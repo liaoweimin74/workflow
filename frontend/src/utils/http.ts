@@ -13,6 +13,8 @@ http.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    // 多租户：当前为单租户模式，使用固定租户 ID
+    config.headers['X-Tenant-Id'] = 'default'
     return config
   },
   (error) => Promise.reject(error)

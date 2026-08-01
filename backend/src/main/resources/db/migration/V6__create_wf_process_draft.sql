@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS wf_process_draft (
     id                      VARCHAR(64)   NOT NULL,
     tenant_id               VARCHAR(64)   NOT NULL,
     name                    VARCHAR(255)  NOT NULL,
-    key                     VARCHAR(255)  NOT NULL,
+    `key`                   VARCHAR(255)  NOT NULL,
     category_id             VARCHAR(64)   DEFAULT NULL,
     bpmn_xml                LONGTEXT      NOT NULL,
     status                  VARCHAR(32)   NOT NULL DEFAULT 'DRAFT',
@@ -20,6 +20,6 @@ CREATE TABLE IF NOT EXISTS wf_process_draft (
     updated_at              DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_tenant (tenant_id),
-    KEY idx_key (tenant_id, key),
+    KEY idx_wf_draft_key (tenant_id, `key`),
     KEY idx_category (category_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

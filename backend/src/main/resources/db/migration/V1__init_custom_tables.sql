@@ -1,4 +1,4 @@
--- Workflow Platform Custom Tables
+-- Workflow Platform Custom Tables (MySQL)
 
 CREATE TABLE IF NOT EXISTS wf_tenant (
     id VARCHAR(64) PRIMARY KEY,

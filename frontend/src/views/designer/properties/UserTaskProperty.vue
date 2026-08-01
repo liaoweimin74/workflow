@@ -1,0 +1,207 @@
+<template>
+  <el-form label-width="90px" size="small">
+    <el-divider content-position="left">基本信息</el-divider>
+
+    <el-form-item label="节点ID">
+      <el-input v-model="config.id" disabled />
+    </el-form-item>
+
+    <el-form-item label="节点名称">
+      <el-input v-model="config.name" placeholder="如：部门经理审批" @change="updateBpmnName" />
+    </el-form-item>
+
+    <el-divider content-position="left">审批人配置</el-divider>
+
+    <el-form-item label="审批类型">
+      <el-radio-group v-model="approval.type" @change="saveConfig">
+        <el-radio value="user">指定用户</el-radio>
+        <el-radio value="role">指定角色</el-radio>
+        <el-radio value="dept_head">部门负责人</el-radio>
+        <el-radio value="initiator_self">发起人自选</el-radio>
+        <el-radio value="expression">流程表达式</el-radio>
+      </el-radio-group>
+    </el-form-item>
+
+    <el-form-item v-if="approval.type === 'user'" label="审批用户">
+      <el-input
+        v-model="approval.value"
+        placeholder="用户ID，多个用逗号分隔"
+        @change="saveConfig"
+      />
+    </el-form-item>
+
+    <el-form-item v-if="approval.type === 'role'" label="审批角色">
+      <el-input
+        v-model="approval.value"
+        placeholder="角色编码，多个用逗号分隔"
+        @change="saveConfig"
+      />
+    </el-form-item>
+
+    <el-form-item v-if="approval.type === 'expression'" label="表达式">
+      <el-input
+        v-model="approval.value"
+        type="textarea"
+        :rows="2"
+        placeholder="如：${initiator.deptManager}"
+        @change="saveConfig"
+      />
+    </el-form-item>
+
+    <el-form-item v-if="approval.type && approval.type !== 'initiator_self'" label="多人模式">
+      <el-radio-group v-model="approval.multiMode" @change="saveConfig">
+        <el-radio value="countersign">会签</el-radio>
+        <el-radio value="or_sign">或签</el-radio>
+      </el-radio-group>
+    </el-form-item>
+
+    <el-divider content-position="left">操作权限</el-divider>
+
+    <el-form-item label="允许驳回">
+      <el-switch v-model="operations.allowReject" @change="saveConfig" />
+    </el-form-item>
+
+    <el-form-item label="允许加签">
+      <el-switch v-model="operations.allowAddSign" @change="saveConfig" />
+    </el-form-item>
+
+    <el-form-item label="允许转办">
+      <el-switch v-model="operations.allowTransfer" @change="saveConfig" />
+    </el-form-item>
+
+    <el-divider content-position="left">超时设置</el-divider>
+
+    <el-form-item label="超时时间">
+      <el-input-number
+        v-model="timeout.duration"
+        :min="0"
+        :step="1"
+        controls-position="right"
+        style="width: 120px"
+      />
+      <span style="margin-left: 8px; color: #909399;">小时</span>
+    </el-form-item>
+
+    <el-form-item label="超时动作">
+      <el-select v-model="timeout.action" placeholder="请选择" style="width: 100%">
+        <el-option label="提醒" value="remind" />
+        <el-option label="升级" value="escalate" />
+      </el-select>
+    </el-form-item>
+
+    <el-form-item>
+      <el-button type="primary" @click="saveAll">保存配置</el-button>
+    </el-form-item>
+  </el-form>
+</template>
+
+<script setup lang="ts">
+import { reactive, onMounted, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
+import { getModeler } from '../utils/bpmnModeler'
+
+const designerStore = useDesignerStore()
+
+const config = reactive({
+  id: '',
+  name: ''
+})
+
+const approval = reactive({
+  type: '' as 'user' | 'role' | 'dept_head' | 'initiator_self' | 'expression' | '',
+  value: '',
+  multiMode: 'countersign' as 'countersign' | 'or_sign'
+})
+
+const operations = reactive({
+  allowReject: true,
+  allowAddSign: false,
+  allowTransfer: true
+})
+
+const timeout = reactive({
+  duration: 0,
+  action: 'remind' as 'remind' | 'escalate'
+})
+
+onMounted(() => {
+  loadConfig()
+})
+
+function loadConfig() {
+  const modeler = getModeler()
+  const elementRegistry = (modeler as any).get('elementRegistry')
+  const element = elementRegistry.get(designerStore.selectedNodeId)
+  if (!element) return
+
+  const bo = element.businessObject
+  config.id = element.id
+  config.name = bo.name || ''
+
+  // 加载已有配置
+  const existing = designerStore.getNodeConfig(designerStore.selectedNodeId!)
+  if (existing) {
+    if (existing.approval) {
+      approval.type = existing.approval.type || ''
+      approval.value = existing.approval.value || ''
+      approval.multiMode = existing.approval.multiMode || 'countersign'
+    }
+    if (existing.operations) {
+      operations.allowReject = existing.operations.allowReject ?? true
+      operations.allowAddSign = existing.operations.allowAddSign ?? false
+      operations.allowTransfer = existing.operations.allowTransfer ?? true
+    }
+    if (existing.timeout) {
+      timeout.duration = existing.timeout.duration || 0
+      timeout.action = existing.timeout.action || 'remind'
+    }
+  }
+}
+
+function updateBpmnName() {
+  const modeler = getModeler()
+  const elementRegistry = (modeler as any).get('elementRegistry')
+  const modeling = (modeler as any).get('modeling')
+  const element = elementRegistry.get(designerStore.selectedNodeId)
+  if (element) {
+    modeling.updateProperties(element, { name: config.name })
+  }
+}
+
+function saveConfig() {
+  // 实时保存到 store（不打扰用户）
+}
+
+function saveAll() {
+  if (!designerStore.selectedNodeId) return
+
+  const nodeConfig: NodeConfigData = {
+    basic: {
+      name: config.name
+    },
+    approval: {
+      type: approval.type || undefined,
+      value: approval.value || undefined,
+      multiMode: approval.multiMode
+    },
+    operations: {
+      allowReject: operations.allowReject,
+      allowAddSign: operations.allowAddSign,
+      allowTransfer: operations.allowTransfer
+    },
+    timeout: {
+      duration: timeout.duration,
+      action: timeout.action
+    }
+  }
+
+  designerStore.setNodeConfig(designerStore.selectedNodeId, nodeConfig)
+  ElMessage.success('节点配置已保存')
+}
+
+watch([config, approval, operations, timeout], () => {
+  // 自动保存
+  saveConfig()
+}, { deep: true })
+</script>

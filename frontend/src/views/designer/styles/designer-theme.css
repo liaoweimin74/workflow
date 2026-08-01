@@ -1,0 +1,166 @@
+/* ============================================================
+ * BPMN Designer 视觉主题
+ * 覆盖 bpmn-js / diagram-js 默认样式，匹配系统整体风格
+ * ============================================================ */
+
+/* 画布背景 */
+.djs-container {
+  background: #fafbfc !important;
+  background-image:
+    linear-gradient(rgba(64, 158, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(64, 158, 255, 0.04) 1px, transparent 1px) !important;
+  background-size: 20px 20px !important;
+}
+
+/* 画布边框 */
+.djs-palette-container {
+  border: 1px solid #e4e7ed !important;
+  background: #fff !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* 节点选中样式 */
+.djs-element.selected .djs-outline {
+  stroke: #409eff !important;
+  stroke-width: 2px !important;
+}
+
+/* 节点 hover 样式 */
+.djs-element:hover .djs-outline {
+  stroke: #a0cfff !important;
+  stroke-width: 1.5px !important;
+}
+
+/* 连线样式 */
+.djs-connection .djs-visual {
+  stroke: #606266 !important;
+  stroke-width: 1.5px !important;
+}
+
+.djs-connection.selected .djs-visual {
+  stroke: #409eff !important;
+  stroke-width: 2px !important;
+}
+
+/* 用户任务节点 */
+.djs-element[data-element-id*="UserTask"] .djs-visual rect {
+  fill: #ecf5ff !important;
+  stroke: #409eff !important;
+  stroke-width: 2px !important;
+  rx: 4px !important;
+  ry: 4px !important;
+}
+
+/* 服务任务节点 */
+.djs-element[data-element-id*="ServiceTask"] .djs-visual rect {
+  fill: #f0f9eb !important;
+  stroke: #67c23a !important;
+  stroke-width: 2px !important;
+}
+
+/* 开始事件 */
+.djs-element[data-element-id*="StartEvent"] .djs-visual circle {
+  fill: #f0f9eb !important;
+  stroke: #67c23a !important;
+  stroke-width: 2px !important;
+}
+
+/* 结束事件 */
+.djs-element[data-element-id*="EndEvent"] .djs-visual circle {
+  fill: #fef0f0 !important;
+  stroke: #f56c6c !important;
+  stroke-width: 3px !important;
+}
+
+/* 网关 */
+.djs-element[data-element-id*="Gateway"] .djs-visual polygon {
+  fill: #fdf6ec !important;
+  stroke: #e6a23c !important;
+  stroke-width: 2px !important;
+}
+
+/* 文字标签 */
+.djs-label {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  font-size: 12px !important;
+  fill: #303133 !important;
+}
+
+/* 工具栏（bpmn-js 内置） */
+.djs-palette {
+  background: #fff !important;
+  border: 1px solid #e4e7ed !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+.djs-palette .entry {
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  text-align: center !important;
+  border-radius: 2px !important;
+}
+
+.djs-palette .entry:hover {
+  background: #ecf5ff !important;
+  color: #409eff !important;
+}
+
+/* 小地图 */
+.djs-minimap {
+  position: absolute !important;
+  bottom: 16px !important;
+  right: 16px !important;
+  width: 200px !important;
+  height: 120px !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid #e4e7ed !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1) !important;
+  overflow: hidden !important;
+}
+
+.djs-minimap .map {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 上下文菜单 */
+.djs-context-pad {
+  background: #fff !important;
+  border: 1px solid #e4e7ed !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+.djs-context-pad .entry {
+  width: 24px !important;
+  height: 24px !important;
+  line-height: 24px !important;
+  text-align: center !important;
+}
+
+.djs-context-pad .entry:hover {
+  background: #ecf5ff !important;
+  color: #409eff !important;
+}
+
+/* 滚动条 */
+.djs-palette-container::-webkit-scrollbar,
+.property-panel ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.djs-palette-container::-webkit-scrollbar-thumb,
+.property-panel ::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+}
+
+.djs-palette-container::-webkit-scrollbar-track,
+.property-panel ::-webkit-scrollbar-track {
+  background: #f5f7fa;
+}

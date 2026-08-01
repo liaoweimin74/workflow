@@ -10,6 +10,24 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '登录' }
   },
   {
+    path: '/designer',
+    name: 'ProcessDesigner',
+    component: () => import('@/views/designer/ProcessDesigner.vue'),
+    meta: { title: '流程设计器', fullScreen: true }
+  },
+  {
+    path: '/category',
+    name: 'CategoryManagement',
+    component: () => import('@/views/category/CategoryPage.vue'),
+    meta: { title: '流程分类' }
+  },
+  {
+    path: '/process',
+    name: 'ProcessList',
+    component: () => import('@/views/process/ProcessListPage.vue'),
+    meta: { title: '流程定义' }
+  },
+  {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/dashboard',

@@ -1,0 +1,108 @@
+<template>
+  <div class="designer-toolbar">
+    <div class="toolbar-left">
+      <el-button-group>
+        <el-button :icon="ArrowLeft" size="small" @click="$emit('back')" title="返回" />
+      </el-button-group>
+      <el-divider direction="vertical" />
+      <el-button-group>
+        <el-button :icon="Back" size="small" @click="$emit('undo')" title="撤销" />
+        <el-button :icon="Right" size="small" @click="$emit('redo')" title="重做" />
+      </el-button-group>
+      <el-divider direction="vertical" />
+      <el-button-group>
+        <el-button :icon="ZoomIn" size="small" @click="$emit('zoomIn')" title="放大" />
+        <el-button :icon="ZoomOut" size="small" @click="$emit('zoomOut')" title="缩小" />
+        <el-button :icon="FullScreen" size="small" @click="$emit('zoomReset')" title="适应屏幕" />
+      </el-button-group>
+    </div>
+
+    <div class="toolbar-center">
+      <span class="designer-title">流程设计器</span>
+      <el-tag v-if="draftName" type="info" size="small">{{ draftName }}</el-tag>
+      <el-tag v-if="isDirty" type="warning" size="small">未保存</el-tag>
+    </div>
+
+    <div class="toolbar-right">
+      <el-button-group>
+        <el-button :icon="Upload" size="small" @click="$emit('importXml')">导入</el-button>
+        <el-button :icon="Download" size="small" @click="$emit('exportXml')">导出XML</el-button>
+        <el-button :icon="Picture" size="small" @click="$emit('exportSvg')">导出SVG</el-button>
+      </el-button-group>
+      <el-divider direction="vertical" />
+      <el-button type="primary" :icon="Document" size="small" @click="$emit('save')">保存</el-button>
+      <el-button type="success" :icon="Promotion" size="small" @click="$emit('deploy')">部署</el-button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import {
+  ArrowLeft,
+  Back,
+  Right,
+  ZoomIn,
+  ZoomOut,
+  FullScreen,
+  Upload,
+  Download,
+  Picture,
+  Document,
+  Promotion
+} from '@element-plus/icons-vue'
+import { useDesignerStore } from '@/stores/designerStore'
+import { computed } from 'vue'
+
+const designerStore = useDesignerStore()
+
+const draftName = computed(() => designerStore.draftName)
+const isDirty = computed(() => designerStore.isDirty)
+
+defineEmits<{
+  (e: 'save'): void
+  (e: 'deploy'): void
+  (e: 'exportXml'): void
+  (e: 'exportSvg'): void
+  (e: 'importXml'): void
+  (e: 'undo'): void
+  (e: 'redo'): void
+  (e: 'zoomIn'): void
+  (e: 'zoomOut'): void
+  (e: 'zoomReset'): void
+  (e: 'back'): void
+}>()
+</script>
+
+<style scoped>
+.designer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 48px;
+  background: #fff;
+  border-bottom: 1px solid #e4e7ed;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  z-index: 10;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #303133;
+}
+
+.designer-title {
+  font-weight: 600;
+  font-size: 15px;
+}
+</style>

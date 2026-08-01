@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@theme {
+  --color-industrial: #1a56db;
+  --color-industrial-50: #eff6ff;
+  --color-industrial-100: #dbeafe;
+  --color-industrial-600: #1a56db;
+  --color-industrial-700: #1e40af;
+  --color-safety: #f59e0b;
+  --color-safety-50: #fffbeb;
+  --color-safety-100: #fef3c7;
+  --color-safety-500: #f59e0b;
+  --color-safety-600: #d97706;
+}
+
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: #374151;
+  background: #f8f9fb;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Element Plus override for light theme */
+.el-button--primary {
+  --el-button-bg-color: #1a56db;
+  --el-button-border-color: #1a56db;
+  --el-button-hover-bg-color: #1e40af;
+  --el-button-hover-border-color: #1e40af;
+}
+
+.el-menu {
+  border-right: none !important;
+  --el-menu-item-font-size: 14px;
+  --el-menu-sub-item-font-size: 14px;
+}
+
+.el-menu-item,
+.el-sub-menu__title {
+  font-size: 14px !important;
+  height: 40px !important;
+  line-height: 40px !important;
+}
+
+.el-menu--collapse .el-menu-item,
+.el-menu--collapse .el-sub-menu__title {
+  font-size: 14px !important;
+}
+
+.el-table th.el-table__cell {
+  background-color: #f8f9fb;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.el-dialog {
+  border-radius: 8px;
+}
+
+.el-tag {
+  border-radius: 4px;
+}

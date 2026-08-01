@@ -1,6 +1,7 @@
 package com.workflow.api.controller;
 
 import com.workflow.api.dto.*;
+import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessInstanceService;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.springframework.data.domain.Page;
@@ -21,7 +22,7 @@ public class ProcessInstanceController {
     }
 
     @PostMapping
-    public Result<Map<String, Object>> start(@RequestBody StartProcessRequest request) {
+    public R<Map<String, Object>> start(@RequestBody StartProcessRequest request) {
         Map<String, Object> variables = request.getVariables() != null ? request.getVariables() : new HashMap<>();
 
         ProcessInstance instance;
@@ -38,11 +39,11 @@ public class ProcessInstanceController {
         response.put("businessKey", instance.getBusinessKey());
         response.put("tenantId", instance.getTenantId());
 
-        return Result.success(response);
+        return R.ok(response);
     }
 
     @GetMapping
-    public Result<PageResponse<Map<String, Object>>> list(
+    public R<PageResponse<Map<String, Object>>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
@@ -55,32 +56,32 @@ public class ProcessInstanceController {
                 result.getTotalElements()
         );
 
-        return Result.success(response);
+        return R.ok(response);
     }
 
     @GetMapping("/{id}")
-    public Result<Map<String, Object>> get(@PathVariable String id) {
+    public R<Map<String, Object>> get(@PathVariable String id) {
         return processInstanceService.getProcessInstance(id)
-                .map(instance -> Result.success(toMap(instance)))
-                .orElse(Result.error(404, "Process instance not found"));
+                .map(instance -> R.ok(toMap(instance)))
+                .orElse(R.fail(404, "Process instance not found"));
     }
 
     @PostMapping("/{id}/suspend")
-    public Result<Void> suspend(@PathVariable String id) {
+    public R<Void> suspend(@PathVariable String id) {
         processInstanceService.suspendProcessInstance(id);
-        return Result.success(null);
+        return R.ok();
     }
 
     @PostMapping("/{id}/resume")
-    public Result<Void> resume(@PathVariable String id) {
+    public R<Void> resume(@PathVariable String id) {
         processInstanceService.resumeProcessInstance(id);
-        return Result.success(null);
+        return R.ok();
     }
 
     @PostMapping("/{id}/terminate")
-    public Result<Void> terminate(@PathVariable String id, @RequestParam(required = false) String reason) {
+    public R<Void> terminate(@PathVariable String id, @RequestParam(required = false) String reason) {
         processInstanceService.terminateProcessInstance(id, reason != null ? reason : "User terminated");
-        return Result.success(null);
+        return R.ok();
     }
 
     private Map<String, Object> toMap(ProcessInstance instance) {

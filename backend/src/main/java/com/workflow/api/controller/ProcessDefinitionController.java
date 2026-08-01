@@ -1,7 +1,7 @@
 package com.workflow.api.controller;
 
 import com.workflow.api.dto.PageResponse;
-import com.workflow.api.dto.Result;
+import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessService;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.springframework.data.domain.Page;
@@ -19,7 +19,7 @@ public class ProcessDefinitionController {
     }
 
     @GetMapping
-    public Result<PageResponse<ProcessDefinition>> list(
+    public R<PageResponse<ProcessDefinition>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
@@ -32,31 +32,31 @@ public class ProcessDefinitionController {
                 result.getTotalElements()
         );
 
-        return Result.success(response);
+        return R.ok(response);
     }
 
     @GetMapping("/{id}")
-    public Result<ProcessDefinition> get(@PathVariable String id) {
+    public R<ProcessDefinition> get(@PathVariable String id) {
         return processService.getProcessDefinition(id)
-                .map(Result::success)
-                .orElse(Result.error(404, "Process definition not found"));
+                .map(R::ok)
+                .orElse(R.fail(404, "Process definition not found"));
     }
 
     @GetMapping("/{id}/xml")
-    public Result<String> getXml(@PathVariable String id) {
+    public R<String> getXml(@PathVariable String id) {
         String xml = processService.getProcessDefinitionXml(id);
-        return Result.success(xml);
+        return R.ok(xml);
     }
 
     @PostMapping("/{id}/suspend")
-    public Result<Void> suspend(@PathVariable String id) {
+    public R<Void> suspend(@PathVariable String id) {
         processService.suspendProcessDefinition(id);
-        return Result.success(null);
+        return R.ok();
     }
 
     @PostMapping("/{id}/activate")
-    public Result<Void> activate(@PathVariable String id) {
+    public R<Void> activate(@PathVariable String id) {
         processService.activateProcessDefinition(id);
-        return Result.success(null);
+        return R.ok();
     }
 }

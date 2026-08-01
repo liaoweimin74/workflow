@@ -1,6 +1,7 @@
 package com.workflow.api.controller;
 
 import com.workflow.api.dto.*;
+import com.workflow.common.domain.R;
 import com.workflow.engine.task.WorkflowTaskService;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
@@ -24,7 +25,7 @@ public class TaskController {
     }
 
     @GetMapping
-    public Result<PageResponse<Map<String, Object>>> listTodo(
+    public R<PageResponse<Map<String, Object>>> listTodo(
             @RequestParam String assignee,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -38,11 +39,11 @@ public class TaskController {
                 result.getTotalElements()
         );
 
-        return Result.success(response);
+        return R.ok(response);
     }
 
     @GetMapping("/historic")
-    public Result<PageResponse<Map<String, Object>>> listHistoric(
+    public R<PageResponse<Map<String, Object>>> listHistoric(
             @RequestParam String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -56,29 +57,29 @@ public class TaskController {
                 result.getTotalElements()
         );
 
-        return Result.success(response);
+        return R.ok(response);
     }
 
     @GetMapping("/{id}")
-    public Result<Map<String, Object>> get(@PathVariable String id) {
+    public R<Map<String, Object>> get(@PathVariable String id) {
         return taskService.getTask(id)
-                .map(task -> Result.success(toMap(task)))
-                .orElse(Result.error(404, "Task not found"));
+                .map(task -> R.ok(toMap(task)))
+                .orElse(R.fail(404, "Task not found"));
     }
 
     @PostMapping("/{id}/claim")
-    public Result<Void> claim(@PathVariable String id, @RequestParam String userId) {
+    public R<Void> claim(@PathVariable String id, @RequestParam String userId) {
         taskService.claimTask(id, userId);
-        return Result.success(null);
+        return R.ok();
     }
 
     @PostMapping("/{id}/complete")
-    public Result<Void> complete(@PathVariable String id, @RequestBody(required = false) CompleteTaskRequest request) {
+    public R<Void> complete(@PathVariable String id, @RequestBody(required = false) CompleteTaskRequest request) {
         Map<String, Object> variables = request != null && request.getVariables() != null
                 ? request.getVariables()
                 : new HashMap<>();
         taskService.completeTask(id, variables);
-        return Result.success(null);
+        return R.ok();
     }
 
     private Map<String, Object> toMap(Task task) {

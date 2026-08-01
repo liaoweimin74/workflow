@@ -5,10 +5,10 @@ spring:
     password: 740130
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
-    enabled: false
+    enabled: true
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     show-sql: false
 
 flowable:
@@ -26,3 +26,4 @@ logging:
     com.workflow: DEBUG
     org.flowable: INFO
     org.springframework.modulith: DEBUG
+    org.flywaydb: DEBUG

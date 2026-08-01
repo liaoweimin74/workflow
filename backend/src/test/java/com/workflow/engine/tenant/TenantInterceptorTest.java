@@ -39,11 +39,10 @@ class TenantInterceptorTest {
     }
 
     @Test
-    void preHandle_withoutTenant_returnsBadRequest() throws Exception {
+    void preHandle_withoutTenant_passesThrough() throws Exception {
         boolean result = interceptor.preHandle(request, response, null);
 
-        assertFalse(result);
-        assertEquals(400, response.getStatus());
+        assertTrue(result);
         assertNull(TenantContext.getTenantId());
     }
 

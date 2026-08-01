@@ -15,12 +15,10 @@ public class TenantInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         String tenantId = request.getHeader(TENANT_HEADER);
 
-        if (tenantId == null || tenantId.isBlank()) {
-            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            return false;
+        if (tenantId != null && !tenantId.isBlank()) {
+            TenantContext.setTenantId(tenantId);
         }
-
-        TenantContext.setTenantId(tenantId);
+        // tenant is optional at interceptor level — business logic enforces when needed
         return true;
     }
 

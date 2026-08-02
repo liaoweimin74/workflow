@@ -69,6 +69,7 @@ import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-js.css'
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css'
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-codes.css'  // context-pad / palette 图标
+import 'diagram-js-minimap/assets/diagram-js-minimap.css'    // 鸟瞰图样式
 import './styles/designer-theme.css'
 
 const route = useRoute()

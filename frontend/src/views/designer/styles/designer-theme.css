@@ -3,6 +3,11 @@
  * 覆盖 bpmn-js / diagram-js 默认样式，匹配系统整体风格
  * ============================================================ */
 
+/* 隐藏 bpmn.io 商业 logo */
+.bjs-powered-by {
+  display: none !important;
+}
+
 /* 画布背景 */
 .djs-container {
   background: #fafbfc !important;

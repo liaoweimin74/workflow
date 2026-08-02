@@ -78,26 +78,22 @@
         :step="1"
         controls-position="right"
         style="width: 120px"
+        @change="saveConfig"
       />
       <span style="margin-left: 8px; color: #909399;">小时</span>
     </el-form-item>
 
     <el-form-item label="超时动作">
-      <el-select v-model="timeout.action" placeholder="请选择" style="width: 100%">
+      <el-select v-model="timeout.action" placeholder="请选择" style="width: 100%" @change="saveConfig">
         <el-option label="提醒" value="remind" />
         <el-option label="升级" value="escalate" />
       </el-select>
-    </el-form-item>
-
-    <el-form-item>
-      <el-button type="primary" @click="saveAll">保存配置</el-button>
     </el-form-item>
   </el-form>
 </template>
 
 <script setup lang="ts">
 import { reactive, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 
@@ -170,10 +166,6 @@ function updateBpmnName() {
 }
 
 function saveConfig() {
-  // 实时保存到 store（不打扰用户）
-}
-
-function saveAll() {
   if (!designerStore.selectedNodeId) return
 
   const nodeConfig: NodeConfigData = {
@@ -197,11 +189,9 @@ function saveAll() {
   }
 
   designerStore.setNodeConfig(designerStore.selectedNodeId, nodeConfig)
-  ElMessage.success('节点配置已保存')
 }
 
 watch([config, approval, operations, timeout], () => {
-  // 自动保存
   saveConfig()
 }, { deep: true })
 </script>

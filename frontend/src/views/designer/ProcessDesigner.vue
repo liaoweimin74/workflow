@@ -163,14 +163,80 @@ function setupEventListeners() {
 }
 
 /**
- * 校验导出的 BPMN XML 是否符合 Flowable 部署要求。
+ * 校验导出的 BPMN XML 是否符合部署要求。
  * 返回错误消息，无错误返回 null。
  */
 function validateBpmnXml(xml: string): string | null {
-  const startEventMatches = xml.match(/<bpmn:startEvent[\s>]/g)
-  if (startEventMatches && startEventMatches.length > 1) {
-    return `流程定义中存在 ${startEventMatches.length} 个开始事件，BPMN 规范只允许一个。请删除多余的开始事件后重试。`
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(xml, 'application/xml')
+  const parseError = doc.querySelector('parsererror')
+  if (parseError) {
+    return 'BPMN XML 解析失败，请检查流程定义。'
   }
+
+  const startEvents = doc.querySelectorAll('bpmn\\:startEvent, startEvent')
+  const endEvents = doc.querySelectorAll('bpmn\\:endEvent, endEvent')
+  const userTasks = doc.querySelectorAll('bpmn\\:userTask, userTask')
+
+  // 1. 必须有开始事件
+  if (startEvents.length === 0) {
+    return '流程缺少开始事件，请添加一个开始事件。'
+  }
+  // 2. 开始事件只能有一个
+  if (startEvents.length > 1) {
+    return `流程存在 ${startEvents.length} 个开始事件，只允许一个。`
+  }
+  // 3. 必须有结束事件
+  if (endEvents.length === 0) {
+    return '流程缺少结束事件，请添加至少一个结束事件。'
+  }
+
+  // 4. 开始事件必须有出口连线
+  const startEvent = startEvents[0]
+  const startId = startEvent.getAttribute('id')
+  const hasOutgoingFromStart = doc.querySelector(
+    `bpmn\\:sequenceFlow[sourceRef="${startId}"], sequenceFlow[sourceRef="${startId}"]`
+  )
+  if (!hasOutgoingFromStart) {
+    return '开始事件没有出口连线，请连接到下一个节点。'
+  }
+
+  // 5. 每个结束事件必须有入口连线
+  for (let i = 0; i < endEvents.length; i++) {
+    const endId = endEvents[i].getAttribute('id')
+    const hasIncomingToEnd = doc.querySelector(
+      `bpmn\\:sequenceFlow[targetRef="${endId}"], sequenceFlow[targetRef="${endId}"]`
+    )
+    if (!hasIncomingToEnd) {
+      return `结束事件「${endEvents[i].getAttribute('name') || endId}」没有入口连线，请连接上游节点。`
+    }
+  }
+
+  // 6. UserTask 必须配置审批人
+  for (let i = 0; i < userTasks.length; i++) {
+    const taskId = userTasks[i].getAttribute('id')
+    const taskName = userTasks[i].getAttribute('name') || taskId
+    if (taskId) {
+      const configStr = designerStore.nodeConfigs[taskId]
+      if (configStr) {
+        try {
+          const config = JSON.parse(configStr)
+          const approval = config.approval
+          if (!approval || !approval.type) {
+            return `用户任务「${taskName}」未配置审批人，请设置审批类型。`
+          }
+          if (approval.type !== 'initiator_self' && !approval.value) {
+            return `用户任务「${taskName}」的审批类型为「${approval.type}」但未设置审批值。`
+          }
+        } catch {
+          return `用户任务「${taskName}」的节点配置解析失败。`
+        }
+      } else {
+        return `用户任务「${taskName}」未配置审批人，请设置审批类型。`
+      }
+    }
+  }
+
   return null
 }
 

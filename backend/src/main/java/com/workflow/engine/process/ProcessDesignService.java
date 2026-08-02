@@ -172,11 +172,21 @@ public class ProcessDesignService {
             throw new BusinessException(400, "流程数据未变化，无需部署");
         }
 
-        Deployment deployment = repositoryService.createDeployment()
-                .name(draft.getName())
-                .addString(draft.getKey() + ".bpmn20.xml", draft.getBpmnXml())
-                .tenantId(tenantId)
-                .deploy();
+        // 部署到 Flowable，捕获引擎校验异常转为友好提示
+        Deployment deployment;
+        try {
+            deployment = repositoryService.createDeployment()
+                    .name(draft.getName())
+                    .addString(draft.getKey() + ".bpmn20.xml", draft.getBpmnXml())
+                    .tenantId(tenantId)
+                    .deploy();
+        } catch (Exception e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("BPMN")) {
+                throw new BusinessException(400, "流程定义不完整：" + msg);
+            }
+            throw new BusinessException(400, "部署失败：" + (msg != null ? msg : "未知错误"));
+        }
 
         ProcessDefinition procDef = repositoryService.createProcessDefinitionQuery()
                 .deploymentId(deployment.getId())

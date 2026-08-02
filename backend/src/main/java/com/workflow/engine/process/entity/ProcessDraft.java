@@ -22,7 +22,7 @@ public class ProcessDraft {
     @Column(name = "name", length = 255, nullable = false)
     private String name;
 
-    @Column(name = "key", length = 255, nullable = false)
+    @Column(name = "process_key", length = 255, nullable = false)
     private String key;
 
     @Column(name = "category_id", length = 64)

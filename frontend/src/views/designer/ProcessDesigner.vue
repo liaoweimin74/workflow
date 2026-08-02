@@ -249,10 +249,11 @@ async function handleSave() {
 
     designerStore.setBpmnXml(xml)
 
+    const processConfig = designerStore.getProcessConfig()
     await processDesignApi.saveDesign(designerStore.draftId, {
       name: designerStore.draftName || '',
       key: designerStore.draftKey || '',
-      categoryId: null,
+      categoryId: processConfig.categoryId,
       bpmnXml: xml,
       nodeConfigs: designerStore.nodeConfigs
     })
@@ -282,10 +283,11 @@ async function handleDeploy() {
       return
     }
 
+    const deployConfig = designerStore.getProcessConfig()
     await processDesignApi.saveDesign(designerStore.draftId, {
       name: designerStore.draftName || '',
       key: designerStore.draftKey || '',
-      categoryId: null,
+      categoryId: deployConfig.categoryId,
       bpmnXml: xml,
       nodeConfigs: designerStore.nodeConfigs
     })

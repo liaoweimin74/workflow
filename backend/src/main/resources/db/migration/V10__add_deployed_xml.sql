@@ -1,21 +1,11 @@
 -- ============================================================
--- V10: 新增 deployed_xml 字段 + 重命名 key 列为 process_key
--- key 是 MySQL 保留字，改用 process_key 避免引号问题
--- 注意：ddl-auto=update 可能已自动创建 process_key 列，需条件处理
+-- V10: 新增 deployed_xml 字段
+-- 注意：key -> process_key 的列重命名由 ddl-auto=update 自动处理
+--       （entity @Column(name="process_key") 已改，Hibernate 会自动加列）
+--       本脚本仅处理 ddl-auto 无法完成的 deployed_xml 列
 -- ============================================================
 
--- 仅当 key 列存在时重命名（ddl-auto 可能已创建 process_key）
-SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS
-  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wf_process_draft' AND COLUMN_NAME = 'key');
-
-SET @sql = IF(@col_exists > 0,
-  'alter table `wf_process_draft` change column `key` `process_key` VARCHAR(255) NOT NULL',
-  'SELECT 1');
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- 仅当 deployed_xml 列不存在时添加
+-- 仅当 deployed_xml 列不存在时添加（ddl-auto 不会处理 @Lob 列类型）
 SET @col_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wf_process_draft' AND COLUMN_NAME = 'deployed_xml');
 

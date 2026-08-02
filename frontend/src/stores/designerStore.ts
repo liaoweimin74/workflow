@@ -41,10 +41,6 @@ export interface ParamMapping {
 export const PROCESS_CONFIG_KEY = '__PROCESS__'
 
 export interface ProcessConfigData {
-  name: string
-  key: string
-  categoryId: string | null
-  description: string
   approvalPolicy: {
     deduplication: {
       enabled: boolean
@@ -62,10 +58,6 @@ export interface ProcessConfigData {
 }
 
 export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {
-  name: '',
-  key: '',
-  categoryId: null,
-  description: '',
   approvalPolicy: {
     deduplication: {
       enabled: false,
@@ -90,6 +82,8 @@ export interface DesignerState {
   draftId: string | null
   draftName: string | null
   draftKey: string | null
+  draftCategoryId: string | null
+  draftDescription: string
 }
 
 export const useDesignerStore = defineStore('designer', () => {
@@ -100,6 +94,8 @@ export const useDesignerStore = defineStore('designer', () => {
   const draftId = ref<string | null>(null)
   const draftName = ref<string | null>(null)
   const draftKey = ref<string | null>(null)
+  const draftCategoryId = ref<string | null>(null)
+  const draftDescription = ref<string>('')
   const isDirty = ref(false)
 
   // 保存快照：记录上次加载/保存时的 XML 和 nodeConfigs，用于判断是否有实际变更
@@ -196,6 +192,12 @@ export const useDesignerStore = defineStore('designer', () => {
     draftKey.value = key
   }
 
+  function setDraftBasicInfo(data: { categoryId?: string | null; description?: string }) {
+    if (data.categoryId !== undefined) draftCategoryId.value = data.categoryId
+    if (data.description !== undefined) draftDescription.value = data.description
+    isDirty.value = true
+  }
+
   /** 记录保存快照（加载流程或保存成功后调用） */
   function setSavedSnapshot(xml: string, configs: Record<string, string>) {
     lastSavedXml.value = xml
@@ -216,6 +218,8 @@ export const useDesignerStore = defineStore('designer', () => {
     draftId.value = null
     draftName.value = null
     draftKey.value = null
+    draftCategoryId.value = null
+    draftDescription.value = ''
     isDirty.value = false
     lastSavedXml.value = ''
     lastSavedNodeConfigs.value = ''
@@ -233,6 +237,8 @@ export const useDesignerStore = defineStore('designer', () => {
     draftId,
     draftName,
     draftKey,
+    draftCategoryId,
+    draftDescription,
     isDirty,
     selectedNodeConfig,
     setBpmnXml,
@@ -244,6 +250,7 @@ export const useDesignerStore = defineStore('designer', () => {
     deleteNodeConfig,
     selectNode,
     setDraft,
+    setDraftBasicInfo,
     setSavedSnapshot,
     isUnchanged,
     clearConfigs,

@@ -3,33 +3,33 @@
     <el-divider content-position="left">基本信息</el-divider>
 
     <el-form-item label="流程名称">
-      <el-input v-model="config.name" placeholder="请输入流程名称" @change="syncToStore" />
+      <el-input v-model="info.name" placeholder="请输入流程名称" @change="updateBpmnName" />
     </el-form-item>
 
     <el-form-item label="流程标识">
-      <el-input v-model="config.key" placeholder="process_key" disabled />
+      <el-input v-model="info.key" disabled />
     </el-form-item>
 
     <el-form-item label="流程分类">
       <el-tree-select
-        v-model="config.categoryId"
+        v-model="info.categoryId"
         :data="categoryTree"
         :props="{ label: 'name', value: 'id', children: 'children' }"
         placeholder="请选择分类"
         clearable
         check-strictly
         style="width: 100%"
-        @change="syncToStore"
+        @change="syncBasicInfo"
       />
     </el-form-item>
 
     <el-form-item label="流程描述">
       <el-input
-        v-model="config.description"
+        v-model="info.description"
         type="textarea"
         :rows="3"
         placeholder="请输入流程描述"
-        @change="syncToStore"
+        @change="syncBasicInfo"
       />
     </el-form-item>
 
@@ -95,6 +95,15 @@ import { getModeler } from '../utils/bpmnModeler'
 
 const designerStore = useDesignerStore()
 
+// 基本信息：从 BPMN root element 和 store draft 读取，不存入 __PROCESS__
+const info = reactive({
+  name: '',
+  key: '',
+  categoryId: null as string | null,
+  description: '',
+})
+
+// 运行时行为配置：存入 __PROCESS__
 const config = reactive<ProcessConfigData>(JSON.parse(JSON.stringify(DEFAULT_PROCESS_CONFIG)))
 
 const categoryTree = ref<any[]>([])
@@ -117,29 +126,50 @@ onMounted(async () => {
     // ignore
   }
 
-  // 从 store 读取流程配置
+  // 从 store 读取流程级配置（运行时行为）
   const stored = designerStore.getProcessConfig()
   Object.assign(config, stored)
 
-  // 从 BPMN XML 读取流程名称和 key（覆盖 store 中的值）
+  // 从 BPMN XML 读取流程名称和 key
   const modeler = getModeler()
   const canvas = (modeler as any).get('canvas')
   const rootElement = canvas.getRootElement()
   const bo = rootElement?.businessObject
   if (bo) {
-    config.name = bo.name || ''
-    config.key = bo.id || ''
+    info.name = bo.name || ''
+    info.key = bo.id || ''
   }
+
+  // 从 store draft 读取 categoryId
+  info.categoryId = designerStore.draftCategoryId
 
   syncToStore()
 })
 
-watch(config, () => {
-  designerStore.setDraft(designerStore.draftId || '', config.name, config.key)
-}, { deep: true })
+watch(() => info.name, (val) => {
+  designerStore.setDraft(designerStore.draftId || '', val, info.key)
+})
 
 function syncToStore() {
   designerStore.setProcessConfig({ ...config })
+}
+
+function syncBasicInfo() {
+  designerStore.setDraftBasicInfo({
+    categoryId: info.categoryId,
+    description: info.description,
+  })
+}
+
+function updateBpmnName() {
+  const modeler = getModeler()
+  const canvas = (modeler as any).get('canvas')
+  const rootElement = canvas.getRootElement()
+  const modeling = (modeler as any).get('modeling')
+  if (rootElement) {
+    modeling.updateProperties(rootElement, { name: info.name })
+  }
+  designerStore.setDraft(designerStore.draftId || '', info.name, info.key)
 }
 
 function buildTree(items: Category[]): any[] {

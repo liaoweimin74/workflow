@@ -17,8 +17,6 @@ describe('designerStore — 流程配置', () => {
     const store = useDesignerStore()
     const custom: ProcessConfigData = {
       ...DEFAULT_PROCESS_CONFIG,
-      name: '请假流程',
-      categoryId: 'cat-1',
       approvalPolicy: {
         ...DEFAULT_PROCESS_CONFIG.approvalPolicy,
         deduplication: {
@@ -37,6 +35,8 @@ describe('designerStore — 流程配置', () => {
     const store = useDesignerStore()
     store.setProcessConfig(DEFAULT_PROCESS_CONFIG)
     expect(store.nodeConfigs[PROCESS_CONFIG_KEY]).toBeDefined()
-    expect(JSON.parse(store.nodeConfigs[PROCESS_CONFIG_KEY]).name).toBe('')
+    const parsed = JSON.parse(store.nodeConfigs[PROCESS_CONFIG_KEY])
+    expect(parsed.approvalPolicy).toBeDefined()
+    expect(parsed.numberRule).toBeDefined()
   })
 })

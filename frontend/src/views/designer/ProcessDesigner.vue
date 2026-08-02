@@ -106,12 +106,10 @@ onMounted(async () => {
     designerStore.setDraft(editorData.id, editorData.name, editorData.key)
     designerStore.setBpmnXml(editorData.bpmnXml)
     designerStore.setNodeConfigs(editorData.nodeConfigs || {})
-    // 确保流程级配置存在，回填基本信息
-    const processConfig = designerStore.getProcessConfig()
-    processConfig.name = editorData.name
-    processConfig.key = editorData.key
-    processConfig.categoryId = editorData.categoryId || null
-    designerStore.setProcessConfig(processConfig)
+    designerStore.setDraftBasicInfo({
+      categoryId: editorData.categoryId || null,
+      description: '',
+    })
     designerStore.setSavedSnapshot(editorData.bpmnXml, editorData.nodeConfigs || {})
     designerStore.markClean()
 
@@ -264,11 +262,10 @@ async function handleSave() {
 
     designerStore.setBpmnXml(xml)
 
-    const processConfig = designerStore.getProcessConfig()
     await processDesignApi.saveDesign(designerStore.draftId, {
       name: designerStore.draftName || '',
       key: designerStore.draftKey || '',
-      categoryId: processConfig.categoryId,
+      categoryId: designerStore.draftCategoryId,
       bpmnXml: xml,
       nodeConfigs: designerStore.nodeConfigs
     })
@@ -298,11 +295,10 @@ async function handleDeploy() {
       return
     }
 
-    const deployConfig = designerStore.getProcessConfig()
     await processDesignApi.saveDesign(designerStore.draftId, {
       name: designerStore.draftName || '',
       key: designerStore.draftKey || '',
-      categoryId: deployConfig.categoryId,
+      categoryId: designerStore.draftCategoryId,
       bpmnXml: xml,
       nodeConfigs: designerStore.nodeConfigs
     })

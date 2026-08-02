@@ -12,14 +12,6 @@
   background-size: 20px 20px !important;
 }
 
-/* 画布边框 */
-.djs-palette-container {
-  border: 1px solid #e4e7ed !important;
-  background: #fff !important;
-  border-radius: 4px !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
-}
-
 /* 节点选中样式 */
 .djs-element.selected .djs-outline {
   stroke: #409eff !important;
@@ -87,25 +79,9 @@
   fill: #303133 !important;
 }
 
-/* 工具栏（bpmn-js 内置） */
-.djs-palette {
-  background: #fff !important;
-  border: 1px solid #e4e7ed !important;
-  border-radius: 4px !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
-}
-
-.djs-palette .entry {
-  width: 32px !important;
-  height: 32px !important;
-  line-height: 32px !important;
-  text-align: center !important;
-  border-radius: 2px !important;
-}
-
-.djs-palette .entry:hover {
-  background: #ecf5ff !important;
-  color: #409eff !important;
+/* 工具栏（bpmn-js 内置）- 隐藏，使用左侧自定义 NodePalette */
+.djs-palette-container {
+  display: none !important;
 }
 
 /* 小地图 */

@@ -41,6 +41,9 @@ public class ProcessDraft {
     @Column(name = "deploy_id", length = 64)
     private String deployId;
 
+    @Column(name = "last_deployed_at")
+    private LocalDateTime lastDeployedAt;
+
     @Column(name = "version", nullable = false)
     private Integer version = 1;
 
@@ -90,6 +93,9 @@ public class ProcessDraft {
 
     public String getDeployId() { return deployId; }
     public void setDeployId(String deployId) { this.deployId = deployId; }
+
+    public LocalDateTime getLastDeployedAt() { return lastDeployedAt; }
+    public void setLastDeployedAt(LocalDateTime lastDeployedAt) { this.lastDeployedAt = lastDeployedAt; }
 
     public Integer getVersion() { return version; }
     public void setVersion(Integer version) { this.version = version; }

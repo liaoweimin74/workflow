@@ -2,6 +2,7 @@ package com.workflow.engine.process;
 
 import com.workflow.api.dto.DesignSaveRequest;
 import com.workflow.api.dto.EditorDTO;
+import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.entity.ProcessDraft;
 import com.workflow.engine.process.repository.NodeConfigRepository;
@@ -20,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -78,10 +81,22 @@ public class ProcessDesignService {
         ProcessDraft draft = draftRepository.findByIdAndTenantId(draftId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Process draft not found: " + draftId));
 
+        // 无变化检查：比较 bpmnXml + name + key + categoryId + nodeConfigs
+        boolean unchanged = Objects.equals(trimToNull(draft.getBpmnXml()), trimToNull(request.getBpmnXml()))
+                && (request.getName() == null || Objects.equals(draft.getName(), request.getName()))
+                && (request.getKey() == null || Objects.equals(draft.getKey(), request.getKey()))
+                && Objects.equals(draft.getCategoryId(), request.getCategoryId())
+                && nodeConfigsEqual(draftId, request.getNodeConfigs());
+
+        if (unchanged) {
+            throw new BusinessException(400, "流程数据未变化，无需保存");
+        }
+
         draft.setBpmnXml(request.getBpmnXml());
         if (request.getName() != null) draft.setName(request.getName());
         if (request.getKey() != null) draft.setKey(request.getKey());
         if (request.getCategoryId() != null) draft.setCategoryId(request.getCategoryId());
+
         draftRepository.save(draft);
 
         nodeConfigRepository.deleteByProcessDefId(draftId);
@@ -171,6 +186,7 @@ public class ProcessDesignService {
 
         draft.setStatus("DEPLOYED");
         draft.setDeployId(deployment.getId());
+        draft.setLastDeployedAt(LocalDateTime.now());
         if (procDef != null) {
             draft.setProcessDefinitionId(procDef.getId());
         }
@@ -264,5 +280,24 @@ public class ProcessDesignService {
         if (configJson.contains("\"approval\"")) return "userTask";
         if (configJson.contains("\"condition\"")) return "sequenceFlow";
         return "unknown";
+    }
+
+    /**
+     * 比较请求中的 nodeConfigs 与数据库当前值是否一致。
+     */
+    private boolean nodeConfigsEqual(String draftId, Map<String, String> requestConfigs) {
+        List<NodeConfig> existing = nodeConfigRepository.findByProcessDefId(draftId);
+        Map<String, String> existingMap = new HashMap<>();
+        for (NodeConfig nc : existing) {
+            existingMap.put(nc.getNodeId(), nc.getConfigJson());
+        }
+        Map<String, String> reqMap = requestConfigs != null ? requestConfigs : new HashMap<>();
+        return Objects.equals(existingMap, reqMap);
+    }
+
+    private static String trimToNull(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
     }
 }

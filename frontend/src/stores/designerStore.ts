@@ -55,6 +55,10 @@ export const useDesignerStore = defineStore('designer', () => {
   const draftName = ref<string | null>(null)
   const isDirty = ref(false)
 
+  // 保存快照：记录上次加载/保存时的 XML 和 nodeConfigs，用于判断是否有实际变更
+  const lastSavedXml = ref<string>('')
+  const lastSavedNodeConfigs = ref<string>('')
+
   const selectedNodeConfig = computed<NodeConfigData | null>(() => {
     if (!selectedNodeId.value) return null
     const raw = nodeConfigs.value[selectedNodeId.value]
@@ -110,6 +114,18 @@ export const useDesignerStore = defineStore('designer', () => {
     draftName.value = name
   }
 
+  /** 记录保存快照（加载流程或保存成功后调用） */
+  function setSavedSnapshot(xml: string, configs: Record<string, string>) {
+    lastSavedXml.value = xml
+    lastSavedNodeConfigs.value = JSON.stringify(configs)
+  }
+
+  /** 判断当前数据是否与上次快照一致（无变化） */
+  function isUnchanged(currentXml: string): boolean {
+    return currentXml === lastSavedXml.value
+      && JSON.stringify(nodeConfigs.value) === lastSavedNodeConfigs.value
+  }
+
   function clearConfigs() {
     nodeConfigs.value = {}
     selectedNodeId.value = null
@@ -118,6 +134,8 @@ export const useDesignerStore = defineStore('designer', () => {
     draftId.value = null
     draftName.value = null
     isDirty.value = false
+    lastSavedXml.value = ''
+    lastSavedNodeConfigs.value = ''
   }
 
   function markClean() {
@@ -140,6 +158,8 @@ export const useDesignerStore = defineStore('designer', () => {
     deleteNodeConfig,
     selectNode,
     setDraft,
+    setSavedSnapshot,
+    isUnchanged,
     clearConfigs,
     markClean
   }

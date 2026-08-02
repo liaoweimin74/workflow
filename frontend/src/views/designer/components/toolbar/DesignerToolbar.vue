@@ -6,8 +6,8 @@
       </el-button-group>
       <el-divider direction="vertical" />
       <el-button-group>
-        <el-button :icon="Back" size="small" @click="$emit('undo')" title="撤销" />
-        <el-button :icon="Right" size="small" @click="$emit('redo')" title="重做" />
+        <el-button :icon="RefreshLeft" size="small" @click="$emit('undo')" title="撤销" />
+        <el-button :icon="RefreshRight" size="small" @click="$emit('redo')" title="重做" />
       </el-button-group>
       <el-divider direction="vertical" />
       <el-button-group>
@@ -17,14 +17,12 @@
       </el-button-group>
       <el-divider direction="vertical" />
       <div class="minimap-toggle">
-        <el-tooltip :content="minimapVisible ? '隐藏鸟瞰图' : '显示鸟瞰图'" placement="bottom">
-          <el-switch
-            v-model="minimapVisible"
-            size="small"
-            @change="(val: boolean) => $emit('toggleMinimap', val)"
-          />
-        </el-tooltip>
-        <el-icon class="toggle-icon"><Aim /></el-icon>
+        <span class="toggle-label">鸟瞰图</span>
+        <el-switch
+          v-model="minimapVisible"
+          size="small"
+          @change="(val: boolean) => $emit('toggleMinimap', val)"
+        />
       </div>
     </div>
 
@@ -50,8 +48,8 @@
 <script setup lang="ts">
 import {
   ArrowLeft,
-  Back,
-  Right,
+  RefreshLeft,
+  RefreshRight,
   ZoomIn,
   ZoomOut,
   FullScreen,
@@ -59,8 +57,7 @@ import {
   Download,
   Picture,
   Document,
-  Promotion,
-  Aim
+  Promotion
 } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { ref, computed } from 'vue'
@@ -128,8 +125,9 @@ defineEmits<{
   gap: 4px;
 }
 
-.toggle-icon {
-  font-size: 14px;
+.toggle-label {
+  font-size: 13px;
   color: #606266;
+  white-space: nowrap;
 }
 </style>

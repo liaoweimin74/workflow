@@ -247,12 +247,6 @@ async function handleSave() {
     const modeler = getModeler()
     const xml = await exportXml(modeler)
 
-    const error = validateBpmnXml(xml)
-    if (error) {
-      ElMessage.error(error)
-      return
-    }
-
     designerStore.setBpmnXml(xml)
 
     await processDesignApi.saveDesign(designerStore.draftId, {

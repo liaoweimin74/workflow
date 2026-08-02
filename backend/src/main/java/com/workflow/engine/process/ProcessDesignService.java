@@ -81,17 +81,6 @@ public class ProcessDesignService {
         ProcessDraft draft = draftRepository.findByIdAndTenantId(draftId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Process draft not found: " + draftId));
 
-        // 无变化检查：比较 bpmnXml + name + key + categoryId + nodeConfigs
-        boolean unchanged = Objects.equals(trimToNull(draft.getBpmnXml()), trimToNull(request.getBpmnXml()))
-                && (request.getName() == null || Objects.equals(draft.getName(), request.getName()))
-                && (request.getKey() == null || Objects.equals(draft.getKey(), request.getKey()))
-                && Objects.equals(draft.getCategoryId(), request.getCategoryId())
-                && nodeConfigsEqual(draftId, request.getNodeConfigs());
-
-        if (unchanged) {
-            throw new BusinessException(400, "流程数据未变化，无需保存");
-        }
-
         draft.setBpmnXml(request.getBpmnXml());
         if (request.getName() != null) draft.setName(request.getName());
         if (request.getKey() != null) draft.setKey(request.getKey());
@@ -170,12 +159,18 @@ public class ProcessDesignService {
 
     /**
      * 部署流程到 Flowable 引擎。
+     * 校验：已部署且未修改的流程不允许重复部署，避免产生多余版本。
      */
     @Transactional
     public ProcessDraft deploy(String draftId) {
         String tenantId = tenantProvider.getTenantId();
         ProcessDraft draft = draftRepository.findByIdAndTenantId(draftId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Process draft not found: " + draftId));
+
+        // 已部署且未修改的流程不允许重复部署
+        if ("DEPLOYED".equals(draft.getStatus())) {
+            throw new BusinessException(400, "流程数据未变化，无需部署");
+        }
 
         Deployment deployment = repositoryService.createDeployment()
                 .name(draft.getName())

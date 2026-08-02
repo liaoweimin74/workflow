@@ -187,12 +187,6 @@ async function handleSave() {
       return
     }
 
-    // 前端快照对比：无变化则拦截，不发请求
-    if (designerStore.isUnchanged(xml)) {
-      ElMessage.info('流程数据未变化，无需保存')
-      return
-    }
-
     designerStore.setBpmnXml(xml)
 
     await processDesignApi.saveDesign(designerStore.draftId, {
@@ -218,7 +212,7 @@ async function handleDeploy() {
       type: 'warning'
     })
 
-    // 先保存（数据未变化时跳过，不中断部署）
+    // 先保存
     const modeler = getModeler()
     const xml = await exportXml(modeler)
 
@@ -228,17 +222,13 @@ async function handleDeploy() {
       return
     }
 
-    try {
-      await processDesignApi.saveDesign(designerStore.draftId, {
-        name: designerStore.draftName || '',
-        key: designerStore.draftKey || '',
-        categoryId: null,
-        bpmnXml: xml,
-        nodeConfigs: designerStore.nodeConfigs
-      })
-    } catch {
-      // 保存失败（可能数据未变化），不中断部署流程
-    }
+    await processDesignApi.saveDesign(designerStore.draftId, {
+      name: designerStore.draftName || '',
+      key: designerStore.draftKey || '',
+      categoryId: null,
+      bpmnXml: xml,
+      nodeConfigs: designerStore.nodeConfigs
+    })
 
     // 部署
     await processDesignApi.deploy(designerStore.draftId)

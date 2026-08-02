@@ -65,6 +65,10 @@ import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
 import { processDesignApi } from '@/api/processDefinition'
+import 'bpmn-js/dist/assets/diagram-js.css'
+import 'bpmn-js/dist/assets/bpmn-js.css'
+import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css'
+import 'bpmn-js/dist/assets/bpmn-font/css/bpmn-codes.css'  // context-pad / palette 图标
 import './styles/designer-theme.css'
 
 const route = useRoute()

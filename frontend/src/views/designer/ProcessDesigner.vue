@@ -13,6 +13,7 @@
       @zoom-out="handleZoomOut"
       @zoom-reset="handleZoomReset"
       @back="handleBack"
+      @toggle-minimap="handleToggleMinimap"
     />
 
     <div class="designer-body">
@@ -108,6 +109,12 @@ onMounted(async () => {
     // 导入 BPMN XML
     const modeler = getModeler()
     await importXml(modeler, editorData.bpmnXml)
+
+    // 默认打开鸟瞰图
+    const minimap: any = (modeler as any).get('minimap')
+    if (minimap) {
+      minimap.open()
+    }
 
     // 监听选择事件
     setupEventListeners()
@@ -286,6 +293,17 @@ function handleZoomReset() {
   const modeler = getModeler()
   const canvas = (modeler as any).get('canvas')
   canvas.zoom('fit-viewport', 'auto')
+}
+
+function handleToggleMinimap(visible: boolean) {
+  const modeler = getModeler()
+  const minimap: any = (modeler as any).get('minimap')
+  if (!minimap) return
+  if (visible) {
+    minimap.open()
+  } else {
+    minimap.close()
+  }
 }
 
 function handleBack() {

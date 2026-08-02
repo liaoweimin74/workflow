@@ -15,6 +15,17 @@
         <el-button :icon="ZoomOut" size="small" @click="$emit('zoomOut')" title="缩小" />
         <el-button :icon="FullScreen" size="small" @click="$emit('zoomReset')" title="适应屏幕" />
       </el-button-group>
+      <el-divider direction="vertical" />
+      <div class="minimap-toggle">
+        <el-tooltip :content="minimapVisible ? '隐藏鸟瞰图' : '显示鸟瞰图'" placement="bottom">
+          <el-switch
+            v-model="minimapVisible"
+            size="small"
+            @change="(val: boolean) => $emit('toggleMinimap', val)"
+          />
+        </el-tooltip>
+        <el-icon class="toggle-icon"><Aim /></el-icon>
+      </div>
     </div>
 
     <div class="toolbar-center">
@@ -48,15 +59,19 @@ import {
   Download,
   Picture,
   Document,
-  Promotion
+  Promotion,
+  Aim
 } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 
 const designerStore = useDesignerStore()
 
 const draftName = computed(() => designerStore.draftName)
 const isDirty = computed(() => designerStore.isDirty)
+
+// 鸟瞰图开关，默认显示
+const minimapVisible = ref(true)
 
 defineEmits<{
   (e: 'save'): void
@@ -70,6 +85,7 @@ defineEmits<{
   (e: 'zoomOut'): void
   (e: 'zoomReset'): void
   (e: 'back'): void
+  (e: 'toggleMinimap', visible: boolean): void
 }>()
 </script>
 
@@ -104,5 +120,16 @@ defineEmits<{
 .designer-title {
   font-weight: 600;
   font-size: 15px;
+}
+
+.minimap-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toggle-icon {
+  font-size: 14px;
+  color: #606266;
 }
 </style>

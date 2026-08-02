@@ -96,7 +96,7 @@
         <el-table-column
           v-if="resolvedActionButtons.length"
           label="操作"
-          :width="actionColumnWidth"
+          :min-width="actionColumnWidth"
           fixed="right"
         >
           <template #default="{ row }">

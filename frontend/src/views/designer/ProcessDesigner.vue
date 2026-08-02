@@ -63,7 +63,6 @@ import NodePalette from './components/NodePalette.vue'
 import PropertyPanel from './properties/PropertyPanel.vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
-import { registerCustomContextPad } from './utils/customContextPad'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
 import { processDesignApi } from '@/api/processDefinition'
 import 'bpmn-js/dist/assets/diagram-js.css'
@@ -94,8 +93,6 @@ onMounted(async () => {
     await nextTick()
     if (canvasWrapperRef.value) {
       initModeler({ container: canvasWrapperRef.value })
-      // 注册自定义 context-pad（追加用户任务/服务任务/网关等快捷入口）
-      registerCustomContextPad(getModeler())
     }
 
     // 加载设计器数据

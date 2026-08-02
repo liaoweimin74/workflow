@@ -4,6 +4,7 @@ import type { Element } from 'bpmn-js/lib/model/Types'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // @ts-ignore - diagram-js-minimap has no type declarations
 import minimapModule from 'diagram-js-minimap'
+import { customContextPadModule } from './customContextPad'
 
 export interface ModelerOptions {
   container: HTMLElement
@@ -17,7 +18,6 @@ export function initModeler(options: ModelerOptions): Modeler {
   }
 
   // 覆盖内置 palette provider 为空，禁用画布悬浮工具栏
-  // 保留 context-pad（选中菜单）等其他功能
   const disablePaletteModule = {
     paletteProvider: ['type', function (this: any) {
       this.getPaletteEntries = function () { return {} }
@@ -26,7 +26,11 @@ export function initModeler(options: ModelerOptions): Modeler {
 
   modelerInstance = new BpmnModeler({
     container: options.container,
-    additionalModules: [minimapModule as any, disablePaletteModule as any],
+    additionalModules: [
+      minimapModule as any,
+      disablePaletteModule as any,
+      customContextPadModule as any
+    ],
     keyboard: {
       bindTo: window
     }

@@ -92,9 +92,9 @@
 /* 小地图 — 右下角悬浮 */
 .djs-minimap {
   position: absolute !important;
+  top: auto !important;
   bottom: 16px !important;
   right: 16px !important;
-  top: auto !important;
   width: 200px !important;
   height: 120px !important;
   background: rgba(255, 255, 255, 0.95) !important;
@@ -115,6 +115,8 @@
   display: none !important;
 }
 
+/* .map 和 .djs-minimap 同尺寸，SVG width:100% 自适应，
+   getBoundingClientRect 返回值与 SVG 渲染尺寸一致，坐标映射不会错 */
 .djs-minimap .map {
   width: 100% !important;
   height: 100% !important;

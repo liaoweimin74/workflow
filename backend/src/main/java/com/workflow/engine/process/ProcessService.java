@@ -6,6 +6,8 @@ import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.repository.ProcessDefinitionQuery;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -24,6 +26,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class ProcessService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProcessService.class);
 
     private final RepositoryService repositoryService;
     private final TenantProvider tenantProvider;
@@ -91,19 +95,20 @@ public class ProcessService {
      */
     public List<ProcessDefinitionSummary> listSummaries() {
         String tenantId = tenantProvider.getTenantId();
+        log.info("Listing deployed process summaries for tenant: {}", tenantId);
         List<ProcessDefinition> all = repositoryService.createProcessDefinitionQuery()
                 .processDefinitionTenantId(tenantId)
                 .latestVersion()
-                .active()
                 .orderByProcessDefinitionName()
                 .asc()
                 .list();
+        log.info("Found {} deployed process definitions", all.size());
 
         return all.stream().map(pd -> {
             ProcessDefinitionSummary s = new ProcessDefinitionSummary();
             s.setId(pd.getId());
             s.setKey(pd.getKey());
-            s.setName(pd.getName());
+            s.setName(pd.getName() != null ? pd.getName() : pd.getKey());
             s.setVersion(pd.getVersion());
             return s;
         }).collect(Collectors.toList());

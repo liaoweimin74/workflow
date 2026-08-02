@@ -181,6 +181,7 @@ const actionButtons: ActionButton[] = [
     size: 'small',
     type: 'danger',
     confirm: '确定要删除此流程吗？',
+    show: (row: any) => row.status !== 'DEPLOYED',
     onClick: async (row: any) => {
       try {
         await processDesignApi.deleteDraft(row.id)

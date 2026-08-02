@@ -48,6 +48,8 @@ export interface ActionButton {
   icon?: Component
   permission?: string
   confirm?: string
+  /** 返回 false 则隐藏此按钮 */
+  show?: (row: any) => boolean
   onClick: (row: any) => void
 }
 

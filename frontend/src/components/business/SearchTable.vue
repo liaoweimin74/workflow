@@ -102,6 +102,7 @@
           <template #default="{ row }">
             <div class="action-buttons" style="display: inline-flex; align-items: center; gap: 0; white-space: nowrap">
               <template v-for="btn in visibleButtons" :key="btn.label">
+                <template v-if="!btn.show || btn.show(row)">
                 <!-- 图标 + confirm -->
                 <el-popconfirm v-if="btn.icon && btn.confirm" :title="btn.confirm" @confirm="btn.onClick(row)">
                   <template #reference>
@@ -137,6 +138,7 @@
                 >
                   {{ btn.label }}
                 </el-button>
+                </template>
               </template>
 
               <el-dropdown v-if="dropdownButtons.length" trigger="click">
@@ -146,10 +148,10 @@
                 <template #dropdown>
                   <el-dropdown-menu>
                     <template v-for="btn in dropdownButtons" :key="btn.label">
-                      <el-dropdown-item v-if="!btn.confirm" @click="btn.onClick(row)">
+                      <el-dropdown-item v-if="(!btn.show || btn.show(row)) && !btn.confirm" @click="btn.onClick(row)">
                         {{ btn.label }}
                       </el-dropdown-item>
-                      <el-dropdown-item v-else>
+                      <el-dropdown-item v-else-if="(!btn.show || btn.show(row)) && btn.confirm">
                         <el-popconfirm :title="btn.confirm" @confirm="btn.onClick(row)">
                           <template #reference>
                             <span>{{ btn.label }}</span>

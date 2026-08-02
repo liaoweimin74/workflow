@@ -32,6 +32,11 @@ public class ProcessDraft {
     @Column(name = "bpmn_xml", nullable = false, columnDefinition = "LONGTEXT")
     private String bpmnXml;
 
+    /** 上次部署时的 BPMN XML，用于部署前校验是否有变化 */
+    @Lob
+    @Column(name = "deployed_xml", columnDefinition = "LONGTEXT")
+    private String deployedXml;
+
     @Column(name = "status", length = 32, nullable = false)
     private String status = "DRAFT";
 
@@ -84,6 +89,9 @@ public class ProcessDraft {
 
     public String getBpmnXml() { return bpmnXml; }
     public void setBpmnXml(String bpmnXml) { this.bpmnXml = bpmnXml; }
+
+    public String getDeployedXml() { return deployedXml; }
+    public void setDeployedXml(String deployedXml) { this.deployedXml = deployedXml; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

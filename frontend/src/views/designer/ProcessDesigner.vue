@@ -106,6 +106,7 @@ onMounted(async () => {
     designerStore.setDraft(editorData.id, editorData.name)
     designerStore.setBpmnXml(editorData.bpmnXml)
     designerStore.setNodeConfigs(editorData.nodeConfigs || {})
+    designerStore.setSavedSnapshot(editorData.bpmnXml, editorData.nodeConfigs || {})
     designerStore.markClean()
 
     // 导入 BPMN XML
@@ -186,6 +187,12 @@ async function handleSave() {
       return
     }
 
+    // 前端快照对比：无变化则拦截，不发请求
+    if (designerStore.isUnchanged(xml)) {
+      ElMessage.info('流程数据未变化，无需保存')
+      return
+    }
+
     designerStore.setBpmnXml(xml)
 
     await processDesignApi.saveDesign(designerStore.draftId, {
@@ -195,6 +202,7 @@ async function handleSave() {
       bpmnXml: xml,
       nodeConfigs: designerStore.nodeConfigs
     })
+    designerStore.setSavedSnapshot(xml, designerStore.nodeConfigs)
     designerStore.markClean()
     ElMessage.success('保存成功')
   } catch {
@@ -230,6 +238,7 @@ async function handleDeploy() {
 
     // 部署
     await processDesignApi.deploy(designerStore.draftId)
+    designerStore.setSavedSnapshot(xml, designerStore.nodeConfigs)
     designerStore.markClean()
     ElMessage.success('部署成功')
   } catch (err) {

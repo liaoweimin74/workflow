@@ -11,8 +11,8 @@
       @row-click="handleRowClick"
     >
       <template #status="{ row }">
-        <el-tag :type="row.status === 'DEPLOYED' ? 'success' : 'info'" size="small">
-          {{ row.status === 'DEPLOYED' ? '已部署' : '草稿' }}
+        <el-tag :type="statusTagType(row)" size="small">
+          {{ statusLabel(row) }}
         </el-tag>
       </template>
       <template #updatedAt="{ row }">
@@ -198,6 +198,25 @@ function formatDate(dateStr: string): string {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return d.toLocaleString('zh-CN', { hour12: false })
+}
+
+/** 判断流程是否有未部署的修改：已部署且 updatedAt > lastDeployedAt */
+function isModified(row: ProcessDraft): boolean {
+  if (row.status !== 'DEPLOYED') return false
+  if (!row.lastDeployedAt) return false
+  return new Date(row.updatedAt).getTime() > new Date(row.lastDeployedAt).getTime()
+}
+
+function statusLabel(row: ProcessDraft): string {
+  if (row.status === 'DRAFT') return '草稿'
+  if (isModified(row)) return '已修改'
+  return '已部署'
+}
+
+function statusTagType(row: ProcessDraft): 'info' | 'success' | 'warning' {
+  if (row.status === 'DRAFT') return 'info'
+  if (isModified(row)) return 'warning'
+  return 'success'
 }
 </script>
 

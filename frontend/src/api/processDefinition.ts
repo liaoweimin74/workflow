@@ -11,6 +11,7 @@ export interface ProcessDraft {
   status: string
   processDefinitionId: string | null
   deployId: string | null
+  lastDeployedAt: string | null
   version: number
   createdBy: string | null
   createdAt: string

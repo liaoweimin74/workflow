@@ -17,3 +17,7 @@ SET @sql = IF(@col_exists = 0,
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
+
+-- 补全历史已部署流程的 last_deployed_at（用 updated_at 近似）
+UPDATE wf_process_draft SET last_deployed_at = updated_at
+WHERE status = 'DEPLOYED' AND last_deployed_at IS NULL;

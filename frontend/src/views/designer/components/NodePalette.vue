@@ -1,35 +1,48 @@
 <template>
-  <div class="node-palette">
-    <div class="palette-header">
-      <span>节点面板</span>
+  <div class="node-palette" :class="{ collapsed }">
+    <!-- 折叠态：竖条 -->
+    <div v-if="collapsed" class="collapse-bar" @click="collapsed = false">
+      <i class="bpmn-font-icon bpmn-icon-start-event-none bar-icon"></i>
+      <span class="bar-text">节点</span>
     </div>
-    <div class="palette-body">
-      <div
-        v-for="group in nodeGroups"
-        :key="group.title"
-        class="palette-group"
-      >
-        <div class="group-title">{{ group.title }}</div>
-        <div class="group-items">
-          <div
-            v-for="node in group.items"
-            :key="node.type"
-            class="palette-item"
-            draggable="true"
-            @dragstart="handleDragStart($event, node)"
-            @click="handleClick(node)"
-            :title="node.description"
-          >
-            <i class="item-icon bpmn-font-icon" :class="node.iconClass"></i>
-            <span class="item-label">{{ node.label }}</span>
+
+    <!-- 展开态：完整面板 -->
+    <template v-else>
+      <div class="palette-header">
+        <span>节点面板</span>
+        <el-icon class="collapse-toggle" @click="collapsed = true"><Fold /></el-icon>
+      </div>
+      <div class="palette-body">
+        <div
+          v-for="group in nodeGroups"
+          :key="group.title"
+          class="palette-group"
+        >
+          <div class="group-title">{{ group.title }}</div>
+          <div class="group-items">
+            <div
+              v-for="node in group.items"
+              :key="node.type"
+              class="palette-item"
+              draggable="true"
+              @dragstart="handleDragStart($event, node)"
+              @click="handleClick(node)"
+              :title="node.description"
+            >
+              <i class="item-icon bpmn-font-icon" :class="node.iconClass"></i>
+              <span class="item-label">{{ node.label }}</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { Fold } from '@element-plus/icons-vue'
+
 interface PaletteNode {
   type: string
   label: string
@@ -41,6 +54,14 @@ interface PaletteGroup {
   title: string
   items: PaletteNode[]
 }
+
+const props = defineProps<{ collapsed?: boolean }>()
+const emit = defineEmits<{ 'update:collapsed': [value: boolean] }>()
+
+const collapsed = computed({
+  get: () => props.collapsed ?? false,
+  set: (val) => emit('update:collapsed', val)
+})
 
 const nodeGroups: PaletteGroup[] = [
   {
@@ -81,20 +102,73 @@ function handleClick(_node: PaletteNode) {
 
 <style scoped>
 .node-palette {
-  width: 200px;
   background: #fff;
   border-right: 1px solid #e4e7ed;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.2s ease;
+}
+
+/* 展开态宽度 */
+.node-palette:not(.collapsed) {
+  width: 200px;
+}
+
+/* 折叠态竖条 */
+.node-palette.collapsed {
+  width: 32px;
+}
+
+.collapse-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  cursor: pointer;
+  gap: 6px;
+  color: #606266;
+  transition: background 0.2s;
+}
+
+.collapse-bar:hover {
+  background: #f5f7fa;
+  color: #409eff;
+}
+
+.bar-icon {
+  font-size: 18px;
+}
+
+.bar-text {
+  font-size: 12px;
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
 }
 
 .palette-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 12px 16px;
   font-size: 14px;
   font-weight: 600;
   color: #303133;
   border-bottom: 1px solid #e4e7ed;
+}
+
+.collapse-toggle {
+  cursor: pointer;
+  color: #909399;
+  font-size: 16px;
+  transition: color 0.2s;
+}
+
+.collapse-toggle:hover {
+  color: #409eff;
 }
 
 .palette-body {

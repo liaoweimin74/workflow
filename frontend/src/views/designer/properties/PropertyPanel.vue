@@ -1,57 +1,68 @@
 <template>
-  <div class="property-panel">
-    <div class="panel-header">
-      <span>属性配置</span>
-      <el-tag v-if="selectedNodeType" size="small" type="success">{{ nodeTypeLabel }}</el-tag>
+  <div class="property-panel" :class="{ collapsed }">
+    <!-- 折叠态：竖条 -->
+    <div v-if="collapsed" class="collapse-bar" @click="collapsed = false">
+      <span class="bar-text">属性</span>
+      <el-icon class="bar-icon"><Setting /></el-icon>
     </div>
 
-    <div class="panel-body">
-      <!-- 无选中节点 -->
-      <el-empty v-if="!selectedNodeId" description="请选择节点查看属性" :image-size="80" />
+    <!-- 展开态：完整面板 -->
+    <template v-else>
+      <div class="panel-header">
+        <span>属性配置</span>
+        <el-tag v-if="selectedNodeType" size="small" type="success">{{ nodeTypeLabel }}</el-tag>
+        <el-icon class="collapse-toggle" @click="collapsed = true"><Fold /></el-icon>
+      </div>
 
-      <!-- 流程属性（选中画布空白时） -->
-      <process-property
-        v-else-if="selectedNodeType === 'Process'"
-      />
+      <div class="panel-body">
+        <!-- 无选中节点 -->
+        <el-empty v-if="!selectedNodeId" description="请选择节点查看属性" :image-size="80" />
 
-      <!-- 开始/结束事件 -->
-      <event-property
-        v-else-if="isEventNode"
-      />
+        <!-- 流程属性（选中画布空白时） -->
+        <process-property
+          v-else-if="selectedNodeType === 'Process'"
+        />
 
-      <!-- 用户任务（审批节点） -->
-      <user-task-property
-        v-else-if="selectedNodeType === 'UserTask'"
-      />
+        <!-- 开始/结束事件 -->
+        <event-property
+          v-else-if="isEventNode"
+        />
 
-      <!-- 服务任务 -->
-      <service-task-property
-        v-else-if="selectedNodeType === 'ServiceTask'"
-      />
+        <!-- 用户任务（审批节点） -->
+        <user-task-property
+          v-else-if="selectedNodeType === 'UserTask'"
+        />
 
-      <!-- 调用活动（子流程） -->
-      <call-activity-property
-        v-else-if="selectedNodeType === 'CallActivity'"
-      />
+        <!-- 服务任务 -->
+        <service-task-property
+          v-else-if="selectedNodeType === 'ServiceTask'"
+        />
 
-      <!-- 网关 -->
-      <gateway-property
-        v-else-if="isGatewayNode"
-      />
+        <!-- 调用活动（子流程） -->
+        <call-activity-property
+          v-else-if="selectedNodeType === 'CallActivity'"
+        />
 
-      <!-- 连线 -->
-      <sequence-flow-property
-        v-else-if="selectedNodeType === 'SequenceFlow'"
-      />
+        <!-- 网关 -->
+        <gateway-property
+          v-else-if="isGatewayNode"
+        />
 
-      <!-- 未知节点类型 -->
-      <el-empty v-else description="该节点类型暂不支持属性配置" :image-size="80" />
-    </div>
+        <!-- 连线 -->
+        <sequence-flow-property
+          v-else-if="selectedNodeType === 'SequenceFlow'"
+        />
+
+        <!-- 未知节点类型 -->
+        <el-empty v-else description="该节点类型暂不支持属性配置" :image-size="80" />
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Fold, Setting } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import ProcessProperty from './ProcessProperty.vue'
 import EventProperty from './EventProperty.vue'
@@ -62,6 +73,14 @@ import GatewayProperty from './GatewayProperty.vue'
 import SequenceFlowProperty from './SequenceFlowProperty.vue'
 
 const designerStore = useDesignerStore()
+
+const props = defineProps<{ collapsed?: boolean }>()
+const emit = defineEmits<{ 'update:collapsed': [value: boolean] }>()
+
+const collapsed = computed({
+  get: () => props.collapsed ?? false,
+  set: (val) => emit('update:collapsed', val)
+})
 
 const selectedNodeId = computed(() => designerStore.selectedNodeId)
 const selectedNodeType = computed(() => designerStore.selectedNodeType)
@@ -95,12 +114,49 @@ const nodeTypeLabel = computed(() => {
 
 <style scoped>
 .property-panel {
-  width: 360px;
   background: #fff;
   border-left: 1px solid #e4e7ed;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.2s ease;
+}
+
+.property-panel:not(.collapsed) {
+  width: 360px;
+}
+
+.property-panel.collapsed {
+  width: 32px;
+}
+
+.collapse-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  cursor: pointer;
+  gap: 6px;
+  color: #606266;
+  transition: background 0.2s;
+}
+
+.collapse-bar:hover {
+  background: #f5f7fa;
+  color: #409eff;
+}
+
+.bar-icon {
+  font-size: 18px;
+}
+
+.bar-text {
+  font-size: 12px;
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
 }
 
 .panel-header {
@@ -112,6 +168,17 @@ const nodeTypeLabel = computed(() => {
   font-weight: 600;
   color: #303133;
   border-bottom: 1px solid #f0f0f0;
+}
+
+.collapse-toggle {
+  cursor: pointer;
+  color: #909399;
+  font-size: 16px;
+  transition: color 0.2s;
+}
+
+.collapse-toggle:hover {
+  color: #409eff;
 }
 
 .panel-body {

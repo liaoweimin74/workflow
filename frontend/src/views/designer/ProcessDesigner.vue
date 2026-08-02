@@ -142,6 +142,7 @@ onBeforeUnmount(() => {
 function setupEventListeners() {
   const modeler = getModeler()
   const eventBus = (modeler as any).get('eventBus')
+  const canvas = (modeler as any).get('canvas')
 
   eventBus.on('selection.changed', (event: any) => {
     const newSelection = event.newSelection
@@ -153,6 +154,13 @@ function setupEventListeners() {
       designerStore.selectNode(element.id, nodeType)
     } else {
       // 点击画布空白：显示流程属性
+      designerStore.selectNode(null, 'Process')
+    }
+  })
+
+  // 点击画布背景（根元素）时显示流程属性
+  eventBus.on('element.click', (event: any) => {
+    if (event.element && event.element === canvas.getRootElement()) {
       designerStore.selectNode(null, 'Process')
     }
   })

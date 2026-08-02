@@ -267,8 +267,8 @@ const actionColumnWidth = computed(() => {
     if (btn.icon) {
       width += 36 // 圆形图标按钮 + 包裹开销
     } else {
-      // 文本按钮：按字数估算，保底 50px
-      width += Math.max(btn.label.length * 14 + 26, 50)
+      // 文本按钮：紧凑布局，每字符约 14px，左右 padding 共 12px
+      width += btn.label.length * 14 + 12
     }
   }
   if (hasMore) width += 62 // "更多"下拉

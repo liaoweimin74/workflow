@@ -18,7 +18,12 @@
 
     <div class="designer-body">
       <!-- 左侧节点面板 -->
-      <node-palette />
+      <transition name="slide-left">
+        <node-palette v-show="paletteVisible" />
+      </transition>
+      <div class="collapse-btn collapse-left" @click="paletteVisible = !paletteVisible">
+        <el-icon><ArrowLeft v-if="paletteVisible" /><ArrowRight v-else /></el-icon>
+      </div>
 
       <!-- 中间画布 -->
       <div
@@ -34,8 +39,13 @@
         </div>
       </div>
 
+      <div class="collapse-btn collapse-right" @click="propertyVisible = !propertyVisible">
+        <el-icon><ArrowRight v-if="propertyVisible" /><ArrowLeft v-else /></el-icon>
+      </div>
       <!-- 右侧属性面板 -->
-      <property-panel />
+      <transition name="slide-right">
+        <property-panel v-show="propertyVisible" />
+      </transition>
     </div>
 
     <!-- 导入 XML 对话框 -->
@@ -58,7 +68,7 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import DesignerToolbar from './components/toolbar/DesignerToolbar.vue'
 import NodePalette from './components/NodePalette.vue'
 import PropertyPanel from './properties/PropertyPanel.vue'
@@ -81,6 +91,8 @@ const canvasWrapperRef = ref<HTMLElement>()
 const loading = ref(false)
 const importDialogVisible = ref(false)
 const importXmlContent = ref('')
+const paletteVisible = ref(true)
+const propertyVisible = ref(true)
 
 onMounted(async () => {
   const draftId = route.query.id as string
@@ -397,5 +409,39 @@ function handleDrop(event: DragEvent) {
   gap: 8px;
   color: #909399;
   font-size: 14px;
+}
+
+.collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  background: #e4e7ed;
+  cursor: pointer;
+  color: #606266;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.collapse-btn:hover {
+  background: #d3d4d6;
+}
+
+/* 左侧折叠栏始终在 palette 右侧 */
+/* 右侧折叠栏始终在 property-panel 左侧 */
+
+/* 过渡动画 */
+.slide-left-enter-active,
+.slide-left-leave-active,
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: opacity 0.2s;
+}
+
+.slide-left-enter-from,
+.slide-left-leave-to,
+.slide-right-enter-from,
+.slide-right-leave-to {
+  opacity: 0;
 }
 </style>

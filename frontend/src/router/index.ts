@@ -22,12 +22,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '流程分类' }
   },
   {
-    path: '/process',
-    name: 'ProcessList',
-    component: () => import('@/views/process/ProcessListPage.vue'),
-    meta: { title: '流程定义' }
-  },
-  {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/dashboard',
@@ -73,6 +67,24 @@ const routes: RouteRecordRaw[] = [
         name: 'Profile',
         component: () => import('@/views/profile/ProfilePage.vue'),
         meta: { title: '个人中心' }
+      },
+      {
+        path: 'process/definition',
+        name: 'ProcessDefinition',
+        component: () => import('@/views/process/ProcessListPage.vue'),
+        meta: { title: '流程定义' }
+      },
+      {
+        path: 'process/center',
+        name: 'ProcessCenter',
+        component: () => import('@/views/process/ProcessCenterPage.vue'),
+        meta: { title: '流程中心' }
+      },
+      {
+        path: 'process/todo',
+        name: 'ProcessTodo',
+        component: () => import('@/views/process/ProcessTodoPage.vue'),
+        meta: { title: '待办处理' }
       },
       {
         path: '404',

@@ -49,10 +49,10 @@
           />
         </el-form-item>
         <el-form-item>
-          <div style="display: flex; gap: 8px; margin-left: auto">
-            <el-button type="primary" :icon="Search" circle @click="handleSearch" />
-            <el-button :icon="Refresh" circle @click="handleReset" />
-            <el-button v-if="showExport" :icon="Download" :loading="exportLoading" circle @click="handleExport" />
+          <div class="toolbar-buttons">
+            <el-button type="primary" :icon="Search" circle size="small" @click="handleSearch" />
+            <el-button :icon="Refresh" circle size="small" @click="handleReset" />
+            <el-button v-if="showExport" :icon="Download" :loading="exportLoading" circle size="small" @click="handleExport" />
           </div>
         </el-form-item>
       </el-form>
@@ -482,6 +482,17 @@ defineExpose({ fetchList, openFormDialog: handleCreate })
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* 查询工具栏图标按钮 */
+.toolbar-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.toolbar-buttons .el-button.is-circle {
+  padding: 5px;
 }
 
 /* 表格数据区域 - 滚动 */

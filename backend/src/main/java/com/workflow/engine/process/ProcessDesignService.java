@@ -113,7 +113,13 @@ public class ProcessDesignService {
                         nc.setTenantId(tenantId);
                         nc.setProcessDefId(draftId);
                         nc.setNodeId(entry.getKey());
-                        String nodeType = nodeTypeMap.get(entry.getKey());
+                        // __PROCESS__ 是流程级配置，不是 BPMN 节点
+                        String nodeType;
+                        if ("__PROCESS__".equals(entry.getKey())) {
+                            nodeType = "process";
+                        } else {
+                            nodeType = nodeTypeMap.get(entry.getKey());
+                        }
                         nc.setNodeType(nodeType != null ? nodeType : "unknown");
                         nc.setConfigJson(entry.getValue());
                         return nc;

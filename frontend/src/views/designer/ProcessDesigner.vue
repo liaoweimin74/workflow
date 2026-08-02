@@ -120,8 +120,8 @@ onMounted(async () => {
 
     // 监听选择事件
     setupEventListeners()
-  } catch (err: any) {
-    ElMessage.error('加载流程定义失败: ' + (err?.message || err))
+  } catch {
+    // http 拦截器已弹出后端返回的具体错误消息
   } finally {
     loading.value = false
   }
@@ -197,8 +197,8 @@ async function handleSave() {
     })
     designerStore.markClean()
     ElMessage.success('保存成功')
-  } catch (err: any) {
-    ElMessage.error('保存失败: ' + (err?.message || err))
+  } catch {
+    // http 拦截器已弹出后端返回的具体错误消息
   }
 }
 
@@ -232,9 +232,10 @@ async function handleDeploy() {
     await processDesignApi.deploy(designerStore.draftId)
     designerStore.markClean()
     ElMessage.success('部署成功')
-  } catch (err: any) {
+  } catch (err) {
+    // ElMessageBox 取消时 reject 'cancel'，静默；其他错误由 http 拦截器弹消息
     if (err !== 'cancel') {
-      ElMessage.error('部署失败: ' + (err?.message || err))
+      // noop
     }
   }
 }

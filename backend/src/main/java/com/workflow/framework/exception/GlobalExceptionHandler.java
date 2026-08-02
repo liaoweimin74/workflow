@@ -30,10 +30,10 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(FlowableException.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
     public R<Void> handleFlowableException(FlowableException e) {
         log.error("Flowable engine error", e);
-        return R.fail(500, "Flowable engine error: " + e.getMessage());
+        return R.fail(400, "流程引擎错误: " + e.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -53,6 +53,10 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public R<Void> handleException(Exception e) {
         log.error("Unexpected error", e);
-        return R.fail(500, "系统内部错误");
+        String msg = e.getMessage();
+        if (msg == null) {
+            msg = e.getClass().getSimpleName();
+        }
+        return R.fail(500, msg);
     }
 }

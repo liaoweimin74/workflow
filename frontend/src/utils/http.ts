@@ -35,7 +35,9 @@ http.interceptors.response.use(
       localStorage.removeItem('refresh_token')
       window.location.href = '/login'
     } else {
-      ElMessage.error(error.message || '网络错误')
+      // 优先取后端 R 包装返回的业务错误消息
+      const bizMsg = error.response?.data?.msg
+      ElMessage.error(bizMsg || error.message || '网络错误')
     }
     return Promise.reject(error)
   }

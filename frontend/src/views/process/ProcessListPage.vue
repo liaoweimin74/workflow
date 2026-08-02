@@ -156,8 +156,8 @@ const actionButtons: ActionButton[] = [
         await processDesignApi.deploy(row.id)
         ElMessage.success('部署成功')
         tableRef.value?.fetchList()
-      } catch (err: any) {
-        ElMessage.error('部署失败: ' + (err?.message || err))
+      } catch {
+        // http 拦截器已弹出后端返回的具体错误消息
       }
     }
   },
@@ -169,8 +169,8 @@ const actionButtons: ActionButton[] = [
         await processDesignApi.copyProcess(row.id)
         ElMessage.success('复制成功')
         tableRef.value?.fetchList()
-      } catch (err: any) {
-        ElMessage.error('复制失败: ' + (err?.message || err))
+      } catch {
+        // http 拦截器已弹出错误消息
       }
     }
   },
@@ -183,8 +183,8 @@ const actionButtons: ActionButton[] = [
         await processDesignApi.deleteDraft(row.id)
         ElMessage.success('删除成功')
         tableRef.value?.fetchList()
-      } catch (err: any) {
-        ElMessage.error('删除失败: ' + (err?.message || err))
+      } catch {
+        // http 拦截器已弹出错误消息
       }
     }
   }

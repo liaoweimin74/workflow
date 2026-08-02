@@ -65,12 +65,6 @@ const nodeGroups: PaletteGroup[] = [
       { type: 'bpmn:ParallelGateway', label: '并行网关', description: '并行执行（AND）', iconClass: 'bpmn-icon-gateway-parallel' },
       { type: 'bpmn:InclusiveGateway', label: '包含网关', description: '包含分支（OR）', iconClass: 'bpmn-icon-gateway-or' }
     ]
-  },
-  {
-    title: '其他',
-    items: [
-      { type: 'bpmn:BoundaryEvent', label: '边界事件', description: '附在活动上的事件', iconClass: 'bpmn-icon-intermediate-event-catch-timer' }
-    ]
   }
 ]
 

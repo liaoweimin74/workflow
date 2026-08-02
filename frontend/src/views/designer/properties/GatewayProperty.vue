@@ -10,12 +10,11 @@
       <el-input v-model="config.name" placeholder="如：金额判断" @change="updateBpmn" />
     </el-form-item>
 
-    <el-divider content-position="left">网关说明</el-divider>
+    <el-divider content-position="left">
+      网关说明<el-tooltip :content="gatewayTip" placement="top"><el-icon class="help-icon"><QuestionFilled /></el-icon></el-tooltip>
+    </el-divider>
 
     <el-form-item label="描述">
-      <template #label>
-        描述<el-tooltip :content="gatewayTip" placement="top"><el-icon class="help-icon"><QuestionFilled /></el-icon></el-tooltip>
-      </template>
       <el-input
         v-model="config.description"
         type="textarea"

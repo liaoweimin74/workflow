@@ -100,7 +100,7 @@
           fixed="right"
         >
           <template #default="{ row }">
-            <div style="display: inline-flex; align-items: center; gap: 0; white-space: nowrap">
+            <div class="action-buttons" style="display: inline-flex; align-items: center; gap: 0; white-space: nowrap">
               <template v-for="btn in visibleButtons" :key="btn.label">
                 <!-- 图标 + confirm -->
                 <el-popconfirm v-if="btn.icon && btn.confirm" :title="btn.confirm" @confirm="btn.onClick(row)">
@@ -502,5 +502,14 @@ defineExpose({ fetchList, openFormDialog: handleCreate })
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+/* 操作列文字按钮紧凑样式 */
+.action-buttons .el-button {
+  margin-left: 0;
+  padding: 4px 6px;
+}
+.action-buttons .el-button + .el-button {
+  margin-left: 0;
 }
 </style>

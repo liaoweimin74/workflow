@@ -81,12 +81,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '待办处理' }
       },
       {
-        path: 'process/category',
-        name: 'CategoryManagement',
-        component: () => import('@/views/category/CategoryPage.vue'),
-        meta: { title: '流程分类' }
-      },
-      {
         path: '404',
         name: 'NotFound',
         component: () => import('@/views/error/NotFoundPage.vue'),

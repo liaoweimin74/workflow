@@ -211,7 +211,7 @@ async function fetchApi(params: any) {
   }
 }
 
-const formConfig: FormConfig<ProcessDraft> = {
+const formConfig = reactive<FormConfig<ProcessDraft>>({
   fields: [
     { type: 'input', label: '流程名称', prop: 'name', rules: [{ required: true, message: '请输入流程名称', trigger: 'blur' }] },
     {
@@ -227,7 +227,7 @@ const formConfig: FormConfig<ProcessDraft> = {
       type: 'tree-select',
       label: '分类',
       prop: 'categoryId',
-      treeProps: { data: [], props: { label: 'name', value: 'id', children: 'children' } },
+      treeProps: { data: [] as any[], props: { label: 'name', value: 'id', children: 'children' } },
     },
   ],
   dialogTitle: { create: '新建流程' },
@@ -245,7 +245,7 @@ const formConfig: FormConfig<ProcessDraft> = {
     router.push({ path: '/designer', query: { id: res.data.id } })
     return res
   },
-}
+})
 
 const actionButtons: ActionButton[] = [
   {

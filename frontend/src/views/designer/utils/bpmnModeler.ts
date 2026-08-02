@@ -16,9 +16,17 @@ export function initModeler(options: ModelerOptions): Modeler {
     destroyModeler()
   }
 
+  // 覆盖内置 palette provider 为空，禁用画布悬浮工具栏
+  // 保留 context-pad（选中菜单）等其他功能
+  const disablePaletteModule = {
+    paletteProvider: ['type', function (this: any) {
+      this.getPaletteEntries = function () { return {} }
+    }]
+  }
+
   modelerInstance = new BpmnModeler({
     container: options.container,
-    additionalModules: [minimapModule as any],
+    additionalModules: [minimapModule as any, disablePaletteModule as any],
     keyboard: {
       bindTo: window
     }

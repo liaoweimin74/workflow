@@ -238,8 +238,11 @@ function validateBpmnXml(xml: string): string | null {
           if (!approval || !approval.type) {
             return `用户任务「${taskName}」未配置审批人，请设置审批类型。`
           }
-          if (approval.type !== 'initiator_self' && !approval.value) {
-            return `用户任务「${taskName}」的审批类型为「${approval.type}」但未设置审批值。`
+          if (approval.type === 'user' && (!approval.userIds || approval.userIds.length === 0)) {
+            return `用户任务「${taskName}」的审批类型为「指定用户」但未选择审批用户。`
+          }
+          if (approval.type === 'expression' && !approval.expression) {
+            return `用户任务「${taskName}」的审批类型为「流程表达式」但未设置表达式。`
           }
         } catch {
           return `用户任务「${taskName}」的节点配置解析失败。`

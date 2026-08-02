@@ -309,8 +309,8 @@ function handleDrop(event: DragEvent) {
   const modeler = getModeler()
   const canvas = (modeler as any).get('canvas')
   const elementFactory = (modeler as any).get('elementFactory')
-  const create = (modeler as any).get('create')
-  const mouseEvent = (modeler as any).get('mouse')
+  const modeling = (modeler as any).get('modeling')
+  const elementRegistry = (modeler as any).get('elementRegistry')
 
   // 计算放置坐标
   const rect = canvasWrapperRef.value?.getBoundingClientRect()
@@ -324,16 +324,14 @@ function handleDrop(event: DragEvent) {
   const canvasX = x / viewbox.scale + viewbox.x
   const canvasY = y / viewbox.scale + viewbox.y
 
-  // 创建元素
+  // 创建元素 shape
   const shape = elementFactory.createShape({ type: nodeType })
 
-  // 使用 create.start 启动创建
-  create.start(mouseEvent.createMouseEvent({
-    x: canvasX,
-    y: canvasY,
-    clientX: event.clientX,
-    clientY: event.clientY
-  }), shape)
+  // 找到根元素（Process）作为父容器
+  const rootElement = elementRegistry.find((el: any) => el.type === 'bpmn:Process') || canvas.getRootElement()
+
+  // 直接在指定坐标创建并放置元素
+  modeling.createShape(shape, { x: canvasX, y: canvasY }, rootElement)
 }
 </script>
 

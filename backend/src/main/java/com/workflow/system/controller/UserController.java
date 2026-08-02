@@ -10,6 +10,8 @@ import com.workflow.system.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
@@ -22,6 +24,12 @@ public class UserController {
     @GetMapping
     public R<PageResult<UserVO>> list(UserQueryRequest query) {
         return R.ok(userService.list(query));
+    }
+
+    @GetMapping("/batch")
+    public R<List<UserVO>> batch(@RequestParam(required = false) List<Long> ids) {
+        if (ids == null) ids = List.of();
+        return R.ok(userService.findByIds(ids));
     }
 
     @GetMapping("/{id}")

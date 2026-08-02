@@ -15,6 +15,8 @@ import com.workflow.system.repository.SysUserRepository;
 import com.workflow.system.repository.SysUserRoleRepository;
 import com.workflow.system.service.UserService;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -57,6 +59,24 @@ public class UserServiceImpl implements UserService {
             if (query.orgId() != null) {
                 predicates.add(cb.equal(root.get("orgId"), query.orgId()));
             }
+
+            // orgIds/roleIds 合并 OR 查询
+            List<Predicate> orPredicates = new ArrayList<>();
+            if (query.orgIds() != null && !query.orgIds().isEmpty()) {
+                orPredicates.add(root.get("orgId").in(query.orgIds()));
+            }
+            if (query.roleIds() != null && !query.roleIds().isEmpty()) {
+                Subquery<Long> sub = cq.subquery(Long.class);
+                Root<SysUserRole> urRoot = sub.from(SysUserRole.class);
+                sub.select(urRoot.get("userId"))
+                        .where(cb.equal(urRoot.get("userId"), root.get("id")),
+                                urRoot.get("roleId").in(query.roleIds()));
+                orPredicates.add(root.get("id").in(sub));
+            }
+            if (!orPredicates.isEmpty()) {
+                predicates.add(cb.or(orPredicates.toArray(new Predicate[0])));
+            }
+
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
@@ -165,6 +185,16 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new BusinessException("用户不存在"));
         user.setPassword(passwordEncoder.encode(GlobalConstant.DEFAULT_PASSWORD));
         userRepository.save(user);
+    }
+
+    @Override
+    public List<UserVO> findByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return userRepository.findAllById(ids).stream()
+                .map(this::toVO)
+                .toList();
     }
 
     private UserVO toVO(SysUser user) {

@@ -22,4 +22,6 @@ public interface UserService {
     void updateStatus(Long id, Integer status);
 
     void resetPassword(Long id);
+
+    List<UserVO> findByIds(List<Long> ids);
 }

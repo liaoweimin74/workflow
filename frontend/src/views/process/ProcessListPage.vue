@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
@@ -105,13 +105,13 @@ function buildTree(items: Category[]): any[] {
   return roots
 }
 
-const categoryFormConfig: FormConfig<Category> = {
+const categoryFormConfig = reactive<FormConfig<Category>>({
   fields: [
     {
       type: 'tree-select',
       label: '父分类',
       prop: 'parentId',
-      treeProps: { data: [], props: { label: 'name', value: 'id', children: 'children' } },
+      treeProps: { data: [] as any[], props: { label: 'name', value: 'id', children: 'children' } },
       placeholder: '不选则为顶级分类',
     },
     { type: 'input', label: '名称', prop: 'name', rules: [{ required: true, message: '请输入分类名称', trigger: 'blur' }] },
@@ -133,9 +133,7 @@ const categoryFormConfig: FormConfig<Category> = {
     const res = await categoryApi.list()
     const f = categoryFormConfig.fields.find(f => f.prop === 'parentId')
     if (f && f.treeProps) {
-      // 排除自身及子节点，避免循环引用
-      const tree = buildTree(res.data?.filter((c: Category) => c.id !== row.id) || [])
-      f.treeProps.data = tree
+      f.treeProps.data = buildTree(res.data?.filter((c: Category) => c.id !== row.id) || [])
     }
     return true
   },
@@ -167,7 +165,7 @@ const categoryFormConfig: FormConfig<Category> = {
       tableRef.value?.fetchList()
     }
   },
-}
+})
 
 const categoryActionButtons: ActionButton[] = [
   {

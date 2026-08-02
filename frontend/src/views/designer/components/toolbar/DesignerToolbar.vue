@@ -35,13 +35,13 @@
 
     <div class="toolbar-right">
       <el-button-group>
-        <el-button :icon="Upload" size="small" @click="$emit('importXml')">导入</el-button>
-        <el-button :icon="Download" size="small" @click="$emit('exportXml')">导出XML</el-button>
-        <el-button :icon="Picture" size="small" @click="$emit('exportSvg')">导出SVG</el-button>
+        <el-button :icon="Upload" size="small" @click="$emit('importXml')" title="导入" />
+        <el-button :icon="Download" size="small" @click="$emit('exportXml')" title="导出XML" />
+        <el-button :icon="Picture" size="small" @click="$emit('exportSvg')" title="导出SVG" />
       </el-button-group>
       <el-divider direction="vertical" />
-      <el-button type="primary" :icon="Document" size="small" @click="$emit('save')">保存</el-button>
-      <el-button type="success" :icon="Promotion" size="small" @click="$emit('deploy')">部署</el-button>
+      <el-button type="primary" :icon="Document" size="small" @click="$emit('save')" title="保存" />
+      <el-button type="success" :icon="Promotion" size="small" @click="$emit('deploy')" title="部署" />
     </div>
   </div>
 </template>

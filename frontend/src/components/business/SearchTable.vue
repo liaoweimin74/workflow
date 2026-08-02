@@ -96,7 +96,7 @@
         <el-table-column
           v-if="resolvedActionButtons.length"
           label="操作"
-          :min-width="actionColumnWidth"
+          :width="actionColumnWidth"
           fixed="right"
         >
           <template #default="{ row }">
@@ -265,14 +265,14 @@ const actionColumnWidth = computed(() => {
   let width = 0
   for (const btn of buttons) {
     if (btn.icon) {
-      width += 32 // 圆形图标按钮（紧凑）
+      width += 32 // 圆形图标按钮
     } else {
-      // 文本按钮：每字符约 13px，左右 padding 共 8px
-      width += btn.label.length * 13 + 8
+      // 文本按钮：每字符 14px + 左右 padding 8px
+      width += btn.label.length * 14 + 8
     }
   }
-  if (hasMore) width += 50 // "更多"下拉（紧凑）
-  width += 12 // el-table .cell 左右 padding（紧凑）
+  if (hasMore) width += 50 // "更多"下拉
+  width += 24 // el-table .cell 左右 padding
 
   return Math.ceil(width) + 'px'
 })

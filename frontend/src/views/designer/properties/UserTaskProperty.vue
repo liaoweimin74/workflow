@@ -15,7 +15,6 @@
     <el-form-item label="审批类型">
       <el-radio-group v-model="approval.type" @change="saveConfig">
         <el-radio value="user">指定用户</el-radio>
-        <el-radio value="role">指定角色</el-radio>
         <el-radio value="dept_head">部门负责人</el-radio>
         <el-radio value="initiator_self">发起人自选</el-radio>
         <el-radio value="expression">流程表达式</el-radio>
@@ -23,24 +22,15 @@
     </el-form-item>
 
     <el-form-item v-if="approval.type === 'user'" label="审批用户">
-      <el-input
-        v-model="approval.value"
-        placeholder="用户ID，多个用逗号分隔"
-        @change="saveConfig"
-      />
-    </el-form-item>
-
-    <el-form-item v-if="approval.type === 'role'" label="审批角色">
-      <el-input
-        v-model="approval.value"
-        placeholder="角色编码，多个用逗号分隔"
+      <ApproverPicker
+        v-model="approval.userIds"
         @change="saveConfig"
       />
     </el-form-item>
 
     <el-form-item v-if="approval.type === 'expression'" label="表达式">
       <el-input
-        v-model="approval.value"
+        v-model="approval.expression"
         type="textarea"
         :rows="2"
         placeholder="如：${initiator.deptManager}"
@@ -96,6 +86,7 @@
 import { reactive, onMounted, watch } from 'vue'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
+import { ApproverPicker } from '@/components/business'
 
 const designerStore = useDesignerStore()
 
@@ -108,8 +99,9 @@ const config = reactive({
 })
 
 const approval = reactive({
-  type: '' as 'user' | 'role' | 'dept_head' | 'initiator_self' | 'expression' | '',
-  value: '',
+  type: '' as 'user' | 'dept_head' | 'initiator_self' | 'expression' | '',
+  userIds: [] as number[],
+  expression: '',
   multiMode: 'countersign' as 'countersign' | 'or_sign'
 })
 
@@ -149,7 +141,8 @@ function loadConfig() {
 
   // 重置为默认值，避免残留上一节点
   approval.type = ''
-  approval.value = ''
+  approval.userIds = []
+  approval.expression = ''
   approval.multiMode = 'countersign'
   operations.allowReject = true
   operations.allowAddSign = false
@@ -162,7 +155,8 @@ function loadConfig() {
   if (existing) {
     if (existing.approval) {
       approval.type = existing.approval.type || ''
-      approval.value = existing.approval.value || ''
+      approval.userIds = existing.approval.userIds || []
+      approval.expression = existing.approval.expression || ''
       approval.multiMode = existing.approval.multiMode || 'countersign'
     }
     if (existing.operations) {
@@ -200,7 +194,8 @@ function saveConfig() {
     },
     approval: {
       type: approval.type || undefined,
-      value: approval.value || undefined,
+      userIds: approval.userIds.length > 0 ? approval.userIds : undefined,
+      expression: approval.expression || undefined,
       multiMode: approval.multiMode
     },
     operations: {

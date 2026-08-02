@@ -18,9 +18,6 @@
       <template #lastDeployedAt="{ row }">
         {{ row.lastDeployedAt ? formatDate(row.lastDeployedAt) : '—' }}
       </template>
-      <template #updatedAt="{ row }">
-        {{ formatDate(row.updatedAt) }}
-      </template>
     </SearchTable>
   </div>
 </template>
@@ -85,8 +82,7 @@ const columns: TableColumn[] = [
   { prop: 'key', label: '流程标识', width: 180 },
   { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
   { prop: 'version', label: '发布版本', width: 90, align: 'center' },
-  { prop: 'lastDeployedAt', label: '发布时间', width: 180, slotName: 'lastDeployedAt' },
-  { prop: 'updatedAt', label: '更新时间', width: 180, slotName: 'updatedAt' }
+  { prop: 'lastDeployedAt', label: '发布时间', width: 180, slotName: 'lastDeployedAt' }
 ]
 
 // ========== 数据获取 ==========

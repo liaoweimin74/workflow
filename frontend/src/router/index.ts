@@ -16,12 +16,6 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '流程设计器', fullScreen: true }
   },
   {
-    path: '/category',
-    name: 'CategoryManagement',
-    component: () => import('@/views/category/CategoryPage.vue'),
-    meta: { title: '流程分类' }
-  },
-  {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/dashboard',
@@ -85,6 +79,12 @@ const routes: RouteRecordRaw[] = [
         name: 'ProcessTodo',
         component: () => import('@/views/process/ProcessTodoPage.vue'),
         meta: { title: '待办处理' }
+      },
+      {
+        path: 'process/category',
+        name: 'CategoryManagement',
+        component: () => import('@/views/category/CategoryPage.vue'),
+        meta: { title: '流程分类' }
       },
       {
         path: '404',

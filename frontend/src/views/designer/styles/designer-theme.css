@@ -103,6 +103,16 @@
   overflow: hidden !important;
 }
 
+/* 关闭时整体隐藏（由 toolbar 开关控制，不用自带 toggle） */
+.djs-minimap:not(.open) {
+  display: none !important;
+}
+
+/* 隐藏自带 toggle 按钮，用 toolbar 开关替代 */
+.djs-minimap .toggle {
+  display: none !important;
+}
+
 .djs-minimap .map {
   width: 100% !important;
   height: 100% !important;

@@ -20,9 +20,7 @@
             @click="handleClick(node)"
             :title="node.description"
           >
-            <el-icon class="item-icon">
-              <component :is="node.icon" />
-            </el-icon>
+            <i class="item-icon bpmn-font-icon" :class="node.iconClass"></i>
             <span class="item-label">{{ node.label }}</span>
           </div>
         </div>
@@ -32,25 +30,11 @@
 </template>
 
 <script setup lang="ts">
-import {
-  CircleCheck,
-  Switch,
-  Share,
-  Connection,
-  Memo,
-  Timer,
-  Minus,
-  Finished,
-  WarnTriangleFilled,
-  Document
-} from '@element-plus/icons-vue'
-import type { Component } from 'vue'
-
 interface PaletteNode {
   type: string
   label: string
   description: string
-  icon: Component
+  iconClass: string
 }
 
 interface PaletteGroup {
@@ -62,31 +46,31 @@ const nodeGroups: PaletteGroup[] = [
   {
     title: '事件',
     items: [
-      { type: 'bpmn:StartEvent', label: '开始事件', description: '流程开始', icon: CircleCheck },
-      { type: 'bpmn:EndEvent', label: '结束事件', description: '流程结束', icon: Finished },
-      { type: 'bpmn:IntermediateThrowEvent', label: '中间事件', description: '中间抛出事件', icon: WarnTriangleFilled }
+      { type: 'bpmn:StartEvent', label: '开始事件', description: '流程开始', iconClass: 'bpmn-icon-start-event-none' },
+      { type: 'bpmn:EndEvent', label: '结束事件', description: '流程结束', iconClass: 'bpmn-icon-end-event-none' },
+      { type: 'bpmn:IntermediateThrowEvent', label: '中间事件', description: '中间抛出事件', iconClass: 'bpmn-icon-intermediate-event-none' }
     ]
   },
   {
     title: '活动',
     items: [
-      { type: 'bpmn:UserTask', label: '用户任务', description: '需要人工审批的任务', icon: Memo },
-      { type: 'bpmn:ServiceTask', label: '服务任务', description: '自动执行的任务', icon: Document },
-      { type: 'bpmn:CallActivity', label: '调用活动', description: '调用子流程', icon: Connection }
+      { type: 'bpmn:UserTask', label: '用户任务', description: '需要人工审批的任务', iconClass: 'bpmn-icon-user-task' },
+      { type: 'bpmn:ServiceTask', label: '服务任务', description: '自动执行的任务', iconClass: 'bpmn-icon-service-task' },
+      { type: 'bpmn:CallActivity', label: '调用活动', description: '调用子流程', iconClass: 'bpmn-icon-call-activity' }
     ]
   },
   {
     title: '网关',
     items: [
-      { type: 'bpmn:ExclusiveGateway', label: '排他网关', description: '条件分支（XOR）', icon: Switch },
-      { type: 'bpmn:ParallelGateway', label: '并行网关', description: '并行执行（AND）', icon: Share },
-      { type: 'bpmn:InclusiveGateway', label: '包含网关', description: '包含分支（OR）', icon: Minus }
+      { type: 'bpmn:ExclusiveGateway', label: '排他网关', description: '条件分支（XOR）', iconClass: 'bpmn-icon-gateway-xor' },
+      { type: 'bpmn:ParallelGateway', label: '并行网关', description: '并行执行（AND）', iconClass: 'bpmn-icon-gateway-parallel' },
+      { type: 'bpmn:InclusiveGateway', label: '包含网关', description: '包含分支（OR）', iconClass: 'bpmn-icon-gateway-or' }
     ]
   },
   {
     title: '其他',
     items: [
-      { type: 'bpmn:BoundaryEvent', label: '边界事件', description: '附在活动上的事件', icon: Timer }
+      { type: 'bpmn:BoundaryEvent', label: '边界事件', description: '附在活动上的事件', iconClass: 'bpmn-icon-intermediate-event-catch-timer' }
     ]
   }
 ]
@@ -117,47 +101,41 @@ function handleClick(_node: PaletteNode) {
   font-size: 14px;
   font-weight: 600;
   color: #303133;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #e4e7ed;
 }
 
 .palette-body {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 8px 0;
 }
 
 .palette-group {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .group-title {
+  padding: 4px 16px;
   font-size: 12px;
   color: #909399;
-  padding: 4px 8px;
-  margin-bottom: 4px;
+  font-weight: 500;
 }
 
 .group-items {
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
 .palette-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 4px;
+  padding: 8px 16px;
   cursor: grab;
   transition: background 0.2s;
-  font-size: 13px;
-  color: #606266;
 }
 
 .palette-item:hover {
-  background: #ecf5ff;
-  color: #409eff;
+  background: #f5f7fa;
 }
 
 .palette-item:active {
@@ -165,11 +143,15 @@ function handleClick(_node: PaletteNode) {
 }
 
 .item-icon {
-  font-size: 16px;
-  flex-shrink: 0;
+  font-size: 20px;
+  color: #409eff;
+  margin-right: 10px;
+  width: 20px;
+  text-align: center;
 }
 
 .item-label {
-  white-space: nowrap;
+  font-size: 13px;
+  color: #606266;
 }
 </style>

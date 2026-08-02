@@ -152,7 +152,8 @@ function setupEventListeners() {
       const nodeType = parts.length > 1 ? parts[1] : type
       designerStore.selectNode(element.id, nodeType)
     } else {
-      designerStore.selectNode(null, null)
+      // 点击画布空白：显示流程属性
+      designerStore.selectNode(null, 'Process')
     }
   })
 

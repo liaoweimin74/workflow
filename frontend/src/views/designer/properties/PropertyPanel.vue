@@ -15,13 +15,13 @@
       </div>
 
       <div class="panel-body">
-        <!-- 无选中节点 -->
-        <el-empty v-if="!selectedNodeId" description="请选择节点查看属性" :image-size="80" />
-
         <!-- 流程属性（选中画布空白时） -->
         <process-property
-          v-else-if="selectedNodeType === 'Process'"
+          v-if="selectedNodeType === 'Process'"
         />
+
+        <!-- 无选中节点 -->
+        <el-empty v-else-if="!selectedNodeId" description="请选择节点查看属性" :image-size="80" />
 
         <!-- 开始/结束事件 -->
         <event-property

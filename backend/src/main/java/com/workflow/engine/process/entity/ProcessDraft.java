@@ -29,7 +29,7 @@ public class ProcessDraft {
     private String categoryId;
 
     @Lob
-    @Column(name = "bpmn_xml", nullable = false)
+    @Column(name = "bpmn_xml", nullable = false, columnDefinition = "LONGTEXT")
     private String bpmnXml;
 
     @Column(name = "status", length = 32, nullable = false)

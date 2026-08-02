@@ -37,6 +37,51 @@ export interface ParamMapping {
   target: string
 }
 
+// ========== 流程级配置 ==========
+export const PROCESS_CONFIG_KEY = '__PROCESS__'
+
+export interface ProcessConfigData {
+  name: string
+  key: string
+  categoryId: string | null
+  description: string
+  approvalPolicy: {
+    deduplication: {
+      enabled: boolean
+      scope: 'GLOBAL' | 'PHASE'
+      action: 'AUTO_PASS' | 'SKIP' | 'ESCALATE'
+    }
+    allowRecall: boolean
+    allowAddSigner: boolean
+    allowDelegate: boolean
+  }
+  numberRule: {
+    enabled: boolean
+    pattern: string
+  }
+}
+
+export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {
+  name: '',
+  key: '',
+  categoryId: null,
+  description: '',
+  approvalPolicy: {
+    deduplication: {
+      enabled: false,
+      scope: 'GLOBAL',
+      action: 'AUTO_PASS',
+    },
+    allowRecall: true,
+    allowAddSigner: true,
+    allowDelegate: true,
+  },
+  numberRule: {
+    enabled: false,
+    pattern: '{{year}}-{{seq:4}}',
+  },
+}
+
 export interface DesignerState {
   bpmnXml: string
   nodeConfigs: Record<string, string>
@@ -100,6 +145,40 @@ export const useDesignerStore = defineStore('designer', () => {
     }
   }
 
+  function getProcessConfig(): ProcessConfigData {
+    const raw = nodeConfigs.value[PROCESS_CONFIG_KEY]
+    if (!raw) return { ...DEFAULT_PROCESS_CONFIG }
+    try {
+      const parsed = JSON.parse(raw) as Partial<ProcessConfigData>
+      return {
+        ...DEFAULT_PROCESS_CONFIG,
+        ...parsed,
+        approvalPolicy: {
+          ...DEFAULT_PROCESS_CONFIG.approvalPolicy,
+          ...parsed.approvalPolicy,
+          deduplication: {
+            ...DEFAULT_PROCESS_CONFIG.approvalPolicy.deduplication,
+            ...parsed.approvalPolicy?.deduplication,
+          },
+        },
+        numberRule: {
+          ...DEFAULT_PROCESS_CONFIG.numberRule,
+          ...parsed.numberRule,
+        },
+      }
+    } catch {
+      return { ...DEFAULT_PROCESS_CONFIG }
+    }
+  }
+
+  function setProcessConfig(config: ProcessConfigData) {
+    nodeConfigs.value = {
+      ...nodeConfigs.value,
+      [PROCESS_CONFIG_KEY]: JSON.stringify(config),
+    }
+    isDirty.value = true
+  }
+
   function deleteNodeConfig(nodeId: string) {
     const { [nodeId]: _removed, ...rest } = nodeConfigs.value
     nodeConfigs.value = rest
@@ -160,6 +239,8 @@ export const useDesignerStore = defineStore('designer', () => {
     setNodeConfigs,
     setNodeConfig,
     getNodeConfig,
+    getProcessConfig,
+    setProcessConfig,
     deleteNodeConfig,
     selectNode,
     setDraft,

@@ -222,8 +222,3 @@ function statusTagType(status: string): 'info' | 'success' | 'warning' {
 }
 </script>
 
-<style scoped>
-.process-list-page {
-  padding: 16px;
-}
-</style>

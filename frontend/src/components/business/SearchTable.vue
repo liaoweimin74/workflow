@@ -105,9 +105,7 @@
                 <!-- 图标 + confirm -->
                 <el-popconfirm v-if="btn.icon && btn.confirm" :title="btn.confirm" @confirm="btn.onClick(row)">
                   <template #reference>
-                    <el-tooltip :content="btn.label" placement="top" :show-after="200">
-                      <el-button :icon="btn.icon" circle size="small" :type="btn.type" v-permission="btn.permission" />
-                    </el-tooltip>
+                    <el-button :icon="btn.icon" circle size="small" :type="btn.type" :title="btn.label" v-permission="btn.permission" />
                   </template>
                 </el-popconfirm>
 

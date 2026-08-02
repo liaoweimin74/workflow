@@ -80,6 +80,6 @@ export const processDesignApi = {
 
   /** 已部署流程定义精简列表（供调用活动子流程选择） */
   listSummaries(): Promise<R<ProcessDefinitionSummary[]>> {
-    return http.get('/v1/process-definitions/summaries')
+    return http.get('/v1/process-definitions/deployed/summaries')
   }
 }

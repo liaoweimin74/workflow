@@ -259,8 +259,8 @@ public class ProcessDesignService {
         ProcessDraft draft = draftRepository.findByIdAndTenantId(draftId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Process draft not found: " + draftId));
 
-        if ("DEPLOYED".equals(draft.getStatus())) {
-            throw new BusinessException(400, "已部署的流程不允许删除，请先停用");
+        if (draft.getDeployId() != null) {
+            throw new BusinessException(400, "已部署过的流程不允许删除，请先停用");
         }
 
         nodeConfigRepository.deleteByProcessDefId(draftId);

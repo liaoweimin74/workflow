@@ -362,7 +362,11 @@ function handleExport() {
 }
 
 // --- CRUD ---
-function handleCreate(initialValues?: Record<string, any>) {
+async function handleCreate(initialValues?: Record<string, any>) {
+  if (props.formConfig?.beforeCreate) {
+    const ok = await props.formConfig.beforeCreate()
+    if (ok === false) return
+  }
   isEdit.value = false
   editId.value = 0
   const configInitialValues = props.formConfig?.initialValues || {}

@@ -161,12 +161,31 @@ function setupEventListeners() {
   })
 }
 
+/**
+ * 校验导出的 BPMN XML 是否符合 Flowable 部署要求。
+ * 返回错误消息，无错误返回 null。
+ */
+function validateBpmnXml(xml: string): string | null {
+  const startEventMatches = xml.match(/<bpmn:startEvent[\s>]/g)
+  if (startEventMatches && startEventMatches.length > 1) {
+    return `流程定义中存在 ${startEventMatches.length} 个开始事件，BPMN 规范只允许一个。请删除多余的开始事件后重试。`
+  }
+  return null
+}
+
 async function handleSave() {
   if (!designerStore.draftId) return
 
   try {
     const modeler = getModeler()
     const xml = await exportXml(modeler)
+
+    const error = validateBpmnXml(xml)
+    if (error) {
+      ElMessage.error(error)
+      return
+    }
+
     designerStore.setBpmnXml(xml)
 
     await processDesignApi.saveDesign(designerStore.draftId, {
@@ -194,6 +213,13 @@ async function handleDeploy() {
     // 先保存
     const modeler = getModeler()
     const xml = await exportXml(modeler)
+
+    const error = validateBpmnXml(xml)
+    if (error) {
+      ElMessage.error(error)
+      return
+    }
+
     await processDesignApi.saveDesign(designerStore.draftId, {
       name: designerStore.draftName || '',
       key: '',

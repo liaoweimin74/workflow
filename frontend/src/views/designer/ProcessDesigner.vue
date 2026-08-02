@@ -103,7 +103,7 @@ onMounted(async () => {
     const res = await processDesignApi.loadEditor(draftId)
     const editorData = res.data
 
-    designerStore.setDraft(editorData.id, editorData.name)
+    designerStore.setDraft(editorData.id, editorData.name, editorData.key)
     designerStore.setBpmnXml(editorData.bpmnXml)
     designerStore.setNodeConfigs(editorData.nodeConfigs || {})
     designerStore.setSavedSnapshot(editorData.bpmnXml, editorData.nodeConfigs || {})
@@ -197,7 +197,7 @@ async function handleSave() {
 
     await processDesignApi.saveDesign(designerStore.draftId, {
       name: designerStore.draftName || '',
-      key: '',
+      key: designerStore.draftKey || '',
       categoryId: null,
       bpmnXml: xml,
       nodeConfigs: designerStore.nodeConfigs
@@ -218,7 +218,7 @@ async function handleDeploy() {
       type: 'warning'
     })
 
-    // 先保存
+    // 先保存（数据未变化时跳过，不中断部署）
     const modeler = getModeler()
     const xml = await exportXml(modeler)
 
@@ -228,13 +228,17 @@ async function handleDeploy() {
       return
     }
 
-    await processDesignApi.saveDesign(designerStore.draftId, {
-      name: designerStore.draftName || '',
-      key: '',
-      categoryId: null,
-      bpmnXml: xml,
-      nodeConfigs: designerStore.nodeConfigs
-    })
+    try {
+      await processDesignApi.saveDesign(designerStore.draftId, {
+        name: designerStore.draftName || '',
+        key: designerStore.draftKey || '',
+        categoryId: null,
+        bpmnXml: xml,
+        nodeConfigs: designerStore.nodeConfigs
+      })
+    } catch {
+      // 保存失败（可能数据未变化），不中断部署流程
+    }
 
     // 部署
     await processDesignApi.deploy(designerStore.draftId)

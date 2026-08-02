@@ -44,6 +44,7 @@ export interface DesignerState {
   selectedNodeType: string | null
   draftId: string | null
   draftName: string | null
+  draftKey: string | null
 }
 
 export const useDesignerStore = defineStore('designer', () => {
@@ -53,6 +54,7 @@ export const useDesignerStore = defineStore('designer', () => {
   const selectedNodeType = ref<string | null>(null)
   const draftId = ref<string | null>(null)
   const draftName = ref<string | null>(null)
+  const draftKey = ref<string | null>(null)
   const isDirty = ref(false)
 
   // 保存快照：记录上次加载/保存时的 XML 和 nodeConfigs，用于判断是否有实际变更
@@ -109,9 +111,10 @@ export const useDesignerStore = defineStore('designer', () => {
     selectedNodeType.value = nodeType
   }
 
-  function setDraft(id: string, name: string) {
+  function setDraft(id: string, name: string, key: string) {
     draftId.value = id
     draftName.value = name
+    draftKey.value = key
   }
 
   /** 记录保存快照（加载流程或保存成功后调用） */
@@ -133,6 +136,7 @@ export const useDesignerStore = defineStore('designer', () => {
     bpmnXml.value = ''
     draftId.value = null
     draftName.value = null
+    draftKey.value = null
     isDirty.value = false
     lastSavedXml.value = ''
     lastSavedNodeConfigs.value = ''
@@ -149,6 +153,7 @@ export const useDesignerStore = defineStore('designer', () => {
     selectedNodeType,
     draftId,
     draftName,
+    draftKey,
     isDirty,
     selectedNodeConfig,
     setBpmnXml,

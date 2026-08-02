@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/process-definitions")
+@RequestMapping("/api/v1/deployed-processes")
 public class ProcessDefinitionController {
 
     private final ProcessService processService;
@@ -41,9 +41,8 @@ public class ProcessDefinitionController {
     /**
      * 已部署流程定义精简列表（按 key 去重取最新版本）。
      * 供调用活动子流程选择下拉使用。
-     * 注意：路径用 /deployed/summaries 避免与 /{id} 动态路径冲突。
      */
-    @GetMapping("/deployed/summaries")
+    @GetMapping("/summaries")
     public R<List<ProcessDefinitionSummary>> summaries() {
         return R.ok(processService.listSummaries());
     }

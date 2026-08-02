@@ -267,12 +267,12 @@ const actionColumnWidth = computed(() => {
     if (btn.icon) {
       width += 32 // 圆形图标按钮（紧凑）
     } else {
-      // 文本按钮：每字符约 14px，左右 padding 共 8px
-      width += btn.label.length * 14 + 8
+      // 文本按钮：每字符约 13px，左右 padding 共 8px
+      width += btn.label.length * 13 + 8
     }
   }
   if (hasMore) width += 50 // "更多"下拉（紧凑）
-  width += 16 // el-table .cell 左右 padding（紧凑）
+  width += 12 // el-table .cell 左右 padding（紧凑）
 
   return Math.ceil(width) + 'px'
 })

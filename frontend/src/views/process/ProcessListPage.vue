@@ -8,6 +8,7 @@
       :fetch-api="fetchApi"
       :form-config="formConfig"
       :default-page-size="20"
+      :max-visible-buttons="4"
       @row-click="handleRowClick"
     >
       <template #status="{ row }">

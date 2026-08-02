@@ -106,6 +106,12 @@ onMounted(async () => {
     designerStore.setDraft(editorData.id, editorData.name, editorData.key)
     designerStore.setBpmnXml(editorData.bpmnXml)
     designerStore.setNodeConfigs(editorData.nodeConfigs || {})
+    // 确保流程级配置存在，回填基本信息
+    const processConfig = designerStore.getProcessConfig()
+    processConfig.name = editorData.name
+    processConfig.key = editorData.key
+    processConfig.categoryId = editorData.categoryId || null
+    designerStore.setProcessConfig(processConfig)
     designerStore.setSavedSnapshot(editorData.bpmnXml, editorData.nodeConfigs || {})
     designerStore.markClean()
 

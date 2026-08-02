@@ -10,6 +10,10 @@ export function getUserById(id: number) {
   return http.get<any, R<UserVO>>(`/users/${id}`)
 }
 
+export function getUserBatch(ids: number[]) {
+  return http.get<any, R<UserVO[]>>('/users/batch', { params: { ids } })
+}
+
 export function createUser(data: UserCreateForm) {
   return http.post<any, R<UserVO>>('/users', data)
 }

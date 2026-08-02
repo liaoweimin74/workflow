@@ -18,7 +18,16 @@ export interface UserQueryParams {
   username?: string
   nickname?: string
   orgId?: number
+  orgIds?: number[]
+  roleIds?: number[]
   status?: number
+}
+
+export interface SelectedUser {
+  id: number
+  nickname: string
+  username: string
+  orgName: string
 }
 
 export interface UserCreateForm {

@@ -29,6 +29,7 @@
     <div class="toolbar-center">
       <span class="designer-title">流程设计器</span>
       <el-tag v-if="draftName" type="info" size="small">{{ draftName }}</el-tag>
+      <el-tag v-if="draftKey" type="info" size="small" effect="plain">{{ draftKey }}</el-tag>
       <el-tag v-if="isDirty" type="warning" size="small">未保存</el-tag>
     </div>
 
@@ -65,6 +66,7 @@ import { ref, computed } from 'vue'
 const designerStore = useDesignerStore()
 
 const draftName = computed(() => designerStore.draftName)
+const draftKey = computed(() => designerStore.draftKey)
 const isDirty = computed(() => designerStore.isDirty)
 
 // 鸟瞰图开关，默认显示

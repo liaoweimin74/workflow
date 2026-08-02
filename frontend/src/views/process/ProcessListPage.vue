@@ -11,9 +11,12 @@
       @row-click="handleRowClick"
     >
       <template #status="{ row }">
-        <el-tag :type="statusTagType(row)" size="small">
-          {{ statusLabel(row) }}
+        <el-tag :type="statusTagType(row.status)" size="small">
+          {{ statusLabel(row.status) }}
         </el-tag>
+      </template>
+      <template #lastDeployedAt="{ row }">
+        {{ row.lastDeployedAt ? formatDate(row.lastDeployedAt) : '—' }}
       </template>
       <template #updatedAt="{ row }">
         {{ formatDate(row.updatedAt) }}
@@ -81,7 +84,8 @@ const columns: TableColumn[] = [
   { prop: 'name', label: '流程名称', minWidth: 180 },
   { prop: 'key', label: '流程标识', width: 180 },
   { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
-  { prop: 'version', label: '版本', width: 80, align: 'center' },
+  { prop: 'version', label: '发布版本', width: 90, align: 'center' },
+  { prop: 'lastDeployedAt', label: '发布时间', width: 180, slotName: 'lastDeployedAt' },
   { prop: 'updatedAt', label: '更新时间', width: 180, slotName: 'updatedAt' }
 ]
 
@@ -200,23 +204,24 @@ function formatDate(dateStr: string): string {
   return d.toLocaleString('zh-CN', { hour12: false })
 }
 
-/** 判断流程是否有未部署的修改：已部署且 updatedAt > lastDeployedAt */
-function isModified(row: ProcessDraft): boolean {
-  if (row.status !== 'DEPLOYED') return false
-  if (!row.lastDeployedAt) return false
-  return new Date(row.updatedAt).getTime() > new Date(row.lastDeployedAt).getTime()
+/** 状态标签文字 */
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'DRAFT': return '草稿'
+    case 'MODIFIED': return '已修改'
+    case 'DEPLOYED': return '已部署'
+    default: return status
+  }
 }
 
-function statusLabel(row: ProcessDraft): string {
-  if (row.status === 'DRAFT') return '草稿'
-  if (isModified(row)) return '已修改'
-  return '已部署'
-}
-
-function statusTagType(row: ProcessDraft): 'info' | 'success' | 'warning' {
-  if (row.status === 'DRAFT') return 'info'
-  if (isModified(row)) return 'warning'
-  return 'success'
+/** 状态标签类型 */
+function statusTagType(status: string): 'info' | 'success' | 'warning' {
+  switch (status) {
+    case 'DRAFT': return 'info'
+    case 'MODIFIED': return 'warning'
+    case 'DEPLOYED': return 'success'
+    default: return 'info'
+  }
 }
 </script>
 

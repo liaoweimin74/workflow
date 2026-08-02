@@ -97,6 +97,11 @@ public class ProcessDesignService {
         if (request.getKey() != null) draft.setKey(request.getKey());
         if (request.getCategoryId() != null) draft.setCategoryId(request.getCategoryId());
 
+        // 已部署的流程被修改后标记为 MODIFIED
+        if ("DEPLOYED".equals(draft.getStatus())) {
+            draft.setStatus("MODIFIED");
+        }
+
         draftRepository.save(draft);
 
         nodeConfigRepository.deleteByProcessDefId(draftId);
@@ -139,7 +144,7 @@ public class ProcessDesignService {
         copy.setCategoryId(source.getCategoryId());
         copy.setBpmnXml(source.getBpmnXml());
         copy.setStatus("DRAFT");
-        copy.setVersion(1);
+        copy.setVersion(0);
         copy.setCreatedBy(source.getCreatedBy());
         draftRepository.save(copy);
 
@@ -189,8 +194,8 @@ public class ProcessDesignService {
         draft.setLastDeployedAt(LocalDateTime.now());
         if (procDef != null) {
             draft.setProcessDefinitionId(procDef.getId());
+            draft.setVersion(procDef.getVersion());
         }
-        draft.setVersion(draft.getVersion() + 1);
         return draftRepository.save(draft);
     }
 
@@ -211,7 +216,7 @@ public class ProcessDesignService {
         draft.setCategoryId(categoryId);
         draft.setBpmnXml(defaultXml);
         draft.setStatus("DRAFT");
-        draft.setVersion(1);
+        draft.setVersion(0);
         return draftRepository.save(draft);
     }
 

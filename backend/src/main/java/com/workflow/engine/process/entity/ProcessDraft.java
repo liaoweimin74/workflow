@@ -45,7 +45,7 @@ public class ProcessDraft {
     private LocalDateTime lastDeployedAt;
 
     @Column(name = "version", nullable = false)
-    private Integer version = 1;
+    private Integer version = 0;
 
     @Column(name = "created_by", length = 50)
     private String createdBy;

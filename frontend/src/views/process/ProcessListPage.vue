@@ -142,7 +142,6 @@ const formConfig: FormConfig<ProcessDraft> = {
 const actionButtons: ActionButton[] = [
   {
     label: '设计',
-    type: 'primary',
     size: 'small',
     onClick: (row: any) => {
       router.push({ path: '/designer', query: { id: row.id } })
@@ -150,7 +149,6 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '部署',
-    type: 'success',
     size: 'small',
     confirm: '确定要部署此流程吗？部署后将创建新的流程定义版本。',
     onClick: async (row: any) => {
@@ -165,7 +163,6 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '复制',
-    type: 'warning',
     size: 'small',
     onClick: async (row: any) => {
       try {
@@ -179,7 +176,6 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '删除',
-    type: 'danger',
     size: 'small',
     confirm: '确定要删除此流程吗？',
     onClick: async (row: any) => {

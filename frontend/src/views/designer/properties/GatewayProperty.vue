@@ -12,31 +12,10 @@
 
     <el-divider content-position="left">网关说明</el-divider>
 
-    <el-alert
-      v-if="gatewayType === 'exclusive'"
-      title="排他网关：根据条件选择一条路径执行（XOR）"
-      type="info"
-      :closable="false"
-      show-icon
-    />
-
-    <el-alert
-      v-else-if="gatewayType === 'parallel'"
-      title="并行网关：所有路径同时执行（AND）"
-      type="info"
-      :closable="false"
-      show-icon
-    />
-
-    <el-alert
-      v-else-if="gatewayType === 'inclusive'"
-      title="包含网关：满足条件的路径同时执行（OR）"
-      type="info"
-      :closable="false"
-      show-icon
-    />
-
     <el-form-item label="描述">
+      <template #label>
+        描述<el-tooltip :content="gatewayTip" placement="top"><el-icon class="help-icon"><QuestionFilled /></el-icon></el-tooltip>
+      </template>
       <el-input
         v-model="config.description"
         type="textarea"
@@ -49,6 +28,7 @@
 
 <script setup lang="ts">
 import { reactive, computed, onMounted, watch } from 'vue'
+import { QuestionFilled } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 
@@ -65,7 +45,16 @@ const gatewayType = computed(() => {
   if (type.includes('Exclusive')) return 'exclusive'
   if (type.includes('Parallel')) return 'parallel'
   if (type.includes('Inclusive')) return 'inclusive'
-  return 'unknown'
+  return ''
+})
+
+const gatewayTip = computed(() => {
+  switch (gatewayType.value) {
+    case 'exclusive': return '排他网关：根据条件选择一条路径执行（XOR）'
+    case 'parallel': return '并行网关：所有路径同时执行（AND）'
+    case 'inclusive': return '包含网关：满足条件的路径同时执行（OR）'
+    default: return ''
+  }
 })
 
 onMounted(() => {
@@ -106,3 +95,15 @@ function updateBpmn() {
   }
 }
 </script>
+
+<style scoped>
+.help-icon {
+  font-size: 13px;
+  color: #c0c4cc;
+  cursor: help;
+  margin-left: 2px;
+  vertical-align: super;
+  display: inline-flex;
+  align-items: center;
+}
+</style>

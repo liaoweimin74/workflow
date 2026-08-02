@@ -20,6 +20,9 @@
     </el-form-item>
 
     <el-form-item v-if="condition.type === 'expression'" label="条件表达式">
+      <template #label>
+        条件表达式<el-tooltip content="Flowable UEL 表达式，支持变量比较、方法调用等" placement="top"><el-icon class="help-icon"><QuestionFilled /></el-icon></el-tooltip>
+      </template>
       <el-input
         v-model="condition.expression"
         type="textarea"
@@ -27,9 +30,6 @@
         placeholder="如：${amount > 10000}"
         @change="updateCondition"
       />
-      <div class="hint-text">
-        Flowable UEL 表达式，支持变量比较、方法调用等
-      </div>
     </el-form-item>
 
     <el-form-item v-if="condition.type === 'expression'" label="常用条件">
@@ -51,6 +51,7 @@
 
 <script setup lang="ts">
 import { reactive, onMounted, watch } from 'vue'
+import { QuestionFilled } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 
@@ -142,9 +143,13 @@ function applyPreset(value: string) {
 </script>
 
 <style scoped>
-.hint-text {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 4px;
+.help-icon {
+  font-size: 13px;
+  color: #c0c4cc;
+  cursor: help;
+  margin-left: 2px;
+  vertical-align: super;
+  display: inline-flex;
+  align-items: center;
 }
 </style>

@@ -27,6 +27,12 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+
 /**
  * 流程设计器服务。
  * 管理流程定义草稿（BPMN XML + 节点配置），支持部署到 Flowable 引擎。
@@ -97,6 +103,9 @@ public class ProcessDesignService {
 
         Map<String, String> nodeConfigs = request.getNodeConfigs();
         if (nodeConfigs != null && !nodeConfigs.isEmpty()) {
+            // 从 BPMN XML 解析 nodeId → nodeType 映射
+            Map<String, String> nodeTypeMap = parseNodeTypes(request.getBpmnXml());
+
             List<NodeConfig> configs = nodeConfigs.entrySet().stream()
                     .map(entry -> {
                         NodeConfig nc = new NodeConfig();
@@ -104,7 +113,8 @@ public class ProcessDesignService {
                         nc.setTenantId(tenantId);
                         nc.setProcessDefId(draftId);
                         nc.setNodeId(entry.getKey());
-                        nc.setNodeType(inferNodeType(entry.getValue()));
+                        String nodeType = nodeTypeMap.get(entry.getKey());
+                        nc.setNodeType(nodeType != null ? nodeType : "unknown");
                         nc.setConfigJson(entry.getValue());
                         return nc;
                     })
@@ -289,13 +299,48 @@ public class ProcessDesignService {
     }
 
     /**
-     * 从 config_json 粗略推断节点类型（仅用于排序/统计，实际类型由前端维护）。
+     * 从 BPMN XML 解析 nodeId → nodeType 映射。
+     * 遍历 process 元素下的所有子元素，取标签名（去掉命名空间前缀）作为 nodeType。
      */
-    private String inferNodeType(String configJson) {
-        if (configJson == null) return "unknown";
-        if (configJson.contains("\"approval\"")) return "userTask";
-        if (configJson.contains("\"condition\"")) return "sequenceFlow";
-        return "unknown";
+    private Map<String, String> parseNodeTypes(String bpmnXml) {
+        Map<String, String> result = new HashMap<>();
+        if (bpmnXml == null || bpmnXml.isBlank()) return result;
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            // 禁用外部实体，防止 XXE
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new java.io.ByteArrayInputStream(bpmnXml.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+            // 查找所有带 id 属性的 BPMN 元素（process 内的节点 + sequenceFlow）
+            NodeList allElements = doc.getElementsByTagName("*");
+            for (int i = 0; i < allElements.getLength(); i++) {
+                Element el = (Element) allElements.item(i);
+                String id = el.getAttribute("id");
+                if (id == null || id.isEmpty()) continue;
+
+                // 标签名可能含命名空间前缀，如 bpmn:userTask → userTask
+                String tagName = el.getLocalName();
+                if (tagName == null) {
+                    tagName = el.getTagName();
+                    int colon = tagName.indexOf(':');
+                    if (colon >= 0) tagName = tagName.substring(colon + 1);
+                }
+
+                // 跳过非节点元素（diagram、plane、shape、edge 等）
+                if ("BPMNDiagram".equalsIgnoreCase(tagName) || "BPMNPlane".equalsIgnoreCase(tagName)
+                        || "BPMNShape".equalsIgnoreCase(tagName) || "BPMNEdge".equalsIgnoreCase(tagName)
+                        || "definitions".equalsIgnoreCase(tagName) || "process".equalsIgnoreCase(tagName)) {
+                    continue;
+                }
+
+                result.put(id, tagName);
+            }
+        } catch (Exception e) {
+            // XML 解析失败时返回空 map，nodeType 将留空
+        }
+        return result;
     }
 
     /**

@@ -47,8 +47,7 @@ const nodeGroups: PaletteGroup[] = [
     title: '事件',
     items: [
       { type: 'bpmn:StartEvent', label: '开始事件', description: '流程开始', iconClass: 'bpmn-icon-start-event-none' },
-      { type: 'bpmn:EndEvent', label: '结束事件', description: '流程结束', iconClass: 'bpmn-icon-end-event-none' },
-      { type: 'bpmn:IntermediateThrowEvent', label: '中间事件', description: '中间抛出事件', iconClass: 'bpmn-icon-intermediate-event-none' }
+      { type: 'bpmn:EndEvent', label: '结束事件', description: '流程结束', iconClass: 'bpmn-icon-end-event-none' }
     ]
   },
   {

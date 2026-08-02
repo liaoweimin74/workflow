@@ -75,7 +75,6 @@ const nodeTypeLabel = computed(() => {
     Process: '流程',
     StartEvent: '开始事件',
     EndEvent: '结束事件',
-    IntermediateThrowEvent: '中间事件',
     UserTask: '用户任务',
     ServiceTask: '服务任务',
     ExclusiveGateway: '排他网关',

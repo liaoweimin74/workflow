@@ -337,6 +337,15 @@ function handleDrop(event: DragEvent) {
   const modeling = (modeler as any).get('modeling')
   const elementRegistry = (modeler as any).get('elementRegistry')
 
+  // 校验：无触发开始事件全局只能有一个
+  if (nodeType === 'bpmn:StartEvent') {
+    const existing = elementRegistry.find((el: any) => el.type === 'bpmn:StartEvent')
+    if (existing) {
+      ElMessage.warning('一个流程只能有一个开始事件')
+      return
+    }
+  }
+
   // 计算放置坐标
   const rect = canvasWrapperRef.value?.getBoundingClientRect()
   if (!rect) return

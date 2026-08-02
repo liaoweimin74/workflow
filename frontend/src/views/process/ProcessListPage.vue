@@ -55,6 +55,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { processDesignApi, type ProcessDraft } from '@/api/processDefinition'
@@ -168,7 +169,17 @@ const categoryFormConfig: FormConfig<Category> = {
   },
 }
 
-const categoryActionButtons: ActionButton[] = []
+const categoryActionButtons: ActionButton[] = [
+  {
+    label: '添加子分类',
+    icon: Plus,
+    type: 'primary',
+    show: (row: any) => !!row.id,
+    onClick: (row: any) => {
+      categoryTableRef.value?.openFormDialog({ parentId: row.id })
+    },
+  },
+]
 
 function handleCategoryClick(row: Category) {
   selectedCategory.value = row

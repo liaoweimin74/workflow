@@ -53,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue'
+import { reactive, onMounted, watch } from 'vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 
@@ -74,6 +74,13 @@ onMounted(() => {
   loadConfig()
 })
 
+// 切换同类型节点时重新加载配置
+watch(() => designerStore.selectedNodeId, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    loadConfig()
+  }
+})
+
 function loadConfig() {
   const modeler = getModeler()
   const elementRegistry = (modeler as any).get('elementRegistry')
@@ -81,6 +88,16 @@ function loadConfig() {
   if (!element) return
 
   const bo = element.businessObject
+
+  // 重置为默认值，避免残留上一节点
+  config.name = ''
+  config.serviceType = 'java'
+  config.beanName = ''
+  config.methodName = ''
+  config.expression = ''
+  config.url = ''
+  config.httpMethod = 'POST'
+
   config.id = element.id
   config.name = bo.name || ''
 
@@ -88,6 +105,7 @@ function loadConfig() {
   if (existing) {
     // 加载已有配置
     Object.assign(config, existing)
+    config.id = element.id
   }
 }
 

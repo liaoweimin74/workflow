@@ -99,6 +99,9 @@ import { getModeler } from '../utils/bpmnModeler'
 
 const designerStore = useDesignerStore()
 
+// 加载标志：loadConfig 期间禁止 watch 触发 saveConfig，避免把新节点值写回旧节点
+let isLoading = false
+
 const config = reactive({
   id: '',
   name: ''
@@ -125,17 +128,36 @@ onMounted(() => {
   loadConfig()
 })
 
+// 切换同类型节点时重新加载配置（组件不重建，onMounted 不触发）
+watch(() => designerStore.selectedNodeId, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    loadConfig()
+  }
+})
+
 function loadConfig() {
   const modeler = getModeler()
   const elementRegistry = (modeler as any).get('elementRegistry')
   const element = elementRegistry.get(designerStore.selectedNodeId)
   if (!element) return
 
+  isLoading = true
+
   const bo = element.businessObject
   config.id = element.id
   config.name = bo.name || ''
 
-  // 加载已有配置
+  // 重置为默认值，避免残留上一节点
+  approval.type = ''
+  approval.value = ''
+  approval.multiMode = 'countersign'
+  operations.allowReject = true
+  operations.allowAddSign = false
+  operations.allowTransfer = true
+  timeout.duration = 0
+  timeout.action = 'remind'
+
+  // 加载已有配置覆盖默认值
   const existing = designerStore.getNodeConfig(designerStore.selectedNodeId!)
   if (existing) {
     if (existing.approval) {
@@ -153,6 +175,9 @@ function loadConfig() {
       timeout.action = existing.timeout.action || 'remind'
     }
   }
+
+  // nextTick 后恢复，确保 watch 不捕获加载期间的变更
+  setTimeout(() => { isLoading = false }, 0)
 }
 
 function updateBpmnName() {
@@ -167,6 +192,7 @@ function updateBpmnName() {
 
 function saveConfig() {
   if (!designerStore.selectedNodeId) return
+  if (isLoading) return
 
   const nodeConfig: NodeConfigData = {
     basic: {

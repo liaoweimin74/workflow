@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue'
+import { reactive, onMounted, watch } from 'vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 
@@ -39,6 +39,13 @@ onMounted(() => {
   loadConfig()
 })
 
+// 切换同类型节点时重新加载配置
+watch(() => designerStore.selectedNodeId, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    loadConfig()
+  }
+})
+
 function loadConfig() {
   const modeler = getModeler()
   const elementRegistry = (modeler as any).get('elementRegistry')
@@ -48,6 +55,7 @@ function loadConfig() {
   const bo = element.businessObject
   config.id = element.id
   config.name = bo.name || ''
+  config.description = ''
 
   const docs = bo.documentation
   if (Array.isArray(docs) && docs.length > 0) {

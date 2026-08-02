@@ -103,6 +103,11 @@ function CustomContextPadProvider(
         'bpmn-icon-end-event-none',
         '追加结束事件'
       )
+      entries['append.call-activity'] = appendAction(
+        'bpmn:CallActivity',
+        'bpmn-icon-call-activity',
+        '追加调用活动'
+      )
     }
 
     // 连线入口（所有 FlowNode）

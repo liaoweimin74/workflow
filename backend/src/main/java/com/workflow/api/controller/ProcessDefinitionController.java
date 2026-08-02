@@ -1,12 +1,15 @@
 package com.workflow.api.controller;
 
 import com.workflow.api.dto.PageResponse;
+import com.workflow.api.dto.ProcessDefinitionSummary;
 import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessService;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/process-definitions")
@@ -33,6 +36,15 @@ public class ProcessDefinitionController {
         );
 
         return R.ok(response);
+    }
+
+    /**
+     * 已部署流程定义精简列表（按 key 去重取最新版本）。
+     * 供调用活动子流程选择下拉使用。
+     */
+    @GetMapping("/summaries")
+    public R<List<ProcessDefinitionSummary>> summaries() {
+        return R.ok(processService.listSummaries());
     }
 
     @GetMapping("/{id}")

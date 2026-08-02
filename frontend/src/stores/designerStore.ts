@@ -25,6 +25,16 @@ export interface NodeConfigData {
     allowTransfer?: boolean
   }
   condition?: string
+  callActivity?: {
+    calledElement?: string
+    inParams?: ParamMapping[]
+    outParams?: ParamMapping[]
+  }
+}
+
+export interface ParamMapping {
+  source: string
+  target: string
 }
 
 export interface DesignerState {

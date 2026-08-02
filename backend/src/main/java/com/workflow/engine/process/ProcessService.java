@@ -1,5 +1,6 @@
 package com.workflow.engine.process;
 
+import com.workflow.api.dto.ProcessDefinitionSummary;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
@@ -15,7 +16,9 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -80,5 +83,29 @@ public class ProcessService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to read process model", e);
         }
+    }
+
+    /**
+     * 列出已部署流程定义精简信息，按 key 去重取最新版本。
+     * 供 CallActivity 子流程选择下拉使用。
+     */
+    public List<ProcessDefinitionSummary> listSummaries() {
+        String tenantId = tenantProvider.getTenantId();
+        List<ProcessDefinition> all = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionTenantId(tenantId)
+                .latestVersion()
+                .active()
+                .orderByProcessDefinitionName()
+                .asc()
+                .list();
+
+        return all.stream().map(pd -> {
+            ProcessDefinitionSummary s = new ProcessDefinitionSummary();
+            s.setId(pd.getId());
+            s.setKey(pd.getKey());
+            s.setName(pd.getName());
+            s.setVersion(pd.getVersion());
+            return s;
+        }).collect(Collectors.toList());
     }
 }

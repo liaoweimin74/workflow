@@ -29,6 +29,11 @@
         v-else-if="selectedNodeType === 'ServiceTask'"
       />
 
+      <!-- 调用活动（子流程） -->
+      <call-activity-property
+        v-else-if="selectedNodeType === 'CallActivity'"
+      />
+
       <!-- 网关 -->
       <gateway-property
         v-else-if="isGatewayNode"
@@ -52,6 +57,7 @@ import ProcessProperty from './ProcessProperty.vue'
 import EventProperty from './EventProperty.vue'
 import UserTaskProperty from './UserTaskProperty.vue'
 import ServiceTaskProperty from './ServiceTaskProperty.vue'
+import CallActivityProperty from './CallActivityProperty.vue'
 import GatewayProperty from './GatewayProperty.vue'
 import SequenceFlowProperty from './SequenceFlowProperty.vue'
 

@@ -35,6 +35,13 @@ export interface DesignSaveRequest {
   nodeConfigs: Record<string, string>
 }
 
+export interface ProcessDefinitionSummary {
+  id: string
+  key: string
+  name: string
+  version: number
+}
+
 export const processDesignApi = {
   createDraft(name: string, key: string, categoryId?: string): Promise<R<ProcessDraft>> {
     return http.post('/v1/process-definitions/drafts', null, {
@@ -69,5 +76,10 @@ export const processDesignApi = {
 
   deleteDraft(id: string): Promise<R<void>> {
     return http.delete(`/v1/process-definitions/${id}`)
+  },
+
+  /** 已部署流程定义精简列表（供调用活动子流程选择） */
+  listSummaries(): Promise<R<ProcessDefinitionSummary[]>> {
+    return http.get('/v1/process-definitions/summaries')
   }
 }

@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
+import { Fold, Expand } from '@element-plus/icons-vue'
 import SubMenu from '@/components/SubMenu.vue'
 
 const router = useRouter()
@@ -83,8 +84,14 @@ const currentTag = computed(() => {
   <div class="flex flex-col h-screen min-w-[1024px] max-w-[1920px] mx-auto bg-white">
     <!-- ====== 顶部标题栏（整行） ====== -->
     <header class="h-14 flex items-center justify-between px-4 border-b border-gray-200 bg-white shrink-0">
-      <!-- 左侧：Logo + 面包屑 -->
+      <!-- 左侧：折叠按钮 + Logo + 面包屑 -->
       <div class="flex items-center gap-4">
+        <button
+          @click="toggleCollapsed"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
+        >
+          <el-icon :size="18"><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
+        </button>
         <div class="flex items-center gap-2 shrink-0">
           <div class="w-8 h-8 rounded-lg bg-industrial-600 flex items-center justify-center">
             <span class="text-white text-sm font-bold">MB</span>
@@ -143,19 +150,6 @@ const currentTag = computed(() => {
           </el-menu>
         </div>
 
-        <div class="h-10 flex items-center justify-center border-t border-gray-200 shrink-0">
-          <button
-            @click="toggleCollapsed"
-            class="w-7 h-7 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"
-          >
-            <svg v-if="collapsed" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
-            </svg>
-            <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
-            </svg>
-          </button>
-        </div>
       </aside>
 
       <!-- 右侧内容区 -->
@@ -207,3 +201,17 @@ const currentTag = computed(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* 折叠态下覆盖 SubMenu.vue 硬编码的 paddingLeft，使图标居中 */
+.el-menu--collapse .el-menu-item {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  justify-content: center !important;
+}
+.el-menu--collapse .el-sub-menu__title {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  justify-content: center !important;
+}
+</style>

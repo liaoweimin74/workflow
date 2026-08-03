@@ -49,6 +49,8 @@
 
 发布时，系统 SHALL 将当前版本标记为 published_version。
 
+同一表单定义同时只 SHALL 有一个 PUBLISHED 版本。新版本发布后，旧 PUBLISHED 版本 SHALL 变为 ARCHIVED。
+
 已发布（PUBLISHED）版本的 schema 不可修改，修改已发布表单 SHALL 创建新的 DRAFT 版本。
 
 #### Scenario: 发布表单定义
@@ -89,25 +91,6 @@
 - **WHEN** 用户尝试修改 PUBLISHED 状态的表单定义
 - **THEN** 系统自动创建新 DRAFT 版本
 - **AND** 已发布版本保持不变
-
-### Requirement: 表单定义发布
-
-系统 SHALL 支持将 DRAFT 状态的表单定义发布为 PUBLISHED。
-
-发布时，系统 SHALL 将 published_version 更新为当前版本号。
-
-同一表单定义同时只 SHALL 有一个 PUBLISHED 版本。新版本发布后，旧 PUBLISHED 版本 SHALL 变为 ARCHIVED。
-
-#### Scenario: 发布表单定义
-- **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
-- **THEN** 系统将表单定义状态更新为 PUBLISHED
-- **AND** published_version 更新为当前版本号
-- **AND** 之前的 PUBLISHED 版本变为 ARCHIVED
-
-#### Scenario: 运行时加载已发布版本
-- **WHEN** 流程节点引用 formDefId 加载表单
-- **THEN** 系统加载 published_version 对应的 schema
-- **AND** 不加载 DRAFT 版本
 
 ### Requirement: 表单定义菜单与路由
 

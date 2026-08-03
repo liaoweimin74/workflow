@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Key } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import type { Rule } from '@form-create/element-ui'
 import { getUserList, createUser, updateUser, deleteUser, updateUserStatus, resetUserPassword, getUserById } from '@/api/user'
 import { getOrgTree } from '@/api/org'
 import { getRoleList } from '@/api/role'
@@ -112,29 +113,20 @@ async function fetchApi(params: any) {
 
 // ---------- 表单配置 ----------
 const formConfig = computed<FormConfig<UserVO>>(() => ({
-  fields: [
-    { type: 'input', label: '用户名', prop: 'username', placeholder: '请输入用户名', rules: [{ required: true, message: '请输入用户名', trigger: 'blur' }] },
-    { type: 'input', label: '昵称', prop: 'nickname', placeholder: '请输入昵称', rules: [{ required: true, message: '请输入昵称', trigger: 'blur' }] },
-    { type: 'input', label: '邮箱', prop: 'email', placeholder: '请输入邮箱' },
-    { type: 'input', label: '手机号', prop: 'phone', placeholder: '请输入手机号' },
+  rule: [
+    { type: 'input', field: 'username', title: '用户名', props: { placeholder: '请输入用户名' }, validate: [{ required: true, message: '请输入用户名', trigger: 'blur' }] } as Rule,
+    { type: 'input', field: 'nickname', title: '昵称', props: { placeholder: '请输入昵称' }, validate: [{ required: true, message: '请输入昵称', trigger: 'blur' }] } as Rule,
+    { type: 'input', field: 'email', title: '邮箱', props: { placeholder: '请输入邮箱' } } as Rule,
+    { type: 'input', field: 'phone', title: '手机号', props: { placeholder: '请输入手机号' } } as Rule,
     {
-      type: 'tree-select',
-      label: '组织机构',
-      prop: 'orgId',
-      placeholder: '选择组织',
-      treeProps: {
-        data: orgTree.value,
-        props: { label: 'label', value: 'id', children: 'children' },
-      },
-    },
+      type: 'treeSelect', field: 'orgId', title: '组织机构',
+      props: { placeholder: '选择组织', data: orgTree.value, props: { label: 'label', value: 'id', children: 'children' } },
+    } as Rule,
     {
-      type: 'select',
-      label: '角色',
-      prop: 'roleIds',
-      placeholder: '选择角色',
-      props: { multiple: true },
+      type: 'select', field: 'roleIds', title: '角色',
+      props: { multiple: true, placeholder: '选择角色' },
       options: roleList.value.map((r) => ({ label: r.roleName, value: r.id })),
-    },
+    } as Rule,
   ],
   createApi: createUser,
   updateApi: (id, data) => updateUser(id as number, data),

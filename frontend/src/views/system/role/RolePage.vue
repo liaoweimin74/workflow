@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import type { Rule } from '@form-create/element-ui'
 import { getRoleList, createRole, updateRole, deleteRole, getRoleMenus, assignRoleMenus } from '@/api/role'
 import { getMenuTree } from '@/api/menu'
 import type { RoleVO } from '@/types/role'
@@ -62,10 +63,10 @@ async function fetchApi(params: any) {
 
 // ---------- 表单配置 ----------
 const formConfig: FormConfig<RoleVO> = {
-  fields: [
-    { type: 'input', label: '角色名称', prop: 'roleName', rules: [{ required: true, message: '请输入角色名称', trigger: 'blur' }] },
-    { type: 'input', label: '角色编码', prop: 'roleCode', rules: [{ required: true, message: '请输入角色编码', trigger: 'blur' }] },
-    { type: 'input', label: '描述', prop: 'description', placeholder: '请输入描述' },
+  rule: [
+    { type: 'input', field: 'roleName', title: '角色名称', validate: [{ required: true, message: '请输入角色名称', trigger: 'blur' }] } as Rule,
+    { type: 'input', field: 'roleCode', title: '角色编码', validate: [{ required: true, message: '请输入角色编码', trigger: 'blur' }] } as Rule,
+    { type: 'input', field: 'description', title: '描述', props: { placeholder: '请输入描述' } } as Rule,
   ],
   createApi: createRole,
   updateApi: (id, data) => updateRole(id as number, { roleName: data.roleName, description: data.description }),

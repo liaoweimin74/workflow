@@ -14,7 +14,7 @@ export interface NodeConfigData {
   }
   form?: {
     formDefId?: string
-    fieldPermissions?: Record<string, 'EDIT' | 'VIEW'>
+    fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
   }
   timeout?: {
     duration?: number

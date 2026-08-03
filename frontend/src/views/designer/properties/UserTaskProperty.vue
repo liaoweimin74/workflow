@@ -79,6 +79,9 @@
         <el-option label="升级" value="escalate" />
       </el-select>
     </el-form-item>
+
+    <!-- 表单关联 -->
+    <FormPropertyTab />
   </el-form>
 </template>
 
@@ -87,6 +90,7 @@ import { reactive, onMounted, watch } from 'vue'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
+import FormPropertyTab from './FormPropertyTab.vue'
 
 const designerStore = useDesignerStore()
 

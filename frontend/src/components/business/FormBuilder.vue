@@ -1,3 +1,7 @@
+<!--
+  @deprecated 此组件已废弃，请使用 FormRenderer (@/views/form/components/FormRenderer.vue) 替代。
+  FormRenderer 基于 @form-create/element-ui 实现，支持动态 schema、字段权限控制、流程实例数据绑定。
+-->
 <template>
   <el-form ref="formRef" :model="localModel" :label-width="labelWidth || '80px'" :label-position="labelPosition" style="width: 100%">
     <el-row v-for="(row, ri) in layoutRows" :key="ri" :gutter="resolvedLayout.gap" style="width: 100%">

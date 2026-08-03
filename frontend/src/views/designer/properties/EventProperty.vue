@@ -19,6 +19,9 @@
         @change="updateBpmn"
       />
     </el-form-item>
+
+    <!-- 表单关联（开始事件） -->
+    <FormPropertyTab />
   </el-form>
 </template>
 
@@ -26,6 +29,7 @@
 import { reactive, onMounted, watch } from 'vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
+import FormPropertyTab from './FormPropertyTab.vue'
 
 const designerStore = useDesignerStore()
 

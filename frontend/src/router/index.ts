@@ -16,6 +16,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '流程设计器', fullScreen: true }
   },
   {
+    path: '/form/designer',
+    name: 'FormDesigner',
+    component: () => import('@/views/form/FormDesigner.vue'),
+    meta: { title: '表单设计器', fullScreen: true }
+  },
+  {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/dashboard',
@@ -79,6 +85,12 @@ const routes: RouteRecordRaw[] = [
         name: 'ProcessTodo',
         component: () => import('@/views/process/ProcessTodoPage.vue'),
         meta: { title: '待办处理' }
+      },
+      {
+        path: 'form',
+        name: 'FormList',
+        component: () => import('@/views/form/FormListPage.vue'),
+        meta: { title: '表单管理' }
       },
       {
         path: '404',

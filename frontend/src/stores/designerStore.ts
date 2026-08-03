@@ -31,11 +31,51 @@ export interface NodeConfigData {
     inParams?: ParamMapping[]
     outParams?: ParamMapping[]
   }
+  backendLogic?: BackendLogicItem[]
 }
 
 export interface ParamMapping {
   source: string
   target: string
+}
+
+export type BackendLogicTrigger = 'ENTER' | 'COMPLETE'
+export type BackendLogicErrorAction = 'IGNORE_CONTINUE' | 'FAIL_FLOW'
+export type BackendLogicType = 'http' | 'bean' | 'script'
+
+export interface BackendLogicHttpConfig {
+  url: string
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  headers?: Record<string, string>
+  queryParams?: ParamMapping[]
+  bodyParams?: ParamMapping[]
+  connTimeoutMs?: number
+  readTimeoutMs?: number
+  retryCount?: number
+}
+
+export interface BackendLogicBeanConfig {
+  beanName: string
+  methodName: string
+  params?: ParamMapping[]
+}
+
+export interface BackendLogicScriptConfig {
+  language: 'groovy'
+  source: string
+}
+
+export interface BackendLogicItem {
+  id: string
+  name: string
+  enabled: boolean
+  trigger: BackendLogicTrigger
+  type: BackendLogicType
+  errorAction: BackendLogicErrorAction
+  resultVar?: string
+  http?: BackendLogicHttpConfig
+  bean?: BackendLogicBeanConfig
+  script?: BackendLogicScriptConfig
 }
 
 // ========== 流程级配置 ==========

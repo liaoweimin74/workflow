@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useDesignerStore, PROCESS_CONFIG_KEY, DEFAULT_PROCESS_CONFIG, type ProcessConfigData } from '../designerStore'
+import { useDesignerStore, PROCESS_CONFIG_KEY, DEFAULT_PROCESS_CONFIG, type ProcessConfigData, type NodeConfigData, type BackendLogicItem } from '../designerStore'
 
 describe('designerStore — 流程配置', () => {
   beforeEach(() => {
@@ -38,5 +38,20 @@ describe('designerStore — 流程配置', () => {
     const parsed = JSON.parse(store.nodeConfigs[PROCESS_CONFIG_KEY])
     expect(parsed.approvalPolicy).toBeDefined()
     expect(parsed.numberRule).toBeDefined()
+  })
+
+  it('backendLogic 序列化读写往返', () => {
+    const store = useDesignerStore()
+    const logic: BackendLogicItem = {
+      id: 'l1', name: '同步订单', enabled: true,
+      trigger: 'ENTER', type: 'http',
+      errorAction: 'IGNORE_CONTINUE', resultVar: 'orderStatus',
+      http: { url: 'https://ex/api', method: 'POST', bodyParams: [{ source: 'orderId', target: 'id' }] },
+    }
+    const cfg: NodeConfigData = { backendLogic: [logic] }
+    store.setNodeConfig('UserTask_1', cfg)
+    const back = store.getNodeConfig('UserTask_1')
+    expect(back?.backendLogic?.[0].http?.url).toBe('https://ex/api')
+    expect(back?.backendLogic?.[0].trigger).toBe('ENTER')
   })
 })

@@ -186,7 +186,7 @@ onUnmounted(() => {
         </div>
         <div class="w-px h-5 bg-gray-200" />
         <el-breadcrumb separator="/">
-          <el-breadcrumb-item v-for="(b, i) in breadcrumbs" :key="b.path" :to="b.path">
+          <el-breadcrumb-item v-for="(b, i) in breadcrumbs" :key="b.path">
             <span class="text-gray-500 text-sm flex items-center gap-1">
               <el-icon v-if="i === 0" :size="14"><HomeFilled /></el-icon>
               {{ b.title }}
@@ -259,6 +259,7 @@ onUnmounted(() => {
             :animation="200"
             :filter="'.no-drag'"
             @end="onDragEnd"
+            class="flex items-center h-full"
           >
             <template #item="{ element: tag }">
               <div
@@ -343,14 +344,25 @@ onUnmounted(() => {
 
 <style scoped>
 /* 折叠态下覆盖 SubMenu.vue 硬编码的 paddingLeft，使图标居中 */
-.el-menu--collapse .el-menu-item {
+:deep(.el-menu--collapse .el-menu-item) {
   padding-left: 0 !important;
   padding-right: 0 !important;
+  margin: 0 auto !important;
+  width: 100% !important;
   justify-content: center !important;
 }
-.el-menu--collapse .el-sub-menu__title {
+:deep(.el-menu--collapse .el-sub-menu__title) {
   padding-left: 0 !important;
   padding-right: 0 !important;
+  margin: 0 auto !important;
+  width: 100% !important;
   justify-content: center !important;
+}
+/* 折叠态下图标容器居中 */
+:deep(.el-menu--collapse .el-menu-item .el-icon) {
+  margin-right: 0 !important;
+}
+:deep(.el-menu--collapse .el-sub-menu__title .el-icon) {
+  margin-right: 0 !important;
 }
 </style>

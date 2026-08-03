@@ -12,6 +12,7 @@ import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.process.repository.ProcessDraftRepository;
 import org.flowable.engine.RuntimeService;
 import org.flowable.spring.boot.ProcessEngineConfigurationConfigurer;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,8 +43,10 @@ public class FlowableEngineConfig {
                                                      HttpLogicExecutor httpExecutor,
                                                      GroovyScriptLogic groovyScriptLogic,
                                                      BackendBeanRegistry backendBeanRegistry,
-                                                     RuntimeService runtimeService) {
-        return new BackendLogicExecutor(resolver, httpExecutor, groovyScriptLogic, backendBeanRegistry, runtimeService);
+                                                     ObjectProvider<RuntimeService> runtimeServiceProvider) {
+        // 通过 ObjectProvider 延迟解析 RuntimeService，打破与 Flowable processEngine 的装配期循环依赖。
+        return new BackendLogicExecutor(resolver, httpExecutor, groovyScriptLogic, backendBeanRegistry,
+                runtimeServiceProvider::getObject);
     }
 
     @Bean

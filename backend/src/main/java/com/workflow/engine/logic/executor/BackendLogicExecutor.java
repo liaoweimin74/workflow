@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * 后端业务逻辑分发执行器。
@@ -20,6 +21,10 @@ import java.util.Map;
  * <p>根据节点配置（来自 {@link ProcessConfigResolver}），在节点进入/完成时按序执行其后端逻辑：
  * HTTP 调用 / Groovy 脚本 / 白名单 Bean 方法。执行成功且配置了 {@code resultVar} 则把结果写回流程变量；
  * 异常按 {@code errorAction} 决定是记录后继续（IGNORE_CONTINUE）还是抛出中断（FAIL_FLOW）。
+ *
+ * <p>{@link RuntimeService} 通过 {@link Supplier} 延迟获取，以打破 Flowable 引擎装配期的循环依赖
+ * （processEngine → processEngineConfigurer → 监听器 → 本执行器 → RuntimeService → processEngine）。
+ * 引擎 bean 完成创建前 {@link Supplier} 不被调用，调用时引擎已就绪。
  */
 public class BackendLogicExecutor {
 
@@ -34,18 +39,26 @@ public class BackendLogicExecutor {
     private final HttpLogicExecutor httpExecutor;
     private final GroovyScriptLogic groovyScriptLogic;
     private final BackendBeanRegistry backendBeanRegistry;
-    private final RuntimeService runtimeService;
+    private final Supplier<RuntimeService> runtimeServiceSupplier;
 
     public BackendLogicExecutor(ProcessConfigResolver processConfigResolver,
                                 HttpLogicExecutor httpExecutor,
                                 GroovyScriptLogic groovyScriptLogic,
                                 BackendBeanRegistry backendBeanRegistry,
                                 RuntimeService runtimeService) {
+        this(processConfigResolver, httpExecutor, groovyScriptLogic, backendBeanRegistry, () -> runtimeService);
+    }
+
+    public BackendLogicExecutor(ProcessConfigResolver processConfigResolver,
+                                HttpLogicExecutor httpExecutor,
+                                GroovyScriptLogic groovyScriptLogic,
+                                BackendBeanRegistry backendBeanRegistry,
+                                Supplier<RuntimeService> runtimeServiceSupplier) {
         this.processConfigResolver = processConfigResolver;
         this.httpExecutor = httpExecutor;
         this.groovyScriptLogic = groovyScriptLogic;
         this.backendBeanRegistry = backendBeanRegistry;
-        this.runtimeService = runtimeService;
+        this.runtimeServiceSupplier = runtimeServiceSupplier;
     }
 
     /**
@@ -63,7 +76,7 @@ public class BackendLogicExecutor {
             return;
         }
 
-        Map<String, Object> vars = runtimeService.getVariables(executionId);
+        Map<String, Object> vars = runtimeServiceSupplier.get().getVariables(executionId);
         for (BackendLogicItemConfig item : items) {
             if (!item.isEnabled()) {
                 continue;
@@ -80,7 +93,7 @@ public class BackendLogicExecutor {
             Object result = dispatch(item, vars);
             String resultVar = item.getResultVar();
             if (resultVar != null && !resultVar.isBlank()) {
-                runtimeService.setVariable(executionId, resultVar, result);
+                runtimeServiceSupplier.get().setVariable(executionId, resultVar, result);
             }
         } catch (Exception e) {
             if (!ACTION_CONTINUE.equalsIgnoreCase(item.getErrorAction())) {

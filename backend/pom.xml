@@ -124,6 +124,12 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Groovy script execution -->
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -55,6 +55,23 @@ onMounted(async () => {
     return
   }
 
+  // 注册 LookupPicker 到设计器拖拽面板
+  designerRef.value?.addComponent({
+    label: '字典选择器',
+    name: 'LookupPicker',
+    rule: {
+      type: 'LookupPicker',
+      field: '',
+      title: '选择',
+      props: {
+        columns: [],
+        fetchApi: null,
+        displayField: '',
+        returnFields: {},
+      },
+    },
+  })
+
   loading.value = true
   try {
     const res = await formApi.getFormDefinition(formId.value)

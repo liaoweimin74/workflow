@@ -8,6 +8,10 @@
 本项目使用 openspec-superpowers-opencode（`superpowers-bridge-opencode` schema）驱动开发流程，
 所有功能变更遵循 artifact 生命周期管理。
 
+# 输出语言
+- 请始终使用中文进行回复。
+- 使用 /init 命令生成的 AGENTS.md 文件也请使用中文
+
 ## 开发规则
 
 - 变更必须先在 worktree（`.worktrees/<name>/`）中生成 artifacts 和代码

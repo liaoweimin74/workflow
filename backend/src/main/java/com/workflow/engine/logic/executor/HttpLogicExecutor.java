@@ -7,10 +7,13 @@ import com.workflow.engine.logic.parse.VariableResolver;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,7 +66,7 @@ public class HttpLogicExecutor {
         for (int i = 0; i < attempts; i++) {
             try {
                 return doExecute(client, url, method, headers, query, body, vars);
-            } catch (Exception e) {
+            } catch (ResourceAccessException e) {
                 lastException = e;
                 if (i < attempts - 1) {
                     try {
@@ -112,7 +115,9 @@ public class HttpLogicExecutor {
         for (ParamMapping pm : query) {
             Object value = resolveSource(pm, vars);
             if (sb.length() > 0) sb.append("&");
-            sb.append(pm.target()).append("=").append(value != null ? value.toString() : "");
+            sb.append(URLEncoder.encode(pm.target(), StandardCharsets.UTF_8))
+              .append("=")
+              .append(URLEncoder.encode(value != null ? value.toString() : "", StandardCharsets.UTF_8));
         }
         return sb.toString();
     }
@@ -130,8 +135,7 @@ public class HttpLogicExecutor {
     }
 
     private Object resolveSource(ParamMapping pm, Map<String, Object> vars) {
-        String resolved = variableResolver.resolve(pm.source(), vars);
-        Object raw = vars.get(resolved);
-        return raw != null ? raw : resolved;
+        Object value = vars.get(pm.source());
+        return value != null ? value : "";
     }
 }

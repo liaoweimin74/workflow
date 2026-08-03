@@ -4,6 +4,7 @@ import com.workflow.engine.logic.parse.ParamMapping;
 import com.workflow.engine.logic.parse.VariableResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -11,8 +12,7 @@ import org.springframework.web.client.RestClient;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
@@ -83,7 +83,7 @@ class HttpLogicExecutorTest {
     void retryOnNetworkFailure() {
         mockServer.expect(requestTo("http://example.com/api"))
                 .andExpect(method(org.springframework.http.HttpMethod.GET))
-                .andRespond(withServerError());
+                .andRespond(withException(new java.io.IOException("simulated connection refused")));
         mockServer.expect(requestTo("http://example.com/api"))
                 .andExpect(method(org.springframework.http.HttpMethod.GET))
                 .andRespond(withSuccess("retried-ok", MediaType.TEXT_PLAIN));
@@ -93,6 +93,35 @@ class HttpLogicExecutorTest {
 
         mockServer.verify();
         assertEquals("retried-ok", result);
+    }
+
+    @Test
+    void httpServerErrorDoesNotTriggerRetry() {
+        mockServer.expect(requestTo("http://example.com/api"))
+                .andExpect(method(org.springframework.http.HttpMethod.GET))
+                .andRespond(withServerError());
+
+        Executable exec = () -> executor.execute("http://example.com/api", "GET", Map.of(),
+                List.of(), List.of(), Map.of(), 0, 0, 1);
+
+        assertThrows(RuntimeException.class, exec);
+        mockServer.verify();
+    }
+
+    @Test
+    void queryValuesAreUrlEncoded() {
+        mockServer.expect(requestTo("http://example.com/api?name=a%26b%3D1&city=NYC"))
+                .andExpect(method(org.springframework.http.HttpMethod.GET))
+                .andRespond(withSuccess("ok", MediaType.TEXT_PLAIN));
+
+        List<ParamMapping> query = List.of(
+                new ParamMapping("name", "name"),
+                new ParamMapping("city", "city"));
+        Object result = executor.execute("http://example.com/api", "GET", Map.of(),
+                query, List.of(), Map.of("name", "a&b=1", "city", "NYC"), 0, 0, 0);
+
+        mockServer.verify();
+        assertEquals("ok", result);
     }
 
     @Test

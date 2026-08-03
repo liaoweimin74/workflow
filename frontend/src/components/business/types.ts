@@ -1,4 +1,5 @@
 import type { Component } from 'vue'
+import type { Rule } from '@form-create/element-ui'
 
 // ============================================================
 // 公共业务组件类型定义
@@ -114,14 +115,14 @@ export interface FormBuilderProps {
 // --- 表单集成配置（SearchTable 用） ---
 
 export interface FormConfig<T = any> {
-  fields: FormField[]
+  /** form-create Rule 数组，直接传给 FormRenderer 渲染 */
+  rule: Rule[]
   /** 新增表单的初始值，handleCreate 时与传入 initialValues 合并 */
-  initialValues?: Record<string, any>
+  initialValues?: Partial<T>
   createApi?: (data: any) => Promise<any>
   updateApi?: (id: number | string, data: any) => Promise<any>
   deleteApi?: (id: number | string) => Promise<any>
   getApi?: (id: number | string) => Promise<T>
-  layout?: FormLayout
   labelWidth?: string
   dialogWidth?: string
   dialogTitle?: { create?: string; edit?: string }

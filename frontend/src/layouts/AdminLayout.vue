@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand } from '@element-plus/icons-vue'
+import { Fold, Expand, HomeFilled } from '@element-plus/icons-vue'
 import SubMenu from '@/components/SubMenu.vue'
 
 const router = useRouter()
@@ -110,7 +110,25 @@ function filteredMenus(menuList: any[]) {
   return visibleMenus(menuList).filter(m => m.path !== '/dashboard')
 }
 
+// 从菜单树递归查找路径，返回从根到目标的节点链
+function findMenuPath(menus: any[], targetPath: string): any[] | null {
+  for (const m of menus) {
+    if (m.path === targetPath) return [m]
+    if (m.children && m.children.length > 0) {
+      const sub = findMenuPath(m.children, targetPath)
+      if (sub) return [m, ...sub]
+    }
+  }
+  return null
+}
+
 const breadcrumbs = computed(() => {
+  // 优先从菜单树匹配
+  const menuPath = findMenuPath(authStore.menus, route.path)
+  if (menuPath && menuPath.length > 0) {
+    return menuPath.map(m => ({ path: m.path, title: m.menuName }))
+  }
+  // 回退到 route.matched
   const matched = route.matched.filter(r => r.meta?.title)
   return matched.map(r => ({ path: r.path, title: r.meta?.title as string }))
 })
@@ -152,8 +170,11 @@ onUnmounted(() => {
         </div>
         <div class="w-px h-5 bg-gray-200" />
         <el-breadcrumb separator="/">
-          <el-breadcrumb-item v-for="b in breadcrumbs" :key="b.path" :to="b.path">
-            <span class="text-gray-500 text-xs">{{ b.title }}</span>
+          <el-breadcrumb-item v-for="(b, i) in breadcrumbs" :key="b.path" :to="b.path">
+            <span class="text-gray-500 text-sm flex items-center gap-1">
+              <el-icon v-if="i === 0" :size="14"><HomeFilled /></el-icon>
+              {{ b.title }}
+            </span>
           </el-breadcrumb-item>
         </el-breadcrumb>
       </div>

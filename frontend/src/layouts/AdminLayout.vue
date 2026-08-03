@@ -167,9 +167,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-screen min-w-[1024px] max-w-[1920px] mx-auto bg-white">
+  <div class="flex flex-col h-screen min-w-[1024px] max-w-[1920px] mx-auto bg-white dark:bg-gray-900">
     <!-- ====== 顶部标题栏（整行） ====== -->
-    <header class="h-14 flex items-center justify-between px-4 border-b border-gray-200 bg-white shrink-0">
+    <header class="h-14 flex items-center justify-between px-4 border-b border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700 shrink-0">
       <!-- 左侧：折叠按钮 + Logo + 面包屑 -->
       <div class="flex items-center gap-4">
         <button
@@ -182,7 +182,7 @@ onUnmounted(() => {
           <div class="w-8 h-8 rounded-lg bg-industrial-600 flex items-center justify-center">
             <span class="text-white text-sm font-bold">MB</span>
           </div>
-          <span class="text-base font-semibold text-gray-800">工作流管理系统</span>
+          <span class="text-base font-semibold text-gray-800 dark:text-gray-100">工作流管理系统</span>
         </div>
         <div class="w-px h-5 bg-gray-200" />
         <el-breadcrumb separator="/">
@@ -206,7 +206,7 @@ onUnmounted(() => {
         <el-dropdown trigger="click">
         <div class="flex items-center gap-2 cursor-pointer select-none">
           <el-avatar :size="28" icon="UserFilled" class="!bg-industrial-100 !text-industrial-600" />
-          <span class="text-sm text-gray-700">{{ authStore.user?.nickname || authStore.user?.username || '用户' }}</span>
+          <span class="text-sm text-gray-700 dark:text-gray-200">{{ authStore.user?.nickname || authStore.user?.username || '用户' }}</span>
         </div>
         <template #dropdown>
           <el-dropdown-menu>
@@ -223,7 +223,7 @@ onUnmounted(() => {
       <!-- 左侧菜单 -->
       <aside
         :class="collapsed ? 'w-16' : 'w-56'"
-        class="flex flex-col bg-gray-50 border-r border-gray-200 transition-all duration-300 shrink-0"
+        class="flex flex-col bg-gray-50 border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700 transition-all duration-300 shrink-0"
       >
         <div class="flex-1 overflow-y-auto overflow-x-hidden py-2">
           <el-menu
@@ -252,7 +252,7 @@ onUnmounted(() => {
       <!-- 右侧内容区 -->
       <div class="flex-1 flex flex-col min-w-0">
         <!-- 页签栏 -->
-        <div class="h-10 flex items-center gap-0 px-3 border-b border-gray-200 bg-gray-50 overflow-x-auto shrink-0">
+        <div class="h-10 flex items-center gap-0 px-3 border-b border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 overflow-x-auto shrink-0">
           <draggable
             v-model="tags"
             item-key="path"
@@ -263,11 +263,11 @@ onUnmounted(() => {
             <template #item="{ element: tag }">
               <div
                 :class="[
-                  'h-full flex items-center gap-1.5 px-3 border-r border-gray-200 cursor-pointer shrink-0 transition-colors text-sm select-none',
+                  'h-full flex items-center gap-1.5 px-3 border-r border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 transition-colors text-sm select-none',
                   tag.path === '/dashboard' ? 'no-drag' : '',
                   route.path === tag.path
-                    ? 'bg-white text-industrial-600 border-t-2 border-t-safety-500 -mt-px'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                    ? 'bg-white dark:bg-gray-900 text-industrial-600 border-t-2 border-t-safety-500 -mt-px'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
                 ]"
                 @click="router.push(tag.path)"
                 @contextmenu.prevent="onTagContextMenu($event, tag)"
@@ -290,42 +290,42 @@ onUnmounted(() => {
         <!-- 右键菜单 -->
         <div
           v-if="contextMenu.visible"
-          class="fixed z-50 min-w-[140px] bg-white rounded-md shadow-lg border border-gray-200 py-1 text-sm"
+          class="fixed z-50 min-w-[140px] bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 text-sm"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
           @click.stop
         >
           <div
             :class="[
-              'px-4 py-2 cursor-pointer hover:bg-gray-100',
+              'px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700',
               (tags.find(t => t.path === contextMenu.targetPath)?.locked || contextMenu.targetPath === '/dashboard')
                 ? 'text-gray-300 cursor-not-allowed hover:bg-transparent'
-                : 'text-gray-700'
+                : 'text-gray-700 dark:text-gray-200'
             ]"
             @click="closeCurrent(contextMenu.targetPath)"
           >
             关闭本页
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-gray-100 text-gray-700"
+            class="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
             @click="closeLeft(contextMenu.targetPath)"
           >
             关闭左侧
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-gray-100 text-gray-700"
+            class="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
             @click="closeRight(contextMenu.targetPath)"
           >
             关闭右侧
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-gray-100 text-gray-700"
+            class="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
             @click="closeAll()"
           >
             关闭所有
           </div>
           <div
             v-if="contextMenu.targetPath !== '/dashboard'"
-            class="px-4 py-2 cursor-pointer hover:bg-gray-100 text-gray-700 border-t border-gray-100"
+            class="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 border-t border-gray-100 dark:border-gray-700"
             @click="toggleLock(contextMenu.targetPath)"
           >
             {{ tags.find(t => t.path === contextMenu.targetPath)?.locked ? '解锁本页' : '锁定本页' }}
@@ -333,7 +333,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 主内容 -->
-        <main class="flex-1 overflow-auto p-4 bg-gray-50">
+        <main class="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-gray-900">
           <router-view />
         </main>
       </div>

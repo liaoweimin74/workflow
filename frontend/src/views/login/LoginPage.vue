@@ -48,15 +48,15 @@ async function handleLogin() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
-    <div class="w-[400px] bg-white rounded-2xl shadow-lg shadow-gray-200/50 p-10">
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+    <div class="w-[400px] bg-white dark:bg-gray-800 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-black/30 p-10">
       <!-- Logo 区 -->
       <div class="text-center mb-8">
         <div class="w-14 h-14 rounded-2xl bg-industrial-600 flex items-center justify-center mx-auto mb-4">
           <span class="text-white text-xl font-bold">MB</span>
         </div>
-        <h1 class="text-xl font-semibold text-gray-800">工作流管理系统</h1>
-        <p class="text-sm text-gray-400 mt-1">石化工厂 · 安全作业管理平台</p>
+        <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100">工作流管理系统</h1>
+        <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">石化工厂 · 安全作业管理平台</p>
       </div>
 
       <!-- 表单 -->
@@ -96,7 +96,7 @@ async function handleLogin() {
       </el-form>
 
       <!-- 底部提示 -->
-      <p class="text-center text-xs text-gray-300 mt-6">
+      <p class="text-center text-xs text-gray-300 dark:text-gray-600 mt-6">
         安全第一 · 规范作业
       </p>
     </div>

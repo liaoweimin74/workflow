@@ -67,3 +67,70 @@ html, body, #app {
 .el-tag {
   border-radius: 4px;
 }
+
+/* ====== 暗色模式全局适配 ====== */
+.dark {
+  --el-bg-color: #1f2937;
+  --el-bg-color-overlay: #1f2937;
+  --el-text-color-primary: #e5e7eb;
+  --el-text-color-regular: #d1d5db;
+  --el-border-color: #374151;
+  --el-border-color-light: #374151;
+  --el-fill-color-blank: #1f2937;
+  --el-fill-color-light: #374151;
+}
+
+.dark body {
+  background: #111827;
+  color: #e5e7eb;
+}
+
+/* 暗色模式下菜单 */
+.dark .el-menu {
+  background-color: transparent !important;
+}
+
+.dark .el-menu-item,
+.dark .el-sub-menu__title {
+  color: #d1d5db;
+}
+
+.dark .el-menu-item:hover,
+.dark .el-sub-menu__title:hover {
+  background-color: #374151 !important;
+}
+
+/* 暗色模式下表格 */
+.dark .el-table {
+  background-color: #1f2937;
+  --el-table-bg-color: #1f2937;
+  --el-table-tr-bg-color: #1f2937;
+  --el-table-border-color: #374151;
+  --el-table-header-bg-color: #111827;
+  --el-table-text-color: #e5e7eb;
+}
+
+.dark .el-table th.el-table__cell {
+  background-color: #111827;
+  color: #9ca3af;
+}
+
+/* 暗色下面包屑 */
+.dark .el-breadcrumb__inner {
+  color: #9ca3af !important;
+}
+
+/* 暗色下下拉菜单 */
+.dark .el-dropdown-menu {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.dark .el-dropdown-menu__item {
+  color: #d1d5db;
+}
+
+.dark .el-dropdown-menu__item:hover {
+  background-color: #374151;
+  color: #f59e0b;
+}

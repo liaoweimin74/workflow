@@ -3,7 +3,9 @@ package com.workflow.engine.logic;
 import com.workflow.engine.logic.annotation.BackendLogicBean;
 import org.springframework.context.ApplicationContext;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -20,8 +22,10 @@ import java.util.Map;
 public class BackendBeanRegistry {
 
     private final List<RegisteredBeanMethod> methods;
+    private final ApplicationContext applicationContext;
 
     public BackendBeanRegistry(ApplicationContext applicationContext) {
+        this.applicationContext = applicationContext;
         Map<String, Object> beans = applicationContext.getBeansWithAnnotation(BackendLogicBean.class);
         List<RegisteredBeanMethod> collected = new ArrayList<>();
         beans.forEach((beanName, bean) -> collectBeanMethods(beanName, bean.getClass(), collected));
@@ -72,5 +76,38 @@ public class BackendBeanRegistry {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Backend logic bean method not registered: " + beanName + "." + methodName));
+    }
+
+    /**
+     * 校验参数个数并反射调用白名单 Bean 方法。
+     *
+     * <p>运行时根据 {@code beanName} 从 {@link ApplicationContext} 获取 Bean 实例，按方法名定位公开方法，
+     * 将 {@code args} 按序传入调用。返回方法返回值（void 返回 null）。参数个数与注册时不一致时
+     * 抛出 {@link IllegalArgumentException}（spec：INVALID_PARAMETER_COUNT 校验错误）。
+     *
+     * @param beanName  Spring Bean 名称
+     * @param methodName 白名单方法名
+     * @param args       按序传入的方法参数
+     * @return 方法返回值，无返回则为 null
+     */
+    public Object invoke(String beanName, String methodName, Object[] args) {
+        RegisteredBeanMethod rbm = require(beanName, methodName);
+        if (args.length != rbm.parameterCount()) {
+            throw new IllegalArgumentException(
+                    "INVALID_PARAMETER_COUNT: bean " + rbm.beanName() + "." + rbm.methodName()
+                            + " expects " + rbm.parameterCount() + " params but got " + args.length);
+        }
+        Object bean = applicationContext.getBean(rbm.beanName());
+        Method method = Arrays.stream(bean.getClass().getMethods())
+                .filter(m -> m.getName().equals(rbm.methodName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Registered method no longer present: " + rbm.beanName() + "." + rbm.methodName()));
+        try {
+            return method.invoke(bean, args);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new RuntimeException("Failed to invoke backend logic bean method "
+                    + rbm.beanName() + "." + rbm.methodName(), e);
+        }
     }
 }

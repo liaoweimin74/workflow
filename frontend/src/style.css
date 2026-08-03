@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-industrial: #1a56db;
   --color-industrial-50: #eff6ff;

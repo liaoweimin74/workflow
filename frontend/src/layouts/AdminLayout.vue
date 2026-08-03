@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand, HomeFilled, Sunny, Moon } from '@element-plus/icons-vue'
+import { Fold, Expand, HomeFilled, Sunny, Moon, Lock } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 
@@ -236,7 +236,7 @@ onUnmounted(() => {
             style="border-right: none"
           >
             <!-- 首页（固定） -->
-            <el-menu-item index="/dashboard" class="!my-0.5 !mx-2 !rounded-lg">
+            <el-menu-item index="/dashboard" :class="collapsed ? '!my-0.5 !rounded-lg' : '!my-0.5 !mx-2 !rounded-lg'">
               <el-icon><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg></el-icon>
               <template #title>
                 <span>首页</span>
@@ -274,8 +274,11 @@ onUnmounted(() => {
                 @contextmenu.prevent="onTagContextMenu($event, tag)"
               >
                 <span class="truncate max-w-[120px]">{{ tag.title }}</span>
+                <!-- 锁定状态：显示锁图标 -->
+                <el-icon v-if="tag.locked" :size="12" class="text-gray-400 shrink-0"><Lock /></el-icon>
+                <!-- 未锁定且非首页：显示关闭按钮 -->
                 <button
-                  v-if="!tag.locked && tag.path !== '/dashboard'"
+                  v-else-if="tag.path !== '/dashboard'"
                   @click.stop="removeTag(tag.path)"
                   class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-gray-200 shrink-0"
                 >

@@ -2,14 +2,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { SearchTable } from '@/components/business'
-import type { SearchField, TableColumn, ActionButton, FormConfig, FormField } from '@/components/business/types'
+import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import type { Rule } from '@form-create/element-ui'
 import { getMenuTree, createMenu, updateMenu, deleteMenu } from '@/api/menu'
 import type { MenuTree } from '@/types/menu'
 
 const searchTableRef = ref()
 const list = ref<MenuTree[]>([])
-const currentMenuType = ref(1)
-const currentParentId = ref<number | undefined>()
 
 const menuTypeMap: Record<number, string> = { 0: '目录', 1: '菜单', 2: '按钮' }
 const menuTypeOptions = [
@@ -39,14 +38,10 @@ async function fetchApi(_params: any) {
 
 // ---------- 新增子菜单 ----------
 function handleAddChild(parentId: number) {
-  currentParentId.value = parentId
-  currentMenuType.value = 1
   searchTableRef.value?.openFormDialog({ parentId, menuType: 1, sortOrder: 0, visible: 1 })
 }
 
 function handleAddRoot() {
-  currentParentId.value = undefined
-  currentMenuType.value = 1
   searchTableRef.value?.openFormDialog({ menuType: 1, sortOrder: 0, visible: 1 })
 }
 
@@ -55,44 +50,58 @@ const actionButtons: ActionButton[] = [
   { label: '新增子菜单', size: 'small', type: 'text', visible: (row: MenuTree) => row.menuType !== 2, onClick: (row: MenuTree) => handleAddChild(row.id) },
 ]
 
-// ---------- 动态表单配置（按 menuType） ----------
+// ---------- 表单配置（form-create rule） ----------
 const formConfig = computed<FormConfig<MenuTree>>(() => {
-  const fields: FormField[] = [
+  const rule: Rule[] = [
     {
-      type: 'tree-select', label: '上级菜单', prop: 'parentId', placeholder: '选择上级（空=根菜单）',
-      treeProps: { data: list.value, props: { label: 'menuName', value: 'id', children: 'children' } },
+      type: 'treeSelect', field: 'parentId', title: '上级菜单',
+      props: { data: list.value, props: { label: 'menuName', value: 'id', children: 'children' } },
     },
     {
-      type: 'select', label: '菜单类型', prop: 'menuType', options: menuTypeOptions,
-      rules: [{ required: true }],
-      onChange: (val: number) => { currentMenuType.value = val },
+      type: 'select', field: 'menuType', title: '菜单类型', options: menuTypeOptions,
+      value: 1,
+      validate: [{ required: true }],
+      update: (val: number, _rule: any, fApi: any) => {
+        const isDir = val === 0
+        const isMenu = val === 1
+        const isButton = val === 2
+        fApi.updateRule('path', { hidden: isButton })
+        fApi.updateRule('icon', { hidden: isButton })
+        fApi.updateRule('visible', { hidden: isButton })
+        fApi.updateRule('component', { hidden: !isMenu })
+        fApi.updateRule('permission', { hidden: isDir })
+      },
     },
-    { type: 'input', label: '菜单名称', prop: 'menuName', rules: [{ required: true, message: '请输入菜单名称', trigger: 'blur' }] },
+    {
+      type: 'input', field: 'menuName', title: '菜单名称',
+      validate: [{ required: true, message: '请输入菜单名称', trigger: 'blur' }],
+    },
+    {
+      type: 'input', field: 'path', title: '路由路径',
+    },
+    {
+      type: 'input', field: 'icon', title: '图标',
+      props: { placeholder: 'Element Plus 图标名' },
+    },
+    {
+      type: 'radio', field: 'visible', title: '可见',
+      options: [{ label: '显示', value: 1 }, { label: '隐藏', value: 0 }],
+    },
+    {
+      type: 'input', field: 'component', title: '组件路径',
+      props: { placeholder: 'views/system/user/UserPage' },
+    },
+    {
+      type: 'input', field: 'permission', title: '权限标识',
+      props: { placeholder: 'system:user:add' },
+    },
+    {
+      type: 'inputNumber', field: 'sortOrder', title: '排序',
+    },
   ]
 
-  // 目录(0) or 菜单(1): path + icon + visible
-  if (currentMenuType.value === 0 || currentMenuType.value === 1) {
-    fields.push(
-      { type: 'input', label: '路由路径', prop: 'path' },
-      { type: 'input', label: '图标', prop: 'icon', placeholder: 'Element Plus 图标名' },
-      { type: 'radio', label: '可见', prop: 'visible', options: [{ label: '显示', value: 1 }, { label: '隐藏', value: 0 }] },
-    )
-  }
-
-  // 菜单(1): component
-  if (currentMenuType.value === 1) {
-    fields.push({ type: 'input', label: '组件路径', prop: 'component', placeholder: 'views/system/user/UserPage' })
-  }
-
-  // 菜单(1) or 按钮(2): permission
-  if (currentMenuType.value === 1 || currentMenuType.value === 2) {
-    fields.push({ type: 'input', label: '权限标识', prop: 'permission', placeholder: 'system:user:add' })
-  }
-
-  fields.push({ type: 'input-number', label: '排序', prop: 'sortOrder' })
-
   return {
-    fields,
+    rule,
     createApi: createMenu,
     updateApi: (id, data) => updateMenu(id as number, data),
     deleteApi: deleteMenu,

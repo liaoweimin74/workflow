@@ -114,13 +114,13 @@ async function fetchApi(params: any) {
 
 // ========== 创建表单 ==========
 const formConfig = reactive<FormConfig<FormDefinitionDTO>>({
-  fields: [
-    { type: 'input', label: '表单名称', prop: 'name', rules: [{ required: true, message: '请输入表单名称', trigger: 'blur' }] },
+  rule: [
+    { type: 'input', field: 'name', title: '表单名称', validate: [{ required: true, message: '请输入表单名称', trigger: 'blur' }] },
     {
       type: 'input',
-      label: '表单标识',
-      prop: 'key',
-      rules: [
+      field: 'key',
+      title: '表单标识',
+      validate: [
         { required: true, message: '请输入表单标识', trigger: 'blur' },
         { pattern: /^[a-z][a-z0-9_]*$/, message: '只能包含小写字母、数字、下划线，且以字母开头', trigger: 'blur' },
       ],

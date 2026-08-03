@@ -106,16 +106,15 @@ function buildTree(items: Category[]): any[] {
 }
 
 const categoryFormConfig = reactive<FormConfig<Category>>({
-  fields: [
+  rule: [
     {
-      type: 'tree-select',
-      label: '父分类',
-      prop: 'parentId',
-      treeProps: { data: [] as any[], props: { label: 'name', value: 'id', children: 'children' } },
-      placeholder: '不选则为顶级分类',
+      type: 'treeSelect',
+      field: 'parentId',
+      title: '父分类',
+      props: { data: [] as any[], props: { label: 'name', value: 'id', children: 'children' }, placeholder: '不选则为顶级分类', checkStrictly: true, clearable: true },
     },
-    { type: 'input', label: '名称', prop: 'name', rules: [{ required: true, message: '请输入分类名称', trigger: 'blur' }] },
-    { type: 'input', label: '排序', prop: 'sortOrder' } as any,
+    { type: 'input', field: 'name', title: '名称', validate: [{ required: true, message: '请输入分类名称', trigger: 'blur' }] },
+    { type: 'input', field: 'sortOrder', title: '排序' },
   ],
   dialogTitle: { create: '新建分类', edit: '编辑分类' },
   createPermission: 'process:category:create',
@@ -123,17 +122,17 @@ const categoryFormConfig = reactive<FormConfig<Category>>({
   deletePermission: 'process:category:delete',
   beforeCreate: async () => {
     const res = await categoryApi.list()
-    const f = categoryFormConfig.fields.find(f => f.prop === 'parentId')
-    if (f && f.treeProps) {
-      f.treeProps.data = buildTree(res.data || [])
+    const r = categoryFormConfig.rule.find(r => r.field === 'parentId')
+    if (r) {
+      r.props.data = buildTree(res.data || [])
     }
     return true
   },
   beforeEdit: async (row: Category) => {
     const res = await categoryApi.list()
-    const f = categoryFormConfig.fields.find(f => f.prop === 'parentId')
-    if (f && f.treeProps) {
-      f.treeProps.data = buildTree(res.data?.filter((c: Category) => c.id !== row.id) || [])
+    const r = categoryFormConfig.rule.find(r => r.field === 'parentId')
+    if (r) {
+      r.props.data = buildTree(res.data?.filter((c: Category) => c.id !== row.id) || [])
     }
     return true
   },
@@ -212,31 +211,31 @@ async function fetchApi(params: any) {
 }
 
 const formConfig = reactive<FormConfig<ProcessDraft>>({
-  fields: [
-    { type: 'input', label: '流程名称', prop: 'name', rules: [{ required: true, message: '请输入流程名称', trigger: 'blur' }] },
+  rule: [
+    { type: 'input', field: 'name', title: '流程名称', validate: [{ required: true, message: '请输入流程名称', trigger: 'blur' }] },
     {
       type: 'input',
-      label: '流程标识',
-      prop: 'key',
-      rules: [
+      field: 'key',
+      title: '流程标识',
+      validate: [
         { required: true, message: '请输入流程标识', trigger: 'blur' },
         { pattern: /^[a-z][a-z0-9_]*$/, message: '只能包含小写字母、数字、下划线，且以字母开头', trigger: 'blur' },
       ],
     },
     {
-      type: 'tree-select',
-      label: '分类',
-      prop: 'categoryId',
-      treeProps: { data: [] as any[], props: { label: 'name', value: 'id', children: 'children' } },
+      type: 'treeSelect',
+      field: 'categoryId',
+      title: '分类',
+      props: { data: [] as any[], props: { label: 'name', value: 'id', children: 'children' }, checkStrictly: true, clearable: true },
     },
   ],
   dialogTitle: { create: '新建流程' },
   createPermission: 'process:definition:create',
   beforeCreate: async () => {
     const res = await categoryApi.list()
-    const f = formConfig.fields.find(f => f.prop === 'categoryId')
-    if (f && f.treeProps) {
-      f.treeProps.data = buildTree(res.data || [])
+    const r = formConfig.rule.find(r => r.field === 'categoryId')
+    if (r) {
+      r.props.data = buildTree(res.data || [])
     }
     return true
   },

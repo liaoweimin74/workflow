@@ -11,13 +11,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import formCreate from '@form-create/element-ui'
+import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
 
 const props = defineProps<{
-  formDefId: string
+  /** 表单定义 ID，传入后通过 API 加载 schema。与 rule 互斥，formDefId 优先。 */
+  formDefId?: string
+  /** 直接传入 form-create rule 数组，无需 API 调用。用于 CRUD 页面。 */
+  rule?: Rule[]
+  /** 预填表单数据，变化时自动同步到 formData。 */
+  initialValues?: Record<string, unknown>
   processInstanceId?: string
   taskId?: string
   fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
@@ -29,8 +34,8 @@ const emit = defineEmits<{
 }>()
 
 const loading = ref(false)
-const resolvedSchema = ref<any[]>([])
-const formData = ref<Record<string, any>>({})
+const resolvedSchema = ref<Rule[]>([])
+const formData = ref<Record<string, unknown>>({})
 const existingFormDataId = ref<string | null>(null)
 const formVersion = ref<number | null>(null)
 
@@ -40,7 +45,14 @@ const renderOption = ref({
 })
 
 onMounted(async () => {
-  await loadSchema()
+  if (props.formDefId) {
+    await loadSchema()
+  } else if (props.rule) {
+    resolvedSchema.value = props.rule
+  }
+  if (props.initialValues) {
+    formData.value = { ...props.initialValues }
+  }
   if (props.processInstanceId) {
     await loadData()
   }
@@ -49,7 +61,15 @@ onMounted(async () => {
   }
 })
 
+// 监听 initialValues 变化，同步到 formData
+watch(() => props.initialValues, (newVal) => {
+  if (newVal) {
+    formData.value = { ...newVal }
+  }
+})
+
 async function loadSchema() {
+  if (!props.formDefId) return
   loading.value = true
   try {
     const res = await formApi.getFormDefinition(props.formDefId)
@@ -69,7 +89,7 @@ async function loadSchema() {
 }
 
 async function loadData() {
-  if (!props.processInstanceId) return
+  if (!props.processInstanceId || !props.formDefId) return
   try {
     const res = await formApi.getFormData(props.processInstanceId, props.formDefId)
     if (res.data) {
@@ -89,7 +109,9 @@ async function loadData() {
 
 function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>) {
   resolvedSchema.value = resolvedSchema.value.map(field => {
-    const permission = permissions[field.field]
+    const fieldName = (field as Record<string, unknown>).field as string | undefined
+    if (!fieldName) return field
+    const permission = permissions[fieldName]
     if (!permission) return field
 
     const updatedField = { ...field }
@@ -105,9 +127,10 @@ function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'
 async function submit(): Promise<boolean> {
   try {
     const dataJson = JSON.stringify(formData.value)
+    const formDefId = props.formDefId ?? ''
     if (existingFormDataId.value) {
       const res = await formApi.updateFormData(existingFormDataId.value, {
-        formDefId: props.formDefId,
+        formDefId,
         processInstanceId: props.processInstanceId,
         taskId: props.taskId,
         dataJson,
@@ -116,7 +139,7 @@ async function submit(): Promise<boolean> {
       emit('submitted', res.data.id)
     } else {
       const res = await formApi.saveFormData({
-        formDefId: props.formDefId,
+        formDefId,
         processInstanceId: props.processInstanceId,
         taskId: props.taskId,
         dataJson,
@@ -131,7 +154,7 @@ async function submit(): Promise<boolean> {
   }
 }
 
-function getFormData(): Record<string, any> {
+function getFormData(): Record<string, unknown> {
   return formData.value
 }
 

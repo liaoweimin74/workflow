@@ -98,7 +98,7 @@ const actionButtons: ActionButton[] = [
     label: '重置密码',
     icon: Key,
     size: 'small',
-    type: 'warning',
+    type: 'text',
     confirm: '确定重置密码吗？',
     onClick: handleResetPassword,
   },

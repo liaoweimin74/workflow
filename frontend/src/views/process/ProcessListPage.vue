@@ -171,7 +171,7 @@ const categoryActionButtons: ActionButton[] = [
   {
     label: '添加子分类',
     icon: Plus,
-    type: 'primary',
+    type: 'text',
     show: (row: any) => !!row.id,
     onClick: (row: any) => {
       categoryTableRef.value?.openFormDialog({ parentId: row.id })

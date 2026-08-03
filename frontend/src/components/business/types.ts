@@ -62,56 +62,6 @@ export interface QueryParams {
   [key: string]: any
 }
 
-// --- 表单布局 ---
-
-export type FormLayout = 'single' | 'double' | { cols: number; gap?: number }
-
-// --- 表单字段 ---
-
-export interface FormField {
-  type:
-    | 'input'
-    | 'input-number'
-    | 'select'
-    | 'tree-select'
-    | 'switch'
-    | 'date-picker'
-    | 'radio'
-    | 'checkbox'
-    | 'textarea'
-    | 'slot'
-    | 'lookup'
-  label: string
-  prop: string
-  placeholder?: string
-  rules?: any[]
-  options?: { label: string; value: any }[]
-  treeProps?: {
-    data: any[]
-    props: { label: string; value: string; children?: string }
-  }
-  disabled?: boolean
-  span?: number
-  slotName?: string
-  props?: Record<string, any>
-  visible?: (formData: Record<string, any>) => boolean
-  onChange?: (
-    newVal: any,
-    oldVal: any,
-    formData: Record<string, any>,
-  ) => boolean | Promise<boolean>
-}
-
-// --- 表单 props ---
-
-export interface FormBuilderProps {
-  fields: FormField[]
-  modelValue: Record<string, any>
-  layout?: FormLayout
-  labelWidth?: string
-  labelPosition?: 'left' | 'right' | 'top'
-}
-
 // --- 表单集成配置（SearchTable 用） ---
 
 export interface FormConfig<T = any> {

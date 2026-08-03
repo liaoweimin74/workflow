@@ -590,7 +590,7 @@ describe('SearchTable — FormRenderer 集成', () => {
     expect(updateApi).toHaveBeenCalledWith(1, { id: 1, username: 'updated' })
   })
 
-  it('弹窗不渲染 FormBuilder 组件', async () => {
+  it('弹窗渲染 FormRenderer 组件', async () => {
     const fetchApi = vi.fn().mockResolvedValue({
       rows: [{ id: 1, username: 'admin' }],
       total: 1,
@@ -614,8 +614,8 @@ describe('SearchTable — FormRenderer 集成', () => {
     await createBtn!.trigger('click')
     await nextTick()
 
-    // 不应存在 FormBuilder 组件
-    const formBuilder = wrapper.findComponent({ name: 'FormBuilder' })
-    expect(formBuilder.exists()).toBe(false)
+    // 应存在 FormRenderer 组件
+    const formRenderer = wrapper.findComponent({ name: 'FormRenderer' })
+    expect(formRenderer.exists()).toBe(true)
   })
 })

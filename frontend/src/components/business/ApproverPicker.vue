@@ -1,16 +1,26 @@
 <template>
   <div class="approver-picker">
-    <el-input
-      :model-value="displayText"
-      :placeholder="placeholder"
-      :disabled="disabled"
-      readonly
+    <div
+      class="ap-trigger"
+      :class="{ 'is-disabled': disabled }"
       @click="openDialog"
     >
-      <template #prefix>
-        <el-icon><User /></el-icon>
-      </template>
-    </el-input>
+      <el-icon class="ap-trigger-icon"><User /></el-icon>
+      <div class="ap-tags">
+        <el-tag
+          v-for="user in selectedUsers"
+          :key="user.id"
+          closable
+          :disable-transitions="false"
+          size="small"
+          @close.stop="removeTag(user.id)"
+          @click.stop
+        >
+          {{ user.nickname }}
+        </el-tag>
+        <span v-if="selectedUsers.length === 0" class="ap-placeholder">{{ placeholder }}</span>
+      </div>
+    </div>
     <el-dialog
       v-model="dialogVisible"
       title="选择审批人"
@@ -18,10 +28,10 @@
       :close-on-click-modal="false"
       append-to-body
     >
-      <div style="display: flex; gap: 12px; min-height: 400px;">
+      <div class="ap-body" :style="{ height: dialogHeight + 'px' }">
         <!-- 左栏：组织树 + 角色列表 Tab -->
-        <div style="width: 200px; border-right: 1px solid #ebeef5; padding-right: 12px; display: flex; flex-direction: column;">
-          <el-tabs v-model="activeTab" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="ap-left">
+          <el-tabs v-model="activeTab" class="ap-tabs">
             <el-tab-pane label="组织树" name="org">
               <el-input
                 v-model="orgFilter"
@@ -30,7 +40,7 @@
                 size="small"
                 style="margin-bottom: 8px;"
               />
-              <div style="overflow: auto; max-height: 350px;">
+              <div class="ap-scroll">
                 <el-tree
                   ref="orgTreeRef"
                   :data="orgTree"
@@ -50,7 +60,7 @@
                 size="small"
                 style="margin-bottom: 8px;"
               />
-              <div style="overflow: auto; max-height: 350px;">
+              <div class="ap-scroll">
                 <el-checkbox-group v-model="checkedRoleIds" @change="onRoleChange">
                   <div
                     v-for="role in filteredRoles"
@@ -67,7 +77,7 @@
         </div>
 
         <!-- 中栏：待选用户表 -->
-        <div style="flex: 1; display: flex; flex-direction: column;">
+        <div class="ap-center">
           <div style="margin-bottom: 8px; display: flex; gap: 8px;">
             <el-input
               v-model="searchKeyword"
@@ -78,20 +88,26 @@
             />
             <el-button type="primary" size="small" @click="onSearch">搜索</el-button>
           </div>
-          <el-table
-            ref="candTableRef"
-            :data="candidateUsers"
-            v-loading="candidateLoading"
-            border
-            size="small"
-            height="350"
-            @select="onTableSelect"
-            @select-all="onTableSelectAll"
-          >
-            <el-table-column type="selection" width="40" />
-            <el-table-column prop="nickname" label="姓名" />
-            <el-table-column prop="orgName" label="部门" />
-          </el-table>
+          <div class="ap-scroll ap-table-wrap">
+            <el-table
+              ref="candTableRef"
+              :data="candidateUsers"
+              v-loading="candidateLoading"
+              border
+              size="small"
+              height="100%"
+              @select="onTableSelect"
+              @select-all="onTableSelectAll"
+            >
+              <el-table-column type="selection" width="40" />
+              <el-table-column prop="nickname" label="姓名" />
+              <el-table-column prop="orgName" label="部门" />
+            </el-table>
+            <el-empty
+              v-if="!candidateLoading && candidateUsers.length === 0"
+              description="请在左侧选择组织或角色，或使用顶部搜索"
+            />
+          </div>
           <div style="margin-top: 8px; display: flex; justify-content: flex-end;">
             <el-pagination
               v-model:current-page="candQuery.page"
@@ -103,18 +119,14 @@
               @current-change="fetchCandidateUsers"
             />
           </div>
-          <el-empty
-            v-if="!candidateLoading && candidateUsers.length === 0"
-            description="请在左侧选择组织或角色，或使用顶部搜索"
-          />
         </div>
 
         <!-- 右栏：已选用户 -->
-        <div style="width: 240px; border-left: 1px solid #ebeef5; padding-left: 12px; display: flex; flex-direction: column;">
-          <div style="font-weight: bold; margin-bottom: 8px;">
+        <div class="ap-right">
+          <div style="font-weight: bold; margin-bottom: 8px; flex-shrink: 0;">
             已选 {{ selectedUsers.length }} 人
           </div>
-          <div style="flex: 1; overflow: auto; max-height: 350px;">
+          <div class="ap-scroll">
             <div
               v-for="user in selectedUsers"
               :key="user.id"
@@ -134,6 +146,7 @@
             text
             type="danger"
             size="small"
+            style="flex-shrink: 0;"
             @click="clearSelected"
           >
             清空
@@ -164,10 +177,12 @@ const props = withDefaults(defineProps<{
   multiple?: boolean
   placeholder?: string
   maxSelected?: number
+  dialogHeight?: number
 }>(), {
   disabled: false,
   multiple: true,
   placeholder: '请选择审批人',
+  dialogHeight: 400,
 })
 
 const emit = defineEmits<{
@@ -263,8 +278,8 @@ async function fetchCandidateUsers() {
     }
     const params: Record<string, unknown> = { ...candQuery }
     if (hasSearch) {
-      // 全局搜索：忽略左侧筛选
-      params.username = searchKeyword.value.trim()
+      // 全局模糊搜索：忽略左侧筛选，后端 OR 匹配姓名和电话
+      params.nickname = searchKeyword.value.trim()
     } else {
       if (checkedOrgIds.value.length > 0) params.orgIds = checkedOrgIds.value
       if (checkedRoleIds.value.length > 0) params.roleIds = checkedRoleIds.value
@@ -330,6 +345,13 @@ function removeSelected(userId: number) {
   syncTableSelection()
 }
 
+function removeTag(userId: number) {
+  removeUserFromSelected(userId)
+  syncTableSelection()
+  emit('update:modelValue', selectedUsers.value.map(u => u.id))
+  emit('change', [...selectedUsers.value])
+}
+
 function clearSelected() {
   selectedUsers.value = []
   syncTableSelection()
@@ -379,3 +401,103 @@ function handleConfirm() {
   dialogVisible.value = false
 }
 </script>
+
+<style scoped>
+.ap-body {
+  display: flex;
+  gap: 12px;
+}
+
+.ap-left {
+  width: 200px;
+  border-right: 1px solid #ebeef5;
+  padding-right: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ap-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ap-tabs :deep(.el-tabs__content) {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ap-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ap-right {
+  width: 240px;
+  border-left: 1px solid #ebeef5;
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ap-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.ap-table-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.ap-trigger {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 11px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #fff;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.ap-trigger:hover {
+  border-color: #c0c4cc;
+}
+
+.ap-trigger.is-disabled {
+  background-color: #f5f7fa;
+  cursor: not-allowed;
+}
+
+.ap-trigger-icon {
+  margin-top: 2px;
+  color: #a8abb2;
+  flex-shrink: 0;
+}
+
+.ap-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+
+.ap-placeholder {
+  color: #a8abb2;
+  font-size: 12px;
+  line-height: 24px;
+}
+</style>

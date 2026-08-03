@@ -53,6 +53,13 @@ public class UserServiceImpl implements UserService {
             if (StringUtils.hasText(query.username())) {
                 predicates.add(cb.like(root.get("username"), "%" + query.username() + "%"));
             }
+            // nickname/phone 模糊 OR 搜索
+            if (StringUtils.hasText(query.nickname())) {
+                predicates.add(cb.or(
+                        cb.like(root.get("nickname"), "%" + query.nickname() + "%"),
+                        cb.like(root.get("phone"), "%" + query.nickname() + "%")
+                ));
+            }
             if (query.status() != null) {
                 predicates.add(cb.equal(root.get("status"), query.status()));
             }

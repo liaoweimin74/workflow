@@ -4,6 +4,7 @@ import java.util.List;
 
 public record UserQueryRequest(
         String username,
+        String nickname,
         Integer status,
         Long orgId,
         List<Long> orgIds,

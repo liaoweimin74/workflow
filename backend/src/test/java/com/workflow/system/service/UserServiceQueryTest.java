@@ -51,7 +51,7 @@ class UserServiceQueryTest {
                 .thenReturn(page);
         when(userRoleRepository.findByUserId(1L)).thenReturn(List.of());
 
-        UserQueryRequest req = new UserQueryRequest(null, null, null, List.of(10L, 20L), null, 1, 10);
+        UserQueryRequest req = new UserQueryRequest(null, null, null, null, List.of(10L, 20L), null, 1, 10);
         PageResult<UserVO> result = userService.list(req);
 
         assertThat(result.getRows()).hasSize(1);
@@ -67,7 +67,7 @@ class UserServiceQueryTest {
                 .thenReturn(page);
         when(userRoleRepository.findByUserId(1L)).thenReturn(List.of());
 
-        UserQueryRequest req = new UserQueryRequest(null, null, null, null, List.of(5L), 1, 10);
+        UserQueryRequest req = new UserQueryRequest(null, null, null, null, null, List.of(5L), 1, 10);
         PageResult<UserVO> result = userService.list(req);
 
         assertThat(result.getRows()).hasSize(1);
@@ -82,7 +82,7 @@ class UserServiceQueryTest {
                 .thenReturn(page);
         when(userRoleRepository.findByUserId(1L)).thenReturn(List.of());
 
-        UserQueryRequest req = new UserQueryRequest(null, null, null, null, null, 1, 10);
+        UserQueryRequest req = new UserQueryRequest(null, null, null, null, null, null, 1, 10);
         PageResult<UserVO> result = userService.list(req);
 
         assertThat(result.getRows()).hasSize(1);
@@ -100,7 +100,7 @@ class UserServiceQueryTest {
                 .thenReturn(page);
         when(userRoleRepository.findByUserId(anyLong())).thenReturn(List.of());
 
-        UserQueryRequest req = new UserQueryRequest(null, null, null, List.of(10L), List.of(5L), 1, 10);
+        UserQueryRequest req = new UserQueryRequest(null, null, null, null, List.of(10L), List.of(5L), 1, 10);
         PageResult<UserVO> result = userService.list(req);
 
         assertThat(result.getRows()).hasSize(2);

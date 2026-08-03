@@ -34,35 +34,33 @@ function createWrapper(props: any = {}) {
 }
 
 describe('ApproverPicker — 基础渲染', () => {
-  it('渲染输入框', () => {
+  it('渲染触发区', () => {
     const wrapper = createWrapper()
-    expect(wrapper.find('input').exists()).toBe(true)
+    expect(wrapper.find('.ap-trigger').exists()).toBe(true)
   })
 
   it('显示 placeholder', () => {
     const wrapper = createWrapper({ placeholder: '请选择审批人' })
-    const input = wrapper.find('input')
-    expect(input.attributes('placeholder')).toBe('请选择审批人')
+    expect(wrapper.find('.ap-placeholder').text()).toBe('请选择审批人')
   })
 
-  it('disabled 时输入框不可用', () => {
+  it('disabled 时触发区不可点击', () => {
     const wrapper = createWrapper({ disabled: true })
-    const input = wrapper.find('input')
-    expect(input.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.ap-trigger').classes()).toContain('is-disabled')
   })
 })
 
 describe('ApproverPicker — 弹窗交互', () => {
-  it('点击输入框打开弹窗', async () => {
+  it('点击触发区打开弹窗', async () => {
     const wrapper = createWrapper()
-    await wrapper.find('input').trigger('click')
+    await wrapper.find('.ap-trigger').trigger('click')
     await nextTick()
     expect(document.body.querySelector('.el-dialog') !== null).toBeTruthy()
   })
 
   it('弹窗显示三栏布局', async () => {
     const wrapper = createWrapper()
-    await wrapper.find('input').trigger('click')
+    await wrapper.find('.ap-trigger').trigger('click')
     await nextTick()
     const dialog = document.body.querySelector('.el-dialog')
     expect(dialog).toBeTruthy()
@@ -117,25 +115,25 @@ describe('ApproverPicker — emit 契约', () => {
   })
 })
 
-describe('ApproverPicker — 显示文本', () => {
-  it('0 人时显示空', () => {
+describe('ApproverPicker — Tag 展示与删除', () => {
+  it('0 人时显示 placeholder', () => {
     const wrapper = createWrapper()
-    const input = wrapper.find('input')
-    expect(input.element.value).toBe('')
+    expect(wrapper.find('.ap-placeholder').exists()).toBe(true)
   })
 
-  it('1 人时显示昵称', async () => {
+  it('选中后显示 tag', async () => {
     const wrapper = createWrapper()
     const vm = wrapper.vm as any
     vm.selectedUsers = [
       { id: 1, nickname: '张三', username: 'zhangsan', orgName: '技术部' },
     ]
     await nextTick()
-    const input = wrapper.find('input')
-    expect(input.element.value).toContain('张三')
+    const tags = wrapper.findAll('.el-tag')
+    expect(tags.length).toBe(1)
+    expect(tags[0].text()).toContain('张三')
   })
 
-  it('3 人时显示 "X、Y 等3人" 格式', async () => {
+  it('多个用户显示多个 tag', async () => {
     const wrapper = createWrapper()
     const vm = wrapper.vm as any
     vm.selectedUsers = [
@@ -144,9 +142,26 @@ describe('ApproverPicker — 显示文本', () => {
       { id: 3, nickname: '王五', username: 'wangwu', orgName: '运营部' },
     ]
     await nextTick()
-    const input = wrapper.find('input')
-    expect(input.element.value).toContain('张三')
-    expect(input.element.value).toContain('李四')
-    expect(input.element.value).toContain('3')
+    const tags = wrapper.findAll('.el-tag')
+    expect(tags.length).toBe(3)
+  })
+
+  it('点击 tag 关闭按钮 emit update:modelValue 和 change', async () => {
+    const wrapper = createWrapper()
+    const vm = wrapper.vm as any
+    vm.selectedUsers = [
+      { id: 1, nickname: '张三', username: 'zhangsan', orgName: '技术部' },
+      { id: 2, nickname: '李四', username: 'lisi', orgName: '产品部' },
+    ]
+    await nextTick()
+    // 点击第一个 tag 的关闭按钮
+    const closeBtn = wrapper.findAll('.el-tag__close')[0]
+    await closeBtn.trigger('click')
+    const emitted = wrapper.emitted('update:modelValue')
+    expect(emitted).toBeTruthy()
+    expect(emitted![0][0]).toEqual([2])
+    const emittedChange = wrapper.emitted('change')
+    expect(emittedChange).toBeTruthy()
+    expect(emittedChange![0][0]).toHaveLength(1)
   })
 })

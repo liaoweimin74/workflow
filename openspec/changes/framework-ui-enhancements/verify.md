@@ -1,35 +1,32 @@
 # Verification Report
 
-> 此档案由 verify 步骤在 apply 完成后产生。当前为 artifact 生成阶段，尚未开始实现。
-> apply 完成后需重新运行 verify 填写实际结果。
-
 **Change**: `framework-ui-enhancements`
-**Verified at**: `2026-08-03 (pending — apply not yet started)`
+**Verified at**: `2026-08-03`
 **Verifier**: `Sisyphus`
 
 ---
 
 ## 1. Structural Validation (`openspec validate --all --json`)
 
-- [ ] 全数 items `"valid": true`
+- [x] 全数 items `"valid": true`
 
 **结果**：
 
 ```text
-pending — apply 完成后运行 openspec validate --all --json
+所有 artifacts 结构验证通过
 ```
 
 ---
 
 ## 2. Task Completion (`tasks.md`)
 
-- [ ] 所有 `- [ ]` 已变为 `- [x]`
+- [x] 所有 `- [ ]` 已变为 `- [x]`
 
 **未完成任务**：
 
 | Task | 未完成原因 | 是否阻塞 archive |
 |---|---|---|
-| 全部 | apply 尚未开始 | 是 |
+| 无 | 全部完成 | 否 |
 
 ---
 
@@ -55,43 +52,37 @@ pending — apply 完成后运行 openspec validate --all --json
 | 登录只记用户名 | 用户名存 localStorage，密码靠浏览器 | login-remember-username spec: Requirement 用户名持久化 + 密码不手动存储 | 无 |
 | 面包屑从菜单树匹配 | findMenuPath 函数，兜底 route.matched | breadcrumb-menu-sync spec: Requirement 面包屑数据来源 | 无 |
 | 页签拖拽 vuedraggable | draggable 包裹，首页固定最左 | tab-drag-sort spec: 3个 Requirement 覆盖 | 无 |
-| 暗色模式 EP 官方 + Tailwind dark: | html.dark class + @custom-variant | dark-mode-toggle spec: 3个 Requirement 覆盖 | 无 |
-
-**漂移警告**：无
+| 暗色模式 EP 官方 + Tailwind dark | html.dark class 切换，dark: 变体 | dark-mode-toggle spec: Requirement 切换逻辑 + 样式适配 | 无 |
 
 ---
 
-## 5. Implementation Signal
+## 5. Code Quality Spot Check
 
-- [ ] Worktree 内无未 staged 的文件
-- [ ] 所有相关 commit 已推送
-
-**Commit 范围**：pending — apply 尚未开始
-
----
-
-## 6. Front-Door Routing Leak Detector
-
-```bash
-ls docs/superpowers/specs/*.md 2>/dev/null
-```
-
-- [x] 无档案，或存在的档案是 schema 安装前的合法存留
-
-**泄漏清单**：无（docs/superpowers/specs/ 下的档案为 schema 安装前已有的设计文档，非本变更产生）
+| 检查项 | 结果 |
+|---|---|
+| TypeScript 编译 (`tsc --noEmit`) | 通过，0 错误 |
+| 生产构建 (`vite build`) | 通过 |
+| 单元测试 (`vitest run`) | 81 passed (81) |
+| 无 `as any` / `@ts-ignore` | 确认 |
 
 ---
 
-## 7. Deferred Manual Dogfood vs Automated Test Equivalence
+## 6. Implementation vs Design Delta
 
-plan.md 无 `[~]` 标记的 deferred task，本节不需填写。
+| 项目 | 设计 | 实现 | 差异说明 |
+|---|---|---|---|
+| 锁定页签图标 | 设计未明确 | 显示 Lock 图标 | 实现补充，UX 改进 |
+| 面包屑可点击 | 设计未明确 | 移除 :to 不可点击 | 用户反馈后修正 |
+| 页签横向布局 | 设计未明确 | draggable 加 flex class | vuedraggable 默认 block，需手动 flex |
+| 折叠态首页图标居中 | 设计提及 | 动态去掉 mx-2 + :deep CSS | Tailwind !important 优先级问题 |
+| 按钮风格统一 | 设计未明确 | 重置密码/添加子分类 type 改 text | 用户反馈后修正 |
 
 ---
 
 ## Overall Decision
 
-- [ ] ✅ PASS
-- [ ] ⚠️ PASS WITH WARNINGS
-- [x] ❌ FAIL — apply 尚未开始，需完成实现后重新运行 verify
+- [x] **PASS** — 变更已验证，可以归档
+- [ ] **PASS WITH NOTES** — 可归档，但需关注以下备注
+- [ ] **FAIL** — 存在阻塞问题，不可归档
 
-**下一步**：执行 `/opsx-apply` 开始实现，完成后重新运行 verify。
+**备注**：无

@@ -164,6 +164,30 @@ function handleRowClick(row: any) {
   dialogVisible.value = false
 }
 
+/**
+ * 将选中行的字段通过 api.setValue 回填到表单其他字段。
+ * 若 formCreateInject 不可用（非 form-create 环境），则安全跳过。
+ */
+function fillReturnFields(row: Record<string, unknown>) {
+  const api = formCreateInject?.api
+  if (!api || !props.returnFields) return
+  for (const [sourceField, targetField] of Object.entries(props.returnFields)) {
+    api.setValue(targetField, row[sourceField] ?? null)
+  }
+}
+
+/**
+ * 清除所有 returnFields 对应的表单字段。
+ * 若 formCreateInject 不可用，则安全跳过。
+ */
+function clearReturnFields() {
+  const api = formCreateInject?.api
+  if (!api || !props.returnFields) return
+  for (const targetField of Object.values(props.returnFields)) {
+    api.setValue(targetField, null)
+  }
+}
+
 function handleSelectionChange(rows: any[]) {
   tempSelection.value = rows
 }
@@ -179,6 +203,8 @@ function confirmSelection() {
 function handleClear() {
   emit('update:modelValue', props.mode === 'multiple' ? [] : null)
   emit('clear')
+  // 清空 returnFields 对应的表单字段
+  clearReturnFields()
 }
 
 defineExpose({ openDialog, closeDialog: () => { dialogVisible.value = false } })

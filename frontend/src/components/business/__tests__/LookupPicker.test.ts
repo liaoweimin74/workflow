@@ -97,3 +97,99 @@ describe('LookupPicker — 清除', () => {
     expect(wrapper.props('clearable')).toBe(true)
   })
 })
+
+// ----- form-create 适配测试 -----
+
+describe('LookupPicker — form-create 适配', () => {
+  /**
+   * 模拟 form-create 的 formCreateInject 注入对象。
+   * api.setValue 用于将选中行的字段回填到表单的其他字段。
+   */
+  function createFormCreateWrapper(props: any = {}, inject?: { api: { setValue: ReturnType<typeof vi.fn> } } | null) {
+    const defaultApi = { setValue: vi.fn() }
+    const formCreateInject = inject ?? { api: defaultApi }
+    return mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+        columns: [{ prop: 'code', label: '编号' }, { prop: 'name', label: '名称' }],
+        returnFields: { code: 'formCode', name: 'formName' },
+        displayField: 'code',
+        ...props,
+      },
+      global: {
+        plugins: [ElementPlus],
+        provide: {
+          formCreateInject,
+        },
+      },
+    })
+  }
+
+  it('选中行时通过 api.setValue 回填 returnFields', async () => {
+    const setValue = vi.fn()
+    const wrapper = createFormCreateWrapper(
+      {},
+      { api: { setValue } },
+    )
+    // 打开弹窗
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    // 模拟表格行点击（handleRowClick）
+    const row = { code: 'BL-001', name: '盲板A' }
+    const vm = wrapper.vm as any
+    vm.handleRowClick(row)
+    await nextTick()
+    // 应该 emit update:modelValue
+    expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+    // 应该调用 api.setValue 回填 returnFields
+    expect(setValue).toHaveBeenCalledWith('formCode', 'BL-001')
+    expect(setValue).toHaveBeenCalledWith('formName', '盲板A')
+  })
+
+  it('清除选择时通过 api.setValue(targetField, null) 清空 returnFields', async () => {
+    const setValue = vi.fn()
+    const wrapper = createFormCreateWrapper(
+      { modelValue: { code: 'BL-001', name: '盲板A' } },
+      { api: { setValue } },
+    )
+    await nextTick()
+    // 触发清除
+    const vm = wrapper.vm as any
+    vm.handleClear()
+    await nextTick()
+    // 应该 emit update:modelValue 为 null
+    expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+    const emitted = wrapper.emitted('update:modelValue')!
+    expect(emitted[emitted.length - 1][0]).toBeNull()
+    // 应该调用 api.setValue 清空 returnFields
+    expect(setValue).toHaveBeenCalledWith('formCode', null)
+    expect(setValue).toHaveBeenCalledWith('formName', null)
+  })
+
+  it('无 formCreateInject 时仍正常工作（向后兼容）', async () => {
+    // 不提供 inject
+    const wrapper = mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+        columns: [{ prop: 'code', label: '编号' }],
+        returnFields: { code: 'formCode' },
+        displayField: 'code',
+      },
+      global: {
+        plugins: [ElementPlus],
+      },
+    })
+    // 选中行不应报错
+    const row = { code: 'BL-002' }
+    const vm = wrapper.vm as any
+    vm.handleRowClick(row)
+    await nextTick()
+    expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+    // 清除也不应报错
+    vm.handleClear()
+    await nextTick()
+    expect(wrapper.emitted('clear')).toBeTruthy()
+  })
+})

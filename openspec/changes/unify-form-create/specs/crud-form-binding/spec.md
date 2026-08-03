@@ -2,41 +2,26 @@
 
 ## ADDED Requirements
 
-### Requirement: CRUD 表单通过 formKey 绑定 FormDefinition
+### Requirement: CRUD 页面通过前端 rule JSON 驱动 FormRenderer
 
-系统 SHALL 允许 CRUD 页面通过 `formKey` 绑定一个已发布的 FormDefinition，用于加载表单 schema 进行渲染。
+系统 SHALL 允许 CRUD 页面在前端定义 form-create rule JSON，传入 SearchTable 的 FormConfig，由 FormRenderer 直接渲染。
 
-FormDefinition 实体 SHALL 增加可选字段 `formKey`（String），用于 CRUD 页面的语义化绑定。`formKey` 在所有已发布的 FormDefinition 中 SHALL 唯一。
+CRUD 表单的 rule JSON SHALL 定义在各页面文件中（前端代码），不存入后端 FormDefinition 表。
 
-后端 SHALL 提供 `GET /api/v1/form-definitions/by-key/{formKey}` 接口，返回该 formKey 对应的已发布版本的 FormDefinition（含 schema）。
+#### Scenario: CRUD 页面渲染表单
 
-#### Scenario: CRUD 页面加载表单 schema
-
-- **WHEN** 页面配置了 `formKey = "user-crud"`
-- **THEN** 前端调用 `GET /api/v1/form-definitions/by-key/user-crud`
-- **AND** 后端返回 status = PUBLISHED 的最新版本的 FormDefinition
-- **AND** 前端使用返回的 schema 渲染表单
-
-#### Scenario: formKey 不存在
-
-- **WHEN** 页面配置了 `formKey = "nonexistent"`
-- **AND** 后端没有匹配的已发布 FormDefinition
-- **THEN** 后端返回 404
-- **AND** 前端显示"表单定义未找到"提示
-
-#### Scenario: formKey 对应未发布的草稿
-
-- **WHEN** FormDefinition 存在但 status = DRAFT
-- **THEN** 后端返回 404（只返回已发布版本）
-- **AND** 前端显示"表单未发布"提示
+- **WHEN** 页面在 formConfig 中配置了 `rule = [{ type: 'input', field: 'name', title: '名称' }, ...]`
+- **THEN** SearchTable 将 rule 传给 FormRenderer
+- **AND** FormRenderer 直接使用 rule 渲染表单（不调后端 API）
+- **AND** 用户可填写表单
 
 ### Requirement: SearchTable 集成 FormRenderer
 
 SearchTable 组件 SHALL 在创建/编辑弹窗中使用 FormRenderer 替代 FormBuilder 渲染表单。
 
-SearchTable 的 `FormConfig` 接口 SHALL 将 `fields: FormField[]` 替换为 `formKey: string`。
+SearchTable 的 `FormConfig` 接口 SHALL 将 `fields: FormField[]` 替换为 `rule: any[]`。
 
-SearchTable SHALL 在弹窗打开时通过 formKey 加载 schema，在提交时通过 FormRenderer 的 `getFormData()` 获取表单数据并调用页面的 create/update API。
+SearchTable SHALL 在弹窗打开时将 rule 传入 FormRenderer，在提交时通过 FormRenderer 的 `getFormData()` 获取表单数据并调用页面的 create/update API。
 
 SearchTable SHALL 保留对 columns、searchFields、actionButtons 的现有配置方式不变。
 
@@ -44,8 +29,8 @@ SearchTable SHALL 保留对 columns、searchFields、actionButtons 的现有配�
 
 - **WHEN** 用户点击"新增"按钮
 - **THEN** SearchTable 打开弹窗
-- **AND** FormRenderer 通过 formKey 加载表单 schema
-- **AND** 表单字段为空（或 schema 默认值）
+- **AND** FormRenderer 接收 rule prop 渲染表单
+- **AND** 表单字段为空（或 rule 中配置的默认值）
 - **AND** 用户填写后点击确定
 - **AND** SearchTable 调用 `getFormData()` 获取数据
 - **AND** 调用页面的 `onCreate(data)` 提交到业务后端

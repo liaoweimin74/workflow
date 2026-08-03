@@ -67,9 +67,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, inject } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import type { LookupPickerProps, QueryParams } from './types'
+
+/** form-create 注入对象，提供 api.setValue 等方法 */
+interface FormCreateInject {
+  api?: {
+    setValue: (field: string, value: unknown) => void
+  }
+}
 
 const props = withDefaults(defineProps<LookupPickerProps>(), {
   mode: 'single',
@@ -85,6 +92,9 @@ const emit = defineEmits<{
   'select': [row: any]
   'clear': []
 }>()
+
+/** form-create 注入，若组件在 form-create 外使用则为 undefined */
+const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
 
 const dialogVisible = ref(false)
 const loading = ref(false)
@@ -149,6 +159,8 @@ function handleRowClick(row: any) {
   if (props.mode === 'multiple') return
   emit('update:modelValue', row)
   emit('select', row)
+  // 回填 returnFields 到表单其他字段
+  fillReturnFields(row)
   dialogVisible.value = false
 }
 

@@ -24,18 +24,15 @@
 
 ## Decisions
 
-### D1: FormDefinition 增加 formKey
+### D1: CRUD 表单 schema 前端定义，不走后端持久化
 
-```java
-// FormDefinition.java
-@Column(name = "form_key")
-private String formKey;  // 可选，CRUD 表单绑定时使用
+CRUD 表单的 rule JSON 定义在各页面文件中（前端代码），不存入 FormDefinition 表。
+
+```
+各 CRUD 页面 → rule JSON（前端常量） → SearchTable → FormRenderer 渲染
 ```
 
-- 流程表单：`formKey = null`，通过流程定义关联 FormDefinition
-- CRUD 表单：`formKey = "user-crud"`，页面通过 formKey 加载已发布版本
-
-**为什么不用现有 id/name？** id 是 UUID 不语义化，name 是显示名可能重复。formKey 是语义化唯一键，专门用于 CRUD 绑定。
+**为什么不存后端？** 当前阶段 CRUD 表单结构稳定，不需要在线编辑。以后如需在线编辑 CRUD 表单，可再增加后端持久化。这样 Phase 1 后端零改动，降低风险。
 
 ### D2: SearchTable 接口改造
 
@@ -50,7 +47,7 @@ interface FormConfig<T> {
 
 // After
 interface FormConfig<T> {
-  formKey: string                    // ← 替代 fields
+  rule: any[]                        // ← 替代 fields，form-create Rule[]
   initialValues?: Partial<T>
   labelWidth?: string
 }
@@ -58,7 +55,7 @@ interface FormConfig<T> {
 
 SearchTable 内部：
 ```
-弹窗打开 → FormRenderer 加载 formKey 对应 schema → 渲染表单
+弹窗打开 → FormRenderer 接收 rule prop → 直接渲染（不调后端）
 提交     → FormRenderer.getFormData() → 调用页面的 create/update API
 ```
 
@@ -71,12 +68,13 @@ SearchTable 内部：
 <FormRenderer :form-def-id="xxx" />
 
 // 模式 2: CRUD 表单（新增）
-<FormRenderer :form-key="'user-crud'" />
+<FormRenderer :rule="ruleArray" :initial-values="rowData" />
 ```
 
 内部逻辑：
-- `formDefId` → 直接加载该 FormDefinition
-- `formKey` → 查询 `formKey = xxx AND status = PUBLISHED` 的最新版本
+- `formDefId` → 调后端 API 加载 FormDefinition schema
+- `rule` → 直接使用传入的 rule 数组渲染，不调后端
+- 两者互斥，`formDefId` 优先
 
 ### D4: LookupPicker 注册为 form-create 组件
 
@@ -149,25 +147,23 @@ MenuPage 的 `onChange: (val) => { currentMenuType.value = val }` 迁移方式�
 | 7 个页面一次性迁移，回归测试量大 | 每个页面迁移后立即手动验证；先迁移简单页面（UserPage）验证流程，再批量 |
 | LookupPicker 注册到 form-create 后，returnFields 回填行为变化 | 单元测试覆盖；重点验证 DictPage |
 | FcDesigner 设计器里配置 LookupPicker 的 fetchApi/columns 等 props 不直观 | 在设计器注册时配置默认 props 模板；后续可考虑属性配置面板 |
-| rule JSON 初始数据需要准备 7 份 | 可先用 FcDesigner 拖拽设计后导出，存为种子数据 |
-| FormDefinition 表加列需要数据库迁移 | Flyway/ Liquibase 脚本，加 nullable 列 |
+| rule JSON 需要手写 7 份 | 可先用 FcDesigner 拖拽设计后导出参考，或从现有 FormField[] 手动转换 |
 
 ## Migration Plan
 
 ```
-Phase 1: 基础设施
-  ├── 后端: FormDefinition 加 formKey + 查询接口
-  ├── 前端: FormRenderer 支持 formKey 模式
-  ├── 前端: LookupPicker 注册为 form-create 组件
+Phase 1: 前端基础设施（无后端改动）
+  ├── 前端: LookupPicker 注册为 form-create 组件 + FcDesigner 注册
+  ├── 前端: FormRenderer 支持 rule prop + initialValues + getFormData
   └── 前端: FormPageLayout 组件
 
 Phase 2: SearchTable 改造
   ├── SearchTable 内部 FormBuilder → FormRenderer
-  └── FormConfig 接口从 fields → formKey
+  └── FormConfig 接口从 fields → rule
 
 Phase 3: 7 个页面迁移
-  ├── 准备 7 份 rule JSON 种子数据
-  ├── 逐页迁移 formConfig
+  ├── 逐页将 FormField[] 转为 rule JSON
+  ├── 逐页修改 formConfig
   └── 每页迁移后验证
 
 Phase 4: 清理
@@ -182,5 +178,5 @@ Rollback: 如果迁移出问题，git revert 到 Phase 1 之前。
 
 ## Open Questions
 
-- rule JSON 种子数据放哪？建议 `frontend/src/views/*/forms/` 目录下，按页面组织
+- rule JSON 定义在页面文件内还是单独文件？建议初期定义在页面文件内，结构稳定后再抽取
 - FcDesigner 是否需要区分 CRUD 表单和流程表单的设计入口？建议初期不区分，统一一个设计器页面

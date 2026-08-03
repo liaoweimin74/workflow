@@ -28,4 +28,11 @@ public interface FormDefinitionRepository extends JpaRepository<FormDefinition, 
     Optional<FormDefinition> findByTenantIdAndKeyAndVersion(String tenantId, String key, Integer version);
 
     boolean existsByTenantIdAndKey(String tenantId, String key);
+
+    /**
+     * 按 formKey 和状态查询，返回 published_version 最大的那条记录。
+     * 用于 CRUD 页面通过 formKey 绑定到已发布的表单定义。
+     */
+    Optional<FormDefinition> findFirstByTenantIdAndFormKeyAndStatusOrderByPublishedVersionDesc(
+            String tenantId, String formKey, String status);
 }

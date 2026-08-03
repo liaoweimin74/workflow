@@ -16,16 +16,15 @@
 
 ### 新增
 
-- **FormDefinition.formKey**：用于 CRUD 页面绑定表单定义（如 `user-crud`、`menu-crud`）
 - **FormPageLayout 组件**：统一外壳，供自定义页面使用，保证 label-width、间距、按钮区等风格一致
 - **LookupPicker 注册为 form-create 自定义组件**：通过 `formCreate.component()` 全局注册 + FcDesigner `addComponent()` 设计器面板入口
-- **CRUD 表单初始 rule JSON**：7 个页面对应的 form-create rule schema
+- **CRUD 表单 rule JSON**：7 个页面对应的 form-create rule schema，前端定义
 
 ### 修改
 
-- **SearchTable**：内部用 FormRenderer 替代 FormBuilder，通过 `formKey` 加载 schema；保留 columns/searchFields/buttons 前端配置不变
-- **7 个 CRUD 页面**：`formConfig.fields`（FormField[]）改为 `formConfig.formKey`（string），数据提交仍走各页面的业务 Controller
-- **FormRenderer**：支持 `formKey` 加载模式（不限于流程表单的 `formDefId`）
+- **SearchTable**：内部用 FormRenderer 替代 FormBuilder，通过 `rule` prop 传入 schema；保留 columns/searchFields/buttons 前端配置不变
+- **7 个 CRUD 页面**：`formConfig.fields`（FormField[]）改为 `formConfig.rule`（form-create Rule[]），数据提交仍走各页面的业务 Controller
+- **FormRenderer**：支持 `rule` prop 直接渲染模式（不限于流程表单的 `formDefId`）
 - **FormDesigner**：注册 LookupPicker 到设计器拖拽面板
 
 ### 删除
@@ -38,13 +37,13 @@
 
 ### New Capabilities
 
-- `crud-form-binding` — CRUD 页面通过 formKey 绑定 FormDefinition，加载 schema 渲染表单
+- `crud-form-binding` — CRUD 页面通过前端 rule JSON 驱动 FormRenderer 渲染表单，数据走业务接口
 - `custom-form-components` — 定制组件（LookupPicker 等）注册为 form-create 组件，同时用于 CRUD 表单、工作流表单和设计器
 - `unified-form-layout` — FormPageLayout 统一外壳，保证拖拽设计表单和自定义页面风格一致
 
 ### Modified Capabilities
 
-- `form-rendering` — FormRenderer 支持两种加载模式：`formDefId`（流程表单）和 `formKey`（CRUD 表单）
+- `form-runtime` — FormRenderer 支持两种模式：`formDefId`（流程表单，后端加载）和 `rule`（CRUD 表单，前端直接传入）
 
 ## Impact
 
@@ -52,27 +51,22 @@
 
 | 模块 | 影响 |
 |---|---|
-| `SearchTable.vue` | 内部 FormBuilder → FormRenderer，接口从 `fields: FormField[]` 改为 `formKey: string` |
-| `FormRenderer.vue` | 增加 `formKey` prop，支持按 key 加载 FormDefinition |
+| `SearchTable.vue` | 内部 FormBuilder → FormRenderer，接口从 `fields: FormField[]` 改为 `rule: any[]` |
+| `FormRenderer.vue` | 增加 `rule` prop（直接渲染）和 `initialValues` prop，暴露 `getFormData()` |
 | `FormDesigner.vue` | 注册 LookupPicker 到 FcDesigner 拖拽面板 |
 | `main.ts` | 注册 LookupPicker 为 form-create 全局组件 |
-| 7 个 CRUD 页面 | formConfig 从 FormField[] 改为 formKey |
+| 7 个 CRUD 页面 | formConfig 从 FormField[] 改为 rule JSON（前端定义） |
 | `FormBuilder.vue` | 删除 |
 | `types.ts` | 删除 FormField 相关类型（保留 SearchField/TableColumn 等） |
 | 新增 `FormPageLayout.vue` | 统一外壳组件 |
 
 ### 后端
 
-| 模块 | 影响 |
-|---|---|
-| `FormDefinition` 实体 | 增加 `formKey` 字段（可选，用于 CRUD 绑定） |
-| `FormDefinitionController` | 增加按 `formKey` 查询已发布版本的接口 |
-| `FormDefinitionService` | 增加按 `formKey` 查询逻辑 |
+无改动。CRUD 表单 schema 前端定义，以后如需在线编辑可再持久化到后端。
 
 ### 数据
 
-- 7 个 CRUD 页面的 rule JSON 初始数据需要初始化（可通过 FcDesigner 设计后导出，或手写）
-- FormDefinition 表增加 `form_key` 列
+无数据库迁移。7 个页面的 rule JSON 定义在前端代码中。
 
 ### 依赖
 

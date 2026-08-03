@@ -6,15 +6,17 @@
 
 系统 SHALL 提供 FormRenderer.vue 组件，封装 form-create 渲染器，用于渲染表单。
 
-FormRenderer SHALL 支持两种加载模式：
-1. **formDefId 模式**：通过 FormDefinition ID 加载指定表单定义（用于流程表单）
-2. **formKey 模式**：通过语义化 key 加载已发布的 FormDefinition（用于 CRUD 表单）
+FormRenderer SHALL 支持两种渲染模式：
+1. **formDefId 模式**：通过 FormDefinition ID 从后端加载 schema（用于流程表单）
+2. **rule 模式**：直接接收 form-create rule 数组渲染（用于 CRUD 表单）
 
 当接收 `formDefId` 参数时，FormRenderer SHALL 调用 `GET /api/v1/form-definitions/{id}` 加载表单定义。
 
-当接收 `formKey` 参数时，FormRenderer SHALL 调用 `GET /api/v1/form-definitions/by-key/{formKey}` 加载已发布版本的表单定义。
+当接收 `rule` 参数时（且未传入 `formDefId`），FormRenderer SHALL 直接使用 rule 数组渲染表单，不调后端 API。
 
-`formDefId` 和 `formKey` 参数 SHALL 互斥，同时传入时 `formDefId` 优先。
+`formDefId` 和 `rule` 参数 SHALL 互斥，同时传入时 `formDefId` 优先。
+
+FormRenderer SHALL 接收 `initialValues` prop，用于预填充表单数据（CRUD 编辑场景）。
 
 FormRenderer SHALL 接收 processInstanceId 和 taskId 参数，从后端加载已保存的表单数据（仅流程表单场景）。
 
@@ -30,12 +32,17 @@ FormRenderer SHALL 暴露 `getFormData()` 方法供父组件获取表单数据�
 - **THEN** 组件调用 GET /api/v1/form-definitions/{id} 获取表单定义
 - **AND** 使用 form-create 渲染 schema
 
-#### Scenario: 通过 formKey 加载表单（CRUD 表单）
+#### Scenario: 通过 rule 直接渲染（CRUD 表单）
 
-- **WHEN** FormRenderer 组件接收 formKey 参数
+- **WHEN** FormRenderer 组件接收 rule 参数
 - **AND** 未传入 formDefId
-- **THEN** 组件调用 GET /api/v1/form-definitions/by-key/{formKey} 获取已发布版本
-- **AND** 使用 form-create 渲染 schema
+- **THEN** 组件直接使用 rule 数组渲染表单
+- **AND** 不调后端 API
+
+#### Scenario: CRUD 表单编辑预填充
+
+- **WHEN** FormRenderer 组件接收 initialValues 参数
+- **THEN** 组件将 initialValues 填充到表单字段中
 
 #### Scenario: CRUD 表单提交获取数据
 

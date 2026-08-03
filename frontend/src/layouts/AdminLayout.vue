@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { Fold, Expand, HomeFilled } from '@element-plus/icons-vue'
+import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 
 const router = useRouter()
@@ -86,6 +87,15 @@ function toggleLock(path: string) {
     tag.locked = !tag.locked
   }
   closeContextMenu()
+}
+
+// 拖拽结束后确保首页在最左
+function onDragEnd() {
+  const dashIdx = tags.value.findIndex(t => t.path === '/dashboard')
+  if (dashIdx > 0) {
+    const [dash] = tags.value.splice(dashIdx, 1)
+    tags.value.unshift(dash)
+  }
 }
 
 watch(() => route.path, () => {
@@ -229,29 +239,38 @@ onUnmounted(() => {
       <div class="flex-1 flex flex-col min-w-0">
         <!-- 页签栏 -->
         <div class="h-10 flex items-center gap-0 px-3 border-b border-gray-200 bg-gray-50 overflow-x-auto shrink-0">
-          <div
-            v-for="tag in tags"
-            :key="tag.path"
-            :class="[
-              'h-full flex items-center gap-1.5 px-3 border-r border-gray-200 cursor-pointer shrink-0 transition-colors text-sm select-none',
-              route.path === tag.path
-                ? 'bg-white text-industrial-600 border-t-2 border-t-safety-500 -mt-px'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-            ]"
-            @click="router.push(tag.path)"
-            @contextmenu.prevent="onTagContextMenu($event, tag)"
+          <draggable
+            v-model="tags"
+            item-key="path"
+            :animation="200"
+            :filter="'.no-drag'"
+            @end="onDragEnd"
           >
-            <span class="truncate max-w-[120px]">{{ tag.title }}</span>
-            <button
-              v-if="!tag.locked && tag.path !== '/dashboard'"
-              @click.stop="removeTag(tag.path)"
-              class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-gray-200 shrink-0"
-            >
-              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
+            <template #item="{ element: tag }">
+              <div
+                :class="[
+                  'h-full flex items-center gap-1.5 px-3 border-r border-gray-200 cursor-pointer shrink-0 transition-colors text-sm select-none',
+                  tag.path === '/dashboard' ? 'no-drag' : '',
+                  route.path === tag.path
+                    ? 'bg-white text-industrial-600 border-t-2 border-t-safety-500 -mt-px'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                ]"
+                @click="router.push(tag.path)"
+                @contextmenu.prevent="onTagContextMenu($event, tag)"
+              >
+                <span class="truncate max-w-[120px]">{{ tag.title }}</span>
+                <button
+                  v-if="!tag.locked && tag.path !== '/dashboard'"
+                  @click.stop="removeTag(tag.path)"
+                  class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-gray-200 shrink-0"
+                >
+                  <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+            </template>
+          </draggable>
         </div>
 
         <!-- 右键菜单 -->

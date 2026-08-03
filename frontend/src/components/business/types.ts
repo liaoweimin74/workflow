@@ -70,6 +70,7 @@ export type FormLayout = 'single' | 'double' | { cols: number; gap?: number }
 export interface FormField {
   type:
     | 'input'
+    | 'input-number'
     | 'select'
     | 'tree-select'
     | 'switch'

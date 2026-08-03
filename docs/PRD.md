@@ -119,16 +119,28 @@
 
 #### 3.3.1 基础能力
 
-- 流程定义部署、激活、挂起
-- 流程实例启动、挂起、恢复、终止
-- 任务签收、完成、转办、委派
-- 流程变量管理
-- 流程图高亮跟踪
+- ✅ 流程定义部署、激活、挂起
+- ✅ 流程实例启动、挂起、恢复、终止
+- ✅ 任务签收、完成、转办、委派
+- ✅ 流程变量管理
+- ✅ 流程图高亮跟踪
+
+> **实现状态（2026-08-03）：**
+> - 转办：`TransferService` + `POST /api/v1/tasks/{id}/transfer`，记录审计到 `wf_task_transfer` 表
+> - 流程变量管理：`ProcessVariableService` + `ProcessVariableController`（6 个 endpoint：GET/PUT/DELETE 实例级变量 + PUT 任务级变量）
+> - 流程图高亮：`ProcessHighlightService` + `GET /api/v1/process-instances/{id}/highlight`，返回已完成节点 + 当前活动节点
+> - 任务完成返回值：`completeTaskWithResponse` 返回 `CompleteTaskResponse`（含下一个任务 ID/名称/办理人、流程是否结束标志）
 
 #### 3.3.2 会签与或签
 
-- 会签：多个审批人全部通过才通过
-- 或签：任一审批人通过即通过
+- ✅ 会签：多个审批人全部通过才通过
+- ✅ 或签：任一审批人通过即通过
+
+> **实现状态（2026-08-03）：**
+> - `MultiInstanceBpmnRewriter`：部署时自动将 `multiInstanceType=parallel/sequential` 的用户任务改写为 Flowable 原生 MI 节点
+> - 会签（parallel）：`collection` + `assigneeList` 变量驱动，全部完成才流转
+> - 或签（sequential + completionCondition）：任一完成即结束 MI，剩余任务自动取消
+> - Spike 测试验证：Spike-1 会签、Spike-2 或签
 
 #### 3.3.3 加签与转签
 
@@ -137,8 +149,14 @@
 
 #### 3.3.4 驳回
 
-- 第一期：驳回到发起人，发起人修改后重新提交
+- ✅ 第一期：驳回到发起人，发起人修改后重新提交
 - 后续：驳回到任意历史节点
+
+> **实现状态（2026-08-03）：**
+> - `InitiatorNodeResolver`：解析流程定义中第一个 userTask 作为发起人节点
+> - `RejectService`：基于 Flowable `changeActivityStateBuilder` 实现驳回到发起人
+> - `POST /api/v1/tasks/{id}/reject`：接收 userId + reason，执行驳回
+> - 集成测试验证：EndToEndIntegrationTest 完整验证 驳回→重提交 全流程
 
 #### 3.3.5 催办
 

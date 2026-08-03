@@ -96,6 +96,14 @@ describe('FormBuilder — 字段渲染', () => {
     expect(wrapper.findAll('.el-checkbox').length).toBe(2)
   })
 
+  it('渲染 input-number 字段', () => {
+    const wrapper = createWrapper({
+      fields: [{ type: 'input-number', label: '排序', prop: 'sortOrder' }],
+      modelValue: { sortOrder: 0 },
+    })
+    expect(wrapper.find('.el-input-number').exists()).toBe(true)
+  })
+
   it('渲染自定义 slot 字段', () => {
     const wrapper = mount(FormBuilder, {
       props: {

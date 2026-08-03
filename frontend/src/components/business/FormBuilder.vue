@@ -17,7 +17,7 @@
 
 <script setup lang="ts">
 import { reactive, watch, ref, computed, defineComponent, h } from 'vue'
-import { ElInput, ElSelect, ElOption, ElTreeSelect, ElSwitch, ElDatePicker, ElRadioGroup, ElRadio, ElCheckboxGroup, ElCheckbox } from 'element-plus'
+import { ElInput, ElInputNumber, ElSelect, ElOption, ElTreeSelect, ElSwitch, ElDatePicker, ElRadioGroup, ElRadio, ElCheckboxGroup, ElCheckbox } from 'element-plus'
 import type { FormField, FormBuilderProps } from './types'
 import LookupPicker from './LookupPicker.vue'
 
@@ -48,6 +48,8 @@ const RenderField = defineComponent({
       switch (f.type) {
         case 'input':
           return h(ElInput, common)
+        case 'input-number':
+          return h(ElInputNumber, common)
         case 'textarea':
           return h(ElInput, { ...common, type: 'textarea' })
         case 'select':

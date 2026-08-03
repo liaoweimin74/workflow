@@ -20,6 +20,9 @@
 - **所有 OpenSpec 工作流操作必须使用 `/opsx-*` 系列命令（如 `/opsx-propose`、`/opsx-apply`、`/opsx-ff` 等），不得手动模拟**
 - **禁止自动执行 OpenSpec 工作流命令**：`/opsx-propose`、`/opsx-ff`、`/opsx-apply`、`/opsx-finish` 等 OpenSpec 工作流命令。必须由用户发起后才能执行。用户显式调用的流程（如输入 `/opsx-finish` 后）内部步骤不受限制。
 
+## Shell 调用规则
+- 在用Shell启动前后端应用时启动独立终端窗口
+
 ## Git 协作规则
 
 - rebase 中遇到 lockfile（Cargo.lock、go.sum、package-lock 等自动 resolving 产物）冲突时，lockfile 无法手动合并，必须重新生成（如 `cargo generate-lockfile` / `npm install` / `go mod tidy` 等）。重新生成的锁文件可能引入非预期的版本漂移，所以必须先编译验证再 `rebase --continue`

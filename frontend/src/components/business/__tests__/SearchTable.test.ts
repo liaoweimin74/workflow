@@ -3,10 +3,11 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { nextTick, defineComponent, h, ref } from 'vue'
 import type { Component } from 'vue'
 import ElementPlus from 'element-plus'
 import { Edit, Delete, Switch } from '@element-plus/icons-vue'
+import type { Rule } from '@form-create/element-ui'
 import SearchTable from '../SearchTable.vue'
 import type { SearchField, TableColumn, ActionButton } from '../types'
 
@@ -39,10 +40,40 @@ function createWrapper(props: {
         'el-dropdown': true,
         'el-dropdown-menu': true,
         'el-dropdown-item': true,
+        FormRenderer: FormRendererStub,
       },
     },
   })
 }
+
+/**
+ * Stub for FormRenderer component.
+ * Captures props and exposes getFormData() for testing submit flow.
+ */
+const FormRendererStub = defineComponent({
+  name: 'FormRenderer',
+  props: {
+    rule: { type: Array, default: () => [] },
+    initialValues: { type: Object, default: () => ({}) },
+    formDefId: { type: String, default: undefined },
+  },
+  setup(props) {
+    const data = ref<Record<string, any>>({ ...(props.initialValues || {}) })
+    return {
+      data,
+      getFormData: () => data.value,
+      setFormData: (val: Record<string, any>) => { data.value = val },
+    }
+  },
+  render() {
+    return h('div', { class: 'form-renderer-stub' })
+  },
+})
+
+// A simple form-create rule for testing
+const testRule: Rule[] = [
+  { type: 'input', field: 'username', title: '用户名', value: '' } as Rule,
+]
 
 describe('SearchTable — 搜索栏渲染', () => {
   it('渲染 input 搜索字段', () => {
@@ -175,7 +206,7 @@ describe('SearchTable — formConfig', () => {
     const wrapper = createWrapper({
       columns: [{ prop: 'username', label: '用户名' }],
       formConfig: {
-        fields: [{ type: 'input', label: '用户名', prop: 'username' }],
+        rule: testRule,
         createApi: vi.fn(),
         updateApi: vi.fn(),
         deleteApi: vi.fn(),
@@ -260,7 +291,7 @@ describe('SearchTable - 图标按钮', () => {
     const wrapper = createWrapper({
       columns: [{ prop: 'name', label: '名称' }],
       formConfig: {
-        fields: [{ type: 'input', label: '名称', prop: 'name' }],
+        rule: testRule,
         createApi: vi.fn(),
         updateApi: vi.fn(),
         deleteApi: vi.fn(),
@@ -400,5 +431,191 @@ describe('SearchTable — tree mode', () => {
     await nextTick()
     const table = wrapper.find('.el-table')
     expect(table.exists()).toBe(true)
+  })
+})
+
+// ============================================================
+// Phase 4: FormRenderer 集成测试
+// ============================================================
+
+describe('SearchTable — FormRenderer 集成', () => {
+  it('弹窗使用 FormRenderer 组件（接收 rule prop）', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({
+      rows: [{ id: 1, username: 'admin' }],
+      total: 1,
+    })
+    const wrapper = createWrapper({
+      columns: [{ prop: 'username', label: '用户名' }],
+      formConfig: {
+        rule: testRule,
+        createApi: vi.fn(),
+        updateApi: vi.fn(),
+        deleteApi: vi.fn(),
+      },
+      fetchApi,
+    })
+    await nextTick()
+    await nextTick()
+
+    // 点击新增按钮打开弹窗
+    const addBtn = wrapper.find('button:not(.is-circle)')
+    // 找到"新增"按钮
+    const buttons = wrapper.findAll('button')
+    const createBtn = buttons.find(b => b.text().includes('新增'))
+    expect(createBtn).toBeTruthy()
+    await createBtn!.trigger('click')
+    await nextTick()
+
+    // 弹窗应渲染 FormRenderer
+    const formRenderer = wrapper.findComponent({ name: 'FormRenderer' })
+    expect(formRenderer.exists()).toBe(true)
+    // FormRenderer 应接收 rule prop
+    expect(formRenderer.props('rule')).toEqual(testRule)
+  })
+
+  it('新增提交时调用 FormRenderer.getFormData() 再调用 createApi', async () => {
+    const createApi = vi.fn().mockResolvedValue({})
+    const fetchApi = vi.fn().mockResolvedValue({
+      rows: [{ id: 1, username: 'admin' }],
+      total: 1,
+    })
+    const wrapper = createWrapper({
+      columns: [{ prop: 'username', label: '用户名' }],
+      formConfig: {
+        rule: testRule,
+        createApi,
+        updateApi: vi.fn(),
+        deleteApi: vi.fn(),
+      },
+      fetchApi,
+    })
+    await nextTick()
+    await nextTick()
+
+    // 打开新增弹窗
+    const buttons = wrapper.findAll('button')
+    const createBtn = buttons.find(b => b.text().includes('新增'))
+    await createBtn!.trigger('click')
+    await nextTick()
+
+    // 获取 FormRenderer 组件并设置表单数据
+    const formRenderer = wrapper.findComponent({ name: 'FormRenderer' })
+    expect(formRenderer.exists()).toBe(true)
+    const vm = formRenderer.vm as any
+    vm.setFormData({ username: 'newuser' })
+
+    // 点击确定按钮提交
+    const dialogButtons = wrapper.findAll('.el-dialog button')
+    const submitBtn = dialogButtons.find(b => b.text().includes('确定'))
+    expect(submitBtn).toBeTruthy()
+    await submitBtn!.trigger('click')
+    await nextTick()
+    await nextTick()
+
+    // createApi 应被调用，且参数为 getFormData() 返回的数据
+    expect(createApi).toHaveBeenCalled()
+    expect(createApi).toHaveBeenCalledWith({ username: 'newuser' })
+  })
+
+  it('编辑时将当前行数据作为 initialValues 传给 FormRenderer', async () => {
+    const updateApi = vi.fn().mockResolvedValue({})
+    const fetchApi = vi.fn().mockResolvedValue({
+      rows: [{ id: 1, username: 'admin', name: '管理员' }],
+      total: 1,
+    })
+    const wrapper = createWrapper({
+      columns: [{ prop: 'username', label: '用户名' }],
+      formConfig: {
+        rule: testRule,
+        createApi: vi.fn(),
+        updateApi,
+        deleteApi: vi.fn(),
+      },
+      fetchApi,
+    })
+    await nextTick()
+    await nextTick()
+
+    // 找到编辑按钮（circle 图标按钮在操作列）并点击
+    const editBtn = wrapper.find('.el-table .el-button.is-circle')
+    expect(editBtn.exists()).toBe(true)
+    await editBtn.trigger('click')
+    await nextTick()
+
+    // FormRenderer 应接收 initialValues，且包含行数据
+    const formRenderer = wrapper.findComponent({ name: 'FormRenderer' })
+    expect(formRenderer.exists()).toBe(true)
+    const initialValues = formRenderer.props('initialValues')
+    expect(initialValues).toMatchObject({ id: 1, username: 'admin', name: '管理员' })
+  })
+
+  it('编辑提交时调用 FormRenderer.getFormData() 再调用 updateApi', async () => {
+    const updateApi = vi.fn().mockResolvedValue({})
+    const fetchApi = vi.fn().mockResolvedValue({
+      rows: [{ id: 1, username: 'admin' }],
+      total: 1,
+    })
+    const wrapper = createWrapper({
+      columns: [{ prop: 'username', label: '用户名' }],
+      formConfig: {
+        rule: testRule,
+        createApi: vi.fn(),
+        updateApi,
+        deleteApi: vi.fn(),
+      },
+      fetchApi,
+    })
+    await nextTick()
+    await nextTick()
+
+    // 打开编辑弹窗
+    const editBtn = wrapper.find('.el-table .el-button.is-circle')
+    await editBtn.trigger('click')
+    await nextTick()
+
+    // 修改表单数据
+    const formRenderer = wrapper.findComponent({ name: 'FormRenderer' })
+    const vm = formRenderer.vm as any
+    vm.setFormData({ id: 1, username: 'updated' })
+
+    // 点击确定
+    const dialogButtons = wrapper.findAll('.el-dialog button')
+    const submitBtn = dialogButtons.find(b => b.text().includes('确定'))
+    await submitBtn!.trigger('click')
+    await nextTick()
+    await nextTick()
+
+    // updateApi 应被调用，参数为 (id, formData)
+    expect(updateApi).toHaveBeenCalled()
+    expect(updateApi).toHaveBeenCalledWith(1, { id: 1, username: 'updated' })
+  })
+
+  it('弹窗不渲染 FormBuilder 组件', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({
+      rows: [{ id: 1, username: 'admin' }],
+      total: 1,
+    })
+    const wrapper = createWrapper({
+      columns: [{ prop: 'username', label: '用户名' }],
+      formConfig: {
+        rule: testRule,
+        createApi: vi.fn(),
+        updateApi: vi.fn(),
+        deleteApi: vi.fn(),
+      },
+      fetchApi,
+    })
+    await nextTick()
+    await nextTick()
+
+    // 打开新增弹窗
+    const buttons = wrapper.findAll('button')
+    const createBtn = buttons.find(b => b.text().includes('新增'))
+    await createBtn!.trigger('click')
+    await nextTick()
+
+    // 不应存在 FormBuilder 组件
+    const formBuilder = wrapper.findComponent({ name: 'FormBuilder' })
+    expect(formBuilder.exists()).toBe(false)
   })
 })

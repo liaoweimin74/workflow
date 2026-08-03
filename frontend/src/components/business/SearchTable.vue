@@ -191,12 +191,10 @@
       :close-on-click-modal="false"
       @close="handleDialogClose"
     >
-      <FormBuilder
-        ref="formRef"
-        v-model="formData"
-        :fields="formConfig.fields"
-        :layout="formConfig.layout"
-        :label-width="formConfig.labelWidth || '80px'"
+      <FormRenderer
+        ref="formRendererRef"
+        :rule="formConfig.rule"
+        :initial-values="dialogInitialValues"
       />
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -211,7 +209,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { SearchTableProps, ActionButton, QueryParams } from './types'
-import FormBuilder from './FormBuilder.vue'
+import FormRenderer from '@/views/form/components/FormRenderer.vue'
 
 const props = withDefaults(defineProps<SearchTableProps>(), {
   defaultPageSize: 10,
@@ -255,9 +253,9 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEdit = ref(false)
 const editId = ref<number | string>(0)
-const formData = ref<Record<string, any>>({})
+const dialogInitialValues = ref<Record<string, any>>({})
 const formLoading = ref(false)
-const formRef = ref()
+const formRendererRef = ref<InstanceType<typeof FormRenderer> | null>(null)
 
 // 操作列宽度
 const actionColumnWidth = computed(() => {
@@ -370,7 +368,7 @@ async function handleCreate(initialValues?: Record<string, any>) {
   isEdit.value = false
   editId.value = 0
   const configInitialValues = props.formConfig?.initialValues || {}
-  formData.value = { ...configInitialValues, ...(initialValues || {}) }
+  dialogInitialValues.value = { ...configInitialValues, ...(initialValues || {}) }
   dialogTitle.value = props.formConfig?.dialogTitle?.create || '新增'
   dialogVisible.value = true
 }
@@ -388,12 +386,12 @@ async function handleEdit(row: any) {
     formLoading.value = true
     try {
       const res = await props.formConfig.getApi(row.id)
-      formData.value = { ...res }
+      dialogInitialValues.value = { ...res }
     } finally {
       formLoading.value = false
     }
   } else {
-    formData.value = { ...row }
+    dialogInitialValues.value = { ...row }
   }
   dialogVisible.value = true
 }
@@ -414,17 +412,16 @@ async function handleDelete(row: any) {
 }
 
 async function handleDialogSubmit() {
-  const valid = await formRef.value?.validate()
-  if (!valid) return
+  const formData = formRendererRef.value?.getFormData() || {}
 
   formLoading.value = true
   try {
     if (isEdit.value) {
-      await props.formConfig?.updateApi?.(editId.value, formData.value)
-      props.formConfig?.afterUpdate?.(formData.value)
+      await props.formConfig?.updateApi?.(editId.value, formData)
+      props.formConfig?.afterUpdate?.(formData)
     } else {
-      await props.formConfig?.createApi?.(formData.value)
-      props.formConfig?.afterCreate?.(formData.value)
+      await props.formConfig?.createApi?.(formData)
+      props.formConfig?.afterCreate?.(formData)
     }
     ElMessage.success(isEdit.value ? '更新成功' : '创建成功')
     dialogVisible.value = false
@@ -435,7 +432,7 @@ async function handleDialogSubmit() {
 }
 
 function handleDialogClose() {
-  formData.value = {}
+  dialogInitialValues.value = {}
 }
 
 defineExpose({ fetchList, openFormDialog: handleCreate })

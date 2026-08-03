@@ -25,14 +25,6 @@ public class FormDefinition {
     @Column(name = "`key`", length = 255, nullable = false)
     private String key;
 
-    /**
-     * 表单绑定标识（可选）。
-     * CRUD 页面通过此标识绑定到对应的已发布表单定义。
-     * 与 key 的区别：key 是表单定义的唯一业务标识，formKey 是 CRUD 页面绑定用标识。
-     */
-    @Column(name = "form_key", length = 100)
-    private String formKey;
-
     @Lob
     @Column(name = "`schema`", columnDefinition = "LONGTEXT")
     private String schema;
@@ -77,9 +69,6 @@ public class FormDefinition {
 
     public String getKey() { return key; }
     public void setKey(String key) { this.key = key; }
-
-    public String getFormKey() { return formKey; }
-    public void setFormKey(String formKey) { this.formKey = formKey; }
 
     public String getSchema() { return schema; }
     public void setSchema(String schema) { this.schema = schema; }

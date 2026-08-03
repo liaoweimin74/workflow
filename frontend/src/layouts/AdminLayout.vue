@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand, HomeFilled } from '@element-plus/icons-vue'
+import { Fold, Expand, HomeFilled, Sunny, Moon } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 
@@ -12,6 +12,12 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const collapsed = ref(false)
+const isDark = ref(false)
+
+function toggleDark() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+}
 const tags = ref<{ path: string; title: string; locked?: boolean }[]>([])
 
 const activeMenu = computed(() => route.path)
@@ -189,8 +195,15 @@ onUnmounted(() => {
         </el-breadcrumb>
       </div>
 
-      <!-- 右侧：用户区 -->
-      <el-dropdown trigger="click">
+      <!-- 右侧：暗色切换 + 用户区 -->
+      <div class="flex items-center gap-3">
+        <button
+          @click="toggleDark"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        >
+          <el-icon :size="18"><Sunny v-if="isDark" /><Moon v-else /></el-icon>
+        </button>
+        <el-dropdown trigger="click">
         <div class="flex items-center gap-2 cursor-pointer select-none">
           <el-avatar :size="28" icon="UserFilled" class="!bg-industrial-100 !text-industrial-600" />
           <span class="text-sm text-gray-700">{{ authStore.user?.nickname || authStore.user?.username || '用户' }}</span>
@@ -201,7 +214,8 @@ onUnmounted(() => {
             <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </template>
-      </el-dropdown>
+        </el-dropdown>
+      </div>
     </header>
 
     <!-- ====== 下方：菜单 + 内容 ====== -->

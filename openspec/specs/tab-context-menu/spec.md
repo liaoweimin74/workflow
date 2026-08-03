@@ -1,0 +1,129 @@
+# tab-context-menu Specification
+
+## Purpose
+TBD - created by archiving change framework-ui-enhancements. Update Purpose after archive.
+## Requirements
+### Requirement: 页签右键菜单
+
+每个页签 SHALL 支持右键点击弹出上下文菜单。右键菜单 MUST 完全替代现有的下拉菜单（▾ 按钮），下拉按钮 MUST 移除。
+
+右键菜单 SHALL 包含以下操作项：
+1. 关闭本页
+2. 关闭左侧
+3. 关闭右侧
+4. 关闭所有
+5. 锁定本页 / 解锁本页（根据当前状态切换文字）
+
+#### Scenario: 右键点击页签弹出菜单
+- **WHEN** 用户在任意页签上右键点击
+- **THEN** 在鼠标位置弹出上下文菜单
+- **AND** 菜单包含5项操作
+
+#### Scenario: 下拉菜单移除
+- **WHEN** 页签栏渲染
+- **THEN** 不显示下拉菜单按钮（▾）
+
+---
+
+### Requirement: 关闭本页
+
+右键菜单的"关闭本页"操作 SHALL 关闭当前右键点击的页签。
+
+以下页签 MUST NOT 被关闭：
+- dashboard 页签（永久不可关闭）
+- 已锁定的页签（"关闭本页"选项显示为禁用/灰色）
+
+关闭当前激活页签时 SHALL 自动导航到相邻页签。
+
+#### Scenario: 关闭普通页签
+- **WHEN** 用户右键点击一个未锁定、非 dashboard 的页签
+- **AND** 选择"关闭本页"
+- **THEN** 该页签从页签栏移除
+
+#### Scenario: 关闭锁定页签被禁用
+- **WHEN** 用户右键点击一个已锁定的页签
+- **THEN** "关闭本页"选项显示为禁用状态
+
+#### Scenario: dashboard 不可关闭
+- **WHEN** 用户右键点击 dashboard 页签
+- **THEN** "关闭本页"选项显示为禁用状态
+
+---
+
+### Requirement: 关闭左侧页签
+
+右键菜单的"关闭左侧"操作 SHALL 关闭当前右键点击页签左侧的所有页签，但 MUST 跳过已锁定的页签和 dashboard 页签。
+
+#### Scenario: 关闭左侧所有普通页签
+- **WHEN** 用户右键点击页签 B
+- **AND** B 左侧有页签 A（普通）、页签 C（锁定）、页签 D（普通）
+- **AND** 选择"关闭左侧"
+- **THEN** 页签 A 和 D 被关闭
+- **AND** 页签 C（锁定）保留
+
+---
+
+### Requirement: 关闭右侧页签
+
+右键菜单的"关闭右侧"操作 SHALL 关闭当前右键点击页签右侧的所有页签，但 MUST 跳过已锁定的页签和 dashboard 页签。
+
+#### Scenario: 关闭右侧所有普通页签
+- **WHEN** 用户右键点击页签 B
+- **AND** B 右侧有页签 C（普通）、页签 D（锁定）
+- **AND** 选择"关闭右侧"
+- **THEN** 页签 C 被关闭
+- **AND** 页签 D（锁定）保留
+
+---
+
+### Requirement: 关闭所有页签
+
+右键菜单的"关闭所有"操作 SHALL 关闭所有页签，但 MUST 跳过已锁定的页签和 dashboard 页签。
+
+关闭后 SHALL 导航到 dashboard 页面。
+
+#### Scenario: 关闭所有保留锁定页签
+- **WHEN** 用户右键点击任意页签
+- **AND** 选择"关闭所有"
+- **THEN** 所有未锁定、非 dashboard 的页签被关闭
+- **AND** 已锁定的页签保留
+- **AND** dashboard 页签保留
+- **AND** 导航到 dashboard 页面
+
+---
+
+### Requirement: 锁定/解锁页签
+
+右键菜单的"锁定本页"操作 SHALL 将页签标记为锁定状态。已锁定的页签右键菜单显示"解锁本页"。
+
+页签数据结构 SHALL 扩展 `locked` 字段（boolean，默认 false）。
+
+锁定后的页签：
+- 关闭按钮(×)隐藏
+- 不可通过"关闭本页"、"关闭左侧"、"关闭右侧"、"关闭所有"关闭
+- 可拖拽排序（锁定不影响拖拽）
+
+dashboard 页签 MUST NOT 显示"锁定本页/解锁本页"选项（因其永久不可关闭，不需要锁定机制）。
+
+#### Scenario: 锁定普通页签
+- **WHEN** 用户右键点击一个未锁定的普通页签
+- **AND** 选择"锁定本页"
+- **THEN** 该页签标记为锁定
+- **AND** 该页签的关闭按钮(×)隐藏
+- **AND** 右键菜单变为"解锁本页"
+
+#### Scenario: 解锁页签
+- **WHEN** 用户右键点击一个已锁定的页签
+- **AND** 选择"解锁本页"
+- **THEN** 该页签解除锁定
+- **AND** 该页签的关闭按钮(×)恢复显示
+- **AND** 右键菜单变为"锁定本页"
+
+#### Scenario: dashboard 无锁定选项
+- **WHEN** 用户右键点击 dashboard 页签
+- **THEN** 右键菜单不显示"锁定本页/解锁本页"选项
+
+#### Scenario: 锁定页签可拖拽
+- **WHEN** 用户拖拽一个已锁定的页签
+- **THEN** 该页签可以被拖拽到新位置
+

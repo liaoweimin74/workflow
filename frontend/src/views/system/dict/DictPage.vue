@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import type { Rule } from '@form-create/element-ui'
 import { getDictTypeList, createDictType, updateDictType, deleteDictType, getDictDataList, createDictData, updateDictData, deleteDictData } from '@/api/dict'
 import type { DictTypeVO, DictDataVO } from '@/types/dict'
 
@@ -28,10 +29,10 @@ async function typeFetchApi(params: any) {
 }
 
 const typeFormConfig: FormConfig<DictTypeVO> = {
-  fields: [
-    { type: 'input', label: '字典名称', prop: 'dictName', rules: [{ required: true, message: '请输入字典名称', trigger: 'blur' }] },
-    { type: 'input', label: '字典编码', prop: 'dictCode', rules: [{ required: true, message: '请输入字典编码', trigger: 'blur' }] },
-    { type: 'input', label: '备注', prop: 'remark' },
+  rule: [
+    { type: 'input', field: 'dictName', title: '字典名称', validate: [{ required: true, message: '请输入字典名称', trigger: 'blur' }] },
+    { type: 'input', field: 'dictCode', title: '字典编码', validate: [{ required: true, message: '请输入字典编码', trigger: 'blur' }] },
+    { type: 'input', field: 'remark', title: '备注' },
   ],
   createApi: createDictType as any,
   updateApi: (id, data) => updateDictType(id as number, data) as any,
@@ -78,12 +79,12 @@ const dataFormConfig = computed<FormConfig<DictDataVO>>(() => ({
         dictCode: selectedType.value.dictCode,
       }
     : {},
-  fields: [
+  rule: [
     {
-      type: 'lookup',
-      label: '字典分类',
-      prop: 'dictTypeRow',
-      rules: [{ required: true, message: '请选择字典分类', trigger: 'change' }],
+      type: 'LookupPicker',
+      field: 'dictTypeRow',
+      title: '字典分类',
+      validate: [{ required: true, message: '请选择字典分类', trigger: 'change' }],
       props: {
         fetchApi: async (params: any) => {
           const res = await getDictTypeList({
@@ -105,10 +106,10 @@ const dataFormConfig = computed<FormConfig<DictDataVO>>(() => ({
         dialogTitle: '选择字典分类',
       },
     },
-    { type: 'input', label: '标签', prop: 'label', rules: [{ required: true, message: '请输入标签', trigger: 'blur' }] },
-    { type: 'input', label: '值', prop: 'value', rules: [{ required: true, message: '请输入值', trigger: 'blur' }] },
-    { type: 'input', label: '排序', prop: 'sortOrder' } as any,
-  ],
+    { type: 'input', field: 'label', title: '标签', validate: [{ required: true, message: '请输入标签', trigger: 'blur' }] },
+    { type: 'input', field: 'value', title: '值', validate: [{ required: true, message: '请输入值', trigger: 'blur' }] },
+    { type: 'input', field: 'sortOrder', title: '排序' },
+  ] as Rule[],
   createApi: async (data: any) => {
     const { dictTypeRow: _row, ...rest } = data
     return createDictData(rest) as any

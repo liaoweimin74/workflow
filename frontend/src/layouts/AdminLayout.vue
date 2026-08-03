@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
@@ -11,7 +11,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const collapsed = ref(false)
-const tags = ref<{ path: string; title: string }[]>([])
+const tags = ref<{ path: string; title: string; locked?: boolean }[]>([])
 
 const activeMenu = computed(() => route.path)
 
@@ -35,13 +35,57 @@ function removeTag(path: string) {
   }
 }
 
-function closeOtherTags(path: string) {
-  tags.value = tags.value.filter(t => t.path === path)
+// ====== 页签右键菜单 ======
+const contextMenu = ref({ visible: false, x: 0, y: 0, targetPath: '' })
+
+function onTagContextMenu(event: MouseEvent, tag: { path: string }) {
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    targetPath: tag.path
+  }
 }
 
-function closeAllTags() {
-  tags.value = []
-  router.push('/dashboard')
+function closeContextMenu() {
+  contextMenu.value.visible = false
+}
+
+function closeCurrent(path: string) {
+  const tag = tags.value.find(t => t.path === path)
+  if (!tag || tag.locked || path === '/dashboard') return
+  removeTag(path)
+  closeContextMenu()
+}
+
+function closeLeft(path: string) {
+  const idx = tags.value.findIndex(t => t.path === path)
+  if (idx <= 0) { closeContextMenu(); return }
+  tags.value = tags.value.filter((t, i) => i >= idx || t.locked || t.path === '/dashboard')
+  closeContextMenu()
+}
+
+function closeRight(path: string) {
+  const idx = tags.value.findIndex(t => t.path === path)
+  if (idx === -1) { closeContextMenu(); return }
+  tags.value = tags.value.filter((t, i) => i <= idx || t.locked || t.path === '/dashboard')
+  closeContextMenu()
+}
+
+function closeAll() {
+  tags.value = tags.value.filter(t => t.locked || t.path === '/dashboard')
+  if (!tags.value.find(t => t.path === route.path)) {
+    router.push('/dashboard')
+  }
+  closeContextMenu()
+}
+
+function toggleLock(path: string) {
+  const tag = tags.value.find(t => t.path === path)
+  if (tag) {
+    tag.locked = !tag.locked
+  }
+  closeContextMenu()
 }
 
 watch(() => route.path, () => {
@@ -77,6 +121,14 @@ const currentTag = computed(() => {
     return (matched[matched.length - 1].meta?.title as string) || ''
   }
   return ''
+})
+
+onMounted(() => {
+  document.addEventListener('click', closeContextMenu)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeContextMenu)
 })
 </script>
 
@@ -166,10 +218,11 @@ const currentTag = computed(() => {
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
             ]"
             @click="router.push(tag.path)"
+            @contextmenu.prevent="onTagContextMenu($event, tag)"
           >
             <span class="truncate max-w-[120px]">{{ tag.title }}</span>
             <button
-              v-if="tag.path !== '/dashboard'"
+              v-if="!tag.locked && tag.path !== '/dashboard'"
               @click.stop="removeTag(tag.path)"
               class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-gray-200 shrink-0"
             >
@@ -178,19 +231,51 @@ const currentTag = computed(() => {
               </svg>
             </button>
           </div>
-          <el-dropdown v-if="tags.length > 1" trigger="click" class="ml-auto shrink-0">
-            <button class="w-7 h-7 flex items-center justify-center rounded text-gray-400 hover:text-gray-600 hover:bg-gray-200">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-              </svg>
-            </button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item @click="closeOtherTags(route.path)">关闭其他</el-dropdown-item>
-                <el-dropdown-item @click="closeAllTags">关闭全部</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+        </div>
+
+        <!-- 右键菜单 -->
+        <div
+          v-if="contextMenu.visible"
+          class="fixed z-50 min-w-[140px] bg-white rounded-md shadow-lg border border-gray-200 py-1 text-sm"
+          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+          @click.stop
+        >
+          <div
+            :class="[
+              'px-4 py-2 cursor-pointer hover:bg-gray-100',
+              (tags.find(t => t.path === contextMenu.targetPath)?.locked || contextMenu.targetPath === '/dashboard')
+                ? 'text-gray-300 cursor-not-allowed hover:bg-transparent'
+                : 'text-gray-700'
+            ]"
+            @click="closeCurrent(contextMenu.targetPath)"
+          >
+            关闭本页
+          </div>
+          <div
+            class="px-4 py-2 cursor-pointer hover:bg-gray-100 text-gray-700"
+            @click="closeLeft(contextMenu.targetPath)"
+          >
+            关闭左侧
+          </div>
+          <div
+            class="px-4 py-2 cursor-pointer hover:bg-gray-100 text-gray-700"
+            @click="closeRight(contextMenu.targetPath)"
+          >
+            关闭右侧
+          </div>
+          <div
+            class="px-4 py-2 cursor-pointer hover:bg-gray-100 text-gray-700"
+            @click="closeAll()"
+          >
+            关闭所有
+          </div>
+          <div
+            v-if="contextMenu.targetPath !== '/dashboard'"
+            class="px-4 py-2 cursor-pointer hover:bg-gray-100 text-gray-700 border-t border-gray-100"
+            @click="toggleLock(contextMenu.targetPath)"
+          >
+            {{ tags.find(t => t.path === contextMenu.targetPath)?.locked ? '解锁本页' : '锁定本页' }}
+          </div>
         </div>
 
         <!-- 主内容 -->

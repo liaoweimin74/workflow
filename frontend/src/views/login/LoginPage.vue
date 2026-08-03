@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -11,6 +11,21 @@ const loginForm = ref({
   password: ''
 })
 const loading = ref(false)
+const rememberMe = ref(false)
+
+// 页面加载时预填已记住的用户名
+const savedUsername = localStorage.getItem('remembered_username')
+if (savedUsername) {
+  loginForm.value.username = savedUsername
+  rememberMe.value = true
+}
+
+// 取消勾选时立即清除
+watch(rememberMe, (val) => {
+  if (!val) {
+    localStorage.removeItem('remembered_username')
+  }
+})
 
 async function handleLogin() {
   if (!loginForm.value.username || !loginForm.value.password) return
@@ -18,6 +33,11 @@ async function handleLogin() {
   try {
     await authStore.login(loginForm.value)
     await authStore.fetchMenus()
+    if (rememberMe.value) {
+      localStorage.setItem('remembered_username', loginForm.value.username)
+    } else {
+      localStorage.removeItem('remembered_username')
+    }
     router.push('/')
   } catch {
     // error handled by interceptor
@@ -59,6 +79,9 @@ async function handleLogin() {
             class="!rounded-lg"
           />
         </el-form-item>
+        <div class="flex items-center mb-4">
+          <el-checkbox v-model="rememberMe">记住用户名</el-checkbox>
+        </div>
         <el-form-item class="!mb-0">
           <el-button
             type="primary"

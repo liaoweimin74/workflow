@@ -237,40 +237,6 @@ class FormDefinitionServiceTest {
         verify(formDefRepository).findByTenantIdOrderByUpdatedAtDesc(TENANT_ID, pageable);
     }
 
-    // ==================== Repository query by formKey ====================
-
-    @Test
-    void repository_findFirstByFormKeyAndStatus_returnsLatestPublishedVersion() {
-        // 验证 repository 查询方法存在且能被调用
-        FormDefinition published = buildFormDef("form-1", "leave_form", 2, "PUBLISHED");
-        published.setFormKey("user-crud");
-        published.setPublishedVersion(2);
-
-        when(formDefRepository.findFirstByTenantIdAndFormKeyAndStatusOrderByPublishedVersionDesc(
-                TENANT_ID, "user-crud", "PUBLISHED"))
-                .thenReturn(Optional.of(published));
-
-        Optional<FormDefinition> result = formDefRepository.findFirstByTenantIdAndFormKeyAndStatusOrderByPublishedVersionDesc(
-                TENANT_ID, "user-crud", "PUBLISHED");
-
-        assertTrue(result.isPresent());
-        assertEquals("user-crud", result.get().getFormKey());
-        assertEquals("PUBLISHED", result.get().getStatus());
-        assertEquals(2, result.get().getPublishedVersion());
-    }
-
-    @Test
-    void repository_findFirstByFormKeyAndStatus_notFound_returnsEmpty() {
-        when(formDefRepository.findFirstByTenantIdAndFormKeyAndStatusOrderByPublishedVersionDesc(
-                TENANT_ID, "nonexistent", "PUBLISHED"))
-                .thenReturn(Optional.empty());
-
-        Optional<FormDefinition> result = formDefRepository.findFirstByTenantIdAndFormKeyAndStatusOrderByPublishedVersionDesc(
-                TENANT_ID, "nonexistent", "PUBLISHED");
-
-        assertTrue(result.isEmpty());
-    }
-
     // ==================== Helper ====================
 
     private FormDefinition buildFormDef(String id, String key, int version, String status) {

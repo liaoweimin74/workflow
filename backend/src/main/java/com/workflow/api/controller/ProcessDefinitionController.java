@@ -24,9 +24,13 @@ public class ProcessDefinitionController {
     @GetMapping
     public R<PageResponse<ProcessDefinition>> list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String categoryId,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String status) {
 
-        Page<ProcessDefinition> result = processService.listProcessDefinitions(PageRequest.of(page, size));
+        Page<ProcessDefinition> result = processService.listProcessDefinitions(
+                PageRequest.of(page, size), categoryId, name, status);
 
         PageResponse<ProcessDefinition> response = new PageResponse<>(
                 result.getContent(),

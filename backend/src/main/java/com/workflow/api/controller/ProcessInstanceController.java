@@ -3,6 +3,7 @@ package com.workflow.api.controller;
 import com.workflow.api.dto.*;
 import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessInstanceService;
+import com.workflow.engine.runtime.ProcessHighlightService;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -16,9 +17,12 @@ import java.util.Map;
 public class ProcessInstanceController {
 
     private final ProcessInstanceService processInstanceService;
+    private final ProcessHighlightService highlightService;
 
-    public ProcessInstanceController(ProcessInstanceService processInstanceService) {
+    public ProcessInstanceController(ProcessInstanceService processInstanceService,
+                                     ProcessHighlightService highlightService) {
         this.processInstanceService = processInstanceService;
+        this.highlightService = highlightService;
     }
 
     @PostMapping
@@ -82,6 +86,11 @@ public class ProcessInstanceController {
     public R<Void> terminate(@PathVariable String id, @RequestParam(required = false) String reason) {
         processInstanceService.terminateProcessInstance(id, reason != null ? reason : "User terminated");
         return R.ok();
+    }
+
+    @GetMapping("/{id}/highlight")
+    public R<Map<String, Object>> highlight(@PathVariable String id) {
+        return R.ok(highlightService.getHighlight(id));
     }
 
     private Map<String, Object> toMap(ProcessInstance instance) {

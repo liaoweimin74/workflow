@@ -2,6 +2,10 @@ package com.workflow.api.controller;
 
 import com.workflow.api.dto.*;
 import com.workflow.common.domain.R;
+import com.workflow.engine.task.AddSignService;
+import com.workflow.engine.task.ForwardSignService;
+import com.workflow.engine.task.RejectService;
+import com.workflow.engine.task.TransferService;
 import com.workflow.engine.task.WorkflowTaskService;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
@@ -19,9 +23,19 @@ import java.util.Map;
 public class TaskController {
 
     private final WorkflowTaskService taskService;
+    private final RejectService rejectService;
+    private final TransferService transferService;
+    private final AddSignService addSignService;
+    private final ForwardSignService forwardSignService;
 
-    public TaskController(WorkflowTaskService taskService) {
+    public TaskController(WorkflowTaskService taskService, RejectService rejectService,
+                          TransferService transferService, AddSignService addSignService,
+                          ForwardSignService forwardSignService) {
         this.taskService = taskService;
+        this.rejectService = rejectService;
+        this.transferService = transferService;
+        this.addSignService = addSignService;
+        this.forwardSignService = forwardSignService;
     }
 
     @GetMapping
@@ -74,11 +88,45 @@ public class TaskController {
     }
 
     @PostMapping("/{id}/complete")
-    public R<Void> complete(@PathVariable String id, @RequestBody(required = false) CompleteTaskRequest request) {
+    public R<CompleteTaskResponse> complete(@PathVariable String id, @RequestBody(required = false) CompleteTaskRequest request) {
         Map<String, Object> variables = request != null && request.getVariables() != null
                 ? request.getVariables()
                 : new HashMap<>();
-        taskService.completeTask(id, variables);
+        return R.ok(taskService.completeTaskWithResponse(id, variables));
+    }
+
+    @PostMapping("/{id}/reject")
+    public R<Void> reject(@PathVariable String id, @RequestBody(required = false) RejectRequest request) {
+        String userId = request != null ? request.getUserId() : null;
+        String reason = request != null ? request.getReason() : null;
+        rejectService.reject(id, userId, reason);
+        return R.ok();
+    }
+
+    @PostMapping("/{id}/transfer")
+    public R<Void> transfer(@PathVariable String id, @RequestBody(required = false) TransferRequest request) {
+        String fromUser = request != null ? request.getFromUser() : null;
+        String toUser = request != null ? request.getToUser() : null;
+        String reason = request != null ? request.getReason() : null;
+        transferService.transfer(id, fromUser, toUser, reason);
+        return R.ok();
+    }
+
+    @PostMapping("/{id}/delegate")
+    public R<Void> delegate(@PathVariable String id, @RequestBody DelegateRequest request) {
+        taskService.delegateTask(id, request.getDelegateTo());
+        return R.ok();
+    }
+
+    @PostMapping("/{id}/add-sign")
+    public R<Void> addSign(@PathVariable String id, @RequestBody AddSignRequest request) {
+        addSignService.addSign(id, request.getUsers());
+        return R.ok();
+    }
+
+    @PostMapping("/{id}/forward-sign")
+    public R<Void> forwardSign(@PathVariable String id, @RequestBody ForwardSignRequest request) {
+        forwardSignService.forwardSign(id, request.getToUser());
         return R.ok();
     }
 

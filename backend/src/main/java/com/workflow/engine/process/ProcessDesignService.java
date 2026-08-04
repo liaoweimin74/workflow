@@ -3,6 +3,7 @@ package com.workflow.engine.process;
 import com.workflow.api.dto.DesignSaveRequest;
 import com.workflow.api.dto.EditorDTO;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.process.bpmn.MultiInstanceBpmnRewriter;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.entity.ProcessDraft;
 import com.workflow.engine.process.repository.NodeConfigRepository;
@@ -44,15 +45,18 @@ public class ProcessDesignService {
     private final NodeConfigRepository nodeConfigRepository;
     private final RepositoryService repositoryService;
     private final TenantProvider tenantProvider;
+    private final MultiInstanceBpmnRewriter multiInstanceBpmnRewriter;
 
     public ProcessDesignService(ProcessDraftRepository draftRepository,
                                 NodeConfigRepository nodeConfigRepository,
                                 RepositoryService repositoryService,
-                                TenantProvider tenantProvider) {
+                                TenantProvider tenantProvider,
+                                MultiInstanceBpmnRewriter multiInstanceBpmnRewriter) {
         this.draftRepository = draftRepository;
         this.nodeConfigRepository = nodeConfigRepository;
         this.repositoryService = repositoryService;
         this.tenantProvider = tenantProvider;
+        this.multiInstanceBpmnRewriter = multiInstanceBpmnRewriter;
     }
 
     /**
@@ -188,12 +192,18 @@ public class ProcessDesignService {
             throw new BusinessException(400, "流程数据未变化，无需部署");
         }
 
+        // 加载 NodeConfig，改写 BPMN XML（会签/或签 → MI parallel）
+        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draftId);
+        Map<String, String> nodeConfigMap = configs.stream()
+                .collect(Collectors.toMap(NodeConfig::getNodeId, NodeConfig::getConfigJson, (a, b) -> a));
+        String effectiveBpmnXml = multiInstanceBpmnRewriter.rewrite(draft.getBpmnXml(), nodeConfigMap);
+
         // 部署到 Flowable，捕获引擎校验异常转为友好提示
         Deployment deployment;
         try {
             deployment = repositoryService.createDeployment()
                     .name(draft.getName())
-                    .addString(draft.getKey() + ".bpmn20.xml", draft.getBpmnXml())
+                    .addString(draft.getKey() + ".bpmn20.xml", effectiveBpmnXml)
                     .tenantId(tenantId)
                     .deploy();
         } catch (Exception e) {
@@ -213,7 +223,7 @@ public class ProcessDesignService {
         draft.setStatus("DEPLOYED");
         draft.setDeployId(deployment.getId());
         draft.setLastDeployedAt(LocalDateTime.now());
-        draft.setDeployedXml(draft.getBpmnXml());
+        draft.setDeployedXml(effectiveBpmnXml);
         if (procDef != null) {
             draft.setProcessDefinitionId(procDef.getId());
             draft.setVersion(procDef.getVersion());

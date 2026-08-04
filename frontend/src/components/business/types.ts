@@ -43,8 +43,10 @@ export interface TableColumn {
 
 export interface ActionButton {
   label: string
-  type?: 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'text'
+  type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
   size?: 'small' | 'default' | 'large'
+  /** 文本按钮（Element Plus 3.0 link 模式）。配置后渲染为 link 按钮，type 字段仅控制颜色 */
+  link?: boolean
   /** Element Plus 图标组件。配置后渲染为圆形图标按钮，hover 显示 label */
   icon?: Component
   permission?: string

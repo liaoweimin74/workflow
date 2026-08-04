@@ -115,10 +115,11 @@
                   <el-button :icon="btn.icon" circle size="small" :type="btn.type" v-permission="btn.permission" @click="btn.onClick(row)" />
                 </el-tooltip>
 
-                <!-- 文本 + confirm (当前逻辑不变) -->
+                <!-- 文本 + confirm -->
                 <el-popconfirm v-else-if="btn.confirm" :title="btn.confirm" @confirm="btn.onClick(row)">
                   <template #reference>
-                    <el-button text
+                    <el-button
+                      link
                       size="small"
                       :type="btn.type"
                       v-permission="btn.permission"
@@ -128,11 +129,12 @@
                   </template>
                 </el-popconfirm>
 
-                <!-- 纯文本 (当前逻辑不变) -->
+                <!-- 纯文本 -->
                 <el-button
                   v-else
+                  link
                   size="small"
-                  :type="btn.type || 'text'"
+                  :type="btn.type"
                   v-permission="btn.permission"
                   @click="btn.onClick(row)"
                 >
@@ -142,7 +144,7 @@
               </template>
 
               <el-dropdown v-if="dropdownButtons.length" trigger="click">
-                <el-button size="small" text>
+                <el-button size="small" link>
                   <el-icon :size="16"><CaretBottom /></el-icon>
                 </el-button>
                 <template #dropdown>
@@ -292,7 +294,6 @@ function getDefaultActions(): ActionButton[] {
     btns.push({
       label: '编辑',
       icon: Edit,
-      type: 'text',
       permission: props.formConfig.editPermission,
       onClick: (row) => handleEdit(row),
     })
@@ -301,7 +302,6 @@ function getDefaultActions(): ActionButton[] {
     btns.push({
       label: '删除',
       icon: Delete,
-      type: 'text',
       confirm: '确定删除该记录吗？',
       permission: props.formConfig.deletePermission,
       onClick: (row) => handleDelete(row),

@@ -140,6 +140,7 @@ const actionButtons: ActionButton[] = [
   {
     label: '设计',
     size: 'small',
+    permission: 'form:edit',
     onClick: (row: any) => {
       router.push({ path: '/form/designer', query: { id: row.id } })
     },
@@ -148,6 +149,7 @@ const actionButtons: ActionButton[] = [
     label: '发布',
     size: 'small',
     type: 'primary',
+    permission: 'form:publish',
     confirm: '确定要发布此表单吗？',
     show: (row: any) => row.status === 'DRAFT',
     onClick: async (row: any) => {
@@ -163,6 +165,7 @@ const actionButtons: ActionButton[] = [
   {
     label: '版本',
     size: 'small',
+    permission: 'form:list',
     onClick: async (row: any) => {
       versionDialogVisible.value = true
       versionLoading.value = true
@@ -180,6 +183,7 @@ const actionButtons: ActionButton[] = [
     label: '删除',
     size: 'small',
     type: 'danger',
+    permission: 'form:delete',
     confirm: '确定要删除此表单吗？',
     show: (row: any) => row.status !== 'ARCHIVED',
     onClick: async (row: any) => {

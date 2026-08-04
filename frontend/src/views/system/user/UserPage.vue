@@ -99,7 +99,7 @@ const actionButtons: ActionButton[] = [
     label: '重置密码',
     icon: Key,
     size: 'small',
-    type: 'text',
+    link: true,
     confirm: '确定重置密码吗？',
     onClick: handleResetPassword,
   },
@@ -133,8 +133,8 @@ const formConfig = computed<FormConfig<UserVO>>(() => ({
   deleteApi: deleteUser,
   getApi: (id) => getUserById(id as number).then((r) => r.data),
   dialogTitle: { create: '新增用户', edit: '编辑用户' },
-  createPermission: 'system:user:add',
-  editPermission: 'system:user:edit',
+  createPermission: 'system:user:create',
+  editPermission: 'system:user:update',
   deletePermission: 'system:user:delete',
 }))
 </script>

@@ -42,11 +42,14 @@ const typeFormConfig: FormConfig<DictTypeVO> = {
     return res.data.rows.find((r: DictTypeVO) => r.id === id) ?? ({} as DictTypeVO)
   },
   dialogTitle: { create: '新增字典类型', edit: '编辑字典类型' },
+  createPermission: 'system:dict:create',
+  editPermission: 'system:dict:update',
+  deletePermission: 'system:dict:delete',
 }
 
 const typeActionButtons: ActionButton[] = [
   {
-    label: '启用/停用', size: 'small', type: 'text',
+    label: '启用/停用', size: 'small', link: true,
     onClick: async (row: DictTypeVO) => {
       await updateDictType(row.id, { status: row.status === 1 ? 0 : 1 } as any)
       typeTableRef.value?.fetchList()
@@ -136,11 +139,14 @@ const dataFormConfig = computed<FormConfig<DictDataVO>>(() => ({
     return { ...item, dictTypeRow }
   },
   dialogTitle: { create: '新增字典项', edit: '编辑字典项' },
+  createPermission: 'system:dict:create',
+  editPermission: 'system:dict:update',
+  deletePermission: 'system:dict:delete',
 }))
 
 const dataActionButtons: ActionButton[] = [
   {
-    label: '启用/停用', size: 'small', type: 'text',
+    label: '启用/停用', size: 'small', link: true,
     onClick: async (row: DictDataVO) => {
       await updateDictData(row.id, { status: row.status === 1 ? 0 : 1 } as any)
       dataTableRef.value?.fetchList()

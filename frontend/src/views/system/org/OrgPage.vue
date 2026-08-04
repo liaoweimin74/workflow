@@ -38,7 +38,7 @@ function handleAddRoot() {
 
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
-  { label: '新增子组织', size: 'small', type: 'text', onClick: (row: TreeNode) => handleAddChild(row.id) },
+  { label: '新增子组织', size: 'small', link: true, onClick: (row: TreeNode) => handleAddChild(row.id) },
 ]
 
 // ---------- 表单配置（字段映射 name→orgName, code→orgCode） ----------
@@ -62,6 +62,9 @@ const formConfig = computed<FormConfig<TreeNode>>(() => ({
     return { ...node, name: node.label }
   },
   dialogTitle: { create: '新增组织', edit: '编辑组织' },
+  createPermission: 'system:org:create',
+  editPermission: 'system:org:update',
+  deletePermission: 'system:org:delete',
 }))
 
 function findNode(tree: TreeNode[], id: number): TreeNode | null {

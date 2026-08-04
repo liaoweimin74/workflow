@@ -118,7 +118,7 @@ const categoryFormConfig = reactive<FormConfig<Category>>({
   ],
   dialogTitle: { create: '新建分类', edit: '编辑分类' },
   createPermission: 'process:category:create',
-  editPermission: 'process:category:edit',
+  editPermission: 'process:category:update',
   deletePermission: 'process:category:delete',
   beforeCreate: async () => {
     const res = await categoryApi.list()
@@ -170,7 +170,8 @@ const categoryActionButtons: ActionButton[] = [
   {
     label: '添加子分类',
     icon: Plus,
-    type: 'text',
+    link: true,
+    permission: 'process:category:create',
     show: (row: any) => !!row.id,
     onClick: (row: any) => {
       categoryTableRef.value?.openFormDialog({ parentId: row.id })
@@ -250,6 +251,7 @@ const actionButtons: ActionButton[] = [
   {
     label: '设计',
     size: 'small',
+    permission: 'process:definition:create',
     onClick: (row: any) => {
       router.push({ path: '/designer', query: { id: row.id } })
     },
@@ -258,6 +260,7 @@ const actionButtons: ActionButton[] = [
     label: '部署',
     size: 'small',
     type: 'primary',
+    permission: 'process:definition:deploy',
     confirm: '确定要部署此流程吗？部署后将创建新的流程定义版本。',
     onClick: async (row: any) => {
       try {
@@ -272,6 +275,7 @@ const actionButtons: ActionButton[] = [
   {
     label: '复制',
     size: 'small',
+    permission: 'process:definition:create',
     onClick: async (row: any) => {
       try {
         await processDesignApi.copyProcess(row.id)
@@ -286,6 +290,7 @@ const actionButtons: ActionButton[] = [
     label: '删除',
     size: 'small',
     type: 'danger',
+    permission: 'process:definition:delete',
     confirm: '确定要删除此流程吗？',
     show: (row: any) => !row.deployId,
     onClick: async (row: any) => {

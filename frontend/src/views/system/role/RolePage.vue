@@ -52,7 +52,7 @@ async function handleMenuSubmit() {
 
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
-  { label: '分配菜单', size: 'small', type: 'text', onClick: handleAssignMenu },
+  { label: '分配菜单', size: 'small', link: true, onClick: handleAssignMenu },
 ]
 
 // ---------- fetchApi ----------
@@ -76,6 +76,9 @@ const formConfig: FormConfig<RoleVO> = {
     return res.data.rows.find((r: RoleVO) => r.id === id) || null
   },
   dialogTitle: { create: '新增角色', edit: '编辑角色' },
+  createPermission: 'system:role:create',
+  editPermission: 'system:role:update',
+  deletePermission: 'system:role:delete',
 }
 
 onMounted(async () => {

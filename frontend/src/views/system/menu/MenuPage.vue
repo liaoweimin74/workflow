@@ -46,7 +46,7 @@ function handleAddRoot() {
 
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
-  { label: '新增子菜单', size: 'small', type: 'text', visible: (row: MenuTree) => row.menuType !== 2, onClick: (row: MenuTree) => handleAddChild(row.id) },
+  { label: '新增子菜单', size: 'small', link: true, show: (row: MenuTree) => row.menuType !== 2, onClick: (row: MenuTree) => handleAddChild(row.id) },
 ]
 
 // ---------- 表单配置（form-create rule） ----------
@@ -105,6 +105,9 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
     updateApi: (id, data) => updateMenu(id as number, data),
     deleteApi: deleteMenu,
     getApi: async (id) => findNode(list.value, id),
+    createPermission: 'system:menu:create',
+    editPermission: 'system:menu:update',
+    deletePermission: 'system:menu:delete',
   }
 })
 

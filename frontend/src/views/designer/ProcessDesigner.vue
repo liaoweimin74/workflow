@@ -454,6 +454,19 @@ function handleDrop(event: DragEvent) {
     }
   }
 
+  // 校验：发起节点全局只能有一个
+  if (nodeRole === 'initiator') {
+    const existingInitiator = elementRegistry.find((el: any) => {
+      const bo = el.businessObject
+      if (!bo || !bo.$instanceOf || !bo.$instanceOf('bpmn:UserTask')) return false
+      return bo.get && bo.get('wf:nodeRole') === 'initiator'
+    })
+    if (existingInitiator) {
+      ElMessage.warning('一个流程只能有一个发起节点')
+      return
+    }
+  }
+
   // 计算放置坐标
   const rect = canvasWrapperRef.value?.getBoundingClientRect()
   if (!rect) return
@@ -475,7 +488,7 @@ function handleDrop(event: DragEvent) {
   // 直接在指定坐标创建并放置元素
   modeling.createShape(shape, { x: canvasX, y: canvasY }, rootElement)
 
-  // 发起人节点：设置 assignee 和 wf:nodeRole
+  // 发起节点：设置 assignee 和 wf:nodeRole
   if (nodeRole === 'initiator') {
     modeling.updateProperties(shape, {
       'flowable:assignee': '${initiator}',

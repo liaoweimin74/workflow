@@ -6,6 +6,7 @@ import type { Element } from 'bpmn-js/lib/model/Types'
 import minimapModule from 'diagram-js-minimap'
 import { customContextPadModule } from './customContextPad'
 import { customRendererModule } from './customRenderer'
+import { customRulesModule } from './customRules'
 import wfModdle from './wf-moddle.json'
 
 export interface ModelerOptions {
@@ -32,7 +33,8 @@ export function initModeler(options: ModelerOptions): Modeler {
       minimapModule as any,
       disablePaletteModule as any,
       customContextPadModule as any,
-      customRendererModule as any
+      customRendererModule as any,
+      customRulesModule as any
     ],
     moddleExtensions: {
       wf: wfModdle

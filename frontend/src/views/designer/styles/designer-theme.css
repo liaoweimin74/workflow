@@ -159,3 +159,17 @@
 .property-panel ::-webkit-scrollbar-track {
   background: #f5f7fa;
 }
+
+/* ============================================================
+ * 发起人节点图标 — 与用户任务区分
+ * 复用 bpmn-font 的 manual（手形）字符，着蓝色
+ * ============================================================ */
+.bpmn-icon-initiator-node:before {
+  content: '\e828'; /* bpmn-icon-manual 字符 */
+  color: #409eff;
+}
+
+/* NodePalette 中发起人节点图标着色 */
+.palette-item .bpmn-icon-initiator-node {
+  color: #409eff;
+}

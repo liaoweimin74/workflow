@@ -20,7 +20,8 @@ CustomContextPadProvider.$inject = [
   'create',
   'autoPlace',
   'connect',
-  'modeling'
+  'modeling',
+  'elementRegistry'
 ]
 
 function CustomContextPadProvider(
@@ -30,9 +31,27 @@ function CustomContextPadProvider(
   create: any,
   autoPlace: any,
   connect: any,
-  modeling: any
+  modeling: any,
+  elementRegistry: any
 ) {
   contextPad.registerProvider(this)
+
+  /**
+   * 判断元素是否为发起节点
+   */
+  function isInitiatorNode(el: any): boolean {
+    const bo = el && el.businessObject
+    if (!bo || !bo.$instanceOf || !bo.$instanceOf('bpmn:UserTask')) return false
+    const nodeRole = bo.get && bo.get('wf:nodeRole')
+    return nodeRole === 'initiator'
+  }
+
+  /**
+   * 画布中是否已存在发起节点
+   */
+  function hasInitiatorNode(): boolean {
+    return !!elementRegistry.find((el: any) => isInitiatorNode(el))
+  }
 
   this.getContextPadEntries = function (element: any) {
     const entries: Record<string, any> = {}
@@ -67,47 +86,97 @@ function CustomContextPadProvider(
       }
     }
 
+    /**
+     * 追加发起节点：创建 UserTask 后设置 wf:nodeRole + flowable:assignee。
+     * 全局唯一：若画布已存在发起节点则不执行创建。
+     */
+    function appendInitiatorAction() {
+      const type = 'bpmn:UserTask'
+
+      function appendStart(event: any, _element: any) {
+        if (hasInitiatorNode()) return
+        const shape = elementFactory.createShape({ type })
+        if (shape.businessObject) {
+          shape.businessObject.$set('wf:nodeRole', 'initiator')
+          shape.businessObject.$set('flowable:assignee', '${initiator}')
+        }
+        create.start(event, shape, { source: _element })
+      }
+
+      const append = autoPlace
+        ? (_event: any, _element: any) => {
+            if (hasInitiatorNode()) return
+            const shape = elementFactory.createShape({ type })
+            const created = autoPlace.append(_element, shape)
+            const target = created || shape
+            modeling.updateProperties(target, {
+              'wf:nodeRole': 'initiator',
+              'flowable:assignee': '${initiator}'
+            })
+          }
+        : appendStart
+
+      return {
+        group: 'model',
+        className: 'bpmn-icon-initiator-node',
+        title: '追加发起节点',
+        action: {
+          dragstart: appendStart,
+          click: append
+        }
+      }
+    }
+
     const bo = element.businessObject
     const isFlowNode = bo && bo.$instanceOf && bo.$instanceOf('bpmn:FlowNode')
     const isEndEvent = bo && bo.$instanceOf && bo.$instanceOf('bpmn:EndEvent')
+    const isStartEvent = bo && bo.$instanceOf && bo.$instanceOf('bpmn:StartEvent')
     const isCompensation = bo && bo.isForCompensation
 
     if (isFlowNode && !isEndEvent && !isCompensation) {
-      entries['append.user-task'] = appendAction(
-        'bpmn:UserTask',
-        'bpmn-icon-user-task',
-        '追加用户任务'
-      )
-      entries['append.service-task'] = appendAction(
-        'bpmn:ServiceTask',
-        'bpmn-icon-service-task',
-        '追加服务任务'
-      )
-      entries['append.exclusive-gateway'] = appendAction(
-        'bpmn:ExclusiveGateway',
-        'bpmn-icon-gateway-xor',
-        '追加排他网关'
-      )
-      entries['append.parallel-gateway'] = appendAction(
-        'bpmn:ParallelGateway',
-        'bpmn-icon-gateway-parallel',
-        '追加并行网关'
-      )
-      entries['append.inclusive-gateway'] = appendAction(
-        'bpmn:InclusiveGateway',
-        'bpmn-icon-gateway-or',
-        '追加包含网关'
-      )
-      entries['append.end-event'] = appendAction(
-        'bpmn:EndEvent',
-        'bpmn-icon-end-event-none',
-        '追加结束事件'
-      )
-      entries['append.call-activity'] = appendAction(
-        'bpmn:CallActivity',
-        'bpmn-icon-call-activity',
-        '追加调用活动'
-      )
+      // 开始节点：只允许追加发起节点（且全局唯一）
+      if (isStartEvent) {
+        if (!hasInitiatorNode()) {
+          entries['append.initiator-node'] = appendInitiatorAction()
+        }
+      } else {
+        // 其他 FlowNode：完整节点入口（不含发起节点）
+        entries['append.user-task'] = appendAction(
+          'bpmn:UserTask',
+          'bpmn-icon-user-task',
+          '追加用户任务'
+        )
+        entries['append.service-task'] = appendAction(
+          'bpmn:ServiceTask',
+          'bpmn-icon-service-task',
+          '追加服务任务'
+        )
+        entries['append.exclusive-gateway'] = appendAction(
+          'bpmn:ExclusiveGateway',
+          'bpmn-icon-gateway-xor',
+          '追加排他网关'
+        )
+        entries['append.parallel-gateway'] = appendAction(
+          'bpmn:ParallelGateway',
+          'bpmn-icon-gateway-parallel',
+          '追加并行网关'
+        )
+        entries['append.inclusive-gateway'] = appendAction(
+          'bpmn:InclusiveGateway',
+          'bpmn-icon-gateway-or',
+          '追加包含网关'
+        )
+        entries['append.end-event'] = appendAction(
+          'bpmn:EndEvent',
+          'bpmn-icon-end-event-none',
+          '追加结束事件'
+        )
+        entries['append.call-activity'] = appendAction(
+          'bpmn:CallActivity',
+          'bpmn-icon-call-activity',
+          '追加调用活动'
+        )
+      }
     }
 
     // 连线入口（所有 FlowNode）

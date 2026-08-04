@@ -16,6 +16,11 @@ import { append, create, attr } from 'tiny-svg'
  */
 const INITIATOR_FILL_COLOR = '#e3f2fd'
 
+/**
+ * 发起人节点图标色（画布内左上角标记）
+ */
+const INITIATOR_ICON_COLOR = '#409eff'
+
 // 依赖注入标记
 CustomRenderer.$inject = ['eventBus', 'bpmnRenderer', 'styles']
 
@@ -66,6 +71,18 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
       'fill-opacity': 0.3
     })
     append(parent, rect)
+
+    // 在默认人形图标后方追加蓝色手形图标（bpmn-font \e828）
+    const icon = create('text')
+    attr(icon, {
+      x: 30,
+      y: 24,
+      'font-family': 'bpmn',
+      'font-size': 16,
+      fill: INITIATOR_ICON_COLOR
+    })
+    icon.textContent = '\uE828'
+    append(parent, icon)
 
     return gfx
   }

@@ -147,7 +147,7 @@ const nodeTypeLabel = computed(() => {
 }
 
 .property-panel:not(.collapsed) {
-  width: 360px;
+  width: 300px;
 }
 
 .property-panel.collapsed {
@@ -208,5 +208,10 @@ const nodeTypeLabel = computed(() => {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+}
+
+/* 分组标题字体加粗 */
+.panel-body :deep(.el-divider__text) {
+  font-weight: 600;
 }
 </style>

@@ -3,12 +3,15 @@ package com.workflow.engine.form;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.common.exception.BusinessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -17,8 +20,8 @@ import java.util.UUID;
  *
  * 版本管理策略：
  * - create: 创建 version=1, status=DRAFT 的记录
- * - update: 创建新版本记录（version+1, status=DRAFT）
- * - publish: 将当前 DRAFT 版本状态改为 PUBLISHED, 记录 published_version
+ * - update: 原地更新 DRAFT（不创建新版本）；若为 PUBLISHED 则创建 DRAFT 副本
+ * - publish: 创建新版本记录（version+1, status=PUBLISHED），旧 PUBLISHED 降为 ARCHIVED
  * - delete: 软删除，状态改为 ARCHIVED
  */
 @Service
@@ -89,11 +92,13 @@ public class FormDefinitionService {
     }
 
     /**
-     * 更新表单定义 schema（创建新版本）。
+     * 更新表单定义 schema（原地更新 DRAFT，不创建新版本）。
+     * 如果当前表单为 DRAFT 状态，直接原地更新 schema。
+     * 如果当前表单为 PUBLISHED 状态，创建一份 DRAFT 副本（版本号不变）供编辑。
      *
-     * @param id     表单定义 ID（当前最新版本）
+     * @param id     表单定义 ID
      * @param schema 新的 schema JSON
-     * @return 新版本的表单定义
+     * @return 更新后的表单定义（DRAFT 状态）
      */
     @Transactional
     public FormDefinition update(String id, String schema) {
@@ -101,21 +106,21 @@ public class FormDefinitionService {
         FormDefinition current = formDefRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new RuntimeException("Form definition not found: " + id));
 
-        // 查找该 key 的最大版本号
-        Integer maxVersion = formDefRepository.findMaxVersionByTenantIdAndKey(tenantId, current.getKey());
-        int newVersion = (maxVersion != null ? maxVersion : 0) + 1;
+        if ("PUBLISHED".equals(current.getStatus())) {
+            FormDefinition draft = new FormDefinition();
+            draft.setId(UUID.randomUUID().toString().replace("-", ""));
+            draft.setTenantId(tenantId);
+            draft.setName(current.getName());
+            draft.setKey(current.getKey());
+            draft.setSchema(schema);
+            draft.setVersion(current.getVersion());
+            draft.setStatus("DRAFT");
+            draft.setCreatedBy(current.getCreatedBy());
+            return formDefRepository.save(draft);
+        }
 
-        FormDefinition newDef = new FormDefinition();
-        newDef.setId(UUID.randomUUID().toString().replace("-", ""));
-        newDef.setTenantId(tenantId);
-        newDef.setName(current.getName());
-        newDef.setKey(current.getKey());
-        newDef.setSchema(schema);
-        newDef.setVersion(newVersion);
-        newDef.setStatus("DRAFT");
-        newDef.setCreatedBy(current.getCreatedBy());
-
-        return formDefRepository.save(newDef);
+        current.setSchema(schema);
+        return formDefRepository.save(current);
     }
 
     /**
@@ -133,25 +138,50 @@ public class FormDefinitionService {
 
     /**
      * 发布表单定义。
-     * 将当前 DRAFT 版本状态改为 PUBLISHED，并记录 published_version。
+     * 创建新的 PUBLISHED 版本记录（version+1），旧 PUBLISHED 降为 ARCHIVED。
+     * 发布前校验 schema 是否与上一已发布版本相同，相同则抛出 BusinessException。
      *
      * @param id 表单定义 ID（DRAFT 版本）
-     * @return 发布后的表单定义
+     * @return 发布后的表单定义（新 PUBLISHED 记录）
+     * @throws BusinessException 如果 schema 与上一已发布版本相同
      */
     @Transactional
     public FormDefinition publish(String id) {
         String tenantId = tenantProvider.getTenantId();
-        FormDefinition formDef = formDefRepository.findByIdAndTenantId(id, tenantId)
+        FormDefinition draft = formDefRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new RuntimeException("Form definition not found: " + id));
 
-        if (!"DRAFT".equals(formDef.getStatus())) {
-            throw new RuntimeException("Only DRAFT forms can be published, current status: " + formDef.getStatus());
+        if (!"DRAFT".equals(draft.getStatus())) {
+            throw new RuntimeException("Only DRAFT forms can be published, current status: " + draft.getStatus());
         }
 
-        formDef.setStatus("PUBLISHED");
-        formDef.setPublishedVersion(formDef.getVersion());
+        Optional<FormDefinition> lastPublished = formDefRepository
+                .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, draft.getKey(), "PUBLISHED");
 
-        return formDefRepository.save(formDef);
+        if (lastPublished.isPresent() && Objects.equals(lastPublished.get().getSchema(), draft.getSchema())) {
+            throw new BusinessException(400, "表单内容未变化，无需发布");
+        }
+
+        Integer maxVersion = formDefRepository.findMaxVersionByTenantIdAndKey(tenantId, draft.getKey());
+        int newVersion = (maxVersion != null ? maxVersion : 0) + 1;
+
+        FormDefinition newPublished = new FormDefinition();
+        newPublished.setId(UUID.randomUUID().toString().replace("-", ""));
+        newPublished.setTenantId(tenantId);
+        newPublished.setName(draft.getName());
+        newPublished.setKey(draft.getKey());
+        newPublished.setSchema(draft.getSchema());
+        newPublished.setVersion(newVersion);
+        newPublished.setStatus("PUBLISHED");
+        newPublished.setPublishedVersion(newVersion);
+        newPublished.setCreatedBy(draft.getCreatedBy());
+
+        lastPublished.ifPresent(old -> {
+            old.setStatus("ARCHIVED");
+            formDefRepository.save(old);
+        });
+
+        return formDefRepository.save(newPublished);
     }
 
     /**

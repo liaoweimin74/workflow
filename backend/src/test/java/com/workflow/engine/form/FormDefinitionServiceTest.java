@@ -4,6 +4,7 @@ import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.common.exception.BusinessException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -109,52 +110,151 @@ class FormDefinitionServiceTest {
     // ==================== update ====================
 
     @Test
-    void update_createsNewVersionWithSchema() {
-        FormDefinition current = buildFormDef("form-1", "leave_form", 1, "DRAFT");
+    void update_draftForm_inPlaceUpdate_noNewVersion() {
+        FormDefinition existing = new FormDefinition();
+        existing.setId("form-1");
+        existing.setTenantId(TENANT_ID);
+        existing.setKey("leave-form");
+        existing.setName("请假表单");
+        existing.setSchema("[]");
+        existing.setVersion(1);
+        existing.setStatus("DRAFT");
+
         when(formDefRepository.findByIdAndTenantId("form-1", TENANT_ID))
-                .thenReturn(Optional.of(current));
-        when(formDefRepository.findMaxVersionByTenantIdAndKey(TENANT_ID, "leave_form"))
-                .thenReturn(1);
+            .thenReturn(Optional.of(existing));
+        when(formDefRepository.save(existing)).thenReturn(existing);
+
+        FormDefinition result = formDefService.update("form-1", "[{\"field\":\"reason\"}]");
+
+        assertEquals("form-1", result.getId());
+        assertEquals(1, result.getVersion());
+        assertEquals("DRAFT", result.getStatus());
+        assertEquals("[{\"field\":\"reason\"}]", result.getSchema());
+        verify(formDefRepository).save(existing);
+    }
+
+    @Test
+    void update_publishedForm_createsDraftCopy() {
+        FormDefinition published = new FormDefinition();
+        published.setId("form-1");
+        published.setTenantId(TENANT_ID);
+        published.setKey("leave-form");
+        published.setName("请假表单");
+        published.setSchema("[]");
+        published.setVersion(2);
+        published.setStatus("PUBLISHED");
+
+        when(formDefRepository.findByIdAndTenantId("form-1", TENANT_ID))
+            .thenReturn(Optional.of(published));
         when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        String newSchema = "[{\"type\":\"input\",\"field\":\"reason\"}]";
-        FormDefinition result = formDefService.update("form-1", newSchema);
+        FormDefinition result = formDefService.update("form-1", "[{\"field\":\"reason\"}]");
 
-        assertNotEquals("form-1", result.getId()); // 新 ID
-        assertEquals(TENANT_ID, result.getTenantId());
-        assertEquals("leave_form", result.getKey());
-        assertEquals(newSchema, result.getSchema());
-        assertEquals(2, result.getVersion()); // 版本号 +1
+        assertNotEquals("form-1", result.getId());
+        assertEquals(2, result.getVersion());
         assertEquals("DRAFT", result.getStatus());
+        assertEquals("[{\"field\":\"reason\"}]", result.getSchema());
+        assertEquals("leave-form", result.getKey());
         verify(formDefRepository).save(any(FormDefinition.class));
+        assertEquals("PUBLISHED", published.getStatus());
     }
 
     // ==================== publish ====================
 
     @Test
-    void publish_draftChangesToPublished() {
-        FormDefinition draft = buildFormDef("form-2", "leave_form", 2, "DRAFT");
-        when(formDefRepository.findByIdAndTenantId("form-2", TENANT_ID))
-                .thenReturn(Optional.of(draft));
+    void publish_draftForm_createsNewVersion_oldPublishedArchived() {
+        FormDefinition draft = new FormDefinition();
+        draft.setId("form-draft");
+        draft.setTenantId(TENANT_ID);
+        draft.setKey("leave-form");
+        draft.setName("请假表单");
+        draft.setSchema("[{\"field\":\"reason\"}]");
+        draft.setVersion(1);
+        draft.setStatus("DRAFT");
+
+        FormDefinition oldPublished = new FormDefinition();
+        oldPublished.setId("form-old-pub");
+        oldPublished.setTenantId(TENANT_ID);
+        oldPublished.setKey("leave-form");
+        oldPublished.setSchema("[{\"field\":\"name\"}]");
+        oldPublished.setVersion(1);
+        oldPublished.setStatus("PUBLISHED");
+
+        when(formDefRepository.findByIdAndTenantId("form-draft", TENANT_ID))
+            .thenReturn(Optional.of(draft));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "leave-form", "PUBLISHED"))
+            .thenReturn(Optional.of(oldPublished));
+        when(formDefRepository.findMaxVersionByTenantIdAndKey(TENANT_ID, "leave-form"))
+            .thenReturn(1);
         when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        FormDefinition result = formDefService.publish("form-2");
+        FormDefinition result = formDefService.publish("form-draft");
 
+        assertEquals(2, result.getVersion());
         assertEquals("PUBLISHED", result.getStatus());
         assertEquals(2, result.getPublishedVersion());
-        verify(formDefRepository).save(any(FormDefinition.class));
+        assertEquals("[{\"field\":\"reason\"}]", result.getSchema());
+        assertEquals("ARCHIVED", oldPublished.getStatus());
+        verify(formDefRepository).save(oldPublished);
+        verify(formDefRepository, times(2)).save(any(FormDefinition.class));
     }
 
     @Test
-    void publish_nonDraft_throwsException() {
-        FormDefinition published = buildFormDef("form-1", "leave_form", 1, "PUBLISHED");
-        when(formDefRepository.findByIdAndTenantId("form-1", TENANT_ID))
-                .thenReturn(Optional.of(published));
+    void publish_schemaUnchanged_throwsException() {
+        FormDefinition draft = new FormDefinition();
+        draft.setId("form-draft");
+        draft.setTenantId(TENANT_ID);
+        draft.setKey("leave-form");
+        draft.setName("请假表单");
+        draft.setSchema("[{\"field\":\"reason\"}]");
+        draft.setVersion(1);
+        draft.setStatus("DRAFT");
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> formDefService.publish("form-1"));
-        assertTrue(ex.getMessage().contains("Only DRAFT forms can be published"));
-        verify(formDefRepository, never()).save(any());
+        FormDefinition oldPublished = new FormDefinition();
+        oldPublished.setId("form-old-pub");
+        oldPublished.setTenantId(TENANT_ID);
+        oldPublished.setKey("leave-form");
+        oldPublished.setSchema("[{\"field\":\"reason\"}]");
+        oldPublished.setVersion(1);
+        oldPublished.setStatus("PUBLISHED");
+
+        when(formDefRepository.findByIdAndTenantId("form-draft", TENANT_ID))
+            .thenReturn(Optional.of(draft));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "leave-form", "PUBLISHED"))
+            .thenReturn(Optional.of(oldPublished));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+            () -> formDefService.publish("form-draft"));
+        assertTrue(ex.getMessage().contains("表单内容未变化"));
+    }
+
+    @Test
+    void publish_noPreviousPublished_createsVersion1() {
+        FormDefinition draft = new FormDefinition();
+        draft.setId("form-draft");
+        draft.setTenantId(TENANT_ID);
+        draft.setKey("leave-form");
+        draft.setName("请假表单");
+        draft.setSchema("[{\"field\":\"reason\"}]");
+        draft.setVersion(1);
+        draft.setStatus("DRAFT");
+
+        when(formDefRepository.findByIdAndTenantId("form-draft", TENANT_ID))
+            .thenReturn(Optional.of(draft));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "leave-form", "PUBLISHED"))
+            .thenReturn(Optional.empty());
+        when(formDefRepository.findMaxVersionByTenantIdAndKey(TENANT_ID, "leave-form"))
+            .thenReturn(null);
+        when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FormDefinition result = formDefService.publish("form-draft");
+
+        assertEquals(1, result.getVersion());
+        assertEquals("PUBLISHED", result.getStatus());
+        assertEquals(1, result.getPublishedVersion());
     }
 
     // ==================== delete ====================

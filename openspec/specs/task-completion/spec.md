@@ -1,5 +1,8 @@
-## MODIFIED Requirements
+# task-completion Specification
 
+## Purpose
+TBD - created by archiving change process-engine-core. Update Purpose after archive.
+## Requirements
 ### Requirement: 任务完成返回值
 
 `POST /api/v1/tasks/{id}/complete` 接口 SHALL 返回 `CompleteTaskResponse`，包含以下字段：
@@ -54,3 +57,4 @@ AND 返回值 SHALL 包含 nodeCompleted/remaining/processAdvanced
 
 WHEN complete 一个不存在的 taskId
 THEN SHALL 返回 404
+

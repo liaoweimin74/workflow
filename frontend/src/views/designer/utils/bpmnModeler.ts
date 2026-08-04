@@ -5,6 +5,8 @@ import type { Element } from 'bpmn-js/lib/model/Types'
 // @ts-ignore - diagram-js-minimap has no type declarations
 import minimapModule from 'diagram-js-minimap'
 import { customContextPadModule } from './customContextPad'
+import { customRendererModule } from './customRenderer'
+import wfModdle from './wf-moddle.json'
 
 export interface ModelerOptions {
   container: HTMLElement
@@ -29,8 +31,12 @@ export function initModeler(options: ModelerOptions): Modeler {
     additionalModules: [
       minimapModule as any,
       disablePaletteModule as any,
-      customContextPadModule as any
+      customContextPadModule as any,
+      customRendererModule as any
     ],
+    moddleExtensions: {
+      wf: wfModdle
+    },
     keyboard: {
       bindTo: window
     }

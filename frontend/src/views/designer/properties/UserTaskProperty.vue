@@ -16,7 +16,6 @@
       <el-radio-group v-model="approval.type" @change="saveConfig">
         <el-radio value="user">指定用户</el-radio>
         <el-radio value="dept_head">部门负责人</el-radio>
-        <el-radio value="initiator_self">发起人自选</el-radio>
         <el-radio value="expression">流程表达式</el-radio>
       </el-radio-group>
     </el-form-item>
@@ -38,7 +37,7 @@
       />
     </el-form-item>
 
-    <el-form-item v-if="approval.type && approval.type !== 'initiator_self'" label="多人模式">
+    <el-form-item v-if="approval.type" label="多人模式">
       <el-radio-group v-model="approval.multiMode" @change="saveConfig">
         <el-radio value="countersign">会签</el-radio>
         <el-radio value="or_sign">或签</el-radio>
@@ -103,7 +102,7 @@ const config = reactive({
 })
 
 const approval = reactive({
-  type: '' as 'user' | 'dept_head' | 'initiator_self' | 'expression' | '',
+  type: '' as 'user' | 'dept_head' | 'expression' | '',
   userIds: [] as number[],
   expression: '',
   multiMode: 'countersign' as 'countersign' | 'or_sign'
@@ -158,7 +157,12 @@ function loadConfig() {
   const existing = designerStore.getNodeConfig(designerStore.selectedNodeId!)
   if (existing) {
     if (existing.approval) {
-      approval.type = existing.approval.type || ''
+      // 兼容旧配置：已移除的 initiator_self 类型回退为未配置
+      if (existing.approval.type === 'initiator_self' as any) {
+        approval.type = ''
+      } else {
+        approval.type = existing.approval.type || ''
+      }
       approval.userIds = existing.approval.userIds || []
       approval.expression = existing.approval.expression || ''
       approval.multiMode = existing.approval.multiMode || 'countersign'

@@ -437,6 +437,8 @@ function handleDrop(event: DragEvent) {
   const nodeType = event.dataTransfer?.getData('node-type')
   if (!nodeType) return
 
+  const nodeRole = event.dataTransfer?.getData('node-role')
+
   const modeler = getModeler()
   const canvas = (modeler as any).get('canvas')
   const elementFactory = (modeler as any).get('elementFactory')
@@ -472,6 +474,14 @@ function handleDrop(event: DragEvent) {
 
   // 直接在指定坐标创建并放置元素
   modeling.createShape(shape, { x: canvasX, y: canvasY }, rootElement)
+
+  // 发起人节点：设置 assignee 和 wf:nodeRole
+  if (nodeRole === 'initiator') {
+    modeling.updateProperties(shape, {
+      'flowable:assignee': '${initiator}',
+      'wf:nodeRole': 'initiator'
+    })
+  }
 }
 </script>
 

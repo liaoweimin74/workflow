@@ -7,7 +7,7 @@ export interface NodeConfigData {
     description?: string
   }
   approval?: {
-    type?: 'user' | 'dept_head' | 'initiator_self' | 'expression'
+    type?: 'user' | 'dept_head' | 'expression'
     userIds?: number[]
     expression?: string
     multiMode?: 'countersign' | 'or_sign'

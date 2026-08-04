@@ -48,6 +48,7 @@ interface PaletteNode {
   label: string
   description: string
   iconClass: string
+  nodeRole?: string
 }
 
 interface PaletteGroup {
@@ -76,7 +77,8 @@ const nodeGroups: PaletteGroup[] = [
     items: [
       { type: 'bpmn:UserTask', label: '用户任务', description: '需要人工审批的任务', iconClass: 'bpmn-icon-user-task' },
       { type: 'bpmn:ServiceTask', label: '服务任务', description: '自动执行的任务', iconClass: 'bpmn-icon-service-task' },
-      { type: 'bpmn:CallActivity', label: '调用活动', description: '调用子流程', iconClass: 'bpmn-icon-call-activity' }
+      { type: 'bpmn:CallActivity', label: '调用活动', description: '调用子流程', iconClass: 'bpmn-icon-call-activity' },
+      { type: 'bpmn:UserTask', label: '发起人节点', description: '发起人填报节点', iconClass: 'bpmn-icon-user-task', nodeRole: 'initiator' }
     ]
   },
   {
@@ -92,6 +94,9 @@ const nodeGroups: PaletteGroup[] = [
 function handleDragStart(event: DragEvent, node: PaletteNode) {
   if (!event.dataTransfer) return
   event.dataTransfer.setData('node-type', node.type)
+  if (node.nodeRole) {
+    event.dataTransfer.setData('node-role', node.nodeRole)
+  }
   event.dataTransfer.effectAllowed = 'copy'
 }
 

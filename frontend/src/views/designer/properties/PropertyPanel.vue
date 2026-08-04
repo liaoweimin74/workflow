@@ -28,6 +28,11 @@
           v-else-if="isEventNode"
         />
 
+        <!-- 发起人节点（精简面板） -->
+        <initiator-task-property
+          v-else-if="selectedNodeType === 'UserTask' && isInitiatorNode"
+        />
+
         <!-- 用户任务（审批节点） -->
         <user-task-property
           v-else-if="selectedNodeType === 'UserTask'"
@@ -62,11 +67,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { Element } from 'bpmn-js/lib/model/Types'
 import { Fold, Setting } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
+import { getModeler } from '../utils/bpmnModeler'
 import ProcessProperty from './ProcessProperty.vue'
 import EventProperty from './EventProperty.vue'
 import UserTaskProperty from './UserTaskProperty.vue'
+import InitiatorTaskProperty from './InitiatorTaskProperty.vue'
 import ServiceTaskProperty from './ServiceTaskProperty.vue'
 import CallActivityProperty from './CallActivityProperty.vue'
 import GatewayProperty from './GatewayProperty.vue'
@@ -93,6 +101,21 @@ const isEventNode = computed(() => {
 const isGatewayNode = computed(() => {
   const type = selectedNodeType.value || ''
   return type.includes('Gateway')
+})
+
+const isInitiatorNode = computed(() => {
+  if (selectedNodeType.value !== 'UserTask') return false
+  if (!selectedNodeId.value) return false
+  try {
+    const modeler = getModeler()
+    const elementRegistry = modeler.get<{ get(id: string): Element | undefined }>('elementRegistry')
+    const element = elementRegistry.get(selectedNodeId.value)
+    if (!element) return false
+    const bo = element.businessObject
+    return bo.get('wf:nodeRole') === 'initiator'
+  } catch {
+    return false
+  }
 })
 
 const nodeTypeLabel = computed(() => {

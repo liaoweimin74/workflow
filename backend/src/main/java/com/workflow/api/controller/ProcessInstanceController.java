@@ -4,9 +4,12 @@ import com.workflow.api.dto.*;
 import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
+import com.workflow.framework.security.domain.LoginUser;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -28,6 +31,12 @@ public class ProcessInstanceController {
     @PostMapping
     public R<Map<String, Object>> start(@RequestBody StartProcessRequest request) {
         Map<String, Object> variables = request.getVariables() != null ? request.getVariables() : new HashMap<>();
+
+        // 注入发起人变量：从 SecurityContext 提取当前用户 ID
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
+            variables.put("initiator", String.valueOf(loginUser.getUserId()));
+        }
 
         ProcessInstance instance;
         if (request.getBusinessKey() != null) {

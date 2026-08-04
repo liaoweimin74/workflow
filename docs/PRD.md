@@ -144,8 +144,14 @@
 
 #### 3.3.3 加签与转签
 
-- 加签：审批人临时增加其他审批人
-- 转签：审批人将审批权转给他人
+- ✅ 加签：审批人临时增加其他审批人
+- ✅ 转签：审批人将审批权转给他人
+
+> **实现状态（2026-08-04）：**
+> - 加签：`AddSignService` + `POST /api/v1/tasks/{id}/add-sign`，基于 `RuntimeService.addMultiInstanceExecution` 实现，支持批量加签多人
+> - 转签：`ForwardSignService` + `POST /api/v1/tasks/{id}/forward-sign`，基于 `deleteMultiInstanceExecution` + `addMultiInstanceExecution` 实现，MI 实例级别人员变更
+> - 委派：`POST /api/v1/tasks/{id}/delegate`，基于 `TaskService.delegateTask`，被委派人 resolve 后任务回到原办理人
+> - Spike 测试验证：Spike-6 加签、Spike-7 转签
 
 #### 3.3.4 驳回
 

@@ -4,21 +4,31 @@
 
     <el-form label-width="90px" size="small">
       <el-form-item label="关联表单">
-        <el-select
-          v-model="formConfig.formDefId"
-          placeholder="请选择已发布的表单"
-          filterable
-          clearable
-          style="width: 100%"
-          @change="handleFormChange"
-        >
-          <el-option
-            v-for="form in formList"
-            :key="form.id"
-            :label="`${form.name} (v${form.version})`"
-            :value="form.id"
-          />
-        </el-select>
+        <div style="display: flex; gap: 8px; width: 100%;">
+          <el-select
+            v-model="formConfig.formDefId"
+            placeholder="请选择已发布的表单"
+            filterable
+            clearable
+            style="flex: 1"
+            @change="handleFormChange"
+          >
+            <el-option
+              v-for="form in formList"
+              :key="form.id"
+              :label="`${form.name} (v${form.version})`"
+              :value="form.id"
+            />
+          </el-select>
+          <el-button
+            v-if="formConfig.formDefId"
+            :icon="Edit"
+            size="small"
+            @click="jumpToFormDesigner"
+          >
+            编辑表单
+          </el-button>
+        </div>
       </el-form-item>
 
       <template v-if="formConfig.formDefId && fieldList.length > 0">
@@ -53,10 +63,14 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { Edit } from '@element-plus/icons-vue'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 
 const designerStore = useDesignerStore()
+const router = useRouter()
+const route = useRoute()
 
 let isLoading = false
 
@@ -132,6 +146,17 @@ async function loadFormFields(formDefId: string) {
   } finally {
     loadingFields.value = false
   }
+}
+
+function jumpToFormDesigner() {
+  if (!formConfig.formDefId) return
+  router.push({
+    name: 'FormDesigner',
+    query: {
+      id: formConfig.formDefId,
+      returnTo: `/designer?id=${route.query.id}`
+    }
+  })
 }
 
 async function handleFormChange(formDefId: string) {

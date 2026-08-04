@@ -147,7 +147,12 @@ async function handlePublish() {
 }
 
 function handleBack() {
-  router.push('/form')
+  const returnTo = route.query.returnTo as string
+  if (returnTo) {
+    router.push(returnTo)
+  } else {
+    router.push('/form')
+  }
 }
 
 function statusTagType(status: string): '' | 'success' | 'warning' | 'info' | 'danger' {

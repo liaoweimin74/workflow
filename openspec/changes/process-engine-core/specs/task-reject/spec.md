@@ -34,12 +34,7 @@ THEN 系统识别的发起人节点 SHALL 为 `fillForm`
 
 ### Requirement: MI 节点驳回整体回退
 
-WHEN MI 会签/或签节点被驳回
-THEN `moveActivityIdTo` SHALL 对 MI 节点生效
-AND 所有 MI 实例（含已完成和待办）SHALL 全部回收
-AND 发起人节点 SHALL 重新出现
-AND `approverList` 变量 SHALL 保留
-AND 发起人重新提交后 MI 节点 SHALL 用原 `approverList` 重新展开全部实例
+MI 会签/或签节点被驳回时，`moveActivityIdTo` SHALL 对 MI 节点生效，所有 MI 实例（含已完成和待办）SHALL 全部回收，发起人节点 SHALL 重新出现，`approverList` 变量 SHALL 保留，发起人重新提交后 MI 节点 SHALL 用原 `approverList` 重新展开全部实例。
 
 #### Scenario: 会签节点部分完成后整体驳回
 
@@ -53,9 +48,7 @@ AND bob SHALL 需要重新审批
 
 ### Requirement: 驳回权限控制
 
-WHEN `wf_node_config.configJson.operations.allowReject = false`
-THEN 该节点的任务 SHALL NOT 允许驳回
-AND 接口 SHALL 返回 400 错误
+当 `wf_node_config.configJson.operations.allowReject = false` 时，该节点的任务 SHALL NOT 允许驳回，接口 SHALL 返回 400 错误。
 
 #### Scenario: 禁止驳回的节点
 

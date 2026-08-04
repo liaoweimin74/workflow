@@ -45,9 +45,7 @@ AND 未走过的 f2 status SHALL 为 UNTRAVERSED
 
 ### Requirement: 驳回后高亮显示
 
-WHEN 流程被驳回（changeActivityState）
-THEN 被取消的节点 SHALL 有 endTime（来自 ACT_HI_ACTINST）
-AND 该节点 status SHALL 为 COMPLETED（不区分 REJECTED）
+流程被驳回（changeActivityState）后，被取消的节点 SHALL 有 endTime（来自 ACT_HI_ACTINST），该节点 status SHALL 为 COMPLETED（不区分 REJECTED）。
 
 #### Scenario: 驳回后被取消节点显示 COMPLETED
 

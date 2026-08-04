@@ -33,9 +33,7 @@ AND created_at SHALL 为当前时间
 
 ### Requirement: 转办权限控制
 
-WHEN `wf_node_config.configJson.operations.allowTransfer = false`
-THEN 该节点的任务 SHALL NOT 允许转办
-AND 接口 SHALL 返回 400 错误
+当 `wf_node_config.configJson.operations.allowTransfer = false` 时，该节点的任务 SHALL NOT 允许转办，接口 SHALL 返回 400 错误。
 
 #### Scenario: 禁止转办的节点
 

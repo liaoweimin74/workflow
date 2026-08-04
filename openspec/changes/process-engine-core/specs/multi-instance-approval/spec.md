@@ -39,11 +39,21 @@ WHEN `approval.type=user` 且 `approval.userIds` 非空
 THEN 部署的流程定义 SHALL 包含 `approverList` 默认值
 AND 流程启动时若调用方传入 `approverList` 变量，SHALL 覆盖默认值
 
+#### Scenario: 部署时注入审批人集合默认值
+
+WHEN 用户部署一个 `approval.type=user` 且 `approval.userIds=["alice","bob"]` 的流程
+THEN 流程定义 SHALL 包含 `approverList` 默认值 `["alice","bob"]`
+AND 流程启动后 `approverList` 变量 SHALL 为 `["alice","bob"]`
+
+#### Scenario: 启动时传入 approverList 覆盖默认值
+
+WHEN 用户启动流程实例时传入 `approverList=["charlie","dave"]`
+THEN 运行时 `approverList` 变量 SHALL 为 `["charlie","dave"]`
+AND 部署时的默认值 SHALL 被覆盖
+
 ### Requirement: 会签运行时行为
 
-WHEN 会签节点的所有 MI 实例都 complete
-THEN 流程 SHALL 前进到下一节点
-AND 每个实例的 assignee SHALL 为 `approverList` 中对应元素
+会签节点的所有 MI 实例都 complete 后，流程 SHALL 前进到下一节点。每个实例的 assignee SHALL 为 `approverList` 中对应元素。
 
 #### Scenario: 3 人会签全部完成才前进
 
@@ -56,10 +66,7 @@ THEN 流程 SHALL 前进到下一节点
 
 ### Requirement: 或签运行时行为
 
-WHEN 或签节点的任一 MI 实例 complete
-THEN `completionCondition` SHALL 触发
-AND 其余未完成实例 SHALL 被引擎自动删除
-AND 流程 SHALL 前进到下一节点
+或签节点的任一 MI 实例 complete 后，`completionCondition` SHALL 触发，其余未完成实例 SHALL 被引擎自动删除，流程 SHALL 前进到下一节点。
 
 #### Scenario: 或签第一个完成后其余自动取消
 

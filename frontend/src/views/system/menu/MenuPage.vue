@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { SearchTable } from '@/components/business'
-import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
-import type { Rule } from '@form-create/element-ui'
+import type { SearchField, TableColumn, ActionButton, FormConfig, FormRule } from '@/components/business/types'
 import { getMenuTree, createMenu, updateMenu, deleteMenu } from '@/api/menu'
 import type { MenuTree } from '@/types/menu'
 
@@ -51,7 +50,7 @@ const actionButtons: ActionButton[] = [
 
 // ---------- 表单配置（form-create rule） ----------
 const formConfig = computed<FormConfig<MenuTree>>(() => {
-  const rule: Rule[] = [
+  const rule: FormRule[] = [
     {
       type: 'treeSelect', field: 'parentId', title: '上级菜单',
       props: { data: list.value, props: { label: 'menuName', value: 'id', children: 'children' } },

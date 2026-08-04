@@ -1,5 +1,23 @@
 import type { Component } from 'vue'
-import type { Rule } from '@form-create/element-ui'
+
+/**
+ * 表单字段规则（原 form-create Rule 的本地替代类型）。
+ * CRUD 页面重建（Task 6）后将迁移为 VTJ DSL 格式。
+ * 目前保留宽松结构以兼容现有 CRUD 页面的表单定义。
+ */
+export interface FormRule {
+  type: string
+  field?: string
+  title?: string
+  prop?: string
+  label?: string
+  props?: Record<string, any>
+  validate?: Array<Record<string, any>>
+  value?: any
+  options?: Array<{ label: string; value: any }>
+  children?: FormRule[]
+  [key: string]: any
+}
 
 // ============================================================
 // 公共业务组件类型定义
@@ -65,8 +83,8 @@ export interface QueryParams {
 // --- 表单集成配置（SearchTable 用） ---
 
 export interface FormConfig<T = any> {
-  /** form-create Rule 数组，直接传给 FormRenderer 渲染 */
-  rule: Rule[]
+  /** 表单字段规则数组，传给 FormRenderer 渲染 */
+  rule: FormRule[]
   /** 新增表单的初始值，handleCreate 时与传入 initialValues 合并 */
   initialValues?: Partial<T>
   createApi?: (data: any) => Promise<any>

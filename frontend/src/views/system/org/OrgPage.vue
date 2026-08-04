@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
-import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
-import type { Rule } from '@form-create/element-ui'
+import type { SearchField, TableColumn, ActionButton, FormConfig, FormRule } from '@/components/business/types'
 import { getOrgTree, createOrg, updateOrg, deleteOrg } from '@/api/org'
 import type { TreeNode } from '@/types/org'
 
@@ -47,10 +46,10 @@ const formConfig = computed<FormConfig<TreeNode>>(() => ({
     {
       type: 'treeSelect', field: 'parentId', title: '上级组织',
       props: { placeholder: '选择上级（空=根组织）', data: list.value, props: { label: 'label', value: 'id', children: 'children' } },
-    } as Rule,
-    { type: 'input', field: 'name', title: '组织名称', validate: [{ required: true, message: '请输入组织名称', trigger: 'blur' }] } as Rule,
-    { type: 'input', field: 'code', title: '组织编码', validate: [{ required: true, message: '请输入组织编码', trigger: 'blur' }] } as Rule,
-    { type: 'input', field: 'sortOrder', title: '排序' } as Rule,
+    } as FormRule,
+    { type: 'input', field: 'name', title: '组织名称', validate: [{ required: true, message: '请输入组织名称', trigger: 'blur' }] } as FormRule,
+    { type: 'input', field: 'code', title: '组织编码', validate: [{ required: true, message: '请输入组织编码', trigger: 'blur' }] } as FormRule,
+    { type: 'input', field: 'sortOrder', title: '排序' } as FormRule,
   ],
   createApi: (data: any) => createOrg({ ...data, orgName: data.name, orgCode: data.code }),
   updateApi: (id, data: any) => updateOrg(id as number, { ...data, orgName: data.name, orgCode: data.code }),

@@ -98,16 +98,14 @@ describe('LookupPicker — 清除', () => {
   })
 })
 
-// ----- form-create 适配测试 -----
+// ----- returnFields emit 适配测试 -----
 
-describe('LookupPicker — form-create 适配', () => {
+describe('LookupPicker — returnFields emit', () => {
   /**
-   * 模拟 form-create 的 formCreateInject 注入对象。
-   * api.setValue 用于将选中行的字段回填到表单的其他字段。
+   * 选中行时通过 emit('returnFields') 通知父组件回填字段。
+   * 不再依赖 form-create 的 inject 机制。
    */
-  function createFormCreateWrapper(props: any = {}, inject?: { api: { setValue: ReturnType<typeof vi.fn> } } | null) {
-    const defaultApi = { setValue: vi.fn() }
-    const formCreateInject = inject ?? { api: defaultApi }
+  function createWrapper(props: any = {}) {
     return mount(LookupPicker, {
       props: {
         modelValue: null,
@@ -119,19 +117,12 @@ describe('LookupPicker — form-create 适配', () => {
       },
       global: {
         plugins: [ElementPlus],
-        provide: {
-          formCreateInject,
-        },
       },
     })
   }
 
-  it('选中行时通过 api.setValue 回填 returnFields', async () => {
-    const setValue = vi.fn()
-    const wrapper = createFormCreateWrapper(
-      {},
-      { api: { setValue } },
-    )
+  it('选中行时 emit returnFields 回填数据', async () => {
+    const wrapper = createWrapper()
     // 打开弹窗
     await wrapper.find('input').trigger('click')
     await nextTick()
@@ -142,17 +133,18 @@ describe('LookupPicker — form-create 适配', () => {
     await nextTick()
     // 应该 emit update:modelValue
     expect(wrapper.emitted('update:modelValue')).toBeTruthy()
-    // 应该调用 api.setValue 回填 returnFields
-    expect(setValue).toHaveBeenCalledWith('formCode', 'BL-001')
-    expect(setValue).toHaveBeenCalledWith('formName', '盲板A')
+    // 应该 emit returnFields 带回填数据
+    const returnFieldsEvents = wrapper.emitted('returnFields')
+    expect(returnFieldsEvents).toBeTruthy()
+    const returnData = returnFieldsEvents![0][0] as Record<string, { field: string; value: unknown }>
+    expect(returnData['formCode']).toEqual({ field: 'formCode', value: 'BL-001' })
+    expect(returnData['formName']).toEqual({ field: 'formName', value: '盲板A' })
   })
 
-  it('清除选择时通过 api.setValue(targetField, null) 清空 returnFields', async () => {
-    const setValue = vi.fn()
-    const wrapper = createFormCreateWrapper(
-      { modelValue: { code: 'BL-001', name: '盲板A' } },
-      { api: { setValue } },
-    )
+  it('清除选择时 emit returnFields 清空数据', async () => {
+    const wrapper = createWrapper({
+      modelValue: { code: 'BL-001', name: '盲板A' },
+    })
     await nextTick()
     // 触发清除
     const vm = wrapper.vm as any
@@ -162,34 +154,53 @@ describe('LookupPicker — form-create 适配', () => {
     expect(wrapper.emitted('update:modelValue')).toBeTruthy()
     const emitted = wrapper.emitted('update:modelValue')!
     expect(emitted[emitted.length - 1][0]).toBeNull()
-    // 应该调用 api.setValue 清空 returnFields
-    expect(setValue).toHaveBeenCalledWith('formCode', null)
-    expect(setValue).toHaveBeenCalledWith('formName', null)
+    // 应该 emit returnFields 清空数据
+    const returnFieldsEvents = wrapper.emitted('returnFields')
+    expect(returnFieldsEvents).toBeTruthy()
+    const returnData = returnFieldsEvents![0][0] as Record<string, { field: string; value: unknown }>
+    expect(returnData['formCode']).toEqual({ field: 'formCode', value: null })
+    expect(returnData['formName']).toEqual({ field: 'formName', value: null })
   })
 
-  it('无 formCreateInject 时仍正常工作（向后兼容）', async () => {
-    // 不提供 inject
+  it('无 returnFields 时不 emit returnFields 事件', async () => {
     const wrapper = mount(LookupPicker, {
       props: {
         modelValue: null,
         fetchApi: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
         columns: [{ prop: 'code', label: '编号' }],
-        returnFields: { code: 'formCode' },
         displayField: 'code',
       },
       global: {
         plugins: [ElementPlus],
       },
     })
-    // 选中行不应报错
+    // 选中行不应报错，不应 emit returnFields
     const row = { code: 'BL-002' }
     const vm = wrapper.vm as any
     vm.handleRowClick(row)
     await nextTick()
     expect(wrapper.emitted('update:modelValue')).toBeTruthy()
-    // 清除也不应报错
+    expect(wrapper.emitted('returnFields')).toBeFalsy()
+    // 清除也不应报错，不应 emit returnFields
     vm.handleClear()
     await nextTick()
     expect(wrapper.emitted('clear')).toBeTruthy()
+    expect(wrapper.emitted('returnFields')).toBeFalsy()
+  })
+
+  it('选中行字段值为 undefined 时回填 null', async () => {
+    const wrapper = createWrapper()
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    // 行数据缺少 name 字段
+    const row = { code: 'BL-003' }
+    const vm = wrapper.vm as any
+    vm.handleRowClick(row)
+    await nextTick()
+    const returnFieldsEvents = wrapper.emitted('returnFields')
+    expect(returnFieldsEvents).toBeTruthy()
+    const returnData = returnFieldsEvents![0][0] as Record<string, { field: string; value: unknown }>
+    expect(returnData['formCode']).toEqual({ field: 'formCode', value: 'BL-003' })
+    expect(returnData['formName']).toEqual({ field: 'formName', value: null })
   })
 })

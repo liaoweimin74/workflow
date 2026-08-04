@@ -4,20 +4,37 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
-import formCreate from '@form-create/element-ui'
-import FcDesigner from '@form-create/designer'
-import '@form-create/designer/src/style/index.css'
-import LookupPicker from '@/components/business/LookupPicker.vue'
+import {
+  createProvider,
+  LocalService,
+  createModules,
+  type NodeEnv
+} from '@vtj/web'
+import '@vtj/web/src/index.scss'
 import App from './App.vue'
 import router from './router'
+import { permission } from './directives/permission'
 import './style.css'
 
 const app = createApp(App)
 app.use(createPinia())
-app.use(router)
 app.use(ElementPlus, { locale: zhCn })
-// 注册 LookupPicker 为 form-create 全局组件，使设计器和渲染器都能使用
-formCreate.component('LookupPicker', LookupPicker)
-app.use(formCreate)
-app.use(FcDesigner)
-app.mount('#app')
+app.directive('permission', permission)
+
+// 实例化低代码服务（LocalService 仅适用于开发环境）
+const service = new LocalService()
+
+// 创建 VTJ 提供者实例
+const { provider, onReady } = createProvider({
+  nodeEnv: process.env.NODE_ENV as NodeEnv,
+  modules: createModules(),
+  service,
+  router
+})
+
+// 初始化完成后挂载应用
+onReady(async () => {
+  app.use(router)
+  app.use(provider)
+  app.mount('#app')
+})

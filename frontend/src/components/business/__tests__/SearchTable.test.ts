@@ -7,9 +7,8 @@ import { nextTick, defineComponent, h, ref } from 'vue'
 import type { Component } from 'vue'
 import ElementPlus from 'element-plus'
 import { Edit, Delete, Switch } from '@element-plus/icons-vue'
-import type { Rule } from '@form-create/element-ui'
 import SearchTable from '../SearchTable.vue'
-import type { SearchField, TableColumn, ActionButton } from '../types'
+import type { SearchField, TableColumn, ActionButton, FormRule } from '../types'
 
 function createWrapper(props: {
   searchFields?: SearchField[]
@@ -71,8 +70,8 @@ const FormRendererStub = defineComponent({
 })
 
 // A simple form-create rule for testing
-const testRule: Rule[] = [
-  { type: 'input', field: 'username', title: '用户名', value: '' } as Rule,
+const testRule: FormRule[] = [
+  { type: 'input', field: 'username', title: '用户名', value: '' } as FormRule,
 ]
 
 describe('SearchTable — 搜索栏渲染', () => {

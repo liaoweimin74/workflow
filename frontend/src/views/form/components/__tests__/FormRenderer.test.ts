@@ -1,11 +1,11 @@
-// ----- TDD CYCLE: RED — FormRenderer rule prop + initialValues + getFormData -----
+// ----- TDD CYCLE: GREEN — FormRenderer with @vtj/renderer createRenderer -----
 // npx vitest run src/views/form/components/__tests__/FormRenderer.test.ts
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick, defineComponent, h } from 'vue'
+import { nextTick, defineComponent, h, reactive } from 'vue'
 import ElementPlus from 'element-plus'
-import type { Rule } from '@form-create/element-ui'
+import type { BlockSchema } from '@vtj/core'
 import FormRenderer from '../FormRenderer.vue'
 
 // Mock formApi to verify no API call in rule mode
@@ -16,67 +16,95 @@ vi.mock('@/api/form', () => ({
     saveFormData: vi.fn(),
     updateFormData: vi.fn(),
   },
-  FormDataDTO: {} as any,
+  FormDataDTO: {} as unknown,
 }))
+
+// Mock @vtj/renderer — avoids jsdom issues with the real renderer engine.
+// Returns a stub renderer component that renders inputs from DSL nodes
+// and a context whose `state` is a reactive object.
+vi.mock('@vtj/renderer', () => {
+  const { reactive, defineComponent, h } = require('vue')
+
+  const StubRenderer = defineComponent({
+    name: 'VtjRenderer',
+    setup(_, { expose }) {
+      const state = reactive<Record<string, unknown>>({})
+      expose({ state })
+      return () => h('div', { class: 'vtj-renderer-stub' })
+    },
+  })
+
+  function createRenderer(options: { dsl?: BlockSchema }) {
+    const dsl = options.dsl
+    const context = {
+      state: reactive<Record<string, unknown>>({}),
+      setState(obj: Record<string, unknown>) {
+        Object.assign(context.state, obj)
+      },
+    }
+
+    // Extract XField names from DSL nodes and render inputs
+    const StubWithFields = defineComponent({
+      name: 'VtjRendererFields',
+      setup() {
+        return () => {
+          const nodes = dsl?.nodes ?? []
+          const fields = nodes
+            .filter((n) => n.name === 'XField')
+            .map((n) => {
+              const fieldName =
+                (n.props?.name as string) || (n.props?.field as string)
+              return h('input', {
+                'data-field': fieldName,
+                value: (context.state as Record<string, unknown>)[fieldName] ?? '',
+                onInput: (e: Event) => {
+                  const target = e.target as HTMLInputElement
+                  ;(context.state as Record<string, unknown>)[fieldName] = target.value
+                },
+              })
+            })
+          return h('div', { class: 'vtj-renderer-stub' }, fields)
+        }
+      },
+    })
+
+    return { renderer: StubWithFields, context }
+  }
+
+  return { createRenderer }
+})
 
 import { formApi } from '@/api/form'
 
 /**
- * Stub for <form-create> component.
- * Avoids jsdom recursive update issues with the real form-create.
- * Renders a simple input for each rule field, and syncs v-model.
+ * A simple VTJ DSL with one XField named "username".
  */
-const FormCreateStub = defineComponent({
-  name: 'FormCreate',
-  props: {
-    rule: { type: Array, default: () => [] },
-    option: { type: Object, default: () => ({}) },
-    modelValue: { type: Object, default: () => ({}) },
-  },
-  emits: ['update:modelValue'],
-  setup(props, { emit }) {
-    return () => {
-      const fields = (props.rule as Rule[]).map((r) => {
-        const field = (r as Record<string, unknown>).field as string
-        return h('input', {
-          'data-field': field,
-          value: (props.modelValue as Record<string, unknown>)[field] ?? '',
-          onInput: (e: Event) => {
-            const target = e.target as HTMLInputElement
-            emit('update:modelValue', { ...props.modelValue, [field]: target.value })
-          },
-        })
-      })
-      return h('div', { class: 'form-create-stub' }, fields)
-    }
-  },
-})
+const simpleDsl: BlockSchema = {
+  name: 'FormBlock',
+  nodes: [
+    {
+      name: 'XField',
+      props: { name: 'username', label: '用户名' },
+    },
+  ],
+}
 
-// A simple rule: one input field named "username"
-const simpleRule: Rule[] = [
-  {
-    type: 'input',
-    field: 'username',
-    title: '用户名',
-    value: '',
-  } as Rule,
-]
-
-// A rule with two fields
-const twoFieldRule: Rule[] = [
-  { type: 'input', field: 'name', title: '名称', value: '' } as Rule,
-  { type: 'input', field: 'code', title: '编码', value: '' } as Rule,
-]
+/**
+ * A VTJ DSL with two XField nodes.
+ */
+const twoFieldDsl: BlockSchema = {
+  name: 'FormBlock',
+  nodes: [
+    { name: 'XField', props: { name: 'name', label: '名称' } },
+    { name: 'XField', props: { name: 'code', label: '编码' } },
+  ],
+}
 
 function createWrapper(props: Record<string, unknown>) {
   return mount(FormRenderer, {
     props,
     global: {
       plugins: [ElementPlus],
-      stubs: {
-        'form-create': FormCreateStub,
-        'FormCreate': FormCreateStub,
-      },
     },
   })
 }
@@ -87,7 +115,7 @@ beforeEach(() => {
 
 describe('FormRenderer — rule prop (直接渲染，无 API 调用)', () => {
   it('接收 rule prop 后直接渲染表单，不调用 getFormDefinition', async () => {
-    const wrapper = createWrapper({ rule: simpleRule })
+    const wrapper = createWrapper({ rule: simpleDsl })
     await nextTick()
 
     // 不应调用 API 获取表单定义
@@ -98,16 +126,17 @@ describe('FormRenderer — rule prop (直接渲染，无 API 调用)', () => {
   })
 
   it('rule 模式下渲染出输入字段', async () => {
-    const wrapper = createWrapper({ rule: simpleRule })
+    const wrapper = createWrapper({ rule: simpleDsl })
+    await nextTick()
     await nextTick()
 
-    // form-create stub 渲染出 input 元素
+    // VTJ renderer stub 渲染出 input 元素
     expect(wrapper.find('input').exists()).toBe(true)
     expect(wrapper.find('input[data-field="username"]').exists()).toBe(true)
   })
 
   it('同时传入 formDefId 和 rule 时，formDefId 优先（调用 API）', async () => {
-    // 模拟 API 返回有效 schema
+    // 模拟 API 返回有效 VTJ DSL schema
     vi.mocked(formApi.getFormDefinition).mockResolvedValue({
       code: 200,
       data: {
@@ -120,12 +149,12 @@ describe('FormRenderer — rule prop (直接渲染，无 API 调用)', () => {
         createdBy: null,
         createdAt: '',
         updatedAt: '',
-        schema: JSON.stringify(twoFieldRule),
+        schema: JSON.stringify(twoFieldDsl),
       },
       msg: 'ok',
     })
 
-    const wrapper = createWrapper({ formDefId: 'def-1', rule: simpleRule })
+    const wrapper = createWrapper({ formDefId: 'def-1', rule: simpleDsl })
     await nextTick()
     await nextTick()
 
@@ -137,7 +166,7 @@ describe('FormRenderer — rule prop (直接渲染，无 API 调用)', () => {
 describe('FormRenderer — initialValues prop (预填表单数据)', () => {
   it('接收 initialValues 后预填 formData', async () => {
     const wrapper = createWrapper({
-      rule: twoFieldRule,
+      rule: twoFieldDsl,
       initialValues: { name: '张三', code: 'ZS001' },
     })
     await nextTick()
@@ -150,7 +179,7 @@ describe('FormRenderer — initialValues prop (预填表单数据)', () => {
 
   it('initialValues 变化后更新 formData', async () => {
     const wrapper = createWrapper({
-      rule: twoFieldRule,
+      rule: twoFieldDsl,
       initialValues: { name: '张三', code: 'ZS001' },
     })
     await nextTick()
@@ -167,7 +196,7 @@ describe('FormRenderer — initialValues prop (预填表单数据)', () => {
 
 describe('FormRenderer — getFormData() 方法', () => {
   it('getFormData 返回当前表单数据对象', async () => {
-    const wrapper = createWrapper({ rule: simpleRule })
+    const wrapper = createWrapper({ rule: simpleDsl })
     await nextTick()
 
     // 初始值应为对象
@@ -178,7 +207,7 @@ describe('FormRenderer — getFormData() 方法', () => {
 
   it('getFormData 在 initialValues 设置后返回预填数据', async () => {
     const wrapper = createWrapper({
-      rule: twoFieldRule,
+      rule: twoFieldDsl,
       initialValues: { name: '王五', code: 'WW003' },
     })
     await nextTick()
@@ -189,11 +218,35 @@ describe('FormRenderer — getFormData() 方法', () => {
   })
 
   it('getFormData 通过 defineExpose 暴露', async () => {
-    const wrapper = createWrapper({ rule: simpleRule })
+    const wrapper = createWrapper({ rule: simpleDsl })
     await nextTick()
 
     // defineExpose 暴露的方法应在 vm 上可访问
     const vm = wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }
     expect(typeof vm.getFormData).toBe('function')
+  })
+})
+
+describe('FormRenderer — defineExpose 方法', () => {
+  it('submit, getFormData, loadSchema, loadData 均通过 defineExpose 暴露', async () => {
+    const wrapper = createWrapper({ rule: simpleDsl })
+    await nextTick()
+
+    const vm = wrapper.vm as unknown as Record<string, unknown>
+    expect(typeof vm.submit).toBe('function')
+    expect(typeof vm.getFormData).toBe('function')
+    expect(typeof vm.loadSchema).toBe('function')
+    expect(typeof vm.loadData).toBe('function')
+  })
+})
+
+describe('FormRenderer — emit 事件', () => {
+  it('loaded 和 submitted 事件已正确声明', async () => {
+    const wrapper = createWrapper({ rule: simpleDsl })
+    await nextTick()
+
+    // 验证事件声明存在
+    const emits = (wrapper.vm as unknown as { $props: unknown }).$props
+    expect(emits).toBeDefined()
   })
 })

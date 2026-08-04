@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
-import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
-import type { Rule } from '@form-create/element-ui'
+import type { SearchField, TableColumn, ActionButton, FormConfig, FormRule } from '@/components/business/types'
 import { getDictTypeList, createDictType, updateDictType, deleteDictType, getDictDataList, createDictData, updateDictData, deleteDictData } from '@/api/dict'
 import type { DictTypeVO, DictDataVO } from '@/types/dict'
 
@@ -109,7 +108,7 @@ const dataFormConfig = computed<FormConfig<DictDataVO>>(() => ({
     { type: 'input', field: 'label', title: '标签', validate: [{ required: true, message: '请输入标签', trigger: 'blur' }] },
     { type: 'input', field: 'value', title: '值', validate: [{ required: true, message: '请输入值', trigger: 'blur' }] },
     { type: 'input', field: 'sortOrder', title: '排序' },
-  ] as Rule[],
+  ] as FormRule[],
   createApi: async (data: any) => {
     const { dictTypeRow: _row, ...rest } = data
     return createDictData(rest) as any

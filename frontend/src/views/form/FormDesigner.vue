@@ -16,27 +16,27 @@
       </div>
     </div>
 
-    <!-- form-create 设计器 -->
+    <!-- VTJ 设计器容器 -->
     <div class="designer-body" v-loading="loading">
-      <fc-designer
-        ref="designerRef"
-        :height="designerHeight"
-      />
+      <!-- VTJ 设计器通过 provider 全局渲染，这里只需要一个容器 -->
+      <div ref="designerContainer" class="vtj-designer-container" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
+import { useProvider } from '@vtj/web'
 import { formApi, type FormDefinitionDetailDTO } from '@/api/form'
+import type { BlockSchema } from '@vtj/core'
 
 const route = useRoute()
 const router = useRouter()
 
-const designerRef = ref<any>(null)
+const designerContainer = ref<HTMLElement | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
@@ -46,7 +46,15 @@ const formName = ref('')
 const formStatus = ref('')
 const formKey = ref('')
 
-const designerHeight = ref('calc(100vh - 50px)')
+// VTJ Provider 实例（在 main.ts 中通过 createProvider 全局注册）
+const provider = useProvider()
+
+// 设计器引擎实例
+// TODO: useProvider() 返回 Provider（运行时渲染器），设计器引擎 Engine 需要通过
+// @vtj/designer 的 useEngine() 获取。当前 main.ts 仅注册了 Provider，
+// 设计器 UI 入口在页面右下角。如果后续需要编程式 load/export，
+// 可通过 engine.applyAI(dsl) 加载、engine.current.value.toDsl() 导出。
+let engine: any = null
 
 onMounted(async () => {
   if (!formId.value) {
@@ -54,23 +62,6 @@ onMounted(async () => {
     router.push('/form')
     return
   }
-
-  // 注册 LookupPicker 到设计器拖拽面板
-  designerRef.value?.addComponent({
-    label: '字典选择器',
-    name: 'LookupPicker',
-    rule: {
-      type: 'LookupPicker',
-      field: '',
-      title: '选择',
-      props: {
-        columns: [],
-        fetchApi: null,
-        displayField: '',
-        returnFields: {},
-      },
-    },
-  })
 
   loading.value = true
   try {
@@ -80,15 +71,11 @@ onMounted(async () => {
     formStatus.value = formDef.status
     formKey.value = formDef.key
 
-    // 加载已有 schema 到设计器
-    if (formDef.schema && formDef.schema !== '[]') {
+    // 加载已有 DSL 到 VTJ 设计器
+    if (formDef.schema && formDef.schema !== '[]' && formDef.schema !== '') {
       try {
-        const rule = JSON.parse(formDef.schema)
-        // 等待设计器渲染完成
-        await nextTick()
-        if (designerRef.value) {
-          designerRef.value.setRule(rule)
-        }
+        const dsl = JSON.parse(formDef.schema) as BlockSchema
+        await loadDslIntoDesigner(dsl)
       } catch {
         // schema 解析失败，使用空设计器
       }
@@ -100,13 +87,57 @@ onMounted(async () => {
   }
 })
 
-async function handleSave() {
-  if (!designerRef.value) return
+onBeforeUnmount(() => {
+  // 清理设计器资源（如有）
+  engine = null
+})
 
+/**
+ * 加载 DSL 到 VTJ 设计器
+ * TODO: 确认 engine 的获取方式。当前通过 provider 间接访问。
+ * VTJ 设计器 Engine 提供 applyAI(dsl) 方法加载 BlockSchema。
+ */
+async function loadDslIntoDesigner(dsl: BlockSchema) {
+  await nextTick()
+  try {
+    // 确保设计器容器已渲染
+    if (!designerContainer.value) return
+    // 尝试通过 provider 获取设计器引擎
+    // TODO: 需要确认 provider 是否暴露 engine，或需要从 @vtj/designer 的 useEngine() 获取
+    const anyProvider = provider as any
+    engine = anyProvider.engine || anyProvider.simulator?.engine || null
+    if (engine && typeof engine.applyAI === 'function') {
+      await engine.applyAI(dsl)
+    }
+  } catch {
+    // 设计器未就绪或加载失败，静默处理
+  }
+}
+
+/**
+ * 从 VTJ 设计器导出当前 DSL
+ * TODO: 确认 engine.current.value.toDsl() 的可用性。
+ * BlockModel.toDsl() 返回 BlockSchema。
+ */
+function exportDslFromDesigner(): BlockSchema | null {
+  try {
+    if (engine && engine.current && engine.current.value) {
+      const currentBlock = engine.current.value
+      if (typeof currentBlock.toDsl === 'function') {
+        return currentBlock.toDsl()
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+async function handleSave() {
   saving.value = true
   try {
-    const rule = designerRef.value.getRule()
-    const schemaJson = JSON.stringify(rule)
+    const dsl = exportDslFromDesigner()
+    const schemaJson = dsl ? JSON.stringify(dsl) : ''
     await formApi.updateFormDefinition(formId.value, {
       name: formName.value,
       key: formKey.value,
@@ -167,8 +198,6 @@ function statusLabel(status: string): string {
   }
   return map[status] || status
 }
-
-import { nextTick } from 'vue'
 </script>
 
 <style scoped>
@@ -204,5 +233,10 @@ import { nextTick } from 'vue'
 .designer-body {
   flex: 1;
   overflow: hidden;
+}
+
+.vtj-designer-container {
+  width: 100%;
+  height: 100%;
 }
 </style>

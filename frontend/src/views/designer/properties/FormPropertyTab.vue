@@ -55,6 +55,7 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
+import { extractXFields } from '@/utils/vtjDsl'
 
 const designerStore = useDesignerStore()
 
@@ -119,11 +120,8 @@ async function loadFormFields(formDefId: string) {
     const res = await formApi.getFormDefinition(formDefId)
     const formDef = res.data as FormDefinitionDetailDTO
     if (formDef.schema && formDef.schema !== '[]') {
-      const schema = JSON.parse(formDef.schema)
-      fieldList.value = (Array.isArray(schema) ? schema : []).map((item: any) => ({
-        field: item.field || item.prop || '',
-        label: item.title || item.label || item.field || '',
-      })).filter((item: any) => item.field)
+      const dsl = JSON.parse(formDef.schema)
+      fieldList.value = extractXFields(dsl)
     } else {
       fieldList.value = []
     }

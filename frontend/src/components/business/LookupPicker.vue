@@ -67,16 +67,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, inject } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import type { LookupPickerProps, QueryParams } from './types'
-
-/** form-create 注入对象，提供 api.setValue 等方法 */
-interface FormCreateInject {
-  api?: {
-    setValue: (field: string, value: unknown) => void
-  }
-}
 
 const props = withDefaults(defineProps<LookupPickerProps>(), {
   mode: 'single',
@@ -91,10 +84,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: Record<string, any> | null | Record<string, any>[]]
   'select': [row: any]
   'clear': []
+  'returnFields': [data: Record<string, { field: string; value: unknown }>]
 }>()
-
-/** form-create 注入，若组件在 form-create 外使用则为 undefined */
-const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
 
 const dialogVisible = ref(false)
 const loading = ref(false)
@@ -165,27 +156,28 @@ function handleRowClick(row: any) {
 }
 
 /**
- * 将选中行的字段通过 api.setValue 回填到表单其他字段。
- * 若 formCreateInject 不可用（非 form-create 环境），则安全跳过。
+ * 将选中行的字段通过 emit('returnFields') 通知父组件回填到表单其他字段。
+ * 父组件监听 returnFields 事件并更新对应表单数据。
  */
 function fillReturnFields(row: Record<string, unknown>) {
-  const api = formCreateInject?.api
-  if (!api || !props.returnFields) return
+  if (!props.returnFields) return
+  const returnData: Record<string, { field: string; value: unknown }> = {}
   for (const [sourceField, targetField] of Object.entries(props.returnFields)) {
-    api.setValue(targetField, row[sourceField] ?? null)
+    returnData[targetField] = { field: targetField, value: row[sourceField] ?? null }
   }
+  emit('returnFields', returnData)
 }
 
 /**
- * 清除所有 returnFields 对应的表单字段。
- * 若 formCreateInject 不可用，则安全跳过。
+ * 通过 emit('returnFields') 通知父组件清空所有 returnFields 对应的表单字段。
  */
 function clearReturnFields() {
-  const api = formCreateInject?.api
-  if (!api || !props.returnFields) return
+  if (!props.returnFields) return
+  const returnData: Record<string, { field: string; value: null }> = {}
   for (const targetField of Object.values(props.returnFields)) {
-    api.setValue(targetField, null)
+    returnData[targetField] = { field: targetField, value: null }
   }
+  emit('returnFields', returnData)
 }
 
 function handleSelectionChange(rows: any[]) {

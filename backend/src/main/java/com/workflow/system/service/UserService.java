@@ -24,4 +24,12 @@ public interface UserService {
     void resetPassword(Long id);
 
     List<UserVO> findByIds(List<Long> ids);
+
+    /**
+     * 根据用户名列表批量查询用户。
+     *
+     * @param usernames 用户名列表
+     * @return 用户 VO 列表
+     */
+    List<UserVO> findByUsernames(List<String> usernames);
 }

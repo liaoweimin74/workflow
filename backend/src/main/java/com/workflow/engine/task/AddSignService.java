@@ -1,5 +1,8 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.history.entity.WfTaskComment;
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.common.engine.api.FlowableException;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
@@ -11,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 加签服务。
@@ -30,10 +34,15 @@ public class AddSignService {
 
     private final RuntimeService runtimeService;
     private final TaskService flowableTaskService;
+    private final TenantProvider tenantProvider;
+    private final WfTaskCommentRepository commentRepository;
 
-    public AddSignService(RuntimeService runtimeService, TaskService flowableTaskService) {
+    public AddSignService(RuntimeService runtimeService, TaskService flowableTaskService,
+                          TenantProvider tenantProvider, WfTaskCommentRepository commentRepository) {
         this.runtimeService = runtimeService;
         this.flowableTaskService = flowableTaskService;
+        this.tenantProvider = tenantProvider;
+        this.commentRepository = commentRepository;
     }
 
     /**
@@ -44,6 +53,19 @@ public class AddSignService {
      */
     @Transactional
     public void addSign(String taskId, List<String> users) {
+        addSign(taskId, users, null, null);
+    }
+
+    /**
+     * 加签：为当前任务增加审批人，并写入审批意见。
+     *
+     * @param taskId  当前任务 ID（必须属于 MI 节点）
+     * @param users   要加签的用户列表
+     * @param userId  操作人 ID
+     * @param comment 审批意见
+     */
+    @Transactional
+    public void addSign(String taskId, List<String> users, String userId, String comment) {
         if (users == null || users.isEmpty()) {
             throw new IllegalArgumentException("AddSign users cannot be empty");
         }
@@ -71,6 +93,19 @@ public class AddSignService {
                 throw new IllegalStateException(
                         "Task is not a multi-instance activity, cannot add sign: " + activityId, e);
             }
+        }
+
+        // 写入审批意见
+        if (userId != null) {
+            WfTaskComment commentRecord = new WfTaskComment();
+            commentRecord.setId(UUID.randomUUID().toString().replace("-", ""));
+            commentRecord.setTenantId(tenantProvider.getTenantId());
+            commentRecord.setTaskId(taskId);
+            commentRecord.setProcessInstanceId(processInstanceId);
+            commentRecord.setUserId(userId);
+            commentRecord.setAction("add_sign");
+            commentRecord.setComment(comment);
+            commentRepository.save(commentRecord);
         }
     }
 }

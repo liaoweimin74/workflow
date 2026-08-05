@@ -1,0 +1,333 @@
+﻿=== Commit list ===
+4d60e19 feat(process-definition): support categoryId/name/status filter in list API
+
+=== Diff stat ===
+ .../controller/ProcessDefinitionController.java    |   8 +-
+ .../workflow/engine/process/ProcessService.java    |  32 ++-
+ .../ProcessDefinitionControllerTest.java           | 232 +++++++++++++++++++++
+ 3 files changed, 266 insertions(+), 6 deletions(-)
+
+=== Full diff (U10) ===
+diff --git a/backend/src/main/java/com/workflow/api/controller/ProcessDefinitionController.java b/backend/src/main/java/com/workflow/api/controller/ProcessDefinitionController.java
+index a731a25..0578063 100644
+--- a/backend/src/main/java/com/workflow/api/controller/ProcessDefinitionController.java
++++ b/backend/src/main/java/com/workflow/api/controller/ProcessDefinitionController.java
+@@ -17,23 +17,27 @@ public class ProcessDefinitionController {
+ 
+     private final ProcessService processService;
+ 
+     public ProcessDefinitionController(ProcessService processService) {
+         this.processService = processService;
+     }
+ 
+     @GetMapping
+     public R<PageResponse<ProcessDefinition>> list(
+             @RequestParam(defaultValue = "0") int page,
+-            @RequestParam(defaultValue = "20") int size) {
++            @RequestParam(defaultValue = "20") int size,
++            @RequestParam(required = false) String categoryId,
++            @RequestParam(required = false) String name,
++            @RequestParam(required = false) String status) {
+ 
+-        Page<ProcessDefinition> result = processService.listProcessDefinitions(PageRequest.of(page, size));
++        Page<ProcessDefinition> result = processService.listProcessDefinitions(
++                PageRequest.of(page, size), categoryId, name, status);
+ 
+         PageResponse<ProcessDefinition> response = new PageResponse<>(
+                 result.getContent(),
+                 result.getNumber(),
+                 result.getSize(),
+                 result.getTotalElements()
+         );
+ 
+         return R.ok(response);
+     }
+diff --git a/backend/src/main/java/com/workflow/engine/process/ProcessService.java b/backend/src/main/java/com/workflow/engine/process/ProcessService.java
+index 2d763a5..af916e1 100644
+--- a/backend/src/main/java/com/workflow/engine/process/ProcessService.java
++++ b/backend/src/main/java/com/workflow/engine/process/ProcessService.java
+@@ -40,26 +40,50 @@ public class ProcessService {
+     @Transactional
+     public Deployment deployProcess(String name, String bpmnXml) {
+         String tenantId = tenantProvider.getTenantId();
+         return repositoryService.createDeployment()
+                 .name(name)
+                 .addString(name + ".bpmn20.xml", bpmnXml)
+                 .tenantId(tenantId)
+                 .deploy();
+     }
+ 
+-    public Page<ProcessDefinition> listProcessDefinitions(Pageable pageable) {
++    /**
++     * 鍒嗛〉鏌ヨ宸查儴缃叉祦绋嬪畾涔夛紝鏀寔鎸夊垎绫汇€佸悕绉般€佺姸鎬佺瓫閫夈€?+     *
++     * @param pageable   鍒嗛〉鍙傛暟
++     * @param categoryId 鍒嗙被 ID锛堝彲閫夛紝绮剧‘鍖归厤 Flowable category 瀛楁锛?+     * @param name       娴佺▼鍚嶇О锛堝彲閫夛紝妯＄硦鍖归厤 Flowable name 瀛楁锛?+     * @param status     鐘舵€侊紙鍙€夛紝"active" 鎴?"suspended"锛?+     * @return 鍒嗛〉缁撴灉
++     */
++    public Page<ProcessDefinition> listProcessDefinitions(Pageable pageable,
++                                                          String categoryId,
++                                                          String name,
++                                                          String status) {
+         String tenantId = tenantProvider.getTenantId();
+         ProcessDefinitionQuery query = repositoryService.createProcessDefinitionQuery()
+-                .processDefinitionTenantId(tenantId)
+-                .orderByProcessDefinitionVersion()
+-                .desc();
++                .processDefinitionTenantId(tenantId);
++
++        if (categoryId != null && !categoryId.isBlank()) {
++            query.processDefinitionCategoryLike(categoryId);
++        }
++        if (name != null && !name.isBlank()) {
++            query.processDefinitionNameLike(name);
++        }
++        if ("active".equalsIgnoreCase(status)) {
++            query.active();
++        } else if ("suspended".equalsIgnoreCase(status)) {
++            query.suspended();
++        }
++
++        query.orderByProcessDefinitionVersion().desc();
+ 
+         long total = query.count();
+         List<ProcessDefinition> content = query
+                 .listPage((int) pageable.getOffset(), pageable.getPageSize());
+ 
+         return new PageImpl<>(content, pageable, total);
+     }
+ 
+     public Optional<ProcessDefinition> getProcessDefinition(String procDefId) {
+         String tenantId = tenantProvider.getTenantId();
+diff --git a/backend/src/test/java/com/workflow/api/controller/ProcessDefinitionControllerTest.java b/backend/src/test/java/com/workflow/api/controller/ProcessDefinitionControllerTest.java
+new file mode 100644
+index 0000000..63ca597
+--- /dev/null
++++ b/backend/src/test/java/com/workflow/api/controller/ProcessDefinitionControllerTest.java
+@@ -0,0 +1,232 @@
++package com.workflow.api.controller;
++
++import com.workflow.api.dto.PageResponse;
++import com.workflow.common.domain.R;
++import com.workflow.engine.process.ProcessService;
++import com.workflow.engine.tenant.TenantProvider;
++import org.flowable.engine.RepositoryService;
++import org.flowable.engine.repository.ProcessDefinition;
++import org.flowable.engine.repository.ProcessDefinitionQuery;
++import org.junit.jupiter.api.Test;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.PageImpl;
++import org.springframework.data.domain.PageRequest;
++
++import java.util.List;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.ArgumentMatchers.anyInt;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.ArgumentMatchers.eq;
++import static org.mockito.ArgumentMatchers.isNull;
++import static org.mockito.Mockito.*;
++
++/**
++ * ProcessDefinitionController 鍗曞厓娴嬭瘯銆?+ *
++ * <p>楠岃瘉锛歭ist() 鏂规硶灏?categoryId/name/status 鏌ヨ鍙傛暟浼犻€掔粰 ProcessService锛?+ * 鍚庤€呭皢鍏惰浆鍖栦负 Flowable ProcessDefinitionQuery 鐨勯摼寮忚繃婊ゆ潯浠躲€?+ */
++class ProcessDefinitionControllerTest {
++
++    // ==================== Controller 灞傦細鍙傛暟浼犻€?====================
++
++    @Test
++    void listByCategoryId() {
++        ProcessService mockService = mock(ProcessService.class);
++        when(mockService.listProcessDefinitions(any(), any(), any(), any()))
++                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
++        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
++
++        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, "cat-1", null, null);
++
++        assertThat(result.getCode()).isEqualTo(200);
++        verify(mockService).listProcessDefinitions(
++                eq(PageRequest.of(0, 20)), eq("cat-1"), isNull(), isNull());
++    }
++
++    @Test
++    void listByName() {
++        ProcessService mockService = mock(ProcessService.class);
++        when(mockService.listProcessDefinitions(any(), any(), any(), any()))
++                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
++        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
++
++        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, null, "leave", null);
++
++        assertThat(result.getCode()).isEqualTo(200);
++        verify(mockService).listProcessDefinitions(
++                eq(PageRequest.of(0, 20)), isNull(), eq("leave"), isNull());
++    }
++
++    @Test
++    void listByStatus_active() {
++        ProcessService mockService = mock(ProcessService.class);
++        when(mockService.listProcessDefinitions(any(), any(), any(), any()))
++                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
++        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
++
++        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, null, null, "active");
++
++        assertThat(result.getCode()).isEqualTo(200);
++        verify(mockService).listProcessDefinitions(
++                eq(PageRequest.of(0, 20)), isNull(), isNull(), eq("active"));
++    }
++
++    @Test
++    void listByStatus_suspended() {
++        ProcessService mockService = mock(ProcessService.class);
++        when(mockService.listProcessDefinitions(any(), any(), any(), any()))
++                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
++        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
++
++        controller.list(0, 20, null, null, "suspended");
++
++        verify(mockService).listProcessDefinitions(
++                any(), isNull(), isNull(), eq("suspended"));
++    }
++
++    @Test
++    void listWithAllFilters() {
++        ProcessService mockService = mock(ProcessService.class);
++        when(mockService.listProcessDefinitions(any(), any(), any(), any()))
++                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
++        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
++
++        controller.list(0, 20, "cat-1", "leave", "active");
++
++        verify(mockService).listProcessDefinitions(
++                eq(PageRequest.of(0, 20)), eq("cat-1"), eq("leave"), eq("active"));
++    }
++
++    @Test
++    void listWithoutFilters_backwardCompatible() {
++        ProcessService mockService = mock(ProcessService.class);
++        when(mockService.listProcessDefinitions(any(), any(), any(), any()))
++                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
++        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
++
++        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, null, null, null);
++
++        assertThat(result.getCode()).isEqualTo(200);
++        verify(mockService).listProcessDefinitions(
++                eq(PageRequest.of(0, 20)), isNull(), isNull(), isNull());
++    }
++
++    @Test
++    void list_returnsCorrectPageResponse() {
++        ProcessDefinition mockPd = mock(ProcessDefinition.class);
++        when(mockPd.getId()).thenReturn("pd-1");
++        Page<ProcessDefinition> servicePage = new PageImpl<>(
++                List.of(mockPd), PageRequest.of(0, 20), 1);
++
++        ProcessService mockService = mock(ProcessService.class);
++        when(mockService.listProcessDefinitions(any(), any(), any(), any()))
++                .thenReturn(servicePage);
++        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
++
++        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, null, null, null);
++
++        assertThat(result.getCode()).isEqualTo(200);
++        assertThat(result.getData().getContent()).hasSize(1);
++        assertThat(result.getData().getTotalElements()).isEqualTo(1);
++        assertThat(result.getData().getPageNumber()).isEqualTo(0);
++        assertThat(result.getData().getPageSize()).isEqualTo(20);
++    }
++
++    // ==================== ProcessService 灞傦細Flowable 鏌ヨ鏉′欢 ====================
++
++    /**
++     * 鏋勫缓宸?mock 鐨?ProcessService锛堝惈 Flowable 鏌ヨ閾撅級锛岀敤浜庨獙璇佹煡璇㈡潯浠躲€?+     */
++    private ProcessService buildServiceWithMockedQuery(ProcessDefinitionQuery query) {
++        RepositoryService repoService = mock(RepositoryService.class);
++        TenantProvider tenantProvider = mock(TenantProvider.class);
++        when(repoService.createProcessDefinitionQuery()).thenReturn(query);
++        when(tenantProvider.getTenantId()).thenReturn("test-tenant");
++
++        when(query.processDefinitionTenantId(anyString())).thenReturn(query);
++        when(query.processDefinitionCategoryLike(anyString())).thenReturn(query);
++        when(query.processDefinitionNameLike(anyString())).thenReturn(query);
++        when(query.active()).thenReturn(query);
++        when(query.suspended()).thenReturn(query);
++        when(query.orderByProcessDefinitionVersion()).thenReturn(query);
++        when(query.desc()).thenReturn(query);
++        when(query.count()).thenReturn(0L);
++        when(query.listPage(anyInt(), anyInt())).thenReturn(List.of());
++
++        return new ProcessService(repoService, tenantProvider);
++    }
++
++    @Test
++    void processService_categoryFilter_appliesCategoryLike() {
++        ProcessDefinitionQuery query = mock(ProcessDefinitionQuery.class);
++        ProcessService service = buildServiceWithMockedQuery(query);
++
++        service.listProcessDefinitions(PageRequest.of(0, 20), "cat-1", null, null);
++
++        verify(query).processDefinitionCategoryLike(eq("cat-1"));
++        verify(query, never()).processDefinitionNameLike(anyString());
++        verify(query, never()).active();
++        verify(query, never()).suspended();
++    }
++
++    @Test
++    void processService_nameFilter_appliesNameLike() {
++        ProcessDefinitionQuery query = mock(ProcessDefinitionQuery.class);
++        ProcessService service = buildServiceWithMockedQuery(query);
++
++        service.listProcessDefinitions(PageRequest.of(0, 20), null, "leave", null);
++
++        verify(query).processDefinitionNameLike(eq("leave"));
++        verify(query, never()).processDefinitionCategoryLike(anyString());
++    }
++
++    @Test
++    void processService_statusActive_appliesActiveFilter() {
++        ProcessDefinitionQuery query = mock(ProcessDefinitionQuery.class);
++        ProcessService service = buildServiceWithMockedQuery(query);
++
++        service.listProcessDefinitions(PageRequest.of(0, 20), null, null, "active");
++
++        verify(query).active();
++        verify(query, never()).suspended();
++    }
++
++    @Test
++    void processService_statusSuspended_appliesSuspendedFilter() {
++        ProcessDefinitionQuery query = mock(ProcessDefinitionQuery.class);
++        ProcessService service = buildServiceWithMockedQuery(query);
++
++        service.listProcessDefinitions(PageRequest.of(0, 20), null, null, "suspended");
++
++        verify(query).suspended();
++        verify(query, never()).active();
++    }
++
++    @Test
++    void processService_noFilters_doesNotApplyAnyFilter() {
++        ProcessDefinitionQuery query = mock(ProcessDefinitionQuery.class);
++        ProcessService service = buildServiceWithMockedQuery(query);
++
++        service.listProcessDefinitions(PageRequest.of(0, 20), null, null, null);
++
++        verify(query, never()).processDefinitionCategoryLike(anyString());
++        verify(query, never()).processDefinitionNameLike(anyString());
++        verify(query, never()).active();
++        verify(query, never()).suspended();
++    }
++
++    @Test
++    void processService_allFilters_appliedTogether() {
++        ProcessDefinitionQuery query = mock(ProcessDefinitionQuery.class);
++        ProcessService service = buildServiceWithMockedQuery(query);
++
++        service.listProcessDefinitions(PageRequest.of(0, 20), "cat-1", "leave", "active");
++
++        verify(query).processDefinitionCategoryLike(eq("cat-1"));
++        verify(query).processDefinitionNameLike(eq("leave"));
++        verify(query).active();
++    }
++}

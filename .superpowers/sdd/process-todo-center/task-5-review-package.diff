@@ -1,0 +1,533 @@
+﻿=== Commit list ===
+73fbc06 feat(process-instance): support initiator/status/processName filter
+
+=== Diff stat ===
+ .../api/controller/ProcessInstanceController.java  |  23 ++-
+ .../engine/process/ProcessInstanceService.java     |  44 ++++-
+ .../controller/ProcessInstanceControllerTest.java  | 101 +++++++++-
+ .../process/ProcessInstanceServiceFilterTest.java  | 212 +++++++++++++++++++++
+ 4 files changed, 370 insertions(+), 10 deletions(-)
+
+=== Full diff (U10) ===
+diff --git a/backend/src/main/java/com/workflow/api/controller/ProcessInstanceController.java b/backend/src/main/java/com/workflow/api/controller/ProcessInstanceController.java
+index d421cee..211b83b 100644
+--- a/backend/src/main/java/com/workflow/api/controller/ProcessInstanceController.java
++++ b/backend/src/main/java/com/workflow/api/controller/ProcessInstanceController.java
+@@ -51,23 +51,27 @@ public class ProcessInstanceController {
+         response.put("processDefinitionKey", instance.getProcessDefinitionKey());
+         response.put("businessKey", instance.getBusinessKey());
+         response.put("tenantId", instance.getTenantId());
+ 
+         return R.ok(response);
+     }
+ 
+     @GetMapping
+     public R<PageResponse<Map<String, Object>>> list(
+             @RequestParam(defaultValue = "0") int page,
+-            @RequestParam(defaultValue = "20") int size) {
++            @RequestParam(defaultValue = "20") int size,
++            @RequestParam(required = false) String initiator,
++            @RequestParam(required = false) String status,
++            @RequestParam(required = false) String processName) {
+ 
+-        Page<ProcessInstance> result = processInstanceService.listProcessInstances(PageRequest.of(page, size));
++        Page<ProcessInstance> result = processInstanceService.listProcessInstances(
++                PageRequest.of(page, size), initiator, status, processName);
+ 
+         PageResponse<Map<String, Object>> response = new PageResponse<>(
+                 result.getContent().stream().map(this::toMap).toList(),
+                 result.getNumber(),
+                 result.getSize(),
+                 result.getTotalElements()
+         );
+ 
+         return R.ok(response);
+     }
+@@ -105,13 +109,28 @@ public class ProcessInstanceController {
+     private Map<String, Object> toMap(ProcessInstance instance) {
+         Map<String, Object> map = new HashMap<>();
+         map.put("id", instance.getId());
+         map.put("processDefinitionId", instance.getProcessDefinitionId());
+         map.put("processDefinitionKey", instance.getProcessDefinitionKey());
+         map.put("processDefinitionName", instance.getProcessDefinitionName());
+         map.put("businessKey", instance.getBusinessKey());
+         map.put("tenantId", instance.getTenantId());
+         map.put("suspended", instance.isSuspended());
+         map.put("ended", instance.isEnded());
++
++        // 褰撳墠鑺傜偣鍚嶇О
++        map.put("currentNode", instance.getName());
++
++        // 鐘舵€侊細suspended 鈫?"suspended", ended 鈫?"completed", 鍚﹀垯 "running"
++        String status;
++        if (instance.isSuspended()) {
++            status = "suspended";
++        } else if (instance.isEnded()) {
++            status = "completed";
++        } else {
++            status = "running";
++        }
++        map.put("status", status);
++
+         return map;
+     }
+ }
+\ No newline at end of file
+diff --git a/backend/src/main/java/com/workflow/engine/process/ProcessInstanceService.java b/backend/src/main/java/com/workflow/engine/process/ProcessInstanceService.java
+index f7e875e..614a380 100644
+--- a/backend/src/main/java/com/workflow/engine/process/ProcessInstanceService.java
++++ b/backend/src/main/java/com/workflow/engine/process/ProcessInstanceService.java
+@@ -1,55 +1,91 @@
+ package com.workflow.engine.process;
+ 
+ import com.workflow.engine.tenant.TenantProvider;
++import org.flowable.engine.HistoryService;
+ import org.flowable.engine.RuntimeService;
+ import org.flowable.engine.runtime.ProcessInstance;
+ import org.flowable.engine.runtime.ProcessInstanceQuery;
+ import org.springframework.data.domain.Page;
+ import org.springframework.data.domain.PageImpl;
+ import org.springframework.data.domain.Pageable;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ 
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Optional;
+ 
+ @Service
+ public class ProcessInstanceService {
+ 
+     private final RuntimeService runtimeService;
++    private final HistoryService historyService;
+     private final TenantProvider tenantProvider;
+ 
+-    public ProcessInstanceService(RuntimeService runtimeService, TenantProvider tenantProvider) {
++    public ProcessInstanceService(RuntimeService runtimeService,
++                                  HistoryService historyService,
++                                  TenantProvider tenantProvider) {
+         this.runtimeService = runtimeService;
++        this.historyService = historyService;
+         this.tenantProvider = tenantProvider;
+     }
+ 
+     @Transactional
+     public ProcessInstance startProcess(String processKey, Map<String, Object> variables) {
+         String tenantId = tenantProvider.getTenantId();
+         return runtimeService.startProcessInstanceByKeyAndTenantId(processKey, variables, tenantId);
+     }
+ 
+     @Transactional
+     public ProcessInstance startProcess(String processKey, String businessKey, Map<String, Object> variables) {
+         String tenantId = tenantProvider.getTenantId();
+         return runtimeService.startProcessInstanceByKeyAndTenantId(processKey, businessKey, variables, tenantId);
+     }
+ 
++    /**
++     * 鍒楀嚭娴佺▼瀹炰緥锛堟棤绛涢€夛紝鍚戝悗鍏煎锛夈€?+     */
+     public Page<ProcessInstance> listProcessInstances(Pageable pageable) {
++        return listProcessInstances(pageable, null, null, null);
++    }
++
++    /**
++     * 鍒楀嚭娴佺▼瀹炰緥锛屾敮鎸佹寜鍙戣捣浜恒€佺姸鎬併€佹祦绋嬪悕绉扮瓫閫夈€?+     *
++     * @param pageable    鍒嗛〉鍙傛暟
++     * @param initiator   鍙戣捣浜?ID锛堝彲閫夛紝閫氳繃娴佺▼鍙橀噺 initiator 绛涢€夛級
++     * @param status      鐘舵€侊紙鍙€夛細"running" 鈫?active, "suspended" 鈫?suspended锛?+     * @param processName 娴佺▼鍚嶇О锛堝彲閫夛紝妯＄硦鍖归厤锛?+     * @return 鍒嗛〉缁撴灉
++     */
++    public Page<ProcessInstance> listProcessInstances(Pageable pageable,
++                                                      String initiator,
++                                                      String status,
++                                                      String processName) {
+         String tenantId = tenantProvider.getTenantId();
+         ProcessInstanceQuery query = runtimeService.createProcessInstanceQuery()
+-                .processInstanceTenantId(tenantId)
+-                .orderByProcessInstanceId()
+-                .desc();
++                .processInstanceTenantId(tenantId);
++
++        if (initiator != null && !initiator.isBlank()) {
++            query.variableValueEquals("initiator", initiator);
++        }
++        if ("running".equalsIgnoreCase(status)) {
++            query.active();
++        } else if ("suspended".equalsIgnoreCase(status)) {
++            query.suspended();
++        }
++        if (processName != null && !processName.isBlank()) {
++            query.processDefinitionNameLike(processName);
++        }
++
++        query.orderByProcessInstanceId().desc();
+ 
+         long total = query.count();
+         List<ProcessInstance> content = query
+                 .listPage((int) pageable.getOffset(), pageable.getPageSize());
+ 
+         return new PageImpl<>(content, pageable, total);
+     }
+ 
+     public Optional<ProcessInstance> getProcessInstance(String instanceId) {
+         String tenantId = tenantProvider.getTenantId();
+diff --git a/backend/src/test/java/com/workflow/api/controller/ProcessInstanceControllerTest.java b/backend/src/test/java/com/workflow/api/controller/ProcessInstanceControllerTest.java
+index 4dbd63c..4212e98 100644
+--- a/backend/src/test/java/com/workflow/api/controller/ProcessInstanceControllerTest.java
++++ b/backend/src/test/java/com/workflow/api/controller/ProcessInstanceControllerTest.java
+@@ -1,35 +1,36 @@
+ package com.workflow.api.controller;
+ 
++import com.workflow.api.dto.PageResponse;
+ import com.workflow.api.dto.StartProcessRequest;
+ import com.workflow.common.domain.R;
+ import com.workflow.engine.process.ProcessInstanceService;
+ import com.workflow.engine.runtime.ProcessHighlightService;
+ import com.workflow.framework.security.domain.LoginUser;
+ import org.flowable.engine.runtime.ProcessInstance;
+ import org.junit.jupiter.api.AfterEach;
+ import org.junit.jupiter.api.BeforeEach;
+ import org.junit.jupiter.api.Test;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.PageImpl;
++import org.springframework.data.domain.PageRequest;
+ import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+ import org.springframework.security.core.context.SecurityContext;
+ import org.springframework.security.core.context.SecurityContextHolder;
+ 
+ import java.util.HashMap;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+ 
+ import static org.assertj.core.api.Assertions.assertThat;
+-import static org.mockito.ArgumentMatchers.any;
+-import static org.mockito.ArgumentMatchers.anyString;
+-import static org.mockito.ArgumentMatchers.argThat;
+-import static org.mockito.ArgumentMatchers.eq;
++import static org.mockito.ArgumentMatchers.*;
+ import static org.mockito.Mockito.*;
+ 
+ /**
+  * ProcessInstanceController 鍗曞厓娴嬭瘯銆?  *
+  * <p>楠岃瘉锛歴tart() 鏂规硶浠?SecurityContext 鎻愬彇褰撳墠鐢ㄦ埛锛屾敞鍏?initiator 鍙橀噺銆?  */
+ class ProcessInstanceControllerTest {
+ 
+     private ProcessInstanceService processInstanceService;
+@@ -161,11 +162,103 @@ class ProcessInstanceControllerTest {
+ 
+         // When
+         controller.start(request);
+ 
+         // Then: variables passed to service must contain initiator="15"
+         verify(processInstanceService).startProcess(
+                 eq("testProcess"),
+                 eq("BK-001"),
+                 argThat(vars -> "15".equals(vars.get("initiator"))));
+     }
++
++    // ==================== list() 绛涢€夊弬鏁版祴璇?====================
++
++    @Test
++    @SuppressWarnings("unchecked")
++    void list_noFilters_passesNullsToService() {
++        ProcessInstance inst = mockProcessInstance();
++        Page<ProcessInstance> page = new PageImpl<>(List.of(inst), PageRequest.of(0, 20), 1);
++        when(processInstanceService.listProcessInstances(any(), isNull(), isNull(), isNull()))
++                .thenReturn(page);
++
++        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
++
++        assertThat(result.getCode()).isEqualTo(200);
++        assertThat(result.getData().getContent()).hasSize(1);
++        verify(processInstanceService).listProcessInstances(
++                any(), isNull(), isNull(), isNull());
++    }
++
++    @Test
++    @SuppressWarnings("unchecked")
++    void list_withInitiator_passesToService() {
++        Page<ProcessInstance> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
++        when(processInstanceService.listProcessInstances(any(), eq("user-1"), isNull(), isNull()))
++                .thenReturn(page);
++
++        controller.list(0, 20, "user-1", null, null);
++
++        verify(processInstanceService).listProcessInstances(any(), eq("user-1"), isNull(), isNull());
++    }
++
++    @Test
++    @SuppressWarnings("unchecked")
++    void list_withStatus_passesToService() {
++        Page<ProcessInstance> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
++        when(processInstanceService.listProcessInstances(any(), isNull(), eq("running"), isNull()))
++                .thenReturn(page);
++
++        controller.list(0, 20, null, "running", null);
++
++        verify(processInstanceService).listProcessInstances(any(), isNull(), eq("running"), isNull());
++    }
++
++    @Test
++    @SuppressWarnings("unchecked")
++    void list_withProcessName_passesToService() {
++        Page<ProcessInstance> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
++        when(processInstanceService.listProcessInstances(any(), isNull(), isNull(), eq("leave")))
++                .thenReturn(page);
++
++        controller.list(0, 20, null, null, "leave");
++
++        verify(processInstanceService).listProcessInstances(any(), isNull(), isNull(), eq("leave"));
++    }
++
++    @Test
++    @SuppressWarnings("unchecked")
++    void list_allFilters_passesToService() {
++        Page<ProcessInstance> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
++        when(processInstanceService.listProcessInstances(any(), eq("user-1"), eq("running"), eq("leave")))
++                .thenReturn(page);
++
++        controller.list(0, 20, "user-1", "running", "leave");
++
++        verify(processInstanceService).listProcessInstances(
++                any(), eq("user-1"), eq("running"), eq("leave"));
++    }
++
++    @Test
++    @SuppressWarnings("unchecked")
++    void list_vo_containsCurrentNodeAndStatus() {
++        ProcessInstance inst = mock(ProcessInstance.class);
++        when(inst.getId()).thenReturn("inst-001");
++        when(inst.getProcessDefinitionId()).thenReturn("pd-001");
++        when(inst.getProcessDefinitionKey()).thenReturn("testProcess");
++        when(inst.getProcessDefinitionName()).thenReturn("娴嬭瘯娴佺▼");
++        when(inst.getBusinessKey()).thenReturn(null);
++        when(inst.getTenantId()).thenReturn("default");
++        when(inst.isSuspended()).thenReturn(false);
++        when(inst.isEnded()).thenReturn(false);
++
++        Page<ProcessInstance> page = new PageImpl<>(List.of(inst), PageRequest.of(0, 20), 1);
++        when(processInstanceService.listProcessInstances(any(), isNull(), isNull(), isNull()))
++                .thenReturn(page);
++
++        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
++
++        Map<String, Object> vo = result.getData().getContent().get(0);
++        assertThat(vo).containsKey("currentNode");
++        assertThat(vo).containsKey("status");
++        assertThat(vo.get("status")).isEqualTo("running");
++    }
+ }
+diff --git a/backend/src/test/java/com/workflow/engine/process/ProcessInstanceServiceFilterTest.java b/backend/src/test/java/com/workflow/engine/process/ProcessInstanceServiceFilterTest.java
+new file mode 100644
+index 0000000..1bfdc4c
+--- /dev/null
++++ b/backend/src/test/java/com/workflow/engine/process/ProcessInstanceServiceFilterTest.java
+@@ -0,0 +1,212 @@
++package com.workflow.engine.process;
++
++import com.workflow.engine.tenant.TenantProvider;
++import org.flowable.engine.RuntimeService;
++import org.flowable.engine.history.HistoricProcessInstanceQuery;
++import org.flowable.engine.runtime.ProcessInstance;
++import org.flowable.engine.runtime.ProcessInstanceQuery;
++import org.flowable.engine.HistoryService;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.PageRequest;
++import org.springframework.data.domain.Pageable;
++
++import java.util.List;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.ArgumentMatchers.anyInt;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.Mockito.*;
++
++/**
++ * ProcessInstanceService 绛涢€夊姛鑳藉崟鍏冩祴璇曘€?+ *
++ * <p>楠岃瘉锛歭istProcessInstances 鏀寔 initiator / status / processName 鍙€夌瓫閫夊弬鏁般€?+ */
++class ProcessInstanceServiceFilterTest {
++
++    private RuntimeService runtimeService;
++    private HistoryService historyService;
++    private TenantProvider tenantProvider;
++    private ProcessInstanceService service;
++
++    @BeforeEach
++    void setUp() {
++        runtimeService = mock(RuntimeService.class);
++        historyService = mock(HistoryService.class);
++        tenantProvider = mock(TenantProvider.class);
++        when(tenantProvider.getTenantId()).thenReturn("test-tenant");
++        service = new ProcessInstanceService(runtimeService, historyService, tenantProvider);
++    }
++
++    /**
++     * 鏋勫缓宸?mock 鐨?ProcessInstanceQuery 鏌ヨ閾俱€?+     */
++    private ProcessInstanceQuery buildMockedQuery() {
++        ProcessInstanceQuery query = mock(ProcessInstanceQuery.class);
++        when(runtimeService.createProcessInstanceQuery()).thenReturn(query);
++        when(query.processInstanceTenantId(anyString())).thenReturn(query);
++        when(query.startedBy(anyString())).thenReturn(query);
++        when(query.active()).thenReturn(query);
++        when(query.suspended()).thenReturn(query);
++        when(query.processDefinitionNameLike(anyString())).thenReturn(query);
++        when(query.variableValueEquals(anyString(), any())).thenReturn(query);
++        when(query.orderByProcessInstanceId()).thenReturn(query);
++        when(query.desc()).thenReturn(query);
++        when(query.count()).thenReturn(0L);
++        when(query.listPage(anyInt(), anyInt())).thenReturn(List.of());
++        return query;
++    }
++
++    // ==================== initiator 绛涢€?====================
++
++    @Test
++    void initiatorFilter_appliesVariableValueEquals() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, "user-42", null, null);
++
++        verify(query).variableValueEquals(eq("initiator"), eq("user-42"));
++        verify(query, never()).active();
++        verify(query, never()).suspended();
++        verify(query, never()).processDefinitionNameLike(anyString());
++    }
++
++    @Test
++    void initiatorNull_doesNotApplyInitiatorFilter() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, null, null, null);
++
++        verify(query, never()).variableValueEquals(eq("initiator"), any());
++    }
++
++    @Test
++    void initiatorBlank_doesNotApplyInitiatorFilter() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, "  ", null, null);
++
++        verify(query, never()).variableValueEquals(eq("initiator"), any());
++    }
++
++    // ==================== status 绛涢€?====================
++
++    @Test
++    void statusRunning_appliesActiveFilter() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, null, "running", null);
++
++        verify(query).active();
++        verify(query, never()).suspended();
++    }
++
++    @Test
++    void statusSuspended_appliesSuspendedFilter() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, null, "suspended", null);
++
++        verify(query).suspended();
++        verify(query, never()).active();
++    }
++
++    @Test
++    void statusNull_doesNotApplyStatusFilter() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, null, null, null);
++
++        verify(query, never()).active();
++        verify(query, never()).suspended();
++    }
++
++    // ==================== processName 绛涢€?====================
++
++    @Test
++    void processNameFilter_appliesNameLike() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, null, null, "leave");
++
++        verify(query).processDefinitionNameLike(eq("leave"));
++    }
++
++    @Test
++    void processNameNull_doesNotApplyNameFilter() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, null, null, null);
++
++        verify(query, never()).processDefinitionNameLike(anyString());
++    }
++
++    @Test
++    void processNameBlank_doesNotApplyNameFilter() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, null, null, "");
++
++        verify(query, never()).processDefinitionNameLike(anyString());
++    }
++
++    // ==================== 缁勫悎绛涢€?====================
++
++    @Test
++    void allFilters_appliedTogether() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable, "user-1", "running", "leave");
++
++        verify(query).variableValueEquals(eq("initiator"), eq("user-1"));
++        verify(query).active();
++        verify(query).processDefinitionNameLike(eq("leave"));
++    }
++
++    // ==================== 鍒嗛〉缁撴灉 ====================
++
++    @Test
++    void returnsPagedResult_withFilters() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        ProcessInstance inst = mock(ProcessInstance.class);
++        when(inst.getId()).thenReturn("inst-001");
++        when(query.count()).thenReturn(1L);
++        when(query.listPage(anyInt(), anyInt())).thenReturn(List.of(inst));
++        Pageable pageable = PageRequest.of(0, 10);
++
++        Page<ProcessInstance> result = service.listProcessInstances(pageable, "user-1", "running", "leave");
++
++        assertThat(result.getContent()).hasSize(1);
++        assertThat(result.getTotalElements()).isEqualTo(1);
++        assertThat(result.getContent().get(0).getId()).isEqualTo("inst-001");
++    }
++
++    // ==================== 鍚戝悗鍏煎锛氭棤鍙傛暟閲嶈浇 ====================
++
++    @Test
++    void noArgOverload_callsFilteredWithAllNulls() {
++        ProcessInstanceQuery query = buildMockedQuery();
++        Pageable pageable = PageRequest.of(0, 20);
++
++        service.listProcessInstances(pageable);
++
++        verify(query, never()).variableValueEquals(anyString(), any());
++        verify(query, never()).active();
++        verify(query, never()).suspended();
++        verify(query, never()).processDefinitionNameLike(anyString());
++        verify(query).count();
++        verify(query).listPage(anyInt(), anyInt());
++    }
++}

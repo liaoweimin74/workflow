@@ -11,7 +11,17 @@ import java.util.List;
 public class AddSignRequest {
     /** 要加签的用户列表 */
     private List<String> users;
+    /** 操作人 ID（用于审批意见记录） */
+    private String userId;
+    /** 审批意见 */
+    private String comment;
 
     public List<String> getUsers() { return users; }
     public void setUsers(List<String> users) { this.users = users; }
+
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
+
+    public String getComment() { return comment; }
+    public void setComment(String comment) { this.comment = comment; }
 }

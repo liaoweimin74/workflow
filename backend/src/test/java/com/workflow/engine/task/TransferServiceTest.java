@@ -1,5 +1,6 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.task.entity.WfTaskTransfer;
 import com.workflow.engine.task.repository.WfTaskTransferRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -34,6 +35,8 @@ class TransferServiceTest {
     WfTaskTransferRepository transferRepository;
     @Mock
     TenantProvider tenantProvider;
+    @Mock
+    WfTaskCommentRepository commentRepository;
 
     @InjectMocks
     TransferService transferService;

@@ -9,7 +9,17 @@ package com.workflow.api.dto;
 public class ForwardSignRequest {
     /** 新审批人 */
     private String toUser;
+    /** 操作人 ID（用于审批意见记录） */
+    private String userId;
+    /** 审批意见 */
+    private String comment;
 
     public String getToUser() { return toUser; }
     public void setToUser(String toUser) { this.toUser = toUser; }
+
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
+
+    public String getComment() { return comment; }
+    public void setComment(String comment) { this.comment = comment; }
 }

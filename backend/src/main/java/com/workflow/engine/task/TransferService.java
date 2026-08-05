@@ -1,5 +1,7 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.history.entity.WfTaskComment;
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.task.entity.WfTaskTransfer;
 import com.workflow.engine.task.repository.WfTaskTransferRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -29,13 +31,16 @@ public class TransferService {
     private final TaskService flowableTaskService;
     private final WfTaskTransferRepository transferRepository;
     private final TenantProvider tenantProvider;
+    private final WfTaskCommentRepository commentRepository;
 
     public TransferService(TaskService flowableTaskService,
                            WfTaskTransferRepository transferRepository,
-                           TenantProvider tenantProvider) {
+                           TenantProvider tenantProvider,
+                           WfTaskCommentRepository commentRepository) {
         this.flowableTaskService = flowableTaskService;
         this.transferRepository = transferRepository;
         this.tenantProvider = tenantProvider;
+        this.commentRepository = commentRepository;
     }
 
     /**
@@ -73,5 +78,18 @@ public class TransferService {
         record.setToUser(toUser);
         record.setReason(reason);
         transferRepository.save(record);
+
+        // 写入审批意见
+        if (fromUser != null) {
+            WfTaskComment comment = new WfTaskComment();
+            comment.setId(UUID.randomUUID().toString().replace("-", ""));
+            comment.setTenantId(tenantProvider.getTenantId());
+            comment.setTaskId(taskId);
+            comment.setProcessInstanceId(task.getProcessInstanceId());
+            comment.setUserId(fromUser);
+            comment.setAction("transfer");
+            comment.setComment(reason);
+            commentRepository.save(comment);
+        }
     }
 }

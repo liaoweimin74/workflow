@@ -6,6 +6,8 @@ import com.workflow.api.dto.TaskDoneFilter;
 import com.workflow.api.dto.TaskDoneVO;
 import com.workflow.api.dto.TaskTodoFilter;
 import com.workflow.api.dto.TaskTodoVO;
+import com.workflow.engine.history.entity.WfTaskComment;
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.system.domain.vo.UserVO;
 import com.workflow.system.service.UserService;
@@ -39,19 +41,22 @@ public class WorkflowTaskService {
     private final RuntimeService runtimeService;
     private final RepositoryService repositoryService;
     private final UserService userService;
+    private final WfTaskCommentRepository commentRepository;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
                                HistoryService historyService,
                                TenantProvider tenantProvider,
                                RuntimeService runtimeService,
                                RepositoryService repositoryService,
-                               UserService userService) {
+                               UserService userService,
+                               WfTaskCommentRepository commentRepository) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
         this.runtimeService = runtimeService;
         this.repositoryService = repositoryService;
         this.userService = userService;
+        this.commentRepository = commentRepository;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
@@ -601,6 +606,21 @@ public class WorkflowTaskService {
      */
     @Transactional
     public CompleteTaskResponse completeTaskWithResponse(String taskId, Map<String, Object> variables) {
+        return completeTaskWithResponse(taskId, variables, null, null);
+    }
+
+    /**
+     * 完成任务并返回下一个任务信息，同时写入审批意见。
+     *
+     * @param taskId    任务 ID
+     * @param variables 流程变量
+     * @param userId    操作人 ID（用于审批意见记录）
+     * @param comment   审批意见（可为 null）
+     * @return 包含下一个任务信息和流程结束标志的响应
+     */
+    @Transactional
+    public CompleteTaskResponse completeTaskWithResponse(String taskId, Map<String, Object> variables,
+                                                          String userId, String comment) {
         // 1. 查当前任务获取 processInstanceId
         Task currentTask = flowableTaskService.createTaskQuery()
                 .taskId(taskId)
@@ -615,14 +635,19 @@ public class WorkflowTaskService {
         // 2. 完成任务
         flowableTaskService.complete(taskId, variables);
 
-        // 3. 查流程是否仍在运行
+        // 3. 写入审批意见
+        if (userId != null) {
+            saveTaskComment(taskId, processInstanceId, userId, "complete", comment);
+        }
+
+        // 4. 查流程是否仍在运行
         ProcessInstance runningInstance = runtimeService.createProcessInstanceQuery()
                 .processInstanceId(processInstanceId)
                 .singleResult();
 
         boolean processFinished = (runningInstance == null);
 
-        // 4. 如果流程未结束，查下一个任务
+        // 5. 如果流程未结束，查下一个任务
         String nextTaskId = null;
         String nextTaskName = null;
         String nextTaskAssignee = null;
@@ -654,5 +679,51 @@ public class WorkflowTaskService {
     @Transactional
     public void delegateTask(String taskId, String userId) {
         flowableTaskService.delegateTask(taskId, userId);
+    }
+
+    /**
+     * 委派任务并写入审批意见。
+     *
+     * @param taskId    任务 ID
+     * @param delegateTo 被委派人
+     * @param fromUser  委派人（操作人）
+     * @param comment   委派说明
+     */
+    @Transactional
+    public void delegateTaskWithComment(String taskId, String delegateTo, String fromUser, String comment) {
+        // 1. 查询任务获取 processInstanceId
+        Task task = flowableTaskService.createTaskQuery()
+                .taskId(taskId)
+                .singleResult();
+
+        if (task == null) {
+            throw new IllegalStateException("Task not found: " + taskId);
+        }
+
+        // 2. 执行委派
+        flowableTaskService.delegateTask(taskId, delegateTo);
+
+        // 3. 写入审批意见
+        if (fromUser != null) {
+            saveTaskComment(taskId, task.getProcessInstanceId(), fromUser, "delegate", comment);
+        }
+    }
+
+    // ==================== 审批意见写入辅助 ====================
+
+    /**
+     * 保存审批意见到 wf_task_comment 表。
+     */
+    void saveTaskComment(String taskId, String processInstanceId, String userId,
+                         String action, String comment) {
+        WfTaskComment record = new WfTaskComment();
+        record.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
+        record.setTenantId(tenantProvider.getTenantId());
+        record.setTaskId(taskId);
+        record.setProcessInstanceId(processInstanceId);
+        record.setUserId(userId);
+        record.setAction(action);
+        record.setComment(comment);
+        commentRepository.save(record);
     }
 }

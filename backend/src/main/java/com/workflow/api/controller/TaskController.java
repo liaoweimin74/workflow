@@ -103,7 +103,9 @@ public class TaskController {
         Map<String, Object> variables = request != null && request.getVariables() != null
                 ? request.getVariables()
                 : new HashMap<>();
-        return R.ok(taskService.completeTaskWithResponse(id, variables));
+        String userId = request != null ? request.getUserId() : null;
+        String comment = request != null ? request.getComment() : null;
+        return R.ok(taskService.completeTaskWithResponse(id, variables, userId, comment));
     }
 
     @PostMapping("/{id}/reject")
@@ -125,19 +127,20 @@ public class TaskController {
 
     @PostMapping("/{id}/delegate")
     public R<Void> delegate(@PathVariable String id, @RequestBody DelegateRequest request) {
-        taskService.delegateTask(id, request.getDelegateTo());
+        taskService.delegateTaskWithComment(id, request.getDelegateTo(),
+                request.getFromUser(), request.getComment());
         return R.ok();
     }
 
     @PostMapping("/{id}/add-sign")
     public R<Void> addSign(@PathVariable String id, @RequestBody AddSignRequest request) {
-        addSignService.addSign(id, request.getUsers());
+        addSignService.addSign(id, request.getUsers(), request.getUserId(), request.getComment());
         return R.ok();
     }
 
     @PostMapping("/{id}/forward-sign")
     public R<Void> forwardSign(@PathVariable String id, @RequestBody ForwardSignRequest request) {
-        forwardSignService.forwardSign(id, request.getToUser());
+        forwardSignService.forwardSign(id, request.getToUser(), request.getUserId(), request.getComment());
         return R.ok();
     }
 

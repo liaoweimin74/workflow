@@ -1,5 +1,8 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.history.entity.WfTaskComment;
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
@@ -9,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 转签服务。
@@ -31,10 +35,15 @@ public class ForwardSignService {
 
     private final RuntimeService runtimeService;
     private final TaskService flowableTaskService;
+    private final TenantProvider tenantProvider;
+    private final WfTaskCommentRepository commentRepository;
 
-    public ForwardSignService(RuntimeService runtimeService, TaskService flowableTaskService) {
+    public ForwardSignService(RuntimeService runtimeService, TaskService flowableTaskService,
+                               TenantProvider tenantProvider, WfTaskCommentRepository commentRepository) {
         this.runtimeService = runtimeService;
         this.flowableTaskService = flowableTaskService;
+        this.tenantProvider = tenantProvider;
+        this.commentRepository = commentRepository;
     }
 
     /**
@@ -45,6 +54,19 @@ public class ForwardSignService {
      */
     @Transactional
     public void forwardSign(String taskId, String toUser) {
+        forwardSign(taskId, toUser, null, null);
+    }
+
+    /**
+     * 转签：当前审批人将审批权转给他人，并写入审批意见。
+     *
+     * @param taskId  当前任务 ID（必须属于 MI 节点）
+     * @param toUser  新审批人
+     * @param userId  操作人 ID
+     * @param comment 审批意见
+     */
+    @Transactional
+    public void forwardSign(String taskId, String toUser, String userId, String comment) {
         if (toUser == null || toUser.isBlank()) {
             throw new IllegalArgumentException("toUser cannot be null or blank");
         }
@@ -72,5 +94,18 @@ public class ForwardSignService {
                 activityId,
                 processInstanceId,
                 Map.of("approver", toUser));
+
+        // 3. 写入审批意见
+        if (userId != null) {
+            WfTaskComment commentRecord = new WfTaskComment();
+            commentRecord.setId(UUID.randomUUID().toString().replace("-", ""));
+            commentRecord.setTenantId(tenantProvider.getTenantId());
+            commentRecord.setTaskId(taskId);
+            commentRecord.setProcessInstanceId(processInstanceId);
+            commentRecord.setUserId(userId);
+            commentRecord.setAction("forward_sign");
+            commentRecord.setComment(comment);
+            commentRepository.save(commentRecord);
+        }
     }
 }

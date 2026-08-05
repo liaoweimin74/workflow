@@ -1,10 +1,12 @@
 package com.workflow.engine.spike;
 
 import com.workflow.api.dto.CompleteTaskResponse;
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.engine.runtime.ProcessVariableService;
 import com.workflow.engine.task.RejectService;
+import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 
 /**
  * Spike-5：端到端集成测试。
@@ -86,7 +89,11 @@ class EndToEndIntegrationTest extends AbstractFlowableSpikeTest {
 
         // 3. 驳回到发起人
         InitiatorNodeResolver resolver = new InitiatorNodeResolver(repositoryService);
-        RejectService rejectService = new RejectService(taskService, runtimeService, resolver);
+        TenantProvider tenantProvider = mock(TenantProvider.class);
+        org.mockito.Mockito.when(tenantProvider.getTenantId()).thenReturn("spike");
+        WfTaskCommentRepository commentRepository = mock(WfTaskCommentRepository.class);
+        RejectService rejectService = new RejectService(taskService, runtimeService, resolver,
+                tenantProvider, commentRepository);
         rejectService.reject(managerTask.getId(), "bob", "信息不完整");
 
         // 经理任务消失，发起人任务重新出现

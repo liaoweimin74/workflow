@@ -1,6 +1,7 @@
 package com.workflow.engine.task;
 
 import com.workflow.api.dto.TaskDetailVO;
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.system.domain.vo.UserVO;
 import com.workflow.system.service.UserService;
@@ -50,6 +51,7 @@ class WorkflowTaskServiceDetailTest {
     private RuntimeService runtimeService;
     private RepositoryService repositoryService;
     private UserService userService;
+    private WfTaskCommentRepository commentRepository;
     private WorkflowTaskService service;
 
     @BeforeEach
@@ -60,8 +62,9 @@ class WorkflowTaskServiceDetailTest {
         runtimeService = mock(RuntimeService.class);
         repositoryService = mock(RepositoryService.class);
         userService = mock(UserService.class);
+        commentRepository = mock(WfTaskCommentRepository.class);
         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
-                runtimeService, repositoryService, userService);
+                runtimeService, repositoryService, userService, commentRepository);
         when(tenantProvider.getTenantId()).thenReturn("default");
     }
 

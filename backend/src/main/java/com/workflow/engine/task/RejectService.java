@@ -1,6 +1,9 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.history.entity.WfTaskComment;
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
@@ -8,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 /**
  * 流程驳回服务。
@@ -23,13 +28,19 @@ public class RejectService {
     private final TaskService flowableTaskService;
     private final RuntimeService runtimeService;
     private final InitiatorNodeResolver initiatorNodeResolver;
+    private final TenantProvider tenantProvider;
+    private final WfTaskCommentRepository commentRepository;
 
     public RejectService(TaskService flowableTaskService,
                          RuntimeService runtimeService,
-                         InitiatorNodeResolver initiatorNodeResolver) {
+                         InitiatorNodeResolver initiatorNodeResolver,
+                         TenantProvider tenantProvider,
+                         WfTaskCommentRepository commentRepository) {
         this.flowableTaskService = flowableTaskService;
         this.runtimeService = runtimeService;
         this.initiatorNodeResolver = initiatorNodeResolver;
+        this.tenantProvider = tenantProvider;
+        this.commentRepository = commentRepository;
     }
 
     /**
@@ -70,5 +81,18 @@ public class RejectService {
                 .processInstanceId(task.getProcessInstanceId())
                 .moveActivityIdTo(currentActivityId, initiatorNodeId)
                 .changeState();
+
+        // 写入审批意见
+        if (userId != null) {
+            WfTaskComment comment = new WfTaskComment();
+            comment.setId(UUID.randomUUID().toString().replace("-", ""));
+            comment.setTenantId(tenantProvider.getTenantId());
+            comment.setTaskId(taskId);
+            comment.setProcessInstanceId(task.getProcessInstanceId());
+            comment.setUserId(userId);
+            comment.setAction("reject");
+            comment.setComment(reason);
+            commentRepository.save(comment);
+        }
     }
 }

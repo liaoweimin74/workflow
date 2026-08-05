@@ -1,0 +1,53 @@
+﻿=== Commit list ===
+90cb103 feat(db): add wf_task_comment and wf_task_remind tables
+
+=== Diff stat ===
+ .../db/migration/V13__create_wf_task_comment.sql       | 18 ++++++++++++++++++
+ .../db/migration/V16__create_wf_task_remind.sql        | 16 ++++++++++++++++
+ 2 files changed, 34 insertions(+)
+
+=== Full diff (U10) ===
+diff --git a/backend/src/main/resources/db/migration/V13__create_wf_task_comment.sql b/backend/src/main/resources/db/migration/V13__create_wf_task_comment.sql
+new file mode 100644
+index 0000000..b5abc37
+--- /dev/null
++++ b/backend/src/main/resources/db/migration/V13__create_wf_task_comment.sql
+@@ -0,0 +1,18 @@
++-- ============================================================
++-- V13: 浠诲姟瀹℃壒鎰忚琛?+-- 瀛樺偍瀹℃壒鑺傜偣鐨勬剰瑙佽褰曪紝鐢ㄤ簬瀹¤杩借釜
++-- ============================================================
++
++CREATE TABLE IF NOT EXISTS wf_task_comment (
++    id                    VARCHAR(64)   NOT NULL,
++    tenant_id             VARCHAR(64)   NOT NULL,
++    task_id               VARCHAR(64)   NOT NULL,
++    process_instance_id   VARCHAR(64)   NOT NULL,
++    user_id               VARCHAR(64)   NOT NULL,
++    comment               TEXT          NULL,
++    action                VARCHAR(32)   NOT NULL,
++    created_at            DATETIME      DEFAULT CURRENT_TIMESTAMP,
++    PRIMARY KEY (id),
++    KEY idx_comment_task (tenant_id, task_id),
++    KEY idx_comment_instance (tenant_id, process_instance_id)
++) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+diff --git a/backend/src/main/resources/db/migration/V16__create_wf_task_remind.sql b/backend/src/main/resources/db/migration/V16__create_wf_task_remind.sql
+new file mode 100644
+index 0000000..7cbd45b
+--- /dev/null
++++ b/backend/src/main/resources/db/migration/V16__create_wf_task_remind.sql
+@@ -0,0 +1,16 @@
++-- ============================================================
++-- V16: 浠诲姟鍌姙璁板綍琛?+-- 瀛樺偍鍌姙璁板綍锛岄厤鍚堥鐜囬檺鍒堕€昏緫
++-- ============================================================
++
++CREATE TABLE IF NOT EXISTS wf_task_remind (
++    id                    VARCHAR(64)   NOT NULL,
++    tenant_id             VARCHAR(64)   NOT NULL,
++    task_id               VARCHAR(64)   NOT NULL,
++    process_instance_id   VARCHAR(64)   NOT NULL,
++    remind_from           VARCHAR(64)   NOT NULL,
++    remind_to             VARCHAR(64)   NOT NULL,
++    remind_time           DATETIME      DEFAULT CURRENT_TIMESTAMP,
++    PRIMARY KEY (id),
++    KEY idx_remind_task (tenant_id, task_id)
++) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

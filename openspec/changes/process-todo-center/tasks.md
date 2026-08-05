@@ -1,33 +1,33 @@
 ## 1. 后端数据库迁移
 
-- [ ] 1.1 创建 `wf_task_comment` 表 Flyway 迁移脚本（taskId、processInstanceId、userId、comment、action、createTime）
-- [ ] 1.2 创建 `wf_task_remind` 表 Flyway 迁移脚本（taskId、processInstanceId、remindFrom、remindTo、remindTime），对 taskId 加索引
+- [x] 1.1 创建 `wf_task_comment` 表 Flyway 迁移脚本（taskId、processInstanceId、userId、comment、action、createTime）
+- [x] 1.2 创建 `wf_task_remind` 表 Flyway 迁移脚本（taskId、processInstanceId、remindFrom、remindTo、remindTime），对 taskId 加索引
 
 ## 2. 后端 — 流程定义列表筛选扩展
 
-- [ ] 2.1 `ProcessService.listProcessDefinitions` 扩展查询条件：支持 categoryId、name、status 参数
-- [ ] 2.2 `ProcessDefinitionController.list` 增加 categoryId、name、status 可选查询参数
-- [ ] 2.3 编写单元测试验证筛选逻辑
+- [x] 2.1 `ProcessService.listProcessDefinitions` 扩展查询条件：支持 categoryId、name、status 参数
+- [x] 2.2 `ProcessDefinitionController.list` 增加 categoryId、name、status 可选查询参数
+- [x] 2.3 编写单元测试验证筛选逻辑
 
 ## 3. 后端 — 任务列表 VO 与关联查询
 
-- [ ] 3.1 新建 `TaskTodoVO`（含 processName、initiator、initiatorName、currentNodeName、businessKey 等关联字段）
-- [ ] 3.2 新建 `TaskDoneVO`（在 TaskTodoVO 基础上增加 endTime、approveResult）
-- [ ] 3.3 `WorkflowTaskService` 扩展：listTodoTasks/listHistoricTasks 返回 VO，批量关联查询流程定义名称与发起人（避免 N+1）
-- [ ] 3.4 `TaskController.listTodo`/`listHistoric` 改为返回 VO 分页，支持 processName、initiator、createTimeStart/End 筛选参数
-- [ ] 3.5 编写集成测试验证 VO 字段完整性与关联查询性能
+- [x] 3.1 新建 `TaskTodoVO`（含 processName、initiator、initiatorName、currentNodeName、businessKey 等关联字段）
+- [x] 3.2 新建 `TaskDoneVO`（在 TaskTodoVO 基础上增加 endTime、approveResult）
+- [x] 3.3 `WorkflowTaskService` 扩展：listTodoTasks/listHistoricTasks 返回 VO，批量关联查询流程定义名称与发起人（避免 N+1）
+- [x] 3.4 `TaskController.listTodo`/`listHistoric` 改为返回 VO 分页，支持 processName、initiator、createTimeStart/End 筛选参数
+- [x] 3.5 编写集成测试验证 VO 字段完整性与关联查询性能
 
 ## 4. 后端 — 任务详情 VO
 
-- [ ] 4.1 新建 `TaskDetailVO`（含任务字段 + 流程基本信息 + 表单定义引用 + 流程变量快照）
-- [ ] 4.2 `TaskController.get` 改为返回 TaskDetailVO
-- [ ] 4.3 编写测试验证详情字段完整性
+- [x] 4.1 新建 `TaskDetailVO`（含任务字段 + 流程基本信息 + 表单定义引用 + 流程变量快照）
+- [x] 4.2 `TaskController.get` 改为返回 TaskDetailVO
+- [x] 4.3 编写测试验证详情字段完整性
 
 ## 5. 后端 — 流程实例列表筛选扩展
 
-- [ ] 5.1 `ProcessInstanceService.listProcessInstances` 扩展查询条件：支持 initiator、status、processName 参数
-- [ ] 5.2 `ProcessInstanceController.list` 增加 initiator、status、processName 可选查询参数，返回 VO 含 currentNode、status 字段
-- [ ] 5.3 编写测试验证发起人与状态筛选
+- [x] 5.1 `ProcessInstanceService.listProcessInstances` 扩展查询条件：支持 initiator、status、processName 参数
+- [x] 5.2 `ProcessInstanceController.list` 增加 initiator、status、processName 可选查询参数，返回 VO 含 currentNode、status 字段
+- [x] 5.3 编写测试验证发起人与状态筛选
 
 ## 6. 后端 — 审批记录历史 API
 

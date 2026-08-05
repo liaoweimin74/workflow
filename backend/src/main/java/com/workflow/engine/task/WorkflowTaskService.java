@@ -1,21 +1,33 @@
 package com.workflow.engine.task;
 
 import com.workflow.api.dto.CompleteTaskResponse;
+import com.workflow.api.dto.TaskDoneFilter;
+import com.workflow.api.dto.TaskDoneVO;
+import com.workflow.api.dto.TaskTodoFilter;
+import com.workflow.api.dto.TaskTodoVO;
 import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.system.domain.vo.UserVO;
+import com.workflow.system.service.UserService;
 import org.flowable.engine.HistoryService;
+import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
+import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
+import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class WorkflowTaskService {
@@ -24,15 +36,21 @@ public class WorkflowTaskService {
     private final HistoryService historyService;
     private final TenantProvider tenantProvider;
     private final RuntimeService runtimeService;
+    private final RepositoryService repositoryService;
+    private final UserService userService;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
                                HistoryService historyService,
                                TenantProvider tenantProvider,
-                               RuntimeService runtimeService) {
+                               RuntimeService runtimeService,
+                               RepositoryService repositoryService,
+                               UserService userService) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
         this.runtimeService = runtimeService;
+        this.repositoryService = repositoryService;
+        this.userService = userService;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
@@ -79,6 +97,353 @@ public class WorkflowTaskService {
                 .listPage((int) pageable.getOffset(), pageable.getPageSize());
 
         return new PageImpl<>(content, pageable, total);
+    }
+
+    // ==================== VO 方法 ====================
+
+    /**
+     * 查询待办任务列表，返回 TaskTodoVO 分页（含关联字段）。
+     *
+     * <p>批量查询 ProcessInstance + UserService 避免 N+1。
+     *
+     * @param assignee 办理人
+     * @param pageable 分页
+     * @param filter   过滤参数（processName, initiator, createTimeStart/End）
+     * @return TaskTodoVO 分页
+     */
+    public Page<TaskTodoVO> listTodoTasksVO(String assignee, Pageable pageable, TaskTodoFilter filter) {
+        String tenantId = tenantProvider.getTenantId();
+        var query = flowableTaskService.createTaskQuery()
+                .taskTenantId(tenantId)
+                .taskAssignee(assignee)
+                .orderByTaskCreateTime()
+                .desc();
+
+        // createTime 范围过滤（Flowable 原生支持 taskCreatedAfter/Before）
+        if (filter != null) {
+            if (filter.createTimeStart() != null) {
+                query.taskCreatedAfter(parseDate(filter.createTimeStart()));
+            }
+            if (filter.createTimeEnd() != null) {
+                query.taskCreatedBefore(parseDate(filter.createTimeEnd()));
+            }
+        }
+
+        long total = query.count();
+        List<Task> tasks = query.listPage((int) pageable.getOffset(), pageable.getPageSize());
+
+        List<TaskTodoVO> vos = assembleTodoVOs(tasks);
+
+        // 内存过滤 processName / initiator（Flowable TaskQuery 不直接支持）
+        if (filter != null) {
+            vos = vos.stream()
+                    .filter(vo -> matchesProcessName(vo, filter.processName()))
+                    .filter(vo -> matchesInitiator(vo, filter.initiator()))
+                    .toList();
+        }
+
+        return new PageImpl<>(vos, pageable, total);
+    }
+
+    /**
+     * 查询已办任务列表，返回 TaskDoneVO 分页（含关联字段）。
+     *
+     * @param userId   办理人
+     * @param pageable 分页
+     * @param filter   过滤参数（processName, initiator, endTimeStart/End, approveResult）
+     * @return TaskDoneVO 分页
+     */
+    public Page<TaskDoneVO> listHistoricTasksVO(String userId, Pageable pageable, TaskDoneFilter filter) {
+        String tenantId = tenantProvider.getTenantId();
+        var query = historyService.createHistoricTaskInstanceQuery()
+                .taskTenantId(tenantId)
+                .taskAssignee(userId)
+                .finished()
+                .orderByHistoricTaskInstanceEndTime()
+                .desc();
+
+        // endTime 范围过滤
+        if (filter != null) {
+            if (filter.endTimeStart() != null) {
+                query.taskCompletedAfter(parseDate(filter.endTimeStart()));
+            }
+            if (filter.endTimeEnd() != null) {
+                query.taskCompletedBefore(parseDate(filter.endTimeEnd()));
+            }
+        }
+
+        long total = query.count();
+        List<HistoricTaskInstance> tasks = query.listPage((int) pageable.getOffset(), pageable.getPageSize());
+
+        List<TaskDoneVO> vos = assembleDoneVOs(tasks);
+
+        // 内存过滤 processName / initiator / approveResult
+        if (filter != null) {
+            vos = vos.stream()
+                    .filter(vo -> matchesProcessName(vo, filter.processName()))
+                    .filter(vo -> matchesInitiator(vo, filter.initiator()))
+                    .filter(vo -> filter.approveResult() == null || filter.approveResult().equals(vo.getApproveResult()))
+                    .toList();
+        }
+
+        return new PageImpl<>(vos, pageable, total);
+    }
+
+    // ==================== VO 组装（批量查询，避免 N+1）====================
+
+    private List<TaskTodoVO> assembleTodoVOs(List<Task> tasks) {
+        if (tasks.isEmpty()) {
+            return List.of();
+        }
+
+        // 1. 批量收集 processInstanceIds
+        Set<String> processInstanceIds = tasks.stream()
+                .map(Task::getProcessInstanceId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // 2. 批量查询 ProcessInstance
+        Map<String, ProcessInstance> piMap = batchQueryProcessInstances(processInstanceIds);
+
+        // 3. 批量收集 processDefinitionIds → 查 ProcessDefinition 名称
+        Set<String> processDefinitionIds = tasks.stream()
+                .map(Task::getProcessDefinitionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(processDefinitionIds);
+
+        // 4. 批量查询 initiator 变量 + 解析用户名
+        Map<String, String> initiatorMap = batchQueryInitiators(processInstanceIds, piMap);
+        Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
+
+        // 5. 组装 VO
+        return tasks.stream().map(task -> {
+            TaskTodoVO vo = new TaskTodoVO();
+            vo.setTaskId(task.getId());
+            vo.setProcessInstanceId(task.getProcessInstanceId());
+            vo.setProcessDefinitionId(task.getProcessDefinitionId());
+            vo.setCurrentNodeName(task.getName());
+            vo.setAssignee(task.getAssignee());
+            if (task.getCreateTime() != null) {
+                vo.setCreateTime(formatDate(task.getCreateTime()));
+            }
+
+            ProcessInstance pi = piMap.get(task.getProcessInstanceId());
+            if (pi != null) {
+                vo.setBusinessKey(pi.getBusinessKey());
+            }
+
+            ProcessDefinition pd = pdMap.get(task.getProcessDefinitionId());
+            if (pd != null) {
+                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+            }
+
+            String initiator = initiatorMap.get(task.getProcessInstanceId());
+            vo.setInitiator(initiator);
+            vo.setInitiatorName(initiatorNameMap.get(initiator));
+
+            return vo;
+        }).toList();
+    }
+
+    private List<TaskDoneVO> assembleDoneVOs(List<HistoricTaskInstance> tasks) {
+        if (tasks.isEmpty()) {
+            return List.of();
+        }
+
+        // 1. 批量收集 processInstanceIds
+        Set<String> processInstanceIds = tasks.stream()
+                .map(HistoricTaskInstance::getProcessInstanceId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // 2. 批量查询 HistoricProcessInstance
+        Map<String, HistoricProcessInstance> piMap = batchQueryHistoricProcessInstances(processInstanceIds);
+
+        // 3. 批量收集 processDefinitionIds → 查 ProcessDefinition 名称
+        Set<String> processDefinitionIds = tasks.stream()
+                .map(HistoricTaskInstance::getProcessDefinitionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(processDefinitionIds);
+
+        // 4. 批量查询 initiator 变量 + 解析用户名
+        Map<String, String> initiatorMap = batchQueryHistoricInitiators(processInstanceIds);
+        Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
+
+        // 5. 组装 VO
+        return tasks.stream().map(task -> {
+            TaskDoneVO vo = new TaskDoneVO();
+            vo.setTaskId(task.getId());
+            vo.setProcessInstanceId(task.getProcessInstanceId());
+            vo.setProcessDefinitionId(task.getProcessDefinitionId());
+            vo.setCurrentNodeName(task.getName());
+            vo.setAssignee(task.getAssignee());
+            if (task.getStartTime() != null) {
+                vo.setCreateTime(formatDate(task.getStartTime()));
+            }
+            if (task.getEndTime() != null) {
+                vo.setEndTime(formatDate(task.getEndTime()));
+            }
+
+            HistoricProcessInstance pi = piMap.get(task.getProcessInstanceId());
+            if (pi != null) {
+                vo.setBusinessKey(pi.getBusinessKey());
+            }
+
+            ProcessDefinition pd = pdMap.get(task.getProcessDefinitionId());
+            if (pd != null) {
+                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+            }
+
+            String initiator = initiatorMap.get(task.getProcessInstanceId());
+            vo.setInitiator(initiator);
+            vo.setInitiatorName(initiatorNameMap.get(initiator));
+
+            // approveResult: wf_task_comment 表尚未创建，暂设为 null
+            // TODO: Task 后续实现 wf_task_comment 查询后填充
+
+            return vo;
+        }).toList();
+    }
+
+    // ==================== 批量查询辅助方法 ====================
+
+    private Map<String, ProcessInstance> batchQueryProcessInstances(Set<String> processInstanceIds) {
+        if (processInstanceIds.isEmpty()) {
+            return Map.of();
+        }
+        List<ProcessInstance> instances = runtimeService.createProcessInstanceQuery()
+                .processInstanceIds(processInstanceIds)
+                .list();
+        return instances.stream()
+                .collect(Collectors.toMap(ProcessInstance::getId, Function.identity(), (a, b) -> a));
+    }
+
+    private Map<String, HistoricProcessInstance> batchQueryHistoricProcessInstances(Set<String> processInstanceIds) {
+        if (processInstanceIds.isEmpty()) {
+            return Map.of();
+        }
+        List<HistoricProcessInstance> instances = historyService.createHistoricProcessInstanceQuery()
+                .processInstanceIds(processInstanceIds)
+                .list();
+        return instances.stream()
+                .collect(Collectors.toMap(HistoricProcessInstance::getId, Function.identity(), (a, b) -> a));
+    }
+
+    private Map<String, ProcessDefinition> batchQueryProcessDefinitions(Set<String> processDefinitionIds) {
+        if (processDefinitionIds.isEmpty()) {
+            return Map.of();
+        }
+        List<ProcessDefinition> defs = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionIds(processDefinitionIds)
+                .list();
+        return defs.stream()
+                .collect(Collectors.toMap(ProcessDefinition::getId, Function.identity(), (a, b) -> a));
+    }
+
+    /**
+     * 批量查询运行中流程实例的 initiator 变量。
+     */
+    private Map<String, String> batchQueryInitiators(Set<String> processInstanceIds,
+                                                     Map<String, ProcessInstance> piMap) {
+        if (processInstanceIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> result = new HashMap<>();
+        for (String piId : processInstanceIds) {
+            try {
+                Object initiator = runtimeService.getVariable(piId, "initiator");
+                if (initiator != null) {
+                    result.put(piId, String.valueOf(initiator));
+                }
+            } catch (Exception e) {
+                // 流程实例可能已结束，变量不可查
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 批量查询历史流程实例的 initiator 变量。
+     */
+    private Map<String, String> batchQueryHistoricInitiators(Set<String> processInstanceIds) {
+        if (processInstanceIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> result = new HashMap<>();
+        for (String piId : processInstanceIds) {
+            try {
+                HistoricVariableInstance hv = historyService.createHistoricVariableInstanceQuery()
+                        .processInstanceId(piId)
+                        .variableName("initiator")
+                        .singleResult();
+                if (hv != null && hv.getValue() != null) {
+                    result.put(piId, String.valueOf(hv.getValue()));
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 批量查询用户姓名。
+     */
+    private Map<String, String> batchQueryInitiatorNames(Collection<String> initiatorIds) {
+        if (initiatorIds == null || initiatorIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> userIds = initiatorIds.stream()
+                .filter(Objects::nonNull)
+                .map(id -> {
+                    try {
+                        return Long.parseLong(id);
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<UserVO> users = userService.findByIds(userIds);
+        return users.stream()
+                .collect(Collectors.toMap(
+                        u -> String.valueOf(u.id()),
+                        u -> u.nickname() != null ? u.nickname() : u.username(),
+                        (a, b) -> a));
+    }
+
+    // ==================== 过滤辅助 ====================
+
+    private boolean matchesProcessName(TaskTodoVO vo, String processName) {
+        return processName == null ||
+                (vo.getProcessName() != null && vo.getProcessName().contains(processName));
+    }
+
+    private boolean matchesInitiator(TaskTodoVO vo, String initiator) {
+        return initiator == null || initiator.equals(vo.getInitiator());
+    }
+
+    // ==================== 日期辅助 ====================
+
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+    private Date parseDate(String dateStr) {
+        return Date.from(
+                java.time.LocalDateTime.parse(dateStr, DATE_FORMATTER)
+                        .atZone(ZoneId.systemDefault())
+                        .toInstant());
+    }
+
+    private String formatDate(Date date) {
+        return DATE_FORMATTER.format(
+                date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
     }
 
     public Optional<Task> getTask(String taskId) {

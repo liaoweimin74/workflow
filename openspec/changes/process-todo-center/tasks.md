@@ -58,11 +58,11 @@
 
 ## 10. 前端 — 发起流程页面
 
-- [ ] 10.1 新建 `ProcessStartPage.vue` + 路由 `/process/start/:processDefinitionId`
-- [ ] 10.2 实现流程基本信息区 + 流程图预览区（可折叠，基于 bpmn-js Viewer）
-- [ ] 10.3 实现发起表单区（复用 FormRenderer，字段权限按"创建时填写"）
-- [ ] 10.4 实现提交逻辑（表单校验 → POST 发起 → 跳转待办中心"我发起的"Tab 高亮新实例）
-- [ ] 10.5 处理无关联表单的流程（直接展示信息 + 确认发起按钮）
+- [x] 10.1 新建 `ProcessStartPage.vue` + 路由 `/process/start/:processDefinitionId`
+- [x] 10.2 实现流程基本信息区 + 流程图预览区（可折叠，基于 bpmn-js Viewer）
+- [x] 10.3 实现发起表单区（复用 FormRenderer，字段权限按"创建时填写"）
+- [x] 10.4 实现提交逻辑（表单校验 → POST 发起 → 跳转待办中心"我发起的"Tab 高亮新实例）
+- [x] 10.5 处理无关联表单的流程（直接展示信息 + 确认发起按钮）
 
 ## 11. 前端 — 待办中心页面
 

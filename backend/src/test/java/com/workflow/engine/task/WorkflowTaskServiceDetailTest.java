@@ -8,12 +8,16 @@ import org.flowable.engine.HistoryService;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
+import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.repository.ProcessDefinitionQuery;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.TaskQuery;
+import org.flowable.variable.api.history.HistoricVariableInstance;
+import org.flowable.variable.api.history.HistoricVariableInstanceQuery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,6 +26,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -83,16 +88,16 @@ class WorkflowTaskServiceDetailTest {
         when(taskQuery.taskTenantId(anyString())).thenReturn(taskQuery);
         when(taskQuery.singleResult()).thenReturn(task);
 
-        // ProcessInstance
+        // ProcessInstance (batch query pattern: processInstanceIds(Set).list())
         ProcessInstance pi = mock(ProcessInstance.class);
         when(pi.getId()).thenReturn(processInstanceId);
         when(pi.getBusinessKey()).thenReturn("BIZ-001");
         ProcessInstanceQuery piQuery = mock(ProcessInstanceQuery.class);
         when(runtimeService.createProcessInstanceQuery()).thenReturn(piQuery);
-        when(piQuery.processInstanceId(anyString())).thenReturn(piQuery);
-        when(piQuery.singleResult()).thenReturn(pi);
+        when(piQuery.processInstanceIds(any())).thenReturn(piQuery);
+        when(piQuery.list()).thenReturn(List.of(pi));
 
-        // initiator variable
+        // initiator variable (batch query pattern: runtimeService.getVariable)
         when(runtimeService.getVariable(eq(processInstanceId), eq("initiator"))).thenReturn("42");
 
         // ProcessDefinition
@@ -160,5 +165,98 @@ class WorkflowTaskServiceDetailTest {
 
         // Then
         assertThat(result).isEmpty();
+    }
+
+    /**
+     * 已结束流程场景：runtimeService 查不到 ProcessInstance，
+     * fallback 查 historyService 获取 businessKey + historic initiator 变量。
+     */
+    @Test
+    void getTaskDetailFallsBackToHistoryWhenProcessEnded() {
+        // Given: a task whose process instance has already ended
+        String taskId = "task-ended-001";
+        String processInstanceId = "pi-ended-001";
+        String processDefinitionId = "pd-ended:1:99";
+
+        Task task = mock(Task.class);
+        when(task.getId()).thenReturn(taskId);
+        when(task.getName()).thenReturn("最终审批");
+        when(task.getDescription()).thenReturn("已结束流程的遗留任务");
+        when(task.getAssignee()).thenReturn("user2");
+        when(task.getProcessInstanceId()).thenReturn(processInstanceId);
+        when(task.getProcessDefinitionId()).thenReturn(processDefinitionId);
+        when(task.getCreateTime()).thenReturn(new Date());
+        when(task.getTaskDefinitionKey()).thenReturn("finalApprove");
+
+        TaskQuery taskQuery = mock(TaskQuery.class);
+        when(flowableTaskService.createTaskQuery()).thenReturn(taskQuery);
+        when(taskQuery.taskId(anyString())).thenReturn(taskQuery);
+        when(taskQuery.taskTenantId(anyString())).thenReturn(taskQuery);
+        when(taskQuery.singleResult()).thenReturn(task);
+
+        // runtimeService 返回空列表 → 流程已结束
+        ProcessInstanceQuery piQuery = mock(ProcessInstanceQuery.class);
+        when(runtimeService.createProcessInstanceQuery()).thenReturn(piQuery);
+        when(piQuery.processInstanceIds(any())).thenReturn(piQuery);
+        when(piQuery.list()).thenReturn(List.of());
+
+        // historyService fallback: HistoricProcessInstance 带 businessKey
+        HistoricProcessInstance hpi = mock(HistoricProcessInstance.class);
+        when(hpi.getId()).thenReturn(processInstanceId);
+        when(hpi.getBusinessKey()).thenReturn("BIZ-ENDED-001");
+        HistoricProcessInstanceQuery hpiQuery = mock(HistoricProcessInstanceQuery.class);
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(hpiQuery);
+        when(hpiQuery.processInstanceId(eq(processInstanceId))).thenReturn(hpiQuery);
+        when(hpiQuery.singleResult()).thenReturn(hpi);
+
+        // historic initiator 变量
+        HistoricVariableInstance hv = mock(HistoricVariableInstance.class);
+        when(hv.getValue()).thenReturn("88");
+        HistoricVariableInstanceQuery hvQuery = mock(HistoricVariableInstanceQuery.class);
+        when(historyService.createHistoricVariableInstanceQuery()).thenReturn(hvQuery);
+        when(hvQuery.processInstanceId(eq(processInstanceId))).thenReturn(hvQuery);
+        when(hvQuery.variableName(eq("initiator"))).thenReturn(hvQuery);
+        when(hvQuery.singleResult()).thenReturn(hv);
+
+        // ProcessDefinition
+        ProcessDefinition pd = mock(ProcessDefinition.class);
+        when(pd.getId()).thenReturn(processDefinitionId);
+        when(pd.getName()).thenReturn("报销流程");
+        when(pd.getKey()).thenReturn("expense");
+        ProcessDefinitionQuery pdQuery = mock(ProcessDefinitionQuery.class);
+        when(repositoryService.createProcessDefinitionQuery()).thenReturn(pdQuery);
+        when(pdQuery.processDefinitionIds(any())).thenReturn(pdQuery);
+        when(pdQuery.list()).thenReturn(List.of(pd));
+
+        // formKey
+        org.flowable.bpmn.model.BpmnModel bpmnModel = mock(org.flowable.bpmn.model.BpmnModel.class);
+        org.flowable.bpmn.model.Process process = mock(org.flowable.bpmn.model.Process.class);
+        org.flowable.bpmn.model.UserTask userTask = mock(org.flowable.bpmn.model.UserTask.class);
+        when(userTask.getId()).thenReturn("finalApprove");
+        when(userTask.getFormKey()).thenReturn("expenseForm");
+        when(process.getFlowElements()).thenReturn(List.of(userTask));
+        when(bpmnModel.getProcesses()).thenReturn(List.of(process));
+        when(repositoryService.getBpmnModel(eq(processDefinitionId))).thenReturn(bpmnModel);
+
+        // variables
+        when(flowableTaskService.getVariables(eq(taskId))).thenReturn(Map.of("amount", 500));
+
+        // UserService
+        UserVO userVO = new UserVO(88L, "lisi", "李四", null, null, null,
+                null, null, 1, LocalDateTime.now(), new Long[]{});
+        when(userService.findByIds(eq(List.of(88L)))).thenReturn(List.of(userVO));
+
+        // When
+        Optional<TaskDetailVO> result = service.getTaskDetail(taskId);
+
+        // Then: businessKey 从历史获取，initiator 从历史变量获取
+        assertThat(result).isPresent();
+        TaskDetailVO vo = result.get();
+        assertThat(vo.getTaskId()).isEqualTo(taskId);
+        assertThat(vo.getBusinessKey()).isEqualTo("BIZ-ENDED-001");
+        assertThat(vo.getInitiator()).isEqualTo("88");
+        assertThat(vo.getInitiatorName()).isEqualTo("李四");
+        assertThat(vo.getProcessName()).isEqualTo("报销流程");
+        assertThat(vo.getFormKey()).isEqualTo("expenseForm");
     }
 }

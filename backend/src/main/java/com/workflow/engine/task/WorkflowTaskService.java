@@ -482,33 +482,47 @@ public class WorkflowTaskService {
             vo.setCreateTime(formatDate(task.getCreateTime()));
         }
 
-        // ProcessInstance → businessKey + initiator
+        // ProcessInstance → businessKey + initiator（复用 batch 查询模式）
         String processInstanceId = task.getProcessInstanceId();
         if (processInstanceId != null) {
-            try {
-                ProcessInstance pi = runtimeService.createProcessInstanceQuery()
-                        .processInstanceId(processInstanceId)
-                        .singleResult();
-                if (pi != null) {
-                    vo.setBusinessKey(pi.getBusinessKey());
-                }
-            } catch (Exception e) {
-                // 流程实例可能已结束
-            }
+            Set<String> piIdSet = Set.of(processInstanceId);
 
-            // initiator 变量
-            try {
-                Object initiator = runtimeService.getVariable(processInstanceId, "initiator");
+            // 1. 复用 batchQueryProcessInstances 获取运行中 ProcessInstance
+            Map<String, ProcessInstance> piMap = batchQueryProcessInstances(piIdSet);
+            ProcessInstance pi = piMap.get(processInstanceId);
+
+            if (pi != null) {
+                // 流程运行中：直接取 businessKey + initiator 变量
+                vo.setBusinessKey(pi.getBusinessKey());
+
+                Map<String, String> initiatorMap = batchQueryInitiators(piIdSet, piMap);
+                String initiator = initiatorMap.get(processInstanceId);
                 if (initiator != null) {
-                    String initiatorStr = String.valueOf(initiator);
-                    vo.setInitiator(initiatorStr);
-
-                    // 批量查询用户名（复用辅助方法）
-                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiatorStr));
-                    vo.setInitiatorName(nameMap.get(initiatorStr));
+                    vo.setInitiator(initiator);
+                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiator));
+                    vo.setInitiatorName(nameMap.get(initiator));
                 }
-            } catch (Exception e) {
-                // 流程实例可能已结束，变量不可查
+            } else {
+                // 2. 流程已结束：fallback 查 HistoricProcessInstance 获取 businessKey
+                try {
+                    HistoricProcessInstance hpi = historyService.createHistoricProcessInstanceQuery()
+                            .processInstanceId(processInstanceId)
+                            .singleResult();
+                    if (hpi != null) {
+                        vo.setBusinessKey(hpi.getBusinessKey());
+                    }
+                } catch (Exception e) {
+                    // 历史查询失败，忽略
+                }
+
+                // initiator 变量也从历史变量中获取
+                Map<String, String> initiatorMap = batchQueryHistoricInitiators(piIdSet);
+                String initiator = initiatorMap.get(processInstanceId);
+                if (initiator != null) {
+                    vo.setInitiator(initiator);
+                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiator));
+                    vo.setInitiatorName(nameMap.get(initiator));
+                }
             }
         }
 

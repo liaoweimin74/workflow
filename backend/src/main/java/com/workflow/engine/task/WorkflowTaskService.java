@@ -1,6 +1,7 @@
 package com.workflow.engine.task;
 
 import com.workflow.api.dto.CompleteTaskResponse;
+import com.workflow.api.dto.TaskDetailVO;
 import com.workflow.api.dto.TaskDoneFilter;
 import com.workflow.api.dto.TaskDoneVO;
 import com.workflow.api.dto.TaskTodoFilter;
@@ -453,6 +454,118 @@ public class WorkflowTaskService {
                 .taskTenantId(tenantId)
                 .singleResult();
         return Optional.ofNullable(task);
+    }
+
+    /**
+     * 查询任务详情，返回 TaskDetailVO（含 processName/initiator/initiatorName/businessKey/formKey/variables）。
+     *
+     * <p>复用批量查询辅助方法，单任务场景直接调用。
+     *
+     * @param taskId 任务 ID
+     * @return TaskDetailVO，任务不存在时返回 Optional.empty()
+     */
+    public Optional<TaskDetailVO> getTaskDetail(String taskId) {
+        Optional<Task> taskOpt = getTask(taskId);
+        if (taskOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        Task task = taskOpt.get();
+
+        TaskDetailVO vo = new TaskDetailVO();
+        vo.setTaskId(task.getId());
+        vo.setName(task.getName());
+        vo.setDescription(task.getDescription());
+        vo.setAssignee(task.getAssignee());
+        vo.setProcessInstanceId(task.getProcessInstanceId());
+        vo.setProcessDefinitionId(task.getProcessDefinitionId());
+        if (task.getCreateTime() != null) {
+            vo.setCreateTime(formatDate(task.getCreateTime()));
+        }
+
+        // ProcessInstance → businessKey + initiator
+        String processInstanceId = task.getProcessInstanceId();
+        if (processInstanceId != null) {
+            try {
+                ProcessInstance pi = runtimeService.createProcessInstanceQuery()
+                        .processInstanceId(processInstanceId)
+                        .singleResult();
+                if (pi != null) {
+                    vo.setBusinessKey(pi.getBusinessKey());
+                }
+            } catch (Exception e) {
+                // 流程实例可能已结束
+            }
+
+            // initiator 变量
+            try {
+                Object initiator = runtimeService.getVariable(processInstanceId, "initiator");
+                if (initiator != null) {
+                    String initiatorStr = String.valueOf(initiator);
+                    vo.setInitiator(initiatorStr);
+
+                    // 批量查询用户名（复用辅助方法）
+                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiatorStr));
+                    vo.setInitiatorName(nameMap.get(initiatorStr));
+                }
+            } catch (Exception e) {
+                // 流程实例可能已结束，变量不可查
+            }
+        }
+
+        // ProcessDefinition → processName
+        String processDefinitionId = task.getProcessDefinitionId();
+        if (processDefinitionId != null) {
+            Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(Set.of(processDefinitionId));
+            ProcessDefinition pd = pdMap.get(processDefinitionId);
+            if (pd != null) {
+                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+            }
+
+            // formKey 从 BpmnModel 中当前任务的 UserTask 节点提取
+            String formKey = extractFormKey(processDefinitionId, task.getTaskDefinitionKey());
+            vo.setFormKey(formKey);
+        }
+
+        // variables
+        try {
+            Map<String, Object> variables = flowableTaskService.getVariables(taskId);
+            vo.setVariables(variables);
+        } catch (Exception e) {
+            vo.setVariables(Map.of());
+        }
+
+        return Optional.of(vo);
+    }
+
+    /**
+     * 从 BpmnModel 中提取指定 UserTask 节点的 formKey。
+     *
+     * @param processDefinitionId 流程定义 ID
+     * @param taskDefinitionKey   任务定义键（BPMN 节点 ID）
+     * @return formKey，未找到时返回 null
+     */
+    private String extractFormKey(String processDefinitionId, String taskDefinitionKey) {
+        if (processDefinitionId == null || taskDefinitionKey == null) {
+            return null;
+        }
+        try {
+            org.flowable.bpmn.model.BpmnModel model = repositoryService.getBpmnModel(processDefinitionId);
+            if (model == null) {
+                return null;
+            }
+            for (org.flowable.bpmn.model.Process process : model.getProcesses()) {
+                for (var flowElement : process.getFlowElements()) {
+                    if (flowElement instanceof org.flowable.bpmn.model.UserTask userTask) {
+                        if (taskDefinitionKey.equals(userTask.getId())) {
+                            return userTask.getFormKey();
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // BpmnModel 获取失败，忽略
+        }
+        return null;
     }
 
     @Transactional

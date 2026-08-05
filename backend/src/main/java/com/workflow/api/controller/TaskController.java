@@ -86,9 +86,9 @@ public class TaskController {
     }
 
     @GetMapping("/{id}")
-    public R<Map<String, Object>> get(@PathVariable String id) {
-        return taskService.getTask(id)
-                .map(task -> R.ok(toMap(task)))
+    public R<TaskDetailVO> get(@PathVariable String id) {
+        return taskService.getTaskDetail(id)
+                .map(R::ok)
                 .orElse(R.fail(404, "Task not found"));
     }
 

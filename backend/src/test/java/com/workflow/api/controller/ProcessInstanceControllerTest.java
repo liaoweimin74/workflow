@@ -1,5 +1,6 @@
 package com.workflow.api.controller;
 
+import com.workflow.api.dto.PageResponse;
 import com.workflow.api.dto.StartProcessRequest;
 import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessInstanceService;
@@ -9,6 +10,9 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,10 +23,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -167,5 +168,97 @@ class ProcessInstanceControllerTest {
                 eq("testProcess"),
                 eq("BK-001"),
                 argThat(vars -> "15".equals(vars.get("initiator"))));
+    }
+
+    // ==================== list() 筛选参数测试 ====================
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void list_noFilters_passesNullsToService() {
+        ProcessInstance inst = mockProcessInstance();
+        Page<ProcessInstance> page = new PageImpl<>(List.of(inst), PageRequest.of(0, 20), 1);
+        when(processInstanceService.listProcessInstances(any(), isNull(), isNull(), isNull()))
+                .thenReturn(page);
+
+        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData().getContent()).hasSize(1);
+        verify(processInstanceService).listProcessInstances(
+                any(), isNull(), isNull(), isNull());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void list_withInitiator_passesToService() {
+        Page<ProcessInstance> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        when(processInstanceService.listProcessInstances(any(), eq("user-1"), isNull(), isNull()))
+                .thenReturn(page);
+
+        controller.list(0, 20, "user-1", null, null);
+
+        verify(processInstanceService).listProcessInstances(any(), eq("user-1"), isNull(), isNull());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void list_withStatus_passesToService() {
+        Page<ProcessInstance> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        when(processInstanceService.listProcessInstances(any(), isNull(), eq("running"), isNull()))
+                .thenReturn(page);
+
+        controller.list(0, 20, null, "running", null);
+
+        verify(processInstanceService).listProcessInstances(any(), isNull(), eq("running"), isNull());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void list_withProcessName_passesToService() {
+        Page<ProcessInstance> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        when(processInstanceService.listProcessInstances(any(), isNull(), isNull(), eq("leave")))
+                .thenReturn(page);
+
+        controller.list(0, 20, null, null, "leave");
+
+        verify(processInstanceService).listProcessInstances(any(), isNull(), isNull(), eq("leave"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void list_allFilters_passesToService() {
+        Page<ProcessInstance> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        when(processInstanceService.listProcessInstances(any(), eq("user-1"), eq("running"), eq("leave")))
+                .thenReturn(page);
+
+        controller.list(0, 20, "user-1", "running", "leave");
+
+        verify(processInstanceService).listProcessInstances(
+                any(), eq("user-1"), eq("running"), eq("leave"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void list_vo_containsCurrentNodeAndStatus() {
+        ProcessInstance inst = mock(ProcessInstance.class);
+        when(inst.getId()).thenReturn("inst-001");
+        when(inst.getProcessDefinitionId()).thenReturn("pd-001");
+        when(inst.getProcessDefinitionKey()).thenReturn("testProcess");
+        when(inst.getProcessDefinitionName()).thenReturn("测试流程");
+        when(inst.getBusinessKey()).thenReturn(null);
+        when(inst.getTenantId()).thenReturn("default");
+        when(inst.isSuspended()).thenReturn(false);
+        when(inst.isEnded()).thenReturn(false);
+
+        Page<ProcessInstance> page = new PageImpl<>(List.of(inst), PageRequest.of(0, 20), 1);
+        when(processInstanceService.listProcessInstances(any(), isNull(), isNull(), isNull()))
+                .thenReturn(page);
+
+        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
+
+        Map<String, Object> vo = result.getData().getContent().get(0);
+        assertThat(vo).containsKey("currentNode");
+        assertThat(vo).containsKey("status");
+        assertThat(vo.get("status")).isEqualTo("running");
     }
 }

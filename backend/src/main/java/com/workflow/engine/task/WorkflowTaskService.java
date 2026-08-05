@@ -8,6 +8,7 @@ import com.workflow.api.dto.TaskTodoFilter;
 import com.workflow.api.dto.TaskTodoVO;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.system.domain.vo.UserVO;
 import com.workflow.system.service.UserService;
@@ -42,6 +43,7 @@ public class WorkflowTaskService {
     private final RepositoryService repositoryService;
     private final UserService userService;
     private final WfTaskCommentRepository commentRepository;
+    private final WfTaskRemindRepository remindRepository;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
                                HistoryService historyService,
@@ -49,7 +51,8 @@ public class WorkflowTaskService {
                                RuntimeService runtimeService,
                                RepositoryService repositoryService,
                                UserService userService,
-                               WfTaskCommentRepository commentRepository) {
+                               WfTaskCommentRepository commentRepository,
+                               WfTaskRemindRepository remindRepository) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -57,6 +60,7 @@ public class WorkflowTaskService {
         this.repositoryService = repositoryService;
         this.userService = userService;
         this.commentRepository = commentRepository;
+        this.remindRepository = remindRepository;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
@@ -222,7 +226,11 @@ public class WorkflowTaskService {
         Map<String, String> initiatorMap = batchQueryInitiators(processInstanceIds, piMap);
         Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
 
-        // 5. 组装 VO
+        // 5. 批量查询催办标记（哪些 task 已有催办记录）
+        Set<String> taskIds = tasks.stream().map(Task::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<String> remindedTaskIds = batchQueryRemindedTaskIds(taskIds);
+
+        // 6. 组装 VO
         return tasks.stream().map(task -> {
             TaskTodoVO vo = new TaskTodoVO();
             vo.setTaskId(task.getId());
@@ -247,6 +255,8 @@ public class WorkflowTaskService {
             String initiator = initiatorMap.get(task.getProcessInstanceId());
             vo.setInitiator(initiator);
             vo.setInitiatorName(initiatorNameMap.get(initiator));
+
+            vo.setReminded(remindedTaskIds.contains(task.getId()));
 
             return vo;
         }).toList();
@@ -426,6 +436,29 @@ public class WorkflowTaskService {
     }
 
     // ==================== 过滤辅助 ====================
+
+    /**
+     * 批量查询哪些 taskId 已有催办记录。
+     *
+     * @param taskIds 任务 ID 集合
+     * @return 有催办记录的 taskId 集合
+     */
+    private Set<String> batchQueryRemindedTaskIds(Set<String> taskIds) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> reminded = new HashSet<>();
+        for (String taskId : taskIds) {
+            try {
+                if (!remindRepository.findByTaskId(taskId).isEmpty()) {
+                    reminded.add(taskId);
+                }
+            } catch (Exception e) {
+                // 查询失败，忽略（默认未催办）
+            }
+        }
+        return reminded;
+    }
 
     private boolean matchesProcessName(TaskTodoVO vo, String processName) {
         return processName == null ||

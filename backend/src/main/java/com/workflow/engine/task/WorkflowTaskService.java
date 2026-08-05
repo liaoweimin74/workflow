@@ -8,6 +8,7 @@ import com.workflow.api.dto.TaskTodoFilter;
 import com.workflow.api.dto.TaskTodoVO;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.task.entity.WfTaskRemind;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.system.domain.vo.UserVO;
@@ -447,17 +448,14 @@ public class WorkflowTaskService {
         if (taskIds == null || taskIds.isEmpty()) {
             return Set.of();
         }
-        Set<String> reminded = new HashSet<>();
-        for (String taskId : taskIds) {
-            try {
-                if (!remindRepository.findByTaskId(taskId).isEmpty()) {
-                    reminded.add(taskId);
-                }
-            } catch (Exception e) {
-                // 查询失败，忽略（默认未催办）
-            }
+        try {
+            return remindRepository.findByTaskIdIn(taskIds).stream()
+                    .map(WfTaskRemind::getTaskId)
+                    .collect(Collectors.toSet());
+        } catch (Exception e) {
+            // 查询失败，忽略（默认未催办）
+            return Set.of();
         }
-        return reminded;
     }
 
     private boolean matchesProcessName(TaskTodoVO vo, String processName) {

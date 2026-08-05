@@ -3,6 +3,7 @@ package com.workflow.engine.task.repository;
 import com.workflow.engine.task.entity.WfTaskRemind;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -19,4 +20,9 @@ public interface WfTaskRemindRepository extends JpaRepository<WfTaskRemind, Stri
      * 按任务 ID 查询催办记录列表。
      */
     List<WfTaskRemind> findByTaskId(String taskId);
+
+    /**
+     * 按任务 ID 集合批量查询催办记录（避免 N+1）。
+     */
+    List<WfTaskRemind> findByTaskIdIn(Collection<String> taskIds);
 }

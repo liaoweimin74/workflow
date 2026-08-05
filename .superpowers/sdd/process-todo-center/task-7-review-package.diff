@@ -1,0 +1,1038 @@
+﻿=== Commit list ===
+9a96f7d feat(remind): add task remind API with 24h frequency limit
+b63c48a feat(frontend): add API modules for task, remind, history endpoints
+
+=== Diff stat ===
+ .../api/controller/TaskRemindController.java       |  36 ++++
+ .../workflow/engine/task/TaskRemindService.java    |  95 +++++++++++
+ .../workflow/engine/task/WorkflowTaskService.java  |  37 +++-
+ .../workflow/engine/task/entity/WfTaskRemind.java  |  67 ++++++++
+ .../task/repository/WfTaskRemindRepository.java    |  22 +++
+ .../engine/task/TaskRemindServiceTest.java         | 139 +++++++++++++++
+ .../engine/task/WorkflowTaskServiceDetailTest.java |   5 +-
+ frontend/src/api/processDefinition.ts              |  63 ++++++-
+ frontend/src/api/processInstance.ts                | 107 ++++++++++++
+ frontend/src/api/task.ts                           | 189 +++++++++++++++++++++
+ frontend/src/api/taskRemind.ts                     |  23 +++
+ frontend/src/types/common.ts                       |  12 ++
+ 12 files changed, 791 insertions(+), 4 deletions(-)
+
+=== Full diff (U10) ===
+diff --git a/backend/src/main/java/com/workflow/api/controller/TaskRemindController.java b/backend/src/main/java/com/workflow/api/controller/TaskRemindController.java
+new file mode 100644
+index 0000000..9094a86
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/api/controller/TaskRemindController.java
+@@ -0,0 +1,36 @@
++package com.workflow.api.controller;
++
++import com.workflow.common.domain.R;
++import com.workflow.engine.task.TaskRemindService;
++import org.springframework.web.bind.annotation.*;
++
++/**
++ * 浠诲姟鍌姙 Controller銆?+ *
++ * <p>鎻愪緵 POST /api/v1/tasks/{taskId}/remind 绔偣锛?+ * 鍏佽鍙戣捣浜哄褰撳墠寰呭姙瀹℃壒浜哄彂璧峰偓鍔炪€?+ */
++@RestController
++@RequestMapping("/api/v1/tasks")
++public class TaskRemindController {
++
++    private final TaskRemindService taskRemindService;
++
++    public TaskRemindController(TaskRemindService taskRemindService) {
++        this.taskRemindService = taskRemindService;
++    }
++
++    /**
++     * 瀵规寚瀹氫换鍔″彂璧峰偓鍔炪€?+     *
++     * @param taskId 浠诲姟 ID
++     * @param from   鍌姙鍙戣捣浜猴紙鏌ヨ鍙傛暟锛屽悗缁彲浠?SecurityContext 鑾峰彇锛?+     * @return 鎿嶄綔缁撴灉
++     */
++    @PostMapping("/{taskId}/remind")
++    public R<Void> remind(@PathVariable String taskId,
++                          @RequestParam(required = false) String from) {
++        taskRemindService.remind(taskId, from);
++        return R.ok();
++    }
++}
+diff --git a/backend/src/main/java/com/workflow/engine/task/TaskRemindService.java b/backend/src/main/java/com/workflow/engine/task/TaskRemindService.java
+new file mode 100644
+index 0000000..edffe29
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/engine/task/TaskRemindService.java
+@@ -0,0 +1,95 @@
++package com.workflow.engine.task;
++
++import com.workflow.engine.task.entity.WfTaskRemind;
++import com.workflow.engine.task.repository.WfTaskRemindRepository;
++import com.workflow.engine.tenant.TenantProvider;
++import org.flowable.engine.TaskService;
++import org.flowable.task.api.Task;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.springframework.beans.factory.annotation.Value;
++import org.springframework.stereotype.Service;
++import org.springframework.transaction.annotation.Transactional;
++
++import java.time.Duration;
++import java.time.LocalDateTime;
++import java.util.List;
++import java.util.UUID;
++
++/**
++ * 浠诲姟鍌姙鏈嶅姟銆?+ *
++ * <p>鍙戣捣浜哄褰撳墠寰呭姙瀹℃壒浜哄彂璧峰偓鍔炪€傞鐜囬檺鍒讹細鍚屼竴浠诲姟鍦?24h锛堝彲閰嶇疆锛夊唴涓嶅彲閲嶅鍌姙銆?+ * 鍌姙璁板綍鍐欏叆 {@code wf_task_remind} 琛紝鏈湡閫氱煡閫氳繃 log 杈撳嚭锛屽悗缁鎺ラ€氱煡涓績銆?+ */
++@Service
++public class TaskRemindService {
++
++    private static final Logger log = LoggerFactory.getLogger(TaskRemindService.class);
++
++    private final TaskService flowableTaskService;
++    private final WfTaskRemindRepository remindRepository;
++    private final TenantProvider tenantProvider;
++
++    /** 鍌姙棰戠巼闄愬埗锛堝皬鏃讹級锛屽彲閫氳繃 workflow.remind.frequency-hours 閰嶇疆瑕嗙洊銆?*/
++    @Value("${workflow.remind.frequency-hours:24}")
++    private int frequencyHours = 24;
++
++    public TaskRemindService(TaskService flowableTaskService,
++                             WfTaskRemindRepository remindRepository,
++                             TenantProvider tenantProvider) {
++        this.flowableTaskService = flowableTaskService;
++        this.remindRepository = remindRepository;
++        this.tenantProvider = tenantProvider;
++    }
++
++    /**
++     * 瀵规寚瀹氫换鍔″彂璧峰偓鍔炪€?+     *
++     * @param taskId     浠诲姟 ID
++     * @param remindFrom 鍌姙鍙戣捣浜?+     * @throws IllegalStateException 濡傛灉浠诲姟涓嶅瓨鍦ㄦ垨 24h 鍐呭凡鍌姙杩?+     */
++    @Transactional
++    public void remind(String taskId, String remindFrom) {
++        // 1. 鏌ヨ浠诲姟鑾峰彇 assignee + processInstanceId
++        Task task = flowableTaskService.createTaskQuery()
++                .taskId(taskId)
++                .singleResult();
++
++        if (task == null) {
++            throw new IllegalStateException("Task not found: " + taskId);
++        }
++
++        // 2. 棰戠巼闄愬埗锛氭煡璇㈡渶鍚庝竴鏉″偓鍔炶褰?+        List<WfTaskRemind> existing = remindRepository.findByTaskIdOrderByRemindTimeDesc(taskId);
++        if (!existing.isEmpty()) {
++            WfTaskRemind lastRemind = existing.get(0);
++            LocalDateTime lastRemindTime = lastRemind.getRemindTime();
++            if (lastRemindTime != null) {
++                long hoursSinceLastRemind = Duration.between(lastRemindTime, LocalDateTime.now()).toHours();
++                if (hoursSinceLastRemind < frequencyHours) {
++                    throw new IllegalStateException(
++                            "Task " + taskId + " was reminded " + hoursSinceLastRemind
++                                    + "h ago, within the " + frequencyHours + "h frequency limit");
++                }
++            }
++        }
++
++        // 3. 鎻掑叆鍌姙璁板綍
++        String remindTo = task.getAssignee();
++        WfTaskRemind record = new WfTaskRemind();
++        record.setId(UUID.randomUUID().toString().replace("-", ""));
++        record.setTenantId(tenantProvider.getTenantId());
++        record.setTaskId(taskId);
++        record.setProcessInstanceId(task.getProcessInstanceId());
++        record.setRemindFrom(remindFrom);
++        record.setRemindTo(remindTo);
++        record.setRemindTime(LocalDateTime.now());
++        remindRepository.save(record);
++
++        // 4. 瑙﹀彂閫氱煡锛堟湰鏈?log锛屽悗缁鎺ラ€氱煡涓績锛?+        log.info("鍌姙閫氱煡 taskId={} processInstanceId={} from={} to={} remindTo={}",
++                taskId, task.getProcessInstanceId(), remindFrom, remindTo, remindTo);
++    }
++}
+diff --git a/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java b/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
+index 0cbe08b..32f7fe1 100644
+--- a/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
++++ b/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
+@@ -1,20 +1,21 @@
+ package com.workflow.engine.task;
+ 
+ import com.workflow.api.dto.CompleteTaskResponse;
+ import com.workflow.api.dto.TaskDetailVO;
+ import com.workflow.api.dto.TaskDoneFilter;
+ import com.workflow.api.dto.TaskDoneVO;
+ import com.workflow.api.dto.TaskTodoFilter;
+ import com.workflow.api.dto.TaskTodoVO;
+ import com.workflow.engine.history.entity.WfTaskComment;
+ import com.workflow.engine.history.repository.WfTaskCommentRepository;
++import com.workflow.engine.task.repository.WfTaskRemindRepository;
+ import com.workflow.engine.tenant.TenantProvider;
+ import com.workflow.system.domain.vo.UserVO;
+ import com.workflow.system.service.UserService;
+ import org.flowable.engine.HistoryService;
+ import org.flowable.engine.RepositoryService;
+ import org.flowable.engine.RuntimeService;
+ import org.flowable.engine.history.HistoricProcessInstance;
+ import org.flowable.engine.repository.ProcessDefinition;
+ import org.flowable.engine.runtime.ProcessInstance;
+ import org.flowable.task.api.Task;
+@@ -35,35 +36,38 @@ import java.util.stream.Collectors;
+ @Service
+ public class WorkflowTaskService {
+ 
+     private final org.flowable.engine.TaskService flowableTaskService;
+     private final HistoryService historyService;
+     private final TenantProvider tenantProvider;
+     private final RuntimeService runtimeService;
+     private final RepositoryService repositoryService;
+     private final UserService userService;
+     private final WfTaskCommentRepository commentRepository;
++    private final WfTaskRemindRepository remindRepository;
+ 
+     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
+                                HistoryService historyService,
+                                TenantProvider tenantProvider,
+                                RuntimeService runtimeService,
+                                RepositoryService repositoryService,
+                                UserService userService,
+-                               WfTaskCommentRepository commentRepository) {
++                               WfTaskCommentRepository commentRepository,
++                               WfTaskRemindRepository remindRepository) {
+         this.flowableTaskService = flowableTaskService;
+         this.historyService = historyService;
+         this.tenantProvider = tenantProvider;
+         this.runtimeService = runtimeService;
+         this.repositoryService = repositoryService;
+         this.userService = userService;
+         this.commentRepository = commentRepository;
++        this.remindRepository = remindRepository;
+     }
+ 
+     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
+         String tenantId = tenantProvider.getTenantId();
+         var query = flowableTaskService.createTaskQuery()
+                 .taskTenantId(tenantId)
+                 .taskAssignee(assignee)
+                 .orderByTaskCreateTime()
+                 .desc();
+ 
+@@ -215,21 +219,25 @@ public class WorkflowTaskService {
+         Set<String> processDefinitionIds = tasks.stream()
+                 .map(Task::getProcessDefinitionId)
+                 .filter(Objects::nonNull)
+                 .collect(Collectors.toSet());
+         Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(processDefinitionIds);
+ 
+         // 4. 鎵归噺鏌ヨ initiator 鍙橀噺 + 瑙ｆ瀽鐢ㄦ埛鍚?         Map<String, String> initiatorMap = batchQueryInitiators(processInstanceIds, piMap);
+         Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
+ 
+-        // 5. 缁勮 VO
++        // 5. 鎵归噺鏌ヨ鍌姙鏍囪锛堝摢浜?task 宸叉湁鍌姙璁板綍锛?+        Set<String> taskIds = tasks.stream().map(Task::getId).filter(Objects::nonNull).collect(Collectors.toSet());
++        Set<String> remindedTaskIds = batchQueryRemindedTaskIds(taskIds);
++
++        // 6. 缁勮 VO
+         return tasks.stream().map(task -> {
+             TaskTodoVO vo = new TaskTodoVO();
+             vo.setTaskId(task.getId());
+             vo.setProcessInstanceId(task.getProcessInstanceId());
+             vo.setProcessDefinitionId(task.getProcessDefinitionId());
+             vo.setCurrentNodeName(task.getName());
+             vo.setAssignee(task.getAssignee());
+             if (task.getCreateTime() != null) {
+                 vo.setCreateTime(formatDate(task.getCreateTime()));
+             }
+@@ -241,20 +249,22 @@ public class WorkflowTaskService {
+ 
+             ProcessDefinition pd = pdMap.get(task.getProcessDefinitionId());
+             if (pd != null) {
+                 vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+             }
+ 
+             String initiator = initiatorMap.get(task.getProcessInstanceId());
+             vo.setInitiator(initiator);
+             vo.setInitiatorName(initiatorNameMap.get(initiator));
+ 
++            vo.setReminded(remindedTaskIds.contains(task.getId()));
++
+             return vo;
+         }).toList();
+     }
+ 
+     private List<TaskDoneVO> assembleDoneVOs(List<HistoricTaskInstance> tasks) {
+         if (tasks.isEmpty()) {
+             return List.of();
+         }
+ 
+         // 1. 鎵归噺鏀堕泦 processInstanceIds
+@@ -420,20 +430,43 @@ public class WorkflowTaskService {
+         List<UserVO> users = userService.findByIds(userIds);
+         return users.stream()
+                 .collect(Collectors.toMap(
+                         u -> String.valueOf(u.id()),
+                         u -> u.nickname() != null ? u.nickname() : u.username(),
+                         (a, b) -> a));
+     }
+ 
+     // ==================== 杩囨护杈呭姪 ====================
+ 
++    /**
++     * 鎵归噺鏌ヨ鍝簺 taskId 宸叉湁鍌姙璁板綍銆?+     *
++     * @param taskIds 浠诲姟 ID 闆嗗悎
++     * @return 鏈夊偓鍔炶褰曠殑 taskId 闆嗗悎
++     */
++    private Set<String> batchQueryRemindedTaskIds(Set<String> taskIds) {
++        if (taskIds == null || taskIds.isEmpty()) {
++            return Set.of();
++        }
++        Set<String> reminded = new HashSet<>();
++        for (String taskId : taskIds) {
++            try {
++                if (!remindRepository.findByTaskId(taskId).isEmpty()) {
++                    reminded.add(taskId);
++                }
++            } catch (Exception e) {
++                // 鏌ヨ澶辫触锛屽拷鐣ワ紙榛樿鏈偓鍔烇級
++            }
++        }
++        return reminded;
++    }
++
+     private boolean matchesProcessName(TaskTodoVO vo, String processName) {
+         return processName == null ||
+                 (vo.getProcessName() != null && vo.getProcessName().contains(processName));
+     }
+ 
+     private boolean matchesInitiator(TaskTodoVO vo, String initiator) {
+         return initiator == null || initiator.equals(vo.getInitiator());
+     }
+ 
+     // ==================== 鏃ユ湡杈呭姪 ====================
+diff --git a/backend/src/main/java/com/workflow/engine/task/entity/WfTaskRemind.java b/backend/src/main/java/com/workflow/engine/task/entity/WfTaskRemind.java
+new file mode 100644
+index 0000000..fcfb978
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/engine/task/entity/WfTaskRemind.java
+@@ -0,0 +1,67 @@
++package com.workflow.engine.task.entity;
++
++import jakarta.persistence.*;
++import java.time.LocalDateTime;
++
++/**
++ * 浠诲姟鍌姙璁板綍瀹炰綋銆?+ *
++ * <p>瀵瑰簲 {@code wf_task_remind} 琛紙V16 杩佺Щ锛夈€?+ * 姣忔鍌姙鎿嶄綔鍐欏叆涓€鏉¤褰曪紝閰嶅悎棰戠巼闄愬埗閫昏緫锛堥粯璁?24h 鍐呬笉鍙噸澶嶅偓鍔烇級銆?+ */
++@Entity
++@Table(name = "wf_task_remind")
++public class WfTaskRemind {
++
++    @Id
++    @Column(name = "id", length = 64, nullable = false)
++    private String id;
++
++    @Column(name = "tenant_id", length = 64, nullable = false)
++    private String tenantId;
++
++    @Column(name = "task_id", length = 64, nullable = false)
++    private String taskId;
++
++    @Column(name = "process_instance_id", length = 64, nullable = false)
++    private String processInstanceId;
++
++    @Column(name = "remind_from", length = 64, nullable = false)
++    private String remindFrom;
++
++    @Column(name = "remind_to", length = 64, nullable = false)
++    private String remindTo;
++
++    @Column(name = "remind_time")
++    private LocalDateTime remindTime;
++
++    @PrePersist
++    protected void onCreate() {
++        if (remindTime == null) {
++            remindTime = LocalDateTime.now();
++        }
++    }
++
++    // ==================== Getters / Setters ====================
++
++    public String getId() { return id; }
++    public void setId(String id) { this.id = id; }
++
++    public String getTenantId() { return tenantId; }
++    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
++
++    public String getTaskId() { return taskId; }
++    public void setTaskId(String taskId) { this.taskId = taskId; }
++
++    public String getProcessInstanceId() { return processInstanceId; }
++    public void setProcessInstanceId(String processInstanceId) { this.processInstanceId = processInstanceId; }
++
++    public String getRemindFrom() { return remindFrom; }
++    public void setRemindFrom(String remindFrom) { this.remindFrom = remindFrom; }
++
++    public String getRemindTo() { return remindTo; }
++    public void setRemindTo(String remindTo) { this.remindTo = remindTo; }
++
++    public LocalDateTime getRemindTime() { return remindTime; }
++    public void setRemindTime(LocalDateTime remindTime) { this.remindTime = remindTime; }
++}
+diff --git a/backend/src/main/java/com/workflow/engine/task/repository/WfTaskRemindRepository.java b/backend/src/main/java/com/workflow/engine/task/repository/WfTaskRemindRepository.java
+new file mode 100644
+index 0000000..ed68c3d
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/engine/task/repository/WfTaskRemindRepository.java
+@@ -0,0 +1,22 @@
++package com.workflow.engine.task.repository;
++
++import com.workflow.engine.task.entity.WfTaskRemind;
++import org.springframework.data.jpa.repository.JpaRepository;
++
++import java.util.List;
++
++/**
++ * 浠诲姟鍌姙璁板綍 Repository銆?+ */
++public interface WfTaskRemindRepository extends JpaRepository<WfTaskRemind, String> {
++
++    /**
++     * 鎸変换鍔?ID 鏌ヨ鍌姙璁板綍锛屾寜鍌姙鏃堕棿鍊掑簭鎺掑垪锛堟渶鏂板湪鍓嶏級銆?+     */
++    List<WfTaskRemind> findByTaskIdOrderByRemindTimeDesc(String taskId);
++
++    /**
++     * 鎸変换鍔?ID 鏌ヨ鍌姙璁板綍鍒楄〃銆?+     */
++    List<WfTaskRemind> findByTaskId(String taskId);
++}
+diff --git a/backend/src/test/java/com/workflow/engine/task/TaskRemindServiceTest.java b/backend/src/test/java/com/workflow/engine/task/TaskRemindServiceTest.java
+new file mode 100644
+index 0000000..5382b32
+--- /dev/null
++++ b/backend/src/test/java/com/workflow/engine/task/TaskRemindServiceTest.java
+@@ -0,0 +1,139 @@
++package com.workflow.engine.task;
++
++import com.workflow.engine.task.entity.WfTaskRemind;
++import com.workflow.engine.task.repository.WfTaskRemindRepository;
++import com.workflow.engine.tenant.TenantProvider;
++import org.flowable.engine.TaskService;
++import org.flowable.task.api.Task;
++import org.flowable.task.api.TaskQuery;
++import org.junit.jupiter.api.Test;
++import org.junit.jupiter.api.extension.ExtendWith;
++import org.mockito.ArgumentCaptor;
++import org.mockito.InjectMocks;
++import org.mockito.Mock;
++import org.mockito.junit.jupiter.MockitoExtension;
++
++import java.time.LocalDateTime;
++import java.util.List;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.Mockito.*;
++
++/**
++ * TaskRemindService 鍗曞厓娴嬭瘯銆?+ *
++ * <p>楠岃瘉锛?+ * <ul>
++ *   <li>棣栨鍌姙鎴愬姛 鈥?鎻掑叆 wf_task_remind 璁板綍 + 鏃ュ織閫氱煡</li>
++ *   <li>24h 鍐呴噸澶嶅偓鍔炶鎷掔粷 鈥?鎶涘嚭寮傚父</li>
++ *   <li>瓒呰繃 24h 鍚庡啀娆″偓鍔炴垚鍔?/li>
++ *   <li>浠诲姟涓嶅瓨鍦ㄦ椂鎶涘紓甯?/li>
++ * </ul>
++ */
++@ExtendWith(MockitoExtension.class)
++class TaskRemindServiceTest {
++
++    @Mock
++    TaskService flowableTaskService;
++    @Mock
++    WfTaskRemindRepository remindRepository;
++    @Mock
++    TenantProvider tenantProvider;
++
++    @InjectMocks
++    TaskRemindService taskRemindService;
++
++    private Task mockTask(String taskId, String piId, String assignee) {
++        Task task = mock(Task.class);
++        lenient().when(task.getId()).thenReturn(taskId);
++        lenient().when(task.getProcessInstanceId()).thenReturn(piId);
++        lenient().when(task.getAssignee()).thenReturn(assignee);
++        return task;
++    }
++
++    private void stubTaskQuery(Task task) {
++        TaskQuery query = mock(TaskQuery.class);
++        when(flowableTaskService.createTaskQuery()).thenReturn(query);
++        when(query.taskId(anyString())).thenReturn(query);
++        when(query.singleResult()).thenReturn(task);
++    }
++
++    @Test
++    void remindSucceedsFirstTime() {
++        Task task = mockTask("task-001", "pi-001", "bob");
++        stubTaskQuery(task);
++        when(tenantProvider.getTenantId()).thenReturn("tenant-1");
++        when(remindRepository.findByTaskIdOrderByRemindTimeDesc("task-001"))
++                .thenReturn(List.of());
++
++        taskRemindService.remind("task-001", "alice");
++
++        // 楠岃瘉鍌姙璁板綍淇濆瓨
++        ArgumentCaptor<WfTaskRemind> captor = ArgumentCaptor.forClass(WfTaskRemind.class);
++        verify(remindRepository).save(captor.capture());
++
++        WfTaskRemind record = captor.getValue();
++        assertThat(record.getTaskId()).isEqualTo("task-001");
++        assertThat(record.getProcessInstanceId()).isEqualTo("pi-001");
++        assertThat(record.getRemindFrom()).isEqualTo("alice");
++        assertThat(record.getRemindTo()).isEqualTo("bob");
++        assertThat(record.getTenantId()).isEqualTo("tenant-1");
++        assertThat(record.getRemindTime()).isNotNull();
++    }
++
++    @Test
++    void remindRejectedWithin24h() {
++        Task task = mockTask("task-001", "pi-001", "bob");
++        stubTaskQuery(task);
++
++        // 妯℃嫙 1 灏忔椂鍓嶅凡鏈夊偓鍔炶褰?+        WfTaskRemind priorRemind = new WfTaskRemind();
++        priorRemind.setTaskId("task-001");
++        priorRemind.setRemindFrom("alice");
++        priorRemind.setRemindTo("bob");
++        priorRemind.setRemindTime(LocalDateTime.now().minusHours(1));
++
++        when(remindRepository.findByTaskIdOrderByRemindTimeDesc("task-001"))
++                .thenReturn(List.of(priorRemind));
++
++        assertThatThrownBy(() -> taskRemindService.remind("task-001", "alice"))
++                .isInstanceOf(IllegalStateException.class)
++                .hasMessageContaining("24");
++
++        // 楠岃瘉娌℃湁鎻掑叆鏂拌褰?+        verify(remindRepository, never()).save(any());
++    }
++
++    @Test
++    void remindSucceedsAfter24h() {
++        Task task = mockTask("task-001", "pi-001", "bob");
++        stubTaskQuery(task);
++        when(tenantProvider.getTenantId()).thenReturn("tenant-1");
++
++        // 妯℃嫙 25 灏忔椂鍓嶅凡鏈夊偓鍔炶褰曪紙瓒呰繃 24h 闄愬埗锛?+        WfTaskRemind priorRemind = new WfTaskRemind();
++        priorRemind.setTaskId("task-001");
++        priorRemind.setRemindFrom("alice");
++        priorRemind.setRemindTo("bob");
++        priorRemind.setRemindTime(LocalDateTime.now().minusHours(25));
++
++        when(remindRepository.findByTaskIdOrderByRemindTimeDesc("task-001"))
++                .thenReturn(List.of(priorRemind));
++
++        taskRemindService.remind("task-001", "alice");
++
++        verify(remindRepository).save(any(WfTaskRemind.class));
++    }
++
++    @Test
++    void remind_taskNotFound_throwsException() {
++        stubTaskQuery(null);
++
++        assertThatThrownBy(() -> taskRemindService.remind("nonexistent", "alice"))
++                .isInstanceOf(IllegalStateException.class)
++                .hasMessageContaining("Task not found");
++    }
++}
+diff --git a/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java b/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java
+index a5ed926..1193fea 100644
+--- a/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java
++++ b/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java
+@@ -1,14 +1,15 @@
+ package com.workflow.engine.task;
+ 
+ import com.workflow.api.dto.TaskDetailVO;
+ import com.workflow.engine.history.repository.WfTaskCommentRepository;
++import com.workflow.engine.task.repository.WfTaskRemindRepository;
+ import com.workflow.engine.tenant.TenantProvider;
+ import com.workflow.system.domain.vo.UserVO;
+ import com.workflow.system.service.UserService;
+ import org.flowable.engine.HistoryService;
+ import org.flowable.engine.RepositoryService;
+ import org.flowable.engine.RuntimeService;
+ import org.flowable.engine.TaskService;
+ import org.flowable.engine.history.HistoricProcessInstance;
+ import org.flowable.engine.history.HistoricProcessInstanceQuery;
+ import org.flowable.engine.repository.ProcessDefinition;
+@@ -45,33 +46,35 @@ import static org.mockito.Mockito.*;
+  */
+ class WorkflowTaskServiceDetailTest {
+ 
+     private TaskService flowableTaskService;
+     private HistoryService historyService;
+     private TenantProvider tenantProvider;
+     private RuntimeService runtimeService;
+     private RepositoryService repositoryService;
+     private UserService userService;
+     private WfTaskCommentRepository commentRepository;
++    private WfTaskRemindRepository remindRepository;
+     private WorkflowTaskService service;
+ 
+     @BeforeEach
+     void setUp() {
+         flowableTaskService = mock(TaskService.class);
+         historyService = mock(HistoryService.class);
+         tenantProvider = mock(TenantProvider.class);
+         runtimeService = mock(RuntimeService.class);
+         repositoryService = mock(RepositoryService.class);
+         userService = mock(UserService.class);
+         commentRepository = mock(WfTaskCommentRepository.class);
++        remindRepository = mock(WfTaskRemindRepository.class);
+         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
+-                runtimeService, repositoryService, userService, commentRepository);
++                runtimeService, repositoryService, userService, commentRepository, remindRepository);
+         when(tenantProvider.getTenantId()).thenReturn("default");
+     }
+ 
+     @Test
+     void getTaskDetailReturnsVOWithProcessNameInitiatorNameAndVariables() {
+         // Given: a task with process instance and definition
+         String taskId = "task-001";
+         String processInstanceId = "pi-001";
+         String processDefinitionId = "pd-001:1:42";
+ 
+diff --git a/frontend/src/api/processDefinition.ts b/frontend/src/api/processDefinition.ts
+index 95fd5a5..633063e 100644
+--- a/frontend/src/api/processDefinition.ts
++++ b/frontend/src/api/processDefinition.ts
+@@ -1,12 +1,12 @@
+ import http from '@/utils/http'
+-import type { R, PageResult } from '@/types/common'
++import type { R, PageResult, PageResponse } from '@/types/common'
+ 
+ export interface ProcessDraft {
+   id: string
+   tenantId: string
+   name: string
+   key: string
+   categoryId: string | null
+   bpmnXml: string
+   status: string
+   processDefinitionId: string | null
+@@ -36,20 +36,81 @@ export interface DesignSaveRequest {
+   nodeConfigs: Record<string, string>
+ }
+ 
+ export interface ProcessDefinitionSummary {
+   id: string
+   key: string
+   name: string
+   version: number
+ }
+ 
++/**
++ * 宸查儴缃叉祦绋嬪畾涔夛紙Flowable ProcessDefinition 搴忓垪鍖栧舰鐘讹級銆?+ * 瀵瑰簲 GET /api/v1/deployed-processes 鍒楄〃椤广€?+ */
++export interface DeployedProcessDefinition {
++  id: string
++  key: string
++  name: string
++  version: number
++  description: string | null
++  deploymentId: string
++  resourceName: string
++  diagramResourceName: string | null
++  tenantId: string
++  category: string | null
++  suspended: boolean
++}
++
++export interface DeployedProcessQueryParams {
++  page?: number
++  size?: number
++  categoryId?: string
++  name?: string
++  status?: string
++}
++
++/**
++ * 宸查儴缃叉祦绋嬪畾涔?API锛堝搴?/api/v1/deployed-processes锛夈€?+ */
++export const deployedProcessApi = {
++  /** 宸查儴缃叉祦绋嬪畾涔夊垎椤靛垪琛紝鏀寔 categoryId/name/status 绛涢€?*/
++  list(params: DeployedProcessQueryParams): Promise<R<PageResponse<DeployedProcessDefinition>>> {
++    return http.get('/v1/deployed-processes', { params })
++  },
++
++  /** 宸查儴缃叉祦绋嬪畾涔夌簿绠€鍒楄〃锛堟寜 key 鍘婚噸鍙栨渶鏂扮増鏈級 */
++  listSummaries(): Promise<R<ProcessDefinitionSummary[]>> {
++    return http.get('/v1/deployed-processes/summaries')
++  },
++
++  /** 鑾峰彇娴佺▼瀹氫箟璇︽儏 */
++  get(id: string): Promise<R<DeployedProcessDefinition>> {
++    return http.get(`/v1/deployed-processes/${id}`)
++  },
++
++  /** 鑾峰彇娴佺▼瀹氫箟 BPMN XML */
++  getXml(id: string): Promise<R<string>> {
++    return http.get(`/v1/deployed-processes/${id}/xml`)
++  },
++
++  /** 鎸傝捣娴佺▼瀹氫箟 */
++  suspend(id: string): Promise<R<void>> {
++    return http.post(`/v1/deployed-processes/${id}/suspend`)
++  },
++
++  /** 婵€娲绘祦绋嬪畾涔?*/
++  activate(id: string): Promise<R<void>> {
++    return http.post(`/v1/deployed-processes/${id}/activate`)
++  },
++}
++
+ export const processDesignApi = {
+   createDraft(name: string, key: string, categoryId?: string): Promise<R<ProcessDraft>> {
+     return http.post('/v1/process-definitions/drafts', null, {
+       params: { name, key, categoryId }
+     })
+   },
+ 
+   listDrafts(params: {
+     page?: number
+     size?: number
+diff --git a/frontend/src/api/processInstance.ts b/frontend/src/api/processInstance.ts
+new file mode 100644
+index 0000000..1b888f3
+--- /dev/null
++++ b/frontend/src/api/processInstance.ts
+@@ -0,0 +1,107 @@
++import http from '@/utils/http'
++import type { R, PageResponse } from '@/types/common'
++import type { ApprovalRecordVO } from '@/api/task'
++
++// 鈹€鈹€ VO / 璇锋眰鎺ュ彛 鈹€鈹€
++
++/**
++ * 娴佺▼瀹炰緥鍒楄〃椤癸紙瀵瑰簲鍚庣 ProcessInstanceController.toMap 搴忓垪鍖栧舰鐘讹級銆?+ */
++export interface ProcessInstanceVO {
++  id: string
++  processDefinitionId: string
++  processDefinitionKey: string
++  processDefinitionName: string
++  businessKey: string
++  tenantId: string
++  suspended: boolean
++  ended: boolean
++  currentNode: string
++  /** running | suspended | completed */
++  status: string
++}
++
++/**
++ * 娴佺▼瀹炰緥鍒楄〃鏌ヨ鍙傛暟銆?+ * 鏀寔鎸夊彂璧蜂汉銆佺姸鎬併€佹祦绋嬪悕绉扮瓫閫夈€?+ */
++export interface ProcessInstanceQueryParams {
++  page?: number
++  size?: number
++  initiator?: string
++  status?: string
++  processName?: string
++}
++
++/** 鍚姩娴佺▼璇锋眰 */
++export interface StartProcessRequest {
++  processKey: string
++  businessKey?: string
++  variables?: Record<string, unknown>
++}
++
++/** 鍚姩娴佺▼鍝嶅簲 */
++export interface StartProcessResponse {
++  id: string
++  processDefinitionId: string
++  processDefinitionKey: string
++  businessKey: string
++  tenantId: string
++}
++
++/** 娴佺▼楂樹寒淇℃伅锛堣妭鐐?+ 杩炵嚎楂樹寒 ID锛?*/
++export interface ProcessHighlight {
++  [key: string]: unknown
++}
++
++// 鈹€鈹€ API 鈹€鈹€
++
++/**
++ * 娴佺▼瀹炰緥 API锛堝搴?/api/v1/process-instances锛夈€?+ *
++ * list: 鏀寔 initiator/status/processName 绛涢€夈€?+ * history: 瀹℃壒鍘嗗彶鏃堕棿绾匡紙鐢?ProcessHistoryController 鎻愪緵锛夈€?+ */
++export const processInstanceApi = {
++  /** 鍚姩娴佺▼ */
++  start(data: StartProcessRequest): Promise<R<StartProcessResponse>> {
++    return http.post('/v1/process-instances', data)
++  },
++
++  /** 娴佺▼瀹炰緥鍒嗛〉鍒楄〃锛屾敮鎸?initiator/status/processName 绛涢€?*/
++  list(params: ProcessInstanceQueryParams): Promise<R<PageResponse<ProcessInstanceVO>>> {
++    return http.get('/v1/process-instances', { params })
++  },
++
++  /** 鑾峰彇娴佺▼瀹炰緥璇︽儏 */
++  get(id: string): Promise<R<ProcessInstanceVO>> {
++    return http.get(`/v1/process-instances/${id}`)
++  },
++
++  /** 鎸傝捣娴佺▼瀹炰緥 */
++  suspend(id: string): Promise<R<void>> {
++    return http.post(`/v1/process-instances/${id}/suspend`)
++  },
++
++  /** 鎭㈠娴佺▼瀹炰緥 */
++  resume(id: string): Promise<R<void>> {
++    return http.post(`/v1/process-instances/${id}/resume`)
++  },
++
++  /** 缁堟娴佺▼瀹炰緥 */
++  terminate(id: string, reason?: string): Promise<R<void>> {
++    return http.post(`/v1/process-instances/${id}/terminate`, null, {
++      params: { reason }
++    })
++  },
++
++  /** 鑾峰彇娴佺▼鍥鹃珮浜俊鎭紙宸茶蛋鑺傜偣 + 褰撳墠鑺傜偣锛?*/
++  highlight(id: string): Promise<R<ProcessHighlight>> {
++    return http.get(`/v1/process-instances/${id}/highlight`)
++  },
++
++  /** 鑾峰彇娴佺▼瀹炰緥鐨勫鎵瑰巻鍙茶褰曪紙鏃堕棿绾匡級 */
++  history(id: string): Promise<R<ApprovalRecordVO[]>> {
++    return http.get(`/v1/process-instances/${id}/history`)
++  },
++}
+diff --git a/frontend/src/api/task.ts b/frontend/src/api/task.ts
+new file mode 100644
+index 0000000..7b778b5
+--- /dev/null
++++ b/frontend/src/api/task.ts
+@@ -0,0 +1,189 @@
++import http from '@/utils/http'
++import type { R, PageResponse } from '@/types/common'
++
++// 鈹€鈹€ VO 鎺ュ彛锛堜笌鍚庣 DTO 瀛楁涓€涓€瀵瑰簲锛?鈹€鈹€
++
++/**
++ * 寰呭姙浠诲姟 VO銆?+ * 瀵瑰簲鍚庣 com.workflow.api.dto.TaskTodoVO銆?+ */
++export interface TaskTodoVO {
++  taskId: string
++  processInstanceId: string
++  processDefinitionId: string
++  processName: string
++  businessKey: string
++  initiator: string
++  initiatorName: string
++  currentNodeName: string
++  assignee: string
++  createTime: string
++  reminded: boolean
++}
++
++/**
++ * 宸插姙浠诲姟 VO銆?+ * 缁ф壙 TaskTodoVO锛屽鍔犵粨鏉熸椂闂村拰瀹℃壒缁撴灉銆?+ * 瀵瑰簲鍚庣 com.workflow.api.dto.TaskDoneVO銆?+ */
++export interface TaskDoneVO extends TaskTodoVO {
++  endTime: string
++  approveResult: string
++}
++
++/**
++ * 浠诲姟璇︽儏 VO銆?+ * 瀵瑰簲鍚庣 com.workflow.api.dto.TaskDetailVO銆?+ */
++export interface TaskDetailVO {
++  taskId: string
++  name: string
++  description: string
++  assignee: string
++  processInstanceId: string
++  processDefinitionId: string
++  processName: string
++  businessKey: string
++  initiator: string
++  initiatorName: string
++  formKey: string
++  variables: Record<string, unknown>
++  createTime: string
++}
++
++/**
++ * 瀹℃壒璁板綍 VO銆?+ * 瀵瑰簲鍚庣 com.workflow.api.dto.ApprovalRecordVO銆?+ * 鐢?ProcessHistoryService 缁勮锛屽皢 Flowable 鍘嗗彶娲诲姩鑺傜偣涓?wf_task_comment 鑱氬悎涓烘椂闂寸嚎瑙嗗浘銆?+ */
++export interface ApprovalRecordVO {
++  activityId: string
++  activityName: string
++  assignee: string
++  assigneeName: string
++  startTime: string
++  endTime: string
++  action: string
++  comment: string
++}
++
++// 鈹€鈹€ 璇锋眰鍙傛暟 / Body 鎺ュ彛 鈹€鈹€
++
++export interface TaskTodoQueryParams {
++  assignee: string
++  page?: number
++  size?: number
++  processName?: string
++  initiator?: string
++  createTimeStart?: string
++  createTimeEnd?: string
++}
++
++export interface TaskDoneQueryParams {
++  userId: string
++  page?: number
++  size?: number
++  processName?: string
++  initiator?: string
++  endTimeStart?: string
++  endTimeEnd?: string
++  approveResult?: string
++}
++
++export interface CompleteTaskRequest {
++  variables?: Record<string, unknown>
++  userId?: string
++  comment?: string
++}
++
++export interface CompleteTaskResponse {
++  processInstanceId: string
++  processFinished: boolean
++  nextTaskId: string
++  nextTaskName: string
++  nextTaskAssignee: string
++  nextTaskDefinitionKey: string
++}
++
++export interface RejectRequest {
++  userId?: string
++  reason?: string
++}
++
++export interface TransferRequest {
++  fromUser?: string
++  toUser?: string
++  reason?: string
++}
++
++export interface DelegateRequest {
++  delegateTo: string
++  fromUser?: string
++  comment?: string
++}
++
++export interface AddSignRequest {
++  users: string[]
++  userId?: string
++  comment?: string
++}
++
++export interface ForwardSignRequest {
++  toUser: string
++  userId?: string
++  comment?: string
++}
++
++// 鈹€鈹€ API 鈹€鈹€
++
++export const taskApi = {
++  /** 寰呭姙浠诲姟鍒楄〃 */
++  listTodo(params: TaskTodoQueryParams): Promise<R<PageResponse<TaskTodoVO>>> {
++    return http.get('/v1/tasks', { params })
++  },
++
++  /** 宸插姙锛堝巻鍙诧級浠诲姟鍒楄〃 */
++  listHistoric(params: TaskDoneQueryParams): Promise<R<PageResponse<TaskDoneVO>>> {
++    return http.get('/v1/tasks/historic', { params })
++  },
++
++  /** 浠诲姟璇︽儏 */
++  getDetail(id: string): Promise<R<TaskDetailVO>> {
++    return http.get(`/v1/tasks/${id}`)
++  },
++
++  /** 绛炬敹浠诲姟 */
++  claim(id: string, userId: string): Promise<R<void>> {
++    return http.post(`/v1/tasks/${id}/claim`, null, { params: { userId } })
++  },
++
++  /** 瀹屾垚浠诲姟 */
++  complete(id: string, data?: CompleteTaskRequest): Promise<R<CompleteTaskResponse>> {
++    return http.post(`/v1/tasks/${id}/complete`, data)
++  },
++
++  /** 椹冲洖浠诲姟 */
++  reject(id: string, data?: RejectRequest): Promise<R<void>> {
++    return http.post(`/v1/tasks/${id}/reject`, data)
++  },
++
++  /** 杞姙浠诲姟 */
++  transfer(id: string, data?: TransferRequest): Promise<R<void>> {
++    return http.post(`/v1/tasks/${id}/transfer`, data)
++  },
++
++  /** 濮旀淳浠诲姟 */
++  delegate(id: string, data: DelegateRequest): Promise<R<void>> {
++    return http.post(`/v1/tasks/${id}/delegate`, data)
++  },
++
++  /** 鍔犵 */
++  addSign(id: string, data: AddSignRequest): Promise<R<void>> {
++    return http.post(`/v1/tasks/${id}/add-sign`, data)
++  },
++
++  /** 杞 */
++  forwardSign(id: string, data: ForwardSignRequest): Promise<R<void>> {
++    return http.post(`/v1/tasks/${id}/forward-sign`, data)
++  },
++}
+diff --git a/frontend/src/api/taskRemind.ts b/frontend/src/api/taskRemind.ts
+new file mode 100644
+index 0000000..88760f5
+--- /dev/null
++++ b/frontend/src/api/taskRemind.ts
+@@ -0,0 +1,23 @@
++import http from '@/utils/http'
++import type { R } from '@/types/common'
++
++/**
++ * 浠诲姟鍌姙 API銆?+ *
++ * 瀵瑰簲 POST /api/v1/tasks/{taskId}/remind銆?+ * 鍚戝綋鍓嶄换鍔＄殑鍔炵悊浜哄彂閫佸偓鍔為€氱煡锛堢珯鍐呬俊 / 娑堟伅鎺ㄩ€侊級銆?+ *
++ * TaskTodoVO.reminded 瀛楁鏍囪璇ヤ换鍔℃槸鍚﹀凡琚偓鍔炪€?+ */
++export const taskRemindApi = {
++  /**
++   * 鍌姙鎸囧畾浠诲姟銆?+   *
++   * @param taskId 浠诲姟 ID
++   * @param data 鍙€夌殑鍌姙闄勫姞淇℃伅锛堟秷鎭唴瀹圭瓑锛?+   * @returns 鍚庣杩斿洖 void
++   */
++  remind(taskId: string, data?: { message?: string }): Promise<R<void>> {
++    return http.post(`/v1/tasks/${taskId}/remind`, data)
++  },
++}
+diff --git a/frontend/src/types/common.ts b/frontend/src/types/common.ts
+index 9f23deb..8902e13 100644
+--- a/frontend/src/types/common.ts
++++ b/frontend/src/types/common.ts
+@@ -2,11 +2,23 @@ export interface R<T = any> {
+   code: number
+   data: T
+   msg: string
+ }
+ 
+ export interface PageResult<T> {
+   total: number
+   page: number
+   size: number
+   rows: T[]
++}
++
++/**
++ * 鍚庣 PageResponse 褰㈢姸锛圫pring Data Page 鍖呰锛夈€?+ * 鐢ㄤ簬 /api/v1/tasks銆?api/v1/process-instances 绛夊垎椤垫帴鍙ｃ€?+ */
++export interface PageResponse<T> {
++  content: T[]
++  pageNumber: number
++  pageSize: number
++  totalElements: number
++  totalPages: number
+ }
+\ No newline at end of file

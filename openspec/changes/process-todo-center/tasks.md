@@ -31,10 +31,10 @@
 
 ## 6. 后端 — 审批记录历史 API
 
-- [ ] 6.1 新建 `ProcessHistoryService`：基于 Flowable HistoryService 聚合历史活动节点 + 审批意见，返回时间线数据
-- [ ] 6.2 新建 `ProcessHistoryController`：`GET /api/v1/process-instances/{id}/history` 返回审批记录列表
-- [ ] 6.3 任务完成/驳回/转办等操作时写入审批意见到 wf_task_comment 表
-- [ ] 6.4 编写集成测试验证审批记录完整性与排序
+- [x] 6.1 新建 `ProcessHistoryService`：基于 Flowable HistoryService 聚合历史活动节点 + 审批意见，返回时间线数据
+- [x] 6.2 新建 `ProcessHistoryController`：`GET /api/v1/process-instances/{id}/history` 返回审批记录列表
+- [x] 6.3 任务完成/驳回/转办等操作时写入审批意见到 wf_task_comment 表
+- [x] 6.4 编写集成测试验证审批记录完整性与排序
 
 ## 7. 后端 — 催办 API
 

@@ -1,0 +1,592 @@
+﻿=== Commit list ===
+
+=== Diff stat ===
+ .../api/controller/TaskRemindController.java       |  36 ------
+ .../workflow/engine/task/TaskRemindService.java    |  95 --------------
+ .../workflow/engine/task/WorkflowTaskService.java  |  37 +-----
+ .../workflow/engine/task/entity/WfTaskRemind.java  |  67 ----------
+ .../task/repository/WfTaskRemindRepository.java    |  22 ----
+ .../engine/task/TaskRemindServiceTest.java         | 139 ---------------------
+ .../engine/task/WorkflowTaskServiceDetailTest.java |   5 +-
+ 7 files changed, 3 insertions(+), 398 deletions(-)
+
+=== Full diff (U10) ===
+diff --git a/backend/src/main/java/com/workflow/api/controller/TaskRemindController.java b/backend/src/main/java/com/workflow/api/controller/TaskRemindController.java
+deleted file mode 100644
+index 9094a86..0000000
+--- a/backend/src/main/java/com/workflow/api/controller/TaskRemindController.java
++++ /dev/null
+@@ -1,36 +0,0 @@
+-package com.workflow.api.controller;
+-
+-import com.workflow.common.domain.R;
+-import com.workflow.engine.task.TaskRemindService;
+-import org.springframework.web.bind.annotation.*;
+-
+-/**
+- * 浠诲姟鍌姙 Controller銆?- *
+- * <p>鎻愪緵 POST /api/v1/tasks/{taskId}/remind 绔偣锛?- * 鍏佽鍙戣捣浜哄褰撳墠寰呭姙瀹℃壒浜哄彂璧峰偓鍔炪€?- */
+-@RestController
+-@RequestMapping("/api/v1/tasks")
+-public class TaskRemindController {
+-
+-    private final TaskRemindService taskRemindService;
+-
+-    public TaskRemindController(TaskRemindService taskRemindService) {
+-        this.taskRemindService = taskRemindService;
+-    }
+-
+-    /**
+-     * 瀵规寚瀹氫换鍔″彂璧峰偓鍔炪€?-     *
+-     * @param taskId 浠诲姟 ID
+-     * @param from   鍌姙鍙戣捣浜猴紙鏌ヨ鍙傛暟锛屽悗缁彲浠?SecurityContext 鑾峰彇锛?-     * @return 鎿嶄綔缁撴灉
+-     */
+-    @PostMapping("/{taskId}/remind")
+-    public R<Void> remind(@PathVariable String taskId,
+-                          @RequestParam(required = false) String from) {
+-        taskRemindService.remind(taskId, from);
+-        return R.ok();
+-    }
+-}
+diff --git a/backend/src/main/java/com/workflow/engine/task/TaskRemindService.java b/backend/src/main/java/com/workflow/engine/task/TaskRemindService.java
+deleted file mode 100644
+index edffe29..0000000
+--- a/backend/src/main/java/com/workflow/engine/task/TaskRemindService.java
++++ /dev/null
+@@ -1,95 +0,0 @@
+-package com.workflow.engine.task;
+-
+-import com.workflow.engine.task.entity.WfTaskRemind;
+-import com.workflow.engine.task.repository.WfTaskRemindRepository;
+-import com.workflow.engine.tenant.TenantProvider;
+-import org.flowable.engine.TaskService;
+-import org.flowable.task.api.Task;
+-import org.slf4j.Logger;
+-import org.slf4j.LoggerFactory;
+-import org.springframework.beans.factory.annotation.Value;
+-import org.springframework.stereotype.Service;
+-import org.springframework.transaction.annotation.Transactional;
+-
+-import java.time.Duration;
+-import java.time.LocalDateTime;
+-import java.util.List;
+-import java.util.UUID;
+-
+-/**
+- * 浠诲姟鍌姙鏈嶅姟銆?- *
+- * <p>鍙戣捣浜哄褰撳墠寰呭姙瀹℃壒浜哄彂璧峰偓鍔炪€傞鐜囬檺鍒讹細鍚屼竴浠诲姟鍦?24h锛堝彲閰嶇疆锛夊唴涓嶅彲閲嶅鍌姙銆?- * 鍌姙璁板綍鍐欏叆 {@code wf_task_remind} 琛紝鏈湡閫氱煡閫氳繃 log 杈撳嚭锛屽悗缁鎺ラ€氱煡涓績銆?- */
+-@Service
+-public class TaskRemindService {
+-
+-    private static final Logger log = LoggerFactory.getLogger(TaskRemindService.class);
+-
+-    private final TaskService flowableTaskService;
+-    private final WfTaskRemindRepository remindRepository;
+-    private final TenantProvider tenantProvider;
+-
+-    /** 鍌姙棰戠巼闄愬埗锛堝皬鏃讹級锛屽彲閫氳繃 workflow.remind.frequency-hours 閰嶇疆瑕嗙洊銆?*/
+-    @Value("${workflow.remind.frequency-hours:24}")
+-    private int frequencyHours = 24;
+-
+-    public TaskRemindService(TaskService flowableTaskService,
+-                             WfTaskRemindRepository remindRepository,
+-                             TenantProvider tenantProvider) {
+-        this.flowableTaskService = flowableTaskService;
+-        this.remindRepository = remindRepository;
+-        this.tenantProvider = tenantProvider;
+-    }
+-
+-    /**
+-     * 瀵规寚瀹氫换鍔″彂璧峰偓鍔炪€?-     *
+-     * @param taskId     浠诲姟 ID
+-     * @param remindFrom 鍌姙鍙戣捣浜?-     * @throws IllegalStateException 濡傛灉浠诲姟涓嶅瓨鍦ㄦ垨 24h 鍐呭凡鍌姙杩?-     */
+-    @Transactional
+-    public void remind(String taskId, String remindFrom) {
+-        // 1. 鏌ヨ浠诲姟鑾峰彇 assignee + processInstanceId
+-        Task task = flowableTaskService.createTaskQuery()
+-                .taskId(taskId)
+-                .singleResult();
+-
+-        if (task == null) {
+-            throw new IllegalStateException("Task not found: " + taskId);
+-        }
+-
+-        // 2. 棰戠巼闄愬埗锛氭煡璇㈡渶鍚庝竴鏉″偓鍔炶褰?-        List<WfTaskRemind> existing = remindRepository.findByTaskIdOrderByRemindTimeDesc(taskId);
+-        if (!existing.isEmpty()) {
+-            WfTaskRemind lastRemind = existing.get(0);
+-            LocalDateTime lastRemindTime = lastRemind.getRemindTime();
+-            if (lastRemindTime != null) {
+-                long hoursSinceLastRemind = Duration.between(lastRemindTime, LocalDateTime.now()).toHours();
+-                if (hoursSinceLastRemind < frequencyHours) {
+-                    throw new IllegalStateException(
+-                            "Task " + taskId + " was reminded " + hoursSinceLastRemind
+-                                    + "h ago, within the " + frequencyHours + "h frequency limit");
+-                }
+-            }
+-        }
+-
+-        // 3. 鎻掑叆鍌姙璁板綍
+-        String remindTo = task.getAssignee();
+-        WfTaskRemind record = new WfTaskRemind();
+-        record.setId(UUID.randomUUID().toString().replace("-", ""));
+-        record.setTenantId(tenantProvider.getTenantId());
+-        record.setTaskId(taskId);
+-        record.setProcessInstanceId(task.getProcessInstanceId());
+-        record.setRemindFrom(remindFrom);
+-        record.setRemindTo(remindTo);
+-        record.setRemindTime(LocalDateTime.now());
+-        remindRepository.save(record);
+-
+-        // 4. 瑙﹀彂閫氱煡锛堟湰鏈?log锛屽悗缁鎺ラ€氱煡涓績锛?-        log.info("鍌姙閫氱煡 taskId={} processInstanceId={} from={} to={} remindTo={}",
+-                taskId, task.getProcessInstanceId(), remindFrom, remindTo, remindTo);
+-    }
+-}
+diff --git a/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java b/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
+index 32f7fe1..0cbe08b 100644
+--- a/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
++++ b/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
+@@ -1,21 +1,20 @@
+ package com.workflow.engine.task;
+ 
+ import com.workflow.api.dto.CompleteTaskResponse;
+ import com.workflow.api.dto.TaskDetailVO;
+ import com.workflow.api.dto.TaskDoneFilter;
+ import com.workflow.api.dto.TaskDoneVO;
+ import com.workflow.api.dto.TaskTodoFilter;
+ import com.workflow.api.dto.TaskTodoVO;
+ import com.workflow.engine.history.entity.WfTaskComment;
+ import com.workflow.engine.history.repository.WfTaskCommentRepository;
+-import com.workflow.engine.task.repository.WfTaskRemindRepository;
+ import com.workflow.engine.tenant.TenantProvider;
+ import com.workflow.system.domain.vo.UserVO;
+ import com.workflow.system.service.UserService;
+ import org.flowable.engine.HistoryService;
+ import org.flowable.engine.RepositoryService;
+ import org.flowable.engine.RuntimeService;
+ import org.flowable.engine.history.HistoricProcessInstance;
+ import org.flowable.engine.repository.ProcessDefinition;
+ import org.flowable.engine.runtime.ProcessInstance;
+ import org.flowable.task.api.Task;
+@@ -36,38 +35,35 @@ import java.util.stream.Collectors;
+ @Service
+ public class WorkflowTaskService {
+ 
+     private final org.flowable.engine.TaskService flowableTaskService;
+     private final HistoryService historyService;
+     private final TenantProvider tenantProvider;
+     private final RuntimeService runtimeService;
+     private final RepositoryService repositoryService;
+     private final UserService userService;
+     private final WfTaskCommentRepository commentRepository;
+-    private final WfTaskRemindRepository remindRepository;
+ 
+     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
+                                HistoryService historyService,
+                                TenantProvider tenantProvider,
+                                RuntimeService runtimeService,
+                                RepositoryService repositoryService,
+                                UserService userService,
+-                               WfTaskCommentRepository commentRepository,
+-                               WfTaskRemindRepository remindRepository) {
++                               WfTaskCommentRepository commentRepository) {
+         this.flowableTaskService = flowableTaskService;
+         this.historyService = historyService;
+         this.tenantProvider = tenantProvider;
+         this.runtimeService = runtimeService;
+         this.repositoryService = repositoryService;
+         this.userService = userService;
+         this.commentRepository = commentRepository;
+-        this.remindRepository = remindRepository;
+     }
+ 
+     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
+         String tenantId = tenantProvider.getTenantId();
+         var query = flowableTaskService.createTaskQuery()
+                 .taskTenantId(tenantId)
+                 .taskAssignee(assignee)
+                 .orderByTaskCreateTime()
+                 .desc();
+ 
+@@ -219,25 +215,21 @@ public class WorkflowTaskService {
+         Set<String> processDefinitionIds = tasks.stream()
+                 .map(Task::getProcessDefinitionId)
+                 .filter(Objects::nonNull)
+                 .collect(Collectors.toSet());
+         Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(processDefinitionIds);
+ 
+         // 4. 鎵归噺鏌ヨ initiator 鍙橀噺 + 瑙ｆ瀽鐢ㄦ埛鍚?         Map<String, String> initiatorMap = batchQueryInitiators(processInstanceIds, piMap);
+         Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
+ 
+-        // 5. 鎵归噺鏌ヨ鍌姙鏍囪锛堝摢浜?task 宸叉湁鍌姙璁板綍锛?-        Set<String> taskIds = tasks.stream().map(Task::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+-        Set<String> remindedTaskIds = batchQueryRemindedTaskIds(taskIds);
+-
+-        // 6. 缁勮 VO
++        // 5. 缁勮 VO
+         return tasks.stream().map(task -> {
+             TaskTodoVO vo = new TaskTodoVO();
+             vo.setTaskId(task.getId());
+             vo.setProcessInstanceId(task.getProcessInstanceId());
+             vo.setProcessDefinitionId(task.getProcessDefinitionId());
+             vo.setCurrentNodeName(task.getName());
+             vo.setAssignee(task.getAssignee());
+             if (task.getCreateTime() != null) {
+                 vo.setCreateTime(formatDate(task.getCreateTime()));
+             }
+@@ -249,22 +241,20 @@ public class WorkflowTaskService {
+ 
+             ProcessDefinition pd = pdMap.get(task.getProcessDefinitionId());
+             if (pd != null) {
+                 vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+             }
+ 
+             String initiator = initiatorMap.get(task.getProcessInstanceId());
+             vo.setInitiator(initiator);
+             vo.setInitiatorName(initiatorNameMap.get(initiator));
+ 
+-            vo.setReminded(remindedTaskIds.contains(task.getId()));
+-
+             return vo;
+         }).toList();
+     }
+ 
+     private List<TaskDoneVO> assembleDoneVOs(List<HistoricTaskInstance> tasks) {
+         if (tasks.isEmpty()) {
+             return List.of();
+         }
+ 
+         // 1. 鎵归噺鏀堕泦 processInstanceIds
+@@ -430,43 +420,20 @@ public class WorkflowTaskService {
+         List<UserVO> users = userService.findByIds(userIds);
+         return users.stream()
+                 .collect(Collectors.toMap(
+                         u -> String.valueOf(u.id()),
+                         u -> u.nickname() != null ? u.nickname() : u.username(),
+                         (a, b) -> a));
+     }
+ 
+     // ==================== 杩囨护杈呭姪 ====================
+ 
+-    /**
+-     * 鎵归噺鏌ヨ鍝簺 taskId 宸叉湁鍌姙璁板綍銆?-     *
+-     * @param taskIds 浠诲姟 ID 闆嗗悎
+-     * @return 鏈夊偓鍔炶褰曠殑 taskId 闆嗗悎
+-     */
+-    private Set<String> batchQueryRemindedTaskIds(Set<String> taskIds) {
+-        if (taskIds == null || taskIds.isEmpty()) {
+-            return Set.of();
+-        }
+-        Set<String> reminded = new HashSet<>();
+-        for (String taskId : taskIds) {
+-            try {
+-                if (!remindRepository.findByTaskId(taskId).isEmpty()) {
+-                    reminded.add(taskId);
+-                }
+-            } catch (Exception e) {
+-                // 鏌ヨ澶辫触锛屽拷鐣ワ紙榛樿鏈偓鍔烇級
+-            }
+-        }
+-        return reminded;
+-    }
+-
+     private boolean matchesProcessName(TaskTodoVO vo, String processName) {
+         return processName == null ||
+                 (vo.getProcessName() != null && vo.getProcessName().contains(processName));
+     }
+ 
+     private boolean matchesInitiator(TaskTodoVO vo, String initiator) {
+         return initiator == null || initiator.equals(vo.getInitiator());
+     }
+ 
+     // ==================== 鏃ユ湡杈呭姪 ====================
+diff --git a/backend/src/main/java/com/workflow/engine/task/entity/WfTaskRemind.java b/backend/src/main/java/com/workflow/engine/task/entity/WfTaskRemind.java
+deleted file mode 100644
+index fcfb978..0000000
+--- a/backend/src/main/java/com/workflow/engine/task/entity/WfTaskRemind.java
++++ /dev/null
+@@ -1,67 +0,0 @@
+-package com.workflow.engine.task.entity;
+-
+-import jakarta.persistence.*;
+-import java.time.LocalDateTime;
+-
+-/**
+- * 浠诲姟鍌姙璁板綍瀹炰綋銆?- *
+- * <p>瀵瑰簲 {@code wf_task_remind} 琛紙V16 杩佺Щ锛夈€?- * 姣忔鍌姙鎿嶄綔鍐欏叆涓€鏉¤褰曪紝閰嶅悎棰戠巼闄愬埗閫昏緫锛堥粯璁?24h 鍐呬笉鍙噸澶嶅偓鍔烇級銆?- */
+-@Entity
+-@Table(name = "wf_task_remind")
+-public class WfTaskRemind {
+-
+-    @Id
+-    @Column(name = "id", length = 64, nullable = false)
+-    private String id;
+-
+-    @Column(name = "tenant_id", length = 64, nullable = false)
+-    private String tenantId;
+-
+-    @Column(name = "task_id", length = 64, nullable = false)
+-    private String taskId;
+-
+-    @Column(name = "process_instance_id", length = 64, nullable = false)
+-    private String processInstanceId;
+-
+-    @Column(name = "remind_from", length = 64, nullable = false)
+-    private String remindFrom;
+-
+-    @Column(name = "remind_to", length = 64, nullable = false)
+-    private String remindTo;
+-
+-    @Column(name = "remind_time")
+-    private LocalDateTime remindTime;
+-
+-    @PrePersist
+-    protected void onCreate() {
+-        if (remindTime == null) {
+-            remindTime = LocalDateTime.now();
+-        }
+-    }
+-
+-    // ==================== Getters / Setters ====================
+-
+-    public String getId() { return id; }
+-    public void setId(String id) { this.id = id; }
+-
+-    public String getTenantId() { return tenantId; }
+-    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+-
+-    public String getTaskId() { return taskId; }
+-    public void setTaskId(String taskId) { this.taskId = taskId; }
+-
+-    public String getProcessInstanceId() { return processInstanceId; }
+-    public void setProcessInstanceId(String processInstanceId) { this.processInstanceId = processInstanceId; }
+-
+-    public String getRemindFrom() { return remindFrom; }
+-    public void setRemindFrom(String remindFrom) { this.remindFrom = remindFrom; }
+-
+-    public String getRemindTo() { return remindTo; }
+-    public void setRemindTo(String remindTo) { this.remindTo = remindTo; }
+-
+-    public LocalDateTime getRemindTime() { return remindTime; }
+-    public void setRemindTime(LocalDateTime remindTime) { this.remindTime = remindTime; }
+-}
+diff --git a/backend/src/main/java/com/workflow/engine/task/repository/WfTaskRemindRepository.java b/backend/src/main/java/com/workflow/engine/task/repository/WfTaskRemindRepository.java
+deleted file mode 100644
+index ed68c3d..0000000
+--- a/backend/src/main/java/com/workflow/engine/task/repository/WfTaskRemindRepository.java
++++ /dev/null
+@@ -1,22 +0,0 @@
+-package com.workflow.engine.task.repository;
+-
+-import com.workflow.engine.task.entity.WfTaskRemind;
+-import org.springframework.data.jpa.repository.JpaRepository;
+-
+-import java.util.List;
+-
+-/**
+- * 浠诲姟鍌姙璁板綍 Repository銆?- */
+-public interface WfTaskRemindRepository extends JpaRepository<WfTaskRemind, String> {
+-
+-    /**
+-     * 鎸変换鍔?ID 鏌ヨ鍌姙璁板綍锛屾寜鍌姙鏃堕棿鍊掑簭鎺掑垪锛堟渶鏂板湪鍓嶏級銆?-     */
+-    List<WfTaskRemind> findByTaskIdOrderByRemindTimeDesc(String taskId);
+-
+-    /**
+-     * 鎸変换鍔?ID 鏌ヨ鍌姙璁板綍鍒楄〃銆?-     */
+-    List<WfTaskRemind> findByTaskId(String taskId);
+-}
+diff --git a/backend/src/test/java/com/workflow/engine/task/TaskRemindServiceTest.java b/backend/src/test/java/com/workflow/engine/task/TaskRemindServiceTest.java
+deleted file mode 100644
+index 5382b32..0000000
+--- a/backend/src/test/java/com/workflow/engine/task/TaskRemindServiceTest.java
++++ /dev/null
+@@ -1,139 +0,0 @@
+-package com.workflow.engine.task;
+-
+-import com.workflow.engine.task.entity.WfTaskRemind;
+-import com.workflow.engine.task.repository.WfTaskRemindRepository;
+-import com.workflow.engine.tenant.TenantProvider;
+-import org.flowable.engine.TaskService;
+-import org.flowable.task.api.Task;
+-import org.flowable.task.api.TaskQuery;
+-import org.junit.jupiter.api.Test;
+-import org.junit.jupiter.api.extension.ExtendWith;
+-import org.mockito.ArgumentCaptor;
+-import org.mockito.InjectMocks;
+-import org.mockito.Mock;
+-import org.mockito.junit.jupiter.MockitoExtension;
+-
+-import java.time.LocalDateTime;
+-import java.util.List;
+-
+-import static org.assertj.core.api.Assertions.assertThat;
+-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+-import static org.mockito.ArgumentMatchers.any;
+-import static org.mockito.ArgumentMatchers.anyString;
+-import static org.mockito.Mockito.*;
+-
+-/**
+- * TaskRemindService 鍗曞厓娴嬭瘯銆?- *
+- * <p>楠岃瘉锛?- * <ul>
+- *   <li>棣栨鍌姙鎴愬姛 鈥?鎻掑叆 wf_task_remind 璁板綍 + 鏃ュ織閫氱煡</li>
+- *   <li>24h 鍐呴噸澶嶅偓鍔炶鎷掔粷 鈥?鎶涘嚭寮傚父</li>
+- *   <li>瓒呰繃 24h 鍚庡啀娆″偓鍔炴垚鍔?/li>
+- *   <li>浠诲姟涓嶅瓨鍦ㄦ椂鎶涘紓甯?/li>
+- * </ul>
+- */
+-@ExtendWith(MockitoExtension.class)
+-class TaskRemindServiceTest {
+-
+-    @Mock
+-    TaskService flowableTaskService;
+-    @Mock
+-    WfTaskRemindRepository remindRepository;
+-    @Mock
+-    TenantProvider tenantProvider;
+-
+-    @InjectMocks
+-    TaskRemindService taskRemindService;
+-
+-    private Task mockTask(String taskId, String piId, String assignee) {
+-        Task task = mock(Task.class);
+-        lenient().when(task.getId()).thenReturn(taskId);
+-        lenient().when(task.getProcessInstanceId()).thenReturn(piId);
+-        lenient().when(task.getAssignee()).thenReturn(assignee);
+-        return task;
+-    }
+-
+-    private void stubTaskQuery(Task task) {
+-        TaskQuery query = mock(TaskQuery.class);
+-        when(flowableTaskService.createTaskQuery()).thenReturn(query);
+-        when(query.taskId(anyString())).thenReturn(query);
+-        when(query.singleResult()).thenReturn(task);
+-    }
+-
+-    @Test
+-    void remindSucceedsFirstTime() {
+-        Task task = mockTask("task-001", "pi-001", "bob");
+-        stubTaskQuery(task);
+-        when(tenantProvider.getTenantId()).thenReturn("tenant-1");
+-        when(remindRepository.findByTaskIdOrderByRemindTimeDesc("task-001"))
+-                .thenReturn(List.of());
+-
+-        taskRemindService.remind("task-001", "alice");
+-
+-        // 楠岃瘉鍌姙璁板綍淇濆瓨
+-        ArgumentCaptor<WfTaskRemind> captor = ArgumentCaptor.forClass(WfTaskRemind.class);
+-        verify(remindRepository).save(captor.capture());
+-
+-        WfTaskRemind record = captor.getValue();
+-        assertThat(record.getTaskId()).isEqualTo("task-001");
+-        assertThat(record.getProcessInstanceId()).isEqualTo("pi-001");
+-        assertThat(record.getRemindFrom()).isEqualTo("alice");
+-        assertThat(record.getRemindTo()).isEqualTo("bob");
+-        assertThat(record.getTenantId()).isEqualTo("tenant-1");
+-        assertThat(record.getRemindTime()).isNotNull();
+-    }
+-
+-    @Test
+-    void remindRejectedWithin24h() {
+-        Task task = mockTask("task-001", "pi-001", "bob");
+-        stubTaskQuery(task);
+-
+-        // 妯℃嫙 1 灏忔椂鍓嶅凡鏈夊偓鍔炶褰?-        WfTaskRemind priorRemind = new WfTaskRemind();
+-        priorRemind.setTaskId("task-001");
+-        priorRemind.setRemindFrom("alice");
+-        priorRemind.setRemindTo("bob");
+-        priorRemind.setRemindTime(LocalDateTime.now().minusHours(1));
+-
+-        when(remindRepository.findByTaskIdOrderByRemindTimeDesc("task-001"))
+-                .thenReturn(List.of(priorRemind));
+-
+-        assertThatThrownBy(() -> taskRemindService.remind("task-001", "alice"))
+-                .isInstanceOf(IllegalStateException.class)
+-                .hasMessageContaining("24");
+-
+-        // 楠岃瘉娌℃湁鎻掑叆鏂拌褰?-        verify(remindRepository, never()).save(any());
+-    }
+-
+-    @Test
+-    void remindSucceedsAfter24h() {
+-        Task task = mockTask("task-001", "pi-001", "bob");
+-        stubTaskQuery(task);
+-        when(tenantProvider.getTenantId()).thenReturn("tenant-1");
+-
+-        // 妯℃嫙 25 灏忔椂鍓嶅凡鏈夊偓鍔炶褰曪紙瓒呰繃 24h 闄愬埗锛?-        WfTaskRemind priorRemind = new WfTaskRemind();
+-        priorRemind.setTaskId("task-001");
+-        priorRemind.setRemindFrom("alice");
+-        priorRemind.setRemindTo("bob");
+-        priorRemind.setRemindTime(LocalDateTime.now().minusHours(25));
+-
+-        when(remindRepository.findByTaskIdOrderByRemindTimeDesc("task-001"))
+-                .thenReturn(List.of(priorRemind));
+-
+-        taskRemindService.remind("task-001", "alice");
+-
+-        verify(remindRepository).save(any(WfTaskRemind.class));
+-    }
+-
+-    @Test
+-    void remind_taskNotFound_throwsException() {
+-        stubTaskQuery(null);
+-
+-        assertThatThrownBy(() -> taskRemindService.remind("nonexistent", "alice"))
+-                .isInstanceOf(IllegalStateException.class)
+-                .hasMessageContaining("Task not found");
+-    }
+-}
+diff --git a/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java b/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java
+index 1193fea..a5ed926 100644
+--- a/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java
++++ b/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java
+@@ -1,15 +1,14 @@
+ package com.workflow.engine.task;
+ 
+ import com.workflow.api.dto.TaskDetailVO;
+ import com.workflow.engine.history.repository.WfTaskCommentRepository;
+-import com.workflow.engine.task.repository.WfTaskRemindRepository;
+ import com.workflow.engine.tenant.TenantProvider;
+ import com.workflow.system.domain.vo.UserVO;
+ import com.workflow.system.service.UserService;
+ import org.flowable.engine.HistoryService;
+ import org.flowable.engine.RepositoryService;
+ import org.flowable.engine.RuntimeService;
+ import org.flowable.engine.TaskService;
+ import org.flowable.engine.history.HistoricProcessInstance;
+ import org.flowable.engine.history.HistoricProcessInstanceQuery;
+ import org.flowable.engine.repository.ProcessDefinition;
+@@ -46,35 +45,33 @@ import static org.mockito.Mockito.*;
+  */
+ class WorkflowTaskServiceDetailTest {
+ 
+     private TaskService flowableTaskService;
+     private HistoryService historyService;
+     private TenantProvider tenantProvider;
+     private RuntimeService runtimeService;
+     private RepositoryService repositoryService;
+     private UserService userService;
+     private WfTaskCommentRepository commentRepository;
+-    private WfTaskRemindRepository remindRepository;
+     private WorkflowTaskService service;
+ 
+     @BeforeEach
+     void setUp() {
+         flowableTaskService = mock(TaskService.class);
+         historyService = mock(HistoryService.class);
+         tenantProvider = mock(TenantProvider.class);
+         runtimeService = mock(RuntimeService.class);
+         repositoryService = mock(RepositoryService.class);
+         userService = mock(UserService.class);
+         commentRepository = mock(WfTaskCommentRepository.class);
+-        remindRepository = mock(WfTaskRemindRepository.class);
+         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
+-                runtimeService, repositoryService, userService, commentRepository, remindRepository);
++                runtimeService, repositoryService, userService, commentRepository);
+         when(tenantProvider.getTenantId()).thenReturn("default");
+     }
+ 
+     @Test
+     void getTaskDetailReturnsVOWithProcessNameInitiatorNameAndVariables() {
+         // Given: a task with process instance and definition
+         String taskId = "task-001";
+         String processInstanceId = "pi-001";
+         String processDefinitionId = "pd-001:1:42";
+ 

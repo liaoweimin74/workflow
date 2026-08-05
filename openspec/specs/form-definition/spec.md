@@ -11,7 +11,7 @@ TBD - created by archiving change form-designer. Update Purpose after archive.
 
 创建表单定义时，系统 SHALL 生成 UUID 作为 id，设置 version=1，status=DRAFT。
 
-更新表单定义时，系统 SHALL 创建新版本（version 自增），保留旧版本记录。
+更新表单定义时，系统 SHALL 原地更新当前记录的 schema，不创建新版本记录，version 不变。若当前记录状态为 PUBLISHED，系统 SHALL 创建新的 DRAFT 副本（同 key，同 version，同 schema），后续更新写入该 DRAFT 副本。
 
 删除表单定义时，系统 SHALL 执行软删除（标记 ARCHIVED），不物理删除。
 
@@ -31,11 +31,18 @@ TBD - created by archiving change form-designer. Update Purpose after archive.
 - **WHEN** 用户调用 GET /api/v1/form-definitions/{id}
 - **THEN** 系统返回表单定义详情，包含完整 schema JSON
 
-#### Scenario: 更新表单定义
+#### Scenario: 更新表单定义（DRAFT 状态）
 - **WHEN** 用户调用 PUT /api/v1/form-definitions/{id}，提供新的 schema
-- **THEN** 系统创建新版本记录（version 自增）
-- **AND** 旧版本保留
-- **AND** 返回新版本的表单定义
+- **THEN** 系统原地更新当前记录的 schema
+- **AND** version 不变
+- **AND** 不创建新版本记录
+- **AND** 返回更新后的表单定义
+
+#### Scenario: 更新表单定义（PUBLISHED 状态）
+- **WHEN** 用户对 PUBLISHED 状态的表单调用 PUT 更新
+- **THEN** 系统创建新的 DRAFT 副本（同 key，同 version，同 schema）
+- **AND** 原 PUBLISHED 版本保持不变
+- **AND** 后续更新写入 DRAFT 副本
 
 #### Scenario: 删除表单定义
 - **WHEN** 用户调用 DELETE /api/v1/form-definitions/{id}
@@ -46,26 +53,40 @@ TBD - created by archiving change form-designer. Update Purpose after archive.
 - **WHEN** 用户创建表单定义时使用已存在的 key
 - **THEN** 系统返回 400 错误，提示"表单标识已存在"
 
+---
+
 ### Requirement: 表单定义发布
 
-系统 SHALL 支持发布表单定义，将 DRAFT 状态的表单变为 PUBLISHED。
+系统 SHALL 支持发布表单定义，将 DRAFT 状态的表单发布为新版本。
 
-发布时，系统 SHALL 将当前版本标记为 published_version。
+发布时，系统 SHALL 创建新版本记录（version 自增），状态为 PUBLISHED，并更新 published_version。
+
+发布前，系统 SHALL 比较当前 DRAFT 的 schema 与该 key 最近一次 PUBLISHED 记录的 schema。若 schema 未变化，系统 SHALL 拒绝发布。
 
 同一表单定义同时只 SHALL 有一个 PUBLISHED 版本。新版本发布后，旧 PUBLISHED 版本 SHALL 变为 ARCHIVED。
 
-已发布（PUBLISHED）版本的 schema 不可修改，修改已发布表单 SHALL 创建新的 DRAFT 版本。
+已发布（PUBLISHED）版本的 schema 不可修改，修改已发布表单 SHALL 创建新的 DRAFT 副本。
 
 #### Scenario: 发布表单定义
 - **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
-- **THEN** 系统将当前版本状态更新为 PUBLISHED
-- **AND** published_version 更新为当前版本号
-- **AND** 返回更新后的表单定义
+- **AND** 当前 DRAFT 的 schema 与上次 PUBLISHED 的 schema 不同
+- **THEN** 系统创建新版本记录（version 自增）
+- **AND** 新记录 status = PUBLISHED
+- **AND** published_version 更新为新版本号
+- **AND** 旧 PUBLISHED 版本 status 改为 ARCHIVED
+- **AND** 返回新版本的表单定义
+
+#### Scenario: 发布未变化的表单
+- **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
+- **AND** 当前 DRAFT 的 schema 与上次 PUBLISHED 的 schema 完全一致
+- **THEN** 系统返回 400 错误，提示"表单内容未变化，无需发布"
 
 #### Scenario: 修改已发布表单
 - **WHEN** 用户对 PUBLISHED 状态的表单调用 PUT 更新
-- **THEN** 系统创建新的 DRAFT 版本（version 自增）
+- **THEN** 系统创建新的 DRAFT 副本（同 key，同 version，同 schema）
 - **AND** 原 PUBLISHED 版本保持不变
+
+---
 
 ### Requirement: 表单定义版本管理
 
@@ -88,11 +109,11 @@ TBD - created by archiving change form-designer. Update Purpose after archive.
 #### Scenario: 获取已发布版本
 - **WHEN** 流程运行时需要加载表单 schema
 - **AND** 传入 formDefId
-- **THEN** 系统返回 published_version 对应版本的 schema表单定义，包含该版本的 schema
+- **THEN** 系统返回 published_version 对应版本的 schema
 
 #### Scenario: 修改已发布版本
 - **WHEN** 用户尝试修改 PUBLISHED 状态的表单定义
-- **THEN** 系统自动创建新 DRAFT 版本
+- **THEN** 系统创建新 DRAFT 副本
 - **AND** 已发布版本保持不变
 
 ### Requirement: 表单定义菜单与路由

@@ -87,16 +87,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '待办处理' }
       },
       {
-        path: 'process/todo/:taskId',
-        name: 'TaskDetail',
-        component: () => import('@/views/process/TaskDetailPage.vue'),
-        meta: { title: '任务处理' }
-      },
-      {
         path: 'process/todo/done/:taskId',
         name: 'TaskDoneDetail',
         component: () => import('@/views/process/TaskDoneDetailPage.vue'),
         meta: { title: '已办详情' }
+      },
+      {
+        path: 'process/todo/:taskId',
+        name: 'TaskDetail',
+        component: () => import('@/views/process/TaskDetailPage.vue'),
+        meta: { title: '任务处理' }
       },
       {
         path: 'process/instance/:instanceId',

@@ -232,7 +232,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -243,10 +243,13 @@ import type { TaskTodoVO, TaskDoneVO, TaskTodoQueryParams, TaskDoneQueryParams }
 import type { ProcessInstanceVO, ProcessInstanceQueryParams } from '@/api/processInstance'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
-// ── Tab 状态 ──
-const activeTab = ref<'todo' | 'done' | 'initiated'>('todo')
+// ── Tab 状态（支持从 query 切换） ──
+const activeTab = ref<'todo' | 'done' | 'initiated'>(
+  (route.query.tab as 'todo' | 'done' | 'initiated') || 'todo'
+)
 
 // ── 待办 ──
 const todoLoading = ref(false)

@@ -1,32 +1,39 @@
 <template>
-  <el-form label-width="80px" size="small">
-    <el-divider content-position="left">基本信息</el-divider>
+  <el-tabs v-model="activeTab" class="initiator-task-property-tabs">
+    <!-- 节点配置 -->
+    <el-tab-pane label="节点配置" name="node">
+      <el-form label-width="80px" size="small">
+        <el-divider content-position="left">基本信息</el-divider>
 
-    <el-form-item label="节点ID">
-      <el-input v-model="config.id" disabled />
-    </el-form-item>
+        <el-form-item label="节点ID">
+          <el-input v-model="config.id" disabled />
+        </el-form-item>
 
-    <el-form-item label="节点名称">
-      <el-input v-model="config.name" placeholder="请输入节点名称" @change="updateBpmn" />
-    </el-form-item>
+        <el-form-item label="节点名称">
+          <el-input v-model="config.name" placeholder="请输入节点名称" @change="updateBpmn" />
+        </el-form-item>
 
-    <el-form-item label="节点描述">
-      <el-input
-        v-model="config.description"
-        type="textarea"
-        :rows="2"
-        placeholder="请输入节点描述"
-        @change="updateBpmn"
-      />
-    </el-form-item>
+        <el-form-item label="节点描述">
+          <el-input
+            v-model="config.description"
+            type="textarea"
+            :rows="2"
+            placeholder="请输入节点描述"
+            @change="updateBpmn"
+          />
+        </el-form-item>
+      </el-form>
+    </el-tab-pane>
 
-    <!-- 表单关联 -->
-    <FormPropertyTab />
-  </el-form>
+    <!-- 表单配置 -->
+    <el-tab-pane label="表单配置" name="form">
+      <FormPropertyTab />
+    </el-tab-pane>
+  </el-tabs>
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted, watch } from 'vue'
+import { reactive, ref, onMounted, watch } from 'vue'
 import type { Element } from 'bpmn-js/lib/model/Types'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
@@ -41,6 +48,8 @@ import FormPropertyTab from './FormPropertyTab.vue'
 type ElementRegistryLike = { get(id: string): Element | undefined }
 
 const designerStore = useDesignerStore()
+
+const activeTab = ref('node')
 
 let isLoading = false
 
@@ -111,3 +120,17 @@ function saveConfig() {
   designerStore.setNodeConfig(designerStore.selectedNodeId, nodeConfig)
 }
 </script>
+
+<style scoped>
+.initiator-task-property-tabs {
+  padding: 0 8px;
+}
+
+.initiator-task-property-tabs :deep(.el-tabs__header) {
+  margin-bottom: 8px;
+}
+
+.initiator-task-property-tabs :deep(.el-tabs__content) {
+  overflow-y: auto;
+}
+</style>

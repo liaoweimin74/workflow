@@ -1,97 +1,106 @@
 <template>
-  <el-form label-width="90px" size="small">
-    <el-divider content-position="left">基本信息</el-divider>
+  <el-tabs v-model="activeTab" class="user-task-property-tabs">
+    <!-- 节点配置 -->
+    <el-tab-pane label="节点配置" name="node">
+      <el-form label-width="90px" size="small">
+        <el-divider content-position="left">基本信息</el-divider>
 
-    <el-form-item label="节点ID">
-      <el-input v-model="config.id" disabled />
-    </el-form-item>
+        <el-form-item label="节点ID">
+          <el-input v-model="config.id" disabled />
+        </el-form-item>
 
-    <el-form-item label="节点名称">
-      <el-input v-model="config.name" placeholder="如：部门经理审批" @change="updateBpmnName" />
-    </el-form-item>
+        <el-form-item label="节点名称">
+          <el-input v-model="config.name" placeholder="如：部门经理审批" @change="updateBpmnName" />
+        </el-form-item>
 
-    <el-divider content-position="left">审批人配置</el-divider>
+        <el-divider content-position="left">审批人配置</el-divider>
 
-    <el-form-item label="审批类型">
-      <el-radio-group v-model="approval.type" @change="saveConfig">
-        <el-radio value="user">指定用户</el-radio>
-        <el-radio value="dept_head">部门负责人</el-radio>
-        <el-radio value="expression">流程表达式</el-radio>
-      </el-radio-group>
-    </el-form-item>
+        <el-form-item label="审批类型">
+          <el-radio-group v-model="approval.type" @change="saveConfig">
+            <el-radio value="user">指定用户</el-radio>
+            <el-radio value="dept_head">部门负责人</el-radio>
+            <el-radio value="expression">流程表达式</el-radio>
+          </el-radio-group>
+        </el-form-item>
 
-    <el-form-item v-if="approval.type === 'user'" label="审批用户">
-      <ApproverPicker
-        v-model="approval.userIds"
-        @change="saveConfig"
-      />
-    </el-form-item>
+        <el-form-item v-if="approval.type === 'user'" label="审批用户">
+          <ApproverPicker
+            v-model="approval.userIds"
+            @change="saveConfig"
+          />
+        </el-form-item>
 
-    <el-form-item v-if="approval.type === 'expression'" label="表达式">
-      <el-input
-        v-model="approval.expression"
-        type="textarea"
-        :rows="2"
-        placeholder="如：${initiator.deptManager}"
-        @change="saveConfig"
-      />
-    </el-form-item>
+        <el-form-item v-if="approval.type === 'expression'" label="表达式">
+          <el-input
+            v-model="approval.expression"
+            type="textarea"
+            :rows="2"
+            placeholder="如：${initiator.deptManager}"
+            @change="saveConfig"
+          />
+        </el-form-item>
 
-    <el-form-item v-if="approval.type" label="多人模式">
-      <el-radio-group v-model="approval.multiMode" @change="saveConfig">
-        <el-radio value="countersign">会签</el-radio>
-        <el-radio value="or_sign">或签</el-radio>
-      </el-radio-group>
-    </el-form-item>
+        <el-form-item v-if="approval.type" label="多人模式">
+          <el-radio-group v-model="approval.multiMode" @change="saveConfig">
+            <el-radio value="countersign">会签</el-radio>
+            <el-radio value="or_sign">或签</el-radio>
+          </el-radio-group>
+        </el-form-item>
 
-    <el-divider content-position="left">操作权限</el-divider>
+        <el-divider content-position="left">操作权限</el-divider>
 
-    <el-form-item label="允许驳回">
-      <el-switch v-model="operations.allowReject" @change="saveConfig" />
-    </el-form-item>
+        <el-form-item label="允许驳回">
+          <el-switch v-model="operations.allowReject" @change="saveConfig" />
+        </el-form-item>
 
-    <el-form-item label="允许加签">
-      <el-switch v-model="operations.allowAddSign" @change="saveConfig" />
-    </el-form-item>
+        <el-form-item label="允许加签">
+          <el-switch v-model="operations.allowAddSign" @change="saveConfig" />
+        </el-form-item>
 
-    <el-form-item label="允许转办">
-      <el-switch v-model="operations.allowTransfer" @change="saveConfig" />
-    </el-form-item>
+        <el-form-item label="允许转办">
+          <el-switch v-model="operations.allowTransfer" @change="saveConfig" />
+        </el-form-item>
 
-    <el-divider content-position="left">超时设置</el-divider>
+        <el-divider content-position="left">超时设置</el-divider>
 
-    <el-form-item label="超时时间">
-      <el-input-number
-        v-model="timeout.duration"
-        :min="0"
-        :step="1"
-        controls-position="right"
-        style="width: 120px"
-        @change="saveConfig"
-      />
-      <span style="margin-left: 8px; color: #909399;">小时</span>
-    </el-form-item>
+        <el-form-item label="超时时间">
+          <el-input-number
+            v-model="timeout.duration"
+            :min="0"
+            :step="1"
+            controls-position="right"
+            style="width: 120px"
+            @change="saveConfig"
+          />
+          <span style="margin-left: 8px; color: #909399;">小时</span>
+        </el-form-item>
 
-    <el-form-item label="超时动作">
-      <el-select v-model="timeout.action" placeholder="请选择" style="width: 100%" @change="saveConfig">
-        <el-option label="提醒" value="remind" />
-        <el-option label="升级" value="escalate" />
-      </el-select>
-    </el-form-item>
+        <el-form-item label="超时动作">
+          <el-select v-model="timeout.action" placeholder="请选择" style="width: 100%" @change="saveConfig">
+            <el-option label="提醒" value="remind" />
+            <el-option label="升级" value="escalate" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+    </el-tab-pane>
 
-    <!-- 表单关联 -->
-    <FormPropertyTab />
-  </el-form>
+    <!-- 表单配置 -->
+    <el-tab-pane label="表单配置" name="form">
+      <FormPropertyTab />
+    </el-tab-pane>
+  </el-tabs>
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted, watch } from 'vue'
+import { reactive, ref, onMounted, watch } from 'vue'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
 import FormPropertyTab from './FormPropertyTab.vue'
 
 const designerStore = useDesignerStore()
+
+const activeTab = ref('node')
 
 // 加载标志：loadConfig 期间禁止 watch 触发 saveConfig，避免把新节点值写回旧节点
 let isLoading = false
@@ -224,3 +233,17 @@ watch([config, approval, operations, timeout], () => {
   saveConfig()
 }, { deep: true })
 </script>
+
+<style scoped>
+.user-task-property-tabs {
+  padding: 0 8px;
+}
+
+.user-task-property-tabs :deep(.el-tabs__header) {
+  margin-bottom: 8px;
+}
+
+.user-task-property-tabs :deep(.el-tabs__content) {
+  overflow-y: auto;
+}
+</style>

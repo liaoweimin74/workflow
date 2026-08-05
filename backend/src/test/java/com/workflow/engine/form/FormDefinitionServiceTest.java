@@ -124,17 +124,18 @@ class FormDefinitionServiceTest {
             .thenReturn(Optional.of(existing));
         when(formDefRepository.save(existing)).thenReturn(existing);
 
-        FormDefinition result = formDefService.update("form-1", "[{\"field\":\"reason\"}]");
+        FormDefinition result = formDefService.update("form-1", "新表单名", "leave-form", "[{\"field\":\"reason\"}]");
 
         assertEquals("form-1", result.getId());
         assertEquals(1, result.getVersion());
         assertEquals("DRAFT", result.getStatus());
         assertEquals("[{\"field\":\"reason\"}]", result.getSchema());
+        assertEquals("新表单名", result.getName());
         verify(formDefRepository).save(existing);
     }
 
     @Test
-    void update_publishedForm_createsDraftCopy() {
+    void update_publishedForm_inPlaceUpdate() {
         FormDefinition published = new FormDefinition();
         published.setId("form-1");
         published.setTenantId(TENANT_ID);
@@ -146,23 +147,21 @@ class FormDefinitionServiceTest {
 
         when(formDefRepository.findByIdAndTenantId("form-1", TENANT_ID))
             .thenReturn(Optional.of(published));
-        when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(formDefRepository.save(published)).thenReturn(published);
 
-        FormDefinition result = formDefService.update("form-1", "[{\"field\":\"reason\"}]");
+        FormDefinition result = formDefService.update("form-1", null, null, "[{\"field\":\"reason\"}]");
 
-        assertNotEquals("form-1", result.getId());
+        assertEquals("form-1", result.getId());
         assertEquals(2, result.getVersion());
-        assertEquals("DRAFT", result.getStatus());
+        assertEquals("PUBLISHED", result.getStatus());
         assertEquals("[{\"field\":\"reason\"}]", result.getSchema());
-        assertEquals("leave-form", result.getKey());
-        verify(formDefRepository).save(any(FormDefinition.class));
-        assertEquals("PUBLISHED", published.getStatus());
+        verify(formDefRepository).save(published);
     }
 
     // ==================== publish ====================
 
     @Test
-    void publish_draftForm_createsNewVersion_oldPublishedArchived() {
+    void publish_draftForm_directPublish_oldPublishedArchived() {
         FormDefinition draft = new FormDefinition();
         draft.setId("form-draft");
         draft.setTenantId(TENANT_ID);
@@ -185,19 +184,20 @@ class FormDefinitionServiceTest {
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "leave-form", "PUBLISHED"))
             .thenReturn(Optional.of(oldPublished));
-        when(formDefRepository.findMaxVersionByTenantIdAndKey(TENANT_ID, "leave-form"))
-            .thenReturn(1);
         when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
         FormDefinition result = formDefService.publish("form-draft");
 
-        assertEquals(2, result.getVersion());
+        // 草稿直接发布：同一记录改状态，不创建新记录
+        assertEquals("form-draft", result.getId());
+        assertEquals(1, result.getVersion());
         assertEquals("PUBLISHED", result.getStatus());
-        assertEquals(2, result.getPublishedVersion());
+        assertEquals(1, result.getPublishedVersion());
         assertEquals("[{\"field\":\"reason\"}]", result.getSchema());
+        // 旧 PUBLISHED 降为 ARCHIVED
         assertEquals("ARCHIVED", oldPublished.getStatus());
         verify(formDefRepository).save(oldPublished);
-        verify(formDefRepository, times(2)).save(any(FormDefinition.class));
+        verify(formDefRepository).save(draft);
     }
 
     @Test
@@ -231,7 +231,7 @@ class FormDefinitionServiceTest {
     }
 
     @Test
-    void publish_noPreviousPublished_createsVersion1() {
+    void publish_noPreviousPublished_directPublish() {
         FormDefinition draft = new FormDefinition();
         draft.setId("form-draft");
         draft.setTenantId(TENANT_ID);
@@ -246,12 +246,11 @@ class FormDefinitionServiceTest {
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "leave-form", "PUBLISHED"))
             .thenReturn(Optional.empty());
-        when(formDefRepository.findMaxVersionByTenantIdAndKey(TENANT_ID, "leave-form"))
-            .thenReturn(null);
         when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
         FormDefinition result = formDefService.publish("form-draft");
 
+        assertEquals("form-draft", result.getId());
         assertEquals(1, result.getVersion());
         assertEquals("PUBLISHED", result.getStatus());
         assertEquals(1, result.getPublishedVersion());
@@ -269,6 +268,18 @@ class FormDefinitionServiceTest {
 
         assertEquals("ARCHIVED", formDef.getStatus());
         verify(formDefRepository).save(formDef);
+    }
+
+    @Test
+    void delete_publishedForm_throwsException() {
+        FormDefinition formDef = buildFormDef("form-1", "leave_form", 1, "PUBLISHED");
+        when(formDefRepository.findByIdAndTenantId("form-1", TENANT_ID))
+                .thenReturn(Optional.of(formDef));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> formDefService.delete("form-1"));
+        assertTrue(ex.getMessage().contains("已发布的表单不能删除"));
+        verify(formDefRepository, never()).save(any());
     }
 
     // ==================== getVersions ====================

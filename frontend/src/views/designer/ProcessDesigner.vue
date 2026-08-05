@@ -419,10 +419,10 @@ function handleBack() {
     ElMessageBox.confirm('有未保存的更改，确定要离开吗？', '提示', {
       type: 'warning'
     }).then(() => {
-      router.back()
+      router.push('/process/definition')
     }).catch(() => {})
   } else {
-    router.back()
+    router.push('/process/definition')
   }
 }
 

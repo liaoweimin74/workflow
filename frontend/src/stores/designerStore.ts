@@ -96,6 +96,10 @@ export interface ProcessConfigData {
     enabled: boolean
     pattern: string
   }
+  form?: {
+    formDefId?: string
+    fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
+  }
 }
 
 export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {

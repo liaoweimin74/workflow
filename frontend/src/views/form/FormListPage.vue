@@ -185,7 +185,7 @@ const actionButtons: ActionButton[] = [
     type: 'danger',
     permission: 'form:delete',
     confirm: '确定要删除此表单吗？',
-    show: (row: any) => row.status !== 'ARCHIVED',
+    show: (row: any) => row.status === 'DRAFT',
     onClick: async (row: any) => {
       try {
         await formApi.deleteFormDefinition(row.id)

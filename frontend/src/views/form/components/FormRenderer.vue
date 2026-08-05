@@ -79,7 +79,8 @@ async function loadSchema() {
       return
     }
     const schema = JSON.parse(formDef.schema)
-    resolvedSchema.value = schema
+    const rules = Array.isArray(schema) ? schema : (schema.rule || [])
+    resolvedSchema.value = rules
     formVersion.value = formDef.version
   } catch {
     // http 拦截器已弹出错误消息

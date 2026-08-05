@@ -20,7 +20,7 @@
       />
     </el-form-item>
 
-    <!-- 表单关联（开始事件） -->
+    <!-- 表单配置（开始事件） -->
     <FormPropertyTab />
   </el-form>
 </template>

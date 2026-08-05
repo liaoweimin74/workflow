@@ -4,7 +4,22 @@
     <div class="designer-toolbar">
       <el-button :icon="ArrowLeft" @click="handleBack">返回</el-button>
       <el-divider direction="vertical" />
-      <span class="form-name">{{ formName || '加载中...' }}</span>
+<el-input
+        :model-value="formName"
+        class="form-name-input"
+        placeholder="表单名称"
+        size="small"
+        style="width: 200px"
+        disabled
+      />
+      <el-input
+        :model-value="formKey"
+        class="form-key-input"
+        placeholder="表单标识"
+        size="small"
+        style="width: 160px; margin-left: 8px"
+        disabled
+      />
       <el-tag v-if="formStatus" :type="statusTagType(formStatus)" size="small" style="margin-left: 8px">
         {{ statusLabel(formStatus) }}
       </el-tag>
@@ -21,6 +36,7 @@
       <fc-designer
         ref="designerRef"
         :height="designerHeight"
+        :config="{ fieldReadonly: false, disabledFormConfig: ['formCreateFormName'] }"
       />
     </div>
   </div>
@@ -31,7 +47,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
-import { formApi, type FormDefinitionDetailDTO } from '@/api/form'
+import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 
 const route = useRoute()
 const router = useRouter()
@@ -83,11 +99,26 @@ onMounted(async () => {
     // 加载已有 schema 到设计器
     if (formDef.schema && formDef.schema !== '[]') {
       try {
-        const rule = JSON.parse(formDef.schema)
+        const parsed = JSON.parse(formDef.schema)
+        // 新版 schema 格式：{ rule: [...], option: {...} }
+        // 兼容旧版：直接是字段数组
+        let rule, option
+        if (Array.isArray(parsed)) {
+          rule = parsed
+        } else {
+          rule = parsed.rule || []
+          option = parsed.option
+        }
         // 等待设计器渲染完成
         await nextTick()
         if (designerRef.value) {
           designerRef.value.setRule(rule)
+          if (option) {
+            // 将数据库中的 name 同步到 option 中显示
+            if (!option.form) option.form = {}
+            option.form.formCreateFormName = formDef.name
+            designerRef.value.setOption(option)
+          }
         }
       } catch {
         // schema 解析失败，使用空设计器
@@ -106,16 +137,19 @@ async function handleSave() {
   saving.value = true
   try {
     const rule = designerRef.value.getRule()
-    const schemaJson = JSON.stringify(rule)
-    await formApi.updateFormDefinition(formId.value, {
+    const option = designerRef.value.getOption()
+    // 将外部的表单名称同步到 option 中
+    if (!option.form) option.form = {}
+    option.form.formCreateFormName = formName.value
+    const schemaJson = JSON.stringify({ rule, option })
+    const res = await formApi.updateFormDefinition(formId.value, {
       name: formName.value,
       key: formKey.value,
       schema: schemaJson,
     })
     ElMessage.success('保存成功')
-    // 刷新状态
-    const res = await formApi.getFormDefinition(formId.value)
-    formStatus.value = (res.data as FormDefinitionDetailDTO).status
+    // 直接使用更新响应中的状态，避免二次请求
+    formStatus.value = (res.data as FormDefinitionDTO).status
   } catch {
     // http 拦截器已弹出错误消息
   } finally {
@@ -125,7 +159,7 @@ async function handleSave() {
 
 async function handlePublish() {
   try {
-    await ElMessageBox.confirm('确定要发布此表单吗？发布后不可修改，新版本将作为草稿。', '确认发布', {
+    await ElMessageBox.confirm('确定要发布此表单吗？发布后不可修改。', '确认发布', {
       type: 'warning',
     })
   } catch {
@@ -134,11 +168,10 @@ async function handlePublish() {
 
   publishing.value = true
   try {
-    await formApi.publishFormDefinition(formId.value)
+    const res = await formApi.publishFormDefinition(formId.value)
     ElMessage.success('发布成功')
-    // 刷新状态
-    const res = await formApi.getFormDefinition(formId.value)
-    formStatus.value = (res.data as FormDefinitionDetailDTO).status
+    // 直接使用发布响应中的状态，避免二次请求
+    formStatus.value = (res.data as FormDefinitionDTO).status
   } catch {
     // http 拦截器已弹出错误消息
   } finally {
@@ -198,6 +231,14 @@ import { nextTick } from 'vue'
 .form-name {
   font-size: 16px;
   font-weight: bold;
+}
+
+.form-name-input :deep(.el-input__wrapper) {
+  font-weight: bold;
+}
+
+.form-key-input :deep(.el-input__wrapper) {
+  font-size: 13px;
 }
 
 .toolbar-right {

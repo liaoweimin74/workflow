@@ -75,12 +75,12 @@ public class FormDefinitionController {
     }
 
     /**
-     * 更新表单定义 schema（创建新版本）。
+     * 更新表单定义（原地更新，不创建新版本）。
      */
     @PutMapping("/{id}")
     public R<FormDefinition> update(@PathVariable String id,
                                     @RequestBody FormDefinitionSaveRequest request) {
-        FormDefinition formDef = formDefService.update(id, request.getSchema());
+        FormDefinition formDef = formDefService.update(id, request.getName(), request.getKey(), request.getSchema());
         return R.ok(formDef);
     }
 

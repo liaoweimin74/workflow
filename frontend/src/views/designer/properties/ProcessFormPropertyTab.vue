@@ -1,9 +1,7 @@
 <template>
-  <div class="form-property-tab">
-    <el-divider content-position="left">表单配置</el-divider>
-
+  <div class="process-form-property-tab">
     <el-form label-width="90px" size="small">
-      <el-form-item label="关联表单">
+      <el-form-item label="表单配置">
         <div style="display: flex; gap: 8px; width: 100%;">
           <el-select
             v-model="formConfig.formDefId"
@@ -29,6 +27,12 @@
             编辑表单
           </el-button>
         </div>
+      </el-form-item>
+
+      <el-form-item v-if="!formConfig.formDefId">
+        <span style="color: #909399; font-size: 12px;">
+          配置流程默认表单后，未单独配置表单的节点将使用此表单。
+        </span>
       </el-form-item>
 
       <template v-if="formConfig.formDefId && fieldList.length > 0">
@@ -64,7 +68,7 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { Edit } from '@element-plus/icons-vue'
-import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
+import { useDesignerStore } from '@/stores/designerStore'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 
 const designerStore = useDesignerStore()
@@ -90,10 +94,9 @@ onMounted(async () => {
   loadConfig()
 })
 
-watch(() => designerStore.selectedNodeId, (newId, oldId) => {
-  if (newId && newId !== oldId) {
-    loadConfig()
-  }
+// 流程级配置不依赖 selectedNodeId，但需要响应 store 变化
+watch(() => designerStore.draftId, () => {
+  loadConfig()
 })
 
 async function loadFormList() {
@@ -109,18 +112,14 @@ async function loadFormList() {
 function loadConfig() {
   isLoading = true
 
-  formConfig.formDefId = ''
-  formConfig.fieldPermissions = {}
-  fieldList.value = []
-
-  const existing = designerStore.getNodeConfig(designerStore.selectedNodeId!)
-  if (existing?.form) {
-    formConfig.formDefId = existing.form.formDefId || ''
-    formConfig.fieldPermissions = { ...(existing.form.fieldPermissions || {}) }
-  }
+  const processConfig = designerStore.getProcessConfig()
+  formConfig.formDefId = processConfig.form?.formDefId || ''
+  formConfig.fieldPermissions = { ...(processConfig.form?.fieldPermissions || {}) }
 
   if (formConfig.formDefId) {
     loadFormFields(formConfig.formDefId)
+  } else {
+    fieldList.value = []
   }
 
   setTimeout(() => { isLoading = false }, 0)
@@ -163,7 +162,6 @@ async function handleFormChange(formDefId: string) {
   formConfig.fieldPermissions = {}
   if (formDefId) {
     await loadFormFields(formDefId)
-    // 默认所有字段为 EDIT
     fieldList.value.forEach(f => {
       formConfig.fieldPermissions[f.field] = 'EDIT'
     })
@@ -174,31 +172,16 @@ async function handleFormChange(formDefId: string) {
 }
 
 function saveConfig() {
-  if (!designerStore.selectedNodeId) return
   if (isLoading) return
 
-  const existing = designerStore.getNodeConfig(designerStore.selectedNodeId!) || {}
-
-  const nodeConfig: NodeConfigData = {
-    ...existing,
-    form: {
-      formDefId: formConfig.formDefId || undefined,
-      fieldPermissions: Object.keys(formConfig.fieldPermissions).length > 0
-        ? formConfig.fieldPermissions
-        : undefined,
-    },
+  const processConfig = designerStore.getProcessConfig()
+  processConfig.form = {
+    formDefId: formConfig.formDefId || undefined,
+    fieldPermissions: Object.keys(formConfig.fieldPermissions).length > 0
+      ? formConfig.fieldPermissions
+      : undefined,
   }
 
-  designerStore.setNodeConfig(designerStore.selectedNodeId, nodeConfig)
+  designerStore.setProcessConfig(processConfig)
 }
-
-watch(formConfig, () => {
-  saveConfig()
-}, { deep: true })
 </script>
-
-<style scoped>
-.form-property-tab {
-  padding: 0 4px;
-}
-</style>

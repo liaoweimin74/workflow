@@ -87,6 +87,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '待办处理' }
       },
       {
+        path: 'process/start/:processDefinitionId',
+        name: 'ProcessStart',
+        component: () => import('@/views/process/ProcessStartPage.vue'),
+        meta: { title: '发起流程' }
+      },
+      {
         path: 'form',
         name: 'FormList',
         component: () => import('@/views/form/FormListPage.vue'),

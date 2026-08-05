@@ -38,17 +38,17 @@
 
 ## 7. 后端 — 催办 API
 
-- [ ] 7.1 新建 `TaskRemindService`：催办记录持久化 + 频率限制（默认 24h，可配置）+ 通知触发
-- [ ] 7.2 新建 `TaskRemindController`：`POST /api/v1/tasks/{taskId}/remind`
-- [ ] 7.3 待办列表 VO 增加 reminded 标记字段（该任务是否已被催办）
-- [ ] 7.4 编写测试验证频率限制与催办记录
+- [x] 7.1 新建 `TaskRemindService`：催办记录持久化 + 频率限制（默认 24h，可配置）+ 通知触发
+- [x] 7.2 新建 `TaskRemindController`：`POST /api/v1/tasks/{taskId}/remind`
+- [x] 7.3 待办列表 VO 增加 reminded 标记字段（该任务是否已被催办）
+- [x] 7.4 编写测试验证频率限制与催办记录
 
 ## 8. 前端 — API 模块封装
 
-- [ ] 8.1 新建 `frontend/src/api/task.ts`：封装待办/已办列表、任务详情、任务操作 API（对应 TaskController）
-- [ ] 8.2 扩展 `frontend/src/api/processDefinition.ts`：deployed-processes 端点增加 categoryId/name/status 参数
-- [ ] 8.3 扩展 `frontend/src/api/processInstance.ts`：list 端点增加 initiator/status/processName 参数；新增 history 端点
-- [ ] 8.4 新建 `frontend/src/api/taskRemind.ts`：封装催办 API
+- [x] 8.1 新建 `frontend/src/api/task.ts`：封装待办/已办列表、任务详情、任务操作 API（对应 TaskController）
+- [x] 8.2 扩展 `frontend/src/api/processDefinition.ts`：deployed-processes 端点增加 categoryId/name/status 参数
+- [x] 8.3 扩展 `frontend/src/api/processInstance.ts`：list 端点增加 initiator/status/processName 参数；新增 history 端点
+- [x] 8.4 新建 `frontend/src/api/taskRemind.ts`：封装催办 API
 
 ## 9. 前端 — 流程中心页面
 

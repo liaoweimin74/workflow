@@ -164,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive, nextTick } from 'vue'
+import { ref, computed, watch, reactive, nextTick, onMounted } from 'vue'
 import { User, Close } from '@element-plus/icons-vue'
 import { getOrgTree } from '@/api/org'
 import { getRoleList } from '@/api/role'
@@ -415,6 +415,34 @@ function handleConfirm() {
 }
 
 defineExpose({ openDialog })
+
+// 组件挂载时，根据 modelValue 加载用户信息（回显 Tag）
+onMounted(() => {
+  loadSelectedUsers(props.modelValue)
+})
+
+// 监听 modelValue 变化（外部更新时重新加载）
+watch(() => props.modelValue, (ids) => {
+  loadSelectedUsers(ids)
+})
+
+async function loadSelectedUsers(ids: number[]) {
+  if (ids.length > 0) {
+    try {
+      const res = await getUserBatch(ids)
+      selectedUsers.value = res.data.map(u => ({
+        id: u.id,
+        nickname: u.nickname,
+        username: u.username,
+        orgName: u.orgName,
+      }))
+    } catch {
+      selectedUsers.value = []
+    }
+  } else {
+    selectedUsers.value = []
+  }
+}
 </script>
 
 <style scoped>

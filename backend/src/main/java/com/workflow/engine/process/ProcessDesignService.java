@@ -187,16 +187,16 @@ public class ProcessDesignService {
         ProcessDraft draft = draftRepository.findByIdAndTenantId(draftId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Process draft not found: " + draftId));
 
-        // 与上次部署的 XML 一致则拒绝部署
-        if (Objects.equals(trimToNull(draft.getDeployedXml()), trimToNull(draft.getBpmnXml()))) {
-            throw new BusinessException(400, "流程数据未变化，无需部署");
-        }
-
         // 加载 NodeConfig，改写 BPMN XML（会签/或签 → MI parallel）
         List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draftId);
         Map<String, String> nodeConfigMap = configs.stream()
                 .collect(Collectors.toMap(NodeConfig::getNodeId, NodeConfig::getConfigJson, (a, b) -> a));
         String effectiveBpmnXml = multiInstanceBpmnRewriter.rewrite(draft.getBpmnXml(), nodeConfigMap);
+
+        // 与上次部署的 XML 一致则拒绝部署（使用改写后的 XML 比较，因为 NodeConfig 变更也会改变改写结果）
+        if (Objects.equals(trimToNull(draft.getDeployedXml()), trimToNull(effectiveBpmnXml))) {
+            throw new BusinessException(400, "流程数据未变化，无需部署");
+        }
 
         // 部署到 Flowable，捕获引擎校验异常转为友好提示
         Deployment deployment;

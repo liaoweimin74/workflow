@@ -47,12 +47,37 @@ public class ProcessService {
                 .deploy();
     }
 
-    public Page<ProcessDefinition> listProcessDefinitions(Pageable pageable) {
+    /**
+     * 分页查询已部署流程定义，支持按分类、名称、状态筛选。
+     *
+     * @param pageable   分页参数
+     * @param categoryId 分类 ID（可选，精确匹配 Flowable category 字段）
+     * @param name       流程名称（可选，模糊匹配 Flowable name 字段）
+     * @param status     状态（可选，"active" 或 "suspended"）
+     * @return 分页结果
+     */
+    public Page<ProcessDefinition> listProcessDefinitions(Pageable pageable,
+                                                          String categoryId,
+                                                          String name,
+                                                          String status) {
         String tenantId = tenantProvider.getTenantId();
         ProcessDefinitionQuery query = repositoryService.createProcessDefinitionQuery()
                 .processDefinitionTenantId(tenantId)
-                .orderByProcessDefinitionVersion()
-                .desc();
+                .latestVersion();
+
+        if (categoryId != null && !categoryId.isBlank()) {
+            query.processDefinitionCategoryLike(categoryId);
+        }
+        if (name != null && !name.isBlank()) {
+            query.processDefinitionNameLike(name);
+        }
+        if ("active".equalsIgnoreCase(status)) {
+            query.active();
+        } else if ("suspended".equalsIgnoreCase(status)) {
+            query.suspended();
+        }
+
+        query.orderByProcessDefinitionVersion().desc();
 
         long total = query.count();
         List<ProcessDefinition> content = query

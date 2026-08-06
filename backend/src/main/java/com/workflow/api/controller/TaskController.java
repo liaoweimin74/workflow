@@ -39,15 +39,20 @@ public class TaskController {
     }
 
     @GetMapping
-    public R<PageResponse<Map<String, Object>>> listTodo(
+    public R<PageResponse<TaskTodoVO>> listTodo(
             @RequestParam String assignee,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String processName,
+            @RequestParam(required = false) String initiator,
+            @RequestParam(required = false) String createTimeStart,
+            @RequestParam(required = false) String createTimeEnd) {
 
-        Page<Task> result = taskService.listTodoTasks(assignee, PageRequest.of(page, size));
+        TaskTodoFilter filter = new TaskTodoFilter(processName, initiator, createTimeStart, createTimeEnd);
+        Page<TaskTodoVO> result = taskService.listTodoTasksVO(assignee, PageRequest.of(page, size), filter);
 
-        PageResponse<Map<String, Object>> response = new PageResponse<>(
-                result.getContent().stream().map(this::toMap).toList(),
+        PageResponse<TaskTodoVO> response = new PageResponse<>(
+                result.getContent(),
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements()
@@ -57,15 +62,21 @@ public class TaskController {
     }
 
     @GetMapping("/historic")
-    public R<PageResponse<Map<String, Object>>> listHistoric(
+    public R<PageResponse<TaskDoneVO>> listHistoric(
             @RequestParam String userId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String processName,
+            @RequestParam(required = false) String initiator,
+            @RequestParam(required = false) String endTimeStart,
+            @RequestParam(required = false) String endTimeEnd,
+            @RequestParam(required = false) String approveResult) {
 
-        Page<HistoricTaskInstance> result = taskService.listHistoricTasks(userId, PageRequest.of(page, size));
+        TaskDoneFilter filter = new TaskDoneFilter(processName, initiator, endTimeStart, endTimeEnd, approveResult);
+        Page<TaskDoneVO> result = taskService.listHistoricTasksVO(userId, PageRequest.of(page, size), filter);
 
-        PageResponse<Map<String, Object>> response = new PageResponse<>(
-                result.getContent().stream().map(this::toHistoricMap).toList(),
+        PageResponse<TaskDoneVO> response = new PageResponse<>(
+                result.getContent(),
                 result.getNumber(),
                 result.getSize(),
                 result.getTotalElements()
@@ -75,9 +86,9 @@ public class TaskController {
     }
 
     @GetMapping("/{id}")
-    public R<Map<String, Object>> get(@PathVariable String id) {
-        return taskService.getTask(id)
-                .map(task -> R.ok(toMap(task)))
+    public R<TaskDetailVO> get(@PathVariable String id) {
+        return taskService.getTaskDetail(id)
+                .map(R::ok)
                 .orElse(R.fail(404, "Task not found"));
     }
 
@@ -92,7 +103,9 @@ public class TaskController {
         Map<String, Object> variables = request != null && request.getVariables() != null
                 ? request.getVariables()
                 : new HashMap<>();
-        return R.ok(taskService.completeTaskWithResponse(id, variables));
+        String userId = request != null ? request.getUserId() : null;
+        String comment = request != null ? request.getComment() : null;
+        return R.ok(taskService.completeTaskWithResponse(id, variables, userId, comment));
     }
 
     @PostMapping("/{id}/reject")
@@ -114,19 +127,20 @@ public class TaskController {
 
     @PostMapping("/{id}/delegate")
     public R<Void> delegate(@PathVariable String id, @RequestBody DelegateRequest request) {
-        taskService.delegateTask(id, request.getDelegateTo());
+        taskService.delegateTaskWithComment(id, request.getDelegateTo(),
+                request.getFromUser(), request.getComment());
         return R.ok();
     }
 
     @PostMapping("/{id}/add-sign")
     public R<Void> addSign(@PathVariable String id, @RequestBody AddSignRequest request) {
-        addSignService.addSign(id, request.getUsers());
+        addSignService.addSign(id, request.getUsers(), request.getUserId(), request.getComment());
         return R.ok();
     }
 
     @PostMapping("/{id}/forward-sign")
     public R<Void> forwardSign(@PathVariable String id, @RequestBody ForwardSignRequest request) {
-        forwardSignService.forwardSign(id, request.getToUser());
+        forwardSignService.forwardSign(id, request.getToUser(), request.getUserId(), request.getComment());
         return R.ok();
     }
 

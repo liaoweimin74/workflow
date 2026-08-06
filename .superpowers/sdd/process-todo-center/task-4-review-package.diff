@@ -1,0 +1,421 @@
+﻿=== Commit list ===
+d432750 feat(task): return TaskDetailVO with process info and variables
+
+=== Diff stat ===
+ .../workflow/api/controller/TaskController.java    |   6 +-
+ .../java/com/workflow/api/dto/TaskDetailVO.java    |  66 +++++++++
+ .../workflow/engine/task/WorkflowTaskService.java  | 113 ++++++++++++++
+ .../engine/task/WorkflowTaskServiceDetailTest.java | 164 +++++++++++++++++++++
+ 4 files changed, 346 insertions(+), 3 deletions(-)
+
+=== Full diff (U10) ===
+diff --git a/backend/src/main/java/com/workflow/api/controller/TaskController.java b/backend/src/main/java/com/workflow/api/controller/TaskController.java
+index 0263b38..b0cac12 100644
+--- a/backend/src/main/java/com/workflow/api/controller/TaskController.java
++++ b/backend/src/main/java/com/workflow/api/controller/TaskController.java
+@@ -79,23 +79,23 @@ public class TaskController {
+                 result.getContent(),
+                 result.getNumber(),
+                 result.getSize(),
+                 result.getTotalElements()
+         );
+ 
+         return R.ok(response);
+     }
+ 
+     @GetMapping("/{id}")
+-    public R<Map<String, Object>> get(@PathVariable String id) {
+-        return taskService.getTask(id)
+-                .map(task -> R.ok(toMap(task)))
++    public R<TaskDetailVO> get(@PathVariable String id) {
++        return taskService.getTaskDetail(id)
++                .map(R::ok)
+                 .orElse(R.fail(404, "Task not found"));
+     }
+ 
+     @PostMapping("/{id}/claim")
+     public R<Void> claim(@PathVariable String id, @RequestParam String userId) {
+         taskService.claimTask(id, userId);
+         return R.ok();
+     }
+ 
+     @PostMapping("/{id}/complete")
+diff --git a/backend/src/main/java/com/workflow/api/dto/TaskDetailVO.java b/backend/src/main/java/com/workflow/api/dto/TaskDetailVO.java
+new file mode 100644
+index 0000000..cc17cdf
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/api/dto/TaskDetailVO.java
+@@ -0,0 +1,66 @@
++package com.workflow.api.dto;
++
++import java.util.Map;
++
++/**
++ * 浠诲姟璇︽儏 VO銆?+ *
++ * <p>鍖呭惈浠诲姟鍩烘湰瀛楁 + 鍏宠仈鐨勬祦绋嬪悕绉般€佸彂璧蜂汉銆佸彂璧蜂汉濮撳悕銆?+ * businessKey銆乫ormKey銆佹祦绋嬪彉閲?Map銆?+ * 鐢ㄤ簬 GET /api/v1/tasks/{id} 璇︽儏鎺ュ彛銆?+ */
++public class TaskDetailVO {
++
++    private String taskId;
++    private String name;
++    private String description;
++    private String assignee;
++    private String processInstanceId;
++    private String processDefinitionId;
++    private String processName;
++    private String businessKey;
++    private String initiator;
++    private String initiatorName;
++    private String formKey;
++    private Map<String, Object> variables;
++    private String createTime;
++
++    public String getTaskId() { return taskId; }
++    public void setTaskId(String taskId) { this.taskId = taskId; }
++
++    public String getName() { return name; }
++    public void setName(String name) { this.name = name; }
++
++    public String getDescription() { return description; }
++    public void setDescription(String description) { this.description = description; }
++
++    public String getAssignee() { return assignee; }
++    public void setAssignee(String assignee) { this.assignee = assignee; }
++
++    public String getProcessInstanceId() { return processInstanceId; }
++    public void setProcessInstanceId(String processInstanceId) { this.processInstanceId = processInstanceId; }
++
++    public String getProcessDefinitionId() { return processDefinitionId; }
++    public void setProcessDefinitionId(String processDefinitionId) { this.processDefinitionId = processDefinitionId; }
++
++    public String getProcessName() { return processName; }
++    public void setProcessName(String processName) { this.processName = processName; }
++
++    public String getBusinessKey() { return businessKey; }
++    public void setBusinessKey(String businessKey) { this.businessKey = businessKey; }
++
++    public String getInitiator() { return initiator; }
++    public void setInitiator(String initiator) { this.initiator = initiator; }
++
++    public String getInitiatorName() { return initiatorName; }
++    public void setInitiatorName(String initiatorName) { this.initiatorName = initiatorName; }
++
++    public String getFormKey() { return formKey; }
++    public void setFormKey(String formKey) { this.formKey = formKey; }
++
++    public Map<String, Object> getVariables() { return variables; }
++    public void setVariables(Map<String, Object> variables) { this.variables = variables; }
++
++    public String getCreateTime() { return createTime; }
++    public void setCreateTime(String createTime) { this.createTime = createTime; }
++}
+diff --git a/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java b/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
+index 5ae03f4..4f14b64 100644
+--- a/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
++++ b/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
+@@ -1,13 +1,14 @@
+ package com.workflow.engine.task;
+ 
+ import com.workflow.api.dto.CompleteTaskResponse;
++import com.workflow.api.dto.TaskDetailVO;
+ import com.workflow.api.dto.TaskDoneFilter;
+ import com.workflow.api.dto.TaskDoneVO;
+ import com.workflow.api.dto.TaskTodoFilter;
+ import com.workflow.api.dto.TaskTodoVO;
+ import com.workflow.engine.tenant.TenantProvider;
+ import com.workflow.system.domain.vo.UserVO;
+ import com.workflow.system.service.UserService;
+ import org.flowable.engine.HistoryService;
+ import org.flowable.engine.RepositoryService;
+ import org.flowable.engine.RuntimeService;
+@@ -448,20 +449,132 @@ public class WorkflowTaskService {
+ 
+     public Optional<Task> getTask(String taskId) {
+         String tenantId = tenantProvider.getTenantId();
+         Task task = flowableTaskService.createTaskQuery()
+                 .taskId(taskId)
+                 .taskTenantId(tenantId)
+                 .singleResult();
+         return Optional.ofNullable(task);
+     }
+ 
++    /**
++     * 鏌ヨ浠诲姟璇︽儏锛岃繑鍥?TaskDetailVO锛堝惈 processName/initiator/initiatorName/businessKey/formKey/variables锛夈€?+     *
++     * <p>澶嶇敤鎵归噺鏌ヨ杈呭姪鏂规硶锛屽崟浠诲姟鍦烘櫙鐩存帴璋冪敤銆?+     *
++     * @param taskId 浠诲姟 ID
++     * @return TaskDetailVO锛屼换鍔′笉瀛樺湪鏃惰繑鍥?Optional.empty()
++     */
++    public Optional<TaskDetailVO> getTaskDetail(String taskId) {
++        Optional<Task> taskOpt = getTask(taskId);
++        if (taskOpt.isEmpty()) {
++            return Optional.empty();
++        }
++        Task task = taskOpt.get();
++
++        TaskDetailVO vo = new TaskDetailVO();
++        vo.setTaskId(task.getId());
++        vo.setName(task.getName());
++        vo.setDescription(task.getDescription());
++        vo.setAssignee(task.getAssignee());
++        vo.setProcessInstanceId(task.getProcessInstanceId());
++        vo.setProcessDefinitionId(task.getProcessDefinitionId());
++        if (task.getCreateTime() != null) {
++            vo.setCreateTime(formatDate(task.getCreateTime()));
++        }
++
++        // ProcessInstance 鈫?businessKey + initiator
++        String processInstanceId = task.getProcessInstanceId();
++        if (processInstanceId != null) {
++            try {
++                ProcessInstance pi = runtimeService.createProcessInstanceQuery()
++                        .processInstanceId(processInstanceId)
++                        .singleResult();
++                if (pi != null) {
++                    vo.setBusinessKey(pi.getBusinessKey());
++                }
++            } catch (Exception e) {
++                // 娴佺▼瀹炰緥鍙兘宸茬粨鏉?+            }
++
++            // initiator 鍙橀噺
++            try {
++                Object initiator = runtimeService.getVariable(processInstanceId, "initiator");
++                if (initiator != null) {
++                    String initiatorStr = String.valueOf(initiator);
++                    vo.setInitiator(initiatorStr);
++
++                    // 鎵归噺鏌ヨ鐢ㄦ埛鍚嶏紙澶嶇敤杈呭姪鏂规硶锛?+                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiatorStr));
++                    vo.setInitiatorName(nameMap.get(initiatorStr));
++                }
++            } catch (Exception e) {
++                // 娴佺▼瀹炰緥鍙兘宸茬粨鏉燂紝鍙橀噺涓嶅彲鏌?+            }
++        }
++
++        // ProcessDefinition 鈫?processName
++        String processDefinitionId = task.getProcessDefinitionId();
++        if (processDefinitionId != null) {
++            Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(Set.of(processDefinitionId));
++            ProcessDefinition pd = pdMap.get(processDefinitionId);
++            if (pd != null) {
++                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
++            }
++
++            // formKey 浠?BpmnModel 涓綋鍓嶄换鍔＄殑 UserTask 鑺傜偣鎻愬彇
++            String formKey = extractFormKey(processDefinitionId, task.getTaskDefinitionKey());
++            vo.setFormKey(formKey);
++        }
++
++        // variables
++        try {
++            Map<String, Object> variables = flowableTaskService.getVariables(taskId);
++            vo.setVariables(variables);
++        } catch (Exception e) {
++            vo.setVariables(Map.of());
++        }
++
++        return Optional.of(vo);
++    }
++
++    /**
++     * 浠?BpmnModel 涓彁鍙栨寚瀹?UserTask 鑺傜偣鐨?formKey銆?+     *
++     * @param processDefinitionId 娴佺▼瀹氫箟 ID
++     * @param taskDefinitionKey   浠诲姟瀹氫箟閿紙BPMN 鑺傜偣 ID锛?+     * @return formKey锛屾湭鎵惧埌鏃惰繑鍥?null
++     */
++    private String extractFormKey(String processDefinitionId, String taskDefinitionKey) {
++        if (processDefinitionId == null || taskDefinitionKey == null) {
++            return null;
++        }
++        try {
++            org.flowable.bpmn.model.BpmnModel model = repositoryService.getBpmnModel(processDefinitionId);
++            if (model == null) {
++                return null;
++            }
++            for (org.flowable.bpmn.model.Process process : model.getProcesses()) {
++                for (var flowElement : process.getFlowElements()) {
++                    if (flowElement instanceof org.flowable.bpmn.model.UserTask userTask) {
++                        if (taskDefinitionKey.equals(userTask.getId())) {
++                            return userTask.getFormKey();
++                        }
++                    }
++                }
++            }
++        } catch (Exception e) {
++            // BpmnModel 鑾峰彇澶辫触锛屽拷鐣?+        }
++        return null;
++    }
++
+     @Transactional
+     public void claimTask(String taskId, String userId) {
+         flowableTaskService.claim(taskId, userId);
+     }
+ 
+     @Transactional
+     public void completeTask(String taskId, Map<String, Object> variables) {
+         flowableTaskService.complete(taskId, variables);
+     }
+ 
+diff --git a/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java b/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java
+new file mode 100644
+index 0000000..f2f013a
+--- /dev/null
++++ b/backend/src/test/java/com/workflow/engine/task/WorkflowTaskServiceDetailTest.java
+@@ -0,0 +1,164 @@
++package com.workflow.engine.task;
++
++import com.workflow.api.dto.TaskDetailVO;
++import com.workflow.engine.tenant.TenantProvider;
++import com.workflow.system.domain.vo.UserVO;
++import com.workflow.system.service.UserService;
++import org.flowable.engine.HistoryService;
++import org.flowable.engine.RepositoryService;
++import org.flowable.engine.RuntimeService;
++import org.flowable.engine.TaskService;
++import org.flowable.engine.repository.ProcessDefinition;
++import org.flowable.engine.repository.ProcessDefinitionQuery;
++import org.flowable.engine.runtime.ProcessInstance;
++import org.flowable.engine.runtime.ProcessInstanceQuery;
++import org.flowable.task.api.Task;
++import org.flowable.task.api.TaskQuery;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++
++import java.time.LocalDateTime;
++import java.util.Date;
++import java.util.List;
++import java.util.Map;
++import java.util.Optional;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.ArgumentMatchers.eq;
++import static org.mockito.Mockito.*;
++
++/**
++ * WorkflowTaskService.getTaskDetail 娴嬭瘯銆?+ *
++ * <p>楠岃瘉锛?+ * 1. 杩斿洖 TaskDetailVO锛堝寘鍚换鍔″瓧娈?+ processName + initiator + initiatorName + businessKey + formKey + variables锛?+ * 2. 鍏宠仈瀛楁姝ｇ‘濉厖
++ * 3. 浠诲姟涓嶅瓨鍦ㄦ椂杩斿洖 Optional.empty()
++ */
++class WorkflowTaskServiceDetailTest {
++
++    private TaskService flowableTaskService;
++    private HistoryService historyService;
++    private TenantProvider tenantProvider;
++    private RuntimeService runtimeService;
++    private RepositoryService repositoryService;
++    private UserService userService;
++    private WorkflowTaskService service;
++
++    @BeforeEach
++    void setUp() {
++        flowableTaskService = mock(TaskService.class);
++        historyService = mock(HistoryService.class);
++        tenantProvider = mock(TenantProvider.class);
++        runtimeService = mock(RuntimeService.class);
++        repositoryService = mock(RepositoryService.class);
++        userService = mock(UserService.class);
++        service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
++                runtimeService, repositoryService, userService);
++        when(tenantProvider.getTenantId()).thenReturn("default");
++    }
++
++    @Test
++    void getTaskDetailReturnsVOWithProcessNameInitiatorNameAndVariables() {
++        // Given: a task with process instance and definition
++        String taskId = "task-001";
++        String processInstanceId = "pi-001";
++        String processDefinitionId = "pd-001:1:42";
++
++        Task task = mock(Task.class);
++        when(task.getId()).thenReturn(taskId);
++        when(task.getName()).thenReturn("閮ㄩ棬瀹℃壒");
++        when(task.getDescription()).thenReturn("璇峰鎵?);
++        when(task.getAssignee()).thenReturn("user1");
++        when(task.getProcessInstanceId()).thenReturn(processInstanceId);
++        when(task.getProcessDefinitionId()).thenReturn(processDefinitionId);
++        when(task.getCreateTime()).thenReturn(new Date());
++        when(task.getTaskDefinitionKey()).thenReturn("deptApprove");
++
++        TaskQuery taskQuery = mock(TaskQuery.class);
++        when(flowableTaskService.createTaskQuery()).thenReturn(taskQuery);
++        when(taskQuery.taskId(anyString())).thenReturn(taskQuery);
++        when(taskQuery.taskTenantId(anyString())).thenReturn(taskQuery);
++        when(taskQuery.singleResult()).thenReturn(task);
++
++        // ProcessInstance
++        ProcessInstance pi = mock(ProcessInstance.class);
++        when(pi.getId()).thenReturn(processInstanceId);
++        when(pi.getBusinessKey()).thenReturn("BIZ-001");
++        ProcessInstanceQuery piQuery = mock(ProcessInstanceQuery.class);
++        when(runtimeService.createProcessInstanceQuery()).thenReturn(piQuery);
++        when(piQuery.processInstanceId(anyString())).thenReturn(piQuery);
++        when(piQuery.singleResult()).thenReturn(pi);
++
++        // initiator variable
++        when(runtimeService.getVariable(eq(processInstanceId), eq("initiator"))).thenReturn("42");
++
++        // ProcessDefinition
++        ProcessDefinition pd = mock(ProcessDefinition.class);
++        when(pd.getId()).thenReturn(processDefinitionId);
++        when(pd.getName()).thenReturn("璇峰亣娴佺▼");
++        when(pd.getKey()).thenReturn("leave");
++        ProcessDefinitionQuery pdQuery = mock(ProcessDefinitionQuery.class);
++        when(repositoryService.createProcessDefinitionQuery()).thenReturn(pdQuery);
++        when(pdQuery.processDefinitionIds(any())).thenReturn(pdQuery);
++        when(pdQuery.list()).thenReturn(List.of(pd));
++
++        // formKey via BpmnModel
++        org.flowable.bpmn.model.BpmnModel bpmnModel = mock(org.flowable.bpmn.model.BpmnModel.class);
++        org.flowable.bpmn.model.Process process = mock(org.flowable.bpmn.model.Process.class);
++        org.flowable.bpmn.model.UserTask userTask = mock(org.flowable.bpmn.model.UserTask.class);
++        when(userTask.getId()).thenReturn("deptApprove");
++        when(userTask.getFormKey()).thenReturn("leaveForm");
++        when(process.getFlowElements()).thenReturn(List.of(userTask));
++        when(bpmnModel.getProcesses()).thenReturn(List.of(process));
++        when(repositoryService.getBpmnModel(eq(processDefinitionId))).thenReturn(bpmnModel);
++
++        // variables
++        Map<String, Object> variables = Map.of("days", 3, "reason", "test");
++        when(flowableTaskService.getVariables(eq(taskId))).thenReturn(variables);
++
++        // UserService for initiatorName
++        UserVO userVO = new UserVO(42L, "zhangsan", "寮犱笁", null, null, null,
++                null, null, 1, LocalDateTime.now(), new Long[]{});
++        when(userService.findByIds(eq(List.of(42L)))).thenReturn(List.of(userVO));
++
++        // When
++        Optional<TaskDetailVO> result = service.getTaskDetail(taskId);
++
++        // Then
++        assertThat(result).isPresent();
++        TaskDetailVO vo = result.get();
++        assertThat(vo.getTaskId()).isEqualTo(taskId);
++        assertThat(vo.getName()).isEqualTo("閮ㄩ棬瀹℃壒");
++        assertThat(vo.getDescription()).isEqualTo("璇峰鎵?);
++        assertThat(vo.getAssignee()).isEqualTo("user1");
++        assertThat(vo.getProcessInstanceId()).isEqualTo(processInstanceId);
++        assertThat(vo.getProcessDefinitionId()).isEqualTo(processDefinitionId);
++        assertThat(vo.getProcessName()).isEqualTo("璇峰亣娴佺▼");
++        assertThat(vo.getBusinessKey()).isEqualTo("BIZ-001");
++        assertThat(vo.getInitiator()).isEqualTo("42");
++        assertThat(vo.getInitiatorName()).isEqualTo("寮犱笁");
++        assertThat(vo.getFormKey()).isEqualTo("leaveForm");
++        assertThat(vo.getVariables()).containsEntry("days", 3);
++        assertThat(vo.getVariables()).containsEntry("reason", "test");
++        assertThat(vo.getCreateTime()).isNotNull();
++    }
++
++    @Test
++    void getTaskDetailReturnsEmptyWhenTaskNotFound() {
++        // Given
++        TaskQuery taskQuery = mock(TaskQuery.class);
++        when(flowableTaskService.createTaskQuery()).thenReturn(taskQuery);
++        when(taskQuery.taskId(anyString())).thenReturn(taskQuery);
++        when(taskQuery.taskTenantId(anyString())).thenReturn(taskQuery);
++        when(taskQuery.singleResult()).thenReturn(null);
++
++        // When
++        Optional<TaskDetailVO> result = service.getTaskDetail("nonexistent");
++
++        // Then
++        assertThat(result).isEmpty();
++    }
++}

@@ -1,6 +1,8 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.runtime.ChangeActivityStateBuilder;
@@ -32,6 +34,10 @@ class RejectServiceTest {
     RuntimeService runtimeService;
     @Mock
     InitiatorNodeResolver initiatorNodeResolver;
+    @Mock
+    TenantProvider tenantProvider;
+    @Mock
+    WfTaskCommentRepository commentRepository;
 
     @InjectMocks
     RejectService rejectService;
@@ -57,6 +63,7 @@ class RejectServiceTest {
         Task task = mockTask("task-001", "pi-001", "pd-001", "managerApproval");
         stubTaskQuery(task);
         when(initiatorNodeResolver.resolve("pd-001")).thenReturn("initiatorTask");
+        when(tenantProvider.getTenantId()).thenReturn("tenant-1");
 
         ChangeActivityStateBuilder builder = mock(ChangeActivityStateBuilder.class);
         when(runtimeService.createChangeActivityStateBuilder()).thenReturn(builder);

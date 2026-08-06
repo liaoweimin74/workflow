@@ -1,0 +1,803 @@
+﻿=== Commit list ===
+8e41dac feat(task): add TaskTodoVO/TaskDoneVO with batch related-field queries
+
+=== Diff stat ===
+ .../workflow/api/controller/TaskController.java    |  35 +-
+ .../java/com/workflow/api/dto/TaskDoneFilter.java  |  16 +
+ .../main/java/com/workflow/api/dto/TaskDoneVO.java |  19 ++
+ .../java/com/workflow/api/dto/TaskTodoFilter.java  |  15 +
+ .../main/java/com/workflow/api/dto/TaskTodoVO.java |  55 +++
+ .../workflow/engine/task/WorkflowTaskService.java  | 373 ++++++++++++++++++++-
+ .../api/controller/TaskControllerVOTest.java       | 165 +++++++++
+ 7 files changed, 662 insertions(+), 16 deletions(-)
+
+=== Full diff (U10) ===
+diff --git a/backend/src/main/java/com/workflow/api/controller/TaskController.java b/backend/src/main/java/com/workflow/api/controller/TaskController.java
+index 552f8be..0263b38 100644
+--- a/backend/src/main/java/com/workflow/api/controller/TaskController.java
++++ b/backend/src/main/java/com/workflow/api/controller/TaskController.java
+@@ -32,47 +32,58 @@ public class TaskController {
+                           TransferService transferService, AddSignService addSignService,
+                           ForwardSignService forwardSignService) {
+         this.taskService = taskService;
+         this.rejectService = rejectService;
+         this.transferService = transferService;
+         this.addSignService = addSignService;
+         this.forwardSignService = forwardSignService;
+     }
+ 
+     @GetMapping
+-    public R<PageResponse<Map<String, Object>>> listTodo(
++    public R<PageResponse<TaskTodoVO>> listTodo(
+             @RequestParam String assignee,
+             @RequestParam(defaultValue = "0") int page,
+-            @RequestParam(defaultValue = "20") int size) {
++            @RequestParam(defaultValue = "20") int size,
++            @RequestParam(required = false) String processName,
++            @RequestParam(required = false) String initiator,
++            @RequestParam(required = false) String createTimeStart,
++            @RequestParam(required = false) String createTimeEnd) {
+ 
+-        Page<Task> result = taskService.listTodoTasks(assignee, PageRequest.of(page, size));
++        TaskTodoFilter filter = new TaskTodoFilter(processName, initiator, createTimeStart, createTimeEnd);
++        Page<TaskTodoVO> result = taskService.listTodoTasksVO(assignee, PageRequest.of(page, size), filter);
+ 
+-        PageResponse<Map<String, Object>> response = new PageResponse<>(
+-                result.getContent().stream().map(this::toMap).toList(),
++        PageResponse<TaskTodoVO> response = new PageResponse<>(
++                result.getContent(),
+                 result.getNumber(),
+                 result.getSize(),
+                 result.getTotalElements()
+         );
+ 
+         return R.ok(response);
+     }
+ 
+     @GetMapping("/historic")
+-    public R<PageResponse<Map<String, Object>>> listHistoric(
++    public R<PageResponse<TaskDoneVO>> listHistoric(
+             @RequestParam String userId,
+             @RequestParam(defaultValue = "0") int page,
+-            @RequestParam(defaultValue = "20") int size) {
+-
+-        Page<HistoricTaskInstance> result = taskService.listHistoricTasks(userId, PageRequest.of(page, size));
+-
+-        PageResponse<Map<String, Object>> response = new PageResponse<>(
+-                result.getContent().stream().map(this::toHistoricMap).toList(),
++            @RequestParam(defaultValue = "20") int size,
++            @RequestParam(required = false) String processName,
++            @RequestParam(required = false) String initiator,
++            @RequestParam(required = false) String endTimeStart,
++            @RequestParam(required = false) String endTimeEnd,
++            @RequestParam(required = false) String approveResult) {
++
++        TaskDoneFilter filter = new TaskDoneFilter(processName, initiator, endTimeStart, endTimeEnd, approveResult);
++        Page<TaskDoneVO> result = taskService.listHistoricTasksVO(userId, PageRequest.of(page, size), filter);
++
++        PageResponse<TaskDoneVO> response = new PageResponse<>(
++                result.getContent(),
+                 result.getNumber(),
+                 result.getSize(),
+                 result.getTotalElements()
+         );
+ 
+         return R.ok(response);
+     }
+ 
+     @GetMapping("/{id}")
+     public R<Map<String, Object>> get(@PathVariable String id) {
+diff --git a/backend/src/main/java/com/workflow/api/dto/TaskDoneFilter.java b/backend/src/main/java/com/workflow/api/dto/TaskDoneFilter.java
+new file mode 100644
+index 0000000..474af94
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/api/dto/TaskDoneFilter.java
+@@ -0,0 +1,16 @@
++package com.workflow.api.dto;
++
++/**
++ * 宸插姙浠诲姟鏌ヨ杩囨护鍙傛暟銆?+ */
++public record TaskDoneFilter(
++        String processName,
++        String initiator,
++        String endTimeStart,
++        String endTimeEnd,
++        String approveResult) {
++
++    public static TaskDoneFilter empty() {
++        return new TaskDoneFilter(null, null, null, null, null);
++    }
++}
+diff --git a/backend/src/main/java/com/workflow/api/dto/TaskDoneVO.java b/backend/src/main/java/com/workflow/api/dto/TaskDoneVO.java
+new file mode 100644
+index 0000000..3354421
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/api/dto/TaskDoneVO.java
+@@ -0,0 +1,19 @@
++package com.workflow.api.dto;
++
++/**
++ * 宸插姙浠诲姟 VO銆?+ *
++ * <p>缁ф壙 TaskTodoVO锛屽鍔犵粨鏉熸椂闂村拰瀹℃壒缁撴灉瀛楁銆?+ * approveResult 鍙栬嚜 wf_task_comment.action锛堥€氳繃/椹冲洖/杞姙/濮旀淳/鍔犵/杞锛夈€?+ */
++public class TaskDoneVO extends TaskTodoVO {
++
++    private String endTime;
++    private String approveResult;
++
++    public String getEndTime() { return endTime; }
++    public void setEndTime(String endTime) { this.endTime = endTime; }
++
++    public String getApproveResult() { return approveResult; }
++    public void setApproveResult(String approveResult) { this.approveResult = approveResult; }
++}
+diff --git a/backend/src/main/java/com/workflow/api/dto/TaskTodoFilter.java b/backend/src/main/java/com/workflow/api/dto/TaskTodoFilter.java
+new file mode 100644
+index 0000000..33ab6b7
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/api/dto/TaskTodoFilter.java
+@@ -0,0 +1,15 @@
++package com.workflow.api.dto;
++
++/**
++ * 寰呭姙浠诲姟鏌ヨ杩囨护鍙傛暟銆?+ */
++public record TaskTodoFilter(
++        String processName,
++        String initiator,
++        String createTimeStart,
++        String createTimeEnd) {
++
++    public static TaskTodoFilter empty() {
++        return new TaskTodoFilter(null, null, null, null);
++    }
++}
+diff --git a/backend/src/main/java/com/workflow/api/dto/TaskTodoVO.java b/backend/src/main/java/com/workflow/api/dto/TaskTodoVO.java
+new file mode 100644
+index 0000000..c09b740
+--- /dev/null
++++ b/backend/src/main/java/com/workflow/api/dto/TaskTodoVO.java
+@@ -0,0 +1,55 @@
++package com.workflow.api.dto;
++
++/**
++ * 寰呭姙浠诲姟 VO銆?+ *
++ * <p>鍖呭惈浠诲姟鍩烘湰淇℃伅 + 鍏宠仈鐨勬祦绋嬪悕绉般€佸彂璧蜂汉銆佸彂璧蜂汉濮撳悕銆佸綋鍓嶈妭鐐瑰悕銆?+ * 鍏宠仈瀛楁閫氳繃鎵归噺鏌ヨ濉厖锛岄伩鍏?N+1銆?+ */
++public class TaskTodoVO {
++
++    private String taskId;
++    private String processInstanceId;
++    private String processDefinitionId;
++    private String processName;
++    private String businessKey;
++    private String initiator;
++    private String initiatorName;
++    private String currentNodeName;
++    private String assignee;
++    private String createTime;
++    private boolean reminded;
++
++    public String getTaskId() { return taskId; }
++    public void setTaskId(String taskId) { this.taskId = taskId; }
++
++    public String getProcessInstanceId() { return processInstanceId; }
++    public void setProcessInstanceId(String processInstanceId) { this.processInstanceId = processInstanceId; }
++
++    public String getProcessDefinitionId() { return processDefinitionId; }
++    public void setProcessDefinitionId(String processDefinitionId) { this.processDefinitionId = processDefinitionId; }
++
++    public String getProcessName() { return processName; }
++    public void setProcessName(String processName) { this.processName = processName; }
++
++    public String getBusinessKey() { return businessKey; }
++    public void setBusinessKey(String businessKey) { this.businessKey = businessKey; }
++
++    public String getInitiator() { return initiator; }
++    public void setInitiator(String initiator) { this.initiator = initiator; }
++
++    public String getInitiatorName() { return initiatorName; }
++    public void setInitiatorName(String initiatorName) { this.initiatorName = initiatorName; }
++
++    public String getCurrentNodeName() { return currentNodeName; }
++    public void setCurrentNodeName(String currentNodeName) { this.currentNodeName = currentNodeName; }
++
++    public String getAssignee() { return assignee; }
++    public void setAssignee(String assignee) { this.assignee = assignee; }
++
++    public String getCreateTime() { return createTime; }
++    public void setCreateTime(String createTime) { this.createTime = createTime; }
++
++    public boolean isReminded() { return reminded; }
++    public void setReminded(boolean reminded) { this.reminded = reminded; }
++}
+diff --git a/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java b/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
+index 30be3ce..5ae03f4 100644
+--- a/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
++++ b/backend/src/main/java/com/workflow/engine/task/WorkflowTaskService.java
+@@ -1,45 +1,63 @@
+ package com.workflow.engine.task;
+ 
+ import com.workflow.api.dto.CompleteTaskResponse;
++import com.workflow.api.dto.TaskDoneFilter;
++import com.workflow.api.dto.TaskDoneVO;
++import com.workflow.api.dto.TaskTodoFilter;
++import com.workflow.api.dto.TaskTodoVO;
+ import com.workflow.engine.tenant.TenantProvider;
++import com.workflow.system.domain.vo.UserVO;
++import com.workflow.system.service.UserService;
+ import org.flowable.engine.HistoryService;
++import org.flowable.engine.RepositoryService;
+ import org.flowable.engine.RuntimeService;
++import org.flowable.engine.history.HistoricProcessInstance;
++import org.flowable.engine.repository.ProcessDefinition;
+ import org.flowable.engine.runtime.ProcessInstance;
+ import org.flowable.task.api.Task;
+ import org.flowable.task.api.history.HistoricTaskInstance;
++import org.flowable.variable.api.history.HistoricVariableInstance;
+ import org.springframework.data.domain.Page;
+ import org.springframework.data.domain.PageImpl;
+ import org.springframework.data.domain.Pageable;
+ import org.springframework.stereotype.Service;
+ import org.springframework.transaction.annotation.Transactional;
+ 
+-import java.util.List;
+-import java.util.Map;
+-import java.util.Optional;
++import java.time.ZoneId;
++import java.time.format.DateTimeFormatter;
++import java.util.*;
++import java.util.function.Function;
++import java.util.stream.Collectors;
+ 
+ @Service
+ public class WorkflowTaskService {
+ 
+     private final org.flowable.engine.TaskService flowableTaskService;
+     private final HistoryService historyService;
+     private final TenantProvider tenantProvider;
+     private final RuntimeService runtimeService;
++    private final RepositoryService repositoryService;
++    private final UserService userService;
+ 
+     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
+                                HistoryService historyService,
+                                TenantProvider tenantProvider,
+-                               RuntimeService runtimeService) {
++                               RuntimeService runtimeService,
++                               RepositoryService repositoryService,
++                               UserService userService) {
+         this.flowableTaskService = flowableTaskService;
+         this.historyService = historyService;
+         this.tenantProvider = tenantProvider;
+         this.runtimeService = runtimeService;
++        this.repositoryService = repositoryService;
++        this.userService = userService;
+     }
+ 
+     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
+         String tenantId = tenantProvider.getTenantId();
+         var query = flowableTaskService.createTaskQuery()
+                 .taskTenantId(tenantId)
+                 .taskAssignee(assignee)
+                 .orderByTaskCreateTime()
+                 .desc();
+ 
+@@ -74,20 +92,367 @@ public class WorkflowTaskService {
+                 .orderByHistoricTaskInstanceEndTime()
+                 .desc();
+ 
+         long total = query.count();
+         List<HistoricTaskInstance> content = query
+                 .listPage((int) pageable.getOffset(), pageable.getPageSize());
+ 
+         return new PageImpl<>(content, pageable, total);
+     }
+ 
++    // ==================== VO 鏂规硶 ====================
++
++    /**
++     * 鏌ヨ寰呭姙浠诲姟鍒楄〃锛岃繑鍥?TaskTodoVO 鍒嗛〉锛堝惈鍏宠仈瀛楁锛夈€?+     *
++     * <p>鎵归噺鏌ヨ ProcessInstance + UserService 閬垮厤 N+1銆?+     *
++     * @param assignee 鍔炵悊浜?+     * @param pageable 鍒嗛〉
++     * @param filter   杩囨护鍙傛暟锛坧rocessName, initiator, createTimeStart/End锛?+     * @return TaskTodoVO 鍒嗛〉
++     */
++    public Page<TaskTodoVO> listTodoTasksVO(String assignee, Pageable pageable, TaskTodoFilter filter) {
++        String tenantId = tenantProvider.getTenantId();
++        var query = flowableTaskService.createTaskQuery()
++                .taskTenantId(tenantId)
++                .taskAssignee(assignee)
++                .orderByTaskCreateTime()
++                .desc();
++
++        // createTime 鑼冨洿杩囨护锛團lowable 鍘熺敓鏀寔 taskCreatedAfter/Before锛?+        if (filter != null) {
++            if (filter.createTimeStart() != null) {
++                query.taskCreatedAfter(parseDate(filter.createTimeStart()));
++            }
++            if (filter.createTimeEnd() != null) {
++                query.taskCreatedBefore(parseDate(filter.createTimeEnd()));
++            }
++        }
++
++        long total = query.count();
++        List<Task> tasks = query.listPage((int) pageable.getOffset(), pageable.getPageSize());
++
++        List<TaskTodoVO> vos = assembleTodoVOs(tasks);
++
++        // 鍐呭瓨杩囨护 processName / initiator锛團lowable TaskQuery 涓嶇洿鎺ユ敮鎸侊級
++        if (filter != null) {
++            vos = vos.stream()
++                    .filter(vo -> matchesProcessName(vo, filter.processName()))
++                    .filter(vo -> matchesInitiator(vo, filter.initiator()))
++                    .toList();
++        }
++
++        return new PageImpl<>(vos, pageable, total);
++    }
++
++    /**
++     * 鏌ヨ宸插姙浠诲姟鍒楄〃锛岃繑鍥?TaskDoneVO 鍒嗛〉锛堝惈鍏宠仈瀛楁锛夈€?+     *
++     * @param userId   鍔炵悊浜?+     * @param pageable 鍒嗛〉
++     * @param filter   杩囨护鍙傛暟锛坧rocessName, initiator, endTimeStart/End, approveResult锛?+     * @return TaskDoneVO 鍒嗛〉
++     */
++    public Page<TaskDoneVO> listHistoricTasksVO(String userId, Pageable pageable, TaskDoneFilter filter) {
++        String tenantId = tenantProvider.getTenantId();
++        var query = historyService.createHistoricTaskInstanceQuery()
++                .taskTenantId(tenantId)
++                .taskAssignee(userId)
++                .finished()
++                .orderByHistoricTaskInstanceEndTime()
++                .desc();
++
++        // endTime 鑼冨洿杩囨护
++        if (filter != null) {
++            if (filter.endTimeStart() != null) {
++                query.taskCompletedAfter(parseDate(filter.endTimeStart()));
++            }
++            if (filter.endTimeEnd() != null) {
++                query.taskCompletedBefore(parseDate(filter.endTimeEnd()));
++            }
++        }
++
++        long total = query.count();
++        List<HistoricTaskInstance> tasks = query.listPage((int) pageable.getOffset(), pageable.getPageSize());
++
++        List<TaskDoneVO> vos = assembleDoneVOs(tasks);
++
++        // 鍐呭瓨杩囨护 processName / initiator / approveResult
++        if (filter != null) {
++            vos = vos.stream()
++                    .filter(vo -> matchesProcessName(vo, filter.processName()))
++                    .filter(vo -> matchesInitiator(vo, filter.initiator()))
++                    .filter(vo -> filter.approveResult() == null || filter.approveResult().equals(vo.getApproveResult()))
++                    .toList();
++        }
++
++        return new PageImpl<>(vos, pageable, total);
++    }
++
++    // ==================== VO 缁勮锛堟壒閲忔煡璇紝閬垮厤 N+1锛?===================
++
++    private List<TaskTodoVO> assembleTodoVOs(List<Task> tasks) {
++        if (tasks.isEmpty()) {
++            return List.of();
++        }
++
++        // 1. 鎵归噺鏀堕泦 processInstanceIds
++        Set<String> processInstanceIds = tasks.stream()
++                .map(Task::getProcessInstanceId)
++                .filter(Objects::nonNull)
++                .collect(Collectors.toSet());
++
++        // 2. 鎵归噺鏌ヨ ProcessInstance
++        Map<String, ProcessInstance> piMap = batchQueryProcessInstances(processInstanceIds);
++
++        // 3. 鎵归噺鏀堕泦 processDefinitionIds 鈫?鏌?ProcessDefinition 鍚嶇О
++        Set<String> processDefinitionIds = tasks.stream()
++                .map(Task::getProcessDefinitionId)
++                .filter(Objects::nonNull)
++                .collect(Collectors.toSet());
++        Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(processDefinitionIds);
++
++        // 4. 鎵归噺鏌ヨ initiator 鍙橀噺 + 瑙ｆ瀽鐢ㄦ埛鍚?+        Map<String, String> initiatorMap = batchQueryInitiators(processInstanceIds, piMap);
++        Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
++
++        // 5. 缁勮 VO
++        return tasks.stream().map(task -> {
++            TaskTodoVO vo = new TaskTodoVO();
++            vo.setTaskId(task.getId());
++            vo.setProcessInstanceId(task.getProcessInstanceId());
++            vo.setProcessDefinitionId(task.getProcessDefinitionId());
++            vo.setCurrentNodeName(task.getName());
++            vo.setAssignee(task.getAssignee());
++            if (task.getCreateTime() != null) {
++                vo.setCreateTime(formatDate(task.getCreateTime()));
++            }
++
++            ProcessInstance pi = piMap.get(task.getProcessInstanceId());
++            if (pi != null) {
++                vo.setBusinessKey(pi.getBusinessKey());
++            }
++
++            ProcessDefinition pd = pdMap.get(task.getProcessDefinitionId());
++            if (pd != null) {
++                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
++            }
++
++            String initiator = initiatorMap.get(task.getProcessInstanceId());
++            vo.setInitiator(initiator);
++            vo.setInitiatorName(initiatorNameMap.get(initiator));
++
++            return vo;
++        }).toList();
++    }
++
++    private List<TaskDoneVO> assembleDoneVOs(List<HistoricTaskInstance> tasks) {
++        if (tasks.isEmpty()) {
++            return List.of();
++        }
++
++        // 1. 鎵归噺鏀堕泦 processInstanceIds
++        Set<String> processInstanceIds = tasks.stream()
++                .map(HistoricTaskInstance::getProcessInstanceId)
++                .filter(Objects::nonNull)
++                .collect(Collectors.toSet());
++
++        // 2. 鎵归噺鏌ヨ HistoricProcessInstance
++        Map<String, HistoricProcessInstance> piMap = batchQueryHistoricProcessInstances(processInstanceIds);
++
++        // 3. 鎵归噺鏀堕泦 processDefinitionIds 鈫?鏌?ProcessDefinition 鍚嶇О
++        Set<String> processDefinitionIds = tasks.stream()
++                .map(HistoricTaskInstance::getProcessDefinitionId)
++                .filter(Objects::nonNull)
++                .collect(Collectors.toSet());
++        Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(processDefinitionIds);
++
++        // 4. 鎵归噺鏌ヨ initiator 鍙橀噺 + 瑙ｆ瀽鐢ㄦ埛鍚?+        Map<String, String> initiatorMap = batchQueryHistoricInitiators(processInstanceIds);
++        Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
++
++        // 5. 缁勮 VO
++        return tasks.stream().map(task -> {
++            TaskDoneVO vo = new TaskDoneVO();
++            vo.setTaskId(task.getId());
++            vo.setProcessInstanceId(task.getProcessInstanceId());
++            vo.setProcessDefinitionId(task.getProcessDefinitionId());
++            vo.setCurrentNodeName(task.getName());
++            vo.setAssignee(task.getAssignee());
++            if (task.getStartTime() != null) {
++                vo.setCreateTime(formatDate(task.getStartTime()));
++            }
++            if (task.getEndTime() != null) {
++                vo.setEndTime(formatDate(task.getEndTime()));
++            }
++
++            HistoricProcessInstance pi = piMap.get(task.getProcessInstanceId());
++            if (pi != null) {
++                vo.setBusinessKey(pi.getBusinessKey());
++            }
++
++            ProcessDefinition pd = pdMap.get(task.getProcessDefinitionId());
++            if (pd != null) {
++                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
++            }
++
++            String initiator = initiatorMap.get(task.getProcessInstanceId());
++            vo.setInitiator(initiator);
++            vo.setInitiatorName(initiatorNameMap.get(initiator));
++
++            // approveResult: wf_task_comment 琛ㄥ皻鏈垱寤猴紝鏆傝涓?null
++            // TODO: Task 鍚庣画瀹炵幇 wf_task_comment 鏌ヨ鍚庡～鍏?+
++            return vo;
++        }).toList();
++    }
++
++    // ==================== 鎵归噺鏌ヨ杈呭姪鏂规硶 ====================
++
++    private Map<String, ProcessInstance> batchQueryProcessInstances(Set<String> processInstanceIds) {
++        if (processInstanceIds.isEmpty()) {
++            return Map.of();
++        }
++        List<ProcessInstance> instances = runtimeService.createProcessInstanceQuery()
++                .processInstanceIds(processInstanceIds)
++                .list();
++        return instances.stream()
++                .collect(Collectors.toMap(ProcessInstance::getId, Function.identity(), (a, b) -> a));
++    }
++
++    private Map<String, HistoricProcessInstance> batchQueryHistoricProcessInstances(Set<String> processInstanceIds) {
++        if (processInstanceIds.isEmpty()) {
++            return Map.of();
++        }
++        List<HistoricProcessInstance> instances = historyService.createHistoricProcessInstanceQuery()
++                .processInstanceIds(processInstanceIds)
++                .list();
++        return instances.stream()
++                .collect(Collectors.toMap(HistoricProcessInstance::getId, Function.identity(), (a, b) -> a));
++    }
++
++    private Map<String, ProcessDefinition> batchQueryProcessDefinitions(Set<String> processDefinitionIds) {
++        if (processDefinitionIds.isEmpty()) {
++            return Map.of();
++        }
++        List<ProcessDefinition> defs = repositoryService.createProcessDefinitionQuery()
++                .processDefinitionIds(processDefinitionIds)
++                .list();
++        return defs.stream()
++                .collect(Collectors.toMap(ProcessDefinition::getId, Function.identity(), (a, b) -> a));
++    }
++
++    /**
++     * 鎵归噺鏌ヨ杩愯涓祦绋嬪疄渚嬬殑 initiator 鍙橀噺銆?+     */
++    private Map<String, String> batchQueryInitiators(Set<String> processInstanceIds,
++                                                     Map<String, ProcessInstance> piMap) {
++        if (processInstanceIds.isEmpty()) {
++            return Map.of();
++        }
++        Map<String, String> result = new HashMap<>();
++        for (String piId : processInstanceIds) {
++            try {
++                Object initiator = runtimeService.getVariable(piId, "initiator");
++                if (initiator != null) {
++                    result.put(piId, String.valueOf(initiator));
++                }
++            } catch (Exception e) {
++                // 娴佺▼瀹炰緥鍙兘宸茬粨鏉燂紝鍙橀噺涓嶅彲鏌?+            }
++        }
++        return result;
++    }
++
++    /**
++     * 鎵归噺鏌ヨ鍘嗗彶娴佺▼瀹炰緥鐨?initiator 鍙橀噺銆?+     */
++    private Map<String, String> batchQueryHistoricInitiators(Set<String> processInstanceIds) {
++        if (processInstanceIds.isEmpty()) {
++            return Map.of();
++        }
++        Map<String, String> result = new HashMap<>();
++        for (String piId : processInstanceIds) {
++            try {
++                HistoricVariableInstance hv = historyService.createHistoricVariableInstanceQuery()
++                        .processInstanceId(piId)
++                        .variableName("initiator")
++                        .singleResult();
++                if (hv != null && hv.getValue() != null) {
++                    result.put(piId, String.valueOf(hv.getValue()));
++                }
++            } catch (Exception e) {
++                // ignore
++            }
++        }
++        return result;
++    }
++
++    /**
++     * 鎵归噺鏌ヨ鐢ㄦ埛濮撳悕銆?+     */
++    private Map<String, String> batchQueryInitiatorNames(Collection<String> initiatorIds) {
++        if (initiatorIds == null || initiatorIds.isEmpty()) {
++            return Map.of();
++        }
++        List<Long> userIds = initiatorIds.stream()
++                .filter(Objects::nonNull)
++                .map(id -> {
++                    try {
++                        return Long.parseLong(id);
++                    } catch (NumberFormatException e) {
++                        return null;
++                    }
++                })
++                .filter(Objects::nonNull)
++                .toList();
++
++        if (userIds.isEmpty()) {
++            return Map.of();
++        }
++
++        List<UserVO> users = userService.findByIds(userIds);
++        return users.stream()
++                .collect(Collectors.toMap(
++                        u -> String.valueOf(u.id()),
++                        u -> u.nickname() != null ? u.nickname() : u.username(),
++                        (a, b) -> a));
++    }
++
++    // ==================== 杩囨护杈呭姪 ====================
++
++    private boolean matchesProcessName(TaskTodoVO vo, String processName) {
++        return processName == null ||
++                (vo.getProcessName() != null && vo.getProcessName().contains(processName));
++    }
++
++    private boolean matchesInitiator(TaskTodoVO vo, String initiator) {
++        return initiator == null || initiator.equals(vo.getInitiator());
++    }
++
++    // ==================== 鏃ユ湡杈呭姪 ====================
++
++    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
++
++    private Date parseDate(String dateStr) {
++        return Date.from(
++                java.time.LocalDateTime.parse(dateStr, DATE_FORMATTER)
++                        .atZone(ZoneId.systemDefault())
++                        .toInstant());
++    }
++
++    private String formatDate(Date date) {
++        return DATE_FORMATTER.format(
++                date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
++    }
++
+     public Optional<Task> getTask(String taskId) {
+         String tenantId = tenantProvider.getTenantId();
+         Task task = flowableTaskService.createTaskQuery()
+                 .taskId(taskId)
+                 .taskTenantId(tenantId)
+                 .singleResult();
+         return Optional.ofNullable(task);
+     }
+ 
+     @Transactional
+diff --git a/backend/src/test/java/com/workflow/api/controller/TaskControllerVOTest.java b/backend/src/test/java/com/workflow/api/controller/TaskControllerVOTest.java
+new file mode 100644
+index 0000000..a8ebb8d
+--- /dev/null
++++ b/backend/src/test/java/com/workflow/api/controller/TaskControllerVOTest.java
+@@ -0,0 +1,165 @@
++package com.workflow.api.controller;
++
++import com.workflow.api.dto.PageResponse;
++import com.workflow.api.dto.TaskDoneVO;
++import com.workflow.api.dto.TaskTodoVO;
++import com.workflow.common.domain.R;
++import com.workflow.engine.task.AddSignService;
++import com.workflow.engine.task.ForwardSignService;
++import com.workflow.engine.task.RejectService;
++import com.workflow.engine.task.TransferService;
++import com.workflow.engine.task.WorkflowTaskService;
++import org.flowable.engine.RepositoryService;
++import org.flowable.engine.TaskService;
++import org.flowable.engine.HistoryService;
++import org.flowable.engine.RuntimeService;
++import org.flowable.engine.repository.ProcessDefinition;
++import org.flowable.engine.runtime.ProcessInstance;
++import org.flowable.task.api.Task;
++import org.flowable.task.api.TaskQuery;
++import org.flowable.task.api.history.HistoricTaskInstance;
++import org.flowable.task.api.history.HistoricTaskInstanceQuery;
++import org.junit.jupiter.api.BeforeEach;
++import org.junit.jupiter.api.Test;
++import org.springframework.data.domain.Page;
++import org.springframework.data.domain.PageImpl;
++import org.springframework.data.domain.PageRequest;
++
++import java.util.Date;
++import java.util.List;
++import java.util.Map;
++
++import static org.assertj.core.api.Assertions.assertThat;
++import static org.mockito.ArgumentMatchers.any;
++import static org.mockito.ArgumentMatchers.anyString;
++import static org.mockito.ArgumentMatchers.eq;
++import static org.mockito.Mockito.*;
++
++/**
++ * TaskController VO 娴嬭瘯銆?+ *
++ * <p>楠岃瘉锛?+ * 1. listTodo 杩斿洖 PageResponse<TaskTodoVO>锛屽寘鍚?processName/initiatorName 鍏宠仈瀛楁
++ * 2. listHistoric 杩斿洖 PageResponse<TaskDoneVO>锛屽寘鍚?endTime/approveResult
++ * 3. 杩囨护鍙傛暟姝ｇ‘浼犻€?+ */
++class TaskControllerVOTest {
++
++    private WorkflowTaskService taskService;
++    private RejectService rejectService;
++    private TransferService transferService;
++    private AddSignService addSignService;
++    private ForwardSignService forwardSignService;
++    private TaskController controller;
++
++    @BeforeEach
++    void setUp() {
++        taskService = mock(WorkflowTaskService.class);
++        rejectService = mock(RejectService.class);
++        transferService = mock(TransferService.class);
++        addSignService = mock(AddSignService.class);
++        forwardSignService = mock(ForwardSignService.class);
++        controller = new TaskController(taskService, rejectService, transferService,
++                addSignService, forwardSignService);
++    }
++
++    @Test
++    void listTodoReturnsVOWithProcessNameAndInitiatorName() {
++        // Given: a TaskTodoVO with related fields populated
++        TaskTodoVO vo = new TaskTodoVO();
++        vo.setTaskId("task-001");
++        vo.setProcessInstanceId("pi-001");
++        vo.setProcessDefinitionId("pd-001");
++        vo.setProcessName("璇峰亣娴佺▼");
++        vo.setInitiator("42");
++        vo.setInitiatorName("寮犱笁");
++        vo.setCurrentNodeName("閮ㄩ棬瀹℃壒");
++        vo.setAssignee("user1");
++        vo.setCreateTime("2025-01-01T10:00:00");
++
++        Page<TaskTodoVO> page = new PageImpl<>(List.of(vo), PageRequest.of(0, 20), 1);
++        when(taskService.listTodoTasksVO(eq("user1"), any(), any()))
++                .thenReturn(page);
++
++        // When
++        R<PageResponse<TaskTodoVO>> result = controller.listTodo(
++                "user1", 0, 20, "璇峰亣", "42", null, null);
++
++        // Then
++        assertThat(result.getCode()).isEqualTo(200);
++        PageResponse<TaskTodoVO> data = result.getData();
++        assertThat(data.getContent()).hasSize(1);
++        TaskTodoVO returned = data.getContent().get(0);
++        assertThat(returned.getProcessName()).isEqualTo("璇峰亣娴佺▼");
++        assertThat(returned.getInitiatorName()).isEqualTo("寮犱笁");
++        assertThat(returned.getTaskId()).isEqualTo("task-001");
++        assertThat(returned.getCurrentNodeName()).isEqualTo("閮ㄩ棬瀹℃壒");
++    }
++
++    @Test
++    void listTodoPassesFilterParams() {
++        // Given
++        Page<TaskTodoVO> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
++        when(taskService.listTodoTasksVO(anyString(), any(), any()))
++                .thenReturn(emptyPage);
++
++        // When
++        controller.listTodo("user1", 0, 10, "璇峰亣娴佺▼", "42",
++                "2025-01-01T00:00:00", "2025-12-31T23:59:59");
++
++        // Then: verify filter params passed to service
++        verify(taskService).listTodoTasksVO(eq("user1"), any(), argThat(filters ->
++                "璇峰亣娴佺▼".equals(filters.processName()) &&
++                "42".equals(filters.initiator()) &&
++                "2025-01-01T00:00:00".equals(filters.createTimeStart()) &&
++                "2025-12-31T23:59:59".equals(filters.createTimeEnd())));
++    }
++
++    @Test
++    void listHistoricReturnsDoneVOWithEndTimeAndApproveResult() {
++        // Given
++        TaskDoneVO vo = new TaskDoneVO();
++        vo.setTaskId("task-002");
++        vo.setProcessName("鎶ラ攢娴佺▼");
++        vo.setInitiatorName("鏉庡洓");
++        vo.setEndTime("2025-06-15T14:30:00");
++        vo.setApproveResult("閫氳繃");
++
++        Page<TaskDoneVO> page = new PageImpl<>(List.of(vo), PageRequest.of(0, 20), 1);
++        when(taskService.listHistoricTasksVO(eq("user1"), any(), any()))
++                .thenReturn(page);
++
++        // When
++        R<PageResponse<TaskDoneVO>> result = controller.listHistoric(
++                "user1", 0, 20, null, null, null, null, null);
++
++        // Then
++        assertThat(result.getCode()).isEqualTo(200);
++        PageResponse<TaskDoneVO> data = result.getData();
++        assertThat(data.getContent()).hasSize(1);
++        TaskDoneVO returned = data.getContent().get(0);
++        assertThat(returned.getProcessName()).isEqualTo("鎶ラ攢娴佺▼");
++        assertThat(returned.getEndTime()).isEqualTo("2025-06-15T14:30:00");
++        assertThat(returned.getApproveResult()).isEqualTo("閫氳繃");
++    }
++
++    @Test
++    void listHistoricPassesFilterParams() {
++        // Given
++        Page<TaskDoneVO> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
++        when(taskService.listHistoricTasksVO(anyString(), any(), any()))
++                .thenReturn(emptyPage);
++
++        // When
++        controller.listHistoric("user1", 0, 20, "鎶ラ攢", "99",
++                "2025-01-01T00:00:00", "2025-12-31T23:59:59", "閫氳繃");
++
++        // Then: verify filter params passed to service
++        verify(taskService).listHistoricTasksVO(eq("user1"), any(), argThat(filters ->
++                "鎶ラ攢".equals(filters.processName()) &&
++                "99".equals(filters.initiator()) &&
++                "閫氳繃".equals(filters.approveResult()) &&
++                "2025-01-01T00:00:00".equals(filters.endTimeStart()) &&
++                "2025-12-31T23:59:59".equals(filters.endTimeEnd())));
++    }
++}

@@ -96,10 +96,12 @@
               border
               size="small"
               height="100%"
+              :highlight-current-row="!multiple"
+              @current-change="onCurrentChange"
               @select="onTableSelect"
               @select-all="onTableSelectAll"
             >
-              <el-table-column type="selection" width="40" />
+              <el-table-column v-if="multiple" type="selection" width="40" />
               <el-table-column prop="nickname" label="姓名" />
               <el-table-column prop="orgName" label="部门" />
             </el-table>
@@ -217,14 +219,6 @@ const candTableRef = ref()
 // 快照：打开弹窗时的已选集，取消时恢复
 let snapshot: SelectedUser[] = []
 
-const displayText = computed(() => {
-  if (selectedUsers.value.length === 0) return ''
-  if (selectedUsers.value.length <= 2) {
-    return selectedUsers.value.map(u => u.nickname).join('、')
-  }
-  return `${selectedUsers.value[0].nickname}、${selectedUsers.value[1].nickname} 等${selectedUsers.value.length}人`
-})
-
 const filteredRoles = computed(() => {
   if (!roleFilter.value) return roles.value
   return roles.value.filter(r => r.roleName.includes(roleFilter.value))
@@ -308,6 +302,14 @@ function onSearch() {
   fetchCandidateUsers()
 }
 
+// 单选模式：点击行选中
+function onCurrentChange(row: UserVO | null) {
+  if (!row) return
+  if (!props.multiple) {
+    addUserToSelected(row)
+  }
+}
+
 function onTableSelect(selection: UserVO[], row: UserVO) {
   const isSelected = selection.some(r => r.id === row.id)
   if (isSelected) {
@@ -326,6 +328,17 @@ function onTableSelectAll(selection: UserVO[]) {
 }
 
 function addUserToSelected(user: UserVO) {
+  // 单选模式：直接替换已选用户
+  if (!props.multiple) {
+    selectedUsers.value = [{
+      id: user.id,
+      nickname: user.nickname,
+      username: user.username,
+      orgName: user.orgName,
+    }]
+    return
+  }
+  // 多选模式：追加
   if (!selectedUsers.value.some(u => u.id === user.id)) {
     selectedUsers.value.push({
       id: user.id,
@@ -400,6 +413,8 @@ function handleConfirm() {
   emit('change', [...selectedUsers.value])
   dialogVisible.value = false
 }
+
+defineExpose({ openDialog })
 </script>
 
 <style scoped>

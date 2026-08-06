@@ -58,9 +58,13 @@ public class ProcessInstanceController {
     @GetMapping
     public R<PageResponse<Map<String, Object>>> list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String initiator,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String processName) {
 
-        Page<ProcessInstance> result = processInstanceService.listProcessInstances(PageRequest.of(page, size));
+        Page<ProcessInstance> result = processInstanceService.listProcessInstances(
+                PageRequest.of(page, size), initiator, status, processName);
 
         PageResponse<Map<String, Object>> response = new PageResponse<>(
                 result.getContent().stream().map(this::toMap).toList(),
@@ -112,6 +116,21 @@ public class ProcessInstanceController {
         map.put("tenantId", instance.getTenantId());
         map.put("suspended", instance.isSuspended());
         map.put("ended", instance.isEnded());
+
+        // 当前节点名称
+        map.put("currentNode", instance.getName());
+
+        // 状态：suspended → "suspended", ended → "completed", 否则 "running"
+        String status;
+        if (instance.isSuspended()) {
+            status = "suspended";
+        } else if (instance.isEnded()) {
+            status = "completed";
+        } else {
+            status = "running";
+        }
+        map.put("status", status);
+
         return map;
     }
 }

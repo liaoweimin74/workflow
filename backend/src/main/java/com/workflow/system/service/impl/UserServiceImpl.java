@@ -204,6 +204,16 @@ public class UserServiceImpl implements UserService {
                 .toList();
     }
 
+    @Override
+    public List<UserVO> findByUsernames(List<String> usernames) {
+        if (usernames == null || usernames.isEmpty()) {
+            return List.of();
+        }
+        return userRepository.findByUsernameIn(usernames).stream()
+                .map(this::toVO)
+                .toList();
+    }
+
     private UserVO toVO(SysUser user) {
         List<SysUserRole> userRoles = userRoleRepository.findByUserId(user.getId());
         Long[] roleIds = userRoles.stream().map(SysUserRole::getRoleId).toArray(Long[]::new);

@@ -87,6 +87,30 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '待办处理' }
       },
       {
+        path: 'process/todo/done/:taskId',
+        name: 'TaskDoneDetail',
+        component: () => import('@/views/process/TaskDoneDetailPage.vue'),
+        meta: { title: '已办详情' }
+      },
+      {
+        path: 'process/todo/:taskId',
+        name: 'TaskDetail',
+        component: () => import('@/views/process/TaskDetailPage.vue'),
+        meta: { title: '任务处理' }
+      },
+      {
+        path: 'process/instance/:instanceId',
+        name: 'ProcessInstanceTrack',
+        component: () => import('@/views/process/ProcessInstanceTrackPage.vue'),
+        meta: { title: '流程跟踪' }
+      },
+      {
+        path: 'process/start/:processDefinitionId',
+        name: 'ProcessStart',
+        component: () => import('@/views/process/ProcessStartPage.vue'),
+        meta: { title: '发起流程' }
+      },
+      {
         path: 'form',
         name: 'FormList',
         component: () => import('@/views/form/FormListPage.vue'),

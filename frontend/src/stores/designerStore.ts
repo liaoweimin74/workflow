@@ -10,7 +10,7 @@ export interface NodeConfigData {
     type?: 'user' | 'dept_head' | 'expression'
     userIds?: number[]
     expression?: string
-    multiMode?: 'countersign' | 'or_sign'
+    multiMode?: 'countersign' | 'or_sign' | ''
   }
   form?: {
     formDefId?: string

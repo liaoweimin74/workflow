@@ -114,7 +114,7 @@ const approval = reactive({
   type: '' as 'user' | 'dept_head' | 'expression' | '',
   userIds: [] as number[],
   expression: '',
-  multiMode: 'countersign' as 'countersign' | 'or_sign'
+  multiMode: '' as 'countersign' | 'or_sign' | ''
 })
 
 const operations = reactive({
@@ -155,7 +155,7 @@ function loadConfig() {
   approval.type = ''
   approval.userIds = []
   approval.expression = ''
-  approval.multiMode = 'countersign'
+  approval.multiMode = ''
   operations.allowReject = true
   operations.allowAddSign = false
   operations.allowTransfer = true
@@ -174,7 +174,7 @@ function loadConfig() {
       }
       approval.userIds = existing.approval.userIds || []
       approval.expression = existing.approval.expression || ''
-      approval.multiMode = existing.approval.multiMode || 'countersign'
+      approval.multiMode = existing.approval.multiMode || ''
     }
     if (existing.operations) {
       operations.allowReject = existing.operations.allowReject ?? true

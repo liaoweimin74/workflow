@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
@@ -146,8 +147,26 @@ public class MultiInstanceBpmnRewriter {
 
         miLoop.appendChild(completionCondition);
 
-        // multiInstanceLoopCharacteristics 必须是 userTask 的第一个子元素（BPMN 规范）
-        userTask.insertBefore(miLoop, userTask.getFirstChild());
+        // multiInstanceLoopCharacteristics 必须插入到 incoming/outgoing 之后，
+        // 确保 XML 子元素顺序符合 BPMN 2.0 XSD 要求：
+        //   incoming* → outgoing* → ioSpecification? → ... → loopCharacteristics? → rendering*
+        // 如果找不到 incoming/outgoing，则插入到第一个子元素位置。
+        Element firstChild = null;
+        NodeList children = userTask.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                String ns = child.getNamespaceURI();
+                String localName = child.getLocalName();
+                // 跳过 incoming/outgoing，找到第一个非 incoming/outgoing 的元素
+                if (BPMN_NS.equals(ns) && ("incoming".equals(localName) || "outgoing".equals(localName))) {
+                    continue;
+                }
+                firstChild = (Element) child;
+                break;
+            }
+        }
+        userTask.insertBefore(miLoop, firstChild);
     }
 
     private String serializeDocument(Document doc) throws Exception {

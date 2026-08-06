@@ -127,6 +127,7 @@ async function handleSubmit() {
 
     const res = await processInstanceApi.start({
       processKey: processDef.value.key,
+      formDefId: formDefId.value,
       variables,
     })
 

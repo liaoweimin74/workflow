@@ -2,6 +2,7 @@ package com.workflow.api.controller;
 
 import com.workflow.api.dto.*;
 import com.workflow.common.domain.R;
+import com.workflow.engine.form.FormDataService;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.framework.security.domain.LoginUser;
@@ -12,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -21,11 +23,17 @@ public class ProcessInstanceController {
 
     private final ProcessInstanceService processInstanceService;
     private final ProcessHighlightService highlightService;
+    private final FormDataService formDataService;
+    private final ObjectMapper objectMapper;
 
     public ProcessInstanceController(ProcessInstanceService processInstanceService,
-                                     ProcessHighlightService highlightService) {
+                                     ProcessHighlightService highlightService,
+                                     FormDataService formDataService,
+                                     ObjectMapper objectMapper) {
         this.processInstanceService = processInstanceService;
         this.highlightService = highlightService;
+        this.formDataService = formDataService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping
@@ -43,6 +51,16 @@ public class ProcessInstanceController {
             instance = processInstanceService.startProcess(request.getProcessKey(), request.getBusinessKey(), variables);
         } else {
             instance = processInstanceService.startProcess(request.getProcessKey(), variables);
+        }
+
+        // 保存表单数据到 form_data 表，供任务处理页面加载
+        if (request.getFormDefId() != null && !request.getFormDefId().isEmpty()) {
+            try {
+                String dataJson = objectMapper.writeValueAsString(variables);
+                formDataService.save(request.getFormDefId(), instance.getId(), null, dataJson);
+            } catch (Exception e) {
+                // 表单数据保存失败不影响流程启动
+            }
         }
 
         Map<String, Object> response = new HashMap<>();

@@ -1,8 +1,10 @@
 package com.workflow.api.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.api.dto.StartProcessRequest;
 import com.workflow.common.domain.R;
+import com.workflow.engine.form.FormDataService;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.framework.security.domain.LoginUser;
@@ -35,6 +37,8 @@ class ProcessInstanceControllerTest {
 
     private ProcessInstanceService processInstanceService;
     private ProcessHighlightService highlightService;
+    private FormDataService formDataService;
+    private ObjectMapper objectMapper;
     private ProcessInstanceController controller;
     private SecurityContext savedSecurityContext;
 
@@ -42,7 +46,9 @@ class ProcessInstanceControllerTest {
     void setUp() {
         processInstanceService = mock(ProcessInstanceService.class);
         highlightService = mock(ProcessHighlightService.class);
-        controller = new ProcessInstanceController(processInstanceService, highlightService);
+        formDataService = mock(FormDataService.class);
+        objectMapper = new ObjectMapper();
+        controller = new ProcessInstanceController(processInstanceService, highlightService, formDataService, objectMapper);
         savedSecurityContext = SecurityContextHolder.getContext();
     }
 

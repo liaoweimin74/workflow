@@ -37,6 +37,7 @@ export interface ProcessInstanceQueryParams {
 export interface StartProcessRequest {
   processKey: string
   businessKey?: string
+  formDefId?: string
   variables?: Record<string, unknown>
 }
 

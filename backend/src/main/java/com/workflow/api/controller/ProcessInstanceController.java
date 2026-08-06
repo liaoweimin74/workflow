@@ -6,6 +6,7 @@ import com.workflow.engine.form.FormDataService;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.framework.security.domain.LoginUser;
+import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -14,6 +15,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -124,6 +127,31 @@ public class ProcessInstanceController {
         return R.ok(highlightService.getHighlight(id));
     }
 
+    /**
+     * 历史流程实例列表（查 act_hi_procinst），用于"我发起的"。
+     * 包含已结束的实例，比 runtime 列表更完整。
+     */
+    @GetMapping("/history")
+    public R<PageResponse<Map<String, Object>>> listHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String initiator,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String processName) {
+
+        Page<HistoricProcessInstance> result = processInstanceService.listHistoricProcessInstances(
+                PageRequest.of(page, size), initiator, status, processName);
+
+        PageResponse<Map<String, Object>> response = new PageResponse<>(
+                result.getContent().stream().map(this::toHistoricMap).toList(),
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements()
+        );
+
+        return R.ok(response);
+    }
+
     private Map<String, Object> toMap(ProcessInstance instance) {
         Map<String, Object> map = new HashMap<>();
         map.put("id", instance.getId());
@@ -135,8 +163,21 @@ public class ProcessInstanceController {
         map.put("suspended", instance.isSuspended());
         map.put("ended", instance.isEnded());
 
-        // 当前节点名称
-        map.put("currentNode", instance.getName());
+        // 标题
+        map.put("name", instance.getName());
+
+        // 发起时间
+        Date startTime = instance.getStartTime();
+        map.put("startTime", startTime != null
+                ? startTime.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString()
+                : null);
+
+        // 当前节点名称（运行时实例才有，已结束的为空）
+        String currentNode = null;
+        if (!instance.isEnded()) {
+            currentNode = instance.getActivityId();
+        }
+        map.put("currentNode", currentNode);
 
         // 状态：suspended → "suspended", ended → "completed", 否则 "running"
         String status;
@@ -148,6 +189,35 @@ public class ProcessInstanceController {
             status = "running";
         }
         map.put("status", status);
+
+        return map;
+    }
+
+    private Map<String, Object> toHistoricMap(HistoricProcessInstance instance) {
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", instance.getId());
+        map.put("processDefinitionId", instance.getProcessDefinitionId());
+        map.put("processDefinitionKey", instance.getProcessDefinitionKey());
+        map.put("processDefinitionName", instance.getProcessDefinitionName());
+        map.put("businessKey", instance.getBusinessKey());
+        map.put("tenantId", instance.getTenantId());
+        map.put("suspended", false);
+        map.put("ended", instance.getEndTime() != null);
+
+        // 标题
+        map.put("name", instance.getName());
+
+        // 发起时间
+        Date startTime = instance.getStartTime();
+        map.put("startTime", startTime != null
+                ? startTime.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString()
+                : null);
+
+        // 历史实例没有当前节点
+        map.put("currentNode", null);
+
+        // 状态：endTime != null → "completed", 否则 "running"
+        map.put("status", instance.getEndTime() != null ? "completed" : "running");
 
         return map;
     }

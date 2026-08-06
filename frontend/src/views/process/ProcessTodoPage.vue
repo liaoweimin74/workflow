@@ -198,8 +198,10 @@
             style="width: 100%"
           >
             <el-table-column prop="processDefinitionName" label="流程名称" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="id" label="实例编号" width="180" show-overflow-tooltip />
-            <el-table-column prop="currentNode" label="当前节点" width="120" show-overflow-tooltip />
+            <el-table-column prop="name" label="标题" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="startTime" label="发起时间" width="170">
+              <template #default="{ row }">{{ formatDateTime(row.startTime) }}</template>
+            </el-table-column>
             <el-table-column prop="status" label="状态" width="100" align="center">
               <template #default="{ row }">
                 <el-tag :type="instanceStatusTagType(row.status)" size="small">
@@ -387,7 +389,7 @@ async function loadInitiated() {
     }
     if (initiatedFilter.processName) params.processName = initiatedFilter.processName
     if (initiatedFilter.status) params.status = initiatedFilter.status
-    const res = await processInstanceApi.list(params)
+    const res = await processInstanceApi.listHistory(params)
     initiatedData.value = res.data.content
     initiatedTotal.value = res.data.totalElements
     initiatedLoaded.value = true

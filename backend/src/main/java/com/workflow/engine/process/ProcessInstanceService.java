@@ -3,6 +3,8 @@ package com.workflow.engine.process;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
+import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.springframework.data.domain.Page;
@@ -109,5 +111,40 @@ public class ProcessInstanceService {
     @Transactional
     public void terminateProcessInstance(String instanceId, String reason) {
         runtimeService.deleteProcessInstance(instanceId, reason);
+    }
+
+    /**
+     * 列出历史流程实例（包含已结束的），用于"我发起的"列表。
+     * 查 act_hi_procinst 表，支持按发起人、状态、流程名称筛选。
+     */
+    public Page<HistoricProcessInstance> listHistoricProcessInstances(Pageable pageable,
+                                                                      String initiator,
+                                                                      String status,
+                                                                      String processName) {
+        String tenantId = tenantProvider.getTenantId();
+        HistoricProcessInstanceQuery query = historyService.createHistoricProcessInstanceQuery()
+                .processInstanceTenantId(tenantId);
+
+        if (initiator != null && !initiator.isBlank()) {
+            query.variableValueEquals("initiator", initiator);
+        }
+        if ("running".equalsIgnoreCase(status)) {
+            query.unfinished();
+        } else if ("completed".equalsIgnoreCase(status)) {
+            query.finished();
+        } else if ("suspended".equalsIgnoreCase(status)) {
+            // 历史表中无法直接查 suspended，只查 runtime
+        }
+        if (processName != null && !processName.isBlank()) {
+            query.processDefinitionName(processName);
+        }
+
+        query.orderByProcessInstanceStartTime().desc();
+
+        long total = query.count();
+        List<HistoricProcessInstance> content = query
+                .listPage((int) pageable.getOffset(), pageable.getPageSize());
+
+        return new PageImpl<>(content, pageable, total);
     }
 }

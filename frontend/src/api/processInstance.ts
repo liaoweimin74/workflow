@@ -16,6 +16,10 @@ export interface ProcessInstanceVO {
   tenantId: string
   suspended: boolean
   ended: boolean
+  /** 标题 */
+  name: string
+  /** 发起时间 */
+  startTime: string
   currentNode: string
   /** running | suspended | completed */
   status: string
@@ -59,9 +63,6 @@ export interface ProcessHighlight {
 
 /**
  * 流程实例 API（对应 /api/v1/process-instances）。
- *
- * list: 支持 initiator/status/processName 筛选。
- * history: 审批历史时间线（由 ProcessHistoryController 提供）。
  */
 export const processInstanceApi = {
   /** 启动流程 */
@@ -72,6 +73,11 @@ export const processInstanceApi = {
   /** 流程实例分页列表，支持 initiator/status/processName 筛选 */
   list(params: ProcessInstanceQueryParams): Promise<R<PageResponse<ProcessInstanceVO>>> {
     return http.get('/v1/process-instances', { params })
+  },
+
+  /** 历史流程实例分页列表（查 act_hi_procinst），用于"我发起的" */
+  listHistory(params: ProcessInstanceQueryParams): Promise<R<PageResponse<ProcessInstanceVO>>> {
+    return http.get('/v1/process-instances/history', { params })
   },
 
   /** 获取流程实例详情 */

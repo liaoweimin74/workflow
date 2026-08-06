@@ -44,6 +44,7 @@ const formVersion = ref<number | null>(null)
 const renderOption = ref({
   submitBtn: false,
   resetBtn: false,
+  disabled: false,
 })
 
 onMounted(async () => {
@@ -58,11 +59,11 @@ onMounted(async () => {
   if (props.processInstanceId) {
     await loadData()
   }
+  if (props.readonly) {
+    renderOption.value = { ...renderOption.value, disabled: true }
+  }
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
-  }
-  if (props.readonly) {
-    applyReadonly()
   }
 })
 
@@ -127,14 +128,6 @@ function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'
       updatedField.display = false
     }
     return updatedField
-  })
-}
-
-/** 将所有字段设为只读（disabled） */
-function applyReadonly() {
-  resolvedSchema.value = resolvedSchema.value.map(field => {
-    if (field.disabled) return field
-    return { ...field, disabled: true }
   })
 }
 

@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -39,7 +40,7 @@ class ProcessDefinitionControllerTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
         ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
 
-        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, "cat-1", null, null);
+        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, "cat-1", null, null);
 
         assertThat(result.getCode()).isEqualTo(200);
         verify(mockService).listProcessDefinitions(
@@ -53,7 +54,7 @@ class ProcessDefinitionControllerTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
         ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
 
-        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, null, "leave", null);
+        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, "leave", null);
 
         assertThat(result.getCode()).isEqualTo(200);
         verify(mockService).listProcessDefinitions(
@@ -67,7 +68,7 @@ class ProcessDefinitionControllerTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
         ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
 
-        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, null, null, "active");
+        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, "active");
 
         assertThat(result.getCode()).isEqualTo(200);
         verify(mockService).listProcessDefinitions(
@@ -107,7 +108,7 @@ class ProcessDefinitionControllerTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
         ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
 
-        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, null, null, null);
+        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
 
         assertThat(result.getCode()).isEqualTo(200);
         verify(mockService).listProcessDefinitions(
@@ -126,7 +127,7 @@ class ProcessDefinitionControllerTest {
                 .thenReturn(servicePage);
         ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
 
-        R<PageResponse<ProcessDefinition>> result = controller.list(0, 20, null, null, null);
+        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
 
         assertThat(result.getCode()).isEqualTo(200);
         assertThat(result.getData().getContent()).hasSize(1);
@@ -147,6 +148,7 @@ class ProcessDefinitionControllerTest {
         when(tenantProvider.getTenantId()).thenReturn("test-tenant");
 
         when(query.processDefinitionTenantId(anyString())).thenReturn(query);
+        when(query.latestVersion()).thenReturn(query);
         when(query.processDefinitionCategoryLike(anyString())).thenReturn(query);
         when(query.processDefinitionNameLike(anyString())).thenReturn(query);
         when(query.active()).thenReturn(query);

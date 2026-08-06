@@ -83,8 +83,8 @@ class ProcessHistoryServiceTest {
         Date start2 = toDate(LocalDateTime.of(2025, 1, 1, 11, 0));
         Date end2 = toDate(LocalDateTime.of(2025, 1, 1, 11, 15));
 
-        HistoricActivityInstance act1 = mockActivity("initiatorTask", "发起人填表", "alice", start1, end1);
-        HistoricActivityInstance act2 = mockActivity("managerApproval", "经理审批", "bob", start2, end2);
+        HistoricActivityInstance act1 = mockActivity("initiatorTask", "发起人填表", "1", start1, end1);
+        HistoricActivityInstance act2 = mockActivity("managerApproval", "经理审批", "2", start2, end2);
 
         lenient().when(tenantProvider.getTenantId()).thenReturn("tenant-1");
         mockActivityQuery(List.of(act1, act2));
@@ -105,10 +105,10 @@ class ProcessHistoryServiceTest {
         lenient().when(commentRepository.findByProcessInstanceIdOrderByCreatedAtAsc("pi-001"))
                 .thenReturn(List.of(comment1, comment2));
 
-        // UserService 返回用户名
+        // UserService 按 ID 返回用户（assignee 存的是 userId 数字字符串）
         UserVO alice = new UserVO(1L, "alice", "Alice", null, null, null, null, null, 1, null, null);
         UserVO bob = new UserVO(2L, "bob", "Bob", null, null, null, null, null, 1, null, null);
-        lenient().when(userService.findByUsernames(any())).thenReturn(List.of(alice, bob));
+        lenient().when(userService.findByIds(any())).thenReturn(List.of(alice, bob));
 
         List<ApprovalRecordVO> result = processHistoryService.getApprovalHistory("pi-001");
 
@@ -118,7 +118,7 @@ class ProcessHistoryServiceTest {
         ApprovalRecordVO r1 = result.get(0);
         assertThat(r1.getActivityId()).isEqualTo("initiatorTask");
         assertThat(r1.getActivityName()).isEqualTo("发起人填表");
-        assertThat(r1.getAssignee()).isEqualTo("alice");
+        assertThat(r1.getAssignee()).isEqualTo("1");
         assertThat(r1.getAssigneeName()).isEqualTo("Alice");
         assertThat(r1.getStartTime()).isNotNull();
         assertThat(r1.getEndTime()).isNotNull();
@@ -129,7 +129,7 @@ class ProcessHistoryServiceTest {
         ApprovalRecordVO r2 = result.get(1);
         assertThat(r2.getActivityId()).isEqualTo("managerApproval");
         assertThat(r2.getActivityName()).isEqualTo("经理审批");
-        assertThat(r2.getAssignee()).isEqualTo("bob");
+        assertThat(r2.getAssignee()).isEqualTo("2");
         assertThat(r2.getAssigneeName()).isEqualTo("Bob");
         assertThat(r2.getAction()).isEqualTo("complete");
         assertThat(r2.getComment()).isEqualTo("同意");

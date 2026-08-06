@@ -18,6 +18,7 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.TaskQuery;
+import org.flowable.task.api.history.HistoricTaskInstanceQuery;
 import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.history.HistoricVariableInstanceQuery;
 import org.junit.jupiter.api.BeforeEach;
@@ -165,6 +166,13 @@ class WorkflowTaskServiceDetailTest {
         when(taskQuery.taskId(anyString())).thenReturn(taskQuery);
         when(taskQuery.taskTenantId(anyString())).thenReturn(taskQuery);
         when(taskQuery.singleResult()).thenReturn(null);
+
+        // 历史表也查不到该任务
+        HistoricTaskInstanceQuery histQuery = mock(HistoricTaskInstanceQuery.class);
+        when(historyService.createHistoricTaskInstanceQuery()).thenReturn(histQuery);
+        when(histQuery.taskId(anyString())).thenReturn(histQuery);
+        when(histQuery.taskTenantId(anyString())).thenReturn(histQuery);
+        when(histQuery.singleResult()).thenReturn(null);
 
         // When
         Optional<TaskDetailVO> result = service.getTaskDetail("nonexistent");

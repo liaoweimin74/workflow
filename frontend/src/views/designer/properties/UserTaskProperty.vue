@@ -41,10 +41,11 @@
         </el-form-item>
 
         <el-form-item v-if="approval.type" label="多人模式">
-          <el-radio-group v-model="approval.multiMode" @change="saveConfig">
-            <el-radio value="countersign">会签</el-radio>
-            <el-radio value="or_sign">或签</el-radio>
-          </el-radio-group>
+          <el-select v-model="approval.multiMode" placeholder="请选择" clearable style="width: 100%" @change="saveConfig">
+            <el-option value="countersign" label="会签（并行审批，全部通过）" />
+            <el-option value="or_sign" label="或签（并行审批，一人通过即可）" />
+            <el-option value="sequential" label="依次审批（串行，全部通过）" />
+          </el-select>
         </el-form-item>
 
         <el-divider content-position="left">操作权限</el-divider>
@@ -114,7 +115,7 @@ const approval = reactive({
   type: '' as 'user' | 'dept_head' | 'expression' | '',
   userIds: [] as number[],
   expression: '',
-  multiMode: '' as 'countersign' | 'or_sign' | ''
+  multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | ''
 })
 
 const operations = reactive({

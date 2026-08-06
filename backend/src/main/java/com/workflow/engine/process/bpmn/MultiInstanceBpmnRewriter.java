@@ -122,7 +122,7 @@ public class MultiInstanceBpmnRewriter {
                 return null;
             }
             String mode = modeNode.asText();
-            return ("countersign".equals(mode) || "or_sign".equals(mode)) ? mode : null;
+            return ("countersign".equals(mode) || "or_sign".equals(mode) || "sequential".equals(mode)) ? mode : null;
         } catch (Exception e) {
             log.debug("解析 NodeConfig JSON 失败，跳过: {}", e.getMessage());
             return null;
@@ -137,12 +137,14 @@ public class MultiInstanceBpmnRewriter {
         }
 
         Element miLoop = doc.createElementNS(BPMN_NS, "multiInstanceLoopCharacteristics");
-        miLoop.setAttribute("isSequential", "false");
+        boolean isSequential = "sequential".equals(multiMode);
+        miLoop.setAttribute("isSequential", String.valueOf(isSequential));
         miLoop.setAttributeNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":collection", COLLECTION_EXPR);
         miLoop.setAttributeNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":elementVariable", ELEMENT_VAR);
 
         Element completionCondition = doc.createElementNS(BPMN_NS, "completionCondition");
-        String condition = "countersign".equals(multiMode) ? COUNTERSIGN_CONDITION : OR_SIGN_CONDITION;
+        // 依次审批（sequential）和会签（countersign）都要求全部完成，或签（or_sign）只需一人通过
+        String condition = "or_sign".equals(multiMode) ? OR_SIGN_CONDITION : COUNTERSIGN_CONDITION;
         completionCondition.setTextContent(condition);
 
         miLoop.appendChild(completionCondition);

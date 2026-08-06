@@ -26,6 +26,8 @@ const props = defineProps<{
   processInstanceId?: string
   taskId?: string
   fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
+  /** 是否只读模式。true 时所有字段 disabled，用于已办详情等查看场景。 */
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -58,6 +60,9 @@ onMounted(async () => {
   }
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
+  }
+  if (props.readonly) {
+    applyReadonly()
   }
 })
 
@@ -122,6 +127,14 @@ function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'
       updatedField.display = false
     }
     return updatedField
+  })
+}
+
+/** 将所有字段设为只读（disabled） */
+function applyReadonly() {
+  resolvedSchema.value = resolvedSchema.value.map(field => {
+    if (field.disabled) return field
+    return { ...field, disabled: true }
   })
 }
 

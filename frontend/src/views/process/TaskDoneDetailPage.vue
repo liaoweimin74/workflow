@@ -34,6 +34,7 @@
             :form-def-id="taskDetail.formKey"
             :process-instance-id="taskDetail.processInstanceId"
             :task-id="taskDetail.taskId"
+            readonly
           />
         </template>
         <template v-else>

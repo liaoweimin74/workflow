@@ -59,9 +59,11 @@ onMounted(async () => {
     await loadData()
   }
   if (props.readonly) {
-    // form-create 的 option.disabled 在初始化后可能不响应变化，
-    // 改为直接在所有 rule 上设 disabled
-    resolvedSchema.value = resolvedSchema.value.map(f => ({ ...f, disabled: true }))
+    // form-create 的 rule 用 props.disabled 控制字段禁用
+    resolvedSchema.value = resolvedSchema.value.map(f => {
+      const props = f.props || {}
+      return { ...f, props: { ...props, disabled: true } }
+    })
   }
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)

@@ -44,7 +44,6 @@ const formVersion = ref<number | null>(null)
 const renderOption = ref({
   submitBtn: false,
   resetBtn: false,
-  disabled: false,
 })
 
 onMounted(async () => {
@@ -60,7 +59,9 @@ onMounted(async () => {
     await loadData()
   }
   if (props.readonly) {
-    renderOption.value = { ...renderOption.value, disabled: true }
+    // form-create 的 option.disabled 在初始化后可能不响应变化，
+    // 改为直接在所有 rule 上设 disabled
+    resolvedSchema.value = resolvedSchema.value.map(f => ({ ...f, disabled: true }))
   }
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)

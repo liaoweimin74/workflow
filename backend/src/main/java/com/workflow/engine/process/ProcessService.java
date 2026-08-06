@@ -62,7 +62,8 @@ public class ProcessService {
                                                           String status) {
         String tenantId = tenantProvider.getTenantId();
         ProcessDefinitionQuery query = repositoryService.createProcessDefinitionQuery()
-                .processDefinitionTenantId(tenantId);
+                .processDefinitionTenantId(tenantId)
+                .latestVersion();
 
         if (categoryId != null && !categoryId.isBlank()) {
             query.processDefinitionCategoryLike(categoryId);

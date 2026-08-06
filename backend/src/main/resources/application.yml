@@ -6,6 +6,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   flyway:
     enabled: true
+    out-of-order: true
   jpa:
     hibernate:
       ddl-auto: update

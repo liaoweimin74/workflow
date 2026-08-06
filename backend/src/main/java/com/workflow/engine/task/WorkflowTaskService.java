@@ -502,16 +502,28 @@ public class WorkflowTaskService {
      */
     public Optional<TaskDetailVO> getTaskDetail(String taskId) {
         Optional<Task> taskOpt = getTask(taskId);
-        if (taskOpt.isEmpty()) {
-            return Optional.empty();
+        if (taskOpt.isPresent()) {
+            return Optional.of(buildTaskDetailFromRuntime(taskOpt.get()));
         }
-        Task task = taskOpt.get();
 
+        // 运行时表没找到 → 查历史表（已办任务已完成，已从 ACT_RU_TASK 移到 ACT_HI_TASKINST）
+        return getHistoricTaskDetail(taskId);
+    }
+
+    /**
+     * 从运行时 Task 构建 TaskDetailVO。
+     */
+    private TaskDetailVO buildTaskDetailFromRuntime(Task task) {
         TaskDetailVO vo = new TaskDetailVO();
         vo.setTaskId(task.getId());
         vo.setName(task.getName());
         vo.setDescription(task.getDescription());
         vo.setAssignee(task.getAssignee());
+        // assignee userId → nickname
+        if (task.getAssignee() != null) {
+            Map<String, String> assigneeNameMap = batchQueryInitiatorNames(List.of(task.getAssignee()));
+            vo.setAssigneeName(assigneeNameMap.get(task.getAssignee()));
+        }
         vo.setProcessInstanceId(task.getProcessInstanceId());
         vo.setProcessDefinitionId(task.getProcessDefinitionId());
         if (task.getCreateTime() != null) {
@@ -578,7 +590,110 @@ public class WorkflowTaskService {
 
         // variables
         try {
-            Map<String, Object> variables = flowableTaskService.getVariables(taskId);
+            Map<String, Object> variables = flowableTaskService.getVariables(task.getId());
+            vo.setVariables(variables);
+        } catch (Exception e) {
+            vo.setVariables(Map.of());
+        }
+
+        return vo;
+    }
+
+    /**
+     * 从历史表查询已完成的任务详情。
+     * 用于已办详情页面——任务完成后已从 ACT_RU_TASK 移到 ACT_HI_TASKINST。
+     */
+    private Optional<TaskDetailVO> getHistoricTaskDetail(String taskId) {
+        String tenantId = tenantProvider.getTenantId();
+        HistoricTaskInstance histTask = historyService.createHistoricTaskInstanceQuery()
+                .taskId(taskId)
+                .taskTenantId(tenantId)
+                .singleResult();
+
+        if (histTask == null) {
+            return Optional.empty();
+        }
+
+        TaskDetailVO vo = new TaskDetailVO();
+        vo.setTaskId(histTask.getId());
+        vo.setName(histTask.getName());
+        vo.setDescription(histTask.getDescription());
+        vo.setAssignee(histTask.getAssignee());
+        // assignee userId → nickname
+        if (histTask.getAssignee() != null) {
+            Map<String, String> assigneeNameMap = batchQueryInitiatorNames(List.of(histTask.getAssignee()));
+            vo.setAssigneeName(assigneeNameMap.get(histTask.getAssignee()));
+        }
+        vo.setProcessInstanceId(histTask.getProcessInstanceId());
+        vo.setProcessDefinitionId(histTask.getProcessDefinitionId());
+        if (histTask.getCreateTime() != null) {
+            vo.setCreateTime(formatDate(histTask.getCreateTime()));
+        }
+
+        // ProcessInstance → businessKey + initiator
+        String processInstanceId = histTask.getProcessInstanceId();
+        if (processInstanceId != null) {
+            Set<String> piIdSet = Set.of(processInstanceId);
+
+            // 先查运行中实例
+            Map<String, ProcessInstance> piMap = batchQueryProcessInstances(piIdSet);
+            ProcessInstance pi = piMap.get(processInstanceId);
+
+            if (pi != null) {
+                vo.setBusinessKey(pi.getBusinessKey());
+                Map<String, String> initiatorMap = batchQueryInitiators(piIdSet, piMap);
+                String initiator = initiatorMap.get(processInstanceId);
+                if (initiator != null) {
+                    vo.setInitiator(initiator);
+                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiator));
+                    vo.setInitiatorName(nameMap.get(initiator));
+                }
+            } else {
+                // 流程已结束：查历史实例
+                try {
+                    HistoricProcessInstance hpi = historyService.createHistoricProcessInstanceQuery()
+                            .processInstanceId(processInstanceId)
+                            .singleResult();
+                    if (hpi != null) {
+                        vo.setBusinessKey(hpi.getBusinessKey());
+                    }
+                } catch (Exception e) {
+                    // ignore
+                }
+
+                Map<String, String> initiatorMap = batchQueryHistoricInitiators(piIdSet);
+                String initiator = initiatorMap.get(processInstanceId);
+                if (initiator != null) {
+                    vo.setInitiator(initiator);
+                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiator));
+                    vo.setInitiatorName(nameMap.get(initiator));
+                }
+            }
+        }
+
+        // ProcessDefinition → processName + formKey
+        String processDefinitionId = histTask.getProcessDefinitionId();
+        if (processDefinitionId != null) {
+            Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(Set.of(processDefinitionId));
+            ProcessDefinition pd = pdMap.get(processDefinitionId);
+            if (pd != null) {
+                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+            }
+
+            String formKey = extractFormKey(processDefinitionId, histTask.getTaskDefinitionKey());
+            vo.setFormKey(formKey);
+        }
+
+        // variables — 历史变量
+        try {
+            List<org.flowable.variable.api.history.HistoricVariableInstance> histVars =
+                    historyService.createHistoricVariableInstanceQuery()
+                            .processInstanceId(processInstanceId)
+                            .list();
+            Map<String, Object> variables = new java.util.HashMap<>();
+            for (var hv : histVars) {
+                variables.put(hv.getVariableName(), hv.getValue());
+            }
             vo.setVariables(variables);
         } catch (Exception e) {
             vo.setVariables(Map.of());

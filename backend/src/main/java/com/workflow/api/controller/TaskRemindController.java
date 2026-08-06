@@ -2,6 +2,9 @@ package com.workflow.api.controller;
 
 import com.workflow.common.domain.R;
 import com.workflow.engine.task.TaskRemindService;
+import com.workflow.framework.security.domain.LoginUser;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -21,15 +24,18 @@ public class TaskRemindController {
     }
 
     /**
-     * 对指定任务发起催办。
+     * 对指定任务发起催办。催办发起人从 SecurityContext 自动获取。
      *
      * @param taskId 任务 ID
-     * @param from   催办发起人（查询参数，后续可从 SecurityContext 获取）
      * @return 操作结果
      */
     @PostMapping("/{taskId}/remind")
-    public R<Void> remind(@PathVariable String taskId,
-                          @RequestParam(required = false) String from) {
+    public R<Void> remind(@PathVariable String taskId) {
+        String from = null;
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
+            from = String.valueOf(loginUser.getUserId());
+        }
         taskRemindService.remind(taskId, from);
         return R.ok();
     }

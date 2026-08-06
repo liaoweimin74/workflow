@@ -40,6 +40,7 @@ export interface TaskDetailVO {
   name: string
   description: string
   assignee: string
+  assigneeName: string
   processInstanceId: string
   processDefinitionId: string
   processName: string

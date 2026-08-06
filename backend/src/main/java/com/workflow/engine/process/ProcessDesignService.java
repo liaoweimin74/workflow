@@ -238,7 +238,7 @@ public class ProcessDesignService {
     public ProcessDraft createDraft(String name, String key, String categoryId) {
         String tenantId = tenantProvider.getTenantId();
         String id = UUID.randomUUID().toString().replace("-", "");
-        String defaultXml = buildEmptyBpmnXml(key, name);
+        String defaultXml = buildEmptyBpmnXml(key, name, categoryId);
 
         ProcessDraft draft = new ProcessDraft();
         draft.setId(id);
@@ -293,14 +293,20 @@ public class ProcessDesignService {
         draftRepository.delete(draft);
     }
 
-    private String buildEmptyBpmnXml(String processKey, String processName) {
+    private String buildEmptyBpmnXml(String processKey, String processName, String categoryId) {
+        // targetNamespace 用于 Flowable 流程定义的 category 字段
+        // 如果有业务分类 ID，使用它；否则使用默认命名空间
+        String targetNamespace = (categoryId != null && !categoryId.isBlank())
+                ? categoryId
+                : "http://flowable.org/bpmn";
+
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                 + "<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" "
                 + "xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" "
                 + "xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" "
                 + "xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" "
                 + "xmlns:flowable=\"http://flowable.org/bpmn\" "
-                + "targetNamespace=\"http://flowable.org/bpmn\">\n"
+                + "targetNamespace=\"" + targetNamespace + "\">\n"
                 + "  <bpmn:process id=\"" + processKey + "\" name=\"" + processName + "\" isExecutable=\"true\">\n"
                 + "    <bpmn:startEvent id=\"startEvent_1\"/>\n"
                 + "  </bpmn:process>\n"

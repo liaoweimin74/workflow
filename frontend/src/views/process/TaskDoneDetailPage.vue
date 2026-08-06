@@ -22,7 +22,7 @@
           <el-descriptions-item label="处理节点">{{ taskDetail?.name }}</el-descriptions-item>
           <el-descriptions-item label="发起人">{{ taskDetail?.initiatorName || taskDetail?.initiator }}</el-descriptions-item>
           <el-descriptions-item label="接收时间">{{ formatDateTime(taskDetail?.createTime) }}</el-descriptions-item>
-          <el-descriptions-item label="办理人">{{ taskDetail?.assignee }}</el-descriptions-item>
+          <el-descriptions-item label="办理人">{{ taskDetail?.assigneeName || taskDetail?.assignee }}</el-descriptions-item>
         </el-descriptions>
       </el-card>
 

@@ -15,6 +15,7 @@ public class TaskDetailVO {
     private String name;
     private String description;
     private String assignee;
+    private String assigneeName;
     private String processInstanceId;
     private String processDefinitionId;
     private String processName;
@@ -36,6 +37,9 @@ public class TaskDetailVO {
 
     public String getAssignee() { return assignee; }
     public void setAssignee(String assignee) { this.assignee = assignee; }
+
+    public String getAssigneeName() { return assigneeName; }
+    public void setAssigneeName(String assigneeName) { this.assigneeName = assigneeName; }
 
     public String getProcessInstanceId() { return processInstanceId; }
     public void setProcessInstanceId(String processInstanceId) { this.processInstanceId = processInstanceId; }

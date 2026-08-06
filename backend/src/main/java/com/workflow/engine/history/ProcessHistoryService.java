@@ -126,20 +126,28 @@ public class ProcessHistoryService {
             return Map.of();
         }
 
-        // userIds 是 username（Flowable assignee），不是 Long ID
-        List<String> usernames = userIds.stream()
+        // assignee 存的是 userId（数字字符串），用 findByIds 查询
+        List<Long> ids = userIds.stream()
+                .filter(Objects::nonNull)
+                .map(id -> {
+                    try {
+                        return Long.parseLong(id);
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                })
                 .filter(Objects::nonNull)
                 .toList();
 
-        if (usernames.isEmpty()) {
+        if (ids.isEmpty()) {
             return Map.of();
         }
 
         try {
-            List<UserVO> users = userService.findByUsernames(usernames);
+            List<UserVO> users = userService.findByIds(ids);
             return users.stream()
                     .collect(Collectors.toMap(
-                            UserVO::username,
+                            u -> String.valueOf(u.id()),
                             u -> u.nickname() != null ? u.nickname() : u.username(),
                             (a, b) -> a));
         } catch (Exception e) {

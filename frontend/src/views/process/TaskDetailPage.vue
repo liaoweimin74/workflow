@@ -22,7 +22,7 @@
           <el-descriptions-item label="当前节点">{{ taskDetail?.name }}</el-descriptions-item>
           <el-descriptions-item label="发起人">{{ taskDetail?.initiatorName || taskDetail?.initiator }}</el-descriptions-item>
           <el-descriptions-item label="接收时间">{{ formatDateTime(taskDetail?.createTime) }}</el-descriptions-item>
-          <el-descriptions-item label="办理人">{{ taskDetail?.assignee }}</el-descriptions-item>
+          <el-descriptions-item label="办理人">{{ taskDetail?.assigneeName || taskDetail?.assignee }}</el-descriptions-item>
         </el-descriptions>
       </el-card>
 
@@ -105,27 +105,23 @@
       </div>
     </el-drawer>
 
-    <!-- 转办/委派/转签 对话框（单选用户） -->
-    <el-dialog v-model="singleUserDialog.visible" :title="singleUserDialog.title" width="400px">
-      <UserPicker v-model="singleUserDialog.userId" placeholder="选择用户" />
-      <template #footer>
-        <el-button @click="singleUserDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="actionLoading === singleUserDialog.action" @click="confirmSingleUser">
-          确认
-        </el-button>
-      </template>
-    </el-dialog>
+    <!-- 转办/委派/转签 选人（单选） -->
+    <ApproverPicker
+      ref="singlePickerRef"
+      v-model="singleUserDialog.userId"
+      :multiple="false"
+      placeholder="选择用户"
+      @change="onSingleUserSelected"
+    />
 
-    <!-- 加签 对话框（多选用户） -->
-    <el-dialog v-model="addSignDialog.visible" title="加签 — 选择用户" width="400px">
-      <UserPicker v-model="addSignDialog.users" multiple placeholder="选择多个用户" />
-      <template #footer>
-        <el-button @click="addSignDialog.visible = false">取消</el-button>
-        <el-button type="primary" :loading="actionLoading === 'addSign'" @click="confirmAddSign">
-          确认
-        </el-button>
-      </template>
-    </el-dialog>
+    <!-- 加签 选人（多选） -->
+    <ApproverPicker
+      ref="addSignPickerRef"
+      v-model="addSignDialog.users"
+      multiple
+      placeholder="选择多个用户"
+      @change="onAddSignUsersSelected"
+    />
   </div>
 </template>
 
@@ -139,7 +135,7 @@ import { processInstanceApi } from '@/api/processInstance'
 import { deployedProcessApi } from '@/api/processDefinition'
 import type { TaskDetailVO, ApprovalRecordVO } from '@/api/task'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import { BpmnViewer, ApprovalTimeline, UserPicker } from '@/components/business'
+import { BpmnViewer, ApprovalTimeline, ApproverPicker } from '@/components/business'
 
 const route = useRoute()
 const router = useRouter()
@@ -157,15 +153,15 @@ const highlightIds = ref<string[]>([])
 const approvalRecords = ref<ApprovalRecordVO[]>([])
 
 // 对话框
+const singlePickerRef = ref<InstanceType<typeof ApproverPicker>>()
+const addSignPickerRef = ref<InstanceType<typeof ApproverPicker>>()
+
 const singleUserDialog = ref({
-  visible: false,
-  title: '',
   action: '',
-  userId: '',
+  userId: [] as number[],
 })
 const addSignDialog = ref({
-  visible: false,
-  users: [] as string[],
+  users: [] as number[],
 })
 
 function formatDateTime(dt?: string): string {
@@ -245,40 +241,29 @@ async function handleReject() {
 }
 
 function handleMoreAction(command: string) {
-  const titles: Record<string, string> = {
-    transfer: '转办 — 选择用户',
-    delegate: '委派 — 选择用户',
-    forwardSign: '转签 — 选择用户',
-  }
   if (command === 'addSign') {
-    addSignDialog.value = { visible: true, users: [] }
+    addSignDialog.value = { users: [] }
+    addSignPickerRef.value?.openDialog()
   } else {
-    singleUserDialog.value = {
-      visible: true,
-      title: titles[command] ?? command,
-      action: command,
-      userId: '',
-    }
+    singleUserDialog.value = { action: command, userId: [] }
+    singlePickerRef.value?.openDialog()
   }
 }
 
-async function confirmSingleUser() {
-  const { action, userId } = singleUserDialog.value
-  if (!userId) {
-    ElMessage.warning('请选择用户')
-    return
-  }
+async function onSingleUserSelected(users: { id: number; nickname: string }[]) {
+  if (users.length === 0) return
+  const userIdStr = String(users[0].id)
+  const action = singleUserDialog.value.action
   actionLoading.value = action
   try {
     if (action === 'transfer') {
-      await taskApi.transfer(taskId, { toUser: userId, reason: comment.value })
+      await taskApi.transfer(taskId, { toUser: userIdStr, reason: comment.value })
     } else if (action === 'delegate') {
-      await taskApi.delegate(taskId, { delegateTo: userId, comment: comment.value })
+      await taskApi.delegate(taskId, { delegateTo: userIdStr, comment: comment.value })
     } else if (action === 'forwardSign') {
-      await taskApi.forwardSign(taskId, { toUser: userId, comment: comment.value })
+      await taskApi.forwardSign(taskId, { toUser: userIdStr, comment: comment.value })
     }
     ElMessage.success('操作成功')
-    singleUserDialog.value.visible = false
     router.push('/process/todo')
   } catch {
     ElMessage.error('操作失败')
@@ -287,16 +272,13 @@ async function confirmSingleUser() {
   }
 }
 
-async function confirmAddSign() {
-  if (addSignDialog.value.users.length === 0) {
-    ElMessage.warning('请至少选择一个用户')
-    return
-  }
+async function onAddSignUsersSelected(users: { id: number; nickname: string }[]) {
+  if (users.length === 0) return
   actionLoading.value = 'addSign'
   try {
-    await taskApi.addSign(taskId, { users: addSignDialog.value.users, comment: comment.value })
+    const userIds = users.map(u => String(u.id))
+    await taskApi.addSign(taskId, { users: userIds, comment: comment.value })
     ElMessage.success('加签成功')
-    addSignDialog.value.visible = false
     router.push('/process/todo')
   } catch {
     ElMessage.error('操作失败')

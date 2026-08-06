@@ -268,7 +268,7 @@ async function loadTodo() {
   todoLoading.value = true
   try {
     const params: TaskTodoQueryParams = {
-      assignee: authStore.user?.username ?? '',
+      assignee: String(authStore.user?.id ?? ''),
       page: todoPage.value - 1,
       size: todoSize.value,
     }
@@ -329,7 +329,7 @@ async function loadDone() {
   doneLoading.value = true
   try {
     const params: TaskDoneQueryParams = {
-      userId: authStore.user?.username ?? '',
+      userId: String(authStore.user?.id ?? ''),
       page: donePage.value - 1,
       size: doneSize.value,
     }
@@ -381,7 +381,7 @@ async function loadInitiated() {
   initiatedLoading.value = true
   try {
     const params: ProcessInstanceQueryParams = {
-      initiator: authStore.user?.username ?? '',
+      initiator: String(authStore.user?.id ?? ''),
       page: initiatedPage.value - 1,
       size: initiatedSize.value,
     }

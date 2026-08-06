@@ -21,7 +21,7 @@
 - **禁止自动执行 OpenSpec 工作流命令**：`/opsx-propose`、`/opsx-ff`、`/opsx-apply`、`/opsx-finish` 等 OpenSpec 工作流命令。必须由用户发起后才能执行。用户显式调用的流程（如输入 `/opsx-finish` 后）内部步骤不受限制。
 
 ## Shell 调用规则
-- 在启动前后端应用时打开独立的windows终端窗口
+- 在启动前后端应用时打开独立的windows终端窗口，注意不是agent内的终端。
 
 ## Git 协作规则
 

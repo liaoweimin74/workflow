@@ -1,7 +1,10 @@
 package com.workflow.engine.task;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.TaskDetailVO;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.process.repository.NodeConfigRepository;
+import com.workflow.engine.process.repository.ProcessDraftRepository;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.system.domain.vo.UserVO;
@@ -55,6 +58,9 @@ class WorkflowTaskServiceDetailTest {
     private UserService userService;
     private WfTaskCommentRepository commentRepository;
     private WfTaskRemindRepository remindRepository;
+    private ProcessDraftRepository processDraftRepository;
+    private NodeConfigRepository nodeConfigRepository;
+    private ObjectMapper objectMapper;
     private WorkflowTaskService service;
 
     @BeforeEach
@@ -67,8 +73,12 @@ class WorkflowTaskServiceDetailTest {
         userService = mock(UserService.class);
         commentRepository = mock(WfTaskCommentRepository.class);
         remindRepository = mock(WfTaskRemindRepository.class);
+        processDraftRepository = mock(ProcessDraftRepository.class);
+        nodeConfigRepository = mock(NodeConfigRepository.class);
+        objectMapper = new ObjectMapper();
         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
-                runtimeService, repositoryService, userService, commentRepository, remindRepository);
+                runtimeService, repositoryService, userService, commentRepository, remindRepository,
+                processDraftRepository, nodeConfigRepository, objectMapper);
         when(tenantProvider.getTenantId()).thenReturn("default");
     }
 
@@ -117,15 +127,19 @@ class WorkflowTaskServiceDetailTest {
         when(pdQuery.processDefinitionIds(any())).thenReturn(pdQuery);
         when(pdQuery.list()).thenReturn(List.of(pd));
 
-        // formKey via BpmnModel
-        org.flowable.bpmn.model.BpmnModel bpmnModel = mock(org.flowable.bpmn.model.BpmnModel.class);
-        org.flowable.bpmn.model.Process process = mock(org.flowable.bpmn.model.Process.class);
-        org.flowable.bpmn.model.UserTask userTask = mock(org.flowable.bpmn.model.UserTask.class);
-        when(userTask.getId()).thenReturn("deptApprove");
-        when(userTask.getFormKey()).thenReturn("leaveForm");
-        when(process.getFlowElements()).thenReturn(List.of(userTask));
-        when(bpmnModel.getProcesses()).thenReturn(List.of(process));
-        when(repositoryService.getBpmnModel(eq(processDefinitionId))).thenReturn(bpmnModel);
+        // NodeConfig for formKey resolution
+        com.workflow.engine.process.entity.ProcessDraft draft =
+                new com.workflow.engine.process.entity.ProcessDraft();
+        draft.setId("draft-001");
+        when(processDraftRepository.findByProcessDefinitionId(eq(processDefinitionId)))
+                .thenReturn(Optional.of(draft));
+
+        com.workflow.engine.process.entity.NodeConfig nodeConfig =
+                new com.workflow.engine.process.entity.NodeConfig();
+        nodeConfig.setNodeId("deptApprove");
+        nodeConfig.setConfigJson("{\"form\":{\"formDefId\":\"leaveForm\"}}");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-001")))
+                .thenReturn(List.of(nodeConfig));
 
         // variables
         Map<String, Object> variables = Map.of("days", 3, "reason", "test");
@@ -242,15 +256,19 @@ class WorkflowTaskServiceDetailTest {
         when(pdQuery.processDefinitionIds(any())).thenReturn(pdQuery);
         when(pdQuery.list()).thenReturn(List.of(pd));
 
-        // formKey
-        org.flowable.bpmn.model.BpmnModel bpmnModel = mock(org.flowable.bpmn.model.BpmnModel.class);
-        org.flowable.bpmn.model.Process process = mock(org.flowable.bpmn.model.Process.class);
-        org.flowable.bpmn.model.UserTask userTask = mock(org.flowable.bpmn.model.UserTask.class);
-        when(userTask.getId()).thenReturn("finalApprove");
-        when(userTask.getFormKey()).thenReturn("expenseForm");
-        when(process.getFlowElements()).thenReturn(List.of(userTask));
-        when(bpmnModel.getProcesses()).thenReturn(List.of(process));
-        when(repositoryService.getBpmnModel(eq(processDefinitionId))).thenReturn(bpmnModel);
+        // NodeConfig for formKey resolution
+        com.workflow.engine.process.entity.ProcessDraft draft =
+                new com.workflow.engine.process.entity.ProcessDraft();
+        draft.setId("draft-ended");
+        when(processDraftRepository.findByProcessDefinitionId(eq(processDefinitionId)))
+                .thenReturn(Optional.of(draft));
+
+        com.workflow.engine.process.entity.NodeConfig nodeConfig =
+                new com.workflow.engine.process.entity.NodeConfig();
+        nodeConfig.setNodeId("finalApprove");
+        nodeConfig.setConfigJson("{\"form\":{\"formDefId\":\"expenseForm\"}}");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-ended")))
+                .thenReturn(List.of(nodeConfig));
 
         // variables
         when(flowableTaskService.getVariables(eq(taskId))).thenReturn(Map.of("amount", 500));

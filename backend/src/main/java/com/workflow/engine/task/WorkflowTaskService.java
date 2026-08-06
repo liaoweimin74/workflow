@@ -8,6 +8,10 @@ import com.workflow.api.dto.TaskTodoFilter;
 import com.workflow.api.dto.TaskTodoVO;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.process.entity.NodeConfig;
+import com.workflow.engine.process.entity.ProcessDraft;
+import com.workflow.engine.process.repository.NodeConfigRepository;
+import com.workflow.engine.process.repository.ProcessDraftRepository;
 import com.workflow.engine.task.entity.WfTaskRemind;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -16,6 +20,8 @@ import com.workflow.system.service.UserService;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
@@ -28,6 +34,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -37,6 +45,8 @@ import java.util.stream.Collectors;
 @Service
 public class WorkflowTaskService {
 
+    private static final Logger log = LoggerFactory.getLogger(WorkflowTaskService.class);
+
     private final org.flowable.engine.TaskService flowableTaskService;
     private final HistoryService historyService;
     private final TenantProvider tenantProvider;
@@ -45,6 +55,9 @@ public class WorkflowTaskService {
     private final UserService userService;
     private final WfTaskCommentRepository commentRepository;
     private final WfTaskRemindRepository remindRepository;
+    private final ProcessDraftRepository processDraftRepository;
+    private final NodeConfigRepository nodeConfigRepository;
+    private final ObjectMapper objectMapper;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
                                HistoryService historyService,
@@ -53,7 +66,10 @@ public class WorkflowTaskService {
                                RepositoryService repositoryService,
                                UserService userService,
                                WfTaskCommentRepository commentRepository,
-                               WfTaskRemindRepository remindRepository) {
+                               WfTaskRemindRepository remindRepository,
+                               ProcessDraftRepository processDraftRepository,
+                               NodeConfigRepository nodeConfigRepository,
+                               ObjectMapper objectMapper) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -62,6 +78,9 @@ public class WorkflowTaskService {
         this.userService = userService;
         this.commentRepository = commentRepository;
         this.remindRepository = remindRepository;
+        this.processDraftRepository = processDraftRepository;
+        this.nodeConfigRepository = nodeConfigRepository;
+        this.objectMapper = objectMapper;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
@@ -709,26 +728,57 @@ public class WorkflowTaskService {
      * @param taskDefinitionKey   任务定义键（BPMN 节点 ID）
      * @return formKey，未找到时返回 null
      */
+    /**
+     * 获取任务节点的表单定义 ID。
+     * <p>优先级：节点表单 > 流程默认表单。
+     * 从 NodeConfig 表中查询，不再依赖 BPMN XML 中的 formKey。
+     */
     private String extractFormKey(String processDefinitionId, String taskDefinitionKey) {
         if (processDefinitionId == null || taskDefinitionKey == null) {
             return null;
         }
         try {
-            org.flowable.bpmn.model.BpmnModel model = repositoryService.getBpmnModel(processDefinitionId);
-            if (model == null) {
-                return null;
+            ProcessDraft draft = processDraftRepository.findByProcessDefinitionId(processDefinitionId).orElse(null);
+            if (draft == null) return null;
+
+            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draft.getId());
+            String taskFormDefId = null;
+            String processFormDefId = null;
+
+            for (NodeConfig nc : configs) {
+                String formDefId = parseFormDefIdFromConfig(nc.getConfigJson());
+                if (formDefId == null) continue;
+
+                if (taskDefinitionKey.equals(nc.getNodeId())) {
+                    taskFormDefId = formDefId;
+                } else if ("__PROCESS__".equals(nc.getNodeId())) {
+                    processFormDefId = formDefId;
+                }
             }
-            for (org.flowable.bpmn.model.Process process : model.getProcesses()) {
-                for (var flowElement : process.getFlowElements()) {
-                    if (flowElement instanceof org.flowable.bpmn.model.UserTask userTask) {
-                        if (taskDefinitionKey.equals(userTask.getId())) {
-                            return userTask.getFormKey();
-                        }
-                    }
+
+            // 节点表单优先，没有则用流程默认表单
+            return taskFormDefId != null ? taskFormDefId : processFormDefId;
+        } catch (Exception e) {
+            log.warn("从 NodeConfig 解析 formDefId 失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * 从 NodeConfig JSON 中解析 formDefId。
+     */
+    private String parseFormDefIdFromConfig(String configJson) {
+        try {
+            JsonNode json = objectMapper.readTree(configJson);
+            JsonNode form = json.get("form");
+            if (form != null && form.has("formDefId")) {
+                String val = form.get("formDefId").asText();
+                if (val != null && !val.isEmpty()) {
+                    return val;
                 }
             }
         } catch (Exception e) {
-            // BpmnModel 获取失败，忽略
+            // 忽略
         }
         return null;
     }

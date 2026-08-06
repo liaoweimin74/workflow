@@ -65,6 +65,7 @@ import PropertyPanel from './properties/PropertyPanel.vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
+import { isInitiatorTaskElement } from './utils/bpmnValidation'
 import { processDesignApi } from '@/api/processDefinition'
 import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-js.css'
@@ -225,10 +226,15 @@ function validateBpmnXml(xml: string): string | null {
     }
   }
 
-  // 6. UserTask 必须配置审批人
+  // 6. UserTask 必须配置审批人（发起人节点除外，其 assignee 为 ${initiator}）
   for (let i = 0; i < userTasks.length; i++) {
-    const taskId = userTasks[i].getAttribute('id')
-    const taskName = userTasks[i].getAttribute('name') || taskId
+    const taskEl = userTasks[i]
+    const taskId = taskEl.getAttribute('id')
+    const taskName = taskEl.getAttribute('name') || taskId
+    // 发起人节点由发起人自己填报，无需配置审批人
+    if (isInitiatorTaskElement(taskEl)) {
+      continue
+    }
     if (taskId) {
       const configStr = designerStore.nodeConfigs[taskId]
       if (configStr) {

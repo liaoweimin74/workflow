@@ -47,8 +47,8 @@ public class MultiInstanceBpmnRewriter {
 
     private static final String COLLECTION_EXPR = "${approverList}";
     private static final String ELEMENT_VAR = "approver";
-    private static final String COUNTERSIGN_CONDITION = "${nrOfCompletedInstances == nrOfInstances}";
-    private static final String OR_SIGN_CONDITION = "${nrOfCompletedInstances >= 1}";
+    private static final String COUNTERSIGN_CONDITION = "${rejected || (nrOfCompletedInstances == nrOfInstances)}";
+    private static final String OR_SIGN_CONDITION = "${rejected || (nrOfCompletedInstances >= 1)}";
 
     private final ObjectMapper objectMapper;
 

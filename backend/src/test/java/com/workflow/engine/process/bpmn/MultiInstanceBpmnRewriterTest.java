@@ -110,7 +110,7 @@ class MultiInstanceBpmnRewriterTest {
 
         assertThat(condition).as("应包含 completionCondition").isNotNull();
         assertThat(condition.getTextContent().trim())
-                .isEqualTo("${nrOfCompletedInstances == nrOfInstances}");
+                .isEqualTo("${rejected || (nrOfCompletedInstances == nrOfInstances)}");
     }
 
     @Test
@@ -128,7 +128,7 @@ class MultiInstanceBpmnRewriterTest {
 
         assertThat(condition).as("或签应包含 completionCondition").isNotNull();
         assertThat(condition.getTextContent().trim())
-                .isEqualTo("${nrOfCompletedInstances >= 1}");
+                .isEqualTo("${rejected || (nrOfCompletedInstances >= 1)}");
     }
 
     @Test

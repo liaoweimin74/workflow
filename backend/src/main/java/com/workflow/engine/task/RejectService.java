@@ -19,6 +19,9 @@ import java.util.UUID;
  *
  * <p>使用 Flowable changeActivityState API 将当前任务节点移回发起人节点。
  * 支持 MI 节点整体回退（MI parallel 的 changeActivityState 会取消全部子实例）。
+ *
+ * <p>驳回时设置流程变量 rejected=true，触发 multi-instance 节点的
+ * completionCondition 终止多实例活动（三种模式：会签/或签/依次审批）。
  */
 @Service
 public class RejectService {
@@ -76,6 +79,9 @@ public class RejectService {
 
         log.info("驳回任务 taskId={} userId={} reason={} 从 {} → {}",
                 taskId, userId, reason, currentActivityId, initiatorNodeId);
+
+        // 设置拒绝标记，触发 multi-instance completionCondition 终止多实例
+        runtimeService.setVariable(task.getProcessInstanceId(), "rejected", true);
 
         runtimeService.createChangeActivityStateBuilder()
                 .processInstanceId(task.getProcessInstanceId())

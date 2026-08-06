@@ -76,29 +76,6 @@ const formRendererRef = ref<InstanceType<typeof FormRenderer>>()
 
 let viewer: ViewerType | null = null
 
-// ── 从 BPMN XML 中解析 start event 的 formKey ──
-function parseStartFormKey(xml: string): string | null {
-  try {
-    const doc = new DOMParser().parseFromString(xml, 'application/xml')
-    const startEvent = doc.querySelector('startEvent')
-    if (!startEvent) return null
-    const extensionElements = startEvent.querySelector('extensionElements')
-    if (!extensionElements) return null
-    const formProperty = extensionElements.querySelector('flowable\\:formProperty, formProperty')
-    if (formProperty) {
-      const formKey = formProperty.getAttribute('formKey')
-        || formProperty.getAttribute('flowable:formKey')
-      if (formKey) return formKey
-    }
-    // 也可能直接在 startEvent 上有 formKey 属性
-    const directFormKey = startEvent.getAttribute('flowable:formKey')
-      || startEvent.getAttribute('formKey')
-    return directFormKey
-  } catch {
-    return null
-  }
-}
-
 // ── 加载流程定义信息 + XML ──
 async function loadProcessDefinition() {
   loading.value = true
@@ -110,11 +87,9 @@ async function loadProcessDefinition() {
     processDef.value = defRes.data
     const xml = xmlRes.data
 
-    // 解析 start formKey
-    const key = parseStartFormKey(xml)
-    if (key) {
-      formDefId.value = key
-    }
+    // 从 API 响应获取表单定义 ID（后端已按优先级：发起人节点表单 > 流程默认表单）
+    const raw = defRes.data as Record<string, unknown>
+    formDefId.value = (raw.formDefId as string) || null
 
     // 渲染流程图
     diagramCollapse.value = ['diagram']

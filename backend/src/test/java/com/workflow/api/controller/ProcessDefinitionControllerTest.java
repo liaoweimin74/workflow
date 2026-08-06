@@ -1,8 +1,12 @@
 package com.workflow.api.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessService;
+import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.process.repository.NodeConfigRepository;
+import com.workflow.engine.process.repository.ProcessDraftRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.ProcessDefinition;
@@ -31,20 +35,14 @@ import static org.mockito.Mockito.*;
  */
 class ProcessDefinitionControllerTest {
 
-    // ==================== Controller 层：参数传递 ====================
+    private final ProcessDraftRepository mockDraftRepo = mock(ProcessDraftRepository.class);
+    private final NodeConfigRepository mockNodeConfigRepo = mock(NodeConfigRepository.class);
+    private final InitiatorNodeResolver mockInitiatorResolver = mock(InitiatorNodeResolver.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Test
-    void listByCategoryId() {
-        ProcessService mockService = mock(ProcessService.class);
-        when(mockService.listProcessDefinitions(any(), any(), any(), any()))
-                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
-
-        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, "cat-1", null, null);
-
-        assertThat(result.getCode()).isEqualTo(200);
-        verify(mockService).listProcessDefinitions(
-                eq(PageRequest.of(0, 20)), eq("cat-1"), isNull(), isNull());
+    private ProcessDefinitionController createController(ProcessService mockService) {
+        return new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo,
+                mockInitiatorResolver, objectMapper);
     }
 
     @Test
@@ -52,7 +50,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
+        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
 
         R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, "leave", null);
 
@@ -66,7 +64,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
+        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
 
         R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, "active");
 
@@ -80,7 +78,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
+        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
 
         controller.list(0, 20, null, null, "suspended");
 
@@ -93,7 +91,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
+        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
 
         controller.list(0, 20, "cat-1", "leave", "active");
 
@@ -106,7 +104,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
+        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
 
         R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
 
@@ -125,7 +123,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(servicePage);
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService);
+        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
 
         R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
 

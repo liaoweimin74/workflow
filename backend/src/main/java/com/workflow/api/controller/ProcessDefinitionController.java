@@ -87,9 +87,11 @@ public class ProcessDefinitionController {
     /**
      * 通过 NodeConfig 解析流程默认表单和发起人节点表单。
      * <p>优先级：发起人节点有表单配置则使用发起人节点表单，否则使用流程默认表单。
+     * 表单和字段权限作为整体从同一层取，不跨层合并。
      * 结果写入 map：
      * <ul>
      *   <li>formDefId — 优先级最高的表单（发起人节点 > 流程默认）</li>
+     *   <li>fieldPermissions — 与 formDefId 同层的字段权限</li>
      *   <li>initiatorFormDefId — 发起人节点表单（单独返回，前端可区分）</li>
      *   <li>processFormDefId — 流程默认表单（单独返回，前端可区分）</li>
      * </ul>
@@ -97,23 +99,23 @@ public class ProcessDefinitionController {
     private void resolveFormDefIds(String processDefinitionId, Map<String, Object> map) {
         if (processDefinitionId == null) {
             map.put("formDefId", null);
+            map.put("fieldPermissions", null);
             map.put("initiatorFormDefId", null);
             map.put("processFormDefId", null);
             return;
         }
-        // 精确匹配该部署版本的 NodeConfig 快照（部署时由当前配置复制生成）
+// 精确匹配该部署版本的 NodeConfig 快照（部署时由当前配置复制生成）
         List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
-        String processFormDefId = null;
-        String initiatorFormDefId = null;
+        FormConfig processCfg = null;
+        FormConfig initiatorCfg = null;
 
         for (NodeConfig nc : configs) {
             try {
-                com.fasterxml.jackson.databind.JsonNode json = objectMapper.readTree(nc.getConfigJson());
-                String formDefId = extractFormDefId(json);
-                if (formDefId == null) continue;
+                FormConfig cfg = extractFormConfig(json(nc.getConfigJson()));
+                if (cfg == null || cfg.formDefId == null) continue;
 
                 if ("__PROCESS__".equals(nc.getNodeId())) {
-                    processFormDefId = formDefId;
+                    processCfg = cfg;
                 }
             } catch (Exception e) {
                 // 忽略解析错误
@@ -126,11 +128,7 @@ public class ProcessDefinitionController {
             for (NodeConfig nc : configs) {
                 if (initiatorNodeId.equals(nc.getNodeId())) {
                     try {
-                        com.fasterxml.jackson.databind.JsonNode json = objectMapper.readTree(nc.getConfigJson());
-                        String formDefId = extractFormDefId(json);
-                        if (formDefId != null) {
-                            initiatorFormDefId = formDefId;
-                        }
+                        initiatorCfg = extractFormConfig(json(nc.getConfigJson()));
                     } catch (Exception e) {
                         // 忽略解析错误
                     }
@@ -139,26 +137,45 @@ public class ProcessDefinitionController {
             }
         }
 
-        // 优先级：发起人节点表单 > 流程默认表单
-        String effectiveFormDefId = initiatorFormDefId != null ? initiatorFormDefId : processFormDefId;
+        // 优先级：发起人节点表单 > 流程默认表单（表单与字段权限同层取）
+        FormConfig effective = initiatorCfg != null && initiatorCfg.formDefId != null ? initiatorCfg : processCfg;
 
-        map.put("formDefId", effectiveFormDefId);
-        map.put("initiatorFormDefId", initiatorFormDefId);
-        map.put("processFormDefId", processFormDefId);
+        map.put("formDefId", effective != null ? effective.formDefId : null);
+        map.put("fieldPermissions", effective != null ? effective.fieldPermissions : null);
+        map.put("initiatorFormDefId", initiatorCfg != null ? initiatorCfg.formDefId : null);
+        map.put("processFormDefId", processCfg != null ? processCfg.formDefId : null);
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode json(String configJson) throws Exception {
+        return objectMapper.readTree(configJson);
     }
 
     /**
-     * 从 NodeConfig JSON 中提取 formDefId。
+     * 从 NodeConfig JSON 中提取表单配置（formDefId + fieldPermissions）。
+     *
+     * @return 表单配置；无 form 节点或无 formDefId 时返回 null
      */
-    private String extractFormDefId(com.fasterxml.jackson.databind.JsonNode json) {
+    private FormConfig extractFormConfig(com.fasterxml.jackson.databind.JsonNode json) {
         com.fasterxml.jackson.databind.JsonNode form = json.get("form");
-        if (form != null && form.has("formDefId")) {
-            String val = form.get("formDefId").asText();
-            if (val != null && !val.isEmpty()) {
-                return val;
-            }
+        if (form == null || !form.has("formDefId")) {
+            return null;
         }
-        return null;
+        String val = form.get("formDefId").asText();
+        if (val == null || val.isEmpty()) {
+            return null;
+        }
+        Map<String, String> permissions = new HashMap<>();
+        com.fasterxml.jackson.databind.JsonNode permNode = form.get("fieldPermissions");
+        if (permNode != null && permNode.isObject()) {
+            permNode.fields().forEachRemaining(e -> permissions.put(e.getKey(), e.getValue().asText()));
+        }
+        return new FormConfig(val, permissions);
+    }
+
+    /**
+     * 表单配置值对象（formDefId + fieldPermissions 同层）。
+     */
+    private record FormConfig(String formDefId, Map<String, String> fieldPermissions) {
     }
 
     @GetMapping("/{id}/xml")

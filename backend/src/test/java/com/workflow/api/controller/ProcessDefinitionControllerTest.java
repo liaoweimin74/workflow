@@ -229,4 +229,118 @@ class ProcessDefinitionControllerTest {
         verify(query).processDefinitionNameLike(eq("leave"));
         verify(query).active();
     }
+
+    // ==================== GET /{id} fieldPermissions 解析 ====================
+
+    private ProcessDefinition buildMockPd(String id) {
+        ProcessDefinition pd = mock(ProcessDefinition.class);
+        when(pd.getId()).thenReturn(id);
+        when(pd.getKey()).thenReturn("leave");
+        when(pd.getName()).thenReturn("请假流程");
+        when(pd.getVersion()).thenReturn(1);
+        when(pd.getDescription()).thenReturn(null);
+        when(pd.getDeploymentId()).thenReturn("deploy-1");
+        when(pd.getResourceName()).thenReturn("leave.bpmn20.xml");
+        when(pd.getDiagramResourceName()).thenReturn(null);
+        when(pd.getTenantId()).thenReturn("default");
+        when(pd.getCategory()).thenReturn(null);
+        when(pd.isSuspended()).thenReturn(false);
+        return pd;
+    }
+
+    private com.workflow.engine.process.entity.ProcessDraft mockDraft(String draftId) {
+        com.workflow.engine.process.entity.ProcessDraft draft =
+                new com.workflow.engine.process.entity.ProcessDraft();
+        draft.setId(draftId);
+        when(mockDraftRepo.findByProcessDefinitionId(anyString()))
+                .thenReturn(java.util.Optional.of(draft));
+        return draft;
+    }
+
+    private com.workflow.engine.process.entity.NodeConfig nodeConfig(String nodeId, String configJson) {
+        com.workflow.engine.process.entity.NodeConfig nc =
+                new com.workflow.engine.process.entity.NodeConfig();
+        nc.setNodeId(nodeId);
+        nc.setConfigJson(configJson);
+        return nc;
+    }
+
+    @Test
+    void get_发起人节点配置了表单和字段权限_返回发起人节点fieldPermissions() {
+        // Given: 发起人节点 initiator-node 配置了 formDefId + fieldPermissions
+        ProcessService mockService = mock(ProcessService.class);
+        ProcessDefinition pd = buildMockPd("pd-1");
+        when(mockService.getProcessDefinition(anyString()))
+                .thenReturn(java.util.Optional.of(pd));
+        mockDraft("draft-1");
+        when(mockNodeConfigRepo.findByProcessDefId(eq("draft-1"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\",\"fieldPermissions\":{\"procField\":\"VIEW\"}}}"),
+                nodeConfig("initiator-node", "{\"form\":{\"formDefId\":\"initiatorForm\",\"fieldPermissions\":{\"fieldA\":\"VIEW\",\"fieldB\":\"HIDDEN\"}}}")
+        ));
+        when(mockInitiatorResolver.resolve(eq("pd-1"))).thenReturn("initiator-node");
+
+        // When
+        R<Map<String, Object>> result = createController(mockService).get("pd-1");
+
+        // Then: fieldPermissions 取发起人节点配置
+        assertThat(result.getCode()).isEqualTo(200);
+        Map<String, Object> data = result.getData();
+        assertThat(data.get("formDefId")).isEqualTo("initiatorForm");
+        @SuppressWarnings("unchecked")
+        Map<String, String> fieldPermissions = (Map<String, String>) data.get("fieldPermissions");
+        assertThat(fieldPermissions)
+                .containsEntry("fieldA", "VIEW")
+                .containsEntry("fieldB", "HIDDEN")
+                .doesNotContainKey("procField");
+    }
+
+    @Test
+    void get_发起人节点未配表单_流程有默认_返回流程级fieldPermissions() {
+        // Given: 发起人节点无表单配置，流程级有 formDefId + fieldPermissions
+        ProcessService mockService = mock(ProcessService.class);
+        ProcessDefinition pd = buildMockPd("pd-2");
+        when(mockService.getProcessDefinition(anyString()))
+                .thenReturn(java.util.Optional.of(pd));
+        mockDraft("draft-2");
+        when(mockNodeConfigRepo.findByProcessDefId(eq("draft-2"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\",\"fieldPermissions\":{\"procField\":\"VIEW\"}}}"),
+                nodeConfig("initiator-node", "{\"form\":{}}")
+        ));
+        when(mockInitiatorResolver.resolve(eq("pd-2"))).thenReturn("initiator-node");
+
+        // When
+        R<Map<String, Object>> result = createController(mockService).get("pd-2");
+
+        // Then: fieldPermissions 取流程级配置
+        assertThat(result.getCode()).isEqualTo(200);
+        Map<String, Object> data = result.getData();
+        assertThat(data.get("formDefId")).isEqualTo("processForm");
+        @SuppressWarnings("unchecked")
+        Map<String, String> fieldPermissions = (Map<String, String>) data.get("fieldPermissions");
+        assertThat(fieldPermissions).containsEntry("procField", "VIEW");
+    }
+
+    @Test
+    void get_均未配置表单_fieldPermissions为null() {
+        // Given: 发起人节点和流程级都没有表单配置
+        ProcessService mockService = mock(ProcessService.class);
+        ProcessDefinition pd = buildMockPd("pd-3");
+        when(mockService.getProcessDefinition(anyString()))
+                .thenReturn(java.util.Optional.of(pd));
+        mockDraft("draft-3");
+        when(mockNodeConfigRepo.findByProcessDefId(eq("draft-3"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"form\":{}}"),
+                nodeConfig("initiator-node", "{\"form\":{}}")
+        ));
+        when(mockInitiatorResolver.resolve(eq("pd-3"))).thenReturn("initiator-node");
+
+        // When
+        R<Map<String, Object>> result = createController(mockService).get("pd-3");
+
+        // Then: formDefId 和 fieldPermissions 均为 null
+        assertThat(result.getCode()).isEqualTo(200);
+        Map<String, Object> data = result.getData();
+        assertThat(data.get("formDefId")).isNull();
+        assertThat(data.get("fieldPermissions")).isNull();
+    }
 }

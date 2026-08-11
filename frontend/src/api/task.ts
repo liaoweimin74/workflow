@@ -34,6 +34,24 @@ export interface TaskDoneVO extends TaskTodoVO {
 }
 
 /**
+ * 节点操作权限配置。
+ * 对应后端 com.workflow.api.dto.OperationsConfig。
+ * 控制任务详情页操作按钮的显示，字段缺失时由后端默认值补全。
+ */
+export interface OperationsConfig {
+  /** 是否允许驳回，默认 true */
+  allowReject: boolean
+  /** 是否允许加签，默认 false */
+  allowAddSign: boolean
+  /** 是否允许转办，默认 true */
+  allowTransfer: boolean
+  /** 是否允许委派，默认 false */
+  allowDelegate: boolean
+  /** 是否允许转签，默认 false */
+  allowForwardSign: boolean
+}
+
+/**
  * 任务详情 VO。
  * 对应后端 com.workflow.api.dto.TaskDetailVO。
  */
@@ -52,6 +70,10 @@ export interface TaskDetailVO {
   initiatorName: string
   formKey: string
   variables: Record<string, unknown>
+  /** 字段级权限：field → EDIT/VIEW/HIDDEN。未配置时为 undefined。 */
+  fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
+  /** 节点操作权限配置。未配置时后端返回全默认值对象。 */
+  operations?: OperationsConfig
   createTime: string
   isInitiatorTask: boolean
 }

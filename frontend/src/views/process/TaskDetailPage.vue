@@ -36,6 +36,7 @@
             :form-def-id="taskDetail.formKey"
             :process-instance-id="taskDetail.processInstanceId"
             :task-id="taskDetail.taskId"
+            :field-permissions="taskDetail.fieldPermissions"
           />
         </template>
         <template v-else>
@@ -70,32 +71,35 @@
           >
             {{ taskDetail?.isInitiatorTask ? '保存草稿' : '暂存' }}
           </el-button>
-          <template v-if="!taskDetail?.isInitiatorTask">
+<template v-if="!taskDetail?.isInitiatorTask">
             <el-button type="success" :loading="actionLoading === 'approve'" @click="handleApprove">
               通过
             </el-button>
-            <el-button type="danger" :loading="actionLoading === 'reject'" @click="handleReject">
+            <el-button
+              v-if="operations?.allowReject"
+              type="danger"
+              :loading="actionLoading === 'reject'"
+              @click="handleReject"
+            >
               驳回
             </el-button>
-            <el-button type="danger" plain :loading="actionLoading === 'refuse'" @click="handleRefuse">
+            <el-button v-if="operations?.allowReject" type="danger" plain :loading="actionLoading === 'refuse'" @click="handleRefuse">
               拒绝
             </el-button>
-            <el-dropdown trigger="click" @command="handleMoreAction">
+            <el-dropdown v-if="hasMoreOperations" trigger="click" @command="handleMoreAction">
               <el-button>
                 更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="transfer">转办</el-dropdown-item>
-                  <el-dropdown-item command="delegate">委派</el-dropdown-item>
-                  <el-dropdown-item command="addSign">加签</el-dropdown-item>
+                  <el-dropdown-item v-if="operations?.allowTransfer" command="transfer">转办</el-dropdown-item>
+                  <el-dropdown-item v-if="operations?.allowDelegate" command="delegate">委派</el-dropdown-item>
+                  <el-dropdown-item v-if="operations?.allowAddSign" command="addSign">加签</el-dropdown-item>
+                  <el-dropdown-item v-if="operations?.allowForwardSign" command="forwardSign">转签</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
           </template>
-          <el-button v-else type="primary" :loading="actionLoading === 'approve'" @click="handleApprove">
-            提交
-          </el-button>
         </div>
       </el-card>
     </div>
@@ -130,12 +134,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View, ArrowDown } from '@element-plus/icons-vue'
 import { taskApi } from '@/api/task'
-import type { TaskDetailVO } from '@/api/task'
+import { processInstanceApi } from '@/api/processInstance'
+import { deployedProcessApi } from '@/api/processDefinition'
+import type { TaskDetailVO, ApprovalRecordVO, OperationsConfig } from '@/api/task'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import { ApproverPicker, ProcessTrackDrawer } from '@/components/business'
 
@@ -148,6 +154,14 @@ const taskDetail = ref<TaskDetailVO | null>(null)
 const comment = ref('')
 const actionLoading = ref<string | null>(null)
 const formRendererRef = ref<InstanceType<typeof FormRenderer>>()
+
+/** 节点操作权限配置，未配置时后端返回全默认值对象 */
+const operations = computed<OperationsConfig | undefined>(() => taskDetail.value?.operations)
+
+/** 是否存在"更多操作"下拉里的任一可用操作 */
+const hasMoreOperations = computed(
+  () => !!operations.value && (operations.value.allowTransfer || operations.value.allowDelegate || operations.value.allowAddSign || operations.value.allowForwardSign),
+)
 
 // 流程跟踪
 const trackingDrawer = ref(false)

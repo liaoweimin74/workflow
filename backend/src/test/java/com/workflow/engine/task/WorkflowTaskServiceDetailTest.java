@@ -345,6 +345,68 @@ class WorkflowTaskServiceDetailTest {
         assertThat(result.get().getFormKey()).isEqualTo("nodeForm");
     }
 
+    // ==================== extractOperations 测试 ====================
+
+    @Test
+    void extractOperations_节点完整配置_返回节点配置() {
+        // Given: 节点配置了全部 5 个操作
+        mockDraft("pd-ops-full:1:6", "draft-ops-full");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-ops-full"))).thenReturn(List.of(
+                nodeConfig("nodeOps", "{\"operations\":{\"allowReject\":false,\"allowAddSign\":true,\"allowTransfer\":false,\"allowDelegate\":true,\"allowForwardSign\":true}}")
+        ));
+
+        // When
+        com.workflow.api.dto.OperationsConfig result = service.extractOperations("pd-ops-full:1:6", "nodeOps");
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.isAllowReject()).isFalse();
+        assertThat(result.isAllowAddSign()).isTrue();
+        assertThat(result.isAllowTransfer()).isFalse();
+        assertThat(result.isAllowDelegate()).isTrue();
+        assertThat(result.isAllowForwardSign()).isTrue();
+    }
+
+    @Test
+    void extractOperations_节点部分配置_缺失字段用默认值补全() {
+        // Given: 旧格式只配置了 3 个字段（allowDelegate/allowForwardSign 缺失 → 默认 false）
+        mockDraft("pd-ops-partial:1:7", "draft-ops-partial");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-ops-partial"))).thenReturn(List.of(
+                nodeConfig("nodeOps2", "{\"operations\":{\"allowReject\":false,\"allowAddSign\":true,\"allowTransfer\":true}}")
+        ));
+
+        // When
+        com.workflow.api.dto.OperationsConfig result = service.extractOperations("pd-ops-partial:1:7", "nodeOps2");
+
+        // Then: 缺失字段补默认值
+        assertThat(result).isNotNull();
+        assertThat(result.isAllowReject()).isFalse();
+        assertThat(result.isAllowAddSign()).isTrue();
+        assertThat(result.isAllowTransfer()).isTrue();
+        assertThat(result.isAllowDelegate()).isFalse();
+        assertThat(result.isAllowForwardSign()).isFalse();
+    }
+
+    @Test
+    void extractOperations_节点未配置_返回全默认值() {
+        // Given: 节点完全没有 operations 配置
+        mockDraft("pd-ops-none:1:8", "draft-ops-none");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-ops-none"))).thenReturn(List.of(
+                nodeConfig("nodeOps3", "{\"form\":{\"formDefId\":\"formA\"}}")
+        ));
+
+        // When
+        com.workflow.api.dto.OperationsConfig result = service.extractOperations("pd-ops-none:1:8", "nodeOps3");
+
+        // Then: 全默认值 allowReject=true, allowTransfer=true, 其余 false
+        assertThat(result).isNotNull();
+        assertThat(result.isAllowReject()).isTrue();
+        assertThat(result.isAllowAddSign()).isFalse();
+        assertThat(result.isAllowTransfer()).isTrue();
+        assertThat(result.isAllowDelegate()).isFalse();
+        assertThat(result.isAllowForwardSign()).isFalse();
+    }
+
     /**
      * 已结束流程场景：runtimeService 查不到 ProcessInstance，
      * fallback 查 historyService 获取 businessKey + historic initiator 变量。

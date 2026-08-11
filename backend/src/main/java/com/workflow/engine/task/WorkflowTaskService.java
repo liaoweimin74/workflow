@@ -2,6 +2,7 @@ package com.workflow.engine.task;
 
 import com.workflow.api.dto.CompleteTaskResponse;
 import com.workflow.api.dto.FormConfigResult;
+import com.workflow.api.dto.OperationsConfig;
 import com.workflow.api.dto.TaskDetailVO;
 import com.workflow.api.dto.TaskDoneFilter;
 import com.workflow.api.dto.TaskDoneVO;
@@ -875,6 +876,66 @@ public class WorkflowTaskService {
             log.warn("从 NodeConfig 解析表单配置失败", e);
             return null;
         }
+    }
+
+    /**
+     * 解析任务节点的操作权限配置。
+     *
+     * <p>从节点配置（NodeConfig, nodeId=taskDefKey）读取 operations，缺失字段用默认值补全；
+     * 节点未配置 operations 时返回全默认值。默认值：
+     * <ul>
+     *   <li>allowReject: true</li>
+     *   <li>allowTransfer: true</li>
+     *   <li>allowAddSign: false</li>
+     *   <li>allowDelegate: false</li>
+     *   <li>allowForwardSign: false</li>
+     * </ul>
+     *
+     * @param processDefinitionId 流程定义 ID
+     * @param taskDefinitionKey   任务定义键（BPMN 节点 ID）
+     * @return 操作权限配置（永不为 null）
+     */
+    public OperationsConfig extractOperations(String processDefinitionId, String taskDefinitionKey) {
+        if (processDefinitionId == null || taskDefinitionKey == null) {
+            return new OperationsConfig();
+        }
+        try {
+            ProcessDraft draft = processDraftRepository.findByProcessDefinitionId(processDefinitionId).orElse(null);
+            if (draft == null) return new OperationsConfig();
+
+            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draft.getId());
+            for (NodeConfig nc : configs) {
+                if (taskDefinitionKey.equals(nc.getNodeId())) {
+                    return parseOperationsFromConfig(nc.getConfigJson());
+                }
+            }
+            return new OperationsConfig();
+        } catch (Exception e) {
+            log.warn("从 NodeConfig 解析操作配置失败", e);
+            return new OperationsConfig();
+        }
+    }
+
+    /**
+     * 从 NodeConfig JSON 中解析 operations，缺失字段用默认值补全。
+     */
+    private OperationsConfig parseOperationsFromConfig(String configJson) {
+        OperationsConfig result = new OperationsConfig();
+        try {
+            JsonNode json = objectMapper.readTree(configJson);
+            JsonNode ops = json.get("operations");
+            if (ops == null || !ops.isObject()) {
+                return result;
+            }
+            if (ops.has("allowReject")) result.setAllowReject(ops.get("allowReject").asBoolean());
+            if (ops.has("allowAddSign")) result.setAllowAddSign(ops.get("allowAddSign").asBoolean());
+            if (ops.has("allowTransfer")) result.setAllowTransfer(ops.get("allowTransfer").asBoolean());
+            if (ops.has("allowDelegate")) result.setAllowDelegate(ops.get("allowDelegate").asBoolean());
+            if (ops.has("allowForwardSign")) result.setAllowForwardSign(ops.get("allowForwardSign").asBoolean());
+        } catch (Exception e) {
+            log.warn("从 NodeConfig 解析 operations JSON 失败: {}", e.getMessage());
+        }
+        return result;
     }
 
     /**

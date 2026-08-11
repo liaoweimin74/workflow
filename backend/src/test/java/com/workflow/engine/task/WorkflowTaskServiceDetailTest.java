@@ -134,7 +134,7 @@ class WorkflowTaskServiceDetailTest {
         com.workflow.engine.process.entity.NodeConfig nodeConfig =
                 new com.workflow.engine.process.entity.NodeConfig();
         nodeConfig.setNodeId("deptApprove");
-        nodeConfig.setConfigJson("{\"form\":{\"formDefId\":\"leaveForm\"}}");
+        nodeConfig.setConfigJson("{\"form\":{\"formDefId\":\"leaveForm\",\"fieldPermissions\":{\"days\":\"VIEW\"}},\"operations\":{\"allowReject\":false,\"allowTransfer\":true}}");
         when(nodeConfigRepository.findByProcessDefinitionId(eq(processDefinitionId)))
                 .thenReturn(List.of(nodeConfig));
 
@@ -167,6 +167,13 @@ class WorkflowTaskServiceDetailTest {
         assertThat(vo.getVariables()).containsEntry("days", 3);
         assertThat(vo.getVariables()).containsEntry("reason", "test");
         assertThat(vo.getCreateTime()).isNotNull();
+
+        // Task 3: fieldPermissions + operations 填充
+        assertThat(vo.getFieldPermissions()).containsEntry("days", "VIEW");
+        assertThat(vo.getOperations()).isNotNull();
+        assertThat(vo.getOperations().isAllowReject()).isFalse();
+        assertThat(vo.getOperations().isAllowTransfer()).isTrue();
+        assertThat(vo.getOperations().isAllowDelegate()).isFalse();
     }
 
     @Test

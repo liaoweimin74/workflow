@@ -679,7 +679,7 @@ public class WorkflowTaskService {
             String formKey = extractFormKey(processDefinitionId, task.getTaskDefinitionKey());
             vo.setFormKey(formKey);
 
-            // 判断是否为发起节点
+// 判断是否为发起节点
             try {
                 String initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
                 vo.setIsInitiatorTask(initiatorNodeId != null
@@ -687,6 +687,10 @@ public class WorkflowTaskService {
             } catch (Exception e) {
                 vo.setIsInitiatorTask(false);
             }
+            // 表单字段权限 + 操作权限配置
+            FormConfigResult formConfig = extractFormConfig(processDefinitionId, task.getTaskDefinitionKey());
+            vo.setFieldPermissions(formConfig != null ? formConfig.getFieldPermissions() : null);
+            vo.setOperations(extractOperations(processDefinitionId, task.getTaskDefinitionKey()));
         }
 
         // variables
@@ -785,7 +789,7 @@ public class WorkflowTaskService {
             String formKey = extractFormKey(processDefinitionId, histTask.getTaskDefinitionKey());
             vo.setFormKey(formKey);
 
-            // 判断是否为发起节点
+// 判断是否为发起节点
             try {
                 String initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
                 vo.setIsInitiatorTask(initiatorNodeId != null
@@ -793,6 +797,10 @@ public class WorkflowTaskService {
             } catch (Exception e) {
                 vo.setIsInitiatorTask(false);
             }
+            // 表单字段权限 + 操作权限配置（历史任务详情同样填充）
+            FormConfigResult formConfig = extractFormConfig(processDefinitionId, histTask.getTaskDefinitionKey());
+            vo.setFieldPermissions(formConfig != null ? formConfig.getFieldPermissions() : null);
+            vo.setOperations(extractOperations(processDefinitionId, histTask.getTaskDefinitionKey()));
         }
 
         // variables — 历史变量

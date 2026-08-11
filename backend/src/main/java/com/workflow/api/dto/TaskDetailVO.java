@@ -25,6 +25,8 @@ public class TaskDetailVO {
     private String initiator;
     private String initiatorName;
     private String formKey;
+    private Map<String, String> fieldPermissions;
+    private OperationsConfig operations;
     private Map<String, Object> variables;
     private String createTime;
     /** 是否为发起节点（发起人填报节点，不需要审批类操作） */
@@ -68,6 +70,12 @@ public class TaskDetailVO {
 
     public String getFormKey() { return formKey; }
     public void setFormKey(String formKey) { this.formKey = formKey; }
+
+    public Map<String, String> getFieldPermissions() { return fieldPermissions; }
+    public void setFieldPermissions(Map<String, String> fieldPermissions) { this.fieldPermissions = fieldPermissions; }
+
+    public OperationsConfig getOperations() { return operations; }
+    public void setOperations(OperationsConfig operations) { this.operations = operations; }
 
     public Map<String, Object> getVariables() { return variables; }
     public void setVariables(Map<String, Object> variables) { this.variables = variables; }

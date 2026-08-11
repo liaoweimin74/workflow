@@ -133,20 +133,21 @@ async function loadData() {
 }
 
 function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>) {
-  resolvedSchema.value = resolvedSchema.value.map(field => {
-    const fieldName = (field as Record<string, unknown>).field as string | undefined
-    if (!fieldName) return field
-    const permission = permissions[fieldName]
-    if (!permission) return field
+  // HIDDEN 字段直接移除（不渲染、不提交）；VIEW 字段设置 props.disabled 只读
+  resolvedSchema.value = resolvedSchema.value
+    .filter(field => {
+      const fieldName = (field as Record<string, unknown>).field as string | undefined
+      if (!fieldName) return true
+      return permissions[fieldName] !== 'HIDDEN'
+    })
+    .map(field => {
+      const fieldName = (field as Record<string, unknown>).field as string | undefined
+      if (!fieldName) return field
+      if (permissions[fieldName] !== 'VIEW') return field
 
-    const updatedField = { ...field }
-    if (permission === 'VIEW') {
-      updatedField.disabled = true
-    } else if (permission === 'HIDDEN') {
-      updatedField.display = false
-    }
-    return updatedField
-  })
+      const props = field.props || {}
+      return { ...field, props: { ...props, disabled: true } }
+    })
 }
 
 async function submit(): Promise<boolean> {

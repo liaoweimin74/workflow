@@ -197,3 +197,102 @@ describe('FormRenderer — getFormData() 方法', () => {
     expect(typeof vm.getFormData).toBe('function')
   })
 })
+
+describe('FormRenderer — fieldPermissions prop (字段级权限)', () => {
+  const permRule: Rule[] = [
+    { type: 'input', field: 'name', title: '名称', value: '' } as Rule,
+    { type: 'input', field: 'code', title: '编码', value: '' } as Rule,
+    { type: 'input', field: 'secret', title: '机密', value: '' } as Rule,
+  ]
+
+  function getRenderedRules(wrapper: ReturnType<typeof createWrapper>): Record<string, unknown>[] {
+    const stub = wrapper.findComponent(FormCreateStub)
+    return stub.props('rule') as Record<string, unknown>[]
+  }
+
+  it('VIEW 权限 → 字段渲染为只读（props.disabled=true）', async () => {
+    const wrapper = createWrapper({
+      rule: permRule,
+      fieldPermissions: { code: 'VIEW' },
+    })
+    await nextTick()
+
+    const rules = getRenderedRules(wrapper)
+    const codeField = rules.find(r => r.field === 'code') as Record<string, unknown>
+    // form-create 的禁用属性在 props 内层
+    const propsObj = codeField.props as Record<string, unknown>
+    expect(propsObj.disabled).toBe(true)
+    // 其他字段不设置 disabled
+    const nameField = rules.find(r => r.field === 'name') as Record<string, unknown>
+    expect((nameField.props as Record<string, unknown> | undefined)?.disabled).toBeUndefined()
+  })
+
+  it('HIDDEN 权限 → 字段从 rule 数组中移除（不渲染、不提交）', async () => {
+    const wrapper = createWrapper({
+      rule: permRule,
+      fieldPermissions: { secret: 'HIDDEN' },
+    })
+    await nextTick()
+
+    const rules = getRenderedRules(wrapper)
+    expect(rules.some(r => r.field === 'secret')).toBe(false)
+    // 其余字段保留
+    expect(rules.some(r => r.field === 'name')).toBe(true)
+    expect(rules.some(r => r.field === 'code')).toBe(true)
+  })
+
+  it('EDIT 权限 → 字段保持可编辑（不修改 rule）', async () => {
+    const wrapper = createWrapper({
+      rule: permRule,
+      fieldPermissions: { name: 'EDIT', code: 'EDIT' },
+    })
+    await nextTick()
+
+    const rules = getRenderedRules(wrapper)
+    const nameField = rules.find(r => r.field === 'name') as Record<string, unknown>
+    expect((nameField.props as Record<string, unknown> | undefined)?.disabled).toBeUndefined()
+    // EDIT 字段全部保留
+    expect(rules).toHaveLength(3)
+  })
+
+  it('fieldPermissions 为空对象 → 所有字段默认可编辑', async () => {
+    const wrapper = createWrapper({
+      rule: permRule,
+      fieldPermissions: {},
+    })
+    await nextTick()
+
+    const rules = getRenderedRules(wrapper)
+    expect(rules).toHaveLength(3)
+    for (const rule of rules) {
+      const propsObj = (rule as Record<string, unknown>).props as Record<string, unknown> | undefined
+      expect(propsObj?.disabled).toBeUndefined()
+    }
+  })
+
+  it('fieldPermissions 未传入 → 所有字段默认可编辑', async () => {
+    const wrapper = createWrapper({ rule: permRule })
+    await nextTick()
+
+    const rules = getRenderedRules(wrapper)
+    expect(rules).toHaveLength(3)
+    for (const rule of rules) {
+      const propsObj = (rule as Record<string, unknown>).props as Record<string, unknown> | undefined
+      expect(propsObj?.disabled).toBeUndefined()
+    }
+  })
+
+  it('权限在 form-create 实例创建前一次性应用（初始化后 rule 不变）', async () => {
+    const wrapper = createWrapper({
+      rule: permRule,
+      fieldPermissions: { code: 'VIEW', secret: 'HIDDEN' },
+    })
+    await nextTick()
+
+    // 初次应用后再次触发同一批 props，rule 应保持稳定（不累积/不恢复）
+    const firstRules = getRenderedRules(wrapper)
+    expect(firstRules.some(r => r.field === 'secret')).toBe(false)
+    const codeFirst = firstRules.find(r => r.field === 'code') as Record<string, unknown>
+    expect((codeFirst.props as Record<string, unknown>).disabled).toBe(true)
+  })
+})

@@ -24,6 +24,8 @@ export interface NodeConfigData {
     allowReject?: boolean
     allowAddSign?: boolean
     allowTransfer?: boolean
+    allowDelegate?: boolean
+    allowForwardSign?: boolean
   }
   condition?: string
   callActivity?: {
@@ -89,7 +91,13 @@ export interface ProcessConfigData {
       action: 'AUTO_PASS' | 'SKIP' | 'ESCALATE'
     }
     allowRecall: boolean
+    /**
+     * @deprecated 已废弃，改由节点级 operations.allowAddSign 控制
+     */
     allowAddSigner: boolean
+    /**
+     * @deprecated 已废弃，改由节点级 operations.allowDelegate 控制
+     */
     allowDelegate: boolean
   }
   numberRule: {

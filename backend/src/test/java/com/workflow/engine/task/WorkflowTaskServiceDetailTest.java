@@ -192,6 +192,159 @@ class WorkflowTaskServiceDetailTest {
         assertThat(result).isEmpty();
     }
 
+    // ==================== extractFormConfig 测试 ====================
+
+    private void mockDraft(String processDefinitionId, String draftId) {
+        com.workflow.engine.process.entity.ProcessDraft draft =
+                new com.workflow.engine.process.entity.ProcessDraft();
+        draft.setId(draftId);
+        when(processDraftRepository.findByProcessDefinitionId(eq(processDefinitionId)))
+                .thenReturn(Optional.of(draft));
+    }
+
+    private com.workflow.engine.process.entity.NodeConfig nodeConfig(String nodeId, String configJson) {
+        com.workflow.engine.process.entity.NodeConfig nc =
+                new com.workflow.engine.process.entity.NodeConfig();
+        nc.setNodeId(nodeId);
+        nc.setConfigJson(configJson);
+        return nc;
+    }
+
+    @Test
+    void extractFormConfig_节点配置了表单_返回节点配置() {
+        // Given: 节点配置了 formDefId + fieldPermissions，流程级也配置了（但不应被读取）
+        mockDraft("pd-node:1:1", "draft-node");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-node"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\",\"fieldPermissions\":{\"procField\":\"VIEW\"}}}"),
+                nodeConfig("nodeA", "{\"form\":{\"formDefId\":\"nodeForm\",\"fieldPermissions\":{\"field1\":\"VIEW\",\"field2\":\"HIDDEN\"}}}")
+        ));
+
+        // When
+        com.workflow.api.dto.FormConfigResult result = service.extractFormConfig("pd-node:1:1", "nodeA");
+
+        // Then: 返回节点配置，不读取流程级
+        assertThat(result).isNotNull();
+        assertThat(result.getFormDefId()).isEqualTo("nodeForm");
+        assertThat(result.getFieldPermissions())
+                .containsEntry("field1", "VIEW")
+                .containsEntry("field2", "HIDDEN")
+                .doesNotContainKey("procField");
+    }
+
+    @Test
+    void extractFormConfig_节点未配流程有默认_返回流程配置() {
+        // Given: 节点配置了 fieldPermissions 但没有 formDefId → 整体回退到流程级
+        mockDraft("pd-fallback:1:2", "draft-fallback");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-fallback"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\",\"fieldPermissions\":{\"procField\":\"VIEW\"}}}"),
+                nodeConfig("nodeB", "{\"form\":{\"fieldPermissions\":{\"field1\":\"HIDDEN\"}}}")
+        ));
+
+        // When
+        com.workflow.api.dto.FormConfigResult result = service.extractFormConfig("pd-fallback:1:2", "nodeB");
+
+        // Then: 使用流程级配置
+        assertThat(result).isNotNull();
+        assertThat(result.getFormDefId()).isEqualTo("processForm");
+        assertThat(result.getFieldPermissions())
+                .containsEntry("procField", "VIEW")
+                .doesNotContainKey("field1");
+    }
+
+    @Test
+    void extractFormConfig_都未配_返回null() {
+        // Given: 节点和流程级都没有 formDefId
+        mockDraft("pd-none:1:3", "draft-none");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-none"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"form\":{}}"),
+                nodeConfig("nodeC", "{\"form\":{}}")
+        ));
+
+        // When
+        com.workflow.api.dto.FormConfigResult result = service.extractFormConfig("pd-none:1:3", "nodeC");
+
+        // Then
+        assertThat(result).isNull();
+    }
+
+    @Test
+    void extractFormConfig_选中层有formDefId但无fieldPermissions_返回空map() {
+        // Given: 节点有 formDefId 但无 fieldPermissions
+        mockDraft("pd-empty:1:4", "draft-empty");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-empty"))).thenReturn(List.of(
+                nodeConfig("nodeD", "{\"form\":{\"formDefId\":\"nodeForm\"}}")
+        ));
+
+        // When
+        com.workflow.api.dto.FormConfigResult result = service.extractFormConfig("pd-empty:1:4", "nodeD");
+
+        // Then: formDefId 返回，fieldPermissions 为空 map（前端视作全 EDIT）
+        assertThat(result).isNotNull();
+        assertThat(result.getFormDefId()).isEqualTo("nodeForm");
+        assertThat(result.getFieldPermissions()).isNotNull();
+        assertThat(result.getFieldPermissions()).isEmpty();
+    }
+
+    @Test
+    void extractFormKey_委托extractFormConfig_仍返回节点表单() {
+        // Given: 与 extractFormConfig 相同的节点配置
+        mockDraft("pd-delegate:1:5", "draft-delegate");
+        when(nodeConfigRepository.findByProcessDefId(eq("draft-delegate"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\"}}"),
+                nodeConfig("nodeE", "{\"form\":{\"formDefId\":\"nodeForm\"}}")
+        ));
+
+        // When: 通过 getTaskDetail 间接验证 extractFormKey 委托后行为不变（formKey 节点优先）
+        String taskId = "task-delegate-001";
+        String processInstanceId = "pi-delegate-001";
+        String processDefinitionId = "pd-delegate:1:5";
+
+        Task task = mock(Task.class);
+        when(task.getId()).thenReturn(taskId);
+        when(task.getName()).thenReturn("委托测试");
+        when(task.getAssignee()).thenReturn("user1");
+        when(task.getProcessInstanceId()).thenReturn(processInstanceId);
+        when(task.getProcessDefinitionId()).thenReturn(processDefinitionId);
+        when(task.getCreateTime()).thenReturn(new Date());
+        when(task.getTaskDefinitionKey()).thenReturn("nodeE");
+
+        TaskQuery taskQuery = mock(TaskQuery.class);
+        when(flowableTaskService.createTaskQuery()).thenReturn(taskQuery);
+        when(taskQuery.taskId(anyString())).thenReturn(taskQuery);
+        when(taskQuery.taskTenantId(anyString())).thenReturn(taskQuery);
+        when(taskQuery.singleResult()).thenReturn(task);
+
+        ProcessInstance pi = mock(ProcessInstance.class);
+        when(pi.getId()).thenReturn(processInstanceId);
+        when(pi.getBusinessKey()).thenReturn("BIZ-DELEGATE");
+        ProcessInstanceQuery piQuery = mock(ProcessInstanceQuery.class);
+        when(runtimeService.createProcessInstanceQuery()).thenReturn(piQuery);
+        when(piQuery.processInstanceIds(any())).thenReturn(piQuery);
+        when(piQuery.list()).thenReturn(List.of(pi));
+
+        when(runtimeService.getVariable(eq(processInstanceId), eq("initiator"))).thenReturn("42");
+
+        ProcessDefinition pd = mock(ProcessDefinition.class);
+        when(pd.getId()).thenReturn(processDefinitionId);
+        when(pd.getName()).thenReturn("委托流程");
+        when(pd.getKey()).thenReturn("delegate");
+        ProcessDefinitionQuery pdQuery = mock(ProcessDefinitionQuery.class);
+        when(repositoryService.createProcessDefinitionQuery()).thenReturn(pdQuery);
+        when(pdQuery.processDefinitionIds(any())).thenReturn(pdQuery);
+        when(pdQuery.list()).thenReturn(List.of(pd));
+
+        when(flowableTaskService.getVariables(eq(taskId))).thenReturn(Map.of());
+
+        UserVO userVO = new UserVO(42L, "zhangsan", "张三", null, null, null,
+                null, null, 1, LocalDateTime.now(), new Long[]{});
+        when(userService.findByIds(eq(List.of(42L)))).thenReturn(List.of(userVO));
+
+        // Then: 节点表单优先
+        Optional<TaskDetailVO> result = service.getTaskDetail(taskId);
+        assertThat(result).isPresent();
+        assertThat(result.get().getFormKey()).isEqualTo("nodeForm");
+    }
+
     /**
      * 已结束流程场景：runtimeService 查不到 ProcessInstance，
      * fallback 查 historyService 获取 businessKey + historic initiator 变量。

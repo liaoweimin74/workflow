@@ -1,6 +1,7 @@
 package com.workflow.engine.task;
 
 import com.workflow.api.dto.CompleteTaskResponse;
+import com.workflow.api.dto.FormConfigResult;
 import com.workflow.api.dto.TaskDetailVO;
 import com.workflow.api.dto.TaskDoneFilter;
 import com.workflow.api.dto.TaskDoneVO;
@@ -819,56 +820,93 @@ public class WorkflowTaskService {
      * @return formKey，未找到时返回 null
      */
     /**
-     * 获取任务节点的表单定义 ID。
+     * 获取任务节点的表单配置。
      * <p>优先级：节点表单 > 流程默认表单。
      * 从 NodeConfig 表中查询，不再依赖 BPMN XML 中的 formKey。
      */
     private String extractFormKey(String processDefinitionId, String taskDefinitionKey) {
+        FormConfigResult cfg = extractFormConfig(processDefinitionId, taskDefinitionKey);
+        return cfg != null ? cfg.getFormDefId() : null;
+    }
+
+    /**
+     * 解析任务节点的表单配置（formDefId + fieldPermissions）。
+     *
+     * <p>解析逻辑：
+     * <ol>
+     *   <li>优先从节点配置（NodeConfig, nodeId=taskDefKey）读取 form.formDefId 和 form.fieldPermissions</li>
+     *   <li>节点未配置 formDefId 时，从流程级配置（NodeConfig, nodeId=__PROCESS__）读取 form.formDefId 和 form.fieldPermissions</li>
+     *   <li>均未配置时返回 null</li>
+     * </ol>
+     * 表单和字段权限作为整体从同一配置层取，不跨层合并。
+     *
+     * @param processDefinitionId 流程定义 ID
+     * @param taskDefinitionKey   任务定义键（BPMN 节点 ID）
+     * @return 表单配置，未找到时返回 null
+     */
+    public FormConfigResult extractFormConfig(String processDefinitionId, String taskDefinitionKey) {
         if (processDefinitionId == null || taskDefinitionKey == null) {
             return null;
         }
         try {
             // 精确匹配该部署版本的 NodeConfig 快照（部署时由当前配置复制生成）
             List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
-            String taskFormDefId = null;
-            String processFormDefId = null;
+            FormConfigResult taskCfg = null;
+            FormConfigResult processCfg = null;
 
             for (NodeConfig nc : configs) {
-                String formDefId = parseFormDefIdFromConfig(nc.getConfigJson());
-                if (formDefId == null) continue;
+                FormConfigResult cfg = parseFormConfigFromJson(nc.getConfigJson());
+                if (cfg == null || cfg.getFormDefId() == null) continue;
 
                 if (taskDefinitionKey.equals(nc.getNodeId())) {
-                    taskFormDefId = formDefId;
+                    taskCfg = cfg;
                 } else if ("__PROCESS__".equals(nc.getNodeId())) {
-                    processFormDefId = formDefId;
+                    processCfg = cfg;
                 }
             }
 
             // 节点表单优先，没有则用流程默认表单
-            return taskFormDefId != null ? taskFormDefId : processFormDefId;
+            FormConfigResult selected = taskCfg != null ? taskCfg : processCfg;
+            if (selected != null && selected.getFieldPermissions() == null) {
+                selected.setFieldPermissions(new HashMap<>());
+            }
+            return selected;
         } catch (Exception e) {
-            log.warn("从 NodeConfig 解析 formDefId 失败", e);
+            log.warn("从 NodeConfig 解析表单配置失败", e);
             return null;
         }
     }
 
     /**
-     * 从 NodeConfig JSON 中解析 formDefId。
+     * 从 NodeConfig JSON 中解析完整表单配置（formDefId + fieldPermissions）。
+     *
+     * @param configJson NodeConfig 的 config_json
+     * @return 表单配置；JSON 无 form 节点或无 formDefId 时返回 null
      */
-    private String parseFormDefIdFromConfig(String configJson) {
+    private FormConfigResult parseFormConfigFromJson(String configJson) {
         try {
             JsonNode json = objectMapper.readTree(configJson);
             JsonNode form = json.get("form");
-            if (form != null && form.has("formDefId")) {
-                String val = form.get("formDefId").asText();
-                if (val != null && !val.isEmpty()) {
-                    return val;
-                }
+            if (form == null || !form.has("formDefId")) {
+                return null;
             }
+            String val = form.get("formDefId").asText();
+            if (val == null || val.isEmpty()) {
+                return null;
+            }
+            FormConfigResult result = new FormConfigResult();
+            result.setFormDefId(val);
+            Map<String, String> permissions = new HashMap<>();
+            JsonNode permNode = form.get("fieldPermissions");
+            if (permNode != null && permNode.isObject()) {
+                permNode.fields().forEachRemaining(e -> permissions.put(e.getKey(), e.getValue().asText()));
+            }
+            result.setFieldPermissions(permissions);
+            return result;
         } catch (Exception e) {
-            // 忽略
+            log.warn("从 NodeConfig 解析表单配置 JSON 失败: {}", e.getMessage());
+            return null;
         }
-        return null;
     }
 
     @Transactional

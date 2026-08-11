@@ -59,6 +59,8 @@ export interface DeployedProcessDefinition {
   tenantId: string
   category: string | null
   suspended: boolean
+  /** 发起人节点字段级权限：field → EDIT/VIEW/HIDDEN。未配置时为 undefined。 */
+  fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
 }
 
 export interface DeployedProcessQueryParams {

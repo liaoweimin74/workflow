@@ -29,7 +29,8 @@
         <FormRenderer
           ref="formRendererRef"
           :form-def-id="formDefId"
-          :initial-values="draftValues ?? undefined"
+:initial-values="draftValues ?? undefined"
+          :field-permissions="processDef?.fieldPermissions"
         />
       </template>
       <template v-else>

@@ -1,5 +1,10 @@
 package com.workflow.engine.form.column;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -17,6 +22,8 @@ public final class ColumnTypeMapper {
     private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
             "subTable", "SubTable", "nestedForm", "NestedForm", "dataTable",
             "userPicker", "deptPicker", "divider", "groupContainer");
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private ColumnTypeMapper() {}
 
@@ -89,6 +96,41 @@ public final class ColumnTypeMapper {
 
     private static void applyJson(ColumnConfig c) {
         c.setColumnType("JSON");
+    }
+
+    /**
+     * 生成 data-picker 字段的两列映射：
+     * <key> VARCHAR(64) 存被引用记录 id（多选逗号分隔，带 pickerConfig）
+     * <key>_text VARCHAR(1024) 存冗余显示文本（hidden=true）
+     *
+     * @param key   字段 key
+     * @param props form-create rule 的 props（sourceFormKey/displayField/mode）
+     * @return 两列映射
+     */
+    public static List<ColumnConfig> mapPickerToColumns(String key, Map<String, Object> props) {
+        ColumnConfig idCol = new ColumnConfig();
+        idCol.setKey(key);
+        idCol.setColumnType("VARCHAR");
+        idCol.setLength(64);
+
+        Map<String, Object> picker = new LinkedHashMap<>();
+        picker.put("sourceFormKey", props == null ? null : props.get("sourceFormKey"));
+        picker.put("displayField", props == null ? null : props.get("displayField"));
+        picker.put("mode", props == null ? null : props.get("mode"));
+        try {
+            idCol.setPickerConfig(OBJECT_MAPPER.writeValueAsString(picker));
+        } catch (JsonProcessingException e) {
+            idCol.setPickerConfig("{}");
+        }
+
+        ColumnConfig textCol = new ColumnConfig();
+        textCol.setKey(key + "_text");
+        textCol.setLabel((props != null && props.get("title") != null) ? String.valueOf(props.get("title")) + "（显示）" : null);
+        textCol.setColumnType("VARCHAR");
+        textCol.setLength(1024);
+        textCol.setHidden(true);
+
+        return List.of(idCol, textCol);
     }
 
     /**

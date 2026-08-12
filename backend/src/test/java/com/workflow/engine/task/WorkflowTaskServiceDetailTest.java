@@ -340,7 +340,7 @@ class WorkflowTaskServiceDetailTest {
 
     @Test
     void extractOperations_节点完整配置_返回节点配置() {
-        // Given: 节点配置了全部 5 个操作
+        // Given: 节点配置了全部 4 个操作（allowForwardSign 为遗留字段，应被忽略）
         when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-ops-full:1:6"))).thenReturn(List.of(
                 nodeConfig("nodeOps", "{\"operations\":{\"allowReject\":false,\"allowAddSign\":true,\"allowTransfer\":false,\"allowDelegate\":true,\"allowForwardSign\":true}}")
         ));
@@ -354,7 +354,6 @@ class WorkflowTaskServiceDetailTest {
         assertThat(result.isAllowAddSign()).isTrue();
         assertThat(result.isAllowTransfer()).isFalse();
         assertThat(result.isAllowDelegate()).isTrue();
-        assertThat(result.isAllowForwardSign()).isTrue();
     }
 
     @Test
@@ -373,7 +372,6 @@ class WorkflowTaskServiceDetailTest {
         assertThat(result.isAllowAddSign()).isTrue();
         assertThat(result.isAllowTransfer()).isTrue();
         assertThat(result.isAllowDelegate()).isFalse();
-        assertThat(result.isAllowForwardSign()).isFalse();
     }
 
     @Test
@@ -392,7 +390,71 @@ class WorkflowTaskServiceDetailTest {
         assertThat(result.isAllowAddSign()).isFalse();
         assertThat(result.isAllowTransfer()).isTrue();
         assertThat(result.isAllowDelegate()).isFalse();
-        assertThat(result.isAllowForwardSign()).isFalse();
+    }
+
+    @Test
+    void extractOperations_流程级关闭转办_节点级开启_结果为false() {
+        // Given: 流程级关闭转办，节点级开启转办
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-proc-off:1:9"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"approvalPolicy\":{\"operations\":{\"allowTransfer\":false}}}"),
+                nodeConfig("task1", "{\"operations\":{\"allowTransfer\":true}}")
+        ));
+
+        // When
+        com.workflow.api.dto.OperationsConfig result = service.extractOperations("pd-proc-off:1:9", "task1");
+
+        // Then: 流程级 && 节点级 → false
+        assertThat(result).isNotNull();
+        assertThat(result.isAllowTransfer()).isFalse();
+    }
+
+    @Test
+    void extractOperations_节点级关闭_流程级开启_结果为false() {
+        // Given: 流程级全开，节点级关闭转办
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-node-off:1:10"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"approvalPolicy\":{\"operations\":{\"allowReject\":true,\"allowAddSign\":true,\"allowTransfer\":true,\"allowDelegate\":true}}}"),
+                nodeConfig("task2", "{\"operations\":{\"allowTransfer\":false}}")
+        ));
+
+        // When
+        com.workflow.api.dto.OperationsConfig result = service.extractOperations("pd-node-off:1:10", "task2");
+
+        // Then: 流程级 && 节点级 → false
+        assertThat(result).isNotNull();
+        assertThat(result.isAllowTransfer()).isFalse();
+    }
+
+    @Test
+    void extractOperations_节点未配置_返回节点级默认值() {
+        // Given: 节点无 operations 配置，流程级未配置（视为全开）
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-def:1:11"))).thenReturn(List.of(
+                nodeConfig("task3", "{\"form\":{\"formDefId\":\"formA\"}}")
+        ));
+
+        // When
+        com.workflow.api.dto.OperationsConfig result = service.extractOperations("pd-def:1:11", "task3");
+
+        // Then: 节点级默认值 {reject:true, addSign:false, transfer:true, delegate:false}
+        assertThat(result).isNotNull();
+        assertThat(result.isAllowReject()).isTrue();
+        assertThat(result.isAllowAddSign()).isFalse();
+        assertThat(result.isAllowTransfer()).isTrue();
+        assertThat(result.isAllowDelegate()).isFalse();
+    }
+
+    @Test
+    void extractOperations_返回对象不包含allowForwardSign字段() throws Exception {
+        // Given: 节点配置含 operations.allowForwardSign=true（应被忽略）
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-nofwd:1:12"))).thenReturn(List.of(
+                nodeConfig("task4", "{\"operations\":{\"allowForwardSign\":true}}")
+        ));
+
+        // When: 序列化返回对象
+        com.workflow.api.dto.OperationsConfig result = service.extractOperations("pd-nofwd:1:12", "task4");
+        String json = objectMapper.writeValueAsString(result);
+
+        // Then: 不含 allowForwardSign 键
+        assertThat(json).doesNotContain("allowForwardSign");
     }
 
     /**

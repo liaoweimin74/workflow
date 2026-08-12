@@ -884,14 +884,13 @@ public class WorkflowTaskService {
     /**
      * 解析任务节点的操作权限配置。
      *
-     * <p>从节点配置（NodeConfig, nodeId=taskDefKey）读取 operations，缺失字段用默认值补全；
-     * 节点未配置 operations 时返回全默认值。默认值：
+     * <p>叠加流程级与节点级配置（AND 规则）：从该部署版本的 {@code __PROCESS__} 节点配置读取
+     * 流程级总控（JSON 路径 {@code approvalPolicy.operations}，未配置视为全开），从节点配置
+     * （NodeConfig, nodeId=taskDefKey）读取节点级 operations，每个开关取两者的 AND。
+     * 节点未配置 operations 时按节点级默认值处理。默认值：
      * <ul>
-     *   <li>allowReject: true</li>
-     *   <li>allowTransfer: true</li>
-     *   <li>allowAddSign: false</li>
-     *   <li>allowDelegate: false</li>
-     *   <li>allowForwardSign: false</li>
+     *   <li>节点级：allowReject: true、allowTransfer: true、allowAddSign: false、allowDelegate: false</li>
+     *   <li>流程级：allowReject/allowAddSign/allowTransfer/allowDelegate 均为 true</li>
      * </ul>
      *
      * @param processDefinitionId 流程定义 ID
@@ -905,12 +904,35 @@ public class WorkflowTaskService {
         try {
             // 精确匹配该部署版本的 NodeConfig 快照（与 extractFormConfig 保持一致）
             List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
+            // 流程级总控（__PROCESS__），未配置视为全开
+            OperationsConfig processLevel = new OperationsConfig();
+            boolean hasProcessLevel = false;
             for (NodeConfig nc : configs) {
-                if (taskDefinitionKey.equals(nc.getNodeId())) {
-                    return parseOperationsFromConfig(nc.getConfigJson());
+                if ("__PROCESS__".equals(nc.getNodeId())) {
+                    processLevel = parseProcessOperations(nc.getConfigJson());
+                    hasProcessLevel = true;
+                    break;
                 }
             }
-            return new OperationsConfig();
+            // 节点级
+            OperationsConfig nodeLevel = new OperationsConfig();
+            for (NodeConfig nc : configs) {
+                if (taskDefinitionKey.equals(nc.getNodeId())) {
+                    nodeLevel = parseOperationsFromConfig(nc.getConfigJson());
+                    break;
+                }
+            }
+            if (!hasProcessLevel) {
+                // 流程级全开时等价于节点级
+                return nodeLevel;
+            }
+            // 流程级 && 节点级（AND 合并）
+            OperationsConfig result = new OperationsConfig();
+            result.setAllowReject(processLevel.isAllowReject() && nodeLevel.isAllowReject());
+            result.setAllowAddSign(processLevel.isAllowAddSign() && nodeLevel.isAllowAddSign());
+            result.setAllowTransfer(processLevel.isAllowTransfer() && nodeLevel.isAllowTransfer());
+            result.setAllowDelegate(processLevel.isAllowDelegate() && nodeLevel.isAllowDelegate());
+            return result;
         } catch (Exception e) {
             log.warn("从 NodeConfig 解析操作配置失败", e);
             return new OperationsConfig();
@@ -932,9 +954,33 @@ public class WorkflowTaskService {
             if (ops.has("allowAddSign")) result.setAllowAddSign(ops.get("allowAddSign").asBoolean());
             if (ops.has("allowTransfer")) result.setAllowTransfer(ops.get("allowTransfer").asBoolean());
             if (ops.has("allowDelegate")) result.setAllowDelegate(ops.get("allowDelegate").asBoolean());
-            if (ops.has("allowForwardSign")) result.setAllowForwardSign(ops.get("allowForwardSign").asBoolean());
         } catch (Exception e) {
             log.warn("从 NodeConfig 解析 operations JSON 失败: {}", e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * 从 {@code __PROCESS__} 配置解析流程级操作权限（JSON 路径 {@code approvalPolicy.operations}）。
+     * 未配置 operations 时返回全开默认值。
+     */
+    private OperationsConfig parseProcessOperations(String configJson) {
+        OperationsConfig result = new OperationsConfig();
+        result.setAllowReject(true);
+        result.setAllowAddSign(true);
+        result.setAllowTransfer(true);
+        result.setAllowDelegate(true);
+        try {
+            JsonNode json = objectMapper.readTree(configJson);
+            JsonNode ops = json.path("approvalPolicy").path("operations");
+            if (ops.isObject()) {
+                if (ops.has("allowReject")) result.setAllowReject(ops.get("allowReject").asBoolean());
+                if (ops.has("allowAddSign")) result.setAllowAddSign(ops.get("allowAddSign").asBoolean());
+                if (ops.has("allowTransfer")) result.setAllowTransfer(ops.get("allowTransfer").asBoolean());
+                if (ops.has("allowDelegate")) result.setAllowDelegate(ops.get("allowDelegate").asBoolean());
+            }
+        } catch (Exception e) {
+            log.warn("从 __PROCESS__ 解析 operations JSON 失败: {}", e.getMessage());
         }
         return result;
     }

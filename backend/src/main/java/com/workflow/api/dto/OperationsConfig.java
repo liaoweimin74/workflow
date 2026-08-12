@@ -3,7 +3,7 @@ package com.workflow.api.dto;
 /**
  * 节点操作权限配置。
  *
- * <p>控制任务详情页操作按钮的显示。由 {@code extractOperations} 从节点 NodeConfig 解析，
+ * <p>控制任务详情页操作按钮的显示。由 {@code extractOperations} 按"流程级 AND 节点级"规则解析，
  * 缺失字段用默认值补全。
  */
 public class OperationsConfig {
@@ -16,8 +16,6 @@ public class OperationsConfig {
     private boolean allowTransfer = true;
     /** 是否允许委派，默认 false */
     private boolean allowDelegate = false;
-    /** 是否允许转签，默认 false */
-    private boolean allowForwardSign = false;
 
     public boolean isAllowReject() { return allowReject; }
     public void setAllowReject(boolean allowReject) { this.allowReject = allowReject; }
@@ -30,7 +28,4 @@ public class OperationsConfig {
 
     public boolean isAllowDelegate() { return allowDelegate; }
     public void setAllowDelegate(boolean allowDelegate) { this.allowDelegate = allowDelegate; }
-
-    public boolean isAllowForwardSign() { return allowForwardSign; }
-    public void setAllowForwardSign(boolean allowForwardSign) { this.allowForwardSign = allowForwardSign; }
 }

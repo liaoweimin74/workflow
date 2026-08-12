@@ -20,14 +20,17 @@
               :value="form.id"
             />
           </el-select>
-          <el-button
-            v-if="formConfig.formDefId && !readOnly"
-            :icon="Edit"
-            size="small"
-            @click="jumpToFormDesigner"
-          >
-            编辑表单
-          </el-button>
+          <el-tooltip content="编辑表单" placement="top">
+            <el-button
+              v-if="formConfig.formDefId && !readOnly"
+              :icon="Edit"
+              circle
+              size="small"
+              type="primary"
+              plain
+              @click="jumpToFormDesigner"
+            />
+          </el-tooltip>
         </div>
       </el-form-item>
 

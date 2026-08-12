@@ -1,0 +1,61 @@
+package com.workflow.engine.form.column;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+/**
+ * 列映射配置项。
+ * 定义业务表单字段到物理表列的映射关系。
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class ColumnConfig {
+
+    /** 字段 key（表单 schema 中的 field，同时作为物理表列名） */
+    private String key;
+
+    /** 字段显示名（用于前端列头与筛选器标签） */
+    private String label;
+
+    /** 列类型（白名单：VARCHAR/TEXT/INT/DECIMAL/DATE/DATETIME/TINYINT/JSON） */
+    private String columnType;
+
+    /** 长度（VARCHAR/TINYINT 使用） */
+    private Integer length;
+
+    /** 小数精度（DECIMAL 使用，如 2 表示 DECIMAL(18,2)） */
+    private Integer scale;
+
+    /** 是否必填（对应 NOT NULL） */
+    private boolean required;
+
+    /** 是否唯一（生成 UNIQUE (tenant_id, key) 复合索引） */
+    private boolean unique;
+
+    /** 是否建普通索引（用于筛选/排序加速） */
+    private boolean indexed;
+
+    public ColumnConfig() {}
+
+    public String getKey() { return key; }
+    public void setKey(String key) { this.key = key; }
+
+    public String getLabel() { return label; }
+    public void setLabel(String label) { this.label = label; }
+
+    public String getColumnType() { return columnType; }
+    public void setColumnType(String columnType) { this.columnType = columnType; }
+
+    public Integer getLength() { return length; }
+    public void setLength(Integer length) { this.length = length; }
+
+    public Integer getScale() { return scale; }
+    public void setScale(Integer scale) { this.scale = scale; }
+
+    public boolean isRequired() { return required; }
+    public void setRequired(boolean required) { this.required = required; }
+
+    public boolean isUnique() { return unique; }
+    public void setUnique(boolean unique) { this.unique = unique; }
+
+    public boolean isIndexed() { return indexed; }
+    public void setIndexed(boolean indexed) { this.indexed = indexed; }
+}

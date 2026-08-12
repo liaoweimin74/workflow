@@ -6,7 +6,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: 转办权限控制（MODIFIED）
+### Requirement: 转办权限控制
 
 当节点 `operations.allowTransfer = false` **或** 流程级 `operations.allowTransfer = false` 时，该节点的任务 SHALL NOT 允许转办，接口 SHALL 返回 400 错误。生效规则 = 流程级 AND 节点级。
 
@@ -24,7 +24,7 @@ AND 任务 assignee SHALL NOT 变化
 
 ## ADDED Requirements
 
-### Requirement: 转办接口多实例节点语义（ADDED）
+### Requirement: 转办接口多实例节点语义
 
 `POST /api/v1/tasks/{id}/transfer` SHALL 统一走 `TransferService.transfer`（`setAssignee` + 清空 owner）。该实现天然覆盖多实例节点：会签/或签节点中每个子任务独立，改 assignee 后原办理人待办消失、目标用户待办出现，其他实例不受影响——运行时效果等价于转签。
 

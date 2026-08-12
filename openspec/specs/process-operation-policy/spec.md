@@ -1,11 +1,8 @@
 # process-operation-policy Specification
 
 ## Purpose
-
-定义流程级操作权限总控模型：流程级 `__PROCESS__` 配置提供四个操作权限总开关（驳回/加签/转办/委派），节点级 `operations` 提供细粒度覆盖，运行时按"流程级 AND 节点级"规则生效。替代废弃的 `allowAddSigner` / `allowDelegate` 字段。
-
+TBD - created by archiving change process-config-and-version. Update Purpose after archive.
 ## Requirements
-
 ### Requirement: 流程级操作权限配置结构
 
 流程级配置 `ProcessConfigData.approvalPolicy.operations` SHALL 包含四个操作权限开关：
@@ -72,3 +69,4 @@ AND 开关值 SHALL 与 `approvalPolicy.operations` 双向同步
 WHEN 用户将流程级"允许转办"关闭并保存
 AND 重新加载设计器
 THEN 流程属性面板"允许转办"开关 SHALL 保持关闭状态
+

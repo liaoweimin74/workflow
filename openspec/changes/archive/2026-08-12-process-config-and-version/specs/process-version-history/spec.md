@@ -1,10 +1,10 @@
-# process-version-history Specification
+﻿# process-version-history Specification
 
 ## Purpose
 
 提供流程历史版本的查看能力：列出同一 `processKey` 的全部已部署版本，并可查看任一版本的编辑器数据（BPMN XML + 该版本部署时的节点配置快照，含 `__PROCESS__`）。前端提供版本历史抽屉与只读设计器视图。
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: 版本列表接口
 

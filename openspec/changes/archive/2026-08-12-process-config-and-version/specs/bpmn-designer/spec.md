@@ -4,10 +4,34 @@
 
 修改流程设计器：流程属性面板新增"节点操作权限"总控分区（流程级四开关）；节点属性中移除"允许转签"配置项（并入"允许转办"）。
 
+## MODIFIED Requirements
+
+### Requirement: 流程设计器页面
+
+用户 SHALL 可通过管理后台导航进入流程设计器页面。
+
+BPMN 流程设计器 SHALL 集成在现有前端项目中，通过懒加载路由访问，路径为 `/workflow/designer`。
+
+设计器页面 SHALL 采用三栏布局：
+- 左侧 Palette（元素面板）
+- 中间 Canvas（流程图绘制区域）
+- 右侧 Properties Panel（属性编辑面板）
+
+设计器页面 SHALL 提供顶部工具栏，包含保存草稿、部署、导入 BPMN XML、导出 BPMN XML、撤销、重做按钮。
+
+#### Scenario: 导航到设计器页面
+WHEN 用户点击"流程设计"菜单项
+THEN 系统懒加载 ProcessDesigner.vue 组件
+AND 页面显示三栏布局
+
+#### Scenario: 创建新流程
+WHEN 用户点击"新建流程"按钮
+THEN 系统显示空流程图
+AND Palette 中显示可拖拽的 BPMN 元素列表
+
 ## ADDED Requirements
 
 ### Requirement: 流程级操作权限总控
-
 流程属性面板（选中画布空白处）"流程配置" Tab SHALL 展示"节点操作权限"分区，包含四个开关：
 
 - **允许驳回**：绑定 `approvalPolicy.operations.allowReject`

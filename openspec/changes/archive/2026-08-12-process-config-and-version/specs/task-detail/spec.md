@@ -6,7 +6,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: 审批操作（MODIFIED）
+### Requirement: 审批操作
 
 详情页底部 SHALL 提供审批意见输入框（必填可配置）和操作按钮。操作按钮的显示由 TaskDetailVO.operations 配置控制：
 
@@ -68,7 +68,7 @@
 - **THEN** 系统 SHALL 不显示"更多操作"下拉按钮
 - **AND** 仅显示"通过"按钮（和"驳回"按钮，如 allowReject 为 true）
 
-### Requirement: 操作权限配置解析（MODIFIED）
+### Requirement: 操作权限配置解析
 
 后端 SHALL 提供 `extractOperations(processDefId, taskDefKey)` 方法，返回操作权限配置对象 `{ allowReject, allowAddSign, allowTransfer, allowDelegate }`（无 `allowForwardSign`）。
 
@@ -99,7 +99,7 @@
 - **THEN** extractOperations SHALL 返回节点级默认值与流程级叠加后的结果
 - **AND** 返回对象 SHALL NOT 包含 allowForwardSign 字段
 
-### Requirement: TaskDetailVO 扩展（MODIFIED）
+### Requirement: TaskDetailVO 扩展
 
 `TaskDetailVO` SHALL 包含以下新增字段：
 

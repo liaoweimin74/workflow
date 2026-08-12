@@ -52,12 +52,11 @@ THEN 顶部区域 SHALL 展示从 TaskDetailVO 获取的流程基本信息字段
 
 - **"通过"按钮**：始终显示
 - **"驳回"按钮**：当 `operations.allowReject == true` 时显示
-- **"转办"**：当 `operations.allowTransfer == true` 时显示（在"更多操作"下拉中）
+- **"转办"**：当 `operations.allowTransfer == true` 时显示（在"更多操作"下拉中；会签节点上该操作执行转签语义）
 - **"委派"**：当 `operations.allowDelegate == true` 时显示（在"更多操作"下拉中）
 - **"加签"**：当 `operations.allowAddSign == true` 时显示（在"更多操作"下拉中）
-- **"转签"**：当 `operations.allowForwardSign == true` 时显示（在"更多操作"下拉中）
 
-当所有"更多操作"项（转办/委派/加签/转签）均不可用时，SHALL 不显示"更多操作"下拉按钮。
+"转签"项 SHALL 从"更多操作"下拉中移除。当所有"更多操作"项（转办/委派/加签）均不可用时，SHALL 不显示"更多操作"下拉按钮。
 
 #### Scenario: 审批通过
 
@@ -97,15 +96,15 @@ THEN 顶部区域 SHALL 展示从 TaskDetailVO 获取的流程基本信息字段
 - **THEN** 系统 SHALL 弹出加签配置弹窗
 - **AND** 用户配置后调用加签接口
 
-#### Scenario: 转签
+#### Scenario: 更多操作不显示转签项
 
-- **WHEN** operations.allowForwardSign 为 true 且用户在"更多操作"中选择"转签"
-- **THEN** 系统 SHALL 弹出转签配置弹窗
-- **AND** 用户配置后调用转签接口
+- **WHEN** 用户打开"更多操作"下拉菜单
+- **THEN** 菜单 SHALL 不包含"转签"项
+- **AND** 仅包含转办、委派、加签（按对应 allow 开关显示）
 
 #### Scenario: 所有更多操作均不可用
 
-- **WHEN** operations 中 allowTransfer/allowDelegate/allowAddSign/allowForwardSign 均为 false
+- **WHEN** operations 中 allowTransfer/allowDelegate/allowAddSign 均为 false
 - **THEN** 系统 SHALL 不显示"更多操作"下拉按钮
 - **AND** 仅显示"通过"按钮（和"驳回"按钮，如 allowReject 为 true）
 
@@ -139,29 +138,34 @@ AND 提供"查看实时进度"跳转到流程实例跟踪页
 
 ### Requirement: 操作权限配置解析
 
-后端 SHALL 提供 `extractOperations(processDefId, taskDefKey)` 方法，返回操作权限配置对象 `{ allowReject, allowAddSign, allowTransfer, allowDelegate, allowForwardSign }`。
+后端 SHALL 提供 `extractOperations(processDefId, taskDefKey)` 方法，返回操作权限配置对象 `{ allowReject, allowAddSign, allowTransfer, allowDelegate }`（无 `allowForwardSign`）。
 
 解析逻辑：
-1. 从节点配置（NodeConfig, nodeId=taskDefKey）读取 `operations`
-2. 节点未配置 operations 时，SHALL 使用默认值
+1. 从该部署版本的 `__PROCESS__` 节点配置读取流程级 operations
+2. 从节点配置（NodeConfig, nodeId=taskDefKey）读取节点级 operations
+3. 每个开关取 `流程级 && 节点级`（AND 规则）
+4. 节点未配置 operations 时，节点级使用默认值；流程级未配置时视为全开
 
 默认值：
-- `allowReject: true`
-- `allowTransfer: true`
-- `allowAddSign: false`
-- `allowDelegate: false`
-- `allowForwardSign: false`
+- 节点级：`allowReject: true`、`allowTransfer: true`、`allowAddSign: false`、`allowDelegate: false`
+- 流程级：四开关均为 `true`
 
 #### Scenario: 节点配置了 operations
 
-- **WHEN** 节点 NodeConfig 含 operations 配置
-- **THEN** extractOperations SHALL 返回该配置
+- **WHEN** 节点 NodeConfig 含 operations 配置（流程级全开）
+- **THEN** extractOperations SHALL 返回该节点配置
 - **AND** 缺失字段 SHALL 使用默认值补全
+
+#### Scenario: 流程级与节点级叠加
+
+- **WHEN** 流程级 `allowTransfer = false` 且节点级 `allowTransfer = true`
+- **THEN** extractOperations SHALL 返回 `allowTransfer = false`
 
 #### Scenario: 节点未配置 operations
 
 - **WHEN** 节点 NodeConfig 无 operations 配置
-- **THEN** extractOperations SHALL 返回全部默认值
+- **THEN** extractOperations SHALL 返回节点级默认值与流程级叠加后的结果
+- **AND** 返回对象 SHALL NOT 包含 allowForwardSign 字段
 
 ### Requirement: TaskDetailVO 扩展
 
@@ -170,18 +174,18 @@ AND 提供"查看实时进度"跳转到流程实例跟踪页
 - `fieldPermissions`（`Map<String, String>`）：字段权限映射，key 为字段名，value 为 "EDIT"|"VIEW"|"HIDDEN"。为 null 时表示无权限配置（所有字段可编辑）。
 - `operations`（`OperationsConfig`）：操作权限配置。
 
-`OperationsConfig` SHALL 包含以下字段：
+`OperationsConfig` SHALL 包含以下字段（移除 `allowForwardSign`）：
 - `allowReject`（boolean）
 - `allowAddSign`（boolean）
 - `allowTransfer`（boolean）
 - `allowDelegate`（boolean）
-- `allowForwardSign`（boolean）
 
 #### Scenario: 任务详情包含字段权限和操作配置
 
 - **WHEN** 调用 `GET /api/v1/tasks/{taskId}/detail`
 - **THEN** 响应 SHALL 包含 fieldPermissions 字段（来自 extractFormConfig）
 - **AND** 响应 SHALL 包含 operations 字段（来自 extractOperations）
+- **AND** operations SHALL NOT 包含 allowForwardSign
 
 #### Scenario: 无表单配置的任务
 

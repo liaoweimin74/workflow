@@ -1,11 +1,8 @@
 # deploy-change-detection Specification
 
 ## Purpose
-
-修复部署变化检测缺陷：当前 `deploy()` 仅比较"改写后 BPMN XML"（只含会签/或签改写），导致审批人、操作权限、超时、表单绑定、`__PROCESS__` 等配置变化不触发部署。本能力将变化检测改为"改写后 XML + 节点配置整体 SHA-256 hash"比较，配置任一变化即可部署，真正无变化才拦截。
-
+TBD - created by archiving change process-config-and-version. Update Purpose after archive.
 ## Requirements
-
 ### Requirement: 部署配置 hash 计算
 
 系统 SHALL 在部署时计算配置 hash：`SHA-256(effectiveBpmnXml + "|" + canonicalJson(nodeConfigMap))`。
@@ -62,3 +59,4 @@ WHEN 一条已部署过的历史记录（`deployed_config_hash` 为 null）仅�
 AND 修改后的 `effectiveBpmnXml` 与 `deployedXml` 不同
 THEN 部署 SHALL 成功
 AND 部署后 `deployed_config_hash` 被写入
+

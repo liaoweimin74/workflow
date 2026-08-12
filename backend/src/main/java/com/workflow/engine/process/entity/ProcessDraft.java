@@ -37,6 +37,10 @@ public class ProcessDraft {
     @Column(name = "deployed_xml", columnDefinition = "LONGTEXT")
     private String deployedXml;
 
+    /** 上次部署时的配置 hash（XML + nodeConfig 整体指纹），用于部署变化检测 */
+    @Column(name = "deployed_config_hash", length = 64)
+    private String deployedConfigHash;
+
     @Column(name = "status", length = 32, nullable = false)
     private String status = "DRAFT";
 
@@ -92,6 +96,9 @@ public class ProcessDraft {
 
     public String getDeployedXml() { return deployedXml; }
     public void setDeployedXml(String deployedXml) { this.deployedXml = deployedXml; }
+
+    public String getDeployedConfigHash() { return deployedConfigHash; }
+    public void setDeployedConfigHash(String deployedConfigHash) { this.deployedConfigHash = deployedConfigHash; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

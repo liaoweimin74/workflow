@@ -9,6 +9,7 @@ import com.workflow.engine.process.entity.ProcessDraft;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.process.repository.ProcessDraftRepository;
 import com.workflow.engine.tenant.TenantProvider;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
@@ -21,11 +22,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -54,17 +58,20 @@ public class ProcessDesignService {
     private final RepositoryService repositoryService;
     private final TenantProvider tenantProvider;
     private final MultiInstanceBpmnRewriter multiInstanceBpmnRewriter;
+    private final ObjectMapper objectMapper;
 
     public ProcessDesignService(ProcessDraftRepository draftRepository,
                                 NodeConfigRepository nodeConfigRepository,
                                 RepositoryService repositoryService,
                                 TenantProvider tenantProvider,
-                                MultiInstanceBpmnRewriter multiInstanceBpmnRewriter) {
+                                MultiInstanceBpmnRewriter multiInstanceBpmnRewriter,
+                                ObjectMapper objectMapper) {
         this.draftRepository = draftRepository;
         this.nodeConfigRepository = nodeConfigRepository;
         this.repositoryService = repositoryService;
         this.tenantProvider = tenantProvider;
         this.multiInstanceBpmnRewriter = multiInstanceBpmnRewriter;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -205,8 +212,17 @@ public class ProcessDesignService {
         // 注入 StartEvent/EndEvent 默认名称
         effectiveBpmnXml = injectEventNames(effectiveBpmnXml);
 
-        // 与上次部署的 XML 一致则拒绝部署（使用改写后的 XML 比较，因为 NodeConfig 变更也会改变改写结果）
-        if (Objects.equals(trimToNull(draft.getDeployedXml()), trimToNull(effectiveBpmnXml))) {
+        // 与上次部署的内容比较（hash 为主，覆盖 XML + 节点配置含 __PROCESS__）：
+        // 历史数据（deployed_config_hash 为空）降级为旧的 XML 比较行为，部署成功后写入 hash。
+        String currentHash = computeDeployHash(effectiveBpmnXml, nodeConfigMap);
+        String storedHash = draft.getDeployedConfigHash();
+        boolean unchanged;
+        if (storedHash != null && !storedHash.isBlank()) {
+            unchanged = storedHash.equals(currentHash);
+        } else {
+            unchanged = Objects.equals(trimToNull(draft.getDeployedXml()), trimToNull(effectiveBpmnXml));
+        }
+        if (unchanged) {
             throw new BusinessException(400, "流程数据未变化，无需部署");
         }
 
@@ -236,6 +252,7 @@ public class ProcessDesignService {
         draft.setDeployId(deployment.getId());
         draft.setLastDeployedAt(LocalDateTime.now());
         draft.setDeployedXml(effectiveBpmnXml);
+        draft.setDeployedConfigHash(currentHash);
         if (procDef != null) {
             draft.setProcessDefinitionId(procDef.getId());
             draft.setVersion(procDef.getVersion());
@@ -272,6 +289,27 @@ public class ProcessDesignService {
             return nc;
         }).collect(Collectors.toList());
         nodeConfigRepository.saveAll(snapshots);
+    }
+
+    /**
+     * 计算部署配置 hash：改写后 XML + 节点配置（含 __PROCESS__）整体指纹。
+     * nodeConfigMap 按键排序后规范化序列化，保证相同内容 hash 一致。
+     *
+     * @param effectiveBpmnXml 改写后的 BPMN XML
+     * @param nodeConfigMap    节点配置（nodeId → configJson，含 __PROCESS__ 键）
+     * @return SHA-256 十六进制字符串（64 位）
+     */
+    private String computeDeployHash(String effectiveBpmnXml, Map<String, String> nodeConfigMap) {
+        try {
+            TreeMap<String, String> sorted = new TreeMap<>(nodeConfigMap);
+            String canonicalJson = objectMapper.writeValueAsString(sorted);
+            String input = trimToNull(effectiveBpmnXml) + "|" + canonicalJson;
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to compute deploy hash", e);
+        }
     }
 
     /**

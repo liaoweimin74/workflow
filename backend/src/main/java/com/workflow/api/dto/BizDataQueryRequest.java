@@ -1,14 +1,12 @@
 package com.workflow.api.dto;
 
-import java.util.Map;
-
 /**
  * 业务数据查询请求。
  */
 public class BizDataQueryRequest {
 
-    /** 字段筛选（column → value，仅接受 column_config 中的字段） */
-    private Map<String, Object> filter;
+    /** 字段筛选（JSON 字符串：{"column":"value"}，仅接受 column_config 中的字段） */
+    private String filter;
 
     /** 关键词（对 keywordColumn 做 LIKE） */
     private String keyword;
@@ -28,8 +26,8 @@ public class BizDataQueryRequest {
     /** 每页大小 */
     private int size = 20;
 
-    public Map<String, Object> getFilter() { return filter; }
-    public void setFilter(Map<String, Object> filter) { this.filter = filter; }
+    public String getFilter() { return filter; }
+    public void setFilter(String filter) { this.filter = filter; }
 
     public String getKeyword() { return keyword; }
     public void setKeyword(String keyword) { this.keyword = keyword; }

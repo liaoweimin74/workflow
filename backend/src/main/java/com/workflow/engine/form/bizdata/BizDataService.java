@@ -71,7 +71,7 @@ public class BizDataService {
         String tenantId = tenantProvider.getTenantId();
         BizDataContext ctx = loadContext(formKey);
 
-        Map<String, Object> filters = req.getFilter() == null ? Map.of() : req.getFilter();
+        Map<String, Object> filters = parseFilter(req.getFilter());
         int page = Math.max(req.getPage(), 0);
         int size = Math.min(Math.max(req.getSize(), 1), 100);
 
@@ -91,6 +91,22 @@ public class BizDataService {
             return new BizDataPageVO(records, total == null ? 0 : total, page, size);
         } catch (IllegalArgumentException e) {
             throw new BusinessException(400, e.getMessage());
+        }
+    }
+
+    /**
+     * 解析 filter JSON 字符串为筛选 Map。空/空白返回空 Map，非法 JSON 抛 400。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseFilter(String filterJson) {
+        if (filterJson == null || filterJson.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> map = objectMapper.readValue(filterJson, Map.class);
+            return map == null ? Map.of() : map;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new BusinessException(400, "筛选参数 filter 格式非法，应为 JSON 对象: " + e.getOriginalMessage());
         }
     }
 

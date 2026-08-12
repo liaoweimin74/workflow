@@ -131,7 +131,7 @@ public final class BizDataQueryBuilder {
             params.add(e.getValue());
             first = false;
         }
-        sql.append(", updated_at = NOW() WHERE id = ? AND tenant_id = ? AND version = ?");
+        sql.append(", version = version + 1, updated_at = NOW() WHERE id = ? AND tenant_id = ? AND version = ?");
         params.add(id);
         params.add(tenantId);
         params.add(version);

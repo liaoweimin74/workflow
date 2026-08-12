@@ -92,6 +92,7 @@ class BizDataQueryBuilderTest {
         BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildUpdate(
                 "wf_biz_biz_leave", COLUMNS, data, "t1", "row-1", 3);
 
+        assertThat(sp.sql()).contains("version = version + 1");
         assertThat(sp.sql()).contains("WHERE id = ? AND tenant_id = ? AND version = ?");
         assertThat(sp.params()).contains("row-1", "t1", 3);
     }

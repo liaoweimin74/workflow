@@ -42,7 +42,12 @@ export interface BizDataQueryParams {
 
 export const bizDataApi = {
   list(formKey: string, params: BizDataQueryParams): Promise<R<BizDataPageResult>> {
-    return http.get(`/v1/biz-data/${formKey}`, { params })
+    const query: Record<string, unknown> = { ...params }
+    // filter 对象序列化为 JSON 字符串（后端 BizDataQueryRequest.filter 为 String）
+    if (query.filter && typeof query.filter === 'object') {
+      query.filter = JSON.stringify(query.filter)
+    }
+    return http.get(`/v1/biz-data/${formKey}`, { params: query })
   },
 
   detail(formKey: string, id: string): Promise<R<BizDataVO>> {

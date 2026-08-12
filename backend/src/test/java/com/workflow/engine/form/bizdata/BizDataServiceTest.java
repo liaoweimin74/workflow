@@ -157,11 +157,22 @@ class BizDataServiceTest {
                         "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
 
         BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("{\"dept\":\"研发部\"}");
         BizDataPageVO page = bizDataService.query("biz_leave", req);
 
         assertThat(page.getTotal()).isEqualTo(1);
         assertThat(page.getRecords()).hasSize(1);
         assertThat(page.getRecords().get(0).getData()).containsEntry("name", "张三");
+    }
+
+    @Test
+    void query_invalidFilterJson_returns400() {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setFilter("not-json");
+
+        assertThatThrownBy(() -> bizDataService.query("biz_leave", req))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400));
     }
 
     @Test

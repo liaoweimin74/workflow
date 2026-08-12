@@ -1,5 +1,10 @@
 package com.workflow.engine.form;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.engine.form.column.ColumnConfig;
+import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -9,9 +14,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -29,11 +36,21 @@ public class FormDefinitionService {
 
     private final FormDefinitionRepository formDefRepository;
     private final TenantProvider tenantProvider;
+    private final DynamicTableManager tableManager;
+    private final ObjectMapper objectMapper;
+
+    /** 不支持映射为业务表单列的组件（子表/嵌套表单等） */
+    private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
+            "subTable", "SubTable", "nestedForm", "NestedForm", "dataTable");
 
     public FormDefinitionService(FormDefinitionRepository formDefRepository,
-                                 TenantProvider tenantProvider) {
+                                 TenantProvider tenantProvider,
+                                 DynamicTableManager tableManager,
+                                 ObjectMapper objectMapper) {
         this.formDefRepository = formDefRepository;
         this.tenantProvider = tenantProvider;
+        this.tableManager = tableManager;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -196,15 +213,17 @@ public class FormDefinitionService {
      * 发布表单定义（草稿直接发布，不创建新记录）。
      * 将当前 DRAFT 记录状态改为 PUBLISHED，旧 PUBLISHED 降为 ARCHIVED。
      * 发布前校验 schema 是否与上次发布相同，相同则拒绝发布。
+     * type=BUSINESS 时，发布前校验 schema 不含子表/嵌套组件，并基于 column_config 触发受控 DDL 建表/变更。
      *
      * @param id 表单定义 ID（DRAFT 版本）
      * @return 发布后的表单定义（同一条记录，状态改为 PUBLISHED）
-     * @throws BusinessException 如果 schema 与上一已发布版本相同
+     * @throws BusinessException 如果 schema 与上一已发布版本相同；业务表单含子表组件或 column_config 非法
      */
     @Transactional
     public FormDefinition publish(String id) {
         String tenantId = tenantProvider.getTenantId();
-        FormDefinition draft = formDefRepository.findByIdAndTenantId(id, tenantId)
+        // 悲观锁读取，串行化发布（防并发 DDL 竞态）
+        FormDefinition draft = formDefRepository.findByIdForUpdate(id, tenantId)
                 .orElseThrow(() -> new RuntimeException("Form definition not found: " + id));
 
         if (!"DRAFT".equals(draft.getStatus())) {
@@ -218,6 +237,13 @@ public class FormDefinitionService {
             throw new BusinessException(400, "表单内容未变化，无需发布");
         }
 
+        // 业务表单：校验 schema 并同步物理表结构（DDL 隐式提交，先于版本记录保存）
+        if ("BUSINESS".equals(draft.getType())) {
+            validateBusinessSchema(draft.getSchema());
+            List<ColumnConfig> columns = parseColumnConfig(draft.getColumnConfig());
+            tableManager.ensureTable(draft.getKey(), columns);
+        }
+
         // 旧 PUBLISHED 降为 ARCHIVED
         lastPublished.ifPresent(old -> {
             old.setStatus("ARCHIVED");
@@ -228,6 +254,65 @@ public class FormDefinitionService {
         draft.setStatus("PUBLISHED");
         draft.setPublishedVersion(draft.getVersion());
         return formDefRepository.save(draft);
+    }
+
+    /**
+     * 校验业务表单 schema 不含子表/嵌套表单等不支持组件。
+     * schema 格式兼容：{rule: [...]} 与纯数组两种。
+     */
+    private void validateBusinessSchema(String schema) throws BusinessException {
+        try {
+            JsonNode root = objectMapper.readTree(schema == null ? "[]" : schema);
+            JsonNode rule = root.isArray() ? root : root.path("rule");
+            if (!rule.isArray()) {
+                throw new BusinessException(400, "表单 schema 格式非法");
+            }
+            for (JsonNode field : rule) {
+                String type = field.path("type").asText();
+                if (UNSUPPORTED_COMPONENTS.contains(type)) {
+                    throw new BusinessException(400, "业务表单暂不支持子表/嵌套表单组件（" + type + "），请移除后发布");
+                }
+            }
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(400, "表单 schema 解析失败");
+        }
+    }
+
+    /**
+     * 解析 column_config JSON 为列映射列表。
+     */
+    private List<ColumnConfig> parseColumnConfig(String columnConfig) throws BusinessException {
+        if (columnConfig == null || columnConfig.isBlank()) {
+            throw new BusinessException(400, "业务表单发布前必须配置列映射（column_config）");
+        }
+        try {
+            List<ColumnConfig> columns = objectMapper.readValue(columnConfig,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, ColumnConfig.class));
+            if (columns == null || columns.isEmpty()) {
+                throw new BusinessException(400, "业务表单列映射不能为空");
+            }
+            // 触发 DdlBuilder 校验（列名/类型/长度），提前暴露非法配置
+            for (ColumnConfig c : columns) {
+                validateColumnConfig(c);
+            }
+            return new ArrayList<>(columns);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(400, "业务表单列映射配置非法: " + e.getOriginalMessage());
+        }
+    }
+
+    private void validateColumnConfig(ColumnConfig c) {
+        if (c.getKey() == null || !c.getKey().matches("^[a-zA-Z][a-zA-Z0-9_]{0,63}$")) {
+            throw new BusinessException(400, "非法列名: " + c.getKey());
+        }
+        Set<String> reserved = Set.of("id", "tenant_id", "version", "created_by", "created_at", "updated_at");
+        if (reserved.contains(c.getKey())) {
+            throw new BusinessException(400, "列名 " + c.getKey() + " 为系统保留列");
+        }
+        if (c.getColumnType() == null || !Set.of("VARCHAR", "TEXT", "INT", "DECIMAL", "DATE", "DATETIME", "TINYINT", "JSON")
+                .contains(c.getColumnType())) {
+            throw new BusinessException(400, "非法列类型: " + c.getColumnType());
+        }
     }
 
     /**

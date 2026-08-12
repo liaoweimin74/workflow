@@ -1,6 +1,7 @@
 package com.workflow.engine.form;
 
 import com.workflow.engine.form.entity.FormDefinition;
+import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
@@ -37,6 +38,9 @@ class FormDefinitionServiceTest {
 
     @Mock
     private TenantProvider tenantProvider;
+
+    @Mock
+    private DynamicTableManager tableManager;
 
     @InjectMocks
     private FormDefinitionService formDefService;
@@ -211,7 +215,7 @@ class FormDefinitionServiceTest {
         oldPublished.setVersion(1);
         oldPublished.setStatus("PUBLISHED");
 
-        when(formDefRepository.findByIdAndTenantId("form-draft", TENANT_ID))
+        when(formDefRepository.findByIdForUpdate("form-draft", TENANT_ID))
             .thenReturn(Optional.of(draft));
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "leave-form", "PUBLISHED"))
@@ -251,7 +255,7 @@ class FormDefinitionServiceTest {
         oldPublished.setVersion(1);
         oldPublished.setStatus("PUBLISHED");
 
-        when(formDefRepository.findByIdAndTenantId("form-draft", TENANT_ID))
+        when(formDefRepository.findByIdForUpdate("form-draft", TENANT_ID))
             .thenReturn(Optional.of(draft));
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "leave-form", "PUBLISHED"))
@@ -273,7 +277,7 @@ class FormDefinitionServiceTest {
         draft.setVersion(1);
         draft.setStatus("DRAFT");
 
-        when(formDefRepository.findByIdAndTenantId("form-draft", TENANT_ID))
+        when(formDefRepository.findByIdForUpdate("form-draft", TENANT_ID))
             .thenReturn(Optional.of(draft));
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "leave-form", "PUBLISHED"))

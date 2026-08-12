@@ -19,6 +19,9 @@ flowable:
   database-schema-update: true
   async-executor-activate: false
 
+# DevTools 热部署配置
+spring.devtools.restart.enabled: true
+
 spring.modulith:
   detection-strategy: explicitly-annotated
 

@@ -135,6 +135,14 @@
             <artifactId>groovy</artifactId>
         </dependency>
 
+        <!-- DevTools: 开发热部署（classpath 变化自动重启；打包可执行 jar 时自动排除） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

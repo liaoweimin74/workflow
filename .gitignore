@@ -17,6 +17,9 @@ target/
 # Logs
 *.log
 
+# Superpowers subagent-driven-development progress (local tool state)
+.superpowers/
+
 # <!-- openspec-superpowers-opencode_gitignore -->
 
 # Worktree isolation

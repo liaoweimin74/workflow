@@ -9,6 +9,8 @@ import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.engine.HistoryService;
+import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Page;
@@ -16,6 +18,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -201,6 +204,35 @@ class ProcessInstanceServiceFilterTest {
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).getId()).isEqualTo("inst-001");
+    }
+
+    // ==================== getHistoricProcessInstance 历史回退 ====================
+
+    @Test
+    void getHistoricProcessInstance_filtersByTenantAndReturnsInstance() {
+        HistoricProcessInstanceQuery query = mock(HistoricProcessInstanceQuery.class);
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(query);
+        when(query.processInstanceId("inst-ended")).thenReturn(query);
+        when(query.processInstanceTenantId("test-tenant")).thenReturn(query);
+        HistoricProcessInstance hist = mock(HistoricProcessInstance.class);
+        when(query.singleResult()).thenReturn(hist);
+
+        Optional<HistoricProcessInstance> result = service.getHistoricProcessInstance("inst-ended");
+
+        assertThat(result).isPresent();
+        verify(query).processInstanceId(eq("inst-ended"));
+        verify(query).processInstanceTenantId(eq("test-tenant"));
+    }
+
+    @Test
+    void getHistoricProcessInstance_notFound_returnsEmpty() {
+        HistoricProcessInstanceQuery query = mock(HistoricProcessInstanceQuery.class);
+        when(historyService.createHistoricProcessInstanceQuery()).thenReturn(query);
+        when(query.processInstanceId(anyString())).thenReturn(query);
+        when(query.processInstanceTenantId(anyString())).thenReturn(query);
+        when(query.singleResult()).thenReturn(null);
+
+        assertThat(service.getHistoricProcessInstance("nope")).isEmpty();
     }
 
     // ==================== 向后兼容：无参数重载 ====================

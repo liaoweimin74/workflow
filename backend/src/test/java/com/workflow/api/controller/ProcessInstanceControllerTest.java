@@ -11,6 +11,7 @@ import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.engine.runtime.ProcessTaskPredictionService;
 import com.workflow.framework.security.domain.LoginUser;
 import org.flowable.engine.TaskService;
+import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,9 +23,11 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -183,6 +186,63 @@ class ProcessInstanceControllerTest {
                 eq("testProcess"),
                 eq("BK-001"),
                 argThat(vars -> "15".equals(vars.get("initiator"))));
+    }
+
+    // ==================== get() 流程跟踪接口 ====================
+
+    @Test
+    void get_runningInstance_returnsRuntimeMap() {
+        ProcessInstance inst = mockProcessInstance();
+        when(processInstanceService.getProcessInstance("inst-001"))
+                .thenReturn(Optional.of(inst));
+
+        R<Map<String, Object>> result = controller.get("inst-001");
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData().get("id")).isEqualTo("inst-001");
+        verify(processInstanceService, never()).getHistoricProcessInstance(anyString());
+    }
+
+    @Test
+    void get_endedInstance_fallsBackToHistoricMap() {
+        // Given: runtime 查不到（已结束实例），历史表有记录
+        HistoricProcessInstance hist = mock(HistoricProcessInstance.class);
+        when(hist.getId()).thenReturn("inst-ended");
+        when(hist.getProcessDefinitionId()).thenReturn("pd-001");
+        when(hist.getProcessDefinitionKey()).thenReturn("testProcess");
+        when(hist.getProcessDefinitionName()).thenReturn("测试流程");
+        when(hist.getBusinessKey()).thenReturn(null);
+        when(hist.getTenantId()).thenReturn("default");
+        when(hist.getStartTime()).thenReturn(new Date());
+        when(hist.getEndTime()).thenReturn(new Date());
+        when(hist.getName()).thenReturn(null);
+
+        when(processInstanceService.getProcessInstance("inst-ended"))
+                .thenReturn(Optional.empty());
+        when(processInstanceService.getHistoricProcessInstance("inst-ended"))
+                .thenReturn(Optional.of(hist));
+
+        // When
+        R<Map<String, Object>> result = controller.get("inst-ended");
+
+        // Then: 返回历史数据，status=completed
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData().get("id")).isEqualTo("inst-ended");
+        assertThat(result.getData().get("processDefinitionName")).isEqualTo("测试流程");
+        assertThat(result.getData().get("status")).isEqualTo("completed");
+        assertThat(result.getData().get("ended")).isEqualTo(true);
+    }
+
+    @Test
+    void get_notFoundInRuntimeAndHistory_returns404() {
+        when(processInstanceService.getProcessInstance("nope"))
+                .thenReturn(Optional.empty());
+        when(processInstanceService.getHistoricProcessInstance("nope"))
+                .thenReturn(Optional.empty());
+
+        R<Map<String, Object>> result = controller.get("nope");
+
+        assertThat(result.getCode()).isEqualTo(404);
     }
 
     // ==================== prediction() 执行预测测试 ====================

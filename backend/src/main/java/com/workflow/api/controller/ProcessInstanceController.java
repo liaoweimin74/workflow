@@ -23,6 +23,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/process-instances")
@@ -109,9 +110,11 @@ public class ProcessInstanceController {
 
     @GetMapping("/{id}")
     public R<Map<String, Object>> get(@PathVariable String id) {
-        return processInstanceService.getProcessInstance(id)
-                .map(instance -> R.ok(toMap(instance)))
-                .orElse(R.fail(404, "Process instance not found"));
+        // 优先查 runtime 表；已结束实例不在 runtime 表，回退查历史表（ACT_HI_PROCINST）
+        Optional<Map<String, Object>> data = processInstanceService.getProcessInstance(id)
+                .map(this::toMap)
+                .or(() -> processInstanceService.getHistoricProcessInstance(id).map(this::toHistoricMap));
+        return data.map(R::ok).orElse(R.fail(404, "Process instance not found"));
     }
 
     @PostMapping("/{id}/suspend")

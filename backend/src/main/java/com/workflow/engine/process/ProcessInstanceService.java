@@ -163,6 +163,21 @@ public class ProcessInstanceService {
         return Optional.ofNullable(instance);
     }
 
+    /**
+     * 按 ID 查询历史流程实例（包含已结束的），用于流程跟踪接口的回退查询。
+     *
+     * <p>已结束实例只存在于历史表（ACT_HI_PROCINST），runtime 表（ACT_RU_EXECUTION）
+     * 中已无记录，直接查 runtime 会得到 404。
+     */
+    public Optional<HistoricProcessInstance> getHistoricProcessInstance(String instanceId) {
+        String tenantId = tenantProvider.getTenantId();
+        HistoricProcessInstance instance = historyService.createHistoricProcessInstanceQuery()
+                .processInstanceId(instanceId)
+                .processInstanceTenantId(tenantId)
+                .singleResult();
+        return Optional.ofNullable(instance);
+    }
+
     @Transactional
     public void suspendProcessInstance(String instanceId) {
         runtimeService.suspendProcessInstanceById(instanceId);

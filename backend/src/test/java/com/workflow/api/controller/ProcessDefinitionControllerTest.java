@@ -1,7 +1,9 @@
 package com.workflow.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.EditorDTO;
 import com.workflow.api.dto.PageResponse;
+import com.workflow.api.dto.ProcessVersionVO;
 import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessService;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
@@ -9,6 +11,8 @@ import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.process.repository.ProcessDraftRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RepositoryService;
+import org.flowable.engine.repository.Deployment;
+import org.flowable.engine.repository.DeploymentQuery;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.repository.ProcessDefinitionQuery;
 import org.junit.jupiter.api.Test;
@@ -16,8 +20,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,7 +50,13 @@ class ProcessDefinitionControllerTest {
 
     private ProcessDefinitionController createController(ProcessService mockService) {
         return new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo,
-                mockInitiatorResolver, objectMapper);
+                mockInitiatorResolver, objectMapper, mock(RepositoryService.class), mock(TenantProvider.class));
+    }
+
+    private ProcessDefinitionController createControllerWith(RepositoryService repo, TenantProvider tenant,
+                                                             ProcessService mockService) {
+        return new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo,
+                mockInitiatorResolver, objectMapper, repo, tenant);
     }
 
     @Test
@@ -50,7 +64,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
+        ProcessDefinitionController controller = createController(mockService);
 
         R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, "leave", null);
 
@@ -64,7 +78,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
+        ProcessDefinitionController controller = createController(mockService);
 
         R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, "active");
 
@@ -78,7 +92,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
+        ProcessDefinitionController controller = createController(mockService);
 
         controller.list(0, 20, null, null, "suspended");
 
@@ -91,7 +105,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
+        ProcessDefinitionController controller = createController(mockService);
 
         controller.list(0, 20, "cat-1", "leave", "active");
 
@@ -104,7 +118,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
+        ProcessDefinitionController controller = createController(mockService);
 
         R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
 
@@ -123,7 +137,7 @@ class ProcessDefinitionControllerTest {
         ProcessService mockService = mock(ProcessService.class);
         when(mockService.listProcessDefinitions(any(), any(), any(), any()))
                 .thenReturn(servicePage);
-        ProcessDefinitionController controller = new ProcessDefinitionController(mockService, mockDraftRepo, mockNodeConfigRepo, mockInitiatorResolver, objectMapper);
+        ProcessDefinitionController controller = createController(mockService);
 
         R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
 
@@ -330,5 +344,160 @@ class ProcessDefinitionControllerTest {
         Map<String, Object> data = result.getData();
         assertThat(data.get("formDefId")).isNull();
         assertThat(data.get("fieldPermissions")).isNull();
+    }
+
+    // ==================== 历史版本列表接口 ====================
+
+    private ProcessDefinition buildVersionedPd(String id, String deploymentId, String key, String name,
+                                               int version, Date deploymentTime) {
+        ProcessDefinition pd = mock(ProcessDefinition.class);
+        when(pd.getId()).thenReturn(id);
+        when(pd.getKey()).thenReturn(key);
+        when(pd.getName()).thenReturn(name);
+        when(pd.getVersion()).thenReturn(version);
+        when(pd.getDeploymentId()).thenReturn(deploymentId);
+        return pd;
+    }
+
+    /**
+     * 构建返回指定 ProcessDefinition 列表的版本查询 mock 链，
+     * 并模拟 deploymentId → 部署时间的反查。
+     */
+    private ProcessDefinitionQuery buildVersionQuery(RepositoryService repo, TenantProvider tenant,
+                                                     List<ProcessDefinition> defs,
+                                                     Map<String, Date> deployTimes) {
+        when(tenant.getTenantId()).thenReturn("test-tenant");
+        ProcessDefinitionQuery query = mock(ProcessDefinitionQuery.class);
+        when(repo.createProcessDefinitionQuery()).thenReturn(query);
+        when(query.processDefinitionKey(anyString())).thenReturn(query);
+        when(query.processDefinitionTenantId(anyString())).thenReturn(query);
+        when(query.orderByProcessDefinitionVersion()).thenReturn(query);
+        when(query.desc()).thenReturn(query);
+        when(query.list()).thenReturn(defs);
+
+        AtomicReference<String> lastDeploymentId = new AtomicReference<>();
+        DeploymentQuery deploymentQuery = mock(DeploymentQuery.class);
+        when(repo.createDeploymentQuery()).thenReturn(deploymentQuery);
+        when(deploymentQuery.deploymentId(anyString())).thenAnswer(inv -> {
+            lastDeploymentId.set(inv.getArgument(0));
+            return deploymentQuery;
+        });
+        when(deploymentQuery.singleResult()).thenAnswer(inv -> {
+            Deployment deployment = mock(Deployment.class);
+            when(deployment.getDeploymentTime()).thenReturn(deployTimes.get(lastDeploymentId.get()));
+            return deployment;
+        });
+        return query;
+    }
+
+    @Test
+    void listVersions_返回全部版本并按版本号倒序() {
+        // Given: v1/v2/v3 三个已部署版本
+        RepositoryService repo = mock(RepositoryService.class);
+        TenantProvider tenant = mock(TenantProvider.class);
+        Date t1 = new Date(1000L);
+        Date t2 = new Date(2000L);
+        Date t3 = new Date(3000L);
+        ProcessDefinitionQuery query = buildVersionQuery(repo, tenant, List.of(
+                buildVersionedPd("v3-id", "deploy-3", "leave", "请假流程", 3, t3),
+                buildVersionedPd("v2-id", "deploy-2", "leave", "请假流程", 2, t2),
+                buildVersionedPd("v1-id", "deploy-1", "leave", "请假流程", 1, t1)
+        ), Map.of("deploy-3", t3, "deploy-2", t2, "deploy-1", t1));
+
+        // When
+        R<List<ProcessVersionVO>> result = createControllerWith(repo, tenant, mock(ProcessService.class))
+                .listVersions("leave");
+
+        // Then: 3 条记录、倒序、租户过滤、latest 标记正确
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData()).hasSize(3);
+        verify(query).processDefinitionTenantId(eq("test-tenant"));
+        assertThat(result.getData()).extracting(ProcessVersionVO::getVersion)
+                .containsExactly(3, 2, 1);
+        assertThat(result.getData()).extracting(ProcessVersionVO::getProcDefId)
+                .containsExactly("v3-id", "v2-id", "v1-id");
+        assertThat(result.getData()).extracting(ProcessVersionVO::getDeploymentTime)
+                .containsExactly(t3, t2, t1);
+        assertThat(result.getData().get(0).isLatest()).isTrue();
+        assertThat(result.getData().get(1).isLatest()).isFalse();
+        assertThat(result.getData().get(2).isLatest()).isFalse();
+    }
+
+    @Test
+    void listVersions_流程不存在返回空数组() {
+        // Given: 查询无结果
+        RepositoryService repo = mock(RepositoryService.class);
+        TenantProvider tenant = mock(TenantProvider.class);
+        ProcessDefinitionQuery query = buildVersionQuery(repo, tenant, List.of(), Map.of());
+
+        // When
+        R<List<ProcessVersionVO>> result = createControllerWith(repo, tenant, mock(ProcessService.class))
+                .listVersions("not-exist");
+
+        // Then: 200 + 空数组
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData()).isEmpty();
+    }
+
+    // ==================== 版本 editor 接口 ====================
+
+    @Test
+    void getVersionEditor_返回该版本XML与配置快照() {
+        // Given: 版本 xyz1 有 XML 与该部署版本快照配置（含 __PROCESS__）
+        RepositoryService repo = mock(RepositoryService.class);
+        TenantProvider tenant = mock(TenantProvider.class);
+        String v1Xml = "<bpmn:definitions>v1-xml</bpmn:definitions>";
+        when(repo.getProcessModel(eq("xyz1")))
+                .thenReturn(new ByteArrayInputStream(v1Xml.getBytes(StandardCharsets.UTF_8)));
+        when(mockNodeConfigRepo.findByProcessDefinitionId(eq("xyz1"))).thenReturn(List.of(
+                nodeConfig("__PROCESS__", "{\"ops\":{\"allowTransfer\":true}}"),
+                nodeConfig("nodeA", "{\"form\":{\"formDefId\":\"f1\"}}")
+        ));
+
+        // When
+        R<EditorDTO> result = createControllerWith(repo, tenant, mock(ProcessService.class))
+                .getVersionEditor("xyz1");
+
+        // Then: bpmnXml + nodeConfigs（含 __PROCESS__ 快照）+ status=DEPLOYED
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData().getBpmnXml()).isEqualTo(v1Xml);
+        assertThat(result.getData().getNodeConfigs())
+                .containsEntry("__PROCESS__", "{\"ops\":{\"allowTransfer\":true}}")
+                .containsEntry("nodeA", "{\"form\":{\"formDefId\":\"f1\"}}");
+        assertThat(result.getData().getStatus()).isEqualTo("DEPLOYED");
+        verify(repo).getProcessModel(eq("xyz1"));
+        verify(mockNodeConfigRepo).findByProcessDefinitionId(eq("xyz1"));
+    }
+
+    @Test
+    void getVersionEditor_XML读取失败返回404() {
+        // Given: getProcessModel 抛异常
+        RepositoryService repo = mock(RepositoryService.class);
+        TenantProvider tenant = mock(TenantProvider.class);
+        when(repo.getProcessModel(eq("xyz1"))).thenThrow(new RuntimeException("resource missing"));
+
+        // When
+        R<EditorDTO> result = createControllerWith(repo, tenant, mock(ProcessService.class))
+                .getVersionEditor("xyz1");
+
+        // Then: 404 + 友好提示（不得抛 500）
+        assertThat(result.getCode()).isEqualTo(404);
+        assertThat(result.getMsg()).isEqualTo("历史版本数据读取失败");
+    }
+
+    @Test
+    void getVersionEditor_XML为null返回404() {
+        // Given: getProcessModel 返回 null
+        RepositoryService repo = mock(RepositoryService.class);
+        TenantProvider tenant = mock(TenantProvider.class);
+        when(repo.getProcessModel(eq("xyz1"))).thenReturn(null);
+
+        // When
+        R<EditorDTO> result = createControllerWith(repo, tenant, mock(ProcessService.class))
+                .getVersionEditor("xyz1");
+
+        // Then: 404 + 友好提示
+        assertThat(result.getCode()).isEqualTo(404);
+        assertThat(result.getMsg()).isEqualTo("历史版本数据读取失败");
     }
 }

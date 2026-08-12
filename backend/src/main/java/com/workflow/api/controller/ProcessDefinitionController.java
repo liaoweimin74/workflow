@@ -1,8 +1,10 @@
 package com.workflow.api.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.EditorDTO;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.api.dto.ProcessDefinitionSummary;
+import com.workflow.api.dto.ProcessVersionVO;
 import com.workflow.common.domain.R;
 import com.workflow.engine.process.ProcessService;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
@@ -10,36 +12,56 @@ import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.entity.ProcessDraft;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.process.repository.ProcessDraftRepository;
+import com.workflow.engine.tenant.TenantProvider;
+import org.flowable.engine.RepositoryService;
+import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/deployed-processes")
 public class ProcessDefinitionController {
+
+    private static final Logger log = LoggerFactory.getLogger(ProcessDefinitionController.class);
 
     private final ProcessService processService;
     private final ProcessDraftRepository processDraftRepository;
     private final NodeConfigRepository nodeConfigRepository;
     private final InitiatorNodeResolver initiatorNodeResolver;
     private final ObjectMapper objectMapper;
+    private final RepositoryService repositoryService;
+    private final TenantProvider tenantProvider;
 
     public ProcessDefinitionController(ProcessService processService,
                                        ProcessDraftRepository processDraftRepository,
                                        NodeConfigRepository nodeConfigRepository,
                                        InitiatorNodeResolver initiatorNodeResolver,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       RepositoryService repositoryService,
+                                       TenantProvider tenantProvider) {
         this.processService = processService;
         this.processDraftRepository = processDraftRepository;
         this.nodeConfigRepository = nodeConfigRepository;
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.objectMapper = objectMapper;
+        this.repositoryService = repositoryService;
+        this.tenantProvider = tenantProvider;
     }
 
     @GetMapping
@@ -182,6 +204,99 @@ public class ProcessDefinitionController {
     public R<String> getXml(@PathVariable String id) {
         String xml = processService.getProcessDefinitionXml(id);
         return R.ok(xml);
+    }
+
+    /**
+     * 流程历史版本列表：按 key 返回该租户下的全部已部署版本，按版本号倒序。
+     * 路径使用多段 {@code /key/{key}/versions}，避免与单段 {@code /{id}} 路由冲突。
+     */
+    @GetMapping("/key/{key}/versions")
+    public R<List<ProcessVersionVO>> listVersions(@PathVariable String key) {
+        String tenantId = tenantProvider.getTenantId();
+        List<ProcessDefinition> defs = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionKey(key)
+                .processDefinitionTenantId(tenantId)
+                .orderByProcessDefinitionVersion().desc()
+                .list();
+
+        List<ProcessVersionVO> result = new ArrayList<>(defs.size());
+        for (ProcessDefinition pd : defs) {
+            ProcessVersionVO vo = new ProcessVersionVO();
+            vo.setProcDefId(pd.getId());
+            vo.setVersion(pd.getVersion());
+            vo.setName(pd.getName());
+            vo.setDeploymentTime(resolveDeploymentTime(pd.getDeploymentId()));
+            result.add(vo);
+        }
+
+        // latest 标记：最高版本号对应的版本为最新
+        int maxVersion = defs.stream()
+                .mapToInt(ProcessDefinition::getVersion)
+                .max()
+                .orElse(-1);
+        result.forEach(v -> v.setLatest(v.getVersion() == maxVersion));
+        return R.ok(result);
+    }
+
+    /**
+     * 通过 deploymentId 反查部署时间。
+     * Flowable 8 的 ProcessDefinition 不直接暴露部署时间，需走 DeploymentQuery。
+     */
+    private Date resolveDeploymentTime(String deploymentId) {
+        if (deploymentId == null) {
+            return null;
+        }
+        try {
+            Deployment deployment = repositoryService.createDeploymentQuery()
+                    .deploymentId(deploymentId)
+                    .singleResult();
+            return deployment != null ? deployment.getDeploymentTime() : null;
+        } catch (Exception e) {
+            log.warn("查询部署时间失败, deploymentId={}: {}", deploymentId, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 历史版本编辑器数据：该版本部署时的 BPMN XML + 节点配置快照（含 __PROCESS__）。
+     */
+    @GetMapping("/versions/{procDefId}/editor")
+    public R<EditorDTO> getVersionEditor(@PathVariable String procDefId) {
+        try {
+            String xml = readProcessModel(procDefId);
+            if (xml == null) {
+                return R.fail(404, "历史版本数据读取失败");
+            }
+            List<NodeConfig> snapshots = nodeConfigRepository.findByProcessDefinitionId(procDefId);
+            Map<String, String> nodeConfigMap = snapshots.stream()
+                    .collect(Collectors.toMap(NodeConfig::getNodeId, NodeConfig::getConfigJson, (a, b) -> a));
+
+            EditorDTO dto = new EditorDTO();
+            dto.setBpmnXml(xml);
+            dto.setNodeConfigs(nodeConfigMap);
+            dto.setStatus("DEPLOYED");
+            return R.ok(dto);
+        } catch (Exception e) {
+            log.warn("读取历史版本数据失败, procDefId={}: {}", procDefId, e.getMessage());
+            return R.fail(404, "历史版本数据读取失败");
+        }
+    }
+
+    /**
+     * 读取部署版本的 BPMN XML。读取失败或资源不存在时返回 null。
+     */
+    private String readProcessModel(String procDefId) {
+        try (InputStream is = repositoryService.getProcessModel(procDefId)) {
+            if (is == null) {
+                return null;
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                return reader.lines().collect(Collectors.joining("\n"));
+            }
+        } catch (Exception e) {
+            log.warn("读取历史版本 BPMN XML 失败, procDefId={}: {}", procDefId, e.getMessage());
+            return null;
+        }
     }
 
     @PostMapping("/{id}/suspend")

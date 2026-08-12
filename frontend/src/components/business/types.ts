@@ -69,6 +69,8 @@ export interface QueryParams {
 export interface FormConfig<T = any> {
   /** form-create Rule 数组，直接传给 FormRenderer 渲染 */
   rule: Rule[]
+  /** form-create option（布局配置如 labelPosition/labelWidth，来自设计器 schema.option） */
+  option?: Record<string, any>
   /** 新增表单的初始值，handleCreate 时与传入 initialValues 合并 */
   initialValues?: Partial<T>
   createApi?: (data: any) => Promise<any>

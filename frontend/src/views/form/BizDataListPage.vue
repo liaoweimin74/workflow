@@ -39,6 +39,7 @@ const formKey = computed(() => route.params.formKey as string)
 const formName = ref('')
 const columnConfig = ref<ColumnConfigItem[]>([])
 const schemaRules = ref<Rule[]>([])
+const schemaOption = ref<Record<string, any>>({})
 const loaded = ref(false)
 
 /** 业务列（可展示） */
@@ -108,6 +109,7 @@ async function fetchApi(params: any) {
  */
 const formConfig = computed<FormConfig<Record<string, any>>>(() => ({
   rule: schemaRules.value,
+  option: schemaOption.value,
   dialogWidth: '640px',
   dialogTitle: { create: '新增数据', edit: '编辑数据' },
   createPermission: 'form:edit',
@@ -138,6 +140,7 @@ async function loadFormMeta() {
     if (def.schema && def.schema !== '[]') {
       const parsed = JSON.parse(def.schema)
       schemaRules.value = Array.isArray(parsed) ? parsed : (parsed.rule || [])
+      schemaOption.value = !Array.isArray(parsed) && parsed.option ? parsed.option : {}
     }
     loaded.value = true
   } catch {

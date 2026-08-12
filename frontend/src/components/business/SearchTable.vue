@@ -196,6 +196,7 @@
       <FormRenderer
         ref="formRendererRef"
         :rule="formConfig.rule"
+        :option="formConfig.option"
         :initial-values="dialogInitialValues"
       />
       <template #footer>

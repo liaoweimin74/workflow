@@ -21,6 +21,8 @@ const props = defineProps<{
   formDefId?: string
   /** 直接传入 form-create rule 数组，无需 API 调用。用于 CRUD 页面。 */
   rule?: Rule[]
+  /** form-create option（布局配置如 labelPosition/labelWidth，来自设计器 schema.option）。与 rule 搭配使用。 */
+  option?: Record<string, any>
   /** 预填表单数据，变化时自动同步到 formData。 */
   initialValues?: Record<string, unknown>
   processInstanceId?: string
@@ -41,12 +43,29 @@ const formData = ref<Record<string, unknown>>({})
 const existingFormDataId = ref<string | null>(null)
 const formVersion = ref<number | null>(null)
 
-const renderOption = ref({
+/** 渲染选项：始终隐藏提交/重置按钮（提交由调用方控制），form 级配置来自设计器 option（labelPosition 等） */
+const renderOption = ref<Record<string, any>>({
   submitBtn: false,
   resetBtn: false,
+  form: {},
 })
 
+/** 应用设计器 option.form 的布局配置（剔除设计器内部字段） */
+function applyOption(option: Record<string, any> | undefined | null) {
+  if (!option) return
+  const form = { ...(option.form || {}) }
+  delete form.formCreateFormName
+  renderOption.value = {
+    submitBtn: false,
+    resetBtn: false,
+    form,
+  }
+}
+
 onMounted(async () => {
+  if (props.option) {
+    applyOption(props.option)
+  }
   if (props.formDefId) {
     await loadSchema()
   } else if (props.rule) {
@@ -90,6 +109,10 @@ async function loadSchema() {
     const schema = JSON.parse(formDef.schema)
     const rules = Array.isArray(schema) ? schema : (schema.rule || [])
     resolvedSchema.value = rules
+    // 合并设计器 option（labelPosition 等布局配置）
+    if (!Array.isArray(schema) && schema.option) {
+      applyOption(schema.option)
+    }
     formVersion.value = formDef.version
   } catch {
     // http 拦截器已弹出错误消息

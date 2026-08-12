@@ -27,7 +27,6 @@
         业务表单
       </el-tag>
       <div class="toolbar-right">
-        <el-button v-if="formType === 'BUSINESS'" :icon="Link" @click="openPickerConfig">数据引用配置</el-button>
         <el-button type="primary" :icon="Check" @click="handleSave" :loading="saving">保存</el-button>
         <el-button v-if="formStatus === 'DRAFT'" type="success" :icon="Promotion" @click="handlePublish" :loading="publishing">
           发布
@@ -67,10 +66,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, provide, inject, defineComponent, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion, Link } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
+import formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
@@ -82,6 +82,24 @@ const designerRef = ref<any>(null)
 const loading = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
+
+// 属性面板"数据引用配置"按钮组件（form-create 全局注册，点击触发配置弹窗）
+formCreate.component('dataPickerConfigTrigger', defineComponent({
+  name: 'dataPickerConfigTrigger',
+  props: { field: { type: String, default: '' } },
+  setup() {
+    const open = inject<(() => void) | undefined>('openDataPickerConfig', undefined)
+    return () => h('el-button', {
+      type: 'primary',
+      size: 'small',
+      style: 'width: 100%',
+      onClick: () => open?.(),
+    }, () => '数据引用配置')
+  },
+}))
+
+// 提供给属性面板触发组件：打开数据引用配置弹窗
+provide('openDataPickerConfig', openPickerConfig)
 
 const formId = computed(() => route.query.id as string)
 const formName = ref('')
@@ -187,6 +205,10 @@ onMounted(async () => {
         dependOn: undefined,
       },
     }),
+    // 属性设置栏：顶部注入"数据引用配置"按钮（点击弹出配置弹窗）
+    props: () => [
+      { type: 'dataPickerConfigTrigger', field: 'dataPickerConfigTrigger', title: '数据引用配置' },
+    ],
   })
 
   loading.value = true

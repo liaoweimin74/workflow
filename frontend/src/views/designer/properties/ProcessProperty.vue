@@ -2,7 +2,7 @@
   <el-tabs v-model="activeTab" class="process-property-tabs">
     <!-- 流程配置（审批策略 + 流程编号合并） -->
     <el-tab-pane label="流程配置" name="process">
-      <el-form label-width="90px" size="small">
+      <el-form label-width="90px" size="small" :disabled="readOnly">
         <el-divider content-position="left">审批人去重</el-divider>
 
         <el-form-item label="审批人去重">
@@ -71,7 +71,7 @@
 
     <!-- 表单配置（原"默认表单"改名） -->
     <el-tab-pane label="表单配置" name="form">
-      <ProcessFormPropertyTab />
+      <ProcessFormPropertyTab :read-only="readOnly" />
     </el-tab-pane>
   </el-tabs>
 </template>
@@ -80,6 +80,8 @@
 import { reactive, ref, computed, onMounted } from 'vue'
 import { useDesignerStore, DEFAULT_PROCESS_CONFIG, type ProcessConfigData } from '@/stores/designerStore'
 import ProcessFormPropertyTab from './ProcessFormPropertyTab.vue'
+
+defineProps<{ readOnly?: boolean }>()
 
 const designerStore = useDesignerStore()
 

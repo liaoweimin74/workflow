@@ -1,6 +1,6 @@
 <template>
   <div class="process-form-property-tab">
-    <el-form label-width="90px" size="small">
+    <el-form label-width="90px" size="small" :disabled="readOnly">
       <el-form-item label="表单配置">
         <div style="display: flex; gap: 8px; width: 100%;">
           <el-select
@@ -19,7 +19,7 @@
             />
           </el-select>
           <el-button
-            v-if="formConfig.formDefId"
+            v-if="formConfig.formDefId && !readOnly"
             :icon="Edit"
             size="small"
             @click="jumpToFormDesigner"
@@ -46,6 +46,7 @@
                 v-model="formConfig.fieldPermissions[row.field]"
                 size="small"
                 style="width: 100%"
+                :disabled="readOnly"
                 @change="saveConfig"
               >
                 <el-option label="可编辑" value="EDIT" />
@@ -70,6 +71,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { Edit } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
+
+defineProps<{ readOnly?: boolean }>()
 
 const designerStore = useDesignerStore()
 const router = useRouter()

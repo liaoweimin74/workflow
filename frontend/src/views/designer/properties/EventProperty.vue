@@ -1,5 +1,5 @@
 <template>
-  <el-form label-width="80px" size="small">
+  <el-form label-width="80px" size="small" :disabled="readOnly">
     <el-divider content-position="left">基本信息</el-divider>
 
     <el-form-item label="节点ID">
@@ -21,7 +21,7 @@
     </el-form-item>
 
     <!-- 表单配置（开始事件） -->
-    <FormPropertyTab />
+    <FormPropertyTab :read-only="readOnly" />
   </el-form>
 </template>
 
@@ -30,6 +30,8 @@ import { reactive, onMounted, watch, computed } from 'vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import FormPropertyTab from './FormPropertyTab.vue'
+
+defineProps<{ readOnly?: boolean }>()
 
 const designerStore = useDesignerStore()
 

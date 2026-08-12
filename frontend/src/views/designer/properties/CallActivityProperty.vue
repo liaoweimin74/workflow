@@ -1,5 +1,5 @@
 <template>
-  <el-form label-width="90px" size="small">
+  <el-form label-width="90px" size="small" :disabled="readOnly">
     <el-divider content-position="left">基本信息</el-divider>
 
     <el-form-item label="节点ID">
@@ -39,9 +39,9 @@
       <el-input v-model="param.source" placeholder="父流程变量" size="small" style="width: 40%" />
       <el-icon class="param-arrow"><Right /></el-icon>
       <el-input v-model="param.target" placeholder="子流程变量" size="small" style="width: 40%" />
-      <el-button type="danger" :icon="Delete" circle size="small" @click="removeInParam(index)" />
+      <el-button type="danger" :icon="Delete" circle size="small" :disabled="readOnly" @click="removeInParam(index)" />
     </div>
-    <el-button type="primary" link size="small" @click="addInParam">+ 添加输入参数</el-button>
+    <el-button type="primary" link size="small" :disabled="readOnly" @click="addInParam">+ 添加输入参数</el-button>
 
     <el-divider content-position="left">输出参数</el-divider>
     <div class="param-hint">子流程变量 → 父流程变量</div>
@@ -53,9 +53,9 @@
       <el-input v-model="param.source" placeholder="子流程变量" size="small" style="width: 40%" />
       <el-icon class="param-arrow"><Right /></el-icon>
       <el-input v-model="param.target" placeholder="父流程变量" size="small" style="width: 40%" />
-      <el-button type="danger" :icon="Delete" circle size="small" @click="removeOutParam(index)" />
+      <el-button type="danger" :icon="Delete" circle size="small" :disabled="readOnly" @click="removeOutParam(index)" />
     </div>
-    <el-button type="primary" link size="small" @click="addOutParam">+ 添加输出参数</el-button>
+    <el-button type="primary" link size="small" :disabled="readOnly" @click="addOutParam">+ 添加输出参数</el-button>
   </el-form>
 </template>
 
@@ -65,6 +65,8 @@ import { Delete, Right } from '@element-plus/icons-vue'
 import { useDesignerStore, type ParamMapping } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { processDesignApi, type ProcessDefinitionSummary } from '@/api/processDefinition'
+
+defineProps<{ readOnly?: boolean }>()
 
 const designerStore = useDesignerStore()
 

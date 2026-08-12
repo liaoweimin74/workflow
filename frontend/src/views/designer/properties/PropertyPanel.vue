@@ -15,11 +15,12 @@
         <el-icon class="collapse-toggle" @click="collapsed = true"><Fold /></el-icon>
       </div>
 
-      <!-- 只读模式：复用同一套可视化属性组件，inert 禁用全部交互（视觉一致、仅不可编辑） -->
-      <div class="panel-body" :inert="readOnly">
+      <!-- 只读模式：复用同一套可视化属性组件，el-form disabled 禁编辑（tab 可切换、滚动正常） -->
+      <div class="panel-body">
         <!-- 流程属性（选中画布空白时） -->
         <process-property
           v-if="selectedNodeType === 'Process'"
+          :read-only="readOnly"
         />
 
         <!-- 无选中节点 -->
@@ -28,36 +29,43 @@
         <!-- 开始/结束事件 -->
         <event-property
           v-else-if="isEventNode"
+          :read-only="readOnly"
         />
 
         <!-- 发起人节点（精简面板） -->
         <initiator-task-property
           v-else-if="selectedNodeType === 'UserTask' && isInitiatorNode"
+          :read-only="readOnly"
         />
 
         <!-- 用户任务（审批节点） -->
         <user-task-property
           v-else-if="selectedNodeType === 'UserTask'"
+          :read-only="readOnly"
         />
 
         <!-- 服务任务 -->
         <service-task-property
           v-else-if="selectedNodeType === 'ServiceTask'"
+          :read-only="readOnly"
         />
 
         <!-- 调用活动（子流程） -->
         <call-activity-property
           v-else-if="selectedNodeType === 'CallActivity'"
+          :read-only="readOnly"
         />
 
         <!-- 网关 -->
           <gateway-property
             v-else-if="isGatewayNode"
+            :read-only="readOnly"
           />
 
           <!-- 连线 -->
           <sequence-flow-property
             v-else-if="selectedNodeType === 'SequenceFlow'"
+            :read-only="readOnly"
           />
 
           <!-- 未知节点类型 -->

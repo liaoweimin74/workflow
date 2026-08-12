@@ -1,5 +1,5 @@
 <template>
-  <el-form label-width="90px" size="small">
+  <el-form label-width="90px" size="small" :disabled="readOnly">
     <el-divider content-position="left">基本信息</el-divider>
 
     <el-form-item label="节点ID">
@@ -30,6 +30,8 @@ import { reactive, computed, onMounted, watch } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
+
+defineProps<{ readOnly?: boolean }>()
 
 const designerStore = useDesignerStore()
 

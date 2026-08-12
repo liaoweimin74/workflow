@@ -2,7 +2,7 @@
   <el-tabs v-model="activeTab" class="user-task-property-tabs">
     <!-- 节点配置 -->
     <el-tab-pane label="节点配置" name="node">
-      <el-form label-width="90px" size="small">
+      <el-form label-width="90px" size="small" :disabled="readOnly">
         <el-divider content-position="left">基本信息</el-divider>
 
         <el-form-item label="节点ID">
@@ -26,6 +26,7 @@
         <el-form-item v-if="approval.type === 'user'" label="审批用户">
           <ApproverPicker
             v-model="approval.userIds"
+            :disabled="readOnly"
             @change="saveConfig"
           />
         </el-form-item>
@@ -91,7 +92,7 @@
 
     <!-- 表单配置 -->
     <el-tab-pane label="表单配置" name="form">
-      <FormPropertyTab />
+      <FormPropertyTab :read-only="readOnly" />
     </el-tab-pane>
   </el-tabs>
 </template>
@@ -102,6 +103,8 @@ import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
 import FormPropertyTab from './FormPropertyTab.vue'
+
+defineProps<{ readOnly?: boolean }>()
 
 const designerStore = useDesignerStore()
 

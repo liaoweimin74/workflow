@@ -2,7 +2,7 @@
   <el-tabs v-model="activeTab" class="initiator-task-property-tabs">
     <!-- 节点配置 -->
     <el-tab-pane label="节点配置" name="node">
-      <el-form label-width="80px" size="small">
+      <el-form label-width="80px" size="small" :disabled="readOnly">
         <el-divider content-position="left">基本信息</el-divider>
 
         <el-form-item label="节点ID">
@@ -27,7 +27,7 @@
 
     <!-- 表单配置 -->
     <el-tab-pane label="表单配置" name="form">
-      <FormPropertyTab />
+      <FormPropertyTab :read-only="readOnly" />
     </el-tab-pane>
   </el-tabs>
 </template>
@@ -42,6 +42,8 @@ import {
   getDocumentation,
 } from '../utils/nodeConfigAdapter'
 import FormPropertyTab from './FormPropertyTab.vue'
+
+defineProps<{ readOnly?: boolean }>()
 
 type ElementRegistryLike = { get(id: string): Element | undefined }
 

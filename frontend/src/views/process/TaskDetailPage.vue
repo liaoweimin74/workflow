@@ -18,6 +18,7 @@
         <template #header><span style="font-weight: bold">流程基本信息</span></template>
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="流程名称">{{ taskDetail?.processName }}</el-descriptions-item>
+          <el-descriptions-item label="版本">v{{ taskDetail?.processVersion ?? '—' }}</el-descriptions-item>
           <el-descriptions-item label="流程编号">{{ taskDetail?.businessKey || '—' }}</el-descriptions-item>
           <el-descriptions-item label="当前节点">{{ taskDetail?.name }}</el-descriptions-item>
           <el-descriptions-item label="发起人">{{ taskDetail?.initiatorName || taskDetail?.initiator }}</el-descriptions-item>
@@ -62,63 +63,66 @@
           show-word-limit
         />
         <div class="action-bar">
-          <el-button type="success" :loading="actionLoading === 'approve'" @click="handleApprove">
-            通过
+          <!-- 发起节点：保存草稿/提交；审批节点：暂存/通过/驳回/拒绝/更多操作 -->
+          <el-button
+            :loading="actionLoading === 'save'"
+            @click="handleSaveDraft"
+          >
+            {{ taskDetail?.isInitiatorTask ? '保存草稿' : '暂存' }}
           </el-button>
-          <el-button type="danger" :loading="actionLoading === 'reject'" @click="handleReject">
-            驳回
-          </el-button>
-          <el-dropdown trigger="click" @command="handleMoreAction">
-            <el-button>
-              更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          <template v-if="!taskDetail?.isInitiatorTask">
+            <el-button type="success" :loading="actionLoading === 'approve'" @click="handleApprove">
+              通过
             </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="transfer">转办</el-dropdown-item>
-                <el-dropdown-item command="delegate">委派</el-dropdown-item>
-                <el-dropdown-item command="addSign">加签</el-dropdown-item>
-                <el-dropdown-item command="forwardSign">转签</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+            <el-button type="danger" :loading="actionLoading === 'reject'" @click="handleReject">
+              驳回
+            </el-button>
+            <el-button type="danger" plain :loading="actionLoading === 'refuse'" @click="handleRefuse">
+              拒绝
+            </el-button>
+            <el-dropdown trigger="click" @command="handleMoreAction">
+              <el-button>
+                更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="transfer">转办</el-dropdown-item>
+                  <el-dropdown-item command="delegate">委派</el-dropdown-item>
+                  <el-dropdown-item command="addSign">加签</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </template>
+          <el-button v-else type="primary" :loading="actionLoading === 'approve'" @click="handleApprove">
+            提交
+          </el-button>
         </div>
       </el-card>
     </div>
 
     <!-- 右侧流程跟踪 Drawer -->
-    <el-drawer v-model="trackingDrawer" title="流程跟踪" size="50%">
-      <div class="tracking-content">
-        <el-card shadow="never" style="margin-bottom: 16px">
-          <template #header><span style="font-weight: bold">流程图</span></template>
-          <div class="bpmn-container">
-            <BpmnViewer
-              v-if="bpmnXml"
-              :xml="bpmnXml"
-              :highlights="highlightIds"
-            />
-          </div>
-        </el-card>
-        <el-card shadow="never">
-          <template #header><span style="font-weight: bold">审批记录</span></template>
-          <ApprovalTimeline :records="approvalRecords" />
-        </el-card>
-      </div>
-    </el-drawer>
+    <ProcessTrackDrawer
+      v-model="trackingDrawer"
+      :process-instance-id="taskDetail?.processInstanceId ?? ''"
+      :process-definition-id="taskDetail?.processDefinitionId"
+    />
 
-    <!-- 转办/委派/转签 选人（单选） -->
+    <!-- 转办/委派/转签 选人（单选） — 仅通过 ref 调用 openDialog -->
     <ApproverPicker
       ref="singlePickerRef"
       v-model="singleUserDialog.userId"
       :multiple="false"
+      hide-trigger
       placeholder="选择用户"
       @change="onSingleUserSelected"
     />
 
-    <!-- 加签 选人（多选） -->
+    <!-- 加签 选人（多选） — 仅通过 ref 调用 openDialog -->
     <ApproverPicker
       ref="addSignPickerRef"
       v-model="addSignDialog.users"
       multiple
+      hide-trigger
       placeholder="选择多个用户"
       @change="onAddSignUsersSelected"
     />
@@ -131,11 +135,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View, ArrowDown } from '@element-plus/icons-vue'
 import { taskApi } from '@/api/task'
-import { processInstanceApi } from '@/api/processInstance'
-import { deployedProcessApi } from '@/api/processDefinition'
-import type { TaskDetailVO, ApprovalRecordVO } from '@/api/task'
+import type { TaskDetailVO } from '@/api/task'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import { BpmnViewer, ApprovalTimeline, ApproverPicker } from '@/components/business'
+import { ApproverPicker, ProcessTrackDrawer } from '@/components/business'
 
 const route = useRoute()
 const router = useRouter()
@@ -145,12 +147,10 @@ const loading = ref(true)
 const taskDetail = ref<TaskDetailVO | null>(null)
 const comment = ref('')
 const actionLoading = ref<string | null>(null)
+const formRendererRef = ref<InstanceType<typeof FormRenderer>>()
 
 // 流程跟踪
 const trackingDrawer = ref(false)
-const bpmnXml = ref('')
-const highlightIds = ref<string[]>([])
-const approvalRecords = ref<ApprovalRecordVO[]>([])
 
 // 对话框
 const singlePickerRef = ref<InstanceType<typeof ApproverPicker>>()
@@ -188,31 +188,44 @@ async function loadDetail() {
   }
 }
 
-// ── 加载流程跟踪数据 ──
-async function loadTrackingData() {
-  if (!taskDetail.value) return
-  const { processInstanceId, processDefinitionId } = taskDetail.value
+// ── 操作处理 ──
+
+/**
+ * 保存草稿/暂存：仅保存当前表单数据，不完成任务。
+ * 发起节点显示"保存草稿"，审批节点显示"暂存"，实现一致。
+ */
+async function handleSaveDraft() {
+  actionLoading.value = 'save'
   try {
-    const [xmlRes, highlightRes, historyRes] = await Promise.all([
-      deployedProcessApi.getXml(processDefinitionId),
-      processInstanceApi.highlight(processInstanceId),
-      processInstanceApi.history(processInstanceId),
-    ])
-    bpmnXml.value = xmlRes.data
-    const highlight = highlightRes.data
-    const completed = (highlight.completedActivityIds as string[]) ?? []
-    const active = (highlight.activeActivityIds as string[]) ?? []
-    highlightIds.value = [...completed, ...active]
-    approvalRecords.value = historyRes.data
+    if (!formRendererRef.value) {
+      ElMessage.warning('当前节点无表单，无需保存')
+      return
+    }
+    const ok = await formRendererRef.value.submit()
+    if (!ok) {
+      ElMessage.warning('保存失败，请重试')
+      return
+    }
+    ElMessage.success(taskDetail.value?.isInitiatorTask ? '草稿已保存' : '已暂存')
   } catch {
-    ElMessage.warning('加载流程跟踪信息失败')
+    ElMessage.error('操作失败')
+  } finally {
+    actionLoading.value = null
   }
 }
 
-// ── 操作处理 ──
 async function handleApprove() {
   actionLoading.value = 'approve'
   try {
+    // 先保存当前表单数据 + 冻结快照，确保下一个节点能读到
+    if (formRendererRef.value) {
+      const ok = await formRendererRef.value.submit()
+      if (!ok) {
+        ElMessage.warning('表单保存失败，请重试')
+        return
+      }
+      await formRendererRef.value.saveSnapshot()
+    }
     await taskApi.complete(taskId, { comment: comment.value })
     ElMessage.success('审批通过')
     router.push('/process/todo')
@@ -230,8 +243,34 @@ async function handleReject() {
   }
   actionLoading.value = 'reject'
   try {
+    // 先保存当前表单数据 + 冻结快照
+    if (formRendererRef.value) {
+      await formRendererRef.value.submit()
+      await formRendererRef.value.saveSnapshot()
+    }
     await taskApi.reject(taskId, { reason: comment.value })
     ElMessage.success('已驳回')
+    router.push('/process/todo')
+  } catch {
+    ElMessage.error('操作失败')
+  } finally {
+    actionLoading.value = null
+  }
+}
+
+async function handleRefuse() {
+  if (!comment.value.trim()) {
+    ElMessage.warning('拒绝请填写审批意见')
+    return
+  }
+  actionLoading.value = 'refuse'
+  try {
+    // 先保存快照
+    if (formRendererRef.value) {
+      await formRendererRef.value.saveSnapshot()
+    }
+    await taskApi.refuse(taskId, { reason: comment.value })
+    ElMessage.success('已拒绝，流程已终止')
     router.push('/process/todo')
   } catch {
     ElMessage.error('操作失败')
@@ -289,7 +328,6 @@ async function onAddSignUsersSelected(users: { id: number; nickname: string }[])
 
 onMounted(async () => {
   await loadDetail()
-  await loadTrackingData()
 })
 </script>
 
@@ -311,15 +349,5 @@ onMounted(async () => {
   margin-top: 16px;
   display: flex;
   gap: 8px;
-}
-
-.bpmn-container {
-  height: 350px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 4px;
-}
-
-.tracking-content {
-  padding: 0 8px;
 }
 </style>

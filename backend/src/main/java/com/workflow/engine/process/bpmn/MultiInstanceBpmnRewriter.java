@@ -20,6 +20,8 @@ import javax.xml.transform.stream.StreamResult;
 import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,6 +49,7 @@ public class MultiInstanceBpmnRewriter {
 
     private static final String COLLECTION_EXPR = "${approverList}";
     private static final String ELEMENT_VAR = "approver";
+    private static final String ELEMENT_VAR_EXPR = "${approver}";
     private static final String COUNTERSIGN_CONDITION = "${rejected || (nrOfCompletedInstances == nrOfInstances)}";
     private static final String OR_SIGN_CONDITION = "${rejected || (nrOfCompletedInstances >= 1)}";
 
@@ -90,13 +93,22 @@ public class MultiInstanceBpmnRewriter {
                 }
 
                 String multiMode = extractMultiMode(configJson);
-                if (multiMode == null) {
+                if (multiMode != null) {
+                    applyMultiInstance(doc, userTask, multiMode);
+                    modified = true;
+                    log.debug("改写 userTask [{}] 为多实例模式: {}", nodeId, multiMode);
                     continue;
                 }
 
-                applyMultiInstance(doc, userTask, multiMode);
+                // 单实例节点：根据 approval.userIds 设置审批人
+                // 1 人 → flowable:assignee；多人 → flowable:candidateUsers
+                List<String> userIds = extractUserIds(configJson);
+                if (userIds.isEmpty()) {
+                    continue;
+                }
+                applySingleAssignee(doc, userTask, userIds);
                 modified = true;
-                log.debug("改写 userTask [{}] 为多实例模式: {}", nodeId, multiMode);
+                log.debug("改写 userTask [{}] 单实例审批人: {}", nodeId, userIds);
             }
 
             if (!modified) {
@@ -129,6 +141,53 @@ public class MultiInstanceBpmnRewriter {
         }
     }
 
+    /**
+     * 从 configJson 提取 approval.userIds（审批人 ID 列表）。
+     */
+    private List<String> extractUserIds(String configJson) {
+        if (configJson == null || configJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(configJson);
+            JsonNode approval = root.path("approval");
+            if (approval.isMissingNode() || !approval.isObject()) {
+                return List.of();
+            }
+            JsonNode userIdsNode = approval.path("userIds");
+            List<String> userIds = new ArrayList<>();
+            if (userIdsNode.isArray()) {
+                for (JsonNode idNode : userIdsNode) {
+                    if (idNode.isTextual() || idNode.isNumber()) {
+                        String id = idNode.asText();
+                        if (id != null && !id.isBlank()) {
+                            userIds.add(id.trim());
+                        }
+                    }
+                }
+            }
+            return userIds;
+        } catch (Exception e) {
+            log.debug("解析 NodeConfig approval.userIds 失败: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * 为单实例 userTask 设置审批人：
+     * 1 人 → flowable:assignee="5"；
+     * 多人 → flowable:candidateUsers="5,6"（任一候选人可办理）。
+     */
+    private void applySingleAssignee(Document doc, Element userTask, List<String> userIds) {
+        String joined = String.join(",", userIds);
+        if (userIds.size() == 1) {
+            userTask.setAttributeNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":assignee", userIds.get(0));
+        } else {
+            userTask.setAttributeNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":candidateUsers", joined);
+        }
+        log.debug("单实例 userTask [{}] 设置审批人: {}", userTask.getAttribute("id"), joined);
+    }
+
     private void applyMultiInstance(Document doc, Element userTask, String multiMode) {
         // 如果已有 multiInstanceLoopCharacteristics，不重复添加
         NodeList existing = userTask.getElementsByTagNameNS(BPMN_NS, "multiInstanceLoopCharacteristics");
@@ -136,13 +195,24 @@ public class MultiInstanceBpmnRewriter {
             return;
         }
 
-        Element miLoop = doc.createElementNS(BPMN_NS, "multiInstanceLoopCharacteristics");
+        // 设置 userTask 的 assignee 为 ${approver}（多实例 elementVariable），
+        // 这样每个实例会自动分配给对应的审批人
+        userTask.setAttributeNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":assignee", ELEMENT_VAR_EXPR);
+
+        // 添加 extensionElements → executionListener（start 事件设置 approverList 变量）
+        Element extensionElements = ensureExtensionElements(doc, userTask);
+        Element listener = doc.createElementNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":executionListener");
+        listener.setAttribute("event", "start");
+        listener.setAttribute("delegateExpression", "${multiInstanceApproverListener}");
+        extensionElements.appendChild(listener);
+
+        Element miLoop = doc.createElementNS(BPMN_NS, "bpmn:multiInstanceLoopCharacteristics");
         boolean isSequential = "sequential".equals(multiMode);
         miLoop.setAttribute("isSequential", String.valueOf(isSequential));
         miLoop.setAttributeNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":collection", COLLECTION_EXPR);
         miLoop.setAttributeNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":elementVariable", ELEMENT_VAR);
 
-        Element completionCondition = doc.createElementNS(BPMN_NS, "completionCondition");
+        Element completionCondition = doc.createElementNS(BPMN_NS, "bpmn:completionCondition");
         // 依次审批（sequential）和会签（countersign）都要求全部完成，或签（or_sign）只需一人通过
         String condition = "or_sign".equals(multiMode) ? OR_SIGN_CONDITION : COUNTERSIGN_CONDITION;
         completionCondition.setTextContent(condition);
@@ -150,25 +220,63 @@ public class MultiInstanceBpmnRewriter {
         miLoop.appendChild(completionCondition);
 
         // multiInstanceLoopCharacteristics 必须插入到 incoming/outgoing 之后，
-        // 确保 XML 子元素顺序符合 BPMN 2.0 XSD 要求：
-        //   incoming* → outgoing* → ioSpecification? → ... → loopCharacteristics? → rendering*
-        // 如果找不到 incoming/outgoing，则插入到第一个子元素位置。
+        // BPMN XSD 顺序：extensionElements? → incoming* → outgoing* → ioSpecification? → ... → loopCharacteristics? → rendering*
+        Element insertBefore = null;
+        NodeList children = userTask.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node child = children.item(i);
+            if (child.getNodeType() != Node.ELEMENT_NODE) {
+                continue;
+            }
+            String ns = child.getNamespaceURI();
+            String localName = child.getLocalName();
+            // 跳过 extensionElements、incoming、outgoing（这些都排在 miLoop 之前）
+            if (BPMN_NS.equals(ns) && ("extensionElements".equals(localName)
+                    || "incoming".equals(localName)
+                    || "outgoing".equals(localName))) {
+                continue;
+            }
+            // flowable:extensionElements（旧命名空间兼容）
+            if (FLOWABLE_NS.equals(ns) && "extensionElements".equals(localName)) {
+                continue;
+            }
+            insertBefore = (Element) child;
+            break;
+        }
+        if (insertBefore != null) {
+            userTask.insertBefore(miLoop, insertBefore);
+        } else {
+            userTask.appendChild(miLoop);
+        }
+    }
+
+    /**
+     * 获取或创建 userTask 的 extensionElements 子元素。
+     * BPMN XSD 顺序：documentation* → extensionElements? → auditing? → ... → incoming* → outgoing* → ...
+     * 所以 extensionElements 必须插入到 incoming/outgoing 之前。
+     */
+    private Element ensureExtensionElements(Document doc, Element userTask) {
+        // extensionElements 用 BPMN 命名空间
+        NodeList existing = userTask.getElementsByTagNameNS(BPMN_NS, "extensionElements");
+        if (existing.getLength() > 0) {
+            return (Element) existing.item(0);
+        }
+
+        // 使用 bpmn: 前缀确保序列化正确
+        Element ext = doc.createElementNS(BPMN_NS, "bpmn:extensionElements");
+
+        // 插入到第一个子元素之前
         Element firstChild = null;
         NodeList children = userTask.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
             Node child = children.item(i);
             if (child.getNodeType() == Node.ELEMENT_NODE) {
-                String ns = child.getNamespaceURI();
-                String localName = child.getLocalName();
-                // 跳过 incoming/outgoing，找到第一个非 incoming/outgoing 的元素
-                if (BPMN_NS.equals(ns) && ("incoming".equals(localName) || "outgoing".equals(localName))) {
-                    continue;
-                }
                 firstChild = (Element) child;
                 break;
             }
         }
-        userTask.insertBefore(miLoop, firstChild);
+        userTask.insertBefore(ext, firstChild);
+        return ext;
     }
 
     private String serializeDocument(Document doc) throws Exception {

@@ -22,6 +22,13 @@ public class NodeConfig {
     @Column(name = "process_def_id", length = 64, nullable = false)
     private String processDefId;
 
+    /**
+     * 部署版本 ID（Flowable processDefinitionId，格式 key:version:uuid）。
+     * 非空=该部署版本的配置快照；空=当前编辑中的最新配置。
+     */
+    @Column(name = "process_definition_id", length = 64)
+    private String processDefinitionId;
+
     @Column(name = "node_id", length = 255, nullable = false)
     private String nodeId;
 
@@ -56,6 +63,9 @@ public class NodeConfig {
 
     public String getProcessDefId() { return processDefId; }
     public void setProcessDefId(String processDefId) { this.processDefId = processDefId; }
+
+    public String getProcessDefinitionId() { return processDefinitionId; }
+    public void setProcessDefinitionId(String processDefinitionId) { this.processDefinitionId = processDefinitionId; }
 
     public String getNodeId() { return nodeId; }
     public void setNodeId(String nodeId) { this.nodeId = nodeId; }

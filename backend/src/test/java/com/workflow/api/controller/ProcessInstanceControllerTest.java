@@ -4,10 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.api.dto.StartProcessRequest;
 import com.workflow.common.domain.R;
+import com.workflow.api.dto.ExecutionNodeVO;
 import com.workflow.engine.form.FormDataService;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
+import com.workflow.engine.runtime.ProcessTaskPredictionService;
 import com.workflow.framework.security.domain.LoginUser;
+import org.flowable.engine.TaskService;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +40,9 @@ class ProcessInstanceControllerTest {
 
     private ProcessInstanceService processInstanceService;
     private ProcessHighlightService highlightService;
+    private ProcessTaskPredictionService predictionService;
     private FormDataService formDataService;
+    private TaskService taskService;
     private ObjectMapper objectMapper;
     private ProcessInstanceController controller;
     private SecurityContext savedSecurityContext;
@@ -46,9 +51,13 @@ class ProcessInstanceControllerTest {
     void setUp() {
         processInstanceService = mock(ProcessInstanceService.class);
         highlightService = mock(ProcessHighlightService.class);
+        predictionService = mock(ProcessTaskPredictionService.class);
         formDataService = mock(FormDataService.class);
+        taskService = mock(TaskService.class);
         objectMapper = new ObjectMapper();
-        controller = new ProcessInstanceController(processInstanceService, highlightService, formDataService, objectMapper);
+        controller = new ProcessInstanceController(
+                processInstanceService, highlightService, predictionService,
+                formDataService, taskService, objectMapper);
         savedSecurityContext = SecurityContextHolder.getContext();
     }
 
@@ -174,6 +183,27 @@ class ProcessInstanceControllerTest {
                 eq("testProcess"),
                 eq("BK-001"),
                 argThat(vars -> "15".equals(vars.get("initiator"))));
+    }
+
+    // ==================== prediction() 执行预测测试 ====================
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void prediction_returnsExecutionNodeList() {
+        ExecutionNodeVO node = new ExecutionNodeVO();
+        node.setActivityId("task2");
+        node.setActivityName("部门审批");
+        node.setStatus("active");
+        when(predictionService.getPrediction("inst-001"))
+                .thenReturn(List.of(node));
+
+        R<List<ExecutionNodeVO>> result = controller.prediction("inst-001");
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData()).hasSize(1);
+        assertThat(result.getData().get(0).getActivityId()).isEqualTo("task2");
+        assertThat(result.getData().get(0).getStatus()).isEqualTo("active");
+        verify(predictionService).getPrediction("inst-001");
     }
 
     // ==================== list() 筛选参数测试 ====================

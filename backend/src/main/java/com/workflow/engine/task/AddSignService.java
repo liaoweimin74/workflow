@@ -4,6 +4,7 @@ import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.common.engine.api.FlowableException;
+import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
@@ -34,13 +35,16 @@ public class AddSignService {
 
     private final RuntimeService runtimeService;
     private final TaskService flowableTaskService;
+    private final RepositoryService repositoryService;
     private final TenantProvider tenantProvider;
     private final WfTaskCommentRepository commentRepository;
 
     public AddSignService(RuntimeService runtimeService, TaskService flowableTaskService,
+                          RepositoryService repositoryService,
                           TenantProvider tenantProvider, WfTaskCommentRepository commentRepository) {
         this.runtimeService = runtimeService;
         this.flowableTaskService = flowableTaskService;
+        this.repositoryService = repositoryService;
         this.tenantProvider = tenantProvider;
         this.commentRepository = commentRepository;
     }
@@ -83,15 +87,21 @@ public class AddSignService {
 
         log.info("加签 taskId={} activityId={} pi={} users={}", taskId, activityId, processInstanceId, users);
 
-        for (String user : users) {
-            try {
+        // 判断是否 MI 节点
+        boolean isMultiInstance = isMultiInstanceActivity(task.getProcessDefinitionId(), activityId);
+
+        if (isMultiInstance) {
+            // MI 节点：用 addMultiInstanceExecution 新增审批实例
+            for (String user : users) {
                 runtimeService.addMultiInstanceExecution(
                         activityId,
                         processInstanceId,
                         Map.of("approver", user));
-            } catch (FlowableException e) {
-                throw new IllegalStateException(
-                        "Task is not a multi-instance activity, cannot add sign: " + activityId, e);
+            }
+        } else {
+            // 非 MI 节点：加为候选人，让加签人也能看到并处理任务
+            for (String user : users) {
+                flowableTaskService.addCandidateUser(taskId, user);
             }
         }
 
@@ -105,7 +115,21 @@ public class AddSignService {
             commentRecord.setUserId(userId);
             commentRecord.setAction("add_sign");
             commentRecord.setComment(comment);
+            commentRecord.setTargetUserId(String.join(",", users));
             commentRepository.save(commentRecord);
+        }
+    }
+
+    private boolean isMultiInstanceActivity(String processDefinitionId, String activityId) {
+        try {
+            org.flowable.bpmn.model.BpmnModel model = repositoryService.getBpmnModel(processDefinitionId);
+            if (model == null) return false;
+            org.flowable.bpmn.model.FlowElement el = model.getMainProcess().getFlowElement(activityId);
+            return el instanceof org.flowable.bpmn.model.Activity
+                    && ((org.flowable.bpmn.model.Activity) el).getLoopCharacteristics() != null;
+        } catch (Exception e) {
+            log.warn("Failed to check MI for activity {}: {}", activityId, e.getMessage());
+            return false;
         }
     }
 }

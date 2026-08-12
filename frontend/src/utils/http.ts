@@ -40,7 +40,9 @@ http.interceptors.response.use(
   (response: AxiosResponse) => {
     const data = response.data
     if (data.code !== 200) {
-      ElMessage.error(data.msg || '请求失败')
+      if (!response.config.headers?.['X-Skip-Error-Toast']) {
+        ElMessage.error(data.msg || '请求失败')
+      }
       return Promise.reject(new Error(data.msg))
     }
     return data
@@ -50,7 +52,7 @@ http.interceptors.response.use(
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       window.location.href = '/login'
-    } else {
+    } else if (!error.config?.headers?.['X-Skip-Error-Toast']) {
       // 优先取后端 R 包装返回的业务错误消息
       const bizMsg = error.response?.data?.msg
       ElMessage.error(bizMsg || error.message || '网络错误')

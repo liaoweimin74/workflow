@@ -24,4 +24,9 @@ public interface WfTaskCommentRepository extends JpaRepository<WfTaskComment, St
      * 按流程实例 ID 查询，按创建时间正序排列。
      */
     List<WfTaskComment> findByProcessInstanceIdOrderByCreatedAtAsc(String processInstanceId);
+
+    /**
+     * 按操作人 ID 查询审批意见列表。
+     */
+    List<WfTaskComment> findByUserId(String userId);
 }

@@ -67,10 +67,9 @@ public class FlowableEngineConfig {
     }
 
     @Bean
-    public ProcessConfigResolver processConfigResolver(ProcessDraftRepository processDraftRepository,
-                                                       NodeConfigRepository nodeConfigRepository,
+    public ProcessConfigResolver processConfigResolver(NodeConfigRepository nodeConfigRepository,
                                                        ObjectMapper objectMapper) {
-        return new ProcessConfigResolver(processDraftRepository, nodeConfigRepository, objectMapper);
+        return new ProcessConfigResolver(nodeConfigRepository, objectMapper);
     }
 
     @Bean

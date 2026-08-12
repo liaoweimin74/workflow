@@ -43,6 +43,12 @@ public class FormData {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    /**
+     * 是否为任务快照（true=审批时冻结的快照，false=当前数据用于节点间传递）。
+     */
+    @Column(name = "is_snapshot", nullable = false)
+    private Boolean isSnapshot = false;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -83,4 +89,7 @@ public class FormData {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Boolean getIsSnapshot() { return isSnapshot; }
+    public void setIsSnapshot(Boolean isSnapshot) { this.isSnapshot = isSnapshot; }
 }

@@ -41,6 +41,7 @@ export interface FormDataDTO {
   createdBy: string | null
   createdAt: string
   updatedAt: string
+  isSnapshot: boolean
 }
 
 export interface FormDataSaveRequest {
@@ -92,8 +93,38 @@ export const formApi = {
     return http.post('/v1/form-data', data)
   },
 
+  /** 保存审批快照（冻结当前表单数据） */
+  saveSnapshot(data: FormDataSaveRequest): Promise<R<FormDataDTO>> {
+    return http.post('/v1/form-data/snapshot', data)
+  },
+
+  /** 保存发起页草稿 */
+  saveDraft(data: { formDefId: string; dataJson: string }): Promise<R<FormDataDTO>> {
+    return http.post('/v1/form-data/draft', data)
+  },
+
+  /** 查询发起页草稿 */
+  getDraft(formDefId: string): Promise<R<FormDataDTO | null>> {
+    return http.get(`/v1/form-data/draft/${formDefId}`)
+  },
+
+  /** 清除发起页草稿（发起成功后调用） */
+  clearDraft(formDefId: string): Promise<R<void>> {
+    return http.delete(`/v1/form-data/draft/${formDefId}`)
+  },
+
   getFormData(processInstanceId: string, formDefId: string): Promise<R<FormDataDTO | null>> {
     return http.get('/v1/form-data', { params: { processInstanceId, formDefId } })
+  },
+
+  /** 按 taskId 查询审批快照 */
+  getFormDataByTask(taskId: string): Promise<R<FormDataDTO | null>> {
+    return http.get(`/v1/form-data/task/${taskId}`)
+  },
+
+  /** 按流程实例查询所有审批快照（按时间倒序） */
+  getSnapshots(processInstanceId: string): Promise<R<FormDataDTO[]>> {
+    return http.get(`/v1/form-data/process-instance/${processInstanceId}/snapshots`)
   },
 
   getFormDataById(id: string): Promise<R<FormDataDTO>> {

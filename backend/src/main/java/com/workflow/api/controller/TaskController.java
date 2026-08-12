@@ -2,12 +2,17 @@ package com.workflow.api.controller;
 
 import com.workflow.api.dto.*;
 import com.workflow.common.domain.R;
+import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.task.AddSignService;
 import com.workflow.engine.task.ForwardSignService;
 import com.workflow.engine.task.RejectService;
 import com.workflow.engine.task.TransferService;
 import com.workflow.engine.task.WorkflowTaskService;
+import com.workflow.framework.security.domain.LoginUser;
+import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.flowable.task.api.history.HistoricTaskInstance;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,15 +32,21 @@ public class TaskController {
     private final TransferService transferService;
     private final AddSignService addSignService;
     private final ForwardSignService forwardSignService;
+    private final ProcessInstanceService processInstanceService;
+    private final TaskService flowableTaskService;
 
     public TaskController(WorkflowTaskService taskService, RejectService rejectService,
                           TransferService transferService, AddSignService addSignService,
-                          ForwardSignService forwardSignService) {
+                          ForwardSignService forwardSignService,
+                          ProcessInstanceService processInstanceService,
+                          TaskService flowableTaskService) {
         this.taskService = taskService;
         this.rejectService = rejectService;
         this.transferService = transferService;
         this.addSignService = addSignService;
         this.forwardSignService = forwardSignService;
+        this.processInstanceService = processInstanceService;
+        this.flowableTaskService = flowableTaskService;
     }
 
     @GetMapping
@@ -103,22 +114,49 @@ public class TaskController {
         Map<String, Object> variables = request != null && request.getVariables() != null
                 ? request.getVariables()
                 : new HashMap<>();
-        String userId = request != null ? request.getUserId() : null;
+        // 从 SecurityContext 获取操作人（不依赖前端传 userId）
+        String userId = getCurrentUserId();
         String comment = request != null ? request.getComment() : null;
         return R.ok(taskService.completeTaskWithResponse(id, variables, userId, comment));
     }
 
     @PostMapping("/{id}/reject")
     public R<Void> reject(@PathVariable String id, @RequestBody(required = false) RejectRequest request) {
-        String userId = request != null ? request.getUserId() : null;
+        String userId = getCurrentUserId();
         String reason = request != null ? request.getReason() : null;
         rejectService.reject(id, userId, reason);
         return R.ok();
     }
 
+    /**
+     * 拒绝：不同意并终止整个流程。
+     * 与驳回不同：驳回将任务退回给发起人重新填写，拒绝直接终止流程。
+     */
+    @PostMapping("/{id}/refuse")
+    public R<Void> refuse(@PathVariable String id, @RequestBody(required = false) RejectRequest request) {
+        // 从 SecurityContext 获取操作人
+        String userId = getCurrentUserId();
+        String reason = request != null ? request.getReason() : null;
+
+        // 查 task 获取 processInstanceId
+        Task task = flowableTaskService.createTaskQuery().taskId(id).singleResult();
+        if (task == null) {
+            throw new IllegalStateException("Task not found: " + id);
+        }
+        String processInstanceId = task.getProcessInstanceId();
+
+        // 写入审批意见（action=refuse）
+        taskService.saveTaskComment(id, processInstanceId, userId, "refuse", reason);
+
+        // 终止流程
+        processInstanceService.terminateProcessInstance(processInstanceId,
+                reason != null ? reason : "审批拒绝，流程终止");
+        return R.ok();
+    }
+
     @PostMapping("/{id}/transfer")
     public R<Void> transfer(@PathVariable String id, @RequestBody(required = false) TransferRequest request) {
-        String fromUser = request != null ? request.getFromUser() : null;
+        String fromUser = resolveCurrentUserId(request != null ? request.getFromUser() : null);
         String toUser = request != null ? request.getToUser() : null;
         String reason = request != null ? request.getReason() : null;
         transferService.transfer(id, fromUser, toUser, reason);
@@ -127,21 +165,44 @@ public class TaskController {
 
     @PostMapping("/{id}/delegate")
     public R<Void> delegate(@PathVariable String id, @RequestBody DelegateRequest request) {
-        taskService.delegateTaskWithComment(id, request.getDelegateTo(),
-                request.getFromUser(), request.getComment());
+        String fromUser = resolveCurrentUserId(request.getFromUser());
+        taskService.delegateTaskWithComment(id, request.getDelegateTo(), fromUser, request.getComment());
         return R.ok();
     }
 
     @PostMapping("/{id}/add-sign")
     public R<Void> addSign(@PathVariable String id, @RequestBody AddSignRequest request) {
-        addSignService.addSign(id, request.getUsers(), request.getUserId(), request.getComment());
+        String userId = resolveCurrentUserId(request.getUserId());
+        addSignService.addSign(id, request.getUsers(), userId, request.getComment());
         return R.ok();
     }
 
     @PostMapping("/{id}/forward-sign")
     public R<Void> forwardSign(@PathVariable String id, @RequestBody ForwardSignRequest request) {
-        forwardSignService.forwardSign(id, request.getToUser(), request.getUserId(), request.getComment());
+        String userId = resolveCurrentUserId(request.getUserId());
+        forwardSignService.forwardSign(id, request.getToUser(), userId, request.getComment());
         return R.ok();
+    }
+
+    /**
+     * 解析当前操作人 ID：优先请求体传入，否则从 SecurityContext 获取。
+     */
+    private String resolveCurrentUserId(String requestUserId) {
+        if (requestUserId != null && !requestUserId.isBlank()) {
+            return requestUserId;
+        }
+        return getCurrentUserId();
+    }
+
+    /**
+     * 从 SecurityContext 获取当前登录用户 ID。
+     */
+    private String getCurrentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
+            return String.valueOf(loginUser.getUserId());
+        }
+        return null;
     }
 
     private Map<String, Object> toMap(Task task) {

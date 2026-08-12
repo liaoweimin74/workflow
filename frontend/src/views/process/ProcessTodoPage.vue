@@ -46,7 +46,7 @@
             <el-table-column prop="currentNodeName" label="当前节点" width="120" show-overflow-tooltip />
             <el-table-column prop="createTime" label="接收时间" width="170">
               <template #default="{ row }">
-                <span :class="{ 'font-bold': !row.reminded }">{{ formatDateTime(row.createTime) }}</span>
+                <span>{{ formatDateTime(row.createTime) }}</span>
               </template>
             </el-table-column>
             <el-table-column label="催办" width="60" align="center">
@@ -56,10 +56,9 @@
                 </el-badge>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="140" fixed="right" align="center">
+            <el-table-column label="操作" width="100" fixed="right" align="center">
               <template #default="{ row }">
                 <el-button type="primary" link @click="handleProcessTask(row)">处理</el-button>
-                <el-button type="warning" link @click="handleRemind(row)">催办</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -127,7 +126,10 @@
             <el-table-column prop="processName" label="流程名称" min-width="160" show-overflow-tooltip />
             <el-table-column prop="businessKey" label="编号" width="140" show-overflow-tooltip />
             <el-table-column prop="initiatorName" label="发起人" width="100" />
-            <el-table-column prop="currentNodeName" label="处理节点" width="120" show-overflow-tooltip />
+            <el-table-column prop="currentNodeName" label="办理节点" width="120" show-overflow-tooltip />
+            <el-table-column prop="currentNode" label="当前节点" width="120" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.currentNode || '—' }}</template>
+            </el-table-column>
             <el-table-column prop="endTime" label="处理时间" width="170">
               <template #default="{ row }">{{ formatDateTime(row.endTime) }}</template>
             </el-table-column>
@@ -199,6 +201,9 @@
           >
             <el-table-column prop="processDefinitionName" label="流程名称" min-width="160" show-overflow-tooltip />
             <el-table-column prop="name" label="标题" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="currentNode" label="当前节点" width="120" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.currentNode || '—' }}</template>
+            </el-table-column>
             <el-table-column prop="startTime" label="发起时间" width="170">
               <template #default="{ row }">{{ formatDateTime(row.startTime) }}</template>
             </el-table-column>
@@ -209,9 +214,10 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100" fixed="right" align="center">
+            <el-table-column label="操作" width="140" fixed="right" align="center">
               <template #default="{ row }">
                 <el-button type="primary" link @click="handleTrack(row)">跟踪</el-button>
+                <el-button v-if="row.status === 'running'" type="warning" link @click="handleInitiatedRemind(row)">催办</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -225,10 +231,17 @@
             style="margin-top: 12px; justify-content: flex-end"
             @size-change="loadInitiated"
             @current-change="loadInitiated"
-          />
+           />
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <!-- 流程跟踪 Drawer（我发起的） -->
+    <ProcessTrackDrawer
+      v-model="trackDrawerVisible"
+      :process-instance-id="trackInstanceId"
+      :title="trackTitle"
+    />
   </div>
 </template>
 
@@ -243,6 +256,7 @@ import { taskRemindApi } from '@/api/taskRemind'
 import { processInstanceApi } from '@/api/processInstance'
 import type { TaskTodoVO, TaskDoneVO, TaskTodoQueryParams, TaskDoneQueryParams } from '@/api/task'
 import type { ProcessInstanceVO, ProcessInstanceQueryParams } from '@/api/processInstance'
+import { ProcessTrackDrawer } from '@/components/business'
 
 const router = useRouter()
 const route = useRoute()
@@ -306,6 +320,21 @@ async function handleRemind(row: TaskTodoVO) {
     loadTodo()
   } catch {
     ElMessage.error('催办失败，可能距离上次催办不足 24 小时')
+  }
+}
+
+async function handleInitiatedRemind(row: any) {
+  try {
+    await taskRemindApi.remindByInstance(row.id)
+    ElMessage.success('催办通知已发送')
+    loadInitiated()
+  } catch (err: any) {
+    const msg = err?.response?.data?.msg ?? err?.message ?? ''
+    if (msg.includes('24') || msg.includes('频率') || msg.includes('frequency')) {
+      ElMessage.warning('催办频率限制：24小时内已催办过，请稍后再试')
+    } else {
+      ElMessage.error('催办失败')
+    }
   }
 }
 
@@ -408,8 +437,15 @@ function resetInitiatedFilter() {
   loadInitiated()
 }
 
+// ── 我发起的：流程跟踪抽屉 ──
+const trackDrawerVisible = ref(false)
+const trackInstanceId = ref('')
+const trackTitle = ref('流程跟踪')
+
 function handleTrack(row: ProcessInstanceVO) {
-  router.push(`/process/instance/${row.id}`)
+  trackInstanceId.value = row.id
+  trackTitle.value = `流程跟踪 — ${row.processDefinitionName ?? ''}`
+  trackDrawerVisible.value = true
 }
 
 // ── Tab 切换懒加载 ──
@@ -427,8 +463,11 @@ function formatDateTime(dt: string): string {
 
 function approveResultLabel(result: string): string {
   const map: Record<string, string> = {
+    submit: '提交',
     approve: '通过',
+    complete: '通过',
     reject: '驳回',
+    refuse: '拒绝',
     transfer: '转办',
     delegate: '委派',
   }
@@ -437,8 +476,11 @@ function approveResultLabel(result: string): string {
 
 function approveResultTagType(result: string): 'success' | 'danger' | 'warning' | 'info' {
   const map: Record<string, 'success' | 'danger' | 'warning' | 'info'> = {
+    submit: 'info',
     approve: 'success',
+    complete: 'success',
     reject: 'danger',
+    refuse: 'danger',
     transfer: 'warning',
     delegate: 'info',
   }

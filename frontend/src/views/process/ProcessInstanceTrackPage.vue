@@ -48,11 +48,18 @@
         </div>
       </el-card>
 
-      <!-- 底部：审批记录时间线 -->
+      <!-- 底部：任务执行列表（已执行 + 活跃 + 预测） -->
       <el-card shadow="never" style="margin-top: 16px">
-        <template #header><span style="font-weight: bold">审批记录</span></template>
-        <ApprovalTimeline :records="approvalRecords" />
+        <template #header><span style="font-weight: bold">任务执行列表</span></template>
+        <ProcessTaskExecutionList :nodes="executionNodes" />
       </el-card>
+
+      <!-- 折叠区：审批记录时间线 -->
+      <el-collapse style="margin-top: 16px">
+        <el-collapse-item title="审批记录（历史时间线）" name="approval-history">
+          <ApprovalTimeline :records="approvalRecords" />
+        </el-collapse-item>
+      </el-collapse>
     </div>
   </div>
 </template>
@@ -65,9 +72,9 @@ import { Bell } from '@element-plus/icons-vue'
 import { processInstanceApi } from '@/api/processInstance'
 import { deployedProcessApi } from '@/api/processDefinition'
 import { taskRemindApi } from '@/api/taskRemind'
-import type { ProcessInstanceVO } from '@/api/processInstance'
+import type { ProcessInstanceVO, ExecutionNodeVO } from '@/api/processInstance'
 import type { ApprovalRecordVO } from '@/api/task'
-import { BpmnViewer, ApprovalTimeline } from '@/components/business'
+import { BpmnViewer, ApprovalTimeline, ProcessTaskExecutionList } from '@/components/business'
 
 const route = useRoute()
 const router = useRouter()
@@ -79,6 +86,7 @@ const instance = ref<ProcessInstanceVO | null>(null)
 const bpmnXml = ref('')
 const highlightIds = ref<string[]>([])
 const approvalRecords = ref<ApprovalRecordVO[]>([])
+const executionNodes = ref<ExecutionNodeVO[]>([])
 
 function statusLabel(status?: string): string {
   const map: Record<string, string> = {
@@ -101,11 +109,11 @@ function statusTagType(status?: string): 'primary' | 'warning' | 'success' | 'in
 async function handleRemind() {
   reminding.value = true
   try {
-    await taskRemindApi.remind(instanceId)
+    await taskRemindApi.remindByInstance(instanceId)
     ElMessage.success('催办通知已发送')
   } catch (err) {
     const msg = err instanceof Error ? err.message : '催办失败'
-    if (msg.includes('24') || msg.includes('频率') || msg.includes('频繁')) {
+    if (msg.includes('24') || msg.includes('频率') || msg.includes('frequency')) {
       ElMessage.warning('催办频率限制：24小时内已催办过，请稍后再试')
     } else {
       ElMessage.error('催办失败')
@@ -122,11 +130,12 @@ onMounted(async () => {
     const instanceRes = await processInstanceApi.get(instanceId)
     instance.value = instanceRes.data
 
-    // 并行加载 XML + 高亮 + 审批记录
-    const [xmlRes, highlightRes, historyRes] = await Promise.all([
+    // 并行加载 XML + 高亮 + 审批记录 + 执行预测
+    const [xmlRes, highlightRes, historyRes, predictionRes] = await Promise.all([
       deployedProcessApi.getXml(instance.value.processDefinitionId),
       processInstanceApi.highlight(instanceId),
       processInstanceApi.history(instanceId),
+      processInstanceApi.prediction(instanceId),
     ])
 
     bpmnXml.value = xmlRes.data
@@ -137,6 +146,7 @@ onMounted(async () => {
     highlightIds.value = [...completed, ...active]
 
     approvalRecords.value = historyRes.data
+    executionNodes.value = predictionRes.data
   } catch {
     ElMessage.error('加载流程跟踪信息失败')
   } finally {

@@ -19,6 +19,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,12 @@ import java.util.stream.Collectors;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import java.io.StringWriter;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -103,7 +111,8 @@ public class ProcessDesignService {
 
         draftRepository.save(draft);
 
-        nodeConfigRepository.deleteByProcessDefId(draftId);
+        // 只删除"当前编辑中"的配置（processDefinitionId IS NULL），保留已部署的版本快照
+        nodeConfigRepository.deleteByProcessDefIdAndProcessDefinitionIdIsNull(draftId);
 
         Map<String, String> nodeConfigs = request.getNodeConfigs();
         if (nodeConfigs != null && !nodeConfigs.isEmpty()) {
@@ -193,6 +202,9 @@ public class ProcessDesignService {
                 .collect(Collectors.toMap(NodeConfig::getNodeId, NodeConfig::getConfigJson, (a, b) -> a));
         String effectiveBpmnXml = multiInstanceBpmnRewriter.rewrite(draft.getBpmnXml(), nodeConfigMap);
 
+        // 注入 StartEvent/EndEvent 默认名称
+        effectiveBpmnXml = injectEventNames(effectiveBpmnXml);
+
         // 与上次部署的 XML 一致则拒绝部署（使用改写后的 XML 比较，因为 NodeConfig 变更也会改变改写结果）
         if (Objects.equals(trimToNull(draft.getDeployedXml()), trimToNull(effectiveBpmnXml))) {
             throw new BusinessException(400, "流程数据未变化，无需部署");
@@ -227,8 +239,39 @@ public class ProcessDesignService {
         if (procDef != null) {
             draft.setProcessDefinitionId(procDef.getId());
             draft.setVersion(procDef.getVersion());
+
+            // 生成当前配置的版本快照：
+            // 复制 processDefinitionId IS NULL 的"当前编辑中"配置，绑定新部署版本
+            // 运行时按精确版本反查，保证不同版本的流程实例使用各自部署时的配置
+            snapshotNodeConfigs(draftId, tenantId, procDef.getId());
         }
         return draftRepository.save(draft);
+    }
+
+    /**
+     * 复制当前配置（processDefinitionId IS NULL）生成指定部署版本的快照。
+     * 同一部署版本重复生成时先删除旧快照（幂等）。
+     */
+    private void snapshotNodeConfigs(String draftId, String tenantId, String processDefinitionId) {
+        List<NodeConfig> currentConfigs = nodeConfigRepository
+                .findByProcessDefIdAndProcessDefinitionIdIsNull(draftId);
+        if (currentConfigs.isEmpty()) {
+            return;
+        }
+        // 幂等：先删除该版本已存在的快照
+        nodeConfigRepository.deleteByProcessDefIdAndProcessDefinitionId(draftId, processDefinitionId);
+        List<NodeConfig> snapshots = currentConfigs.stream().map(src -> {
+            NodeConfig nc = new NodeConfig();
+            nc.setId(UUID.randomUUID().toString().replace("-", ""));
+            nc.setTenantId(tenantId);
+            nc.setProcessDefId(draftId);
+            nc.setNodeId(src.getNodeId());
+            nc.setNodeType(src.getNodeType());
+            nc.setConfigJson(src.getConfigJson());
+            nc.setProcessDefinitionId(processDefinitionId);
+            return nc;
+        }).collect(Collectors.toList());
+        nodeConfigRepository.saveAll(snapshots);
     }
 
     /**
@@ -382,5 +425,65 @@ public class ProcessDesignService {
         if (s == null) return null;
         String t = s.trim();
         return t.isEmpty() ? null : t;
+    }
+
+    private static final String BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL";
+
+    /**
+     * 给 BPMN XML 中的 StartEvent 补 name="开始"、EndEvent 补 name="结束"。
+     * 已有名称的事件不覆盖。
+     */
+    private String injectEventNames(String bpmnXml) {
+        if (bpmnXml == null || bpmnXml.isBlank()) {
+            return bpmnXml;
+        }
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new ByteArrayInputStream(bpmnXml.getBytes(StandardCharsets.UTF_8)));
+
+            boolean modified = false;
+
+            // StartEvent → "开始"
+            NodeList startEvents = doc.getElementsByTagNameNS(BPMN_NS, "startEvent");
+            for (int i = 0; i < startEvents.getLength(); i++) {
+                Element el = (Element) startEvents.item(i);
+                String name = el.getAttribute("name");
+                if (name == null || name.isBlank()) {
+                    el.setAttribute("name", "开始");
+                    modified = true;
+                }
+            }
+
+            // EndEvent → "结束"
+            NodeList endEvents = doc.getElementsByTagNameNS(BPMN_NS, "endEvent");
+            for (int i = 0; i < endEvents.getLength(); i++) {
+                Element el = (Element) endEvents.item(i);
+                String name = el.getAttribute("name");
+                if (name == null || name.isBlank()) {
+                    el.setAttribute("name", "结束");
+                    modified = true;
+                }
+            }
+
+            if (!modified) {
+                return bpmnXml;
+            }
+
+            return serializeXml(doc);
+        } catch (Exception e) {
+            return bpmnXml;
+        }
+    }
+
+    private String serializeXml(Document doc) throws Exception {
+        TransformerFactory tf = TransformerFactory.newInstance();
+        Transformer t = tf.newTransformer();
+        t.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+        t.setOutputProperty(OutputKeys.INDENT, "yes");
+        StringWriter sw = new StringWriter();
+        t.transform(new DOMSource(doc), new StreamResult(sw));
+        return sw.toString();
     }
 }

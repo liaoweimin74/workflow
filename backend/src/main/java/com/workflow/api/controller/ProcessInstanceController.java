@@ -5,9 +5,12 @@ import com.workflow.common.domain.R;
 import com.workflow.engine.form.FormDataService;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
+import com.workflow.engine.runtime.ProcessTaskPredictionService;
 import com.workflow.framework.security.domain.LoginUser;
+import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.runtime.ProcessInstance;
+import org.flowable.task.api.Task;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
@@ -18,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -26,16 +30,22 @@ public class ProcessInstanceController {
 
     private final ProcessInstanceService processInstanceService;
     private final ProcessHighlightService highlightService;
+    private final ProcessTaskPredictionService predictionService;
     private final FormDataService formDataService;
+    private final TaskService taskService;
     private final ObjectMapper objectMapper;
 
     public ProcessInstanceController(ProcessInstanceService processInstanceService,
                                      ProcessHighlightService highlightService,
+                                     ProcessTaskPredictionService predictionService,
                                      FormDataService formDataService,
+                                     TaskService taskService,
                                      ObjectMapper objectMapper) {
         this.processInstanceService = processInstanceService;
         this.highlightService = highlightService;
+        this.predictionService = predictionService;
         this.formDataService = formDataService;
+        this.taskService = taskService;
         this.objectMapper = objectMapper;
     }
 
@@ -128,6 +138,14 @@ public class ProcessInstanceController {
     }
 
     /**
+     * 获取流程实例的执行预测列表（已执行 + 活跃 + 预测节点）。
+     */
+    @GetMapping("/{id}/prediction")
+    public R<List<ExecutionNodeVO>> prediction(@PathVariable String id) {
+        return R.ok(predictionService.getPrediction(id));
+    }
+
+    /**
      * 历史流程实例列表（查 act_hi_procinst），用于"我发起的"。
      * 包含已结束的实例，比 runtime 列表更完整。
      */
@@ -213,8 +231,22 @@ public class ProcessInstanceController {
                 ? startTime.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime().toString()
                 : null);
 
-        // 历史实例没有当前节点
-        map.put("currentNode", null);
+        // 当前节点：运行中的实例查当前活跃任务名（可能多个，用逗号连接）
+        String currentNode = null;
+        if (instance.getEndTime() == null) {
+            List<Task> activeTasks = taskService.createTaskQuery()
+                    .processInstanceId(instance.getId())
+                    .active()
+                    .list();
+            if (!activeTasks.isEmpty()) {
+                currentNode = activeTasks.stream()
+                        .map(Task::getName)
+                        .filter(n -> n != null && !n.isBlank())
+                        .distinct()
+                        .collect(java.util.stream.Collectors.joining("、"));
+            }
+        }
+        map.put("currentNode", currentNode);
 
         // 状态：endTime != null → "completed", 否则 "running"
         map.put("status", instance.getEndTime() != null ? "completed" : "running");

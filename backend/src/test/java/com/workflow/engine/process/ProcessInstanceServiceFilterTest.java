@@ -1,7 +1,10 @@
 package com.workflow.engine.process;
 
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RuntimeService;
+import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
@@ -29,6 +32,9 @@ class ProcessInstanceServiceFilterTest {
     private RuntimeService runtimeService;
     private HistoryService historyService;
     private TenantProvider tenantProvider;
+    private TaskService taskService;
+    private InitiatorNodeResolver initiatorNodeResolver;
+    private WfTaskCommentRepository commentRepository;
     private ProcessInstanceService service;
 
     @BeforeEach
@@ -36,8 +42,12 @@ class ProcessInstanceServiceFilterTest {
         runtimeService = mock(RuntimeService.class);
         historyService = mock(HistoryService.class);
         tenantProvider = mock(TenantProvider.class);
+        taskService = mock(TaskService.class);
+        initiatorNodeResolver = mock(InitiatorNodeResolver.class);
+        commentRepository = mock(WfTaskCommentRepository.class);
         when(tenantProvider.getTenantId()).thenReturn("test-tenant");
-        service = new ProcessInstanceService(runtimeService, historyService, tenantProvider);
+        service = new ProcessInstanceService(runtimeService, historyService, tenantProvider,
+                taskService, initiatorNodeResolver, commentRepository);
     }
 
     /**

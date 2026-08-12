@@ -1,5 +1,12 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.tenant.TenantProvider;
+import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.MultiInstanceLoopCharacteristics;
+import org.flowable.bpmn.model.Process;
+import org.flowable.bpmn.model.UserTask;
+import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.runtime.Execution;
@@ -30,21 +37,62 @@ class AddSignServiceTest {
     RuntimeService runtimeService;
     @Mock
     TaskService flowableTaskService;
+    @Mock
+    RepositoryService repositoryService;
+    @Mock
+    TenantProvider tenantProvider;
+    @Mock
+    WfTaskCommentRepository commentRepository;
 
     @InjectMocks
     AddSignService addSignService;
 
-    @Test
-    void addSign_singleUser_addsMultiInstanceExecution() {
+    /** 构造一个含 MI loopCharacteristics 的 BPMN 模型（approvalTask 为 MI 节点）。 */
+    private BpmnModel miBpmnModel() {
+        BpmnModel bpmnModel = new BpmnModel();
+        Process process = new Process();
+        process.setId("process1");
+        UserTask userTask = new UserTask();
+        userTask.setId("approvalTask");
+        userTask.setLoopCharacteristics(new MultiInstanceLoopCharacteristics());
+        process.addFlowElement(userTask);
+        bpmnModel.addProcess(process);
+        return bpmnModel;
+    }
+
+    /** 构造一个无 loopCharacteristics 的 BPMN 模型（approvalTask 非 MI 节点）。 */
+    private BpmnModel plainBpmnModel() {
+        BpmnModel bpmnModel = new BpmnModel();
+        Process process = new Process();
+        process.setId("process1");
+        UserTask userTask = new UserTask();
+        userTask.setId("approvalTask");
+        process.addFlowElement(userTask);
+        bpmnModel.addProcess(process);
+        return bpmnModel;
+    }
+
+    private org.flowable.task.api.TaskQuery taskQueryReturning(Task task) {
+        org.flowable.task.api.TaskQuery query = mock(org.flowable.task.api.TaskQuery.class, RETURNS_SELF);
+        when(query.taskId(anyString())).thenReturn(query);
+        when(query.singleResult()).thenReturn(task);
+        return query;
+    }
+
+    private Task taskStub() {
         Task task = mock(Task.class);
         when(task.getProcessInstanceId()).thenReturn("pi-001");
         when(task.getTaskDefinitionKey()).thenReturn("approvalTask");
+        when(task.getProcessDefinitionId()).thenReturn("pd-001");
+        return task;
+    }
 
-        when(flowableTaskService.createTaskQuery())
-                .thenReturn(mock(org.flowable.task.api.TaskQuery.class, RETURNS_SELF));
-        org.flowable.task.api.TaskQuery query = flowableTaskService.createTaskQuery();
-        when(query.taskId(anyString())).thenReturn(query);
-        when(query.singleResult()).thenReturn(task);
+    @Test
+    void addSign_singleUser_addsMultiInstanceExecution() {
+        Task task = taskStub();
+        org.flowable.task.api.TaskQuery query = taskQueryReturning(task);
+        when(flowableTaskService.createTaskQuery()).thenReturn(query);
+        when(repositoryService.getBpmnModel("pd-001")).thenReturn(miBpmnModel());
 
         Execution exec = mock(Execution.class);
         when(runtimeService.addMultiInstanceExecution("approvalTask", "pi-001",
@@ -59,15 +107,10 @@ class AddSignServiceTest {
 
     @Test
     void addSign_multipleUsers_addsEachAsMultiInstance() {
-        Task task = mock(Task.class);
-        when(task.getProcessInstanceId()).thenReturn("pi-001");
-        when(task.getTaskDefinitionKey()).thenReturn("approvalTask");
-
-        when(flowableTaskService.createTaskQuery())
-                .thenReturn(mock(org.flowable.task.api.TaskQuery.class, RETURNS_SELF));
-        org.flowable.task.api.TaskQuery query = flowableTaskService.createTaskQuery();
-        when(query.taskId(anyString())).thenReturn(query);
-        when(query.singleResult()).thenReturn(task);
+        Task task = taskStub();
+        org.flowable.task.api.TaskQuery query = taskQueryReturning(task);
+        when(flowableTaskService.createTaskQuery()).thenReturn(query);
+        when(repositoryService.getBpmnModel("pd-001")).thenReturn(miBpmnModel());
 
         addSignService.addSign("task-001", List.of("charlie", "dave"));
 
@@ -79,11 +122,8 @@ class AddSignServiceTest {
 
     @Test
     void addSign_taskNotFound_throwsException() {
-        when(flowableTaskService.createTaskQuery())
-                .thenReturn(mock(org.flowable.task.api.TaskQuery.class, RETURNS_SELF));
-        org.flowable.task.api.TaskQuery query = flowableTaskService.createTaskQuery();
-        when(query.taskId(anyString())).thenReturn(query);
-        when(query.singleResult()).thenReturn(null);
+        org.flowable.task.api.TaskQuery query = taskQueryReturning(null);
+        when(flowableTaskService.createTaskQuery()).thenReturn(query);
 
         assertThatThrownBy(() -> addSignService.addSign("nonexistent", List.of("charlie")))
                 .isInstanceOf(IllegalStateException.class)
@@ -105,23 +145,32 @@ class AddSignServiceTest {
     }
 
     @Test
-    void addSign_taskNotMi_throwsException() {
-        Task task = mock(Task.class);
-        when(task.getProcessInstanceId()).thenReturn("pi-001");
-        when(task.getTaskDefinitionKey()).thenReturn("approvalTask");
+    void addSign_taskNotMi_addsCandidateUser() {
+        Task task = taskStub();
+        org.flowable.task.api.TaskQuery query = taskQueryReturning(task);
+        when(flowableTaskService.createTaskQuery()).thenReturn(query);
+        when(repositoryService.getBpmnModel("pd-001")).thenReturn(plainBpmnModel());
 
-        when(flowableTaskService.createTaskQuery())
-                .thenReturn(mock(org.flowable.task.api.TaskQuery.class, RETURNS_SELF));
-        org.flowable.task.api.TaskQuery query = flowableTaskService.createTaskQuery();
-        when(query.taskId(anyString())).thenReturn(query);
-        when(query.singleResult()).thenReturn(task);
+        addSignService.addSign("task-001", List.of("charlie"));
 
-        // addMultiInstanceExecution throws → task not MI
-        when(runtimeService.addMultiInstanceExecution(anyString(), anyString(), any()))
-                .thenThrow(new org.flowable.common.engine.api.FlowableException("not a multi instance activity"));
+        verify(flowableTaskService).addCandidateUser("task-001", "charlie");
+        verify(runtimeService, never()).addMultiInstanceExecution(anyString(), anyString(), any());
+    }
 
-        assertThatThrownBy(() -> addSignService.addSign("task-001", List.of("charlie")))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("not a multi-instance");
+    @Test
+    void addSign_withUserId_writesComment() {
+        Task task = taskStub();
+        org.flowable.task.api.TaskQuery query = taskQueryReturning(task);
+        when(flowableTaskService.createTaskQuery()).thenReturn(query);
+        when(repositoryService.getBpmnModel("pd-001")).thenReturn(miBpmnModel());
+        when(tenantProvider.getTenantId()).thenReturn("default");
+
+        addSignService.addSign("task-001", List.of("charlie"), "u1", "请补充材料");
+
+        verify(commentRepository).save(argThat(c ->
+                "add_sign".equals(c.getAction())
+                        && "u1".equals(c.getUserId())
+                        && "charlie".equals(c.getTargetUserId())
+                        && "pi-001".equals(c.getProcessInstanceId())));
     }
 }

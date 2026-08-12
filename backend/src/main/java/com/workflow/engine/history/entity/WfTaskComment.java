@@ -36,6 +36,12 @@ public class WfTaskComment {
     @Column(name = "action", length = 32, nullable = false)
     private String action;
 
+    /**
+     * 动作目标人 ID（转办/委派/加签/转签的目标人，其他动作为 null）。
+     */
+    @Column(name = "target_user_id", length = 64)
+    private String targetUserId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -68,6 +74,9 @@ public class WfTaskComment {
 
     public String getAction() { return action; }
     public void setAction(String action) { this.action = action; }
+
+    public String getTargetUserId() { return targetUserId; }
+    public void setTargetUserId(String targetUserId) { this.targetUserId = targetUserId; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

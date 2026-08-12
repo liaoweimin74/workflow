@@ -1,13 +1,13 @@
 <template>
   <div class="task-done-detail-page">
-    <el-page-header @back="router.back()">
+    <el-page-header @back="$router.back()">
       <template #content>
         <span class="header-title">已办详情 — {{ taskDetail?.processName ?? '加载中…' }}</span>
       </template>
       <template #extra>
-        <el-button v-if="instanceRunning" type="primary" @click="goTracking">
+        <el-button @click="trackingDrawer = true">
           <el-icon><View /></el-icon>
-          查看实时进度
+          流程跟踪
         </el-button>
       </template>
     </el-page-header>
@@ -18,6 +18,7 @@
         <template #header><span style="font-weight: bold">流程基本信息</span></template>
         <el-descriptions :column="3" border size="small">
           <el-descriptions-item label="流程名称">{{ taskDetail?.processName }}</el-descriptions-item>
+          <el-descriptions-item label="版本">v{{ taskDetail?.processVersion ?? '—' }}</el-descriptions-item>
           <el-descriptions-item label="流程编号">{{ taskDetail?.businessKey || '—' }}</el-descriptions-item>
           <el-descriptions-item label="处理节点">{{ taskDetail?.name }}</el-descriptions-item>
           <el-descriptions-item label="发起人">{{ taskDetail?.initiatorName || taskDetail?.initiator }}</el-descriptions-item>
@@ -49,35 +50,33 @@
           </el-descriptions>
         </template>
       </el-card>
-
-      <!-- 底部：审批记录时间线 -->
-      <el-card shadow="never" style="margin-top: 16px">
-        <template #header><span style="font-weight: bold">审批记录</span></template>
-        <ApprovalTimeline :records="approvalRecords" />
-      </el-card>
     </div>
+
+    <!-- 流程跟踪 Drawer -->
+    <ProcessTrackDrawer
+      v-model="trackingDrawer"
+      :process-instance-id="taskDetail?.processInstanceId ?? ''"
+      :process-definition-id="taskDetail?.processDefinitionId"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View } from '@element-plus/icons-vue'
 import { taskApi } from '@/api/task'
-import { processInstanceApi } from '@/api/processInstance'
-import type { TaskDetailVO, ApprovalRecordVO } from '@/api/task'
+import type { TaskDetailVO } from '@/api/task'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import { ApprovalTimeline } from '@/components/business'
+import { ProcessTrackDrawer } from '@/components/business'
 
 const route = useRoute()
-const router = useRouter()
 const taskId = route.params.taskId as string
 
 const loading = ref(true)
 const taskDetail = ref<TaskDetailVO | null>(null)
-const approvalRecords = ref<ApprovalRecordVO[]>([])
-const instanceRunning = ref(false)
+const trackingDrawer = ref(false)
 
 function formatDateTime(dt?: string): string {
   if (!dt) return '—'
@@ -90,25 +89,11 @@ function formatValue(value: unknown): string {
   return String(value)
 }
 
-function goTracking() {
-  if (taskDetail.value) {
-    router.push(`/process/instance/${taskDetail.value.processInstanceId}`)
-  }
-}
-
 onMounted(async () => {
   loading.value = true
   try {
     const res = await taskApi.getDetail(taskId)
     taskDetail.value = res.data
-
-    // 并行加载审批记录 + 检查流程是否仍在运行
-    const [historyRes, instanceRes] = await Promise.all([
-      processInstanceApi.history(taskDetail.value.processInstanceId),
-      processInstanceApi.get(taskDetail.value.processInstanceId),
-    ])
-    approvalRecords.value = historyRes.data
-    instanceRunning.value = !instanceRes.data.ended
   } catch {
     ElMessage.error('加载详情失败')
   } finally {

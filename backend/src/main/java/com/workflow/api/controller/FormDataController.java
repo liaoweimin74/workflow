@@ -26,7 +26,7 @@ public class FormDataController {
     }
 
     /**
-     * 保存表单数据。
+     * 保存表单当前数据（upsert，用于节点间传递）。
      */
     @PostMapping
     public R<FormData> save(@RequestBody FormDataSaveRequest request) {
@@ -40,7 +40,51 @@ public class FormDataController {
     }
 
     /**
-     * 按流程实例和表单定义查询表单数据。
+     * 保存审批快照（每次创建新记录，不可变）。
+     */
+    @PostMapping("/snapshot")
+    public R<FormData> saveSnapshot(@RequestBody FormDataSaveRequest request) {
+        FormData formData = formDataService.saveSnapshot(
+                request.getFormDefId(),
+                request.getProcessInstanceId(),
+                request.getTaskId(),
+                request.getDataJson()
+        );
+        return R.ok(formData);
+    }
+
+    /**
+     * 保存发起页草稿（processInstanceId 为 null 的表单数据）。
+     */
+    @PostMapping("/draft")
+    public R<FormData> saveDraft(@RequestBody FormDataSaveRequest request) {
+        FormData formData = formDataService.saveDraft(
+                request.getFormDefId(),
+                request.getDataJson()
+        );
+        return R.ok(formData);
+    }
+
+    /**
+     * 查询发起页草稿。
+     */
+    @GetMapping("/draft/{formDefId}")
+    public R<FormDataDTO> getDraft(@PathVariable String formDefId) {
+        Optional<FormData> formData = formDataService.findDraft(formDefId);
+        return R.ok(formData.map(this::toDTO).orElse(null));
+    }
+
+    /**
+     * 清除发起页草稿（发起成功后调用）。
+     */
+    @DeleteMapping("/draft/{formDefId}")
+    public R<Void> clearDraft(@PathVariable String formDefId) {
+        formDataService.clearDraft(formDefId);
+        return R.ok();
+    }
+
+    /**
+     * 按流程实例和表单定义查询当前表单数据（非快照）。
      */
     @GetMapping
     public R<FormDataDTO> getByProcessInstance(
@@ -49,6 +93,27 @@ public class FormDataController {
 
         Optional<FormData> formData = formDataService.findByProcessInstance(processInstanceId, formDefId);
         return R.ok(formData.map(this::toDTO).orElse(null));
+    }
+
+    /**
+     * 按 taskId 查询审批快照。
+     */
+    @GetMapping("/task/{taskId}")
+    public R<FormDataDTO> getByTaskId(@PathVariable String taskId) {
+        Optional<FormData> formData = formDataService.findByTaskId(taskId);
+        return R.ok(formData.map(this::toDTO).orElse(null));
+    }
+
+    /**
+     * 按流程实例查询所有审批快照（按时间倒序）。
+     */
+    @GetMapping("/process-instance/{processInstanceId}/snapshots")
+    public R<List<FormDataDTO>> getSnapshots(@PathVariable String processInstanceId) {
+        List<FormData> list = formDataService.findSnapshotsByProcessInstance(processInstanceId);
+        List<FormDataDTO> dtos = list.stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+        return R.ok(dtos);
     }
 
     /**
@@ -93,6 +158,7 @@ public class FormDataController {
         dto.setCreatedBy(formData.getCreatedBy());
         dto.setCreatedAt(formData.getCreatedAt());
         dto.setUpdatedAt(formData.getUpdatedAt());
+        dto.setIsSnapshot(formData.getIsSnapshot());
         return dto;
     }
 }

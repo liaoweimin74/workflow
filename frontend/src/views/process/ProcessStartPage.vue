@@ -29,6 +29,7 @@
         <FormRenderer
           ref="formRendererRef"
           :form-def-id="formDefId"
+          :initial-values="draftValues ?? undefined"
         />
       </template>
       <template v-else>
@@ -43,6 +44,7 @@
       <!-- 提交按钮 -->
       <div class="submit-bar">
         <el-button @click="router.back()">取消</el-button>
+        <el-button v-if="formDefId" :loading="savingDraft" @click="handleSaveDraft">保存草稿</el-button>
         <el-button type="primary" :loading="submitting" @click="handleSubmit">
           {{ formDefId ? '提交发起' : '确认发起' }}
         </el-button>
@@ -59,6 +61,7 @@ import BpmnViewer from 'bpmn-js/lib/NavigatedViewer'
 import type ViewerType from 'bpmn-js/lib/NavigatedViewer'
 import { deployedProcessApi } from '@/api/processDefinition'
 import { processInstanceApi } from '@/api/processInstance'
+import { formApi } from '@/api/form'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { DeployedProcessDefinition } from '@/api/processDefinition'
 
@@ -68,11 +71,13 @@ const processDefinitionId = route.params.processDefinitionId as string
 
 const loading = ref(true)
 const submitting = ref(false)
+const savingDraft = ref(false)
 const processDef = ref<DeployedProcessDefinition | null>(null)
 const formDefId = ref<string | null>(null)
 const diagramCollapse = ref<string[]>([])
 const diagramRef = ref<HTMLElement>()
 const formRendererRef = ref<InstanceType<typeof FormRenderer>>()
+const draftValues = ref<Record<string, unknown> | null>(null)
 
 let viewer: ViewerType | null = null
 
@@ -88,8 +93,20 @@ async function loadProcessDefinition() {
     const xml = xmlRes.data
 
     // 从 API 响应获取表单定义 ID（后端已按优先级：发起人节点表单 > 流程默认表单）
-    const raw = defRes.data as Record<string, unknown>
+    const raw = defRes.data as unknown as Record<string, unknown>
     formDefId.value = (raw.formDefId as string) || null
+
+    // 加载已有草稿回填表单
+    if (formDefId.value) {
+      try {
+        const draftRes = await formApi.getDraft(formDefId.value)
+        if (draftRes.data?.dataJson) {
+          draftValues.value = JSON.parse(draftRes.data.dataJson)
+        }
+      } catch {
+        // 无草稿或加载失败，忽略
+      }
+    }
 
     // 渲染流程图
     diagramCollapse.value = ['diagram']
@@ -113,6 +130,24 @@ async function loadProcessDefinition() {
   }
 }
 
+// ── 保存草稿 ──
+async function handleSaveDraft() {
+  if (!formDefId.value || !formRendererRef.value) return
+  savingDraft.value = true
+  try {
+    const data = formRendererRef.value.getFormData()
+    await formApi.saveDraft({
+      formDefId: formDefId.value,
+      dataJson: JSON.stringify(data),
+    })
+    ElMessage.success('草稿已保存')
+  } catch {
+    ElMessage.error('保存草稿失败')
+  } finally {
+    savingDraft.value = false
+  }
+}
+
 // ── 提交发起 ──
 async function handleSubmit() {
   if (!processDef.value) return
@@ -127,9 +162,18 @@ async function handleSubmit() {
 
     const res = await processInstanceApi.start({
       processKey: processDef.value.key,
-      formDefId: formDefId.value,
+      formDefId: formDefId.value ?? undefined,
       variables,
     })
+
+    // 发起成功后清除草稿
+    if (formDefId.value) {
+      try {
+        await formApi.clearDraft(formDefId.value)
+      } catch {
+        // 清除失败不影响发起结果
+      }
+    }
 
     ElMessage.success('发起成功')
     router.push({ path: '/process/todo', query: { tab: 'initiated', highlight: res.data.id } })

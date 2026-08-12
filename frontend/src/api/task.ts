@@ -29,6 +29,8 @@ export interface TaskTodoVO {
 export interface TaskDoneVO extends TaskTodoVO {
   endTime: string
   approveResult: string
+  /** 流程当前待办节点（非办理节点 currentNodeName）。 */
+  currentNode?: string
 }
 
 /**
@@ -44,12 +46,14 @@ export interface TaskDetailVO {
   processInstanceId: string
   processDefinitionId: string
   processName: string
+  processVersion?: number
   businessKey: string
   initiator: string
   initiatorName: string
   formKey: string
   variables: Record<string, unknown>
   createTime: string
+  isInitiatorTask: boolean
 }
 
 /**
@@ -163,9 +167,14 @@ export const taskApi = {
     return http.post(`/v1/tasks/${id}/complete`, data)
   },
 
-  /** 驳回任务 */
+  /** 驳回任务（退回给发起人重新填写） */
   reject(id: string, data?: RejectRequest): Promise<R<void>> {
     return http.post(`/v1/tasks/${id}/reject`, data)
+  },
+
+  /** 拒绝任务（不同意并终止整个流程） */
+  refuse(id: string, data?: RejectRequest): Promise<R<void>> {
+    return http.post(`/v1/tasks/${id}/refuse`, data)
   },
 
   /** 转办任务 */

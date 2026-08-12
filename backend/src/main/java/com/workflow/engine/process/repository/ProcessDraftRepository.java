@@ -21,6 +21,11 @@ public interface ProcessDraftRepository extends JpaRepository<ProcessDraft, Stri
     List<ProcessDraft> findByTenantIdAndKeyOrderByVersionDesc(String tenantId, String key);
 
     /**
+     * 按流程 key 查询流程草稿。
+     */
+    Optional<ProcessDraft> findByTenantIdAndKey(String tenantId, String key);
+
+    /**
      * 按已部署的 Flowable processDefinitionId 反查关联的流程草稿。
      * 用于运行时根据 processDefinitionId 定位 draftId，进而加载节点配置。
      */

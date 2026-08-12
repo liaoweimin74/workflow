@@ -40,8 +40,6 @@ import { getModeler } from '../utils/bpmnModeler'
 import {
   getNodeName,
   getDocumentation,
-  setNodeName,
-  setDocumentation
 } from '../utils/nodeConfigAdapter'
 import FormPropertyTab from './FormPropertyTab.vue'
 
@@ -79,7 +77,7 @@ function loadConfig() {
   isLoading = true
 
   config.id = element.id
-  config.name = getNodeName(element)
+  config.name = getNodeName(element) || '发起节点'
   config.description = getDocumentation(element)
 
   // 加载已有 designerStore 配置覆盖（basic.name / basic.description）
@@ -89,17 +87,29 @@ function loadConfig() {
     if (existing.basic.description) config.description = existing.basic.description
   }
 
+  // BPMN element 无名称时写入默认值，确保持久化
+  if (!getNodeName(element) && config.name) {
+    const modeling = (modeler as any).get('modeling')
+    modeling.updateProperties(element, { name: config.name })
+  }
+
   setTimeout(() => { isLoading = false }, 0)
 }
 
 function updateBpmn() {
   const modeler = getModeler()
   const elementRegistry = modeler.get<ElementRegistryLike>('elementRegistry')
+  const modeling = (modeler as any).get('modeling')
+  const moddle = (modeler as any).get('moddle')
   const element = elementRegistry.get(designerStore.selectedNodeId!)
   if (!element) return
 
-  setNodeName(element, config.name)
-  setDocumentation(element, config.description, modeler)
+  const props: any = { name: config.name }
+  if (config.description) {
+    const doc = moddle.create('bpmn:Documentation', { text: config.description })
+    props.documentation = [doc]
+  }
+  modeling.updateProperties(element, props)
   saveConfig()
 }
 

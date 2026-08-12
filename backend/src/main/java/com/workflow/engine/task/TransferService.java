@@ -18,7 +18,11 @@ import java.util.UUID;
  * 任务转办服务。
  *
  * <p>转办（transfer）：直接更换 assignee，原办理人不再持有任务。
- * 区别于委派（delegate）：委派后原 assignee 仍是 PENDING_TASK_OWNER，
+ * 单实例节点与多实例（会签/或签/依次审批）节点统一处理：
+ * 多实例中每个子任务独立，改 assignee 后原办理人待办消失、新人待办出现，
+ * 其他实例不受影响（业务上等价于转签）。
+ *
+ * <p>区别于委派（delegate）：委派后原 assignee 仍是 PENDING_TASK_OWNER，
  * 被委派人 resolve 后任务回到原 assignee。
  *
  * <p>每次转办记录审计到 wf_task_transfer 表。
@@ -65,15 +69,23 @@ public class TransferService {
             throw new IllegalStateException("Task not found: " + taskId);
         }
 
-        log.info("转办任务 taskId={} from={} to={} reason={}", taskId, fromUser, toUser, reason);
+        String activityId = task.getTaskDefinitionKey();
+        String processInstanceId = task.getProcessInstanceId();
+        String executionId = task.getExecutionId();
 
+        log.info("转办任务 taskId={} from={} to={} reason={} activity={}",
+                taskId, fromUser, toUser, reason, activityId);
+
+        // 单实例和多实例节点统一走 setAssignee：
+        // 多实例（会签/或签/依次审批）中每个子任务独立，改 assignee 后
+        // 原办理人待办消失、新人待办出现，其他实例不受影响（业务上等价于转签）。
         flowableTaskService.setAssignee(taskId, toUser);
 
         WfTaskTransfer record = new WfTaskTransfer();
         record.setId(UUID.randomUUID().toString().replace("-", ""));
         record.setTenantId(tenantProvider.getTenantId());
         record.setTaskId(taskId);
-        record.setProcessInstanceId(task.getProcessInstanceId());
+        record.setProcessInstanceId(processInstanceId);
         record.setFromUser(task.getAssignee());
         record.setToUser(toUser);
         record.setReason(reason);
@@ -85,10 +97,11 @@ public class TransferService {
             comment.setId(UUID.randomUUID().toString().replace("-", ""));
             comment.setTenantId(tenantProvider.getTenantId());
             comment.setTaskId(taskId);
-            comment.setProcessInstanceId(task.getProcessInstanceId());
+            comment.setProcessInstanceId(processInstanceId);
             comment.setUserId(fromUser);
             comment.setAction("transfer");
             comment.setComment(reason);
+            comment.setTargetUserId(toUser);
             commentRepository.save(comment);
         }
     }

@@ -78,6 +78,13 @@ public class TaskRemindService {
 
         // 3. 插入催办记录
         String remindTo = task.getAssignee();
+        if (remindTo == null || remindTo.isBlank()) {
+            remindTo = task.getOwner();
+        }
+        if (remindTo == null || remindTo.isBlank()) {
+            throw new IllegalStateException(
+                    "Task " + taskId + " has no assignee or owner to remind");
+        }
         WfTaskRemind record = new WfTaskRemind();
         record.setId(UUID.randomUUID().toString().replace("-", ""));
         record.setTenantId(tenantProvider.getTenantId());

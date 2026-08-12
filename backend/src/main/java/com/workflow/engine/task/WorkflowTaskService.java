@@ -8,6 +8,7 @@ import com.workflow.api.dto.TaskTodoFilter;
 import com.workflow.api.dto.TaskTodoVO;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.entity.ProcessDraft;
 import com.workflow.engine.process.repository.NodeConfigRepository;
@@ -57,6 +58,7 @@ public class WorkflowTaskService {
     private final WfTaskRemindRepository remindRepository;
     private final ProcessDraftRepository processDraftRepository;
     private final NodeConfigRepository nodeConfigRepository;
+    private final InitiatorNodeResolver initiatorNodeResolver;
     private final ObjectMapper objectMapper;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
@@ -69,6 +71,7 @@ public class WorkflowTaskService {
                                WfTaskRemindRepository remindRepository,
                                ProcessDraftRepository processDraftRepository,
                                NodeConfigRepository nodeConfigRepository,
+                               InitiatorNodeResolver initiatorNodeResolver,
                                ObjectMapper objectMapper) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
@@ -80,6 +83,7 @@ public class WorkflowTaskService {
         this.remindRepository = remindRepository;
         this.processDraftRepository = processDraftRepository;
         this.nodeConfigRepository = nodeConfigRepository;
+        this.initiatorNodeResolver = initiatorNodeResolver;
         this.objectMapper = objectMapper;
     }
 
@@ -203,7 +207,34 @@ public class WorkflowTaskService {
         }
 
         long total = query.count();
-        List<HistoricTaskInstance> tasks = query.listPage((int) pageable.getOffset(), pageable.getPageSize());
+        List<HistoricTaskInstance> tasks = new ArrayList<>(query.listPage((int) pageable.getOffset(), pageable.getPageSize()));
+
+        // 补充：用户操作过但未完成的任务（转办/委派/加签/转签后任务已换人），
+        // 从 wf_task_comment 按 user_id 反查 taskId，也应出现在已办中
+        Set<String> commentTaskIds = commentRepository.findByUserId(userId).stream()
+                .map(WfTaskComment::getTaskId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Set<String> existingTaskIds = tasks.stream()
+                .map(HistoricTaskInstance::getId)
+                .collect(Collectors.toSet());
+
+        // 只查不在已办列表中的任务（去重）
+        Set<String> missingTaskIds = commentTaskIds.stream()
+                .filter(id -> !existingTaskIds.contains(id))
+                .collect(Collectors.toSet());
+
+        if (!missingTaskIds.isEmpty()) {
+            List<HistoricTaskInstance> commentTasks = historyService
+                    .createHistoricTaskInstanceQuery()
+                    .taskTenantId(tenantId)
+                    .taskIds(missingTaskIds)
+                    .orderByHistoricTaskInstanceEndTime()
+                    .desc()
+                    .list();
+            tasks.addAll(commentTasks);
+        }
 
         List<TaskDoneVO> vos = assembleDoneVOs(tasks);
 
@@ -216,7 +247,13 @@ public class WorkflowTaskService {
                     .toList();
         }
 
-        return new PageImpl<>(vos, pageable, total);
+        // 排序：按 endTime 或 createTime 倒序
+        vos = vos.stream()
+                .sorted(Comparator.comparing(TaskDoneVO::getEndTime,
+                        Comparator.nullsFirst(Comparator.naturalOrder())).reversed())
+                .toList();
+
+        return new PageImpl<>(vos, pageable, Math.max(total, vos.size()));
     }
 
     // ==================== VO 组装（批量查询，避免 N+1）====================
@@ -307,6 +344,36 @@ public class WorkflowTaskService {
         Map<String, String> initiatorMap = batchQueryHistoricInitiators(processInstanceIds);
         Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
 
+        // 4b. 批量查询审批意见（approveResult）
+        Map<String, String> approveResultMap = new HashMap<>();
+        for (HistoricTaskInstance task : tasks) {
+            if (task.getId() == null) continue;
+            List<WfTaskComment> comments = commentRepository.findByTaskId(task.getId());
+            if (!comments.isEmpty()) {
+                // 取最后一条操作
+                approveResultMap.put(task.getId(), comments.get(comments.size() - 1).getAction());
+            }
+        }
+
+        // 4c. 批量查询流程当前待办节点（currentNode，区别于办理节点 currentNodeName）
+        Map<String, String> currentNodeMap = new HashMap<>();
+        for (String pid : processInstanceIds) {
+            List<Task> activeTasks = flowableTaskService.createTaskQuery()
+                    .processInstanceId(pid)
+                    .active()
+                    .list();
+            if (activeTasks != null && !activeTasks.isEmpty()) {
+                String names = activeTasks.stream()
+                        .map(Task::getName)
+                        .filter(n -> n != null && !n.isBlank())
+                        .distinct()
+                        .collect(Collectors.joining("、"));
+                if (!names.isBlank()) {
+                    currentNodeMap.put(pid, names);
+                }
+            }
+        }
+
         // 5. 组装 VO
         return tasks.stream().map(task -> {
             TaskDoneVO vo = new TaskDoneVO();
@@ -336,8 +403,11 @@ public class WorkflowTaskService {
             vo.setInitiator(initiator);
             vo.setInitiatorName(initiatorNameMap.get(initiator));
 
-            // approveResult: wf_task_comment 表尚未创建，暂设为 null
-            // TODO: Task 后续实现 wf_task_comment 查询后填充
+            // approveResult: 从 wf_task_comment 取该任务的最新操作
+            vo.setApproveResult(approveResultMap.get(task.getId()));
+
+            // currentNode: 流程当前待办节点（非办理节点）
+            vo.setCurrentNode(currentNodeMap.get(task.getProcessInstanceId()));
 
             return vo;
         }).toList();
@@ -600,11 +670,21 @@ public class WorkflowTaskService {
             ProcessDefinition pd = pdMap.get(processDefinitionId);
             if (pd != null) {
                 vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+                vo.setProcessVersion(pd.getVersion());
             }
 
             // formKey 从 BpmnModel 中当前任务的 UserTask 节点提取
             String formKey = extractFormKey(processDefinitionId, task.getTaskDefinitionKey());
             vo.setFormKey(formKey);
+
+            // 判断是否为发起节点
+            try {
+                String initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
+                vo.setIsInitiatorTask(initiatorNodeId != null
+                        && initiatorNodeId.equals(task.getTaskDefinitionKey()));
+            } catch (Exception e) {
+                vo.setIsInitiatorTask(false);
+            }
         }
 
         // variables
@@ -697,10 +777,20 @@ public class WorkflowTaskService {
             ProcessDefinition pd = pdMap.get(processDefinitionId);
             if (pd != null) {
                 vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+                vo.setProcessVersion(pd.getVersion());
             }
 
             String formKey = extractFormKey(processDefinitionId, histTask.getTaskDefinitionKey());
             vo.setFormKey(formKey);
+
+            // 判断是否为发起节点
+            try {
+                String initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
+                vo.setIsInitiatorTask(initiatorNodeId != null
+                        && initiatorNodeId.equals(histTask.getTaskDefinitionKey()));
+            } catch (Exception e) {
+                vo.setIsInitiatorTask(false);
+            }
         }
 
         // variables — 历史变量
@@ -738,10 +828,8 @@ public class WorkflowTaskService {
             return null;
         }
         try {
-            ProcessDraft draft = processDraftRepository.findByProcessDefinitionId(processDefinitionId).orElse(null);
-            if (draft == null) return null;
-
-            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draft.getId());
+            // 精确匹配该部署版本的 NodeConfig 快照（部署时由当前配置复制生成）
+            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
             String taskFormDefId = null;
             String processFormDefId = null;
 
@@ -790,6 +878,10 @@ public class WorkflowTaskService {
 
     @Transactional
     public void completeTask(String taskId, Map<String, Object> variables) {
+        Task task = flowableTaskService.createTaskQuery().taskId(taskId).singleResult();
+        if (task != null && task.getDelegationState() != null) {
+            flowableTaskService.resolveTask(taskId);
+        }
         flowableTaskService.complete(taskId, variables);
     }
 
@@ -828,12 +920,18 @@ public class WorkflowTaskService {
 
         String processInstanceId = currentTask.getProcessInstanceId();
 
-        // 2. 完成任务
+        // 2. 委派状态的任务需要先 resolve
+        org.flowable.task.api.DelegationState state = currentTask.getDelegationState();
+        if (state != null) {
+            flowableTaskService.resolveTask(taskId);
+        }
+
+        // 3. 完成任务
         flowableTaskService.complete(taskId, variables);
 
-        // 3. 写入审批意见
+        // 4. 写入审批意见
         if (userId != null) {
-            saveTaskComment(taskId, processInstanceId, userId, "complete", comment);
+            saveTaskComment(taskId, processInstanceId, userId, "approve", comment);
         }
 
         // 4. 查流程是否仍在运行
@@ -901,7 +999,7 @@ public class WorkflowTaskService {
 
         // 3. 写入审批意见
         if (fromUser != null) {
-            saveTaskComment(taskId, task.getProcessInstanceId(), fromUser, "delegate", comment);
+            saveTaskComment(taskId, task.getProcessInstanceId(), fromUser, "delegate", comment, delegateTo);
         }
     }
 
@@ -910,8 +1008,16 @@ public class WorkflowTaskService {
     /**
      * 保存审批意见到 wf_task_comment 表。
      */
-    void saveTaskComment(String taskId, String processInstanceId, String userId,
+    public void saveTaskComment(String taskId, String processInstanceId, String userId,
                          String action, String comment) {
+        saveTaskComment(taskId, processInstanceId, userId, action, comment, null);
+    }
+
+    /**
+     * 保存审批意见到 wf_task_comment 表（带目标人）。
+     */
+    public void saveTaskComment(String taskId, String processInstanceId, String userId,
+                         String action, String comment, String targetUserId) {
         WfTaskComment record = new WfTaskComment();
         record.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
         record.setTenantId(tenantProvider.getTenantId());
@@ -920,6 +1026,7 @@ public class WorkflowTaskService {
         record.setUserId(userId);
         record.setAction(action);
         record.setComment(comment);
+        record.setTargetUserId(targetUserId);
         commentRepository.save(record);
     }
 }

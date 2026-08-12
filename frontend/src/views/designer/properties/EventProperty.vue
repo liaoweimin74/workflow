@@ -7,7 +7,7 @@
     </el-form-item>
 
     <el-form-item label="节点名称">
-      <el-input v-model="config.name" placeholder="请输入节点名称" @change="updateBpmn" />
+      <el-input v-model="config.name" disabled />
     </el-form-item>
 
     <el-form-item label="节点描述">
@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted, watch } from 'vue'
+import { reactive, onMounted, watch, computed } from 'vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import FormPropertyTab from './FormPropertyTab.vue'
@@ -37,6 +37,14 @@ const config = reactive({
   id: '',
   name: '',
   description: ''
+})
+
+/** 开始/结束事件名称固定，不可编辑 */
+const fixedName = computed(() => {
+  const type = designerStore.selectedNodeType || ''
+  if (type === 'StartEvent') return '开始'
+  if (type === 'EndEvent') return '结束'
+  return null
 })
 
 onMounted(() => {
@@ -58,7 +66,7 @@ function loadConfig() {
 
   const bo = element.businessObject
   config.id = element.id
-  config.name = bo.name || ''
+  config.name = fixedName.value ?? bo.name ?? ''
   config.description = ''
 
   const docs = bo.documentation
@@ -75,7 +83,7 @@ function updateBpmn() {
   const element = elementRegistry.get(designerStore.selectedNodeId)
   if (!element) return
 
-  const props: any = { name: config.name }
+  const props: any = { name: fixedName.value ?? config.name }
   if (config.description) {
     const doc = moddle.create('bpmn:Documentation', { text: config.description })
     props.documentation = [doc]

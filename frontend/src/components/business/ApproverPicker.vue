@@ -1,6 +1,7 @@
 <template>
   <div class="approver-picker">
     <div
+      v-if="!hideTrigger"
       class="ap-trigger"
       :class="{ 'is-disabled': disabled }"
       @click="openDialog"
@@ -180,11 +181,13 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   maxSelected?: number
   dialogHeight?: number
+  hideTrigger?: boolean
 }>(), {
   disabled: false,
   multiple: true,
   placeholder: '请选择审批人',
   dialogHeight: 400,
+  hideTrigger: false,
 })
 
 const emit = defineEmits<{

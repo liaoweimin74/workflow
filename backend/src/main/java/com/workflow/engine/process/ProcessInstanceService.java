@@ -1,12 +1,20 @@
 package com.workflow.engine.process;
 
+import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.history.entity.WfTaskComment;
+import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.HistoryService;
+import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
+import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
+import org.flowable.task.api.Task;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -20,28 +28,85 @@ import java.util.Optional;
 @Service
 public class ProcessInstanceService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProcessInstanceService.class);
+
     private final RuntimeService runtimeService;
     private final HistoryService historyService;
     private final TenantProvider tenantProvider;
+    private final TaskService taskService;
+    private final InitiatorNodeResolver initiatorNodeResolver;
+    private final WfTaskCommentRepository commentRepository;
 
     public ProcessInstanceService(RuntimeService runtimeService,
                                   HistoryService historyService,
-                                  TenantProvider tenantProvider) {
+                                  TenantProvider tenantProvider,
+                                  TaskService taskService,
+                                  InitiatorNodeResolver initiatorNodeResolver,
+                                  WfTaskCommentRepository commentRepository) {
         this.runtimeService = runtimeService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
+        this.taskService = taskService;
+        this.initiatorNodeResolver = initiatorNodeResolver;
+        this.commentRepository = commentRepository;
     }
 
     @Transactional
     public ProcessInstance startProcess(String processKey, Map<String, Object> variables) {
         String tenantId = tenantProvider.getTenantId();
-        return runtimeService.startProcessInstanceByKeyAndTenantId(processKey, variables, tenantId);
+        ProcessInstance instance = runtimeService.startProcessInstanceByKeyAndTenantId(processKey, variables, tenantId);
+        autoCompleteInitiatorTask(instance, variables);
+        return instance;
     }
 
     @Transactional
     public ProcessInstance startProcess(String processKey, String businessKey, Map<String, Object> variables) {
         String tenantId = tenantProvider.getTenantId();
-        return runtimeService.startProcessInstanceByKeyAndTenantId(processKey, businessKey, variables, tenantId);
+        ProcessInstance instance = runtimeService.startProcessInstanceByKeyAndTenantId(processKey, businessKey, variables, tenantId);
+        autoCompleteInitiatorTask(instance, variables);
+        return instance;
+    }
+
+    /**
+     * 自动完成发起人节点，使流程流转到第一个审批节点。
+     */
+    private void autoCompleteInitiatorTask(ProcessInstance instance, Map<String, Object> variables) {
+        try {
+            String initiatorNodeId = initiatorNodeResolver.resolve(instance.getProcessDefinitionId());
+            if (initiatorNodeId == null) {
+                log.warn("未找到发起人节点 processDefinitionId={}", instance.getProcessDefinitionId());
+                return;
+            }
+
+            List<Task> tasks = taskService.createTaskQuery()
+                    .processInstanceId(instance.getId())
+                    .taskDefinitionKey(initiatorNodeId)
+                    .list();
+
+            if (tasks.isEmpty()) {
+                log.warn("发起人节点无待办任务 processInstanceId={} initiatorNodeId={}", instance.getId(), initiatorNodeId);
+                return;
+            }
+
+            for (Task task : tasks) {
+                log.info("自动完成发起人节点 task={} nodeId={} processInstanceId={}", task.getId(), initiatorNodeId, instance.getId());
+                String assignee = task.getAssignee() != null ? task.getAssignee() : String.valueOf(variables.get("initiator"));
+                taskService.complete(task.getId(), variables);
+                // complete 后写 submit comment，此时 ACT_HI_ACTINST 已有记录
+                WfTaskComment comment = new WfTaskComment();
+                comment.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
+                comment.setTenantId(tenantProvider.getTenantId());
+                comment.setTaskId(task.getId());
+                comment.setProcessInstanceId(instance.getId());
+                comment.setUserId(assignee);
+                comment.setAction("submit");
+                comment.setComment(null);
+                comment.setTargetUserId(null);
+                commentRepository.save(comment);
+            }
+        } catch (Exception e) {
+            log.error("自动完成发起人节点失败 processInstanceId={}", instance.getId(), e);
+        }
     }
 
     /**

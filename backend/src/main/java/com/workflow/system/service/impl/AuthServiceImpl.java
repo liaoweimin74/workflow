@@ -102,19 +102,53 @@ public class AuthServiceImpl implements AuthService {
                 .anyMatch(r -> "ROLE_ADMIN".equals(r.getRoleCode()));
 
         List<SysMenu> allMenus;
+        Set<Long> authorizedMenuIds = null;
+        Map<Long, SysMenu> menuCache = new HashMap<>();
         if (isAdmin) {
             allMenus = menuRepository.findByParentIdIsNullOrderBySortOrder();
         } else {
             Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(roleIds).stream()
                     .map(SysRoleMenu::getMenuId)
                     .collect(Collectors.toSet());
-            allMenus = menuRepository.findAllById(menuIds).stream()
-                    .filter(m -> m.getParentId() == null)
+
+            // 回溯所有祖先菜单，确保父级目录也在列表中
+            Set<Long> rootMenuIds = new LinkedHashSet<>();
+            for (Long menuId : menuIds) {
+                SysMenu menu = menuRepository.findById(menuId).orElse(null);
+                if (menu == null) {
+                    continue;
+                }
+                menuCache.put(menu.getId(), menu);
+                // 向上回溯祖先
+                SysMenu current = menu;
+                while (current.getParentId() != null) {
+                    if (menuCache.containsKey(current.getParentId())) {
+                        break; // 祖先已在缓存中，无需重复
+                    }
+                    SysMenu parent = menuRepository.findById(current.getParentId()).orElse(null);
+                    if (parent == null) {
+                        break;
+                    }
+                    menuCache.put(parent.getId(), parent);
+                    current = parent;
+                }
+                // 收集顶级祖先
+                if (current.getParentId() == null) {
+                    rootMenuIds.add(current.getId());
+                }
+            }
+
+            allMenus = rootMenuIds.stream()
+                    .map(menuCache::get)
+                    .filter(Objects::nonNull)
                     .sorted(Comparator.comparingInt(SysMenu::getSortOrder))
                     .collect(Collectors.toList());
         }
 
-        return buildMenuTree(allMenus);
+        // 收集所有有权限的菜单 ID（原始授权 + 祖先目录）
+        authorizedMenuIds = isAdmin ? null : menuCache.keySet();
+
+        return buildMenuTree(allMenus, authorizedMenuIds);
     }
 
     private UserInfo buildUserInfo(SysUser user) {
@@ -144,20 +178,22 @@ public class AuthServiceImpl implements AuthService {
                 permissions);
     }
 
-    private List<MenuTree> buildMenuTree(List<SysMenu> menus) {
+    private List<MenuTree> buildMenuTree(List<SysMenu> menus, Set<Long> authorizedMenuIds) {
         return menus.stream()
                 .filter(m -> m.getIsDeleted() == 0)
                 .filter(m -> m.getStatus() == 1)
-                .map(this::toMenuTree)
+                .filter(m -> authorizedMenuIds == null || authorizedMenuIds.contains(m.getId()))
+                .map(m -> toMenuTree(m, authorizedMenuIds))
                 .collect(Collectors.toList());
     }
 
-    private MenuTree toMenuTree(SysMenu menu) {
+    private MenuTree toMenuTree(SysMenu menu, Set<Long> authorizedMenuIds) {
         List<SysMenu> children = menuRepository.findByParentIdOrderBySortOrder(menu.getId());
         List<MenuTree> childTrees = children.stream()
                 .filter(c -> c.getIsDeleted() == 0)
                 .filter(c -> c.getStatus() == 1)
-                .map(this::toMenuTree)
+                .filter(c -> authorizedMenuIds == null || authorizedMenuIds.contains(c.getId()))
+                .map(c -> toMenuTree(c, authorizedMenuIds))
                 .collect(Collectors.toList());
 
         return new MenuTree(

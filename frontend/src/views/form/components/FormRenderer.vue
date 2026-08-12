@@ -101,6 +101,21 @@ async function loadSchema() {
 async function loadData() {
   if (!props.processInstanceId || !props.formDefId) return
   try {
+    // 1. 优先按 taskId 查审批快照（已办详情场景）
+    if (props.taskId) {
+      const snapRes = await formApi.getFormDataByTask(props.taskId)
+      if (snapRes.data) {
+        existingFormDataId.value = snapRes.data.id
+        try {
+          formData.value = JSON.parse(snapRes.data.dataJson || '{}')
+        } catch {
+          formData.value = {}
+        }
+        emit('loaded', formData.value)
+        return
+      }
+    }
+    // 2. 查当前数据（节点间传递场景）
     const res = await formApi.getFormData(props.processInstanceId, props.formDefId)
     if (res.data) {
       const formDataDto = res.data as FormDataDTO
@@ -138,26 +153,15 @@ async function submit(): Promise<boolean> {
   try {
     const dataJson = JSON.stringify(formData.value)
     const formDefId = props.formDefId ?? ''
-    if (existingFormDataId.value) {
-      const res = await formApi.updateFormData(existingFormDataId.value, {
-        formDefId,
-        processInstanceId: props.processInstanceId,
-        taskId: props.taskId,
-        dataJson,
-      })
-      ElMessage.success('表单已保存')
-      emit('submitted', res.data.id)
-    } else {
-      const res = await formApi.saveFormData({
-        formDefId,
-        processInstanceId: props.processInstanceId,
-        taskId: props.taskId,
-        dataJson,
-      })
-      existingFormDataId.value = res.data.id
-      ElMessage.success('表单已保存')
-      emit('submitted', res.data.id)
-    }
+    // 保存当前数据（upsert，用于节点间传递）
+    const res = await formApi.saveFormData({
+      formDefId,
+      processInstanceId: props.processInstanceId,
+      taskId: props.taskId,
+      dataJson,
+    })
+    existingFormDataId.value = res.data.id
+    emit('submitted', res.data.id)
     return true
   } catch {
     return false
@@ -168,7 +172,27 @@ function getFormData(): Record<string, unknown> {
   return formData.value
 }
 
-defineExpose({ submit, getFormData, loadSchema, loadData })
+/**
+ * 保存审批快照（冻结当前表单数据，供历史查看）。
+ * 与 submit 不同：submit 保存可变的当前数据，saveSnapshot 创建不可变的历史记录。
+ */
+async function saveSnapshot(): Promise<boolean> {
+  try {
+    const dataJson = JSON.stringify(formData.value)
+    const formDefId = props.formDefId ?? ''
+    await formApi.saveSnapshot({
+      formDefId,
+      processInstanceId: props.processInstanceId,
+      taskId: props.taskId,
+      dataJson,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+defineExpose({ submit, saveSnapshot, getFormData, loadSchema, loadData })
 </script>
 
 <style scoped>

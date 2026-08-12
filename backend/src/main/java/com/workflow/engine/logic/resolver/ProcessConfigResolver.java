@@ -4,9 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.engine.logic.config.BackendLogicItemConfig;
 import com.workflow.engine.process.entity.NodeConfig;
-import com.workflow.engine.process.entity.ProcessDraft;
 import com.workflow.engine.process.repository.NodeConfigRepository;
-import com.workflow.engine.process.repository.ProcessDraftRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,8 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 进程内节点后端逻辑配置解析器 (带 TTL 缓存)。
  *
- * <p>由 {@code processDefinitionId} 反查流程草稿 {@code draftId}，再加载该草稿下所有 {@link NodeConfig}，
- * 解析 {@code config_json} 中的 {@code backendLogic[]}，按 {@code nodeId} 组织成 map。
+ * <p>按 {@code processDefinitionId} 精确匹配该部署版本的 {@link NodeConfig} 快照
+ * （部署时由当前配置复制生成），解析 {@code config_json} 中的 {@code backendLogic[]}，
+ * 按 {@code nodeId} 组织成 map。
  * 结果按进程内 {@link ConcurrentHashMap} + TTL（默认 5 分钟）缓存，避免每次引擎事件都命中数据库。
  */
 public class ProcessConfigResolver {
@@ -30,15 +29,12 @@ public class ProcessConfigResolver {
     private static final long DEFAULT_TTL_MILLIS = 5 * 60 * 1000L;
     private static final String BACKEND_LOGIC_FIELD = "backendLogic";
 
-    private final ProcessDraftRepository processDraftRepository;
     private final NodeConfigRepository nodeConfigRepository;
     private final ObjectMapper objectMapper;
     private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
-    public ProcessConfigResolver(ProcessDraftRepository processDraftRepository,
-                                 NodeConfigRepository nodeConfigRepository,
+    public ProcessConfigResolver(NodeConfigRepository nodeConfigRepository,
                                  ObjectMapper objectMapper) {
-        this.processDraftRepository = processDraftRepository;
         this.nodeConfigRepository = nodeConfigRepository;
         this.objectMapper = objectMapper;
     }
@@ -65,13 +61,11 @@ public class ProcessConfigResolver {
 
     private Map<String, List<BackendLogicItemConfig>> doResolve(String processDefinitionId) {
         Map<String, List<BackendLogicItemConfig>> result = new HashMap<>();
-        ProcessDraft draft = processDraftRepository.findByProcessDefinitionId(processDefinitionId).orElse(null);
-        if (draft == null) {
-            log.debug("No draft found for processDefinitionId={}", processDefinitionId);
+        if (processDefinitionId == null) {
             return result;
         }
-        String draftId = draft.getId();
-        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draftId);
+        // 精确匹配该部署版本的 NodeConfig 快照（部署时由当前配置复制生成）
+        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
         for (NodeConfig nc : configs) {
             List<BackendLogicItemConfig> items = parseBackendLogic(nc.getConfigJson());
             if (items != null && !items.isEmpty()) {

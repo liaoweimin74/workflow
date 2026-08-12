@@ -3,6 +3,7 @@ package com.workflow.engine.task;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.TaskDetailVO;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.process.repository.ProcessDraftRepository;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
@@ -60,6 +61,7 @@ class WorkflowTaskServiceDetailTest {
     private WfTaskRemindRepository remindRepository;
     private ProcessDraftRepository processDraftRepository;
     private NodeConfigRepository nodeConfigRepository;
+    private InitiatorNodeResolver initiatorNodeResolver;
     private ObjectMapper objectMapper;
     private WorkflowTaskService service;
 
@@ -75,10 +77,11 @@ class WorkflowTaskServiceDetailTest {
         remindRepository = mock(WfTaskRemindRepository.class);
         processDraftRepository = mock(ProcessDraftRepository.class);
         nodeConfigRepository = mock(NodeConfigRepository.class);
+        initiatorNodeResolver = mock(InitiatorNodeResolver.class);
         objectMapper = new ObjectMapper();
         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
                 runtimeService, repositoryService, userService, commentRepository, remindRepository,
-                processDraftRepository, nodeConfigRepository, objectMapper);
+                processDraftRepository, nodeConfigRepository, initiatorNodeResolver, objectMapper);
         when(tenantProvider.getTenantId()).thenReturn("default");
     }
 
@@ -127,18 +130,12 @@ class WorkflowTaskServiceDetailTest {
         when(pdQuery.processDefinitionIds(any())).thenReturn(pdQuery);
         when(pdQuery.list()).thenReturn(List.of(pd));
 
-        // NodeConfig for formKey resolution
-        com.workflow.engine.process.entity.ProcessDraft draft =
-                new com.workflow.engine.process.entity.ProcessDraft();
-        draft.setId("draft-001");
-        when(processDraftRepository.findByProcessDefinitionId(eq(processDefinitionId)))
-                .thenReturn(Optional.of(draft));
-
+        // NodeConfig for formKey resolution（按部署版本精确查询）
         com.workflow.engine.process.entity.NodeConfig nodeConfig =
                 new com.workflow.engine.process.entity.NodeConfig();
         nodeConfig.setNodeId("deptApprove");
         nodeConfig.setConfigJson("{\"form\":{\"formDefId\":\"leaveForm\"}}");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-001")))
+        when(nodeConfigRepository.findByProcessDefinitionId(eq(processDefinitionId)))
                 .thenReturn(List.of(nodeConfig));
 
         // variables
@@ -256,18 +253,12 @@ class WorkflowTaskServiceDetailTest {
         when(pdQuery.processDefinitionIds(any())).thenReturn(pdQuery);
         when(pdQuery.list()).thenReturn(List.of(pd));
 
-        // NodeConfig for formKey resolution
-        com.workflow.engine.process.entity.ProcessDraft draft =
-                new com.workflow.engine.process.entity.ProcessDraft();
-        draft.setId("draft-ended");
-        when(processDraftRepository.findByProcessDefinitionId(eq(processDefinitionId)))
-                .thenReturn(Optional.of(draft));
-
+        // NodeConfig for formKey resolution（按部署版本精确查询）
         com.workflow.engine.process.entity.NodeConfig nodeConfig =
                 new com.workflow.engine.process.entity.NodeConfig();
         nodeConfig.setNodeId("finalApprove");
         nodeConfig.setConfigJson("{\"form\":{\"formDefId\":\"expenseForm\"}}");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-ended")))
+        when(nodeConfigRepository.findByProcessDefinitionId(eq(processDefinitionId)))
                 .thenReturn(List.of(nodeConfig));
 
         // variables

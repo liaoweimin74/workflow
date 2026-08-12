@@ -4,6 +4,7 @@ import com.workflow.api.dto.PageResponse;
 import com.workflow.api.dto.TaskDoneVO;
 import com.workflow.api.dto.TaskTodoVO;
 import com.workflow.common.domain.R;
+import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.task.AddSignService;
 import com.workflow.engine.task.ForwardSignService;
 import com.workflow.engine.task.RejectService;
@@ -50,6 +51,8 @@ class TaskControllerVOTest {
     private TransferService transferService;
     private AddSignService addSignService;
     private ForwardSignService forwardSignService;
+    private ProcessInstanceService processInstanceService;
+    private TaskService flowableTaskService;
     private TaskController controller;
 
     @BeforeEach
@@ -59,8 +62,10 @@ class TaskControllerVOTest {
         transferService = mock(TransferService.class);
         addSignService = mock(AddSignService.class);
         forwardSignService = mock(ForwardSignService.class);
+        processInstanceService = mock(ProcessInstanceService.class);
+        flowableTaskService = mock(TaskService.class);
         controller = new TaskController(taskService, rejectService, transferService,
-                addSignService, forwardSignService);
+                addSignService, forwardSignService, processInstanceService, flowableTaskService);
     }
 
     @Test

@@ -19,12 +19,16 @@ public class TaskDetailVO {
     private String processInstanceId;
     private String processDefinitionId;
     private String processName;
+    /** 流程定义版本号。 */
+    private Integer processVersion;
     private String businessKey;
     private String initiator;
     private String initiatorName;
     private String formKey;
     private Map<String, Object> variables;
     private String createTime;
+    /** 是否为发起节点（发起人填报节点，不需要审批类操作） */
+    private Boolean isInitiatorTask;
 
     public String getTaskId() { return taskId; }
     public void setTaskId(String taskId) { this.taskId = taskId; }
@@ -50,6 +54,9 @@ public class TaskDetailVO {
     public String getProcessName() { return processName; }
     public void setProcessName(String processName) { this.processName = processName; }
 
+    public Integer getProcessVersion() { return processVersion; }
+    public void setProcessVersion(Integer processVersion) { this.processVersion = processVersion; }
+
     public String getBusinessKey() { return businessKey; }
     public void setBusinessKey(String businessKey) { this.businessKey = businessKey; }
 
@@ -67,4 +74,7 @@ public class TaskDetailVO {
 
     public String getCreateTime() { return createTime; }
     public void setCreateTime(String createTime) { this.createTime = createTime; }
+
+    public Boolean getIsInitiatorTask() { return isInitiatorTask; }
+    public void setIsInitiatorTask(Boolean isInitiatorTask) { this.isInitiatorTask = isInitiatorTask; }
 }

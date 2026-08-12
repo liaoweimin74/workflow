@@ -59,6 +59,23 @@ export interface ProcessHighlight {
   [key: string]: unknown
 }
 
+/** 执行节点 VO（已执行 + 活跃 + 预测） */
+export interface ExecutionNodeVO {
+  activityId: string
+  activityName: string
+  type: string
+  status: 'completed' | 'active' | 'predicted'
+  assigneeName: string | null
+  candidateNames: string | null
+  multiMode: string | null
+  endTime: string | null
+  action: string | null
+  comment: string | null
+  targetUserName: string | null
+  hasBranch: boolean
+  lineType: 'solid' | 'dashed'
+}
+
 // ── API ──
 
 /**
@@ -110,5 +127,10 @@ export const processInstanceApi = {
   /** 获取流程实例的审批历史记录（时间线） */
   history(id: string): Promise<R<ApprovalRecordVO[]>> {
     return http.get(`/v1/process-instances/${id}/history`)
+  },
+
+  /** 获取流程实例的执行预测列表（已执行 + 活跃 + 预测节点） */
+  prediction(id: string): Promise<R<ExecutionNodeVO[]>> {
+    return http.get(`/v1/process-instances/${id}/prediction`)
   },
 }

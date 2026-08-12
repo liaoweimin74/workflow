@@ -16,6 +16,7 @@ public class FormDataDTO {
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Boolean isSnapshot;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -43,4 +44,7 @@ public class FormDataDTO {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Boolean getIsSnapshot() { return isSnapshot; }
+    public void setIsSnapshot(Boolean isSnapshot) { this.isSnapshot = isSnapshot; }
 }

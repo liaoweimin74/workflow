@@ -105,6 +105,7 @@ public class ForwardSignService {
             commentRecord.setUserId(userId);
             commentRecord.setAction("forward_sign");
             commentRecord.setComment(comment);
+            commentRecord.setTargetUserId(toUser);
             commentRepository.save(commentRecord);
         }
     }

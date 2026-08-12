@@ -95,15 +95,14 @@ public class ProcessDefinitionController {
      * </ul>
      */
     private void resolveFormDefIds(String processDefinitionId, Map<String, Object> map) {
-        Optional<ProcessDraft> draft = processDraftRepository.findByProcessDefinitionId(processDefinitionId);
-        if (draft.isEmpty()) {
+        if (processDefinitionId == null) {
             map.put("formDefId", null);
             map.put("initiatorFormDefId", null);
             map.put("processFormDefId", null);
             return;
         }
-
-        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draft.get().getId());
+        // 精确匹配该部署版本的 NodeConfig 快照（部署时由当前配置复制生成）
+        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
         String processFormDefId = null;
         String initiatorFormDefId = null;
 

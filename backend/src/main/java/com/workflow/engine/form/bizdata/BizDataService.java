@@ -11,9 +11,11 @@ import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.tenant.TenantProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +25,7 @@ import java.util.regex.Pattern;
  * 业务数据服务。
  * 基于 column_config 对动态物理表 wf_biz_<formKey> 提供 CRUD，
  * 全部 SQL 由 BizDataQueryBuilder 参数化生成，强制 tenant_id 过滤。
+ * 支持按 formKey 注册 BizDataHandler 钩子，在各环节注入定制业务逻辑。
  */
 @Service
 public class BizDataService {
@@ -34,25 +37,61 @@ public class BizDataService {
     private final FormDefinitionService formDefService;
     private final TenantProvider tenantProvider;
     private final ObjectMapper objectMapper;
+    /** formKey → 钩子列表（按 Spring 注入顺序） */
+    private final Map<String, List<BizDataHandler>> handlerIndex;
 
     public BizDataService(JdbcTemplate jdbcTemplate,
                           DynamicTableManager tableManager,
                           FormDefinitionService formDefService,
                           TenantProvider tenantProvider,
                           ObjectMapper objectMapper) {
+        this(jdbcTemplate, tableManager, formDefService, tenantProvider, objectMapper, List.of());
+    }
+
+    public BizDataService(JdbcTemplate jdbcTemplate,
+                          DynamicTableManager tableManager,
+                          FormDefinitionService formDefService,
+                          TenantProvider tenantProvider,
+                          ObjectMapper objectMapper,
+                          List<BizDataHandler> handlers) {
         this.jdbcTemplate = jdbcTemplate;
         this.tableManager = tableManager;
         this.formDefService = formDefService;
         this.tenantProvider = tenantProvider;
         this.objectMapper = objectMapper;
+        this.handlerIndex = buildHandlerIndex(handlers);
+    }
+
+    private static Map<String, List<BizDataHandler>> buildHandlerIndex(List<BizDataHandler> handlers) {
+        Map<String, List<BizDataHandler>> index = new HashMap<>();
+        if (handlers == null) {
+            return index;
+        }
+        for (BizDataHandler handler : handlers) {
+            if (handler.getFormKey() == null || handler.getFormKey().isBlank()) {
+                throw new IllegalStateException("BizDataHandler.getFormKey() 不能为空: " + handler.getClass().getName());
+            }
+            index.computeIfAbsent(handler.getFormKey(), k -> new ArrayList<>()).add(handler);
+        }
+        return index;
+    }
+
+    /** 获取 formKey 对应的钩子列表（无则空） */
+    private List<BizDataHandler> handlersOf(String formKey) {
+        return handlerIndex.getOrDefault(formKey, List.of());
     }
 
     /**
      * 新增业务数据。
      */
+    @Transactional
     public BizDataVO create(String formKey, Map<String, Object> data) {
         String tenantId = tenantProvider.getTenantId();
         BizDataContext ctx = loadContext(formKey);
+
+        for (BizDataHandler handler : handlersOf(formKey)) {
+            handler.beforeCreate(data);
+        }
 
         validateRequired(ctx.columns, data);
 
@@ -61,7 +100,11 @@ public class BizDataService {
         jdbcTemplate.update(insert.sql(), insert.params().toArray());
 
         // 新行 id 由 buildInsert 内部生成，查询返回
-        return findById(ctx.tableName, tenantId, ctx, insertedId(insert));
+        BizDataVO created = findById(ctx.tableName, tenantId, ctx, insertedId(insert));
+        for (BizDataHandler handler : handlersOf(formKey)) {
+            handler.afterCreate(created);
+        }
+        return created;
     }
 
     /**
@@ -122,9 +165,15 @@ public class BizDataService {
     /**
      * 更新业务数据（乐观锁）。
      */
+    @Transactional
     public BizDataVO update(String formKey, String id, Map<String, Object> data, Integer version) {
         String tenantId = tenantProvider.getTenantId();
         BizDataContext ctx = loadContext(formKey);
+
+        BizDataVO existing = findById(ctx.tableName, tenantId, ctx, id);
+        for (BizDataHandler handler : handlersOf(formKey)) {
+            handler.beforeUpdate(data, existing);
+        }
 
         validateRequired(ctx.columns, data);
         int currentVersion = version == null ? 1 : version;
@@ -149,9 +198,15 @@ public class BizDataService {
     /**
      * 删除业务数据（租户范围限定）。
      */
+    @Transactional
     public void delete(String formKey, String id) {
         String tenantId = tenantProvider.getTenantId();
         BizDataContext ctx = loadContext(formKey);
+
+        BizDataVO existing = findById(ctx.tableName, tenantId, ctx, id);
+        for (BizDataHandler handler : handlersOf(formKey)) {
+            handler.beforeDelete(existing);
+        }
 
         BizDataQueryBuilder.SqlAndParams delete = BizDataQueryBuilder.buildDelete(ctx.tableName, tenantId, id);
         int affected = jdbcTemplate.update(delete.sql(), delete.params().toArray());

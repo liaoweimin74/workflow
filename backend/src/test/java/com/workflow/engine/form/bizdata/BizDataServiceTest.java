@@ -136,7 +136,7 @@ class BizDataServiceTest {
 
     @Test
     void update_rowNotExists_throws404() {
-        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(0);
+        // findById 先查 existing：行不存在直接 404
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
 
         assertThatThrownBy(() -> bizDataService.update("biz_leave", "row-x", Map.of("name", "张三", "dept", "新部门"), 1))
@@ -177,6 +177,15 @@ class BizDataServiceTest {
 
     @Test
     void delete_success_removesRow() {
+        // beforeDelete 需先读 existing
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
 
         bizDataService.delete("biz_leave", "row-1");
@@ -186,7 +195,8 @@ class BizDataServiceTest {
 
     @Test
     void delete_crossTenant_returns404() {
-        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(0);
+        // findById 先查 existing：跨租户行不存在 → 404（不执行 DELETE）
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
 
         assertThatThrownBy(() -> bizDataService.delete("biz_leave", "row-other-tenant"))
                 .isInstanceOf(BusinessException.class)

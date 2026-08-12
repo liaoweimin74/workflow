@@ -26,60 +26,88 @@ THEN 顶部区域 SHALL 展示从 TaskDetailVO 获取的流程基本信息字段
 
 ### Requirement: 审批表单渲染
 
-详情页中部 SHALL 渲染当前任务关联的表单（若有），字段权限按"审批时查看"控制（PRD 3.2.6）。同时 SHALL 只读展示流程变量（已填写的发起表单数据）。
+详情页中部 SHALL 渲染当前任务关联的表单（若有）。表单字段权限按节点配置的 `fieldPermissions` 控制（EDIT/VIEW/HIDDEN），从 TaskDetailVO 的 `fieldPermissions` 字段获取。同时 SHALL 只读展示流程变量（已填写的发起表单数据）。
 
 #### Scenario: 任务有关联表单
 
-WHEN 当前任务关联了表单
-THEN 系统 SHALL 渲染表单组件（复用 FormRenderer），字段按"审批时查看"权限展示
-AND 下方只读展示发起人填写的流程变量
+- **WHEN** 当前任务关联了表单（TaskDetailVO.formKey 不为空）
+- **THEN** 系统 SHALL 渲染 FormRenderer 组件
+- **AND** 将 TaskDetailVO.fieldPermissions 传递给 FormRenderer
+- **AND** FormRenderer 按字段权限控制每个字段的编辑/只读/隐藏
+- **AND** 下方只读展示发起人填写的流程变量
 
 #### Scenario: 任务无关联表单
 
-WHEN 当前任务未关联表单
-THEN 系统 SHALL 仅展示流程变量只读区
+- **WHEN** 当前任务未关联表单（TaskDetailVO.formKey 为空）
+- **THEN** 系统 SHALL 仅展示流程变量只读区
+
+#### Scenario: 字段权限为空
+
+- **WHEN** TaskDetailVO.fieldPermissions 为 null 或空对象
+- **THEN** FormRenderer SHALL 视所有字段为可编辑（EDIT）
 
 ### Requirement: 审批操作
 
-详情页底部 SHALL 提供审批意见输入框（必填可配置）、主操作按钮"通过""驳回"，以及"更多操作"下拉菜单含转办、委派、加签、转签。
+详情页底部 SHALL 提供审批意见输入框（必填可配置）和操作按钮。操作按钮的显示由 TaskDetailVO.operations 配置控制：
+
+- **"通过"按钮**：始终显示
+- **"驳回"按钮**：当 `operations.allowReject == true` 时显示
+- **"转办"**：当 `operations.allowTransfer == true` 时显示（在"更多操作"下拉中）
+- **"委派"**：当 `operations.allowDelegate == true` 时显示（在"更多操作"下拉中）
+- **"加签"**：当 `operations.allowAddSign == true` 时显示（在"更多操作"下拉中）
+- **"转签"**：当 `operations.allowForwardSign == true` 时显示（在"更多操作"下拉中）
+
+当所有"更多操作"项（转办/委派/加签/转签）均不可用时，SHALL 不显示"更多操作"下拉按钮。
 
 #### Scenario: 审批通过
 
-WHEN 用户填写审批意见并点击"通过"
-THEN 系统 SHALL 校验表单（若关联）
-AND 调用 `POST /api/tasks/{id}/complete` 提交，请求体含审批意见作为流程变量
-AND 提交成功后返回待办列表，任务从待办移除
+- **WHEN** 用户填写审批意见并点击"通过"
+- **THEN** 系统 SHALL 校验表单（若关联）
+- **AND** 调用 `POST /api/tasks/{id}/complete` 提交，请求体含审批意见作为流程变量
+- **AND** 提交成功后返回待办列表，任务从待办移除
 
 #### Scenario: 驳回
 
-WHEN 用户点击"驳回"
-THEN 系统 SHALL 弹出确认框要求填写驳回原因
-AND 用户确认后调用 `POST /api/tasks/{id}/reject`，请求体含 userId 与 reason
-AND 驳回成功后返回待办列表
+- **WHEN** operations.allowReject 为 true 且用户点击"驳回"
+- **THEN** 系统 SHALL 弹出确认框要求填写驳回原因
+- **AND** 用户确认后调用 `POST /api/tasks/{id}/reject`，请求体含 userId 与 reason
+- **AND** 驳回成功后返回待办列表
+
+#### Scenario: 驳回按钮不显示
+
+- **WHEN** operations.allowReject 为 false
+- **THEN** 系统 SHALL 不显示"驳回"按钮
+- **AND** 用户无法执行驳回操作
 
 #### Scenario: 转办
 
-WHEN 用户在"更多操作"中选择"转办"
-THEN 系统 SHALL 弹出用户选择器
-AND 用户选择办理人后调用 `POST /api/tasks/{id}/transfer`，请求体含 fromUser、toUser、reason
+- **WHEN** operations.allowTransfer 为 true 且用户在"更多操作"中选择"转办"
+- **THEN** 系统 SHALL 弹出用户选择器
+- **AND** 用户选择办理人后调用 `POST /api/tasks/{id}/transfer`，请求体含 fromUser、toUser、reason
 
 #### Scenario: 委派
 
-WHEN 用户在"更多操作"中选择"委派"
-THEN 系统 SHALL 弹出用户选择器
-AND 用户选择被委派人后调用 `POST /api/tasks/{id}/delegate`
+- **WHEN** operations.allowDelegate 为 true 且用户在"更多操作"中选择"委派"
+- **THEN** 系统 SHALL 弹出用户选择器
+- **AND** 用户选择被委派人后调用委派接口
 
 #### Scenario: 加签
 
-WHEN 用户在"更多操作"中选择"加签"
-THEN 系统 SHALL 弹出用户选择器（多选）
-AND 用户选择后调用 `POST /api/tasks/{id}/add-sign`
+- **WHEN** operations.allowAddSign 为 true 且用户在"更多操作"中选择"加签"
+- **THEN** 系统 SHALL 弹出加签配置弹窗
+- **AND** 用户配置后调用加签接口
 
 #### Scenario: 转签
 
-WHEN 用户在"更多操作"中选择"转签"
-THEN 系统 SHALL 弹出用户选择器
-AND 用户选择新审批人后调用 `POST /api/tasks/{id}/forward-sign`
+- **WHEN** operations.allowForwardSign 为 true 且用户在"更多操作"中选择"转签"
+- **THEN** 系统 SHALL 弹出转签配置弹窗
+- **AND** 用户配置后调用转签接口
+
+#### Scenario: 所有更多操作均不可用
+
+- **WHEN** operations 中 allowTransfer/allowDelegate/allowAddSign/allowForwardSign 均为 false
+- **THEN** 系统 SHALL 不显示"更多操作"下拉按钮
+- **AND** 仅显示"通过"按钮（和"驳回"按钮，如 allowReject 为 true）
 
 ### Requirement: 操作后通知
 
@@ -108,4 +136,56 @@ AND 流程跟踪 SHALL 高亮当时处理的节点
 WHEN 已办任务对应的流程实例仍在进行中
 THEN 流程跟踪 SHALL 显示最新状态
 AND 提供"查看实时进度"跳转到流程实例跟踪页
+
+### Requirement: 操作权限配置解析
+
+后端 SHALL 提供 `extractOperations(processDefId, taskDefKey)` 方法，返回操作权限配置对象 `{ allowReject, allowAddSign, allowTransfer, allowDelegate, allowForwardSign }`。
+
+解析逻辑：
+1. 从节点配置（NodeConfig, nodeId=taskDefKey）读取 `operations`
+2. 节点未配置 operations 时，SHALL 使用默认值
+
+默认值：
+- `allowReject: true`
+- `allowTransfer: true`
+- `allowAddSign: false`
+- `allowDelegate: false`
+- `allowForwardSign: false`
+
+#### Scenario: 节点配置了 operations
+
+- **WHEN** 节点 NodeConfig 含 operations 配置
+- **THEN** extractOperations SHALL 返回该配置
+- **AND** 缺失字段 SHALL 使用默认值补全
+
+#### Scenario: 节点未配置 operations
+
+- **WHEN** 节点 NodeConfig 无 operations 配置
+- **THEN** extractOperations SHALL 返回全部默认值
+
+### Requirement: TaskDetailVO 扩展
+
+`TaskDetailVO` SHALL 包含以下新增字段：
+
+- `fieldPermissions`（`Map<String, String>`）：字段权限映射，key 为字段名，value 为 "EDIT"|"VIEW"|"HIDDEN"。为 null 时表示无权限配置（所有字段可编辑）。
+- `operations`（`OperationsConfig`）：操作权限配置。
+
+`OperationsConfig` SHALL 包含以下字段：
+- `allowReject`（boolean）
+- `allowAddSign`（boolean）
+- `allowTransfer`（boolean）
+- `allowDelegate`（boolean）
+- `allowForwardSign`（boolean）
+
+#### Scenario: 任务详情包含字段权限和操作配置
+
+- **WHEN** 调用 `GET /api/v1/tasks/{taskId}/detail`
+- **THEN** 响应 SHALL 包含 fieldPermissions 字段（来自 extractFormConfig）
+- **AND** 响应 SHALL 包含 operations 字段（来自 extractOperations）
+
+#### Scenario: 无表单配置的任务
+
+- **WHEN** 任务所在节点和流程均未配置表单
+- **THEN** fieldPermissions SHALL 为 null
+- **AND** operations SHALL 仍返回默认值配置
 

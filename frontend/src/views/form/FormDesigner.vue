@@ -153,9 +153,11 @@ onMounted(async () => {
   designerRef.value?.addComponent({
     label: '字典选择器',
     name: 'LookupPicker',
-    rule: {
+    icon: 'el-icon-Files',
+    menu: 'main',
+    rule: () => ({
       type: 'LookupPicker',
-      field: '',
+      field: 'lookup' + Date.now(),
       title: '选择',
       props: {
         columns: [],
@@ -163,16 +165,18 @@ onMounted(async () => {
         displayField: '',
         returnFields: {},
       },
-    },
+    }),
   })
 
   // 注册数据引用（dataPicker）组件
   designerRef.value?.addComponent({
     label: '数据引用',
     name: 'dataPicker',
-    rule: {
+    icon: 'el-icon-Link',
+    menu: 'main',
+    rule: () => ({
       type: 'dataPicker',
-      field: '',
+      field: 'dataPicker' + Date.now(),
       title: '数据引用',
       props: {
         sourceFormKey: '',
@@ -182,7 +186,7 @@ onMounted(async () => {
         returnFields: {},
         dependOn: undefined,
       },
-    },
+    }),
   })
 
   loading.value = true

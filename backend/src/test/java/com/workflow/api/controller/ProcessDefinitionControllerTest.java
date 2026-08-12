@@ -248,15 +248,6 @@ class ProcessDefinitionControllerTest {
         return pd;
     }
 
-    private com.workflow.engine.process.entity.ProcessDraft mockDraft(String draftId) {
-        com.workflow.engine.process.entity.ProcessDraft draft =
-                new com.workflow.engine.process.entity.ProcessDraft();
-        draft.setId(draftId);
-        when(mockDraftRepo.findByProcessDefinitionId(anyString()))
-                .thenReturn(java.util.Optional.of(draft));
-        return draft;
-    }
-
     private com.workflow.engine.process.entity.NodeConfig nodeConfig(String nodeId, String configJson) {
         com.workflow.engine.process.entity.NodeConfig nc =
                 new com.workflow.engine.process.entity.NodeConfig();
@@ -272,8 +263,7 @@ class ProcessDefinitionControllerTest {
         ProcessDefinition pd = buildMockPd("pd-1");
         when(mockService.getProcessDefinition(anyString()))
                 .thenReturn(java.util.Optional.of(pd));
-        mockDraft("draft-1");
-        when(mockNodeConfigRepo.findByProcessDefId(eq("draft-1"))).thenReturn(List.of(
+        when(mockNodeConfigRepo.findByProcessDefinitionId(eq("pd-1"))).thenReturn(List.of(
                 nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\",\"fieldPermissions\":{\"procField\":\"VIEW\"}}}"),
                 nodeConfig("initiator-node", "{\"form\":{\"formDefId\":\"initiatorForm\",\"fieldPermissions\":{\"fieldA\":\"VIEW\",\"fieldB\":\"HIDDEN\"}}}")
         ));
@@ -301,8 +291,7 @@ class ProcessDefinitionControllerTest {
         ProcessDefinition pd = buildMockPd("pd-2");
         when(mockService.getProcessDefinition(anyString()))
                 .thenReturn(java.util.Optional.of(pd));
-        mockDraft("draft-2");
-        when(mockNodeConfigRepo.findByProcessDefId(eq("draft-2"))).thenReturn(List.of(
+        when(mockNodeConfigRepo.findByProcessDefinitionId(eq("pd-2"))).thenReturn(List.of(
                 nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\",\"fieldPermissions\":{\"procField\":\"VIEW\"}}}"),
                 nodeConfig("initiator-node", "{\"form\":{}}")
         ));
@@ -327,8 +316,7 @@ class ProcessDefinitionControllerTest {
         ProcessDefinition pd = buildMockPd("pd-3");
         when(mockService.getProcessDefinition(anyString()))
                 .thenReturn(java.util.Optional.of(pd));
-        mockDraft("draft-3");
-        when(mockNodeConfigRepo.findByProcessDefId(eq("draft-3"))).thenReturn(List.of(
+        when(mockNodeConfigRepo.findByProcessDefinitionId(eq("pd-3"))).thenReturn(List.of(
                 nodeConfig("__PROCESS__", "{\"form\":{}}"),
                 nodeConfig("initiator-node", "{\"form\":{}}")
         ));

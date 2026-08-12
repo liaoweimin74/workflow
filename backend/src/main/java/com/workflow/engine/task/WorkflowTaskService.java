@@ -12,9 +12,7 @@ import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.entity.NodeConfig;
-import com.workflow.engine.process.entity.ProcessDraft;
 import com.workflow.engine.process.repository.NodeConfigRepository;
-import com.workflow.engine.process.repository.ProcessDraftRepository;
 import com.workflow.engine.task.entity.WfTaskRemind;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -58,7 +56,6 @@ public class WorkflowTaskService {
     private final UserService userService;
     private final WfTaskCommentRepository commentRepository;
     private final WfTaskRemindRepository remindRepository;
-    private final ProcessDraftRepository processDraftRepository;
     private final NodeConfigRepository nodeConfigRepository;
     private final InitiatorNodeResolver initiatorNodeResolver;
     private final ObjectMapper objectMapper;
@@ -71,7 +68,6 @@ public class WorkflowTaskService {
                                UserService userService,
                                WfTaskCommentRepository commentRepository,
                                WfTaskRemindRepository remindRepository,
-                               ProcessDraftRepository processDraftRepository,
                                NodeConfigRepository nodeConfigRepository,
                                InitiatorNodeResolver initiatorNodeResolver,
                                ObjectMapper objectMapper) {
@@ -83,7 +79,6 @@ public class WorkflowTaskService {
         this.userService = userService;
         this.commentRepository = commentRepository;
         this.remindRepository = remindRepository;
-        this.processDraftRepository = processDraftRepository;
         this.nodeConfigRepository = nodeConfigRepository;
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.objectMapper = objectMapper;
@@ -908,10 +903,8 @@ public class WorkflowTaskService {
             return new OperationsConfig();
         }
         try {
-            ProcessDraft draft = processDraftRepository.findByProcessDefinitionId(processDefinitionId).orElse(null);
-            if (draft == null) return new OperationsConfig();
-
-            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draft.getId());
+            // 精确匹配该部署版本的 NodeConfig 快照（与 extractFormConfig 保持一致）
+            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
             for (NodeConfig nc : configs) {
                 if (taskDefinitionKey.equals(nc.getNodeId())) {
                     return parseOperationsFromConfig(nc.getConfigJson());

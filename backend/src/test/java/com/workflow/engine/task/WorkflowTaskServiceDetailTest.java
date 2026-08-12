@@ -5,7 +5,6 @@ import com.workflow.api.dto.TaskDetailVO;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.repository.NodeConfigRepository;
-import com.workflow.engine.process.repository.ProcessDraftRepository;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.system.domain.vo.UserVO;
@@ -59,7 +58,6 @@ class WorkflowTaskServiceDetailTest {
     private UserService userService;
     private WfTaskCommentRepository commentRepository;
     private WfTaskRemindRepository remindRepository;
-    private ProcessDraftRepository processDraftRepository;
     private NodeConfigRepository nodeConfigRepository;
     private InitiatorNodeResolver initiatorNodeResolver;
     private ObjectMapper objectMapper;
@@ -75,13 +73,12 @@ class WorkflowTaskServiceDetailTest {
         userService = mock(UserService.class);
         commentRepository = mock(WfTaskCommentRepository.class);
         remindRepository = mock(WfTaskRemindRepository.class);
-        processDraftRepository = mock(ProcessDraftRepository.class);
         nodeConfigRepository = mock(NodeConfigRepository.class);
         initiatorNodeResolver = mock(InitiatorNodeResolver.class);
         objectMapper = new ObjectMapper();
         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
                 runtimeService, repositoryService, userService, commentRepository, remindRepository,
-                processDraftRepository, nodeConfigRepository, initiatorNodeResolver, objectMapper);
+                nodeConfigRepository, initiatorNodeResolver, objectMapper);
         when(tenantProvider.getTenantId()).thenReturn("default");
     }
 
@@ -201,14 +198,6 @@ class WorkflowTaskServiceDetailTest {
 
     // ==================== extractFormConfig 测试 ====================
 
-    private void mockDraft(String processDefinitionId, String draftId) {
-        com.workflow.engine.process.entity.ProcessDraft draft =
-                new com.workflow.engine.process.entity.ProcessDraft();
-        draft.setId(draftId);
-        when(processDraftRepository.findByProcessDefinitionId(eq(processDefinitionId)))
-                .thenReturn(Optional.of(draft));
-    }
-
     private com.workflow.engine.process.entity.NodeConfig nodeConfig(String nodeId, String configJson) {
         com.workflow.engine.process.entity.NodeConfig nc =
                 new com.workflow.engine.process.entity.NodeConfig();
@@ -220,8 +209,7 @@ class WorkflowTaskServiceDetailTest {
     @Test
     void extractFormConfig_节点配置了表单_返回节点配置() {
         // Given: 节点配置了 formDefId + fieldPermissions，流程级也配置了（但不应被读取）
-        mockDraft("pd-node:1:1", "draft-node");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-node"))).thenReturn(List.of(
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-node:1:1"))).thenReturn(List.of(
                 nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\",\"fieldPermissions\":{\"procField\":\"VIEW\"}}}"),
                 nodeConfig("nodeA", "{\"form\":{\"formDefId\":\"nodeForm\",\"fieldPermissions\":{\"field1\":\"VIEW\",\"field2\":\"HIDDEN\"}}}")
         ));
@@ -241,8 +229,7 @@ class WorkflowTaskServiceDetailTest {
     @Test
     void extractFormConfig_节点未配流程有默认_返回流程配置() {
         // Given: 节点配置了 fieldPermissions 但没有 formDefId → 整体回退到流程级
-        mockDraft("pd-fallback:1:2", "draft-fallback");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-fallback"))).thenReturn(List.of(
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-fallback:1:2"))).thenReturn(List.of(
                 nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\",\"fieldPermissions\":{\"procField\":\"VIEW\"}}}"),
                 nodeConfig("nodeB", "{\"form\":{\"fieldPermissions\":{\"field1\":\"HIDDEN\"}}}")
         ));
@@ -261,8 +248,7 @@ class WorkflowTaskServiceDetailTest {
     @Test
     void extractFormConfig_都未配_返回null() {
         // Given: 节点和流程级都没有 formDefId
-        mockDraft("pd-none:1:3", "draft-none");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-none"))).thenReturn(List.of(
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-none:1:3"))).thenReturn(List.of(
                 nodeConfig("__PROCESS__", "{\"form\":{}}"),
                 nodeConfig("nodeC", "{\"form\":{}}")
         ));
@@ -277,8 +263,7 @@ class WorkflowTaskServiceDetailTest {
     @Test
     void extractFormConfig_选中层有formDefId但无fieldPermissions_返回空map() {
         // Given: 节点有 formDefId 但无 fieldPermissions
-        mockDraft("pd-empty:1:4", "draft-empty");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-empty"))).thenReturn(List.of(
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-empty:1:4"))).thenReturn(List.of(
                 nodeConfig("nodeD", "{\"form\":{\"formDefId\":\"nodeForm\"}}")
         ));
 
@@ -295,8 +280,7 @@ class WorkflowTaskServiceDetailTest {
     @Test
     void extractFormKey_委托extractFormConfig_仍返回节点表单() {
         // Given: 与 extractFormConfig 相同的节点配置
-        mockDraft("pd-delegate:1:5", "draft-delegate");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-delegate"))).thenReturn(List.of(
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-delegate:1:5"))).thenReturn(List.of(
                 nodeConfig("__PROCESS__", "{\"form\":{\"formDefId\":\"processForm\"}}"),
                 nodeConfig("nodeE", "{\"form\":{\"formDefId\":\"nodeForm\"}}")
         ));
@@ -357,8 +341,7 @@ class WorkflowTaskServiceDetailTest {
     @Test
     void extractOperations_节点完整配置_返回节点配置() {
         // Given: 节点配置了全部 5 个操作
-        mockDraft("pd-ops-full:1:6", "draft-ops-full");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-ops-full"))).thenReturn(List.of(
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-ops-full:1:6"))).thenReturn(List.of(
                 nodeConfig("nodeOps", "{\"operations\":{\"allowReject\":false,\"allowAddSign\":true,\"allowTransfer\":false,\"allowDelegate\":true,\"allowForwardSign\":true}}")
         ));
 
@@ -377,8 +360,7 @@ class WorkflowTaskServiceDetailTest {
     @Test
     void extractOperations_节点部分配置_缺失字段用默认值补全() {
         // Given: 旧格式只配置了 3 个字段（allowDelegate/allowForwardSign 缺失 → 默认 false）
-        mockDraft("pd-ops-partial:1:7", "draft-ops-partial");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-ops-partial"))).thenReturn(List.of(
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-ops-partial:1:7"))).thenReturn(List.of(
                 nodeConfig("nodeOps2", "{\"operations\":{\"allowReject\":false,\"allowAddSign\":true,\"allowTransfer\":true}}")
         ));
 
@@ -397,8 +379,7 @@ class WorkflowTaskServiceDetailTest {
     @Test
     void extractOperations_节点未配置_返回全默认值() {
         // Given: 节点完全没有 operations 配置
-        mockDraft("pd-ops-none:1:8", "draft-ops-none");
-        when(nodeConfigRepository.findByProcessDefId(eq("draft-ops-none"))).thenReturn(List.of(
+        when(nodeConfigRepository.findByProcessDefinitionId(eq("pd-ops-none:1:8"))).thenReturn(List.of(
                 nodeConfig("nodeOps3", "{\"form\":{\"formDefId\":\"formA\"}}")
         ));
 

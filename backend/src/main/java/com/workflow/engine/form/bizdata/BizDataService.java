@@ -90,8 +90,12 @@ public class BizDataService {
 
         validateRequired(ctx.columns, data);
 
+        // data-picker 引用校验与冗余文本生成（不改原 data，返回附加字段）
+        Map<String, Object> merged = new LinkedHashMap<>(data);
+        merged.putAll(resolvePickerValues(ctx, data));
+
         BizDataQueryBuilder.SqlAndParams insert = BizDataQueryBuilder.buildInsert(
-                ctx.tableName, ctx.columnKeys, data, tenantId);
+                ctx.tableName, ctx.columnKeys, merged, tenantId);
         jdbcTemplate.update(insert.sql(), insert.params().toArray());
 
         // 新行 id 由 buildInsert 内部生成，查询返回
@@ -173,8 +177,11 @@ public class BizDataService {
         validateRequired(ctx.columns, data);
         int currentVersion = version == null ? 1 : version;
 
+        Map<String, Object> merged = new LinkedHashMap<>(data);
+        merged.putAll(resolvePickerValues(ctx, data));
+
         BizDataQueryBuilder.SqlAndParams update = BizDataQueryBuilder.buildUpdate(
-                ctx.tableName, ctx.columnKeys, data, tenantId, id, currentVersion);
+                ctx.tableName, ctx.columnKeys, merged, tenantId, id, currentVersion);
         int affected = jdbcTemplate.update(update.sql(), update.params().toArray());
 
         if (affected == 0) {
@@ -242,6 +249,85 @@ public class BizDataService {
     private String insertedId(BizDataQueryBuilder.SqlAndParams insert) {
         // buildInsert 的第一个参数即生成的 UUID
         return String.valueOf(insert.params().get(0));
+    }
+
+    /**
+     * 批量解析被引用记录的显示文本（id → displayField 值）。
+     * displayField 通过列名白名单校验防注入；仅返回存在的记录。
+     */
+    public Map<String, String> resolveDisplayTexts(String sourceFormKey, List<String> ids, String displayField) {
+        if (sourceFormKey == null || !FORM_KEY_PATTERN.matcher(sourceFormKey).matches()) {
+            throw new BusinessException(400, "非法目标表单 key: " + sourceFormKey);
+        }
+        if (ids == null || ids.isEmpty()) {
+            return Map.of();
+        }
+        if (displayField == null || !displayField.matches("^[a-zA-Z][a-zA-Z0-9_]{0,63}$")) {
+            throw new BusinessException(400, "非法显示字段: " + displayField);
+        }
+        String table = "wf_biz_" + sourceFormKey;
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        String sql = "SELECT id, " + displayField + " FROM " + table
+                + " WHERE tenant_id = ? AND id IN (" + placeholders + ")";
+        List<Object> params = new ArrayList<>();
+        params.add(tenantProvider.getTenantId());
+        params.addAll(ids);
+
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : jdbcTemplate.queryForList(sql, params.toArray())) {
+            Object v = row.get(displayField);
+            result.put(String.valueOf(row.get("id")), v == null ? "" : String.valueOf(v));
+        }
+        return result;
+    }
+
+    /**
+     * 遍历 data-picker 引用列：校验 id 存在并生成 `<key>_text` 冗余文本。
+     * 不修改原 data，返回附加字段（`<key>_text` → 文本）；引用值为空时返回空文本。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> resolvePickerValues(BizDataContext ctx, Map<String, Object> data) {
+        Map<String, Object> extra = new LinkedHashMap<>();
+        for (ColumnConfig col : ctx.columns) {
+            String pickerConfig = col.getPickerConfig();
+            if (pickerConfig == null || pickerConfig.isBlank()) {
+                continue;
+            }
+            String key = col.getKey();
+            Object raw = data.get(key);
+            String text = resolvePickerText(ctx, col, raw);
+            extra.put(key + "_text", text);
+        }
+        return extra;
+    }
+
+    @SuppressWarnings("unchecked")
+    private String resolvePickerText(BizDataContext ctx, ColumnConfig col, Object raw) {
+        try {
+            Map<String, Object> picker = objectMapper.readValue(col.getPickerConfig(), Map.class);
+            String sourceFormKey = picker.get("sourceFormKey") == null ? null : String.valueOf(picker.get("sourceFormKey"));
+            String displayField = picker.get("displayField") == null ? null : String.valueOf(picker.get("displayField"));
+
+            if (raw == null || String.valueOf(raw).isBlank()) {
+                return "";
+            }
+            String rawStr = String.valueOf(raw);
+            List<String> ids = new ArrayList<>(List.of(rawStr.split(",")));
+            ids.removeIf(String::isBlank);
+
+            Map<String, String> texts = resolveDisplayTexts(sourceFormKey, ids, displayField);
+            List<String> ordered = new ArrayList<>();
+            for (String id : ids) {
+                String t = texts.get(id);
+                if (t == null) {
+                    throw new BusinessException(400, "引用的数据不存在: " + col.getKey() + "=" + id);
+                }
+                ordered.add(t);
+            }
+            return String.join(",", ordered);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new BusinessException(400, "data-picker 配置非法: " + col.getKey());
+        }
     }
 
     private BizDataVO findById(String tableName, String tenantId, BizDataContext ctx, String id) {

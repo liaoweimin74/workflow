@@ -1,8 +1,11 @@
-## ADDED Requirements
+# process-prediction Specification
 
+## Purpose
+TBD - created by archiving change process-track-prediction. Update Purpose after archive.
+## Requirements
 ### Requirement: 流程执行预测服务 SHALL 提供从当前活跃节点出发的后续路径遍历
 
-流程执行预测服务 `ProcessTaskPredictionService` 需要从当前活跃节点出发，沿 BPMN 出线遍历后续节点，并按规则停止于有条件连线。
+流程执行预测服务 `ProcessTaskPredictionService` SHALL 从当前活跃节点出发，沿 BPMN 出线遍历后续节点，并按规则停止于有条件连线。
 
 #### Scenario: 无条件连线直接遍历
 - **WHEN** 当前节点有一条或多条无条件连线（出线）
@@ -22,7 +25,7 @@
 
 ### Requirement: 流程执行预测 API SHALL 返回完整的执行预测列表
 
-新增 `GET /api/v1/process-instances/{id}/prediction` 接口，返回已执行节点和预测节点的合并列表。
+新增 `GET /api/v1/process-instances/{id}/prediction` 接口，该接口 SHALL 返回已执行节点和预测节点的合并列表。
 
 #### Scenario: 运行中实例返回完整列表
 - **WHEN** 调用 prediction 接口，实例正在运行中
@@ -34,7 +37,7 @@
 
 ### Requirement: 前端任务执行列表 SHALL 展示已执行和预测节点
 
-前端新增 `ProcessTaskExecutionList` 组件，在流程图下方以表格形式展示执行预测结果。
+前端新增 `ProcessTaskExecutionList` 组件，该组件 SHALL 在流程图下方以表格形式展示执行预测结果。
 
 #### Scenario: 展示已完成节点带审批信息
 - **WHEN** 行为 completed 的节点有 assigneeName、endTime、action、comment 值
@@ -49,3 +52,4 @@
 - **THEN** 连线列 SHALL 显示实线箭头（→）
 - **WHEN** lineType 为 dashed
 - **THEN** 连线列 SHALL 显示虚线箭头（⇢）
+

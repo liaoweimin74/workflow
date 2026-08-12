@@ -40,6 +40,8 @@ public interface FormDefinitionRepository extends JpaRepository<FormDefinition, 
 
     List<FormDefinition> findByTenantIdAndKeyOrderByVersionDesc(String tenantId, String key);
 
+    Optional<FormDefinition> findFirstByTenantIdAndKeyOrderByVersionDesc(String tenantId, String key);
+
     Optional<FormDefinition> findByTenantIdAndKeyAndVersion(String tenantId, String key, Integer version);
 
     boolean existsByTenantIdAndKey(String tenantId, String key);

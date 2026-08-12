@@ -106,6 +106,15 @@ public class FormDefinitionService {
     }
 
     /**
+     * 按 key 获取表单定义（最新版本记录，用于业务数据管理页加载列映射与 schema）。
+     */
+    public FormDefinition getByKey(String key) {
+        String tenantId = tenantProvider.getTenantId();
+        return formDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(tenantId, key)
+                .orElseThrow(() -> new RuntimeException("Form definition not found: " + key));
+    }
+
+    /**
      * 分页查询表单定义列表（无类型过滤，兼容旧调用）。
      *
      * @param status 状态过滤（可选）

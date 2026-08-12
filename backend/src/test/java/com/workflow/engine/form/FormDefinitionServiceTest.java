@@ -143,6 +143,28 @@ class FormDefinitionServiceTest {
         assertTrue(ex.getMessage().contains("Form definition not found"));
     }
 
+    @Test
+    void getByKey_returnsLatestVersion() {
+        FormDefinition formDef = buildFormDef("form-3", "biz_leave", 3, "PUBLISHED");
+        when(formDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "biz_leave"))
+                .thenReturn(Optional.of(formDef));
+
+        FormDefinition result = formDefService.getByKey("biz_leave");
+
+        assertEquals("form-3", result.getId());
+        assertEquals(3, result.getVersion());
+    }
+
+    @Test
+    void getByKey_notFound_throwsException() {
+        when(formDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "nope"))
+                .thenReturn(Optional.empty());
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> formDefService.getByKey("nope"));
+        assertTrue(ex.getMessage().contains("Form definition not found"));
+    }
+
     // ==================== update ====================
 
     @Test

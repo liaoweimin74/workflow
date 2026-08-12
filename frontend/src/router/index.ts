@@ -117,6 +117,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '表单管理' }
       },
       {
+        path: 'biz-data/:formKey',
+        name: 'BizDataList',
+        component: () => import('@/views/form/BizDataListPage.vue'),
+        meta: { title: '业务数据管理' }
+      },
+      {
         path: '404',
         name: 'NotFound',
         component: () => import('@/views/error/NotFoundPage.vue'),

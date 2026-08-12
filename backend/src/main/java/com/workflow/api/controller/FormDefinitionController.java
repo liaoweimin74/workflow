@@ -77,6 +77,15 @@ public class FormDefinitionController {
     }
 
     /**
+     * 按 key 获取表单定义详情（最新版本，用于业务数据管理页）。
+     */
+    @GetMapping("/by-key/{key}")
+    public R<FormDefinitionDetailDTO> getByKey(@PathVariable String key) {
+        FormDefinition formDef = formDefService.getByKey(key);
+        return R.ok(toDetailDTO(formDef));
+    }
+
+    /**
      * 更新表单定义（原地更新，不创建新版本）。
      */
     @PutMapping("/{id}")

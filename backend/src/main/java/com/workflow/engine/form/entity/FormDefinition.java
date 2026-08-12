@@ -25,6 +25,21 @@ public class FormDefinition {
     @Column(name = "`key`", length = 255, nullable = false)
     private String key;
 
+    /**
+     * 表单类型：WORKFLOW（工作流表单）/ BUSINESS（业务表单/底表）。
+     * 默认 WORKFLOW，兼容旧数据。
+     */
+    @Column(name = "type", length = 20, nullable = false)
+    private String type = "WORKFLOW";
+
+    /**
+     * 列映射配置 JSON（仅 BUSINESS 类型使用，WORKFLOW 为 null）。
+     * 定义表单字段到物理表列的映射：类型/长度/必填/唯一/索引。
+     */
+    @Lob
+    @Column(name = "column_config", columnDefinition = "JSON")
+    private String columnConfig;
+
     @Lob
     @Column(name = "`schema`", columnDefinition = "LONGTEXT")
     private String schema;
@@ -69,6 +84,12 @@ public class FormDefinition {
 
     public String getKey() { return key; }
     public void setKey(String key) { this.key = key; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+
+    public String getColumnConfig() { return columnConfig; }
+    public void setColumnConfig(String columnConfig) { this.columnConfig = columnConfig; }
 
     public String getSchema() { return schema; }
     public void setSchema(String schema) { this.schema = schema; }

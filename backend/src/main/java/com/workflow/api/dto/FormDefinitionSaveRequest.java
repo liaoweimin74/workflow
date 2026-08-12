@@ -8,6 +8,7 @@ public class FormDefinitionSaveRequest {
     private String name;
     private String key;
     private String schema;
+    private String columnConfig;
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -17,4 +18,7 @@ public class FormDefinitionSaveRequest {
 
     public String getSchema() { return schema; }
     public void setSchema(String schema) { this.schema = schema; }
+
+    public String getColumnConfig() { return columnConfig; }
+    public void setColumnConfig(String columnConfig) { this.columnConfig = columnConfig; }
 }

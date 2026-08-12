@@ -10,6 +10,7 @@ public class FormDefinitionDTO {
     private String id;
     private String name;
     private String key;
+    private String type;
     private Integer version;
     private String status;
     private Integer publishedVersion;
@@ -19,12 +20,13 @@ public class FormDefinitionDTO {
 
     public FormDefinitionDTO() {}
 
-    public FormDefinitionDTO(String id, String name, String key, Integer version,
+    public FormDefinitionDTO(String id, String name, String key, String type, Integer version,
                              String status, Integer publishedVersion,
                              String createdBy, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.name = name;
         this.key = key;
+        this.type = type;
         this.version = version;
         this.status = status;
         this.publishedVersion = publishedVersion;
@@ -41,6 +43,9 @@ public class FormDefinitionDTO {
 
     public String getKey() { return key; }
     public void setKey(String key) { this.key = key; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
     public Integer getVersion() { return version; }
     public void setVersion(Integer version) { this.version = version; }

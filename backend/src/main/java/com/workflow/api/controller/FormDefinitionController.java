@@ -34,8 +34,9 @@ public class FormDefinitionController {
      */
     @PostMapping
     public R<FormDefinition> create(@RequestParam String name,
-                                    @RequestParam String key) {
-        FormDefinition formDef = formDefService.create(name, key);
+                                    @RequestParam String key,
+                                    @RequestParam(required = false) String type) {
+        FormDefinition formDef = formDefService.create(name, key, type);
         return R.ok(formDef);
     }
 
@@ -47,10 +48,11 @@ public class FormDefinitionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String name) {
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String type) {
 
         PageRequest pageable = PageRequest.of(page, size);
-        Page<FormDefinition> result = formDefService.list(status, name, pageable);
+        Page<FormDefinition> result = formDefService.list(status, name, type, pageable);
 
         List<FormDefinitionDTO> dtos = result.getContent().stream()
                 .map(this::toDTO)
@@ -80,7 +82,8 @@ public class FormDefinitionController {
     @PutMapping("/{id}")
     public R<FormDefinition> update(@PathVariable String id,
                                     @RequestBody FormDefinitionSaveRequest request) {
-        FormDefinition formDef = formDefService.update(id, request.getName(), request.getKey(), request.getSchema());
+        FormDefinition formDef = formDefService.update(
+                id, request.getName(), request.getKey(), request.getSchema(), request.getColumnConfig());
         return R.ok(formDef);
     }
 
@@ -129,6 +132,7 @@ public class FormDefinitionController {
         dto.setId(formDef.getId());
         dto.setName(formDef.getName());
         dto.setKey(formDef.getKey());
+        dto.setType(formDef.getType());
         dto.setVersion(formDef.getVersion());
         dto.setStatus(formDef.getStatus());
         dto.setPublishedVersion(formDef.getPublishedVersion());
@@ -143,6 +147,7 @@ public class FormDefinitionController {
         dto.setId(formDef.getId());
         dto.setName(formDef.getName());
         dto.setKey(formDef.getKey());
+        dto.setType(formDef.getType());
         dto.setVersion(formDef.getVersion());
         dto.setStatus(formDef.getStatus());
         dto.setPublishedVersion(formDef.getPublishedVersion());
@@ -150,6 +155,7 @@ public class FormDefinitionController {
         dto.setCreatedAt(formDef.getCreatedAt());
         dto.setUpdatedAt(formDef.getUpdatedAt());
         dto.setSchema(formDef.getSchema());
+        dto.setColumnConfig(formDef.getColumnConfig());
         return dto;
     }
 }

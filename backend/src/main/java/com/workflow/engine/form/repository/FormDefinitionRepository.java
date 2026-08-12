@@ -23,6 +23,12 @@ public interface FormDefinitionRepository extends JpaRepository<FormDefinition, 
 
     Page<FormDefinition> findByTenantIdAndNameContainingOrderByUpdatedAtDesc(String tenantId, String name, Pageable pageable);
 
+    Page<FormDefinition> findByTenantIdAndTypeOrderByUpdatedAtDesc(String tenantId, String type, Pageable pageable);
+
+    Page<FormDefinition> findByTenantIdAndTypeAndStatusOrderByUpdatedAtDesc(String tenantId, String type, String status, Pageable pageable);
+
+    Page<FormDefinition> findByTenantIdAndTypeAndNameContainingOrderByUpdatedAtDesc(String tenantId, String type, String name, Pageable pageable);
+
     List<FormDefinition> findByTenantIdAndKeyOrderByVersionDesc(String tenantId, String key);
 
     Optional<FormDefinition> findByTenantIdAndKeyAndVersion(String tenantId, String key, Integer version);

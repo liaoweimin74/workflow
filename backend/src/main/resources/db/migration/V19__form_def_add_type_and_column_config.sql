@@ -1,0 +1,3 @@
+ALTER TABLE wf_form_def
+    ADD COLUMN type VARCHAR(20) NOT NULL DEFAULT 'WORKFLOW',
+    ADD COLUMN column_config JSON NULL;

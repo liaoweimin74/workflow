@@ -83,6 +83,38 @@ class FormDefinitionServiceTest {
         verify(formDefRepository, never()).save(any());
     }
 
+    @Test
+    void create_withBusinessType_setsType() {
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave")).thenReturn(false);
+        when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FormDefinition result = formDefService.create("业务表单", "biz_leave", "BUSINESS");
+
+        assertEquals("BUSINESS", result.getType());
+        assertEquals("biz_leave", result.getKey());
+        verify(formDefRepository).save(any(FormDefinition.class));
+    }
+
+    @Test
+    void create_withoutType_defaultsToWorkflow() {
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "leave_form")).thenReturn(false);
+        when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FormDefinition result = formDefService.create("工作流表单", "leave_form", null);
+
+        assertEquals("WORKFLOW", result.getType());
+    }
+
+    @Test
+    void create_blankType_defaultsToWorkflow() {
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "leave_form")).thenReturn(false);
+        when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FormDefinition result = formDefService.create("工作流表单", "leave_form", "  ");
+
+        assertEquals("WORKFLOW", result.getType());
+    }
+
     // ==================== getById ====================
 
     @Test
@@ -346,6 +378,36 @@ class FormDefinitionServiceTest {
 
         assertSame(expectedPage, result);
         verify(formDefRepository).findByTenantIdOrderByUpdatedAtDesc(TENANT_ID, pageable);
+    }
+
+    @Test
+    void list_withTypeFilter_callsTypeRepositoryMethod() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<FormDefinition> expectedPage = new PageImpl<>(List.of());
+        when(formDefRepository.findByTenantIdAndTypeOrderByUpdatedAtDesc(
+                TENANT_ID, "BUSINESS", pageable))
+                .thenReturn(expectedPage);
+
+        Page<FormDefinition> result = formDefService.list(null, null, "BUSINESS", pageable);
+
+        assertSame(expectedPage, result);
+        verify(formDefRepository).findByTenantIdAndTypeOrderByUpdatedAtDesc(
+                TENANT_ID, "BUSINESS", pageable);
+    }
+
+    @Test
+    void list_withTypeAndName_callsTypeNameRepositoryMethod() {
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<FormDefinition> expectedPage = new PageImpl<>(List.of());
+        when(formDefRepository.findByTenantIdAndTypeAndNameContainingOrderByUpdatedAtDesc(
+                TENANT_ID, "BUSINESS", "leave", pageable))
+                .thenReturn(expectedPage);
+
+        Page<FormDefinition> result = formDefService.list(null, "leave", "BUSINESS", pageable);
+
+        assertSame(expectedPage, result);
+        verify(formDefRepository).findByTenantIdAndTypeAndNameContainingOrderByUpdatedAtDesc(
+                TENANT_ID, "BUSINESS", "leave", pageable);
     }
 
     // ==================== Helper ====================

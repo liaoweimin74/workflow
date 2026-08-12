@@ -37,7 +37,7 @@ public class FormDefinitionService {
     }
 
     /**
-     * 创建表单定义。
+     * 创建表单定义（默认工作流表单）。
      *
      * @param name 表单名称
      * @param key  表单唯一标识（同租户内不可重复）
@@ -46,6 +46,20 @@ public class FormDefinitionService {
      */
     @Transactional
     public FormDefinition create(String name, String key) {
+        return create(name, key, null);
+    }
+
+    /**
+     * 创建表单定义。
+     *
+     * @param name 表单名称
+     * @param key  表单唯一标识（同租户内不可重复）
+     * @param type 表单类型（WORKFLOW/BUSINESS，null 或空白默认 WORKFLOW）
+     * @return 创建的表单定义
+     * @throws RuntimeException 如果 key 已存在
+     */
+    @Transactional
+    public FormDefinition create(String name, String key, String type) {
         String tenantId = tenantProvider.getTenantId();
 
         if (formDefRepository.existsByTenantIdAndKey(tenantId, key)) {
@@ -57,6 +71,7 @@ public class FormDefinitionService {
         formDef.setTenantId(tenantId);
         formDef.setName(name);
         formDef.setKey(key);
+        formDef.setType(type == null || type.isBlank() ? "WORKFLOW" : type);
         formDef.setSchema("[]");
         formDef.setVersion(1);
         formDef.setStatus("DRAFT");
@@ -74,17 +89,39 @@ public class FormDefinitionService {
     }
 
     /**
-     * 分页查询表单定义列表。
+     * 分页查询表单定义列表（无类型过滤，兼容旧调用）。
      *
      * @param status 状态过滤（可选）
      * @param name   名称模糊搜索（可选）
      */
     public Page<FormDefinition> list(String status, String name, Pageable pageable) {
-        String tenantId = tenantProvider.getTenantId();
+        return list(status, name, null, pageable);
+    }
 
-        if (name != null && !name.isBlank()) {
+    /**
+     * 分页查询表单定义列表。
+     *
+     * @param status 状态过滤（可选）
+     * @param name   名称模糊搜索（可选）
+     * @param type   类型过滤（可选：WORKFLOW/BUSINESS）
+     */
+    public Page<FormDefinition> list(String status, String name, String type, Pageable pageable) {
+        String tenantId = tenantProvider.getTenantId();
+        boolean hasType = type != null && !type.isBlank();
+        boolean hasName = name != null && !name.isBlank();
+        boolean hasStatus = status != null && !status.isBlank();
+
+        if (hasType) {
+            if (hasName) {
+                return formDefRepository.findByTenantIdAndTypeAndNameContainingOrderByUpdatedAtDesc(tenantId, type, name, pageable);
+            } else if (hasStatus) {
+                return formDefRepository.findByTenantIdAndTypeAndStatusOrderByUpdatedAtDesc(tenantId, type, status, pageable);
+            } else {
+                return formDefRepository.findByTenantIdAndTypeOrderByUpdatedAtDesc(tenantId, type, pageable);
+            }
+        } else if (hasName) {
             return formDefRepository.findByTenantIdAndNameContainingOrderByUpdatedAtDesc(tenantId, name, pageable);
-        } else if (status != null && !status.isBlank()) {
+        } else if (hasStatus) {
             return formDefRepository.findByTenantIdAndStatusOrderByUpdatedAtDesc(tenantId, status, pageable);
         } else {
             return formDefRepository.findByTenantIdOrderByUpdatedAtDesc(tenantId, pageable);
@@ -103,6 +140,22 @@ public class FormDefinitionService {
      */
     @Transactional
     public FormDefinition update(String id, String name, String key, String schema) {
+        return update(id, name, key, schema, null);
+    }
+
+    /**
+     * 更新表单定义（原地更新，不创建新版本）。
+     * 直接在当前记录上更新 name、key、schema、columnConfig，无论 DRAFT 还是 PUBLISHED 状态。
+     *
+     * @param id           表单定义 ID
+     * @param name         表单名称（null 表示不更新）
+     * @param key          表单 key（null 表示不更新）
+     * @param schema       新的 schema JSON（null 表示不更新）
+     * @param columnConfig 新的列映射 JSON（null 表示不更新）
+     * @return 更新后的表单定义
+     */
+    @Transactional
+    public FormDefinition update(String id, String name, String key, String schema, String columnConfig) {
         String tenantId = tenantProvider.getTenantId();
         FormDefinition current = formDefRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new RuntimeException("Form definition not found: " + id));
@@ -115,6 +168,9 @@ public class FormDefinitionService {
         }
         if (schema != null) {
             current.setSchema(schema);
+        }
+        if (columnConfig != null) {
+            current.setColumnConfig(columnConfig);
         }
         return formDefRepository.save(current);
     }

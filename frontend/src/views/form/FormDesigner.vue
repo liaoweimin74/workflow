@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, provide, inject, defineComponent, h } from 'vue'
+import { ref, onMounted, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
@@ -82,21 +82,6 @@ const designerRef = ref<any>(null)
 const loading = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
-
-// 属性面板"数据引用配置"按钮组件（form-create 全局注册，点击触发配置弹窗）
-formCreate.component('dataPickerConfigTrigger', defineComponent({
-  name: 'dataPickerConfigTrigger',
-  props: { field: { type: String, default: '' } },
-  setup() {
-    const open = inject<(() => void) | undefined>('openDataPickerConfig', undefined)
-    return () => h('el-button', {
-      type: 'primary',
-      size: 'small',
-      style: 'width: 100%',
-      onClick: () => open?.(),
-    }, () => '数据引用配置')
-  },
-}))
 
 // 提供给属性面板触发组件：打开数据引用配置弹窗
 provide('openDataPickerConfig', openPickerConfig)
@@ -205,9 +190,16 @@ onMounted(async () => {
         dependOn: undefined,
       },
     }),
-    // 属性设置栏：顶部注入"数据引用配置"按钮（点击弹出配置弹窗）
+    // 属性设置栏：注入"数据引用配置"触发项（标准 input + click 事件，属性面板可靠渲染）
     props: () => [
-      { type: 'dataPickerConfigTrigger', field: 'dataPickerConfigTrigger', title: '数据引用配置' },
+      {
+        type: 'input',
+        field: 'dataPickerConfigTrigger',
+        title: '',
+        value: '点击配置数据引用',
+        props: { readonly: true, placeholder: '点击配置' },
+        on: { click: () => openPickerConfig() },
+      },
     ],
   })
 

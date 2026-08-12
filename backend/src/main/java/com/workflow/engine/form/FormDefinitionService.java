@@ -279,6 +279,24 @@ public class FormDefinitionService {
     }
 
     /**
+     * 按 key 获取已发布业务表单的列映射。
+     *
+     * @param key 表单 key
+     * @return 列映射列表
+     * @throws BusinessException 表单不存在/未发布/非业务表单/column_config 非法
+     */
+    public List<ColumnConfig> getBusinessColumnsByKey(String key) {
+        String tenantId = tenantProvider.getTenantId();
+        FormDefinition published = formDefRepository
+                .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, key, "PUBLISHED")
+                .orElseThrow(() -> new BusinessException(404, "业务表单不存在或未发布: " + key));
+        if (!"BUSINESS".equals(published.getType())) {
+            throw new BusinessException(400, "表单 " + key + " 不是业务表单");
+        }
+        return parseColumnConfig(published.getColumnConfig());
+    }
+
+    /**
      * 解析 column_config JSON 为列映射列表。
      */
     private List<ColumnConfig> parseColumnConfig(String columnConfig) throws BusinessException {

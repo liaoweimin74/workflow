@@ -13,7 +13,6 @@
         :form-config="formConfig"
         :default-page-size="20"
         :max-visible-buttons="4"
-        table-size="small"
       >
         <template #status="{ row }">
           <el-tag :type="statusTagType(row.status)" size="small">

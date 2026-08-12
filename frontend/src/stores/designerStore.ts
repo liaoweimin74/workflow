@@ -25,7 +25,6 @@ export interface NodeConfigData {
     allowAddSign?: boolean
     allowTransfer?: boolean
     allowDelegate?: boolean
-    allowForwardSign?: boolean
   }
   condition?: string
   callActivity?: {
@@ -91,14 +90,13 @@ export interface ProcessConfigData {
       action: 'AUTO_PASS' | 'SKIP' | 'ESCALATE'
     }
     allowRecall: boolean
-    /**
-     * @deprecated 已废弃，改由节点级 operations.allowAddSign 控制
-     */
-    allowAddSigner: boolean
-    /**
-     * @deprecated 已废弃，改由节点级 operations.allowDelegate 控制
-     */
-    allowDelegate: boolean
+    // 流程级操作权限总控（节点级 operations 覆盖，生效 = AND）
+    operations: {
+      allowReject: boolean
+      allowAddSign: boolean
+      allowTransfer: boolean
+      allowDelegate: boolean
+    }
   }
   numberRule: {
     enabled: boolean
@@ -118,8 +116,12 @@ export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {
       action: 'AUTO_PASS',
     },
     allowRecall: true,
-    allowAddSigner: true,
-    allowDelegate: true,
+    operations: {
+      allowReject: true,
+      allowAddSign: true,
+      allowTransfer: true,
+      allowDelegate: true,
+    },
   },
   numberRule: {
     enabled: false,
@@ -199,20 +201,29 @@ export const useDesignerStore = defineStore('designer', () => {
     if (!raw) return { ...DEFAULT_PROCESS_CONFIG }
     try {
       const parsed = JSON.parse(raw) as Partial<ProcessConfigData>
+      // 兼容旧配置：忽略已废弃的 allowAddSigner / allowDelegate 字段
+      const storedApprovalPolicy = parsed.approvalPolicy as
+        | (Partial<ProcessConfigData['approvalPolicy']> & { allowAddSigner?: boolean; allowDelegate?: boolean })
+        | undefined
+      const { allowAddSigner: _allowAddSigner, allowDelegate: _allowDelegate, ...restApprovalPolicy } = storedApprovalPolicy ?? {}
       return {
         ...DEFAULT_PROCESS_CONFIG,
         ...parsed,
         approvalPolicy: {
           ...DEFAULT_PROCESS_CONFIG.approvalPolicy,
-          ...parsed.approvalPolicy,
+          ...restApprovalPolicy,
           deduplication: {
             ...DEFAULT_PROCESS_CONFIG.approvalPolicy.deduplication,
-            ...parsed.approvalPolicy?.deduplication,
+            ...(restApprovalPolicy.deduplication ?? {}),
+          },
+          operations: {
+            ...DEFAULT_PROCESS_CONFIG.approvalPolicy.operations,
+            ...(restApprovalPolicy.operations ?? {}),
           },
         },
         numberRule: {
           ...DEFAULT_PROCESS_CONFIG.numberRule,
-          ...parsed.numberRule,
+          ...(parsed.numberRule ?? {}),
         },
       }
     } catch {

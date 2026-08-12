@@ -66,10 +66,6 @@
           <el-switch v-model="operations.allowDelegate" @change="saveConfig" />
         </el-form-item>
 
-        <el-form-item label="允许转签">
-          <el-switch v-model="operations.allowForwardSign" @change="saveConfig" />
-        </el-form-item>
-
         <el-divider content-position="left">超时设置</el-divider>
 
         <el-form-item label="超时时间">
@@ -130,8 +126,7 @@ const operations = reactive({
   allowReject: true,
   allowAddSign: false,
   allowTransfer: true,
-  allowDelegate: false,
-  allowForwardSign: false
+  allowDelegate: false
 })
 
 const timeout = reactive({
@@ -171,7 +166,6 @@ function loadConfig() {
   operations.allowAddSign = false
   operations.allowTransfer = true
   operations.allowDelegate = false
-  operations.allowForwardSign = false
   timeout.duration = 0
   timeout.action = 'remind'
 
@@ -194,7 +188,6 @@ function loadConfig() {
       operations.allowAddSign = existing.operations.allowAddSign ?? false
       operations.allowTransfer = existing.operations.allowTransfer ?? true
       operations.allowDelegate = existing.operations.allowDelegate ?? false
-      operations.allowForwardSign = existing.operations.allowForwardSign ?? false
     }
     if (existing.timeout) {
       timeout.duration = existing.timeout.duration || 0
@@ -234,8 +227,7 @@ function saveConfig() {
       allowReject: operations.allowReject,
       allowAddSign: operations.allowAddSign,
       allowTransfer: operations.allowTransfer,
-      allowDelegate: operations.allowDelegate,
-      allowForwardSign: operations.allowForwardSign
+      allowDelegate: operations.allowDelegate
     },
     timeout: {
       duration: timeout.duration,

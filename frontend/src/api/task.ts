@@ -47,8 +47,6 @@ export interface OperationsConfig {
   allowTransfer: boolean
   /** 是否允许委派，默认 false */
   allowDelegate: boolean
-  /** 是否允许转签，默认 false */
-  allowForwardSign: boolean
 }
 
 /**

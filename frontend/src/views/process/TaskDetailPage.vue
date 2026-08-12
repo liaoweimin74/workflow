@@ -95,7 +95,6 @@
                   <el-dropdown-item v-if="operations?.allowTransfer" command="transfer">转办</el-dropdown-item>
                   <el-dropdown-item v-if="operations?.allowDelegate" command="delegate">委派</el-dropdown-item>
                   <el-dropdown-item v-if="operations?.allowAddSign" command="addSign">加签</el-dropdown-item>
-                  <el-dropdown-item v-if="operations?.allowForwardSign" command="forwardSign">转签</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -160,7 +159,7 @@ const operations = computed<OperationsConfig | undefined>(() => taskDetail.value
 
 /** 是否存在"更多操作"下拉里的任一可用操作 */
 const hasMoreOperations = computed(
-  () => !!operations.value && (operations.value.allowTransfer || operations.value.allowDelegate || operations.value.allowAddSign || operations.value.allowForwardSign),
+  () => !!operations.value && (operations.value.allowTransfer || operations.value.allowDelegate || operations.value.allowAddSign),
 )
 
 // 流程跟踪
@@ -313,8 +312,6 @@ async function onSingleUserSelected(users: { id: number; nickname: string }[]) {
       await taskApi.transfer(taskId, { toUser: userIdStr, reason: comment.value })
     } else if (action === 'delegate') {
       await taskApi.delegate(taskId, { delegateTo: userIdStr, comment: comment.value })
-    } else if (action === 'forwardSign') {
-      await taskApi.forwardSign(taskId, { toUser: userIdStr, comment: comment.value })
     }
     ElMessage.success('操作成功')
     router.push('/process/todo')

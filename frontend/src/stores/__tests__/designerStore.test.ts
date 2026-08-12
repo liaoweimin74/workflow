@@ -55,3 +55,49 @@ describe('designerStore — 流程配置', () => {
     expect(back?.backendLogic?.[0].trigger).toBe('ENTER')
   })
 })
+
+describe('DEFAULT_PROCESS_CONFIG — 流程级操作权限', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('approvalPolicy.operations 默认四开关全开', () => {
+    const ops = DEFAULT_PROCESS_CONFIG.approvalPolicy.operations
+    expect(ops.allowReject).toBe(true)
+    expect(ops.allowAddSign).toBe(true)
+    expect(ops.allowTransfer).toBe(true)
+    expect(ops.allowDelegate).toBe(true)
+  })
+
+  it('废弃字段 allowAddSigner / allowDelegate 已从默认配置移除', () => {
+    // @ts-expect-error 已移除的废弃字段不应存在
+    expect(DEFAULT_PROCESS_CONFIG.approvalPolicy.allowAddSigner).toBeUndefined()
+    // @ts-expect-error 已移除的废弃字段不应存在
+    expect(DEFAULT_PROCESS_CONFIG.approvalPolicy.allowDelegate).toBeUndefined()
+  })
+
+  it('加载含废弃字段的旧配置：忽略废弃字段并用默认值补全 operations', () => {
+    const store = useDesignerStore()
+    const legacy = {
+      approvalPolicy: {
+        deduplication: { enabled: true, scope: 'GLOBAL', action: 'AUTO_PASS' },
+        allowRecall: true,
+        allowAddSigner: false,
+        allowDelegate: false,
+      },
+      numberRule: { enabled: false, pattern: '{{year}}-{{seq:4}}' },
+    }
+    store.setNodeConfigs({ [PROCESS_CONFIG_KEY]: JSON.stringify(legacy) })
+    const config = store.getProcessConfig()
+    expect(config.approvalPolicy.operations).toEqual({
+      allowReject: true,
+      allowAddSign: true,
+      allowTransfer: true,
+      allowDelegate: true,
+    })
+    // @ts-expect-error 已移除的废弃字段不应存在
+    expect(config.approvalPolicy.allowAddSigner).toBeUndefined()
+    // @ts-expect-error 已移除的废弃字段不应存在
+    expect(config.approvalPolicy.allowDelegate).toBeUndefined()
+  })
+})

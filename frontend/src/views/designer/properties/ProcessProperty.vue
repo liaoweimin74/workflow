@@ -30,13 +30,25 @@
           <el-switch v-model="config.approvalPolicy.allowRecall" @change="syncToStore" />
         </el-form-item>
 
+        <el-divider content-position="left">节点操作权限</el-divider>
+
+        <el-form-item label="允许驳回">
+          <el-switch v-model="config.approvalPolicy.operations.allowReject" @change="syncToStore" />
+        </el-form-item>
+
         <el-form-item label="允许加签">
-          <el-switch v-model="config.approvalPolicy.allowAddSigner" @change="syncToStore" />
+          <el-switch v-model="config.approvalPolicy.operations.allowAddSign" @change="syncToStore" />
         </el-form-item>
 
         <el-form-item label="允许转办">
-          <el-switch v-model="config.approvalPolicy.allowDelegate" @change="syncToStore" />
+          <el-switch v-model="config.approvalPolicy.operations.allowTransfer" @change="syncToStore" />
         </el-form-item>
+
+        <el-form-item label="允许委派">
+          <el-switch v-model="config.approvalPolicy.operations.allowDelegate" @change="syncToStore" />
+        </el-form-item>
+
+        <div class="operations-hint">流程级总开关，节点级可覆盖；会签节点转办等同转签</div>
 
         <el-divider content-position="left">流程编号</el-divider>
 
@@ -106,5 +118,11 @@ function syncToStore() {
 
 .process-property-tabs :deep(.el-tabs__content) {
   overflow-y: auto;
+}
+
+.operations-hint {
+  color: #909399;
+  font-size: 12px;
+  margin: 4px 0 8px;
 }
 </style>

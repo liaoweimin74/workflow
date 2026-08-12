@@ -27,6 +27,7 @@
         业务表单
       </el-tag>
       <div class="toolbar-right">
+        <el-button v-if="formType === 'BUSINESS'" :icon="Link" @click="openPickerConfig">数据引用配置</el-button>
         <el-button type="primary" :icon="Check" @click="handleSave" :loading="saving">保存</el-button>
         <el-button v-if="formStatus === 'DRAFT'" type="success" :icon="Promotion" @click="handlePublish" :loading="publishing">
           发布
@@ -51,6 +52,17 @@
       :existing-columns="columnConfig"
       @confirm="handleColumnConfirm"
     />
+
+    <!-- data-picker 数据引用配置 -->
+    <DataPickerConfigDialog
+      v-model="pickerDialogVisible"
+      :target-forms="pickerTargetForms"
+      :current-fields="currentFieldKeys"
+      :target-columns="pickerTargetColumns"
+      :picker-props="currentPickerProps"
+      @source-change="handlePickerSourceChange"
+      @confirm="handlePickerConfirm"
+    />
   </div>
 </template>
 
@@ -58,9 +70,10 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Promotion, Link } from '@element-plus/icons-vue'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
+import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,6 +90,46 @@ const formKey = ref('')
 const formType = ref('')
 const columnConfig = ref<ColumnConfigItem[]>([])
 const columnDialogVisible = ref(false)
+
+// ===== data-picker 配置 =====
+const pickerDialogVisible = ref(false)
+const pickerTargetForms = ref<FormDefinitionDTO[]>([])
+const pickerTargetColumns = ref<ColumnConfigItem[]>([])
+const pickerConfigDialogRef = ref<InstanceType<typeof DataPickerConfigDialog>>()
+/** 当前 schema 中的 dataPicker 字段（field → props） */
+const pickerFields = computed<{ field: string; props: Record<string, any> }[]>(() => {
+  const fields: { field: string; props: Record<string, any> }[] = []
+  const walk = (rules: any[]) => {
+    for (const r of rules) {
+      if (r?.type === 'dataPicker' && r.field) {
+        fields.push({ field: r.field, props: r.props || {} })
+      }
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(designerRule.value)
+  return fields
+})
+const selectedPickerField = ref<string>('')
+
+/** 当前表单所有字段 key（供回填映射/级联依赖的目标字段选择） */
+const currentFieldKeys = computed<string[]>(() => {
+  const keys: string[] = []
+  const walk = (rules: any[]) => {
+    for (const r of rules) {
+      if (r?.field) keys.push(r.field)
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(designerRule.value)
+  return keys
+})
+
+/** 当前选中 dataPicker 字段的 props（供配置弹窗回填） */
+const currentPickerProps = computed<Record<string, any>>(() => {
+  const found = pickerFields.value.find(f => f.field === selectedPickerField.value)
+  return found?.props || {}
+})
 
 const designerHeight = ref('calc(100vh - 50px)')
 
@@ -109,6 +162,25 @@ onMounted(async () => {
         fetchApi: null,
         displayField: '',
         returnFields: {},
+      },
+    },
+  })
+
+  // 注册数据引用（dataPicker）组件
+  designerRef.value?.addComponent({
+    label: '数据引用',
+    name: 'dataPicker',
+    rule: {
+      type: 'dataPicker',
+      field: '',
+      title: '数据引用',
+      props: {
+        sourceFormKey: '',
+        displayField: '',
+        columns: [],
+        mode: 'single',
+        returnFields: {},
+        dependOn: undefined,
       },
     },
   })
@@ -245,6 +317,48 @@ async function doPublish(items: ColumnConfigItem[] | null) {
   } finally {
     publishing.value = false
   }
+}
+
+// ===== data-picker 配置 =====
+async function openPickerConfig() {
+  if (pickerFields.value.length === 0) {
+    ElMessage.warning('画布中没有数据引用字段，请先拖入"数据引用"组件')
+    return
+  }
+  selectedPickerField.value = pickerFields.value[0].field
+  try {
+    const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
+    pickerTargetForms.value = res.data.content || []
+  } catch {
+    pickerTargetForms.value = []
+  }
+  pickerTargetColumns.value = []
+  pickerDialogVisible.value = true
+}
+
+async function handlePickerSourceChange(formKey: string) {
+  try {
+    const res = await formApi.getFormDefinitionByKey(formKey)
+    const cc = res.data.columnConfig
+    pickerTargetColumns.value = cc ? JSON.parse(cc) : []
+  } catch {
+    pickerTargetColumns.value = []
+  }
+}
+
+function handlePickerConfirm(newProps: Record<string, any>) {
+  const rules = designerRef.value?.getRule() || []
+  const walk = (list: any[]) => {
+    for (const r of list) {
+      if (r?.type === 'dataPicker' && r.field === selectedPickerField.value) {
+        r.props = { ...(r.props || {}), ...newProps }
+      }
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(rules)
+  designerRef.value?.setRule(rules)
+  ElMessage.success('数据引用配置已保存')
 }
 
 function handleBack() {

@@ -55,7 +55,8 @@ class BizDataServiceTest {
     void setUp() {
         TenantContext.setTenantId(TENANT_ID);
         lenient().when(tenantProvider.getTenantId()).thenReturn(TENANT_ID);
-        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider, new ObjectMapper());
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of());
 
         ColumnConfig name = new ColumnConfig();
         name.setKey("name");

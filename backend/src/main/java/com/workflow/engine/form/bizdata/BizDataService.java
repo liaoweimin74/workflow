@@ -40,14 +40,9 @@ public class BizDataService {
     /** formKey → 钩子列表（按 Spring 注入顺序） */
     private final Map<String, List<BizDataHandler>> handlerIndex;
 
-    public BizDataService(JdbcTemplate jdbcTemplate,
-                          DynamicTableManager tableManager,
-                          FormDefinitionService formDefService,
-                          TenantProvider tenantProvider,
-                          ObjectMapper objectMapper) {
-        this(jdbcTemplate, tableManager, formDefService, tenantProvider, objectMapper, List.of());
-    }
-
+    /**
+     * @param handlers Spring 自动注入所有 BizDataHandler bean（无则空列表）
+     */
     public BizDataService(JdbcTemplate jdbcTemplate,
                           DynamicTableManager tableManager,
                           FormDefinitionService formDefService,

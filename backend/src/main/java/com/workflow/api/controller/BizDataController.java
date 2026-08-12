@@ -7,6 +7,7 @@ import com.workflow.common.domain.R;
 import com.workflow.engine.form.bizdata.BizDataService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,6 +48,17 @@ public class BizDataController {
     public R<BizDataVO> getById(@PathVariable String formKey,
                                 @PathVariable String id) {
         return R.ok(bizDataService.getById(formKey, id));
+    }
+
+    /**
+     * 批量解析业务数据显示文本（data-picker 引用还原）。
+     * 返回 id → 显示字段文本 映射。
+     */
+    @GetMapping("/{formKey}/resolve")
+    public R<Map<String, String>> resolve(@PathVariable String formKey,
+                                          @RequestParam List<String> ids,
+                                          @RequestParam(required = false) String displayField) {
+        return R.ok(bizDataService.resolveByFormKey(formKey, ids, displayField));
     }
 
     /**

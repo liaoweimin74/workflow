@@ -310,4 +310,59 @@ class BizDataServiceTest {
         assertThat(vo.getVersion()).isEqualTo(2);
         assertThat(vo.getData()).containsEntry("emp_id_text", "张三");
     }
+
+    // ==================== resolve API ====================
+
+    @Test
+    void resolveDisplayTexts_batchReturnsMap() {
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "a", "name", "张三"), Map.of("id", "b", "name", "李四")));
+
+        Map<String, String> map = bizDataService.resolveDisplayTexts("emp_profile", List.of("a", "b"), "name");
+
+        assertThat(map).containsEntry("a", "张三").containsEntry("b", "李四");
+    }
+
+    @Test
+    void resolveDisplayTexts_missingIds_omitted() {
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "a", "name", "张三")));
+
+        Map<String, String> map = bizDataService.resolveDisplayTexts("emp_profile", List.of("a", "x"), "name");
+
+        assertThat(map).containsEntry("a", "张三");
+        assertThat(map).doesNotContainKey("x");
+    }
+
+    @Test
+    void resolveByFormKey_defaultDisplayField_firstNonHiddenColumn() {
+        // 列：emp_id（pickerConfig）隐藏列 emp_id_text + 普通列 name（第一个非 hidden）
+        lenient().when(tableManager.tableExists("wf_biz_emp_profile")).thenReturn(true);
+        when(formDefService.getBusinessColumnsByKey("emp_profile"))
+                .thenReturn(List.of(
+                        pickerColumn("emp_id", "x"),
+                        hiddenTextColumn("emp_id_text"),
+                        simpleColumn("name", "VARCHAR", 255)));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "a", "name", "张三")));
+
+        Map<String, String> map = bizDataService.resolveByFormKey("emp_profile", List.of("a"), null);
+
+        assertThat(map).containsEntry("a", "张三");
+    }
+
+    @Test
+    void resolveDisplayTexts_invalidDisplayField_rejected400() {
+        assertThatThrownBy(() -> bizDataService.resolveDisplayTexts("emp_profile", List.of("a"), "name; DROP"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400));
+    }
+
+    private ColumnConfig simpleColumn(String key, String type, Integer length) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setColumnType(type);
+        c.setLength(length);
+        return c;
+    }
 }

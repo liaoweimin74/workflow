@@ -252,6 +252,24 @@ public class BizDataService {
     }
 
     /**
+     * 按表单 key 批量解析显示文本（resolve API 入口）。
+     * displayField 缺省取目标表单第一个非隐藏列；表不存在 404。
+     */
+    public Map<String, String> resolveByFormKey(String formKey, List<String> ids, String displayField) {
+        BizDataContext ctx = loadContext(formKey);
+        String field = displayField;
+        if (field == null || field.isBlank()) {
+            // 缺省取第一个"普通列"（非 hidden、非 data-picker 引用列）
+            field = ctx.columns.stream()
+                    .filter(c -> !c.isHidden() && c.getPickerConfig() == null)
+                    .map(ColumnConfig::getKey)
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(400, "目标表单无可解析的显示字段"));
+        }
+        return resolveDisplayTexts(formKey, ids, field);
+    }
+
+    /**
      * 批量解析被引用记录的显示文本（id → displayField 值）。
      * displayField 通过列名白名单校验防注入；仅返回存在的记录。
      */

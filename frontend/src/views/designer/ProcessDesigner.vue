@@ -2,6 +2,7 @@
   <div class="process-designer">
     <!-- 顶部工具栏 -->
     <designer-toolbar
+      :read-only="isReadOnly"
       @save="handleSave"
       @deploy="handleDeploy"
       @export-xml="handleExportXml"
@@ -17,8 +18,8 @@
     />
 
     <div class="designer-body">
-      <!-- 左侧节点面板 -->
-      <node-palette v-model:collapsed="paletteCollapsed" />
+      <!-- 左侧节点面板（只读模式隐藏） -->
+      <node-palette v-if="!isReadOnly" v-model:collapsed="paletteCollapsed" />
 
       <!-- 中间画布 -->
       <div
@@ -35,7 +36,7 @@
       </div>
 
       <!-- 右侧属性面板 -->
-      <property-panel v-model:collapsed="propertyCollapsed" />
+      <property-panel v-model:collapsed="propertyCollapsed" :read-only="isReadOnly" />
     </div>
 
     <!-- 导入 XML 对话框 -->
@@ -66,7 +67,7 @@ import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
 import { isInitiatorTaskElement } from './utils/bpmnValidation'
-import { processDesignApi } from '@/api/processDefinition'
+import { processDesignApi, deployedProcessApi } from '@/api/processDefinition'
 import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-js.css'
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css'
@@ -85,19 +86,27 @@ const importXmlContent = ref('')
 const paletteCollapsed = ref(false)
 const propertyCollapsed = ref(false)
 
-onMounted(async () => {
-  const draftId = route.query.id as string
-  if (!draftId) {
-    ElMessage.warning('缺少流程定义 ID')
-    return
-  }
+/** 只读模式：通过 /designer?procDefId=xxx&readonly=1 进入，查看历史版本 */
+const isReadOnly = computed(() => route.query.readonly === '1')
 
+onMounted(async () => {
   loading.value = true
   try {
-    // 初始化 modeler
+    // 初始化 modeler（只读模式禁用编辑）
     await nextTick()
     if (canvasWrapperRef.value) {
-      initModeler({ container: canvasWrapperRef.value })
+      initModeler({ container: canvasWrapperRef.value }, isReadOnly.value)
+    }
+
+    if (isReadOnly.value) {
+      await loadReadOnlyVersion()
+      return
+    }
+
+    const draftId = route.query.id as string
+    if (!draftId) {
+      ElMessage.warning('缺少流程定义 ID')
+      return
     }
 
     // 加载设计器数据
@@ -133,12 +142,38 @@ onMounted(async () => {
   }
 })
 
+/** 只读模式：加载历史版本的编辑器数据（该版本 XML + 配置快照） */
+async function loadReadOnlyVersion() {
+  const procDefId = route.query.procDefId as string
+  if (!procDefId) {
+    ElMessage.warning('缺少流程版本 ID')
+    return
+  }
+  const res = await deployedProcessApi.getVersionEditor(procDefId)
+  const editorData = res.data
+  designerStore.setDraft('', editorData.name || '', editorData.key || '')
+  designerStore.setBpmnXml(editorData.bpmnXml)
+  designerStore.setNodeConfigs(editorData.nodeConfigs || {})
+  designerStore.setDraftBasicInfo({ categoryId: null, description: '' })
+  designerStore.markClean()
+
+  const modeler = getModeler()
+  await importXml(modeler, editorData.bpmnXml)
+
+  const minimap: any = (modeler as any).get('minimap')
+  if (minimap) {
+    minimap.open()
+  }
+  // 只读模式：仅注册选择监听（展示节点配置），不注册编辑/删除监听
+  setupEventListeners(true)
+}
+
 onBeforeUnmount(() => {
   destroyModeler()
   designerStore.clearConfigs()
 })
 
-function setupEventListeners() {
+function setupEventListeners(readOnly = false) {
   const modeler = getModeler()
   const eventBus = (modeler as any).get('eventBus')
   const canvas = (modeler as any).get('canvas')
@@ -163,6 +198,10 @@ function setupEventListeners() {
       designerStore.selectNode(null, 'Process')
     }
   })
+
+  if (readOnly) {
+    return
+  }
 
   eventBus.on('commandStack.changed', () => {
     designerStore.setBpmnXml('') // mark dirty
@@ -421,6 +460,10 @@ function handleToggleMinimap(visible: boolean) {
 }
 
 function handleBack() {
+  if (isReadOnly.value) {
+    router.push('/process/definition')
+    return
+  }
   if (designerStore.isDirty) {
     ElMessageBox.confirm('有未保存的更改，确定要离开吗？', '提示', {
       type: 'warning'

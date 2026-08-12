@@ -43,6 +43,15 @@ export interface ProcessDefinitionSummary {
   version: number
 }
 
+/** 流程历史版本（GET /api/v1/deployed-processes/key/{key}/versions 列表项） */
+export interface ProcessVersion {
+  procDefId: string
+  version: number
+  name: string
+  deploymentTime: string
+  latest: boolean
+}
+
 /**
  * 已部署流程定义（Flowable ProcessDefinition 序列化形状）。
  * 对应 GET /api/v1/deployed-processes 列表项。
@@ -103,6 +112,16 @@ export const deployedProcessApi = {
   /** 激活流程定义 */
   activate(id: string): Promise<R<void>> {
     return http.post(`/v1/deployed-processes/${id}/activate`)
+  },
+
+  /** 流程历史版本列表（按 key 查询全部已部署版本） */
+  getVersions(key: string): Promise<R<ProcessVersion[]>> {
+    return http.get(`/v1/deployed-processes/key/${key}/versions`)
+  },
+
+  /** 某版本的编辑器数据（该版本 BPMN XML + 配置快照） */
+  getVersionEditor(procDefId: string): Promise<R<EditorData>> {
+    return http.get(`/v1/deployed-processes/versions/${procDefId}/editor`)
   },
 }
 

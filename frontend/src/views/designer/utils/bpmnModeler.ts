@@ -15,7 +15,22 @@ export interface ModelerOptions {
 
 let modelerInstance: Modeler | null = null
 
-export function initModeler(options: ModelerOptions): Modeler {
+/** 只读模式：禁用建模/拖拽/删除/编辑动作/画布上下文菜单 */
+function buildReadOnlyModule() {
+  return {
+    modeling: ['value', null],
+    editorActions: ['value', null],
+    dragging: ['value', null],
+    contextPadProvider: ['type', function (this: any) {
+      this.getContextPadEntries = function () { return {} }
+    }],
+    paletteProvider: ['type', function (this: any) {
+      this.getPaletteEntries = function () { return {} }
+    }],
+  }
+}
+
+export function initModeler(options: ModelerOptions, readOnly = false): Modeler {
   if (modelerInstance) {
     destroyModeler()
   }
@@ -27,15 +42,20 @@ export function initModeler(options: ModelerOptions): Modeler {
     }]
   }
 
+  const additionalModules = [
+    minimapModule as any,
+    disablePaletteModule as any,
+    customContextPadModule as any,
+    customRendererModule as any,
+    customRulesModule as any,
+  ]
+  if (readOnly) {
+    additionalModules.push(buildReadOnlyModule() as any)
+  }
+
   modelerInstance = new BpmnModeler({
     container: options.container,
-    additionalModules: [
-      minimapModule as any,
-      disablePaletteModule as any,
-      customContextPadModule as any,
-      customRendererModule as any,
-      customRulesModule as any
-    ],
+    additionalModules,
     moddleExtensions: {
       wf: wfModdle
     },

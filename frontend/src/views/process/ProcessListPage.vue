@@ -49,6 +49,37 @@
       </SearchTable>
     </el-card>
   </div>
+
+  <!-- 版本历史抽屉 -->
+  <el-drawer
+    v-model="versionDrawerVisible"
+    :title="`${versionDrawerTitle} · 版本历史`"
+    size="420px"
+  >
+    <div v-loading="versionLoading">
+      <el-table :data="versionRows" size="small" @row-click="openVersionViewer" style="cursor: pointer">
+        <el-table-column prop="version" label="版本" width="70" align="center">
+          <template #default="{ row }">
+            <span>v{{ row.version }}</span>
+            <el-tag v-if="row.latest" size="small" type="success" style="margin-left: 4px">最新</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="deploymentTime" label="部署时间" min-width="140">
+          <template #default="{ row }">
+            {{ row.deploymentTime ? formatDate(row.deploymentTime) : '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="80" align="center">
+          <template #default>
+            <el-button link type="primary" size="small">查看</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无历史版本" :image-size="60" />
+        </template>
+      </el-table>
+    </div>
+  </el-drawer>
 </template>
 
 <script setup lang="ts">
@@ -58,13 +89,19 @@ import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
-import { processDesignApi, type ProcessDraft } from '@/api/processDefinition'
+import { processDesignApi, deployedProcessApi, type ProcessDraft, type ProcessVersion } from '@/api/processDefinition'
 import { categoryApi, type Category } from '@/api/category'
 
 const router = useRouter()
 const tableRef = ref()
 const categoryTableRef = ref()
 const selectedCategory = ref<Category | null>(null)
+
+// ========== 版本历史抽屉 ==========
+const versionDrawerVisible = ref(false)
+const versionLoading = ref(false)
+const versionRows = ref<ProcessVersion[]>([])
+const versionDrawerTitle = ref('')
 
 // ========== 流程分类 ==========
 const categorySearchFields: SearchField[] = [
@@ -287,6 +324,14 @@ const actionButtons: ActionButton[] = [
     },
   },
   {
+    label: '版本历史',
+    size: 'small',
+    show: (row: any) => !!row.deployId,
+    onClick: (row: any) => {
+      openVersionHistory(row)
+    },
+  },
+  {
     label: '删除',
     size: 'small',
     type: 'danger',
@@ -306,6 +351,27 @@ const actionButtons: ActionButton[] = [
 ]
 
 function handleRowClick(_row: any) {}
+
+/** 打开版本历史抽屉，加载该流程 key 的全部已部署版本 */
+async function openVersionHistory(row: any) {
+  versionDrawerTitle.value = row.name || row.key || ''
+  versionDrawerVisible.value = true
+  versionLoading.value = true
+  versionRows.value = []
+  try {
+    const res = await deployedProcessApi.getVersions(row.key)
+    versionRows.value = res.data || []
+  } catch {
+    versionRows.value = []
+  } finally {
+    versionLoading.value = false
+  }
+}
+
+/** 点击某版本 → 跳转只读设计器查看该版本的流程图与配置快照 */
+function openVersionViewer(row: ProcessVersion) {
+  router.push({ path: '/designer', query: { procDefId: row.procDefId, readonly: '1' } })
+}
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return ''

@@ -15,51 +15,71 @@
       </div>
 
       <div class="panel-body">
-        <!-- 流程属性（选中画布空白时） -->
-        <process-property
-          v-if="selectedNodeType === 'Process'"
-        />
+        <!-- 只读模式：展示该版本节点的配置快照（基本信息 + 配置 JSON） -->
+        <template v-if="readOnly">
+          <el-descriptions v-if="selectedNodeType === 'Process'" :column="1" size="small" border>
+            <el-descriptions-item label="对象">流程</el-descriptions-item>
+            <el-descriptions-item label="配置">
+              <pre class="readonly-config">{{ processConfigJson }}</pre>
+            </el-descriptions-item>
+          </el-descriptions>
+          <el-empty v-else-if="!selectedNodeId" description="请选择节点查看配置" :image-size="80" />
+          <el-descriptions v-else :column="1" size="small" border>
+            <el-descriptions-item label="对象">{{ nodeTypeLabel }}：{{ selectedNodeName }}</el-descriptions-item>
+            <el-descriptions-item label="配置">
+              <pre class="readonly-config">{{ nodeConfigJson }}</pre>
+            </el-descriptions-item>
+          </el-descriptions>
+        </template>
 
-        <!-- 无选中节点 -->
-        <el-empty v-else-if="!selectedNodeId" description="请选择节点查看属性" :image-size="80" />
+        <!-- 编辑模式：按节点类型渲染属性编辑组件 -->
+        <template v-else>
+          <!-- 流程属性（选中画布空白时） -->
+          <process-property
+            v-if="selectedNodeType === 'Process'"
+          />
 
-        <!-- 开始/结束事件 -->
-        <event-property
-          v-else-if="isEventNode"
-        />
+          <!-- 无选中节点 -->
+          <el-empty v-else-if="!selectedNodeId" description="请选择节点查看属性" :image-size="80" />
 
-        <!-- 发起人节点（精简面板） -->
-        <initiator-task-property
-          v-else-if="selectedNodeType === 'UserTask' && isInitiatorNode"
-        />
+          <!-- 开始/结束事件 -->
+          <event-property
+            v-else-if="isEventNode"
+          />
 
-        <!-- 用户任务（审批节点） -->
-        <user-task-property
-          v-else-if="selectedNodeType === 'UserTask'"
-        />
+          <!-- 发起人节点（精简面板） -->
+          <initiator-task-property
+            v-else-if="selectedNodeType === 'UserTask' && isInitiatorNode"
+          />
 
-        <!-- 服务任务 -->
-        <service-task-property
-          v-else-if="selectedNodeType === 'ServiceTask'"
-        />
+          <!-- 用户任务（审批节点） -->
+          <user-task-property
+            v-else-if="selectedNodeType === 'UserTask'"
+          />
 
-        <!-- 调用活动（子流程） -->
-        <call-activity-property
-          v-else-if="selectedNodeType === 'CallActivity'"
-        />
+          <!-- 服务任务 -->
+          <service-task-property
+            v-else-if="selectedNodeType === 'ServiceTask'"
+          />
 
-        <!-- 网关 -->
-        <gateway-property
-          v-else-if="isGatewayNode"
-        />
+          <!-- 调用活动（子流程） -->
+          <call-activity-property
+            v-else-if="selectedNodeType === 'CallActivity'"
+          />
 
-        <!-- 连线 -->
-        <sequence-flow-property
-          v-else-if="selectedNodeType === 'SequenceFlow'"
-        />
+          <!-- 网关 -->
+          <gateway-property
+            v-else-if="isGatewayNode"
+          />
 
-        <!-- 未知节点类型 -->
-        <el-empty v-else description="该节点类型暂不支持属性配置" :image-size="80" />
+          <!-- 连线 -->
+          <sequence-flow-property
+            v-else-if="selectedNodeType === 'SequenceFlow'"
+          />
+
+          <!-- 未知节点类型 -->
+          <el-empty v-else description="该节点类型暂不支持属性配置" :image-size="80" />
+        </template>
       </div>
     </template>
   </div>
@@ -82,7 +102,7 @@ import SequenceFlowProperty from './SequenceFlowProperty.vue'
 
 const designerStore = useDesignerStore()
 
-const props = defineProps<{ collapsed?: boolean }>()
+const props = defineProps<{ collapsed?: boolean; readOnly?: boolean }>()
 const emit = defineEmits<{ 'update:collapsed': [value: boolean] }>()
 
 const collapsed = computed({
@@ -133,6 +153,42 @@ const nodeTypeLabel = computed(() => {
   }
   return labels[selectedNodeType.value || ''] || selectedNodeType.value || ''
 })
+
+// ========== 只读模式：节点配置快照展示 ==========
+
+/** 当前选中节点名称（只读展示用） */
+const selectedNodeName = computed(() => {
+  if (!selectedNodeId.value) return ''
+  try {
+    const modeler = getModeler()
+    const elementRegistry = modeler.get<{ get(id: string): Element | undefined }>('elementRegistry')
+    const element = elementRegistry.get(selectedNodeId.value)
+    return (element?.businessObject as any)?.name || selectedNodeId.value
+  } catch {
+    return selectedNodeId.value
+  }
+})
+
+/** 格式化节点配置 JSON（只读展示） */
+function formatConfigJson(configJson: string | undefined): string {
+  if (!configJson) return '（未配置）'
+  try {
+    return JSON.stringify(JSON.parse(configJson), null, 2)
+  } catch {
+    return configJson
+  }
+}
+
+/** 当前选中节点的配置快照 JSON */
+const nodeConfigJson = computed(() => {
+  if (!selectedNodeId.value) return ''
+  return formatConfigJson(designerStore.nodeConfigs[selectedNodeId.value])
+})
+
+/** 流程级配置（__PROCESS__）快照 JSON */
+const processConfigJson = computed(() => {
+  return formatConfigJson(designerStore.nodeConfigs['__PROCESS__'])
+})
 </script>
 
 <style scoped>
@@ -180,6 +236,22 @@ const nodeTypeLabel = computed(() => {
   font-size: 12px;
   writing-mode: vertical-rl;
   letter-spacing: 2px;
+  color: #909399;
+}
+
+/* 只读模式：配置快照 JSON 展示 */
+.readonly-config {
+  margin: 0;
+  padding: 8px;
+  max-height: 420px;
+  overflow: auto;
+  background: #f8f9fb;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #303133;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .panel-header {

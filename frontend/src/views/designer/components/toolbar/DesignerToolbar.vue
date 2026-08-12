@@ -4,44 +4,49 @@
       <el-button-group>
         <el-button :icon="ArrowLeft" size="small" @click="$emit('back')" title="返回" />
       </el-button-group>
-      <el-divider direction="vertical" />
-      <el-button-group>
-        <el-button :icon="RefreshLeft" size="small" @click="$emit('undo')" title="撤销" />
-        <el-button :icon="RefreshRight" size="small" @click="$emit('redo')" title="重做" />
-      </el-button-group>
-      <el-divider direction="vertical" />
-      <el-button-group>
-        <el-button :icon="ZoomIn" size="small" @click="$emit('zoomIn')" title="放大" />
-        <el-button :icon="ZoomOut" size="small" @click="$emit('zoomOut')" title="缩小" />
-        <el-button :icon="FullScreen" size="small" @click="$emit('zoomReset')" title="适应屏幕" />
-      </el-button-group>
-      <el-divider direction="vertical" />
-      <div class="minimap-toggle">
-        <span class="toggle-label">鸟瞰图</span>
-        <el-switch
-          v-model="minimapVisible"
-          size="small"
-          @change="(val: boolean) => $emit('toggleMinimap', val)"
-        />
-      </div>
+      <template v-if="!readOnly">
+        <el-divider direction="vertical" />
+        <el-button-group>
+          <el-button :icon="RefreshLeft" size="small" @click="$emit('undo')" title="撤销" />
+          <el-button :icon="RefreshRight" size="small" @click="$emit('redo')" title="重做" />
+        </el-button-group>
+        <el-divider direction="vertical" />
+        <el-button-group>
+          <el-button :icon="ZoomIn" size="small" @click="$emit('zoomIn')" title="放大" />
+          <el-button :icon="ZoomOut" size="small" @click="$emit('zoomOut')" title="缩小" />
+          <el-button :icon="FullScreen" size="small" @click="$emit('zoomReset')" title="适应屏幕" />
+        </el-button-group>
+        <el-divider direction="vertical" />
+        <div class="minimap-toggle">
+          <span class="toggle-label">鸟瞰图</span>
+          <el-switch
+            v-model="minimapVisible"
+            size="small"
+            @change="(val: boolean) => $emit('toggleMinimap', val)"
+          />
+        </div>
+      </template>
     </div>
 
     <div class="toolbar-center">
-      <span class="designer-title">流程设计器</span>
+      <span class="designer-title">{{ readOnly ? '流程版本查看' : '流程设计器' }}</span>
       <el-tag v-if="draftName" type="info" size="small">{{ draftName }}</el-tag>
       <el-tag v-if="draftKey" type="info" size="small" effect="plain">{{ draftKey }}</el-tag>
       <el-tag v-if="isDirty" type="warning" size="small">未保存</el-tag>
     </div>
 
     <div class="toolbar-right">
-      <el-button-group>
-        <el-button :icon="Upload" size="small" @click="$emit('importXml')" title="导入" />
-        <el-button :icon="Download" size="small" @click="$emit('exportXml')" title="导出XML" />
-        <el-button :icon="Picture" size="small" @click="$emit('exportSvg')" title="导出SVG" />
-      </el-button-group>
-      <el-divider direction="vertical" />
-      <el-button type="primary" :icon="Document" size="small" @click="$emit('save')" title="保存" />
-      <el-button type="success" :icon="Promotion" size="small" @click="$emit('deploy')" title="部署" />
+      <template v-if="!readOnly">
+        <el-button-group>
+          <el-button :icon="Upload" size="small" @click="$emit('importXml')" title="导入" />
+          <el-button :icon="Download" size="small" @click="$emit('exportXml')" title="导出XML" />
+          <el-button :icon="Picture" size="small" @click="$emit('exportSvg')" title="导出SVG" />
+        </el-button-group>
+        <el-divider direction="vertical" />
+        <el-button type="primary" :icon="Document" size="small" @click="$emit('save')" title="保存" />
+        <el-button type="success" :icon="Promotion" size="small" @click="$emit('deploy')" title="部署" />
+      </template>
+      <el-tag v-else type="info" size="small" effect="plain">只读模式</el-tag>
     </div>
   </div>
 </template>
@@ -64,6 +69,11 @@ import { useDesignerStore } from '@/stores/designerStore'
 import { ref, computed } from 'vue'
 
 const designerStore = useDesignerStore()
+
+defineProps<{
+  /** 只读模式：隐藏保存/部署/导入/撤销/重做等编辑类按钮 */
+  readOnly?: boolean
+}>()
 
 const draftName = computed(() => designerStore.draftName)
 const draftKey = computed(() => designerStore.draftKey)

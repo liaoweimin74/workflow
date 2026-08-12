@@ -255,6 +255,7 @@ const dialogVisible = ref(false)
 const dialogTitle = ref('')
 const isEdit = ref(false)
 const editId = ref<number | string>(0)
+const editingRow = ref<any>(null)
 const dialogInitialValues = ref<Record<string, any>>({})
 const formLoading = ref(false)
 const formRendererRef = ref<InstanceType<typeof FormRenderer> | null>(null)
@@ -367,6 +368,7 @@ async function handleCreate(initialValues?: Record<string, any>) {
   }
   isEdit.value = false
   editId.value = 0
+  editingRow.value = null
   const configInitialValues = props.formConfig?.initialValues || {}
   dialogInitialValues.value = { ...configInitialValues, ...(initialValues || {}) }
   dialogTitle.value = props.formConfig?.dialogTitle?.create || '新增'
@@ -380,6 +382,7 @@ async function handleEdit(row: any) {
   }
   isEdit.value = true
   editId.value = row.id
+  editingRow.value = row
   dialogTitle.value = props.formConfig?.dialogTitle?.edit || '编辑'
 
   if (props.formConfig?.getApi) {
@@ -402,7 +405,7 @@ async function handleDelete(row: any) {
     if (ok === false) return
   }
   try {
-    await props.formConfig?.deleteApi?.(row.id)
+    await props.formConfig?.deleteApi?.(row.id, row)
     ElMessage.success('删除成功')
     props.formConfig?.afterDelete?.()
     fetchList()
@@ -417,7 +420,7 @@ async function handleDialogSubmit() {
   formLoading.value = true
   try {
     if (isEdit.value) {
-      await props.formConfig?.updateApi?.(editId.value, formData)
+      await props.formConfig?.updateApi?.(editId.value, formData, editingRow.value)
       props.formConfig?.afterUpdate?.(formData)
     } else {
       await props.formConfig?.createApi?.(formData)

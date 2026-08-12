@@ -72,8 +72,8 @@ export interface FormConfig<T = any> {
   /** 新增表单的初始值，handleCreate 时与传入 initialValues 合并 */
   initialValues?: Partial<T>
   createApi?: (data: any) => Promise<any>
-  updateApi?: (id: number | string, data: any) => Promise<any>
-  deleteApi?: (id: number | string) => Promise<any>
+  updateApi?: (id: number | string, data: any, row?: T) => Promise<any>
+  deleteApi?: (id: number | string, row?: T) => Promise<any>
   getApi?: (id: number | string) => Promise<T>
   labelWidth?: string
   dialogWidth?: string

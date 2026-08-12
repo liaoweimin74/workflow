@@ -152,20 +152,46 @@ class ProcessDesignServiceDeployTest {
     }
 
     @Test
-    void 历史数据降级路径_hash为空且XML相同则拒绝() {
+    void 历史数据降级路径_hash为空且XML相同且配置相同则拒绝() {
         ProcessDraft draft = newDraft();
-        // 历史数据：deployed_config_hash 为空，deployedXml 与 effective 相同
+        // 历史数据：deployed_config_hash 为空，deployedXml 与 effective 相同，配置与上次部署快照一致
         draft.setDeployedXml(EFFECTIVE_BPMN);
+        draft.setProcessDefinitionId(PROC_DEF_ID);
         stubDraftLookup(draft);
         when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
                 .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
+        // 上次部署版本快照与当前配置一致
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionId(DRAFT_ID, PROC_DEF_ID))
+                .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
         when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
 
-        // 降级路径：XML 相同 → 拒绝部署（保持旧行为）
+        // 降级路径：XML 相同 且 配置与快照一致 → 拒绝部署
         assertThatThrownBy(() -> service.deploy(DRAFT_ID))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("流程数据未变化，无需部署");
         verify(repositoryService, never()).createDeployment();
+    }
+
+    @Test
+    void 历史数据降级路径_XML相同但配置已修改则允许部署() {
+        ProcessDraft draft = newDraft();
+        // 历史数据：hash 为空，XML 未变，但配置已修改（如流程级 allowTransfer 从 true 改 false）
+        draft.setDeployedXml(EFFECTIVE_BPMN);
+        draft.setProcessDefinitionId(PROC_DEF_ID);
+        stubDraftLookup(draft);
+        stubDeploy();
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
+                .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":false}}"));
+        // 上次部署版本快照是旧配置
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionId(DRAFT_ID, PROC_DEF_ID))
+                .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
+        when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
+
+        service.deploy(DRAFT_ID);
+
+        assertThat(draft.getStatus()).isEqualTo("DEPLOYED");
+        assertThat(draft.getDeployedConfigHash()).isNotBlank();
+        verify(repositoryService).createDeployment();
     }
 
     @Test

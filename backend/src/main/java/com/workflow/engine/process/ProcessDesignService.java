@@ -215,14 +215,14 @@ public class ProcessDesignService {
         effectiveBpmnXml = injectEventNames(effectiveBpmnXml);
 
         // 与上次部署的内容比较（hash 为主，覆盖 XML + 节点配置含 __PROCESS__）：
-        // 历史数据（deployed_config_hash 为空）降级为旧的 XML 比较行为，部署成功后写入 hash。
+        // 历史数据（deployed_config_hash 为空）降级比较：XML 相同 且 配置与上次部署快照一致 → 未变化。
         String currentHash = computeDeployHash(effectiveBpmnXml, nodeConfigMap);
         String storedHash = draft.getDeployedConfigHash();
         boolean unchanged;
         if (storedHash != null && !storedHash.isBlank()) {
             unchanged = storedHash.equals(currentHash);
         } else {
-            unchanged = Objects.equals(trimToNull(draft.getDeployedXml()), trimToNull(effectiveBpmnXml));
+            unchanged = isSameAsLastDeployment(draft, effectiveBpmnXml, nodeConfigMap);
         }
         if (unchanged) {
             throw new BusinessException(400, "流程数据未变化，无需部署");
@@ -291,6 +291,25 @@ public class ProcessDesignService {
             return nc;
         }).collect(Collectors.toList());
         nodeConfigRepository.saveAll(snapshots);
+    }
+
+    /**
+     * 降级路径判定：历史数据（deployed_config_hash 为空）是否与上次部署内容一致。
+     * XML 相同 且 当前配置与上次部署版本快照一致 → 视为未变化；任一不同 → 允许部署。
+     */
+    private boolean isSameAsLastDeployment(ProcessDraft draft, String effectiveBpmnXml, Map<String, String> nodeConfigMap) {
+        if (!Objects.equals(trimToNull(draft.getDeployedXml()), trimToNull(effectiveBpmnXml))) {
+            return false; // XML 变化
+        }
+        String procDefId = draft.getProcessDefinitionId();
+        if (procDefId == null) {
+            return true; // 无历史部署记录且 XML 相同，视为未变化
+        }
+        List<NodeConfig> snapshots = nodeConfigRepository
+                .findByProcessDefIdAndProcessDefinitionId(draft.getId(), procDefId);
+        Map<String, String> snapshotMap = snapshots.stream()
+                .collect(Collectors.toMap(NodeConfig::getNodeId, NodeConfig::getConfigJson, (a, b) -> a));
+        return snapshotMap.equals(nodeConfigMap);
     }
 
     /**

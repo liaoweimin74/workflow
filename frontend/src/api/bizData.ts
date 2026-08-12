@@ -65,4 +65,11 @@ export const bizDataApi = {
   remove(formKey: string, id: string): Promise<R<void>> {
     return http.delete(`/v1/biz-data/${formKey}/${id}`)
   },
+
+  /** 批量解析数据显示文本（data-picker 引用还原） */
+  resolve(formKey: string, ids: string[], displayField?: string): Promise<R<Record<string, string>>> {
+    return http.get(`/v1/biz-data/${formKey}/resolve`, {
+      params: { ids: ids.join(','), displayField },
+    })
+  },
 }

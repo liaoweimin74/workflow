@@ -5,6 +5,7 @@ export interface FormDefinitionDTO {
   id: string
   name: string
   key: string
+  type: string
   version: number
   status: string
   publishedVersion: number | null
@@ -15,12 +16,14 @@ export interface FormDefinitionDTO {
 
 export interface FormDefinitionDetailDTO extends FormDefinitionDTO {
   schema: string
+  columnConfig: string | null
 }
 
 export interface FormDefinitionSaveRequest {
   name: string
   key: string
   schema: string
+  columnConfig?: string | null
 }
 
 export interface FormVersionDTO {
@@ -52,8 +55,8 @@ export interface FormDataSaveRequest {
 }
 
 export const formApi = {
-  createForm(name: string, key: string): Promise<R<FormDefinitionDTO>> {
-    return http.post('/v1/form-definitions', null, { params: { name, key } })
+  createForm(name: string, key: string, type?: string): Promise<R<FormDefinitionDTO>> {
+    return http.post('/v1/form-definitions', null, { params: { name, key, type } })
   },
 
   getFormDefinitions(params: {
@@ -61,12 +64,18 @@ export const formApi = {
     size?: number
     status?: string
     name?: string
+    type?: string
   }): Promise<R<PageResult<FormDefinitionDTO>>> {
     return http.get('/v1/form-definitions', { params })
   },
 
   getFormDefinition(id: string): Promise<R<FormDefinitionDetailDTO>> {
     return http.get(`/v1/form-definitions/${id}`)
+  },
+
+  /** 按 key 获取表单定义详情（业务数据管理页用） */
+  getFormDefinitionByKey(key: string): Promise<R<FormDefinitionDetailDTO>> {
+    return http.get(`/v1/form-definitions/by-key/${key}`)
   },
 
   updateFormDefinition(id: string, data: FormDefinitionSaveRequest): Promise<R<FormDefinitionDTO>> {

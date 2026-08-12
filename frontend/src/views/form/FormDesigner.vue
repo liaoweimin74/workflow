@@ -23,6 +23,9 @@
       <el-tag v-if="formStatus" :type="statusTagType(formStatus)" size="small" style="margin-left: 8px">
         {{ statusLabel(formStatus) }}
       </el-tag>
+      <el-tag v-if="formType === 'BUSINESS'" type="primary" size="small" style="margin-left: 8px">
+        业务表单
+      </el-tag>
       <div class="toolbar-right">
         <el-button type="primary" :icon="Check" @click="handleSave" :loading="saving">保存</el-button>
         <el-button v-if="formStatus === 'DRAFT'" type="success" :icon="Promotion" @click="handlePublish" :loading="publishing">
@@ -39,6 +42,15 @@
         :config="{ fieldReadonly: false, disabledFormConfig: ['formCreateFormName'] }"
       />
     </div>
+
+    <!-- 业务表单列映射确认 -->
+    <ColumnConfigDialog
+      v-model="columnDialogVisible"
+      :schema="designerRule"
+      :form-name="formName"
+      :existing-columns="columnConfig"
+      @confirm="handleColumnConfirm"
+    />
   </div>
 </template>
 
@@ -48,6 +60,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
+import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -61,8 +74,20 @@ const formId = computed(() => route.query.id as string)
 const formName = ref('')
 const formStatus = ref('')
 const formKey = ref('')
+const formType = ref('')
+const columnConfig = ref<ColumnConfigItem[]>([])
+const columnDialogVisible = ref(false)
 
 const designerHeight = ref('calc(100vh - 50px)')
+
+/** 当前设计器 rule（供列映射确认对话框生成草案） */
+const designerRule = computed<any[]>(() => {
+  try {
+    return designerRef.value?.getRule() || []
+  } catch {
+    return []
+  }
+})
 
 onMounted(async () => {
   if (!formId.value) {
@@ -95,6 +120,14 @@ onMounted(async () => {
     formName.value = formDef.name
     formStatus.value = formDef.status
     formKey.value = formDef.key
+    formType.value = formDef.type || 'WORKFLOW'
+    if (formDef.columnConfig) {
+      try {
+        columnConfig.value = JSON.parse(formDef.columnConfig)
+      } catch {
+        columnConfig.value = []
+      }
+    }
 
     // 加载已有 schema 到设计器
     if (formDef.schema && formDef.schema !== '[]') {
@@ -166,12 +199,47 @@ async function handlePublish() {
     return
   }
 
+  if (formType.value === 'BUSINESS') {
+    // 业务表单：先弹出列映射确认，确认后保存 column_config 再发布
+    const rule = designerRef.value?.getRule() || []
+    columnConfig.value = []
+    columnDialogVisible.value = true
+    return
+  }
+
+  await doPublish(null)
+}
+
+/** 列映射确认后的发布 */
+async function handleColumnConfirm(items: ColumnConfigItem[]) {
+  try {
+    // 1. 保存 column_config 到表单定义
+    const rule = designerRef.value.getRule()
+    const option = designerRef.value.getOption()
+    if (!option.form) option.form = {}
+    option.form.formCreateFormName = formName.value
+    await formApi.updateFormDefinition(formId.value, {
+      name: formName.value,
+      key: formKey.value,
+      schema: JSON.stringify({ rule, option }),
+      columnConfig: JSON.stringify(items),
+    })
+    // 2. 发布（后端将基于最新 column_config 建表/变更）
+    await doPublish(items)
+  } catch {
+    // http 拦截器已弹出错误消息
+  }
+}
+
+async function doPublish(items: ColumnConfigItem[] | null) {
   publishing.value = true
   try {
     const res = await formApi.publishFormDefinition(formId.value)
     ElMessage.success('发布成功')
-    // 直接使用发布响应中的状态，避免二次请求
     formStatus.value = (res.data as FormDefinitionDTO).status
+    if (items) {
+      columnConfig.value = items
+    }
   } catch {
     // http 拦截器已弹出错误消息
   } finally {

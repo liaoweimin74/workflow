@@ -20,6 +20,11 @@
             {{ statusLabel(row.status) }}
           </el-tag>
         </template>
+        <template #type="{ row }">
+          <el-tag :type="row.type === 'BUSINESS' ? 'primary' : ''" size="small">
+            {{ row.type === 'BUSINESS' ? '业务' : '工作流' }}
+          </el-tag>
+        </template>
         <template #publishedVersion="{ row }">
           {{ row.publishedVersion != null ? 'v' + row.publishedVersion : '—' }}
         </template>
@@ -75,6 +80,17 @@ const searchFields = computed<SearchField[]>(() => [
   { type: 'input', label: '表单名称', prop: 'name', placeholder: '搜索表单名称', style: 'width: 200px' },
   {
     type: 'select',
+    label: '类型',
+    prop: 'type',
+    placeholder: '全部',
+    options: [
+      { label: '工作流表单', value: 'WORKFLOW' },
+      { label: '业务表单', value: 'BUSINESS' },
+    ],
+    style: 'width: 140px',
+  },
+  {
+    type: 'select',
     label: '状态',
     prop: 'status',
     placeholder: '全部',
@@ -91,6 +107,7 @@ const searchFields = computed<SearchField[]>(() => [
 const columns: TableColumn[] = [
   { prop: 'name', label: '表单名称', minWidth: 180 },
   { prop: 'key', label: '表单标识', width: 180 },
+  { prop: 'type', label: '类型', width: 100, align: 'center', slotName: 'type' },
   { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
   { prop: 'publishedVersion', label: '发布版本', width: 100, align: 'center', slotName: 'publishedVersion' },
   { prop: 'version', label: '当前版本', width: 90, align: 'center' },
@@ -104,6 +121,7 @@ async function fetchApi(params: any) {
     size: params.size || 20,
     name: params.name || undefined,
     status: params.status || undefined,
+    type: params.type || undefined,
   })
   const data = res.data as any
   return {
@@ -115,6 +133,16 @@ async function fetchApi(params: any) {
 // ========== 创建表单 ==========
 const formConfig = reactive<FormConfig<FormDefinitionDTO>>({
   rule: [
+    {
+      type: 'select',
+      field: 'type',
+      title: '表单类型',
+      options: [
+        { label: '工作流表单', value: 'WORKFLOW' },
+        { label: '业务表单', value: 'BUSINESS' },
+      ],
+      value: 'WORKFLOW',
+    },
     { type: 'input', field: 'name', title: '表单名称', validate: [{ required: true, message: '请输入表单名称', trigger: 'blur' }] },
     {
       type: 'input',
@@ -129,7 +157,7 @@ const formConfig = reactive<FormConfig<FormDefinitionDTO>>({
   dialogTitle: { create: '新建表单' },
   createPermission: 'form:create',
   createApi: async (data: any) => {
-    const res = await formApi.createForm(data.name, data.key)
+    const res = await formApi.createForm(data.name, data.key, data.type || 'WORKFLOW')
     router.push({ path: '/form/designer', query: { id: res.data.id } })
     return res
   },
@@ -143,6 +171,17 @@ const actionButtons: ActionButton[] = [
     permission: 'form:edit',
     onClick: (row: any) => {
       router.push({ path: '/form/designer', query: { id: row.id } })
+    },
+  },
+  {
+    label: '管理数据',
+    size: 'small',
+    type: 'primary',
+    link: true,
+    permission: 'form:list',
+    show: (row: any) => row.type === 'BUSINESS' && row.status === 'PUBLISHED',
+    onClick: (row: any) => {
+      router.push({ path: `/biz-data/${row.key}` })
     },
   },
   {

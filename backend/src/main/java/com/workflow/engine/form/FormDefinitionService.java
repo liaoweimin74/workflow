@@ -249,6 +249,7 @@ public class FormDefinitionService {
         // 业务表单：校验 schema 并同步物理表结构（DDL 隐式提交，先于版本记录保存）
         if ("BUSINESS".equals(draft.getType())) {
             validateBusinessSchema(draft.getSchema());
+            validatePickerReferences(draft.getSchema());
             List<ColumnConfig> columns = parseColumnConfig(draft.getColumnConfig());
             tableManager.ensureTable(draft.getKey(), columns);
         }
@@ -303,6 +304,60 @@ public class FormDefinitionService {
             throw new BusinessException(400, "表单 " + key + " 不是业务表单");
         }
         return parseColumnConfig(published.getColumnConfig());
+    }
+
+    /**
+     * 校验业务表单 schema 中的 data-picker 引用配置：
+     * 目标表单存在且已发布、引用列（displayField/columns/dependOn.sourceColumn）仍存在于目标 column_config。
+     */
+    private void validatePickerReferences(String schema) throws BusinessException {
+        try {
+            JsonNode root = objectMapper.readTree(schema == null ? "[]" : schema);
+            JsonNode rule = root.isArray() ? root : root.path("rule");
+            if (!rule.isArray()) {
+                return;
+            }
+            for (JsonNode field : rule) {
+                if (!"dataPicker".equals(field.path("type").asText())) {
+                    continue;
+                }
+                String fieldKey = field.path("field").asText();
+                JsonNode props = field.path("props");
+                String sourceFormKey = props.path("sourceFormKey").asText();
+                if (sourceFormKey.isBlank()) {
+                    throw new BusinessException(400, "data-picker 字段 " + fieldKey + " 未配置目标表单");
+                }
+                List<ColumnConfig> targetColumns;
+                try {
+                    targetColumns = getBusinessColumnsByKey(sourceFormKey);
+                } catch (BusinessException e) {
+                    throw new BusinessException(400, "data-picker 目标表单不存在或未发布: " + sourceFormKey);
+                }
+                Set<String> targetKeys = targetColumns.stream()
+                        .map(ColumnConfig::getKey)
+                        .collect(java.util.stream.Collectors.toSet());
+
+                String displayField = props.path("displayField").asText();
+                if (displayField.isBlank()) {
+                    throw new BusinessException(400, "data-picker 字段 " + fieldKey + " 未配置显示字段");
+                }
+                if (!targetKeys.contains(displayField)) {
+                    throw new BusinessException(400, "data-picker 引用列已不存在: " + displayField);
+                }
+                for (JsonNode col : props.path("columns")) {
+                    String c = col.asText();
+                    if (!c.isBlank() && !targetKeys.contains(c)) {
+                        throw new BusinessException(400, "data-picker 引用列已不存在: " + c);
+                    }
+                }
+                String sourceColumn = props.path("dependOn").path("sourceColumn").asText();
+                if (!sourceColumn.isBlank() && !targetKeys.contains(sourceColumn)) {
+                    throw new BusinessException(400, "data-picker 级联引用列已不存在: " + sourceColumn);
+                }
+            }
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(400, "表单 schema 解析失败");
+        }
     }
 
     /**

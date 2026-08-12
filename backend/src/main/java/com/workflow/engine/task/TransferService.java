@@ -1,5 +1,6 @@
 package com.workflow.engine.task;
 
+import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.task.entity.WfTaskTransfer;
@@ -25,7 +26,8 @@ import java.util.UUID;
  * <p>区别于委派（delegate）：委派后原 assignee 仍是 PENDING_TASK_OWNER，
  * 被委派人 resolve 后任务回到原 assignee。
  *
- * <p>每次转办记录审计到 wf_task_transfer 表。
+ * <p>转办前校验操作权限（流程级 AND 节点级 allowTransfer），
+ * 每次转办记录审计到 wf_task_transfer 表。
  */
 @Service
 public class TransferService {
@@ -36,15 +38,18 @@ public class TransferService {
     private final WfTaskTransferRepository transferRepository;
     private final TenantProvider tenantProvider;
     private final WfTaskCommentRepository commentRepository;
+    private final WorkflowTaskService workflowTaskService;
 
     public TransferService(TaskService flowableTaskService,
                            WfTaskTransferRepository transferRepository,
                            TenantProvider tenantProvider,
-                           WfTaskCommentRepository commentRepository) {
+                           WfTaskCommentRepository commentRepository,
+                           WorkflowTaskService workflowTaskService) {
         this.flowableTaskService = flowableTaskService;
         this.transferRepository = transferRepository;
         this.tenantProvider = tenantProvider;
         this.commentRepository = commentRepository;
+        this.workflowTaskService = workflowTaskService;
     }
 
     /**
@@ -67,6 +72,13 @@ public class TransferService {
 
         if (task == null) {
             throw new IllegalStateException("Task not found: " + taskId);
+        }
+
+        // 权限校验：流程级 AND 节点级 allowTransfer（extractOperations 已叠加）
+        String processDefinitionId = task.getProcessDefinitionId();
+        String taskDefinitionKey = task.getTaskDefinitionKey();
+        if (!workflowTaskService.extractOperations(processDefinitionId, taskDefinitionKey).isAllowTransfer()) {
+            throw new BusinessException(400, "该节点不允许转办");
         }
 
         String activityId = task.getTaskDefinitionKey();

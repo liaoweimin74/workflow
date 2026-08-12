@@ -111,7 +111,7 @@ class ProcessDesignServiceDeployTest {
         stubDeploy();
         when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
         // 第一次部署：内容 A
-        when(nodeConfigRepository.findByProcessDefId(DRAFT_ID))
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
                 .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
 
         service.deploy(DRAFT_ID);
@@ -120,7 +120,7 @@ class ProcessDesignServiceDeployTest {
         assertThat(hashAfterA).isNotBlank();
 
         // 仅修改节点配置（不影响 BPMN XML）→ 再次部署应成功且 hash 更新
-        when(nodeConfigRepository.findByProcessDefId(DRAFT_ID))
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
                 .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":false}}"));
 
         service.deploy(DRAFT_ID);
@@ -135,7 +135,7 @@ class ProcessDesignServiceDeployTest {
         ProcessDraft draft = newDraft();
         stubDraftLookup(draft);
         stubDeploy();
-        when(nodeConfigRepository.findByProcessDefId(DRAFT_ID))
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
                 .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
         when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
 
@@ -157,7 +157,7 @@ class ProcessDesignServiceDeployTest {
         // 历史数据：deployed_config_hash 为空，deployedXml 与 effective 相同
         draft.setDeployedXml(EFFECTIVE_BPMN);
         stubDraftLookup(draft);
-        when(nodeConfigRepository.findByProcessDefId(DRAFT_ID))
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
                 .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
         when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
 
@@ -175,7 +175,7 @@ class ProcessDesignServiceDeployTest {
         draft.setDeployedXml("<definitions>old</definitions>");
         stubDraftLookup(draft);
         stubDeploy();
-        when(nodeConfigRepository.findByProcessDefId(DRAFT_ID))
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
                 .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
         when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
 

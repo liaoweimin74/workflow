@@ -82,7 +82,8 @@ public class ProcessDesignService {
         ProcessDraft draft = draftRepository.findByIdAndTenantId(draftId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Process draft not found: " + draftId));
 
-        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draftId);
+        // 仅读取当前编辑中的配置（processDefinitionId IS NULL），不含历史版本快照
+        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(draftId);
         Map<String, String> nodeConfigMap = configs.stream()
                 .collect(Collectors.toMap(NodeConfig::getNodeId, NodeConfig::getConfigJson, (a, b) -> a));
 
@@ -173,7 +174,8 @@ public class ProcessDesignService {
         copy.setCreatedBy(source.getCreatedBy());
         draftRepository.save(copy);
 
-        List<NodeConfig> sourceConfigs = nodeConfigRepository.findByProcessDefId(sourceDraftId);
+        // 仅复制当前编辑中的配置（不含历史版本快照）
+        List<NodeConfig> sourceConfigs = nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(sourceDraftId);
         if (!sourceConfigs.isEmpty()) {
             List<NodeConfig> copies = sourceConfigs.stream()
                     .map(nc -> {
@@ -203,8 +205,8 @@ public class ProcessDesignService {
         ProcessDraft draft = draftRepository.findByIdAndTenantId(draftId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Process draft not found: " + draftId));
 
-        // 加载 NodeConfig，改写 BPMN XML（会签/或签 → MI parallel）
-        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefId(draftId);
+        // 加载 NodeConfig（仅当前编辑中配置，不含历史版本快照），改写 BPMN XML（会签/或签 → MI parallel）
+        List<NodeConfig> configs = nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(draftId);
         Map<String, String> nodeConfigMap = configs.stream()
                 .collect(Collectors.toMap(NodeConfig::getNodeId, NodeConfig::getConfigJson, (a, b) -> a));
         String effectiveBpmnXml = multiInstanceBpmnRewriter.rewrite(draft.getBpmnXml(), nodeConfigMap);

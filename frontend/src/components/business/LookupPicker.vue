@@ -125,7 +125,9 @@ const resolvedDisplayField = computed(() => props.displayField || defaultDisplay
 
 const displayText = computed(() => {
   const val = props.modelValue
-  if (!val) return ''
+  if (val === null || val === undefined || val === '') return ''
+  // 新语义：单选 modelValue 为显示文本字符串，直接返回
+  if (typeof val === 'string') return val
   if (Array.isArray(val)) {
     if (val.length === 0) return ''
     // 底表行业务字段在 data 内层，readCellValue 兼容内层/顶层
@@ -179,11 +181,21 @@ function handleSearch() {
 
 function handleRowClick(row: any) {
   if (props.mode === 'multiple') return
-  emit('update:modelValue', row)
+  // 新语义：emit 显示文本字符串（field 绑定显示文本字段）
+  emit('update:modelValue', readCellValue(row, resolvedDisplayField.value) ?? null)
   emit('select', row)
+  // 独立存储 id（设计者显式配置的 idField）
+  writeIdField(row.id)
   // 回填 returnFields 到表单其他字段
   fillReturnFields(row)
   dialogVisible.value = false
+}
+
+/** 将选中记录 id 写入 idField 字段（若配置且 formCreateInject 可用） */
+function writeIdField(id: unknown) {
+  const api = formCreateInject?.api
+  if (!api || !props.idField) return
+  api.setValue(props.idField, id ?? null)
 }
 
 /**
@@ -225,6 +237,7 @@ function confirmSelection() {
 function handleClear() {
   emit('update:modelValue', props.mode === 'multiple' ? [] : null)
   emit('clear')
+  writeIdField(null)
   // 清空 returnFields 对应的表单字段
   clearReturnFields()
 }

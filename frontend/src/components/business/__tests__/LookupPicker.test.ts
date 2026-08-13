@@ -89,6 +89,32 @@ describe('LookupPicker — 单选', () => {
     const input = wrapper.find('input')
     expect(input.element.value).toBe('BL-001')
   })
+
+  it('单选选中：emit 显示文本字符串，而非整行对象', async () => {
+    const wrapper = createWrapper({
+      modelValue: null,
+      displayField: 'code',
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.handleRowClick({ id: '1', code: 'BL-001', name: '盲板A' })
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue')!
+    expect(emitted[emitted.length - 1][0]).toBe('BL-001')
+  })
+
+  it('回显：modelValue 为字符串时直接显示', async () => {
+    const wrapper = createWrapper({ modelValue: 'BL-001', displayField: 'code' })
+    await nextTick()
+    expect(wrapper.find('input').element.value).toBe('BL-001')
+  })
+
+  it('回显：modelValue 为旧整行对象时兼容显示', async () => {
+    const wrapper = createWrapper({ modelValue: { code: 'BL-001', name: '盲板A' }, displayField: 'code' })
+    await nextTick()
+    expect(wrapper.find('input').element.value).toBe('BL-001')
+  })
 })
 
 describe('LookupPicker — 清除', () => {
@@ -191,6 +217,33 @@ describe('LookupPicker — form-create 适配', () => {
     vm.handleClear()
     await nextTick()
     expect(wrapper.emitted('clear')).toBeTruthy()
+  })
+
+  it('单选选中：配置 idField 时经 api.setValue 写入 id', async () => {
+    const setValue = vi.fn()
+    const wrapper = createFormCreateWrapper(
+      { idField: 'emp_id' },
+      { api: { setValue } },
+    )
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.handleRowClick({ id: 'u1', code: 'BL-001', name: '盲板A' })
+    await nextTick()
+    expect(setValue).toHaveBeenCalledWith('emp_id', 'u1')
+  })
+
+  it('单选清除：同时清空 idField', async () => {
+    const setValue = vi.fn()
+    const wrapper = createFormCreateWrapper(
+      { modelValue: 'BL-001', idField: 'emp_id' },
+      { api: { setValue } },
+    )
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.handleClear()
+    await nextTick()
+    expect(setValue).toHaveBeenCalledWith('emp_id', null)
   })
 })
 

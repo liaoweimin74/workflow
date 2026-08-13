@@ -140,6 +140,42 @@
             <span class="form-tip">选中记录后把源字段值回填到当前表单字段</span>
           </div>
         </el-form-item>
+        <el-form-item label="数据筛选">
+          <div style="width: 100%">
+            <el-radio-group v-model="form.filterLogic" size="small">
+              <el-radio-button value="AND">所有（且）</el-radio-button>
+              <el-radio-button value="OR">任一（或）</el-radio-button>
+            </el-radio-group>
+            <div v-for="(row, i) in form.filterRows" :key="i" style="display: flex; gap: 8px; margin-top: 8px">
+              <el-select v-if="form.sourceType === 'form'" v-model="row.column" placeholder="目标列" style="width: 30%">
+                <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+              </el-select>
+              <el-input v-else v-model="row.column" placeholder="目标列" style="width: 30%" />
+              <el-select v-model="row.op" style="width: 22%">
+                <el-option label="等于" value="eq" />
+                <el-option label="不等于" value="ne" />
+                <el-option label="包含" value="like" />
+                <el-option label="属于" value="in" />
+                <el-option label="为空" value="isEmpty" />
+                <el-option label="不为空" value="isNotEmpty" />
+              </el-select>
+              <el-radio-group v-model="row.source" size="small">
+                <el-radio-button value="fixed">固定值</el-radio-button>
+                <el-radio-button value="field">表单字段</el-radio-button>
+              </el-radio-group>
+              <el-select v-if="row.source === 'field'" v-model="row.field" placeholder="当前表单字段" style="width: 30%">
+                <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
+              </el-select>
+              <el-input v-else v-model="row.fixedValue" placeholder="固定值" style="width: 30%" />
+              <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
+            </div>
+            <el-button type="primary" link style="margin-top: 8px"
+              @click="form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })">
+              + 添加筛选条件
+            </el-button>
+            <span class="form-tip">限定可查范围（如仅查已支付订单）；动态条件依赖表单字段，变化时自动刷新选项</span>
+          </div>
+        </el-form-item>
       </el-form>
     </div>
 
@@ -201,6 +237,8 @@ const form = reactive({
   sourceType: 'form',
   mode: 'single' as 'single' | 'multiple',
   idField: '',
+  filterLogic: 'AND' as 'AND' | 'OR',
+  filterRows: [] as { column: string; op: string; source: 'fixed' | 'field'; fixedValue: string; field: string }[],
   sourceFormKey: '',
   action: '',
   method: 'GET' as 'GET' | 'POST',
@@ -240,6 +278,16 @@ watch(
     form.dataRows = Object.entries(fetch.data || {}).map(([key, value]) => ({ key, value: String(value) }))
     form.headerRows = Object.entries(fetch.headers || {}).map(([key, value]) => ({ key, value }))
     form.displayField = p.displayField || ''
+    // 数据筛选还原
+    const pFilter = p.filter || {}
+    form.filterLogic = pFilter.logic === 'OR' ? 'OR' : 'AND'
+    form.filterRows = (pFilter.conditions || []).map((c: any) => ({
+      column: c.column || '',
+      op: c.op || 'eq',
+      source: c.field ? 'field' : 'fixed',
+      fixedValue: c.field ? '' : (c.value === undefined ? '' : String(c.value)),
+      field: c.field || '',
+    }))
     // 底表模式列：按 key 存；外部 API：存 prop/label
     form.selectedColumns = (p.columns || []).map((c: any) => c.prop || c.key || '')
     form.columnRows = (p.columns || []).map((c: any) => ({ prop: c.prop || '', label: c.label || '' }))
@@ -340,6 +388,27 @@ function handleConfirm() {
   }
   if (form.mode === 'single' && form.idField) {
     newProps.idField = form.idField
+  }
+  // 数据筛选：有有效条件才产出 filter
+  const validFilterRows = form.filterRows.filter(r => r.column)
+  if (validFilterRows.length > 0) {
+    newProps.filter = {
+      logic: form.filterLogic,
+      conditions: validFilterRows.map(r => {
+        const cond: Record<string, unknown> = { column: r.column, op: r.op }
+        const isNullOp = r.op === 'isEmpty' || r.op === 'isNotEmpty'
+        if (!isNullOp) {
+          if (r.source === 'field' && r.field) {
+            cond.field = r.field
+          } else {
+            cond.value = r.op === 'in'
+              ? (r.fixedValue || '').split(',').map(s => s.trim()).filter(Boolean)
+              : r.fixedValue
+          }
+        }
+        return cond
+      }),
+    }
   }
   if (form.sourceType === 'form') {
     newProps.sourceFormKey = form.sourceFormKey

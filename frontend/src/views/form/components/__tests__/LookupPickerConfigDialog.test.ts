@@ -131,3 +131,68 @@ describe('LookupPickerConfigDialog — 选择模式与 idField', () => {
     expect(vm.form.mode).toBe('single')
   })
 })
+
+describe('LookupPickerConfigDialog — 数据筛选', () => {
+  it('配置静态筛选：confirm 产出 filter（logic + conditions）', async () => {
+    const wrapper = createWrapper({ currentFields: ['name', 'dept', 'status'] })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    vm.form.filterLogic = 'AND'
+    vm.form.filterRows = [
+      { column: 'status', op: 'eq', source: 'fixed', fixedValue: 'PAID', field: '' },
+    ]
+    await vm.handleConfirm()
+    const props = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(props.filter).toEqual({
+      logic: 'AND',
+      conditions: [{ column: 'status', op: 'eq', value: 'PAID' }],
+    })
+  })
+
+  it('配置动态筛选：source=field 时产出 field 而非 value', async () => {
+    const wrapper = createWrapper({ currentFields: ['name', 'dept', 'emp_dept'] })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    vm.form.filterLogic = 'AND'
+    vm.form.filterRows = [
+      { column: 'dept_id', op: 'eq', source: 'field', fixedValue: '', field: 'emp_dept' },
+    ]
+    await vm.handleConfirm()
+    const props = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(props.filter.conditions[0]).toEqual({ column: 'dept_id', op: 'eq', field: 'emp_dept' })
+  })
+
+  it('无有效筛选条件时不产出 filter 键', async () => {
+    const wrapper = createWrapper()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    vm.form.filterRows = []
+    await vm.handleConfirm()
+    const props = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(props.filter).toBeUndefined()
+  })
+
+  it('回填：lookupProps.filter 还原到 filterLogic/filterRows', async () => {
+    const wrapper = createWrapper({
+      lookupProps: {
+        sourceType: 'form',
+        sourceFormKey: 'emp_profile',
+        displayField: 'name',
+        columns: [],
+        returnFields: {},
+        filter: {
+          logic: 'OR',
+          conditions: [{ column: 'status', op: 'eq', value: 'PAID' }],
+        },
+      },
+    })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.form.filterLogic).toBe('OR')
+    expect(vm.form.filterRows[0]).toMatchObject({ column: 'status', op: 'eq', fixedValue: 'PAID' })
+  })
+})

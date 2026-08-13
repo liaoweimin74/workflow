@@ -63,7 +63,7 @@
       @confirm="handlePickerConfirm"
     />
 
-    <!-- LookupPicker（字典选择器）数据源配置 -->
+    <!-- LookupPicker（查找带回）数据源配置 -->
     <LookupPickerConfigDialog
       v-model="lookupDialogVisible"
       :target-forms="lookupTargetForms"
@@ -166,7 +166,7 @@ onMounted(async () => {
 
   // 注册 LookupPicker 到设计器拖拽面板
   designerRef.value?.addComponent({
-    label: '字典选择器',
+    label: '查找带回',
     name: 'LookupPicker',
     icon: 'el-icon-Files',
     menu: 'main',
@@ -182,7 +182,7 @@ onMounted(async () => {
         idField: '',
       },
     }),
-    // 属性设置栏：注入"数据源配置"触发项（按钮 + click 事件）
+    // 属性设置栏：注入"数据源配置"触发项（按钮 + click 事件，样式对齐"设置事件"按钮）
     props: () => [
       {
         type: 'button',
@@ -190,7 +190,8 @@ onMounted(async () => {
         title: '',
         children: ['点击配置数据源'],
         native: true,
-        props: { type: 'primary', plain: true },
+        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        props: { size: 'small' },
         on: { click: () => openLookupConfig() },
       },
     ],
@@ -404,7 +405,7 @@ function handlePickerConfirm(newProps: Record<string, any>) {
   ElMessage.success('数据引用配置已保存')
 }
 
-// ===== LookupPicker（字典选择器）配置 =====
+// ===== LookupPicker（查找带回）配置 =====
 const lookupDialogVisible = ref(false)
 const lookupTargetForms = ref<FormDefinitionDTO[]>([])
 const lookupTargetColumns = ref<ColumnConfigItem[]>([])
@@ -432,7 +433,7 @@ const currentLookupProps = computed<Record<string, any>>(() => {
 
 function openLookupConfig() {
   if (lookupFields.value.length === 0) {
-    ElMessage.warning('画布中没有字典选择器字段，请先拖入"字典选择器"组件')
+    ElMessage.warning('画布中没有查找带回字段，请先拖入"查找带回"组件')
     return
   }
   selectedLookupField.value = lookupFields.value[0].field

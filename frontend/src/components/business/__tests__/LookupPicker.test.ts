@@ -1,7 +1,7 @@
 // ----- TDD: LookupPicker 组件测试 -----
 // npx vitest run src/components/business/__tests__/LookupPicker.test.ts
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ElementPlus from 'element-plus'
@@ -191,5 +191,130 @@ describe('LookupPicker — form-create 适配', () => {
     vm.handleClear()
     await nextTick()
     expect(wrapper.emitted('clear')).toBeTruthy()
+  })
+})
+
+// ============================================================
+// fetch 配置模式（设计器 schema 可序列化的数据源配置）
+// ============================================================
+
+vi.mock('@/utils/http', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+}))
+
+import http from '@/utils/http'
+import { buildFetchApiFromConfig } from '../lookupFetch'
+
+const mockHttp = http as any
+
+beforeEach(() => {
+  mockHttp.get.mockReset()
+  mockHttp.post.mockReset()
+})
+
+describe('buildFetchApiFromConfig — GET', () => {
+  it('从 R.data 的 parse 表达式提取 rows 与 total', async () => {
+    mockHttp.get.mockResolvedValue({
+      code: 200,
+      data: { records: [{ id: '1', name: '张三' }], total: 1 },
+    })
+    const fetchApi = buildFetchApiFromConfig({
+      action: '/v1/biz-data/emp_profile',
+      method: 'GET',
+      parse: 'records',
+    })
+    const res = await fetchApi({ page: 1, size: 10 })
+    expect(mockHttp.get).toHaveBeenCalledWith('/v1/biz-data/emp_profile', expect.objectContaining({}))
+    expect(res).toEqual({ rows: [{ id: '1', name: '张三' }], total: 1 })
+  })
+
+  it('parse 缺省时依次尝试 rows 与 records，total 缺省取 data.total', async () => {
+    mockHttp.get.mockResolvedValue({
+      code: 200,
+      data: { rows: [{ id: '2' }], total: 7 },
+    })
+    const fetchApi = buildFetchApiFromConfig({ action: '/v1/xxx' })
+    expect(await fetchApi({ page: 1, size: 10 })).toEqual({ rows: [{ id: '2' }], total: 7 })
+  })
+
+  it('解析失败时返回空列表与长度兜底', async () => {
+    mockHttp.get.mockResolvedValue({ code: 200, data: { message: 'no data' } })
+    const fetchApi = buildFetchApiFromConfig({ action: '/v1/empty', parse: 'list' })
+    const res = await fetchApi({ page: 1, size: 10 })
+    expect(res.rows).toEqual([])
+    expect(res.total).toBe(0)
+  })
+
+  it('totalParse 显式指定时以约定路径为准', async () => {
+    mockHttp.get.mockResolvedValue({ code: 200, data: { content: [{ id: '3' }], page: { totalElements: 42 } } })
+    const fetchApi = buildFetchApiFromConfig({ action: '/v1/x', parse: 'content', totalParse: 'page.totalElements' })
+    expect(await fetchApi({ page: 1, size: 10 })).toEqual({ rows: [{ id: '3' }], total: 42 })
+  })
+})
+
+describe('buildFetchApiFromConfig — POST 与固定参数', () => {
+  it('POST 将固定 data 作 body、合并参数作 query', async () => {
+    mockHttp.post.mockResolvedValue({
+      code: 200,
+      data: { list: [{ id: '4' }], total: 3 },
+    })
+    const fetchApi = buildFetchApiFromConfig({
+      action: '/v1/search',
+      method: 'POST',
+      parse: 'list',
+      data: { dept: 'A' },
+    })
+    await fetchApi({ page: 1, size: 10 })
+    expect(mockHttp.post).toHaveBeenCalledWith(
+      '/v1/search',
+      { dept: 'A' },
+      expect.objectContaining({ params: expect.objectContaining({ page: 1, size: 10, dept: 'A' }) }),
+    )
+    const res = await fetchApi({ page: 1, size: 10 })
+    expect(res.rows).toEqual([{ id: '4' }])
+    expect(res.total).toBe(3)
+  })
+})
+
+describe('LookupPicker — fetch 配置模式', () => {
+  it('未配置任何数据源时打开弹窗给出提示且不请求', async () => {
+    const wrapper = createWrapper({ fetchApi: undefined, fetch: undefined })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    expect(mockHttp.get).not.toHaveBeenCalled()
+  })
+
+  it('fetch 配置存在时打开弹窗调用 http.get 加载数据', async () => {
+    mockHttp.get.mockResolvedValue({
+      code: 200,
+      data: { records: [{ id: '1', name: '张三' }], total: 1 },
+    })
+    const wrapper = createWrapper({
+      fetchApi: undefined,
+      fetch: { action: '/v1/biz-data/emp_profile', parse: 'records' },
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    await nextTick()
+    expect(mockHttp.get).toHaveBeenCalledWith(
+      '/v1/biz-data/emp_profile',
+      expect.objectContaining({ params: expect.objectContaining({ page: 1, size: 10 }) }),
+    )
+  })
+
+  it('fetchApi 函数优先于 fetch 配置', async () => {
+    const fn = vi.fn().mockResolvedValue({ rows: [{ id: '9' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: fn,
+      fetch: { action: '/v1/should-not-use' },
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    await nextTick()
+    expect(fn).toHaveBeenCalled()
+    expect(mockHttp.get).not.toHaveBeenCalledWith('/v1/should-not-use', expect.anything())
   })
 })

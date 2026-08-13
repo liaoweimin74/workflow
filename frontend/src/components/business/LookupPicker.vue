@@ -69,7 +69,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, inject } from 'vue'
 import { Search } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import type { LookupPickerProps, QueryParams } from './types'
+import { buildFetchApiFromConfig } from './lookupFetch'
 
 /** form-create 注入对象，提供 api.setValue 等方法 */
 interface FormCreateInject {
@@ -108,6 +110,12 @@ const query = reactive<QueryParams & { keyword?: string }>({
   size: 10,
 })
 
+/** 有效 fetchApi：代码级函数优先；否则由 fetch 配置构造 */
+const effectiveFetchApi = computed(() => {
+  if (typeof props.fetchApi === 'function') return props.fetchApi
+  return buildFetchApiFromConfig(props.fetch || { action: '' })
+})
+
 const defaultDisplayField = computed(() => {
   const firstCol = props.columns.find(c => c.prop)
   return firstCol?.prop || ''
@@ -138,13 +146,19 @@ function openDialog() {
 }
 
 async function fetchData() {
+  const fetchApi = effectiveFetchApi.value
+  // fetch 配置未配置数据源（action 为空）时提示
+  if (!props.fetch && !props.fetchApi) {
+    ElMessage.warning('未配置数据源，请在设计器中配置"数据源/回填"')
+    return
+  }
   loading.value = true
   try {
     const params: any = { ...query }
     if (keyword.value) params.keyword = keyword.value
-    const res = await props.fetchApi(params)
-    tableData.value = res.rows
-    total.value = res.total
+    const res = await fetchApi(params)
+    tableData.value = res.rows || []
+    total.value = res.total || 0
   } finally {
     loading.value = false
   }

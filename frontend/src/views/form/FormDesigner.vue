@@ -62,6 +62,14 @@
       @source-change="handlePickerSourceChange"
       @confirm="handlePickerConfirm"
     />
+
+    <!-- LookupPicker（字典选择器）数据源配置 -->
+    <LookupPickerConfigDialog
+      v-model="lookupDialogVisible"
+      :current-fields="currentFieldKeys"
+      :lookup-props="currentLookupProps"
+      @confirm="handleLookupConfirm"
+    />
   </div>
 </template>
 
@@ -74,6 +82,7 @@ import formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
+import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -164,11 +173,21 @@ onMounted(async () => {
       title: '选择',
       props: {
         columns: [],
-        fetchApi: null,
         displayField: '',
         returnFields: {},
       },
     }),
+    // 属性设置栏：注入"数据源配置"触发项（标准 input + click 事件）
+    props: () => [
+      {
+        type: 'input',
+        field: 'lookupConfigTrigger',
+        title: '',
+        value: '点击配置数据源',
+        props: { readonly: true, placeholder: '点击配置' },
+        on: { click: () => openLookupConfig() },
+      },
+    ],
   })
 
   // 注册数据引用（dataPicker）组件
@@ -377,6 +396,54 @@ function handlePickerConfirm(newProps: Record<string, any>) {
   walk(rules)
   designerRef.value?.setRule(rules)
   ElMessage.success('数据引用配置已保存')
+}
+
+// ===== LookupPicker（字典选择器）配置 =====
+const lookupDialogVisible = ref(false)
+/** 当前 schema 中的 LookupPicker 字段（field → props） */
+const lookupFields = computed<{ field: string; props: Record<string, any> }[]>(() => {
+  const fields: { field: string; props: Record<string, any> }[] = []
+  const walk = (rules: any[]) => {
+    for (const r of rules) {
+      if (r?.type === 'LookupPicker' && r.field) {
+        fields.push({ field: r.field, props: r.props || {} })
+      }
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(designerRule.value)
+  return fields
+})
+const selectedLookupField = ref<string>('')
+
+/** 当前选中 LookupPicker 字段的 props（供配置弹窗回填） */
+const currentLookupProps = computed<Record<string, any>>(() => {
+  const found = lookupFields.value.find(f => f.field === selectedLookupField.value)
+  return found?.props || {}
+})
+
+function openLookupConfig() {
+  if (lookupFields.value.length === 0) {
+    ElMessage.warning('画布中没有字典选择器字段，请先拖入"字典选择器"组件')
+    return
+  }
+  selectedLookupField.value = lookupFields.value[0].field
+  lookupDialogVisible.value = true
+}
+
+function handleLookupConfirm(newProps: Record<string, any>) {
+  const rules = designerRef.value?.getRule() || []
+  const walk = (list: any[]) => {
+    for (const r of list) {
+      if (r?.type === 'LookupPicker' && r.field === selectedLookupField.value) {
+        r.props = { ...(r.props || {}), ...newProps }
+      }
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(rules)
+  designerRef.value?.setRule(rules)
+  ElMessage.success('数据源配置已保存')
 }
 
 function handleBack() {

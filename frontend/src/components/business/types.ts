@@ -130,6 +130,22 @@ export interface SearchTableProps<T = any> {
 
 // --- LookupPicker props ---
 
+/** LookupPicker 可序列化的数据源配置（替代函数 fetchApi，供设计器 schema 存取） */
+export interface LookupFetchConfig {
+  /** API 路径（相对 /api，如 /v1/biz-data/{formKey}） */
+  action: string
+  /** 请求方法，默认 GET */
+  method?: 'GET' | 'POST'
+  /** 响应解析表达式：从 R.data 提取数组，如 records / content / list */
+  parse?: string
+  /** 响应解析表达式：从 R.data 提取 total，缺省取 data.total 或数组长度 */
+  totalParse?: string
+  /** 请求头（可选） */
+  headers?: Record<string, string>
+  /** 固定请求参数（可选，与分页/关键字合并） */
+  data?: Record<string, unknown>
+}
+
 export interface LookupPickerProps {
   /** v-model 绑定选中行数据 */
   modelValue: Record<string, any> | null | Record<string, any>[]
@@ -137,10 +153,13 @@ export interface LookupPickerProps {
   /** 弹窗表格列定义 */
   columns: TableColumn[]
 
-  /** 数据获取函数 */
+  /** 数据获取函数（代码级注入；设计器 schema 用 fetch 配置替代） */
   fetchApi: (
     params: QueryParams & { keyword?: string },
   ) => Promise<{ rows: any[]; total: number }>
+
+  /** 可序列化的数据源配置（设计器场景，优先级低于 fetchApi：fetchApi 为函数时优先） */
+  fetch?: LookupFetchConfig
 
   /** 字段映射：选中行的 sourceField → 表单的 targetField */
   returnFields?: Record<string, string>

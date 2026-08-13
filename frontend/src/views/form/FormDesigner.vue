@@ -201,7 +201,7 @@ onMounted(async () => {
   designerRef.value?.addComponent({
     label: '数据引用',
     name: 'dataPicker',
-    icon: 'el-icon-Link',
+    icon: 'icon-link',
     menu: 'main',
     rule: () => ({
       type: 'dataPicker',

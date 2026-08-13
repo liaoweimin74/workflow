@@ -17,10 +17,12 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
-// 注册 LookupPicker 为 form-create 全局组件，使设计器和渲染器都能使用
-formCreate.component('LookupPicker', LookupPicker)
-// 注册 DataPicker（数据引用）为 form-create 全局组件
-formCreate.component('dataPicker', DataPicker)
+// 注册 LookupPicker/DataPicker 为 form-create 全局组件（表单渲染 + 设计器拖拽预览双实例），
+// 使设计器和渲染器都能使用。必须用 FcDesigner.component：内部同时注册
+// designerForm（设计器画布 DragForm）与 formCreate（ViewForm/运行时渲染），
+// 只用 formCreate.component 会导致设计器画布（designerForm 实例）找不到组件而只渲染 label。
+FcDesigner.component('LookupPicker', LookupPicker)
+FcDesigner.component('dataPicker', DataPicker)
 app.use(formCreate)
 app.use(FcDesigner)
 app.mount('#app')

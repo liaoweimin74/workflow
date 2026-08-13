@@ -182,14 +182,15 @@ onMounted(async () => {
         idField: '',
       },
     }),
-    // 属性设置栏：注入"数据源配置"触发项（标准 input + click 事件）
+    // 属性设置栏：注入"数据源配置"触发项（按钮 + click 事件）
     props: () => [
       {
-        type: 'input',
+        type: 'button',
         field: 'lookupConfigTrigger',
         title: '',
-        value: '点击配置数据源',
-        props: { readonly: true, placeholder: '点击配置' },
+        children: ['点击配置数据源'],
+        native: true,
+        props: { type: 'primary', plain: true },
         on: { click: () => openLookupConfig() },
       },
     ],

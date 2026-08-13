@@ -91,6 +91,19 @@
       <!-- 展示与回填 -->
       <el-divider content-position="left">展示与回填</el-divider>
       <el-form label-width="110px" size="default">
+        <el-form-item label="选择模式">
+          <el-radio-group v-model="form.mode">
+            <el-radio value="single">单选</el-radio>
+            <el-radio value="multiple">多选</el-radio>
+          </el-radio-group>
+          <span class="form-tip">多选结果以快照数组存储，落子表后按行展示</span>
+        </el-form-item>
+        <el-form-item v-if="form.mode === 'single'" label="id 存储字段">
+          <el-select v-model="form.idField" placeholder="选择当前表单字段存储选中记录 id" clearable style="width: 100%">
+            <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
+          </el-select>
+          <span class="form-tip">选中记录的 id 将写入该字段（建议设为隐藏），用于索引与追踪</span>
+        </el-form-item>
         <el-form-item v-if="form.sourceType === 'api'" label="显示字段">
           <el-input v-model="form.displayField" placeholder="如 name，输入框回显的字段名" />
         </el-form-item>
@@ -186,6 +199,8 @@ const visibleColumns = computed(() => props.targetColumns.filter(c => !c.hidden)
 
 const form = reactive({
   sourceType: 'form',
+  mode: 'single' as 'single' | 'multiple',
+  idField: '',
   sourceFormKey: '',
   action: '',
   method: 'GET' as 'GET' | 'POST',
@@ -213,6 +228,8 @@ watch(
       ? explicitType === 'form'
       : !!(p.sourceFormKey || fetch.action?.startsWith('/v1/biz-data/'))
     form.sourceType = isFormSource ? 'form' : 'api'
+    form.mode = p.mode === 'multiple' ? 'multiple' : 'single'
+    form.idField = p.idField || ''
     form.sourceFormKey = isFormSource ? (p.sourceFormKey || fetch.action?.replace('/v1/biz-data/', '') || '') : ''
     form.action = fetch.action || ''
     form.method = fetch.method || 'GET'
@@ -315,10 +332,14 @@ function handleConfirm() {
   }
   const newProps: Record<string, any> = {
     sourceType: form.sourceType,
+    mode: form.mode,
     fetch,
     displayField: form.displayField.trim() || undefined,
     columns,
     returnFields,
+  }
+  if (form.mode === 'single' && form.idField) {
+    newProps.idField = form.idField
   }
   if (form.sourceType === 'form') {
     newProps.sourceFormKey = form.sourceFormKey

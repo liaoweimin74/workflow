@@ -71,7 +71,7 @@ import { ref, reactive, computed, inject } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LookupPickerProps, QueryParams } from './types'
-import { buildFetchApiFromConfig, readCellValue } from './lookupFetch'
+import { buildFetchApiFromConfig, readCellValue, buildSnapshot } from './lookupFetch'
 
 /** form-create 注入对象，提供 api.setValue 等方法 */
 interface FormCreateInject {
@@ -130,8 +130,11 @@ const displayText = computed(() => {
   if (typeof val === 'string') return val
   if (Array.isArray(val)) {
     if (val.length === 0) return ''
-    // 底表行业务字段在 data 内层，readCellValue 兼容内层/顶层
-    return readCellValue(val[0], resolvedDisplayField.value) || ''
+    // 多选快照数组：拼接全部 displayField 值展示
+    return val
+      .map((item: any) => readCellValue(item, resolvedDisplayField.value) || '')
+      .filter(Boolean)
+      .join(',')
   }
   if (typeof val === 'object') {
     return readCellValue(val, resolvedDisplayField.value) || ''
@@ -227,9 +230,12 @@ function handleSelectionChange(rows: any[]) {
 }
 
 function confirmSelection() {
-  emit('update:modelValue', [...tempSelection.value])
-  if (tempSelection.value.length > 0) {
-    emit('select', tempSelection.value)
+  const snapshots = tempSelection.value.map((row: any) =>
+    buildSnapshot(row, resolvedDisplayField.value, props.columns),
+  )
+  emit('update:modelValue', snapshots)
+  if (snapshots.length > 0) {
+    emit('select', snapshots)
   }
   dialogVisible.value = false
 }

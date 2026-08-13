@@ -117,6 +117,51 @@ describe('LookupPicker — 单选', () => {
   })
 })
 
+describe('LookupPicker — 多选', () => {
+  it('确认选择：emit 快照数组（id + displayField + 配置列，无脏字段）', async () => {
+    const wrapper = createWrapper({
+      modelValue: [],
+      mode: 'multiple',
+      displayField: 'name',
+      columns: [{ prop: 'code', label: '编号' }, { prop: 'name', label: '名称' }],
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.tempSelection = [
+      { id: 'u1', data: { code: 'BL-001', name: '张三', level: 'P7' }, version: 1 },
+      { id: 'u2', data: { code: 'BL-002', name: '李四', level: 'P6' }, version: 1 },
+    ]
+    vm.confirmSelection()
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue')!
+    expect(emitted[emitted.length - 1][0]).toEqual([
+      { id: 'u1', name: '张三', code: 'BL-001' },
+      { id: 'u2', name: '李四', code: 'BL-002' },
+    ])
+  })
+
+  it('多选回显：输入框显示所有快照的 displayField 值（逗号分隔）', async () => {
+    const wrapper = createWrapper({
+      modelValue: [{ id: 'u1', name: '张三' }, { id: 'u2', name: '李四' }],
+      mode: 'multiple',
+      displayField: 'name',
+    })
+    await nextTick()
+    expect(wrapper.find('input').element.value).toBe('张三,李四')
+  })
+
+  it('多选清除：emit 空数组', async () => {
+    const wrapper = createWrapper({ modelValue: [{ id: 'u1', name: '张三' }], mode: 'multiple' })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.handleClear()
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue')!
+    expect(emitted[emitted.length - 1][0]).toEqual([])
+  })
+})
+
 describe('LookupPicker — 清除', () => {
   it('clearable 默认为 true', () => {
     const wrapper = createWrapper()

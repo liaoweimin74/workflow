@@ -178,6 +178,8 @@ onMounted(async () => {
         columns: [],
         displayField: '',
         returnFields: {},
+        mode: 'single',
+        idField: '',
       },
     }),
     // 属性设置栏：注入"数据源配置"触发项（标准 input + click 事件）

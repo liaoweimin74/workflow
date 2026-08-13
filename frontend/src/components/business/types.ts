@@ -156,8 +156,16 @@ export interface LookupFetchConfig {
 }
 
 export interface LookupPickerProps {
-  /** v-model 绑定选中行数据 */
-  modelValue: Record<string, any> | null | Record<string, any>[]
+  /**
+   * v-model 绑定值：
+   * - 单选（新语义）：显示文本字符串（field 绑定显示文本字段）
+   * - 单选（旧兼容）：整行对象
+   * - 多选：快照数组 [{ id, <displayField>, ...配置列 }]
+   */
+  modelValue: string | null | Record<string, any> | Record<string, any>[]
+
+  /** 选中记录 id 的独立存储字段（设计者显式配置，hidden）。选中时经 formCreateInject.api.setValue(idField, row.id) 写入 */
+  idField?: string
 
   /** 弹窗表格列定义 */
   columns: TableColumn[]

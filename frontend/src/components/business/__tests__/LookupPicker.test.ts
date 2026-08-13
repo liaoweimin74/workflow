@@ -550,3 +550,76 @@ describe('LookupPicker — BizDataVO 嵌套行', () => {
     expect(setValue).toHaveBeenCalledWith('formName', '盲板A')
   })
 })
+
+describe('LookupPicker — 数据源筛选', () => {
+  it('底表数据源：fetch 含 filter 时请求带 filter JSON（静态值）', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+    const wrapper = mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi,
+        columns: [{ prop: 'code', label: '编号' }],
+        displayField: 'code',
+        fetch: {
+          action: '/v1/biz-data/emp_profile',
+          filter: { logic: 'AND', conditions: [{ column: 'status', op: 'eq', value: 'PAID' }] },
+        },
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    expect(fetchApi).toHaveBeenCalled()
+    const params = fetchApi.mock.calls[0][0]
+    expect(params.filter).toEqual({
+      logic: 'AND',
+      conditions: [{ column: 'status', op: 'eq', value: 'PAID' }],
+    })
+  })
+
+  it('底表数据源：动态条件值经 formCreateInject api.getValue 读取', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+    const wrapper = mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi,
+        columns: [{ prop: 'code', label: '编号' }],
+        displayField: 'code',
+        fetch: {
+          action: '/v1/biz-data/emp_profile',
+          filter: { conditions: [{ column: 'dept_id', op: 'eq', field: 'emp_dept' }] },
+        },
+      },
+      global: {
+        plugins: [ElementPlus],
+        provide: { formCreateInject: { api: { setValue: vi.fn(), getValue: vi.fn().mockReturnValue('rd-001') } } },
+      },
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    const params = fetchApi.mock.calls[0][0]
+    expect(params.filter.conditions[0].value).toBe('rd-001')
+  })
+
+  it('外部 API 数据源：filter 等值条件展开为查询参数', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+    const wrapper = mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi,
+        columns: [{ prop: 'code', label: '编号' }],
+        displayField: 'code',
+        fetch: {
+          action: '/external/orders',
+          filter: { conditions: [{ column: 'status', op: 'eq', value: 'PAID' }] },
+        },
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    const params = fetchApi.mock.calls[0][0]
+    expect(params.status).toBe('PAID')
+    expect(params.filter).toBeUndefined()
+  })
+})

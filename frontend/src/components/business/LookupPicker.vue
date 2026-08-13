@@ -67,16 +67,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, inject } from 'vue'
+import { ref, reactive, computed, inject, watch } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LookupPickerProps, QueryParams } from './types'
-import { buildFetchApiFromConfig, readCellValue, buildSnapshot } from './lookupFetch'
+import { buildFetchApiFromConfig, readCellValue, buildSnapshot, resolveFilter } from './lookupFetch'
 
-/** form-create 注入对象，提供 api.setValue 等方法 */
+/** form-create 注入对象，提供 api.setValue/getValue 等方法 */
 interface FormCreateInject {
   api?: {
     setValue: (field: string, value: unknown) => void
+    getValue?: (field: string) => unknown
   }
 }
 
@@ -142,6 +143,31 @@ const displayText = computed(() => {
   return ''
 })
 
+/** 依赖字段（动态条件来源），供联动 watch */
+const filterDependFields = computed<string[]>(() => {
+  const conds = props.fetch?.filter?.conditions || []
+  return conds.map(c => c.field).filter((f): f is string => !!f)
+})
+
+/** 解析后的筛选参数：底表 → filter JSON；外部 API → 等值查询参数展开 */
+const resolvedFilterParams = computed<Record<string, unknown> | undefined>(() => {
+  const filter = props.fetch?.filter
+  if (!filter || !props.fetch?.action) return undefined
+  const getValue = (field: string) => formCreateInject?.api?.getValue?.(field)
+  if (props.fetch.action.startsWith('/v1/biz-data/')) {
+    return resolveFilter(filter, getValue || (() => undefined))
+  }
+  // 外部 API：仅等值展开
+  const params: Record<string, unknown> = {}
+  for (const c of filter.conditions || []) {
+    if (!c.column || (c.op && c.op !== 'eq')) continue
+    const v = c.field ? (getValue ? getValue(c.field) : undefined) : c.value
+    if (v === undefined || v === null || v === '') continue
+    params[c.column] = v
+  }
+  return Object.keys(params).length > 0 ? params : undefined
+})
+
 /** 表格单元格格式化：readCellValue 兼容 BizDataVO 内层与平铺行；对象/数组 JSON 化 */
 function formatCell(row: any, key?: string): string {
   const v = readCellValue(row, key)
@@ -169,6 +195,15 @@ async function fetchData() {
   try {
     const params: any = { ...query }
     if (keyword.value) params.keyword = keyword.value
+    // 数据源筛选：底表 → filter JSON；外部 API → 等值参数
+    const filterParams = resolvedFilterParams.value
+    if (filterParams) {
+      if (props.fetch?.action.startsWith('/v1/biz-data/')) {
+        params.filter = filterParams
+      } else {
+        Object.assign(params, filterParams)
+      }
+    }
     const res = await fetchApi(params)
     tableData.value = res.rows || []
     total.value = res.total || 0
@@ -247,6 +282,20 @@ function handleClear() {
   // 清空 returnFields 对应的表单字段
   clearReturnFields()
 }
+
+// 动态筛选联动：依赖字段值变化 → 清空当前选择与回填，刷新选项（快照语义：已选数据不清空由父级保证）
+watch(
+  () => filterDependFields.value.map(f => formCreateInject?.api?.getValue?.(f)),
+  () => {
+    emit('update:modelValue', props.mode === 'multiple' ? [] : null)
+    writeIdField(null)
+    clearReturnFields()
+    if (dialogVisible.value) {
+      query.page = 1
+      fetchData()
+    }
+  },
+)
 
 defineExpose({ openDialog, closeDialog: () => { dialogVisible.value = false }, readCellValue })
 </script>

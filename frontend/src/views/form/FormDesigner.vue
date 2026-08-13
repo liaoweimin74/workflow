@@ -168,7 +168,7 @@ onMounted(async () => {
   designerRef.value?.addComponent({
     label: '查找带回',
     name: 'LookupPicker',
-    icon: 'el-icon-Files',
+    icon: 'icon-search',
     menu: 'main',
     rule: () => ({
       type: 'LookupPicker',

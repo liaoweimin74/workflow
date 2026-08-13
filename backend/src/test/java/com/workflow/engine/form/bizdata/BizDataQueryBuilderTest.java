@@ -105,4 +105,73 @@ class BizDataQueryBuilderTest {
         assertThat(sp.sql()).contains("DELETE FROM wf_biz_biz_leave WHERE id = ? AND tenant_id = ?");
         assertThat(sp.params()).contains("row-1", "t1");
     }
+
+    // ---------- 结构化 filter（静态 + 动态 + AND/OR） ----------
+    // 注：buildSelect 签名保持 Map<String,Object>，结构化格式 {logic, conditions}
+    // 由 BizDataService 的 Jackson 解析后传入，因此测试直接构造 Map。
+
+    private static Map<String, Object> structFilter(String logic, List<Map<String, Object>> conds) {
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("logic", logic);
+        m.put("conditions", conds);
+        return m;
+    }
+
+    @Test
+    void buildSelect_structuredFilter_eq_like_AND() {
+        List<Map<String, Object>> conds = List.of(
+                Map.of("column", "dept", "op", "eq", "value", "研发部"),
+                Map.of("column", "name", "op", "like", "value", "张"));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("(dept = ? AND name LIKE ?)");
+        assertThat(sp.params()).contains("研发部", "%张%");
+    }
+
+    @Test
+    void buildSelect_structuredFilter_OR_wrapsParens() {
+        List<Map<String, Object>> conds = List.of(
+                Map.of("column", "dept", "op", "eq", "value", "研发部"),
+                Map.of("column", "dept", "op", "eq", "value", "市场部"));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", structFilter("OR", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("(dept = ? OR dept = ?)");
+        assertThat(sp.params()).contains("研发部", "市场部");
+    }
+
+    @Test
+    void buildSelect_structuredFilter_ne_in_isEmpty() {
+        List<Map<String, Object>> conds = List.of(
+                Map.of("column", "dept", "op", "ne", "value", "行政部"),
+                Map.of("column", "name", "op", "in", "value", List.of("张三", "李四")),
+                Map.of("column", "dept", "op", "isEmpty"));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("dept <> ?");
+        assertThat(sp.sql()).contains("name IN (?, ?)");
+        assertThat(sp.sql()).contains("(dept IS NULL OR dept = '')");
+        assertThat(sp.params()).contains("行政部", "张三", "李四");
+    }
+
+    @Test
+    void buildSelect_structuredFilter_rejectsUnknownColumn() {
+        List<Map<String, Object>> conds = List.of(Map.of("column", "hack", "op", "eq", "value", "x"));
+        assertThatThrownBy(() -> BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void buildSelect_legacyFilterMap_keepsEqualsAnd() {
+        // 旧格式 {col: value} 仍走等值 AND，向后兼容
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", Map.of("dept", "研发部"),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("dept = ?");
+        assertThat(sp.params()).contains("研发部");
+    }
 }

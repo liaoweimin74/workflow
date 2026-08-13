@@ -151,6 +151,13 @@ public final class BizDataQueryBuilder {
         if (filters == null || filters.isEmpty()) {
             return;
         }
+        // 结构化格式：{ "logic": "AND"|"OR", "conditions": [{column, op, value}] }
+        if (filters.get("conditions") instanceof List<?> condList) {
+            String logic = "AND".equalsIgnoreCase(String.valueOf(filters.getOrDefault("logic", "AND"))) ? "AND" : "OR";
+            appendStructuredFilters(sql, params, allowedColumns, logic, castConditions(condList));
+            return;
+        }
+        // 旧格式：{col: value} 等值 AND
         for (Map.Entry<String, Object> e : filters.entrySet()) {
             validateColumn(e.getKey(), allowedColumns, "筛选字段");
             if (e.getValue() == null) {
@@ -159,6 +166,63 @@ public final class BizDataQueryBuilder {
             sql.append(" AND ").append(e.getKey()).append(" = ?");
             params.add(e.getValue());
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> castConditions(List<?> list) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object o : list) {
+            if (o instanceof Map<?, ?> m) {
+                out.add((Map<String, Object>) m);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 结构化多条件：按 logic 组合 AND/OR，括号包裹；列名白名单校验，值参数绑定。
+     * 运算符：eq/ne/like/in/isEmpty/isNotEmpty（isEmpty/isNotEmpty 忽略 value）。
+     */
+    private static void appendStructuredFilters(StringBuilder sql, List<Object> params,
+                                                List<String> allowedColumns, String logic,
+                                                List<Map<String, Object>> conditions) {
+        List<String> fragments = new ArrayList<>();
+        for (Map<String, Object> c : conditions) {
+            String column = String.valueOf(c.get("column"));
+            validateColumn(column, allowedColumns, "筛选字段");
+            String op = c.get("op") == null ? "eq" : String.valueOf(c.get("op")).toLowerCase();
+            switch (op) {
+                case "eq" -> {
+                    if (c.get("value") == null) continue;
+                    fragments.add(column + " = ?");
+                    params.add(c.get("value"));
+                }
+                case "ne" -> {
+                    if (c.get("value") == null) continue;
+                    fragments.add(column + " <> ?");
+                    params.add(c.get("value"));
+                }
+                case "like" -> {
+                    if (c.get("value") == null) continue;
+                    fragments.add(column + " LIKE ?");
+                    params.add("%" + c.get("value") + "%");
+                }
+                case "in" -> {
+                    Object v = c.get("value");
+                    if (!(v instanceof List<?> values) || values.isEmpty()) continue;
+                    String marks = String.join(", ", java.util.Collections.nCopies(values.size(), "?"));
+                    fragments.add(column + " IN (" + marks + ")");
+                    params.addAll(values);
+                }
+                case "isempty" -> fragments.add("(" + column + " IS NULL OR " + column + " = '')");
+                case "isnotempty" -> fragments.add("(" + column + " IS NOT NULL AND " + column + " <> '')");
+                default -> throw new IllegalArgumentException("非法筛选运算符: " + op);
+            }
+        }
+        if (fragments.isEmpty()) {
+            return;
+        }
+        sql.append(" AND (").append(String.join(" " + logic + " ", fragments)).append(")");
     }
 
     /**

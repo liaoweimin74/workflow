@@ -279,6 +279,70 @@ describe('buildFetchApiFromConfig — POST 与固定参数', () => {
   })
 })
 
+describe('buildFetchApiFromConfig — 分页基准', () => {
+  it('默认（无 pageBase）按原样透传 page（1 起 API）', async () => {
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
+    const fetchApi = buildFetchApiFromConfig({ action: '/v1/users' })
+    await fetchApi({ page: 2, size: 10 })
+    const params = mockHttp.get.mock.calls[0][1].params
+    expect(params.page).toBe(2)
+  })
+
+  it('pageBase=0 时把 el-pagination 的 1 起页码转为 0 起（底表接口）', async () => {
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
+    const fetchApi = buildFetchApiFromConfig({ action: '/v1/biz-data/emp_profile', pageBase: 0 })
+    await fetchApi({ page: 1, size: 10 })
+    const params = mockHttp.get.mock.calls[0][1].params
+    expect(params.page).toBe(0)
+    await fetchApi({ page: 2, size: 10 })
+    expect(mockHttp.get.mock.calls[1][1].params.page).toBe(1)
+  })
+})
+
+describe('buildFetchApiFromConfig — 搜索参数匹配', () => {
+  it('默认 searchParam 为 keyword：关键字映射到 query.keyword', async () => {
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
+    const fetchApi = buildFetchApiFromConfig({ action: '/v1/biz-data/emp_profile', parse: 'records' })
+    await fetchApi({ page: 1, size: 10, keyword: '张' })
+    expect(mockHttp.get).toHaveBeenCalledWith(
+      '/v1/biz-data/emp_profile',
+      expect.objectContaining({ params: expect.objectContaining({ keyword: '张', page: 0, size: 10 }) }),
+    )
+  })
+
+  it('自定义 searchParam 时关键字映射到指定参数名', async () => {
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
+    const fetchApi = buildFetchApiFromConfig({ action: '/v1/users', searchParam: 'name' })
+    await fetchApi({ page: 1, size: 10, keyword: '李' })
+    expect(mockHttp.get).toHaveBeenCalledWith(
+      '/v1/users',
+      expect.objectContaining({ params: expect.objectContaining({ name: '李' }) }),
+    )
+  })
+
+  it('配置 keywordColumn 时透传查询列名（底表按列搜索）', async () => {
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
+    const fetchApi = buildFetchApiFromConfig({
+      action: '/v1/biz-data/emp_profile',
+      keywordColumn: 'name',
+    })
+    await fetchApi({ page: 1, size: 10, keyword: '王' })
+    expect(mockHttp.get).toHaveBeenCalledWith(
+      '/v1/biz-data/emp_profile',
+      expect.objectContaining({ params: expect.objectContaining({ keyword: '王', keywordColumn: 'name' }) }),
+    )
+  })
+
+  it('无关键字时 query 不携带 keyword 参数', async () => {
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
+    const fetchApi = buildFetchApiFromConfig({ action: '/v1/biz-data/emp_profile' })
+    await fetchApi({ page: 1, size: 10 })
+    const params = mockHttp.get.mock.calls[0][1].params
+    expect(params.keyword).toBeUndefined()
+    expect(params.page).toBe(0)
+  })
+})
+
 describe('LookupPicker — fetch 配置模式', () => {
   it('未配置任何数据源时打开弹窗给出提示且不请求', async () => {
     const wrapper = createWrapper({ fetchApi: undefined, fetch: undefined })
@@ -287,7 +351,7 @@ describe('LookupPicker — fetch 配置模式', () => {
     expect(mockHttp.get).not.toHaveBeenCalled()
   })
 
-  it('fetch 配置存在时打开弹窗调用 http.get 加载数据', async () => {
+  it('fetch 配置存在时打开弹窗调用 http.get 加载数据（biz-data 接口按 0 起分页）', async () => {
     mockHttp.get.mockResolvedValue({
       code: 200,
       data: { records: [{ id: '1', name: '张三' }], total: 1 },
@@ -301,7 +365,7 @@ describe('LookupPicker — fetch 配置模式', () => {
     await nextTick()
     expect(mockHttp.get).toHaveBeenCalledWith(
       '/v1/biz-data/emp_profile',
-      expect.objectContaining({ params: expect.objectContaining({ page: 1, size: 10 }) }),
+      expect.objectContaining({ params: expect.objectContaining({ page: 0, size: 10 }) }),
     )
   })
 
@@ -316,5 +380,75 @@ describe('LookupPicker — fetch 配置模式', () => {
     await nextTick()
     expect(fn).toHaveBeenCalled()
     expect(mockHttp.get).not.toHaveBeenCalledWith('/v1/should-not-use', expect.anything())
+  })
+})
+
+// ============================================================
+// BizDataVO 嵌套结构适配（底表接口返回 { id, data: {...}, version, ... }）
+// ============================================================
+
+describe('LookupPicker — BizDataVO 嵌套行', () => {
+  it('displayText 从选中行 data 内层取 displayField', async () => {
+    const wrapper = createWrapper({
+      modelValue: { id: '1', data: { code: 'BL-001', name: '盲板A' }, version: 1 },
+      displayField: 'code',
+    })
+    await nextTick()
+    const input = wrapper.find('input')
+    expect(input.element.value).toBe('BL-001')
+  })
+
+  it('displayText 无 data 内层时回退取顶层字段（外部 API 平铺行）', async () => {
+    const wrapper = createWrapper({
+      modelValue: { code: 'PLAIN-1', name: '平铺A' },
+      displayField: 'code',
+    })
+    await nextTick()
+    const input = wrapper.find('input')
+    expect(input.element.value).toBe('PLAIN-1')
+  })
+
+  it('弹窗表格列从 row.data 内层取列值（readCellValue 嵌套取值）', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({
+      rows: [{ id: '1', data: { code: 'BL-001', name: '盲板A' }, version: 1 }],
+      total: 1,
+    })
+    const wrapper = createWrapper({ fetchApi })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    await nextTick()
+    const vm = wrapper.vm as any
+    // fetchData 已填充 tableData
+    expect(vm.tableData.length).toBe(1)
+    // 表格列 cell 通过 readCellValue 从 data 内层取值
+    expect(vm.readCellValue(vm.tableData[0], 'code')).toBe('BL-001')
+    expect(vm.readCellValue(vm.tableData[0], 'name')).toBe('盲板A')
+    // 平铺行回退取顶层
+    expect(vm.readCellValue({ code: 'PLAIN-1' }, 'code')).toBe('PLAIN-1')
+  })
+
+  it('选中 BizDataVO 行时回填 returnFields 取 data 内层字段', async () => {
+    const setValue = vi.fn()
+    const wrapper = mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+        columns: [{ prop: 'code', label: '编号' }, { prop: 'name', label: '名称' }],
+        returnFields: { code: 'formCode', name: 'formName' },
+        displayField: 'code',
+      },
+      global: {
+        plugins: [ElementPlus],
+        provide: { formCreateInject: { api: { setValue } } },
+      },
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.handleRowClick({ id: '1', data: { code: 'BL-001', name: '盲板A' }, version: 1 })
+    await nextTick()
+    expect(wrapper.emitted('update:modelValue')).toBeTruthy()
+    expect(setValue).toHaveBeenCalledWith('formCode', 'BL-001')
+    expect(setValue).toHaveBeenCalledWith('formName', '盲板A')
   })
 })

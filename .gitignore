@@ -17,6 +17,9 @@ target/
 # Logs
 *.log
 
+# Node
+node_modules/
+
 # Superpowers subagent-driven-development progress (local tool state)
 .superpowers/
 

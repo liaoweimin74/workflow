@@ -140,6 +140,15 @@ export interface LookupFetchConfig {
   parse?: string
   /** 响应解析表达式：从 R.data 提取 total，缺省取 data.total 或数组长度 */
   totalParse?: string
+  /** 搜索关键字映射的 API 参数名，默认 'keyword' */
+  searchParam?: string
+  /** 搜索字段列名（底表 API 用；如 keywordColumn=name 表示按 name 列模糊搜索） */
+  keywordColumn?: string
+  /**
+   * 页码基准：1（默认，页码按原样透传，el-pagination 1 起）；
+   * 0（后端 0 起，如 biz-data 分页接口，发送 page=页码-1）
+   */
+  pageBase?: 0 | 1
   /** 请求头（可选） */
   headers?: Record<string, string>
   /** 固定请求参数（可选，与分页/关键字合并） */

@@ -11,6 +11,10 @@ export interface ColumnConfigItem {
   required: boolean
   unique: boolean
   indexed: boolean
+  /** 隐藏列（如 data-picker 引用列的 <key>_text 冗余列） */
+  hidden?: boolean
+  /** data-picker 引用配置（JSON 字符串，可空） */
+  pickerConfig?: string | null
 }
 
 /** 业务数据行 */

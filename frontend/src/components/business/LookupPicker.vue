@@ -41,9 +41,9 @@
         <el-table-column
           v-for="col in columns"
           :key="col.prop || col.label"
-          :prop="col.prop"
           :label="col.label"
           :width="col.width"
+          :formatter="(row: any) => formatCell(row, col.prop)"
         />
       </el-table>
       <div style="margin-top: 12px; display: flex; justify-content: flex-end">
@@ -71,7 +71,7 @@ import { ref, reactive, computed, inject } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LookupPickerProps, QueryParams } from './types'
-import { buildFetchApiFromConfig } from './lookupFetch'
+import { buildFetchApiFromConfig, readCellValue } from './lookupFetch'
 
 /** form-create 注入对象，提供 api.setValue 等方法 */
 interface FormCreateInject {
@@ -128,13 +128,21 @@ const displayText = computed(() => {
   if (!val) return ''
   if (Array.isArray(val)) {
     if (val.length === 0) return ''
-    return val[0][resolvedDisplayField.value] || ''
+    // 底表行业务字段在 data 内层，readCellValue 兼容内层/顶层
+    return readCellValue(val[0], resolvedDisplayField.value) || ''
   }
   if (typeof val === 'object') {
-    return val[resolvedDisplayField.value] || ''
+    return readCellValue(val, resolvedDisplayField.value) || ''
   }
   return ''
 })
+
+/** 表格单元格格式化：readCellValue 兼容 BizDataVO 内层与平铺行；对象/数组 JSON 化 */
+function formatCell(row: any, key?: string): string {
+  const v = readCellValue(row, key)
+  if (v === null || v === undefined) return ''
+  return typeof v === 'object' ? JSON.stringify(v) : String(v)
+}
 
 function openDialog() {
   if (props.disabled) return
@@ -186,7 +194,7 @@ function fillReturnFields(row: Record<string, unknown>) {
   const api = formCreateInject?.api
   if (!api || !props.returnFields) return
   for (const [sourceField, targetField] of Object.entries(props.returnFields)) {
-    api.setValue(targetField, row[sourceField] ?? null)
+    api.setValue(targetField, readCellValue(row, sourceField) ?? null)
   }
 }
 
@@ -221,5 +229,5 @@ function handleClear() {
   clearReturnFields()
 }
 
-defineExpose({ openDialog, closeDialog: () => { dialogVisible.value = false } })
+defineExpose({ openDialog, closeDialog: () => { dialogVisible.value = false }, readCellValue })
 </script>

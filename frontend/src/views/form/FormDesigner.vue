@@ -66,8 +66,11 @@
     <!-- LookupPicker（字典选择器）数据源配置 -->
     <LookupPickerConfigDialog
       v-model="lookupDialogVisible"
+      :target-forms="lookupTargetForms"
       :current-fields="currentFieldKeys"
+      :target-columns="lookupTargetColumns"
       :lookup-props="currentLookupProps"
+      @source-change="handleLookupSourceChange"
       @confirm="handleLookupConfirm"
     />
   </div>
@@ -400,6 +403,8 @@ function handlePickerConfirm(newProps: Record<string, any>) {
 
 // ===== LookupPicker（字典选择器）配置 =====
 const lookupDialogVisible = ref(false)
+const lookupTargetForms = ref<FormDefinitionDTO[]>([])
+const lookupTargetColumns = ref<ColumnConfigItem[]>([])
 /** 当前 schema 中的 LookupPicker 字段（field → props） */
 const lookupFields = computed<{ field: string; props: Record<string, any> }[]>(() => {
   const fields: { field: string; props: Record<string, any> }[] = []
@@ -428,7 +433,32 @@ function openLookupConfig() {
     return
   }
   selectedLookupField.value = lookupFields.value[0].field
+  try {
+    // 预加载已发布业务表单，供底表模式选择
+    void formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
+      .then((res) => { lookupTargetForms.value = res.data.content || [] })
+      .catch(() => { lookupTargetForms.value = [] })
+  } catch {
+    lookupTargetForms.value = []
+  }
+  // 当前字段已配置底表数据源时预加载其列，避免重新打开弹窗时列下拉为空、列标题退化为字段标识
+  const existingSource = currentLookupProps.value.sourceFormKey
+  if (existingSource) {
+    void handleLookupSourceChange(existingSource)
+  } else {
+    lookupTargetColumns.value = []
+  }
   lookupDialogVisible.value = true
+}
+
+async function handleLookupSourceChange(formKey: string) {
+  try {
+    const res = await formApi.getFormDefinitionByKey(formKey)
+    const cc = res.data.columnConfig
+    lookupTargetColumns.value = cc ? JSON.parse(cc) : []
+  } catch {
+    lookupTargetColumns.value = []
+  }
 }
 
 function handleLookupConfirm(newProps: Record<string, any>) {

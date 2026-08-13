@@ -1,5 +1,5 @@
 import http from '@/utils/http'
-import type { LookupFetchConfig, QueryParams, TableColumn } from './types'
+import type { LookupFetchConfig, LookupFilterConfig, QueryParams, TableColumn } from './types'
 
 /**
  * 深层取值：按点分路径从对象取值。
@@ -81,4 +81,34 @@ export function buildSnapshot(
     snapshot[col.prop] = readCellValue(row, col.prop)
   }
   return snapshot
+}
+
+/**
+ * 解析筛选配置为底表 filter JSON 对象（供 params.filter）。
+ * - 静态条件：value 用固定值；动态条件：经 getFieldValue 读取当前表单字段值
+ * - 动态字段值缺失（null/undefined/''）→ value 置 null（等值恒不匹配，列表为空）
+ * - isEmpty/isNotEmpty 条件不含 value 键
+ * - 无任何条件返回 undefined
+ */
+export function resolveFilter(
+  filter: LookupFilterConfig | undefined,
+  getFieldValue: (field: string) => unknown,
+): Record<string, unknown> | undefined {
+  if (!filter || !Array.isArray(filter.conditions) || filter.conditions.length === 0) {
+    return undefined
+  }
+  const conditions = filter.conditions
+    .filter(c => c && c.column)
+    .map(c => {
+      const cond: Record<string, unknown> = { column: c.column, op: c.op || 'eq' }
+      const op = (c.op || 'eq').toLowerCase()
+      if (op !== 'isempty' && op !== 'isnotempty') {
+        cond.value = c.field ? (getFieldValue(c.field) ?? null) : c.value
+      }
+      return cond
+    })
+  if (conditions.length === 0) {
+    return undefined
+  }
+  return { logic: filter.logic || 'AND', conditions }
 }

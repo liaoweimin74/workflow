@@ -211,19 +211,21 @@ onMounted(async () => {
         sourceFormKey: '',
         displayField: '',
         columns: [],
+        searchColumns: [],
         mode: 'single',
-        returnFields: {},
         dependOn: undefined,
       },
     }),
-    // 属性设置栏：注入"数据引用配置"触发项（标准 input + click 事件，属性面板可靠渲染）
+    // 属性设置栏：注入"数据引用配置"触发项（按钮 + click 事件，样式对齐"设置事件"按钮，同 LookupPicker）
     props: () => [
       {
-        type: 'input',
+        type: 'button',
         field: 'dataPickerConfigTrigger',
         title: '',
-        value: '点击配置数据引用',
-        props: { readonly: true, placeholder: '点击配置' },
+        children: ['点击配置数据引用'],
+        native: true,
+        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        props: { size: 'small' },
         on: { click: () => openPickerConfig() },
       },
     ],

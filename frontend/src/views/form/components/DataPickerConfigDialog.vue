@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="数据引用配置" width="620px" :close-on-click-modal="false">
+  <el-dialog v-model="visible" title="数据引用配置" width="640px" :close-on-click-modal="false">
     <el-form label-width="110px" size="default">
       <el-form-item label="目标表单" required>
         <el-select v-model="form.sourceFormKey" placeholder="选择已发布的业务表单" filterable style="width: 100%" @change="handleSourceChange">
@@ -9,14 +9,21 @@
 
       <el-form-item label="显示字段" required>
         <el-select v-model="form.displayField" placeholder="选择目标表显示字段" style="width: 100%">
-          <el-option v-for="c in targetColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+          <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
         </el-select>
       </el-form-item>
 
       <el-form-item label="列表显示列">
         <el-select v-model="form.columns" multiple placeholder="弹窗表格列（默认显示字段）" style="width: 100%">
-          <el-option v-for="c in targetColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+          <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
         </el-select>
+      </el-form-item>
+
+      <el-form-item label="搜索列">
+        <el-select v-model="form.searchColumns" multiple placeholder="选择参与关键字搜索的列（默认显示字段）" style="width: 100%">
+          <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+        </el-select>
+        <span class="form-tip">支持多列全文搜索，弹窗搜索框按所选列模糊匹配（多列以 / 分隔提示）</span>
       </el-form-item>
 
       <el-form-item label="选择模式">
@@ -26,54 +33,51 @@
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item label="返回字段映射">
+      <el-form-item label="筛选条件">
         <div style="width: 100%">
-          <div v-for="(row, i) in form.returnFieldsRows" :key="i" style="display: flex; gap: 8px; margin-bottom: 8px">
-            <el-select v-model="row.source" placeholder="目标表字段" style="width: 45%">
-              <el-option v-for="c in targetColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-            </el-select>
-            <el-select v-model="row.target" placeholder="回填到当前表单字段" style="width: 45%">
-              <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
-            </el-select>
-            <el-button type="danger" link @click="form.returnFieldsRows.splice(i, 1)">删除</el-button>
-          </div>
-          <el-button type="primary" link @click="form.returnFieldsRows.push({ source: '', target: '' })">+ 添加映射</el-button>
-        </div>
-      </el-form-item>
-
-      <el-form-item label="过滤条件">
-        <div style="width: 100%">
+          <el-radio-group v-model="form.filterLogic" size="small">
+            <el-radio-button value="AND">所有（且）</el-radio-button>
+            <el-radio-button value="OR">任一（或）</el-radio-button>
+          </el-radio-group>
           <div
-            v-for="(row, i) in form.filtersRows"
+            v-for="(row, i) in form.filterRows"
             :key="i"
-            style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center"
+            style="display: flex; gap: 8px; margin-top: 8px; align-items: center"
           >
-            <el-select v-model="row.column" placeholder="目标表列" style="width: 26%">
-              <el-option v-for="c in targetColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            <el-select v-model="row.column" placeholder="目标表列" style="width: 24%">
+              <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
             </el-select>
-            <el-select v-model="row.operator" style="width: 10%">
-              <el-option value="=" label="=" />
+            <el-select v-model="row.op" style="width: 20%">
+              <el-option label="等于" value="eq" />
+              <el-option label="不等于" value="ne" />
+              <el-option label="包含" value="like" />
+              <el-option label="属于" value="in" />
+              <el-option label="为空" value="isEmpty" />
+              <el-option label="不为空" value="isNotEmpty" />
             </el-select>
-            <el-radio-group v-model="row.valueType" size="small">
-              <el-radio-button value="static">固定值</el-radio-button>
-              <el-radio-button value="field">表单字段</el-radio-button>
-            </el-radio-group>
+            <el-select v-model="row.source" style="width: 18%">
+              <el-option label="固定值" value="fixed" />
+              <el-option label="表单字段" value="field" />
+            </el-select>
             <el-select
-              v-if="row.valueType === 'field'"
-              v-model="row.value"
+              v-if="row.source === 'field'"
+              v-model="row.field"
               placeholder="当前表单字段"
               clearable
-              style="width: 30%"
+              style="width: 26%"
             >
               <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
             </el-select>
-            <el-input v-else v-model="row.value" placeholder="固定值" style="width: 30%" />
-            <el-button type="danger" link @click="form.filtersRows.splice(i, 1)">删除</el-button>
+            <el-input
+              v-else
+              v-model="row.fixedValue"
+              :placeholder="row.op === 'in' ? '多个值逗号分隔' : '固定值'"
+              style="width: 26%"
+            />
+            <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
           </div>
-          <el-button type="primary" link @click="addFilterRow">+ 添加过滤条件</el-button>
-          <div style="color: #909399; font-size: 12px; margin-top: 4px">
-            固定值直接过滤；表单字段动态引用当前表单字段值（值变化刷新选项）
-          </div>
+          <el-button type="primary" link style="margin-top: 8px" @click="addFilterRow">+ 添加筛选条件</el-button>
+          <div class="form-tip">限定可查范围（如仅查已支付订单）；动态条件依赖表单字段，值变化时自动刷新选项</div>
         </div>
       </el-form-item>
 
@@ -94,10 +98,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormDefinitionDTO } from '@/api/form'
 import type { ColumnConfigItem } from '@/api/bizData'
+
+/** 筛选条件行（对齐 LookupPicker：op + 固定值/表单字段 来源） */
+interface FilterRow {
+  column: string
+  op: string
+  source: 'fixed' | 'field'
+  fixedValue: string
+  field: string
+}
 
 const props = defineProps<{
   modelValue: boolean
@@ -122,13 +135,17 @@ const visible = computed({
   set: (v: boolean) => emit('update:modelValue', v),
 })
 
+/** 底表模式可引用列：排除隐藏列（_text 冗余列等） */
+const visibleColumns = computed(() => props.targetColumns.filter(c => !c.hidden))
+
 const form = reactive({
   sourceFormKey: '',
   displayField: '',
   columns: [] as string[],
+  searchColumns: [] as string[],
   mode: 'single',
-  returnFieldsRows: [] as { source: string; target: string }[],
-  filtersRows: [] as { column: string; operator: string; valueType: 'static' | 'field'; value: string }[],
+  filterLogic: 'AND' as 'AND' | 'OR',
+  filterRows: [] as FilterRow[],
   clearOnCascadeChange: false,
   allowCreate: false,
   viewLink: true,
@@ -142,23 +159,34 @@ watch(
       form.sourceFormKey = props.pickerProps?.sourceFormKey || ''
       form.displayField = props.pickerProps?.displayField || ''
       form.columns = [...(props.pickerProps?.columns || [])]
+      form.searchColumns = [...(props.pickerProps?.searchColumns || [])]
       form.mode = props.pickerProps?.mode || 'single'
-      const returnFields = props.pickerProps?.returnFields || {}
-      form.returnFieldsRows = Object.entries(returnFields).map(([s, t]) => ({ source: s, target: String(t) }))
-      // 过滤条件：filters（v2）优先；dependOn（v1）兼容为单条 field 型
+      // 筛选条件：filters（v3 结构化 {logic, conditions}）优先；v2 数组兼容；dependOn（v1）兼容为单条 field 型
       const filters = props.pickerProps?.filters
-      if (Array.isArray(filters) && filters.length > 0) {
-        form.filtersRows = filters.map((f: any) => ({
+      if (filters && typeof filters === 'object' && !Array.isArray(filters)) {
+        form.filterLogic = filters.logic === 'OR' ? 'OR' : 'AND'
+        form.filterRows = (filters.conditions || []).map((c: any) => ({
+          column: c.column || '',
+          op: c.op || 'eq',
+          source: c.field ? 'field' : 'fixed',
+          fixedValue: c.field ? '' : (c.value === undefined || c.value === null ? '' : String(c.value)),
+          field: c.field || '',
+        }))
+      } else if (Array.isArray(filters) && filters.length > 0) {
+        form.filterLogic = 'AND'
+        form.filterRows = filters.map((f: any) => ({
           column: f.column || '',
-          operator: f.operator || '=',
-          valueType: f.valueType === 'field' ? 'field' : 'static',
-          value: String(f.value ?? ''),
+          op: f.operator === '<>' ? 'ne' : (f.operator || '='),
+          source: f.valueType === 'field' ? 'field' : 'fixed',
+          fixedValue: f.valueType === 'field' ? '' : String(f.value ?? ''),
+          field: f.valueType === 'field' ? String(f.value ?? '') : '',
         }))
       } else {
         const dep = props.pickerProps?.dependOn
-        form.filtersRows = dep?.field && dep?.sourceColumn
-          ? [{ column: dep.sourceColumn, operator: '=', valueType: 'field', value: dep.field }]
+        form.filterRows = dep?.field && dep?.sourceColumn
+          ? [{ column: dep.sourceColumn, op: 'eq', source: 'field', fixedValue: '', field: dep.field }]
           : []
+        form.filterLogic = 'AND'
       }
       form.clearOnCascadeChange = props.pickerProps?.clearOnCascadeChange || false
       form.allowCreate = props.pickerProps?.allowCreate || false
@@ -180,11 +208,12 @@ watch(
 function handleSourceChange() {
   form.displayField = ''
   form.columns = []
-  form.filtersRows.forEach(r => { r.column = '' })
+  form.searchColumns = []
+  form.filterRows.forEach(r => { r.column = '' })
 }
 
 function addFilterRow() {
-  form.filtersRows.push({ column: '', operator: '=', valueType: 'static', value: '' })
+  form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })
 }
 
 function handleConfirm() {
@@ -192,22 +221,35 @@ function handleConfirm() {
     ElMessage.warning('请选择目标表单与显示字段')
     return
   }
-  const returnFields: Record<string, string> = {}
-  for (const row of form.returnFieldsRows) {
-    if (row.source && row.target) {
-      returnFields[row.source] = row.target
+  // 筛选条件：结构化 { logic, conditions }；isEmpty/isNotEmpty 无 value；in 逗号转数组；field 型产出 field
+  const validRows = form.filterRows.filter(r => r.column)
+  let filters: Record<string, unknown> | undefined
+  if (validRows.length > 0) {
+    filters = {
+      logic: form.filterLogic,
+      conditions: validRows.map(r => {
+        const cond: Record<string, unknown> = { column: r.column, op: r.op }
+        const isNullOp = r.op === 'isEmpty' || r.op === 'isNotEmpty'
+        if (!isNullOp) {
+          if (r.source === 'field' && r.field) {
+            cond.field = r.field
+          } else {
+            cond.value = r.op === 'in'
+              ? (r.fixedValue || '').split(',').map(s => s.trim()).filter(Boolean)
+              : r.fixedValue
+          }
+        }
+        return cond
+      }),
     }
   }
-  const filters = form.filtersRows
-    .filter(r => r.column && r.value)
-    .map(r => ({ column: r.column, operator: r.operator || '=', valueType: r.valueType, value: r.value }))
   const newProps: Record<string, any> = {
     sourceFormKey: form.sourceFormKey,
     displayField: form.displayField,
     columns: form.columns,
+    searchColumns: form.searchColumns,
     mode: form.mode,
-    returnFields,
-    filters: filters.length > 0 ? filters : undefined,
+    filters,
     clearOnCascadeChange: form.clearOnCascadeChange,
     allowCreate: form.allowCreate,
     viewLink: form.viewLink,
@@ -218,3 +260,12 @@ function handleConfirm() {
 
 defineExpose({ form })
 </script>
+
+<style scoped>
+.form-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  display: block;
+}
+</style>

@@ -1,26 +1,44 @@
 <template>
   <div class="data-picker">
+    <!-- 空值：可点击输入框（点击打开选择弹窗） -->
     <el-input
-      :model-value="displayText"
+      v-if="!hasValue"
+      :model-value="''"
       :placeholder="placeholder || '请选择'"
       :disabled="disabled || readonly"
-      :clearable="!readonly"
-      :class="{ 'pick-ref-missing': hasMissing && !readonly }"
       readonly
       @click="openDialog"
-      @clear="handleClear"
     >
       <template #prefix>
         <el-icon><Search /></el-icon>
       </template>
     </el-input>
-    <el-button
-      v-if="canView"
-      link
-      type="primary"
-      class="data-picker__view"
-      @click.stop="goView"
-    >查看</el-button>
+    <!-- 有值：Tag 列表（编辑态可 x 移除 + 选择按钮；只读态无 x） -->
+    <div v-else class="data-picker__tags">
+      <span
+        v-for="(item, i) in tagItems"
+        :key="item.id"
+        class="data-picker__tag"
+        @click="handleTagClick(item.id)"
+      >
+        <el-tag
+          :type="item.missing ? 'danger' : 'primary'"
+          :closable="!readonly"
+          size="small"
+          @close="removeTag(i)"
+        >
+          {{ item.text }}
+        </el-tag>
+      </span>
+      <el-button
+        v-if="!readonly"
+        link
+        type="primary"
+        size="small"
+        class="data-picker__select-btn"
+        @click="openDialog"
+      >选择</el-button>
+    </div>
     <el-dialog
       v-model="dialogVisible"
       :title="placeholder || '选择数据'"
@@ -31,7 +49,7 @@
       <div style="margin-bottom: 12px; display: flex; gap: 8px">
         <el-input
           v-model="keyword"
-          :placeholder="'搜索' + (displayField || '')"
+          :placeholder="searchPlaceholderText"
           clearable
           @keyup.enter="handleSearch"
         />
@@ -50,8 +68,9 @@
           v-for="col in resolvedColumns"
           :key="col"
           :prop="col"
-          :label="col"
+          :label="columnLabelMap[col] || col"
           min-width="120"
+          :formatter="(row: any) => formatCell(row, col)"
         />
       </el-table>
       <div style="margin-top: 12px; display: flex; justify-content: flex-end">
@@ -72,6 +91,20 @@
         <el-button v-if="isMultiple" type="primary" @click="confirmSelection">确定</el-button>
       </template>
     </el-dialog>
+    <!-- 点击 Tag：记录详情弹窗（只读展示目标记录各字段） -->
+    <el-dialog
+      v-model="detailVisible"
+      :title="'记录详情'"
+      width="600px"
+      :close-on-click-modal="false"
+      append-to-body
+    >
+      <el-descriptions :column="1" border v-loading="detailLoading">
+        <el-descriptions-item v-for="col in detailColumns" :key="col.key" :label="col.label">
+          {{ detailCell(col.key) }}
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
     <DataPickerCreateDialog
       v-model:visible="createDialogVisible"
       :source-form-key="sourceFormKey || ''"
@@ -82,9 +115,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, inject } from 'vue'
-import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { bizDataApi } from '@/api/bizData'
+import { formApi } from '@/api/form'
 import DataPickerCreateDialog from './DataPickerCreateDialog.vue'
 
 /** form-create 注入对象，提供 api.setValue 等方法 */
@@ -95,12 +128,28 @@ interface FormCreateInject {
   }
 }
 
-/** 过滤条件项：column 目标表列；operator 操作符（v2 仅 '='）；valueType static 固定值 / field 当前表单字段 */
-export interface FilterItem {
+/** 单条筛选条件（对齐 LookupPicker）：column 目标表列；op 运算符；value 固定值 / field 当前表单字段 */
+export interface FilterCondition {
   column: string
-  operator: string
-  valueType: 'static' | 'field'
-  value: string
+  op?: 'eq' | 'ne' | 'like' | 'in' | 'isEmpty' | 'isNotEmpty'
+  /** 固定值（field 未配置时使用） */
+  value?: unknown
+  /** 动态源：当前表单字段名（存在时条件值 = 该字段当前值，经 form-create api.getValue 读取） */
+  field?: string
+}
+
+/** 结构化筛选配置：AND（所有满足，默认）/ OR（任一满足）+ 条件列表 */
+export interface PickerFilters {
+  logic?: 'AND' | 'OR'
+  conditions: FilterCondition[]
+}
+
+/** v2 兼容：数组型过滤条件（valueType static/field） */
+interface LegacyFilterItem {
+  column: string
+  operator?: string
+  valueType?: 'static' | 'field'
+  value?: string
 }
 
 const props = withDefaults(
@@ -112,21 +161,21 @@ const props = withDefaults(
     displayField?: string
     /** 弹窗列表列（目标表列 key），缺省显示 displayField */
     columns?: string[]
+    /** 搜索列（参与关键字搜索的目标表列 key），缺省仅 displayField */
+    searchColumns?: string[]
     /** 单选/多选 */
     mode?: 'single' | 'multiple'
-    /** 返回字段映射：目标表字段 → 当前表单字段 */
-    returnFields?: Record<string, string>
-    /** 级联依赖（v1 兼容形态，等价于单条 field 型过滤条件） */
+    /** 级联依赖（v1 兼容形态，等价于单条 field 型筛选条件） */
     dependOn?: { field?: string; sourceColumn?: string }
     /** 依赖字段当前值（由父组件传入，v1 兼容触发源） */
     dependOnValue?: unknown
-    /** 过滤条件列表（v2）：static 固定值 / field 动态引用当前表单字段 */
-    filters?: FilterItem[]
-    /** 依赖条件变化时是否清空已选值与回填（默认 false：保留已选值，仅刷新选项） */
+    /** 筛选条件（结构化 {logic, conditions}；v2 数组 / v1 dependOn 兼容归一化） */
+    filters?: PickerFilters | LegacyFilterItem[]
+    /** 依赖条件变化时是否清空已选值（默认 false：保留已选值，仅刷新选项） */
     clearOnCascadeChange?: boolean
-    /** 允许新增：选择弹窗提供"新增"入口（Task 4 消费） */
+    /** 允许新增：选择弹窗提供"新增"入口 */
     allowCreate?: boolean
-    /** 只读态显示"查看"链接跳转目标记录（默认开启） */
+    /** 点击 Tag 是否可查看记录详情（默认开启） */
     viewLink?: boolean
     /** 冗余显示文本（由表单数据提供，如 <key>_text；缺省时内部 resolve 补全） */
     displayText?: string
@@ -150,11 +199,13 @@ const emit = defineEmits<{
   'update:displayText': [value: string]
 }>()
 
-const router = useRouter()
 const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
 
 const dialogVisible = ref(false)
 const createDialogVisible = ref(false)
+const detailVisible = ref(false)
+const detailLoading = ref(false)
+const detailRow = ref<any>(null)
 const loading = ref(false)
 const keyword = ref('')
 const tableData = ref<any[]>([])
@@ -167,55 +218,145 @@ const query = ref({ page: 1, size: 10 })
 
 const isMultiple = computed(() => props.mode === 'multiple')
 
-/** 归一化过滤条件：filters 优先；dependOn（v1）等价于单条 field 型 */
-const normalizedFilters = computed<FilterItem[]>(() => {
-  if (props.filters && props.filters.length > 0) return props.filters
+/** 是否有已选值：有值时不显示输入框，改为 Tag 列表 */
+const hasValue = computed(() => !!(props.modelValue))
+
+/** Tag 数据源：modelValue（逗号 id）与显示文本（_text/resolve 逗号串）按 index 对齐拆分 */
+const tagItems = computed(() => {
+  const ids = (props.modelValue || '').split(',').filter(Boolean)
+  if (ids.length === 0) return []
+  const missingSet = new Set(missingIds.value)
+  const texts = (props.displayText || resolvedDisplayText.value || '').split(',').filter(Boolean)
+  return ids.map((id, i) => ({
+    id,
+    text: missingSet.has(id)
+      ? (props.readonly ? id : '引用数据已删除')
+      : (texts[i] !== undefined && texts[i] !== '' ? texts[i] : id),
+    missing: missingSet.has(id),
+  }))
+})
+
+/** 归一化筛选条件为结构化 {logic, conditions}：filters（v3 结构化/v2 数组）优先；dependOn（v1）兼容为单条 field 型 */
+const normalizedFilters = computed<PickerFilters>(() => {
+  const f = props.filters
+  if (f && !Array.isArray(f) && Array.isArray(f.conditions)) {
+    return { logic: f.logic || 'AND', conditions: f.conditions }
+  }
+  if (Array.isArray(f) && f.length > 0) {
+    return {
+      logic: 'AND',
+      conditions: f.map((item: LegacyFilterItem) => {
+        const cond: FilterCondition = { column: item.column, op: 'eq' }
+        if (item.valueType === 'field') {
+          cond.field = item.value || ''
+        } else {
+          cond.value = item.value ?? ''
+        }
+        return cond
+      }),
+    }
+  }
   if (props.dependOn?.field && props.dependOn?.sourceColumn) {
-    return [{ column: props.dependOn.sourceColumn, operator: '=', valueType: 'field', value: props.dependOn.field }]
+    return {
+      logic: 'AND',
+      conditions: [{ column: props.dependOn.sourceColumn, op: 'eq', field: props.dependOn.field }],
+    }
   }
-  return []
+  return { logic: 'AND', conditions: [] }
 })
 
-/** 查询 filter：static 直接取值；field 读当前表单字段值（空值跳过该条件） */
+/** 查询 filter：结构化 {logic, conditions}；field 型读当前表单字段值（空值跳过该条件） */
 const queryFilter = computed(() => {
-  const f: Record<string, unknown> = {}
-  for (const item of normalizedFilters.value) {
-    const v = item.valueType === 'field'
-      ? formCreateInject?.api?.getValue?.(item.value)
-      : item.value
-    if (v === undefined || v === null || v === '') continue
-    f[item.column] = v
+  const nf = normalizedFilters.value
+  const conds: Record<string, unknown>[] = []
+  for (const c of nf.conditions) {
+    const cond: Record<string, unknown> = { column: c.column, op: c.op || 'eq' }
+    if (c.field) {
+      const v = formCreateInject?.api?.getValue?.(c.field)
+      if (v === undefined || v === null || v === '') continue
+      cond.value = v
+    } else {
+      if (c.op === 'isEmpty' || c.op === 'isNotEmpty') {
+        // 无 value
+      } else if (c.value === undefined || c.value === null) {
+        continue
+      } else {
+        cond.value = c.value
+      }
+    }
+    conds.push(cond)
   }
-  return Object.keys(f).length > 0 ? f : undefined
+  if (conds.length === 0) return undefined
+  return { logic: nf.logic || 'AND', conditions: conds }
 })
 
-/** 级联依赖字段（field 型条件的 value），值变化时联动刷新选项 */
+/** 级联依赖字段（field 型条件的 field），值变化时联动刷新选项 */
 const dependFields = computed<string[]>(() =>
-  normalizedFilters.value.filter(f => f.valueType === 'field').map(f => f.value),
+  normalizedFilters.value.conditions.filter(c => c.field).map(c => c.field as string),
 )
 
-/** 悬空引用：resolve 缺失的记录 id 数 */
-const hasMissing = computed(() => missingIds.value.length > 0)
-
-/** 显示文本：优先外部冗余文本（_text）；编辑态悬空提示；否则内部 resolve 结果 */
-const displayText = computed(() => {
-  if (props.displayText) return props.displayText
-  if (hasMissing.value && !props.readonly) {
-    return `${missingIds.value.length} 条引用数据已删除`
-  }
-  return resolvedDisplayText.value
-})
-
-/** 只读态可跳转查看：非空值 + 开启 viewLink */
-const canView = computed(() => {
-  if (!props.viewLink || props.readonly !== true) return false
-  return !!(props.modelValue && props.sourceFormKey)
+/** 搜索列：显式配置优先，缺省仅显示字段 */
+const resolvedSearchColumns = computed<string[]>(() => {
+  if (props.searchColumns && props.searchColumns.length > 0) return props.searchColumns
+  return props.displayField ? [props.displayField] : []
 })
 
 const resolvedColumns = computed(() => {
   const cols = props.columns && props.columns.length > 0 ? props.columns : [props.displayField]
-  return cols.filter(Boolean)
+  return cols.filter((c): c is string => !!c)
 })
+
+/** 目标表单列 key → label 映射（弹窗列头/详情显示中文；获取失败回退 key） */
+const columnLabelMap = ref<Record<string, string>>({})
+/** 详情弹窗展示列（目标表单非隐藏列） */
+const detailColumns = ref<{ key: string; label: string }[]>([])
+
+async function loadColumnLabels() {
+  if (!props.sourceFormKey) return
+  try {
+    const res = await formApi.getFormDefinitionByKey(props.sourceFormKey)
+    const cc = res.data.columnConfig
+    const map: Record<string, string> = {}
+    const detail: { key: string; label: string }[] = []
+    if (cc) {
+      for (const c of JSON.parse(cc) as { key: string; label?: string; hidden?: boolean }[]) {
+        if (c.key && c.label) map[c.key] = c.label
+        if (c.key && !c.hidden) detail.push({ key: c.key, label: c.label || c.key })
+      }
+    }
+    columnLabelMap.value = map
+    detailColumns.value = detail
+  } catch {
+    columnLabelMap.value = {}
+    detailColumns.value = []
+  }
+}
+
+/** 搜索框提示：按搜索列中文 label 拼接（多列以 / 分隔），对齐 LookupPicker.searchInputPlaceholder */
+const searchPlaceholderText = computed(() => {
+  const cols = resolvedSearchColumns.value
+  if (cols.length === 0) return '请输入关键字搜索'
+  const labels = cols.map(c => columnLabelMap.value[c] || c)
+  return `搜索${labels.join('/')}`
+})
+
+/** 行单元格取值：兼容 BizDataVO 内层（row.data[key]）与平铺行（row[key]），对齐 LookupPicker.readCellValue */
+function readCell(row: any, key: string): unknown {
+  if (row == null || !key) return undefined
+  const inner = row.data != null && typeof row.data === 'object' ? row.data[key] : undefined
+  return inner !== undefined ? inner : row[key]
+}
+
+function formatCell(row: any, key: string): string {
+  const v = readCell(row, key)
+  if (v === null || v === undefined) return ''
+  return typeof v === 'object' ? JSON.stringify(v) : String(v)
+}
+
+/** 详情弹窗单元格取值 */
+function detailCell(key: string): string {
+  return formatCell(detailRow.value, key)
+}
 
 watch(
   () => props.modelValue,
@@ -242,7 +383,6 @@ watch(
       emit('update:displayText', '')
       resolvedDisplayText.value = ''
       missingIds.value = []
-      clearReturnFields()
     }
     if (dialogVisible.value) {
       fetchData()
@@ -260,7 +400,6 @@ async function resolveDisplay(val: string) {
     missingIds.value = parts.filter(p => p.missing).map(p => p.id)
     resolvedDisplayText.value = parts.map(p => (p.missing ? p.id : p.text)).join(',')
   } catch {
-    // 解析失败显示原始 id
     resolvedDisplayText.value = val
     missingIds.value = []
   }
@@ -272,16 +411,18 @@ function openDialog() {
   keyword.value = ''
   query.value.page = 1
   tempSelection.value = []
+  loadColumnLabels()
   fetchData()
 }
 
 async function fetchData() {
   loading.value = true
   try {
-    const params: any = { ...query.value }
-    if (keyword.value && props.displayField) {
+    // 后端分页 0 起（OFFSET = page*size），el-pagination 为 1 起 → 发送时 -1（对齐 BizDataListPage 惯例）
+    const params: any = { ...query.value, page: query.value.page - 1 }
+    if (keyword.value && resolvedSearchColumns.value.length > 0) {
       params.keyword = keyword.value
-      params.keywordColumn = props.displayField
+      params.keywordColumn = resolvedSearchColumns.value.join(',')
     }
     if (queryFilter.value) {
       params.filter = queryFilter.value
@@ -294,11 +435,35 @@ async function fetchData() {
   }
 }
 
-/** 跳转查看：目标表单列表页，携带 detail 参数定位记录（BizDataListPage 消费） */
-function goView() {
-  const firstId = (props.modelValue || '').split(',')[0]
-  if (!props.sourceFormKey || !firstId) return
-  router.push({ path: `/biz-data/${props.sourceFormKey}`, query: { detail: firstId } })
+/** 点击 Tag 主体：打开记录详情弹窗（加载目标记录 + 展示各字段） */
+async function handleTagClick(id: string) {
+  if (!props.sourceFormKey || !id) return
+  if (props.viewLink === false) return
+  detailVisible.value = true
+  detailLoading.value = true
+  detailRow.value = null
+  try {
+    await loadColumnLabels()
+    const res = await bizDataApi.detail(props.sourceFormKey, id)
+    detailRow.value = res.data
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+/** 点击 Tag 右上角 x：移除该条引用（单选清空；多选剔除该 id 保留其余） */
+function removeTag(index: number) {
+  const ids = (props.modelValue || '').split(',').filter(Boolean)
+  if (index < 0 || index >= ids.length) return
+  ids.splice(index, 1)
+  const texts = (props.displayText || resolvedDisplayText.value || '').split(',').filter(Boolean)
+  texts.splice(index, 1)
+  const newIds = ids.join(',')
+  const newText = texts.join(',')
+  emit('update:modelValue', newIds)
+  emit('update:displayText', newText)
+  resolvedDisplayText.value = newText
+  missingIds.value = []
 }
 
 /** 打开"新增"弹窗（allowCreate=true 时由 footer 按钮触发） */
@@ -307,8 +472,8 @@ function openCreateDialog() {
 }
 
 /**
- * 新增成功（DataPickerCreateDialog emit，携带 BizDataVO）：单选自动选中并回填，多选刷新列表供勾选。
- * 平铺 data 内层字段 + id，供 selectValue / fillReturnFields 取值。
+ * 新增成功（DataPickerCreateDialog emit，携带 BizDataVO）：单选自动选中，多选刷新列表供勾选。
+ * 平铺 data 内层字段 + id，供 selectValue 取值。
  */
 async function handleCreateSuccess(row: Record<string, any>) {
   createDialogVisible.value = false
@@ -343,39 +508,10 @@ function confirmSelection() {
 
 function selectValue(rows: any[]) {
   const ids = rows.map(r => String(r.id)).join(',')
-  const texts = rows.map(r => (props.displayField ? String(r[props.displayField] ?? '') : '')).join(',')
+  const texts = rows.map(r => (props.displayField ? String(readCell(r, props.displayField) ?? '') : '')).join(',')
   emit('update:modelValue', ids)
   resolvedDisplayText.value = texts
-  if (rows.length > 0) {
-    fillReturnFields(rows[0])
-  }
 }
-
-function handleClear() {
-  emit('update:modelValue', '')
-  emit('update:displayText', '')
-  resolvedDisplayText.value = ''
-  clearReturnFields()
-}
-
-/** 回填：选中记录字段 → 当前表单其他字段 */
-function fillReturnFields(row: Record<string, unknown>) {
-  const api = formCreateInject?.api
-  if (!api || !props.returnFields) return
-  for (const [sourceField, targetField] of Object.entries(props.returnFields)) {
-    api.setValue(targetField, row[sourceField] ?? null)
-  }
-}
-
-function clearReturnFields() {
-  const api = formCreateInject?.api
-  if (!api || !props.returnFields) return
-  for (const targetField of Object.values(props.returnFields)) {
-    api.setValue(targetField, null)
-  }
-}
-
-defineExpose({ openDialog })
 </script>
 
 <style scoped>
@@ -385,12 +521,10 @@ defineExpose({ openDialog })
   gap: 4px;
 }
 
-.data-picker__view {
-  flex-shrink: 0;
-}
-
-/* 悬空引用（引用数据已删除）标红提示 */
-.data-picker :deep(.el-input.pick-ref-missing .el-input__inner) {
-  color: #f56c6c;
+.data-picker__tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 </style>

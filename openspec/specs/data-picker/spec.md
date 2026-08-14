@@ -10,22 +10,15 @@ TBD - created by archiving change data-picker-v2. Update Purpose after archive.
 
 配置弹窗 SHALL 支持：选择目标业务表单（仅列出已发布 BUSINESS 类型表单）、选择显示字段（目标表单非隐藏列）、选择弹窗列表列（目标表单非隐藏列）、选择模式（单选/多选）。
 
-配置弹窗 SHALL 支持配置返回字段映射（目标表字段 → 当前表单字段），选中记录后自动回填到当前表单对应字段。
-
 配置弹窗 SHALL 支持配置级联依赖（当前表单字段 + 目标表单列），级联依赖可选。
 
-配置结果 SHALL 以 rule props 形式存入表单 schema，包含 sourceFormKey、displayField、columns、mode、returnFields、dependOn 字段。
+配置结果 SHALL 以 rule props 形式存入表单 schema，包含 sourceFormKey、displayField、columns、mode、filters、clearOnCascadeChange、allowCreate、viewLink 字段。
 
 #### Scenario: 配置数据引用组件
 
 - **WHEN** 用户在设计器中拖入"数据引用"组件并打开配置弹窗
 - **AND** 选择目标表单 emp_profile、显示字段 name、列表列 [name, dept]、单选模式
 - **THEN** 组件 rule props 写入 sourceFormKey=emp_profile、displayField=name、columns=[name,dept]、mode=single
-
-#### Scenario: 配置返回字段映射
-
-- **WHEN** 用户在配置弹窗中添加返回字段映射 dept → emp_dept
-- **THEN** rule props 的 returnFields 包含 {"dept":"emp_dept"}
 
 #### Scenario: 配置级联依赖
 
@@ -47,15 +40,13 @@ TBD - created by archiving change data-picker-v2. Update Purpose after archive.
 
 单选模式下点击行 SHALL 立即选中并关闭弹窗；多选模式下 SHALL 提供确认按钮。
 
-选中后 SHALL 触发返回字段回填：按 returnFields 配置将目标记录字段写入当前表单对应字段。
-
 组件 SHALL 支持级联：配置了依赖条件（filters 中 valueType=field 的条目，或兼容形态 dependOn）时，依赖字段值变化 SHALL 刷新选项列表（以依赖字段值作为 filter 查询目标表）。
 
 级联行为 SHALL 由 clearOnCascadeChange 配置控制（默认 false）：
-- 为 false 时，依赖字段值变化 SHALL 保留当前选择值与回填字段，仅刷新选项列表；
-- 为 true 时，依赖字段值变化 SHALL 清空当前选择与回填字段，并刷新选项列表。
+- 为 false 时，依赖字段值变化 SHALL 保留当前选择值，仅刷新选项列表；
+- 为 true 时，依赖字段值变化 SHALL 清空当前选择值，并刷新选项列表。
 
-组件 SHALL 支持清除：清空选择时 SHALL 同时清空回填字段。
+组件 SHALL 支持清除：清空选择时 SHALL 清空组件值。
 
 #### Scenario: 单选选择记录
 
@@ -70,30 +61,24 @@ TBD - created by archiving change data-picker-v2. Update Purpose after archive.
 - **THEN** 组件值更新为多个 id（逗号分隔）
 - **AND** 输入框显示多条显示文本（逗号分隔）
 
-#### Scenario: 选中后回填
-
-- **WHEN** 用户选中记录且配置了 returnFields
-- **THEN** 按映射将目标记录字段值写入当前表单对应字段
-
 #### Scenario: 级联依赖刷新（默认保留已选值）
 
 - **WHEN** 用户修改依赖字段的值
 - **AND** 组件配置了依赖条件且 clearOnCascadeChange=false（默认）
-- **THEN** 当前选择值与回填字段被保留
+- **THEN** 当前选择值被保留
 - **AND** 选项列表按新依赖值重新查询
 
 #### Scenario: 级联依赖刷新（配置清空）
 
 - **WHEN** 用户修改依赖字段的值
 - **AND** 组件配置了依赖条件且 clearOnCascadeChange=true
-- **THEN** 当前选择值与回填字段被清空
+- **THEN** 当前选择值被清空
 - **AND** 选项列表按新依赖值重新查询
 
 #### Scenario: 清除选择
 
 - **WHEN** 用户点击输入框清除按钮
 - **THEN** 组件值清空
-- **AND** returnFields 对应的回填字段清空
 
 ---
 
@@ -115,47 +100,60 @@ TBD - created by archiving change data-picker-v2. Update Purpose after archive.
 - **AND** deleted_col 不在目标表单 column_config
 - **THEN** 系统返回 400，提示引用列已不存在
 
-### Requirement: 过滤条件配置
+### Requirement: 筛选条件配置
 
-数据引用组件 SHALL 支持配置多条过滤条件（filters），每条条件包含目标表单列（column）、操作符（operator）、值类型（valueType）与值（value）。
+数据引用组件 SHALL 支持配置筛选条件（filters），结构化格式 `{logic, conditions}`：logic 为 AND（所有满足，默认）或 OR（任一满足），每条 condition 包含目标表单列（column）、操作符（op）与值。
 
-值类型 SHALL 支持两种：
-- static：固定值，直接作为查询过滤条件；
-- field：动态引用当前表单某个字段的值，字段值变化时作为查询过滤条件刷新选项。
+值来源 SHALL 支持两种：
+- 固定值（value）：直接作为查询过滤条件；
+- 表单字段（field）：动态引用当前表单某个字段的值，字段值变化时作为查询过滤条件刷新选项。
 
-操作符 v2 SHALL 仅支持等值（"="）。
+操作符 SHALL 支持：eq（等于）、ne（不等于）、like（包含）、in（属于，值逗号分隔为数组）、isEmpty（为空）、isNotEmpty（不为空）。
 
-配置弹窗 SHALL 提供过滤条件编辑器：动态行添加/删除条件，每行配置目标列、操作符、值类型、值（static 时输入固定值，field 时选择当前表单字段）。
+配置弹窗 SHALL 提供筛选条件编辑器：AND/OR 切换、动态行添加/删除条件，每行配置目标列、操作符、值来源（固定值/表单字段）与值（固定值时输入，表单字段时选择当前表单字段）。
 
-兼容性：运行时 SHALL 归一化兼容 v1 的 dependOn 配置（等价于单条 valueType=field 的过滤条件），filters 存在时优先使用 filters。
+搜索 SHALL 支持配置搜索列（searchColumns）：目标表单列多选（默认仅显示字段），弹窗搜索框按所选列模糊匹配，多列以 / 分隔提示。
+
+兼容性：运行时 SHALL 归一化兼容 v1 的 dependOn 配置（等价于单条 field 型 eq 条件）与 v2 的数组型 filters（valueType static/field），结构化 filters 存在时优先使用。
 
 发布校验 SHALL 验证 filters 中每条 column 存在于目标表单 column_config（非 hidden 列），校验失败返回 400 并提示具体缺失项。
 
-#### Scenario: 配置固定值过滤条件
+#### Scenario: 配置固定值筛选条件
 
-- **WHEN** 用户在配置弹窗添加过滤条件：目标列 status、操作符 =、值类型 static、值 active
-- **THEN** rule props 的 filters 包含 {"column":"status","operator":"=","valueType":"static","value":"active"}
+- **WHEN** 用户在配置弹窗添加筛选条件：目标列 status、操作符 eq、固定值 active
+- **THEN** rule props 的 filters 包含 {"logic":"AND","conditions":[{"column":"status","op":"eq","value":"active"}]}
 
-#### Scenario: 配置字段动态过滤条件
+#### Scenario: 配置字段动态筛选条件
 
-- **WHEN** 用户在配置弹窗添加过滤条件：目标列 dept、操作符 =、值类型 field、当前表单字段 dept_field
-- **THEN** rule props 的 filters 包含 {"column":"dept","operator":"=","valueType":"field","value":"dept_field"}
+- **WHEN** 用户在配置弹窗添加筛选条件：目标列 dept、操作符 eq、表单字段 dept_field
+- **THEN** rule props 的 filters 包含 {"logic":"AND","conditions":[{"column":"dept","op":"eq","field":"dept_field"}]}
 
-#### Scenario: 过滤条件参与选项查询
+#### Scenario: 配置 OR 与非等值操作符
 
-- **WHEN** 用户打开选择弹窗且组件配置了 static 过滤条件 status=active
+- **WHEN** 用户在配置弹窗设置 logic=OR 并添加条件 status ne closed、dept isEmpty
+- **THEN** rule props 的 filters 包含 {"logic":"OR","conditions":[{"column":"status","op":"ne","value":"closed"},{"column":"dept","op":"isEmpty"}]}
+
+#### Scenario: 配置搜索列
+
+- **WHEN** 用户在配置弹窗选择搜索列 name、dept
+- **THEN** rule props 的 searchColumns 包含 ["name","dept"]
+- **AND** 弹窗搜索框提示为"搜索姓名/部门"
+
+#### Scenario: 筛选条件参与选项查询
+
+- **WHEN** 用户打开选择弹窗且组件配置了固定值筛选条件 status=active
 - **THEN** 选项列表仅返回目标表单中 status=active 的记录
 
-#### Scenario: 字段动态过滤条件联动刷新
+#### Scenario: 字段动态筛选条件联动刷新
 
 - **WHEN** 用户修改当前表单字段 dept_field 的值
-- **AND** 组件配置了 valueType=field 的过滤条件
+- **AND** 组件配置了 field 型筛选条件
 - **THEN** 选项列表按新值重新查询
 
-#### Scenario: 发布校验过滤条件引用列
+#### Scenario: 发布校验筛选条件引用列
 
 - **WHEN** 发布 schema 含 dataPicker 且 filters 中某条 column 已不在目标表单 column_config
-- **THEN** 系统返回 400，提示过滤条件引用列已不存在
+- **THEN** 系统返回 400，提示筛选条件引用列已不存在
 
 ---
 
@@ -194,7 +192,7 @@ TBD - created by archiving change data-picker-v2. Update Purpose after archive.
 
 allowCreate=true 时，选择弹窗 SHALL 提供"新增"入口；点击 SHALL 打开目标表单的快速创建界面。
 
-快速创建提交成功 SHALL：刷新选项列表 → 自动选中新创建的记录 → 执行 returnFields 回填 → 更新组件值。
+快速创建提交成功 SHALL：刷新选项列表 → 自动选中新创建的记录 → 更新组件值。
 
 权限 SHALL 沿用 v1 数据范围策略（能管理目标表单即能新增）。
 
@@ -209,7 +207,6 @@ allowCreate=true 时，选择弹窗 SHALL 提供"新增"入口；点击 SHALL �
 - **THEN** 选项列表刷新
 - **AND** 新记录被自动选中
 - **AND** 组件值更新为新记录 id
-- **AND** returnFields 回填执行
 
 #### Scenario: 未启用时无新增入口
 
@@ -218,24 +215,41 @@ allowCreate=true 时，选择弹窗 SHALL 提供"新增"入口；点击 SHALL �
 
 ---
 
-### Requirement: 跳转查看关联记录
+### Requirement: 已选值 Tag 展示与记录详情弹窗
 
-数据引用组件 SHALL 支持配置跳转查看（默认开启，配置项 viewLink 可关闭）。
+dataPicker 字段有已选值时，SHALL 以 Tag 形式展示每条被引用记录（替代文本输入框），Tag 文本为显示字段值。
 
-有值且非编辑态时，显示文本 SHALL 可点击跳转至目标记录详情页。
+编辑态 Tag SHALL 右上角提供 x 角标，点击 SHALL 移除该条引用：
+- 单选：移除后组件值清空，回到可点击输入框形态；
+- 多选：剔除该 id 保留其余，并同步回写 `_text` 展示缓存。
 
-跳转目标 SHALL 基于 sourceFormKey 与记录 id 解析（复用目标表单详情能力）。
+只读态 Tag SHALL 无 x 角标（不可移除）。
 
-#### Scenario: 点击显示文本跳转详情
+点击 Tag 主体 SHALL 打开记录详情弹窗（默认开启，配置项 viewLink 可关闭）：弹窗 SHALL 加载目标记录（基于 sourceFormKey 与记录 id）并展示目标表单非隐藏列的各字段值（label 为列中文名）。
 
-- **WHEN** 只读态下用户点击 dataPicker 的显示文本
-- **AND** 组件值非空
-- **THEN** 跳转至目标表单（sourceFormKey）对应记录（id）的详情页
+编辑态已选值时，Tag 旁 SHALL 提供"选择"按钮用于重新打开选择弹窗。
 
-#### Scenario: 关闭跳转后不可点击
+#### Scenario: 编辑态已选值显示 Tag 并可移除
+
+- **WHEN** 编辑态下 dataPicker 值包含记录 t1（显示"张三"）
+- **THEN** 组件显示 Tag"张三"（右上角 x 角标）
+- **AND** 点击 x 后值清空并回到输入框形态
+
+#### Scenario: 多选移除单个 Tag 保留其余
+
+- **WHEN** 多选模式下值包含 t1,t2（显示"张三,李四"）且点击第一个 Tag 的 x
+- **THEN** 组件值更新为 t2、展示缓存更新为"李四"
+
+#### Scenario: 点击 Tag 打开记录详情弹窗
+
+- **WHEN** 用户点击已选记录 Tag
+- **AND** 组件配置 viewLink=true（默认）
+- **THEN** 打开详情弹窗并展示目标记录各字段（如"姓名：张三"）
+
+#### Scenario: 关闭 viewLink 后 Tag 不可点击
 
 - **WHEN** 组件配置 viewLink=false
-- **THEN** 显示文本不可点击跳转
+- **THEN** 点击 Tag 不打开详情弹窗
 
 ---
 

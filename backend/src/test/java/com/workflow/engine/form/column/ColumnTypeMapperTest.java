@@ -2,6 +2,7 @@ package com.workflow.engine.form.column;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -98,5 +99,34 @@ class ColumnTypeMapperTest {
         assertThat(ColumnTypeMapper.isAllowedColumnType("DECIMAL")).isTrue();
         assertThat(ColumnTypeMapper.isAllowedColumnType("BLOB")).isFalse();
         assertThat(ColumnTypeMapper.isAllowedColumnType(null)).isFalse();
+    }
+
+    @Test
+    void mapPicker_returnsTwoColumns_idAndHiddenText() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapPickerToColumns("emp_id",
+                Map.of("sourceFormKey", "emp_profile", "displayField", "name", "mode", "single"));
+
+        assertThat(cols).hasSize(2);
+        assertThat(cols.get(0).getKey()).isEqualTo("emp_id");
+        assertThat(cols.get(0).getColumnType()).isEqualTo("VARCHAR");
+        assertThat(cols.get(0).getLength()).isEqualTo(64);
+        assertThat(cols.get(0).getPickerConfig()).contains("emp_profile");
+        assertThat(cols.get(0).getPickerConfig()).contains("name");
+        assertThat(cols.get(0).isHidden()).isFalse();
+
+        assertThat(cols.get(1).getKey()).isEqualTo("emp_id_text");
+        assertThat(cols.get(1).getColumnType()).isEqualTo("VARCHAR");
+        assertThat(cols.get(1).getLength()).isEqualTo(1024);
+        assertThat(cols.get(1).isHidden()).isTrue();
+    }
+
+    @Test
+    void mapPicker_missingProps_stillGeneratesTwoColumns() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapPickerToColumns("ref", Map.of());
+
+        assertThat(cols).hasSize(2);
+        assertThat(cols.get(0).getKey()).isEqualTo("ref");
+        assertThat(cols.get(1).getKey()).isEqualTo("ref_text");
+        assertThat(cols.get(1).isHidden()).isTrue();
     }
 }

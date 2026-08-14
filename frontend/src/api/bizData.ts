@@ -11,6 +11,10 @@ export interface ColumnConfigItem {
   required: boolean
   unique: boolean
   indexed: boolean
+  /** 隐藏列（如 data-picker 引用列的 <key>_text 冗余列） */
+  hidden?: boolean
+  /** data-picker 引用配置（JSON 字符串，可空） */
+  pickerConfig?: string | null
 }
 
 /** 业务数据行 */
@@ -64,5 +68,12 @@ export const bizDataApi = {
 
   remove(formKey: string, id: string): Promise<R<void>> {
     return http.delete(`/v1/biz-data/${formKey}/${id}`)
+  },
+
+  /** 批量解析数据显示文本（data-picker 引用还原） */
+  resolve(formKey: string, ids: string[], displayField?: string): Promise<R<Record<string, string>>> {
+    return http.get(`/v1/biz-data/${formKey}/resolve`, {
+      params: { ids: ids.join(','), displayField },
+    })
   },
 }

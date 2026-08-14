@@ -134,4 +134,76 @@ class FormDefinitionPublishBusinessTest {
 
         verify(tableManager).ensureTable(eq("biz_leave"), anyList());
     }
+
+    // ==================== data-picker 发布校验 ====================
+
+    private String pickerSchema(String sourceFormKey, String displayField) {
+        return "{\"rule\":[{\"type\":\"dataPicker\",\"field\":\"emp_id\",\"props\":{"
+                + "\"sourceFormKey\":\"" + sourceFormKey + "\","
+                + "\"displayField\":\"" + displayField + "\","
+                + "\"columns\":[\"" + displayField + "\"],\"mode\":\"single\"}}]}";
+    }
+
+    private FormDefinition targetForm(String key, String columnConfig) {
+        FormDefinition t = new FormDefinition();
+        t.setId("target-1");
+        t.setTenantId(TENANT_ID);
+        t.setKey(key);
+        t.setType("BUSINESS");
+        t.setSchema("[]");
+        t.setColumnConfig(columnConfig);
+        t.setVersion(1);
+        t.setStatus("PUBLISHED");
+        return t;
+    }
+
+    @Test
+    void publish_withPicker_targetFormNotPublished_rejected() {
+        FormDefinition d = draft("f1", "biz_leave", "BUSINESS",
+                pickerSchema("emp_profile", "name"),
+                "[{\"key\":\"emp_id\",\"columnType\":\"VARCHAR\",\"length\":64}]");
+        stubDraft(d);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "emp_profile", "PUBLISHED")).thenReturn(Optional.empty());
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> formDefService.publish("f1"));
+
+        assertTrue(ex.getMessage().contains("目标表单"));
+        verify(tableManager, never()).ensureTable(anyString(), anyList());
+    }
+
+    @Test
+    void publish_withPicker_displayFieldDeleted_rejected() {
+        FormDefinition d = draft("f1", "biz_leave", "BUSINESS",
+                pickerSchema("emp_profile", "name"),
+                "[{\"key\":\"emp_id\",\"columnType\":\"VARCHAR\",\"length\":64}]");
+        stubDraft(d);
+        // 目标表单存在但 column_config 不含 name 列
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "emp_profile", "PUBLISHED"))
+                .thenReturn(Optional.of(targetForm("emp_profile",
+                        "[{\"key\":\"dept\",\"columnType\":\"VARCHAR\",\"length\":64}]")));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> formDefService.publish("f1"));
+
+        assertTrue(ex.getMessage().contains("引用列"));
+    }
+
+    @Test
+    void publish_withPicker_validConfig_passes() {
+        FormDefinition d = draft("f1", "biz_leave", "BUSINESS",
+                pickerSchema("emp_profile", "name"),
+                "[{\"key\":\"emp_id\",\"columnType\":\"VARCHAR\",\"length\":64},"
+                        + "{\"key\":\"emp_id_text\",\"columnType\":\"VARCHAR\",\"length\":1024,\"hidden\":true}]");
+        stubDraft(d);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "emp_profile", "PUBLISHED"))
+                .thenReturn(Optional.of(targetForm("emp_profile",
+                        "[{\"key\":\"name\",\"columnType\":\"VARCHAR\",\"length\":255}]")));
+
+        FormDefinition result = formDefService.publish("f1");
+
+        assertEquals("PUBLISHED", result.getStatus());
+        verify(tableManager).ensureTable(eq("biz_leave"), anyList());
+    }
 }

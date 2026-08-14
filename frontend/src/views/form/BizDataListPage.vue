@@ -42,8 +42,8 @@ const schemaRules = ref<Rule[]>([])
 const schemaOption = ref<Record<string, any>>({})
 const loaded = ref(false)
 
-/** 业务列（可展示） */
-const bizColumns = computed(() => columnConfig.value.filter(c => !c.unsupported))
+/** 业务列（可展示，排除隐藏列） */
+const bizColumns = computed(() => columnConfig.value.filter(c => !c.unsupported && !c.hidden))
 
 /** 可筛选列（非 JSON/TEXT，且 indexed 或短文本） */
 const filterableColumns = computed(() =>
@@ -63,13 +63,20 @@ const searchFields = computed<SearchField[]>(() =>
   })),
 )
 
-/** 表格列（formatter 读 row.data[key]） */
+/** 表格列（formatter 读 row.data[key]；data-picker 引用列优先显示冗余文本） */
 const columns = computed<TableColumn[]>(() => {
   const bizCols: TableColumn[] = bizColumns.value.map(c => ({
     prop: c.key,
     label: c.label,
     minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 130,
-    formatter: (row: any) => formatCell(row.data?.[c.key]),
+    formatter: (row: any) => {
+      if (c.pickerConfig && row.data?.[c.key]) {
+        // data-picker：显示冗余文本列（<key>_text），缺省回退原值
+        const text = row.data[c.key + '_text']
+        if (text !== undefined && text !== null && text !== '') return String(text)
+      }
+      return formatCell(row.data?.[c.key])
+    },
   }))
   return [
     ...bizCols,

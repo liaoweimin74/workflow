@@ -33,6 +33,12 @@ public class ColumnConfig {
     /** 是否建普通索引（用于筛选/排序加速） */
     private boolean indexed;
 
+    /** 是否隐藏列（data-picker 冗余文本列等：不进前端默认表格列/筛选列，但参与 CRUD 写入） */
+    private boolean hidden;
+
+    /** 数据引用配置（dataPicker 字段专用：sourceFormKey/displayField/mode 的 JSON，普通列 null） */
+    private String pickerConfig;
+
     public ColumnConfig() {}
 
     public String getKey() { return key; }
@@ -58,4 +64,10 @@ public class ColumnConfig {
 
     public boolean isIndexed() { return indexed; }
     public void setIndexed(boolean indexed) { this.indexed = indexed; }
+
+    public boolean isHidden() { return hidden; }
+    public void setHidden(boolean hidden) { this.hidden = hidden; }
+
+    public String getPickerConfig() { return pickerConfig; }
+    public void setPickerConfig(String pickerConfig) { this.pickerConfig = pickerConfig; }
 }

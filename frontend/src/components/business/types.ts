@@ -130,17 +130,75 @@ export interface SearchTableProps<T = any> {
 
 // --- LookupPicker props ---
 
+/** LookupPicker 可序列化的数据源配置（替代函数 fetchApi，供设计器 schema 存取） */
+export interface LookupFetchConfig {
+  /** API 路径（相对 /api，如 /v1/biz-data/{formKey}） */
+  action: string
+  /** 请求方法，默认 GET */
+  method?: 'GET' | 'POST'
+  /** 响应解析表达式：从 R.data 提取数组，如 records / content / list */
+  parse?: string
+  /** 响应解析表达式：从 R.data 提取 total，缺省取 data.total 或数组长度 */
+  totalParse?: string
+  /** 搜索关键字映射的 API 参数名，默认 'keyword' */
+  searchParam?: string
+  /** 搜索字段列名（底表 API 用；如 keywordColumn=name 表示按 name 列模糊搜索） */
+  keywordColumn?: string
+  /**
+   * 页码基准：1（默认，页码按原样透传，el-pagination 1 起）；
+   * 0（后端 0 起，如 biz-data 分页接口，发送 page=页码-1）
+   */
+  pageBase?: 0 | 1
+  /** 请求头（可选） */
+  headers?: Record<string, string>
+  /** 固定请求参数（可选，与分页/关键字合并） */
+  data?: Record<string, unknown>
+  /** 数据源预筛选（静态 + 动态 + AND/OR）；底表数据源组装为 filter JSON，外部 API 降级为等值参数 */
+  filter?: LookupFilterConfig
+}
+
+/** 筛选运算符（底表结构化 filter 支持；外部 API 仅透传等值 eq） */
+export type FilterOperator = 'eq' | 'ne' | 'like' | 'in' | 'isEmpty' | 'isNotEmpty'
+
+/** 单条筛选条件：column 必填；field 存在时取当前表单字段值（动态），否则用 value（静态） */
+export interface FilterCondition {
+  column: string
+  op?: FilterOperator
+  /** 静态值（field 未配置时使用） */
+  value?: unknown
+  /** 动态源：当前表单字段名（存在时条件值 = 该字段当前值，经 form-create api.getValue 读取） */
+  field?: string
+}
+
+/** 数据源预筛选：静态 + 动态 + AND/OR 组合 */
+export interface LookupFilterConfig {
+  /** AND（所有条件满足，默认）| OR（任一条件满足） */
+  logic?: 'AND' | 'OR'
+  conditions: FilterCondition[]
+}
+
 export interface LookupPickerProps {
-  /** v-model 绑定选中行数据 */
-  modelValue: Record<string, any> | null | Record<string, any>[]
+  /**
+   * v-model 绑定值：
+   * - 单选（新语义）：显示文本字符串（field 绑定显示文本字段）
+   * - 单选（旧兼容）：整行对象
+   * - 多选：快照数组 [{ id, <displayField>, ...配置列 }]
+   */
+  modelValue: string | null | Record<string, any> | Record<string, any>[]
+
+  /** 选中记录 id 的独立存储字段（设计者显式配置，hidden）。选中时经 formCreateInject.api.setValue(idField, row.id) 写入 */
+  idField?: string
 
   /** 弹窗表格列定义 */
   columns: TableColumn[]
 
-  /** 数据获取函数 */
+  /** 数据获取函数（代码级注入；设计器 schema 用 fetch 配置替代） */
   fetchApi: (
     params: QueryParams & { keyword?: string },
   ) => Promise<{ rows: any[]; total: number }>
+
+  /** 可序列化的数据源配置（设计器场景，优先级低于 fetchApi：fetchApi 为函数时优先） */
+  fetch?: LookupFetchConfig
 
   /** 字段映射：选中行的 sourceField → 表单的 targetField */
   returnFields?: Record<string, string>

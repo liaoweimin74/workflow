@@ -51,16 +51,41 @@
       :existing-columns="columnConfig"
       @confirm="handleColumnConfirm"
     />
+
+    <!-- data-picker 数据引用配置 -->
+    <DataPickerConfigDialog
+      v-model="pickerDialogVisible"
+      :target-forms="pickerTargetForms"
+      :current-fields="currentFieldKeys"
+      :target-columns="pickerTargetColumns"
+      :picker-props="currentPickerProps"
+      @source-change="handlePickerSourceChange"
+      @confirm="handlePickerConfirm"
+    />
+
+    <!-- LookupPicker（查找带回）数据源配置 -->
+    <LookupPickerConfigDialog
+      v-model="lookupDialogVisible"
+      :target-forms="lookupTargetForms"
+      :current-fields="currentFieldKeys"
+      :target-columns="lookupTargetColumns"
+      :lookup-props="currentLookupProps"
+      @source-change="handleLookupSourceChange"
+      @confirm="handleLookupConfirm"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
+import formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
+import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
+import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -70,6 +95,9 @@ const loading = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
 
+// 提供给属性面板触发组件：打开数据引用配置弹窗
+provide('openDataPickerConfig', openPickerConfig)
+
 const formId = computed(() => route.query.id as string)
 const formName = ref('')
 const formStatus = ref('')
@@ -77,6 +105,46 @@ const formKey = ref('')
 const formType = ref('')
 const columnConfig = ref<ColumnConfigItem[]>([])
 const columnDialogVisible = ref(false)
+
+// ===== data-picker 配置 =====
+const pickerDialogVisible = ref(false)
+const pickerTargetForms = ref<FormDefinitionDTO[]>([])
+const pickerTargetColumns = ref<ColumnConfigItem[]>([])
+const pickerConfigDialogRef = ref<InstanceType<typeof DataPickerConfigDialog>>()
+/** 当前 schema 中的 dataPicker 字段（field → props） */
+const pickerFields = computed<{ field: string; props: Record<string, any> }[]>(() => {
+  const fields: { field: string; props: Record<string, any> }[] = []
+  const walk = (rules: any[]) => {
+    for (const r of rules) {
+      if (r?.type === 'dataPicker' && r.field) {
+        fields.push({ field: r.field, props: r.props || {} })
+      }
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(designerRule.value)
+  return fields
+})
+const selectedPickerField = ref<string>('')
+
+/** 当前表单所有字段 key（供回填映射/级联依赖的目标字段选择） */
+const currentFieldKeys = computed<string[]>(() => {
+  const keys: string[] = []
+  const walk = (rules: any[]) => {
+    for (const r of rules) {
+      if (r?.field) keys.push(r.field)
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(designerRule.value)
+  return keys
+})
+
+/** 当前选中 dataPicker 字段的 props（供配置弹窗回填） */
+const currentPickerProps = computed<Record<string, any>>(() => {
+  const found = pickerFields.value.find(f => f.field === selectedPickerField.value)
+  return found?.props || {}
+})
 
 const designerHeight = ref('calc(100vh - 50px)')
 
@@ -98,19 +166,67 @@ onMounted(async () => {
 
   // 注册 LookupPicker 到设计器拖拽面板
   designerRef.value?.addComponent({
-    label: '字典选择器',
+    label: '查找带回',
     name: 'LookupPicker',
-    rule: {
+    icon: 'icon-search',
+    menu: 'main',
+    rule: () => ({
       type: 'LookupPicker',
-      field: '',
+      field: 'lookup' + Date.now(),
       title: '选择',
       props: {
         columns: [],
-        fetchApi: null,
         displayField: '',
         returnFields: {},
+        mode: 'single',
+        idField: '',
       },
-    },
+    }),
+    // 属性设置栏：注入"数据源配置"触发项（按钮 + click 事件，样式对齐"设置事件"按钮）
+    props: () => [
+      {
+        type: 'button',
+        field: 'lookupConfigTrigger',
+        title: '',
+        children: ['点击配置数据源'],
+        native: true,
+        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        props: { size: 'small' },
+        on: { click: () => openLookupConfig() },
+      },
+    ],
+  })
+
+  // 注册数据引用（dataPicker）组件
+  designerRef.value?.addComponent({
+    label: '数据引用',
+    name: 'dataPicker',
+    icon: 'icon-link',
+    menu: 'main',
+    rule: () => ({
+      type: 'dataPicker',
+      field: 'dataPicker' + Date.now(),
+      title: '数据引用',
+      props: {
+        sourceFormKey: '',
+        displayField: '',
+        columns: [],
+        mode: 'single',
+        returnFields: {},
+        dependOn: undefined,
+      },
+    }),
+    // 属性设置栏：注入"数据引用配置"触发项（标准 input + click 事件，属性面板可靠渲染）
+    props: () => [
+      {
+        type: 'input',
+        field: 'dataPickerConfigTrigger',
+        title: '',
+        value: '点击配置数据引用',
+        props: { readonly: true, placeholder: '点击配置' },
+        on: { click: () => openPickerConfig() },
+      },
+    ],
   })
 
   loading.value = true
@@ -245,6 +361,123 @@ async function doPublish(items: ColumnConfigItem[] | null) {
   } finally {
     publishing.value = false
   }
+}
+
+// ===== data-picker 配置 =====
+async function openPickerConfig() {
+  if (pickerFields.value.length === 0) {
+    ElMessage.warning('画布中没有数据引用字段，请先拖入"数据引用"组件')
+    return
+  }
+  selectedPickerField.value = pickerFields.value[0].field
+  try {
+    const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
+    pickerTargetForms.value = res.data.content || []
+  } catch {
+    pickerTargetForms.value = []
+  }
+  pickerTargetColumns.value = []
+  pickerDialogVisible.value = true
+}
+
+async function handlePickerSourceChange(formKey: string) {
+  try {
+    const res = await formApi.getFormDefinitionByKey(formKey)
+    const cc = res.data.columnConfig
+    pickerTargetColumns.value = cc ? JSON.parse(cc) : []
+  } catch {
+    pickerTargetColumns.value = []
+  }
+}
+
+function handlePickerConfirm(newProps: Record<string, any>) {
+  const rules = designerRef.value?.getRule() || []
+  const walk = (list: any[]) => {
+    for (const r of list) {
+      if (r?.type === 'dataPicker' && r.field === selectedPickerField.value) {
+        r.props = { ...(r.props || {}), ...newProps }
+      }
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(rules)
+  designerRef.value?.setRule(rules)
+  ElMessage.success('数据引用配置已保存')
+}
+
+// ===== LookupPicker（查找带回）配置 =====
+const lookupDialogVisible = ref(false)
+const lookupTargetForms = ref<FormDefinitionDTO[]>([])
+const lookupTargetColumns = ref<ColumnConfigItem[]>([])
+/** 当前 schema 中的 LookupPicker 字段（field → props） */
+const lookupFields = computed<{ field: string; props: Record<string, any> }[]>(() => {
+  const fields: { field: string; props: Record<string, any> }[] = []
+  const walk = (rules: any[]) => {
+    for (const r of rules) {
+      if (r?.type === 'LookupPicker' && r.field) {
+        fields.push({ field: r.field, props: r.props || {} })
+      }
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(designerRule.value)
+  return fields
+})
+const selectedLookupField = ref<string>('')
+
+/** 当前选中 LookupPicker 字段的 props（供配置弹窗回填） */
+const currentLookupProps = computed<Record<string, any>>(() => {
+  const found = lookupFields.value.find(f => f.field === selectedLookupField.value)
+  return found?.props || {}
+})
+
+function openLookupConfig() {
+  if (lookupFields.value.length === 0) {
+    ElMessage.warning('画布中没有查找带回字段，请先拖入"查找带回"组件')
+    return
+  }
+  selectedLookupField.value = lookupFields.value[0].field
+  try {
+    // 预加载已发布业务表单，供底表模式选择
+    void formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
+      .then((res) => { lookupTargetForms.value = res.data.content || [] })
+      .catch(() => { lookupTargetForms.value = [] })
+  } catch {
+    lookupTargetForms.value = []
+  }
+  // 当前字段已配置底表数据源时预加载其列，避免重新打开弹窗时列下拉为空、列标题退化为字段标识
+  const existingSource = currentLookupProps.value.sourceFormKey
+  if (existingSource) {
+    void handleLookupSourceChange(existingSource)
+  } else {
+    lookupTargetColumns.value = []
+  }
+  lookupDialogVisible.value = true
+}
+
+async function handleLookupSourceChange(formKey: string) {
+  try {
+    const res = await formApi.getFormDefinitionByKey(formKey)
+    const cc = res.data.columnConfig
+    lookupTargetColumns.value = cc ? JSON.parse(cc) : []
+  } catch {
+    lookupTargetColumns.value = []
+  }
+}
+
+function handleLookupConfirm(newProps: Record<string, any>) {
+  const rules = designerRef.value?.getRule() || []
+  const walk = (list: any[]) => {
+    for (const r of list) {
+      if (r?.type === 'LookupPicker' && r.field === selectedLookupField.value) {
+        r.props = { ...(r.props || {}), ...newProps }
+      }
+      if (r?.children) walk(r.children)
+    }
+  }
+  walk(rules)
+  designerRef.value?.setRule(rules)
+  ElMessage.success('数据源配置已保存')
 }
 
 function handleBack() {

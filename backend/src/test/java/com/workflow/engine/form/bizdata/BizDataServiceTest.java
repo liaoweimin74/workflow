@@ -14,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -202,5 +203,166 @@ class BizDataServiceTest {
         assertThatThrownBy(() -> bizDataService.delete("biz_leave", "row-other-tenant"))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(404));
+    }
+
+    // ==================== data-picker 引用字段 ====================
+
+    private ColumnConfig pickerColumn(String key, String sourceFormKey) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setColumnType("VARCHAR");
+        c.setLength(64);
+        c.setPickerConfig("{\"sourceFormKey\":\"" + sourceFormKey + "\",\"displayField\":\"name\",\"mode\":\"single\"}");
+        return c;
+    }
+
+    private ColumnConfig hiddenTextColumn(String key) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setColumnType("VARCHAR");
+        c.setLength(1024);
+        c.setHidden(true);
+        return c;
+    }
+
+    @Test
+    void create_withPickerField_resolvesAndMaintainsText() {
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(pickerColumn("emp_id", "emp_profile"), hiddenTextColumn("emp_id_text")));
+        // 第一次 queryForList：resolve 目标表；第二次：findById 当前表
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(
+                        List.of(Map.of("id", "t1", "name", "张三")),
+                        List.of(Map.of(
+                                "id", "row-1",
+                                "tenant_id", TENANT_ID,
+                                "emp_id", "t1",
+                                "emp_id_text", "张三",
+                                "version", 1,
+                                "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                                "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of("emp_id", "t1"));
+
+        assertThat(vo.getData()).containsEntry("emp_id", "t1").containsEntry("emp_id_text", "张三");
+        ArgumentCaptor<Object[]> params = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave"), params.capture());
+        assertThat(params.getValue()).contains("张三");
+    }
+
+    @Test
+    void create_withPickerMissingId_rejected400() {
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(pickerColumn("emp_id", "emp_profile"), hiddenTextColumn("emp_id_text")));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> bizDataService.create("biz_leave", Map.of("emp_id", "ghost")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
+                .hasMessageContaining("引用的数据不存在");
+
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void create_withPickerMultipleIds_joinsTextInOrder() {
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(pickerColumn("emp_id", "emp_profile"), hiddenTextColumn("emp_id_text")));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(
+                        List.of(Map.of("id", "a", "name", "张三"), Map.of("id", "b", "name", "李四")),
+                        List.of(Map.of(
+                                "id", "row-1",
+                                "tenant_id", TENANT_ID,
+                                "emp_id", "a,b",
+                                "emp_id_text", "张三,李四",
+                                "version", 1,
+                                "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                                "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of("emp_id", "a,b"));
+
+        assertThat(vo.getData()).containsEntry("emp_id_text", "张三,李四");
+    }
+
+    @Test
+    void update_withPickerField_recomputesText() {
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(pickerColumn("emp_id", "emp_profile"), hiddenTextColumn("emp_id_text")));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(
+                        List.of(Map.of("id", "t1", "name", "张三")),   // update 前 findById existing
+                        List.of(Map.of("id", "t1", "name", "张三")),   // resolvePickerValues 目标表
+                        List.of(Map.of(
+                                "id", "row-1",
+                                "tenant_id", TENANT_ID,
+                                "emp_id", "t1",
+                                "emp_id_text", "张三",
+                                "version", 2,
+                                "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                                "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0))))); // 更新后 findById
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        BizDataVO vo = bizDataService.update("biz_leave", "row-1", Map.of("emp_id", "t1"), 1);
+
+        assertThat(vo.getVersion()).isEqualTo(2);
+        assertThat(vo.getData()).containsEntry("emp_id_text", "张三");
+    }
+
+    // ==================== resolve API ====================
+
+    @Test
+    void resolveDisplayTexts_batchReturnsMap() {
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "a", "name", "张三"), Map.of("id", "b", "name", "李四")));
+
+        Map<String, String> map = bizDataService.resolveDisplayTexts("emp_profile", List.of("a", "b"), "name");
+
+        assertThat(map).containsEntry("a", "张三").containsEntry("b", "李四");
+    }
+
+    @Test
+    void resolveDisplayTexts_missingIds_omitted() {
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "a", "name", "张三")));
+
+        Map<String, String> map = bizDataService.resolveDisplayTexts("emp_profile", List.of("a", "x"), "name");
+
+        assertThat(map).containsEntry("a", "张三");
+        assertThat(map).doesNotContainKey("x");
+    }
+
+    @Test
+    void resolveByFormKey_defaultDisplayField_firstNonHiddenColumn() {
+        // 列：emp_id（pickerConfig）隐藏列 emp_id_text + 普通列 name（第一个非 hidden）
+        lenient().when(tableManager.tableExists("wf_biz_emp_profile")).thenReturn(true);
+        when(formDefService.getBusinessColumnsByKey("emp_profile"))
+                .thenReturn(List.of(
+                        pickerColumn("emp_id", "x"),
+                        hiddenTextColumn("emp_id_text"),
+                        simpleColumn("name", "VARCHAR", 255)));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "a", "name", "张三")));
+
+        Map<String, String> map = bizDataService.resolveByFormKey("emp_profile", List.of("a"), null);
+
+        assertThat(map).containsEntry("a", "张三");
+    }
+
+    @Test
+    void resolveDisplayTexts_invalidDisplayField_rejected400() {
+        assertThatThrownBy(() -> bizDataService.resolveDisplayTexts("emp_profile", List.of("a"), "name; DROP"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400));
+    }
+
+    private ColumnConfig simpleColumn(String key, String type, Integer length) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setColumnType(type);
+        c.setLength(length);
+        return c;
     }
 }

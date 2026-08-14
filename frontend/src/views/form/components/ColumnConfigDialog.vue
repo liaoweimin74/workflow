@@ -16,22 +16,26 @@
     <el-table :data="editableItems" border size="small" max-height="420">
       <el-table-column label="字段" min-width="130">
         <template #default="{ row }">
-          <div :class="{ 'unsupported-field': row.unsupported }">{{ row.label }}</div>
+          <div :class="{ 'unsupported-field': row.unsupported }">
+            {{ row.label }}
+            <el-tag v-if="row.hidden" size="small" type="info" style="margin-left: 4px">隐藏</el-tag>
+          </div>
           <div class="field-key">{{ row.key }}</div>
         </template>
       </el-table-column>
       <el-table-column label="列类型" width="150">
         <template #default="{ row }">
-          <el-select v-if="!row.unsupported" v-model="row.columnType" size="small" :disabled="isCrossChangeLocked(row)">
+          <el-select v-if="!row.unsupported && !row.hidden" v-model="row.columnType" size="small" :disabled="isCrossChangeLocked(row)">
             <el-option v-for="t in allowedTypes" :key="t" :label="t" :value="t" />
           </el-select>
+          <span v-else-if="row.hidden">VARCHAR</span>
           <span v-else class="unsupported-text">不支持</span>
         </template>
       </el-table-column>
       <el-table-column label="长度" width="90" align="center">
         <template #default="{ row }">
           <el-input-number
-            v-if="!row.unsupported && showLength(row)"
+            v-if="!row.unsupported && !row.hidden && showLength(row)"
             v-model="row.length"
             :min="1"
             :max="row.columnType === 'VARCHAR' ? 255 : 30"
@@ -39,22 +43,26 @@
             controls-position="right"
             style="width: 100%"
           />
+          <span v-else-if="row.hidden">{{ row.length }}</span>
           <span v-else>—</span>
         </template>
       </el-table-column>
       <el-table-column label="必填" width="70" align="center">
         <template #default="{ row }">
-          <el-switch v-if="!row.unsupported" v-model="row.required" size="small" />
+          <el-switch v-if="!row.unsupported && !row.hidden" v-model="row.required" size="small" />
+          <span v-else-if="row.hidden">—</span>
         </template>
       </el-table-column>
       <el-table-column label="唯一" width="70" align="center">
         <template #default="{ row }">
-          <el-switch v-if="!row.unsupported" v-model="row.unique" size="small" />
+          <el-switch v-if="!row.unsupported && !row.hidden" v-model="row.unique" size="small" />
+          <span v-else-if="row.hidden">—</span>
         </template>
       </el-table-column>
       <el-table-column label="索引" width="70" align="center">
         <template #default="{ row }">
-          <el-switch v-if="!row.unsupported" v-model="row.indexed" size="small" />
+          <el-switch v-if="!row.unsupported && !row.hidden" v-model="row.indexed" size="small" />
+          <span v-else-if="row.hidden">—</span>
         </template>
       </el-table-column>
     </el-table>
@@ -81,6 +89,10 @@ export interface ColumnConfigItem {
   unique: boolean
   indexed: boolean
   unsupported?: boolean
+  /** 隐藏列（data-picker 冗余文本列，不进表格/筛选，参与 CRUD 写入） */
+  hidden?: boolean
+  /** 数据引用配置（dataPicker 字段：sourceFormKey/displayField/mode JSON） */
+  pickerConfig?: string
   /** 已发布版本中的列类型（存在时禁止跨类变更） */
   existingType?: string
 }
@@ -180,6 +192,41 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
     const label = (rule?.title as string) || field
     if (UNSUPPORTED_TYPES.includes(type)) {
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
+      continue
+    }
+    // data-picker：生成两列（id 列 + 隐藏冗余文本列）
+    if (type === 'dataPicker') {
+      const propsMap = (rule?.props || {}) as Record<string, any>
+      const existing = props.existingColumns?.find(c => c.key === field)
+      const existingText = props.existingColumns?.find(c => c.key === field + '_text')
+      out.push({
+        key: field,
+        label,
+        columnType: 'VARCHAR',
+        length: 64,
+        scale: null,
+        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        unique: existing?.unique ?? false,
+        indexed: existing?.indexed ?? false,
+        pickerConfig: JSON.stringify({
+          sourceFormKey: propsMap.sourceFormKey,
+          displayField: propsMap.displayField,
+          mode: propsMap.mode,
+        }),
+        existingType: existing?.columnType,
+      })
+      out.push({
+        key: field + '_text',
+        label: label + '（显示）',
+        columnType: 'VARCHAR',
+        length: 1024,
+        scale: null,
+        required: false,
+        unique: false,
+        indexed: false,
+        hidden: true,
+        existingType: existingText?.columnType,
+      })
       continue
     }
     const mapped = mapComponentToColumn(type, rule?.props || {})

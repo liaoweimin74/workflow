@@ -46,11 +46,7 @@ public final class BizDataQueryBuilder {
 
         appendFilters(sql, params, allowedColumns, filters);
 
-        if (keyword != null && !keyword.isBlank()) {
-            validateColumn(keywordColumn, allowedColumns, "关键词匹配列");
-            sql.append(" AND ").append(keywordColumn).append(" LIKE ?");
-            params.add("%" + keyword + "%");
-        }
+        appendKeyword(sql, params, allowedColumns, keyword, keywordColumn);
 
         String sortColumn = (sort == null || sort.isBlank()) ? "created_at" : sort;
         validateColumn(sortColumn, allowedColumns, "排序字段");
@@ -77,11 +73,7 @@ public final class BizDataQueryBuilder {
 
         appendFilters(sql, params, allowedColumns, filters);
 
-        if (keyword != null && !keyword.isBlank()) {
-            validateColumn(keywordColumn, allowedColumns, "关键词匹配列");
-            sql.append(" AND ").append(keywordColumn).append(" LIKE ?");
-            params.add("%" + keyword + "%");
-        }
+        appendKeyword(sql, params, allowedColumns, keyword, keywordColumn);
         return new SqlAndParams(sql.toString(), params);
     }
 
@@ -146,11 +138,50 @@ public final class BizDataQueryBuilder {
         return new SqlAndParams(sql, List.of(id, tenantId));
     }
 
+    /**
+     * 关键词搜索：keywordColumn 支持逗号分隔多列（OR LIKE 组合，括号包裹）。
+     * 单列保持向后兼容（原样 LIKE）。列名逐一白名单校验。
+     */
+    private static void appendKeyword(StringBuilder sql, List<Object> params,
+                                      List<String> allowedColumns, String keyword, String keywordColumn) {
+        if (keyword == null || keyword.isBlank()) {
+            return;
+        }
+        String[] columns = (keywordColumn == null || keywordColumn.isBlank())
+                ? new String[0]
+                : keywordColumn.split(",");
+        List<String> likeFragments = new ArrayList<>();
+        for (String col : columns) {
+            String trimmed = col.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            validateColumn(trimmed, allowedColumns, "关键词匹配列");
+            likeFragments.add(trimmed + " LIKE ?");
+            params.add("%" + keyword + "%");
+        }
+        if (likeFragments.isEmpty()) {
+            throw new IllegalArgumentException("关键词匹配列不能为空");
+        }
+        if (likeFragments.size() == 1) {
+            sql.append(" AND ").append(likeFragments.get(0));
+        } else {
+            sql.append(" AND (").append(String.join(" OR ", likeFragments)).append(")");
+        }
+    }
+
     private static void appendFilters(StringBuilder sql, List<Object> params,
                                       List<String> allowedColumns, Map<String, Object> filters) {
         if (filters == null || filters.isEmpty()) {
             return;
         }
+        // 结构化格式：{ "logic": "AND"|"OR", "conditions": [{column, op, value}] }
+        if (filters.get("conditions") instanceof List<?> condList) {
+            String logic = "AND".equalsIgnoreCase(String.valueOf(filters.getOrDefault("logic", "AND"))) ? "AND" : "OR";
+            appendStructuredFilters(sql, params, allowedColumns, logic, castConditions(condList));
+            return;
+        }
+        // 旧格式：{col: value} 等值 AND
         for (Map.Entry<String, Object> e : filters.entrySet()) {
             validateColumn(e.getKey(), allowedColumns, "筛选字段");
             if (e.getValue() == null) {
@@ -159,6 +190,63 @@ public final class BizDataQueryBuilder {
             sql.append(" AND ").append(e.getKey()).append(" = ?");
             params.add(e.getValue());
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> castConditions(List<?> list) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object o : list) {
+            if (o instanceof Map<?, ?> m) {
+                out.add((Map<String, Object>) m);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 结构化多条件：按 logic 组合 AND/OR，括号包裹；列名白名单校验，值参数绑定。
+     * 运算符：eq/ne/like/in/isEmpty/isNotEmpty（isEmpty/isNotEmpty 忽略 value）。
+     */
+    private static void appendStructuredFilters(StringBuilder sql, List<Object> params,
+                                                List<String> allowedColumns, String logic,
+                                                List<Map<String, Object>> conditions) {
+        List<String> fragments = new ArrayList<>();
+        for (Map<String, Object> c : conditions) {
+            String column = String.valueOf(c.get("column"));
+            validateColumn(column, allowedColumns, "筛选字段");
+            String op = c.get("op") == null ? "eq" : String.valueOf(c.get("op")).toLowerCase();
+            switch (op) {
+                case "eq" -> {
+                    if (c.get("value") == null) continue;
+                    fragments.add(column + " = ?");
+                    params.add(c.get("value"));
+                }
+                case "ne" -> {
+                    if (c.get("value") == null) continue;
+                    fragments.add(column + " <> ?");
+                    params.add(c.get("value"));
+                }
+                case "like" -> {
+                    if (c.get("value") == null) continue;
+                    fragments.add(column + " LIKE ?");
+                    params.add("%" + c.get("value") + "%");
+                }
+                case "in" -> {
+                    Object v = c.get("value");
+                    if (!(v instanceof List<?> values) || values.isEmpty()) continue;
+                    String marks = String.join(", ", java.util.Collections.nCopies(values.size(), "?"));
+                    fragments.add(column + " IN (" + marks + ")");
+                    params.addAll(values);
+                }
+                case "isempty" -> fragments.add("(" + column + " IS NULL OR " + column + " = '')");
+                case "isnotempty" -> fragments.add("(" + column + " IS NOT NULL AND " + column + " <> '')");
+                default -> throw new IllegalArgumentException("非法筛选运算符: " + op);
+            }
+        }
+        if (fragments.isEmpty()) {
+            return;
+        }
+        sql.append(" AND (").append(String.join(" " + logic + " ", fragments)).append(")");
     }
 
     /**

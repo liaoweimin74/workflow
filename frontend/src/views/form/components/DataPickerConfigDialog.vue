@@ -41,14 +41,47 @@
         </div>
       </el-form-item>
 
-      <el-form-item label="级联依赖">
-        <div style="display: flex; gap: 8px; width: 100%">
-          <el-select v-model="form.dependOnField" placeholder="当前表单字段" clearable style="width: 45%">
-            <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
-          </el-select>
-          <el-select v-model="form.dependOnSourceColumn" placeholder="目标表列" clearable style="width: 45%">
-            <el-option v-for="c in targetColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-          </el-select>
+      <el-form-item label="过滤条件">
+        <div style="width: 100%">
+          <div
+            v-for="(row, i) in form.filtersRows"
+            :key="i"
+            style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center"
+          >
+            <el-select v-model="row.column" placeholder="目标表列" style="width: 26%">
+              <el-option v-for="c in targetColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            </el-select>
+            <el-select v-model="row.operator" style="width: 10%">
+              <el-option value="=" label="=" />
+            </el-select>
+            <el-radio-group v-model="row.valueType" size="small">
+              <el-radio-button value="static">固定值</el-radio-button>
+              <el-radio-button value="field">表单字段</el-radio-button>
+            </el-radio-group>
+            <el-select
+              v-if="row.valueType === 'field'"
+              v-model="row.value"
+              placeholder="当前表单字段"
+              clearable
+              style="width: 30%"
+            >
+              <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
+            </el-select>
+            <el-input v-else v-model="row.value" placeholder="固定值" style="width: 30%" />
+            <el-button type="danger" link @click="form.filtersRows.splice(i, 1)">删除</el-button>
+          </div>
+          <el-button type="primary" link @click="addFilterRow">+ 添加过滤条件</el-button>
+          <div style="color: #909399; font-size: 12px; margin-top: 4px">
+            固定值直接过滤；表单字段动态引用当前表单字段值（值变化刷新选项）
+          </div>
+        </div>
+      </el-form-item>
+
+      <el-form-item label="行为设置">
+        <div style="display: flex; flex-direction: column; gap: 10px; width: 100%">
+          <el-switch v-model="form.clearOnCascadeChange" active-text="级联变化时清空已选值" />
+          <el-switch v-model="form.allowCreate" active-text="允许新增目标记录" />
+          <el-switch v-model="form.viewLink" active-text="只读态显示查看链接" />
         </div>
       </el-form-item>
     </el-form>
@@ -95,8 +128,10 @@ const form = reactive({
   columns: [] as string[],
   mode: 'single',
   returnFieldsRows: [] as { source: string; target: string }[],
-  dependOnField: '',
-  dependOnSourceColumn: '',
+  filtersRows: [] as { column: string; operator: string; valueType: 'static' | 'field'; value: string }[],
+  clearOnCascadeChange: false,
+  allowCreate: false,
+  viewLink: true,
 })
 
 watch(
@@ -110,10 +145,27 @@ watch(
       form.mode = props.pickerProps?.mode || 'single'
       const returnFields = props.pickerProps?.returnFields || {}
       form.returnFieldsRows = Object.entries(returnFields).map(([s, t]) => ({ source: s, target: String(t) }))
-      form.dependOnField = props.pickerProps?.dependOn?.field || ''
-      form.dependOnSourceColumn = props.pickerProps?.dependOn?.sourceColumn || ''
+      // 过滤条件：filters（v2）优先；dependOn（v1）兼容为单条 field 型
+      const filters = props.pickerProps?.filters
+      if (Array.isArray(filters) && filters.length > 0) {
+        form.filtersRows = filters.map((f: any) => ({
+          column: f.column || '',
+          operator: f.operator || '=',
+          valueType: f.valueType === 'field' ? 'field' : 'static',
+          value: String(f.value ?? ''),
+        }))
+      } else {
+        const dep = props.pickerProps?.dependOn
+        form.filtersRows = dep?.field && dep?.sourceColumn
+          ? [{ column: dep.sourceColumn, operator: '=', valueType: 'field', value: dep.field }]
+          : []
+      }
+      form.clearOnCascadeChange = props.pickerProps?.clearOnCascadeChange || false
+      form.allowCreate = props.pickerProps?.allowCreate || false
+      form.viewLink = props.pickerProps?.viewLink !== false
     }
   },
+  { immediate: true },
 )
 
 watch(
@@ -128,7 +180,11 @@ watch(
 function handleSourceChange() {
   form.displayField = ''
   form.columns = []
-  form.dependOnSourceColumn = ''
+  form.filtersRows.forEach(r => { r.column = '' })
+}
+
+function addFilterRow() {
+  form.filtersRows.push({ column: '', operator: '=', valueType: 'static', value: '' })
 }
 
 function handleConfirm() {
@@ -142,17 +198,23 @@ function handleConfirm() {
       returnFields[row.source] = row.target
     }
   }
+  const filters = form.filtersRows
+    .filter(r => r.column && r.value)
+    .map(r => ({ column: r.column, operator: r.operator || '=', valueType: r.valueType, value: r.value }))
   const newProps: Record<string, any> = {
     sourceFormKey: form.sourceFormKey,
     displayField: form.displayField,
     columns: form.columns,
     mode: form.mode,
     returnFields,
-    dependOn: form.dependOnField && form.dependOnSourceColumn
-      ? { field: form.dependOnField, sourceColumn: form.dependOnSourceColumn }
-      : undefined,
+    filters: filters.length > 0 ? filters : undefined,
+    clearOnCascadeChange: form.clearOnCascadeChange,
+    allowCreate: form.allowCreate,
+    viewLink: form.viewLink,
   }
   emit('confirm', newProps)
   visible.value = false
 }
+
+defineExpose({ form })
 </script>

@@ -23,7 +23,7 @@
       <div v-if="showSearch !== false" style="margin-bottom: 12px; display: flex; gap: 8px">
         <el-input
           v-model="keyword"
-          :placeholder="searchPlaceholder || '请输入关键字搜索'"
+          :placeholder="searchInputPlaceholder"
           clearable
           @keyup.enter="handleSearch"
         />
@@ -123,6 +123,25 @@ const defaultDisplayField = computed(() => {
 })
 
 const resolvedDisplayField = computed(() => props.displayField || defaultDisplayField.value)
+
+/**
+ * 搜索框 placeholder：提示可搜索字段。
+ * 从 fetch.keywordColumn（逗号分隔）拆分，匹配 columns 的 label，多列以 / 分隔；
+ * 未配置时用 searchPlaceholder 或默认文案。
+ */
+const searchInputPlaceholder = computed(() => {
+  const cols = props.fetch?.keywordColumn
+    ? props.fetch.keywordColumn.split(',').map(s => s.trim()).filter(Boolean)
+    : []
+  if (cols.length > 0) {
+    const labels = cols.map((c) => {
+      const col = props.columns.find(x => x.prop === c)
+      return col?.label || c
+    })
+    return `搜索${labels.join('/')}`
+  }
+  return props.searchPlaceholder || '请输入关键字搜索'
+})
 
 const displayText = computed(() => {
   const val = props.modelValue

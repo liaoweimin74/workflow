@@ -623,3 +623,64 @@ describe('LookupPicker — 数据源筛选', () => {
     expect(params.filter).toBeUndefined()
   })
 })
+
+describe('LookupPicker — 搜索框 placeholder', () => {
+  beforeEach(() => {
+    // 前面测试 mount 的 wrapper 未 unmount，dialog（append-to-body）残留在 body，
+    // 干扰 .el-dialog 定位——本组测试前清理，确保取到本次打开的弹窗
+    document.body.innerHTML = ''
+  })
+
+  async function openDialogAndGetSearchPlaceholders(wrapper: any) {
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    await nextTick()
+    // el-dialog append-to-body：弹窗内容渲染在 document.body。
+    // 直接扫描 body 内所有 input 的 placeholder（不依赖 dialog 定位，避免残留干扰）
+    return Array.from(document.body.querySelectorAll('input'))
+      .map(i => i.getAttribute('placeholder'))
+      .filter((p): p is string => !!p)
+  }
+
+  it('fetch.keywordColumn 单列时 placeholder 提示该列 label', async () => {
+    const wrapper = mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+        columns: [{ prop: 'code', label: '编号' }, { prop: 'name', label: '名称' }],
+        displayField: 'name',
+        fetch: {
+          action: '/v1/biz-data/emp_profile',
+          keywordColumn: 'name',
+        },
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    const placeholders = await openDialogAndGetSearchPlaceholders(wrapper)
+    expect(placeholders).toContain('搜索名称')
+  })
+
+  it('fetch.keywordColumn 多列时 placeholder 以 / 分隔提示', async () => {
+    const wrapper = mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+        columns: [{ prop: 'code', label: '编号' }, { prop: 'name', label: '名称' }, { prop: 'dept', label: '部门' }],
+        displayField: 'name',
+        fetch: {
+          action: '/v1/biz-data/emp_profile',
+          keywordColumn: 'name,code',
+        },
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    const placeholders = await openDialogAndGetSearchPlaceholders(wrapper)
+    expect(placeholders).toContain('搜索名称/编号')
+  })
+
+  it('未配置 keywordColumn 时保留默认提示', async () => {
+    const wrapper = createWrapper({ modelValue: null })
+    const placeholders = await openDialogAndGetSearchPlaceholders(wrapper)
+    expect(placeholders).toContain('请输入关键字搜索')
+  })
+})

@@ -25,6 +25,15 @@ public class BizDataController {
     }
 
     /**
+     * 统计业务表单被 dataPicker 引用的情况（引用感知）。
+     * 返回 { formKey: { count: N, referencedBy: [formKeyA, ...] } }，仅含被引用（count>0）的目标表单。
+     */
+    @GetMapping("/referenced-count")
+    public R<Map<String, Map<String, Object>>> referencedCount() {
+        return R.ok(bizDataService.countReferencedBy());
+    }
+
+    /**
      * 新增业务数据。
      */
     @PostMapping("/{formKey}")

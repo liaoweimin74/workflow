@@ -8,6 +8,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.column.DynamicTableManager;
+import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -17,6 +18,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Timestamp;
@@ -356,6 +360,50 @@ class BizDataServiceTest {
         assertThatThrownBy(() -> bizDataService.resolveDisplayTexts("emp_profile", List.of("a"), "name; DROP"))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400));
+    }
+
+    // ==================== 引用统计（referenced-count） ====================
+
+    @Test
+    void countReferencedBy_统计各表单被dataPicker引用次数() {
+        FormDefinition formA = businessForm("form_a", pickerCols("emp_profile"));
+        FormDefinition formB = businessForm("form_b", pickerCols("emp_profile", "dept_profile"));
+        FormDefinition formC = businessForm("form_c", "[]");
+        when(formDefService.list(isNull(), isNull(), eq("BUSINESS"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(formA, formB, formC)), new PageImpl<>(List.of()));
+
+        Map<String, Map<String, Object>> result = bizDataService.countReferencedBy();
+
+        assertThat(result).containsKey("emp_profile");
+        assertThat(result.get("emp_profile").get("count")).isEqualTo(2);
+        assertThat(result.get("emp_profile").get("referencedBy"))
+                .asList().containsExactlyInAnyOrder("form_a", "form_b");
+        assertThat(result.get("dept_profile").get("count")).isEqualTo(1);
+        assertThat(result).doesNotContainKey("form_c");
+    }
+
+    private FormDefinition businessForm(String key, String columnConfig) {
+        FormDefinition f = new FormDefinition();
+        f.setKey(key);
+        f.setType("BUSINESS");
+        f.setColumnConfig(columnConfig);
+        return f;
+    }
+
+    /** 构造含 N 个 dataPicker 引用列的 column_config JSON（pickerConfig.sourceFormKey 依次为入参） */
+    private String pickerCols(String... sourceFormKeys) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < sourceFormKeys.length; i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append("{\"key\":\"ref_").append(i + 1)
+                    .append("\",\"label\":\"引用\",\"columnType\":\"VARCHAR\",\"length\":64,")
+                    .append("\"required\":false,\"unique\":false,\"indexed\":false,\"hidden\":false,")
+                    .append("\"pickerConfig\":\"{\\\"sourceFormKey\\\":\\\"").append(sourceFormKeys[i])
+                    .append("\\\",\\\"displayField\\\":\\\"name\\\"}\"}");
+        }
+        return sb.append("]").toString();
     }
 
     private ColumnConfig simpleColumn(String key, String type, Integer length) {

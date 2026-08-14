@@ -8,7 +8,10 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.column.DynamicTableManager;
+import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.tenant.TenantProvider;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -345,6 +348,63 @@ public class BizDataService {
             return String.join(",", ordered);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new BusinessException(400, "data-picker 配置非法: " + col.getKey());
+        }
+    }
+
+    /**
+     * 统计各业务表单被 dataPicker 引用的情况（引用感知）。
+     * 遍历全部同租户 BUSINESS 表单的 column_config，统计 pickerConfig.sourceFormKey 出现次数。
+     *
+     * @return { formKey: { count: N, referencedBy: [formKeyA, ...] } }，仅含被引用（count>0）的目标表单
+     */
+    public Map<String, Map<String, Object>> countReferencedBy() {
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        int page = 0;
+        final int size = 100;
+        while (true) {
+            Page<FormDefinition> defs = formDefService.list(null, null, "BUSINESS", PageRequest.of(page, size));
+            for (FormDefinition def : defs.getContent()) {
+                collectPickerRefs(def, result);
+            }
+            if (defs.getContent().isEmpty() || defs.isLast()) {
+                break;
+            }
+            page++;
+        }
+        return result;
+    }
+
+    /** 解析单个表单 column_config 中的 dataPicker 引用列，聚合到 result */
+    @SuppressWarnings("unchecked")
+    private void collectPickerRefs(FormDefinition def, Map<String, Map<String, Object>> result) {
+        String columnConfig = def.getColumnConfig();
+        if (columnConfig == null || columnConfig.isBlank()) {
+            return;
+        }
+        try {
+            List<Map<String, Object>> cols = objectMapper.readValue(columnConfig, List.class);
+            for (Map<String, Object> col : cols) {
+                Object pickerConfig = col.get("pickerConfig");
+                if (!(pickerConfig instanceof String s) || s.isBlank()) {
+                    continue;
+                }
+                Map<String, Object> picker = objectMapper.readValue(s, Map.class);
+                Object target = picker.get("sourceFormKey");
+                if (target == null || String.valueOf(target).isBlank()) {
+                    continue;
+                }
+                String targetKey = String.valueOf(target);
+                Map<String, Object> entry = result.computeIfAbsent(targetKey, k -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("count", 0);
+                    m.put("referencedBy", new ArrayList<String>());
+                    return m;
+                });
+                entry.put("count", ((Number) entry.get("count")).intValue() + 1);
+                ((List<String>) entry.get("referencedBy")).add(def.getKey());
+            }
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            // 非法 column_config 跳过（发布链路已校验，此处容错）
         }
     }
 

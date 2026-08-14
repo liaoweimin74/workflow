@@ -16,7 +16,7 @@ vi.mock('@/api/bizData', () => ({
 
 import { bizDataApi } from '@/api/bizData'
 
-function createWrapper(props: any = {}) {
+function createWrapper(props: any = {}, injectObj: any = {}) {
   return mount(DataPicker, {
     props: {
       modelValue: '',
@@ -24,7 +24,12 @@ function createWrapper(props: any = {}) {
       displayField: 'name',
       ...props,
     },
-    global: { plugins: [ElementPlus] },
+    global: {
+      plugins: [ElementPlus],
+      provide: {
+        formCreateInject: injectObj,
+      },
+    },
   })
 }
 
@@ -100,6 +105,102 @@ describe('DataPicker — 选择交互', () => {
   })
 })
 
+describe('DataPicker — filters 与级联保留', () => {
+  it('filters static 条件参与查询', async () => {
+    const wrapper = createWrapper({
+      filters: [{ column: 'status', operator: '=', valueType: 'static', value: 'active' }],
+    })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    await flushPromises()
+    expect(bizDataApi.list).toHaveBeenCalledWith(
+      'emp_profile',
+      expect.objectContaining({ filter: { status: 'active' } }),
+    )
+    wrapper.unmount()
+  })
+
+  it('filters field 条件取当前表单字段值参与查询', async () => {
+    const wrapper = createWrapper(
+      { filters: [{ column: 'dept', operator: '=', valueType: 'field', value: 'dept_field' }] },
+      { api: { getValue: () => 'rd', setValue: vi.fn() } },
+    )
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    await flushPromises()
+    expect(bizDataApi.list).toHaveBeenCalledWith(
+      'emp_profile',
+      expect.objectContaining({ filter: { dept: 'rd' } }),
+    )
+    wrapper.unmount()
+  })
+
+  it('dependOn 兼容：归一化为 field 型 filter', async () => {
+    const wrapper = createWrapper(
+      { dependOn: { field: 'dept_field', sourceColumn: 'dept' } },
+      { api: { getValue: () => 'rd', setValue: vi.fn() } },
+    )
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    await flushPromises()
+    expect(bizDataApi.list).toHaveBeenCalledWith(
+      'emp_profile',
+      expect.objectContaining({ filter: { dept: 'rd' } }),
+    )
+    wrapper.unmount()
+  })
+
+  it('依赖字段变化时默认保留已选值（不清空）', async () => {
+    const wrapper = createWrapper(
+      {
+        modelValue: 't1',
+        dependOn: { field: 'dept_field', sourceColumn: 'dept' },
+        dependOnValue: 'rd',
+      },
+      { api: { getValue: () => 'mk', setValue: vi.fn() } },
+    )
+    await wrapper.setProps({ dependOnValue: 'mk' })
+    await nextTick()
+    // 默认 clearOnCascadeChange=false：保留已选值，不清空
+    expect(wrapper.emitted('update:modelValue')).toBeFalsy()
+    wrapper.unmount()
+  })
+
+  it('clearOnCascadeChange=true 时依赖字段变化清空选择与回填', async () => {
+    const wrapper = createWrapper({
+      modelValue: 't1',
+      clearOnCascadeChange: true,
+      dependOn: { field: 'dept_field', sourceColumn: 'dept' },
+      dependOnValue: 'rd',
+    })
+    await wrapper.setProps({ dependOnValue: 'mk' })
+    await nextTick()
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([''])
+    wrapper.unmount()
+  })
+})
+
+describe('DataPicker — 悬空降级', () => {
+  it('resolve 缺失 id 时编辑态显示删除提示', async () => {
+    ;(bizDataApi.resolve as any).mockResolvedValueOnce({ data: {} })
+    const wrapper = createWrapper({ modelValue: 't1' })
+    await flushPromises()
+    const input = wrapper.find('input')
+    expect((input.element as HTMLInputElement).value).toBe('1 条引用数据已删除')
+    expect(wrapper.find('.el-input').classes()).toContain('pick-ref-missing')
+    wrapper.unmount()
+  })
+
+  it('resolve 缺失 id 时只读态显示原始 id', async () => {
+    ;(bizDataApi.resolve as any).mockResolvedValueOnce({ data: {} })
+    const wrapper = createWrapper({ modelValue: 't1', readonly: true })
+    await flushPromises()
+    const input = wrapper.find('input')
+    expect((input.element as HTMLInputElement).value).toBe('t1')
+    wrapper.unmount()
+  })
+})
+
 describe('DataPicker — 级联与回显', () => {
   it('dependOnValue 存在时列表查询带 filter', async () => {
     const wrapper = createWrapper({
@@ -113,18 +214,6 @@ describe('DataPicker — 级联与回显', () => {
       'emp_profile',
       expect.objectContaining({ filter: { dept: 'rd' } }),
     )
-    wrapper.unmount()
-  })
-
-  it('依赖字段变化时清空当前值', async () => {
-    const wrapper = createWrapper({
-      modelValue: 't1',
-      dependOn: { field: 'dept_field', sourceColumn: 'dept' },
-      dependOnValue: 'rd',
-    })
-    await wrapper.setProps({ dependOnValue: 'mk' })
-    await nextTick()
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([''])
     wrapper.unmount()
   })
 

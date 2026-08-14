@@ -354,6 +354,22 @@ public class FormDefinitionService {
                 if (!sourceColumn.isBlank() && !targetKeys.contains(sourceColumn)) {
                     throw new BusinessException(400, "data-picker 级联引用列已不存在: " + sourceColumn);
                 }
+                Set<String> hiddenKeys = targetColumns.stream()
+                        .filter(ColumnConfig::isHidden)
+                        .map(ColumnConfig::getKey)
+                        .collect(java.util.stream.Collectors.toSet());
+                for (JsonNode filter : props.path("filters")) {
+                    String fCol = filter.path("column").asText();
+                    if (fCol.isBlank()) {
+                        continue;
+                    }
+                    if (!targetKeys.contains(fCol)) {
+                        throw new BusinessException(400, "data-picker 过滤条件引用列已不存在: " + fCol);
+                    }
+                    if (hiddenKeys.contains(fCol)) {
+                        throw new BusinessException(400, "data-picker 过滤条件不能引用隐藏列: " + fCol);
+                    }
+                }
             }
         } catch (JsonProcessingException e) {
             throw new BusinessException(400, "表单 schema 解析失败");

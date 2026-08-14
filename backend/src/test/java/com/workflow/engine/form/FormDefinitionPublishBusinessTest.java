@@ -206,4 +206,51 @@ class FormDefinitionPublishBusinessTest {
         assertEquals("PUBLISHED", result.getStatus());
         verify(tableManager).ensureTable(eq("biz_leave"), anyList());
     }
+
+    // ==================== filters 发布校验 ====================
+
+    private String pickerSchemaWithFilters(String sourceFormKey, String displayField, String filtersJson) {
+        return "{\"rule\":[{\"type\":\"dataPicker\",\"field\":\"emp_id\",\"props\":{"
+                + "\"sourceFormKey\":\"" + sourceFormKey + "\","
+                + "\"displayField\":\"" + displayField + "\","
+                + "\"columns\":[\"" + displayField + "\"],\"mode\":\"single\","
+                + "\"filters\":" + filtersJson + "}}]}";
+    }
+
+    @Test
+    void publish_withPicker_filterColumnDeleted_rejected() {
+        FormDefinition d = draft("f1", "biz_leave", "BUSINESS",
+                pickerSchemaWithFilters("emp_profile", "name",
+                        "[{\"column\":\"gone_col\",\"operator\":\"=\",\"valueType\":\"static\",\"value\":\"x\"}]"),
+                "[{\"key\":\"emp_id\",\"columnType\":\"VARCHAR\",\"length\":64}]");
+        stubDraft(d);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "emp_profile", "PUBLISHED"))
+                .thenReturn(Optional.of(targetForm("emp_profile",
+                        "[{\"key\":\"name\",\"columnType\":\"VARCHAR\",\"length\":255}]")));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> formDefService.publish("f1"));
+
+        assertTrue(ex.getMessage().contains("过滤条件引用列"));
+        verify(tableManager, never()).ensureTable(anyString(), anyList());
+    }
+
+    @Test
+    void publish_withPicker_filterValid_passes() {
+        FormDefinition d = draft("f1", "biz_leave", "BUSINESS",
+                pickerSchemaWithFilters("emp_profile", "name",
+                        "[{\"column\":\"dept\",\"operator\":\"=\",\"valueType\":\"field\",\"value\":\"dept_field\"}]"),
+                "[{\"key\":\"emp_id\",\"columnType\":\"VARCHAR\",\"length\":64},"
+                        + "{\"key\":\"emp_id_text\",\"columnType\":\"VARCHAR\",\"length\":1024,\"hidden\":true}]");
+        stubDraft(d);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "emp_profile", "PUBLISHED"))
+                .thenReturn(Optional.of(targetForm("emp_profile",
+                        "[{\"key\":\"name\",\"columnType\":\"VARCHAR\",\"length\":255},"
+                                + "{\"key\":\"dept\",\"columnType\":\"VARCHAR\",\"length\":64}]")));
+
+        FormDefinition result = formDefService.publish("f1");
+
+        assertEquals("PUBLISHED", result.getStatus());
+    }
 }

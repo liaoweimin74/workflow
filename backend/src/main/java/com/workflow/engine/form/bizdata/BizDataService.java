@@ -303,8 +303,9 @@ public class BizDataService {
     }
 
     /**
-     * 遍历 data-picker 引用列：校验 id 存在并生成 `<key>_text` 冗余文本。
+     * 遍历 data-picker 引用列：校验 id 存在并生成 `<key>_text` 展示缓存文本。
      * 不修改原 data，返回附加字段（`<key>_text` → 文本）；引用值为空时返回空文本。
+     * 语义：`<key>_text` 为展示缓存（非业务数据，尽力而为维护），显示准确性以 resolve API 为准。
      */
     @SuppressWarnings("unchecked")
     private Map<String, Object> resolvePickerValues(BizDataContext ctx, Map<String, Object> data) {

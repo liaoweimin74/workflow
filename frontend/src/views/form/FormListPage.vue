@@ -27,6 +27,14 @@
         <template #publishedVersion="{ row }">
           {{ row.publishedVersion != null ? 'v' + row.publishedVersion : '—' }}
         </template>
+        <template #referenced="{ row }">
+          <el-tag
+            v-if="row.type === 'BUSINESS' && referencedMap[row.key]?.count > 0"
+            type="warning"
+            size="small"
+          >被 {{ referencedMap[row.key].count }} 个表单引用</el-tag>
+          <span v-else>—</span>
+        </template>
         <template #createdAt="{ row }">
           {{ formatDate(row.createdAt) }}
         </template>
@@ -63,16 +71,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { formApi, type FormDefinitionDTO, type FormVersionDTO } from '@/api/form'
+import { bizDataApi } from '@/api/bizData'
 
 const router = useRouter()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
+
+/** 引用感知：{ formKey: { count, referencedBy } }，供徽标与删除警告 */
+const referencedMap = ref<Record<string, { count: number; referencedBy: string[] }>>({})
+
+onMounted(async () => {
+  try {
+    const res = await bizDataApi.referencedCount()
+    referencedMap.value = res.data || {}
+  } catch {
+    // 统计失败不阻断列表
+  }
+})
 
 // ========== 搜索 ==========
 const searchFields = computed<SearchField[]>(() => [
@@ -109,6 +130,7 @@ const columns: TableColumn[] = [
   { prop: 'type', label: '类型', width: 100, align: 'center', slotName: 'type' },
   { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
   { prop: 'publishedVersion', label: '发布版本', width: 100, align: 'center', slotName: 'publishedVersion' },
+  { prop: 'referenced', label: '被引用', width: 150, align: 'center', slotName: 'referenced' },
   { prop: 'version', label: '当前版本', width: 90, align: 'center' },
   { prop: 'createdAt', label: '创建时间', width: 180, slotName: 'createdAt' },
 ]
@@ -222,9 +244,17 @@ const actionButtons: ActionButton[] = [
     size: 'small',
     type: 'danger',
     permission: 'form:delete',
-    confirm: '确定要删除此表单吗？',
     show: (row: any) => row.status === 'DRAFT',
     onClick: async (row: any) => {
+      const refInfo = referencedMap.value[row.key]
+      const msg = refInfo && refInfo.count > 0
+        ? `该表单被 ${refInfo.count} 个表单引用，删除后引用将无法解析。确定删除吗？`
+        : '确定要删除此表单吗？'
+      try {
+        await ElMessageBox.confirm(msg, '删除确认', { type: 'warning' })
+      } catch {
+        return
+      }
       try {
         await formApi.deleteFormDefinition(row.id)
         ElMessage.success('删除成功')

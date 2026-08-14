@@ -76,4 +76,9 @@ export const bizDataApi = {
       params: { ids: ids.join(','), displayField },
     })
   },
+
+  /** 引用感知：各业务表单被 dataPicker 引用统计（{ formKey: { count, referencedBy } }，仅含被引用者） */
+  referencedCount(): Promise<R<Record<string, { count: number; referencedBy: string[] }>>> {
+    return http.get('/v1/biz-data/referenced-count')
+  },
 }

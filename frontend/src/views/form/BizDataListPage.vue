@@ -4,6 +4,12 @@
       <el-button :icon="ArrowLeft" @click="router.back()">返回</el-button>
       <span class="page-title">{{ formName || '业务数据' }}</span>
       <span class="page-subtitle">数据表：wf_biz_{{ formKey }}</span>
+      <el-tag
+        v-if="refInfo && refInfo.count > 0"
+        type="warning"
+        size="small"
+        style="margin-left: 8px"
+      >被 {{ refInfo.count }} 个表单引用</el-tag>
     </div>
 
     <SearchTable
@@ -15,13 +21,14 @@
       :form-config="formConfig"
       :default-page-size="20"
       :page-sizes="[10, 20, 50]"
+      :delete-confirm="deleteConfirm"
     />
     <el-card v-else v-loading="!loaded" style="min-height: 200px" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
@@ -41,6 +48,9 @@ const columnConfig = ref<ColumnConfigItem[]>([])
 const schemaRules = ref<Rule[]>([])
 const schemaOption = ref<Record<string, any>>({})
 const loaded = ref(false)
+
+/** 引用感知：本表单被 dataPicker 引用统计（{ count, referencedBy }） */
+const refInfo = ref<{ count: number; referencedBy: string[] } | null>(null)
 
 /** 业务列（可展示，排除隐藏列） */
 const bizColumns = computed(() => columnConfig.value.filter(c => !c.unsupported && !c.hidden))
@@ -131,8 +141,28 @@ const formConfig = computed<FormConfig<Record<string, any>>>(() => ({
   deleteApi: (id) => bizDataApi.remove(formKey.value, String(id)),
 }))
 
+/** 删除确认文案：本表单被引用时提示影响范围（悬空降级后显示原始 id/标红） */
+function deleteConfirm(): string {
+  if (refInfo.value && refInfo.value.count > 0) {
+    return `本表单被 ${refInfo.value.count} 个表单引用，删除记录可能导致相关表单引用悬空。确定删除吗？`
+  }
+  return '确定删除该记录吗？'
+}
+
 onMounted(async () => {
   await loadFormMeta()
+  try {
+    const res = await bizDataApi.referencedCount()
+    refInfo.value = res.data?.[formKey.value] || null
+  } catch {
+    // 统计失败不阻断
+  }
+  // 跳转查看（DataPicker viewLink）：?detail=<id> 自动打开记录详情
+  const detailId = route.query.detail as string | undefined
+  if (detailId) {
+    await nextTick()
+    tableRef.value?.openEdit?.({ id: detailId })
+  }
 })
 
 /** 加载表单定义（name / columnConfig / schema） */

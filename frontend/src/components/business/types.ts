@@ -124,6 +124,8 @@ export interface SearchTableProps<T = any> {
   tableSize?: 'small' | 'default' | 'large'
   /** 树形表格配置，存在时启用树形渲染并隐藏分页 */
   treeProps?: TreeTableProps
+  /** 动态删除确认文案（接收行，返回确认提示）；缺省 '确定删除该记录吗？' */
+  deleteConfirm?: (row: T) => string
 }
 
 // --- ReferencePicker props ---

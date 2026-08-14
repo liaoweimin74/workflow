@@ -210,7 +210,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { SearchTableProps, ActionButton, QueryParams } from './types'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 
@@ -304,7 +304,6 @@ function getDefaultActions(): ActionButton[] {
     btns.push({
       label: '删除',
       icon: Delete,
-      confirm: '确定删除该记录吗？',
       permission: props.formConfig.deletePermission,
       onClick: (row) => handleDelete(row),
     })
@@ -405,6 +404,12 @@ async function handleDelete(row: any) {
     const ok = await props.formConfig.beforeDelete(row)
     if (ok === false) return
   }
+  const msg = props.deleteConfirm ? props.deleteConfirm(row) : '确定删除该记录吗？'
+  try {
+    await ElMessageBox.confirm(msg, '删除确认', { type: 'warning' })
+  } catch {
+    return
+  }
   try {
     await props.formConfig?.deleteApi?.(row.id, row)
     ElMessage.success('删除成功')
@@ -439,7 +444,7 @@ function handleDialogClose() {
   dialogInitialValues.value = {}
 }
 
-defineExpose({ fetchList, openFormDialog: handleCreate })
+  defineExpose({ fetchList, openFormDialog: handleCreate, openEdit: handleEdit })
 </script>
 
 <style scoped>

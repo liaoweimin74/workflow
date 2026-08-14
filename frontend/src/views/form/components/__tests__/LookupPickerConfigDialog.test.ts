@@ -196,3 +196,51 @@ describe('LookupPickerConfigDialog — 数据筛选', () => {
     expect(vm.form.filterRows[0]).toMatchObject({ column: 'status', op: 'eq', fixedValue: 'PAID' })
   })
 })
+
+describe('LookupPickerConfigDialog — 搜索列多选', () => {
+  it('底表模式：配置多个搜索列，confirm 产出逗号分隔 keywordColumn', async () => {
+    const wrapper = createWrapper()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    vm.form.searchColumns = ['name', 'dept']
+    await vm.handleConfirm()
+    const props = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(props.fetch.keywordColumn).toBe('name,dept')
+  })
+
+  it('底表模式：搜索列未选择时默认用显示字段', async () => {
+    const wrapper = createWrapper()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    vm.form.searchColumns = []
+    await vm.handleConfirm()
+    const props = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(props.fetch.keywordColumn).toBe('name')
+  })
+
+  it('回填：fetch.keywordColumn 逗号分隔还原到 searchColumns', async () => {
+    const wrapper = createWrapper({
+      lookupProps: {
+        sourceType: 'form',
+        sourceFormKey: 'emp_profile',
+        displayField: 'name',
+        columns: [],
+        returnFields: {},
+        fetch: {
+          action: '/v1/biz-data/emp_profile',
+          method: 'GET',
+          parse: 'records',
+          totalParse: 'total',
+          searchParam: 'keyword',
+          keywordColumn: 'name,dept',
+        },
+      },
+    })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.form.searchColumns).toEqual(['name', 'dept'])
+  })
+})

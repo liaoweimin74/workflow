@@ -32,6 +32,12 @@
             </el-select>
             <span class="form-tip">表头标题自动取底表列 label，可在下方核对</span>
           </el-form-item>
+          <el-form-item label="搜索列">
+            <el-select v-model="form.searchColumns" multiple placeholder="选择参与关键字搜索的列（默认显示字段）" style="width: 100%">
+              <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            </el-select>
+            <span class="form-tip">支持多列全文搜索，弹窗搜索框按所选列模糊匹配（多列以 / 分隔提示）</span>
+          </el-form-item>
         </el-form>
       </template>
 
@@ -239,6 +245,7 @@ const form = reactive({
   idField: '',
   filterLogic: 'AND' as 'AND' | 'OR',
   filterRows: [] as { column: string; op: string; source: 'fixed' | 'field'; fixedValue: string; field: string }[],
+  searchColumns: [] as string[],
   sourceFormKey: '',
   action: '',
   method: 'GET' as 'GET' | 'POST',
@@ -275,6 +282,10 @@ watch(
     form.totalParse = fetch.totalParse || ''
     form.searchParam = fetch.searchParam || ''
     form.keywordColumn = fetch.keywordColumn || ''
+    // 底表模式搜索列多选：keywordColumn 逗号分隔还原
+    form.searchColumns = fetch.keywordColumn
+      ? fetch.keywordColumn.split(',').map(s => s.trim()).filter(Boolean)
+      : []
     form.dataRows = Object.entries(fetch.data || {}).map(([key, value]) => ({ key, value: String(value) }))
     form.headerRows = Object.entries(fetch.headers || {}).map(([key, value]) => ({ key, value }))
     form.displayField = p.displayField || ''
@@ -308,6 +319,7 @@ function handleSourceChange() {
   form.displayField = ''
   form.selectedColumns = []
   form.keywordColumn = ''
+  form.searchColumns = []
   emit('sourceChange', form.sourceFormKey)
 }
 
@@ -346,7 +358,8 @@ function handleConfirm() {
         parse: 'records',
         totalParse: 'total',
         searchParam: 'keyword',
-        keywordColumn: form.displayField,
+        // 底表模式搜索列：多选逗号分隔（默认显示字段）
+        keywordColumn: form.searchColumns.length > 0 ? form.searchColumns.join(',') : form.displayField,
         pageBase: 0,
       }
     : { action: form.action.trim(), method: form.method }

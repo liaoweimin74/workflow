@@ -159,10 +159,10 @@
                 <el-option label="为空" value="isEmpty" />
                 <el-option label="不为空" value="isNotEmpty" />
               </el-select>
-              <el-radio-group v-model="row.source" size="small">
-                <el-radio-button value="fixed">固定值</el-radio-button>
-                <el-radio-button value="field">表单字段</el-radio-button>
-              </el-radio-group>
+              <el-select v-model="row.source" style="width: 22%">
+                <el-option label="固定值" value="fixed" />
+                <el-option label="表单字段" value="field" />
+              </el-select>
               <el-select v-if="row.source === 'field'" v-model="row.field" placeholder="当前表单字段" style="width: 30%">
                 <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
               </el-select>

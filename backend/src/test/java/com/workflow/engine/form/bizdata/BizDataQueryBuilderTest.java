@@ -174,4 +174,41 @@ class BizDataQueryBuilderTest {
         assertThat(sp.sql()).contains("dept = ?");
         assertThat(sp.params()).contains("研发部");
     }
+
+    // ---------- keywordColumn 多列全文搜索（逗号分隔，OR LIKE） ----------
+
+    @Test
+    void buildSelect_keywordColumn_multiple_columns_orLike() {
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", Map.of(),
+                "张", "name,dept", null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("(name LIKE ? OR dept LIKE ?)");
+        assertThat(sp.params()).contains("%张%", "%张%");
+    }
+
+    @Test
+    void buildSelect_keywordColumn_single_keepsLike() {
+        // 单列保持向后兼容
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", Map.of(),
+                "张三", "name", null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("name LIKE ?");
+        assertThat(sp.params()).contains("%张三%");
+    }
+
+    @Test
+    void buildSelect_keywordColumn_rejectsUnknownColumn() {
+        assertThatThrownBy(() -> BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", Map.of(),
+                "x", "hack,name", null, "desc", 0, 20))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void buildCount_keywordColumn_multiple_columns_orLike() {
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildCount(
+                "wf_biz_biz_leave", COLUMNS, "t1", Map.of(), "张", "name,dept");
+        assertThat(sp.sql()).contains("(name LIKE ? OR dept LIKE ?)");
+        assertThat(sp.params()).contains("%张%", "%张%");
+    }
 }

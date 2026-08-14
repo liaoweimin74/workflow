@@ -46,11 +46,7 @@ public final class BizDataQueryBuilder {
 
         appendFilters(sql, params, allowedColumns, filters);
 
-        if (keyword != null && !keyword.isBlank()) {
-            validateColumn(keywordColumn, allowedColumns, "关键词匹配列");
-            sql.append(" AND ").append(keywordColumn).append(" LIKE ?");
-            params.add("%" + keyword + "%");
-        }
+        appendKeyword(sql, params, allowedColumns, keyword, keywordColumn);
 
         String sortColumn = (sort == null || sort.isBlank()) ? "created_at" : sort;
         validateColumn(sortColumn, allowedColumns, "排序字段");
@@ -77,11 +73,7 @@ public final class BizDataQueryBuilder {
 
         appendFilters(sql, params, allowedColumns, filters);
 
-        if (keyword != null && !keyword.isBlank()) {
-            validateColumn(keywordColumn, allowedColumns, "关键词匹配列");
-            sql.append(" AND ").append(keywordColumn).append(" LIKE ?");
-            params.add("%" + keyword + "%");
-        }
+        appendKeyword(sql, params, allowedColumns, keyword, keywordColumn);
         return new SqlAndParams(sql.toString(), params);
     }
 
@@ -144,6 +136,38 @@ public final class BizDataQueryBuilder {
     public static SqlAndParams buildDelete(String tableName, String tenantId, String id) {
         String sql = "DELETE FROM " + tableName + " WHERE id = ? AND tenant_id = ?";
         return new SqlAndParams(sql, List.of(id, tenantId));
+    }
+
+    /**
+     * 关键词搜索：keywordColumn 支持逗号分隔多列（OR LIKE 组合，括号包裹）。
+     * 单列保持向后兼容（原样 LIKE）。列名逐一白名单校验。
+     */
+    private static void appendKeyword(StringBuilder sql, List<Object> params,
+                                      List<String> allowedColumns, String keyword, String keywordColumn) {
+        if (keyword == null || keyword.isBlank()) {
+            return;
+        }
+        String[] columns = (keywordColumn == null || keywordColumn.isBlank())
+                ? new String[0]
+                : keywordColumn.split(",");
+        List<String> likeFragments = new ArrayList<>();
+        for (String col : columns) {
+            String trimmed = col.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            validateColumn(trimmed, allowedColumns, "关键词匹配列");
+            likeFragments.add(trimmed + " LIKE ?");
+            params.add("%" + keyword + "%");
+        }
+        if (likeFragments.isEmpty()) {
+            throw new IllegalArgumentException("关键词匹配列不能为空");
+        }
+        if (likeFragments.size() == 1) {
+            sql.append(" AND ").append(likeFragments.get(0));
+        } else {
+            sql.append(" AND (").append(String.join(" OR ", likeFragments)).append(")");
+        }
     }
 
     private static void appendFilters(StringBuilder sql, List<Object> params,

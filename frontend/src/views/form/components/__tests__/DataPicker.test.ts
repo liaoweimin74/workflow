@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { nextTick, defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
 import DataPicker from '../DataPicker.vue'
 
@@ -15,6 +15,15 @@ vi.mock('@/api/bizData', () => ({
 }))
 
 import { bizDataApi } from '@/api/bizData'
+
+/** DataPickerCreateDialog 桩：验证"新增"入口交互 */
+const CreateDialogStub = defineComponent({
+  props: ['visible', 'sourceFormKey'],
+  emits: ['update:visible', 'success'],
+  setup(props, { emit }) {
+    return () => h('div', { class: 'create-dialog-stub' })
+  },
+})
 
 function createWrapper(props: any = {}, injectObj: any = {}) {
   return mount(DataPicker, {
@@ -29,6 +38,7 @@ function createWrapper(props: any = {}, injectObj: any = {}) {
       provide: {
         formCreateInject: injectObj,
       },
+      stubs: { DataPickerCreateDialog: CreateDialogStub },
     },
   })
 }
@@ -197,6 +207,30 @@ describe('DataPicker — 悬空降级', () => {
     await flushPromises()
     const input = wrapper.find('input')
     expect((input.element as HTMLInputElement).value).toBe('t1')
+    wrapper.unmount()
+  })
+})
+
+describe('DataPicker — 允许新增', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('allowCreate=true 时选择弹窗显示"新增"按钮', async () => {
+    const wrapper = createWrapper({ allowCreate: true })
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    const btn = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent === '新增')
+    expect(btn).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('allowCreate=false（默认）时不显示"新增"按钮', async () => {
+    const wrapper = createWrapper()
+    await wrapper.find('input').trigger('click')
+    await nextTick()
+    const btn = Array.from(document.body.querySelectorAll('button')).find(b => b.textContent === '新增')
+    expect(btn).toBeFalsy()
     wrapper.unmount()
   })
 })

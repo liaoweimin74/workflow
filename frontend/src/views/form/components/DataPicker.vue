@@ -66,11 +66,17 @@
           @current-change="fetchData()"
         />
       </div>
-      <template v-if="isMultiple" #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmSelection">确定</el-button>
+      <template v-if="isMultiple || allowCreate" #footer>
+        <el-button v-if="allowCreate" @click="openCreateDialog">新增</el-button>
+        <el-button v-if="isMultiple" @click="dialogVisible = false">取消</el-button>
+        <el-button v-if="isMultiple" type="primary" @click="confirmSelection">确定</el-button>
       </template>
     </el-dialog>
+    <DataPickerCreateDialog
+      v-model:visible="createDialogVisible"
+      :source-form-key="sourceFormKey || ''"
+      @success="handleCreateSuccess"
+    />
   </div>
 </template>
 
@@ -79,6 +85,7 @@ import { ref, computed, watch, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { bizDataApi } from '@/api/bizData'
+import DataPickerCreateDialog from './DataPickerCreateDialog.vue'
 
 /** form-create 注入对象，提供 api.setValue 等方法 */
 interface FormCreateInject {
@@ -147,6 +154,7 @@ const router = useRouter()
 const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
 
 const dialogVisible = ref(false)
+const createDialogVisible = ref(false)
 const loading = ref(false)
 const keyword = ref('')
 const tableData = ref<any[]>([])
@@ -291,6 +299,26 @@ function goView() {
   const firstId = (props.modelValue || '').split(',')[0]
   if (!props.sourceFormKey || !firstId) return
   router.push({ path: `/biz-data/${props.sourceFormKey}`, query: { detail: firstId } })
+}
+
+/** 打开"新增"弹窗（allowCreate=true 时由 footer 按钮触发） */
+function openCreateDialog() {
+  createDialogVisible.value = true
+}
+
+/**
+ * 新增成功（DataPickerCreateDialog emit，携带 BizDataVO）：单选自动选中并回填，多选刷新列表供勾选。
+ * 平铺 data 内层字段 + id，供 selectValue / fillReturnFields 取值。
+ */
+async function handleCreateSuccess(row: Record<string, any>) {
+  createDialogVisible.value = false
+  if (isMultiple.value) {
+    await fetchData()
+    return
+  }
+  const flat = { ...((row.data as Record<string, unknown>) || {}), id: String(row.id) }
+  selectValue([flat])
+  dialogVisible.value = false
 }
 
 function handleSearch() {

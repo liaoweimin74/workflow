@@ -3,8 +3,8 @@
 ## Purpose
 修改 form-definition 的发布校验与列映射逻辑：扩展支持组件、subForm storageMode 分派。
 
-## Requirements
-### Requirement: 表单定义发布 (MODIFIED)
+## MODIFIED Requirements
+### Requirement: 表单定义发布
 
 系统 SHALL 支持发布表单定义，将 DRAFT 状态的表单发布为新版本。
 
@@ -58,6 +58,3 @@
 - **AND** 提示移除不支持组件后方可发布
 - **AND** 不创建新版本记录
 
-### Requirement: 修改已发布表单
-
-系统 SHALL 在用户对 PUBLISHED 状态的表单调用 PUT 更新时，创建新的 DRAFT 副本（同 key，同 version，同 schema），原 PUBLISHED 版本保持不变。此需求保持不变（无变更）。

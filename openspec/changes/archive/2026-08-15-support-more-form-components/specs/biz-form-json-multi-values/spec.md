@@ -3,7 +3,7 @@
 ## Purpose
 多值组件（checkbox、multiSelect、tree 多选、elTreeSelect 多选、elTransfer）统一以 JSON 列存储的序列化/反序列化约定。
 
-## Requirements
+## ADDED Requirements
 ### Requirement: 多值组件 JSON 列映射
 
 系统 SHALL 将以下多值组件映射为 JSON 列类型：

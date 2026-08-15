@@ -1,8 +1,7 @@
 # biz-form-extra-components Specification
 
 ## Purpose
-业务表单（type=BUSINESS）发布时，支持 form-create 设计器内置的评分、颜色选择器、树形控件、树形选择、穿梭框、富文本框、手写签名、子表单、滑块组件的列映射、建表与数据读写。
-
+TBD - created by archiving change support-more-form-components. Update Purpose after archive.
 ## Requirements
 ### Requirement: 扩展组件列映射
 
@@ -181,3 +180,4 @@ SearchTable 的 TableColumn SHALL 支持 `render` 函数（返回 VNode 或字�
 #### Scenario: SearchTable render 优先于 formatter
 - **WHEN** TableColumn 同时配置 render 与 formatter
 - **THEN** 单元格使用 render 渲染
+

@@ -95,23 +95,11 @@ TBD - created by archiving change form-designer. Update Purpose after archive.
 
 发布 type=BUSINESS 的表单时，系统 SHALL 对发布过程加锁（对 form_def 行 SELECT ... FOR UPDATE），防止并发发布导致 DDL 竞态。
 
-#### Scenario: 发布表单定义
+发布 type=BUSINESS 的表单时，系统 SHALL 校验 schema 不含纯展示型/结构性不支持组件（divider、groupContainer、dataTable 等），子表单（subForm）SHALL 以 JSON 列方式支持（见 biz-form-extra-components 能力）。
 
-- **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
-- **AND** 当前 DRAFT 的 schema 与上次 PUBLISHED 的 schema 不同
-- **THEN** 系统创建新版本记录（version 自增）
-- **AND** 新记录 status = PUBLISHED
-- **AND** published_version 更新为新版本号
-- **AND** 旧 PUBLISHED 版本 status 改为 ARCHIVED
-- **AND** 返回新版本的表单定义
+发布 type=BUSINESS 的表单时，若列映射含 subForm 且 storageMode=JSON，系统 SHALL 将 subForm 字段映射为主表 JSON 列并走现有 ensureTable 逻辑；storageMode=SUB_TABLE 的列 SHALL 被拒绝（本期未实现）。
 
-#### Scenario: 发布未变化的表单
-
-- **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
-- **AND** 当前 DRAFT 的 schema 与上次 PUBLISHED 的 schema 完全一致
-- **THEN** 系统返回 400 错误，提示"表单内容未变化，无需发布"
-
-#### Scenario: 发布业务表单
+#### Scenario: 发布业务表单 (MODIFIED)
 
 - **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
 - **AND** 表单 type=BUSINESS
@@ -120,20 +108,30 @@ TBD - created by archiving change form-designer. Update Purpose after archive.
 - **AND** 系统执行受控 DDL 创建或变更物理表 wf_biz_<formKey>
 - **AND** 新版本记录保存结构变更历史
 
-#### Scenario: 发布业务表单但 schema 含子表组件
+#### Scenario: 发布业务表单含 subForm（JSON 模式）
 
 - **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
 - **AND** 表单 type=BUSINESS
-- **AND** schema 包含子表/嵌套表单组件
+- **AND** column_config 含 subForm 列且 storageMode=JSON
+- **THEN** 系统执行受控 DDL 创建或变更物理表 wf_biz_<formKey>
+- **AND** subForm 列以 JSON 列建表
+
+#### Scenario: 发布业务表单含 subForm（SUB_TABLE 模式）
+
+- **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
+- **AND** column_config 含 storageMode=SUB_TABLE 的列
 - **THEN** 系统返回 400 错误
-- **AND** 提示移除子表/嵌套表单组件后方可发布
+- **AND** 提示子表模式暂未实现
 - **AND** 不创建新版本记录
 
-#### Scenario: 修改已发布表单
+#### Scenario: 发布业务表单但 schema 含纯展示型组件
 
-- **WHEN** 用户对 PUBLISHED 状态的表单调用 PUT 更新
-- **THEN** 系统创建新的 DRAFT 副本（同 key，同 version，同 schema）
-- **AND** 原 PUBLISHED 版本保持不变
+- **WHEN** 用户调用 POST /api/v1/form-definitions/{id}/publish
+- **AND** 表单 type=BUSINESS
+- **AND** schema 包含 divider/groupContainer/dataTable 组件
+- **THEN** 系统返回 400 错误
+- **AND** 提示移除不支持组件后方可发布
+- **AND** 不创建新版本记录
 
 ### Requirement: 表单定义版本管理
 

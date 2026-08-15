@@ -46,6 +46,10 @@ public final class ColumnTypeMapper {
             case "inputNumber" -> applyNumber(c, props);
             case "select", "radio", "cascader" -> applyString(c, 255);
             case "checkbox", "multiSelect", "multiSelectPro" -> applyString(c, 1024);
+            case "LookupPicker" -> {
+                // 查找带回：存显示文本（VARCHAR 255）
+                applyString(c, 255);
+            }
             case "DatePicker", "datePicker" -> applyDate(c, props);
             case "TimePicker", "timePicker" -> applyString(c, 32);
             case "switch" -> applyTinyint(c);
@@ -100,23 +104,23 @@ public final class ColumnTypeMapper {
 
     /**
      * 生成 data-picker 字段的两列映射：
-     * <key> VARCHAR(64) 存被引用记录 id（多选逗号分隔，带 pickerConfig）
-     * <key>_text VARCHAR(1024) 存冗余显示文本（hidden=true）
+     * <key> TEXT 存被引用记录 id 数组（JSON，如 ["u1","u2"]；单选为 ["u1"]）
+     * <key>_text TEXT 存冗余显示文本数组（JSON，hidden=true）
      *
      * @param key   字段 key
-     * @param props form-create rule 的 props（sourceFormKey/displayField/mode）
+     * @param props form-create rule 的 props（sourceFormKey/displayField/maxCount）
      * @return 两列映射
      */
     public static List<ColumnConfig> mapPickerToColumns(String key, Map<String, Object> props) {
         ColumnConfig idCol = new ColumnConfig();
         idCol.setKey(key);
-        idCol.setColumnType("VARCHAR");
-        idCol.setLength(64);
+        idCol.setColumnType("TEXT");
 
         Map<String, Object> picker = new LinkedHashMap<>();
         picker.put("sourceFormKey", props == null ? null : props.get("sourceFormKey"));
         picker.put("displayField", props == null ? null : props.get("displayField"));
-        picker.put("mode", props == null ? null : props.get("mode"));
+        // maxCount：缺省 null = 不限（单选语义为 1）
+        picker.put("maxCount", props == null ? null : props.get("maxCount"));
         try {
             idCol.setPickerConfig(OBJECT_MAPPER.writeValueAsString(picker));
         } catch (JsonProcessingException e) {
@@ -126,8 +130,7 @@ public final class ColumnTypeMapper {
         ColumnConfig textCol = new ColumnConfig();
         textCol.setKey(key + "_text");
         textCol.setLabel((props != null && props.get("title") != null) ? String.valueOf(props.get("title")) + "（显示）" : null);
-        textCol.setColumnType("VARCHAR");
-        textCol.setLength(1024);
+        textCol.setColumnType("TEXT");
         textCol.setHidden(true);
 
         return List.of(idCol, textCol);

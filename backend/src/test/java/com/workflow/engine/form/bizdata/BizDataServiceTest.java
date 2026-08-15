@@ -212,11 +212,15 @@ class BizDataServiceTest {
     // ==================== data-picker 引用字段 ====================
 
     private ColumnConfig pickerColumn(String key, String sourceFormKey) {
+        return pickerColumn(key, sourceFormKey, null);
+    }
+
+    private ColumnConfig pickerColumn(String key, String sourceFormKey, Integer maxCount) {
         ColumnConfig c = new ColumnConfig();
         c.setKey(key);
-        c.setColumnType("VARCHAR");
-        c.setLength(64);
-        c.setPickerConfig("{\"sourceFormKey\":\"" + sourceFormKey + "\",\"displayField\":\"name\",\"mode\":\"single\"}");
+        c.setColumnType("TEXT");
+        String mc = maxCount == null ? "null" : String.valueOf(maxCount);
+        c.setPickerConfig("{\"sourceFormKey\":\"" + sourceFormKey + "\",\"displayField\":\"name\",\"maxCount\":" + mc + "}");
         return c;
     }
 
@@ -240,19 +244,19 @@ class BizDataServiceTest {
                         List.of(Map.of(
                                 "id", "row-1",
                                 "tenant_id", TENANT_ID,
-                                "emp_id", "t1",
-                                "emp_id_text", "张三",
+                                "emp_id", "[\"t1\"]",
+                                "emp_id_text", "[\"张三\"]",
                                 "version", 1,
                                 "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
                                 "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
 
-        BizDataVO vo = bizDataService.create("biz_leave", Map.of("emp_id", "t1"));
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of("emp_id", "[\"t1\"]"));
 
-        assertThat(vo.getData()).containsEntry("emp_id", "t1").containsEntry("emp_id_text", "张三");
+        assertThat(vo.getData()).containsEntry("emp_id", "[\"t1\"]").containsEntry("emp_id_text", "[\"张三\"]");
         ArgumentCaptor<Object[]> params = ArgumentCaptor.forClass(Object[].class);
         verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave"), params.capture());
-        assertThat(params.getValue()).contains("张三");
+        assertThat(params.getValue()).contains("[\"张三\"]");
     }
 
     @Test
@@ -261,7 +265,7 @@ class BizDataServiceTest {
                 .thenReturn(List.of(pickerColumn("emp_id", "emp_profile"), hiddenTextColumn("emp_id_text")));
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
 
-        assertThatThrownBy(() -> bizDataService.create("biz_leave", Map.of("emp_id", "ghost")))
+        assertThatThrownBy(() -> bizDataService.create("biz_leave", Map.of("emp_id", "[\"ghost\"]")))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
                 .hasMessageContaining("引用的数据不存在");
@@ -279,16 +283,42 @@ class BizDataServiceTest {
                         List.of(Map.of(
                                 "id", "row-1",
                                 "tenant_id", TENANT_ID,
-                                "emp_id", "a,b",
-                                "emp_id_text", "张三,李四",
+                                "emp_id", "[\"a\",\"b\"]",
+                                "emp_id_text", "[\"张三\",\"李四\"]",
                                 "version", 1,
                                 "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
                                 "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
 
-        BizDataVO vo = bizDataService.create("biz_leave", Map.of("emp_id", "a,b"));
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of("emp_id", "[\"a\",\"b\"]"));
 
-        assertThat(vo.getData()).containsEntry("emp_id_text", "张三,李四");
+        assertThat(vo.getData()).containsEntry("emp_id_text", "[\"张三\",\"李四\"]");
+    }
+
+    @Test
+    void create_withPickerOverMaxCount_rejected400() {
+        // maxCount=1（单选语义）：传 2 个 id → 400（在 resolve 之前拦截）
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(pickerColumn("emp_id", "emp_profile", 1), hiddenTextColumn("emp_id_text")));
+
+        assertThatThrownBy(() -> bizDataService.create("biz_leave", Map.of("emp_id", "[\"a\",\"b\"]")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
+                .hasMessageContaining("引用数量超出限制");
+
+        verify(jdbcTemplate, never()).queryForList(contains("wf_biz_emp_profile"), any(Object[].class));
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void create_withPickerInvalidJson_rejected400() {
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(pickerColumn("emp_id", "emp_profile"), hiddenTextColumn("emp_id_text")));
+
+        assertThatThrownBy(() -> bizDataService.create("biz_leave", Map.of("emp_id", "a,b")))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
+                .hasMessageContaining("引用值格式非法");
     }
 
     @Test
@@ -302,17 +332,17 @@ class BizDataServiceTest {
                         List.of(Map.of(
                                 "id", "row-1",
                                 "tenant_id", TENANT_ID,
-                                "emp_id", "t1",
-                                "emp_id_text", "张三",
+                                "emp_id", "[\"t1\"]",
+                                "emp_id_text", "[\"张三\"]",
                                 "version", 2,
                                 "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
                                 "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0))))); // 更新后 findById
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
 
-        BizDataVO vo = bizDataService.update("biz_leave", "row-1", Map.of("emp_id", "t1"), 1);
+        BizDataVO vo = bizDataService.update("biz_leave", "row-1", Map.of("emp_id", "[\"t1\"]"), 1);
 
         assertThat(vo.getVersion()).isEqualTo(2);
-        assertThat(vo.getData()).containsEntry("emp_id_text", "张三");
+        assertThat(vo.getData()).containsEntry("emp_id_text", "[\"张三\"]");
     }
 
     // ==================== resolve API ====================
@@ -380,6 +410,73 @@ class BizDataServiceTest {
                 .asList().containsExactlyInAnyOrder("form_a", "form_b");
         assertThat(result.get("dept_profile").get("count")).isEqualTo(1);
         assertThat(result).doesNotContainKey("form_c");
+    }
+
+    // ==================== LookupPicker（单选显示文本）与 dataPicker 判别 ====================
+
+    @Test
+    void create_lookupPickerSingle_旧配置无pickerType_也不触发引用解析() {
+        // 存量 LookupPicker 单选列：pickerConfig 无 pickerType、值=显示文本（"张三"），
+        // 无 <key>_text 冗余列 → 不应按 data-picker 解析（否则把"张三"当 id 查引用报错）
+        ColumnConfig lookup = new ColumnConfig();
+        lookup.setKey("lookup");
+        lookup.setColumnType("VARCHAR");
+        lookup.setLength(255);
+        lookup.setPickerConfig("{\"sourceFormKey\":\"emp_profile\",\"displayField\":\"name\",\"mode\":\"single\"}");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(lookup));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "lookup", "张三",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of("lookup", "张三"));
+
+        assertThat(vo.getData()).containsEntry("lookup", "张三");
+        assertThat(vo.getData()).doesNotContainKey("lookup_text");
+        // 不触发对 emp_profile 的查询
+        verify(jdbcTemplate, never()).queryForList(contains("wf_biz_emp_profile"), any(Object[].class));
+    }
+
+    @Test
+    void create_dataPicker_有_text列_仍触发引用解析() {
+        // dataPicker 列：pickerConfig 无 pickerType 但有 <key>_text 冗余列 → 仍按 data-picker 解析
+        ColumnConfig ref = new ColumnConfig();
+        ref.setKey("emp_ref");
+        ref.setColumnType("TEXT");
+        ref.setPickerConfig("{\"sourceFormKey\":\"emp_profile\",\"displayField\":\"name\"}");
+        ColumnConfig refText = new ColumnConfig();
+        refText.setKey("emp_ref_text");
+        refText.setColumnType("TEXT");
+        refText.setHidden(true);
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(ref, refText));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    String sql = (String) inv.getArgument(0);
+                    if (sql.contains("wf_biz_emp_profile")) {
+                        // resolveDisplayTexts 查 emp_profile
+                        return List.of(Map.of("id", "u1", "name", "张三"));
+                    }
+                    // findById 回查本表
+                    return List.of(Map.of(
+                            "id", "row-1",
+                            "tenant_id", TENANT_ID,
+                            "emp_ref", "[\"u1\"]",
+                            "emp_ref_text", "[\"张三\"]",
+                            "version", 1,
+                            "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                            "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0))));
+                });
+
+        BizDataVO vo = bizDataService.create("biz_leave", Map.of("emp_ref", "[\"u1\"]"));
+
+        assertThat(vo.getData()).containsEntry("emp_ref_text", "[\"张三\"]");
+        verify(jdbcTemplate).queryForList(contains("wf_biz_emp_profile"), any(Object[].class));
     }
 
     private FormDefinition businessForm(String key, String columnConfig) {

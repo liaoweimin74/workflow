@@ -77,6 +77,23 @@ class ColumnTypeMapperTest {
     }
 
     @Test
+    void mapLookupPicker_returnsVarchar255() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("LookupPicker",
+                Map.of("displayField", "name"));
+        assertThat(c).isNotNull();
+        assertThat(c.getColumnType()).isEqualTo("VARCHAR");
+        assertThat(c.getLength()).isEqualTo(255);
+    }
+
+    @Test
+    void mapLookupPicker_defaultProps_returnsVarchar255() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("LookupPicker", Map.of());
+        assertThat(c).isNotNull();
+        assertThat(c.getColumnType()).isEqualTo("VARCHAR");
+        assertThat(c.getLength()).isEqualTo(255);
+    }
+
+    @Test
     void mapUnsupported_returnsNull() {
         assertThat(ColumnTypeMapper.mapComponentToColumn("subTable", Map.of())).isNull();
         assertThat(ColumnTypeMapper.mapComponentToColumn("nestedForm", Map.of())).isNull();
@@ -104,20 +121,28 @@ class ColumnTypeMapperTest {
     @Test
     void mapPicker_returnsTwoColumns_idAndHiddenText() {
         List<ColumnConfig> cols = ColumnTypeMapper.mapPickerToColumns("emp_id",
-                Map.of("sourceFormKey", "emp_profile", "displayField", "name", "mode", "single"));
+                Map.of("sourceFormKey", "emp_profile", "displayField", "name", "maxCount", 3));
 
         assertThat(cols).hasSize(2);
         assertThat(cols.get(0).getKey()).isEqualTo("emp_id");
-        assertThat(cols.get(0).getColumnType()).isEqualTo("VARCHAR");
-        assertThat(cols.get(0).getLength()).isEqualTo(64);
+        assertThat(cols.get(0).getColumnType()).isEqualTo("TEXT");
         assertThat(cols.get(0).getPickerConfig()).contains("emp_profile");
         assertThat(cols.get(0).getPickerConfig()).contains("name");
+        assertThat(cols.get(0).getPickerConfig()).contains("maxCount");
         assertThat(cols.get(0).isHidden()).isFalse();
 
         assertThat(cols.get(1).getKey()).isEqualTo("emp_id_text");
-        assertThat(cols.get(1).getColumnType()).isEqualTo("VARCHAR");
-        assertThat(cols.get(1).getLength()).isEqualTo(1024);
+        assertThat(cols.get(1).getColumnType()).isEqualTo("TEXT");
         assertThat(cols.get(1).isHidden()).isTrue();
+    }
+
+    @Test
+    void mapPicker_singleSemantics_maxCount1() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapPickerToColumns("emp_id",
+                Map.of("sourceFormKey", "emp_profile", "displayField", "name", "maxCount", 1));
+
+        assertThat(cols.get(0).getColumnType()).isEqualTo("TEXT");
+        assertThat(cols.get(0).getPickerConfig()).contains("\"maxCount\":1");
     }
 
     @Test
@@ -128,5 +153,7 @@ class ColumnTypeMapperTest {
         assertThat(cols.get(0).getKey()).isEqualTo("ref");
         assertThat(cols.get(1).getKey()).isEqualTo("ref_text");
         assertThat(cols.get(1).isHidden()).isTrue();
+        // maxCount 缺省为 null（不限）
+        assertThat(cols.get(0).getPickerConfig()).contains("\"maxCount\":null");
     }
 }

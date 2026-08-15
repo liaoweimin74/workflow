@@ -315,6 +315,11 @@ public class BizDataService {
             if (pickerConfig == null || pickerConfig.isBlank()) {
                 continue;
             }
+            // 仅 data-picker 引用列生成冗余文本；LookupPicker 列跳过
+            // （LookupPicker 值已含展示快照：单选为显示文本字符串）
+            if (!isDataPickerColumn(ctx, col)) {
+                continue;
+            }
             String key = col.getKey();
             Object raw = data.get(key);
             String text = resolvePickerText(ctx, col, raw);
@@ -323,19 +328,72 @@ public class BizDataService {
         return extra;
     }
 
+    /**
+     * 判断列是否为 data-picker 引用列（需生成 <key>_text 冗余文本）。
+     * 判别优先级：
+     * 1. 显式 pickerType：dataPicker → 是；lookupPicker → 否。
+     * 2. 无 pickerType 的旧配置：
+     *    a. column_config 中存在 <key>_text 冗余列 → 是 dataPicker（其固定生成 _text 隐藏列）；
+     *    b. 否则视为 dataPicker（兼容最老的 dataPicker 配置）。
+     */
+    @SuppressWarnings("unchecked")
+    private boolean isDataPickerColumn(BizDataContext ctx, ColumnConfig col) {
+        String pickerConfig = col.getPickerConfig();
+        try {
+            Map<String, Object> picker = objectMapper.readValue(pickerConfig, Map.class);
+            String pickerType = picker.get("pickerType") == null ? null : String.valueOf(picker.get("pickerType"));
+            if ("lookupPicker".equals(pickerType)) {
+                return false;
+            }
+            if ("dataPicker".equals(pickerType)) {
+                return true;
+            }
+            // 无 pickerType 旧配置：LookupPicker 单选值=显示文本（"张三"），且无 <key>_text 冗余列 → 排除
+            boolean hasTextColumn = ctx.columns.stream()
+                    .anyMatch(c -> (col.getKey() + "_text").equals(c.getKey()));
+            return hasTextColumn;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            return false;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private String resolvePickerText(BizDataContext ctx, ColumnConfig col, Object raw) {
         try {
             Map<String, Object> picker = objectMapper.readValue(col.getPickerConfig(), Map.class);
             String sourceFormKey = picker.get("sourceFormKey") == null ? null : String.valueOf(picker.get("sourceFormKey"));
             String displayField = picker.get("displayField") == null ? null : String.valueOf(picker.get("displayField"));
+            Object maxCountObj = picker.get("maxCount");
 
             if (raw == null || String.valueOf(raw).isBlank()) {
                 return "";
             }
+            // 值以 JSON 数组字符串存储（如 ["u1","u2"]；单选为 ["u1"]）
             String rawStr = String.valueOf(raw);
-            List<String> ids = new ArrayList<>(List.of(rawStr.split(",")));
+            List<String> ids;
+            try {
+                ids = objectMapper.readValue(rawStr,
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new BusinessException(400, "data-picker 引用值格式非法（需 JSON 数组）: " + col.getKey());
+            }
             ids.removeIf(String::isBlank);
+            if (ids.isEmpty()) {
+                return "";
+            }
+            // maxCount 校验：配置了（非 null 非空）且超限 → 400
+            if (maxCountObj != null) {
+                int maxCount;
+                try {
+                    maxCount = Integer.parseInt(String.valueOf(maxCountObj));
+                } catch (NumberFormatException e) {
+                    throw new BusinessException(400, "data-picker maxCount 配置非法: " + col.getKey());
+                }
+                if (maxCount > 0 && ids.size() > maxCount) {
+                    throw new BusinessException(400,
+                            "data-picker 引用数量超出限制（最多 " + maxCount + "）: " + col.getKey());
+                }
+            }
 
             Map<String, String> texts = resolveDisplayTexts(sourceFormKey, ids, displayField);
             List<String> ordered = new ArrayList<>();
@@ -346,9 +404,10 @@ public class BizDataService {
                 }
                 ordered.add(t);
             }
-            return String.join(",", ordered);
+            // 冗余文本同样以 JSON 数组存储（与 id 数组顺序一致）
+            return objectMapper.writeValueAsString(ordered);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            throw new BusinessException(400, "data-picker 配置非法: " + col.getKey());
+            throw new BusinessException(400, "data-picker 配置或引用值非法: " + col.getKey());
         }
     }
 

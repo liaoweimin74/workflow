@@ -92,6 +92,7 @@ import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
+import { collectFieldsByType, collectFieldKeys, updateFieldProps } from './schemaRules'
 
 const route = useRoute()
 const router = useRouter()
@@ -116,35 +117,16 @@ const columnDialogVisible = ref(false)
 const pickerDialogVisible = ref(false)
 const pickerTargetForms = ref<FormDefinitionDTO[]>([])
 const pickerTargetColumns = ref<ColumnConfigItem[]>([])
+
 const pickerConfigDialogRef = ref<InstanceType<typeof DataPickerConfigDialog>>()
 /** 当前 schema 中的 dataPicker 字段（field → props） */
-const pickerFields = computed<{ field: string; props: Record<string, any> }[]>(() => {
-  const fields: { field: string; props: Record<string, any> }[] = []
-  const walk = (rules: any[]) => {
-    for (const r of rules) {
-      if (r?.type === 'dataPicker' && r.field) {
-        fields.push({ field: r.field, props: r.props || {} })
-      }
-      if (r?.children) walk(r.children)
-    }
-  }
-  walk(designerRule.value)
-  return fields
-})
+const pickerFields = computed<{ field: string; props: Record<string, any> }[]>(() =>
+  collectFieldsByType(designerRule.value, 'dataPicker'),
+)
 const selectedPickerField = ref<string>('')
 
 /** 当前表单所有字段 key（供回填映射/级联依赖的目标字段选择） */
-const currentFieldKeys = computed<string[]>(() => {
-  const keys: string[] = []
-  const walk = (rules: any[]) => {
-    for (const r of rules) {
-      if (r?.field) keys.push(r.field)
-      if (r?.children) walk(r.children)
-    }
-  }
-  walk(designerRule.value)
-  return keys
-})
+const currentFieldKeys = computed<string[]>(() => collectFieldKeys(designerRule.value))
 
 /** 当前选中 dataPicker 字段的 props（供配置弹窗回填） */
 const currentPickerProps = computed<Record<string, any>>(() => {
@@ -402,15 +384,7 @@ async function handlePickerSourceChange(formKey: string) {
 
 function handlePickerConfirm(newProps: Record<string, any>) {
   const rules = designerRef.value?.getRule() || []
-  const walk = (list: any[]) => {
-    for (const r of list) {
-      if (r?.type === 'dataPicker' && r.field === selectedPickerField.value) {
-        r.props = { ...(r.props || {}), ...newProps }
-      }
-      if (r?.children) walk(r.children)
-    }
-  }
-  walk(rules)
+  updateFieldProps(rules, selectedPickerField.value, 'dataPicker', newProps)
   designerRef.value?.setRule(rules)
   ElMessage.success('数据引用配置已保存')
 }
@@ -420,19 +394,9 @@ const lookupDialogVisible = ref(false)
 const lookupTargetForms = ref<FormDefinitionDTO[]>([])
 const lookupTargetColumns = ref<ColumnConfigItem[]>([])
 /** 当前 schema 中的 LookupPicker 字段（field → props） */
-const lookupFields = computed<{ field: string; props: Record<string, any> }[]>(() => {
-  const fields: { field: string; props: Record<string, any> }[] = []
-  const walk = (rules: any[]) => {
-    for (const r of rules) {
-      if (r?.type === 'LookupPicker' && r.field) {
-        fields.push({ field: r.field, props: r.props || {} })
-      }
-      if (r?.children) walk(r.children)
-    }
-  }
-  walk(designerRule.value)
-  return fields
-})
+const lookupFields = computed<{ field: string; props: Record<string, any> }[]>(() =>
+  collectFieldsByType(designerRule.value, 'LookupPicker'),
+)
 const selectedLookupField = ref<string>('')
 
 /** 当前选中 LookupPicker 字段的 props（供配置弹窗回填） */
@@ -477,15 +441,7 @@ async function handleLookupSourceChange(formKey: string) {
 
 function handleLookupConfirm(newProps: Record<string, any>) {
   const rules = designerRef.value?.getRule() || []
-  const walk = (list: any[]) => {
-    for (const r of list) {
-      if (r?.type === 'LookupPicker' && r.field === selectedLookupField.value) {
-        r.props = { ...(r.props || {}), ...newProps }
-      }
-      if (r?.children) walk(r.children)
-    }
-  }
-  walk(rules)
+  updateFieldProps(rules, selectedLookupField.value, 'LookupPicker', newProps)
   designerRef.value?.setRule(rules)
   ElMessage.success('数据源配置已保存')
 }

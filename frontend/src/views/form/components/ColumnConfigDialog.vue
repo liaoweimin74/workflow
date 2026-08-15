@@ -309,11 +309,31 @@ function isLayoutContainer(rule: any): boolean {
   return !rule?.field && Array.isArray(rule?.children)
 }
 
+/**
+ * 提取子表组件的直接子规则：
+ * - 布局容器（group 的 props.rule 或 tableForm 的 props.columns[].rule 内嵌 fcRow/col）：字段在 children
+ * - group/subForm：内部字段在 props.rule
+ * - tableForm：内部字段在 props.columns[].rule（每列一个 rule 数组）
+ * 所有结构汇总返回，供子列收集统一穿透。
+ */
+function subTableChildren(rule: any): any[] {
+  const out: any[] = []
+  if (Array.isArray(rule?.children)) out.push(...rule.children)
+  if (Array.isArray(rule?.props?.rule)) out.push(...rule.props.rule)
+  const columns = rule?.props?.columns
+  if (Array.isArray(columns)) {
+    for (const col of columns) {
+      if (col && Array.isArray(col.rule)) out.push(...col.rule)
+    }
+  }
+  return out
+}
+
 /** 递归提取子表子列（子表内不再支持嵌套子表，嵌套子表标记为不可映射） */
 function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefined, out: ColumnConfigItem[]) {
   for (const rule of rules) {
     if (isLayoutContainer(rule)) {
-      collectSubFields(rule.children || [], existingSub, out)
+      collectSubFields(subTableChildren(rule), existingSub, out)
       continue
     }
     const field = rule?.field as string | undefined
@@ -323,6 +343,63 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
     const existing = existingSub?.find(c => c.key === field)
     if (SUBTABLE_TYPES.includes(type) || type === 'subForm') {
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
+      continue
+    }
+    // data-picker：子表内同样生成两列（id 列 + 隐藏冗余文本列），与主表一致
+    if (type === 'dataPicker') {
+      const propsMap = (rule?.props || {}) as Record<string, any>
+      const existingText = existingSub?.find(c => c.key === field + '_text')
+      out.push({
+        key: field,
+        label,
+        columnType: 'TEXT',
+        length: null,
+        scale: null,
+        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        unique: existing?.unique ?? false,
+        indexed: existing?.indexed ?? false,
+        pickerConfig: JSON.stringify({
+          sourceFormKey: propsMap.sourceFormKey,
+          displayField: propsMap.displayField,
+          maxCount: propsMap.maxCount,
+          pickerType: 'dataPicker',
+        }),
+        existingType: existing?.columnType,
+      })
+      out.push({
+        key: field + '_text',
+        label: label + '（显示）',
+        columnType: 'TEXT',
+        length: null,
+        scale: null,
+        required: false,
+        unique: false,
+        indexed: false,
+        hidden: true,
+        existingType: existingText?.columnType,
+      })
+      continue
+    }
+    // LookupPicker（查找带回）：存显示文本字符串 → VARCHAR(255)
+    if (type === 'LookupPicker') {
+      const propsMap = (rule?.props || {}) as Record<string, any>
+      out.push({
+        key: field,
+        label,
+        columnType: 'VARCHAR',
+        length: 255,
+        scale: null,
+        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        unique: existing?.unique ?? false,
+        indexed: existing?.indexed ?? false,
+        pickerConfig: JSON.stringify({
+          sourceFormKey: propsMap.sourceFormKey,
+          displayField: propsMap.displayField,
+          mode: 'single',
+          pickerType: 'lookupPicker',
+        }),
+        existingType: existing?.columnType,
+      })
       continue
     }
     const mapped = mapComponentToColumn(type, rule?.props || {})
@@ -347,7 +424,7 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
 function collectFields(rules: any[], out: ColumnConfigItem[]) {
   for (const rule of rules) {
     if (isLayoutContainer(rule)) {
-      collectFields(rule.children || [], out)
+      collectFields(subTableChildren(rule), out)
       continue
     }
     const field = rule?.field as string | undefined
@@ -362,7 +439,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
     if (SUBTABLE_TYPES.includes(type)) {
       const existing = props.existingColumns?.find(c => c.key === field)
       const subItems: ColumnConfigItem[] = []
-      collectSubFields(rule.children || [], existing?.subColumns, subItems)
+      collectSubFields(subTableChildren(rule), existing?.subColumns, subItems)
       out.push({
         key: field,
         label,

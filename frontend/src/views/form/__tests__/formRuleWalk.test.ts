@@ -2,7 +2,7 @@
 // npx vitest run src/views/form/__tests__/formRuleWalk.test.ts
 
 import { describe, it, expect } from 'vitest'
-import { walkRules, collectFieldsOfType, collectFieldKeys, patchFieldProps, type RuleLike } from '../formRuleWalk'
+import { walkRules, collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, type RuleLike } from '../formRuleWalk'
 
 /**
  * 主表单 schema：
@@ -106,5 +106,33 @@ describe('formRuleWalk — 子表内部字段（props.rule / props.columns[].rul
   it('patchFieldProps 未命中时返回 false 且不改动', () => {
     const rules = buildSchema()
     expect(patchFieldProps(rules, 'LookupPicker', 'nonexistent', { a: 1 })).toBe(false)
+  })
+})
+
+describe('formRuleWalk — resolveActiveField（配置弹窗按设计器当前选中定位字段）', () => {
+  const fields = [
+    { field: 'lookup', props: {} },
+    { field: 'sub_lookup', props: {} },
+  ]
+
+  it('activeRule 类型与字段都匹配时返回该字段（子表内字段）', () => {
+    expect(resolveActiveField(fields, 'LookupPicker', { type: 'LookupPicker', field: 'sub_lookup' })).toBe('sub_lookup')
+  })
+
+  it('activeRule 类型不匹配时回退第一个字段', () => {
+    expect(resolveActiveField(fields, 'LookupPicker', { type: 'input', field: 'remark' })).toBe('lookup')
+  })
+
+  it('activeRule 字段不在列表中时回退第一个字段', () => {
+    expect(resolveActiveField(fields, 'LookupPicker', { type: 'LookupPicker', field: 'ghost' })).toBe('lookup')
+  })
+
+  it('activeRule 为空时回退第一个字段', () => {
+    expect(resolveActiveField(fields, 'LookupPicker', null)).toBe('lookup')
+    expect(resolveActiveField(fields, 'LookupPicker', undefined)).toBe('lookup')
+  })
+
+  it('字段列表为空时返回空串', () => {
+    expect(resolveActiveField([], 'LookupPicker', { type: 'LookupPicker', field: 'x' })).toBe('')
   })
 })

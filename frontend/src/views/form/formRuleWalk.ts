@@ -75,3 +75,25 @@ export function patchFieldProps(rules: RuleLike[] | undefined, type: string, fie
   })
   return found
 }
+
+/**
+ * 从字段列表中解析"当前要配置的字段"：
+ * 优先返回与设计器当前选中字段（activeRule）匹配的字段（含子表内部字段），
+ * 未匹配/无选中时回退到列表第一个。
+ *
+ * @param fields    字段列表（如 collectFieldsOfType 的结果）
+ * @param type      组件类型（LookupPicker / dataPicker）
+ * @param activeRule 设计器当前选中的 rule（fc-designer activeRule），可为 null
+ * @returns 命中的字段名；列表为空时返回空串
+ */
+export function resolveActiveField(
+  fields: { field: string }[],
+  type: string,
+  activeRule: RuleLike | null | undefined,
+): string {
+  if (activeRule && activeRule.type === type && activeRule.field) {
+    const hit = fields.find(f => f.field === activeRule.field)
+    if (hit) return hit.field
+  }
+  return fields[0]?.field || ''
+}

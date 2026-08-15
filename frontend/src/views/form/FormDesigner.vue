@@ -92,7 +92,7 @@ import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
-import { collectFieldsOfType, collectFieldKeys, patchFieldProps } from './formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from './formRuleWalk'
 
 const route = useRoute()
 const router = useRouter()
@@ -361,7 +361,8 @@ async function openPickerConfig() {
     ElMessage.warning('画布中没有数据引用字段，请先拖入"数据引用"组件')
     return
   }
-  selectedPickerField.value = pickerFields.value[0].field
+  // 优先使用设计器当前选中字段（含子表内部字段），未选中/不匹配时回退第一个
+  selectedPickerField.value = resolveActiveField(pickerFields.value, 'dataPicker', designerRef.value?.activeRule)
   try {
     const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
     pickerTargetForms.value = res.data.content || []
@@ -410,7 +411,8 @@ function openLookupConfig() {
     ElMessage.warning('画布中没有查找带回字段，请先拖入"查找带回"组件')
     return
   }
-  selectedLookupField.value = lookupFields.value[0].field
+  // 优先使用设计器当前选中字段（含子表内部字段），未选中/不匹配时回退第一个
+  selectedLookupField.value = resolveActiveField(lookupFields.value, 'LookupPicker', designerRef.value?.activeRule)
   try {
     // 预加载已发布业务表单，供底表模式选择
     void formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })

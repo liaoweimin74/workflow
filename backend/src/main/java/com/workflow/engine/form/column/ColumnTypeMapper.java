@@ -16,7 +16,7 @@ public final class ColumnTypeMapper {
 
     /** 允许的列类型白名单 */
     private static final Set<String> ALLOWED_TYPES = Set.of(
-            "VARCHAR", "TEXT", "INT", "DECIMAL", "DATE", "DATETIME", "TINYINT", "JSON");
+            "VARCHAR", "TEXT", "INT", "DECIMAL", "DATE", "DATETIME", "TINYINT", "JSON", "LONGTEXT");
 
     /** 不支持映射为可查询列的组件（子表/嵌套表单/人员选择等） */
     private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
@@ -45,7 +45,7 @@ public final class ColumnTypeMapper {
             case "textarea", "RichText", "richText" -> applyText(c);
             case "inputNumber" -> applyNumber(c, props);
             case "select", "radio", "cascader" -> applyString(c, 255);
-            case "checkbox", "multiSelect", "multiSelectPro" -> applyString(c, 1024);
+            case "checkbox", "multiSelect", "multiSelectPro" -> applyJson(c);
             case "LookupPicker" -> {
                 // 查找带回：存显示文本（VARCHAR 255）
                 applyString(c, 255);
@@ -54,6 +54,13 @@ public final class ColumnTypeMapper {
             case "TimePicker", "timePicker" -> applyString(c, 32);
             case "switch" -> applyTinyint(c);
             case "Upload", "upload", "fileUpload" -> applyJson(c);
+            case "rate" -> applyInt(c);
+            case "colorPicker" -> applyString(c, 16);
+            case "tree", "elTreeSelect" -> applyTree(c, props);
+            case "elTransfer" -> applyJson(c);
+            case "fcEditor" -> applyText(c);
+            case "signaturePad" -> applyLongtext(c);
+            case "subForm" -> applyJson(c);
             default -> {
                 return null;
             }
@@ -96,6 +103,24 @@ public final class ColumnTypeMapper {
     private static void applyTinyint(ColumnConfig c) {
         c.setColumnType("TINYINT");
         c.setLength(1);
+    }
+
+    private static void applyInt(ColumnConfig c) {
+        c.setColumnType("INT");
+    }
+
+    private static void applyLongtext(ColumnConfig c) {
+        c.setColumnType("LONGTEXT");
+    }
+
+    private static void applyTree(ColumnConfig c, Map<String, Object> props) {
+        boolean multi = props != null && (Boolean.TRUE.equals(props.get("multiple"))
+                || Boolean.TRUE.equals(props.get("showCheckbox")));
+        if (multi) {
+            applyJson(c);
+        } else {
+            applyString(c, 255);
+        }
     }
 
     private static void applyJson(ColumnConfig c) {
@@ -155,7 +180,7 @@ public final class ColumnTypeMapper {
     private static String categoryOf(String type) {
         if (type == null) return "UNKNOWN";
         return switch (type) {
-            case "VARCHAR", "TEXT", "TINYINT", "JSON" -> "STRING";
+            case "VARCHAR", "TEXT", "LONGTEXT", "TINYINT", "JSON" -> "STRING";
             case "INT" -> "INT";
             case "DECIMAL" -> "DECIMAL";
             case "DATE", "DATETIME" -> "DATE";

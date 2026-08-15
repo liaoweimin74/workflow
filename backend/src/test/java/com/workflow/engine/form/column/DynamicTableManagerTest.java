@@ -118,4 +118,47 @@ class DynamicTableManagerTest {
         assertThat(info.isNullable()).isTrue();
         assertThat(info.isUnique()).isFalse();
     }
+
+    @Test
+    void findTableColumns_mapsLongtextToLongtext() throws Exception {
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getString("COLUMN_NAME")).thenReturn("sign");
+        when(rs.getString("DATA_TYPE")).thenReturn("longtext");
+        when(rs.getInt("CHARACTER_MAXIMUM_LENGTH")).thenReturn(0);
+        when(rs.wasNull()).thenReturn(false);
+        when(rs.getString("IS_NULLABLE")).thenReturn("YES");
+        when(rs.getString("COLUMN_KEY")).thenReturn("");
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    RowMapper<ColumnInfo> mapper = inv.getArgument(1);
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+
+        List<ColumnInfo> columns = tableManager.findTableColumns("wf_biz_biz_leave");
+
+        assertThat(columns).hasSize(1);
+        assertThat(columns.get(0).getColumnType()).isEqualTo("LONGTEXT");
+    }
+
+    @Test
+    void findTableColumns_mapsMediumtextToText() throws Exception {
+        // 历史遗留 mediumtext/tinytext 列仍归一化为 TEXT（白名单内），避免二次发布被判非法列类型
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getString("COLUMN_NAME")).thenReturn("content");
+        when(rs.getString("DATA_TYPE")).thenReturn("mediumtext");
+        when(rs.getInt("CHARACTER_MAXIMUM_LENGTH")).thenReturn(0);
+        when(rs.wasNull()).thenReturn(false);
+        when(rs.getString("IS_NULLABLE")).thenReturn("YES");
+        when(rs.getString("COLUMN_KEY")).thenReturn("");
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    RowMapper<ColumnInfo> mapper = inv.getArgument(1);
+                    return List.of(mapper.mapRow(rs, 0));
+                });
+
+        List<ColumnInfo> columns = tableManager.findTableColumns("wf_biz_biz_leave");
+
+        assertThat(columns).hasSize(1);
+        assertThat(columns.get(0).getColumnType()).isEqualTo("TEXT");
+    }
 }

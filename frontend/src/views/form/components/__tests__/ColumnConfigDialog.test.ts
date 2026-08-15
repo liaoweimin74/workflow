@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElSelect } from 'element-plus'
 import ColumnConfigDialog from '../ColumnConfigDialog.vue'
 
 const schema = [
@@ -106,22 +106,22 @@ describe('ColumnConfigDialog — 长文本列类型（VARCHAR 255 上限规避�
     wrapper.unmount()
   })
 
-  it('checkbox 多选组件映射为 TEXT 而非 VARCHAR(1024)', async () => {
+  it('checkbox 多选组件映射为 JSON（与后端 ColumnTypeMapper 对齐）', async () => {
     const wrapper = createWrapper()
     await openAndBuild(wrapper)
     const items = confirmItems(wrapper)
     const tags = items.find(i => i.key === 'tags')
-    expect(tags?.columnType).toBe('TEXT')
+    expect(tags?.columnType).toBe('JSON')
     expect(tags?.length).toBeNull()
     wrapper.unmount()
   })
 
-  it('multiSelect 多选组件映射为 TEXT 而非 VARCHAR(1024)', async () => {
+  it('multiSelect 多选组件映射为 JSON（与后端 ColumnTypeMapper 对齐）', async () => {
     const wrapper = createWrapper()
     await openAndBuild(wrapper)
     const items = confirmItems(wrapper)
     const depts = items.find(i => i.key === 'depts')
-    expect(depts?.columnType).toBe('TEXT')
+    expect(depts?.columnType).toBe('JSON')
     expect(depts?.length).toBeNull()
     wrapper.unmount()
   })
@@ -173,6 +173,143 @@ describe('ColumnConfigDialog — LookupPicker（查找带回）列映射', () =>
     const btn = wrapper.findAll('button').find(b => b.text().includes('确认发布'))
     expect((btn as any)?.attributes('disabled')).toBeUndefined()
     expect(wrapper.text()).not.toContain('不支持映射为数据列的字段')
+    wrapper.unmount()
+  })
+})
+
+describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与后端 ColumnTypeMapper 逐 case 对齐）', () => {
+  const extSchema = (type: string, props: Record<string, any> = {}) => [
+    { type, field: 'f1', title: '字段', props },
+  ]
+
+  it('rate → INT', async () => {
+    const wrapper = createWrapper({ schema: extSchema('rate') })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('INT')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('colorPicker → VARCHAR(16)', async () => {
+    const wrapper = createWrapper({ schema: extSchema('colorPicker') })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('VARCHAR')
+    expect(col?.length).toBe(16)
+    wrapper.unmount()
+  })
+
+  it('tree 单选（showCheckbox=false）→ VARCHAR(255)', async () => {
+    const wrapper = createWrapper({ schema: extSchema('tree', { showCheckbox: false }) })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('VARCHAR')
+    expect(col?.length).toBe(255)
+    wrapper.unmount()
+  })
+
+  it('tree 多选（showCheckbox=true）→ JSON', async () => {
+    const wrapper = createWrapper({ schema: extSchema('tree', { showCheckbox: true }) })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('tree 多选（multiple=true）→ JSON', async () => {
+    const wrapper = createWrapper({ schema: extSchema('tree', { multiple: true }) })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('elTreeSelect 单选（multiple=false）→ VARCHAR(255)', async () => {
+    const wrapper = createWrapper({ schema: extSchema('elTreeSelect', { multiple: false }) })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('VARCHAR')
+    expect(col?.length).toBe(255)
+    wrapper.unmount()
+  })
+
+  it('elTreeSelect 多选（multiple=true）→ JSON', async () => {
+    const wrapper = createWrapper({ schema: extSchema('elTreeSelect', { multiple: true }) })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('elTransfer → JSON', async () => {
+    const wrapper = createWrapper({ schema: extSchema('elTransfer') })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('fcEditor → TEXT', async () => {
+    const wrapper = createWrapper({ schema: extSchema('fcEditor') })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('TEXT')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('signaturePad → LONGTEXT', async () => {
+    const wrapper = createWrapper({ schema: extSchema('signaturePad') })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('LONGTEXT')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('subForm → JSON 且 hidden=true（不进列表，仅参与 CRUD 写入）', async () => {
+    const wrapper = createWrapper({ schema: extSchema('subForm') })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    const col = items.find(i => i.key === 'f1')
+    expect(col).toBeDefined()
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.hidden).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('subForm 不产生 unsupportedFields（确认发布按钮可用）', async () => {
+    const wrapper = createWrapper({ schema: extSchema('subForm') })
+    await openAndBuild(wrapper)
+    const btn = wrapper.findAll('button').find(b => b.text().includes('确认发布'))
+    expect((btn as any)?.attributes('disabled')).toBeUndefined()
+    expect(wrapper.text()).not.toContain('不支持映射为数据列的字段')
+    wrapper.unmount()
+  })
+
+  it('multiSelectPro → JSON', async () => {
+    const wrapper = createWrapper({ schema: extSchema('multiSelectPro') })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('已发布 LONGTEXT 与 VARCHAR 同属字符串类，不触发跨类锁定（与后端 categoryOf 对齐）', async () => {
+    const wrapper = createWrapper({
+      schema: extSchema('signaturePad'),
+      existingColumns: [{ key: 'f1', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false }],
+    })
+    await openAndBuild(wrapper)
+    const sel = wrapper.findComponent(ElSelect)
+    expect(sel.exists()).toBe(true)
+    expect(sel.props('disabled')).toBe(false)
     wrapper.unmount()
   })
 })

@@ -172,6 +172,7 @@ public final class DdlBuilder {
         String type = switch (c.getColumnType()) {
             case "VARCHAR" -> "VARCHAR(" + (c.getLength() == null ? 255 : c.getLength()) + ")";
             case "TEXT" -> "TEXT";
+            case "LONGTEXT" -> "LONGTEXT";
             case "INT" -> "INT";
             case "DECIMAL" -> "DECIMAL(" + (c.getLength() == null ? 18 : c.getLength())
                     + "," + (c.getScale() == null ? 0 : c.getScale()) + ")";

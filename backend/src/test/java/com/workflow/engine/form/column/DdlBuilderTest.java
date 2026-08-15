@@ -146,6 +146,17 @@ class DdlBuilderTest {
     }
 
     @Test
+    void longtextColumnDefinition() {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey("sign");
+        c.setColumnType("LONGTEXT");
+
+        String sql = DdlBuilder.buildCreateTable("f1", List.of(c));
+
+        assertThat(sql).contains("sign LONGTEXT");
+    }
+
+    @Test
     void invalidColumnType_rejected() {
         ColumnConfig bad = new ColumnConfig();
         bad.setKey("foo");

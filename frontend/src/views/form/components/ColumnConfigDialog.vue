@@ -115,7 +115,7 @@ const visible = computed({
   set: (v: boolean) => emit('update:modelValue', v),
 })
 
-const allowedTypes = ['VARCHAR', 'TEXT', 'INT', 'DECIMAL', 'DATE', 'DATETIME', 'TINYINT', 'JSON']
+const allowedTypes = ['VARCHAR', 'TEXT', 'INT', 'DECIMAL', 'DATE', 'DATETIME', 'TINYINT', 'JSON', 'LONGTEXT']
 
 const editableItems = ref<ColumnConfigItem[]>([])
 const unsupportedFields = computed(() => editableItems.value.filter(i => i.unsupported).map(i => i.label))
@@ -151,8 +151,8 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
     case 'checkbox':
     case 'multiSelect':
     case 'multiSelectPro':
-      // 多选值以逗号拼接存储，长度不可控 → TEXT（VARCHAR 上限 255 会截断）
-      return { columnType: 'TEXT', length: null, scale: null }
+      // 多选值以数组/JSON 存储，长度不可控 → JSON（与后端 ColumnTypeMapper 对齐）
+      return { columnType: 'JSON', length: null, scale: null }
     case 'DatePicker':
     case 'datePicker': {
       const subType = propsMap?.type
@@ -170,12 +170,34 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
     case 'upload':
     case 'fileUpload':
       return { columnType: 'JSON', length: null, scale: null }
+    case 'rate':
+      return { columnType: 'INT', length: null, scale: null }
+    case 'colorPicker':
+      return { columnType: 'VARCHAR', length: 16, scale: null }
+    case 'tree':
+    case 'elTreeSelect': {
+      // 多选（showCheckbox/multiple）以数组/JSON 存储，单选存值 → VARCHAR(255)
+      const multi = propsMap?.multiple || propsMap?.showCheckbox
+      return multi
+        ? { columnType: 'JSON', length: null, scale: null }
+        : { columnType: 'VARCHAR', length: 255, scale: null }
+    }
+    case 'elTransfer':
+      return { columnType: 'JSON', length: null, scale: null }
+    case 'fcEditor':
+      return { columnType: 'TEXT', length: null, scale: null }
+    case 'signaturePad':
+      // 签名图片 base64 可能很长 → LONGTEXT
+      return { columnType: 'LONGTEXT', length: null, scale: null }
+    case 'subForm':
+      // 子表：值以 JSON 数组存储（列标记 hidden，不进列表）
+      return { columnType: 'JSON', length: null, scale: null }
     default:
       return null
   }
 }
 
-const UNSUPPORTED_TYPES = ['subTable', 'SubTable', 'nestedForm', 'NestedForm', 'dataTable', 'divider', 'groupContainer']
+const UNSUPPORTED_TYPES = ['divider', 'groupContainer', 'dataTable']
 
 /** 从 LookupPicker fetch.action（/v1/biz-data/<formKey>）推断数据源表单 key */
 function inferSourceFormKey(propsMap: Record<string, any>): string | undefined {
@@ -277,6 +299,8 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
       unique: existing?.unique ?? false,
       indexed: existing?.indexed ?? false,
+      // subForm：JSON 列不进列表（仅参与 CRUD 写入），隐藏不可编辑
+      ...(type === 'subForm' ? { hidden: true } : {}),
       existingType: existing?.columnType,
     })
   }
@@ -291,7 +315,7 @@ function buildDraft() {
 /** 跨类变更判断（与后端 categoryOf 对齐） */
 function categoryOf(type: string): string {
   if (!type) return 'UNKNOWN'
-  if (['VARCHAR', 'TEXT', 'TINYINT', 'JSON'].includes(type)) return 'STRING'
+  if (['VARCHAR', 'TEXT', 'LONGTEXT', 'TINYINT', 'JSON'].includes(type)) return 'STRING'
   if (type === 'INT') return 'INT'
   if (type === 'DECIMAL') return 'DECIMAL'
   if (['DATE', 'DATETIME'].includes(type)) return 'DATE'

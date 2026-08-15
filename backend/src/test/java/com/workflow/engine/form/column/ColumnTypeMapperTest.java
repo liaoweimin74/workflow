@@ -58,10 +58,86 @@ class ColumnTypeMapperTest {
     }
 
     @Test
-    void mapCheckbox_returnsVarchar1024() {
+    void mapCheckbox_returnsJson() {
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("checkbox", Map.of());
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapMultiSelect_returnsJson() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("multiSelect", Map.of());
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapMultiSelectPro_returnsJson() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("multiSelectPro", Map.of());
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapRate_returnsInt() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("rate", null);
+        assertThat(c).isNotNull();
+        assertThat(c.getColumnType()).isEqualTo("INT");
+    }
+
+    @Test
+    void mapColorPicker_returnsVarchar16() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("colorPicker", null);
+        assertThat(c).isNotNull();
         assertThat(c.getColumnType()).isEqualTo("VARCHAR");
-        assertThat(c.getLength()).isEqualTo(1024);
+        assertThat(c.getLength()).isEqualTo(16);
+    }
+
+    @Test
+    void mapTreeSingle_returnsVarchar255() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("tree", null);
+        assertThat(c.getColumnType()).isEqualTo("VARCHAR");
+        assertThat(c.getLength()).isEqualTo(255);
+    }
+
+    @Test
+    void mapTreeMultiple_returnsJson() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("tree", Map.of("showCheckbox", true));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapTreeSelectSingle_returnsVarchar255() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("elTreeSelect", Map.of("multiple", false));
+        assertThat(c.getColumnType()).isEqualTo("VARCHAR");
+        assertThat(c.getLength()).isEqualTo(255);
+    }
+
+    @Test
+    void mapTreeSelectMultiple_returnsJson() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("elTreeSelect", Map.of("multiple", true));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapTransfer_returnsJson() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("elTransfer", null);
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapEditor_returnsText() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("fcEditor", null);
+        assertThat(c.getColumnType()).isEqualTo("TEXT");
+    }
+
+    @Test
+    void mapSignaturePad_returnsLongtext() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("signaturePad", null);
+        assertThat(c.getColumnType()).isEqualTo("LONGTEXT");
+    }
+
+    @Test
+    void mapSubForm_returnsJson() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("subForm", null);
+        assertThat(c.getColumnType()).isEqualTo("JSON");
     }
 
     @Test
@@ -110,10 +186,18 @@ class ColumnTypeMapperTest {
     }
 
     @Test
+    void longtextTypeChangeIsNotCrossCategory() {
+        // LONGTEXT 与 TEXT 同类（STRING），允许变更
+        assertThat(ColumnTypeMapper.isCrossTypeChange("TEXT", "LONGTEXT")).isFalse();
+        assertThat(ColumnTypeMapper.isCrossTypeChange("LONGTEXT", "TEXT")).isFalse();
+    }
+
+    @Test
     void allowedColumnType_validation() {
         assertThat(ColumnTypeMapper.isAllowedColumnType("VARCHAR")).isTrue();
         assertThat(ColumnTypeMapper.isAllowedColumnType("TEXT")).isTrue();
         assertThat(ColumnTypeMapper.isAllowedColumnType("DECIMAL")).isTrue();
+        assertThat(ColumnTypeMapper.isAllowedColumnType("LONGTEXT")).isTrue();
         assertThat(ColumnTypeMapper.isAllowedColumnType("BLOB")).isFalse();
         assertThat(ColumnTypeMapper.isAllowedColumnType(null)).isFalse();
     }

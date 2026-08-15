@@ -1,5 +1,6 @@
 package com.workflow.engine.form.bizdata;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
@@ -93,9 +94,9 @@ public class BizDataService {
 
         validateRequired(ctx.columns, data);
 
-        // data-picker 引用校验与冗余文本生成（不改原 data，返回附加字段）
-        Map<String, Object> merged = new LinkedHashMap<>(data);
-        merged.putAll(resolvePickerValues(ctx, data));
+        // data-picker 引用校验与冗余文本生成（基于 JSON 序列化后的数据，不改原 data，返回附加字段）
+        Map<String, Object> merged = serializeJsonColumns(ctx, data);
+        merged.putAll(resolvePickerValues(ctx, merged));
 
         BizDataQueryBuilder.SqlAndParams insert = BizDataQueryBuilder.buildInsert(
                 ctx.tableName, ctx.columnKeys, merged, tenantId);
@@ -180,8 +181,8 @@ public class BizDataService {
         validateRequired(ctx.columns, data);
         int currentVersion = version == null ? 1 : version;
 
-        Map<String, Object> merged = new LinkedHashMap<>(data);
-        merged.putAll(resolvePickerValues(ctx, data));
+        Map<String, Object> merged = serializeJsonColumns(ctx, data);
+        merged.putAll(resolvePickerValues(ctx, merged));
 
         BizDataQueryBuilder.SqlAndParams update = BizDataQueryBuilder.buildUpdate(
                 ctx.tableName, ctx.columnKeys, merged, tenantId, id, currentVersion);
@@ -482,13 +483,49 @@ public class BizDataService {
         for (ColumnConfig c : ctx.columns) {
             Object v = row.get(c.getKey());
             if (v != null) {
-                data.put(c.getKey(), v);
+                data.put(c.getKey(), "JSON".equals(c.getColumnType()) ? deserializeJsonValue(v) : v);
             }
         }
         Integer version = asInt(row.get("version"));
         LocalDateTime createdAt = asDateTime(row.get("created_at"));
         LocalDateTime updatedAt = asDateTime(row.get("updated_at"));
         return new BizDataVO(String.valueOf(row.get("id")), data, version, createdAt, updatedAt);
+    }
+
+    /**
+     * 对 JSON 列值序列化为 JSON 字符串（供参数绑定存储）。
+     * 非数组/对象（如旧格式字符串、null）原样保留。
+     */
+    private Map<String, Object> serializeJsonColumns(BizDataContext ctx, Map<String, Object> data) {
+        Map<String, Object> out = new LinkedHashMap<>(data);
+        for (ColumnConfig c : ctx.columns) {
+            if (!"JSON".equals(c.getColumnType())) {
+                continue;
+            }
+            Object v = out.get(c.getKey());
+            if (v == null || v instanceof String) {
+                continue; // null 跳过；字符串为旧格式容错
+            }
+            try {
+                out.put(c.getKey(), objectMapper.writeValueAsString(v));
+            } catch (JsonProcessingException e) {
+                throw new BusinessException(400, "字段 " + c.getKey() + " 无法序列化为 JSON: " + e.getOriginalMessage());
+            }
+        }
+        return out;
+    }
+
+    /** 对 JSON 列值反序列化；parse 失败原样返回（兼容旧逗号串数据） */
+    @SuppressWarnings("unchecked")
+    private Object deserializeJsonValue(Object v) {
+        if (v == null || !(v instanceof String s)) {
+            return v;
+        }
+        try {
+            return objectMapper.readValue(s, Object.class);
+        } catch (JsonProcessingException e) {
+            return v;
+        }
     }
 
     private static Integer asInt(Object v) {

@@ -39,6 +39,9 @@ public class ColumnConfig {
     /** 数据引用配置（dataPicker 字段专用：sourceFormKey/displayField/mode 的 JSON，普通列 null） */
     private String pickerConfig;
 
+    /** 存储模式（JSON：整体 JSON 列，默认；SUB_TABLE：子表，预留未实现） */
+    private String storageMode = "JSON";
+
     public ColumnConfig() {}
 
     public String getKey() { return key; }
@@ -70,4 +73,7 @@ public class ColumnConfig {
 
     public String getPickerConfig() { return pickerConfig; }
     public void setPickerConfig(String pickerConfig) { this.pickerConfig = pickerConfig; }
+
+    public String getStorageMode() { return storageMode; }
+    public void setStorageMode(String storageMode) { this.storageMode = storageMode; }
 }

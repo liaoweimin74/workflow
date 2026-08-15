@@ -39,9 +39,9 @@ public class FormDefinitionService {
     private final DynamicTableManager tableManager;
     private final ObjectMapper objectMapper;
 
-    /** 不支持映射为业务表单列的组件（子表/嵌套表单等） */
+    /** 不支持映射为业务表单列的组件（展示型组件） */
     private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
-            "subTable", "SubTable", "nestedForm", "NestedForm", "dataTable");
+            "divider", "groupContainer", "dataTable");
 
     public FormDefinitionService(FormDefinitionRepository formDefRepository,
                                  TenantProvider tenantProvider,
@@ -227,7 +227,7 @@ public class FormDefinitionService {
      *
      * @param id 表单定义 ID
      * @return 发布后的表单定义（同一条记录，状态改为 PUBLISHED）
-     * @throws BusinessException 如果 schema 与上一已发布版本相同；业务表单含子表组件或 column_config 非法
+     * @throws BusinessException 如果 schema 与上一已发布版本相同；业务表单含不支持组件或 column_config 非法
      */
     @Transactional
     public FormDefinition publish(String id) {
@@ -273,7 +273,7 @@ public class FormDefinitionService {
     }
 
     /**
-     * 校验业务表单 schema 不含子表/嵌套表单等不支持组件。
+     * 校验业务表单 schema 不含展示型等不支持组件。
      * schema 格式兼容：{rule: [...]} 与纯数组两种。
      */
     private void validateBusinessSchema(String schema) throws BusinessException {
@@ -286,7 +286,7 @@ public class FormDefinitionService {
             for (JsonNode field : rule) {
                 String type = field.path("type").asText();
                 if (UNSUPPORTED_COMPONENTS.contains(type)) {
-                    throw new BusinessException(400, "业务表单暂不支持子表/嵌套表单组件（" + type + "），请移除后发布");
+                    throw new BusinessException(400, "业务表单暂不支持组件（" + type + "），请移除后发布");
                 }
             }
         } catch (JsonProcessingException e) {
@@ -398,6 +398,9 @@ public class FormDefinitionService {
             // 触发 DdlBuilder 校验（列名/类型/长度），提前暴露非法配置
             for (ColumnConfig c : columns) {
                 validateColumnConfig(c);
+                if ("SUB_TABLE".equals(c.getStorageMode())) {
+                    throw new BusinessException(400, "子表存储模式暂未实现: " + c.getKey());
+                }
             }
             return new ArrayList<>(columns);
         } catch (JsonProcessingException e) {

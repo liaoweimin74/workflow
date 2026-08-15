@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
 
 /**
  * 业务表单发布流程单元测试。
- * 验证 type=BUSINESS 时发布触发受控 DDL、含子表组件被拒绝、非法 column_config 被拒绝。
+ * 验证 type=BUSINESS 时发布触发受控 DDL、含展示型组件被拒绝、非法 column_config 被拒绝。
  */
 @ExtendWith(MockitoExtension.class)
 class FormDefinitionPublishBusinessTest {
@@ -98,15 +98,44 @@ class FormDefinitionPublishBusinessTest {
     }
 
     @Test
-    void publishBusinessForm_withSubTable_rejected() {
+    void publishBusinessForm_withDivider_rejected() {
         FormDefinition d = draft("f1", "biz_bad", "BUSINESS",
-                "{\"rule\":[{\"type\":\"subTable\",\"field\":\"items\"}]}",
-                "[{\"key\":\"items\",\"columnType\":\"JSON\"}]");
+                "{\"rule\":[{\"type\":\"divider\",\"field\":\"d1\"}]}",
+                "[{\"key\":\"d1\",\"columnType\":\"JSON\"}]");
         stubDraft(d);
 
         BusinessException ex = assertThrows(BusinessException.class, () -> formDefService.publish("f1"));
 
-        assertTrue(ex.getMessage().contains("子表"));
+        assertTrue(ex.getMessage().contains("divider"));
+        verify(tableManager, never()).ensureTable(anyString(), anyList());
+        verify(formDefRepository, never()).save(any(FormDefinition.class));
+    }
+
+    // ==================== subForm / storageMode 发布校验 ====================
+
+    @Test
+    void publishSubFormJsonModeCreatesJsonColumn() {
+        FormDefinition d = draft("f1", "biz_subform", "BUSINESS",
+                "{\"rule\":[{\"type\":\"subForm\",\"field\":\"items\"}]}",
+                "[{\"key\":\"items\",\"columnType\":\"JSON\",\"storageMode\":\"JSON\"}]");
+        stubDraft(d);
+
+        FormDefinition result = formDefService.publish("f1");
+
+        assertEquals("PUBLISHED", result.getStatus());
+        verify(tableManager).ensureTable(eq("biz_subform"), anyList());
+    }
+
+    @Test
+    void publishSubTableModeRejected() {
+        FormDefinition d = draft("f1", "biz_subtable", "BUSINESS",
+                "{\"rule\":[{\"type\":\"subForm\",\"field\":\"items\"}]}",
+                "[{\"key\":\"items\",\"columnType\":\"JSON\",\"storageMode\":\"SUB_TABLE\"}]");
+        stubDraft(d);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> formDefService.publish("f1"));
+
+        assertTrue(ex.getMessage().contains("子表存储模式暂未实现"));
         verify(tableManager, never()).ensureTable(anyString(), anyList());
         verify(formDefRepository, never()).save(any(FormDefinition.class));
     }

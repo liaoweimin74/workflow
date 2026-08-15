@@ -105,7 +105,8 @@ public class DynamicTableManager {
         if (dataType == null) return "UNKNOWN";
         return switch (dataType.toLowerCase()) {
             case "varchar" -> "VARCHAR";
-            case "text", "longtext", "mediumtext", "tinytext" -> "TEXT";
+            case "text", "mediumtext", "tinytext" -> "TEXT";
+            case "longtext" -> "LONGTEXT";
             case "int", "integer", "bigint", "smallint", "mediumint" -> "INT";
             case "decimal", "numeric" -> "DECIMAL";
             case "date" -> "DATE";

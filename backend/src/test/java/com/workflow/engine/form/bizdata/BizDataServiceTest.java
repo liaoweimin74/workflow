@@ -345,6 +345,62 @@ class BizDataServiceTest {
         assertThat(vo.getData()).containsEntry("emp_id_text", "[\"张三\"]");
     }
 
+    // ==================== JSON 列（多选 checkbox/tree 多选/elTransfer/subForm） ====================
+
+    private ColumnConfig jsonColumn(String key) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setColumnType("JSON");
+        return c;
+    }
+
+    @Test
+    void create_serializesJsonColumnList_toJsonString() {
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(simpleColumn("name", "VARCHAR", 255), simpleColumn("dept", "VARCHAR", 64),
+                        jsonColumn("tags")));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "dept", "研发部",
+                        "tags", "[\"a\",\"b\"]",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        BizDataVO vo = bizDataService.create("biz_leave",
+                Map.of("name", "张三", "dept", "研发部", "tags", List.of("a", "b")));
+
+        ArgumentCaptor<Object[]> params = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave"), params.capture());
+        assertThat(params.getValue()).contains("[\"a\",\"b\"]");
+        assertThat(vo.getData()).containsEntry("tags", List.of("a", "b"));
+    }
+
+    @Test
+    void read_legacyNonJsonValue_returnsAsIs() {
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(simpleColumn("name", "VARCHAR", 255), simpleColumn("dept", "VARCHAR", 64),
+                        jsonColumn("tags")));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "dept", "研发部",
+                        "tags", "a,b",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        BizDataVO vo = bizDataService.getById("biz_leave", "row-1");
+
+        assertThat(vo.getData()).containsEntry("tags", "a,b");
+    }
+
     // ==================== resolve API ====================
 
     @Test

@@ -90,4 +90,52 @@ public class BizDataController {
         bizDataService.delete(formKey, id);
         return R.ok();
     }
+
+    // ==================== 独立子表行 CRUD（subMode=dedicated） ====================
+
+    /**
+     * 查询独立子表行列表（sort_no 升序）。
+     */
+    @GetMapping("/{formKey}/{id}/sub/{field}")
+    public R<List<Map<String, Object>>> listSubRows(@PathVariable String formKey,
+                                                    @PathVariable String id,
+                                                    @PathVariable String field) {
+        return R.ok(bizDataService.listSubRows(formKey, id, field));
+    }
+
+    /**
+     * 新增独立子表行（追加到末尾）。
+     */
+    @PostMapping("/{formKey}/{id}/sub/{field}")
+    public R<Map<String, Object>> addSubRow(@PathVariable String formKey,
+                                            @PathVariable String id,
+                                            @PathVariable String field,
+                                            @RequestBody Map<String, Object> data) {
+        return R.ok(bizDataService.addSubRow(formKey, id, field, data));
+    }
+
+    /**
+     * 更新独立子表行（乐观锁，请求体须携带 version）。
+     */
+    @PutMapping("/{formKey}/{id}/sub/{field}/{rowId}")
+    public R<Map<String, Object>> updateSubRow(@PathVariable String formKey,
+                                               @PathVariable String id,
+                                               @PathVariable String field,
+                                               @PathVariable String rowId,
+                                               @RequestBody Map<String, Object> data) {
+        Integer version = data.get("version") instanceof Number n ? n.intValue() : null;
+        return R.ok(bizDataService.updateSubRow(formKey, id, field, rowId, data, version));
+    }
+
+    /**
+     * 删除独立子表行。
+     */
+    @DeleteMapping("/{formKey}/{id}/sub/{field}/{rowId}")
+    public R<Void> deleteSubRow(@PathVariable String formKey,
+                                @PathVariable String id,
+                                @PathVariable String field,
+                                @PathVariable String rowId) {
+        bizDataService.deleteSubRow(formKey, id, field, rowId);
+        return R.ok();
+    }
 }

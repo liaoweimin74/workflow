@@ -248,6 +248,111 @@ public class BizDataService {
         }
     }
 
+    // ==================== 独立子表行 CRUD（subMode=dedicated 走此接口） ====================
+
+    /**
+     * 校验子表字段存在，返回子表定义。
+     */
+    private SubTableDef requireSubTable(BizDataContext ctx, String field) {
+        SubTableDef def = ctx.subTables().get(field);
+        if (def == null) {
+            throw new BusinessException(404, "子表字段不存在: " + field);
+        }
+        return def;
+    }
+
+    /**
+     * 校验主表行存在（404）。
+     */
+    private void requireMainRow(BizDataContext ctx, String id) {
+        String tenantId = tenantProvider.getTenantId();
+        findById(ctx.tableName, tenantId, ctx, id);
+    }
+
+    /**
+     * 分页查询独立子表行（sort_no 升序）。
+     */
+    public List<Map<String, Object>> listSubRows(String formKey, String id, String field) {
+        BizDataContext ctx = loadContext(formKey);
+        SubTableDef def = requireSubTable(ctx, field);
+        requireMainRow(ctx, id);
+        return readSubRows(def, id);
+    }
+
+    /**
+     * 新增独立子表行（追加到末尾，sort_no 续接）。
+     *
+     * @return 插入后的行（含内部生成的 id/sort_no）
+     */
+    public Map<String, Object> addSubRow(String formKey, String id, String field, Map<String, Object> data) {
+        BizDataContext ctx = loadContext(formKey);
+        SubTableDef def = requireSubTable(ctx, field);
+        requireMainRow(ctx, id);
+        List<Map<String, Object>> rows = readSubRows(def, id);
+        if (rows.size() >= MAX_SUB_ROWS) {
+            throw new BusinessException(400, "子表行数超限（最多 " + MAX_SUB_ROWS + " 行）: " + def.tableName());
+        }
+        return insertOneSubRow(def, id, data, rows.size());
+    }
+
+    /**
+     * 更新独立子表行（乐观锁：须携带当前 version）。
+     *
+     * @return 更新后的行
+     * @throws BusinessException 行不存在/版本冲突（409）
+     */
+    public Map<String, Object> updateSubRow(String formKey, String id, String field, String rowId,
+                                            Map<String, Object> data, Integer version) {
+        BizDataContext ctx = loadContext(formKey);
+        SubTableDef def = requireSubTable(ctx, field);
+        requireMainRow(ctx, id);
+
+        // 仅允许更新子业务列（白名单 subKeys 过滤，防注入/防篡改内部列）
+        Map<String, Object> safe = new LinkedHashMap<>();
+        for (String k : def.subKeys()) {
+            if (data.containsKey(k)) {
+                safe.put(k, data.get(k));
+            }
+        }
+        if (safe.isEmpty()) {
+            throw new BusinessException(400, "更新内容不能为空: " + field);
+        }
+
+        StringBuilder set = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        for (Map.Entry<String, Object> e : safe.entrySet()) {
+            set.append(e.getKey()).append(" = ?, ");
+            params.add(e.getValue());
+        }
+        set.append("version = version + 1, updated_at = NOW()");
+        params.add(tenantProvider.getTenantId());
+        params.add(id);
+        params.add(rowId);
+        params.add(version == null ? 1 : version);
+
+        int affected = jdbcTemplate.update("UPDATE " + def.tableName() + " SET " + set
+                + " WHERE tenant_id = ? AND biz_id = ? AND id = ? AND version = ?", params.toArray());
+        if (affected == 0) {
+            throw new BusinessException(409, "子表行已被他人修改或不存在，请刷新后重试");
+        }
+        return readSubRows(def, id).stream()
+                .filter(r -> rowId.equals(String.valueOf(r.get("id"))))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(404, "子表行不存在: " + rowId));
+    }
+
+    /**
+     * 删除独立子表行。
+     */
+    public void deleteSubRow(String formKey, String id, String field, String rowId) {
+        BizDataContext ctx = loadContext(formKey);
+        SubTableDef def = requireSubTable(ctx, field);
+        requireMainRow(ctx, id);
+        jdbcTemplate.update("DELETE FROM " + def.tableName()
+                        + " WHERE tenant_id = ? AND biz_id = ? AND id = ?",
+                tenantProvider.getTenantId(), id, rowId);
+    }
+
     // ==================== 内部工具 ====================
 
     /** 子表行单次请求上限 */
@@ -680,8 +785,10 @@ public class BizDataService {
 
     /**
      * 插入单行子表数据（id/biz_id/tenant_id/sort_no/version + 子业务列）。
+     *
+     * @return 插入后的行（含内部生成的 id/sort_no，供独立接口返回）
      */
-    private void insertOneSubRow(SubTableDef def, String bizId, Map<String, Object> m, int sortNo) {
+    private Map<String, Object> insertOneSubRow(SubTableDef def, String bizId, Map<String, Object> m, int sortNo) {
         String rowId = UUID.randomUUID().toString().replace("-", "");
         List<Object> params = new ArrayList<>();
         params.add(rowId);
@@ -699,6 +806,11 @@ public class BizDataService {
         }
         jdbcTemplate.update("INSERT INTO " + def.tableName() + " (" + cols + ") VALUES (" + vals + ")",
                 params.toArray());
+
+        Map<String, Object> inserted = new LinkedHashMap<>(m);
+        inserted.put("id", rowId);
+        inserted.put("sort_no", sortNo);
+        return inserted;
     }
 
     /** 子表行必须是 JSON 对象；非法抛 400 */

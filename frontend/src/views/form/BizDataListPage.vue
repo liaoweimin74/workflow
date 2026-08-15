@@ -81,9 +81,17 @@ const columns = computed<TableColumn[]>(() => {
     minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 130,
     formatter: (row: any) => {
       if (c.pickerConfig && row.data?.[c.key]) {
-        // data-picker：显示冗余文本列（<key>_text），缺省回退原值
+        // data-picker：显示冗余文本列（<key>_text，JSON 文本数组），缺省回退原值
         const text = row.data[c.key + '_text']
-        if (text !== undefined && text !== null && text !== '') return String(text)
+        if (text !== undefined && text !== null && text !== '') {
+          try {
+            const parsed = JSON.parse(String(text))
+            if (Array.isArray(parsed)) return parsed.join(',')
+          } catch {
+            // 非 JSON 旧数据，按原值展示
+          }
+          return String(text)
+        }
       }
       return formatCell(row.data?.[c.key])
     },

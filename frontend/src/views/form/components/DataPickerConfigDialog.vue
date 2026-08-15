@@ -26,11 +26,9 @@
         <span class="form-tip">支持多列全文搜索，弹窗搜索框按所选列模糊匹配（多列以 / 分隔提示）</span>
       </el-form-item>
 
-      <el-form-item label="选择模式">
-        <el-radio-group v-model="form.mode">
-          <el-radio value="single">单选</el-radio>
-          <el-radio value="multiple">多选</el-radio>
-        </el-radio-group>
+      <el-form-item label="最多可选数">
+        <el-input-number v-model="form.maxCount" :min="1" :max="100" placeholder="不限" style="width: 160px" />
+        <span class="form-tip">缺省不限；填 1 为单选（点行即选），>1 限制勾选数量</span>
       </el-form-item>
 
       <el-form-item label="筛选条件">
@@ -85,7 +83,8 @@
         <div style="display: flex; flex-direction: column; gap: 10px; width: 100%">
           <el-switch v-model="form.clearOnCascadeChange" active-text="级联变化时清空已选值" />
           <el-switch v-model="form.allowCreate" active-text="允许新增目标记录" />
-          <el-switch v-model="form.viewLink" active-text="只读态显示查看链接" />
+          <el-switch v-model="form.detailReadonly" active-text="详情弹窗表单只读" />
+          <span class="form-tip">点击已选 Tag 弹出目标表单详情；"详情弹窗表单只读"关闭后详情表单可编辑并支持保存修改</span>
         </div>
       </el-form-item>
     </el-form>
@@ -143,12 +142,12 @@ const form = reactive({
   displayField: '',
   columns: [] as string[],
   searchColumns: [] as string[],
-  mode: 'single',
+  maxCount: undefined as number | undefined,
   filterLogic: 'AND' as 'AND' | 'OR',
   filterRows: [] as FilterRow[],
   clearOnCascadeChange: false,
   allowCreate: false,
-  viewLink: true,
+  detailReadonly: true,
 })
 
 watch(
@@ -160,7 +159,10 @@ watch(
       form.displayField = props.pickerProps?.displayField || ''
       form.columns = [...(props.pickerProps?.columns || [])]
       form.searchColumns = [...(props.pickerProps?.searchColumns || [])]
-      form.mode = props.pickerProps?.mode || 'single'
+      // maxCount：缺省不限（undefined）；旧 mode=multiple 配置兼容为不限（1 为单选）
+      const legacyMode = props.pickerProps?.mode
+      form.maxCount = props.pickerProps?.maxCount
+        ?? (legacyMode === 'single' ? 1 : undefined)
       // 筛选条件：filters（v3 结构化 {logic, conditions}）优先；v2 数组兼容；dependOn（v1）兼容为单条 field 型
       const filters = props.pickerProps?.filters
       if (filters && typeof filters === 'object' && !Array.isArray(filters)) {
@@ -190,7 +192,7 @@ watch(
       }
       form.clearOnCascadeChange = props.pickerProps?.clearOnCascadeChange || false
       form.allowCreate = props.pickerProps?.allowCreate || false
-      form.viewLink = props.pickerProps?.viewLink !== false
+      form.detailReadonly = props.pickerProps?.detailReadonly !== false
     }
   },
   { immediate: true },
@@ -248,11 +250,12 @@ function handleConfirm() {
     displayField: form.displayField,
     columns: form.columns,
     searchColumns: form.searchColumns,
-    mode: form.mode,
+    // maxCount：缺省不限；1 = 单选语义
+    ...(form.maxCount ? { maxCount: form.maxCount } : {}),
     filters,
     clearOnCascadeChange: form.clearOnCascadeChange,
     allowCreate: form.allowCreate,
-    viewLink: form.viewLink,
+    detailReadonly: form.detailReadonly,
   }
   emit('confirm', newProps)
   visible.value = false

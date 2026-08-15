@@ -47,7 +47,7 @@ describe('DataPickerConfigDialog — v1 dependOn 兼容回填', () => {
         sourceFormKey: 'emp_profile',
         displayField: 'name',
         columns: ['name'],
-        mode: 'single',
+        maxCount: 1,
         dependOn: { field: 'dept_field', sourceColumn: 'dept' },
       },
     })
@@ -66,7 +66,7 @@ describe('DataPickerConfigDialog — v1 dependOn 兼容回填', () => {
         sourceFormKey: 'emp_profile',
         displayField: 'name',
         columns: [],
-        mode: 'single',
+        maxCount: 1,
         dependOn: { field: 'dept_field', sourceColumn: 'dept' },
       },
     })
@@ -84,7 +84,7 @@ describe('DataPickerConfigDialog — v1 dependOn 兼容回填', () => {
 describe('DataPickerConfigDialog — 筛选条件编辑（对齐 LookupPicker）', () => {
   it('添加 static（固定值）筛选条件并保存产出结构化 filter', async () => {
     const wrapper = createWrapper({
-      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], mode: 'single' },
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], maxCount: 1 },
     })
     await nextTick()
     const vm = wrapper.vm as any
@@ -99,7 +99,7 @@ describe('DataPickerConfigDialog — 筛选条件编辑（对齐 LookupPicker）
 
   it('支持 op 与 OR 组合产出', async () => {
     const wrapper = createWrapper({
-      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], mode: 'single' },
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], maxCount: 1 },
     })
     await nextTick()
     const vm = wrapper.vm as any
@@ -119,7 +119,7 @@ describe('DataPickerConfigDialog — 筛选条件编辑（对齐 LookupPicker）
 
   it('空条件行（无 column）不产出', async () => {
     const wrapper = createWrapper({
-      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], mode: 'single' },
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], maxCount: 1 },
     })
     await nextTick()
     const vm = wrapper.vm as any
@@ -135,7 +135,7 @@ describe('DataPickerConfigDialog — 筛选条件编辑（对齐 LookupPicker）
         sourceFormKey: 'emp_profile',
         displayField: 'name',
         columns: [],
-        mode: 'single',
+        maxCount: 1,
         filters: {
           logic: 'OR',
           conditions: [
@@ -158,7 +158,7 @@ describe('DataPickerConfigDialog — 筛选条件编辑（对齐 LookupPicker）
 describe('DataPickerConfigDialog — 搜索列', () => {
   it('搜索列多选保存产出（逗号分隔）', async () => {
     const wrapper = createWrapper({
-      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], mode: 'single' },
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], maxCount: 1 },
     })
     await nextTick()
     const vm = wrapper.vm as any
@@ -174,7 +174,7 @@ describe('DataPickerConfigDialog — 搜索列', () => {
         sourceFormKey: 'emp_profile',
         displayField: 'name',
         columns: [],
-        mode: 'single',
+        maxCount: 1,
         searchColumns: ['name', 'dept'],
       },
     })
@@ -188,19 +188,20 @@ describe('DataPickerConfigDialog — 搜索列', () => {
 describe('DataPickerConfigDialog — 行为开关', () => {
   it('开关默认值与保存产出', async () => {
     const wrapper = createWrapper({
-      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], mode: 'single' },
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], maxCount: 1 },
     })
     await nextTick()
     const vm = wrapper.vm as any
     expect(vm.form.clearOnCascadeChange).toBe(false)
     expect(vm.form.allowCreate).toBe(false)
-    expect(vm.form.viewLink).toBe(true)
+    expect(vm.form.detailReadonly).toBe(true)
     vm.form.clearOnCascadeChange = true
     vm.form.allowCreate = true
+    vm.form.detailReadonly = false
     const props = confirmProps(wrapper)
     expect(props.clearOnCascadeChange).toBe(true)
     expect(props.allowCreate).toBe(true)
-    expect(props.viewLink).toBe(true)
+    expect(props.detailReadonly).toBe(false)
     wrapper.unmount()
   })
 
@@ -210,17 +211,70 @@ describe('DataPickerConfigDialog — 行为开关', () => {
         sourceFormKey: 'emp_profile',
         displayField: 'name',
         columns: [],
-        mode: 'single',
+        maxCount: 1,
         clearOnCascadeChange: true,
         allowCreate: true,
-        viewLink: false,
+        detailReadonly: false,
       },
     })
     await nextTick()
     const vm = wrapper.vm as any
     expect(vm.form.clearOnCascadeChange).toBe(true)
     expect(vm.form.allowCreate).toBe(true)
-    expect(vm.form.viewLink).toBe(false)
+    expect(vm.form.detailReadonly).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('DataPickerConfigDialog — 最多可选数（maxCount）', () => {
+  it('默认 maxCount 为 undefined（不限）', async () => {
+    const wrapper = createWrapper()
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.form.maxCount).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('回填：pickerProps.maxCount 正确还原', async () => {
+    const wrapper = createWrapper({
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], maxCount: 3 },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.form.maxCount).toBe(3)
+    wrapper.unmount()
+  })
+
+  it('回填：旧 mode=single 兼容为 maxCount=1', async () => {
+    const wrapper = createWrapper({
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [], mode: 'single' },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.form.maxCount).toBe(1)
+    wrapper.unmount()
+  })
+
+  it('保存：配置 maxCount 后产出该值', async () => {
+    const wrapper = createWrapper({
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.form.maxCount = 5
+    const props = confirmProps(wrapper)
+    expect(props.maxCount).toBe(5)
+    expect(props.mode).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('保存：未配置 maxCount 时不产出该键', async () => {
+    const wrapper = createWrapper({
+      pickerProps: { sourceFormKey: 'emp_profile', displayField: 'name', columns: [] },
+    })
+    await nextTick()
+    const props = confirmProps(wrapper)
+    expect(props.maxCount).toBeUndefined()
     wrapper.unmount()
   })
 })

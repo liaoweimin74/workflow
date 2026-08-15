@@ -28,7 +28,7 @@
           <el-select v-if="!row.unsupported && !row.hidden" v-model="row.columnType" size="small" :disabled="isCrossChangeLocked(row)">
             <el-option v-for="t in allowedTypes" :key="t" :label="t" :value="t" />
           </el-select>
-          <span v-else-if="row.hidden">VARCHAR</span>
+          <span v-else-if="row.hidden">{{ row.columnType }}</span>
           <span v-else class="unsupported-text">不支持</span>
         </template>
       </el-table-column>
@@ -151,7 +151,8 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
     case 'checkbox':
     case 'multiSelect':
     case 'multiSelectPro':
-      return { columnType: 'VARCHAR', length: 1024, scale: null }
+      // 多选值以逗号拼接存储，长度不可控 → TEXT（VARCHAR 上限 255 会截断）
+      return { columnType: 'TEXT', length: null, scale: null }
     case 'DatePicker':
     case 'datePicker': {
       const subType = propsMap?.type
@@ -176,6 +177,13 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
 
 const UNSUPPORTED_TYPES = ['subTable', 'SubTable', 'nestedForm', 'NestedForm', 'dataTable', 'divider', 'groupContainer']
 
+/** 从 LookupPicker fetch.action（/v1/biz-data/<formKey>）推断数据源表单 key */
+function inferSourceFormKey(propsMap: Record<string, any>): string | undefined {
+  const action = typeof propsMap.fetch?.action === 'string' ? propsMap.fetch.action : ''
+  const m = action.match(/\/v1\/biz-data\/([a-zA-Z][a-zA-Z0-9_]*)/)
+  return m ? m[1] : undefined
+}
+
 function isLayoutContainer(rule: any): boolean {
   return !rule?.field && Array.isArray(rule?.children)
 }
@@ -195,6 +203,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       continue
     }
     // data-picker：生成两列（id 列 + 隐藏冗余文本列）
+    // 值以 JSON 数组存储（["u1","u2"]，单选为 ["u1"]），长度不可控 → 两列均 TEXT
     if (type === 'dataPicker') {
       const propsMap = (rule?.props || {}) as Record<string, any>
       const existing = props.existingColumns?.find(c => c.key === field)
@@ -202,8 +211,8 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       out.push({
         key: field,
         label,
-        columnType: 'VARCHAR',
-        length: 64,
+        columnType: 'TEXT',
+        length: null,
         scale: null,
         required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: existing?.unique ?? false,
@@ -211,21 +220,45 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey,
           displayField: propsMap.displayField,
-          mode: propsMap.mode,
+          maxCount: propsMap.maxCount,
+          pickerType: 'dataPicker',
         }),
         existingType: existing?.columnType,
       })
       out.push({
         key: field + '_text',
         label: label + '（显示）',
-        columnType: 'VARCHAR',
-        length: 1024,
+        columnType: 'TEXT',
+        length: null,
         scale: null,
         required: false,
         unique: false,
         indexed: false,
         hidden: true,
         existingType: existingText?.columnType,
+      })
+      continue
+    }
+    // LookupPicker（查找带回）：存显示文本字符串 → VARCHAR(255)
+    if (type === 'LookupPicker') {
+      const propsMap = (rule?.props || {}) as Record<string, any>
+      const existing = props.existingColumns?.find(c => c.key === field)
+      out.push({
+        key: field,
+        label,
+        columnType: 'VARCHAR',
+        length: 255,
+        scale: null,
+        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        unique: existing?.unique ?? false,
+        indexed: existing?.indexed ?? false,
+        pickerConfig: JSON.stringify({
+          sourceFormKey: propsMap.sourceFormKey || inferSourceFormKey(propsMap),
+          displayField: propsMap.displayField,
+          mode: 'single',
+          pickerType: 'lookupPicker',
+        }),
+        existingType: existing?.columnType,
       })
       continue
     }

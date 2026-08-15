@@ -13,7 +13,7 @@
         <el-icon><Search /></el-icon>
       </template>
     </el-input>
-    <!-- 有值：Tag 列表（编辑态可 x 移除 + 选择按钮；只读态无 x） -->
+    <!-- 有值：Tag 列表（编辑态可 x 移除 + 查看/选择按钮；只读态仅查看） -->
     <div v-else class="data-picker__tags">
       <span
         v-for="(item, i) in tagItems"
@@ -30,6 +30,13 @@
           {{ item.text }}
         </el-tag>
       </span>
+      <el-button
+        link
+        type="primary"
+        size="small"
+        class="data-picker__view-btn"
+        @click="openViewDialog"
+      >查看</el-button>
       <el-button
         v-if="!readonly"
         link
@@ -56,6 +63,7 @@
         <el-button type="primary" @click="handleSearch">搜索</el-button>
       </div>
       <el-table
+        ref="tableRef"
         :data="tableData"
         v-loading="loading"
         border
@@ -91,19 +99,54 @@
         <el-button v-if="isMultiple" type="primary" @click="confirmSelection">确定</el-button>
       </template>
     </el-dialog>
-    <!-- 点击 Tag：记录详情弹窗（只读展示目标记录各字段） -->
+    <!-- 查看已选记录列表：表格列与选择弹窗一致，数据为当前已选记录（复用 list 接口 + id IN 过滤） -->
     <el-dialog
-      v-model="detailVisible"
-      :title="'记录详情'"
-      width="600px"
+      v-model="viewDialogVisible"
+      title="已选记录"
+      width="700px"
       :close-on-click-modal="false"
       append-to-body
     >
-      <el-descriptions :column="1" border v-loading="detailLoading">
-        <el-descriptions-item v-for="col in detailColumns" :key="col.key" :label="col.label">
-          {{ detailCell(col.key) }}
-        </el-descriptions-item>
-      </el-descriptions>
+      <el-table
+        :data="viewRows"
+        v-loading="viewLoading"
+        border
+        highlight-current-row
+        @row-click="handleViewRowClick"
+      >
+        <el-table-column
+          v-for="col in resolvedColumns"
+          :key="col"
+          :prop="col"
+          :label="columnLabelMap[col] || col"
+          min-width="120"
+          :formatter="(row: any) => formatCell(row, col)"
+        />
+      </el-table>
+    </el-dialog>
+    <!-- 点击 Tag：记录详情弹窗（复用 form-create 渲染目标表单，readonly 由 detailReadonly 配置控制） -->
+    <el-dialog
+      v-model="detailVisible"
+      :title="'记录详情'"
+      width="640px"
+      :close-on-click-modal="false"
+      append-to-body
+    >
+      <div v-loading="detailLoading" style="min-height: 200px">
+        <FormRenderer
+          v-if="detailSchema.length > 0"
+          ref="detailFormRef"
+          :rule="detailSchema"
+          :option="detailOption"
+          :initial-values="detailFormValues"
+          :readonly="detailReadonly"
+        />
+        <p v-else-if="!detailLoading" class="detail-empty">目标表单 schema 为空或表单未发布</p>
+      </div>
+      <template v-if="!detailReadonly && detailSchema.length > 0" #footer>
+        <el-button @click="detailVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="detailSaving" @click="handleDetailSave">保存</el-button>
+      </template>
     </el-dialog>
     <DataPickerCreateDialog
       v-model:visible="createDialogVisible"
@@ -114,11 +157,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, inject } from 'vue'
+import { ref, computed, watch, inject, nextTick, type ComponentPublicInstance } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
+import { type Rule } from '@form-create/element-ui'
 import { bizDataApi } from '@/api/bizData'
 import { formApi } from '@/api/form'
 import DataPickerCreateDialog from './DataPickerCreateDialog.vue'
+import FormRenderer from './FormRenderer.vue'
 
 /** form-create 注入对象，提供 api.setValue 等方法 */
 interface FormCreateInject {
@@ -163,8 +209,8 @@ const props = withDefaults(
     columns?: string[]
     /** 搜索列（参与关键字搜索的目标表列 key），缺省仅 displayField */
     searchColumns?: string[]
-    /** 单选/多选 */
-    mode?: 'single' | 'multiple'
+    /** 最多可选数量：缺省不限；1 = 单选语义（点行即选 + 校验长度 ≤ 1） */
+    maxCount?: number
     /** 级联依赖（v1 兼容形态，等价于单条 field 型筛选条件） */
     dependOn?: { field?: string; sourceColumn?: string }
     /** 依赖字段当前值（由父组件传入，v1 兼容触发源） */
@@ -175,8 +221,8 @@ const props = withDefaults(
     clearOnCascadeChange?: boolean
     /** 允许新增：选择弹窗提供"新增"入口 */
     allowCreate?: boolean
-    /** 点击 Tag 是否可查看记录详情（默认开启） */
-    viewLink?: boolean
+    /** 详情弹窗表单是否只读（默认 true；false 时详情表单可编辑并支持保存） */
+    detailReadonly?: boolean
     /** 冗余显示文本（由表单数据提供，如 <key>_text；缺省时内部 resolve 补全） */
     displayText?: string
     disabled?: boolean
@@ -184,13 +230,12 @@ const props = withDefaults(
     placeholder?: string
   }>(),
   {
-    mode: 'single',
     placeholder: '请选择',
     disabled: false,
     readonly: false,
     clearOnCascadeChange: false,
     allowCreate: false,
-    viewLink: true,
+    detailReadonly: true,
   },
 )
 
@@ -203,9 +248,16 @@ const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject'
 
 const dialogVisible = ref(false)
 const createDialogVisible = ref(false)
+const viewDialogVisible = ref(false)
+const viewLoading = ref(false)
+const viewRows = ref<any[]>([])
 const detailVisible = ref(false)
 const detailLoading = ref(false)
+const detailSaving = ref(false)
 const detailRow = ref<any>(null)
+const detailSchema = ref<Rule[]>([])
+const detailOption = ref<Record<string, any>>({})
+const detailFormRef = ref<ComponentPublicInstance | null>(null)
 const loading = ref(false)
 const keyword = ref('')
 const tableData = ref<any[]>([])
@@ -213,20 +265,36 @@ const total = ref(0)
 const tempSelection = ref<any[]>([])
 const resolvedDisplayText = ref('')
 const missingIds = ref<string[]>([])
+const tableRef = ref<ComponentPublicInstance | null>(null)
 
 const query = ref({ page: 1, size: 10 })
 
-const isMultiple = computed(() => props.mode === 'multiple')
+/** 单选语义：maxCount=1（点行即选） */
+const isSingleSelect = computed(() => props.maxCount === 1)
 
-/** 是否有已选值：有值时不显示输入框，改为 Tag 列表 */
-const hasValue = computed(() => !!(props.modelValue))
+/** 多选交互：maxCount 缺省（不限）或 >1 时勾选 + 确认 */
+const isMultiple = computed(() => !isSingleSelect.value)
 
-/** Tag 数据源：modelValue（逗号 id）与显示文本（_text/resolve 逗号串）按 index 对齐拆分 */
+/** 解析 JSON 数组字符串（modelValue/displayText 存储形态），非法/空返回 [] */
+function parseJsonArray(v: string | undefined | null): string[] {
+  if (!v) return []
+  try {
+    const parsed = JSON.parse(v)
+    return Array.isArray(parsed) ? parsed.map(String) : []
+  } catch {
+    return []
+  }
+}
+
+/** 是否有已选值：有值时不显示输入框，改为 Tag 列表（空数组视为无值） */
+const hasValue = computed(() => parseJsonArray(props.modelValue).length > 0)
+
+/** Tag 数据源：modelValue（JSON id 数组）与显示文本（_text/resolve JSON 文本数组）按 index 对齐 */
 const tagItems = computed(() => {
-  const ids = (props.modelValue || '').split(',').filter(Boolean)
+  const ids = parseJsonArray(props.modelValue)
   if (ids.length === 0) return []
   const missingSet = new Set(missingIds.value)
-  const texts = (props.displayText || resolvedDisplayText.value || '').split(',').filter(Boolean)
+  const texts = parseJsonArray(props.displayText || resolvedDisplayText.value)
   return ids.map((id, i) => ({
     id,
     text: missingSet.has(id)
@@ -306,10 +374,8 @@ const resolvedColumns = computed(() => {
   return cols.filter((c): c is string => !!c)
 })
 
-/** 目标表单列 key → label 映射（弹窗列头/详情显示中文；获取失败回退 key） */
+/** 目标表单列 key → label 映射（弹窗列头显示中文；获取失败回退 key） */
 const columnLabelMap = ref<Record<string, string>>({})
-/** 详情弹窗展示列（目标表单非隐藏列） */
-const detailColumns = ref<{ key: string; label: string }[]>([])
 
 async function loadColumnLabels() {
   if (!props.sourceFormKey) return
@@ -317,18 +383,48 @@ async function loadColumnLabels() {
     const res = await formApi.getFormDefinitionByKey(props.sourceFormKey)
     const cc = res.data.columnConfig
     const map: Record<string, string> = {}
-    const detail: { key: string; label: string }[] = []
     if (cc) {
-      for (const c of JSON.parse(cc) as { key: string; label?: string; hidden?: boolean }[]) {
+      for (const c of JSON.parse(cc) as { key: string; label?: string }[]) {
         if (c.key && c.label) map[c.key] = c.label
-        if (c.key && !c.hidden) detail.push({ key: c.key, label: c.label || c.key })
       }
     }
     columnLabelMap.value = map
-    detailColumns.value = detail
   } catch {
     columnLabelMap.value = {}
-    detailColumns.value = []
+  }
+}
+
+/** 详情表单初始值：detail 记录的 data 内层（业务字段平铺），对齐 BizDataListPage.getApi */
+const detailFormValues = computed(() => {
+  const d = detailRow.value
+  if (d && typeof d === 'object') {
+    const inner = (d as Record<string, unknown>).data
+    if (inner && typeof inner === 'object') return inner as Record<string, unknown>
+    return d
+  }
+  return {}
+})
+
+/** 加载目标表单 schema（form-create rule + option）供详情弹窗渲染 */
+async function loadDetailSchema() {
+  detailSchema.value = []
+  detailOption.value = {}
+  if (!props.sourceFormKey) return
+  try {
+    const res = await formApi.getFormDefinitionByKey(props.sourceFormKey)
+    const def = res.data
+    if (def.schema && def.schema !== '[]') {
+      const parsed = JSON.parse(def.schema)
+      if (Array.isArray(parsed)) {
+        detailSchema.value = parsed
+      } else {
+        detailSchema.value = parsed.rule || []
+        detailOption.value = parsed.option || {}
+      }
+    }
+  } catch {
+    detailSchema.value = []
+    detailOption.value = {}
   }
 }
 
@@ -351,11 +447,6 @@ function formatCell(row: any, key: string): string {
   const v = readCell(row, key)
   if (v === null || v === undefined) return ''
   return typeof v === 'object' ? JSON.stringify(v) : String(v)
-}
-
-/** 详情弹窗单元格取值 */
-function detailCell(key: string): string {
-  return formatCell(detailRow.value, key)
 }
 
 watch(
@@ -393,12 +484,13 @@ watch(
 async function resolveDisplay(val: string) {
   if (!props.sourceFormKey || !val) return
   try {
-    const ids = val.split(',').filter(Boolean)
+    const ids = parseJsonArray(val)
+    if (ids.length === 0) return
     const res = await bizDataApi.resolve(props.sourceFormKey, ids, props.displayField)
     const map = res.data || {}
     const parts = ids.map(id => ({ id, text: map[id], missing: map[id] === undefined }))
     missingIds.value = parts.filter(p => p.missing).map(p => p.id)
-    resolvedDisplayText.value = parts.map(p => (p.missing ? p.id : p.text)).join(',')
+    resolvedDisplayText.value = JSON.stringify(parts.map(p => (p.missing ? p.id : p.text)))
   } catch {
     resolvedDisplayText.value = val
     missingIds.value = []
@@ -413,6 +505,40 @@ function openDialog() {
   tempSelection.value = []
   loadColumnLabels()
   fetchData()
+}
+
+/** 打开"查看已选记录"弹窗：按当前已选 id 批量查询完整记录（表格与选择弹窗一致） */
+async function openViewDialog() {
+  const ids = parseJsonArray(props.modelValue)
+  if (ids.length === 0) return
+  viewDialogVisible.value = true
+  viewLoading.value = true
+  viewRows.value = []
+  loadColumnLabels()
+  try {
+    // 复用 list 接口 + id IN 过滤（后端 filter 支持 in 运算符）
+    const res = await bizDataApi.list(props.sourceFormKey || '', {
+      page: 0,
+      size: 100,
+      filter: {
+        logic: 'AND',
+        conditions: [{ column: 'id', op: 'in', value: ids }],
+      },
+    })
+    // 后端 IN 不保证顺序：按 modelValue 顺序重排（与 Tag 顺序一致）
+    const byId = new Map<string, any>((res.data.records || []).map(r => [String(r.id), r]))
+    viewRows.value = ids.map(id => byId.get(id)).filter(Boolean)
+  } catch {
+    viewRows.value = []
+  } finally {
+    viewLoading.value = false
+  }
+}
+
+/** 查看弹窗点击行：打开该记录详情（与点击 Tag 一致，复用 handleTagClick） */
+function handleViewRowClick(row: any) {
+  if (!row || row.id === undefined || row.id === null) return
+  handleTagClick(String(row.id))
 }
 
 async function fetchData() {
@@ -435,15 +561,17 @@ async function fetchData() {
   }
 }
 
-/** 点击 Tag 主体：打开记录详情弹窗（加载目标记录 + 展示各字段） */
+/** 点击 Tag 主体：打开记录详情弹窗（加载目标表单 schema + 记录数据，form-create 渲染）。
+ *  点击 Tag 始终可查看详情（编辑态/只读态一致）。 */
 async function handleTagClick(id: string) {
   if (!props.sourceFormKey || !id) return
-  if (props.viewLink === false) return
   detailVisible.value = true
   detailLoading.value = true
   detailRow.value = null
+  detailFormRef.value = null
   try {
     await loadColumnLabels()
+    await loadDetailSchema()
     const res = await bizDataApi.detail(props.sourceFormKey, id)
     detailRow.value = res.data
   } finally {
@@ -451,15 +579,41 @@ async function handleTagClick(id: string) {
   }
 }
 
+/** 保存详情表单修改（detailReadonly=false 时才可见"保存"按钮）：
+ *  form-create 校验通过后读取表单数据，调 update 接口（带 version 乐观锁）保存，
+ *  保存成功带回服务端最新数据刷新详情并同步 Tag 文本。 */
+async function handleDetailSave() {
+  const form = detailFormRef.value as any
+  if (!form) return
+  const validate = typeof form.validate === 'function' ? form.validate : () => Promise.resolve(true)
+  const valid = await validate().catch(() => false)
+  if (!valid) return
+  const data = (typeof form.getFormData === 'function' ? form.getFormData() : {}) as Record<string, unknown>
+  const id = detailRow.value?.id
+  const version = detailRow.value?.version
+  if (!props.sourceFormKey || id === undefined || id === null) return
+  detailSaving.value = true
+  try {
+    const res = await bizDataApi.update(props.sourceFormKey, String(id), data, version)
+    detailRow.value = res.data
+    ElMessage.success('保存成功')
+    await resolveDisplay(JSON.stringify([id]))
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    detailSaving.value = false
+  }
+}
+
 /** 点击 Tag 右上角 x：移除该条引用（单选清空；多选剔除该 id 保留其余） */
 function removeTag(index: number) {
-  const ids = (props.modelValue || '').split(',').filter(Boolean)
+  const ids = parseJsonArray(props.modelValue)
   if (index < 0 || index >= ids.length) return
   ids.splice(index, 1)
-  const texts = (props.displayText || resolvedDisplayText.value || '').split(',').filter(Boolean)
+  const texts = parseJsonArray(props.displayText || resolvedDisplayText.value)
   texts.splice(index, 1)
-  const newIds = ids.join(',')
-  const newText = texts.join(',')
+  const newIds = JSON.stringify(ids)
+  const newText = JSON.stringify(texts)
   emit('update:modelValue', newIds)
   emit('update:displayText', newText)
   resolvedDisplayText.value = newText
@@ -472,13 +626,20 @@ function openCreateDialog() {
 }
 
 /**
- * 新增成功（DataPickerCreateDialog emit，携带 BizDataVO）：单选自动选中，多选刷新列表供勾选。
+ * 新增成功（DataPickerCreateDialog emit，携带 BizDataVO）：单选自动选中，多选刷新列表并自动勾选新记录。
  * 平铺 data 内层字段 + id，供 selectValue 取值。
  */
 async function handleCreateSuccess(row: Record<string, any>) {
   createDialogVisible.value = false
   if (isMultiple.value) {
     await fetchData()
+    // 自动勾选新记录（spec：新增成功 SHALL 自动选中新创建的记录）
+    const newId = String(row?.id)
+    const target = tableData.value.find(r => String(r.id) === newId)
+    if (target) {
+      await nextTick()
+      ;(tableRef.value as any)?.toggleRowSelection(target, true)
+    }
     return
   }
   const flat = { ...((row.data as Record<string, unknown>) || {}), id: String(row.id) }
@@ -502,15 +663,20 @@ function handleSelectionChange(rows: any[]) {
 }
 
 function confirmSelection() {
+  // maxCount 上限校验（缺省不限；>1 时限制勾选数量）
+  if (props.maxCount && props.maxCount > 1 && tempSelection.value.length > props.maxCount) {
+    ElMessage.warning(`最多选择 ${props.maxCount} 条记录`)
+    return
+  }
   selectValue(tempSelection.value)
   dialogVisible.value = false
 }
 
 function selectValue(rows: any[]) {
-  const ids = rows.map(r => String(r.id)).join(',')
-  const texts = rows.map(r => (props.displayField ? String(readCell(r, props.displayField) ?? '') : '')).join(',')
-  emit('update:modelValue', ids)
-  resolvedDisplayText.value = texts
+  const ids = rows.map(r => String(r.id))
+  const texts = rows.map(r => (props.displayField ? String(readCell(r, props.displayField) ?? '') : ''))
+  emit('update:modelValue', JSON.stringify(ids))
+  resolvedDisplayText.value = JSON.stringify(texts)
 }
 </script>
 

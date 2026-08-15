@@ -219,12 +219,13 @@ public class FormDefinitionService {
     }
 
     /**
-     * 发布表单定义（草稿直接发布，不创建新记录）。
-     * 将当前 DRAFT 记录状态改为 PUBLISHED，旧 PUBLISHED 降为 ARCHIVED。
-     * 发布前校验 schema 是否与上次发布相同，相同则拒绝发布。
+     * 发布/重新发布表单定义（不创建新记录，原地改状态）。
+     * - DRAFT → PUBLISHED：首次发布，旧 PUBLISHED（同 key 其他记录）降为 ARCHIVED。
+     * - PUBLISHED → PUBLISHED：重新发布（已发布表单编辑后再发布），排除自身比较内容变化。
+     * 发布前校验 schema 是否与上次发布（排除自身）相同，相同则拒绝。
      * type=BUSINESS 时，发布前校验 schema 不含子表/嵌套组件，并基于 column_config 触发受控 DDL 建表/变更。
      *
-     * @param id 表单定义 ID（DRAFT 版本）
+     * @param id 表单定义 ID
      * @return 发布后的表单定义（同一条记录，状态改为 PUBLISHED）
      * @throws BusinessException 如果 schema 与上一已发布版本相同；业务表单含子表组件或 column_config 非法
      */
@@ -235,12 +236,17 @@ public class FormDefinitionService {
         FormDefinition draft = formDefRepository.findByIdForUpdate(id, tenantId)
                 .orElseThrow(() -> new RuntimeException("Form definition not found: " + id));
 
-        if (!"DRAFT".equals(draft.getStatus())) {
-            throw new RuntimeException("Only DRAFT forms can be published, current status: " + draft.getStatus());
+        boolean republish = "PUBLISHED".equals(draft.getStatus());
+        if (!"DRAFT".equals(draft.getStatus()) && !republish) {
+            throw new BusinessException(400, "仅草稿或已发布表单可发布，当前状态: " + draft.getStatus());
         }
 
-        Optional<FormDefinition> lastPublished = formDefRepository
-                .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, draft.getKey(), "PUBLISHED");
+        // 重新发布：排除当前记录自身（其已是 PUBLISHED），避免与自己的 schema 比较恒等
+        Optional<FormDefinition> lastPublished = republish
+                ? formDefRepository.findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
+                        tenantId, draft.getKey(), "PUBLISHED", draft.getId())
+                : formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                        tenantId, draft.getKey(), "PUBLISHED");
 
         if (lastPublished.isPresent() && Objects.equals(lastPublished.get().getSchema(), draft.getSchema())) {
             throw new BusinessException(400, "表单内容未变化，无需发布");
@@ -254,13 +260,13 @@ public class FormDefinitionService {
             tableManager.ensureTable(draft.getKey(), columns);
         }
 
-        // 旧 PUBLISHED 降为 ARCHIVED
+        // 旧 PUBLISHED（非当前记录）降为 ARCHIVED
         lastPublished.ifPresent(old -> {
             old.setStatus("ARCHIVED");
             formDefRepository.save(old);
         });
 
-        // 草稿直接发布：同一记录改状态，不创建新记录
+        // 原地改状态：草稿或已发布记录直接改为 PUBLISHED
         draft.setStatus("PUBLISHED");
         draft.setPublishedVersion(draft.getVersion());
         return formDefRepository.save(draft);

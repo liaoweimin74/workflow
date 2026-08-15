@@ -28,8 +28,14 @@
       </el-tag>
       <div class="toolbar-right">
         <el-button type="primary" :icon="Check" @click="handleSave" :loading="saving">保存</el-button>
-        <el-button v-if="formStatus === 'DRAFT'" type="success" :icon="Promotion" @click="handlePublish" :loading="publishing">
-          发布
+        <el-button
+          v-if="formStatus === 'DRAFT' || formStatus === 'PUBLISHED'"
+          type="success"
+          :icon="Promotion"
+          @click="handlePublish"
+          :loading="publishing"
+        >
+          {{ formStatus === 'PUBLISHED' ? '重新发布' : '发布' }}
         </el-button>
       </div>
     </div>
@@ -178,7 +184,6 @@ onMounted(async () => {
         columns: [],
         displayField: '',
         returnFields: {},
-        mode: 'single',
         idField: '',
       },
     }),
@@ -212,7 +217,6 @@ onMounted(async () => {
         displayField: '',
         columns: [],
         searchColumns: [],
-        mode: 'single',
         dependOn: undefined,
       },
     }),
@@ -309,8 +313,12 @@ async function handleSave() {
 }
 
 async function handlePublish() {
+  const isRepublish = formStatus.value === 'PUBLISHED'
+  const confirmText = isRepublish
+    ? '确定要重新发布此表单吗？将同步更新线上表单结构与数据表列。'
+    : '确定要发布此表单吗？发布后不可修改。'
   try {
-    await ElMessageBox.confirm('确定要发布此表单吗？发布后不可修改。', '确认发布', {
+    await ElMessageBox.confirm(confirmText, isRepublish ? '确认重新发布' : '确认发布', {
       type: 'warning',
     })
   } catch {

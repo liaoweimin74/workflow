@@ -314,6 +314,86 @@ class FormDefinitionServiceTest {
         assertEquals(1, result.getPublishedVersion());
     }
 
+    // ==================== 重新发布（PUBLISHED → PUBLISHED） ====================
+
+    @Test
+    void republish_publishedForm_schemaChanged_succeeds() {
+        FormDefinition published = new FormDefinition();
+        published.setId("form-pub");
+        published.setTenantId(TENANT_ID);
+        published.setKey("leave-form");
+        published.setName("请假表单");
+        published.setSchema("[{\"field\":\"reason\"},{\"field\":\"days\"}]"); // 已编辑后的新 schema
+        published.setVersion(2);
+        published.setStatus("PUBLISHED");
+
+        // 重新发布：排除自身后无其他 PUBLISHED → 不比较内容，直接发布
+        when(formDefRepository.findByIdForUpdate("form-pub", TENANT_ID))
+            .thenReturn(Optional.of(published));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
+                TENANT_ID, "leave-form", "PUBLISHED", "form-pub"))
+            .thenReturn(Optional.empty());
+        when(formDefRepository.save(any(FormDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FormDefinition result = formDefService.publish("form-pub");
+
+        assertEquals("form-pub", result.getId());
+        assertEquals("PUBLISHED", result.getStatus());
+        assertEquals(2, result.getPublishedVersion());
+        // 自身不被降级为 ARCHIVED
+        assertEquals("PUBLISHED", published.getStatus());
+        verify(formDefRepository).save(published);
+    }
+
+    @Test
+    void republish_publishedForm_excludesSelfFromComparison() {
+        FormDefinition published = new FormDefinition();
+        published.setId("form-pub");
+        published.setTenantId(TENANT_ID);
+        published.setKey("leave-form");
+        published.setName("请假表单");
+        published.setSchema("[{\"field\":\"reason\"}]");
+        published.setVersion(2);
+        published.setStatus("PUBLISHED");
+
+        // 存在另一条 PUBLISHED（旧版本），且 schema 与当前相同 → 拒绝（内容未变化）
+        FormDefinition otherPublished = new FormDefinition();
+        otherPublished.setId("form-pub-old");
+        otherPublished.setTenantId(TENANT_ID);
+        otherPublished.setKey("leave-form");
+        otherPublished.setSchema("[{\"field\":\"reason\"}]");
+        otherPublished.setVersion(1);
+        otherPublished.setStatus("PUBLISHED");
+
+        when(formDefRepository.findByIdForUpdate("form-pub", TENANT_ID))
+            .thenReturn(Optional.of(published));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
+                TENANT_ID, "leave-form", "PUBLISHED", "form-pub"))
+            .thenReturn(Optional.of(otherPublished));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+            () -> formDefService.publish("form-pub"));
+        assertTrue(ex.getMessage().contains("表单内容未变化"));
+    }
+
+    @Test
+    void republish_archivedForm_rejected() {
+        FormDefinition archived = new FormDefinition();
+        archived.setId("form-archived");
+        archived.setTenantId(TENANT_ID);
+        archived.setKey("leave-form");
+        archived.setSchema("[]");
+        archived.setVersion(3);
+        archived.setStatus("ARCHIVED");
+
+        when(formDefRepository.findByIdForUpdate("form-archived", TENANT_ID))
+            .thenReturn(Optional.of(archived));
+
+        BusinessException ex = assertThrows(BusinessException.class,
+            () -> formDefService.publish("form-archived"));
+        assertTrue(ex.getMessage().contains("仅草稿或已发布表单可发布"));
+    }
+
     // ==================== delete ====================
 
     @Test

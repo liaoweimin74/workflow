@@ -48,4 +48,12 @@ public interface FormDefinitionRepository extends JpaRepository<FormDefinition, 
 
     Optional<FormDefinition> findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
             String tenantId, String key, String status);
+
+    /**
+     * 查找同 key 的最新已发布版本（排除指定 id）。
+     * 重新发布时用于排除当前记录自身（当前记录已是 PUBLISHED），
+     * 避免"内容未变化"比较时与自己比较恒等。
+     */
+    Optional<FormDefinition> findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
+            String tenantId, String key, String status, String excludeId);
 }

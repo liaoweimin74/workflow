@@ -78,11 +78,10 @@ onMounted(async () => {
     await loadData()
   }
   if (props.readonly) {
-    // form-create 的 rule 用 props.disabled 控制字段禁用
-    resolvedSchema.value = resolvedSchema.value.map(f => {
-      const props = f.props || {}
-      return { ...f, props: { ...props, disabled: true } }
-    })
+    // form-create 的 rule 用 props.disabled 控制字段禁用。
+    // 注意：schema 可能为 fcRow 栅格布局嵌套结构（fcRow → col → input/select），
+    // 必须递归到子字段，否则只有容器被禁用、真实字段仍可编辑。
+    resolvedSchema.value = resolvedSchema.value.map(deepDisable)
   }
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
@@ -155,8 +154,19 @@ async function loadData() {
   }
 }
 
+/** 递归设置 rule 树中所有字段的 disabled（含 fcRow/col 等布局容器内的子字段） */
+function deepDisable(field: Rule): Rule {
+  const f = field as Record<string, unknown>
+  const fieldProps = (f.props as Record<string, any>) || {}
+  const next: Record<string, unknown> = { ...f, props: { ...fieldProps, disabled: true } }
+  if (Array.isArray(f.children)) {
+    next.children = (f.children as Rule[]).map(deepDisable)
+  }
+  return next as Rule
+}
+
 function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>) {
-  // HIDDEN 字段直接移除（不渲染、不提交）；VIEW 字段设置 props.disabled 只读
+  // HIDDEN 字段直接移除（不渲染、不提交）；VIEW 字段设置 props.disabled 只读（递归到子字段）
   resolvedSchema.value = resolvedSchema.value
     .filter(field => {
       const fieldName = (field as Record<string, unknown>).field as string | undefined
@@ -168,8 +178,7 @@ function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'
       if (!fieldName) return field
       if (permissions[fieldName] !== 'VIEW') return field
 
-      const props = field.props || {}
-      return { ...field, props: { ...props, disabled: true } }
+      return deepDisable(field)
     })
 }
 
@@ -196,6 +205,28 @@ function getFormData(): Record<string, unknown> {
   return formData.value
 }
 
+/** form-create 实例 API（校验等），通过全局注入获取 */
+const formCreateApi = ref<{ validate: () => Promise<boolean> } | null>(null)
+onMounted(() => {
+  // 组件被 stub / install 未执行时 inject 不存在，跳过注入（validate 退化为跳过校验）
+  const injectFn = (formCreate as any).inject
+  if (typeof injectFn === 'function') {
+    injectFn((api: any) => {
+      formCreateApi.value = api
+    })
+  }
+})
+
+/** 校验表单：通过返回 true；未注入 api 时跳过校验返回 true */
+async function validate(): Promise<boolean> {
+  if (!formCreateApi.value) return true
+  try {
+    return (await formCreateApi.value.validate()) !== false
+  } catch {
+    return false
+  }
+}
+
 /**
  * 保存审批快照（冻结当前表单数据，供历史查看）。
  * 与 submit 不同：submit 保存可变的当前数据，saveSnapshot 创建不可变的历史记录。
@@ -216,7 +247,7 @@ async function saveSnapshot(): Promise<boolean> {
   }
 }
 
-defineExpose({ submit, saveSnapshot, getFormData, loadSchema, loadData })
+defineExpose({ submit, saveSnapshot, getFormData, validate, loadSchema, loadData })
 </script>
 
 <style scoped>

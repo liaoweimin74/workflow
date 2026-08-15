@@ -198,6 +198,25 @@ describe('FormRenderer — getFormData() 方法', () => {
   })
 })
 
+describe('FormRenderer — validate() 方法（详情弹窗保存校验）', () => {
+  it('validate 通过 defineExpose 暴露', async () => {
+    const wrapper = createWrapper({ rule: simpleRule })
+    await nextTick()
+
+    const vm = wrapper.vm as unknown as { validate: () => Promise<boolean> }
+    expect(typeof vm.validate).toBe('function')
+  })
+
+  it('未注入 form-create api（组件被 stub）时 validate 跳过校验返回 true', async () => {
+    const wrapper = createWrapper({ rule: simpleRule })
+    await nextTick()
+
+    // 测试环境 form-create 为 stub，inject 不存在 → validate 退化为跳过校验
+    const ok = await (wrapper.vm as unknown as { validate: () => Promise<boolean> }).validate()
+    expect(ok).toBe(true)
+  })
+})
+
 describe('FormRenderer — fieldPermissions prop (字段级权限)', () => {
   const permRule: Rule[] = [
     { type: 'input', field: 'name', title: '名称', value: '' } as Rule,
@@ -294,5 +313,78 @@ describe('FormRenderer — fieldPermissions prop (字段级权限)', () => {
     expect(firstRules.some(r => r.field === 'secret')).toBe(false)
     const codeFirst = firstRules.find(r => r.field === 'code') as Record<string, unknown>
     expect((codeFirst.props as Record<string, unknown>).disabled).toBe(true)
+  })
+})
+
+describe('FormRenderer — readonly prop 递归禁用（详情弹窗只读回归）', () => {
+  // 回归：详情弹窗渲染目标表单 schema（fcRow 栅格布局 → col → input/select 三层结构），
+  // readonly 必须递归到子字段，仅禁用顶层容器会导致字段仍可编辑
+  const nestedRule: Rule[] = [
+    {
+      type: 'fcRow',
+      field: 'row1',
+      title: '栅格',
+      children: [
+        {
+          type: 'col',
+          title: '列',
+          children: [
+            { type: 'input', field: 'level', title: '级别', value: '' } as Rule,
+            { type: 'input', field: 'name', title: '员工名称', value: '' } as Rule,
+          ],
+        },
+        {
+          type: 'col',
+          title: '列',
+          children: [
+            { type: 'select', field: 'dept', title: '部门', value: '' } as Rule,
+          ],
+        },
+      ],
+    } as unknown as Rule,
+  ]
+
+  function getRenderedRules(wrapper: ReturnType<typeof createWrapper>): Record<string, unknown>[] {
+    const stub = wrapper.findComponent(FormCreateStub)
+    return stub.props('rule') as Record<string, unknown>[]
+  }
+
+  // 递归查找 rule 树中的叶子字段
+  function findField(rules: Record<string, unknown>[], fieldName: string): Record<string, unknown> | undefined {
+    for (const r of rules) {
+      if (r.field === fieldName) return r
+      if (Array.isArray(r.children)) {
+        const found = findField(r.children as Record<string, unknown>[], fieldName)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+
+  it('readonly=true 时栅格容器内的子字段全部 disabled', async () => {
+    const wrapper = createWrapper({ rule: nestedRule, readonly: true })
+    await nextTick()
+
+    const rules = getRenderedRules(wrapper)
+    // 顶层 fcRow 容器本身 disabled
+    expect(rules).toHaveLength(1)
+    expect((rules[0].props as Record<string, unknown>).disabled).toBe(true)
+    // 深入两层的字段（input/select）也必须 disabled
+    for (const fieldName of ['level', 'name', 'dept']) {
+      const field = findField(rules, fieldName)
+      expect(field, `字段 ${fieldName} 应存在`).toBeDefined()
+      expect((field!.props as Record<string, unknown>).disabled, `字段 ${fieldName} 应只读`).toBe(true)
+    }
+  })
+
+  it('readonly 未传入时嵌套字段不设置 disabled（编辑器模式不受影响）', async () => {
+    const wrapper = createWrapper({ rule: nestedRule })
+    await nextTick()
+
+    const rules = getRenderedRules(wrapper)
+    for (const fieldName of ['level', 'name', 'dept']) {
+      const field = findField(rules, fieldName)
+      expect((field!.props as Record<string, unknown> | undefined)?.disabled).toBeUndefined()
+    }
   })
 })

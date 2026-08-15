@@ -141,6 +141,26 @@ class ColumnTypeMapperTest {
     }
 
     @Test
+    void mapSliderSingleInteger_returnsInt() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("slider", Map.of("min", 0, "max", 10));
+        assertThat(c.getColumnType()).isEqualTo("INT");
+    }
+
+    @Test
+    void mapSliderSingleDecimal_returnsDecimal() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("slider", Map.of("min", 0, "max", 1, "step", 0.1));
+        assertThat(c.getColumnType()).isEqualTo("DECIMAL");
+        assertThat(c.getLength()).isEqualTo(18);
+        assertThat(c.getScale()).isEqualTo(1);
+    }
+
+    @Test
+    void mapSliderRange_returnsJson() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("slider", Map.of("range", true, "min", 0, "max", 100));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
     void mapSwitch_returnsTinyint() {
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("switch", Map.of());
         assertThat(c.getColumnType()).isEqualTo("TINYINT");

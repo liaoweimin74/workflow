@@ -416,7 +416,7 @@ public class FormDefinitionService {
         if (reserved.contains(c.getKey())) {
             throw new BusinessException(400, "列名 " + c.getKey() + " 为系统保留列");
         }
-        if (c.getColumnType() == null || !Set.of("VARCHAR", "TEXT", "INT", "DECIMAL", "DATE", "DATETIME", "TINYINT", "JSON")
+        if (c.getColumnType() == null || !Set.of("VARCHAR", "TEXT", "LONGTEXT", "INT", "DECIMAL", "DATE", "DATETIME", "TINYINT", "JSON")
                 .contains(c.getColumnType())) {
             throw new BusinessException(400, "非法列类型: " + c.getColumnType());
         }

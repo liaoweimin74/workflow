@@ -1,7 +1,7 @@
 # biz-form-extra-components Specification
 
 ## Purpose
-业务表单（type=BUSINESS）发布时，支持 form-create 设计器内置的评分、颜色选择器、树形控件、树形选择、穿梭框、富文本框、手写签名、子表单组件的列映射、建表与数据读写。
+业务表单（type=BUSINESS）发布时，支持 form-create 设计器内置的评分、颜色选择器、树形控件、树形选择、穿梭框、富文本框、手写签名、子表单、滑块组件的列映射、建表与数据读写。
 
 ## Requirements
 ### Requirement: 扩展组件列映射
@@ -20,8 +20,11 @@
 | `fcEditor` | 无 | TEXT |
 | `signaturePad` | 无 | LONGTEXT |
 | `subForm` | storageMode=JSON | JSON |
+| `slider` | range=true（双滑块，值为数组） | JSON |
+| `slider` | step 为小数（单选） | DECIMAL(18, 小数位) |
+| `slider` | 其他（单选整数） | INT |
 
-多选判定 SHALL 基于 rule 的 props（tree 看 showCheckbox/值形态、elTreeSelect 看 multiple）。
+多选判定 SHALL 基于 rule 的 props（tree 看 showCheckbox/值形态、elTreeSelect 看 multiple、slider 看 range/step）。
 
 #### Scenario: 评分组件发布
 - **WHEN** 业务表单 schema 含 `{ type: 'rate', field: 'score' }`
@@ -61,6 +64,19 @@
 - **WHEN** 业务表单 schema 含 `{ type: 'subForm', field: 'items' }`
 - **THEN** 列映射草案生成 `{ key: 'items', columnType: 'JSON', storageMode: 'JSON' }`
 - **AND** 发布后物理表包含 `items JSON` 列
+
+#### Scenario: 滑块单选整数发布
+- **WHEN** 业务表单 schema 含 `{ type: 'slider', field: 'level', props: { min: 0, max: 10 } }`
+- **THEN** 列映射草案生成 `{ key: 'level', columnType: 'INT' }`
+
+#### Scenario: 滑块单选小数发布
+- **WHEN** 业务表单 schema 含 `{ type: 'slider', field: 'ratio', props: { min: 0, max: 1, step: 0.1 } }`
+- **THEN** 列映射草案生成 `{ key: 'ratio', columnType: 'DECIMAL', length: 18, scale: 1 }`
+
+#### Scenario: 滑块双滑块发布
+- **WHEN** 业务表单 schema 含 `{ type: 'slider', field: 'range', props: { range: true, min: 0, max: 100 } }`
+- **THEN** 列映射草案生成 `{ key: 'range', columnType: 'JSON' }`
+- **AND** 发布后物理表包含 `range JSON` 列
 
 ### Requirement: 扩展组件数据读写
 

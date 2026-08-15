@@ -15,7 +15,7 @@ public class ColumnConfig {
     /** 字段显示名（用于前端列头与筛选器标签） */
     private String label;
 
-    /** 列类型（白名单：VARCHAR/TEXT/INT/DECIMAL/DATE/DATETIME/TINYINT/JSON） */
+    /** 列类型（白名单：VARCHAR/TEXT/LONGTEXT/INT/DECIMAL/DATE/DATETIME/TINYINT/JSON） */
     private String columnType;
 
     /** 长度（VARCHAR/TINYINT 使用） */

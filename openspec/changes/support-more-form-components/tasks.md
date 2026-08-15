@@ -49,3 +49,9 @@
 - [x] 7.2 前端测试通过（npm run test）
 - [x] 7.3 手工验证：设计器拖入 8 类组件 → 业务表单发布 → 业务数据页 CRUD 往返（代码层已由前后端测试覆盖，浏览器手工验证见 verify.md §7）
 - [x] 7.4 验证 checkbox 多选发布为 JSON 列并正常读写
+
+## 8. slider 滑块组件支持
+
+- [x] 8.1 ColumnTypeMapper 增加 slider 映射（range=true → JSON；step 小数 → DECIMAL；其余 → INT）
+- [x] 8.2 ColumnConfigDialog 增加 slider 映射（与后端对齐）
+- [x] 8.3 测试补充 slider 单选整数/单选小数/双滑块用例

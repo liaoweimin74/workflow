@@ -127,6 +127,20 @@ class FormDefinitionPublishBusinessTest {
     }
 
     @Test
+    void publishSignaturePad_acceptsLongtextColumn() {
+        // signaturePad → LONGTEXT：发布校验白名单必须接受 LONGTEXT 列类型
+        FormDefinition d = draft("f1", "biz_sign", "BUSINESS",
+                "{\"rule\":[{\"type\":\"signaturePad\",\"field\":\"sign\"}]}",
+                "[{\"key\":\"sign\",\"columnType\":\"LONGTEXT\"}]");
+        stubDraft(d);
+
+        FormDefinition result = formDefService.publish("f1");
+
+        assertEquals("PUBLISHED", result.getStatus());
+        verify(tableManager).ensureTable(eq("biz_sign"), anyList());
+    }
+
+    @Test
     void publishSubTableModeRejected() {
         FormDefinition d = draft("f1", "biz_subtable", "BUSINESS",
                 "{\"rule\":[{\"type\":\"subForm\",\"field\":\"items\"}]}",

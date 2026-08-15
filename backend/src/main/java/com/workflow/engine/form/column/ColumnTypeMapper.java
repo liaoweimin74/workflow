@@ -61,6 +61,7 @@ public final class ColumnTypeMapper {
             case "fcEditor" -> applyText(c);
             case "signaturePad" -> applyLongtext(c);
             case "subForm" -> applyJson(c);
+            case "slider" -> applySlider(c, props);
             default -> {
                 return null;
             }
@@ -125,6 +126,30 @@ public final class ColumnTypeMapper {
 
     private static void applyJson(ColumnConfig c) {
         c.setColumnType("JSON");
+    }
+
+    /**
+     * 滑块映射：
+     * - range=true（双滑块，值为 [min,max] 数组）→ JSON
+     * - step 为小数（单选，值可能为小数）→ DECIMAL(18, 小数位)
+     * - 其余（单选整数）→ INT
+     */
+    private static void applySlider(ColumnConfig c, Map<String, Object> props) {
+        if (props != null && Boolean.TRUE.equals(props.get("range"))) {
+            applyJson(c);
+            return;
+        }
+        if (props != null && props.get("step") instanceof Number n) {
+            String plain = new java.math.BigDecimal(n.toString()).stripTrailingZeros().toPlainString();
+            int dot = plain.indexOf('.');
+            if (dot >= 0) {
+                c.setColumnType("DECIMAL");
+                c.setLength(18);
+                c.setScale(plain.length() - dot - 1);
+                return;
+            }
+        }
+        applyInt(c);
     }
 
     /**

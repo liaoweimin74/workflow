@@ -192,6 +192,17 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
     case 'subForm':
       // 子表：值以 JSON 数组存储（列标记 hidden，不进列表）
       return { columnType: 'JSON', length: null, scale: null }
+    case 'slider': {
+      // 双滑块（range）值 [min,max] → JSON；step 小数 → DECIMAL；其余整数 → INT（与后端 applySlider 对齐）
+      if (propsMap?.range) return { columnType: 'JSON', length: null, scale: null }
+      const step = Number(propsMap?.step)
+      if (Number.isFinite(step) && step > 0 && !Number.isInteger(step)) {
+        const plain = step.toFixed(10).replace(/0+$/, '').replace(/\.$/, '')
+        const scale = plain.includes('.') ? plain.length - plain.indexOf('.') - 1 : 0
+        return { columnType: 'DECIMAL', length: 18, scale }
+      }
+      return { columnType: 'INT', length: null, scale: null }
+    }
     default:
       return null
   }

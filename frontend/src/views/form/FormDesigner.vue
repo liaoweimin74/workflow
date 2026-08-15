@@ -92,7 +92,7 @@ import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
-import { collectFieldsByType, collectFieldKeys, updateFieldProps } from './schemaRules'
+import { collectFieldsOfType, collectFieldKeys, patchFieldProps } from './formRuleWalk'
 
 const route = useRoute()
 const router = useRouter()
@@ -119,13 +119,13 @@ const pickerTargetForms = ref<FormDefinitionDTO[]>([])
 const pickerTargetColumns = ref<ColumnConfigItem[]>([])
 
 const pickerConfigDialogRef = ref<InstanceType<typeof DataPickerConfigDialog>>()
-/** 当前 schema 中的 dataPicker 字段（field → props） */
+/** 当前 schema 中的 dataPicker 字段（field → props），穿透子表内部 */
 const pickerFields = computed<{ field: string; props: Record<string, any> }[]>(() =>
-  collectFieldsByType(designerRule.value, 'dataPicker'),
+  collectFieldsOfType(designerRule.value, 'dataPicker'),
 )
 const selectedPickerField = ref<string>('')
 
-/** 当前表单所有字段 key（供回填映射/级联依赖的目标字段选择） */
+/** 当前表单所有字段 key（供回填映射/级联依赖的目标字段选择），穿透子表内部 */
 const currentFieldKeys = computed<string[]>(() => collectFieldKeys(designerRule.value))
 
 /** 当前选中 dataPicker 字段的 props（供配置弹窗回填） */
@@ -384,7 +384,7 @@ async function handlePickerSourceChange(formKey: string) {
 
 function handlePickerConfirm(newProps: Record<string, any>) {
   const rules = designerRef.value?.getRule() || []
-  updateFieldProps(rules, selectedPickerField.value, 'dataPicker', newProps)
+  patchFieldProps(rules, 'dataPicker', selectedPickerField.value, newProps)
   designerRef.value?.setRule(rules)
   ElMessage.success('数据引用配置已保存')
 }
@@ -393,9 +393,9 @@ function handlePickerConfirm(newProps: Record<string, any>) {
 const lookupDialogVisible = ref(false)
 const lookupTargetForms = ref<FormDefinitionDTO[]>([])
 const lookupTargetColumns = ref<ColumnConfigItem[]>([])
-/** 当前 schema 中的 LookupPicker 字段（field → props） */
+/** 当前 schema 中的 LookupPicker 字段（field → props），穿透子表内部 */
 const lookupFields = computed<{ field: string; props: Record<string, any> }[]>(() =>
-  collectFieldsByType(designerRule.value, 'LookupPicker'),
+  collectFieldsOfType(designerRule.value, 'LookupPicker'),
 )
 const selectedLookupField = ref<string>('')
 
@@ -441,7 +441,7 @@ async function handleLookupSourceChange(formKey: string) {
 
 function handleLookupConfirm(newProps: Record<string, any>) {
   const rules = designerRef.value?.getRule() || []
-  updateFieldProps(rules, selectedLookupField.value, 'LookupPicker', newProps)
+  patchFieldProps(rules, 'LookupPicker', selectedLookupField.value, newProps)
   designerRef.value?.setRule(rules)
   ElMessage.success('数据源配置已保存')
 }

@@ -1,44 +1,27 @@
-# Tasks: business-form-subtable-column-mapping
+﻿# Tasks: business-form-subtable-column-mapping
 
-## 1. 后端：数据模型与 DDL 层
+## 1. 鍚庣锛氭暟鎹ā鍨嬩笌 DDL 灞?
+- [x] 1.1 `ColumnConfig.java` 澧炲姞 `subColumns`锛圠ist<ColumnConfig>锛変笌 `subMode`锛圫tring锛岀己鐪?embedded锛夊瓧娈靛強 getter/setter
+- [x] 1.2 `DdlBuilder.java` 鏂板 `buildCreateSubTable(formKey, field, subColumns)` 鐢熸垚瀛愯〃寤鸿〃 SQL锛堝浐瀹氬垪 id/biz_id/tenant_id/sort_no/version/鏃堕棿鍒?+ 瀛愪笟鍔″垪 + (tenant_id, biz_id) 绱㈠紩锛?- [x] 1.3 `DdlBuilder.java` 鏂板 `buildAlterSubTable(formKey, field, desired, existing)` 鐢熸垚瀛愯〃宸紓鍙樻洿 SQL锛堝鐢ㄤ富琛ㄨ鍒欙細澧炲垪/鏀瑰/鏀瑰繀濉?鍔犵储寮曪紝绂佸垹鍒?绂佽法绫伙級
+- [x] 1.4 `DdlBuilder.java` `validateColumns` 閫掑綊鏍￠獙 `subColumns`锛堝垪鍚?绫诲瀷/闀垮害鐧藉悕鍗曞鐢ㄧ幇鏈夐€昏緫锛?- [x] 1.5 `DynamicTableManager.java` 鏂板 `ensureSubTable(formKey, field, subColumns)`锛堣〃涓嶅瓨鍦ㄢ啋寤鸿〃锛涘瓨鍦ㄢ啋宸紓鍙樻洿锛夛紝澶嶇敤 `tableExists`/`findTableColumns`
+- [x] 1.6 鏂板 `DdlBuilderTest` 瀛愯〃鐢ㄤ緥锛氬缓琛?SQL 鏂█銆侀潪娉曞瓙琛ㄥ瓧娈靛悕銆佸瓙琛ㄥ垪鐧藉悕鍗曘€佺鍒犲垪/绂佽法绫?- [x] 1.7 鏂板 `DynamicTableManagerTest` 瀛愯〃鐢ㄤ緥锛氭柊寤哄瓙琛ㄣ€佸樊寮傚彉鏇淬€佺粨鏋勪笉鍙樿烦杩?
+## 2. 鍚庣锛氬彂甯冩牎楠屼笌娴佺▼
 
-- [ ] 1.1 `ColumnConfig.java` 增加 `subColumns`（List<ColumnConfig>）与 `subMode`（String，缺省 embedded）字段及 getter/setter
-- [ ] 1.2 `DdlBuilder.java` 新增 `buildCreateSubTable(formKey, field, subColumns)` 生成子表建表 SQL（固定列 id/biz_id/tenant_id/sort_no/version/时间列 + 子业务列 + (tenant_id, biz_id) 索引）
-- [ ] 1.3 `DdlBuilder.java` 新增 `buildAlterSubTable(formKey, field, desired, existing)` 生成子表差异变更 SQL（复用主表规则：增列/改宽/改必填/加索引，禁删列/禁跨类）
-- [ ] 1.4 `DdlBuilder.java` `validateColumns` 递归校验 `subColumns`（列名/类型/长度白名单复用现有逻辑）
-- [ ] 1.5 `DynamicTableManager.java` 新增 `ensureSubTable(formKey, field, subColumns)`（表不存在→建表；存在→差异变更），复用 `tableExists`/`findTableColumns`
-- [ ] 1.6 新增 `DdlBuilderTest` 子表用例：建表 SQL 断言、非法子表字段名、子表列白名单、禁删列/禁跨类
-- [ ] 1.7 新增 `DynamicTableManagerTest` 子表用例：新建子表、差异变更、结构不变跳过
+- [x] 2.1 `ColumnTypeMapper.java`锛歚UNSUPPORTED_COMPONENTS` 绉婚櫎 subTable/SubTable/nestedForm/NestedForm/dataTable锛沗mapComponentToColumn` 瀵?`subForm` 杩斿洖 JSON 鍒楋紝`group`/`tableForm` 杩斿洖 null锛堢敱涓婂眰瀛愯〃閫昏緫澶勭悊锛屼笉钀藉叆涓昏〃鍒楋級
+- [x] 2.2 `FormDefinitionService.java`锛歚UNSUPPORTED_COMPONENTS` 鍚屾淇锛堢Щ闄ゅ瓙琛ㄧ被鍨嬶紝淇濈暀 userPicker/deptPicker/divider/groupContainer锛夛紱`validateBusinessSchema` 鏀逛负鍏佽 group/tableForm/subForm
+- [x] 2.3 `FormDefinitionService.publish()`锛歚parseColumnConfig` 鏀寔宓屽 subColumns 瑙ｆ瀽锛汢USINESS 鍒嗘敮鍦?`ensureTable` 鍚庨亶鍘嗗瓙琛ㄥ瓧娈佃皟鐢?`ensureSubTable`
+- [x] 2.4 鏂板/鏇存柊 `FormDefinitionPublishBusinessTest`锛氬彂甯冨惈 group 瀛愯〃锛堝垱寤轰富琛?瀛愯〃锛夈€佸彂甯冨惈 subForm锛堜粎 JSON 鍒楋級銆佸彂甯冨惈 userPicker锛?00锛夈€佸瓙琛ㄥ瓧娈甸潪娉曪紙400 涓旀棤 DDL锛?- [x] 2.5 鏇存柊 `ColumnTypeMapperTest`锛歴ubTable/nestedForm 鏂█绉婚櫎鎴栨敼涓烘柊璇箟锛坓roup/tableForm鈫抧ull 鐢ㄤ簬瀛愯〃鍒嗘敮銆乻ubForm鈫扟SON锛?
+## 3. 鍚庣锛欱izDataService 瀛愯〃 CRUD
 
-## 2. 后端：发布校验与流程
+- [x] 3.1 `BizDataContext`/`loadContext` 澧炲姞瀛愯〃鍒楁槧灏勮В鏋愶紙subColumns + subMode + 瀛愯〃琛ㄥ悕锛?- [x] 3.2 `BizDataService.create`锛氬啓鍏ヤ富琛ㄥ悗閬嶅巻璇锋眰涓殑瀛愯〃瀛楁鎵归噺鎻掑叆瀛愯〃琛岋紙biz_id=涓昏〃鏂?id锛宻ort_no=鏁扮粍搴忓彿锛岄€愯鐢熸垚 id锛?- [x] 3.3 `BizDataService.update`锛氬璇锋眰鎼哄甫鐨勫瓙琛ㄥ瓧娈垫墽琛屽閲?diff锛堝簱涓瓨鍦ㄨ€岃姹傜己澶扁啋DELETE锛涙湁 id 涓斿瓨鍦ㄢ啋姣旇緝鍒楀€?UPDATE + 閲嶆帓 sort_no锛涙棤 id 鎴栦笉鍦ㄥ簱鈫扞NSERT锛夛紱鏈惡甯︾殑瀛愯〃瀛楁涓嶅鐞?- [x] 3.4 `BizDataService.getById`锛歴ubMode=embedded 鏃舵寜 biz_id 鎵归噺 IN 鏌ュ瓙琛ㄨ缁勮鏁扮粍杩斿洖锛坰ort_no 鍗囧簭锛夛紱dedicated 鏃朵笉鍐呭祵
+- [x] 3.5 `BizDataService.delete`锛氬垹闄や富琛ㄨ鍚庡悓浜嬪姟绾ц仈鍒犻櫎鍏ㄩ儴瀛愯〃琛?- [x] 3.6 瀛愯〃琛屾暟涓婇檺鏍￠獙锛堥粯璁?100锛岃秴闄?400锛?- [x] 3.7 鏂板鐙珛瀛愯〃琛?CRUD 鎺ュ彛锛歚BizDataController` 澧炲姞 GET/POST/PUT/DELETE `/api/v1/biz-data/{formKey}/{id}/sub/{field}[/{rowId}]`锛堢鎴烽殧绂汇€佷富琛ㄨ 404銆佷箰瑙傞攣 409銆佸繀濉?绫诲瀷鏍￠獙澶嶇敤锛?- [x] 3.8 鏂板/鏇存柊 `BizDataServiceTest`/`BizDataHandlerTest`锛歝reate 鎵归噺鎻掑叆銆乽pdate diff锛堝/鍒?鏀癸級銆佹湭鎼哄甫涓嶅彉銆佺骇鑱斿垹闄ゃ€佽鏁拌秴闄愩€佺嫭绔嬫帴鍙ｅ悇鍦烘櫙
 
-- [ ] 2.1 `ColumnTypeMapper.java`：`UNSUPPORTED_COMPONENTS` 移除 subTable/SubTable/nestedForm/NestedForm/dataTable；`mapComponentToColumn` 对 `subForm` 返回 JSON 列，`group`/`tableForm` 返回 null（由上层子表逻辑处理，不落入主表列）
-- [ ] 2.2 `FormDefinitionService.java`：`UNSUPPORTED_COMPONENTS` 同步修正（移除子表类型，保留 userPicker/deptPicker/divider/groupContainer）；`validateBusinessSchema` 改为允许 group/tableForm/subForm
-- [ ] 2.3 `FormDefinitionService.publish()`：`parseColumnConfig` 支持嵌套 subColumns 解析；BUSINESS 分支在 `ensureTable` 后遍历子表字段调用 `ensureSubTable`
-- [ ] 2.4 新增/更新 `FormDefinitionPublishBusinessTest`：发布含 group 子表（创建主表+子表）、发布含 subForm（仅 JSON 列）、发布含 userPicker（400）、子表字段非法（400 且无 DDL）
-- [ ] 2.5 更新 `ColumnTypeMapperTest`：subTable/nestedForm 断言移除或改为新语义（group/tableForm→null 用于子表分支、subForm→JSON）
+## 4. 鍓嶇锛氬垪鏄犲皠 UI
 
-## 3. 后端：BizDataService 子表 CRUD
+- [x] 4.1 `ColumnConfigDialog.vue`锛歚UNSUPPORTED_TYPES` 绉婚櫎 subTable/SubTable/nestedForm/NestedForm/dataTable锛屼繚鐣?divider/groupContainer 绛夛紱`collectFields` 瀵?group/tableForm 鐢熸垚瀛愯〃閰嶇疆椤癸紙key/label + 鍙睍寮€瀛愬垪锛夛紝subForm 鏄犲皠 JSON 鍒?- [x] 4.2 `ColumnConfigDialog.vue` 瀛愯〃閰嶇疆 UI锛氬瓙琛ㄥ瓧娈佃鍙睍寮€锛屽睍绀哄瓙鍒楁槧灏勬帶浠讹紙澶嶇敤鐜版湁鍒楁槧灏勮锛氱被鍨?闀垮害/蹇呭～/鍞竴/绱㈠紩锛? 浼犺緭鏂瑰紡閫夋嫨锛堝唴宓?鐙珛鎺ュ彛锛?- [x] 4.3 `ColumnConfigDialog.vue` `handleConfirm`锛氬瓙琛ㄥ瓧娈佃緭鍑?`subColumns` + `subMode`锛岃繃婊ら€昏緫閫傞厤宓屽
+- [x] 4.4 鏇存柊 `ColumnConfigItem` 鎺ュ彛绫诲瀷瀹氫箟锛坰ubColumns/subMode 鍙€夊瓧娈碉級
 
-- [ ] 3.1 `BizDataContext`/`loadContext` 增加子表列映射解析（subColumns + subMode + 子表表名）
-- [ ] 3.2 `BizDataService.create`：写入主表后遍历请求中的子表字段批量插入子表行（biz_id=主表新 id，sort_no=数组序号，逐行生成 id）
-- [ ] 3.3 `BizDataService.update`：对请求携带的子表字段执行增量 diff（库中存在而请求缺失→DELETE；有 id 且存在→比较列值 UPDATE + 重排 sort_no；无 id 或不在库→INSERT）；未携带的子表字段不处理
-- [ ] 3.4 `BizDataService.getById`：subMode=embedded 时按 biz_id 批量 IN 查子表行组装数组返回（sort_no 升序）；dedicated 时不内嵌
-- [ ] 3.5 `BizDataService.delete`：删除主表行后同事务级联删除全部子表行
-- [ ] 3.6 子表行数上限校验（默认 100，超限 400）
-- [ ] 3.7 新增独立子表行 CRUD 接口：`BizDataController` 增加 GET/POST/PUT/DELETE `/api/v1/biz-data/{formKey}/{id}/sub/{field}[/{rowId}]`（租户隔离、主表行 404、乐观锁 409、必填/类型校验复用）
-- [ ] 3.8 新增/更新 `BizDataServiceTest`/`BizDataHandlerTest`：create 批量插入、update diff（增/删/改）、未携带不变、级联删除、行数超限、独立接口各场景
-
-## 4. 前端：列映射 UI
-
-- [ ] 4.1 `ColumnConfigDialog.vue`：`UNSUPPORTED_TYPES` 移除 subTable/SubTable/nestedForm/NestedForm/dataTable，保留 divider/groupContainer 等；`collectFields` 对 group/tableForm 生成子表配置项（key/label + 可展开子列），subForm 映射 JSON 列
-- [ ] 4.2 `ColumnConfigDialog.vue` 子表配置 UI：子表字段行可展开，展示子列映射控件（复用现有列映射行：类型/长度/必填/唯一/索引）+ 传输方式选择（内嵌/独立接口）
-- [ ] 4.3 `ColumnConfigDialog.vue` `handleConfirm`：子表字段输出 `subColumns` + `subMode`，过滤逻辑适配嵌套
-- [ ] 4.4 更新 `ColumnConfigItem` 接口类型定义（subColumns/subMode 可选字段）
-
-## 5. 端到端验证
-
-- [ ] 5.1 手工验证：设计器配置含 group 子表的 BUSINESS 表单 → 发布成功 → 主表+子表建表（SQL 检查）
-- [ ] 5.2 手工验证：POST 主表带子表行 → GET 内嵌返回 → PUT 增量 diff（增/删/改）→ DELETE 级联清空
-- [ ] 5.3 手工验证：subMode=dedicated 表单走独立子表接口 CRUD；subForm 表单值落 JSON 列
-- [ ] 5.4 回归：既有无子表 BUSINESS 表单发布/CRUD 行为不变；WORKFLOW 表单子表能力不受影响
+## 5. 绔埌绔獙璇?
+- [x] 5.1 鎵嬪伐楠岃瘉锛氳璁″櫒閰嶇疆鍚?group 瀛愯〃鐨?BUSINESS 琛ㄥ崟 鈫?鍙戝竷鎴愬姛 鈫?涓昏〃+瀛愯〃寤鸿〃锛圫QL 妫€鏌ワ級
+- [x] 5.2 鎵嬪伐楠岃瘉锛歅OST 涓昏〃甯﹀瓙琛ㄨ 鈫?GET 鍐呭祵杩斿洖 鈫?PUT 澧為噺 diff锛堝/鍒?鏀癸級鈫?DELETE 绾ц仈娓呯┖
+- [x] 5.3 鎵嬪伐楠岃瘉锛歴ubMode=dedicated 琛ㄥ崟璧扮嫭绔嬪瓙琛ㄦ帴鍙?CRUD锛泂ubForm 琛ㄥ崟鍊艰惤 JSON 鍒?- [x] 5.4 鍥炲綊锛氭棦鏈夋棤瀛愯〃 BUSINESS 琛ㄥ崟鍙戝竷/CRUD 琛屼负涓嶅彉锛沇ORKFLOW 琛ㄥ崟瀛愯〃鑳藉姏涓嶅彈褰卞搷

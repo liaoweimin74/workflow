@@ -585,9 +585,9 @@ describe('SearchTable — FormRenderer 集成', () => {
     await nextTick()
     await nextTick()
 
-    // updateApi 应被调用，参数为 (id, formData)
+    // updateApi 应被调用，参数为 (id, formData, row) —— row 为编辑行（乐观锁 version 等）
     expect(updateApi).toHaveBeenCalled()
-    expect(updateApi).toHaveBeenCalledWith(1, { id: 1, username: 'updated' })
+    expect(updateApi).toHaveBeenCalledWith(1, { id: 1, username: 'updated' }, { id: 1, username: 'admin' })
   })
 
   it('弹窗渲染 FormRenderer 组件', async () => {

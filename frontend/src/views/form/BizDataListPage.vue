@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
@@ -73,15 +73,16 @@ const searchFields = computed<SearchField[]>(() =>
   })),
 )
 
-/** 表格列（formatter 读 row.data[key]；data-picker 引用列优先显示冗余文本） */
+/** 表格列（formatter/render 读 row.data[key]；data-picker 引用列优先显示冗余文本） */
 const columns = computed<TableColumn[]>(() => {
   const bizCols: TableColumn[] = bizColumns.value.map(c => ({
     prop: c.key,
     label: c.label,
     minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 130,
-    formatter: (row: any) => {
-      if (c.pickerConfig && row.data?.[c.key]) {
-        // data-picker：显示冗余文本列（<key>_text，JSON 文本数组），缺省回退原值
+    render: (row: any) => {
+      const v = row.data?.[c.key]
+      // data-picker：显示冗余文本列（<key>_text，JSON 文本数组），缺省回退原值
+      if (c.pickerConfig && v) {
         const text = row.data[c.key + '_text']
         if (text !== undefined && text !== null && text !== '') {
           try {
@@ -93,7 +94,7 @@ const columns = computed<TableColumn[]>(() => {
           return String(text)
         }
       }
-      return formatCell(row.data?.[c.key])
+      return renderByComponentType(c.componentType, c.columnType, v)
     },
   }))
   return [
@@ -107,6 +108,70 @@ const columns = computed<TableColumn[]>(() => {
     },
   ]
 })
+
+/** 按组件类型定制单元格渲染（无 componentType 时按列类型兜底） */
+function renderByComponentType(componentType: string | undefined, columnType: string, v: unknown): unknown {
+  if (v === null || v === undefined) return '—'
+  switch (componentType) {
+    case 'colorPicker': {
+      const hex = String(v)
+      return h('div', {
+        style: 'display:inline-flex;align-items:center;gap:6px;',
+      }, [
+        h('span', {
+          style: `display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid #dcdfe6;background:${hex};vertical-align:middle;`,
+        }),
+        hex,
+      ])
+    }
+    case 'signaturePad': {
+      const src = String(v)
+      if (!src.startsWith('data:image')) return '（签名）'
+      return h('img', { src, alt: '签名', style: 'max-height:32px;max-width:120px;vertical-align:middle;' })
+    }
+    case 'fcEditor':
+      // 剥离 HTML 标签（textContent 方式，不执行脚本）
+      return stripHtml(String(v))
+    case 'tree':
+    case 'elTreeSelect':
+    case 'elTransfer':
+    case 'cascader':
+    case 'checkbox':
+    case 'multiSelect':
+    case 'multiSelectPro':
+      return formatArray(v)
+    case 'slider':
+      return Array.isArray(v) ? v.join(' ~ ') : formatCell(v)
+    case 'dataPickerText':
+      // 隐藏冗余列不展示（bizColumns 已过滤 hidden，正常不会到达）
+      return ''
+    default:
+      return formatCell(v)
+  }
+}
+
+/** JSON 数组 → 逗号拼接；非数组（旧逗号串/字符串）原样 */
+function formatArray(v: unknown): string {
+  if (Array.isArray(v)) return v.join(', ')
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v)
+      if (Array.isArray(parsed)) return parsed.join(', ')
+    } catch {
+      // 旧逗号串或普通字符串，原样
+    }
+    return v
+  }
+  return formatCell(v)
+}
+
+/** 安全剥离 HTML：textContent 方式（不执行内联脚本，XSS 安全） */
+function stripHtml(html: string): string {
+  if (!html || !/<[a-z][\s\S]*>/i.test(html)) return html
+  const el = document.createElement('div')
+  el.innerHTML = html
+  return el.textContent || ''
+}
 
 /**
  * fetchApi 适配层：SearchTable 平铺查询参数 → biz-data 的 filter JSON

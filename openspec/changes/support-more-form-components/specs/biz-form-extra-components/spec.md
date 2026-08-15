@@ -112,3 +112,66 @@
 - **WHEN** 业务表单 column_config 含 subForm 映射列
 - **THEN** 业务数据列表页不渲染该列为表格列
 - **AND** 不提供该列的筛选入口
+
+### Requirement: 列映射记录组件类型
+
+系统 SHALL 在列映射（column_config）中记录每个字段对应的 form-create 组件类型（`componentType` 字段）。
+
+`ColumnTypeMapper.mapComponentToColumn` 生成的 ColumnConfig SHALL 携带 componentType（= 组件 type 入参）。
+
+`mapPickerToColumns` 生成的列 SHALL 携带 componentType：id 列为 `dataPicker`，冗余文本列为 `dataPickerText`。
+
+前端 ColumnConfigDialog 生成的列映射草案 SHALL 携带 componentType（= rule.type）。
+
+#### Scenario: 普通组件记录组件类型
+- **WHEN** ColumnTypeMapper.mapComponentToColumn 处理 `{ type: 'colorPicker', field: 'color' }`
+- **THEN** 生成的 ColumnConfig 含 `componentType: 'colorPicker'`
+
+#### Scenario: dataPicker 双列记录组件类型
+- **WHEN** mapPickerToColumns 生成 dataPicker 字段的列映射
+- **THEN** id 列 componentType 为 `dataPicker`，`_text` 冗余列 componentType 为 `dataPickerText`
+
+#### Scenario: 前端草案记录组件类型
+- **WHEN** ColumnConfigDialog 对 `{ type: 'elTransfer', field: 'users' }` 生成列映射草案
+- **THEN** 草案项含 `componentType: 'elTransfer'`
+
+### Requirement: 业务数据列表按组件类型渲染
+
+系统 SHALL 在业务数据列表页（BizDataListPage）按 column_config 的 `componentType` 定制列渲染。
+
+SearchTable 的 TableColumn SHALL 支持 `render` 函数（返回 VNode 或字符串），优先级高于 formatter。
+
+各 componentType 的渲染规则 SHALL 为：
+| componentType | 渲染 |
+|---|---|
+| `colorPicker` | 色块（背景色 + hex 文本）|
+| `signaturePad` | 缩略图（img src=base64）|
+| `fcEditor` | 纯文本（剥离 HTML 标签）|
+| `tree` / `elTreeSelect` / `elTransfer` / `cascader` | 逗号拼接（JSON 数组 join）|
+| `slider`（JSON 双滑块） | `min ~ max` 文本 |
+| `rate` / `slider` 单选（INT/DECIMAL） | 数字 |
+| 其余 / 无 componentType | 现有 formatCell（对象 JSON.stringify，否则字符串）|
+
+#### Scenario: colorPicker 显示色块
+- **WHEN** 业务数据列表渲染 colorPicker 列，值为 `#2E73FF`
+- **THEN** 单元格显示色块（背景 #2E73FF）与 hex 文本
+
+#### Scenario: signaturePad 显示缩略图
+- **WHEN** 业务数据列表渲染 signaturePad 列，值为 base64 图片字符串
+- **THEN** 单元格显示 `<img>` 缩略图
+
+#### Scenario: fcEditor 剥离 HTML
+- **WHEN** 业务数据列表渲染 fcEditor 列，值为 `<p>你好</p>`
+- **THEN** 单元格显示纯文本 `你好`（无 HTML 标签）
+
+#### Scenario: JSON 多选逗号拼接
+- **WHEN** 业务数据列表渲染 elTransfer 列，值为 `["u1","u2"]`
+- **THEN** 单元格显示 `u1, u2`
+
+#### Scenario: slider 双滑块区间
+- **WHEN** 业务数据列表渲染 slider 双滑块列，值为 `[10, 50]`
+- **THEN** 单元格显示 `10 ~ 50`
+
+#### Scenario: SearchTable render 优先于 formatter
+- **WHEN** TableColumn 同时配置 render 与 formatter
+- **THEN** 单元格使用 render 渲染

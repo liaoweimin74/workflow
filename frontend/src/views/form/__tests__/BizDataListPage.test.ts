@@ -36,11 +36,11 @@ const SearchTableStub = defineComponent({
   },
 })
 
-/** 默认 columnConfig：name(VARCHAR 可筛选) + tags(JSON 不可筛选) + sub_items(subForm, hidden) */
+/** 默认 columnConfig：name(VARCHAR 可筛选) + tags(checkbox, JSON) + sub_items(subForm, hidden) */
 function defaultColumnConfig() {
   return JSON.stringify([
     { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: true },
-    { key: 'tags', label: '标签', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false },
+    { key: 'tags', label: '标签', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'checkbox' },
     { key: 'sub_items', label: '子表单', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, hidden: true },
   ])
 }
@@ -79,14 +79,64 @@ describe('BizDataListPage — 新列类型展示适配', () => {
     wrapper.unmount()
   })
 
-  it('JSON 数组值展示为可读文本（数组 JSON.stringify、旧逗号串原样）', async () => {
+  it('checkbox JSON 数组值逗号拼接、旧逗号串原样', async () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
     const columns = wrapper.findComponent(SearchTableStub).props('columns') as any[]
     const tags = columns.find((c: any) => c.prop === 'tags')
-    expect(tags?.formatter?.({ data: { tags: ['a', 'b'] } })).toBe('["a","b"]')
-    expect(tags?.formatter?.({ data: { tags: 'a,b' } })).toBe('a,b')
+    expect(tags?.render?.({ data: { tags: ['a', 'b'] } })).toBe('a, b')
+    expect(tags?.render?.({ data: { tags: 'a,b' } })).toBe('a,b')
+    wrapper.unmount()
+  })
+
+  it('colorPicker 渲染色块 VNode', async () => {
+    const wrapper = createWrapper(JSON.stringify([
+      { key: 'color', label: '颜色', columnType: 'VARCHAR', length: 16, scale: null, required: false, unique: false, indexed: false, componentType: 'colorPicker' },
+    ]))
+    await nextTick()
+    await flushPromises()
+    const columns = wrapper.findComponent(SearchTableStub).props('columns') as any[]
+    const color = columns.find((c: any) => c.prop === 'color')
+    const vnode = color?.render?.({ data: { color: '#2E73FF' } })
+    expect((vnode as any)?.type).toBe('div')
+    wrapper.unmount()
+  })
+
+  it('signaturePad 渲染缩略图（base64 → img）', async () => {
+    const wrapper = createWrapper(JSON.stringify([
+      { key: 'sign', label: '签名', columnType: 'TEXT', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'signaturePad' },
+    ]))
+    await nextTick()
+    await flushPromises()
+    const columns = wrapper.findComponent(SearchTableStub).props('columns') as any[]
+    const sign = columns.find((c: any) => c.prop === 'sign')
+    const vnode = sign?.render?.({ data: { sign: 'data:image/png;base64,abc' } })
+    expect((vnode as any)?.type).toBe('img')
+    wrapper.unmount()
+  })
+
+  it('fcEditor 剥离 HTML 显示纯文本', async () => {
+    const wrapper = createWrapper(JSON.stringify([
+      { key: 'content', label: '内容', columnType: 'TEXT', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'fcEditor' },
+    ]))
+    await nextTick()
+    await flushPromises()
+    const columns = wrapper.findComponent(SearchTableStub).props('columns') as any[]
+    const content = columns.find((c: any) => c.prop === 'content')
+    expect(content?.render?.({ data: { content: '<p>你好</p>' } })).toBe('你好')
+    wrapper.unmount()
+  })
+
+  it('slider 双滑块渲染区间文本', async () => {
+    const wrapper = createWrapper(JSON.stringify([
+      { key: 'range', label: '区间', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'slider' },
+    ]))
+    await nextTick()
+    await flushPromises()
+    const columns = wrapper.findComponent(SearchTableStub).props('columns') as any[]
+    const range = columns.find((c: any) => c.prop === 'range')
+    expect(range?.render?.({ data: { range: [10, 50] } })).toBe('10 ~ 50')
     wrapper.unmount()
   })
 })

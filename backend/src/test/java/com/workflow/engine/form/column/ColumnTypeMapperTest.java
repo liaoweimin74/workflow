@@ -230,6 +230,21 @@ class ColumnTypeMapperTest {
     }
 
     @Test
+    void mapComponent_recordsComponentType() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("colorPicker", null);
+        assertThat(c.getComponentType()).isEqualTo("colorPicker");
+    }
+
+    @Test
+    void mapPicker_recordsComponentType() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapPickerToColumns("emp_id",
+                Map.of("sourceFormKey", "emp_profile", "displayField", "name"));
+
+        assertThat(cols.get(0).getComponentType()).isEqualTo("dataPicker");
+        assertThat(cols.get(1).getComponentType()).isEqualTo("dataPickerText");
+    }
+
+    @Test
     void mapPicker_returnsTwoColumns_idAndHiddenText() {
         List<ColumnConfig> cols = ColumnTypeMapper.mapPickerToColumns("emp_id",
                 Map.of("sourceFormKey", "emp_profile", "displayField", "name", "maxCount", 3));

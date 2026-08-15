@@ -1,4 +1,4 @@
-import type { Component } from 'vue'
+import type { Component, VNode } from 'vue'
 import type { Rule } from '@form-create/element-ui'
 
 // ============================================================
@@ -36,6 +36,8 @@ export interface TableColumn {
     cellValue: any,
     index: number,
   ) => string
+  /** 富渲染函数（返回 VNode 或字符串），优先级高于 formatter */
+  render?: (row: any, column: TableColumn, index: number) => VNode | string
   slotName?: string
 }
 

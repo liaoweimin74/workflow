@@ -283,6 +283,26 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 
+  it('草案携带 componentType（= rule.type）', async () => {
+    const wrapper = createWrapper({ schema: extSchema('elTransfer') })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    const col = items.find(i => i.key === 'f1')
+    expect(col?.componentType).toBe('elTransfer')
+    wrapper.unmount()
+  })
+
+  it('dataPicker 双列携带 componentType（id=dataPicker、_text=dataPickerText）', async () => {
+    const wrapper = createWrapper({ schema: [{ type: 'dataPicker', field: 'emp', title: '引用', props: { sourceFormKey: 'x', displayField: 'name' } }] as any })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    const idCol = items.find(i => i.key === 'emp')
+    const textCol = items.find(i => i.key === 'emp_text')
+    expect(idCol?.componentType).toBe('dataPicker')
+    expect(textCol?.componentType).toBe('dataPickerText')
+    wrapper.unmount()
+  })
+
   it('subForm 不产生 unsupportedFields（确认发布按钮可用）', async () => {
     const wrapper = createWrapper({ schema: extSchema('subForm') })
     await openAndBuild(wrapper)

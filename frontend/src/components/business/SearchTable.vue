@@ -87,7 +87,10 @@
           :fixed="col.fixed"
           :formatter="col.formatter"
         >
-          <template #default="{ row, column, $index }" v-if="col.slotName && $slots[col.slotName]">
+          <template #default="{ row, column, $index }" v-if="col.render">
+            <RenderCell :render="col.render" :row="row" :column="column" :index="$index" />
+          </template>
+          <template #default="{ row, column, $index }" v-else-if="col.slotName && $slots[col.slotName]">
             <slot :name="col.slotName" :row="row" :column="column" :$index="$index" />
           </template>
         </el-table-column>
@@ -208,11 +211,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, defineComponent, h, type PropType } from 'vue'
 import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { SearchTableProps, ActionButton, QueryParams } from './types'
+import type { SearchTableProps, ActionButton, QueryParams, TableColumn } from './types'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
+
+/** 承接 TableColumn.render 的小型函数式组件（返回 VNode 或字符串） */
+const RenderCell = defineComponent({
+  name: 'RenderCell',
+  props: {
+    render: { type: Function as PropType<(row: any, column: TableColumn, index: number) => unknown>, required: true },
+    row: { type: Object as PropType<any>, required: true },
+    column: { type: Object as PropType<TableColumn>, required: true },
+    index: { type: Number, required: true },
+  },
+  setup(props) {
+    return () => {
+      const r = props.render(props.row, props.column, props.index)
+      return typeof r === 'string' || r === null || r === undefined ? h('span', r ?? '') : r
+    }
+  },
+})
 
 const props = withDefaults(defineProps<SearchTableProps>(), {
   defaultPageSize: 10,

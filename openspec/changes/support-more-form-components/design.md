@@ -92,6 +92,20 @@ form-create 设计器（@form-create/designer + @form-create/element-ui）内置
 3. 手工验证：拖入 8 类组件 → 发布 → 业务数据页 CRUD 往返。
 4. 回滚：变更集中在映射与校验，未发布的新表单不受影响；已发布表单不受影响（本次不改已有列类型）。
 
+
+### D6: 列映射记录组件类型（componentType）
+
+- ColumnConfig 新增 componentType 字段（String，默认 null），随 column_config 持久化。
+- ColumnTypeMapper.mapComponentToColumn 每个 case 设置 componentType（= 入参组件 type）；mapPickerToColumns 设 dataPicker / dataPickerText。
+- 前端 ColumnConfigDialog 的 ColumnConfigItem 加 componentType，collectFields 生成草案时写入 rule.type。
+- 存量表单不管：无 componentType 时 BizDataListPage 走现有 formatCell，不新增兜底启发式。
+
+### D7: SearchTable 富渲染与按组件类型渲染
+
+- TableColumn 增加 ender?: (row, column, index) => VNode | string，SearchTable 列渲染优先级 render > slotName > formatter（render 返回字符串时等价 formatter，返回 VNode 时支持色块/缩略图）。
+- BizDataListPage 按 componentType 分派渲染：colorPicker 色块、signaturePad 缩略图（img base64）、fcEditor 剥 HTML（div.textContent 安全方式）、JSON 多选逗号拼接、slider 双滑块 min ~ max、rate/slider 单选数字、其余/无 componentType 走 formatCell。
+- fcEditor 剥 HTML 用 textContent 方式，不执行内联脚本（XSS 安全）。
+
 ## Open Questions
 
 1. subForm 内部是否需要后端子字段校验？（本期不做，SUB_TABLE 模式时再评估）

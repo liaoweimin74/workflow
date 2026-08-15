@@ -40,6 +40,7 @@ public final class ColumnTypeMapper {
         }
 
         ColumnConfig c = new ColumnConfig();
+        c.setComponentType(componentType);
         switch (componentType) {
             case "input" -> applyString(c, 255);
             case "textarea", "RichText", "richText" -> applyText(c);
@@ -162,6 +163,7 @@ public final class ColumnTypeMapper {
         ColumnConfig idCol = new ColumnConfig();
         idCol.setKey(key);
         idCol.setColumnType("TEXT");
+        idCol.setComponentType("dataPicker");
 
         Map<String, Object> picker = new LinkedHashMap<>();
         picker.put("sourceFormKey", props == null ? null : props.get("sourceFormKey"));
@@ -179,6 +181,7 @@ public final class ColumnTypeMapper {
         textCol.setLabel((props != null && props.get("title") != null) ? String.valueOf(props.get("title")) + "（显示）" : null);
         textCol.setColumnType("TEXT");
         textCol.setHidden(true);
+        textCol.setComponentType("dataPickerText");
 
         return List.of(idCol, textCol);
     }

@@ -95,6 +95,8 @@ export interface ColumnConfigItem {
   pickerConfig?: string
   /** 已发布版本中的列类型（存在时禁止跨类变更） */
   existingType?: string
+  /** 组件类型（form-create rule type，如 colorPicker/elTransfer；供业务数据列表定制渲染） */
+  componentType?: string
 }
 
 const props = defineProps<{
@@ -252,6 +254,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: existing?.unique ?? false,
         indexed: existing?.indexed ?? false,
+        componentType: 'dataPicker',
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey,
           displayField: propsMap.displayField,
@@ -270,6 +273,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         unique: false,
         indexed: false,
         hidden: true,
+        componentType: 'dataPickerText',
         existingType: existingText?.columnType,
       })
       continue
@@ -287,6 +291,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: existing?.unique ?? false,
         indexed: existing?.indexed ?? false,
+        componentType: 'LookupPicker',
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey || inferSourceFormKey(propsMap),
           displayField: propsMap.displayField,
@@ -312,6 +317,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
       unique: existing?.unique ?? false,
       indexed: existing?.indexed ?? false,
+      componentType: type,
       // subForm：JSON 列不进列表（仅参与 CRUD 写入），隐藏不可编辑
       ...(type === 'subForm' ? { hidden: true } : {}),
       existingType: existing?.columnType,

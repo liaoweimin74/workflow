@@ -42,10 +42,13 @@ public class ColumnConfig {
     /** 存储模式（JSON：整体 JSON 列，默认；SUB_TABLE：子表，预留未实现） */
     private String storageMode = "JSON";
 
-    public ColumnConfig() {}
+    /** 组件类型（form-create rule 的 type，如 colorPicker/elTransfer；供前端按组件定制渲染） */
+    private String componentType;
 
+    public ColumnConfig() {}
     public String getKey() { return key; }
     public void setKey(String key) { this.key = key; }
+
 
     public String getLabel() { return label; }
     public void setLabel(String label) { this.label = label; }
@@ -76,4 +79,7 @@ public class ColumnConfig {
 
     public String getStorageMode() { return storageMode; }
     public void setStorageMode(String storageMode) { this.storageMode = storageMode; }
+
+    public String getComponentType() { return componentType; }
+    public void setComponentType(String componentType) { this.componentType = componentType; }
 }

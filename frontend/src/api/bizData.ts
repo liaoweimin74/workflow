@@ -15,6 +15,8 @@ export interface ColumnConfigItem {
   hidden?: boolean
   /** data-picker 引用配置（JSON 字符串，可空） */
   pickerConfig?: string | null
+  /** 组件类型（form-create rule type，如 colorPicker/elTransfer；供列表定制渲染） */
+  componentType?: string | null
 }
 
 /** 业务数据行 */

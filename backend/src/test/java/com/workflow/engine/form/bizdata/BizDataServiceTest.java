@@ -867,4 +867,106 @@ class BizDataServiceTest {
                 .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(404))
                 .hasMessageContaining("子表字段不存在");
     }
+
+    // ==================== JSON 列（subForm 组件） ====================
+
+    private ColumnConfig jsonColumn(String key) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setColumnType("JSON");
+        return c;
+    }
+
+    @Test
+    void create_withJsonColumn_serializesObjectToJsonString() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig extra = jsonColumn("extra");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, extra));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "extra", "{\"addr\":\"北京市\",\"qty\":5}",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", "张三");
+        data.put("extra", Map.of("addr", "北京市", "qty", 5));
+        bizDataService.create("biz_leave", data);
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave"), captor.capture());
+        // JSON 列参数必须是序列化后的 JSON 字符串（而非 Map 对象，否则 MySQL 报 CHARACTER SET 'binary'）
+        Object[] params = captor.getValue();
+        Object extraParam = null;
+        for (Object p : params) {
+            if (p instanceof String s && s.contains("\"北京市\"")) {
+                extraParam = p;
+            }
+        }
+        assertThat(extraParam).isNotNull().isInstanceOf(String.class);
+        assertThat((String) extraParam).contains("\"addr\":\"北京市\"").contains("\"qty\":5");
+    }
+
+    @Test
+    void update_withJsonColumn_serializesObjectToJsonString() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig extra = jsonColumn("extra");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, extra));
+        // 更新前 findById existing（主表无子表）
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "extra", "{\"addr\":\"北京市\",\"qty\":5}",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", "张三改");
+        data.put("extra", Map.of("addr", "上海市", "qty", 8));
+        bizDataService.update("biz_leave", "row-1", data, 1);
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("UPDATE wf_biz_biz_leave SET"), captor.capture());
+        Object extraParam = null;
+        for (Object p : captor.getValue()) {
+            if (p instanceof String s && s.contains("\"上海市\"")) {
+                extraParam = p;
+            }
+        }
+        assertThat(extraParam).isNotNull().isInstanceOf(String.class);
+        assertThat((String) extraParam).contains("\"addr\":\"上海市\"").contains("\"qty\":8");
+    }
+
+    @Test
+    void create_withJsonColumnAlreadyString_keepsAsIs() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig extra = jsonColumn("extra");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, extra));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "extra", "{\"addr\":\"北京市\"}",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        bizDataService.create("biz_leave", Map.of("name", "张三", "extra", "{\"addr\":\"北京市\"}"));
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave"), captor.capture());
+        Object[] params = captor.getValue();
+        assertThat(params).contains("{\"addr\":\"北京市\"}");
+    }
 }

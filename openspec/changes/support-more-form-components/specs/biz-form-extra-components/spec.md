@@ -108,10 +108,18 @@
 
 子表单（subForm）列 SHALL 不出现在业务数据列表的表格列与筛选列中。
 
+穿梭框（elTransfer）、树形控件（tree）、树形选择（elTreeSelect）、富文本框（fcEditor）、级联选择器（cascader）、手写签名（signaturePad）列 SHALL 同样不出现在业务数据列表的表格列与筛选列中（hidden=true，仅参与 CRUD 写入）。
+
 #### Scenario: 业务数据列表隐藏子表单列
 - **WHEN** 业务表单 column_config 含 subForm 映射列
 - **THEN** 业务数据列表页不渲染该列为表格列
 - **AND** 不提供该列的筛选入口
+
+#### Scenario: 业务数据列表隐藏复杂组件列
+- **WHEN** 业务表单 column_config 含 elTransfer/tree/elTreeSelect/fcEditor/cascader/signaturePad 映射列
+- **THEN** 列映射草案中这些列标记 hidden=true
+- **AND** 业务数据列表页不渲染这些列为表格列
+- **AND** 不提供这些列的筛选入口
 
 ### Requirement: 列映射记录组件类型
 
@@ -141,14 +149,12 @@
 
 SearchTable 的 TableColumn SHALL 支持 `render` 函数（返回 VNode 或字符串），优先级高于 formatter。
 
-各 componentType 的渲染规则 SHALL 为：
+各 componentType 的渲染规则 SHALL 为（隐藏组件——subForm/elTransfer/tree/elTreeSelect/fcEditor/cascader/signaturePad——不进入列表渲染）：
 | componentType | 渲染 |
 |---|---|
 | `colorPicker` | 色块（背景色 + hex 文本）|
-| `signaturePad` | 缩略图（img src=base64）|
-| `fcEditor` | 纯文本（剥离 HTML 标签）|
-| `tree` / `elTreeSelect` / `elTransfer` / `cascader` | 逗号拼接（JSON 数组 join）|
 | `slider`（JSON 双滑块） | `min ~ max` 文本 |
+| `checkbox` / `multiSelect` / `multiSelectPro` | 逗号拼接（JSON 数组 join）|
 | `rate` / `slider` 单选（INT/DECIMAL） | 数字 |
 | 其余 / 无 componentType | 现有 formatCell（对象 JSON.stringify，否则字符串）|
 
@@ -156,17 +162,13 @@ SearchTable 的 TableColumn SHALL 支持 `render` 函数（返回 VNode 或字�
 - **WHEN** 业务数据列表渲染 colorPicker 列，值为 `#2E73FF`
 - **THEN** 单元格显示色块（背景 #2E73FF）与 hex 文本
 
-#### Scenario: signaturePad 显示缩略图
-- **WHEN** 业务数据列表渲染 signaturePad 列，值为 base64 图片字符串
-- **THEN** 单元格显示 `<img>` 缩略图
+#### Scenario: slider 双滑块显示区间
+- **WHEN** 业务数据列表渲染 slider 双滑块列，值为 `[10, 50]`
+- **THEN** 单元格显示 `10 ~ 50`
 
-#### Scenario: fcEditor 剥离 HTML
-- **WHEN** 业务数据列表渲染 fcEditor 列，值为 `<p>你好</p>`
-- **THEN** 单元格显示纯文本 `你好`（无 HTML 标签）
-
-#### Scenario: JSON 多选逗号拼接
-- **WHEN** 业务数据列表渲染 elTransfer 列，值为 `["u1","u2"]`
-- **THEN** 单元格显示 `u1, u2`
+#### Scenario: checkbox JSON 数组逗号拼接
+- **WHEN** 业务数据列表渲染 checkbox 列，值为 `["a","b"]`
+- **THEN** 单元格显示 `a, b`
 
 #### Scenario: slider 双滑块区间
 - **WHEN** 业务数据列表渲染 slider 双滑块列，值为 `[10, 50]`

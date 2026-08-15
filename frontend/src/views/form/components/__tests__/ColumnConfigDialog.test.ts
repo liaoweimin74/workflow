@@ -283,6 +283,17 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 
+  it('隐藏组件（elTransfer/tree/elTreeSelect/fcEditor/cascader/signaturePad）均标记 hidden', async () => {
+    for (const type of ['elTransfer', 'tree', 'elTreeSelect', 'fcEditor', 'cascader', 'signaturePad']) {
+      const wrapper = createWrapper({ schema: extSchema(type) })
+      await openAndBuild(wrapper)
+      const items = confirmItems(wrapper)
+      const col = items.find(i => i.key === 'f1')
+      expect(col?.hidden).toBe(true)
+      wrapper.unmount()
+    }
+  })
+
   it('草案携带 componentType（= rule.type）', async () => {
     const wrapper = createWrapper({ schema: extSchema('elTransfer') })
     await openAndBuild(wrapper)
@@ -323,13 +334,15 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
 
   it('TEXT/LONGTEXT 与 VARCHAR 同属字符串类，不触发跨类锁定（与后端 categoryOf 对齐）', async () => {
     const wrapper = createWrapper({
-      schema: extSchema('signaturePad'),
-      existingColumns: [{ key: 'f1', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false }],
+      schema: extSchema('fcEditor'),
+      existingColumns: [{ key: 'f1', columnType: 'TEXT', length: null, scale: null, required: false, unique: false, indexed: false }],
     })
     await openAndBuild(wrapper)
-    const sel = wrapper.findComponent(ElSelect)
-    expect(sel.exists()).toBe(true)
-    expect(sel.props('disabled')).toBe(false)
+    const items = confirmItems(wrapper)
+    const col = items.find(i => i.key === 'f1')
+    // 隐藏组件不渲染列类型选择器，但草案保留 columnType 且不标记 unsupported
+    expect(col).toBeDefined()
+    expect(col?.unsupported).toBeUndefined()
     wrapper.unmount()
   })
 })

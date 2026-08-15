@@ -103,28 +103,25 @@ describe('BizDataListPage — 新列类型展示适配', () => {
     wrapper.unmount()
   })
 
-  it('signaturePad 渲染缩略图（base64 → img）', async () => {
+  it('signaturePad/fcEditor/elTransfer/tree/cascader 隐藏列不出现在表格列', async () => {
     const wrapper = createWrapper(JSON.stringify([
-      { key: 'sign', label: '签名', columnType: 'TEXT', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'signaturePad' },
+      { key: 'sign', label: '签名', columnType: 'TEXT', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'signaturePad', hidden: true },
+      { key: 'content', label: '内容', columnType: 'TEXT', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'fcEditor', hidden: true },
+      { key: 'users', label: '穿梭', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'elTransfer', hidden: true },
+      { key: 'tree', label: '树', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'tree', hidden: true },
+      { key: 'region', label: '级联', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'cascader', hidden: true },
+      { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: true },
     ]))
     await nextTick()
     await flushPromises()
     const columns = wrapper.findComponent(SearchTableStub).props('columns') as any[]
-    const sign = columns.find((c: any) => c.prop === 'sign')
-    const vnode = sign?.render?.({ data: { sign: 'data:image/png;base64,abc' } })
-    expect((vnode as any)?.type).toBe('img')
-    wrapper.unmount()
-  })
-
-  it('fcEditor 剥离 HTML 显示纯文本', async () => {
-    const wrapper = createWrapper(JSON.stringify([
-      { key: 'content', label: '内容', columnType: 'TEXT', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'fcEditor' },
-    ]))
-    await nextTick()
-    await flushPromises()
-    const columns = wrapper.findComponent(SearchTableStub).props('columns') as any[]
-    const content = columns.find((c: any) => c.prop === 'content')
-    expect(content?.render?.({ data: { content: '<p>你好</p>' } })).toBe('你好')
+    const props = columns.map((c: any) => c.prop)
+    expect(props).not.toContain('sign')
+    expect(props).not.toContain('content')
+    expect(props).not.toContain('users')
+    expect(props).not.toContain('tree')
+    expect(props).not.toContain('region')
+    expect(props).toContain('name')
     wrapper.unmount()
   })
 

@@ -214,6 +214,9 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
 
 const UNSUPPORTED_TYPES = ['divider', 'groupContainer', 'dataTable']
 
+/** 列映射生成但不在业务数据列表展示的组件（隐藏列：仅参与 CRUD 写入） */
+const HIDDEN_COMPONENT_TYPES = ['subForm', 'elTransfer', 'tree', 'elTreeSelect', 'fcEditor', 'cascader', 'signaturePad']
+
 /** 从 LookupPicker fetch.action（/v1/biz-data/<formKey>）推断数据源表单 key */
 function inferSourceFormKey(propsMap: Record<string, any>): string | undefined {
   const action = typeof propsMap.fetch?.action === 'string' ? propsMap.fetch.action : ''
@@ -318,8 +321,8 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       unique: existing?.unique ?? false,
       indexed: existing?.indexed ?? false,
       componentType: type,
-      // subForm：JSON 列不进列表（仅参与 CRUD 写入），隐藏不可编辑
-      ...(type === 'subForm' ? { hidden: true } : {}),
+      // 隐藏组件（子表单/穿梭框/树形/富文本/级联/签名）：JSON 列不进列表（仅参与 CRUD 写入）
+      ...(HIDDEN_COMPONENT_TYPES.includes(type) ? { hidden: true } : {}),
       existingType: existing?.columnType,
     })
   }

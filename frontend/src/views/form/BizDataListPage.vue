@@ -124,27 +124,12 @@ function renderByComponentType(componentType: string | undefined, columnType: st
         hex,
       ])
     }
-    case 'signaturePad': {
-      const src = String(v)
-      if (!src.startsWith('data:image')) return '（签名）'
-      return h('img', { src, alt: '签名', style: 'max-height:32px;max-width:120px;vertical-align:middle;' })
-    }
-    case 'fcEditor':
-      // 剥离 HTML 标签（textContent 方式，不执行脚本）
-      return stripHtml(String(v))
-    case 'tree':
-    case 'elTreeSelect':
-    case 'elTransfer':
-    case 'cascader':
     case 'checkbox':
     case 'multiSelect':
     case 'multiSelectPro':
       return formatArray(v)
     case 'slider':
       return Array.isArray(v) ? v.join(' ~ ') : formatCell(v)
-    case 'dataPickerText':
-      // 隐藏冗余列不展示（bizColumns 已过滤 hidden，正常不会到达）
-      return ''
     default:
       return formatCell(v)
   }
@@ -163,14 +148,6 @@ function formatArray(v: unknown): string {
     return v
   }
   return formatCell(v)
-}
-
-/** 安全剥离 HTML：textContent 方式（不执行内联脚本，XSS 安全） */
-function stripHtml(html: string): string {
-  if (!html || !/<[a-z][\s\S]*>/i.test(html)) return html
-  const el = document.createElement('div')
-  el.innerHTML = html
-  return el.textContent || ''
 }
 
 /**

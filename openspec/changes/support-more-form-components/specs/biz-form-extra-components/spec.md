@@ -170,6 +170,10 @@ SearchTable 的 TableColumn SHALL 支持 `render` 函数（返回 VNode 或字�
 - **WHEN** 业务数据列表渲染 checkbox 列，值为 `["a","b"]`
 - **THEN** 单元格显示 `a, b`
 
+#### Scenario: colorPicker 不出现在搜索栏
+- **WHEN** 业务表单 column_config 含 colorPicker 映射列
+- **THEN** 业务数据列表页不提供该列的颜色筛选入口（虽为 VARCHAR 短列，但颜色值不参与文本筛选）
+
 #### Scenario: slider 双滑块区间
 - **WHEN** 业务数据列表渲染 slider 双滑块列，值为 `[10, 50]`
 - **THEN** 单元格显示 `10 ~ 50`

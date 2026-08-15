@@ -79,6 +79,19 @@ describe('BizDataListPage — 新列类型展示适配', () => {
     wrapper.unmount()
   })
 
+  it('colorPicker 不出现在搜索栏（searchFields）', async () => {
+    const wrapper = createWrapper(JSON.stringify([
+      { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: true },
+      { key: 'color', label: '颜色', columnType: 'VARCHAR', length: 16, scale: null, required: false, unique: false, indexed: false, componentType: 'colorPicker' },
+    ]))
+    await nextTick()
+    await flushPromises()
+    const props = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
+    expect(props.map((s: any) => s.prop)).not.toContain('color')
+    expect(props.map((s: any) => s.prop)).toContain('name')
+    wrapper.unmount()
+  })
+
   it('checkbox JSON 数组值逗号拼接、旧逗号串原样', async () => {
     const wrapper = createWrapper()
     await nextTick()

@@ -55,10 +55,12 @@ const refInfo = ref<{ count: number; referencedBy: string[] } | null>(null)
 /** 业务列（可展示，排除隐藏列） */
 const bizColumns = computed(() => columnConfig.value.filter(c => !c.unsupported && !c.hidden))
 
-/** 可筛选列（非 JSON/TEXT，且 indexed 或短文本） */
+/** 可筛选列（非 JSON/TEXT、非 colorPicker，且 indexed 或短文本） */
 const filterableColumns = computed(() =>
   bizColumns.value.filter(
-    c => c.columnType !== 'JSON' && c.columnType !== 'TEXT' && (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
+    c => c.columnType !== 'JSON' && c.columnType !== 'TEXT'
+      && c.componentType !== 'colorPicker'
+      && (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
   ),
 )
 

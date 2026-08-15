@@ -253,4 +253,59 @@ class DdlBuilderTest {
                 .isInstanceOf(IllegalArgumentException.class);
         DdlBuilder.validateSubField("items_2"); // 合法不抛错
     }
+
+    // ==================== 主表构建跳过子表占位字段 ====================
+
+    private ColumnConfig subtableField(String key, ColumnConfig... subs) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setSubColumns(List.of(subs));
+        c.setSubMode("embedded");
+        return c;
+    }
+
+    @Test
+    void buildCreateTable_skipsSubtablePlaceholder() {
+        ColumnConfig items = subtableField("items", column("itemName", "VARCHAR", 255, false));
+        ColumnConfig title = column("title", "VARCHAR", 255, false);
+
+        String sql = DdlBuilder.buildCreateTable("expense", List.of(title, items));
+
+        assertThat(sql).contains("title VARCHAR(255)");
+        assertThat(sql).doesNotContain("items VARCHAR");
+        assertThat(sql).doesNotContain("itemName");
+    }
+
+    @Test
+    void buildCreateTable_subtablePlaceholder_withoutOwnType_doesNotReject() {
+        // 子表占位字段自身无 columnType（空），主表构建应跳过而非报"非法列类型"
+        ColumnConfig items = subtableField("items", column("itemName", "VARCHAR", 255, false));
+
+        String sql = DdlBuilder.buildCreateTable("expense", List.of(items));
+
+        assertThat(sql).contains("CREATE TABLE IF NOT EXISTS wf_biz_expense");
+        assertThat(sql).doesNotContain("items ");
+    }
+
+    @Test
+    void buildCreateTable_onlySubtableColumns_rejectsEmpty() {
+        // 主表没有任何真实业务列时仍应成功建表（固定列兜底），子表占位字段不生成列定义
+        ColumnConfig items = subtableField("items", column("itemName", "VARCHAR", 255, false));
+
+        String sql = DdlBuilder.buildCreateTable("expense", List.of(items));
+
+        assertThat(sql).contains("PRIMARY KEY (id)");
+        assertThat(sql).doesNotContain("itemName");
+    }
+
+    @Test
+    void buildAlterStatements_skipsSubtablePlaceholder() {
+        ColumnConfig items = subtableField("items", column("itemName", "VARCHAR", 255, false));
+        ColumnConfig title = column("title", "VARCHAR", 255, false);
+
+        List<String> stmts = DdlBuilder.buildAlterStatements("expense", List.of(title, items), List.of());
+
+        assertThat(stmts).anyMatch(s -> s.contains("ADD COLUMN title VARCHAR(255)"));
+        assertThat(stmts).noneMatch(s -> s.contains("items"));
+    }
 }

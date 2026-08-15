@@ -51,6 +51,7 @@ public final class DdlBuilder {
         sb.append("    id VARCHAR(64) NOT NULL,\n");
         sb.append("    tenant_id VARCHAR(64) NOT NULL,\n");
         for (ColumnConfig c : columns) {
+            if (isSubtableField(c)) continue;
             sb.append("    ").append(c.getKey()).append(" ").append(columnDefinition(c)).append(",\n");
         }
         sb.append("    version INT NOT NULL DEFAULT 1,\n");
@@ -60,6 +61,7 @@ public final class DdlBuilder {
         sb.append("    PRIMARY KEY (id)");
 
         for (ColumnConfig c : columns) {
+            if (isSubtableField(c)) continue;
             if (c.isUnique()) {
                 sb.append(",\n    UNIQUE KEY uk_").append(formKey).append("_").append(c.getKey())
                         .append(" (tenant_id, ").append(c.getKey()).append(")");
@@ -96,6 +98,7 @@ public final class DdlBuilder {
 
         List<String> statements = new ArrayList<>();
         for (ColumnConfig c : desired) {
+            if (isSubtableField(c)) continue;
             ColumnInfo current = existingMap.get(c.getKey());
             if (current == null) {
                 statements.add("ALTER TABLE " + table + " ADD COLUMN " + c.getKey() + " " + columnDefinition(c));
@@ -259,6 +262,11 @@ public final class DdlBuilder {
             if (c.getKey() == null || !COLUMN_KEY_PATTERN.matcher(c.getKey()).matches()) {
                 throw new IllegalArgumentException("非法列名（仅允许字母开头，含字母/数字/下划线，最长 64）: " + c.getKey());
             }
+            // 子表占位字段：自身无列类型，仅校验字段名白名单并递归校验子列
+            if (isSubtableField(c)) {
+                validateSubColumns(c.getSubColumns());
+                continue;
+            }
             if (RESERVED_COLUMNS.contains(c.getKey())) {
                 throw new IllegalArgumentException("列名 " + c.getKey() + " 为系统保留列，不允许作为业务列");
             }
@@ -279,6 +287,11 @@ public final class DdlBuilder {
                 }
             }
         }
+    }
+
+    /** 子表占位字段判定：subColumns 非空即为子表占位，不生成主表列定义 */
+    private static boolean isSubtableField(ColumnConfig c) {
+        return c.getSubColumns() != null && !c.getSubColumns().isEmpty();
     }
 
     private static String columnDefinition(ColumnConfig c) {

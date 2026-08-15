@@ -97,14 +97,7 @@
       <!-- 展示与回填 -->
       <el-divider content-position="left">展示与回填</el-divider>
       <el-form label-width="110px" size="default">
-        <el-form-item label="选择模式">
-          <el-radio-group v-model="form.mode">
-            <el-radio value="single">单选</el-radio>
-            <el-radio value="multiple">多选</el-radio>
-          </el-radio-group>
-          <span class="form-tip">多选结果以快照数组存储，落子表后按行展示</span>
-        </el-form-item>
-        <el-form-item v-if="form.mode === 'single'" label="id 存储字段">
+        <el-form-item label="id 存储字段">
           <el-select v-model="form.idField" placeholder="选择当前表单字段存储选中记录 id" clearable style="width: 100%">
             <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
           </el-select>
@@ -241,7 +234,6 @@ const visibleColumns = computed(() => props.targetColumns.filter(c => !c.hidden)
 
 const form = reactive({
   sourceType: 'form',
-  mode: 'single' as 'single' | 'multiple',
   idField: '',
   filterLogic: 'AND' as 'AND' | 'OR',
   filterRows: [] as { column: string; op: string; source: 'fixed' | 'field'; fixedValue: string; field: string }[],
@@ -273,7 +265,6 @@ watch(
       ? explicitType === 'form'
       : !!(p.sourceFormKey || fetch.action?.startsWith('/v1/biz-data/'))
     form.sourceType = isFormSource ? 'form' : 'api'
-    form.mode = p.mode === 'multiple' ? 'multiple' : 'single'
     form.idField = p.idField || ''
     form.sourceFormKey = isFormSource ? (p.sourceFormKey || fetch.action?.replace('/v1/biz-data/', '') || '') : ''
     form.action = fetch.action || ''
@@ -393,13 +384,12 @@ function handleConfirm() {
   }
   const newProps: Record<string, any> = {
     sourceType: form.sourceType,
-    mode: form.mode,
     fetch,
     displayField: form.displayField.trim() || undefined,
     columns,
     returnFields,
   }
-  if (form.mode === 'single' && form.idField) {
+  if (form.idField) {
     newProps.idField = form.idField
   }
   // 数据筛选：有有效条件才产出 filter

@@ -182,11 +182,10 @@ export interface LookupFilterConfig {
 export interface LookupPickerProps {
   /**
    * v-model 绑定值：
-   * - 单选（新语义）：显示文本字符串（field 绑定显示文本字段）
-   * - 单选（旧兼容）：整行对象
-   * - 多选：快照数组 [{ id, <displayField>, ...配置列 }]
+   * - 新语义：显示文本字符串（field 绑定显示文本字段）
+   * - 旧兼容：整行对象
    */
-  modelValue: string | null | Record<string, any> | Record<string, any>[]
+  modelValue: string | null | Record<string, any>
 
   /** 选中记录 id 的独立存储字段（设计者显式配置，hidden）。选中时经 formCreateInject.api.setValue(idField, row.id) 写入 */
   idField?: string
@@ -214,9 +213,6 @@ export interface LookupPickerProps {
 
   /** 是否显示弹窗搜索框，默认 true */
   showSearch?: boolean
-
-  /** 选择模式：single（默认）| multiple */
-  mode?: 'single' | 'multiple'
 
   disabled?: boolean
   clearable?: boolean

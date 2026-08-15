@@ -35,9 +35,7 @@
         border
         highlight-current-row
         @row-click="handleRowClick"
-        @selection-change="handleSelectionChange"
       >
-        <el-table-column v-if="mode === 'multiple'" type="selection" width="50" />
         <el-table-column
           v-for="col in columns"
           :key="col.prop || col.label"
@@ -58,10 +56,6 @@
           @current-change="fetchData()"
         />
       </div>
-      <template v-if="mode === 'multiple'" #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmSelection">确定</el-button>
-      </template>
     </el-dialog>
   </div>
 </template>
@@ -71,7 +65,7 @@ import { ref, reactive, computed, inject, watch } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LookupPickerProps, QueryParams } from './types'
-import { buildFetchApiFromConfig, readCellValue, buildSnapshot, resolveFilter } from './lookupFetch'
+import { buildFetchApiFromConfig, readCellValue, resolveFilter } from './lookupFetch'
 
 /** form-create 注入对象，提供 api.setValue/getValue 等方法 */
 interface FormCreateInject {
@@ -82,7 +76,6 @@ interface FormCreateInject {
 }
 
 const props = withDefaults(defineProps<LookupPickerProps>(), {
-  mode: 'single',
   placeholder: '请选择',
   searchPlaceholder: '请输入关键字搜索',
   showSearch: true,
@@ -91,7 +84,7 @@ const props = withDefaults(defineProps<LookupPickerProps>(), {
 })
 
 const emit = defineEmits<{
-  'update:modelValue': [value: Record<string, any> | null | Record<string, any>[]]
+  'update:modelValue': [value: Record<string, any> | null]
   'select': [row: any]
   'clear': []
 }>()
@@ -104,7 +97,6 @@ const loading = ref(false)
 const keyword = ref('')
 const tableData = ref<any[]>([])
 const total = ref(0)
-const tempSelection = ref<any[]>([])
 
 const query = reactive<QueryParams & { keyword?: string }>({
   page: 1,
@@ -146,15 +138,9 @@ const searchInputPlaceholder = computed(() => {
 const displayText = computed(() => {
   const val = props.modelValue
   if (val === null || val === undefined || val === '') return ''
-  // 新语义：单选 modelValue 为显示文本字符串，直接返回
-  if (typeof val === 'string') return val
-  if (Array.isArray(val)) {
-    if (val.length === 0) return ''
-    // 多选快照数组：拼接全部 displayField 值展示
+  // 单选：modelValue 为显示文本字符串，直接返回
+  if (typeof val === 'string') {
     return val
-      .map((item: any) => readCellValue(item, resolvedDisplayField.value) || '')
-      .filter(Boolean)
-      .join(',')
   }
   if (typeof val === 'object') {
     return readCellValue(val, resolvedDisplayField.value) || ''
@@ -199,7 +185,6 @@ function openDialog() {
   dialogVisible.value = true
   keyword.value = ''
   query.page = 1
-  tempSelection.value = []
   fetchData()
 }
 
@@ -237,8 +222,7 @@ function handleSearch() {
 }
 
 function handleRowClick(row: any) {
-  if (props.mode === 'multiple') return
-  // 新语义：emit 显示文本字符串（field 绑定显示文本字段）
+  // 单选：emit 显示文本字符串（field 绑定显示文本字段）
   emit('update:modelValue', readCellValue(row, resolvedDisplayField.value) ?? null)
   emit('select', row)
   // 独立存储 id（设计者显式配置的 idField）
@@ -279,34 +263,19 @@ function clearReturnFields() {
   }
 }
 
-function handleSelectionChange(rows: any[]) {
-  tempSelection.value = rows
-}
-
-function confirmSelection() {
-  const snapshots = tempSelection.value.map((row: any) =>
-    buildSnapshot(row, resolvedDisplayField.value, props.columns),
-  )
-  emit('update:modelValue', snapshots)
-  if (snapshots.length > 0) {
-    emit('select', snapshots)
-  }
-  dialogVisible.value = false
-}
-
 function handleClear() {
-  emit('update:modelValue', props.mode === 'multiple' ? [] : null)
+  emit('update:modelValue', null)
   emit('clear')
   writeIdField(null)
   // 清空 returnFields 对应的表单字段
   clearReturnFields()
 }
 
-// 动态筛选联动：依赖字段值变化 → 清空当前选择与回填，刷新选项（快照语义：已选数据不清空由父级保证）
+// 动态筛选联动：依赖字段值变化 → 清空当前选择与回填，刷新选项
 watch(
   () => filterDependFields.value.map(f => formCreateInject?.api?.getValue?.(f)),
   () => {
-    emit('update:modelValue', props.mode === 'multiple' ? [] : null)
+    emit('update:modelValue', null)
     writeIdField(null)
     clearReturnFields()
     if (dialogVisible.value) {

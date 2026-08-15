@@ -1,5 +1,5 @@
 import http from '@/utils/http'
-import type { LookupFetchConfig, LookupFilterConfig, QueryParams, TableColumn } from './types'
+import type { LookupFetchConfig, LookupFilterConfig, QueryParams } from './types'
 
 /**
  * 深层取值：按点分路径从对象取值。
@@ -61,26 +61,6 @@ export function buildFetchApiFromConfig(fetch: LookupFetchConfig) {
       : (getByPath(biz, 'total') ?? rows.length)
     return { rows: Array.isArray(rows) ? rows : [], total: Number(total) || rows.length }
   }
-}
-
-/**
- * 构建引用快照：{ id, [displayField]: 值, ...配置列值 }。
- * 剔除 data/version/createdAt 等脏字段；displayField 值强制包含（tag 展示依赖）。
- * 所有取值走 readCellValue（兼容 BizDataVO 内层与平铺行）。
- */
-export function buildSnapshot(
-  row: Record<string, unknown>,
-  displayField: string,
-  columns?: TableColumn[],
-): Record<string, unknown> {
-  const snapshot: Record<string, unknown> = {}
-  if (row.id !== undefined && row.id !== null) snapshot.id = row.id
-  snapshot[displayField] = readCellValue(row, displayField)
-  for (const col of columns || []) {
-    if (!col.prop || col.prop === displayField || col.prop === 'id') continue
-    snapshot[col.prop] = readCellValue(row, col.prop)
-  }
-  return snapshot
 }
 
 /**

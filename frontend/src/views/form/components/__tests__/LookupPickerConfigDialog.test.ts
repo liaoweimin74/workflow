@@ -78,41 +78,36 @@ describe('LookupPickerConfigDialog — 列 label 保持', () => {
 })
 
 describe('LookupPickerConfigDialog — 选择模式与 idField', () => {
-  it('默认单选：confirm 产出 mode=single，且配置 idField 后写入', async () => {
+  it('confirm 产出 idField（模式恒为单选）', async () => {
     const wrapper = createWrapper({ currentFields: ['name', 'dept', 'emp_id'] })
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
     const vm = wrapper.vm as any
-    vm.form.mode = 'single'
     vm.form.idField = 'emp_id'
     await vm.handleConfirm()
     const emitted = wrapper.emitted('confirm') as any[]
     const props = emitted[0][0]
-    expect(props.mode).toBe('single')
     expect(props.idField).toBe('emp_id')
   })
 
-  it('多选模式：confirm 产出 mode=multiple 且不含 idField', async () => {
+  it('confirm 不产出 mode 字段', async () => {
     const wrapper = createWrapper()
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
     const vm = wrapper.vm as any
-    vm.form.mode = 'multiple'
-    vm.form.idField = ''
     await vm.handleConfirm()
     const emitted = wrapper.emitted('confirm') as any[]
     const props = emitted[0][0]
-    expect(props.mode).toBe('multiple')
-    expect(props.idField).toBeUndefined()
+    expect(props.mode).toBeUndefined()
   })
 
-  it('回填：lookupProps 含 mode 与 idField 时正确还原', async () => {
+  it('回填：lookupProps 含 idField 时正确还原，且无 mode 概念', async () => {
     const wrapper = createWrapper({
       lookupProps: {
         sourceType: 'form',
         sourceFormKey: 'emp_profile',
         displayField: 'name',
-        mode: 'multiple',
+        idField: 'emp_id',
         columns: [],
         returnFields: {},
       },
@@ -120,15 +115,7 @@ describe('LookupPickerConfigDialog — 选择模式与 idField', () => {
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
     const vm = wrapper.vm as any
-    expect(vm.form.mode).toBe('multiple')
-  })
-
-  it('回填：无 mode 时默认单选', async () => {
-    const wrapper = createWrapper()
-    await wrapper.vm.$nextTick()
-    await wrapper.vm.$nextTick()
-    const vm = wrapper.vm as any
-    expect(vm.form.mode).toBe('single')
+    expect(vm.form.idField).toBe('emp_id')
   })
 })
 

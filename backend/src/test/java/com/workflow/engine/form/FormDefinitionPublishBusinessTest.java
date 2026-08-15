@@ -111,6 +111,20 @@ class FormDefinitionPublishBusinessTest {
         verify(formDefRepository, never()).save(any(FormDefinition.class));
     }
 
+    @Test
+    void publishBusinessForm_withUserPicker_rejected() {
+        FormDefinition d = draft("f1", "biz_bad", "BUSINESS",
+                "{\"rule\":[{\"type\":\"userPicker\",\"field\":\"owner\"}]}",
+                "[{\"key\":\"owner\",\"columnType\":\"VARCHAR\",\"length\":64}]");
+        stubDraft(d);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> formDefService.publish("f1"));
+
+        assertTrue(ex.getMessage().contains("不支持"));
+        verify(tableManager, never()).ensureTable(anyString(), anyList());
+        verify(formDefRepository, never()).save(any(FormDefinition.class));
+    }
+
     // ==================== subForm / storageMode 发布校验 ====================
 
     @Test
@@ -152,6 +166,26 @@ class FormDefinitionPublishBusinessTest {
         assertTrue(ex.getMessage().contains("子表存储模式暂未实现"));
         verify(tableManager, never()).ensureTable(anyString(), anyList());
         verify(formDefRepository, never()).save(any(FormDefinition.class));
+    }
+
+    @Test
+    void publishBusinessForm_withGroupSubtable_createsMainAndSubTables() {
+        String columnConfig = "[{\"key\":\"items\",\"subMode\":\"embedded\",\"subColumns\":["
+                + "{\"key\":\"name\",\"columnType\":\"VARCHAR\",\"length\":255},"
+                + "{\"key\":\"amount\",\"columnType\":\"DECIMAL\",\"length\":18,\"scale\":2}]},"
+                + "{\"key\":\"title\",\"columnType\":\"VARCHAR\",\"length\":255}]";
+        FormDefinition d = draft("f1", "biz_expense", "BUSINESS",
+                "{\"rule\":[{\"type\":\"group\",\"field\":\"items\",\"children\":["
+                + "{\"type\":\"input\",\"field\":\"name\"},"
+                + "{\"type\":\"inputNumber\",\"field\":\"amount\"}]},"
+                + "{\"type\":\"input\",\"field\":\"title\"}]}", columnConfig);
+        stubDraft(d);
+
+        FormDefinition result = formDefService.publish("f1");
+
+        assertEquals("PUBLISHED", result.getStatus());
+        verify(tableManager).ensureTable(eq("biz_expense"), anyList());
+        verify(tableManager).ensureSubTable(eq("biz_expense"), eq("items"), anyList());
     }
 
     @Test

@@ -40,15 +40,16 @@ form-create 设计器（@form-create/designer + @form-create/element-ui）内置
 | `elTreeSelect` | 单选 | VARCHAR(255) | |
 | `elTransfer` | — | JSON | 数组 |
 | `fcEditor` | — | TEXT | HTML |
-| `signaturePad` | — | LONGTEXT | base64，防超 TEXT 64KB |
+| `signaturePad` | — | TEXT | base64 签名图（TEXT 64KB 通常足够） |
 | `subForm` | — | JSON | storageMode=JSON |
 | `checkbox`（既有） | — | TEXT→JSON | 迁移 |
 | `multiSelect` / `multiSelectPro`（既有） | — | TEXT→JSON | 迁移 |
+| `cascader`（既有） | — | VARCHAR→JSON | 值必为数组（级联路径），VARCHAR 触发 Java 序列化乱码 |
 
 设计说明：
 - 多选判定读取 rule.props（tree 看 `showCheckbox`+值形态、elTreeSelect 看 `multiple`），与既有 `datePicker` 读 `props.type` 的做法一致。
-- `signaturePad` 直接上 LONGTEXT 而非 TEXT：base64 图片易超 64KB，避免发布后二次类型变更（TEXT→LONGTEXT 虽属同类，但避免无谓的重新发布与 DDL）。
-- 若引入 LONGTEXT：DdlBuilder 的 `ALLOWED_TYPES`、`columnDefinition()`、`validateColumns()`、`sameDefinition()`/`isNarrowing()` 需同步支持；`DynamicTableManager.normalizeType()` 已把 longtext 归一化为 TEXT（读取侧），但**写入侧 DDL 需输出 LONGTEXT 才不缩列**，因此 DdlBuilder 需区分 TEXT vs LONGTEXT 两个列类型值（或新增 LONGTEXT 白名单项）。
+- `signaturePad` 使用 TEXT：base64 签名图通常小于 64KB；不使用 LONGTEXT，避免引入新列类型（CHARACTER_MAXIMUM_LENGTH=4294967295 超出 Java Integer 范围，findTableColumns 读取会溢出——getNullableInt 已加溢出防御，但无需主动使用该类型）。
+- `cascader` 值形态是数组（级联路径），必须 JSON 列——VARCHAR 列存数组值会被 MySQL 驱动按 Java 序列化写入（`\xAC\xED` 魔数乱码）。
 
 ### D2: 多值组件 JSON 存储
 
@@ -74,24 +75,23 @@ form-create 设计器（@form-create/designer + @form-create/element-ui）内置
 ### D5: categoryOf 跨类变更
 
 - 现有分类：VARCHAR/TEXT/TINYINT/JSON → STRING；INT → INT；DECIMAL → DECIMAL；DATE/DATETIME → DATE。
-- 新增映射均落在既有分类内（rate=INT→INT；colorPicker=VARCAHR→STRING；JSON 多选→STRING；fcEditor/signaturePad=TEXT/LONGTEXT→STRING；subForm=JSON→STRING），**无需修改 categoryOf**。
+- 新增映射均落在既有分类内（rate=INT→INT；colorPicker=VARCAHR→STRING；JSON 多选→STRING；fcEditor/signaturePad=TEXT→STRING；subForm=JSON→STRING），**无需修改 categoryOf**。
 
 ## Risks / Trade-offs
 
 - [checkbox/multiSelect 从 TEXT 逗号拼接迁到 JSON 列] → 老数据不兼容，读取旧值为逗号串、新值为 JSON 数组 → 用户明确接受不兼容；`toVO()` 对 JSON 列加容错（parse 失败时原样返回），避免旧数据崩溃。
-- [signaturePad 使用 LONGTEXT 引入新列类型] → DdlBuilder/DynamicTableManager 需同步支持 LONGTEXT 的建列与归一化 → 变更集中在这两个文件 + 测试覆盖；若保守可退化为 TEXT（base64 小图可用，大图截断风险）。
+- [signaturePad 使用 TEXT] → base64 签名图超过 64KB 会截断 → 签名图通常远小于 64KB，风险可接受；若未来出现大图需求再评估 LONGTEXT（届时需处理 CHARACTER_MAXIMUM_LENGTH 溢出，已防御）。
 - [subForm 值格式复杂（对象数组）] → 若内部含子字段校验/联动，JSON 整列存储无法做列级校验 → 本期仅存储展示，子字段校验由前端 form-create 渲染时执行；后续 SUB_TABLE 模式再补齐后端行级校验。
 - [前后端映射表漂移] → 两处独立实现 → 在 ColumnTypeMapperTest 与 ColumnConfigDialog 测试中各建同一张"组件→列类型"期望表，发布测试断言前后端一致。
 - [JSON 列不可建索引/筛选] → 业务数据页对 JSON 列已降级不可筛选 → 符合"多值不做筛选"的产品预期，记录为已知限制。
 
 ## Migration Plan
 
-1. 后端：ColumnTypeMapper 增映射 + LONGTEXT 支持 + FormDefinitionService 校验调整 + ColumnConfig.storageMode → 单测（ColumnTypeMapperTest/DdlBuilderTest/DynamicTableManagerTest/FormDefinitionPublishBusinessTest）。
+1. 后端：ColumnTypeMapper 增映射 + FormDefinitionService 校验调整 + ColumnConfig.storageMode + getNullableInt 溢出防御 → 单测（ColumnTypeMapperTest/DdlBuilderTest/DynamicTableManagerTest/FormDefinitionPublishBusinessTest）。
 2. 前端：ColumnConfigDialog 增映射 + BizDataListPage 展示适配 + BizDataService 序列化/反序列化 → 组件测试。
 3. 手工验证：拖入 8 类组件 → 发布 → 业务数据页 CRUD 往返。
 4. 回滚：变更集中在映射与校验，未发布的新表单不受影响；已发布表单不受影响（本次不改已有列类型）。
 
 ## Open Questions
 
-1. LONGTEXT 是否一步到位？（本设计倾向直接上，见 D1 说明）
-2. subForm 内部是否需要后端子字段校验？（本期不做，SUB_TABLE 模式时再评估）
+1. subForm 内部是否需要后端子字段校验？（本期不做，SUB_TABLE 模式时再评估）

@@ -117,8 +117,10 @@ public class DynamicTableManager {
         };
     }
 
+    /** 读取可空整数；LONGTEXT 的 CHARACTER_MAXIMUM_LENGTH=4294967295 超出 int 范围 → 返回 null（无固定长度） */
     private static Integer getNullableInt(ResultSet rs, String columnLabel) throws SQLException {
-        int v = rs.getInt(columnLabel);
-        return rs.wasNull() ? null : v;
+        long v = rs.getLong(columnLabel);
+        if (rs.wasNull()) return null;
+        return v > Integer.MAX_VALUE ? null : (int) v;
     }
 }

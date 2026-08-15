@@ -18,11 +18,12 @@
 | `elTreeSelect` | 多选（multiple=true） | JSON |
 | `elTransfer` | 无（值必为数组） | JSON |
 | `fcEditor` | 无 | TEXT |
-| `signaturePad` | 无 | LONGTEXT |
+| `signaturePad` | 无 | TEXT |
 | `subForm` | storageMode=JSON | JSON |
 | `slider` | range=true（双滑块，值为数组） | JSON |
 | `slider` | step 为小数（单选） | DECIMAL(18, 小数位) |
 | `slider` | 其他（单选整数） | INT |
+| `cascader` | 无（值必为数组，级联路径） | JSON |
 
 多选判定 SHALL 基于 rule 的 props（tree 看 showCheckbox/值形态、elTreeSelect 看 multiple、slider 看 range/step）。
 
@@ -57,8 +58,13 @@
 
 #### Scenario: 手写签名发布
 - **WHEN** 业务表单 schema 含 `{ type: 'signaturePad', field: 'sign' }`
-- **THEN** 列映射草案生成 `{ key: 'sign', columnType: 'LONGTEXT' }`
-- **AND** DDL 生成 `sign LONGTEXT` 列定义
+- **THEN** 列映射草案生成 `{ key: 'sign', columnType: 'TEXT' }`
+- **AND** DDL 生成 `sign TEXT` 列定义
+
+#### Scenario: 级联选择器发布
+- **WHEN** 业务表单 schema 含 `{ type: 'cascader', field: 'region' }`
+- **THEN** 列映射草案生成 `{ key: 'region', columnType: 'JSON' }`
+- **AND** 发布后物理表包含 `region JSON` 列
 
 #### Scenario: 子表单发布（JSON 模式）
 - **WHEN** 业务表单 schema 含 `{ type: 'subForm', field: 'items' }`

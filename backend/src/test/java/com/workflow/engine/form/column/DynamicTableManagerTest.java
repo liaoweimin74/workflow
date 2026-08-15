@@ -98,7 +98,7 @@ class DynamicTableManagerTest {
         ResultSet rs = mock(ResultSet.class);
         when(rs.getString("COLUMN_NAME")).thenReturn("name");
         when(rs.getString("DATA_TYPE")).thenReturn("varchar");
-        when(rs.getInt("CHARACTER_MAXIMUM_LENGTH")).thenReturn(255);
+        when(rs.getLong("CHARACTER_MAXIMUM_LENGTH")).thenReturn(255L);
         when(rs.wasNull()).thenReturn(false);
         when(rs.getString("IS_NULLABLE")).thenReturn("YES");
         when(rs.getString("COLUMN_KEY")).thenReturn("");
@@ -124,7 +124,7 @@ class DynamicTableManagerTest {
         ResultSet rs = mock(ResultSet.class);
         when(rs.getString("COLUMN_NAME")).thenReturn("sign");
         when(rs.getString("DATA_TYPE")).thenReturn("longtext");
-        when(rs.getInt("CHARACTER_MAXIMUM_LENGTH")).thenReturn(0);
+        when(rs.getLong("CHARACTER_MAXIMUM_LENGTH")).thenReturn(0L);
         when(rs.wasNull()).thenReturn(false);
         when(rs.getString("IS_NULLABLE")).thenReturn("YES");
         when(rs.getString("COLUMN_KEY")).thenReturn("");
@@ -146,7 +146,7 @@ class DynamicTableManagerTest {
         ResultSet rs = mock(ResultSet.class);
         when(rs.getString("COLUMN_NAME")).thenReturn("content");
         when(rs.getString("DATA_TYPE")).thenReturn("mediumtext");
-        when(rs.getInt("CHARACTER_MAXIMUM_LENGTH")).thenReturn(0);
+        when(rs.getLong("CHARACTER_MAXIMUM_LENGTH")).thenReturn(0L);
         when(rs.wasNull()).thenReturn(false);
         when(rs.getString("IS_NULLABLE")).thenReturn("YES");
         when(rs.getString("COLUMN_KEY")).thenReturn("");

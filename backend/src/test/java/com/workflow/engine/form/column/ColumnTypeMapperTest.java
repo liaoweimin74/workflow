@@ -129,9 +129,16 @@ class ColumnTypeMapperTest {
     }
 
     @Test
-    void mapSignaturePad_returnsLongtext() {
+    void mapSignaturePad_returnsText() {
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("signaturePad", null);
-        assertThat(c.getColumnType()).isEqualTo("LONGTEXT");
+        assertThat(c.getColumnType()).isEqualTo("TEXT");
+    }
+
+    @Test
+    void mapCascader_returnsJson() {
+        // cascader 值为数组（级联路径），须 JSON 存储（VARCHAR 会触发 Java 序列化乱码）
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("cascader", null);
+        assertThat(c.getColumnType()).isEqualTo("JSON");
     }
 
     @Test

@@ -146,8 +146,10 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
     }
     case 'select':
     case 'radio':
-    case 'cascader':
       return { columnType: 'VARCHAR', length: 255, scale: null }
+    case 'cascader':
+      // 级联选择器值为数组（级联路径）→ JSON（与后端对齐；VARCHAR 会触发 Java 序列化乱码）
+      return { columnType: 'JSON', length: null, scale: null }
     case 'checkbox':
     case 'multiSelect':
     case 'multiSelectPro':
@@ -187,8 +189,8 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
     case 'fcEditor':
       return { columnType: 'TEXT', length: null, scale: null }
     case 'signaturePad':
-      // 签名图片 base64 可能很长 → LONGTEXT
-      return { columnType: 'LONGTEXT', length: null, scale: null }
+      // 签名图片 base64 → TEXT（TEXT 64KB 对 base64 签名图通常足够）
+      return { columnType: 'TEXT', length: null, scale: null }
     case 'subForm':
       // 子表：值以 JSON 数组存储（列标记 hidden，不进列表）
       return { columnType: 'JSON', length: null, scale: null }

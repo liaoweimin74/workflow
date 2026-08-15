@@ -44,7 +44,8 @@ public final class ColumnTypeMapper {
             case "input" -> applyString(c, 255);
             case "textarea", "RichText", "richText" -> applyText(c);
             case "inputNumber" -> applyNumber(c, props);
-            case "select", "radio", "cascader" -> applyString(c, 255);
+            case "select", "radio" -> applyString(c, 255);
+            case "cascader" -> applyJson(c);
             case "checkbox", "multiSelect", "multiSelectPro" -> applyJson(c);
             case "LookupPicker" -> {
                 // 查找带回：存显示文本（VARCHAR 255）
@@ -59,7 +60,7 @@ public final class ColumnTypeMapper {
             case "tree", "elTreeSelect" -> applyTree(c, props);
             case "elTransfer" -> applyJson(c);
             case "fcEditor" -> applyText(c);
-            case "signaturePad" -> applyLongtext(c);
+            case "signaturePad" -> applyText(c);
             case "subForm" -> applyJson(c);
             case "slider" -> applySlider(c, props);
             default -> {
@@ -108,10 +109,6 @@ public final class ColumnTypeMapper {
 
     private static void applyInt(ColumnConfig c) {
         c.setColumnType("INT");
-    }
-
-    private static void applyLongtext(ColumnConfig c) {
-        c.setColumnType("LONGTEXT");
     }
 
     private static void applyTree(ColumnConfig c, Map<String, Object> props) {

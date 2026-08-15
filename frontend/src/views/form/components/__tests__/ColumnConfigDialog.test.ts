@@ -263,11 +263,11 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 
-  it('signaturePad → LONGTEXT', async () => {
+  it('signaturePad → TEXT', async () => {
     const wrapper = createWrapper({ schema: extSchema('signaturePad') })
     await openAndBuild(wrapper)
     const col = confirmItems(wrapper).find(i => i.key === 'f1')
-    expect(col?.columnType).toBe('LONGTEXT')
+    expect(col?.columnType).toBe('TEXT')
     expect(col?.length).toBeNull()
     wrapper.unmount()
   })
@@ -301,7 +301,7 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 
-  it('已发布 LONGTEXT 与 VARCHAR 同属字符串类，不触发跨类锁定（与后端 categoryOf 对齐）', async () => {
+  it('TEXT/LONGTEXT 与 VARCHAR 同属字符串类，不触发跨类锁定（与后端 categoryOf 对齐）', async () => {
     const wrapper = createWrapper({
       schema: extSchema('signaturePad'),
       existingColumns: [{ key: 'f1', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false }],

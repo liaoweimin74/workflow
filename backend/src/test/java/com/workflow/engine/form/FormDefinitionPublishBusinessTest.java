@@ -127,11 +127,11 @@ class FormDefinitionPublishBusinessTest {
     }
 
     @Test
-    void publishSignaturePad_acceptsLongtextColumn() {
-        // signaturePad → LONGTEXT：发布校验白名单必须接受 LONGTEXT 列类型
+    void publishSignaturePad_acceptsTextColumn() {
+        // signaturePad → TEXT：发布校验白名单必须接受 TEXT 列类型
         FormDefinition d = draft("f1", "biz_sign", "BUSINESS",
                 "{\"rule\":[{\"type\":\"signaturePad\",\"field\":\"sign\"}]}",
-                "[{\"key\":\"sign\",\"columnType\":\"LONGTEXT\"}]");
+                "[{\"key\":\"sign\",\"columnType\":\"TEXT\"}]");
         stubDraft(d);
 
         FormDefinition result = formDefService.publish("f1");

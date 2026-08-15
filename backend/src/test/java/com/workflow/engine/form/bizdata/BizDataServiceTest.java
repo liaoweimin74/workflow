@@ -401,6 +401,31 @@ class BizDataServiceTest {
         assertThat(vo.getData()).containsEntry("tags", "a,b");
     }
 
+    @Test
+    void create_serializesArrayValue_forNonJsonColumn() {
+        // 级联选择器等值形态为数组、但列类型非 JSON（历史发布 VARCHAR 列）的字段：
+        // 非字符串值必须序列化，否则被 MySQL 驱动按 Java 序列化写入（\xAC\xED 乱码）
+        when(formDefService.getBusinessColumnsByKey("biz_leave"))
+                .thenReturn(List.of(simpleColumn("name", "VARCHAR", 255), simpleColumn("region", "VARCHAR", 255)));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "region", "[\"gd\",\"sz\"]",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        BizDataVO vo = bizDataService.create("biz_leave",
+                Map.of("name", "张三", "region", List.of("gd", "sz")));
+
+        ArgumentCaptor<Object[]> params = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave"), params.capture());
+        assertThat(params.getValue()).contains("[\"gd\",\"sz\"]");
+    }
+
     // ==================== resolve API ====================
 
     @Test

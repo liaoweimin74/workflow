@@ -114,9 +114,36 @@ const formConfig = reactive<FormConfig<PageDefinitionDTO>>({
       title: '页面类型',
       options: [
         { label: '视图', value: 'VIEW' },
-        { label: '页面（阶段二开放）', value: 'PAGE', disabled: true },
+        { label: '自定义页面', value: 'PAGE' },
       ],
       value: 'VIEW',
+      control: [
+        {
+          value: 'VIEW',
+          rule: [
+            {
+              type: 'select',
+              field: 'formKey',
+              title: '绑定表单',
+              options: [] as { label: string; value: string; disabled?: boolean }[],
+              props: { clearable: true, placeholder: '选择已发布的业务表单' },
+              validate: [{ required: true, message: '请选择绑定的业务表单', trigger: 'change' }],
+            },
+          ],
+        },
+        {
+          value: 'PAGE',
+          rule: [
+            {
+              type: 'select',
+              field: 'formKey',
+              title: '绑定表单',
+              options: [] as { label: string; value: string; disabled?: boolean }[],
+              props: { clearable: true, placeholder: '自定义页面使用数据源绑定，无需绑定表单' },
+            },
+          ],
+        },
+      ],
     },
     { type: 'input', field: 'name', title: '页面名称', validate: [{ required: true, message: '请输入页面名称', trigger: 'blur' }] },
     {
@@ -127,14 +154,6 @@ const formConfig = reactive<FormConfig<PageDefinitionDTO>>({
         { required: true, message: '请输入页面标识', trigger: 'blur' },
         { pattern: /^[a-z][a-z0-9_]*$/, message: '只能包含小写字母、数字、下划线，且以字母开头', trigger: 'blur' },
       ],
-    },
-    {
-      type: 'select',
-      field: 'formKey',
-      title: '绑定表单',
-      options: [] as { label: string; value: string; disabled?: boolean }[],
-      props: { clearable: true, placeholder: '选择已发布的业务表单' },
-      validate: [{ required: true, message: '请选择绑定的业务表单', trigger: 'change' }],
     },
   ],
   dialogTitle: { create: '新建页面' },
@@ -240,6 +259,15 @@ onMounted(async () => {
     const formKeyRule = formConfig.rule.find((r: any) => r.field === 'formKey') as any
     if (formKeyRule) {
       formKeyRule.options = publishedForms.value.map((f) => ({ label: f.name, value: f.key }))
+    }
+    // type control 分支内的 formKey 也注入选项
+    const typeRule = formConfig.rule.find((r: any) => r.field === 'type') as any
+    for (const ctl of typeRule?.control || []) {
+      for (const r of ctl.rule || []) {
+        if (r.field === 'formKey') {
+          r.options = publishedForms.value.map((f) => ({ label: f.name, value: f.key }))
+        }
+      }
     }
   } catch {
     // 表单加载失败不阻断列表

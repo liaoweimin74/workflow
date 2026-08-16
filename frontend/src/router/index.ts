@@ -24,7 +24,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/page/designer',
     name: 'PageDesigner',
-    component: () => import('@/views/page/ViewDesigner.vue'),
+    component: () => import('@/views/page/PageDesignerRouter.vue'),
     meta: { title: '页面设计器', fullScreen: true }
   },
   {

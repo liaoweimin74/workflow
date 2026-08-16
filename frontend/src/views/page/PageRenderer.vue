@@ -1,8 +1,10 @@
 <template>
   <div class="page-renderer">
+    <!-- 自定义页面（PAGE）：独立渲染组件（数据源注册 + 动作总线） -->
+    <PageRendererPage v-if="page?.type === 'PAGE'" />
     <!-- 错误态：不存在/未发布/schema 畸形，不白屏 -->
     <el-result
-      v-if="error"
+      v-else-if="error"
       icon="error"
       :title="error"
       style="padding: 80px 0"
@@ -158,6 +160,7 @@ import {
   Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
 } from '@element-plus/icons-vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
+import PageRendererPage from './PageRendererPage.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { formApi } from '@/api/form'
 import { bizDataApi } from '@/api/bizData'
@@ -230,8 +233,12 @@ async function load() {
     const preview = route.query.preview === 'true'
     const res = await pageApi.getPageByKey(pageKey.value, preview)
     page.value = res.data
+    if (res.data.type === 'PAGE') {
+      // 自定义页面（阶段二）：交给 PageRendererPage 渲染（数据源注册 + 动作总线）
+      return
+    }
     if (res.data.type !== 'VIEW') {
-      error.value = '自定义页面（阶段二）暂未开放'
+      error.value = '未知页面类型'
       return
     }
     if (!parseSchema(res.data.schema)) {

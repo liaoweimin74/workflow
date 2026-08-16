@@ -75,11 +75,17 @@ describe('PageListPage — 发布/删除交互', () => {
       size: 100,
     })
     const stub = wrapper.findComponent(SearchTableStub)
-    // formKey 下拉候选已注入创建弹窗 rule
+    // formKey 下拉候选注入到 type control 的 VIEW 分支
     const formConfig = stub.props('formConfig') as any
-    const formKeyRule = formConfig.rule.find((r: any) => r.field === 'formKey')
+    const typeRule = formConfig.rule.find((r: any) => r.field === 'type')
+    const viewCtl = typeRule.control.find((c: any) => c.value === 'VIEW')
+    const formKeyRule = viewCtl.rule.find((r: any) => r.field === 'formKey')
     expect(formKeyRule.options).toHaveLength(1)
     expect(formKeyRule.options[0]).toEqual({ label: '员工档案', value: 'emp_profile' })
+    // PAGE 分支 formKey 也可选（非必填）
+    const pageCtl = typeRule.control.find((c: any) => c.value === 'PAGE')
+    const pageFormKeyRule = pageCtl.rule.find((r: any) => r.field === 'formKey')
+    expect(pageFormKeyRule.options).toHaveLength(1)
     // fetchApi：SearchTable 透传的查询参数 → pageApi.getPages（page 转 0 基）
     const fetchApi = stub.props('fetchApi') as (params: any) => Promise<any>
     const res = await fetchApi({ page: 2, size: 20, name: '视图', status: 'DRAFT', type: 'VIEW' })

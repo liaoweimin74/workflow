@@ -2,6 +2,8 @@ package com.workflow.engine.page;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.DataSourceDefinitionService;
+import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
@@ -37,6 +39,9 @@ class PageValidatorTest {
     private FormDefinitionRepository formDefRepository;
 
     @Mock
+    private DataSourceDefinitionService dsService;
+
+    @Mock
     private TenantProvider tenantProvider;
 
     private PageValidator validator;
@@ -47,7 +52,7 @@ class PageValidatorTest {
     void setUp() {
         TenantContext.setTenantId(TENANT_ID);
         lenient().when(tenantProvider.getTenantId()).thenReturn(TENANT_ID);
-        validator = new PageValidator(formDefRepository, new ObjectMapper(), tenantProvider);
+        validator = new PageValidator(formDefRepository, new ObjectMapper(), tenantProvider, dsService);
     }
 
     @AfterEach
@@ -227,5 +232,137 @@ class PageValidatorTest {
 
         PageDefinition page = viewPage("not-json");
         assertThrows(BusinessException.class, () -> validator.validateForPublish(page));
+    }
+
+    // ==================== PAGE 自定义页面校验 ====================
+
+    private PageDefinition pagePage(String schema) {
+        PageDefinition page = new PageDefinition();
+        page.setType("PAGE");
+        page.setFormKey(null);
+        page.setSchema(schema);
+        return page;
+    }
+
+    private DataSourceDefinition enabledDs(String id, String type, String formKey) {
+        DataSourceDefinition ds = new DataSourceDefinition();
+        ds.setId(id);
+        ds.setTenantId(TENANT_ID);
+        ds.setName("ds-" + id);
+        ds.setType(type);
+        ds.setFormKey(formKey);
+        ds.setSourceKey("sk-" + id);
+        ds.setStatus("ENABLED");
+        return ds;
+    }
+
+    @Test
+    void page_validSchema_passes() {
+        when(dsService.getEnabled()).thenReturn(List.of(
+                enabledDs("ds_ref_001", "FORM", "product"),
+                enabledDs("ds_ref_002", "FORM", "category")));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                eq(TENANT_ID), eq("product"), eq("PUBLISHED")))
+                .thenReturn(Optional.of(publishedForm(columnConfigJson(
+                        col("name", "VARCHAR", false),
+                        col("categoryId", "VARCHAR", false)))));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                eq(TENANT_ID), eq("category"), eq("PUBLISHED")))
+                .thenReturn(Optional.of(publishedForm(columnConfigJson(
+                        col("id", "VARCHAR", false)))));
+
+        String schema = """
+                {"rule":[{"type":"page-tree","field":"tree1","props":{"dataSourceId":"ds-cats"}},
+                  {"type":"page-table","field":"table1","props":{"dataSourceId":"ds-products"}}],
+                 "option":{},
+                 "dataSources":[
+                   {"id":"ds-cats","refId":"ds_ref_002"},
+                   {"id":"ds-products","refId":"ds_ref_001","searchFields":["categoryId"]}],
+                 "actions":[{"trigger":"node-click","steps":[
+                   {"op":"set-filter","target":"ds-products","field":"categoryId","value":"{node.id}"},
+                   {"op":"refresh","target":"ds-products"}]}]}
+                """;
+        assertDoesNotThrow(() -> validator.validateForPublish(pagePage(schema)));
+    }
+
+    @Test
+    void page_danglingDataSourceRef_rejected() {
+        when(dsService.getEnabled()).thenReturn(List.of(enabledDs("ds_ref_001", "FORM", "product")));
+
+        String schema = """
+                {"rule":[{"type":"page-table","field":"t1","props":{"dataSourceId":"ds-products"}}],
+                 "option":{},
+                 "dataSources":[{"id":"ds-products","refId":"ds_ref_GHOST"}],
+                 "actions":[]}
+                """;
+        assertThrows(BusinessException.class, () -> validator.validateForPublish(pagePage(schema)));
+    }
+
+    @Test
+    void page_disabledDataSourceRef_rejected() {
+        DataSourceDefinition disabled = enabledDs("ds_ref_001", "FORM", "product");
+        disabled.setStatus("DISABLED");
+        when(dsService.getEnabled()).thenReturn(List.of());
+
+        String schema = """
+                {"rule":[{"type":"page-table","field":"t1","props":{"dataSourceId":"ds-products"}}],
+                 "option":{},
+                 "dataSources":[{"id":"ds-products","refId":"ds_ref_001"}],
+                 "actions":[]}
+                """;
+        assertThrows(BusinessException.class, () -> validator.validateForPublish(pagePage(schema)));
+    }
+
+    @Test
+    void page_componentDanglingDataSourceId_rejected() {
+        when(dsService.getEnabled()).thenReturn(List.of(enabledDs("ds_ref_001", "FORM", "product")));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                eq(TENANT_ID), eq("product"), eq("PUBLISHED")))
+                .thenReturn(Optional.of(publishedForm(columnConfigJson(
+                        col("name", "VARCHAR", false)))));
+
+        String schema = """
+                {"rule":[{"type":"page-table","field":"t1","props":{"dataSourceId":"ds-ghost"}}],
+                 "option":{},
+                 "dataSources":[{"id":"ds-products","refId":"ds_ref_001"}],
+                 "actions":[]}
+                """;
+        assertThrows(BusinessException.class, () -> validator.validateForPublish(pagePage(schema)));
+    }
+
+    @Test
+    void page_actionSetFilterUndeclaredField_rejected() {
+        when(dsService.getEnabled()).thenReturn(List.of(enabledDs("ds_ref_001", "FORM", "product")));
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                eq(TENANT_ID), eq("product"), eq("PUBLISHED")))
+                .thenReturn(Optional.of(publishedForm(columnConfigJson(
+                        col("name", "VARCHAR", false)))));
+
+        // set-filter 引用 secretColumn，但 ds-products 的 searchFields 未声明
+        String schema = """
+                {"rule":[{"type":"page-table","field":"t1","props":{"dataSourceId":"ds-products"}}],
+                 "option":{},
+                 "dataSources":[{"id":"ds-products","refId":"ds_ref_001","searchFields":["name"]}],
+                 "actions":[{"trigger":"click","steps":[
+                   {"op":"set-filter","target":"ds-products","field":"secretColumn","value":"x"}]}]}
+                """;
+        assertThrows(BusinessException.class, () -> validator.validateForPublish(pagePage(schema)));
+    }
+
+    @Test
+    void page_duplicateDataSourceId_rejected() {
+        when(dsService.getEnabled()).thenReturn(List.of(
+                enabledDs("ds_ref_001", "FORM", "product"),
+                enabledDs("ds_ref_002", "FORM", "category")));
+
+        String schema = """
+                {"rule":[],
+                 "option":{},
+                 "dataSources":[
+                   {"id":"ds-x","refId":"ds_ref_001"},
+                   {"id":"ds-x","refId":"ds_ref_002"}],
+                 "actions":[]}
+                """;
+        assertThrows(BusinessException.class, () -> validator.validateForPublish(pagePage(schema)));
     }
 }

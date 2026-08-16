@@ -13,6 +13,7 @@ import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
+import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
@@ -68,6 +69,9 @@ class PageDefinitionPublishIntegrationTest {
     @Mock
     private BizDataService bizDataService;
 
+    @Mock
+    private DataSourceDefinitionService dsService;
+
     private FormDefinitionService formDefService;
     private PageDefinitionService pageDefService;
     private PageQueryController queryController;
@@ -88,11 +92,11 @@ class PageDefinitionPublishIntegrationTest {
 
         // 页面链路全真实：Validator/Compiler/Service + 内存仓库（发布临界区同步模拟行锁）
         pageRepo = new InMemoryPageRepository();
-        PageValidator validator = new PageValidator(formDefRepository, objectMapper, tenantProvider);
+        PageValidator validator = new PageValidator(formDefRepository, objectMapper, tenantProvider, dsService);
         ViewCompiler compiler = new ViewCompiler(objectMapper);
         pageDefService = new PageDefinitionService(pageRepo, tenantProvider, validator, compiler, objectMapper);
 
-        queryController = new PageQueryController(pageDefService, bizDataService, objectMapper);
+        queryController = new PageQueryController(pageDefService, bizDataService, dsService, objectMapper);
     }
 
     @AfterEach

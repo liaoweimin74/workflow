@@ -6,6 +6,7 @@ import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.form.bizdata.BizDataService;
 import com.workflow.engine.page.PageDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
@@ -20,6 +21,8 @@ import java.util.Set;
  * 页面数据查询 Controller。
  * 视图（VIEW）页面渲染时的数据查询入口：按 pageKey 取已发布页面定义，
  * 以 schema 声明的 searchFields 作 filter 白名单，委托 BizDataService 查询业务表。
+ * 自定义页面（PAGE）数据源查询：按页面内 dataSourceId 解析全局数据源 refId，
+ * 委托 DataSourceDefinitionService.queryData（经 DataSourceAdapter）查询。
  */
 @RestController
 @RequestMapping("/api/v1/pages")
@@ -27,13 +30,16 @@ public class PageQueryController {
 
     private final PageDefinitionService pageDefService;
     private final BizDataService bizDataService;
+    private final DataSourceDefinitionService dsService;
     private final ObjectMapper objectMapper;
 
     public PageQueryController(PageDefinitionService pageDefService,
                                BizDataService bizDataService,
+                               DataSourceDefinitionService dsService,
                                ObjectMapper objectMapper) {
         this.pageDefService = pageDefService;
         this.bizDataService = bizDataService;
+        this.dsService = dsService;
         this.objectMapper = objectMapper;
     }
 
@@ -57,6 +63,74 @@ public class PageQueryController {
         req.setFilter(whitelistFilter(req.getFilter(), whitelist));
 
         return R.ok(bizDataService.query(page.getFormKey(), req));
+    }
+
+    /**
+     * 自定义页面（PAGE）数据源查询。
+     * 按页面内 dataSourceId 在已发布 schema 的 dataSources 中解析 refId，
+     * 委托 DataSourceDefinitionService.queryData（经 DataSourceAdapter）查询。
+     *
+     * @param pageKey       页面 key（已发布 PAGE）
+     * @param dataSourceId  页面内数据源 id（dataSources[].id）
+     * @param req           查询参数（filter 为 JSON 字符串，受数据源 searchFields 白名单约束）
+     */
+    @GetMapping("/{pageKey}/ds/{dataSourceId}/data")
+    public R<BizDataPageVO> queryPageDataSource(@PathVariable String pageKey,
+                                                @PathVariable String dataSourceId,
+                                                BizDataQueryRequest req) {
+        PageDefinition page = pageDefService.getPublishedByKey(pageKey);
+        if (!"PAGE".equals(page.getType())) {
+            throw new BusinessException(400, "页面 " + pageKey + " 不是自定义页面类型");
+        }
+        String refId = resolveDataSourceRefId(page.getSchema(), dataSourceId);
+        // filter 白名单：仅保留该数据源条目声明的 searchFields
+        Set<String> whitelist = pageDataSourceSearchFields(page.getSchema(), dataSourceId);
+        req.setFilter(whitelistFilter(req.getFilter(), whitelist));
+        return R.ok(dsService.queryData(refId, req));
+    }
+
+    /** 在 PAGE schema dataSources 中按页面内 id 解析 refId */
+    private String resolveDataSourceRefId(String schema, String dataSourceId) {
+        JsonNode dataSources = pageDataSources(schema);
+        if (dataSources.isArray()) {
+            for (JsonNode entry : dataSources) {
+                if (dataSourceId.equals(entry.path("id").asText())) {
+                    String refId = entry.path("refId").asText();
+                    if (!refId.isBlank()) return refId;
+                }
+            }
+        }
+        throw new BusinessException(400, "页面未声明数据源: " + dataSourceId);
+    }
+
+    /** 该数据源条目声明的 searchFields key 集合（未声明 → 空 = 不限制） */
+    private Set<String> pageDataSourceSearchFields(String schema, String dataSourceId) {
+        Set<String> keys = new HashSet<>();
+        JsonNode dataSources = pageDataSources(schema);
+        if (dataSources.isArray()) {
+            for (JsonNode entry : dataSources) {
+                if (!dataSourceId.equals(entry.path("id").asText())) continue;
+                JsonNode searchFields = entry.path("searchFields");
+                if (searchFields.isArray()) {
+                    for (JsonNode sf : searchFields) {
+                        String k = sf.asText();
+                        if (!k.isBlank()) keys.add(k);
+                    }
+                }
+                break;
+            }
+        }
+        return keys;
+    }
+
+    /** 解析 PAGE schema 的 dataSources 数组 */
+    private JsonNode pageDataSources(String schema) {
+        try {
+            JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
+            return root.path("dataSources");
+        } catch (Exception e) {
+            throw new BusinessException(400, "页面 schema 解析失败");
+        }
     }
 
     /**
@@ -89,6 +163,10 @@ public class PageQueryController {
     private String whitelistFilter(String filterJson, Set<String> whitelist) {
         if (filterJson == null || filterJson.isBlank()) {
             return null;
+        }
+        // 白名单为空（数据源未声明 searchFields）= 不限制
+        if (whitelist == null || whitelist.isEmpty()) {
+            return filterJson;
         }
         try {
             Map<String, Object> filter = objectMapper.readValue(filterJson, Map.class);

@@ -5,6 +5,7 @@ import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.form.bizdata.BizDataService;
 import com.workflow.engine.page.PageDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
@@ -27,11 +28,15 @@ import static org.mockito.Mockito.when;
  * - 扁平格式 {@code {"col":"value"}} 按列名校验（既有行为）
  * - 结构化格式 {@code {"logic":"AND","conditions":[{"column","op","value"}]}}
  *   按 conditions[].column 校验（与前端 PageRenderer.buildFilter 输出对齐）
+ * <p>PAGE 自定义页面数据源查询：
+ * - 按 dataSourceId 解析 refId 后委托 DataSourceDefinitionService.queryData
+ * - 未声明的 dataSourceId / 非 PAGE 页面 → 400
  */
 class PageQueryControllerTest {
 
     private PageDefinitionService pageDefService;
     private BizDataService bizDataService;
+    private DataSourceDefinitionService dsService;
     private PageQueryController controller;
 
     /** 视图 schema：声明 name/dept 两个可查询字段 */
@@ -42,19 +47,76 @@ class PageQueryControllerTest {
             ],"columns":[]}
             """;
 
+    /** PAGE schema：两个数据源绑定 */
+    private static final String PAGE_SCHEMA = """
+            {"rule":[{"type":"el-tree","field":"tree1","props":{"dataSourceId":"ds-cats"}},
+              {"type":"el-table","field":"table1","props":{"dataSourceId":"ds-products"}}],
+             "option":{},
+             "dataSources":[
+               {"id":"ds-cats","refId":"ds_ref_002"},
+               {"id":"ds-products","refId":"ds_ref_001"}],
+             "actions":[]}
+            """;
+
     @BeforeEach
     void setUp() {
         pageDefService = mock(PageDefinitionService.class);
         bizDataService = mock(BizDataService.class);
-        controller = new PageQueryController(pageDefService, bizDataService, new ObjectMapper());
+        dsService = mock(DataSourceDefinitionService.class);
+        controller = new PageQueryController(pageDefService, bizDataService, dsService, new ObjectMapper());
 
         PageDefinition view = new PageDefinition();
         view.setType("VIEW");
         view.setFormKey("emp_profile");
         view.setSchema(SCHEMA);
         when(pageDefService.getPublishedByKey("emp_view")).thenReturn(view);
+
+        PageDefinition page = new PageDefinition();
+        page.setType("PAGE");
+        page.setFormKey(null);
+        page.setSchema(PAGE_SCHEMA);
+        when(pageDefService.getPublishedByKey("product-page")).thenReturn(page);
+
         when(bizDataService.query(anyString(), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO());
+        when(dsService.queryData(anyString(), any(BizDataQueryRequest.class)))
+                .thenReturn(new BizDataPageVO());
+    }
+
+    // ---------- PAGE 数据源查询 ----------
+
+    @Test
+    void pageQuery_resolvesDataSourceIdToRefId_delegates() {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setPage(0);
+        req.setSize(20);
+
+        R<BizDataPageVO> result = controller.queryPageDataSource("product-page", "ds-products", req);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        verify(dsService).queryData(eq("ds_ref_001"), eq(req));
+    }
+
+    @Test
+    void pageQuery_unknownDataSourceId_rejected400() {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setPage(0);
+        req.setSize(20);
+
+        assertThatThrownBy(() -> controller.queryPageDataSource("product-page", "ds-ghost", req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未声明数据源");
+    }
+
+    @Test
+    void pageQuery_onViewPage_rejected400() {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setPage(0);
+        req.setSize(20);
+
+        assertThatThrownBy(() -> controller.queryPageDataSource("emp_view", "ds-products", req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("不是自定义页面");
     }
 
     // ---------- 扁平格式（既有行为回归） ----------

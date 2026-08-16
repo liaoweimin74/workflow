@@ -456,7 +456,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       })
       continue
     }
-    // subForm：以 JSON 列落主表（与 upload 同策略）
+    // subForm：以 JSON 列落主表（与 upload 同策略），隐藏展示（仅参与 CRUD 写入）
     if (type === 'subForm') {
       const existing = props.existingColumns?.find(c => c.key === field)
       out.push({
@@ -468,6 +468,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
         unique: false,
         indexed: false,
+        hidden: true,
         existingType: existing?.columnType,
       })
       continue

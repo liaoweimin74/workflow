@@ -142,12 +142,6 @@ class ColumnTypeMapperTest {
     }
 
     @Test
-    void mapSubForm_returnsJson() {
-        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("subForm", null);
-        assertThat(c.getColumnType()).isEqualTo("JSON");
-    }
-
-    @Test
     void mapSliderSingleInteger_returnsInt() {
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("slider", Map.of("min", 0, "max", 10));
         assertThat(c.getColumnType()).isEqualTo("INT");

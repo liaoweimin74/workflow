@@ -349,13 +349,6 @@ class BizDataServiceTest {
 
     // ==================== JSON 列（多选 checkbox/tree 多选/elTransfer/subForm） ====================
 
-    private ColumnConfig jsonColumn(String key) {
-        ColumnConfig c = new ColumnConfig();
-        c.setKey(key);
-        c.setColumnType("JSON");
-        return c;
-    }
-
     @Test
     void create_serializesJsonColumnList_toJsonString() {
         when(formDefService.getBusinessColumnsByKey("biz_leave"))

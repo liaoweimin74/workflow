@@ -343,6 +343,10 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     // 隐藏组件不渲染列类型选择器，但草案保留 columnType 且不标记 unsupported
     expect(col).toBeDefined()
     expect(col?.unsupported).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
 // ----- 真实场景（ref_test 表单）：group 子表内部字段存放在 props.rule（fcRow/col 布局嵌套） -----
 // 子表组件（group/tableForm）内部字段在 props.rule / props.columns[].rule，而不是 children。
 // 发布列映射必须穿透这些结构提取子列，否则子列为空 → 被标记 unsupported 阻止发布。

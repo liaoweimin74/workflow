@@ -176,4 +176,61 @@ class PageDefinitionServicePublishTest {
 
         assertThrows(BusinessException.class, () -> service.publish("page-1"));
     }
+
+    // ==================== 预览（未发布 DRAFT 动态编译，不持久化） ====================
+
+    @Test
+    void preview_draftWithoutCompiledRule_dynamicallyCompiles() {
+        // 未发布 DRAFT：schema 仅有声明式配置（无 rule 编译产物）
+        PageDefinition draft = draftView("page-1", "leave-query", "{\"searchFields\":[{\"key\":\"name\"}]}");
+        when(pageDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "leave-query"))
+                .thenReturn(Optional.of(draft));
+        doNothing().when(validator).validateForPublish(draft);
+        when(validator.resolveBindColumns(draft)).thenReturn(List.of());
+        when(compiler.compile(any(PageDefinition.class), anyList()))
+                .thenReturn("{\"rule\":[{\"type\":\"table\"}],\"option\":{}}");
+
+        PageDefinition result = service.getPreviewByKey("leave-query");
+
+        // 编译产物合并进返回的 schema，但不持久化（不调用 save）
+        assertNotNull(result.getSchema());
+        assertTrue(result.getSchema().contains("\"rule\""));
+        verify(compiler).compile(any(PageDefinition.class), anyList());
+        verify(pageDefRepository, never()).save(any());
+    }
+
+    @Test
+    void preview_draftWithCompiledRule_skipsRecompile() {
+        // DRAFT 但 schema 已含编译产物（上次预览/保存残留）→ 不重复编译
+        PageDefinition draft = draftView("page-1", "leave-query",
+                "{\"searchFields\":[{\"key\":\"name\"}],\"rule\":[{\"type\":\"table\"}],\"option\":{}}");
+        when(pageDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "leave-query"))
+                .thenReturn(Optional.of(draft));
+
+        PageDefinition result = service.getPreviewByKey("leave-query");
+
+        assertTrue(result.getSchema().contains("\"rule\""));
+        verify(compiler, never()).compile(any(), anyList());
+    }
+
+    @Test
+    void preview_publishedPage_returnsDirectlyWithoutCompile() {
+        PageDefinition published = draftView("page-2", "leave-query", "{\"searchFields\":[],\"rule\":[]}");
+        published.setStatus("PUBLISHED");
+        when(pageDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "leave-query"))
+                .thenReturn(Optional.of(published));
+
+        PageDefinition result = service.getPreviewByKey("leave-query");
+
+        assertEquals("PUBLISHED", result.getStatus());
+        verify(compiler, never()).compile(any(), anyList());
+    }
+
+    @Test
+    void preview_missingPage_rejected404() {
+        when(pageDefRepository.findFirstByTenantIdAndKeyOrderByVersionDesc(TENANT_ID, "no-such-page"))
+                .thenReturn(Optional.empty());
+
+        assertThrows(BusinessException.class, () -> service.getPreviewByKey("no-such-page"));
+    }
 }

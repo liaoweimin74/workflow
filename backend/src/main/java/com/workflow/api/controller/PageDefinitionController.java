@@ -71,12 +71,13 @@ public class PageDefinitionController {
 
     /**
      * 按 key 获取页面定义。
-     * 渲染页默认取已发布版本（未发布 → 404）；preview=true 时取最新 DRAFT 定义（预览用）。
+     * 渲染页默认取已发布版本（未发布 → 404）；preview=true 时取最新定义，
+     * 未发布的 DRAFT 视图动态编译（效果与发布后一致），预览用。
      */
     @GetMapping("/{key}/definition")
     public R<PageDefinitionDetailDTO> getByKey(@PathVariable String key,
                                                @RequestParam(defaultValue = "false") boolean preview) {
-        PageDefinition pageDef = preview ? pageDefService.getByKey(key) : pageDefService.getPublishedByKey(key);
+        PageDefinition pageDef = preview ? pageDefService.getPreviewByKey(key) : pageDefService.getPublishedByKey(key);
         return R.ok(toDetailDTO(pageDef));
     }
 

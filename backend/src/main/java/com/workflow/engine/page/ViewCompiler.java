@@ -148,7 +148,10 @@ public class ViewCompiler {
     }
 
     /**
-     * actions → 操作按钮配置（create/edit/delete/view 开关）。
+     * actions → 操作按钮配置。
+     * 支持按钮数组格式：{buttons:[{key,label,placement,style,events?}]}（每按钮独立配置，
+     * 自定义按钮可携带事件链）；兼容旧布尔格式 {create/edit/delete/view, placement, style}。
+     * placement：toolbar（操作栏）/ column（操作列）；style：icon / text / button。
      */
     private void compileActions(JsonNode root, ArrayNode rule) {
         JsonNode actions = root.path("actions");
@@ -160,22 +163,74 @@ public class ViewCompiler {
         actionsNode.put("field", "__page_actions");
         actionsNode.put("title", "操作");
         ObjectNode props = actionsNode.putObject("props");
-        for (String action : List.of("create", "edit", "delete", "view")) {
-            if (actions.path(action).asBoolean(false)) {
-                props.put(action, true);
-            }
-        }
-        if (actions.has("permissions") && actions.path("permissions").isTextual()) {
+        if (actions.path("permissions").isTextual()) {
             props.put("permissions", actions.path("permissions").asText());
+        }
+        if (actions.has("actionColumnWidth") && actions.path("actionColumnWidth").isInt()
+                && actions.path("actionColumnWidth").asInt() > 0) {
+            props.put("actionColumnWidth", actions.path("actionColumnWidth").asInt());
+        }
+        JsonNode buttons = actions.path("buttons");
+        if (buttons.isArray()) {
+            // 按钮数组格式：每按钮独立配置
+            ArrayNode btnNodes = props.putArray("buttons");
+            for (JsonNode btn : buttons) {
+                String key = btn.path("key").asText();
+                if (key.isBlank()) {
+                    throw new BusinessException(400, "操作按钮 key 不能为空");
+                }
+                ObjectNode b = btnNodes.addObject();
+                b.put("key", key);
+                b.put("label", btn.path("label").asText(key));
+                String placement = btn.path("placement").asText("column");
+                if (!"toolbar".equals(placement) && !"column".equals(placement)) {
+                    throw new BusinessException(400, "未知操作位置 placement: " + placement);
+                }
+                b.put("placement", placement);
+                String style = btn.path("style").asText("button");
+                if (!"icon".equals(style) && !"text".equals(style) && !"button".equals(style)) {
+                    throw new BusinessException(400, "未知按钮形态 style: " + style);
+                }
+                b.put("style", style);
+                if (btn.has("icon") && btn.path("icon").isTextual() && !btn.path("icon").asText().isBlank()) {
+                    b.put("icon", btn.path("icon").asText());
+                }
+                if (btn.has("events")) {
+                    b.set("events", btn.path("events").deepCopy());
+                }
+            }
+        } else {
+            // 兼容旧布尔格式
+            for (String action : List.of("create", "edit", "delete", "view")) {
+                if (actions.path(action).asBoolean(false)) {
+                    props.put(action, true);
+                }
+            }
+            String placement = actions.path("placement").asText("column");
+            if (!"toolbar".equals(placement) && !"column".equals(placement)) {
+                throw new BusinessException(400, "未知操作位置 placement: " + placement);
+            }
+            props.put("placement", placement);
+            String style = actions.path("style").asText("button");
+            if (!"icon".equals(style) && !"text".equals(style) && !"button".equals(style)) {
+                throw new BusinessException(400, "未知按钮形态 style: " + style);
+            }
+            props.put("style", style);
         }
     }
 
     /**
-     * detail → 详情弹窗配置。
+     * detail → 详情弹窗配置（由 view 按钮启用；view 关闭/未配置则不编译）。
+     * 兼容旧格式 detail.enabled（显式 true 亦启用）；按钮数组格式下检查 buttons 是否含 view。
      */
     private void compileDetail(JsonNode root, ArrayNode rule) {
         JsonNode detail = root.path("detail");
-        if (!detail.isObject() || !detail.path("enabled").asBoolean(false)) {
+        if (!detail.isObject()) {
+            return;
+        }
+        boolean viewEnabled = isViewEnabled(root.path("actions"));
+        boolean legacyEnabled = detail.path("enabled").asBoolean(false);
+        if (!viewEnabled && !legacyEnabled) {
             return;
         }
         ObjectNode detailNode = rule.addObject();
@@ -190,6 +245,23 @@ public class ViewCompiler {
         if (detail.path("type").asText("form").equals("form")) {
             props.put("type", "form");
         }
+    }
+
+    /** view 按钮是否启用：按钮数组含 key=view，或旧布尔格式 view=true */
+    private boolean isViewEnabled(JsonNode actions) {
+        if (!actions.isObject()) {
+            return false;
+        }
+        JsonNode buttons = actions.path("buttons");
+        if (buttons.isArray()) {
+            for (JsonNode btn : buttons) {
+                if ("view".equals(btn.path("key").asText())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return actions.path("view").asBoolean(false);
     }
 
     /**

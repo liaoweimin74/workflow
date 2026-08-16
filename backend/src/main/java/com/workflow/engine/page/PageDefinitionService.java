@@ -109,6 +109,37 @@ public class PageDefinitionService {
     }
 
     /**
+     * 预览：按 key 获取最新定义，未发布的 DRAFT 视图动态编译（含编译产物 rule/option）。
+     * 与发布不同：编译结果不持久化（不调用 save），仅返回内存中合并后的 schema，
+     * 使设计器预览效果与发布后一致（查询/操作/详情/事件完整可渲染）。
+     */
+    public PageDefinition getPreviewByKey(String key) {
+        PageDefinition page = getByKey(key);
+        if (!"VIEW".equals(page.getType())) {
+            return page;
+        }
+        // 已含编译产物（发布过或残留）→ 直接返回；否则动态编译
+        if (page.getSchema() != null && schemaHasCompiled(page.getSchema())) {
+            return page;
+        }
+        validator.validateForPublish(page);
+        List<ColumnConfig> bindColumns = validator.resolveBindColumns(page);
+        String compiled = compiler.compile(page, bindColumns);
+        page.setSchema(mergeCompiled(page.getSchema(), compiled));
+        return page;
+    }
+
+    /** schema 是否已含编译产物（rule 键存在） */
+    private boolean schemaHasCompiled(String schema) {
+        try {
+            JsonNode node = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
+            return node.isObject() && node.has("rule");
+        } catch (JsonProcessingException e) {
+            return false;
+        }
+    }
+
+    /**
      * 分页查询页面定义列表。
      *
      * @param status 状态过滤（可选）

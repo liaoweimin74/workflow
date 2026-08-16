@@ -22,6 +22,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '表单设计器', fullScreen: true }
   },
   {
+    path: '/page/designer',
+    name: 'PageDesigner',
+    component: () => import('@/views/page/ViewDesigner.vue'),
+    meta: { title: '页面设计器', fullScreen: true }
+  },
+  {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/dashboard',
@@ -121,6 +127,24 @@ const routes: RouteRecordRaw[] = [
         name: 'BizDataList',
         component: () => import('@/views/form/BizDataListPage.vue'),
         meta: { title: '业务数据管理' }
+      },
+      {
+        path: 'page',
+        name: 'PageList',
+        component: () => import('@/views/page/PageListPage.vue'),
+        meta: { title: '页面管理' }
+      },
+      {
+        path: 'page/:pageKey',
+        name: 'PageRenderer',
+        component: () => import('@/views/page/PageRenderer.vue'),
+        meta: { title: '页面' }
+      },
+      {
+        path: 'data-source/list',
+        name: 'DataSourceList',
+        component: () => import('@/views/dataSource/DataSourceListPage.vue'),
+        meta: { title: '数据源管理' }
       },
       {
         path: '404',

@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 页面定义服务。
@@ -38,6 +39,12 @@ public class PageDefinitionService {
     private final PageValidator validator;
     private final ViewCompiler compiler;
     private final ObjectMapper objectMapper;
+
+    /**
+     * 同 key 发布串行化锁（进程内）：findByIdForUpdate 仅锁单行，
+     * 同 key 不同 id 的并发发布需要按 key 粒度互斥，防止双 PUBLISHED。
+     */
+    private final ConcurrentHashMap<String, Object> publishLocks = new ConcurrentHashMap<>();
 
     public PageDefinitionService(PageDefinitionRepository pageDefRepository,
                                  TenantProvider tenantProvider,
@@ -221,9 +228,13 @@ public class PageDefinitionService {
     /**
      * 发布页面（不建表）。
      * 流程：findByIdForUpdate 悲观锁 → 状态校验（DRAFT/PUBLISHED 可重发，ARCHIVED 拒绝）
-     * → 内容未变化拒绝（对比同 key 排除自身的最新 PUBLISHED）
+     * → 同 key 进程内锁内：内容未变化拒绝（对比同 key 排除自身的最新 PUBLISHED）
      * → type=VIEW 时 validateForPublish + resolveBindColumns + compile，编译产物合并进 schema
      * → 旧 PUBLISHED 降 ARCHIVED → 当前 status=PUBLISHED、publishedVersion=version → save。
+     *
+     * 并发保证：findByIdForUpdate 仅锁单行，同 key 不同 id 的并发发布需按 key 粒度
+     * 串行化（publishLocks），确保同一时刻仅一条 PUBLISHED。锁内第一次普通读
+     * （oldPublished 查询）才建立事务快照，可读到先完成者已提交的状态。
      *
      * @param id 页面定义 ID
      * @return 发布后的页面定义
@@ -239,45 +250,62 @@ public class PageDefinitionService {
             throw new BusinessException(400, "已归档页面不能发布");
         }
 
-        // 内容未变化拒绝：与同 key 最新已发布版本（排除自身）比较 schema
-        Optional<PageDefinition> oldPublishedOpt = pageDefRepository
-                .findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
-                        tenantId, current.getKey(), "PUBLISHED", id);
-        if (oldPublishedOpt.isPresent()
-                && schemaEquals(current.getSchema(), oldPublishedOpt.get().getSchema())) {
-            throw new BusinessException(400, "页面内容与已发布版本未变化，无需发布");
+        Object lock = publishLocks.computeIfAbsent(tenantId + ":" + current.getKey(), k -> new Object());
+        synchronized (lock) {
+            // 内容未变化拒绝：与同 key 最新已发布版本（排除自身）比较 schema
+            Optional<PageDefinition> oldPublishedOpt = pageDefRepository
+                    .findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
+                            tenantId, current.getKey(), "PUBLISHED", id);
+            if (oldPublishedOpt.isPresent()
+                    && schemaEquals(current.getSchema(), oldPublishedOpt.get().getSchema())) {
+                throw new BusinessException(400, "页面内容与已发布版本未变化，无需发布");
+            }
+
+            // 校验 + 编译（type=PAGE 阶段二预留：仅基础校验，不编译）
+            validator.validateForPublish(current);
+            if ("VIEW".equals(current.getType())) {
+                List<ColumnConfig> bindColumns = validator.resolveBindColumns(current);
+                String compiled = compiler.compile(current, bindColumns);
+                current.setSchema(mergeCompiled(current.getSchema(), compiled));
+            }
+
+            // 旧 PUBLISHED 降 ARCHIVED
+            oldPublishedOpt.ifPresent(old -> {
+                old.setStatus("ARCHIVED");
+                pageDefRepository.save(old);
+            });
+
+            current.setStatus("PUBLISHED");
+            current.setPublishedVersion(current.getVersion());
+            return pageDefRepository.save(current);
         }
-
-        // 校验 + 编译（type=PAGE 阶段二预留：仅基础校验，不编译）
-        validator.validateForPublish(current);
-        if ("VIEW".equals(current.getType())) {
-            List<ColumnConfig> bindColumns = validator.resolveBindColumns(current);
-            String compiled = compiler.compile(current, bindColumns);
-            current.setSchema(mergeCompiled(current.getSchema(), compiled));
-        }
-
-        // 旧 PUBLISHED 降 ARCHIVED
-        oldPublishedOpt.ifPresent(old -> {
-            old.setStatus("ARCHIVED");
-            pageDefRepository.save(old);
-        });
-
-        current.setStatus("PUBLISHED");
-        current.setPublishedVersion(current.getVersion());
-        return pageDefRepository.save(current);
     }
 
     /**
-     * schema 语义比较（JSON 规范化后比对顺序无关）。
+     * schema 语义比较：剔除编译产物（rule/option）后做 JSON 规范化比对。
+     * 发布时编译产物会合并进 schema，直接比较会把"相同声明"误判为"已变化"。
      */
     private boolean schemaEquals(String a, String b) {
         try {
             JsonNode na = objectMapper.readTree(a == null || a.isBlank() ? "{}" : a);
             JsonNode nb = objectMapper.readTree(b == null || b.isBlank() ? "{}" : b);
-            return na.equals(nb);
+            return stripCompiled(na).equals(stripCompiled(nb));
         } catch (JsonProcessingException e) {
             return false;
         }
+    }
+
+    /**
+     * 移除 schema 中的编译产物键（rule/option），仅保留用户声明内容。
+     */
+    private JsonNode stripCompiled(JsonNode node) {
+        if (node != null && node.isObject()) {
+            ObjectNode copy = ((ObjectNode) node).deepCopy();
+            copy.remove("rule");
+            copy.remove("option");
+            return copy;
+        }
+        return node;
     }
 
     /**

@@ -90,8 +90,14 @@ public class PageQueryController {
             if (filter == null || filter.isEmpty()) {
                 return null;
             }
-            filter.keySet().retainAll(whitelist);
+            for (String key : filter.keySet()) {
+                if (!whitelist.contains(key)) {
+                    throw new BusinessException(400, "筛选字段不在页面声明白名单: " + key);
+                }
+            }
             return objectMapper.writeValueAsString(filter);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             throw new BusinessException(400, "筛选参数 filter 格式非法，应为 JSON 对象");
         }

@@ -43,17 +43,15 @@
         <!-- 表单配置页签底部：数据源配置入口（页面级配置，与表单配置同属页面属性） -->
         <template #formConfigExtra>
           <div class="form-extra-section">
-            <div class="form-extra-header">
-              <span>数据源与动作</span>
-              <el-button
-                type="warning"
-                plain
-                size="small"
-                @click="dsDialogVisible = true"
-              >
-                配置数据源（{{ schema.dataSources.length }}）
-              </el-button>
-            </div>
+            <div class="form-extra-header">数据源与动作</div>
+            <el-button
+              plain
+              size="small"
+              class="ds-config-btn"
+              @click="dsDialogVisible = true"
+            >
+              点击配置数据源（{{ schema.dataSources.length }}）
+            </el-button>
           </div>
         </template>
       </fc-designer>
@@ -420,12 +418,23 @@ function statusLabel(status: string): string {
   padding-top: 8px;
 }
 .form-extra-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   font-size: 13px;
   color: #606266;
   font-weight: 500;
+  margin-bottom: 4px;
+}
+/* 对齐 LookupPicker"点击配置数据源"按钮样式：全宽 + 蓝色描边 */
+.ds-config-btn {
+  width: 100%;
+  border-color: #2E73FF;
+  color: #2E73FF;
+  font-weight: 400;
+  margin-top: 4px;
+}
+.ds-config-btn:hover {
+  border-color: #2E73FF;
+  color: #fff;
+  background-color: #2E73FF;
 }
 .preview-json {
   max-height: 60vh;

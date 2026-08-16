@@ -122,6 +122,7 @@ import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { formApi } from '@/api/form'
 import { bizDataApi } from '@/api/bizData'
+import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 
 const route = useRoute()
 const router = useRouter()
@@ -484,9 +485,47 @@ async function dispatchAction(
       }
       await loadData(0)
       break
-    case 'script':
-      console.warn('[page] 脚本事件未启用（Task 12 接入）')
+    case 'script': {
+      const source: string = resolved.source || ''
+      if (!source) {
+        console.warn('[page] 脚本动作缺少 source 参数')
+        break
+      }
+      if (!isScriptEventEnabled()) {
+        console.warn('[page] 脚本事件未启用（设置 VITE_PAGE_SCRIPT_ENABLED=true 开启）')
+        break
+      }
+      await executeScript(source, {
+        row: ctx.row,
+        params: ctx.params || {},
+        selectedRows: currentRow.value ? [currentRow.value] : [],
+        ds: {
+          query: (filter?: Record<string, any>) => {
+            if (filter) for (const [k, v] of Object.entries(filter)) query[k] = v
+            return loadData(0)
+          },
+          detail: (id: string) => (page.value?.formKey ? bizDataApi.detail(page.value.formKey, id) : null),
+          create: (data: Record<string, unknown>) =>
+            page.value?.formKey ? bizDataApi.create(page.value.formKey, data) : Promise.reject(new Error('未绑定表单')),
+          update: (id: string, data: Record<string, unknown>) =>
+            page.value?.formKey
+              ? bizDataApi.update(page.value.formKey, id, data, currentRow.value?.version || 1)
+              : Promise.reject(new Error('未绑定表单')),
+          remove: (id: string) =>
+            page.value?.formKey ? bizDataApi.remove(page.value.formKey, id) : Promise.reject(new Error('未绑定表单')),
+        },
+        api: { formKey: page.value?.formKey || '', pageKey: pageKey.value },
+        actions: {
+          refresh: () => loadData(currentPage.value - 1),
+          openDetail: () => openDetail(currentRow.value),
+          openCreate: () => openCreate(),
+          openEdit: () => openEdit(),
+          remove: (id: string) => bizDataApi.remove(page.value?.formKey || '', id),
+        },
+        $: { message: (msg: string, type = 'info') => ElMessage({ message: msg, type: type as any }) },
+      })
       break
+    }
     default:
       console.warn('[page] 未知动作类型:', action.type)
   }

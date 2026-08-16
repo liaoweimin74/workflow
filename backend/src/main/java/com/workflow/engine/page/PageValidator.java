@@ -124,6 +124,27 @@ public class PageValidator {
         parseSchema(schema);
     }
 
+    /**
+     * 解析绑定表单的列映射（供发布时编译视图使用）。
+     * 调用前提：validateForPublish 已通过（绑定表单存在且已发布）。
+     *
+     * @param page 待发布页面（type=VIEW，formKey 已绑定）
+     * @return 绑定表单的 column_config 列映射列表
+     * @throws BusinessException 绑定表单不存在/未发布或列映射非法
+     */
+    public List<ColumnConfig> resolveBindColumns(PageDefinition page) {
+        String tenantId = tenantProvider.getTenantId();
+        if (page.getFormKey() == null || page.getFormKey().isBlank()) {
+            throw new BusinessException(400, "视图必须绑定业务表单");
+        }
+        Optional<FormDefinition> boundFormOpt = formDefRepository
+                .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, page.getFormKey(), "PUBLISHED");
+        if (boundFormOpt.isEmpty()) {
+            throw new BusinessException(400, "绑定表单不存在或未发布: " + page.getFormKey());
+        }
+        return parseColumnConfig(boundFormOpt.get().getColumnConfig());
+    }
+
     private JsonNode parseSchema(String schema) throws BusinessException {
         try {
             JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);

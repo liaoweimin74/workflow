@@ -1,6 +1,11 @@
 package com.workflow.engine.page;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -10,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -19,7 +25,9 @@ import java.util.UUID;
  * 版本管理策略（对齐 FormDefinitionService）：
  * - create: 创建 version=1, status=DRAFT 的记录
  * - update: 原地更新（不创建新版本，不改变状态）
- * - publish: 由 Task 5 实现（DRAFT → PUBLISHED，旧 PUBLISHED 降 ARCHIVED，不建表）
+ * - publish: DRAFT → PUBLISHED，旧 PUBLISHED 降 ARCHIVED，不建表；type=VIEW 时
+ *   PageValidator.validateForPublish + PageValidator.resolveBindColumns + ViewCompiler.compile，
+ *   编译产物 {rule, option} 合并进 schema 持久化；type=PAGE（阶段二预留）仅基础校验不编译
  * - delete: 软删除，PUBLISHED 拒绝，状态改为 ARCHIVED
  */
 @Service
@@ -27,11 +35,20 @@ public class PageDefinitionService {
 
     private final PageDefinitionRepository pageDefRepository;
     private final TenantProvider tenantProvider;
+    private final PageValidator validator;
+    private final ViewCompiler compiler;
+    private final ObjectMapper objectMapper;
 
     public PageDefinitionService(PageDefinitionRepository pageDefRepository,
-                                 TenantProvider tenantProvider) {
+                                 TenantProvider tenantProvider,
+                                 PageValidator validator,
+                                 ViewCompiler compiler,
+                                 ObjectMapper objectMapper) {
         this.pageDefRepository = pageDefRepository;
         this.tenantProvider = tenantProvider;
+        this.validator = validator;
+        this.compiler = compiler;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -189,5 +206,87 @@ public class PageDefinitionService {
 
         return pageDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, pageDef.getKey(), "PUBLISHED")
                 .orElseThrow(() -> new BusinessException(404, "页面未发布: " + pageDef.getKey()));
+    }
+
+    /**
+     * 发布页面（不建表）。
+     * 流程：findByIdForUpdate 悲观锁 → 状态校验（DRAFT/PUBLISHED 可重发，ARCHIVED 拒绝）
+     * → 内容未变化拒绝（对比同 key 排除自身的最新 PUBLISHED）
+     * → type=VIEW 时 validateForPublish + resolveBindColumns + compile，编译产物合并进 schema
+     * → 旧 PUBLISHED 降 ARCHIVED → 当前 status=PUBLISHED、publishedVersion=version → save。
+     *
+     * @param id 页面定义 ID
+     * @return 发布后的页面定义
+     * @throws BusinessException 页面不存在 / 已归档 / 内容未变化 / 校验或编译失败
+     */
+    @Transactional
+    public PageDefinition publish(String id) {
+        String tenantId = tenantProvider.getTenantId();
+        PageDefinition current = pageDefRepository.findByIdForUpdate(id, tenantId)
+                .orElseThrow(() -> new BusinessException(404, "页面不存在: " + id));
+
+        if ("ARCHIVED".equals(current.getStatus())) {
+            throw new BusinessException(400, "已归档页面不能发布");
+        }
+
+        // 内容未变化拒绝：与同 key 最新已发布版本（排除自身）比较 schema
+        Optional<PageDefinition> oldPublishedOpt = pageDefRepository
+                .findFirstByTenantIdAndKeyAndStatusAndIdNotOrderByVersionDesc(
+                        tenantId, current.getKey(), "PUBLISHED", id);
+        if (oldPublishedOpt.isPresent()
+                && schemaEquals(current.getSchema(), oldPublishedOpt.get().getSchema())) {
+            throw new BusinessException(400, "页面内容与已发布版本未变化，无需发布");
+        }
+
+        // 校验 + 编译（type=PAGE 阶段二预留：仅基础校验，不编译）
+        validator.validateForPublish(current);
+        if ("VIEW".equals(current.getType())) {
+            List<ColumnConfig> bindColumns = validator.resolveBindColumns(current);
+            String compiled = compiler.compile(current, bindColumns);
+            current.setSchema(mergeCompiled(current.getSchema(), compiled));
+        }
+
+        // 旧 PUBLISHED 降 ARCHIVED
+        oldPublishedOpt.ifPresent(old -> {
+            old.setStatus("ARCHIVED");
+            pageDefRepository.save(old);
+        });
+
+        current.setStatus("PUBLISHED");
+        current.setPublishedVersion(current.getVersion());
+        return pageDefRepository.save(current);
+    }
+
+    /**
+     * schema 语义比较（JSON 规范化后比对顺序无关）。
+     */
+    private boolean schemaEquals(String a, String b) {
+        try {
+            JsonNode na = objectMapper.readTree(a == null || a.isBlank() ? "{}" : a);
+            JsonNode nb = objectMapper.readTree(b == null || b.isBlank() ? "{}" : b);
+            return na.equals(nb);
+        } catch (JsonProcessingException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 将编译产物 {rule, option} 合并进声明 schema，保留原始声明配置。
+     */
+    private String mergeCompiled(String schema, String compiled) {
+        try {
+            JsonNode rootNode = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
+            ObjectNode root = rootNode.isObject() ? (ObjectNode) rootNode : objectMapper.createObjectNode();
+            JsonNode compiledNode = objectMapper.readTree(compiled);
+            if (compiledNode.has("rule")) {
+                root.set("rule", compiledNode.get("rule"));
+            }
+            if (compiledNode.has("option")) {
+                root.set("option", compiledNode.get("option"));
+            }
+            return objectMapper.writeValueAsString(root);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(400, "视图编译产物合并失败");
+        }
     }
 }

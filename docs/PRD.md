@@ -116,6 +116,28 @@
 - 第一期：字段区分为"创建时填写"和"审批时查看"
 - 后续：细粒度角色控制
 
+#### 3.2.7 列表查询界面（视图/页面双轨）
+
+基于已发布业务表单，通过声明式配置生成通用列表查询界面，无需编码。
+
+**视图轨（VIEW）：**
+- 页面管理：创建/编辑/发布/删除（DRAFT 可改可删，发布后不可改，重发需确认）
+- 视图设计器：勾选式配置可筛选字段（等值/模糊/范围匹配）、展示列、操作按钮（新增/编辑/删除/查看）、详情弹窗、事件动作链
+- 通用渲染页 `/page/:pageKey`：查询区 + 表格 + 分页 + 操作按钮 + 详情/新增/编辑弹窗（复用表单设计器渲染）
+- 发布不建表（无 DDL），仅做绑定/字段校验并编译为 form-create rule
+
+**页面轨（PAGE，阶段二预留）：**
+- 自定义页面设计器 + 多数据源联动（左树右表），阶段二实施
+
+**事件与脚本：**
+- 声明式动作链：行点击/搜索/刷新/新增成功触发器，动作白名单 open-detail/open-link/open-create/edit/delete/refresh/export/message/set-filter/script
+- 动作参数支持模板变量 `$row.字段` / `$param.参数`
+- type=script 脚本事件在沙箱中执行（默认关闭，`VITE_PAGE_SCRIPT_ENABLED=true` 开启），上下文注入 row/params/selectedRows/ds/api/actions/$
+
+**数据源管理：**
+- 全局数据源（FORM/SYSTEM/API 多态，DRAFT/ENABLED/DISABLED 状态机），启用后供页面轨消费
+- FORM 数据源绑定已发布业务表单；SYSTEM 提供 dept-tree/user-tree；API 对接外部接口
+
 ### 3.3 流程执行引擎
 
 #### 3.3.1 基础能力

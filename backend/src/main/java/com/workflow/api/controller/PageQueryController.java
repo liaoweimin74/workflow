@@ -12,6 +12,7 @@ import com.workflow.engine.page.entity.PageDefinition;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -79,6 +80,10 @@ public class PageQueryController {
 
     /**
      * 过滤 filter JSON：仅保留白名单内的字段。
+     * 支持两种格式：
+     * - 扁平格式 {@code {"col":"value"}}：按顶层 key 校验
+     * - 结构化格式 {@code {"logic":"AND","conditions":[{column,op,value}]}}
+     *   （前端 PageRenderer.buildFilter 输出）：按 conditions[].column 校验
      */
     @SuppressWarnings("unchecked")
     private String whitelistFilter(String filterJson, Set<String> whitelist) {
@@ -90,9 +95,22 @@ public class PageQueryController {
             if (filter == null || filter.isEmpty()) {
                 return null;
             }
-            for (String key : filter.keySet()) {
-                if (!whitelist.contains(key)) {
-                    throw new BusinessException(400, "筛选字段不在页面声明白名单: " + key);
+            if (filter.get("conditions") instanceof List<?> conditions) {
+                // 结构化格式：{logic, conditions:[{column,op,value}]}
+                for (Object o : conditions) {
+                    if (o instanceof Map<?, ?> c) {
+                        String column = String.valueOf(c.get("column"));
+                        if (!whitelist.contains(column)) {
+                            throw new BusinessException(400, "筛选字段不在页面声明白名单: " + column);
+                        }
+                    }
+                }
+            } else {
+                // 扁平格式：{col: value}
+                for (String key : filter.keySet()) {
+                    if (!whitelist.contains(key)) {
+                        throw new BusinessException(400, "筛选字段不在页面声明白名单: " + key);
+                    }
                 }
             }
             return objectMapper.writeValueAsString(filter);

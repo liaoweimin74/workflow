@@ -95,6 +95,19 @@ watch(() => props.initialValues, (newVal) => {
   }
 })
 
+// 监听 rule 变化：父组件可能先挂载（rule 为空）再异步加载 schema（如页面渲染器详情/新增/编辑弹窗），
+// 必须响应式同步，否则 resolvedSchema 停留在空数组导致"暂无表单"
+watch(() => props.rule, (newVal) => {
+  if (!Array.isArray(newVal) || newVal.length === 0) return
+  resolvedSchema.value = newVal
+  if (props.readonly) {
+    resolvedSchema.value = resolvedSchema.value.map(deepDisable)
+  }
+  if (props.fieldPermissions) {
+    applyPermissions(props.fieldPermissions)
+  }
+})
+
 async function loadSchema() {
   if (!props.formDefId) return
   loading.value = true

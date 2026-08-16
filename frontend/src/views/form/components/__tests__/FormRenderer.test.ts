@@ -134,6 +134,37 @@ describe('FormRenderer — rule prop (直接渲染，无 API 调用)', () => {
   })
 })
 
+describe('FormRenderer — rule prop 动态变化（先挂载后异步加载 schema）', () => {
+  it('挂载后 rule 从空变为非空时，重新渲染表单', async () => {
+    const wrapper = createWrapper({ rule: [] })
+    await nextTick()
+
+    // 初始为空 → 无输入框
+    expect(wrapper.find('input').exists()).toBe(false)
+
+    // 模拟父组件异步加载 schema 后填充 rule
+    await wrapper.setProps({ rule: simpleRule })
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.find('input[data-field="username"]').exists()).toBe(true)
+  })
+
+  it('rule 由一组替换为另一组时同步更新（详情/编辑切换场景）', async () => {
+    const wrapper = createWrapper({ rule: simpleRule })
+    await nextTick()
+    expect(wrapper.find('input[data-field="username"]').exists()).toBe(true)
+
+    await wrapper.setProps({ rule: twoFieldRule })
+    await nextTick()
+    await nextTick()
+
+    expect(wrapper.find('input[data-field="name"]').exists()).toBe(true)
+    expect(wrapper.find('input[data-field="code"]').exists()).toBe(true)
+    expect(wrapper.find('input[data-field="username"]').exists()).toBe(false)
+  })
+})
+
 describe('FormRenderer — initialValues prop (预填表单数据)', () => {
   it('接收 initialValues 后预填 formData', async () => {
     const wrapper = createWrapper({

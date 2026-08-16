@@ -51,7 +51,7 @@ INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, componen
 -- 子菜单：页面列表 + 数据源管理
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, permission, icon, sort_order, status, is_deleted, created_at, updated_at) VALUES
 (141, 140, '页面列表', 1, '/page', 'page/PageListPage', 'page:list', 'Document', 1, 1, 0, NOW(), NOW()),
-(142, 140, '数据源管理', 1, '/data-source', 'dataSource/DataSourceListPage', 'data-source:list', 'Connection', 2, 1, 0, NOW(), NOW());
+(142, 140, '数据源管理', 1, '/data-source/list', 'dataSource/DataSourceListPage', 'data-source:list', 'Connection', 2, 1, 0, NOW(), NOW());
 
 -- 按钮权限
 INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, permission, sort_order, status, is_deleted, created_at, updated_at) VALUES

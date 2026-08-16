@@ -122,11 +122,128 @@ describe('DataSourceListPage — 列表/动态表单/启用禁用/删除', () =>
       { label: '部门树', value: 'dept-tree' },
       { label: '用户树', value: 'user-tree' },
     ])
-    // API 分支 → sourceKey 输入 + params JSON 文本域
+    // API 分支 → sourceKey 输入 + LookupFetchConfig 结构化字段（action/method/parse/totalParse/searchParam/keywordColumn/pageBase/data/headers）
     const apiCtl = controls.find((c) => c.value === 'API')!
-    expect(apiCtl.rule.map((r) => r.field)).toEqual(['sourceKey', 'params'])
+    expect(apiCtl.rule.map((r) => r.field)).toEqual([
+      'sourceKey', 'action', 'method', 'parse', 'totalParse',
+      'searchParam', 'keywordColumn', 'pageBase', 'data', 'headers',
+    ])
     expect(apiCtl.rule[0].type).toBe('input')
-    expect(apiCtl.rule[1].type).toBe('textarea')
+    // action 必填（LookupFetchConfig 契约）；method/pageBase 单选
+    expect(apiCtl.rule[1].type).toBe('input')
+    expect(apiCtl.rule[1].validate).toBeDefined()
+    expect(apiCtl.rule[2].type).toBe('radio')
+    expect(apiCtl.rule[8].type).toBe('textarea')
+    expect(apiCtl.rule[9].type).toBe('textarea')
+    wrapper.unmount()
+  })
+
+  it('API 类型提交：action/method/parse/… 序列化为 params JSON（LookupFetchConfig 结构）', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: { id: 'ds1' } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const formConfig = stub.props('formConfig') as any
+    const res = await formConfig.createApi({
+      name: '外部库存 API',
+      type: 'API',
+      sourceKey: 'external-stock',
+      action: '/v1/external/list',
+      method: 'POST',
+      parse: 'records',
+      totalParse: 'total',
+      searchParam: 'kw',
+      keywordColumn: 'name',
+      pageBase: 0,
+      data: '{"dept":"IT"}',
+      headers: '{"X-Api-Key":"abc"}',
+    })
+    expect(dataSourceApi.createDataSource).toHaveBeenCalledTimes(1)
+    const payload = (dataSourceApi.createDataSource as any).mock.calls[0][0]
+    expect(payload.formKey).toBeNull()
+    expect(payload.sourceKey).toBe('external-stock')
+    const params = JSON.parse(payload.params) as Record<string, any>
+    expect(params).toEqual({
+      action: '/v1/external/list',
+      method: 'POST',
+      parse: 'records',
+      totalParse: 'total',
+      searchParam: 'kw',
+      keywordColumn: 'name',
+      pageBase: 0,
+      data: { dept: 'IT' },
+      headers: { 'X-Api-Key': 'abc' },
+    })
+    expect(res).toEqual({ data: { id: 'ds1' } })
+    wrapper.unmount()
+  })
+
+  it('API 类型提交：data/headers 留空时省略；非法 JSON 时回退空对象', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: { id: 'ds1' } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const formConfig = stub.props('formConfig') as any
+    await formConfig.createApi({
+      name: '外部库存 API',
+      type: 'API',
+      sourceKey: 'external-stock',
+      action: '/v1/external/list',
+      method: 'GET',
+      data: '',
+      headers: 'not-json',
+    })
+    const payload = (dataSourceApi.createDataSource as any).mock.calls[0][0]
+    const params = JSON.parse(payload.params) as Record<string, any>
+    expect(params.data).toBeUndefined()
+    expect(params.headers).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('编辑回填：getApi 返回 DTO，API 类型 params JSON 拆回各字段（data/headers JSON 化）', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    ;(dataSourceApi.getDataSource as any).mockResolvedValue({
+      data: {
+        id: 'ds1',
+        name: '外部库存 API',
+        type: 'API',
+        formKey: null,
+        sourceKey: 'external-stock',
+        status: 'DRAFT',
+        params: JSON.stringify({
+          action: '/v1/external/list',
+          method: 'POST',
+          parse: 'records',
+          totalParse: 'total',
+          searchParam: 'kw',
+          keywordColumn: 'name',
+          pageBase: 0,
+          data: { dept: 'IT' },
+          headers: { 'X-Api-Key': 'abc' },
+        }),
+      },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const formConfig = stub.props('formConfig') as any
+    const formValues = await formConfig.getApi('ds1')
+    expect(formValues.action).toBe('/v1/external/list')
+    expect(formValues.method).toBe('POST')
+    expect(formValues.parse).toBe('records')
+    expect(formValues.searchParam).toBe('kw')
+    expect(formValues.keywordColumn).toBe('name')
+    expect(formValues.pageBase).toBe(0)
+    expect(JSON.parse(formValues.data)).toEqual({ dept: 'IT' })
+    expect(JSON.parse(formValues.headers)).toEqual({ 'X-Api-Key': 'abc' })
     wrapper.unmount()
   })
 
@@ -151,7 +268,7 @@ describe('DataSourceListPage — 列表/动态表单/启用禁用/删除', () =>
       type: 'FORM',
       formKey: 'emp_profile',
       sourceKey: null,
-      params: '{"a":1}',
+      params: null,
     })
     expect(res).toEqual({ data: { id: 'ds1' } })
     wrapper.unmount()

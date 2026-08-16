@@ -151,11 +151,37 @@ const formConfig = reactive<FormConfig<DataSourceDTO>>({
           rule: [
             { type: 'input', field: 'sourceKey', title: '接口标识', validate: [{ required: true, message: '请输入接口标识', trigger: 'blur' }] },
             {
-              type: 'textarea',
-              field: 'params',
-              title: '静态参数 JSON',
-              props: { rows: 4, placeholder: '可选，JSON 格式，如 {"apiKey":"xxx"}' },
+              type: 'input',
+              field: 'action',
+              title: 'API 路径',
+              validate: [{ required: true, message: '请输入 API 路径（LookupPicker 数据源必填）', trigger: 'blur' }],
             },
+            {
+              type: 'radio',
+              field: 'method',
+              title: '请求方法',
+              options: [
+                { label: 'GET', value: 'GET' },
+                { label: 'POST', value: 'POST' },
+              ],
+              value: 'GET',
+            },
+            { type: 'input', field: 'parse', title: '列表解析', props: { placeholder: '如 records / content / list' } },
+            { type: 'input', field: 'totalParse', title: '总数解析', props: { placeholder: '留空自动取 data.total' } },
+            { type: 'input', field: 'searchParam', title: '搜索参数名', props: { placeholder: '默认 keyword' } },
+            { type: 'input', field: 'keywordColumn', title: '搜索列名', props: { placeholder: '如 name' } },
+            {
+              type: 'radio',
+              field: 'pageBase',
+              title: '页码基准',
+              options: [
+                { label: '从 1 开始', value: 1 },
+                { label: '从 0 开始', value: 0 },
+              ],
+              value: 1,
+            },
+            { type: 'textarea', field: 'data', title: '固定参数 JSON', props: { rows: 2, placeholder: '可选，如 {"dept":"IT"}' } },
+            { type: 'textarea', field: 'headers', title: '请求头 JSON', props: { rows: 2, placeholder: '可选，如 {"X-Api-Key":"abc"}' } },
           ],
         },
       ],
@@ -167,7 +193,7 @@ const formConfig = reactive<FormConfig<DataSourceDTO>>({
   deletePermission: 'data-source:manage',
   getApi: async (id) => {
     const res = await dataSourceApi.getDataSource(String(id))
-    return res.data
+    return denormalizePayload(res.data)
   },
   createApi: async (data: any) => {
     return dataSourceApi.createDataSource(normalizePayload(data))
@@ -177,15 +203,92 @@ const formConfig = reactive<FormConfig<DataSourceDTO>>({
   },
 })
 
-/** 按类型归一化提交载荷：FORM→formKey；SYSTEM/API→sourceKey（+params） */
+/** 按类型归一化提交载荷：FORM→formKey；SYSTEM→sourceKey；API→sourceKey + LookupFetchConfig 序列化为 params */
 function normalizePayload(data: any): any {
+  if (data.type === 'API') {
+    return {
+      name: data.name,
+      type: 'API',
+      formKey: null,
+      sourceKey: data.sourceKey || null,
+      params: JSON.stringify(buildApiParams(data)),
+    }
+  }
   return {
     name: data.name,
     type: data.type || 'FORM',
     formKey: data.type === 'FORM' ? data.formKey || null : null,
-    sourceKey: data.type !== 'FORM' ? data.sourceKey || null : null,
-    params: data.params || null,
+    sourceKey: data.type === 'SYSTEM' ? data.sourceKey || null : null,
+    params: data.type === 'SYSTEM' ? (data.params || null) : null,
   }
+}
+
+/** API 类型：组装 LookupFetchConfig 结构（对齐 LookupPicker fetch 配置；空项省略） */
+function buildApiParams(data: any): Record<string, any> {
+  const params: Record<string, any> = {
+    action: data.action,
+    method: data.method || 'GET',
+  }
+  for (const [key, val] of Object.entries({
+    parse: data.parse,
+    totalParse: data.totalParse,
+    searchParam: data.searchParam,
+    keywordColumn: data.keywordColumn,
+  })) {
+    if (val) params[key] = val
+  }
+  // 页码基准：显式配置时写入（LookupPicker 用 pageBase 区分 0/1 起）
+  if (data.pageBase === 0 || data.pageBase === 1) params.pageBase = data.pageBase
+  // 固定参数/请求头：JSON 文本解析为对象；非法或空白省略
+  const dataObj = parseJsonField(data.data)
+  if (dataObj) params.data = dataObj
+  const headersObj = parseJsonField(data.headers)
+  if (headersObj) params.headers = headersObj
+  return params
+}
+
+/** 解析 JSON 文本字段：空白/非法返回 undefined */
+function parseJsonField(text: string | null | undefined): Record<string, unknown> | undefined {
+  if (!text || !text.trim()) return undefined
+  try {
+    const parsed = JSON.parse(text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** 编辑回填：API 类型 params JSON 拆回各字段（data/headers JSON 化文本） */
+function denormalizePayload(dto: any): any {
+  const out: Record<string, any> = {
+    name: dto.name,
+    type: dto.type,
+  }
+  if (dto.type === 'API') {
+    out.sourceKey = dto.sourceKey || ''
+    let p: Record<string, any> = {}
+    try {
+      p = dto.params ? JSON.parse(dto.params) : {}
+    } catch {
+      p = {}
+    }
+    out.action = p.action || ''
+    out.method = p.method || 'GET'
+    out.parse = p.parse || ''
+    out.totalParse = p.totalParse || ''
+    out.searchParam = p.searchParam || ''
+    out.keywordColumn = p.keywordColumn || ''
+    out.pageBase = p.pageBase === 0 ? 0 : 1
+    out.data = p.data ? JSON.stringify(p.data) : ''
+    out.headers = p.headers ? JSON.stringify(p.headers) : ''
+  } else if (dto.type === 'FORM') {
+    out.formKey = dto.formKey || ''
+  } else {
+    out.sourceKey = dto.sourceKey || ''
+    out.params = dto.params || ''
+  }
+  return out
 }
 
 // ========== 操作按钮 ==========

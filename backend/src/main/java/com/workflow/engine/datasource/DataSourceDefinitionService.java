@@ -1,6 +1,7 @@
 package com.workflow.engine.datasource;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
@@ -236,9 +237,22 @@ public class DataSourceDefinitionService {
             if (sourceKey == null || sourceKey.isBlank()) {
                 throw new BusinessException(400, type + " 类型数据源必须填写 sourceKey");
             }
-            if (TYPE_API.equals(type) && params != null && !params.isBlank()) {
+            if (TYPE_API.equals(type)) {
+                // LookupFetchConfig 契约：params 须为 JSON 对象且 action 必填
+                if (params == null || params.isBlank()) {
+                    throw new BusinessException(400, "API 数据源参数 params 必须包含 action（API 路径）");
+                }
                 try {
-                    objectMapper.readTree(params);
+                    JsonNode node = objectMapper.readTree(params);
+                    if (!node.isObject()) {
+                        throw new BusinessException(400, "API 数据源参数 params 必须是 JSON 对象");
+                    }
+                    JsonNode action = node.get("action");
+                    if (action == null || action.isNull() || action.asText().isBlank()) {
+                        throw new BusinessException(400, "API 数据源参数 params 必须包含 action（API 路径）");
+                    }
+                } catch (BusinessException e) {
+                    throw e;
                 } catch (JsonProcessingException e) {
                     throw new BusinessException(400, "API 数据源参数 params 必须是合法 JSON: " + e.getOriginalMessage());
                 }

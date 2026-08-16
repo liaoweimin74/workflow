@@ -164,13 +164,38 @@ class DataSourceDefinitionServiceTest {
     }
 
     @Test
+    void create_apiSource_missingAction_rejected() {
+        // params 合法 JSON 但缺少 action（LookupFetchConfig 契约：action 必填）
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.create("测试数据源", "API", null, "external-stock", "{\"parse\":\"records\"}"));
+        assertTrue(ex.getMessage().contains("action"));
+    }
+
+    @Test
+    void create_apiSource_paramsNotObject_rejected() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.create("测试数据源", "API", null, "external-stock", "[1,2,3]"));
+        assertTrue(ex.getMessage().contains("JSON 对象"));
+    }
+
+    @Test
     void create_apiSource_validParams_success() {
         when(dsRepository.existsByTenantIdAndName(TENANT_ID, "测试数据源")).thenReturn(false);
         when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        DataSourceDefinition result = service.create("测试数据源", "API", null, "external-stock", "{\"url\":\"http://x\"}");
+        DataSourceDefinition result = service.create("测试数据源", "API", null, "external-stock",
+                "{\"action\":\"/v1/external/list\",\"method\":\"GET\",\"parse\":\"records\",\"totalParse\":\"total\","
+                        + "\"searchParam\":\"keyword\",\"keywordColumn\":\"name\",\"pageBase\":1,"
+                        + "\"data\":{\"k\":\"v\"},\"headers\":{\"X-Api-Key\":\"xxx\"}}");
 
         assertEquals("DRAFT", result.getStatus());
+    }
+
+    @Test
+    void create_apiSource_paramsNull_rejected() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.create("测试数据源", "API", null, "external-stock", null));
+        assertTrue(ex.getMessage().contains("action"));
     }
 
     // ==================== 启用 ====================

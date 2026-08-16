@@ -1,10 +1,22 @@
 // ----- TDD: LookupPickerConfigDialog 列 label 保持测试 -----
 // npx vitest run src/views/form/components/__tests__/LookupPickerConfigDialog.test.ts
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import LookupPickerConfigDialog from '../LookupPickerConfigDialog.vue'
+
+vi.mock('@/api/data-source', () => ({
+  dataSourceApi: {
+    getEnabledDataSources: vi.fn(),
+  },
+}))
+
+import { dataSourceApi } from '@/api/data-source'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 /** 模拟已配置的底表模式字段：columns 含中文 label */
 function createWrapper(overrides: Record<string, any> = {}) {
@@ -229,5 +241,102 @@ describe('LookupPickerConfigDialog — 搜索列多选', () => {
     await wrapper.vm.$nextTick()
     const vm = wrapper.vm as any
     expect(vm.form.searchColumns).toEqual(['name', 'dept'])
+  })
+})
+
+describe('LookupPickerConfigDialog — 已启用数据源下拉（数据源管理打通）', () => {
+  const enabledDs = [
+    {
+      id: 'ds-form',
+      name: '员工档案数据源',
+      type: 'FORM',
+      formKey: 'emp_profile',
+      sourceKey: null,
+      status: 'ENABLED',
+    },
+    {
+      id: 'ds-api',
+      name: '外部库存 API',
+      type: 'API',
+      formKey: null,
+      sourceKey: 'external-stock',
+      status: 'ENABLED',
+      params: JSON.stringify({
+        action: '/v1/external/list',
+        method: 'POST',
+        parse: 'records',
+        totalParse: 'total',
+        searchParam: 'kw',
+        keywordColumn: 'name',
+        pageBase: 0,
+        data: { dept: 'IT' },
+        headers: { 'X-Api-Key': 'abc' },
+      }),
+    },
+  ]
+
+  it('弹窗打开时加载已启用数据源列表', async () => {
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
+    const wrapper = createWrapper()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    expect(dataSourceApi.getEnabledDataSources).toHaveBeenCalled()
+    const vm = wrapper.vm as any
+    expect(vm.enabledDataSources).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('选中 FORM 数据源 → sourceType=form + sourceFormKey 回填 + 触发 sourceChange 加载目标列', async () => {
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
+    const wrapper = createWrapper()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    vm.handleDataSourceSelect('ds-form')
+    await wrapper.vm.$nextTick()
+    expect(vm.form.sourceType).toBe('form')
+    expect(vm.form.sourceFormKey).toBe('emp_profile')
+    // 触发 sourceChange → 父组件加载目标表单列
+    const emitted = wrapper.emitted('sourceChange') as any[]
+    expect(emitted).toBeTruthy()
+    expect(emitted[0][0]).toBe('emp_profile')
+    wrapper.unmount()
+  })
+
+  it('选中 API 数据源 → sourceType=api + LookupFetchConfig 各字段回填（data/headers 解析为键值行）', async () => {
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
+    const wrapper = createWrapper()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    vm.handleDataSourceSelect('ds-api')
+    await wrapper.vm.$nextTick()
+    expect(vm.form.sourceType).toBe('api')
+    expect(vm.form.action).toBe('/v1/external/list')
+    expect(vm.form.method).toBe('POST')
+    expect(vm.form.parse).toBe('records')
+    expect(vm.form.totalParse).toBe('total')
+    expect(vm.form.searchParam).toBe('kw')
+    expect(vm.form.keywordColumn).toBe('name')
+    expect(vm.form.pageBase).toBe(0)
+    expect(vm.form.dataRows).toEqual([{ key: 'dept', value: 'IT' }])
+    expect(vm.form.headerRows).toEqual([{ key: 'X-Api-Key', value: 'abc' }])
+    wrapper.unmount()
+  })
+
+  it('API 数据源 params 缺失/非法时回退空配置，仅保留 sourceType=api', async () => {
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({
+      data: [{ id: 'ds-api2', name: '残缺 API', type: 'API', formKey: null, sourceKey: 'broken', status: 'ENABLED', params: 'not-json' }],
+    })
+    const wrapper = createWrapper()
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    vm.handleDataSourceSelect('ds-api2')
+    await wrapper.vm.$nextTick()
+    expect(vm.form.sourceType).toBe('api')
+    expect(vm.form.action).toBe('')
+    expect(vm.form.dataRows).toEqual([])
+    wrapper.unmount()
   })
 })

@@ -10,6 +10,25 @@
           </el-radio-group>
           <span class="form-tip">底表：引用已发布业务表单的数据；外部 API：任意后端接口</span>
         </el-form-item>
+        <!-- 已启用数据源（数据源管理注册）快捷选择 -->
+        <el-form-item label="数据源管理">
+          <el-select
+            v-model="selectedDataSourceId"
+            placeholder="从已启用数据源选择（可选）"
+            clearable
+            filterable
+            style="width: 100%"
+            @change="handleDataSourceSelect"
+          >
+            <el-option
+              v-for="ds in enabledDataSources"
+              :key="ds.id"
+              :label="`${ds.name}（${ds.type === 'FORM' ? '底表' : ds.type === 'API' ? '外部 API' : ds.type}）`"
+              :value="ds.id"
+            />
+          </el-select>
+          <span class="form-tip">选中后自动回填下方数据源配置（可继续微调）</span>
+        </el-form-item>
       </el-form>
 
       <!-- 底表模式 -->
@@ -186,12 +205,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import type { LookupFetchConfig } from '@/components/business/types'
 import type { FormDefinitionDTO } from '@/api/form'
 import type { ColumnConfigItem } from '@/api/bizData'
+import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 
 interface KeyValueRow {
   key: string
@@ -245,6 +265,7 @@ const form = reactive({
   totalParse: '',
   searchParam: '',
   keywordColumn: '',
+  pageBase: 1 as 0 | 1,
   dataRows: [] as KeyValueRow[],
   headerRows: [] as KeyValueRow[],
   displayField: '',
@@ -252,6 +273,58 @@ const form = reactive({
   columnRows: [] as ColumnRow[],
   returnFieldsRows: [] as { source: string; target: string }[],
 })
+
+/** 已启用数据源（数据源管理注册，快捷回填 LookupFetchConfig） */
+const enabledDataSources = ref<DataSourceDTO[]>([])
+const selectedDataSourceId = ref('')
+
+onMounted(async () => {
+  try {
+    const res = await dataSourceApi.getEnabledDataSources()
+    enabledDataSources.value = (res.data || []).filter((d) => d.type === 'FORM' || d.type === 'API')
+  } catch {
+    enabledDataSources.value = []
+  }
+})
+
+/** 数据源下拉选中：FORM → 底表模式回填 + 触发 sourceChange；API → 解析 params 回填 LookupFetchConfig */
+function handleDataSourceSelect(id: string) {
+  selectedDataSourceId.value = id
+  const ds = enabledDataSources.value.find((d) => d.id === id)
+  if (!ds) return
+  if (ds.type === 'FORM') {
+    form.sourceType = 'form'
+    form.sourceFormKey = ds.formKey || ''
+    form.action = ''
+    form.method = 'GET'
+    form.parse = ''
+    form.totalParse = ''
+    form.searchParam = ''
+    form.keywordColumn = ''
+    form.pageBase = 1
+    form.dataRows = []
+    form.headerRows = []
+    // 通知父组件加载目标表单列（显示字段/列表列/搜索列候选）
+    emit('sourceChange', form.sourceFormKey)
+  } else if (ds.type === 'API') {
+    form.sourceType = 'api'
+    let p: Record<string, any> = {}
+    try {
+      p = ds.params ? JSON.parse(ds.params) : {}
+    } catch {
+      p = {}
+    }
+    form.action = p.action || ''
+    form.method = (p.method === 'POST' ? 'POST' : 'GET') as 'GET' | 'POST'
+    form.parse = p.parse || ''
+    form.totalParse = p.totalParse || ''
+    form.searchParam = p.searchParam || ''
+    form.keywordColumn = p.keywordColumn || ''
+    form.pageBase = p.pageBase === 0 ? 0 : 1
+    form.dataRows = Object.entries(p.data || {}).map(([key, value]) => ({ key, value: String(value) }))
+    form.headerRows = Object.entries(p.headers || {}).map(([key, value]) => ({ key, value: String(value) }))
+  }
+}
 
 watch(
   () => props.modelValue,
@@ -273,6 +346,7 @@ watch(
     form.totalParse = fetch.totalParse || ''
     form.searchParam = fetch.searchParam || ''
     form.keywordColumn = fetch.keywordColumn || ''
+    form.pageBase = fetch.pageBase === 0 ? 0 : 1
     // 底表模式搜索列多选：keywordColumn 逗号分隔还原
     form.searchColumns = fetch.keywordColumn
       ? fetch.keywordColumn.split(',').map(s => s.trim()).filter(Boolean)
@@ -359,6 +433,7 @@ function handleConfirm() {
     if (form.totalParse.trim()) fetch.totalParse = form.totalParse.trim()
     if (form.searchParam.trim()) fetch.searchParam = form.searchParam.trim()
     if (form.keywordColumn.trim()) fetch.keywordColumn = form.keywordColumn.trim()
+    fetch.pageBase = form.pageBase === 0 ? 0 : 1
     const data: Record<string, unknown> = {}
     for (const row of form.dataRows) {
       if (row.key) data[row.key] = row.value

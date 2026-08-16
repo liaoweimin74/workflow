@@ -11,7 +11,7 @@
     <template v-else>
       <!-- 查询条件区（由编译产物 searchFields 生成） -->
       <el-card v-if="searchRules.length" class="search-card">
-        <el-form inline>
+        <el-form inline :size="tableSize">
           <el-form-item v-for="r in searchRules" :key="r.field" :label="r.title">
             <el-input
               v-if="r.type === 'input'"
@@ -31,23 +31,29 @@
             />
           </el-form-item>
           <el-form-item>
-            <el-button type="primary" @click="handleSearch">查询</el-button>
-            <el-button @click="handleReset">重置</el-button>
+            <div class="toolbar-buttons">
+              <el-button type="primary" :icon="Search" circle :size="tableSize === 'small' ? 'small' : 'default'" @click="handleSearch" />
+              <el-button :icon="Refresh" circle :size="tableSize === 'small' ? 'small' : 'default'" @click="handleReset" />
+            </div>
           </el-form-item>
         </el-form>
       </el-card>
 
       <!-- 数据表格 -->
       <el-card class="table-card">
-        <div v-if="actionButtons.length" class="toolbar">
+        <div v-if="toolbarButtons.length" class="toolbar">
           <el-button
-            v-for="b in actionButtons"
+            v-for="b in toolbarButtons"
             :key="b.label"
             :type="b.type"
-            size="small"
-            @click="b.onClick"
+            :link="b.link"
+            :circle="b.circle"
+            :icon="b.icon"
+            :size="toolbarButtonSize"
+            :title="b.label"
+            @click="b.onClick()"
           >
-            {{ b.label }}
+            {{ b.style === 'icon' ? '' : b.label }}
           </el-button>
         </div>
         <el-table
@@ -55,7 +61,7 @@
           v-loading="loading"
           border
           stripe
-          size="small"
+          :size="tableSize"
           @row-click="handleRowClick"
         >
           <el-table-column
@@ -70,6 +76,35 @@
           >
             <template #default="{ row }">
               {{ cellValue(row, col.prop) }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            v-if="rowActionButtons.length"
+            label="操作"
+            :width="rowActionColumnWidth"
+            align="center"
+            fixed="right"
+          >
+            <template #default="{ row }">
+              <div class="page-row-actions">
+                <template v-for="b in rowActionButtons" :key="b.label">
+                  <!-- 图标/按钮形态：circle + tooltip（对齐 SearchTable 操作列） -->
+                  <el-tooltip v-if="b.style === 'icon'" :content="b.label" placement="top" :show-after="200">
+                    <el-button :icon="b.icon" circle size="small" :type="b.type" @click.stop="b.onClick(row)" />
+                  </el-tooltip>
+                  <!-- 文字/按钮形态：link 文本按钮 -->
+                  <el-button
+                    v-else
+                    :type="b.type"
+                    :icon="b.style === 'button' ? b.icon : undefined"
+                    link
+                    size="small"
+                    @click.stop="b.onClick(row)"
+                  >
+                    {{ b.label }}
+                  </el-button>
+                </template>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -118,6 +153,10 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+} from '@element-plus/icons-vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { formApi } from '@/api/form'
@@ -148,6 +187,7 @@ interface SearchRule {
   field: string
   title: string
   matchType: string
+  value?: any
   props?: Record<string, any>
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -186,7 +226,9 @@ onMounted(load)
 
 async function load() {
   try {
-    const res = await pageApi.getPageByKey(pageKey.value)
+    // preview=true（视图设计器预览）：取最新 DRAFT 定义而非已发布版本
+    const preview = route.query.preview === 'true'
+    const res = await pageApi.getPageByKey(pageKey.value, preview)
     page.value = res.data
     if (res.data.type !== 'VIEW') {
       error.value = '自定义页面（阶段二）暂未开放'
@@ -254,7 +296,7 @@ async function loadData(pageNo: number) {
     records.value = data.records || []
     total.value = data.total || 0
     currentPage.value = pageNo + 1
-    triggerEvents('refresh', { row: null, params: route.query || {} })
+    triggerEvents('refresh', 'table', { row: null, params: route.query || {} })
   } catch (e: any) {
     ElMessage.error(e?.message || '数据加载失败')
   } finally {
@@ -265,7 +307,7 @@ async function loadData(pageNo: number) {
 // ========== 查询交互 ==========
 function handleSearch() {
   loadData(0)
-  triggerEvents('search', { row: null, params: route.query || {} })
+  triggerEvents('search', 'search', { row: null, params: route.query || {} })
 }
 
 function handleReset() {
@@ -284,22 +326,103 @@ function cellValue(row: any, key: string): unknown {
 }
 
 // ========== 操作按钮 ==========
-const actionButtons = computed(() => {
+interface ActionButtonConfig {
+  label: string
+  type: '' | 'primary' | 'danger'
+  icon?: any
+  link?: boolean
+  circle?: boolean
+  onClick: (row?: any) => void
+  /** 按钮形态：button（带图标+文字）/ icon（仅图标）/ text（文字链接） */
+  style: 'button' | 'icon' | 'text'
+}
+
+/** 内置按钮 key（固定行为映射） */
+const BUILTIN_ACTION_KEYS = ['create', 'edit', 'delete', 'view']
+
+/** 表格尺寸：预览（preview=true）普通模式，非预览紧凑模式 */
+const tableSize = computed<'default' | 'small'>(() => (route.query.preview === 'true' ? 'default' : 'small'))
+/** 操作栏按钮尺寸：预览普通，非预览紧凑 */
+const toolbarButtonSize = computed<'default' | 'small'>(() => (route.query.preview === 'true' ? 'default' : 'small'))
+
+/** 编译产物按钮列表（buttons[] 或兼容旧布尔格式归一化） */
+const actionButtonsConfig = computed<{ key: string; label: string; placement: 'toolbar' | 'column'; style: 'button' | 'icon' | 'text'; events?: any[] }[]>(() => {
   const cfg = actionConfig.value
-  const btns: { label: string; type: '' | 'primary' | 'danger'; onClick: () => void }[] = []
-  if (cfg.create) {
-    btns.push({ label: '新增', type: 'primary', onClick: () => openCreate() })
+  if (Array.isArray(cfg.buttons) && cfg.buttons.length > 0) {
+    return cfg.buttons
   }
-  if (cfg.edit) {
-    btns.push({ label: '编辑', type: '', onClick: () => openEdit() })
+  // 兼容旧布尔格式：create/edit/delete/view + 全局 placement/style
+  const placement = (cfg.placement === 'toolbar' ? 'toolbar' : 'column') as 'toolbar' | 'column'
+  const style = (cfg.style || 'button') as 'button' | 'icon' | 'text'
+  const out: any[] = []
+  if (cfg.create) out.push({ key: 'create', label: '新增', placement: 'toolbar', style })
+  if (cfg.edit) out.push({ key: 'edit', label: '编辑', placement, style })
+  if (cfg.delete) out.push({ key: 'delete', label: '删除', placement, style })
+  if (cfg.view) out.push({ key: 'view', label: '查看', placement, style })
+  return out
+})
+
+/** 工具栏按钮（placement=toolbar） */
+const toolbarButtons = computed<ActionButtonConfig[]>(() =>
+  actionButtonsConfig.value.filter((b) => b.placement === 'toolbar').map(toButtonConfig),
+)
+
+/** 操作列按钮（placement=column，行内渲染带行参数） */
+const rowActionButtons = computed<ActionButtonConfig[]>(() =>
+  actionButtonsConfig.value.filter((b) => b.placement === 'column').map(toButtonConfig),
+)
+
+/** 自定义按钮：点击触发其绑定事件链（trigger 恒为 click，target=按钮 key） */
+function handleCustomButton(btn: { key: string; events?: any[] }, row?: any) {
+  if (row) currentRow.value = row
+  for (const ev of btn.events || []) {
+    for (const action of ev.actions || []) {
+      dispatchAction(action, { row: currentRow.value, params: route.query || {} })
+    }
   }
-  if (cfg.delete) {
-    btns.push({ label: '删除', type: 'danger', onClick: () => handleDelete() })
+}
+
+function toButtonConfig(b: { key: string; label: string; style: 'button' | 'icon' | 'text'; icon?: string; events?: any[] }): ActionButtonConfig {
+  const defaultIcons: Record<string, any> = { create: Plus, edit: Edit, delete: Delete, view: View }
+  const iconMap: Record<string, any> = {
+    Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+    Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
   }
-  if (cfg.view) {
-    btns.push({ label: '查看', type: '', onClick: () => openDetail(currentRow.value) })
+  const handlers: Record<string, (row?: any) => void> = {
+    create: () => openCreate(),
+    edit: (row?: any) => openEdit(row),
+    delete: (row?: any) => handleDelete(row),
+    view: (row?: any) => openDetail(row),
   }
-  return btns
+  const type = b.key === 'create' ? 'primary' : b.key === 'delete' ? 'danger' : ''
+  const isBuiltin = BUILTIN_ACTION_KEYS.includes(b.key)
+  const hasEvents = !!(b.events && b.events.length > 0)
+  // 有绑定事件 → 优先执行事件链（内建/自定义都一样）
+  const onClick = hasEvents
+    ? (row?: any) => handleCustomButton(b, row)
+    : isBuiltin
+      ? handlers[b.key]
+      : () => {}
+  return {
+    label: b.label,
+    type: type as '' | 'primary' | 'danger',
+    icon: (b.icon && iconMap[b.icon]) || defaultIcons[b.key],
+    style: b.style,
+    link: b.style === 'text',
+    circle: b.style === 'icon',
+    onClick,
+  }
+}
+
+/** 行操作列宽：优先用配置 actionColumnWidth；缺省按按钮数量自动计算 */
+const rowActionColumnWidth = computed(() => {
+  const count = rowActionButtons.value.length
+  if (count === 0) return 0
+  const cfgWidth = actionConfig.value.actionColumnWidth
+  if (cfgWidth && cfgWidth > 0) return cfgWidth
+  const iconCount = rowActionButtons.value.filter((b) => b.style === 'icon').length
+  const textCount = count - iconCount
+  return iconCount * 56 + textCount * 70 + 20
 })
 
 function requireRow(): any | null {
@@ -309,11 +432,11 @@ function requireRow(): any | null {
 }
 
 // ========== 详情弹窗 ==========
-async function openDetail(row: any) {
+async function openDetail(row?: any) {
   if (!row) {
-    ElMessage.warning('暂无数据可查看')
-    return
+    row = requireRow()
   }
+  if (!row) return
   currentRow.value = row
   detailTitle.value = '详情'
   detailWidth.value = detailConfig.value.width || '800px'
@@ -351,9 +474,12 @@ function openCreate() {
   }
 }
 
-function openEdit() {
-  const row = requireRow()
-  if (!row) return
+function openEdit(row?: any) {
+  if (!row) {
+    row = requireRow()
+    if (!row) return
+  }
+  currentRow.value = row
   editMode.value = 'edit'
   editTitle.value = '编辑'
   editInitialValues.value = row.data || {}
@@ -371,7 +497,7 @@ async function handleEditSubmit() {
     if (editMode.value === 'create') {
       await bizDataApi.create(page.value.formKey, formData)
       ElMessage.success('新增成功')
-      triggerEvents('create-success', { row: null, params: route.query || {} })
+      triggerEvents('create-success', 'create-dialog', { row: null, params: route.query || {} })
     } else {
       const row = currentRow.value
       if (!row) return
@@ -388,9 +514,12 @@ async function handleEditSubmit() {
 }
 
 // ========== 删除 ==========
-async function handleDelete() {
-  const row = requireRow()
+async function handleDelete(row?: any) {
+  if (!row) {
+    row = requireRow()
+  }
   if (!row || !page.value?.formKey) return
+  currentRow.value = row
   try {
     await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
   } catch {
@@ -531,10 +660,11 @@ async function dispatchAction(
   }
 }
 
-/** 按触发器执行事件链 */
-function triggerEvents(trigger: string, ctx: { row: any; params: Record<string, any> }) {
+/** 按触发器 + 挂接组件执行事件链；target 为空 = 通配（匹配所有组件） */
+function triggerEvents(trigger: string, target: string, ctx: { row: any; params: Record<string, any> }) {
   for (const ev of eventsList.value) {
     if (ev.trigger !== trigger) continue
+    if (ev.target && ev.target !== target) continue
     for (const action of ev.actions || []) {
       dispatchAction(action, ctx)
     }
@@ -544,7 +674,7 @@ function triggerEvents(trigger: string, ctx: { row: any; params: Record<string, 
 // ========== 行点击 ==========
 function handleRowClick(row: any) {
   currentRow.value = row
-  triggerEvents('row-click', { row, params: route.query || {} })
+  triggerEvents('row-click', 'table', { row, params: route.query || {} })
 }
 </script>
 
@@ -557,6 +687,10 @@ function handleRowClick(row: any) {
 }
 .search-card {
   flex-shrink: 0;
+  margin-bottom: 16px;
+}
+.search-card :deep(.el-card__body) {
+  padding-bottom: 0;
 }
 .table-card {
   flex: 1;
@@ -568,6 +702,30 @@ function handleRowClick(row: any) {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+/* 查询工具栏图标按钮（对齐 SearchTable） */
+.toolbar-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.toolbar-buttons .el-button.is-circle {
+  padding: 5px;
+}
+.page-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  white-space: nowrap;
+}
+/* 操作列按钮紧凑样式（对齐 SearchTable） */
+.page-row-actions .el-button {
+  margin-left: 0;
+  padding: 4px 6px;
+}
+.page-row-actions .el-button + .el-button {
+  margin-left: 0;
 }
 .pagination-bar {
   margin-top: 12px;

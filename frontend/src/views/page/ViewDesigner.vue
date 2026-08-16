@@ -46,23 +46,23 @@
           {{ formStatus === 'PUBLISHED' ? '重新发布' : '发布' }}
         </el-button>
         <el-button :icon="View" @click="handlePreview">预览</el-button>
+        <el-button :icon="Document" @click="handleShowJson">JSON 配置</el-button>
       </div>
     </div>
 
     <!-- 设计器主体：清单勾选式配置区 -->
     <div class="designer-body" v-loading="loading">
       <el-tabs v-model="activeTab" class="config-tabs">
-        <el-tab-pane label="查询条件" name="search">
-          <SearchFieldsConfig :candidates="filterableColumns" v-model="schema.searchFields" />
-        </el-tab-pane>
-        <el-tab-pane label="展示列" name="columns">
-          <ColumnsConfig :candidates="viewColumns" v-model="schema.columns" />
+        <el-tab-pane label="显示&查询" name="query">
+          <QueryColumnsConfig
+            :candidates="viewColumns"
+            :filterable-keys="filterableColumnKeys"
+            v-model:search-fields="schema.searchFields"
+            v-model:columns="schema.columns"
+          />
         </el-tab-pane>
         <el-tab-pane label="操作" name="actions">
-          <ActionsConfig v-model="schema.actions" />
-        </el-tab-pane>
-        <el-tab-pane label="详情" name="detail">
-          <DetailConfig v-model="schema.detail" />
+          <ActionsConfig v-model="schema.actions" :detail="schema.detail" />
         </el-tab-pane>
         <el-tab-pane label="事件" name="events">
           <EventsConfig v-model="schema.events" />
@@ -84,14 +84,12 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion, View } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Promotion, View, Document } from '@element-plus/icons-vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 import type { ColumnConfigItem } from '@/api/bizData'
-import SearchFieldsConfig from './components/SearchFieldsConfig.vue'
-import ColumnsConfig from './components/ColumnsConfig.vue'
+import QueryColumnsConfig from './components/QueryColumnsConfig.vue'
 import ActionsConfig from './components/ActionsConfig.vue'
-import DetailConfig from './components/DetailConfig.vue'
 import EventsConfig from './components/EventsConfig.vue'
 
 // ========== Schema 类型 ==========
@@ -107,15 +105,26 @@ export interface ColumnViewConfig {
   align?: string
   sortable?: boolean
 }
+export interface ViewActionButton {
+  key: string
+  label: string
+  /** 位置：toolbar（操作栏）/ column（操作列） */
+  placement: 'toolbar' | 'column'
+  /** 形态：icon（仅图标）/ text（文字链接）/ button（带图标按钮） */
+  style: 'icon' | 'text' | 'button'
+  /** 图标名（Element Plus 图标，如 Plus/Edit/Delete/View；留空按内置 key 兜底） */
+  icon?: string
+  /** 自定义按钮事件链（点击触发）；内置按钮无需 */
+  events?: any[]
+}
 export interface ViewActionsConfig {
-  create: boolean
-  edit: boolean
-  delete: boolean
-  view: boolean
+  buttons: ViewActionButton[]
   permissions: string
+  /** 操作列宽度（px，可选；缺省按按钮数量自动计算） */
+  actionColumnWidth?: number
 }
 export interface ViewDetailConfig {
-  enabled: boolean
+  /** 详情弹窗宽度（由"查看"按钮启用，无需独立开关） */
   width: string
   type: string
 }
@@ -140,7 +149,7 @@ const formStatus = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
-const activeTab = ref('search')
+const activeTab = ref('query')
 /** 预览弹窗：当前视图配置 JSON */
 const previewVisible = ref(false)
 const previewJson = ref('')
@@ -155,8 +164,16 @@ const bindFormLoaded = ref(false)
 const schema = reactive<ViewSchema>({
   searchFields: [],
   columns: [],
-  actions: { create: false, edit: false, delete: false, view: false, permissions: '' },
-  detail: { enabled: false, width: '800px', type: 'form' },
+  actions: {
+    buttons: [
+      { key: 'create', label: '新增', placement: 'toolbar', style: 'button' },
+      { key: 'edit', label: '编辑', placement: 'column', style: 'button' },
+      { key: 'delete', label: '删除', placement: 'column', style: 'button' },
+      { key: 'view', label: '查看', placement: 'column', style: 'button' },
+    ],
+    permissions: '',
+  },
+  detail: { width: '800px', type: 'form' },
   events: [],
 })
 
@@ -173,6 +190,9 @@ const filterableColumns = computed(() =>
       (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
   ),
 )
+
+/** 可筛选列的 key 集合（查询条件勾选禁用依据） */
+const filterableColumnKeys = computed(() => new Set(filterableColumns.value.map((c) => c.key)))
 
 onMounted(async () => {
   if (!pageId.value) {
@@ -198,6 +218,7 @@ onMounted(async () => {
     if (def.schema) {
       try {
         Object.assign(schema, JSON.parse(def.schema))
+        normalizeActions()
       } catch {
         // schema 解析失败，使用默认空配置
       }
@@ -212,12 +233,41 @@ onMounted(async () => {
   }
 })
 
+/** 归一化 actions：旧布尔格式 → buttons 数组（保证 modelValue.buttons 始终存在） */
+function normalizeActions() {
+  const a = schema.actions as any
+  if (Array.isArray(a.buttons)) return // 新格式已有 buttons
+  // 旧格式转换
+  const placement = (a.placement === 'toolbar' ? 'toolbar' : 'column') as 'toolbar' | 'column'
+  const style = (a.style || 'button') as 'button' | 'icon' | 'text'
+  const buttons: ViewActionButton[] = []
+  if (a.create) buttons.push({ key: 'create', label: '新增', placement: 'toolbar', style })
+  if (a.edit) buttons.push({ key: 'edit', label: '编辑', placement, style })
+  if (a.delete) buttons.push({ key: 'delete', label: '删除', placement, style })
+  if (a.view) buttons.push({ key: 'view', label: '查看', placement, style })
+  schema.actions = { buttons, permissions: a.permissions || '' }
+}
+
 async function loadBindColumns(key: string) {
   bindFormLoaded.value = false
   try {
     const res = await formApi.getFormDefinitionByKey(key)
     const cc = res.data.columnConfig
     selectedColumns.value = cc ? JSON.parse(cc) : []
+    // 新页面（查询/显示均未配置）→ 默认全选：可筛选列默认查询，可展示列默认显示
+    if (schema.searchFields.length === 0 && schema.columns.length === 0) {
+      const filterable = new Set(filterableColumns.value.map((c) => c.key))
+      schema.searchFields = viewColumns.value
+        .filter((c) => filterable.has(c.key))
+        .map((c) => ({ key: c.key, label: c.label, matchType: 'eq' }))
+      schema.columns = viewColumns.value.map((c) => ({
+        key: c.key,
+        label: c.label,
+        width: 130,
+        align: 'left',
+        sortable: false,
+      }))
+    }
   } catch {
     selectedColumns.value = []
   } finally {
@@ -281,8 +331,17 @@ async function handlePublish() {
   }
 }
 
-/** 预览：展示当前视图配置 JSON（简单实现） */
+/** 预览：新标签打开视图渲染页（preview=true 取最新 DRAFT 定义，无需先发布） */
 function handlePreview() {
+  if (!pageKey.value) {
+    ElMessage.warning('页面标识为空，无法预览')
+    return
+  }
+  window.open(`/page/${pageKey.value}?preview=true`, '_blank')
+}
+
+/** JSON 配置：弹出当前 schema JSON 弹窗 */
+function handleShowJson() {
   previewJson.value = JSON.stringify({ ...schema }, null, 2)
   previewVisible.value = true
 }

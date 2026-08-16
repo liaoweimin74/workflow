@@ -29,8 +29,8 @@
           <el-input
             :model-value="ev.target"
             size="small"
-            placeholder="目标组件/数据源（如 ds-products）"
-            style="width: 200px"
+            placeholder="事件挂接组件 id，如 table / search / 按钮 key"
+            style="width: 240px"
             @input="(v: string) => patchEvent(idx, { target: v })"
           />
         </el-form-item>

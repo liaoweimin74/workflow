@@ -209,6 +209,16 @@ public class PageDefinitionService {
     }
 
     /**
+     * 按 key 获取已发布版本（数据查询/渲染入口）。
+     * pageKey 未发布或不存在 → 404。
+     */
+    public PageDefinition getPublishedByKey(String key) {
+        String tenantId = tenantProvider.getTenantId();
+        return pageDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, key, "PUBLISHED")
+                .orElseThrow(() -> new BusinessException(404, "页面未发布或不存在: " + key));
+    }
+
+    /**
      * 发布页面（不建表）。
      * 流程：findByIdForUpdate 悲观锁 → 状态校验（DRAFT/PUBLISHED 可重发，ARCHIVED 拒绝）
      * → 内容未变化拒绝（对比同 key 排除自身的最新 PUBLISHED）

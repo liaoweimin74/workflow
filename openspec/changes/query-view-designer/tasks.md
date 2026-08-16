@@ -53,10 +53,20 @@
 - [ ] 7.3 `ViewCompilerTest`：searchFields/columns/actions/detail/events 映射正确性、模板变量解析、未知 matchType 拒绝
 - [ ] 7.4 集成测试：发布 → 查询 API 分页/过滤/白名单、并发发布防竞态
 
+## 7A. 后端：全局数据源管理（data-source-management）
+
+- [ ] 7A.1 创建 `V19__create_wf_page_def.sql` 增补 `wf_data_source` 表（id/tenant_id/name/type/form_key/source_key/params/status/created_by/created_at/updated_at + name 唯一键与索引）
+- [ ] 7A.2 创建 `DataSourceDefinition` 实体 + `DataSourceDefinitionRepository`（findByIdAndTenantId、findByTenantId、findByTenantIdAndName、findEnabledByTenantId 等）
+- [ ] 7A.3 实现 `DataSourceDefinitionService`：create（DRAFT/name 唯一/type 必填校验）、update、delete（仅 DRAFT）、enable（必填项 + 绑定表单已发布校验）、disable
+- [ ] 7A.4 创建 `DataSourceAdapter` SPI（supports/query） + FORM 适配器（路由 BizDataService）+ SYSTEM/API 未启用占位（返回"数据源类型未启用"）
+- [ ] 7A.5 创建 `DataSourceController`：GET/POST/PUT/DELETE `/api/v1/data-sources`、POST `/{id}/enable`、POST `/{id}/disable`
+- [ ] 7A.6 `DataSourceDefinitionServiceTest`：CRUD、name 唯一、状态机流转、非 DRAFT 删除拒绝、启用未发布表单拒绝、不执行 DDL 断言
+
 ## 8. 前端：API 与路由
 
 - [ ] 8.1 创建 `src/api/page.ts`（pageApi：CRUD/publish/data 查询接口，对齐 formApi 模式）
-- [ ] 8.2 注册路由：`/page/list`（PageListPage）、`/page/designer`（ViewDesigner，query 带 id）、`/page/:pageKey`（PageRenderer）
+- [ ] 8.2 创建 `src/api/data-source.ts`（dataSourceApi：CRUD/enable/disable，对齐 formApi 模式）
+- [ ] 8.3 注册路由：`/page/list`（PageListPage）、`/page/designer`（ViewDesigner，query 带 id）、`/page/:pageKey`（PageRenderer）、`/data-source/list`（DataSourceListPage）
 
 ## 9. 前端：页面管理列表（PageListPage）
 
@@ -74,6 +84,13 @@
 - [ ] 10.7 实现事件配置面板（触发器 + 声明式动作链配置 + 模板变量提示）
 - [ ] 10.8 实现保存（update schema）与发布（publish）流程 + 预览按钮
 
+## 10A. 前端：数据源管理页（DataSourceListPage）
+
+- [ ] 10A.1 实现 DataSourceListPage.vue：列表（name/type/绑定对象/status/更新时间）、按 type/status 筛选（复用 SearchTable）
+- [ ] 10A.2 实现创建/编辑弹窗：type 选择（FORM/SYSTEM/API）+ 按类型动态表单（FORM→表单下拉；SYSTEM→sourceKey 枚举；API→sourceKey + params JSON）
+- [ ] 10A.3 实现启用/禁用/删除操作（按钮权限 data-source:manage；禁用/删除失败提示）
+- [ ] 10A.4 PageDesigner 数据源下拉只列出 ENABLED 数据源（阶段二接入）
+
 ## 11. 前端：通用渲染页（PageRenderer）
 
 - [ ] 11.1 实现 PageRenderer.vue：按 pageKey 加载页面定义（VIEW 编译产物 / PAGE schema）
@@ -89,15 +106,17 @@
 
 ## 13. 阶段二（预留）：自定义页面轨（轨 B）
 
-- [ ] 13.1 页面组件库：注册布局/展示/交互/数据组件到 form-create（独立于表单组件库）
-- [ ] 13.2 PageDesigner（复用 @form-create/designer，页面组件库模式 + 数据源绑定配置）
-- [ ] 13.3 PageRenderer 支持直接渲染 PAGE schema + 数据源绑定组件的运行时关联
-- [ ] 13.4 页面事件总线与脚本交互（复用 ScriptSandbox）
-- [ ] 13.5 PAGE 类型发布校验（rule 可解析 + 数据组件引用字段存在）
-- [ ] 13.6 阶段二前端测试（设计器交互、渲染断言、事件交互）
+- [ ] 13.1 页面组件库：注册布局/展示/交互/数据组件到 form-create（独立于表单组件库；含 el-tree 树形数据组件）
+- [ ] 13.2 PageDesigner（复用 @form-create/designer，页面组件库模式 + 数据源绑定配置：dataSourceId 下拉来自页面 dataSources 绑定层）
+- [ ] 13.3 PageRenderer 支持直接渲染 PAGE schema + 按 dataSources 绑定层实例化 DataSourceRegistry（refId 解析全局数据源；组件按 dataSourceId 关联；单数据源默认绑定 dataSources[0]）
+- [ ] 13.4 页面动作总线（actions）：trigger/componentId/event + steps（set-filter/refresh/set-value/open-detail/call-api），目标引用数据源 id；联动过滤受 searchFields 白名单约束（左树右表场景 = node-click → set-filter + refresh 验收）
+- [ ] 13.5 页面事件总线与脚本交互（复用 ScriptSandbox；脚本上下文含 registry 与 actions）
+- [ ] 13.6 PAGE 类型发布校验扩展：dataSources 条目 refId 命中 ENABLED 全局数据源、组件 dataSourceId 命中绑定层、actions 引用存在、set-filter 字段白名单（集中遍历一次）
+- [ ] 13.7 阶段二前端测试（设计器交互、多数据源渲染断言、左树右表联动 end-to-end、事件交互）
 
 ## 14. 验收与收尾
 
 - [ ] 14.1 全量回归：现有表单设计器/发布建表/BizDataListPage 行为不变（存量测试全绿）
 - [ ] 14.2 端到端演示路径：创建业务表单并发布 → 创建视图绑定该表单 → 配置搜索/列/操作/事件 → 发布 → /page/<key> 查询 + 事件验证
-- [ ] 14.3 更新 docs（PRD 3.2 补充视图/页面能力说明；docs/features.md）
+- [ ] 14.3 端到端演示路径（阶段二）：创建全局数据源（FORM×2：分类+商品）→ 自定义页面绑定两数据源 → 配置左树右表联动动作 → 发布 → 树节点点击过滤表格验证
+- [ ] 14.4 更新 docs（PRD 3.2 补充视图/页面/全局数据源能力说明；docs/features.md）

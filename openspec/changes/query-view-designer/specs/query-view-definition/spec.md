@@ -1,9 +1,6 @@
-# query-view-definition Specification
+# query-view-definition Delta Specification
 
-## Purpose
-视图定义的管理能力：CRUD、发布（不建表 + 绑定/字段校验）、ViewCompiler 编译为 form-create rule、双层事件机制（声明式动作链 + ScriptSandbox 沙箱脚本）。视图绑定已发布 BUSINESS 表单（`wf_biz_<formKey>` 物理表）作为数据源，发布动作不触发任何 DDL。
-
-## Requirements
+## ADDED Requirements
 
 ### Requirement: 视图定义创建
 

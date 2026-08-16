@@ -18,6 +18,8 @@
 **Goals:**
 - 提供"查询界面设计器"，发布动作不触发任何 DDL，只绑定已发布 BUSINESS 表单（`wf_biz_<formKey>`）
 - 双轨：视图轨（声明式清单勾选，80% 表格场景）+ 自定义页面轨（form-create 拖拽，20% 复杂场景）
+- 自定义页面轨支持**页面级多数据源绑定**（一个页面可绑定多个数据源）与通用组件联动（不限定左树右表等具体场景）
+- 提供**全局数据源管理**（`wf_data_source` 实体 + 列表界面）：FORM/SYSTEM/API 多态来源一处维护、多页面复用
 - 视图支持"声明式动作链 + 沙箱脚本"双层自定义事件
 - 两轨共享数据层与 form-create 运行时，统一发布/菜单/路由消费
 - 发布校验严格：绑定表单已发布、引用列存在、搜索字段类型合法
@@ -112,7 +114,91 @@ actions.openLink({ pageKey: 'leave-detail', query: { id: row.id } })
 
 ### D7：数据源注入（页面轨，阶段二启用）
 
-扩展 `formCreateInject` 机制注入 `PageDataSource`：`formKey` / `query` / `detail` / `create` / `update` / `remove`，供页面内 table 等数据组件声明绑定。
+扩展 `formCreateInject` 机制注入数据源 API 到 form-create 运行时：`query` / `detail` / `create` / `update` / `remove`，供页面内 table 等数据组件声明绑定。
+
+> **D8 上线后的关系**：D7 的"单数据源注入"是 D8 `dataSources` 数组长度为 1 的特例——组件未显式绑定 `dataSourceId` 时默认绑定 `dataSources[0]`，语义兼容，无迁移负担。
+
+### D8：页面级多数据源绑定（页面轨，阶段二启用）
+
+自定义页面（type=PAGE）schema 增加顶层 `dataSources: []` 数组（与 rule/option 平级）——**绑定层**：每个条目通过 `refId` 引用全局数据源（D9 实体），并携带**页面级覆盖**（局部别名 id、searchFields/columns 白名单、默认 filter 参数）。组件以页面内 `id` 声明绑定。联动不自造布局专用逻辑（如左树右表只是一个例子），统一走页面级 `actions` 动作总线。
+
+```json
+{
+  "rule": ["表格组件(dataSourceId='ds-products')", "树组件(dataSourceId='ds-cats')"],
+  "option": {},
+  "dataSources": [
+    { "id": "ds-cats",     "refId": "ds_cat_tree_001", "searchFields": ["name"], "columns": ["id","name"] },
+    { "id": "ds-products", "refId": "ds_prod_list_002", "searchFields": ["name","categoryId"], "columns": ["id","name","categoryId","price"] }
+  ],
+  "actions": [
+    { "trigger": { "componentId": "tree", "event": "node-click" },
+      "steps": [
+        { "op": "set-filter", "target": "ds-products", "field": "categoryId", "value": "{node.id}" },
+        { "op": "refresh",    "target": "ds-products" }
+      ] }
+  ]
+}
+```
+
+**绑定层与全局层分离**：
+- 全局层（D9 `wf_data_source`）：数据源"是什么"——类型、formKey/systemKey/apiKey、状态。一处维护、多页面复用
+- 绑定层（页面 `dataSources[]`）：页面"怎么用"——局部别名、白名单、默认参数。**同一全局数据源可被不同页面以不同白名单复用**（左树右表：树用分类表 name 字段，表用商品表 name/categoryId/price 白名单）
+- 发布校验：`refId` 必须指向存在且 `status=ENABLED` 的全局数据源（悬空引用 400）
+
+**联动（通用动作总线）**：
+- `trigger`：任意组件事件（node-click / row-click / selection-change / button-click…）
+- `steps`：动作链，目标统一引用页面内数据源 `id`（`set-filter` / `refresh` / `set-value` / `open-detail` / `call-api`…）
+- 复杂联动（多数据源交叉、条件逻辑）走 ScriptSandbox 脚本兜底，脚本上下文含 `registry`（全部已注册数据源）与 `actions`
+- 联动动作对数据源的过滤同样受该数据源 `searchFields` 白名单约束（左树右表的 `categoryId` 过滤必须已声明）
+
+**发布校验（集中遍历一次）**：
+- `dataSources`：页面内 `id` 唯一、`refId` 非空且命中 D9 全局数据源（存在且 ENABLED）
+- FORM 类全局数据源：formKey 对应表单已发布；searchFields/columns 引用列存在于 column_config；拒绝隐藏列、JSON/TEXT 列不作搜索条件
+- rule 中数据组件 `dataSourceId` 必须命中绑定层 `dataSources[].id`（否则 400）
+- `actions` 引用的 componentId / target 必须存在
+- 不建表承诺不变（发布链路单测断言无 DDL）
+
+### D9：全局数据源管理（独立管理模块）
+
+新增 `wf_data_source` 实体 + 独立管理界面（DataSourceListPage），与页面轨解耦、独立生命周期。
+
+```sql
+CREATE TABLE IF NOT EXISTS wf_data_source (
+    id          VARCHAR(64)  NOT NULL PRIMARY KEY,
+    tenant_id   VARCHAR(64)  NOT NULL,
+    name        VARCHAR(255) NOT NULL,
+    `type`      VARCHAR(32)  NOT NULL,             -- FORM / SYSTEM / API
+    form_key    VARCHAR(255),                      -- type=FORM：绑定业务表单
+    source_key  VARCHAR(255),                      -- type=SYSTEM/API：注册表 key
+    `params`    LONGTEXT,                          -- type=API：静态参数 JSON
+    status      VARCHAR(32)  NOT NULL DEFAULT 'DRAFT',  -- DRAFT / ENABLED / DISABLED
+    created_by  VARCHAR(50),
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_ds_tenant_name (tenant_id, name),
+    INDEX idx_ds_tenant_type (tenant_id, `type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全局数据源（业务表单/系统结构/第三方API）';
+```
+
+**类型（来源多态）**：
+
+| type | 说明 |
+|---|---|
+| `FORM` | 绑定已发布业务表单（`formKey`）；多表单页面的主体。发布校验要求 formKey 存在且表单已发布 |
+| `SYSTEM` | 系统结构（`sourceKey`：dept-tree / user-tree 等，一期固定枚举注册表，无 CRUD） |
+| `API` | 第三方 API（`sourceKey` + `params`）；一期仅预留适配器接口，不实装查询 |
+
+**生命周期与规则**：
+- CRUD 独立于页面：创建 → DRAFT；编辑任意状态；启用 ENABLED（校验 type 必填项合法）；禁用 DISABLED（不影响已发布页面运行，但阻止新页面绑定/重新发布引用它）
+- 状态机：`DRAFT ⇄ ENABLED ⇄ DISABLED`；删除仅允许 DRAFT（ENABLED/DISABLED 需先禁用再删，避免页面引用悬空）
+- **不建表**：数据源管理只登记元数据，不触发任何 DDL
+- 命名唯一：tenant 内 name 唯一，作为设计器下拉的显示标识
+- API 适配器一期只做接口预留（`DataSourceAdapter` SPI），不实现真实请求——页面绑定 API 数据源可保存，但查询时返回"数据源类型未启用"错误
+
+**Why 独立模块（对比页面内联）**：
+- 多页面复用同一份数据源配置（尤其 API 的鉴权参数、SYSTEM 的注册 key）——一处维护而非每页拷贝
+- 数据源是比页面更底层、更稳定的资产，独立生命周期（禁用不影响已发布页面灰度回退）
+- 设计器下拉选择已有数据源，降低页面配置门槛（无需每次记住 formKey）
 
 ## Risks / Trade-offs
 
@@ -122,13 +208,15 @@ actions.openLink({ pageKey: 'leave-detail', query: { id: row.id } })
 | 视图编译 → rule 映射面广、规则复杂 | ViewCompiler 集中管理映射；编译产物快照可预览（ViewDesigner 预览按钮） |
 | 脚本沙箱安全（视图脚本若开启） | 白名单上下文 + 受限执行环境（iframe/Function 包装验证后选型）；视图事件脚本默认关闭、按需开启 |
 | 查询 API 越权（查非本表单字段） | filter 白名单 + 后端强制绑定表单校验 |
+| 多数据源校验遗漏（组件绑了不存在的 ds / 动作链引用悬空） | 发布校验集中遍历 dataSources + rule + actions 一次完成；单测覆盖悬空引用失败路径 |
+| 联动过滤绕过白名单（树节点值直接注入右表查询） | 联动动作的 set-filter 字段亦须命中目标数据源 searchFields；后端按 ds-id 校验 filter |
 | 与 BizDataListPage 并存期定位混淆 | 页面轨上线后 BizDataListPage 保留为兼容入口，新页面引导使用 PageRenderer |
 | DDL-free 承诺被破坏（后续人误加建表逻辑） | 发布链路单测断言无 DDL 执行；代码 review 关注点 |
 
 ## Migration Plan
 
-- 迁移脚本：`V19__create_wf_page_def.sql` 创建 `wf_page_def` 表 + 页面管理菜单（父菜单 + 子菜单 + 按钮权限 + ROLE_ADMIN 授权，对齐 V12 模式）
-- 纯增量：不修改现有表结构/现有 API/现有前端页面，可独立部署
+- 迁移脚本：`V19__create_wf_page_def.sql` 创建 `wf_page_def` 表 + `wf_data_source` 表（合并进同一次迁移，对齐 V12 模式）+ 页面管理菜单（父菜单 + 子菜单 + 按钮权限 + ROLE_ADMIN 授权）
+- 纯增量：不修改现有表结构/现有 API/现有前端页面，可独立部署；数据源管理界面独立于页面轨，可先行上线
 - 回滚：删除迁移 + 移除新增 API/前端页面即可（无数据迁移负担）
 - 阶段一上线后，BizDataListPage 继续保留；新查询界面使用 PageRenderer
 
@@ -137,3 +225,4 @@ actions.openLink({ pageKey: 'leave-detail', query: { id: row.id } })
 - ScriptSandbox 受限执行实现选型（iframe / new Function 包装 / worker）——阶段一落地时验证
 - 视图事件脚本默认开启策略——需产品确认默认关闭、按需开启
 - 阶段二页面组件库首批组件清单——页面轨启动时确认
+- API 数据源适配器（DataSourceAdapter SPI）的首批实现——一期仅预留接口，首个真实 API 适配器随页面轨落地

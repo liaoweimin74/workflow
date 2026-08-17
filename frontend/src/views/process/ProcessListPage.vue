@@ -1,11 +1,21 @@
 <template>
   <div class="process-list-page" style="display: flex; gap: 12px; height: calc(100vh - 140px)">
-    <!-- 左侧：流程分类 -->
-    <el-card style="width: 480px; flex-shrink: 0; overflow: hidden">
+    <!-- 左侧：流程分类（可折叠） -->
+    <el-card class="category-card" :style="categoryCardStyle" style="flex-shrink: 0; overflow: hidden">
       <template #header>
-        <span style="font-weight: bold; font-size: 14px">流程分类</span>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span v-show="!categoryCollapsed" style="font-weight: bold; font-size: 14px">流程分类</span>
+          <el-button
+            class="category-collapse-btn"
+            link
+            :icon="categoryCollapsed ? Expand : Fold"
+            :title="categoryCollapsed ? '展开分类' : '折叠分类'"
+            @click="categoryCollapsed = !categoryCollapsed"
+          />
+        </div>
       </template>
       <SearchTable
+        v-show="!categoryCollapsed"
         ref="categoryTableRef"
         :search-fields="categorySearchFields"
         :columns="categoryColumns"
@@ -17,6 +27,10 @@
         :max-visible-buttons="3"
         @row-click="handleCategoryClick"
       />
+      <!-- 折叠后的展开按钮 -->
+      <div v-if="categoryCollapsed" class="category-expand-btn" style="display: flex; justify-content: center; padding-top: 4px">
+        <el-button link :icon="Expand" title="展开分类" @click="categoryCollapsed = false" />
+      </div>
     </el-card>
 
     <!-- 右侧：流程列表 -->
@@ -34,7 +48,7 @@
         :fetch-api="fetchApi"
         :form-config="formConfig"
         :default-page-size="20"
-        :max-visible-buttons="4"
+        :max-visible-buttons="5"
         table-size="small"
         @row-click="handleRowClick"
       >
@@ -86,7 +100,7 @@
 import { ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Upload, CopyDocument, Delete, Fold, Expand } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { processDesignApi, deployedProcessApi, type ProcessDraft, type ProcessVersion } from '@/api/processDefinition'
@@ -96,6 +110,12 @@ const router = useRouter()
 const tableRef = ref()
 const categoryTableRef = ref()
 const selectedCategory = ref<Category | null>(null)
+
+// ========== 流程分类折叠 ==========
+const categoryCollapsed = ref(false)
+const categoryCardStyle = computed(() => ({
+  width: categoryCollapsed.value ? '40px' : '480px',
+}))
 
 // ========== 版本历史抽屉 ==========
 const versionDrawerVisible = ref(false)
@@ -287,6 +307,7 @@ const formConfig = reactive<FormConfig<ProcessDraft>>({
 const actionButtons: ActionButton[] = [
   {
     label: '设计',
+    icon: Edit,
     size: 'small',
     permission: 'process:definition:create',
     onClick: (row: any) => {
@@ -295,6 +316,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '部署',
+    icon: Upload,
     size: 'small',
     type: 'primary',
     permission: 'process:definition:deploy',
@@ -311,6 +333,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '复制',
+    icon: CopyDocument,
     size: 'small',
     permission: 'process:definition:create',
     onClick: async (row: any) => {
@@ -324,7 +347,7 @@ const actionButtons: ActionButton[] = [
     },
   },
   {
-    label: '版本历史',
+    label: '版本',
     size: 'small',
     show: (row: any) => !!row.deployId,
     onClick: (row: any) => {
@@ -333,11 +356,12 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '删除',
+    icon: Delete,
     size: 'small',
     type: 'danger',
     permission: 'process:definition:delete',
     confirm: '确定要删除此流程吗？',
-    show: (row: any) => !row.deployId,
+    show: (row: any) => !row.version,
     onClick: async (row: any) => {
       try {
         await processDesignApi.deleteDraft(row.id)

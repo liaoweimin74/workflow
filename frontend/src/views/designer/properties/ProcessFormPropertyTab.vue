@@ -107,7 +107,7 @@ watch(() => designerStore.draftId, () => {
 
 async function loadFormList() {
   try {
-    const res = await formApi.getFormDefinitions({ status: 'PUBLISHED', size: 1000 })
+    const res = await formApi.getFormDefinitions({ type: 'WORKFLOW', status: 'PUBLISHED', size: 1000 })
     const data = res.data as any
     formList.value = data.content || data.rows || []
   } catch {

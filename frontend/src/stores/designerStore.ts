@@ -1,6 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
+/**
+ * 单个表单字段的数据来源映射配置。
+ *
+ * source 取值（与后端 FormDataMapping 一致）：
+ * - form:initiator   发起人表单（sourceField 必填）
+ * - form:&lt;nodeId&gt;   指定节点的表单（sourceField 必填）
+ * - variable:&lt;name&gt; 流程变量（sourceField 省略）
+ */
+export interface FormFieldDataMapping {
+  targetField: string
+  source: string
+  sourceField?: string
+}
+
 export interface NodeConfigData {
   basic?: {
     name?: string
@@ -15,6 +29,7 @@ export interface NodeConfigData {
   form?: {
     formDefId?: string
     fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
+    dataMappings?: FormFieldDataMapping[]
   }
   timeout?: {
     duration?: number

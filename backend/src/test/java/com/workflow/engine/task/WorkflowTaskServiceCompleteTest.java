@@ -35,6 +35,10 @@ class WorkflowTaskServiceCompleteTest {
     org.flowable.engine.HistoryService historyService;
     @Mock
     com.workflow.engine.tenant.TenantProvider tenantProvider;
+    @Mock
+    com.workflow.engine.form.mapping.FormDataMerger formDataMerger;
+    @Mock
+    com.workflow.engine.form.mapping.VariableMappingWriter variableMappingWriter;
 
     @InjectMocks
     WorkflowTaskService taskService;

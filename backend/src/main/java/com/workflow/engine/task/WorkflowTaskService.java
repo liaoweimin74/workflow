@@ -9,6 +9,7 @@ import com.workflow.api.dto.TaskDoneVO;
 import com.workflow.api.dto.TaskTodoFilter;
 import com.workflow.api.dto.TaskTodoVO;
 import com.workflow.engine.form.mapping.FormDataMerger;
+import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
@@ -60,6 +61,7 @@ public class WorkflowTaskService {
     private final NodeConfigRepository nodeConfigRepository;
     private final InitiatorNodeResolver initiatorNodeResolver;
     private final FormDataMerger formDataMerger;
+    private final VariableMappingWriter variableMappingWriter;
     private final ObjectMapper objectMapper;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
@@ -73,7 +75,8 @@ public class WorkflowTaskService {
                                NodeConfigRepository nodeConfigRepository,
                                InitiatorNodeResolver initiatorNodeResolver,
                                ObjectMapper objectMapper,
-                               FormDataMerger formDataMerger) {
+                               FormDataMerger formDataMerger,
+                               VariableMappingWriter variableMappingWriter) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -86,6 +89,7 @@ public class WorkflowTaskService {
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.objectMapper = objectMapper;
         this.formDataMerger = formDataMerger;
+        this.variableMappingWriter = variableMappingWriter;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
@@ -1102,6 +1106,15 @@ public class WorkflowTaskService {
 
         // 3. 完成任务
         flowableTaskService.complete(taskId, variables);
+
+        // 3b. 流程变量映射写入（form:* 源需在任务数据流转后读取）
+        try {
+            if (currentTask.getProcessDefinitionId() != null) {
+                variableMappingWriter.write(currentTask.getProcessDefinitionId(), processInstanceId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to write variable mappings after complete task [{}]: {}", taskId, e.getMessage());
+        }
 
         // 4. 写入审批意见
         if (userId != null) {

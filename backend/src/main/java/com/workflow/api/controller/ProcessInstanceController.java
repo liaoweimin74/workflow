@@ -3,6 +3,7 @@ package com.workflow.api.controller;
 import com.workflow.api.dto.*;
 import com.workflow.common.domain.R;
 import com.workflow.engine.form.FormDataService;
+import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.engine.runtime.ProcessTaskPredictionService;
@@ -18,6 +19,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.HashMap;
@@ -29,10 +32,13 @@ import java.util.Optional;
 @RequestMapping("/api/v1/process-instances")
 public class ProcessInstanceController {
 
+    private static final Logger log = LoggerFactory.getLogger(ProcessInstanceController.class);
+
     private final ProcessInstanceService processInstanceService;
     private final ProcessHighlightService highlightService;
     private final ProcessTaskPredictionService predictionService;
     private final FormDataService formDataService;
+    private final VariableMappingWriter variableMappingWriter;
     private final TaskService taskService;
     private final ObjectMapper objectMapper;
 
@@ -40,12 +46,14 @@ public class ProcessInstanceController {
                                      ProcessHighlightService highlightService,
                                      ProcessTaskPredictionService predictionService,
                                      FormDataService formDataService,
+                                     VariableMappingWriter variableMappingWriter,
                                      TaskService taskService,
                                      ObjectMapper objectMapper) {
         this.processInstanceService = processInstanceService;
         this.highlightService = highlightService;
         this.predictionService = predictionService;
         this.formDataService = formDataService;
+        this.variableMappingWriter = variableMappingWriter;
         this.taskService = taskService;
         this.objectMapper = objectMapper;
     }
@@ -75,6 +83,13 @@ public class ProcessInstanceController {
             } catch (Exception e) {
                 // 表单数据保存失败不影响流程启动
             }
+        }
+
+        // 流程变量映射写入（form:* 源需在表单数据保存之后读取）
+        try {
+            variableMappingWriter.write(instance.getProcessDefinitionId(), instance.getId());
+        } catch (Exception e) {
+            log.warn("Failed to write variable mappings for instance [{}]: {}", instance.getId(), e.getMessage());
         }
 
         Map<String, Object> response = new HashMap<>();

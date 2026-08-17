@@ -6,6 +6,7 @@ import com.workflow.api.dto.StartProcessRequest;
 import com.workflow.common.domain.R;
 import com.workflow.api.dto.ExecutionNodeVO;
 import com.workflow.engine.form.FormDataService;
+import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.engine.runtime.ProcessTaskPredictionService;
@@ -45,6 +46,7 @@ class ProcessInstanceControllerTest {
     private ProcessHighlightService highlightService;
     private ProcessTaskPredictionService predictionService;
     private FormDataService formDataService;
+    private VariableMappingWriter variableMappingWriter;
     private TaskService taskService;
     private ObjectMapper objectMapper;
     private ProcessInstanceController controller;
@@ -56,11 +58,12 @@ class ProcessInstanceControllerTest {
         highlightService = mock(ProcessHighlightService.class);
         predictionService = mock(ProcessTaskPredictionService.class);
         formDataService = mock(FormDataService.class);
+        variableMappingWriter = mock(VariableMappingWriter.class);
         taskService = mock(TaskService.class);
         objectMapper = new ObjectMapper();
         controller = new ProcessInstanceController(
                 processInstanceService, highlightService, predictionService,
-                formDataService, taskService, objectMapper);
+                formDataService, variableMappingWriter, taskService, objectMapper);
         savedSecurityContext = SecurityContextHolder.getContext();
     }
 

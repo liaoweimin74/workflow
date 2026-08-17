@@ -1,5 +1,6 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.tenant.TenantProvider;
@@ -38,6 +39,8 @@ class RejectServiceTest {
     TenantProvider tenantProvider;
     @Mock
     WfTaskCommentRepository commentRepository;
+    @Mock
+    VariableMappingWriter variableMappingWriter;
 
     @InjectMocks
     RejectService rejectService;

@@ -1,5 +1,7 @@
 package com.workflow.engine.history;
 
+import com.workflow.engine.form.mapping.FormDataMerger;
+import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.task.RejectService;
@@ -47,6 +49,8 @@ class TaskCommentWriteTest {
         @Mock RepositoryService repositoryService;
         @Mock UserService userService;
         @Mock WfTaskCommentRepository commentRepository;
+        @Mock FormDataMerger formDataMerger;
+        @Mock VariableMappingWriter variableMappingWriter;
 
         @InjectMocks WorkflowTaskService taskService;
 
@@ -102,6 +106,7 @@ class TaskCommentWriteTest {
         @Mock InitiatorNodeResolver initiatorNodeResolver;
         @Mock TenantProvider tenantProvider;
         @Mock WfTaskCommentRepository commentRepository;
+        @Mock VariableMappingWriter variableMappingWriter;
 
         @InjectMocks RejectService rejectService;
 
@@ -195,6 +200,8 @@ class TaskCommentWriteTest {
         @Mock RepositoryService repositoryService;
         @Mock UserService userService;
         @Mock WfTaskCommentRepository commentRepository;
+        @Mock FormDataMerger formDataMerger;
+        @Mock VariableMappingWriter variableMappingWriter;
 
         @InjectMocks WorkflowTaskService taskService;
 

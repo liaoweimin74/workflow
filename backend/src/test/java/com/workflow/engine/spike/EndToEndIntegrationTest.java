@@ -92,8 +92,10 @@ class EndToEndIntegrationTest extends AbstractFlowableSpikeTest {
         TenantProvider tenantProvider = mock(TenantProvider.class);
         org.mockito.Mockito.when(tenantProvider.getTenantId()).thenReturn("spike");
         WfTaskCommentRepository commentRepository = mock(WfTaskCommentRepository.class);
+        com.workflow.engine.form.mapping.VariableMappingWriter variableMappingWriter =
+                mock(com.workflow.engine.form.mapping.VariableMappingWriter.class);
         RejectService rejectService = new RejectService(taskService, runtimeService, resolver,
-                tenantProvider, commentRepository);
+                tenantProvider, commentRepository, variableMappingWriter);
         rejectService.reject(managerTask.getId(), "bob", "信息不完整");
 
         // 经理任务消失，发起人任务重新出现

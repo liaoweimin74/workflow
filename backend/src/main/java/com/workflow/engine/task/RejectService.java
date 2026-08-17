@@ -1,5 +1,6 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
@@ -33,17 +34,20 @@ public class RejectService {
     private final InitiatorNodeResolver initiatorNodeResolver;
     private final TenantProvider tenantProvider;
     private final WfTaskCommentRepository commentRepository;
+    private final VariableMappingWriter variableMappingWriter;
 
     public RejectService(TaskService flowableTaskService,
                          RuntimeService runtimeService,
                          InitiatorNodeResolver initiatorNodeResolver,
                          TenantProvider tenantProvider,
-                         WfTaskCommentRepository commentRepository) {
+                         WfTaskCommentRepository commentRepository,
+                         VariableMappingWriter variableMappingWriter) {
         this.flowableTaskService = flowableTaskService;
         this.runtimeService = runtimeService;
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.tenantProvider = tenantProvider;
         this.commentRepository = commentRepository;
+        this.variableMappingWriter = variableMappingWriter;
     }
 
     /**
@@ -99,6 +103,13 @@ public class RejectService {
             comment.setAction("reject");
             comment.setComment(reason);
             commentRepository.save(comment);
+        }
+
+        // 流程变量映射写入（驳回后发起人重新填报，变量随新表单数据刷新）
+        try {
+            variableMappingWriter.write(processDefinitionId, task.getProcessInstanceId());
+        } catch (Exception e) {
+            log.warn("Failed to write variable mappings after reject task [{}]: {}", taskId, e.getMessage());
         }
     }
 }

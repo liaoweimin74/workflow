@@ -3,6 +3,7 @@ package com.workflow.engine.task;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.TaskDetailVO;
 import com.workflow.engine.form.mapping.FormDataMerger;
+import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.repository.NodeConfigRepository;
@@ -75,9 +76,11 @@ class WorkflowTaskServiceMappedDataTest {
         initiatorNodeResolver = mock(InitiatorNodeResolver.class);
         objectMapper = new ObjectMapper();
         formDataMerger = mock(FormDataMerger.class);
+        VariableMappingWriter variableMappingWriter = mock(VariableMappingWriter.class);
         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
                 runtimeService, repositoryService, userService, commentRepository, remindRepository,
-                nodeConfigRepository, initiatorNodeResolver, objectMapper, formDataMerger);
+                nodeConfigRepository, initiatorNodeResolver, objectMapper, formDataMerger,
+                variableMappingWriter);
         when(tenantProvider.getTenantId()).thenReturn("default");
     }
 

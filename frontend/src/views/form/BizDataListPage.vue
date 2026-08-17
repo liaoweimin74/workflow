@@ -57,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, h } from 'vue'
+import { ref, computed, onMounted, nextTick, h, type VNode } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
@@ -66,7 +66,7 @@ import type { SearchField, TableColumn, FormConfig } from '@/components/business
 import { formApi } from '@/api/form'
 import { bizDataApi, type ColumnConfigItem } from '@/api/bizData'
 import FormRenderer from './components/FormRenderer.vue'
-import { walkRules } from './formRuleWalk'
+import { walkRules, type RuleLike } from './formRuleWalk'
 import { parseSubRows } from './subtableDisplay'
 import type { Rule } from '@form-create/element-ui'
 
@@ -112,7 +112,7 @@ const searchFields = computed<SearchField[]>(() =>
 
 /** 表格列（render 读 row.data[key]；data-picker 引用列优先显示冗余文本；子表字段用 slotName 渲染链接） */
 const columns = computed<TableColumn[]>(() => {
-  const bizCols: TableColumn[] = bizColumns.value.map(c => {
+  const bizCols = bizColumns.value.map((c): TableColumn => {
     // 子表字段：不显示存储 JSON 文本，使用 [子表名称] 链接（slotName 渲染）
     if (c.subColumns && c.subColumns.length > 0) {
       return {
@@ -126,7 +126,7 @@ const columns = computed<TableColumn[]>(() => {
       prop: c.key,
       label: c.label,
       minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 130,
-      render: (row: any) => {
+      render: (row: any): VNode | string => {
         const v = row.data?.[c.key]
         // data-picker：显示冗余文本列（<key>_text，JSON 文本数组），缺省回退原值
         if (c.pickerConfig && v) {
@@ -141,7 +141,7 @@ const columns = computed<TableColumn[]>(() => {
             return String(text)
           }
         }
-        return renderByComponentType(c.componentType, c.columnType, v)
+        return renderByComponentType(c.componentType || undefined, c.columnType, v)
       },
     }
   })
@@ -158,7 +158,7 @@ const columns = computed<TableColumn[]>(() => {
 })
 
 /** 按组件类型定制单元格渲染（无 componentType 时按列类型兜底） */
-function renderByComponentType(componentType: string | undefined, columnType: string, v: unknown): unknown {
+function renderByComponentType(componentType: string | undefined, _columnType: string, v: unknown): VNode | string {
   if (v === null || v === undefined) return '—'
   switch (componentType) {
     case 'colorPicker': {
@@ -212,7 +212,7 @@ const subtableInitialValues = computed<Record<string, any>>(() => {
 /** 从 schema 中查找子表字段的 rule（group/tableForm/subForm），穿透布局容器 */
 function findSubtableRule(field: string): Rule | null {
   let found: Rule | null = null
-  walkRules(schemaRules.value, (r) => {
+  walkRules(schemaRules.value as RuleLike[], (r) => {
     if (!found && r.field === field && ['group', 'tableForm', 'subForm'].includes(r.type || '')) {
       found = r as Rule
     }

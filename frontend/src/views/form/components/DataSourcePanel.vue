@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, reactive } from 'vue'
+import { watch, reactive } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
 
 interface KeyValue {

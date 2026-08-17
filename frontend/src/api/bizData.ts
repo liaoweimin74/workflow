@@ -17,6 +17,10 @@ export interface ColumnConfigItem {
   pickerConfig?: string | null
   /** 组件类型（form-create rule type，如 colorPicker/elTransfer；供列表定制渲染） */
   componentType?: string | null
+  /** 不支持展示的列（如子表占位字段，后端无实际列） */
+  unsupported?: boolean
+  /** 子表列定义（group/tableForm/subForm 内部子字段） */
+  subColumns?: ColumnConfigItem[]
 }
 
 /** 业务数据行 */

@@ -157,6 +157,31 @@ class BizDataQueryBuilderTest {
     }
 
     @Test
+    void buildSelect_structuredFilter_range_betweenInclusive() {
+        List<Map<String, Object>> conds = List.of(
+                Map.of("column", "dept", "op", "range", "value", List.of("2026-01-01", "2026-01-31")));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("(dept >= ? AND dept <= ?)");
+        assertThat(sp.params()).contains("2026-01-01", "2026-01-31");
+    }
+
+    @Test
+    void buildSelect_structuredFilter_range_skipsInvalidValue() {
+        // value 非两元素列表（null / 单元素 / 非列表）时静默跳过该条件
+        List<Map<String, Object>> conds = List.of(
+                Map.of("column", "dept", "op", "range", "value", "2026-01-01"),
+                Map.of("column", "name", "op", "eq", "value", "张三"));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).doesNotContain("dept >=");
+        assertThat(sp.sql()).contains("name = ?");
+        assertThat(sp.params()).contains("张三");
+    }
+
+    @Test
     void buildSelect_structuredFilter_rejectsUnknownColumn() {
         List<Map<String, Object>> conds = List.of(Map.of("column", "hack", "op", "eq", "value", "x"));
         assertThatThrownBy(() -> BizDataQueryBuilder.buildSelect(

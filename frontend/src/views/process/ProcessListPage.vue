@@ -161,7 +161,7 @@ const categoryFormConfig = reactive<FormConfig<Category>>({
     const res = await categoryApi.list()
     const r = categoryFormConfig.rule.find(r => r.field === 'parentId')
     if (r) {
-      r.props.data = buildTree(res.data || [])
+      r!.props!.data = buildTree(res.data || [])
     }
     return true
   },
@@ -169,7 +169,7 @@ const categoryFormConfig = reactive<FormConfig<Category>>({
     const res = await categoryApi.list()
     const r = categoryFormConfig.rule.find(r => r.field === 'parentId')
     if (r) {
-      r.props.data = buildTree(res.data?.filter((c: Category) => c.id !== row.id) || [])
+      r!.props!.data = buildTree(res.data?.filter((c: Category) => c.id !== row.id) || [])
     }
     return true
   },
@@ -273,7 +273,7 @@ const formConfig = reactive<FormConfig<ProcessDraft>>({
     const res = await categoryApi.list()
     const r = formConfig.rule.find(r => r.field === 'categoryId')
     if (r) {
-      r.props.data = buildTree(res.data || [])
+      r!.props!.data = buildTree(res.data || [])
     }
     return true
   },

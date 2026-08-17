@@ -149,14 +149,6 @@ const breadcrumbs = computed(() => {
   return matched.map(r => ({ path: r.path, title: r.meta?.title as string }))
 })
 
-const currentTag = computed(() => {
-  const matched = route.matched.filter(r => r.meta?.title)
-  if (matched.length > 0) {
-    return (matched[matched.length - 1].meta?.title as string) || ''
-  }
-  return ''
-})
-
 onMounted(() => {
   document.addEventListener('click', closeContextMenu)
 })

@@ -1,0 +1,193 @@
+package com.workflow.api.controller;
+
+import com.workflow.api.dto.BizDataPageVO;
+import com.workflow.api.dto.BizDataQueryRequest;
+import com.workflow.api.dto.BizDataVO;
+import com.workflow.api.dto.DataSourceDTO;
+import com.workflow.api.dto.DataSourceMetadata;
+import com.workflow.api.dto.DataSourceSaveRequest;
+import com.workflow.api.dto.PageResponse;
+import com.workflow.common.domain.R;
+import com.workflow.engine.datasource.DataSourceDefinitionService;
+import com.workflow.engine.datasource.entity.DataSourceDefinition;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+/**
+ * 全局数据源管理 Controller。
+ * 供前端数据源管理页（Task 10A）与页面设计器（Task 8/10A）调用。
+ * 响应封装统一为 { code, data, message }（R<T>）。
+ */
+@RestController
+@RequestMapping("/api/v1/data-sources")
+public class DataSourceController {
+
+    private final DataSourceDefinitionService dataSourceService;
+
+    public DataSourceController(DataSourceDefinitionService dataSourceService) {
+        this.dataSourceService = dataSourceService;
+    }
+
+    /**
+     * 查询数据源列表（分页 + type/status 过滤）。
+     */
+    @GetMapping
+    public R<PageResponse<DataSourceDTO>> list(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String status) {
+
+        Page<DataSourceDefinition> result = dataSourceService.list(type, status, PageRequest.of(page, size));
+        List<DataSourceDTO> dtos = result.getContent().stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+        PageResponse<DataSourceDTO> response = new PageResponse<>(
+                dtos, result.getNumber(), result.getSize(), result.getTotalElements());
+        return R.ok(response);
+    }
+
+    /**
+     * 仅已启用数据源（页面设计器数据源下拉）。
+     */
+    @GetMapping("/enabled")
+    public R<List<DataSourceDTO>> enabled() {
+        List<DataSourceDTO> dtos = dataSourceService.getEnabled().stream()
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+        return R.ok(dtos);
+    }
+
+    /**
+     * 创建数据源（默认 DRAFT）。
+     */
+    @PostMapping
+    public R<DataSourceDTO> create(@RequestBody DataSourceSaveRequest request) {
+        DataSourceDefinition ds = dataSourceService.create(
+                request.getName(), request.getType(), request.getFormKey(),
+                request.getSourceKey(), request.getParams());
+        return R.ok(toDTO(ds));
+    }
+
+    /**
+     * 获取数据源详情。
+     */
+    @GetMapping("/{id}")
+    public R<DataSourceDTO> getById(@PathVariable String id) {
+        return R.ok(toDTO(dataSourceService.getById(id)));
+    }
+
+    /**
+     * 更新数据源（原地更新）。
+     */
+    @PutMapping("/{id}")
+    public R<DataSourceDTO> update(@PathVariable String id,
+                                   @RequestBody DataSourceSaveRequest request) {
+        DataSourceDefinition ds = dataSourceService.update(
+                id, request.getName(), request.getType(), request.getFormKey(),
+                request.getSourceKey(), request.getParams());
+        return R.ok(toDTO(ds));
+    }
+
+    /**
+     * 删除数据源（仅 DRAFT 可删；ENABLED/DISABLED → 400）。
+     */
+    @DeleteMapping("/{id}")
+    public R<Void> delete(@PathVariable String id) {
+        dataSourceService.delete(id);
+        return R.ok();
+    }
+
+    /**
+     * 启用数据源（FORM 类型须绑定已发布表单）。
+     */
+    @PostMapping("/{id}/enable")
+    public R<DataSourceDTO> enable(@PathVariable String id) {
+        return R.ok(toDTO(dataSourceService.enable(id)));
+    }
+
+    /**
+     * 禁用数据源。
+     */
+    @PostMapping("/{id}/disable")
+    public R<DataSourceDTO> disable(@PathVariable String id) {
+        return R.ok(toDTO(dataSourceService.disable(id)));
+    }
+
+    // ==================== 统一数据访问端点（经 DataSourceAdapter SPI） ====================
+
+    /**
+     * 数据源元数据：列定义 + 可写标记（设计器切换数据源刷新列用）。
+     */
+    @GetMapping("/{id}/metadata")
+    public R<DataSourceMetadata> metadata(@PathVariable String id) {
+        return R.ok(dataSourceService.metadata(id));
+    }
+
+    /**
+     * 数据源列表分页查询。
+     */
+    @GetMapping("/{id}/data")
+    public R<BizDataPageVO> queryData(@PathVariable String id, BizDataQueryRequest req) {
+        return R.ok(dataSourceService.queryData(id, req));
+    }
+
+    /**
+     * 数据源单条查询。
+     */
+    @GetMapping("/{id}/data/{rowId}")
+    public R<BizDataVO> getData(@PathVariable String id, @PathVariable String rowId) {
+        return R.ok(dataSourceService.getData(id, rowId));
+    }
+
+    /**
+     * 数据源新增（只读数据源 → 400 不支持）。
+     */
+    @PostMapping("/{id}/data")
+    public R<String> createData(@PathVariable String id, @RequestBody Map<String, Object> data) {
+        return R.ok(dataSourceService.createData(id, data));
+    }
+
+    /**
+     * 数据源修改（version 乐观锁可空）。
+     */
+    @PutMapping("/{id}/data/{rowId}")
+    public R<Void> updateData(@PathVariable String id, @PathVariable String rowId,
+                              @RequestParam(required = false) Integer version,
+                              @RequestBody Map<String, Object> data) {
+        dataSourceService.updateData(id, rowId, data, version);
+        return R.ok();
+    }
+
+    /**
+     * 数据源删除。
+     */
+    @DeleteMapping("/{id}/data/{rowId}")
+    public R<Void> deleteData(@PathVariable String id, @PathVariable String rowId) {
+        dataSourceService.deleteData(id, rowId);
+        return R.ok();
+    }
+
+    // ==================== DTO 转换 ====================
+
+    private DataSourceDTO toDTO(DataSourceDefinition ds) {
+        DataSourceDTO dto = new DataSourceDTO();
+        dto.setId(ds.getId());
+        dto.setTenantId(ds.getTenantId());
+        dto.setName(ds.getName());
+        dto.setType(ds.getType());
+        dto.setFormKey(ds.getFormKey());
+        dto.setSourceKey(ds.getSourceKey());
+        dto.setParams(ds.getParams());
+        dto.setStatus(ds.getStatus());
+        dto.setCreatedBy(ds.getCreatedBy());
+        dto.setCreatedAt(ds.getCreatedAt());
+        dto.setUpdatedAt(ds.getUpdatedAt());
+        return dto;
+    }
+}

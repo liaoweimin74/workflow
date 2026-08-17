@@ -95,6 +95,19 @@ watch(() => props.initialValues, (newVal) => {
   }
 })
 
+// 监听 rule 变化：父组件可能先挂载（rule 为空）再异步加载 schema（如页面渲染器详情/新增/编辑弹窗），
+// 必须响应式同步，否则 resolvedSchema 停留在空数组导致"暂无表单"
+watch(() => props.rule, (newVal) => {
+  if (!Array.isArray(newVal) || newVal.length === 0) return
+  resolvedSchema.value = newVal
+  if (props.readonly) {
+    resolvedSchema.value = resolvedSchema.value.map(deepDisable)
+  }
+  if (props.fieldPermissions) {
+    applyPermissions(props.fieldPermissions)
+  }
+})
+
 async function loadSchema() {
   if (!props.formDefId) return
   loading.value = true
@@ -161,18 +174,20 @@ async function loadData() {
 function deepDisable(field: Rule): Rule {
   const f = field as Record<string, unknown>
   const fieldProps = (f.props as Record<string, any>) || {}
-  const next: Record<string, unknown> = { ...f, props: { ...fieldProps, disabled: true } }
+  const next: Record<string, unknown> = { ...f, props: { ...fieldProps, disabled: true } as Record<string, unknown> }
   if (Array.isArray(f.children)) {
     next.children = (f.children as Rule[]).map(deepDisable)
   }
   // group/subForm 子表单：内部字段在 props.rule
   if (Array.isArray(fieldProps.rule)) {
-    next.props = { ...next.props, rule: (fieldProps.rule as Rule[]).map(deepDisable) }
+    const p = next.props as Record<string, unknown>
+    next.props = { ...p, rule: (fieldProps.rule as Rule[]).map(deepDisable) }
   }
   // tableForm 子表：内部字段在 props.columns[].rule（每列一个 rule 数组）
   if (Array.isArray(fieldProps.columns)) {
+    const p = next.props as Record<string, unknown>
     next.props = {
-      ...next.props,
+      ...p,
       columns: (fieldProps.columns as Record<string, any>[]).map((col) => {
         if (col && Array.isArray(col.rule)) {
           return { ...col, rule: (col.rule as Rule[]).map(deepDisable) }

@@ -32,10 +32,6 @@ function handleAddChild(parentId: number) {
   searchTableRef.value?.openFormDialog({ parentId, sortOrder: 0 })
 }
 
-function handleAddRoot() {
-  searchTableRef.value?.openFormDialog({ sortOrder: 0 })
-}
-
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
   { label: '新增子组织', size: 'small', link: true, onClick: (row: TreeNode) => handleAddChild(row.id) },
@@ -54,11 +50,11 @@ const formConfig = computed<FormConfig<TreeNode>>(() => ({
   ],
   createApi: (data: any) => createOrg({ ...data, orgName: data.name, orgCode: data.code }),
   updateApi: (id, data: any) => updateOrg(id as number, { ...data, orgName: data.name, orgCode: data.code }),
-  deleteApi: deleteOrg,
+  deleteApi: async (id) => { await deleteOrg(id as number) },
   getApi: async (id: number | string) => {
     const res = await getOrgTree()
     const node = findNode(res.data, Number(id))
-    if (!node) return null
+    if (!node) return { id: 0, label: '', code: '', parentId: 0, sortOrder: 0, status: 1, children: [] } as TreeNode
     return { ...node, name: node.label }
   },
   dialogTitle: { create: '新增组织', edit: '编辑组织' },

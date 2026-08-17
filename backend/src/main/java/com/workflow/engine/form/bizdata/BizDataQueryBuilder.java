@@ -238,6 +238,15 @@ public final class BizDataQueryBuilder {
                     fragments.add(column + " IN (" + marks + ")");
                     params.addAll(values);
                 }
+                case "range" -> {
+                    Object v = c.get("value");
+                    if (!(v instanceof List<?> range) || range.size() != 2 || range.get(0) == null || range.get(1) == null) {
+                        continue;
+                    }
+                    fragments.add("(" + column + " >= ? AND " + column + " <= ?)");
+                    params.add(range.get(0));
+                    params.add(range.get(1));
+                }
                 case "isempty" -> fragments.add("(" + column + " IS NULL OR " + column + " = '')");
                 case "isnotempty" -> fragments.add("(" + column + " IS NOT NULL AND " + column + " <> '')");
                 default -> throw new IllegalArgumentException("非法筛选运算符: " + op);

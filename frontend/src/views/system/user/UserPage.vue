@@ -130,7 +130,7 @@ const formConfig = computed<FormConfig<UserVO>>(() => ({
   ],
   createApi: createUser,
   updateApi: (id, data) => updateUser(id as number, data),
-  deleteApi: deleteUser,
+  deleteApi: async (id) => { await deleteUser(id as number) },
   getApi: (id) => getUserById(id as number).then((r) => r.data),
   dialogTitle: { create: '新增用户', edit: '编辑用户' },
   createPermission: 'system:user:create',

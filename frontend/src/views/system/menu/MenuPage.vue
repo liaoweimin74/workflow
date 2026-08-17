@@ -40,10 +40,6 @@ function handleAddChild(parentId: number) {
   searchTableRef.value?.openFormDialog({ parentId, menuType: 1, sortOrder: 0, visible: 1 })
 }
 
-function handleAddRoot() {
-  searchTableRef.value?.openFormDialog({ menuType: 1, sortOrder: 0, visible: 1 })
-}
-
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
   { label: '新增子菜单', size: 'small', link: true, show: (row: MenuTree) => row.menuType !== 2, onClick: (row: MenuTree) => handleAddChild(row.id) },
@@ -103,12 +99,12 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
     rule,
     createApi: createMenu,
     updateApi: (id, data) => updateMenu(id as number, data),
-    deleteApi: deleteMenu,
-    getApi: async (id) => findNode(list.value, id),
+    deleteApi: async (id) => { await deleteMenu(id as number) },
+    getApi: async (id) => findNode(list.value, Number(id)) as MenuTree,
     createPermission: 'system:menu:create',
     editPermission: 'system:menu:update',
     deletePermission: 'system:menu:delete',
-  }
+  } as FormConfig<MenuTree>
 })
 
 // 从树递归查找

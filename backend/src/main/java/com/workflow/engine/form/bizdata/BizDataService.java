@@ -20,9 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -102,8 +106,17 @@ public class BizDataService {
                 ctx.tableName, ctx.columnKeys, merged, tenantId);
         jdbcTemplate.update(insert.sql(), insert.params().toArray());
 
+        // 子表行写入（随主表创建批量插入）
+        String bizId = insertedId(insert);
+        for (Map.Entry<String, SubTableDef> e : ctx.subTables().entrySet()) {
+            Object raw = data.get(e.getKey());
+            if (raw instanceof List<?> rows) {
+                writeSubRows(e.getValue(), bizId, rows);
+            }
+        }
+
         // 新行 id 由 buildInsert 内部生成，查询返回
-        BizDataVO created = findById(ctx.tableName, tenantId, ctx, insertedId(insert));
+        BizDataVO created = findById(ctx.tableName, tenantId, ctx, bizId);
         for (BizDataHandler handler : handlersOf(formKey)) {
             handler.afterCreate(created);
         }
@@ -198,6 +211,14 @@ public class BizDataService {
             throw new BusinessException(409, "数据已被他人修改，请刷新后重试");
         }
 
+        // 子表行增量 diff（仅当请求携带子表字段时）
+        for (Map.Entry<String, SubTableDef> e : ctx.subTables().entrySet()) {
+            Object raw = data.get(e.getKey());
+            if (raw instanceof List<?> rows) {
+                diffSubRows(e.getValue(), id, rows);
+            }
+        }
+
         return findById(ctx.tableName, tenantId, ctx, id);
     }
 
@@ -214,6 +235,12 @@ public class BizDataService {
             handler.beforeDelete(existing);
         }
 
+        // 级联删除子表行（同事务）
+        for (SubTableDef def : ctx.subTables().values()) {
+            jdbcTemplate.update("DELETE FROM " + def.tableName() + " WHERE tenant_id = ? AND biz_id = ?",
+                    tenantId, id);
+        }
+
         BizDataQueryBuilder.SqlAndParams delete = BizDataQueryBuilder.buildDelete(ctx.tableName, tenantId, id);
         int affected = jdbcTemplate.update(delete.sql(), delete.params().toArray());
         if (affected == 0) {
@@ -221,9 +248,120 @@ public class BizDataService {
         }
     }
 
+    // ==================== 独立子表行 CRUD（subMode=dedicated 走此接口） ====================
+
+    /**
+     * 校验子表字段存在，返回子表定义。
+     */
+    private SubTableDef requireSubTable(BizDataContext ctx, String field) {
+        SubTableDef def = ctx.subTables().get(field);
+        if (def == null) {
+            throw new BusinessException(404, "子表字段不存在: " + field);
+        }
+        return def;
+    }
+
+    /**
+     * 校验主表行存在（404）。
+     */
+    private void requireMainRow(BizDataContext ctx, String id) {
+        String tenantId = tenantProvider.getTenantId();
+        findById(ctx.tableName, tenantId, ctx, id);
+    }
+
+    /**
+     * 分页查询独立子表行（sort_no 升序）。
+     */
+    public List<Map<String, Object>> listSubRows(String formKey, String id, String field) {
+        BizDataContext ctx = loadContext(formKey);
+        SubTableDef def = requireSubTable(ctx, field);
+        requireMainRow(ctx, id);
+        return readSubRows(def, id);
+    }
+
+    /**
+     * 新增独立子表行（追加到末尾，sort_no 续接）。
+     *
+     * @return 插入后的行（含内部生成的 id/sort_no）
+     */
+    public Map<String, Object> addSubRow(String formKey, String id, String field, Map<String, Object> data) {
+        BizDataContext ctx = loadContext(formKey);
+        SubTableDef def = requireSubTable(ctx, field);
+        requireMainRow(ctx, id);
+        List<Map<String, Object>> rows = readSubRows(def, id);
+        if (rows.size() >= MAX_SUB_ROWS) {
+            throw new BusinessException(400, "子表行数超限（最多 " + MAX_SUB_ROWS + " 行）: " + def.tableName());
+        }
+        return insertOneSubRow(def, id, data, rows.size());
+    }
+
+    /**
+     * 更新独立子表行（乐观锁：须携带当前 version）。
+     *
+     * @return 更新后的行
+     * @throws BusinessException 行不存在/版本冲突（409）
+     */
+    public Map<String, Object> updateSubRow(String formKey, String id, String field, String rowId,
+                                            Map<String, Object> data, Integer version) {
+        BizDataContext ctx = loadContext(formKey);
+        SubTableDef def = requireSubTable(ctx, field);
+        requireMainRow(ctx, id);
+
+        // 仅允许更新子业务列（白名单 subKeys 过滤，防注入/防篡改内部列）
+        Map<String, Object> safe = new LinkedHashMap<>();
+        for (String k : def.subKeys()) {
+            if (data.containsKey(k)) {
+                safe.put(k, data.get(k));
+            }
+        }
+        if (safe.isEmpty()) {
+            throw new BusinessException(400, "更新内容不能为空: " + field);
+        }
+
+        StringBuilder set = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        for (Map.Entry<String, Object> e : safe.entrySet()) {
+            set.append(e.getKey()).append(" = ?, ");
+            params.add(e.getValue());
+        }
+        set.append("version = version + 1, updated_at = NOW()");
+        params.add(tenantProvider.getTenantId());
+        params.add(id);
+        params.add(rowId);
+        params.add(version == null ? 1 : version);
+
+        int affected = jdbcTemplate.update("UPDATE " + def.tableName() + " SET " + set
+                + " WHERE tenant_id = ? AND biz_id = ? AND id = ? AND version = ?", params.toArray());
+        if (affected == 0) {
+            throw new BusinessException(409, "子表行已被他人修改或不存在，请刷新后重试");
+        }
+        return readSubRows(def, id).stream()
+                .filter(r -> rowId.equals(String.valueOf(r.get("id"))))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(404, "子表行不存在: " + rowId));
+    }
+
+    /**
+     * 删除独立子表行。
+     */
+    public void deleteSubRow(String formKey, String id, String field, String rowId) {
+        BizDataContext ctx = loadContext(formKey);
+        SubTableDef def = requireSubTable(ctx, field);
+        requireMainRow(ctx, id);
+        jdbcTemplate.update("DELETE FROM " + def.tableName()
+                        + " WHERE tenant_id = ? AND biz_id = ? AND id = ?",
+                tenantProvider.getTenantId(), id, rowId);
+    }
+
     // ==================== 内部工具 ====================
 
-    private record BizDataContext(String tableName, String formKey, List<ColumnConfig> columns, List<String> columnKeys) {}
+    /** 子表行单次请求上限 */
+    private static final int MAX_SUB_ROWS = 100;
+
+    private record SubTableDef(String tableName, String subMode, List<ColumnConfig> subColumns, List<String> subKeys) {}
+
+    private record BizDataContext(String tableName, String formKey, List<ColumnConfig> columns,
+                                  List<String> columnKeys, Map<String, SubTableDef> subTables) {}
 
     private BizDataContext loadContext(String formKey) {
         if (formKey == null || !FORM_KEY_PATTERN.matcher(formKey).matches()) {
@@ -234,8 +372,21 @@ public class BizDataService {
             throw new BusinessException(404, "业务表单数据表不存在: " + formKey);
         }
         List<ColumnConfig> columns = formDefService.getBusinessColumnsByKey(formKey);
-        List<String> keys = columns.stream().map(ColumnConfig::getKey).toList();
-        return new BizDataContext(tableName, formKey, columns, keys);
+        // 主表列：排除子表字段（子表字段映射独立物理表，非主表列）
+        List<String> keys = columns.stream()
+                .filter(c -> c.getSubColumns() == null || c.getSubColumns().isEmpty())
+                .map(ColumnConfig::getKey)
+                .toList();
+        Map<String, SubTableDef> subTables = new LinkedHashMap<>();
+        for (ColumnConfig c : columns) {
+            if (c.getSubColumns() != null && !c.getSubColumns().isEmpty()) {
+                String mode = c.getSubMode() == null || c.getSubMode().isBlank() ? "embedded" : c.getSubMode();
+                List<String> subKeys = c.getSubColumns().stream().map(ColumnConfig::getKey).toList();
+                subTables.put(c.getKey(), new SubTableDef(
+                        "wf_biz_" + formKey + "_" + c.getKey(), mode, c.getSubColumns(), subKeys));
+            }
+        }
+        return new BizDataContext(tableName, formKey, columns, keys, subTables);
     }
 
     private void validateRequired(List<ColumnConfig> columns, Map<String, Object> data) {
@@ -486,6 +637,13 @@ public class BizDataService {
                 data.put(c.getKey(), "JSON".equals(c.getColumnType()) ? deserializeJsonValue(v) : v);
             }
         }
+        // embedded 模式：附加子表行（按 sort_no 升序），保留 id 供前端 diff
+        for (Map.Entry<String, SubTableDef> e : ctx.subTables().entrySet()) {
+            SubTableDef def = e.getValue();
+            if ("embedded".equals(def.subMode())) {
+                data.put(e.getKey(), readSubRows(def, String.valueOf(row.get("id"))));
+            }
+        }
         Integer version = asInt(row.get("version"));
         LocalDateTime createdAt = asDateTime(row.get("created_at"));
         LocalDateTime updatedAt = asDateTime(row.get("updated_at"));
@@ -525,6 +683,147 @@ public class BizDataService {
         } catch (JsonProcessingException e) {
             return v;
         }
+    }
+
+    // ==================== 子表读写 ====================
+
+    /**
+     * 批量写入子表行（create 场景）。
+     * 单行 id 由内部生成，sort_no 从 0 递增。
+     */
+    private void writeSubRows(SubTableDef def, String bizId, List<?> rows) {
+        if (rows.size() > MAX_SUB_ROWS) {
+            throw new BusinessException(400, "子表行数超限（最多 " + MAX_SUB_ROWS + " 行）: " + def.tableName());
+        }
+        int sortNo = 0;
+        for (Object row : rows) {
+            insertOneSubRow(def, bizId, toRowMap(row, def.tableName()), sortNo);
+            sortNo++;
+        }
+    }
+
+    /**
+     * 子表行增量 diff（update 场景）：
+     * - 携带 id 且存在 → 值/排序变化则 UPDATE
+     * - 无 id → 新行 INSERT
+     * - 现有行不在请求中 → DELETE
+     * 完成后按请求顺序重排 sort_no。
+     */
+    private void diffSubRows(SubTableDef def, String bizId, List<?> rows) {
+        if (rows.size() > MAX_SUB_ROWS) {
+            throw new BusinessException(400, "子表行数超限（最多 " + MAX_SUB_ROWS + " 行）: " + def.tableName());
+        }
+        List<Map<String, Object>> existing = readSubRows(def, bizId);
+        Map<String, Map<String, Object>> existingById = new LinkedHashMap<>();
+        for (Map<String, Object> r : existing) {
+            existingById.put(String.valueOf(r.get("id")), r);
+        }
+
+        Set<String> keepIds = new HashSet<>();
+        int sortNo = 0;
+        for (Object row : rows) {
+            Map<String, Object> m = toRowMap(row, def.tableName());
+            Object rawId = m.get("id");
+            String rowId = rawId == null ? null : String.valueOf(rawId);
+            if (rowId != null && existingById.containsKey(rowId)) {
+                Map<String, Object> cur = existingById.get(rowId);
+                boolean changed = def.subKeys().stream()
+                        .anyMatch(k -> !Objects.equals(cur.get(k), m.get(k)));
+                if (changed || !Objects.equals(cur.get("sort_no"), sortNo)) {
+                    StringBuilder set = new StringBuilder();
+                    List<Object> params = new ArrayList<>();
+                    for (String k : def.subKeys()) {
+                        set.append(k).append(" = ?, ");
+                        params.add(m.get(k));
+                    }
+                    set.append("sort_no = ?");
+                    params.add(sortNo);
+                    params.add(tenantProvider.getTenantId());
+                    params.add(bizId);
+                    params.add(rowId);
+                    jdbcTemplate.update("UPDATE " + def.tableName() + " SET " + set
+                            + " WHERE tenant_id = ? AND biz_id = ? AND id = ?", params.toArray());
+                }
+                keepIds.add(rowId);
+            } else {
+                // 新行：剥离客户端传入的 id，走内部生成
+                Map<String, Object> newRow = new LinkedHashMap<>(m);
+                newRow.remove("id");
+                insertOneSubRow(def, bizId, newRow, sortNo);
+            }
+            sortNo++;
+        }
+
+        // 删除请求中不存在的现有行
+        if (existingById.size() > keepIds.size()) {
+            List<Object> params = new ArrayList<>();
+            params.add(tenantProvider.getTenantId());
+            params.add(bizId);
+            StringBuilder ph = new StringBuilder();
+            for (String id : existingById.keySet()) {
+                if (!keepIds.contains(id)) {
+                    if (ph.length() > 0) {
+                        ph.append(",");
+                    }
+                    ph.append("?");
+                    params.add(id);
+                }
+            }
+            jdbcTemplate.update("DELETE FROM " + def.tableName()
+                    + " WHERE tenant_id = ? AND biz_id = ? AND id IN (" + ph + ")", params.toArray());
+        }
+    }
+
+    /**
+     * 查询子表行（按 sort_no 升序，租户范围限定）。
+     */
+    private List<Map<String, Object>> readSubRows(SubTableDef def, String bizId) {
+        return jdbcTemplate.queryForList("SELECT * FROM " + def.tableName()
+                        + " WHERE tenant_id = ? AND biz_id = ? ORDER BY sort_no",
+                tenantProvider.getTenantId(), bizId);
+    }
+
+    /**
+     * 插入单行子表数据（id/biz_id/tenant_id/sort_no/version + 子业务列）。
+     *
+     * @return 插入后的行（含内部生成的 id/sort_no，供独立接口返回）
+     */
+    private Map<String, Object> insertOneSubRow(SubTableDef def, String bizId, Map<String, Object> m, int sortNo) {
+        String rowId = UUID.randomUUID().toString().replace("-", "");
+        List<Object> params = new ArrayList<>();
+        params.add(rowId);
+        params.add(bizId);
+        params.add(tenantProvider.getTenantId());
+        params.add(sortNo);
+        params.add(1); // version
+
+        StringBuilder cols = new StringBuilder("id, biz_id, tenant_id, sort_no, version");
+        StringBuilder vals = new StringBuilder("?, ?, ?, ?, ?");
+        for (String k : def.subKeys()) {
+            cols.append(", ").append(k);
+            vals.append(", ?");
+            params.add(m.get(k));
+        }
+        jdbcTemplate.update("INSERT INTO " + def.tableName() + " (" + cols + ") VALUES (" + vals + ")",
+                params.toArray());
+
+        Map<String, Object> inserted = new LinkedHashMap<>(m);
+        inserted.put("id", rowId);
+        inserted.put("sort_no", sortNo);
+        return inserted;
+    }
+
+    /** 子表行必须是 JSON 对象；非法抛 400 */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> toRowMap(Object row, String tableName) {
+        if (!(row instanceof Map<?, ?> m)) {
+            throw new BusinessException(400, "子表行数据格式非法（需对象）: " + tableName);
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : m.entrySet()) {
+            out.put(String.valueOf(e.getKey()), e.getValue());
+        }
+        return out;
     }
 
     private static Integer asInt(Object v) {

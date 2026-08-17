@@ -25,6 +25,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -347,13 +349,6 @@ class BizDataServiceTest {
 
     // ==================== JSON 列（多选 checkbox/tree 多选/elTransfer/subForm） ====================
 
-    private ColumnConfig jsonColumn(String key) {
-        ColumnConfig c = new ColumnConfig();
-        c.setKey(key);
-        c.setColumnType("JSON");
-        return c;
-    }
-
     @Test
     void create_serializesJsonColumnList_toJsonString() {
         when(formDefService.getBusinessColumnsByKey("biz_leave"))
@@ -590,5 +585,381 @@ class BizDataServiceTest {
         c.setColumnType(type);
         c.setLength(length);
         return c;
+    }
+
+    // ==================== 子表读写 ====================
+
+    private ColumnConfig subtableColumn(String key, List<ColumnConfig> subs, String subMode) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setSubColumns(subs);
+        c.setSubMode(subMode);
+        return c;
+    }
+
+    private Map<String, Object> mainRow() {
+        return Map.of(
+                "id", "row-1",
+                "tenant_id", TENANT_ID,
+                "name", "报销单",
+                "version", 1,
+                "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)));
+    }
+
+    @Test
+    void create_withSubRows_insertsMainAndSub() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig itemName = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig itemAmount = simpleColumn("amount", "DECIMAL", 18);
+        itemAmount.setScale(2);
+        ColumnConfig items = subtableColumn("items", List.of(itemName, itemAmount), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, items));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of(mainRow()));
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", "报销单");
+        data.put("items", List.of(
+                Map.of("name", "差旅", "amount", 1200),
+                Map.of("name", "办公", "amount", 450)));
+        BizDataVO vo = bizDataService.create("biz_leave", data);
+
+        assertThat(vo.getId()).isEqualTo("row-1");
+        // 主表 INSERT 1 次 + 子表 INSERT 2 次
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave "), any(Object[].class));
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate, times(2)).update(contains("INSERT INTO wf_biz_biz_leave_items"), captor.capture());
+        List<Object[]> all = captor.getAllValues();
+        // params: [rowId, bizId, tenantId, sortNo, name, amount]
+        assertThat(all.get(0)).contains("t1", 0, "差旅", 1200);
+        assertThat(all.get(1)).contains("t1", 1, "办公", 450);
+        // 两行同属一个主行 biz_id
+        assertThat(all.get(0)[1]).isEqualTo(all.get(1)[1]);
+    }
+
+    @Test
+    void create_subRowsOverLimit_rejected400() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig items = subtableColumn("items", List.of(simpleColumn("name", "VARCHAR", 255)), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, items));
+
+        List<Map<String, Object>> tooMany = new ArrayList<>();
+        for (int i = 0; i < 101; i++) {
+            tooMany.add(Map.of("name", "行" + i));
+        }
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", "报销单");
+        data.put("items", tooMany);
+
+        assertThatThrownBy(() -> bizDataService.create("biz_leave", data))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400))
+                .hasMessageContaining("超限");
+    }
+
+    @Test
+    void update_diff_addsRemovesUpdates() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig items = subtableColumn("items", List.of(simpleColumn("name", "VARCHAR", 255)), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, items));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    String sql = (String) inv.getArgument(0);
+                    if (sql.contains("wf_biz_biz_leave_items")) {
+                        return List.of(
+                                Map.of("id", "sub-1", "biz_id", "row-1", "tenant_id", TENANT_ID, "name", "差旅", "sort_no", 0, "version", 1),
+                                Map.of("id", "sub-2", "biz_id", "row-1", "tenant_id", TENANT_ID, "name", "办公", "sort_no", 1, "version", 1));
+                    }
+                    return List.of(mainRow());
+                });
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", "报销单");
+        data.put("items", List.of(
+                Map.of("id", "sub-1", "name", "差旅更新"),
+                Map.of("name", "新增行")));
+        bizDataService.update("biz_leave", "row-1", data, 1);
+
+        verify(jdbcTemplate).update(contains("UPDATE wf_biz_biz_leave_items SET"), any(Object[].class));
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave_items"), any(Object[].class));
+        verify(jdbcTemplate).update(contains("DELETE FROM wf_biz_biz_leave_items"), any(Object[].class));
+    }
+
+    @Test
+    void update_withoutSubField_keepsRows() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig items = subtableColumn("items", List.of(simpleColumn("name", "VARCHAR", 255)), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, items));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of(mainRow()));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        bizDataService.update("biz_leave", "row-1", Map.of("name", "报销单改"), 1);
+
+        // 主表 UPDATE 有，子表无任何写操作
+        verify(jdbcTemplate).update(contains("UPDATE wf_biz_biz_leave "), any(Object[].class));
+        verify(jdbcTemplate, never()).update(contains("wf_biz_biz_leave_items"), any(Object[].class));
+    }
+
+    @Test
+    void delete_cascadesSubRows() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig items = subtableColumn("items", List.of(simpleColumn("name", "VARCHAR", 255)), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, items));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of(mainRow()));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        bizDataService.delete("biz_leave", "row-1");
+
+        verify(jdbcTemplate).update(contains("DELETE FROM wf_biz_biz_leave_items"), any(Object[].class));
+        verify(jdbcTemplate).update(contains("DELETE FROM wf_biz_biz_leave "), any(Object[].class));
+    }
+
+    @Test
+    void getById_embedded_attachesSubRows() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig items = subtableColumn("items", List.of(simpleColumn("name", "VARCHAR", 255)), "embedded");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, items));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    String sql = (String) inv.getArgument(0);
+                    if (sql.contains("wf_biz_biz_leave_items")) {
+                        return List.of(Map.of("id", "sub-1", "biz_id", "row-1", "tenant_id", TENANT_ID,
+                                "name", "差旅", "sort_no", 0));
+                    }
+                    return List.of(mainRow());
+                });
+
+        BizDataVO vo = bizDataService.getById("biz_leave", "row-1");
+
+        List<?> itemsData = (List<?>) vo.getData().get("items");
+        assertThat(itemsData).hasSize(1);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> first = (Map<String, Object>) itemsData.get(0);
+        assertThat(first).containsEntry("id", "sub-1").containsEntry("name", "差旅");
+    }
+
+    @Test
+    void getById_dedicated_doesNotAttachSubRows() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig items = subtableColumn("items", List.of(simpleColumn("name", "VARCHAR", 255)), "dedicated");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, items));
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class))).thenReturn(List.of(mainRow()));
+
+        BizDataVO vo = bizDataService.getById("biz_leave", "row-1");
+
+        assertThat(vo.getData()).doesNotContainKey("items");
+        verify(jdbcTemplate, never()).queryForList(contains("wf_biz_biz_leave_items"), any(Object[].class));
+    }
+
+    // ==================== 独立子表行 CRUD ====================
+
+    private void stubSubtableForm() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig items = subtableColumn("items", List.of(simpleColumn("name", "VARCHAR", 255)), "dedicated");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, items));
+    }
+
+    private void stubMainAndSubRows() {
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    String sql = (String) inv.getArgument(0);
+                    if (sql.contains("wf_biz_biz_leave_items")) {
+                        return List.of();
+                    }
+                    return List.of(mainRow());
+                });
+    }
+
+    @Test
+    void subRows_addRow_insertsAndReturnsRow() {
+        stubSubtableForm();
+        stubMainAndSubRows();
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        Map<String, Object> added = bizDataService.addSubRow("biz_leave", "row-1", "items", Map.of("name", "新行"));
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave_items"), captor.capture());
+        assertThat(captor.getValue()).contains("row-1", "t1", 0, "新行");
+        assertThat(added.get("id")).isNotNull();
+        assertThat(added.get("sort_no")).isEqualTo(0);
+    }
+
+    @Test
+    void subRows_list_returnsRows() {
+        stubSubtableForm();
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    String sql = (String) inv.getArgument(0);
+                    if (sql.contains("wf_biz_biz_leave_items")) {
+                        return List.of(Map.of("id", "sub-1", "biz_id", "row-1", "tenant_id", TENANT_ID,
+                                "name", "差旅", "sort_no", 0));
+                    }
+                    return List.of(mainRow());
+                });
+
+        List<Map<String, Object>> rows = bizDataService.listSubRows("biz_leave", "row-1", "items");
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0)).containsEntry("id", "sub-1").containsEntry("name", "差旅");
+    }
+
+    @Test
+    void subRows_updateRow_optimisticLock() {
+        stubSubtableForm();
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenAnswer(inv -> {
+                    String sql = (String) inv.getArgument(0);
+                    if (sql.contains("wf_biz_biz_leave_items")) {
+                        return List.of(Map.of("id", "sub-1", "biz_id", "row-1", "tenant_id", TENANT_ID,
+                                "name", "改后", "sort_no", 0, "version", 2));
+                    }
+                    return List.of(mainRow());
+                });
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        Map<String, Object> updated = bizDataService.updateSubRow("biz_leave", "row-1", "items", "sub-1",
+                Map.of("name", "改后"), 2);
+
+        verify(jdbcTemplate).update(contains("UPDATE wf_biz_biz_leave_items SET"), any(Object[].class));
+        assertThat(updated).containsEntry("name", "改后");
+    }
+
+    @Test
+    void subRows_updateRow_versionConflict_returns409() {
+        stubSubtableForm();
+        stubMainAndSubRows();
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(0);
+
+        assertThatThrownBy(() -> bizDataService.updateSubRow("biz_leave", "row-1", "items", "sub-1",
+                Map.of("name", "改后"), 1))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(409));
+    }
+
+    @Test
+    void subRows_deleteRow_removesRow() {
+        stubSubtableForm();
+        stubMainAndSubRows();
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        bizDataService.deleteSubRow("biz_leave", "row-1", "items", "sub-1");
+
+        verify(jdbcTemplate).update(contains("DELETE FROM wf_biz_biz_leave_items"), any(Object[].class));
+    }
+
+    @Test
+    void subRows_invalidField_returns404() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name));
+
+        assertThatThrownBy(() -> bizDataService.listSubRows("biz_leave", "row-1", "items"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(404))
+                .hasMessageContaining("子表字段不存在");
+    }
+
+    // ==================== JSON 列（subForm 组件） ====================
+
+    private ColumnConfig jsonColumn(String key) {
+        ColumnConfig c = new ColumnConfig();
+        c.setKey(key);
+        c.setColumnType("JSON");
+        return c;
+    }
+
+    @Test
+    void create_withJsonColumn_serializesObjectToJsonString() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig extra = jsonColumn("extra");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, extra));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "extra", "{\"addr\":\"北京市\",\"qty\":5}",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", "张三");
+        data.put("extra", Map.of("addr", "北京市", "qty", 5));
+        bizDataService.create("biz_leave", data);
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave"), captor.capture());
+        // JSON 列参数必须是序列化后的 JSON 字符串（而非 Map 对象，否则 MySQL 报 CHARACTER SET 'binary'）
+        Object[] params = captor.getValue();
+        Object extraParam = null;
+        for (Object p : params) {
+            if (p instanceof String s && s.contains("\"北京市\"")) {
+                extraParam = p;
+            }
+        }
+        assertThat(extraParam).isNotNull().isInstanceOf(String.class);
+        assertThat((String) extraParam).contains("\"addr\":\"北京市\"").contains("\"qty\":5");
+    }
+
+    @Test
+    void update_withJsonColumn_serializesObjectToJsonString() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig extra = jsonColumn("extra");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, extra));
+        // 更新前 findById existing（主表无子表）
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "extra", "{\"addr\":\"北京市\",\"qty\":5}",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", "张三改");
+        data.put("extra", Map.of("addr", "上海市", "qty", 8));
+        bizDataService.update("biz_leave", "row-1", data, 1);
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("UPDATE wf_biz_biz_leave SET"), captor.capture());
+        Object extraParam = null;
+        for (Object p : captor.getValue()) {
+            if (p instanceof String s && s.contains("\"上海市\"")) {
+                extraParam = p;
+            }
+        }
+        assertThat(extraParam).isNotNull().isInstanceOf(String.class);
+        assertThat((String) extraParam).contains("\"addr\":\"上海市\"").contains("\"qty\":8");
+    }
+
+    @Test
+    void create_withJsonColumnAlreadyString_keepsAsIs() {
+        ColumnConfig name = simpleColumn("name", "VARCHAR", 255);
+        ColumnConfig extra = jsonColumn("extra");
+        when(formDefService.getBusinessColumnsByKey("biz_leave")).thenReturn(List.of(name, extra));
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "extra", "{\"addr\":\"北京市\"}",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        bizDataService.create("biz_leave", Map.of("name", "张三", "extra", "{\"addr\":\"北京市\"}"));
+
+        ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbcTemplate).update(contains("INSERT INTO wf_biz_biz_leave"), captor.capture());
+        Object[] params = captor.getValue();
+        assertThat(params).contains("{\"addr\":\"北京市\"}");
     }
 }

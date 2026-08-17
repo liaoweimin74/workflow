@@ -14,6 +14,7 @@ import java.sql.ResultSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -160,5 +161,41 @@ class DynamicTableManagerTest {
 
         assertThat(columns).hasSize(1);
         assertThat(columns.get(0).getColumnType()).isEqualTo("TEXT");
+    }
+
+    // ==================== 子表 ====================
+
+    @Test
+    void ensureSubTable_createsTable_whenMissing() {
+        ColumnConfig amount = column("amount", "DECIMAL", 18);
+        amount.setScale(2);
+
+        tableManager.ensureSubTable("expense", "items", List.of(amount));
+
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).execute(captor.capture());
+        assertThat(captor.getValue()).contains("CREATE TABLE IF NOT EXISTS wf_biz_expense_items");
+        assertThat(captor.getValue()).contains("biz_id VARCHAR(64) NOT NULL");
+        assertThat(captor.getValue()).contains("sort_no INT NOT NULL DEFAULT 0");
+    }
+
+    @Test
+    void ensureSubTable_noAlter_whenSameStructure() {
+        ColumnConfig amount = column("amount", "DECIMAL", 18);
+        amount.setScale(2);
+        ColumnInfo existing = new ColumnInfo("amount", "DECIMAL", 18, 2, true, false);
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of(existing));
+
+        tableManager.ensureSubTable("expense", "items", List.of(amount));
+
+        verify(jdbcTemplate, never()).execute(anyString());
+    }
+
+    @Test
+    void ensureSubTable_invalidField_rejected() {
+        assertThatThrownBy(() -> tableManager.ensureSubTable("expense", "bad field", List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

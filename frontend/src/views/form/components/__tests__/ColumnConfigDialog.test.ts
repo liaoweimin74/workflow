@@ -346,3 +346,117 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 })
+
+// ----- 真实场景（ref_test 表单）：group 子表内部字段存放在 props.rule（fcRow/col 布局嵌套） -----
+// 子表组件（group/tableForm）内部字段在 props.rule / props.columns[].rule，而不是 children。
+// 发布列映射必须穿透这些结构提取子列，否则子列为空 → 被标记 unsupported 阻止发布。
+const groupSubtableSchema = [
+  { type: 'input', field: 'dept_name', title: '部门名称' },
+  {
+    type: 'group',
+    field: 'sub_form1',
+    title: '子表单',
+    props: {
+      rule: [
+        {
+          type: 'fcRow',
+          children: [
+            {
+              type: 'col',
+              props: { span: 12 },
+              children: [
+                { type: 'LookupPicker', field: 'sub_lookup', title: '子表查找带回', props: {} },
+              ],
+            },
+            {
+              type: 'col',
+              props: { span: 12 },
+              children: [
+                { type: 'dataPicker', field: 'sub_dataPicker', title: '子表数据引用', props: {} },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  },
+]
+
+const tableFormSubtableSchema = [
+  {
+    type: 'tableForm',
+    field: 'table_items',
+    title: '费用明细表',
+    props: {
+      columns: [
+        {
+          label: '项目名称',
+          required: false,
+          hidden: false,
+          style: {},
+          rule: [{ type: 'input', field: 'item_name', title: '项目名称' }],
+        },
+        {
+          label: '金额',
+          required: false,
+          hidden: false,
+          style: {},
+          rule: [{ type: 'inputNumber', field: 'amount', title: '金额', props: { precision: 2 } }],
+        },
+      ],
+    },
+  },
+]
+
+describe('ColumnConfigDialog — 子表组件（group/tableForm）子列穿透', () => {
+  it('group 子表内部字段存放于 props.rule（fcRow/col 布局）：提取子列且不标记 unsupported', async () => {
+    const wrapper = createWrapper({ schema: groupSubtableSchema })
+    await openAndBuild(wrapper)
+    // 子表字段应生成 subColumns，而非 unsupported
+    const items = confirmItems(wrapper)
+    const sub = items.find(i => i.key === 'sub_form1')
+    expect(sub).toBeDefined()
+    expect(sub.unsupported).toBeFalsy()
+    // LookupPicker → VARCHAR(255) 单列；dataPicker → TEXT id 列 + 隐藏 _text 列（与顶层一致）
+    const lookup = sub.subColumns?.find((c: any) => c.key === 'sub_lookup')
+    expect(lookup).toBeDefined()
+    expect(lookup.columnType).toBe('VARCHAR')
+    expect(lookup.length).toBe(255)
+    expect(lookup.unsupported).toBeFalsy()
+    const dp = sub.subColumns?.find((c: any) => c.key === 'sub_dataPicker')
+    expect(dp).toBeDefined()
+    expect(dp.columnType).toBe('TEXT')
+    expect(dp.unsupported).toBeFalsy()
+    const dpText = sub.subColumns?.find((c: any) => c.key === 'sub_dataPicker_text')
+    expect(dpText).toBeDefined()
+    expect(dpText.hidden).toBe(true)
+    // 弹窗不应提示"不支持映射为数据列的字段"
+    expect(wrapper.text()).not.toContain('不支持映射为数据列的字段')
+    // 子表区域不应提示"没有可映射子列"
+    expect(wrapper.text()).not.toContain('子表没有可映射子列')
+    wrapper.unmount()
+  })
+
+  it('tableForm 子表内部字段存放于 props.columns[].rule：提取子列且不标记 unsupported', async () => {
+    const wrapper = createWrapper({ schema: tableFormSubtableSchema })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    const sub = items.find(i => i.key === 'table_items')
+    expect(sub).toBeDefined()
+    expect(sub.unsupported).toBeFalsy()
+    expect(sub.subColumns?.length).toBe(2)
+    const keys = sub.subColumns?.map((c: any) => c.key)
+    expect(keys).toContain('item_name')
+    expect(keys).toContain('amount')
+    expect(wrapper.text()).not.toContain('不支持映射为数据列的字段')
+    wrapper.unmount()
+  })
+
+  it('确认发布按钮可用（汇总 unsupportedFields 不应包含子表字段）', async () => {
+    const wrapper = createWrapper({ schema: groupSubtableSchema })
+    await openAndBuild(wrapper)
+    const btn = wrapper.findAll('button').find(b => b.text().includes('确认发布'))
+    expect((btn as any)?.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+})

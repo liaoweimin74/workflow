@@ -142,12 +142,6 @@ class ColumnTypeMapperTest {
     }
 
     @Test
-    void mapSubForm_returnsJson() {
-        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("subForm", null);
-        assertThat(c.getColumnType()).isEqualTo("JSON");
-    }
-
-    @Test
     void mapSliderSingleInteger_returnsInt() {
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("slider", Map.of("min", 0, "max", 10));
         assertThat(c.getColumnType()).isEqualTo("INT");
@@ -198,9 +192,24 @@ class ColumnTypeMapperTest {
 
     @Test
     void mapUnsupported_returnsNull() {
-        assertThat(ColumnTypeMapper.mapComponentToColumn("subTable", Map.of())).isNull();
-        assertThat(ColumnTypeMapper.mapComponentToColumn("nestedForm", Map.of())).isNull();
         assertThat(ColumnTypeMapper.mapComponentToColumn("userPicker", Map.of())).isNull();
+        assertThat(ColumnTypeMapper.mapComponentToColumn("deptPicker", Map.of())).isNull();
+        assertThat(ColumnTypeMapper.mapComponentToColumn("divider", Map.of())).isNull();
+        assertThat(ColumnTypeMapper.mapComponentToColumn("groupContainer", Map.of())).isNull();
+    }
+
+    @Test
+    void mapSubForm_returnsJson() {
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("subForm", Map.of());
+        assertThat(c).isNotNull();
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapSubtableComponents_returnsNull_forSubtableBranch() {
+        // group/tableForm 由上层子表分支处理，不映射为普通列
+        assertThat(ColumnTypeMapper.mapComponentToColumn("group", Map.of())).isNull();
+        assertThat(ColumnTypeMapper.mapComponentToColumn("tableForm", Map.of())).isNull();
     }
 
     @Test

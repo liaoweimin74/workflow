@@ -2,6 +2,8 @@ package com.workflow.engine.form.column;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.util.List;
+
 /**
  * 列映射配置项。
  * 定义业务表单字段到物理表列的映射关系。
@@ -45,6 +47,12 @@ public class ColumnConfig {
     /** 组件类型（form-create rule 的 type，如 colorPicker/elTransfer；供前端按组件定制渲染） */
     private String componentType;
 
+    /** 子表列映射（非空表示该 key 为子表字段，映射独立物理表 wf_biz_<formKey>_<key>） */
+    private List<ColumnConfig> subColumns;
+
+    /** 子表传输方式：embedded（默认，内嵌 JSON 随主表往返）/ dedicated（独立子表 CRUD 接口） */
+    private String subMode;
+
     public ColumnConfig() {}
     public String getKey() { return key; }
     public void setKey(String key) { this.key = key; }
@@ -82,4 +90,10 @@ public class ColumnConfig {
 
     public String getComponentType() { return componentType; }
     public void setComponentType(String componentType) { this.componentType = componentType; }
+
+    public List<ColumnConfig> getSubColumns() { return subColumns; }
+    public void setSubColumns(List<ColumnConfig> subColumns) { this.subColumns = subColumns; }
+
+    public String getSubMode() { return subMode; }
+    public void setSubMode(String subMode) { this.subMode = subMode; }
 }

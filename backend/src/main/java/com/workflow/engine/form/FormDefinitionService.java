@@ -39,9 +39,12 @@ public class FormDefinitionService {
     private final DynamicTableManager tableManager;
     private final ObjectMapper objectMapper;
 
-    /** 不支持映射为业务表单列的组件（展示型组件） */
+    /** 不支持映射为业务表单列的组件（人员/部门选择、分割线、容器、历史数据表组件等） */
     private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
-            "divider", "groupContainer", "dataTable");
+            "userPicker", "deptPicker", "divider", "groupContainer", "dataTable");
+
+    /** 子表组件：发布时创建独立子表物理表（wf_biz_<formKey>_<field>） */
+    private static final Set<String> SUBTABLE_COMPONENTS = Set.of("group", "tableForm", "subForm");
 
     public FormDefinitionService(FormDefinitionRepository formDefRepository,
                                  TenantProvider tenantProvider,
@@ -258,6 +261,12 @@ public class FormDefinitionService {
             validatePickerReferences(draft.getSchema());
             List<ColumnConfig> columns = parseColumnConfig(draft.getColumnConfig());
             tableManager.ensureTable(draft.getKey(), columns);
+            // 子表字段：创建/变更独立子表物理表 wf_biz_<formKey>_<field>
+            for (ColumnConfig c : columns) {
+                if (c.getSubColumns() != null && !c.getSubColumns().isEmpty()) {
+                    tableManager.ensureSubTable(draft.getKey(), c.getKey(), c.getSubColumns());
+                }
+            }
         }
 
         // 旧 PUBLISHED（非当前记录）降为 ARCHIVED
@@ -273,7 +282,8 @@ public class FormDefinitionService {
     }
 
     /**
-     * 校验业务表单 schema 不含展示型等不支持组件。
+     * 校验业务表单 schema 不含不支持组件（人员/部门选择、分割线、容器等）。
+     * 子表组件（group/tableForm/subForm）放行，由发布流程创建独立子表物理表。
      * schema 格式兼容：{rule: [...]} 与纯数组两种。
      */
     private void validateBusinessSchema(String schema) throws BusinessException {
@@ -411,6 +421,13 @@ public class FormDefinitionService {
     private void validateColumnConfig(ColumnConfig c) {
         if (c.getKey() == null || !c.getKey().matches("^[a-zA-Z][a-zA-Z0-9_]{0,63}$")) {
             throw new BusinessException(400, "非法列名: " + c.getKey());
+        }
+        // 子表字段：自身无列类型，递归校验子列
+        if (c.getSubColumns() != null && !c.getSubColumns().isEmpty()) {
+            for (ColumnConfig sub : c.getSubColumns()) {
+                validateColumnConfig(sub);
+            }
+            return;
         }
         Set<String> reserved = Set.of("id", "tenant_id", "version", "created_by", "created_at", "updated_at");
         if (reserved.contains(c.getKey())) {

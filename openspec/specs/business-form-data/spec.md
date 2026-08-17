@@ -15,7 +15,7 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 
 唯一约束 SHALL 以 (tenant_id, 字段) 复合索引形式创建。
 
-发布时，系统 SHALL 校验 BUSINESS 表单 schema 中不含子表/嵌套表单组件；若存在，SHALL 拒绝发布并提示。
+发布时，系统 SHALL 允许 schema 包含子表组件（group/tableForm/subForm）：group 与 tableForm 映射为独立子表物理表，subForm 映射为主表 JSON 列，具体持久化行为遵循 business-form-subtable 规范。系统 SHALL 拒绝 schema 中包含不可映射组件（userPicker、deptPicker、divider、groupContainer）的发布，并提示组件类型。
 
 #### Scenario: 发布业务表单创建物理表
 
@@ -28,10 +28,19 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 
 #### Scenario: 发布包含子表组件的业务表单
 
+- **WHEN** 用户发布 type=BUSINESS 的表单定义
+- **AND** schema 中包含 group/tableForm 子表组件
+- **AND** column_config 中该子表字段配置了 subColumns 列映射
+- **THEN** 系统创建主表 wf_biz_<formKey>
+- **AND** 系统创建子表 wf_biz_<formKey>_<field>
+- **AND** 发布成功返回 200
+
+#### Scenario: 发布包含不可映射组件的业务表单
+
 - **WHEN** 用户尝试发布 type=BUSINESS 的表单定义
-- **AND** schema 中包含子表/嵌套表单组件
+- **AND** schema 中包含 userPicker 等不可映射组件
 - **THEN** 系统返回 400 错误
-- **AND** 提示移除子表/嵌套表单组件后方可发布
+- **AND** 提示移除不可映射组件后方可发布
 
 #### Scenario: 变更已发布业务表单的表结构
 

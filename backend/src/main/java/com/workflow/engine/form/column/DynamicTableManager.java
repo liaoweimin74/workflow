@@ -56,6 +56,38 @@ public class DynamicTableManager {
     }
 
     /**
+     * 确保子表物理表存在且结构与 column_config 一致（wf_biz_<formKey>_<field>）。
+     * 表不存在 → 创建；已存在 → 执行差异变更。
+     *
+     * @param formKey    主表表单 key
+     * @param field      子表字段名
+     * @param subColumns 期望的子表列映射（须已通过 DdlBuilder 校验）
+     */
+    public void ensureSubTable(String formKey, String field, List<ColumnConfig> subColumns) {
+        DdlBuilder.validateFormKey(formKey);
+        DdlBuilder.validateSubField(field);
+        String table = "wf_biz_" + formKey + "_" + field;
+
+        if (!tableExists(table)) {
+            String createSql = DdlBuilder.buildCreateSubTable(formKey, field, subColumns);
+            log.info("Creating sub table: {}", table);
+            jdbcTemplate.execute(createSql);
+            return;
+        }
+
+        List<ColumnInfo> existing = findTableColumns(table);
+        List<String> alterStatements = DdlBuilder.buildAlterSubTable(formKey, field, subColumns, existing);
+        if (alterStatements.isEmpty()) {
+            log.info("Sub table {} structure unchanged", table);
+            return;
+        }
+        for (String stmt : alterStatements) {
+            log.info("Altering sub table: {}", stmt);
+            jdbcTemplate.execute(stmt);
+        }
+    }
+
+    /**
      * 判断物理表是否存在。
      */
     public boolean tableExists(String tableName) {

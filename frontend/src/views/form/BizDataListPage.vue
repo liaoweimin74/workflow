@@ -22,8 +22,37 @@
       :default-page-size="20"
       :page-sizes="[10, 20, 50]"
       :delete-confirm="deleteConfirm"
-    />
+    >
+      <!-- 子表字段列：显示 [子表名称] 链接，点击弹窗查看子表行 -->
+      <template
+        v-for="c in subtableCols"
+        :key="c.key"
+        #[`subtable-${c.key}`]="{ row }"
+      >
+        <el-link type="primary" @click="openSubtable(row, c)">
+          [{{ c.label }}]
+        </el-link>
+      </template>
+    </SearchTable>
     <el-card v-else v-loading="!loaded" style="min-height: 200px" />
+
+    <!-- 子表内容弹窗：复用表单渲染机制（form-create），子表内 lookupPicker/dataPicker 等组件正常渲染 -->
+    <el-dialog
+      v-model="subtableDialogVisible"
+      :title="subtableDialogTitle"
+      width="720px"
+      :close-on-click-modal="false"
+    >
+      <FormRenderer
+        v-if="subtableRule"
+        :key="subtableRule.field"
+        :rule="[subtableRule]"
+        :initial-values="subtableInitialValues"
+        readonly
+      />
+      <el-empty v-else-if="subtableRows.length > 0" description="子表 schema 未加载，无法渲染" />
+      <el-empty v-else description="暂无子表数据" />
+    </el-dialog>
   </div>
 </template>
 
@@ -36,6 +65,9 @@ import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, FormConfig } from '@/components/business/types'
 import { formApi } from '@/api/form'
 import { bizDataApi, type ColumnConfigItem } from '@/api/bizData'
+import FormRenderer from './components/FormRenderer.vue'
+import { walkRules } from './formRuleWalk'
+import { parseSubRows } from './subtableDisplay'
 import type { Rule } from '@form-create/element-ui'
 
 const route = useRoute()
@@ -54,6 +86,9 @@ const refInfo = ref<{ count: number; referencedBy: string[] } | null>(null)
 
 /** 业务列（可展示，排除隐藏列） */
 const bizColumns = computed(() => columnConfig.value.filter(c => !c.unsupported && !c.hidden))
+
+/** 子表字段列（subColumns 非空）：列表中以 [子表名称] 链接展示，点击弹窗查看子表行 */
+const subtableCols = computed(() => bizColumns.value.filter(c => c.subColumns && c.subColumns.length > 0))
 
 /** 可筛选列（非 JSON/TEXT、非 colorPicker，且 indexed 或短文本） */
 const filterableColumns = computed(() =>
@@ -75,30 +110,41 @@ const searchFields = computed<SearchField[]>(() =>
   })),
 )
 
-/** 表格列（formatter/render 读 row.data[key]；data-picker 引用列优先显示冗余文本） */
+/** 表格列（render 读 row.data[key]；data-picker 引用列优先显示冗余文本；子表字段用 slotName 渲染链接） */
 const columns = computed<TableColumn[]>(() => {
-  const bizCols: TableColumn[] = bizColumns.value.map(c => ({
-    prop: c.key,
-    label: c.label,
-    minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 130,
-    render: (row: any) => {
-      const v = row.data?.[c.key]
-      // data-picker：显示冗余文本列（<key>_text，JSON 文本数组），缺省回退原值
-      if (c.pickerConfig && v) {
-        const text = row.data[c.key + '_text']
-        if (text !== undefined && text !== null && text !== '') {
-          try {
-            const parsed = JSON.parse(String(text))
-            if (Array.isArray(parsed)) return parsed.join(',')
-          } catch {
-            // 非 JSON 旧数据，按原值展示
-          }
-          return String(text)
-        }
+  const bizCols: TableColumn[] = bizColumns.value.map(c => {
+    // 子表字段：不显示存储 JSON 文本，使用 [子表名称] 链接（slotName 渲染）
+    if (c.subColumns && c.subColumns.length > 0) {
+      return {
+        prop: c.key,
+        label: c.label,
+        minWidth: 130,
+        slotName: `subtable-${c.key}`,
       }
-      return renderByComponentType(c.componentType, c.columnType, v)
-    },
-  }))
+    }
+    return {
+      prop: c.key,
+      label: c.label,
+      minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 130,
+      render: (row: any) => {
+        const v = row.data?.[c.key]
+        // data-picker：显示冗余文本列（<key>_text，JSON 文本数组），缺省回退原值
+        if (c.pickerConfig && v) {
+          const text = row.data[c.key + '_text']
+          if (text !== undefined && text !== null && text !== '') {
+            try {
+              const parsed = JSON.parse(String(text))
+              if (Array.isArray(parsed)) return parsed.join(',')
+            } catch {
+              // 非 JSON 旧数据，按原值展示
+            }
+            return String(text)
+          }
+        }
+        return renderByComponentType(c.componentType, c.columnType, v)
+      },
+    }
+  })
   return [
     ...bizCols,
     {
@@ -150,6 +196,37 @@ function formatArray(v: unknown): string {
     return v
   }
   return formatCell(v)
+}
+
+/** 子表内容弹窗状态 */
+const subtableDialogVisible = ref(false)
+const subtableDialogTitle = ref('')
+const subtableRows = ref<any[]>([])
+const subtableRule = ref<Rule | null>(null)
+/** 弹窗渲染的子表字段初始值：{ [字段]: 子表行数组 } */
+const subtableInitialValues = computed<Record<string, any>>(() => {
+  const field = subtableRule.value?.field
+  return field ? { [field]: subtableRows.value } : {}
+})
+
+/** 从 schema 中查找子表字段的 rule（group/tableForm/subForm），穿透布局容器 */
+function findSubtableRule(field: string): Rule | null {
+  let found: Rule | null = null
+  walkRules(schemaRules.value, (r) => {
+    if (!found && r.field === field && ['group', 'tableForm', 'subForm'].includes(r.type || '')) {
+      found = r as Rule
+    }
+  })
+  return found
+}
+
+/** 点击 [子表名称] 链接：解析子表行数据，用 form-create 渲染子表字段 rule */
+function openSubtable(row: any, col: ColumnConfigItem) {
+  const rows = parseSubRows(row.data?.[col.key])
+  subtableRows.value = rows
+  subtableRule.value = findSubtableRule(col.key)
+  subtableDialogTitle.value = `${col.label}（${rows.length} 条）`
+  subtableDialogVisible.value = true
 }
 
 /**

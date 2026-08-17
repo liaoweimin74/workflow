@@ -419,3 +419,95 @@ describe('FormRenderer — readonly prop 递归禁用（详情弹窗只读回归
     }
   })
 })
+
+describe('FormRenderer — readonly 穿透子表内部字段（group props.rule / tableForm columns[].rule）', () => {
+  // 回归：子表字段（group/tableForm）内部字段在 props.rule / props.columns[].rule，
+  // readonly 必须穿透，否则只读弹窗中子表内部字段仍可编辑
+  const subtableRule: Rule[] = [
+    {
+      type: 'group',
+      field: 'items',
+      title: '明细',
+      props: {
+        rule: [
+          { type: 'input', field: 'item_name', title: '名称', value: '' },
+          { type: 'LookupPicker', field: 'sub_lookup', title: '子表查找', props: {} },
+        ],
+      },
+    },
+    {
+      type: 'tableForm',
+      field: 'rows',
+      title: '表格子表',
+      props: {
+        columns: [
+          { label: '名称', rule: [{ type: 'input', field: 'row_name', title: '名称', value: '' }] },
+          { label: '数据引用', rule: [{ type: 'dataPicker', field: 'sub_dp', title: '数据引用', props: {} }] },
+        ],
+      },
+    },
+  ]
+
+  function getRenderedRules(wrapper: ReturnType<typeof createWrapper>): Record<string, unknown>[] {
+    const stub = wrapper.findComponent(FormCreateStub)
+    return stub.props('rule') as Record<string, unknown>[]
+  }
+
+  function findSubField(rules: Record<string, unknown>[], fieldName: string): Record<string, unknown> | undefined {
+    for (const r of rules) {
+      if (r.field === fieldName) return r
+      const props = (r.props || {}) as Record<string, any>
+      // 穿透 group/subForm 的 props.rule
+      if (Array.isArray(props.rule)) {
+        const found = findSubField(props.rule as Record<string, unknown>[], fieldName)
+        if (found) return found
+      }
+      // 穿透 tableForm 的 props.columns[].rule
+      if (Array.isArray(props.columns)) {
+        for (const col of props.columns as any[]) {
+          if (col && Array.isArray(col.rule)) {
+            const found = findSubField(col.rule as Record<string, unknown>[], fieldName)
+            if (found) return found
+          }
+        }
+      }
+      if (Array.isArray(r.children)) {
+        const found = findSubField(r.children as Record<string, unknown>[], fieldName)
+        if (found) return found
+      }
+    }
+    return undefined
+  }
+
+  it('readonly=true 时 group props.rule 内部字段 disabled', async () => {
+    const wrapper = createWrapper({ rule: subtableRule, readonly: true })
+    await nextTick()
+    const rules = getRenderedRules(wrapper)
+    for (const fieldName of ['item_name', 'sub_lookup']) {
+      const field = findSubField(rules, fieldName)
+      expect(field, `字段 ${fieldName} 应存在`).toBeDefined()
+      expect((field!.props as Record<string, unknown>).disabled, `字段 ${fieldName} 应只读`).toBe(true)
+    }
+  })
+
+  it('readonly=true 时 tableForm columns[].rule 内部字段 disabled', async () => {
+    const wrapper = createWrapper({ rule: subtableRule, readonly: true })
+    await nextTick()
+    const rules = getRenderedRules(wrapper)
+    for (const fieldName of ['row_name', 'sub_dp']) {
+      const field = findSubField(rules, fieldName)
+      expect(field, `字段 ${fieldName} 应存在`).toBeDefined()
+      expect((field!.props as Record<string, unknown>).disabled, `字段 ${fieldName} 应只读`).toBe(true)
+    }
+  })
+
+  it('readonly 未传入时子表内部字段不设置 disabled', async () => {
+    const wrapper = createWrapper({ rule: subtableRule })
+    await nextTick()
+    const rules = getRenderedRules(wrapper)
+    for (const fieldName of ['item_name', 'sub_lookup', 'row_name', 'sub_dp']) {
+      const field = findSubField(rules, fieldName)
+      expect((field!.props as Record<string, unknown> | undefined)?.disabled).toBeUndefined()
+    }
+  })
+})

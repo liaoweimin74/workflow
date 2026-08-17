@@ -18,9 +18,8 @@ public final class ColumnTypeMapper {
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "VARCHAR", "TEXT", "INT", "DECIMAL", "DATE", "DATETIME", "TINYINT", "JSON", "LONGTEXT");
 
-    /** 不支持映射为可查询列的组件（子表/嵌套表单/人员选择等） */
+    /** 不支持映射为可查询列的组件（人员/部门选择、分割线、容器等） */
     private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
-            "subTable", "SubTable", "nestedForm", "NestedForm", "dataTable",
             "userPicker", "deptPicker", "divider", "groupContainer");
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

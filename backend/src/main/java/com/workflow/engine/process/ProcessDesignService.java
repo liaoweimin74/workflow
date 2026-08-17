@@ -12,6 +12,7 @@ import com.workflow.engine.tenant.TenantProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
+import org.flowable.engine.repository.DeploymentBuilder;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.repository.ProcessDefinitionQuery;
 import org.springframework.data.domain.Page;
@@ -229,13 +230,17 @@ public class ProcessDesignService {
         }
 
         // 部署到 Flowable，捕获引擎校验异常转为友好提示
+        // 方案 A：部署时写入分类（draft.categoryId），使流程中心按 category 分组/筛选生效
+        DeploymentBuilder deploymentBuilder = repositoryService.createDeployment()
+                .name(draft.getName())
+                .addString(draft.getKey() + ".bpmn20.xml", effectiveBpmnXml)
+                .tenantId(tenantId);
+        if (draft.getCategoryId() != null && !draft.getCategoryId().isBlank()) {
+            deploymentBuilder.category(draft.getCategoryId());
+        }
         Deployment deployment;
         try {
-            deployment = repositoryService.createDeployment()
-                    .name(draft.getName())
-                    .addString(draft.getKey() + ".bpmn20.xml", effectiveBpmnXml)
-                    .tenantId(tenantId)
-                    .deploy();
+            deployment = deploymentBuilder.deploy();
         } catch (Exception e) {
             String msg = e.getMessage();
             if (msg != null && msg.contains("BPMN")) {

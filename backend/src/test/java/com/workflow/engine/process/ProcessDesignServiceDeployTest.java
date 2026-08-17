@@ -212,6 +212,39 @@ class ProcessDesignServiceDeployTest {
         verify(repositoryService).createDeployment();
     }
 
+    // ==================== 部署写入分类（方案 A） ====================
+
+    @Test
+    void 部署时写入流程分类() {
+        ProcessDraft draft = newDraft();
+        draft.setCategoryId("cat-1");
+        stubDraftLookup(draft);
+        DeploymentBuilder builder = stubDeploy();
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
+                .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
+        when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
+
+        service.deploy(DRAFT_ID);
+
+        verify(builder).category("cat-1");
+        verify(builder).deploy();
+    }
+
+    @Test
+    void 分类为空时不设置category() {
+        ProcessDraft draft = newDraft(); // 无 categoryId
+        stubDraftLookup(draft);
+        DeploymentBuilder builder = stubDeploy();
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
+                .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
+        when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
+
+        service.deploy(DRAFT_ID);
+
+        verify(builder, never()).category(anyString());
+        verify(builder).deploy();
+    }
+
     // ==================== helpers ====================
 
     private ProcessDraft newDraft() {
@@ -230,12 +263,13 @@ class ProcessDesignServiceDeployTest {
         when(draftRepository.save(draft)).thenReturn(draft);
     }
 
-    private void stubDeploy() {
+    private DeploymentBuilder stubDeploy() {
         DeploymentBuilder builder = mock(DeploymentBuilder.class);
         when(repositoryService.createDeployment()).thenReturn(builder);
         when(builder.name(anyString())).thenReturn(builder);
         when(builder.addString(anyString(), anyString())).thenReturn(builder);
         when(builder.tenantId(anyString())).thenReturn(builder);
+        when(builder.category(anyString())).thenReturn(builder);
         Deployment deployment = mock(Deployment.class);
         when(builder.deploy()).thenReturn(deployment);
         when(deployment.getId()).thenReturn(DEPLOY_ID);
@@ -249,6 +283,7 @@ class ProcessDesignServiceDeployTest {
         when(query.singleResult()).thenReturn(procDef);
         when(procDef.getId()).thenReturn(PROC_DEF_ID);
         when(procDef.getVersion()).thenReturn(2);
+        return builder;
     }
 
     private List<NodeConfig> nodeConfigs(String nodeId, String configJson) {

@@ -19,11 +19,12 @@
 | 决策点 | 结论 |
 |---|---|
 | 统一接口组织方式 | 方案 A：能力接口 + default 方法（只读数据源继承默认实现抛"不支持"） |
-| 列元数据格式 | 复用 `ColumnConfig`（key/label/columnType/length/scale/required/unique/indexed/hidden/pickerConfig/storageMode/componentType） |
-| API 数据源适配器范围 | 完整实现（metadata/query/get/create/update/delete） |
+| 列元数据格式 | 复用 `ColumnConfig`，**第一版仅列定义字段**（key/label/columnType/length/scale/required/unique/indexed/hidden），**不含 componentType/pickerConfig**（组件类型与编辑弹窗能力后续再做） |
+| API 数据源适配器范围 | 完整实现（metadata/query/get/create/update/delete），列配置界面不含组件类型 |
 | 消费端范围 | 全打通：REST API 全暴露 + PAGE 表格操作按钮接数据源增删改 |
 | FORM 数据源 | 补齐增删改查 API + 取元数据 API；配置界面选择表单时自动展示生成的 API 端点 |
 | API 多操作配置 | params 扩展为 list/get/create/update/delete + columns；兼容旧 action 顶层格式 |
+| 组件类型（componentType） | **第一版不加入**：FORM 数据源实际 column_config 无 componentType（仅列定义字段）；编辑弹窗渲染（columnToRule 映射）后续再设计 |
 
 ## 架构
 
@@ -88,7 +89,7 @@ public interface DataSourceAdapter {
 
 ```java
 public class DataSourceMetadata {
-    private List<ColumnConfig> columns;  // 复用 ColumnConfig（key/label/columnType/componentType 等）
+    private List<ColumnConfig> columns;  // 复用 ColumnConfig（第一版仅 key/label/columnType/length/scale/required/unique/indexed/hidden）
     private boolean writable;            // 是否支持增删改
 }
 ```
@@ -131,13 +132,15 @@ public class DataSourceMetadata {
   "update":  { "action": "/v1/external/{id}",   "method": "PUT" },
   "delete":  { "action": "/v1/external/{id}",   "method": "DELETE" },
   "columns": [
-    { "key": "name", "label": "名称", "columnType": "VARCHAR", "componentType": "input" },
-    { "key": "price", "label": "价格", "columnType": "DECIMAL", "componentType": "inputNumber" }
+    { "key": "name",  "label": "名称", "columnType": "VARCHAR", "required": true },
+    { "key": "price", "label": "价格", "columnType": "DECIMAL", "scale": 2 }
   ],
   "searchParam": "kw", "keywordColumn": "name", "pageBase": 0,
   "data": { "dept": "IT" }, "headers": { "X-Api-Key": "abc" }
 }
 ```
+
+> columns 复用 ColumnConfig 的列定义字段（key/label/columnType/length/scale/required/unique/indexed/hidden），与 FORM 数据源 column_config 格式一致；**不含 componentType**（组件类型与编辑弹窗渲染后续再做）。
 
 兼容：顶层 `action`/`method`/`parse`/`totalParse` 存在时自动归入 `list`（method 默认 GET）。
 

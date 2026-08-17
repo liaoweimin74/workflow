@@ -4,7 +4,7 @@
       <span class="config-title">展示列（勾选 + 宽度/对齐/排序）</span>
       <span class="config-hint">已选 {{ modelValue.length }} 项</span>
     </div>
-    <el-table :data="candidates" border size="small" max-height="420">
+    <el-table :data="candidates" border max-height="420">
       <el-table-column label="选择" width="80" align="center">
         <template #default="{ row }">
           <el-checkbox :model-value="isChecked(row.key)" @change="(v: any) => toggle(row, !!v)" />
@@ -17,7 +17,6 @@
           <el-input-number
             v-if="isChecked(row.key)"
             :model-value="widthOf(row.key)"
-            size="small"
             :min="50"
             :max="600"
             :step="10"
@@ -32,7 +31,6 @@
           <el-select
             v-if="isChecked(row.key)"
             :model-value="alignOf(row.key)"
-            size="small"
             style="width: 100px"
             @change="(v: any) => setProp(row.key, 'align', v)"
           >
@@ -48,7 +46,6 @@
           <el-switch
             v-if="isChecked(row.key)"
             :model-value="sortableOf(row.key)"
-            size="small"
             @change="(v: any) => setProp(row.key, 'sortable', v)"
           />
           <span v-else class="muted">—</span>
@@ -125,7 +122,7 @@ function setProp(key: string, prop: 'width' | 'align' | 'sortable', v: any) {
   font-weight: bold;
 }
 .config-hint {
-  font-size: 12px;
+  font-size: 14px;
   color: #909399;
 }
 .muted {

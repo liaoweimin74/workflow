@@ -15,12 +15,12 @@
         :max-visible-buttons="4"
       >
         <template #type="{ row }">
-          <el-tag :type="row.type === 'VIEW' ? 'primary' : 'success'" size="small">
+          <el-tag :type="row.type === 'VIEW' ? 'primary' : 'success'">
             {{ row.type === 'VIEW' ? '视图' : '页面' }}
           </el-tag>
         </template>
         <template #status="{ row }">
-          <el-tag :type="statusTagType(row.status)" size="small">
+          <el-tag :type="statusTagType(row.status)">
             {{ statusLabel(row.status) }}
           </el-tag>
         </template>
@@ -174,7 +174,6 @@ const formConfig = reactive<FormConfig<PageDefinitionDTO>>({
 const actionButtons: ActionButton[] = [
   {
     label: '设计',
-    size: 'small',
     permission: 'page:edit',
     onClick: (row: any) => {
       router.push({ path: '/page/designer', query: { id: row.id } })
@@ -182,7 +181,6 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '发布',
-    size: 'small',
     type: 'primary',
     permission: 'page:publish',
     show: (row: any) => row.status === 'DRAFT',
@@ -203,7 +201,6 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '删除',
-    size: 'small',
     type: 'danger',
     permission: 'page:delete',
     show: (row: any) => row.status === 'DRAFT',

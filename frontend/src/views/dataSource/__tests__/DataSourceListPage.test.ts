@@ -1,4 +1,4 @@
-// ----- TDD: DataSourceListPage 列表/动态表单/启用禁用/删除交互 -----
+// ----- TDD: DataSourceListPage 列表/新建编辑弹窗/启用禁用/删除交互 -----
 // npx vitest run src/views/dataSource/__tests__/DataSourceListPage.test.ts
 
 import { describe, it, expect, vi } from 'vitest'
@@ -16,261 +16,87 @@ vi.mock('@/api/data-source', () => ({
     deleteDataSource: vi.fn(),
     enableDataSource: vi.fn(),
     disableDataSource: vi.fn(),
+    getMetadata: vi.fn(),
   },
 }))
 
 vi.mock('@/api/form', () => ({
-  formApi: { getFormDefinitions: vi.fn() },
+  formApi: {
+    getFormDefinitions: vi.fn(),
+  },
 }))
 
-vi.mock('element-plus', async (importOriginal) => {
-  const actual = await importOriginal()
-  return {
-    ...actual,
-    ElMessageBox: { confirm: vi.fn() },
-    ElMessage: { success: vi.fn(), error: vi.fn() },
-  }
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual('element-plus')
+  return { ...actual, ElMessage: { success: vi.fn(), error: vi.fn() }, ElMessageBox: { confirm: vi.fn() } }
 })
+vi.mock('@element-plus/icons-vue', () => ({
+  Plus: { name: 'Plus', render: () => h('span', '+') },
+  Delete: { name: 'Delete', render: () => h('span', '×') },
+}))
 
-import { dataSourceApi } from '@/api/data-source'
-import { formApi } from '@/api/form'
-import { ElMessageBox, ElMessage } from 'element-plus'
+const ElMessage = (await import('element-plus')).ElMessage as any
+const ElMessageBox = (await import('element-plus')).ElMessageBox as any
+const { dataSourceApi } = await import('@/api/data-source') as any
+const { formApi } = await import('@/api/form') as any
 
-beforeEach(() => {
-  vi.clearAllMocks()
-})
-
-/** SearchTable 桩：透传 actionButtons/formConfig/fetchApi，供测试驱动 */
 const SearchTableStub = defineComponent({
+  name: 'SearchTableStub',
   props: ['searchFields', 'columns', 'actionButtons', 'fetchApi', 'formConfig', 'defaultPageSize', 'maxVisibleButtons'],
-  setup() {
-    return () => h('div', { class: 'search-table-stub' })
+  emits: ['update:modelValue'],
+  setup(props, { expose }) {
+    expose({ fetchList: vi.fn() })
+    return () => h('div', 'search-table-stub')
   },
 })
 
-function createWrapper() {
-  return mount(DataSourceListPage, {
-    global: {
-      plugins: [ElementPlus],
-      stubs: { SearchTable: SearchTableStub },
-    },
-  })
-}
-
-describe('DataSourceListPage — 列表/动态表单/启用禁用/删除', () => {
-  it('onMounted 加载已发布表单注入 FORM 分支 formKey 下拉候选；fetchApi 透传分页参数', async () => {
-    ;(dataSourceApi.getDataSources as any).mockResolvedValue({
-      data: { content: [{ id: 'ds1', name: '员工档案数据源', type: 'FORM', formKey: 'emp_profile', sourceKey: null, status: 'DRAFT' }], totalElements: 1 },
-    })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({
-      data: { content: [{ id: 'f1', name: '员工档案', key: 'emp_profile', type: 'BUSINESS', status: 'PUBLISHED' }] },
-    })
-    const wrapper = createWrapper()
-    await nextTick()
-    await flushPromises()
-    expect(formApi.getFormDefinitions).toHaveBeenCalledWith({
-      type: 'BUSINESS',
-      status: 'PUBLISHED',
-      size: 100,
-    })
-    const stub = wrapper.findComponent(SearchTableStub)
-    // formKey 下拉候选注入到 type 字段 control 的 FORM 分支
-    const formConfig = stub.props('formConfig') as any
-    const typeRule = formConfig.rule.find((r: any) => r.field === 'type')
-    const formControl = typeRule.control.find((c: any) => c.value === 'FORM')
-    const formKeyRule = formControl.rule.find((r: any) => r.field === 'formKey')
-    expect(formKeyRule.options).toHaveLength(1)
-    expect(formKeyRule.options[0]).toEqual({ label: '员工档案', value: 'emp_profile' })
-    // fetchApi：SearchTable 透传的查询参数 → dataSourceApi.getDataSources（page 转 0 基）
-    const fetchApi = stub.props('fetchApi') as (params: any) => Promise<any>
-    const res = await fetchApi({ page: 2, size: 20, name: '档案', status: 'DRAFT', type: 'FORM' })
-    expect(dataSourceApi.getDataSources).toHaveBeenCalledWith({
-      page: 1,
-      size: 20,
-      name: '档案',
-      status: 'DRAFT',
-      type: 'FORM',
-    })
-    expect(res).toEqual({
-      rows: [{ id: 'ds1', name: '员工档案数据源', type: 'FORM', formKey: 'emp_profile', sourceKey: null, status: 'DRAFT' }],
-      total: 1,
-    })
-    wrapper.unmount()
+describe('DataSourceListPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
   })
 
-  it('动态表单：type 单选 control 联动 FORM/SYSTEM/API 字段组', async () => {
-    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    const wrapper = createWrapper()
-    await nextTick()
-    await flushPromises()
-    const stub = wrapper.findComponent(SearchTableStub)
-    const formConfig = stub.props('formConfig') as any
-    const typeRule = formConfig.rule.find((r: any) => r.field === 'type')
-    expect(typeRule.type).toBe('radio')
-    expect(typeRule.value).toBe('FORM')
-    const controls = typeRule.control as { value: string; rule: any[] }[]
-    expect(controls.map((c) => c.value)).toEqual(['FORM', 'SYSTEM', 'API'])
-    // FORM 分支 → formKey select
-    const formCtl = controls.find((c) => c.value === 'FORM')!
-    expect(formCtl.rule.map((r) => r.field)).toEqual(['formKey'])
-    expect(formCtl.rule[0].type).toBe('select')
-    // SYSTEM 分支 → sourceKey select（dept-tree/user-tree 枚举）
-    const sysCtl = controls.find((c) => c.value === 'SYSTEM')!
-    expect(sysCtl.rule.map((r) => r.field)).toEqual(['sourceKey'])
-    expect(sysCtl.rule[0].options).toEqual([
-      { label: '部门树', value: 'dept-tree' },
-      { label: '用户树', value: 'user-tree' },
-    ])
-    // API 分支 → sourceKey 输入 + LookupFetchConfig 结构化字段（action/method/parse/totalParse/searchParam/keywordColumn/pageBase/data/headers）
-    const apiCtl = controls.find((c) => c.value === 'API')!
-    expect(apiCtl.rule.map((r) => r.field)).toEqual([
-      'sourceKey', 'action', 'method', 'parse', 'totalParse',
-      'searchParam', 'keywordColumn', 'pageBase', 'data', 'headers',
-    ])
-    expect(apiCtl.rule[0].type).toBe('input')
-    // action 必填（LookupFetchConfig 契约）；method/pageBase 单选
-    expect(apiCtl.rule[1].type).toBe('input')
-    expect(apiCtl.rule[1].validate).toBeDefined()
-    expect(apiCtl.rule[2].type).toBe('radio')
-    expect(apiCtl.rule[8].type).toBe('textarea')
-    expect(apiCtl.rule[9].type).toBe('textarea')
-    wrapper.unmount()
-  })
-
-  it('API 类型提交：action/method/parse/… 序列化为 params JSON（LookupFetchConfig 结构）', async () => {
-    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: { id: 'ds1' } })
-    const wrapper = createWrapper()
-    await nextTick()
-    await flushPromises()
-    const stub = wrapper.findComponent(SearchTableStub)
-    const formConfig = stub.props('formConfig') as any
-    const res = await formConfig.createApi({
-      name: '外部库存 API',
-      type: 'API',
-      sourceKey: 'external-stock',
-      action: '/v1/external/list',
-      method: 'POST',
-      parse: 'records',
-      totalParse: 'total',
-      searchParam: 'kw',
-      keywordColumn: 'name',
-      pageBase: 0,
-      data: '{"dept":"IT"}',
-      headers: '{"X-Api-Key":"abc"}',
-    })
-    expect(dataSourceApi.createDataSource).toHaveBeenCalledTimes(1)
-    const payload = (dataSourceApi.createDataSource as any).mock.calls[0][0]
-    expect(payload.formKey).toBeNull()
-    expect(payload.sourceKey).toBe('external-stock')
-    const params = JSON.parse(payload.params) as Record<string, any>
-    expect(params).toEqual({
-      action: '/v1/external/list',
-      method: 'POST',
-      parse: 'records',
-      totalParse: 'total',
-      searchParam: 'kw',
-      keywordColumn: 'name',
-      pageBase: 0,
-      data: { dept: 'IT' },
-      headers: { 'X-Api-Key': 'abc' },
-    })
-    expect(res).toEqual({ data: { id: 'ds1' } })
-    wrapper.unmount()
-  })
-
-  it('API 类型提交：data/headers 留空时省略；非法 JSON 时回退空对象', async () => {
-    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: { id: 'ds1' } })
-    const wrapper = createWrapper()
-    await nextTick()
-    await flushPromises()
-    const stub = wrapper.findComponent(SearchTableStub)
-    const formConfig = stub.props('formConfig') as any
-    await formConfig.createApi({
-      name: '外部库存 API',
-      type: 'API',
-      sourceKey: 'external-stock',
-      action: '/v1/external/list',
-      method: 'GET',
-      data: '',
-      headers: 'not-json',
-    })
-    const payload = (dataSourceApi.createDataSource as any).mock.calls[0][0]
-    const params = JSON.parse(payload.params) as Record<string, any>
-    expect(params.data).toBeUndefined()
-    expect(params.headers).toBeUndefined()
-    wrapper.unmount()
-  })
-
-  it('编辑回填：getApi 返回 DTO，API 类型 params JSON 拆回各字段（data/headers JSON 化）', async () => {
-    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    ;(dataSourceApi.getDataSource as any).mockResolvedValue({
-      data: {
-        id: 'ds1',
-        name: '外部库存 API',
-        type: 'API',
-        formKey: null,
-        sourceKey: 'external-stock',
-        status: 'DRAFT',
-        params: JSON.stringify({
-          action: '/v1/external/list',
-          method: 'POST',
-          parse: 'records',
-          totalParse: 'total',
-          searchParam: 'kw',
-          keywordColumn: 'name',
-          pageBase: 0,
-          data: { dept: 'IT' },
-          headers: { 'X-Api-Key': 'abc' },
-        }),
+  function createWrapper() {
+    return mount(DataSourceListPage, {
+      global: {
+        plugins: [ElementPlus],
+        stubs: { SearchTable: SearchTableStub },
       },
     })
+  }
+
+  it('列表渲染：actionButtons 包含新建/编辑/启用/禁用/删除', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
     const stub = wrapper.findComponent(SearchTableStub)
-    const formConfig = stub.props('formConfig') as any
-    const formValues = await formConfig.getApi('ds1')
-    expect(formValues.action).toBe('/v1/external/list')
-    expect(formValues.method).toBe('POST')
-    expect(formValues.parse).toBe('records')
-    expect(formValues.searchParam).toBe('kw')
-    expect(formValues.keywordColumn).toBe('name')
-    expect(formValues.pageBase).toBe(0)
-    expect(JSON.parse(formValues.data)).toEqual({ dept: 'IT' })
-    expect(JSON.parse(formValues.headers)).toEqual({ 'X-Api-Key': 'abc' })
+    const actionButtons = stub.props('actionButtons') as any[]
+    const labels = actionButtons.map((b: any) => b.label)
+    expect(labels).toContain('新建')
+    expect(labels).toContain('编辑')
+    expect(labels).toContain('启用')
+    expect(labels).toContain('禁用')
+    expect(labels).toContain('删除')
     wrapper.unmount()
   })
 
-  it('创建提交：FORM 类型归一化提交（formKey 保留，sourceKey 置空）', async () => {
+  it('新建：点击新建按钮显示弹窗（dialogVisible = true）', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: { id: 'ds1' } })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
     const stub = wrapper.findComponent(SearchTableStub)
-    const formConfig = stub.props('formConfig') as any
-    const res = await formConfig.createApi({
-      name: '员工档案数据源',
-      type: 'FORM',
-      formKey: 'emp_profile',
-      sourceKey: 'whatever',
-      params: '{"a":1}',
-    })
-    expect(dataSourceApi.createDataSource).toHaveBeenCalledWith({
-      name: '员工档案数据源',
-      type: 'FORM',
-      formKey: 'emp_profile',
-      sourceKey: null,
-      params: null,
-    })
-    expect(res).toEqual({ data: { id: 'ds1' } })
+    const actionButtons = stub.props('actionButtons') as any[]
+    const createBtn = actionButtons.find((b: any) => b.label === '新建')
+    expect(createBtn).toBeDefined()
+    // 点击新建 → 弹窗应出现（dialogVisible 变为 true）
+    createBtn.onClick()
+    await nextTick()
+    await flushPromises()
+    // 弹窗内应有 el-dialog（destroy-on-close）
+    expect(wrapper.html()).toContain('新建数据源')
     wrapper.unmount()
   })
 

@@ -8,19 +8,17 @@
         v-model="pageName"
         class="page-name-input"
         placeholder="页面名称"
-        size="small"
         style="width: 200px"
       />
       <el-input
         :model-value="pageKey"
         class="page-key-input"
         placeholder="页面标识"
-        size="small"
         style="width: 160px; margin-left: 8px"
         disabled
       />
-      <el-tag type="success" size="small" style="margin-left: 8px">自定义页面</el-tag>
-      <el-tag v-if="formStatus" :type="statusTagType(formStatus)" size="small" style="margin-left: 8px">
+      <el-tag type="success" style="margin-left: 8px">自定义页面</el-tag>
+      <el-tag v-if="formStatus" :type="statusTagType(formStatus)" style="margin-left: 8px">
         {{ statusLabel(formStatus) }}
       </el-tag>
       <div class="toolbar-right">
@@ -46,7 +44,6 @@
             <div class="form-extra-header">数据源与动作</div>
             <el-button
               plain
-              size="small"
               class="ds-config-btn"
               @click="dsDialogVisible = true"
             >
@@ -63,13 +60,13 @@
         <!-- 数据源绑定 -->
         <el-tab-pane label="数据源绑定" name="ds">
           <div class="ds-row" v-for="(ds, i) in schema.dataSources" :key="i">
-            <el-input v-model="ds.id" size="small" placeholder="页面内标识" style="width: 130px" />
-            <el-select v-model="ds.refId" size="small" placeholder="选择全局数据源" style="flex: 1" filterable>
+            <el-input v-model="ds.id" placeholder="页面内标识" style="width: 130px" />
+            <el-select v-model="ds.refId" placeholder="选择全局数据源" style="flex: 1" filterable>
               <el-option v-for="g in enabledDataSources" :key="g.id" :label="`${g.name}（${g.type}）`" :value="g.id" />
             </el-select>
-            <el-button size="small" link type="danger" @click="schema.dataSources.splice(i, 1)">删</el-button>
+            <el-button link type="danger" @click="schema.dataSources.splice(i, 1)">删</el-button>
           </div>
-          <el-button size="small" type="primary" plain @click="addDataSource">+ 添加数据源</el-button>
+          <el-button type="primary" plain @click="addDataSource">+ 添加数据源</el-button>
           <div class="form-tip">数据组件（树/表格）绑定：选中组件 → 属性面板「数据源 id」填上方页面内标识</div>
         </el-tab-pane>
 
@@ -77,25 +74,25 @@
         <el-tab-pane label="动作总线" name="actions">
           <div class="action-card" v-for="(ac, i) in schema.actions" :key="i">
             <div class="ds-row">
-              <el-select v-model="ac.trigger" size="small" style="width: 120px">
+              <el-select v-model="ac.trigger" style="width: 120px">
                 <el-option label="树节点点击" value="node-click" />
                 <el-option label="表格行点击" value="row-click" />
               </el-select>
-              <el-button size="small" link type="danger" @click="schema.actions.splice(i, 1)">删除</el-button>
+              <el-button link type="danger" @click="schema.actions.splice(i, 1)">删除</el-button>
             </div>
             <div class="ds-row step-row" v-for="(step, si) in ac.steps" :key="si">
-              <el-select v-model="step.op" size="small" style="width: 120px">
+              <el-select v-model="step.op" style="width: 120px">
                 <el-option label="设置过滤" value="set-filter" />
                 <el-option label="刷新数据" value="refresh" />
               </el-select>
-              <el-input v-model="step.target" size="small" placeholder="目标数据源标识" style="width: 130px" />
-              <el-input v-if="step.op === 'set-filter'" v-model="step.field" size="small" placeholder="过滤字段" style="width: 90px" />
-              <el-input v-if="step.op === 'set-filter'" v-model="step.value" size="small" placeholder="如 {node.id}" style="width: 100px" />
-              <el-button size="small" link type="danger" @click="ac.steps.splice(si, 1)">删</el-button>
+              <el-input v-model="step.target" placeholder="目标数据源标识" style="width: 130px" />
+              <el-input v-if="step.op === 'set-filter'" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
+              <el-input v-if="step.op === 'set-filter'" v-model="step.value" placeholder="如 {node.id}" style="width: 100px" />
+              <el-button link type="danger" @click="ac.steps.splice(si, 1)">删</el-button>
             </div>
-            <el-button size="small" link type="primary" @click="ac.steps.push({ op: 'refresh', target: '' })">+ 步骤</el-button>
+            <el-button link type="primary" @click="ac.steps.push({ op: 'refresh', target: '' })">+ 步骤</el-button>
           </div>
-          <el-button size="small" type="primary" plain @click="addAction">+ 添加动作</el-button>
+          <el-button type="primary" plain @click="addAction">+ 添加动作</el-button>
           <div class="form-tip">动作链：触发事件 → 步骤列表。「设置过滤」的值支持模板变量：{node.id}（树节点标识）、{row.id}（表格行标识）</div>
         </el-tab-pane>
       </el-tabs>
@@ -166,8 +163,46 @@ const schema = reactive<{
 /** 已启用全局数据源 */
 const enabledDataSources = ref<DataSourceDTO[]>([])
 
-/** 注册页面组件到 FcDesigner 面板，并在属性面板注入"点击配置数据源"按钮（对齐 FormDesigner LookupPicker） */
+/** 注册页面组件到 FcDesigner 面板，并通过 setComponentRuleConfig 在属性面板注入"数据源"下拉（动态读取页面绑定层） */
 function registerPageComponents() {
+  // 属性面板注入：数据源下拉（选项来自页面绑定层 schema.dataSources，随选中组件动态求值）
+  const dataSourceProps = () => [
+    {
+      type: 'select',
+      field: 'dataSourceId',
+      title: '数据源',
+      value: '',
+      options: schema.dataSources.map((ds) => ({ value: ds.id, label: ds.id })),
+      props: {
+        clearable: true,
+        filterable: true,
+        placeholder: '选择页面数据源',
+      },
+      on: {
+        change: async (value: string) => {
+          if (!value) return
+          const ds = schema.dataSources.find((d) => d.id === value)
+          if (!ds || !ds.refId) return
+          try {
+            const res = await dataSourceApi.getMetadata(ds.refId)
+            const meta = res.data as any
+            const cols = (meta?.columns || []).map((c: any) => ({
+              prop: c.key,
+              label: c.label || c.key,
+            }))
+            // 写入当前选中组件的 columns prop（vendor activeRule 是 reactive 引用）
+            const active = designerRef.value?.activeRule as any
+            if (active?.props) {
+              active.props.columns = cols
+            }
+          } catch {
+            // 拦截器已弹出错误
+          }
+        },
+      },
+    },
+  ]
+
   designerRef.value?.addComponent({
     label: '数据表格',
     name: 'page-table',
@@ -181,11 +216,12 @@ function registerPageComponents() {
         dataSourceId: '',
         border: true,
         stripe: true,
-        size: 'small',
         columns: [],
       },
     }),
   })
+  // 属性面板"属性配置"区注入数据源下拉（选中画布中该组件时动态求值）
+  designerRef.value?.setComponentRuleConfig('page-table', dataSourceProps, true)
 
   designerRef.value?.addComponent({
     label: '树形数据',
@@ -205,6 +241,7 @@ function registerPageComponents() {
       },
     }),
   })
+  designerRef.value?.setComponentRuleConfig('page-tree', dataSourceProps, true)
 }
 
 onMounted(async () => {
@@ -407,7 +444,7 @@ function statusLabel(status: string): string {
   margin-left: 8px;
 }
 .form-tip {
-  font-size: 12px;
+  font-size: 14px;
   color: #909399;
   margin-top: 4px;
 }
@@ -418,7 +455,7 @@ function statusLabel(status: string): string {
   padding-top: 8px;
 }
 .form-extra-header {
-  font-size: 13px;
+  font-size: 14px;
   color: #606266;
   font-weight: 500;
   margin-bottom: 4px;
@@ -442,7 +479,7 @@ function statusLabel(status: string): string {
   background: #f5f7fa;
   padding: 12px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.6;
   margin: 0;
 }

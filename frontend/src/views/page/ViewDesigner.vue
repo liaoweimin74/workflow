@@ -8,30 +8,27 @@
         v-model="pageName"
         class="page-name-input"
         placeholder="页面名称"
-        size="small"
         style="width: 200px"
       />
       <el-input
         :model-value="pageKey"
         class="page-key-input"
         placeholder="页面标识"
-        size="small"
         style="width: 160px; margin-left: 8px"
         disabled
       />
-      <el-tag v-if="pageType" :type="pageType === 'VIEW' ? 'primary' : 'success'" size="small" style="margin-left: 8px">
+      <el-tag v-if="pageType" :type="pageType === 'VIEW' ? 'primary' : 'success'" style="margin-left: 8px">
         {{ pageType === 'VIEW' ? '视图' : '页面' }}
       </el-tag>
       <el-select
         v-model="formKey"
         placeholder="选择绑定表单"
-        size="small"
         style="width: 220px; margin-left: 8px"
         @change="handleBindFormChange"
       >
         <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
       </el-select>
-      <el-tag v-if="formStatus" :type="statusTagType(formStatus)" size="small" style="margin-left: 8px">
+      <el-tag v-if="formStatus" :type="statusTagType(formStatus)" style="margin-left: 8px">
         {{ statusLabel(formStatus) }}
       </el-tag>
       <div class="toolbar-right">
@@ -398,7 +395,7 @@ function statusLabel(status: string): string {
 }
 
 .page-key-input :deep(.el-input__wrapper) {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .toolbar-right {
@@ -429,7 +426,7 @@ function statusLabel(status: string): string {
   background: #f5f7fa;
   padding: 12px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.6;
   margin: 0;
 }

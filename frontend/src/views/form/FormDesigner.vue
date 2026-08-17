@@ -87,7 +87,7 @@ import { ref, onMounted, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
-import formCreate from '@form-create/element-ui'
+import _formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
@@ -118,7 +118,6 @@ const pickerDialogVisible = ref(false)
 const pickerTargetForms = ref<FormDefinitionDTO[]>([])
 const pickerTargetColumns = ref<ColumnConfigItem[]>([])
 
-const pickerConfigDialogRef = ref<InstanceType<typeof DataPickerConfigDialog>>()
 /** 当前 schema 中的 dataPicker 字段（field → props），穿透子表内部 */
 const pickerFields = computed<{ field: string; props: Record<string, any> }[]>(() =>
   collectFieldsOfType(designerRule.value, 'dataPicker'),
@@ -309,7 +308,7 @@ async function handlePublish() {
 
   if (formType.value === 'BUSINESS') {
     // 业务表单：先弹出列映射确认，确认后保存 column_config 再发布
-    const rule = designerRef.value?.getRule() || []
+    designerRef.value?.getRule() || []
     columnConfig.value = []
     columnDialogVisible.value = true
     return
@@ -365,7 +364,7 @@ async function openPickerConfig() {
   selectedPickerField.value = resolveActiveField(pickerFields.value, 'dataPicker', designerRef.value?.activeRule)
   try {
     const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
-    pickerTargetForms.value = res.data.content || []
+    pickerTargetForms.value = res.data.rows || []
   } catch {
     pickerTargetForms.value = []
   }
@@ -416,7 +415,7 @@ function openLookupConfig() {
   try {
     // 预加载已发布业务表单，供底表模式选择
     void formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
-      .then((res) => { lookupTargetForms.value = res.data.content || [] })
+      .then((res) => { lookupTargetForms.value = res.data.rows || [] })
       .catch(() => { lookupTargetForms.value = [] })
   } catch {
     lookupTargetForms.value = []

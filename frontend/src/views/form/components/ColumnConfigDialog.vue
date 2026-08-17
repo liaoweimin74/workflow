@@ -26,7 +26,7 @@
               </el-select>
             </div>
             <el-alert
-              v-if="row.subColumns.filter(c => !c.unsupported).length === 0"
+              v-if="row.subColumns.filter((c: any) => !c.unsupported).length === 0"
               type="warning"
               :closable="false"
               show-icon

@@ -9,7 +9,7 @@
       <el-select
         v-model="pendingBuiltin"
         placeholder="添加内置按钮"
-        size="small"
+        
         style="width: 160px"
         @change="handleAddBuiltin"
       >
@@ -18,34 +18,34 @@
       <el-input
         v-model="pendingCustomKey"
         placeholder="自定义按钮标识（如 approve）"
-        size="small"
+        
         style="width: 160px"
       />
       <el-input
         v-model="pendingCustomLabel"
         placeholder="自定义按钮名称（如 审核）"
-        size="small"
+        
         style="width: 140px"
       />
-      <el-button size="small" type="primary" plain :icon="Plus" @click="handleAddCustom">
+      <el-button  type="primary" plain :icon="Plus" @click="handleAddCustom">
         添加自定义按钮
       </el-button>
     </div>
 
     <!-- 按钮表格 -->
-    <el-table :data="modelValue.buttons" border size="small" row-key="key" max-height="420">
+    <el-table :data="modelValue.buttons" border  row-key="key" max-height="420">
       <!-- 自定义按钮：展开行编辑事件链 -->
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="button-events">
             <div class="events-title">
               按钮事件链（点击时优先执行；内建按钮无事件则执行默认行为）
-              <el-button size="small" link type="danger" style="float: right" @click="unbindEvents(row.key)">解绑事件</el-button>
+              <el-button  link type="danger" style="float: right" @click="unbindEvents(row.key)">解绑事件</el-button>
             </div>
             <div v-for="(action, ai) in getButtonActions(row.key)" :key="ai" class="event-action-row">
               <el-select
                 :model-value="action.type"
-                size="small"
+                
                 style="width: 130px"
                 @change="(v: string) => patchEventAction(row.key, ai, { type: v })"
               >
@@ -54,24 +54,24 @@
               <div v-for="(p, pi) in getActionParamsForKey(row.key, ai)" :key="pi" class="event-param-row">
                 <el-input
                   :model-value="p.key"
-                  size="small"
+                  
                   placeholder="参数名"
                   style="width: 110px"
                   @input="(v: string) => patchEventParam(row.key, ai, pi, { key: v })"
                 />
                 <el-input
                   :model-value="p.value"
-                  size="small"
+                  
                   placeholder="值，支持 $row.xxx / $param.xxx"
                   style="width: 200px"
                   @input="(v: string) => patchEventParam(row.key, ai, pi, { value: v })"
                 />
-                <el-button size="small" link type="danger" @click="removeEventParam(row.key, ai, pi)">删</el-button>
+                <el-button  link type="danger" @click="removeEventParam(row.key, ai, pi)">删</el-button>
               </div>
-              <el-button size="small" link type="primary" @click="addEventParam(row.key, ai)">+ 参数</el-button>
-              <el-button size="small" type="danger" link @click="removeEventAction(row.key, ai)">移除动作</el-button>
+              <el-button  link type="primary" @click="addEventParam(row.key, ai)">+ 参数</el-button>
+              <el-button  type="danger" link @click="removeEventAction(row.key, ai)">移除动作</el-button>
             </div>
-            <el-button size="small" link type="primary" @click="addEventAction(row.key)">+ 动作</el-button>
+            <el-button  link type="primary" @click="addEventAction(row.key)">+ 动作</el-button>
             <div class="var-hint">变量提示：$row.字段（当前行）/ $param.参数（页面参数）</div>
           </div>
         </template>
@@ -79,14 +79,14 @@
 
       <el-table-column label="标识" width="120">
         <template #default="{ row }">
-          <el-tag size="small" type="info">{{ row.key }}</el-tag>
+          <el-tag  type="info">{{ row.key }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="名称" min-width="120">
         <template #default="{ row }">
           <el-input
             :model-value="row.label"
-            size="small"
+            
             @input="(v: string) => updateButton(row.key, { label: v })"
           />
         </template>
@@ -95,7 +95,7 @@
         <template #default="{ row }">
           <el-select
             :model-value="row.placement"
-            size="small"
+            
             style="width: 100px"
             @change="(v: any) => updateButton(row.key, { placement: v })"
           >
@@ -108,7 +108,7 @@
         <template #default="{ row }">
           <el-select
             :model-value="row.style"
-            size="small"
+            
             style="width: 100px"
             @change="(v: any) => updateButton(row.key, { style: v })"
           >
@@ -122,7 +122,7 @@
         <template #default="{ row }">
           <el-select
             :model-value="row.icon || defaultIconOf(row.key)"
-            size="small"
+            
             style="width: 130px"
             clearable
             @change="(v: any) => updateButton(row.key, { icon: v || '' })"
@@ -146,14 +146,14 @@
       </el-table-column>
       <el-table-column label="事件" width="120" align="center">
         <template #default="{ row }">
-          <el-tag size="small" :type="hasEvents(row) ? 'success' : 'info'">
+          <el-tag  :type="hasEvents(row) ? 'success' : 'info'">
             {{ hasEvents(row) ? '已绑定' : '未绑定' }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="80" align="center">
         <template #default="{ row }">
-          <el-button size="small" type="danger" link :icon="Delete" @click="removeButton(row.key)">
+          <el-button  type="danger" link :icon="Delete" @click="removeButton(row.key)">
             删除
           </el-button>
         </template>
@@ -164,11 +164,11 @@
 
     <!-- 操作列宽度 -->
     <el-divider content-position="left">操作列</el-divider>
-    <el-form label-width="90px" size="small" style="max-width: 520px">
+    <el-form label-width="90px"  style="max-width: 520px">
       <el-form-item label="列宽度">
         <el-input-number
           :model-value="actionColumnWidthValue"
-          size="small"
+          
           :min="0"
           :max="400"
           :step="10"
@@ -181,11 +181,11 @@
 
     <!-- 详情弹窗（由"查看"按钮启用，仅配置宽度） -->
     <el-divider content-position="left">详情弹窗</el-divider>
-    <el-form label-width="90px" size="small" style="max-width: 520px">
+    <el-form label-width="90px"  style="max-width: 520px">
       <el-form-item label="弹窗宽度">
         <el-input
           :model-value="detailWidth"
-          size="small"
+          
           placeholder="如 800px"
           style="width: 200px"
           @input="setDetailWidth"
@@ -196,7 +196,7 @@
 
     <!-- 权限点 -->
     <el-divider content-position="left">权限控制</el-divider>
-    <el-form label-width="90px" size="small" style="max-width: 520px">
+    <el-form label-width="90px"  style="max-width: 520px">
       <el-form-item label="权限点">
         <el-select
           :model-value="permissionArray"
@@ -505,7 +505,7 @@ function commit(v: ViewActionsConfig) {
   border-radius: 4px;
 }
 .events-title {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: bold;
   margin-bottom: 8px;
   color: #606266;
@@ -524,17 +524,17 @@ function commit(v: ViewActionsConfig) {
 }
 .var-hint {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 14px;
   color: #909399;
 }
 .form-tip {
-  font-size: 12px;
+  font-size: 14px;
   color: #909399;
   display: block;
 }
 .muted {
   color: #c0c4cc;
-  font-size: 12px;
+  font-size: 14px;
 }
 .icon-option {
   display: inline-flex;

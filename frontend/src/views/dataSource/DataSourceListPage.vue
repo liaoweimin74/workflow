@@ -10,12 +10,11 @@
         :columns="columns"
         :action-buttons="actionButtons"
         :fetch-api="fetchApi"
-        :form-config="formConfig"
         :default-page-size="20"
-        :max-visible-buttons="4"
+        :max-visible-buttons="5"
       >
         <template #type="{ row }">
-          <el-tag :type="typeTagType(row.type)" size="small">
+          <el-tag :type="typeTagType(row.type)">
             {{ typeLabel(row.type) }}
           </el-tag>
         </template>
@@ -23,7 +22,7 @@
           <span>{{ row.formKey || row.sourceKey || '—' }}</span>
         </template>
         <template #status="{ row }">
-          <el-tag :type="statusTagType(row.status)" size="small">
+          <el-tag :type="statusTagType(row.status)">
             {{ statusLabel(row.status) }}
           </el-tag>
         </template>
@@ -32,21 +31,203 @@
         </template>
       </SearchTable>
     </el-card>
+
+    <!-- 新建/编辑数据源弹窗（自持：API 类型需多操作 + 列定义编辑器，SearchTable 标准弹窗无法承载） -->
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '编辑数据源' : '新建数据源'"
+      width="760px"
+      top="6vh"
+      destroy-on-close
+      :close-on-click-modal="false"
+    >
+      <el-form :model="form" label-width="110px">
+        <el-form-item label="数据源名称" required>
+          <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" />
+        </el-form-item>
+
+        <el-form-item label="数据源类型" required>
+          <el-radio-group v-model="form.type" :disabled="!!editingId">
+            <el-radio-button value="FORM">业务表单</el-radio-button>
+            <el-radio-button value="SYSTEM">系统结构</el-radio-button>
+            <el-radio-button value="API">第三方 API</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- ============ FORM：绑定表单 + 统一 API 端点展示 ============ -->
+        <template v-if="form.type === 'FORM'">
+          <el-form-item label="绑定表单" required>
+            <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px">
+              <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+            </el-select>
+          </el-form-item>
+          <el-form-item v-if="form.formKey" label="统一 API 端点">
+            <el-alert type="info" :closable="false" style="width: 100%">
+              <template #title>
+                <div class="endpoint-tip">启用后对外暴露统一数据源 API（id 为系统分配）：</div>
+                <ul class="endpoint-list">
+                  <li>GET /api/v1/data-sources/{id}/metadata — 列定义与可写标记</li>
+                  <li>GET /api/v1/data-sources/{id}/data — 分页查询</li>
+                  <li>GET /api/v1/data-sources/{id}/data/{rowId} — 单条查询</li>
+                  <li>POST /api/v1/data-sources/{id}/data — 新增</li>
+                  <li>PUT /api/v1/data-sources/{id}/data/{rowId} — 修改</li>
+                  <li>DELETE /api/v1/data-sources/{id}/data/{rowId} — 删除</li>
+                </ul>
+              </template>
+            </el-alert>
+          </el-form-item>
+        </template>
+
+        <!-- ============ SYSTEM：系统结构 ============ -->
+        <template v-else-if="form.type === 'SYSTEM'">
+          <el-form-item label="系统结构" required>
+            <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 320px">
+              <el-option label="部门树" value="dept-tree" />
+              <el-option label="用户列表" value="user-tree" />
+            </el-select>
+          </el-form-item>
+        </template>
+
+        <!-- ============ API：多操作 + 列定义 ============ -->
+        <template v-else>
+          <el-form-item label="接口标识" required>
+            <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" />
+          </el-form-item>
+
+          <el-divider content-position="left">接口操作</el-divider>
+
+          <el-form-item label="列表查询 (list)" required>
+            <div class="op-editor">
+              <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" />
+              <el-select v-model="apiOps.list.method" style="width: 110px">
+                <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+              </el-select>
+              <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" />
+              <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" />
+            </div>
+          </el-form-item>
+
+          <el-form-item label="单条查询 (get)">
+            <div class="op-editor">
+              <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
+              <el-select v-model="apiOps.get.method" style="width: 110px">
+                <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+              </el-select>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="新增 (create)">
+            <div class="op-editor">
+              <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" />
+              <el-select v-model="apiOps.create.method" style="width: 110px">
+                <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+              </el-select>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="修改 (update)">
+            <div class="op-editor">
+              <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
+              <el-select v-model="apiOps.update.method" style="width: 110px">
+                <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+              </el-select>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="删除 (delete)">
+            <div class="op-editor">
+              <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
+              <el-select v-model="apiOps.delete.method" style="width: 110px">
+                <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+              </el-select>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="搜索参数">
+            <div class="op-editor">
+              <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" />
+              <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" />
+              <el-select v-model="form.pageBase" style="width: 130px">
+                <el-option label="页码从 1 开始" :value="1" />
+                <el-option label="页码从 0 开始" :value="0" />
+              </el-select>
+            </div>
+          </el-form-item>
+
+          <el-form-item label="固定参数 JSON">
+            <el-input v-model="form.data" placeholder="可选，如 {&quot;dept&quot;:&quot;IT&quot;}" rows="2" type="textarea" />
+          </el-form-item>
+          <el-form-item label="请求头 JSON">
+            <el-input v-model="form.headers" placeholder="可选，如 {&quot;X-Api-Key&quot;:&quot;abc&quot;}" rows="2" type="textarea" />
+          </el-form-item>
+
+          <el-divider content-position="left">列定义（列表展示与编辑弹窗使用）</el-divider>
+
+          <el-form-item label="列">
+            <div class="column-editor">
+              <div v-for="(col, idx) in apiColumns" :key="idx" class="column-row">
+                <el-input v-model="col.key" placeholder="字段名" style="width: 130px" />
+                <el-input v-model="col.label" placeholder="列名" style="width: 130px" />
+                <el-select v-model="col.columnType" placeholder="类型" style="width: 120px">
+                  <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+                </el-select>
+                <el-input-number
+                  v-if="needsLength(col.columnType)"
+                  v-model="col.length"
+                  :min="0"
+                  :max="10000"
+                  placeholder="长度"
+                  controls-position="right"
+                  style="width: 120px"
+                />
+                <el-input-number
+                  v-if="col.columnType === 'DECIMAL'"
+                  v-model="col.scale"
+                  :min="0"
+                  :max="10"
+                  placeholder="精度"
+                  controls-position="right"
+                  style="width: 110px"
+                />
+                <el-checkbox v-model="col.required" title="必填">必填</el-checkbox>
+                <el-checkbox v-model="col.unique" title="唯一">唯一</el-checkbox>
+                <el-checkbox v-model="col.indexed" title="索引">索引</el-checkbox>
+                <el-button :icon="Delete" circle @click="apiColumns.splice(idx, 1)" />
+              </div>
+              <el-button type="primary" plain :icon="Plus" @click="addColumn">添加列</el-button>
+            </div>
+          </el-form-item>
+        </template>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Delete } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
-import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
+import type { ColumnConfigItem } from '@/api/bizData'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 
-/** 已发布业务表单（FORM 类型数据源 formKey 下拉候选） */
+/** 已发布业务表单（FORM 类型 formKey 下拉候选） */
 const publishedForms = ref<FormDefinitionDTO[]>([])
+
+/** API 操作 HTTP 方法候选 */
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const
+
+/** 列定义字段类型候选（第一版：仅列定义字段，不含 componentType） */
+const COLUMN_TYPES = ['VARCHAR', 'INTEGER', 'BIGINT', 'DECIMAL', 'DATETIME', 'DATE', 'TEXT', 'TINYINT'] as const
 
 // ========== 搜索 ==========
 const searchFields = computed<SearchField[]>(() => [
@@ -102,147 +283,221 @@ async function fetchApi(params: any) {
   }
 }
 
-// ========== 创建/编辑弹窗 ==========
-/** 类型联动：type 单选变化时通过 form-create control 显示对应字段组 */
-const formConfig = reactive<FormConfig<DataSourceDTO>>({
-  rule: [
-    { type: 'input', field: 'name', title: '数据源名称', validate: [{ required: true, message: '请输入数据源名称', trigger: 'blur' }] },
-    {
-      type: 'radio',
-      field: 'type',
-      title: '数据源类型',
-      options: [
-        { label: '业务表单', value: 'FORM' },
-        { label: '系统结构', value: 'SYSTEM' },
-        { label: '第三方 API', value: 'API' },
-      ],
-      value: 'FORM',
-      control: [
-        {
-          value: 'FORM',
-          rule: [
-            {
-              type: 'select',
-              field: 'formKey',
-              title: '绑定表单',
-              options: [] as { label: string; value: string }[],
-              props: { clearable: true, placeholder: '选择已发布的业务表单' },
-              validate: [{ required: true, message: '请选择绑定的业务表单', trigger: 'change' }],
-            },
-          ],
-        },
-        {
-          value: 'SYSTEM',
-          rule: [
-            {
-              type: 'select',
-              field: 'sourceKey',
-              title: '系统结构',
-              options: [
-                { label: '部门树', value: 'dept-tree' },
-                { label: '用户树', value: 'user-tree' },
-              ],
-              validate: [{ required: true, message: '请选择系统结构', trigger: 'change' }],
-            },
-          ],
-        },
-        {
-          value: 'API',
-          rule: [
-            { type: 'input', field: 'sourceKey', title: '接口标识', validate: [{ required: true, message: '请输入接口标识', trigger: 'blur' }] },
-            {
-              type: 'input',
-              field: 'action',
-              title: 'API 路径',
-              validate: [{ required: true, message: '请输入 API 路径（LookupPicker 数据源必填）', trigger: 'blur' }],
-            },
-            {
-              type: 'radio',
-              field: 'method',
-              title: '请求方法',
-              options: [
-                { label: 'GET', value: 'GET' },
-                { label: 'POST', value: 'POST' },
-              ],
-              value: 'GET',
-            },
-            { type: 'input', field: 'parse', title: '列表解析', props: { placeholder: '如 records / content / list' } },
-            { type: 'input', field: 'totalParse', title: '总数解析', props: { placeholder: '留空自动取 data.total' } },
-            { type: 'input', field: 'searchParam', title: '搜索参数名', props: { placeholder: '默认 keyword' } },
-            { type: 'input', field: 'keywordColumn', title: '搜索列名', props: { placeholder: '如 name' } },
-            {
-              type: 'radio',
-              field: 'pageBase',
-              title: '页码基准',
-              options: [
-                { label: '从 1 开始', value: 1 },
-                { label: '从 0 开始', value: 0 },
-              ],
-              value: 1,
-            },
-            { type: 'textarea', field: 'data', title: '固定参数 JSON', props: { rows: 2, placeholder: '可选，如 {"dept":"IT"}' } },
-            { type: 'textarea', field: 'headers', title: '请求头 JSON', props: { rows: 2, placeholder: '可选，如 {"X-Api-Key":"abc"}' } },
-          ],
-        },
-      ],
-    },
-  ],
-  dialogTitle: { create: '新建数据源', edit: '编辑数据源' },
-  createPermission: 'data-source:manage',
-  editPermission: 'data-source:manage',
-  deletePermission: 'data-source:manage',
-  getApi: async (id) => {
-    const res = await dataSourceApi.getDataSource(String(id))
-    return denormalizePayload(res.data)
-  },
-  createApi: async (data: any) => {
-    return dataSourceApi.createDataSource(normalizePayload(data))
-  },
-  updateApi: async (id, data: any) => {
-    return dataSourceApi.updateDataSource(String(id), normalizePayload(data))
-  },
+// ========== 新建/编辑弹窗状态 ==========
+const dialogVisible = ref(false)
+const editingId = ref<string | null>(null)
+
+/** 单操作配置（多操作 params 结构） */
+interface ApiOpConfig {
+  action: string
+  method: string
+  parse?: string
+  totalParse?: string
+}
+
+/** 弹窗表单（类型无关字段 + API 公共字段） */
+const form = reactive({
+  name: '',
+  type: 'FORM' as string,
+  formKey: '',
+  sourceKey: '',
+  searchParam: '',
+  keywordColumn: '',
+  pageBase: 1 as 0 | 1,
+  data: '',
+  headers: '',
 })
 
-/** 按类型归一化提交载荷：FORM→formKey；SYSTEM→sourceKey；API→sourceKey + LookupFetchConfig 序列化为 params */
-function normalizePayload(data: any): any {
-  if (data.type === 'API') {
-    return {
-      name: data.name,
-      type: 'API',
-      formKey: null,
-      sourceKey: data.sourceKey || null,
-      params: JSON.stringify(buildApiParams(data)),
+/** API 类型：五个操作配置 */
+const apiOps = reactive<Record<'list' | 'get' | 'create' | 'update' | 'delete', ApiOpConfig>>({
+  list: { action: '', method: 'GET' },
+  get: { action: '', method: 'GET' },
+  create: { action: '', method: 'POST' },
+  update: { action: '', method: 'PUT' },
+  delete: { action: '', method: 'DELETE' },
+})
+
+/** API 类型：列定义 */
+const apiColumns = ref<ColumnConfigItem[]>([])
+
+function openCreate() {
+  editingId.value = null
+  form.name = ''
+  form.type = 'FORM'
+  form.formKey = ''
+  form.sourceKey = ''
+  form.searchParam = ''
+  form.keywordColumn = ''
+  form.pageBase = 1
+  form.data = ''
+  form.headers = ''
+  apiOps.list = { action: '', method: 'GET' }
+  apiOps.get = { action: '', method: 'GET' }
+  apiOps.create = { action: '', method: 'POST' }
+  apiOps.update = { action: '', method: 'PUT' }
+  apiOps.delete = { action: '', method: 'DELETE' }
+  apiColumns.value = []
+  dialogVisible.value = true
+}
+
+async function openEdit(row: DataSourceDTO) {
+  editingId.value = row.id
+  form.name = row.name
+  form.type = row.type
+  form.formKey = row.formKey || ''
+  form.sourceKey = row.sourceKey || ''
+  form.searchParam = ''
+  form.keywordColumn = ''
+  form.pageBase = 1
+  form.data = ''
+  form.headers = ''
+  apiOps.list = { action: '', method: 'GET' }
+  apiOps.get = { action: '', method: 'GET' }
+  apiOps.create = { action: '', method: 'POST' }
+  apiOps.update = { action: '', method: 'PUT' }
+  apiOps.delete = { action: '', method: 'DELETE' }
+  apiColumns.value = []
+  if (row.type === 'API' && row.params) {
+    let p: Record<string, any> = {}
+    try {
+      p = JSON.parse(row.params)
+    } catch {
+      p = {}
+    }
+    for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+      const cfg = p[op]
+      if (cfg && typeof cfg === 'object') {
+        apiOps[op] = {
+          action: cfg.action || '',
+          method: (cfg.method || 'GET').toUpperCase(),
+          parse: cfg.parse || '',
+          totalParse: cfg.totalParse || '',
+        }
+      }
+    }
+    form.searchParam = p.searchParam || ''
+    form.keywordColumn = p.keywordColumn || ''
+    form.pageBase = p.pageBase === 0 ? 0 : 1
+    form.data = p.data ? JSON.stringify(p.data) : ''
+    form.headers = p.headers ? JSON.stringify(p.headers) : ''
+    apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  }
+  dialogVisible.value = true
+}
+
+function addColumn() {
+  apiColumns.value.push({
+    key: '',
+    label: '',
+    columnType: 'VARCHAR',
+    length: null,
+    scale: null,
+    required: false,
+    unique: false,
+    indexed: false,
+  })
+}
+
+/** 长度输入框仅对需要长度的类型显示 */
+function needsLength(type?: string | null): boolean {
+  return type === 'VARCHAR' || type === 'DECIMAL' || type === 'INTEGER' || type === 'BIGINT' || type === 'TINYINT'
+}
+
+/** 校验并保存 */
+async function handleSave() {
+  if (!form.name || !form.name.trim()) {
+    ElMessage.warning('请输入数据源名称')
+    return
+  }
+  if (form.type === 'FORM' && !form.formKey) {
+    ElMessage.warning('请选择绑定的业务表单')
+    return
+  }
+  if (form.type === 'SYSTEM' && !form.sourceKey) {
+    ElMessage.warning('请选择系统结构')
+    return
+  }
+  if (form.type === 'API') {
+    if (!form.sourceKey || !form.sourceKey.trim()) {
+      ElMessage.warning('请输入接口标识')
+      return
+    }
+    if (!apiOps.list.action || !apiOps.list.action.trim()) {
+      ElMessage.warning('列表查询 (list) 接口路径必填')
+      return
     }
   }
-  return {
-    name: data.name,
-    type: data.type || 'FORM',
-    formKey: data.type === 'FORM' ? data.formKey || null : null,
-    sourceKey: data.type === 'SYSTEM' ? data.sourceKey || null : null,
-    params: data.type === 'SYSTEM' ? (data.params || null) : null,
+  try {
+    const payload = normalizePayload()
+    if (editingId.value) {
+      await dataSourceApi.updateDataSource(editingId.value, payload)
+    } else {
+      await dataSourceApi.createDataSource(payload)
+    }
+    ElMessage.success(editingId.value ? '保存成功' : '创建成功')
+    dialogVisible.value = false
+    tableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
   }
 }
 
-/** API 类型：组装 LookupFetchConfig 结构（对齐 LookupPicker fetch 配置；空项省略） */
-function buildApiParams(data: any): Record<string, any> {
-  const params: Record<string, any> = {
-    action: data.action,
-    method: data.method || 'GET',
+/** 按类型归一化提交载荷（API → sourceKey + 多操作 params JSON） */
+function normalizePayload(): any {
+  if (form.type === 'API') {
+    return {
+      name: form.name,
+      type: 'API',
+      formKey: null,
+      sourceKey: form.sourceKey || null,
+      params: JSON.stringify(buildApiParams()),
+    }
   }
-  for (const [key, val] of Object.entries({
-    parse: data.parse,
-    totalParse: data.totalParse,
-    searchParam: data.searchParam,
-    keywordColumn: data.keywordColumn,
-  })) {
-    if (val) params[key] = val
+  return {
+    name: form.name,
+    type: form.type || 'FORM',
+    formKey: form.type === 'FORM' ? form.formKey || null : null,
+    sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : null,
+    params: null,
   }
-  // 页码基准：显式配置时写入（LookupPicker 用 pageBase 区分 0/1 起）
-  if (data.pageBase === 0 || data.pageBase === 1) params.pageBase = data.pageBase
-  // 固定参数/请求头：JSON 文本解析为对象；非法或空白省略
-  const dataObj = parseJsonField(data.data)
+}
+
+/** API 类型：组装多操作 params（未配置的操作省略；列定义仅写入非空 key 行） */
+function buildApiParams(): Record<string, any> {
+  const params: Record<string, any> = {}
+  // 五个操作：action 为空则整体省略
+  for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+    const cfg = apiOps[op]
+    if (cfg.action && cfg.action.trim()) {
+      const item: Record<string, any> = { action: cfg.action.trim(), method: (cfg.method || 'GET').toUpperCase() }
+      if (op === 'list') {
+        if (cfg.parse && cfg.parse.trim()) item.parse = cfg.parse.trim()
+        if (cfg.totalParse && cfg.totalParse.trim()) item.totalParse = cfg.totalParse.trim()
+      }
+      params[op] = item
+    }
+  }
+  // 列定义：过滤未填写 key 的行
+  const columns = apiColumns.value.filter((c) => c.key && c.key.trim())
+  if (columns.length > 0) {
+    params.columns = columns.map((c) => {
+      const item: Record<string, any> = { key: c.key.trim(), label: c.label || c.key.trim() }
+      if (c.columnType) item.columnType = c.columnType
+      if (c.length != null) item.length = c.length
+      if (c.columnType === 'DECIMAL' && c.scale != null) item.scale = c.scale
+      if (c.required) item.required = true
+      if (c.unique) item.unique = true
+      if (c.indexed) item.indexed = true
+      return item
+    })
+  }
+  // 搜索/分页/固定参数/请求头
+  if (form.searchParam && form.searchParam.trim()) params.searchParam = form.searchParam.trim()
+  if (form.keywordColumn && form.keywordColumn.trim()) params.keywordColumn = form.keywordColumn.trim()
+  if (form.pageBase === 0 || form.pageBase === 1) params.pageBase = form.pageBase
+  const dataObj = parseJsonField(form.data)
   if (dataObj) params.data = dataObj
-  const headersObj = parseJsonField(data.headers)
+  const headersObj = parseJsonField(form.headers)
   if (headersObj) params.headers = headersObj
   return params
 }
@@ -259,43 +514,21 @@ function parseJsonField(text: string | null | undefined): Record<string, unknown
   }
 }
 
-/** 编辑回填：API 类型 params JSON 拆回各字段（data/headers JSON 化文本） */
-function denormalizePayload(dto: any): any {
-  const out: Record<string, any> = {
-    name: dto.name,
-    type: dto.type,
-  }
-  if (dto.type === 'API') {
-    out.sourceKey = dto.sourceKey || ''
-    let p: Record<string, any> = {}
-    try {
-      p = dto.params ? JSON.parse(dto.params) : {}
-    } catch {
-      p = {}
-    }
-    out.action = p.action || ''
-    out.method = p.method || 'GET'
-    out.parse = p.parse || ''
-    out.totalParse = p.totalParse || ''
-    out.searchParam = p.searchParam || ''
-    out.keywordColumn = p.keywordColumn || ''
-    out.pageBase = p.pageBase === 0 ? 0 : 1
-    out.data = p.data ? JSON.stringify(p.data) : ''
-    out.headers = p.headers ? JSON.stringify(p.headers) : ''
-  } else if (dto.type === 'FORM') {
-    out.formKey = dto.formKey || ''
-  } else {
-    out.sourceKey = dto.sourceKey || ''
-    out.params = dto.params || ''
-  }
-  return out
-}
-
 // ========== 操作按钮 ==========
 const actionButtons: ActionButton[] = [
   {
+    label: '新建',
+    type: 'primary',
+    permission: 'data-source:manage',
+    onClick: () => openCreate(),
+  },
+  {
+    label: '编辑',
+    permission: 'data-source:manage',
+    onClick: (row: any) => openEdit(row),
+  },
+  {
     label: '启用',
-    size: 'small',
     type: 'primary',
     permission: 'data-source:manage',
     show: (row: any) => row.status !== 'ENABLED',
@@ -311,7 +544,6 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '禁用',
-    size: 'small',
     permission: 'data-source:manage',
     show: (row: any) => row.status === 'ENABLED',
     onClick: async (row: any) => {
@@ -326,7 +558,6 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '删除',
-    size: 'small',
     type: 'danger',
     permission: 'data-source:manage',
     onClick: async (row: any) => {
@@ -396,15 +627,38 @@ onMounted(async () => {
     const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
     const data = res.data as any
     publishedForms.value = data.content || data.rows || []
-    // formKey select 位于 type 字段 control 的 FORM 分支中
-    const typeRule = formConfig.rule.find((r: any) => r.field === 'type') as any
-    const formControl = (typeRule?.control || []).find((c: any) => c.value === 'FORM')
-    const formKeyRule = (formControl?.rule || []).find((r: any) => r.field === 'formKey')
-    if (formKeyRule) {
-      formKeyRule.options = publishedForms.value.map((f) => ({ label: f.name, value: f.key }))
-    }
   } catch {
     // 表单加载失败不阻断列表
   }
 })
 </script>
+
+<style scoped>
+.endpoint-tip {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.endpoint-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.op-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.column-editor {
+  width: 100%;
+}
+.column-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+</style>
+

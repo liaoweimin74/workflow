@@ -4,7 +4,7 @@
       <span class="config-title">查询条件（勾选可筛选列并设置匹配方式）</span>
       <span class="config-hint">已选 {{ modelValue.length }} 项</span>
     </div>
-    <el-table :data="candidates" border size="small" max-height="420">
+    <el-table :data="candidates" border  max-height="420">
       <el-table-column label="选择" width="80" align="center">
         <template #default="{ row }">
           <el-checkbox :model-value="isChecked(row.key)" @change="(v: any) => toggle(row, !!v)" />
@@ -17,7 +17,7 @@
           <el-select
             v-if="isChecked(row.key)"
             :model-value="matchTypeOf(row.key)"
-            size="small"
+            
             style="width: 140px"
             @change="(v: any) => setMatchType(row.key, v)"
           >
@@ -114,7 +114,7 @@ function setMatchType(key: string, v: string) {
   font-weight: bold;
 }
 .config-hint {
-  font-size: 12px;
+  font-size: 14px;
   color: #909399;
 }
 .muted {

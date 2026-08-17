@@ -2,7 +2,7 @@
   <div class="events-config">
     <div class="config-header">
       <span class="config-title">事件动作链（声明式）</span>
-      <el-button size="small" type="primary" plain :icon="Plus" @click="addEvent">添加事件</el-button>
+      <el-button  type="primary" plain :icon="Plus" @click="addEvent">添加事件</el-button>
     </div>
 
     <div v-if="props.modelValue.length === 0" class="empty-hint">
@@ -12,13 +12,13 @@
     <div v-for="(ev, idx) in props.modelValue" :key="idx" class="event-card">
       <div class="event-head">
         <span class="event-title">事件 {{ idx + 1 }}</span>
-        <el-button size="small" type="danger" link :icon="Delete" @click="removeEvent(idx)">删除</el-button>
+        <el-button  type="danger" link :icon="Delete" @click="removeEvent(idx)">删除</el-button>
       </div>
-      <el-form label-width="70px" size="small" inline>
+      <el-form label-width="70px"  inline>
         <el-form-item label="触发器">
           <el-select
             :model-value="ev.trigger"
-            size="small"
+            
             style="width: 140px"
             @change="(v: string) => patchEvent(idx, { trigger: v })"
           >
@@ -28,7 +28,7 @@
         <el-form-item label="目标">
           <el-input
             :model-value="ev.target"
-            size="small"
+            
             placeholder="事件挂接组件 id，如 table / search / 按钮 key"
             style="width: 240px"
             @input="(v: string) => patchEvent(idx, { target: v })"
@@ -40,7 +40,7 @@
         <div v-for="(action, ai) in ev.actions" :key="ai" class="action-row">
           <el-select
             :model-value="action.type"
-            size="small"
+            
             style="width: 130px"
             @change="(v: string) => patchAction(idx, ai, { type: v })"
           >
@@ -50,25 +50,25 @@
             <div v-for="(row, pi) in action.params" :key="pi" class="param-row">
               <el-input
                 :model-value="row.key"
-                size="small"
+                
                 placeholder="参数名"
                 style="width: 120px"
                 @input="(v: string) => patchParamKey(idx, ai, pi, v)"
               />
               <el-input
                 :model-value="row.value"
-                size="small"
+                
                 placeholder="值，支持 $row.xxx / $param.xxx 变量"
                 style="width: 220px"
                 @input="(v: string) => patchParamValue(idx, ai, pi, v)"
               />
-              <el-button size="small" link type="danger" @click="removeParam(idx, ai, pi)">删</el-button>
+              <el-button  link type="danger" @click="removeParam(idx, ai, pi)">删</el-button>
             </div>
-            <el-button size="small" link type="primary" @click="addParam(idx, ai)">+ 参数</el-button>
+            <el-button  link type="primary" @click="addParam(idx, ai)">+ 参数</el-button>
           </div>
-          <el-button size="small" type="danger" link @click="removeAction(idx, ai)">移除动作</el-button>
+          <el-button  type="danger" link @click="removeAction(idx, ai)">移除动作</el-button>
         </div>
-        <el-button size="small" link type="primary" @click="addAction(idx)">+ 动作</el-button>
+        <el-button  link type="primary" @click="addAction(idx)">+ 动作</el-button>
       </div>
       <div class="var-hint">变量提示：$row.字段（当前行）/ $param.参数（页面参数）</div>
     </div>
@@ -225,7 +225,7 @@ function patchParam(idx: number, ai: number, pi: number, patch: Partial<EventAct
 }
 .event-title {
   font-weight: bold;
-  font-size: 13px;
+  font-size: 14px;
 }
 .actions-chain {
   margin-top: 4px;
@@ -248,7 +248,7 @@ function patchParam(idx: number, ai: number, pi: number, patch: Partial<EventAct
 }
 .var-hint {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 14px;
   color: #909399;
 }
 </style>

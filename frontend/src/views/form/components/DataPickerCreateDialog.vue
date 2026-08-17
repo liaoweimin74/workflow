@@ -87,7 +87,8 @@ async function handleSubmit() {
   submitting.value = true
   try {
     const row = await bizDataApi.create(props.sourceFormKey, formData.value)
-    emit('success', row.data)
+    // emit 携带完整 BizDataVO（含 id/data/version），供 DataPicker 单选自动选中/多选勾选新记录
+    emit('success', row.data as unknown as Record<string, unknown>)
     emit('update:visible', false)
   } catch {
     // http 拦截器已弹出错误消息

@@ -4,7 +4,7 @@
       <span class="config-title">字段配置（显示 & 查询）</span>
       <span class="config-hint">已选查询 {{ searchFields.length }} 项 · 显示 {{ columns.length }} 项</span>
     </div>
-    <el-table :data="candidates" border size="small" max-height="460">
+    <el-table :data="candidates" border max-height="460">
       <el-table-column prop="key" label="字段" width="130" />
       <el-table-column prop="label" label="标题" min-width="110" />
 
@@ -23,7 +23,6 @@
           <el-select
             v-if="isSearchChecked(row.key)"
             :model-value="searchMatchTypeOf(row.key)"
-            size="small"
             style="width: 120px"
             @change="(v: any) => setSearchMatchType(row.key, v)"
           >
@@ -52,7 +51,6 @@
           <el-input-number
             v-if="isColumnChecked(row.key)"
             :model-value="columnWidthOf(row.key)"
-            size="small"
             :min="50"
             :max="600"
             :step="10"
@@ -67,7 +65,6 @@
           <el-select
             v-if="isColumnChecked(row.key)"
             :model-value="columnAlignOf(row.key)"
-            size="small"
             style="width: 90px"
             @change="(v: any) => setColumnProp(row.key, 'align', v)"
           >
@@ -83,7 +80,6 @@
           <el-switch
             v-if="isColumnChecked(row.key)"
             :model-value="columnSortableOf(row.key)"
-            size="small"
             @change="(v: any) => setColumnProp(row.key, 'sortable', v)"
           />
           <span v-else class="muted">—</span>
@@ -220,7 +216,7 @@ function setColumnProp(key: string, prop: 'width' | 'align' | 'sortable', v: any
   font-weight: bold;
 }
 .config-hint {
-  font-size: 12px;
+  font-size: 14px;
   color: #909399;
 }
 .muted {

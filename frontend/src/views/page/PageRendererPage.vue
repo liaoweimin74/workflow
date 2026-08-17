@@ -90,6 +90,13 @@ function transformComponent(node: any): any {
   const next = { ...node, props: { ...(node.props || {}) }, on: { ...(node.on || {}) } }
   if (next.type === 'page-table' || next.type === 'page-tree') {
     next.props.pageKey = pageKey.value
+    // 注入 dsRefId（页面内 dataSourceId → 全局数据源 refId，供写操作用）
+    if (next.props.dataSourceId) {
+      const ds = pageSchema.dataSources.find((d) => d.id === next.props.dataSourceId)
+      if (ds && ds.refId) {
+        next.props.dsRefId = ds.refId
+      }
+    }
     // 组件实例上报 → 注册到 componentRefs（供动作总线 refresh/set-filter）
     next.on['ready'] = (instance: any) => {
       if (next.props.dataSourceId && instance) {

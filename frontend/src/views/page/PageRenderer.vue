@@ -92,7 +92,7 @@
                 <template v-for="b in rowActionButtons" :key="b.label">
                   <!-- 图标/按钮形态：circle + tooltip（对齐 SearchTable 操作列） -->
                   <el-tooltip v-if="b.style === 'icon'" :content="b.label" placement="top" :show-after="200">
-                    <el-button :icon="b.icon" circle size="small" :type="b.type" @click.stop="b.onClick(row)" />
+                    <el-button :icon="b.icon" circle :type="b.type" @click.stop="b.onClick(row)" />
                   </el-tooltip>
                   <!-- 文字/按钮形态：link 文本按钮 -->
                   <el-button
@@ -100,7 +100,6 @@
                     :type="b.type"
                     :icon="b.style === 'button' ? b.icon : undefined"
                     link
-                    size="small"
                     @click.stop="b.onClick(row)"
                   >
                     {{ b.label }}

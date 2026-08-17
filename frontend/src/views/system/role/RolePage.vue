@@ -10,6 +10,8 @@ import type { RoleVO } from '@/types/role'
 import type { MenuTree } from '@/types/menu'
 
 const searchTableRef = ref()
+// ensure searchTableRef is "used" for template ref binding
+void searchTableRef
 const menuTree = ref<MenuTree[]>([])
 const menuDialogVisible = ref(false)
 const currentRoleId = ref<number>(0)
@@ -70,10 +72,10 @@ const formConfig: FormConfig<RoleVO> = {
   ],
   createApi: createRole,
   updateApi: (id, data) => updateRole(id as number, { roleName: data.roleName, description: data.description }),
-  deleteApi: deleteRole,
+  deleteApi: async (id) => { await deleteRole(id as number) },
   getApi: async (id) => {
     const res = await getRoleList({ page: 1, size: 999 })
-    return res.data.rows.find((r: RoleVO) => r.id === id) || null
+    return res.data.rows.find((r: RoleVO) => r.id === (id as number)) as RoleVO
   },
   dialogTitle: { create: '新增角色', edit: '编辑角色' },
   createPermission: 'system:role:create',

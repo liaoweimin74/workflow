@@ -174,18 +174,20 @@ async function loadData() {
 function deepDisable(field: Rule): Rule {
   const f = field as Record<string, unknown>
   const fieldProps = (f.props as Record<string, any>) || {}
-  const next: Record<string, unknown> = { ...f, props: { ...fieldProps, disabled: true } }
+  const next: Record<string, unknown> = { ...f, props: { ...fieldProps, disabled: true } as Record<string, unknown> }
   if (Array.isArray(f.children)) {
     next.children = (f.children as Rule[]).map(deepDisable)
   }
   // group/subForm 子表单：内部字段在 props.rule
   if (Array.isArray(fieldProps.rule)) {
-    next.props = { ...next.props, rule: (fieldProps.rule as Rule[]).map(deepDisable) }
+    const p = next.props as Record<string, unknown>
+    next.props = { ...p, rule: (fieldProps.rule as Rule[]).map(deepDisable) }
   }
   // tableForm 子表：内部字段在 props.columns[].rule（每列一个 rule 数组）
   if (Array.isArray(fieldProps.columns)) {
+    const p = next.props as Record<string, unknown>
     next.props = {
-      ...next.props,
+      ...p,
       columns: (fieldProps.columns as Record<string, any>[]).map((col) => {
         if (col && Array.isArray(col.rule)) {
           return { ...col, rule: (col.rule as Rule[]).map(deepDisable) }

@@ -42,7 +42,8 @@ const treeAttrs = computed(() => {
 
 async function fetchData() {
   const dsId = props.dataSourceId || props.refId
-  if (!dsId) {
+  // 设计器画布中无 pageKey（渲染页才注入），跳过加载避免无效请求
+  if (!dsId || !props.pageKey) {
     treeData.value = []
     return
   }

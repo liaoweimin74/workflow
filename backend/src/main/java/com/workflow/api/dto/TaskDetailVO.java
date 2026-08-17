@@ -28,6 +28,8 @@ public class TaskDetailVO {
     private Map<String, String> fieldPermissions;
     private OperationsConfig operations;
     private Map<String, Object> variables;
+    /** 跨表单映射聚合数据（下游节点只读引用上游表单字段/流程变量）；未配置映射时为 null。 */
+    private Map<String, Object> mappedData;
     private String createTime;
     /** 是否为发起节点（发起人填报节点，不需要审批类操作） */
     private Boolean isInitiatorTask;
@@ -79,6 +81,9 @@ public class TaskDetailVO {
 
     public Map<String, Object> getVariables() { return variables; }
     public void setVariables(Map<String, Object> variables) { this.variables = variables; }
+
+    public Map<String, Object> getMappedData() { return mappedData; }
+    public void setMappedData(Map<String, Object> mappedData) { this.mappedData = mappedData; }
 
     public String getCreateTime() { return createTime; }
     public void setCreateTime(String createTime) { this.createTime = createTime; }

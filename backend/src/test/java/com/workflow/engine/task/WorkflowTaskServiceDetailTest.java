@@ -2,6 +2,7 @@ package com.workflow.engine.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.TaskDetailVO;
+import com.workflow.engine.form.mapping.FormDataMerger;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.repository.NodeConfigRepository;
@@ -76,9 +77,11 @@ class WorkflowTaskServiceDetailTest {
         nodeConfigRepository = mock(NodeConfigRepository.class);
         initiatorNodeResolver = mock(InitiatorNodeResolver.class);
         objectMapper = new ObjectMapper();
+        FormDataMerger formDataMerger = mock(FormDataMerger.class);
+        when(formDataMerger.merge(anyString(), anyString(), anyString())).thenReturn(Map.of());
         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
                 runtimeService, repositoryService, userService, commentRepository, remindRepository,
-                nodeConfigRepository, initiatorNodeResolver, objectMapper);
+                nodeConfigRepository, initiatorNodeResolver, objectMapper, formDataMerger);
         when(tenantProvider.getTenantId()).thenReturn("default");
     }
 

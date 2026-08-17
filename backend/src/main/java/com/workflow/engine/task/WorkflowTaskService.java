@@ -8,6 +8,7 @@ import com.workflow.api.dto.TaskDoneFilter;
 import com.workflow.api.dto.TaskDoneVO;
 import com.workflow.api.dto.TaskTodoFilter;
 import com.workflow.api.dto.TaskTodoVO;
+import com.workflow.engine.form.mapping.FormDataMerger;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
@@ -58,6 +59,7 @@ public class WorkflowTaskService {
     private final WfTaskRemindRepository remindRepository;
     private final NodeConfigRepository nodeConfigRepository;
     private final InitiatorNodeResolver initiatorNodeResolver;
+    private final FormDataMerger formDataMerger;
     private final ObjectMapper objectMapper;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
@@ -70,7 +72,8 @@ public class WorkflowTaskService {
                                WfTaskRemindRepository remindRepository,
                                NodeConfigRepository nodeConfigRepository,
                                InitiatorNodeResolver initiatorNodeResolver,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               FormDataMerger formDataMerger) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -82,6 +85,7 @@ public class WorkflowTaskService {
         this.nodeConfigRepository = nodeConfigRepository;
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.objectMapper = objectMapper;
+        this.formDataMerger = formDataMerger;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
@@ -696,6 +700,18 @@ public class WorkflowTaskService {
             vo.setVariables(Map.of());
         }
 
+        // mappedData：跨表单映射聚合（未配置映射时 merge 返回空 → 置 null）
+        if (task.getProcessDefinitionId() != null && task.getProcessInstanceId() != null) {
+            try {
+                Map<String, Object> mappedData = formDataMerger.merge(
+                        task.getProcessDefinitionId(), task.getTaskDefinitionKey(), task.getProcessInstanceId());
+                vo.setMappedData(mappedData.isEmpty() ? null : mappedData);
+            } catch (Exception e) {
+                log.warn("Failed to merge mappedData for task [{}]: {}", task.getId(), e.getMessage());
+                vo.setMappedData(null);
+            }
+        }
+
         return vo;
     }
 
@@ -811,6 +827,18 @@ public class WorkflowTaskService {
             vo.setVariables(variables);
         } catch (Exception e) {
             vo.setVariables(Map.of());
+        }
+
+        // mappedData：历史任务详情同样聚合（未配置映射时置 null）
+        if (processDefinitionId != null && processInstanceId != null) {
+            try {
+                Map<String, Object> mappedData = formDataMerger.merge(
+                        processDefinitionId, histTask.getTaskDefinitionKey(), processInstanceId);
+                vo.setMappedData(mappedData.isEmpty() ? null : mappedData);
+            } catch (Exception e) {
+                log.warn("Failed to merge mappedData for historic task [{}]: {}", taskId, e.getMessage());
+                vo.setMappedData(null);
+            }
         }
 
         return Optional.of(vo);

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.List;
@@ -20,6 +21,7 @@ import java.util.List;
  * </pre>
  * 无配置（缺失/空）返回空列表；解析异常返回空列表并记录 warn 日志，不阻断调用方。
  */
+@Component
 public class FormMappingParser {
 
     private static final Logger log = LoggerFactory.getLogger(FormMappingParser.class);

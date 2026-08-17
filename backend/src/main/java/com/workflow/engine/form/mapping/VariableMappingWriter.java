@@ -8,6 +8,7 @@ import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RuntimeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,7 @@ import java.util.Optional;
  * <p>触发时机：流程发起成功后、任务完成/驳回等流转动作后。
  * 源数据缺失时跳过该条写入，不抛错、不阻断。
  */
+@Component
 public class VariableMappingWriter {
 
     private static final Logger log = LoggerFactory.getLogger(VariableMappingWriter.class);

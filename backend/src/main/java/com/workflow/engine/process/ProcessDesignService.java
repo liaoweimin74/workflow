@@ -3,6 +3,7 @@ package com.workflow.engine.process;
 import com.workflow.api.dto.DesignSaveRequest;
 import com.workflow.api.dto.EditorDTO;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.form.mapping.FormMappingValidator;
 import com.workflow.engine.process.bpmn.MultiInstanceBpmnRewriter;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.entity.ProcessDraft;
@@ -59,6 +60,7 @@ public class ProcessDesignService {
     private final RepositoryService repositoryService;
     private final TenantProvider tenantProvider;
     private final MultiInstanceBpmnRewriter multiInstanceBpmnRewriter;
+    private final FormMappingValidator formMappingValidator;
     private final ObjectMapper objectMapper;
 
     public ProcessDesignService(ProcessDraftRepository draftRepository,
@@ -66,12 +68,14 @@ public class ProcessDesignService {
                                 RepositoryService repositoryService,
                                 TenantProvider tenantProvider,
                                 MultiInstanceBpmnRewriter multiInstanceBpmnRewriter,
+                                FormMappingValidator formMappingValidator,
                                 ObjectMapper objectMapper) {
         this.draftRepository = draftRepository;
         this.nodeConfigRepository = nodeConfigRepository;
         this.repositoryService = repositoryService;
         this.tenantProvider = tenantProvider;
         this.multiInstanceBpmnRewriter = multiInstanceBpmnRewriter;
+        this.formMappingValidator = formMappingValidator;
         this.objectMapper = objectMapper;
     }
 
@@ -268,6 +272,9 @@ public class ProcessDesignService {
             // 复制 processDefinitionId IS NULL 的"当前编辑中"配置，绑定新部署版本
             // 运行时按精确版本反查，保证不同版本的流程实例使用各自部署时的配置
             snapshotNodeConfigs(draftId, tenantId, procDef.getId());
+
+            // 校验映射配置（字段存在性/变量名唯一/循环引用），失败抛 IllegalArgumentException 阻止部署
+            formMappingValidator.validate(procDef.getId());
         }
         return draftRepository.save(draft);
     }

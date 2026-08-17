@@ -2,6 +2,7 @@ package com.workflow.engine.process;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.form.mapping.FormMappingValidator;
 import com.workflow.engine.process.bpmn.MultiInstanceBpmnRewriter;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.entity.ProcessDraft;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -59,6 +61,7 @@ class ProcessDesignServiceDeployTest {
     private RepositoryService repositoryService;
     private TenantProvider tenantProvider;
     private MultiInstanceBpmnRewriter multiInstanceBpmnRewriter;
+    private FormMappingValidator formMappingValidator;
     private ProcessDesignService service;
 
     @BeforeEach
@@ -68,9 +71,10 @@ class ProcessDesignServiceDeployTest {
         repositoryService = mock(RepositoryService.class);
         tenantProvider = mock(TenantProvider.class);
         multiInstanceBpmnRewriter = mock(MultiInstanceBpmnRewriter.class);
+        formMappingValidator = mock(FormMappingValidator.class);
         when(tenantProvider.getTenantId()).thenReturn(TENANT_ID);
         service = new ProcessDesignService(draftRepository, nodeConfigRepository, repositoryService,
-                tenantProvider, multiInstanceBpmnRewriter, new ObjectMapper());
+                tenantProvider, multiInstanceBpmnRewriter, formMappingValidator, new ObjectMapper());
     }
 
     // ==================== 部署配置 hash 计算 ====================
@@ -243,6 +247,22 @@ class ProcessDesignServiceDeployTest {
 
         verify(builder, never()).category(anyString());
         verify(builder).deploy();
+    }
+
+    @Test
+    void 非法映射配置时部署失败() {
+        ProcessDraft draft = newDraft();
+        stubDraftLookup(draft);
+        stubDeploy();
+        when(nodeConfigRepository.findByProcessDefIdAndProcessDefinitionIdIsNull(DRAFT_ID))
+                .thenReturn(nodeConfigs("node1", "{\"operations\":{\"allowTransfer\":true}}"));
+        when(multiInstanceBpmnRewriter.rewrite(anyString(), any())).thenReturn(EFFECTIVE_BPMN);
+        doThrow(new IllegalArgumentException("节点 UserTask_1 的映射目标字段不存在: nonexistent"))
+                .when(formMappingValidator).validate(PROC_DEF_ID);
+
+        assertThatThrownBy(() -> service.deploy(DRAFT_ID))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("nonexistent");
     }
 
     // ==================== helpers ====================

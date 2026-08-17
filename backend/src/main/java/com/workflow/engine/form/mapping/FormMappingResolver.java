@@ -7,6 +7,7 @@ import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.Map;
  * 映射配置解析器：按部署版本聚合节点级表单字段映射与流程级变量映射，
  * 并解析映射 source（form:initiator / form:&lt;nodeId&gt;）对应的源表单定义 ID。
  */
+@Component
 public class FormMappingResolver {
 
     private static final Logger log = LoggerFactory.getLogger(FormMappingResolver.class);

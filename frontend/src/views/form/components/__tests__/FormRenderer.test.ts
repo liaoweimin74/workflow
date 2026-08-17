@@ -511,3 +511,37 @@ describe('FormRenderer — readonly 穿透子表内部字段（group props.rule 
     }
   })
 })
+
+describe('FormRenderer — mappedData prop (映射数据预填)', () => {
+  it('merges mappedData into form data on mount', async () => {
+    const wrapper = createWrapper({
+      rule: [{ type: 'input', field: 'applicantName', title: '申请人' } as Rule],
+      mappedData: { applicantName: '张三' },
+    })
+    await nextTick()
+
+    const data = (wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }).getFormData()
+    expect(data.applicantName).toBe('张三')
+  })
+
+  it('本表单数据优先于 mappedData（initialValues 覆盖映射）', async () => {
+    const wrapper = createWrapper({
+      rule: twoFieldRule,
+      initialValues: { name: '本表数据' },
+      mappedData: { name: '映射数据' },
+    })
+    await nextTick()
+
+    const data = (wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }).getFormData()
+    expect(data.name).toBe('本表数据')
+  })
+
+  it('未传 mappedData 时不影响 formData', async () => {
+    const wrapper = createWrapper({ rule: simpleRule })
+    await nextTick()
+
+    const data = (wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }).getFormData()
+    expect(data).toBeDefined()
+    expect(typeof data).toBe('object')
+  })
+})

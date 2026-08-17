@@ -25,6 +25,8 @@ const props = defineProps<{
   option?: Record<string, any>
   /** 预填表单数据，变化时自动同步到 formData。 */
   initialValues?: Record<string, unknown>
+  /** 上游映射数据（跨表单只读预填）：先铺底，本表单数据（initialValues/loadData）优先覆盖。 */
+  mappedData?: Record<string, unknown>
   processInstanceId?: string
   taskId?: string
   fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
@@ -76,6 +78,10 @@ onMounted(async () => {
   }
   if (props.processInstanceId) {
     await loadData()
+  }
+  if (props.mappedData) {
+    // mappedData 先铺底、本表单数据（initialValues/loadData）后覆盖
+    formData.value = { ...props.mappedData, ...formData.value }
   }
   if (props.readonly) {
     // form-create 的 rule 用 props.disabled 控制字段禁用。

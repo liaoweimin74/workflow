@@ -6,6 +6,7 @@ import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
+import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.bizdata.BizDataService;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
@@ -327,7 +328,8 @@ class DataSourceDefinitionServiceTest {
     @Test
     void formAdapter_supportsOnlyForm_andDelegatesToBizData() {
         BizDataService bizDataService = mock(BizDataService.class);
-        FormDataSourceAdapter adapter = new FormDataSourceAdapter(bizDataService, tenantProvider);
+        FormDefinitionService formDefService = mock(FormDefinitionService.class);
+        FormDataSourceAdapter adapter = new FormDataSourceAdapter(bizDataService, formDefService, tenantProvider);
 
         assertTrue(adapter.supports("FORM"));
         assertFalse(adapter.supports("SYSTEM"));

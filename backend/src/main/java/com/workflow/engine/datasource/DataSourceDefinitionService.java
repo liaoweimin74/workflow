@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
+import com.workflow.api.dto.BizDataVO;
+import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -213,13 +216,56 @@ public class DataSourceDefinitionService {
      * 无适配器 → 400"数据源类型未启用"。
      */
     public BizDataPageVO queryData(String id, BizDataQueryRequest req) {
+        if (req == null) {
+            req = new BizDataQueryRequest();
+        }
+        return adapterOf(id).query(getById(id), req);
+    }
+
+    /**
+     * 数据源元数据分发：数据源须 ENABLED。
+     */
+    public DataSourceMetadata metadata(String id) {
+        return adapterOf(id).metadata(getById(id));
+    }
+
+    /**
+     * 数据源单条查询分发。
+     */
+    public BizDataVO getData(String id, String rowId) {
+        return adapterOf(id).get(getById(id), rowId);
+    }
+
+    /**
+     * 数据源新增分发（只读数据源 → 适配器 default 抛不支持）。
+     */
+    public String createData(String id, Map<String, Object> data) {
+        return adapterOf(id).create(getById(id), data);
+    }
+
+    /**
+     * 数据源修改分发。
+     */
+    public void updateData(String id, String rowId, Map<String, Object> data, Integer version) {
+        adapterOf(id).update(getById(id), rowId, data, version);
+    }
+
+    /**
+     * 数据源删除分发。
+     */
+    public void deleteData(String id, String rowId) {
+        adapterOf(id).delete(getById(id), rowId);
+    }
+
+    /** 按数据源类型找适配器（数据源须 ENABLED） */
+    private DataSourceAdapter adapterOf(String id) {
         DataSourceDefinition ds = getById(id);
         if (!STATUS_ENABLED.equals(ds.getStatus())) {
-            throw new BusinessException(400, "数据源未启用，无法查询: " + ds.getName());
+            throw new BusinessException(400, "数据源未启用，无法访问: " + ds.getName());
         }
         for (DataSourceAdapter adapter : adapters) {
             if (adapter.supports(ds.getType())) {
-                return adapter.query(ds, req);
+                return adapter;
             }
         }
         throw new BusinessException(400, "数据源类型未启用: " + ds.getType());

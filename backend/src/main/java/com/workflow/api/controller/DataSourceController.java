@@ -1,6 +1,10 @@
 package com.workflow.api.controller;
 
+import com.workflow.api.dto.BizDataPageVO;
+import com.workflow.api.dto.BizDataQueryRequest;
+import com.workflow.api.dto.BizDataVO;
 import com.workflow.api.dto.DataSourceDTO;
+import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.api.dto.DataSourceSaveRequest;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
@@ -11,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -112,6 +117,60 @@ public class DataSourceController {
     @PostMapping("/{id}/disable")
     public R<DataSourceDTO> disable(@PathVariable String id) {
         return R.ok(toDTO(dataSourceService.disable(id)));
+    }
+
+    // ==================== 统一数据访问端点（经 DataSourceAdapter SPI） ====================
+
+    /**
+     * 数据源元数据：列定义 + 可写标记（设计器切换数据源刷新列用）。
+     */
+    @GetMapping("/{id}/metadata")
+    public R<DataSourceMetadata> metadata(@PathVariable String id) {
+        return R.ok(dataSourceService.metadata(id));
+    }
+
+    /**
+     * 数据源列表分页查询。
+     */
+    @GetMapping("/{id}/data")
+    public R<BizDataPageVO> queryData(@PathVariable String id, BizDataQueryRequest req) {
+        return R.ok(dataSourceService.queryData(id, req));
+    }
+
+    /**
+     * 数据源单条查询。
+     */
+    @GetMapping("/{id}/data/{rowId}")
+    public R<BizDataVO> getData(@PathVariable String id, @PathVariable String rowId) {
+        return R.ok(dataSourceService.getData(id, rowId));
+    }
+
+    /**
+     * 数据源新增（只读数据源 → 400 不支持）。
+     */
+    @PostMapping("/{id}/data")
+    public R<String> createData(@PathVariable String id, @RequestBody Map<String, Object> data) {
+        return R.ok(dataSourceService.createData(id, data));
+    }
+
+    /**
+     * 数据源修改（version 乐观锁可空）。
+     */
+    @PutMapping("/{id}/data/{rowId}")
+    public R<Void> updateData(@PathVariable String id, @PathVariable String rowId,
+                              @RequestParam(required = false) Integer version,
+                              @RequestBody Map<String, Object> data) {
+        dataSourceService.updateData(id, rowId, data, version);
+        return R.ok();
+    }
+
+    /**
+     * 数据源删除。
+     */
+    @DeleteMapping("/{id}/data/{rowId}")
+    public R<Void> deleteData(@PathVariable String id, @PathVariable String rowId) {
+        dataSourceService.deleteData(id, rowId);
+        return R.ok();
     }
 
     // ==================== DTO 转换 ====================

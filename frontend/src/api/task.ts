@@ -70,6 +70,8 @@ export interface TaskDetailVO {
   variables: Record<string, unknown>
   /** 字段级权限：field → EDIT/VIEW/HIDDEN。未配置时为 undefined。 */
   fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
+  /** 映射数据（表单字段映射/流程变量映射结果），供表单预填。 */
+  mappedData?: Record<string, unknown> | null
   /** 节点操作权限配置。未配置时后端返回全默认值对象。 */
   operations?: OperationsConfig
   createTime: string

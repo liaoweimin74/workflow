@@ -35,6 +35,7 @@
             :form-def-id="taskDetail.formKey"
             :process-instance-id="taskDetail.processInstanceId"
             :task-id="taskDetail.taskId"
+            :mapped-data="taskDetail?.mappedData ?? undefined"
             readonly
           />
         </template>

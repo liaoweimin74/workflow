@@ -37,6 +37,7 @@
             :process-instance-id="taskDetail.processInstanceId"
             :task-id="taskDetail.taskId"
             :field-permissions="taskDetail.fieldPermissions"
+            :mapped-data="taskDetail?.mappedData ?? undefined"
           />
         </template>
         <template v-else>

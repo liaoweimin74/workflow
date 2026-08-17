@@ -46,7 +46,7 @@
           />
         </template>
       </el-table-column>
-      <el-table-column label="宽度" width="120">
+      <el-table-column label="宽度" width="160">
         <template #default="{ row }">
           <el-input-number
             v-if="isColumnChecked(row.key)"
@@ -54,18 +54,18 @@
             :min="50"
             :max="600"
             :step="10"
-            style="width: 100px"
+            style="width: 130px"
             @change="(v: any) => setColumnProp(row.key, 'width', v)"
           />
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="对齐" width="110">
+      <el-table-column label="对齐" width="150">
         <template #default="{ row }">
           <el-select
             v-if="isColumnChecked(row.key)"
             :model-value="columnAlignOf(row.key)"
-            style="width: 90px"
+            style="width: 120px"
             @change="(v: any) => setColumnProp(row.key, 'align', v)"
           >
             <el-option label="左对齐" value="left" />

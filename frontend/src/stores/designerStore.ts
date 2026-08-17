@@ -97,6 +97,15 @@ export interface BackendLogicItem {
 // ========== 流程级配置 ==========
 export const PROCESS_CONFIG_KEY = '__PROCESS__'
 
+export interface ProcessVariableMapping {
+  /** 目标流程变量名（流程级唯一，区分大小写） */
+  variable: string
+  /** 数据源：form:initiator / form:<nodeId> / variable:<name> */
+  source: string
+  /** 源表单字段名（仅 form:* 源需要） */
+  sourceField?: string
+}
+
 export interface ProcessConfigData {
   approvalPolicy: {
     deduplication: {
@@ -121,6 +130,7 @@ export interface ProcessConfigData {
     formDefId?: string
     fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
   }
+  variableMappings?: ProcessVariableMapping[]
 }
 
 export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {

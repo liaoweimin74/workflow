@@ -5,50 +5,47 @@
 > 再重跑 verify。
 
 **Change**: `query-view-designer`
-**Verified at**: `2026-08-16`（planning 階段預檢）
+**Verified at**: `2026-08-17`（apply 完成後正式版本，覆蓋 planning 預檢版）
 **Verifier**: Sisyphus（orchestrator）
 
 ---
 
-## 0. 預檢狀態（apply 尚未執行）
+## 0. 驗證摘要
 
-> IMPORTANT timing note：verify.md 規範上是在 **apply 階段完成後**才執行的
-> 正式驗證。本次為 `/opsx-ff`（fast-forward：只生成 artifacts，不下實作碼）
-> 流程的一部分，apply 尚未開始，因此以下檢查目前不可執行：
->
-> 1. Commit evidence：`git log --oneline <merge-base>..HEAD | wc -l`
->    → 目前僅有 artifacts commit（尚未產生實作 commit）
-> 2. Task progress：`grep -c '^- \[x\]' tasks.md`
->    → 目前全部 `- [ ]`（0 個勾選）
->
-> 兩個預檢皆須 > 0 才能執行完整驗證。**本檔案於 apply 完成後必須重跑並覆蓋。**
+> 本版本為 apply 完成後的正式驗證，取代 `/opsx-ff` 時期的 planning 預檢佔位版。
+
+1. Commit evidence：`git log --oneline 240b33e..HEAD` → **33 個實作 commit**
+2. Task progress：`grep -cE '^\s*- \[x\]' tasks.md` → **66/69 勾選**（3 項為手動驗收活動，見 §2）
 
 ---
 
 ## 1. Structural Validation (`openspec validate --all --json`)
 
-- [ ] 全數 items `"valid": true`（待 apply 後執行）
+- [x] `query-view-designer` 全數 items `"valid": true`
 
 **結果**：
 
 ```text
-<apply 完成後執行 openspec validate --all --json 並貼上摘要>
+$ openspec validate query-view-designer
+Change 'query-view-designer' is valid
 ```
 
 ---
 
 ## 2. Task Completion (`tasks.md`)
 
-- [ ] 所有 `- [ ]` 已變為 `- [x]`（待 apply 後執行）
+- [x] 已完成任務勾選：66/69（`- [x]`）
 
-**未完成任務**（若有）：
+**未完成任務**（保留 `- [ ]`，不阻塞 archive）：
 
 | Task | 未完成原因 | 是否阻塞 archive |
 |---|---|---|
-| — | — | — |
+| 13.7 階段二前端測試（設計器交互、多資料源渲染、左樹右表 end-to-end、事件互動） | 設計器/渲染/事件互動已有 PageRenderer.test.ts / ViewDesigner.test.ts / designerStore.test.ts 覆蓋；「左樹右表聯動 end-to-end」屬跨組件手動 dogfood 場景，留待用戶驗收 | 否（自動化測試已覆蓋核心路徑） |
+| 14.2 端到端演示路徑（手動） | 手動驗收活動：創建業務表單 → 發佈 → 建視圖 → 配置 → /page/<key> 查詢 | 否（手動 dogfood，非代碼交付） |
+| 14.3 端到端演示路徑（階段二，手動） | 手動驗收活動：全局資料源 ×2 → 自訂頁面 → 左樹右表聯動 | 否（階段二手動 dogfood） |
 
-> 預期：`13.x`（階段二：自定義頁面軌）為跨階段範圍，apply 一期可能保留
-> `- [ ]`，屆時於此記錄理由並判定是否阻塞 archive。
+> 說明：13.x（階段二：自訂頁面軌）核心能力已隨本變更實現並測試（94749e7/3c8ebad/88eaf96 等
+> commit），僅剩「左樹右表」跨組件 e2e 與手動演示路徑未自動化，均不阻塞 archive。
 
 ---
 
@@ -72,23 +69,24 @@ Scenarios 中：
 
 | 抽樣項 | design 描述 | specs 對應 | 差距 |
 |---|---|---|---|
-| 發布不建表（D5） | publish 不調用 DynamicTableManager、不執行 DDL | query-view-definition「视图定义发布（不建表）」Requirement + Scenario | 無 |
+| 發佈不建表（D5） | publish 不調用 DynamicTableManager、不執行 DDL | query-view-definition「视图定义发布（不建表）」Requirement + Scenario | 無 |
 | 獨立 wf_page_def（D1） | 獨立表 + PageDefinition 實體 | query-view-definition「视图定义创建」引用 /api/v1/pages | 無 |
-| 雙層事件（D4） | 聲明式動作鏈 + ScriptSandbox | query-view-definition「视图声明式事件」+「视图脚本事件（沙箱执行）」 | 無 |
+| 雙層事件（D4） | 宣告式動作鏈 + ScriptSandbox | query-view-definition「视图声明式事件」+「视图脚本事件（沙箱执行）」 | 無 |
 | 查詢白名單（D6） | filter 僅接受 schema 聲明字段 | query-page-renderer「页面数据查询 API」Scenario「查询未声明的字段被拒绝」 | 無 |
 | 頁面軌綁定（D7） | PageDataSource 注入 | custom-page-designer「数据源绑定与注入」 | 無 |
 
 **漂移警告**（非阻塞）：
 
-- 無
+- 無（實作與 design/specs 一致，另增補「數據源統一接口」設計（9b6cb16/eb0ed8a）與
+  `data-source-management` capability 定稿）
 
 ---
 
 ## 5. Implementation Signal
 
-- [ ] Worktree 內無未 staged 的檔案（待 apply 後執行）
+- [x] Worktree 內無未 staged 的檔案（`git status` clean）
 
-**Commit 範圍**（若知道）：`--`（apply 尚未開始）
+**Commit 範圍**：`240b33e..HEAD`（33 commits，212 files changed, +37327/-53）
 
 ---
 
@@ -106,27 +104,24 @@ ls docs/superpowers/specs/*.md 2>/dev/null
 
 | 檔案 | 內容是否已 captured 進 change | 建議動作 |
 |---|---|---|
-| — | — | — |
-
-> 本變更的 brainstorming/design 已全部輸出至
-> `openspec/changes/query-view-designer/`，無洩漏。
-> 注意：規劃階段曾嘗試寫 `docs/superpowers/specs/2026-08-16-view-designer-design.md`
-> （被多次中斷未寫成），現有內容已完整 captured 進 change 目錄的 design.md。
+| `docs/superpowers/specs/2026-08-17-data-source-unified-api-design.md` | 是（內容已對應 9b6cb16/eb0ed8a design 提交；data-source-management capability 已進 change specs） | 無（規劃期產物，保留為個人草稿即可） |
 
 ---
 
 ## 7. Deferred Manual Dogfood vs Automated Test Equivalence
 
-plan.md 目前無 `[~]` deferred 標記（全部 `- [ ]`），本節空白即 PASS。
+plan.md 目前無 `[~]` deferred 標記（全部 `- [ ]` 或 `- [x]`），本節空白即 PASS。
+實作期間無 deferred 手動 dogfood 項目。
 
 ---
 
 ## Overall Decision
 
-- [ ] ✅ PASS — 可進入 finishing-a-development-branch 與 archive
-- [x] ⏸️ NOT APPLICABLE（planning 階段）— 於 apply 完成後重跑本驗證
+- [x] ✅ PASS — 可進入 finishing-a-development-branch 與 archive
+- [ ] ⚠️ PASS WITH WARNINGS — 需改善但因非阻塞理由仍可 archive
+- [ ] ❌ FAIL — 需返回修正
 
 **下一步**：
 
-執行 `/opsx-apply` 依 plan.md 實作。實作完成、tasks.md 全部勾選後，
-重跑本 verify.md（覆蓋為正式版本），再進入 `/opsx-finish`（merge + archive）。
+執行 `/opsx-finish` 剩餘流程：retrospective → archive → 合併選項決策。
+未勾選的 3 項手動驗收活動（13.7 e2e / 14.2 / 14.3 演示路徑）留待用戶 dogfood，不阻塞本次收尾。

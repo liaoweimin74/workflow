@@ -37,75 +37,43 @@
       <template v-if="formConfig.formDefId && fieldList.length > 0">
         <el-divider content-position="left">字段权限</el-divider>
 
-        <div class="field-card-list">
-          <div v-for="field in fieldList" :key="field.field" class="field-card">
-            <div class="field-card-header">
-              <span class="field-label" :title="field.label">{{ field.label }}</span>
-              <div class="field-card-actions">
-                <el-select
-                  v-model="formConfig.fieldPermissions[field.field]"
-                  size="small"
-                  style="width: 110px"
-                  :disabled="readOnly"
-                  @change="saveConfig"
-                >
-                  <el-option label="可编辑" value="EDIT" />
-                  <el-option label="只读" value="VIEW" />
-                  <el-option label="隐藏" value="HIDDEN" />
-                </el-select>
-                <el-button
-                  class="mapping-toggle-btn"
-                  size="small"
-                  link
-                  :type="isMapped(field.field) ? 'primary' : 'default'"
-                  :disabled="readOnly"
-                  @click="toggleExpand(field.field)"
-                >
-                  {{ mappingSummary(field.field) }}
-                </el-button>
-              </div>
-            </div>
-            <div v-if="expandedField === field.field" class="source-cell" @click.stop>
+        <el-table :data="fieldList" border size="small" style="width: 100%">
+          <el-table-column prop="label" label="字段名" min-width="100" />
+          <el-table-column label="权限" width="80" align="center">
+            <template #default="{ row }">
               <el-select
-                v-model="formConfig.dataMappings[field.field].source"
+                v-model="formConfig.fieldPermissions[row.field]"
                 size="small"
                 style="width: 100%"
-                class="source-select"
-                :disabled="readOnly"
-                @change="onSourceChange(field.field)"
-              >
-                <el-option label="无" value="" />
-                <el-option label="发起人表单" value="initiator" />
-                <el-option label="指定节点" value="node" />
-                <el-option label="流程变量" value="variable" />
-              </el-select>
-              <el-select
-                v-if="formConfig.dataMappings[field.field].source === 'initiator'"
-                v-model="formConfig.dataMappings[field.field].sourceField"
-                size="small"
-                style="width: 100%"
-                class="source-field-select"
-                placeholder="选择源字段"
+                class="perm-select"
                 :disabled="readOnly"
                 @change="saveConfig"
               >
-                <el-option v-for="f in initiatorFormFields" :key="f.field" :label="f.label" :value="f.field" />
+                <el-option label="编辑" value="EDIT" />
+                <el-option label="只读" value="VIEW" />
+                <el-option label="隐藏" value="HIDDEN" />
               </el-select>
-              <template v-else-if="formConfig.dataMappings[field.field].source === 'node'">
+            </template>
+          </el-table-column>
+          <el-table-column label="数据来源" min-width="130" align="center">
+            <template #default="{ row }">
+              <div class="source-cell">
                 <el-select
-                  v-model="formConfig.dataMappings[field.field].sourceNodeId"
+                  v-model="formConfig.dataMappings[row.field].source"
                   size="small"
                   style="width: 100%"
-                  class="source-node-select"
-                  placeholder="选择源节点"
+                  class="source-select"
                   :disabled="readOnly"
-                  @change="onNodeChange(field.field)"
+                  @change="onSourceChange(row.field)"
                 >
-                  <el-option v-for="n in formTaskNodes" :key="n.id" :label="n.label" :value="n.id" />
+                  <el-option label="无" value="" />
+                  <el-option label="发起人表单" value="initiator" />
+                  <el-option label="指定节点" value="node" />
+                  <el-option label="流程变量" value="variable" />
                 </el-select>
                 <el-select
-                  v-if="formConfig.dataMappings[field.field].sourceNodeId"
-                  v-model="formConfig.dataMappings[field.field].sourceField"
+                  v-if="formConfig.dataMappings[row.field].source === 'initiator'"
+                  v-model="formConfig.dataMappings[row.field].sourceField"
                   size="small"
                   style="width: 100%"
                   class="source-field-select"
@@ -113,21 +81,46 @@
                   :disabled="readOnly"
                   @change="saveConfig"
                 >
-                  <el-option v-for="f in nodeFormFields" :key="f.field" :label="f.label" :value="f.field" />
+                  <el-option v-for="f in initiatorFormFields" :key="f.field" :label="f.label" :value="f.field" />
                 </el-select>
-              </template>
-              <el-input
-                v-else-if="formConfig.dataMappings[field.field].source === 'variable'"
-                v-model="formConfig.dataMappings[field.field].variableName"
-                size="small"
-                class="variable-name-input"
-                placeholder="变量名"
-                :disabled="readOnly"
-                @change="saveConfig"
-              />
-            </div>
-          </div>
-        </div>
+                <template v-else-if="formConfig.dataMappings[row.field].source === 'node'">
+                  <el-select
+                    v-model="formConfig.dataMappings[row.field].sourceNodeId"
+                    size="small"
+                    style="width: 100%"
+                    class="source-node-select"
+                    placeholder="选择源节点"
+                    :disabled="readOnly"
+                    @change="onNodeChange(row.field)"
+                  >
+                    <el-option v-for="n in formTaskNodes" :key="n.id" :label="n.label" :value="n.id" />
+                  </el-select>
+                  <el-select
+                    v-if="formConfig.dataMappings[row.field].sourceNodeId"
+                    v-model="formConfig.dataMappings[row.field].sourceField"
+                    size="small"
+                    style="width: 100%"
+                    class="source-field-select"
+                    placeholder="选择源字段"
+                    :disabled="readOnly"
+                    @change="saveConfig"
+                  >
+                    <el-option v-for="f in nodeFormFields" :key="f.field" :label="f.label" :value="f.field" />
+                  </el-select>
+                </template>
+                <el-input
+                  v-else-if="formConfig.dataMappings[row.field].source === 'variable'"
+                  v-model="formConfig.dataMappings[row.field].variableName"
+                  size="small"
+                  class="variable-name-input"
+                  placeholder="变量名"
+                  :disabled="readOnly"
+                  @change="saveConfig"
+                />
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
       </template>
 
       <el-form-item v-if="formConfig.formDefId && fieldList.length === 0 && !loadingFields">
@@ -174,37 +167,6 @@ const formConfig = reactive<{
   fieldPermissions: {},
   dataMappings: {},
 })
-
-/** 当前展开来源配置的字段（手风琴：单值） */
-const expandedField = ref<string | null>(null)
-
-function toggleExpand(field: string) {
-  expandedField.value = expandedField.value === field ? null : field
-}
-
-/** 字段是否已配置数据来源（用于按钮高亮） */
-function isMapped(field: string): boolean {
-  return !!formConfig.dataMappings[field]?.source
-}
-
-/** 生成映射按钮摘要文案 */
-function mappingSummary(field: string): string {
-  const m = formConfig.dataMappings[field]
-  if (!m?.source) return '映射'
-  if (m.source === 'initiator') {
-    const label = initiatorFormFields.value.find(f => f.field === m.sourceField)?.label || m.sourceField
-    return `← 发起人表单.${label}`
-  }
-  if (m.source === 'node') {
-    const nodeLabel = formTaskNodes.value.find(n => n.id === m.sourceNodeId)?.label || m.sourceNodeId
-    const fieldLabel = nodeFormFields.value.find(f => f.field === m.sourceField)?.label || m.sourceField
-    return `← ${nodeLabel}.${fieldLabel}`
-  }
-  if (m.source === 'variable') {
-    return `← 变量.${m.variableName}`
-  }
-  return '映射'
-}
 
 /** 发起人表单的字段列表（供源字段下拉） */
 const initiatorFormFields = ref<{ field: string; label: string }[]>([])
@@ -303,7 +265,6 @@ function loadConfig() {
   }
 
   loadTaskNodes()
-  loadInitiatorFields()
   setTimeout(() => { isLoading = false }, 0)
 }
 
@@ -471,44 +432,9 @@ watch(formConfig, () => {
   padding: 0 4px;
 }
 
-.field-card-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.field-card {
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  padding: 10px;
-}
-
-.field-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.field-label {
-  font-weight: 500;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.field-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
 .source-cell {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-top: 10px;
 }
 </style>

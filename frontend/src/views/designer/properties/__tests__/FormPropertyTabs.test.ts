@@ -91,11 +91,18 @@ describe('节点表单配置 — 字段数据来源映射', () => {
     return wrapper
   }
 
-  /** 点击字段行数据来源下拉并选择指定选项 */
-  async function pickSource(wrapper: any, rowText: string, optionText: string, selector = '.source-select .el-select__wrapper') {
+  /** 点击指定字段行的「映射」按钮展开其来源配置区 */
+  async function expandRow(wrapper: any, rowText: string) {
     const row = wrapper.findAll('.el-table__row').find((r: any) => r.text().includes(rowText))
     expect(row).toBeTruthy()
-    const sourceSelect = row.find(selector)
+    await row.find('.mapping-toggle-btn').trigger('click')
+    await flushPromises()
+    return row
+  }
+
+  /** 在已展开的字段行内选择来源配置选项 */
+  async function pickSource(expandedRow: any, optionText: string, selector = '.source-select .el-select__wrapper') {
+    const sourceSelect = expandedRow.find(selector)
     expect(sourceSelect.exists()).toBe(true)
     await sourceSelect.trigger('click')
     await flushPromises()
@@ -113,11 +120,10 @@ describe('节点表单配置 — 字段数据来源映射', () => {
     setupNodeConfig()
     const wrapper = await mountTab()
 
-    await pickSource(wrapper, '金额', '流程变量')
+    const row = await expandRow(wrapper, '金额')
+    await pickSource(row, '流程变量')
 
-    const input = wrapper.findAll('.el-table__row')
-      .find((r: any) => r.text().includes('金额'))!
-      .find('.variable-name-input input')
+    const input = row.find('.variable-name-input input')
     expect(input.exists()).toBe(true)
     await input.setValue('requestAmount')
     await flushPromises()
@@ -138,9 +144,10 @@ describe('节点表单配置 — 字段数据来源映射', () => {
     store.setNodeConfig('UserTask_init', { form: { formDefId: 'F0' } })
     const wrapper = await mountTab()
 
-    await pickSource(wrapper, '金额', '发起人表单')
+    const row = await expandRow(wrapper, '金额')
+    await pickSource(row, '发起人表单')
     // 发起人表单字段下拉应出现，选择"姓名"（源字段下拉）
-    await pickSource(wrapper, '金额', '姓名', '.source-field-select .el-select__wrapper')
+    await pickSource(row, '姓名', '.source-field-select .el-select__wrapper')
 
     const saved = useDesignerStore().getNodeConfig('UserTask_1')
     expect(saved?.form?.dataMappings).toContainEqual({
@@ -148,5 +155,64 @@ describe('节点表单配置 — 字段数据来源映射', () => {
       source: 'form:initiator',
       sourceField: 'name',
     })
+  })
+
+  it('默认收起：未点击映射按钮时不渲染 source-cell', async () => {
+    setupNodeConfig()
+    const wrapper = await mountTab()
+    expect(wrapper.findAll('.el-table__row').some((r: any) => r.find('.source-cell').exists())).toBe(false)
+  })
+
+  it('点击「映射」按钮后该行 source-cell 展开', async () => {
+    setupNodeConfig()
+    const wrapper = await mountTab()
+    const row = await expandRow(wrapper, '金额')
+    expect(row.find('.source-cell').exists()).toBe(true)
+  })
+
+  it('手风琴：展开新行时自动收起之前的行', async () => {
+    setupNodeConfig()
+    const wrapper = await mountTab()
+    const rowAmount = await expandRow(wrapper, '金额')
+    expect(rowAmount.find('.source-cell').exists()).toBe(true)
+
+    const rowReason = await expandRow(wrapper, '事由')
+    expect(rowReason.find('.source-cell').exists()).toBe(true)
+    expect(rowAmount.find('.source-cell').exists()).toBe(false)
+  })
+
+  it('再次点击已展开行的「映射」按钮收起', async () => {
+    setupNodeConfig()
+    const wrapper = await mountTab()
+    const row = await expandRow(wrapper, '金额')
+    expect(row.find('.source-cell').exists()).toBe(true)
+    await row.find('.mapping-toggle-btn').trigger('click')
+    await flushPromises()
+    expect(row.find('.source-cell').exists()).toBe(false)
+  })
+
+  it('映射按钮显示来源摘要：发起人表单与流程变量', async () => {
+    const store = setupNodeConfig()
+    store.setBpmnXml(
+      '<definitions xmlns:wf="http://example.com/wf"><process><userTask id="UserTask_init" wf:nodeRole="initiator" name="发起人填报"/></process></definitions>'
+    )
+    store.setNodeConfig('UserTask_init', { form: { formDefId: 'F0' } })
+    store.setNodeConfig('UserTask_1', {
+      form: {
+        formDefId: 'F1',
+        fieldPermissions: { amount: 'EDIT', reason: 'EDIT' },
+        dataMappings: [
+          { targetField: 'amount', source: 'form:initiator', sourceField: 'name' },
+          { targetField: 'reason', source: 'variable:requestAmount' },
+        ],
+      },
+    })
+    const wrapper = await mountTab()
+
+    const rowAmount = wrapper.findAll('.el-table__row').find((r: any) => r.text().includes('金额'))!
+    expect(rowAmount.find('.mapping-toggle-btn').text()).toContain('发起人表单')
+
+    const rowReason = wrapper.findAll('.el-table__row').find((r: any) => r.text().includes('事由'))!
+    expect(rowReason.find('.mapping-toggle-btn').text()).toContain('变量')
   })
 })

@@ -437,4 +437,12 @@ watch(formConfig, () => {
   flex-direction: column;
   gap: 4px;
 }
+
+/* 隐藏权限列与数据来源列下拉箭头，点击即可展开 */
+.perm-select :deep(.el-select__caret),
+.source-select :deep(.el-select__caret),
+.source-field-select :deep(.el-select__caret),
+.source-node-select :deep(.el-select__caret) {
+  display: none;
+}
 </style>

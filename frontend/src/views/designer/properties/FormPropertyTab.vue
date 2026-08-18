@@ -38,8 +38,8 @@
         <el-divider content-position="left">字段权限</el-divider>
 
         <el-table :data="fieldList" border size="small" style="width: 100%">
-          <el-table-column prop="label" label="字段名" min-width="100" />
-          <el-table-column label="权限" width="80" align="center">
+          <el-table-column prop="label" label="字段名" min-width="76" />
+          <el-table-column label="权限" width="68" align="center">
             <template #default="{ row }">
               <el-select
                 v-model="formConfig.fieldPermissions[row.field]"
@@ -55,7 +55,7 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="数据来源" min-width="130" align="center">
+          <el-table-column label="数据来源" min-width="106" align="center">
             <template #default="{ row }">
               <div class="source-cell">
                 <el-select

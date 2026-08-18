@@ -91,13 +91,13 @@ describe('节点表单配置 — 字段数据来源映射', () => {
     return wrapper
   }
 
-  /** 点击指定字段行的「映射」按钮展开其来源配置区 */
+  /** 点击指定字段卡片的「映射」按钮展开其来源配置区 */
   async function expandRow(wrapper: any, rowText: string) {
-    const row = wrapper.findAll('.el-table__row').find((r: any) => r.text().includes(rowText))
-    expect(row).toBeTruthy()
-    await row.find('.mapping-toggle-btn').trigger('click')
+    const card = wrapper.findAll('.field-card').find((r: any) => r.text().includes(rowText))
+    expect(card).toBeTruthy()
+    await card.find('.mapping-toggle-btn').trigger('click')
     await flushPromises()
-    return row
+    return card
   }
 
   /** 在已展开的字段行内选择来源配置选项 */
@@ -160,7 +160,7 @@ describe('节点表单配置 — 字段数据来源映射', () => {
   it('默认收起：未点击映射按钮时不渲染 source-cell', async () => {
     setupNodeConfig()
     const wrapper = await mountTab()
-    expect(wrapper.findAll('.el-table__row').some((r: any) => r.find('.source-cell').exists())).toBe(false)
+    expect(wrapper.findAll('.field-card').some((c: any) => c.find('.source-cell').exists())).toBe(false)
   })
 
   it('点击「映射」按钮后该行 source-cell 展开', async () => {
@@ -209,10 +209,10 @@ describe('节点表单配置 — 字段数据来源映射', () => {
     })
     const wrapper = await mountTab()
 
-    const rowAmount = wrapper.findAll('.el-table__row').find((r: any) => r.text().includes('金额'))!
+    const rowAmount = wrapper.findAll('.field-card').find((c: any) => c.text().includes('金额'))!
     expect(rowAmount.find('.mapping-toggle-btn').text()).toContain('发起人表单')
 
-    const rowReason = wrapper.findAll('.el-table__row').find((r: any) => r.text().includes('事由'))!
+    const rowReason = wrapper.findAll('.field-card').find((c: any) => c.text().includes('事由'))!
     expect(rowReason.find('.mapping-toggle-btn').text()).toContain('变量')
   })
 })

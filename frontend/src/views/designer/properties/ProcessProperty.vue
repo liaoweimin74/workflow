@@ -111,7 +111,7 @@ function syncToStore() {
 
 <style scoped>
 .process-property-tabs {
-  padding: 0 8px;
+  padding: 0;
 }
 
 .process-property-tabs :deep(.el-tabs__header) {

@@ -248,7 +248,7 @@ watch([config, approval, operations, timeout], () => {
 
 <style scoped>
 .user-task-property-tabs {
-  padding: 0 8px;
+  padding: 0;
 }
 
 .user-task-property-tabs :deep(.el-tabs__header) {

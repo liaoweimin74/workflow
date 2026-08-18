@@ -461,7 +461,7 @@ watch(mappings, () => {
 
 <style scoped>
 .process-form-property-tab {
-  padding: 0 4px;
+  padding: 0;
 }
 
 .mapping-rows {

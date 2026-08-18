@@ -429,7 +429,7 @@ watch(formConfig, () => {
 
 <style scoped>
 .form-property-tab {
-  padding: 0 4px;
+  padding: 0;
 }
 
 .source-cell {

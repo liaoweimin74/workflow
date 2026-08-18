@@ -135,7 +135,7 @@ function saveConfig() {
 
 <style scoped>
 .initiator-task-property-tabs {
-  padding: 0 8px;
+  padding: 0;
 }
 
 .initiator-task-property-tabs :deep(.el-tabs__header) {

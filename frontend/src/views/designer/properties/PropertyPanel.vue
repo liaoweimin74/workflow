@@ -56,6 +56,12 @@
           :read-only="readOnly"
         />
 
+        <!-- 内嵌子流程 -->
+        <sub-process-property
+          v-else-if="selectedNodeType === 'SubProcess'"
+          :read-only="readOnly"
+        />
+
         <!-- 网关 -->
           <gateway-property
             v-else-if="isGatewayNode"
@@ -87,6 +93,7 @@ import UserTaskProperty from './UserTaskProperty.vue'
 import InitiatorTaskProperty from './InitiatorTaskProperty.vue'
 import ServiceTaskProperty from './ServiceTaskProperty.vue'
 import CallActivityProperty from './CallActivityProperty.vue'
+import SubProcessProperty from './SubProcessProperty.vue'
 import GatewayProperty from './GatewayProperty.vue'
 import SequenceFlowProperty from './SequenceFlowProperty.vue'
 
@@ -139,7 +146,8 @@ const nodeTypeLabel = computed(() => {
     ParallelGateway: '并行网关',
     InclusiveGateway: '包含网关',
     SequenceFlow: '连线',
-    CallActivity: '调用活动'
+    CallActivity: '调用活动',
+    SubProcess: '内嵌子流程'
   }
   return labels[selectedNodeType.value || ''] || selectedNodeType.value || ''
 })

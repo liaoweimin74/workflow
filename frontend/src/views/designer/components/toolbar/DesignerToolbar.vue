@@ -33,6 +33,13 @@
       <el-tag v-if="draftName" type="info" size="small">{{ draftName }}</el-tag>
       <el-tag v-if="draftKey" type="info" size="small" effect="plain">{{ draftKey }}</el-tag>
       <el-tag v-if="isDirty" type="warning" size="small">未保存</el-tag>
+      <el-breadcrumb v-if="subflowBreadcrumbs.length" separator="/" style="margin-left: 12px">
+        <el-breadcrumb-item
+          v-for="(crumb, i) in subflowBreadcrumbs"
+          :key="crumb.id"
+          @click="$emit('exit-to-level', i)"
+        >{{ crumb.name || '未命名子流程' }}</el-breadcrumb-item>
+      </el-breadcrumb>
     </div>
 
     <div class="toolbar-right">
@@ -78,6 +85,7 @@ defineProps<{
 const draftName = computed(() => designerStore.draftName)
 const draftKey = computed(() => designerStore.draftKey)
 const isDirty = computed(() => designerStore.isDirty)
+const subflowBreadcrumbs = computed(() => designerStore.subflowBreadcrumbs)
 
 // 鸟瞰图开关，默认显示
 const minimapVisible = ref(true)
@@ -95,6 +103,7 @@ defineEmits<{
   (e: 'zoomReset'): void
   (e: 'back'): void
   (e: 'toggleMinimap', visible: boolean): void
+  (e: 'exit-to-level', level: number): void
 }>()
 </script>
 

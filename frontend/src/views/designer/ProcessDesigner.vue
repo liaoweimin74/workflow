@@ -15,6 +15,7 @@
       @zoom-reset="handleZoomReset"
       @back="handleBack"
       @toggle-minimap="handleToggleMinimap"
+      @exit-to-level="exitToSubflowLevel"
     />
 
     <div class="designer-body">
@@ -66,7 +67,8 @@ import PropertyPanel from './properties/PropertyPanel.vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
-import { isInitiatorTaskElement } from './utils/bpmnValidation'
+import { isInitiatorTaskElement, validateSubProcessBoundaries } from './utils/bpmnValidation'
+import { collectExternalElements, computeFocusViewbox } from './utils/subflowNavigation'
 import { processDesignApi, deployedProcessApi } from '@/api/processDefinition'
 import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-js.css'
@@ -207,12 +209,68 @@ function setupEventListeners(readOnly = false) {
     designerStore.setBpmnXml('') // mark dirty
   })
 
-  eventBus.on('shape.remove', (event: any) => {
-    const element = event.element
-    if (element && element.id) {
-      designerStore.deleteNodeConfig(element.id)
+  // 删除级联：bpmn-js 删除子流程时内部元素同批进入 deleted 列表，统一清理 config
+  eventBus.on('elements.deleted', (event: any) => {
+    const deleted: any[] = event.elements || []
+    deleted.forEach((el: any) => { if (el.id) designerStore.deleteNodeConfig(el.id) })
+    // 若栈顶子流程被删，自动退出该层级（恢复视图快照）
+    const top = designerStore.subflowStack[designerStore.subflowStack.length - 1]
+    if (top && deleted.some((el: any) => el.id === top)) {
+      exitToSubflowLevel(designerStore.subflowStack.length - 1)
     }
   })
+
+  // 双击展开态子流程 → 进入编辑模式
+  eventBus.on('element.dblclick', (event: any) => {
+    const el = event.element
+    const bo = el && el.businessObject
+    if (!bo || !bo.$instanceOf || !bo.$instanceOf('bpmn:SubProcess')) return
+    event.preventDefault()
+    enterSubprocessView(el)
+  })
+}
+
+/** 进入子流程编辑视图：展开 + 快照 + 隐藏外部元素 + 聚焦 + 入栈 */
+function enterSubprocessView(el: any) {
+  const modeler = getModeler()
+  const canvas = (modeler as any).get('canvas')
+  const elementRegistry = (modeler as any).get('elementRegistry')
+  const modeling = (modeler as any).get('modeling')
+
+  if (el.collapsed) modeling.toggleCollapse(el)
+  // 快照：当前整体 viewbox + 外部元素 id 列表
+  const viewbox = canvas.viewbox()
+  const hidden = collectExternalElements(el, elementRegistry)
+  designerStore.pushSubflowSnapshot({
+    viewbox: viewbox.scale ? { x: viewbox.x, y: viewbox.y, width: viewbox.width, height: viewbox.height } : null,
+    hiddenIds: hidden.map((e: any) => e.id),
+  })
+  // 隐藏外部元素 graphics
+  hidden.forEach((e: any) => { const g = canvas.getGraphics(e); if (g) g.style.display = 'none' })
+  // 聚焦子流程内部
+  const bounds = el.getBoundingBox()
+  canvas.viewbox(computeFocusViewbox(bounds))
+  designerStore.enterSubflow(el.id)
+}
+
+/** 返回指定层级（level 为栈下标，0 = 主流程）：弹出嵌套层并恢复对应层快照 */
+function exitToSubflowLevel(level: number) {
+  const modeler = getModeler()
+  const canvas = (modeler as any).get('canvas')
+  const elementRegistry = (modeler as any).get('elementRegistry')
+  // 弹出至目标层，逐个恢复快照（仅最后恢复的生效，前面的快照叠加取最终态）
+  while (designerStore.subflowStack.length > level) {
+    const snap = designerStore.popSubflowSnapshot()
+    const hidden = snap?.hiddenIds || []
+    hidden.forEach((id) => {
+      const e = elementRegistry.get(id)
+      const g = e && canvas.getGraphics(e)
+      if (g) g.style.display = ''
+    })
+    designerStore.exitSubflow()
+  }
+  const snap = designerStore.popSubflowSnapshot()
+  if (snap?.viewbox) canvas.viewbox(snap.viewbox)
 }
 
 /**
@@ -297,6 +355,10 @@ function validateBpmnXml(xml: string): string | null {
       }
     }
   }
+
+  // 7. 内嵌子流程必须包含开始与结束事件
+  const subErrors = validateSubProcessBoundaries(xml)
+  if (subErrors.length) return subErrors.join('；')
 
   return null
 }

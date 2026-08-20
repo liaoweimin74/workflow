@@ -40,6 +40,16 @@
           @click="$emit('exit-to-level', i)"
         >{{ crumb.name || '未命名子流程' }}</el-breadcrumb-item>
       </el-breadcrumb>
+      <!-- 子流程编辑模式：显眼返回按钮 -->
+      <el-button
+        v-if="isInsideSubflow"
+        :icon="Back"
+        size="small"
+        type="warning"
+        plain
+        style="margin-left: 12px"
+        @click="$emit('exit-to-level', 0)"
+      >退出子流程</el-button>
     </div>
 
     <div class="toolbar-right">
@@ -61,6 +71,7 @@
 <script setup lang="ts">
 import {
   ArrowLeft,
+  Back,
   RefreshLeft,
   RefreshRight,
   ZoomIn,
@@ -86,6 +97,7 @@ const draftName = computed(() => designerStore.draftName)
 const draftKey = computed(() => designerStore.draftKey)
 const isDirty = computed(() => designerStore.isDirty)
 const subflowBreadcrumbs = computed(() => designerStore.subflowBreadcrumbs)
+const isInsideSubflow = computed(() => designerStore.isInsideSubflow)
 
 // 鸟瞰图开关，默认显示
 const minimapVisible = ref(true)

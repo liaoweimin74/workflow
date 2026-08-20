@@ -173,7 +173,7 @@ function CustomContextPadProvider(
         )
         entries['append.sub-process'] = appendAction(
           'bpmn:SubProcess',
-          'bpmn-icon-sub-process',
+          'bpmn-icon-subprocess-collapsed',
           '追加内嵌子流程'
         )
         entries['append.call-activity'] = appendAction(

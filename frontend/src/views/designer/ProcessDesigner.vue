@@ -30,6 +30,14 @@
         @dragover.prevent="handleDragOver"
       >
         <div class="canvas-wrapper" ref="canvasWrapperRef"></div>
+        <!-- 子流程编辑模式浮层：明确当前处于子流程内部并提供返回入口 -->
+        <transition name="el-fade-in">
+          <div v-if="designerStore.isInsideSubflow" class="subflow-edit-bar">
+            <el-icon class="subflow-edit-icon"><FolderOpened /></el-icon>
+            <span>正在编辑子流程：{{ currentSubflowName }}</span>
+            <el-button size="small" type="primary" link @click="exitToSubflowLevel(0)">返回主流程</el-button>
+          </div>
+        </transition>
         <div class="canvas-loading" v-if="loading">
           <el-icon class="is-loading"><Loading /></el-icon>
           <span>加载中...</span>
@@ -60,7 +68,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, FolderOpened } from '@element-plus/icons-vue'
 import DesignerToolbar from './components/toolbar/DesignerToolbar.vue'
 import NodePalette from './components/NodePalette.vue'
 import PropertyPanel from './properties/PropertyPanel.vue'
@@ -90,6 +98,13 @@ const propertyCollapsed = ref(false)
 
 /** 只读模式：通过 /designer?procDefId=xxx&readonly=1 进入，查看历史版本 */
 const isReadOnly = computed(() => route.query.readonly === '1')
+
+/** 当前所在子流程名称（面包屑最后一级，未命名时兜底） */
+const currentSubflowName = computed(() => {
+  const crumbs = designerStore.subflowBreadcrumbs
+  const last = crumbs[crumbs.length - 1]
+  return last?.name || '未命名子流程'
+})
 
 onMounted(async () => {
   loading.value = true
@@ -648,5 +663,28 @@ function handleDrop(event: DragEvent) {
   gap: 8px;
   color: #909399;
   font-size: 14px;
+}
+
+/* 子流程编辑模式浮层：顶部居中提示 + 返回入口 */
+.subflow-edit-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: #ecf5ff;
+  border: 1px solid #d9ecff;
+  border-radius: 18px;
+  font-size: 13px;
+  color: #409eff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.subflow-edit-icon {
+  font-size: 15px;
 }
 </style>

@@ -15,7 +15,6 @@
       @zoom-reset="handleZoomReset"
       @back="handleBack"
       @toggle-minimap="handleToggleMinimap"
-      @exit-to-level="exitToSubflowLevel"
     />
 
     <div class="designer-body">
@@ -30,14 +29,6 @@
         @dragover.prevent="handleDragOver"
       >
         <div class="canvas-wrapper" ref="canvasWrapperRef"></div>
-        <!-- 子流程编辑模式浮层：明确当前处于子流程内部并提供返回入口 -->
-        <transition name="el-fade-in">
-          <div v-if="designerStore.isInsideSubflow" class="subflow-edit-bar">
-            <el-icon class="subflow-edit-icon"><FolderOpened /></el-icon>
-            <span>正在编辑子流程：{{ currentSubflowName }}</span>
-            <el-button size="small" type="primary" link @click="exitToSubflowLevel(0)">返回主流程</el-button>
-          </div>
-        </transition>
         <div class="canvas-loading" v-if="loading">
           <el-icon class="is-loading"><Loading /></el-icon>
           <span>加载中...</span>
@@ -68,7 +59,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, FolderOpened } from '@element-plus/icons-vue'
+import { Loading } from '@element-plus/icons-vue'
 import DesignerToolbar from './components/toolbar/DesignerToolbar.vue'
 import NodePalette from './components/NodePalette.vue'
 import PropertyPanel from './properties/PropertyPanel.vue'
@@ -76,7 +67,7 @@ import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
 import { isInitiatorTaskElement, validateSubProcessBoundaries } from './utils/bpmnValidation'
-import { collectExternalElements, computeFocusViewbox } from './utils/subflowNavigation'
+import { findStartEventInScope, resolveDropParent } from './utils/subflowNavigation'
 import { processDesignApi, deployedProcessApi } from '@/api/processDefinition'
 import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-js.css'
@@ -98,13 +89,6 @@ const propertyCollapsed = ref(false)
 
 /** 只读模式：通过 /designer?procDefId=xxx&readonly=1 进入，查看历史版本 */
 const isReadOnly = computed(() => route.query.readonly === '1')
-
-/** 当前所在子流程名称（面包屑最后一级，未命名时兜底） */
-const currentSubflowName = computed(() => {
-  const crumbs = designerStore.subflowBreadcrumbs
-  const last = crumbs[crumbs.length - 1]
-  return last?.name || '未命名子流程'
-})
 
 onMounted(async () => {
   loading.value = true
@@ -228,64 +212,23 @@ function setupEventListeners(readOnly = false) {
   eventBus.on('elements.deleted', (event: any) => {
     const deleted: any[] = event.elements || []
     deleted.forEach((el: any) => { if (el.id) designerStore.deleteNodeConfig(el.id) })
-    // 若栈顶子流程被删，自动退出该层级（恢复视图快照）
-    const top = designerStore.subflowStack[designerStore.subflowStack.length - 1]
-    if (top && deleted.some((el: any) => el.id === top)) {
-      exitToSubflowLevel(designerStore.subflowStack.length - 1)
-    }
   })
 
-  // 双击展开态子流程 → 进入编辑模式
+  // 双击子流程 → 与原生斜向下箭头（.bjs-drilldown 按钮）行为一致：
+  // 进入内建的子流程设计界面（切换至子流程 plane，圆角面包屑可返回）。
+  // 子流程无独立 plane（无内部元素）时退回原地折叠/展开。
   eventBus.on('element.dblclick', (event: any) => {
     const el = event.element
     const bo = el && el.businessObject
     if (!bo || !bo.$instanceOf || !bo.$instanceOf('bpmn:SubProcess')) return
-    event.preventDefault()
-    enterSubprocessView(el)
+    const planeRoot = canvas.findRoot(el.id + '_plane')
+    if (planeRoot && planeRoot !== canvas.getRootElement()) {
+      canvas.setRootElement(planeRoot)
+    } else {
+      const modeling = (getModeler() as any).get('modeling')
+      modeling.toggleCollapse(el)
+    }
   })
-}
-
-/** 进入子流程编辑视图：展开 + 快照 + 隐藏外部元素 + 聚焦 + 入栈 */
-function enterSubprocessView(el: any) {
-  const modeler = getModeler()
-  const canvas = (modeler as any).get('canvas')
-  const elementRegistry = (modeler as any).get('elementRegistry')
-  const modeling = (modeler as any).get('modeling')
-
-  if (el.collapsed) modeling.toggleCollapse(el)
-  // 快照：当前整体 viewbox + 外部元素 id 列表
-  const viewbox = canvas.viewbox()
-  const hidden = collectExternalElements(el, elementRegistry)
-  designerStore.pushSubflowSnapshot({
-    viewbox: viewbox.scale ? { x: viewbox.x, y: viewbox.y, width: viewbox.width, height: viewbox.height } : null,
-    hiddenIds: hidden.map((e: any) => e.id),
-  })
-  // 隐藏外部元素 graphics
-  hidden.forEach((e: any) => { const g = canvas.getGraphics(e); if (g) g.style.display = 'none' })
-  // 聚焦子流程内部
-  const bounds = el.getBoundingBox()
-  canvas.viewbox(computeFocusViewbox(bounds))
-  designerStore.enterSubflow(el.id)
-}
-
-/** 返回指定层级（level 为栈下标，0 = 主流程）：弹出嵌套层并恢复对应层快照 */
-function exitToSubflowLevel(level: number) {
-  const modeler = getModeler()
-  const canvas = (modeler as any).get('canvas')
-  const elementRegistry = (modeler as any).get('elementRegistry')
-  // 弹出至目标层，逐个恢复快照（仅最后恢复的生效，前面的快照叠加取最终态）
-  while (designerStore.subflowStack.length > level) {
-    const snap = designerStore.popSubflowSnapshot()
-    const hidden = snap?.hiddenIds || []
-    hidden.forEach((id) => {
-      const e = elementRegistry.get(id)
-      const g = e && canvas.getGraphics(e)
-      if (g) g.style.display = ''
-    })
-    designerStore.exitSubflow()
-  }
-  const snap = designerStore.popSubflowSnapshot()
-  if (snap?.viewbox) canvas.viewbox(snap.viewbox)
 }
 
 /**
@@ -571,9 +514,25 @@ function handleDrop(event: DragEvent) {
   const modeling = (modeler as any).get('modeling')
   const elementRegistry = (modeler as any).get('elementRegistry')
 
-  // 校验：无触发开始事件全局只能有一个
+  // 计算放置坐标（画布坐标）
+  const rect = canvasWrapperRef.value?.getBoundingClientRect()
+  if (!rect) return
+
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+
+  // 转换为画布坐标
+  const viewbox = canvas.viewbox()
+  const canvasX = x / viewbox.scale + viewbox.x
+  const canvasY = y / viewbox.scale + viewbox.y
+
+  // 父容器：按落点命中「展开态子流程」（保持 bpmn-js 内建界面语义），
+  // 未命中任何展开子流程则取当前 plane 根元素（主流程 plane→主流程；子流程 plane→子流程）
+  const rootElement = resolveDropParent({ x: canvasX, y: canvasY }, elementRegistry, canvas.getRootElement())
+
+  // 校验：当前容器作用域内只能有一个开始事件（子流程可有自己的开始事件）
   if (nodeType === 'bpmn:StartEvent') {
-    const existing = elementRegistry.find((el: any) => el.type === 'bpmn:StartEvent')
+    const existing = findStartEventInScope(rootElement, elementRegistry)
     if (existing) {
       ElMessage.warning('一个流程只能有一个开始事件')
       return
@@ -593,25 +552,10 @@ function handleDrop(event: DragEvent) {
     }
   }
 
-  // 计算放置坐标
-  const rect = canvasWrapperRef.value?.getBoundingClientRect()
-  if (!rect) return
-
-  const x = event.clientX - rect.left
-  const y = event.clientY - rect.top
-
-  // 转换为画布坐标
-  const viewbox = canvas.viewbox()
-  const canvasX = x / viewbox.scale + viewbox.x
-  const canvasY = y / viewbox.scale + viewbox.y
-
   // 创建元素 shape
   const shape = elementFactory.createShape({ type: nodeType })
 
-  // 找到根元素（Process）作为父容器
-  const rootElement = elementRegistry.find((el: any) => el.type === 'bpmn:Process') || canvas.getRootElement()
-
-  // 直接在指定坐标创建并放置元素
+  // 直接以父容器创建并放置元素（父容器已在开始事件校验前解析）
   modeling.createShape(shape, { x: canvasX, y: canvasY }, rootElement)
 
   // 发起节点：设置 assignee 和 wf:nodeRole
@@ -663,28 +607,5 @@ function handleDrop(event: DragEvent) {
   gap: 8px;
   color: #909399;
   font-size: 14px;
-}
-
-/* 子流程编辑模式浮层：顶部居中提示 + 返回入口 */
-.subflow-edit-bar {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background: #ecf5ff;
-  border: 1px solid #d9ecff;
-  border-radius: 18px;
-  font-size: 13px;
-  color: #409eff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.subflow-edit-icon {
-  font-size: 15px;
 }
 </style>

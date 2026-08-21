@@ -33,23 +33,6 @@
       <el-tag v-if="draftName" type="info" size="small">{{ draftName }}</el-tag>
       <el-tag v-if="draftKey" type="info" size="small" effect="plain">{{ draftKey }}</el-tag>
       <el-tag v-if="isDirty" type="warning" size="small">未保存</el-tag>
-      <el-breadcrumb v-if="subflowBreadcrumbs.length" separator="/" style="margin-left: 12px">
-        <el-breadcrumb-item
-          v-for="(crumb, i) in subflowBreadcrumbs"
-          :key="crumb.id"
-          @click="$emit('exit-to-level', i)"
-        >{{ crumb.name || '未命名子流程' }}</el-breadcrumb-item>
-      </el-breadcrumb>
-      <!-- 子流程编辑模式：显眼返回按钮 -->
-      <el-button
-        v-if="isInsideSubflow"
-        :icon="Back"
-        size="small"
-        type="warning"
-        plain
-        style="margin-left: 12px"
-        @click="$emit('exit-to-level', 0)"
-      >退出子流程</el-button>
     </div>
 
     <div class="toolbar-right">
@@ -71,7 +54,6 @@
 <script setup lang="ts">
 import {
   ArrowLeft,
-  Back,
   RefreshLeft,
   RefreshRight,
   ZoomIn,
@@ -96,8 +78,6 @@ defineProps<{
 const draftName = computed(() => designerStore.draftName)
 const draftKey = computed(() => designerStore.draftKey)
 const isDirty = computed(() => designerStore.isDirty)
-const subflowBreadcrumbs = computed(() => designerStore.subflowBreadcrumbs)
-const isInsideSubflow = computed(() => designerStore.isInsideSubflow)
 
 // 鸟瞰图开关，默认显示
 const minimapVisible = ref(true)
@@ -115,7 +95,6 @@ defineEmits<{
   (e: 'zoomReset'): void
   (e: 'back'): void
   (e: 'toggleMinimap', visible: boolean): void
-  (e: 'exit-to-level', level: number): void
 }>()
 </script>
 

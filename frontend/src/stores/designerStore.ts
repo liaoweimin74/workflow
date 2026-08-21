@@ -166,12 +166,6 @@ export interface DesignerState {
   draftDescription: string
 }
 
-/** 子流程视图快照：进入某层前的画布视图与其外部隐藏元素，退出时恢复 */
-export interface SubflowViewSnapshot {
-  viewbox: { x: number; y: number; width: number; height: number } | null
-  hiddenIds: string[]
-}
-
 export const useDesignerStore = defineStore('designer', () => {
   const bpmnXml = ref<string>('')
   const nodeConfigs = ref<Record<string, string>>({})
@@ -318,37 +312,10 @@ export const useDesignerStore = defineStore('designer', () => {
     isDirty.value = false
     lastSavedXml.value = ''
     lastSavedNodeConfigs.value = ''
-    subflowStack.value = []
-    subflowSnapshots.value = []
   }
 
   function markClean() {
     isDirty.value = false
-  }
-
-  // ========== 子流程导航栈 ==========
-  const subflowStack = ref<string[]>([])
-  const subflowSnapshots = ref<SubflowViewSnapshot[]>([])
-  const isInsideSubflow = computed(() => subflowStack.value.length > 0)
-
-  const subflowBreadcrumbs = computed(() =>
-    subflowStack.value.map((id) => {
-      const cfg = getNodeConfig(id)
-      return { id, name: cfg?.basic?.name ?? '' }
-    })
-  )
-
-  function enterSubflow(nodeId: string) {
-    if (subflowStack.value[subflowStack.value.length - 1] === nodeId) return
-    subflowStack.value = [...subflowStack.value, nodeId]
-    selectedNodeId.value = null
-    selectedNodeType.value = null
-  }
-  function exitSubflow() { subflowStack.value = subflowStack.value.slice(0, -1) }
-  function exitAllSubflows() { subflowStack.value = [] }
-  function pushSubflowSnapshot(snap: SubflowViewSnapshot) { subflowSnapshots.value.push(snap) }
-  function popSubflowSnapshot(): SubflowViewSnapshot | undefined {
-    return subflowSnapshots.value.pop()
   }
 
   return {
@@ -377,14 +344,5 @@ export const useDesignerStore = defineStore('designer', () => {
     isUnchanged,
     clearConfigs,
     markClean,
-    subflowStack,
-    subflowSnapshots,
-    isInsideSubflow,
-    subflowBreadcrumbs,
-    enterSubflow,
-    exitSubflow,
-    exitAllSubflows,
-    pushSubflowSnapshot,
-    popSubflowSnapshot
   }
 })

@@ -49,11 +49,7 @@ C:\Users\foxwe\.cache\opencode\packages\superpowers@git+https_\github.com\obra\s
 
 | 任务类型    | 调用方式                                                                                                                                |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 实现任务    | `task(category="deep", load_skills=[], ...)` — prompt 中嵌入 TDD 指令（Read C:\Users\foxwe\.cache\opencode\packages\superpowers@git+https_\github.com\obra\superpowers.git\node_modules\superpowers\skills\test-driven-development/SKILL.md） |
-| 代码搜索    | `task(subagent_type="explore", ...)`                                                                                                    |
-| 查文档      | `task(subagent_type="librarian", ...)`                                                                                                  |
-| 架构决策    | `task(subagent_type="oracle", ...)`                                                                                                     |
-| Code review | `task(subagent_type="oracle", ...)`                                                                                                     |
+| 实现任务    | `task(load_skills=[], ...)` — prompt 中嵌入 TDD 指令（Read C:\Users\foxwe\.cache\opencode\packages\superpowers@git+https_\github.com\obra\superpowers.git\node_modules\superpowers\skills\test-driven-development/SKILL.md） |
 
 ### ⚠️ 关键限制：`load_skills` 不支持 Superpowers 技能
 

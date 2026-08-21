@@ -41,6 +41,12 @@ public class DataSourceDefinition {
     private String sourceKey;
 
     /**
+     * 关联的业务表单ID（FORM类型数据源使用）。
+     */
+    @Column(name = "form_id", length = 64)
+    private String formId;
+
+    /**
      * type=API 时的动态参数 JSON。
      */
     @Lob
@@ -90,6 +96,9 @@ public class DataSourceDefinition {
 
     public String getSourceKey() { return sourceKey; }
     public void setSourceKey(String sourceKey) { this.sourceKey = sourceKey; }
+
+    public String getFormId() { return formId; }
+    public void setFormId(String formId) { this.formId = formId; }
 
     public String getParams() { return params; }
     public void setParams(String params) { this.params = params; }

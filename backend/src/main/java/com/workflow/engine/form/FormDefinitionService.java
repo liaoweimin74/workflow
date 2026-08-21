@@ -3,12 +3,16 @@ package com.workflow.engine.form;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.engine.datasource.event.FormCreatedEvent;
+import com.workflow.engine.datasource.event.FormDeletedEvent;
+import com.workflow.engine.datasource.event.FormUpdatedEvent;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.common.exception.BusinessException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -38,6 +42,7 @@ public class FormDefinitionService {
     private final TenantProvider tenantProvider;
     private final DynamicTableManager tableManager;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** 不支持映射为业务表单列的组件（人员/部门选择、分割线、容器、历史数据表组件等） */
     private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
@@ -49,11 +54,13 @@ public class FormDefinitionService {
     public FormDefinitionService(FormDefinitionRepository formDefRepository,
                                  TenantProvider tenantProvider,
                                  DynamicTableManager tableManager,
-                                 ObjectMapper objectMapper) {
+                                 ObjectMapper objectMapper,
+                                 ApplicationEventPublisher eventPublisher) {
         this.formDefRepository = formDefRepository;
         this.tenantProvider = tenantProvider;
         this.tableManager = tableManager;
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -96,7 +103,12 @@ public class FormDefinitionService {
         formDef.setVersion(1);
         formDef.setStatus("DRAFT");
 
-        return formDefRepository.save(formDef);
+        FormDefinition saved = formDefRepository.save(formDef);
+        
+        // 发布表单创建事件
+        eventPublisher.publishEvent(new FormCreatedEvent(this, saved.getId(), saved.getName(), saved.getKey(), tenantId));
+        
+        return saved;
     }
 
     /**
@@ -201,7 +213,13 @@ public class FormDefinitionService {
         if (columnConfig != null) {
             current.setColumnConfig(columnConfig);
         }
-        return formDefRepository.save(current);
+        
+        FormDefinition saved = formDefRepository.save(current);
+        
+        // 发布表单更新事件
+        eventPublisher.publishEvent(new FormUpdatedEvent(this, saved.getId(), saved.getName(), saved.getKey(), tenantId));
+        
+        return saved;
     }
 
     /**
@@ -219,6 +237,9 @@ public class FormDefinitionService {
 
         formDef.setStatus("ARCHIVED");
         formDefRepository.save(formDef);
+        
+        // 发布表单删除事件
+        eventPublisher.publishEvent(new FormDeletedEvent(this, formDef.getId(), formDef.getKey(), tenantId));
     }
 
     /**

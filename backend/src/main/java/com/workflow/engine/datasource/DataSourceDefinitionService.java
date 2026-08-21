@@ -67,6 +67,8 @@ public class DataSourceDefinitionService {
      * 创建数据源（默认 DRAFT）。
      * 校验：type 必填且合法；同租户 name 唯一；按类型必填项（FORM→formKey + 表单存在；
      * SYSTEM/API→sourceKey；API→params 须为合法 JSON）。
+     * 
+     * 注意：此方法仅供系统内部调用，用户不能直接创建数据源。
      */
     @Transactional
     public DataSourceDefinition create(String name, String type, String formKey, String sourceKey, String params) {
@@ -108,6 +110,8 @@ public class DataSourceDefinitionService {
     /**
      * 原地更新数据源（name/type/formKey/sourceKey/params；null 表示不更新）。
      * 若当前 ENABLED 且 type/formKey 变更，重新校验（FORM 须仍指向已发布表单）。
+     * 
+     * 注意：此方法仅供系统内部调用，用户不能直接编辑数据源。
      */
     @Transactional
     public DataSourceDefinition update(String id, String name, String type, String formKey,
@@ -148,6 +152,8 @@ public class DataSourceDefinitionService {
 
     /**
      * 启用数据源：校验按类型必填项齐全；FORM 类型须绑定已发布表单。成功置 ENABLED。
+     * 
+     * 注意：此方法仅供系统内部调用，用户不能直接启用数据源。
      */
     @Transactional
     public DataSourceDefinition enable(String id) {
@@ -166,6 +172,8 @@ public class DataSourceDefinitionService {
 
     /**
      * 禁用数据源（不校验引用；不影响已发布页面运行）。
+     * 
+     * 注意：此方法仅供系统内部调用，用户不能直接禁用数据源。
      */
     @Transactional
     public DataSourceDefinition disable(String id) {
@@ -176,6 +184,8 @@ public class DataSourceDefinitionService {
 
     /**
      * 删除数据源：仅 DRAFT 可删除（ENABLED/DISABLED → 400）。
+     * 
+     * 注意：此方法仅供系统内部调用，用户不能直接删除数据源。
      */
     @Transactional
     public void delete(String id) {

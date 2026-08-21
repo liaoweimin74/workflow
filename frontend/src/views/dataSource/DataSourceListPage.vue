@@ -2,7 +2,10 @@
   <div class="data-source-list-page">
     <el-card style="overflow: hidden">
       <template #header>
-        <span style="font-weight: bold; font-size: 14px">数据源管理</span>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-weight: bold; font-size: 14px">数据源管理</span>
+          <el-tag type="info" size="small">数据源由系统自动管理，不支持手动操作</el-tag>
+        </div>
       </template>
       <SearchTable
         ref="tableRef"
@@ -13,11 +16,6 @@
         :default-page-size="20"
         :max-visible-buttons="5"
       >
-        <template #default>
-          <el-button type="primary" :icon="Plus" v-permission="'data-source:manage'" @click="openCreate">
-            新建
-          </el-button>
-        </template>
         <template #type="{ row }">
           <el-tag :type="typeTagType(row.type)">
             {{ typeLabel(row.type) }}
@@ -37,42 +35,42 @@
       </SearchTable>
     </el-card>
 
-    <!-- 新建/编辑数据源弹窗（自持：API 类型需多操作 + 列定义编辑器，SearchTable 标准弹窗无法承载） -->
+      <!-- 查看/新建/编辑数据源弹窗 -->
       <el-dialog
         v-model="dialogVisible"
-        :title="editingId ? '编辑数据源' : '新建数据源'"
+        :title="dialogTitle"
         width="760px"
         top="6vh"
         destroy-on-close
         :close-on-click-modal="false"
       >
         <el-form :model="form" label-width="110px" label-position="left">
-        <el-form-item label="数据源名称" required>
-          <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" />
+        <el-form-item label="数据源名称">
+          <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" :disabled="isViewMode" />
         </el-form-item>
 
-        <el-form-item label="数据源类型" required>
-          <el-radio-group v-model="form.type" :disabled="!!editingId">
+        <el-form-item label="数据源类型">
+          <el-radio-group v-model="form.type" :disabled="true">
             <el-radio-button value="FORM">业务表单</el-radio-button>
             <el-radio-button value="SYSTEM">系统结构</el-radio-button>
             <el-radio-button value="API">第三方 API</el-radio-button>
           </el-radio-group>
         </el-form-item>
           <!-- ============ 统一 API 配置：FORM/SYSTEM 自动填充，API 手动配置 ============ -->
-          <el-form-item label="标识" required>
+          <el-form-item label="标识">
             <template v-if="form.type === 'FORM'">
-              <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px">
+              <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px" disabled>
                 <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
               </el-select>
             </template>
             <template v-else-if="form.type === 'SYSTEM'">
-              <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 320px">
+              <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 320px" disabled>
                 <el-option label="部门树" value="dept-tree" />
                 <el-option label="用户列表" value="user-tree" />
               </el-select>
             </template>
             <template v-else>
-              <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" />
+              <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" disabled />
             </template>
           </el-form-item>
         </el-form>
@@ -85,21 +83,21 @@
           <!-- ===== API：可编辑表单 ===== -->
           <template v-if="form.type === 'API'">
         <el-form :model="form" label-width="110px" label-position="left">
-              <el-form-item :label="opLabel.list" required>
+              <el-form-item :label="opLabel.list">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" />
-                  <el-select v-model="apiOps.list.method" style="width: 110px">
+                  <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" disabled />
+                  <el-select v-model="apiOps.list.method" style="width: 110px" disabled>
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
-                  <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" />
-                  <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" />
+                  <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" disabled />
+                  <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" disabled />
                 </div>
               </el-form-item>
 
               <el-form-item :label="opLabel.get">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
-                  <el-select v-model="apiOps.get.method" style="width: 110px">
+                  <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" disabled />
+                  <el-select v-model="apiOps.get.method" style="width: 110px" disabled>
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
                 </div>
@@ -107,8 +105,8 @@
 
               <el-form-item :label="opLabel.create">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" />
-                  <el-select v-model="apiOps.create.method" style="width: 110px">
+                  <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" disabled />
+                  <el-select v-model="apiOps.create.method" style="width: 110px" disabled>
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
                 </div>
@@ -116,8 +114,8 @@
 
               <el-form-item :label="opLabel.update">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
-                  <el-select v-model="apiOps.update.method" style="width: 110px">
+                  <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" disabled />
+                  <el-select v-model="apiOps.update.method" style="width: 110px" disabled>
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
                 </div>
@@ -125,8 +123,8 @@
 
               <el-form-item :label="opLabel.delete">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
-                  <el-select v-model="apiOps.delete.method" style="width: 110px">
+                  <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" disabled />
+                  <el-select v-model="apiOps.delete.method" style="width: 110px" disabled>
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
                 </div>
@@ -134,9 +132,9 @@
 
               <el-form-item label="搜索参数">
                 <div class="op-editor">
-                  <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" />
-                  <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" />
-                  <el-select v-model="form.pageBase" style="width: 130px">
+                  <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" disabled />
+                  <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" disabled />
+                  <el-select v-model="form.pageBase" style="width: 130px" disabled>
                     <el-option label="页码从 1 开始" :value="1" />
                     <el-option label="页码从 0 开始" :value="0" />
                   </el-select>
@@ -144,10 +142,10 @@
               </el-form-item>
 
               <el-form-item label="固定参数 JSON">
-                <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" />
+                <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" disabled />
               </el-form-item>
               <el-form-item label="请求头 JSON">
-                <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" />
+                <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" disabled />
               </el-form-item>
 
               <el-divider content-position="left">列定义（列表展示与编辑弹窗使用）</el-divider>
@@ -155,9 +153,9 @@
               <el-form-item label="列">
                 <div class="column-editor">
                   <div v-for="(col, idx) in apiColumns" :key="idx" class="column-row">
-                    <el-input v-model="col.key" placeholder="字段名" style="width: 130px" />
-                    <el-input v-model="col.label" placeholder="列名" style="width: 130px" />
-                    <el-select v-model="col.columnType" placeholder="类型" style="width: 120px">
+                    <el-input v-model="col.key" placeholder="字段名" style="width: 130px" disabled />
+                    <el-input v-model="col.label" placeholder="列名" style="width: 130px" disabled />
+                    <el-select v-model="col.columnType" placeholder="类型" style="width: 120px" disabled>
                       <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
                     </el-select>
                     <el-input-number
@@ -168,6 +166,7 @@
                       placeholder="长度"
                       controls-position="right"
                       style="width: 120px"
+                      disabled
                     />
                     <el-input-number
                       v-if="col.columnType === 'DECIMAL'"
@@ -177,13 +176,12 @@
                       placeholder="精度"
                       controls-position="right"
                       style="width: 110px"
+                      disabled
                     />
-                    <el-checkbox v-model="col.required" title="必填">必填</el-checkbox>
-                    <el-checkbox v-model="col.unique" title="唯一">唯一</el-checkbox>
-                    <el-checkbox v-model="col.indexed" title="索引">索引</el-checkbox>
-                    <el-button :icon="Delete" circle @click="apiColumns.splice(idx, 1)" />
+                    <el-checkbox v-model="col.required" title="必填" disabled>必填</el-checkbox>
+                    <el-checkbox v-model="col.unique" title="唯一" disabled>唯一</el-checkbox>
+                    <el-checkbox v-model="col.indexed" title="索引" disabled>索引</el-checkbox>
                   </div>
-                  <el-button type="primary" plain :icon="Plus" @click="addColumn">添加列</el-button>
                 </div>
               </el-form-item>
             </el-form>
@@ -211,8 +209,7 @@
         </div>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
+        <el-button @click="dialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -220,8 +217,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, Edit, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { View } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
@@ -296,6 +293,17 @@ async function fetchApi(params: any) {
 // ========== 新建/编辑弹窗状态 ==========
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
+
+/** 是否为查看模式（数据源由系统自动管理，用户只能查看） */
+const isViewMode = computed(() => editingId.value !== null)
+
+/** 弹窗标题 */
+const dialogTitle = computed(() => {
+  if (isViewMode.value) {
+    return '查看数据源'
+  }
+  return '数据源详情'
+})
 
 /** 单操作配置（多操作 params 结构） */
 interface ApiOpConfig {
@@ -399,6 +407,55 @@ async function openEdit(row: DataSourceDTO) {
     apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
   } else if (row.type === 'FORM' || row.type === 'SYSTEM') {
     // FORM/SYSTEM：只读端点展示由模板根据 formKey/sourceKey 响应式计算，无需填充 apiOps
+  }
+  dialogVisible.value = true
+}
+
+/** 查看数据源详情（只读模式） */
+function openView(row: DataSourceDTO) {
+  editingId.value = row.id
+  form.name = row.name
+  form.type = row.type
+  form.formKey = row.formKey || ''
+  form.sourceKey = row.sourceKey || ''
+  form.searchParam = ''
+  form.keywordColumn = ''
+  form.pageBase = 1
+  form.data = ''
+  form.headers = ''
+  apiOps.list = { action: '', method: 'GET' }
+  apiOps.get = { action: '', method: 'GET' }
+  apiOps.create = { action: '', method: 'POST' }
+  apiOps.update = { action: '', method: 'PUT' }
+  apiOps.delete = { action: '', method: 'DELETE' }
+  apiColumns.value = []
+  // 解析 params JSON
+  let p: Record<string, any> = {}
+  if (row.params) {
+    try {
+      p = JSON.parse(row.params)
+    } catch {
+      p = {}
+    }
+  }
+  if (row.type === 'API') {
+    for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+      const cfg = p[op]
+      if (cfg && typeof cfg === 'object') {
+        apiOps[op] = {
+          action: cfg.action || '',
+          method: (cfg.method || 'GET').toUpperCase(),
+          parse: cfg.parse || '',
+          totalParse: cfg.totalParse || '',
+        }
+      }
+    }
+    form.searchParam = p.searchParam || ''
+    form.keywordColumn = p.keywordColumn || ''
+    form.pageBase = p.pageBase === 0 ? 0 : 1
+    form.data = p.data ? JSON.stringify(p.data) : ''
+    form.headers = p.headers ? JSON.stringify(p.headers) : ''
+    apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
   }
   dialogVisible.value = true
 }
@@ -547,62 +604,9 @@ async function openEdit(row: DataSourceDTO) {
 // ========== 操作按钮 ==========
 const actionButtons: ActionButton[] = [
   {
-    label: '编辑',
-    icon: Edit,
-    permission: 'data-source:manage',
-    onClick: (row: any) => openEdit(row),
-  },
-  {
-    label: '启用',
-    type: 'success',
-    icon: CircleCheck,
-    permission: 'data-source:manage',
-    show: (row: any) => row.status !== 'ENABLED',
-    onClick: async (row: any) => {
-      try {
-        await dataSourceApi.enableDataSource(row.id)
-        ElMessage.success('启用成功')
-        tableRef.value?.fetchList()
-      } catch {
-        // http 拦截器已弹出错误消息
-      }
-    },
-  },
-  {
-    label: '禁用',
-    type: 'warning',
-    icon: CircleClose,
-    permission: 'data-source:manage',
-    show: (row: any) => row.status === 'ENABLED',
-    onClick: async (row: any) => {
-      try {
-        await dataSourceApi.disableDataSource(row.id)
-        ElMessage.success('禁用成功')
-        tableRef.value?.fetchList()
-      } catch {
-        // http 拦截器已弹出错误消息
-      }
-    },
-  },
-  {
-    label: '删除',
-    type: 'danger',
-    icon: Delete,
-    permission: 'data-source:manage',
-    onClick: async (row: any) => {
-      try {
-        await ElMessageBox.confirm('确定要删除此数据源吗？', '删除确认', { type: 'warning' })
-      } catch {
-        return
-      }
-      try {
-        await dataSourceApi.deleteDataSource(row.id)
-        ElMessage.success('删除成功')
-        tableRef.value?.fetchList()
-      } catch {
-        // http 拦截器已弹出错误消息（如"请先禁用"）
-      }
-    },
+    label: '查看',
+    icon: View,
+    onClick: (row: any) => openView(row),
   },
 ]
 

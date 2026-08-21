@@ -5,7 +5,6 @@ import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
 import com.workflow.api.dto.DataSourceDTO;
 import com.workflow.api.dto.DataSourceMetadata;
-import com.workflow.api.dto.DataSourceSaveRequest;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
@@ -22,6 +21,8 @@ import java.util.stream.Collectors;
  * 全局数据源管理 Controller。
  * 供前端数据源管理页（Task 10A）与页面设计器（Task 8/10A）调用。
  * 响应封装统一为 { code, data, message }（R<T>）。
+ * 
+ * 注意：数据源由系统自动管理，用户只能查看，不能新增、编辑、删除。
  */
 @RestController
 @RequestMapping("/api/v1/data-sources")
@@ -64,59 +65,11 @@ public class DataSourceController {
     }
 
     /**
-     * 创建数据源（默认 DRAFT）。
-     */
-    @PostMapping
-    public R<DataSourceDTO> create(@RequestBody DataSourceSaveRequest request) {
-        DataSourceDefinition ds = dataSourceService.create(
-                request.getName(), request.getType(), request.getFormKey(),
-                request.getSourceKey(), request.getParams());
-        return R.ok(toDTO(ds));
-    }
-
-    /**
      * 获取数据源详情。
      */
     @GetMapping("/{id}")
     public R<DataSourceDTO> getById(@PathVariable String id) {
         return R.ok(toDTO(dataSourceService.getById(id)));
-    }
-
-    /**
-     * 更新数据源（原地更新）。
-     */
-    @PutMapping("/{id}")
-    public R<DataSourceDTO> update(@PathVariable String id,
-                                   @RequestBody DataSourceSaveRequest request) {
-        DataSourceDefinition ds = dataSourceService.update(
-                id, request.getName(), request.getType(), request.getFormKey(),
-                request.getSourceKey(), request.getParams());
-        return R.ok(toDTO(ds));
-    }
-
-    /**
-     * 删除数据源（仅 DRAFT 可删；ENABLED/DISABLED → 400）。
-     */
-    @DeleteMapping("/{id}")
-    public R<Void> delete(@PathVariable String id) {
-        dataSourceService.delete(id);
-        return R.ok();
-    }
-
-    /**
-     * 启用数据源（FORM 类型须绑定已发布表单）。
-     */
-    @PostMapping("/{id}/enable")
-    public R<DataSourceDTO> enable(@PathVariable String id) {
-        return R.ok(toDTO(dataSourceService.enable(id)));
-    }
-
-    /**
-     * 禁用数据源。
-     */
-    @PostMapping("/{id}/disable")
-    public R<DataSourceDTO> disable(@PathVariable String id) {
-        return R.ok(toDTO(dataSourceService.disable(id)));
     }
 
     // ==================== 统一数据访问端点（经 DataSourceAdapter SPI） ====================

@@ -88,7 +88,10 @@ class PageDefinitionPublishIntegrationTest {
 
         // 真实业务表单服务：发布 BUSINESS 表单触发建表（受控 DDL）
         formDefService = new FormDefinitionService(formDefRepository, tenantProvider,
-                tableManager, objectMapper);
+                tableManager, objectMapper, new org.springframework.context.ApplicationEventPublisher() {
+            @Override
+            public void publishEvent(Object event) {}
+        });
 
         // 页面链路全真实：Validator/Compiler/Service + 内存仓库（发布临界区同步模拟行锁）
         pageRepo = new InMemoryPageRepository();

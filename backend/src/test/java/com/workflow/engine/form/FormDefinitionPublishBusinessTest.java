@@ -45,7 +45,10 @@ class FormDefinitionPublishBusinessTest {
     void setUp() {
         TenantContext.setTenantId(TENANT_ID);
         lenient().when(tenantProvider.getTenantId()).thenReturn(TENANT_ID);
-        formDefService = new FormDefinitionService(formDefRepository, tenantProvider, tableManager, new ObjectMapper());
+        formDefService = new FormDefinitionService(formDefRepository, tenantProvider, tableManager, new ObjectMapper(), new org.springframework.context.ApplicationEventPublisher() {
+            @Override
+            public void publishEvent(Object event) {}
+        });
     }
 
     @AfterEach

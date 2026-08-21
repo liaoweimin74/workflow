@@ -4,7 +4,7 @@ Baseline: openspec/specs/data-source-management/spec.md
 
 ## RENAMED Requirements
 
-- FROM: `### Requirement: DataSourceAdapter SPI 预留（一期不实装查询)`
+- FROM: `### Requirement: DataSourceAdapter SPI 预留（一期不实装查询）`
 - TO: `### Requirement: DataSourceAdapter 统一实现`
 
 ## MODIFIED Requirements

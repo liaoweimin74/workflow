@@ -1,30 +1,30 @@
 ## 1. 后端事件机制实现
 
-- [ ] 1.1 创建 Spring 事件类：FormCreatedEvent、FormUpdatedEvent、FormDeletedEvent
-- [ ] 1.2 创建事件监听器：DataSourceSyncListener，监听业务表单事件并自动同步数据源
-- [ ] 1.3 在 FormService 中发布事件：在创建、修改、删除业务表单时发布对应事件
-- [ ] 1.4 创建系统初始化器：SystemDataSourceInitializer，在系统启动时自动创建 SYSTEM 类型数据源
+- [x] 1.1 创建 Spring 事件类：FormCreatedEvent、FormUpdatedEvent、FormDeletedEvent
+- [x] 1.2 创建事件监听器：DataSourceSyncListener，监听业务表单事件并自动同步数据源
+- [x] 1.3 在 FormService 中发布事件：在创建、修改、删除业务表单时发布对应事件
+- [x] 1.4 创建系统初始化器：SystemDataSourceInitializer，在系统启动时自动创建 SYSTEM 类型数据源
 
 ## 2. 数据源管理接口调整
 
-- [ ] 2.1 移除数据源创建接口：DELETE /api/v1/data-sources
-- [ ] 2.2 移除数据源编辑接口：PUT /api/v1/data-sources/{id}
-- [ ] 2.3 移除数据源删除接口：DELETE /api/v1/data-sources/{id}
-- [ ] 2.4 保留数据源查看接口：GET /api/v1/data-sources 和 GET /api/v1/data-sources/{id}
-- [ ] 2.5 添加数据源只读校验：在接口中添加只读校验，拒绝创建、编辑、删除操作
+- [x] 2.1 移除数据源创建接口：DELETE /api/v1/data-sources
+- [x] 2.2 移除数据源编辑接口：PUT /api/v1/data-sources/{id}
+- [x] 2.3 移除数据源删除接口：DELETE /api/v1/data-sources/{id}
+- [x] 2.4 保留数据源查看接口：GET /api/v1/data-sources 和 GET /api/v1/data-sources/{id}
+- [x] 2.5 添加数据源只读校验：在接口中添加只读校验，拒绝创建、编辑、删除操作
 
 ## 3. 数据库结构调整
 
-- [ ] 3.1 修改数据源表结构：添加 form_id 字段关联业务表单
-- [ ] 3.2 创建数据迁移脚本：将现有手动创建的数据源转换为自动管理模式
-- [ ] 3.3 更新数据源表索引：为 form_id 字段添加索引
+- [x] 3.1 修改数据源表结构：添加 form_id 字段关联业务表单
+- [x] 3.2 创建数据迁移脚本：将现有手动创建的数据源转换为自动管理模式
+- [x] 3.3 更新数据源表索引：为 form_id 字段添加索引
 
 ## 4. 前端界面调整
 
-- [ ] 4.1 修改数据源管理页面：移除新增、删除、编辑按钮
-- [ ] 4.2 修改数据源详情页面：所有字段设置为只读
-- [ ] 4.3 修改业务表单页面：显示关联的数据源信息（只读）
-- [ ] 4.4 添加数据源状态提示：显示数据源由系统自动管理的提示信息
+- [x] 4.1 修改数据源管理页面：移除新增、删除、编辑按钮
+- [x] 4.2 修改数据源详情页面：所有字段设置为只读
+- [x] 4.3 修改业务表单页面：显示关联的数据源信息（只读）
+- [x] 4.4 添加数据源状态提示：显示数据源由系统自动管理的提示信息
 
 ## 5. 测试与验证
 

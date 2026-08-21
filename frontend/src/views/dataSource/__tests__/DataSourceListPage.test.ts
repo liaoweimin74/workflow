@@ -33,6 +33,9 @@ vi.mock('element-plus', async () => {
 vi.mock('@element-plus/icons-vue', () => ({
   Plus: { name: 'Plus', render: () => h('span', '+') },
   Delete: { name: 'Delete', render: () => h('span', '×') },
+  Edit: { name: 'Edit', render: () => h('span', '✎') },
+  CircleCheck: { name: 'CircleCheck', render: () => h('span', '✓') },
+  CircleClose: { name: 'CircleClose', render: () => h('span', '✕') },
 }))
 
 const ElMessage = (await import('element-plus')).ElMessage as any
@@ -64,7 +67,7 @@ describe('DataSourceListPage', () => {
     })
   }
 
-  it('列表渲染：actionButtons 包含新建/编辑/启用/禁用/删除', async () => {
+  it('列表渲染：actionButtons 包含新建/编辑/启用/禁用/删除，均为图标按钮', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
     const wrapper = createWrapper()
@@ -78,6 +81,10 @@ describe('DataSourceListPage', () => {
     expect(labels).toContain('启用')
     expect(labels).toContain('禁用')
     expect(labels).toContain('删除')
+    // Fix 4：所有按钮均为图标按钮（icon 已配置）
+    for (const b of actionButtons) {
+      expect(b.icon, `${b.label} 应配置 icon`).toBeDefined()
+    }
     wrapper.unmount()
   })
 
@@ -257,6 +264,64 @@ describe('DataSourceListPage', () => {
     await nextTick()
     expect(wrapper.find('.op-editor').exists()).toBe(true)
     expect(wrapper.find('.column-editor').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('Fix 2：FORM/SYSTEM 未选择标识时，接口操作区域不显示任何内容', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
+    createBtn.onClick()
+    await nextTick()
+    await flushPromises()
+    // FORM 未选 formKey → 接口操作区不渲染任何内容
+    expect(wrapper.find('.auto-params-display').exists()).toBe(false)
+    expect(wrapper.find('.op-editor').exists()).toBe(false)
+    // SYSTEM 未选 sourceKey → 同样不显示
+    ;(wrapper.vm as any).form.type = 'SYSTEM'
+    await nextTick()
+    expect(wrapper.find('.auto-params-display').exists()).toBe(false)
+    expect(wrapper.find('.op-editor').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('Fix 3：编辑 FORM 数据源能打开编辑弹窗', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [{ key: 'user', name: '用户表' }] } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const editBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '编辑')
+    // 编辑 FORM 数据源：应正常打开弹窗（不因调用已删除函数而崩溃）
+    await editBtn.onClick({ id: 'ds-form', name: '用户数据', type: 'FORM', formKey: 'user', sourceKey: null, status: 'ENABLED', params: null })
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.html()).toContain('编辑数据源')
+    // formKey 已回填，只读端点展示渲染
+    expect((wrapper.vm as any).form.formKey).toBe('user')
+    expect(wrapper.find('.auto-params-display').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('Fix 3：编辑 SYSTEM 数据源能打开编辑弹窗', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const editBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '编辑')
+    await editBtn.onClick({ id: 'ds-sys', name: '部门数据', type: 'SYSTEM', formKey: null, sourceKey: 'dept-tree', status: 'ENABLED', params: null })
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.html()).toContain('编辑数据源')
+    expect((wrapper.vm as any).form.sourceKey).toBe('dept-tree')
+    expect(wrapper.find('.auto-params-display').exists()).toBe(true)
     wrapper.unmount()
   })
 })

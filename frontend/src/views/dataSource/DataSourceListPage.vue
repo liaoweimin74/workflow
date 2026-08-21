@@ -77,28 +77,9 @@
         <!-- 可滚动的接口操作区域 -->
         <div class="ops-scroll">
 
-          <!-- ===== FORM / SYSTEM：只读端点展示 ===== -->
-          <template v-if="form.type !== 'API' && generateEndpoints()">
-            <div class="auto-params-display">
-              <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
-                <el-tag :type="op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'" size="small">
-                  {{ op.method }}
-                </el-tag>
-                <code>{{ op.action }}</code>
-                <span class="op-label">（{{ name }}）</span>
-                <template v-if="op.parse">
-                  <span class="op-meta">parse: {{ op.parse }}</span>
-                </template>
-                <template v-if="op.totalParse">
-                  <span class="op-meta">totalParse: {{ op.totalParse }}</span>
-                </template>
-              </div>
-            </div>
-          </template>
-
           <!-- ===== API：可编辑表单 ===== -->
-          <template v-else>
-            <el-form :model="form" label-width="110px">
+          <template v-if="form.type === 'API'">
+        <el-form :model="form" label-width="110px" label-position="left">
               <el-form-item :label="opLabel.list" required>
                 <div class="op-editor">
                   <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" />
@@ -203,6 +184,25 @@
             </el-form>
           </template>
 
+          <!-- ===== FORM / SYSTEM：只读端点展示 ===== -->
+          <template v-else-if="generateEndpoints()">
+            <div class="auto-params-display">
+              <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
+                <el-tag :type="op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'" size="small">
+                  {{ op.method }}
+                </el-tag>
+                <code>{{ op.action }}</code>
+                <span class="op-label">（{{ name }}）</span>
+                <template v-if="op.parse">
+                  <span class="op-meta">parse: {{ op.parse }}</span>
+                </template>
+                <template v-if="op.totalParse">
+                  <span class="op-meta">totalParse: {{ op.totalParse }}</span>
+                </template>
+              </div>
+            </div>
+          </template>
+
         </div>
 
       <template #footer>
@@ -216,7 +216,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus, Delete, Edit, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
@@ -393,8 +393,7 @@ async function openEdit(row: DataSourceDTO) {
     form.headers = p.headers ? JSON.stringify(p.headers) : ''
     apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
   } else if (row.type === 'FORM' || row.type === 'SYSTEM') {
-    // 根据已保存的标识自动填充接口操作
-    nextTick(() => onSourceSelected())
+    // FORM/SYSTEM：只读端点展示由模板根据 formKey/sourceKey 响应式计算，无需填充 apiOps
   }
   dialogVisible.value = true
 }
@@ -545,17 +544,20 @@ const actionButtons: ActionButton[] = [
   {
     label: '新建',
     type: 'primary',
+    icon: Plus,
     permission: 'data-source:manage',
     onClick: () => openCreate(),
   },
   {
     label: '编辑',
+    icon: Edit,
     permission: 'data-source:manage',
     onClick: (row: any) => openEdit(row),
   },
   {
     label: '启用',
-    type: 'primary',
+    type: 'success',
+    icon: CircleCheck,
     permission: 'data-source:manage',
     show: (row: any) => row.status !== 'ENABLED',
     onClick: async (row: any) => {
@@ -570,6 +572,8 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '禁用',
+    type: 'warning',
+    icon: CircleClose,
     permission: 'data-source:manage',
     show: (row: any) => row.status === 'ENABLED',
     onClick: async (row: any) => {
@@ -585,6 +589,7 @@ const actionButtons: ActionButton[] = [
   {
     label: '删除',
     type: 'danger',
+    icon: Delete,
     permission: 'data-source:manage',
     onClick: async (row: any) => {
       try {

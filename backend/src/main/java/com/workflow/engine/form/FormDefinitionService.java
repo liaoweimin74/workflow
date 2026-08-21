@@ -299,7 +299,14 @@ public class FormDefinitionService {
         // 原地改状态：草稿或已发布记录直接改为 PUBLISHED
         draft.setStatus("PUBLISHED");
         draft.setPublishedVersion(draft.getVersion());
-        return formDefRepository.save(draft);
+        FormDefinition saved = formDefRepository.save(draft);
+
+        // 发布表单创建事件（业务表单发布后触发数据源同步）
+        if ("BUSINESS".equals(saved.getType())) {
+            eventPublisher.publishEvent(new FormCreatedEvent(this, saved.getId(), saved.getName(), saved.getKey(), tenantId));
+        }
+
+        return saved;
     }
 
     /**

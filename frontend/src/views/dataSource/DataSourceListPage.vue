@@ -53,40 +53,48 @@
             <el-radio-button value="API">第三方 API</el-radio-button>
           </el-radio-group>
         </el-form-item>
+          <!-- ============ FORM：绑定表单 + 自动生成接口配置（只读） ============ -->
+         <template v-if="form.type === 'FORM'">
+           <el-form-item label="绑定表单" required>
+             <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px">
+               <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+             </el-select>
+           </el-form-item>
 
-        <!-- ============ FORM：绑定表单 + 统一 API 端点展示 ============ -->
-        <template v-if="form.type === 'FORM'">
-          <el-form-item label="绑定表单" required>
-            <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px">
-              <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
-            </el-select>
-          </el-form-item>
-          <el-form-item v-if="form.formKey" label="统一 API 端点">
-            <el-alert type="info" :closable="false" style="width: 100%">
-              <template #title>
-                <div class="endpoint-tip">启用后对外暴露统一数据源 API（id 为系统分配）：</div>
-                <ul class="endpoint-list">
-                  <li>GET /api/v1/data-sources/{id}/metadata — 列定义与可写标记</li>
-                  <li>GET /api/v1/data-sources/{id}/data — 分页查询</li>
-                  <li>GET /api/v1/data-sources/{id}/data/{rowId} — 单条查询</li>
-                  <li>POST /api/v1/data-sources/{id}/data — 新增</li>
-                  <li>PUT /api/v1/data-sources/{id}/data/{rowId} — 修改</li>
-                  <li>DELETE /api/v1/data-sources/{id}/data/{rowId} — 删除</li>
-                </ul>
-              </template>
-            </el-alert>
-          </el-form-item>
-        </template>
+           <el-form-item v-if="generateEndpoints()" label="自动生成接口配置（只读）">
+             <div class="auto-params-display">
+               <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
+                 <el-tag :type="op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'">
+                   {{ op.method }}
+                 </el-tag>
+                 <code>{{ op.action }}</code>
+                 <span class="op-name">（{ { name } }）</span>
+               </div>
+             </div>
+           </el-form-item>
+         </template>
 
-        <!-- ============ SYSTEM：系统结构 ============ -->
-        <template v-else-if="form.type === 'SYSTEM'">
-          <el-form-item label="系统结构" required>
-            <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 320px">
-              <el-option label="部门树" value="dept-tree" />
-              <el-option label="用户列表" value="user-tree" />
-            </el-select>
-          </el-form-item>
-        </template>
+         <!-- ============ SYSTEM：系统结构 + 自动生成接口配置（只读） ============ -->
+         <template v-else-if="form.type === 'SYSTEM'">
+           <el-form-item label="系统结构" required>
+             <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 320px">
+               <el-option label="部门树" value="dept-tree" />
+               <el-option label="用户列表" value="user-tree" />
+             </el-select>
+           </el-form-item>
+
+           <el-form-item v-if="generateEndpoints()" label="自动生成接口配置（只读）">
+             <div class="auto-params-display">
+               <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
+                 <el-tag :type="op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'">
+                   {{ op.method }}
+                 </el-tag>
+                 <code>{{ op.action }}</code>
+                 <span class="op-name">（{ { name } }）</span>
+               </div>
+             </div>
+           </el-form-item>
+         </template>
 
         <!-- ============ API：多操作 + 列定义 ============ -->
         <template v-else>
@@ -385,134 +393,155 @@ async function openEdit(row: DataSourceDTO) {
   dialogVisible.value = true
 }
 
-function addColumn() {
-  apiColumns.value.push({
-    key: '',
-    label: '',
-    columnType: 'VARCHAR',
-    length: null,
-    scale: null,
-    required: false,
-    unique: false,
-    indexed: false,
-  })
-}
+   function addColumn() {
+   apiColumns.value.push({
+     key: '',
+     label: '',
+     columnType: 'VARCHAR',
+     length: null,
+     scale: null,
+     required: false,
+     unique: false,
+     indexed: false,
+   })
+ }
 
-/** 长度输入框仅对需要长度的类型显示 */
-function needsLength(type?: string | null): boolean {
-  return type === 'VARCHAR' || type === 'DECIMAL' || type === 'INTEGER' || type === 'BIGINT' || type === 'TINYINT'
-}
+ /** 长度输入框仅对需要长度的类型显示 */
+ function needsLength(type?: string | null): boolean {
+   return type === 'VARCHAR' || type === 'DECIMAL' || type === 'INTEGER' || type === 'BIGINT' || type === 'TINYINT'
+ }
 
-/** 校验并保存 */
-async function handleSave() {
-  if (!form.name || !form.name.trim()) {
-    ElMessage.warning('请输入数据源名称')
-    return
-  }
-  if (form.type === 'FORM' && !form.formKey) {
-    ElMessage.warning('请选择绑定的业务表单')
-    return
-  }
-  if (form.type === 'SYSTEM' && !form.sourceKey) {
-    ElMessage.warning('请选择系统结构')
-    return
-  }
-  if (form.type === 'API') {
-    if (!form.sourceKey || !form.sourceKey.trim()) {
-      ElMessage.warning('请输入接口标识')
-      return
-    }
-    if (!apiOps.list.action || !apiOps.list.action.trim()) {
-      ElMessage.warning('列表查询 (list) 接口路径必填')
-      return
-    }
-  }
-  try {
-    const payload = normalizePayload()
-    if (editingId.value) {
-      await dataSourceApi.updateDataSource(editingId.value, payload)
-    } else {
-      await dataSourceApi.createDataSource(payload)
-    }
-    ElMessage.success(editingId.value ? '保存成功' : '创建成功')
-    dialogVisible.value = false
-    tableRef.value?.fetchList()
-  } catch {
-    // http 拦截器已弹出错误消息
-  }
-}
+ /** 解析 params JSON 为对象，空/非法返回 undefined */
+ function parseParamsJson(text: string | null | undefined): Record<string, any> | undefined {
+   if (!text || !text.trim()) return undefined
+   try {
+     const parsed = JSON.parse(text)
+     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+     return undefined
+   } catch {
+     return undefined
+   }
+ }
 
-/** 按类型归一化提交载荷（API → sourceKey + 多操作 params JSON） */
-function normalizePayload(): any {
-  if (form.type === 'API') {
-    return {
-      name: form.name,
-      type: 'API',
-      formKey: null,
-      sourceKey: form.sourceKey || null,
-      params: JSON.stringify(buildApiParams()),
-    }
-  }
-  return {
-    name: form.name,
-    type: form.type || 'FORM',
-    formKey: form.type === 'FORM' ? form.formKey || null : null,
-    sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : null,
-    params: null,
-  }
-}
+ /** API 类型：组装多操作 params（未配置的操作省略；列定义仅写入非空 key 行） */
+ function buildApiParams(): Record<string, any> {
+   const params: Record<string, any> = {}
+   // 五个操作：action 为空则整体省略
+   for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+     const cfg = apiOps[op]
+     if (cfg.action && cfg.action.trim()) {
+       const item: Record<string, any> = { action: cfg.action.trim(), method: (cfg.method || 'GET').toUpperCase() }
+       if (op === 'list') {
+         if (cfg.parse && cfg.parse.trim()) item.parse = cfg.parse.trim()
+         if (cfg.totalParse && cfg.totalParse.trim()) item.totalParse = cfg.totalParse.trim()
+       }
+       params[op] = item
+     }
+   }
+   // 列定义：过滤未填写 key 的行
+   const columns = apiColumns.value.filter((c) => c.key && c.key.trim())
+   if (columns.length > 0) {
+     params.columns = columns.map((c) => {
+       const item: Record<string, any> = { key: c.key.trim(), label: c.label || c.key.trim() }
+       if (c.columnType) item.columnType = c.columnType
+       if (c.length != null) item.length = c.length
+       if (c.columnType === 'DECIMAL' && c.scale != null) item.scale = c.scale
+       if (c.required) item.required = true
+       if (c.unique) item.unique = true
+       if (c.indexed) item.indexed = true
+       return item
+     })
+   }
+   // 搜索/分页/固定参数/请求头
+   if (form.searchParam && form.searchParam.trim()) params.searchParam = form.searchParam.trim()
+   if (form.keywordColumn && form.keywordColumn.trim()) params.keywordColumn = form.keywordColumn.trim()
+   if (form.pageBase === 0 || form.pageBase === 1) params.pageBase = form.pageBase
+   const dataObj = parseParamsJson(form.data)
+   if (dataObj) params.data = dataObj
+   const headersObj = parseParamsJson(form.headers)
+   if (headersObj) params.headers = headersObj
+   return params
+ }
 
-/** API 类型：组装多操作 params（未配置的操作省略；列定义仅写入非空 key 行） */
-function buildApiParams(): Record<string, any> {
-  const params: Record<string, any> = {}
-  // 五个操作：action 为空则整体省略
-  for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
-    const cfg = apiOps[op]
-    if (cfg.action && cfg.action.trim()) {
-      const item: Record<string, any> = { action: cfg.action.trim(), method: (cfg.method || 'GET').toUpperCase() }
-      if (op === 'list') {
-        if (cfg.parse && cfg.parse.trim()) item.parse = cfg.parse.trim()
-        if (cfg.totalParse && cfg.totalParse.trim()) item.totalParse = cfg.totalParse.trim()
-      }
-      params[op] = item
-    }
-  }
-  // 列定义：过滤未填写 key 的行
-  const columns = apiColumns.value.filter((c) => c.key && c.key.trim())
-  if (columns.length > 0) {
-    params.columns = columns.map((c) => {
-      const item: Record<string, any> = { key: c.key.trim(), label: c.label || c.key.trim() }
-      if (c.columnType) item.columnType = c.columnType
-      if (c.length != null) item.length = c.length
-      if (c.columnType === 'DECIMAL' && c.scale != null) item.scale = c.scale
-      if (c.required) item.required = true
-      if (c.unique) item.unique = true
-      if (c.indexed) item.indexed = true
-      return item
-    })
-  }
-  // 搜索/分页/固定参数/请求头
-  if (form.searchParam && form.searchParam.trim()) params.searchParam = form.searchParam.trim()
-  if (form.keywordColumn && form.keywordColumn.trim()) params.keywordColumn = form.keywordColumn.trim()
-  if (form.pageBase === 0 || form.pageBase === 1) params.pageBase = form.pageBase
-  const dataObj = parseJsonField(form.data)
-  if (dataObj) params.data = dataObj
-  const headersObj = parseJsonField(form.headers)
-  if (headersObj) params.headers = headersObj
-  return params
-}
+ /** 校验并保存 */
+ async function handleSave() {
+   if (!form.name || !form.name.trim()) {
+     ElMessage.warning('请输入数据源名称')
+     return
+   }
+   if (form.type === 'FORM' && !form.formKey) {
+     ElMessage.warning('请选择绑定的业务表单')
+     return
+   }
+   if (form.type === 'SYSTEM' && !form.sourceKey) {
+     ElMessage.warning('请选择系统结构')
+     return
+   }
+   if (form.type === 'API') {
+     if (!form.sourceKey || !form.sourceKey.trim()) {
+       ElMessage.warning('请输入接口标识')
+       return
+     }
+     if (!apiOps.list.action || !apiOps.list.action.trim()) {
+       ElMessage.warning('列表查询 (list) 接口路径必填')
+       return
+     }
+   }
+   try {
+     const payload = normalizePayload()
+     if (editingId.value) {
+       await dataSourceApi.updateDataSource(editingId.value, payload)
+     } else {
+       await dataSourceApi.createDataSource(payload)
+     }
+     ElMessage.success(editingId.value ? '保存成功' : '创建成功')
+     dialogVisible.value = false
+     tableRef.value?.fetchList()
+   } catch {
+     // http 拦截器已弹出错误消息
+   }
+ }
 
-/** 解析 JSON 文本字段：空白/非法返回 undefined */
-function parseJsonField(text: string | null | undefined): Record<string, unknown> | undefined {
-  if (!text || !text.trim()) return undefined
-  try {
-    const parsed = JSON.parse(text)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
-    return undefined
-  } catch {
-    return undefined
-  }
-}
+ /** 按类型归一化提交载荷（API → sourceKey + 多操作 params JSON；FORM/SYSTEM → params=null 由后端自动生成） */
+ function normalizePayload(): any {
+   if (form.type === 'API') {
+     return {
+       name: form.name,
+       type: 'API',
+       formKey: null,
+       sourceKey: form.sourceKey || null,
+       params: JSON.stringify(buildApiParams()),
+     }
+   }
+   return {
+     name: form.name,
+     type: form.type || 'FORM',
+     formKey: form.type === 'FORM' ? form.formKey || null : null,
+     sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : null,
+     params: null,
+   }
+ }
+
+ /** 生成统一 API 端点描述（FORM/SYSTEM 显示在只读提示中） */
+ function generateEndpoints(): Record<string, any> | null {
+   if (form.type === 'FORM' && form.formKey) {
+     const base = `/api/v1/biz-data/${form.formKey}`
+     return {
+       list: { action: base, method: 'GET' },
+       get: { action: `${base}/{id}`, method: 'GET' },
+       create: { action: base, method: 'POST' },
+       update: { action: `${base}/{id}`, method: 'PUT' },
+       delete: { action: `${base}/{id}`, method: 'DELETE' },
+     }
+   }
+   if (form.type === 'SYSTEM' && form.sourceKey) {
+     const internalKey = form.sourceKey === 'user-tree' ? 'users' : form.sourceKey
+     return {
+       list: { action: `/api/v1/internal/system/${internalKey}`, method: 'GET' },
+     }
+   }
+   return null
+ }
 
 // ========== 操作按钮 ==========
 const actionButtons: ActionButton[] = [
@@ -649,6 +678,27 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 8px;
   width: 100%;
+}
+.auto-params-display {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.op-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.op-row code {
+  font-family: 'Courier New', monospace;
+  background: #f4f6f8;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.op-name {
+  color: #909399;
+  font-size: 12px;
 }
 .column-editor {
   width: 100%;

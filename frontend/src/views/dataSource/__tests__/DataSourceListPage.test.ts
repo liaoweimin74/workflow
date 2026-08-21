@@ -187,4 +187,55 @@ describe('DataSourceListPage', () => {
     expect(dataSourceApi.deleteDataSource).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  it('新建 FORM：选择表单后显示自动生成接口配置（只读）', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [{ key: 'user', name: '用户表' }] } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    // 触发新建 → 默认类型 FORM
+    const stub = wrapper.findComponent(SearchTableStub)
+    const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
+    createBtn.onClick()
+    await nextTick()
+    await flushPromises()
+    // 弹窗应已出现
+    expect(wrapper.html()).toContain('新建数据源')
+    // 选择表单 key 后，自动生成的端点应显示在只读区域
+    const component: any = wrapper.vm as any
+    component.form.formKey = 'user'
+    await nextTick()
+    await flushPromises()
+    const html = wrapper.html()
+    expect(html).toContain('自动生成接口配置')
+    expect(html).toContain('/api/v1/biz-data/user')
+    expect(html).toContain('GET')
+    expect(html).toContain('POST')
+    expect(html).toContain('PUT')
+    expect(html).toContain('DELETE')
+    wrapper.unmount()
+  })
+
+  it('新建 SYSTEM：选择结构后显示自动生成接口配置（只读）', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
+    createBtn.onClick()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SYSTEM'
+    component.form.sourceKey = 'user-tree'
+    await nextTick()
+    await flushPromises()
+    const html = wrapper.html()
+    expect(html).toContain('自动生成接口配置')
+    expect(html).toContain('/api/v1/internal/system/users')
+    wrapper.unmount()
+  })
 })

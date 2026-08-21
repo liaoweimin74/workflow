@@ -242,6 +242,32 @@ describe('DataSourceListPage', () => {
     component.onSourceSelected()
     await nextTick()
     expect(component.apiOps.list.action).toBe('/api/v1/internal/system/users')
+    // 验证 SYSTEM 类型只生成 list，其他操作被清空
+    expect(component.apiOps.get.action).toBe('')
+    expect(component.apiOps.create.action).toBe('')
+    expect(component.apiOps.update.action).toBe('')
+    expect(component.apiOps.delete.action).toBe('')
+    wrapper.unmount()
+  })
+
+  it('SYSTEM 类型：API 操作编辑器只读，FORM 同理', async () => {
+    ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
+    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
+    createBtn.onClick()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    // 默认 FORM 类型 → opsReadonly 应为 true
+    expect(component.opsReadonly).toBe(true)
+    // 切换到 API → opsReadonly 应为 false
+    component.form.type = 'API'
+    await nextTick()
+    expect(component.opsReadonly).toBe(false)
     wrapper.unmount()
   })
 })

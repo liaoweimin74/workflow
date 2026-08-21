@@ -33,21 +33,21 @@
     </el-card>
 
     <!-- 新建/编辑数据源弹窗（自持：API 类型需多操作 + 列定义编辑器，SearchTable 标准弹窗无法承载） -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="editingId ? '编辑数据源' : '新建数据源'"
-      width="760px"
-      top="6vh"
-      destroy-on-close
-      :close-on-click-modal="false"
-    >
-      <el-form :model="form" label-width="110px">
+      <el-dialog
+        v-model="dialogVisible"
+        :title="editingId ? '编辑数据源' : '新建数据源'"
+        width="760px"
+        top="6vh"
+        destroy-on-close
+        :close-on-click-modal="false"
+      >
+        <el-form :model="form" label-width="110px">
         <el-form-item label="数据源名称" required>
           <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" />
         </el-form-item>
 
         <el-form-item label="数据源类型" required>
-          <el-radio-group v-model="form.type" :disabled="!!editingId">
+          <el-radio-group v-model="form.type" :disabled="!!editingId" @change="onSourceSelected">
             <el-radio-button value="FORM">业务表单</el-radio-button>
             <el-radio-button value="SYSTEM">系统结构</el-radio-button>
             <el-radio-button value="API">第三方 API</el-radio-button>
@@ -75,19 +75,19 @@
 
           <el-form-item :label="opLabel.list" required>
             <div class="op-editor">
-              <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" />
-              <el-select v-model="apiOps.list.method" style="width: 110px">
+              <el-input v-model="apiOps.list.action" :readonly="opsReadonly" placeholder="如 /v1/products" style="width: 260px" />
+              <el-select v-model="apiOps.list.method" :readonly="opsReadonly" style="width: 110px">
                 <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
               </el-select>
-              <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" />
-              <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" />
+              <el-input v-model="apiOps.list.parse" :readonly="opsReadonly" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" />
+              <el-input v-model="apiOps.list.totalParse" :readonly="opsReadonly" placeholder="总数解析（留空取数组长度）" style="width: 180px" />
             </div>
           </el-form-item>
 
           <el-form-item :label="opLabel.get">
             <div class="op-editor">
-              <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
-              <el-select v-model="apiOps.get.method" style="width: 110px">
+              <el-input v-model="apiOps.get.action" :readonly="opsReadonly" placeholder="如 /v1/products/{id}" style="width: 260px" />
+              <el-select v-model="apiOps.get.method" :readonly="opsReadonly" style="width: 110px">
                 <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
               </el-select>
             </div>
@@ -95,8 +95,8 @@
 
           <el-form-item :label="opLabel.create">
             <div class="op-editor">
-              <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" />
-              <el-select v-model="apiOps.create.method" style="width: 110px">
+              <el-input v-model="apiOps.create.action" :readonly="opsReadonly" placeholder="如 /v1/products" style="width: 260px" />
+              <el-select v-model="apiOps.create.method" :readonly="opsReadonly" style="width: 110px">
                 <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
               </el-select>
             </div>
@@ -104,8 +104,8 @@
 
           <el-form-item :label="opLabel.update">
             <div class="op-editor">
-              <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
-              <el-select v-model="apiOps.update.method" style="width: 110px">
+              <el-input v-model="apiOps.update.action" :readonly="opsReadonly" placeholder="如 /v1/products/{id}" style="width: 260px" />
+              <el-select v-model="apiOps.update.method" :readonly="opsReadonly" style="width: 110px">
                 <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
               </el-select>
             </div>
@@ -113,8 +113,8 @@
 
           <el-form-item :label="opLabel.delete">
             <div class="op-editor">
-              <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
-              <el-select v-model="apiOps.delete.method" style="width: 110px">
+              <el-input v-model="apiOps.delete.action" :readonly="opsReadonly" placeholder="如 /v1/products/{id}" style="width: 260px" />
+              <el-select v-model="apiOps.delete.method" :readonly="opsReadonly" style="width: 110px">
                 <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
               </el-select>
             </div>
@@ -122,9 +122,9 @@
 
           <el-form-item label="搜索参数">
             <div class="op-editor">
-              <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" />
-              <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" />
-              <el-select v-model="form.pageBase" style="width: 130px">
+              <el-input v-model="form.searchParam" :readonly="opsReadonly" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" />
+              <el-input v-model="form.keywordColumn" :readonly="opsReadonly" placeholder="搜索列名（如 name）" style="width: 200px" />
+              <el-select v-model="form.pageBase" :readonly="opsReadonly" style="width: 130px">
                 <el-option label="页码从 1 开始" :value="1" />
                 <el-option label="页码从 0 开始" :value="0" />
               </el-select>
@@ -132,10 +132,10 @@
           </el-form-item>
 
           <el-form-item label="固定参数 JSON">
-            <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" />
+            <el-input v-model="form.data" :readonly="opsReadonly" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" />
           </el-form-item>
           <el-form-item label="请求头 JSON">
-            <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" />
+            <el-input v-model="form.headers" :readonly="opsReadonly" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" />
           </el-form-item>
 
           <el-divider content-position="left">列定义（列表展示与编辑弹窗使用）</el-divider>
@@ -169,12 +169,12 @@
                 <el-checkbox v-model="col.required" title="必填">必填</el-checkbox>
                 <el-checkbox v-model="col.unique" title="唯一">唯一</el-checkbox>
                 <el-checkbox v-model="col.indexed" title="索引">索引</el-checkbox>
-                <el-button :icon="Delete" circle @click="apiColumns.splice(idx, 1)" />
+                <el-button :icon="Delete" circle :disabled="opsReadonly" @click="apiColumns.splice(idx, 1)" />
               </div>
-              <el-button type="primary" plain :icon="Plus" @click="addColumn">添加列</el-button>
+              <el-button type="primary" plain :icon="Plus" :disabled="opsReadonly" @click="addColumn">添加列</el-button>
             </div>
           </el-form-item>
-    </el-form>
+      </el-form>
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -299,8 +299,22 @@ const apiColumns = ref<ColumnConfigItem[]>([])
 /** 操作表单标签（统一界面，所有类型显示相同标签） */
 const opLabel = computed(() => ({ list: '列表查询 (list)', get: '单条查询 (get)', create: '新增 (create)', update: '修改 (update)', delete: '删除 (delete)' }))
 
-  /** 当选择 FORM/SYSTEM 标识时，自动填充 API 操作 */
+/** FORM/SYSTEM 类型时，API 操作编辑器只读（自动生成） */
+const opsReadonly = computed(() => form.type !== 'API')
+
+  /** 当选择 FORM/SYSTEM 标识时，自动填充 API 操作（先清空全部，再填充） */
   function onSourceSelected() {
+    // 先清空全部操作字段，避免残留
+    for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+      apiOps[op] = { action: '', method: 'GET', parse: '', totalParse: '' }
+    }
+    apiColumns.value = []
+    form.searchParam = ''
+    form.keywordColumn = ''
+    form.pageBase = 1
+    form.data = ''
+    form.headers = ''
+    // 再填充自动生成的端点
     const endpoints = generateEndpoints()
     if (endpoints) {
       for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
@@ -644,15 +658,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.endpoint-tip {
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-.endpoint-list {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 14px;
-  line-height: 20px;
+:deep(.el-dialog__body) {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .op-editor {
   display: flex;

@@ -188,42 +188,35 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('新建 FORM：选择表单后自动填充 API 操作接口', async () => {
+  it('新建 FORM：选择表单后显示只读端点展示', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [{ key: 'user', name: '用户表' }] } })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    // 触发新建 → 默认类型 FORM
     const stub = wrapper.findComponent(SearchTableStub)
     const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
     createBtn.onClick()
     await nextTick()
     await flushPromises()
-    // 弹窗应已出现
     expect(wrapper.html()).toContain('新建数据源')
-    // 选择表单 key 后，自动填充 API 操作
     const component: any = wrapper.vm as any
     component.form.formKey = 'user'
     await nextTick()
     await flushPromises()
-    component.onSourceSelected()
-    await nextTick()
-    const listAction = component.apiOps.list.action
-    const createAction = component.apiOps.create.action
-    const updateAction = component.apiOps.update.action
-    const deleteAction = component.apiOps.delete.action
-    expect(listAction).toBe('/api/v1/biz-data/user')
-    expect(createAction).toBe('/api/v1/biz-data/user')
-    expect(updateAction).toBe('/api/v1/biz-data/user/{id}')
-    expect(deleteAction).toBe('/api/v1/biz-data/user/{id}')
-    // 验证 list 操作包含 parse 和 totalParse
-    expect(component.apiOps.list.parse).toBe('records')
-    expect(component.apiOps.list.totalParse).toBe('total')
+    // 只读端点展示应出现
+    const html = wrapper.html()
+    expect(html).toContain('/api/v1/biz-data/user')
+    expect(html).toContain('GET')
+    expect(html).toContain('POST')
+    expect(html).toContain('PUT')
+    expect(html).toContain('DELETE')
+    expect(html).toContain('list')
+    expect(html).toContain('create')
     wrapper.unmount()
   })
 
-  it('新建 SYSTEM：选择结构后自动填充 API 操作接口', async () => {
+  it('新建 SYSTEM：选择结构后显示只读端点展示', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
     const wrapper = createWrapper()
@@ -239,18 +232,13 @@ describe('DataSourceListPage', () => {
     component.form.sourceKey = 'user-tree'
     await nextTick()
     await flushPromises()
-    component.onSourceSelected()
-    await nextTick()
-    expect(component.apiOps.list.action).toBe('/api/v1/internal/system/users')
-    // 验证 SYSTEM 类型只生成 list，其他操作被清空
-    expect(component.apiOps.get.action).toBe('')
-    expect(component.apiOps.create.action).toBe('')
-    expect(component.apiOps.update.action).toBe('')
-    expect(component.apiOps.delete.action).toBe('')
+    const html = wrapper.html()
+    expect(html).toContain('/api/v1/internal/system/users')
+    expect(html).toContain('list')
     wrapper.unmount()
   })
 
-  it('SYSTEM 类型：API 操作编辑器只读，FORM 同理', async () => {
+  it('API 类型：显示可编辑表单，FORM/SYSTEM 显示只读展示', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
     const wrapper = createWrapper()
@@ -262,12 +250,13 @@ describe('DataSourceListPage', () => {
     await nextTick()
     await flushPromises()
     const component: any = wrapper.vm as any
-    // 默认 FORM 类型 → opsReadonly 应为 true
-    expect(component.opsReadonly).toBe(true)
-    // 切换到 API → opsReadonly 应为 false
+    // 默认 FORM → 应显示只读展示（auto-params-display），不显示可编辑表单
+    expect(wrapper.find('.auto-params-display').exists()).toBe(false) // 未选 formKey，不显示
+    // 切换到 API → 应显示可编辑表单
     component.form.type = 'API'
     await nextTick()
-    expect(component.opsReadonly).toBe(false)
+    expect(wrapper.find('.op-editor').exists()).toBe(true)
+    expect(wrapper.find('.column-editor').exists()).toBe(true)
     wrapper.unmount()
   })
 })

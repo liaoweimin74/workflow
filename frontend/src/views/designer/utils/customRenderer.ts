@@ -21,6 +21,11 @@ const INITIATOR_FILL_COLOR = '#e3f2fd'
  */
 const INITIATOR_ICON_COLOR = '#409eff'
 
+/**
+ * 折叠态内嵌子流程左上角图标色（与 CallActivity 折叠态默认 marker 区分）
+ */
+const SUBFLOW_ICON_COLOR = '#409eff'
+
 // 依赖注入标记
 CustomRenderer.$inject = ['eventBus', 'bpmnRenderer', 'styles']
 
@@ -40,11 +45,13 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
 
   /**
    * 判断元素是否可由本渲染器渲染：
-   * 仅处理 businessObject 上 wf:nodeRole === 'initiator' 的元素。
+   * - 折叠态内嵌子流程（bpmn:SubProcess collapsed）：左上角绘制折叠图标，与 CallActivity 区分
+   * - businessObject 上 wf:nodeRole === 'initiator' 的发起人节点
    */
   this.canRender = function (element: any): boolean {
     const bo = element && element.businessObject
     if (!bo) return false
+    if (bo.$instanceOf && bo.$instanceOf('bpmn:SubProcess') && element.collapsed) return true
     const nodeRole = bo.get && bo.get('wf:nodeRole')
     return nodeRole === 'initiator'
   }
@@ -52,13 +59,31 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
   /**
    * 绘制形状：
    * 1. 委托默认 bpmnRenderer 完成基础绘制
-   * 2. 追加浅蓝色填充 rect 覆盖在默认图形上方
+   * 2. 折叠态子流程：左上角追加蓝色折叠图标（\e81f），与 CallActivity 折叠态默认 marker 区分
+   * 3. 发起人节点：追加浅蓝色填充矩形 + 蓝色手形图标
    *
    * @returns 默认渲染器返回的 SVG 元素
    */
   this.drawShape = function (parent: SVGElement, shape: any): SVGElement {
     // 委托默认渲染器绘制
     const gfx = this.bpmnRenderer.drawShape(parent, shape)
+
+    const bo = shape.businessObject
+    const isSubProcess = bo && bo.$instanceOf && bo.$instanceOf('bpmn:SubProcess')
+    if (isSubProcess) {
+      // 折叠态子流程：左上角蓝色折叠图标（bpmn-font \e81f）
+      const icon = create('text')
+      attr(icon, {
+        x: 8,
+        y: 18,
+        'font-family': 'bpmn',
+        'font-size': 14,
+        fill: SUBFLOW_ICON_COLOR
+      })
+      icon.textContent = '\uE81F'
+      append(parent, icon)
+      return gfx
+    }
 
     // 追加浅蓝色填充矩形
     const rect = create('rect')

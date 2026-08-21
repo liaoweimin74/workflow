@@ -343,6 +343,6 @@ export const useDesignerStore = defineStore('designer', () => {
     setSavedSnapshot,
     isUnchanged,
     clearConfigs,
-    markClean
+    markClean,
   }
 })

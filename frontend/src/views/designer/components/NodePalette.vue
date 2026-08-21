@@ -91,7 +91,8 @@ const nodeGroups: PaletteGroup[] = [
       { type: 'bpmn:UserTask', label: '发起节点', description: '发起人填报节点', iconClass: 'bpmn-icon-initiator-node', nodeRole: 'initiator' },
       { type: 'bpmn:UserTask', label: '用户任务', description: '需要人工审批的任务', iconClass: 'bpmn-icon-user-task' },
       { type: 'bpmn:ServiceTask', label: '服务任务', description: '自动执行的任务', iconClass: 'bpmn-icon-service-task' },
-      { type: 'bpmn:CallActivity', label: '调用活动', description: '调用子流程', iconClass: 'bpmn-icon-call-activity' }
+      { type: 'bpmn:CallActivity', label: '调用活动', description: '调用子流程', iconClass: 'bpmn-icon-call-activity' },
+      { type: 'bpmn:SubProcess', label: '内嵌子流程', description: '子流程容器，双击进入编辑', iconClass: 'bpmn-icon-subprocess-collapsed' }
     ]
   },
   {

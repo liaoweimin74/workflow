@@ -66,7 +66,8 @@ import PropertyPanel from './properties/PropertyPanel.vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
-import { isInitiatorTaskElement } from './utils/bpmnValidation'
+import { isInitiatorTaskElement, validateSubProcessBoundaries } from './utils/bpmnValidation'
+import { findStartEventInScope, resolveDropParent } from './utils/subflowNavigation'
 import { processDesignApi, deployedProcessApi } from '@/api/processDefinition'
 import 'bpmn-js/dist/assets/diagram-js.css'
 import 'bpmn-js/dist/assets/bpmn-js.css'
@@ -207,10 +208,25 @@ function setupEventListeners(readOnly = false) {
     designerStore.setBpmnXml('') // mark dirty
   })
 
-  eventBus.on('shape.remove', (event: any) => {
-    const element = event.element
-    if (element && element.id) {
-      designerStore.deleteNodeConfig(element.id)
+  // 删除级联：bpmn-js 删除子流程时内部元素同批进入 deleted 列表，统一清理 config
+  eventBus.on('elements.deleted', (event: any) => {
+    const deleted: any[] = event.elements || []
+    deleted.forEach((el: any) => { if (el.id) designerStore.deleteNodeConfig(el.id) })
+  })
+
+  // 双击子流程 → 与原生斜向下箭头（.bjs-drilldown 按钮）行为一致：
+  // 进入内建的子流程设计界面（切换至子流程 plane，圆角面包屑可返回）。
+  // 子流程无独立 plane（无内部元素）时退回原地折叠/展开。
+  eventBus.on('element.dblclick', (event: any) => {
+    const el = event.element
+    const bo = el && el.businessObject
+    if (!bo || !bo.$instanceOf || !bo.$instanceOf('bpmn:SubProcess')) return
+    const planeRoot = canvas.findRoot(el.id + '_plane')
+    if (planeRoot && planeRoot !== canvas.getRootElement()) {
+      canvas.setRootElement(planeRoot)
+    } else {
+      const modeling = (getModeler() as any).get('modeling')
+      modeling.toggleCollapse(el)
     }
   })
 }
@@ -297,6 +313,10 @@ function validateBpmnXml(xml: string): string | null {
       }
     }
   }
+
+  // 7. 内嵌子流程必须包含开始与结束事件
+  const subErrors = validateSubProcessBoundaries(xml)
+  if (subErrors.length) return subErrors.join('；')
 
   return null
 }
@@ -494,9 +514,25 @@ function handleDrop(event: DragEvent) {
   const modeling = (modeler as any).get('modeling')
   const elementRegistry = (modeler as any).get('elementRegistry')
 
-  // 校验：无触发开始事件全局只能有一个
+  // 计算放置坐标（画布坐标）
+  const rect = canvasWrapperRef.value?.getBoundingClientRect()
+  if (!rect) return
+
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+
+  // 转换为画布坐标
+  const viewbox = canvas.viewbox()
+  const canvasX = x / viewbox.scale + viewbox.x
+  const canvasY = y / viewbox.scale + viewbox.y
+
+  // 父容器：按落点命中「展开态子流程」（保持 bpmn-js 内建界面语义），
+  // 未命中任何展开子流程则取当前 plane 根元素（主流程 plane→主流程；子流程 plane→子流程）
+  const rootElement = resolveDropParent({ x: canvasX, y: canvasY }, elementRegistry, canvas.getRootElement())
+
+  // 校验：当前容器作用域内只能有一个开始事件（子流程可有自己的开始事件）
   if (nodeType === 'bpmn:StartEvent') {
-    const existing = elementRegistry.find((el: any) => el.type === 'bpmn:StartEvent')
+    const existing = findStartEventInScope(rootElement, elementRegistry)
     if (existing) {
       ElMessage.warning('一个流程只能有一个开始事件')
       return
@@ -516,25 +552,10 @@ function handleDrop(event: DragEvent) {
     }
   }
 
-  // 计算放置坐标
-  const rect = canvasWrapperRef.value?.getBoundingClientRect()
-  if (!rect) return
-
-  const x = event.clientX - rect.left
-  const y = event.clientY - rect.top
-
-  // 转换为画布坐标
-  const viewbox = canvas.viewbox()
-  const canvasX = x / viewbox.scale + viewbox.x
-  const canvasY = y / viewbox.scale + viewbox.y
-
   // 创建元素 shape
   const shape = elementFactory.createShape({ type: nodeType })
 
-  // 找到根元素（Process）作为父容器
-  const rootElement = elementRegistry.find((el: any) => el.type === 'bpmn:Process') || canvas.getRootElement()
-
-  // 直接在指定坐标创建并放置元素
+  // 直接以父容器创建并放置元素（父容器已在开始事件校验前解析）
   modeling.createShape(shape, { x: canvasX, y: canvasY }, rootElement)
 
   // 发起节点：设置 assignee 和 wf:nodeRole

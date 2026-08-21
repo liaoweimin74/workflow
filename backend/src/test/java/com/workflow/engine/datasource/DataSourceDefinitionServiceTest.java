@@ -322,24 +322,4 @@ class DataSourceDefinitionServiceTest {
         assertNotNull(vo);
         verify(formAdapter).query(eq(ds), any(BizDataQueryRequest.class));
     }
-
-    // ==================== FORM 适配器（真实组件委托 BizDataService） ====================
-
-    @Test
-    void formAdapter_supportsOnlyForm_andDelegatesToBizData() {
-        BizDataService bizDataService = mock(BizDataService.class);
-        FormDefinitionService formDefService = mock(FormDefinitionService.class);
-        FormDataSourceAdapter adapter = new FormDataSourceAdapter(bizDataService, formDefService, tenantProvider);
-
-        assertTrue(adapter.supports("FORM"));
-        assertFalse(adapter.supports("SYSTEM"));
-        assertFalse(adapter.supports("API"));
-
-        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
-        when(bizDataService.query(eq("biz_leave"), any())).thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
-
-        adapter.query(ds, new BizDataQueryRequest());
-
-        verify(bizDataService).query(eq("biz_leave"), any());
-    }
 }

@@ -53,58 +53,27 @@
             <el-radio-button value="API">第三方 API</el-radio-button>
           </el-radio-group>
         </el-form-item>
-          <!-- ============ FORM：绑定表单 + 自动生成接口配置（只读） ============ -->
-         <template v-if="form.type === 'FORM'">
-           <el-form-item label="绑定表单" required>
-             <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px">
-               <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
-             </el-select>
-           </el-form-item>
-
-           <el-form-item v-if="generateEndpoints()" label="自动生成接口配置（只读）">
-             <div class="auto-params-display">
-               <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
-                 <el-tag :type="op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'">
-                   {{ op.method }}
-                 </el-tag>
-                 <code>{{ op.action }}</code>
-                 <span class="op-name">（{ { name } }）</span>
-               </div>
-             </div>
-           </el-form-item>
-         </template>
-
-         <!-- ============ SYSTEM：系统结构 + 自动生成接口配置（只读） ============ -->
-         <template v-else-if="form.type === 'SYSTEM'">
-           <el-form-item label="系统结构" required>
-             <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 320px">
-               <el-option label="部门树" value="dept-tree" />
-               <el-option label="用户列表" value="user-tree" />
-             </el-select>
-           </el-form-item>
-
-           <el-form-item v-if="generateEndpoints()" label="自动生成接口配置（只读）">
-             <div class="auto-params-display">
-               <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
-                 <el-tag :type="op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'">
-                   {{ op.method }}
-                 </el-tag>
-                 <code>{{ op.action }}</code>
-                 <span class="op-name">（{ { name } }）</span>
-               </div>
-             </div>
-           </el-form-item>
-         </template>
-
-        <!-- ============ API：多操作 + 列定义 ============ -->
-        <template v-else>
-          <el-form-item label="接口标识" required>
-            <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" />
+          <!-- ============ 统一 API 配置：FORM/SYSTEM 自动填充，API 手动配置 ============ -->
+          <el-form-item label="标识" required>
+            <template v-if="form.type === 'FORM'">
+              <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px" @change="onSourceSelected">
+                <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+              </el-select>
+            </template>
+            <template v-else-if="form.type === 'SYSTEM'">
+              <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 320px" @change="onSourceSelected">
+                <el-option label="部门树" value="dept-tree" />
+                <el-option label="用户列表" value="user-tree" />
+              </el-select>
+            </template>
+            <template v-else>
+              <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" />
+            </template>
           </el-form-item>
 
           <el-divider content-position="left">接口操作</el-divider>
 
-          <el-form-item label="列表查询 (list)" required>
+          <el-form-item :label="opLabel.list" required>
             <div class="op-editor">
               <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" />
               <el-select v-model="apiOps.list.method" style="width: 110px">
@@ -115,7 +84,7 @@
             </div>
           </el-form-item>
 
-          <el-form-item label="单条查询 (get)">
+          <el-form-item :label="opLabel.get">
             <div class="op-editor">
               <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
               <el-select v-model="apiOps.get.method" style="width: 110px">
@@ -124,7 +93,7 @@
             </div>
           </el-form-item>
 
-          <el-form-item label="新增 (create)">
+          <el-form-item :label="opLabel.create">
             <div class="op-editor">
               <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" />
               <el-select v-model="apiOps.create.method" style="width: 110px">
@@ -133,7 +102,7 @@
             </div>
           </el-form-item>
 
-          <el-form-item label="修改 (update)">
+          <el-form-item :label="opLabel.update">
             <div class="op-editor">
               <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
               <el-select v-model="apiOps.update.method" style="width: 110px">
@@ -142,7 +111,7 @@
             </div>
           </el-form-item>
 
-          <el-form-item label="删除 (delete)">
+          <el-form-item :label="opLabel.delete">
             <div class="op-editor">
               <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" />
               <el-select v-model="apiOps.delete.method" style="width: 110px">
@@ -163,10 +132,10 @@
           </el-form-item>
 
           <el-form-item label="固定参数 JSON">
-            <el-input v-model="form.data" placeholder="可选，如 {&quot;dept&quot;:&quot;IT&quot;}" rows="2" type="textarea" />
+            <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" />
           </el-form-item>
           <el-form-item label="请求头 JSON">
-            <el-input v-model="form.headers" placeholder="可选，如 {&quot;X-Api-Key&quot;:&quot;abc&quot;}" rows="2" type="textarea" />
+            <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" />
           </el-form-item>
 
           <el-divider content-position="left">列定义（列表展示与编辑弹窗使用）</el-divider>
@@ -205,8 +174,7 @@
               <el-button type="primary" plain :icon="Plus" @click="addColumn">添加列</el-button>
             </div>
           </el-form-item>
-        </template>
-      </el-form>
+    </el-form>
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -328,6 +296,22 @@ const apiOps = reactive<Record<'list' | 'get' | 'create' | 'update' | 'delete', 
 /** API 类型：列定义 */
 const apiColumns = ref<ColumnConfigItem[]>([])
 
+/** 操作表单标签（统一界面，所有类型显示相同标签） */
+const opLabel = computed(() => ({ list: '列表查询 (list)', get: '单条查询 (get)', create: '新增 (create)', update: '修改 (update)', delete: '删除 (delete)' }))
+
+  /** 当选择 FORM/SYSTEM 标识时，自动填充 API 操作 */
+  function onSourceSelected() {
+    const endpoints = generateEndpoints()
+    if (endpoints) {
+      for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+        const cfg = endpoints[op]
+        if (cfg) {
+          apiOps[op] = { action: cfg.action, method: cfg.method, parse: cfg.parse || '', totalParse: cfg.totalParse || '' }
+        }
+      }
+    }
+  }
+
 function openCreate() {
   editingId.value = null
   form.name = ''
@@ -365,13 +349,16 @@ async function openEdit(row: DataSourceDTO) {
   apiOps.update = { action: '', method: 'PUT' }
   apiOps.delete = { action: '', method: 'DELETE' }
   apiColumns.value = []
-  if (row.type === 'API' && row.params) {
-    let p: Record<string, any> = {}
+  // 解析 params JSON：API类型手动配置；FORM/SYSTEM则根据标识自动填充
+  let p: Record<string, any> = {}
+  if (row.params) {
     try {
       p = JSON.parse(row.params)
     } catch {
       p = {}
     }
+  }
+  if (row.type === 'API') {
     for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
       const cfg = p[op]
       if (cfg && typeof cfg === 'object') {
@@ -389,6 +376,9 @@ async function openEdit(row: DataSourceDTO) {
     form.data = p.data ? JSON.stringify(p.data) : ''
     form.headers = p.headers ? JSON.stringify(p.headers) : ''
     apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  } else if (row.type === 'FORM' || row.type === 'SYSTEM') {
+    // 根据已保存的标识自动填充接口操作
+    nextTick(() => onSourceSelected())
   }
   dialogVisible.value = true
 }
@@ -502,46 +492,37 @@ async function openEdit(row: DataSourceDTO) {
    }
  }
 
- /** 按类型归一化提交载荷（API → sourceKey + 多操作 params JSON；FORM/SYSTEM → params=null 由后端自动生成） */
- function normalizePayload(): any {
-   if (form.type === 'API') {
-     return {
-       name: form.name,
-       type: 'API',
-       formKey: null,
-       sourceKey: form.sourceKey || null,
-       params: JSON.stringify(buildApiParams()),
-     }
-   }
-   return {
-     name: form.name,
-     type: form.type || 'FORM',
-     formKey: form.type === 'FORM' ? form.formKey || null : null,
-     sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : null,
-     params: null,
-   }
- }
+  /** 按类型归一化提交载荷：所有类型均通过统一 API 编辑器，FORM/SYSTEM params 由前端自动生成 */
+  function normalizePayload(): any {
+    return {
+      name: form.name,
+      type: form.type || 'FORM',
+      formKey: form.type === 'FORM' ? form.formKey || null : null,
+      sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : form.type === 'API' ? form.sourceKey || null : null,
+      params: JSON.stringify(buildApiParams()),
+    }
+  }
 
- /** 生成统一 API 端点描述（FORM/SYSTEM 显示在只读提示中） */
- function generateEndpoints(): Record<string, any> | null {
-   if (form.type === 'FORM' && form.formKey) {
-     const base = `/api/v1/biz-data/${form.formKey}`
-     return {
-       list: { action: base, method: 'GET' },
-       get: { action: `${base}/{id}`, method: 'GET' },
-       create: { action: base, method: 'POST' },
-       update: { action: `${base}/{id}`, method: 'PUT' },
-       delete: { action: `${base}/{id}`, method: 'DELETE' },
-     }
-   }
-   if (form.type === 'SYSTEM' && form.sourceKey) {
-     const internalKey = form.sourceKey === 'user-tree' ? 'users' : form.sourceKey
-     return {
-       list: { action: `/api/v1/internal/system/${internalKey}`, method: 'GET' },
-     }
-   }
-   return null
- }
+  /** 生成统一 API 端点描述（FORM/SYSTEM 自动填充到 API 编辑器） */
+  function generateEndpoints(): Record<string, any> | null {
+    if (form.type === 'FORM' && form.formKey) {
+      const base = `/api/v1/biz-data/${form.formKey}`
+      return {
+        list: { action: base, method: 'GET', parse: 'records', totalParse: 'total' },
+        get: { action: `${base}/{id}`, method: 'GET' },
+        create: { action: base, method: 'POST' },
+        update: { action: `${base}/{id}`, method: 'PUT' },
+        delete: { action: `${base}/{id}`, method: 'DELETE' },
+      }
+    }
+    if (form.type === 'SYSTEM' && form.sourceKey) {
+      const internalKey = form.sourceKey === 'user-tree' ? 'users' : form.sourceKey
+      return {
+        list: { action: `/api/v1/internal/system/${internalKey}`, method: 'GET' },
+      }
+    }
+    return null
+  }
 
 // ========== 操作按钮 ==========
 const actionButtons: ActionButton[] = [
@@ -678,27 +659,6 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 8px;
   width: 100%;
-}
-.auto-params-display {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.op-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-.op-row code {
-  font-family: 'Courier New', monospace;
-  background: #f4f6f8;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-.op-name {
-  color: #909399;
-  font-size: 12px;
 }
 .column-editor {
   width: 100%;

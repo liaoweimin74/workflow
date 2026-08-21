@@ -188,7 +188,7 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('新建 FORM：选择表单后显示自动生成接口配置（只读）', async () => {
+  it('新建 FORM：选择表单后自动填充 API 操作接口', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [{ key: 'user', name: '用户表' }] } })
     const wrapper = createWrapper()
@@ -202,22 +202,28 @@ describe('DataSourceListPage', () => {
     await flushPromises()
     // 弹窗应已出现
     expect(wrapper.html()).toContain('新建数据源')
-    // 选择表单 key 后，自动生成的端点应显示在只读区域
+    // 选择表单 key 后，自动填充 API 操作
     const component: any = wrapper.vm as any
     component.form.formKey = 'user'
     await nextTick()
     await flushPromises()
-    const html = wrapper.html()
-    expect(html).toContain('自动生成接口配置')
-    expect(html).toContain('/api/v1/biz-data/user')
-    expect(html).toContain('GET')
-    expect(html).toContain('POST')
-    expect(html).toContain('PUT')
-    expect(html).toContain('DELETE')
+    component.onSourceSelected()
+    await nextTick()
+    const listAction = component.apiOps.list.action
+    const createAction = component.apiOps.create.action
+    const updateAction = component.apiOps.update.action
+    const deleteAction = component.apiOps.delete.action
+    expect(listAction).toBe('/api/v1/biz-data/user')
+    expect(createAction).toBe('/api/v1/biz-data/user')
+    expect(updateAction).toBe('/api/v1/biz-data/user/{id}')
+    expect(deleteAction).toBe('/api/v1/biz-data/user/{id}')
+    // 验证 list 操作包含 parse 和 totalParse
+    expect(component.apiOps.list.parse).toBe('records')
+    expect(component.apiOps.list.totalParse).toBe('total')
     wrapper.unmount()
   })
 
-  it('新建 SYSTEM：选择结构后显示自动生成接口配置（只读）', async () => {
+  it('新建 SYSTEM：选择结构后自动填充 API 操作接口', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
     const wrapper = createWrapper()
@@ -233,9 +239,9 @@ describe('DataSourceListPage', () => {
     component.form.sourceKey = 'user-tree'
     await nextTick()
     await flushPromises()
-    const html = wrapper.html()
-    expect(html).toContain('自动生成接口配置')
-    expect(html).toContain('/api/v1/internal/system/users')
+    component.onSourceSelected()
+    await nextTick()
+    expect(component.apiOps.list.action).toBe('/api/v1/internal/system/users')
     wrapper.unmount()
   })
 })

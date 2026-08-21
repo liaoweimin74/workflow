@@ -3,6 +3,7 @@ package com.workflow.engine.datasource;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
@@ -37,6 +38,9 @@ public class DataSourceDefinitionService {
     private static final String TYPE_SYSTEM = "SYSTEM";
     private static final String TYPE_API = "API";
     private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API);
+
+    /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist） */
+    private static final Set<String> SYSTEM_SOURCE_KEYS = Set.of("dept-tree", "user-tree");
 
     private final DataSourceDefinitionRepository dsRepository;
     private final FormDefinitionRepository formDefRepository;
@@ -92,7 +96,11 @@ public class DataSourceDefinitionService {
         ds.setType(type);
         ds.setFormKey(formKey);
         ds.setSourceKey(sourceKey);
-        ds.setParams(params);
+        if (TYPE_FORM.equals(type) || TYPE_SYSTEM.equals(type)) {
+            ds.setParams(generateParams(type, formKey, sourceKey));
+        } else {
+            ds.setParams(params);
+        }
         ds.setStatus(STATUS_DRAFT);
         return dsRepository.save(ds);
     }
@@ -150,6 +158,9 @@ public class DataSourceDefinitionService {
             requirePublishedForm(tenantId, ds.getFormKey());
         }
         ds.setStatus(STATUS_ENABLED);
+        if ((TYPE_FORM.equals(ds.getType()) || TYPE_SYSTEM.equals(ds.getType())) && ds.getParams() == null) {
+            ds.setParams(generateParams(ds.getType(), ds.getFormKey(), ds.getSourceKey()));
+        }
         return dsRepository.save(ds);
     }
 
@@ -271,6 +282,41 @@ public class DataSourceDefinitionService {
         throw new BusinessException(400, "数据源类型未启用: " + ds.getType());
     }
 
+    // ==================== 参数自动生成 ====================
+
+    /**
+     * 为 FORM/SYSTEM 数据源自动生成 params JSON（只读配置，UI 不可编辑）。
+     * - FORM：list/get/create/update/delete → /api/v1/biz-data/{formKey}[/{id}]
+     * - SYSTEM：list → /api/v1/internal/system/{internalKey}，internalKey 由 sourceKey 映射
+     */
+    private String generateParams(String type, String formKey, String sourceKey) {
+        ObjectNode params = objectMapper.getNodeFactory().objectNode();
+        if (TYPE_FORM.equals(type)) {
+            String base = "/api/v1/biz-data/" + formKey;
+            JsonNode list = params.putObject("list")
+                    .put("action", base).put("method", "GET")
+                    .put("parse", "records").put("totalParse", "total");
+            params.putObject("create").put("action", base).put("method", "POST");
+            params.putObject("get").put("action", base + "/{id}").put("method", "GET");
+            params.putObject("update").put("action", base + "/{id}").put("method", "PUT");
+            params.putObject("delete").put("action", base + "/{id}").put("method", "DELETE");
+        } else if (TYPE_SYSTEM.equals(type)) {
+            params.putObject("list")
+                    .put("action", "/api/v1/internal/system/" + mapSystemInternalKey(sourceKey))
+                    .put("method", "GET");
+        }
+        return params.toString();
+    }
+
+    /** sourceKey → internal API 路径 key 映射（dept-tree→dept-tree，user-tree→users） */
+    private String mapSystemInternalKey(String sourceKey) {
+        return switch (sourceKey) {
+            case "dept-tree" -> "dept-tree";
+            case "user-tree" -> "users";
+            default -> throw new BusinessException(400, "未注册的系统数据源: " + sourceKey);
+        };
+    }
+
     // ==================== 内部工具 ====================
 
     /** 按类型校验必填项：FORM→formKey；SYSTEM/API→sourceKey；API→params 合法 JSON */
@@ -282,6 +328,9 @@ public class DataSourceDefinitionService {
         } else if (TYPE_SYSTEM.equals(type) || TYPE_API.equals(type)) {
             if (sourceKey == null || sourceKey.isBlank()) {
                 throw new BusinessException(400, type + " 类型数据源必须填写 sourceKey");
+            }
+            if (TYPE_SYSTEM.equals(type) && !SYSTEM_SOURCE_KEYS.contains(sourceKey)) {
+                throw new BusinessException(400, "未注册的系统数据源: " + sourceKey);
             }
             if (TYPE_API.equals(type)) {
                 // LookupFetchConfig 契约：params 须为 JSON 对象且 action 必填

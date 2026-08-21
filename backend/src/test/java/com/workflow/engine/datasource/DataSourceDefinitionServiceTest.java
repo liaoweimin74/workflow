@@ -1,13 +1,12 @@
 package com.workflow.engine.datasource;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
-import com.workflow.engine.form.FormDefinitionService;
-import com.workflow.engine.form.bizdata.BizDataService;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
@@ -142,6 +141,29 @@ class DataSourceDefinitionServiceTest {
     }
 
     @Test
+    void create_formSource_autoGeneratesParams() throws Exception {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "测试数据源")).thenReturn(false);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "product")).thenReturn(true);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("测试数据源", "FORM", "product", null, null);
+
+        String params = result.getParams();
+        assertNotNull(params);
+        JsonNode node = objectMapper.readTree(params);
+        assertEquals("GET", node.get("list").get("method").asText());
+        assertEquals("/api/v1/biz-data/product", node.get("list").get("action").asText());
+        assertEquals("records", node.get("list").get("parse").asText());
+        assertEquals("total", node.get("list").get("totalParse").asText());
+        assertEquals("POST", node.get("create").get("method").asText());
+        assertEquals("/api/v1/biz-data/product", node.get("create").get("action").asText());
+        assertEquals("GET", node.get("get").get("method").asText());
+        assertEquals("/api/v1/biz-data/product/{id}", node.get("get").get("action").asText());
+        assertEquals("DELETE", node.get("delete").get("method").asText());
+        assertEquals("/api/v1/biz-data/product/{id}", node.get("delete").get("action").asText());
+    }
+
+    @Test
     void create_formSource_unknownForm_rejected() {
         when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "no-such-form")).thenReturn(false);
 
@@ -155,6 +177,26 @@ class DataSourceDefinitionServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> service.create("测试数据源", "SYSTEM", null, null, null));
         assertTrue(ex.getMessage().contains("sourceKey"));
+    }
+
+    @Test
+    void create_systemSource_autoGeneratesParams() throws Exception {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "测试数据源")).thenReturn(false);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("测试数据源", "SYSTEM", null, "dept-tree", null);
+
+        String params = result.getParams();
+        assertNotNull(params);
+        JsonNode node = objectMapper.readTree(params);
+        assertEquals("GET", node.get("list").get("method").asText());
+        assertEquals("/api/v1/internal/system/dept-tree", node.get("list").get("action").asText());
+    }
+
+    @Test
+    void create_systemSource_unknownSourceKey_rejected() {
+        assertThrows(BusinessException.class,
+                () -> service.create("测试数据源", "SYSTEM", null, "unknown-key", null));
     }
 
     @Test
@@ -229,12 +271,15 @@ class DataSourceDefinitionServiceTest {
     @Test
     void enable_systemSource_success() {
         DataSourceDefinition ds = draftDs("SYSTEM", null, "dept-tree", null);
+        ds.setParams(null);
         when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
         DataSourceDefinition result = service.enable(DS_ID);
 
         assertEquals("ENABLED", result.getStatus());
+        assertNotNull(result.getParams());
+        assertTrue(result.getParams().contains("/api/v1/internal/system/dept-tree"));
     }
 
     @Test

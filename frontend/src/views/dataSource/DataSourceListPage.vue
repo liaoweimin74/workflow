@@ -70,8 +70,13 @@
               <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" />
             </template>
           </el-form-item>
+        </el-form>
 
-          <el-divider content-position="left">接口操作</el-divider>
+        <el-divider content-position="left">接口操作</el-divider>
+
+        <!-- 可滚动的接口操作区域 -->
+        <div class="ops-scroll">
+          <el-form :model="form" label-width="110px">
 
           <el-form-item :label="opLabel.list" required>
             <div class="op-editor">
@@ -174,7 +179,8 @@
               <el-button type="primary" plain :icon="Plus" :disabled="opsReadonly" @click="addColumn">添加列</el-button>
             </div>
           </el-form-item>
-      </el-form>
+          </el-form>
+        </div>
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -658,8 +664,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-:deep(.el-dialog__body) {
-  max-height: 70vh;
+.ops-scroll {
+  max-height: 50vh;
   overflow-y: auto;
   padding-right: 4px;
 }

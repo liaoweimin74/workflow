@@ -47,9 +47,10 @@ const SearchTableStub = defineComponent({
   name: 'SearchTableStub',
   props: ['searchFields', 'columns', 'actionButtons', 'fetchApi', 'formConfig', 'defaultPageSize', 'maxVisibleButtons'],
   emits: ['update:modelValue'],
-  setup(props, { expose }) {
+  setup(props, { expose, slots }) {
     expose({ fetchList: vi.fn() })
-    return () => h('div', 'search-table-stub')
+    // 渲染默认 slot（工具栏新建按钮），其余 slot 忽略
+    return () => (slots.default ? slots.default() : h('div', 'search-table-stub'))
   },
 })
 
@@ -63,11 +64,12 @@ describe('DataSourceListPage', () => {
       global: {
         plugins: [ElementPlus],
         stubs: { SearchTable: SearchTableStub },
+        directives: { permission: { mounted() {} } },
       },
     })
   }
 
-  it('列表渲染：actionButtons 包含新建/编辑/启用/禁用/删除，均为图标按钮', async () => {
+  it('列表渲染：actionButtons 包含编辑/启用/禁用/删除（不含新建），均为图标按钮', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
     const wrapper = createWrapper()
@@ -76,30 +78,31 @@ describe('DataSourceListPage', () => {
     const stub = wrapper.findComponent(SearchTableStub)
     const actionButtons = stub.props('actionButtons') as any[]
     const labels = actionButtons.map((b: any) => b.label)
-    expect(labels).toContain('新建')
+    // 新建按钮在工具栏，不在行操作列
+    expect(labels).not.toContain('新建')
     expect(labels).toContain('编辑')
     expect(labels).toContain('启用')
     expect(labels).toContain('禁用')
     expect(labels).toContain('删除')
-    // Fix 4：所有按钮均为图标按钮（icon 已配置）
+    // Fix 4：所有行操作按钮均为图标按钮（icon 已配置）
     for (const b of actionButtons) {
       expect(b.icon, `${b.label} 应配置 icon`).toBeDefined()
     }
+    // 工具栏默认 slot 渲染新建按钮（图标 + 文字）
+    expect(wrapper.find('.search-table-toolbar-btn').exists() || wrapper.html().includes('新建')).toBe(true)
     wrapper.unmount()
   })
 
-  it('新建：点击新建按钮显示弹窗（dialogVisible = true）', async () => {
+  it('新建：工具栏新建按钮显示弹窗（dialogVisible = true）', async () => {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    const stub = wrapper.findComponent(SearchTableStub)
-    const actionButtons = stub.props('actionButtons') as any[]
-    const createBtn = actionButtons.find((b: any) => b.label === '新建')
-    expect(createBtn).toBeDefined()
-    // 点击新建 → 弹窗应出现（dialogVisible 变为 true）
-    createBtn.onClick()
+    // 点击工具栏默认 slot 中的新建按钮 → 弹窗应出现
+    const toolbarBtn = wrapper.findAll('button').find((b) => b.text().includes('新建'))
+    expect(toolbarBtn).toBeDefined()
+    await toolbarBtn!.trigger('click')
     await nextTick()
     await flushPromises()
     // 弹窗内应有 el-dialog（destroy-on-close）
@@ -201,9 +204,7 @@ describe('DataSourceListPage', () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    const stub = wrapper.findComponent(SearchTableStub)
-    const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
-    createBtn.onClick()
+    ;(wrapper.vm as any).openCreate()
     await nextTick()
     await flushPromises()
     expect(wrapper.html()).toContain('新建数据源')
@@ -229,9 +230,7 @@ describe('DataSourceListPage', () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    const stub = wrapper.findComponent(SearchTableStub)
-    const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
-    createBtn.onClick()
+    ;(wrapper.vm as any).openCreate()
     await nextTick()
     await flushPromises()
     const component: any = wrapper.vm as any
@@ -251,9 +250,7 @@ describe('DataSourceListPage', () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    const stub = wrapper.findComponent(SearchTableStub)
-    const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
-    createBtn.onClick()
+    ;(wrapper.vm as any).openCreate()
     await nextTick()
     await flushPromises()
     const component: any = wrapper.vm as any
@@ -273,9 +270,7 @@ describe('DataSourceListPage', () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    const stub = wrapper.findComponent(SearchTableStub)
-    const createBtn = (stub.props('actionButtons') as any[]).find((b: any) => b.label === '新建')
-    createBtn.onClick()
+    ;(wrapper.vm as any).openCreate()
     await nextTick()
     await flushPromises()
     // FORM 未选 formKey → 接口操作区不渲染任何内容

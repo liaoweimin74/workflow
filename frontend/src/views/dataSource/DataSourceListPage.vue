@@ -13,6 +13,11 @@
         :default-page-size="20"
         :max-visible-buttons="5"
       >
+        <template #default>
+          <el-button type="primary" :icon="Plus" v-permission="'data-source:manage'" @click="openCreate">
+            新建
+          </el-button>
+        </template>
         <template #type="{ row }">
           <el-tag :type="typeTagType(row.type)">
             {{ typeLabel(row.type) }}
@@ -41,7 +46,7 @@
         destroy-on-close
         :close-on-click-modal="false"
       >
-        <el-form :model="form" label-width="110px">
+        <el-form :model="form" label-width="110px" label-position="left">
         <el-form-item label="数据源名称" required>
           <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" />
         </el-form-item>
@@ -541,13 +546,6 @@ async function openEdit(row: DataSourceDTO) {
 
 // ========== 操作按钮 ==========
 const actionButtons: ActionButton[] = [
-  {
-    label: '新建',
-    type: 'primary',
-    icon: Plus,
-    permission: 'data-source:manage',
-    onClick: () => openCreate(),
-  },
   {
     label: '编辑',
     icon: Edit,

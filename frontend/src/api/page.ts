@@ -8,6 +8,7 @@ export interface PageDefinitionDTO {
   key: string
   type: string
   formKey: string | null
+  dataSourceId: string | null
   version: number
   status: string
   publishedVersion: number | null
@@ -27,6 +28,7 @@ export interface PageDefinitionSaveRequest {
   key: string
   type: string
   formKey?: string | null
+  dataSourceId?: string | null
   schema?: string
 }
 

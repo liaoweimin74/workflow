@@ -21,12 +21,12 @@
         {{ pageType === 'VIEW' ? '视图' : '页面' }}
       </el-tag>
       <el-select
-        v-model="formKey"
-        placeholder="选择绑定表单"
+        v-model="dataSourceId"
+        placeholder="选择数据源"
         style="width: 220px; margin-left: 8px"
-        @change="handleBindFormChange"
+        @change="handleDataSourceChange"
       >
-        <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+        <el-option v-for="ds in enabledDataSources" :key="ds.id" :label="ds.name" :value="ds.id" />
       </el-select>
       <el-tag v-if="formStatus" :type="statusTagType(formStatus)" style="margin-left: 8px">
         {{ statusLabel(formStatus) }}
@@ -83,7 +83,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion, View, Document } from '@element-plus/icons-vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
-import { formApi, type FormDefinitionDTO } from '@/api/form'
+import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
 import QueryColumnsConfig from './components/QueryColumnsConfig.vue'
 import ActionsConfig from './components/ActionsConfig.vue'
@@ -140,7 +140,7 @@ const pageId = computed(() => route.query.id as string)
 const pageName = ref('')
 const pageKey = ref('')
 const pageType = ref('')
-const formKey = ref<string | null>(null)
+const dataSourceId = ref<string | null>(null)
 const formStatus = ref('')
 
 const loading = ref(false)
@@ -151,11 +151,11 @@ const activeTab = ref('query')
 const previewVisible = ref(false)
 const previewJson = ref('')
 
-/** 已发布业务表单（绑定表单下拉） */
-const publishedForms = ref<FormDefinitionDTO[]>([])
-/** 绑定表单的列映射（候选字段来源） */
+/** 已启用数据源（绑定下拉：FORM/WORKFLOW） */
+const enabledDataSources = ref<DataSourceDTO[]>([])
+/** 绑定数据源的列映射（候选字段来源，来自 metadata） */
 const selectedColumns = ref<ColumnConfigItem[]>([])
-/** 绑定表单是否已加载候选（发布按钮依赖） */
+/** 绑定数据源是否已加载候选（发布按钮依赖） */
 const bindFormLoaded = ref(false)
 
 const schema = reactive<ViewSchema>({
@@ -199,18 +199,19 @@ onMounted(async () => {
   }
   loading.value = true
   try {
-    const [formsRes, pageRes] = await Promise.all([
-      formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 }),
+    const [dsRes, pageRes] = await Promise.all([
+      dataSourceApi.getEnabledDataSources(),
       pageApi.getPage(pageId.value),
     ])
-    const forms = ((formsRes.data as any).content || []) as FormDefinitionDTO[]
-    publishedForms.value = forms
+    const dsList = (dsRes.data || []) as DataSourceDTO[]
+    // 绑定下拉仅展示 FORM/WORKFLOW（业务表单/工作流表单）数据源
+    enabledDataSources.value = dsList.filter((d) => d.type === 'FORM' || d.type === 'WORKFLOW')
 
     const def = pageRes.data as PageDefinitionDetailDTO
     pageName.value = def.name
     pageKey.value = def.key
     pageType.value = def.type || 'VIEW'
-    formKey.value = def.formKey || null
+    dataSourceId.value = def.dataSourceId || null
     formStatus.value = def.status || 'DRAFT'
     if (def.schema) {
       try {
@@ -220,8 +221,8 @@ onMounted(async () => {
         // schema 解析失败，使用默认空配置
       }
     }
-    if (formKey.value) {
-      await loadBindColumns(formKey.value)
+    if (dataSourceId.value) {
+      await loadBindColumns(dataSourceId.value)
     }
   } catch {
     // http 拦截器已弹出错误消息
@@ -245,12 +246,13 @@ function normalizeActions() {
   schema.actions = { buttons, permissions: a.permissions || '' }
 }
 
-async function loadBindColumns(key: string) {
+/** 加载绑定数据源 metadata 列（候选字段来源） */
+async function loadBindColumns(dsId: string) {
   bindFormLoaded.value = false
   try {
-    const res = await formApi.getFormDefinitionByKey(key)
-    const cc = res.data.columnConfig
-    selectedColumns.value = cc ? JSON.parse(cc) : []
+    const res = await dataSourceApi.getMetadata(dsId)
+    const meta = res.data as DataSourceMetadataDTO
+    selectedColumns.value = meta.columns || []
     // 新页面（查询/显示均未配置）→ 默认全选：可筛选列默认查询，可展示列默认显示
     if (schema.searchFields.length === 0 && schema.columns.length === 0) {
       const filterable = new Set(filterableColumns.value.map((c) => c.key))
@@ -272,8 +274,8 @@ async function loadBindColumns(key: string) {
   }
 }
 
-function handleBindFormChange(key: string) {
-  void loadBindColumns(key)
+function handleDataSourceChange(dsId: string) {
+  void loadBindColumns(dsId)
 }
 
 async function handleSave() {
@@ -281,8 +283,8 @@ async function handleSave() {
     ElMessage.warning('请填写页面名称')
     return
   }
-  if (!formKey.value) {
-    ElMessage.warning('请选择绑定表单')
+  if (!dataSourceId.value) {
+    ElMessage.warning('请选择数据源')
     return
   }
   saving.value = true
@@ -291,7 +293,7 @@ async function handleSave() {
       name: pageName.value,
       key: pageKey.value,
       type: pageType.value || 'VIEW',
-      formKey: formKey.value,
+      dataSourceId: dataSourceId.value,
       schema: JSON.stringify({ ...schema }),
     })
     ElMessage.success('保存成功')

@@ -122,15 +122,20 @@
       </el-card>
     </template>
 
-    <!-- 详情弹窗（只读表单，复用绑定表单 schema） -->
+    <!-- 详情弹窗双轨：FORM 数据源/遗留页 → 只读表单；WORKFLOW 等只读数据源 → KV 表格 -->
     <el-dialog v-model="detailVisible" :title="detailTitle" :width="detailWidth">
       <FormRenderer
-        v-if="detailVisible"
+        v-if="detailVisible && isFormDetail"
         :rule="detailRules"
         :option="detailOption"
         :initial-values="currentRow && currentRow.data"
         readonly
       />
+      <el-descriptions v-else-if="detailVisible" :column="1" border>
+        <el-descriptions-item v-for="col in kvDetailColumns" :key="col.key" :label="col.label || col.key">
+          {{ cellValue(currentRow, col.key) }}
+        </el-descriptions-item>
+      </el-descriptions>
     </el-dialog>
 
     <!-- 新增/编辑弹窗（可编辑，提交后刷新） -->
@@ -162,6 +167,7 @@ import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import PageRendererPage from './PageRendererPage.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { formApi } from '@/api/form'
+import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import { bizDataApi } from '@/api/bizData'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 
@@ -174,6 +180,28 @@ const pageKey = computed(() => route.params.pageKey as string)
 const error = ref('')
 const loading = ref(false)
 const page = ref<PageDefinitionDetailDTO | null>(null)
+
+// ========== 数据源协议（dataSourceId → metadata/类型缓存，双轨渲染依据） ==========
+/** 绑定数据源 metadata（列 + 可写标记）；null=遗留 formKey 页未绑定数据源 */
+const dataSourceMeta = ref<DataSourceMetadataDTO | null>(null)
+/** 绑定数据源定义（type/formKey 反查用） */
+const boundDataSource = ref<DataSourceDTO | null>(null)
+/** 详情/CRUD 用表单 key：遗留页取 page.formKey；FORM 数据源取 ds.formKey；WORKFLOW 数据源为 null（KV 只读） */
+const boundFormKey = computed(
+  () =>
+    page.value?.formKey ||
+    (boundDataSource.value?.type === 'FORM' ? (boundDataSource.value.formKey || null) : null),
+)
+/** 是否只读数据源（无 metadata=遗留可编辑页 → false；有 metadata 按 writable） */
+const isReadonly = computed(() => (dataSourceMeta.value ? !dataSourceMeta.value.writable : false))
+/** 详情渲染形态：有 formKey → 表单；否则 KV 只读表格 */
+const isFormDetail = computed(() => !!boundFormKey.value)
+/** KV 详情列（metadata 列；无 metadata 时回退当前表格列） */
+const kvDetailColumns = computed(() => {
+  const meta = dataSourceMeta.value
+  if (meta?.columns?.length) return meta.columns
+  return tableColumns.value.map((c) => ({ key: c.prop, label: c.label }))
+})
 
 // ========== 编译产物解析结果 ==========
 interface CompiledColumn {
@@ -243,6 +271,20 @@ async function load() {
     if (!parseSchema(res.data.schema)) {
       error.value = '页面配置异常，请联系管理员'
       return
+    }
+    // 数据源协议：绑定 dataSourceId 时拉取 metadata（列 + writable）与定义（FORM 反查 formKey）
+    if (res.data.dataSourceId) {
+      try {
+        const [metaRes, dsRes] = await Promise.all([
+          dataSourceApi.getMetadata(res.data.dataSourceId),
+          dataSourceApi.getDataSource(res.data.dataSourceId),
+        ])
+        dataSourceMeta.value = metaRes.data
+        boundDataSource.value = dsRes.data
+      } catch {
+        dataSourceMeta.value = null
+        boundDataSource.value = null
+      }
     }
     await loadData(0)
   } catch (e: any) {
@@ -346,6 +388,13 @@ interface ActionButtonConfig {
 /** 内置按钮 key（固定行为映射） */
 const BUILTIN_ACTION_KEYS = ['create', 'edit', 'delete', 'view']
 
+/** 按钮显隐：数据源只读时隐藏写操作内置按钮（create/edit/delete），保留查看与自定义按钮 */
+function isActionVisible(b: { key: string; events?: any[] }): boolean {
+  if (!isReadonly.value) return true
+  if (b.events && b.events.length > 0) return true
+  return b.key === 'view'
+}
+
 /** 表格尺寸：预览（preview=true）普通模式，非预览紧凑模式 */
 const tableSize = computed<'default' | 'small'>(() => (route.query.preview === 'true' ? 'default' : 'small'))
 /** 操作栏按钮尺寸：预览普通，非预览紧凑 */
@@ -370,12 +419,16 @@ const actionButtonsConfig = computed<{ key: string; label: string; placement: 't
 
 /** 工具栏按钮（placement=toolbar） */
 const toolbarButtons = computed<ActionButtonConfig[]>(() =>
-  actionButtonsConfig.value.filter((b) => b.placement === 'toolbar').map(toButtonConfig),
+  actionButtonsConfig.value
+    .filter((b) => b.placement === 'toolbar' && isActionVisible(b))
+    .map(toButtonConfig),
 )
 
 /** 操作列按钮（placement=column，行内渲染带行参数） */
 const rowActionButtons = computed<ActionButtonConfig[]>(() =>
-  actionButtonsConfig.value.filter((b) => b.placement === 'column').map(toButtonConfig),
+  actionButtonsConfig.value
+    .filter((b) => b.placement === 'column' && isActionVisible(b))
+    .map(toButtonConfig),
 )
 
 /** 自定义按钮：点击触发其绑定事件链（trigger 恒为 click，target=按钮 key） */
@@ -447,16 +500,18 @@ async function openDetail(row?: any) {
   detailTitle.value = '详情'
   detailWidth.value = detailConfig.value.width || '800px'
   detailVisible.value = true
-  if (!detailRules.value.length) {
+  // 表单形态详情才需要加载表单 schema；KV 只读详情直接展示行数据
+  if (isFormDetail.value && !detailRules.value.length) {
     await loadDetailSchema()
   }
 }
 
-/** 加载绑定表单 schema（详情/新增/编辑共用） */
+/** 加载绑定表单 schema（详情/新增/编辑共用；FORM 数据源经 ds.formKey，遗留页经 page.formKey） */
 async function loadDetailSchema() {
-  if (!page.value?.formKey) return
+  const formKey = boundFormKey.value
+  if (!formKey) return
   try {
-    const res = await formApi.getFormDefinitionByKey(page.value.formKey)
+    const res = await formApi.getFormDefinitionByKey(formKey)
     const schema = JSON.parse(res.data?.schema || '[]')
     if (Array.isArray(schema)) {
       detailRules.value = schema
@@ -471,6 +526,10 @@ async function loadDetailSchema() {
 
 // ========== 新增/编辑 ==========
 function openCreate() {
+  if (isReadonly.value) {
+    ElMessage.warning('数据源为只读，不支持新增')
+    return
+  }
   editMode.value = 'create'
   editTitle.value = '新增'
   editInitialValues.value = {}
@@ -481,6 +540,10 @@ function openCreate() {
 }
 
 function openEdit(row?: any) {
+  if (isReadonly.value) {
+    ElMessage.warning('数据源为只读，不支持编辑')
+    return
+  }
   if (!row) {
     row = requireRow()
     if (!row) return
@@ -496,18 +559,19 @@ function openEdit(row?: any) {
 }
 
 async function handleEditSubmit() {
-  if (!page.value?.formKey) return
+  const formKey = boundFormKey.value
+  if (!formKey) return
   const formData = editFormRef.value?.getFormData() || {}
   saving.value = true
   try {
     if (editMode.value === 'create') {
-      await bizDataApi.create(page.value.formKey, formData)
+      await bizDataApi.create(formKey, formData)
       ElMessage.success('新增成功')
       triggerEvents('create-success', 'create-dialog', { row: null, params: route.query || {} })
     } else {
       const row = currentRow.value
       if (!row) return
-      await bizDataApi.update(page.value.formKey, row.id, formData, row.version ?? 1)
+      await bizDataApi.update(formKey, row.id, formData, row.version ?? 1)
       ElMessage.success('更新成功')
     }
     editVisible.value = false
@@ -521,10 +585,11 @@ async function handleEditSubmit() {
 
 // ========== 删除 ==========
 async function handleDelete(row?: any) {
+  const formKey = boundFormKey.value
   if (!row) {
     row = requireRow()
   }
-  if (!row || !page.value?.formKey) return
+  if (!row || !formKey) return
   currentRow.value = row
   try {
     await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
@@ -532,7 +597,7 @@ async function handleDelete(row?: any) {
     return
   }
   try {
-    await bizDataApi.remove(page.value.formKey, row.id)
+    await bizDataApi.remove(formKey, row.id)
     ElMessage.success('删除成功')
     loadData(currentPage.value - 1)
   } catch {
@@ -639,23 +704,23 @@ async function dispatchAction(
             if (filter) for (const [k, v] of Object.entries(filter)) query[k] = v
             return loadData(0)
           },
-          detail: (id: string) => (page.value?.formKey ? bizDataApi.detail(page.value.formKey, id) : null),
+          detail: (id: string) => (boundFormKey.value ? bizDataApi.detail(boundFormKey.value, id) : null),
           create: (data: Record<string, unknown>) =>
-            page.value?.formKey ? bizDataApi.create(page.value.formKey, data) : Promise.reject(new Error('未绑定表单')),
+            boundFormKey.value ? bizDataApi.create(boundFormKey.value, data) : Promise.reject(new Error('数据源只读')),
           update: (id: string, data: Record<string, unknown>) =>
-            page.value?.formKey
-              ? bizDataApi.update(page.value.formKey, id, data, currentRow.value?.version || 1)
-              : Promise.reject(new Error('未绑定表单')),
+            boundFormKey.value
+              ? bizDataApi.update(boundFormKey.value, id, data, currentRow.value?.version || 1)
+              : Promise.reject(new Error('数据源只读')),
           remove: (id: string) =>
-            page.value?.formKey ? bizDataApi.remove(page.value.formKey, id) : Promise.reject(new Error('未绑定表单')),
+            boundFormKey.value ? bizDataApi.remove(boundFormKey.value, id) : Promise.reject(new Error('数据源只读')),
         },
-        api: { formKey: page.value?.formKey || '', pageKey: pageKey.value },
+        api: { formKey: boundFormKey.value || '', pageKey: pageKey.value },
         actions: {
           refresh: () => loadData(currentPage.value - 1),
           openDetail: () => openDetail(currentRow.value),
           openCreate: () => openCreate(),
           openEdit: () => openEdit(),
-          remove: (id: string) => bizDataApi.remove(page.value?.formKey || '', id),
+          remove: (id: string) => (boundFormKey.value ? bizDataApi.remove(boundFormKey.value, id) : Promise.reject(new Error('数据源只读'))),
         },
         $: { message: (msg: string, type = 'info') => ElMessage({ message: msg, type: type as any }) },
       })

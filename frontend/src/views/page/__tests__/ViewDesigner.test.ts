@@ -16,10 +16,10 @@ vi.mock('@/api/page', () => ({
   },
 }))
 
-vi.mock('@/api/form', () => ({
-  formApi: {
-    getFormDefinitions: vi.fn(),
-    getFormDefinitionByKey: vi.fn(),
+vi.mock('@/api/data-source', () => ({
+  dataSourceApi: {
+    getEnabledDataSources: vi.fn(),
+    getMetadata: vi.fn(),
   },
 }))
 
@@ -46,7 +46,7 @@ beforeEach(() => {
 })
 
 import { pageApi } from '@/api/page'
-import { formApi } from '@/api/form'
+import { dataSourceApi } from '@/api/data-source'
 
 /** 配置区子组件桩：透传 candidates/modelValue；点击 .stub-emit 发出固定载荷（模拟 v-model 勾选） */
 function configStub(name: string, emitPayload: any = null) {
@@ -95,6 +95,19 @@ const columnConfigJson = JSON.stringify([
   { key: 'color', label: '颜色', columnType: 'VARCHAR', length: 20, indexed: false, hidden: false, componentType: 'colorPicker' },
 ])
 
+/** 启用数据源桩：FORM/WORKFLOW 各一个 */
+const enabledDs = [
+  { id: 'ds_wf_1', name: '员工工作流数据源', type: 'WORKFLOW', formKey: 'emp_wf', status: 'ENABLED' },
+  { id: 'ds_form_1', name: '员工业务数据源', type: 'FORM', formKey: 'emp_profile', status: 'ENABLED' },
+]
+
+/** 数据源 metadata 桩：返回列定义（对齐后端 DataSourceMetadataDTO） */
+function mockMetadata() {
+  ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+    data: { columns: JSON.parse(columnConfigJson), writable: false },
+  })
+}
+
 function createWrapper() {
   return mount(ViewDesigner, {
     global: {
@@ -105,14 +118,15 @@ function createWrapper() {
 }
 
 describe('ViewDesigner — 清单勾选式视图配置', () => {
-  it('绑定表单加载后：候选列按可筛选/可展示规则过滤；勾选配置 → schema 组装正确', async () => {
+  it('绑定数据源加载后：候选列按可筛选/可展示规则过滤；勾选配置 → schema 组装正确', async () => {
     ;(pageApi.getPage as any).mockResolvedValue({
       data: {
         id: 'p1',
         name: '员工视图',
         key: 'emp_view',
         type: 'VIEW',
-        formKey: 'emp_profile',
+        formKey: null,
+        dataSourceId: 'ds_wf_1',
         status: 'DRAFT',
         version: 1,
         schema: JSON.stringify({
@@ -132,12 +146,8 @@ describe('ViewDesigner — 清单勾选式视图配置', () => {
         }),
       },
     })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({
-      data: { content: [{ id: 'f1', name: '员工档案', key: 'emp_profile', type: 'BUSINESS', status: 'PUBLISHED' }] },
-    })
-    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
-      data: { key: 'emp_profile', name: '员工档案', columnConfig: columnConfigJson },
-    })
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
+    mockMetadata()
     ;(pageApi.updatePage as any).mockResolvedValue({ data: { status: 'DRAFT' } })
 
     const wrapper = createWrapper()
@@ -169,7 +179,7 @@ describe('ViewDesigner — 清单勾选式视图配置', () => {
         name: '员工视图',
         key: 'emp_view',
         type: 'VIEW',
-        formKey: 'emp_profile',
+        dataSourceId: 'ds_wf_1',
       }),
     )
     const schemaArg = (pageApi.updatePage as any).mock.calls[0][1].schema
@@ -183,7 +193,7 @@ describe('ViewDesigner — 清单勾选式视图配置', () => {
     wrapper.unmount()
   })
 
-  it('绑定表单未加载时发布被禁用', async () => {
+  it('绑定数据源未加载时发布被禁用', async () => {
     ;(pageApi.getPage as any).mockResolvedValue({
       data: {
         id: 'p1',
@@ -191,12 +201,13 @@ describe('ViewDesigner — 清单勾选式视图配置', () => {
         key: 'emp_view',
         type: 'VIEW',
         formKey: null,
+        dataSourceId: null,
         status: 'DRAFT',
         version: 1,
         schema: '{}',
       },
     })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: [] })
 
     const wrapper = createWrapper()
     await nextTick()
@@ -214,16 +225,15 @@ describe('ViewDesigner — 清单勾选式视图配置', () => {
         name: '员工视图',
         key: 'emp_view',
         type: 'VIEW',
-        formKey: 'emp_profile',
+        formKey: null,
+        dataSourceId: 'ds_wf_1',
         status: 'DRAFT',
         version: 1,
         schema: '{}',
       },
     })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
-      data: { key: 'emp_profile', name: '员工档案', columnConfig: columnConfigJson },
-    })
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
+    mockMetadata()
 
     const wrapper = createWrapper()
     await nextTick()
@@ -244,16 +254,15 @@ describe('ViewDesigner — 清单勾选式视图配置', () => {
         name: '员工视图',
         key: 'emp_view',
         type: 'VIEW',
-        formKey: 'emp_profile',
+        formKey: null,
+        dataSourceId: 'ds_wf_1',
         status: 'DRAFT',
         version: 1,
         schema: '{}',
       },
     })
-    ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
-    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
-      data: { key: 'emp_profile', name: '员工档案', columnConfig: columnConfigJson },
-    })
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
+    mockMetadata()
 
     const wrapper = createWrapper()
     await nextTick()

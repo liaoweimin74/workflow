@@ -11,6 +11,7 @@ import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
+import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.springframework.data.domain.Page;
@@ -37,7 +38,8 @@ public class DataSourceDefinitionService {
     private static final String TYPE_FORM = "FORM";
     private static final String TYPE_SYSTEM = "SYSTEM";
     private static final String TYPE_API = "API";
-    private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API);
+    private static final String TYPE_WORKFLOW = "WORKFLOW";
+    private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API, TYPE_WORKFLOW);
 
     /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist） */
     private static final Set<String> SYSTEM_SOURCE_KEYS = Set.of("dept-tree", "user-tree");
@@ -87,7 +89,8 @@ public class DataSourceDefinitionService {
             throw new BusinessException(400, "数据源名称已存在: " + name);
         }
         validateRequiredFields(type, formKey, sourceKey, params);
-        if (TYPE_FORM.equals(type) && !formDefRepository.existsByTenantIdAndKey(tenantId, formKey)) {
+        if ((TYPE_FORM.equals(type) || TYPE_WORKFLOW.equals(type))
+                && !formDefRepository.existsByTenantIdAndKey(tenantId, formKey)) {
             throw new BusinessException(400, "绑定的表单不存在: " + formKey);
         }
 
@@ -132,14 +135,19 @@ public class DataSourceDefinitionService {
         String newSourceKey = sourceKey == null ? ds.getSourceKey() : sourceKey;
         String newParams = params == null ? ds.getParams() : params;
         validateRequiredFields(newType, newFormKey, newSourceKey, newParams);
-        if (TYPE_FORM.equals(newType) && !formDefRepository.existsByTenantIdAndKey(tenantId, newFormKey)) {
+        if ((TYPE_FORM.equals(newType) || TYPE_WORKFLOW.equals(newType))
+                && !formDefRepository.existsByTenantIdAndKey(tenantId, newFormKey)) {
             throw new BusinessException(400, "绑定的表单不存在: " + newFormKey);
         }
 
         // 已启用数据源若变更类型/绑定对象，须重新校验发布状态
         boolean bindChanged = !TYPE_FORM.equals(ds.getType()) || (formKey != null && !formKey.equals(ds.getFormKey()));
-        if (STATUS_ENABLED.equals(ds.getStatus()) && bindChanged && TYPE_FORM.equals(newType)) {
-            requirePublishedForm(tenantId, newFormKey);
+        if (STATUS_ENABLED.equals(ds.getStatus()) && bindChanged) {
+            if (TYPE_FORM.equals(newType)) {
+                requirePublishedForm(tenantId, newFormKey);
+            } else if (TYPE_WORKFLOW.equals(newType)) {
+                requireWorkflowForm(tenantId, newFormKey);
+            }
         }
 
         ds.setName(name == null ? ds.getName() : name);
@@ -162,6 +170,8 @@ public class DataSourceDefinitionService {
         validateRequiredFields(ds.getType(), ds.getFormKey(), ds.getSourceKey(), ds.getParams());
         if (TYPE_FORM.equals(ds.getType())) {
             requirePublishedForm(tenantId, ds.getFormKey());
+        } else if (TYPE_WORKFLOW.equals(ds.getType())) {
+            requireWorkflowForm(tenantId, ds.getFormKey());
         }
         ds.setStatus(STATUS_ENABLED);
         if ((TYPE_FORM.equals(ds.getType()) || TYPE_SYSTEM.equals(ds.getType())) && ds.getParams() == null) {
@@ -335,6 +345,10 @@ public class DataSourceDefinitionService {
             if (formKey == null || formKey.isBlank()) {
                 throw new BusinessException(400, "FORM 类型数据源必须绑定表单 formKey");
             }
+        } else if (TYPE_WORKFLOW.equals(type)) {
+            if (formKey == null || formKey.isBlank()) {
+                throw new BusinessException(400, "WORKFLOW 类型数据源必须绑定表单 formKey");
+            }
         } else if (TYPE_SYSTEM.equals(type) || TYPE_API.equals(type)) {
             if (sourceKey == null || sourceKey.isBlank()) {
                 throw new BusinessException(400, type + " 类型数据源必须填写 sourceKey");
@@ -370,6 +384,19 @@ public class DataSourceDefinitionService {
         if (formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, formKey, "PUBLISHED")
                 .isEmpty()) {
             throw new BusinessException(400, "绑定的表单未发布，无法启用: " + formKey);
+        }
+    }
+
+    /** WORKFLOW 数据源启用前置校验：表单存在、已发布且非 BUSINESS（业务表单无流程实例，无法跨实例聚合）。 */
+    private void requireWorkflowForm(String tenantId, String formKey) {
+        if (!formDefRepository.existsByTenantIdAndKey(tenantId, formKey)) {
+            throw new BusinessException(400, "表单不存在: " + formKey);
+        }
+        FormDefinition form = formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                        tenantId, formKey, "PUBLISHED")
+                .orElseThrow(() -> new BusinessException(400, "工作流表单必须先发布: " + formKey));
+        if ("BUSINESS".equals(form.getType())) {
+            throw new BusinessException(400, "业务表单不可配置为工作流表单数据源: " + formKey);
         }
     }
 }

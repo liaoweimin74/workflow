@@ -367,4 +367,57 @@ class DataSourceDefinitionServiceTest {
         assertNotNull(vo);
         verify(formAdapter).query(eq(ds), any(BizDataQueryRequest.class));
     }
+
+    // ==================== WORKFLOW 启用校验 ====================
+
+    @Test
+    void enable_workflowSource_withPublishedWorkflowForm_success() {
+        DataSourceDefinition ds = draftDs("WORKFLOW", "wf_leave", null, null);
+        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        FormDefinition wf = publishedForm("wf_leave");
+        wf.setType("WORKFLOW");
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "wf_leave")).thenReturn(true);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "wf_leave", "PUBLISHED")).thenReturn(Optional.of(wf));
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.enable(DS_ID);
+
+        assertEquals("ENABLED", result.getStatus());
+    }
+
+    @Test
+    void enable_workflowSource_withBusinessForm_rejected() {
+        DataSourceDefinition ds = draftDs("WORKFLOW", "wf_leave", null, null);
+        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "wf_leave")).thenReturn(true);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "wf_leave", "PUBLISHED")).thenReturn(Optional.of(publishedForm("wf_leave")));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.enable(DS_ID));
+        assertTrue(ex.getMessage().contains("业务表单不可配置为工作流表单数据源"));
+        assertEquals("DRAFT", ds.getStatus());
+    }
+
+    @Test
+    void enable_workflowSource_onlyDraftForm_rejected() {
+        DataSourceDefinition ds = draftDs("WORKFLOW", "wf_leave", null, null);
+        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "wf_leave")).thenReturn(true);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                TENANT_ID, "wf_leave", "PUBLISHED")).thenReturn(Optional.empty());
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.enable(DS_ID));
+        assertTrue(ex.getMessage().contains("工作流表单必须先发布"));
+    }
+
+    @Test
+    void enable_workflowSource_missingForm_rejected() {
+        DataSourceDefinition ds = draftDs("WORKFLOW", "no-such", null, null);
+        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "no-such")).thenReturn(false);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.enable(DS_ID));
+        assertTrue(ex.getMessage().contains("表单不存在"));
+    }
 }

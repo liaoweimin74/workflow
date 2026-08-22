@@ -26,6 +26,9 @@ public interface DataSourceDefinitionRepository extends JpaRepository<DataSource
     /** 页面设计器下拉用：仅已启用数据源 */
     List<DataSourceDefinition> findByTenantIdAndStatus(String tenantId, String status);
 
+    /** 迁移器命名约定查重：租户内同类型同名数据源 */
+    Optional<DataSourceDefinition> findByTenantIdAndTypeAndName(String tenantId, String type, String name);
+
     /** 按 formKey 查找数据源（业务表单关联） */
     Optional<DataSourceDefinition> findByTenantIdAndFormKey(String tenantId, String formKey);
 

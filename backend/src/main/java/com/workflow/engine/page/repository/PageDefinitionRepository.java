@@ -57,4 +57,9 @@ public interface PageDefinitionRepository extends JpaRepository<PageDefinition, 
     Page<PageDefinition> findByTenantIdAndNameContainingAndStatusOrderByUpdatedAtDesc(String tenantId, String name, String status, Pageable pageable);
 
     Page<PageDefinition> findByTenantIdAndNameContainingAndStatusAndTypeOrderByUpdatedAtDesc(String tenantId, String name, String status, String type, Pageable pageable);
+
+    /**
+     * 存量视图迁移扫描：type=VIEW 且 formKey 非空且 dataSourceId 未回填（跨租户，迁移器按页面租户分组处理）。
+     */
+    List<PageDefinition> findByTypeAndFormKeyNotNullAndDataSourceIdNull(String type);
 }

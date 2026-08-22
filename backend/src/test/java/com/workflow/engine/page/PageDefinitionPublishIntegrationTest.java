@@ -436,6 +436,14 @@ class PageDefinitionPublishIntegrationTest {
         }
 
         @Override
+        public List<PageDefinition> findByTypeAndFormKeyNotNullAndDataSourceIdNull(String type) {
+            return store.values().stream()
+                    .filter(p -> type.equals(p.getType()) && p.getFormKey() != null
+                            && p.getDataSourceId() == null)
+                    .toList();
+        }
+
+        @Override
         public Optional<PageDefinition> findByIdForUpdate(String id, String tenantId) {
             synchronized (publishLock) {
                 return findByIdAndTenantId(id, tenantId);

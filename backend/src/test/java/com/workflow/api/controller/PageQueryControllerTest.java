@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -70,6 +71,17 @@ class PageQueryControllerTest {
         view.setFormKey("emp_profile");
         view.setSchema(SCHEMA);
         when(pageDefService.getPublishedByKey("emp_view")).thenReturn(view);
+
+        PageDefinition dsView = new PageDefinition();
+        dsView.setType("VIEW");
+        dsView.setDataSourceId("ds_workflow_001");
+        dsView.setSchema(SCHEMA);
+        when(pageDefService.getPublishedByKey("wf_view")).thenReturn(dsView);
+
+        PageDefinition nakedView = new PageDefinition();
+        nakedView.setType("VIEW");
+        nakedView.setSchema(SCHEMA);
+        when(pageDefService.getPublishedByKey("naked_view")).thenReturn(nakedView);
 
         PageDefinition page = new PageDefinition();
         page.setType("PAGE");
@@ -196,6 +208,39 @@ class PageQueryControllerTest {
 
         assertThat(result.getCode()).isEqualTo(200);
         verify(bizDataService).query(eq("emp_profile"), eq(req));
+    }
+
+    // ---------- VIEW 数据源协议（dataSourceId） ----------
+
+    @Test
+    void viewQuery_withDataSourceId_delegatesToSpi() {
+        BizDataQueryRequest req = req("{\"dept\":\"IT\"}");
+
+        R<BizDataPageVO> result = controller.query("wf_view", req);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        verify(dsService).queryData(eq("ds_workflow_001"), eq(req));
+        verify(bizDataService, never()).query(anyString(), any());
+    }
+
+    @Test
+    void viewQuery_legacyFormKey_fallsBackToBizDataService() {
+        BizDataQueryRequest req = req("{\"dept\":\"IT\"}");
+
+        R<BizDataPageVO> result = controller.query("emp_view", req);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        verify(bizDataService).query(eq("emp_profile"), eq(req));
+        verify(dsService, never()).queryData(anyString(), any());
+    }
+
+    @Test
+    void viewQuery_noBinding_rejected400() {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+
+        assertThatThrownBy(() -> controller.query("naked_view", req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("未绑定数据源");
     }
 
     private BizDataQueryRequest req(String filter) {

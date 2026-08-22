@@ -47,6 +47,10 @@ public class PageQueryController {
      * 视图数据分页查询。
      * 参数对齐 BizDataQueryRequest（filter 为 JSON 字符串），filter 仅保留
      * schema 声明的 searchFields key（白名单）；pageKey 未发布/不存在 → 404。
+     * 取数来源三分支：
+     * 1. dataSourceId 非空（新协议）→ 经统一数据源 SPI 查询（DataSourceDefinitionService.queryData）
+     * 2. 仅剩 formKey（兼容）→ 遗留 BizDataService 直连业务表
+     * 3. 两者皆无 → 400「页面未绑定数据源」
      */
     @GetMapping("/{pageKey}/data")
     public R<BizDataPageVO> query(@PathVariable String pageKey, BizDataQueryRequest req) {
@@ -54,14 +58,19 @@ public class PageQueryController {
         if (!"VIEW".equals(page.getType())) {
             throw new BusinessException(400, "页面 " + pageKey + " 不是视图类型，不支持数据查询");
         }
-        if (page.getFormKey() == null || page.getFormKey().isBlank()) {
-            throw new BusinessException(400, "视图 " + pageKey + " 未绑定业务表单");
+        boolean hasDataSourceId = page.getDataSourceId() != null && !page.getDataSourceId().isBlank();
+        boolean hasFormKey = page.getFormKey() != null && !page.getFormKey().isBlank();
+        if (!hasDataSourceId && !hasFormKey) {
+            throw new BusinessException(400, "页面 " + pageKey + " 未绑定数据源");
         }
 
         // filter 白名单：仅保留 schema 声明的 searchFields key
         Set<String> whitelist = searchFieldKeys(page.getSchema());
         req.setFilter(whitelistFilter(req.getFilter(), whitelist));
 
+        if (hasDataSourceId) {
+            return R.ok(dsService.queryData(page.getDataSourceId(), req));
+        }
         return R.ok(bizDataService.query(page.getFormKey(), req));
     }
 

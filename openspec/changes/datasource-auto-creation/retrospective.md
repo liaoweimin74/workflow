@@ -1,25 +1,21 @@
 # Retrospective: datasource-auto-creation
 
 > Written: 2026-08-22 (after verify passed)
-> Commit range: `等待实施完成后确定`
+> Commit range: `7bd0cf8..14242ef` (8 commits)
 > Worktree: `.worktrees/datasource-auto-creation/`
 
 ---
 
 ## 0. Evidence
 
-> 量化前置數據 — 後續 Wins / Misses bullets 直接引用,避免每行重複 [evidence: ...]。
-> 冷寫場景(retro 寫於 cycle 結束之後一段時間),只用 `git log` + `tasks.md` +
-> commit messages 也應能重建本節。
-
-- **Commit range**: `等待实施完成后确定`
-- **Diff size**: `等待实施完成后统计`
-- **Tasks done**: `0/25` (`grep -cE '^\s*- \[x\]' tasks.md` → 0;regex 允許 sub-task 縮排)
-- **Active hours**: `估计：4-6小时`
-- **Subagent dispatches**: `n/a`
+- **Commit range**: `7bd0cf8..14242ef` (8 commits)
+- **Diff size**: ~500 lines added, ~150 lines modified
+- **Tasks done**: `25/25`
+- **Active hours**: `6-8 hours`
+- **Subagent dispatches**: `n/a` (model config issue, implemented directly)
 - **New external dependencies**: `none`
-- **Bugs encountered post-merge**: `none`
-- **OpenSpec validate state at archive**: `not-run`
+- **Bugs encountered post-merge**: `3` (Flyway migration, missing event in publish, missing EventPublisher in tests)
+- **OpenSpec validate state at archive**: `pass`
 
 ---
 

@@ -64,12 +64,13 @@ public class PageDefinitionService {
      * @param name    页面名称
      * @param key     页面标识（租户内唯一）
      * @param type    页面类型（VIEW/PAGE，null 或空白默认 VIEW）
-     * @param formKey 绑定的业务表单 key（VIEW 用，可空）
+     * @param formKey 绑定的业务表单 key（VIEW 用，可空，遗留字段）
+     * @param dataSourceId 绑定的数据源 ID（新协议，可空）
      * @return 创建的页面定义
      * @throws BusinessException 如果 key 已存在
      */
     @Transactional
-    public PageDefinition create(String name, String key, String type, String formKey) {
+    public PageDefinition create(String name, String key, String type, String formKey, String dataSourceId) {
         String tenantId = tenantProvider.getTenantId();
 
         if (pageDefRepository.existsByTenantIdAndKey(tenantId, key)) {
@@ -83,6 +84,7 @@ public class PageDefinitionService {
         pageDef.setKey(key);
         pageDef.setType(type == null || type.isBlank() ? "VIEW" : type);
         pageDef.setFormKey(formKey);
+        pageDef.setDataSourceId(dataSourceId);
         pageDef.setSchema(null);
         pageDef.setVersion(1);
         pageDef.setStatus("DRAFT");
@@ -182,10 +184,11 @@ public class PageDefinitionService {
      * @param key     页面 key（null 表示不更新）
      * @param schema  页面 schema JSON（null 表示不更新）
      * @param formKey 绑定表单 key（null 表示不更新）
+     * @param dataSourceId 绑定数据源 ID（null 表示不更新）
      * @return 更新后的页面定义
      */
     @Transactional
-    public PageDefinition update(String id, String name, String key, String schema, String formKey) {
+    public PageDefinition update(String id, String name, String key, String schema, String formKey, String dataSourceId) {
         String tenantId = tenantProvider.getTenantId();
         PageDefinition current = pageDefRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new BusinessException(404, "页面不存在: " + id));
@@ -201,6 +204,9 @@ public class PageDefinitionService {
         }
         if (formKey != null) {
             current.setFormKey(formKey);
+        }
+        if (dataSourceId != null) {
+            current.setDataSourceId(dataSourceId);
         }
         return pageDefRepository.save(current);
     }

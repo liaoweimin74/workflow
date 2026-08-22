@@ -34,7 +34,8 @@ public class PageDefinitionController {
     @PostMapping
     public R<PageDefinition> create(@RequestBody PageDefinitionSaveRequest request) {
         PageDefinition pageDef = pageDefService.create(
-                request.getName(), request.getKey(), request.getType(), request.getFormKey());
+                request.getName(), request.getKey(), request.getType(), request.getFormKey(),
+                request.getDataSourceId());
         return R.ok(pageDef);
     }
 
@@ -88,7 +89,8 @@ public class PageDefinitionController {
     public R<PageDefinition> update(@PathVariable String id,
                                     @RequestBody PageDefinitionSaveRequest request) {
         PageDefinition pageDef = pageDefService.update(
-                id, request.getName(), request.getKey(), request.getSchema(), request.getFormKey());
+                id, request.getName(), request.getKey(), request.getSchema(), request.getFormKey(),
+                request.getDataSourceId());
         return R.ok(pageDef);
     }
 
@@ -117,6 +119,7 @@ public class PageDefinitionController {
         dto.setKey(pageDef.getKey());
         dto.setType(pageDef.getType());
         dto.setFormKey(pageDef.getFormKey());
+        dto.setDataSourceId(pageDef.getDataSourceId());
         dto.setVersion(pageDef.getVersion());
         dto.setStatus(pageDef.getStatus());
         dto.setPublishedVersion(pageDef.getPublishedVersion());
@@ -133,6 +136,7 @@ public class PageDefinitionController {
         dto.setKey(pageDef.getKey());
         dto.setType(pageDef.getType());
         dto.setFormKey(pageDef.getFormKey());
+        dto.setDataSourceId(pageDef.getDataSourceId());
         dto.setVersion(pageDef.getVersion());
         dto.setStatus(pageDef.getStatus());
         dto.setPublishedVersion(pageDef.getPublishedVersion());

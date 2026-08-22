@@ -9,6 +9,7 @@ public class PageDefinitionSaveRequest {
     private String key;
     private String type;
     private String formKey;
+    private String dataSourceId;
     private String schema;
 
     public String getName() { return name; }
@@ -22,6 +23,9 @@ public class PageDefinitionSaveRequest {
 
     public String getFormKey() { return formKey; }
     public void setFormKey(String formKey) { this.formKey = formKey; }
+
+    public String getDataSourceId() { return dataSourceId; }
+    public void setDataSourceId(String dataSourceId) { this.dataSourceId = dataSourceId; }
 
     public String getSchema() { return schema; }
     public void setSchema(String schema) { this.schema = schema; }

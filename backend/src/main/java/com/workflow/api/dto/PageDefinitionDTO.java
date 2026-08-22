@@ -12,6 +12,7 @@ public class PageDefinitionDTO {
     private String key;
     private String type;
     private String formKey;
+    private String dataSourceId;
     private Integer version;
     private String status;
     private Integer publishedVersion;
@@ -35,6 +36,9 @@ public class PageDefinitionDTO {
 
     public String getFormKey() { return formKey; }
     public void setFormKey(String formKey) { this.formKey = formKey; }
+
+    public String getDataSourceId() { return dataSourceId; }
+    public void setDataSourceId(String dataSourceId) { this.dataSourceId = dataSourceId; }
 
     public Integer getVersion() { return version; }
     public void setVersion(Integer version) { this.version = version; }

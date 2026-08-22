@@ -38,6 +38,12 @@ public class PageDefinition {
     private String formKey;
 
     /**
+     * 视图绑定的数据源 ID（新协议）；formKey 为遗留字段仅保留兼容。
+     */
+    @Column(name = "data_source_id", length = 64)
+    private String dataSourceId;
+
+    /**
      * VIEW=视图配置JSON / PAGE=form-create {rule,option,dataSources,actions}。
      */
     @Lob
@@ -90,6 +96,9 @@ public class PageDefinition {
 
     public String getFormKey() { return formKey; }
     public void setFormKey(String formKey) { this.formKey = formKey; }
+
+    public String getDataSourceId() { return dataSourceId; }
+    public void setDataSourceId(String dataSourceId) { this.dataSourceId = dataSourceId; }
 
     public String getSchema() { return schema; }
     public void setSchema(String schema) { this.schema = schema; }

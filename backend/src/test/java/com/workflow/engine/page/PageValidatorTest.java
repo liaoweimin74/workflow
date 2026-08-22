@@ -1,6 +1,7 @@
 package com.workflow.engine.page;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
@@ -21,7 +22,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -92,6 +95,15 @@ class PageValidatorTest {
         PageDefinition page = new PageDefinition();
         page.setType("VIEW");
         page.setFormKey("leave");
+        page.setSchema(schema);
+        return page;
+    }
+
+    private PageDefinition viewPage(String dataSourceId, String formKey, String schema) {
+        PageDefinition page = new PageDefinition();
+        page.setType("VIEW");
+        page.setDataSourceId(dataSourceId);
+        page.setFormKey(formKey);
         page.setSchema(schema);
         return page;
     }
@@ -364,5 +376,95 @@ class PageValidatorTest {
                  "actions":[]}
                 """;
         assertThrows(BusinessException.class, () -> validator.validateForPublish(pagePage(schema)));
+    }
+
+    // ==================== VIEW 数据源协议（dataSourceId）校验 ====================
+
+    /** 固定 metadata：name/apply_date 两列（模拟 FORM/WORKFLOW 数据源 metadata） */
+    private DataSourceMetadata metadataOf(String... keys) {
+        return new DataSourceMetadata(List.of(
+                col("name", "VARCHAR", false),
+                col("apply_date", "DATE", false)), false);
+    }
+
+    @Test
+    void view_dataSourceAndFormKeyBothNull_rejected() {
+        PageDefinition page = viewPage(null, null, "{\"searchFields\":[]}");
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> validator.validateForPublish(page));
+        assertTrue(ex.getMessage().contains("请选择数据源"));
+    }
+
+    @Test
+    void view_dataSourceNotExist_rejected() {
+        when(dsService.metadata("ds-ghost")).thenThrow(new BusinessException(404, "数据源不存在: ds-ghost"));
+        PageDefinition page = viewPage("ds-ghost", null, "{\"searchFields\":[]}");
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> validator.validateForPublish(page));
+        assertEquals(404, ex.getCode());
+    }
+
+    @Test
+    void view_dataSourceDisabled_rejected() {
+        when(dsService.metadata("ds-off")).thenThrow(new BusinessException(400, "数据源未启用，无法访问: off"));
+        PageDefinition page = viewPage("ds-off", null, "{\"searchFields\":[]}");
+        assertThrows(BusinessException.class, () -> validator.validateForPublish(page));
+    }
+
+    @Test
+    void view_searchFieldNotInMetadata_rejected() {
+        when(dsService.metadata("ds-1")).thenReturn(metadataOf());
+        PageDefinition page = viewPage("ds-1", null,
+                "{\"searchFields\":[{\"key\":\"ghost\",\"label\":\"幽灵\",\"matchType\":\"eq\"}]}");
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> validator.validateForPublish(page));
+        assertTrue(ex.getMessage().contains("ghost"));
+    }
+
+    @Test
+    void view_columnNotInMetadata_rejected() {
+        when(dsService.metadata("ds-1")).thenReturn(metadataOf());
+        PageDefinition page = viewPage("ds-1", null,
+                "{\"columns\":[{\"key\":\"ghost\",\"label\":\"幽灵列\"}]}");
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> validator.validateForPublish(page));
+        assertTrue(ex.getMessage().contains("ghost"));
+    }
+
+    @Test
+    void view_validDataSourceSchema_passes() {
+        when(dsService.metadata("ds-1")).thenReturn(metadataOf());
+        PageDefinition page = viewPage("ds-1", null,
+                "{\"searchFields\":[{\"key\":\"name\",\"label\":\"姓名\",\"matchType\":\"like\"}],"
+                        + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"},{\"key\":\"apply_date\",\"label\":\"日期\"}]}");
+        assertDoesNotThrow(() -> validator.validateForPublish(page));
+    }
+
+    // ==================== resolveBindColumns 取列来源切换 ====================
+
+    @Test
+    void resolveBindColumns_dataSourceBound_returnsMetadataColumns() {
+        when(dsService.metadata("ds-1")).thenReturn(metadataOf());
+        PageDefinition page = viewPage("ds-1", null, "{}");
+
+        List<ColumnConfig> columns = validator.resolveBindColumns(page);
+
+        assertEquals(2, columns.size());
+        assertEquals("name", columns.get(0).getKey());
+        assertEquals("apply_date", columns.get(1).getKey());
+    }
+
+    @Test
+    void resolveBindColumns_legacyFormKey_fallsBackToFormConfig() {
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                eq(TENANT_ID), eq("leave"), eq("PUBLISHED")))
+                .thenReturn(Optional.of(publishedForm(columnConfigJson(
+                        col("name", "VARCHAR", false)))));
+        PageDefinition page = viewPage("{\"searchFields\":[]}");
+
+        List<ColumnConfig> columns = validator.resolveBindColumns(page);
+
+        assertEquals(1, columns.size());
+        assertEquals("name", columns.get(0).getKey());
     }
 }

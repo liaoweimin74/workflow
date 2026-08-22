@@ -3,6 +3,7 @@ package com.workflow.engine.page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
@@ -58,6 +59,9 @@ public class PageValidator {
     /**
      * 校验页面可发布。
      *
+     * <p>VIEW 绑定协议：dataSourceId（新协议，经 SPI metadata 取列）优先；
+     * dataSourceId 为空且 formKey 非空（迁移被跳过的页）走遗留校验逻辑兜底。
+     *
      * @param page 待发布页面（type=VIEW 或 PAGE）
      * @throws BusinessException 各类校验失败（错误码 400）
      */
@@ -68,23 +72,36 @@ public class PageValidator {
         }
 
         String tenantId = tenantProvider.getTenantId();
+        String dataSourceId = page.getDataSourceId();
+        String formKey = page.getFormKey();
+        boolean hasDataSource = dataSourceId != null && !dataSourceId.isBlank();
+        boolean hasFormKey = formKey != null && !formKey.isBlank();
 
-        // 1. 绑定表单校验：存在、已发布、BUSINESS 类型
-        if (page.getFormKey() == null || page.getFormKey().isBlank()) {
-            throw new BusinessException(400, "视图必须绑定业务表单");
-        }
-        Optional<FormDefinition> boundFormOpt = formDefRepository
-                .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, page.getFormKey(), "PUBLISHED");
-        if (boundFormOpt.isEmpty()) {
-            throw new BusinessException(400, "绑定表单不存在或未发布: " + page.getFormKey());
-        }
-        FormDefinition boundForm = boundFormOpt.get();
-        if (!"BUSINESS".equals(boundForm.getType())) {
-            throw new BusinessException(400, "绑定表单 " + page.getFormKey() + " 不是业务表单");
+        // 1. 绑定来源校验：数据源与遗留 formKey 至少其一
+        if (!hasDataSource && !hasFormKey) {
+            throw new BusinessException(400, "请选择数据源");
         }
 
-        // 2. 解析 column_config，构建合法列 / 隐藏列 / 不可筛选列集合
-        List<ColumnConfig> columns = parseColumnConfig(boundForm.getColumnConfig());
+        // 2. 取列并构建合法列 / 隐藏列 / 不可筛选列集合
+        List<ColumnConfig> columns;
+        if (hasDataSource) {
+            // 新协议：数据源 metadata 取列（定义不存在/未启用 → dsService.metadata 抛 400/404）
+            DataSourceMetadata meta = dsService.metadata(dataSourceId);
+            columns = meta.getColumns() == null ? List.of() : meta.getColumns();
+        } else {
+            // 兼容兜底：formKey 遗留协议（绑定表单存在、已发布、BUSINESS 类型）
+            Optional<FormDefinition> boundFormOpt = formDefRepository
+                    .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, formKey, "PUBLISHED");
+            if (boundFormOpt.isEmpty()) {
+                throw new BusinessException(400, "绑定表单不存在或未发布: " + formKey);
+            }
+            FormDefinition boundForm = boundFormOpt.get();
+            if (!"BUSINESS".equals(boundForm.getType())) {
+                throw new BusinessException(400, "绑定表单 " + formKey + " 不是业务表单");
+            }
+            columns = parseColumnConfig(boundForm.getColumnConfig());
+        }
+
         Set<String> validKeys = new HashSet<>();
         Set<String> hiddenKeys = new HashSet<>();
         Set<String> nonFilterableKeys = new HashSet<>();
@@ -138,14 +155,20 @@ public class PageValidator {
     }
 
     /**
-     * 解析绑定表单的列映射（供发布时编译视图使用）。
-     * 调用前提：validateForPublish 已通过（绑定表单存在且已发布）。
+     * 解析发布时编译视图所需的列（供 ViewCompiler 使用）。
+     * 调用前提：validateForPublish 已通过。
+     * dataSourceId 非空 → 数据源 metadata 列；否则 → 遗留 formKey 表单 column_config。
      *
-     * @param page 待发布页面（type=VIEW，formKey 已绑定）
-     * @return 绑定表单的 column_config 列映射列表
-     * @throws BusinessException 绑定表单不存在/未发布或列映射非法
+     * @param page 待发布页面（type=VIEW）
+     * @return 列定义列表
+     * @throws BusinessException 数据源不可用或绑定表单不存在/未发布
      */
     public List<ColumnConfig> resolveBindColumns(PageDefinition page) {
+        String dataSourceId = page.getDataSourceId();
+        if (dataSourceId != null && !dataSourceId.isBlank()) {
+            DataSourceMetadata meta = dsService.metadata(dataSourceId);
+            return meta.getColumns() == null ? List.of() : meta.getColumns();
+        }
         String tenantId = tenantProvider.getTenantId();
         if (page.getFormKey() == null || page.getFormKey().isBlank()) {
             throw new BusinessException(400, "视图必须绑定业务表单");

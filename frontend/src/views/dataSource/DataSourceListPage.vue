@@ -52,6 +52,7 @@
         <el-form-item label="数据源类型">
           <el-radio-group v-model="form.type" :disabled="true">
             <el-radio-button value="FORM">业务表单</el-radio-button>
+            <el-radio-button value="WORKFLOW">工作流表单</el-radio-button>
             <el-radio-button value="SYSTEM">系统结构</el-radio-button>
             <el-radio-button value="API">第三方 API</el-radio-button>
           </el-radio-group>
@@ -61,6 +62,11 @@
             <template v-if="form.type === 'FORM'">
               <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px" disabled>
                 <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+              </el-select>
+            </template>
+            <template v-else-if="form.type === 'WORKFLOW'">
+              <el-select v-model="form.formKey" placeholder="选择已发布的工作流表单" filterable style="width: 320px">
+                <el-option v-for="f in publishedWorkflowForms" :key="f.key" :label="f.name" :value="f.key" />
               </el-select>
             </template>
             <template v-else-if="form.type === 'SYSTEM'">
@@ -230,6 +236,9 @@ const tableRef = ref<InstanceType<typeof SearchTable>>()
 /** 已发布业务表单（FORM 类型 formKey 下拉候选） */
 const publishedForms = ref<FormDefinitionDTO[]>([])
 
+/** 已发布工作流表单（WORKFLOW 类型 formKey 下拉候选） */
+const publishedWorkflowForms = ref<FormDefinitionDTO[]>([])
+
 /** API 操作 HTTP 方法候选 */
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const
 
@@ -246,6 +255,7 @@ const searchFields = computed<SearchField[]>(() => [
     placeholder: '全部',
     options: [
       { label: '业务表单', value: 'FORM' },
+      { label: '工作流表单', value: 'WORKFLOW' },
       { label: '系统结构', value: 'SYSTEM' },
       { label: '第三方 API', value: 'API' },
     ],
@@ -536,10 +546,14 @@ function openView(row: DataSourceDTO) {
      ElMessage.warning('请输入数据源名称')
      return
    }
-   if (form.type === 'FORM' && !form.formKey) {
-     ElMessage.warning('请选择绑定的业务表单')
-     return
-   }
+    if (form.type === 'FORM' && !form.formKey) {
+      ElMessage.warning('请选择绑定的业务表单')
+      return
+    }
+    if (form.type === 'WORKFLOW' && !form.formKey) {
+      ElMessage.warning('请选择绑定的工作流表单')
+      return
+    }
    if (form.type === 'SYSTEM' && !form.sourceKey) {
      ElMessage.warning('请选择系统结构')
      return
@@ -574,7 +588,7 @@ function openView(row: DataSourceDTO) {
     return {
       name: form.name,
       type: form.type || 'FORM',
-      formKey: form.type === 'FORM' ? form.formKey || null : null,
+      formKey: form.type === 'FORM' || form.type === 'WORKFLOW' ? form.formKey || null : null,
       sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : form.type === 'API' ? form.sourceKey || null : null,
       params: JSON.stringify(buildApiParams()),
     }
@@ -614,6 +628,7 @@ const actionButtons: ActionButton[] = [
 function typeTagType(type: string): '' | 'primary' | 'success' | 'warning' {
   const map: Record<string, '' | 'primary' | 'success' | 'warning'> = {
     FORM: 'primary',
+    WORKFLOW: 'primary',
     SYSTEM: 'success',
     API: 'warning',
   }
@@ -623,6 +638,7 @@ function typeTagType(type: string): '' | 'primary' | 'success' | 'warning' {
 function typeLabel(type: string): string {
   const map: Record<string, string> = {
     FORM: '业务表单',
+    WORKFLOW: '工作流表单',
     SYSTEM: '系统结构',
     API: '第三方 API',
   }
@@ -654,12 +670,19 @@ function formatDate(dateStr: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-// ========== 初始化：加载已发布业务表单（FORM 类型 formKey 下拉候选） ==========
+// ========== 初始化：加载已发布业务/工作流表单（FORM/WORKFLOW 类型 formKey 下拉候选） ==========
 onMounted(async () => {
   try {
     const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
     const data = res.data as any
     publishedForms.value = data.content || data.rows || []
+  } catch {
+    // 表单加载失败不阻断列表
+  }
+  try {
+    const res = await formApi.getFormDefinitions({ type: 'WORKFLOW', status: 'PUBLISHED', size: 100 })
+    const data = res.data as any
+    publishedWorkflowForms.value = data.content || data.rows || []
   } catch {
     // 表单加载失败不阻断列表
   }

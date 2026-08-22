@@ -5,31 +5,38 @@ TBD - created by archiving change query-view-designer. Update Purpose after arch
 ## Requirements
 ### Requirement: 数据源 CRUD
 
-系统 SHALL 提供全局数据源管理接口 `GET/POST/PUT/DELETE /api/v1/data-sources`。
+系统 SHALL 提供全局数据源管理接口 `GET /api/v1/data-sources`。
 数据源字段 SHALL 包含：id、tenantId、name、type（FORM/SYSTEM/API）、formKey、sourceKey、params、status、createdAt、updatedAt。
 同一租户内 name SHALL 唯一（重复创建返回 400）。
 创建后的数据源 SHALL 为 DRAFT 状态；类型为 FORM 时 formKey 对应业务表单必须存在（不存在返回 400）；类型为 SYSTEM/API 时 sourceKey 必填。
+用户 SHALL NOT 能够手动创建、编辑、删除数据源，数据源由系统自动管理。
 
-#### Scenario: 创建 FORM 数据源
-- **WHEN** 用户创建 type=FORM 的数据源，name="商品列表"，formKey="product"
-- **AND** product 表单存在
-- **THEN** 创建成功（status=DRAFT）
-- **AND** 后续页面可通过 refId 引用该数据源
+#### Scenario: 查看 FORM 数据源
+- **WHEN** 用户查看 type=FORM 的数据源
+- **THEN** 系统显示数据源详情，包含关联的业务表单信息
+- **AND** 所有字段为只读
 
-#### Scenario: 创建引用不存在表单的数据源
-- **WHEN** 用户创建 type=FORM 的数据源
-- **AND** formKey="not-exist-form" 且该表单不存在
-- **THEN** 系统返回 400 错误
-- **AND** 不创建记录
+#### Scenario: 查看 SYSTEM 数据源
+- **WHEN** 用户查看 type=SYSTEM 的数据源
+- **THEN** 系统显示数据源详情，包含系统数据类型信息
+- **AND** 所有字段为只读
 
-#### Scenario: 同租户重复名称
-- **WHEN** 用户创建第二个 name="商品列表" 的数据源（同租户内）
-- **THEN** 系统返回 400 错误（name 冲突）
+#### Scenario: 查看 API 数据源
+- **WHEN** 用户查看 type=API 的数据源
+- **THEN** 系统显示数据源详情，包含 API 配置信息
+- **AND** 所有字段为只读
 
-#### Scenario: 创建 API 数据源（一期仅登记）
-- **WHEN** 用户创建 type=API 的数据源，name="外部库存"，sourceKey="external-stock"，params 含鉴权参数
-- **THEN** 创建成功（status=DRAFT）
-- **AND** 页面可绑定该数据源（查询时返回"数据源类型未启用"）
+#### Scenario: 禁止创建数据源
+- **WHEN** 用户尝试创建数据源
+- **THEN** 系统 SHALL 拒绝操作并返回错误信息"数据源由系统自动管理，不支持手动创建"
+
+#### Scenario: 禁止编辑数据源
+- **WHEN** 用户尝试编辑数据源
+- **THEN** 系统 SHALL 拒绝操作并返回错误信息"数据源由系统自动管理，不支持手动编辑"
+
+#### Scenario: 禁止删除数据源
+- **WHEN** 用户尝试删除数据源
+- **THEN** 系统 SHALL 拒绝操作并返回错误信息"数据源由系统自动管理，不支持手动删除"
 
 ---
 
@@ -39,57 +46,79 @@ TBD - created by archiving change query-view-designer. Update Purpose after arch
 启用（ENABLED）时系统 SHALL 校验 type 必填项齐全且合法，不合法返回 400 且状态不变。
 禁用（DISABLED）SHALL 不影响已发布页面运行，但 SHALL 阻止新页面绑定或已绑定页面重新发布引用该数据源。
 删除 SHALL 仅允许 DRAFT 状态；ENABLED/DISABLED 的数据源必须先禁用再删除（防止已发布页面引用悬空）。
+用户 SHALL NOT 能够手动更改数据源状态，数据源状态由系统自动管理。
 
-#### Scenario: 启用数据源
-- **WHEN** 用户对 type=FORM、formKey="product"（表单已发布）的 DRAFT 数据源调用启用
-- **THEN** 数据源变为 ENABLED
-- **AND** 页面发布校验可通过该数据源的 refId 引用
+#### Scenario: 自动启用 FORM 数据源
+- **WHEN** 系统自动创建 FORM 数据源
+- **THEN** 数据源状态 SHALL 自动设置为 ENABLED
+- **AND** 用户不能修改数据源状态
 
-#### Scenario: 启用必填项不齐全的数据源
-- **WHEN** 用户启用 type=FORM 但 formKey 为空的数据源
-- **THEN** 系统返回 400 错误
-- **AND** 状态保持 DRAFT
+#### Scenario: 自动启用 SYSTEM 数据源
+- **WHEN** 系统自动创建 SYSTEM 数据源
+- **THEN** 数据源状态 SHALL 自动设置为 ENABLED
+- **AND** 用户不能修改数据源状态
 
-#### Scenario: 禁用已发布页面引用的数据源
-- **WHEN** 用户禁用数据源 DS-A
-- **AND** 已发布页面 P 的 dataSources 引用了 DS-A
-- **THEN** 禁用成功，页面 P 运行不受影响（其发布时快照已固定查询字段）
-- **AND** 页面 P 修改 schema 后重新发布时，因引用了 DISABLED 数据源而返回 400
+#### Scenario: 禁止手动启用数据源
+- **WHEN** 用户尝试手动启用数据源
+- **THEN** 系统 SHALL 拒绝操作并返回错误信息"数据源状态由系统自动管理，不支持手动启用"
 
-#### Scenario: 删除非 DRAFT 数据源
-- **WHEN** 用户删除 ENABLED 状态的数据源
-- **THEN** 系统返回 400（需先禁用）
-- **AND** 记录保留
+#### Scenario: 禁止手动禁用数据源
+- **WHEN** 用户尝试手动禁用数据源
+- **THEN** 系统 SHALL 拒绝操作并返回错误信息"数据源状态由系统自动管理，不支持手动禁用"
 
 ---
 
 ### Requirement: 数据源类型合法性校验
+
 系统 SHALL 按类型校验数据源配置合法性：
 - FORM：formKey 对应业务表单存在且（启用时）已发布；params 自动生成（只读）。
 - SYSTEM：sourceKey 命中内部接口枚举（dept-tree / user-tree）；params 自动生成。
 - API：sourceKey 必填，params 为合法 JSON（含 list action）。
 
-#### Scenario: 非法 SYSTEM key
-- **WHEN** 用户创建 type=SYSTEM、sourceKey="unknown-tree"
-- **THEN** 系统返回 400 错误
+#### Scenario: 自动创建 FORM 数据源时校验
+- **WHEN** 系统自动创建 FORM 数据源
+- **THEN** 系统 SHALL 校验 formKey 对应的业务表单存在
+- **AND** 如果表单不存在，系统 SHALL 记录错误日志但不影响业务表单创建
 
-#### Scenario: 启用 FORM 数据源时自动生成 params
-- **WHEN** 用户启用 type=FORM、formKey="product"（表单已发布）的数据源
-- **THEN** 系统补填 params（接口 action=/api/v1/biz-data/product 等）
-- **AND** 前端仅读展示
+#### Scenario: 自动创建 SYSTEM 数据源时校验
+- **WHEN** 系统自动创建 SYSTEM 数据源
+- **THEN** 系统 SHALL 校验 sourceKey 是否在内部接口枚举中
+- **AND** 如果不在枚举中，系统 SHALL 记录错误日志
+
+---
 
 ### Requirement: 数据源管理界面
-系统 SHALL 提供数据源管理页面 (DataSourceListPage)，以单一「API 配置」页签呈现：type 选择器（FORM/SYSTEM/API） + 统一 API 操作/列定义配置。FORM/SYSTEM 的 API 配置 SHALL 自动生成且只读；仅 API 类型允许编辑。同时 SHALL 支持创建、编辑、启用、禁用、删除、按类型/状态筛选。
-设计器 SHALL 仅展示当前租户 ENABLED 数据源。
 
-#### Scenario: 单页签配置 FORM 数据源
-- **WHEN** 用户在数据源管理页创建 type=FORM、formKey="product"
-- **THEN** 界面在 API 配置页签内只读展示 product 的 CRUD 接口地址
+系统 SHALL 提供数据源管理页面 (DataSourceListPage)，以单一「API 配置」页签呈现：type 选择器（FORM/SYSTEM/API） + 统一 API 操作/列定义配置。FORM/SYSTEM 的 API 配置 SHALL 自动生成且只读；仅 API 类型允许编辑。同时 SHALL 支持查看、按类型/状态筛选。
+设计器 SHALL 仅展示当前租户 ENABLED 数据源。
+用户 SHALL NOT 能够新增、删除、编辑数据源，只能查看。
+
+#### Scenario: 查看 FORM 数据源配置
+- **WHEN** 用户查看 type=FORM 的数据源配置
+- **THEN** 界面在 API 配置页签内只读展示表单的 CRUD 接口地址
 - **AND** 用户不可编辑接口地址
 
-#### Scenario: 编辑 API 数据源
-- **WHEN** 用户在 API 配置页签编辑 type=API 数据源
-- **THEN** 允许编辑 list/get/create/update/delete action+method、column 定义、headers
+#### Scenario: 查看 SYSTEM 数据源配置
+- **WHEN** 用户查看 type=SYSTEM 的数据源配置
+- **THEN** 界面在 API 配置页签内只读展示系统数据接口地址
+- **AND** 用户不可编辑接口地址
+
+#### Scenario: 查看 API 数据源配置
+- **WHEN** 用户查看 type=API 的数据源配置
+- **THEN** 界面在 API 配置页签内只读展示 API 接口配置
+- **AND** 用户不可编辑接口配置
+
+#### Scenario: 禁止新增数据源
+- **WHEN** 用户尝试新增数据源
+- **THEN** 系统 SHALL 不显示新增按钮，或显示新增按钮但点击后提示"数据源由系统自动管理，不支持手动新增"
+
+#### Scenario: 禁止编辑数据源
+- **WHEN** 用户尝试编辑数据源
+- **THEN** 系统 SHALL 不显示编辑按钮，或显示编辑按钮但点击后提示"数据源由系统自动管理，不支持手动编辑"
+
+#### Scenario: 禁止删除数据源
+- **WHEN** 用户尝试删除数据源
+- **THEN** 系统 SHALL 不显示删除按钮，或显示删除按钮但点击后提示"数据源由系统自动管理，不支持手动删除"
 
 ### Requirement: 数据源管理不建表
 

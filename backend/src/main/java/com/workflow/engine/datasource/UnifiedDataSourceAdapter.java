@@ -60,6 +60,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     private final HttpLogicExecutor httpExecutor;
     private final ObjectMapper objectMapper;
     private final InternalDataSourceRouter router;
+    private final WorkflowFormDataQueryService workflowQueryService;
 
     public UnifiedDataSourceAdapter(BizDataService bizDataService,
                                     FormDefinitionService formDefService,
@@ -67,7 +68,8 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                                     UserService userService,
                                     HttpLogicExecutor httpExecutor,
                                     ObjectMapper objectMapper,
-                                    InternalDataSourceRouter router) {
+                                    InternalDataSourceRouter router,
+                                    WorkflowFormDataQueryService workflowQueryService) {
         this.bizDataService = bizDataService;
         this.formDefService = formDefService;
         this.organizationService = organizationService;
@@ -75,11 +77,12 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
         this.httpExecutor = httpExecutor;
         this.objectMapper = objectMapper;
         this.router = router;
+        this.workflowQueryService = workflowQueryService;
     }
 
     @Override
     public boolean supports(String type) {
-        return "FORM".equals(type) || "SYSTEM".equals(type) || "API".equals(type);
+        return "FORM".equals(type) || "SYSTEM".equals(type) || "API".equals(type) || "WORKFLOW".equals(type);
     }
 
     @Override
@@ -87,6 +90,8 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
         return switch (ds.getType()) {
             case "FORM" -> new DataSourceMetadata(
                     formDefService.getBusinessColumnsByKey(ds.getFormKey()), true);
+            case "WORKFLOW" -> new DataSourceMetadata(
+                    workflowQueryService.columnsFor(ds.getFormKey()), false);
             case "SYSTEM" -> "user-tree".equals(ds.getSourceKey())
                     ? new DataSourceMetadata(USER_COLUMNS, false)
                     : new DataSourceMetadata(DEPT_COLUMNS, false);
@@ -102,6 +107,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 router.resolve(ds, "list");
                 yield bizDataService.query(ds.getFormKey(), req);
             }
+            case "WORKFLOW" -> workflowQueryService.query(ds.getFormKey(), req);
             case "SYSTEM" -> {
                 router.resolve(ds, "list");
                 yield systemQuery(ds, req);
@@ -118,6 +124,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 router.resolve(ds, "get");
                 yield bizDataService.getById(ds.getFormKey(), id);
             }
+            case "WORKFLOW" -> workflowQueryService.getById(ds.getFormKey(), id);
             case "SYSTEM" -> systemGet(ds, id);
             case "API" -> apiGet(ds, id);
             default -> throw unsupported(ds, "get");
@@ -131,6 +138,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 router.resolve(ds, "create");
                 yield bizDataService.create(ds.getFormKey(), data).getId();
             }
+            case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
             case "API" -> apiCreate(ds, data);
             default -> throw unsupported(ds, "create");
         };
@@ -143,6 +151,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 router.resolve(ds, "update");
                 bizDataService.update(ds.getFormKey(), id, data, version);
             }
+            case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
             case "API" -> apiUpdate(ds, id, data);
             default -> throw unsupported(ds, "update");
         }
@@ -160,6 +169,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 // SYSTEM is read-only at adapter level; router allows for audit
                 throw unsupported(ds, "delete");
             }
+            case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
             case "API" -> apiDelete(ds, id);
             default -> throw unsupported(ds, "delete");
         }

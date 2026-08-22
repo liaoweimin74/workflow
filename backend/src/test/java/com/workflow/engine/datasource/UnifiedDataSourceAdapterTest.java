@@ -22,6 +22,7 @@ import com.workflow.system.service.OrganizationService;
 import com.workflow.system.service.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -50,6 +51,7 @@ class UnifiedDataSourceAdapterTest {
     @Mock private UserService userService;
     @Mock private HttpLogicExecutor httpExecutor;
     @Mock private InternalDataSourceRouter router;
+    @Mock private WorkflowFormDataQueryService workflowQueryService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private UnifiedDataSourceAdapter adapter;
@@ -60,7 +62,7 @@ class UnifiedDataSourceAdapterTest {
         when(router.resolve(any(), any())).thenReturn(
             new InternalDataSourceRouter.ResolvedEndpoint("T", "t", "GET", "/t"));
         adapter = new UnifiedDataSourceAdapter(bizDataService, formDefService, organizationService,
-                userService, httpExecutor, objectMapper, router);
+                userService, httpExecutor, objectMapper, router, workflowQueryService);
     }
 
     @AfterEach
@@ -73,6 +75,7 @@ class UnifiedDataSourceAdapterTest {
         d.setId("ds-1"); d.setName("test"); d.setType(type); d.setStatus("ENABLED");
         if ("FORM".equals(type)) d.setFormKey(key);
         if ("SYSTEM".equals(type)) d.setSourceKey(key);
+        if ("WORKFLOW".equals(type)) d.setFormKey(key);
         return d;
     }
 
@@ -94,10 +97,11 @@ class UnifiedDataSourceAdapterTest {
     }
 
     @Test
-    void supportsAllThreeTypes() {
+    void supportsAllTypes() {
         assertTrue(adapter.supports("FORM"));
         assertTrue(adapter.supports("SYSTEM"));
         assertTrue(adapter.supports("API"));
+        assertTrue(adapter.supports("WORKFLOW"));
         assertFalse(adapter.supports("UNKNOWN"));
     }
 
@@ -251,5 +255,74 @@ class UnifiedDataSourceAdapterTest {
                 .thenReturn("{\"id\": \"99\"}");
         String id = adapter.create(ds, Map.of("name", "Widget"));
         assertEquals("99", id);
+    }
+
+    // ===== WORKFLOW (只读：跨流程实例聚合) =====
+
+    @Nested
+    class WorkflowBranch {
+
+        private DataSourceDefinition wfDef() {
+            return ds("WORKFLOW", "leave");
+        }
+
+        @Test
+        void metadata_returnsSystemAndBusinessColumns_readonly() {
+            List<ColumnConfig> cols = List.of(
+                    col("instanceId", "流程实例ID", "VARCHAR", 64),
+                    col("reason", "事由", "VARCHAR", 255));
+            when(workflowQueryService.columnsFor("leave")).thenReturn(cols);
+
+            DataSourceMetadata meta = adapter.metadata(wfDef());
+
+            assertFalse(meta.isWritable());
+            assertEquals(2, meta.getColumns().size());
+            assertEquals("reason", meta.getColumns().get(1).getKey());
+            verify(workflowQueryService).columnsFor("leave");
+        }
+
+        @Test
+        void query_delegatesToWorkflowQueryService() {
+            BizDataQueryRequest req = new BizDataQueryRequest();
+            BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 0, 20);
+            when(workflowQueryService.query("leave", req)).thenReturn(expected);
+
+            BizDataPageVO result = adapter.query(wfDef(), req);
+
+            assertSame(expected, result);
+            verify(workflowQueryService).query("leave", req);
+        }
+
+        @Test
+        void get_delegatesToWorkflowQueryService() {
+            BizDataVO expected = new BizDataVO("r1", Map.of(), null, null, null);
+            when(workflowQueryService.getById("leave", "r1")).thenReturn(expected);
+
+            BizDataVO result = adapter.get(wfDef(), "r1");
+
+            assertSame(expected, result);
+            verify(workflowQueryService).getById("leave", "r1");
+        }
+
+        @Test
+        void create_throwsReadOnly() {
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> adapter.create(wfDef(), Map.of("reason", "x")));
+            assertEquals(400, ex.getCode());
+        }
+
+        @Test
+        void update_throwsReadOnly() {
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> adapter.update(wfDef(), "r1", Map.of("reason", "x"), 1));
+            assertEquals(400, ex.getCode());
+        }
+
+        @Test
+        void delete_throwsReadOnly() {
+            BusinessException ex = assertThrows(BusinessException.class,
+                    () -> adapter.delete(wfDef(), "r1"));
+            assertEquals(400, ex.getCode());
+        }
     }
 }

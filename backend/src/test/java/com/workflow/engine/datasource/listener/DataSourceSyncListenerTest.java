@@ -146,4 +146,79 @@ class DataSourceSyncListenerTest {
         // Then
         verify(dsRepository, never()).delete(any());
     }
+
+    // ==================== WORKFLOW 表单 → WORKFLOW 数据源 ====================
+
+    @Test
+    void handleFormCreated_workflowForm_createsWorkflowDataSource() {
+        // Given
+        FormCreatedEvent event = new FormCreatedEvent(this, FORM_ID, "请假流程", FORM_KEY, TENANT_ID, "WORKFLOW");
+        when(dsRepository.findByTenantIdAndFormKey(TENANT_ID, FORM_KEY)).thenReturn(Optional.empty());
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(invocation -> {
+            DataSourceDefinition ds = invocation.getArgument(0);
+            ds.setId("generated-id");
+            return ds;
+        });
+
+        // When
+        listener.handleFormCreated(event);
+
+        // Then
+        ArgumentCaptor<DataSourceDefinition> captor = ArgumentCaptor.forClass(DataSourceDefinition.class);
+        verify(dsRepository).save(captor.capture());
+
+        DataSourceDefinition saved = captor.getValue();
+        assertThat(saved.getName()).isEqualTo("请假流程 数据源");
+        assertThat(saved.getType()).isEqualTo("WORKFLOW");
+        assertThat(saved.getFormKey()).isEqualTo(FORM_KEY);
+        assertThat(saved.getStatus()).isEqualTo("ENABLED");
+    }
+
+    @Test
+    void handleFormUpdated_workflowForm_updatesDataSourceName() {
+        // Given
+        FormUpdatedEvent event = new FormUpdatedEvent(this, FORM_ID, "新请假流程", FORM_KEY, TENANT_ID, "WORKFLOW");
+        DataSourceDefinition existing = new DataSourceDefinition();
+        existing.setId("existing-id");
+        existing.setType("WORKFLOW");
+        existing.setName("旧请假流程 数据源");
+        when(dsRepository.findByTenantIdAndFormKey(TENANT_ID, FORM_KEY)).thenReturn(Optional.of(existing));
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        listener.handleFormUpdated(event);
+
+        // Then
+        ArgumentCaptor<DataSourceDefinition> captor = ArgumentCaptor.forClass(DataSourceDefinition.class);
+        verify(dsRepository).save(captor.capture());
+        assertThat(captor.getValue().getName()).isEqualTo("新请假流程 数据源");
+    }
+
+    @Test
+    void handleFormDeleted_workflowForm_deletesDataSource() {
+        // Given
+        FormDeletedEvent event = new FormDeletedEvent(this, FORM_ID, FORM_KEY, TENANT_ID, "WORKFLOW");
+        DataSourceDefinition existing = new DataSourceDefinition();
+        existing.setId("existing-id");
+        when(dsRepository.findByTenantIdAndFormKey(TENANT_ID, FORM_KEY)).thenReturn(Optional.of(existing));
+
+        // When
+        listener.handleFormDeleted(event);
+
+        // Then
+        verify(dsRepository).delete(existing);
+    }
+
+    @Test
+    void handleFormCreated_nonBusinessOrWorkflowType_skips() {
+        // Given
+        FormCreatedEvent event = new FormCreatedEvent(this, FORM_ID, "未知类型", FORM_KEY, TENANT_ID, "OTHER");
+
+        // When
+        listener.handleFormCreated(event);
+
+        // Then
+        verify(dsRepository, never()).findByTenantIdAndFormKey(any(), any());
+        verify(dsRepository, never()).save(any());
+    }
 }

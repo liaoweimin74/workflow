@@ -12,13 +12,21 @@ public class FormUpdatedEvent extends ApplicationEvent {
     private final String formName;
     private final String formKey;
     private final String tenantId;
+    /** 表单类型：BUSINESS → FORM 数据源；WORKFLOW → WORKFLOW 数据源 */
+    private final String formType;
 
     public FormUpdatedEvent(Object source, String formId, String formName, String formKey, String tenantId) {
+        this(source, formId, formName, formKey, tenantId, "BUSINESS");
+    }
+
+    public FormUpdatedEvent(Object source, String formId, String formName, String formKey, String tenantId,
+                            String formType) {
         super(source);
         this.formId = formId;
         this.formName = formName;
         this.formKey = formKey;
         this.tenantId = tenantId;
+        this.formType = formType;
     }
 
     public String getFormId() {
@@ -35,5 +43,9 @@ public class FormUpdatedEvent extends ApplicationEvent {
 
     public String getTenantId() {
         return tenantId;
+    }
+
+    public String getFormType() {
+        return formType;
     }
 }

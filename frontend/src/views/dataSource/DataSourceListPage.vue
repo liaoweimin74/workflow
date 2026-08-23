@@ -4,7 +4,7 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 12px;">
           <span style="font-weight: bold; font-size: 14px">数据源管理</span>
-          <el-tag type="info" size="small">数据源由系统自动管理，不支持手动操作</el-tag>
+          <el-tag type="info" size="small">FORM/WORKFLOW/SYSTEM 由系统自动管理；API 支持手动增删改</el-tag>
         </div>
       </template>
       <SearchTable
@@ -16,6 +16,11 @@
         :default-page-size="20"
         :max-visible-buttons="5"
       >
+        <template #default>
+          <el-button type="primary" :icon="Plus" v-permission="'data-source:manage'" @click="openCreate">
+            新建
+          </el-button>
+        </template>
         <template #type="{ row }">
           <el-tag :type="typeTagType(row.type)">
             {{ typeLabel(row.type) }}
@@ -46,11 +51,11 @@
       >
         <el-form :model="form" label-width="110px" label-position="left">
         <el-form-item label="数据源名称">
-          <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" :disabled="isViewMode" />
+          <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" :disabled="isReadonlyForm" />
         </el-form-item>
 
         <el-form-item label="数据源类型">
-          <el-radio-group v-model="form.type" :disabled="true">
+          <el-radio-group v-model="form.type" :disabled="!isApiEditable">
             <el-radio-button value="FORM">业务表单</el-radio-button>
             <el-radio-button value="WORKFLOW">工作流表单</el-radio-button>
             <el-radio-button value="SYSTEM">系统结构</el-radio-button>
@@ -65,7 +70,7 @@
               </el-select>
             </template>
             <template v-else-if="form.type === 'WORKFLOW'">
-              <el-select v-model="form.formKey" placeholder="选择已发布的工作流表单" filterable style="width: 320px">
+              <el-select v-model="form.formKey" placeholder="选择已发布的工作流表单" filterable style="width: 320px" disabled>
                 <el-option v-for="f in publishedWorkflowForms" :key="f.key" :label="f.name" :value="f.key" />
               </el-select>
             </template>
@@ -76,7 +81,7 @@
               </el-select>
             </template>
             <template v-else>
-              <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" disabled />
+              <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" :disabled="isReadonlyForm" />
             </template>
           </el-form-item>
         </el-form>
@@ -91,19 +96,19 @@
         <el-form :model="form" label-width="110px" label-position="left">
               <el-form-item :label="opLabel.list">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" disabled />
-                  <el-select v-model="apiOps.list.method" style="width: 110px" disabled>
+                  <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
+                  <el-select v-model="apiOps.list.method" style="width: 110px" :disabled="isReadonlyForm">
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
-                  <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" disabled />
-                  <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" disabled />
+                  <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" :disabled="isReadonlyForm" />
+                  <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" :disabled="isReadonlyForm" />
                 </div>
               </el-form-item>
 
               <el-form-item :label="opLabel.get">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" disabled />
-                  <el-select v-model="apiOps.get.method" style="width: 110px" disabled>
+                  <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+                  <el-select v-model="apiOps.get.method" style="width: 110px" :disabled="isReadonlyForm">
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
                 </div>
@@ -111,8 +116,8 @@
 
               <el-form-item :label="opLabel.create">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" disabled />
-                  <el-select v-model="apiOps.create.method" style="width: 110px" disabled>
+                  <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
+                  <el-select v-model="apiOps.create.method" style="width: 110px" :disabled="isReadonlyForm">
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
                 </div>
@@ -120,8 +125,8 @@
 
               <el-form-item :label="opLabel.update">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" disabled />
-                  <el-select v-model="apiOps.update.method" style="width: 110px" disabled>
+                  <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+                  <el-select v-model="apiOps.update.method" style="width: 110px" :disabled="isReadonlyForm">
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
                 </div>
@@ -129,8 +134,8 @@
 
               <el-form-item :label="opLabel.delete">
                 <div class="op-editor">
-                  <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" disabled />
-                  <el-select v-model="apiOps.delete.method" style="width: 110px" disabled>
+                  <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+                  <el-select v-model="apiOps.delete.method" style="width: 110px" :disabled="isReadonlyForm">
                     <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
                   </el-select>
                 </div>
@@ -138,9 +143,9 @@
 
               <el-form-item label="搜索参数">
                 <div class="op-editor">
-                  <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" disabled />
-                  <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" disabled />
-                  <el-select v-model="form.pageBase" style="width: 130px" disabled>
+                  <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" :disabled="isReadonlyForm" />
+                  <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" :disabled="isReadonlyForm" />
+                  <el-select v-model="form.pageBase" style="width: 130px" :disabled="isReadonlyForm">
                     <el-option label="页码从 1 开始" :value="1" />
                     <el-option label="页码从 0 开始" :value="0" />
                   </el-select>
@@ -148,10 +153,10 @@
               </el-form-item>
 
               <el-form-item label="固定参数 JSON">
-                <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" disabled />
+                <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
               </el-form-item>
               <el-form-item label="请求头 JSON">
-                <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" disabled />
+                <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
               </el-form-item>
 
               <el-divider content-position="left">列定义（列表展示与编辑弹窗使用）</el-divider>
@@ -159,9 +164,9 @@
               <el-form-item label="列">
                 <div class="column-editor">
                   <div v-for="(col, idx) in apiColumns" :key="idx" class="column-row">
-                    <el-input v-model="col.key" placeholder="字段名" style="width: 130px" disabled />
-                    <el-input v-model="col.label" placeholder="列名" style="width: 130px" disabled />
-                    <el-select v-model="col.columnType" placeholder="类型" style="width: 120px" disabled>
+                    <el-input v-model="col.key" placeholder="字段名" style="width: 130px" :disabled="isReadonlyForm" />
+                    <el-input v-model="col.label" placeholder="列名" style="width: 130px" :disabled="isReadonlyForm" />
+                    <el-select v-model="col.columnType" placeholder="类型" style="width: 120px" :disabled="isReadonlyForm">
                       <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
                     </el-select>
                     <el-input-number
@@ -172,7 +177,7 @@
                       placeholder="长度"
                       controls-position="right"
                       style="width: 120px"
-                      disabled
+                      :disabled="isReadonlyForm"
                     />
                     <el-input-number
                       v-if="col.columnType === 'DECIMAL'"
@@ -182,11 +187,11 @@
                       placeholder="精度"
                       controls-position="right"
                       style="width: 110px"
-                      disabled
+                      :disabled="isReadonlyForm"
                     />
-                    <el-checkbox v-model="col.required" title="必填" disabled>必填</el-checkbox>
-                    <el-checkbox v-model="col.unique" title="唯一" disabled>唯一</el-checkbox>
-                    <el-checkbox v-model="col.indexed" title="索引" disabled>索引</el-checkbox>
+                    <el-checkbox v-model="col.required" title="必填" :disabled="isReadonlyForm">必填</el-checkbox>
+                    <el-checkbox v-model="col.unique" title="唯一" :disabled="isReadonlyForm">唯一</el-checkbox>
+                    <el-checkbox v-model="col.indexed" title="索引" :disabled="isReadonlyForm">索引</el-checkbox>
                   </div>
                 </div>
               </el-form-item>
@@ -223,8 +228,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { View } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, View, Edit, Delete, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
@@ -303,16 +308,27 @@ async function fetchApi(params: any) {
 // ========== 新建/编辑弹窗状态 ==========
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
+/** 纯查看模式（openView 打开，区别于可编辑的 API 编辑模式） */
+const viewOnly = ref(false)
 
-/** 是否为查看模式（数据源由系统自动管理，用户只能查看） */
+/** 是否为查看模式（弹窗处于打开态） */
 const isViewMode = computed(() => editingId.value !== null)
+
+/** 是否为 API 类型（唯一支持手动增删改的类型） */
+const isApiType = computed(() => form.type === 'API')
+
+/** 表单整体只读：纯查看模式，或非 API 类型（FORM/WORKFLOW/SYSTEM 由系统管理） */
+const isReadonlyForm = computed(() => viewOnly.value || !isApiType.value)
+
+/** 类型切换是否可编辑：仅 API 类型在非查看模式下可切换 */
+const isApiEditable = computed(() => !viewOnly.value && isApiType.value)
 
 /** 弹窗标题 */
 const dialogTitle = computed(() => {
-  if (isViewMode.value) {
+  if (viewOnly.value) {
     return '查看数据源'
   }
-  return '数据源详情'
+  return isApiType.value ? (editingId.value ? '编辑数据源' : '新建数据源') : '数据源详情'
 })
 
 /** 单操作配置（多操作 params 结构） */
@@ -353,8 +369,10 @@ const opLabel = computed(() => ({ list: '列表查询 (list)', get: '单条查�
 
 function openCreate() {
   editingId.value = null
+  viewOnly.value = false
   form.name = ''
-  form.type = 'FORM'
+  // 仅第三方 API 数据源支持手动新建；系统管理类型不开放手动创建
+  form.type = 'API'
   form.formKey = ''
   form.sourceKey = ''
   form.searchParam = ''
@@ -373,6 +391,7 @@ function openCreate() {
 
 async function openEdit(row: DataSourceDTO) {
   editingId.value = row.id
+  viewOnly.value = false
   form.name = row.name
   form.type = row.type
   form.formKey = row.formKey || ''
@@ -424,6 +443,7 @@ async function openEdit(row: DataSourceDTO) {
 /** 查看数据源详情（只读模式） */
 function openView(row: DataSourceDTO) {
   editingId.value = row.id
+  viewOnly.value = true
   form.name = row.name
   form.type = row.type
   form.formKey = row.formKey || ''
@@ -616,11 +636,40 @@ function openView(row: DataSourceDTO) {
   }
 
 // ========== 操作按钮 ==========
+/** 仅第三方 API 数据源可手动编辑/删除；FORM/WORKFLOW/SYSTEM 由系统管理，仅可查看 */
 const actionButtons: ActionButton[] = [
   {
     label: '查看',
     icon: View,
     onClick: (row: any) => openView(row),
+  },
+  {
+    label: '编辑',
+    icon: Edit,
+    permission: 'data-source:manage',
+    show: (row: any) => row.type === 'API',
+    onClick: (row: any) => openEdit(row),
+  },
+  {
+    label: '删除',
+    type: 'danger',
+    icon: Delete,
+    permission: 'data-source:manage',
+    show: (row: any) => row.type === 'API',
+    onClick: async (row: any) => {
+      try {
+        await ElMessageBox.confirm('确定要删除此数据源吗？', '删除确认', { type: 'warning' })
+      } catch {
+        return
+      }
+      try {
+        await dataSourceApi.deleteDataSource(row.id)
+        ElMessage.success('删除成功')
+        tableRef.value?.fetchList()
+      } catch {
+        // http 拦截器已弹出错误消息（如"请先禁用"）
+      }
+    },
   },
 ]
 

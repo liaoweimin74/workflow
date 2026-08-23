@@ -105,8 +105,9 @@ public class FormDefinitionService {
 
         FormDefinition saved = formDefRepository.save(formDef);
         
-        // 发布表单创建事件
-        eventPublisher.publishEvent(new FormCreatedEvent(this, saved.getId(), saved.getName(), saved.getKey(), tenantId));
+        // 发布表单创建事件（含类型：BUSINESS → FORM 数据源；WORKFLOW → WORKFLOW 数据源）
+        eventPublisher.publishEvent(new FormCreatedEvent(this, saved.getId(), saved.getName(), saved.getKey(),
+                tenantId, saved.getType()));
         
         return saved;
     }
@@ -216,8 +217,9 @@ public class FormDefinitionService {
         
         FormDefinition saved = formDefRepository.save(current);
         
-        // 发布表单更新事件
-        eventPublisher.publishEvent(new FormUpdatedEvent(this, saved.getId(), saved.getName(), saved.getKey(), tenantId));
+        // 发布表单更新事件（含类型）
+        eventPublisher.publishEvent(new FormUpdatedEvent(this, saved.getId(), saved.getName(), saved.getKey(),
+                tenantId, saved.getType()));
         
         return saved;
     }
@@ -238,8 +240,9 @@ public class FormDefinitionService {
         formDef.setStatus("ARCHIVED");
         formDefRepository.save(formDef);
         
-        // 发布表单删除事件
-        eventPublisher.publishEvent(new FormDeletedEvent(this, formDef.getId(), formDef.getKey(), tenantId));
+        // 发布表单删除事件（含类型）
+        eventPublisher.publishEvent(new FormDeletedEvent(this, formDef.getId(), formDef.getKey(), tenantId,
+                formDef.getType()));
     }
 
     /**
@@ -301,10 +304,9 @@ public class FormDefinitionService {
         draft.setPublishedVersion(draft.getVersion());
         FormDefinition saved = formDefRepository.save(draft);
 
-        // 发布表单创建事件（业务表单发布后触发数据源同步）
-        if ("BUSINESS".equals(saved.getType())) {
-            eventPublisher.publishEvent(new FormCreatedEvent(this, saved.getId(), saved.getName(), saved.getKey(), tenantId));
-        }
+        // 发布表单创建事件（业务表单与工作流表单发布后均触发数据源同步）
+        eventPublisher.publishEvent(new FormCreatedEvent(this, saved.getId(), saved.getName(), saved.getKey(),
+                tenantId, saved.getType()));
 
         return saved;
     }

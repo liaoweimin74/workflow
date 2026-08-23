@@ -11,12 +11,19 @@ public class FormDeletedEvent extends ApplicationEvent {
     private final String formId;
     private final String formKey;
     private final String tenantId;
+    /** 表单类型：BUSINESS → FORM 数据源；WORKFLOW → WORKFLOW 数据源 */
+    private final String formType;
 
     public FormDeletedEvent(Object source, String formId, String formKey, String tenantId) {
+        this(source, formId, formKey, tenantId, "BUSINESS");
+    }
+
+    public FormDeletedEvent(Object source, String formId, String formKey, String tenantId, String formType) {
         super(source);
         this.formId = formId;
         this.formKey = formKey;
         this.tenantId = tenantId;
+        this.formType = formType;
     }
 
     public String getFormId() {
@@ -29,5 +36,9 @@ public class FormDeletedEvent extends ApplicationEvent {
 
     public String getTenantId() {
         return tenantId;
+    }
+
+    public String getFormType() {
+        return formType;
     }
 }

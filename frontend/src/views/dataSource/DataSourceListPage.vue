@@ -187,7 +187,9 @@
                     <el-checkbox v-model="col.required" title="必填" :disabled="isReadonlyForm">必填</el-checkbox>
                     <el-checkbox v-model="col.unique" title="唯一" :disabled="isReadonlyForm">唯一</el-checkbox>
                     <el-checkbox v-model="col.indexed" title="索引" :disabled="isReadonlyForm">索引</el-checkbox>
+                    <el-button :icon="Delete" circle :disabled="isReadonlyForm" @click="apiColumns.splice(idx, 1)" />
                   </div>
+                  <el-button type="primary" plain :icon="Plus" :disabled="isReadonlyForm" @click="addColumn">添加列</el-button>
                 </div>
               </el-form-item>
             </el-form>

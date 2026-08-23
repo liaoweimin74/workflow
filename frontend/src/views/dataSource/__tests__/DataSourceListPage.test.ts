@@ -276,6 +276,37 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
+  it('查看 WORKFLOW 数据源：接口区显示 SPI 端点与只读标记', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-wf', name: '请假流程数据源', type: 'WORKFLOW', formKey: 'leave_flow', sourceKey: null,
+      status: 'ENABLED', params: null,
+    })
+    await nextTick()
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    const endpoints = component.generateEndpoints()
+    expect(endpoints).not.toBeNull()
+    // 经统一 SPI 按数据源 ID 访问
+    expect(endpoints.metadata.action).toBe('/api/v1/data-sources/ds-wf/metadata')
+    expect(endpoints.list.action).toBe('/api/v1/data-sources/ds-wf/data')
+    expect(endpoints.get.action).toBe('/api/v1/data-sources/ds-wf/data/{id}')
+    // 写操作标注只读
+    expect(endpoints.create.readonly).toBe(true)
+    expect(endpoints.update.readonly).toBe(true)
+    expect(endpoints.delete.readonly).toBe(true)
+    // 弹窗接口区渲染端点与「只读」标记
+    const html = wrapper.html()
+    expect(html).toContain('/api/v1/data-sources/ds-wf/metadata')
+    expect(html).toContain('只读')
+    wrapper.unmount()
+  })
+
   it('查看 API 数据源：只读视图模式（查看入口可查看任何类型）', async () => {
     stubList()
     const wrapper = createWrapper()

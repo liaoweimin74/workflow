@@ -197,11 +197,12 @@
           <template v-else-if="generateEndpoints()">
             <div class="auto-params-display">
               <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
-                <el-tag :type="op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'" size="small">
+                <el-tag :type="op.readonly ? 'info' : op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'" size="small">
                   {{ op.method }}
                 </el-tag>
                 <code>{{ op.action }}</code>
                 <span class="op-label">（{{ name }}）</span>
+                <el-tag v-if="op.readonly" type="danger" size="small">只读</el-tag>
                 <template v-if="op.parse">
                   <span class="op-meta">parse: {{ op.parse }}</span>
                 </template>
@@ -606,7 +607,7 @@ function openView(row: DataSourceDTO) {
     }
   }
 
-  /** 生成统一 API 端点描述（FORM/SYSTEM 自动填充到 API 编辑器） */
+  /** 生成统一 API 端点描述（FORM/SYSTEM 自动填充到 API 编辑器；WORKFLOW 经 SPI 按数据源 ID 访问） */
   function generateEndpoints(): Record<string, any> | null {
     if (form.type === 'FORM' && form.formKey) {
       const base = `/api/v1/biz-data/${form.formKey}`
@@ -622,6 +623,18 @@ function openView(row: DataSourceDTO) {
       const internalKey = form.sourceKey === 'user-tree' ? 'users' : form.sourceKey
       return {
         list: { action: `/api/v1/internal/system/${internalKey}`, method: 'GET' },
+      }
+    }
+    // WORKFLOW：只读数据源，经统一 SPI（DataSourceController）按数据源 ID 访问；写操作一律 400 拒绝
+    if (form.type === 'WORKFLOW' && editingId.value) {
+      const base = `/api/v1/data-sources/${editingId.value}`
+      return {
+        metadata: { action: `${base}/metadata`, method: 'GET' },
+        list: { action: `${base}/data`, method: 'GET', parse: 'records', totalParse: 'total' },
+        get: { action: `${base}/data/{id}`, method: 'GET' },
+        create: { action: `${base}/data`, method: 'POST', readonly: true },
+        update: { action: `${base}/data/{id}`, method: 'PUT', readonly: true },
+        delete: { action: `${base}/data/{id}`, method: 'DELETE', readonly: true },
       }
     }
     return null

@@ -55,12 +55,7 @@
         </el-form-item>
 
         <el-form-item label="数据源类型">
-          <el-radio-group v-model="form.type" :disabled="!isApiEditable">
-            <el-radio-button value="FORM">业务表单</el-radio-button>
-            <el-radio-button value="WORKFLOW">工作流表单</el-radio-button>
-            <el-radio-button value="SYSTEM">系统结构</el-radio-button>
-            <el-radio-button value="API">第三方 API</el-radio-button>
-          </el-radio-group>
+          <el-tag :type="typeTagType(form.type)">{{ typeLabel(form.type) }}</el-tag>
         </el-form-item>
           <!-- ============ 统一 API 配置：FORM/SYSTEM 自动填充，API 手动配置 ============ -->
           <el-form-item label="标识">
@@ -319,9 +314,6 @@ const isApiType = computed(() => form.type === 'API')
 
 /** 表单整体只读：纯查看模式，或非 API 类型（FORM/WORKFLOW/SYSTEM 由系统管理） */
 const isReadonlyForm = computed(() => viewOnly.value || !isApiType.value)
-
-/** 类型切换是否可编辑：仅 API 类型在非查看模式下可切换 */
-const isApiEditable = computed(() => !viewOnly.value && isApiType.value)
 
 /** 弹窗标题 */
 const dialogTitle = computed(() => {

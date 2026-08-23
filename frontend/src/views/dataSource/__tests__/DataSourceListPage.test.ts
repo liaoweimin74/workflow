@@ -296,4 +296,34 @@ describe('DataSourceListPage', () => {
     expect(component.apiOps.list.action).toBe('/v1/products')
     wrapper.unmount()
   })
+
+  // ==================== 类型固定（无切换选择器） ====================
+
+  it('弹窗类型为静态标签：新建/编辑固定 API，查看展示实际类型', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    // 弹窗内不渲染类型 radio 选择器
+    expect(wrapper.find('.el-radio-group').exists()).toBe(false)
+
+    // 新建：类型标签显示「第三方 API」
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    expect((wrapper.vm as any).form.type).toBe('API')
+    expect(wrapper.html()).toContain('第三方 API')
+
+    // 查看 FORM：类型标签显示「业务表单」
+    ;(wrapper.vm as any).openView({
+      id: 'ds-form', name: '用户数据', type: 'FORM', formKey: 'user', sourceKey: null,
+      status: 'ENABLED', params: null,
+    })
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.html()).toContain('业务表单')
+    expect(wrapper.html()).not.toContain('el-radio-group')
+    wrapper.unmount()
+  })
 })

@@ -18,6 +18,7 @@ vi.mock('@/api/data-source', () => ({
     enableDataSource: vi.fn(),
     disableDataSource: vi.fn(),
     getMetadata: vi.fn(),
+    queryData: vi.fn(),
   },
 }))
 
@@ -390,6 +391,140 @@ describe('DataSourceListPage', () => {
     await flushPromises()
     expect(wrapper.html()).toContain('业务表单')
     expect(wrapper.html()).not.toContain('el-radio-group')
+    wrapper.unmount()
+  })
+
+  // ==================== 字段元数据 + 数据预览标签页 ====================
+
+  const mockMetadata = {
+    columns: [
+      { key: 'id', label: 'ID', columnType: 'VARCHAR', length: 64, required: true, unique: true, indexed: false },
+      { key: 'name', label: '名称', columnType: 'VARCHAR', length: 128, required: true, unique: false, indexed: false },
+    ],
+    writable: true,
+  }
+
+  it('详情弹窗有三个标签：接口配置、字段元数据、数据预览', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-api', name: '库存接口', type: 'API', formKey: null, sourceKey: 'external-stock',
+      status: 'ENABLED', params: JSON.stringify({ list: { action: '/v1/products', method: 'GET' } }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.html()).toContain('接口配置')
+    expect(wrapper.html()).toContain('字段元数据')
+    expect(wrapper.html()).toContain('数据预览')
+    wrapper.unmount()
+  })
+
+  it('切换到字段元数据标签后调用 getMetadata 接口', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-api', name: '库存接口', type: 'API', formKey: null, sourceKey: 'external-stock',
+      status: 'ENABLED', params: JSON.stringify({ list: { action: '/v1/products', method: 'GET' } }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    // 模拟切换到字段元数据标签
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    expect(dataSourceApi.getMetadata).toHaveBeenCalledWith('ds-api')
+    wrapper.unmount()
+  })
+
+  it('字段元数据标签渲染列定义表格（key/label/type/length）', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-api', name: '库存接口', type: 'API', formKey: null, sourceKey: 'external-stock',
+      status: 'ENABLED', params: JSON.stringify({ list: { action: '/v1/products', method: 'GET' } }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    const html = wrapper.html()
+    expect(html).toContain('字段名')
+    expect(html).toContain('显示名')
+    expect(html).toContain('类型')
+    expect(html).toContain('长度')
+    // 列数据
+    expect(html).toContain('id')
+    expect(html).toContain('ID')
+    expect(html).toContain('名称')
+    // writable 标记
+    expect(html).toContain('可写')
+    wrapper.unmount()
+  })
+
+  it('切换到数据预览标签后调用 queryData 接口', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [{ id: '1', data: { name: '测试' } }], total: 1, page: 1, size: 20 },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-api', name: '库存接口', type: 'API', formKey: null, sourceKey: 'external-stock',
+      status: 'ENABLED', params: JSON.stringify({ list: { action: '/v1/products', method: 'GET' } }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    await (wrapper.vm as any).handleTabChange('data')
+    await flushPromises()
+
+    expect(dataSourceApi.queryData).toHaveBeenCalledWith(
+      'ds-api',
+      expect.objectContaining({ page: 0, size: 20 })
+    )
+    const html = wrapper.html()
+    expect(html).toContain('测试')
+    wrapper.unmount()
+  })
+
+  it('只读数据源（SYSTEM）元数据 writable=false 显示只读标记', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: { columns: [], writable: false },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-sys', name: '部门树', type: 'SYSTEM', formKey: null, sourceKey: 'dept-tree',
+      status: 'ENABLED', params: null,
+    })
+    await nextTick()
+    await flushPromises()
+
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    expect(wrapper.html()).toContain('只读')
     wrapper.unmount()
   })
 })

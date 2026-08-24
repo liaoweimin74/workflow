@@ -81,7 +81,7 @@
           </el-form-item>
         </el-form>
 
-        <el-divider content-position="left">接口操作</el-divider>
+        <el-divider content-position="left">接口配置</el-divider>
 
         <!-- 可滚动的接口操作区域 -->
         <div class="ops-scroll">
@@ -217,9 +217,75 @@
 
         </div>
 
-      <template #footer>
-        <el-button @click="dialogVisible = false">关闭</el-button>
-      </template>
+        <!-- ==================== 字段元数据 ==================== -->
+        <el-divider content-position="left">字段元数据</el-divider>
+        <div class="metadata-section">
+          <el-row :gutter="8" class="metadata-header">
+            <el-col>
+              <el-tag :type="metadata?.writable ? 'success' : 'info'" size="small">
+                {{ metadata?.writable ? '可写' : '只读' }}
+              </el-tag>
+            </el-col>
+          </el-row>
+          <el-table
+            :data="metadata?.columns || []"
+            v-loading="metadataLoading"
+            :span-method="spanMethod"
+            style="width: 100%"
+            :max-height="300"
+          >
+            <el-table-column prop="key" label="字段名" min-width="120" />
+            <el-table-column prop="label" label="显示名" min-width="120" />
+            <el-table-column prop="columnType" label="类型" min-width="100" />
+            <el-table-column prop="length" label="长度" min-width="80" />
+            <el-table-column prop="scale" label="精度" min-width="80" />
+            <el-table-column prop="required" label="必填" min-width="80" />
+            <el-table-column prop="unique" label="唯一" min-width="80" />
+            <el-table-column prop="indexed" label="索引" min-width="80" />
+          </el-table>
+        </div>
+
+        <!-- ==================== 数据预览 ==================== -->
+        <el-divider content-position="left">数据预览</el-divider>
+        <div class="preview-section">
+          <el-row :gutter="8" class="preview-toolbar">
+            <el-col>
+              <el-input
+                v-model="previewKeyword"
+                placeholder="搜索关键词"
+                style="width: 200px"
+                size="small"
+                @input="onSearchDebounce"
+              />
+            </el-col>
+          </el-row>
+          <el-table
+            :data="previewTableData"
+            v-loading="dataLoading"
+            style="width: 100%"
+            :max-height="300"
+          >
+            <el-table-column
+              v-for="col in displayColumns"
+              :key="col.key"
+              :prop="col.key"
+              :label="col.label"
+              min-width="120"
+              show-overflow-tooltip
+            />
+          </el-table>
+          <el-pagination
+            layout="total, prev, pager, next"
+            :page-size="previewSize"
+            :total="previewTotal"
+            :page-sizes="[10, 20, 50, 100]"
+            @size-change="onPageSizeChange"
+            @current-change="onPageChange"
+          />
+          <div v-if="dataError" class="preview-error">
+            <el-alert :title="dataError" type="error" />
+          </div>
+        </div>
     </el-dialog>
   </div>
 </template>
@@ -230,8 +296,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, View, Edit, Delete, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
-import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
-import type { ColumnConfigItem } from '@/api/bizData'
+import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO, type DataSourceQueryParams } from '@/api/data-source'
+import type { ColumnConfigItem, BizDataVO } from '@/api/bizData'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 
 const tableRef = ref<InstanceType<typeof SearchTable>>()
@@ -359,8 +425,126 @@ const apiOps = reactive<Record<'list' | 'get' | 'create' | 'update' | 'delete', 
 /** API 类型：列定义 */
 const apiColumns = ref<ColumnConfigItem[]>([])
 
+/** 当前激活标签：config / metadata / data */
+const activeTab = ref('config')
+
+/** ================ 字段元数据 ================= */
+const metadata = ref<DataSourceMetadataDTO | null>(null)
+const metadataLoading = ref(false)
+const metadataError = ref<string | null>(null)
+
+/** ================ 数据预览 ================= */
+const previewData = ref<BizDataVO[]>([])
+const previewTotal = ref(0)
+const previewPage = ref(1)
+const previewSize = ref(20)
+const previewKeyword = ref('')
+const dataLoading = ref(false)
+const dataError = ref<string | null>(null)
+
 /** 操作表单标签（统一界面，所有类型显示相同标签） */
 const opLabel = computed(() => ({ list: '列表查询 (list)', get: '单条查询 (get)', create: '新增 (create)', update: '修改 (update)', delete: '删除 (delete)' }))
+
+/** 元数据表格列定义（用于渲染） */
+const displayColumns = computed(() => metadata.value?.columns || [])
+
+/** 数据预览表格显示数据（扁平化 BizDataVO.data） */
+const previewTableData = computed(() => {
+  return previewData.value.map((row) => ({
+    id: row.id,
+    _version: row.version,
+    ...(row.data || {})
+  }))
+})
+
+/** 重置元数据/预览状态（每次打开弹窗时清空） */
+function resetMetadataState() {
+  metadata.value = null
+  metadataLoading.value = false
+  metadataError.value = null
+}
+
+function resetPreviewState() {
+  previewData.value = []
+  previewTotal.value = 0
+  previewPage.value = 1
+  previewKeyword.value = ''
+  dataLoading.value = false
+  dataError.value = null
+}
+
+/** 处理标签切换 */
+async function handleTabChange(tab: string) {
+  activeTab.value = tab
+  if (tab === 'metadata' && editingId.value && !metadata.value) {
+    await loadMetadata()
+  }
+  if (tab === 'data' && editingId.value) {
+    // 数据预览需要列定义：若元数据未加载，先加载元数据
+    if (!metadata.value) {
+      await loadMetadata()
+    }
+    await loadPreviewData()
+  }
+}
+
+/** 加载元数据 */
+async function loadMetadata() {
+  if (!editingId.value) return
+  metadataLoading.value = true
+  metadataError.value = null
+  try {
+    const res = await dataSourceApi.getMetadata(editingId.value)
+    metadata.value = res.data
+  } catch (e: any) {
+    metadataError.value = e?.message || '加载字段元数据失败'
+  } finally {
+    metadataLoading.value = false
+  }
+}
+
+/** 加载数据预览 */
+async function loadPreviewData() {
+  if (!editingId.value) return
+  dataLoading.value = true
+  dataError.value = null
+  try {
+    const res = await dataSourceApi.queryData(editingId.value, {
+      page: previewPage.value - 1, // API 使用 0-indexed 页码
+      size: previewSize.value,
+      keyword: previewKeyword.value || undefined,
+    })
+    previewData.value = res.data.records || []
+    previewTotal.value = res.data.total || 0
+  } catch (e: any) {
+    dataError.value = e?.message || '加载数据失败'
+  } finally {
+    dataLoading.value = false
+  }
+}
+
+/** 搜索防抖 */
+let searchTimer: any = null
+function onSearchDebounce() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    previewPage.value = 1
+    loadPreviewData()
+  }, 300)
+}
+
+/** 分页尺寸改变 */
+function onPageSizeChange(size: number) {
+  previewSize.value = size
+  previewPage.value = 1
+  loadPreviewData()
+}
+
+/** 页码改变 */
+function onPageChange(page: number) {
+  previewPage.value = page
+  loadPreviewData()
+}
 
 function openCreate() {
   editingId.value = null
@@ -381,6 +565,9 @@ function openCreate() {
   apiOps.update = { action: '', method: 'PUT' }
   apiOps.delete = { action: '', method: 'DELETE' }
   apiColumns.value = []
+  resetMetadataState()
+  resetPreviewState()
+  activeTab.value = 'config'
   dialogVisible.value = true
 }
 
@@ -401,7 +588,7 @@ async function openEdit(row: DataSourceDTO) {
   apiOps.create = { action: '', method: 'POST' }
   apiOps.update = { action: '', method: 'PUT' }
   apiOps.delete = { action: '', method: 'DELETE' }
-  apiColumns.value = []
+   apiColumns.value = []
   // 解析 params JSON：API类型手动配置；FORM/SYSTEM则根据标识自动填充
   let p: Record<string, any> = {}
   if (row.params) {
@@ -432,6 +619,9 @@ async function openEdit(row: DataSourceDTO) {
   } else if (row.type === 'FORM' || row.type === 'SYSTEM') {
     // FORM/SYSTEM：只读端点展示由模板根据 formKey/sourceKey 响应式计算，无需填充 apiOps
   }
+  resetMetadataState()
+  resetPreviewState()
+  activeTab.value = 'config'
   dialogVisible.value = true
 }
 
@@ -482,6 +672,9 @@ function openView(row: DataSourceDTO) {
     form.headers = p.headers ? JSON.stringify(p.headers) : ''
     apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
   }
+  resetMetadataState()
+  resetPreviewState()
+  activeTab.value = 'config'
   dialogVisible.value = true
 }
 

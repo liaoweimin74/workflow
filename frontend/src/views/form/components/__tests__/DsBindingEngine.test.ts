@@ -8,7 +8,10 @@ function containerRule(props: Record<string, unknown>, children: Rule[]): Rule {
 
 describe('createDsBindingEngine', () => {
   const dsApi = {
-    getData: vi.fn(async () => ({ data: { name: '张三', items: [{ product: 'A', qty: 2 }] } })),
+    // 真实后端返回 R<BizDataVO>：res.data = { id, version, data: { 字段... } }
+    getData: vi.fn(async () => ({
+      data: { id: 'rec_1', version: 3, data: { name: '张三', items: [{ product: 'A', qty: 2 }] } },
+    })),
     updateData: vi.fn(async () => ({ data: null })),
     getMetadata: vi.fn(async () => ({ data: { columns: [], writable: true } })),
   }
@@ -59,7 +62,8 @@ describe('createDsBindingEngine', () => {
     const fieldCb = deps.onFieldChange.mock.calls[0][0] as (f: string) => void
     fieldCb('name')
     await vi.advanceTimersByTimeAsync(300)
-    expect(dsApi.updateData).toHaveBeenCalledWith('ds_1', 'rec_1', expect.objectContaining({ name: expect.anything() }))
+    // write 时若无 loadRecord，version 为 undefined
+    expect(dsApi.updateData).toHaveBeenCalledWith('ds_1', 'rec_1', expect.objectContaining({ name: expect.anything() }), undefined)
     vi.useRealTimers()
   })
 
@@ -87,5 +91,54 @@ describe('createDsBindingEngine', () => {
     await engine.flush()
     expect(dsApi.updateData).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
+  })
+
+  it('loadRecord 读取嵌套 BizDataVO（res.data.data）', async () => {
+    // getData 返回 R<BizDataVO> = { data: { id, version, data: {...fields} } }
+    const mockApi = {
+      getData: vi.fn(async () => ({ data: { id: 'rec_test', version: 7, data: { name: '嵌套字段', count: 42 } } })),
+      updateData: vi.fn(),
+      getMetadata: vi.fn(),
+    }
+    const deps = makeDeps()
+    const engine = createDsBindingEngine({ dsApi: mockApi } as never, deps as never)
+    engine.mount([containerRule({ dataSourceId: 'ds_1' }, [{ type: 'input', field: 'name' } as unknown as Rule])])
+    await engine.loadRecord('rec_test')
+    expect(mockApi.getData).toHaveBeenCalledWith('ds_1', 'rec_test')
+    expect(deps.api.setValue).toHaveBeenCalledWith('name', '嵌套字段')
+  })
+
+  it('flush 传入 loadRecord 记录的 version', async () => {
+    vi.useFakeTimers()
+    const mockApi = {
+      getData: vi.fn(async () => ({ data: { id: 'rec_v', version: 5, data: { name: '姓名' } } })),
+      updateData: vi.fn(async () => ({ data: null })),
+      getMetadata: vi.fn(async () => ({ data: { columns: [], writable: true } })),
+    }
+    const deps = makeDeps()
+    const engine = createDsBindingEngine({ dsApi: mockApi } as never, deps as never)
+    engine.mount([containerRule({ dataSourceId: 'ds_v' }, [{ type: 'input', field: 'name' } as unknown as Rule])])
+    await engine.loadRecord('rec_v')
+    deps.onFieldChange.mock.calls[0][0]('name')
+    await vi.advanceTimersByTimeAsync(300)
+    // deps.recordId() 返回 'rec_1', getValue('name') 返回 '新值'
+    expect(mockApi.updateData).toHaveBeenCalledWith('ds_v', 'rec_1', expect.objectContaining({ name: '新值' }), 5)
+    vi.useRealTimers()
+  })
+
+  it('getLastRecord 返回最近 loadRecord 的字段数据', async () => {
+    const mockApi = {
+      getData: vi.fn(async () => ({ data: { id: 'rec_g', version: 10, data: { foo: 'bar', num: 123 } } })),
+      updateData: vi.fn(),
+      getMetadata: vi.fn(async () => ({ data: { columns: [], writable: true } })),
+    }
+    const deps = makeDeps()
+    const engine = createDsBindingEngine({ dsApi: mockApi } as never, deps as never)
+    const mounted = engine.mount([containerRule({ dataSourceId: 'ds_g' }, [{ type: 'input', field: 'foo' } as unknown as Rule])])
+    expect(mounted).toBe(true)
+    await engine.loadRecord('rec_g')
+    expect(mockApi.getData).toHaveBeenCalledWith('ds_g', 'rec_g')
+    const last = engine.getLastRecord()
+    expect(last).toEqual({ foo: 'bar', num: 123 })
   })
 })

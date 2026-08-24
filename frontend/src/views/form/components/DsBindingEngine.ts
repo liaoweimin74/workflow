@@ -14,6 +14,8 @@ interface ContainerBinding {
   dataSourceId: string
   fieldNames: string[] // 容器内子字段（含嵌套 group 的 props.rule 字段）
   writable: boolean
+  version?: number // 最后加载的记录版本（flush 用）
+  lastFields?: Record<string, unknown> // 最近 loadRecord 的字段数据（getLastRecord 用）
 }
 
 const WRITE_DEBOUNCE_MS = 300
@@ -57,9 +59,15 @@ export function createDsBindingEngine(
     for (const b of bindings) {
       try {
         const res = await dsApi.getData(b.dataSourceId, recordId)
-        const record = (res.data || {}) as unknown as Record<string, unknown>
+        const biz = res.data
+        // BizDataVO = { id, version, data: Record<string, unknown> }
+        const fields = (biz?.data || {}) as Record<string, unknown>
+        // 记录 version 供 flush 使用
+        if (typeof biz?.version === 'number') b.version = biz.version
+        // 存储字段数据供 getLastRecord 访问
+        b.lastFields = fields
         for (const f of b.fieldNames) {
-          if (f in record) deps.api.setValue(f, record[f])
+          if (f in fields) deps.api.setValue(f, fields[f])
         }
       } catch {
         // http 拦截器已提示
@@ -91,7 +99,7 @@ export function createDsBindingEngine(
     pendingField = ''
     if (!b || !b.writable || !recordId) return
     try {
-      await dsApi.updateData(b.dataSourceId, recordId, { [field]: deps.api.getValue(field) })
+      await dsApi.updateData(b.dataSourceId, recordId, { [field]: deps.api.getValue(field) }, b.version)
     } catch {
       deps.onConflict('数据已被修改，请刷新')
       await loadRecord(recordId)
@@ -104,6 +112,11 @@ export function createDsBindingEngine(
     pendingField = field
     if (debounceTimer !== null) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => { void flush() }, WRITE_DEBOUNCE_MS)
+  }
+
+  /** 获取最近一次 loadRecord 的字段数据（供页面 record-change 场景使用） */
+  function getLastRecord(): Record<string, unknown> | undefined {
+    return bindings[0]?.lastFields
   }
 
   function mount(ruleTree: Rule[]): boolean {
@@ -125,5 +138,5 @@ export function createDsBindingEngine(
     return true
   }
 
-  return { mount, loadRecord, flush }
+  return { mount, loadRecord, flush, getLastRecord }
 }

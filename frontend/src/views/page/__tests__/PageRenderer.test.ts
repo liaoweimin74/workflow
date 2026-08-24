@@ -22,6 +22,25 @@ vi.mock('@/api/bizData', () => ({
   bizDataApi: { detail: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
 }))
 
+vi.mock('@/api/data-source', () => ({
+  dataSourceApi: {
+    getData: vi.fn(),
+    updateData: vi.fn(),
+    getMetadata: vi.fn(),
+  },
+}))
+
+// Store componentRefs for later verification
+const storedRefs: Record<string, any> = {}
+vi.mock('@/views/form/components/DsBindingEngine', () => ({
+  createDsBindingEngine: vi.fn(() => ({
+    mount: vi.fn(() => true),
+    loadRecord: vi.fn(),
+    flush: vi.fn(),
+    getLastRecord: vi.fn(() => ({ foo: 'bar' })),
+  })),
+}))
+
 // ElMessage：函数调用形式（message 动作 ElMessage({...})）与属性断言（ElMessage.error(...)）并存
 const elMessageMock = vi.hoisted(() => {
   const fn: any = vi.fn()

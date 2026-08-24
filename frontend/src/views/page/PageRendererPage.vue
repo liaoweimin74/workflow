@@ -17,13 +17,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, provide } from 'vue'
+import { ref, reactive, onMounted, provide, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import formCreate from '@form-create/element-ui'
 import PageDataTable from './components/PageDataTable.vue'
 import PageDataTree from './components/PageDataTree.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
+import { dataSourceApi } from '@/api/data-source'
+import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
 formCreate.component('page-table', PageDataTable)
@@ -46,6 +48,18 @@ const loading = ref(false)
 const rule = ref<any[]>([])
 const option = ref<Record<string, any>>({})
 const formData = ref<Record<string, any>>({})
+
+/** 页面绑定引擎（挂载于表单 rule 中的 formContainer） */
+const pageEngine = ref<ReturnType<typeof createDsBindingEngine> | null>(null)
+
+/** 当前数据记录 ID（从 route 获取，record-change 触发 reload-record 用） */
+const currentRecordId = ref<string | undefined>(undefined)
+
+/** 最近加载的记录数据（供 record-change 触发的上下文） */
+const lastRecord = ref<Record<string, unknown> | undefined>(undefined)
+
+/** 字段变更回调（field-change 触发器） */
+let fieldChangeCb: ((field: string) => void) | null = null
 
 /** 页面 schema：dataSources 与 actions */
 const pageSchema = reactive<{
@@ -85,6 +99,58 @@ async function load() {
   }
 }
 
+// 检查 rule 中是否含 formContainer，若有则挂载绑定引擎
+watch(rule, async (newRule) => {
+  if (newRule.length > 0 && !pageEngine.value) {
+    await mountPageEngine(newRule)
+  }
+})
+
+// 感知表单字段值变化 → 引擎写路径（fieldChangeCb）+ field-change 动作链
+watch(formData, (val, oldVal) => {
+  if (!val) return
+  const old = (oldVal || {}) as Record<string, unknown>
+  for (const key of Object.keys(val)) {
+    if (val[key] !== old[key]) {
+      if (fieldChangeCb) fieldChangeCb(key)
+      dispatchActions('field-change', {
+        field: key,
+        value: val[key],
+        record: lastRecord.value,
+        param: { ...route.query },
+      })
+      return
+    }
+  }
+}, { deep: true })
+
+async function mountPageEngine(ruleTree: any[]) {
+  // 检查是否包含 formContainer
+  const hasContainer = ruleTree.some((r: any) => r?.type === 'formContainer')
+  if (!hasContainer) return
+
+  pageEngine.value = createDsBindingEngine(
+    { dsApi: dataSourceApi } as any,
+    {
+      api: {
+        getValue: (field: string) => formData.value[field],
+        setValue: (field: string, value: unknown) => { formData.value = { ...formData.value, [field]: value } },
+      },
+      recordId: () => currentRecordId.value,
+      onRecordChange: () => { /* 由节点点击显式触发 record-change */ },
+      onFieldChange: (cb: (field: string) => void) => { fieldChangeCb = cb },
+      onConflict: (msg: string) => ElMessage.warning(msg),
+    }
+  )
+  pageEngine.value.mount(ruleTree)
+  // 从路由获取初始记录 ID
+  const initialId = route.query.recordId as string
+  if (initialId) {
+    currentRecordId.value = initialId
+    await pageEngine.value?.loadRecord(initialId)
+  }
+}
+
 /** 递归转换 rule：数据组件注入 pageKey 与事件（registry 已用 page-table/page-tree 类型） */
 function transformComponent(node: any): any {
   const next = { ...node, props: { ...(node.props || {}) }, on: { ...(node.on || {}) } }
@@ -104,9 +170,13 @@ function transformComponent(node: any): any {
       }
     }
     // 数据组件事件 → 动作总线（node-click 等）
-    // el-tree/el-table 事件第一参数是业务数据（含 id），包装为 { node, row } 使模板 {node.id}/{row.id} 可解析
+    // el-tree/el-table 事件第一参数是业务数据（含 id），包装为 { node, row }
     next.on['node-click'] = (data: any) => {
-      dispatchActions('node-click', { node: data, row: data })
+      // 更新当前记录 ID 并触发 record-change
+      currentRecordId.value = data?.id
+      lastRecord.value = data
+      dispatchActions('node-click', { node: data, row: data, record: data })
+      dispatchActions('record-change', { node: data, row: data, record: data })
     }
     next.on['row-click'] = (data: any) => {
       dispatchActions('row-click', { node: data, row: data })
@@ -149,6 +219,20 @@ function executeStep(step: any, eventData: any) {
     if (comp && typeof comp.setValue === 'function') {
       comp.setValue(step.field, resolveStepValue(step.value, eventData))
     }
+  } else if (op === 'reload-record') {
+    // 重新加载当前记录回显容器：value 模板解析记录 ID，缺省用当前上下文
+    const rid = step.value ? String(resolveStepValue(step.value, eventData) || '') : ''
+    const recordId = rid || currentRecordId.value
+    if (recordId && pageEngine.value) {
+      currentRecordId.value = recordId
+      void pageEngine.value.loadRecord(recordId).then(() => {
+        const last = pageEngine.value?.getLastRecord()
+        if (last) lastRecord.value = last
+      })
+    }
+  } else if (op === 'save-record') {
+    // 写回数据源：强制完成未决防抖写入
+    void pageEngine.value?.flush()
   }
 }
 

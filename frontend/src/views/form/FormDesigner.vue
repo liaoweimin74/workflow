@@ -94,6 +94,7 @@ import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnCo
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from './formRuleWalk'
+import { containerFieldValidator } from './components/containerFieldValidator'
 
 const route = useRoute()
 const router = useRouter()
@@ -298,6 +299,26 @@ function registerFormContainerProps() {
           clearable: true,
           filterable: true,
           placeholder: '选择绑定数据源',
+        },
+        /** 数据源变更时校验容器子字段是否存在于 metadata */
+        onChange: async (val: string) => {
+          if (!val || !designerRef.value) return
+          const activeRule = designerRef.value.activeRule
+          if (!activeRule || activeRule.type !== 'formContainer') return
+          const children = (activeRule.children || []) as any[]
+          if (children.length === 0) return
+          try {
+            const res = await dataSourceApi.getMetadata(val)
+            const columns = res.data?.columns || []
+            const result = containerFieldValidator(children, columns)
+            if (result.invalidFields.length > 0) {
+              ElMessage.warning(
+                `以下字段不在数据源列中：${result.invalidFields.join('、')}`,
+              )
+            }
+          } catch {
+            // getMetadata 失败不阻塞，http 拦截器已提示
+          }
         },
       },
       {

@@ -312,10 +312,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, View, Edit, Delete, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { Plus, View, Edit, Delete } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
-import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO, type DataSourceQueryParams } from '@/api/data-source'
+import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import type { ColumnConfigItem, BizDataVO } from '@/api/bizData'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 

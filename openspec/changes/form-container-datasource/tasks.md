@@ -32,18 +32,18 @@
 ## 5. FormDesigner 容器属性面板
 
 - [x] 5.1 `FormDesigner.vue`：容器属性面板支持 dataSourceId 下拉（复用 `getEnabledDataSources`）+ recordLocator 配置（默认当前表单记录），参照 PageDesigner 的 setComponentRuleConfig 注入模式
-- [ ] 5.2 容器绑定数据源后按 metadata 校验子字段存在性（不在列中标记非法）
-- [ ] 5.3 组件测试：容器属性配置写入 rule、字段存在性校验
+- [x] 5.2 容器绑定数据源后按 metadata 校验子字段存在性（不在列中标记非法）
+- [x] 5.3 组件测试：容器属性配置写入 rule、字段存在性校验
 
 ## 6. 页面端容器注册与动作泛化
 
 - [x] 6.1 `PageDesigner.vue`：注册 formContainer 组件到页面组件库，容器可配置数据源
 - [x] 6.2 页面动作总线触发器泛化：支持 field-change、record-change；动作步骤支持 reload-record、save-record
-- [ ] 6.3 `PageRendererPage.vue`：挂载绑定引擎，记录上下文（路由参数/动作总线）驱动容器读回显
-- [ ] 6.4 组件测试：field-change 触发容器刷新、record-change 触发容器回显
+- [x] 6.3 `PageRendererPage.vue`：挂载绑定引擎，记录上下文（路由参数/动作总线）驱动容器读回显
+- [x] 6.4 组件测试：field-change 触发容器刷新、record-change 触发容器回显
 
 ## 7. 验证与回归
 
-- [ ] 7.1 前端构建通过（vite build / tsc 无类型错误）
+- [x] 7.1 前端构建通过（vite build / tsc 无类型错误）
 - [x] 7.2 全量前端组件测试通过（含既有 DataPicker/LookupPicker/FormRenderer 回归）
 - [ ] 7.3 E2E 验证：业务表单编辑回显 + 值修改写回、页面左树右表联动、多容器同名字段独立

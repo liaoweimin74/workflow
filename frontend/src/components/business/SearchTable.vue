@@ -197,6 +197,7 @@
       @close="handleDialogClose"
     >
       <FormRenderer
+        :key="dialogFormKey"
         ref="formRendererRef"
         :rule="formConfig.rule"
         :option="formConfig.option"
@@ -280,6 +281,8 @@ const editingRow = ref<any>(null)
 const dialogInitialValues = ref<Record<string, any>>({})
 const formLoading = ref(false)
 const formRendererRef = ref<InstanceType<typeof FormRenderer> | null>(null)
+/** 每次打开弹窗递增，强制重建 FormRenderer（确保读取最新 initialValues，避免复用实例时表单残留旧数据） */
+const dialogFormKey = ref(0)
 
 // 操作列宽度
 const actionColumnWidth = computed(() => {
@@ -392,6 +395,7 @@ async function handleCreate(initialValues?: Record<string, any>) {
   const configInitialValues = props.formConfig?.initialValues || {}
   dialogInitialValues.value = { ...configInitialValues, ...(initialValues || {}) }
   dialogTitle.value = props.formConfig?.dialogTitle?.create || '新增'
+  dialogFormKey.value++ // 强制重建 FormRenderer，加载最新 initialValues
   dialogVisible.value = true
 }
 
@@ -416,6 +420,7 @@ async function handleEdit(row: any) {
   } else {
     dialogInitialValues.value = { ...row }
   }
+  dialogFormKey.value++ // 强制重建 FormRenderer，加载最新 initialValues
   dialogVisible.value = true
 }
 

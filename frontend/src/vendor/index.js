@@ -77,7 +77,7 @@ designerForm.component('LanguageInput', LanguageInput);
 designerForm.component('ConfigItem', ConfigItem);
 designerForm.component('FieldInput', FieldInput);
 designerForm.component('FnConfig', FnConfig);
-designerForm.component('FcRow', Row);
+addComponent('FcRow', Row);
 designerForm.component('ValueInput', ValueInput);
 addComponent('FcEditor', FcEditor);
 addComponent('FcTitle', FcTitle);

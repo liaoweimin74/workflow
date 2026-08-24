@@ -124,7 +124,7 @@ export function createDsBindingEngine(
     if (containers.length === 0) return false
     bindings = containers.map((c) => {
       const props = ((c as Record<string, unknown>).props || {}) as Record<string, unknown>
-      const children = ((c as Record<string, unknown>).children || []) as Rule[]
+      const children = ((c as Record<string, unknown>).children || (props.rule as Rule[]) || []) as Rule[]
       return {
         field: (c as Record<string, unknown>).field as string,
         dataSourceId: (props.dataSourceId as string) || '',

@@ -1,8 +1,8 @@
 <template>
   <div class="form-renderer" v-loading="loading">
     <form-create
-      v-if="resolvedSchema && resolvedSchema.length > 0"
-      :rule="resolvedSchema"
+      v-if="renderSchema && renderSchema.length > 0"
+      :rule="renderSchema"
       :option="renderOption"
       v-model="formData"
     />
@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
@@ -19,6 +19,7 @@ import { createDsBindingEngine } from './DsBindingEngine'
 import { createActionBus } from './DsActionBus'
 import type { DsLink } from './DsActionBus'
 import { dataSourceApi } from '@/api/data-source'
+import { normalizeForRender } from '../schemaRules'
 
 const props = defineProps<{
   /** 表单定义 ID，传入后通过 API 加载 schema。与 rule 互斥，formDefId 优先。 */
@@ -54,6 +55,9 @@ const resolvedSchema = ref<Rule[]>([])
 const formData = ref<Record<string, unknown>>({})
 const existingFormDataId = ref<string | null>(null)
 const formVersion = ref<number | null>(null)
+
+/** 渲染用 schema：将 formContainer 规范化为 fcRow 供 form-create 运行时渲染 */
+const renderSchema = computed(() => normalizeForRender(resolvedSchema.value))
 
 /** 渲染选项：始终隐藏提交/重置按钮（提交由调用方控制），form 级配置来自设计器 option（labelPosition 等） */
 const renderOption = ref<Record<string, any>>({
@@ -190,6 +194,8 @@ async function loadData() {
  * tableForm 的 props.columns[].rule 子表内部字段），保证 readonly 下子表内部字段也不可编辑。
  */
 function deepDisable(field: Rule): Rule {
+  // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
+  if (typeof field !== 'object' || field === null) return field
   const f = field as Record<string, unknown>
   const fieldProps = (f.props as Record<string, any>) || {}
   const next: Record<string, unknown> = { ...f, props: { ...fieldProps, disabled: true } as Record<string, unknown> }

@@ -960,7 +960,8 @@ export default defineComponent({
             openInputData(state) {
                 data.inputForm.state = state === undefined ? !data.inputForm.state : !!state;
                 if (data.inputForm.state) {
-                    data.inputForm.rule = designerForm.parseJson(methods.getJson());
+                    // getJson 为保存格式（formContainer 等），ViewForm 渲染需还原为可渲染格式
+                    data.inputForm.rule = methods.toPreviewRules(designerForm.parseJson(methods.getJson()));
                     data.inputForm.option = designerForm.parseJson(methods.getOptionsJson());
                     data.inputForm.option.formData = deepCopy(data.inputForm.data);
                     data.inputForm.option.appendValue = false;
@@ -986,7 +987,8 @@ export default defineComponent({
                 methods.inputReset({});
             },
             inputReset(formData) {
-                data.inputForm.rule = designerForm.parseJson(methods.getJson());
+                // getJson 为保存格式（formContainer 等），ViewForm 渲染需还原为可渲染格式
+                data.inputForm.rule = methods.toPreviewRules(designerForm.parseJson(methods.getJson()));
                 data.inputForm.option.formData = formData || deepCopy(data.inputForm.data);
                 data.inputForm.key = uniqueId();
             },
@@ -1082,7 +1084,11 @@ export default defineComponent({
                 data.preview.state = true;
                 const rule = methods.getJson();
                 const options = methods.getOptionsJson();
-                data.preview.rule = designerForm.parseJson(rule);
+                // getJson 输出为 parseRule 后的保存格式（formContainer 等 type），
+                // 预览渲染（ViewForm=formCreate 运行时）需还原为可渲染格式（FcRow+children）。
+                // 不能直接用 loadRule（其内部 makeRule 会注入 _menu/_fc_drag_tag 设计器元数据，
+                // 导致预览出现移动/删除手柄），只用 config.loadRule 钩子做最小结构还原。
+                data.preview.rule = methods.toPreviewRules(designerForm.parseJson(rule));
                 data.preview.option = designerForm.parseJson(options);
                 const useV2 = methods.getConfig('useTemplate', false);
                 data.preview.component = hljs.highlight(
@@ -1096,6 +1102,31 @@ export default defineComponent({
             },
             copyCode() {
                 copyTextToClipboard(this.$refs.previewCode.innerText);
+            },
+            /**
+             * 将保存格式规则还原为可渲染格式（供预览 ViewForm 使用）。
+             * 与 loadRule 的区别：只应用各组件 config.loadRule 钩子做结构还原
+             * （formContainer → FcRow、props.rule → children），不调用 makeRule，
+             * 避免注入 _menu/_fc_drag_tag 等设计器元数据导致预览出现移动/删除手柄。
+             * 不修改原始 rule 对象（浅拷贝后转换）。
+             */
+            toPreviewRules(rules) {
+                if (!Array.isArray(rules)) return rules;
+                return rules.map(rule => {
+                    if (typeof rule !== 'object' || rule === null) return rule;
+                    const r = {...rule, props: {...(rule.props || {})}};
+                    const config = data.dragRuleList[r.type];
+                    if (config && typeof config.loadRule === 'function') {
+                        config.loadRule(r);
+                    }
+                    if (Array.isArray(r.children)) {
+                        r.children = methods.toPreviewRules(r.children);
+                    }
+                    if (r.props && Array.isArray(r.props.rule)) {
+                        r.props.rule = methods.toPreviewRules(r.props.rule);
+                    }
+                    return r;
+                });
             },
             getHtml() {
                 return htmlTemplate(methods.getJson(), methods.getOptionsJson());

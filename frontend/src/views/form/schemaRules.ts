@@ -45,3 +45,38 @@ export function updateFieldProps(rules: any[], field: string, type: string, newP
     }
   })
 }
+
+/**
+ * 递归将 formContainer 类型转为 fcRow（props.rule → children），
+ * 使 form-create 运行时能渲染容器及其子组件。
+ * 与设计器 loadRule 钩子（vendor/config/rule/formContainer.js）逻辑一致。
+ * 不修改原始 rule 对象，返回新数组。
+ */
+export function normalizeForRender(rules: any[]): any[] {
+  return rules.map((rule) => {
+    // 字符串/非对象子节点（text/button 等组件的文字内容）原样透传，
+    // 避免 {...'文字'} 展开为字符索引对象 {0:'文',1:'字'} 被 form-create 当作未知组件 → fallback input
+    if (typeof rule !== 'object' || rule === null) return rule
+    const r = rule as Record<string, any>
+    if (r.type === 'formContainer') {
+      const props = { ...(r.props || {}) }
+      const childRules = Array.isArray(props.rule) ? props.rule : []
+      delete props.rule
+      return {
+        ...r,
+        type: 'FcRow',
+        props,
+        children: normalizeForRender(childRules),
+      }
+    }
+    // 递归处理 children 和 props.rule（subForm 等）
+    const next: Record<string, any> = { ...r }
+    if (Array.isArray(r.children)) {
+      next.children = normalizeForRender(r.children)
+    }
+    if (r.props && Array.isArray(r.props.rule)) {
+      next.props = { ...r.props, rule: normalizeForRender(r.props.rule) }
+    }
+    return next
+  })
+}

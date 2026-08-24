@@ -35,44 +35,49 @@
               子表没有可映射子列，该字段将无法发布。
             </el-alert>
             <el-table :data="row.subColumns" border size="small">
-              <el-table-column label="子字段" min-width="180">
+              <el-table-column label="子字段" min-width="120">
                 <template #default="{ row: sub }">
-                  <div :class="{ 'unsupported-field': sub.unsupported }">
-                    {{ sub.label }}
-                    <div class="field-key">{{ sub.key }}</div>
-                  </div>
+                  <div :class="{ 'unsupported-field': sub.unsupported }">{{ sub.label }}</div>
+                  <div class="field-key">{{ sub.key }}</div>
                 </template>
               </el-table-column>
-              <el-table-column label="必填" width="50" align="center">
+              <el-table-column label="列类型" width="140">
                 <template #default="{ row: sub }">
-                  <span
-                    v-if="!sub.unsupported"
-                    :style="{ color: sub.required ? '#409EFF' : '#c0c4cc', cursor: 'pointer' }"
-                    @click="sub.required = !sub.required"
-                    title="点击切换"
-                  >{{ sub.required ? '✓' : '✗' }}</span>
+                  <el-select v-if="!sub.unsupported" v-model="sub.columnType" size="small" :disabled="isCrossChangeLocked(sub)">
+                    <el-option v-for="t in allowedTypes" :key="t" :label="t" :value="t" />
+                  </el-select>
+                  <span v-else class="unsupported-text">不支持</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="长度" width="90" align="center">
+                <template #default="{ row: sub }">
+                  <el-input-number
+                    v-if="!sub.unsupported && showLength(sub)"
+                    v-model="sub.length"
+                    :min="1"
+                    :max="sub.columnType === 'VARCHAR' ? 255 : 30"
+                    size="small"
+                    controls-position="right"
+                    style="width: 100%"
+                  />
                   <span v-else>—</span>
                 </template>
               </el-table-column>
-              <el-table-column label="唯一" width="50" align="center">
+              <el-table-column label="必填" width="70" align="center">
                 <template #default="{ row: sub }">
-                  <span
-                    v-if="!sub.unsupported"
-                    :style="{ color: sub.unique ? '#409EFF' : '#c0c4cc', cursor: 'pointer' }"
-                    @click="sub.unique = !sub.unique"
-                    title="点击切换"
-                  >{{ sub.unique ? '✓' : '✗' }}</span>
+                  <el-switch v-if="!sub.unsupported" v-model="sub.required" size="small" />
                   <span v-else>—</span>
                 </template>
               </el-table-column>
-              <el-table-column label="索引" width="50" align="center">
+              <el-table-column label="唯一" width="70" align="center">
                 <template #default="{ row: sub }">
-                  <span
-                    v-if="!sub.unsupported"
-                    :style="{ color: sub.indexed ? '#409EFF' : '#c0c4cc', cursor: 'pointer' }"
-                    @click="sub.indexed = !sub.indexed"
-                    title="点击切换"
-                  >{{ sub.indexed ? '✓' : '✗' }}</span>
+                  <el-switch v-if="!sub.unsupported" v-model="sub.unique" size="small" />
+                  <span v-else>—</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="索引" width="70" align="center">
+                <template #default="{ row: sub }">
+                  <el-switch v-if="!sub.unsupported" v-model="sub.indexed" size="small" />
                   <span v-else>—</span>
                 </template>
               </el-table-column>
@@ -81,7 +86,7 @@
           <span v-else class="subtable-empty">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="字段" min-width="180">
+      <el-table-column label="字段" min-width="130">
         <template #default="{ row }">
           <div :class="{ 'unsupported-field': row.unsupported }">
             {{ row.label }}
@@ -91,36 +96,46 @@
           <div class="field-key">{{ row.key }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="必填" width="50" align="center">
+      <el-table-column label="列类型" width="150">
         <template #default="{ row }">
-          <span
-            v-if="!row.unsupported && !row.hidden && !row.subColumns"
-            :style="{ color: row.required ? '#409EFF' : '#c0c4cc', cursor: 'pointer' }"
-            @click="row.required = !row.required"
-            title="点击切换"
-          >{{ row.required ? '✓' : '✗' }}</span>
+          <span v-if="row.subColumns" class="subtable-type">子表</span>
+          <el-select v-else-if="!row.unsupported && !row.hidden" v-model="row.columnType" size="small" :disabled="isCrossChangeLocked(row)">
+            <el-option v-for="t in allowedTypes" :key="t" :label="t" :value="t" />
+          </el-select>
+          <span v-else-if="row.hidden">{{ row.columnType }}</span>
+          <span v-else class="unsupported-text">不支持</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="长度" width="90" align="center">
+        <template #default="{ row }">
+          <el-input-number
+            v-if="!row.unsupported && !row.hidden && !row.subColumns && showLength(row)"
+            v-model="row.length"
+            :min="1"
+            :max="row.columnType === 'VARCHAR' ? 255 : 30"
+            size="small"
+            controls-position="right"
+            style="width: 100%"
+          />
+          <span v-else-if="row.hidden">{{ row.length }}</span>
+          <span v-else>—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="必填" width="70" align="center">
+        <template #default="{ row }">
+          <el-switch v-if="!row.unsupported && !row.hidden && !row.subColumns" v-model="row.required" size="small" />
           <span v-else-if="row.hidden">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="唯一" width="50" align="center">
+      <el-table-column label="唯一" width="70" align="center">
         <template #default="{ row }">
-          <span
-            v-if="!row.unsupported && !row.hidden && !row.subColumns"
-            :style="{ color: row.unique ? '#409EFF' : '#c0c4cc', cursor: 'pointer' }"
-            @click="row.unique = !row.unique"
-            title="点击切换"
-          >{{ row.unique ? '✓' : '✗' }}</span>
+          <el-switch v-if="!row.unsupported && !row.hidden && !row.subColumns" v-model="row.unique" size="small" />
           <span v-else-if="row.hidden">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="索引" width="50" align="center">
+      <el-table-column label="索引" width="70" align="center">
         <template #default="{ row }">
-          <span
-            v-if="!row.unsupported && !row.hidden && !row.subColumns"
-            :style="{ color: row.indexed ? '#409EFF' : '#c0c4cc', cursor: 'pointer' }"
-            @click="row.indexed = !row.indexed"
-            title="点击切换"
-          >{{ row.indexed ? '✓' : '✗' }}</span>
+          <el-switch v-if="!row.unsupported && !row.hidden && !row.subColumns" v-model="row.indexed" size="small" />
           <span v-else-if="row.hidden">—</span>
         </template>
       </el-table-column>
@@ -179,6 +194,8 @@ const visible = computed({
   get: () => props.modelValue,
   set: (v: boolean) => emit('update:modelValue', v),
 })
+
+const allowedTypes = ['VARCHAR', 'TEXT', 'INT', 'DECIMAL', 'DATE', 'DATETIME', 'TINYINT', 'JSON', 'LONGTEXT']
 
 const editableItems = ref<ColumnConfigItem[]>([])
 const unsupportedFields = computed(() => editableItems.value.filter(i => i.unsupported).map(i => i.label))
@@ -328,6 +345,10 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
       continue
     }
+    // formContainer：数据源容器，子字段数据来自外部数据源，跳过
+    if (type === 'formContainer') {
+      continue
+    }
     // data-picker：子表内同样生成两列（id 列 + 隐藏冗余文本列），与主表一致
     if (type === 'dataPicker') {
       const propsMap = (rule?.props || {}) as Record<string, any>
@@ -416,6 +437,10 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
     const label = (rule?.title as string) || field
     if (UNSUPPORTED_TYPES.includes(type)) {
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
+      continue
+    }
+    // formContainer：数据源容器，子字段数据来自外部数据源，不参与当前表单列映射
+    if (type === 'formContainer') {
       continue
     }
     // 子表组件：提取子列映射到独立物理表 wf_biz_<formKey>_<field>
@@ -546,6 +571,25 @@ function buildDraft() {
   const items: ColumnConfigItem[] = []
   collectFields(props.schema || [], items)
   editableItems.value = items
+}
+
+/** 跨类变更判断（与后端 categoryOf 对齐） */
+function categoryOf(type: string): string {
+  if (!type) return 'UNKNOWN'
+  if (['VARCHAR', 'TEXT', 'LONGTEXT', 'TINYINT', 'JSON'].includes(type)) return 'STRING'
+  if (type === 'INT') return 'INT'
+  if (type === 'DECIMAL') return 'DECIMAL'
+  if (['DATE', 'DATETIME'].includes(type)) return 'DATE'
+  return 'UNKNOWN'
+}
+
+function isCrossChangeLocked(row: ColumnConfigItem): boolean {
+  if (!row.existingType) return false
+  return categoryOf(row.existingType) !== categoryOf(row.columnType)
+}
+
+function showLength(row: ColumnConfigItem): boolean {
+  return row.columnType === 'VARCHAR' || row.columnType === 'TINYINT' || row.columnType === 'DECIMAL'
 }
 
 function handleConfirm() {

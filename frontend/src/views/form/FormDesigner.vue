@@ -304,7 +304,8 @@ function registerFormContainerProps() {
         onChange: async (val: string) => {
           if (!val || !designerRef.value) return
           const activeRule = designerRef.value.activeRule
-          if (!activeRule || activeRule.type !== 'formContainer') return
+          // 画布上 formContainer 经 loadRule 后 type 为 FcRow（保存格式为 formContainer）
+          if (!activeRule || !['formContainer', 'FcRow'].includes(activeRule.type)) return
           const children = (activeRule.children || []) as any[]
           if (children.length === 0) return
           try {
@@ -328,7 +329,7 @@ function registerFormContainerProps() {
         value: { type: 'current-record' },
       },
     ],
-    true, // force override
+    false, // 替换内置 props（append=true 会与 formContainer.js 内置 dataSourceId/recordLocator 重复，导致属性值绑定冲突）
   )
 }
 

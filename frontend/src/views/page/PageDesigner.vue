@@ -270,7 +270,7 @@ function registerPageComponents() {
       props: { clearable: true, filterable: true, placeholder: '选择绑定数据源' },
     },
     { type: 'json', field: 'recordLocator', title: '记录定位' },
-  ], true)
+  ], false)
 }
 
 onMounted(async () => {

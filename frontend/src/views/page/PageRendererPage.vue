@@ -26,6 +26,7 @@ import PageDataTree from './components/PageDataTree.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
+import { normalizeForRender } from '@/views/form/schemaRules'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
 formCreate.component('page-table', PageDataTable)
@@ -89,7 +90,7 @@ async function load() {
     pageSchema.dataSources = parsed.dataSources || []
     pageSchema.actions = parsed.actions || []
     // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
-    rule.value = (parsed.rule || []).map((r: any) => transformComponent(r))
+    rule.value = normalizeForRender(parsed.rule || []).map((r: any) => transformComponent(r))
     option.value = parsed.option || {}
   } catch (e: any) {
     error.value = e?.message || '页面加载失败'
@@ -153,6 +154,8 @@ async function mountPageEngine(ruleTree: any[]) {
 
 /** 递归转换 rule：数据组件注入 pageKey 与事件（registry 已用 page-table/page-tree 类型） */
 function transformComponent(node: any): any {
+  // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
+  if (typeof node !== 'object' || node === null) return node
   const next = { ...node, props: { ...(node.props || {}) }, on: { ...(node.on || {}) } }
   if (next.type === 'page-table' || next.type === 'page-tree') {
     next.props.pageKey = pageKey.value

@@ -23,7 +23,7 @@ public class FormSchemaColumnExtractor {
     private static final Pattern COL_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{0,63}$");
     private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
             "userPicker", "deptPicker", "divider", "groupContainer", "dataTable",
-            "group", "tableForm", "subForm");
+            "group", "tableForm", "subForm", "formContainer");
 
     private final ObjectMapper objectMapper;
 
@@ -82,6 +82,11 @@ public class FormSchemaColumnExtractor {
             }
             String field = rule.path("field").asText(null);
             String type = rule.path("type").asText(null);
+
+            // formContainer 绑定外部数据源，其子字段不生成 DDL，整体跳过（不提取列、不递归子节点）
+            if ("formContainer".equals(type)) {
+                continue;
+            }
 
             // 如果有 field 且是有效字段名，提取列定义
             if (field != null && !field.isBlank() && COL_PATTERN.matcher(field).matches()) {

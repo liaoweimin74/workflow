@@ -92,18 +92,12 @@ public class WorkflowFormDataQueryService {
                 col("currentNodeName", "当前节点"));
     }
 
-    /** 系统列 + 该 formKey 最新 PUBLISHED schema 解析出的业务列。 */
+    /** 该 formKey 最新 PUBLISHED schema 解析出的业务列。
+     * 仅返回表单定义的字段，不包含系统列（instanceId 等派生列）；
+     * 系统列仍会在 query/getById 的数据中返回，但不出现在 metadata.columns。 */
     public List<ColumnConfig> columnsFor(String formKey) {
         String tenantId = tenantProvider.getTenantId();
-        Set<String> seen = new LinkedHashSet<>();
-        systemColumns().forEach(c -> seen.add(c.getKey()));
-        List<ColumnConfig> cols = new ArrayList<>(systemColumns());
-        for (ColumnConfig c : businessColumns(tenantId, formKey).values()) {
-            if (seen.add(c.getKey())) {
-                cols.add(c);
-            }
-        }
-        return cols;
+        return new ArrayList<>(businessColumns(tenantId, formKey).values());
     }
 
     /** 跨实例分页查询：filter/keyword 仅接受最新 schema 白名单列。 */
@@ -294,15 +288,19 @@ public class WorkflowFormDataQueryService {
     }
 
     /** 最新 schema 业务列（有序 key→列，非法键名过滤）。
-     * 优先从 columnConfig 解析；WORKFLOW 表单 columnConfig 可能为空，此时从 schema rule 推导。 */
+     * WORKFLOW 表单始终从 schema rule 数组解析（columnConfig 仅 BUSINESS 类型使用）；
+     * 其他类型使用 columnConfig。 */
     private LinkedHashMap<String, ColumnConfig> businessColumns(String tenantId, String formKey) {
         FormDefinition latest = latestPublished(tenantId, formKey);
-        LinkedHashMap<String, ColumnConfig> map = new LinkedHashMap<>();
-        List<ColumnConfig> cols = extractor.extract(latest.getColumnConfig());
-        if (cols.isEmpty()) {
-            cols = extractFromSchema(latest.getSchema());
+        List<ColumnConfig> extracted;
+        // WORKFLOW 类型始终从 schema 解析，忽略 columnConfig（防止被误存的数据干扰）
+        if ("WORKFLOW".equals(latest.getType())) {
+            extracted = extractor.extractFromSchema(latest.getSchema());
+        } else {
+            extracted = extractor.extract(latest.getColumnConfig());
         }
-        for (ColumnConfig c : cols) {
+        LinkedHashMap<String, ColumnConfig> map = new LinkedHashMap<>();
+        for (ColumnConfig c : extracted) {
             if (c.getKey() == null || c.getKey().isBlank()) {
                 continue;
             }
@@ -312,43 +310,6 @@ public class WorkflowFormDataQueryService {
             map.putIfAbsent(c.getKey(), c);
         }
         return map;
-    }
-
-    /** 从表单 schema JSON 里的 rule 数组推导列定义（WORKFLOW 表单无 columnConfig 时使用）。 */
-    private List<ColumnConfig> extractFromSchema(String schemaJson) {
-        if (schemaJson == null || schemaJson.isBlank()) {
-            return List.of();
-        }
-        try {
-            JsonNode root = objectMapper.readTree(schemaJson);
-            JsonNode rules = root.isArray() ? root : root.path("rule");
-            if (!rules.isArray() || rules.isEmpty()) {
-                return List.of();
-            }
-            List<ColumnConfig> cols = new ArrayList<>();
-            for (JsonNode rule : rules) {
-                String field = rule.path("field").asText(null);
-                String label = rule.path("label").asText(field);
-                if (field == null || field.isBlank()) {
-                    continue;
-                }
-                if (!COL_PATTERN.matcher(field).matches()) {
-                    continue;
-                }
-                ColumnConfig c = new ColumnConfig();
-                c.setKey(field);
-                c.setLabel(label != null ? label : field);
-                c.setColumnType("VARCHAR");
-                String type = rule.path("type").asText(null);
-                if (type != null && !type.isBlank()) {
-                    c.setComponentType(type);
-                }
-                cols.add(c);
-            }
-            return cols;
-        } catch (JsonProcessingException e) {
-            return List.of();
-        }
     }
 
     /** 该 key 下全部版本定义 id（版本倒序）。 */

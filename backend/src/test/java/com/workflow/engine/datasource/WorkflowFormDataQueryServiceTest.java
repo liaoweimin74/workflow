@@ -83,8 +83,15 @@ class WorkflowFormDataQueryServiceTest {
         when(countQuery.setParameter(anyString(), any())).thenReturn(countQuery);
 
         FormDefinition published = def("fd-2", 2, "PUBLISHED", COLUMN_CONFIG);
+        // WORKFLOW 类型始终从 schema 解析，需要设置 schema 字段
+        published.setSchema("{\"rule\":[{\"field\":\"reason\",\"title\":\"事由\",\"type\":\"input\"},"
+                + "{\"field\":\"days\",\"title\":\"天数\",\"type\":\"inputNumber\"}]"
+                + ",\"option\":{}}");
         FormDefinition v1 = def("fd-1", 1, "ARCHIVED",
                 "[{\"key\":\"reason\",\"label\":\"事由\"},{\"key\":\"legacyField\",\"label\":\"旧列\"}]");
+        v1.setSchema("{\"rule\":[{\"field\":\"reason\",\"title\":\"事由\",\"type\":\"input\"},"
+                + "{\"field\":\"legacyField\",\"title\":\"旧列\",\"type\":\"input\"}]"
+                + ",\"option\":{}}");
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 "tenant-1", "leave", "PUBLISHED")).thenReturn(Optional.of(published));
         when(formDefRepository.findByTenantIdAndKeyOrderByVersionDesc("tenant-1", "leave"))
@@ -131,6 +138,7 @@ class WorkflowFormDataQueryServiceTest {
         f.setId(id);
         f.setVersion(version);
         f.setStatus(status);
+        f.setType("WORKFLOW");
         f.setColumnConfig(columnConfig);
         return f;
     }
@@ -251,15 +259,35 @@ class WorkflowFormDataQueryServiceTest {
     // ==================== 补充：columnsFor / systemColumns ====================
 
     @Test
-    void columnsFor_combinesSystemColumnsWithBusinessSchema() {
+    void columnsFor_returnsOnlyBusinessColumns() {
         List<ColumnConfig> cols = service.columnsFor("leave");
 
-        assertEquals(7, cols.size());
-        assertEquals(
-                List.of("instanceId", "processStatus", "initiatorName", "startTime", "currentNodeName"),
-                cols.subList(0, 5).stream().map(ColumnConfig::getKey).toList());
-        assertEquals("reason", cols.get(5).getKey());
-        assertEquals("days", cols.get(6).getKey());
+        // 仅返回表单定义的业务字段，不包含系统列
+        assertEquals(2, cols.size());
+        assertEquals("reason", cols.get(0).getKey());
+        assertEquals("days", cols.get(1).getKey());
+    }
+
+    @Test
+    void columnsFor_workflowType_ignoresColumnConfig_usesSchema() {
+        // WORKFLOW 表单即使有 columnConfig（被前端误存），也始终从 schema 解析
+        String badColumnConfig = "[{\"key\":\"reason\",\"label\":\"reason\"},{\"key\":\"id\",\"label\":\"id\"}]";
+        String schemaJson = "{\"rule\":[{\"field\":\"reason\",\"title\":\"原因\",\"type\":\"input\"},"
+                + "{\"field\":\"date_range\",\"title\":\"请假时间\",\"type\":\"timePicker\"}]"
+                + "}";
+        FormDefinition wfPublished = def("fd-wf2", 1, "PUBLISHED", badColumnConfig);
+        wfPublished.setSchema(schemaJson);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                "tenant-1", "leave", "PUBLISHED")).thenReturn(Optional.of(wfPublished));
+
+        List<ColumnConfig> cols = service.columnsFor("leave");
+
+        // 应只有 2 个业务列（从 schema 解析），不包含系统列，也不使用 columnConfig
+        assertEquals(2, cols.size());
+        assertEquals("reason", cols.get(0).getKey());
+        assertEquals("原因", cols.get(0).getLabel());
+        assertEquals("date_range", cols.get(1).getKey());
+        assertEquals("请假时间", cols.get(1).getLabel());
     }
 
     @Test
@@ -275,10 +303,11 @@ class WorkflowFormDataQueryServiceTest {
     // ==================== 补充：columnConfig 为空时从 schema rule 推导列 ====================
 
     @Test
-    void columnsFor_fallsBackToSchemaWhenColumnConfigEmpty() {
-        // Arrange：mock form with columnConfig=null, schema contains rule array
-        String schemaJson = "{\"rule\":[{\"field\":\"title\",\"label\":\"标题\",\"type\":\"input\"},"
-                + "{\"field\":\"amount\",\"label\":\"金额\",\"type\":\"number\"}]}";
+    void columnsFor_fallsBackToSchemaWhenColumnConfigNull() {
+        // Arrange：WORKFLOW 表单 columnConfig=null，从 schema rule 数组解析
+        String schemaJson = "{\"rule\":[{\"field\":\"title\",\"title\":\"标题\",\"type\":\"input\"},"
+                + "{\"field\":\"amount\",\"title\":\"金额\",\"type\":\"inputNumber\"}]"
+                + "}";
         FormDefinition formWithSchema = def("fd-3", 3, "PUBLISHED", null);
         formWithSchema.setSchema(schemaJson);
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
@@ -287,20 +316,20 @@ class WorkflowFormDataQueryServiceTest {
         // Act
         List<ColumnConfig> cols = service.columnsFor("leave");
 
-        // Assert：5 系统列 + 2 业务列 = 7
-        assertEquals(7, cols.size());
-        assertEquals("title", cols.get(5).getKey());
-        assertEquals("标题", cols.get(5).getLabel());
-        assertEquals("input", cols.get(5).getComponentType());
-        assertEquals("amount", cols.get(6).getKey());
-        assertEquals("金额", cols.get(6).getLabel());
-        assertEquals("number", cols.get(6).getComponentType());
+        // Assert：仅返回表单定义的业务列(2 个)，不包含系统列
+        assertEquals(2, cols.size());
+        assertEquals("title", cols.get(0).getKey());
+        assertEquals("标题", cols.get(0).getLabel());
+        assertEquals("input", cols.get(0).getComponentType());
+        assertEquals("amount", cols.get(1).getKey());
+        assertEquals("金额", cols.get(1).getLabel());
+        assertEquals("INT", cols.get(1).getColumnType());
     }
 
     @Test
     void query_fallsBackToSchemaForBusinessColumns() {
-        // Arrange：columnConfig=null，schema 包含 rule 数组
-        String schemaJson = "{\"rule\":[{\"field\":\"title\",\"label\":\"标题\",\"type\":\"input\"}]}";
+        // Arrange：WORKFLOW 表单 columnConfig=null，schema 包含 rule 数组
+        String schemaJson = "{\"rule\":[{\"field\":\"title\",\"title\":\"标题\",\"type\":\"input\"}]}";
         FormDefinition formWithSchema = def("fd-3", 3, "PUBLISHED", null);
         formWithSchema.setSchema(schemaJson);
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(

@@ -235,13 +235,19 @@
                 style="width: 100%"
                 :max-height="300"
               >
-                <el-table-column prop="label" label="字段名" min-width="120" />
-                <el-table-column prop="key" label="标识" min-width="120" />
+                <el-table-column prop="label" label="字段名" min-width="180" show-overflow-tooltip />
+                <el-table-column prop="key" label="标识" min-width="160" show-overflow-tooltip />
                 <el-table-column prop="componentType" label="组件" min-width="100" />
-                <el-table-column prop="columnType" label="类型" min-width="100" />
-                <el-table-column prop="length" label="长度" min-width="80" />
-                <el-table-column prop="required" label="必填" min-width="80" />
-                <el-table-column prop="unique" label="唯一" min-width="80" />
+                <el-table-column label="必填" width="50" align="center">
+                  <template #default="{ row }">
+                    <span :style="boolIconStyle(row.required)">{{ row.required ? '✓' : '✗' }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="唯一" width="50" align="center">
+                  <template #default="{ row }">
+                    <span :style="boolIconStyle(row.unique)">{{ row.unique ? '✓' : '✗' }}</span>
+                  </template>
+                </el-table-column>
               </el-table>
               <div v-if="metadataError" class="metadata-error">
                 <el-alert :title="metadataError" type="error" />
@@ -265,16 +271,6 @@
                     </el-button>
                   </div>
                 </el-col>
-                <el-col style="margin-left: auto">
-                  <el-pagination
-                    layout="total, prev, pager, next"
-                    :page-size="previewSize"
-                    :total="previewTotal"
-                    :current-page="previewPage"
-                    @size-change="onPageSizeChange"
-                    @current-change="onPageChange"
-                  />
-                </el-col>
               </el-row>
               <el-table
                 :data="previewTableData"
@@ -291,6 +287,18 @@
                   show-overflow-tooltip
                 />
               </el-table>
+              <el-row :gutter="8" class="preview-pagination" style="margin-top: 8px">
+                <el-col style="display: flex; justify-content: flex-end">
+                  <el-pagination
+                    layout="total, prev, pager, next"
+                    :page-size="previewSize"
+                    :total="previewTotal"
+                    :current-page="previewPage"
+                    @size-change="onPageSizeChange"
+                    @current-change="onPageChange"
+                  />
+                </el-col>
+              </el-row>
               <div v-if="dataError" class="preview-error">
                 <el-alert :title="dataError" type="error" />
               </div>
@@ -443,6 +451,11 @@ const activeTab = ref('config')
 const metadata = ref<DataSourceMetadataDTO | null>(null)
 const metadataLoading = ref(false)
 const metadataError = ref<string | null>(null)
+
+/** 布尔值图标样式：true 蓝色，false 灰色 */
+function boolIconStyle(v: boolean | undefined): Record<string, string> {
+  return { color: v ? '#409EFF' : '#c0c4cc', cursor: 'default' }
+}
 
 /** ================ 数据预览 ================= */
 const previewData = ref<BizDataVO[]>([])

@@ -252,21 +252,21 @@
 
           <el-tab-pane label="数据预览" name="data">
             <div class="preview-section">
-              <el-row :gutter="8" class="preview-toolbar">
+              <el-row :gutter="8" class="preview-toolbar" style="align-items: center">
                 <el-col>
-                  <el-input
-                    v-model="previewKeyword"
-                    placeholder="搜索关键词"
-                    style="width: 200px"
-                    size="small"
-                  />
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <el-input
+                      v-model="previewKeyword"
+                      placeholder="搜索关键词"
+                      style="width: 200px"
+                      size="small"
+                    />
+                    <el-button type="primary" size="small" :loading="dataLoading" @click="onSearch">
+                      搜索
+                    </el-button>
+                  </div>
                 </el-col>
-                <el-col>
-                  <el-button type="primary" size="small" :loading="dataLoading" @click="onSearch">
-                    搜索
-                  </el-button>
-                </el-col>
-                <el-col>
+                <el-col style="margin-left: auto">
                   <el-pagination
                     layout="total, prev, pager, next"
                     :page-size="previewSize"
@@ -274,7 +274,6 @@
                     :current-page="previewPage"
                     @size-change="onPageSizeChange"
                     @current-change="onPageChange"
-                    style="margin-left: auto; display: flex; align-items: center"
                   />
                 </el-col>
               </el-row>

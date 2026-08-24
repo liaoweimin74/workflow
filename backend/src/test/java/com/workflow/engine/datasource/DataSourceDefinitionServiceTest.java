@@ -420,4 +420,54 @@ class DataSourceDefinitionServiceTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> service.enable(DS_ID));
         assertTrue(ex.getMessage().contains("表单不存在"));
     }
+
+    // ==================== getEnabled 跨租户测试 ====================
+
+    @Test
+    void getEnabled_includesSystemDatasources() {
+        // ARRANGE：当前租户有一个 ENABLED 的 FORM 数据源，system 租户有 SYSTEM 数据源
+        DataSourceDefinition tenantDs = draftDs("FORM", "biz_form", null, null);
+        tenantDs.setStatus("ENABLED");
+        tenantDs.setTenantId(TENANT_ID);
+
+        DataSourceDefinition systemDs = draftDs("SYSTEM", null, "dept-tree", null);
+        systemDs.setId("ds-system");
+        systemDs.setStatus("ENABLED");
+        systemDs.setTenantId("system");
+
+        // getEnabled 调用新的跨租户查询方法
+        when(dsRepository.findByStatusAndAccessibleTenant("ENABLED", TENANT_ID))
+                .thenReturn(List.of(tenantDs, systemDs));
+
+        // ACT
+        List<DataSourceDefinition> result = service.getEnabled();
+
+        // ASSERT：返回当前租户的 + SYSTEM 的数据源
+        assertEquals(2, result.size());
+        assertTrue(result.stream().anyMatch(ds -> "SYSTEM".equals(ds.getType())));
+        assertTrue(result.stream().anyMatch(ds -> TENANT_ID.equals(ds.getTenantId())));
+    }
+
+    @Test
+    void getEnabled_excludesOtherTenantDatasources() {
+        // ARRANGE：其他租户的非 SYSTEM 数据源不应返回
+        DataSourceDefinition otherTenantDs = draftDs("FORM", "other_form", null, null);
+        otherTenantDs.setStatus("ENABLED");
+        otherTenantDs.setTenantId("other-tenant");
+
+        DataSourceDefinition systemDs = draftDs("SYSTEM", null, "user-tree", null);
+        systemDs.setId("ds-system");
+        systemDs.setStatus("ENABLED");
+        systemDs.setTenantId("system");
+
+        when(dsRepository.findByStatusAndAccessibleTenant("ENABLED", TENANT_ID))
+                .thenReturn(List.of(systemDs)); // 只返回 SYSTEM，其他租户的不返回
+
+        // ACT
+        List<DataSourceDefinition> result = service.getEnabled();
+
+        // ASSERT
+        assertEquals(1, result.size());
+        assertEquals("SYSTEM", result.get(0).getType());
+    }
 }

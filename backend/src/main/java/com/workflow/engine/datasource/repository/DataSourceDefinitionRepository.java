@@ -34,4 +34,42 @@ public interface DataSourceDefinitionRepository extends JpaRepository<DataSource
 
     /** 按 sourceKey 查找数据源（系统数据源） */
     Optional<DataSourceDefinition> findByTenantIdAndSourceKey(String tenantId, String sourceKey);
+
+    /**
+     * 跨租户查询：当前租户的启用数据源 + SYSTEM 类型的启用数据源（系统资源对所有租户可见）。
+     * SQL: WHERE status = ?1 AND (tenant_id = ?2 OR type = 'SYSTEM')
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT ds FROM DataSourceDefinition ds WHERE ds.status = ?1 AND (ds.tenantId = ?2 OR ds.type = 'SYSTEM')")
+    List<DataSourceDefinition> findByStatusAndAccessibleTenant(String status, String tenantId);
+
+    /**
+     * 分页跨租户查询：当前租户的数据源 + SYSTEM 类型的数据源。
+     * SQL: WHERE tenant_id = ?1 OR type = 'SYSTEM'
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT ds FROM DataSourceDefinition ds WHERE ds.tenantId = ?1 OR ds.type = 'SYSTEM'")
+    Page<DataSourceDefinition> findByAccessibleTenantOrderByUpdatedAtDesc(String tenantId, Pageable pageable);
+
+    /**
+     * 分页跨租户查询：按类型过滤 + SYSTEM 可见。
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT ds FROM DataSourceDefinition ds WHERE (ds.tenantId = ?1 OR ds.type = 'SYSTEM') AND ds.type = ?2")
+    Page<DataSourceDefinition> findByAccessibleTenantAndTypeOrderByUpdatedAtDesc(String tenantId, String type, Pageable pageable);
+
+    /**
+     * 分页跨租户查询：按状态过滤 + SYSTEM 可见。
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT ds FROM DataSourceDefinition ds WHERE (ds.tenantId = ?1 OR ds.type = 'SYSTEM') AND ds.status = ?2")
+    Page<DataSourceDefinition> findByAccessibleTenantAndStatusOrderByUpdatedAtDesc(String tenantId, String status, Pageable pageable);
+
+    /**
+     * 分页跨租户查询：按类型+状态过滤 + SYSTEM 可见。
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT ds FROM DataSourceDefinition ds WHERE (ds.tenantId = ?1 OR ds.type = 'SYSTEM') AND ds.type = ?2 AND ds.status = ?3")
+    Page<DataSourceDefinition> findByAccessibleTenantAndTypeAndStatusOrderByUpdatedAtDesc(
+            String tenantId, String type, String status, Pageable pageable);
 }

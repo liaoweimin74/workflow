@@ -217,29 +217,31 @@ public class DataSourceDefinitionService {
 
     /**
      * 分页查询数据源列表（type/status 可选过滤，按更新时间倒序）。
+     * SYSTEM 类型（系统结构）对所有租户可见（跨租户查询）。
      */
     public Page<DataSourceDefinition> list(String type, String status, Pageable pageable) {
         String tenantId = tenantProvider.getTenantId();
         boolean hasType = type != null && !type.isBlank();
         boolean hasStatus = status != null && !status.isBlank();
         if (hasType && hasStatus) {
-            return dsRepository.findByTenantIdAndTypeAndStatusOrderByUpdatedAtDesc(tenantId, type, status, pageable);
+            return dsRepository.findByAccessibleTenantAndTypeAndStatusOrderByUpdatedAtDesc(tenantId, type, status, pageable);
         }
         if (hasType) {
-            return dsRepository.findByTenantIdAndTypeOrderByUpdatedAtDesc(tenantId, type, pageable);
+            return dsRepository.findByAccessibleTenantAndTypeOrderByUpdatedAtDesc(tenantId, type, pageable);
         }
         if (hasStatus) {
-            return dsRepository.findByTenantIdAndStatusOrderByUpdatedAtDesc(tenantId, status, pageable);
+            return dsRepository.findByAccessibleTenantAndStatusOrderByUpdatedAtDesc(tenantId, status, pageable);
         }
-        return dsRepository.findByTenantIdOrderByUpdatedAtDesc(tenantId, pageable);
+        return dsRepository.findByAccessibleTenantOrderByUpdatedAtDesc(tenantId, pageable);
     }
 
     /**
      * 仅已启用数据源（页面设计器下拉用）。
+     * SYSTEM 类型（系统结构）对所有租户可见。
      */
     public List<DataSourceDefinition> getEnabled() {
         String tenantId = tenantProvider.getTenantId();
-        return dsRepository.findByTenantIdAndStatus(tenantId, STATUS_ENABLED);
+        return dsRepository.findByStatusAndAccessibleTenant(STATUS_ENABLED, tenantId);
     }
 
     /**

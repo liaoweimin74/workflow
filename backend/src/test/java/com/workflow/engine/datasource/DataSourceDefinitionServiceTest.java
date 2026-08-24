@@ -246,7 +246,7 @@ class DataSourceDefinitionServiceTest {
     @Test
     void enable_formSource_withUnpublishedForm_rejected() {
         DataSourceDefinition ds = draftDs("FORM", "draft-form", null, null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "draft-form", "PUBLISHED")).thenReturn(Optional.empty());
 
@@ -258,7 +258,7 @@ class DataSourceDefinitionServiceTest {
     @Test
     void enable_formSource_success() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "biz_leave", "PUBLISHED")).thenReturn(Optional.of(publishedForm("biz_leave")));
         when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -272,7 +272,7 @@ class DataSourceDefinitionServiceTest {
     void enable_systemSource_success() {
         DataSourceDefinition ds = draftDs("SYSTEM", null, "dept-tree", null);
         ds.setParams(null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
         DataSourceDefinition result = service.enable(DS_ID);
@@ -286,7 +286,7 @@ class DataSourceDefinitionServiceTest {
     void enable_missingRequiredField_rejected() {
         // SYSTEM 类型缺 sourceKey → 必填校验失败，保持 DRAFT
         DataSourceDefinition ds = draftDs("SYSTEM", null, null, null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.enable(DS_ID));
         assertTrue(ex.getMessage().contains("sourceKey"));
@@ -299,7 +299,7 @@ class DataSourceDefinitionServiceTest {
     void disable_setsDisabled() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
 
         DataSourceDefinition result = service.disable(DS_ID);
@@ -312,7 +312,7 @@ class DataSourceDefinitionServiceTest {
     @Test
     void delete_draft_success() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
 
         service.delete(DS_ID);
 
@@ -323,7 +323,7 @@ class DataSourceDefinitionServiceTest {
     void delete_enabled_rejected() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(DS_ID));
         assertTrue(ex.getMessage().contains("禁用"));
@@ -336,7 +336,7 @@ class DataSourceDefinitionServiceTest {
     void query_apiType_noAdapter_rejected() {
         DataSourceDefinition ds = draftDs("API", null, "external-stock", null);
         ds.setStatus("ENABLED");
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
 
         BizDataQueryRequest req = new BizDataQueryRequest();
         BusinessException ex = assertThrows(BusinessException.class,
@@ -349,7 +349,7 @@ class DataSourceDefinitionServiceTest {
     void query_disabledSource_rejected() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("DISABLED");
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
 
         assertThrows(BusinessException.class, () -> service.queryData(DS_ID, new BizDataQueryRequest()));
     }
@@ -358,7 +358,7 @@ class DataSourceDefinitionServiceTest {
     void query_formSource_delegatesToAdapter() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         ds.setStatus("ENABLED");
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(formAdapter.query(eq(ds), any(BizDataQueryRequest.class)))
                 .thenReturn(new BizDataPageVO(List.of(), 0, 0, 20));
 
@@ -373,7 +373,7 @@ class DataSourceDefinitionServiceTest {
     @Test
     void enable_workflowSource_withPublishedWorkflowForm_success() {
         DataSourceDefinition ds = draftDs("WORKFLOW", "wf_leave", null, null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         FormDefinition wf = publishedForm("wf_leave");
         wf.setType("WORKFLOW");
         when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "wf_leave")).thenReturn(true);
@@ -389,7 +389,7 @@ class DataSourceDefinitionServiceTest {
     @Test
     void enable_workflowSource_withBusinessForm_rejected() {
         DataSourceDefinition ds = draftDs("WORKFLOW", "wf_leave", null, null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "wf_leave")).thenReturn(true);
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "wf_leave", "PUBLISHED")).thenReturn(Optional.of(publishedForm("wf_leave")));
@@ -402,7 +402,7 @@ class DataSourceDefinitionServiceTest {
     @Test
     void enable_workflowSource_onlyDraftForm_rejected() {
         DataSourceDefinition ds = draftDs("WORKFLOW", "wf_leave", null, null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "wf_leave")).thenReturn(true);
         when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
                 TENANT_ID, "wf_leave", "PUBLISHED")).thenReturn(Optional.empty());
@@ -414,7 +414,7 @@ class DataSourceDefinitionServiceTest {
     @Test
     void enable_workflowSource_missingForm_rejected() {
         DataSourceDefinition ds = draftDs("WORKFLOW", "no-such", null, null);
-        when(dsRepository.findByIdAndTenantId(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "no-such")).thenReturn(false);
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.enable(DS_ID));
@@ -469,5 +469,22 @@ class DataSourceDefinitionServiceTest {
         // ASSERT
         assertEquals(1, result.size());
         assertEquals("SYSTEM", result.get(0).getType());
+    }
+
+    @Test
+    void getById_systemDatasourceAccessibleAcrossTenants() {
+        // SYSTEM 数据源归属 tenantId="system"，但任何租户都能访问
+        DataSourceDefinition systemDs = draftDs("SYSTEM", null, "dept-tree", null);
+        systemDs.setId("ds-system");
+        systemDs.setTenantId("system");
+        systemDs.setStatus("ENABLED");
+
+        when(dsRepository.findByIdAccessible("ds-system", TENANT_ID)).thenReturn(Optional.of(systemDs));
+
+        DataSourceDefinition result = service.getById("ds-system");
+
+        assertEquals("ds-system", result.getId());
+        assertEquals("SYSTEM", result.getType());
+        assertEquals("dept-tree", result.getSourceKey());
     }
 }

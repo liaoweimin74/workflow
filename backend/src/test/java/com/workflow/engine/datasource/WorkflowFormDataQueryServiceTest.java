@@ -271,4 +271,29 @@ class WorkflowFormDataQueryServiceTest {
                 List.of("instanceId", "processStatus", "initiatorName", "startTime", "currentNodeName"),
                 cols.stream().map(ColumnConfig::getKey).toList());
     }
+
+    // ==================== 补充：columnConfig 为空时从 schema rule 推导列 ====================
+
+    @Test
+    void columnsFor_fallsBackToSchemaWhenColumnConfigEmpty() {
+        // Arrange：mock form with columnConfig=null, schema contains rule array
+        String schemaJson = "{\"rule\":[{\"field\":\"title\",\"label\":\"标题\",\"type\":\"input\"},"
+                + "{\"field\":\"amount\",\"label\":\"金额\",\"type\":\"number\"}]}";
+        FormDefinition formWithSchema = def("fd-3", 3, "PUBLISHED", null);
+        formWithSchema.setSchema(schemaJson);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                "tenant-1", "leave", "PUBLISHED")).thenReturn(Optional.of(formWithSchema));
+
+        // Act
+        List<ColumnConfig> cols = service.columnsFor("leave");
+
+        // Assert：5 系统列 + 2 业务列 = 7
+        assertEquals(7, cols.size());
+        assertEquals("title", cols.get(5).getKey());
+        assertEquals("标题", cols.get(5).getLabel());
+        assertEquals("input", cols.get(5).getComponentType());
+        assertEquals("amount", cols.get(6).getKey());
+        assertEquals("金额", cols.get(6).getLabel());
+        assertEquals("number", cols.get(6).getComponentType());
+    }
 }

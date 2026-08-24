@@ -2,6 +2,7 @@ package com.workflow.engine.datasource;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
@@ -292,11 +293,16 @@ public class WorkflowFormDataQueryService {
                 .orElseThrow(() -> new BusinessException(404, "表单不存在或未发布: " + formKey));
     }
 
-    /** 最新 schema 业务列（有序 key→列，非法键名过滤）。 */
+    /** 最新 schema 业务列（有序 key→列，非法键名过滤）。
+     * 优先从 columnConfig 解析；WORKFLOW 表单 columnConfig 可能为空，此时从 schema rule 推导。 */
     private LinkedHashMap<String, ColumnConfig> businessColumns(String tenantId, String formKey) {
         FormDefinition latest = latestPublished(tenantId, formKey);
         LinkedHashMap<String, ColumnConfig> map = new LinkedHashMap<>();
-        for (ColumnConfig c : extractor.extract(latest.getColumnConfig())) {
+        List<ColumnConfig> cols = extractor.extract(latest.getColumnConfig());
+        if (cols.isEmpty()) {
+            cols = extractFromSchema(latest.getSchema());
+        }
+        for (ColumnConfig c : cols) {
             if (c.getKey() == null || c.getKey().isBlank()) {
                 continue;
             }
@@ -306,6 +312,43 @@ public class WorkflowFormDataQueryService {
             map.putIfAbsent(c.getKey(), c);
         }
         return map;
+    }
+
+    /** 从表单 schema JSON 里的 rule 数组推导列定义（WORKFLOW 表单无 columnConfig 时使用）。 */
+    private List<ColumnConfig> extractFromSchema(String schemaJson) {
+        if (schemaJson == null || schemaJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode root = objectMapper.readTree(schemaJson);
+            JsonNode rules = root.isArray() ? root : root.path("rule");
+            if (!rules.isArray() || rules.isEmpty()) {
+                return List.of();
+            }
+            List<ColumnConfig> cols = new ArrayList<>();
+            for (JsonNode rule : rules) {
+                String field = rule.path("field").asText(null);
+                String label = rule.path("label").asText(field);
+                if (field == null || field.isBlank()) {
+                    continue;
+                }
+                if (!COL_PATTERN.matcher(field).matches()) {
+                    continue;
+                }
+                ColumnConfig c = new ColumnConfig();
+                c.setKey(field);
+                c.setLabel(label != null ? label : field);
+                c.setColumnType("VARCHAR");
+                String type = rule.path("type").asText(null);
+                if (type != null && !type.isBlank()) {
+                    c.setComponentType(type);
+                }
+                cols.add(c);
+            }
+            return cols;
+        } catch (JsonProcessingException e) {
+            return List.of();
+        }
     }
 
     /** 该 key 下全部版本定义 id（版本倒序）。 */

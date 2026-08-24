@@ -207,11 +207,11 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * 按 id 获取数据源（租户隔离；不存在 → 404）。
+     * 按 id 获取数据源（租户隔离；SYSTEM 类型跨租户可见；不存在 → 404）。
      */
     public DataSourceDefinition getById(String id) {
         String tenantId = tenantProvider.getTenantId();
-        return dsRepository.findByIdAndTenantId(id, tenantId)
+        return dsRepository.findByIdAccessible(id, tenantId)
                 .orElseThrow(() -> new BusinessException(404, "数据源不存在: " + id));
     }
 

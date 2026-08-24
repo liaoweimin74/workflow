@@ -235,14 +235,13 @@
                 style="width: 100%"
                 :max-height="300"
               >
-                <el-table-column prop="key" label="字段名" min-width="120" />
-                <el-table-column prop="label" label="显示名" min-width="120" />
+                <el-table-column prop="label" label="字段名" min-width="120" />
+                <el-table-column prop="key" label="标识" min-width="120" />
+                <el-table-column prop="componentType" label="组件" min-width="100" />
                 <el-table-column prop="columnType" label="类型" min-width="100" />
                 <el-table-column prop="length" label="长度" min-width="80" />
-                <el-table-column prop="scale" label="精度" min-width="80" />
                 <el-table-column prop="required" label="必填" min-width="80" />
                 <el-table-column prop="unique" label="唯一" min-width="80" />
-                <el-table-column prop="indexed" label="索引" min-width="80" />
               </el-table>
               <div v-if="metadataError" class="metadata-error">
                 <el-alert :title="metadataError" type="error" />

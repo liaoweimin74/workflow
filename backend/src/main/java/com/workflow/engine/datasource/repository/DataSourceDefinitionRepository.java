@@ -12,6 +12,14 @@ public interface DataSourceDefinitionRepository extends JpaRepository<DataSource
 
     Optional<DataSourceDefinition> findByIdAndTenantId(String id, String tenantId);
 
+    /**
+     * 按 id 获取数据源，SYSTEM 类型跨租户可见。
+     * SQL: WHERE id = ?1 AND (tenant_id = ?2 OR type = 'SYSTEM')
+     */
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT ds FROM DataSourceDefinition ds WHERE ds.id = ?1 AND (ds.tenantId = ?2 OR ds.type = 'SYSTEM')")
+    Optional<DataSourceDefinition> findByIdAccessible(String id, String tenantId);
+
     boolean existsByTenantIdAndName(String tenantId, String name);
 
     Page<DataSourceDefinition> findByTenantIdOrderByUpdatedAtDesc(String tenantId, Pageable pageable);

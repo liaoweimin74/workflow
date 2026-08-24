@@ -398,8 +398,8 @@ describe('DataSourceListPage', () => {
 
   const mockMetadata = {
     columns: [
-      { key: 'id', label: 'ID', columnType: 'VARCHAR', length: 64, required: true, unique: true, indexed: false },
-      { key: 'name', label: '名称', columnType: 'VARCHAR', length: 128, required: true, unique: false, indexed: false },
+      { key: 'id', label: 'ID', columnType: 'VARCHAR', length: 64, required: true, unique: true, indexed: false, componentType: 'input' },
+      { key: 'name', label: '名称', columnType: 'VARCHAR', length: 128, required: true, unique: false, indexed: false, componentType: 'input' },
     ],
     writable: true,
   }
@@ -464,7 +464,8 @@ describe('DataSourceListPage', () => {
 
     const html = wrapper.html()
     expect(html).toContain('字段名')
-    expect(html).toContain('显示名')
+    expect(html).toContain('标识')
+    expect(html).toContain('组件')
     expect(html).toContain('类型')
     expect(html).toContain('长度')
     // 列数据

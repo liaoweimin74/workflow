@@ -527,4 +527,29 @@ describe('DataSourceListPage', () => {
     expect(wrapper.html()).toContain('只读')
     wrapper.unmount()
   })
+
+  it('@tab-click 事件 (onTabClick) 正确处理 Element Plus 事件签名: tab.props.name', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-api', name: '库存接口', type: 'API', formKey: null, sourceKey: 'external-stock',
+      status: 'ENABLED', params: JSON.stringify({ list: { action: '/v1/products', method: 'GET' } }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    // Element Plus @tab-click 发送 (pane, event) 两个参数，pane.props.name 包含标签名称
+    await (wrapper.vm as any).onTabClick({ props: { name: 'metadata' } })
+    await flushPromises()
+    expect(dataSourceApi.getMetadata).toHaveBeenCalledWith('ds-api')
+
+    const html = wrapper.html()
+    expect(html).toContain('ID')
+    expect(html).toContain('名称')
+    wrapper.unmount()
+  })
 })

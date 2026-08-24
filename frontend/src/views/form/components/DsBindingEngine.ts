@@ -57,7 +57,7 @@ export function createDsBindingEngine(
     for (const b of bindings) {
       try {
         const res = await dsApi.getData(b.dataSourceId, recordId)
-        const record = (res.data || {}) as Record<string, unknown>
+        const record = (res.data || {}) as unknown as Record<string, unknown>
         for (const f of b.fieldNames) {
           if (f in record) deps.api.setValue(f, record[f])
         }

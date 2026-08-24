@@ -483,8 +483,8 @@ function resetPreviewState() {
 }
 
 /** 处理标签切换 (el-tabs @tab-click 事件) */
-async function onTabClick(tab: { name: string }) {
-  await handleTabChange(tab.name)
+async function onTabClick(tab: { props: { name: string } }) {
+  await handleTabChange(tab.props.name)
 }
 
 /** 处理标签切换 (直接调用用) */

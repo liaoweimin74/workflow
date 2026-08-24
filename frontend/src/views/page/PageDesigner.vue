@@ -77,6 +77,8 @@
               <el-select v-model="ac.trigger" style="width: 120px">
                 <el-option label="树节点点击" value="node-click" />
                 <el-option label="表格行点击" value="row-click" />
+                <el-option label="字段变化" value="field-change" />
+                <el-option label="记录变化" value="record-change" />
               </el-select>
               <el-button link type="danger" @click="schema.actions.splice(i, 1)">删除</el-button>
             </div>
@@ -84,6 +86,8 @@
               <el-select v-model="step.op" style="width: 120px">
                 <el-option label="设置过滤" value="set-filter" />
                 <el-option label="刷新数据" value="refresh" />
+                <el-option label="重载记录" value="reload-record" />
+                <el-option label="保存记录" value="save-record" />
               </el-select>
               <el-input v-model="step.target" placeholder="目标数据源标识" style="width: 130px" />
               <el-input v-if="step.op === 'set-filter'" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
@@ -242,6 +246,31 @@ function registerPageComponents() {
     }),
   })
   designerRef.value?.setComponentRuleConfig('page-tree', dataSourceProps, true)
+
+  // 注册 FORM 容器组件到页面组件库（表单区容器）
+  designerRef.value?.addComponent({
+    label: '数据表单容器',
+    name: 'formContainer',
+    icon: 'icon-group',
+    menu: 'main',
+    rule: () => ({
+      type: 'formContainer',
+      field: 'fc' + Date.now(),
+      title: '数据表单容器',
+      props: { dataSourceId: '', recordLocator: { type: 'current-record' } },
+      children: [],
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig('formContainer', () => [
+    {
+      type: 'select',
+      field: 'dataSourceId',
+      title: '数据源',
+      options: enabledDataSources.value.map((d) => ({ value: d.id, label: `${d.name}（${d.type}）` })),
+      props: { clearable: true, filterable: true, placeholder: '选择绑定数据源' },
+    },
+    { type: 'json', field: 'recordLocator', title: '记录定位' },
+  ], true)
 }
 
 onMounted(async () => {

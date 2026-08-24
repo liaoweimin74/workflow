@@ -266,6 +266,17 @@
                     搜索
                   </el-button>
                 </el-col>
+                <el-col>
+                  <el-pagination
+                    layout="total, prev, pager, next"
+                    :page-size="previewSize"
+                    :total="previewTotal"
+                    :current-page="previewPage"
+                    @size-change="onPageSizeChange"
+                    @current-change="onPageChange"
+                    style="margin-left: auto; display: flex; align-items: center"
+                  />
+                </el-col>
               </el-row>
               <el-table
                 :data="previewTableData"
@@ -282,13 +293,6 @@
                   show-overflow-tooltip
                 />
               </el-table>
-              <el-pagination
-                layout="total, prev, pager, next"
-                :page-size="previewSize"
-                :total="previewTotal"
-                @size-change="onPageSizeChange"
-                @current-change="onPageChange"
-              />
               <div v-if="dataError" class="preview-error">
                 <el-alert :title="dataError" type="error" />
               </div>

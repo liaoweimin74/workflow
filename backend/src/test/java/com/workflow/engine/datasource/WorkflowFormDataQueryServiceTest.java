@@ -296,4 +296,30 @@ class WorkflowFormDataQueryServiceTest {
         assertEquals("金额", cols.get(6).getLabel());
         assertEquals("number", cols.get(6).getComponentType());
     }
+
+    @Test
+    void query_fallsBackToSchemaForBusinessColumns() {
+        // Arrange：columnConfig=null，schema 包含 rule 数组
+        String schemaJson = "{\"rule\":[{\"field\":\"title\",\"label\":\"标题\",\"type\":\"input\"}]}";
+        FormDefinition formWithSchema = def("fd-3", 3, "PUBLISHED", null);
+        formWithSchema.setSchema(schemaJson);
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                "tenant-1", "leave", "PUBLISHED")).thenReturn(Optional.of(formWithSchema));
+        when(formDefRepository.findByTenantIdAndKeyOrderByVersionDesc("tenant-1", "leave"))
+                .thenReturn(List.of(formWithSchema));
+
+        when(rowsQuery.getResultList())
+                .thenReturn(Collections.singletonList(row("{\"title\":\"请假申请\"}")));
+        when(countQuery.getSingleResult()).thenReturn(1L);
+
+        // Act
+        BizDataPageVO page = service.query("leave", req());
+
+        // Assert：数据包含表单字段 "title"，而不仅是系统列
+        assertEquals(1, page.getRecords().size());
+        BizDataVO vo = page.getRecords().get(0);
+        assertEquals("row-1", vo.getId());
+        assertEquals("pi-1", vo.getData().get("instanceId"));
+        assertEquals("请假申请", vo.getData().get("title"));
+    }
 }

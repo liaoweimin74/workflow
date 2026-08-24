@@ -29,6 +29,7 @@ import button from './rule/button';
 import editor from './rule/editor';
 import group from './rule/group';
 import subForm from './rule/subForm';
+import formContainer from './rule/formContainer';
 import card from './rule/card';
 import collapse from './rule/collapse';
 import collapseItem from './rule/collapseItem';
@@ -45,7 +46,7 @@ import title from './rule/title';
 
 const ruleList = [
     input, textarea, password, number, radio, checkbox, select, _switch, rate, time, timeRange, slider, date, dateRange, color, cascader, upload, transfer, tree, treeSelect, editor, signaturePad,
-    group, subForm, tableForm, tableFormColumn,
+    group, subForm, formContainer, tableForm, tableFormColumn,
     alert, button, text, title, html, divider, tag, image,
     row, table, tabs, space, card, collapse,
     col, tabPane, collapseItem,

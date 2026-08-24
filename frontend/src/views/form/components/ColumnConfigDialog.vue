@@ -345,6 +345,10 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
       continue
     }
+    // formContainer：数据源容器，子字段数据来自外部数据源，跳过
+    if (type === 'formContainer') {
+      continue
+    }
     // data-picker：子表内同样生成两列（id 列 + 隐藏冗余文本列），与主表一致
     if (type === 'dataPicker') {
       const propsMap = (rule?.props || {}) as Record<string, any>
@@ -433,6 +437,10 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
     const label = (rule?.title as string) || field
     if (UNSUPPORTED_TYPES.includes(type)) {
       out.push({ key: field, label, columnType: '', length: null, scale: null, required: false, unique: false, indexed: false, unsupported: true })
+      continue
+    }
+    // formContainer：数据源容器，子字段数据来自外部数据源，不参与当前表单列映射
+    if (type === 'formContainer') {
       continue
     }
     // 子表组件：提取子列映射到独立物理表 wf_biz_<formKey>_<field>

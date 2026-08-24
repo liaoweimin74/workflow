@@ -15,6 +15,10 @@ import { ref, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
+import { createDsBindingEngine } from './DsBindingEngine'
+import { createActionBus } from './DsActionBus'
+import type { DsLink } from './DsActionBus'
+import { dataSourceApi } from '@/api/data-source'
 
 const props = defineProps<{
   /** 表单定义 ID，传入后通过 API 加载 schema。与 rule 互斥，formDefId 优先。 */
@@ -32,6 +36,12 @@ const props = defineProps<{
   fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
   /** 是否只读模式。true 时所有字段 disabled，用于已办详情等查看场景。 */
   readonly?: boolean
+  /** data-linkage action chain config (optional) */
+  links?: DsLink[]
+  /** record locator: return current record id */
+  recordId?: () => string | undefined
+  /** notify record context change (tree click / route param) */
+  notifyRecordChange?: () => void
 }>()
 
 const emit = defineEmits<{
@@ -92,6 +102,7 @@ onMounted(async () => {
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
   }
+  mountDsBinding()
 })
 
 // 监听 initialValues 变化，同步到 formData
@@ -112,6 +123,7 @@ watch(() => props.rule, (newVal) => {
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
   }
+  mountDsBinding()
 })
 
 async function loadSchema() {
@@ -224,6 +236,8 @@ function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'
 
 async function submit(): Promise<boolean> {
   try {
+    // 提交前强制完成未决的数据源写入，保证数据一致
+    await bindingEngine.value?.flush()
     const dataJson = JSON.stringify(formData.value)
     const formDefId = props.formDefId ?? ''
     // 保存当前数据（upsert，用于节点间传递）
@@ -257,6 +271,72 @@ onMounted(() => {
   }
 })
 
+/** 数据源绑定引擎实例（含容器时挂载，无容器为 null） */
+const bindingEngine = ref<ReturnType<typeof createDsBindingEngine> | null>(null)
+/** 联动动作总线实例 */
+const actionBus = ref<ReturnType<typeof createActionBus> | null>(null)
+/** 字段值变化回调（引擎注入，由 formData watch 触发） */
+let fieldChangeCb: ((field: string) => void) | null = null
+
+// 感知表单字段值变化 → 引擎写路径（仅当引擎挂载时）
+watch(formData, (val, oldVal) => {
+  if (!fieldChangeCb) return
+  const old = (oldVal || {}) as Record<string, unknown>
+  for (const key of Object.keys(val)) {
+    if (val[key] !== old[key]) {
+      fieldChangeCb(key)
+      return
+    }
+  }
+}, { deep: true })
+
+/** 挂载容器数据源绑定引擎与联动总线（无容器时 no-op） */
+function mountDsBinding() {
+  if (!resolvedSchema.value.length) return
+  // 联动总线：执行 reload-record 动作（重载当前记录回显）
+  const bus = createActionBus(async (op, _target) => {
+    if (op === 'reload-record') {
+      const id = props.recordId?.()
+      if (id) await bindingEngine.value?.loadRecord(id)
+    }
+  })
+  if (props.links) bus.register(props.links)
+  actionBus.value = bus
+  // 绑定引擎：读（recordId 定位）写（字段变化防抖）
+  const engine = createDsBindingEngine(
+    { dsApi: dataSourceApi },
+    {
+      api: {
+        getValue: (field) => (formData.value as Record<string, unknown>)[field],
+        setValue: (field, value) => { formData.value = { ...formData.value, [field]: value } },
+      },
+      recordId: () => props.recordId?.(),
+      onRecordChange: () => {
+        // 记录上下文变化：由调用方经 reloadRecord() 显式驱动（引擎不自动订阅）
+      },
+      onFieldChange: (cb) => {
+        // 通过 formData 深度 watch 感知字段值变化（不依赖 form-create 实例事件，stub 环境也可靠）
+        fieldChangeCb = cb
+      },
+      onConflict: (msg) => { ElMessage.warning(msg) },
+    },
+  )
+  if (engine.mount(resolvedSchema.value)) {
+    bindingEngine.value = engine
+  } else {
+    bindingEngine.value = null
+    actionBus.value = null
+  }
+}
+
+/** 重新加载当前记录回显容器（记录上下文变化时由调用方触发） */
+async function reloadRecord(): Promise<void> {
+  const id = props.recordId?.()
+  if (!id) return
+  await bindingEngine.value?.loadRecord(id)
+  props.notifyRecordChange?.()
+}
+
 /** 校验表单：通过返回 true；未注入 api 时跳过校验返回 true */
 async function validate(): Promise<boolean> {
   if (!formCreateApi.value) return true
@@ -287,7 +367,7 @@ async function saveSnapshot(): Promise<boolean> {
   }
 }
 
-defineExpose({ submit, saveSnapshot, getFormData, validate, loadSchema, loadData })
+defineExpose({ submit, saveSnapshot, getFormData, validate, loadSchema, loadData, reloadRecord })
 </script>
 
 <style scoped>

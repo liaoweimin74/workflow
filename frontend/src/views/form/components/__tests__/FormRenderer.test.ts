@@ -21,6 +21,18 @@ vi.mock('@/api/form', () => ({
 
 import { formApi } from '@/api/form'
 
+// Mock dataSourceApi for FORM container binding engine
+vi.mock('@/api/data-source', () => ({
+  dataSourceApi: {
+    getMetadata: vi.fn(async () => ({ data: { columns: [], writable: true } })),
+    getData: vi.fn(async () => ({ data: {} })),
+    updateData: vi.fn(async () => ({ data: null })),
+    queryData: vi.fn(),
+    createData: vi.fn(),
+    deleteData: vi.fn(),
+  },
+}))
+
 /**
  * Stub for <form-create> component.
  * Avoids jsdom recursive update issues with the real form-create.
@@ -543,5 +555,32 @@ describe('FormRenderer — mappedData prop (映射数据预填)', () => {
     const data = (wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }).getFormData()
     expect(data).toBeDefined()
     expect(typeof data).toBe('object')
+  })
+})
+
+describe('FormRenderer - FORM container binding engine mount', () => {
+  it('renders rule with formContainer without error (engine mounts, no crash)', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_a',
+        title: '数据表单容器',
+        props: { dataSourceId: 'ds_1', recordLocator: { type: 'current-record' } },
+        children: [{ type: 'input', field: 'name', title: '名称', value: '' } as Rule],
+      } as unknown as Rule,
+    ]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1' })
+    await nextTick()
+    // Engine mounted: no error thrown, formData initialized
+    const data = (wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }).getFormData()
+    expect(typeof data).toBe('object')
+  })
+
+  it('no-op without formContainer: existing simple rule still renders', async () => {
+    const wrapper = createWrapper({ rule: simpleRule })
+    await nextTick()
+    // form-create stub renders an input per field
+    expect(wrapper.find('.form-create-stub').exists()).toBe(true)
+    expect(wrapper.find('input[data-field="username"]').exists()).toBe(true)
   })
 })

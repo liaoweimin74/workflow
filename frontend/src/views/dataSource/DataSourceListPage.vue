@@ -81,213 +81,222 @@
           </el-form-item>
         </el-form>
 
-        <el-divider content-position="left">接口配置</el-divider>
+        <el-tabs v-model="activeTab" @tab-click="onTabClick" style="margin-top: 16px">
+          <el-tab-pane label="接口配置" name="config">
+            <el-divider content-position="left">接口操作</el-divider>
 
-        <!-- 可滚动的接口操作区域 -->
-        <div class="ops-scroll">
+            <!-- 可滚动的接口操作区域 -->
+            <div class="ops-scroll">
 
-          <!-- ===== API：可编辑表单 ===== -->
-          <template v-if="form.type === 'API'">
-        <el-form :model="form" label-width="110px" label-position="left">
-              <el-form-item :label="opLabel.list">
-                <div class="op-editor">
-                  <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
-                  <el-select v-model="apiOps.list.method" style="width: 110px" :disabled="isReadonlyForm">
-                    <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
-                  </el-select>
-                  <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" :disabled="isReadonlyForm" />
-                  <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" :disabled="isReadonlyForm" />
-                </div>
-              </el-form-item>
+              <!-- ===== API：可编辑表单 ===== -->
+              <template v-if="form.type === 'API'">
+            <el-form :model="form" label-width="110px" label-position="left">
+                  <el-form-item :label="opLabel.list">
+                    <div class="op-editor">
+                      <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
+                      <el-select v-model="apiOps.list.method" style="width: 110px" :disabled="isReadonlyForm">
+                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+                      </el-select>
+                      <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" :disabled="isReadonlyForm" />
+                      <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" :disabled="isReadonlyForm" />
+                    </div>
+                  </el-form-item>
 
-              <el-form-item :label="opLabel.get">
-                <div class="op-editor">
-                  <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
-                  <el-select v-model="apiOps.get.method" style="width: 110px" :disabled="isReadonlyForm">
-                    <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
-                  </el-select>
-                </div>
-              </el-form-item>
+                  <el-form-item :label="opLabel.get">
+                    <div class="op-editor">
+                      <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+                      <el-select v-model="apiOps.get.method" style="width: 110px" :disabled="isReadonlyForm">
+                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+                      </el-select>
+                    </div>
+                  </el-form-item>
 
-              <el-form-item :label="opLabel.create">
-                <div class="op-editor">
-                  <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
-                  <el-select v-model="apiOps.create.method" style="width: 110px" :disabled="isReadonlyForm">
-                    <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
-                  </el-select>
-                </div>
-              </el-form-item>
+                  <el-form-item :label="opLabel.create">
+                    <div class="op-editor">
+                      <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
+                      <el-select v-model="apiOps.create.method" style="width: 110px" :disabled="isReadonlyForm">
+                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+                      </el-select>
+                    </div>
+                  </el-form-item>
 
-              <el-form-item :label="opLabel.update">
-                <div class="op-editor">
-                  <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
-                  <el-select v-model="apiOps.update.method" style="width: 110px" :disabled="isReadonlyForm">
-                    <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
-                  </el-select>
-                </div>
-              </el-form-item>
+                  <el-form-item :label="opLabel.update">
+                    <div class="op-editor">
+                      <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+                      <el-select v-model="apiOps.update.method" style="width: 110px" :disabled="isReadonlyForm">
+                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+                      </el-select>
+                    </div>
+                  </el-form-item>
 
-              <el-form-item :label="opLabel.delete">
-                <div class="op-editor">
-                  <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
-                  <el-select v-model="apiOps.delete.method" style="width: 110px" :disabled="isReadonlyForm">
-                    <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
-                  </el-select>
-                </div>
-              </el-form-item>
+                  <el-form-item :label="opLabel.delete">
+                    <div class="op-editor">
+                      <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+                      <el-select v-model="apiOps.delete.method" style="width: 110px" :disabled="isReadonlyForm">
+                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+                      </el-select>
+                    </div>
+                  </el-form-item>
 
-              <el-form-item label="搜索参数">
-                <div class="op-editor">
-                  <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" :disabled="isReadonlyForm" />
-                  <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" :disabled="isReadonlyForm" />
-                  <el-select v-model="form.pageBase" style="width: 130px" :disabled="isReadonlyForm">
-                    <el-option label="页码从 1 开始" :value="1" />
-                    <el-option label="页码从 0 开始" :value="0" />
-                  </el-select>
-                </div>
-              </el-form-item>
+                  <el-form-item label="搜索参数">
+                    <div class="op-editor">
+                      <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" :disabled="isReadonlyForm" />
+                      <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" :disabled="isReadonlyForm" />
+                      <el-select v-model="form.pageBase" style="width: 130px" :disabled="isReadonlyForm">
+                        <el-option label="页码从 1 开始" :value="1" />
+                        <el-option label="页码从 0 开始" :value="0" />
+                      </el-select>
+                    </div>
+                  </el-form-item>
 
-              <el-form-item label="固定参数 JSON">
-                <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
-              </el-form-item>
-              <el-form-item label="请求头 JSON">
-                <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
-              </el-form-item>
+                  <el-form-item label="固定参数 JSON">
+                    <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
+                  </el-form-item>
+                  <el-form-item label="请求头 JSON">
+                    <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
+                  </el-form-item>
 
-              <el-divider content-position="left">列定义（列表展示与编辑弹窗使用）</el-divider>
+                  <el-divider content-position="left">列定义（列表展示与编辑弹窗使用）</el-divider>
 
-              <el-form-item label="列">
-                <div class="column-editor">
-                  <div v-for="(col, idx) in apiColumns" :key="idx" class="column-row">
-                    <el-input v-model="col.key" placeholder="字段名" style="width: 130px" :disabled="isReadonlyForm" />
-                    <el-input v-model="col.label" placeholder="列名" style="width: 130px" :disabled="isReadonlyForm" />
-                    <el-select v-model="col.columnType" placeholder="类型" style="width: 120px" :disabled="isReadonlyForm">
-                      <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
-                    </el-select>
-                    <el-input-number
-                      v-if="needsLength(col.columnType)"
-                      v-model="col.length"
-                      :min="0"
-                      :max="10000"
-                      placeholder="长度"
-                      controls-position="right"
-                      style="width: 120px"
-                      :disabled="isReadonlyForm"
-                    />
-                    <el-input-number
-                      v-if="col.columnType === 'DECIMAL'"
-                      v-model="col.scale"
-                      :min="0"
-                      :max="10"
-                      placeholder="精度"
-                      controls-position="right"
-                      style="width: 110px"
-                      :disabled="isReadonlyForm"
-                    />
-                    <el-checkbox v-model="col.required" title="必填" :disabled="isReadonlyForm">必填</el-checkbox>
-                    <el-checkbox v-model="col.unique" title="唯一" :disabled="isReadonlyForm">唯一</el-checkbox>
-                    <el-checkbox v-model="col.indexed" title="索引" :disabled="isReadonlyForm">索引</el-checkbox>
-                    <el-button :icon="Delete" circle :disabled="isReadonlyForm" @click="apiColumns.splice(idx, 1)" />
+                  <el-form-item label="列">
+                    <div class="column-editor">
+                      <div v-for="(col, idx) in apiColumns" :key="idx" class="column-row">
+                        <el-input v-model="col.key" placeholder="字段名" style="width: 130px" :disabled="isReadonlyForm" />
+                        <el-input v-model="col.label" placeholder="列名" style="width: 130px" :disabled="isReadonlyForm" />
+                        <el-select v-model="col.columnType" placeholder="类型" style="width: 120px" :disabled="isReadonlyForm">
+                          <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+                        </el-select>
+                        <el-input-number
+                          v-if="needsLength(col.columnType)"
+                          v-model="col.length"
+                          :min="0"
+                          :max="10000"
+                          placeholder="长度"
+                          controls-position="right"
+                          style="width: 120px"
+                          :disabled="isReadonlyForm"
+                        />
+                        <el-input-number
+                          v-if="col.columnType === 'DECIMAL'"
+                          v-model="col.scale"
+                          :min="0"
+                          :max="10"
+                          placeholder="精度"
+                          controls-position="right"
+                          style="width: 110px"
+                          :disabled="isReadonlyForm"
+                        />
+                        <el-checkbox v-model="col.required" title="必填" :disabled="isReadonlyForm">必填</el-checkbox>
+                        <el-checkbox v-model="col.unique" title="唯一" :disabled="isReadonlyForm">唯一</el-checkbox>
+                        <el-checkbox v-model="col.indexed" title="索引" :disabled="isReadonlyForm">索引</el-checkbox>
+                        <el-button :icon="Delete" circle :disabled="isReadonlyForm" @click="apiColumns.splice(idx, 1)" />
+                      </div>
+                      <el-button type="primary" plain :icon="Plus" :disabled="isReadonlyForm" @click="addColumn">添加列</el-button>
+                    </div>
+                  </el-form-item>
+                </el-form>
+              </template>
+
+              <!-- ===== FORM / SYSTEM：只读端点展示 ===== -->
+              <template v-else-if="generateEndpoints()">
+                <div class="auto-params-display">
+                  <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
+                    <el-tag :type="op.readonly ? 'info' : op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'" size="small">
+                      {{ op.method }}
+                    </el-tag>
+                    <code>{{ op.action }}</code>
+                    <span class="op-label">（{{ name }}）</span>
+                    <el-tag v-if="op.readonly" type="danger" size="small">只读</el-tag>
+                    <template v-if="op.parse">
+                      <span class="op-meta">parse: {{ op.parse }}</span>
+                    </template>
+                    <template v-if="op.totalParse">
+                      <span class="op-meta">totalParse: {{ op.totalParse }}</span>
+                    </template>
                   </div>
-                  <el-button type="primary" plain :icon="Plus" :disabled="isReadonlyForm" @click="addColumn">添加列</el-button>
                 </div>
-              </el-form-item>
-            </el-form>
-          </template>
+              </template>
 
-          <!-- ===== FORM / SYSTEM：只读端点展示 ===== -->
-          <template v-else-if="generateEndpoints()">
-            <div class="auto-params-display">
-              <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
-                <el-tag :type="op.readonly ? 'info' : op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'" size="small">
-                  {{ op.method }}
-                </el-tag>
-                <code>{{ op.action }}</code>
-                <span class="op-label">（{{ name }}）</span>
-                <el-tag v-if="op.readonly" type="danger" size="small">只读</el-tag>
-                <template v-if="op.parse">
-                  <span class="op-meta">parse: {{ op.parse }}</span>
-                </template>
-                <template v-if="op.totalParse">
-                  <span class="op-meta">totalParse: {{ op.totalParse }}</span>
-                </template>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="字段元数据" name="metadata">
+            <div class="metadata-section">
+              <el-row :gutter="8" class="metadata-header">
+                <el-col>
+                  <el-tag :type="metadata?.writable ? 'success' : 'info'" size="small">
+                    {{ metadata?.writable ? '可写' : '只读' }}
+                  </el-tag>
+                </el-col>
+              </el-row>
+              <el-table
+                :data="metadata?.columns || []"
+                v-loading="metadataLoading"
+                style="width: 100%"
+                :max-height="300"
+              >
+                <el-table-column prop="key" label="字段名" min-width="120" />
+                <el-table-column prop="label" label="显示名" min-width="120" />
+                <el-table-column prop="columnType" label="类型" min-width="100" />
+                <el-table-column prop="length" label="长度" min-width="80" />
+                <el-table-column prop="scale" label="精度" min-width="80" />
+                <el-table-column prop="required" label="必填" min-width="80" />
+                <el-table-column prop="unique" label="唯一" min-width="80" />
+                <el-table-column prop="indexed" label="索引" min-width="80" />
+              </el-table>
+              <div v-if="metadataError" class="metadata-error">
+                <el-alert :title="metadataError" type="error" />
               </div>
             </div>
-          </template>
+          </el-tab-pane>
 
-        </div>
-
-        <!-- ==================== 字段元数据 ==================== -->
-        <el-divider content-position="left">字段元数据</el-divider>
-        <div class="metadata-section">
-          <el-row :gutter="8" class="metadata-header">
-            <el-col>
-              <el-tag :type="metadata?.writable ? 'success' : 'info'" size="small">
-                {{ metadata?.writable ? '可写' : '只读' }}
-              </el-tag>
-            </el-col>
-          </el-row>
-          <el-table
-            :data="metadata?.columns || []"
-            v-loading="metadataLoading"
-            :span-method="spanMethod"
-            style="width: 100%"
-            :max-height="300"
-          >
-            <el-table-column prop="key" label="字段名" min-width="120" />
-            <el-table-column prop="label" label="显示名" min-width="120" />
-            <el-table-column prop="columnType" label="类型" min-width="100" />
-            <el-table-column prop="length" label="长度" min-width="80" />
-            <el-table-column prop="scale" label="精度" min-width="80" />
-            <el-table-column prop="required" label="必填" min-width="80" />
-            <el-table-column prop="unique" label="唯一" min-width="80" />
-            <el-table-column prop="indexed" label="索引" min-width="80" />
-          </el-table>
-        </div>
-
-        <!-- ==================== 数据预览 ==================== -->
-        <el-divider content-position="left">数据预览</el-divider>
-        <div class="preview-section">
-          <el-row :gutter="8" class="preview-toolbar">
-            <el-col>
-              <el-input
-                v-model="previewKeyword"
-                placeholder="搜索关键词"
-                style="width: 200px"
-                size="small"
-                @input="onSearchDebounce"
+          <el-tab-pane label="数据预览" name="data">
+            <div class="preview-section">
+              <el-row :gutter="8" class="preview-toolbar">
+                <el-col>
+                  <el-input
+                    v-model="previewKeyword"
+                    placeholder="搜索关键词"
+                    style="width: 200px"
+                    size="small"
+                  />
+                </el-col>
+                <el-col>
+                  <el-button type="primary" size="small" :loading="dataLoading" @click="onSearch">
+                    搜索
+                  </el-button>
+                </el-col>
+              </el-row>
+              <el-table
+                :data="previewTableData"
+                v-loading="dataLoading"
+                style="width: 100%"
+                :max-height="300"
+              >
+                <el-table-column
+                  v-for="col in displayColumns"
+                  :key="col.key"
+                  :prop="col.key"
+                  :label="col.label"
+                  min-width="120"
+                  show-overflow-tooltip
+                />
+              </el-table>
+              <el-pagination
+                layout="total, prev, pager, next"
+                :page-size="previewSize"
+                :total="previewTotal"
+                @size-change="onPageSizeChange"
+                @current-change="onPageChange"
               />
-            </el-col>
-          </el-row>
-          <el-table
-            :data="previewTableData"
-            v-loading="dataLoading"
-            style="width: 100%"
-            :max-height="300"
-          >
-            <el-table-column
-              v-for="col in displayColumns"
-              :key="col.key"
-              :prop="col.key"
-              :label="col.label"
-              min-width="120"
-              show-overflow-tooltip
-            />
-          </el-table>
-          <el-pagination
-            layout="total, prev, pager, next"
-            :page-size="previewSize"
-            :total="previewTotal"
-            :page-sizes="[10, 20, 50, 100]"
-            @size-change="onPageSizeChange"
-            @current-change="onPageChange"
-          />
-          <div v-if="dataError" class="preview-error">
-            <el-alert :title="dataError" type="error" />
-          </div>
-        </div>
-    </el-dialog>
-  </div>
+              <div v-if="dataError" class="preview-error">
+                <el-alert :title="dataError" type="error" />
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+      </el-dialog>
+   </div>
 </template>
 
 <script setup lang="ts">
@@ -473,7 +482,12 @@ function resetPreviewState() {
   dataError.value = null
 }
 
-/** 处理标签切换 */
+/** 处理标签切换 (el-tabs @tab-click 事件) */
+async function onTabClick(tab: { name: string }) {
+  await handleTabChange(tab.name)
+}
+
+/** 处理标签切换 (直接调用用) */
 async function handleTabChange(tab: string) {
   activeTab.value = tab
   if (tab === 'metadata' && editingId.value && !metadata.value) {
@@ -523,14 +537,10 @@ async function loadPreviewData() {
   }
 }
 
-/** 搜索防抖 */
-let searchTimer: any = null
-function onSearchDebounce() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    previewPage.value = 1
-    loadPreviewData()
-  }, 300)
+/** 搜索 */
+function onSearch() {
+  previewPage.value = 1
+  loadPreviewData()
 }
 
 /** 分页尺寸改变 */

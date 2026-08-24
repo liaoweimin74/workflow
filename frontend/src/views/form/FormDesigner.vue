@@ -89,6 +89,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
 import _formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
+import { dataSourceApi } from '@/api/data-source'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
@@ -112,6 +113,8 @@ const formKey = ref('')
 const formType = ref('')
 const columnConfig = ref<ColumnConfigItem[]>([])
 const columnDialogVisible = ref(false)
+/** 已启用全局数据源（供 FORM 容器属性面板选择） */
+const enabledDataSources = ref<Array<{ id: string; name: string; type: string; status: string }>>([])
 
 // ===== data-picker 配置 =====
 const pickerDialogVisible = ref(false)
@@ -264,8 +267,49 @@ onMounted(async () => {
     // http 拦截器已弹出错误消息
   } finally {
     loading.value = false
+    // 加载已启用全局数据源（供 FORM 容器属性面板选择）
+    try {
+      const dsRes = await dataSourceApi.getEnabledDataSources()
+      enabledDataSources.value = (dsRes.data || []).filter(
+        (d: any) => d.status === 'ENABLED' && (d.type === 'FORM' || d.type === 'API' || d.type === 'SYSTEM'),
+      )
+    } catch { /* http 拦截器已提示 */ }
+    // 注册 FORM 容器数据源属性面板
+    registerFormContainerProps()
   }
 })
+
+/** 注册 FORM 容器数据源下拉到属性面板 */
+function registerFormContainerProps() {
+  if (!designerRef.value) return
+  designerRef.value.setComponentRuleConfig(
+    'formContainer',
+    () => [
+      {
+        type: 'select',
+        field: 'dataSourceId',
+        title: '数据源',
+        value: '',
+        options: enabledDataSources.value.map((d) => ({
+          value: d.id,
+          label: `${d.name}（${d.type}）`,
+        })),
+        props: {
+          clearable: true,
+          filterable: true,
+          placeholder: '选择绑定数据源',
+        },
+      },
+      {
+        type: 'json',
+        field: 'recordLocator',
+        title: '记录定位',
+        value: { type: 'current-record' },
+      },
+    ],
+    true, // force override
+  )
+}
 
 async function handleSave() {
   if (!designerRef.value) return

@@ -40,7 +40,7 @@
       </template>
 
       <!-- 展示列 -->
-      <el-table-column label="展示" width="80" align="center">
+      <el-table-column label="展示" width="62" align="center">
         <template #default="{ row }">
           <el-checkbox
             :model-value="isColumnChecked(row.key)"
@@ -48,7 +48,7 @@
           />
         </template>
       </el-table-column>
-      <el-table-column label="宽度" width="160">
+      <el-table-column label="宽度" width="139">
         <template #default="{ row }">
           <el-input-number
             v-if="isColumnChecked(row.key)"
@@ -56,18 +56,18 @@
             :min="50"
             :max="600"
             :step="10"
-            style="width: 130px"
+            style="width: 109px"
             @change="(v: any) => setColumnProp(row.key, 'width', v)"
           />
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="对齐" width="150">
+      <el-table-column label="对齐" width="122">
         <template #default="{ row }">
           <el-select
             v-if="isColumnChecked(row.key)"
             :model-value="columnAlignOf(row.key)"
-            style="width: 120px"
+            style="width: 92px"
             @change="(v: any) => setColumnProp(row.key, 'align', v)"
           >
             <el-option label="左对齐" value="left" />
@@ -87,13 +87,13 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="格式化" width="150">
+      <el-table-column label="格式化" width="136">
         <template #default="{ row }">
           <el-select
             v-if="isColumnChecked(row.key)"
             :model-value="columnFormatterOf(row.key)"
             clearable
-            style="width: 120px"
+            style="width: 106px"
             placeholder="无"
             @change="(v: any) => setColumnProp(row.key, 'formatter', v || undefined)"
           >
@@ -106,13 +106,13 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="固定列" width="130">
+      <el-table-column label="固定列" width="109">
         <template #default="{ row }">
           <el-select
             v-if="isColumnChecked(row.key)"
             :model-value="columnFixedOf(row.key)"
             clearable
-            style="width: 100px"
+            style="width: 79px"
             placeholder="无"
             @change="(v: any) => setColumnProp(row.key, 'fixed', v || undefined)"
           >

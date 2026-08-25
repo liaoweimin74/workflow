@@ -10,7 +10,7 @@
 
       <!-- 查询条件（showSearch=false 时隐藏） -->
       <template v-if="showSearch">
-        <el-table-column label="查询" width="90" align="center">
+        <el-table-column label="查询" width="62" align="center">
           <template #default="{ row }">
             <el-checkbox
               :model-value="isSearchChecked(row.key)"
@@ -19,12 +19,12 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="匹配方式" width="120">
+        <el-table-column label="匹配方式" width="115">
           <template #default="{ row }">
             <el-select
               v-if="isSearchChecked(row.key)"
               :model-value="searchMatchTypeOf(row.key)"
-              style="width: 90px"
+              style="width: 85px"
               @change="(v: any) => setSearchMatchType(row.key, v)"
             >
               <el-option

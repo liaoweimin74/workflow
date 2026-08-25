@@ -74,6 +74,7 @@
             :filterable-keys="tableConfigFilterableKeys"
             v-model:search-fields="tableConfigData.searchFields"
             v-model:columns="tableConfigData.columns"
+            :show-search="false"
           />
         </el-tab-pane>
         <el-tab-pane label="操作" name="actions">

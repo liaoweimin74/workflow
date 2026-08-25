@@ -1,41 +1,43 @@
 <template>
   <div class="query-columns-config">
     <div class="config-header">
-      <span class="config-title">字段配置（显示 & 查询）</span>
-      <span class="config-hint">已选查询 {{ searchFields.length }} 项 · 显示 {{ columns.length }} 项</span>
+      <span class="config-title">{{ showSearch ? '字段配置（显示 & 查询）' : '字段配置（显示）' }}</span>
+      <span class="config-hint">{{ showSearch ? `已选查询 ${searchFields.length} 项 · ` : '' }}显示 {{ columns.length }} 项</span>
     </div>
     <el-table :data="candidates" border max-height="460">
       <el-table-column prop="key" label="字段" width="130" />
       <el-table-column prop="label" label="标题" min-width="110" />
 
-      <!-- 查询条件 -->
-      <el-table-column label="查询" width="90" align="center">
-        <template #default="{ row }">
-          <el-checkbox
-            :model-value="isSearchChecked(row.key)"
-            :disabled="!isFilterable(row.key)"
-            @change="(v: any) => toggleSearch(row, !!v)"
-          />
-        </template>
-      </el-table-column>
-      <el-table-column label="匹配方式" width="130">
-        <template #default="{ row }">
-          <el-select
-            v-if="isSearchChecked(row.key)"
-            :model-value="searchMatchTypeOf(row.key)"
-            style="width: 120px"
-            @change="(v: any) => setSearchMatchType(row.key, v)"
-          >
-            <el-option
-              v-for="opt in matchOptions(row)"
-              :key="opt.value"
-              :label="opt.label"
-              :value="opt.value"
+      <!-- 查询条件（showSearch=false 时隐藏） -->
+      <template v-if="showSearch">
+        <el-table-column label="查询" width="90" align="center">
+          <template #default="{ row }">
+            <el-checkbox
+              :model-value="isSearchChecked(row.key)"
+              :disabled="!isFilterable(row.key)"
+              @change="(v: any) => toggleSearch(row, !!v)"
             />
-          </el-select>
-          <span v-else class="muted">—</span>
-        </template>
-      </el-table-column>
+          </template>
+        </el-table-column>
+        <el-table-column label="匹配方式" width="130">
+          <template #default="{ row }">
+            <el-select
+              v-if="isSearchChecked(row.key)"
+              :model-value="searchMatchTypeOf(row.key)"
+              style="width: 120px"
+              @change="(v: any) => setSearchMatchType(row.key, v)"
+            >
+              <el-option
+                v-for="opt in matchOptions(row)"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
+            </el-select>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+      </template>
 
       <!-- 展示列 -->
       <el-table-column label="展示" width="80" align="center">
@@ -130,13 +132,17 @@
 import type { ColumnConfigItem } from '@/api/bizData'
 import type { SearchFieldConfig, ColumnViewConfig } from '../ViewDesigner.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   candidates: ColumnConfigItem[]
   searchFields: SearchFieldConfig[]
   columns: ColumnViewConfig[]
   /** 可筛选列 key 集合（查询条件勾选禁用依据；缺省全部可勾选） */
   filterableKeys?: Set<string>
-}>()
+  /** 是否显示查询条件配置（默认 true；PageDesigner 数据表格场景设为 false） */
+  showSearch?: boolean
+}>(), {
+  showSearch: true,
+})
 
 const emit = defineEmits<{
   (e: 'update:searchFields', v: SearchFieldConfig[]): void

@@ -19,7 +19,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="匹配方式" width="100">
+        <el-table-column label="匹配方式" width="120">
           <template #default="{ row }">
             <el-select
               v-if="isSearchChecked(row.key)"
@@ -87,7 +87,7 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="格式化" width="140">
+      <el-table-column label="格式化" width="150">
         <template #default="{ row }">
           <el-select
             v-if="isColumnChecked(row.key)"
@@ -106,7 +106,7 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="固定列" width="120">
+      <el-table-column label="固定列" width="130">
         <template #default="{ row }">
           <el-select
             v-if="isColumnChecked(row.key)"

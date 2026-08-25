@@ -59,12 +59,16 @@
           </el-button>
         </div>
         <el-table
+          ref="tableRef"
           :data="records"
           v-loading="loading"
           border
           stripe
           :size="tableSize"
           @row-click="handleRowClick"
+          @cell-click="handleCellClick"
+          @selection-change="handleSelectionChange"
+          @sort-change="handleSortChange"
         >
           <el-table-column
             v-for="col in tableColumns"
@@ -75,9 +79,10 @@
             :width="col.width"
             :align="col.align || 'left'"
             :sortable="!!col.sortable"
+            :fixed="col.fixed || undefined"
           >
             <template #default="{ row }">
-              {{ cellValue(row, col.prop) }}
+              {{ col.formatter ? formatCellValue(row.data != null ? row.data[col.prop] : row[col.prop], col.formatter) : cellValue(row, col.prop) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -90,20 +95,22 @@
             <template #default="{ row }">
               <div class="page-row-actions">
                 <template v-for="b in rowActionButtons" :key="b.label">
-                  <!-- 图标/按钮形态：circle + tooltip（对齐 SearchTable 操作列） -->
-                  <el-tooltip v-if="b.style === 'icon'" :content="b.label" placement="top" :show-after="200">
-                    <el-button :icon="b.icon" circle :type="b.type" @click.stop="b.onClick(row)" />
-                  </el-tooltip>
-                  <!-- 文字/按钮形态：link 文本按钮 -->
-                  <el-button
-                    v-else
-                    :type="b.type"
-                    :icon="b.style === 'button' ? b.icon : undefined"
-                    link
-                    @click.stop="b.onClick(row)"
-                  >
-                    {{ b.label }}
-                  </el-button>
+                  <template v-if="isButtonVisibleForRow(b, row)">
+                    <!-- 图标/按钮形态：circle + tooltip（对齐 SearchTable 操作列） -->
+                    <el-tooltip v-if="b.style === 'icon'" :content="b.label" placement="top" :show-after="200">
+                      <el-button :icon="b.icon" circle :type="b.type" @click.stop="b.onClick(row)" />
+                    </el-tooltip>
+                    <!-- 文字/按钮形态：link 文本按钮 -->
+                    <el-button
+                      v-else
+                      :type="b.type"
+                      :icon="b.style === 'button' ? b.icon : undefined"
+                      link
+                      @click.stop="b.onClick(row)"
+                    >
+                      {{ b.label }}
+                    </el-button>
+                  </template>
                 </template>
               </div>
             </template>
@@ -170,6 +177,7 @@ import { formApi } from '@/api/form'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import { bizDataApi } from '@/api/bizData'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
+import { formatCellValue } from '@/utils/formatters'
 
 const route = useRoute()
 const router = useRouter()
@@ -180,6 +188,10 @@ const pageKey = computed(() => route.params.pageKey as string)
 const error = ref('')
 const loading = ref(false)
 const page = ref<PageDefinitionDetailDTO | null>(null)
+/** 表格 ref（供 clear-selection / set-sort 操作使用） */
+const tableRef = ref<any>(null)
+/** 当前选中行（selection-change 事件） */
+const selectedRows = ref<any[]>([])
 
 // ========== 数据源协议（dataSourceId → metadata/类型缓存，双轨渲染依据） ==========
 /** 绑定数据源 metadata（列 + 可写标记）；null=遗留 formKey 页未绑定数据源 */
@@ -211,6 +223,10 @@ interface CompiledColumn {
   width?: number | string
   align?: string
   sortable?: boolean
+  /** 固定列（left/right） */
+  fixed?: string
+  /** 列值格式化器（currency/date/datetime/boolean/enum） */
+  formatter?: string
 }
 interface SearchRule {
   type: string
@@ -393,6 +409,29 @@ function isActionVisible(b: { key: string; events?: any[] }): boolean {
   if (!isReadonly.value) return true
   if (b.events && b.events.length > 0) return true
   return b.key === 'view'
+}
+
+/** 行级按钮可见性：根据 visible 表达式判断（$row 变量替换求值） */
+function isButtonVisibleForRow(b: { key: string; visible?: string; events?: any[] }, row: any): boolean {
+  // 先通过全局可见性检查
+  if (!isActionVisible(b)) return false
+  // 无 visible 表达式 → 始终显示
+  if (!b.visible) return true
+  // 替换 $row.xxx 变量后求值
+  try {
+    const expr = b.visible.replace(/\$row\.([\w]+)/g, (_: string, k: string) => {
+      const v = row?.data != null && typeof row.data === 'object' ? row.data[k] : row?.[k]
+      return v === null || v === undefined ? 'undefined' : JSON.stringify(v)
+    }).replace(/\$param\.([\w]+)/g, (_: string, k: string) => {
+      const v = route.query?.[k]
+      return v === null || v === undefined ? 'undefined' : JSON.stringify(v)
+    })
+    // 安全求值：仅允许比较运算，禁止函数调用
+    if (/[a-zA-Z_$]\s*\(/.test(expr)) return false
+    return !!Function('"use strict"; return (' + expr + ')')()
+  } catch {
+    return true // 求值失败时默认显示
+  }
 }
 
 /** 表格尺寸：预览（preview=true）普通模式，非预览紧凑模式 */
@@ -685,6 +724,32 @@ async function dispatchAction(
       }
       await loadData(0)
       break
+    case 'set-sort': {
+      // 设置表格排序：params 包含 field 和 order
+      const field = resolved.field || resolved.prop || ''
+      const order = resolved.order || 'ascending'
+      if (tableRef.value) {
+        tableRef.value.sort(field, order)
+      }
+      break
+    }
+    case 'set-page': {
+      // 设置分页：params 包含 page
+      const page = parseInt(resolved.page, 10)
+      if (!isNaN(page) && page > 0) {
+        currentPage.value = page
+        await loadData(page - 1)
+      }
+      break
+    }
+    case 'clear-selection': {
+      // 清空行选择
+      if (tableRef.value) {
+        tableRef.value.clearSelection()
+      }
+      selectedRows.value = []
+      break
+    }
     case 'script': {
       const source: string = resolved.source || ''
       if (!source) {
@@ -746,6 +811,22 @@ function triggerEvents(trigger: string, target: string, ctx: { row: any; params:
 function handleRowClick(row: any) {
   currentRow.value = row
   triggerEvents('row-click', 'table', { row, params: route.query || {} })
+}
+
+// ========== 单元格点击（新增） ==========
+function handleCellClick(row: any, column: any) {
+  triggerEvents('cell-click', 'table', { row, column, params: route.query || {} })
+}
+
+// ========== 行选择变化（新增） ==========
+function handleSelectionChange(selection: any[]) {
+  selectedRows.value = selection
+  triggerEvents('selection-change', 'table', { selectedRows: selection, params: route.query || {} })
+}
+
+// ========== 排序变化（新增） ==========
+function handleSortChange({ column, prop, order }: { column: any; prop: string; order: string }) {
+  triggerEvents('sort-change', 'table', { column, prop, order, params: route.query || {} })
 }
 </script>
 

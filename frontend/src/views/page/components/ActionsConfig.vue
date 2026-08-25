@@ -91,12 +91,12 @@
           />
         </template>
       </el-table-column>
-      <el-table-column label="位置" width="130">
+      <el-table-column label="位置" width="123">
         <template #default="{ row }">
           <el-select
             :model-value="row.placement"
             
-            style="width: 100px"
+            style="width: 93px"
             @change="(v: any) => updateButton(row.key, { placement: v })"
           >
             <el-option label="操作栏" value="toolbar" />
@@ -104,12 +104,12 @@
           </el-select>
         </template>
       </el-table-column>
-      <el-table-column label="形态" width="130">
+      <el-table-column label="形态" width="109">
         <template #default="{ row }">
           <el-select
             :model-value="row.style"
             
-            style="width: 100px"
+            style="width: 79px"
             @change="(v: any) => updateButton(row.key, { style: v })"
           >
             <el-option label="按钮" value="button" />
@@ -118,12 +118,12 @@
           </el-select>
         </template>
       </el-table-column>
-      <el-table-column label="图标" width="140">
+      <el-table-column label="图标" width="126">
         <template #default="{ row }">
           <el-select
             :model-value="row.icon || defaultIconOf(row.key)"
             
-            style="width: 110px"
+            style="width: 96px"
             clearable
             @change="(v: any) => updateButton(row.key, { icon: v || '' })"
           >

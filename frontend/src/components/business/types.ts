@@ -60,6 +60,20 @@ export interface ActionButton {
   onClick: (row: any) => void
 }
 
+/** 工具栏按钮（表格上方操作栏，无行参数） */
+export interface ToolbarButton {
+  label: string
+  type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+  size?: 'small' | 'default' | 'large'
+  /** 文字链接按钮 */
+  link?: boolean
+  /** 圆形图标按钮（hover 显示 label） */
+  circle?: boolean
+  /** Element Plus 图标组件 */
+  icon?: Component
+  onClick: () => void
+}
+
 // --- 查询参数 ---
 
 export interface QueryParams {
@@ -110,9 +124,11 @@ export interface TreeTableProps {
 }
 
 export interface SearchTableProps<T = any> {
-  searchFields: SearchField[]
+  searchFields?: SearchField[]
   columns: TableColumn[]
   actionButtons?: ActionButton[]
+  /** 表格上方工具栏按钮（无行参数） */
+  toolbarButtons?: ToolbarButton[]
   fetchApi: (
     params: QueryParams,
   ) => Promise<{ rows: T[]; total: number }>
@@ -124,6 +140,8 @@ export interface SearchTableProps<T = any> {
   formConfig?: FormConfig<T>
   /** 是否显示搜索栏，默认 true */
   showSearch?: boolean
+  /** 是否显示内置"新增"按钮（formConfig 存在时默认 true） */
+  showCreateButton?: boolean
   /** 是否显示分页，默认 true（树形模式下忽略） */
   showPagination?: boolean
   /** 自定义按钮是否与默认按钮合并（默认 true：默认编辑/删除在前，自定义在后；false：完全使用自定义按钮） */

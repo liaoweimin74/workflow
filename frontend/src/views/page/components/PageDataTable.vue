@@ -4,27 +4,53 @@
     :search-fields="resolvedSearchFields"
     :columns="resolvedColumns"
     :action-buttons="resolvedActionButtons"
+    :toolbar-buttons="resolvedToolbarButtons"
     :merge-default-actions="false"
     :fetch-api="fetchApi"
     :form-config="formConfig"
+    :show-create-button="!hasCreateButton"
     :show-search="showSearch"
     :show-pagination="pagination"
     :delete-confirm="deleteConfirm"
     @row-click="handleRowClick"
+    @cell-click="handleCellClick"
+    @selection-change="handleSelectionChange"
+    @sort-change="handleSortChange"
   />
+
+  <!-- 详情弹窗（view 按钮/行查看：只读表单） -->
+  <el-dialog v-model="detailVisible" title="详情" :width="detailWidth" :close-on-click-modal="false">
+    <FormRenderer
+      v-if="detailVisible"
+      :key="detailFormKey"
+      :rule="detailRules"
+      :option="{ labelWidth: '100px' }"
+      :initial-values="detailRow"
+      readonly
+    />
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, inject } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, View } from '@element-plus/icons-vue'
+import {
+  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+} from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
 import { formatCellValue } from '@/utils/formatters'
+import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import SearchTable from '@/components/business/SearchTable.vue'
-import type { TableColumn, ActionButton, SearchField } from '@/components/business/types'
+import FormRenderer from '@/views/form/components/FormRenderer.vue'
+import type { TableColumn, ActionButton, SearchField, ToolbarButton } from '@/components/business/types'
 
 /** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) */
 const actionBus = inject<{ dispatch: (trigger: string, eventData: any) => void } | undefined>('pageActionBus')
+
+const route = useRoute()
+const router = useRouter()
 
 const props = defineProps<{
   /** 页面 key（数据源查询接口路径） */
@@ -37,6 +63,8 @@ const props = defineProps<{
   columns?: any[]
   /** 操作配置（ViewDesigner 风格：{ buttons, permissions, actionColumnWidth }） */
   viewActions?: { buttons?: any[]; permissions?: string; actionColumnWidth?: number }
+  /** 详情配置（ViewDesigner 风格：{ width, type }） */
+  viewDetail?: { width?: string; type?: string }
   /** 事件链配置 */
   viewEvents?: any[]
   /** 搜索字段配置 */
@@ -68,8 +96,24 @@ const writable = ref(false)
 /** 当前 filter（动作总线 set-filter 注入） */
 const currentFilter = ref<Record<string, unknown> | undefined>(undefined)
 
+// ==================== 详情弹窗 ====================
+const detailVisible = ref(false)
+const detailRow = ref<Record<string, any>>({})
+const detailWidth = computed(() => props.viewDetail?.width || '800px')
+/** 每次打开递增，强制重建 FormRenderer（读取最新行数据） */
+const detailFormKey = ref(0)
+
 // ==================== 图标映射 ====================
-const iconMap: Record<string, any> = { Plus, Edit, Delete, View }
+/** 图标名 → 组件（对齐 ActionsConfig.iconOptions，工具栏/操作列按钮图标解析用） */
+const iconMap: Record<string, any> = {
+  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+}
+/** 内置按钮默认图标名（PascalCase，对齐 ActionsConfig.iconOptions value） */
+const BUILTIN_ICONS: Record<string, string> = { create: 'Plus', edit: 'Edit', delete: 'Delete', view: 'View' }
+function defaultIconOf(key?: string): string | undefined {
+  return key ? BUILTIN_ICONS[key] : undefined
+}
 function getIcon(name?: string): any {
   return name ? iconMap[name] : undefined
 }
@@ -96,30 +140,48 @@ const resolvedColumns = computed<TableColumn[]>(() =>
     align: c.align as any,
     fixed: c.fixed as any,
     sortable: !!c.sortable,
-    formatter: c.formatter ? (row: any, _col: TableColumn, cellValue: any) => formatCellValue(cellValue, c.formatter) : undefined,
+    formatter: c.formatter ? (_row: any, _col: TableColumn, cellValue: any) => formatCellValue(cellValue, c.formatter) : undefined,
   })),
 )
 
 // ==================== 操作按钮适配 ====================
-const resolvedActionButtons = computed<ActionButton[] | undefined>(() => {
-  const buttons = props.viewActions?.buttons || []
-  if (buttons.length > 0) {
-    return buttons.map((btn: any) => ({
+/** 用户是否配置了 create 按钮（隐藏 SearchTable 内置新增，避免操作栏出现两个"新增"） */
+const hasCreateButton = computed(() =>
+  (props.viewActions?.buttons || []).some((b: any) => b.key === 'create'),
+)
+
+/** 工具栏按钮（placement=toolbar）→ SearchTable ToolbarButton：button=普通按钮+图标+文字，text=文本按钮+图标，icon=圆形图标按钮 */
+const resolvedToolbarButtons = computed<ToolbarButton[]>(() =>
+  (props.viewActions?.buttons || [])
+    .filter((b: any) => b.placement === 'toolbar')
+    .map((btn: any) => ({
+      label: btn.label,
+      type: btn.type || defaultType(btn.key),
+      link: btn.style === 'text',
+      circle: btn.style === 'icon',
+      icon: getIcon(btn.icon || defaultIconOf(btn.key)),
+      onClick: () => handleActionClick(btn, undefined),
+    })),
+)
+
+/** 操作列按钮（placement=column）→ SearchTable ActionButton；始终返回数组（空则无按钮，不回退 formConfig 默认） */
+const resolvedActionButtons = computed<ActionButton[]>(() =>
+  (props.viewActions?.buttons || [])
+    .filter((b: any) => b.placement !== 'toolbar')
+    .map((btn: any) => ({
       label: btn.label,
       type: btn.type || defaultType(btn.key),
       link: btn.style !== 'icon',
-      icon: btn.style === 'icon' ? getIcon(btn.icon) : undefined,
+      icon: btn.style === 'icon' ? getIcon(btn.icon || defaultIconOf(btn.key)) : undefined,
       show: btn.visible ? (row: any) => evalVisible(btn.visible, row) : undefined,
       onClick: (row: any) => handleActionClick(btn, row),
-    }))
-  }
-  // 未配置自定义按钮 → undefined，让 SearchTable 用 formConfig 默认编辑/删除
-  return undefined
-})
+    })),
+)
 
 function defaultType(key: string): '' | 'primary' | 'danger' {
+  // 对齐 PageRenderer：create=primary、delete=danger、edit/view=默认（灰色描边/图标）
+  if (key === 'create') return 'primary'
   if (key === 'delete') return 'danger'
-  if (key === 'edit' || key === 'view' || key === 'create') return 'primary'
   return ''
 }
 
@@ -180,16 +242,24 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
 }
 
 // ==================== formConfig（CRUD 弹窗动态生成） ====================
+/** 由数据源列定义生成表单规则（新增/编辑/详情共用） */
+function buildFormRule() {
+  return metaColumns.value.map((c) => ({
+    type: inputTypeOf(c.columnType),
+    field: c.key,
+    title: c.label,
+    props: c.columnType === 'DECIMAL' ? { precision: c.scale || 2 } : {},
+    validate: c.required ? [{ required: true, message: `${c.label}不能为空` }] : [],
+  }))
+}
+
+/** 详情弹窗规则（只读表单） */
+const detailRules = computed(() => buildFormRule())
+
 const formConfig = computed(() => {
   if (!props.dsRefId || !writable.value) return undefined
   return {
-    rule: metaColumns.value.map((c) => ({
-      type: inputTypeOf(c.columnType),
-      field: c.key,
-      title: c.label,
-      props: c.columnType === 'DECIMAL' ? { precision: c.scale || 2 } : {},
-      validate: c.required ? [{ required: true, message: `${c.label}不能为空` }] : [],
-    })),
+    rule: buildFormRule(),
     labelWidth: '100px',
     createApi: (data: any) => dataSourceApi.createData(props.dsRefId!, data),
     updateApi: (id: string, data: any, row?: any) => dataSourceApi.updateData(props.dsRefId!, id, data, row?.version),
@@ -211,18 +281,158 @@ function inputTypeOf(columnType?: string): string {
 
 // ==================== 按钮点击分发 ====================
 function handleActionClick(btn: any, row: any) {
-  if (btn.key === 'edit') {
+  // 有绑定事件 → 优先执行事件链（内建/自定义都一样，对齐 PageRenderer）
+  if (btn.events?.length) {
+    for (const ev of btn.events) {
+      for (const action of ev.actions || []) {
+        void dispatchButtonAction(action, row)
+      }
+    }
+    return
+  }
+  // 无事件 → 默认行为
+  if (btn.key === 'create') {
+    // 打开新增弹窗（工具栏 create 按钮；无行参数）
+    tableRef.value?.openFormDialog()
+  } else if (btn.key === 'edit') {
     tableRef.value?.openEdit(row)
   } else if (btn.key === 'delete') {
     handleDelete(row)
-  } else if (btn.events?.length) {
-    // 自定义按钮：执行事件链（trigger 恒为 click）
-    for (const ev of btn.events) {
-      for (const action of ev.actions || []) {
-        actionBus?.dispatch(action.type, { row, ...action.params })
-      }
-    }
+  } else if (btn.key === 'view') {
+    openDetail(row)
   }
+}
+
+// ==================== 按钮事件链动作执行器（对齐 PageRenderer dispatchAction） ====================
+/** 模板变量替换：$row.字段（当前行）/ $param.参数（路由参数） */
+function resolveTemplate(tpl: string, row: any): string {
+  return tpl
+    .replace(/\$row\.([\w]+)/g, (_: string, k: string) => {
+      const v = row?.[k]
+      return v === null || v === undefined ? '' : String(v)
+    })
+    .replace(/\$param\.([\w]+)/g, (_: string, k: string) => (route.query?.[k] == null ? '' : String(route.query[k])))
+}
+
+/** 解析动作参数 [{key,value}] → {key: 模板替换后的值} */
+function resolveParams(params: { key: string; value: string }[], row: any): Record<string, any> {
+  const out: Record<string, any> = {}
+  for (const p of params || []) {
+    out[p.key] = resolveTemplate(p.value, row)
+  }
+  return out
+}
+
+/** 导出当前表格数据（JSON） */
+function exportData() {
+  const rows = records.value
+  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${props.pageKey || 'page'}-data.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/** 执行单个事件链动作（ViewDesigner 风格：type/params） */
+async function dispatchButtonAction(action: { type: string; params?: { key: string; value: string }[] }, row: any) {
+  const resolved = resolveParams(action.params || [], row)
+  switch (action.type) {
+    case 'open-detail':
+      openDetail(row)
+      break
+    case 'open-link':
+      if (resolved.url) router.push(resolved.url)
+      break
+    case 'open-create':
+      tableRef.value?.openFormDialog()
+      break
+    case 'edit':
+      if (row) tableRef.value?.openEdit(row)
+      break
+    case 'delete':
+      if (row) await handleDelete(row)
+      break
+    case 'refresh':
+      tableRef.value?.fetchList()
+      break
+    case 'export':
+      exportData()
+      break
+    case 'message':
+      ElMessage({
+        message: resolved.text || resolved.message || '提示',
+        type: (resolved.type as any) || 'info',
+      })
+      break
+    case 'set-filter':
+      setFilter(resolved)
+      break
+    case 'set-page': {
+      const page = parseInt(resolved.page, 10)
+      if (!isNaN(page) && page > 0) {
+        tableRef.value?.setQuery({ page }, false)
+      }
+      break
+    }
+    case 'set-sort':
+      tableRef.value?.sort(resolved.field || resolved.prop || '', resolved.order || 'ascending')
+      break
+    case 'clear-selection':
+      tableRef.value?.clearSelection()
+      break
+    case 'script': {
+      const source: string = resolved.source || ''
+      if (!source) {
+        console.warn('[page-table] 脚本动作缺少 source 参数')
+        break
+      }
+      if (!isScriptEventEnabled()) {
+        console.warn('[page-table] 脚本事件未启用（设置 VITE_PAGE_SCRIPT_ENABLED=true 开启）')
+        break
+      }
+      await executeScript(source, {
+        row,
+        params: route.query || {},
+        selectedRows: row ? [row] : [],
+        ds: {
+          query: (filter?: Record<string, any>) => {
+            if (filter) setFilter(filter)
+            else refresh()
+          },
+          detail: (id: string) => (props.dsRefId ? dataSourceApi.getData(props.dsRefId, id) : Promise.reject(new Error('数据源未绑定'))),
+          create: (data: Record<string, unknown>) =>
+            props.dsRefId ? dataSourceApi.createData(props.dsRefId, data) : Promise.reject(new Error('数据源未绑定')),
+          update: (id: string, data: Record<string, unknown>) =>
+            props.dsRefId ? dataSourceApi.updateData(props.dsRefId, id, data, row?.version) : Promise.reject(new Error('数据源未绑定')),
+          remove: (id: string) =>
+            props.dsRefId ? dataSourceApi.deleteData(props.dsRefId, id) : Promise.reject(new Error('数据源未绑定')),
+        },
+        api: { pageKey: props.pageKey || '', dataSourceId: props.dsRefId || '' },
+        actions: {
+          refresh: () => refresh(),
+          openDetail: () => openDetail(row),
+          openCreate: () => tableRef.value?.openFormDialog(),
+          openEdit: () => (row ? tableRef.value?.openEdit(row) : undefined),
+          remove: (id: string) =>
+            props.dsRefId ? dataSourceApi.deleteData(props.dsRefId, id) : Promise.reject(new Error('数据源未绑定')),
+        },
+        $: { message: (msg: string, type = 'info') => ElMessage({ message: msg, type: type as any }) },
+      })
+      break
+    }
+    default:
+      console.warn('[page-table] 未知动作类型:', action.type)
+  }
+}
+
+/** 详情弹窗：以数据源列生成只读表单，回显行数据 */
+function openDetail(row: any) {
+  if (!row) return
+  detailRow.value = row
+  detailFormKey.value++
+  detailVisible.value = true
 }
 
 /** 删除：确认后调用数据源删除 API，并刷新列表 */
@@ -242,17 +452,37 @@ async function handleDelete(row: any) {
   }
 }
 
-// ==================== 行点击 → 事件链 ====================
-function handleRowClick(row: any, column?: any, event?: Event) {
-  emit('row-click', row)
-  actionBus?.dispatch('row-click', { node: row, row })
-  // 触发 viewEvents 中 row-click 触发器
+// ==================== 表格事件 → 事件链 ====================
+/** 触发 viewEvents 中匹配触发器的动作（动作由本组件自执行，对齐 PageRenderer triggerEvents） */
+function triggerViewEvents(trigger: string, target: string, ctx: { row?: any; column?: any; selectedRows?: any[]; prop?: string; order?: string }) {
   for (const ev of props.viewEvents || []) {
-    if (ev.trigger !== 'row-click') continue
+    if (ev.trigger !== trigger) continue
+    if (ev.target && ev.target !== target) continue
     for (const action of ev.actions || []) {
-      actionBus?.dispatch(action.type, { row, ...action.params })
+      void dispatchButtonAction(action, ctx.row)
     }
   }
+}
+
+function handleRowClick(row: any, _column?: any, _event?: Event) {
+  emit('row-click', row)
+  actionBus?.dispatch('row-click', { node: row, row })
+  triggerViewEvents('row-click', 'table', { row })
+}
+
+/** 单元格点击（新增） */
+function handleCellClick(row: any, column: any) {
+  triggerViewEvents('cell-click', 'table', { row, column })
+}
+
+/** 行选择变化（新增） */
+function handleSelectionChange(selection: any[]) {
+  triggerViewEvents('selection-change', 'table', { selectedRows: selection })
+}
+
+/** 排序变化（新增） */
+function handleSortChange(args: { column: any; prop: string; order: string }) {
+  triggerViewEvents('sort-change', 'table', { column: args.column, prop: args.prop, order: args.order })
 }
 
 // ==================== 动作总线接口 ====================

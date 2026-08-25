@@ -41,92 +41,24 @@
         </el-form>
       </el-card>
 
-      <!-- 数据表格 -->
-      <el-card class="table-card">
-        <div v-if="toolbarButtons.length" class="toolbar">
-          <el-button
-            v-for="b in toolbarButtons"
-            :key="b.label"
-            :type="b.type"
-            :link="b.link"
-            :circle="b.circle"
-            :icon="b.icon"
-            :size="toolbarButtonSize"
-            :title="b.label"
-            @click="b.onClick()"
-          >
-            {{ b.style === 'icon' ? '' : b.label }}
-          </el-button>
-        </div>
-        <el-table
-          ref="tableRef"
-          :data="records"
-          v-loading="loading"
-          border
-          stripe
-          :size="tableSize"
-          @row-click="handleRowClick"
-          @cell-click="handleCellClick"
-          @selection-change="handleSelectionChange"
-          @sort-change="handleSortChange"
-        >
-          <el-table-column
-            v-for="col in tableColumns"
-            :key="col.prop"
-            :prop="col.prop"
-            :label="col.label"
-            :min-width="col.minWidth"
-            :width="col.width"
-            :align="col.align || 'left'"
-            :sortable="!!col.sortable"
-            :fixed="col.fixed || undefined"
-          >
-            <template #default="{ row }">
-              {{ col.formatter ? formatCellValue(row.data != null ? row.data[col.prop] : row[col.prop], col.formatter) : cellValue(row, col.prop) }}
-            </template>
-          </el-table-column>
-          <el-table-column
-            v-if="rowActionButtons.length"
-            label="操作"
-            :width="rowActionColumnWidth"
-            align="center"
-            fixed="right"
-          >
-            <template #default="{ row }">
-              <div class="page-row-actions">
-                <template v-for="b in rowActionButtons" :key="b.label">
-                  <template v-if="isButtonVisibleForRow(b, row)">
-                    <!-- 图标/按钮形态：circle + tooltip（对齐 SearchTable 操作列） -->
-                    <el-tooltip v-if="b.style === 'icon'" :content="b.label" placement="top" :show-after="200">
-                      <el-button :icon="b.icon" circle :type="b.type" @click.stop="b.onClick(row)" />
-                    </el-tooltip>
-                    <!-- 文字/按钮形态：link 文本按钮 -->
-                    <el-button
-                      v-else
-                      :type="b.type"
-                      :icon="b.style === 'button' ? b.icon : undefined"
-                      link
-                      @click.stop="b.onClick(row)"
-                    >
-                      {{ b.label }}
-                    </el-button>
-                  </template>
-                </template>
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div class="pagination-bar">
-          <el-pagination
-            :current-page="currentPage"
-            :page-size="pageSize"
-            :total="total"
-            layout="total, prev, pager, next"
-            background
-            @current-change="handlePageChange"
-          />
-        </div>
-      </el-card>
+      <!-- 数据表格（统一基于 SearchTable） -->
+      <SearchTable
+        v-if="ready"
+        ref="searchTableRef"
+        class="page-search-table"
+        :columns="searchTableColumns"
+        :action-buttons="searchTableActionButtons"
+        :toolbar-buttons="searchTableToolbarButtons"
+        :fetch-api="searchTableFetchApi"
+        :show-search="false"
+        :default-page-size="20"
+        :table-size="tableSize"
+        :max-visible-buttons="20"
+        @row-click="handleRowClick"
+        @cell-click="handleCellClick"
+        @selection-change="handleSelectionChange"
+        @sort-change="handleSortChange"
+      />
     </template>
 
     <!-- 详情弹窗双轨：FORM 数据源/遗留页 → 只读表单；WORKFLOW 等只读数据源 → KV 表格 -->
@@ -172,6 +104,8 @@ import {
 } from '@element-plus/icons-vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import PageRendererPage from './PageRendererPage.vue'
+import SearchTable from '@/components/business/SearchTable.vue'
+import type { TableColumn, ActionButton, ToolbarButton, QueryParams } from '@/components/business/types'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { formApi } from '@/api/form'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
@@ -186,10 +120,11 @@ const pageKey = computed(() => route.params.pageKey as string)
 
 // ========== 加载状态 ==========
 const error = ref('')
-const loading = ref(false)
 const page = ref<PageDefinitionDetailDTO | null>(null)
-/** 表格 ref（供 clear-selection / set-sort 操作使用） */
-const tableRef = ref<any>(null)
+/** schema 解析 + 数据源 metadata 就绪后置 true，挂载 SearchTable（避免空 schema 提前请求） */
+const ready = ref(false)
+/** SearchTable 实例 ref（供 setQuery / sort / clearSelection / fetchList 控制） */
+const searchTableRef = ref<InstanceType<typeof SearchTable> | null>(null)
 /** 当前选中行（selection-change 事件） */
 const selectedRows = ref<any[]>([])
 
@@ -248,10 +183,6 @@ const detailOption = ref<Record<string, any>>({})
 // ========== 查询 ==========
 const query = reactive<Record<string, any>>({})
 const queryDefaults = ref<Record<string, any>>({})
-const records = ref<any[]>([])
-const total = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(20)
 
 // ========== 详情 ==========
 const detailVisible = ref(false)
@@ -302,7 +233,7 @@ async function load() {
         boundDataSource.value = null
       }
     }
-    await loadData(0)
+    ready.value = true
   } catch (e: any) {
     error.value = e?.message || '页面加载失败'
     ElMessage.error(error.value)
@@ -336,10 +267,10 @@ function parseSchema(schema: string): boolean {
 }
 
 /** 构建结构化 filter {logic, conditions:[{column,op,value}]}；空条件返回 undefined */
-function buildFilter(): string | undefined {
+function buildFilter(params: Record<string, any>): string | undefined {
   const conditions: { column: string; op: string; value: any }[] = []
   for (const r of searchRules.value) {
-    const v = query[r.field]
+    const v = params[r.field]
     if (v === undefined || v === null || v === '') continue
     if (r.matchType === 'like') conditions.push({ column: r.field, op: 'like', value: v })
     else if (r.matchType === 'range') conditions.push({ column: r.field, op: 'range', value: v })
@@ -349,38 +280,26 @@ function buildFilter(): string | undefined {
   return JSON.stringify({ logic: 'AND', conditions })
 }
 
-async function loadData(pageNo: number) {
-  loading.value = true
-  try {
-    const params: Record<string, any> = { page: pageNo, size: pageSize.value }
-    const filter = buildFilter()
-    if (filter) params.filter = filter
-    const res = await pageApi.queryPageData(pageKey.value, params)
-    const data = res.data as any
-    records.value = data.records || []
-    total.value = data.total || 0
-    currentPage.value = pageNo + 1
-    triggerEvents('refresh', 'table', { row: null, params: route.query || {} })
-  } catch (e: any) {
-    ElMessage.error(e?.message || '数据加载失败')
-  } finally {
-    loading.value = false
-  }
+/** SearchTable 数据获取：page 为 1-based，转后端 0-based；搜索条件从 params（含外部注入 query）提取 */
+const searchTableFetchApi = async (params: QueryParams): Promise<{ rows: any[]; total: number }> => {
+  const p: Record<string, any> = { page: (params.page || 1) - 1, size: params.size || 20 }
+  const filter = buildFilter(params)
+  if (filter) p.filter = filter
+  const res = await pageApi.queryPageData(pageKey.value, p)
+  const data = res.data as any
+  triggerEvents('refresh', 'table', { row: null, params: route.query || {} })
+  return { rows: data.records || [], total: data.total || 0 }
 }
 
 // ========== 查询交互 ==========
 function handleSearch() {
-  loadData(0)
+  searchTableRef.value?.setQuery({ ...query })
   triggerEvents('search', 'search', { row: null, params: route.query || {} })
 }
 
 function handleReset() {
   Object.keys(queryDefaults.value).forEach((k) => { query[k] = queryDefaults.value[k] })
-  loadData(0)
-}
-
-function handlePageChange(p: number) {
-  loadData(p - 1)
+  searchTableRef.value?.setQuery({ ...query })
 }
 
 /** 行取值：优先 BizDataVO 内层 row.data[key]，回退顶层 row[key] */
@@ -436,11 +355,17 @@ function isButtonVisibleForRow(b: { key: string; visible?: string; events?: any[
 
 /** 表格尺寸：预览（preview=true）普通模式，非预览紧凑模式 */
 const tableSize = computed<'default' | 'small'>(() => (route.query.preview === 'true' ? 'default' : 'small'))
-/** 操作栏按钮尺寸：预览普通，非预览紧凑 */
-const toolbarButtonSize = computed<'default' | 'small'>(() => (route.query.preview === 'true' ? 'default' : 'small'))
+
+/** 内置按钮默认图标（未配置 icon 时按 key 注入，操作列圆形图标用） */
+const defaultIcons: Record<string, any> = { create: Plus, edit: Edit, delete: Delete, view: View }
+/** 图标名 → 组件（对齐 ViewDesigner ActionsConfig.iconOptions value） */
+const iconMap: Record<string, any> = {
+  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+}
 
 /** 编译产物按钮列表（buttons[] 或兼容旧布尔格式归一化） */
-const actionButtonsConfig = computed<{ key: string; label: string; placement: 'toolbar' | 'column'; style: 'button' | 'icon' | 'text'; events?: any[] }[]>(() => {
+const actionButtonsConfig = computed<{ key: string; label: string; placement: 'toolbar' | 'column'; style: 'button' | 'icon' | 'text'; icon?: string; events?: any[] }[]>(() => {
   const cfg = actionConfig.value
   if (Array.isArray(cfg.buttons) && cfg.buttons.length > 0) {
     return cfg.buttons
@@ -456,18 +381,55 @@ const actionButtonsConfig = computed<{ key: string; label: string; placement: 't
   return out
 })
 
-/** 工具栏按钮（placement=toolbar） */
-const toolbarButtons = computed<ActionButtonConfig[]>(() =>
-  actionButtonsConfig.value
-    .filter((b) => b.placement === 'toolbar' && isActionVisible(b))
-    .map(toButtonConfig),
+/** 列 → SearchTable TableColumn：行值取 BizDataVO 内层 row.data，render 承载 formatter/cellValue */
+const searchTableColumns = computed<TableColumn[]>(() =>
+  tableColumns.value.map((c) => ({
+    prop: c.prop,
+    label: c.label,
+    minWidth: c.minWidth,
+    width: c.width,
+    align: (c.align || 'left') as any,
+    fixed: (c.fixed || undefined) as any,
+    sortable: c.sortable,
+    render: (row: any) => {
+      const raw = row?.data != null && typeof row.data === 'object' ? row.data[c.prop] : row?.[c.prop]
+      if (c.formatter) return formatCellValue(raw, c.formatter)
+      return raw === null || raw === undefined ? '—' : String(raw)
+    },
+  })),
 )
 
-/** 操作列按钮（placement=column，行内渲染带行参数） */
-const rowActionButtons = computed<ActionButtonConfig[]>(() =>
+/** 工具栏按钮（placement=toolbar）→ SearchTable ToolbarButton：button=普通按钮+图标+文字，text=文本按钮+图标，icon=圆形图标按钮 */
+const searchTableToolbarButtons = computed<ToolbarButton[]>(() =>
+  actionButtonsConfig.value
+    .filter((b) => b.placement === 'toolbar' && isActionVisible(b))
+    .map((b) => {
+      const cfg = toButtonConfig(b)
+      return {
+        label: cfg.label,
+        type: cfg.type || undefined,
+        link: cfg.link,
+        circle: cfg.circle,
+        icon: cfg.icon,
+        onClick: () => cfg.onClick(),
+      }
+    }),
+)
+
+/** 操作列按钮（placement=column）→ SearchTable ActionButton（onClick 注入事件链/内建行为，show 注入行级 visible） */
+const searchTableActionButtons = computed<ActionButton[]>(() =>
   actionButtonsConfig.value
     .filter((b) => b.placement === 'column' && isActionVisible(b))
-    .map(toButtonConfig),
+    .map((b) => {
+      const cfg = toButtonConfig(b)
+      return {
+        label: cfg.label,
+        type: cfg.type || undefined,
+        icon: cfg.style === 'icon' ? cfg.icon : undefined,
+        show: (row: any) => isButtonVisibleForRow(b, row),
+        onClick: (row: any) => cfg.onClick(row),
+      }
+    }),
 )
 
 /** 自定义按钮：点击触发其绑定事件链（trigger 恒为 click，target=按钮 key） */
@@ -481,11 +443,6 @@ function handleCustomButton(btn: { key: string; events?: any[] }, row?: any) {
 }
 
 function toButtonConfig(b: { key: string; label: string; style: 'button' | 'icon' | 'text'; icon?: string; events?: any[] }): ActionButtonConfig {
-  const defaultIcons: Record<string, any> = { create: Plus, edit: Edit, delete: Delete, view: View }
-  const iconMap: Record<string, any> = {
-    Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
-    Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
-  }
   const handlers: Record<string, (row?: any) => void> = {
     create: () => openCreate(),
     edit: (row?: any) => openEdit(row),
@@ -511,17 +468,6 @@ function toButtonConfig(b: { key: string; label: string; style: 'button' | 'icon
     onClick,
   }
 }
-
-/** 行操作列宽：优先用配置 actionColumnWidth；缺省按按钮数量自动计算 */
-const rowActionColumnWidth = computed(() => {
-  const count = rowActionButtons.value.length
-  if (count === 0) return 0
-  const cfgWidth = actionConfig.value.actionColumnWidth
-  if (cfgWidth && cfgWidth > 0) return cfgWidth
-  const iconCount = rowActionButtons.value.filter((b) => b.style === 'icon').length
-  const textCount = count - iconCount
-  return iconCount * 56 + textCount * 70 + 20
-})
 
 function requireRow(): any | null {
   if (currentRow.value) return currentRow.value
@@ -614,7 +560,7 @@ async function handleEditSubmit() {
       ElMessage.success('更新成功')
     }
     editVisible.value = false
-    loadData(currentPage.value - 1)
+    searchTableRef.value?.fetchList()
   } catch {
     // http 拦截器已弹出错误消息
   } finally {
@@ -638,7 +584,7 @@ async function handleDelete(row?: any) {
   try {
     await bizDataApi.remove(formKey, row.id)
     ElMessage.success('删除成功')
-    loadData(currentPage.value - 1)
+    searchTableRef.value?.fetchList()
   } catch {
     // http 拦截器已弹出错误消息
   }
@@ -646,7 +592,8 @@ async function handleDelete(row?: any) {
 
 // ========== 导出 ==========
 function exportData() {
-  const blob = new Blob([JSON.stringify(records.value, null, 2)], { type: 'application/json' })
+  const rows = searchTableRef.value?.getList() || []
+  const blob = new Blob([JSON.stringify(rows, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -707,7 +654,7 @@ async function dispatchAction(
       break
     }
     case 'refresh':
-      await loadData(currentPage.value - 1)
+      searchTableRef.value?.fetchList()
       break
     case 'export':
       exportData()
@@ -722,31 +669,26 @@ async function dispatchAction(
       for (const [k, v] of Object.entries(resolved)) {
         if (k in query) query[k] = v
       }
-      await loadData(0)
+      searchTableRef.value?.setQuery({ ...query })
       break
     case 'set-sort': {
       // 设置表格排序：params 包含 field 和 order
       const field = resolved.field || resolved.prop || ''
       const order = resolved.order || 'ascending'
-      if (tableRef.value) {
-        tableRef.value.sort(field, order)
-      }
+      searchTableRef.value?.sort(field, order)
       break
     }
     case 'set-page': {
-      // 设置分页：params 包含 page
+      // 设置分页：params 包含 page（1-based），不重置页
       const page = parseInt(resolved.page, 10)
       if (!isNaN(page) && page > 0) {
-        currentPage.value = page
-        await loadData(page - 1)
+        searchTableRef.value?.setQuery({ page }, false)
       }
       break
     }
     case 'clear-selection': {
       // 清空行选择
-      if (tableRef.value) {
-        tableRef.value.clearSelection()
-      }
+      searchTableRef.value?.clearSelection()
       selectedRows.value = []
       break
     }
@@ -767,7 +709,7 @@ async function dispatchAction(
         ds: {
           query: (filter?: Record<string, any>) => {
             if (filter) for (const [k, v] of Object.entries(filter)) query[k] = v
-            return loadData(0)
+            return searchTableRef.value?.fetchList() ?? Promise.resolve()
           },
           detail: (id: string) => (boundFormKey.value ? bizDataApi.detail(boundFormKey.value, id) : null),
           create: (data: Record<string, unknown>) =>
@@ -781,7 +723,7 @@ async function dispatchAction(
         },
         api: { formKey: boundFormKey.value || '', pageKey: pageKey.value },
         actions: {
-          refresh: () => loadData(currentPage.value - 1),
+          refresh: () => searchTableRef.value?.fetchList() ?? Promise.resolve(),
           openDetail: () => openDetail(currentRow.value),
           openCreate: () => openCreate(),
           openEdit: () => openEdit(),
@@ -796,13 +738,23 @@ async function dispatchAction(
   }
 }
 
+/** 事件链上下文：row/params 为通用字段，column/selectedRows/prop/order 为特定触发器携带 */
+interface EventContext {
+  row?: any
+  params?: Record<string, any>
+  column?: any
+  selectedRows?: any[]
+  prop?: string
+  order?: string
+}
+
 /** 按触发器 + 挂接组件执行事件链；target 为空 = 通配（匹配所有组件） */
-function triggerEvents(trigger: string, target: string, ctx: { row: any; params: Record<string, any> }) {
+function triggerEvents(trigger: string, target: string, ctx: EventContext) {
   for (const ev of eventsList.value) {
     if (ev.trigger !== trigger) continue
     if (ev.target && ev.target !== target) continue
     for (const action of ev.actions || []) {
-      dispatchAction(action, ctx)
+      dispatchAction(action, { row: ctx.row, params: ctx.params || {} })
     }
   }
 }
@@ -836,6 +788,7 @@ function handleSortChange({ column, prop, order }: { column: any; prop: string; 
   flex-direction: column;
   gap: 12px;
   padding: 4px;
+  height: 100%;
 }
 .search-card {
   flex-shrink: 0;
@@ -844,16 +797,10 @@ function handleSortChange({ column, prop, order }: { column: any; prop: string; 
 .search-card :deep(.el-card__body) {
   padding-bottom: 0;
 }
-.table-card {
+/* SearchTable 撑满剩余空间（表格区域滚动） */
+.page-search-table {
   flex: 1;
-  overflow: hidden;
-}
-.toolbar {
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  min-height: 0;
 }
 /* 查询工具栏图标按钮（对齐 SearchTable） */
 .toolbar-buttons {
@@ -864,24 +811,5 @@ function handleSortChange({ column, prop, order }: { column: any; prop: string; 
 }
 .toolbar-buttons .el-button.is-circle {
   padding: 5px;
-}
-.page-row-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  white-space: nowrap;
-}
-/* 操作列按钮紧凑样式（对齐 SearchTable） */
-.page-row-actions .el-button {
-  margin-left: 0;
-  padding: 4px 6px;
-}
-.page-row-actions .el-button + .el-button {
-  margin-left: 0;
-}
-.pagination-bar {
-  margin-top: 12px;
-  display: flex;
-  justify-content: flex-end;
 }
 </style>

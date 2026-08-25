@@ -62,8 +62,31 @@
     <el-card class="table-card">
       <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 8px">
         <slot />
+        <template v-for="btn in toolbarButtons" :key="btn.label">
+          <!-- circle（图标形态）：无 slot 内容，图标完全居中（对齐搜索栏/操作列图标按钮），hover 显示 label -->
+          <el-tooltip v-if="btn.circle" :content="btn.label" placement="top" :show-after="200">
+            <el-button
+              :type="btn.type"
+              :size="btn.size || (tableSize === 'small' ? 'small' : 'default')"
+              circle
+              :icon="btn.icon"
+              @click="btn.onClick"
+            />
+          </el-tooltip>
+          <!-- 非 circle：带文字的普通/文本按钮 -->
+          <el-button
+            v-else
+            :type="btn.type"
+            :size="btn.size || (tableSize === 'small' ? 'small' : 'default')"
+            :link="btn.link"
+            :icon="btn.icon"
+            @click="btn.onClick"
+          >
+            {{ btn.label }}
+          </el-button>
+        </template>
         <el-button
-          v-if="formConfig"
+          v-if="formConfig && showCreateButton"
           type="primary"
           :icon="Plus"
           :size="tableSize === 'small' ? 'small' : 'default'"
@@ -75,7 +98,7 @@
       </div>
 
       <div class="table-wrapper">
-      <el-table :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)">
+      <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="(args: { column: any; prop: string; order: string }) => emit('sort-change', args)">
         <el-table-column
           v-for="col in columns"
           :key="col.prop || col.label"
@@ -110,13 +133,13 @@
                 <!-- 图标 + confirm -->
                 <el-popconfirm v-if="btn.icon && btn.confirm" :title="btn.confirm" @confirm="btn.onClick(row)">
                   <template #reference>
-                    <el-button :icon="btn.icon" circle size="small" :type="btn.type" :title="btn.label" v-permission="btn.permission" />
+                    <el-button :icon="btn.icon" circle plain size="small" :type="btn.type" :title="btn.label" v-permission="btn.permission" @click.stop />
                   </template>
                 </el-popconfirm>
 
                 <!-- 图标无 confirm -->
                 <el-tooltip v-else-if="btn.icon" :content="btn.label" placement="top" :show-after="200">
-                  <el-button :icon="btn.icon" circle size="small" :type="btn.type" v-permission="btn.permission" @click="btn.onClick(row)" />
+                  <el-button :icon="btn.icon" circle plain size="small" :type="btn.type" v-permission="btn.permission" @click.stop="btn.onClick(row)" />
                 </el-tooltip>
 
                 <!-- 文本 + confirm -->
@@ -127,6 +150,7 @@
                       size="small"
                       :type="btn.type"
                       v-permission="btn.permission"
+                      @click.stop
                     >
                       {{ btn.label }}
                     </el-button>
@@ -140,7 +164,7 @@
                   size="small"
                   :type="btn.type"
                   v-permission="btn.permission"
-                  @click="btn.onClick(row)"
+                  @click.stop="btn.onClick(row)"
                 >
                   {{ btn.label }}
                 </el-button>
@@ -148,7 +172,7 @@
               </template>
 
               <el-dropdown v-if="dropdownButtons.length" trigger="click">
-                <el-button size="small" link>
+                <el-button size="small" link @click.stop>
                   <el-icon :size="16"><CaretBottom /></el-icon>
                 </el-button>
                 <template #dropdown>
@@ -243,8 +267,10 @@ const props = withDefaults(defineProps<SearchTableProps>(), {
   exportLoading: false,
   maxVisibleButtons: 3,
   showSearch: true,
+  showCreateButton: true,
   mergeDefaultActions: true,
   tableSize: 'default',
+  toolbarButtons: () => [],
 })
 
 /** 树形表格属性：透传给 el-table */
@@ -265,11 +291,16 @@ const emit = defineEmits<{
   reset: []
   export: [params: QueryParams]
   'row-click': [row: any, column: any, event: Event]
+  'cell-click': [row: any, column: any, cell: any, event: Event]
+  'selection-change': [selection: any[]]
+  'sort-change': [args: { column: any; prop: string; order: string }]
 }>()
 
 const loading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
+/** el-table 实例（供外部 sort/clearSelection 控制） */
+const tableRef = ref<any>(null)
 
 const query = reactive<QueryParams>({ page: 1, size: props.defaultPageSize })
 const initialQuery = ref<Record<string, any>>({})
@@ -346,7 +377,7 @@ const dropdownButtons = computed(() =>
 
 function initSearchDefaults() {
   const defaults: Record<string, any> = {}
-  for (const field of props.searchFields) {
+  for (const field of props.searchFields || []) {
     if (field.defaultValue !== undefined) {
       defaults[field.prop] = field.defaultValue
     }
@@ -472,7 +503,31 @@ function handleDialogClose() {
   dialogInitialValues.value = {}
 }
 
-  defineExpose({ fetchList, openFormDialog: handleCreate, openEdit: handleEdit })
+// --- 外部控制方法（供父组件通过 ref 调用，如外部自建搜索栏 / 事件动作链） ---
+
+/** 外部注入查询条件并刷新；resetPage=true 时重置到第一页（默认） */
+function setQuery(extra: Record<string, any>, resetPage = true) {
+  Object.assign(query, extra)
+  if (resetPage) query.page = 1
+  fetchList()
+}
+
+/** 设置表格排序（代理 el-table.sort） */
+function sort(field: string, order: string) {
+  tableRef.value?.sort(field, order)
+}
+
+/** 清空行选择（代理 el-table.clearSelection） */
+function clearSelection() {
+  tableRef.value?.clearSelection()
+}
+
+/** 当前表格数据（外部读取用） */
+function getList() {
+  return list.value
+}
+
+  defineExpose({ fetchList, openFormDialog: handleCreate, openEdit: handleEdit, setQuery, sort, clearSelection, getList })
 </script>
 
 <style scoped>
@@ -562,5 +617,12 @@ function handleDialogClose() {
 }
 .action-buttons .el-button + .el-button {
   margin-left: 0;
+}
+/* 操作列图标按钮：空心描边，默认无底色（hover 时才有反馈填充） */
+.action-buttons .el-button.is-plain.is-circle {
+  --el-button-bg-color: transparent;
+}
+.action-buttons .el-button.is-plain.is-circle:hover {
+  --el-button-hover-bg-color: var(--el-color-primary-light-8);
 }
 </style>

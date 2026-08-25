@@ -96,7 +96,7 @@
           <el-select
             :model-value="row.placement"
             
-            style="width: 90px"
+            style="width: 80px"
             @change="(v: any) => updateButton(row.key, { placement: v })"
           >
             <el-option label="操作栏" value="toolbar" />
@@ -109,7 +109,7 @@
           <el-select
             :model-value="row.style"
             
-            style="width: 90px"
+            style="width: 80px"
             @change="(v: any) => updateButton(row.key, { style: v })"
           >
             <el-option label="按钮" value="button" />
@@ -123,7 +123,7 @@
           <el-select
             :model-value="row.icon || defaultIconOf(row.key)"
             
-            style="width: 120px"
+            style="width: 110px"
             clearable
             @change="(v: any) => updateButton(row.key, { icon: v || '' })"
           >

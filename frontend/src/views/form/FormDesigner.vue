@@ -79,6 +79,8 @@
       :current-fields="currentFieldKeys"
       :target-columns="lookupTargetColumns"
       :lookup-props="currentLookupProps"
+      :form-data-sources="formDataSources"
+      :enabled-data-sources="enabledDataSources"
       @source-change="handleLookupSourceChange"
       @confirm="handleLookupConfirm"
     />
@@ -314,14 +316,14 @@ function registerFormContainerProps() {
         field: 'dataSourceId',
         title: '数据源',
         value: '',
-        options: enabledDataSources.value.map((d) => ({
-          value: d.id,
-          label: `${d.name}（${d.type}）`,
+        options: formDataSources.value.map((ds) => ({
+          value: ds.id,
+          label: ds.id,
         })),
         props: {
           clearable: true,
           filterable: true,
-          placeholder: '选择绑定数据源',
+          placeholder: '选择页面内数据源',
         },
         /** 数据源变更时校验容器子字段是否存在于 metadata */
         onChange: async (val: string) => {
@@ -331,8 +333,11 @@ function registerFormContainerProps() {
           if (!activeRule || !['formContainer', 'FcRow'].includes(activeRule.type)) return
           const children = (activeRule.children || []) as any[]
           if (children.length === 0) return
+          // 查找页面内数据源对应的全局数据源ID
+          const ds = formDataSources.value.find((d) => d.id === val)
+          if (!ds || !ds.refId) return
           try {
-            const res = await dataSourceApi.getMetadata(val)
+            const res = await dataSourceApi.getMetadata(ds.refId)
             const columns = res.data?.columns || []
             const result = containerFieldValidator(children, columns)
             if (result.invalidFields.length > 0) {

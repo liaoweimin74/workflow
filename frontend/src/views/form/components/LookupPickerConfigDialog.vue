@@ -10,20 +10,20 @@
           </el-radio-group>
           <span class="form-tip">底表：引用已发布业务表单的数据；外部 API：任意后端接口</span>
         </el-form-item>
-        <!-- 已启用数据源（数据源管理注册）快捷选择 -->
-        <el-form-item label="数据源管理">
+        <!-- 页面内数据源快捷选择 -->
+        <el-form-item label="页面内数据源">
           <el-select
             v-model="selectedDataSourceId"
-            placeholder="从已启用数据源选择（可选）"
+            placeholder="从页面内数据源选择（可选）"
             clearable
             filterable
             style="width: 100%"
             @change="handleDataSourceSelect"
           >
             <el-option
-              v-for="ds in enabledDataSources"
+              v-for="ds in formDataSources"
               :key="ds.id"
-              :label="`${ds.name}（${ds.type === 'FORM' ? '底表' : ds.type === 'API' ? '外部 API' : ds.type}）`"
+              :label="ds.id"
               :value="ds.id"
             />
           </el-select>
@@ -233,6 +233,10 @@ const props = defineProps<{
   targetForms: FormDefinitionDTO[]
   /** 目标表单列（父组件根据 sourceFormKey 加载后传入） */
   targetColumns: ColumnConfigItem[]
+  /** 页面内数据源绑定配置 */
+  formDataSources: Array<{ id: string; refId: string }>
+  /** 已启用的全局数据源列表（用于获取元数据） */
+  enabledDataSources: DataSourceDTO[]
 }>()
 
 const emit = defineEmits<{
@@ -274,23 +278,17 @@ const form = reactive({
   returnFieldsRows: [] as { source: string; target: string }[],
 })
 
-/** 已启用数据源（数据源管理注册，快捷回填 LookupFetchConfig） */
-const enabledDataSources = ref<DataSourceDTO[]>([])
+/** 选中的页面内数据源ID */
 const selectedDataSourceId = ref('')
 
-onMounted(async () => {
-  try {
-    const res = await dataSourceApi.getEnabledDataSources()
-    enabledDataSources.value = (res.data || []).filter((d) => d.type === 'FORM' || d.type === 'API')
-  } catch {
-    enabledDataSources.value = []
-  }
-})
-
-/** 数据源下拉选中：FORM → 底表模式回填 + 触发 sourceChange；API → 解析 params 回填 LookupFetchConfig */
+/** 数据源下拉选中：通过页面内数据源找到对应的全局数据源，然后进行回填 */
 function handleDataSourceSelect(id: string) {
   selectedDataSourceId.value = id
-  const ds = enabledDataSources.value.find((d) => d.id === id)
+  // 查找页面内数据源
+  const localDs = props.formDataSources.find((d) => d.id === id)
+  if (!localDs || !localDs.refId) return
+  // 查找对应的全局数据源
+  const ds = props.enabledDataSources.find((d) => d.id === localDs.refId)
   if (!ds) return
   if (ds.type === 'FORM') {
     form.sourceType = 'form'

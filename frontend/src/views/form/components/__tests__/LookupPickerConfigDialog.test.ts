@@ -44,6 +44,8 @@ function createWrapper(overrides: Record<string, any> = {}) {
           keywordColumn: 'name',
         },
       },
+      formDataSources: [],
+      enabledDataSources: [],
       ...overrides,
     },
     global: { plugins: [ElementPlus] },
@@ -244,7 +246,7 @@ describe('LookupPickerConfigDialog — 搜索列多选', () => {
   })
 })
 
-describe('LookupPickerConfigDialog — 已启用数据源下拉（数据源管理打通）', () => {
+describe('LookupPickerConfigDialog — 页面内数据源下拉（数据源管理打通）', () => {
   const enabledDs = [
     {
       id: 'ds-form',
@@ -275,24 +277,32 @@ describe('LookupPickerConfigDialog — 已启用数据源下拉（数据源管�
     },
   ]
 
-  it('弹窗打开时加载已启用数据源列表', async () => {
-    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
-    const wrapper = createWrapper()
+  const formDataSources = [
+    { id: 'local-ds-form', refId: 'ds-form' },
+    { id: 'local-ds-api', refId: 'ds-api' },
+  ]
+
+  it('页面内数据源下拉显示正确的数据源列表', async () => {
+    const wrapper = createWrapper({
+      formDataSources,
+      enabledDataSources: enabledDs,
+    })
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
-    expect(dataSourceApi.getEnabledDataSources).toHaveBeenCalled()
     const vm = wrapper.vm as any
-    expect(vm.enabledDataSources).toHaveLength(2)
+    expect(vm.formDataSources).toHaveLength(2)
     wrapper.unmount()
   })
 
-  it('选中 FORM 数据源 → sourceType=form + sourceFormKey 回填 + 触发 sourceChange 加载目标列', async () => {
-    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
-    const wrapper = createWrapper()
+  it('选中 FORM 页面内数据源 → sourceType=form + sourceFormKey 回填 + 触发 sourceChange', async () => {
+    const wrapper = createWrapper({
+      formDataSources,
+      enabledDataSources: enabledDs,
+    })
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
     const vm = wrapper.vm as any
-    vm.handleDataSourceSelect('ds-form')
+    vm.handleDataSourceSelect('local-ds-form')
     await wrapper.vm.$nextTick()
     expect(vm.form.sourceType).toBe('form')
     expect(vm.form.sourceFormKey).toBe('emp_profile')
@@ -303,13 +313,15 @@ describe('LookupPickerConfigDialog — 已启用数据源下拉（数据源管�
     wrapper.unmount()
   })
 
-  it('选中 API 数据源 → sourceType=api + LookupFetchConfig 各字段回填（data/headers 解析为键值行）', async () => {
-    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
-    const wrapper = createWrapper()
+  it('选中 API 页面内数据源 → sourceType=api + LookupFetchConfig 各字段回填', async () => {
+    const wrapper = createWrapper({
+      formDataSources,
+      enabledDataSources: enabledDs,
+    })
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
     const vm = wrapper.vm as any
-    vm.handleDataSourceSelect('ds-api')
+    vm.handleDataSourceSelect('local-ds-api')
     await wrapper.vm.$nextTick()
     expect(vm.form.sourceType).toBe('api')
     expect(vm.form.action).toBe('/v1/external/list')
@@ -325,14 +337,14 @@ describe('LookupPickerConfigDialog — 已启用数据源下拉（数据源管�
   })
 
   it('API 数据源 params 缺失/非法时回退空配置，仅保留 sourceType=api', async () => {
-    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({
-      data: [{ id: 'ds-api2', name: '残缺 API', type: 'API', formKey: null, sourceKey: 'broken', status: 'ENABLED', params: 'not-json' }],
+    const wrapper = createWrapper({
+      formDataSources: [{ id: 'local-ds-api2', refId: 'ds-api2' }],
+      enabledDataSources: [{ id: 'ds-api2', name: '残缺 API', type: 'API', formKey: null, sourceKey: 'broken', status: 'ENABLED', params: 'not-json' }],
     })
-    const wrapper = createWrapper()
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
     const vm = wrapper.vm as any
-    vm.handleDataSourceSelect('ds-api2')
+    vm.handleDataSourceSelect('local-ds-api2')
     await wrapper.vm.$nextTick()
     expect(vm.form.sourceType).toBe('api')
     expect(vm.form.action).toBe('')

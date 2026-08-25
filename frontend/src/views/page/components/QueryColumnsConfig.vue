@@ -19,12 +19,12 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="匹配方式" width="115">
+        <el-table-column label="匹配方式" width="100">
           <template #default="{ row }">
             <el-select
               v-if="isSearchChecked(row.key)"
               :model-value="searchMatchTypeOf(row.key)"
-              style="width: 85px"
+              style="width: 70px"
               @change="(v: any) => setSearchMatchType(row.key, v)"
             >
               <el-option

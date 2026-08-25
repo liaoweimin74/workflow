@@ -177,6 +177,8 @@ const props = defineProps<{
   actionColumnWidth?: number
   /** 操作按钮配置 */
   actionButtons?: { key: string; label: string; placement: string; style: string; icon?: string; visible?: string; type?: string; events?: any[] }[]
+  /** ViewDesigner 风格操作配置（{ buttons, permissions, actionColumnWidth }） */
+  viewActions?: { buttons?: any[]; permissions?: string; actionColumnWidth?: number }
   /** 附加表格属性（border/stripe/size 等） */
   [key: string]: any
 }>()
@@ -241,9 +243,10 @@ function getIcon(name?: string): any {
   return name ? iconMap[name] : undefined
 }
 
-/** 操作按钮配置（默认内置编辑/删除） */
+/** 操作按钮配置（兼容 viewActions.buttons / actionButtons 两种格式） */
 const resolvedActionButtons = computed(() => {
-  if (props.actionButtons?.length) return props.actionButtons
+  const buttons = props.viewActions?.buttons || props.actionButtons
+  if (buttons?.length) return buttons
   // 默认：有写权限时显示编辑/删除
   if (!writable.value || !props.dsRefId) return []
   return [
@@ -254,7 +257,8 @@ const resolvedActionButtons = computed(() => {
 
 /** 操作列宽度 */
 const actionColumnWidthValue = computed(() => {
-  if (props.actionColumnWidth && props.actionColumnWidth > 0) return props.actionColumnWidth
+  const cfgWidth = props.viewActions?.actionColumnWidth || props.actionColumnWidth
+  if (cfgWidth && cfgWidth > 0) return cfgWidth
   const count = resolvedActionButtons.value.length
   if (count === 0) return 0
   return count * 70 + 20

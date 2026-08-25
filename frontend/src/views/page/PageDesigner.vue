@@ -64,6 +64,118 @@
         <el-button @click="previewVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 列配置弹窗（formatter/fixed） -->
+    <el-dialog v-model="columnsConfigVisible" title="列配置（格式化 / 固定列）" width="760px" destroy-on-close>
+      <el-table :data="activeColumns" border max-height="420">
+        <el-table-column prop="prop" label="字段" width="140" />
+        <el-table-column prop="label" label="标题" min-width="120" />
+        <el-table-column label="格式化" width="150">
+          <template #default="{ row }">
+            <el-select
+              :model-value="row.formatter || ''"
+              clearable
+              placeholder="无"
+              style="width: 130px"
+              @change="(v: string) => updateColumnProp(row.prop, 'formatter', v || undefined)"
+            >
+              <el-option label="货币" value="currency" />
+              <el-option label="日期" value="date" />
+              <el-option label="日期时间" value="datetime" />
+              <el-option label="布尔" value="boolean" />
+              <el-option label="枚举" value="enum" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="固定列" width="130">
+          <template #default="{ row }">
+            <el-select
+              :model-value="row.fixed || ''"
+              clearable
+              placeholder="无"
+              style="width: 110px"
+              @change="(v: string) => updateColumnProp(row.prop, 'fixed', v || undefined)"
+            >
+              <el-option label="左侧" value="left" />
+              <el-option label="右侧" value="right" />
+            </el-select>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="activeColumns.length === 0" description="请先选择数据源" :image-size="60" />
+      <template #footer>
+        <el-button @click="columnsConfigVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 操作列配置弹窗（按钮 visible/事件链） -->
+    <el-dialog v-model="actionConfigVisible" title="操作列配置（按钮 / 条件显示）" width="760px" destroy-on-close>
+      <el-table :data="activeActionButtons" border max-height="420">
+        <el-table-column prop="key" label="标识" width="120">
+          <template #default="{ row }">
+            <el-tag type="info">{{ row.key }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="名称" min-width="120">
+          <template #default="{ row }">
+            <el-input
+              :model-value="row.label"
+              @input="(v: string) => updateActionBtn(row.key, { label: v })"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="位置" width="130">
+          <template #default="{ row }">
+            <el-select
+              :model-value="row.placement"
+              style="width: 110px"
+              @change="(v: string) => updateActionBtn(row.key, { placement: v })"
+            >
+              <el-option label="操作栏" value="toolbar" />
+              <el-option label="操作列" value="column" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="形态" width="130">
+          <template #default="{ row }">
+            <el-select
+              :model-value="row.style"
+              style="width: 110px"
+              @change="(v: string) => updateActionBtn(row.key, { style: v })"
+            >
+              <el-option label="按钮" value="button" />
+              <el-option label="图标" value="icon" />
+              <el-option label="文字" value="text" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="条件显示" width="200">
+          <template #default="{ row }">
+            <el-input
+              :model-value="row.visible || ''"
+              placeholder="如 $row.status === 'PENDING'"
+              clearable
+              @input="(v: string) => updateActionBtn(row.key, { visible: v || undefined })"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="事件" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.events?.length ? 'success' : 'info'">
+              {{ row.events?.length ? '已绑定' : '未绑定' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center">
+        <el-input v-model="newBtnKey" placeholder="按钮标识" style="width: 140px" />
+        <el-input v-model="newBtnLabel" placeholder="按钮名称" style="width: 140px" />
+        <el-button type="primary" plain @click="addActionButton">添加按钮</el-button>
+      </div>
+      <template #footer>
+        <el-button @click="actionConfigVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -100,6 +212,24 @@ const previewJson = ref('')
 const dsDialogVisible = ref(false)
 const dsTab = ref('ds')
 
+// ===== 列配置弹窗状态 =====
+const columnsConfigVisible = ref(false)
+/** 当前选中组件的列配置（响应式引用） */
+const activeColumns = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.props?.columns || []
+})
+
+// ===== 操作列配置弹窗状态 =====
+const actionConfigVisible = ref(false)
+const newBtnKey = ref('')
+const newBtnLabel = ref('')
+/** 当前选中组件的操作按钮配置（响应式引用） */
+const activeActionButtons = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.props?.actionButtons || []
+})
+
 /** FcDesigner 配置：隐藏表单专用面板，保留组件/属性 */
 const designerConfig = {
   fieldReadonly: false,
@@ -122,7 +252,7 @@ const enabledDataSources = ref<DataSourceDTO[]>([])
 
 /** 注册页面组件到 FcDesigner 面板，并通过 setComponentRuleConfig 在属性面板注入"数据源"下拉（动态读取页面绑定层） */
 function registerPageComponents() {
-  // 属性面板注入：数据源下拉（选项来自页面绑定层 schema.dataSources，随选中组件动态求值）
+  // 属性面板注入：数据源下拉 + 表格配置（选项来自页面绑定层 schema.dataSources，随选中组件动态求值）
   const dataSourceProps = () => [
     {
       type: 'select',
@@ -158,6 +288,70 @@ function registerPageComponents() {
         },
       },
     },
+    // ===== 表格功能配置 =====
+    { type: 'title', title: '表格功能' },
+    {
+      type: 'switch',
+      field: 'sortable',
+      title: '启用排序',
+      value: false,
+    },
+    {
+      type: 'switch',
+      field: 'filterable',
+      title: '启用筛选',
+      value: false,
+    },
+    {
+      type: 'switch',
+      field: 'pagination',
+      title: '显示分页',
+      value: true,
+    },
+    {
+      type: 'select',
+      field: 'selectionMode',
+      title: '行选择模式',
+      value: 'none',
+      props: { clearable: true },
+      options: [
+        { label: '无', value: 'none' },
+        { label: '单选', value: 'single' },
+        { label: '多选', value: 'multiple' },
+      ],
+    },
+    // ===== 操作列配置 =====
+    { type: 'title', title: '操作列' },
+    {
+      type: 'inputNumber',
+      field: 'actionColumnWidth',
+      title: '操作列宽度',
+      value: 0,
+      props: { min: 0, max: 400, step: 10, placeholder: '0=自动计算' },
+    },
+    // ===== 列格式化配置 =====
+    { type: 'title', title: '列格式化（需在 columns 中配置）' },
+    {
+      type: 'button',
+      field: 'columnsConfigTrigger',
+      title: '',
+      children: ['列配置（格式化/固定列）'],
+      native: true,
+      style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+      props: { size: 'small' },
+      on: { click: () => openColumnsConfig() },
+    },
+    // ===== 操作列配置 =====
+    {
+      type: 'button',
+      field: 'actionConfigTrigger',
+      title: '',
+      children: ['操作列配置（按钮/条件显示）'],
+      native: true,
+      style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF', marginTop: '8px' },
+      props: { size: 'small' },
+      on: { click: () => openActionConfig() },
+    },
   ]
 
   designerRef.value?.addComponent({
@@ -174,10 +368,15 @@ function registerPageComponents() {
         border: true,
         stripe: true,
         columns: [],
+        sortable: false,
+        filterable: false,
+        pagination: true,
+        selectionMode: 'none',
+        actionColumnWidth: 0,
       },
     }),
   })
-  // 属性面板"属性配置"区注入数据源下拉（选中画布中该组件时动态求值）
+  // 属性面板"属性配置"区注入数据源下拉 + 表格配置（选中画布中该组件时动态求值）
   designerRef.value?.setComponentRuleConfig('page-table', dataSourceProps, true)
 
   designerRef.value?.addComponent({
@@ -352,6 +551,68 @@ function statusLabel(status: string): string {
     ARCHIVED: '已归档',
   }
   return map[status] || status
+}
+
+// ===== 列配置弹窗 =====
+function openColumnsConfig() {
+  const active = designerRef.value?.activeRule as any
+  if (!active?.props?.columns?.length) {
+    ElMessage.warning('请先选择数据源，再配置列')
+    return
+  }
+  columnsConfigVisible.value = true
+}
+
+function updateColumnProp(prop: string, key: string, value: any) {
+  const active = designerRef.value?.activeRule as any
+  if (!active?.props?.columns) return
+  active.props.columns = active.props.columns.map((c: any) =>
+    c.prop === prop ? { ...c, [key]: value } : c,
+  )
+}
+
+// ===== 操作列配置弹窗 =====
+function openActionConfig() {
+  const active = designerRef.value?.activeRule as any
+  // 初始化默认按钮（如果还没有配置过）
+  if (!active?.props?.actionButtons) {
+    if (!active.props) active.props = {}
+    active.props.actionButtons = [
+      { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
+      { key: 'delete', label: '删除', placement: 'column', style: 'text' },
+    ]
+  }
+  actionConfigVisible.value = true
+}
+
+function updateActionBtn(key: string, patch: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (!active?.props?.actionButtons) return
+  active.props.actionButtons = active.props.actionButtons.map((b: any) =>
+    b.key === key ? { ...b, ...patch } : b,
+  )
+}
+
+function addActionButton() {
+  const key = newBtnKey.value.trim()
+  const label = newBtnLabel.value.trim() || key
+  if (!key) return
+  const active = designerRef.value?.activeRule as any
+  if (!active?.props) return
+  if (!active.props.actionButtons) active.props.actionButtons = []
+  if (active.props.actionButtons.some((b: any) => b.key === key)) {
+    ElMessage.warning('按钮标识已存在')
+    return
+  }
+  active.props.actionButtons.push({
+    key,
+    label,
+    placement: 'column',
+    style: 'text',
+    visible: '',
+  })
+  newBtnKey.value = ''
+  newBtnLabel.value = ''
 }
 </script>
 

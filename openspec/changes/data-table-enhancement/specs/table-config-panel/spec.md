@@ -1,63 +1,31 @@
 ## ADDED Requirements
 
-### Requirement: 配置面板 SHALL 提供列配置功能
+### Requirement: ViewDesigner SHALL 提供完整的视图配置能力
 
-通用配置面板 SHALL 提供可视化列配置界面。
+ViewDesigner SHALL 通过现有的 QueryColumnsConfig/ActionsConfig/EventsConfig 组件提供完整的视图配置能力。
 
-#### Scenario: 打开列配置
-- **WHEN** 用户点击"列配置"按钮
-- **THEN** 配置面板 SHALL 显示列列表，支持添加、删除、编辑列
+#### Scenario: 配置查询条件和显示列
+- **WHEN** 用户在 ViewDesigner 的"显示&查询"标签页中操作
+- **THEN** ViewDesigner SHALL 支持配置查询条件（searchFields）和显示列（columns），包括新增的 formatter 和 fixed 属性
 
-#### Scenario: 编辑列属性
-- **WHEN** 用户在列配置中选择某一列并修改属性
-- **THEN** 配置面板 SHALL 实时更新列配置预览
+#### Scenario: 配置操作按钮
+- **WHEN** 用户在 ViewDesigner 的"操作"标签页中操作
+- **THEN** ViewDesigner SHALL 支持配置操作按钮（actions.buttons），包括新增的 visible 条件显示属性
 
-#### Scenario: 保存列配置
-- **WHEN** 用户确认列配置修改
-- **THEN** 配置面板 SHALL 通过 `update:columns` 事件通知父组件
-
----
-
-### Requirement: 配置面板 SHALL 提供操作列配置功能
-
-通用配置面板 SHALL 提供可视化操作列配置界面。
-
-#### Scenario: 打开操作列配置
-- **WHEN** 用户点击"操作列"配置按钮
-- **THEN** 配置面板 SHALL 显示按钮列表，支持添加、删除、编辑按钮
-
-#### Scenario: 编辑按钮属性
-- **WHEN** 用户在操作列配置中选择某一按钮并修改属性
-- **THEN** 配置面板 SHALL 实时更新按钮配置预览
-
-#### Scenario: 保存操作列配置
-- **WHEN** 用户确认操作列配置修改
-- **THEN** 配置面板 SHALL 通过 `update:action-buttons` 事件通知父组件
+#### Scenario: 配置事件动作链
+- **WHEN** 用户在 ViewDesigner 的"事件"标签页中操作
+- **THEN** ViewDesigner SHALL 支持配置事件动作链（events），包括新增的触发器和动作类型
 
 ---
 
-### Requirement: 配置面板 SHALL 可选显示搜索字段配置
+### Requirement: ViewDesigner 配置 SHALL 通过 PageRenderer 渲染
 
-通用配置面板 SHALL 支持可选的搜索字段配置功能。
+ViewDesigner 中配置的所有功能 SHALL 在 PageRenderer 中正确渲染和执行。
 
-#### Scenario: 启用搜索字段配置
-- **WHEN** 父组件设置 `showSearch` 为 `true`
-- **THEN** 配置面板 SHALL 显示搜索字段配置标签页
+#### Scenario: 配置保存后预览
+- **WHEN** 用户在 ViewDesigner 中保存配置后预览
+- **THEN** PageRenderer SHALL 根据配置正确渲染表格（格式化器、固定列、按钮条件显示、事件联动）
 
-#### Scenario: 禁用搜索字段配置
-- **WHEN** 父组件设置 `showSearch` 为 `false` 或未设置
-- **THEN** 配置面板 SHALL 不显示搜索字段配置标签页
-
----
-
-### Requirement: 配置面板 SHALL 在 PageDesigner 中通过弹窗使用
-
-PageDesigner SHALL 通过弹窗方式使用通用配置面板。
-
-#### Scenario: 打开配置弹窗
-- **WHEN** 用户在 PageDesigner 属性面板中点击配置按钮
-- **THEN** PageDesigner SHALL 打开包含 TableConfigPanel 的弹窗
-
-#### Scenario: 关闭配置弹窗
-- **WHEN** 用户关闭配置弹窗
-- **THEN** PageDesigner SHALL 将配置结果同步到组件属性
+#### Scenario: 现有配置向后兼容
+- **WHEN** 现有视图 schema 不包含新增配置项
+- **THEN** PageRenderer SHALL 按原有行为渲染，不受新增功能影响

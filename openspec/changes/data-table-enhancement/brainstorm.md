@@ -1,132 +1,94 @@
 ## Design Summary
 
-增强页面设计器和表单设计器中数据表格组件的功能，通过属性配置和事件绑定实现与其他组件的灵活联动。
+直接扩展 ViewDesigner 的配置能力，并同步扩展 PageRenderer 的渲染能力，实现数据表格组件的增强。
 
 ### 核心目标
 
-1. **属性配置增强** - 扩展 PageDataTable 的配置能力，支持排序、筛选、分页、行选择等
-2. **事件绑定增强** - 支持更多事件类型（cell-click、selection-change、sort-change 等）
-3. **操作列配置** - 实现操作列按钮的灵活配置，支持自定义按钮和条件显示
-4. **配置复用** - 与 SearchTable 组件共享配置面板，统一配置体验
+1. **ViewDesigner 配置扩展** - 在现有 QueryColumnsConfig/ActionsConfig/EventsConfig 基础上增加新配置项
+2. **PageRenderer 渲染扩展** - 支持新配置项的运行时渲染
+3. **保持向后兼容** - 现有视图 schema 无需修改
 
 ## Alternatives Considered
 
-### 方案 A：渐进式增强
+### 方案 A：独立配置面板
 
-- **做法**：在现有 PageDataTable 基础上扩展属性和事件，保持向后兼容
-- **优点**：改动小、风险低、兼容现有 schema
-- **缺点**：功能受限于 el-table 原生能力，配置体验一般
-- **为何未采用**：配置体验不够友好，无法与 SearchTable 复用配置逻辑
+- **做法**：新建通用 TableConfigPanel 组件，与 ViewDesigner 分离
+- **优点**：组件独立，可复用于 SearchTable
+- **缺点**：与现有 ViewDesigner 配置体系割裂，用户需要在两处配置
+- **为何未采用**：配置体验不统一，增加用户认知负担
 
-### 方案 B：完全重构
+### 方案 B：完全重构 ViewDesigner
 
-- **做法**：新建独立的 AdvancedDataTable 组件，支持更丰富的配置
-- **优点**：功能强大、高度可定制
-- **缺点**：工作量大、需要重新设计 schema 结构、破坏向后兼容
-- **为何未采用**：风险过高，与现有架构不兼容
+- **做法**：重新设计 ViewDesigner 的 schema 结构和配置组件
+- **优点**：架构更清晰
+- **缺点**：工作量大，破坏向后兼容
+- **为何未采用**：风险过高
 
-### 方案 C：混合方案（采用）
+### 方案 C：直接扩展 ViewDesigner（采用）
 
-- **做法**：增强 PageDataTable 属性和事件，引入通用配置面板复用 SearchTable 的配置逻辑
-- **优点**：功能丰富且可控、用户体验好、可分阶段实现
+- **做法**：在现有 QueryColumnsConfig/ActionsConfig/EventsConfig 组件上增加新配置项，同步扩展 PageRenderer 渲染能力
+- **优点**：复用现有配置体系，风险低，用户体验统一
 - **缺点**：中等工作量
-- **为何采用**：在现有架构上扩展，风险可控；配置面板提供更好的用户体验；可以分阶段实现
+- **为何采用**：ViewDesigner 已有完善的配置体系，直接扩展是最自然的方式
 
 ## Agreed Approach
 
-采用方案 C（混合方案），具体实现：
+直接扩展 ViewDesigner，具体实现：
 
-### 1. 属性配置增强
+### 1. QueryColumnsConfig 扩展
 
-**表格级属性**：
-- `sortable` - 是否启用排序
-- `filterable` - 是否启用筛选
-- `pagination` - 是否显示分页
-- `pageSize` - 每页条数
-- `selectionMode` - 行选择模式（none/single/multiple）
-- `height` / `maxHeight` - 表格高度控制
+**现有能力**：勾选显示列、设置宽度/对齐/排序
 
-**列级属性**：
-- `sortable` - 该列是否可排序
-- `filterable` - 该列是否可筛选
+**新增能力**：
+- `formatter` - 列值格式化器（currency/date/boolean/enum）
 - `fixed` - 固定列（left/right）
-- `formatter` - 值格式化函数名
-- `align` - 对齐方式
-- `showOverflowTooltip` - 超出显示 tooltip
 
-### 2. 事件绑定增强
+### 2. ActionsConfig 扩展
 
-**组件事件**：
-- `row-click` - 行点击
+**现有能力**：内置/自定义按钮、位置/形态/图标、事件链、操作列宽度、权限
+
+**新增能力**：
+- `visible` - 按钮条件显示表达式（如 `$row.status === 'PENDING'`）
+
+### 3. EventsConfig 扩展
+
+**现有触发器**：row-click / search / refresh / create-success
+
+**新增触发器**：
 - `cell-click` - 单元格点击
-- `selection-change` - 选中行变化
-- `sort-change` - 排序变化
+- `selection-change` - 行选择变化
 - `current-change` - 当前行变化
 
-**动作总线扩展**：
-- `set-sort` - 设置排序
-- `set-page` - 设置分页
-- `get-selection` - 获取选中行
-- `clear-selection` - 清空选中
+**现有动作**：set-filter / refresh / open-detail / script
 
-### 3. 操作列按钮配置
+**新增动作**：
+- `set-sort` - 设置排序（params: field, order）
+- `set-page` - 设置分页（params: page, size）
+- `clear-selection` - 清空行选择
 
-```javascript
-{
-  actionColumn: {
-    label: '操作',
-    width: 200,
-    fixed: 'right',
-    buttons: [
-      {
-        label: '编辑',
-        type: 'primary',
-        action: 'edit',
-        visible: '{row.status === 0}'
-      },
-      {
-        label: '删除',
-        type: 'danger',
-        action: 'delete',
-        confirmMessage: '确定删除这条记录吗？'
-      },
-      {
-        label: '查看详情',
-        type: 'primary',
-        action: 'custom',
-        customAction: 'view-detail'
-      }
-    ]
-  }
-}
-```
+### 4. PageRenderer 渲染扩展
 
-### 4. 配置面板设计
-
-采用分层配置策略：
-- **第一层**：属性编辑栏直接配置（简单属性）
-- **第二层**：弹窗配置（复杂配置：列配置、操作列、事件绑定）
-
-### 5. 与 SearchTable 复用
-
-创建通用 `TableConfigPanel` 组件，支持：
-- 列配置面板
-- 操作列配置面板
-- 搜索字段配置（可选）
-
-SearchTable 和 PageDataTable 通过适配层使用该配置组件。
+| 扩展项 | 说明 |
+|--------|------|
+| 列格式化 | 根据 `formatter` 配置格式化单元格显示值 |
+| 固定列 | 根据 `fixed` 配置固定列位置 |
+| 单元格事件 | 监听 `cell-click` 并触发事件链 |
+| 行选择 | 支持 `selection-change` 多选/单选模式 |
+| 排序动作 | 执行 `set-sort` 动作时设置 el-table 排序 |
+| 分页动作 | 执行 `set-page` 动作时跳转分页 |
+| 清空选择 | 执行 `clear-selection` 动作时清空选中行 |
+| 按钮条件显示 | 根据 `visible` 表达式判断是否渲染按钮 |
 
 ## Key Decisions
 
-1. **采用混合方案** - 在现有基础上扩展，保持向后兼容
-2. **分层配置策略** - 简单属性直接配置，复杂属性弹窗配置
-3. **通用配置组件** - 与 SearchTable 复用配置逻辑
-4. **操作列按钮支持条件显示** - 通过表达式控制按钮可见性
-5. **内置格式化器** - 提供 currency、date、boolean 等常用格式化器
+1. **直接扩展 ViewDesigner** - 不新建独立配置组件，复用现有配置体系
+2. **配置端 + 渲染端同步扩展** - ViewDesigner 新增的配置项在 PageRenderer 中实现渲染
+3. **保持向后兼容** - 新增配置项均有默认值，现有 schema 无需修改
+4. **内置格式化器** - 提供 currency/date/boolean/enum 常用格式化器
+5. **按钮条件显示** - 通过表达式（`$row.xxx` 语法）控制按钮可见性
 
 ## Open Questions
 
-1. 是否需要支持列拖拽排序？
-2. 是否需要支持表格导出功能？
-3. 是否需要支持行内编辑？
-4. 是否需要支持虚拟滚动（大数据量场景）？
+1. 格式化器是否需要支持自定义函数？
+2. 固定列组合（同时固定左右）是否有性能影响？
+3. selection-change 是否需要支持跨页选择？

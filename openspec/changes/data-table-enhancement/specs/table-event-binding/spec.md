@@ -1,73 +1,119 @@
 ## ADDED Requirements
 
-### Requirement: 表格 SHALL 发射 cell-click 事件
+### Requirement: EventsConfig SHALL 支持 cell-click 触发器
 
-表格 SHALL 在用户点击单元格时发射 `cell-click` 事件。
+EventsConfig 组件 SHALL 在触发器下拉中提供 `cell-click`（单元格点击）选项。
 
-#### Scenario: 点击单元格
-- **WHEN** 用户点击表格中的某个单元格
-- **THEN** 表格 SHALL 发射 `cell-click` 事件，携带 `{ row, column, cell, event }` 参数
-
----
-
-### Requirement: 表格 SHALL 发射 selection-change 事件
-
-表格 SHALL 在用户改变行选择时发射 `selection-change` 事件。
-
-#### Scenario: 单选模式下选择行
-- **WHEN** `selectionMode` 为 `single` 且用户选择一行
-- **THEN** 表格 SHALL 发射 `selection-change` 事件，携带选中的行数据
-
-#### Scenario: 多选模式下选择行
-- **WHEN** `selectionMode` 为 `multiple` 且用户选择/取消选择行
-- **THEN** 表格 SHALL 发射 `selection-change` 事件，携带所有选中的行数据数组
+#### Scenario: 选择 cell-click 触发器
+- **WHEN** 用户在 EventsConfig 中选择触发器为 `cell-click`
+- **THEN** 该事件配置 SHALL 包含 `trigger: 'cell-click'`
 
 ---
 
-### Requirement: 表格 SHALL 发射 sort-change 事件
+### Requirement: EventsConfig SHALL 支持 selection-change 触发器
 
-表格 SHALL 在用户改变排序时发射 `sort-change` 事件。
+EventsConfig 组件 SHALL 在触发器下拉中提供 `selection-change`（行选择变化）选项。
 
-#### Scenario: 用户点击列头排序
-- **WHEN** 用户点击可排序列的列头进行排序
-- **THEN** 表格 SHALL 发射 `sort-change` 事件，携带 `{ column, prop, order }` 参数
-
----
-
-### Requirement: 表格 SHALL 发射 current-change 事件
-
-表格 SHALL 在用户改变当前行时发射 `current-change` 事件。
-
-#### Scenario: 单选模式下切换行
-- **WHEN** `selectionMode` 为 `single` 且用户点击不同行
-- **THEN** 表格 SHALL 发射 `current-change` 事件，携带新行和旧行数据
+#### Scenario: 选择 selection-change 触发器
+- **WHEN** 用户在 EventsConfig 中选择触发器为 `selection-change`
+- **THEN** 该事件配置 SHALL 包含 `trigger: 'selection-change'`
 
 ---
 
-### Requirement: 动作总线 SHALL 支持 set-sort 操作
+### Requirement: EventsConfig SHALL 支持 current-change 触发器
 
-动作总线 SHALL 支持 `set-sort` 操作设置表格排序。
+EventsConfig 组件 SHALL 在触发器下拉中提供 `current-change`（当前行变化）选项。
 
-#### Scenario: 通过动作总线设置排序
-- **WHEN** 动作总线触发 `set-sort` 操作，参数包含 `field` 和 `order`
-- **THEN** 目标表格 SHALL 按指定字段和顺序进行排序
-
----
-
-### Requirement: 动作总线 SHALL 支持 set-page 操作
-
-动作总线 SHALL 支持 `set-page` 操作设置分页。
-
-#### Scenario: 通过动作总线设置分页
-- **WHEN** 动作总线触发 `set-page` 操作，参数包含 `page` 和/或 `size`
-- **THEN** 目标表格 SHALL 跳转到指定页码
+#### Scenario: 选择 current-change 触发器
+- **WHEN** 用户在 EventsConfig 中选择触发器为 `current-change`
+- **THEN** 该事件配置 SHALL 包含 `trigger: 'current-change'`
 
 ---
 
-### Requirement: 动作总线 SHALL 支持 clear-selection 操作
+### Requirement: EventsConfig SHALL 支持 set-sort 动作
 
-动作总线 SHALL 支持 `clear-selection` 操作清空表格选中状态。
+EventsConfig 组件 SHALL 在动作类型下拉中提供 `set-sort`（设置排序）选项。
 
-#### Scenario: 通过动作总线清空选中
-- **WHEN** 动作总线触发 `clear-selection` 操作
-- **THEN** 目标表格 SHALL 清空所有行的选中状态
+#### Scenario: 选择 set-sort 动作
+- **WHEN** 用户在 EventsConfig 中选择动作为 `set-sort`
+- **THEN** 该动作配置 SHALL 包含 `type: 'set-sort'`，支持 params: field（排序字段）、order（排序方向 ascending/descending）
+
+---
+
+### Requirement: EventsConfig SHALL 支持 set-page 动作
+
+EventsConfig 组件 SHALL 在动作类型下拉中提供 `set-page`（设置分页）选项。
+
+#### Scenario: 选择 set-page 动作
+- **WHEN** 用户在 EventsConfig 中选择动作为 `set-page`
+- **THEN** 该动作配置 SHALL 包含 `type: 'set-page'`，支持 params: page（目标页码）
+
+---
+
+### Requirement: EventsConfig SHALL 支持 clear-selection 动作
+
+EventsConfig 组件 SHALL 在动作类型下拉中提供 `clear-selection`（清空选择）选项。
+
+#### Scenario: 选择 clear-selection 动作
+- **WHEN** 用户在 EventsConfig 中选择动作为 `clear-selection`
+- **THEN** 该动作配置 SHALL 包含 `type: 'clear-selection'`
+
+---
+
+### Requirement: PageRenderer SHALL 处理 cell-click 事件
+
+PageRenderer SHALL 监听 el-table 的 `cell-click` 事件并触发对应事件链。
+
+#### Scenario: 点击单元格触发事件链
+- **WHEN** 用户点击表格单元格
+- **THEN** PageRenderer SHALL 调用 `triggerEvents('cell-click', 'table', { row, column })`
+
+---
+
+### Requirement: PageRenderer SHALL 处理 selection-change 事件
+
+PageRenderer SHALL 监听 el-table 的 `selection-change` 事件并触发对应事件链。
+
+#### Scenario: 行选择变化触发事件链
+- **WHEN** 用户选择或取消选择行
+- **THEN** PageRenderer SHALL 调用 `triggerEvents('selection-change', 'table', { selectedRows })`
+
+---
+
+### Requirement: PageRenderer SHALL 处理 current-change 事件
+
+PageRenderer SHALL 监听 el-table 的 `current-change` 事件并触发对应事件链。
+
+#### Scenario: 当前行变化触发事件链
+- **WHEN** 用户点击不同行切换当前行
+- **THEN** PageRenderer SHALL 调用 `triggerEvents('current-change', 'table', { row, oldRow })`
+
+---
+
+### Requirement: PageRenderer SHALL 执行 set-sort 动作
+
+PageRenderer SHALL 在 `dispatchAction` 中支持 `set-sort` 动作类型。
+
+#### Scenario: 执行 set-sort 动作
+- **WHEN** 事件链中动作为 `set-sort`，params 包含 `field` 和 `order`
+- **THEN** PageRenderer SHALL 设置 el-table 的排序状态（prop 和 order）
+
+---
+
+### Requirement: PageRenderer SHALL 执行 set-page 动作
+
+PageRenderer SHALL 在 `dispatchAction` 中支持 `set-page` 动作类型。
+
+#### Scenario: 执行 set-page 动作
+- **WHEN** 事件链中动作为 `set-page`，params 包含 `page`
+- **THEN** PageRenderer SHALL 跳转到指定页码并重新加载数据
+
+---
+
+### Requirement: PageRenderer SHALL 执行 clear-selection 动作
+
+PageRenderer SHALL 在 `dispatchAction` 中支持 `clear-selection` 动作类型。
+
+#### Scenario: 执行 clear-selection 动作
+- **WHEN** 事件链中动作为 `clear-selection`
+- **THEN** PageRenderer SHALL 清空 el-table 的所有行选中状态

@@ -199,31 +199,6 @@ function registerPageComponents() {
     }),
   })
   designerRef.value?.setComponentRuleConfig('page-tree', dataSourceProps, true)
-
-  // 注册 FORM 容器组件到页面组件库（表单区容器）
-  designerRef.value?.addComponent({
-    label: '数据表单容器',
-    name: 'formContainer',
-    icon: 'icon-group',
-    menu: 'main',
-    rule: () => ({
-      type: 'formContainer',
-      field: 'fc' + Date.now(),
-      title: '数据表单容器',
-      props: { dataSourceId: '', recordLocator: { type: 'current-record' } },
-      children: [],
-    }),
-  })
-  designerRef.value?.setComponentRuleConfig('formContainer', () => [
-    {
-      type: 'select',
-      field: 'dataSourceId',
-      title: '数据源',
-      options: enabledDataSources.value.map((d) => ({ value: d.id, label: `${d.name}（${d.type}）` })),
-      props: { clearable: true, filterable: true, placeholder: '选择绑定数据源' },
-    },
-    { type: 'json', field: 'recordLocator', title: '记录定位' },
-  ], false)
 }
 
 onMounted(async () => {

@@ -1,6 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: DataSourceConfigPanel 组件 SHALL 提供数据源绑定配置功能
+DataSourceConfigPanel 组件 SHALL 提供完整的数据源绑定配置功能，包括添加、编辑和删除数据源绑定。
 
 #### Scenario: 添加数据源绑定
 - **WHEN** 用户点击"添加数据源"按钮
@@ -19,6 +20,7 @@
 - **THEN** 系统 SHALL 更新该数据源绑定的 refId 属性为选中的全局数据源ID
 
 ### Requirement: DataSourceConfigPanel 组件 SHALL 显示已启用的全局数据源列表
+组件 SHALL 在下拉框中显示所有已启用的全局数据源，供用户选择绑定。
 
 #### Scenario: 加载全局数据源
 - **WHEN** 组件挂载时接收到 enabledDataSources prop
@@ -29,6 +31,7 @@
 - **THEN** 系统 SHALL 在下拉框中显示"暂无可用数据源"提示
 
 ### Requirement: DataSourceConfigPanel 组件 SHALL 支持数据验证
+组件 SHALL 支持数据验证，包括页面内标识唯一性、必填项验证等。
 
 #### Scenario: 页面内标识重复
 - **WHEN** 用户输入的页面内标识与已有标识重复
@@ -43,6 +46,7 @@
 - **THEN** 系统 SHALL 显示错误提示"请选择全局数据源"
 
 ### Requirement: DataSourceConfigPanel 组件 SHALL 通过事件通知父组件配置变更
+组件 SHALL 在配置变更时通过事件通知父组件，确保数据同步。
 
 #### Scenario: 配置变更
 - **WHEN** 用户添加、删除或修改数据源绑定

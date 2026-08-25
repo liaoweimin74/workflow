@@ -59,15 +59,11 @@
       <el-tabs v-model="dsTab" type="border-card">
         <!-- 数据源绑定 -->
         <el-tab-pane label="数据源绑定" name="ds">
-          <div class="ds-row" v-for="(ds, i) in schema.dataSources" :key="i">
-            <el-input v-model="ds.id" placeholder="页面内标识" style="width: 130px" />
-            <el-select v-model="ds.refId" placeholder="选择全局数据源" style="flex: 1" filterable>
-              <el-option v-for="g in enabledDataSources" :key="g.id" :label="`${g.name}（${g.type}）`" :value="g.id" />
-            </el-select>
-            <el-button link type="danger" @click="schema.dataSources.splice(i, 1)">删</el-button>
-          </div>
-          <el-button type="primary" plain @click="addDataSource">+ 添加数据源</el-button>
-          <div class="form-tip">数据组件（树/表格）绑定：选中组件 → 属性面板「数据源 id」填上方页面内标识</div>
+          <DataSourceConfigPanel
+            :dataSources="schema.dataSources"
+            :enabledDataSources="enabledDataSources"
+            @update:dataSources="updateDataSources"
+          />
         </el-tab-pane>
 
         <!-- 动作总线 -->
@@ -125,6 +121,7 @@ import PageDataTable from './components/PageDataTable.vue'
 import PageDataTree from './components/PageDataTree.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
+import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
@@ -317,6 +314,10 @@ onMounted(async () => {
 
 function addDataSource() {
   schema.dataSources.push({ id: `ds_${Date.now().toString(36)}`, refId: '' })
+}
+
+function updateDataSources(newDataSources: { id: string; refId: string; searchFields?: string[] }[]) {
+  schema.dataSources.splice(0, schema.dataSources.length, ...newDataSources)
 }
 
 function addAction() {

@@ -85,6 +85,7 @@
           :min-width="col.minWidth"
           :align="col.align"
           :fixed="col.fixed"
+          :sortable="col.sortable ? 'custom' : undefined"
           :formatter="col.formatter"
         >
           <template #default="{ row, column, $index }" v-if="col.render">
@@ -242,6 +243,7 @@ const props = withDefaults(defineProps<SearchTableProps>(), {
   exportLoading: false,
   maxVisibleButtons: 3,
   showSearch: true,
+  mergeDefaultActions: true,
   tableSize: 'default',
 })
 
@@ -255,8 +257,8 @@ const treeTableAttrs = computed(() => {
   }
 })
 
-/** 树形模式下隐藏分页 */
-const showPagination = computed(() => !props.treeProps)
+/** 树形模式下隐藏分页；非树形时按 props.showPagination（默认 true） */
+const showPagination = computed(() => (!props.treeProps && props.showPagination !== false))
 
 const emit = defineEmits<{
   search: [params: QueryParams]
@@ -307,7 +309,8 @@ const actionColumnWidth = computed(() => {
 const resolvedActionButtons = computed<ActionButton[]>(() => {
   const defaults = props.formConfig ? getDefaultActions() : []
   if (props.actionButtons !== undefined) {
-    // 合并：自定义按钮追加到默认按钮后面
+    // mergeDefaultActions=false 时完全使用自定义按钮；默认合并（默认在前，自定义在后）
+    if (props.mergeDefaultActions === false) return props.actionButtons
     return [...defaults, ...props.actionButtons]
   }
   return defaults

@@ -30,6 +30,8 @@ export interface TableColumn {
   minWidth?: number | string
   align?: 'left' | 'center' | 'right'
   fixed?: 'left' | 'right'
+  /** 是否可排序 */
+  sortable?: boolean
   formatter?: (
     row: any,
     column: TableColumn,
@@ -122,6 +124,10 @@ export interface SearchTableProps<T = any> {
   formConfig?: FormConfig<T>
   /** 是否显示搜索栏，默认 true */
   showSearch?: boolean
+  /** 是否显示分页，默认 true（树形模式下忽略） */
+  showPagination?: boolean
+  /** 自定义按钮是否与默认按钮合并（默认 true：默认编辑/删除在前，自定义在后；false：完全使用自定义按钮） */
+  mergeDefaultActions?: boolean
   /** el-table 尺寸，默认 'default' */
   tableSize?: 'small' | 'default' | 'large'
   /** 树形表格配置，存在时启用树形渲染并隐藏分页 */

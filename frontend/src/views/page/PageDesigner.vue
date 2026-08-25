@@ -446,7 +446,11 @@ async function openTableConfig() {
   const props = active.props || {}
   tableConfigData.searchFields = props.searchFields || []
   // props.columns 为渲染格式 { prop, label, width, ... }，转换为配置格式 { key, label, width, ... }
-  tableConfigData.columns = (props.columns || []).map((c: any) => ({
+  // 空数组/未配置时 fallback 到数据源全列（默认全选显示）
+  const srcColumns = (props.columns && props.columns.length > 0)
+    ? props.columns
+    : tableConfigColumns.value.map((c: any) => ({ prop: c.key, label: c.label || c.key }))
+  tableConfigData.columns = srcColumns.map((c: any) => ({
     key: c.prop ?? c.key,
     label: c.label || c.prop || c.key,
     width: c.width,

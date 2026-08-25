@@ -118,7 +118,7 @@
           </el-select>
         </template>
       </el-table-column>
-      <el-table-column label="图标" width="145">
+      <el-table-column label="图标" width="140">
         <template #default="{ row }">
           <el-select
             :model-value="row.icon || defaultIconOf(row.key)"

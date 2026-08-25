@@ -65,115 +65,30 @@
       </template>
     </el-dialog>
 
-    <!-- 列配置弹窗（formatter/fixed） -->
-    <el-dialog v-model="columnsConfigVisible" title="列配置（格式化 / 固定列）" width="760px" destroy-on-close>
-      <el-table :data="activeColumns" border max-height="420">
-        <el-table-column prop="prop" label="字段" width="140" />
-        <el-table-column prop="label" label="标题" min-width="120" />
-        <el-table-column label="格式化" width="150">
-          <template #default="{ row }">
-            <el-select
-              :model-value="row.formatter || ''"
-              clearable
-              placeholder="无"
-              style="width: 130px"
-              @change="(v: string) => updateColumnProp(row.prop, 'formatter', v || undefined)"
-            >
-              <el-option label="货币" value="currency" />
-              <el-option label="日期" value="date" />
-              <el-option label="日期时间" value="datetime" />
-              <el-option label="布尔" value="boolean" />
-              <el-option label="枚举" value="enum" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="固定列" width="130">
-          <template #default="{ row }">
-            <el-select
-              :model-value="row.fixed || ''"
-              clearable
-              placeholder="无"
-              style="width: 110px"
-              @change="(v: string) => updateColumnProp(row.prop, 'fixed', v || undefined)"
-            >
-              <el-option label="左侧" value="left" />
-              <el-option label="右侧" value="right" />
-            </el-select>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="activeColumns.length === 0" description="请先选择数据源" :image-size="60" />
+    <!-- 数据表格统一配置弹窗（对齐 ViewDesigner 风格） -->
+    <el-dialog v-model="tableConfigVisible" title="数据表格配置" width="860px" destroy-on-close>
+      <el-tabs v-model="tableConfigTab" type="border-card">
+        <el-tab-pane label="显示列" name="columns">
+          <QueryColumnsConfig
+            :candidates="tableConfigColumns"
+            :filterable-keys="tableConfigFilterableKeys"
+            v-model:search-fields="tableConfigData.searchFields"
+            v-model:columns="tableConfigData.columns"
+          />
+        </el-tab-pane>
+        <el-tab-pane label="操作" name="actions">
+          <ActionsConfig
+            v-model="tableConfigData.actions"
+            :detail="tableConfigData.detail"
+          />
+        </el-tab-pane>
+        <el-tab-pane label="事件" name="events">
+          <EventsConfig v-model="tableConfigData.events" />
+        </el-tab-pane>
+      </el-tabs>
       <template #footer>
-        <el-button @click="columnsConfigVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 操作列配置弹窗（按钮 visible/事件链） -->
-    <el-dialog v-model="actionConfigVisible" title="操作列配置（按钮 / 条件显示）" width="760px" destroy-on-close>
-      <el-table :data="activeActionButtons" border max-height="420">
-        <el-table-column prop="key" label="标识" width="120">
-          <template #default="{ row }">
-            <el-tag type="info">{{ row.key }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="名称" min-width="120">
-          <template #default="{ row }">
-            <el-input
-              :model-value="row.label"
-              @input="(v: string) => updateActionBtn(row.key, { label: v })"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="位置" width="130">
-          <template #default="{ row }">
-            <el-select
-              :model-value="row.placement"
-              style="width: 110px"
-              @change="(v: string) => updateActionBtn(row.key, { placement: v })"
-            >
-              <el-option label="操作栏" value="toolbar" />
-              <el-option label="操作列" value="column" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="形态" width="130">
-          <template #default="{ row }">
-            <el-select
-              :model-value="row.style"
-              style="width: 110px"
-              @change="(v: string) => updateActionBtn(row.key, { style: v })"
-            >
-              <el-option label="按钮" value="button" />
-              <el-option label="图标" value="icon" />
-              <el-option label="文字" value="text" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="条件显示" width="200">
-          <template #default="{ row }">
-            <el-input
-              :model-value="row.visible || ''"
-              placeholder="如 $row.status === 'PENDING'"
-              clearable
-              @input="(v: string) => updateActionBtn(row.key, { visible: v || undefined })"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="事件" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.events?.length ? 'success' : 'info'">
-              {{ row.events?.length ? '已绑定' : '未绑定' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center">
-        <el-input v-model="newBtnKey" placeholder="按钮标识" style="width: 140px" />
-        <el-input v-model="newBtnLabel" placeholder="按钮名称" style="width: 140px" />
-        <el-button type="primary" plain @click="addActionButton">添加按钮</el-button>
-      </div>
-      <template #footer>
-        <el-button @click="actionConfigVisible = false">关闭</el-button>
+        <el-button @click="tableConfigVisible = false">取消</el-button>
+        <el-button type="primary" @click="applyTableConfig">确定</el-button>
       </template>
     </el-dialog>
   </div>
@@ -190,6 +105,9 @@ import PageDataTree from './components/PageDataTree.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
+import QueryColumnsConfig from './components/QueryColumnsConfig.vue'
+import ActionsConfig from './components/ActionsConfig.vue'
+import EventsConfig from './components/EventsConfig.vue'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
@@ -212,22 +130,20 @@ const previewJson = ref('')
 const dsDialogVisible = ref(false)
 const dsTab = ref('ds')
 
-// ===== 列配置弹窗状态 =====
-const columnsConfigVisible = ref(false)
-/** 当前选中组件的列配置（响应式引用） */
-const activeColumns = computed(() => {
-  const active = designerRef.value?.activeRule as any
-  return active?.props?.columns || []
-})
-
-// ===== 操作列配置弹窗状态 =====
-const actionConfigVisible = ref(false)
-const newBtnKey = ref('')
-const newBtnLabel = ref('')
-/** 当前选中组件的操作按钮配置（响应式引用） */
-const activeActionButtons = computed(() => {
-  const active = designerRef.value?.activeRule as any
-  return active?.props?.actionButtons || []
+// ===== 数据表格统一配置弹窗状态 =====
+const tableConfigVisible = ref(false)
+const tableConfigTab = ref('columns')
+/** 当前选中组件的列候选项（从数据源 metadata 加载） */
+const tableConfigColumns = ref<any[]>([])
+/** 可筛选列 key 集合 */
+const tableConfigFilterableKeys = ref<Set<string>>(new Set())
+/** 配置数据（临时，确定后写回 activeRule） */
+const tableConfigData = reactive({
+  searchFields: [] as any[],
+  columns: [] as any[],
+  actions: { buttons: [] as any[], permissions: '' },
+  detail: { width: '800px', type: 'form' },
+  events: [] as any[],
 })
 
 /** FcDesigner 配置：隐藏表单专用面板，保留组件/属性 */
@@ -288,69 +204,16 @@ function registerPageComponents() {
         },
       },
     },
-    // ===== 表格功能配置 =====
-    { type: 'title', title: '表格功能' },
-    {
-      type: 'switch',
-      field: 'sortable',
-      title: '启用排序',
-      value: false,
-    },
-    {
-      type: 'switch',
-      field: 'filterable',
-      title: '启用筛选',
-      value: false,
-    },
-    {
-      type: 'switch',
-      field: 'pagination',
-      title: '显示分页',
-      value: true,
-    },
-    {
-      type: 'select',
-      field: 'selectionMode',
-      title: '行选择模式',
-      value: 'none',
-      props: { clearable: true },
-      options: [
-        { label: '无', value: 'none' },
-        { label: '单选', value: 'single' },
-        { label: '多选', value: 'multiple' },
-      ],
-    },
-    // ===== 操作列配置 =====
-    { type: 'title', title: '操作列' },
-    {
-      type: 'inputNumber',
-      field: 'actionColumnWidth',
-      title: '操作列宽度',
-      value: 0,
-      props: { min: 0, max: 400, step: 10, placeholder: '0=自动计算' },
-    },
-    // ===== 列格式化配置 =====
-    { type: 'title', title: '列格式化（需在 columns 中配置）' },
+    // ===== 数据表格配置入口 =====
     {
       type: 'button',
-      field: 'columnsConfigTrigger',
+      field: 'tableConfigTrigger',
       title: '',
-      children: ['列配置（格式化/固定列）'],
+      children: ['数据表格配置'],
       native: true,
       style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
       props: { size: 'small' },
-      on: { click: () => openColumnsConfig() },
-    },
-    // ===== 操作列配置 =====
-    {
-      type: 'button',
-      field: 'actionConfigTrigger',
-      title: '',
-      children: ['操作列配置（按钮/条件显示）'],
-      native: true,
-      style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF', marginTop: '8px' },
-      props: { size: 'small' },
-      on: { click: () => openActionConfig() },
+      on: { click: () => openTableConfig() },
     },
   ]
 
@@ -553,66 +416,58 @@ function statusLabel(status: string): string {
   return map[status] || status
 }
 
-// ===== 列配置弹窗 =====
-function openColumnsConfig() {
+// ===== 数据表格统一配置弹窗 =====
+async function openTableConfig() {
   const active = designerRef.value?.activeRule as any
-  if (!active?.props?.columns?.length) {
-    ElMessage.warning('请先选择数据源，再配置列')
+  if (!active?.props?.dataSourceId) {
+    ElMessage.warning('请先选择数据源')
     return
   }
-  columnsConfigVisible.value = true
-}
-
-function updateColumnProp(prop: string, key: string, value: any) {
-  const active = designerRef.value?.activeRule as any
-  if (!active?.props?.columns) return
-  active.props.columns = active.props.columns.map((c: any) =>
-    c.prop === prop ? { ...c, [key]: value } : c,
-  )
-}
-
-// ===== 操作列配置弹窗 =====
-function openActionConfig() {
-  const active = designerRef.value?.activeRule as any
-  // 初始化默认按钮（如果还没有配置过）
-  if (!active?.props?.actionButtons) {
-    if (!active.props) active.props = {}
-    active.props.actionButtons = [
-      { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
-      { key: 'delete', label: '删除', placement: 'column', style: 'text' },
-    ]
+  // 加载数据源列候选项
+  const ds = schema.dataSources.find((d: any) => d.id === active.props.dataSourceId)
+  if (ds?.refId) {
+    try {
+      const res = await dataSourceApi.getMetadata(ds.refId)
+      const meta = res.data as any
+      const cols = (meta?.columns || []).filter((c: any) => !c.hidden)
+      tableConfigColumns.value = cols
+      // 可筛选列
+      const filterable = cols.filter((c: any) =>
+        c.columnType !== 'JSON' && c.columnType !== 'TEXT' &&
+        (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
+      )
+      tableConfigFilterableKeys.value = new Set(filterable.map((c: any) => c.key))
+    } catch {
+      tableConfigColumns.value = []
+    }
   }
-  actionConfigVisible.value = true
+  // 初始化配置数据（从 activeRule.props 读取）
+  const props = active.props || {}
+  tableConfigData.searchFields = props.searchFields || []
+  tableConfigData.columns = props.columns || tableConfigColumns.value.map((c: any) => ({
+    key: c.key, label: c.label || c.key, width: 130, align: 'left', sortable: false,
+  }))
+  tableConfigData.actions = props.viewActions || { buttons: [
+    { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
+    { key: 'delete', label: '删除', placement: 'column', style: 'text' },
+  ], permissions: '' }
+  tableConfigData.detail = props.viewDetail || { width: '800px', type: 'form' }
+  tableConfigData.events = props.viewEvents || []
+  tableConfigTab.value = 'columns'
+  tableConfigVisible.value = true
 }
 
-function updateActionBtn(key: string, patch: Record<string, any>) {
-  const active = designerRef.value?.activeRule as any
-  if (!active?.props?.actionButtons) return
-  active.props.actionButtons = active.props.actionButtons.map((b: any) =>
-    b.key === key ? { ...b, ...patch } : b,
-  )
-}
-
-function addActionButton() {
-  const key = newBtnKey.value.trim()
-  const label = newBtnLabel.value.trim() || key
-  if (!key) return
+function applyTableConfig() {
   const active = designerRef.value?.activeRule as any
   if (!active?.props) return
-  if (!active.props.actionButtons) active.props.actionButtons = []
-  if (active.props.actionButtons.some((b: any) => b.key === key)) {
-    ElMessage.warning('按钮标识已存在')
-    return
-  }
-  active.props.actionButtons.push({
-    key,
-    label,
-    placement: 'column',
-    style: 'text',
-    visible: '',
-  })
-  newBtnKey.value = ''
-  newBtnLabel.value = ''
+  // 写回配置到 activeRule.props
+  active.props.searchFields = [...tableConfigData.searchFields]
+  active.props.columns = [...tableConfigData.columns]
+  active.props.viewActions = { ...tableConfigData.actions }
+  active.props.viewDetail = { ...tableConfigData.detail }
+  active.props.viewEvents = [...tableConfigData.events]
+  tableConfigVisible.value = false
+  ElMessage.success('数据表格配置已保存')
 }
 </script>
 

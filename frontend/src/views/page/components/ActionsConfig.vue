@@ -91,12 +91,12 @@
           />
         </template>
       </el-table-column>
-      <el-table-column label="位置" width="160">
+      <el-table-column label="位置" width="100">
         <template #default="{ row }">
           <el-select
             :model-value="row.placement"
             
-            style="width: 130px"
+            style="width: 90px"
             @change="(v: any) => updateButton(row.key, { placement: v })"
           >
             <el-option label="操作栏" value="toolbar" />
@@ -104,12 +104,12 @@
           </el-select>
         </template>
       </el-table-column>
-      <el-table-column label="形态" width="160">
+      <el-table-column label="形态" width="100">
         <template #default="{ row }">
           <el-select
             :model-value="row.style"
             
-            style="width: 130px"
+            style="width: 90px"
             @change="(v: any) => updateButton(row.key, { style: v })"
           >
             <el-option label="按钮" value="button" />
@@ -118,12 +118,12 @@
           </el-select>
         </template>
       </el-table-column>
-      <el-table-column label="图标" width="180">
+      <el-table-column label="图标" width="130">
         <template #default="{ row }">
           <el-select
             :model-value="row.icon || defaultIconOf(row.key)"
             
-            style="width: 160px"
+            style="width: 120px"
             clearable
             @change="(v: any) => updateButton(row.key, { icon: v || '' })"
           >
@@ -144,7 +144,7 @@
           </el-select>
         </template>
       </el-table-column>
-      <el-table-column label="条件显示" width="200">
+      <el-table-column label="条件显示" width="260">
         <template #default="{ row }">
           <el-input
             :model-value="row.visible || ''"
@@ -155,7 +155,7 @@
           />
         </template>
       </el-table-column>
-      <el-table-column label="事件" width="120" align="center">
+      <el-table-column label="事件" width="90" align="center">
         <template #default="{ row }">
           <el-tag  :type="hasEvents(row) ? 'success' : 'info'">
             {{ hasEvents(row) ? '已绑定' : '未绑定' }}

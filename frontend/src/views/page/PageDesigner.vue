@@ -445,8 +445,15 @@ async function openTableConfig() {
   // 初始化配置数据（从 activeRule.props 读取）
   const props = active.props || {}
   tableConfigData.searchFields = props.searchFields || []
-  tableConfigData.columns = props.columns || tableConfigColumns.value.map((c: any) => ({
-    key: c.key, label: c.label || c.key, width: 130, align: 'left', sortable: false,
+  // props.columns 为渲染格式 { prop, label, width, ... }，转换为配置格式 { key, label, width, ... }
+  tableConfigData.columns = (props.columns || []).map((c: any) => ({
+    key: c.prop ?? c.key,
+    label: c.label || c.prop || c.key,
+    width: c.width,
+    align: c.align,
+    sortable: c.sortable,
+    formatter: c.formatter,
+    fixed: c.fixed,
   }))
   tableConfigData.actions = props.viewActions || { buttons: [
     { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
@@ -463,7 +470,16 @@ function applyTableConfig() {
   if (!active?.props) return
   // 写回配置到 activeRule.props
   active.props.searchFields = [...tableConfigData.searchFields]
-  active.props.columns = [...tableConfigData.columns]
+  // 配置格式 { key, label, ... } 转换为渲染格式 { prop, label, ... }（PageDataTable 读取 prop）
+  active.props.columns = tableConfigData.columns.map((c: any) => ({
+    prop: c.key ?? c.prop,
+    label: c.label || c.key,
+    width: c.width,
+    align: c.align,
+    sortable: c.sortable,
+    formatter: c.formatter,
+    fixed: c.fixed,
+  }))
   active.props.viewActions = { ...tableConfigData.actions }
   active.props.viewDetail = { ...tableConfigData.detail }
   active.props.viewEvents = [...tableConfigData.events]

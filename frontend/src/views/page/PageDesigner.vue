@@ -22,6 +22,9 @@
         {{ statusLabel(formStatus) }}
       </el-tag>
       <div class="toolbar-right">
+        <el-button plain @click="dsDialogVisible = true">
+          数据源配置（{{ schema.dataSources.length }}）
+        </el-button>
         <el-button type="primary" :icon="Check" @click="handleSave" :loading="saving">保存</el-button>
         <el-button type="success" :icon="Promotion" @click="handlePublish" :loading="publishing">
           {{ formStatus === 'PUBLISHED' ? '重新发布' : '发布' }}
@@ -31,27 +34,13 @@
       </div>
     </div>
 
-    <!-- 设计器主体：FcDesigner 画布（数据源配置入口在表单配置页签底部） -->
+    <!-- 设计器主体：FcDesigner 画布 -->
     <div class="designer-body" v-loading="loading">
       <fc-designer
         ref="designerRef"
         :height="designerHeight"
         :config="designerConfig"
-      >
-        <!-- 表单配置页签底部：数据源配置入口（页面级配置，与表单配置同属页面属性） -->
-        <template #formConfigExtra>
-          <div class="form-extra-section">
-            <div class="form-extra-header">数据源与动作</div>
-            <el-button
-              plain
-              class="ds-config-btn"
-              @click="dsDialogVisible = true"
-            >
-              点击配置数据源（{{ schema.dataSources.length }}）
-            </el-button>
-          </div>
-        </template>
-      </fc-designer>
+      />
     </div>
 
     <!-- 数据源/动作配置弹窗 -->

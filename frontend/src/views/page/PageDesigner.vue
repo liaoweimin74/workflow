@@ -45,46 +45,13 @@
 
     <!-- 数据源/动作配置弹窗 -->
     <el-dialog v-model="dsDialogVisible" title="数据源绑定与动作总线" width="680px">
-      <el-tabs v-model="dsTab" type="border-card">
-        <!-- 数据源绑定 -->
-        <el-tab-pane label="数据源绑定" name="ds">
-          <DataSourceConfigPanel
-            :dataSources="schema.dataSources"
-            :enabledDataSources="enabledDataSources"
-            @update:dataSources="updateDataSources"
-          />
-        </el-tab-pane>
-
-        <!-- 动作总线 -->
-        <el-tab-pane label="动作总线" name="actions">
-          <div class="action-card" v-for="(ac, i) in schema.actions" :key="i">
-            <div class="ds-row">
-              <el-select v-model="ac.trigger" style="width: 120px">
-                <el-option label="树节点点击" value="node-click" />
-                <el-option label="表格行点击" value="row-click" />
-                <el-option label="字段变化" value="field-change" />
-                <el-option label="记录变化" value="record-change" />
-              </el-select>
-              <el-button link type="danger" @click="schema.actions.splice(i, 1)">删除</el-button>
-            </div>
-            <div class="ds-row step-row" v-for="(step, si) in ac.steps" :key="si">
-              <el-select v-model="step.op" style="width: 120px">
-                <el-option label="设置过滤" value="set-filter" />
-                <el-option label="刷新数据" value="refresh" />
-                <el-option label="重载记录" value="reload-record" />
-                <el-option label="保存记录" value="save-record" />
-              </el-select>
-              <el-input v-model="step.target" placeholder="目标数据源标识" style="width: 130px" />
-              <el-input v-if="step.op === 'set-filter'" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
-              <el-input v-if="step.op === 'set-filter'" v-model="step.value" placeholder="如 {node.id}" style="width: 100px" />
-              <el-button link type="danger" @click="ac.steps.splice(si, 1)">删</el-button>
-            </div>
-            <el-button link type="primary" @click="ac.steps.push({ op: 'refresh', target: '' })">+ 步骤</el-button>
-          </div>
-          <el-button type="primary" plain @click="addAction">+ 添加动作</el-button>
-          <div class="form-tip">动作链：触发事件 → 步骤列表。「设置过滤」的值支持模板变量：{node.id}（树节点标识）、{row.id}（表格行标识）</div>
-        </el-tab-pane>
-      </el-tabs>
+      <DataSourceConfigPanel
+        :dataSources="schema.dataSources"
+        :enabledDataSources="enabledDataSources"
+        :actions="schema.actions"
+        @update:dataSources="updateDataSources"
+        @update:actions="updateActions"
+      />
       <template #footer>
         <el-button @click="dsDialogVisible = false">关闭</el-button>
       </template>
@@ -309,11 +276,8 @@ function updateDataSources(newDataSources: { id: string; refId: string; searchFi
   schema.dataSources.splice(0, schema.dataSources.length, ...newDataSources)
 }
 
-function addAction() {
-  schema.actions.push({
-    trigger: 'node-click',
-    steps: [{ op: 'set-filter', target: '', field: '', value: '{node.id}' }],
-  })
+function updateActions(newActions: any[]) {
+  schema.actions.splice(0, schema.actions.length, ...newActions)
 }
 
 async function handleSave() {

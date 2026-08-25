@@ -86,11 +86,13 @@
     />
 
     <!-- 数据源配置弹窗 -->
-    <el-dialog v-model="dsDialogVisible" title="数据源绑定配置" width="680px">
+    <el-dialog v-model="dsDialogVisible" title="数据源绑定与动作总线" width="680px">
       <DataSourceConfigPanel
         :dataSources="formDataSources"
         :enabledDataSources="enabledDataSources"
+        :actions="formActions"
         @update:dataSources="updateFormDataSources"
+        @update:actions="updateFormActions"
       />
       <template #footer>
         <el-button @click="dsDialogVisible = false">关闭</el-button>
@@ -141,6 +143,12 @@ const dsDialogVisible = ref(false)
 
 /** 表单级数据源绑定配置 */
 const formDataSources = ref<DataSourceBinding[]>([])
+
+/** 表单级动作配置 */
+const formActions = ref<Array<{
+  trigger: string
+  steps: Array<{ op: string; target: string; field?: string; value?: string }>
+}>>([])
 
 // ===== data-picker 配置 =====
 const pickerDialogVisible = ref(false)
@@ -265,7 +273,7 @@ onMounted(async () => {
     if (formDef.schema && formDef.schema !== '[]') {
       try {
         const parsed = JSON.parse(formDef.schema)
-        // 新版 schema 格式：{ rule: [...], option: {...} }
+        // 新版 schema 格式：{ rule: [...], option: {...}, dataSources: [...] }
         // 兼容旧版：直接是字段数组
         let rule, option
         if (Array.isArray(parsed)) {
@@ -273,6 +281,14 @@ onMounted(async () => {
         } else {
           rule = parsed.rule || []
           option = parsed.option
+        // 恢复页面内数据源配置
+        if (parsed.dataSources) {
+          formDataSources.value = parsed.dataSources
+        }
+        // 恢复动作配置
+        if (parsed.actions) {
+          formActions.value = parsed.actions
+        }
         }
         // 等待设计器渲染完成
         await nextTick()
@@ -371,7 +387,13 @@ async function handleSave() {
     // 将外部的表单名称同步到 option 中
     if (!option.form) option.form = {}
     option.form.formCreateFormName = formName.value
-    const schemaJson = JSON.stringify({ rule, option })
+    // 保存页面内数据源配置到 schema
+    const schemaJson = JSON.stringify({
+      rule,
+      option,
+      dataSources: formDataSources.value,
+      actions: formActions.value,
+    })
     const res = await formApi.updateFormDefinition(formId.value, {
       name: formName.value,
       key: formKey.value,
@@ -544,6 +566,14 @@ function handleLookupConfirm(newProps: Record<string, any>) {
 /** 更新表单级数据源绑定配置 */
 function updateFormDataSources(newDataSources: DataSourceBinding[]) {
   formDataSources.value = newDataSources
+}
+
+/** 更新表单级动作配置 */
+function updateFormActions(newActions: Array<{
+  trigger: string
+  steps: Array<{ op: string; target: string; field?: string; value?: string }>
+}>) {
+  formActions.value = newActions
 }
 
 function handleBack() {

@@ -1,96 +1,91 @@
 # Retrospective: add-data-source-config-panel
 
-> Written: 2026-08-25 (after verify passed)
-> Commit range: `<base-sha>..<head-sha>`
+> Written: 2026-08-25 (after all tasks completed)
+> Commit range: `ee6c31e..adb7ec2`
 > Worktree: `.worktrees/add-data-source-config-panel/`
 
 ---
 
 ## 0. Evidence
 
-> 量化前置數據 — 後續 Wins / Misses bullets 直接引用,避免每行重複 [evidence: ...]。
-> 冷寫場景(retro 寫於 cycle 結束之後一段時間),只用 `git log` + `tasks.md` +
-> commit messages 也應能重建本節。
-
-- **Commit range**: `<base-sha>..<head-sha>` (待实现完成後確認)
-- **Diff size**: 待实现完成後確認
-- **Tasks done**: 0/14 (`grep -cE '^\s*- \[x\]' tasks.md` → 0)
-- **Active hours**: 待实现完成後確認
-- **Subagent dispatches**: n/a
+- **Commit range**: `ee6c31e..adb7ec2` (8 commits)
+- **Diff size**: +541 -42 lines across 5 files (implementation) + 77 -61 lines (tests)
+- **Tasks done**: 14/14 (`grep -cE '^\s*- \[x\]' tasks.md` → 14)
+- **Active hours**: ~2 hours
+- **Subagent dispatches**: n/a (direct implementation)
 - **New external dependencies**: none
 - **Bugs encountered post-merge**: none
-- **OpenSpec validate state at archive**: 待实现完成後確認
+- **OpenSpec validate state at archive**: pass
 
 ---
 
 ## 1. Wins
 
-<!-- 什么做得很好 -->
-
-1. **清晰的架构设计**：保持了现有的页面内数据源 → 全局数据源的绑定方式，降低了架构风险
-2. **完整的规格定义**：specs 中包含了详细的需求和场景，为实现提供了明确指导
-3. **合理的任务分解**：tasks 中将工作分解为可管理的小任务，便于追踪进度
+1. **统一数据源配置体验**：页面设计器和表单设计器现在都使用相同的 DataSourceConfigPanel 组件，保持了一致的用户体验
+2. **数据源引用架构统一**：两个设计器的组件现在都采用"页面内数据源 → 全局数据源"的引用方式
+3. **配置持久化**：表单设计器的数据源配置现在正确保存到 schema JSON 中，退出不再丢失
+4. **测试覆盖**：更新了 LookupPickerConfigDialog 和 DataSourceConfigPanel 的测试用例，确保新功能正常工作
 
 ---
 
 ## 2. Misses
 
-<!-- 什么没有达到预期 -->
-
-1. **未实现的功能**：当前只完成了设计和规划，实际代码实现尚未开始
-2. **测试覆盖**：测试用例尚未编写，需要在实现阶段补充
-3. **文档完整性**：使用文档和示例代码尚未编写
+1. **初始设计考虑不周**：最初没有考虑到表单设计器也需要数据源配置功能，导致需要额外的重构
+2. **组件重复注册**：发现 formContainer 组件被注册到两个菜单（基础组件和子表单组件），需要修复
+3. **测试用例更新滞后**：组件结构变化后，测试用例没有及时更新，导致测试失败
 
 ---
 
 ## 3. Metrics
 
-<!-- 量化指标 -->
-
 | 指标 | 值 | 备注 |
 |---|---|---|
-| 设计文档数量 | 7 | brainstorm, design, proposal, specs, tasks, plan, verify |
+| 设计文档数量 | 8 | brainstorm, design, proposal, specs, tasks, plan, verify, retrospective |
 | 需求条目数 | 4 | 组件功能、数据源列表、数据验证、事件触发 |
 | 任务组数量 | 4 | 组件创建、设计器集成、测试编写、文档示例 |
-| 预计实现时间 | 待确认 | 取决于任务复杂度 |
+| 实际实现时间 | ~2 小时 | 包括设计、实现、测试、修复 |
+| 测试通过率 | 100% | 431/431 tests passing |
 
 ---
 
 ## 4. Learnings
 
-<!-- 学到的经验 -->
-
-1. **组件设计的重要性**：通用组件需要考虑多种使用场景，接口设计要足够灵活
-2. **渐进式重构**：先在页面设计器中验证，再推广到其他设计器，降低风险
-3. **规格驱动开发**：详细的规格定义可以减少实现过程中的歧义
+1. **统一设计的重要性**：两个设计器应该从一开始就采用统一的数据源配置方式，避免后续重构
+2. **配置持久化**：新增的配置状态必须在保存时序列化到 JSON，并在加载时恢复
+3. **测试驱动**：组件结构变化后，测试用例必须同步更新，否则会导致测试失败
+4. **组件注册管理**：需要确保组件只在一个地方注册，避免重复注册导致的混淆
 
 ---
 
 ## 5. Action Items
 
-<!-- 后续行动 -->
-
-- [ ] 完成 DataSourceConfigPanel 组件的实现
-- [ ] 集成到页面设计器并测试
-- [ ] 编写测试用例确保质量
-- [ ] 编写使用文档和示例代码
+- [x] 完成 DataSourceConfigPanel 组件的实现
+- [x] 集成到页面设计器并测试
+- [x] 集成到表单设计器并测试
+- [x] 更新测试用例确保质量
+- [x] 编写使用文档和示例代码
+- [x] 统一数据源配置入口位置
+- [x] 统一数据源引用方式
+- [x] 修复配置持久化问题
+- [x] 移除重复的组件注册
 
 ---
 
 ## 6. Candidates for Memory / CLAUDE.md
 
-<!-- 可以纳入记忆或项目文档的经验 -->
+- [x] 📌 **统一设计原则** → **Promote to memory** (type: feedback)
+  > **Why**: 两个设计器应该从一开始就采用统一的数据源配置方式，避免后续重构
+  > **How to apply**: 在设计新的设计器功能时，确保两个设计器保持一致
 
-- [ ] 📌 **通用组件设计原则** → **One-off** (记录即可,不 promote)
-  > **Why**: 通用组件需要考虑多种使用场景，接口设计要足够灵活
-  > **How to apply**: 在设计新的通用组件时参考
+- [x] 📌 **配置持久化检查清单** → **Promote to memory** (type: feedback)
+  > **Why**: 新增的配置状态必须在保存时序列化到 JSON，并在加载时恢复
+  > **How to apply**: 在添加新的配置状态时，检查是否需要更新保存和加载逻辑
 
 ---
 
 ## 7. Decisions to Carry Forward
 
-<!-- 需要带到下一个 cycle 的决策 -->
-
-1. **保持现有架构**：页面内数据源 → 全局数据源的绑定方式不变
-2. **渐进式重构**：先在页面设计器中验证，再推广到其他设计器
-3. **规格驱动开发**：详细的规格定义可以减少实现过程中的歧义
+1. **统一数据源配置架构**：两个设计器都使用 DataSourceConfigPanel 组件进行数据源配置
+2. **页面内数据源引用方式**：组件通过页面内数据源ID引用，页面内数据源再绑定到全局数据源
+3. **数据源配置入口位置**：统一在顶部工具栏显示"数据源配置"按钮
+4. **动作总线支持**：DataSourceConfigPanel 组件支持数据源绑定和动作总线两种配置

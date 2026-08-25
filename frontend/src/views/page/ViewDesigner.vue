@@ -101,6 +101,10 @@ export interface ColumnViewConfig {
   width?: number
   align?: string
   sortable?: boolean
+  /** 列值格式化器（currency/date/datetime/boolean/enum） */
+  formatter?: string
+  /** 固定列（left/right） */
+  fixed?: string
 }
 export interface ViewActionButton {
   key: string
@@ -113,6 +117,8 @@ export interface ViewActionButton {
   icon?: string
   /** 自定义按钮事件链（点击触发）；内置按钮无需 */
   events?: any[]
+  /** 条件显示表达式（如 $row.status === 'PENDING'） */
+  visible?: string
 }
 export interface ViewActionsConfig {
   buttons: ViewActionButton[]

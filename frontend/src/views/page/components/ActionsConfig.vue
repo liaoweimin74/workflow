@@ -144,6 +144,17 @@
           </el-select>
         </template>
       </el-table-column>
+      <el-table-column label="条件显示" width="200">
+        <template #default="{ row }">
+          <el-input
+            :model-value="row.visible || ''"
+            
+            placeholder="如 $row.status === 'PENDING'"
+            clearable
+            @input="(v: string) => updateButton(row.key, { visible: v || undefined })"
+          />
+        </template>
+      </el-table-column>
       <el-table-column label="事件" width="120" align="center">
         <template #default="{ row }">
           <el-tag  :type="hasEvents(row) ? 'success' : 'info'">

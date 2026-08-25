@@ -85,6 +85,41 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
+      <el-table-column label="格式化" width="140">
+        <template #default="{ row }">
+          <el-select
+            v-if="isColumnChecked(row.key)"
+            :model-value="columnFormatterOf(row.key)"
+            clearable
+            style="width: 120px"
+            placeholder="无"
+            @change="(v: any) => setColumnProp(row.key, 'formatter', v || undefined)"
+          >
+            <el-option label="货币" value="currency" />
+            <el-option label="日期" value="date" />
+            <el-option label="日期时间" value="datetime" />
+            <el-option label="布尔" value="boolean" />
+            <el-option label="枚举" value="enum" />
+          </el-select>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="固定列" width="120">
+        <template #default="{ row }">
+          <el-select
+            v-if="isColumnChecked(row.key)"
+            :model-value="columnFixedOf(row.key)"
+            clearable
+            style="width: 100px"
+            placeholder="无"
+            @change="(v: any) => setColumnProp(row.key, 'fixed', v || undefined)"
+          >
+            <el-option label="左侧" value="left" />
+            <el-option label="右侧" value="right" />
+          </el-select>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
     </el-table>
 
     <el-empty v-if="candidates.length === 0" description="当前表单无可配置字段" :image-size="60" />
@@ -184,6 +219,14 @@ function columnSortableOf(key: string): boolean {
   return findColumn(key)?.sortable ?? false
 }
 
+function columnFormatterOf(key: string): string {
+  return findColumn(key)?.formatter ?? ''
+}
+
+function columnFixedOf(key: string): string {
+  return findColumn(key)?.fixed ?? ''
+}
+
 function toggleColumn(col: ColumnConfigItem, checked: boolean) {
   if (checked) {
     if (!isColumnChecked(col.key)) {
@@ -197,7 +240,7 @@ function toggleColumn(col: ColumnConfigItem, checked: boolean) {
   }
 }
 
-function setColumnProp(key: string, prop: 'width' | 'align' | 'sortable', v: any) {
+function setColumnProp(key: string, prop: 'width' | 'align' | 'sortable' | 'formatter' | 'fixed', v: any) {
   emit(
     'update:columns',
     props.columns.map((c) => (c.key === key ? { ...c, [prop]: v } : c)),

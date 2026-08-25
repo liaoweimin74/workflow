@@ -105,6 +105,9 @@ const triggerOptions = [
   { label: '搜索', value: 'search' },
   { label: '刷新', value: 'refresh' },
   { label: '新增成功', value: 'create-success' },
+  { label: '单元格点击', value: 'cell-click' },
+  { label: '行选择变化', value: 'selection-change' },
+  { label: '当前行变化', value: 'current-change' },
 ]
 
 const actionTypeOptions = [
@@ -112,6 +115,9 @@ const actionTypeOptions = [
   { label: '刷新数据', value: 'refresh' },
   { label: '打开详情', value: 'open-detail' },
   { label: '脚本', value: 'script' },
+  { label: '设置排序', value: 'set-sort' },
+  { label: '设置分页', value: 'set-page' },
+  { label: '清空选择', value: 'clear-selection' },
 ]
 
 function commit(v: PageEventConfig[]) {

@@ -29,6 +29,8 @@ export default {
                     hidden: column.hidden || false,
                     width: column.style.width || '',
                     color: column.style.color || '',
+                    formatter: column.formatter || '',
+                    fixed: column.fixed || '',
                 },
                 children: column.rule || [],
             };
@@ -47,6 +49,8 @@ export default {
                     width: column.props.width,
                     color: column.props.color,
                 },
+                formatter: column.props.formatter || '',
+                fixed: column.props.fixed || '',
                 rule: column.children || [],
             };
         });
@@ -109,6 +113,28 @@ export default {
                 type: 'inputNumber',
                 field: 'max',
                 props: {min: 0},
+            },
+            // ===== 新增：操作列宽度 =====
+            {
+                type: 'inputNumber',
+                field: 'actionColumnWidth',
+                title: '操作列宽度',
+                value: 0,
+                props: {min: 0, max: 400, step: 10, placeholder: '0=自动计算'},
+            },
+            // ===== 新增：新增按钮条件显示 =====
+            {
+                type: 'input',
+                field: 'addVisible',
+                title: '新增按钮条件',
+                props: {placeholder: '如 $row.status === "PENDING"，留空始终显示'},
+            },
+            // ===== 新增：删除按钮条件显示 =====
+            {
+                type: 'input',
+                field: 'deleteVisible',
+                title: '删除按钮条件',
+                props: {placeholder: '如 $row.status === "PENDING"，留空始终显示'},
             },
         ]);
     },

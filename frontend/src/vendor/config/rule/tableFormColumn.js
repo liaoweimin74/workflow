@@ -50,6 +50,31 @@ export default {
                 type: 'ColorInput',
                 field: 'color',
             },
+            // ===== 新增：格式化器 =====
+            {
+                type: 'select',
+                field: 'formatter',
+                title: '格式化器',
+                props: {clearable: true, placeholder: '无'},
+                options: [
+                    {label: '货币', value: 'currency'},
+                    {label: '日期', value: 'date'},
+                    {label: '日期时间', value: 'datetime'},
+                    {label: '布尔', value: 'boolean'},
+                    {label: '枚举', value: 'enum'},
+                ],
+            },
+            // ===== 新增：固定列 =====
+            {
+                type: 'select',
+                field: 'fixed',
+                title: '固定列',
+                props: {clearable: true, placeholder: '无'},
+                options: [
+                    {label: '左侧', value: 'left'},
+                    {label: '右侧', value: 'right'},
+                ],
+            },
         ]);
     },
 };

@@ -27,6 +27,9 @@
         业务表单
       </el-tag>
       <div class="toolbar-right">
+        <el-button plain @click="dsDialogVisible = true">
+          数据源配置（{{ formDataSources.length }}）
+        </el-button>
         <el-button type="primary" :icon="Check" @click="handleSave" :loading="saving">保存</el-button>
         <el-button
           v-if="formStatus === 'DRAFT' || formStatus === 'PUBLISHED'"
@@ -79,6 +82,18 @@
       @source-change="handleLookupSourceChange"
       @confirm="handleLookupConfirm"
     />
+
+    <!-- 数据源配置弹窗 -->
+    <el-dialog v-model="dsDialogVisible" title="数据源绑定配置" width="680px">
+      <DataSourceConfigPanel
+        :dataSources="formDataSources"
+        :enabledDataSources="enabledDataSources"
+        @update:dataSources="updateFormDataSources"
+      />
+      <template #footer>
+        <el-button @click="dsDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -89,10 +104,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
 import _formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
-import { dataSourceApi } from '@/api/data-source'
+import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
+import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
+import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from './formRuleWalk'
 import { containerFieldValidator } from './components/containerFieldValidator'
 
@@ -115,7 +132,13 @@ const formType = ref('')
 const columnConfig = ref<ColumnConfigItem[]>([])
 const columnDialogVisible = ref(false)
 /** 已启用全局数据源（供 FORM 容器属性面板选择） */
-const enabledDataSources = ref<Array<{ id: string; name: string; type: string; status: string }>>([])
+const enabledDataSources = ref<DataSourceDTO[]>([])
+
+/** 数据源配置弹窗状态 */
+const dsDialogVisible = ref(false)
+
+/** 表单级数据源绑定配置 */
+const formDataSources = ref<DataSourceBinding[]>([])
 
 // ===== data-picker 配置 =====
 const pickerDialogVisible = ref(false)
@@ -511,6 +534,11 @@ function handleLookupConfirm(newProps: Record<string, any>) {
   patchFieldProps(rules, 'LookupPicker', selectedLookupField.value, newProps)
   designerRef.value?.setRule(rules)
   ElMessage.success('数据源配置已保存')
+}
+
+/** 更新表单级数据源绑定配置 */
+function updateFormDataSources(newDataSources: DataSourceBinding[]) {
+  formDataSources.value = newDataSources
 }
 
 function handleBack() {

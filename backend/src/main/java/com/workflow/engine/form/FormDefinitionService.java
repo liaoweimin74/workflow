@@ -370,12 +370,13 @@ public class FormDefinitionService {
                 String fieldKey = field.path("field").asText();
                 JsonNode props = field.path("props");
                 String dataSourceId = props.path("dataSourceId").asText();
-                if (dataSourceId.isBlank()) {
-                    // 兼容旧配置：检查 sourceFormKey
-                    String sourceFormKey = props.path("sourceFormKey").asText();
-                    if (sourceFormKey.isBlank()) {
-                        throw new BusinessException(400, "data-picker 字段 " + fieldKey + " 未配置数据源（dataSourceId）");
-                    }
+                String sourceFormKey = props.path("sourceFormKey").asText();
+                if (dataSourceId.isBlank() && sourceFormKey.isBlank()) {
+                    throw new BusinessException(400, "data-picker 字段 " + fieldKey + " 未配置数据源（dataSourceId）");
+                }
+                // dataSourceId 模式：跳过列级校验（运行时由数据源 metadata 动态验证）
+                if (!dataSourceId.isBlank()) {
+                    continue;
                 }
                 List<ColumnConfig> targetColumns;
                 try {

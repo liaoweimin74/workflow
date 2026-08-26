@@ -137,6 +137,7 @@ import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
 import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from './formRuleWalk'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import { containerFieldValidator } from './components/containerFieldValidator'
 // 数据表格配置弹窗组件（复用页面设计器，均为纯 UI 配置组件，无页面级上下文依赖）
 import QueryColumnsConfig from '@/views/page/components/QueryColumnsConfig.vue'
@@ -347,6 +348,7 @@ onMounted(async () => {
         // 恢复页面内数据源配置
         if (parsed.dataSources) {
           formDataSources.value = parsed.dataSources
+          activeDsBindings.value = parsed.dataSources
         }
         // 恢复动作配置
         if (parsed.actions) {
@@ -640,7 +642,7 @@ async function handleColumnConfirm(items: ColumnConfigItem[]) {
     await formApi.updateFormDefinition(formId.value, {
       name: formName.value,
       key: formKey.value,
-      schema: JSON.stringify({ rule, option }),
+      schema: JSON.stringify({ rule, option, dataSources: formDataSources.value, actions: formActions.value }),
       columnConfig: JSON.stringify(items),
     })
     // 2. 发布（后端将基于最新 column_config 建表/变更）
@@ -718,6 +720,7 @@ function handleLookupConfirm(newProps: Record<string, any>) {
 /** 更新表单级数据源绑定配置 */
 function updateFormDataSources(newDataSources: DataSourceBinding[]) {
   formDataSources.value = newDataSources
+  activeDsBindings.value = newDataSources
 }
 
 /** 更新表单级动作配置 */

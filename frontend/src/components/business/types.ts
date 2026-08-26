@@ -247,6 +247,15 @@ export interface LookupPickerProps {
   /** 可序列化的数据源配置（设计器场景，优先级低于 fetchApi：fetchApi 为函数时优先） */
   fetch?: LookupFetchConfig
 
+  /** 页面内数据源绑定 ID（新模式：通过 FORM_DS_BINDINGS_KEY 解析 refId，优先级高于 fetch） */
+  dataSourceId?: string
+
+  /** 搜索列（参与关键字搜索的列 key），新模式下用于 keywordColumn */
+  searchColumns?: string[]
+
+  /** 组件级筛选条件（新模式：与数据源级 filter 以 AND 合并） */
+  filter?: LookupFilterConfig
+
   /** 字段映射：选中行的 sourceField → 表单的 targetField */
   returnFields?: Record<string, string>
 

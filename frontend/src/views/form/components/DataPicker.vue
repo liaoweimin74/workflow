@@ -157,12 +157,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, inject, nextTick, type ComponentPublicInstance } from 'vue'
+import { ref, computed, watch, inject, nextTick, type ComponentPublicInstance, type Ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { type Rule } from '@form-create/element-ui'
 import { bizDataApi } from '@/api/bizData'
 import { formApi } from '@/api/form'
+import { dataSourceApi } from '@/api/data-source'
+import { FORM_DS_BINDINGS_KEY, type DataSourceBindingContext, type LookupFilterConfig } from '@/components/business/types'
+import { mergeFilters } from '@/utils/filterMerge'
 import DataPickerCreateDialog from './DataPickerCreateDialog.vue'
 import FormRenderer from './FormRenderer.vue'
 
@@ -201,7 +204,9 @@ interface LegacyFilterItem {
 const props = withDefaults(
   defineProps<{
     modelValue?: string
-    /** 目标业务表单 key */
+    /** 页面内数据源绑定 ID（新模式） */
+    dataSourceId?: string
+    /** 目标业务表单 key（旧模式，dataSourceId 优先） */
     sourceFormKey?: string
     /** 目标表显示字段 */
     displayField?: string
@@ -217,6 +222,8 @@ const props = withDefaults(
     dependOnValue?: unknown
     /** 筛选条件（结构化 {logic, conditions}；v2 数组 / v1 dependOn 兼容归一化） */
     filters?: PickerFilters | LegacyFilterItem[]
+    /** 组件级筛选（新模式，与数据源级 filter 以 AND 合并） */
+    filter?: LookupFilterConfig
     /** 依赖条件变化时是否清空已选值（默认 false：保留已选值，仅刷新选项） */
     clearOnCascadeChange?: boolean
     /** 允许新增：选择弹窗提供"新增"入口 */
@@ -245,6 +252,31 @@ const emit = defineEmits<{
 }>()
 
 const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
+
+/** 页面/表单级数据源绑定上下文（FormRenderer / PageRendererPage provide） */
+const dsBindings = inject<Ref<DataSourceBindingContext[]> | DataSourceBindingContext[]>(FORM_DS_BINDINGS_KEY, [])
+
+/** 当前组件的绑定上下文（通过 dataSourceId 解析） */
+const currentBinding = computed<DataSourceBindingContext | undefined>(() => {
+  if (!props.dataSourceId) return undefined
+  const list = Array.isArray(dsBindings) ? dsBindings : (dsBindings as any).value
+  return list?.find((b: DataSourceBindingContext) => b.id === props.dataSourceId)
+})
+
+/** 全局数据源 refId（由绑定解析） */
+const dsRefId = computed(() => currentBinding.value?.refId || '')
+
+/** 有效表单 key：新模式从 DS 定义动态获取；旧模式用 props.sourceFormKey */
+const effectiveFormKey = ref('')
+watch(dsRefId, async (refId) => {
+  if (!refId) { effectiveFormKey.value = props.sourceFormKey || ''; return }
+  try {
+    const res = await dataSourceApi.getDataSource(refId)
+    effectiveFormKey.value = res.data?.formKey || ''
+  } catch {
+    effectiveFormKey.value = ''
+  }
+}, { immediate: true })
 
 const dialogVisible = ref(false)
 const createDialogVisible = ref(false)
@@ -304,8 +336,14 @@ const tagItems = computed(() => {
   }))
 })
 
-/** 归一化筛选条件为结构化 {logic, conditions}：filters（v3 结构化/v2 数组）优先；dependOn（v1）兼容为单条 field 型 */
+/** 归一化筛选条件：新 filter prop（组件级）+ 旧 filters/dependOn（v1/v2 兼容） */
 const normalizedFilters = computed<PickerFilters>(() => {
+  // 新模式：filter prop（组件级，将与数据源级 filter 合并）
+  const componentFilter = props.filter
+  if (componentFilter && Array.isArray(componentFilter.conditions) && componentFilter.conditions.length > 0) {
+    return { logic: componentFilter.logic || 'AND', conditions: componentFilter.conditions }
+  }
+  // 旧模式兼容
   const f = props.filters
   if (f && !Array.isArray(f) && Array.isArray(f.conditions)) {
     return { logic: f.logic || 'AND', conditions: f.conditions }
@@ -333,9 +371,17 @@ const normalizedFilters = computed<PickerFilters>(() => {
   return { logic: 'AND', conditions: [] }
 })
 
+/** 合并后的 filter（数据源级 + 组件级） */
+const mergedFilter = computed(() => {
+  if (!props.dataSourceId) return normalizedFilters.value
+  const dsFilter = currentBinding.value?.filter
+  const merged = mergeFilters(dsFilter, props.filter)
+  return merged || normalizedFilters.value
+})
+
 /** 查询 filter：结构化 {logic, conditions}；field 型读当前表单字段值（空值跳过该条件） */
 const queryFilter = computed(() => {
-  const nf = normalizedFilters.value
+  const nf = mergedFilter.value
   const conds: Record<string, unknown>[] = []
   for (const c of nf.conditions) {
     const cond: Record<string, unknown> = { column: c.column, op: c.op || 'eq' }
@@ -378,9 +424,10 @@ const resolvedColumns = computed(() => {
 const columnLabelMap = ref<Record<string, string>>({})
 
 async function loadColumnLabels() {
-  if (!props.sourceFormKey) return
+  const fk = effectiveFormKey.value
+  if (!fk) return
   try {
-    const res = await formApi.getFormDefinitionByKey(props.sourceFormKey)
+    const res = await formApi.getFormDefinitionByKey(fk)
     const cc = res.data.columnConfig
     const map: Record<string, string> = {}
     if (cc) {
@@ -409,9 +456,10 @@ const detailFormValues = computed(() => {
 async function loadDetailSchema() {
   detailSchema.value = []
   detailOption.value = {}
-  if (!props.sourceFormKey) return
+  const fk = effectiveFormKey.value
+  if (!fk) return
   try {
-    const res = await formApi.getFormDefinitionByKey(props.sourceFormKey)
+    const res = await formApi.getFormDefinitionByKey(fk)
     const def = res.data
     if (def.schema && def.schema !== '[]') {
       const parsed = JSON.parse(def.schema)
@@ -482,11 +530,12 @@ watch(
 )
 
 async function resolveDisplay(val: string) {
-  if (!props.sourceFormKey || !val) return
+  const fk = effectiveFormKey.value
+  if (!fk || !val) return
   try {
     const ids = parseJsonArray(val)
     if (ids.length === 0) return
-    const res = await bizDataApi.resolve(props.sourceFormKey, ids, props.displayField)
+    const res = await bizDataApi.resolve(fk, ids, props.displayField)
     const map = res.data || {}
     const parts = ids.map(id => ({ id, text: map[id], missing: map[id] === undefined }))
     missingIds.value = parts.filter(p => p.missing).map(p => p.id)
@@ -517,17 +566,30 @@ async function openViewDialog() {
   loadColumnLabels()
   try {
     // 复用 list 接口 + id IN 过滤（后端 filter 支持 in 运算符）
-    const res = await bizDataApi.list(props.sourceFormKey || '', {
-      page: 0,
-      size: 100,
-      filter: {
-        logic: 'AND',
-        conditions: [{ column: 'id', op: 'in', value: ids }],
-      },
-    })
-    // 后端 IN 不保证顺序：按 modelValue 顺序重排（与 Tag 顺序一致）
-    const byId = new Map<string, any>((res.data.records || []).map(r => [String(r.id), r]))
-    viewRows.value = ids.map(id => byId.get(id)).filter(Boolean)
+    const fk = effectiveFormKey.value
+    if (dsRefId.value) {
+      const res = await dataSourceApi.queryData(dsRefId.value, {
+        page: 0,
+        size: 100,
+        filter: JSON.stringify({
+          logic: 'AND',
+          conditions: [{ column: 'id', op: 'in', value: ids }],
+        }),
+      })
+      const byId = new Map<string, any>(((res.data as any)?.records || []).map((r: any) => [String(r.id), r]))
+      viewRows.value = ids.map(id => byId.get(id)).filter(Boolean)
+    } else if (fk) {
+      const res = await bizDataApi.list(fk, {
+        page: 0,
+        size: 100,
+        filter: {
+          logic: 'AND',
+          conditions: [{ column: 'id', op: 'in', value: ids }],
+        },
+      })
+      const byId = new Map<string, any>((res.data.records || []).map(r => [String(r.id), r]))
+      viewRows.value = ids.map(id => byId.get(id)).filter(Boolean)
+    }
   } catch {
     viewRows.value = []
   } finally {
@@ -544,16 +606,38 @@ function handleViewRowClick(row: any) {
 async function fetchData() {
   loading.value = true
   try {
-    // 后端分页 0 起（OFFSET = page*size），el-pagination 为 1 起 → 发送时 -1（对齐 BizDataListPage 惯例）
-    const params: any = { ...query.value, page: query.value.page - 1 }
+    // === 新路径：通过页面/表单级数据源绑定查询 ===
+    if (dsRefId.value) {
+      const params: Record<string, unknown> = {
+        page: query.value.page - 1,
+        size: query.value.size,
+      }
+      if (keyword.value && resolvedSearchColumns.value.length > 0) {
+        params.keyword = keyword.value
+        params.keywordColumn = resolvedSearchColumns.value.join(',')
+      }
+      if (queryFilter.value) {
+        params.filter = JSON.stringify(queryFilter.value)
+      }
+      const res = await dataSourceApi.queryData(dsRefId.value, params as any)
+      const biz = res.data as any
+      tableData.value = biz?.records || []
+      total.value = biz?.total || 0
+      return
+    }
+
+    // === 旧路径：通过 bizDataApi.list(sourceFormKey) 查询 ===
+    const fk = effectiveFormKey.value
+    if (!fk) return
+    const p: any = { ...query.value, page: query.value.page - 1 }
     if (keyword.value && resolvedSearchColumns.value.length > 0) {
-      params.keyword = keyword.value
-      params.keywordColumn = resolvedSearchColumns.value.join(',')
+      p.keyword = keyword.value
+      p.keywordColumn = resolvedSearchColumns.value.join(',')
     }
     if (queryFilter.value) {
-      params.filter = queryFilter.value
+      p.filter = queryFilter.value
     }
-    const res = await bizDataApi.list(props.sourceFormKey || '', params)
+    const res = await bizDataApi.list(fk, p)
     tableData.value = res.data.records || []
     total.value = res.data.total || 0
   } finally {
@@ -564,7 +648,8 @@ async function fetchData() {
 /** 点击 Tag 主体：打开记录详情弹窗（加载目标表单 schema + 记录数据，form-create 渲染）。
  *  点击 Tag 始终可查看详情（编辑态/只读态一致）。 */
 async function handleTagClick(id: string) {
-  if (!props.sourceFormKey || !id) return
+  const fk = effectiveFormKey.value
+  if (!fk || !id) return
   detailVisible.value = true
   detailLoading.value = true
   detailRow.value = null
@@ -572,7 +657,7 @@ async function handleTagClick(id: string) {
   try {
     await loadColumnLabels()
     await loadDetailSchema()
-    const res = await bizDataApi.detail(props.sourceFormKey, id)
+    const res = await bizDataApi.detail(fk, id)
     detailRow.value = res.data
   } finally {
     detailLoading.value = false
@@ -591,10 +676,10 @@ async function handleDetailSave() {
   const data = (typeof form.getFormData === 'function' ? form.getFormData() : {}) as Record<string, unknown>
   const id = detailRow.value?.id
   const version = detailRow.value?.version
-  if (!props.sourceFormKey || id === undefined || id === null) return
+  if (!effectiveFormKey.value || id === undefined || id === null) return
   detailSaving.value = true
   try {
-    const res = await bizDataApi.update(props.sourceFormKey, String(id), data, version)
+    const res = await bizDataApi.update(effectiveFormKey.value, String(id), data, version)
     detailRow.value = res.data
     ElMessage.success('保存成功')
     await resolveDisplay(JSON.stringify([id]))

@@ -460,3 +460,28 @@ describe('ColumnConfigDialog — 子表组件（group/tableForm）子列穿透',
     wrapper.unmount()
   })
 })
+
+describe('ColumnConfigDialog — 数据表格组件发布忽略', () => {
+  const dataTableSchema = [
+    { type: 'input', field: 'reason', title: '请假原因' },
+    {
+      type: 'page-table',
+      field: 'table_data',
+      title: '数据表格',
+      props: { dataSourceId: 'ds_1', columns: [] },
+    },
+  ]
+
+  it('page-table 不生成数据列，且不阻止发布', async () => {
+    const wrapper = createWrapper({ schema: dataTableSchema })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    // 数据表格字段被整体忽略，不进入列映射
+    expect(items.find(i => i.key === 'table_data')).toBeUndefined()
+    // 其余普通字段正常映射
+    expect(items.find(i => i.key === 'reason')).toBeDefined()
+    // 不作为"不支持映射"字段拦截发布
+    expect(wrapper.text()).not.toContain('不支持映射为数据列的字段')
+    wrapper.unmount()
+  })
+})

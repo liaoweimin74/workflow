@@ -113,6 +113,16 @@ class FormSchemaColumnExtractorTest {
     }
 
     @Test
+    void schema跳过数据表格组件page_table不生成列() {
+        String schema = "[{\"field\":\"reason\",\"title\":\"事由\",\"type\":\"input\"},"
+                + "{\"field\":\"tbl\",\"title\":\"数据表格\",\"type\":\"page-table\","
+                + " \"props\":{\"dataSourceId\":\"ds_1\",\"columns\":[]}}]";
+        List<ColumnConfig> cols = extractor.extractFromSchema(schema);
+        assertEquals(1, cols.size());
+        assertEquals("reason", cols.get(0).getKey());
+    }
+
+    @Test
     void schema跳过非法字段名() {
         String schema = "[{\"field\":\"123bad\",\"title\":\"坏字段\",\"type\":\"input\"},"
                 + "{\"field\":\"good\",\"title\":\"好字段\",\"type\":\"input\"}]";

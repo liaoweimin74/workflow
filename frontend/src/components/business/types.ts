@@ -5,6 +5,26 @@ import type { Rule } from '@form-create/element-ui'
 // 公共业务组件类型定义
 // ============================================================
 
+/**
+ * 表单/页面级数据源绑定上下文的 provide/inject key。
+ * 渲染容器（FormRenderer / PageRendererPage）provide 页面内绑定列表；
+ * LookupPicker / dataPicker 等数据组件 inject 后按 dataSourceId 解析 refId 与绑定级 filter。
+ */
+export const FORM_DS_BINDINGS_KEY: string = 'formDataSourceBindings'
+
+/** 数据源绑定上下文条目（与 DataSourceConfigPanel.DataSourceBinding 结构对齐的最小面） */
+export interface DataSourceBindingContext {
+  /** 页面内标识 */
+  id: string
+  /** 全局数据源ID */
+  refId: string
+  /** 搜索字段（可选） */
+  searchFields?: string[]
+  /** 数据源级筛选条件（可选） */
+  filter?: LookupFilterConfig
+}
+
+
 // --- 查询字段 ---
 
 export interface SearchField {

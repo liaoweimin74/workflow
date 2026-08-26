@@ -64,24 +64,18 @@
     <!-- data-picker 数据引用配置 -->
     <DataPickerConfigDialog
       v-model="pickerDialogVisible"
-      :target-forms="pickerTargetForms"
       :current-fields="currentFieldKeys"
-      :target-columns="pickerTargetColumns"
       :picker-props="currentPickerProps"
-      @source-change="handlePickerSourceChange"
+      :form-data-sources="formDataSources"
       @confirm="handlePickerConfirm"
     />
 
     <!-- LookupPicker（查找带回）数据源配置 -->
     <LookupPickerConfigDialog
       v-model="lookupDialogVisible"
-      :target-forms="lookupTargetForms"
       :current-fields="currentFieldKeys"
-      :target-columns="lookupTargetColumns"
       :lookup-props="currentLookupProps"
       :form-data-sources="formDataSources"
-      :enabled-data-sources="enabledDataSources"
-      @source-change="handleLookupSourceChange"
       @confirm="handleLookupConfirm"
     />
 
@@ -200,8 +194,6 @@ const tableConfigData = reactive({
 
 // ===== data-picker 配置 =====
 const pickerDialogVisible = ref(false)
-const pickerTargetForms = ref<FormDefinitionDTO[]>([])
-const pickerTargetColumns = ref<ColumnConfigItem[]>([])
 
 /** 当前 schema 中的 dataPicker 字段（field → props），穿透子表内部 */
 const pickerFields = computed<{ field: string; props: Record<string, any> }[]>(() =>
@@ -279,11 +271,10 @@ onMounted(async () => {
       field: 'dataPicker' + Date.now(),
       title: '数据引用',
       props: {
-        sourceFormKey: '',
+        dataSourceId: '',
         displayField: '',
         columns: [],
         searchColumns: [],
-        dependOn: undefined,
       },
     }),
     // 属性设置栏：注入"数据引用配置"触发项（按钮 + click 事件，样式对齐"设置事件"按钮，同 LookupPicker）
@@ -683,24 +674,7 @@ async function openPickerConfig() {
   }
   // 优先使用设计器当前选中字段（含子表内部字段），未选中/不匹配时回退第一个
   selectedPickerField.value = resolveActiveField(pickerFields.value, 'dataPicker', designerRef.value?.activeRule)
-  try {
-    const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
-    pickerTargetForms.value = res.data.rows || []
-  } catch {
-    pickerTargetForms.value = []
-  }
-  pickerTargetColumns.value = []
   pickerDialogVisible.value = true
-}
-
-async function handlePickerSourceChange(formKey: string) {
-  try {
-    const res = await formApi.getFormDefinitionByKey(formKey)
-    const cc = res.data.columnConfig
-    pickerTargetColumns.value = cc ? JSON.parse(cc) : []
-  } catch {
-    pickerTargetColumns.value = []
-  }
 }
 
 function handlePickerConfirm(newProps: Record<string, any>) {
@@ -712,8 +686,6 @@ function handlePickerConfirm(newProps: Record<string, any>) {
 
 // ===== LookupPicker（查找带回）配置 =====
 const lookupDialogVisible = ref(false)
-const lookupTargetForms = ref<FormDefinitionDTO[]>([])
-const lookupTargetColumns = ref<ColumnConfigItem[]>([])
 /** 当前 schema 中的 LookupPicker 字段（field → props），穿透子表内部 */
 const lookupFields = computed<{ field: string; props: Record<string, any> }[]>(() =>
   collectFieldsOfType(designerRule.value, 'LookupPicker'),
@@ -733,32 +705,7 @@ function openLookupConfig() {
   }
   // 优先使用设计器当前选中字段（含子表内部字段），未选中/不匹配时回退第一个
   selectedLookupField.value = resolveActiveField(lookupFields.value, 'LookupPicker', designerRef.value?.activeRule)
-  try {
-    // 预加载已发布业务表单，供底表模式选择
-    void formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
-      .then((res) => { lookupTargetForms.value = res.data.rows || [] })
-      .catch(() => { lookupTargetForms.value = [] })
-  } catch {
-    lookupTargetForms.value = []
-  }
-  // 当前字段已配置底表数据源时预加载其列，避免重新打开弹窗时列下拉为空、列标题退化为字段标识
-  const existingSource = currentLookupProps.value.sourceFormKey
-  if (existingSource) {
-    void handleLookupSourceChange(existingSource)
-  } else {
-    lookupTargetColumns.value = []
-  }
   lookupDialogVisible.value = true
-}
-
-async function handleLookupSourceChange(formKey: string) {
-  try {
-    const res = await formApi.getFormDefinitionByKey(formKey)
-    const cc = res.data.columnConfig
-    lookupTargetColumns.value = cc ? JSON.parse(cc) : []
-  } catch {
-    lookupTargetColumns.value = []
-  }
 }
 
 function handleLookupConfirm(newProps: Record<string, any>) {

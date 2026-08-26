@@ -1,14 +1,26 @@
 <template>
   <el-dialog v-model="visible" title="数据引用配置" width="640px" :close-on-click-modal="false">
     <el-form label-width="110px" size="default">
-      <el-form-item label="目标表单" required>
-        <el-select v-model="form.sourceFormKey" placeholder="选择已发布的业务表单" filterable style="width: 100%" @change="handleSourceChange">
-          <el-option v-for="f in targetForms" :key="f.key" :label="f.name" :value="f.key" />
+      <!-- 页面内数据源 -->
+      <el-form-item label="页面内数据源" required>
+        <el-select
+          v-model="form.dataSourceId"
+          placeholder="选择页面数据源绑定"
+          style="width: 100%"
+          @change="handleDataSourceChange"
+        >
+          <el-option
+            v-for="ds in formDataSources"
+            :key="ds.id"
+            :label="ds.id"
+            :value="ds.id"
+          />
         </el-select>
+        <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
       </el-form-item>
 
       <el-form-item label="显示字段" required>
-        <el-select v-model="form.displayField" placeholder="选择目标表显示字段" style="width: 100%">
+        <el-select v-model="form.displayField" placeholder="选择显示字段（输入框回显）" style="width: 100%">
           <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
         </el-select>
       </el-form-item>
@@ -31,6 +43,8 @@
         <span class="form-tip">缺省不限；填 1 为单选（点行即选），>1 限制勾选数量</span>
       </el-form-item>
 
+      <!-- 组件级数据筛选 -->
+      <el-divider content-position="left">组件级数据筛选</el-divider>
       <el-form-item label="筛选条件">
         <div style="width: 100%">
           <el-radio-group v-model="form.filterLogic" size="small">
@@ -75,7 +89,7 @@
             <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
           </div>
           <el-button type="primary" link style="margin-top: 8px" @click="addFilterRow">+ 添加筛选条件</el-button>
-          <div class="form-tip">限定可查范围（如仅查已支付订单）；动态条件依赖表单字段，值变化时自动刷新选项</div>
+          <span class="form-tip">与数据源级筛选（数据源配置中设置）以「且」合并；动态条件依赖表单字段，值变化时自动刷新选项</span>
         </div>
       </el-form-item>
 
@@ -97,10 +111,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { FormDefinitionDTO } from '@/api/form'
 import type { ColumnConfigItem } from '@/api/bizData'
+import { dataSourceApi } from '@/api/data-source'
 
 /** 筛选条件行（对齐 LookupPicker：op + 固定值/表单字段 来源） */
 interface FilterRow {
@@ -113,20 +127,17 @@ interface FilterRow {
 
 const props = defineProps<{
   modelValue: boolean
-  /** 已发布业务表单列表 */
-  targetForms: FormDefinitionDTO[]
   /** 当前表单字段 key 列表 */
   currentFields: string[]
-  /** 目标表单列（父组件根据 sourceFormKey 加载后传入） */
-  targetColumns: ColumnConfigItem[]
   /** 正在编辑的 dataPicker 字段 props */
   pickerProps?: Record<string, any>
+  /** 页面内数据源绑定配置 */
+  formDataSources: Array<{ id: string; refId: string }>
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'confirm', props: Record<string, any>): void
-  (e: 'sourceChange', formKey: string): void
 }>()
 
 const visible = computed({
@@ -134,11 +145,14 @@ const visible = computed({
   set: (v: boolean) => emit('update:modelValue', v),
 })
 
-/** 底表模式可引用列：排除隐藏列（_text 冗余列等） */
-const visibleColumns = computed(() => props.targetColumns.filter(c => !c.hidden))
+/** 当前选中绑定的列定义（来自数据源 metadata） */
+const dsColumns = ref<ColumnConfigItem[]>([])
+
+/** 可引用列：排除隐藏列 */
+const visibleColumns = computed(() => dsColumns.value.filter(c => !c.hidden))
 
 const form = reactive({
-  sourceFormKey: '',
+  dataSourceId: '',
   displayField: '',
   columns: [] as string[],
   searchColumns: [] as string[],
@@ -150,77 +164,86 @@ const form = reactive({
   detailReadonly: true,
 })
 
-watch(
-  () => props.modelValue,
-  (v) => {
-    if (v) {
-      // 从 pickerProps 回填表单
-      form.sourceFormKey = props.pickerProps?.sourceFormKey || ''
-      form.displayField = props.pickerProps?.displayField || ''
-      form.columns = [...(props.pickerProps?.columns || [])]
-      form.searchColumns = [...(props.pickerProps?.searchColumns || [])]
-      // maxCount：缺省不限（undefined）；旧 mode=multiple 配置兼容为不限（1 为单选）
-      const legacyMode = props.pickerProps?.mode
-      form.maxCount = props.pickerProps?.maxCount
-        ?? (legacyMode === 'single' ? 1 : undefined)
-      // 筛选条件：filters（v3 结构化 {logic, conditions}）优先；v2 数组兼容；dependOn（v1）兼容为单条 field 型
-      const filters = props.pickerProps?.filters
-      if (filters && typeof filters === 'object' && !Array.isArray(filters)) {
-        form.filterLogic = filters.logic === 'OR' ? 'OR' : 'AND'
-        form.filterRows = (filters.conditions || []).map((c: any) => ({
-          column: c.column || '',
-          op: c.op || 'eq',
-          source: c.field ? 'field' : 'fixed',
-          fixedValue: c.field ? '' : (c.value === undefined || c.value === null ? '' : String(c.value)),
-          field: c.field || '',
-        }))
-      } else if (Array.isArray(filters) && filters.length > 0) {
-        form.filterLogic = 'AND'
-        form.filterRows = filters.map((f: any) => ({
-          column: f.column || '',
-          op: f.operator === '<>' ? 'ne' : (f.operator || '='),
-          source: f.valueType === 'field' ? 'field' : 'fixed',
-          fixedValue: f.valueType === 'field' ? '' : String(f.value ?? ''),
-          field: f.valueType === 'field' ? String(f.value ?? '') : '',
-        }))
-      } else {
-        const dep = props.pickerProps?.dependOn
-        form.filterRows = dep?.field && dep?.sourceColumn
-          ? [{ column: dep.sourceColumn, op: 'eq', source: 'field', fixedValue: '', field: dep.field }]
-          : []
-        form.filterLogic = 'AND'
-      }
-      form.clearOnCascadeChange = props.pickerProps?.clearOnCascadeChange || false
-      form.allowCreate = props.pickerProps?.allowCreate || false
-      form.detailReadonly = props.pickerProps?.detailReadonly !== false
-    }
-  },
-  { immediate: true },
-)
+/** 按绑定 refId 加载数据源列定义 */
+async function loadDsColumns() {
+  dsColumns.value = []
+  const binding = props.formDataSources.find(d => d.id === form.dataSourceId)
+  if (!binding?.refId) return
+  try {
+    const res = await dataSourceApi.getMetadata(binding.refId)
+    dsColumns.value = res.data?.columns || []
+  } catch {
+    // http 拦截器已提示
+  }
+}
 
-watch(
-  () => form.sourceFormKey,
-  (key) => {
-    if (key) {
-      emit('sourceChange', key)
-    }
-  },
-)
-
-function handleSourceChange() {
+/** 切换数据源：清空依赖列配置并重新加载列候选 */
+function handleDataSourceChange() {
   form.displayField = ''
   form.columns = []
   form.searchColumns = []
   form.filterRows.forEach(r => { r.column = '' })
+  void loadDsColumns()
 }
+
+watch(
+  () => props.modelValue,
+  (v) => {
+    if (!v) return
+    // 从 pickerProps 回填表单
+    form.dataSourceId = props.pickerProps?.dataSourceId || ''
+    form.displayField = props.pickerProps?.displayField || ''
+    form.columns = [...(props.pickerProps?.columns || [])]
+    form.searchColumns = [...(props.pickerProps?.searchColumns || [])]
+    form.maxCount = props.pickerProps?.maxCount
+    // 筛选条件：filters（v3 结构化 {logic, conditions}）优先；v2 数组兼容；dependOn（v1）兼容为单条 field 型
+    const filters = props.pickerProps?.filters
+    if (filters && typeof filters === 'object' && !Array.isArray(filters)) {
+      form.filterLogic = filters.logic === 'OR' ? 'OR' : 'AND'
+      form.filterRows = (filters.conditions || []).map((c: any) => ({
+        column: c.column || '',
+        op: c.op || 'eq',
+        source: c.field ? 'field' : 'fixed',
+        fixedValue: c.field ? '' : (c.value === undefined || c.value === null ? '' : String(c.value)),
+        field: c.field || '',
+      }))
+    } else if (Array.isArray(filters) && filters.length > 0) {
+      form.filterLogic = 'AND'
+      form.filterRows = filters.map((f: any) => ({
+        column: f.column || '',
+        op: f.operator === '<>' ? 'ne' : (f.operator || '='),
+        source: f.valueType === 'field' ? 'field' : 'fixed',
+        fixedValue: f.valueType === 'field' ? '' : String(f.value ?? ''),
+        field: f.valueType === 'field' ? String(f.value ?? '') : '',
+      }))
+    } else {
+      const dep = props.pickerProps?.dependOn
+      form.filterRows = dep?.field && dep?.sourceColumn
+        ? [{ column: dep.sourceColumn, op: 'eq', source: 'field', fixedValue: '', field: dep.field }]
+        : []
+      form.filterLogic = 'AND'
+    }
+    form.clearOnCascadeChange = props.pickerProps?.clearOnCascadeChange || false
+    form.allowCreate = props.pickerProps?.allowCreate || false
+    form.detailReadonly = props.pickerProps?.detailReadonly !== false
+    if (form.dataSourceId) {
+      void loadDsColumns()
+    }
+  },
+  { immediate: true },
+)
 
 function addFilterRow() {
   form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })
 }
 
 function handleConfirm() {
-  if (!form.sourceFormKey || !form.displayField) {
-    ElMessage.warning('请选择目标表单与显示字段')
+  if (!form.dataSourceId) {
+    ElMessage.warning('请选择页面内数据源')
+    return
+  }
+  if (!form.displayField) {
+    ElMessage.warning('请选择显示字段')
     return
   }
   // 筛选条件：结构化 { logic, conditions }；isEmpty/isNotEmpty 无 value；in 逗号转数组；field 型产出 field
@@ -246,7 +269,7 @@ function handleConfirm() {
     }
   }
   const newProps: Record<string, any> = {
-    sourceFormKey: form.sourceFormKey,
+    dataSourceId: form.dataSourceId,
     displayField: form.displayField,
     columns: form.columns,
     searchColumns: form.searchColumns,

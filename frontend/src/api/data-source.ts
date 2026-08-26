@@ -41,6 +41,8 @@ export interface DataSourceQueryParams {
   keywordColumn?: string
   sort?: string
   order?: string
+  /** 结构化筛选 JSON 字符串（{logic, conditions:[{column,op,value}]}），受 searchFields 白名单约束 */
+  filter?: string
 }
 
 export const dataSourceApi = {

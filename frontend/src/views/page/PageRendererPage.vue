@@ -17,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, provide, watch } from 'vue'
+import { ref, reactive, onMounted, provide, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import formCreate from '@form-create/element-ui'
@@ -27,6 +27,10 @@ import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
 import { normalizeForRender } from '@/views/form/schemaRules'
+import {
+  FORM_DS_BINDINGS_KEY,
+  type DataSourceBindingContext,
+} from '@/components/business/types'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
 formCreate.component('page-table', PageDataTable)
@@ -73,6 +77,13 @@ const pageSchema = reactive<{
 
 /** 组件引用注册表：dataSourceId → 组件实例（供 refresh/set-filter） */
 const componentRefs = reactive<Record<string, any>>({})
+
+/** 页面内数据源绑定上下文：供 LookupPicker / dataPicker 按 dataSourceId 解析（含绑定级 filter）。
+ *  用 computed 包装：load() 时 dataSources 数组被整体替换，注入方仍能读到最新绑定。 */
+const dsBindingsCtx = computed<DataSourceBindingContext[]>(
+  () => pageSchema.dataSources as DataSourceBindingContext[],
+)
+provide(FORM_DS_BINDINGS_KEY, dsBindingsCtx)
 
 onMounted(load)
 

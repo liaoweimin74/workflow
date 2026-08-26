@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted, computed, provide } from 'vue'
 import { ElMessage } from 'element-plus'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
@@ -20,6 +20,10 @@ import { createActionBus } from './DsActionBus'
 import type { DsLink } from './DsActionBus'
 import { dataSourceApi } from '@/api/data-source'
 import { normalizeForRender } from '../schemaRules'
+import {
+  FORM_DS_BINDINGS_KEY,
+  type DataSourceBindingContext,
+} from '@/components/business/types'
 
 const props = defineProps<{
   /** 表单定义 ID，传入后通过 API 加载 schema。与 rule 互斥，formDefId 优先。 */
@@ -43,6 +47,11 @@ const props = defineProps<{
   recordId?: () => string | undefined
   /** notify record context change (tree click / route param) */
   notifyRecordChange?: () => void
+  /**
+   * 表单级数据源绑定（可选）。rule 直传场景由调用方提供；
+   * formDefId 场景自动从 schema.dataSources 加载，无需传入。
+   */
+  dataSources?: DataSourceBindingContext[]
 }>()
 
 const emit = defineEmits<{
@@ -55,6 +64,15 @@ const resolvedSchema = ref<Rule[]>([])
 const formData = ref<Record<string, unknown>>({})
 const existingFormDataId = ref<string | null>(null)
 const formVersion = ref<number | null>(null)
+
+/** 从 schema 加载的表单级数据源绑定（formDefId 场景） */
+const schemaDataSources = ref<DataSourceBindingContext[]>([])
+
+/** 注入给数据组件的绑定上下文：prop 直传优先，其次 schema 加载结果 */
+const dsBindings = computed<DataSourceBindingContext[]>(
+  () => props.dataSources ?? schemaDataSources.value,
+)
+provide(FORM_DS_BINDINGS_KEY, dsBindings)
 
 /** 渲染用 schema：将 formContainer 规范化为 fcRow 供 form-create 运行时渲染 */
 const renderSchema = computed(() => normalizeForRender(resolvedSchema.value))
@@ -143,6 +161,10 @@ async function loadSchema() {
     const schema = JSON.parse(formDef.schema)
     const rules = Array.isArray(schema) ? schema : (schema.rule || [])
     resolvedSchema.value = rules
+    // 恢复表单级数据源绑定（供 LookupPicker/dataPicker 按 dataSourceId 解析）
+    if (!Array.isArray(schema) && Array.isArray(schema.dataSources)) {
+      schemaDataSources.value = schema.dataSources
+    }
     // 合并设计器 option（labelPosition 等布局配置）
     if (!Array.isArray(schema) && schema.option) {
       applyOption(schema.option)

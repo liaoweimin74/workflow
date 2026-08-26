@@ -103,6 +103,7 @@
 import { ref, watch } from 'vue'
 import { Plus, InfoFilled } from '@element-plus/icons-vue'
 import type { DataSourceDTO } from '@/api/data-source'
+import type { LookupFilterConfig } from './types'
 
 /** 数据源绑定类型 */
 export interface DataSourceBinding {
@@ -112,6 +113,12 @@ export interface DataSourceBinding {
   refId: string
   /** 搜索字段（可选） */
   searchFields?: string[]
+  /**
+   * 数据源级筛选条件（可选）。
+   * 引用该数据源的组件（LookupPicker/DataPicker 等）查询时，
+   * 与组件级 filter 以 AND 合并后作为最终查询条件。
+   */
+  filter?: LookupFilterConfig
 }
 
 /** 动作步骤类型 */

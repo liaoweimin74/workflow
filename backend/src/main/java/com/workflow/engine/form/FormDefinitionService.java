@@ -369,9 +369,13 @@ public class FormDefinitionService {
                 }
                 String fieldKey = field.path("field").asText();
                 JsonNode props = field.path("props");
-                String sourceFormKey = props.path("sourceFormKey").asText();
-                if (sourceFormKey.isBlank()) {
-                    throw new BusinessException(400, "data-picker 字段 " + fieldKey + " 未配置目标表单");
+                String dataSourceId = props.path("dataSourceId").asText();
+                if (dataSourceId.isBlank()) {
+                    // 兼容旧配置：检查 sourceFormKey
+                    String sourceFormKey = props.path("sourceFormKey").asText();
+                    if (sourceFormKey.isBlank()) {
+                        throw new BusinessException(400, "data-picker 字段 " + fieldKey + " 未配置数据源（dataSourceId）");
+                    }
                 }
                 List<ColumnConfig> targetColumns;
                 try {

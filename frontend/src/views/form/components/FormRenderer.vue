@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed, provide } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
@@ -20,10 +20,8 @@ import { createActionBus } from './DsActionBus'
 import type { DsLink } from './DsActionBus'
 import { dataSourceApi } from '@/api/data-source'
 import { normalizeForRender } from '../schemaRules'
-import {
-  FORM_DS_BINDINGS_KEY,
-  type DataSourceBindingContext,
-} from '@/components/business/types'
+import type { DataSourceBindingContext } from '@/components/business/types'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 const props = defineProps<{
   /** 表单定义 ID，传入后通过 API 加载 schema。与 rule 互斥，formDefId 优先。 */
@@ -72,7 +70,9 @@ const schemaDataSources = ref<DataSourceBindingContext[]>([])
 const dsBindings = computed<DataSourceBindingContext[]>(
   () => props.dataSources ?? schemaDataSources.value,
 )
-provide(FORM_DS_BINDINGS_KEY, dsBindings)
+
+/** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
+watch(dsBindings, (val) => { activeDsBindings.value = val }, { immediate: true })
 
 /** 渲染用 schema：将 formContainer 规范化为 fcRow 供 form-create 运行时渲染 */
 const renderSchema = computed(() => normalizeForRender(resolvedSchema.value))

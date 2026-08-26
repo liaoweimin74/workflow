@@ -52,6 +52,33 @@
               <span v-if="errors[index].id" class="error-text">{{ errors[index].id }}</span>
               <span v-if="errors[index].refId" class="error-text">{{ errors[index].refId }}</span>
             </div>
+            <!-- 数据源级筛选条件 -->
+            <div class="binding-filter" v-if="ds.refId">
+              <div class="binding-filter-header">
+                <span class="binding-filter-title">数据源级筛选</span>
+              </div>
+              <div class="filter-row" v-for="(fc, fi) in ds.filter?.conditions || []" :key="fi">
+                <el-input v-model="fc.column" placeholder="列名" size="small" style="width: 28%" />
+                <el-select v-model="fc.op" style="width: 22%" size="small">
+                  <el-option label="等于" value="eq" />
+                  <el-option label="不等于" value="ne" />
+                  <el-option label="包含" value="like" />
+                  <el-option label="属于" value="in" />
+                  <el-option label="为空" value="isEmpty" />
+                  <el-option label="不为空" value="isNotEmpty" />
+                </el-select>
+                <el-input v-if="fc.field" v-model="fc.field" placeholder="表单字段" size="small" style="width: 24%" />
+                <el-input v-else :model-value="String(fc.value ?? '')" @update:model-value="fc.value = $event" placeholder="固定值" size="small" style="width: 24%" />
+                <el-button type="danger" link size="small" @click="ds.filter!.conditions.splice(fi, 1)">删</el-button>
+              </div>
+              <div style="display: flex; gap: 8px; margin-top: 4px; align-items: center">
+                <el-button type="primary" link size="small" @click="addDsFilter(index)">+ 添加筛选</el-button>
+                <el-radio-group v-if="(ds.filter?.conditions?.length || 0) > 1" v-model="ds.filter!.logic" size="small">
+                  <el-radio-button value="AND">且</el-radio-button>
+                  <el-radio-button value="OR">或</el-radio-button>
+                </el-radio-group>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -255,6 +282,16 @@ function validateAll() {
   errors.value = localDataSources.value.map((_, index) => validateBinding(index))
 }
 
+/** 添加数据源级筛选条件 */
+function addDsFilter(bindingIndex: number) {
+  const ds = localDataSources.value[bindingIndex]
+  if (!ds.filter) {
+    ds.filter = { logic: 'AND', conditions: [] }
+  }
+  ds.filter.conditions.push({ column: '', op: 'eq', value: '' })
+  validateAndEmit()
+}
+
 /** 验证并触发数据源更新 */
 function validateAndEmit() {
   validateAll()
@@ -362,5 +399,28 @@ function emitActions() {
   align-items: center;
   margin-left: 16px;
   margin-bottom: 8px;
+}
+
+/* 数据源级筛选样式 */
+.binding-filter {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e4e7ed;
+}
+.binding-filter-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.binding-filter-title {
+  font-size: 12px;
+  color: #606266;
+  font-weight: 500;
+}
+.filter-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
 }
 </style>

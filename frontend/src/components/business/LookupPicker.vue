@@ -61,15 +61,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, inject, watch, type Ref } from 'vue'
+import { ref, reactive, computed, inject, watch } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LookupPickerProps, QueryParams, LookupFilterConfig, DataSourceBindingContext } from './types'
-import { FORM_DS_BINDINGS_KEY } from './types'
-import { buildFetchApiFromConfig, readCellValue, resolveFilter } from './lookupFetch'
+import { readCellValue } from './lookupFetch'
 import { mergeFilters } from '@/utils/filterMerge'
 import { resolveFilterFieldReferences } from '@/utils/filterResolve'
 import { dataSourceApi } from '@/api/data-source'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 /** form-create 注入对象，提供 api.setValue/getValue 等方法 */
 interface FormCreateInject {
@@ -96,14 +96,10 @@ const emit = defineEmits<{
 /** form-create 注入，若组件在 form-create 外使用则为 undefined */
 const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
 
-/** 页面/表单级数据源绑定上下文（FormRenderer / PageRendererPage provide） */
-const dsBindings = inject<Ref<DataSourceBindingContext[]> | DataSourceBindingContext[]>(FORM_DS_BINDINGS_KEY, [])
-
-/** 当前组件的绑定上下文（通过 dataSourceId 解析） */
+/** 当前组件的绑定上下文（通过 dataSourceId 从模块级存储解析） */
 const currentBinding = computed<DataSourceBindingContext | undefined>(() => {
   if (!props.dataSourceId) return undefined
-  const list = Array.isArray(dsBindings) ? dsBindings : (dsBindings as any).value
-  return list?.find((b: DataSourceBindingContext) => b.id === props.dataSourceId)
+  return activeDsBindings.value.find((b: DataSourceBindingContext) => b.id === props.dataSourceId)
 })
 
 /** 全局数据源 refId（由绑定解析） */
@@ -118,12 +114,6 @@ const total = ref(0)
 const query = reactive<QueryParams & { keyword?: string }>({
   page: 1,
   size: 10,
-})
-
-/** 有效 fetchApi：代码级函数优先；否则由 fetch 配置构造 */
-const effectiveFetchApi = computed(() => {
-  if (typeof props.fetchApi === 'function') return props.fetchApi
-  return buildFetchApiFromConfig(props.fetch || { action: '' })
 })
 
 const defaultDisplayField = computed(() => {
@@ -184,33 +174,11 @@ const mergedFilter = computed<LookupFilterConfig | undefined>(() => {
 
 /** 依赖字段（动态条件来源），供联动 watch */
 const filterDependFields = computed<string[]>(() => {
-  // 新模式：合并后的 filter
   const mf = mergedFilter.value
   if (mf) {
     return mf.conditions.map((c: any) => c.field).filter((f: any): f is string => !!f)
   }
-  // 旧模式：fetch.filter
-  const conds = props.fetch?.filter?.conditions || []
-  return conds.map((c: any) => c.field).filter((f: any): f is string => !!f)
-})
-
-/** 解析后的筛选参数：底表 → filter JSON；外部 API → 等值查询参数展开 */
-const resolvedFilterParams = computed<Record<string, unknown> | undefined>(() => {
-  const filter = props.fetch?.filter
-  if (!filter || !props.fetch?.action) return undefined
-  const getValue = (field: string) => formCreateInject?.api?.getValue?.(field)
-  if (props.fetch.action.startsWith('/v1/biz-data/')) {
-    return resolveFilter(filter, getValue || (() => undefined))
-  }
-  // 外部 API：仅等值展开
-  const params: Record<string, unknown> = {}
-  for (const c of filter.conditions || []) {
-    if (!c.column || (c.op && c.op !== 'eq')) continue
-    const v = c.field ? (getValue ? getValue(c.field) : undefined) : c.value
-    if (v === undefined || v === null || v === '') continue
-    params[c.column] = v
-  }
-  return Object.keys(params).length > 0 ? params : undefined
+  return []
 })
 
 /** 表格单元格格式化：readCellValue 兼容 BizDataVO 内层与平铺行；对象/数组 JSON 化 */
@@ -229,63 +197,42 @@ function openDialog() {
 }
 
 async function fetchData() {
+  if (!dsRefId.value) {
+    ElMessage.warning('未配置数据源，请在设计器中配置数据源绑定')
+    return
+  }
   loading.value = true
   try {
-    // === 新路径：通过页面/表单级数据源绑定查询 ===
-    if (dsRefId.value) {
-      const params: Record<string, unknown> = {
-        page: query.page - 1,
-        size: query.size,
-      }
-      if (keyword.value) {
-        params.keyword = keyword.value
-        // 搜索列：新 prop searchColumns 优先；回退 fetch.keywordColumn
-        const kwCols = (props.searchColumns && props.searchColumns.length > 0)
-          ? props.searchColumns
-          : (props.fetch?.keywordColumn || '').split(',').map(s => s.trim()).filter(Boolean)
-        if (kwCols.length > 0) params.keywordColumn = kwCols.join(',')
-      }
-      // 合并 + 解析 filter（数据源级 + 组件级）
-      const getValue = (field: string) => formCreateInject?.api?.getValue?.(field)
-      if (mergedFilter.value) {
-        const resolved = resolveFilterFieldReferences(
-          mergedFilter.value,
-          Object.fromEntries(
-            (mergedFilter.value.conditions || [])
-              .filter(c => c.field)
-              .map(c => [c.field!, getValue(c.field!) ?? '']),
-          ),
-        )
-        if (resolved && resolved.conditions.length > 0) {
-          params.filter = JSON.stringify(resolved)
-        }
-      }
-      const res = await dataSourceApi.queryData(dsRefId.value, params as any)
-      const biz = res.data as any
-      tableData.value = biz?.records || []
-      total.value = biz?.total || 0
-      return
+    const params: Record<string, unknown> = {
+      page: query.page - 1,
+      size: query.size,
     }
-
-    // === 旧路径：通过 fetch/fetchApi 配置查询 ===
-    const fetchApi = effectiveFetchApi.value
-    if (!props.fetch && !props.fetchApi) {
-      ElMessage.warning('未配置数据源，请在设计器中配置"数据源/回填"')
-      return
+    if (keyword.value) {
+      params.keyword = keyword.value
+      const kwCols = (props.searchColumns && props.searchColumns.length > 0)
+        ? props.searchColumns
+        : (props.fetch?.keywordColumn || '').split(',').map(s => s.trim()).filter(Boolean)
+      if (kwCols.length > 0) params.keywordColumn = kwCols.join(',')
     }
-    const params: any = { ...query }
-    if (keyword.value) params.keyword = keyword.value
-    const filterParams = resolvedFilterParams.value
-    if (filterParams) {
-      if (props.fetch?.action.startsWith('/v1/biz-data/')) {
-        params.filter = filterParams
-      } else {
-        Object.assign(params, filterParams)
+    // 合并 + 解析 filter（数据源级 + 组件级）
+    const getValue = (field: string) => formCreateInject?.api?.getValue?.(field)
+    if (mergedFilter.value) {
+      const resolved = resolveFilterFieldReferences(
+        mergedFilter.value,
+        Object.fromEntries(
+          (mergedFilter.value.conditions || [])
+            .filter((c: any) => c.field)
+            .map((c: any) => [c.field!, getValue(c.field!) ?? '']),
+        ),
+      )
+      if (resolved && resolved.conditions.length > 0) {
+        params.filter = JSON.stringify(resolved)
       }
     }
-    const res = await fetchApi(params)
-    tableData.value = res.rows || []
-    total.value = res.total || 0
+    const res = await dataSourceApi.queryData(dsRefId.value, params as any)
+    const biz = res.data as any
+    tableData.value = biz?.records || []
+    total.value = biz?.total || 0
   } finally {
     loading.value = false
   }

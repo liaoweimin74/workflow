@@ -150,22 +150,23 @@
     </el-dialog>
     <DataPickerCreateDialog
       v-model:visible="createDialogVisible"
-      :source-form-key="sourceFormKey || ''"
+      :source-form-key="effectiveFormKey || ''"
       @success="handleCreateSuccess"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, inject, nextTick, type ComponentPublicInstance, type Ref } from 'vue'
+import { ref, computed, watch, inject, nextTick, type ComponentPublicInstance } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { type Rule } from '@form-create/element-ui'
 import { bizDataApi } from '@/api/bizData'
 import { formApi } from '@/api/form'
 import { dataSourceApi } from '@/api/data-source'
-import { FORM_DS_BINDINGS_KEY, type DataSourceBindingContext, type LookupFilterConfig } from '@/components/business/types'
+import { type DataSourceBindingContext, type LookupFilterConfig } from '@/components/business/types'
 import { mergeFilters } from '@/utils/filterMerge'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import DataPickerCreateDialog from './DataPickerCreateDialog.vue'
 import FormRenderer from './FormRenderer.vue'
 
@@ -204,10 +205,8 @@ interface LegacyFilterItem {
 const props = withDefaults(
   defineProps<{
     modelValue?: string
-    /** 页面内数据源绑定 ID（新模式） */
+    /** 页面内数据源绑定 ID */
     dataSourceId?: string
-    /** 目标业务表单 key（旧模式，dataSourceId 优先） */
-    sourceFormKey?: string
     /** 目标表显示字段 */
     displayField?: string
     /** 弹窗列表列（目标表列 key），缺省显示 displayField */
@@ -253,23 +252,19 @@ const emit = defineEmits<{
 
 const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
 
-/** 页面/表单级数据源绑定上下文（FormRenderer / PageRendererPage provide） */
-const dsBindings = inject<Ref<DataSourceBindingContext[]> | DataSourceBindingContext[]>(FORM_DS_BINDINGS_KEY, [])
-
-/** 当前组件的绑定上下文（通过 dataSourceId 解析） */
+/** 当前组件的绑定上下文（通过 dataSourceId 从模块级存储解析） */
 const currentBinding = computed<DataSourceBindingContext | undefined>(() => {
   if (!props.dataSourceId) return undefined
-  const list = Array.isArray(dsBindings) ? dsBindings : (dsBindings as any).value
-  return list?.find((b: DataSourceBindingContext) => b.id === props.dataSourceId)
+  return activeDsBindings.value.find((b: DataSourceBindingContext) => b.id === props.dataSourceId)
 })
 
 /** 全局数据源 refId（由绑定解析） */
 const dsRefId = computed(() => currentBinding.value?.refId || '')
 
-/** 有效表单 key：新模式从 DS 定义动态获取；旧模式用 props.sourceFormKey */
+/** 有效表单 key：从 DS 定义动态获取 */
 const effectiveFormKey = ref('')
 watch(dsRefId, async (refId) => {
-  if (!refId) { effectiveFormKey.value = props.sourceFormKey || ''; return }
+  if (!refId) { effectiveFormKey.value = ''; return }
   try {
     const res = await dataSourceApi.getDataSource(refId)
     effectiveFormKey.value = res.data?.formKey || ''
@@ -604,42 +599,27 @@ function handleViewRowClick(row: any) {
 }
 
 async function fetchData() {
+  if (!dsRefId.value) {
+    ElMessage.warning('未配置数据源，请在设计器中配置数据源绑定')
+    return
+  }
   loading.value = true
   try {
-    // === 新路径：通过页面/表单级数据源绑定查询 ===
-    if (dsRefId.value) {
-      const params: Record<string, unknown> = {
-        page: query.value.page - 1,
-        size: query.value.size,
-      }
-      if (keyword.value && resolvedSearchColumns.value.length > 0) {
-        params.keyword = keyword.value
-        params.keywordColumn = resolvedSearchColumns.value.join(',')
-      }
-      if (queryFilter.value) {
-        params.filter = JSON.stringify(queryFilter.value)
-      }
-      const res = await dataSourceApi.queryData(dsRefId.value, params as any)
-      const biz = res.data as any
-      tableData.value = biz?.records || []
-      total.value = biz?.total || 0
-      return
+    const params: Record<string, unknown> = {
+      page: query.value.page - 1,
+      size: query.value.size,
     }
-
-    // === 旧路径：通过 bizDataApi.list(sourceFormKey) 查询 ===
-    const fk = effectiveFormKey.value
-    if (!fk) return
-    const p: any = { ...query.value, page: query.value.page - 1 }
     if (keyword.value && resolvedSearchColumns.value.length > 0) {
-      p.keyword = keyword.value
-      p.keywordColumn = resolvedSearchColumns.value.join(',')
+      params.keyword = keyword.value
+      params.keywordColumn = resolvedSearchColumns.value.join(',')
     }
     if (queryFilter.value) {
-      p.filter = queryFilter.value
+      params.filter = JSON.stringify(queryFilter.value)
     }
-    const res = await bizDataApi.list(fk, p)
-    tableData.value = res.data.records || []
-    total.value = res.data.total || 0
+    const res = await dataSourceApi.queryData(dsRefId.value, params as any)
+    const biz = res.data as any
+    tableData.value = biz?.records || []
+    total.value = biz?.total || 0
   } finally {
     loading.value = false
   }

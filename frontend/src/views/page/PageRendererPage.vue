@@ -27,10 +27,7 @@ import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
 import { normalizeForRender } from '@/views/form/schemaRules'
-import {
-  FORM_DS_BINDINGS_KEY,
-  type DataSourceBindingContext,
-} from '@/components/business/types'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
 formCreate.component('page-table', PageDataTable)
@@ -78,12 +75,8 @@ const pageSchema = reactive<{
 /** 组件引用注册表：dataSourceId → 组件实例（供 refresh/set-filter） */
 const componentRefs = reactive<Record<string, any>>({})
 
-/** 页面内数据源绑定上下文：供 LookupPicker / dataPicker 按 dataSourceId 解析（含绑定级 filter）。
- *  用 computed 包装：load() 时 dataSources 数组被整体替换，注入方仍能读到最新绑定。 */
-const dsBindingsCtx = computed<DataSourceBindingContext[]>(
-  () => pageSchema.dataSources as DataSourceBindingContext[],
-)
-provide(FORM_DS_BINDINGS_KEY, dsBindingsCtx)
+/** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
+watch(() => pageSchema.dataSources, (val) => { activeDsBindings.value = val as any }, { immediate: true })
 
 onMounted(load)
 

@@ -17,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, provide, watch, computed } from 'vue'
+import { ref, reactive, onMounted, provide, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import formCreate from '@form-create/element-ui'
@@ -27,7 +27,7 @@ import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
 import { normalizeForRender } from '@/views/form/schemaRules'
-import { activeDsBindings } from '@/utils/formDsBindingsStore'
+import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
 formCreate.component('page-table', PageDataTable)
@@ -76,7 +76,7 @@ const pageSchema = reactive<{
 const componentRefs = reactive<Record<string, any>>({})
 
 /** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
-watch(() => pageSchema.dataSources, (val) => { activeDsBindings.value = val as any }, { immediate: true })
+watch(() => pageSchema.dataSources, (val) => { setActiveDsBindings(val as any) }, { immediate: true })
 
 onMounted(load)
 

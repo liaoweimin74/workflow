@@ -21,7 +21,7 @@ import type { DsLink } from './DsActionBus'
 import { dataSourceApi } from '@/api/data-source'
 import { normalizeForRender } from '../schemaRules'
 import type { DataSourceBindingContext } from '@/components/business/types'
-import { activeDsBindings } from '@/utils/formDsBindingsStore'
+import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 const props = defineProps<{
   /** 表单定义 ID，传入后通过 API 加载 schema。与 rule 互斥，formDefId 优先。 */
@@ -72,7 +72,7 @@ const dsBindings = computed<DataSourceBindingContext[]>(
 )
 
 /** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
-watch(dsBindings, (val) => { activeDsBindings.value = val }, { immediate: true })
+watch(dsBindings, (val) => { setActiveDsBindings(val) }, { immediate: true })
 
 /** 渲染用 schema：将 formContainer 规范化为 fcRow 供 form-create 运行时渲染 */
 const renderSchema = computed(() => normalizeForRender(resolvedSchema.value))

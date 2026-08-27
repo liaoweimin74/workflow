@@ -58,4 +58,25 @@ describe('formContainer rule', () => {
     const optionValues = (displayModeProp?.options || []).map((o: any) => o.value)
     expect(optionValues).toEqual(expect.arrayContaining(['dialog', 'newTab', 'inline']))
   })
+
+  it('rule() 默认按钮配置：新增/取消/确定显示，删除/复制隐藏，自定义按钮为空', () => {
+    const rule = formContainer.rule({ t: (k: string) => k })
+    expect(rule.props.showNewButton).toBe(true)
+    expect(rule.props.showCancelButton).toBe(true)
+    expect(rule.props.showConfirmButton).toBe(true)
+    expect(rule.props.showDeleteButton).toBe(false)
+    expect(rule.props.showCopyButton).toBe(false)
+    expect(rule.props.customButtons).toEqual([])
+  })
+
+  it('props() 属性面板包含按钮显示/隐藏开关与自定义按钮配置', () => {
+    const props = formContainer.props({}, { t: (k: string) => k })
+    const fields = props.map((p: any) => p.field)
+    expect(fields).toContain('showNewButton')
+    expect(fields).toContain('showCancelButton')
+    expect(fields).toContain('showConfirmButton')
+    expect(fields).toContain('showDeleteButton')
+    expect(fields).toContain('showCopyButton')
+    expect(fields).toContain('customButtons')
+  })
 })

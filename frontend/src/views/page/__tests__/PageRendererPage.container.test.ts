@@ -15,6 +15,7 @@ vi.mock('@/api/data-source', () => ({
     getData: vi.fn(),
     updateData: vi.fn(),
     createData: vi.fn(),
+    deleteData: vi.fn(),
     getMetadata: vi.fn(() => Promise.resolve({ data: { writable: true, columns: [] } })),
     queryData: vi.fn(),
   },
@@ -88,7 +89,7 @@ vi.mock('../components/PageDataTree.vue', () => ({
   default: defineComponent({ name: 'PageDataTreeStub', setup: () => () => h('div') }),
 }))
 
-// el-dialog 桩：modelValue 为 true 时渲染标题与默认槽
+// el-dialog 桩：modelValue 为 true 时渲染标题与默认槽 + footer 槽（按钮区验证用）
 const ElDialogStub = defineComponent({
   name: 'ElDialogStub',
   props: ['modelValue', 'title', 'width'],
@@ -97,6 +98,7 @@ const ElDialogStub = defineComponent({
       h('div', { class: ['dialog-stub', { visible: !!props.modelValue }] }, [
         h('div', { class: 'dialog-title' }, String(props.title || '')),
         props.modelValue ? slots.default?.() : null,
+        props.modelValue ? slots.footer?.() : null,
       ])
   },
 })
@@ -274,5 +276,111 @@ describe('PageRendererPage 表格-容器联动宿主', () => {
     // 自动加载 recordId
     const loaded = engineMocks.filter((e) => e.loadRecord.mock.calls.some((c: any[]) => c[0] === 'R100'))
     expect(loaded.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('PageRendererPage 容器按钮区', () => {
+  /** 构造带按钮覆盖的页面 schema */
+  function makeButtonPage(buttonOverrides: Record<string, any>, customButtons: any[] = []) {
+    const schema = makePageSchema('dialog')
+    const fc = schema.rule.find((r: any) => r.type === 'formContainer')
+    Object.assign(fc.props, { showNewButton: true, showCancelButton: true, showConfirmButton: true, showDeleteButton: false, showCopyButton: false, customButtons: [], ...buttonOverrides })
+    if (customButtons.length) fc.props.customButtons = customButtons
+    return schema
+  }
+
+  it('默认渲染新增/取消/确定按钮，不渲染删除/复制', async () => {
+    const wrapper = await mountPage(makeButtonPage({}))
+    const dialog = wrapper.findComponent(ElDialogStub)
+    expect(dialog.exists()).toBe(true)
+
+    // 打开弹窗
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+
+    const footer = dialog.find('.container-buttons')
+    expect(footer.exists()).toBe(true)
+    expect(footer.text()).toContain('新增')
+    expect(footer.text()).toContain('取消')
+    expect(footer.text()).toContain('确定')
+    expect(footer.text()).not.toContain('删除')
+    expect(footer.text()).not.toContain('复制')
+  })
+
+  it('配置 showDeleteButton 后渲染删除按钮', async () => {
+    const wrapper = await mountPage(makeButtonPage({ showDeleteButton: true }))
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+
+    const footer = wrapper.findComponent(ElDialogStub).find('.container-buttons')
+    expect(footer.text()).toContain('删除')
+  })
+
+  it('点击取消按钮关闭弹窗', async () => {
+    const wrapper = await mountPage(makeButtonPage({}))
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent(ElDialogStub)
+    expect(dialog.props('modelValue')).toBe(true)
+
+    await dialog.find('.btn-cancel').trigger('click')
+    await flushPromises()
+    expect(dialog.props('modelValue')).toBe(false)
+  })
+
+  it('点击确定按钮 flush 引擎并关闭弹窗', async () => {
+    const wrapper = await mountPage(makeButtonPage({}))
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent(ElDialogStub)
+
+    await dialog.find('.btn-confirm').trigger('click')
+    await flushPromises()
+    expect(dialog.props('modelValue')).toBe(false)
+    // 容器引擎 flush 被调用
+    const flushed = engineMocks.filter((e) => e.flush.mock.calls.length > 0)
+    expect(flushed.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('点击新增按钮清空表单与记录 ID', async () => {
+    const wrapper = await mountPage(makeButtonPage({}))
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent(ElDialogStub)
+
+    await dialog.find('.btn-new').trigger('click')
+    await flushPromises()
+    // 弹窗保持打开（新增是清空，非关闭）
+    expect(dialog.props('modelValue')).toBe(true)
+  })
+
+  it('自定义按钮渲染并点击触发事件链动作（close-container 可观察）', async () => {
+    const schema = makeButtonPage({}, [
+      { key: 'custom1', label: '自定义操作', actions: [{ op: 'close-container', target: 'dsForm' }] },
+    ])
+    const wrapper = await mountPage(schema)
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent(ElDialogStub)
+
+    const footer = dialog.find('.container-buttons')
+    expect(footer.text()).toContain('自定义操作')
+
+    // 点击自定义按钮 → close-container 动作 → 弹窗关闭
+    await footer.find('.btn-custom-custom1').trigger('click')
+    await flushPromises()
+    expect(dialog.props('modelValue')).toBe(false)
+  })
+
+  it('复制按钮调用 createData 创建副本（去除 id/version）', async () => {
+    const { dataSourceApi } = await import('@/api/data-source')
+    const wrapper = await mountPage(makeButtonPage({ showCopyButton: true }))
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent(ElDialogStub)
+
+    await dialog.find('.btn-copy').trigger('click')
+    await flushPromises()
+    expect(dataSourceApi.createData).toHaveBeenCalled()
   })
 })

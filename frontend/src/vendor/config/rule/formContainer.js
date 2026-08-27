@@ -41,6 +41,12 @@ export default {
         dialogHeight: '600px',
         tabTitle: '编辑记录',
         inlineHeight: 'auto',
+        showNewButton: true,
+        showCancelButton: true,
+        showConfirmButton: true,
+        showDeleteButton: false,
+        showCopyButton: false,
+        customButtons: [],
       },
       children: [],
     }
@@ -62,6 +68,12 @@ export default {
       { type: 'input', field: 'dialogHeight', props: { placeholder: '600px' } },
       { type: 'input', field: 'tabTitle', props: { placeholder: '编辑记录' } },
       { type: 'input', field: 'inlineHeight', props: { placeholder: 'auto' } },
+      { type: 'switch', field: 'showNewButton', title: '新增按钮' },
+      { type: 'switch', field: 'showCancelButton', title: '取消按钮' },
+      { type: 'switch', field: 'showConfirmButton', title: '确定按钮' },
+      { type: 'switch', field: 'showDeleteButton', title: '删除按钮' },
+      { type: 'switch', field: 'showCopyButton', title: '复制按钮' },
+      { type: 'json', field: 'customButtons', title: '自定义按钮' },
     ])
   },
 }

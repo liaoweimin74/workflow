@@ -25,6 +25,22 @@
       class="linkage-container-dialog"
     >
       <form-create v-if="c.visible" v-model="c.formData" :rule="c.renderRule" :option="{}" />
+      <template #footer>
+        <div class="container-buttons">
+          <el-button v-if="c.buttons.showNew" class="btn-new" @click="containerAction(c, 'new')">新增</el-button>
+          <el-button v-if="c.buttons.showCopy" class="btn-copy" @click="containerAction(c, 'copy')">复制</el-button>
+          <el-button v-if="c.buttons.showDelete" class="btn-delete" type="danger" @click="containerAction(c, 'delete')">删除</el-button>
+          <el-button
+            v-for="btn in c.buttons.custom"
+            :key="btn.key"
+            :type="btn.type || ''"
+            :class="`btn-custom-${btn.key}`"
+            @click="containerCustomAction(c, btn)"
+          >{{ btn.label }}</el-button>
+          <el-button class="btn-cancel" @click="containerAction(c, 'cancel')">取消</el-button>
+          <el-button v-if="c.buttons.showConfirm" class="btn-confirm" type="primary" @click="containerAction(c, 'confirm')">确定</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -32,7 +48,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, markRaw, onMounted, provide, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import formCreate from '@form-create/element-ui'
 import PageDataTable from './components/PageDataTable.vue'
 import PageDataTree from './components/PageDataTree.vue'
@@ -93,6 +109,24 @@ const componentRefs = reactive<Record<string, any>>({})
 watch(() => pageSchema.dataSources, (val) => { setActiveDsBindings(val as any) }, { immediate: true })
 
 // ==================== 表格-容器联动 ====================
+/** 自定义按钮配置（key/label/type/actions 事件链） */
+interface ContainerCustomButton {
+  key: string
+  label: string
+  type?: string
+  actions?: any[]
+}
+
+/** 容器按钮区配置 */
+interface ContainerButtons {
+  showNew: boolean
+  showCancel: boolean
+  showConfirm: boolean
+  showDelete: boolean
+  showCopy: boolean
+  custom: ContainerCustomButton[]
+}
+
 /** 联动容器运行时状态（formContainer 以 dataSourceId 为联动 target） */
 interface LinkageContainer {
   /** 页面内数据源标识（动作 target） */
@@ -115,6 +149,8 @@ interface LinkageContainer {
   currentRecordId: string | undefined
   /** 容器数据引擎（读写数据源） */
   engine: ReturnType<typeof createDsBindingEngine> | null
+  /** 按钮区配置 */
+  buttons: ContainerButtons
 }
 
 /** 联动容器注册表（dialog/newTab 从主树移除；inline 保留主树） */
@@ -173,6 +209,14 @@ function makeContainer(node: any, displayMode: LinkageContainer['displayMode']):
     formData: {},
     currentRecordId: undefined,
     engine: null,
+    buttons: {
+      showNew: props.showNewButton !== false,
+      showCancel: props.showCancelButton !== false,
+      showConfirm: props.showConfirmButton !== false,
+      showDelete: props.showDeleteButton === true,
+      showCopy: props.showCopyButton === true,
+      custom: Array.isArray(props.customButtons) ? props.customButtons : [],
+    },
   }
 }
 
@@ -211,6 +255,63 @@ function openFromQuery() {
   if (rid) {
     c.currentRecordId = rid
     void c.engine?.loadRecord(rid)
+  }
+}
+
+// ==================== 容器按钮区行为 ====================
+/** 容器内数据源对应的全局 refId */
+function containerRefId(c: LinkageContainer): string | undefined {
+  return pageSchema.dataSources.find((d) => d.id === c.key)?.refId
+}
+
+/** 默认按钮行为：new=清空建新 / cancel=关闭 / confirm=保存关闭 / delete=删除记录 / copy=复制新记录 */
+async function containerAction(c: LinkageContainer, action: 'new' | 'cancel' | 'confirm' | 'delete' | 'copy') {
+  if (action === 'new') {
+    c.formData = {}
+    c.currentRecordId = undefined
+  } else if (action === 'cancel') {
+    c.visible = false
+  } else if (action === 'confirm') {
+    // 强制完成引擎未竟的字段写入，然后关闭
+    await c.engine?.flush()
+    c.visible = false
+  } else if (action === 'delete') {
+    const refId = containerRefId(c)
+    if (!refId || !c.currentRecordId) return
+    try {
+      await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
+    } catch {
+      return
+    }
+    try {
+      await dataSourceApi.deleteData(refId, c.currentRecordId)
+      ElMessage.success('删除成功')
+      c.visible = false
+    } catch {
+      // http 拦截器已提示
+    }
+  } else if (action === 'copy') {
+    const refId = containerRefId(c)
+    if (!refId) return
+    // 以当前表单数据为模板创建新记录（去除主键与版本）
+    const data = { ...c.formData }
+    delete data.id
+    delete data.version
+    try {
+      await dataSourceApi.createData(refId, data)
+      ElMessage.success('复制成功')
+      c.visible = false
+    } catch {
+      // http 拦截器已提示
+    }
+  }
+}
+
+/** 自定义按钮：执行其事件链动作（以容器当前表单数据为上下文） */
+function containerCustomAction(c: LinkageContainer, btn: ContainerCustomButton) {
+  const eventData = { row: c.formData, record: c.formData, node: c.formData }
+  for (const step of btn.actions || []) {
+    executeStep(step, eventData)
   }
 }
 

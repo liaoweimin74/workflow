@@ -79,6 +79,7 @@ const formName = ref('')
 const columnConfig = ref<ColumnConfigItem[]>([])
 const schemaRules = ref<Rule[]>([])
 const schemaOption = ref<Record<string, any>>({})
+const schemaActions = ref<any[]>([])
 const loaded = ref(false)
 
 /** 引用感知：本表单被 dataPicker 引用统计（{ count, referencedBy }） */
@@ -256,6 +257,7 @@ async function fetchApi(params: any) {
 const formConfig = computed<FormConfig<Record<string, any>>>(() => ({
   rule: schemaRules.value,
   option: schemaOption.value,
+  actions: schemaActions.value,
   dialogWidth: '640px',
   dialogTitle: { create: '新增数据', edit: '编辑数据' },
   createPermission: 'form:edit',
@@ -307,6 +309,8 @@ async function loadFormMeta() {
       const parsed = JSON.parse(def.schema)
       schemaRules.value = Array.isArray(parsed) ? parsed : (parsed.rule || [])
       schemaOption.value = !Array.isArray(parsed) && parsed.option ? parsed.option : {}
+      // 表格-容器联动动作链（表单设计器"数据源配置"→动作总线配置）
+      schemaActions.value = !Array.isArray(parsed) && Array.isArray(parsed.actions) ? parsed.actions : []
     }
     loaded.value = true
   } catch {

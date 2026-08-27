@@ -56,11 +56,13 @@ const FormRendererStub = defineComponent({
     rule: { type: Array, default: () => [] },
     initialValues: { type: Object, default: () => ({}) },
     formDefId: { type: String, default: undefined },
+    actions: { type: Array, default: () => [] },
   },
   setup(props) {
     const data = ref<Record<string, any>>({ ...(props.initialValues || {}) })
     return {
       data,
+      actions: props.actions,
       getFormData: () => data.value,
       setFormData: (val: Record<string, any>) => { data.value = val },
     }
@@ -220,6 +222,36 @@ describe('SearchTable — formConfig', () => {
     expect(wrapper.find('.el-table .el-button.is-circle').exists()).toBe(true)
     // 删除按钮在 el-popconfirm 内（被 stub），验证存在 formConfig 即可
     expect(wrapper.vm.$props.formConfig).toBeDefined()
+  })
+
+  it('formConfig.actions 传递给弹窗内 FormRenderer（表格-容器联动动作链）', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+    const linkageActions = [
+      { trigger: 'row-edit', source: 'ds_1', steps: [{ op: 'open-container', target: 'ds_1' }] },
+    ]
+    const wrapper = createWrapper({
+      columns: [{ prop: 'username', label: '用户名' }],
+      formConfig: {
+        rule: testRule,
+        actions: linkageActions,
+        createApi: vi.fn(),
+        updateApi: vi.fn(),
+        deleteApi: vi.fn(),
+      },
+      fetchApi,
+    })
+    await nextTick()
+    await nextTick()
+    // 打开新增弹窗（触发 handleCreate → dialogVisible=true → FormRenderer 渲染）
+    const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新增'))
+    expect(createBtn).toBeTruthy()
+    await createBtn!.trigger('click')
+    await nextTick()
+    await nextTick()
+    // FormRenderer stub 收到 actions
+    const renderer = wrapper.findComponent(FormRendererStub)
+    expect(renderer.exists()).toBe(true)
+    expect((renderer.vm as any).actions).toEqual(linkageActions)
   })
 })
 

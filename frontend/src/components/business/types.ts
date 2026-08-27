@@ -109,6 +109,8 @@ export interface FormConfig<T = any> {
   rule: Rule[]
   /** form-create option（布局配置如 labelPosition/labelWidth，来自设计器 schema.option） */
   option?: Record<string, any>
+  /** 表格-容器联动动作链（schema.actions：trigger/source/steps），传给 FormRenderer 驱动表单内表格联动 */
+  actions?: any[]
   /** 新增表单的初始值，handleCreate 时与传入 initialValues 合并 */
   initialValues?: Partial<T>
   createApi?: (data: any) => Promise<any>

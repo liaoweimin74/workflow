@@ -227,6 +227,7 @@
         :rule="formConfig.rule"
         :option="formConfig.option"
         :initial-values="dialogInitialValues"
+        :actions="formConfig.actions"
       />
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>

@@ -30,6 +30,7 @@
         <el-button plain @click="dsDialogVisible = true">
           数据源配置（{{ formDataSources.length }}）
         </el-button>
+        <el-button plain :icon="Document" @click="handleShowJson">JSON 配置</el-button>
         <el-button type="primary" :icon="Check" @click="handleSave" :loading="saving">保存</el-button>
         <el-button
           v-if="formStatus === 'DRAFT' || formStatus === 'PUBLISHED'"
@@ -113,6 +114,14 @@
         <el-button type="primary" @click="confirmDsConfig">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- JSON 配置弹窗 -->
+    <el-dialog v-model="jsonVisible" title="表单配置 JSON" width="760px">
+      <pre class="preview-json">{{ jsonText }}</pre>
+      <template #footer>
+        <el-button @click="jsonVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -120,7 +129,7 @@
 import { ref, onMounted, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Promotion, Document } from '@element-plus/icons-vue'
 import _formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
@@ -157,6 +166,25 @@ const enabledDataSources = ref<DataSourceDTO[]>([])
 /** 数据源配置弹窗状态 */
 const dsDialogVisible = ref(false)
 const dsConfigPanelRef = ref<InstanceType<typeof DataSourceConfigPanel> | null>(null)
+
+/** JSON 配置弹窗状态 */
+const jsonVisible = ref(false)
+const jsonText = ref('')
+
+/** 查看表单配置 JSON（对齐保存结构：rule/option/dataSources/actions） */
+function handleShowJson() {
+  jsonText.value = JSON.stringify(
+    {
+      rule: designerRef.value?.getRule() || [],
+      option: designerRef.value?.getOption() || {},
+      dataSources: formDataSources.value,
+      actions: formActions.value,
+    },
+    null,
+    2,
+  )
+  jsonVisible.value = true
+}
 
 function confirmDsConfig() {
   dsConfigPanelRef.value?.confirm()
@@ -673,5 +701,16 @@ import { nextTick } from 'vue'
 .designer-body {
   flex: 1;
   overflow: hidden;
+}
+
+.preview-json {
+  max-height: 60vh;
+  overflow: auto;
+  background: #f5f7fa;
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
 }
 </style>

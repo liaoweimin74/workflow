@@ -305,6 +305,11 @@ const actionTypeOptions = [
   { label: '打开链接', value: 'open-link' },
   { label: '消息提示', value: 'message' },
   { label: '脚本', value: 'script' },
+  // ===== 表格-容器联动动作 =====
+  { label: '打开容器', value: 'open-container' },
+  { label: '关闭容器', value: 'close-container' },
+  { label: '加载记录', value: 'load-record' },
+  { label: '保存容器', value: 'save-container' },
 ]
 
 const presetPermissions = [

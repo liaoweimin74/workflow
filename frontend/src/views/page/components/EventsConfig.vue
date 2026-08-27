@@ -102,6 +102,10 @@ const emit = defineEmits<{
 
 const triggerOptions = [
   { label: '行点击', value: 'row-click' },
+  // ===== 表格-容器联动触发器 =====
+  { label: '行编辑', value: 'row-edit' },
+  { label: '行查看', value: 'row-view' },
+  { label: '行新增', value: 'row-create' },
   { label: '搜索', value: 'search' },
   { label: '刷新', value: 'refresh' },
   { label: '新增成功', value: 'create-success' },

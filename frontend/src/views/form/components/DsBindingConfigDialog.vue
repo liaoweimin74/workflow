@@ -68,7 +68,7 @@
     </template>
 
     <template v-else>
-      <!-- 非表格模式：仅数据源 + 筛选 -->
+      <!-- 非表格模式：数据源 + 筛选 + 显示与按钮 -->
       <el-form label-width="110px" size="default">
         <el-form-item label="页面内数据源" required>
           <el-select v-model="form.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
@@ -106,6 +106,57 @@
               + 添加筛选条件
             </el-button>
           </div>
+        </el-form-item>
+
+        <!-- 显示模式与尺寸（表格-容器联动：弹窗/新页签/内嵌） -->
+        <el-divider content-position="left">显示与按钮</el-divider>
+        <el-form-item label="显示模式">
+          <el-select v-model="container.displayMode" placeholder="选择显示方式" style="width: 100%">
+            <el-option label="弹出窗口" value="dialog" />
+            <el-option label="新开页签" value="newTab" />
+            <el-option label="页面内嵌" value="inline" />
+          </el-select>
+          <span class="form-tip">默认弹出窗口；open-container 动作可覆盖</span>
+        </el-form-item>
+        <el-form-item v-if="container.displayMode === 'dialog'" label="弹窗宽度">
+          <el-input v-model="container.dialogWidth" placeholder="800px" style="width: 100%" />
+        </el-form-item>
+        <el-form-item v-if="container.displayMode === 'dialog'" label="弹窗高度">
+          <el-input v-model="container.dialogHeight" placeholder="600px" style="width: 100%" />
+        </el-form-item>
+        <el-form-item v-if="container.displayMode === 'newTab'" label="页签标题">
+          <el-input v-model="container.tabTitle" placeholder="编辑记录" style="width: 100%" />
+        </el-form-item>
+        <el-form-item v-if="container.displayMode === 'inline'" label="内嵌高度">
+          <el-input v-model="container.inlineHeight" placeholder="auto" style="width: 100%" />
+        </el-form-item>
+        <el-divider content-position="left">按钮</el-divider>
+        <el-form-item label="新增按钮">
+          <el-switch v-model="container.showNewButton" />
+        </el-form-item>
+        <el-form-item label="取消按钮">
+          <el-switch v-model="container.showCancelButton" />
+        </el-form-item>
+        <el-form-item label="确定按钮">
+          <el-switch v-model="container.showConfirmButton" />
+        </el-form-item>
+        <el-form-item label="删除按钮">
+          <el-switch v-model="container.showDeleteButton" />
+          <span class="form-tip">默认隐藏</span>
+        </el-form-item>
+        <el-form-item label="复制按钮">
+          <el-switch v-model="container.showCopyButton" />
+          <span class="form-tip">默认隐藏</span>
+        </el-form-item>
+        <el-form-item label="自定义按钮">
+          <el-input
+            v-model="container.customButtonsText"
+            type="textarea"
+            :rows="4"
+            placeholder='[{ "key": "approve", "label": "审核", "actions": [{ "op": "refresh", "target": "ds1" }] }]'
+            style="width: 100%"
+          />
+          <span class="form-tip">JSON 数组：key/label/type/actions（事件链）</span>
         </el-form-item>
       </el-form>
     </template>
@@ -162,6 +213,50 @@ const form = reactive({
   filterLogic: 'AND' as 'AND' | 'OR',
   filterRows: [] as { column: string; op: string; source: 'fixed' | 'field'; fixedValue: string; field: string }[],
 })
+
+// ==================== 容器显示与按钮配置（formContainer 模式） ====================
+const container = reactive({
+  displayMode: 'dialog' as 'dialog' | 'newTab' | 'inline',
+  dialogWidth: '800px',
+  dialogHeight: '600px',
+  tabTitle: '编辑记录',
+  inlineHeight: 'auto',
+  showNewButton: true,
+  showCancelButton: true,
+  showConfirmButton: true,
+  showDeleteButton: false,
+  showCopyButton: false,
+  customButtonsText: '',
+})
+
+/** 从 bindingProps 回填容器配置 */
+function initContainerConfig(bp: Record<string, any>) {
+  container.displayMode = bp.displayMode || 'dialog'
+  container.dialogWidth = bp.dialogWidth || '800px'
+  container.dialogHeight = bp.dialogHeight || '600px'
+  container.tabTitle = bp.tabTitle || '编辑记录'
+  container.inlineHeight = bp.inlineHeight || 'auto'
+  container.showNewButton = bp.showNewButton !== false
+  container.showCancelButton = bp.showCancelButton !== false
+  container.showConfirmButton = bp.showConfirmButton !== false
+  container.showDeleteButton = bp.showDeleteButton === true
+  container.showCopyButton = bp.showCopyButton === true
+  container.customButtonsText = Array.isArray(bp.customButtons)
+    ? JSON.stringify(bp.customButtons)
+    : ''
+}
+
+/** 解析自定义按钮 JSON（非法输入返回空数组） */
+function parseCustomButtons(): any[] {
+  const text = container.customButtonsText.trim()
+  if (!text) return []
+  try {
+    const arr = JSON.parse(text)
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
 
 async function loadDsColumns() {
   dsColumns.value = []
@@ -263,6 +358,8 @@ watch(() => props.modelValue, async (val) => {
   if (props.tableMode) {
     await loadTableCandidates()
     initTableData()
+  } else {
+    initContainerConfig(bp)
   }
 })
 
@@ -290,6 +387,19 @@ function handleConfirm() {
     result.viewActions = { ...tableData.actions }
     result.viewDetail = { ...tableData.detail }
     result.viewEvents = [...tableData.events]
+  } else {
+    // 容器显示模式与按钮配置
+    result.displayMode = container.displayMode
+    result.dialogWidth = container.dialogWidth
+    result.dialogHeight = container.dialogHeight
+    result.tabTitle = container.tabTitle
+    result.inlineHeight = container.inlineHeight
+    result.showNewButton = container.showNewButton
+    result.showCancelButton = container.showCancelButton
+    result.showConfirmButton = container.showConfirmButton
+    result.showDeleteButton = container.showDeleteButton
+    result.showCopyButton = container.showCopyButton
+    result.customButtons = parseCustomButtons()
   }
   emit('confirm', result)
   visible.value = false

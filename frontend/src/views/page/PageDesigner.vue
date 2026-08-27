@@ -237,6 +237,29 @@ function registerPageComponents() {
         title: '记录定位',
         value: { type: 'current-record' },
       },
+      // ===== 表格-容器联动：显示模式与尺寸 =====
+      {
+        type: 'select',
+        field: 'displayMode',
+        title: '显示模式',
+        value: 'dialog',
+        options: [
+          { label: '弹出窗口', value: 'dialog' },
+          { label: '新开页签', value: 'newTab' },
+          { label: '页面内嵌', value: 'inline' },
+        ],
+      },
+      { type: 'input', field: 'dialogWidth', title: '弹窗宽度', value: '800px', props: { placeholder: '800px' } },
+      { type: 'input', field: 'dialogHeight', title: '弹窗高度', value: '600px', props: { placeholder: '600px' } },
+      { type: 'input', field: 'tabTitle', title: '页签标题', value: '编辑记录', props: { placeholder: '编辑记录' } },
+      { type: 'input', field: 'inlineHeight', title: '内嵌高度', value: 'auto', props: { placeholder: 'auto' } },
+      // ===== 按钮配置 =====
+      { type: 'switch', field: 'showNewButton', title: '新增按钮', value: true },
+      { type: 'switch', field: 'showCancelButton', title: '取消按钮', value: true },
+      { type: 'switch', field: 'showConfirmButton', title: '确定按钮', value: true },
+      { type: 'switch', field: 'showDeleteButton', title: '删除按钮', value: false },
+      { type: 'switch', field: 'showCopyButton', title: '复制按钮', value: false },
+      { type: 'json', field: 'customButtons', title: '自定义按钮', value: [] },
     ],
     false,
   )

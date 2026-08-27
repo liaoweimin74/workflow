@@ -119,7 +119,9 @@
               <el-option label="保存容器" value="save-container" />
               <el-option label="关闭容器" value="close-container" />
             </el-select>
-            <el-input v-model="step.target" placeholder="目标数据源标识" style="width: 130px" />
+            <el-select v-model="step.target" placeholder="目标数据源" style="width: 130px">
+              <el-option v-for="ds in localDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
+            </el-select>
             <el-input v-if="step.op === 'set-filter'" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
             <el-input v-if="step.op === 'set-filter'" v-model="step.value" placeholder="如 {node.id}" style="width: 100px" />
             <el-select v-if="step.op === 'open-container'" v-model="step.displayMode" placeholder="显示模式" style="width: 110px">
@@ -287,10 +289,12 @@ function removeBinding(index: number) {
 
 /** 添加动作 */
 function addAction() {
+  // 默认目标填充第一个数据源（用户可改）
+  const firstDs = localDataSources.value[0]?.id ?? ''
   localActions.value.push({
     trigger: 'row-edit',
     source: '',
-    steps: [{ op: 'open-container', target: '', displayMode: 'dialog' }],
+    steps: [{ op: 'open-container', target: firstDs, displayMode: 'dialog' }],
   })
 }
 

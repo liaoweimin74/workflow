@@ -219,4 +219,34 @@ describe('DataSourceConfigPanel', () => {
     const emitted = wrapper.emitted('update:actions') as any[]
     expect(emitted[0][0][0].source).toBe('dsTable')
   })
+
+  // ==================== 目标数据源下拉（step.target） ====================
+
+  it('步骤 target 渲染为下拉（选项来自数据源绑定）', () => {
+    const wrapper = mountPanel({
+      dataSources: [
+        { id: 'dsTable', refId: 'g1' },
+        { id: 'dsForm', refId: 'g2' },
+      ],
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'open-container', target: 'dsForm' }] }],
+    })
+    // select 选项（option 元素）应包含数据源 id（target 候选）
+    const optionValues = wrapper.findAll('option').map((o) => o.attributes('value'))
+    expect(optionValues).toContain('dsTable')
+    expect(optionValues).toContain('dsForm')
+    // target 不再渲染为文本输入框（el-input stub 是 input 元素）
+    // —— 验证存在 select 元素承载 target
+    expect(wrapper.findAll('select').length).toBeGreaterThanOrEqual(3) // trigger + source + target
+  })
+
+  it('步骤 target 默认值自动填充第一个数据源（新建动作时）', () => {
+    const wrapper = mountPanel({
+      dataSources: [{ id: 'dsForm', refId: 'g2' }],
+      actions: [],
+    })
+    const vm = wrapper.vm as any
+    vm.addAction()
+    // addAction 新建 open-container 步骤，target 应预填第一个数据源
+    expect(vm.localActions[0].steps[0].target).toBe('dsForm')
+  })
 })

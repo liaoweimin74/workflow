@@ -237,12 +237,12 @@ const resolvedRefId = computed(() => {
 
 // 数据源绑定就绪后自动刷新（解决首次加载时 activeDsBindings 为空导致 fetchApi 返回空数据的问题）
 let _dsBindingsRefreshed = false
-watch(() => activeDsBindings.value.length, (len) => {
-  if (len > 0 && !_dsBindingsRefreshed) {
+watch(activeDsBindings, () => {
+  if (activeDsBindings.value.length > 0 && !_dsBindingsRefreshed) {
     _dsBindingsRefreshed = true
     nextTick(() => { tableRef.value?.fetchList() })
   }
-})
+}, { immediate: true })
 
 const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {
   const dsId = resolvedRefId.value

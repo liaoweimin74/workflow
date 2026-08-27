@@ -270,9 +270,15 @@ async function containerAction(c: LinkageContainer, action: 'new' | 'cancel' | '
     c.currentRecordId = undefined
   } else if (action === 'cancel') {
     c.visible = false
-  } else if (action === 'confirm') {
-    // 强制完成引擎未竟的字段写入，然后关闭
+} else if (action === 'confirm') {
+    // 强制完成引擎未竟的字段写入，然后关闭弹窗
     await c.engine?.flush()
+    // ===== 智能同步：刷新容器关联的表格 =====
+    // 假设容器与表格是同一数据源（dataSourceId），用 key 找组件
+    const tbl = componentRefs[c.key]
+    if (tbl && typeof (tbl as any).refresh === 'function') {
+      ;(tbl as any).refresh()
+    }
     c.visible = false
   } else if (action === 'delete') {
     const refId = containerRefId(c)
@@ -285,6 +291,11 @@ async function containerAction(c: LinkageContainer, action: 'new' | 'cancel' | '
     try {
       await dataSourceApi.deleteData(refId, c.currentRecordId)
       ElMessage.success('删除成功')
+      // ===== 智能同步：刷新容器关联的表格 =====
+      const tbl = componentRefs[c.key]
+      if (tbl && typeof (tbl as any).refresh === 'function') {
+        ;(tbl as any).refresh()
+      }
       c.visible = false
     } catch {
       // http 拦截器已提示
@@ -299,6 +310,11 @@ async function containerAction(c: LinkageContainer, action: 'new' | 'cancel' | '
     try {
       await dataSourceApi.createData(refId, data)
       ElMessage.success('复制成功')
+      // ===== 智能同步：刷新容器关联的表格 =====
+      const tbl = componentRefs[c.key]
+      if (tbl && typeof (tbl as any).refresh === 'function') {
+        ;(tbl as any).refresh()
+      }
       c.visible = false
     } catch {
       // http 拦截器已提示

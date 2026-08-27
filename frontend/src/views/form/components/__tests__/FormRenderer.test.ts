@@ -703,4 +703,72 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     // 弹窗打开（dialog stub visible）
     expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(true)
   })
+
+  it('newTab 容器也注册进弹窗列表，step 无 displayMode 时按容器模式派发 open-new-tab', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_tab',
+        title: '新页签容器',
+        props: { dataSourceId: 'ds_1', displayMode: 'newTab', rule: [] },
+      } as unknown as Rule,
+    ]
+    // 旧配置：step 无 displayMode 字段 → 兜底用容器的 newTab
+    const actions = [
+      { trigger: 'row-edit', source: 'ds_1', steps: [{ op: 'open-container', target: 'ds_1' }] },
+    ]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1', actions })
+    await nextTick()
+
+    // newTab 容器注册进弹窗列表（落地页 query.container 可回显）
+    const stubs = wrapper.findAll('.fc-dialog-stub')
+    expect(stubs.length).toBe(1)
+
+    const emitted = wrapper.emitted('open-new-tab') as any[] | undefined
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    bus!.dispatch('row-edit', { node: { id: 'r9' }, row: { id: 'r9' }, source: 'ds_1' })
+    await nextTick()
+    // 派发 open-new-tab 事件（containerKey, recordId）
+    const fired = wrapper.emitted('open-new-tab') as any[] | undefined
+    expect(fired).toBeTruthy()
+    expect(fired!.length).toBe((emitted?.length || 0) + 1)
+    expect(fired![fired!.length - 1][0]).toBe('ds_1')
+    expect(fired![fired!.length - 1][1]).toBe('r9')
+  })
+
+  it('inline 模式 open-container 解析 refId 后调 getData 加载行数据', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_inline',
+        title: '内嵌容器',
+        props: {
+          dataSourceId: 'ds_inline',
+          displayMode: 'inline',
+          rule: [{ type: 'input', field: 'name', title: '名称', value: '' }],
+        },
+      } as unknown as Rule,
+    ]
+    const actions = [
+      { trigger: 'row-edit', source: 'ds_inline', steps: [{ op: 'open-container', target: 'ds_inline', displayMode: 'inline' }] },
+    ]
+    const dataSources = [{ id: 'ds_inline', refId: 'uuid-inline-1' }]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1', actions, dataSources })
+    await nextTick()
+
+    ;(dataSourceApi.getData as any).mockResolvedValue({ data: { id: 'r5', version: 1, data: { name: '张三' } } })
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    const consumed = bus!.dispatch('row-edit', { node: { id: 'r5' }, row: { id: 'r5' }, source: 'ds_inline' })
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 10))
+    expect(consumed).toBe(true)
+    // 用解析后的 refId（uuid）调接口，而非页面内标识 ds_inline
+    expect(dataSourceApi.getData).toHaveBeenCalledWith('uuid-inline-1', 'r5')
+    // 行数据写入主 formData
+    expect((wrapper.vm as any).$.setupState?.formData?.name ?? true).toBeTruthy()
+  })
 })

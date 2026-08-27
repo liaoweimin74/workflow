@@ -306,6 +306,14 @@ onMounted(async () => {
     await nextTick()
     tableRef.value?.openEdit?.({ id: detailId })
   }
+  // newTab 容器联动落地：?container=<容器标识>&recordId=<记录ID>
+  // 自动打开编辑弹窗（弹窗内 FormRenderer 读取 query.container 打开容器弹窗并加载记录）
+  const containerKey = route.query.container as string | undefined
+  if (containerKey) {
+    const recordId = route.query.recordId as string | undefined
+    await nextTick()
+    tableRef.value?.openEdit?.(recordId ? { id: recordId } : undefined)
+  }
 })
 
 /** 加载表单定义（name / columnConfig / schema） */

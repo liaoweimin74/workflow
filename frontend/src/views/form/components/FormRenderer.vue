@@ -17,9 +17,8 @@
       :width="c.width"
       :close-on-click-modal="false"
       class="fc-container-dialog"
-      :style="{ '--dialog-max-h': c.height } as any"
     >
-      <div class="fc-dialog-body">
+      <div class="fc-dialog-body" :style="{ height: c.height }">
         <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="c.formData" />
       </div>
       <template #footer>
@@ -45,7 +44,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed, provide, markRaw, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
 import { createDsBindingEngine } from './DsBindingEngine'
@@ -127,6 +126,15 @@ const routeQuery = (() => {
   }
 })()
 
+/** router 实例（query 落地处理后清理参数用；测试环境无 router 时为 undefined） */
+const routerRef = (() => {
+  try {
+    return useRouter()
+  } catch {
+    return undefined
+  }
+})()
+
 /** newTab 落地处理标记（仅首次 schema 加载时处理 query.container） */
 let queryHandled = false
 
@@ -172,8 +180,11 @@ interface DialogContainer {
   }
 }
 
-/** dialog 模式容器列表 */
+/** dialog 模式容器列表（含 newTab 容器——落地页以弹窗回显） */
 const dialogContainers = ref<DialogContainer[]>([])
+
+/** 全部联动容器显示模式（dataSourceId → displayMode，含 inline；step.displayMode 缺省时兜底） */
+const containerModes = new Map<string, string>()
 
 /** 弹窗内 form-create 选项（隐藏提交按钮，表单级布局） */
 const dialogOption = computed<Record<string, any>>(() => ({
@@ -184,19 +195,20 @@ const dialogOption = computed<Record<string, any>>(() => ({
 
 /**
  * 从 rule 树提取联动容器（须在 normalizeForRender 之前调用，此时 type 仍为 formContainer）。
- * - dialog：从主树移除，创建独立引擎 + formData，弹窗渲染
- * - newTab：从主树移除，open-container 时路由跳转
- * - inline：保留在主树，load-record 时加载数据到主 formData
+ * - dialog/newTab：从主树移除，注册弹窗容器（独立引擎 + formData）；newTab 落地页（query.container）以弹窗回显
+ * - inline：保留在主树，open-container 时从数据源加载行数据到主 formData
  */
 function extractDialogContainers(rules: Rule[]): Rule[] {
   const dialogs: DialogContainer[] = []
+  containerModes.clear()
   const walk = (list: Rule[]): Rule[] =>
     list
       .filter((n) => {
         const node = n as Record<string, any>
         if (node.type === 'formContainer' && node.props?.dataSourceId) {
           const mode = (node.props.displayMode as string) || 'dialog'
-          if (mode === 'dialog') {
+          containerModes.set(node.props.dataSourceId, mode)
+          if (mode === 'dialog' || mode === 'newTab') {
             const props = node.props || {}
             const c: DialogContainer = {
               key: props.dataSourceId,
@@ -222,9 +234,7 @@ function extractDialogContainers(rules: Rule[]): Rule[] {
             dialogs.push(c)
             return false // 从主树移除
           }
-          // newTab：从主树移除（open-container 时路由跳转）
-          if (mode === 'newTab') return false
-          // inline：保留在主树（load-record 加载到主 formData）
+          // inline：保留在主树（open-container 时从数据源加载到主 formData）
           return true
         }
         return true
@@ -244,6 +254,8 @@ function extractDialogContainers(rules: Rule[]): Rule[] {
     const qrid = routeQuery.recordId ? String(routeQuery.recordId) : ''
     nextTick(() => {
       const rc = dialogContainers.value.find((x) => x.key === qc)
+      // 处理后清理 query（避免编辑弹窗重开时重复触发容器弹窗）
+      routerRef?.replace({ query: { ...routeQuery, container: undefined, recordId: undefined } })
       if (!rc) return
       rc.visible = true
       if (qrid && rc.engine) {
@@ -658,7 +670,8 @@ function dispatchAction(trigger: string, eventData: any): boolean {
       const op = step.op
       const target = step.target
       if (op === 'open-container') {
-        const mode = step.displayMode || 'dialog'
+        // 步骤 displayMode 优先，其次容器 displayMode（旧配置 step 无该字段时兜底），默认 dialog
+        const mode = step.displayMode || containerModes.get(target) || 'dialog'
         if (mode === 'dialog') {
           const c = dialogContainers.value.find((x) => x.key === target)
           if (c) {
@@ -677,18 +690,19 @@ function dispatchAction(trigger: string, eventData: any): boolean {
           // 新开页签：通过事件通知父组件处理路由跳转
           const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
           emit('open-new-tab', target || '', rid)
-        }
-        // inline：容器常驻主树，open-container 时自动从数据源加载行数据
-        if (mode === 'inline') {
+        } else if (mode === 'inline') {
+          // 容器常驻主树：从数据源加载行数据到主 formData（target 须解析为全局 refId）
           const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
           if (rid && target) {
-            // 直接从数据源加载（inline 容器可能绑定不同于主表单的数据源）
-            void dataSourceApi.getData(target, rid).then((res) => {
-              const fields = (res.data?.data || {}) as Record<string, unknown>
-              for (const [k, v] of Object.entries(fields)) {
-                formData.value = { ...formData.value, [k]: v }
-              }
-            }).catch(() => { /* http 拦截器已提示 */ })
+            const refId = dsBindings.value.find((d) => d.id === target)?.refId
+            if (refId) {
+              void dataSourceApi.getData(refId, rid).then((res) => {
+                const fields = (res.data?.data || {}) as Record<string, unknown>
+                formData.value = { ...formData.value, ...fields }
+              }).catch(() => { /* http 拦截器已提示 */ })
+            } else {
+              ElMessage.warning(`数据源未绑定: ${target}`)
+            }
           }
         }
         consumed = true
@@ -845,10 +859,8 @@ defineExpose({ submit, saveSnapshot, getFormData, validate, loadSchema, loadData
   min-height: 200px;
 }
 
-/* 容器弹窗：使用 CSS 变量设定高度，内容超出滚动 */
-.fc-container-dialog :deep(.el-dialog__body) {
-  max-height: var(--dialog-max-h, 600px);
+/* 容器弹窗内容区：设定高度（dialogHeight），超出滚动 */
+.fc-dialog-body {
   overflow-y: auto;
-  padding: 16px;
 }
 </style>

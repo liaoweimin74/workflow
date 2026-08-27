@@ -432,15 +432,16 @@ function transformComponent(node: any): any {
     }
     // 数据组件事件 → 动作总线（node-click 等）
     // el-tree/el-table 事件第一参数是业务数据（含 id），包装为 { node, row }
+    const source = next.props.dataSourceId as string | undefined
     next.on['node-click'] = (data: any) => {
       // 更新当前记录 ID 并触发 record-change
       currentRecordId.value = data?.id
       lastRecord.value = data
-      dispatchActions('node-click', { node: data, row: data, record: data })
-      dispatchActions('record-change', { node: data, row: data, record: data })
+      dispatchActions('node-click', { node: data, row: data, record: data, source })
+      dispatchActions('record-change', { node: data, row: data, record: data, source })
     }
     next.on['row-click'] = (data: any) => {
-      dispatchActions('row-click', { node: data, row: data })
+      dispatchActions('row-click', { node: data, row: data, source })
     }
   }
   if (Array.isArray(next.children)) {
@@ -452,8 +453,11 @@ function transformComponent(node: any): any {
 /** 执行页面 actions（触发 → steps 动作链）；返回是否存在匹配的动作链（供数据组件判断是否消费） */
 function dispatchActions(trigger: string, eventData: any): boolean {
   let consumed = false
+  const source = eventData?.source
   for (const action of pageSchema.actions || []) {
     if (action.trigger !== trigger) continue
+    // source 匹配：动作配置了来源（action.source）时，仅来源一致的触发才执行；未配置 = 全局通配
+    if (action.source && action.source !== source) continue
     for (const step of action.steps || []) {
       executeStep(step, eventData)
       consumed = true

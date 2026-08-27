@@ -384,3 +384,50 @@ describe('PageRendererPage 容器按钮区', () => {
     expect(dataSourceApi.createData).toHaveBeenCalled()
   })
 })
+
+describe('PageRendererPage 动作 source 来源匹配（多数据源）', () => {
+  /** 构造带 source 的动作链：row-click 触发 → 打开 dsForm 容器 */
+  function makeSourcePage(source?: string) {
+    const schema = makePageSchema('dialog')
+    schema.actions = [
+      {
+        trigger: 'row-click',
+        source, // undefined = 全局通配
+        steps: [{ op: 'open-container', target: 'dsForm' }],
+      },
+    ]
+    return schema
+  }
+
+  it('动作未配置 source（全局）时任意来源触发', async () => {
+    const wrapper = await mountPage(makeSourcePage(undefined))
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(ElDialogStub).props('modelValue')).toBe(true)
+  })
+
+  it('动作配置 source 且来源匹配时触发', async () => {
+    const schema = makeSourcePage('dsTable')
+    // 页面 schema 的数据源绑定需包含 dsTable（表格 dataSourceId 来源）
+    schema.dataSources = [
+      { id: 'dsTable', refId: 'global-table' },
+      { id: 'dsForm', refId: 'global-form' },
+    ]
+    const wrapper = await mountPage(schema)
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(ElDialogStub).props('modelValue')).toBe(true)
+  })
+
+  it('动作配置 source 且来源不匹配时不触发（返回未消费）', async () => {
+    const schema = makeSourcePage('dsOther') // 表格来源是 dsTable，动作 source 是 dsOther
+    schema.dataSources = [
+      { id: 'dsTable', refId: 'global-table' },
+      { id: 'dsForm', refId: 'global-form' },
+    ]
+    const wrapper = await mountPage(schema)
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+    expect(wrapper.findComponent(ElDialogStub).props('modelValue')).toBe(false)
+  })
+})

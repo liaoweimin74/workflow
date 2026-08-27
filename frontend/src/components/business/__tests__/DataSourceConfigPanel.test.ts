@@ -191,4 +191,32 @@ describe('DataSourceConfigPanel', () => {
     expect(emitted).toBeTruthy()
     expect(emitted[0][0][0].trigger).toBe('row-edit')
   })
+
+  // ==================== 动作来源数据源（多数据源） ====================
+
+  it('动作卡片渲染来源数据源下拉（全局 + 各数据源）', () => {
+    const wrapper = mountPanel({
+      dataSources: [
+        { id: 'dsTable', refId: 'g1' },
+        { id: 'dsForm', refId: 'g2' },
+      ],
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'open-container', target: 'dsForm' }] }],
+    })
+    const optionValues = wrapper.findAll('option').map((o) => o.attributes('value'))
+    expect(optionValues).toContain('') // 全局（不限制来源）
+    expect(optionValues).toContain('dsTable')
+    expect(optionValues).toContain('dsForm')
+  })
+
+  it('动作 source 字段参与提交（选中来源后保存）', () => {
+    const wrapper = mountPanel({
+      dataSources: [{ id: 'dsTable', refId: 'g1' }],
+      actions: [{ trigger: 'row-edit', source: 'dsTable', steps: [] }],
+    })
+    const vm = wrapper.vm as any
+    expect(vm.localActions[0].source).toBe('dsTable')
+    vm.emitActions()
+    const emitted = wrapper.emitted('update:actions') as any[]
+    expect(emitted[0][0][0].source).toBe('dsTable')
+  })
 })

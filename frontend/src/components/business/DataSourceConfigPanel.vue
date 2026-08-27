@@ -102,6 +102,10 @@
               <el-option label="字段变化" value="field-change" />
               <el-option label="记录变化" value="record-change" />
             </el-select>
+            <el-select v-model="ac.source" placeholder="来源数据源" style="width: 130px" clearable>
+              <el-option label="任意来源" value="" />
+              <el-option v-for="ds in localDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
+            </el-select>
             <el-button link type="danger" @click="removeAction(i)">删除</el-button>
           </div>
           <div class="step-row" v-for="(step, si) in ac.steps" :key="si">
@@ -183,6 +187,8 @@ export interface Action {
   /** 触发事件 */
   trigger: 'node-click' | 'row-click' | 'field-change' | 'record-change'
     | 'row-edit' | 'row-view' | 'row-create'
+  /** 触发来源数据源（页面内标识；空 = 任意来源触发） */
+  source?: string
   /** 步骤列表 */
   steps: ActionStep[]
 }
@@ -283,6 +289,7 @@ function removeBinding(index: number) {
 function addAction() {
   localActions.value.push({
     trigger: 'row-edit',
+    source: '',
     steps: [{ op: 'open-container', target: '', displayMode: 'dialog' }],
   })
 }

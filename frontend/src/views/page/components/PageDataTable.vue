@@ -322,7 +322,10 @@ function handleActionClick(btn: any, row: any) {
   // 表格-容器联动触发器：派发到页面动作总线（动作链消费时跳过默认行为，避免双弹窗）
   const linkageTrigger = LINKAGE_TRIGGERS[btn.key]
   if (linkageTrigger && actionBus) {
-    const consumed = actionBus.dispatch(linkageTrigger, row ? { node: row, row } : {})
+    const consumed = actionBus.dispatch(
+      linkageTrigger,
+      row ? { node: row, row, source: props.dataSourceId } : { source: props.dataSourceId },
+    )
     if (consumed) return
   }
   // 无事件 → 默认行为
@@ -501,7 +504,7 @@ function triggerViewEvents(trigger: string, target: string, ctx: { row?: any; co
 
 function handleRowClick(row: any, _column?: any, _event?: Event) {
   emit('row-click', row)
-  actionBus?.dispatch('row-click', { node: row, row })
+  actionBus?.dispatch('row-click', { node: row, row, source: props.dataSourceId })
   triggerViewEvents('row-click', 'table', { row })
 }
 

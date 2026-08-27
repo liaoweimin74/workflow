@@ -18,13 +18,31 @@
       :close-on-click-modal="false"
       class="fc-container-dialog"
     >
-      <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="formData" />
+      <div :style="{ maxHeight: c.height, overflowY: 'auto' }">
+        <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="c.formData" />
+      </div>
+      <template #footer>
+        <div class="container-buttons">
+          <el-button v-if="c.buttons.showNew" class="btn-new" @click="containerAction(c, 'new')">新增</el-button>
+          <el-button v-if="c.buttons.showCopy" class="btn-copy" @click="containerAction(c, 'copy')">复制</el-button>
+          <el-button v-if="c.buttons.showDelete" class="btn-delete" type="danger" @click="containerAction(c, 'delete')">删除</el-button>
+          <el-button
+            v-for="btn in c.buttons.custom"
+            :key="btn.key"
+            :type="(btn.type as any) || ''"
+            :class="`btn-custom-${btn.key}`"
+            @click="containerCustomAction(c, btn)"
+          >{{ btn.label }}</el-button>
+          <el-button class="btn-cancel" @click="containerAction(c, 'cancel')">取消</el-button>
+          <el-button v-if="c.buttons.showConfirm" class="btn-confirm" type="primary" @click="containerAction(c, 'confirm')">确定</el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed, provide } from 'vue'
+import { ref, watch, onMounted, computed, provide, markRaw } from 'vue'
 import { ElMessage } from 'element-plus'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
@@ -106,18 +124,37 @@ const schemaActions = ref<FormAction[]>([])
 /** 生效动作链：props.actions 优先，其次 schema.actions */
 const effectiveActions = computed<FormAction[]>(() => props.actions ?? schemaActions.value)
 
-/** 弹窗模式容器运行时状态（displayMode=dialog 的 formContainer，从主树抽出） */
+/** 弹窗模式容器运行时状态（对齐 PageRendererPage LinkageContainer） */
 interface DialogContainer {
   /** dataSourceId（联动 target） */
   key: string
+  /** 原始 schema 节点（引擎 mount 用） */
+  node: Record<string, any>
   /** 标题（tabTitle 或节点 title） */
   title: string
   /** 宽度（dialogWidth） */
   width: string
+  /** 高度（dialogHeight，用于 dialog body max-height） */
+  height: string
   /** 弹窗可见性 */
   visible: boolean
   /** 容器子 rule（props.rule，弹窗内 form-create 渲染） */
   renderRule: Rule[]
+  /** 弹窗独立表单数据（与主 formData 隔离） */
+  formData: Record<string, any>
+  /** 当前记录 ID（load-record 写入） */
+  currentRecordId: string | undefined
+  /** 容器数据引擎（独立读写数据源） */
+  engine: ReturnType<typeof createDsBindingEngine> | null
+  /** 按钮区配置 */
+  buttons: {
+    showNew: boolean
+    showCancel: boolean
+    showConfirm: boolean
+    showDelete: boolean
+    showCopy: boolean
+    custom: Array<{ key: string; label: string; type?: string }>
+  }
 }
 
 /** dialog 模式容器列表 */
@@ -131,9 +168,10 @@ const dialogOption = computed<Record<string, any>>(() => ({
 }))
 
 /**
- * 从 rule 树提取 displayMode=dialog 的 formContainer（弹窗呈现），从主渲染树移除。
- * 须在 normalizeForRender 之前调用（此时 type 仍为 formContainer）。
- * 表单容器数据绑定主 formData（引擎 api 绑定主 formData），弹窗内复用同一 formData。
+ * 从 rule 树提取联动容器（须在 normalizeForRender 之前调用，此时 type 仍为 formContainer）。
+ * - dialog：从主树移除，创建独立引擎 + formData，弹窗渲染
+ * - newTab：从主树移除，open-container 时路由跳转
+ * - inline：保留在主树，load-record 时加载数据到主 formData
  */
 function extractDialogContainers(rules: Rule[]): Rule[] {
   const dialogs: DialogContainer[] = []
@@ -141,15 +179,38 @@ function extractDialogContainers(rules: Rule[]): Rule[] {
     list
       .filter((n) => {
         const node = n as Record<string, any>
-        if (node.type === 'formContainer' && node.props?.dataSourceId && node.props?.displayMode === 'dialog') {
-          dialogs.push({
-            key: node.props.dataSourceId,
-            title: node.props.tabTitle || node.title || '编辑记录',
-            width: node.props.dialogWidth || '800px',
-            visible: false,
-            renderRule: (Array.isArray(node.props.rule) ? node.props.rule : []) as Rule[],
-          })
-          return false
+        if (node.type === 'formContainer' && node.props?.dataSourceId) {
+          const mode = (node.props.displayMode as string) || 'dialog'
+          if (mode === 'dialog') {
+            const props = node.props || {}
+            const c: DialogContainer = {
+              key: props.dataSourceId,
+              node,
+              title: props.tabTitle || node.title || '编辑记录',
+              width: props.dialogWidth || '800px',
+              height: props.dialogHeight || '600px',
+              visible: false,
+              renderRule: (Array.isArray(props.rule) ? props.rule : []) as Rule[],
+              formData: {},
+              currentRecordId: undefined,
+              engine: null,
+              buttons: {
+                showNew: props.showNewButton !== false,
+                showCancel: props.showCancelButton !== false,
+                showConfirm: props.showConfirmButton !== false,
+                showDelete: props.showDeleteButton === true,
+                showCopy: props.showCopyButton === true,
+                custom: Array.isArray(props.customButtons) ? props.customButtons : [],
+              },
+            }
+            mountDialogEngine(c)
+            dialogs.push(c)
+            return false // 从主树移除
+          }
+          // newTab：从主树移除（open-container 时路由跳转）
+          if (mode === 'newTab') return false
+          // inline：保留在主树（load-record 加载到主 formData）
+          return true
         }
         return true
       })
@@ -162,6 +223,27 @@ function extractDialogContainers(rules: Rule[]): Rule[] {
   const mainTree = walk(rules)
   dialogContainers.value = dialogs
   return mainTree
+}
+
+/** 为弹窗容器挂载独立数据引擎（与主 formData 隔离） */
+function mountDialogEngine(c: DialogContainer) {
+  const engine = createDsBindingEngine(
+    { dsApi: dataSourceApi } as any,
+    {
+      api: {
+        getValue: (field: string) => c.formData[field],
+        setValue: (field: string, value: unknown) => {
+          c.formData = { ...c.formData, [field]: value }
+        },
+      },
+      recordId: () => c.currentRecordId,
+      onRecordChange: () => { /* load-record 动作显式驱动 */ },
+      onFieldChange: () => { /* dialog 内字段变化由容器 formData 驱动 */ },
+      onConflict: (msg: string) => ElMessage.warning(msg),
+    },
+  )
+  engine.mount([c.node])
+  c.engine = markRaw(engine) as any
 }
 
 /** 注入给数据组件的绑定上下文：prop 直传优先，其次 schema 加载结果 */
@@ -501,33 +583,125 @@ function dispatchAction(trigger: string, eventData: any): boolean {
       const op = step.op
       const target = step.target
       if (op === 'open-container') {
-        // 表单容器弹窗：displayMode=dialog 的容器从主树抽出，此处打开弹窗
         const mode = step.displayMode || 'dialog'
         if (mode === 'dialog') {
           const c = dialogContainers.value.find((x) => x.key === target)
-          if (c) c.visible = true
+          if (c) {
+            // 先清空旧数据，避免弹窗残留上一条记录内容
+            c.formData = {}
+            c.currentRecordId = undefined
+            c.visible = true
+            // 自动加载触发行数据（row-edit/view 时 eventData.row.id 存在）
+            const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+            if (rid && c.engine) {
+              c.currentRecordId = rid
+              void c.engine.loadRecord(rid)
+            }
+          }
+        } else if (mode === 'newTab') {
+          // 新开页签：路由跳转到表单页 + query 参数（容器标识 + 记录 ID）
+          const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+          const route = (globalThis as any).__formRendererRoute
+          if (route?.resolve) {
+            const resolved = route.resolve({ query: { container: target, recordId: rid } })
+            window.open(resolved.href, '_blank')
+          }
         }
+        // inline：容器已在主树中，load-record 步骤单独处理
         consumed = true
       } else if (op === 'load-record') {
         const rid = step.recordId
           ? resolveTemplateValue(step.recordId, eventData)
           : String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-        if (rid) void bindingEngine.value?.loadRecord(rid)
+        if (rid) {
+          // 优先加载到弹窗容器引擎（如有匹配），否则加载到主引擎
+          const c = dialogContainers.value.find((x) => x.key === target)
+          if (c?.engine) {
+            c.currentRecordId = rid
+            void c.engine.loadRecord(rid)
+          } else {
+            void bindingEngine.value?.loadRecord(rid)
+          }
+        }
         consumed = true
       } else if (op === 'save-container') {
-        void bindingEngine.value?.flush()
+        const c = dialogContainers.value.find((x) => x.key === target)
+        if (c?.engine) void c.engine.flush()
+        else void bindingEngine.value?.flush()
         consumed = true
       } else if (op === 'close-container') {
+        const c = dialogContainers.value.find((x) => x.key === target)
+        if (c) c.visible = false
         consumed = true
       } else if (op === 'reload-record') {
         const rid = props.recordId?.()
         if (rid) void bindingEngine.value?.loadRecord(rid)
         consumed = true
       }
-      void target
     }
   }
   return consumed
+}
+
+// ==================== 容器按钮区行为 ====================
+
+/** 容器内数据源对应的全局 refId */
+function containerRefId(c: DialogContainer): string | undefined {
+  return dsBindings.value.find((d) => d.id === c.key)?.refId
+}
+
+/** 默认按钮行为：new=清空建新 / cancel=关闭 / confirm=保存关闭 / delete=删除记录 / copy=复制新记录 */
+async function containerAction(c: DialogContainer, action: 'new' | 'cancel' | 'confirm' | 'delete' | 'copy') {
+  if (action === 'new') {
+    c.formData = {}
+    c.currentRecordId = undefined
+  } else if (action === 'cancel') {
+    c.visible = false
+  } else if (action === 'confirm') {
+    await c.engine?.flush()
+    // 智能同步：刷新容器关联的表格
+    const tbl = componentRefs.get(c.key)
+    if (tbl && typeof tbl.refresh === 'function') tbl.refresh()
+    c.visible = false
+  } else if (action === 'delete') {
+    const refId = containerRefId(c)
+    if (!refId || !c.currentRecordId) return
+    try {
+      const { ElMessageBox } = await import('element-plus')
+      await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
+    } catch {
+      return
+    }
+    try {
+      await dataSourceApi.deleteData(refId, c.currentRecordId)
+      ElMessage.success('删除成功')
+      const tbl = componentRefs.get(c.key)
+      if (tbl && typeof tbl.refresh === 'function') tbl.refresh()
+      c.visible = false
+    } catch {
+      // http 拦截器已提示
+    }
+  } else if (action === 'copy') {
+    const refId = containerRefId(c)
+    if (!refId) return
+    const data = { ...c.formData }
+    delete data.id
+    delete data.version
+    try {
+      await dataSourceApi.createData(refId, data)
+      ElMessage.success('复制成功')
+      const tbl = componentRefs.get(c.key)
+      if (tbl && typeof tbl.refresh === 'function') tbl.refresh()
+      c.visible = false
+    } catch {
+      // http 拦截器已提示
+    }
+  }
+}
+
+/** 自定义按钮行为（触发 container-action 事件，由调用方处理） */
+function containerCustomAction(c: DialogContainer, btn: { key: string; label: string }) {
+  ElMessage.info(`自定义按钮：${btn.label}`)
 }
 
 /** 组件引用注册表（对齐 PageRendererPage：PageDataTable ready 上报） */

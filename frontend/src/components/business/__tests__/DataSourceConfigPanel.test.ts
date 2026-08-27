@@ -1,18 +1,35 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { defineComponent, h } from 'vue'
 import DataSourceConfigPanel from '../DataSourceConfigPanel.vue'
 import type { DataSourceDTO } from '@/api/data-source'
 
-// Mock Element Plus
+// Mock Element Plus（kebab-case 组件名，匹配模板 <el-xxx>）
+const stub = (name: string, template: string, props: string[] = []) =>
+  defineComponent({ name, template, props })
+
+const ElStubs = {
+  'el-input': stub('ElInputStub', '<input />', ['modelValue', 'placeholder']),
+  'el-select': stub('ElSelectStub', '<select><slot /></select>', ['modelValue', 'placeholder', 'filterable']),
+  'el-option': stub('ElOptionStub', '<option :value="value">{{ label || value }}</option>', ['label', 'value']),
+  'el-button': stub('ElButtonStub', '<button />', ['type', 'plain', 'link']),
+  'el-empty': stub('ElEmptyStub', '<div />', ['description', 'imageSize']),
+  'el-icon': stub('ElIconStub', '<span />'),
+  'el-tabs': stub('ElTabsStub', '<div><slot /></div>', ['modelValue', 'type']),
+  'el-tab-pane': stub('ElTabPaneStub', '<div><slot /></div>', ['label', 'name']),
+  'el-radio-group': stub('ElRadioGroupStub', '<div><slot /></div>'),
+  'el-radio-button': stub('ElRadioButtonStub', '<span><slot /></span>'),
+}
+
 vi.mock('element-plus', () => ({
-  ElInput: { template: '<input />', props: ['modelValue', 'placeholder'] },
-  ElSelect: { template: '<select />', props: ['modelValue', 'placeholder', 'filterable'] },
-  ElOption: { template: '<option />', props: ['label', 'value'] },
-  ElButton: { template: '<button />', props: ['type', 'plain', 'link'] },
-  ElEmpty: { template: '<div />', props: ['description', 'imageSize'] },
-  ElIcon: { template: '<span />', props: [] },
-  ElTabs: { template: '<div><slot /></div>', props: ['modelValue', 'type'] },
-  ElTabPane: { template: '<div><slot /></div>', props: ['label', 'name'] },
+  ElInput: { name: 'ElInput', template: '<input />', props: ['modelValue', 'placeholder'] },
+  ElSelect: { name: 'ElSelect', template: '<select><slot /></select>', props: ['modelValue', 'placeholder', 'filterable'] },
+  ElOption: { name: 'ElOption', template: '<option>{{ label || value }}</option>', props: ['label', 'value'] },
+  ElButton: { name: 'ElButton', template: '<button />', props: ['type', 'plain', 'link'] },
+  ElEmpty: { name: 'ElEmpty', template: '<div />', props: ['description', 'imageSize'] },
+  ElIcon: { name: 'ElIcon', template: '<span />', props: [] },
+  ElTabs: { name: 'ElTabs', template: '<div><slot /></div>', props: ['modelValue', 'type'] },
+  ElTabPane: { name: 'ElTabPane', template: '<div><slot /></div>', props: ['label', 'name'] },
 }))
 
 // Mock icons
@@ -21,19 +38,26 @@ vi.mock('@element-plus/icons-vue', () => ({
   InfoFilled: { template: '<span />', name: 'InfoFilled' },
 }))
 
+const mockDataSources: DataSourceDTO[] = [
+  { id: 'ds1', tenantId: 't1', name: '用户数据源', type: 'FORM', formKey: 'user', sourceKey: null, params: null, status: 'ENABLED', createdBy: null, createdAt: '', updatedAt: '' },
+  { id: 'ds2', tenantId: 't1', name: '订单数据源', type: 'API', formKey: null, sourceKey: 'order', params: null, status: 'ENABLED', createdBy: null, createdAt: '', updatedAt: '' },
+]
+
+function mountPanel(props: Record<string, any> = {}) {
+  return mount(DataSourceConfigPanel, {
+    props: {
+      dataSources: [],
+      enabledDataSources: mockDataSources,
+      ...props,
+    },
+    global: { components: ElStubs },
+  })
+}
+
 describe('DataSourceConfigPanel', () => {
-  const mockDataSources: DataSourceDTO[] = [
-    { id: 'ds1', tenantId: 't1', name: '用户数据源', type: 'FORM', formKey: 'user', sourceKey: null, params: null, status: 'ENABLED', createdBy: null, createdAt: '', updatedAt: '' },
-    { id: 'ds2', tenantId: 't1', name: '订单数据源', type: 'API', formKey: null, sourceKey: 'order', params: null, status: 'ENABLED', createdBy: null, createdAt: '', updatedAt: '' },
-  ]
 
   it('renders panel with tabs', () => {
-    const wrapper = mount(DataSourceConfigPanel, {
-      props: {
-        dataSources: [],
-        enabledDataSources: mockDataSources,
-      },
-    })
+    const wrapper = mountPanel()
 
     // Check that the component renders
     expect(wrapper.exists()).toBe(true)
@@ -42,13 +66,7 @@ describe('DataSourceConfigPanel', () => {
   })
 
   it('has correct props interface', () => {
-    const wrapper = mount(DataSourceConfigPanel, {
-      props: {
-        dataSources: [],
-        enabledDataSources: mockDataSources,
-        actions: [],
-      },
-    })
+    const wrapper = mountPanel({ actions: [] })
 
     const vm = wrapper.vm as any
     expect(vm.localDataSources).toEqual([])
@@ -56,14 +74,11 @@ describe('DataSourceConfigPanel', () => {
   })
 
   it('validates duplicate page identifiers', async () => {
-    const wrapper = mount(DataSourceConfigPanel, {
-      props: {
-        dataSources: [
-          { id: 'myDs', refId: 'ds1' },
-          { id: 'myDs', refId: 'ds2' },
-        ],
-        enabledDataSources: mockDataSources,
-      },
+    const wrapper = mountPanel({
+      dataSources: [
+        { id: 'myDs', refId: 'ds1' },
+        { id: 'myDs', refId: 'ds2' },
+      ],
     })
 
     const vm = wrapper.vm as any
@@ -77,13 +92,10 @@ describe('DataSourceConfigPanel', () => {
   })
 
   it('validates empty page identifier', async () => {
-    const wrapper = mount(DataSourceConfigPanel, {
-      props: {
-        dataSources: [
-          { id: '', refId: 'ds1' },
-        ],
-        enabledDataSources: mockDataSources,
-      },
+    const wrapper = mountPanel({
+      dataSources: [
+        { id: '', refId: 'ds1' },
+      ],
     })
 
     const vm = wrapper.vm as any
@@ -97,13 +109,10 @@ describe('DataSourceConfigPanel', () => {
   })
 
   it('validates missing global data source selection', async () => {
-    const wrapper = mount(DataSourceConfigPanel, {
-      props: {
-        dataSources: [
-          { id: 'myDs', refId: '' },
-        ],
-        enabledDataSources: mockDataSources,
-      },
+    const wrapper = mountPanel({
+      dataSources: [
+        { id: 'myDs', refId: '' },
+      ],
     })
 
     const vm = wrapper.vm as any
@@ -117,16 +126,69 @@ describe('DataSourceConfigPanel', () => {
   })
 
   it('supports actions prop', async () => {
-    const wrapper = mount(DataSourceConfigPanel, {
-      props: {
-        dataSources: [],
-        enabledDataSources: mockDataSources,
-        actions: [
-          { trigger: 'node-click', steps: [{ op: 'refresh', target: 'ds1' }] },
-        ],
-      },
+    const wrapper = mountPanel({
+      actions: [
+        { trigger: 'node-click', steps: [{ op: 'refresh', target: 'ds1' }] },
+      ],
     })
 
     expect(wrapper.emitted('update:actions')).toBeFalsy()
+  })
+
+  // ==================== 表格-容器联动动作配置 ====================
+
+  it('动作总线触发器下拉包含 row-edit/row-view/row-create 联动触发器', () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'row-edit', steps: [] }],
+    })
+    const vm = wrapper.vm as any
+    expect(vm.localActions[0].trigger).toBe('row-edit')
+    // 触发器下拉选项（渲染为 option 元素）
+    const triggerOptions = wrapper.findAll('option').map((o) => o.attributes('value'))
+    expect(triggerOptions).toContain('row-edit')
+    expect(triggerOptions).toContain('row-view')
+    expect(triggerOptions).toContain('row-create')
+  })
+
+  it('动作步骤下拉包含容器联动动作（open-container/load-record/save-container/close-container）', () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'open-container', target: 'ds1' }] }],
+    })
+    const optionValues = wrapper.findAll('option').map((o) => o.attributes('value'))
+    expect(optionValues).toContain('open-container')
+    expect(optionValues).toContain('load-record')
+    expect(optionValues).toContain('save-container')
+    expect(optionValues).toContain('close-container')
+  })
+
+  it('open-container 步骤渲染 displayMode 参数下拉（弹窗/新页签/内嵌）', () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'open-container', target: 'ds1' }] }],
+    })
+    const optionValues = wrapper.findAll('option').map((o) => o.attributes('value'))
+    expect(optionValues).toContain('dialog')
+    expect(optionValues).toContain('newTab')
+    expect(optionValues).toContain('inline')
+  })
+
+  it('load-record 步骤渲染 recordId 参数输入', () => {
+    const wrapper = mountPanel({
+      actions: [{ trigger: 'row-edit', steps: [{ op: 'load-record', target: 'ds1', recordId: '{row.id}' }] }],
+    })
+    const vm = wrapper.vm as any
+    expect(vm.localActions[0].steps[0].recordId).toBe('{row.id}')
+  })
+
+  it('新增动作默认 steps 支持 open-container 配置', async () => {
+    const wrapper = mountPanel({ actions: [] })
+    const vm = wrapper.vm as any
+    // 添加动作 → 默认触发器应为 row-edit（联动场景优先）
+    vm.addAction()
+    expect(vm.localActions.length).toBe(1)
+    // 提交时不崩溃
+    vm.emitActions()
+    const emitted = wrapper.emitted('update:actions') as any[]
+    expect(emitted).toBeTruthy()
+    expect(emitted[0][0][0].trigger).toBe('row-edit')
   })
 })

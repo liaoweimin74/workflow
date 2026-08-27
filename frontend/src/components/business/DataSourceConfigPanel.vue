@@ -96,21 +96,34 @@
             <el-select v-model="ac.trigger" style="width: 150px">
               <el-option label="树节点点击" value="node-click" />
               <el-option label="表格行点击" value="row-click" />
+              <el-option label="行编辑" value="row-edit" />
+              <el-option label="行查看" value="row-view" />
+              <el-option label="行新增" value="row-create" />
               <el-option label="字段变化" value="field-change" />
               <el-option label="记录变化" value="record-change" />
             </el-select>
             <el-button link type="danger" @click="removeAction(i)">删除</el-button>
           </div>
           <div class="step-row" v-for="(step, si) in ac.steps" :key="si">
-            <el-select v-model="step.op" style="width: 120px">
+            <el-select v-model="step.op" style="width: 130px">
               <el-option label="设置过滤" value="set-filter" />
               <el-option label="刷新数据" value="refresh" />
               <el-option label="重载记录" value="reload-record" />
               <el-option label="保存记录" value="save-record" />
+              <el-option label="打开容器" value="open-container" />
+              <el-option label="加载记录" value="load-record" />
+              <el-option label="保存容器" value="save-container" />
+              <el-option label="关闭容器" value="close-container" />
             </el-select>
             <el-input v-model="step.target" placeholder="目标数据源标识" style="width: 130px" />
             <el-input v-if="step.op === 'set-filter'" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
             <el-input v-if="step.op === 'set-filter'" v-model="step.value" placeholder="如 {node.id}" style="width: 100px" />
+            <el-select v-if="step.op === 'open-container'" v-model="step.displayMode" placeholder="显示模式" style="width: 110px">
+              <el-option label="弹出窗口" value="dialog" />
+              <el-option label="新开页签" value="newTab" />
+              <el-option label="页面内嵌" value="inline" />
+            </el-select>
+            <el-input v-if="step.op === 'load-record'" v-model="step.recordId" placeholder="如 {row.id}" style="width: 100px" />
             <el-button link type="danger" @click="ac.steps.splice(si, 1)">删</el-button>
           </div>
           <el-button link type="primary" @click="ac.steps.push({ op: 'refresh', target: '' })">+ 步骤</el-button>
@@ -118,7 +131,7 @@
         <el-button type="primary" plain @click="addAction">+ 添加动作</el-button>
         <div class="panel-tip">
           <el-icon><InfoFilled /></el-icon>
-          <span>动作链：触发事件 → 步骤列表。「设置过滤」的值支持模板变量：{node.id}（树节点标识）、{row.id}（表格行标识）</span>
+          <span>动作链：触发事件 → 步骤列表。「设置过滤」的值支持模板变量：{node.id}（树节点标识）、{row.id}（表格行标识）；「加载记录」recordId 支持 {row.id} 模板</span>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -152,18 +165,24 @@ export interface DataSourceBinding {
 export interface ActionStep {
   /** 操作类型 */
   op: 'set-filter' | 'refresh' | 'reload-record' | 'save-record'
+    | 'open-container' | 'load-record' | 'save-container' | 'close-container'
   /** 目标数据源标识 */
   target: string
   /** 过滤字段（set-filter 时使用） */
   field?: string
   /** 过滤值模板（set-filter 时使用） */
   value?: string
+  /** 显示模式（open-container 时使用，覆盖容器默认配置） */
+  displayMode?: 'dialog' | 'newTab' | 'inline'
+  /** 记录 ID 模板（load-record 时使用，如 {row.id}） */
+  recordId?: string
 }
 
 /** 动作类型 */
 export interface Action {
   /** 触发事件 */
   trigger: 'node-click' | 'row-click' | 'field-change' | 'record-change'
+    | 'row-edit' | 'row-view' | 'row-create'
   /** 步骤列表 */
   steps: ActionStep[]
 }
@@ -263,8 +282,8 @@ function removeBinding(index: number) {
 /** 添加动作 */
 function addAction() {
   localActions.value.push({
-    trigger: 'node-click',
-    steps: [{ op: 'set-filter', target: '', field: '', value: '{node.id}' }],
+    trigger: 'row-edit',
+    steps: [{ op: 'open-container', target: '', displayMode: 'dialog' }],
   })
 }
 

@@ -7,6 +7,19 @@
       v-model="formData"
     />
     <el-empty v-else-if="!loading" description="暂无表单" />
+
+    <!-- 表格-容器联动：dialog 模式容器弹窗（open-container 动作打开） -->
+    <el-dialog
+      v-for="c in dialogContainers"
+      :key="c.key"
+      v-model="c.visible"
+      :title="c.title"
+      :width="c.width"
+      :close-on-click-modal="false"
+      class="fc-container-dialog"
+    >
+      <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="formData" />
+    </el-dialog>
   </div>
 </template>
 
@@ -93,6 +106,64 @@ const schemaActions = ref<FormAction[]>([])
 /** 生效动作链：props.actions 优先，其次 schema.actions */
 const effectiveActions = computed<FormAction[]>(() => props.actions ?? schemaActions.value)
 
+/** 弹窗模式容器运行时状态（displayMode=dialog 的 formContainer，从主树抽出） */
+interface DialogContainer {
+  /** dataSourceId（联动 target） */
+  key: string
+  /** 标题（tabTitle 或节点 title） */
+  title: string
+  /** 宽度（dialogWidth） */
+  width: string
+  /** 弹窗可见性 */
+  visible: boolean
+  /** 容器子 rule（props.rule，弹窗内 form-create 渲染） */
+  renderRule: Rule[]
+}
+
+/** dialog 模式容器列表 */
+const dialogContainers = ref<DialogContainer[]>([])
+
+/** 弹窗内 form-create 选项（隐藏提交按钮，表单级布局） */
+const dialogOption = computed<Record<string, any>>(() => ({
+  submitBtn: false,
+  resetBtn: false,
+  form: { ...(renderOption.value.form || {}) },
+}))
+
+/**
+ * 从 rule 树提取 displayMode=dialog 的 formContainer（弹窗呈现），从主渲染树移除。
+ * 须在 normalizeForRender 之前调用（此时 type 仍为 formContainer）。
+ * 表单容器数据绑定主 formData（引擎 api 绑定主 formData），弹窗内复用同一 formData。
+ */
+function extractDialogContainers(rules: Rule[]): Rule[] {
+  const dialogs: DialogContainer[] = []
+  const walk = (list: Rule[]): Rule[] =>
+    list
+      .filter((n) => {
+        const node = n as Record<string, any>
+        if (node.type === 'formContainer' && node.props?.dataSourceId && node.props?.displayMode === 'dialog') {
+          dialogs.push({
+            key: node.props.dataSourceId,
+            title: node.props.tabTitle || node.title || '编辑记录',
+            width: node.props.dialogWidth || '800px',
+            visible: false,
+            renderRule: (Array.isArray(node.props.rule) ? node.props.rule : []) as Rule[],
+          })
+          return false
+        }
+        return true
+      })
+      .map((n) => {
+        const node = n as Record<string, any>
+        if (Array.isArray(node.children)) node.children = walk(node.children as Rule[])
+        if (node.props && Array.isArray(node.props.rule)) node.props.rule = walk(node.props.rule as Rule[])
+        return n
+      })
+  const mainTree = walk(rules)
+  dialogContainers.value = dialogs
+  return mainTree
+}
+
 /** 注入给数据组件的绑定上下文：prop 直传优先，其次 schema 加载结果 */
 const dsBindings = computed<DataSourceBindingContext[]>(
   () => props.dataSources ?? schemaDataSources.value,
@@ -101,8 +172,16 @@ const dsBindings = computed<DataSourceBindingContext[]>(
 /** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
 watch(dsBindings, (val) => { setActiveDsBindings(val) }, { immediate: true })
 
+/** 弹窗容器提取后的主渲染树（displayMode=dialog 的 formContainer 已移除） */
+const mainSchema = ref<Rule[]>([])
+
 /** 渲染用 schema：将 formContainer 规范化为 fcRow 供 form-create 运行时渲染 */
-const renderSchema = computed(() => normalizeForRender(resolvedSchema.value))
+const renderSchema = computed(() => normalizeForRender(mainSchema.value))
+
+// resolvedSchema 变化 → 同步 mainSchema（提取 dialog 容器到弹窗）
+watch(resolvedSchema, (val) => {
+  mainSchema.value = extractDialogContainers(val)
+}, { immediate: true })
 
 /** 渲染选项：始终隐藏提交/重置按钮（提交由调用方控制），form 级配置来自设计器 option（labelPosition 等） */
 const renderOption = ref<Record<string, any>>({
@@ -422,7 +501,12 @@ function dispatchAction(trigger: string, eventData: any): boolean {
       const op = step.op
       const target = step.target
       if (op === 'open-container') {
-        // 表单容器内嵌：目标容器已渲染在表单中，无需额外动作
+        // 表单容器弹窗：displayMode=dialog 的容器从主树抽出，此处打开弹窗
+        const mode = step.displayMode || 'dialog'
+        if (mode === 'dialog') {
+          const c = dialogContainers.value.find((x) => x.key === target)
+          if (c) c.visible = true
+        }
         consumed = true
       } else if (op === 'load-record') {
         const rid = step.recordId

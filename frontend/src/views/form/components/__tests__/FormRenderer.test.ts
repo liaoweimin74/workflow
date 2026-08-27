@@ -89,6 +89,18 @@ function createWrapper(props: Record<string, unknown>) {
       stubs: {
         'form-create': FormCreateStub,
         'FormCreate': FormCreateStub,
+        // el-dialog stub：modelValue 为 true 时渲染内容（弹窗容器断言用）
+        'el-dialog': {
+          name: 'ElDialogStub',
+          props: ['modelValue', 'title'],
+          setup(props: any, { slots }: any) {
+            return () =>
+              h('div', { class: ['fc-dialog-stub', { visible: !!props.modelValue }] }, [
+                h('div', { class: 'fc-dialog-title' }, String(props.title || '')),
+                props.modelValue ? slots.default?.() : null,
+              ])
+          },
+        },
       },
     },
   })
@@ -658,5 +670,37 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     // 无容器/无动作链 → dispatch 返回 false
     const consumed = bus!.dispatch('row-edit', { node: { id: 'r1' }, row: { id: 'r1' }, source: '' })
     expect(consumed).toBe(false)
+  })
+
+  it('open-container(dialog) 打开表单容器弹窗', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_a',
+        title: '数据容器',
+        props: { dataSourceId: 'ds_1', recordLocator: { type: 'current-record' }, displayMode: 'dialog' },
+        children: [{ type: 'input', field: 'name', title: '名称', value: '' } as Rule],
+      } as unknown as Rule,
+    ]
+    const actions = [
+      {
+        trigger: 'row-edit',
+        source: 'ds_1',
+        steps: [{ op: 'open-container', target: 'ds_1', displayMode: 'dialog' }],
+      },
+    ]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1', actions })
+    await nextTick()
+
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    expect(bus).toBeTruthy()
+
+    const consumed = bus!.dispatch('row-edit', { node: { id: 'r1' }, row: { id: 'r1' }, source: 'ds_1' })
+    await nextTick()
+    expect(consumed).toBe(true)
+    // 弹窗打开（dialog stub visible）
+    expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(true)
   })
 })

@@ -349,6 +349,8 @@ async function load() {
     parsed.rule = extractLinkageContainers(parsed.rule || [])
     // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
     rule.value = normalizeForRender(parsed.rule || []).map((r: any) => transformComponent(r))
+    // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
+    rule.value = normalizeForRender(parsed.rule || []).map((r: any) => transformComponent(r))
     option.value = parsed.option || {}
   } catch (e: any) {
     error.value = e?.message || '页面加载失败'

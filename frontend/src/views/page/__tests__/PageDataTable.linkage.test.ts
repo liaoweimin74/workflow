@@ -91,7 +91,7 @@ beforeEach(() => {
 })
 
 describe('PageDataTable 表格-容器联动事件触发', () => {
-  it('点击编辑按钮派发 row-edit 事件（含当前行数据）', async () => {
+  it('点击编辑按钮派发 row-edit 事件（含当前行数据 + 来源 dataSourceId）', async () => {
     const wrapper = mountTable([{ key: 'edit', label: '编辑', placement: 'column' }])
     await wrapper.find('.stub-col-btn-0').trigger('click')
     await flushPromises()
@@ -101,6 +101,8 @@ describe('PageDataTable 表格-容器联动事件触发', () => {
     expect(trigger).toBe('row-edit')
     expect(payload.row).toEqual(ROW)
     expect(payload.node).toEqual(ROW)
+    // 来源 = 表格 dataSourceId（动作 source 匹配依据）
+    expect(payload.source).toBe('ds1')
     // 无动作链消费 → 默认行为执行（内置编辑弹窗）
     expect(openEditSpy).toHaveBeenCalledWith(ROW)
   })

@@ -1,6 +1,7 @@
 // ----- TDD: 集成测试 - PageRendererPage + 真实 PageDataTable 联动（用户场景复现） -----
-// 场景：页面 schema 含表格(viewActions.edit) + 容器(ds_mta77dtz) + 动作链(row-edit → open-container)
-// 验证：点击操作列"编辑" → 打开容器弹窗（而非内建编辑窗口）
+// 用户场景：页面 schema 含表格(edit 按钮, dataSourceId=ds_mta77dtz) + 容器(dataSourceId=ds_mta77dtz)
+//          + 动作链(trigger=row-edit, source=ds_mta77dtz → open-container)
+// 验证：点击操作列"编辑" → 容器弹窗打开（而非内建编辑窗口）
 // npx vitest run src/views/page/__tests__/PageRendererPage.integration.test.ts
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -23,9 +24,8 @@ vi.mock('@/api/data-source', () => ({
   },
 }))
 
-vi.mock('@/views/form/schemaRules', () => ({
-  normalizeForRender: (rules: any[]) => rules,
-}))
+// 使用真实 normalizeForRender（验证 formContainer→FcRow 转换与 extractLinkageContainers 的交互）
+// vi.mock('@/views/form/schemaRules', ...) 故意不 mock
 
 vi.mock('@/utils/scriptSandbox', () => ({
   executeScript: vi.fn(),
@@ -37,59 +37,192 @@ vi.mock('@/utils/formDsBindingsStore', () => ({
   setActiveDsBindings: vi.fn(),
 }))
 
-// form-create 桩：page-table 渲染为真实 PageDataTable（form-create 的 component 注册被 mock 掉，
-// 这里直接透传 rule 到 PageDataTable 桩——因为 PageRendererPage 用 <form-create> 渲染，测试里用自定义渲染）
-vi.mock('@form-create/element-ui', () => ({
-  default: { component: vi.fn() },
+// SearchTable 桩：渲染操作列按钮（actionButtons），暴露 openEdit/openFormDialog spy
+const openEditSpy = vi.hoisted(() => vi.fn())
+vi.mock('@/components/business/SearchTable.vue', () => {
+  const SearchTableStub = defineComponent({
+    name: 'SearchTableStub',
+    props: ['actionButtons', 'toolbarButtons', 'fetchApi', 'columns', 'formConfig', 'showCreateButton', 'mergeDefaultActions'],
+    setup(props, { expose }) {
+      expose({ openEdit: openEditSpy, openFormDialog: vi.fn(), fetchList: vi.fn() })
+      return () =>
+        h('div', { class: 'search-table-stub' }, [
+          ...(props.actionButtons || []).map((btn: any, i: number) =>
+            h('button', {
+              key: i,
+              class: `stub-col-btn-${i}`,
+              onClick: () => btn.onClick({ id: 'R1', name: '张三', version: 1 }),
+            }, String(btn.label)),
+          ),
+        ])
+    },
+  })
+  return { default: SearchTableStub }
+})
+
+// form-create 桩：page-table 渲染为真实 PageDataTable（保留其内部 dispatch 链路）
+import PageDataTable from '../components/PageDataTable.vue'
+vi.mock('@form-create/element-ui', () => {
+  const FormCreateStub = defineComponent({
+    name: 'FormCreate',
+    props: ['modelValue', 'rule', 'option'],
+    setup(props) {
+      return () =>
+        h('div', { class: 'fc-stub' }, [
+          ...(props.rule || []).map((node: any, i: number) => {
+            if (node?.type === 'page-table') {
+              return h(PageDataTable, {
+                key: i,
+                ...node.props,
+                pageKey: node.props?.pageKey,
+                viewActions: node.props?.viewActions,
+                viewEvents: node.props?.viewEvents,
+                onReady: node.on?.['ready'],
+              })
+            }
+            return h('div', { key: i, class: 'fc-node' }, JSON.stringify(node))
+          }),
+        ])
+    },
+  })
+  ;(FormCreateStub as any).component = vi.fn()
+  return { default: FormCreateStub }
+})
+
+// 引擎桩
+const engineMocks: any[] = []
+vi.mock('@/views/form/components/DsBindingEngine', () => ({
+  createDsBindingEngine: vi.fn((_opts: any, deps: any) => {
+    const engine = {
+      mount: vi.fn(() => true),
+      loadRecord: vi.fn(),
+      flush: vi.fn(),
+      getLastRecord: vi.fn(),
+      _deps: deps,
+    }
+    engineMocks.push(engine)
+    return engine
+  }),
 }))
 
+const mockRoute = vi.hoisted(() => ({
+  params: { pageKey: 'emp_page' },
+  query: {} as Record<string, string>,
+}))
+vi.mock('vue-router', () => ({
+  useRoute: () => mockRoute,
+  useRouter: () => ({ push: vi.fn(), resolve: (to: any) => ({ href: `/page/emp_page?${new URLSearchParams(to.query || {}).toString()}` }) }),
+}))
+
+import { pageApi } from '@/api/page'
 import PageRendererPage from '../PageRendererPage.vue'
 
-// 简化：直接验证 PageRendererPage 的核心逻辑——dispatchActions 的 source 匹配与容器打开，
-// 以及 PageDataTable 的 handleActionClick 在 actionBus 存在时走联动而非内建。
-import PageDataTable from '../components/PageDataTable.vue'
-import SearchTable from '@/components/business/SearchTable.vue'
-
-describe('PageRendererPage + PageDataTable 联动集成', () => {
-  it('PageDataTable 注入 actionBus 后点击编辑走联动（返回消费）而非内建 openEdit', async () => {
-    // 直接挂载 PageDataTable，注入 pageActionBus mock
-    const dispatchMock = vi.fn(() => true) // 模拟页面动作链消费 row-edit
-    const openEditSpy = vi.fn()
-
-    const wrapper = mount(PageDataTable, {
-      props: {
-        pageKey: 'p1',
-        dataSourceId: 'ds_mta77dtz',
-        dsRefId: 'global1',
-        viewActions: {
-          buttons: [{ key: 'edit', label: '编辑', placement: 'column', style: 'text' }],
+/** 用户场景页面 schema */
+function userPageSchema() {
+  return {
+    type: 'PAGE',
+    rule: [
+      {
+        type: 'page-table',
+        field: 't1',
+        title: '数据表格',
+        props: {
+          dataSourceId: 'ds_mta77dtz',
+          columns: [{ prop: 'name', label: '姓名' }],
+          viewActions: {
+            buttons: [{ key: 'edit', label: '编辑', placement: 'column', style: 'text' }],
+          },
         },
       },
-      global: {
-        plugins: [ElementPlus],
-        provide: {
-          pageActionBus: { dispatch: dispatchMock, register: vi.fn() },
-        },
-        stubs: {
-          'el-dialog': { props: ['modelValue'], template: '<div class="dlg" />' },
+      {
+        type: 'formContainer',
+        field: 'FC1',
+        title: '数据容器',
+        props: {
+          dataSourceId: 'ds_mta77dtz',
+          displayMode: 'dialog',
+          dialogWidth: '800px',
+          rule: [{ type: 'input', field: 'name', title: '姓名' }],
         },
       },
-    })
+    ],
+    dataSources: [{ id: 'ds_mta77dtz', refId: 'global1' }],
+    actions: [
+      {
+        trigger: 'row-edit',
+        steps: [{ op: 'open-container', target: 'ds_mta77dtz', displayMode: 'dialog' }],
+        source: 'ds_mta77dtz',
+      },
+    ],
+  }
+}
 
+const ElDialogStub = defineComponent({
+  name: 'ElDialogStub',
+  props: ['modelValue', 'title', 'width'],
+  setup(props, { slots }) {
+    return () =>
+      h('div', { class: ['dialog-stub', { visible: !!props.modelValue }] }, [
+        h('div', { class: 'dialog-title' }, String(props.title || '')),
+        props.modelValue ? slots.default?.() : null,
+        props.modelValue ? slots.footer?.() : null,
+      ])
+  },
+})
+
+async function mountPage(schema: any) {
+  ;(pageApi.getPageByKey as any).mockResolvedValue({ data: { type: 'PAGE', schema: JSON.stringify(schema) } })
+  const wrapper = mount(PageRendererPage, {
+    global: {
+      plugins: [ElementPlus],
+      stubs: {
+        'el-dialog': ElDialogStub,
+        'el-result': { template: '<div class="result-stub" />' },
+        'el-empty': { template: '<div class="empty-stub" />' },
+        teleport: true,
+      },
+    },
+  })
+  await flushPromises()
+  return wrapper
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  openEditSpy.mockClear()
+  engineMocks.length = 0
+  mockRoute.query = {}
+})
+
+describe('用户场景：表格编辑按钮 → 容器弹窗联动', () => {
+  it('点击操作列"编辑" → open-container 打开容器弹窗（不弹内建编辑窗口）', async () => {
+    const wrapper = await mountPage(userPageSchema())
+
+    // 操作列编辑按钮（SearchTable 桩渲染）
+    const editBtn = wrapper.find('.stub-col-btn-0')
+    expect(editBtn.exists()).toBe(true)
+
+    await editBtn.trigger('click')
     await flushPromises()
 
-    // 操作列编辑按钮 → 点击
-    // SearchTable 渲染按钮 → 找到并触发
-    const btn = wrapper.find('.el-table__body-wrapper button') // 真实 SearchTable 渲染
-    // 若 SearchTable 真实渲染复杂，改用组件实例调用内部方法
-    const vm = wrapper.vm as any
-    expect(vm).toBeTruthy()
+    // 容器弹窗（class=linkage-container-dialog 的 el-dialog stub）
+    const containerDialogs = wrapper.findAll('.dialog-stub.visible')
+    expect(containerDialogs.length).toBeGreaterThanOrEqual(1)
+    // 内建编辑窗口未打开
+    expect(openEditSpy).not.toHaveBeenCalled()
+  })
 
-    // 验证：actionBus 注入成功
-    expect((wrapper.vm as any)._setupState ?? true).toBeDefined()
-    // 直接验证 dispatch 调用链：通过 SearchTable 暴露的按钮 onClick
-    // SearchTable 暴露 openEdit；若联动消费，openEdit 不被调用
-    const searchTable = wrapper.findComponent(SearchTable)
-    expect(searchTable.exists()).toBe(true)
+  it('source 不匹配时回退内建编辑窗口（复现诊断路径）', async () => {
+    const schema = userPageSchema()
+    schema.actions[0].source = 'ds_other' // 来源不匹配
+    const wrapper = await mountPage(schema)
+
+    await wrapper.find('.stub-col-btn-0').trigger('click')
+    await flushPromises()
+
+    // 容器未打开（无 visible dialog）
+    expect(wrapper.findAll('.dialog-stub.visible').length).toBe(0)
+    // 回退内建编辑
+    expect(openEditSpy).toHaveBeenCalled()
   })
 })

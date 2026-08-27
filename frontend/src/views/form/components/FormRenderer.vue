@@ -233,7 +233,8 @@ function mountDialogEngine(c: DialogContainer) {
       api: {
         getValue: (field: string) => c.formData[field],
         setValue: (field: string, value: unknown) => {
-          c.formData = { ...c.formData, [field]: value }
+          // 直接 mutate 保留对象引用，form-create v-model 能感知变化
+          c.formData[field] = value
         },
       },
       recordId: () => c.currentRecordId,
@@ -587,8 +588,8 @@ function dispatchAction(trigger: string, eventData: any): boolean {
         if (mode === 'dialog') {
           const c = dialogContainers.value.find((x) => x.key === target)
           if (c) {
-            // 先清空旧数据，避免弹窗残留上一条记录内容
-            c.formData = {}
+            // 先清空旧数据（保留引用），避免弹窗残留上一条记录内容
+            for (const key of Object.keys(c.formData)) delete c.formData[key]
             c.currentRecordId = undefined
             c.visible = true
             // 自动加载触发行数据（row-edit/view 时 eventData.row.id 存在）
@@ -653,7 +654,8 @@ function containerRefId(c: DialogContainer): string | undefined {
 /** 默认按钮行为：new=清空建新 / cancel=关闭 / confirm=保存关闭 / delete=删除记录 / copy=复制新记录 */
 async function containerAction(c: DialogContainer, action: 'new' | 'cancel' | 'confirm' | 'delete' | 'copy') {
   if (action === 'new') {
-    c.formData = {}
+    // 清空保留引用，form-create v-model 能感知
+    for (const key of Object.keys(c.formData)) delete c.formData[key]
     c.currentRecordId = undefined
   } else if (action === 'cancel') {
     c.visible = false

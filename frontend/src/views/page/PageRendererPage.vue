@@ -13,12 +13,25 @@
       />
       <el-empty v-else description="页面内容为空" :image-size="80" />
     </div>
+
+    <!-- 表格-容器联动：dialog 模式容器弹窗（open-container 动作打开） -->
+    <el-dialog
+      v-for="c in dialogContainers"
+      :key="c.key"
+      v-model="c.visible"
+      :title="c.title"
+      :width="c.width"
+      :close-on-click-modal="false"
+      class="linkage-container-dialog"
+    >
+      <form-create v-if="c.visible" v-model="c.formData" :rule="c.renderRule" :option="{}" />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, provide, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive, computed, markRaw, onMounted, provide, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import formCreate from '@form-create/element-ui'
 import PageDataTable from './components/PageDataTable.vue'
@@ -43,6 +56,7 @@ provide(ACTION_BUS_KEY, {
 })
 
 const route = useRoute()
+const router = useRouter()
 const pageKey = ref(route.params.pageKey as string)
 
 const error = ref('')
@@ -78,6 +92,128 @@ const componentRefs = reactive<Record<string, any>>({})
 /** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
 watch(() => pageSchema.dataSources, (val) => { setActiveDsBindings(val as any) }, { immediate: true })
 
+// ==================== 表格-容器联动 ====================
+/** 联动容器运行时状态（formContainer 以 dataSourceId 为联动 target） */
+interface LinkageContainer {
+  /** 页面内数据源标识（动作 target） */
+  key: string
+  /** 原始 formContainer 节点（保存格式，引擎 mount 用） */
+  node: any
+  /** 渲染子规则（props.rule，dialog 内 form-create 渲染用） */
+  renderRule: any[]
+  /** 默认显示模式（open-container 动作可覆盖） */
+  displayMode: 'dialog' | 'newTab' | 'inline'
+  /** 弹窗标题（tabTitle 配置） */
+  title: string
+  /** 弹窗宽度（dialogWidth 配置） */
+  width: string
+  /** dialog 可见性 */
+  visible: boolean
+  /** dialog/newTab 容器独立表单数据（inline 容器用主 formData） */
+  formData: Record<string, any>
+  /** 当前记录 ID（load-record 写入，引擎 recordId 定位用） */
+  currentRecordId: string | undefined
+  /** 容器数据引擎（读写数据源） */
+  engine: ReturnType<typeof createDsBindingEngine> | null
+}
+
+/** 联动容器注册表（dialog/newTab 从主树移除；inline 保留主树） */
+const linkageContainers = reactive<LinkageContainer[]>([])
+
+/** dialog 模式容器（弹窗渲染列表） */
+const dialogContainers = computed(() => linkageContainers.filter((c) => c.displayMode === 'dialog'))
+
+/** 按 target（dataSourceId）查找联动容器 */
+function findContainer(target: string): LinkageContainer | undefined {
+  return linkageContainers.find((c) => c.key === target)
+}
+
+/** 从原始 rule 树提取联动容器（须在 normalizeForRender 之前调用，此时 type 仍为 formContainer） */
+function extractLinkageContainers(nodes: any[]): any[] {
+  const containers: LinkageContainer[] = []
+  const walk = (list: any[]): any[] =>
+    list
+      .filter((n) => {
+        if (n && typeof n === 'object' && n.type === 'formContainer' && n.props?.dataSourceId) {
+          const mode = (n.props.displayMode as LinkageContainer['displayMode']) || 'dialog'
+          containers.push(makeContainer(n, mode))
+          // dialog/newTab 从主树移除；inline 保留主树渲染
+          return mode === 'inline'
+        }
+        return true
+      })
+      .map((n) => {
+        if (n && typeof n === 'object' && Array.isArray(n.children)) {
+          n.children = walk(n.children)
+        }
+        return n
+      })
+  const mainTree = walk(nodes)
+  linkageContainers.splice(0, linkageContainers.length)
+  for (const c of containers) {
+    mountContainerEngine(c)
+    linkageContainers.push(c)
+  }
+  // newTab 落地页：query.container 自动打开对应容器
+  openFromQuery()
+  return mainTree
+}
+
+/** 构造联动容器运行时状态 */
+function makeContainer(node: any, displayMode: LinkageContainer['displayMode']): LinkageContainer {
+  const props = node.props || {}
+  return {
+    key: props.dataSourceId,
+    node,
+    renderRule: Array.isArray(props.rule) ? props.rule : [],
+    displayMode,
+    title: props.tabTitle || node.title || '编辑记录',
+    width: props.dialogWidth || '800px',
+    visible: false,
+    formData: {},
+    currentRecordId: undefined,
+    engine: null,
+  }
+}
+
+/** 为联动容器挂载独立数据引擎（inline 容器绑定主 formData，其余绑定容器自身 formData） */
+function mountContainerEngine(c: LinkageContainer) {
+  const isInline = c.displayMode === 'inline'
+  const engine = createDsBindingEngine(
+    { dsApi: dataSourceApi } as any,
+    {
+      api: {
+        getValue: (field: string) => (isInline ? formData.value[field] : c.formData[field]),
+        setValue: (field: string, value: unknown) => {
+          if (isInline) formData.value = { ...formData.value, [field]: value }
+          else c.formData = { ...c.formData, [field]: value }
+        },
+      },
+      recordId: () => c.currentRecordId,
+      onRecordChange: () => { /* load-record 动作显式驱动 */ },
+      onFieldChange: () => { /* dialog 内字段变化由容器 formData 驱动（Task 5 完善） */ },
+      onConflict: (msg: string) => ElMessage.warning(msg),
+    },
+  )
+  // mount 用保存格式节点（collectContainers 递归 props.rule 收集子字段）
+  engine.mount([c.node])
+  c.engine = markRaw(engine)
+}
+
+/** newTab 落地页：query.container=容器标识 时自动打开（dialog 模式弹窗回显） */
+function openFromQuery() {
+  const key = route.query.container as string
+  if (!key) return
+  const c = findContainer(key)
+  if (!c) return
+  c.visible = true
+  const rid = route.query.recordId as string
+  if (rid) {
+    c.currentRecordId = rid
+    void c.engine?.loadRecord(rid)
+  }
+}
+
 onMounted(load)
 
 async function load() {
@@ -93,6 +229,8 @@ async function load() {
     const parsed = JSON.parse(def.schema || '{}')
     pageSchema.dataSources = parsed.dataSources || []
     pageSchema.actions = parsed.actions || []
+    // 提取联动容器（dialog/newTab 从主树移除，须在 normalizeForRender 之前——此后 type 变为 FcRow）
+    parsed.rule = extractLinkageContainers(parsed.rule || [])
     // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
     rule.value = normalizeForRender(parsed.rule || []).map((r: any) => transformComponent(r))
     option.value = parsed.option || {}
@@ -238,8 +376,47 @@ function executeStep(step: any, eventData: any) {
       })
     }
   } else if (op === 'save-record') {
-    // 写回数据源：强制完成未决防抖写入
+    // 写回数据源：强制完成未竟防抖写入
     void pageEngine.value?.flush()
+  } else if (op === 'open-container') {
+    // 打开联动容器：displayMode 参数优先，容器默认配置兜底
+    const c = findContainer(target)
+    if (!c) return
+    const mode = (step.displayMode as string) || c.displayMode
+    if (mode === 'dialog') {
+      c.visible = true
+    } else if (mode === 'newTab') {
+      const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+      const resolved = router.resolve({
+        query: { ...route.query, container: c.key, ...(rid ? { recordId: rid } : {}) },
+      })
+      window.open(resolved.href, '_blank')
+    }
+    // inline：容器常驻主树，无需操作
+  } else if (op === 'load-record') {
+    // 加载记录到容器：recordId 模板解析，缺省取事件行 ID
+    const rid = step.recordId
+      ? String(resolveStepValue(step.recordId, eventData) || '')
+      : String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+    if (!rid) return
+    const c = findContainer(target)
+    if (c) {
+      c.currentRecordId = rid
+      void c.engine?.loadRecord(rid)
+    } else if (pageEngine.value) {
+      // 非联动容器回退：页面级引擎（兼容既有 reload-record 语义）
+      currentRecordId.value = rid
+      void pageEngine.value.loadRecord(rid)
+    }
+  } else if (op === 'save-container') {
+    // 保存容器数据：强制完成容器引擎未竟防抖写入（表格同步由 Task 5 完善）
+    const c = findContainer(target)
+    if (c) void c.engine?.flush()
+    else void pageEngine.value?.flush()
+  } else if (op === 'close-container') {
+    // 关闭联动容器弹窗
+    const c = findContainer(target)
+    if (c) c.visible = false
   }
 }
 

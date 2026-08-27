@@ -31,4 +31,31 @@ describe('formContainer rule', () => {
     expect(fields).toContain('dataSourceId')
     expect(fields).toContain('recordLocator')
   })
+
+  it('rule() 默认显示模式为弹出窗口（dialog）', () => {
+    const rule = formContainer.rule({ t: (k: string) => k })
+    expect(rule.props.displayMode).toBe('dialog')
+    expect(rule.props.dialogWidth).toBeTruthy()
+    expect(rule.props.dialogHeight).toBeTruthy()
+  })
+
+  it('rule() 新开页签与内嵌配置默认值', () => {
+    const rule = formContainer.rule({ t: (k: string) => k })
+    expect(rule.props.tabTitle).toBeTruthy()
+    expect(rule.props.inlineHeight).toBeTruthy()
+  })
+
+  it('props() 属性面板包含显示模式与尺寸配置', () => {
+    const props = formContainer.props({}, { t: (k: string) => k })
+    const fields = props.map((p: any) => p.field)
+    expect(fields).toContain('displayMode')
+    expect(fields).toContain('dialogWidth')
+    expect(fields).toContain('dialogHeight')
+    expect(fields).toContain('tabTitle')
+    expect(fields).toContain('inlineHeight')
+    // displayMode 为下拉选择，含三种模式
+    const displayModeProp = props.find((p: any) => p.field === 'displayMode')
+    const optionValues = (displayModeProp?.options || []).map((o: any) => o.value)
+    expect(optionValues).toEqual(expect.arrayContaining(['dialog', 'newTab', 'inline']))
+  })
 })

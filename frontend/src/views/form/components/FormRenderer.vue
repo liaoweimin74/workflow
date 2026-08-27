@@ -17,8 +17,9 @@
       :width="c.width"
       :close-on-click-modal="false"
       class="fc-container-dialog"
+      :style="{ '--dialog-max-h': c.height } as any"
     >
-      <div :style="{ maxHeight: c.height, overflowY: 'auto' }">
+      <div class="fc-dialog-body">
         <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="c.formData" />
       </div>
       <template #footer>
@@ -42,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed, provide, markRaw } from 'vue'
+import { ref, watch, onMounted, computed, provide, markRaw, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
@@ -107,6 +108,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'loaded', formData: Record<string, any>): void
   (e: 'submitted', formDataId: string): void
+  (e: 'open-new-tab', containerKey: string, recordId: string): void
 }>()
 
 const loading = ref(false)
@@ -265,8 +267,21 @@ const dsBindings = computed<DataSourceBindingContext[]>(
   () => props.dataSources ?? schemaDataSources.value,
 )
 
+/** 引擎是否已挂载（防重复挂载） */
+let engineMounted = false
+
+/** 数据源绑定是否已就绪（解决首次加载'数据源不存在'双重警告） */
+const bindingsReady = ref(false)
+
 /** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
-watch(dsBindings, (val) => { setActiveDsBindings(val) }, { immediate: true })
+watch(dsBindings, (val) => {
+  setActiveDsBindings(val)
+  // 首次加载：bindings 就绪后挂载引擎（onMounted 已 defer nextTick）
+  if (!bindingsReady.value && val.length > 0) {
+    bindingsReady.value = true
+    nextTick(() => { tryMountEngine() })
+  }
+}, { immediate: true })
 
 /** 弹窗容器提取后的主渲染树（displayMode=dialog 的 formContainer 已移除） */
 const mainSchema = ref<Rule[]>([])
@@ -326,7 +341,15 @@ onMounted(async () => {
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
   }
-  mountDsBinding()
+  // 引擎挂载延迟到 nextTick，等待 dsBindings watcher 更新 activeDsBindings
+  // 首次加载：dsBindings 就绪后由 watcher 调用 tryMountEngine
+  // 跳过首次加载：如 rule 直传场景（无 formDefId），bindings 可能已就绪
+  nextTick(() => {
+    if (dsBindings.value.length > 0) {
+      bindingsReady.value = true
+      tryMountEngine()
+    }
+  })
 })
 
 // 监听 initialValues 变化，同步到 formData
@@ -347,7 +370,7 @@ watch(() => props.rule, (newVal) => {
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
   }
-  mountDsBinding()
+  tryMountEngine()
 })
 
 async function loadSchema() {
@@ -524,6 +547,16 @@ watch(formData, (val, oldVal) => {
   }
 }, { deep: true })
 
+/**
+ * 尝试挂载容器数据源绑定引擎（幂等：已挂载或未就绪则跳过）。
+ * 首次加载须等 activeDsBindings 就绪后由 dsBindings watcher 调用。
+ */
+function tryMountEngine() {
+  if (engineMounted || !resolvedSchema.value.length || !bindingsReady.value) return
+  engineMounted = true
+  mountDsBinding()
+}
+
 /** 挂载容器数据源绑定引擎与联动总线（无容器时 no-op） */
 function mountDsBinding() {
   if (!resolvedSchema.value.length) return
@@ -613,15 +646,23 @@ function dispatchAction(trigger: string, eventData: any): boolean {
             }
           }
         } else if (mode === 'newTab') {
-          // 新开页签：路由跳转到表单页 + query 参数（容器标识 + 记录 ID）
+          // 新开页签：通过事件通知父组件处理路由跳转
           const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-          const route = (globalThis as any).__formRendererRoute
-          if (route?.resolve) {
-            const resolved = route.resolve({ query: { container: target, recordId: rid } })
-            window.open(resolved.href, '_blank')
+          emit('open-new-tab', target || '', rid)
+        }
+        // inline：容器常驻主树，open-container 时自动从数据源加载行数据
+        if (mode === 'inline') {
+          const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+          if (rid && target) {
+            // 直接从数据源加载（inline 容器可能绑定不同于主表单的数据源）
+            void dataSourceApi.getData(target, rid).then((res) => {
+              const fields = (res.data?.data || {}) as Record<string, unknown>
+              for (const [k, v] of Object.entries(fields)) {
+                formData.value = { ...formData.value, [k]: v }
+              }
+            }).catch(() => { /* http 拦截器已提示 */ })
           }
         }
-        // inline：容器已在主树中，load-record 步骤单独处理
         consumed = true
       } else if (op === 'load-record') {
         const rid = step.recordId
@@ -774,5 +815,12 @@ defineExpose({ submit, saveSnapshot, getFormData, validate, loadSchema, loadData
 <style scoped>
 .form-renderer {
   min-height: 200px;
+}
+
+/* 容器弹窗：使用 CSS 变量设定高度，内容超出滚动 */
+.fc-container-dialog :deep(.el-dialog__body) {
+  max-height: var(--dialog-max-h, 600px);
+  overflow-y: auto;
+  padding: 16px;
 }
 </style>

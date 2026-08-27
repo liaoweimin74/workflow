@@ -225,19 +225,32 @@ function extractDialogContainers(rules: Rule[]): Rule[] {
   return mainTree
 }
 
-/** 为弹窗容器挂载独立数据引擎（与主 formData 隔离） */
+/** 为弹窗容器挂载独立数据引擎（与主 formData 隔离）。
+ *  注意：c 在赋值 dialogContainers.value 之前传入，是原始对象。
+ *  getValue/setValue 必须通过 dialogContainers.value.find() 获取 reactive proxy，
+ *  否则写入绕过 Vue 响应式系统，form-create 感知不到数据变化。 */
 function mountDialogEngine(c: DialogContainer) {
+  const key = c.key
   const engine = createDsBindingEngine(
     { dsApi: dataSourceApi } as any,
     {
       api: {
-        getValue: (field: string) => c.formData[field],
+        getValue: (field: string) => {
+          const rc = dialogContainers.value.find((x) => x.key === key)
+          return rc?.formData?.[field]
+        },
         setValue: (field: string, value: unknown) => {
-          // 直接 mutate 保留对象引用，form-create v-model 能感知变化
-          c.formData[field] = value
+          const rc = dialogContainers.value.find((x) => x.key === key)
+          if (rc) {
+            // 新建对象赋值触发 Vue 响应式（非 mutate 原始引用）
+            rc.formData = { ...rc.formData, [field]: value }
+          }
         },
       },
-      recordId: () => c.currentRecordId,
+      recordId: () => {
+        const rc = dialogContainers.value.find((x) => x.key === key)
+        return rc?.currentRecordId
+      },
       onRecordChange: () => { /* load-record 动作显式驱动 */ },
       onFieldChange: () => { /* dialog 内字段变化由容器 formData 驱动 */ },
       onConflict: (msg: string) => ElMessage.warning(msg),
@@ -588,8 +601,8 @@ function dispatchAction(trigger: string, eventData: any): boolean {
         if (mode === 'dialog') {
           const c = dialogContainers.value.find((x) => x.key === target)
           if (c) {
-            // 先清空旧数据（保留引用），避免弹窗残留上一条记录内容
-            for (const key of Object.keys(c.formData)) delete c.formData[key]
+            // 清空旧数据（新对象赋值触发响应式）
+            c.formData = {}
             c.currentRecordId = undefined
             c.visible = true
             // 自动加载触发行数据（row-edit/view 时 eventData.row.id 存在）
@@ -654,8 +667,8 @@ function containerRefId(c: DialogContainer): string | undefined {
 /** 默认按钮行为：new=清空建新 / cancel=关闭 / confirm=保存关闭 / delete=删除记录 / copy=复制新记录 */
 async function containerAction(c: DialogContainer, action: 'new' | 'cancel' | 'confirm' | 'delete' | 'copy') {
   if (action === 'new') {
-    // 清空保留引用，form-create v-model 能感知
-    for (const key of Object.keys(c.formData)) delete c.formData[key]
+    // 新对象赋值触发 Vue 响应式
+    c.formData = {}
     c.currentRecordId = undefined
   } else if (action === 'cancel') {
     c.visible = false

@@ -23,7 +23,6 @@
                 placeholder="页面内标识"
                 class="binding-input"
                 :class="{ 'is-error': errors[index]?.id }"
-                @input="validateAndEmit"
               />
               <el-select
                 v-model="ds.refId"
@@ -31,7 +30,6 @@
                 class="binding-select"
                 :class="{ 'is-error': errors[index]?.refId }"
                 filterable
-                @change="validateAndEmit"
               >
                 <el-option
                   v-for="source in enabledDataSources"
@@ -54,12 +52,11 @@
             </div>
             <!-- 数据源级筛选条件 -->
             <div class="binding-filter" v-if="ds.refId">
-              <div class="binding-filter-header">
-                <span class="binding-filter-title">数据源级筛选</span>
-              </div>
               <div class="filter-row" v-for="(fc, fi) in ds.filter?.conditions || []" :key="fi">
-                <el-input v-model="fc.column" placeholder="列名" size="small" style="width: 28%" />
-                <el-select v-model="fc.op" style="width: 22%" size="small">
+                <el-select v-model="fc.column" placeholder="列名" size="small" style="width: 22%" filterable allow-create>
+                  <el-option v-for="col in getDsColumns(ds.refId)" :key="col.key" :label="col.label" :value="col.key" />
+                </el-select>
+                <el-select v-model="fc.op" style="width: 20%" size="small">
                   <el-option label="等于" value="eq" />
                   <el-option label="不等于" value="ne" />
                   <el-option label="包含" value="like" />
@@ -67,7 +64,13 @@
                   <el-option label="为空" value="isEmpty" />
                   <el-option label="不为空" value="isNotEmpty" />
                 </el-select>
-                <el-input v-if="fc.field" v-model="fc.field" placeholder="表单字段" size="small" style="width: 24%" />
+                <el-select v-model="fc.source" style="width: 20%" size="small">
+                  <el-option label="固定值" value="fixed" />
+                  <el-option label="表单字段" value="field" />
+                </el-select>
+                <el-select v-if="fc.source === 'field'" v-model="fc.field" placeholder="当前表单字段" size="small" style="width: 24%">
+                  <el-option v-for="f in currentFormFields" :key="f" :label="f" :value="f" />
+                </el-select>
                 <el-input v-else :model-value="String(fc.value ?? '')" @update:model-value="fc.value = $event" placeholder="固定值" size="small" style="width: 24%" />
                 <el-button type="danger" link size="small" @click="ds.filter!.conditions.splice(fi, 1)">删</el-button>
               </div>
@@ -84,10 +87,6 @@
 
         <el-empty v-else description="暂无数据源绑定" :image-size="60" />
 
-        <div class="panel-tip">
-          <el-icon><InfoFilled /></el-icon>
-          <span>数据组件（表格/树）绑定：选中组件 → 属性面板「数据源 id」填上方页面内标识</span>
-        </div>
       </el-tab-pane>
 
       <!-- 动作总线 -->
@@ -130,6 +129,7 @@
 import { ref, watch } from 'vue'
 import { Plus, InfoFilled } from '@element-plus/icons-vue'
 import type { DataSourceDTO } from '@/api/data-source'
+import { dataSourceApi } from '@/api/data-source'
 import type { LookupFilterConfig } from './types'
 
 /** 数据源绑定类型 */
@@ -181,6 +181,8 @@ const props = defineProps<{
   enabledDataSources: DataSourceDTO[]
   /** 动作配置 */
   actions?: Action[]
+  /** 当前表单字段 key 列表（筛选条件"表单字段"选项用） */
+  currentFormFields?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -202,12 +204,34 @@ const localActions = ref<Action[]>([...(props.actions || [])])
 /** 验证错误 */
 const errors = ref<ValidationError[]>([])
 
+/** 各数据源的列元数据候选（用于筛选列名下拉） */
+const dsColumnsMap = ref<Record<string, { key: string; label: string }[]>>({})
+
+/** 按 refId 加载数据源列元数据，填充 dsColumnsMap */
+async function loadDsColumns(refId: string) {
+  if (!refId || dsColumnsMap.value[refId]) return
+  try {
+    const res = await dataSourceApi.getMetadata(refId)
+    const cols = (res.data?.columns || []).filter((c: any) => !c.hidden)
+    dsColumnsMap.value[refId] = cols.map((c: any) => ({ key: c.key, label: c.label || c.key }))
+  } catch {
+    dsColumnsMap.value[refId] = []
+  }
+}
+
+/** 获取指定数据源的列候选 */
+function getDsColumns(refId: string): { key: string; label: string }[] {
+  return dsColumnsMap.value[refId] || []
+}
+
 /** 监听外部数据源配置变化 */
 watch(
   () => props.dataSources,
   (newVal) => {
     localDataSources.value = [...newVal]
     validateAll()
+    // 加载所有已有 refId 的列元数据
+    newVal.forEach((ds) => { if (ds.refId) void loadDsColumns(ds.refId) })
   },
   { deep: true }
 )
@@ -228,14 +252,12 @@ function addBinding() {
     refId: '',
   })
   errors.value.push({})
-  validateAndEmit()
 }
 
 /** 删除数据源绑定 */
 function removeBinding(index: number) {
   localDataSources.value.splice(index, 1)
   errors.value.splice(index, 1)
-  validateAndEmit()
 }
 
 /** 添加动作 */
@@ -244,13 +266,11 @@ function addAction() {
     trigger: 'node-click',
     steps: [{ op: 'set-filter', target: '', field: '', value: '{node.id}' }],
   })
-  emitActions()
 }
 
 /** 删除动作 */
 function removeAction(index: number) {
   localActions.value.splice(index, 1)
-  emitActions()
 }
 
 /** 验证单个绑定 */
@@ -288,9 +308,16 @@ function addDsFilter(bindingIndex: number) {
   if (!ds.filter) {
     ds.filter = { logic: 'AND', conditions: [] }
   }
-  ds.filter.conditions.push({ column: '', op: 'eq', value: '' })
-  validateAndEmit()
+  ds.filter.conditions.push({ column: '', op: 'eq', source: 'fixed', value: '' })
 }
+
+/** 外部调用：确认并提交所有变更 */
+function confirm() {
+  validateAndEmit()
+  emitActions()
+}
+
+defineExpose({ confirm })
 
 /** 验证并触发数据源更新 */
 function validateAndEmit() {

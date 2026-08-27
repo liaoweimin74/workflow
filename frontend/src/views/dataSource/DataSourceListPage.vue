@@ -1,12 +1,6 @@
 <template>
   <div class="data-source-list-page">
     <el-card style="overflow: hidden">
-      <template #header>
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <span style="font-weight: bold; font-size: 14px">数据源管理</span>
-          <el-tag type="info" size="small">FORM/WORKFLOW/SYSTEM 由系统自动管理；API 支持手动增删改</el-tag>
-        </div>
-      </template>
       <SearchTable
         ref="tableRef"
         :search-fields="searchFields"

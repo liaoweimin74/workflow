@@ -1,5 +1,6 @@
 import type { Rule } from '@form-create/element-ui'
 import type { dataSourceApi } from '@/api/data-source'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 export interface EngineDeps {
   api: { getValue(field: string): unknown; setValue(field: string, value: unknown): void }
@@ -19,6 +20,15 @@ interface ContainerBinding {
 }
 
 const WRITE_DEBOUNCE_MS = 300
+
+/** 从模块存储解析 binding ID → 全局数据源 refId */
+function resolveRefId(bindingId: string): string {
+  if (!bindingId) return ''
+  // 如果已经是 UUID 格式（无 ds_ 前缀），直接返回
+  if (!bindingId.startsWith('ds_')) return bindingId
+  const binding = activeDsBindings.value.find((b) => b.id === bindingId)
+  return binding?.refId || bindingId
+}
 
 /** 递归收集 rule 树中的 formContainer 节点（含 fcRow/col 布局 children 与容器 props.rule 子级） */
 function collectContainers(rules: Rule[], out: Rule[] = []): Rule[] {
@@ -58,7 +68,8 @@ export function createDsBindingEngine(
   async function loadRecord(recordId: string) {
     for (const b of bindings) {
       try {
-        const res = await dsApi.getData(b.dataSourceId, recordId)
+        const dsRefId = resolveRefId(b.dataSourceId)
+        const res = await dsApi.getData(dsRefId, recordId)
         const biz = res.data
         // BizDataVO = { id, version, data: Record<string, unknown> }
         const fields = (biz?.data || {}) as Record<string, unknown>
@@ -79,7 +90,8 @@ export function createDsBindingEngine(
   async function resolveWritable() {
     await Promise.all(bindings.map(async (b) => {
       try {
-        const meta = await dsApi.getMetadata(b.dataSourceId)
+        const dsRefId = resolveRefId(b.dataSourceId)
+        const meta = await dsApi.getMetadata(dsRefId)
         b.writable = meta.data?.writable ?? true
       } catch {
         b.writable = true
@@ -99,7 +111,8 @@ export function createDsBindingEngine(
     pendingField = ''
     if (!b || !b.writable || !recordId) return
     try {
-      await dsApi.updateData(b.dataSourceId, recordId, { [field]: deps.api.getValue(field) }, b.version)
+      const dsRefId = resolveRefId(b.dataSourceId)
+      await dsApi.updateData(dsRefId, recordId, { [field]: deps.api.getValue(field) }, b.version)
     } catch {
       deps.onConflict('数据已被修改，请刷新')
       await loadRecord(recordId)

@@ -208,13 +208,15 @@ export interface LookupFetchConfig {
 /** 筛选运算符（底表结构化 filter 支持；外部 API 仅透传等值 eq） */
 export type FilterOperator = 'eq' | 'ne' | 'like' | 'in' | 'isEmpty' | 'isNotEmpty'
 
-/** 单条筛选条件：column 必填；field 存在时取当前表单字段值（动态），否则用 value（静态） */
+/** 单条筛选条件：column 必填；source=field 时取当前表单字段值（动态），否则用 value（静态） */
 export interface FilterCondition {
   column: string
   op?: FilterOperator
-  /** 静态值（field 未配置时使用） */
+  /** 值来源：fixed（固定值，默认）| field（当前表单字段） */
+  source?: 'fixed' | 'field'
+  /** 静态值（source=fixed 时使用） */
   value?: unknown
-  /** 动态源：当前表单字段名（存在时条件值 = 该字段当前值，经 form-create api.getValue 读取） */
+  /** 动态源：当前表单字段名（source=field 时使用，条件值 = 该字段当前值，经 form-create api.getValue 读取） */
   field?: string
 }
 

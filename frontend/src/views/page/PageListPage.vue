@@ -1,9 +1,6 @@
 <template>
   <div class="page-list-page">
     <el-card style="overflow: hidden">
-      <template #header>
-        <span style="font-weight: bold; font-size: 14px">页面管理</span>
-      </template>
       <SearchTable
         ref="tableRef"
         :search-fields="searchFields"

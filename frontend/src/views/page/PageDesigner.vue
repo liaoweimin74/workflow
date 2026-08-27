@@ -46,50 +46,34 @@
     <!-- 数据源/动作配置弹窗 -->
     <el-dialog v-model="dsDialogVisible" title="数据源绑定与动作总线" width="680px">
       <DataSourceConfigPanel
-        :dataSources="schema.dataSources"
+        ref="dsConfigPanelRef"
+        :dataSources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId, searchFields: ds.searchFields }))"
         :enabledDataSources="enabledDataSources"
         :actions="schema.actions"
         @update:dataSources="updateDataSources"
         @update:actions="updateActions"
       />
       <template #footer>
-        <el-button @click="dsDialogVisible = false">关闭</el-button>
+        <el-button @click="dsDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmDsConfig">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 数据表格数据源配置 -->
+    <DsBindingConfigDialog
+      v-model="pageTableDialogVisible"
+      :current-fields="[]"
+      :binding-props="currentPageTableProps"
+      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
+      :table-mode="true"
+      @confirm="handlePageTableConfirm"
+    />
 
     <!-- JSON 弹窗 -->
     <el-dialog v-model="previewVisible" title="页面配置 JSON" width="760px">
       <pre class="preview-json">{{ previewJson }}</pre>
       <template #footer>
         <el-button @click="previewVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 数据表格统一配置弹窗（对齐 ViewDesigner 风格） -->
-    <el-dialog v-model="tableConfigVisible" title="数据表格配置" width="860px" destroy-on-close>
-      <el-tabs v-model="tableConfigTab" type="border-card">
-        <el-tab-pane label="显示列" name="columns">
-          <QueryColumnsConfig
-            :candidates="tableConfigColumns"
-            :filterable-keys="tableConfigFilterableKeys"
-            v-model:search-fields="tableConfigData.searchFields"
-            v-model:columns="tableConfigData.columns"
-            :show-search="false"
-          />
-        </el-tab-pane>
-        <el-tab-pane label="操作" name="actions">
-          <ActionsConfig
-            v-model="tableConfigData.actions"
-            :detail="tableConfigData.detail"
-          />
-        </el-tab-pane>
-        <el-tab-pane label="事件" name="events">
-          <EventsConfig v-model="tableConfigData.events" />
-        </el-tab-pane>
-      </el-tabs>
-      <template #footer>
-        <el-button @click="tableConfigVisible = false">取消</el-button>
-        <el-button type="primary" @click="applyTableConfig">确定</el-button>
       </template>
     </el-dialog>
   </div>
@@ -106,9 +90,7 @@ import PageDataTree from './components/PageDataTree.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
-import QueryColumnsConfig from './components/QueryColumnsConfig.vue'
-import ActionsConfig from './components/ActionsConfig.vue'
-import EventsConfig from './components/EventsConfig.vue'
+import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog.vue'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
@@ -129,23 +111,13 @@ const previewVisible = ref(false)
 const previewJson = ref('')
 /** 数据源/动作配置弹窗 */
 const dsDialogVisible = ref(false)
-const dsTab = ref('ds')
+const dsConfigPanelRef = ref<InstanceType<typeof DataSourceConfigPanel> | null>(null)
 
-// ===== 数据表格统一配置弹窗状态 =====
-const tableConfigVisible = ref(false)
-const tableConfigTab = ref('columns')
-/** 当前选中组件的列候选项（从数据源 metadata 加载） */
-const tableConfigColumns = ref<any[]>([])
-/** 可筛选列 key 集合 */
-const tableConfigFilterableKeys = ref<Set<string>>(new Set())
-/** 配置数据（临时，确定后写回 activeRule） */
-const tableConfigData = reactive({
-  searchFields: [] as any[],
-  columns: [] as any[],
-  actions: { buttons: [] as any[], permissions: '' },
-  detail: { width: '800px', type: 'form' },
-  events: [] as any[],
-})
+function confirmDsConfig() {
+  dsConfigPanelRef.value?.confirm()
+  dsDialogVisible.value = false
+}
+const dsTab = ref('ds')
 
 /** FcDesigner 配置：隐藏表单专用面板，保留组件/属性 */
 const designerConfig = {
@@ -167,54 +139,34 @@ const schema = reactive<{
 /** 已启用全局数据源 */
 const enabledDataSources = ref<DataSourceDTO[]>([])
 
-/** 注册页面组件到 FcDesigner 面板，并通过 setComponentRuleConfig 在属性面板注入"数据源"下拉（动态读取页面绑定层） */
+// ===== 页面数据表格数据源配置 =====
+const pageTableDialogVisible = ref(false)
+const currentPageTableProps = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.props || {}
+})
+function openPageTableDsConfig() {
+  pageTableDialogVisible.value = true
+}
+function handlePageTableConfirm(newProps: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (active?.props) Object.assign(active.props, newProps)
+  ElMessage.success('数据表格数据源配置已保存')
+}
+
+/** 注册页面组件到 FcDesigner 面板，并通过 setComponentRuleConfig 在属性面板注入"数据源"按钮（动态读取页面绑定层） */
 function registerPageComponents() {
-  // 属性面板注入：数据源下拉 + 表格配置（选项来自页面绑定层 schema.dataSources，随选中组件动态求值）
+  // 属性面板注入：数据源按钮 + 表格配置（选项来自页面绑定层 schema.dataSources）
   const dataSourceProps = () => [
     {
-      type: 'select',
-      field: 'dataSourceId',
-      title: '数据源',
-      value: '',
-      options: schema.dataSources.map((ds) => ({ value: ds.id, label: ds.id })),
-      props: {
-        clearable: true,
-        filterable: true,
-        placeholder: '选择页面数据源',
-      },
-      on: {
-        change: async (value: string) => {
-          if (!value) return
-          const ds = schema.dataSources.find((d) => d.id === value)
-          if (!ds || !ds.refId) return
-          try {
-            const res = await dataSourceApi.getMetadata(ds.refId)
-            const meta = res.data as any
-            const cols = (meta?.columns || []).map((c: any) => ({
-              prop: c.key,
-              label: c.label || c.key,
-            }))
-            // 写入当前选中组件的 columns prop（vendor activeRule 是 reactive 引用）
-            const active = designerRef.value?.activeRule as any
-            if (active?.props) {
-              active.props.columns = cols
-            }
-          } catch {
-            // 拦截器已弹出错误
-          }
-        },
-      },
-    },
-    // ===== 数据表格配置入口 =====
-    {
       type: 'button',
-      field: 'tableConfigTrigger',
-      title: '',
-      children: ['数据表格配置'],
+      field: 'dsConfigTrigger',
+      title: '数据源',
+      children: ['配置数据源'],
       native: true,
       style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
       props: { size: 'small' },
-      on: { click: () => openTableConfig() },
+      on: { click: () => openPageTableDsConfig() },
     },
   ]
 
@@ -262,6 +214,32 @@ function registerPageComponents() {
     }),
   })
   designerRef.value?.setComponentRuleConfig('page-tree', dataSourceProps, true)
+
+  // formContainer（数据表单容器）：属性面板数据源下拉使用页面级 schema.dataSources
+  designerRef.value?.setComponentRuleConfig(
+    'formContainer',
+    () => [
+      {
+        type: 'select',
+        field: 'dataSourceId',
+        title: '数据源',
+        value: '',
+        options: schema.dataSources.map((ds) => ({ value: ds.id, label: ds.id })),
+        props: {
+          clearable: true,
+          filterable: true,
+          placeholder: '选择页面内数据源',
+        },
+      },
+      {
+        type: 'json',
+        field: 'recordLocator',
+        title: '记录定位',
+        value: { type: 'current-record' },
+      },
+    ],
+    false,
+  )
 }
 
 onMounted(async () => {
@@ -417,79 +395,6 @@ function statusLabel(status: string): string {
   return map[status] || status
 }
 
-// ===== 数据表格统一配置弹窗 =====
-async function openTableConfig() {
-  const active = designerRef.value?.activeRule as any
-  if (!active?.props?.dataSourceId) {
-    ElMessage.warning('请先选择数据源')
-    return
-  }
-  // 加载数据源列候选项
-  const ds = schema.dataSources.find((d: any) => d.id === active.props.dataSourceId)
-  if (ds?.refId) {
-    try {
-      const res = await dataSourceApi.getMetadata(ds.refId)
-      const meta = res.data as any
-      const cols = (meta?.columns || []).filter((c: any) => !c.hidden)
-      tableConfigColumns.value = cols
-      // 可筛选列
-      const filterable = cols.filter((c: any) =>
-        c.columnType !== 'JSON' && c.columnType !== 'TEXT' &&
-        (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
-      )
-      tableConfigFilterableKeys.value = new Set(filterable.map((c: any) => c.key))
-    } catch {
-      tableConfigColumns.value = []
-    }
-  }
-  // 初始化配置数据（从 activeRule.props 读取）
-  const props = active.props || {}
-  tableConfigData.searchFields = props.searchFields || []
-  // props.columns 为渲染格式 { prop, label, width, ... }，转换为配置格式 { key, label, width, ... }
-  // 空数组/未配置时 fallback 到数据源全列（默认全选显示）
-  const srcColumns = (props.columns && props.columns.length > 0)
-    ? props.columns
-    : tableConfigColumns.value.map((c: any) => ({ prop: c.key, label: c.label || c.key }))
-  tableConfigData.columns = srcColumns.map((c: any) => ({
-    key: c.prop ?? c.key,
-    label: c.label || c.prop || c.key,
-    width: c.width,
-    align: c.align,
-    sortable: c.sortable,
-    formatter: c.formatter,
-    fixed: c.fixed,
-  }))
-  tableConfigData.actions = props.viewActions || { buttons: [
-    { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
-    { key: 'delete', label: '删除', placement: 'column', style: 'text' },
-  ], permissions: '' }
-  tableConfigData.detail = props.viewDetail || { width: '800px', type: 'form' }
-  tableConfigData.events = props.viewEvents || []
-  tableConfigTab.value = 'columns'
-  tableConfigVisible.value = true
-}
-
-function applyTableConfig() {
-  const active = designerRef.value?.activeRule as any
-  if (!active?.props) return
-  // 写回配置到 activeRule.props
-  active.props.searchFields = [...tableConfigData.searchFields]
-  // 配置格式 { key, label, ... } 转换为渲染格式 { prop, label, ... }（PageDataTable 读取 prop）
-  active.props.columns = tableConfigData.columns.map((c: any) => ({
-    prop: c.key ?? c.prop,
-    label: c.label || c.key,
-    width: c.width,
-    align: c.align,
-    sortable: c.sortable,
-    formatter: c.formatter,
-    fixed: c.fixed,
-  }))
-  active.props.viewActions = { ...tableConfigData.actions }
-  active.props.viewDetail = { ...tableConfigData.detail }
-  active.props.viewEvents = [...tableConfigData.events]
-  tableConfigVisible.value = false
-  ElMessage.success('数据表格配置已保存')
-}
 </script>
 
 <style scoped>

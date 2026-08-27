@@ -1,0 +1,307 @@
+<template>
+  <el-dialog v-model="visible" :title="isTableMode ? '数据源配置' : '数据源配置'" :width="isTableMode ? '860px' : '600px'" :close-on-click-modal="false">
+    <template v-if="isTableMode">
+      <el-tabs v-model="activeTab" type="border-card">
+        <!-- Tab 1: 数据源 + 筛选 -->
+        <el-tab-pane label="数据源" name="binding">
+          <el-form label-width="110px" size="default">
+            <el-form-item label="页面内数据源" required>
+              <el-select v-model="form.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
+                <el-option v-for="ds in formDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
+              </el-select>
+              <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
+            </el-form-item>
+            <el-divider content-position="left">组件级数据筛选</el-divider>
+            <el-form-item label="筛选条件">
+              <div style="width: 100%">
+                <el-radio-group v-model="form.filterLogic" size="small">
+                  <el-radio-button value="AND">所有（且）</el-radio-button>
+                  <el-radio-button value="OR">任一（或）</el-radio-button>
+                </el-radio-group>
+                <div v-for="(row, i) in form.filterRows" :key="i" style="display: flex; gap: 8px; margin-top: 8px">
+                  <el-select v-model="row.column" placeholder="目标列" style="width: 30%">
+                    <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+                  </el-select>
+                  <el-select v-model="row.op" style="width: 22%">
+                    <el-option label="等于" value="eq" /><el-option label="不等于" value="ne" />
+                    <el-option label="包含" value="like" /><el-option label="属于" value="in" />
+                    <el-option label="为空" value="isEmpty" /><el-option label="不为空" value="isNotEmpty" />
+                  </el-select>
+                  <el-select v-model="row.source" style="width: 22%">
+                    <el-option label="固定值" value="fixed" /><el-option label="表单字段" value="field" />
+                  </el-select>
+                  <el-select v-if="row.source === 'field'" v-model="row.field" placeholder="当前表单字段" style="width: 30%">
+                    <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
+                  </el-select>
+                  <el-input v-else v-model="row.fixedValue" placeholder="固定值" style="width: 30%" />
+                  <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
+                </div>
+                <el-button type="primary" link style="margin-top: 8px"
+                  @click="form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })">
+                  + 添加筛选条件
+                </el-button>
+              </div>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+        <!-- Tab 2: 显示列 -->
+        <el-tab-pane label="显示列" name="columns">
+          <QueryColumnsConfig
+            v-if="tableCandidates.length > 0"
+            :candidates="tableCandidates"
+            :filterable-keys="tableFilterableKeys as any"
+            v-model:search-fields="tableData.searchFields as any"
+            v-model:columns="tableData.columns"
+            :show-search="false"
+          />
+          <el-empty v-else description="请先选择数据源" :image-size="60" />
+        </el-tab-pane>
+        <!-- Tab 3: 操作 -->
+        <el-tab-pane label="操作" name="actions">
+          <ActionsConfig v-model="tableData.actions" :detail="tableData.detail" />
+        </el-tab-pane>
+        <!-- Tab 4: 事件 -->
+        <el-tab-pane label="事件" name="events">
+          <EventsConfig v-model="tableData.events" />
+        </el-tab-pane>
+      </el-tabs>
+    </template>
+
+    <template v-else>
+      <!-- 非表格模式：仅数据源 + 筛选 -->
+      <el-form label-width="110px" size="default">
+        <el-form-item label="页面内数据源" required>
+          <el-select v-model="form.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
+            <el-option v-for="ds in formDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
+          </el-select>
+          <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
+        </el-form-item>
+        <el-divider content-position="left">组件级数据筛选</el-divider>
+        <el-form-item label="筛选条件">
+          <div style="width: 100%">
+            <el-radio-group v-model="form.filterLogic" size="small">
+              <el-radio-button value="AND">所有（且）</el-radio-button>
+              <el-radio-button value="OR">任一（或）</el-radio-button>
+            </el-radio-group>
+            <div v-for="(row, i) in form.filterRows" :key="i" style="display: flex; gap: 8px; margin-top: 8px">
+              <el-select v-model="row.column" placeholder="目标列" style="width: 30%">
+                <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+              </el-select>
+              <el-select v-model="row.op" style="width: 22%">
+                <el-option label="等于" value="eq" /><el-option label="不等于" value="ne" />
+                <el-option label="包含" value="like" /><el-option label="属于" value="in" />
+                <el-option label="为空" value="isEmpty" /><el-option label="不为空" value="isNotEmpty" />
+              </el-select>
+              <el-select v-model="row.source" style="width: 22%">
+                <el-option label="固定值" value="fixed" /><el-option label="表单字段" value="field" />
+              </el-select>
+              <el-select v-if="row.source === 'field'" v-model="row.field" placeholder="当前表单字段" style="width: 30%">
+                <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
+              </el-select>
+              <el-input v-else v-model="row.fixedValue" placeholder="固定值" style="width: 30%" />
+              <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
+            </div>
+            <el-button type="primary" link style="margin-top: 8px"
+              @click="form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })">
+              + 添加筛选条件
+            </el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+    </template>
+
+    <template #footer>
+      <el-button @click="visible = false">取消</el-button>
+      <el-button type="primary" @click="handleConfirm">确定</el-button>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive, computed, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { dataSourceApi } from '@/api/data-source'
+import type { ColumnConfigItem } from '@/api/bizData'
+import QueryColumnsConfig from '@/views/page/components/QueryColumnsConfig.vue'
+import ActionsConfig from '@/views/page/components/ActionsConfig.vue'
+import EventsConfig from '@/views/page/components/EventsConfig.vue'
+
+const props = withDefaults(defineProps<{
+  modelValue: boolean
+  /** 当前表单字段 key 列表（筛选条件的"表单字段"选项） */
+  currentFields: string[]
+  /** 当前绑定配置（用于回填） */
+  bindingProps?: Record<string, any>
+  /** 页面内数据源绑定配置 */
+  formDataSources: Array<{ id: string; refId: string }>
+  /** 是否为数据表格模式（显示列/操作/事件 tabs） */
+  tableMode?: boolean
+}>(), {
+  tableMode: false,
+})
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', v: boolean): void
+  (e: 'confirm', props: Record<string, any>): void
+}>()
+
+const visible = computed({
+  get: () => props.modelValue,
+  set: (v: boolean) => emit('update:modelValue', v),
+})
+
+const isTableMode = computed(() => props.tableMode)
+const activeTab = ref('binding')
+
+// ==================== 数据源 + 筛选 ====================
+const dsColumns = ref<ColumnConfigItem[]>([])
+const visibleColumns = computed(() => dsColumns.value.filter(c => !c.hidden))
+
+const form = reactive({
+  dataSourceId: '',
+  filterLogic: 'AND' as 'AND' | 'OR',
+  filterRows: [] as { column: string; op: string; source: 'fixed' | 'field'; fixedValue: string; field: string }[],
+})
+
+async function loadDsColumns() {
+  dsColumns.value = []
+  const binding = props.formDataSources.find(d => d.id === form.dataSourceId)
+  if (!binding?.refId) return
+  try {
+    const res = await dataSourceApi.getMetadata(binding.refId)
+    dsColumns.value = res.data?.columns || []
+  } catch { /* http 拦截器已提示 */ }
+}
+
+async function handleDataSourceChange() {
+  form.filterRows = []
+  await loadDsColumns()
+  if (props.tableMode) {
+    await loadTableCandidates()
+    initTableData()
+  }
+}
+
+// ==================== 数据表格配置（显示列/操作/事件） ====================
+const tableCandidates = ref<any[]>([])
+const tableFilterableKeys = ref<Set<string>>(new Set())
+const tableData = reactive({
+  searchFields: [] as { key: string; matchType?: string }[],
+  columns: [] as any[],
+  actions: { buttons: [
+    { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
+    { key: 'delete', label: '删除', placement: 'column', style: 'text' },
+  ], permissions: '' } as any,
+  detail: { width: '800px', type: 'form' } as any,
+  events: [] as any[],
+})
+
+/** 加载数据源列候选项（显示列 tab 用） */
+async function loadTableCandidates() {
+  tableCandidates.value = []
+  tableFilterableKeys.value = new Set()
+  const binding = props.formDataSources.find(d => d.id === form.dataSourceId)
+  if (!binding?.refId) return
+  try {
+    const res = await dataSourceApi.getMetadata(binding.refId)
+    const meta = res.data as any
+    const cols = (meta?.columns || []).filter((c: any) => !c.hidden)
+    tableCandidates.value = cols
+    const filterable = cols.filter((c: any) =>
+      c.columnType !== 'JSON' && c.columnType !== 'TEXT' &&
+      (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
+    )
+    tableFilterableKeys.value = new Set(filterable.map((c: any) => c.key))
+  } catch {
+    tableCandidates.value = []
+  }
+}
+
+/** 初始化表格配置数据（从 bindingProps 读取） */
+function initTableData() {
+  const bp = props.bindingProps || {}
+  tableData.searchFields = bp.searchFields || []
+  const srcColumns = (bp.columns && bp.columns.length > 0)
+    ? bp.columns
+    : tableCandidates.value.map((c: any) => ({ prop: c.key, label: c.label || c.key }))
+  tableData.columns = srcColumns.map((c: any) => ({
+    key: c.prop ?? c.key,
+    label: c.label || c.prop || c.key,
+    width: c.width,
+    align: c.align,
+    sortable: c.sortable,
+    formatter: c.formatter,
+    fixed: c.fixed,
+  }))
+  tableData.actions = bp.viewActions || { buttons: [
+    { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
+    { key: 'delete', label: '删除', placement: 'column', style: 'text' },
+  ], permissions: '' }
+  tableData.detail = bp.viewDetail || { width: '800px', type: 'form' }
+  tableData.events = bp.viewEvents || []
+}
+
+// ==================== 打开/回填 ====================
+watch(() => props.modelValue, async (val) => {
+  if (!val) return
+  activeTab.value = 'binding'
+  const bp = props.bindingProps || {}
+  // 回填数据源 + 筛选
+  form.dataSourceId = bp.dataSourceId || ''
+  const filter = bp.filter
+  if (filter && typeof filter === 'object') {
+    form.filterLogic = filter.logic || 'AND'
+    form.filterRows = (filter.conditions || []).map((c: any) => ({
+      column: c.column || '', op: c.op || 'eq', source: c.source || 'fixed',
+      fixedValue: c.fixedValue || '', field: c.field || '',
+    }))
+  } else {
+    form.filterLogic = 'AND'
+    form.filterRows = []
+  }
+  await loadDsColumns()
+  if (props.tableMode) {
+    await loadTableCandidates()
+    initTableData()
+  }
+})
+
+// ==================== 确认 ====================
+function handleConfirm() {
+  if (!form.dataSourceId) return
+  const result: Record<string, any> = { dataSourceId: form.dataSourceId }
+  // 筛选条件
+  const conditions = form.filterRows.filter(r => r.column).map(r => ({
+    column: r.column, op: r.op, source: r.source,
+    fixedValue: r.source === 'fixed' ? r.fixedValue : undefined,
+    field: r.source === 'field' ? r.field : undefined,
+  }))
+  if (conditions.length > 0) {
+    result.filter = { logic: form.filterLogic, conditions }
+  }
+  // 表格配置
+  if (props.tableMode) {
+    result.searchFields = [...tableData.searchFields]
+    result.columns = tableData.columns.map((c: any) => ({
+      prop: c.key ?? c.prop, label: c.label || c.key,
+      width: c.width, align: c.align, sortable: c.sortable,
+      formatter: c.formatter, fixed: c.fixed,
+    }))
+    result.viewActions = { ...tableData.actions }
+    result.viewDetail = { ...tableData.detail }
+    result.viewEvents = [...tableData.events]
+  }
+  emit('confirm', result)
+  visible.value = false
+  ElMessage.success(props.tableMode ? '数据源与表格配置已保存' : '数据源配置已保存')
+}
+</script>
+
+<style scoped>
+.form-tip {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+}
+</style>

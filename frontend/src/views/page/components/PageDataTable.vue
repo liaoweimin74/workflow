@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, watch, inject } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -44,7 +44,8 @@ import { formatCellValue } from '@/utils/formatters'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import type { TableColumn, ActionButton, SearchField, ToolbarButton } from '@/components/business/types'
+import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 /** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) */
 const actionBus = inject<{ dispatch: (trigger: string, eventData: any) => void } | undefined>('pageActionBus')
@@ -95,6 +96,8 @@ const metaColumns = ref<{ key: string; label: string; columnType?: string; requi
 const writable = ref(false)
 /** 当前 filter（动作总线 set-filter 注入） */
 const currentFilter = ref<Record<string, unknown> | undefined>(undefined)
+/** 切换数据源后标记为 true，忽略 props.columns 旧配置 */
+const useMetadataColumns = ref(false)
 
 // ==================== 详情弹窗 ====================
 const detailVisible = ref(false)
@@ -131,8 +134,17 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
 
 // ==================== 列适配 ====================
 /** ColumnViewConfig → SearchTable TableColumn（formatter 字符串映射为函数） */
-const resolvedColumns = computed<TableColumn[]>(() =>
-  (props.columns || []).map((c: any) => ({
+const resolvedColumns = computed<TableColumn[]>(() => {
+  // 切换数据源后优先使用元数据列，忽略旧的 props.columns
+  if (useMetadataColumns.value || !props.columns || props.columns.length === 0) {
+    return metaColumns.value.map((c) => ({
+      prop: c.key,
+      label: c.label || c.key,
+      minWidth: 120,
+    }))
+  }
+  // 有用户配置的列时使用用户配置
+  return (props.columns || []).map((c: any) => ({
     prop: c.key ?? c.prop,
     label: c.label || c.key || c.prop,
     width: c.width,
@@ -141,8 +153,8 @@ const resolvedColumns = computed<TableColumn[]>(() =>
     fixed: c.fixed as any,
     sortable: !!c.sortable,
     formatter: c.formatter ? (_row: any, _col: TableColumn, cellValue: any) => formatCellValue(cellValue, c.formatter) : undefined,
-  })),
-)
+  }))
+})
 
 // ==================== 操作按钮适配 ====================
 /** 用户是否配置了 create 按钮（隐藏 SearchTable 内置新增，避免操作栏出现两个"新增"） */
@@ -213,10 +225,20 @@ function deleteConfirm(): string {
 }
 
 // ==================== fetchApi 适配 ====================
+/** 从模块存储解析全局数据源 refId（优先 props.dsRefId，其次 store 查找，最后回退 dataSourceId） */
+const resolvedRefId = computed(() => {
+  if (props.dsRefId) return props.dsRefId
+  if (props.dataSourceId) {
+    const binding = activeDsBindings.value.find((b: DataSourceBindingContext) => b.id === props.dataSourceId)
+    if (binding?.refId) return binding.refId
+  }
+  return ''
+})
+
 const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {
-  const dsId = props.dsRefId || props.dataSourceId
-  // 设计器画布中无 pageKey（渲染页才注入），跳过加载避免无效请求
-  if (!dsId || !props.pageKey) return { rows: [], total: 0 }
+  const dsId = resolvedRefId.value
+  if (!dsId) return { rows: [], total: 0 }
+
   // 组装筛选条件：动作总线 set-filter 注入的条件 + 搜索栏条件
   const filterConditions: any[] = []
   if (currentFilter.value) {
@@ -230,7 +252,7 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
     if (v === '' || v === null || v === undefined) continue
     filterConditions.push({ column: field.prop, op: 'like', value: v })
   }
-  const query: Record<string, any> = { page: params.page - 1, size: params.size }
+  const query: Record<string, any> = { page: Math.max(0, params.page - 1), size: params.size }
   if (filterConditions.length > 0) {
     query.filter = JSON.stringify({ logic: 'AND', conditions: filterConditions })
   }
@@ -257,15 +279,15 @@ function buildFormRule() {
 const detailRules = computed(() => buildFormRule())
 
 const formConfig = computed(() => {
-  if (!props.dsRefId || !writable.value) return undefined
+  if (!writable.value) return undefined
   return {
     rule: buildFormRule(),
     labelWidth: '100px',
-    createApi: (data: any) => dataSourceApi.createData(props.dsRefId!, data),
-    updateApi: (id: string, data: any, row?: any) => dataSourceApi.updateData(props.dsRefId!, id, data, row?.version),
-    deleteApi: (id: string) => dataSourceApi.deleteData(props.dsRefId!, id),
+    createApi: (data: any) => dataSourceApi.createData(resolvedRefId.value, data),
+    updateApi: (id: string, data: any, row?: any) => dataSourceApi.updateData(resolvedRefId.value, id, data, row?.version),
+    deleteApi: (id: string) => dataSourceApi.deleteData(resolvedRefId.value, id),
     getApi: async (id: string) => {
-      const r = await dataSourceApi.getData(props.dsRefId!, id)
+      const r = await dataSourceApi.getData(resolvedRefId.value, id)
       return r?.data?.data || {}
     },
     dialogWidth: '500px',
@@ -401,22 +423,22 @@ async function dispatchButtonAction(action: { type: string; params?: { key: stri
             if (filter) setFilter(filter)
             else refresh()
           },
-          detail: (id: string) => (props.dsRefId ? dataSourceApi.getData(props.dsRefId, id) : Promise.reject(new Error('数据源未绑定'))),
+          detail: (id: string) => (resolvedRefId.value ? dataSourceApi.getData(resolvedRefId.value, id) : Promise.reject(new Error('数据源未绑定'))),
           create: (data: Record<string, unknown>) =>
-            props.dsRefId ? dataSourceApi.createData(props.dsRefId, data) : Promise.reject(new Error('数据源未绑定')),
+            resolvedRefId.value ? dataSourceApi.createData(resolvedRefId.value, data) : Promise.reject(new Error('数据源未绑定')),
           update: (id: string, data: Record<string, unknown>) =>
-            props.dsRefId ? dataSourceApi.updateData(props.dsRefId, id, data, row?.version) : Promise.reject(new Error('数据源未绑定')),
+            resolvedRefId.value ? dataSourceApi.updateData(resolvedRefId.value, id, data, row?.version) : Promise.reject(new Error('数据源未绑定')),
           remove: (id: string) =>
-            props.dsRefId ? dataSourceApi.deleteData(props.dsRefId, id) : Promise.reject(new Error('数据源未绑定')),
+            resolvedRefId.value ? dataSourceApi.deleteData(resolvedRefId.value, id) : Promise.reject(new Error('数据源未绑定')),
         },
-        api: { pageKey: props.pageKey || '', dataSourceId: props.dsRefId || '' },
+        api: { pageKey: props.pageKey || '', dataSourceId: resolvedRefId.value || '' },
         actions: {
           refresh: () => refresh(),
           openDetail: () => openDetail(row),
           openCreate: () => tableRef.value?.openFormDialog(),
           openEdit: () => (row ? tableRef.value?.openEdit(row) : undefined),
           remove: (id: string) =>
-            props.dsRefId ? dataSourceApi.deleteData(props.dsRefId, id) : Promise.reject(new Error('数据源未绑定')),
+            resolvedRefId.value ? dataSourceApi.deleteData(resolvedRefId.value, id) : Promise.reject(new Error('数据源未绑定')),
         },
         $: { message: (msg: string, type = 'info') => ElMessage({ message: msg, type: type as any }) },
       })
@@ -437,14 +459,14 @@ function openDetail(row: any) {
 
 /** 删除：确认后调用数据源删除 API，并刷新列表 */
 async function handleDelete(row: any) {
-  if (!props.dsRefId) return
+  if (!resolvedRefId.value) return
   try {
     await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
   } catch {
     return
   }
   try {
-    await dataSourceApi.deleteData(props.dsRefId, row.id)
+    await dataSourceApi.deleteData(resolvedRefId.value, row.id)
     ElMessage.success('删除成功')
     tableRef.value?.fetchList()
   } catch {
@@ -506,24 +528,33 @@ function openCreate() {
 
 defineExpose({ refresh, fetchData: refresh, records, setFilter, resetFilter, openCreate })
 
-onMounted(async () => {
-  // 加载元数据（可写标记 + 列定义，供 formConfig 动态生成表单）
-  if (props.dsRefId) {
-    try {
-      const res = await dataSourceApi.getMetadata(props.dsRefId)
-      const meta = res.data as any
-      writable.value = !!meta?.writable
-      metaColumns.value = (meta?.columns || []).map((c: any) => ({
-        key: c.key,
-        label: c.label || c.key,
-        columnType: c.columnType,
-        required: c.required,
-        scale: c.scale,
-      }))
-    } catch {
-      // 元数据加载失败不阻断表格展示
-    }
+/** 加载数据源元数据（列定义 + writable 标记） */
+async function loadMetadata() {
+  if (!resolvedRefId.value) return
+  try {
+    const res = await dataSourceApi.getMetadata(resolvedRefId.value)
+    const meta = res.data as any
+    writable.value = !!meta?.writable
+    metaColumns.value = (meta?.columns || []).map((c: any) => ({
+      key: c.key,
+      label: c.label || c.key,
+      columnType: c.columnType,
+      required: c.required,
+      scale: c.scale,
+    }))
+  } catch {
+    // 元数据加载失败不阻断表格展示
   }
+}
+
+onMounted(async () => {
+  await loadMetadata()
   emit('ready', { refresh, setFilter, resetFilter, openCreate, records })
+})
+
+// 数据源切换时重新加载元数据，标记使用元数据列
+watch(() => resolvedRefId.value, () => {
+  useMetadataColumns.value = true
+  loadMetadata()
 })
 </script>

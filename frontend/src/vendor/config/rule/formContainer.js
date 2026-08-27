@@ -1,7 +1,7 @@
 import { localeProps } from '../../utils'
 import uniqueId from '@form-create/utils/lib/unique'
 
-const label = '数据表单容器'
+const label = '数据容器'
 const name = 'formContainer'
 
 export default {

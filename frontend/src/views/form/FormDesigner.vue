@@ -79,52 +79,45 @@
       @confirm="handleLookupConfirm"
     />
 
+    <!-- 数据容器/数据表格 数据源配置 -->
+    <DsBindingConfigDialog
+      v-model="containerDialogVisible"
+      :current-fields="currentFieldKeys"
+      :binding-props="currentContainerProps"
+      :form-data-sources="formDataSources"
+      @confirm="handleContainerConfirm"
+    />
+    <DsBindingConfigDialog
+      v-model="tableDsDialogVisible"
+      :current-fields="currentFieldKeys"
+      :binding-props="currentTableDsProps"
+      :form-data-sources="formDataSources"
+      :table-mode="true"
+      @confirm="handleTableDsConfirm"
+    />
+
     <!-- 数据源配置弹窗 -->
     <el-dialog v-model="dsDialogVisible" title="数据源绑定与动作总线" width="680px">
       <DataSourceConfigPanel
+        v-if="dsDialogVisible"
+        ref="dsConfigPanelRef"
         :dataSources="formDataSources"
         :enabledDataSources="enabledDataSources"
         :actions="formActions"
+        :currentFormFields="currentFieldKeys"
         @update:dataSources="updateFormDataSources"
         @update:actions="updateFormActions"
       />
       <template #footer>
-        <el-button @click="dsDialogVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 数据表格统一配置弹窗（对齐 PageDesigner 风格：显示列/操作/事件） -->
-    <el-dialog v-model="tableConfigVisible" title="数据表格配置" width="860px" destroy-on-close>
-      <el-tabs v-model="tableConfigTab" type="border-card">
-        <el-tab-pane label="显示列" name="columns">
-          <QueryColumnsConfig
-            :candidates="tableConfigColumns"
-            :filterable-keys="tableConfigFilterableKeys"
-            v-model:search-fields="tableConfigData.searchFields"
-            v-model:columns="tableConfigData.columns"
-            :show-search="false"
-          />
-        </el-tab-pane>
-        <el-tab-pane label="操作" name="actions">
-          <ActionsConfig
-            v-model="tableConfigData.actions"
-            :detail="tableConfigData.detail"
-          />
-        </el-tab-pane>
-        <el-tab-pane label="事件" name="events">
-          <EventsConfig v-model="tableConfigData.events" />
-        </el-tab-pane>
-      </el-tabs>
-      <template #footer>
-        <el-button @click="tableConfigVisible = false">取消</el-button>
-        <el-button type="primary" @click="applyTableConfig">确定</el-button>
+        <el-button @click="dsDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmDsConfig">确定</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, provide, reactive } from 'vue'
+import { ref, onMounted, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion } from '@element-plus/icons-vue'
@@ -134,15 +127,11 @@ import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
+import DsBindingConfigDialog from './components/DsBindingConfigDialog.vue'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
 import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from './formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
-import { containerFieldValidator } from './components/containerFieldValidator'
-// 数据表格配置弹窗组件（复用页面设计器，均为纯 UI 配置组件，无页面级上下文依赖）
-import QueryColumnsConfig from '@/views/page/components/QueryColumnsConfig.vue'
-import ActionsConfig from '@/views/page/components/ActionsConfig.vue'
-import EventsConfig from '@/views/page/components/EventsConfig.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -167,6 +156,13 @@ const enabledDataSources = ref<DataSourceDTO[]>([])
 
 /** 数据源配置弹窗状态 */
 const dsDialogVisible = ref(false)
+const dsConfigPanelRef = ref<InstanceType<typeof DataSourceConfigPanel> | null>(null)
+
+function confirmDsConfig() {
+  dsConfigPanelRef.value?.confirm()
+  dsDialogVisible.value = false
+  setActiveDsBindings(formDataSources.value)
+}
 
 /** 表单级数据源绑定配置 */
 const formDataSources = ref<DataSourceBinding[]>([])
@@ -176,22 +172,6 @@ const formActions = ref<Array<{
   trigger: string
   steps: Array<{ op: string; target: string; field?: string; value?: string }>
 }>>([])
-
-// ===== 数据表格统一配置弹窗状态（对齐 PageDesigner） =====
-const tableConfigVisible = ref(false)
-const tableConfigTab = ref('columns')
-/** 当前选中组件的列候选项（从数据源 metadata 加载） */
-const tableConfigColumns = ref<any[]>([])
-/** 可筛选列 key 集合 */
-const tableConfigFilterableKeys = ref<Set<string>>(new Set())
-/** 配置数据（临时，确定后写回 activeRule） */
-const tableConfigData = reactive({
-  searchFields: [] as any[],
-  columns: [] as any[],
-  actions: { buttons: [] as any[], permissions: '' },
-  detail: { width: '800px', type: 'form' },
-  events: [] as any[],
-})
 
 // ===== data-picker 配置 =====
 const pickerDialogVisible = ref(false)
@@ -252,7 +232,7 @@ onMounted(async () => {
         type: 'button',
         field: 'lookupConfigTrigger',
         title: '',
-        children: ['点击配置数据源'],
+        children: ['配置数据源'],
         native: true,
         style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
         props: { size: 'small' },
@@ -284,7 +264,7 @@ onMounted(async () => {
         type: 'button',
         field: 'dataPickerConfigTrigger',
         title: '',
-        children: ['点击配置数据引用'],
+        children: ['配置数据源'],
         native: true,
         style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
         props: { size: 'small' },
@@ -388,50 +368,21 @@ onMounted(async () => {
   }
 })
 
-/** 注册 FORM 容器数据源下拉到属性面板 */
+/** 注册 FORM 容器数据源属性面板（按钮 → 弹窗配置） */
 function registerFormContainerProps() {
   if (!designerRef.value) return
   designerRef.value.setComponentRuleConfig(
     'formContainer',
     () => [
       {
-        type: 'select',
-        field: 'dataSourceId',
+        type: 'button',
+        field: 'dsConfigTrigger',
         title: '数据源',
-        value: '',
-        options: formDataSources.value.map((ds) => ({
-          value: ds.id,
-          label: ds.id,
-        })),
-        props: {
-          clearable: true,
-          filterable: true,
-          placeholder: '选择页面内数据源',
-        },
-        /** 数据源变更时校验容器子字段是否存在于 metadata */
-        onChange: async (val: string) => {
-          if (!val || !designerRef.value) return
-          const activeRule = designerRef.value.activeRule
-          // 画布上 formContainer 经 loadRule 后 type 为 FcRow（保存格式为 formContainer）
-          if (!activeRule || !['formContainer', 'FcRow'].includes(activeRule.type)) return
-          const children = (activeRule.children || []) as any[]
-          if (children.length === 0) return
-          // 查找页面内数据源对应的全局数据源ID
-          const ds = formDataSources.value.find((d) => d.id === val)
-          if (!ds || !ds.refId) return
-          try {
-            const res = await dataSourceApi.getMetadata(ds.refId)
-            const columns = res.data?.columns || []
-            const result = containerFieldValidator(children, columns)
-            if (result.invalidFields.length > 0) {
-              ElMessage.warning(
-                `以下字段不在数据源列中：${result.invalidFields.join('、')}`,
-              )
-            }
-          } catch {
-            // getMetadata 失败不阻塞，http 拦截器已提示
-          }
-        },
+        children: ['配置数据源'],
+        native: true,
+        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        props: { size: 'small' },
+        on: { click: () => openContainerConfig() },
       },
       {
         type: 'json',
@@ -440,139 +391,29 @@ function registerFormContainerProps() {
         value: { type: 'current-record' },
       },
     ],
-    false, // 替换内置 props（append=true 会与 formContainer.js 内置 dataSourceId/recordLocator 重复，导致属性值绑定冲突）
+    false,
   )
 }
 
-/** 注册数据表格数据源属性面板（选项来自表单级绑定层，数据源变更时自动刷新列） */
+/** 注册数据表格数据源属性面板（按钮 → 弹窗配置） */
 function registerDataTableProps() {
   if (!designerRef.value) return
   designerRef.value.setComponentRuleConfig(
     'page-table',
     () => [
       {
-        type: 'select',
-        field: 'dataSourceId',
-        title: '数据源',
-        value: '',
-        options: formDataSources.value.map((ds) => ({
-          value: ds.id,
-          label: ds.id,
-        })),
-        props: {
-          clearable: true,
-          filterable: true,
-          placeholder: '选择表单数据源',
-        },
-        /** 数据源变更时自动加载 metadata 生成表格列（对齐页面设计器行为） */
-        onChange: async (val: string) => {
-          if (!val || !designerRef.value) return
-          const activeRule = designerRef.value.activeRule
-          if (!activeRule || activeRule.type !== 'page-table') return
-          const ds = formDataSources.value.find((d) => d.id === val)
-          if (!ds || !ds.refId) return
-          try {
-            const res = await dataSourceApi.getMetadata(ds.refId)
-            const cols = (res.data?.columns || []).map((c: any) => ({
-              prop: c.key,
-              label: c.label || c.key,
-            }))
-            if (activeRule.props) {
-              activeRule.props.columns = cols
-            }
-          } catch {
-            // getMetadata 失败不阻塞，http 拦截器已提示
-          }
-        },
-      },
-      // ===== 数据表格配置入口（对齐 PageDesigner：全宽蓝色描边按钮，点击打开统一配置弹窗） =====
-      {
         type: 'button',
-        field: 'tableConfigTrigger',
-        title: '',
-        children: ['数据表格配置'],
+        field: 'dsConfigTrigger',
+        title: '数据源',
+        children: ['配置数据源'],
         native: true,
         style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
         props: { size: 'small' },
-        on: { click: () => openTableConfig() },
+        on: { click: () => openTableDsConfig() },
       },
     ],
-    true, // 追加到属性面板（page-table 无内置 props）
+    false,
   )
-}
-
-/** 打开数据表格统一配置弹窗（显示列/操作/事件），数据源取自表单级绑定层 formDataSources */
-async function openTableConfig() {
-  const active = designerRef.value?.activeRule as any
-  if (!active?.props?.dataSourceId) {
-    ElMessage.warning('请先选择数据源')
-    return
-  }
-  // 加载数据源列候选项
-  const ds = formDataSources.value.find((d: any) => d.id === active.props.dataSourceId)
-  if (ds?.refId) {
-    try {
-      const res = await dataSourceApi.getMetadata(ds.refId)
-      const meta = res.data as any
-      const cols = (meta?.columns || []).filter((c: any) => !c.hidden)
-      tableConfigColumns.value = cols
-      // 可筛选列
-      const filterable = cols.filter((c: any) =>
-        c.columnType !== 'JSON' && c.columnType !== 'TEXT' &&
-        (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
-      )
-      tableConfigFilterableKeys.value = new Set(filterable.map((c: any) => c.key))
-    } catch {
-      tableConfigColumns.value = []
-    }
-  }
-  // 初始化配置数据（从 activeRule.props 读取）
-  const props = active.props || {}
-  tableConfigData.searchFields = props.searchFields || []
-  // props.columns 为渲染格式 { prop, label, width, ... }，转换为配置格式 { key, label, width, ... }
-  // 空数组/未配置时 fallback 到数据源全列（默认全选显示）
-  const srcColumns = (props.columns && props.columns.length > 0)
-    ? props.columns
-    : tableConfigColumns.value.map((c: any) => ({ prop: c.key, label: c.label || c.key }))
-  tableConfigData.columns = srcColumns.map((c: any) => ({
-    key: c.prop ?? c.key,
-    label: c.label || c.prop || c.key,
-    width: c.width,
-    align: c.align,
-    sortable: c.sortable,
-    formatter: c.formatter,
-    fixed: c.fixed,
-  }))
-  tableConfigData.actions = props.viewActions || { buttons: [
-    { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
-    { key: 'delete', label: '删除', placement: 'column', style: 'text' },
-  ], permissions: '' }
-  tableConfigData.detail = props.viewDetail || { width: '800px', type: 'form' }
-  tableConfigData.events = props.viewEvents || []
-  tableConfigTab.value = 'columns'
-  tableConfigVisible.value = true
-}
-
-function applyTableConfig() {
-  const active = designerRef.value?.activeRule as any
-  if (!active?.props) return
-  // 写回配置到 activeRule.props
-  active.props.searchFields = [...tableConfigData.searchFields]
-  // 配置格式 { key, label, ... } 转换为渲染格式 { prop, label, ... }（PageDataTable 读取 prop）
-  active.props.columns = tableConfigData.columns.map((c: any) => ({
-    prop: c.key ?? c.prop,
-    label: c.label || c.key,
-    width: c.width,
-    align: c.align,
-    sortable: c.sortable,
-    formatter: c.formatter,
-    fixed: c.fixed,
-  }))
-  active.props.viewActions = { ...tableConfigData.actions }
-  active.props.viewDetail = { ...tableConfigData.detail }
-  active.props.viewEvents = [...tableConfigData.events]
-  tableConfigVisible.value = false
-  ElMessage.success('数据表格配置已保存')
 }
 
 async function handleSave() {
@@ -715,6 +556,36 @@ function handleLookupConfirm(newProps: Record<string, any>) {
   patchFieldProps(rules, 'LookupPicker', selectedLookupField.value, newProps)
   designerRef.value?.setRule(rules)
   ElMessage.success('数据源配置已保存')
+}
+
+// ===== 数据容器（formContainer）数据源配置 =====
+const containerDialogVisible = ref(false)
+const currentContainerProps = computed<Record<string, any>>(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.props || {}
+})
+function openContainerConfig() {
+  containerDialogVisible.value = true
+}
+function handleContainerConfirm(newProps: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (active?.props) Object.assign(active.props, newProps)
+  ElMessage.success('数据容器配置已保存')
+}
+
+// ===== 数据表格（page-table）数据源配置 =====
+const tableDsDialogVisible = ref(false)
+const currentTableDsProps = computed<Record<string, any>>(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.props || {}
+})
+function openTableDsConfig() {
+  tableDsDialogVisible.value = true
+}
+function handleTableDsConfirm(newProps: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (active?.props) Object.assign(active.props, newProps)
+  ElMessage.success('数据表格数据源配置已保存')
 }
 
 /** 更新表单级数据源绑定配置 */

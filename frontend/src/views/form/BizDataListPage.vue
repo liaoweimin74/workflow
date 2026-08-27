@@ -22,6 +22,7 @@
       :default-page-size="20"
       :page-sizes="[10, 20, 50]"
       :delete-confirm="deleteConfirm"
+      @open-new-tab="handleOpenNewTab"
     >
       <!-- 子表字段列：显示 [子表名称] 链接，点击弹窗查看子表行 -->
       <template
@@ -80,6 +81,8 @@ const columnConfig = ref<ColumnConfigItem[]>([])
 const schemaRules = ref<Rule[]>([])
 const schemaOption = ref<Record<string, any>>({})
 const schemaActions = ref<any[]>([])
+/** 表单级数据源绑定（schema.dataSources，供表单内数据组件解析 refId） */
+const schemaDataSources = ref<any[]>([])
 const loaded = ref(false)
 
 /** 引用感知：本表单被 dataPicker 引用统计（{ count, referencedBy }） */
@@ -258,6 +261,7 @@ const formConfig = computed<FormConfig<Record<string, any>>>(() => ({
   rule: schemaRules.value,
   option: schemaOption.value,
   actions: schemaActions.value,
+  dataSources: schemaDataSources.value,
   dialogWidth: '640px',
   dialogTitle: { create: '新增数据', edit: '编辑数据' },
   createPermission: 'form:edit',
@@ -273,9 +277,17 @@ const formConfig = computed<FormConfig<Record<string, any>>>(() => ({
 }))
 
 /** 删除确认文案：本表单被引用时提示影响范围（悬空降级后显示原始 id/标红） */
+/** newTab 容器联动：新页签打开当前页 + query 参数（容器标识 + 记录 ID，FormRenderer 落地自动打开弹窗容器） */
+function handleOpenNewTab(containerKey: string, recordId: string) {
+  const resolved = router.resolve({
+    query: { ...route.query, container: containerKey, ...(recordId ? { recordId } : {}) },
+  })
+  window.open(resolved.href, '_blank')
+}
+
 function deleteConfirm(): string {
   if (refInfo.value && refInfo.value.count > 0) {
-    return `本表单被 ${refInfo.value.count} 个表单引用，删除记录可能导致相关表单引用悬空。确定删除吗？`
+    return `本表单被 ${refInfo.value.count} 个表单引用，删除记录可能导致相关表单引用悬空。确定吗？`
   }
   return '确定删除该记录吗？'
 }
@@ -311,6 +323,8 @@ async function loadFormMeta() {
       schemaOption.value = !Array.isArray(parsed) && parsed.option ? parsed.option : {}
       // 表格-容器联动动作链（表单设计器"数据源配置"→动作总线配置）
       schemaActions.value = !Array.isArray(parsed) && Array.isArray(parsed.actions) ? parsed.actions : []
+      // 表单级数据源绑定（表单内 page-table/LookupPicker 解析 refId 依赖）
+      schemaDataSources.value = !Array.isArray(parsed) && Array.isArray(parsed.dataSources) ? parsed.dataSources : []
     }
     loaded.value = true
   } catch {

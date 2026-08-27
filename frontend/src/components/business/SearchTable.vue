@@ -228,6 +228,7 @@
         :option="formConfig.option"
         :initial-values="dialogInitialValues"
         :actions="formConfig.actions"
+        :data-sources="formConfig.dataSources"
         @open-new-tab="(key, rid) => $emit('open-new-tab', key, rid)"
       />
       <template #footer>
@@ -296,6 +297,7 @@ const emit = defineEmits<{
   'cell-click': [row: any, column: any, cell: any, event: Event]
   'selection-change': [selection: any[]]
   'sort-change': [args: { column: any; prop: string; order: string }]
+  'open-new-tab': [containerKey: string, recordId: string]
 }>()
 
 const loading = ref(false)

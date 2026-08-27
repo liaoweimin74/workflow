@@ -111,6 +111,8 @@ export interface FormConfig<T = any> {
   option?: Record<string, any>
   /** 表格-容器联动动作链（schema.actions：trigger/source/steps），传给 FormRenderer 驱动表单内表格联动 */
   actions?: any[]
+  /** 表单级数据源绑定（schema.dataSources），传给 FormRenderer 写入 activeDsBindings（表单内 page-table/LookupPicker 解析 refId 用） */
+  dataSources?: DataSourceBindingContext[]
   /** 新增表单的初始值，handleCreate 时与传入 initialValues 合并 */
   initialValues?: Partial<T>
   createApi?: (data: any) => Promise<any>

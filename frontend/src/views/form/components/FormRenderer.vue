@@ -45,6 +45,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed, provide, markRaw, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRoute } from 'vue-router'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
 import { createDsBindingEngine } from './DsBindingEngine'
@@ -116,6 +117,18 @@ const resolvedSchema = ref<Rule[]>([])
 const formData = ref<Record<string, unknown>>({})
 const existingFormDataId = ref<string | null>(null)
 const formVersion = ref<number | null>(null)
+
+/** 路由 query（newTab 落地页用；测试环境无 router 时为 undefined） */
+const routeQuery = (() => {
+  try {
+    return useRoute()?.query as Record<string, any> | undefined
+  } catch {
+    return undefined
+  }
+})()
+
+/** newTab 落地处理标记（仅首次 schema 加载时处理 query.container） */
+let queryHandled = false
 
 /** 从 schema 加载的表单级数据源绑定（formDefId 场景） */
 const schemaDataSources = ref<DataSourceBindingContext[]>([])
@@ -224,6 +237,21 @@ function extractDialogContainers(rules: Rule[]): Rule[] {
       })
   const mainTree = walk(rules)
   dialogContainers.value = dialogs
+  // newTab 落地页：query.container=容器标识 时自动打开弹窗（须通过 reactive proxy 写，绕开闭包原始对象陷阱）
+  if (!queryHandled && routeQuery?.container) {
+    queryHandled = true
+    const qc = String(routeQuery.container)
+    const qrid = routeQuery.recordId ? String(routeQuery.recordId) : ''
+    nextTick(() => {
+      const rc = dialogContainers.value.find((x) => x.key === qc)
+      if (!rc) return
+      rc.visible = true
+      if (qrid && rc.engine) {
+        rc.currentRecordId = qrid
+        void rc.engine.loadRecord(qrid)
+      }
+    })
+  }
   return mainTree
 }
 

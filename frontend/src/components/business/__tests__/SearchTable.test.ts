@@ -57,12 +57,14 @@ const FormRendererStub = defineComponent({
     initialValues: { type: Object, default: () => ({}) },
     formDefId: { type: String, default: undefined },
     actions: { type: Array, default: () => [] },
+    dataSources: { type: Array, default: () => [] },
   },
   setup(props) {
     const data = ref<Record<string, any>>({ ...(props.initialValues || {}) })
     return {
       data,
       actions: props.actions,
+      dataSources: props.dataSources,
       getFormData: () => data.value,
       setFormData: (val: Record<string, any>) => { data.value = val },
     }
@@ -252,6 +254,37 @@ describe('SearchTable — formConfig', () => {
     const renderer = wrapper.findComponent(FormRendererStub)
     expect(renderer.exists()).toBe(true)
     expect((renderer.vm as any).actions).toEqual(linkageActions)
+  })
+
+  it('formConfig.dataSources 传递给弹窗内 FormRenderer（表单内数据组件解析 refId 依赖）', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+    const dataSources = [
+      { id: 'ds_mta77dtz', refId: 'uuid-ref-1' },
+      { id: 'ds_2', refId: 'uuid-ref-2' },
+    ]
+    const wrapper = createWrapper({
+      columns: [{ prop: 'username', label: '用户名' }],
+      formConfig: {
+        rule: testRule,
+        dataSources,
+        createApi: vi.fn(),
+        updateApi: vi.fn(),
+        deleteApi: vi.fn(),
+      },
+      fetchApi,
+    })
+    await nextTick()
+    await nextTick()
+    // 打开新增弹窗 → FormRenderer 渲染
+    const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新增'))
+    expect(createBtn).toBeTruthy()
+    await createBtn!.trigger('click')
+    await nextTick()
+    await nextTick()
+    // FormRenderer stub 收到 dataSources（写入 activeDsBindings 的数据源）
+    const renderer = wrapper.findComponent(FormRendererStub)
+    expect(renderer.exists()).toBe(true)
+    expect((renderer.vm as any).dataSources).toEqual(dataSources)
   })
 })
 

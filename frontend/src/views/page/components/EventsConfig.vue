@@ -108,6 +108,12 @@ const triggerOptions = [
   { label: '单元格点击', value: 'cell-click' },
   { label: '行选择变化', value: 'selection-change' },
   { label: '当前行变化', value: 'current-change' },
+  // ===== 表单容器触发器 =====
+  { label: '弹窗打开', value: 'dialog-open' },
+  { label: '弹窗关闭', value: 'dialog-close' },
+  { label: '加载记录成功', value: 'load-success' },
+  { label: '保存成功', value: 'save-success' },
+  { label: '删除成功', value: 'delete-success' },
 ]
 
 const actionTypeOptions = [
@@ -118,6 +124,12 @@ const actionTypeOptions = [
   { label: '设置排序', value: 'set-sort' },
   { label: '设置分页', value: 'set-page' },
   { label: '清空选择', value: 'clear-selection' },
+  // ===== 表单容器专属动作 =====
+  { label: '打开容器', value: 'open-container' },
+  { label: '关闭容器', value: 'close-container' },
+  { label: '加载记录', value: 'load-record' },
+  { label: '保存容器', value: 'save-container' },
+  { label: '新增记录', value: 'new-record' }, // 复制后创建
 ]
 
 function commit(v: PageEventConfig[]) {

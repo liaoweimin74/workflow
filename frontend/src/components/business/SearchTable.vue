@@ -228,6 +228,7 @@
         :option="formConfig.option"
         :initial-values="dialogInitialValues"
         :actions="formConfig.actions"
+        @open-new-tab="(key, rid) => $emit('open-new-tab', key, rid)"
       />
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>

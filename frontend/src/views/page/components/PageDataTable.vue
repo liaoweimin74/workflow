@@ -32,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, inject } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, inject } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -233,6 +233,15 @@ const resolvedRefId = computed(() => {
     if (binding?.refId) return binding.refId
   }
   return ''
+})
+
+// 数据源绑定就绪后自动刷新（解决首次加载时 activeDsBindings 为空导致 fetchApi 返回空数据的问题）
+let _dsBindingsRefreshed = false
+watch(() => activeDsBindings.value.length, (len) => {
+  if (len > 0 && !_dsBindingsRefreshed) {
+    _dsBindingsRefreshed = true
+    nextTick(() => { tableRef.value?.fetchList() })
+  }
 })
 
 const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {

@@ -20,6 +20,7 @@ vi.mock('@/api/form', () => ({
 }))
 
 import { formApi } from '@/api/form'
+import { dataSourceApi } from '@/api/data-source'
 
 // Mock dataSourceApi for FORM container binding engine
 vi.mock('@/api/data-source', () => ({
@@ -582,5 +583,80 @@ describe('FormRenderer - FORM container binding engine mount', () => {
     // form-create stub renders an input per field
     expect(wrapper.find('.form-create-stub').exists()).toBe(true)
     expect(wrapper.find('input[data-field="username"]').exists()).toBe(true)
+  })
+})
+
+describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit → load-record）', () => {
+  it('provide pageActionBus：dispatch 可被表格组件注入使用', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_a',
+        title: '数据表单容器',
+        props: { dataSourceId: 'ds_1', recordLocator: { type: 'current-record' } },
+        children: [{ type: 'input', field: 'name', title: '名称', value: '' } as Rule],
+      } as unknown as Rule,
+    ]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1' })
+    await nextTick()
+
+    // FormRenderer 应 provide pageActionBus（供表单内 PageDataTable 注入）
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    expect(bus).toBeTruthy()
+    expect(typeof bus!.dispatch).toBe('function')
+  })
+
+  it('dispatch row-edit + load-record 动作时调用容器引擎 loadRecord', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_a',
+        title: '数据表单容器',
+        props: { dataSourceId: 'ds_1', recordLocator: { type: 'current-record' } },
+        children: [{ type: 'input', field: 'name', title: '名称', value: '' } as Rule],
+      } as unknown as Rule,
+    ]
+    // 传入表单级动作链：row-edit(source=ds_1) → load-record
+    const actions = [
+      {
+        trigger: 'row-edit',
+        source: 'ds_1',
+        steps: [{ op: 'open-container', target: 'ds_1' }, { op: 'load-record', target: 'ds_1', recordId: '{row.id}' }],
+      },
+    ]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1', actions })
+    await nextTick()
+
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    expect(bus).toBeTruthy()
+
+    // 派发 row-edit → 匹配动作链 load-record → 引擎 loadRecord 被调用（mock getData 返回 rec_2）
+    ;(dataSourceApi.getData as any).mockResolvedValueOnce({
+      data: { id: 'rec_2', version: 1, data: { name: '李四' } },
+    })
+    const consumed = bus!.dispatch('row-edit', { node: { id: 'rec_2' }, row: { id: 'rec_2' }, source: 'ds_1' })
+    await nextTick()
+
+    // 有匹配动作 → 返回 true（表格跳过默认行为）
+    expect(consumed).toBe(true)
+    // 容器引擎 loadRecord 触发了 getData 请求
+    expect(dataSourceApi.getData).toHaveBeenCalled()
+  })
+
+  it('dispatch 无匹配动作时返回 false（表格回退默认行为）', async () => {
+    const wrapper = createWrapper({ rule: simpleRule, recordId: () => 'rec_1' })
+    await nextTick()
+
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    expect(bus).toBeTruthy()
+    // 无容器/无动作链 → dispatch 返回 false
+    const consumed = bus!.dispatch('row-edit', { node: { id: 'r1' }, row: { id: 'r1' }, source: '' })
+    expect(consumed).toBe(false)
   })
 })

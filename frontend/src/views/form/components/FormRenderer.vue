@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted, computed, provide } from 'vue'
 import { ElMessage } from 'element-plus'
 import formCreate, { type Rule } from '@form-create/element-ui'
 import { formApi, type FormDataDTO } from '@/api/form'
@@ -22,6 +22,25 @@ import { dataSourceApi } from '@/api/data-source'
 import { normalizeForRender } from '../schemaRules'
 import type { DataSourceBindingContext } from '@/components/business/types'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
+import PageDataTable from '@/views/page/components/PageDataTable.vue'
+
+// 注册数据表格组件到 form-create（表单内嵌 page-table 支持）
+formCreate.component('page-table', PageDataTable)
+
+/** 表单级动作链类型（对齐 DataSourceConfigPanel Action：trigger/source/steps） */
+interface FormActionStep {
+  op: string
+  target: string
+  field?: string
+  value?: string
+  displayMode?: string
+  recordId?: string
+}
+interface FormAction {
+  trigger: string
+  source?: string
+  steps: FormActionStep[]
+}
 
 const props = defineProps<{
   /** 表单定义 ID，传入后通过 API 加载 schema。与 rule 互斥，formDefId 优先。 */
@@ -41,6 +60,8 @@ const props = defineProps<{
   readonly?: boolean
   /** data-linkage action chain config (optional) */
   links?: DsLink[]
+  /** 表格-容器联动动作链（schema.actions，trigger/source/steps 结构） */
+  actions?: FormAction[]
   /** record locator: return current record id */
   recordId?: () => string | undefined
   /** notify record context change (tree click / route param) */
@@ -65,6 +86,12 @@ const formVersion = ref<number | null>(null)
 
 /** 从 schema 加载的表单级数据源绑定（formDefId 场景） */
 const schemaDataSources = ref<DataSourceBindingContext[]>([])
+
+/** 表单级动作链（schema.actions，表格-容器联动用） */
+const schemaActions = ref<FormAction[]>([])
+
+/** 生效动作链：props.actions 优先，其次 schema.actions */
+const effectiveActions = computed<FormAction[]>(() => props.actions ?? schemaActions.value)
 
 /** 注入给数据组件的绑定上下文：prop 直传优先，其次 schema 加载结果 */
 const dsBindings = computed<DataSourceBindingContext[]>(
@@ -164,6 +191,10 @@ async function loadSchema() {
     // 恢复表单级数据源绑定（供 LookupPicker/dataPicker 按 dataSourceId 解析）
     if (!Array.isArray(schema) && Array.isArray(schema.dataSources)) {
       schemaDataSources.value = schema.dataSources
+    }
+    // 恢复表单级动作链（表格-容器联动）
+    if (!Array.isArray(schema) && Array.isArray(schema.actions)) {
+      schemaActions.value = schema.actions
     }
     // 合并设计器 option（labelPosition 等布局配置）
     if (!Array.isArray(schema) && schema.option) {
@@ -321,12 +352,19 @@ watch(formData, (val, oldVal) => {
 /** 挂载容器数据源绑定引擎与联动总线（无容器时 no-op） */
 function mountDsBinding() {
   if (!resolvedSchema.value.length) return
-  // 联动总线：执行 reload-record 动作（重载当前记录回显）
-  const bus = createActionBus(async (op, _target) => {
+  // 联动总线：支持 reload-record 与表格-容器联动动作（open-container/load-record/save-container/close-container）
+  const bus = createActionBus(async (op, target, resolved, ctx) => {
     if (op === 'reload-record') {
       const id = props.recordId?.()
       if (id) await bindingEngine.value?.loadRecord(id)
+    } else if (op === 'load-record') {
+      // 表单场景容器内嵌：按 recordId 加载记录到容器字段（引擎已挂载表单容器）
+      const rid = resolved.recordId || String(ctx?.row?.id ?? ctx?.record?.id ?? '')
+      if (rid) await bindingEngine.value?.loadRecord(rid)
+    } else if (op === 'save-container') {
+      await bindingEngine.value?.flush()
     }
+    // open-container / close-container：表单容器内嵌，无需弹窗/关闭动作（返回即可）
   })
   if (props.links) bus.register(props.links)
   actionBus.value = bus
@@ -356,6 +394,68 @@ function mountDsBinding() {
     actionBus.value = null
   }
 }
+
+// ==================== 表格-容器联动（pageActionBus provide） ====================
+
+/** 解析步骤 value 模板（{row.id} / {record.id} / 字面量） */
+function resolveTemplateValue(tpl: string | undefined, eventData: any): string {
+  if (!tpl) return ''
+  return tpl.replace(/\{([^}]+)\}/g, (_: string, path: string) => {
+    const parts = path.split('.')
+    let v: any = eventData
+    for (const p of parts) v = v?.[p]
+    return v === undefined || v === null ? '' : String(v)
+  })
+}
+
+/**
+ * 派发表格-容器联动触发器（PageDataTable 注入 pageActionBus 后调用）。
+ * 匹配表单级动作链（trigger + source），执行步骤；返回是否被消费（表格据此跳过默认行为）。
+ */
+function dispatchAction(trigger: string, eventData: any): boolean {
+  const source = eventData?.source
+  let consumed = false
+  for (const action of effectiveActions.value) {
+    if (action.trigger !== trigger) continue
+    if (action.source && action.source !== source) continue
+    for (const step of action.steps || []) {
+      const op = step.op
+      const target = step.target
+      if (op === 'open-container') {
+        // 表单容器内嵌：目标容器已渲染在表单中，无需额外动作
+        consumed = true
+      } else if (op === 'load-record') {
+        const rid = step.recordId
+          ? resolveTemplateValue(step.recordId, eventData)
+          : String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+        if (rid) void bindingEngine.value?.loadRecord(rid)
+        consumed = true
+      } else if (op === 'save-container') {
+        void bindingEngine.value?.flush()
+        consumed = true
+      } else if (op === 'close-container') {
+        consumed = true
+      } else if (op === 'reload-record') {
+        const rid = props.recordId?.()
+        if (rid) void bindingEngine.value?.loadRecord(rid)
+        consumed = true
+      }
+      void target
+    }
+  }
+  return consumed
+}
+
+/** 组件引用注册表（对齐 PageRendererPage：PageDataTable ready 上报） */
+const componentRefs = new Map<string, any>()
+
+/** 供表单内 PageDataTable 注入的动作总线 */
+provide('pageActionBus', {
+  dispatch: dispatchAction,
+  register: (dataSourceId: string, instance: any) => {
+    componentRefs.set(dataSourceId, instance)
+  },
+})
 
 /** 重新加载当前记录回显容器（记录上下文变化时由调用方触发） */
 async function reloadRecord(): Promise<void> {

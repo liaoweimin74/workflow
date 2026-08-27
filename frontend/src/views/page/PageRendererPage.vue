@@ -70,7 +70,6 @@ provide(ACTION_BUS_KEY, {
     componentRefs[dataSourceId] = instance
   },
 })
-
 const route = useRoute()
 const router = useRouter()
 const pageKey = ref(route.params.pageKey as string)
@@ -434,14 +433,17 @@ function transformComponent(node: any): any {
   return next
 }
 
-/** 执行页面 actions（触发 → steps 动作链） */
-function dispatchActions(trigger: string, eventData: any) {
+/** 执行页面 actions（触发 → steps 动作链）；返回是否存在匹配的动作链（供数据组件判断是否消费） */
+function dispatchActions(trigger: string, eventData: any): boolean {
+  let consumed = false
   for (const action of pageSchema.actions || []) {
     if (action.trigger !== trigger) continue
     for (const step of action.steps || []) {
       executeStep(step, eventData)
+      consumed = true
     }
   }
+  return consumed
 }
 
 /** 执行单个动作 step（set-filter / refresh / set-value / open-detail） */

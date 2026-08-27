@@ -47,8 +47,8 @@ import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
-/** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) */
-const actionBus = inject<{ dispatch: (trigger: string, eventData: any) => void } | undefined>('pageActionBus')
+/** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费 */
+const actionBus = inject<{ dispatch: (trigger: string, eventData: any) => boolean } | undefined>('pageActionBus')
 
 const route = useRoute()
 const router = useRouter()
@@ -302,6 +302,13 @@ function inputTypeOf(columnType?: string): string {
 }
 
 // ==================== 按钮点击分发 ====================
+/** 表格-容器联动触发器映射（按钮 key → 页面总线触发器） */
+const LINKAGE_TRIGGERS: Record<string, string> = {
+  edit: 'row-edit',
+  view: 'row-view',
+  create: 'row-create',
+}
+
 function handleActionClick(btn: any, row: any) {
   // 有绑定事件 → 优先执行事件链（内建/自定义都一样，对齐 PageRenderer）
   if (btn.events?.length) {
@@ -311,6 +318,12 @@ function handleActionClick(btn: any, row: any) {
       }
     }
     return
+  }
+  // 表格-容器联动触发器：派发到页面动作总线（动作链消费时跳过默认行为，避免双弹窗）
+  const linkageTrigger = LINKAGE_TRIGGERS[btn.key]
+  if (linkageTrigger && actionBus) {
+    const consumed = actionBus.dispatch(linkageTrigger, row ? { node: row, row } : {})
+    if (consumed) return
   }
   // 无事件 → 默认行为
   if (btn.key === 'create') {

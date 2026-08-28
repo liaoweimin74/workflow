@@ -51,6 +51,27 @@ export interface BizDataPageVO {
   size: number
 }
 
+/** 页面挂接的菜单项（对齐后端 PageMenuResponse.MenuItem） */
+export interface PageMenuItem {
+  menuId: number
+  menuName: string
+  path: string
+  parentId: number | null
+  permission: string | null
+  status: number | null
+}
+
+/** 页面挂接菜单列表响应（对齐后端 PageMenuResponse） */
+export interface PageMenuListResponse {
+  items: PageMenuItem[]
+}
+
+/** 挂接菜单请求（对齐后端 MountMenuRequest） */
+export interface MountMenuRequest {
+  name?: string
+  parentId?: number | null
+}
+
 export const pageApi = {
   /** 分页查询页面列表 */
   getPages(params: {
@@ -96,5 +117,20 @@ export const pageApi = {
   /** 视图数据分页查询（filter 仅保留页面声明白名单字段） */
   queryPageData(pageKey: string, params: PageQueryParams): Promise<R<BizDataPageVO>> {
     return http.get(`/v1/pages/${pageKey}/data`, { params })
+  },
+
+  /** 挂接菜单（每次调用为已发布页面创建一条新菜单，支持多挂接） */
+  mountMenu(id: string, data: MountMenuRequest): Promise<R<PageMenuItem>> {
+    return http.post(`/v1/pages/${id}/mount-menu`, data)
+  },
+
+  /** 查询页面全部关联菜单 */
+  getMenusByKey(key: string): Promise<R<PageMenuListResponse>> {
+    return http.get(`/v1/pages/${key}/menus`)
+  },
+
+  /** 解除挂接（软删指定菜单） */
+  unmountMenu(menuId: number): Promise<R<void>> {
+    return http.delete(`/v1/pages/menus/${menuId}`)
   },
 }

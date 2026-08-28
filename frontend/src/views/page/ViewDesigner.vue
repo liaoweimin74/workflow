@@ -42,6 +42,9 @@
         >
           {{ formStatus === 'PUBLISHED' ? '重新发布' : '发布' }}
         </el-button>
+        <el-button v-if="formStatus === 'PUBLISHED'" :icon="Menu" @click="openMountDialog">
+          {{ mountedMenus.length ? `已挂接 ${mountedMenus.length} 个菜单` : '挂接菜单' }}
+        </el-button>
         <el-button :icon="View" @click="handlePreview">预览</el-button>
         <el-button :icon="Document" @click="handleShowJson">JSON 配置</el-button>
       </div>
@@ -74,6 +77,51 @@
         <el-button @click="previewVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 挂接菜单弹窗：多挂接 + 已挂列表管理 -->
+    <el-dialog v-model="mountDialogVisible" title="挂接到系统菜单" width="560px">
+      <!-- 已挂列表（可解除） -->
+      <div v-if="mountedMenus.length" class="mounted-menus">
+        <div class="mounted-menus-title">该页面已在 {{ mountedMenus.length }} 个菜单中：</div>
+        <el-tag
+          v-for="m in mountedMenus"
+          :key="m.menuId"
+          closable
+          class="mounted-menu-tag"
+          @close="handleUnmount(m)"
+        >
+          {{ m.menuName }}
+        </el-tag>
+      </div>
+      <el-alert
+        v-if="mountedMenus.length"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="继续挂接将为该页面新增一条菜单"
+        class="mount-alert"
+      />
+      <el-form label-width="90px" @submit.prevent>
+        <el-form-item label="菜单名称">
+          <el-input v-model="mountForm.name" placeholder="默认使用页面名称" />
+        </el-form-item>
+        <el-form-item label="所属目录">
+          <el-tree-select
+            v-model="mountForm.parentId"
+            :data="menuCategories"
+            :props="{ label: 'menuName', children: 'children', value: 'id' }"
+            check-strictly
+            clearable
+            placeholder="不选则挂到根目录"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="mountDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="mounting" @click="confirmMount">挂接</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -81,13 +129,16 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion, View, Document } from '@element-plus/icons-vue'
-import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
+import { ArrowLeft, Check, Promotion, View, Document, Menu } from '@element-plus/icons-vue'
+import { pageApi, type PageDefinitionDetailDTO, type PageMenuItem } from '@/api/page'
+import { useAuthStore } from '@/stores/auth'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
 import QueryColumnsConfig from './components/QueryColumnsConfig.vue'
 import ActionsConfig from './components/ActionsConfig.vue'
 import EventsConfig from './components/EventsConfig.vue'
+
+const authStore = useAuthStore()
 
 // ========== Schema 类型 ==========
 export interface SearchFieldConfig {
@@ -156,6 +207,77 @@ const activeTab = ref('query')
 /** 预览弹窗：当前视图配置 JSON */
 const previewVisible = ref(false)
 const previewJson = ref('')
+
+// ========== 挂接菜单（多挂接 + 列表管理） ==========
+const mountDialogVisible = ref(false)
+const mounting = ref(false)
+const mountedMenus = ref<PageMenuItem[]>([])
+const mountForm = reactive<{ name: string; parentId: number | null }>({ name: '', parentId: null })
+
+/** 所属目录候选：authStore.menus 中 menuType===1 的目录节点（递归） */
+const menuCategories = computed(() => filterMenuDirs(authStore.menus as any[]))
+
+function filterMenuDirs(menus: any[]): any[] {
+  return (menus || [])
+    .filter((m: any) => m.menuType === 1)
+    .map((m: any) => ({
+      ...m,
+      children: m.children ? filterMenuDirs(m.children) : [],
+    }))
+}
+
+/** 打开挂接弹窗：加载已挂列表 */
+async function openMountDialog() {
+  mountDialogVisible.value = true
+  if (pageKey.value) {
+    await loadMountedMenus()
+  }
+}
+
+async function loadMountedMenus() {
+  try {
+    const res = await pageApi.getMenusByKey(pageKey.value)
+    mountedMenus.value = res.data?.items || []
+  } catch {
+    mountedMenus.value = []
+  }
+}
+
+async function confirmMount() {
+  if (!pageId.value) return
+  mounting.value = true
+  try {
+    await pageApi.mountMenu(pageId.value, {
+      name: mountForm.name || undefined,
+      parentId: mountForm.parentId ?? null,
+    })
+    ElMessage.success('挂接成功')
+    mountForm.name = ''
+    mountForm.parentId = null
+    await loadMountedMenus()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    mounting.value = false
+  }
+}
+
+async function handleUnmount(menu: PageMenuItem) {
+  try {
+    await ElMessageBox.confirm(`确定解除菜单「${menu.menuName}」吗？`, '解除挂接', {
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    await pageApi.unmountMenu(menu.menuId)
+    ElMessage.success('已解除')
+    await loadMountedMenus()
+  } catch {
+    // http 拦截器已弹出错误消息
+  }
+}
 
 /** 已启用数据源（绑定下拉：FORM/WORKFLOW） */
 const enabledDataSources = ref<DataSourceDTO[]>([])
@@ -229,6 +351,10 @@ onMounted(async () => {
     }
     if (dataSourceId.value) {
       await loadBindColumns(dataSourceId.value)
+    }
+    // 已发布页面加载已挂菜单（按钮显示"已挂接 N 个菜单"）
+    if (formStatus.value === 'PUBLISHED') {
+      await loadMountedMenus()
     }
   } catch {
     // http 拦截器已弹出错误消息
@@ -437,5 +563,21 @@ function statusLabel(status: string): string {
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
+}
+
+.mounted-menus {
+  margin-bottom: 12px;
+}
+.mounted-menus-title {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+.mounted-menu-tag {
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+.mount-alert {
+  margin-bottom: 12px;
 }
 </style>

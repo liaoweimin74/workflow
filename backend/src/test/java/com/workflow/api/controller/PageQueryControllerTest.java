@@ -7,6 +7,7 @@ import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.form.bizdata.BizDataService;
+import com.workflow.engine.page.PageAccessGuard;
 import com.workflow.engine.page.PageDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,7 @@ class PageQueryControllerTest {
     private PageDefinitionService pageDefService;
     private BizDataService bizDataService;
     private DataSourceDefinitionService dsService;
+    private PageAccessGuard pageAccessGuard;
     private PageQueryController controller;
 
     /** 视图 schema：声明 name/dept 两个可查询字段 */
@@ -64,7 +66,8 @@ class PageQueryControllerTest {
         pageDefService = mock(PageDefinitionService.class);
         bizDataService = mock(BizDataService.class);
         dsService = mock(DataSourceDefinitionService.class);
-        controller = new PageQueryController(pageDefService, bizDataService, dsService, new ObjectMapper());
+        pageAccessGuard = mock(PageAccessGuard.class);
+        controller = new PageQueryController(pageDefService, bizDataService, dsService, pageAccessGuard, new ObjectMapper());
 
         PageDefinition view = new PageDefinition();
         view.setType("VIEW");

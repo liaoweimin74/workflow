@@ -5,6 +5,7 @@ import com.workflow.api.dto.PageDefinitionDetailDTO;
 import com.workflow.api.dto.PageDefinitionSaveRequest;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
+import com.workflow.engine.page.PageAccessGuard;
 import com.workflow.engine.page.PageDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
 import org.springframework.data.domain.Page;
@@ -23,9 +24,12 @@ import java.util.stream.Collectors;
 public class PageDefinitionController {
 
     private final PageDefinitionService pageDefService;
+    private final PageAccessGuard pageAccessGuard;
 
-    public PageDefinitionController(PageDefinitionService pageDefService) {
+    public PageDefinitionController(PageDefinitionService pageDefService,
+                                    PageAccessGuard pageAccessGuard) {
         this.pageDefService = pageDefService;
+        this.pageAccessGuard = pageAccessGuard;
     }
 
     /**
@@ -74,10 +78,14 @@ public class PageDefinitionController {
      * 按 key 获取页面定义。
      * 渲染页默认取已发布版本（未发布 → 404）；preview=true 时取最新定义，
      * 未发布的 DRAFT 视图动态编译（效果与发布后一致），预览用。
+     * 非 preview 访问经 PageAccessGuard 校验权限（无菜单 404 / 无权限 403）。
      */
     @GetMapping("/{key}/definition")
     public R<PageDefinitionDetailDTO> getByKey(@PathVariable String key,
                                                @RequestParam(defaultValue = "false") boolean preview) {
+        if (!preview) {
+            pageAccessGuard.assertPageAccess(key);
+        }
         PageDefinition pageDef = preview ? pageDefService.getPreviewByKey(key) : pageDefService.getPublishedByKey(key);
         return R.ok(toDetailDTO(pageDef));
     }

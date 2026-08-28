@@ -8,6 +8,7 @@ import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.form.bizdata.BizDataService;
+import com.workflow.engine.page.PageAccessGuard;
 import com.workflow.engine.page.PageDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +24,7 @@ import java.util.Set;
  * 以 schema 声明的 searchFields 作 filter 白名单，委托 BizDataService 查询业务表。
  * 自定义页面（PAGE）数据源查询：按页面内 dataSourceId 解析全局数据源 refId，
  * 委托 DataSourceDefinitionService.queryData（经 DataSourceAdapter）查询。
+ * 所有数据出口均经 PageAccessGuard 校验访问权限（无菜单 404 / 无权限 403）。
  */
 @RestController
 @RequestMapping("/api/v1/pages")
@@ -31,15 +33,18 @@ public class PageQueryController {
     private final PageDefinitionService pageDefService;
     private final BizDataService bizDataService;
     private final DataSourceDefinitionService dsService;
+    private final PageAccessGuard pageAccessGuard;
     private final ObjectMapper objectMapper;
 
     public PageQueryController(PageDefinitionService pageDefService,
                                BizDataService bizDataService,
                                DataSourceDefinitionService dsService,
+                               PageAccessGuard pageAccessGuard,
                                ObjectMapper objectMapper) {
         this.pageDefService = pageDefService;
         this.bizDataService = bizDataService;
         this.dsService = dsService;
+        this.pageAccessGuard = pageAccessGuard;
         this.objectMapper = objectMapper;
     }
 
@@ -54,6 +59,7 @@ public class PageQueryController {
      */
     @GetMapping("/{pageKey}/data")
     public R<BizDataPageVO> query(@PathVariable String pageKey, BizDataQueryRequest req) {
+        pageAccessGuard.assertPageAccess(pageKey);
         PageDefinition page = pageDefService.getPublishedByKey(pageKey);
         if (!"VIEW".equals(page.getType())) {
             throw new BusinessException(400, "页面 " + pageKey + " 不是视图类型，不支持数据查询");
@@ -87,6 +93,7 @@ public class PageQueryController {
     public R<BizDataPageVO> queryPageDataSource(@PathVariable String pageKey,
                                                 @PathVariable String dataSourceId,
                                                 BizDataQueryRequest req) {
+        pageAccessGuard.assertPageAccess(pageKey);
         PageDefinition page = pageDefService.getPublishedByKey(pageKey);
         if (!"PAGE".equals(page.getType())) {
             throw new BusinessException(400, "页面 " + pageKey + " 不是自定义页面类型");

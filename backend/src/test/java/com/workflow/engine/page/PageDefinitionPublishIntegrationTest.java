@@ -72,6 +72,9 @@ class PageDefinitionPublishIntegrationTest {
     @Mock
     private DataSourceDefinitionService dsService;
 
+    @Mock
+    private PageAccessGuard pageAccessGuard;
+
     private FormDefinitionService formDefService;
     private PageDefinitionService pageDefService;
     private PageQueryController queryController;
@@ -99,7 +102,8 @@ class PageDefinitionPublishIntegrationTest {
         ViewCompiler compiler = new ViewCompiler(objectMapper);
         pageDefService = new PageDefinitionService(pageRepo, tenantProvider, validator, compiler, objectMapper);
 
-        queryController = new PageQueryController(pageDefService, bizDataService, dsService, objectMapper);
+        // 访问守卫 mock 为放行（本测试聚焦发布/查询链路，不测权限）
+        queryController = new PageQueryController(pageDefService, bizDataService, dsService, pageAccessGuard, objectMapper);
     }
 
     @AfterEach

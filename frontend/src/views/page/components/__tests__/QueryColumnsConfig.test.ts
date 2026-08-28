@@ -49,7 +49,7 @@ describe('QueryColumnsConfig — 单表同时配置查询条件与展示列', ()
     wrapper.unmount()
   })
 
-  it('勾选展示列 → update:columns 收到 {key,label,width,align,sortable}', async () => {
+  it('勾选展示列 → update:columns 收到 {key,label,width,align}', async () => {
     const wrapper = createWrapper()
     await nextTick()
     const vm = wrapper.vm as any
@@ -58,7 +58,7 @@ describe('QueryColumnsConfig — 单表同时配置查询条件与展示列', ()
     const emitted = wrapper.emitted('update:columns') as any[]
     expect(emitted).toBeTruthy()
     expect(emitted[emitted.length - 1][0]).toEqual([
-      { key: 'name', label: '姓名', width: 130, align: 'left', sortable: false },
+      { key: 'name', label: '姓名', width: 130, align: 'left' },
     ])
     wrapper.unmount()
   })
@@ -76,10 +76,10 @@ describe('QueryColumnsConfig — 单表同时配置查询条件与展示列', ()
     wrapper.unmount()
   })
 
-  it('展示列修改宽度/对齐/排序 → 更新 columns 对应项（逐次 emit）', async () => {
+  it('展示列修改宽度/对齐 → 更新 columns 对应项（逐次 emit）', async () => {
     const wrapper = createWrapper(
       [],
-      [{ key: 'name', label: '姓名', width: 130, align: 'left', sortable: false }],
+      [{ key: 'name', label: '姓名', width: 130, align: 'left' }],
     )
     await nextTick()
     const vm = wrapper.vm as any
@@ -87,7 +87,7 @@ describe('QueryColumnsConfig — 单表同时配置查询条件与展示列', ()
     await nextTick()
     let emitted = wrapper.emitted('update:columns') as any[]
     expect(emitted[emitted.length - 1][0]).toEqual([
-      { key: 'name', label: '姓名', width: 200, align: 'left', sortable: false },
+      { key: 'name', label: '姓名', width: 200, align: 'left' },
     ])
 
     vm.setColumnProp('name', 'align', 'center')
@@ -95,11 +95,6 @@ describe('QueryColumnsConfig — 单表同时配置查询条件与展示列', ()
     emitted = wrapper.emitted('update:columns') as any[]
     expect(emitted[emitted.length - 1][0][0].align).toBe('center')
     expect(emitted[emitted.length - 1][0][0].width).toBe(130)
-
-    vm.setColumnProp('name', 'sortable', true)
-    await nextTick()
-    emitted = wrapper.emitted('update:columns') as any[]
-    expect(emitted[emitted.length - 1][0][0].sortable).toBe(true)
     wrapper.unmount()
   })
 

@@ -15,6 +15,7 @@
     </div>
 
     <!-- 表格-容器联动：dialog 模式容器弹窗（open-container 动作打开） -->
+    <!-- inline 容器渲染在表单主区域，dialog/newTab 在弹窗 -->
     <el-dialog
       v-for="c in dialogContainers"
       :key="c.key"
@@ -25,30 +26,35 @@
       class="linkage-container-dialog"
     >
       <form-create v-if="c.visible" v-model="c.formData" :rule="c.renderRule" :option="{}" />
-      <template #footer>
-        <div class="container-buttons">
-          <el-button v-if="c.buttons.showNew" class="btn-new" @click="containerAction(c, 'new')">新增</el-button>
-          <el-button v-if="c.buttons.showCopy" class="btn-copy" @click="containerAction(c, 'copy')">复制</el-button>
-          <el-button v-if="c.buttons.showDelete" class="btn-delete" type="danger" @click="containerAction(c, 'delete')">删除</el-button>
-          <el-button
-            v-for="btn in c.buttons.custom"
-            :key="btn.key"
-            :type="btn.type || ''"
-            :class="`btn-custom-${btn.key}`"
-            @click="containerCustomAction(c, btn)"
-          >{{ btn.label }}</el-button>
-          <el-button class="btn-cancel" @click="containerAction(c, 'cancel')">取消</el-button>
-          <el-button v-if="c.buttons.showConfirm" class="btn-confirm" type="primary" @click="containerAction(c, 'confirm')">确定</el-button>
-        </div>
+      <template #footer v-if="hasContainerButtons(c)">
+        <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
       </template>
     </el-dialog>
+    <!-- inline 容器：页内区域渲染（点击显示、可关闭、有按钮） -->
+    <div
+      v-for="c in inlineContainers"
+      :key="c.key"
+      v-show="c.visible"
+      class="fc-inline-container"
+      :class="{ 'fc-inline-open': c.visible }"
+    >
+      <div class="fc-inline-header">
+        <span class="fc-inline-title">{{ c.title }}</span>
+        <el-button class="btn-cancel" text @click="containerAction(c, 'cancel')">关闭</el-button>
+      </div>
+      <form-create v-if="c.visible" v-model="c.formData" :rule="c.renderRule" :option="{}" />
+      <div v-if="hasContainerButtons(c)" class="container-buttons fc-inline-footer">
+        <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, markRaw, onMounted, provide, watch } from 'vue'
+import ContainerButtons from '@/views/form/components/ContainerButtons.vue'
+import { ref, reactive, computed, onMounted, provide, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import formCreate from '@form-create/element-ui'
 import PageDataTable from './components/PageDataTable.vue'
 import PageDataTree from './components/PageDataTree.vue'
@@ -57,6 +63,7 @@ import { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
 import { normalizeForRender } from '@/views/form/schemaRules'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
+import { useLinkageContainer } from '@/views/form/composables/useLinkageContainer'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
 formCreate.component('page-table', PageDataTable)
@@ -107,228 +114,52 @@ const componentRefs = reactive<Record<string, any>>({})
 /** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
 watch(() => pageSchema.dataSources, (val) => { setActiveDsBindings(val as any) }, { immediate: true })
 
-// ==================== 表格-容器联动 ====================
-/** 自定义按钮配置（key/label/type/actions 事件链） */
-interface ContainerCustomButton {
-  key: string
-  label: string
-  type?: string
-  actions?: any[]
-}
-
-/** 容器按钮区配置 */
-interface ContainerButtons {
-  showNew: boolean
-  showCancel: boolean
-  showConfirm: boolean
-  showDelete: boolean
-  showCopy: boolean
-  custom: ContainerCustomButton[]
-}
-
-/** 联动容器运行时状态（formContainer 以 dataSourceId 为联动 target） */
-interface LinkageContainer {
-  /** 页面内数据源标识（动作 target） */
-  key: string
-  /** 原始 formContainer 节点（保存格式，引擎 mount 用） */
-  node: any
-  /** 渲染子规则（props.rule，dialog 内 form-create 渲染用） */
-  renderRule: any[]
-  /** 默认显示模式（open-container 动作可覆盖） */
-  displayMode: 'dialog' | 'newTab' | 'inline'
-  /** 弹窗标题（tabTitle 配置） */
-  title: string
-  /** 弹窗宽度（dialogWidth 配置） */
-  width: string
-  /** dialog 可见性 */
-  visible: boolean
-  /** dialog/newTab 容器独立表单数据（inline 容器用主 formData） */
-  formData: Record<string, any>
-  /** 当前记录 ID（load-record 写入，引擎 recordId 定位用） */
-  currentRecordId: string | undefined
-  /** 容器数据引擎（读写数据源） */
-  engine: ReturnType<typeof createDsBindingEngine> | null
-  /** 按钮区配置 */
-  buttons: ContainerButtons
-}
-
-/** 联动容器注册表（dialog/newTab 从主树移除；inline 保留主树） */
-const linkageContainers = reactive<LinkageContainer[]>([])
-
-/** dialog 模式容器（弹窗渲染列表） */
-const dialogContainers = computed(() => linkageContainers.filter((c) => c.displayMode === 'dialog'))
-
-/** 按 target（dataSourceId）查找联动容器 */
-function findContainer(target: string): LinkageContainer | undefined {
-  return linkageContainers.find((c) => c.key === target)
-}
-
-/** 从原始 rule 树提取联动容器（须在 normalizeForRender 之前调用，此时 type 仍为 formContainer） */
-function extractLinkageContainers(nodes: any[]): any[] {
-  const containers: LinkageContainer[] = []
-  const walk = (list: any[]): any[] =>
-    list
-      .filter((n) => {
-        if (n && typeof n === 'object' && n.type === 'formContainer' && n.props?.dataSourceId) {
-          const mode = (n.props.displayMode as LinkageContainer['displayMode']) || 'dialog'
-          containers.push(makeContainer(n, mode))
-          // dialog/newTab 从主树移除；inline 保留主树渲染
-          return mode === 'inline'
-        }
-        return true
-      })
-      .map((n) => {
-        if (n && typeof n === 'object' && Array.isArray(n.children)) {
-          n.children = walk(n.children)
-        }
-        return n
-      })
-  const mainTree = walk(nodes)
-  linkageContainers.splice(0, linkageContainers.length)
-  for (const c of containers) {
-    mountContainerEngine(c)
-    linkageContainers.push(c)
-  }
-  // newTab 落地页：query.container 自动打开对应容器
-  openFromQuery()
-  return mainTree
-}
-
-/** 构造联动容器运行时状态 */
-function makeContainer(node: any, displayMode: LinkageContainer['displayMode']): LinkageContainer {
-  const props = node.props || {}
-  return {
-    key: props.dataSourceId,
-    node,
-    renderRule: Array.isArray(props.rule) ? props.rule : [],
-    displayMode,
-    title: props.tabTitle || node.title || '编辑记录',
-    width: props.dialogWidth || '800px',
-    visible: false,
-    formData: {},
-    currentRecordId: undefined,
-    engine: null,
-    buttons: {
-      showNew: props.showNewButton !== false,
-      showCancel: props.showCancelButton !== false,
-      showConfirm: props.showConfirmButton !== false,
-      showDelete: props.showDeleteButton === true,
-      showCopy: props.showCopyButton === true,
-      custom: Array.isArray(props.customButtons) ? props.customButtons : [],
+// ==================== 表格-容器联动：共享容器机制 ====================
+/**
+ * 表格-容器联动（PageRendererPage 版）。
+ * 复用 useLinkageContainer：容器提取、独立引擎、按钮行为。
+ * 注意：Page 用 inline 容器时，formData 绑定**主 formData**（与容器渲染区隔离）。
+ */
+const {
+  containers,
+  dialogContainers,
+  inlineContainers,
+  containerModes,
+  findContainer,
+  extractContainers,
+  openContainer,
+  loadRecord: loadContainerRecord,
+  flushContainer,
+  closeContainer,
+  containerRefId,
+  containerAction,
+  containerCustomAction,
+  hasContainerButtons,
+} = useLinkageContainer({
+  dsApi: dataSourceApi,
+  dataSources: () => pageSchema.dataSources.map((d) => ({ id: d.id, refId: d.refId })),
+  // inline 容器的 formData 绑定到主 formData；dialog 容器独立 formData
+  formDataApi: {
+    getValue: (c, field) => (c.displayMode === 'inline' ? formData.value[field] : c.formData[field]),
+    setValue: (c, field, value) => {
+      if (c.displayMode === 'inline') formData.value = { ...formData.value, [field]: value }
+      else c.formData = { ...c.formData, [field]: value }
     },
-  }
-}
-
-/** 为联动容器挂载独立数据引擎（inline 容器绑定主 formData，其余绑定容器自身 formData） */
-function mountContainerEngine(c: LinkageContainer) {
-  const isInline = c.displayMode === 'inline'
-  const engine = createDsBindingEngine(
-    { dsApi: dataSourceApi } as any,
-    {
-      api: {
-        getValue: (field: string) => (isInline ? formData.value[field] : c.formData[field]),
-        setValue: (field: string, value: unknown) => {
-          if (isInline) formData.value = { ...formData.value, [field]: value }
-          else c.formData = { ...c.formData, [field]: value }
-        },
-      },
-      recordId: () => c.currentRecordId,
-      onRecordChange: () => { /* load-record 动作显式驱动 */ },
-      onFieldChange: () => { /* dialog 内字段变化由容器 formData 驱动（Task 5 完善） */ },
-      onConflict: (msg: string) => ElMessage.warning(msg),
-    },
-  )
-  // mount 用保存格式节点（collectContainers 递归 props.rule 收集子字段）
-  engine.mount([c.node])
-  c.engine = markRaw(engine)
-}
-
-/** newTab 落地页：query.container=容器标识 时自动打开（dialog 模式弹窗回显） */
-function openFromQuery() {
-  const key = route.query.container as string
-  if (!key) return
-  const c = findContainer(key)
-  if (!c) return
-  c.visible = true
-  const rid = route.query.recordId as string
-  if (rid) {
-    c.currentRecordId = rid
-    void c.engine?.loadRecord(rid)
-  }
-}
-
-// ==================== 容器按钮区行为 ====================
-/** 容器内数据源对应的全局 refId */
-function containerRefId(c: LinkageContainer): string | undefined {
-  return pageSchema.dataSources.find((d) => d.id === c.key)?.refId
-}
-
-/** 默认按钮行为：new=清空建新 / cancel=关闭 / confirm=保存关闭 / delete=删除记录 / copy=复制新记录 */
-async function containerAction(c: LinkageContainer, action: 'new' | 'cancel' | 'confirm' | 'delete' | 'copy') {
-  if (action === 'new') {
-    c.formData = {}
-    c.currentRecordId = undefined
-  } else if (action === 'cancel') {
-    c.visible = false
-} else if (action === 'confirm') {
-    // 强制完成引擎未竟的字段写入，然后关闭弹窗
-    await c.engine?.flush()
-    // ===== 智能同步：刷新容器关联的表格 =====
-    // 假设容器与表格是同一数据源（dataSourceId），用 key 找组件
-    const tbl = componentRefs[c.key]
-    if (tbl && typeof (tbl as any).refresh === 'function') {
-      ;(tbl as any).refresh()
+  },
+  // newTab 在此不弹窗回显，外部通过 router.open 实现
+  openNewTab: undefined,
+  // 页面 inline 容器已渲染在主树，open-container 不应将其当作弹窗打开
+  keepInlineOnTree: true,
+  openInline: false,
+  // 自定义按钮：执行步骤链（containerCustomAction 内部调用此回调）
+  onCustomAction: (c, btn) => {
+    const eventData = { row: c.formData, record: c.formData, node: c.formData }
+    for (const step of (btn as any).actions || []) {
+      executeStep(step, eventData)
     }
-    c.visible = false
-  } else if (action === 'delete') {
-    const refId = containerRefId(c)
-    if (!refId || !c.currentRecordId) return
-    try {
-      await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
-    } catch {
-      return
-    }
-    try {
-      await dataSourceApi.deleteData(refId, c.currentRecordId)
-      ElMessage.success('删除成功')
-      // ===== 智能同步：刷新容器关联的表格 =====
-      const tbl = componentRefs[c.key]
-      if (tbl && typeof (tbl as any).refresh === 'function') {
-        ;(tbl as any).refresh()
-      }
-      c.visible = false
-    } catch {
-      // http 拦截器已提示
-    }
-  } else if (action === 'copy') {
-    const refId = containerRefId(c)
-    if (!refId) return
-    // 以当前表单数据为模板创建新记录（去除主键与版本）
-    const data = { ...c.formData }
-    delete data.id
-    delete data.version
-    try {
-      await dataSourceApi.createData(refId, data)
-      ElMessage.success('复制成功')
-      // ===== 智能同步：刷新容器关联的表格 =====
-      const tbl = componentRefs[c.key]
-      if (tbl && typeof (tbl as any).refresh === 'function') {
-        ;(tbl as any).refresh()
-      }
-      c.visible = false
-    } catch {
-      // http 拦截器已提示
-    }
-  }
-}
-
-/** 自定义按钮：执行其事件链动作（以容器当前表单数据为上下文） */
-function containerCustomAction(c: LinkageContainer, btn: ContainerCustomButton) {
-  const eventData = { row: c.formData, record: c.formData, node: c.formData }
-  for (const step of btn.actions || []) {
-    executeStep(step, eventData)
-  }
-}
+  },
+  findComponent: (key) => componentRefs[key] as any,
+})
 
 onMounted(load)
 
@@ -345,12 +176,10 @@ async function load() {
     const parsed = JSON.parse(def.schema || '{}')
     pageSchema.dataSources = parsed.dataSources || []
     pageSchema.actions = parsed.actions || []
-    // 提取联动容器（dialog/newTab 从主树移除，须在 normalizeForRender 之前——此后 type 变为 FcRow）
-    parsed.rule = extractLinkageContainers(parsed.rule || [])
+    // 提取容器（dialog/inline/newTab 从主树移除），注册独立容器引擎
+    const mainRule = extractContainers(parsed.rule || [])
     // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
-    rule.value = normalizeForRender(parsed.rule || []).map((r: any) => transformComponent(r))
-    // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
-    rule.value = normalizeForRender(parsed.rule || []).map((r: any) => transformComponent(r))
+    rule.value = normalizeForRender(mainRule).map((r: any) => transformComponent(r))
     option.value = parsed.option || {}
   } catch (e: any) {
     error.value = e?.message || '页面加载失败'
@@ -359,6 +188,16 @@ async function load() {
     loading.value = false
   }
 }
+
+  // 路有 query 自动打开容器（newTab 落地页场景或深链）
+  watch(
+    () => [route.query.container as string | undefined, route.query.recordId as string | undefined, containers.value.length] as const,
+    ([container, recordId, count]) => {
+      if (!container || count === 0) return
+      openContainer(container, recordId || '')
+    },
+    { immediate: true },
+  )
 
 // 检查 rule 中是否含 formContainer，若有则挂载绑定引擎
 watch(rule, async (newRule) => {
@@ -504,44 +343,40 @@ function executeStep(step: any, eventData: any) {
     // 写回数据源：强制完成未竟防抖写入
     void pageEngine.value?.flush()
   } else if (op === 'open-container') {
-    // 打开联动容器：displayMode 参数优先，容器默认配置兜底
+    // 打开联动容器：newTab 用本地 router.open；dialog/inline 用共享 openContainer
     const c = findContainer(target)
     if (!c) return
     const mode = (step.displayMode as string) || c.displayMode
-    if (mode === 'dialog') {
-      c.visible = true
-    } else if (mode === 'newTab') {
+    if (mode === 'newTab') {
+      // newTab：浏览器新标签页打开，query 传递容器 key 记录 ID
       const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
       const resolved = router.resolve({
         query: { ...route.query, container: c.key, ...(rid ? { recordId: rid } : {}) },
       })
       window.open(resolved.href, '_blank')
+    } else {
+      // dialog/inline：共享 openContainer（dialog 显示弹窗，inline 常驻不操作）
+      const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+      openContainer(target, rid, (step.displayMode as string) || undefined)
     }
-    // inline：容器常驻主树，无需操作
   } else if (op === 'load-record') {
-    // 加载记录到容器：recordId 模板解析，缺省取事件行 ID
+    // 加载记录到容器：用共享 loadContainerRecord；回退给页面引擎
     const rid = step.recordId
       ? String(resolveStepValue(step.recordId, eventData) || '')
       : String(eventData?.row?.id ?? eventData?.node?.id ?? '')
     if (!rid) return
-    const c = findContainer(target)
-    if (c) {
-      c.currentRecordId = rid
-      void c.engine?.loadRecord(rid)
-    } else if (pageEngine.value) {
-      // 非联动容器回退：页面级引擎（兼容既有 reload-record 语义）
-      currentRecordId.value = rid
-      void pageEngine.value.loadRecord(rid)
-    }
+    loadContainerRecord(target, rid, () => {
+      if (pageEngine.value) {
+        currentRecordId.value = rid
+        void pageEngine.value.loadRecord(rid)
+      }
+    })
   } else if (op === 'save-container') {
-    // 保存容器数据：强制完成容器引擎未竟防抖写入（表格同步由 Task 5 完善）
-    const c = findContainer(target)
-    if (c) void c.engine?.flush()
-    else void pageEngine.value?.flush()
+    // 保存容器数据：用共享 flushContainer；回退给页面引擎
+    flushContainer(target, () => void pageEngine.value?.flush())
   } else if (op === 'close-container') {
-    // 关闭联动容器弹窗
-    const c = findContainer(target)
-    if (c) c.visible = false
+    // 关闭容器弹窗
+    closeContainer(target)
   }
 }
 

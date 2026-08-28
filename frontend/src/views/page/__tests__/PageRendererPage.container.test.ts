@@ -59,6 +59,7 @@ vi.mock('@/views/form/components/DsBindingEngine', () => ({
       mount: vi.fn(() => true),
       loadRecord: vi.fn(),
       flush: vi.fn(),
+      saveAll: vi.fn().mockResolvedValue(true),
       getLastRecord: vi.fn(),
       _deps: deps,
     }
@@ -328,18 +329,19 @@ describe('PageRendererPage 容器按钮区', () => {
     expect(dialog.props('modelValue')).toBe(false)
   })
 
-  it('点击确定按钮 flush 引擎并关闭弹窗', async () => {
+  it('点击确定按钮 saveAll 引擎并关闭弹窗', async () => {
     const wrapper = await mountPage(makeButtonPage({}))
     await wrapper.find('.stub-row-click').trigger('click')
     await flushPromises()
     const dialog = wrapper.findComponent(ElDialogStub)
+    expect(dialog.props('modelValue')).toBe(true)
 
     await dialog.find('.btn-confirm').trigger('click')
     await flushPromises()
     expect(dialog.props('modelValue')).toBe(false)
-    // 容器引擎 flush 被调用
-    const flushed = engineMocks.filter((e) => e.flush.mock.calls.length > 0)
-    expect(flushed.length).toBeGreaterThanOrEqual(1)
+    // 容器引擎 saveAll 被调用（confirm 触发 saveAll，不是 flush）
+    const saved = engineMocks.filter((e) => e.saveAll.mock.calls.length > 0)
+    expect(saved.length).toBeGreaterThanOrEqual(1)
   })
 
   it('点击新增按钮清空表单与记录 ID', async () => {

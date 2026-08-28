@@ -80,6 +80,14 @@ provide(ACTION_BUS_KEY, {
 const route = useRoute()
 const router = useRouter()
 const pageKey = ref(route.params.pageKey as string)
+// 同一组件不同 pageKey 切换（vue-router 复用实例）时更新
+watch(() => route.params.pageKey, (val) => {
+  pageKey.value = val as string
+  error.value = ''
+  loading.value = false
+  rule.value = []
+  load()
+})
 
 const error = ref('')
 const loading = ref(false)

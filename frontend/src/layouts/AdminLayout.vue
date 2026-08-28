@@ -26,8 +26,12 @@ function toggleCollapsed() {
   collapsed.value = !collapsed.value
 }
 
-function addTag(to: { path: string; meta?: { title?: string } }) {
-  const title = (to.meta?.title as string) || to.path
+function addTag(to: { path: string; meta?: { title?: string }; name?: string }) {
+  // 优先使用菜单名称（菜单打开的路由标题=菜单名），回退路由 meta.title
+  const menuPath = findMenuPath(authStore.menus, to.path)
+  const title = (menuPath && menuPath.length > 0 ? menuPath[menuPath.length - 1].menuName : null)
+    || (to.meta?.title as string)
+    || to.path
   if (!tags.value.find(t => t.path === to.path)) {
     tags.value.push({ path: to.path, title })
   }

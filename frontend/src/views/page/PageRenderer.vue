@@ -95,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -200,6 +200,17 @@ const saving = ref(false)
 
 // ========== 加载页面 ==========
 onMounted(load)
+// 同一组件不同 pageKey 切换（vue-router 复用实例）时重新加载
+watch(pageKey, () => {
+  // 重置旧页面状态，避免切换后残留
+  error.value = ''
+  page.value = null
+  ready.value = false
+  dataSourceMeta.value = null
+  boundDataSource.value = null
+  detailRules.value = []
+  load()
+})
 
 async function load() {
   try {

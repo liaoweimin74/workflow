@@ -2,7 +2,7 @@
 // npx vitest run src/components/business/__tests__/SearchTable.test.ts
 
 import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, defineComponent, h, ref } from 'vue'
 import type { Component } from 'vue'
 import ElementPlus from 'element-plus'
@@ -481,10 +481,11 @@ describe('SearchTable — tree mode', () => {
     expect(wrapper.find('.el-pagination').exists()).toBe(false)
   })
 
-  it('无 treeProps 时显示分页', async () => {
-    const wrapper = createWrapper({
-      fetchApi: vi.fn().mockResolvedValue({ rows: [], total: 10 }),
-    })
+  it('非树形且开启分页（showPagination）时显示分页', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 10 })
+    const wrapper = createWrapper({ fetchApi, showPagination: true })
+    await nextTick()
+    await flushPromises() // 等待 onMounted 的 fetchList 落地 total=10
     await nextTick()
     expect(wrapper.find('.el-pagination').exists()).toBe(true)
   })

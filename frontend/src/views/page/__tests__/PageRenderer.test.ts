@@ -6,6 +6,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
 import PageRenderer from '../PageRenderer.vue'
+import SearchTable from '@/components/business/SearchTable.vue'
 
 vi.mock('@/api/page', () => ({
   pageApi: {
@@ -294,7 +295,7 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     wrapper.unmount()
   })
 
-  it('placement=column（默认）：新增在工具栏，编辑/删除/查看渲染为表格操作列行内按钮', async () => {
+  it('placement=column（默认）：新增渲染为工具栏按钮，编辑/删除/查看渲染为操作列按钮', async () => {
     ;(pageApi.getPageByKey as any).mockResolvedValue({ data: pageDef })
     ;(pageApi.queryPageData as any).mockResolvedValue({
       data: { records: [{ id: 'r1', data: { name: '张三', age: 30 }, version: 1 }], total: 1, page: 0, size: 20 },
@@ -303,26 +304,21 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     await nextTick()
     await flushPromises()
 
-    // 工具栏只有"新增"（create 固定在工具栏）
-    const toolbar = wrapper.find('.toolbar')
-    expect(toolbar.exists()).toBe(true)
-    expect(toolbar.text()).toContain('新增')
-    expect(toolbar.text()).not.toContain('编辑')
-    expect(toolbar.text()).not.toContain('删除')
-    // 表格内操作列含编辑/删除/查看
-    const tableText = wrapper.find('.el-table').text()
-    expect(tableText).toContain('编辑')
-    expect(tableText).toContain('删除')
-    expect(tableText).toContain('查看')
-    // 操作列按钮点击 → openEdit 弹窗（currentRow 绑定行）
-    const editBtn = wrapper.findAll('.el-table button').find((b) => b.text().includes('编辑'))!
-    await editBtn.trigger('click')
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.exists()).toBe(true)
+    // placement=column：create 固定在工具栏，编辑/删除/查看进操作列
+    const toolbarBtns = st.props('toolbarButtons') as any[]
+    expect(toolbarBtns.map((b) => b.label)).toEqual(['新增'])
+    const actionBtns = st.props('actionButtons') as any[]
+    expect(actionBtns.map((b) => b.label)).toEqual(['编辑', '删除', '查看'])
+    // 点击编辑 → openEdit 弹窗（loadDetailSchema → getFormDefinitionByKey）
+    actionBtns[0].onClick({ id: 'r1', data: { name: '张三', age: 30 }, version: 1 })
     await flushPromises()
     expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('emp_profile')
     wrapper.unmount()
   })
 
-  it('placement=toolbar：编辑/删除/查看保留在工具栏，表格无操作列', async () => {
+  it('placement=toolbar：编辑/删除/查看进工具栏，表格无操作列', async () => {
     const toolbarSchema = compiledSchema.replaceAll('"placement":"column"', '"placement":"toolbar"')
     ;(pageApi.getPageByKey as any).mockResolvedValue({ data: { ...pageDef, schema: toolbarSchema } })
     ;(pageApi.queryPageData as any).mockResolvedValue({
@@ -332,19 +328,18 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     await nextTick()
     await flushPromises()
 
-    const toolbar = wrapper.find('.toolbar')
-    expect(toolbar.text()).toContain('新增')
-    expect(toolbar.text()).toContain('编辑')
-    expect(toolbar.text()).toContain('删除')
-    expect(toolbar.text()).toContain('查看')
-    // 表格内无操作列（无行内编辑按钮）
-    const tableBtns = wrapper.findAll('.el-table button')
-    expect(tableBtns.filter((b) => b.text().includes('编辑')).length).toBe(0)
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.exists()).toBe(true)
+    // placement=toolbar：全部按钮进工具栏，操作列为空
+    const toolbarBtns = st.props('toolbarButtons') as any[]
+    expect(toolbarBtns.map((b) => b.label)).toEqual(['新增', '编辑', '删除', '查看'])
+    const actionBtns = st.props('actionButtons') as any[]
+    expect(actionBtns).toEqual([])
     wrapper.unmount()
   })
 
-  it('style=icon：操作列按钮仅图标（无文字），style=text 时文字链接', async () => {
-    const iconSchema = compiledSchema.replace('"style":"button"', '"style":"icon"')
+  it('style=icon：工具栏 create 为圆形图标按钮，操作列按钮为图标形态', async () => {
+    const iconSchema = compiledSchema.replaceAll('"style":"button"', '"style":"icon"')
     ;(pageApi.getPageByKey as any).mockResolvedValue({ data: { ...pageDef, schema: iconSchema } })
     ;(pageApi.queryPageData as any).mockResolvedValue({
       data: { records: [{ id: 'r1', data: { name: '张三', age: 30 }, version: 1 }], total: 1, page: 0, size: 20 },
@@ -353,11 +348,15 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     await nextTick()
     await flushPromises()
 
-    // icon 形态：按钮含图标类（el-icon），不含文字 label
-    const tableBtns = wrapper.findAll('.el-table button')
-    expect(tableBtns.length).toBeGreaterThan(0)
-    const hasIcon = tableBtns.some((b) => b.find('.el-icon').exists())
-    expect(hasIcon).toBe(true)
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.exists()).toBe(true)
+    // icon 形态：工具栏 create 为 circle（圆形图标按钮）
+    const toolbarBtn = (st.props('toolbarButtons') as any[])[0]
+    expect(toolbarBtn.circle).toBe(true)
+    // 操作列按钮（edit/delete/view）带 icon（渲染为图标按钮）
+    const actionBtns = st.props('actionButtons') as any[]
+    expect(actionBtns.length).toBeGreaterThan(0)
+    expect(actionBtns.every((b: any) => !!b.icon)).toBe(true)
     wrapper.unmount()
   })
 

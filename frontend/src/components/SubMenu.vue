@@ -7,14 +7,19 @@ const depth = props.depth ?? 0
 function resolveIcon(iconName: string) {
   return (Icons as Record<string, any>)[iconName] || Icons.Menu
 }
+
+/** 子级可渲染菜单（排除按钮 menuType=2） */
+function renderableChildren(item: any): any[] {
+  return (item.children || []).filter((c: any) => c.menuType !== 2)
+}
 </script>
 
 <template>
   <template v-for="item in menuList" :key="item.id">
-    <!-- 有子菜单 -->
+    <!-- 有可渲染子菜单（子级含非按钮菜单） -->
     <el-sub-menu
-      v-if="item.children && item.children.length > 0"
-      :index="item.path || String(item.id)"
+      v-if="item.children && item.children.length > 0 && item.children.some((c: any) => c.menuType !== 2)"
+      :index="'submenu-' + item.id"
       class="!mx-2"
     >
       <template #title>
@@ -23,9 +28,9 @@ function resolveIcon(iconName: string) {
         </el-icon>
         <span class="font-medium">{{ item.menuName }}</span>
       </template>
-      <!-- 子菜单缩进一个字符（14px） -->
+      <!-- 子菜单缩进一个字符（14px）；按钮（menuType=2）排除 -->
       <el-menu-item
-        v-for="child in item.children"
+        v-for="child in renderableChildren(item)"
         :key="child.id"
         :index="child.path"
         :style="{ paddingLeft: `${(depth + 1) * 14 + 20}px` }"
@@ -37,7 +42,7 @@ function resolveIcon(iconName: string) {
       </el-menu-item>
     </el-sub-menu>
 
-    <!-- 无子菜单 -->
+    <!-- 叶子菜单（无子级或子级全是按钮） -->
     <el-menu-item
       v-else-if="item.menuType === 1"
       :index="item.path"

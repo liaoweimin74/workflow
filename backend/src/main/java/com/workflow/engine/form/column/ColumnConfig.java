@@ -47,6 +47,9 @@ public class ColumnConfig {
     /** 组件类型（form-create rule 的 type，如 colorPicker/elTransfer；供前端按组件定制渲染） */
     private String componentType;
 
+    /** 是否可排序（缺省 null=未推导，由 SortableResolver 填充；数据源 metadata 声明） */
+    private Boolean sortable;
+
     /** 子表列映射（非空表示该 key 为子表字段，映射独立物理表 wf_biz_<formKey>_<key>） */
     private List<ColumnConfig> subColumns;
 
@@ -90,6 +93,9 @@ public class ColumnConfig {
 
     public String getComponentType() { return componentType; }
     public void setComponentType(String componentType) { this.componentType = componentType; }
+
+    public Boolean getSortable() { return sortable; }
+    public void setSortable(Boolean sortable) { this.sortable = sortable; }
 
     public List<ColumnConfig> getSubColumns() { return subColumns; }
     public void setSubColumns(List<ColumnConfig> subColumns) { this.subColumns = subColumns; }

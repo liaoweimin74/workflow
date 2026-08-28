@@ -124,11 +124,7 @@
             </el-select>
             <el-input v-if="step.op === 'set-filter'" v-model="step.field" placeholder="过滤字段" style="width: 90px" />
             <el-input v-if="step.op === 'set-filter'" v-model="step.value" placeholder="如 {node.id}" style="width: 100px" />
-            <el-select v-if="step.op === 'open-container'" v-model="step.displayMode" placeholder="显示模式" style="width: 110px">
-              <el-option label="弹出窗口" value="dialog" />
-              <el-option label="新开页签" value="newTab" />
-              <el-option label="页面内嵌" value="inline" />
-            </el-select>
+            <!-- 显示模式（弹窗/新页签/内嵌）以容器属性面板配置为准，此处不再重复配置 -->
             <el-input v-if="step.op === 'load-record'" v-model="step.recordId" placeholder="如 {row.id}" style="width: 100px" />
             <el-button link type="danger" @click="ac.steps.splice(si, 1)">删</el-button>
           </div>

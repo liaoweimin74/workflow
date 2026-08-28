@@ -69,6 +69,33 @@
       @confirm="handlePageTableConfirm"
     />
 
+    <!-- 数据表单容器配置：与表单设计器复用同一套非表格模式绑定弹窗 -->
+    <DsBindingConfigDialog
+      v-model="formContainerDialogVisible"
+      :current-fields="[]"
+      :binding-props="currentFormContainerProps"
+      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
+      @confirm="handleFormContainerConfirm"
+    />
+
+    <!-- 数据引用组件配置：与表单设计器复用同一套配置弹窗与字段回写逻辑 -->
+    <DataPickerConfigDialog
+      v-model="pickerDialogVisible"
+      :current-fields="currentFieldKeys"
+      :picker-props="currentPickerProps"
+      :form-data-sources="schema.dataSources"
+      @confirm="handlePickerConfirm"
+    />
+
+    <!-- 查找带回组件配置：与表单设计器复用同一套配置弹窗与字段回写逻辑 -->
+    <LookupPickerConfigDialog
+      v-model="lookupDialogVisible"
+      :current-fields="currentFieldKeys"
+      :lookup-props="currentLookupProps"
+      :form-data-sources="schema.dataSources"
+      @confirm="handleLookupConfirm"
+    />
+
     <!-- JSON 弹窗 -->
     <el-dialog v-model="previewVisible" title="页面配置 JSON" width="760px">
       <pre class="preview-json">{{ previewJson }}</pre>
@@ -91,6 +118,9 @@ import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
 import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog.vue'
+import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
+import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
+import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from '@/views/form/formRuleWalk'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
@@ -136,6 +166,74 @@ const schema = reactive<{
   actions: [],
 })
 
+/** 当前设计器 rule（供数据引用/查找带回配置与字段回写） */
+const designerRule = computed<any[]>(() => {
+  try {
+    return designerRef.value?.getRule() || []
+  } catch {
+    return []
+  }
+})
+
+/** 页面画布中的全部字段，供筛选条件选择表单字段 */
+const currentFieldKeys = computed<string[]>(() => collectFieldKeys(designerRule.value))
+
+/** 当前选中的 dataPicker 字段与配置 */
+const pickerDialogVisible = ref(false)
+const selectedPickerField = ref('')
+const pickerFields = computed(() => collectFieldsOfType(designerRule.value, 'dataPicker'))
+const currentPickerProps = computed<Record<string, any>>(() =>
+  pickerFields.value.find((field) => field.field === selectedPickerField.value)?.props || {},
+)
+
+/** 当前选中的 LookupPicker 字段与配置 */
+const lookupDialogVisible = ref(false)
+const selectedLookupField = ref('')
+const lookupFields = computed(() => collectFieldsOfType(designerRule.value, 'LookupPicker'))
+const currentLookupProps = computed<Record<string, any>>(() =>
+  lookupFields.value.find((field) => field.field === selectedLookupField.value)?.props || {},
+)
+
+function openPickerConfig() {
+  if (pickerFields.value.length === 0) {
+    ElMessage.warning('画布中没有数据引用字段，请先拖入“数据引用”组件')
+    return
+  }
+  selectedPickerField.value = resolveActiveField(
+    pickerFields.value,
+    'dataPicker',
+    designerRef.value?.activeRule,
+  )
+  pickerDialogVisible.value = true
+}
+
+function handlePickerConfirm(newProps: Record<string, any>) {
+  const rules = designerRef.value?.getRule() || []
+  patchFieldProps(rules, 'dataPicker', selectedPickerField.value, newProps)
+  designerRef.value?.setRule(rules)
+  ElMessage.success('数据引用配置已保存')
+}
+
+function openLookupConfig() {
+  if (lookupFields.value.length === 0) {
+    ElMessage.warning('画布中没有查找带回字段，请先拖入“查找带回”组件')
+    return
+  }
+  selectedLookupField.value = resolveActiveField(
+    lookupFields.value,
+    'LookupPicker',
+    designerRef.value?.activeRule,
+  )
+  lookupDialogVisible.value = true
+}
+
+function handleLookupConfirm(newProps: Record<string, any>) {
+  const rules = designerRef.value?.getRule() || []
+  patchFieldProps(rules, 'LookupPicker', selectedLookupField.value, newProps)
+  designerRef.value?.setRule(rules)
+  ElMessage.success('查找带回配置已保存')
+}
+
 /** 已启用全局数据源 */
 const enabledDataSources = ref<DataSourceDTO[]>([])
 
@@ -154,6 +252,23 @@ function handlePageTableConfirm(newProps: Record<string, any>) {
   ElMessage.success('数据表格数据源配置已保存')
 }
 
+// ===== 页面数据表单容器配置（复用 DsBindingConfigDialog 非表格模式） =====
+const formContainerDialogVisible = ref(false)
+const currentFormContainerProps = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.type === 'formContainer' ? (active.props || {}) : {}
+})
+function openFormContainerDsConfig() {
+  formContainerDialogVisible.value = true
+}
+function handleFormContainerConfirm(newProps: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (active?.type === 'formContainer' && active.props) {
+    Object.assign(active.props, newProps)
+  }
+  ElMessage.success('数据表单容器配置已保存')
+}
+
 /** 注册页面组件到 FcDesigner 面板，并通过 setComponentRuleConfig 在属性面板注入"数据源"按钮（动态读取页面绑定层） */
 function registerPageComponents() {
   // 属性面板注入：数据源按钮 + 表格配置（选项来自页面绑定层 schema.dataSources）
@@ -169,6 +284,56 @@ function registerPageComponents() {
       on: { click: () => openPageTableDsConfig() },
     },
   ]
+
+  const pickerConfigProps = (label: string, onClick: () => void) => [
+    {
+      type: 'button',
+      field: 'pickerConfigTrigger',
+      title: '',
+      children: [label],
+      native: true,
+      style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+      props: { size: 'small' },
+      on: { click: onClick },
+    },
+  ]
+
+  // 数据引用与查找带回复用表单设计器的组件注册和配置入口
+  designerRef.value?.addComponent({
+    label: '数据引用',
+    name: 'dataPicker',
+    icon: 'icon-link',
+    menu: 'main',
+    rule: () => ({
+      type: 'dataPicker',
+      field: 'dataPicker' + Date.now(),
+      title: '数据引用',
+      props: { dataSourceId: '', displayField: '', columns: [], searchColumns: [] },
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig(
+    'dataPicker',
+    () => pickerConfigProps('配置数据引用', openPickerConfig),
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '查找带回',
+    name: 'LookupPicker',
+    icon: 'icon-search',
+    menu: 'main',
+    rule: () => ({
+      type: 'LookupPicker',
+      field: 'lookup' + Date.now(),
+      title: '选择',
+      props: { columns: [], displayField: '', returnFields: {}, idField: '' },
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig(
+    'LookupPicker',
+    () => pickerConfigProps('配置查找带回', openLookupConfig),
+    true,
+  )
 
   designerRef.value?.addComponent({
     label: '数据表格',
@@ -215,21 +380,19 @@ function registerPageComponents() {
   })
   designerRef.value?.setComponentRuleConfig('page-tree', dataSourceProps, true)
 
-  // formContainer（数据表单容器）：属性面板数据源下拉使用页面级 schema.dataSources
+  // formContainer（数据表单容器）：配置入口复用 DsBindingConfigDialog，避免维护第二套字段
   designerRef.value?.setComponentRuleConfig(
     'formContainer',
     () => [
       {
-        type: 'select',
-        field: 'dataSourceId',
+        type: 'button',
+        field: 'dsConfigTrigger',
         title: '数据源',
-        value: '',
-        options: schema.dataSources.map((ds) => ({ value: ds.id, label: ds.id })),
-        props: {
-          clearable: true,
-          filterable: true,
-          placeholder: '选择页面内数据源',
-        },
+        children: ['配置数据源'],
+        native: true,
+        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        props: { size: 'small' },
+        on: { click: () => openFormContainerDsConfig() },
       },
       {
         type: 'json',
@@ -237,29 +400,6 @@ function registerPageComponents() {
         title: '记录定位',
         value: { type: 'current-record' },
       },
-      // ===== 表格-容器联动：显示模式与尺寸 =====
-      {
-        type: 'select',
-        field: 'displayMode',
-        title: '显示模式',
-        value: 'dialog',
-        options: [
-          { label: '弹出窗口', value: 'dialog' },
-          { label: '新开页签', value: 'newTab' },
-          { label: '页面内嵌', value: 'inline' },
-        ],
-      },
-      { type: 'input', field: 'dialogWidth', title: '弹窗宽度', value: '800px', props: { placeholder: '800px' } },
-      { type: 'input', field: 'dialogHeight', title: '弹窗高度', value: '600px', props: { placeholder: '600px' } },
-      { type: 'input', field: 'tabTitle', title: '页签标题', value: '编辑记录', props: { placeholder: '编辑记录' } },
-      { type: 'input', field: 'inlineHeight', title: '内嵌高度', value: 'auto', props: { placeholder: 'auto' } },
-      // ===== 按钮配置 =====
-      { type: 'switch', field: 'showNewButton', title: '新增按钮', value: true },
-      { type: 'switch', field: 'showCancelButton', title: '取消按钮', value: true },
-      { type: 'switch', field: 'showConfirmButton', title: '确定按钮', value: true },
-      { type: 'switch', field: 'showDeleteButton', title: '删除按钮', value: false },
-      { type: 'switch', field: 'showCopyButton', title: '复制按钮', value: false },
-      { type: 'json', field: 'customButtons', title: '自定义按钮', value: [] },
     ],
     false,
   )

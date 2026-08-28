@@ -161,14 +161,14 @@ describe('DataSourceConfigPanel', () => {
     expect(optionValues).toContain('close-container')
   })
 
-  it('open-container 步骤渲染 displayMode 参数下拉（弹窗/新页签/内嵌）', () => {
+  it('open-container 步骤不再配置 displayMode（显示模式以容器属性面板为准）', () => {
     const wrapper = mountPanel({
       actions: [{ trigger: 'row-edit', steps: [{ op: 'open-container', target: 'ds1' }] }],
     })
+    // displayMode 下拉已移除：选项中不再有 dialog/newTab/inline 模式值
     const optionValues = wrapper.findAll('option').map((o) => o.attributes('value'))
-    expect(optionValues).toContain('dialog')
-    expect(optionValues).toContain('newTab')
-    expect(optionValues).toContain('inline')
+    expect(optionValues).not.toContain('newTab')
+    expect(optionValues).not.toContain('inline')
   })
 
   it('load-record 步骤渲染 recordId 参数输入', () => {

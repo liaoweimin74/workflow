@@ -22,6 +22,8 @@
   - 视图设计器：勾选式配置可筛选字段（等值/模糊/范围匹配）、展示列、操作按钮、详情弹窗、事件动作链；绑定区选择数据源（FORM/WORKFLOW），列候选取自数据源 metadata
   - 通用渲染页 `/page/:pageKey`：查询区 + 表格 + 分页 + 操作按钮 + 详情/新增/编辑弹窗；只读数据源（WORKFLOW）自动隐藏写操作按钮，详情以 KV 展示
   - 发布不建表（无 DDL）；存量视图启动时自动迁移（formKey → FORM 数据源并回填 dataSourceId，幂等）
+  - **挂接系统菜单**：设计器对已发布页面一键"挂接菜单"（自动建 `sys_menu`：path=/page/{key}、permission=page:read:{key}）；**支持多挂接**（同一页面可挂多个目录/名称），弹窗展示已挂列表、每条可解除挂接（软删）；菜单管理页手动创建同样可用
+  - **访问控制（双重）**：前端菜单 `hasPermission` 控制可见性 + 后端 `PageAccessGuard` 校验（渲染与数据接口）：无任何关联菜单 → 404、拥有任一关联菜单权限 → 放行（OR）、全部无权限 → 403；设计器预览（preview=true）豁免
 - **页面轨（PAGE，阶段二预留）**：自定义页面设计器 + 多数据源联动
 - **事件与脚本**：声明式动作链（open-detail/open-link/open-create/edit/delete/refresh/export/message/set-filter/script），模板变量 `$row.字段` / `$param.参数`，脚本事件沙箱（默认关闭，`VITE_PAGE_SCRIPT_ENABLED=true` 开启）
 - **数据源管理**：全局数据源（FORM/WORKFLOW/SYSTEM/API 多态，DRAFT/ENABLED/DISABLED 状态机）

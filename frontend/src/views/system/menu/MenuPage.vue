@@ -4,10 +4,13 @@ import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
 import { getMenuTree, createMenu, updateMenu, deleteMenu } from '@/api/menu'
+import { pageApi, type PageDefinitionDTO } from '@/api/page'
 import type { MenuTree } from '@/types/menu'
 
 const searchTableRef = ref()
 const list = ref<MenuTree[]>([])
+/** 已发布页面列表（关联页面下拉候选） */
+const publishedPages = ref<PageDefinitionDTO[]>([])
 
 const menuTypeMap: Record<number, string> = { 0: '目录', 1: '菜单', 2: '按钮' }
 const menuTypeOptions = [
@@ -33,6 +36,17 @@ async function fetchApi(_params: any) {
   const res = await getMenuTree()
   list.value = res.data
   return { rows: res.data, total: res.data.length }
+}
+
+// ---------- 加载已发布页面 ----------
+async function loadPublishedPages() {
+  try {
+    const res = await pageApi.getPages({ status: 'PUBLISHED', size: 100 })
+    const data = res.data as any
+    publishedPages.value = data.content || data.rows || []
+  } catch {
+    publishedPages.value = []
+  }
 }
 
 // ---------- 新增子菜单 ----------
@@ -65,11 +79,33 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
         fApi.updateRule('visible', { hidden: isButton })
         fApi.updateRule('component', { hidden: !isMenu })
         fApi.updateRule('permission', { hidden: isDir })
+        fApi.updateRule('linkedPage', { hidden: !isMenu })
       },
     },
     {
       type: 'input', field: 'menuName', title: '菜单名称',
       validate: [{ required: true, message: '请输入菜单名称', trigger: 'blur' }],
+    },
+    {
+      // 关联已发布页面/视图：选中后自动回填 path/component/permission
+      type: 'select', field: 'linkedPage', title: '关联页面',
+      options: publishedPages.value.map((p) => ({ label: `${p.name}（${p.key}）`, value: p.key })),
+      props: { clearable: true, filterable: true, placeholder: '选择已发布的页面/视图（可选）' },
+      validate: [],
+      on: {
+        change: (val: string | undefined, _f: any, fApi: any) => {
+          const page = publishedPages.value.find((p) => p.key === val)
+          if (!page) {
+            fApi.setValue('path', undefined)
+            fApi.setValue('component', undefined)
+            fApi.setValue('permission', undefined)
+            return
+          }
+          fApi.setValue('path', `/page/${page.key}`)
+          fApi.setValue('component', 'page/PageRenderer')
+          fApi.setValue('permission', `page:read:${page.key}`)
+        },
+      },
     },
     {
       type: 'input', field: 'path', title: '路由路径',
@@ -97,8 +133,8 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
 
   return {
     rule,
-    createApi: createMenu,
-    updateApi: (id, data) => updateMenu(id as number, data),
+    createApi: (data) => createMenu(stripLinkedPage(data)),
+    updateApi: (id, data) => updateMenu(id as number, stripLinkedPage(data)),
     deleteApi: async (id) => { await deleteMenu(id as number) },
     getApi: async (id) => findNode(list.value, Number(id)) as MenuTree,
     createPermission: 'system:menu:create',
@@ -106,6 +142,12 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
     deletePermission: 'system:menu:delete',
   } as FormConfig<MenuTree>
 })
+
+/** 提交时移除前端辅助字段 linkedPage（后端 MenuCreateRequest 无此字段） */
+function stripLinkedPage(data: any): any {
+  const { linkedPage, ...rest } = data || {}
+  return rest
+}
 
 // 从树递归查找
 function findNode(tree: MenuTree[], id: number): MenuTree | null {
@@ -122,6 +164,7 @@ function findNode(tree: MenuTree[], id: number): MenuTree | null {
 onMounted(async () => {
   const res = await getMenuTree()
   list.value = res.data
+  await loadPublishedPages()
 })
 </script>
 

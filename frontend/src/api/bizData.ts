@@ -17,6 +17,8 @@ export interface ColumnConfigItem {
   pickerConfig?: string | null
   /** 组件类型（form-create rule type，如 colorPicker/elTransfer；供列表定制渲染） */
   componentType?: string | null
+  /** 是否可排序（数据源 metadata 声明；缺省 undefined=未推导，前端按列类型兜底） */
+  sortable?: boolean
   /** 不支持展示的列（如子表占位字段，后端无实际列） */
   unsupported?: boolean
   /** 子表列定义（group/tableForm/subForm 内部子字段） */

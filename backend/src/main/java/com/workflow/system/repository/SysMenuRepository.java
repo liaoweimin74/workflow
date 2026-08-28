@@ -13,4 +13,6 @@ public interface SysMenuRepository extends JpaRepository<SysMenu, Long>,
     List<SysMenu> findByParentIdIsNullOrderBySortOrder();
 
     long countByParentId(Long parentId);
+
+    List<SysMenu> findByPathAndIsDeleted(String path, int isDeleted);
 }

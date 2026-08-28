@@ -11,10 +11,10 @@
 ## Alternatives Considered
 
 ### 方案 A：设计器挂接 + 菜单控制 + 后端校验
-- **做法**：设计器发布后提供"挂接菜单"按钮，自动创建 `sys_menu`（path=/page/{key}、permission=page:read:{key}）；`PageDefinitionController`/`PageQueryController` 增加基于菜单 permission 的后端校验；重复挂接幂等（已挂则返回已有菜单）
-- **优点**：前端+后端双重控制，防 URL 直填绕过；复用现有 `sys_menu`/`hasPermission` 权限体系，最小改动；设计器一键操作，免手动进菜单页
-- **缺点**：需新增后端接口（mount-menu）与前端按钮；页面 `key` 变更时菜单需同步
-- **为何未採用**：未被放弃——用户选定为主方案
+- **做法**：设计器发布后提供"挂接菜单"按钮，每次挂接创建一条 `sys_menu`（path=/page/{key}、permission=page:read:{key}），同一页面可挂多个菜单（多入口/多目录/差异化授权）；`PageDefinitionController`/`PageQueryController` 增加基于菜单 permission 的后端校验（OR 语义：任一菜单授权即放行）；配套菜单列表与解除挂接管理
+- **优点**：前端+后端双重控制，防 URL 直填绕过；复用现有 `sys_menu`/`hasPermission` 权限体系，最小改动；设计器一键操作，免手动进菜单页；多挂接支持真实业务的多入口/分部门菜单
+- **缺点**：需新增后端接口（mount-menu、menus 列表、解除挂接）与前端按钮/列表；页面 `key` 变更时多个菜单需同步
+- **为何未採用**：未被放弃——用户选定为主方案，并明确多挂接方向
 
 ### 方案 B：页面实体持权限（双写）
 - **做法**：`PageDefinition` 实体增加 `permission` 字段，挂接时菜单与页面各存一份权限码，访问时两层校验（菜单 + 页面）
@@ -35,6 +35,7 @@
 2. 用户确认权限模型为**双重控制**：菜单控制前端可见性 + 后端访问校验（"两种方式均需"）
 3. 现有 `sys_menu`（parentId/menuName/path/component/permission/icon/sortOrder/status）+ `/auth/menus` API + `authStore.menus` + `hasPermission` 体系已完整，方案 A 是"复用存量框架 + 补齐权限校验缺口"的最小路径
 4. 后端当前对 `/page/:pageKey` 零校验是已知安全缺口（`PageDefinitionController`、`PageQueryController` 均无鉴权），本方案将其闭环
+5. 用户明确**一个页面可挂多个菜单**：多入口/多目录/差异化授权是真实业务常态；挂接改为"每次创建新菜单 + 列表管理 + OR 校验"，而非幂等单挂
 
 ## Key Decisions
 
@@ -45,11 +46,14 @@
 | 权限码格式 | `page:read:{pageKey}`（留扩展位：`page:{key}:{action}`） |
 | 菜单 path | `/page/{pageKey}`，component=`page/PageRenderer` |
 | 挂接触发点 | 设计器右上角按钮（发布后可用）+ 菜单管理页手动（两种方式并存） |
-| 重复挂接 | 幂等：同 path 已存在则返回已有菜单，不重复创建 |
+| 挂接语义 | **多挂接**：同页面可挂多个菜单（不同目录/名称），每次挂接创建新菜单；挂接弹窗提示"已挂 N 个菜单"防误操作 |
+| 挂接状态 | **列表**：`GET /{key}/menus` 返回全部关联菜单（数组），设计器展示列表 + 每条可解除挂接（软删菜单） |
+| 访问校验 | **OR 语义**：拥有**任一**指向该页面的已启用菜单权限即放行；无任何关联菜单 → 404 |
 | 重复发布 | key 不变则菜单不变；仅 PUBLISHED 可挂接 |
 | 页面删除 | 不连带删菜单（由管理员清理），避免误删 |
 | 无菜单页面访问 | 后端 404（不暴露页面存在） |
 | 预览（preview=true） | 跳过权限校验，保持设计流程畅通 |
+| 面包屑/高亮 | 多菜单同 path 时取第一个匹配（沿用现有 findMenuPath 规则，不新增） |
 
 ## Open Questions
 

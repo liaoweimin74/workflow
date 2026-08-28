@@ -42,30 +42,37 @@
 - `GET /api/v1/pages/{key}/definition`（非 preview）：按 path 反查菜单 → 无菜单 404 / 菜单禁用 400 / 无权限 403
 - `GET /api/v1/pages/{pageKey}/data`：同规则校验（页面渲染的数据接口必须与页面本身同权限）
 
-### D4：幂等挂接
-`POST /api/v1/pages/{id}/mount-menu`：先按 `/page/{key}` 查已有菜单，存在则返回既有信息（含 menuId）；不存在才创建。天然处理"重复发布/重复挂接"——key 不变则菜单唯一。
+### D4：多挂接（非幂等单挂）
+`POST /api/v1/pages/{id}/mount-menu`：**每次调用创建一条新菜单**（可传 name/parentId），同一页面可挂到多个目录/以多个名称出现。`sys_menu.path` 无唯一约束，多菜单同 path 技术上无障碍。挂接弹窗展示"该页面已挂 N 个菜单"提示，防误操作。
 
-### D5：挂接时机 = PUBLISHED
+### D5：菜单管理（列表 + 解除）
+`GET /api/v1/pages/{key}/menus` 返回该页面全部关联菜单（数组：menuId/menuName/path/parentId/status），设计器展示"已挂 N 个菜单"列表；每条菜单提供"解除挂接"（软删：is_deleted=1），解除不影响页面本身。
+
+### D6：挂接时机 = PUBLISHED
 仅已发布页面可挂接（DRAFT 不可），避免把未定型页面暴露给终端用户。重新发布（key 不变）菜单无需变动。
 
-### D6：预览豁免校验
-`preview=true` 跳过权限校验（设计器内部使用，路径带 preview 参数），保持设计-预览-发布流程不被打断。数据查询接口（无 preview 参数）始终校验，预览数据经设计器专用路径/或接受与正式页同权限——本变更保持 data 接口统一校验。
+### D7：访问校验 OR 语义
+`PageAccessGuard.assertPageAccess(pageKey)`：按 path 查询**全部**关联菜单（is_deleted=0）；一个都没有 → 404；有菜单但任一菜单对当前用户有权限（经 `PermissionEvaluator.hasPermission`）→ 放行；全部菜单均无权限 → 403。menuType 不参与过滤（按钮/目录均可作为授权依据，但页面菜单均为 menuType=1 目录，天然一致）。
+
+### D8：预览豁免校验
+`preview=true` 跳过权限校验（设计器内部使用，路径带 preview 参数），保持设计-预览-发布流程不被打断。数据查询接口（无 preview 参数）始终校验。
 
 ## Risks / Trade-offs
 
 - [页面 key 变更导致旧菜单失效] → 设计器层面限制 key 创建后不可修改（软约束）；后续可加"同步菜单"能力
 - [删除页面后残留菜单指向 404] → 本变更不自动删菜单，由管理员在菜单管理页清理；删除流程中可后续加提示（Open Question）
 - [权限码冲突（与其他业务权限同值）] → `page:read:` 前缀命名空间隔离，冲突概率极低；挂接时按 path 反查不依赖 permission 唯一
-- [findByPath 多租户/软删歧义] → repository 方法限定 `path + isDeleted=0`（+ tenant 上下文若适用），挂接幂等与校验共用同一查询，保证一致
+- [findByPath 多租户/软删歧义] → repository 方法限定 `path + isDeleted=0`（+ tenant 上下文若适用），列表查询与 OR 校验共用同一查询，保证一致
+- [多挂接导致菜单冗余/误操作] → 挂接弹窗展示"已挂 N 个菜单"提示 + 列表管理 + 解除挂接能力；用户确认后才创建新菜单
 - [preview 豁免被滥用] → preview 仅作用于 definition 读取接口且需已登录；数据接口始终校验，风险可控
 
 ## Migration Plan
 
-1. 新增 `SysMenuRepository.findByPath`（含 isDeleted 过滤）
-2. 新增 `PageMenuController`（或并入 PageDefinitionController）：`POST /{id}/mount-menu`、`GET /{key}/menu`（查询挂接状态）
-3. 修改 `PageDefinitionController.getByKey`、`PageQueryController.query` 增加权限校验（注入 SysMenuRepository + 从 Authentication 取 LoginUser）
-4. 前端：设计器（PageDesignerRouter.vue / PageRenderer 的父级设计视图）工具栏新增"挂接菜单"按钮 + 弹窗（菜单名称/所属目录，目录树来自 authStore.menus）；已挂接状态展示 + "查看菜单"跳转
-5. 后端集成测试：挂接成功/幂等/404/403/preview 豁免；前端冒烟
+1. 新增 `SysMenuRepository.findByPathAndIsDeleted`（返回 List，含 isDeleted 过滤）
+2. 新增 `PageMenuController`（或并入 PageDefinitionController）：`POST /{id}/mount-menu`（每次创建新菜单）、`GET /{key}/menus`（列表）、`DELETE /menus/{menuId}`（解除=软删）
+3. 修改 `PageDefinitionController.getByKey`、`PageQueryController.query` 增加权限校验（注入 SysMenuRepository + PermissionEvaluator，OR 语义）
+4. 前端：设计器（PageDesignerRouter.vue / PageRenderer 的父级设计视图）工具栏新增"挂接菜单"按钮 + 弹窗（菜单名称/所属目录，目录树来自 authStore.menus）；已挂列表展示（N 个菜单）+ 每条"解除挂接"；挂接弹窗防误操作提示
+5. 后端集成测试：挂接创建/多挂接/列表/解除/404/403/OR 放行/preview 豁免；前端冒烟
 6. 回滚：后端校验逻辑可独立回退（去掉校验分支即恢复现状）；菜单记录与页面无强约束，删除即解除
 
 ## Open Questions

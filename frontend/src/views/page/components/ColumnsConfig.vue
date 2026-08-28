@@ -41,16 +41,6 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="排序" width="90" align="center">
-        <template #default="{ row }">
-          <el-switch
-            v-if="isChecked(row.key)"
-            :model-value="sortableOf(row.key)"
-            @change="(v: any) => setProp(row.key, 'sortable', v)"
-          />
-          <span v-else class="muted">—</span>
-        </template>
-      </el-table-column>
     </el-table>
 
     <el-empty v-if="candidates.length === 0" description="当前表单无可展示列" :image-size="60" />
@@ -86,16 +76,12 @@ function alignOf(key: string): string {
   return find(key)?.align ?? 'left'
 }
 
-function sortableOf(key: string): boolean {
-  return find(key)?.sortable ?? false
-}
-
 function toggle(col: ColumnConfigItem, checked: boolean) {
   if (checked) {
     if (!isChecked(col.key)) {
       emit('update:modelValue', [
         ...props.modelValue,
-        { key: col.key, label: col.label, width: 130, align: 'left', sortable: false },
+        { key: col.key, label: col.label, width: 130, align: 'left' },
       ])
     }
   } else {
@@ -103,7 +89,7 @@ function toggle(col: ColumnConfigItem, checked: boolean) {
   }
 }
 
-function setProp(key: string, prop: 'width' | 'align' | 'sortable', v: any) {
+function setProp(key: string, prop: 'width' | 'align', v: any) {
   emit(
     'update:modelValue',
     props.modelValue.map((c) => (c.key === key ? { ...c, [prop]: v } : c)),

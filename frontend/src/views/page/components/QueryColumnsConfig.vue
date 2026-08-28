@@ -77,16 +77,6 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
-      <el-table-column label="排序" width="80" align="center">
-        <template #default="{ row }">
-          <el-switch
-            v-if="isColumnChecked(row.key)"
-            :model-value="columnSortableOf(row.key)"
-            @change="(v: any) => setColumnProp(row.key, 'sortable', v)"
-          />
-          <span v-else class="muted">—</span>
-        </template>
-      </el-table-column>
       <el-table-column label="格式化" width="136">
         <template #default="{ row }">
           <el-select
@@ -221,10 +211,6 @@ function columnAlignOf(key: string): string {
   return findColumn(key)?.align ?? 'left'
 }
 
-function columnSortableOf(key: string): boolean {
-  return findColumn(key)?.sortable ?? false
-}
-
 function columnFormatterOf(key: string): string {
   return findColumn(key)?.formatter ?? ''
 }
@@ -238,7 +224,7 @@ function toggleColumn(col: ColumnConfigItem, checked: boolean) {
     if (!isColumnChecked(col.key)) {
       emit('update:columns', [
         ...props.columns,
-        { key: col.key, label: col.label, width: 130, align: 'left', sortable: false },
+        { key: col.key, label: col.label, width: 130, align: 'left' },
       ])
     }
   } else {
@@ -246,7 +232,7 @@ function toggleColumn(col: ColumnConfigItem, checked: boolean) {
   }
 }
 
-function setColumnProp(key: string, prop: 'width' | 'align' | 'sortable' | 'formatter' | 'fixed', v: any) {
+function setColumnProp(key: string, prop: 'width' | 'align' | 'formatter' | 'fixed', v: any) {
   emit(
     'update:columns',
     props.columns.map((c) => (c.key === key ? { ...c, [prop]: v } : c)),

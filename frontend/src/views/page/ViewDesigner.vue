@@ -151,6 +151,7 @@ export interface ColumnViewConfig {
   label: string
   width?: number
   align?: string
+  /** @deprecated 排序能力由数据源 metadata 声明（方案 A），本字段不再配置；历史残留被忽略 */
   sortable?: boolean
   /** 列值格式化器（currency/date/datetime/boolean/enum） */
   formatter?: string

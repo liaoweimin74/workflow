@@ -101,12 +101,12 @@ const mountTarget = ref<PageDefinitionDTO | null>(null)
 const mountedMenus = ref<PageMenuItem[]>([])
 const mountForm = reactive<{ name: string; parentId: number | null }>({ name: '', parentId: null })
 
-/** 所属目录候选：authStore.menus 中 menuType===1 的目录节点（递归） */
+/** 所属目录候选：authStore.menus 中 menuType===0 的目录节点（递归） */
 const menuCategories = computed(() => filterMenuDirs(authStore.menus as any[]))
 
 function filterMenuDirs(menus: any[]): any[] {
   return (menus || [])
-    .filter((m: any) => m.menuType === 1)
+    .filter((m: any) => m.menuType === 0)
     .map((m: any) => ({
       ...m,
       children: m.children ? filterMenuDirs(m.children) : [],

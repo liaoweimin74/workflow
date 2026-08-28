@@ -119,6 +119,32 @@ export function createDsBindingEngine(
     }
   }
 
+  /**
+   * 全量保存所有容器字段（弹窗"确定"按钮用：整表提交而非单字段防抖写）。
+   * 冲突时提示并重载，返回 false；成功返回 true。
+   */
+  async function saveAll(recordId?: string): Promise<boolean> {
+    const rid = recordId ?? deps.recordId()
+    if (!rid || bindings.length === 0) return false
+    for (const b of bindings) {
+      if (!b.writable) continue
+      const data: Record<string, unknown> = {}
+      for (const f of b.fieldNames) data[f] = deps.api.getValue(f)
+      try {
+        const dsRefId = resolveRefId(b.dataSourceId)
+        const res = await dsApi.updateData(dsRefId, rid, data, b.version)
+        // 更新乐观锁版本（后续连续保存不误判冲突）
+        const newVer = (res as any)?.data?.version
+        if (typeof newVer === 'number') b.version = newVer
+      } catch {
+        deps.onConflict('数据已被修改，请刷新')
+        await loadRecord(rid)
+        return false
+      }
+    }
+    return true
+  }
+
   function scheduleWrite(field: string) {
     const b = findBinding(field)
     if (!b || !b.writable) return
@@ -151,5 +177,5 @@ export function createDsBindingEngine(
     return true
   }
 
-  return { mount, loadRecord, flush, getLastRecord }
+  return { mount, loadRecord, flush, saveAll, getLastRecord }
 }

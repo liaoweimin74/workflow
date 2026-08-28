@@ -97,7 +97,7 @@ function createWrapper(props: Record<string, unknown>) {
             return () =>
               h('div', { class: ['fc-dialog-stub', { visible: !!props.modelValue }] }, [
                 h('div', { class: 'fc-dialog-title' }, String(props.title || '')),
-                props.modelValue ? slots.default?.() : null,
+                props.modelValue ? [slots.default?.(), slots.footer?.()] : null,
               ])
           },
         },
@@ -704,7 +704,7 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(true)
   })
 
-  it('newTab 容器也注册进弹窗列表，step 无 displayMode 时按容器模式派发 open-new-tab', async () => {
+  it('newTab 容器也注册进弹窗列表，容器 displayMode 优先于 step（step 存 dialog 仍按 newTab 派发）', async () => {
     const containerRule: Rule[] = [
       {
         type: 'formContainer',
@@ -713,9 +713,9 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
         props: { dataSourceId: 'ds_1', displayMode: 'newTab', rule: [] },
       } as unknown as Rule,
     ]
-    // 旧配置：step 无 displayMode 字段 → 兜底用容器的 newTab
+    // 旧配置：step 存 displayMode:'dialog'（默认值），容器的 newTab 应优先
     const actions = [
-      { trigger: 'row-edit', source: 'ds_1', steps: [{ op: 'open-container', target: 'ds_1' }] },
+      { trigger: 'row-edit', source: 'ds_1', steps: [{ op: 'open-container', target: 'ds_1', displayMode: 'dialog' }] },
     ]
     const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1', actions })
     await nextTick()
@@ -724,21 +724,22 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     const stubs = wrapper.findAll('.fc-dialog-stub')
     expect(stubs.length).toBe(1)
 
-    const emitted = wrapper.emitted('open-new-tab') as any[] | undefined
+    const emittedBefore = (wrapper.emitted('open-new-tab') as any[] | undefined)?.length || 0
     const bus = wrapper.vm.$.provides?.['pageActionBus'] as
       | { dispatch: (trigger: string, eventData: any) => boolean }
       | undefined
     bus!.dispatch('row-edit', { node: { id: 'r9' }, row: { id: 'r9' }, source: 'ds_1' })
     await nextTick()
-    // 派发 open-new-tab 事件（containerKey, recordId）
+    // 容器 newTab 优先 → 派发 open-new-tab 事件（而非打开弹窗）
     const fired = wrapper.emitted('open-new-tab') as any[] | undefined
-    expect(fired).toBeTruthy()
-    expect(fired!.length).toBe((emitted?.length || 0) + 1)
+    expect(fired!.length).toBe(emittedBefore + 1)
     expect(fired![fired!.length - 1][0]).toBe('ds_1')
     expect(fired![fired!.length - 1][1]).toBe('r9')
+    // 不打开弹窗
+    expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(false)
   })
 
-  it('inline 模式 open-container 解析 refId 后调 getData 加载行数据', async () => {
+  it('inline 模式 open-container 打开页内容器并加载到独立 formData（不污染主表单）', async () => {
     const containerRule: Rule[] = [
       {
         type: 'formContainer',
@@ -762,13 +763,117 @@ describe('FormRenderer - 表格-容器联动（pageActionBus provide + row-edit 
     const bus = wrapper.vm.$.provides?.['pageActionBus'] as
       | { dispatch: (trigger: string, eventData: any) => boolean }
       | undefined
+    const setupState = (wrapper.vm as any).$.setupState
+    expect(setupState?.formData).toBeDefined()
     const consumed = bus!.dispatch('row-edit', { node: { id: 'r5' }, row: { id: 'r5' }, source: 'ds_inline' })
     await nextTick()
     await new Promise((r) => setTimeout(r, 10))
     expect(consumed).toBe(true)
     // 用解析后的 refId（uuid）调接口，而非页面内标识 ds_inline
     expect(dataSourceApi.getData).toHaveBeenCalledWith('uuid-inline-1', 'r5')
-    // 行数据写入主 formData
-    expect((wrapper.vm as any).$.setupState?.formData?.name ?? true).toBeTruthy()
+    // inline 容器打开（页内显示），数据写入容器独立 formData
+    const containers = (Array.isArray(setupState?.containers)
+      ? setupState.containers
+      : []) as Array<{ key: string; visible: boolean; formData: Record<string, unknown> }>
+    const c = containers.find((x: any) => x.key === 'ds_inline')
+    expect(c).toBeTruthy()
+    expect(c!.visible).toBe(true)
+    expect(c!.formData.name).toBe('张三')
+    // 关键：数据落在容器独立 formData，主 formData 不被污染（避免重名字段冲突）
+    expect(setupState.formData?.name ?? undefined).toBeUndefined()
+  })
+
+  it('旧动作链 step 存 displayMode:dialog，容器面板设为 inline 时仍打开页内容器（容器优先，不弹窗）', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_inline2',
+        title: '内嵌容器',
+        props: {
+          dataSourceId: 'ds_in2',
+          displayMode: 'inline',
+          rule: [{ type: 'input', field: 'city', title: '城市', value: '' }],
+        },
+      } as unknown as Rule,
+    ]
+    // 用户旧配置：addAction 默认生成的 step 带 displayMode:'dialog'，未随容器面板更新
+    const actions = [
+      { trigger: 'row-edit', source: 'ds_in2', steps: [{ op: 'open-container', target: 'ds_in2', displayMode: 'dialog' }] },
+    ]
+    const dataSources = [{ id: 'ds_in2', refId: 'uuid-in2' }]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1', actions, dataSources })
+    await nextTick()
+
+    ;(dataSourceApi.getData as any).mockClear()
+    ;(dataSourceApi.getData as any).mockResolvedValue({ data: { id: 'r8', version: 1, data: { city: '北京' } } })
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    const consumed = bus!.dispatch('row-edit', { node: { id: 'r8' }, row: { id: 'r8' }, source: 'ds_in2' })
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 10))
+    expect(consumed).toBe(true)
+    // 容器 inline 优先于 step 的 dialog → 不弹窗，打开页内容器
+    expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(false)
+    expect(dataSourceApi.getData).toHaveBeenCalledWith('uuid-in2', 'r8')
+    const setupState = (wrapper.vm as any).$.setupState
+    const containers = (Array.isArray(setupState?.containers)
+      ? setupState.containers
+      : []) as Array<{ key: string; visible: boolean; formData: Record<string, unknown> }>
+    const c = containers.find((x: any) => x.key === 'ds_in2')
+    expect(c).toBeTruthy()
+    expect(c!.visible).toBe(true)
+    expect(c!.formData.city).toBe('北京')
+  })
+
+  it('弹窗编辑后点确定调 updateData 全量保存（saveAll，含乐观锁版本）', async () => {
+    const containerRule: Rule[] = [
+      {
+        type: 'formContainer',
+        field: 'fc_dlg',
+        title: '弹窗容器',
+        props: {
+          dataSourceId: 'ds_dlg',
+          displayMode: 'dialog',
+          rule: [{ type: 'input', field: 'name', title: '名称', value: '' }],
+        },
+      } as unknown as Rule,
+    ]
+    const actions = [
+      { trigger: 'row-edit', source: 'ds_dlg', steps: [{ op: 'open-container', target: 'ds_dlg' }] },
+    ]
+    const dataSources = [{ id: 'ds_dlg', refId: 'uuid-dlg-1' }]
+    const wrapper = createWrapper({ rule: containerRule, recordId: () => 'rec_1', actions, dataSources })
+    await nextTick()
+
+    // 打开弹窗并加载记录（version=3）
+    ;(dataSourceApi.getData as any).mockResolvedValue({ data: { id: 'r7', version: 3, data: { name: '旧名称' } } })
+    const bus = wrapper.vm.$.provides?.['pageActionBus'] as
+      | { dispatch: (trigger: string, eventData: any) => boolean }
+      | undefined
+    bus!.dispatch('row-edit', { node: { id: 'r7' }, row: { id: 'r7' }, source: 'ds_dlg' })
+    await nextTick()
+    await new Promise((r) => setTimeout(r, 10))
+    // 弹窗已打开
+    expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(true)
+
+    // 用户编辑弹窗字段：弹窗内 form-create stub 的 input（data-field=name）
+    const input = wrapper.find('.fc-dialog-stub.visible input[data-field="name"]')
+    expect(input.exists()).toBe(true)
+    await input.setValue('新名称')
+    await nextTick()
+
+    // 点击"确定"按钮 → saveAll → updateData
+    ;(dataSourceApi.updateData as any).mockClear()
+    ;(dataSourceApi.updateData as any).mockResolvedValue({ data: { version: 4 } })
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text() === '确定')
+    expect(confirmBtn).toBeTruthy()
+    await confirmBtn!.trigger('click')
+    await new Promise((r) => setTimeout(r, 10))
+
+    // 全量保存：updateData(refId, recordId, 完整字段, 乐观锁版本)
+    expect(dataSourceApi.updateData).toHaveBeenCalledWith('uuid-dlg-1', 'r7', { name: '新名称' }, 3)
+    // 保存成功后弹窗关闭
+    expect(wrapper.find('.fc-dialog-stub.visible').exists()).toBe(false)
   })
 })

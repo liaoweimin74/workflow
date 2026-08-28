@@ -10,7 +10,7 @@
 
     <!-- 表格-容器联动：dialog 模式容器弹窗（open-container 动作打开） -->
     <el-dialog
-      v-for="c in dialogContainers"
+      v-for="c in dialogOnlyContainers"
       :key="c.key"
       v-model="c.visible"
       :title="c.title"
@@ -21,28 +21,36 @@
       <div class="fc-dialog-body" :style="{ height: c.height }">
         <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="c.formData" />
       </div>
-      <template #footer>
-        <div class="container-buttons">
-          <el-button v-if="c.buttons.showNew" class="btn-new" @click="containerAction(c, 'new')">新增</el-button>
-          <el-button v-if="c.buttons.showCopy" class="btn-copy" @click="containerAction(c, 'copy')">复制</el-button>
-          <el-button v-if="c.buttons.showDelete" class="btn-delete" type="danger" @click="containerAction(c, 'delete')">删除</el-button>
-          <el-button
-            v-for="btn in c.buttons.custom"
-            :key="btn.key"
-            :type="(btn.type as any) || ''"
-            :class="`btn-custom-${btn.key}`"
-            @click="containerCustomAction(c, btn)"
-          >{{ btn.label }}</el-button>
-          <el-button class="btn-cancel" @click="containerAction(c, 'cancel')">取消</el-button>
-          <el-button v-if="c.buttons.showConfirm" class="btn-confirm" type="primary" @click="containerAction(c, 'confirm')">确定</el-button>
-        </div>
+      <template #footer v-if="hasContainerButtons(c)">
+        <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
       </template>
     </el-dialog>
+
+    <!-- 表格-容器联动：inline 模式容器页内区域（点击显示、可关闭、有按钮；与弹窗同机制，仅渲染位置不同） -->
+    <div
+      v-for="c in inlineContainers"
+      :key="c.key"
+      v-show="c.visible"
+      class="fc-inline-container"
+      :class="{ 'fc-inline-open': c.visible }"
+    >
+      <div class="fc-inline-header">
+        <span class="fc-inline-title">{{ c.title }}</span>
+        <!-- 页内关闭入口：始终显示（不受 showCancelButton 控制），满足“关闭时隐藏内嵌页面” -->
+        <el-button class="btn-cancel" text @click="containerAction(c, 'cancel')">关闭</el-button>
+      </div>
+      <div class="fc-inline-body" :style="{ height: c.height }">
+        <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="c.formData" />
+      </div>
+      <div v-if="hasContainerButtons(c)" class="container-buttons fc-inline-footer">
+        <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed, provide, markRaw, nextTick } from 'vue'
+import { ref, watch, onMounted, computed, provide, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import formCreate, { type Rule } from '@form-create/element-ui'
@@ -55,6 +63,8 @@ import { normalizeForRender } from '../schemaRules'
 import type { DataSourceBindingContext } from '@/components/business/types'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
+import { useLinkageContainer, type LinkageContainer } from '../composables/useLinkageContainer'
+import ContainerButtons from './ContainerButtons.vue'
 
 // 注册数据表格组件到 form-create（表单内嵌 page-table 支持）
 formCreate.component('page-table', PageDataTable)
@@ -147,44 +157,41 @@ const schemaActions = ref<FormAction[]>([])
 /** 生效动作链：props.actions 优先，其次 schema.actions */
 const effectiveActions = computed<FormAction[]>(() => props.actions ?? schemaActions.value)
 
-/** 弹窗模式容器运行时状态（对齐 PageRendererPage LinkageContainer） */
-interface DialogContainer {
-  /** dataSourceId（联动 target） */
-  key: string
-  /** 原始 schema 节点（引擎 mount 用） */
-  node: Record<string, any>
-  /** 标题（tabTitle 或节点 title） */
-  title: string
-  /** 宽度（dialogWidth） */
-  width: string
-  /** 高度（dialogHeight，用于 dialog body max-height） */
-  height: string
-  /** 弹窗可见性 */
-  visible: boolean
-  /** 容器子 rule（props.rule，弹窗内 form-create 渲染） */
-  renderRule: Rule[]
-  /** 弹窗独立表单数据（与主 formData 隔离） */
-  formData: Record<string, any>
-  /** 当前记录 ID（load-record 写入） */
-  currentRecordId: string | undefined
-  /** 容器数据引擎（独立读写数据源） */
-  engine: ReturnType<typeof createDsBindingEngine> | null
-  /** 按钮区配置 */
-  buttons: {
-    showNew: boolean
-    showCancel: boolean
-    showConfirm: boolean
-    showDelete: boolean
-    showCopy: boolean
-    custom: Array<{ key: string; label: string; type?: string }>
-  }
-}
+/** 弹窗容器运行时状态（复用共享 LinkageContainer：dialog/inline/newTab 统一容器机制） */
+type DialogContainer = LinkageContainer
 
-/** dialog 模式容器列表（含 newTab 容器——落地页以弹窗回显） */
-const dialogContainers = ref<DialogContainer[]>([])
-
-/** 全部联动容器显示模式（dataSourceId → displayMode，含 inline；step.displayMode 缺省时兜底） */
-const containerModes = new Map<string, string>()
+// ==================== 表格-容器联动：共享容器机制 ====================
+// 复用 useLinkageContainer（与页面设计器同一套容器机制）：
+// 容器提取（从主树移除）、独立引擎挂载、按钮行为、open/load/save/close 动作。
+// 三种显示模式共用同一机制，仅渲染位置不同（dialog=弹窗 / inline=页内 / newTab=新页签）。
+const {
+  containers,
+  dialogContainers: dialogOnlyContainers, // dialog+newTab 容器（模板 el-dialog 渲染；newTab 落地页以弹窗回显）
+  inlineContainers,                       // inline 容器（模板页内区域渲染：点击显示、可关闭、有按钮）
+  containerModes,
+  findContainer,
+  extractContainers,
+  openContainer,
+  loadRecord: loadContainerRecord,
+  flushContainer,
+  closeContainer,
+  containerRefId,
+  hasContainerButtons,
+  containerAction,
+  containerCustomAction,
+} = useLinkageContainer({
+  dsApi: dataSourceApi,
+  dataSources: () => dsBindings.value as any,
+  formDataApi: {
+    getValue: (c, field) => c.formData[field],
+    setValue: (c, field, value) => {
+      c.formData = { ...c.formData, [field]: value }
+    },
+  },
+  openNewTab: (c, rid) => emit('open-new-tab', c.key, rid),
+  findComponent: (key) => componentRefs.get(key),
+  onCustomAction: (c, btn) => ElMessage.info(`自定义按钮：${btn.label}`),
+})
 
 /** 弹窗内 form-create 选项（隐藏提交按钮，表单级布局） */
 const dialogOption = computed<Record<string, any>>(() => ({
@@ -195,65 +202,20 @@ const dialogOption = computed<Record<string, any>>(() => ({
 
 /**
  * 从 rule 树提取联动容器（须在 normalizeForRender 之前调用，此时 type 仍为 formContainer）。
- * - dialog/newTab：从主树移除，注册弹窗容器（独立引擎 + formData）；newTab 落地页（query.container）以弹窗回显
- * - inline：保留在主树，open-container 时从数据源加载行数据到主 formData
+ * dialog / inline / newTab 统一从主树移除，注册为独立容器（独立引擎 + formData），仅渲染位置不同：
+ * - dialog：el-dialog 弹窗
+ * - inline：页内区域（点击显示、可关闭、有按钮）
+ * - newTab：新页签（emit open-new-tab 由父组件打开页签；落地页 query.container 以弹窗回显）
  */
 function extractDialogContainers(rules: Rule[]): Rule[] {
-  const dialogs: DialogContainer[] = []
-  containerModes.clear()
-  const walk = (list: Rule[]): Rule[] =>
-    list
-      .filter((n) => {
-        const node = n as Record<string, any>
-        if (node.type === 'formContainer' && node.props?.dataSourceId) {
-          const mode = (node.props.displayMode as string) || 'dialog'
-          containerModes.set(node.props.dataSourceId, mode)
-          if (mode === 'dialog' || mode === 'newTab') {
-            const props = node.props || {}
-            const c: DialogContainer = {
-              key: props.dataSourceId,
-              node,
-              title: props.tabTitle || node.title || '编辑记录',
-              width: props.dialogWidth || '800px',
-              height: props.dialogHeight || '600px',
-              visible: false,
-              renderRule: (Array.isArray(props.rule) ? props.rule : []) as Rule[],
-              formData: {},
-              currentRecordId: undefined,
-              engine: null,
-              buttons: {
-                showNew: props.showNewButton !== false,
-                showCancel: props.showCancelButton !== false,
-                showConfirm: props.showConfirmButton !== false,
-                showDelete: props.showDeleteButton === true,
-                showCopy: props.showCopyButton === true,
-                custom: Array.isArray(props.customButtons) ? props.customButtons : [],
-              },
-            }
-            mountDialogEngine(c)
-            dialogs.push(c)
-            return false // 从主树移除
-          }
-          // inline：保留在主树（open-container 时从数据源加载到主 formData）
-          return true
-        }
-        return true
-      })
-      .map((n) => {
-        const node = n as Record<string, any>
-        if (Array.isArray(node.children)) node.children = walk(node.children as Rule[])
-        if (node.props && Array.isArray(node.props.rule)) node.props.rule = walk(node.props.rule as Rule[])
-        return n
-      })
-  const mainTree = walk(rules)
-  dialogContainers.value = dialogs
+  const mainTree = extractContainers(rules)
   // newTab 落地页：query.container=容器标识 时自动打开弹窗（须通过 reactive proxy 写，绕开闭包原始对象陷阱）
   if (!queryHandled && routeQuery?.container) {
     queryHandled = true
     const qc = String(routeQuery.container)
     const qrid = routeQuery.recordId ? String(routeQuery.recordId) : ''
     nextTick(() => {
-      const rc = dialogContainers.value.find((x) => x.key === qc)
+      const rc = containers.value.find((x) => x.key === qc)
       // 处理后清理 query（避免编辑弹窗重开时重复触发容器弹窗）
       routerRef?.replace({ query: { ...routeQuery, container: undefined, recordId: undefined } })
       if (!rc) return
@@ -265,41 +227,6 @@ function extractDialogContainers(rules: Rule[]): Rule[] {
     })
   }
   return mainTree
-}
-
-/** 为弹窗容器挂载独立数据引擎（与主 formData 隔离）。
- *  注意：c 在赋值 dialogContainers.value 之前传入，是原始对象。
- *  getValue/setValue 必须通过 dialogContainers.value.find() 获取 reactive proxy，
- *  否则写入绕过 Vue 响应式系统，form-create 感知不到数据变化。 */
-function mountDialogEngine(c: DialogContainer) {
-  const key = c.key
-  const engine = createDsBindingEngine(
-    { dsApi: dataSourceApi } as any,
-    {
-      api: {
-        getValue: (field: string) => {
-          const rc = dialogContainers.value.find((x) => x.key === key)
-          return rc?.formData?.[field]
-        },
-        setValue: (field: string, value: unknown) => {
-          const rc = dialogContainers.value.find((x) => x.key === key)
-          if (rc) {
-            // 新建对象赋值触发 Vue 响应式（非 mutate 原始引用）
-            rc.formData = { ...rc.formData, [field]: value }
-          }
-        },
-      },
-      recordId: () => {
-        const rc = dialogContainers.value.find((x) => x.key === key)
-        return rc?.currentRecordId
-      },
-      onRecordChange: () => { /* load-record 动作显式驱动 */ },
-      onFieldChange: () => { /* dialog 内字段变化由容器 formData 驱动 */ },
-      onConflict: (msg: string) => ElMessage.warning(msg),
-    },
-  )
-  engine.mount([c.node])
-  c.engine = markRaw(engine) as any
 }
 
 /** 注入给数据组件的绑定上下文：prop 直传优先，其次 schema 加载结果 */
@@ -670,65 +597,28 @@ function dispatchAction(trigger: string, eventData: any): boolean {
       const op = step.op
       const target = step.target
       if (op === 'open-container') {
-        // 步骤 displayMode 优先，其次容器 displayMode（旧配置 step 无该字段时兜底），默认 dialog
-        const mode = step.displayMode || containerModes.get(target) || 'dialog'
-        if (mode === 'dialog') {
-          const c = dialogContainers.value.find((x) => x.key === target)
-          if (c) {
-            // 清空旧数据（新对象赋值触发响应式）
-            c.formData = {}
-            c.currentRecordId = undefined
-            c.visible = true
-            // 自动加载触发行数据（row-edit/view 时 eventData.row.id 存在）
-            const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-            if (rid && c.engine) {
-              c.currentRecordId = rid
-              void c.engine.loadRecord(rid)
-            }
-          }
-        } else if (mode === 'newTab') {
-          // 新开页签：通过事件通知父组件处理路由跳转
-          const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-          emit('open-new-tab', target || '', rid)
-        } else if (mode === 'inline') {
-          // 容器常驻主树：从数据源加载行数据到主 formData（target 须解析为全局 refId）
-          const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-          if (rid && target) {
-            const refId = dsBindings.value.find((d) => d.id === target)?.refId
-            if (refId) {
-              void dataSourceApi.getData(refId, rid).then((res) => {
-                const fields = (res.data?.data || {}) as Record<string, unknown>
-                formData.value = { ...formData.value, ...fields }
-              }).catch(() => { /* http 拦截器已提示 */ })
-            } else {
-              ElMessage.warning(`数据源未绑定: ${target}`)
-            }
-          }
-        }
+        // 容器 displayMode 优先（属性面板配置为准），step.displayMode 为兜底，默认 dialog
+        const mode = containerModes.get(target) || step.displayMode || 'dialog'
+        // 共享打开逻辑：dialog/inline 统一清空 formData + 显示 + 引擎 loadRecord；
+        // newTab 经 openNewTab 回调 emit open-new-tab（仅渲染位置不同）
+        const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
+        openContainer(target || '', rid, mode as any)
         consumed = true
       } else if (op === 'load-record') {
         const rid = step.recordId
           ? resolveTemplateValue(step.recordId, eventData)
           : String(eventData?.row?.id ?? eventData?.node?.id ?? '')
         if (rid) {
-          // 优先加载到弹窗容器引擎（如有匹配），否则加载到主引擎
-          const c = dialogContainers.value.find((x) => x.key === target)
-          if (c?.engine) {
-            c.currentRecordId = rid
-            void c.engine.loadRecord(rid)
-          } else {
-            void bindingEngine.value?.loadRecord(rid)
-          }
+          // 优先加载到容器引擎（如有匹配），否则加载到主引擎
+          loadContainerRecord(target, rid, () => void bindingEngine.value?.loadRecord(rid))
         }
         consumed = true
       } else if (op === 'save-container') {
-        const c = dialogContainers.value.find((x) => x.key === target)
-        if (c?.engine) void c.engine.flush()
-        else void bindingEngine.value?.flush()
+        // 冲刷容器引擎；无容器时回退主引擎
+        flushContainer(target, () => void bindingEngine.value?.flush())
         consumed = true
       } else if (op === 'close-container') {
-        const c = dialogContainers.value.find((x) => x.key === target)
-        if (c) c.visible = false
+        closeContainer(target)
         consumed = true
       } else if (op === 'reload-record') {
         const rid = props.recordId?.()
@@ -738,68 +628,6 @@ function dispatchAction(trigger: string, eventData: any): boolean {
     }
   }
   return consumed
-}
-
-// ==================== 容器按钮区行为 ====================
-
-/** 容器内数据源对应的全局 refId */
-function containerRefId(c: DialogContainer): string | undefined {
-  return dsBindings.value.find((d) => d.id === c.key)?.refId
-}
-
-/** 默认按钮行为：new=清空建新 / cancel=关闭 / confirm=保存关闭 / delete=删除记录 / copy=复制新记录 */
-async function containerAction(c: DialogContainer, action: 'new' | 'cancel' | 'confirm' | 'delete' | 'copy') {
-  if (action === 'new') {
-    // 新对象赋值触发 Vue 响应式
-    c.formData = {}
-    c.currentRecordId = undefined
-  } else if (action === 'cancel') {
-    c.visible = false
-  } else if (action === 'confirm') {
-    await c.engine?.flush()
-    // 智能同步：刷新容器关联的表格
-    const tbl = componentRefs.get(c.key)
-    if (tbl && typeof tbl.refresh === 'function') tbl.refresh()
-    c.visible = false
-  } else if (action === 'delete') {
-    const refId = containerRefId(c)
-    if (!refId || !c.currentRecordId) return
-    try {
-      const { ElMessageBox } = await import('element-plus')
-      await ElMessageBox.confirm('确定要删除该记录吗？', '删除确认', { type: 'warning' })
-    } catch {
-      return
-    }
-    try {
-      await dataSourceApi.deleteData(refId, c.currentRecordId)
-      ElMessage.success('删除成功')
-      const tbl = componentRefs.get(c.key)
-      if (tbl && typeof tbl.refresh === 'function') tbl.refresh()
-      c.visible = false
-    } catch {
-      // http 拦截器已提示
-    }
-  } else if (action === 'copy') {
-    const refId = containerRefId(c)
-    if (!refId) return
-    const data = { ...c.formData }
-    delete data.id
-    delete data.version
-    try {
-      await dataSourceApi.createData(refId, data)
-      ElMessage.success('复制成功')
-      const tbl = componentRefs.get(c.key)
-      if (tbl && typeof tbl.refresh === 'function') tbl.refresh()
-      c.visible = false
-    } catch {
-      // http 拦截器已提示
-    }
-  }
-}
-
-/** 自定义按钮行为（触发 container-action 事件，由调用方处理） */
-function containerCustomAction(c: DialogContainer, btn: { key: string; label: string }) {
-  ElMessage.info(`自定义按钮：${btn.label}`)
 }
 
 /** 组件引用注册表（对齐 PageRendererPage：PageDataTable ready 上报） */
@@ -862,5 +690,35 @@ defineExpose({ submit, saveSnapshot, getFormData, validate, loadSchema, loadData
 /* 容器弹窗内容区：设定高度（dialogHeight），超出滚动 */
 .fc-dialog-body {
   overflow-y: auto;
+}
+
+/* inline 容器页内区域：默认隐藏，open-container 时显示；带边框与头部 */
+.fc-inline-container {
+  display: none;
+  margin-top: 16px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.fc-inline-container.fc-inline-open {
+  display: block;
+}
+.fc-inline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-weight: 600;
+}
+.fc-inline-body {
+  overflow-y: auto;
+  padding: 16px;
+}
+.fc-inline-footer {
+  padding: 8px 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  text-align: right;
 }
 </style>

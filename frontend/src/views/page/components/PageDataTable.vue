@@ -141,9 +141,10 @@ const resolvedColumns = computed<TableColumn[]>(() => {
       prop: c.key,
       label: c.label || c.key,
       minWidth: 120,
+      sortable: !!c.sortable, // 数据源 metadata 声明的排序能力
     }))
   }
-  // 有用户配置的列时使用用户配置
+  // 有用户配置的列时使用用户配置；排序能力由数据源 metadata 声明（方案 A：视图零配置）
   return (props.columns || []).map((c: any) => ({
     prop: c.key ?? c.prop,
     label: c.label || c.key || c.prop,
@@ -151,7 +152,7 @@ const resolvedColumns = computed<TableColumn[]>(() => {
     minWidth: c.minWidth || 120,
     align: c.align as any,
     fixed: c.fixed as any,
-    sortable: !!c.sortable,
+    sortable: !!metaColumns.value.find((m) => m.key === (c.key ?? c.prop))?.sortable,
     formatter: c.formatter ? (_row: any, _col: TableColumn, cellValue: any) => formatCellValue(cellValue, c.formatter) : undefined,
   }))
 })
@@ -262,6 +263,9 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
     filterConditions.push({ column: field.prop, op: 'like', value: v })
   }
   const query: Record<string, any> = { page: Math.max(0, params.page - 1), size: params.size }
+  // 排序状态透传（SearchTable 内部维护，服务器端排序）
+  if (params.sort) query.sort = params.sort
+  if (params.order) query.order = params.order
   if (filterConditions.length > 0) {
     query.filter = JSON.stringify({ logic: 'AND', conditions: filterConditions })
   }

@@ -130,6 +130,7 @@ const columns = computed<TableColumn[]>(() => {
       prop: c.key,
       label: c.label,
       minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 130,
+      sortable: isColumnSortable(c),
       render: (row: any): VNode | string => {
         const v = row.data?.[c.key]
         // data-picker：显示冗余文本列（<key>_text，JSON 文本数组），缺省回退原值
@@ -233,6 +234,14 @@ function openSubtable(row: any, col: ColumnConfigItem) {
   subtableDialogVisible.value = true
 }
 
+/** 按列类型推导排序能力（与 filterableColumns 同源规则：JSON/TEXT/colorPicker/子表不可排） */
+function isColumnSortable(c: ColumnConfigItem): boolean {
+  if (c.subColumns && c.subColumns.length > 0) return false
+  if (c.columnType === 'JSON' || c.columnType === 'TEXT') return false
+  if (c.componentType === 'colorPicker') return false
+  return true
+}
+
 /**
  * fetchApi 适配层：SearchTable 平铺查询参数 → biz-data 的 filter JSON
  */
@@ -248,6 +257,8 @@ async function fetchApi(params: any) {
     page: (params.page || 1) - 1,
     size: params.size || 20,
     filter,
+    sort: params.sort,
+    order: params.order,
   })
   return { rows: res.data.records || [], total: res.data.total || 0 }
 }

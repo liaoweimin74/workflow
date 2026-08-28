@@ -28,6 +28,7 @@ vi.mock('@/api/data-source', () => ({
     getData: vi.fn(),
     updateData: vi.fn(),
     getMetadata: vi.fn(),
+    getDataSource: vi.fn(),
   },
 }))
 
@@ -73,6 +74,7 @@ vi.mock('vue-router', () => ({
 
 import { pageApi } from '@/api/page'
 import { formApi } from '@/api/form'
+import { dataSourceApi } from '@/api/data-source'
 import { ElMessage } from 'element-plus'
 
 beforeEach(() => {
@@ -429,6 +431,59 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     await approveBtn.trigger('click')
     await flushPromises()
     expect(ElMessage).toHaveBeenCalledWith(expect.objectContaining({ message: '已审批' }))
+    wrapper.unmount()
+  })
+
+  it('列排序能力由数据源 metadata 声明（方案 A：schema 不驱动）', async () => {
+    ;(pageApi.getPageByKey as any).mockResolvedValue({
+      data: { ...pageDef, dataSourceId: 'ds-1' },
+    })
+    ;(pageApi.queryPageData as any).mockResolvedValue({
+      data: { records: [], total: 0, page: 0, size: 20 },
+    })
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', sortable: true },
+          { key: 'age', label: '年龄', columnType: 'TEXT', sortable: false },
+        ],
+      },
+    })
+    ;(dataSourceApi.getDataSource as any).mockResolvedValue({ data: { id: 'ds-1', type: 'FORM' } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.exists()).toBe(true)
+    const cols = st.props('columns') as any[]
+    const nameCol = cols.find((c) => c.prop === 'name')
+    const ageCol = cols.find((c) => c.prop === 'age')
+    // metadata 声明可排 → true；声明不可排（TEXT）→ false
+    expect(nameCol.sortable).toBe(true)
+    expect(ageCol.sortable).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('排序请求透传 sort/order 参数', async () => {
+    ;(pageApi.getPageByKey as any).mockResolvedValue({ data: pageDef })
+    ;(pageApi.queryPageData as any).mockResolvedValue({
+      data: { records: [], total: 0, page: 0, size: 20 },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    // 通过 SearchTable 触发排序（携带 sort/order 的重新请求）
+    const st = wrapper.findComponent(SearchTable)
+    const table = st.findComponent({ name: 'ElTable' })
+    await (table.vm as any).$emit('sort-change', { column: { prop: 'name' }, prop: 'name', order: 'ascending' })
+    await flushPromises()
+
+    const lastCall = (pageApi.queryPageData as any).mock.calls.at(-1)
+    expect(lastCall[0]).toBe('emp_view')
+    expect(lastCall[1]).toEqual({ page: 0, size: 20, sort: 'name', order: 'asc' })
     wrapper.unmount()
   })
 })

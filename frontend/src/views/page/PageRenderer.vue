@@ -294,6 +294,9 @@ function buildFilter(params: Record<string, any>): string | undefined {
 /** SearchTable 数据获取：page 为 1-based，转后端 0-based；搜索条件从 params（含外部注入 query）提取 */
 const searchTableFetchApi = async (params: QueryParams): Promise<{ rows: any[]; total: number }> => {
   const p: Record<string, any> = { page: (params.page || 1) - 1, size: params.size || 20 }
+  // 排序状态透传（SearchTable 内部维护，服务器端排序）
+  if (params.sort) p.sort = params.sort
+  if (params.order) p.order = params.order
   const filter = buildFilter(params)
   if (filter) p.filter = filter
   const res = await pageApi.queryPageData(pageKey.value, p)
@@ -392,7 +395,8 @@ const actionButtonsConfig = computed<{ key: string; label: string; placement: 't
   return out
 })
 
-/** 列 → SearchTable TableColumn：行值取 BizDataVO 内层 row.data，render 承载 formatter/cellValue */
+/** 列 → SearchTable TableColumn：行值取 BizDataVO 内层 row.data，render 承载 formatter/cellValue。
+ * 排序能力由数据源 metadata 声明（方案 A：视图零配置），schema 残留 sortable 忽略。 */
 const searchTableColumns = computed<TableColumn[]>(() =>
   tableColumns.value.map((c) => ({
     prop: c.prop,
@@ -401,7 +405,7 @@ const searchTableColumns = computed<TableColumn[]>(() =>
     width: c.width,
     align: (c.align || 'left') as any,
     fixed: (c.fixed || undefined) as any,
-    sortable: c.sortable,
+    sortable: !!dataSourceMeta.value?.columns?.find((m) => m.key === c.prop)?.sortable,
     render: (row: any) => {
       const raw = row?.data != null && typeof row.data === 'object' ? row.data[c.prop] : row?.[c.prop]
       if (c.formatter) return formatCellValue(raw, c.formatter)

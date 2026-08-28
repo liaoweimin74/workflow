@@ -2,6 +2,7 @@ package com.workflow.framework.security.jwt;
 
 import com.workflow.common.constant.GlobalConstant;
 import com.workflow.framework.security.domain.LoginUser;
+import com.workflow.framework.security.service.LoginUserService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -13,15 +14,16 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Set;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
+    private final LoginUserService loginUserService;
 
-    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
+                                   LoginUserService loginUserService) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.loginUserService = loginUserService;
     }
 
     @Override
@@ -35,11 +37,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             Long userId = jwtTokenProvider.getUserIdFromToken(token);
-            String username = jwtTokenProvider.getUsernameFromToken(token);
-            LoginUser loginUser = new LoginUser(userId, username, null, Collections.emptyList(), Collections.emptySet(), true);
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities());
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+            // 加载完整角色与权限集合（后端鉴权依赖，不能为空）
+            LoginUser loginUser = loginUserService.buildLoginUser(userId);
+            if (loginUser != null) {
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
         }
         filterChain.doFilter(request, response);
     }

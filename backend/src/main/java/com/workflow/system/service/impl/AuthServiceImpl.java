@@ -2,6 +2,7 @@ package com.workflow.system.service.impl;
 
 import com.workflow.common.constant.GlobalConstant;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.framework.security.jwt.JwtTokenProvider;
 import com.workflow.framework.redis.RedisCache;
 import com.workflow.system.domain.dto.LoginRequest;
@@ -90,6 +91,29 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new BusinessException("用户不存在"));
         UserInfo userInfo = buildUserInfo(user);
         return new LoginResponse(null, null, userInfo);
+    }
+
+    @Override
+    public LoginUser buildLoginUser(Long userId) {
+        SysUser user = userRepository.findById(userId).orElse(null);
+        if (user == null || user.getStatus() == null || user.getStatus() != 1) {
+            return null;
+        }
+        List<SysUserRole> userRoles = userRoleRepository.findByUserId(user.getId());
+        Set<Long> roleIds = userRoles.stream().map(SysUserRole::getRoleId).collect(Collectors.toSet());
+        List<String> roles = roleRepository.findAllById(roleIds).stream()
+                .map(SysRole::getRoleCode)
+                .collect(Collectors.toList());
+
+        Set<Long> menuIds = roleMenuRepository.findByRoleIdIn(roleIds).stream()
+                .map(SysRoleMenu::getMenuId)
+                .collect(Collectors.toSet());
+        Set<String> permissions = menuRepository.findAllById(menuIds).stream()
+                .map(SysMenu::getPermission)
+                .filter(p -> p != null && !p.isEmpty())
+                .collect(Collectors.toSet());
+
+        return new LoginUser(user.getId(), user.getUsername(), null, roles, permissions, true);
     }
 
     @Override

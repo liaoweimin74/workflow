@@ -131,9 +131,13 @@ function filteredMenus(menuList: any[]) {
 }
 
 // 从菜单树递归查找路径，返回从根到目标的节点链
+// 优先匹配叶子菜单（menuType=1 有 component），避免父目录与子菜单 path 相同（如 /form）时误命中父级
 function findMenuPath(menus: any[], targetPath: string): any[] | null {
   for (const m of menus) {
-    if (m.path === targetPath) return [m]
+    // 仅叶子菜单（非目录）参与 path 精确匹配
+    if ((m.menuType === undefined || m.menuType !== 0) && m.path === targetPath) {
+      return [m]
+    }
     if (m.children && m.children.length > 0) {
       const sub = findMenuPath(m.children, targetPath)
       if (sub) return [m, ...sub]

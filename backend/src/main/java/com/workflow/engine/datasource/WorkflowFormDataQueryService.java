@@ -82,14 +82,19 @@ public class WorkflowFormDataQueryService {
         this.tenantProvider = tenantProvider;
     }
 
-    /** WORKFLOW 数据源固定系统列。 */
+    /** WORKFLOW 数据源固定系统列（显式标注 sortable：startTime 可排，派生列不可排）。 */
     public static List<ColumnConfig> systemColumns() {
-        return List.of(
-                col("instanceId", "流程实例ID"),
-                col("processStatus", "流程状态"),
-                col("initiatorName", "发起人"),
-                col("startTime", "发起时间", "DATETIME"),
-                col("currentNodeName", "当前节点"));
+        ColumnConfig instanceId = col("instanceId", "流程实例ID");
+        instanceId.setSortable(false);
+        ColumnConfig processStatus = col("processStatus", "流程状态");
+        processStatus.setSortable(false);
+        ColumnConfig initiatorName = col("initiatorName", "发起人");
+        initiatorName.setSortable(false);
+        ColumnConfig startTime = col("startTime", "发起时间", "DATETIME");
+        startTime.setSortable(true);
+        ColumnConfig currentNodeName = col("currentNodeName", "当前节点");
+        currentNodeName.setSortable(false);
+        return List.of(instanceId, processStatus, initiatorName, startTime, currentNodeName);
     }
 
     /** 该 formKey 最新 PUBLISHED schema 解析出的业务列。

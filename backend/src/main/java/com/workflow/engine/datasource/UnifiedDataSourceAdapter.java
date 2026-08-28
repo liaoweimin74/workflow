@@ -88,16 +88,44 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     @Override
     public DataSourceMetadata metadata(DataSourceDefinition ds) {
         return switch (ds.getType()) {
-            case "FORM" -> new DataSourceMetadata(
-                    formDefService.getBusinessColumnsByKey(ds.getFormKey()), true);
-            case "WORKFLOW" -> new DataSourceMetadata(
-                    workflowQueryService.columnsFor(ds.getFormKey()), false);
-            case "SYSTEM" -> "user-tree".equals(ds.getSourceKey())
-                    ? new DataSourceMetadata(USER_COLUMNS, false)
-                    : new DataSourceMetadata(DEPT_COLUMNS, false);
-            case "API" -> apiMetadata(ds);
+            case "FORM" -> {
+                List<ColumnConfig> cols = formDefService.getBusinessColumnsByKey(ds.getFormKey());
+                SortableResolver.resolve(cols);
+                yield new DataSourceMetadata(cols, true);
+            }
+            case "WORKFLOW" -> {
+                List<ColumnConfig> cols = workflowQueryService.columnsFor(ds.getFormKey());
+                SortableResolver.resolve(cols);
+                yield new DataSourceMetadata(cols, false);
+            }
+            case "SYSTEM" -> {
+                List<ColumnConfig> cols = "user-tree".equals(ds.getSourceKey())
+                        ? copyWithSortableFalse(USER_COLUMNS)
+                        : copyWithSortableFalse(DEPT_COLUMNS);
+                yield new DataSourceMetadata(cols, false);
+            }
+            case "API" -> {
+                DataSourceMetadata m = apiMetadata(ds);
+                yield new DataSourceMetadata(copyWithSortableFalse(m.getColumns()), m.isWritable());
+            }
             default -> throw unsupported(ds, "metadata");
         };
+    }
+
+    /** 复制列并强制标记 sortable=false（SYSTEM/API 数据源不可排序；避免就地污染共享常量列）。 */
+    private List<ColumnConfig> copyWithSortableFalse(List<ColumnConfig> src) {
+        List<ColumnConfig> out = new ArrayList<>();
+        if (src != null) {
+            for (ColumnConfig c : src) {
+                ColumnConfig copy = new ColumnConfig();
+                copy.setKey(c.getKey());
+                copy.setLabel(c.getLabel());
+                copy.setColumnType(c.getColumnType());
+                copy.setSortable(false);
+                out.add(copy);
+            }
+        }
+        return out;
     }
 
     @Override

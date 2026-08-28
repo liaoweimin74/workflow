@@ -205,6 +205,8 @@ interface LegacyFilterItem {
 const props = withDefaults(
   defineProps<{
     modelValue?: string
+    /** 旧版直接绑定业务表单 key；未配置 dataSourceId 时作为兼容回退 */
+    sourceFormKey?: string
     /** 页面内数据源绑定 ID */
     dataSourceId?: string
     /** 目标表显示字段 */
@@ -262,9 +264,9 @@ const currentBinding = computed<DataSourceBindingContext | undefined>(() => {
 const dsRefId = computed(() => currentBinding.value?.refId || '')
 
 /** 有效表单 key：从 DS 定义动态获取 */
-const effectiveFormKey = ref('')
+const effectiveFormKey = ref(props.sourceFormKey || '')
 watch(dsRefId, async (refId) => {
-  if (!refId) { effectiveFormKey.value = ''; return }
+  if (!refId) { effectiveFormKey.value = props.sourceFormKey || ''; return }
   try {
     const res = await dataSourceApi.getDataSource(refId)
     effectiveFormKey.value = res.data?.formKey || ''
@@ -272,6 +274,9 @@ watch(dsRefId, async (refId) => {
     effectiveFormKey.value = ''
   }
 }, { immediate: true })
+watch(() => props.sourceFormKey, (formKey) => {
+  if (!props.dataSourceId) effectiveFormKey.value = formKey || ''
+})
 
 const dialogVisible = ref(false)
 const createDialogVisible = ref(false)
@@ -599,7 +604,7 @@ function handleViewRowClick(row: any) {
 }
 
 async function fetchData() {
-  if (!dsRefId.value) {
+  if (!dsRefId.value && !effectiveFormKey.value) {
     ElMessage.warning('未配置数据源，请在设计器中配置数据源绑定')
     return
   }
@@ -614,9 +619,12 @@ async function fetchData() {
       params.keywordColumn = resolvedSearchColumns.value.join(',')
     }
     if (queryFilter.value) {
-      params.filter = JSON.stringify(queryFilter.value)
+      // 统一数据源接口接收 JSON 字符串；旧 sourceFormKey 兼容接口仍接收结构化对象
+      params.filter = dsRefId.value ? JSON.stringify(queryFilter.value) : queryFilter.value
     }
-    const res = await dataSourceApi.queryData(dsRefId.value, params as any)
+    const res = dsRefId.value
+      ? await dataSourceApi.queryData(dsRefId.value, params as any)
+      : await bizDataApi.list(effectiveFormKey.value, params as any)
     const biz = res.data as any
     tableData.value = biz?.records || []
     total.value = biz?.total || 0

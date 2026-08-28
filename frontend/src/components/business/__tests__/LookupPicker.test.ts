@@ -2,10 +2,11 @@
 // npx vitest run src/components/business/__tests__/LookupPicker.test.ts
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ElementPlus from 'element-plus'
 import LookupPicker from '../LookupPicker.vue'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 function createWrapper(props: any = {}) {
   return mount(LookupPicker, {
@@ -61,12 +62,16 @@ describe('LookupPicker — 弹窗交互', () => {
     expect(wrapper.find('.el-dialog__wrapper').exists()).toBe(false)
   })
 
-  it('打开弹窗时调用 fetchApi', async () => {
-    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
-    const wrapper = createWrapper({ fetchApi })
+  it('打开弹窗时按 dataSourceId 查询数据源', async () => {
+    activeDsBindings.value = [{ id: 'ds-1', refId: 'emp_profile' }]
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
+    const wrapper = createWrapper({ dataSourceId: 'ds-1' })
     await wrapper.find('input').trigger('click')
-    await nextTick()
-    expect(fetchApi).toHaveBeenCalled()
+    await flushPromises()
+    expect(mockHttp.get).toHaveBeenCalledWith(
+      '/v1/data-sources/emp_profile/data',
+      expect.objectContaining({ params: expect.objectContaining({ page: 0, size: 10 }) }),
+    )
   })
 })
 
@@ -266,6 +271,7 @@ const mockHttp = http as any
 beforeEach(() => {
   mockHttp.get.mockReset()
   mockHttp.post.mockReset()
+  activeDsBindings.value = []
 })
 
 describe('buildFetchApiFromConfig — GET', () => {
@@ -396,43 +402,36 @@ describe('buildFetchApiFromConfig — 搜索参数匹配', () => {
   })
 })
 
-describe('LookupPicker — fetch 配置模式', () => {
-  it('未配置任何数据源时打开弹窗给出提示且不请求', async () => {
-    const wrapper = createWrapper({ fetchApi: undefined, fetch: undefined })
+describe('LookupPicker — dataSourceId 模式', () => {
+  it('未配置数据源绑定时打开弹窗给出提示且不请求', async () => {
+    const wrapper = createWrapper({ dataSourceId: 'ds-1' })
     await wrapper.find('input').trigger('click')
     await nextTick()
     expect(mockHttp.get).not.toHaveBeenCalled()
   })
 
-  it('fetch 配置存在时打开弹窗调用 http.get 加载数据（biz-data 接口按 0 起分页）', async () => {
+  it('dataSourceId 匹配绑定后按 refId 调用 queryData 加载数据', async () => {
+    activeDsBindings.value = [{ id: 'ds-1', refId: 'emp_profile' }]
     mockHttp.get.mockResolvedValue({
       code: 200,
       data: { records: [{ id: '1', name: '张三' }], total: 1 },
     })
-    const wrapper = createWrapper({
-      fetchApi: undefined,
-      fetch: { action: '/v1/biz-data/emp_profile', parse: 'records' },
-    })
+    const wrapper = createWrapper({ dataSourceId: 'ds-1' })
     await wrapper.find('input').trigger('click')
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     expect(mockHttp.get).toHaveBeenCalledWith(
-      '/v1/biz-data/emp_profile',
+      '/v1/data-sources/emp_profile/data',
       expect.objectContaining({ params: expect.objectContaining({ page: 0, size: 10 }) }),
     )
+    expect((wrapper.vm as any).tableData.length).toBe(1)
   })
 
-  it('fetchApi 函数优先于 fetch 配置', async () => {
-    const fn = vi.fn().mockResolvedValue({ rows: [{ id: '9' }], total: 1 })
-    const wrapper = createWrapper({
-      fetchApi: fn,
-      fetch: { action: '/v1/should-not-use' },
-    })
+  it('dataSourceId 匹配不到绑定时给出提示且不请求', async () => {
+    activeDsBindings.value = [{ id: 'other', refId: 'x' }]
+    const wrapper = createWrapper({ dataSourceId: 'ds-1' })
     await wrapper.find('input').trigger('click')
     await nextTick()
-    await nextTick()
-    expect(fn).toHaveBeenCalled()
-    expect(mockHttp.get).not.toHaveBeenCalledWith('/v1/should-not-use', expect.anything())
+    expect(mockHttp.get).not.toHaveBeenCalled()
   })
 })
 
@@ -462,14 +461,17 @@ describe('LookupPicker — BizDataVO 嵌套行', () => {
   })
 
   it('弹窗表格列从 row.data 内层取列值（readCellValue 嵌套取值）', async () => {
-    const fetchApi = vi.fn().mockResolvedValue({
-      rows: [{ id: '1', data: { code: 'BL-001', name: '盲板A' }, version: 1 }],
-      total: 1,
+    activeDsBindings.value = [{ id: 'ds-1', refId: 'emp_profile' }]
+    mockHttp.get.mockResolvedValue({
+      code: 200,
+      data: {
+        records: [{ id: '1', data: { code: 'BL-001', name: '盲板A' }, version: 1 }],
+        total: 1,
+      },
     })
-    const wrapper = createWrapper({ fetchApi })
+    const wrapper = createWrapper({ dataSourceId: 'ds-1' })
     await wrapper.find('input').trigger('click')
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     // fetchData 已填充 tableData
     expect(vm.tableData.length).toBe(1)
@@ -507,43 +509,35 @@ describe('LookupPicker — BizDataVO 嵌套行', () => {
 })
 
 describe('LookupPicker — 数据源筛选', () => {
-  it('底表数据源：fetch 含 filter 时请求带 filter JSON（静态值）', async () => {
-    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
-    const wrapper = mount(LookupPicker, {
-      props: {
-        modelValue: null,
-        fetchApi,
-        columns: [{ prop: 'code', label: '编号' }],
-        displayField: 'code',
-        fetch: {
-          action: '/v1/biz-data/emp_profile',
-          filter: { logic: 'AND', conditions: [{ column: 'status', op: 'eq', value: 'PAID' }] },
-        },
-      },
-      global: { plugins: [ElementPlus] },
+  it('dataSourceId + 组件级 filter（静态值）：请求携带 filter JSON', async () => {
+    activeDsBindings.value = [{ id: 'ds-1', refId: 'emp_profile' }]
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
+    const wrapper = createWrapper({
+      dataSourceId: 'ds-1',
+      columns: [{ prop: 'code', label: '编号' }],
+      displayField: 'code',
+      filter: { logic: 'AND', conditions: [{ column: 'status', op: 'eq', value: 'PAID' }] },
     })
     await wrapper.find('input').trigger('click')
-    await nextTick()
-    expect(fetchApi).toHaveBeenCalled()
-    const params = fetchApi.mock.calls[0][0]
-    expect(params.filter).toEqual({
+    await flushPromises()
+    const calls = mockHttp.get.mock.calls
+    const params = calls[calls.length - 1][1].params
+    expect(JSON.parse(params.filter)).toEqual({
       logic: 'AND',
       conditions: [{ column: 'status', op: 'eq', value: 'PAID' }],
     })
   })
 
-  it('底表数据源：动态条件值经 formCreateInject api.getValue 读取', async () => {
-    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+  it('dataSourceId + 动态条件值经 formCreateInject api.getValue 读取', async () => {
+    activeDsBindings.value = [{ id: 'ds-1', refId: 'emp_profile' }]
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
     const wrapper = mount(LookupPicker, {
       props: {
         modelValue: null,
-        fetchApi,
         columns: [{ prop: 'code', label: '编号' }],
         displayField: 'code',
-        fetch: {
-          action: '/v1/biz-data/emp_profile',
-          filter: { conditions: [{ column: 'dept_id', op: 'eq', field: 'emp_dept' }] },
-        },
+        dataSourceId: 'ds-1',
+        filter: { conditions: [{ column: 'dept_id', op: 'eq', field: 'emp_dept' }] },
       },
       global: {
         plugins: [ElementPlus],
@@ -551,30 +545,32 @@ describe('LookupPicker — 数据源筛选', () => {
       },
     })
     await wrapper.find('input').trigger('click')
-    await nextTick()
-    const params = fetchApi.mock.calls[0][0]
-    expect(params.filter.conditions[0].value).toBe('rd-001')
+    await flushPromises()
+    const calls = mockHttp.get.mock.calls
+    const params = calls[calls.length - 1][1].params
+    expect(JSON.parse(params.filter).conditions[0].value).toBe('rd-001')
   })
 
-  it('外部 API 数据源：filter 等值条件展开为查询参数', async () => {
-    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+  it('dataSourceId + 动态字段值为空时该条件被剔除', async () => {
+    activeDsBindings.value = [{ id: 'ds-1', refId: 'emp_profile' }]
+    mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
     const wrapper = mount(LookupPicker, {
       props: {
         modelValue: null,
-        fetchApi,
         columns: [{ prop: 'code', label: '编号' }],
         displayField: 'code',
-        fetch: {
-          action: '/external/orders',
-          filter: { conditions: [{ column: 'status', op: 'eq', value: 'PAID' }] },
-        },
+        dataSourceId: 'ds-1',
+        filter: { conditions: [{ column: 'dept_id', op: 'eq', field: 'emp_dept' }] },
       },
-      global: { plugins: [ElementPlus] },
+      global: {
+        plugins: [ElementPlus],
+        provide: { formCreateInject: { api: { setValue: vi.fn(), getValue: vi.fn().mockReturnValue('') } } },
+      },
     })
     await wrapper.find('input').trigger('click')
-    await nextTick()
-    const params = fetchApi.mock.calls[0][0]
-    expect(params.status).toBe('PAID')
+    await flushPromises()
+    const calls = mockHttp.get.mock.calls
+    const params = calls[calls.length - 1][1].params
     expect(params.filter).toBeUndefined()
   })
 })

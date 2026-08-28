@@ -118,12 +118,19 @@ const props = defineProps<{
   /** 正在编辑的 LookupPicker 字段 props */
   lookupProps?: Record<string, any>
   /** 页面内数据源绑定配置 */
-  formDataSources: Array<{ id: string; refId: string }>
+  formDataSources?: Array<{ id: string; refId: string }>
+  /** 旧版表单设计器目标表单列表（兼容输入） */
+  targetForms?: Array<{ key: string; name?: string }>
+  /** 旧版目标表字段列表（兼容输入） */
+  targetColumns?: ColumnConfigItem[]
+  /** 页面级已启用数据源列表（兼容 API/FORM 回填） */
+  enabledDataSources?: Array<Record<string, any>>
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: boolean): void
   (e: 'confirm', props: Record<string, any>): void
+  (e: 'sourceChange', formKey: string): void
 }>()
 
 const visible = computed({
@@ -135,7 +142,11 @@ const visible = computed({
 const dsColumns = ref<ColumnConfigItem[]>([])
 
 /** 可引用列：排除隐藏列 */
-const visibleColumns = computed(() => dsColumns.value.filter(c => !c.hidden))
+const visibleColumns = computed(() => {
+  const columns = dsColumns.value.length > 0 ? dsColumns.value : (props.targetColumns || [])
+  return columns.filter(c => !c.hidden)
+})
+const legacyMode = computed(() => props.targetForms !== undefined || (props.formDataSources || []).length === 0)
 
 const form = reactive({
   dataSourceId: '',
@@ -146,12 +157,24 @@ const form = reactive({
   returnFieldsRows: [] as { source: string; target: string }[],
   filterLogic: 'AND' as 'AND' | 'OR',
   filterRows: [] as { column: string; op: string; source: 'fixed' | 'field'; fixedValue: string; field: string }[],
+  // 旧版 API/FORM 数据源配置字段（仅兼容回填与确认，不影响页面级新协议）
+  sourceType: 'form' as 'form' | 'api',
+  sourceFormKey: '',
+  action: '',
+  method: 'GET',
+  parse: 'records',
+  totalParse: 'total',
+  searchParam: 'keyword',
+  keywordColumn: '',
+  pageBase: 1 as 0 | 1,
+  dataRows: [] as { key: string; value: string }[],
+  headerRows: [] as { key: string; value: string }[],
 })
 
 /** 按绑定 refId 加载数据源列定义 */
 async function loadDsColumns() {
   dsColumns.value = []
-  const binding = props.formDataSources.find(d => d.id === form.dataSourceId)
+  const binding = (props.formDataSources || []).find(d => d.id === form.dataSourceId)
   if (!binding?.refId) return
   try {
     const res = await dataSourceApi.getMetadata(binding.refId)
@@ -170,6 +193,42 @@ function handleDataSourceChange() {
   void loadDsColumns()
 }
 
+/** 旧版页面数据源选择：将页面绑定 refId 解析为 FORM/API 配置 */
+async function handleDataSourceSelect(id: string) {
+  form.dataSourceId = id
+  const binding = (props.formDataSources || []).find(d => d.id === id)
+  const ds = (props.enabledDataSources || []).find(d => d.id === binding?.refId)
+  if (!ds) return
+  form.sourceType = ds.type === 'API' ? 'api' : 'form'
+  form.sourceFormKey = ds.formKey || ''
+  form.action = ''
+  form.method = 'GET'
+  form.parse = 'records'
+  form.totalParse = 'total'
+  form.searchParam = 'keyword'
+  form.keywordColumn = ''
+  form.pageBase = 1
+  form.dataRows = []
+  form.headerRows = []
+  if (ds.type === 'API' && typeof ds.params === 'string') {
+    try {
+      const params = JSON.parse(ds.params)
+      form.action = params.action || ''
+      form.method = params.method || 'GET'
+      form.parse = params.parse || 'records'
+      form.totalParse = params.totalParse || 'total'
+      form.searchParam = params.searchParam || 'keyword'
+      form.keywordColumn = params.keywordColumn || ''
+      form.pageBase = params.pageBase === 0 ? 0 : 1
+      form.dataRows = Object.entries(params.data || {}).map(([key, value]) => ({ key, value: String(value) }))
+      form.headerRows = Object.entries(params.headers || {}).map(([key, value]) => ({ key, value: String(value) }))
+    } catch {
+      // 非法 API params 保持空配置
+    }
+  }
+  if (form.sourceType === 'form' && form.sourceFormKey) emit('sourceChange', form.sourceFormKey)
+}
+
 /** 切换显示字段：默认选中列跟随 */
 function handleDisplayChange() {
   if (form.selectedColumns.length === 0 && form.displayField) {
@@ -182,10 +241,24 @@ watch(
   (v) => {
     if (!v) return
     const p = props.lookupProps || {}
-    form.dataSourceId = p.dataSourceId || ''
+    form.dataSourceId = p.dataSourceId || p.sourceFormKey || ''
+    form.sourceFormKey = p.sourceFormKey || ''
+    form.sourceType = p.sourceType || (p.fetch ? 'api' : 'form')
     form.displayField = p.displayField || ''
     form.selectedColumns = (p.columns || []).map((c: any) => c.prop || c.key || '').filter(Boolean)
-    form.searchColumns = [...(p.searchColumns || [])]
+    const fetch = p.fetch || {}
+    form.action = fetch.action || ''
+    form.method = fetch.method || 'GET'
+    form.parse = fetch.parse || 'records'
+    form.totalParse = fetch.totalParse || 'total'
+    form.searchParam = fetch.searchParam || 'keyword'
+    form.keywordColumn = fetch.keywordColumn || ''
+    form.searchColumns = p.searchColumns?.length
+      ? [...p.searchColumns]
+      : (form.keywordColumn ? form.keywordColumn.split(',').map((s: string) => s.trim()).filter(Boolean) : [])
+    form.pageBase = fetch.pageBase === 0 ? 0 : 1
+    form.dataRows = Object.entries(fetch.data || {}).map(([key, value]) => ({ key, value: String(value) }))
+    form.headerRows = Object.entries(fetch.headers || {}).map(([key, value]) => ({ key, value: String(value) }))
     form.idField = p.idField || ''
     form.returnFieldsRows = Object.entries(p.returnFields || {}).map(([s, t]) => ({ source: s, target: String(t) }))
     const pFilter = p.filter || {}
@@ -197,14 +270,14 @@ watch(
       fixedValue: c.field ? '' : (c.value === undefined ? '' : String(c.value)),
       field: c.field || '',
     }))
-    if (form.dataSourceId) {
+    if (form.dataSourceId && (props.formDataSources || []).length > 0) {
       void loadDsColumns()
     }
   },
 )
 
 function handleConfirm() {
-  if (!form.dataSourceId) {
+  if (!form.dataSourceId && !form.sourceFormKey) {
     ElMessage.warning('请选择页面内数据源')
     return
   }
@@ -214,8 +287,9 @@ function handleConfirm() {
   }
 
   const columnLabel = (key: string): string => {
-    const col = dsColumns.value.find(c => c.key === key)
-    return col?.label || key
+    const col = visibleColumns.value.find(c => c.key === key)
+    const configured = (props.lookupProps?.columns || []).find((c: any) => (c.prop || c.key) === key)
+    return col?.label || configured?.label || key
   }
   const columns = (form.selectedColumns.length > 0 ? form.selectedColumns : [form.displayField])
     .map(key => ({ prop: key, label: columnLabel(key) }))
@@ -226,13 +300,27 @@ function handleConfirm() {
   }
 
   const newProps: Record<string, any> = {
-    dataSourceId: form.dataSourceId,
+    ...(legacyMode.value ? { sourceType: form.sourceType, sourceFormKey: form.sourceFormKey || form.dataSourceId } : { dataSourceId: form.dataSourceId }),
     displayField: form.displayField,
     columns,
     searchColumns: form.searchColumns.length > 0 ? form.searchColumns : [form.displayField],
     returnFields,
   }
   if (form.idField) newProps.idField = form.idField
+
+  if (legacyMode.value) {
+    newProps.fetch = {
+      action: form.action || `/v1/biz-data/${form.sourceFormKey || form.dataSourceId}`,
+      method: form.method,
+      parse: form.parse,
+      totalParse: form.totalParse,
+      searchParam: form.searchParam,
+      keywordColumn: form.searchColumns.length > 0 ? form.searchColumns.join(',') : (form.keywordColumn || form.displayField),
+      pageBase: form.pageBase,
+      ...(form.dataRows.length > 0 ? { data: Object.fromEntries(form.dataRows.map(r => [r.key, r.value])) } : {}),
+      ...(form.headerRows.length > 0 ? { headers: Object.fromEntries(form.headerRows.map(r => [r.key, r.value])) } : {}),
+    }
+  }
 
   const validFilterRows = form.filterRows.filter(r => r.column)
   if (validFilterRows.length > 0) {

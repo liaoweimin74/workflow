@@ -132,7 +132,11 @@ const props = defineProps<{
   /** 正在编辑的 dataPicker 字段 props */
   pickerProps?: Record<string, any>
   /** 页面内数据源绑定配置 */
-  formDataSources: Array<{ id: string; refId: string }>
+  formDataSources?: Array<{ id: string; refId: string }>
+  /** 旧版表单设计器目标表单列表（兼容输入） */
+  targetForms?: Array<{ key: string; name?: string }>
+  /** 旧版目标表字段列表（兼容输入） */
+  targetColumns?: ColumnConfigItem[]
 }>()
 
 const emit = defineEmits<{
@@ -149,7 +153,10 @@ const visible = computed({
 const dsColumns = ref<ColumnConfigItem[]>([])
 
 /** 可引用列：排除隐藏列 */
-const visibleColumns = computed(() => dsColumns.value.filter(c => !c.hidden))
+const visibleColumns = computed(() => {
+  const columns = dsColumns.value.length > 0 ? dsColumns.value : (props.targetColumns || [])
+  return columns.filter(c => !c.hidden)
+})
 
 const form = reactive({
   dataSourceId: '',
@@ -167,7 +174,7 @@ const form = reactive({
 /** 按绑定 refId 加载数据源列定义 */
 async function loadDsColumns() {
   dsColumns.value = []
-  const binding = props.formDataSources.find(d => d.id === form.dataSourceId)
+  const binding = (props.formDataSources || []).find(d => d.id === form.dataSourceId)
   if (!binding?.refId) return
   try {
     const res = await dataSourceApi.getMetadata(binding.refId)
@@ -191,11 +198,11 @@ watch(
   (v) => {
     if (!v) return
     // 从 pickerProps 回填表单
-    form.dataSourceId = props.pickerProps?.dataSourceId || ''
+    form.dataSourceId = props.pickerProps?.dataSourceId || props.pickerProps?.sourceFormKey || ''
     form.displayField = props.pickerProps?.displayField || ''
     form.columns = [...(props.pickerProps?.columns || [])]
     form.searchColumns = [...(props.pickerProps?.searchColumns || [])]
-    form.maxCount = props.pickerProps?.maxCount
+    form.maxCount = props.pickerProps?.maxCount ?? (props.pickerProps?.mode === 'single' ? 1 : undefined)
     // 筛选条件：filters（v3 结构化 {logic, conditions}）优先；v2 数组兼容；dependOn（v1）兼容为单条 field 型
     const filters = props.pickerProps?.filters
     if (filters && typeof filters === 'object' && !Array.isArray(filters)) {
@@ -226,7 +233,7 @@ watch(
     form.clearOnCascadeChange = props.pickerProps?.clearOnCascadeChange || false
     form.allowCreate = props.pickerProps?.allowCreate || false
     form.detailReadonly = props.pickerProps?.detailReadonly !== false
-    if (form.dataSourceId) {
+    if (form.dataSourceId && (props.formDataSources || []).length > 0) {
       void loadDsColumns()
     }
   },
@@ -269,13 +276,14 @@ function handleConfirm() {
     }
   }
   const newProps: Record<string, any> = {
-    dataSourceId: form.dataSourceId,
+    ...(props.targetForms ? { sourceFormKey: form.dataSourceId } : { dataSourceId: form.dataSourceId }),
     displayField: form.displayField,
     columns: form.columns,
     searchColumns: form.searchColumns,
     // maxCount：缺省不限；1 = 单选语义
     ...(form.maxCount ? { maxCount: form.maxCount } : {}),
-    filters,
+    ...(props.targetForms ? {} : { filters }),
+    ...(props.targetForms ? { filters } : {}),
     clearOnCascadeChange: form.clearOnCascadeChange,
     allowCreate: form.allowCreate,
     detailReadonly: form.detailReadonly,

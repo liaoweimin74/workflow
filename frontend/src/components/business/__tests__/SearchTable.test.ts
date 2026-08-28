@@ -685,3 +685,74 @@ describe('SearchTable — FormRenderer 集成', () => {
     expect(formRenderer.exists()).toBe(true)
   })
 })
+
+// ============================================================
+// 服务器端排序：sort-change 携带参数重新请求 + 重置清空
+// ============================================================
+
+describe('SearchTable — 服务器端排序', () => {
+  function emitSortChange(wrapper: any, prop: string, order: string) {
+    const table = wrapper.findComponent({ name: 'ElTable' })
+    return (table.vm as any).$emit('sort-change', { column: { prop }, prop, order })
+  }
+
+  it('sort-change 后重新请求并携带 sort/order，事件仍转发', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+    const wrapper = createWrapper({
+      columns: [{ prop: 'name', label: '名称', sortable: true }],
+      fetchApi,
+    })
+    await nextTick()
+    await flushPromises()
+
+    await emitSortChange(wrapper, 'name', 'ascending')
+    await flushPromises()
+
+    // sort-change 事件仍对外转发（不破坏事件总线）
+    expect(wrapper.emitted('sort-change')).toBeTruthy()
+    // fetchApi 最后一次调用携带归一化后的排序参数
+    const lastCall = fetchApi.mock.calls[fetchApi.mock.calls.length - 1][0]
+    expect(lastCall).toMatchObject({ sort: 'name', order: 'asc' })
+  })
+
+  it('翻页/再次拉取保留排序状态', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+    const wrapper = createWrapper({
+      columns: [{ prop: 'name', label: '名称', sortable: true }],
+      fetchApi,
+    })
+    await nextTick()
+    await flushPromises()
+
+    await emitSortChange(wrapper, 'name', 'descending')
+    await flushPromises()
+    await (wrapper.vm as any).fetchList()
+    await flushPromises()
+
+    const lastCall = fetchApi.mock.calls[fetchApi.mock.calls.length - 1][0]
+    expect(lastCall).toMatchObject({ sort: 'name', order: 'desc' })
+  })
+
+  it('重置清空排序状态，恢复默认请求', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 0 })
+    const wrapper = createWrapper({
+      columns: [{ prop: 'name', label: '名称', sortable: true }],
+      fetchApi,
+    })
+    await nextTick()
+    await flushPromises()
+
+    await emitSortChange(wrapper, 'name', 'ascending')
+    await flushPromises()
+
+    // 搜索栏重置按钮（toolbar-buttons 第二个：搜索/重置/导出）
+    const resetBtn = wrapper.findAll('.toolbar-buttons .el-button')[1]
+    expect(resetBtn).toBeTruthy()
+    await resetBtn.trigger('click')
+    await flushPromises()
+
+    const lastCall = fetchApi.mock.calls[fetchApi.mock.calls.length - 1][0]
+    expect(lastCall.sort).toBeUndefined()
+    expect(lastCall.order).toBeUndefined()
+  })
+})

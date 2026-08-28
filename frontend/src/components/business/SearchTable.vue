@@ -98,7 +98,7 @@
       </div>
 
       <div class="table-wrapper">
-      <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="(args: { column: any; prop: string; order: string }) => emit('sort-change', args)">
+      <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
         <el-table-column
           v-for="col in columns"
           :key="col.prop || col.label"
@@ -309,6 +309,9 @@ const tableRef = ref<any>(null)
 const query = reactive<QueryParams>({ page: 1, size: props.defaultPageSize })
 const initialQuery = ref<Record<string, any>>({})
 
+/** 当前排序状态（服务器端排序；与 query 并列由组件内部自管，重置时清空） */
+const sortState = ref<{ prop: string; order: string } | null>(null)
+
 // 表单弹窗状态
 const dialogVisible = ref(false)
 const dialogTitle = ref('')
@@ -398,12 +401,27 @@ onMounted(() => {
 async function fetchList() {
   loading.value = true
   try {
-    const res = await props.fetchApi({ ...query })
+    const params: Record<string, any> = { ...query }
+    // 合并排序状态（服务器端排序；order 已归一化为 asc/desc）
+    if (sortState.value) {
+      params.sort = sortState.value.prop
+      params.order = sortState.value.order
+    }
+    const res = await props.fetchApi(params)
     list.value = Array.isArray(res.rows) ? res.rows : []
     total.value = Number(res.total) || 0
   } finally {
     loading.value = false
   }
+}
+
+/** 排序变化：记录排序状态并重新请求；同时照常转发 sort-change 事件（不破坏事件总线动作） */
+function handleSortChange(args: { column: any; prop: string; order: string }) {
+  sortState.value = args.order
+    ? { prop: args.prop, order: args.order === 'ascending' ? 'asc' : 'desc' }
+    : null
+  emit('sort-change', args)
+  fetchList()
 }
 
 function handleSearch() {
@@ -412,6 +430,7 @@ function handleSearch() {
 }
 
 function handleReset() {
+  sortState.value = null
   Object.keys(query).forEach((key) => delete query[key])
   Object.assign(query, initialQuery.value)
   fetchList()

@@ -34,8 +34,8 @@
           </el-form-item>
           <el-form-item>
             <div class="toolbar-buttons">
-              <el-button type="primary" :icon="Search" circle :size="tableSize === 'small' ? 'small' : 'default'" @click="handleSearch" />
-              <el-button :icon="Refresh" circle :size="tableSize === 'small' ? 'small' : 'default'" @click="handleReset" />
+              <el-button type="primary" :icon="Search" circle @click="handleSearch" />
+              <el-button :icon="Refresh" circle @click="handleReset" />
             </div>
           </el-form-item>
         </el-form>
@@ -364,8 +364,8 @@ function isButtonVisibleForRow(b: { key: string; visible?: string; events?: any[
   }
 }
 
-/** 表格尺寸：预览（preview=true）普通模式，非预览紧凑模式 */
-const tableSize = computed<'default' | 'small'>(() => (route.query.preview === 'true' ? 'default' : 'small'))
+/** 表格尺寸：统一正常尺寸（预览与正式访问一致） */
+const tableSize = computed<'default' | 'small'>(() => 'default')
 
 /** 内置按钮默认图标（未配置 icon 时按 key 注入，操作列圆形图标用） */
 const defaultIcons: Record<string, any> = { create: Plus, edit: Edit, delete: Delete, view: View }

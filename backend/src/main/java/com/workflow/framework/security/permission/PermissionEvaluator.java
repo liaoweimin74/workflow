@@ -14,7 +14,8 @@ public class PermissionEvaluator {
         }
         Object principal = authentication.getPrincipal();
         if (principal instanceof LoginUser loginUser) {
-            if (loginUser.getRoles().contains("admin")) {
+            // 管理员绕过：兼容 "admin"（历史）与 "ROLE_ADMIN"（系统角色 code）
+            if (loginUser.getRoles().stream().anyMatch(r -> "admin".equals(r) || "ROLE_ADMIN".equals(r))) {
                 return true;
             }
             for (String permission : permissions) {

@@ -6,8 +6,13 @@ import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.page.PageDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
+import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.system.domain.entity.SysMenu;
+import com.workflow.system.domain.entity.SysRole;
+import com.workflow.system.domain.entity.SysRoleMenu;
 import com.workflow.system.repository.SysMenuRepository;
+import com.workflow.system.repository.SysRoleMenuRepository;
+import com.workflow.system.repository.SysRoleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -34,6 +39,8 @@ class PageMenuControllerTest {
 
     private PageDefinitionService pageDefService;
     private SysMenuRepository menuRepository;
+    private SysRoleRepository roleRepository;
+    private SysRoleMenuRepository roleMenuRepository;
     private PageMenuController controller;
 
     private PageDefinition publishedPage;
@@ -42,7 +49,9 @@ class PageMenuControllerTest {
     void setUp() {
         pageDefService = mock(PageDefinitionService.class);
         menuRepository = mock(SysMenuRepository.class);
-        controller = new PageMenuController(pageDefService, menuRepository);
+        roleRepository = mock(SysRoleRepository.class);
+        roleMenuRepository = mock(SysRoleMenuRepository.class);
+        controller = new PageMenuController(pageDefService, menuRepository, roleRepository, roleMenuRepository);
 
         publishedPage = new PageDefinition();
         publishedPage.setId("p1");
@@ -205,5 +214,68 @@ class PageMenuControllerTest {
                 .hasMessageContaining("菜单不存在或已解除");
 
         verify(menuRepository, never()).save(any(SysMenu.class));
+    }
+
+    // ---------- 管理员挂接自动授权 ROLE_ADMIN ----------
+
+    @Test
+    void mountMenu_byAdmin_autoGrantsToAdminRole() {
+        // 以 ROLE_ADMIN 登录
+        LoginUser admin = new LoginUser(1L, "admin", "pwd",
+                List.of("ROLE_ADMIN"), java.util.Set.of(), true);
+        org.springframework.security.core.context.SecurityContextHolder.getContext()
+                .setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        admin, null, admin.getAuthorities()));
+
+        SysRole adminRole = new SysRole();
+        adminRole.setId(10L);
+        adminRole.setRoleCode("ROLE_ADMIN");
+
+        when(pageDefService.getById("p1")).thenReturn(publishedPage);
+        when(menuRepository.save(any(SysMenu.class))).thenAnswer(inv -> {
+            SysMenu m = inv.getArgument(0);
+            m.setId(101L);
+            return m;
+        });
+        when(roleRepository.findByRoleCode("ROLE_ADMIN")).thenReturn(Optional.of(adminRole));
+        when(roleMenuRepository.findByRoleId(10L)).thenReturn(List.of());
+
+        MountMenuRequest req = new MountMenuRequest();
+
+        controller.mountMenu("p1", req);
+
+        // 新菜单应授权给 ROLE_ADMIN
+        org.mockito.ArgumentCaptor<SysRoleMenu> captor =
+                org.mockito.ArgumentCaptor.forClass(SysRoleMenu.class);
+        verify(roleMenuRepository).save(captor.capture());
+        assertThat(captor.getValue().getRoleId()).isEqualTo(10L);
+        assertThat(captor.getValue().getMenuId()).isEqualTo(101L);
+
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void mountMenu_byNonAdmin_doesNotAutoGrant() {
+        LoginUser user = new LoginUser(2L, "test", "pwd",
+                List.of("ROLE_USER"), java.util.Set.of(), true);
+        org.springframework.security.core.context.SecurityContextHolder.getContext()
+                .setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        user, null, user.getAuthorities()));
+
+        when(pageDefService.getById("p1")).thenReturn(publishedPage);
+        when(menuRepository.save(any(SysMenu.class))).thenAnswer(inv -> {
+            SysMenu m = inv.getArgument(0);
+            m.setId(101L);
+            return m;
+        });
+
+        MountMenuRequest req = new MountMenuRequest();
+
+        controller.mountMenu("p1", req);
+
+        verify(roleRepository, never()).findByRoleCode(any());
+        verify(roleMenuRepository, never()).save(any(SysRoleMenu.class));
+
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
     }
 }

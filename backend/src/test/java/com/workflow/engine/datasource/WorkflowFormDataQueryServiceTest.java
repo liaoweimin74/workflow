@@ -351,4 +351,76 @@ class WorkflowFormDataQueryServiceTest {
         assertEquals("pi-1", vo.getData().get("instanceId"));
         assertEquals("请假申请", vo.getData().get("title"));
     }
+
+    // ==================== 场景 7：动态排序（业务列 CAST / 系统列映射 / 白名单 / 缺省） ====================
+
+    private String pageSql() {
+        return capturedSql.stream()
+                .filter(s -> s.toUpperCase().contains("LIMIT"))
+                .findFirst()
+                .orElse("");
+    }
+
+    @Test
+    void query_withSortOnNumericColumn_buildsCastOrderBy() {
+        when(rowsQuery.getResultList()).thenReturn(List.of());
+        when(countQuery.getSingleResult()).thenReturn(0L);
+        BizDataQueryRequest r = req();
+        r.setSort("days");
+        r.setOrder("desc");
+
+        service.query("leave", r);
+
+        // 数值列必须 CAST 后排序（避免 JSON 字符串字典序 10 < 2）
+        String sql = pageSql();
+        assertTrue(sql.contains("CAST(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.days')) AS SIGNED) DESC"),
+                () -> sql);
+    }
+
+    @Test
+    void query_withSortOnSystemStartTime_mapsToStartTimeColumn() {
+        when(rowsQuery.getResultList()).thenReturn(List.of());
+        when(countQuery.getSingleResult()).thenReturn(0L);
+        BizDataQueryRequest r = req();
+        r.setSort("startTime");
+        r.setOrder("asc");
+
+        service.query("leave", r);
+
+        String sql = pageSql();
+        assertTrue(sql.contains("ORDER BY h.START_TIME_ ASC"), () -> sql);
+    }
+
+    @Test
+    void query_withSortOnDerivedColumn_rejects400() {
+        when(rowsQuery.getResultList()).thenReturn(List.of());
+        when(countQuery.getSingleResult()).thenReturn(0L);
+        BizDataQueryRequest r = req();
+        r.setSort("currentNodeName");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.query("leave", r));
+        assertEquals(400, ex.getCode());
+    }
+
+    @Test
+    void query_withSortOnUnknownColumn_rejects400() {
+        when(rowsQuery.getResultList()).thenReturn(List.of());
+        when(countQuery.getSingleResult()).thenReturn(0L);
+        BizDataQueryRequest r = req();
+        r.setSort("not_a_field");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.query("leave", r));
+        assertEquals(400, ex.getCode());
+    }
+
+    @Test
+    void query_withoutSort_keepsDefaultOrdering() {
+        when(rowsQuery.getResultList()).thenReturn(List.of());
+        when(countQuery.getSingleResult()).thenReturn(0L);
+
+        service.query("leave", req());
+
+        String sql = pageSql();
+        assertTrue(sql.contains("ORDER BY COALESCE(h.START_TIME_, f.created_at) DESC"), () -> sql);
+    }
 }

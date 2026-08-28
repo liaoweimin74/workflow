@@ -47,6 +47,11 @@ public class WorkflowFormDataQueryService {
 
     private static final Pattern COL_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{0,63}$");
 
+    /** 可排序系统列 key（映射底层 h.START_TIME_）；其余系统列为派生列不可排 */
+    private static final String START_TIME_KEY = "startTime";
+    private static final Set<String> DERIVED_SYSTEM_KEYS =
+            Set.of("instanceId", "processStatus", "initiatorName", "currentNodeName");
+
     private static final String PAGE_SELECT =
             "SELECT f.id, f.data_json, f.process_instance_id, h.START_TIME_, h.START_USER_ID_";
     private static final String BASE_FROM =
@@ -139,14 +144,42 @@ public class WorkflowFormDataQueryService {
         bind(countQ, params);
         long total = ((Number) countQ.getSingleResult()).longValue();
 
-        Query rowsQ = em.createNativeQuery(PAGE_SELECT + where
-                + " ORDER BY COALESCE(h.START_TIME_, f.created_at) DESC LIMIT :limit OFFSET :offset");
+        Query rowsQ = em.createNativeQuery(PAGE_SELECT + where + buildOrderBy(req, bizCols)
+                + " LIMIT :limit OFFSET :offset");
         params.put("limit", size);
         params.put("offset", Math.max(0, req.getPage()) * size);
         bind(rowsQ, params);
         List<?> rows = rowsQ.getResultList();
 
         return assemble(formKey, rows, total, Math.max(0, req.getPage()), size);
+    }
+
+    /** 解析 sort/order 生成 ORDER BY 片段；缺省保持默认排序。 */
+    private String buildOrderBy(BizDataQueryRequest req, Map<String, ColumnConfig> bizCols) {
+        String sort = req.getSort();
+        if (sort == null || sort.isBlank()) {
+            return " ORDER BY COALESCE(h.START_TIME_, f.created_at) DESC";
+        }
+        String dir = "asc".equalsIgnoreCase(req.getOrder()) ? "ASC" : "DESC";
+        if (START_TIME_KEY.equals(sort)) {
+            return " ORDER BY h.START_TIME_ " + dir;
+        }
+        if (DERIVED_SYSTEM_KEYS.contains(sort)) {
+            throw new BusinessException(400, "排序字段不可排序: " + sort);
+        }
+        ColumnConfig col = bizCols.get(sort);
+        if (col == null || !COL_PATTERN.matcher(sort).matches()) {
+            throw new BusinessException(400, "排序字段不在表单字段中: " + sort);
+        }
+        String type = col.getColumnType() == null ? "VARCHAR" : col.getColumnType().toUpperCase();
+        if (type.contains("INT") || type.contains("DECIMAL")) {
+            // 数值列先 CAST 再排序，避免 JSON 字符串字典序（如 10 < 2）
+            String cast = type.contains("DECIMAL")
+                    ? "DECIMAL(20," + (col.getScale() == null ? 2 : col.getScale()) + ")"
+                    : "SIGNED";
+            return " ORDER BY CAST(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + sort + "')) AS " + cast + ") " + dir;
+        }
+        return " ORDER BY JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + sort + "')) " + dir;
     }
 
     /** 单条详情；不存在抛 404。 */

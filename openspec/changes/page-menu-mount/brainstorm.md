@@ -1,0 +1,58 @@
+## Design Summary
+
+将"已发布的视图/页面"挂接到系统菜单，形成完整闭环：设计器 → 发布 → 挂接菜单 → 用户访问。前端通过菜单可见性控制发现入口，后端对页面渲染/数据接口做权限校验，防止 URL 直填绕过。
+
+核心机制：
+- **前端发现**：设计器提供"挂接菜单"按钮，自动创建 `sys_menu` 记录（`path=/page/{key}`，`permission=page:read:{key}`），侧边栏经 `hasPermission` 控制可见性
+- **后端控制**：`PageDefinitionController.getByKey` / `PageQueryController.query` 按 `sys_menu` 的 permission 校验登录用户权限，无菜单 → 404，无权限 → 403
+- **幂等挂接**：同 `path` 只允许一条菜单，重复挂接返回已挂信息，不重复创建
+- **重复发布兼容**：页面 `key` 不变则菜单不变，重新发布无需重挂；挂接时机限定 `status=PUBLISHED`
+
+## Alternatives Considered
+
+### 方案 A：设计器挂接 + 菜单控制 + 后端校验
+- **做法**：设计器发布后提供"挂接菜单"按钮，自动创建 `sys_menu`（path=/page/{key}、permission=page:read:{key}）；`PageDefinitionController`/`PageQueryController` 增加基于菜单 permission 的后端校验；重复挂接幂等（已挂则返回已有菜单）
+- **优点**：前端+后端双重控制，防 URL 直填绕过；复用现有 `sys_menu`/`hasPermission` 权限体系，最小改动；设计器一键操作，免手动进菜单页
+- **缺点**：需新增后端接口（mount-menu）与前端按钮；页面 `key` 变更时菜单需同步
+- **为何未採用**：未被放弃——用户选定为主方案
+
+### 方案 B：页面实体持权限（双写）
+- **做法**：`PageDefinition` 实体增加 `permission` 字段，挂接时菜单与页面各存一份权限码，访问时两层校验（菜单 + 页面）
+- **优点**：页面与菜单解耦，页面可独立于菜单存在；权限归属页面本身
+- **缺点**：需改表（wf_page_def 加字段）+ API 变更，改动面更大
+- **为何未採用**：用户选择"先 A，以后再考虑 B 和 C"——当前页面均以菜单为唯一入口，无独立于菜单访问的需求，B 的独立权限属于过度设计
+
+### 方案 C：仅前端挂接（不做后端校验）
+- **做法**：仅在设计器提供挂接入口/复制链接，不改后端 API
+- **优点**：改动最小
+- **缺点**：任何登录用户可凭 URL 直接访问任意已发布页面，权限形同虚设，违反租户数据隔离
+- **为何未採用**：用户明确"两种方式均需"（菜单控制 + 后端控制），C 缺少后端防线
+
+## Agreed Approach
+
+**方案 A**。理由：
+1. 用户确认使用场景为**本系统普通用户**（A 主线，后续再考虑外部公开分享）
+2. 用户确认权限模型为**双重控制**：菜单控制前端可见性 + 后端访问校验（"两种方式均需"）
+3. 现有 `sys_menu`（parentId/menuName/path/component/permission/icon/sortOrder/status）+ `/auth/menus` API + `authStore.menus` + `hasPermission` 体系已完整，方案 A 是"复用存量框架 + 补齐权限校验缺口"的最小路径
+4. 后端当前对 `/page/:pageKey` 零校验是已知安全缺口（`PageDefinitionController`、`PageQueryController` 均无鉴权），本方案将其闭环
+
+## Key Decisions
+
+| 决策点 | 结论 |
+|--------|------|
+| 使用场景 | 本系统普通用户（登录后经菜单访问），不做外部分享 |
+| 权限模型 | 菜单(前端可见) + 后端(接口校验) 双重控制 |
+| 权限码格式 | `page:read:{pageKey}`（留扩展位：`page:{key}:{action}`） |
+| 菜单 path | `/page/{pageKey}`，component=`page/PageRenderer` |
+| 挂接触发点 | 设计器右上角按钮（发布后可用）+ 菜单管理页手动（两种方式并存） |
+| 重复挂接 | 幂等：同 path 已存在则返回已有菜单，不重复创建 |
+| 重复发布 | key 不变则菜单不变；仅 PUBLISHED 可挂接 |
+| 页面删除 | 不连带删菜单（由管理员清理），避免误删 |
+| 无菜单页面访问 | 后端 404（不暴露页面存在） |
+| 预览（preview=true） | 跳过权限校验，保持设计流程畅通 |
+
+## Open Questions
+
+- 页面删除时是否提示"存在关联菜单"？（当前建议不删菜单，后续可在删除流程中加提示）
+- `key` 是否限制不可修改？（当前建议设计器层面限制，避免菜单失效）
+- 菜单管理页是否展示"来源页面"信息？（可选增强，非本变更范围）

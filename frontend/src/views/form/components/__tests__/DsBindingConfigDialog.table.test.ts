@@ -129,4 +129,39 @@ describe('DsBindingConfigDialog — table-mode sortableFields', () => {
     expect(result.sortableFields).toEqual(['name', 'age'])
     wrapper.unmount()
   })
+
+  it('保存结果含分页配置（pagination/pageSize/pageSizes）', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({
+      dataSourceId: 'ds1',
+      pagination: true,
+      pageSize: 50,
+      pageSizes: [10, 50, 100],
+    })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    ;(wrapper.vm as any).handleConfirm()
+
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.pagination).toBe(true)
+    expect(result.pageSize).toBe(50)
+    expect(result.pageSizes).toEqual([10, 50, 100])
+    wrapper.unmount()
+  })
+
+  it('未声明分页配置时回填默认（true / 20 / [10,20,50]）', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({ dataSourceId: 'ds1' })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    ;(wrapper.vm as any).handleConfirm()
+
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.pagination).toBe(true)
+    expect(result.pageSize).toBe(20)
+    expect(result.pageSizes).toEqual([10, 20, 50])
+    wrapper.unmount()
+  })
 })

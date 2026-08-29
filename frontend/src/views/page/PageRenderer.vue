@@ -51,7 +51,9 @@
         :toolbar-buttons="searchTableToolbarButtons"
         :fetch-api="searchTableFetchApi"
         :show-search="false"
-        :default-page-size="20"
+        :show-pagination="paginationConfig.show"
+        :default-page-size="paginationConfig.pageSize"
+        :page-sizes="paginationConfig.pageSizes"
         :table-size="tableSize"
         :max-visible-buttons="20"
         @row-click="handleRowClick"
@@ -176,6 +178,12 @@ const searchRules = ref<SearchRule[]>([])
 const tableColumns = ref<CompiledColumn[]>([])
 /** 视图级可排序字段（编译产物 sortableFields；空=跟随数据源全部可排字段） */
 const sortableFieldKeys = ref<string[]>([])
+/** 分页配置（编译产物 pagination；缺省显示分页 / 20 条 / [10,20,50]） */
+const paginationConfig = ref<{ show: boolean; pageSize: number; pageSizes: number[] }>({
+  show: true,
+  pageSize: 20,
+  pageSizes: [10, 20, 50],
+})
 const actionConfig = ref<Record<string, any>>({})
 const detailConfig = ref<Record<string, any>>({ enabled: false, width: '800px', type: 'form' })
 const eventsList = ref<any[]>([])
@@ -262,6 +270,13 @@ function parseSchema(schema: string): boolean {
     searchRules.value = rule.filter((r) => r.type === 'input' || r.type === 'datePicker')
     // 视图级可排序字段（编译产物顶层 sortableFields；未声明=跟随数据源全部可排字段）
     sortableFieldKeys.value = Array.isArray(parsed.sortableFields) ? parsed.sortableFields : []
+    // 分页配置（编译产物顶层 pagination；未声明使用默认）
+    const pag = parsed.pagination || {}
+    paginationConfig.value = {
+      show: pag.show !== false,
+      pageSize: Number(pag.pageSize) > 0 ? Number(pag.pageSize) : 20,
+      pageSizes: Array.isArray(pag.pageSizes) && pag.pageSizes.length ? [...pag.pageSizes] : [10, 20, 50],
+    }
     const tableRule = rule.find((r) => r.type === 'table')
     tableColumns.value = (tableRule?.props?.columns || []) as CompiledColumn[]
     const actionsRule = rule.find((r) => r.type === '__page_actions')

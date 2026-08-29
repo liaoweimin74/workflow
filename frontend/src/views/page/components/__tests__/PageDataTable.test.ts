@@ -142,3 +142,43 @@ describe('PageDataTable — 排序能力（数据源 metadata 驱动）', () => 
     wrapper.unmount()
   })
 })
+
+describe('PageDataTable — 分页配置透传', () => {
+  it('pageSize/pageSizes/pagination 透传到 SearchTable', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: { writable: false, columns: [{ key: 'name', label: '姓名', columnType: 'VARCHAR', sortable: true }] },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({
+      pagination: true,
+      pageSize: 50,
+      pageSizes: [10, 50, 100],
+    })
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.props('showPagination')).toBe(true)
+    expect(st.props('defaultPageSize')).toBe(50)
+    expect(st.props('pageSizes')).toEqual([10, 50, 100])
+    wrapper.unmount()
+  })
+
+  it('pageSize/pageSizes 未传时回退默认（20 / [10,20,50]）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: { writable: false, columns: [{ key: 'name', label: '姓名', columnType: 'VARCHAR', sortable: true }] },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.props('defaultPageSize')).toBe(20)
+    expect(st.props('pageSizes')).toEqual([10, 20, 50])
+    expect(st.props('showPagination')).toBe(true)
+    wrapper.unmount()
+  })
+})

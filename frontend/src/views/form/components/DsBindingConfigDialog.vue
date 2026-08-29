@@ -57,6 +57,30 @@
             :sortable-candidates="tableSortableCandidates"
           />
           <el-empty v-else description="请先选择数据源" :image-size="60" />
+          <!-- 分页配置（默认显示分页，20 条/页，可选 [10,20,50]） -->
+          <el-divider content-position="left">分页</el-divider>
+          <el-form label-width="100px" size="default">
+            <el-form-item label="显示分页">
+              <el-switch v-model="tableData.pagination" />
+            </el-form-item>
+            <el-form-item label="每页条数">
+              <el-input-number v-model="tableData.pageSize" :min="1" :max="200" :step="10" style="width: 160px" />
+            </el-form-item>
+            <el-form-item label="可选页大小">
+              <el-select
+                v-model="tableData.pageSizes"
+                multiple
+                allow-create
+                filterable
+                default-first-option
+                :reserve-keyword="false"
+                placeholder="选择或输入每页大小"
+                style="width: 100%"
+              >
+                <el-option v-for="n in [10, 20, 50, 100]" :key="n" :label="n + ' 条'" :value="n" />
+              </el-select>
+            </el-form-item>
+          </el-form>
         </el-tab-pane>
         <!-- Tab 3: 操作 -->
         <el-tab-pane label="操作" name="actions">
@@ -287,6 +311,12 @@ const tableData = reactive({
   columns: [] as any[],
   /** 组件级可排序字段（受数据源 metadata 上限约束；空=跟随数据源全部可排字段） */
   sortableFields: [] as string[],
+  /** 是否显示分页（默认 true） */
+  pagination: true,
+  /** 默认每页大小（默认 20） */
+  pageSize: 20,
+  /** 可选每页大小（默认 [10,20,50]） */
+  pageSizes: [] as number[],
   actions: { buttons: [
     { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
     { key: 'delete', label: '删除', placement: 'column', style: 'text' },
@@ -340,6 +370,10 @@ function initTableData() {
   tableData.sortableFields = Array.isArray(bp.sortableFields)
     ? [...bp.sortableFields]
     : tableCandidates.value.filter((c: any) => c.sortable).map((c: any) => c.key)
+  // 分页配置：回填已声明配置；未声明使用默认（显示分页 / 20 条 / [10,20,50]）
+  tableData.pagination = bp.pagination !== false
+  tableData.pageSize = bp.pageSize || 20
+  tableData.pageSizes = Array.isArray(bp.pageSizes) && bp.pageSizes.length ? [...bp.pageSizes] : [10, 20, 50]
   tableData.actions = bp.viewActions || { buttons: [
     { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
     { key: 'delete', label: '删除', placement: 'column', style: 'text' },
@@ -397,6 +431,9 @@ function handleConfirm() {
       formatter: c.formatter, fixed: c.fixed,
     }))
     result.sortableFields = [...tableData.sortableFields]
+    result.pagination = tableData.pagination
+    result.pageSize = tableData.pageSize
+    result.pageSizes = [...tableData.pageSizes]
     result.viewActions = { ...tableData.actions }
     result.viewDetail = { ...tableData.detail }
     result.viewEvents = [...tableData.events]

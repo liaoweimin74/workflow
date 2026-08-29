@@ -54,6 +54,15 @@
 
 ## 9. B1 组件级：页面/表单数据表格 sortableFields 配置（公共部分）
 
-- [ ] 9.1 `PageDataTable`：props 增加 `sortableFields?: string[]`；`resolvedColumns` 双条件 = metadata 可排 ∧ (sortableFields 空 或 包含该列)，未声明=跟随数据源全部可排字段
-- [ ] 9.2 `DsBindingConfigDialog`（table-mode，页面/表单共用）：tableData 增加 sortableFields；"显示列"tab 的 QueryColumnsConfig 接线 `v-model:sortable-fields` + `:sortable-candidates`（候选 = 绑定数据源 metadata 可排字段）；回填/保存 sortableFields；清理列级 sortable 残留
-- [ ] 9.3 测试：PageDataTable 收窄渲染（props.sortableFields 生效）；DsBindingConfigDialog table-mode 保存/回填 sortableFields
+- [x] 9.1 `PageDataTable`：props 增加 `sortableFields?: string[]`；`resolvedColumns` 双条件 = metadata 可排 ∧ (sortableFields 空 或 包含该列)，未声明=跟随数据源全部可排字段
+- [x] 9.2 `DsBindingConfigDialog`（table-mode，页面/表单共用）：tableData 增加 sortableFields；"显示列"tab 的 QueryColumnsConfig 接线 `v-model:sortable-fields` + `:sortable-candidates`（候选 = 绑定数据源 metadata 可排字段）；回填/保存 sortableFields；清理列级 sortable 残留
+- [x] 9.3 测试：PageDataTable 收窄渲染（props.sortableFields 生效）；DsBindingConfigDialog table-mode 保存/回填 sortableFields
+
+## 10. 分页配置（视图 + 数据表格，三项：showPagination/pageSize/pageSizes）
+
+- [ ] 10.1 `PageDataTable`：props 增加 `pageSize?: number`/`pageSizes?: number[]`，透传 SearchTable `:default-page-size`/`:page-sizes`/`:show-pagination`（pagination 已有）
+- [ ] 10.2 `DsBindingConfigDialog`（table-mode，公共）：tableData 增加 pagination/pageSize/pageSizes；"显示列"tab 旁加"分页"配置（开关 + 每页大小 + 可选页大小）；回填/保存
+- [ ] 10.3 `ViewCompiler`：编译 schema 顶层 `pagination: {show,pageSize,pageSizes}` 进产物（校验 pageSizes 合法）
+- [ ] 10.4 `PageRenderer`：parseSchema 读取产物 pagination → SearchTable `:show-pagination :default-page-size :page-sizes`（缺省跟随默认）
+- [ ] 10.5 `ViewDesigner`：schema 增加 pagination；"显示&查询"tab 加分页配置区（开关 + 每页大小 + 可选页大小）
+- [ ] 10.6 测试：PageDataTable 透传；DsBindingConfigDialog 回填/保存；ViewCompiler 编译；PageRenderer 传参

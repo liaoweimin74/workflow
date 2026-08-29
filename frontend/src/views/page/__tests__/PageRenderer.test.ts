@@ -520,4 +520,42 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     expect(cols.find((c) => c.prop === 'age').sortable).toBe(false)
     wrapper.unmount()
   })
+
+  it('分页配置从编译产物 pagination 读取并透传 SearchTable', async () => {
+    const schemaWithPag = JSON.stringify({
+      ...JSON.parse(compiledSchema),
+      pagination: { show: true, pageSize: 50, pageSizes: [10, 50, 100] },
+    })
+    ;(pageApi.getPageByKey as any).mockResolvedValue({
+      data: { ...pageDef, schema: schemaWithPag },
+    })
+    ;(pageApi.queryPageData as any).mockResolvedValue({
+      data: { records: [], total: 0, page: 0, size: 20 },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.props('showPagination')).toBe(true)
+    expect(st.props('defaultPageSize')).toBe(50)
+    expect(st.props('pageSizes')).toEqual([10, 50, 100])
+    wrapper.unmount()
+  })
+
+  it('未声明分页配置时使用默认（true / 20 / [10,20,50]）', async () => {
+    ;(pageApi.getPageByKey as any).mockResolvedValue({ data: pageDef }) // 无 pagination
+    ;(pageApi.queryPageData as any).mockResolvedValue({
+      data: { records: [], total: 0, page: 0, size: 20 },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.props('showPagination')).toBe(true)
+    expect(st.props('defaultPageSize')).toBe(20)
+    expect(st.props('pageSizes')).toEqual([10, 20, 50])
+    wrapper.unmount()
+  })
 })

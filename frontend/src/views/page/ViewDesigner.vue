@@ -62,6 +62,36 @@
             v-model:sortable-fields="schema.sortableFields"
             :sortable-candidates="sortableCandidates"
           />
+          <!-- 分页配置（视图级） -->
+          <el-divider content-position="left">分页</el-divider>
+          <el-form label-width="100px" size="default">
+            <el-form-item label="显示分页">
+              <el-switch v-model="schema.pagination.show" />
+            </el-form-item>
+            <el-form-item label="每页条数">
+              <el-input-number
+                v-model="schema.pagination.pageSize"
+                :min="1"
+                :max="200"
+                :step="10"
+                style="width: 160px"
+              />
+            </el-form-item>
+            <el-form-item label="可选页大小">
+              <el-select
+                v-model="schema.pagination.pageSizes"
+                multiple
+                allow-create
+                filterable
+                default-first-option
+                :reserve-keyword="false"
+                placeholder="选择或输入每页大小"
+                style="width: 100%"
+              >
+                <el-option v-for="n in [10, 20, 50, 100]" :key="n" :label="n + ' 条'" :value="n" />
+              </el-select>
+            </el-form-item>
+          </el-form>
         </el-tab-pane>
         <el-tab-pane label="操作" name="actions">
           <ActionsConfig v-model="schema.actions" :detail="schema.detail" />
@@ -189,6 +219,8 @@ export interface ViewSchema {
   searchFields: SearchFieldConfig[]
   /** 视图级可排序字段（受数据源 metadata 上限约束；缺省=跟随数据源全部可排字段） */
   sortableFields: string[]
+  /** 分页配置（缺省显示分页 / 20 条 / [10,20,50]） */
+  pagination: { show: boolean; pageSize: number; pageSizes: number[] }
   columns: ColumnViewConfig[]
   actions: ViewActionsConfig
   detail: ViewDetailConfig
@@ -294,6 +326,7 @@ const bindFormLoaded = ref(false)
 const schema = reactive<ViewSchema>({
   searchFields: [],
   sortableFields: [],
+  pagination: { show: true, pageSize: 20, pageSizes: [10, 20, 50] },
   columns: [],
   actions: {
     buttons: [
@@ -356,6 +389,7 @@ onMounted(async () => {
       try {
         Object.assign(schema, JSON.parse(def.schema))
         normalizeActions()
+        normalizePagination()
       } catch {
         // schema 解析失败，使用默认空配置
       }
@@ -387,6 +421,16 @@ function normalizeActions() {
   if (a.delete) buttons.push({ key: 'delete', label: '删除', placement, style })
   if (a.view) buttons.push({ key: 'view', label: '查看', placement, style })
   schema.actions = { buttons, permissions: a.permissions || '' }
+}
+
+/** 归一化 pagination：兼容旧 schema 缺失/部分字段，回填默认（显示 / 20 / [10,20,50]） */
+function normalizePagination() {
+  const p = (schema.pagination || {}) as Partial<ViewSchema['pagination']>
+  schema.pagination = {
+    show: p.show !== false,
+    pageSize: Number(p.pageSize) > 0 ? Number(p.pageSize) : 20,
+    pageSizes: Array.isArray(p.pageSizes) && p.pageSizes.length ? [...p.pageSizes] : [10, 20, 50],
+  }
 }
 
 /** 加载绑定数据源 metadata 列（候选字段来源） */

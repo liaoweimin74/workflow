@@ -293,6 +293,43 @@ class ViewCompilerTest {
         assertFalse(ruleJson.contains("\"sortable\""));
     }
 
+    // ==================== pagination（分页配置） ====================
+
+    @Test
+    void compile_carriesPagination_intoResult() throws Exception {
+        JsonNode compiled = parse(compiler.compile(viewPage(
+                "{\"pagination\":{\"show\":true,\"pageSize\":50,\"pageSizes\":[10,50,100]}}"), columns()));
+
+        JsonNode pag = compiled.path("pagination");
+        assertTrue(pag.isObject());
+        assertTrue(pag.path("show").asBoolean());
+        assertEquals(50, pag.path("pageSize").asInt());
+        assertEquals(3, pag.path("pageSizes").size());
+        assertEquals(50, pag.path("pageSizes").get(1).asInt());
+    }
+
+    @Test
+    void compile_paginationDefaults_whenPartial() throws Exception {
+        JsonNode compiled = parse(compiler.compile(viewPage(
+                "{\"pagination\":{\"show\":false}}"), columns()));
+
+        JsonNode pag = compiled.path("pagination");
+        assertFalse(pag.path("show").asBoolean());
+        // 缺省 pageSize=20、pageSizes=[10,20,50]
+        assertEquals(20, pag.path("pageSize").asInt());
+        assertEquals(10, pag.path("pageSizes").get(0).asInt());
+        assertEquals(20, pag.path("pageSizes").get(1).asInt());
+        assertEquals(50, pag.path("pageSizes").get(2).asInt());
+    }
+
+    @Test
+    void compile_rejectsNonPositivePageSize() {
+        PageDefinition page = viewPage(
+                "{\"pagination\":{\"show\":true,\"pageSize\":0}}");
+
+        assertThrows(BusinessException.class, () -> compiler.compile(page, columns()));
+    }
+
     private JsonNode parse(String json) throws Exception {
         return objectMapper.readTree(json);
     }

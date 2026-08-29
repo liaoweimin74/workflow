@@ -11,6 +11,8 @@
     :show-create-button="!hasCreateButton"
     :show-search="showSearch"
     :show-pagination="pagination"
+    :default-page-size="pageSize || 20"
+    :page-sizes="pageSizes || [10, 20, 50]"
     :delete-confirm="deleteConfirm"
     @row-click="handleRowClick"
     @cell-click="handleCellClick"
@@ -53,7 +55,7 @@ const actionBus = inject<{ dispatch: (trigger: string, eventData: any) => boolea
 const route = useRoute()
 const router = useRouter()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** 页面 key（数据源查询接口路径） */
   pageKey: string
   /** 页面内数据源绑定 id（schema.dataSources[].id） */
@@ -76,12 +78,18 @@ const props = defineProps<{
   showSearch?: boolean
   /** 是否显示分页（默认 true） */
   pagination?: boolean
+  /** 默认每页大小（缺省 20） */
+  pageSize?: number
+  /** 可选每页大小（缺省 [10,20,50]） */
+  pageSizes?: number[]
   /** 行选择模式（SearchTable 不支持，保留兼容） */
   selectionMode?: 'none' | 'single' | 'multiple'
   /** 附加属性（border/stripe 等） */
   [key: string]: any
-}>()
-
+}>(), {
+  // Boolean 类型 prop 未传入时 Vue 默认 false，显式默认 true（分页默认显示）
+  pagination: true,
+})
 const emit = defineEmits<{
   (e: 'row-click', row: any): void
   (e: 'loaded', records: any[]): void

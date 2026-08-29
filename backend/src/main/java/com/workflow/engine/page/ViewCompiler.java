@@ -59,6 +59,7 @@ public class ViewCompiler {
             compileSearchFields(root, rule, validKeys);
             compileColumns(root, rule, validKeys);
             compileSortableFields(root, result, validKeys);
+            compilePagination(root, result);
             compileActions(root, rule);
             compileDetail(root, rule);
             compileEvents(root, rule);
@@ -130,6 +131,39 @@ public class ViewCompiler {
                 throw new BusinessException(400, "排序字段引用列不存在: " + key);
             }
             out.add(key);
+        }
+    }
+
+    /**
+     * pagination → 产物顶层对象（分页配置 {show, pageSize, pageSizes}）。
+     * 缺省：show=true、pageSize=20、pageSizes=[10,20,50]；pageSize/pageSizes 非正整数 → 400。
+     */
+    private void compilePagination(JsonNode root, ObjectNode result) {
+        JsonNode pagination = root.path("pagination");
+        if (!pagination.isObject()) {
+            return;
+        }
+        ObjectNode out = result.putObject("pagination");
+        out.put("show", pagination.path("show").asBoolean(true));
+
+        int pageSize = pagination.path("pageSize").asInt(20);
+        if (pageSize <= 0) {
+            throw new BusinessException(400, "每页条数必须为正整数: " + pageSize);
+        }
+        out.put("pageSize", pageSize);
+
+        ArrayNode sizes = out.putArray("pageSizes");
+        JsonNode pageSizes = pagination.path("pageSizes");
+        if (pageSizes.isArray()) {
+            for (JsonNode n : pageSizes) {
+                if (!n.isInt() || n.asInt() <= 0) {
+                    throw new BusinessException(400, "可选页大小必须为正整数: " + n);
+                }
+                sizes.add(n.asInt());
+            }
+        }
+        if (sizes.isEmpty()) {
+            sizes.add(10).add(20).add(50);
         }
     }
 

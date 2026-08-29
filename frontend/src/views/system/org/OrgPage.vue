@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
+import { FolderAdd } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
 import { getOrgTree, createOrg, updateOrg, deleteOrg } from '@/api/org'
@@ -34,7 +35,7 @@ function handleAddChild(parentId: number) {
 
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
-  { label: '新增子组织', size: 'small', link: true, onClick: (row: TreeNode) => handleAddChild(row.id) },
+  { label: '新增子组织', icon: FolderAdd, size: 'small', link: true, onClick: (row: TreeNode) => handleAddChild(row.id) },
 ]
 
 // ---------- 表单配置（字段映射 name→orgName, code→orgCode） ----------

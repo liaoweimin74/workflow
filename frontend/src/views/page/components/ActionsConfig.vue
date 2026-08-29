@@ -32,7 +32,8 @@
       </el-button>
     </div>
 
-    <!-- 按钮表格 -->
+    <!-- 按钮表格（整行可拖拽排序） -->
+    <div ref="tableWrapperRef">
     <el-table :data="modelValue.buttons" border  row-key="key" max-height="420">
       <!-- 自定义按钮：展开行编辑事件链 -->
       <el-table-column type="expand">
@@ -170,6 +171,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-empty v-if="modelValue.buttons.length === 0" description="暂无操作按钮，从上方添加" :image-size="60" />
 
@@ -198,19 +200,54 @@
       <el-form-item>
         <template #label>
           <span class="label-with-tip">
-            弹窗宽度
-            <el-tooltip content='启用"查看"按钮后，点击行即可弹出详情' placement="top">
+            表单方式
+            <el-tooltip content="表单容器的展示方式：弹窗/抽屉/内嵌" placement="top">
               <el-icon class="tip-icon"><QuestionFilled /></el-icon>
             </el-tooltip>
           </span>
         </template>
-        <el-input
-          :model-value="detailWidth"
+        <div class="form-config-row">
+          <el-select
+            :model-value="detailFormMode"
+            placeholder="请选择"
+            style="width: 150px"
+            @change="setDetailFormMode"
+          >
+            <el-option label="弹窗" value="popup" />
+            <el-option label="抽屉" value="drawer" />
+            <el-option label="内嵌" value="inline" />
+          </el-select>
+          <div class="form-config-col">
+            <span class="label-with-tip">
+              弹窗宽度
+              <el-tooltip content='启用"查看"按钮后，点击行即可弹出详情' placement="top">
+                <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
+            <el-input
+              :model-value="detailWidth"
 
-          placeholder="如 800px"
-          style="width: 200px"
-          @input="setDetailWidth"
-        />
+              placeholder="如 800px"
+              style="width: 140px"
+              @input="setDetailWidth"
+            />
+          </div>
+          <div class="form-config-col">
+            <span class="label-with-tip">
+              弹窗高度
+              <el-tooltip content="表单容器内容区高度（如 600px），超出滚动" placement="top">
+                <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
+            <el-input
+              :model-value="detailHeight"
+
+              placeholder="如 600px"
+              style="width: 140px"
+              @input="setDetailHeight"
+            />
+          </div>
+        </div>
       </el-form-item>
       <el-form-item>
         <template #label>
@@ -239,12 +276,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import {
   Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
   Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
   QuestionFilled,
 } from '@element-plus/icons-vue'
+import Sortable from 'sortablejs'
 import type { ViewActionsConfig, ViewActionButton, ViewDetailConfig } from '../ViewDesigner.vue'
 
 const props = defineProps<{
@@ -490,8 +528,38 @@ function setActionColumnWidth(v: number | undefined) {
 // ========== 详情宽度 ==========
 const detailWidth = computed(() => props.detail?.width || '800px')
 
+/** 合并 detail 配置（保留必填字段 type/width；detail 可能为 undefined） */
+function patchDetail(patch: Partial<ViewDetailConfig>): ViewDetailConfig {
+  return {
+    ...props.detail,
+    type: props.detail?.type || 'form',
+    width: props.detail?.width || '800px',
+    ...patch,
+  }
+}
+
 function setDetailWidth(v: string) {
-  emit('update:detail', { width: v, type: props.detail?.type || 'form' })
+  emit('update:detail', patchDetail({ width: v }))
+}
+
+// ========== 详情高度 ==========
+const detailHeight = computed(() => props.detail?.height || '')
+
+function setDetailHeight(v: string) {
+  emit('update:detail', patchDetail({ height: v || undefined }))
+}
+
+// ========== 表单方式 ==========
+const detailFormMode = computed<'popup' | 'drawer' | 'inline' | undefined>({
+  get: () => props.detail?.formMode,
+  set: (v) => {
+    if (!props.detail) return
+    emit('update:detail', patchDetail({ formMode: v }))
+  }
+})
+
+function setDetailFormMode(v: 'popup' | 'drawer' | 'inline' | undefined) {
+  detailFormMode.value = v
 }
 
 // ========== 权限点 ==========
@@ -509,6 +577,39 @@ function setPermissionArray(arr: string[]) {
 function commit(v: ViewActionsConfig) {
   emit('update:modelValue', v)
 }
+
+// ========== 按钮表格拖拽排序 ==========
+const tableWrapperRef = ref<HTMLElement>()
+let buttonSortable: Sortable | null = null
+
+/** 初始化按钮表格行拖拽（sortablejs 绑定 el-table tbody；整行可拖，展开行不参与） */
+function initButtonSortable() {
+  nextTick(() => {
+    if (buttonSortable) {
+      buttonSortable.destroy()
+      buttonSortable = null
+    }
+    const tbody = tableWrapperRef.value?.querySelector('.el-table__body-wrapper tbody')
+    if (!tbody) return
+    buttonSortable = Sortable.create(tbody as HTMLElement, {
+      animation: 150,
+      filter: '.el-table__expanded-row',
+      onEnd: (evt: any) => {
+        const oldIndex = evt.oldIndex
+        const newIndex = evt.newIndex
+        if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return
+        const buttons = [...props.modelValue.buttons]
+        const [moved] = buttons.splice(oldIndex, 1)
+        buttons.splice(newIndex, 0, moved)
+        commit({ ...props.modelValue, buttons })
+      },
+    })
+  })
+}
+
+onMounted(initButtonSortable)
+// 按钮数量变化（增删）后重新绑定
+watch(() => props.modelValue.buttons.length, initButtonSortable)
 </script>
 
 <style scoped>
@@ -566,6 +667,18 @@ function commit(v: ViewActionsConfig) {
   margin-left: 4px;
   color: #909399;
   cursor: help;
+}
+/* 表单方式 + 弹窗宽度：同一行并排 */
+.form-config-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.form-config-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 .muted {
   color: #c0c4cc;

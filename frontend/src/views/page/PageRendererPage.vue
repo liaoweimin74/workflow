@@ -1,5 +1,5 @@
 <template>
-  <div class="page-renderer-page">
+  <div class="page-renderer-page" :class="{ 'has-stretch': hasStretchTable }">
     <!-- 错误态 -->
     <el-result v-if="error" icon="error" :title="error" style="padding: 80px 0" />
 
@@ -15,9 +15,8 @@
     </div>
 
     <!-- 表格-容器联动：dialog 模式容器弹窗（open-container 动作打开） -->
-    <!-- inline 容器渲染在表单主区域，dialog/newTab 在弹窗 -->
     <el-dialog
-      v-for="c in dialogContainers"
+      v-for="c in dialogPopContainers"
       :key="c.key"
       v-model="c.visible"
       :title="c.title"
@@ -25,26 +24,57 @@
       :close-on-click-modal="false"
       class="linkage-container-dialog"
     >
-      <form-create v-if="c.visible" v-model="c.formData" :rule="c.renderRule" :option="{}" />
-      <template #footer v-if="hasContainerButtons(c)">
+      <div class="lc-dialog-body" :style="{ height: c.height }">
+        <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption" />
+      </div>
+      <!-- 只读（查看）：仅显示关闭按钮；非只读：容器按钮（互斥独立 v-if，避免 v-else-if 编译问题） -->
+      <template #footer v-if="c.readonly">
+        <el-button type="primary" @click="c.visible = false">关闭</el-button>
+      </template>
+      <template #footer v-if="!c.readonly && hasContainerButtons(c)">
         <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
       </template>
     </el-dialog>
-    <!-- inline 容器：页内区域渲染（点击显示、可关闭、有按钮） -->
+    <!-- 表格-容器联动：drawer 模式容器抽屉（open-container 动作打开） -->
+    <el-drawer
+      v-for="c in drawerContainers"
+      :key="c.key"
+      v-model="c.visible"
+      :title="c.title"
+      :size="c.width"
+      destroy-on-close
+    >
+      <div class="lc-dialog-body" :style="{ height: c.height }">
+        <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption" />
+      </div>
+      <template #footer v-if="c.readonly">
+        <el-button type="primary" @click="c.visible = false">关闭</el-button>
+      </template>
+      <template #footer v-if="!c.readonly && hasContainerButtons(c)">
+        <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
+      </template>
+    </el-drawer>
+    <!-- 表格-容器联动：inline 模式容器覆盖层（open-container 动作打开；覆盖页面内容区，关闭后恢复） -->
     <div
       v-for="c in inlineContainers"
       :key="c.key"
       v-show="c.visible"
-      class="fc-inline-container"
-      :class="{ 'fc-inline-open': c.visible }"
+      class="lc-inline-overlay"
     >
-      <div class="fc-inline-header">
-        <span class="fc-inline-title">{{ c.title }}</span>
-        <el-button class="btn-cancel" text @click="containerAction(c, 'cancel')">关闭</el-button>
-      </div>
-      <form-create v-if="c.visible" v-model="c.formData" :rule="c.renderRule" :option="{}" />
-      <div v-if="hasContainerButtons(c)" class="container-buttons fc-inline-footer">
-        <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
+      <div class="lc-inline-container">
+        <div class="lc-inline-header">
+          <span class="lc-inline-title">{{ c.title }}</span>
+          <el-button text @click="containerAction(c, 'cancel')">关闭</el-button>
+        </div>
+        <div class="lc-dialog-body" :style="{ height: c.height }">
+          <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption" />
+        </div>
+        <div v-if="c.readonly" class="lc-inline-footer">
+          <el-button type="primary" @click="containerAction(c, 'cancel')">关闭</el-button>
+        </div>
+        <div v-if="!c.readonly && hasContainerButtons(c)" class="lc-inline-footer">
+          <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
+        </div>
       </div>
     </div>
   </div>
@@ -61,7 +91,7 @@ import PageDataTree from './components/PageDataTree.vue'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
-import { normalizeForRender } from '@/views/form/schemaRules'
+import { normalizeForRender, deepDisableRules } from '@/views/form/schemaRules'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import { useLinkageContainer } from '@/views/form/composables/useLinkageContainer'
 
@@ -75,6 +105,15 @@ provide(ACTION_BUS_KEY, {
   dispatch: (trigger: string, eventData: any) => dispatchActions(trigger, eventData),
   register: (dataSourceId: string, instance: any) => {
     componentRefs[dataSourceId] = instance
+  },
+  /** 表格按钮默认行为：是否存在同数据源的数据容器（自动关联，无需动作链即可打开容器表单） */
+  hasLinkedContainer: (dataSourceId?: string) => !!dataSourceId && !!findContainer(dataSourceId),
+  /** 打开同数据源的数据容器：按容器展示方式（表格 formMode 解析）显示；view=只读 */
+  openLinkedContainer: (dataSourceId: string, mode: 'create' | 'edit' | 'view', row: any) => {
+    const c = findContainer(dataSourceId)
+    if (!c) return
+    const rid = mode === 'create' ? '' : String(row?.id ?? '')
+    openContainer(dataSourceId, rid, undefined, mode === 'view')
   },
 })
 const route = useRoute()
@@ -119,6 +158,25 @@ const pageSchema = reactive<{
 /** 组件引用注册表：dataSourceId → 组件实例（供 refresh/set-filter） */
 const componentRefs = reactive<Record<string, any>>({})
 
+/** 数据表格组件配置注册表：dataSourceId → page-table 节点 props（含 viewDetail；联动容器"以数据表格配置为准"） */
+const tableViewConfigs = reactive<Record<string, any>>({})
+
+/** 页面是否存在撑满（stretch）表格：开启后让 form-create 布局链传递 100% 高度，表格撑满页面内容区 */
+const hasStretchTable = ref(false)
+
+/** 递归收集 rule 树中 page-table 组件配置（供 resolveContainerStyle 取 viewDetail；须在 extractContainers 前调用） */
+function collectTableConfigs(rules: any[]) {
+  for (const n of rules || []) {
+    const node = n as Record<string, any>
+    if (node.type === 'page-table' && node.props?.dataSourceId) {
+      tableViewConfigs[node.props.dataSourceId] = node.props
+      if (node.props.stretch === true) hasStretchTable.value = true
+    }
+    if (Array.isArray(node.children)) collectTableConfigs(node.children as any[])
+    if (node.props && Array.isArray(node.props.rule)) collectTableConfigs(node.props.rule as any[])
+  }
+}
+
 /** 写入模块级存储，供 form-create 内部渲染的 LookupPicker / DataPicker 读取 */
 watch(() => pageSchema.dataSources, (val) => { setActiveDsBindings(val as any) }, { immediate: true })
 
@@ -147,18 +205,15 @@ const {
   dsApi: dataSourceApi,
   dataSources: () => pageSchema.dataSources.map((d) => ({ id: d.id, refId: d.refId })),
   // inline 容器的 formData 绑定到主 formData；dialog 容器独立 formData
+  // inline 容器：独立覆盖层（从主树移除，open-container 控制显示，覆盖页面内容区）
+  keepInlineOnTree: false,
+  openInline: true,
   formDataApi: {
-    getValue: (c, field) => (c.displayMode === 'inline' ? formData.value[field] : c.formData[field]),
+    getValue: (c, field) => c.formData[field],
     setValue: (c, field, value) => {
-      if (c.displayMode === 'inline') formData.value = { ...formData.value, [field]: value }
-      else c.formData = { ...c.formData, [field]: value }
+      c.formData = { ...c.formData, [field]: value }
     },
   },
-  // newTab 在此不弹窗回显，外部通过 router.open 实现
-  openNewTab: undefined,
-  // 页面 inline 容器已渲染在主树，open-container 不应将其当作弹窗打开
-  keepInlineOnTree: true,
-  openInline: false,
   // 自定义按钮：执行步骤链（containerCustomAction 内部调用此回调）
   onCustomAction: (c, btn) => {
     const eventData = { row: c.formData, record: c.formData, node: c.formData }
@@ -167,7 +222,23 @@ const {
     }
   },
   findComponent: (key) => componentRefs[key] as any,
+  // 联动容器展示方式/尺寸以数据表格配置为准（formMode 映射 + viewDetail.width/height）
+  resolveContainerStyle: (target) => {
+    const props = tableViewConfigs[target]
+    const detail = props?.viewDetail
+    if (!detail) return undefined
+    const fm = detail.formMode || 'popup'
+    return {
+      displayMode: fm === 'popup' ? 'dialog' : fm === 'drawer' ? 'drawer' : 'inline',
+      width: detail.width || '800px',
+      height: detail.height || '600px',
+    }
+  },
 })
+
+/** dialog 容器拆分：弹窗（dialog/newTab）与抽屉（drawer）分别渲染，避免 template 多根 + 插槽 v-if 的编译限制 */
+const dialogPopContainers = computed(() => dialogContainers.value.filter((c) => c.displayMode !== 'drawer'))
+const drawerContainers = computed(() => dialogContainers.value.filter((c) => c.displayMode === 'drawer'))
 
 onMounted(load)
 
@@ -183,12 +254,21 @@ async function load() {
     }
     const parsed = JSON.parse(def.schema || '{}')
     pageSchema.dataSources = parsed.dataSources || []
+    // 同步写入模块存储（不依赖 watch pre-flush 时序）：extractContainers 会同步挂载容器引擎
+    // 并解析数据源 refId，若此处延迟到渲染前，引擎拿到的是旧绑定导致"数据源不存在"误报
+    setActiveDsBindings(pageSchema.dataSources as any)
     pageSchema.actions = parsed.actions || []
+    // 先收集表格组件配置（在 extractContainers 之前）：makeContainer 的 resolveContainerStyle
+    // 依赖 tableViewConfigs 解析展示方式/尺寸，若延迟到 transformComponent 才收集，
+    // 容器拿到的是默认 dialog（始终弹窗）
+    collectTableConfigs(parsed.rule || [])
     // 提取容器（dialog/inline/newTab 从主树移除），注册独立容器引擎
     const mainRule = extractContainers(parsed.rule || [])
     // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
     rule.value = normalizeForRender(mainRule).map((r: any) => transformComponent(r))
-    option.value = parsed.option || {}
+    // 渲染选项：保留设计器布局配置，但强制隐藏 form-create 默认提交/重置按钮（页面非表单提交场景）。
+    // 注意 submitBtn/resetBtn 必须是对象结构 { show: false }（form-create 约定），布尔值无效。
+    option.value = { ...(parsed.option || {}), submitBtn: { show: false }, resetBtn: { show: false } }
   } catch (e: any) {
     error.value = e?.message || '页面加载失败'
     ElMessage.error(error.value)
@@ -272,6 +352,10 @@ function transformComponent(node: any): any {
       if (ds && ds.refId) {
         next.props.dsRefId = ds.refId
       }
+      // 记录表格组件配置（联动容器"以数据表格配置为准"取 viewDetail 用）
+      if (next.type === 'page-table') {
+        tableViewConfigs[next.props.dataSourceId] = next.props
+      }
     }
     // 组件实例上报 → 注册到 componentRefs（供动作总线 refresh/set-filter）
     next.on['ready'] = (instance: any) => {
@@ -308,15 +392,15 @@ function dispatchActions(trigger: string, eventData: any): boolean {
     // source 匹配：动作配置了来源（action.source）时，仅来源一致的触发才执行；未配置 = 全局通配
     if (action.source && action.source !== source) continue
     for (const step of action.steps || []) {
-      executeStep(step, eventData)
+      executeStep(step, eventData, trigger)
       consumed = true
     }
   }
   return consumed
 }
 
-/** 执行单个动作 step（set-filter / refresh / set-value / open-detail） */
-function executeStep(step: any, eventData: any) {
+/** 执行单个动作 step（set-filter / refresh / set-value / open-container / ...）；trigger 供 open-container 判断只读（row-view → 只读） */
+function executeStep(step: any, eventData: any, trigger?: string) {
   const op = step.op
   const target = step.target
   if (!target) return
@@ -351,11 +435,11 @@ function executeStep(step: any, eventData: any) {
     // 写回数据源：强制完成未竟防抖写入
     void pageEngine.value?.flush()
   } else if (op === 'open-container') {
-    // 打开联动容器：newTab 用本地 router.open；dialog/inline 用共享 openContainer
+    // 打开联动容器：newTab 用本地 router.open；dialog/drawer/inline 用共享 openContainer
+    // 展示方式以数据表格配置（formMode）为准（resolveContainerStyle 已解析），step.displayMode 不再覆盖
     const c = findContainer(target)
     if (!c) return
-    const mode = (step.displayMode as string) || c.displayMode
-    if (mode === 'newTab') {
+    if (c.displayMode === 'newTab') {
       // newTab：浏览器新标签页打开，query 传递容器 key 记录 ID
       const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
       const resolved = router.resolve({
@@ -363,9 +447,9 @@ function executeStep(step: any, eventData: any) {
       })
       window.open(resolved.href, '_blank')
     } else {
-      // dialog/inline：共享 openContainer（dialog 显示弹窗，inline 常驻不操作）
+      // dialog/drawer/inline：共享 openContainer（用容器解析后的 displayMode）；row-view 触发 → 只读查看
       const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-      openContainer(target, rid, (step.displayMode as string) || undefined)
+      openContainer(target, rid, undefined, trigger === 'row-view')
     }
   } else if (op === 'load-record') {
     // 加载记录到容器：用共享 loadContainerRecord；回退给页面引擎
@@ -388,6 +472,14 @@ function executeStep(step: any, eventData: any) {
   }
 }
 
+/** 容器渲染规则：只读容器 → 所有字段禁用（deepDisableRules），否则用原始 rule */
+function containerRenderRule(c: any): any[] {
+  return c.readonly ? deepDisableRules(c.renderRule) : c.renderRule
+}
+
+/** 容器内 form-create 选项：隐藏默认提交/重置按钮（按钮由 ContainerButtons 控制）。submitBtn/resetBtn 须为对象结构 { show: false } */
+const containerOption = { submitBtn: { show: false }, resetBtn: { show: false } }
+
 /** 解析 step value 模板（{node.id} / {row.id} / 字面量） */
 function resolveStepValue(tpl: string | undefined, eventData: any): unknown {
   if (!tpl) return undefined
@@ -405,8 +497,74 @@ function resolveStepValue(tpl: string | undefined, eventData: any): unknown {
 <style scoped>
 .page-renderer-page {
   padding: 4px;
+  /* 定位上下文：inline 覆盖层 absolute 定位锚（覆盖页面内容区） */
+  position: relative;
+  min-height: 100%;
 }
 .page-canvas {
   min-height: 300px;
+}
+
+/* ===== 页面含撑满（stretch）表格：form-create 布局链传递 100% 高度，使表格撑满页面内容区 =====
+   :has() 精准匹配"包含 page-data-table 的 form-item"，避免影响 SearchTable 查询栏内部的 form-item（否则查询栏被撑高出现滚动条） */
+.page-renderer-page.has-stretch {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.page-renderer-page.has-stretch .page-canvas {
+  flex: 1;
+  min-height: 0;
+}
+.page-renderer-page.has-stretch .page-canvas :deep(.el-form),
+.page-renderer-page.has-stretch .page-canvas :deep(.el-row),
+.page-renderer-page.has-stretch .page-canvas :deep(.el-col),
+.page-renderer-page.has-stretch .page-canvas :deep(.el-form-item:has(> .el-form-item__content > .page-data-table)),
+.page-renderer-page.has-stretch .page-canvas :deep(.el-form-item__content:has(> .page-data-table)) {
+  height: 100%;
+}
+
+/* 容器弹窗/抽屉内容区：配置高度时固定高度、超出滚动 */
+.lc-dialog-body {
+  overflow-y: auto;
+}
+/* inline 容器覆盖层：覆盖页面内容区（.page-renderer-page），关闭后恢复 */
+.lc-inline-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.lc-inline-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px;
+  overflow: hidden;
+}
+.lc-inline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.lc-inline-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.lc-inline-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 16px;
+  flex-shrink: 0;
 }
 </style>

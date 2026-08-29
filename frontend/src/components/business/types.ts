@@ -125,6 +125,8 @@ export interface FormConfig<T = any> {
   getApi?: (id: number | string) => Promise<T>
   labelWidth?: string
   dialogWidth?: string
+  /** 表单弹窗内容区高度（如 600px），配置后固定高度、超出滚动 */
+  dialogHeight?: string
   dialogTitle?: { create?: string; edit?: string }
   createPermission?: string
   editPermission?: string

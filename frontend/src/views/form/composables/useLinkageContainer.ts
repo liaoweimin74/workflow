@@ -4,7 +4,7 @@ import type { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '../components/DsBindingEngine'
 import type { DataSourceBindingContext } from '@/components/business/types'
 
-export type ContainerDisplayMode = 'dialog' | 'inline' | 'newTab'
+export type ContainerDisplayMode = 'dialog' | 'drawer' | 'inline' | 'newTab'
 
 export interface ContainerButtons {
   showNew: boolean
@@ -34,6 +34,8 @@ export interface LinkageContainer {
   height: string
   /** 可见性（dialog=弹窗开关 / inline=页内显示开关） */
   visible: boolean
+  /** 只读模式（查看触发打开；true 时字段禁用、仅显示关闭按钮） */
+  readonly: boolean
   /** 容器子 rule（props.rule，容器内 form-create 渲染） */
   renderRule: Rule[]
   /** 容器独立表单数据（与主 formData 隔离，天然避免重名字段冲突） */
@@ -74,6 +76,14 @@ export interface UseLinkageContainerOptions {
   openInline?: boolean
   /** 渲染选项（容器内 form-create 用） */
   getRenderOption?: () => Record<string, any>
+  /**
+   * 解析联动容器展示样式（以数据表格配置为准）。
+   * 数据容器（formContainer）不再独立配置显示方式/尺寸，运行时取关联数据表格的 viewDetail
+   * （formMode 映射：popup→dialog、drawer→drawer、inline→inline；宽度/高度取 viewDetail.width/height）。
+   * 返回 undefined 时回退容器 props（dialogWidth/dialogHeight/displayMode）或默认值。
+   */
+  resolveContainerStyle?: (target: string) =>
+    { displayMode?: ContainerDisplayMode; width?: string; height?: string } | undefined
 }
 
 /**
@@ -83,7 +93,9 @@ export interface UseLinkageContainerOptions {
 export function useLinkageContainer(options: UseLinkageContainerOptions) {
   const containers = ref<LinkageContainer[]>([]) as Ref<LinkageContainer[]>
 
-  const dialogContainers = computed(() => containers.value.filter((c) => c.displayMode === 'dialog' || c.displayMode === 'newTab'))
+  const dialogContainers = computed(() =>
+    containers.value.filter((c) => c.displayMode === 'dialog' || c.displayMode === 'drawer' || c.displayMode === 'newTab'),
+  )
   const inlineContainers = computed(() => containers.value.filter((c) => c.displayMode === 'inline'))
 
   /** 各容器显示模式索引（dataSourceId → displayMode），动作分发用 */
@@ -96,14 +108,18 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
   /** 构造联动容器运行时状态 */
   function makeContainer(node: Record<string, any>, displayMode: ContainerDisplayMode): LinkageContainer {
     const props = node.props || {}
+    const key = props.dataSourceId
+    // 以数据表格配置为准（resolveContainerStyle 覆盖）；未命中回退容器 props/默认值
+    const style = options.resolveContainerStyle?.(key)
     return {
-      key: props.dataSourceId,
-      displayMode,
+      key,
+      displayMode: style?.displayMode || displayMode,
       node,
       title: props.tabTitle || node.title || '编辑记录',
-      width: props.dialogWidth || '800px',
-      height: props.dialogHeight || '600px',
+      width: style?.width || props.dialogWidth || '800px',
+      height: style?.height || props.dialogHeight || '600px',
       visible: false,
+      readonly: false,
       renderRule: (Array.isArray(props.rule) ? props.rule : []) as Rule[],
       formData: {},
       currentRecordId: undefined,
@@ -164,10 +180,10 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
         .filter((n) => {
           const node = n as Record<string, any>
           if (node.type === 'formContainer' && node.props?.dataSourceId) {
-            const mode = (node.props.displayMode as ContainerDisplayMode) || 'dialog'
-            containerModes.set(node.props.dataSourceId, mode)
-            found.push(makeContainer(node, mode))
-            return mode === 'inline' && options.keepInlineOnTree === true // 可选保留 inline；其他从树移除
+            const c = makeContainer(node, (node.props.displayMode as ContainerDisplayMode) || 'dialog')
+            containerModes.set(c.key, c.displayMode)
+            found.push(c)
+            return c.displayMode === 'inline' && options.keepInlineOnTree === true // 可选保留 inline；其他从树移除
           }
           return true
         })
@@ -186,8 +202,8 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
     return mainTree
   }
 
-  /** 打开容器并加载触发行记录（open-container）；rid 来自事件行 */
-  function openContainer(target: string, rid: string, displayMode?: ContainerDisplayMode) {
+  /** 打开容器并加载触发行记录（open-container）；rid 来自事件行；readonly=查看场景（字段禁用、仅关闭） */
+  function openContainer(target: string, rid: string, displayMode?: ContainerDisplayMode, readonly?: boolean) {
     const mode = displayMode || containerModes.get(target) || 'dialog'
     if (mode === 'newTab') {
       options.openNewTab?.(findContainer(target) as LinkageContainer, rid)
@@ -199,18 +215,34 @@ export function useLinkageContainer(options: UseLinkageContainerOptions) {
       if (!c) return
       c.formData = {}
       c.currentRecordId = undefined
+      if (readonly !== undefined) {
+        c.readonly = readonly
+        c.title = containerTitle(c, readonly)
+      }
       return
     }
-    // dialog 模式：弹窗控制 visible
+    // dialog/drawer 模式：控制 visible
     const c = findContainer(target)
     if (!c) return
     c.formData = {}
     c.currentRecordId = undefined
+    if (readonly !== undefined) {
+      c.readonly = readonly
+      // 查看 → 标题"详情"（对齐视图）；编辑/新增 → 恢复容器原标题
+      c.title = containerTitle(c, readonly)
+    }
     c.visible = true
     if (rid && c.engine) {
       c.currentRecordId = rid
       void c.engine.loadRecord(rid)
     }
+  }
+
+  /** 容器标题：查看（只读）统一"详情"；编辑/新增用原始标题（tabTitle 或节点 title 兜底"编辑记录"） */
+  function containerTitle(c: LinkageContainer, readonly: boolean): string {
+    if (readonly) return '详情'
+    const props = (c.node?.props || {}) as Record<string, any>
+    return props.tabTitle || c.node?.title || '编辑记录'
   }
 
   /** 加载记录到容器引擎（load-record）；无容器时回退调用方处理 */

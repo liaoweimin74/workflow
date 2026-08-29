@@ -10,7 +10,7 @@
 
     <!-- 表格-容器联动：dialog 模式容器弹窗（open-container 动作打开） -->
     <el-dialog
-      v-for="c in dialogOnlyContainers"
+      v-for="c in dialogPopContainers"
       :key="c.key"
       v-model="c.visible"
       :title="c.title"
@@ -19,12 +19,35 @@
       class="fc-container-dialog"
     >
       <div class="fc-dialog-body" :style="{ height: c.height }">
-        <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="c.formData" />
+        <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="dialogOption" v-model="c.formData" />
       </div>
-      <template #footer v-if="hasContainerButtons(c)">
+      <!-- 只读（查看）：仅显示关闭按钮；非只读：容器按钮（互斥独立 v-if，避免 v-else-if 编译问题） -->
+      <template #footer v-if="c.readonly">
+        <el-button type="primary" @click="c.visible = false">关闭</el-button>
+      </template>
+      <template #footer v-if="!c.readonly && hasContainerButtons(c)">
         <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
       </template>
     </el-dialog>
+    <!-- 表格-容器联动：drawer 模式容器抽屉（open-container 动作打开） -->
+    <el-drawer
+      v-for="c in drawerOnlyContainers"
+      :key="c.key"
+      v-model="c.visible"
+      :title="c.title"
+      :size="c.width"
+      destroy-on-close
+    >
+      <div class="fc-dialog-body" :style="{ height: c.height }">
+        <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="dialogOption" v-model="c.formData" />
+      </div>
+      <template #footer v-if="c.readonly">
+        <el-button type="primary" @click="c.visible = false">关闭</el-button>
+      </template>
+      <template #footer v-if="!c.readonly && hasContainerButtons(c)">
+        <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
+      </template>
+    </el-drawer>
 
     <!-- 表格-容器联动：inline 模式容器页内区域（点击显示、可关闭、有按钮；与弹窗同机制，仅渲染位置不同） -->
     <div
@@ -40,9 +63,12 @@
         <el-button class="btn-cancel" text @click="containerAction(c, 'cancel')">关闭</el-button>
       </div>
       <div class="fc-inline-body" :style="{ height: c.height }">
-        <form-create v-if="c.visible" :rule="c.renderRule" :option="dialogOption" v-model="c.formData" />
+        <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="dialogOption" v-model="c.formData" />
       </div>
-      <div v-if="hasContainerButtons(c)" class="container-buttons fc-inline-footer">
+      <div v-if="c.readonly" class="container-buttons fc-inline-footer">
+        <el-button type="primary" @click="containerAction(c, 'cancel')">关闭</el-button>
+      </div>
+      <div v-if="!c.readonly && hasContainerButtons(c)" class="container-buttons fc-inline-footer">
         <ContainerButtons :container="c" @action="containerAction(c, $event)" @custom="containerCustomAction(c, $event)" />
       </div>
     </div>
@@ -50,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, computed, provide, nextTick } from 'vue'
+import { ref, reactive, watch, onMounted, computed, provide, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import formCreate, { type Rule } from '@form-create/element-ui'
@@ -59,7 +85,7 @@ import { createDsBindingEngine } from './DsBindingEngine'
 import { createActionBus } from './DsActionBus'
 import type { DsLink } from './DsActionBus'
 import { dataSourceApi } from '@/api/data-source'
-import { normalizeForRender } from '../schemaRules'
+import { normalizeForRender, deepDisableRules, deepDisableField } from '../schemaRules'
 import type { DataSourceBindingContext } from '@/components/business/types'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
@@ -157,16 +183,28 @@ const schemaActions = ref<FormAction[]>([])
 /** 生效动作链：props.actions 优先，其次 schema.actions */
 const effectiveActions = computed<FormAction[]>(() => props.actions ?? schemaActions.value)
 
-/** 弹窗容器运行时状态（复用共享 LinkageContainer：dialog/inline/newTab 统一容器机制） */
-type DialogContainer = LinkageContainer
+/** 数据表格组件配置注册表：dataSourceId → page-table 节点 props（联动容器"以数据表格配置为准"） */
+const tableViewConfigs = reactive<Record<string, any>>({})
+
+/** 递归收集 rule 树中 page-table 组件配置（供 resolveContainerStyle 取 viewDetail） */
+function collectTableConfigs(rules: any[]) {
+  for (const n of rules || []) {
+    const node = n as Record<string, any>
+    if (node.type === 'page-table' && node.props?.dataSourceId) {
+      tableViewConfigs[node.props.dataSourceId] = node.props
+    }
+    if (Array.isArray(node.children)) collectTableConfigs(node.children as any[])
+    if (node.props && Array.isArray(node.props.rule)) collectTableConfigs(node.props.rule as any[])
+  }
+}
 
 // ==================== 表格-容器联动：共享容器机制 ====================
 // 复用 useLinkageContainer（与页面设计器同一套容器机制）：
 // 容器提取（从主树移除）、独立引擎挂载、按钮行为、open/load/save/close 动作。
-// 三种显示模式共用同一机制，仅渲染位置不同（dialog=弹窗 / inline=页内 / newTab=新页签）。
+// 显示方式以数据表格配置为准（formMode 映射），仅渲染位置不同（dialog=弹窗 / drawer=抽屉 / inline=页内 / newTab=新页签）。
 const {
   containers,
-  dialogContainers: dialogOnlyContainers, // dialog+newTab 容器（模板 el-dialog 渲染；newTab 落地页以弹窗回显）
+  dialogContainers: dialogOnlyContainers, // dialog+drawer+newTab 容器（模板 el-dialog/el-drawer 渲染；newTab 落地页以弹窗回显）
   inlineContainers,                       // inline 容器（模板页内区域渲染：点击显示、可关闭、有按钮）
   containerModes,
   findContainer,
@@ -191,12 +229,28 @@ const {
   openNewTab: (c, rid) => emit('open-new-tab', c.key, rid),
   findComponent: (key) => componentRefs.get(key),
   onCustomAction: (c, btn) => ElMessage.info(`自定义按钮：${btn.label}`),
+  // 联动容器展示方式/尺寸以数据表格配置为准（formMode 映射 + viewDetail.width/height）
+  resolveContainerStyle: (target) => {
+    const props = tableViewConfigs[target]
+    const detail = props?.viewDetail
+    if (!detail) return undefined
+    const fm = detail.formMode || 'popup'
+    return {
+      displayMode: fm === 'popup' ? 'dialog' : fm === 'drawer' ? 'drawer' : 'inline',
+      width: detail.width || '800px',
+      height: detail.height || '600px',
+    }
+  },
 })
+
+/** dialog 容器拆分：弹窗（dialog/newTab）与抽屉（drawer）分别渲染，避免 template 多根 + 插槽 v-if 的编译限制 */
+const dialogPopContainers = computed(() => dialogOnlyContainers.value.filter((c) => c.displayMode !== 'drawer'))
+const drawerOnlyContainers = computed(() => dialogOnlyContainers.value.filter((c) => c.displayMode === 'drawer'))
 
 /** 弹窗内 form-create 选项（隐藏提交按钮，表单级布局） */
 const dialogOption = computed<Record<string, any>>(() => ({
-  submitBtn: false,
-  resetBtn: false,
+  submitBtn: { show: false },
+  resetBtn: { show: false },
   form: { ...(renderOption.value.form || {}) },
 }))
 
@@ -256,15 +310,16 @@ const mainSchema = ref<Rule[]>([])
 /** 渲染用 schema：将 formContainer 规范化为 fcRow 供 form-create 运行时渲染 */
 const renderSchema = computed(() => normalizeForRender(mainSchema.value))
 
-// resolvedSchema 变化 → 同步 mainSchema（提取 dialog 容器到弹窗）
+// resolvedSchema 变化 → 同步 mainSchema（提取 dialog 容器到弹窗）+ 收集表格组件配置
 watch(resolvedSchema, (val) => {
+  collectTableConfigs(val)
   mainSchema.value = extractDialogContainers(val)
 }, { immediate: true })
 
 /** 渲染选项：始终隐藏提交/重置按钮（提交由调用方控制），form 级配置来自设计器 option（labelPosition 等） */
 const renderOption = ref<Record<string, any>>({
-  submitBtn: false,
-  resetBtn: false,
+  submitBtn: { show: false },
+  resetBtn: { show: false },
   form: {},
 })
 
@@ -274,8 +329,8 @@ function applyOption(option: Record<string, any> | undefined | null) {
   const form = { ...(option.form || {}) }
   delete form.formCreateFormName
   renderOption.value = {
-    submitBtn: false,
-    resetBtn: false,
+    submitBtn: { show: false },
+    resetBtn: { show: false },
     form,
   }
 }
@@ -303,7 +358,7 @@ onMounted(async () => {
     // form-create 的 rule 用 props.disabled 控制字段禁用。
     // 注意：schema 可能为 fcRow 栅格布局嵌套结构（fcRow → col → input/select），
     // 必须递归到子字段，否则只有容器被禁用、真实字段仍可编辑。
-    resolvedSchema.value = resolvedSchema.value.map(deepDisable)
+    resolvedSchema.value = deepDisableRules(resolvedSchema.value)
   }
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
@@ -332,7 +387,7 @@ watch(() => props.rule, (newVal) => {
   if (!Array.isArray(newVal) || newVal.length === 0) return
   resolvedSchema.value = newVal
   if (props.readonly) {
-    resolvedSchema.value = resolvedSchema.value.map(deepDisable)
+    resolvedSchema.value = deepDisableRules(resolvedSchema.value)
   }
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
@@ -407,40 +462,6 @@ async function loadData() {
   }
 }
 
-/**
- * 递归设置 rule 树中所有字段的 disabled（含 fcRow/col 布局 children、group/subForm 的 props.rule、
- * tableForm 的 props.columns[].rule 子表内部字段），保证 readonly 下子表内部字段也不可编辑。
- */
-function deepDisable(field: Rule): Rule {
-  // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
-  if (typeof field !== 'object' || field === null) return field
-  const f = field as Record<string, unknown>
-  const fieldProps = (f.props as Record<string, any>) || {}
-  const next: Record<string, unknown> = { ...f, props: { ...fieldProps, disabled: true } as Record<string, unknown> }
-  if (Array.isArray(f.children)) {
-    next.children = (f.children as Rule[]).map(deepDisable)
-  }
-  // group/subForm 子表单：内部字段在 props.rule
-  if (Array.isArray(fieldProps.rule)) {
-    const p = next.props as Record<string, unknown>
-    next.props = { ...p, rule: (fieldProps.rule as Rule[]).map(deepDisable) }
-  }
-  // tableForm 子表：内部字段在 props.columns[].rule（每列一个 rule 数组）
-  if (Array.isArray(fieldProps.columns)) {
-    const p = next.props as Record<string, unknown>
-    next.props = {
-      ...p,
-      columns: (fieldProps.columns as Record<string, any>[]).map((col) => {
-        if (col && Array.isArray(col.rule)) {
-          return { ...col, rule: (col.rule as Rule[]).map(deepDisable) }
-        }
-        return col
-      }),
-    }
-  }
-  return next as Rule
-}
-
 function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>) {
   // HIDDEN 字段直接移除（不渲染、不提交）；VIEW 字段设置 props.disabled 只读（递归到子字段）
   resolvedSchema.value = resolvedSchema.value
@@ -454,7 +475,7 @@ function applyPermissions(permissions: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'
       if (!fieldName) return field
       if (permissions[fieldName] !== 'VIEW') return field
 
-      return deepDisable(field)
+      return deepDisableField(field)
     })
 }
 
@@ -600,9 +621,10 @@ function dispatchAction(trigger: string, eventData: any): boolean {
         // 容器 displayMode 优先（属性面板配置为准），step.displayMode 为兜底，默认 dialog
         const mode = containerModes.get(target) || step.displayMode || 'dialog'
         // 共享打开逻辑：dialog/inline 统一清空 formData + 显示 + 引擎 loadRecord；
-        // newTab 经 openNewTab 回调 emit open-new-tab（仅渲染位置不同）
+        // newTab 经 openNewTab 回调 emit open-new-tab（仅渲染位置不同）；
+        // row-view 触发 → 只读查看（字段禁用、仅关闭按钮）
         const rid = String(eventData?.row?.id ?? eventData?.node?.id ?? '')
-        openContainer(target || '', rid, mode as any)
+        openContainer(target || '', rid, mode as any, trigger === 'row-view')
         consumed = true
       } else if (op === 'load-record') {
         const rid = step.recordId
@@ -628,6 +650,11 @@ function dispatchAction(trigger: string, eventData: any): boolean {
     }
   }
   return consumed
+}
+
+/** 容器渲染规则：只读容器 → 所有字段禁用（deepDisableRules），否则用原始 rule */
+function containerRenderRule(c: LinkageContainer): Rule[] {
+  return c.readonly ? deepDisableRules(c.renderRule) : c.renderRule
 }
 
 /** 组件引用注册表（对齐 PageRendererPage：PageDataTable ready 上报） */

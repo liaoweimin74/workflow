@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
+import { Switch } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
 import { getDictTypeList, createDictType, updateDictType, deleteDictType, getDictDataList, createDictData, updateDictData, deleteDictData } from '@/api/dict'
@@ -49,7 +50,7 @@ const typeFormConfig: FormConfig<DictTypeVO> = {
 
 const typeActionButtons: ActionButton[] = [
   {
-    label: '启用/停用', size: 'small', link: true,
+    label: '启用/停用', icon: Switch, size: 'small', link: true,
     onClick: async (row: DictTypeVO) => {
       await updateDictType(row.id, { status: row.status === 1 ? 0 : 1 } as any)
       typeTableRef.value?.fetchList()
@@ -146,7 +147,7 @@ const dataFormConfig = computed<FormConfig<DictDataVO>>(() => ({
 
 const dataActionButtons: ActionButton[] = [
   {
-    label: '启用/停用', size: 'small', link: true,
+    label: '启用/停用', icon: Switch, size: 'small', link: true,
     onClick: async (row: DictDataVO) => {
       await updateDictData(row.id, { status: row.status === 1 ? 0 : 1 } as any)
       dataTableRef.value?.fetchList()

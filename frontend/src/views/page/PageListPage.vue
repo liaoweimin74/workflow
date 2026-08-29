@@ -81,6 +81,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { EditPen, Promotion, Menu, Delete } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { pageApi, type PageDefinitionDTO, type PageMenuItem } from '@/api/page'
@@ -293,6 +294,7 @@ const formConfig = reactive<FormConfig<PageDefinitionDTO>>({
 const actionButtons: ActionButton[] = [
   {
     label: '设计',
+    icon: EditPen,
     permission: 'page:edit',
     onClick: (row: any) => {
       router.push({ path: '/page/designer', query: { id: row.id } })
@@ -300,6 +302,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '发布',
+    icon: Promotion,
     type: 'primary',
     permission: 'page:publish',
     show: (row: any) => row.status === 'DRAFT',
@@ -320,6 +323,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '挂接菜单',
+    icon: Menu,
     permission: 'page:edit',
     show: (row: any) => row.status === 'PUBLISHED',
     onClick: (row: any) => {
@@ -328,6 +332,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '删除',
+    icon: Delete,
     type: 'danger',
     permission: 'page:delete',
     show: (row: any) => row.status === 'DRAFT',

@@ -25,6 +25,8 @@
       </el-select>
     </div>
 
+    <!-- 字段列表（整行可拖拽排序：已勾选展示字段的顺序随拖拽调整） -->
+    <div ref="tableWrapperRef">
     <el-table :data="candidates" border max-height="460">
       <el-table-column prop="key" label="字段" width="130" />
       <el-table-column prop="label" label="标题" min-width="110" />
@@ -134,12 +136,15 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-empty v-if="candidates.length === 0" description="当前表单无可配置字段" :image-size="60" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, watch, nextTick } from 'vue'
+import Sortable from 'sortablejs'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import type { ColumnConfigItem } from '@/api/bizData'
 import type { SearchFieldConfig, ColumnViewConfig } from '../ViewDesigner.vue'
@@ -165,6 +170,44 @@ const emit = defineEmits<{
   (e: 'update:columns', v: ColumnViewConfig[]): void
   (e: 'update:sortableFields', v: string[]): void
 }>()
+
+// ========== 字段列表整行拖拽排序 ==========
+const tableWrapperRef = ref<HTMLElement>()
+let fieldSortable: Sortable | null = null
+
+/** 初始化字段表格行拖拽：拖拽后按新顺序重排已勾选展示字段（columns） */
+function initFieldSortable() {
+  nextTick(() => {
+    if (fieldSortable) {
+      fieldSortable.destroy()
+      fieldSortable = null
+    }
+    const tbody = tableWrapperRef.value?.querySelector('.el-table__body-wrapper tbody')
+    if (!tbody) return
+    fieldSortable = Sortable.create(tbody as HTMLElement, {
+      animation: 150,
+      onEnd: (evt: any) => {
+        const oldIndex = evt.oldIndex
+        const newIndex = evt.newIndex
+        if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return
+        // 重排候选副本（模拟 DOM 新顺序），已勾选展示字段按新顺序重排 columns
+        const cands = [...props.candidates]
+        const [moved] = cands.splice(oldIndex, 1)
+        cands.splice(newIndex, 0, moved)
+        const cols = props.columns
+        const newCols = cands
+          .filter((c) => cols.some((x) => x.key === c.key))
+          .map((c) => cols.find((x) => x.key === c.key) as ColumnViewConfig)
+        const same = newCols.length === cols.length && newCols.every((c, i) => c.key === cols[i].key)
+        if (!same) emit('update:columns', newCols)
+      },
+    })
+  })
+}
+
+onMounted(initFieldSortable)
+// 候选字段变化（数据源切换）后重新绑定
+watch(() => props.candidates.length, initFieldSortable)
 
 // ========== 查询条件 ==========
 /** 字段是否可作查询条件（filterableKeys 未配置时全部允许） */

@@ -2,7 +2,7 @@
   <el-dialog v-model="visible" :title="isTableMode ? '数据源配置' : '数据源配置'" :width="isTableMode ? '860px' : '600px'" :close-on-click-modal="false">
     <template v-if="isTableMode">
       <el-tabs v-model="activeTab" type="border-card">
-        <!-- Tab 1: 数据源 + 筛选 -->
+        <!-- Tab 1: 数据源 + 组件级数据筛选 -->
         <el-tab-pane label="数据源" name="binding">
           <el-form label-width="110px" size="default">
             <el-form-item required>
@@ -66,6 +66,17 @@
               </template>
               <el-switch v-model="tableData.showSearch" />
             </el-form-item>
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  撑满
+                  <el-tooltip content="开启后表格占满父容器宽高，数据区域内部滚动" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-switch v-model="tableData.stretch" />
+            </el-form-item>
           </el-form>
           <QueryColumnsConfig
             v-if="tableCandidates.length > 0"
@@ -105,7 +116,7 @@
         </el-tab-pane>
         <!-- Tab 3: 操作 -->
         <el-tab-pane label="操作" name="actions">
-          <ActionsConfig v-model="tableData.actions" :detail="tableData.detail" />
+          <ActionsConfig v-model="tableData.actions" v-model:detail="tableData.detail" />
         </el-tab-pane>
         <!-- Tab 4: 事件 -->
         <el-tab-pane label="事件" name="events">
@@ -115,7 +126,7 @@
     </template>
 
     <template v-else>
-      <!-- 非表格模式：数据源 + 筛选 + 显示与按钮 -->
+      <!-- 非表格模式：数据源 + 按钮 -->
       <el-form label-width="110px" size="default">
         <el-form-item label="页面内数据源" required>
           <el-select v-model="form.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
@@ -123,60 +134,8 @@
           </el-select>
           <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
         </el-form-item>
-        <el-divider content-position="left">组件级数据筛选</el-divider>
-        <el-form-item label="筛选条件">
-          <div style="width: 100%">
-            <el-radio-group v-model="form.filterLogic" size="small">
-              <el-radio-button value="AND">所有（且）</el-radio-button>
-              <el-radio-button value="OR">任一（或）</el-radio-button>
-            </el-radio-group>
-            <div v-for="(row, i) in form.filterRows" :key="i" style="display: flex; gap: 8px; margin-top: 8px">
-              <el-select v-model="row.column" placeholder="目标列" style="width: 30%">
-                <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-              </el-select>
-              <el-select v-model="row.op" style="width: 22%">
-                <el-option label="等于" value="eq" /><el-option label="不等于" value="ne" />
-                <el-option label="包含" value="like" /><el-option label="属于" value="in" />
-                <el-option label="为空" value="isEmpty" /><el-option label="不为空" value="isNotEmpty" />
-              </el-select>
-              <el-select v-model="row.source" style="width: 22%">
-                <el-option label="固定值" value="fixed" /><el-option label="表单字段" value="field" />
-              </el-select>
-              <el-select v-if="row.source === 'field'" v-model="row.field" placeholder="当前表单字段" style="width: 30%">
-                <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
-              </el-select>
-              <el-input v-else v-model="row.fixedValue" placeholder="固定值" style="width: 30%" />
-              <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
-            </div>
-            <el-button type="primary" link style="margin-top: 8px"
-              @click="form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })">
-              + 添加筛选条件
-            </el-button>
-          </div>
-        </el-form-item>
 
-        <!-- 显示模式与尺寸（表格-容器联动：弹窗/新页签/内嵌） -->
-        <el-divider content-position="left">显示与按钮</el-divider>
-        <el-form-item label="显示模式">
-          <el-select v-model="container.displayMode" placeholder="选择显示方式" style="width: 100%">
-            <el-option label="弹出窗口" value="dialog" />
-            <el-option label="新开页签" value="newTab" />
-            <el-option label="页面内嵌" value="inline" />
-          </el-select>
-          <span class="form-tip">默认弹出窗口；open-container 动作可覆盖</span>
-        </el-form-item>
-        <el-form-item v-if="container.displayMode === 'dialog'" label="弹窗宽度">
-          <el-input v-model="container.dialogWidth" placeholder="800px" style="width: 100%" />
-        </el-form-item>
-        <el-form-item v-if="container.displayMode === 'dialog'" label="弹窗高度">
-          <el-input v-model="container.dialogHeight" placeholder="600px" style="width: 100%" />
-        </el-form-item>
-        <el-form-item v-if="container.displayMode === 'newTab'" label="页签标题">
-          <el-input v-model="container.tabTitle" placeholder="编辑记录" style="width: 100%" />
-        </el-form-item>
-        <el-form-item v-if="container.displayMode === 'inline'" label="内嵌高度">
-          <el-input v-model="container.inlineHeight" placeholder="auto" style="width: 100%" />
-        </el-form-item>
+        <!-- 按钮配置 -->
         <el-divider content-position="left">按钮</el-divider>
         <el-form-item label="新增按钮">
           <el-switch v-model="container.showNewButton" />
@@ -252,7 +211,7 @@ const visible = computed({
 const isTableMode = computed(() => props.tableMode)
 const activeTab = ref('binding')
 
-// ==================== 数据源 + 筛选 ====================
+// ==================== 数据源 + 组件级数据筛选（表格模式） ====================
 const dsColumns = ref<ColumnConfigItem[]>([])
 const visibleColumns = computed(() => dsColumns.value.filter(c => !c.hidden))
 
@@ -262,13 +221,8 @@ const form = reactive({
   filterRows: [] as { column: string; op: string; source: 'fixed' | 'field'; fixedValue: string; field: string }[],
 })
 
-// ==================== 容器显示与按钮配置（formContainer 模式） ====================
+// ==================== 容器按钮配置（formContainer 模式） ====================
 const container = reactive({
-  displayMode: 'dialog' as 'dialog' | 'newTab' | 'inline',
-  dialogWidth: '800px',
-  dialogHeight: '600px',
-  tabTitle: '编辑记录',
-  inlineHeight: 'auto',
   showNewButton: true,
   showCancelButton: true,
   showConfirmButton: true,
@@ -277,13 +231,8 @@ const container = reactive({
   customButtonsText: '',
 })
 
-/** 从 bindingProps 回填容器配置 */
+/** 从 bindingProps 回填容器按钮配置 */
 function initContainerConfig(bp: Record<string, any>) {
-  container.displayMode = bp.displayMode || 'dialog'
-  container.dialogWidth = bp.dialogWidth || '800px'
-  container.dialogHeight = bp.dialogHeight || '600px'
-  container.tabTitle = bp.tabTitle || '编辑记录'
-  container.inlineHeight = bp.inlineHeight || 'auto'
   container.showNewButton = bp.showNewButton !== false
   container.showCancelButton = bp.showCancelButton !== false
   container.showConfirmButton = bp.showConfirmButton !== false
@@ -331,6 +280,8 @@ const tableFilterableKeys = ref<Set<string>>(new Set())
 const tableData = reactive({
   /** 是否显示查询栏（默认 false） */
   showSearch: false,
+  /** 是否占满父容器高度（默认 false） */
+  stretch: false,
   searchFields: [] as { key: string; matchType?: string }[],
   columns: [] as any[],
   /** 组件级可排序字段（受数据源 metadata 上限约束；空=跟随数据源全部可排字段） */
@@ -379,6 +330,7 @@ async function loadTableCandidates() {
 function initTableData() {
   const bp = props.bindingProps || {}
   tableData.showSearch = bp.showSearch === true
+  tableData.stretch = bp.stretch === true
   tableData.searchFields = bp.searchFields || []
   const srcColumns = (bp.columns && bp.columns.length > 0)
     ? bp.columns
@@ -412,7 +364,7 @@ watch(() => props.modelValue, async (val) => {
   if (!val) return
   activeTab.value = 'binding'
   const bp = props.bindingProps || {}
-  // 回填数据源 + 筛选
+  // 回填数据源 + 组件级数据筛选
   form.dataSourceId = bp.dataSourceId || ''
   const filter = bp.filter
   if (filter && typeof filter === 'object') {
@@ -438,7 +390,7 @@ watch(() => props.modelValue, async (val) => {
 function handleConfirm() {
   if (!form.dataSourceId) return
   const result: Record<string, any> = { dataSourceId: form.dataSourceId }
-  // 筛选条件
+  // 组件级数据筛选（表格模式）
   const conditions = form.filterRows.filter(r => r.column).map(r => ({
     column: r.column, op: r.op, source: r.source,
     fixedValue: r.source === 'fixed' ? r.fixedValue : undefined,
@@ -450,6 +402,7 @@ function handleConfirm() {
   // 表格配置
   if (props.tableMode) {
     result.showSearch = tableData.showSearch
+    result.stretch = tableData.stretch
     result.searchFields = [...tableData.searchFields]
     result.columns = tableData.columns.map((c: any) => ({
       prop: c.key ?? c.prop, label: c.label || c.key,
@@ -464,12 +417,7 @@ function handleConfirm() {
     result.viewDetail = { ...tableData.detail }
     result.viewEvents = [...tableData.events]
   } else {
-    // 容器显示模式与按钮配置
-    result.displayMode = container.displayMode
-    result.dialogWidth = container.dialogWidth
-    result.dialogHeight = container.dialogHeight
-    result.tabTitle = container.tabTitle
-    result.inlineHeight = container.inlineHeight
+    // 容器按钮配置
     result.showNewButton = container.showNewButton
     result.showCancelButton = container.showCancelButton
     result.showConfirmButton = container.showConfirmButton

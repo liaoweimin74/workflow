@@ -229,16 +229,18 @@
       :close-on-click-modal="false"
       @close="handleDialogClose"
     >
-      <FormRenderer
-        :key="dialogFormKey"
-        ref="formRendererRef"
-        :rule="formConfig.rule"
-        :option="formConfig.option"
-        :initial-values="dialogInitialValues"
-        :actions="formConfig.actions"
-        :data-sources="formConfig.dataSources"
-        @open-new-tab="(key, rid) => $emit('open-new-tab', key, rid)"
-      />
+      <div class="st-dialog-body" :style="{ height: formConfig.dialogHeight || undefined }">
+        <FormRenderer
+          :key="dialogFormKey"
+          ref="formRendererRef"
+          :rule="formConfig.rule"
+          :option="formConfig.option"
+          :initial-values="dialogInitialValues"
+          :actions="formConfig.actions"
+          :data-sources="formConfig.dataSources"
+          @open-new-tab="(key, rid) => $emit('open-new-tab', key, rid)"
+        />
+      </div>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="formLoading" @click="handleDialogSubmit">确定</el-button>
@@ -588,6 +590,13 @@ function getList() {
 /* 搜索栏 */
 .search-card {
   flex-shrink: 0;
+  /* 与视图 PageRenderer 查询栏一致；!important 防 form-create/画布等外部环境覆盖 */
+  margin-bottom: 16px !important;
+}
+/* 查询栏内表单字段间距：恢复 element-plus 默认（form-create 全局样式会把 el-form-item margin-bottom 覆盖为 0，
+   导致 PAGE 页面（form-create 渲染）里查询栏输入框贴底；视图页面不受影响） */
+.search-card :deep(.el-form-item) {
+  margin-bottom: 18px;
 }
 .search-card :deep(.el-card__body) {
   padding-bottom: 0;
@@ -670,5 +679,9 @@ function getList() {
 }
 .action-buttons .el-button.is-plain.is-circle:hover {
   --el-button-hover-bg-color: var(--el-color-primary-light-8);
+}
+/* 表单弹窗内容区：配置 dialogHeight 时固定高度、超出滚动 */
+.st-dialog-body {
+  overflow-y: auto;
 }
 </style>

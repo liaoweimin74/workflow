@@ -1,4 +1,6 @@
 <template>
+  <!-- 根包裹无定位（static），使 inline 覆盖层 absolute 定位锚向上到页面内容区容器；stretch=true 时撑满父容器高度 -->
+  <div class="page-data-table" :class="{ 'stretch-fill': stretch }">
   <SearchTable
     ref="tableRef"
     :search-fields="resolvedSearchFields"
@@ -13,6 +15,7 @@
     :show-pagination="pagination"
     :default-page-size="pageSize || 20"
     :page-sizes="pageSizes || [10, 20, 50]"
+    :table-size="tableSize"
     :delete-confirm="deleteConfirm"
     @row-click="handleRowClick"
     @cell-click="handleCellClick"
@@ -22,15 +25,63 @@
 
   <!-- 详情弹窗（view 按钮/行查看：只读表单） -->
   <el-dialog v-model="detailVisible" title="详情" :width="detailWidth" :close-on-click-modal="false">
-    <FormRenderer
-      v-if="detailVisible"
-      :key="detailFormKey"
-      :rule="detailRules"
-      :option="{ labelWidth: '100px' }"
-      :initial-values="detailRow"
-      readonly
-    />
+    <div class="detail-body-scroll" :style="{ height: detailHeight || undefined }">
+      <FormRenderer
+        v-if="detailVisible"
+        :key="detailFormKey"
+        :rule="detailRules"
+        :option="{ labelWidth: '100px' }"
+        :initial-values="detailRow"
+        readonly
+      />
+    </div>
   </el-dialog>
+
+  <!-- 编辑/新增/查看表单（formMode=drawer）：右侧抽屉（view 只读） -->
+  <el-drawer v-model="localDrawerVisible" :title="localFormTitle" :size="localFormWidth" destroy-on-close>
+    <FormRenderer
+      v-if="localDrawerVisible"
+      ref="localFormRef"
+      :rule="localFormRules"
+      :option="{ labelWidth: '100px' }"
+      :initial-values="localInitialValues"
+      :readonly="localFormMode === 'view'"
+    />
+    <template #footer>
+      <el-button v-if="localFormMode === 'view'" type="primary" @click="localDrawerVisible = false">关闭</el-button>
+      <template v-else>
+        <el-button @click="localDrawerVisible = false">取消</el-button>
+        <el-button type="primary" :loading="localSaving" @click="handleLocalSubmit">保存</el-button>
+      </template>
+    </template>
+  </el-drawer>
+
+  <!-- 编辑/新增/查看表单（formMode=inline）：覆盖整个页面内容区，关闭后恢复（view 只读） -->
+  <div v-if="localInlineVisible" class="local-inline-overlay">
+    <div class="local-inline-container">
+      <div class="local-inline-header">
+        <span class="local-inline-title">{{ localFormTitle }}</span>
+        <el-button text :icon="Close" @click="localInlineVisible = false" />
+      </div>
+      <div class="local-inline-body">
+        <FormRenderer
+          ref="localFormRef"
+          :rule="localFormRules"
+          :option="{ labelWidth: '100px' }"
+          :initial-values="localInitialValues"
+          :readonly="localFormMode === 'view'"
+        />
+      </div>
+      <div class="local-inline-footer">
+        <el-button v-if="localFormMode === 'view'" type="primary" @click="localInlineVisible = false">关闭</el-button>
+        <template v-else>
+          <el-button @click="localInlineVisible = false">取消</el-button>
+          <el-button type="primary" :loading="localSaving" @click="handleLocalSubmit">保存</el-button>
+        </template>
+      </div>
+    </div>
+  </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -49,8 +100,13 @@ import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
-/** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费 */
-const actionBus = inject<{ dispatch: (trigger: string, eventData: any) => boolean } | undefined>('pageActionBus')
+/** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费；关联容器打开能力 */
+const actionBus = inject<{
+  dispatch: (trigger: string, eventData: any) => boolean
+  register?: (dataSourceId: string, instance: any) => void
+  hasLinkedContainer?: (dataSourceId?: string) => boolean
+  openLinkedContainer?: (dataSourceId: string, mode: 'create' | 'edit' | 'view', row: any) => void
+} | undefined>('pageActionBus')
 
 const route = useRoute()
 const router = useRouter()
@@ -68,8 +124,8 @@ const props = withDefaults(defineProps<{
   sortableFields?: string[]
   /** 操作配置（ViewDesigner 风格：{ buttons, permissions, actionColumnWidth }） */
   viewActions?: { buttons?: any[]; permissions?: string; actionColumnWidth?: number }
-  /** 详情配置（ViewDesigner 风格：{ width, type }） */
-  viewDetail?: { width?: string; type?: string }
+  /** 详情配置（ViewDesigner 风格：{ width, height, type, formMode }；以数据表格配置为准） */
+  viewDetail?: { width?: string; height?: string; type?: string; formMode?: string }
   /** 事件链配置 */
   viewEvents?: any[]
   /** 搜索字段配置 */
@@ -84,6 +140,8 @@ const props = withDefaults(defineProps<{
   pageSizes?: number[]
   /** 行选择模式（SearchTable 不支持，保留兼容） */
   selectionMode?: 'none' | 'single' | 'multiple'
+  /** 是否占满父容器高度（true 时表格撑满父容器，表格区域内部滚动） */
+  stretch?: boolean
   /** 附加属性（border/stripe 等） */
   [key: string]: any
 }>(), {
@@ -97,6 +155,8 @@ const emit = defineEmits<{
 }>()
 
 const tableRef = ref<InstanceType<typeof SearchTable> | null>(null)
+/** 表格尺寸（small/default/large）：透传视图 size 配置给 SearchTable，使查询栏/表格与直接渲染一致 */
+const tableSize = computed(() => props.size || 'default')
 /** 最近加载的记录（供动作总线/外部读取） */
 const records = ref<any[]>([])
 
@@ -113,8 +173,86 @@ const useMetadataColumns = ref(false)
 const detailVisible = ref(false)
 const detailRow = ref<Record<string, any>>({})
 const detailWidth = computed(() => props.viewDetail?.width || '800px')
+/** 详情弹窗内容区高度（viewDetail.height，超出滚动） */
+const detailHeight = computed(() => props.viewDetail?.height || '')
 /** 每次打开递增，强制重建 FormRenderer（读取最新行数据） */
 const detailFormKey = ref(0)
+
+// ==================== 本地编辑/新增/查看表单（formMode=drawer/inline） ====================
+const localDrawerVisible = ref(false)
+const localInlineVisible = ref(false)
+const localFormMode = ref<'create' | 'edit' | 'view'>('create')
+const localFormTitle = ref('')
+const localFormRow = ref<any>(null)
+const localInitialValues = ref<Record<string, any>>({})
+const localFormRef = ref<InstanceType<typeof FormRenderer>>()
+const localSaving = ref(false)
+/** 表单宽度（viewDetail.width 为准，缺省 500px 对齐 SearchTable 弹窗） */
+const localFormWidth = computed(() => props.viewDetail?.width || '500px')
+/** 本地编辑/新增表单规则（复用 buildFormRule） */
+const localFormRules = computed(() => buildFormRule())
+
+/** 按表单方式打开编辑/新增/查看：popup → SearchTable 弹窗/详情弹窗；drawer → 右侧抽屉；inline → 覆盖层 */
+function openLocalForm(mode: 'create' | 'edit' | 'view', row?: any) {
+  const fm = props.viewDetail?.formMode || 'popup'
+  if (fm === 'popup') {
+    if (mode === 'view') { openDetail(row); return }
+    if (mode === 'create') tableRef.value?.openFormDialog()
+    else tableRef.value?.openEdit(row)
+    return
+  }
+  localFormMode.value = mode
+  localFormTitle.value = mode === 'view' ? '详情' : mode === 'create' ? '新增' : '编辑'
+  localFormRow.value = row || null
+  // 数据来源：行数据为扁平结构（{...字段, id, version}），直接回填；编辑时再用 getData 补充最新值
+  if (mode === 'view') {
+    localInitialValues.value = row || {}
+  } else if (mode === 'edit') {
+    localInitialValues.value = row || {}
+    if (row?.id && resolvedRefId.value) {
+      dataSourceApi.getData(resolvedRefId.value, row.id).then((r: any) => {
+        const fresh = (r.data as any)?.data
+        if (fresh) localInitialValues.value = { ...localInitialValues.value, ...fresh }
+      })
+    }
+  } else {
+    localInitialValues.value = {}
+  }
+  if (fm === 'drawer') {
+    localDrawerVisible.value = true
+    localInlineVisible.value = false
+  } else {
+    localInlineVisible.value = true
+    localDrawerVisible.value = false
+  }
+}
+
+/** 本地表单提交（drawer/inline 模式：新增/编辑，成功后关闭并刷新列表） */
+async function handleLocalSubmit() {
+  if (localFormMode.value === 'view') return
+  const cfg = formConfig.value
+  if (!cfg) return
+  const formData = localFormRef.value?.getFormData() || {}
+  localSaving.value = true
+  try {
+    if (localFormMode.value === 'create') {
+      await cfg.createApi?.(formData)
+      ElMessage.success('新增成功')
+    } else {
+      const row = localFormRow.value
+      if (!row) return
+      await cfg.updateApi?.(row.id, formData, row)
+      ElMessage.success('更新成功')
+    }
+    localDrawerVisible.value = false
+    localInlineVisible.value = false
+    tableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    localSaving.value = false
+  }
+}
 
 // ==================== 图标映射 ====================
 /** 图标名 → 组件（对齐 ActionsConfig.iconOptions，工具栏/操作列按钮图标解析用） */
@@ -324,7 +462,9 @@ const formConfig = computed(() => {
       const r = await dataSourceApi.getData(resolvedRefId.value, id)
       return r?.data?.data || {}
     },
-    dialogWidth: '500px',
+    // 以数据表格配置为准：宽度/高度取 viewDetail（缺省保持默认）
+    dialogWidth: props.viewDetail?.width || '500px',
+    dialogHeight: props.viewDetail?.height || undefined,
     dialogTitle: { create: '新增数据', edit: '编辑数据' },
   }
 })
@@ -363,15 +503,20 @@ function handleActionClick(btn: any, row: any) {
     if (consumed) return
   }
   // 无事件 → 默认行为
+  // 存在同数据源的数据容器 → 打开容器表单（自动关联，无需动作链）；否则本地默认表单
+  const dsId = props.dataSourceId
+  const linked = actionBus?.hasLinkedContainer?.(dsId)
   if (btn.key === 'create') {
-    // 打开新增弹窗（工具栏 create 按钮；无行参数）
-    tableRef.value?.openFormDialog()
+    if (linked && dsId) actionBus?.openLinkedContainer?.(dsId, 'create', null)
+    else openLocalForm('create')
   } else if (btn.key === 'edit') {
-    tableRef.value?.openEdit(row)
+    if (linked && dsId) actionBus?.openLinkedContainer?.(dsId, 'edit', row)
+    else openLocalForm('edit', row)
   } else if (btn.key === 'delete') {
     handleDelete(row)
   } else if (btn.key === 'view') {
-    openDetail(row)
+    if (linked && dsId) actionBus?.openLinkedContainer?.(dsId, 'view', row)
+    else openDetail(row)
   }
 }
 
@@ -418,10 +563,10 @@ async function dispatchButtonAction(action: { type: string; params?: { key: stri
       if (resolved.url) router.push(resolved.url)
       break
     case 'open-create':
-      tableRef.value?.openFormDialog()
+      openLocalForm('create')
       break
     case 'edit':
-      if (row) tableRef.value?.openEdit(row)
+      if (row) openLocalForm('edit', row)
       break
     case 'delete':
       if (row) await handleDelete(row)
@@ -485,8 +630,8 @@ async function dispatchButtonAction(action: { type: string; params?: { key: stri
         actions: {
           refresh: () => refresh(),
           openDetail: () => openDetail(row),
-          openCreate: () => tableRef.value?.openFormDialog(),
-          openEdit: () => (row ? tableRef.value?.openEdit(row) : undefined),
+          openCreate: () => openLocalForm('create'),
+          openEdit: () => (row ? openLocalForm('edit', row) : undefined),
           remove: (id: string) =>
             resolvedRefId.value ? dataSourceApi.deleteData(resolvedRefId.value, id) : Promise.reject(new Error('数据源未绑定')),
         },
@@ -499,9 +644,14 @@ async function dispatchButtonAction(action: { type: string; params?: { key: stri
   }
 }
 
-/** 详情弹窗：以数据源列生成只读表单，回显行数据 */
+/** 详情：popup → 弹窗；drawer/inline → 本地表单只读查看（按 formMode 展示） */
 function openDetail(row: any) {
   if (!row) return
+  const fm = props.viewDetail?.formMode || 'popup'
+  if (fm !== 'popup') {
+    openLocalForm('view', row)
+    return
+  }
   detailRow.value = row
   detailFormKey.value++
   detailVisible.value = true
@@ -609,3 +759,66 @@ watch(() => resolvedRefId.value, () => {
   loadMetadata()
 })
 </script>
+
+<style scoped>
+/* 查询工具栏下边距：与视图 PageRenderer 查询栏一致（防 form-create/画布环境覆盖 el-card 间距） */
+.page-data-table :deep(.search-card) {
+  margin-bottom: 16px !important;
+}
+/* 撑满父容器（stretch）：高度由 PageRendererPage 的 has-stretch 布局链传递（form-create 容器 100%），
+   此处根容器 flex 列布局，SearchTable 内部表格区域随之铺满并滚动 */
+.page-data-table.stretch-fill {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* 详情弹窗内容区：配置了弹窗高度时固定高度、超出滚动 */
+.detail-body-scroll {
+  overflow-y: auto;
+}
+/* 编辑/新增表单内嵌覆盖层（formMode=inline）：覆盖页面内容区（定位锚为页面内容容器），关闭后恢复 */
+.local-inline-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.local-inline-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px;
+  overflow: hidden;
+}
+.local-inline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.local-inline-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.local-inline-body {
+  flex: 1;
+  overflow: auto;
+}
+.local-inline-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 16px;
+  flex-shrink: 0;
+}
+</style>

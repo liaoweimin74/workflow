@@ -21,13 +21,13 @@ interface ContainerBinding {
 
 const WRITE_DEBOUNCE_MS = 300
 
-/** 从模块存储解析 binding ID → 全局数据源 refId */
+/** 从模块存储解析 binding ID → 全局数据源 refId；绑定不存在或 refId 为空返回 ''（调用方跳过，避免把页面内 id 当全局 refId 请求报错） */
 function resolveRefId(bindingId: string): string {
   if (!bindingId) return ''
   // 如果已经是 UUID 格式（无 ds_ 前缀），直接返回
   if (!bindingId.startsWith('ds_')) return bindingId
   const binding = activeDsBindings.value.find((b) => b.id === bindingId)
-  return binding?.refId || bindingId
+  return binding?.refId || ''
 }
 
 /** 递归收集 rule 树中的 formContainer 节点（含 fcRow/col 布局 children 与容器 props.rule 子级） */
@@ -67,8 +67,9 @@ export function createDsBindingEngine(
 
   async function loadRecord(recordId: string) {
     for (const b of bindings) {
+      const dsRefId = resolveRefId(b.dataSourceId)
+      if (!dsRefId) continue // 绑定无效（未完成/已删除）跳过，避免无效请求报错
       try {
-        const dsRefId = resolveRefId(b.dataSourceId)
         const res = await dsApi.getData(dsRefId, recordId)
         const biz = res.data
         // BizDataVO = { id, version, data: Record<string, unknown> }
@@ -89,8 +90,9 @@ export function createDsBindingEngine(
   /** mount 时预取 metadata，确定各容器 writable（写路径依赖） */
   async function resolveWritable() {
     await Promise.all(bindings.map(async (b) => {
+      const dsRefId = resolveRefId(b.dataSourceId)
+      if (!dsRefId) { b.writable = true; return } // 绑定无效跳过，避免无效请求报错
       try {
-        const dsRefId = resolveRefId(b.dataSourceId)
         const meta = await dsApi.getMetadata(dsRefId)
         b.writable = meta.data?.writable ?? true
       } catch {
@@ -110,8 +112,9 @@ export function createDsBindingEngine(
     const field = pendingField
     pendingField = ''
     if (!b || !b.writable || !recordId) return
+    const dsRefId = resolveRefId(b.dataSourceId)
+    if (!dsRefId) return // 绑定无效跳过
     try {
-      const dsRefId = resolveRefId(b.dataSourceId)
       await dsApi.updateData(dsRefId, recordId, { [field]: deps.api.getValue(field) }, b.version)
     } catch {
       deps.onConflict('数据已被修改，请刷新')
@@ -128,10 +131,11 @@ export function createDsBindingEngine(
     if (!rid || bindings.length === 0) return false
     for (const b of bindings) {
       if (!b.writable) continue
+      const dsRefId = resolveRefId(b.dataSourceId)
+      if (!dsRefId) continue // 绑定无效跳过
       const data: Record<string, unknown> = {}
       for (const f of b.fieldNames) data[f] = deps.api.getValue(f)
       try {
-        const dsRefId = resolveRefId(b.dataSourceId)
         const res = await dsApi.updateData(dsRefId, rid, data, b.version)
         // 更新乐观锁版本（后续连续保存不误判冲突）
         const newVer = (res as any)?.data?.version

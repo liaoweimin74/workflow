@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { SearchTable } from '@/components/business'
+import { FolderAdd } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
 import { getMenuTree, createMenu, updateMenu, deleteMenu } from '@/api/menu'
@@ -56,7 +57,7 @@ function handleAddChild(parentId: number) {
 
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
-  { label: '新增子菜单', size: 'small', link: true, show: (row: MenuTree) => row.menuType !== 2, onClick: (row: MenuTree) => handleAddChild(row.id) },
+  { label: '新增子菜单', icon: FolderAdd, size: 'small', link: true, show: (row: MenuTree) => row.menuType !== 2, onClick: (row: MenuTree) => handleAddChild(row.id) },
 ]
 
 // ---------- 表单配置（form-create rule） ----------

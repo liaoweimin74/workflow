@@ -94,7 +94,7 @@
           </el-form>
         </el-tab-pane>
         <el-tab-pane label="操作" name="actions">
-          <ActionsConfig v-model="schema.actions" :detail="schema.detail" />
+          <ActionsConfig v-model="schema.actions" v-model:detail="schema.detail" />
         </el-tab-pane>
         <el-tab-pane label="事件" name="events">
           <EventsConfig v-model="schema.events" />
@@ -213,7 +213,11 @@ export interface ViewActionsConfig {
 export interface ViewDetailConfig {
   /** 详情弹窗宽度（由"查看"按钮启用，无需独立开关） */
   width: string
+  /** 表单容器高度（弹窗/抽屉/内嵌内容区高度，超出滚动） */
+  height?: string
   type: string
+  /** 表单展示方式：popup（弹窗）/ drawer（抽屉）/ inline（内嵌） */
+  formMode?: 'popup' | 'drawer' | 'inline'
 }
 export interface ViewSchema {
   searchFields: SearchFieldConfig[]

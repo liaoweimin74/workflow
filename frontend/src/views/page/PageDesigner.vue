@@ -375,16 +375,20 @@ function handlePageTableConfirm(newProps: Record<string, any>) {
 
 // ===== 页面数据表单容器配置（复用 DsBindingConfigDialog 非表格模式） =====
 const formContainerDialogVisible = ref(false)
+/** 数据容器 rule：画布中 loadRule 后 type 为 FcRow，序列化前为 formContainer，两者兼容判断 */
+function isContainerRule(active: any): boolean {
+  return !!active && (active.type === 'formContainer' || active.type === 'FcRow')
+}
 const currentFormContainerProps = computed(() => {
   const active = designerRef.value?.activeRule as any
-  return active?.type === 'formContainer' ? (active.props || {}) : {}
+  return isContainerRule(active) ? (active.props || {}) : {}
 })
 function openFormContainerDsConfig() {
   formContainerDialogVisible.value = true
 }
 function handleFormContainerConfirm(newProps: Record<string, any>) {
   const active = designerRef.value?.activeRule as any
-  if (active?.type === 'formContainer' && active.props) {
+  if (isContainerRule(active) && active.props) {
     Object.assign(active.props, newProps)
   }
   ElMessage.success('数据表单容器配置已保存')

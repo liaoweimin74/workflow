@@ -100,7 +100,7 @@
 import { ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Plus, Edit, Upload, CopyDocument, Delete, Fold, Expand } from '@element-plus/icons-vue'
+import { Plus, Edit, Upload, CopyDocument, Delete, Fold, Expand, Clock } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { processDesignApi, deployedProcessApi, type ProcessDraft, type ProcessVersion } from '@/api/processDefinition'
@@ -348,6 +348,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '版本',
+    icon: Clock,
     size: 'small',
     show: (row: any) => !!row.deployId,
     onClick: (row: any) => {

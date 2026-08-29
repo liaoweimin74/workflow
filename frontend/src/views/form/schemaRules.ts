@@ -37,6 +37,43 @@ export function collectFieldKeys(rules: any[]): string[] {
   return keys
 }
 
+/**
+ * 递归设置 rule 树中所有字段的 disabled（含 fcRow/col 布局 children、group/subForm 的 props.rule、
+ * tableForm 的 props.columns[].rule 子表内部字段），保证只读查看下子表内部字段也不可编辑。
+ */
+export function deepDisableRules(rules: any[]): any[] {
+  return rules.map(deepDisableField)
+}
+
+/** 单字段只读：设置 props.disabled 并递归到子字段（布局 children / props.rule / props.columns[].rule） */
+export function deepDisableField(field: any): any {
+  // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
+  if (typeof field !== 'object' || field === null) return field
+  const f = field as Record<string, any>
+  const fieldProps = (f.props as Record<string, any>) || {}
+  const next: Record<string, any> = { ...f, props: { ...fieldProps, disabled: true } }
+  if (Array.isArray(f.children)) {
+    next.children = (f.children as any[]).map(deepDisableField)
+  }
+  // group/subForm 子表单：内部字段在 props.rule
+  if (Array.isArray(fieldProps.rule)) {
+    next.props = { ...next.props, rule: (fieldProps.rule as any[]).map(deepDisableField) }
+  }
+  // tableForm 子表：内部字段在 props.columns[].rule（每列一个 rule 数组）
+  if (Array.isArray(fieldProps.columns)) {
+    next.props = {
+      ...next.props,
+      columns: (fieldProps.columns as Record<string, any>[]).map((col) => {
+        if (col && Array.isArray(col.rule)) {
+          return { ...col, rule: (col.rule as any[]).map(deepDisableField) }
+        }
+        return col
+      }),
+    }
+  }
+  return next
+}
+
 /** 更新指定 field 的 props（合并 newProps，保留已有配置） */
 export function updateFieldProps(rules: any[], field: string, type: string, newProps: Record<string, any>): void {
   walkRules(rules, (r) => {

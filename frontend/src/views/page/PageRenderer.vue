@@ -65,34 +65,98 @@
 
     <!-- 详情弹窗双轨：FORM 数据源/遗留页 → 只读表单；WORKFLOW 等只读数据源 → KV 表格 -->
     <el-dialog v-model="detailVisible" :title="detailTitle" :width="detailWidth">
-      <FormRenderer
-        v-if="detailVisible && isFormDetail"
-        :rule="detailRules"
-        :option="detailOption"
-        :initial-values="currentRow && currentRow.data"
-        readonly
-      />
-      <el-descriptions v-else-if="detailVisible" :column="1" border>
-        <el-descriptions-item v-for="col in kvDetailColumns" :key="col.key" :label="col.label || col.key">
-          {{ cellValue(currentRow, col.key) }}
-        </el-descriptions-item>
-      </el-descriptions>
+      <div class="dialog-body-scroll" :style="{ height: detailHeight || undefined }">
+        <FormRenderer
+          v-if="detailVisible && isFormDetail"
+          :rule="detailRules"
+          :option="detailOption"
+          :initial-values="currentRow && currentRow.data"
+          readonly
+        />
+        <el-descriptions v-else-if="detailVisible" :column="1" border>
+          <el-descriptions-item v-for="col in kvDetailColumns" :key="col.key" :label="col.label || col.key">
+            {{ cellValue(currentRow, col.key) }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
     </el-dialog>
 
     <!-- 新增/编辑弹窗（可编辑，提交后刷新） -->
     <el-dialog v-model="editVisible" :title="editTitle" :width="detailWidth">
-      <FormRenderer
-        v-if="editVisible"
-        ref="editFormRef"
-        :rule="detailRules"
-        :option="detailOption"
-        :initial-values="editInitialValues"
-      />
+      <div class="dialog-body-scroll" :style="{ height: detailHeight || undefined }">
+        <FormRenderer
+          v-if="editVisible"
+          ref="editFormRef"
+          :rule="detailRules"
+          :option="detailOption"
+          :initial-values="editInitialValues"
+        />
+      </div>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="handleEditSubmit">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 内嵌表单（formMode=inline）：全屏覆盖视图，关闭后恢复 -->
+    <div v-if="inlineVisible" class="inline-form-overlay">
+      <div class="inline-form-container">
+        <div class="inline-form-header">
+          <span class="inline-form-title">{{ inlineTitle }}</span>
+          <el-button text :icon="Close" @click="inlineVisible = false" />
+        </div>
+        <div class="inline-form-body">
+          <FormRenderer
+            v-if="isFormDetail"
+            ref="inlineFormRef"
+            :rule="detailRules"
+            :option="detailOption"
+            :initial-values="inlineInitialValues"
+            :readonly="inlineMode === 'view'"
+          />
+          <el-descriptions v-else :column="1" border>
+            <el-descriptions-item v-for="col in kvDetailColumns" :key="col.key" :label="col.label || col.key">
+              {{ cellValue(inlineRow, col.key) }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+        <div class="inline-form-footer">
+          <template v-if="inlineMode === 'view'">
+            <el-button type="primary" @click="inlineVisible = false">关闭</el-button>
+          </template>
+          <template v-else>
+            <el-button @click="inlineVisible = false">取消</el-button>
+            <el-button type="primary" :loading="saving" @click="handleInlineSubmit">保存</el-button>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- 抽屉表单（formMode=drawer）：右侧弹出 -->
+    <el-drawer v-model="drawerVisible" :title="drawerTitle" :size="detailWidth" destroy-on-close>
+      <FormRenderer
+        v-if="isFormDetail"
+        ref="drawerFormRef"
+        :rule="detailRules"
+        :option="detailOption"
+        :initial-values="drawerInitialValues"
+        :readonly="drawerMode === 'view'"
+      />
+      <el-descriptions v-else :column="1" border>
+        <el-descriptions-item v-for="col in kvDetailColumns" :key="col.key" :label="col.label || col.key">
+          {{ cellValue(drawerRow, col.key) }}
+        </el-descriptions-item>
+      </el-descriptions>
+      <template #footer>
+        <template v-if="drawerMode === 'view'">
+          <el-button type="primary" @click="drawerVisible = false">关闭</el-button>
+        </template>
+        <template v-else>
+          <el-button @click="drawerVisible = false">取消</el-button>
+          <el-button type="primary" :loading="saving" @click="handleDrawerSubmit">保存</el-button>
+        </template>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -198,6 +262,8 @@ const queryDefaults = ref<Record<string, any>>({})
 const detailVisible = ref(false)
 const detailTitle = ref('详情')
 const detailWidth = ref('800px')
+/** 表单容器内容区高度（detailConfig.height；弹窗内容区固定高度滚动） */
+const detailHeight = computed(() => (detailConfig.value.height as string) || '')
 const currentRow = ref<any>(null)
 
 // ========== 新增/编辑 ==========
@@ -207,6 +273,22 @@ const editMode = ref<'create' | 'edit'>('create')
 const editInitialValues = ref<Record<string, any>>({})
 const editFormRef = ref<InstanceType<typeof FormRenderer>>()
 const saving = ref(false)
+
+// ========== 内嵌表单（formMode=inline） ==========
+const inlineVisible = ref(false)
+const inlineTitle = ref('新增')
+const inlineMode = ref<'create' | 'edit' | 'view'>('create')
+const inlineRow = ref<any>(null)
+const inlineInitialValues = ref<Record<string, any>>({})
+const inlineFormRef = ref<InstanceType<typeof FormRenderer>>()
+
+// ========== 抽屉表单（formMode=drawer，右侧弹出） ==========
+const drawerVisible = ref(false)
+const drawerTitle = ref('新增')
+const drawerMode = ref<'create' | 'edit' | 'view'>('create')
+const drawerRow = ref<any>(null)
+const drawerInitialValues = ref<Record<string, any>>({})
+const drawerFormRef = ref<InstanceType<typeof FormRenderer>>()
 
 // ========== 加载页面 ==========
 onMounted(load)
@@ -514,7 +596,106 @@ function requireRow(): any | null {
 }
 
 // ========== 详情弹窗 ==========
+/** 表单方式分发：drawer 打开抽屉 / inline 打开内嵌覆盖层；返回 true 表示已由非弹窗容器处理 */
+function openFormContainer(mode: 'create' | 'edit' | 'view', row?: any): boolean {
+  const fm = (detailConfig.value.formMode as string) || 'popup'
+  if (fm === 'drawer') {
+    if (mode !== 'create' && !row) {
+      row = requireRow()
+      if (!row) return true
+    }
+    openDrawerForm(mode, row)
+    return true
+  }
+  if (fm === 'inline') {
+    if (mode !== 'create' && !row) {
+      row = requireRow()
+      if (!row) return true
+    }
+    openInlineForm(mode, row)
+    return true
+  }
+  return false
+}
+
+/** 内嵌表单：覆盖视图打开（新增/编辑/查看共用），关闭后恢复视图 */
+function openInlineForm(mode: 'create' | 'edit' | 'view', row?: any) {
+  inlineMode.value = mode
+  inlineRow.value = mode === 'create' ? null : (row || null)
+  inlineInitialValues.value = mode === 'create' ? {} : (row?.data || {})
+  inlineTitle.value = mode === 'view' ? '详情' : mode === 'create' ? '新增' : '编辑'
+  inlineVisible.value = true
+  if (!detailRules.value.length) {
+    loadDetailSchema()
+  }
+}
+
+/** 抽屉表单：右侧抽屉打开（新增/编辑/查看共用） */
+function openDrawerForm(mode: 'create' | 'edit' | 'view', row?: any) {
+  drawerMode.value = mode
+  drawerRow.value = mode === 'create' ? null : (row || null)
+  drawerInitialValues.value = mode === 'create' ? {} : (row?.data || {})
+  drawerTitle.value = mode === 'view' ? '详情' : mode === 'create' ? '新增' : '编辑'
+  drawerVisible.value = true
+  if (!detailRules.value.length) {
+    loadDetailSchema()
+  }
+}
+
+/** 抽屉表单提交（新增/编辑，成功后关闭抽屉并刷新列表） */
+async function handleDrawerSubmit() {
+  const formKey = boundFormKey.value
+  if (!formKey) return
+  const formData = drawerFormRef.value?.getFormData() || {}
+  saving.value = true
+  try {
+    if (drawerMode.value === 'create') {
+      await bizDataApi.create(formKey, formData)
+      ElMessage.success('新增成功')
+      triggerEvents('create-success', 'create-dialog', { row: null, params: route.query || {} })
+    } else {
+      const row = drawerRow.value
+      if (!row) return
+      await bizDataApi.update(formKey, row.id, formData, row.version ?? 1)
+      ElMessage.success('更新成功')
+    }
+    drawerVisible.value = false
+    searchTableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    saving.value = false
+  }
+}
+
+/** 内嵌表单提交（新增/编辑，成功后关闭覆盖层并刷新列表） */
+async function handleInlineSubmit() {
+  const formKey = boundFormKey.value
+  if (!formKey) return
+  const formData = inlineFormRef.value?.getFormData() || {}
+  saving.value = true
+  try {
+    if (inlineMode.value === 'create') {
+      await bizDataApi.create(formKey, formData)
+      ElMessage.success('新增成功')
+      triggerEvents('create-success', 'create-dialog', { row: null, params: route.query || {} })
+    } else {
+      const row = inlineRow.value
+      if (!row) return
+      await bizDataApi.update(formKey, row.id, formData, row.version ?? 1)
+      ElMessage.success('更新成功')
+    }
+    inlineVisible.value = false
+    searchTableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    saving.value = false
+  }
+}
+
 async function openDetail(row?: any) {
+  if (openFormContainer('view', row)) return
   if (!row) {
     row = requireRow()
   }
@@ -553,6 +734,7 @@ function openCreate() {
     ElMessage.warning('数据源为只读，不支持新增')
     return
   }
+  if (openFormContainer('create')) return
   editMode.value = 'create'
   editTitle.value = '新增'
   editInitialValues.value = {}
@@ -567,6 +749,7 @@ function openEdit(row?: any) {
     ElMessage.warning('数据源为只读，不支持编辑')
     return
   }
+  if (openFormContainer('edit', row)) return
   if (!row) {
     row = requireRow()
     if (!row) return
@@ -827,10 +1010,13 @@ function handleSortChange({ column, prop, order }: { column: any; prop: string; 
   gap: 12px;
   padding: 4px;
   height: 100%;
+  position: relative;
 }
 .search-card {
   flex-shrink: 0;
-  margin-bottom: 16px;
+  /* flex 容器间距：gap(12px) + margin-bottom(4px) = 16px，与 SearchTable 直渲染的查询栏间距一致
+     （不能写成 16px：会与 .page-renderer 的 flex gap 12px 叠加成 28px） */
+  margin-bottom: 4px;
 }
 .search-card :deep(.el-card__body) {
   padding-bottom: 0;
@@ -849,5 +1035,52 @@ function handleSortChange({ column, prop, order }: { column: any; prop: string; 
 }
 .toolbar-buttons .el-button.is-circle {
   padding: 5px;
+}
+/* 弹窗内容区：配置了弹窗高度时固定高度、超出滚动；未配置自然高度 */
+.dialog-body-scroll {
+  overflow-y: auto;
+}
+/* 内嵌表单覆盖层（formMode=inline）：覆盖当前页签内容区，关闭后恢复视图 */
+.inline-form-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.inline-form-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px;
+  overflow: hidden;
+}
+.inline-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.inline-form-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.inline-form-body {
+  flex: 1;
+  overflow: auto;
+}
+.inline-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 16px;
+  flex-shrink: 0;
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Key } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
@@ -54,7 +55,7 @@ async function handleMenuSubmit() {
 
 // ---------- 操作按钮 ----------
 const actionButtons: ActionButton[] = [
-  { label: '分配菜单', size: 'small', link: true, onClick: handleAssignMenu },
+  { label: '分配菜单', icon: Key, size: 'small', link: true, onClick: handleAssignMenu },
 ]
 
 // ---------- fetchApi ----------

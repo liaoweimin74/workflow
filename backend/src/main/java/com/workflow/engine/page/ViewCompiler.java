@@ -190,10 +190,11 @@ public class ViewCompiler {
             ObjectNode col = colNodes.addObject();
             col.put("prop", key);
             col.put("label", column.path("label").asText(key));
-            col.put("minWidth", 130);
-            if (column.has("width")) {
-                col.put("width", column.path("width").asInt(130));
-            }
+            // 列宽以 min-width 输出（用户配置宽度作为最小宽，表格剩余空间充足时 el-table 会按比例拉伸列，
+            // 从而横向撑满容器）。不能在列上同时输出固定 width：el-table 中 width 优先于 min-width，
+            // 会把列钉死为固定宽，导致列宽总和 < 容器宽时右侧留白，无法横向撑满。
+            int minW = column.has("width") ? column.path("width").asInt(130) : 130;
+            col.put("minWidth", minW);
             if (column.has("align")) {
                 col.put("align", column.path("align").asText("left"));
             }
@@ -296,8 +297,17 @@ public class ViewCompiler {
         if (detail.has("width")) {
             props.put("width", detail.path("width").asText("800px"));
         }
+        // 表单容器高度（弹窗/抽屉/内嵌内容区高度，超出滚动）
+        if (detail.has("height") && !detail.path("height").asText("").isEmpty()) {
+            props.put("height", detail.path("height").asText());
+        }
         if (detail.path("type").asText("form").equals("form")) {
             props.put("type", "form");
+        }
+        // 表单展示方式（表单容器：popup 弹窗 / drawer 抽屉 / inline 内嵌；未配置默认 popup）
+        String formMode = detail.path("formMode").asText("popup");
+        if (formMode.equals("drawer") || formMode.equals("inline")) {
+            props.put("formMode", formMode);
         }
     }
 

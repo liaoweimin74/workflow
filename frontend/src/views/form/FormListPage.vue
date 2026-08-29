@@ -9,7 +9,7 @@
         :fetch-api="fetchApi"
         :form-config="formConfig"
         :default-page-size="20"
-        :max-visible-buttons="4"
+        :max-visible-buttons="5"
       >
         <template #status="{ row }">
           <el-tag :type="statusTagType(row.status)" size="small">
@@ -71,7 +71,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus as _Plus } from '@element-plus/icons-vue'
+import { Plus as _Plus, EditPen, Grid, Promotion, Clock, Delete } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { formApi, type FormDefinitionDTO, type FormVersionDTO } from '@/api/form'
@@ -185,6 +185,7 @@ const formConfig = reactive<FormConfig<FormDefinitionDTO>>({
 const actionButtons: ActionButton[] = [
   {
     label: '设计',
+    icon: EditPen,
     size: 'small',
     permission: 'form:edit',
     onClick: (row: any) => {
@@ -193,6 +194,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '管理数据',
+    icon: Grid,
     size: 'small',
     type: 'primary',
     link: true,
@@ -204,6 +206,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '发布',
+    icon: Promotion,
     size: 'small',
     type: 'primary',
     permission: 'form:publish',
@@ -221,6 +224,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '版本',
+    icon: Clock,
     size: 'small',
     permission: 'form:list',
     onClick: async (row: any) => {
@@ -238,6 +242,7 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '删除',
+    icon: Delete,
     size: 'small',
     type: 'danger',
     permission: 'form:delete',

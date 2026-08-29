@@ -246,6 +246,57 @@ class PageQueryControllerTest {
                 .hasMessageContaining("未绑定数据源");
     }
 
+    // ---------- VIEW 排序白名单（B1：schema.sortableFields） ----------
+
+    private static final String SORTABLE_SCHEMA = """
+            {"searchFields":[],"sortableFields":["name"],"columns":[]}
+            """;
+
+    @Test
+    void viewQuery_sortNotInSchemaSortableFields_rejected400() {
+        PageDefinition view = new PageDefinition();
+        view.setType("VIEW");
+        view.setFormKey("emp_profile");
+        view.setSchema(SORTABLE_SCHEMA);
+        when(pageDefService.getPublishedByKey("sortable_view")).thenReturn(view);
+
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setSort("dept");
+
+        assertThatThrownBy(() -> controller.query("sortable_view", req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("排序字段不在页面声明的可排序字段中");
+    }
+
+    @Test
+    void viewQuery_sortInSchemaSortableFields_delegates() {
+        PageDefinition view = new PageDefinition();
+        view.setType("VIEW");
+        view.setFormKey("emp_profile");
+        view.setSchema(SORTABLE_SCHEMA);
+        when(pageDefService.getPublishedByKey("sortable_view")).thenReturn(view);
+
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setSort("name");
+        req.setOrder("desc");
+
+        R<BizDataPageVO> result = controller.query("sortable_view", req);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        verify(bizDataService).query(eq("emp_profile"), eq(req));
+    }
+
+    @Test
+    void viewQuery_noSortableFieldsDeclared_anySortAllowed() {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setSort("dept");
+
+        R<BizDataPageVO> result = controller.query("emp_view", req);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        verify(bizDataService).query(eq("emp_profile"), eq(req));
+    }
+
     private BizDataQueryRequest req(String filter) {
         BizDataQueryRequest r = new BizDataQueryRequest();
         r.setFilter(filter);

@@ -58,6 +58,7 @@ public class ViewCompiler {
 
             compileSearchFields(root, rule, validKeys);
             compileColumns(root, rule, validKeys);
+            compileSortableFields(root, result, validKeys);
             compileActions(root, rule);
             compileDetail(root, rule);
             compileEvents(root, rule);
@@ -111,6 +112,28 @@ public class ViewCompiler {
     }
 
     /**
+     * sortableFields → 产物顶层数组（视图级排序收窄；引用列存在校验）。
+     * 排序能力上限由数据源 metadata 决定，此处仅校验引用列存在于绑定数据源列。
+     */
+    private void compileSortableFields(JsonNode root, ObjectNode result, Set<String> validKeys) {
+        JsonNode fields = root.path("sortableFields");
+        if (!fields.isArray() || fields.isEmpty()) {
+            return;
+        }
+        ArrayNode out = result.putArray("sortableFields");
+        for (JsonNode f : fields) {
+            String key = f.asText();
+            if (key.isBlank()) {
+                continue;
+            }
+            if (!validKeys.isEmpty() && !validKeys.contains(key)) {
+                throw new BusinessException(400, "排序字段引用列不存在: " + key);
+            }
+            out.add(key);
+        }
+    }
+
+    /**
      * columns → table 组件规则（el-table + 列配置）。
      */
     private void compileColumns(JsonNode root, ArrayNode rule, Set<String> validKeys) {
@@ -139,9 +162,6 @@ public class ViewCompiler {
             }
             if (column.has("align")) {
                 col.put("align", column.path("align").asText("left"));
-            }
-            if (column.path("sortable").asBoolean(false)) {
-                col.put("sortable", true);
             }
         }
         rule.add(table);

@@ -262,6 +262,37 @@ class ViewCompilerTest {
         assertTrue(compiled.path("rule").isArray() && compiled.path("rule").size() > 0);
     }
 
+    // ==================== sortableFields（B1：视图级排序收窄） ====================
+
+    @Test
+    void compile_carriesSortableFields_intoResult() throws Exception {
+        JsonNode compiled = parse(compiler.compile(viewPage(
+                "{\"sortableFields\":[\"name\",\"amount\"],\"columns\":[]}"), columns()));
+
+        assertTrue(compiled.path("sortableFields").isArray());
+        assertEquals(2, compiled.path("sortableFields").size());
+        assertEquals("name", compiled.path("sortableFields").get(0).asText());
+        assertEquals("amount", compiled.path("sortableFields").get(1).asText());
+    }
+
+    @Test
+    void compile_rejectsSortableFieldNotInBoundColumns() {
+        PageDefinition page = viewPage(
+                "{\"sortableFields\":[\"ghost\"],\"columns\":[]}");
+
+        assertThrows(BusinessException.class, () -> compiler.compile(page, columns()));
+    }
+
+    @Test
+    void compile_ignoresLegacyColumnLevelSortable() throws Exception {
+        JsonNode compiled = parse(compiler.compile(viewPage(
+                "{\"columns\":[{\"key\":\"name\",\"label\":\"姓名\",\"sortable\":true}]}"), columns()));
+
+        // 列级 sortable 残留不再编译进产物（排序能力由 sortableFields + 数据源决定）
+        String ruleJson = compiled.path("rule").toString();
+        assertFalse(ruleJson.contains("\"sortable\""));
+    }
+
     private JsonNode parse(String json) throws Exception {
         return objectMapper.readTree(json);
     }

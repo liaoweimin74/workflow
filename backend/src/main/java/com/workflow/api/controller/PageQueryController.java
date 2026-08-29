@@ -74,6 +74,13 @@ public class PageQueryController {
         Set<String> whitelist = searchFieldKeys(page.getSchema());
         req.setFilter(whitelistFilter(req.getFilter(), whitelist));
 
+        // 排序白名单：schema 声明 sortableFields 时，sort 字段必须命中（对齐 searchFields 白名单模式）
+        Set<String> sortable = sortableFieldKeys(page.getSchema());
+        if (req.getSort() != null && !req.getSort().isBlank()
+                && !sortable.isEmpty() && !sortable.contains(req.getSort())) {
+            throw new BusinessException(400, "排序字段不在页面声明的可排序字段中: " + req.getSort());
+        }
+
         if (hasDataSourceId) {
             return R.ok(dsService.queryData(page.getDataSourceId(), req));
         }
@@ -160,6 +167,25 @@ public class PageQueryController {
             if (searchFields.isArray()) {
                 for (JsonNode field : searchFields) {
                     keys.add(field.path("key").asText());
+                }
+            }
+        } catch (Exception e) {
+            throw new BusinessException(400, "页面 schema 解析失败");
+        }
+        return keys;
+    }
+
+    /**
+     * 解析 schema 中声明的 sortableFields key 集合（视图级排序收窄；未声明为空=不限制）。
+     */
+    private Set<String> sortableFieldKeys(String schema) {
+        Set<String> keys = new HashSet<>();
+        try {
+            JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
+            JsonNode fields = root.path("sortableFields");
+            if (fields.isArray()) {
+                for (JsonNode f : fields) {
+                    keys.add(f.asText());
                 }
             }
         } catch (Exception e) {

@@ -42,10 +42,12 @@
           <el-date-picker
             v-else-if="field.type === 'date-range'"
             v-model="query[field.prop]"
-            type="daterange"
+            :type="field.time ? 'datetimerange' : 'daterange'"
             range-separator="至"
-            start-placeholder="开始日期"
-            end-placeholder="结束日期"
+            :start-placeholder="field.time ? '开始时间' : '开始日期'"
+            :end-placeholder="field.time ? '结束时间' : '结束日期'"
+            :value-format="field.time ? 'YYYY-MM-DD HH:mm:ss' : undefined"
+            :style="field.style || (field.time ? 'width: 380px' : 'width: 340px')"
           />
         </el-form-item>
         <el-form-item>
@@ -98,7 +100,7 @@
       </div>
 
       <div class="table-wrapper">
-      <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
+      <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @row-dblclick="(row: any, col: any, evt: Event) => emit('row-dblclick', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
         <el-table-column
           v-for="col in columns"
           :key="col.prop || col.label"
@@ -110,6 +112,7 @@
           :fixed="col.fixed"
           :sortable="col.sortable ? 'custom' : undefined"
           :formatter="col.formatter"
+          :show-overflow-tooltip="col.showOverflowTooltip"
         >
           <template #default="{ row, column, $index }" v-if="col.render">
             <RenderCell :render="col.render" :row="row" :column="column" :index="$index" />
@@ -124,6 +127,7 @@
           v-if="resolvedActionButtons.length"
           label="操作"
           :width="actionColumnWidth"
+          align="center"
           fixed="right"
         >
           <template #default="{ row }">
@@ -296,6 +300,7 @@ const emit = defineEmits<{
   reset: []
   export: [params: QueryParams]
   'row-click': [row: any, column: any, event: Event]
+  'row-dblclick': [row: any, column: any, event: Event]
   'cell-click': [row: any, column: any, cell: any, event: Event]
   'selection-change': [selection: any[]]
   'sort-change': [args: { column: any; prop: string; order: string }]
@@ -328,6 +333,9 @@ const dialogFormKey = ref(0)
 
 // 操作列宽度
 const actionColumnWidth = computed(() => {
+  // 外部显式指定（覆盖自动计算）
+  if (props.actionColumnWidth) return props.actionColumnWidth + 'px'
+
   const buttons = visibleButtons.value
   const hasMore = resolvedActionButtons.value.length > props.maxVisibleButtons
 
@@ -593,6 +601,8 @@ function getList() {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* 分页栏贴底：去掉默认 padding-bottom（20px），与分页栏 margin-top: 0 对称 */
+  padding-bottom: 0;
 }
 
 /* 工具栏 - 固定 */

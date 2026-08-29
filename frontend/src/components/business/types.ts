@@ -39,6 +39,8 @@ export interface SearchField {
     props: { label: string; value: string; children?: string }
   }
   style?: string
+  /** 仅 date-range 有效：true 渲染 datetimerange（含时分秒），false/缺省渲染 daterange（仅日期） */
+  time?: boolean
 }
 
 // --- 表格列 ---
@@ -61,6 +63,8 @@ export interface TableColumn {
   /** 富渲染函数（返回 VNode 或字符串），优先级高于 formatter */
   render?: (row: any, column: TableColumn, index: number) => VNode | string
   slotName?: string
+  /** 内容超长省略并显示 tooltip（透传 el-table-column show-overflow-tooltip） */
+  showOverflowTooltip?: boolean
 }
 
 // --- 操作按钮 ---
@@ -176,6 +180,8 @@ export interface SearchTableProps<T = any> {
   treeProps?: TreeTableProps
   /** 动态删除确认文案（接收行，返回确认提示）；缺省 '确定删除该记录吗？' */
   deleteConfirm?: (row: T) => string
+  /** 操作列宽度（px），覆盖自动计算（icon 按钮 32px/个 + 24px padding） */
+  actionColumnWidth?: number
 }
 
 // --- ReferencePicker props ---

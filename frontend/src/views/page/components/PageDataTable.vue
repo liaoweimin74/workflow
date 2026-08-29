@@ -91,7 +91,7 @@ const tableRef = ref<InstanceType<typeof SearchTable> | null>(null)
 const records = ref<any[]>([])
 
 /** 数据源列定义（metadata，供 formConfig 动态生成表单） */
-const metaColumns = ref<{ key: string; label: string; columnType?: string; required?: boolean; scale?: number }[]>([])
+const metaColumns = ref<{ key: string; label: string; columnType?: string; required?: boolean; scale?: number; sortable?: boolean }[]>([])
 /** 数据源可写标记 */
 const writable = ref(false)
 /** 当前 filter（动作总线 set-filter 注入） */
@@ -570,6 +570,7 @@ async function loadMetadata() {
       columnType: c.columnType,
       required: c.required,
       scale: c.scale,
+      sortable: c.sortable,
     }))
   } catch {
     // 元数据加载失败不阻断表格展示

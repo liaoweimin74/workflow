@@ -174,6 +174,8 @@ interface SearchRule {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const searchRules = ref<SearchRule[]>([])
 const tableColumns = ref<CompiledColumn[]>([])
+/** 视图级可排序字段（编译产物 sortableFields；空=跟随数据源全部可排字段） */
+const sortableFieldKeys = ref<string[]>([])
 const actionConfig = ref<Record<string, any>>({})
 const detailConfig = ref<Record<string, any>>({ enabled: false, width: '800px', type: 'form' })
 const eventsList = ref<any[]>([])
@@ -258,6 +260,8 @@ function parseSchema(schema: string): boolean {
     const rule: any[] = Array.isArray(parsed) ? parsed : (parsed.rule || [])
     detailOption.value = Array.isArray(parsed) ? {} : (parsed.option || {})
     searchRules.value = rule.filter((r) => r.type === 'input' || r.type === 'datePicker')
+    // 视图级可排序字段（编译产物顶层 sortableFields；未声明=跟随数据源全部可排字段）
+    sortableFieldKeys.value = Array.isArray(parsed.sortableFields) ? parsed.sortableFields : []
     const tableRule = rule.find((r) => r.type === 'table')
     tableColumns.value = (tableRule?.props?.columns || []) as CompiledColumn[]
     const actionsRule = rule.find((r) => r.type === '__page_actions')
@@ -405,7 +409,8 @@ const searchTableColumns = computed<TableColumn[]>(() =>
     width: c.width,
     align: (c.align || 'left') as any,
     fixed: (c.fixed || undefined) as any,
-    sortable: !!dataSourceMeta.value?.columns?.find((m) => m.key === c.prop)?.sortable,
+    sortable: !!dataSourceMeta.value?.columns?.find((m) => m.key === c.prop)?.sortable
+      && (sortableFieldKeys.value.length === 0 || sortableFieldKeys.value.includes(c.prop)),
     render: (row: any) => {
       const raw = row?.data != null && typeof row.data === 'object' ? row.data[c.prop] : row?.[c.prop]
       if (c.formatter) return formatCellValue(raw, c.formatter)

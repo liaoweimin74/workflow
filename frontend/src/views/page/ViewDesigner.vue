@@ -59,6 +59,8 @@
             :filterable-keys="filterableColumnKeys"
             v-model:search-fields="schema.searchFields"
             v-model:columns="schema.columns"
+            v-model:sortable-fields="schema.sortableFields"
+            :sortable-candidates="sortableCandidates"
           />
         </el-tab-pane>
         <el-tab-pane label="操作" name="actions">
@@ -185,6 +187,8 @@ export interface ViewDetailConfig {
 }
 export interface ViewSchema {
   searchFields: SearchFieldConfig[]
+  /** 视图级可排序字段（受数据源 metadata 上限约束；缺省=跟随数据源全部可排字段） */
+  sortableFields: string[]
   columns: ColumnViewConfig[]
   actions: ViewActionsConfig
   detail: ViewDetailConfig
@@ -289,6 +293,7 @@ const bindFormLoaded = ref(false)
 
 const schema = reactive<ViewSchema>({
   searchFields: [],
+  sortableFields: [],
   columns: [],
   actions: {
     buttons: [
@@ -319,6 +324,11 @@ const filterableColumns = computed(() =>
 
 /** 可筛选列的 key 集合（查询条件勾选禁用依据） */
 const filterableColumnKeys = computed(() => new Set(filterableColumns.value.map((c) => c.key)))
+
+/** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；数据源不可排字段不可配置） */
+const sortableCandidates = computed(() =>
+  viewColumns.value.filter((c) => c.sortable).map((c) => ({ key: c.key, label: c.label })),
+)
 
 onMounted(async () => {
   if (!pageId.value) {
@@ -397,8 +407,11 @@ async function loadBindColumns(dsId: string) {
         label: c.label,
         width: 130,
         align: 'left',
-        sortable: false,
       }))
+      // 排序能力默认跟随数据源全部可排字段（视图级收窄，可再编辑）
+      schema.sortableFields = viewColumns.value
+        .filter((c) => c.sortable)
+        .map((c) => c.key)
     }
   } catch {
     selectedColumns.value = []

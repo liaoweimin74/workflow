@@ -43,3 +43,11 @@
 
 - [x] 7.1 后端编译通过 + `mvn test`（或项目等价命令）全绿
 - [x] 7.2 前端 `npm run lint` + 相关单测通过
+
+## 8. B1：视图级 sortableFields 配置（受数据源上限约束）
+
+- [x] 8.1 `ViewCompiler` 编译 schema 顶层 `sortableFields` 进产物（引用列存在校验），移除 compileColumns 的列级 sortable 残留
+- [x] 8.2 `ViewDesigner`：schema 增加 `sortableFields`；绑定数据源后从 metadata 加载可排字段作候选（候选仅含 sortable=true 字段）；提供"可排序字段"多选 UI（缺省跟随数据源全部可排字段）
+- [x] 8.3 `PageRenderer`：parseSchema 读取产物 `sortableFields`；`searchTableColumns` 排序入口 = 列显示 ∧ metadata 可排 ∧ ∈ 视图 sortableFields
+- [x] 8.4 `PageQueryController`：VIEW 路径校验 `req.sort` ∈ schema.sortableFields（声明非空时，非法 400）
+- [x] 8.5 测试：ViewCompiler 编译 sortableFields + 引用校验；PageQueryController 排序白名单；PageRenderer 渲染收窄；ViewDesigner 候选受数据源上限约束

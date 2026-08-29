@@ -160,3 +160,71 @@ describe('QueryColumnsConfig — 单表同时配置查询条件与展示列', ()
     wrapper.unmount()
   })
 })
+
+// ============================================================
+// 可排序字段配置（B1：视图级收窄，候选受数据源 metadata 上限约束）
+// ============================================================
+
+describe('QueryColumnsConfig — 可排序字段配置', () => {
+  const sortableCandidates = [
+    { key: 'name', label: '姓名' },
+    { key: 'age', label: '年龄' },
+  ]
+
+  it('渲染可排序字段多选，候选仅含数据源可排字段', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [],
+        sortableFields: ['name'],
+        sortableCandidates,
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+
+    // 候选区渲染（数据源不可排字段 content 不在候选中；选项由 ViewDesigner 侧过滤保证）
+    expect(wrapper.find('.sortable-config').exists()).toBe(true)
+    expect(wrapper.find('.sortable-config .el-select').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('修改选择 → emit update:sortableFields', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [],
+        sortableFields: ['name'],
+        sortableCandidates,
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    // sortable-config 内的 ElSelect 触发 change（等价于多选变更）
+    const select = wrapper.find('.sortable-config').findComponent({ name: 'ElSelect' })
+    expect(select.exists()).toBe(true)
+    ;(select.vm as any).$emit('change', ['age'])
+    await nextTick()
+    const emitted = wrapper.emitted('update:sortableFields') as any[]
+    expect(emitted).toBeTruthy()
+    expect(emitted[emitted.length - 1][0]).toEqual(['age'])
+    wrapper.unmount()
+  })
+
+  it('无候选时不渲染可排序字段配置区', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [],
+        sortableCandidates: [],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    expect(wrapper.find('.sortable-config').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

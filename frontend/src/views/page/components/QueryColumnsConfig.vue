@@ -4,6 +4,23 @@
       <span class="config-title">{{ showSearch ? '字段配置（显示 & 查询）' : '字段配置（显示）' }}</span>
       <span class="config-hint">{{ showSearch ? `已选查询 ${searchFields.length} 项 · ` : '' }}显示 {{ columns.length }} 项</span>
     </div>
+
+    <!-- 可排序字段（视图级收窄；候选受数据源 metadata 上限约束） -->
+    <div v-if="sortableCandidates && sortableCandidates.length" class="sortable-config">
+      <span class="config-title">可排序字段</span>
+      <el-select
+        :model-value="sortableFields || []"
+        multiple
+        clearable
+        placeholder="跟随数据源全部可排字段"
+        style="width: 100%"
+        @change="(v: string[]) => emit('update:sortableFields', v)"
+      >
+        <el-option v-for="c in sortableCandidates" :key="c.key" :label="c.label" :value="c.key" />
+      </el-select>
+      <span class="config-hint">排序入口仅对勾选字段开放；数据源不可排字段不可配置</span>
+    </div>
+
     <el-table :data="candidates" border max-height="460">
       <el-table-column prop="key" label="字段" width="130" />
       <el-table-column prop="label" label="标题" min-width="110" />
@@ -130,6 +147,10 @@ const props = withDefaults(defineProps<{
   filterableKeys?: Set<string>
   /** 是否显示查询条件配置（默认 true；PageDesigner 数据表格场景设为 false） */
   showSearch?: boolean
+  /** 视图级可排序字段（schema.sortableFields；缺省=跟随数据源全部可排字段） */
+  sortableFields?: string[]
+  /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不出现） */
+  sortableCandidates?: { key: string; label: string }[]
 }>(), {
   showSearch: true,
 })
@@ -137,6 +158,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'update:searchFields', v: SearchFieldConfig[]): void
   (e: 'update:columns', v: ColumnViewConfig[]): void
+  (e: 'update:sortableFields', v: string[]): void
 }>()
 
 // ========== 查询条件 ==========
@@ -253,6 +275,16 @@ function setColumnProp(key: string, prop: 'width' | 'align' | 'formatter' | 'fix
 .config-hint {
   font-size: 14px;
   color: #909399;
+}
+.sortable-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  background: #fafafa;
 }
 .muted {
   color: #c0c4cc;

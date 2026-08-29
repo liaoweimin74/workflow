@@ -486,4 +486,38 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     expect(lastCall[1]).toEqual({ page: 0, size: 20, sort: 'name', order: 'asc' })
     wrapper.unmount()
   })
+
+  it('视图 sortableFields 收窄排序入口（未声明字段不可排）', async () => {
+    const schemaWithSort = JSON.stringify({
+      ...JSON.parse(compiledSchema),
+      sortableFields: ['name'], // 视图仅声明 name 可排序
+    })
+    ;(pageApi.getPageByKey as any).mockResolvedValue({
+      data: { ...pageDef, dataSourceId: 'ds-1', schema: schemaWithSort },
+    })
+    ;(pageApi.queryPageData as any).mockResolvedValue({
+      data: { records: [], total: 0, page: 0, size: 20 },
+    })
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', sortable: true },
+          { key: 'age', label: '年龄', columnType: 'INT', sortable: true }, // 数据源可排但视图未声明
+        ],
+      },
+    })
+    ;(dataSourceApi.getDataSource as any).mockResolvedValue({ data: { id: 'ds-1', type: 'FORM' } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    const cols = st.props('columns') as any[]
+    // 视图声明 + 数据源可排 → 可排
+    expect(cols.find((c) => c.prop === 'name').sortable).toBe(true)
+    // 数据源可排但视图未声明 → 不可排（视图级收窄）
+    expect(cols.find((c) => c.prop === 'age').sortable).toBe(false)
+    wrapper.unmount()
+  })
 })

@@ -185,10 +185,28 @@ export interface ColumnViewConfig {
   align?: string
   /** @deprecated 排序能力由数据源 metadata 声明（方案 A），本字段不再配置；历史残留被忽略 */
   sortable?: boolean
-  /** 列值格式化器（currency/date/datetime/boolean/enum） */
+  /** 列内容类型：expression（JS 表达式）/ template（${字段} 插值） */
+  contentType?: 'expression' | 'template'
+  /** 列内容值（与 contentType 配对：expression → JS 表达式，template → 插值模板） */
+  contentValue?: string
+  /** @deprecated 已迁移至 contentType='expression' + contentValue */
   formatter?: string
   /** 固定列（left/right） */
   fixed?: string
+  /** @deprecated 已迁移至 contentType='template' + contentValue */
+  template?: string
+  /** @deprecated 已迁移至 contentType='expression' + contentValue */
+  expression?: string
+  /** 单元格 class（透传 <td> 静态样式） */
+  className?: string
+  /** 单元格样式表达式（返回样式字符串/CSSProperties 对象，如 $row.status==='PENDING' ? 'color:red' : ''） */
+  styleExpr?: string
+  /** 列头点击事件链（点击本列单元格触发；配置后短路整表级 cell-click） */
+  onCellClick?: { actions: any[] }
+  /** 自定义计算列标记（key 非数据源字段；由"添加自定义列"写入，后端编译时跳过引用列校验） */
+  custom?: boolean
+  /** 自定义列隐藏标记（取消勾选展示时置 true：保留列定义与高级配置，仅不在表格渲染） */
+  hidden?: boolean
 }
 export interface ViewActionButton {
   key: string

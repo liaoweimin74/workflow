@@ -113,6 +113,7 @@
           :sortable="col.sortable ? 'custom' : undefined"
           :formatter="col.formatter"
           :show-overflow-tooltip="col.showOverflowTooltip"
+          :class-name="col.cellClassName"
         >
           <template #default="{ row, column, $index }" v-if="col.render">
             <RenderCell :render="col.render" :row="row" :column="column" :index="$index" />

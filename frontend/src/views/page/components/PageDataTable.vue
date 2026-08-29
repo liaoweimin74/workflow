@@ -93,8 +93,8 @@ import {
   Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
 } from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
-import { formatCellValue } from '@/utils/formatters'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
+import { buildCellRender } from '@/utils/tableColumnRenderer'
 import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
@@ -301,15 +301,29 @@ const resolvedColumns = computed<TableColumn[]>(() => {
     }))
   }
   // 有用户配置的列时使用用户配置；排序能力由数据源 metadata + 组件 sortableFields 决定
-  return (props.columns || []).map((c: any) => ({
+  // 过滤 hidden 列（自定义列取消展示时置 true，保留定义但不渲染）
+  return (props.columns || [])
+    .filter((c: any) => !c.hidden)
+    .map((c: any) => ({
     prop: c.key ?? c.prop,
     label: c.label || c.key || c.prop,
     width: c.width,
     minWidth: c.minWidth || 120,
     align: c.align as any,
     fixed: c.fixed as any,
+    cellClassName: c.className,
     sortable: sortableOf(c.key ?? c.prop),
-    formatter: c.formatter ? (_row: any, _col: TableColumn, cellValue: any) => formatCellValue(cellValue, c.formatter) : undefined,
+    render: buildCellRender({
+      key: c.key ?? c.prop,
+      contentType: c.contentType,
+      contentValue: c.contentValue,
+      // 兼容旧数据（expression/template/formatter 字段）
+      expression: c.expression,
+      template: c.template,
+      formatter: c.formatter,
+      className: c.className,
+      styleExpr: c.styleExpr,
+    }),
   }))
 })
 
@@ -694,6 +708,16 @@ function handleRowClick(row: any, _column?: any, _event?: Event) {
 
 /** 单元格点击（新增） */
 function handleCellClick(row: any, column: any) {
+  // 列级 onCellClick 短路整表级 cell-click（点击该列触发列级事件链）
+  const col = (props.columns || []).find(
+    (c: any) => (c.key ?? c.prop) === (column?.property ?? column?.prop),
+  )
+  if (col?.onCellClick?.actions?.length) {
+    for (const action of col.onCellClick.actions) {
+      void dispatchButtonAction(action, row)
+    }
+    return
+  }
   triggerViewEvents('cell-click', 'table', { row, column })
 }
 

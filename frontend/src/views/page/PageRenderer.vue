@@ -177,7 +177,7 @@ import { formApi } from '@/api/form'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import { bizDataApi } from '@/api/bizData'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
-import { formatCellValue } from '@/utils/formatters'
+import { buildCellRender } from '@/utils/tableColumnRenderer'
 
 const route = useRoute()
 const router = useRouter()
@@ -228,6 +228,16 @@ interface CompiledColumn {
   fixed?: string
   /** 列值格式化器（currency/date/datetime/boolean/enum） */
   formatter?: string
+  /** 列内容模板（${字段} 插值；优先级高于 formatter，低于 expression） */
+  template?: string
+  /** 列动态内容表达式（$row.xxx 求值，结果仅作文本渲染；优先级最高） */
+  expression?: string
+  /** 单元格 class（透传 <td> 静态样式） */
+  className?: string
+  /** 单元格样式表达式（返回样式字符串/CSSProperties 对象） */
+  styleExpr?: string
+  /** 列头点击事件链（点击本列单元格触发；配置后短路整表级 cell-click） */
+  onCellClick?: { actions: any[] }
 }
 interface SearchRule {
   type: string
@@ -499,7 +509,7 @@ const actionButtonsConfig = computed<{ key: string; label: string; placement: 't
   return out
 })
 
-/** 列 → SearchTable TableColumn：行值取 BizDataVO 内层 row.data，render 承载 formatter/cellValue。
+/** 列 → SearchTable TableColumn：render 经公共模块承载 contentType/contentValue/styleExpr/className。
  * 排序能力由数据源 metadata 声明（方案 A：视图零配置），schema 残留 sortable 忽略。 */
 const searchTableColumns = computed<TableColumn[]>(() =>
   tableColumns.value.map((c) => ({
@@ -509,13 +519,20 @@ const searchTableColumns = computed<TableColumn[]>(() =>
     width: c.width,
     align: (c.align || 'left') as any,
     fixed: (c.fixed || undefined) as any,
+    cellClassName: c.className,
     sortable: !!dataSourceMeta.value?.columns?.find((m) => m.key === c.prop)?.sortable
       && (sortableFieldKeys.value.length === 0 || sortableFieldKeys.value.includes(c.prop)),
-    render: (row: any) => {
-      const raw = row?.data != null && typeof row.data === 'object' ? row.data[c.prop] : row?.[c.prop]
-      if (c.formatter) return formatCellValue(raw, c.formatter)
-      return raw === null || raw === undefined ? '—' : String(raw)
-    },
+    render: buildCellRender({
+      key: c.prop,
+      contentType: c.contentType,
+      contentValue: c.contentValue,
+      // 兼容旧编译产物（expression/template/formatter 字段）
+      expression: c.expression,
+      template: c.template,
+      formatter: c.formatter,
+      className: c.className,
+      styleExpr: c.styleExpr,
+    }),
   })),
 )
 
@@ -988,6 +1005,16 @@ function handleRowClick(row: any) {
 
 // ========== 单元格点击（新增） ==========
 function handleCellClick(row: any, column: any) {
+  // 列级 onCellClick 短路整表级 cell-click（点击该列触发列级事件链）
+  const col = tableColumns.value.find(
+    (c) => c.prop === (column?.property ?? column?.prop),
+  )
+  if (col?.onCellClick?.actions?.length) {
+    for (const action of col.onCellClick.actions) {
+      dispatchAction(action, { row, params: route.query || {} })
+    }
+    return
+  }
   triggerEvents('cell-click', 'table', { row, column, params: route.query || {} })
 }
 

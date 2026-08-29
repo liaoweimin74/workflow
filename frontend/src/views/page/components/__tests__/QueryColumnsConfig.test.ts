@@ -228,3 +228,245 @@ describe('QueryColumnsConfig — 可排序字段配置', () => {
     wrapper.unmount()
   })
 })
+
+// ============================================================
+// 列高级配置子面板（Task 7：template/expression/className/styleExpr/onCellClick）
+// ============================================================
+
+describe('QueryColumnsConfig — 列高级配置子面板', () => {
+  it('对话框组件已挂载，且初始不可见', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: { candidates: visibleCandidates, searchFields: [], columns: [{ key: 'name', label: '姓名', width: 130, align: 'left' }] },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    expect((wrapper.vm as any).advancedVisible).toBe(false)
+    // 子面板组件存在（el-dialog 包裹于其中）
+    expect(wrapper.findComponent({ name: 'ElDialog' }).exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('openAdvanced 打开对话框并填充列副本', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [{ key: 'name', label: '姓名', width: 130, align: 'left', template: '${name}' }],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.openAdvanced('name')
+    await nextTick()
+    expect(vm.advancedVisible).toBe(true)
+    expect(vm.advancedColumn.key).toBe('name')
+    expect(vm.advancedColumn.template).toBe('${name}')
+    wrapper.unmount()
+  })
+
+  it('saveAdvanced 写回高级字段且不覆盖基础字段（width/align）', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [
+          { key: 'name', label: '姓名', width: 200, align: 'center', template: '${name}' },
+          { key: 'age', label: '年龄', width: 130, align: 'left' },
+        ],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.saveAdvanced({
+      key: 'name',
+      template: '${name} (${age})',
+      expression: '$row.age > 18 ? "成年" : "未成年"',
+      className: 'col-red',
+      styleExpr: "$row.age > 30 ? 'color:red' : ''",
+      onCellClick: { actions: [{ type: 'script', params: [] }] },
+    })
+    await nextTick()
+    const emitted = wrapper.emitted('update:columns') as any[]
+    const cols = emitted[emitted.length - 1][0]
+    const name = cols.find((c: any) => c.key === 'name')
+    expect(name.template).toBe('${name} (${age})')
+    expect(name.expression).toBe('$row.age > 18 ? "成年" : "未成年"')
+    expect(name.className).toBe('col-red')
+    expect(name.styleExpr).toBe("$row.age > 30 ? 'color:red' : ''")
+    expect(name.onCellClick).toEqual({ actions: [{ type: 'script', params: [] }] })
+    // 基础字段不受影响
+    expect(name.width).toBe(200)
+    expect(name.align).toBe('center')
+    wrapper.unmount()
+  })
+})
+
+// ============================================================
+// 添加自定义列（Task 7 补充：key 不必是数据源字段，可生成计算列）
+// ============================================================
+
+describe('QueryColumnsConfig — 添加自定义列', () => {
+  it('openCustomColumn 打开弹窗并清空输入', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: { candidates: visibleCandidates, searchFields: [], columns: [] },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.customKey = 'total'
+    vm.customLabel = '合计'
+    vm.openCustomColumn()
+    await nextTick()
+    expect(vm.customVisible).toBe(true)
+    expect(vm.customKey).toBe('')
+    expect(vm.customLabel).toBe('')
+    wrapper.unmount()
+  })
+
+  it('addCustomColumn 追加自定义列到 columns（key/label/width/align）', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: { candidates: visibleCandidates, searchFields: [], columns: [{ key: 'name', label: '姓名', width: 130, align: 'left' }] },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.customVisible = true
+    vm.customKey = 'total'
+    vm.customLabel = '合计'
+    vm.addCustomColumn()
+    await nextTick()
+    const emitted = wrapper.emitted('update:columns') as any[]
+    const cols = emitted[emitted.length - 1][0]
+    expect(cols).toHaveLength(2)
+    const total = cols.find((c: any) => c.key === 'total')
+    expect(total).toEqual({ key: 'total', label: '合计', width: 130, align: 'left', custom: true })
+    expect(vm.customVisible).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('addCustomColumn key 为空/重复时不 emit 并提示错误', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: { candidates: visibleCandidates, searchFields: [], columns: [{ key: 'name', label: '姓名', width: 130, align: 'left' }] },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    // key 为空
+    vm.customKey = '   '
+    vm.addCustomColumn()
+    await nextTick()
+    expect(wrapper.emitted('update:columns')).toBeUndefined()
+    expect(vm.customKeyError).toBe('列标识不能为空')
+    // key 重复
+    vm.customKey = 'name'
+    vm.addCustomColumn()
+    await nextTick()
+    expect(wrapper.emitted('update:columns')).toBeUndefined()
+    expect(vm.customKeyError).toContain('已存在')
+    wrapper.unmount()
+  })
+
+  it('自定义列出现在下方字段列表（displayCandidates 派生自 columns），且查询勾选禁用', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [
+          { key: 'name', label: '姓名', width: 130, align: 'left' },
+          { key: 'total', label: '合计', width: 130, align: 'left' },
+        ],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    // displayCandidates = 数据源候选 + 自定义列（total）
+    expect(vm.displayCandidates.map((c: any) => c.key)).toEqual(['name', 'age', 'content', 'total'])
+    // el-table 渲染 4 行（含自定义列 total）
+    expect(wrapper.findAll('.el-table__row').length).toBe(4)
+    // 自定义列可识别，且不可作为查询条件（计算列）
+    expect(vm.isCustomColumn('total')).toBe(true)
+    expect(vm.isCustomColumn('age')).toBe(false)
+    expect(vm.isFilterable('total')).toBe(false)
+    expect(vm.isFilterable('age')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('removeCustomColumn 从展示列与查询条件移除自定义列', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [{ key: 'total', label: '合计', matchType: 'eq' }],
+        columns: [
+          { key: 'name', label: '姓名', width: 130, align: 'left' },
+          { key: 'total', label: '合计', width: 130, align: 'left' },
+        ],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.removeCustomColumn('total')
+    await nextTick()
+    const colEmit = (wrapper.emitted('update:columns') as any[]).slice(-1)[0][0]
+    expect(colEmit.map((c: any) => c.key)).toEqual(['name'])
+    const searchEmit = (wrapper.emitted('update:searchFields') as any[]).slice(-1)[0][0]
+    expect(searchEmit).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('自定义列取消展示 → 置 hidden 而非从 columns 删除（展示开关与删除隔离）', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [
+          { key: 'name', label: '姓名', width: 130, align: 'left' },
+          { key: 'total', label: '合计', width: 130, align: 'left', custom: true },
+        ],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.toggleColumn({ key: 'total', label: '合计', columnType: 'VARCHAR' } as any, false)
+    await nextTick()
+    const cols = (wrapper.emitted('update:columns') as any[]).slice(-1)[0][0]
+    // total 仍保留在 columns，仅 hidden:true（未被删除）
+    expect(cols.map((c: any) => c.key)).toEqual(['name', 'total'])
+    expect(cols.find((c: any) => c.key === 'total').hidden).toBe(true)
+    // 父组件回传后：展示未勾选，但仍出现在下方字段列表（可重新勾选或删除）
+    await wrapper.setProps({ columns: cols })
+    await nextTick()
+    expect(vm.isColumnChecked('total')).toBe(false)
+    expect(vm.displayCandidates.map((c: any) => c.key)).toContain('total')
+    wrapper.unmount()
+  })
+
+  it('自定义列重新勾选展示 → hidden 置 false', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [
+          { key: 'total', label: '合计', width: 130, align: 'left', custom: true, hidden: true },
+        ],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.isColumnChecked('total')).toBe(false)
+    vm.toggleColumn({ key: 'total', label: '合计', columnType: 'VARCHAR' } as any, true)
+    await nextTick()
+    const cols = (wrapper.emitted('update:columns') as any[]).slice(-1)[0][0]
+    expect(cols.find((c: any) => c.key === 'total').hidden).toBe(false)
+    // 父组件回传后展示勾选恢复
+    await wrapper.setProps({ columns: cols })
+    await nextTick()
+    expect(vm.isColumnChecked('total')).toBe(true)
+    wrapper.unmount()
+  })
+})

@@ -184,7 +184,16 @@ public class ViewCompiler {
         ArrayNode colNodes = (ArrayNode) tableProps.get("columns");
         for (JsonNode column : columns) {
             String key = column.path("key").asText();
-            if (!validKeys.isEmpty() && !validKeys.contains(key)) {
+            if (key.isBlank()) {
+                continue;
+            }
+            // 自定义列隐藏时不渲染（保留 schema 定义，仅编译期跳过）
+            if (column.path("hidden").asBoolean(false)) {
+                continue;
+            }
+            // 自定义计算列（custom=true，key 非数据源字段）跳过引用列校验
+            boolean isCustom = column.path("custom").asBoolean(false);
+            if (!validKeys.isEmpty() && !isCustom && !validKeys.contains(key)) {
                 throw new BusinessException(400, "展示列引用列不存在: " + key);
             }
             ObjectNode col = colNodes.addObject();
@@ -198,6 +207,17 @@ public class ViewCompiler {
             if (column.has("align")) {
                 col.put("align", column.path("align").asText("left"));
             }
+            // 透传列高级渲染配置（contentType/contentValue 优先；兼容旧字段 expression/template/formatter）
+            // PageRenderer.searchTableColumns 读取这些字段构建 buildCellRender
+            copyIfPresent(column, col, "contentType");
+            copyIfPresent(column, col, "contentValue");
+            copyIfPresent(column, col, "expression");
+            copyIfPresent(column, col, "template");
+            copyIfPresent(column, col, "formatter");
+            copyIfPresent(column, col, "className");
+            copyIfPresent(column, col, "styleExpr");
+            copyIfPresent(column, col, "custom");
+            copyIfPresent(column, col, "onCellClick");
         }
         rule.add(table);
     }
@@ -341,5 +361,12 @@ public class ViewCompiler {
         eventsNode.put("field", "__page_events");
         eventsNode.put("title", "事件");
         eventsNode.set("events", events.deepCopy());
+    }
+
+    /** 将源节点中指定字段（字符串值）复制到目标节点，字段不存在或为空时跳过 */
+    private void copyIfPresent(JsonNode source, ObjectNode target, String field) {
+        if (source.has(field) && !source.get(field).isNull()) {
+            target.set(field, source.get(field));
+        }
     }
 }

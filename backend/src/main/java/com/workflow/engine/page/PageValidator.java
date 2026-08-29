@@ -136,11 +136,12 @@ public class PageValidator {
             }
         }
 
-        // 5. columns：引用列必须存在、非隐藏
+        // 5. columns：引用列必须存在、非隐藏（自定义列 custom=true 跳过数据源字段校验）
         if (pageColumns.isArray()) {
             for (JsonNode column : pageColumns) {
                 String key = column.path("key").asText();
-                if (!validKeys.contains(key)) {
+                boolean isCustom = column.path("custom").asBoolean(false);
+                if (!isCustom && !validKeys.contains(key)) {
                     throw new BusinessException(400, "展示列引用列不存在: " + key);
                 }
                 if (hiddenKeys.contains(key)) {

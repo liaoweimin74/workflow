@@ -8,6 +8,14 @@ import ElementPlus from 'element-plus'
 import PageDataTable from '../PageDataTable.vue'
 import SearchTable from '@/components/business/SearchTable.vue'
 
+// mock element-plus：保留 ElementPlus 安装器与其余导出，仅将 ElMessage 替换为可观测 vi.fn()
+vi.mock('element-plus', async (importOriginal) => {
+  const actual: any = await importOriginal()
+  return { ...actual, ElMessage: vi.fn() }
+})
+
+const ElMessageMock = (await import('element-plus')).ElMessage as ReturnType<typeof vi.fn>
+
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: {}, query: {} }),
   useRouter: () => ({ push: vi.fn() }),
@@ -179,6 +187,67 @@ describe('PageDataTable — 分页配置透传', () => {
     expect(st.props('defaultPageSize')).toBe(20)
     expect(st.props('pageSizes')).toEqual([10, 20, 50])
     expect(st.props('showPagination')).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+describe('PageDataTable — 列级定制（template/expression/formatter/className 经公共模块）', () => {
+  it('用户配置列：render 经 buildCellRender 组装，template/formatter/styleExpr 生效', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: { writable: false, columns: [] },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({
+      columns: [
+        { key: 'name', label: '姓名', template: '员工：${name}' },
+        { key: 'amount', label: '金额', formatter: 'currency' },
+        { key: 'status', label: '状态', styleExpr: '$row.status === "PENDING" ? "color:red" : ""' },
+      ],
+    })
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    const cols = st.props('columns') as any[]
+    expect(cols).toHaveLength(3)
+    // template 经 render 插值
+    const nameV = (cols[0].render as Function)({ name: '张三' } as any)
+    expect(nameV.children).toContain('员工：张三')
+    // formatter 经 render 应用
+    const amountV = (cols[1].render as Function)({ amount: 1234.56 } as any)
+    expect(amountV.children).toBe('¥1,234.56')
+    // styleExpr 经 render 应用
+    const stV = (cols[2].render as Function)({ status: 'PENDING' } as any)
+    expect(stV.props.style).toContain('color:red')
+    wrapper.unmount()
+  })
+
+  it('列级 onCellClick 短路整表级 cell-click（只触发列级链，不触发 viewEvents）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: { writable: false, columns: [] },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [{ id: '1', name: '张三' }], total: 1 } })
+    ElMessageMock.mockClear()
+
+    const wrapper = createWrapper({
+      columns: [
+        { key: 'name', label: '姓名', onCellClick: { actions: [{ type: 'message', params: [{ key: 'text', value: '列级点击' }] }] } },
+      ],
+      viewEvents: [
+        { trigger: 'cell-click', target: 'table', actions: [{ type: 'message', params: [{ key: 'text', value: '整表级' }] }] },
+      ],
+    })
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    st.vm.$emit('cell-click', { id: '1', name: '张三' }, { property: 'name' })
+    await flushPromises()
+    // 列级事件链被执行
+    expect(ElMessageMock).toHaveBeenCalledWith(expect.objectContaining({ message: '列级点击' }))
+    // 整表级未触发（短路）
+    expect(ElMessageMock).not.toHaveBeenCalledWith(expect.objectContaining({ message: '整表级' }))
     wrapper.unmount()
   })
 })

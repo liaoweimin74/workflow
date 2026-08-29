@@ -90,6 +90,35 @@ class ViewCompilerTest {
         assertTrue(ruleJson.contains("\"prop\":\"apply_date\""));
     }
 
+    @Test
+    void columns_customColumn_skipsReferenceValidation() throws Exception {
+        // 自定义计算列（custom=true，key 非数据源字段）跳过引用列校验并正常编译
+        // 验证 contentType/contentValue 透传到编译产物
+        JsonNode compiled = parse(compiler.compile(viewPage(
+                "{\"columns\":[{\"key\":\"total\",\"label\":\"合计\",\"custom\":true,"
+                        + "\"contentType\":\"expression\",\"contentValue\":\"$row.name + '(' + $row.dept + ')'\","
+                        + "\"className\":\"bold-cell\",\"styleExpr\":\"color:red\"},"
+                        + "{\"key\":\"name\",\"label\":\"姓名\"}]}"), columns()));
+        String ruleJson = compiled.path("rule").toString();
+        assertTrue(ruleJson.contains("\"prop\":\"total\""));
+        assertTrue(ruleJson.contains("\"contentType\":\"expression\""));
+        assertTrue(ruleJson.contains("\"contentValue\":\"$row.name + '(' + $row.dept + ')'\""));
+        assertTrue(ruleJson.contains("\"className\":\"bold-cell\""));
+        assertTrue(ruleJson.contains("\"styleExpr\":\"color:red\""));
+        assertTrue(ruleJson.contains("\"prop\":\"name\""));
+    }
+
+    @Test
+    void columns_hiddenColumn_skippedFromRender() throws Exception {
+        // 隐藏的自定义列不渲染（保留 schema 定义，编译期跳过）
+        JsonNode compiled = parse(compiler.compile(viewPage(
+                "{\"columns\":[{\"key\":\"total\",\"label\":\"合计\",\"custom\":true,\"hidden\":true},"
+                        + "{\"key\":\"name\",\"label\":\"姓名\"}]}"), columns()));
+        String ruleJson = compiled.path("rule").toString();
+        assertFalse(ruleJson.contains("\"prop\":\"total\""));
+        assertTrue(ruleJson.contains("\"prop\":\"name\""));
+    }
+
     // ==================== actions / detail / events ====================
 
     @Test

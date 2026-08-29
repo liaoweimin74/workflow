@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { executeScript, isScriptEventEnabled } from '../scriptSandbox'
+import { executeScript, isScriptEventEnabled, evalCellExpression } from '../scriptSandbox'
 
 describe('scriptSandbox — 视图脚本沙箱', () => {
   const originalEnv = import.meta.env
@@ -61,5 +61,33 @@ describe('scriptSandbox — 视图脚本沙箱', () => {
     expect(isScriptEventEnabled()).toBe(true)
     vi.stubEnv('VITE_PAGE_SCRIPT_ENABLED', 'false')
     expect(isScriptEventEnabled()).toBe(false)
+  })
+})
+
+describe('evalCellExpression — 列动态表达式求值', () => {
+  it('求值单表达式并返回结果（$row 上下文）', () => {
+    const row = { amount: 5000 }
+    const result = evalCellExpression('$row.amount > 1000 ? "高" : "低"', { $row: row, row })
+    expect(result).toBe('高')
+  })
+
+  it('注入 value 上下文（当前单元格值）', () => {
+    const result = evalCellExpression('value > 100 ? "big" : "small"', { $row: {}, row: {}, value: 500 })
+    expect(result).toBe('big')
+  })
+
+  it('表达式异常返回 undefined 且不抛出', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(evalCellExpression('undefinedFn()', { $row: {}, row: {} })).toBeUndefined()
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('空 source 返回 undefined', () => {
+    expect(evalCellExpression('', { $row: {}, row: {} })).toBeUndefined()
+    expect(evalCellExpression('   ', { $row: {}, row: {} })).toBeUndefined()
+  })
+
+  it('受限全局不可用，逃逸被拦截', () => {
+    expect(evalCellExpression('typeof window', { $row: {}, row: {} })).toBe('undefined')
   })
 })

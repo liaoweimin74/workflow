@@ -204,6 +204,30 @@ class PageValidatorTest {
         assertThrows(BusinessException.class, () -> validator.validateForPublish(page));
     }
 
+    @Test
+    void customColumn_skipsReferenceValidation() {
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                eq(TENANT_ID), eq("leave"), eq("PUBLISHED")))
+                .thenReturn(Optional.of(publishedForm(columnConfigJson(
+                        col("name", "VARCHAR", false)))));
+
+        // custom=true 的列 key 非数据源字段，应通过发布校验（不抛 400）
+        PageDefinition page = viewPage("{\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"},{\"key\":\"total\",\"label\":\"合计\",\"custom\":true}]}");
+        assertDoesNotThrow(() -> validator.validateForPublish(page));
+    }
+
+    @Test
+    void nonCustomColumn_missingReference_stillRejected() {
+        when(formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+                eq(TENANT_ID), eq("leave"), eq("PUBLISHED")))
+                .thenReturn(Optional.of(publishedForm(columnConfigJson(
+                        col("name", "VARCHAR", false)))));
+
+        // 未标记 custom 的非数据源字段列，仍应被校验拒绝
+        PageDefinition page = viewPage("{\"columns\":[{\"key\":\"ghost\",\"label\":\"幽灵列\"}]}");
+        assertThrows(BusinessException.class, () -> validator.validateForPublish(page));
+    }
+
     // ==================== 合法配置 ====================
 
     @Test

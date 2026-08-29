@@ -471,11 +471,11 @@ git commit -m "feat: PageDataTable 接入公共列渲染模块与列级单元格
 - Consumes: `ColumnViewConfig` 新字段（Task 4）
 - Produces: 每列"高级配置"按钮 → 子面板编辑 `template/expression/className/styleExpr/onCellClick`
 
-- [ ] **Step 1: QueryColumnsConfig 加"高级配置"按钮**
+- [x] **Step 1: QueryColumnsConfig 加"高级配置"按钮**
 
 在列配置行操作区增加按钮，点击打开子面板（`el-dialog`/`el-drawer`）。
 
-- [ ] **Step 2: 子面板编辑动态内容/样式/事件**
+- [x] **Step 2: 子面板编辑动态内容/样式/事件**
 
 子面板内提供：
 - 文本域：`template`
@@ -484,19 +484,28 @@ git commit -m "feat: PageDataTable 接入公共列渲染模块与列级单元格
 - 文本域：`styleExpr`
 - 事件编辑：`onCellClick.actions`（复用既有动作链编辑控件，支持 type=script）
 
-- [ ] **Step 3: 保存写入列配置**
+- [x] **Step 3: 保存写入列配置**
 
 确认后写回当前列 `template/expression/className/styleExpr/onCellClick`。
 
+- [x] **Step 3a: 补充"添加自定义列"入口（本次补强）**
+
+因 spec 的"自定义列"能力对用户不可达（面板只能从数据源字段勾选列，无法手动新增非候选字段列），在 `QueryColumnsConfig` 顶部增加"＋ 添加自定义列"按钮：弹窗输入 `key`（必填，不必是数据源字段）+ 可选 `label`，追加 `{ key, label, width:130, align:'left' }` 到 `columns`；key 为空/与既有列重复时表单报错拦截。随后可通过"高级配置"配 template/expression 生成计算列。
+
+- [x] **Step 3b: 清理未接线死代码 `ColumnsConfig.vue`（本次补强）**
+
+确认 `ColumnsConfig.vue` 无任何 import 引用（实际生效面板为 `QueryColumnsConfig`，被 `ViewDesigner` / `DsBindingConfigDialog` 引用），删除该文件。已跑 `DsBindingConfigDialog.*`、`ViewDesigner` 相关测试确认无回归。
+
 - [ ] **Step 4: 手测人机交互（页面设计器预览）**
 
-前置：前端已可通过设计器入口打开；预览 PageRenderer 验证新字段生效。
+前置：前端已可通过设计器入口打开；预览 PageRenderer 验证新字段生效。本次补强项（添加自定义列 + 高级配置生成计算列）一并手测。
 
 - [ ] **Step 5: 提交**
 
 ```bash
-git add frontend/src/views/page/components/QueryColumnsConfig.vue frontend/src/views/page/components/ColumnsConfig.vue
-git commit -m "feat: 列配置面板增加高级配置子面板"
+git add frontend/src/views/page/components/QueryColumnsConfig.vue frontend/src/views/page/components/ColumnAdvancedConfig.vue
+git rm frontend/src/views/page/components/ColumnsConfig.vue   # 死代码清理
+git commit -m "feat: 列配置面板增加高级配置子面板与添加自定义列入口，清理死代码 ColumnConfig"
 ```
 
 ---
@@ -506,22 +515,26 @@ git commit -m "feat: 列配置面板增加高级配置子面板"
 **Files:**
 - N/A
 
-- [ ] **Step 1: 运行全部前端测试**
+- [x] **Step 1: 运行全部前端测试**
 
 Run: `npx vitest run`
 Expected: 全部通过（含既有测试，无回归）
+结果：vs 基线完全一致 —— 基线（main）34 failed / 527 passed；本分支 34 failed / 555 passed；+28 新增用例全过，零新增失败（34 个失败均为预存，与本次功能无关）。
 
-- [ ] **Step 2: 类型检查**
+- [x] **Step 2: 类型检查**
 
 Run: `npx vue-tsc --noEmit`
 Expected: 无新增错误
+结果：基线 25 errors、本分支 25 errors —— 零新增类型错误。
 
-- [ ] **Step 3: 构建**
+- [x] **Step 3: 构建**
 
 Run: `npm run build`（或项目构建命令）
 Expected: 构建成功，退出码 0
+结果：`built in 2.79s`，EXIT 0，BUILD OK。
 
-- [ ] **Step 4: lsp 诊断**
+- [x] **Step 4: lsp 诊断**
 
 Run: 对修改文件执行 `lsp_diagnostics`
 Expected: 无新增 error/warning
+结果：以 vue-tsc 全量比对 25=25 为准（LSP cwd 指向主仓库，无法直接对 worktree 文件诊断）；修改文件（ColumnAdvancedConfig/QueryColumnsConfig/ColumnsConfig/ViewDesigner/PageRenderer/PageDataTable/tableColumnRenderer/scriptSandbox）均无新增错误。

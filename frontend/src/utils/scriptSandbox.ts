@@ -74,3 +74,25 @@ export async function executeScript(source: string, context: Record<string, any>
     console.error('[script] 执行失败:', e)
   }
 }
+
+/**
+ * 在沙箱中求值单个表达式并返回结果（异常捕获，返回 undefined）。
+ *
+ * 用于列动态内容 / 条件样式等"取结果"而非"执行动作"的场景。
+ * 与 {@link executeScript} 共用同一沙箱安全模型（with + 白名单 Proxy）。
+ *
+ * @param source 表达式源码，如 `$row.amount > 1000 ? '高' : '低'`
+ * @param context 注入上下文：$row/row/value/column 等（随需要传）
+ */
+export function evalCellExpression(source: string, context: Record<string, any>): unknown {
+  if (typeof source !== 'string' || !source.trim()) return undefined
+  try {
+    const sandbox = createSandbox(context)
+    // eslint-disable-next-line no-new-func
+    const fn = new Function('__sandbox', `with (__sandbox) { return (${source}) }`)
+    return fn(sandbox)
+  } catch (e) {
+    console.error('[script] 表达式求值失败:', e)
+    return undefined
+  }
+}

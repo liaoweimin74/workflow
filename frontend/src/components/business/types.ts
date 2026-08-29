@@ -65,6 +65,8 @@ export interface TableColumn {
   slotName?: string
   /** 内容超长省略并显示 tooltip（透传 el-table-column show-overflow-tooltip） */
   showOverflowTooltip?: boolean
+  /** 单元格 class（透传 el-table-column class-name 注入 <td>），静态样式预留 */
+  cellClassName?: string
 }
 
 // --- 操作按钮 ---

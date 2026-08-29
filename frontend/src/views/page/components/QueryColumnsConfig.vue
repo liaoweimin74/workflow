@@ -3,6 +3,7 @@
     <div class="config-header">
       <span class="config-title">{{ showSearch ? '字段配置（显示 & 查询）' : '字段配置（显示）' }}</span>
       <span class="config-hint">{{ showSearch ? `已选查询 ${searchFields.length} 项 · ` : '' }}显示 {{ columns.length }} 项</span>
+      <el-button link type="primary" :icon="Plus" @click="openCustomColumn">添加自定义列</el-button>
     </div>
 
     <!-- 可排序字段（视图级收窄；候选受数据源 metadata 上限约束） -->
@@ -27,7 +28,7 @@
 
     <!-- 字段列表（整行可拖拽排序：已勾选展示字段的顺序随拖拽调整） -->
     <div ref="tableWrapperRef">
-    <el-table :data="candidates" border max-height="460">
+    <el-table :data="displayCandidates" border max-height="460">
       <el-table-column prop="key" label="字段" width="130" />
       <el-table-column prop="label" label="标题" min-width="110" />
 
@@ -135,17 +136,76 @@
           <span v-else class="muted">—</span>
         </template>
       </el-table-column>
+      <el-table-column label="高级" width="90" align="center">
+        <template #default="{ row }">
+          <el-button
+            v-if="isColumnChecked(row.key)"
+            link
+            type="primary"
+            @click="openAdvanced(row.key)"
+          >
+            高级配置
+          </el-button>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="" width="48" align="center">
+        <template #default="{ row }">
+          <el-button
+            v-if="isCustomColumn(row.key)"
+            link
+            type="danger"
+            :icon="Delete"
+            title="删除自定义列"
+            @click="removeCustomColumn(row.key)"
+          />
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
     </el-table>
     </div>
 
-    <el-empty v-if="candidates.length === 0" description="当前表单无可配置字段" :image-size="60" />
+    <el-empty v-if="displayCandidates.length === 0" description="当前表单无可配置字段" :image-size="60" />
+
+    <!-- 列高级配置子面板 -->
+    <ColumnAdvancedConfig
+      :visible="advancedVisible"
+      :column="advancedColumn"
+      @update:visible="advancedVisible = $event"
+      @save="saveAdvanced"
+    />
+
+    <!-- 添加自定义列弹窗 -->
+    <el-dialog v-model="customVisible" title="添加自定义列" width="460px" :close-on-click-modal="false">
+      <el-form label-width="90px">
+        <el-form-item required :error="customKeyError || undefined">
+          <template #label>
+            <span class="label-with-tip">
+              列标识
+              <el-tooltip content="自定义列的列标识不必是数据源字段；添加后点击该列「高级配置」，配置模板/表达式即可生成计算列。" placement="top">
+                <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
+          </template>
+          <el-input v-model="customKey" placeholder="任意标识（不必是数据字段），如 total" />
+        </el-form-item>
+        <el-form-item label="列标题">
+          <el-input v-model="customLabel" placeholder="可选，缺省用 key，如 合计" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="customVisible = false">取消</el-button>
+        <el-button type="primary" @click="addCustomColumn">添加</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import Sortable from 'sortablejs'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { Plus, QuestionFilled, Delete } from '@element-plus/icons-vue'
+import ColumnAdvancedConfig from './ColumnAdvancedConfig.vue'
 import type { ColumnConfigItem } from '@/api/bizData'
 import type { SearchFieldConfig, ColumnViewConfig } from '../ViewDesigner.vue'
 
@@ -171,6 +231,31 @@ const emit = defineEmits<{
   (e: 'update:sortableFields', v: string[]): void
 }>()
 
+// ========== 自定义列（派生自 columns 中非数据源字段的列） ==========
+/** 是否为自定义列（key 不在数据源候选列表中） */
+function isCustomColumn(key: string): boolean {
+  return !props.candidates.some((c) => c.key === key)
+}
+
+/** 下方字段列表数据源 = 数据源字段候选 + 自定义列（计算列），自定义列参与展示/排序/编辑/删除 */
+const displayCandidates = computed<ColumnConfigItem[]>(() => {
+  const candKeys = new Set(props.candidates.map((c) => c.key))
+  const customs: ColumnConfigItem[] = props.columns
+    .filter((c) => !candKeys.has(c.key))
+    .map((c) => ({
+      key: c.key,
+      label: c.label,
+      columnType: 'VARCHAR',
+      length: null,
+      scale: null,
+      required: false,
+      unique: false,
+      indexed: false,
+      hidden: false,
+    }))
+  return [...props.candidates, ...customs]
+})
+
 // ========== 字段列表整行拖拽排序 ==========
 const tableWrapperRef = ref<HTMLElement>()
 let fieldSortable: Sortable | null = null
@@ -191,7 +276,7 @@ function initFieldSortable() {
         const newIndex = evt.newIndex
         if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return
         // 重排候选副本（模拟 DOM 新顺序），已勾选展示字段按新顺序重排 columns
-        const cands = [...props.candidates]
+        const cands = [...displayCandidates.value]
         const [moved] = cands.splice(oldIndex, 1)
         cands.splice(newIndex, 0, moved)
         const cols = props.columns
@@ -210,8 +295,9 @@ onMounted(initFieldSortable)
 watch(() => props.candidates.length, initFieldSortable)
 
 // ========== 查询条件 ==========
-/** 字段是否可作查询条件（filterableKeys 未配置时全部允许） */
+/** 字段是否可作查询条件（filterableKeys 未配置时全部允许；自定义计算列不可作为查询条件） */
 function isFilterable(key: string): boolean {
+  if (isCustomColumn(key)) return false
   return props.filterableKeys ? props.filterableKeys.has(key) : true
 }
 
@@ -266,7 +352,11 @@ function setSearchMatchType(key: string, v: string) {
 
 // ========== 展示列 ==========
 function isColumnChecked(key: string): boolean {
-  return props.columns.some((c) => c.key === key)
+  const col = findColumn(key)
+  // 自定义列：列始终保留在 columns，展示开关 = !hidden（取消展示仅隐藏，不删除）
+  if (isCustomColumn(key)) return col ? !col.hidden : false
+  // 数据源列：展示 = 在 columns 中
+  return !!col
 }
 
 function findColumn(key: string): ColumnViewConfig | undefined {
@@ -290,6 +380,14 @@ function columnFixedOf(key: string): string {
 }
 
 function toggleColumn(col: ColumnConfigItem, checked: boolean) {
+  // 自定义列：切换展示开关（hidden），保留列定义与高级配置；彻底删除仅通过删除按钮
+  if (isCustomColumn(col.key)) {
+    emit('update:columns', props.columns.map((c) =>
+      c.key === col.key ? { ...c, hidden: !checked } : c,
+    ))
+    return
+  }
+  // 数据源列：在不在 columns 决定是否展示
   if (checked) {
     if (!isColumnChecked(col.key)) {
       emit('update:columns', [
@@ -307,6 +405,84 @@ function setColumnProp(key: string, prop: 'width' | 'align' | 'formatter' | 'fix
     'update:columns',
     props.columns.map((c) => (c.key === key ? { ...c, [prop]: v } : c)),
   )
+}
+
+// ========== 列高级配置子面板 ==========
+const advancedVisible = ref(false)
+/** 当前正在编辑高级配置的列副本 */
+const advancedColumn = ref<ColumnViewConfig | null>(null)
+
+function openAdvanced(key: string) {
+  const col = findColumn(key)
+  if (!col) return
+  // 传入副本，避免编辑期间污染 props
+  advancedColumn.value = {
+    ...col,
+    onCellClick: col.onCellClick
+      ? { actions: ((col.onCellClick as any).actions || []).map((a: any) => ({ ...a, params: [...(a.params || [])] })) }
+      : undefined,
+  }
+  advancedVisible.value = true
+}
+
+function saveAdvanced(updated: ColumnViewConfig) {
+  const col = findColumn(updated.key)
+  if (!col) return
+  const next = props.columns.map((c) =>
+    c.key === updated.key ? { ...c, ...pickAdvanced(updated) } : c,
+  )
+  emit('update:columns', next)
+}
+
+/** 仅取高级配置相关字段写回，避免覆盖 width/align/fixed 等基础字段 */
+function pickAdvanced(c: ColumnViewConfig): Partial<ColumnViewConfig> {
+  return {
+    ...(c.contentType !== undefined ? { contentType: c.contentType } : {}),
+    ...(c.contentValue !== undefined ? { contentValue: c.contentValue } : {}),
+    ...(c.template !== undefined ? { template: c.template } : {}),
+    ...(c.expression !== undefined ? { expression: c.expression } : {}),
+    ...(c.className !== undefined ? { className: c.className } : {}),
+    ...(c.styleExpr !== undefined ? { styleExpr: c.styleExpr } : {}),
+    ...(c.onCellClick !== undefined ? { onCellClick: c.onCellClick } : {}),
+  }
+}
+
+// ========== 添加自定义列 ==========
+const customVisible = ref(false)
+const customKey = ref('')
+const customLabel = ref('')
+/** 添加校验错误提示（key 为空 / 与既有列重复） */
+const customKeyError = ref('')
+
+function openCustomColumn() {
+  customKey.value = ''
+  customLabel.value = ''
+  customKeyError.value = ''
+  customVisible.value = true
+}
+
+function addCustomColumn() {
+  const key = customKey.value.trim()
+  if (!key) {
+    customKeyError.value = '列标识不能为空'
+    return
+  }
+  if (props.columns.some((c) => c.key === key)) {
+    customKeyError.value = `列「${key}」已存在`
+    return
+  }
+  emit('update:columns', [
+    ...props.columns,
+    { key, label: customLabel.value.trim() || key, width: 130, align: 'left', custom: true },
+  ])
+  customKeyError.value = ''
+  customVisible.value = false
+}
+
+/** 删除自定义列：从展示列移除，并同步移除其查询条件（若有） */
+function removeCustomColumn(key: string) {
+  emit('update:columns', props.columns.filter((c) => c.key !== key))
+  emit('update:searchFields', props.searchFields.filter((f) => f.key !== key))
 }
 </script>
 
@@ -342,6 +518,17 @@ function setColumnProp(key: string, prop: 'width' | 'align' | 'formatter' | 'fix
   line-height: 1;
 }
 .config-tip-icon {
+  margin-left: 4px;
+  color: #909399;
+  cursor: help;
+}
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  line-height: 1;
+}
+.tip-icon {
   margin-left: 4px;
   color: #909399;
   cursor: help;

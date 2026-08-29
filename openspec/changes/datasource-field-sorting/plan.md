@@ -788,3 +788,187 @@ Expected: 全部 PASS，无类型错误
 git add -A
 git commit -m "chore: finalize datasource-field-sorting"
 ```
+
+---
+
+### Task 11: 视图级 sortableFields 配置（B1，受数据源上限约束）
+
+**Files:**
+- Modify: `backend/src/main/java/com/workflow/engine/page/ViewCompiler.java`（compile 编译 sortableFields 进产物顶层；compileColumns 移除列级 sortable 残留）
+- Modify: `backend/src/main/java/com/workflow/api/controller/PageQueryController.java`（VIEW 路径 sort 白名单校验）
+- Modify: `frontend/src/views/page/ViewDesigner.vue`（schema.sortableFields + 候选加载 + 多选 UI）
+- Modify: `frontend/src/views/page/components/QueryColumnsConfig.vue`（"可排序字段"配置区）
+- Modify: `frontend/src/views/page/PageRenderer.vue`（parseSchema 读 sortableFields + searchTableColumns 双条件）
+- Test: `backend/src/test/java/com/workflow/engine/page/ViewCompilerTest.java`、`backend/src/test/java/com/workflow/api/controller/PageQueryControllerTest.java`、`frontend/src/views/page/__tests__/PageRenderer.test.ts`、`frontend/src/views/page/components/__tests__/QueryColumnsConfig.test.ts`
+
+**Interfaces:**
+- Consumes: `DataSourceMetadataDTO.columns[].sortable`、`ColumnViewConfig`、ViewCompiler 编译产物结构
+- Produces: schema 顶层 `sortableFields: string[]`；编译产物顶层 `sortableFields`；PageRenderer 读取视图收窄集
+
+- [ ] **Step 1: 写失败测试（ViewCompiler 编译 sortableFields）**
+
+`ViewCompilerTest.java` 新增：
+
+```java
+@Test
+void compile_carriesSortableFields_intoResult() {
+    // schema 顶层声明 sortableFields=["name","age"]，绑定列含 name/age/note
+    String schema = "{\"searchFields\":[],\"sortableFields\":[\"name\",\"age\"],"
+            + "\"columns\":[{\"key\":\"name\",\"label\":\"姓名\"},{\"key\":\"age\",\"label\":\"年龄\"}],"
+            + "\"actions\":{},\"detail\":{},\"events\":[]}";
+    PageDefinition page = new PageDefinition();
+    page.setSchema(schema);
+    List<ColumnConfig> cols = List.of(col("name"), col("age"), col("note"));
+    JsonNode result = read(compiler.compile(page, cols));
+    assertTrue(result.path("sortableFields").isArray());
+    assertEquals(2, result.path("sortableFields").size());
+    assertEquals("name", result.path("sortableFields").get(0).asText());
+}
+
+@Test
+void compile_rejectsSortableFieldNotInBoundColumns() {
+    String schema = "{\"searchFields\":[],\"sortableFields\":[\"ghost\"],\"columns\":[],\"actions\":{},\"detail\":{},\"events\":[]}";
+    PageDefinition page = new PageDefinition();
+    page.setSchema(schema);
+    assertThrows(BusinessException.class, () -> compiler.compile(page, List.of(col("name"))));
+}
+```
+
+- [ ] **Step 2: 运行确认失败**
+
+Run: `mvn test -Dtest=ViewCompilerTest`（workdir `backend/`）
+Expected: FAIL（产物无 sortableFields；引用校验未实现）
+
+- [ ] **Step 3: 实现 ViewCompiler**
+
+`compile()` 内 `compileColumns` 之后追加：
+
+```java
+compileSortableFields(root, result, validKeys);
+```
+
+新增方法（引用列存在校验，对齐 compileSearchFields；产物顶层写入）：
+
+```java
+/** sortableFields → 产物顶层数组（视图级排序收窄；引用列存在校验）。 */
+private void compileSortableFields(JsonNode root, ObjectNode result, Set<String> validKeys) {
+    JsonNode fields = root.path("sortableFields");
+    if (!fields.isArray() || fields.isEmpty()) {
+        return;
+    }
+    ArrayNode out = result.putArray("sortableFields");
+    for (JsonNode f : fields) {
+        String key = f.asText();
+        if (key.isBlank()) {
+            continue;
+        }
+        if (!validKeys.isEmpty() && !validKeys.contains(key)) {
+            throw new BusinessException(400, "排序字段引用列不存在: " + key);
+        }
+        out.add(key);
+    }
+}
+```
+
+`compileColumns` 中删除列级 sortable 残留：
+
+```java
+if (column.path("sortable").asBoolean(false)) {
+    col.put("sortable", true);
+}
+```
+
+- [ ] **Step 4: 运行确认通过**
+
+Run: `mvn test -Dtest=ViewCompilerTest`（workdir `backend/`）
+Expected: PASS
+
+- [ ] **Step 5: 写失败测试（PageQueryController sort 白名单）**
+
+`PageQueryControllerTest.java` 新增：
+
+```java
+@Test
+void query_rejectsSortNotInSchemaSortableFields() throws Exception {
+    // schema 声明 sortableFields=["name"]，请求 sort=age → 400
+    when(pageDefService.getPublishedByKey("emp_view")).thenReturn(viewPage(
+            "{\"searchFields\":[],\"sortableFields\":[\"name\"],\"columns\":[],\"actions\":{},\"detail\":{},\"events\":[]}"));
+    mockMvc.perform(get("/api/v1/pages/emp_view/data").param("sort", "age"))
+            .andExpect(status().isBadRequest());
+}
+```
+
+（按既有测试基建调整：无 schema 声明 sortableFields 时放行原有路径。）
+
+- [ ] **Step 6: 运行确认失败**
+
+Run: `mvn test -Dtest=PageQueryControllerTest`（workdir `backend/`）
+Expected: FAIL（未校验）
+
+- [ ] **Step 7: 实现 PageQueryController 白名单**
+
+`query()` 中 filter 白名单之后追加：
+
+```java
+Set<String> sortable = sortableFieldKeys(page.getSchema());
+if (req.getSort() != null && !req.getSort().isBlank() && !sortable.isEmpty()
+        && !sortable.contains(req.getSort())) {
+    throw new BusinessException(400, "排序字段不在页面声明的可排序字段中: " + req.getSort());
+}
+```
+
+新增私有方法（与 `searchFieldKeys` 对齐）：
+
+```java
+private Set<String> sortableFieldKeys(String schema) {
+    Set<String> keys = new HashSet<>();
+    try {
+        JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
+        JsonNode fields = root.path("sortableFields");
+        if (fields.isArray()) {
+            for (JsonNode f : fields) {
+                keys.add(f.asText());
+            }
+        }
+    } catch (Exception e) {
+        throw new BusinessException(400, "页面 schema 解析失败");
+    }
+    return keys;
+}
+```
+
+- [ ] **Step 8: 运行确认通过**
+
+Run: `mvn test -Dtest=PageQueryControllerTest`（workdir `backend/`）
+Expected: PASS
+
+- [ ] **Step 9: 前端实现（ViewDesigner + QueryColumnsConfig + PageRenderer）**
+
+a) `ViewDesigner.vue`：schema 增加 `sortableFields` 状态；`loadBindColumns` 时从 metadata 列过滤 sortable 作候选；缺省默认跟随全部候选；传给 QueryColumnsConfig。
+
+b) `QueryColumnsConfig.vue`：新增 props `sortableFields`/`sortableCandidates` 与 emits `update:sortableFields`；渲染"可排序字段"多选（el-select multiple，候选 = sortableCandidates；候选空时提示"当前数据源无可排序字段"）。
+
+c) `PageRenderer.vue`：`parseSchema` 读取产物 `sortableFields` 存 `sortableFieldKeys` ref；`searchTableColumns` 改为：
+
+```typescript
+sortable: !!dataSourceMeta.value?.columns?.find((m) => m.key === c.prop)?.sortable
+  && (sortableFieldKeys.value.length === 0 || sortableFieldKeys.value.includes(c.prop)),
+```
+
+（视图未声明时跟随数据源全部可排字段。）
+
+- [ ] **Step 10: 前端测试**
+
+`PageRenderer.test.ts`：新增"视图 sortableFields 收窄排序入口"用例（schema 产物含 sortableFields 时，未声明字段不可排）。`QueryColumnsConfig.test.ts`：新增"可排序字段多选候选受数据源上限约束"用例。
+
+Run: `npx vitest run src/views/page`（workdir `frontend/`）；`npx tsc --noEmit`
+Expected: 新用例 PASS，无新类型错误（既有失败除外）
+
+- [ ] **Step 11: 全量验证 + 提交**
+
+Run: `mvn test`（backend）；`npm test`（frontend）
+Expected: 后端全绿；前端仅剩既有失败
+
+```bash
+git add -A && git commit -m "feat: view-level sortableFields config bounded by datasource metadata"
+```

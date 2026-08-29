@@ -37,7 +37,8 @@
 ## Key Decisions
 
 - 排序能力声明位置 = 数据源 metadata（后端按列类型推导），不落在视图/界面层。
-- 视图层保留列显隐职责，移除排序开关；列显示 + 数据源可排 → 排序入口自动出现。
+- 视图层保留列显隐职责，移除列级排序开关；列显示 + 数据源可排 → 排序入口自动出现。
+- **B1 增强（视图级收窄）**：视图设计器新增"可排序字段"多选（schema 顶层 `sortableFields`），候选集 MUST 为绑定数据源 metadata 声明可排字段（数据源不可排字段不可配置）；渲染入口 = 列显示 ∧ 数据源可排 ∧ ∈ 视图 sortableFields；后端 VIEW 路径 sort 白名单校验 ∈ schema.sortableFields（对齐 searchFields 白名单模式）。
 - SearchTable 内部维护排序交互状态（与 query 并列），`sort-change` 事件仍转发父组件。
 - WORKFLOW 数据源排序：业务列 `JSON_UNQUOTE(JSON_EXTRACT(...))` + 数值列 `CAST AS SIGNED/DECIMAL`（避免 10 < 2）；系统列 `startTime` → `h.START_TIME_`；`initiatorName`/`currentNodeName` 等派生列不可排。
 - FORM 数据源查询已支持排序，仅需将白名单校验规则与 SortableResolver 对齐。

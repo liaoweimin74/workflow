@@ -71,6 +71,15 @@
 
 - `ColumnsConfig.vue` / `QueryColumnsConfig.vue` 移除"排序"列与 `sortableOf/setProp('sortable')`；`ColumnViewConfig.sortable` 字段废弃（历史 schema 中残留值被忽略，向后兼容）。
 
+### D8：视图级 sortableFields 配置（B1，受数据源上限约束）
+
+- 页面 schema 顶层新增 `sortableFields: string[]`（视图级可排序字段声明，缺省=跟随数据源全部可排字段，向后兼容）。
+- ViewDesigner：绑定数据源后加载 metadata 可排字段作候选（`columns.filter(c => c.sortable)`），"可排序字段"多选**候选集受数据源上限约束**——数据源不可排字段不出现在候选，无法配置。存 `schema.sortableFields`。
+- ViewCompiler：编译 `sortableFields` 进产物顶层（PageRenderer `parseSchema` 读取），并校验引用列存在于绑定数据源列（对齐 compileSearchFields 的 validKeys 校验）；移除 `compileColumns` 中列级 sortable 残留。
+- PageRenderer：`searchTableColumns` 排序入口 = 列显示 ∧ metadata 可排 ∧ ∈ 视图 sortableFields（双条件防御手改 schema 绕过）。
+- PageQueryController：VIEW 路径校验 `req.sort` ∈ schema.sortableFields（声明非空时，非法 400），对齐 `whitelistFilter` 的 searchFields 白名单模式。
+- **为何不在数据源绑定条目（schema.dataSources）上配置**：VIEW 页面为单一 dataSourceId 绑定，无绑定条目；sortableFields 放 schema 顶层与 searchFields 并列，发布/编译链路天然支持。
+
 ## Risks / Trade-offs
 
 - **R1：JSON 列排序类型错误（10 < 2）** → 数值列显式 `CAST AS SIGNED/DECIMAL`；排序前仍按列类型推导可排性，JSON/TEXT 直接不可排。

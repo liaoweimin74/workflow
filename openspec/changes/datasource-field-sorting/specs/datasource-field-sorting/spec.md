@@ -1,9 +1,9 @@
-# datasource-field-sorting Specification
+# datasource-field-sorting Specification (Delta)
 
 ## Purpose
 数据源字段排序能力端到端：排序能力上限由数据源 metadata 按列类型声明，视图层在此上限内可收窄配置（sortableFields），前端列表页统一服务器端排序接线。
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: 数据源 metadata 声明字段排序能力
 

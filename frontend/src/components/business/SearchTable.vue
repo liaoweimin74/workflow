@@ -627,12 +627,19 @@ function getList() {
   overflow-y: auto;
 }
 
-/* 分页栏 */
+/* 分页栏：高度与表格行高一致（default 40px / small 32px），分页组件垂直居中 */
 .pagination-bar {
   flex-shrink: 0;
-  margin-top: 16px;
+  margin-top: 0;
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 2px;
+  box-sizing: border-box;
+}
+.search-table.is-small .pagination-bar {
+  min-height: 32px;
 }
 
 /* 操作列文字按钮紧凑样式 */

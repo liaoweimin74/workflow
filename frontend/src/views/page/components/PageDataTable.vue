@@ -62,6 +62,8 @@ const props = defineProps<{
   dsRefId?: string
   /** 列配置（ViewDesigner 风格：{ key, label, width, align, sortable, formatter, fixed }） */
   columns?: any[]
+  /** 组件级可排序字段（受数据源 metadata 上限约束；缺省=跟随数据源全部可排字段） */
+  sortableFields?: string[]
   /** 操作配置（ViewDesigner 风格：{ buttons, permissions, actionColumnWidth }） */
   viewActions?: { buttons?: any[]; permissions?: string; actionColumnWidth?: number }
   /** 详情配置（ViewDesigner 风格：{ width, type }） */
@@ -135,16 +137,23 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
 // ==================== 列适配 ====================
 /** ColumnViewConfig → SearchTable TableColumn（formatter 字符串映射为函数） */
 const resolvedColumns = computed<TableColumn[]>(() => {
+  /** 组件级收窄：metadata 可排 ∧ (sortableFields 未声明或包含该列) */
+  const sortableOf = (key: string): boolean => {
+    const metaSortable = !!metaColumns.value.find((m) => m.key === key)?.sortable
+    if (!metaSortable) return false
+    const declared = props.sortableFields
+    return !declared || declared.length === 0 || declared.includes(key)
+  }
   // 切换数据源后优先使用元数据列，忽略旧的 props.columns
   if (useMetadataColumns.value || !props.columns || props.columns.length === 0) {
     return metaColumns.value.map((c) => ({
       prop: c.key,
       label: c.label || c.key,
       minWidth: 120,
-      sortable: !!c.sortable, // 数据源 metadata 声明的排序能力
+      sortable: sortableOf(c.key),
     }))
   }
-  // 有用户配置的列时使用用户配置；排序能力由数据源 metadata 声明（方案 A：视图零配置）
+  // 有用户配置的列时使用用户配置；排序能力由数据源 metadata + 组件 sortableFields 决定
   return (props.columns || []).map((c: any) => ({
     prop: c.key ?? c.prop,
     label: c.label || c.key || c.prop,
@@ -152,7 +161,7 @@ const resolvedColumns = computed<TableColumn[]>(() => {
     minWidth: c.minWidth || 120,
     align: c.align as any,
     fixed: c.fixed as any,
-    sortable: !!metaColumns.value.find((m) => m.key === (c.key ?? c.prop))?.sortable,
+    sortable: sortableOf(c.key ?? c.prop),
     formatter: c.formatter ? (_row: any, _col: TableColumn, cellValue: any) => formatCellValue(cellValue, c.formatter) : undefined,
   }))
 })

@@ -87,4 +87,58 @@ describe('PageDataTable — 排序能力（数据源 metadata 驱动）', () => 
     expect(cols.find((c) => c.prop === 'bio').sortable).toBe(false)
     wrapper.unmount()
   })
+
+  it('sortableFields 收窄：未声明字段即使数据源可排也不显示排序入口', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', sortable: true },
+          { key: 'age', label: '年龄', columnType: 'INT', sortable: true },
+        ],
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [], total: 0 },
+    })
+
+    const wrapper = createWrapper({
+      sortableFields: ['name'], // 组件级收窄：仅 name 可排序
+    })
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    const cols = st.props('columns') as any[]
+    // 视图声明 + 数据源可排 → 可排
+    expect(cols.find((c) => c.prop === 'name').sortable).toBe(true)
+    // 数据源可排但未在 sortableFields 中 → 不可排
+    expect(cols.find((c) => c.prop === 'age').sortable).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('sortableFields 未声明时跟随数据源全部可排字段', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', sortable: true },
+          { key: 'age', label: '年龄', columnType: 'INT', sortable: true },
+        ],
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [], total: 0 },
+    })
+
+    const wrapper = createWrapper() // 无 sortableFields
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    const cols = st.props('columns') as any[]
+    expect(cols.find((c) => c.prop === 'name').sortable).toBe(true)
+    expect(cols.find((c) => c.prop === 'age').sortable).toBe(true)
+    wrapper.unmount()
+  })
 })

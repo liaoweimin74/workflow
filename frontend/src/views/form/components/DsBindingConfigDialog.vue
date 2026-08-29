@@ -53,6 +53,8 @@
             v-model:search-fields="tableData.searchFields as any"
             v-model:columns="tableData.columns"
             :show-search="false"
+            v-model:sortable-fields="tableData.sortableFields"
+            :sortable-candidates="tableSortableCandidates"
           />
           <el-empty v-else description="请先选择数据源" :image-size="60" />
         </el-tab-pane>
@@ -283,6 +285,8 @@ const tableFilterableKeys = ref<Set<string>>(new Set())
 const tableData = reactive({
   searchFields: [] as { key: string; matchType?: string }[],
   columns: [] as any[],
+  /** 组件级可排序字段（受数据源 metadata 上限约束；空=跟随数据源全部可排字段） */
+  sortableFields: [] as string[],
   actions: { buttons: [
     { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
     { key: 'delete', label: '删除', placement: 'column', style: 'text' },
@@ -290,6 +294,11 @@ const tableData = reactive({
   detail: { width: '800px', type: 'form' } as any,
   events: [] as any[],
 })
+
+/** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不可配置） */
+const tableSortableCandidates = computed(() =>
+  tableCandidates.value.filter((c: any) => c.sortable).map((c: any) => ({ key: c.key, label: c.label || c.key })),
+)
 
 /** 加载数据源列候选项（显示列 tab 用） */
 async function loadTableCandidates() {
@@ -324,10 +333,13 @@ function initTableData() {
     label: c.label || c.prop || c.key,
     width: c.width,
     align: c.align,
-    sortable: c.sortable,
     formatter: c.formatter,
     fixed: c.fixed,
   }))
+  // 可排序字段：回填已声明配置；未声明（新组件）默认跟随数据源全部可排字段
+  tableData.sortableFields = Array.isArray(bp.sortableFields)
+    ? [...bp.sortableFields]
+    : tableCandidates.value.filter((c: any) => c.sortable).map((c: any) => c.key)
   tableData.actions = bp.viewActions || { buttons: [
     { key: 'edit', label: '编辑', placement: 'column', style: 'text' },
     { key: 'delete', label: '删除', placement: 'column', style: 'text' },
@@ -381,9 +393,10 @@ function handleConfirm() {
     result.searchFields = [...tableData.searchFields]
     result.columns = tableData.columns.map((c: any) => ({
       prop: c.key ?? c.prop, label: c.label || c.key,
-      width: c.width, align: c.align, sortable: c.sortable,
+      width: c.width, align: c.align,
       formatter: c.formatter, fixed: c.fixed,
     }))
+    result.sortableFields = [...tableData.sortableFields]
     result.viewActions = { ...tableData.actions }
     result.viewDetail = { ...tableData.detail }
     result.viewEvents = [...tableData.events]

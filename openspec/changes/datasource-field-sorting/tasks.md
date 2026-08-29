@@ -51,3 +51,9 @@
 - [x] 8.3 `PageRenderer`：parseSchema 读取产物 `sortableFields`；`searchTableColumns` 排序入口 = 列显示 ∧ metadata 可排 ∧ ∈ 视图 sortableFields
 - [x] 8.4 `PageQueryController`：VIEW 路径校验 `req.sort` ∈ schema.sortableFields（声明非空时，非法 400）
 - [x] 8.5 测试：ViewCompiler 编译 sortableFields + 引用校验；PageQueryController 排序白名单；PageRenderer 渲染收窄；ViewDesigner 候选受数据源上限约束
+
+## 9. B1 组件级：页面/表单数据表格 sortableFields 配置（公共部分）
+
+- [ ] 9.1 `PageDataTable`：props 增加 `sortableFields?: string[]`；`resolvedColumns` 双条件 = metadata 可排 ∧ (sortableFields 空 或 包含该列)，未声明=跟随数据源全部可排字段
+- [ ] 9.2 `DsBindingConfigDialog`（table-mode，页面/表单共用）：tableData 增加 sortableFields；"显示列"tab 的 QueryColumnsConfig 接线 `v-model:sortable-fields` + `:sortable-candidates`（候选 = 绑定数据源 metadata 可排字段）；回填/保存 sortableFields；清理列级 sortable 残留
+- [ ] 9.3 测试：PageDataTable 收窄渲染（props.sortableFields 生效）；DsBindingConfigDialog table-mode 保存/回填 sortableFields

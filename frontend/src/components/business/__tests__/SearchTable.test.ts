@@ -490,6 +490,15 @@ describe('SearchTable — tree mode', () => {
     expect(wrapper.find('.el-pagination').exists()).toBe(true)
   })
 
+  it('未传 showPagination 时默认显示分页（Boolean prop 默认 true）', async () => {
+    const fetchApi = vi.fn().mockResolvedValue({ rows: [], total: 10 })
+    const wrapper = createWrapper({ fetchApi })
+    await nextTick()
+    await flushPromises()
+    await nextTick()
+    expect(wrapper.find('.el-pagination').exists()).toBe(true)
+  })
+
   it('treeProps 透传 row-key 到 el-table', async () => {
     const wrapper = createWrapper({
       treeProps: { rowKey: 'id', children: 'children', defaultExpandAll: true },

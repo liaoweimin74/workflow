@@ -271,6 +271,8 @@ const props = withDefaults(defineProps<SearchTableProps>(), {
   maxVisibleButtons: 3,
   showSearch: true,
   showCreateButton: true,
+  // Boolean 类型 prop 未传入时 Vue 默认 false，必须显式 default true（否则分页被静默关闭）
+  showPagination: true,
   mergeDefaultActions: true,
   tableSize: 'default',
   toolbarButtons: () => [],

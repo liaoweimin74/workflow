@@ -84,3 +84,23 @@
 #### Scenario: 视图声明排序字段被收窄
 - **WHEN** 视图声明的 sortableFields 不含某数据源可排字段
 - **THEN** 该字段在视图中不出现排序入口，即使数据源声明可排
+
+### Requirement: 视图与数据表格分页配置
+
+VIEW 视图 schema 与页面/表单数据表格组件 SHALL 支持分页配置（三项：是否显示分页 `showPagination`、默认每页大小 `pageSize`、可选每页大小 `pageSizes`）。缺省值 SHALL 为 `show=true`、`pageSize=20`、`pageSizes=[10,20,50]`（未配置时使用缺省，向后兼容）。VIEW 视图 schema SHALL 以顶层 `pagination: {show,pageSize,pageSizes}` 声明，ViewCompiler SHALL 将其编译进渲染产物并校验 pageSize/pageSizes 为正整数（非法返回 400），PageRenderer SHALL 读取产物并传给 SearchTable（`:show-pagination :default-page-size :page-sizes`）。数据表格组件（PageDataTable）SHALL 通过 props（`pagination`/`pageSize`/`pageSizes`）透传 SearchTable；其配置面板（DsBindingConfigDialog table-mode，页面/表单共用）SHALL 提供分页配置（显示开关 + 每页条数 + 可选页大小），保存时写回组件 props、加载时回填（未声明使用缺省）。
+
+#### Scenario: 视图分页配置编译与传参
+- **WHEN** 视图 schema 声明 `pagination: {show:true, pageSize:50, pageSizes:[10,50,100]}`
+- **THEN** 编译产物含 pagination，PageRenderer 将 showPagination/pageSize/pageSizes 传给 SearchTable
+
+#### Scenario: 数据表格分页配置保存与透传
+- **WHEN** 用户在数据表格配置面板设置显示分页/每页条数/可选页大小并保存
+- **THEN** 组件 props 记录配置，PageDataTable 透传给 SearchTable 生效
+
+#### Scenario: 分页缺省值
+- **WHEN** 视图或数据表格未声明分页配置
+- **THEN** 使用缺省（显示分页 / 20 条 / [10,20,50]）
+
+#### Scenario: 分页参数非法被拒
+- **WHEN** 视图 schema 声明 `pageSize=0` 或非正整数 pageSizes
+- **THEN** 编译返回 400 错误

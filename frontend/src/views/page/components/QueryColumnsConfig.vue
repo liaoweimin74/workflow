@@ -7,7 +7,12 @@
 
     <!-- 可排序字段（视图级收窄；候选受数据源 metadata 上限约束） -->
     <div v-if="sortableCandidates && sortableCandidates.length" class="sortable-config">
-      <span class="config-title">可排序字段</span>
+      <span class="config-title">
+        可排序字段
+        <el-tooltip content="排序入口仅对勾选字段开放；数据源不可排字段不可配置" placement="top">
+          <el-icon class="config-tip-icon"><QuestionFilled /></el-icon>
+        </el-tooltip>
+      </span>
       <el-select
         :model-value="sortableFields || []"
         multiple
@@ -18,7 +23,6 @@
       >
         <el-option v-for="c in sortableCandidates" :key="c.key" :label="c.label" :value="c.key" />
       </el-select>
-      <span class="config-hint">排序入口仅对勾选字段开放；数据源不可排字段不可配置</span>
     </div>
 
     <el-table :data="candidates" border max-height="460">
@@ -136,6 +140,7 @@
 </template>
 
 <script setup lang="ts">
+import { QuestionFilled } from '@element-plus/icons-vue'
 import type { ColumnConfigItem } from '@/api/bizData'
 import type { SearchFieldConfig, ColumnViewConfig } from '../ViewDesigner.vue'
 
@@ -278,13 +283,25 @@ function setColumnProp(key: string, prop: 'width' | 'align' | 'formatter' | 'fix
 }
 .sortable-config {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
   padding: 10px 12px;
   border: 1px solid #e4e7ed;
   border-radius: 4px;
   background: #fafafa;
+}
+.sortable-config .config-title {
+  flex-shrink: 0;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+.config-tip-icon {
+  margin-left: 4px;
+  color: #909399;
+  cursor: help;
 }
 .muted {
   color: #c0c4cc;

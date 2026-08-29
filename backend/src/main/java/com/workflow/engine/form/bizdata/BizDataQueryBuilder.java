@@ -56,9 +56,12 @@ public final class BizDataQueryBuilder {
         }
         sql.append(" ORDER BY ").append(sortColumn).append(" ").append(orderDir.toUpperCase());
 
-        sql.append(" LIMIT ? OFFSET ?");
-        params.add(size);
-        params.add(page * size);
+        // size <= 0 表示不分页取全部（跳过 LIMIT/OFFSET）
+        if (size > 0) {
+            sql.append(" LIMIT ? OFFSET ?");
+            params.add(size);
+            params.add(page * size);
+        }
         return new SqlAndParams(sql.toString(), params);
     }
 

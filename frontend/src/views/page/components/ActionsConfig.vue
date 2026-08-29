@@ -173,42 +173,54 @@
 
     <el-empty v-if="modelValue.buttons.length === 0" description="暂无操作按钮，从上方添加" :image-size="60" />
 
-    <!-- 操作列宽度 -->
-    <el-divider content-position="left">操作列</el-divider>
+    <!-- 其他设置：列宽度 / 弹窗宽度 / 权限点（说明文字以 ? 图标悬浮显示） -->
+    <el-divider content-position="left">其他设置</el-divider>
     <el-form label-width="90px"  style="max-width: 520px">
-      <el-form-item label="列宽度">
+      <el-form-item>
+        <template #label>
+          <span class="label-with-tip">
+            列宽度
+            <el-tooltip content="操作列宽度（px），留空/0 按按钮数量自动计算" placement="top">
+              <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </span>
+        </template>
         <el-input-number
           :model-value="actionColumnWidthValue"
-          
+
           :min="0"
           :max="400"
           :step="10"
           style="width: 160px"
           @change="setActionColumnWidth"
         />
-        <span class="form-tip">操作列宽度（px），留空/0 按按钮数量自动计算</span>
       </el-form-item>
-    </el-form>
-
-    <!-- 详情弹窗（由"查看"按钮启用，仅配置宽度） -->
-    <el-divider content-position="left">详情弹窗</el-divider>
-    <el-form label-width="90px"  style="max-width: 520px">
-      <el-form-item label="弹窗宽度">
+      <el-form-item>
+        <template #label>
+          <span class="label-with-tip">
+            弹窗宽度
+            <el-tooltip content='启用"查看"按钮后，点击行即可弹出详情' placement="top">
+              <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </span>
+        </template>
         <el-input
           :model-value="detailWidth"
-          
+
           placeholder="如 800px"
           style="width: 200px"
           @input="setDetailWidth"
         />
       </el-form-item>
-      <span class="form-tip">启用"查看"按钮后，点击行即可弹出详情</span>
-    </el-form>
-
-    <!-- 权限点 -->
-    <el-divider content-position="left">权限控制</el-divider>
-    <el-form label-width="90px"  style="max-width: 520px">
-      <el-form-item label="权限点">
+      <el-form-item>
+        <template #label>
+          <span class="label-with-tip">
+            权限点
+            <el-tooltip content="多选权限点（如 page:create / page:edit），用于按钮级权限控制" placement="top">
+              <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </span>
+        </template>
         <el-select
           :model-value="permissionArray"
           multiple
@@ -221,7 +233,6 @@
         >
           <el-option v-for="p in presetPermissions" :key="p" :label="p" :value="p" />
         </el-select>
-        <span class="form-tip">多选权限点（如 page:create / page:edit），用于按钮级权限控制</span>
       </el-form-item>
     </el-form>
   </div>
@@ -232,6 +243,7 @@ import { ref, computed } from 'vue'
 import {
   Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
   Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+  QuestionFilled,
 } from '@element-plus/icons-vue'
 import type { ViewActionsConfig, ViewActionButton, ViewDetailConfig } from '../ViewDesigner.vue'
 
@@ -543,10 +555,17 @@ function commit(v: ViewActionsConfig) {
   font-size: 14px;
   color: #909399;
 }
-.form-tip {
-  font-size: 14px;
+/* label 文字 + 问号提示图标：flex 垂直居中；align-self:center 在 el-form-item__label（默认 align-items:flex-start）内垂直居中，与右侧控件对齐 */
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  line-height: 1;
+}
+.label-with-tip .tip-icon {
+  margin-left: 4px;
   color: #909399;
-  display: block;
+  cursor: help;
 }
 .muted {
   color: #c0c4cc;

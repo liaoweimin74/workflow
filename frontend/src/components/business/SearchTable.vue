@@ -183,12 +183,16 @@
                   <el-dropdown-menu>
                     <template v-for="btn in dropdownButtons" :key="btn.label">
                       <el-dropdown-item v-if="(!btn.show || btn.show(row)) && !btn.confirm" @click="btn.onClick(row)">
+                        <el-icon v-if="btn.icon" :size="14" style="margin-right: 6px; vertical-align: -2px"><component :is="btn.icon" /></el-icon>
                         {{ btn.label }}
                       </el-dropdown-item>
                       <el-dropdown-item v-else-if="(!btn.show || btn.show(row)) && btn.confirm">
                         <el-popconfirm :title="btn.confirm" @confirm="btn.onClick(row)">
                           <template #reference>
-                            <span>{{ btn.label }}</span>
+                            <span>
+                              <el-icon v-if="btn.icon" :size="14" style="margin-right: 6px; vertical-align: -2px"><component :is="btn.icon" /></el-icon>
+                              {{ btn.label }}
+                            </span>
                           </template>
                         </el-popconfirm>
                       </el-dropdown-item>

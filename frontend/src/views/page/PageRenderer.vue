@@ -312,7 +312,10 @@ function buildFilter(params: Record<string, any>): string | undefined {
 
 /** SearchTable 数据获取：page 为 1-based，转后端 0-based；搜索条件从 params（含外部注入 query）提取 */
 const searchTableFetchApi = async (params: QueryParams): Promise<{ rows: any[]; total: number }> => {
-  const p: Record<string, any> = { page: (params.page || 1) - 1, size: params.size || 20 }
+  // 不分页（pagination.show=false）：请求全部数据（后端 size<=0 跳过 LIMIT），保留排序
+  const p: Record<string, any> = paginationConfig.value.show === false
+    ? { size: -1 }
+    : { page: (params.page || 1) - 1, size: params.size || 20 }
   // 排序状态透传（SearchTable 内部维护，服务器端排序）
   if (params.sort) p.sort = params.sort
   if (params.order) p.order = params.order

@@ -132,7 +132,8 @@ function getIcon(name?: string): any {
 }
 
 // ==================== 搜索字段适配 ====================
-const showSearch = computed(() => props.showSearch === true)
+/** 查询栏显示：显式开启 且 至少配置了一个可查询列（避免空查询栏只有按钮） */
+const showSearch = computed(() => props.showSearch === true && resolvedSearchFields.value.length > 0)
 /** SearchFieldConfig({key,label,matchType}) → SearchField({prop,label,type}) */
 const resolvedSearchFields = computed<SearchField[]>(() =>
   (props.searchFields || []).map((f: any) => ({
@@ -279,7 +280,10 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
     if (v === '' || v === null || v === undefined) continue
     filterConditions.push({ column: field.prop, op: 'like', value: v })
   }
-  const query: Record<string, any> = { page: Math.max(0, params.page - 1), size: params.size }
+  const query: Record<string, any> = props.pagination === false
+    // 不分页：请求全部数据（后端 size<=0 跳过 LIMIT），保留排序
+    ? { size: -1 }
+    : { page: Math.max(0, params.page - 1), size: params.size }
   // 排序状态透传（SearchTable 内部维护，服务器端排序）
   if (params.sort) query.sort = params.sort
   if (params.order) query.order = params.order

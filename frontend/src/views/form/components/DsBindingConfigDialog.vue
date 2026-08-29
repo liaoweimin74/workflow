@@ -5,11 +5,18 @@
         <!-- Tab 1: 数据源 + 筛选 -->
         <el-tab-pane label="数据源" name="binding">
           <el-form label-width="110px" size="default">
-            <el-form-item label="页面内数据源" required>
+            <el-form-item required>
+              <template #label>
+                <span class="label-with-tip">
+                  数据源
+                  <el-tooltip content="数据源在「数据源配置」中绑定；切换后自动加载列定义" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-select v-model="form.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
                 <el-option v-for="ds in formDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
               </el-select>
-              <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
             </el-form-item>
             <el-divider content-position="left">组件级数据筛选</el-divider>
             <el-form-item label="筛选条件">
@@ -46,20 +53,34 @@
         </el-tab-pane>
         <!-- Tab 2: 显示列 -->
         <el-tab-pane label="显示列" name="columns">
+          <!-- 查询栏开关：开启后可配置查询列（QueryColumnsConfig 显示查询勾选），运行时显示查询栏 -->
+          <el-form label-width="100px" size="default">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  显示查询栏
+                  <el-tooltip content="默认不显示；开启后可按下列勾选可查询字段" placement="top">
+                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-switch v-model="tableData.showSearch" />
+            </el-form-item>
+          </el-form>
           <QueryColumnsConfig
             v-if="tableCandidates.length > 0"
             :candidates="tableCandidates"
             :filterable-keys="tableFilterableKeys as any"
             v-model:search-fields="tableData.searchFields as any"
             v-model:columns="tableData.columns"
-            :show-search="false"
+            :show-search="tableData.showSearch"
             v-model:sortable-fields="tableData.sortableFields"
             :sortable-candidates="tableSortableCandidates"
           />
           <el-empty v-else description="请先选择数据源" :image-size="60" />
-          <!-- 分页配置（默认显示分页，20 条/页，可选 [10,20,50]） -->
+          <!-- 分页配置（默认显示分页，20 条/页，可选 [10,20,50]；横向流式布局） -->
           <el-divider content-position="left">分页</el-divider>
-          <el-form label-width="100px" size="default">
+          <div class="pagination-config">
             <el-form-item label="显示分页">
               <el-switch v-model="tableData.pagination" />
             </el-form-item>
@@ -75,12 +96,12 @@
                 default-first-option
                 :reserve-keyword="false"
                 placeholder="选择或输入每页大小"
-                style="width: 100%"
+                style="width: 260px"
               >
                 <el-option v-for="n in [10, 20, 50, 100]" :key="n" :label="n + ' 条'" :value="n" />
               </el-select>
             </el-form-item>
-          </el-form>
+          </div>
         </el-tab-pane>
         <!-- Tab 3: 操作 -->
         <el-tab-pane label="操作" name="actions">
@@ -197,6 +218,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { QuestionFilled } from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
 import QueryColumnsConfig from '@/views/page/components/QueryColumnsConfig.vue'
@@ -307,6 +329,8 @@ async function handleDataSourceChange() {
 const tableCandidates = ref<any[]>([])
 const tableFilterableKeys = ref<Set<string>>(new Set())
 const tableData = reactive({
+  /** 是否显示查询栏（默认 false） */
+  showSearch: false,
   searchFields: [] as { key: string; matchType?: string }[],
   columns: [] as any[],
   /** 组件级可排序字段（受数据源 metadata 上限约束；空=跟随数据源全部可排字段） */
@@ -354,6 +378,7 @@ async function loadTableCandidates() {
 /** 初始化表格配置数据（从 bindingProps 读取） */
 function initTableData() {
   const bp = props.bindingProps || {}
+  tableData.showSearch = bp.showSearch === true
   tableData.searchFields = bp.searchFields || []
   const srcColumns = (bp.columns && bp.columns.length > 0)
     ? bp.columns
@@ -424,6 +449,7 @@ function handleConfirm() {
   }
   // 表格配置
   if (props.tableMode) {
+    result.showSearch = tableData.showSearch
     result.searchFields = [...tableData.searchFields]
     result.columns = tableData.columns.map((c: any) => ({
       prop: c.key ?? c.prop, label: c.label || c.key,
@@ -463,5 +489,27 @@ function handleConfirm() {
   margin-top: 4px;
   font-size: 12px;
   color: #909399;
+}
+/* 分页设置：横向流式布局（放不下自动换行） */
+.pagination-config {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+.pagination-config .el-form-item {
+  margin-bottom: 0;
+}
+/* label 文字 + 问号提示图标：flex 垂直居中；align-self:center 在 el-form-item__label（默认 align-items:flex-start）内垂直居中，与右侧开关对齐 */
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  line-height: 1;
+}
+.label-with-tip .tip-icon {
+  margin-left: 4px;
+  color: #909399;
+  cursor: help;
 }
 </style>

@@ -132,7 +132,8 @@ public class BizDataService {
 
         Map<String, Object> filters = parseFilter(req.getFilter());
         int page = Math.max(req.getPage(), 0);
-        int size = Math.min(Math.max(req.getSize(), 1), 100);
+        // size <= 0 表示不分页取全部（buildSelect 跳过 LIMIT/OFFSET）；正数沿用原钳制上限
+        int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
 
         try {
             BizDataQueryBuilder.SqlAndParams count = BizDataQueryBuilder.buildCount(

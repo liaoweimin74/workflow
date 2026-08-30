@@ -402,9 +402,19 @@ function handleConfirm() {
     result.stretch = tableData.stretch
     result.searchFields = [...tableData.searchFields]
     result.columns = tableData.columns.map((c: any) => ({
-      prop: c.key ?? c.prop, label: c.label || c.key,
-      width: c.width, align: c.align,
-      formatter: c.formatter, fixed: c.fixed,
+      prop: c.key ?? c.prop,
+      label: c.label || c.key,
+      width: c.width,
+      align: c.align,
+      formatter: c.formatter,
+      fixed: c.fixed,
+      ...(c.contentType !== undefined ? { contentType: c.contentType } : {}),
+      ...(c.contentValue !== undefined ? { contentValue: c.contentValue } : {}),
+      ...(c.className !== undefined ? { className: c.className } : {}),
+      ...(c.styleExpr !== undefined ? { styleExpr: c.styleExpr } : {}),
+      ...(c.onCellClick !== undefined ? { onCellClick: c.onCellClick } : {}),
+      ...(c.custom !== undefined ? { custom: c.custom } : {}),
+      ...(c.hidden !== undefined ? { hidden: c.hidden } : {}),
     }))
     result.sortableFields = [...tableData.sortableFields]
     result.pagination = tableData.pagination

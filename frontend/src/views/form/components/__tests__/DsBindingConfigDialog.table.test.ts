@@ -164,4 +164,53 @@ describe('DsBindingConfigDialog — table-mode sortableFields', () => {
     expect(result.pageSizes).toEqual([10, 20, 50])
     wrapper.unmount()
   })
+
+  it('回填已有列时保留高级配置字段（contentType/contentValue/className/styleExpr/onCellClick/custom/hidden）', async () => {
+    mockMetadata()
+    const advanced = {
+      prop: 'name', label: '姓名',
+      contentType: 'template', contentValue: '${name}(${status})',
+      className: 'col-highlight', styleExpr: '$row.status === "PENDING" ? "color:red" : ""',
+      onCellClick: { actions: [{ type: 'message', params: [{ key: 'text', value: '点击' }] }] },
+      custom: true, hidden: false,
+    }
+    const wrapper = mountDialog({ dataSourceId: 'ds1', columns: [advanced] })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.tableData.columns[0].contentType).toBe('template')
+    expect(vm.tableData.columns[0].contentValue).toBe('${name}(${status})')
+    expect(vm.tableData.columns[0].className).toBe('col-highlight')
+    expect(vm.tableData.columns[0].styleExpr).toBe('$row.status === "PENDING" ? "color:red" : ""')
+    expect(vm.tableData.columns[0].onCellClick.actions).toHaveLength(1)
+    expect(vm.tableData.columns[0].custom).toBe(true)
+    expect(vm.tableData.columns[0].hidden).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('确认保存时透传列高级配置字段', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({ dataSourceId: 'ds1', columns: [
+      { prop: 'name', label: '姓名',
+        contentType: 'expression', contentValue: '$row.price * $row.qty',
+        className: 'col-highlight', styleExpr: 'color:blue',
+        onCellClick: { actions: [{ type: 'message', params: [] }] },
+        custom: true, hidden: true },
+    ] })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    ;(wrapper.vm as any).handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    const col = result.columns[0]
+    expect(col.contentType).toBe('expression')
+    expect(col.contentValue).toBe('$row.price * $row.qty')
+    expect(col.className).toBe('col-highlight')
+    expect(col.styleExpr).toBe('color:blue')
+    expect(col.onCellClick.actions).toHaveLength(1)
+    expect(col.custom).toBe(true)
+    expect(col.hidden).toBe(true)
+    wrapper.unmount()
+  })
 })

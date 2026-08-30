@@ -336,12 +336,9 @@ function initTableData() {
     ? bp.columns
     : tableCandidates.value.map((c: any) => ({ prop: c.key, label: c.label || c.key }))
   tableData.columns = srcColumns.map((c: any) => ({
+    ...c,
     key: c.prop ?? c.key,
     label: c.label || c.prop || c.key,
-    width: c.width,
-    align: c.align,
-    formatter: c.formatter,
-    fixed: c.fixed,
   }))
   // 可排序字段：回填已声明配置；未声明（新组件）默认跟随数据源全部可排字段
   tableData.sortableFields = Array.isArray(bp.sortableFields)

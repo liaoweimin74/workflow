@@ -65,7 +65,7 @@
 
 ## 6. P4：重试、监控与优化
 
-- [ ] 6.1 优化重试表索引（message_id + status + next_retry_at 联合索引）
+- [x] 6.1 优化重试表索引（message_id + status + next_retry_at 联合索引）
 - [ ] 6.2 实现发送记录统计查询接口（发送量趋势、成功率、渠道分布）
 - [ ] 6.3 前端统计图表组件（ECharts 或 Element Plus 图表）
 - [ ] 6.4 性能优化：消息列表查询索引优化、未读计数缓存（Redis 可选）

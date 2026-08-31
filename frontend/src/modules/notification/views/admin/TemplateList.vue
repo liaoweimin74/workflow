@@ -128,7 +128,9 @@ const formConfig = computed<FormConfig>(() => {
               },
               {
                 type: 'switch', field: 'isSystem', title: '系统模板', value: false,
-                props: structural(),
+                // 仅编辑系统模板时显示（锁定）；新建/编辑普通模板隐藏，用户不能创建或切换为系统模板
+                hidden: !editingIsSystem.value,
+                props: { disabled: true },
               },
             ],
           },

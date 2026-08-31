@@ -26,14 +26,15 @@ const props = defineProps<{
   formCreateInject?: any
 }>()
 
-/** 将 ${变量} 转为 [变量] 展示，模拟渲染效果 */
+/** 将 ${变量} 转为 [变量] 展示，模拟渲染效果（支持中文变量名） */
 function previewText(text?: string) {
   if (!text) return ''
-  return text.replace(/\$\{(\w+)\}/g, '[$1]')
+  return text.replace(/\$\{([^}]+)\}/g, '[$1]')
 }
 
 const displayText = computed(() => {
-  const value = props.formCreateInject?.api?.form?.[props.source]
+  // form-create 注入对象：{ api, form, ... }，表单值需经 api.getValue(field) 读取
+  const value = props.formCreateInject?.api?.getValue?.(props.source)
   if (value === undefined || value === null || value === '') {
     return props.placeholder || '（未填写）'
   }

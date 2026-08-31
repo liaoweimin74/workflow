@@ -63,7 +63,7 @@ const actionButtons: ActionButton[] = [
         await testChannel(row.id)
         ElMessage.success('渠道测试通过')
       } catch {
-        ElMessage.error('渠道测试失败')
+        // http 拦截器已弹出错误消息（渠道未配置/测试失败）
       }
     },
   },

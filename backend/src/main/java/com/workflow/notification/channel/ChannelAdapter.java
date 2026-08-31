@@ -26,4 +26,18 @@ public interface ChannelAdapter {
      * 渠道是否可用
      */
     boolean isAvailable();
+
+    /**
+     * 测试渠道连通性
+     *
+     * <p>默认实现基于 {@link #isAvailable()} 判断配置是否就绪；
+     * 需要真实连通性探测的渠道可覆写此方法（如获取 token、心跳检测）。
+     *
+     * @return 测试结果，success=true 表示渠道可用
+     */
+    default ChannelDeliveryResult test() {
+        return isAvailable()
+                ? ChannelDeliveryResult.success("渠道配置就绪")
+                : ChannelDeliveryResult.failure("渠道未配置或配置不完整");
+    }
 }

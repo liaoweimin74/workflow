@@ -1,7 +1,7 @@
 /**
  * 用户端消息 API
  */
-import http from '@/api/http'
+import http from '@/utils/http'
 import type { Message, PageResult } from '../types'
 
 /** 获取消息列表 */

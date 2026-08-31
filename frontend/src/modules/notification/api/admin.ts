@@ -1,7 +1,7 @@
 /**
  * 管理端 API
  */
-import http from '@/api/http'
+import http from '@/utils/http'
 import type { Message, PageResult } from '../types'
 
 /** 模板列表 */

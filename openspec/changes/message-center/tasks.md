@@ -61,13 +61,13 @@
 - [x] 5.6 实现渠道测试连通性接口（POST /channels/{id}/test）
 - [x] 5.7 实现内部 API：POST /api/v1/internal/notifications/send（服务间调用）
 - [ ] 5.8 权限控制：用户端仅操作自己的消息、管理端需 ADMIN/NOTIFICATION_MANAGER 角色、内部 API 限服务间
-- [ ] 5.9 各渠道适配器单元测试（Mock 外部 API）
+- [x] 5.9 各渠道适配器单元测试（Mock 外部 API）
 
 ## 6. P4：重试、监控与优化
 
 - [x] 6.1 优化重试表索引（message_id + status + next_retry_at 联合索引）
-- [ ] 6.2 实现发送记录统计查询接口（发送量趋势、成功率、渠道分布）
-- [ ] 6.3 前端统计图表组件（ECharts 或 Element Plus 图表）
+- [x] 6.2 实现发送记录统计查询接口（发送量趋势、成功率、渠道分布）
+- [x] 6.3 前端统计图表组件（ECharts 或 Element Plus 图表）
 - [ ] 6.4 性能优化：消息列表查询索引优化、未读计数缓存（Redis 可选）
 - [ ] 6.5 端到端集成测试：消息发送→接收→已读→跳转完整链路
 - [x] 6.6 更新 PRD 3.7 通知章节，标注已由新模块替代

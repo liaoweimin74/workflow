@@ -2,9 +2,9 @@
 
 ## Purpose
 
-页面附属选项/定义数据延迟加载策略：将非首屏必需的选项数据（组织树、角色列表）与定义数据（VIEW 数据源定义）从"页面挂载即取"改为"首次使用时才取"，降低首屏请求数并保持功能完整。
+页面附属选项/定义数据延迟加载策略：将非首屏必需的选项数据（组织树、角色列表、分配菜单树、已发布页面列表）与定义数据（VIEW 数据源定义）从"页面挂载即取"改为"首次使用时才取"，并消除菜单管理页同页重复挂载请求，降低首屏请求数并保持功能完整。
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: 搜索树选项支持按需加载
 
@@ -74,3 +74,55 @@ VIEW 类型页面渲染时 SHALL 仅挂载加载数据源元数据（metadata，
 - **WHEN** 用户在 VIEW 页点击新增/编辑/查看
 - **THEN** 系统 SHALL 先加载数据源定义（若未加载）
 - **AND** 依据定义（formKey）渲染对应表单形态后再打开
+
+### Requirement: 表单打开前回调
+
+FormConfig SHALL 支持可选的 `onFormOpen` 回调：SearchTable 打开新增/编辑表单弹窗前 SHALL 等待该回调完成；未配置 `onFormOpen` 的表单 SHALL 保持既有行为，向后兼容。
+
+#### Scenario: 表单打开前触发回调
+
+- **WHEN** SearchTable 打开新增或编辑表单
+- **AND** formConfig 配置了 `onFormOpen`
+- **THEN** 系统 SHALL 在弹窗打开前执行并等待 `onFormOpen` 完成
+
+#### Scenario: 未配置 onFormOpen 保持原行为
+
+- **WHEN** formConfig 未配置 `onFormOpen`
+- **THEN** 打开表单 SHALL 不执行任何回调且行为不变
+
+### Requirement: 角色管理页菜单树延迟加载
+
+角色管理页面 SHALL 将分配菜单弹窗所需的菜单树从挂载预取改为按需加载：首屏 SHALL 不发出 `/menus/tree` 请求；首次点击"分配菜单"时 SHALL 在弹窗打开前加载菜单树，同一页面生命周期内 SHALL 只加载一次。
+
+#### Scenario: 首屏不请求菜单树
+
+- **WHEN** 打开角色管理页面
+- **THEN** 系统 SHALL 不发起 /menus/tree 请求
+
+#### Scenario: 首次分配菜单时加载一次
+
+- **WHEN** 用户首次点击某行的"分配菜单"
+- **THEN** 系统 SHALL 在分配菜单弹窗打开前加载菜单树并展示
+- **AND** 后续再次点击分配 SHALL 复用已加载菜单树，不重复请求
+
+### Requirement: 菜单管理页挂载收敛与关联页面选项延迟加载
+
+菜单管理页面挂载时 SHALL 只发出一次 `/menus/tree` 请求（表格树数据、表单上级菜单选项与编辑回填共用同一份树数据，消除挂载双重请求）；已发布页面列表（关联页面下拉选项）SHALL 不在挂载时预取，SHALL 延迟到首次打开表单时加载，且同一页面生命周期内 SHALL 只加载一次。
+
+#### Scenario: 首屏菜单树仅请求一次
+
+- **WHEN** 打开菜单管理页面
+- **THEN** 系统 SHALL 仅发起一次 /menus/tree 请求
+- **AND** 表格树数据、表单上级菜单选项、编辑回填使用同一份数据
+
+#### Scenario: 首屏不请求已发布页面列表
+
+- **WHEN** 打开菜单管理页面
+- **THEN** 系统 SHALL 不发起已发布页面列表请求（/pages）
+
+#### Scenario: 首次打开表单时加载关联页面选项
+
+- **WHEN** 用户首次打开新增/编辑/新增子菜单表单
+- **THEN** 系统 SHALL 在表单打开前加载已发布页面列表
+- **AND** "关联页面"下拉展示选项
+- **AND** 后续再次打开表单 SHALL 复用已加载数据，不重复请求

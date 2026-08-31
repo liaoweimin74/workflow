@@ -4,7 +4,7 @@
 
 **Goal:** 减少前端页面加载时的冗余 API 请求（definition×2、data×2、预取过载），通过 props 下传、补发修正、HTTP 去重+短 TTL 缓存、懒加载实现纯前端提速。
 
-**Architecture:** 三层改动——①传输层（utils/http.ts）增加 GET in-flight 去重与显式声明的短 TTL 缓存兜底；②渲染链路（PageRenderer → PageRendererPage）definition 由 props 下传消除重复加载，PageDataTable 补发逻辑收紧为单次；③数据获取时机（用户管理页 orgs 树懒加载、VIEW 页 ds 定义按需获取、roles 缓存复用）。
+**Architecture:** 三层改动——①传输层（utils/http.ts）增加 GET in-flight 去重与显式声明的短 TTL 缓存兜底；②渲染链路（PageRenderer → PageRendererPage）definition 由 props 下传消除重复加载，PageDataTable 补发逻辑收紧为单次；③数据获取时机（用户管理页 orgs 树懒加载、VIEW 页 ds 定义按需获取、roles 缓存复用、角色管理页分配菜单树懒加载、菜单管理页挂载树请求收敛 + 关联页面选项懒加载）。
 
 **Tech Stack:** Vue 3 + TypeScript + Element Plus + axios + vitest
 
@@ -14,7 +14,7 @@
 - TDD（RED → GREEN → REFACTOR）：每个功能点先写失败测试再实现
 - 类型安全：禁止 `as any`、`@ts-ignore`、`@ts-expect-error`
 - http 缓存仅 GET + 显式 `cache: true` 声明；TTL 缺省 30s；内存级存储（刷新即失效）
-- 向后兼容：PageRendererPage 无 `definition` props 回退自行加载；SearchField `onExpand` 可选字段
+- 向后兼容：PageRendererPage 无 `definition` props 回退自行加载；SearchField `onExpand` 可选字段；FormConfig `onFormOpen` 可选字段
 - 行为约束遵循 openspec specs：http-request-caching / deferred-options-loading / query-page-renderer / page-data-table
 - 前端工作目录：`frontend/`（所有路径相对该目录，如 `frontend/src/utils/http.ts`）
 
@@ -251,14 +251,16 @@ git commit -m "feat(page): VIEW 数据源定义按需加载（ensureBoundDataSou
 ### Task 5: 选项延迟加载（deferred-options-loading）
 
 **Files:**
-- Modify: `frontend/src/components/business/types.ts`（SearchField 类型）
-- Modify: `frontend/src/components/business/SearchTable.vue`（tree-select @visible-change）
+- Modify: `frontend/src/components/business/types.ts`（SearchField / FormConfig 类型）
+- Modify: `frontend/src/components/business/SearchTable.vue`（tree-select @visible-change；openFormDialog 前置 onFormOpen）
 - Modify: `frontend/src/views/system/user/UserPage.vue`（ensureOrgTree + roles 缓存声明）
+- Modify: `frontend/src/views/system/role/RolePage.vue`（分配菜单树懒加载）
+- Modify: `frontend/src/views/system/menu/MenuPage.vue`（挂载收敛 + 关联页面选项懒加载）
 - Test (create): `frontend/src/components/business/__tests__/onExpand.test.ts` 或并入现有 SearchTable 测试
 
 **Interfaces:**
 - Consumes: Task 1 缓存（getOrgTree/getRoleList 已声明）
-- Produces: `SearchField.onExpand?: () => void | Promise<void>`；`UserPage.ensureOrgTree()`（带 `_treeLoaded` 标志）；orgs 字段配置 `onExpand: ensureOrgTree`
+- Produces: `SearchField.onExpand?: () => void | Promise<void>`；`FormConfig.onFormOpen?: () => void | Promise<void>`；`UserPage.ensureOrgTree()`（带 `_treeLoaded` 标志）；orgs 字段配置 `onExpand: ensureOrgTree`；`RolePage.ensureMenuTree()`（已加载标志）；`MenuPage.ensurePublishedPages()`（已加载标志）
 
 - [ ] **Step 1: 写失败测试（SearchTable onExpand 触发）**
 
@@ -312,6 +314,63 @@ git add frontend/src/components/business frontend/src/views/system/user
 git commit -m "feat(user): 组织树懒加载与角色列表缓存复用（deferred-options-loading）"
 ```
 
+- [ ] **Step 6: 写失败测试（onFormOpen + RolePage/MenuPage 场景）**
+
+```ts
+// SearchTable 测试：配置 formConfig.onFormOpen → 打开新增/编辑表单前 onFormOpen 被 await 恰一次；未配置 → 行为不变
+// RolePage 测试：挂载后无 /menus/tree 请求；首次点击"分配菜单" → 弹窗打开前加载菜单树恰一次；再次点击复用
+// MenuPage 测试：挂载后 /menus/tree 恰 1 次（现行为 2 次，等待失败）；挂载后无 /pages 请求；首次打开表单 → ensurePublishedPages 恰一次
+```
+
+- [ ] **Step 7: 运行确认失败**
+
+Run: `npx vitest run src/components/business src/views/system`
+Expected: FAIL（onFormOpen 未触发；RolePage/MenuPage 挂载仍预取）
+
+- [ ] **Step 8: 实现 onFormOpen 钩子 + RolePage/MenuPage 改造**
+
+```ts
+// types.ts FormConfig 新增可选字段
+onFormOpen?: () => void | Promise<void>
+```
+```ts
+// SearchTable.vue openFormDialog 开头（打开弹窗前）
+await props.formConfig?.onFormOpen?.()
+```
+```ts
+// RolePage.vue：删除 onMounted 预取；handleAssignMenu 改造
+let _menuTreeLoaded = false
+const ensureMenuTree = async () => {
+  if (_menuTreeLoaded) return
+  _menuTreeLoaded = true
+  menuTree.value = (await getMenuTree()).data
+}
+async function handleAssignMenu(row: RoleVO) {
+  currentRoleId.value = row.id
+  await ensureMenuTree()
+  checkedMenuKeys.value = (await getRoleMenus(row.id)).data || []
+  menuDialogVisible.value = true
+}
+```
+```ts
+// MenuPage.vue：删除整个 onMounted（fetchApi 已维护 list.value，消除挂载双请求）
+let _pagesLoaded = false
+const ensurePublishedPages = async () => {
+  if (_pagesLoaded) return
+  _pagesLoaded = true
+  await loadPublishedPages()
+}
+// formConfig 返回对象中追加：onFormOpen: ensurePublishedPages
+```
+
+- [ ] **Step 9: 运行测试通过 + 提交**
+
+Run: `npx vitest run src/components/business src/views/system`
+```
+git add frontend/src/components/business frontend/src/views/system
+git commit -m "feat(system): 角色/菜单管理页选项延迟加载与挂载收敛（deferred-options-loading）"
+```
+
 ---
 
 ### Task 6: 回归验证
@@ -333,3 +392,5 @@ Expected: 无类型错误、构建成功
 - 打开 /page/page2 → Network 面板确认 definition 1 次、data 1 次
 - 打开 /page/emp_view_e2e → 首屏无 /data-sources/{id}，点"查看"后才出现
 - 打开用户管理页 → 首屏无 /orgs/tree，展开搜索树才出现；roles 仅 1 次且切页后命中缓存
+- 打开角色管理页 → 首屏无 /menus/tree，点"分配菜单"才出现且仅 1 次
+- 打开菜单管理页 → 首屏 /menus/tree 仅 1 次、无 /pages 请求；打开表单才出现 /pages 请求

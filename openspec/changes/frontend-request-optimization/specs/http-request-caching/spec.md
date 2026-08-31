@@ -4,7 +4,7 @@
 
 HTTP 传输层基础设施：对 GET 请求提供并发去重与显式声明的短 TTL 响应缓存，减少页面加载期的重复请求，兜底同 tick 重复触发。
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: GET 请求并发去重
 

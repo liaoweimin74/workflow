@@ -64,10 +64,12 @@
 | D3 http 去重+TTL | 顯式 cache:true、默認 30s、內存級 | http-request-caching 3 requirements 全覆蓋 | 無 |
 | D4 orgs 懶加載 | onExpand + ensureOrgTree 防並發 | deferred-options-loading「搜索树选项按需加载」+「组织树延迟加载」 | 無 |
 | D6 VIEW ds 定義懶加載 | ensureBoundDataSource 打開表單才取 | query-page-renderer ADDED + deferred-options-loading「VIEW 页数据源定义按需加载」 | 無 |
+| D7 角色分配菜單樹懶加載 | handleAssignMenu 內 ensureMenuTree 單次加載 | deferred-options-loading「角色管理页菜单树延迟加载」 | 無 |
+| D8 菜單管理掛載收斂 + onFormOpen | 刪 onMounted、fetchApi 統一維護樹、FormConfig.onFormOpen 前置 await | deferred-options-loading「表单打开前回调」+「菜单管理页挂载收敛与关联页面选项延迟加载」 | 無 |
 
 **漂移警告**（非阻塞）：
 
-- 無（design D1-D6 全部對應至 specs）
+- 無（design D1-D8 全部對應至 specs）
 
 ---
 

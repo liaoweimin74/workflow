@@ -30,8 +30,12 @@
 - [ ] 5.3 UserPage.vue：orgs 搜索字段配置 onExpand；抽取共享 `ensureOrgTree()`（已加载/加载中标志防并发重复拉取）；新增/编辑表单打开时若树未加载则补拉
 - [ ] 5.4 roles 请求（`getRoleList({page:1,size:999})`）声明 `cache: true`（跨页面复用，配合 1.4）
 - [ ] 5.5 补充测试：tree-select 首次展开触发 onExpand 恰一次；数据非空不重复触发；未配置 onExpand 兼容原行为
+- [ ] 5.6 FormConfig 类型（components/business/types.ts）新增可选 `onFormOpen?: () => void | Promise<void>`；SearchTable.vue `openFormDialog` 打开弹窗前置 `await` 调用；未配置行为不变
+- [ ] 5.7 RolePage.vue：移除 `onMounted` 的 `getMenuTree` 预取；`handleAssignMenu` 首次点击时加载菜单树（`ensureMenuTree` 已加载标志，防并发重复），弹窗打开前就绪
+- [ ] 5.8 MenuPage.vue：删除整个 `onMounted`（消除 `getMenuTree` 与 fetchApi 的挂载双重请求——fetchApi 已维护 `list.value`；移除 `loadPublishedPages` 预取）；`formConfig` 配置 `onFormOpen: ensurePublishedPages`（已加载标志）
+- [ ] 5.9 补充测试：onFormOpen 配置时表单打开前被 await、未配置兼容；RolePage 首屏无 /menus/tree、首次分配加载恰一次；MenuPage 首屏 /menus/tree 恰 1 次、首屏无 /pages 请求、首次打开表单触发 ensurePublishedPages 恰一次
 
 ## 6. 回归验证
 
-- [ ] 6.1 运行前端相关测试：PageRendererPage.integration.test.ts、PageRendererPage.container.test.ts 及新增用例全部通过
+- [ ] 6.1 运行前端相关测试：PageRendererPage.integration.test.ts、PageRendererPage.container.test.ts、SearchTable onExpand/onFormOpen 用例及新增用例全部通过
 - [ ] 6.2 运行 typecheck / lint / 构建（如 vue-tsc && vite build），确认无类型与构建错误

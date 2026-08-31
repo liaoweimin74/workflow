@@ -1,6 +1,6 @@
 ## Why
 
-前端页面加载存在冗余 API 请求：PAGE 页 definition 请求 ×2（渲染宿主与子组件各取一次）、page-table 首次 data 请求 ×2（挂载请求与绑定就绪补发叠加）、用户管理页 orgs/roles 无差别预取、VIEW 页数据源定义过早加载。传输层无去重与缓存机制兜底。预期收益：page2 5→3 请求、emp_view_e2e 首屏 4→3、用户管理首屏 3→2，加快页面首屏速度。
+前端页面加载存在冗余 API 请求：PAGE 页 definition 请求 ×2（渲染宿主与子组件各取一次）、page-table 首次 data 请求 ×2（挂载请求与绑定就绪补发叠加）、用户管理页 orgs/roles 无差别预取、角色管理页菜单树挂载预取（仅分配菜单弹窗使用）、菜单管理页挂载树请求 ×2 且已发布页面列表无差别预取、VIEW 页数据源定义过早加载。传输层无去重与缓存机制兜底。预期收益：page2 5→3 请求、emp_view_e2e 首屏 4→3、用户管理首屏 3→2、角色管理首屏 2→1、菜单管理首屏 3→1，加快页面首屏速度。
 
 ## What Changes
 
@@ -22,16 +22,16 @@
 - Impact: non-breaking；跨页面复用稳定数据，兜住未来重复触发
 
 **附属选项/定义数据延迟加载（新能力 deferred-options-loading）**
-- 新增：SearchField.onExpand 可选回调，tree-select 首次展开才拉组织树；VIEW 页 ensureBoundDataSource 打开表单才取 ds 定义；roles 保留首屏但叠加缓存复用
-- From: 用户管理页 onMounted 预取 orgs/roles；VIEW 页挂载即取 ds 定义
-- To: orgs 展开搜索树才拉、ds 定义打开表单才取、roles 缓存复用
-- Impact: non-breaking；首屏请求数减少
+- 新增：SearchField.onExpand 可选回调，tree-select 首次展开才拉组织树；FormConfig.onFormOpen 可选回调，表单打开前才拉选项数据；VIEW 页 ensureBoundDataSource 打开表单才取 ds 定义；roles 保留首屏但叠加缓存复用
+- From: 用户管理页 onMounted 预取 orgs/roles；角色管理页 onMounted 预取菜单树（仅分配菜单弹窗使用）；菜单管理页挂载 getMenuTree ×2（onMounted 与 fetchApi 各一次）且预取已发布页面列表（仅表单关联页面下拉使用）；VIEW 页挂载即取 ds 定义
+- To: orgs 展开搜索树才拉；角色菜单树首次点"分配菜单"才拉；菜单管理挂载树请求收敛为 1 次（fetchApi 统一维护树数据）、已发布页面首次打开表单才拉；ds 定义打开表单才取；roles 缓存复用
+- Impact: non-breaking；首屏请求数减少（角色管理 -1、菜单管理 -2）
 
 ## Capabilities
 
 ### New Capabilities
 - `http-request-caching`: HTTP GET 请求 in-flight 去重与短 TTL 响应缓存（传输层基础设施）
-- `deferred-options-loading`: 页面附属选项/定义数据延迟加载（组织树懒加载、VIEW 数据源定义按需获取、角色列表缓存复用）
+- `deferred-options-loading`: 页面附属选项/定义数据延迟加载（组织树懒加载、分配菜单树懒加载、菜单管理挂载收敛与关联页面选项懒加载、VIEW 数据源定义按需获取、角色列表缓存复用）
 
 ### Modified Capabilities
 - `query-page-renderer`: PAGE 页面 definition 加载从"宿主与子组件各取一次"改为"宿主下传单次加载"；VIEW 分支数据源定义改为按需获取
@@ -39,7 +39,7 @@
 
 ## Impact
 
-- 前端文件：utils/http.ts、components/business/{types,SearchTable}.vue、views/page/PageRenderer.vue、views/page/PageRendererPage.vue、views/page/components/PageDataTable.vue、views/system/user/UserPage.vue
+- 前端文件：utils/http.ts、components/business/{types,SearchTable}.vue、views/page/PageRenderer.vue、views/page/PageRendererPage.vue、views/page/components/PageDataTable.vue、views/system/user/UserPage.vue、views/system/role/RolePage.vue、views/system/menu/MenuPage.vue
 - 后端：无改动
-- 测试：PageRendererPage.integration.test.ts / container.test.ts 回归；新增 http 去重、data 单次加载、onExpand 触发用例
+- 测试：PageRendererPage.integration.test.ts / container.test.ts 回归；新增 http 去重、data 单次加载、onExpand/onFormOpen 触发用例
 - 依赖：无新增

@@ -94,9 +94,9 @@ export const dataSourceApi = {
 
   // ==================== 统一数据访问（经 DataSourceAdapter SPI，对齐后端六端点） ====================
 
-  /** 数据源元数据：列定义 + 可写标记（设计器切换数据源刷新列用） */
+  /** 数据源元数据：列定义 + 可写标记（设计器切换数据源刷新列用；稳定数据启用 30s 缓存） */
   getMetadata(id: string): Promise<R<DataSourceMetadataDTO>> {
-    return http.get(`/v1/data-sources/${id}/metadata`)
+    return http.get(`/v1/data-sources/${id}/metadata`, { cache: true })
   },
 
   /** 数据源列表分页查询 */

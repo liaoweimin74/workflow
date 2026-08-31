@@ -94,9 +94,9 @@ export const pageApi = {
     return http.get(`/v1/pages/${id}`)
   },
 
-  /** 按 key 获取页面定义（渲染默认取已发布；preview=true 取最新 DRAFT 定义） */
+  /** 按 key 获取页面定义（渲染默认取已发布；preview=true 取最新 DRAFT 定义。已发布定义启用 30s 缓存） */
   getPageByKey(key: string, preview: boolean = false): Promise<R<PageDefinitionDetailDTO>> {
-    return http.get(`/v1/pages/${key}/definition`, { params: { preview } })
+    return http.get(`/v1/pages/${key}/definition`, { params: { preview }, cache: !preview })
   },
 
   /** 更新页面定义 */

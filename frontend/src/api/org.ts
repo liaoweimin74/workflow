@@ -3,7 +3,7 @@ import type { R } from '@/types/common'
 import type { TreeNode, OrgCreateForm, OrgUpdateForm } from '@/types/org'
 
 export function getOrgTree() {
-  return http.get<any, R<TreeNode[]>>('/orgs/tree')
+  return http.get<any, R<TreeNode[]>>('/orgs/tree', { cache: true })
 }
 
 export function createOrg(data: OrgCreateForm) {

@@ -3,7 +3,7 @@ import type { R } from '@/types/common'
 import type { RoleVO, RoleCreateForm, RoleUpdateForm, RoleQueryParams } from '@/types/role'
 
 export function getRoleList(params: RoleQueryParams) {
-  return http.get<any, R<{ rows: RoleVO[]; total: number; page: number; size: number }>>('/roles', { params })
+  return http.get<any, R<{ rows: RoleVO[]; total: number; page: number; size: number }>>('/roles', { params, cache: true })
 }
 
 export function createRole(data: RoleCreateForm) {

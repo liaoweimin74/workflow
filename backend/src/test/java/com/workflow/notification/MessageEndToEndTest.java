@@ -5,6 +5,7 @@ import com.workflow.notification.model.*;
 import com.workflow.notification.store.MessageService;
 import com.workflow.notification.dispatch.MessageEvent;
 import com.workflow.notification.sse.SseEmitterManager;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,6 +34,9 @@ class MessageEndToEndTest {
 
     @Autowired
     private SseEmitterManager sseManager;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void full_flow_send_read_unread() {
@@ -64,6 +68,14 @@ class MessageEndToEndTest {
 
         // 5. 标记已读
         messageService.markAsRead(sent.getId(), 1000L);
+        // 清空持久化上下文：JPQL bulk update 不更新一级缓存实体，避免读到旧状态
+        entityManager.clear();
+        // 验证已读：按 messageId 标记后，该消息在列表中状态变为 SENT（已读）
+        PageResult<Message> readList = messageService.listByUserId(1000L, 0, 10, null, null, null, null, null);
+        Message marked = readList.getRows().stream()
+                .filter(m -> m.getId().equals(sent.getId()))
+                .findFirst().orElseThrow(() -> new AssertionError("标记已读后消息应仍在列表中"));
+        assertThat(marked.getStatus()).isEqualTo(MessageStatus.SENT);
 
         // 6. 删除消息
         messageService.delete(sent.getId(), 1000L);

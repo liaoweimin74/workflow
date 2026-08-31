@@ -1,45 +1,83 @@
 <template>
   <el-badge :value="store.unreadCount" :hidden="!store.hasUnread" :max="99" class="notification-bell">
-    <el-popover placement="bottom-end" :width="360" trigger="click">
+    <el-popover placement="bottom-end" :width="380" trigger="click" @show="handleShow">
       <template #reference>
         <el-button :icon="Bell" circle />
       </template>
       <div class="bell-panel">
         <div class="bell-header">
-          <span>消息通知</span>
-          <el-button v-if="store.hasUnread" type="primary" link @click="handleReadAll">全部已读</el-button>
+          <span class="bell-title">消息通知</span>
+          <el-tooltip :content="`只显示最新${MAX_LIST_SIZE}条消息，更多消息到消息中心查看`" placement="top">
+            <el-icon class="bell-hint" :size="15"><WarningFilled /></el-icon>
+          </el-tooltip>
         </div>
-        <el-divider style="margin: 8px 0" />
-        <div v-if="recentMessages.length === 0" class="bell-empty">暂无消息</div>
-        <div v-else class="bell-list">
-          <div v-for="msg in recentMessages" :key="msg.id" class="bell-item" @click="handleClick(msg)">
-            <div class="bell-item-title">{{ msg.title }}</div>
-            <div class="bell-item-time">{{ formatTime(msg.createdAt) }}</div>
-          </div>
-        </div>
+        <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+          <el-tab-pane label="未读" name="unread">
+            <div v-loading="loading" class="bell-list-wrap">
+              <div v-if="unreadList.length === 0" class="bell-empty">暂无未读消息</div>
+              <div v-else class="bell-list">
+                <div v-for="msg in unreadList" :key="msg.id" class="bell-item" @click="handleClick(msg)">
+                  <div class="bell-item-title">{{ msg.title }}</div>
+                  <div class="bell-item-time">{{ formatTime(msg.createdAt) }}</div>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+          <el-tab-pane label="已读" name="read">
+            <div v-loading="loading" class="bell-list-wrap">
+              <div v-if="readList.length === 0" class="bell-empty">暂无已读消息</div>
+              <div v-else class="bell-list">
+                <div v-for="msg in readList" :key="msg.id" class="bell-item" @click="handleClick(msg)">
+                  <div class="bell-item-title">{{ msg.title }}</div>
+                  <div class="bell-item-time">{{ formatTime(msg.createdAt) }}</div>
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
         <el-divider style="margin: 8px 0" />
         <div class="bell-footer">
+          <el-button v-if="activeTab === 'unread' && unreadList.length > 0" type="primary" link @click="handleReadAll">
+            全部已读
+          </el-button>
           <el-button type="primary" link @click="goToCenter">查看全部</el-button>
         </div>
       </div>
     </el-popover>
   </el-badge>
+
+  <MessageDetailDrawer
+    v-model="detailVisible"
+    :message-id="detailId"
+    @read="handleDrawerRead"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bell } from '@element-plus/icons-vue'
+import { Bell, WarningFilled } from '@element-plus/icons-vue'
 import { useNotificationStore } from '../stores/notification'
-import type { Message } from '../types'
+import MessageDetailDrawer from './MessageDetailDrawer.vue'
+import { getNotifications } from '../api/notification'
+import type { Message, PageResult } from '../types'
 
 const store = useNotificationStore()
 const router = useRouter()
 
-const recentMessages = computed(() => store.messages.slice(0, 5))
+/** 当前页签：unread=未读，read=已读 */
+const activeTab = ref<'unread' | 'read'>('unread')
+/** 小窗口每个页签最多展示的消息数 */
+const MAX_LIST_SIZE = 50
+const unreadList = ref<Message[]>([])
+const readList = ref<Message[]>([])
+const loading = ref(false)
+
+/** 详情抽屉 */
+const detailVisible = ref(false)
+const detailId = ref<number | null>(null)
 
 onMounted(() => {
-  store.fetchMessages(0)
   store.fetchUnreadCount()
   store.connectSSE()
 })
@@ -47,6 +85,32 @@ onMounted(() => {
 onUnmounted(() => {
   store.disconnectSSE()
 })
+
+/** popover 打开：拉当前页签列表 */
+function handleShow() {
+  loadList(activeTab.value === 'unread')
+}
+
+/** 切换页签 */
+function handleTabChange() {
+  loadList(activeTab.value === 'unread')
+}
+
+/** 按已读状态拉取最近消息 */
+async function loadList(unread: boolean) {
+  loading.value = true
+  try {
+    const res = await getNotifications({ page: 0, size: MAX_LIST_SIZE, unread })
+    const rows = (res.data as PageResult<Message>).rows || []
+    if (unread) {
+      unreadList.value = rows
+    } else {
+      readList.value = rows
+    }
+  } finally {
+    loading.value = false
+  }
+}
 
 function formatTime(time: string) {
   const date = new Date(time)
@@ -61,21 +125,22 @@ function formatTime(time: string) {
   return `${days}天前`
 }
 
-async function handleClick(msg: Message) {
-  await store.readMessage(msg.id)
-  // 根据 linkJson 跳转
-  if (msg.linkJson) {
-    const link = msg.linkJson as { type?: string; url?: string }
-    if (link.type === 'WORKFLOW_INSTANCE' && link.url) {
-      router.push(link.url)
-    } else if (link.url) {
-      router.push(link.url)
-    }
-  }
+/** 点击消息：以抽屉打开详情（未读自动已读由抽屉处理） */
+function handleClick(msg: Message) {
+  detailId.value = msg.id
+  detailVisible.value = true
 }
 
-function handleReadAll() {
-  store.readAllMessages()
+/** 抽屉内消息从未读变为已读：刷新角标与当前列表 */
+async function handleDrawerRead() {
+  store.fetchUnreadCount()
+  await loadList(activeTab.value === 'unread')
+}
+
+async function handleReadAll() {
+  await store.readAllMessages()
+  await loadList('unread')
+  await loadList('read')
 }
 
 function goToCenter() {
@@ -87,11 +152,9 @@ function goToCenter() {
 .bell-panel {
   padding: 0;
 }
-.bell-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 600;
+.bell-list-wrap {
+  min-height: 60px;
+  max-height: 300px;
 }
 .bell-empty {
   text-align: center;
@@ -99,7 +162,7 @@ function goToCenter() {
   padding: 20px 0;
 }
 .bell-list {
-  max-height: 300px;
+  max-height: 260px;
   overflow-y: auto;
 }
 .bell-item {
@@ -123,6 +186,8 @@ function goToCenter() {
   margin-top: 4px;
 }
 .bell-footer {
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 </style>

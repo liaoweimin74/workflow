@@ -139,8 +139,8 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     @Transactional
-    public void markAsRead(Long id, Long userId) {
-        int updated = recipientRepository.markAsRead(id, userId, LocalDateTime.now());
+    public void markAsRead(Long messageId, Long userId) {
+        int updated = recipientRepository.markAsRead(messageId, userId, LocalDateTime.now());
         if (updated == 0) {
             throw new BusinessException("消息不存在或已读");
         }

@@ -38,7 +38,7 @@ class MessageEndToEndTest {
     void full_flow_send_read_unread() {
         // 1. 创建消息
         Message message = new Message();
-        message.setTenantId(1L);
+        message.setTenantId("default");
         message.setTemplateCode("TEST_FLOW");
         message.setSenderId(100L);
         message.setSenderType("SYSTEM");

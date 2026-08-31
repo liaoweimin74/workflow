@@ -60,14 +60,14 @@ public class SubscriptionService {
     /**
      * 获取用户订阅偏好
      */
-    public List<UserSubscription> getUserPreferences(Long tenantId, Long userId) {
+    public List<UserSubscription> getUserPreferences(String tenantId, Long userId) {
         return userSubscriptionRepository.findByTenantIdAndUserId(tenantId, userId);
     }
 
     /**
      * 更新用户订阅偏好
      */
-    public void updatePreference(Long tenantId, Long userId, ChannelType channel, boolean subscribed) {
+    public void updatePreference(String tenantId, Long userId, ChannelType channel, boolean subscribed) {
         UserSubscription existing = userSubscriptionRepository
                 .findByTenantIdAndUserIdAndChannel(tenantId, userId, channel);
 

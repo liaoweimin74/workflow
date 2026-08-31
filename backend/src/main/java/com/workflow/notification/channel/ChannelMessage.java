@@ -8,7 +8,7 @@ import java.util.Map;
 public class ChannelMessage {
 
     private Long messageId;
-    private Long tenantId;
+    private String tenantId;
     private String title;
     private String content;
     private Map<String, Object> templateData;
@@ -18,8 +18,8 @@ public class ChannelMessage {
 
     public Long getMessageId() { return messageId; }
     public void setMessageId(Long messageId) { this.messageId = messageId; }
-    public Long getTenantId() { return tenantId; }
-    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
     public String getContent() { return content; }

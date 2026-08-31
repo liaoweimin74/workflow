@@ -18,8 +18,8 @@ public class Recipient {
     private Long id;
 
     /** 租户ID */
-    @Column(name = "tenant_id", nullable = false)
-    private Long tenantId;
+    @Column(name = "tenant_id", nullable = false, length = 64)
+    private String tenantId;
 
     /** 消息ID */
     @Column(name = "message_id", nullable = false)
@@ -68,8 +68,8 @@ public class Recipient {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public Long getTenantId() { return tenantId; }
-    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
 
     public Long getMessageId() { return messageId; }
     public void setMessageId(Long messageId) { this.messageId = messageId; }

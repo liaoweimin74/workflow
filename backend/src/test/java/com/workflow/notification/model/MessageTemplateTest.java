@@ -11,7 +11,7 @@ class MessageTemplateTest {
     @Test
     void template_creation_with_all_fields() {
         MessageTemplate template = new MessageTemplate();
-        template.setTenantId(1L);
+        template.setTenantId("default");
         template.setTemplateCode("TASK_CREATED");
         template.setName("任务创建通知");
         template.setTitle("新任务：${taskName}");
@@ -22,7 +22,7 @@ class MessageTemplateTest {
         template.setIsSystem(false);
         template.setCreatedAt(LocalDateTime.now());
 
-        assertThat(template.getTenantId()).isEqualTo(1L);
+        assertThat(template.getTenantId()).isEqualTo("default");
         assertThat(template.getTemplateCode()).isEqualTo("TASK_CREATED");
         assertThat(template.getName()).isEqualTo("任务创建通知");
         assertThat(template.getChannel()).isEqualTo(ChannelType.SMS);

@@ -1,7 +1,6 @@
 package com.workflow.notification.admin;
 
 import com.workflow.common.domain.R;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -12,7 +11,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/v1/admin/notification/channels")
-@PreAuthorize("hasAnyRole('ADMIN', 'NOTIFICATION_MANAGER')")
 public class ChannelController {
 
     /**

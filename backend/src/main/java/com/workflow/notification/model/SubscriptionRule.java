@@ -18,8 +18,8 @@ public class SubscriptionRule {
     private Long id;
 
     /** 租户ID */
-    @Column(name = "tenant_id", nullable = false)
-    private Long tenantId;
+    @Column(name = "tenant_id", nullable = false, length = 64)
+    private String tenantId;
 
     /** 事件代码 */
     @Column(name = "event_code", length = 64, nullable = false)
@@ -56,8 +56,8 @@ public class SubscriptionRule {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public Long getTenantId() { return tenantId; }
-    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
 
     public String getEventCode() { return eventCode; }
     public void setEventCode(String eventCode) { this.eventCode = eventCode; }

@@ -11,7 +11,7 @@ import java.util.Optional;
  */
 public interface MessageTemplateRepository extends JpaRepository<MessageTemplate, Long> {
 
-    Optional<MessageTemplate> findByTemplateCodeAndTenantId(String templateCode, Long tenantId);
+    Optional<MessageTemplate> findByTemplateCodeAndTenantId(String templateCode, String tenantId);
 
-    boolean existsByTemplateCodeAndTenantId(String templateCode, Long tenantId);
+    boolean existsByTemplateCodeAndTenantId(String templateCode, String tenantId);
 }

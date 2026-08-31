@@ -41,7 +41,7 @@ class MessageServiceTest {
     void setUp() {
         testMessage = new Message();
         testMessage.setId(1L);
-        testMessage.setTenantId(1L);
+        testMessage.setTenantId("default");
         testMessage.setTemplateCode("TASK_CREATED");
         testMessage.setSenderId(100L);
         testMessage.setSenderType("SYSTEM");
@@ -53,7 +53,7 @@ class MessageServiceTest {
 
         testRecipient = new Recipient();
         testRecipient.setId(1L);
-        testRecipient.setTenantId(1L);
+        testRecipient.setTenantId("default");
         testRecipient.setMessageId(1L);
         testRecipient.setUserId(1000L);
         testRecipient.setUsername("test_user");

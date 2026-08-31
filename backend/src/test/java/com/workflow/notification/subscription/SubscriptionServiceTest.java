@@ -23,7 +23,7 @@ class SubscriptionServiceTest {
 
     private Message createMessage(MessagePriority priority, MessageType type, MessageCategory category) {
         Message msg = new Message();
-        msg.setTenantId(1L);
+        msg.setTenantId("default");
         msg.setPriority(priority);
         msg.setMessageType(type);
         msg.setCategory(category);
@@ -51,7 +51,7 @@ class SubscriptionServiceTest {
     @Test
     void shouldSend_default_true_when_no_preference() {
         Message msg = createMessage(MessagePriority.NORMAL, MessageType.PUBLIC, MessageCategory.WORKFLOW);
-        when(userSubscriptionRepository.findByTenantIdAndUserIdAndChannel(1L, 1000L, ChannelType.SMS))
+        when(userSubscriptionRepository.findByTenantIdAndUserIdAndChannel("default", 1000L, ChannelType.SMS))
                 .thenReturn(null);
         assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isTrue();
     }
@@ -61,7 +61,7 @@ class SubscriptionServiceTest {
         Message msg = createMessage(MessagePriority.NORMAL, MessageType.PUBLIC, MessageCategory.WORKFLOW);
         UserSubscription sub = new UserSubscription();
         sub.setSubscribed(false);
-        when(userSubscriptionRepository.findByTenantIdAndUserIdAndChannel(1L, 1000L, ChannelType.SMS))
+        when(userSubscriptionRepository.findByTenantIdAndUserIdAndChannel("default", 1000L, ChannelType.SMS))
                 .thenReturn(sub);
         assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isFalse();
     }

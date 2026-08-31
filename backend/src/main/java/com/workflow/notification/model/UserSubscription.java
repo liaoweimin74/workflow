@@ -19,8 +19,8 @@ public class UserSubscription {
     private Long id;
 
     /** 租户ID */
-    @Column(name = "tenant_id", nullable = false)
-    private Long tenantId;
+    @Column(name = "tenant_id", nullable = false, length = 64)
+    private String tenantId;
 
     /** 用户ID */
     @Column(name = "user_id", nullable = false)
@@ -52,8 +52,8 @@ public class UserSubscription {
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public Long getTenantId() { return tenantId; }
-    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
 
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }

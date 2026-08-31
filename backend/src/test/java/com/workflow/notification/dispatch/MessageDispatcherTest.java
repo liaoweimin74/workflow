@@ -46,7 +46,7 @@ class MessageDispatcherTest {
 
         testMessage = new Message();
         testMessage.setId(1L);
-        testMessage.setTenantId(1L);
+        testMessage.setTenantId("default");
         testMessage.setTemplateCode("TASK_CREATED");
         testMessage.setSenderId(100L);
         testMessage.setSenderType("SYSTEM");

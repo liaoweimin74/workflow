@@ -68,10 +68,10 @@ class TemplateServiceTest {
     void create_saves_template() {
         MessageTemplate template = new MessageTemplate();
         template.setTemplateCode("TEST");
-        template.setTenantId(1L);
+        template.setTenantId("default");
         template.setName("测试模板");
 
-        when(templateRepository.existsByTemplateCodeAndTenantId("TEST", 1L)).thenReturn(false);
+        when(templateRepository.existsByTemplateCodeAndTenantId("TEST", "default")).thenReturn(false);
         when(templateRepository.save(any(MessageTemplate.class))).thenReturn(template);
 
         MessageTemplate result = templateService.create(template);
@@ -84,9 +84,9 @@ class TemplateServiceTest {
     void create_throws_when_duplicate() {
         MessageTemplate template = new MessageTemplate();
         template.setTemplateCode("TEST");
-        template.setTenantId(1L);
+        template.setTenantId("default");
 
-        when(templateRepository.existsByTemplateCodeAndTenantId("TEST", 1L)).thenReturn(true);
+        when(templateRepository.existsByTemplateCodeAndTenantId("TEST", "default")).thenReturn(true);
 
         assertThatThrownBy(() -> templateService.create(template))
                 .isInstanceOf(com.workflow.common.exception.BusinessException.class);

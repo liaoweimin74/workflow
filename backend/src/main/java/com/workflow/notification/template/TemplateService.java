@@ -27,7 +27,7 @@ public class TemplateService {
     /**
      * 根据模板代码和租户ID获取模板
      */
-    public MessageTemplate getTemplate(String templateCode, Long tenantId) {
+    public MessageTemplate getTemplate(String templateCode, String tenantId) {
         return templateRepository.findByTemplateCodeAndTenantId(templateCode, tenantId)
                 .orElseThrow(() -> new BusinessException("模板不存在: " + templateCode));
     }
@@ -101,7 +101,7 @@ public class TemplateService {
     /**
      * 获取模板列表
      */
-    public List<MessageTemplate> list(Long tenantId) {
+    public List<MessageTemplate> list(String tenantId) {
         return templateRepository.findAll();
     }
 }

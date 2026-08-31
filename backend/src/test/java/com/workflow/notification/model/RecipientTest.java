@@ -15,7 +15,7 @@ class RecipientTest {
     @Test
     void recipient_creation_with_all_fields() {
         Recipient recipient = new Recipient();
-        recipient.setTenantId(1L);
+        recipient.setTenantId("default");
         recipient.setMessageId(100L);
         recipient.setUserId(1000L);
         recipient.setUsername("test_user");
@@ -26,7 +26,7 @@ class RecipientTest {
         recipient.setStatus(MessageStatus.PENDING);
         recipient.setSentAt(LocalDateTime.now());
 
-        assertThat(recipient.getTenantId()).isEqualTo(1L);
+        assertThat(recipient.getTenantId()).isEqualTo("default");
         assertThat(recipient.getMessageId()).isEqualTo(100L);
         assertThat(recipient.getUserId()).isEqualTo(1000L);
         assertThat(recipient.getUsername()).isEqualTo("test_user");

@@ -11,7 +11,7 @@ import java.util.List;
  */
 public interface UserSubscriptionRepository extends JpaRepository<UserSubscription, Long> {
 
-    UserSubscription findByTenantIdAndUserIdAndChannel(Long tenantId, Long userId, ChannelType channel);
+    UserSubscription findByTenantIdAndUserIdAndChannel(String tenantId, Long userId, ChannelType channel);
 
-    List<UserSubscription> findByTenantIdAndUserId(Long tenantId, Long userId);
+    List<UserSubscription> findByTenantIdAndUserId(String tenantId, Long userId);
 }

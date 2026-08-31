@@ -17,7 +17,7 @@ class MessageTest {
     @Test
     void message_creation_with_all_fields() {
         Message msg = new Message();
-        msg.setTenantId(1L);
+        msg.setTenantId("default");
         msg.setTemplateCode("TASK_CREATED");
         msg.setSenderId(100L);
         msg.setSenderType("SYSTEM");
@@ -28,7 +28,7 @@ class MessageTest {
         msg.setMessageType(MessageType.PRIVATE);
         msg.setStatus(MessageStatus.SENT);
 
-        assertThat(msg.getTenantId()).isEqualTo(1L);
+        assertThat(msg.getTenantId()).isEqualTo("default");
         assertThat(msg.getTemplateCode()).isEqualTo("TASK_CREATED");
         assertThat(msg.getSenderId()).isEqualTo(100L);
         assertThat(msg.getSenderType()).isEqualTo("SYSTEM");
@@ -43,7 +43,7 @@ class MessageTest {
     @Test
     void message_pre_persist_sets_created_at() {
         Message msg = new Message();
-        msg.setTenantId(1L);
+        msg.setTenantId("default");
         msg.setTemplateCode("TEST");
 
         // 手动触发 prePersist

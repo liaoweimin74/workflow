@@ -17,8 +17,8 @@ public class DeliveryRetry {
     private Long id;
 
     /** 租户ID */
-    @Column(name = "tenant_id", nullable = false)
-    private Long tenantId;
+    @Column(name = "tenant_id", nullable = false, length = 64)
+    private String tenantId;
 
     /** 收件人ID */
     @Column(name = "recipient_id", nullable = false)
@@ -62,8 +62,8 @@ public class DeliveryRetry {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-    public Long getTenantId() { return tenantId; }
-    public void setTenantId(Long tenantId) { this.tenantId = tenantId; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
     public Long getRecipientId() { return recipientId; }
     public void setRecipientId(Long recipientId) { this.recipientId = recipientId; }
     public ChannelType getChannel() { return channel; }

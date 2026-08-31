@@ -1,9 +1,9 @@
 ## 1. P1：核心模型与站内信
 
-- [ ] 1.1 创建 notification 模块骨架：package-info.java、模块目录结构（model/template/subscription/dispatch/channel/store/retry/admin）
-- [ ] 1.2 创建 msg_message 表 Flyway 迁移脚本（id, tenant_id, template_code, sender_id, sender_type, title, content JSON, link_json, priority, category, message_type, status, created_at）
-- [ ] 1.3 创建 msg_recipient 表 Flyway 迁移脚本（id, message_id, user_id, read_status, read_at, channel_delivery_status_json）
-- [ ] 1.4 实现 Message 实体、Recipient 实体、JPA Repository
+- [x] 1.1 创建 notification 模块骨架：package-info.java、模块目录结构（model/template/subscription/dispatch/channel/store/retry/admin）
+- [x] 1.2 创建 msg_message 表 Flyway 迁移脚本（id, tenant_id, template_code, sender_id, sender_type, title, content JSON, link_json, priority, category, message_type, status, created_at）
+- [x] 1.3 创建 msg_recipient 表 Flyway 迁移脚本（id, message_id, user_id, read_status, read_at, channel_delivery_status_json）
+- [x] 1.4 实现 Message 实体、Recipient 实体、JPA Repository
 - [ ] 1.5 实现 MessageService：发送消息、查询列表（分页筛选）、查询详情、标记已读、批量已读、删除、未读计数
 - [ ] 1.6 实现 MessageEvent 事件类和 MessageDispatcher 分发器（站内信同步写入）
 - [ ] 1.7 实现 ChannelAdapter SPI 接口、ChannelType 枚举、ChannelDeliveryResult 返回类

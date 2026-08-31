@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'MessageTemplateList' })
 
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
 import { Switch } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
@@ -78,54 +78,79 @@ const categoryOptions = [
   { value: 'SYSTEM', label: '系统' },
 ]
 
-const formConfig: FormConfig = {
-  rule: [
-    {
-      type: 'elTabs',
-      props: { type: 'border-card' },
-      children: [
-        {
-          type: 'elTabPane',
-          props: { label: '模板配置' },
-          children: [
-            {
-              type: 'input', field: 'templateCode', title: '模板编码',
-              validate: [{ required: true, message: '请输入模板编码', trigger: 'blur' }],
-            },
-            {
-              type: 'input', field: 'name', title: '模板名称',
-              validate: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
-            },
-            {
-              type: 'input', field: 'title', title: '标题模板',
-              props: { placeholder: '支持变量：${变量名}' },
-            },
-            {
-              type: 'input', field: 'content', title: '内容模板',
-              props: { type: 'textarea', rows: 6, placeholder: '支持变量：${变量名}' },
-            },
-            { type: 'select', field: 'channel', title: '渠道', options: channelOptions, value: 'IN_APP' },
-            { type: 'select', field: 'priority', title: '优先级', options: priorityOptions, value: 'NORMAL' },
-            { type: 'select', field: 'category', title: '类别', options: categoryOptions, value: 'WORKFLOW' },
-            { type: 'switch', field: 'isSystem', title: '系统模板', value: false },
-          ],
-        },
-        {
-          type: 'elTabPane',
-          props: { label: '模板预览' },
-          children: [
-            { type: 'template-preview', props: { source: 'title', label: '标题预览' } },
-            { type: 'template-preview', props: { source: 'content', label: '内容预览' } },
-          ],
-        },
-      ],
-    },
-  ] as Rule[],
-  createApi: (data: any) => createTemplate(data) as any,
-  updateApi: (id: number | string, data: any) => updateTemplate(id as number, data) as any,
-  dialogTitle: { create: '新建模板', edit: '编辑模板' },
-  dialogWidth: '720px',
-}
+/** 当前编辑的是否系统模板（系统模板仅文案可编辑，结构性字段锁定） */
+const editingIsSystem = ref(false)
+
+const formConfig = computed<FormConfig>(() => {
+  // 结构性字段：系统模板编辑时锁定
+  const locked = editingIsSystem.value
+  const structural = () => ({ disabled: locked })
+
+  return {
+    rule: [
+      {
+        type: 'elTabs',
+        props: { type: 'border-card' },
+        style: { width: '100%' },
+        children: [
+          {
+            type: 'elTabPane',
+            props: { label: '模板配置' },
+            children: [
+              {
+                type: 'input', field: 'templateCode', title: '模板编码',
+                props: { ...structural(), placeholder: '系统模板编码不可修改' },
+                validate: [{ required: true, message: '请输入模板编码', trigger: 'blur' }],
+              },
+              {
+                type: 'input', field: 'name', title: '模板名称',
+                validate: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
+              },
+              {
+                type: 'input', field: 'title', title: '标题模板',
+                props: { placeholder: '支持变量：${变量名}' },
+              },
+              {
+                type: 'input', field: 'content', title: '内容模板',
+                props: { type: 'textarea', rows: 6, placeholder: '支持变量：${变量名}' },
+              },
+              {
+                type: 'select', field: 'channel', title: '渠道', options: channelOptions, value: 'IN_APP',
+                props: structural(),
+              },
+              {
+                type: 'select', field: 'priority', title: '优先级', options: priorityOptions, value: 'NORMAL',
+                props: structural(),
+              },
+              {
+                type: 'select', field: 'category', title: '类别', options: categoryOptions, value: 'WORKFLOW',
+                props: structural(),
+              },
+              {
+                type: 'switch', field: 'isSystem', title: '系统模板', value: false,
+                props: structural(),
+              },
+            ],
+          },
+          {
+            type: 'elTabPane',
+            props: { label: '模板预览' },
+            children: [
+              { type: 'template-preview', props: { source: 'title', label: '标题预览' } },
+              { type: 'template-preview', props: { source: 'content', label: '内容预览' } },
+            ],
+          },
+        ],
+      },
+    ] as Rule[],
+    createApi: (data: any) => createTemplate(data) as any,
+    updateApi: (id: number | string, data: any) => updateTemplate(id as number, data) as any,
+    beforeCreate: () => { editingIsSystem.value = false; return true },
+    beforeEdit: (row: any) => { editingIsSystem.value = !!row.isSystem; return true },
+    dialogTitle: { create: '新建模板', edit: '编辑模板' },
+    dialogWidth: '720px',
+  }
+})
 
 const actionButtons: ActionButton[] = [
   {

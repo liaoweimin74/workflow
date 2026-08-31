@@ -66,27 +66,37 @@ public class TemplateService {
 
     /**
      * 创建模板
+     * 
+     * <p>用户创建的一律为普通模板（isSystem=false），
+     * 系统模板由系统初始化预置，不允许用户创建
      */
     @Transactional
     public MessageTemplate create(MessageTemplate template) {
         if (templateRepository.existsByTemplateCodeAndTenantId(template.getTemplateCode(), template.getTenantId())) {
             throw new BusinessException("模板代码已存在: " + template.getTemplateCode());
         }
+        template.setIsSystem(false);
         return templateRepository.save(template);
     }
 
     /**
      * 更新模板
+     * 
+     * <p>系统模板（isSystem=true）仅允许更新文案（name/title/content），
+     * 结构性字段（templateCode/channel/priority/category/isSystem）由系统维护不可修改
      */
     @Transactional
     public MessageTemplate update(Long id, MessageTemplate updated) {
         MessageTemplate existing = templateRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("模板不存在"));
+        boolean isSystem = Boolean.TRUE.equals(existing.getIsSystem());
         existing.setName(updated.getName());
         existing.setTitle(updated.getTitle());
         existing.setContent(updated.getContent());
-        existing.setPriority(updated.getPriority());
-        existing.setCategory(updated.getCategory());
+        if (!isSystem) {
+            existing.setPriority(updated.getPriority());
+            existing.setCategory(updated.getCategory());
+        }
         return templateRepository.save(existing);
     }
 

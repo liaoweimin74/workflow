@@ -288,10 +288,12 @@ async function load() {
   }
 }
 
-  // 路有 query 自动打开容器（newTab 落地页场景或深链）
+  // 路由 query 自动打开容器（newTab 落地页场景或深链）。
+  // 仅当前激活实例响应：keep-alive 缓存实例共享全局 route，其他页签 query 变化不应触发本实例容器
   watch(
     () => [route.query.container as string | undefined, route.query.recordId as string | undefined, containers.value.length] as const,
     ([container, recordId, count]) => {
+      if (route.path !== ownPath) return
       if (!container || count === 0) return
       openContainer(container, recordId || '')
     },

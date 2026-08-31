@@ -31,16 +31,33 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <el-dialog
+      v-model="editorVisible"
+      :title="editingTemplate ? '编辑模板' : '新建模板'"
+      width="720px"
+      destroy-on-close
+    >
+      <TemplateEditor
+        v-if="editorVisible"
+        :template-data="editingTemplate"
+        @cancel="editorVisible = false"
+        @saved="onSaved"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getTemplates, toggleTemplate } from '../../api/admin'
+import TemplateEditor from './TemplateEditor.vue'
 import { ElMessage } from 'element-plus'
 
 const templates = ref<any[]>([])
 const loading = ref(false)
+const editorVisible = ref(false)
+const editingTemplate = ref<any | null>(null)
 
 onMounted(() => {
   fetchTemplates()
@@ -50,18 +67,26 @@ async function fetchTemplates() {
   loading.value = true
   try {
     const res = await getTemplates()
-    templates.value = (res.data as any)?.rows || []
+    // 后端返回 R<List<MessageTemplate>>，data 直接是数组
+    templates.value = (res.data as any[]) || []
   } finally {
     loading.value = false
   }
 }
 
 function handleCreate() {
-  // TODO: 打开创建弹窗
+  editingTemplate.value = null
+  editorVisible.value = true
 }
 
-function handleEdit(_row: any) {
-  // TODO: 打开编辑弹窗
+function handleEdit(row: any) {
+  editingTemplate.value = row
+  editorVisible.value = true
+}
+
+function onSaved() {
+  editorVisible.value = false
+  fetchTemplates()
 }
 
 async function handleToggle(row: any) {

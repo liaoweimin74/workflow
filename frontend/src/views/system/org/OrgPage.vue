@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'OrgManagement' })
+
 import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
 import { FolderAdd } from '@element-plus/icons-vue'

@@ -158,6 +158,7 @@ public class PageQueryController {
 
     /**
      * 解析 schema 中声明的 searchFields key 集合。
+     * 同时包含 filter.conditions 中引用的列（静态筛选列也需白名单校验）。
      */
     private Set<String> searchFieldKeys(String schema) {
         Set<String> keys = new HashSet<>();
@@ -167,6 +168,19 @@ public class PageQueryController {
             if (searchFields.isArray()) {
                 for (JsonNode field : searchFields) {
                     keys.add(field.path("key").asText());
+                }
+            }
+            // 静态筛选列也纳入白名单（ViewDesigner 数据源页签配置）
+            JsonNode filter = root.path("filter");
+            if (filter.isObject()) {
+                JsonNode conditions = filter.path("conditions");
+                if (conditions.isArray()) {
+                    for (JsonNode c : conditions) {
+                        String column = c.path("column").asText();
+                        if (column != null && !column.isBlank()) {
+                            keys.add(column);
+                        }
+                    }
                 }
             }
         } catch (Exception e) {

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'Profile' })
+
 import { reactive } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'

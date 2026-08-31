@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'UserManagement' })
+
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Key } from '@element-plus/icons-vue'

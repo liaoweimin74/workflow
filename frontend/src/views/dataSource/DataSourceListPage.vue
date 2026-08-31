@@ -304,6 +304,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'DataSourceList' })
+
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, View, Edit, Delete } from '@element-plus/icons-vue'

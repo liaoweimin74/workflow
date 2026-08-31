@@ -55,6 +55,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'ProcessStart' })
+
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

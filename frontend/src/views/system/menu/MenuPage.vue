@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'MenuManagement' })
+
 import { ref, computed, onMounted } from 'vue'
 import { SearchTable } from '@/components/business'
 import { FolderAdd } from '@element-plus/icons-vue'

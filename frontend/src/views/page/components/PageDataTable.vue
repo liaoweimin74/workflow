@@ -15,6 +15,7 @@
     :show-pagination="pagination"
     :default-page-size="pageSize || 20"
     :page-sizes="pageSizes || [10, 20, 50]"
+    :cache-key="cacheKey"
     :table-size="tableSize"
     :delete-confirm="deleteConfirm"
     @row-click="handleRowClick"
@@ -99,6 +100,7 @@ import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
+import { tableFilterStore } from './tableFilterStore'
 
 /** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费；关联容器打开能力 */
 const actionBus = inject<{
@@ -118,6 +120,8 @@ const props = withDefaults(defineProps<{
   dataSourceId?: string
   /** 全局数据源 refId（由 PageRendererPage.transformComponent 注入） */
   dsRefId?: string
+  /** 查询状态缓存 key（null/'' 不缓存）：由父组件按「菜单路径 + dataSourceId」注入，使页签切换后保留查询/分页/排序 */
+  cacheKey?: string
   /** 列配置（ViewDesigner 风格：{ key, label, width, align, sortable, formatter, fixed }） */
   columns?: any[]
   /** 组件级可排序字段（受数据源 metadata 上限约束；缺省=跟随数据源全部可排字段） */
@@ -419,14 +423,27 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
   const dsId = resolvedRefId.value
   if (!dsId) return { rows: [], total: 0 }
 
-  // 组装筛选条件：动作总线 set-filter 注入的条件 + 搜索栏条件
+  // 组装筛选条件：静态筛选（DsBindingConfigDialog 配置）+ 动作总线 set-filter + 搜索栏条件
   const filterConditions: any[] = []
+  // 1. 静态筛选（组件级配置，始终生效；从 tableFilterStore 按页面内 dataSourceId 读取）
+  let staticFilter: any = props.dataSourceId ? tableFilterStore[props.dataSourceId] : undefined
+  if (staticFilter?.conditions) {
+    for (const c of staticFilter.conditions) {
+      if (c.column) {
+        // DsBindingConfigDialog 输出 fixedValue，兼容 value
+        const val = c.fixedValue ?? c.value ?? ''
+        filterConditions.push({ column: c.column, op: c.op || 'eq', value: val })
+      }
+    }
+  }
+  // 2. 动作总线 set-filter 注入的条件
   if (currentFilter.value) {
     for (const [column, value] of Object.entries(currentFilter.value)) {
       if (value === '' || value === null || value === undefined) continue
       filterConditions.push({ column, op: 'eq', value })
     }
   }
+  // 3. 搜索栏条件
   for (const field of resolvedSearchFields.value) {
     const v = params[field.prop]
     if (v === '' || v === null || v === undefined) continue

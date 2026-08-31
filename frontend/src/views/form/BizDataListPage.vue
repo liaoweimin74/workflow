@@ -58,6 +58,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'BizDataList' })
+
 import { ref, computed, onMounted, nextTick, h, type VNode } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

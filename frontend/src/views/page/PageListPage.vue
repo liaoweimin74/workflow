@@ -78,6 +78,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'PageList' })
+
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

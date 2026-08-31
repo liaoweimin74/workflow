@@ -65,6 +65,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'ProcessInstanceTrack' })
+
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

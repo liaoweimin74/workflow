@@ -63,6 +63,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'TaskDoneDetail' })
+
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'

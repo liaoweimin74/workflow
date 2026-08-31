@@ -78,6 +78,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'ProcessTodo' })
+
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'

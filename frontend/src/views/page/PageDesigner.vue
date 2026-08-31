@@ -47,7 +47,7 @@
     </div>
 
     <!-- 数据源/动作配置弹窗 -->
-    <el-dialog v-model="dsDialogVisible" title="数据源绑定与动作总线" width="680px">
+    <el-dialog v-model="dsDialogVisible" title="数据源绑定与动作总线" width="680px" destroy-on-close>
       <DataSourceConfigPanel
         ref="dsConfigPanelRef"
         :dataSources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId, searchFields: ds.searchFields }))"
@@ -65,7 +65,7 @@
     <!-- 数据表格数据源配置 -->
     <DsBindingConfigDialog
       v-model="pageTableDialogVisible"
-      :current-fields="[]"
+      :current-fields="currentFieldKeys"
       :binding-props="currentPageTableProps"
       :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
       :table-mode="true"
@@ -161,6 +161,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion, View, Document, Menu } from '@element-plus/icons-vue'
 import FcDesigner from '@form-create/designer'
 import PageDataTable from './components/PageDataTable.vue'
+import { tableFilterStore } from './components/tableFilterStore'
 import PageDataTree from './components/PageDataTree.vue'
 import { pageApi, type PageDefinitionDetailDTO, type PageMenuItem } from '@/api/page'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
@@ -370,6 +371,15 @@ function openPageTableDsConfig() {
 function handlePageTableConfirm(newProps: Record<string, any>) {
   const active = designerRef.value?.activeRule as any
   if (active?.props) Object.assign(active.props, newProps)
+  // 将静态筛选写入 tableFilterStore（PageDataTable fetchApi 从 store 读取）
+  const dsId = newProps.dataSourceId as string
+  if (dsId) {
+    if (newProps.filter) {
+      tableFilterStore[dsId] = newProps.filter
+    } else {
+      delete tableFilterStore[dsId]
+    }
+  }
   ElMessage.success('数据表格数据源配置已保存')
 }
 
@@ -560,6 +570,13 @@ onMounted(async () => {
         if (designerRef.value) {
           designerRef.value.setRule(parsed.rule || [])
           designerRef.value.setOption(parsed.option || {})
+          // 从已保存的 rule 中恢复静态筛选到 tableFilterStore
+          const rules = parsed.rule || []
+          for (const r of rules) {
+            if (r.props?.filter && r.props?.dataSourceId) {
+              tableFilterStore[r.props.dataSourceId] = r.props.filter
+            }
+          }
         }
       } catch {
         // 解析失败用默认

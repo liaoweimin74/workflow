@@ -20,14 +20,6 @@
       <el-tag v-if="pageType" :type="pageType === 'VIEW' ? 'primary' : 'success'" style="margin-left: 8px">
         {{ pageType === 'VIEW' ? '视图' : '页面' }}
       </el-tag>
-      <el-select
-        v-model="dataSourceId"
-        placeholder="选择数据源"
-        style="width: 220px; margin-left: 8px"
-        @change="handleDataSourceChange"
-      >
-        <el-option v-for="ds in enabledDataSources" :key="ds.id" :label="ds.name" :value="ds.id" />
-      </el-select>
       <el-tag v-if="formStatus" :type="statusTagType(formStatus)" style="margin-left: 8px">
         {{ statusLabel(formStatus) }}
       </el-tag>
@@ -53,6 +45,26 @@
     <!-- 设计器主体：清单勾选式配置区 -->
     <div class="designer-body" v-loading="loading">
       <el-tabs v-model="activeTab" class="config-tabs">
+        <el-tab-pane label="数据源" name="datasource">
+          <el-form label-width="100px" size="default">
+            <el-form-item label="选择数据源" required>
+              <el-select
+                v-model="dataSourceId"
+                placeholder="选择全局数据源"
+                style="width: 100%"
+                @change="handleDataSourceChange"
+              >
+                <el-option v-for="ds in enabledDataSources" :key="ds.id" :label="ds.name" :value="ds.id" />
+              </el-select>
+              <span class="form-tip">切换后自动加载列定义</span>
+            </el-form-item>
+          </el-form>
+          <el-divider content-position="left">数据源筛选</el-divider>
+          <FilterConfig
+            v-model="schema.filter"
+            :columns="filterableColumnsForFilter"
+          />
+        </el-tab-pane>
         <el-tab-pane label="显示&查询" name="query">
           <QueryColumnsConfig
             :candidates="viewColumns"
@@ -169,6 +181,7 @@ import type { ColumnConfigItem } from '@/api/bizData'
 import QueryColumnsConfig from './components/QueryColumnsConfig.vue'
 import ActionsConfig from './components/ActionsConfig.vue'
 import EventsConfig from './components/EventsConfig.vue'
+import FilterConfig from './components/FilterConfig.vue'
 
 const authStore = useAuthStore()
 
@@ -247,6 +260,8 @@ export interface ViewSchema {
   actions: ViewActionsConfig
   detail: ViewDetailConfig
   events: any[]
+  /** 数据源静态筛选（可选；运行时与用户搜索条件 AND 合并） */
+  filter?: { logic: 'AND' | 'OR'; conditions: Array<{ column: string; op: string; source: 'fixed'; value: string }> }
 }
 
 const route = useRoute()
@@ -262,7 +277,7 @@ const formStatus = ref('')
 const loading = ref(false)
 const saving = ref(false)
 const publishing = ref(false)
-const activeTab = ref('query')
+const activeTab = ref('datasource')
 /** 预览弹窗：当前视图配置 JSON */
 const previewVisible = ref(false)
 const previewJson = ref('')
@@ -361,6 +376,7 @@ const schema = reactive<ViewSchema>({
   },
   detail: { width: '800px', type: 'form' },
   events: [],
+  filter: undefined,
 })
 
 /** 可展示列（非隐藏） */
@@ -383,6 +399,11 @@ const filterableColumnKeys = computed(() => new Set(filterableColumns.value.map(
 /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；数据源不可排字段不可配置） */
 const sortableCandidates = computed(() =>
   viewColumns.value.filter((c) => c.sortable).map((c) => ({ key: c.key, label: c.label })),
+)
+
+/** 数据源筛选可用列候选（所有可展示列，供 FilterConfig 使用） */
+const filterableColumnsForFilter = computed(() =>
+  viewColumns.value.map((c) => ({ key: c.key, label: c.label || c.key })),
 )
 
 onMounted(async () => {
@@ -659,5 +680,11 @@ function statusLabel(status: string): string {
 }
 .mount-alert {
   margin-bottom: 12px;
+}
+.form-tip {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
 }
 </style>

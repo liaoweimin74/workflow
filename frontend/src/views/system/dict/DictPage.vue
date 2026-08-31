@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'DictManagement' })
+
 import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
 import { Switch } from '@element-plus/icons-vue'

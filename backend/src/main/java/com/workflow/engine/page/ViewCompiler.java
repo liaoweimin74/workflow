@@ -60,6 +60,7 @@ public class ViewCompiler {
             compileColumns(root, rule, validKeys);
             compileSortableFields(root, result, validKeys);
             compilePagination(root, result);
+            compileFilter(root, result, validKeys);
             compileActions(root, rule);
             compileDetail(root, rule);
             compileEvents(root, rule);
@@ -164,6 +165,42 @@ public class ViewCompiler {
         }
         if (sizes.isEmpty()) {
             sizes.add(10).add(20).add(50);
+        }
+    }
+
+    /**
+     * filter → 产物顶层对象（静态筛选条件 {logic, conditions:[{column,op,value}]}）。
+     * 仅保留 fixed 类型条件；conditions 为空或缺失时跳过。
+     */
+    private void compileFilter(JsonNode root, ObjectNode result, Set<String> validKeys) {
+        JsonNode filter = root.path("filter");
+        if (!filter.isObject()) {
+            return;
+        }
+        JsonNode conditions = filter.path("conditions");
+        if (!conditions.isArray() || conditions.isEmpty()) {
+            return;
+        }
+        ObjectNode out = result.putObject("filter");
+        out.put("logic", filter.path("logic").asText("AND"));
+        ArrayNode outConditions = out.putArray("conditions");
+        for (JsonNode c : conditions) {
+            String column = c.path("column").asText();
+            if (column.isBlank()) {
+                continue;
+            }
+            if (!validKeys.isEmpty() && !validKeys.contains(column)) {
+                throw new BusinessException(400, "筛选条件引用列不存在: " + column);
+            }
+            ObjectNode cond = objectMapper.createObjectNode();
+            cond.put("column", column);
+            cond.put("op", c.path("op").asText("eq"));
+            cond.put("value", c.path("value").asText(""));
+            outConditions.add(cond);
+        }
+        // conditions 全部为空时移除 filter 对象
+        if (outConditions.isEmpty()) {
+            result.remove("filter");
         }
     }
 

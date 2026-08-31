@@ -68,6 +68,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'FormList' })
+
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

@@ -63,6 +63,8 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'ProcessCenter' })
+
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

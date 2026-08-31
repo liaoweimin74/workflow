@@ -1,4 +1,6 @@
 <script setup lang="ts">
+defineOptions({ name: 'RoleManagement' })
+
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Key } from '@element-plus/icons-vue'

@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, inject, watch } from 'vue'
+import { ref, reactive, computed, inject, watch, getCurrentInstance } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LookupPickerProps, QueryParams, LookupFilterConfig, DataSourceBindingContext } from './types'
@@ -89,12 +89,22 @@ const props = withDefaults(defineProps<LookupPickerProps>(), {
 
 const emit = defineEmits<{
   'update:modelValue': [value: Record<string, any> | null]
-  'select': [row: any]
+  'select': [row: Record<string, any>]
   'clear': []
 }>()
 
-/** form-create 注入，若组件在 form-create 外使用则为 undefined */
-const formCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
+/**
+ * form-create 注入：优先从 prop 读取（FcDesigner 通过 prop 传递），
+ * 兜底从 inject 读取（运行时 FormRenderer 通过 provide 传递）
+ */
+const instance = getCurrentInstance()
+const formCreateInject = computed<FormCreateInject | undefined>(() => {
+  // FcDesigner 通过 prop 传递 formCreateInject
+  const fromProp = (instance?.proxy?.$props as any)?.formCreateInject
+  if (fromProp) return fromProp
+  // 运行时 FormRenderer 通过 provide 传递
+  return inject<FormCreateInject | undefined>('formCreateInject', undefined)
+})
 
 /** 当前组件的绑定上下文（通过 dataSourceId 从模块级存储解析） */
 const currentBinding = computed<DataSourceBindingContext | undefined>(() => {
@@ -190,6 +200,10 @@ function formatCell(row: any, key?: string): string {
 
 function openDialog() {
   if (props.disabled) return
+  console.log('[LookupPicker] openDialog props.dataSourceId:', props.dataSourceId)
+  console.log('[LookupPicker] openDialog activeDsBindings:', JSON.stringify(activeDsBindings.value))
+  console.log('[LookupPicker] openDialog currentBinding:', currentBinding.value)
+  console.log('[LookupPicker] openDialog dsRefId:', dsRefId.value)
   dialogVisible.value = true
   keyword.value = ''
   query.page = 1
@@ -198,6 +212,7 @@ function openDialog() {
 
 async function fetchData() {
   if (!dsRefId.value) {
+    console.warn('[LookupPicker] fetchData: dsRefId is empty! dataSourceId=', props.dataSourceId, 'activeDsBindings=', activeDsBindings.value.length)
     ElMessage.warning('未配置数据源，请在设计器中配置数据源绑定')
     return
   }
@@ -215,7 +230,7 @@ async function fetchData() {
       if (kwCols.length > 0) params.keywordColumn = kwCols.join(',')
     }
     // 合并 + 解析 filter（数据源级 + 组件级）
-    const getValue = (field: string) => formCreateInject?.api?.getValue?.(field)
+    const getValue = (field: string) => formCreateInject.value?.api?.getValue?.(field)
     if (mergedFilter.value) {
       const resolved = resolveFilterFieldReferences(
         mergedFilter.value,
@@ -256,7 +271,7 @@ function handleRowClick(row: any) {
 
 /** 将选中记录 id 写入 idField 字段（若配置且 formCreateInject 可用） */
 function writeIdField(id: unknown) {
-  const api = formCreateInject?.api
+  const api = formCreateInject.value?.api
   if (!api || !props.idField) return
   api.setValue(props.idField, id ?? null)
 }
@@ -266,7 +281,7 @@ function writeIdField(id: unknown) {
  * 若 formCreateInject 不可用（非 form-create 环境），则安全跳过。
  */
 function fillReturnFields(row: Record<string, unknown>) {
-  const api = formCreateInject?.api
+  const api = formCreateInject.value?.api
   if (!api || !props.returnFields) return
   for (const [sourceField, targetField] of Object.entries(props.returnFields)) {
     api.setValue(targetField, readCellValue(row, sourceField) ?? null)
@@ -278,7 +293,7 @@ function fillReturnFields(row: Record<string, unknown>) {
  * 若 formCreateInject 不可用，则安全跳过。
  */
 function clearReturnFields() {
-  const api = formCreateInject?.api
+  const api = formCreateInject.value?.api
   if (!api || !props.returnFields) return
   for (const targetField of Object.values(props.returnFields)) {
     api.setValue(targetField, null)
@@ -295,7 +310,7 @@ function handleClear() {
 
 // 动态筛选联动：依赖字段值变化 → 清空当前选择与回填，刷新选项
 watch(
-  () => filterDependFields.value.map(f => formCreateInject?.api?.getValue?.(f)),
+  () => filterDependFields.value.map(f => formCreateInject.value?.api?.getValue?.(f)),
   () => {
     emit('update:modelValue', null)
     writeIdField(null)

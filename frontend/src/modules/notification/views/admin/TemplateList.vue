@@ -83,20 +83,39 @@ const formConfig: FormConfig = {
       type: 'input', field: 'name', title: '模板名称',
       validate: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
     },
-    { type: 'input', field: 'title', title: '标题模板', props: { placeholder: '支持变量：${变量名}' } },
+    {
+      type: 'input', field: 'title', title: '标题模板',
+      props: { placeholder: '支持变量：${变量名}' },
+      update: (val: any, _r: any, fApi: any) => fApi.setValue('titlePreview', previewText(val)),
+    },
     {
       type: 'input', field: 'content', title: '内容模板',
       props: { type: 'textarea', rows: 6, placeholder: '支持变量：${变量名}' },
+      update: (val: any, _r: any, fApi: any) => fApi.setValue('contentPreview', previewText(val)),
     },
     { type: 'select', field: 'channel', title: '渠道', options: channelOptions, value: 'IN_APP' },
     { type: 'select', field: 'priority', title: '优先级', options: priorityOptions, value: 'NORMAL' },
     { type: 'select', field: 'category', title: '类别', options: categoryOptions, value: 'WORKFLOW' },
     { type: 'switch', field: 'isSystem', title: '系统模板', value: false },
+    { type: 'input', field: 'titlePreview', title: '标题预览', props: { readonly: true, placeholder: '输入标题模板后自动预览' } },
+    { type: 'input', field: 'contentPreview', title: '内容预览', props: { type: 'textarea', readonly: true, rows: 4, placeholder: '输入内容模板后自动预览' } },
   ] as Rule[],
-  createApi: (data: any) => createTemplate(data) as any,
-  updateApi: (id: number | string, data: any) => updateTemplate(id as number, data) as any,
+  createApi: (data: any) => createTemplate(stripPreview(data)) as any,
+  updateApi: (id: number | string, data: any) => updateTemplate(id as number, stripPreview(data)) as any,
   dialogTitle: { create: '新建模板', edit: '编辑模板' },
   dialogWidth: '640px',
+}
+
+/** 提交前剥离只读预览字段 */
+function stripPreview(data: any) {
+  const { titlePreview, contentPreview, ...rest } = data || {}
+  return rest
+}
+
+/** 将 ${变量} 转为 [变量] 展示，模拟渲染效果 */
+function previewText(text?: string) {
+  if (!text) return ''
+  return text.replace(/\$\{(\w+)\}/g, '[$1]')
 }
 
 const actionButtons: ActionButton[] = [

@@ -18,11 +18,20 @@ import type { RoleVO } from '@/types/role'
 const orgTree = ref<TreeNode[]>([])
 const roleList = ref<RoleVO[]>([])
 
+// 角色列表保留首屏加载（角色列 ID→名称映射必需），已声明 cache:true 跨页面复用
 onMounted(async () => {
-  const [orgRes, roleRes] = await Promise.all([getOrgTree(), getRoleList({ page: 1, size: 999 })])
-  orgTree.value = orgRes.data
+  const roleRes = await getRoleList({ page: 1, size: 999 })
   roleList.value = roleRes.data.rows
 })
+
+// ---------- 组织树延迟加载 ----------
+let _orgTreeLoaded = false
+async function ensureOrgTree() {
+  if (_orgTreeLoaded) return
+  _orgTreeLoaded = true
+  const res = await getOrgTree()
+  orgTree.value = res.data
+}
 
 // ---------- 搜索字段 ----------
 const searchFields = computed<SearchField[]>(() => [
@@ -38,6 +47,7 @@ const searchFields = computed<SearchField[]>(() => [
       props: { label: 'label', value: 'id', children: 'children' },
     },
     style: 'width: 200px',
+    onExpand: ensureOrgTree,
   },
   {
     type: 'select',
@@ -138,6 +148,7 @@ const formConfig = computed<FormConfig<UserVO>>(() => ({
   createPermission: 'system:user:create',
   editPermission: 'system:user:update',
   deletePermission: 'system:user:delete',
+  onFormOpen: ensureOrgTree,
 }))
 </script>
 

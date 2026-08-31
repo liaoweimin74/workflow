@@ -2,6 +2,7 @@ package com.workflow.notification.store.impl;
 
 import com.workflow.common.domain.PageResult;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.notification.cache.NotificationCache;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.Recipient;
@@ -26,10 +27,13 @@ public class MessageServiceImpl implements MessageService {
 
     private final MessageRepository messageRepository;
     private final RecipientRepository recipientRepository;
+    private final NotificationCache notificationCache;
 
-    public MessageServiceImpl(MessageRepository messageRepository, RecipientRepository recipientRepository) {
+    public MessageServiceImpl(MessageRepository messageRepository, RecipientRepository recipientRepository,
+                              NotificationCache notificationCache) {
         this.messageRepository = messageRepository;
         this.recipientRepository = recipientRepository;
+        this.notificationCache = notificationCache;
     }
 
     @Override
@@ -53,6 +57,9 @@ public class MessageServiceImpl implements MessageService {
             recipient.setStatus(MessageStatus.PENDING);
             recipient.setCreatedAt(LocalDateTime.now());
             recipientRepository.save(recipient);
+
+            // 更新缓存：未读数 +1
+            notificationCache.incrementUnread(userId);
         }
 
         return savedMessage;
@@ -101,12 +108,16 @@ public class MessageServiceImpl implements MessageService {
         if (updated == 0) {
             throw new BusinessException("消息不存在或已读");
         }
+        // 失效缓存
+        notificationCache.invalidateUnread(userId);
     }
 
     @Override
     @Transactional
     public void markAllAsRead(Long userId) {
         recipientRepository.markAllAsRead(userId, LocalDateTime.now());
+        // 失效缓存
+        notificationCache.invalidateUnread(userId);
     }
 
     @Override
@@ -119,10 +130,24 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException(403, "无权删除此消息");
         }
         recipientRepository.deleteByUserIdAndMessageId(userId, id);
+        // 失效缓存
+        notificationCache.invalidateUnread(userId);
     }
 
     @Override
     public long getUnreadCount(Long userId) {
-        return recipientRepository.findByUserIdAndStatus(userId, MessageStatus.PENDING).size();
+        // 优先从缓存读取
+        Long cached = notificationCache.getUnreadCount(userId);
+        if (cached != null) {
+            return cached;
+        }
+
+        // 缓存未命中，查询数据库
+        long count = recipientRepository.findByUserIdAndStatus(userId, MessageStatus.PENDING).size();
+
+        // 回填缓存
+        notificationCache.setUnreadCount(userId, count);
+
+        return count;
     }
 }

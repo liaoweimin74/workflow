@@ -1,6 +1,7 @@
 package com.workflow.notification.store;
 
 import com.workflow.common.domain.PageResult;
+import com.workflow.notification.cache.NotificationCache;
 import com.workflow.notification.model.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,9 @@ class MessageServiceTest {
 
     @Mock
     private RecipientRepository recipientRepository;
+
+    @Mock
+    private NotificationCache notificationCache;
 
     @InjectMocks
     private com.workflow.notification.store.impl.MessageServiceImpl messageService;
@@ -110,12 +114,16 @@ class MessageServiceTest {
 
     @Test
     void getUnreadCount_returns_number() {
+        // 缓存未命中，返回 null
+        when(notificationCache.getUnreadCount(1000L)).thenReturn(null);
         when(recipientRepository.findByUserIdAndStatus(1000L, MessageStatus.PENDING))
                 .thenReturn(List.of(testRecipient));
 
         long count = messageService.getUnreadCount(1000L);
 
         assertThat(count).isEqualTo(1);
+        // 验证回填缓存
+        verify(notificationCache).setUnreadCount(1000L, 1);
     }
 
     @Test

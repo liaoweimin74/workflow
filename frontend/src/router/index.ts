@@ -159,6 +159,30 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '消息中心' }
       },
       {
+        path: 'messages/templates',
+        name: 'MessageTemplateList',
+        component: () => import('@/modules/notification/views/admin/TemplateList.vue'),
+        meta: { title: '模板管理' }
+      },
+      {
+        path: 'messages/channels',
+        name: 'MessageChannelConfig',
+        component: () => import('@/modules/notification/views/admin/ChannelConfig.vue'),
+        meta: { title: '渠道配置' }
+      },
+      {
+        path: 'messages/subscriptions',
+        name: 'MessageSubscriptionRules',
+        component: () => import('@/modules/notification/views/admin/SubscriptionRules.vue'),
+        meta: { title: '订阅规则' }
+      },
+      {
+        path: 'messages/deliveries',
+        name: 'MessageDeliveryLog',
+        component: () => import('@/modules/notification/views/admin/DeliveryLog.vue'),
+        meta: { title: '发送记录' }
+      },
+      {
         path: '/:pathMatch(.*)*',
         redirect: '/404'
       }

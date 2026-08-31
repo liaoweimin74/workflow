@@ -6,6 +6,7 @@ import com.workflow.notification.channel.ChannelMessage;
 import com.workflow.notification.model.ChannelType;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.Recipient;
+import com.workflow.notification.sse.SseEmitterManager;
 import com.workflow.notification.store.MessageService;
 import com.workflow.notification.store.RecipientRepository;
 import org.slf4j.Logger;
@@ -30,13 +31,16 @@ public class MessageDispatcher {
 
     private final MessageService messageService;
     private final RecipientRepository recipientRepository;
+    private final SseEmitterManager sseManager;
     private final Map<ChannelType, ChannelAdapter> adapters;
 
     public MessageDispatcher(MessageService messageService,
                              RecipientRepository recipientRepository,
+                             SseEmitterManager sseManager,
                              List<ChannelAdapter> channelAdapters) {
         this.messageService = messageService;
         this.recipientRepository = recipientRepository;
+        this.sseManager = sseManager;
         this.adapters = new ConcurrentHashMap<>();
         for (ChannelAdapter adapter : channelAdapters) {
             adapters.put(adapter.getChannelType(), adapter);
@@ -59,6 +63,11 @@ public class MessageDispatcher {
         if (channels.contains(ChannelType.IN_APP)) {
             messageService.send(message, recipientIds);
             log.info("站内信投递完成: messageId={}", message.getId());
+
+            // 2. 通过 SSE 推送给在线用户
+            for (Long userId : recipientIds) {
+                sseManager.sendToUser(userId, "new-message", message);
+            }
         }
 
         // 2. 异步发送外部渠道

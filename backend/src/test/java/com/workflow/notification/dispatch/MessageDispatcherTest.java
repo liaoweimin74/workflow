@@ -5,6 +5,7 @@ import com.workflow.notification.channel.ChannelDeliveryResult;
 import com.workflow.notification.channel.ChannelMessage;
 import com.workflow.notification.channel.InAppChannelAdapter;
 import com.workflow.notification.model.*;
+import com.workflow.notification.sse.SseEmitterManager;
 import com.workflow.notification.store.MessageService;
 import com.workflow.notification.store.RecipientRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +31,7 @@ class MessageDispatcherTest {
     private RecipientRepository recipientRepository;
 
     private InAppChannelAdapter inAppAdapter;
+    private SseEmitterManager sseManager;
 
     private MessageDispatcher dispatcher;
 
@@ -39,7 +41,8 @@ class MessageDispatcherTest {
     void setUp() {
         // 使用真实实例
         inAppAdapter = new InAppChannelAdapter();
-        dispatcher = new MessageDispatcher(messageService, recipientRepository, List.of(inAppAdapter));
+        sseManager = new SseEmitterManager();
+        dispatcher = new MessageDispatcher(messageService, recipientRepository, sseManager, List.of(inAppAdapter));
 
         testMessage = new Message();
         testMessage.setId(1L);

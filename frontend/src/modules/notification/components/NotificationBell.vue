@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Bell } from '@element-plus/icons-vue'
 import { useNotificationStore } from '../stores/notification'
@@ -41,6 +41,11 @@ const recentMessages = computed(() => store.messages.slice(0, 5))
 onMounted(() => {
   store.fetchMessages(0)
   store.fetchUnreadCount()
+  store.connectSSE()
+})
+
+onUnmounted(() => {
+  store.disconnectSSE()
 })
 
 function formatTime(time: string) {

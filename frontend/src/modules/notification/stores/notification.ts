@@ -13,6 +13,7 @@ export const useNotificationStore = defineStore('notification', () => {
   const loading = ref(false)
   const currentPage = ref(0)
   const pageSize = ref(20)
+  let eventSource: EventSource | null = null
 
   /** 加载消息列表 */
   async function fetchMessages(page = 0) {
@@ -32,6 +33,42 @@ export const useNotificationStore = defineStore('notification', () => {
   async function fetchUnreadCount() {
     const res = await getUnreadCount()
     unreadCount.value = res.data as number
+  }
+
+  /** 建立 SSE 连接 */
+  function connectSSE() {
+    if (eventSource) {
+      eventSource.close()
+    }
+
+    eventSource = new EventSource('/api/v1/notifications/sse')
+
+    eventSource.addEventListener('new-message', (event) => {
+      const message = JSON.parse(event.data) as Message
+      // 更新未读数
+      unreadCount.value++
+      // 如果消息列表有数据，插入到顶部
+      if (messages.value.length > 0) {
+        messages.value.unshift(message)
+        if (messages.value.length > pageSize.value) {
+          messages.value.pop()
+        }
+      }
+      total.value++
+    })
+
+    eventSource.onerror = () => {
+      // SSE 自动重连，浏览器会处理
+      console.warn('SSE 连接断开，将自动重连')
+    }
+  }
+
+  /** 断开 SSE 连接 */
+  function disconnectSSE() {
+    if (eventSource) {
+      eventSource.close()
+      eventSource = null
+    }
   }
 
   /** 标记已读 */
@@ -66,6 +103,8 @@ export const useNotificationStore = defineStore('notification', () => {
     hasUnread,
     fetchMessages,
     fetchUnreadCount,
+    connectSSE,
+    disconnectSSE,
     readMessage,
     readAllMessages,
     removeMessage,

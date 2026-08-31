@@ -47,8 +47,8 @@
 - [ ] 4.4 实现 ChannelConfig 渠道管理页（渠道列表 + 配置编辑 + 健康检查展示）
 - [ ] 4.5 实现 SubscriptionRules 订阅规则管理页（规则列表 + 创建/编辑 + 优先级排序）
 - [x] 4.6 实现 DeliveryLog 发送记录页（复用 SearchTable + 筛选 + 失败高亮 + 手动重发 + 统计图表）
-- [ ] 4.7 实现 REST API：管理端模板/渠道/订阅/记录接口（8个端点）
-- [ ] 4.8 注册管理端路由（/admin/notification/*）
+- [x] 4.7 实现 REST API：管理端模板/渠道/订阅/记录接口（8个端点）
+- [x] 4.8 注册管理端路由（/admin/notification/*）
 - [ ] 4.9 前端单元测试：管理端各页面组件
 
 ## 5. P3：渠道适配器
@@ -59,7 +59,7 @@
 - [ ] 5.4 渠道配置加密存储（AES-256 加密 api_key 等敏感参数）
 - [ ] 5.5 实现渠道健康检查接口（成功率、平均延迟统计）
 - [ ] 5.6 实现渠道测试连通性接口（POST /channels/{id}/test）
-- [ ] 5.7 实现内部 API：POST /api/v1/internal/notifications/send（服务间调用）
+- [x] 5.7 实现内部 API：POST /api/v1/internal/notifications/send（服务间调用）
 - [ ] 5.8 权限控制：用户端仅操作自己的消息、管理端需 ADMIN/NOTIFICATION_MANAGER 角色、内部 API 限服务间
 - [ ] 5.9 各渠道适配器单元测试（Mock 外部 API）
 

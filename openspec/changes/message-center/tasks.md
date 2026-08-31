@@ -4,14 +4,14 @@
 - [x] 1.2 创建 msg_message 表 Flyway 迁移脚本（id, tenant_id, template_code, sender_id, sender_type, title, content JSON, link_json, priority, category, message_type, status, created_at）
 - [x] 1.3 创建 msg_recipient 表 Flyway 迁移脚本（id, message_id, user_id, read_status, read_at, channel_delivery_status_json）
 - [x] 1.4 实现 Message 实体、Recipient 实体、JPA Repository
-- [ ] 1.5 实现 MessageService：发送消息、查询列表（分页筛选）、查询详情、标记已读、批量已读、删除、未读计数
-- [ ] 1.6 实现 MessageEvent 事件类和 MessageDispatcher 分发器（站内信同步写入）
-- [ ] 1.7 实现 ChannelAdapter SPI 接口、ChannelType 枚举、ChannelDeliveryResult 返回类
-- [ ] 1.8 实现 IN_APP 渠道适配器（站内信，同步写入即完成）
-- [ ] 1.9 实现 REST API：用户端消息接口（7个端点）
-- [ ] 1.10 创建 msg_delivery_retry 表 Flyway 迁移脚本（id, message_id, channel, retry_count, next_retry_at, last_error, status）
-- [ ] 1.11 实现异步重试机制：@Async 异步发送 + RetryTask 定时任务（3级退避：1min/5min/30min，最多3次）
-- [ ] 1.12 后端单元测试：MessageService、MessageDispatcher、RetryTask
+- [x] 1.5 实现 MessageService：发送消息、查询列表（分页筛选）、查询详情、标记已读、批量已读、删除、未读计数
+- [x] 1.6 实现 MessageEvent 事件类和 MessageDispatcher 分发器（站内信同步写入）
+- [x] 1.7 实现 ChannelAdapter SPI 接口、ChannelType 枚举、ChannelDeliveryResult 返回类
+- [x] 1.8 实现 IN_APP 渠道适配器（站内信，同步写入即完成）
+- [x] 1.9 实现 REST API：用户端消息接口（7个端点）
+- [x] 1.10 创建 msg_delivery_retry 表 Flyway 迁移脚本（id, message_id, channel, retry_count, next_retry_at, last_error, status）
+- [x] 1.11 实现异步重试机制：@Async 异步发送 + RetryTask 定时任务（3级退避：1min/5min/30min，最多3次）
+- [x] 1.12 后端单元测试：MessageService、MessageDispatcher、RetryTask
 
 ## 2. P1：Web 前端 - 铃铛与消息中心
 

@@ -765,3 +765,81 @@ describe('SearchTable — 服务器端排序', () => {
     expect(lastCall.order).toBeUndefined()
   })
 })
+
+describe('onExpand 回调（tree-select 按需加载）', () => {
+  it('tree-select 首次展开且数据为空时触发 onExpand', async () => {
+    const onExpand = vi.fn()
+    const wrapper = createWrapper({
+      searchFields: [{
+        type: 'tree-select',
+        label: '组织',
+        prop: 'orgId',
+        treeProps: { data: [], props: { label: 'name', value: 'id' } },
+        onExpand,
+      }],
+    })
+    const treeSelect = wrapper.findComponent({ name: 'ElTreeSelect' })
+    expect(treeSelect.exists()).toBe(true)
+    treeSelect.vm.$emit('visible-change', true)
+    await flushPromises()
+    expect(onExpand).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('tree-select 数据非空时不触发 onExpand', async () => {
+    const onExpand = vi.fn()
+    const wrapper = createWrapper({
+      searchFields: [{
+        type: 'tree-select',
+        label: '组织',
+        prop: 'orgId',
+        treeProps: { data: [{ id: 1, name: '总部' }], props: { label: 'name', value: 'id' } },
+        onExpand,
+      }],
+    })
+    const treeSelect = wrapper.findComponent({ name: 'ElTreeSelect' })
+    treeSelect.vm.$emit('visible-change', true)
+    await flushPromises()
+    expect(onExpand).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('未配置 onExpand 的 tree-select 保持原行为', async () => {
+    const wrapper = createWrapper({
+      searchFields: [{
+        type: 'tree-select',
+        label: '组织',
+        prop: 'orgId',
+        treeProps: { data: [], props: { label: 'name', value: 'id' } },
+      }],
+    })
+    const treeSelect = wrapper.findComponent({ name: 'ElTreeSelect' })
+    expect(treeSelect.exists()).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+describe('onFormOpen 回调（表单打开前延迟加载）', () => {
+  it('formConfig.onFormOpen 在表单打开前被调用', async () => {
+    const onFormOpen = vi.fn()
+    const wrapper = createWrapper({
+      formConfig: { rule: [], createApi: vi.fn(), onFormOpen },
+    })
+    const vm = wrapper.vm as any
+    await vm.openFormDialog()
+    await flushPromises()
+    expect(onFormOpen).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('未配置 onFormOpen 时表单正常打开', async () => {
+    const wrapper = createWrapper({
+      formConfig: { rule: [], createApi: vi.fn() },
+    })
+    const vm = wrapper.vm as any
+    await vm.openFormDialog()
+    await flushPromises()
+    // 不报错即为兼容
+    wrapper.unmount()
+  })
+})

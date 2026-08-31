@@ -41,6 +41,8 @@ export interface SearchField {
   style?: string
   /** 仅 date-range 有效：true 渲染 datetimerange（含时分秒），false/缺省渲染 daterange（仅日期） */
   time?: boolean
+  /** tree-select 首次展开时加载数据的回调（按需加载）；未配置时保持既有行为 */
+  onExpand?: () => void | Promise<void>
 }
 
 // --- 表格列 ---
@@ -139,6 +141,8 @@ export interface FormConfig<T = any> {
   afterCreate?: (result: any) => void
   afterUpdate?: (result: any) => void
   afterDelete?: () => void
+  /** 表单打开前回调（打开弹窗前 await，用于延迟加载选项数据）；未配置时保持既有行为 */
+  onFormOpen?: () => void | Promise<void>
 }
 
 // --- SearchTable props ---

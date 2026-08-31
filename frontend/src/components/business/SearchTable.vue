@@ -33,6 +33,7 @@
             clearable
             :style="field.style || 'width: 200px'"
             check-strictly
+            @visible-change="(visible: boolean) => { if (visible && field.onExpand && (!field.treeProps?.data || field.treeProps.data.length === 0)) field.onExpand() }"
           />
           <el-date-picker
             v-else-if="field.type === 'date-picker'"
@@ -503,6 +504,7 @@ function handleExport() {
 
 // --- CRUD ---
 async function handleCreate(initialValues?: Record<string, any>) {
+  await props.formConfig?.onFormOpen?.()
   if (props.formConfig?.beforeCreate) {
     const ok = await props.formConfig.beforeCreate()
     if (ok === false) return
@@ -518,6 +520,7 @@ async function handleCreate(initialValues?: Record<string, any>) {
 }
 
 async function handleEdit(row: any) {
+  await props.formConfig?.onFormOpen?.()
   if (props.formConfig?.beforeEdit) {
     const ok = await props.formConfig.beforeEdit(row)
     if (ok === false) return

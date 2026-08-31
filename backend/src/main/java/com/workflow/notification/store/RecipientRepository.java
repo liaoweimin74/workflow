@@ -38,6 +38,15 @@ public interface RecipientRepository extends JpaRepository<Recipient, Long> {
     int markAsRead(@Param("id") Long id, @Param("userId") Long userId, @Param("now") LocalDateTime now);
 
     /**
+     * 批量标记已读（按消息ID + 用户ID）
+     */
+    @Modifying
+    @Query("UPDATE Recipient r SET r.status = com.workflow.notification.model.MessageStatus.SENT, r.sentAt = :now " +
+           "WHERE r.userId = :userId AND r.messageId IN :messageIds")
+    int markBatchAsRead(@Param("userId") Long userId, @Param("messageIds") List<Long> messageIds,
+                        @Param("now") LocalDateTime now);
+
+    /**
      * 删除用户的消息接收记录
      */
     void deleteByUserIdAndMessageId(Long userId, Long messageId);

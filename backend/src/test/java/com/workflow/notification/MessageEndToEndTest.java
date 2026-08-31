@@ -54,7 +54,7 @@ class MessageEndToEndTest {
         assertThat(sent.getStatus()).isEqualTo(MessageStatus.SENT);
 
         // 3. 查询消息列表
-        PageResult<Message> list = messageService.listByUserId(1000L, 0, 10);
+        PageResult<Message> list = messageService.listByUserId(1000L, 0, 10, null, null, null, null, null);
         assertThat(list.getTotal()).isGreaterThanOrEqualTo(1);
         assertThat(list.getRows()).isNotEmpty();
 
@@ -67,7 +67,7 @@ class MessageEndToEndTest {
 
         // 6. 删除消息
         messageService.delete(sent.getId(), 1000L);
-        PageResult<Message> afterDelete = messageService.listByUserId(1000L, 0, 10);
+        PageResult<Message> afterDelete = messageService.listByUserId(1000L, 0, 10, null, null, null, null, null);
         assertThat(afterDelete.getRows()).isEmpty();
     }
 }

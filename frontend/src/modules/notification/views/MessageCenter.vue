@@ -1,142 +1,143 @@
 <template>
-  <div class="message-center">
-    <el-container style="height: calc(100vh - 60px)">
-      <!-- 左侧分类 -->
-      <el-aside width="180px" class="category-panel">
-        <div class="category-title">消息分类</div>
-        <el-menu :default-active="activeCategory" @select="handleCategorySelect">
-          <el-menu-item index="all">全部消息</el-menu-item>
-          <el-menu-item index="WORKFLOW">工作流</el-menu-item>
-          <el-menu-item index="SYSTEM">系统消息</el-menu-item>
-          <el-menu-item index="USER">用户通信</el-menu-item>
-          <el-menu-item index="EXTERNAL">外部业务</el-menu-item>
-        </el-menu>
-      </el-aside>
-
-      <!-- 中间消息列表 -->
-      <el-main class="message-list-panel">
-        <div class="list-header">
-          <el-input v-model="keyword" placeholder="搜索消息" clearable style="width: 300px" @keyup.enter="handleSearch" />
-          <el-button type="primary" @click="handleReadAll">全部已读</el-button>
-        </div>
-        <el-table :data="store.messages" v-loading="store.loading" @row-click="handleRowClick" stripe>
-          <el-table-column prop="title" label="标题" min-width="200">
-            <template #default="{ row }">
-              <span :class="{ 'unread': row.status === 'PENDING' }">{{ row.title }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="category" label="分类" width="100">
-            <template #default="{ row }">
-              <el-tag size="small">{{ categoryLabel(row.category) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="createdAt" label="时间" width="160">
-            <template #default="{ row }">
-              {{ formatDateTime(row.createdAt) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="100">
-            <template #default="{ row }">
-              <el-button type="danger" link @click.stop="handleDelete(row.id)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-pagination
-          v-model:current-page="currentPage"
-          :page-size="store.pageSize"
-          :total="store.total"
-          layout="total, prev, pager, next"
-          style="margin-top: 16px; justify-content: flex-end"
-          @current-change="handlePageChange"
-        />
-      </el-main>
-
-      <!-- 右侧消息详情 -->
-      <el-aside width="350px" class="detail-panel">
-        <template v-if="selectedMessage">
-          <div class="detail-title">{{ selectedMessage.title }}</div>
-          <div class="detail-meta">
-            <span>分类：{{ categoryLabel(selectedMessage.category) }}</span>
-            <span>优先级：{{ selectedMessage.priority }}</span>
-          </div>
-          <div class="detail-time">{{ formatDateTime(selectedMessage.createdAt) }}</div>
-          <el-divider />
-          <div class="detail-content">{{ JSON.stringify(selectedMessage.content) }}</div>
-          <div v-if="selectedMessage.linkJson" class="detail-action">
-            <el-button type="primary" @click="handleJump">查看详情</el-button>
-          </div>
-        </template>
-        <div v-else class="detail-empty">选择一条消息查看详情</div>
-      </el-aside>
-    </el-container>
+  <div class="message-center-page">
+    <SearchTable
+      ref="tableRef"
+      :search-fields="searchFields"
+      :columns="columns"
+      :action-buttons="actionButtons"
+      :toolbar-buttons="toolbarButtons"
+      :fetch-api="fetchApi"
+      :show-selection="true"
+      :default-page-size="10"
+      table-size="small"
+      @selection-change="handleSelectionChange"
+      @row-click="handleRowClick"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { SearchTable } from '@/components/business'
+import { Check, Delete, View, Reading } from '@element-plus/icons-vue'
+import type { SearchField, TableColumn, ActionButton, ToolbarButton } from '@/components/business/types'
+import { ElMessage } from 'element-plus'
+import { getNotifications, markAsRead, markBatchAsRead, markAllAsRead, deleteNotification } from '../api/notification'
 import { useNotificationStore } from '../stores/notification'
 import type { Message, MessageCategory } from '../types'
 
+const tableRef = ref<InstanceType<typeof SearchTable>>()
 const store = useNotificationStore()
 const router = useRouter()
 
-const activeCategory = ref('all')
-const keyword = ref('')
-const currentPage = ref(1)
-const selectedMessage = ref<Message | null>(null)
+/** 当前勾选的行（批量已读用） */
+const selectedRows = ref<Message[]>([])
 
-onMounted(() => {
-  store.fetchMessages(0)
-})
+// ========== 查询栏 ==========
+const searchFields: SearchField[] = [
+  { type: 'input', label: '标题', prop: 'keyword', placeholder: '按标题搜索', style: 'width: 200px' },
+  {
+    type: 'select', label: '分类', prop: 'category', placeholder: '全部分类', style: 'width: 140px',
+    options: [
+      { label: '工作流', value: 'WORKFLOW' },
+      { label: '系统', value: 'SYSTEM' },
+      { label: '通知', value: 'NOTIFICATION' },
+      { label: '任务', value: 'TASK' },
+      { label: '审批', value: 'APPROVAL' },
+    ],
+  },
+  {
+    type: 'select', label: '状态', prop: 'unread', placeholder: '全部', style: 'width: 120px',
+    options: [
+      { label: '未读', value: true },
+      { label: '已读', value: false },
+    ],
+  },
+  { type: 'date-range', label: '时间', prop: 'timeRange', time: true, style: 'width: 360px' },
+]
 
-function categoryLabel(category: MessageCategory) {
-  const labels: Record<string, string> = {
-    WORKFLOW: '工作流',
-    SYSTEM: '系统',
-    USER: '用户',
-    EXTERNAL: '外部',
+// ========== 列 ==========
+const columns: TableColumn[] = [
+  {
+    prop: 'title', label: '标题', minWidth: 220,
+    render: (row: any) => (row.status === 'PENDING' ? `◉ ${row.title || '--'}` : row.title || '--'),
+  },
+  {
+    prop: 'category', label: '分类', width: 110, align: 'center',
+    render: (row: any) => categoryLabel(row.category),
+  },
+  {
+    prop: 'createdAt', label: '时间', width: 170,
+    render: (row: any) => formatDateTime(row.createdAt),
+  },
+]
+
+// ========== 工具栏按钮 ==========
+const toolbarButtons: ToolbarButton[] = [
+  {
+    label: '批量已读', icon: Check, circle: true, type: 'primary',
+    onClick: handleBatchRead,
+  },
+  {
+    label: '全部已读', icon: Reading, circle: true, type: 'success',
+    onClick: handleReadAll,
+  },
+]
+
+// ========== 操作列（全部图标按钮） ==========
+const actionButtons: ActionButton[] = [
+  {
+    label: '标记已读', icon: View, type: 'primary', size: 'small',
+    show: (row: any) => row.status === 'PENDING',
+    onClick: async (row: any) => {
+      await handleRead(row)
+    },
+  },
+  {
+    label: '删除', icon: Delete, type: 'danger', size: 'small',
+    confirm: '确定删除该消息吗？',
+    onClick: async (row: any) => {
+      await deleteNotification(row.id)
+      ElMessage.success('删除成功')
+      refreshUnread()
+      tableRef.value?.fetchList()
+    },
+  },
+]
+
+// ========== 数据获取 ==========
+async function fetchApi(params: any) {
+  const [start, end] = params.timeRange || []
+  const res = await getNotifications({
+    page: (params.page || 1) - 1,
+    size: params.size || 10,
+    keyword: params.keyword || undefined,
+    category: params.category || undefined,
+    unread: params.unread ?? undefined,
+    start: start || undefined,
+    end: end || undefined,
+  })
+  const data = res.data as any
+  return {
+    rows: data.rows || [],
+    total: data.total || 0,
   }
-  return labels[category] || category
 }
 
-function formatDateTime(time: string) {
-  return new Date(time).toLocaleString('zh-CN')
+// ========== 交互 ==========
+function handleSelectionChange(selection: any[]) {
+  selectedRows.value = selection
 }
 
-function handleCategorySelect(index: string) {
-  activeCategory.value = index
-  // TODO: 按分类筛选
-  store.fetchMessages(0)
-}
-
-function handleSearch() {
-  // TODO: 按关键词搜索
-  store.fetchMessages(0)
-}
-
-function handlePageChange(page: number) {
-  store.fetchMessages(page - 1)
-}
-
-function handleRowClick(row: Message) {
-  selectedMessage.value = row
+/** 点击行：未读 → 已读 */
+async function handleRowClick(row: Message) {
   if (row.status === 'PENDING') {
-    store.readMessage(row.id)
+    await handleRead(row)
   }
-}
-
-async function handleDelete(id: number) {
-  await store.removeMessage(id)
-}
-
-function handleReadAll() {
-  store.readAllMessages()
-}
-
-function handleJump() {
-  if (selectedMessage.value?.linkJson) {
-    const link = selectedMessage.value.linkJson as { type?: string; url?: string }
+  // 有跳转链接时打开
+  if (row.linkJson) {
+    const link = row.linkJson as { type?: string; url?: string }
     if (link.url) {
       if (link.type === 'EXTERNAL') {
         window.open(link.url, '_blank')
@@ -146,63 +147,59 @@ function handleJump() {
     }
   }
 }
+
+async function handleRead(row: Message) {
+  await markAsRead(row.id)
+  row.status = 'SENT'
+  refreshUnread()
+  ElMessage.success('已标记为已读')
+}
+
+async function handleBatchRead() {
+  const ids = selectedRows.value.filter(r => r.status === 'PENDING').map(r => r.id)
+  if (ids.length === 0) {
+    ElMessage.warning('请先勾选未读消息')
+    return
+  }
+  await markBatchAsRead(ids)
+  ElMessage.success(`已将 ${ids.length} 条消息标记为已读`)
+  refreshUnread()
+  tableRef.value?.clearSelection()
+  tableRef.value?.fetchList()
+}
+
+async function handleReadAll() {
+  await markAllAsRead()
+  ElMessage.success('全部消息已读')
+  refreshUnread()
+  tableRef.value?.fetchList()
+}
+
+/** 刷新未读数角标 */
+function refreshUnread() {
+  store.fetchUnreadCount()
+}
+
+// ========== 展示辅助 ==========
+function categoryLabel(category: MessageCategory) {
+  const labels: Record<string, string> = {
+    WORKFLOW: '工作流', SYSTEM: '系统', NOTIFICATION: '通知', TASK: '任务', APPROVAL: '审批',
+  }
+  return labels[category] || category || '--'
+}
+
+function formatDateTime(time: string) {
+  if (!time) return '--'
+  const d = new Date(time)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 </script>
 
 <style scoped>
-.message-center {
+.message-center-page {
   height: 100%;
-}
-.category-panel {
-  border-right: 1px solid #e4e7ed;
   padding: 16px;
-}
-.category-title {
-  font-weight: 600;
-  margin-bottom: 12px;
-}
-.message-list-panel {
-  padding: 16px;
-}
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.unread {
-  font-weight: 600;
-}
-.detail-panel {
-  border-left: 1px solid #e4e7ed;
-  padding: 16px;
-}
-.detail-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.detail-meta {
-  font-size: 13px;
-  color: #666;
-  display: flex;
-  gap: 16px;
-}
-.detail-time {
-  font-size: 12px;
-  color: #999;
-  margin-top: 4px;
-}
-.detail-content {
-  font-size: 14px;
-  line-height: 1.6;
-  color: #333;
-}
-.detail-action {
-  margin-top: 16px;
-}
-.detail-empty {
-  text-align: center;
-  color: #999;
-  padding: 40px 0;
+  box-sizing: border-box;
 }
 </style>

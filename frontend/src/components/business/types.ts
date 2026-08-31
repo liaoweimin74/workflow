@@ -190,6 +190,8 @@ export interface SearchTableProps<T = any> {
   deleteConfirm?: (row: T) => string
   /** 操作列宽度（px），覆盖自动计算（icon 按钮 32px/个 + 24px padding） */
   actionColumnWidth?: number
+  /** 是否显示多选列（type=selection），默认 false。选中行经 selection-change 事件对外暴露 */
+  showSelection?: boolean
 }
 
 // --- ReferencePicker props ---

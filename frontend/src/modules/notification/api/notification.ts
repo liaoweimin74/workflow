@@ -2,10 +2,18 @@
  * 用户端消息 API
  */
 import http from '@/utils/http'
-import type { Message, PageResult } from '../types'
+import type { Message, MessageCategory, PageResult } from '../types'
 
-/** 获取消息列表 */
-export function getNotifications(params: { page?: number; size?: number }) {
+/** 获取消息列表（支持筛选） */
+export function getNotifications(params: {
+  page?: number
+  size?: number
+  keyword?: string
+  category?: MessageCategory
+  unread?: boolean
+  start?: string
+  end?: string
+}) {
   return http.get<PageResult<Message>>('/v1/notifications', { params })
 }
 
@@ -17,6 +25,11 @@ export function getNotification(id: number) {
 /** 标记已读 */
 export function markAsRead(id: number) {
   return http.put(`/v1/notifications/${id}/read`)
+}
+
+/** 批量标记已读 */
+export function markBatchAsRead(messageIds: number[]) {
+  return http.post('/v1/notifications/read-batch', messageIds)
 }
 
 /** 全部已读 */

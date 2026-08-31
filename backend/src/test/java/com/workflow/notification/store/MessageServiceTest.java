@@ -130,9 +130,41 @@ class MessageServiceTest {
     void listByUserId_returns_empty_when_no_messages() {
         when(recipientRepository.findByUserId(1000L)).thenReturn(Collections.emptyList());
 
-        PageResult<Message> result = messageService.listByUserId(1000L, 0, 10);
+        PageResult<Message> result = messageService.listByUserId(1000L, 0, 10, null, null, null, null, null);
 
         assertThat(result.getTotal()).isEqualTo(0);
         assertThat(result.getRows()).isEmpty();
+    }
+
+    @Test
+    void listByUserId_filters_by_unread_status() {
+        when(recipientRepository.findByUserIdAndStatus(1000L, MessageStatus.PENDING))
+                .thenReturn(List.of(testRecipient));
+        when(messageRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.PageRequest.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(Collections.emptyList()));
+
+        PageResult<Message> result = messageService.listByUserId(1000L, 0, 10, null, null, true, null, null);
+
+        assertThat(result.getTotal()).isEqualTo(0); // 无消息匹配
+        verify(recipientRepository).findByUserIdAndStatus(1000L, MessageStatus.PENDING);
+    }
+
+    @Test
+    void batchMarkAsRead_updates_recipients_and_invalidates_cache() {
+        when(recipientRepository.markBatchAsRead(eq(1000L), eq(List.of(1L, 2L)), any(LocalDateTime.class)))
+                .thenReturn(2);
+
+        messageService.batchMarkAsRead(List.of(1L, 2L), 1000L);
+
+        verify(recipientRepository).markBatchAsRead(eq(1000L), eq(List.of(1L, 2L)), any(LocalDateTime.class));
+        verify(notificationCache).invalidateUnread(1000L);
+    }
+
+    @Test
+    void batchMarkAsRead_empty_list_is_noop() {
+        messageService.batchMarkAsRead(Collections.emptyList(), 1000L);
+
+        verify(recipientRepository, never()).markBatchAsRead(any(), any(), any());
     }
 }

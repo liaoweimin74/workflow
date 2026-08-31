@@ -102,6 +102,7 @@
 
       <div class="table-wrapper">
       <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @row-dblclick="(row: any, col: any, evt: Event) => emit('row-dblclick', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
+        <el-table-column v-if="props.showSelection" type="selection" width="42" align="center" fixed="left" />
         <el-table-column
           v-for="col in columns"
           :key="col.prop || col.label"

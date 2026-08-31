@@ -5,13 +5,13 @@
 /** 消息优先级 */
 export type MessagePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
 
-/** 消息分类 */
-export type MessageCategory = 'WORKFLOW' | 'SYSTEM' | 'USER' | 'EXTERNAL'
+/** 消息分类（与后端 MessageCategory 枚举一致） */
+export type MessageCategory = 'WORKFLOW' | 'SYSTEM' | 'NOTIFICATION' | 'TASK' | 'APPROVAL'
 
 /** 消息类型 */
 export type MessageType = 'PUBLIC' | 'PRIVATE'
 
-/** 消息状态 */
+/** 消息状态：列表接口返回当前用户的已读状态（PENDING=未读，SENT=已读） */
 export type MessageStatus = 'PENDING' | 'SENT' | 'READ' | 'DELETED' | 'FAILED'
 
 /** 渠道类型 */
@@ -20,7 +20,7 @@ export type ChannelType = 'IN_APP' | 'SMS' | 'WECHAT_WORK' | 'WECHAT_MINIPROGRAM
 /** 消息实体 */
 export interface Message {
   id: number
-  tenantId: number
+  tenantId: string
   templateCode: string
   senderId: number
   senderType: string
@@ -38,8 +38,11 @@ export interface Message {
 export interface MessageFilter {
   page?: number
   size?: number
-  category?: MessageCategory
   keyword?: string
+  category?: MessageCategory
+  unread?: boolean
+  start?: string
+  end?: string
 }
 
 /** 分页结果 */

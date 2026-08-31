@@ -4,10 +4,15 @@ import com.workflow.common.domain.PageResult;
 import com.workflow.common.domain.R;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.model.Message;
+import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.store.MessageService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 用户端消息 API
@@ -26,13 +31,18 @@ public class NotificationController {
     }
 
     /**
-     * 获取消息列表（分页）
+     * 获取消息列表（分页，支持标题/分类/已读状态/时间段筛选）
      */
     @GetMapping
     public R<PageResult<Message>> list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return R.ok(messageService.listByUserId(currentUserId(), page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) MessageCategory category,
+            @RequestParam(required = false) Boolean unread,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+        return R.ok(messageService.listByUserId(currentUserId(), page, size, keyword, category, unread, start, end));
     }
 
     /**
@@ -49,6 +59,15 @@ public class NotificationController {
     @PutMapping("/{id}/read")
     public R<Void> markAsRead(@PathVariable Long id) {
         messageService.markAsRead(id, currentUserId());
+        return R.ok();
+    }
+
+    /**
+     * 批量标记已读
+     */
+    @PostMapping("/read-batch")
+    public R<Void> batchMarkAsRead(@RequestBody List<Long> messageIds) {
+        messageService.batchMarkAsRead(messageIds, currentUserId());
         return R.ok();
     }
 

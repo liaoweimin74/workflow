@@ -33,6 +33,8 @@ public class NotificationController {
 
     /**
      * 获取消息列表（分页，支持标题/分类/已读状态/时间段筛选）
+     *
+     * <p>时间参数格式与前端 SearchTable datetimerange 输出一致：{@code yyyy-MM-dd HH:mm:ss}
      */
     @GetMapping
     public R<PageResult<Message>> list(
@@ -41,8 +43,8 @@ public class NotificationController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) MessageCategory category,
             @RequestParam(required = false) Boolean unread,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime start,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime end) {
         return R.ok(messageService.listByUserId(currentUserId(), page, size, keyword, category, unread, start, end));
     }
 

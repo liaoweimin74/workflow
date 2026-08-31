@@ -51,7 +51,7 @@ const detail = ref<Message | null>(null)
 /** 打开抽屉时加载详情；未读消息自动标记已读 */
 watch(
   () => [props.modelValue, props.messageId],
-  async ([visible, id]) => {
+  async ([visible, id]: [boolean, number | null]) => {
     if (visible && id) {
       loading.value = true
       detail.value = null

@@ -77,6 +77,10 @@ const categoryOptions = [
   { value: 'NOTIFICATION', label: '通知' },
   { value: 'SYSTEM', label: '系统' },
 ]
+const contentTypeOptions = [
+  { value: 'TEXT', label: '纯文本' },
+  { value: 'MARKDOWN', label: 'Markdown' },
+]
 
 /** 当前编辑的是否系统模板（系统模板仅文案可编辑，结构性字段锁定） */
 const editingIsSystem = ref(false)
@@ -112,7 +116,10 @@ const formConfig = computed<FormConfig>(() => {
               },
               {
                 type: 'input', field: 'content', title: '内容模板',
-                props: { type: 'textarea', rows: 6, placeholder: '支持变量：${变量名}' },
+                props: { type: 'textarea', rows: 6, placeholder: '支持变量：${变量名}；内容类型为 Markdown 时支持 Markdown 语法' },
+              },
+              {
+                type: 'select', field: 'contentType', title: '内容类型', options: contentTypeOptions, value: 'TEXT',
               },
               {
                 type: 'select', field: 'channel', title: '渠道', options: channelOptions, value: 'IN_APP',

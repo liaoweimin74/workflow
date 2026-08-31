@@ -55,4 +55,34 @@ describe('TemplatePreview', () => {
     })
     expect(wrapper.text()).toContain('任务 [任务名称] 已创建')
   })
+
+  it('Markdown 内容（contentType=MARKDOWN）按富文本渲染', () => {
+    const wrapper = mount(TemplatePreview, {
+      props: {
+        source: 'content',
+        label: '内容预览',
+        formCreateInject: makeInject({
+          contentType: 'MARKDOWN',
+          content: '# 任务通知\n- 步骤一\n- 步骤二\n\n**重要**',
+        }),
+      },
+    })
+    const html = wrapper.html()
+    expect(html).toContain('<h1>')
+    expect(html).toContain('<strong>')
+    expect(html).toContain('<li>')
+  })
+
+  it('纯文本内容（contentType=TEXT）不渲染 Markdown 标签', () => {
+    const wrapper = mount(TemplatePreview, {
+      props: {
+        source: 'content',
+        label: '内容预览',
+        formCreateInject: makeInject({ contentType: 'TEXT', content: '# 不是标题' }),
+      },
+    })
+    // 纯文本模式：原文展示，不生成 <h1> 标签
+    expect(wrapper.text()).toContain('# 不是标题')
+    expect(wrapper.html()).not.toContain('<h1')
+  })
 })

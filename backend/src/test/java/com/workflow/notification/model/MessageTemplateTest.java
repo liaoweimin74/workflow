@@ -27,4 +27,19 @@ class MessageTemplateTest {
         assertThat(template.getName()).isEqualTo("任务创建通知");
         assertThat(template.getChannel()).isEqualTo(ChannelType.SMS);
     }
+
+    @Test
+    void contentType_defaults_to_text() {
+        MessageTemplate template = new MessageTemplate();
+
+        assertThat(template.getContentType()).isEqualTo(TemplateContentType.TEXT);
+    }
+
+    @Test
+    void contentType_can_be_set_to_markdown() {
+        MessageTemplate template = new MessageTemplate();
+        template.setContentType(TemplateContentType.MARKDOWN);
+
+        assertThat(template.getContentType()).isEqualTo(TemplateContentType.MARKDOWN);
+    }
 }

@@ -37,6 +37,11 @@ public class MessageTemplate {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
+    /** 内容类型：TEXT=纯文本，MARKDOWN=Markdown 富文本 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "content_type", length = 16)
+    private TemplateContentType contentType = TemplateContentType.TEXT;
+
     /** 渠道类型 */
     @Enumerated(EnumType.STRING)
     @Column(name = "channel", length = 16)
@@ -79,6 +84,9 @@ public class MessageTemplate {
 
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+
+    public TemplateContentType getContentType() { return contentType; }
+    public void setContentType(TemplateContentType contentType) { this.contentType = contentType; }
 
     public ChannelType getChannel() { return channel; }
     public void setChannel(ChannelType channel) { this.channel = channel; }

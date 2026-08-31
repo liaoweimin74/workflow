@@ -93,6 +93,9 @@ public class TemplateService {
         existing.setName(updated.getName());
         existing.setTitle(updated.getTitle());
         existing.setContent(updated.getContent());
+        if (updated.getContentType() != null) {
+            existing.setContentType(updated.getContentType());
+        }
         if (!isSystem) {
             existing.setPriority(updated.getPriority());
             existing.setCategory(updated.getCategory());

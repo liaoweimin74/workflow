@@ -139,8 +139,8 @@ async function handleDrawerRead() {
 
 async function handleReadAll() {
   await store.readAllMessages()
-  await loadList('unread')
-  await loadList('read')
+  await loadList(true)
+  await loadList(false)
 }
 
 function goToCenter() {

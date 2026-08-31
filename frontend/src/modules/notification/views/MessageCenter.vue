@@ -234,7 +234,7 @@ function categoryLabel(category?: MessageCategory) {
   const labels: Record<string, string> = {
     WORKFLOW: '工作流', SYSTEM: '系统', NOTIFICATION: '通知', TASK: '任务', APPROVAL: '审批',
   }
-  return labels[category] || category || '--'
+  return (category && labels[category]) || category || '--'
 }
 
 function priorityLabel(priority?: MessagePriority) {

@@ -10,9 +10,18 @@ import { ElMessage } from 'element-plus'
 
 const columns: TableColumn[] = [
   { prop: 'id', label: 'ID', width: 80 },
-  { prop: 'recipientId', label: '收件人ID', width: 120 },
+  { prop: 'title', label: '标题', minWidth: 240, showOverflowTooltip: true },
   {
-    prop: 'channel', label: '渠道', width: 120,
+    prop: 'recipients', label: '收件人', width: 160,
+    render: (row: any) => {
+      const recs = row.recipients || []
+      if (recs.length === 0) return '--'
+      const names = recs.map((r: any) => r.username || `#${r.userId}`)
+      return `${names.join('、')}（${recs.length}人）`
+    },
+  },
+  {
+    prop: 'channel', label: '渠道', width: 110,
     render: (row: any) => {
       const m: Record<string, string> = {
         IN_APP: '站内信', SMS: '短信', WECHAT_WORK: '企业微信', WECHAT_MINIPROGRAM: '小程序', APP: 'APP',
@@ -20,10 +29,11 @@ const columns: TableColumn[] = [
       return m[row.channel] || row.channel || '--'
     },
   },
-  { prop: 'status', label: '状态', width: 100 },
-  { prop: 'retryCount', label: '重试次数', width: 100 },
-  { prop: 'lastError', label: '错误信息', minWidth: 200, showOverflowTooltip: true },
-  { prop: 'createdAt', label: '创建时间', width: 180 },
+  {
+    prop: 'status', label: '状态', width: 100,
+    render: (row: any) => (row.status === 'SENT' ? '已发送' : row.status || '--'),
+  },
+  { prop: 'createdAt', label: '发送时间', width: 180 },
 ]
 
 async function fetchApi(params: any) {

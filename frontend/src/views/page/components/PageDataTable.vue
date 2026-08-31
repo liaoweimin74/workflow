@@ -410,14 +410,17 @@ const resolvedRefId = computed(() => {
   return ''
 })
 
-// 数据源绑定就绪后自动刷新（解决首次加载时 activeDsBindings 为空导致 fetchApi 返回空数据的问题）
-let _dsBindingsRefreshed = false
+// ==================== 首次数据请求单次触发 ====================
+// 挂载时 refId 已就绪：SearchTable 挂载请求即首次请求，不补发；
+// 挂载时未就绪：置待补发标志，绑定就绪（refId 可解析）后补发恰一次
+let _pendingFirstFetch = false
+onMounted(() => { if (!resolvedRefId.value) _pendingFirstFetch = true })
 watch(activeDsBindings, () => {
-  if (activeDsBindings.value.length > 0 && !_dsBindingsRefreshed) {
-    _dsBindingsRefreshed = true
+  if (_pendingFirstFetch && resolvedRefId.value) {
+    _pendingFirstFetch = false
     nextTick(() => { tableRef.value?.fetchList() })
   }
-}, { immediate: true })
+})
 
 const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {
   const dsId = resolvedRefId.value

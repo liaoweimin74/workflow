@@ -3,7 +3,7 @@ package com.workflow.notification.cache;
 import com.workflow.framework.redis.RedisCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
@@ -15,7 +15,6 @@ import java.util.concurrent.TimeUnit;
  * Redis 不可用时自动降级为直查数据库
  */
 @Component
-@ConditionalOnBean(RedisCache.class)
 public class NotificationCache {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationCache.class);
@@ -29,7 +28,7 @@ public class NotificationCache {
 
     private final RedisCache redisCache;
 
-    public NotificationCache(RedisCache redisCache) {
+    public NotificationCache(@Autowired(required = false) RedisCache redisCache) {
         this.redisCache = redisCache;
     }
 
@@ -39,6 +38,7 @@ public class NotificationCache {
      * @return 未读数，缓存未命中返回 null
      */
     public Long getUnreadCount(Long userId) {
+        if (redisCache == null) return null;
         try {
             String value = redisCache.get(UNREAD_PREFIX + userId);
             return value != null ? Long.parseLong(value) : null;
@@ -52,6 +52,7 @@ public class NotificationCache {
      * 设置未读数缓存
      */
     public void setUnreadCount(Long userId, long count) {
+        if (redisCache == null) return;
         try {
             redisCache.set(UNREAD_PREFIX + userId, String.valueOf(count), UNREAD_TTL, UNREAD_UNIT);
         } catch (Exception e) {
@@ -63,6 +64,7 @@ public class NotificationCache {
      * 未读数 +1
      */
     public void incrementUnread(Long userId) {
+        if (redisCache == null) return;
         try {
             String key = UNREAD_PREFIX + userId;
             if (redisCache.hasKey(key)) {
@@ -78,6 +80,7 @@ public class NotificationCache {
      * 未读数 -1
      */
     public void decrementUnread(Long userId) {
+        if (redisCache == null) return;
         try {
             String key = UNREAD_PREFIX + userId;
             if (redisCache.hasKey(key)) {
@@ -92,6 +95,7 @@ public class NotificationCache {
      * 清除用户未读数缓存（已读/删除时调用）
      */
     public void invalidateUnread(Long userId) {
+        if (redisCache == null) return;
         try {
             redisCache.delete(UNREAD_PREFIX + userId);
         } catch (Exception e) {

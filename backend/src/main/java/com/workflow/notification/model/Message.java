@@ -6,6 +6,8 @@ import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.MessageType;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 import java.util.Map;
 
@@ -44,10 +46,12 @@ public class Message {
     private String title;
 
     /** 消息内容 (JSON) */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "content", columnDefinition = "JSON")
     private Map<String, Object> content;
 
     /** 链接信息 (JSON) */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "link_json", columnDefinition = "JSON")
     private Map<String, Object> linkJson;
 

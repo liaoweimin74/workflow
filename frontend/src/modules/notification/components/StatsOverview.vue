@@ -31,7 +31,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import http from '@/api/http'
+import http from '@/utils/http'
 
 const stats = ref({ totalMessages: 0, totalRecipients: 0, failedRetries: 0 })
 

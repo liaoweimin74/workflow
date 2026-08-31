@@ -41,7 +41,9 @@ export const useNotificationStore = defineStore('notification', () => {
       eventSource.close()
     }
 
-    eventSource = new EventSource('/api/v1/notifications/sse')
+    const token = localStorage.getItem('access_token') ?? ''
+    // EventSource 无法自定义 header，通过 query 参数携带 token
+    eventSource = new EventSource(`/api/v1/notifications/sse?token=${encodeURIComponent(token)}`)
 
     eventSource.addEventListener('new-message', (event) => {
       const message = JSON.parse(event.data) as Message

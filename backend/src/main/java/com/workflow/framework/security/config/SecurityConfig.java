@@ -41,6 +41,8 @@ public class SecurityConfig {
                 .accessDeniedHandler(accessDeniedHandler))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login").permitAll()
+                // SSE 端点：浏览器 EventSource 无法自定义 header，通过 query token 自行认证
+                .requestMatchers("/api/v1/notifications/sse").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

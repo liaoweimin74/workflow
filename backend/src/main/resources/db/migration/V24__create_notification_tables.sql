@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS msg_subscription_rule (
     channel                 VARCHAR(16)   NOT NULL COMMENT '渠道类型',
     priority                VARCHAR(16)   NULL COMMENT '优先级',
     `enable`                BOOLEAN       NOT NULL DEFAULT TRUE COMMENT '是否启用',
-    `condition`             TEXT          NULL COMMENT '条件表达式',
+    condition_expr          TEXT          NULL COMMENT '条件表达式',
     created_by              VARCHAR(64)   NULL COMMENT '创建人',
     created_at              DATETIME      DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

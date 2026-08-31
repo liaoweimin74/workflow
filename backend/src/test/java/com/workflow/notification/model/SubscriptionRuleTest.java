@@ -16,7 +16,7 @@ class SubscriptionRuleTest {
         rule.setChannel(ChannelType.SMS);
         rule.setPriority(MessagePriority.HIGH);
         rule.setEnable(true);
-        rule.setCondition("user.role == 'ADMIN'");
+        rule.setConditionExpr("user.role == 'ADMIN'");
         rule.setCreatedAt(LocalDateTime.now());
 
         assertThat(rule.getTenantId()).isEqualTo(1L);

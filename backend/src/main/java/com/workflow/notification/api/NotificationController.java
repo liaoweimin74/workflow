@@ -5,6 +5,7 @@ import com.workflow.common.domain.R;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageCategory;
+import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.store.MessageService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.Authentication;
@@ -69,6 +70,14 @@ public class NotificationController {
     public R<Void> batchMarkAsRead(@RequestBody List<Long> messageIds) {
         messageService.batchMarkAsRead(messageIds, currentUserId());
         return R.ok();
+    }
+
+    /**
+     * 切换消息已读状态（未读↔已读）
+     */
+    @PostMapping("/{id}/toggle-read")
+    public R<MessageStatus> toggleRead(@PathVariable Long id) {
+        return R.ok(messageService.toggleRead(id, currentUserId()));
     }
 
     /**

@@ -9,7 +9,6 @@
       :fetch-api="fetchApi"
       :show-selection="true"
       :default-page-size="10"
-      table-size="small"
       @selection-change="handleSelectionChange"
       @row-click="handleRowClick"
     />
@@ -20,12 +19,12 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SearchTable } from '@/components/business'
-import { Check, Delete, View, Reading } from '@element-plus/icons-vue'
+import { Check, Reading, Message as MessageIcon, Delete } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, ToolbarButton } from '@/components/business/types'
 import { ElMessage } from 'element-plus'
-import { getNotifications, markAsRead, markBatchAsRead, markAllAsRead, deleteNotification } from '../api/notification'
+import { getNotifications, markAsRead, markBatchAsRead, markAllAsRead, toggleRead, deleteNotification } from '../api/notification'
 import { useNotificationStore } from '../stores/notification'
-import type { Message, MessageCategory } from '../types'
+import type { Message, MessageCategory, MessageStatus } from '../types'
 
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 const store = useNotificationStore()
@@ -64,6 +63,10 @@ const columns: TableColumn[] = [
     render: (row: any) => (row.status === 'PENDING' ? `◉ ${row.title || '--'}` : row.title || '--'),
   },
   {
+    prop: 'status', label: '状态', width: 90, align: 'center',
+    render: (row: any) => (row.status === 'PENDING' ? '未读' : '已读'),
+  },
+  {
     prop: 'category', label: '分类', width: 110, align: 'center',
     render: (row: any) => categoryLabel(row.category),
   },
@@ -73,14 +76,14 @@ const columns: TableColumn[] = [
   },
 ]
 
-// ========== 工具栏按钮 ==========
+// ========== 工具栏按钮（带图标普通按钮） ==========
 const toolbarButtons: ToolbarButton[] = [
   {
-    label: '批量已读', icon: Check, circle: true, type: 'primary',
+    label: '批量已读', icon: Check, type: 'primary',
     onClick: handleBatchRead,
   },
   {
-    label: '全部已读', icon: Reading, circle: true, type: 'success',
+    label: '全部已读', icon: Reading, type: 'success',
     onClick: handleReadAll,
   },
 ]
@@ -88,10 +91,15 @@ const toolbarButtons: ToolbarButton[] = [
 // ========== 操作列（全部图标按钮） ==========
 const actionButtons: ActionButton[] = [
   {
-    label: '标记已读', icon: View, type: 'primary', size: 'small',
-    show: (row: any) => row.status === 'PENDING',
+    label: '切换已读状态', size: 'small',
+    // 图标随状态切换：未读→Check（标记已读），已读→Message（标记未读）
+    icon: (row: any) => (row.status === 'PENDING' ? Check : MessageIcon),
     onClick: async (row: any) => {
-      await handleRead(row)
+      const res = await toggleRead(row.id)
+      row.status = (res.data as MessageStatus) || (row.status === 'PENDING' ? 'SENT' : 'PENDING')
+      ElMessage.success(row.status === 'PENDING' ? '已标记为未读' : '已标记为已读')
+      refreshUnread()
+      tableRef.value?.fetchList()
     },
   },
   {
@@ -133,7 +141,9 @@ function handleSelectionChange(selection: any[]) {
 /** 点击行：未读 → 已读 */
 async function handleRowClick(row: Message) {
   if (row.status === 'PENDING') {
-    await handleRead(row)
+    await markAsRead(row.id)
+    row.status = 'SENT'
+    refreshUnread()
   }
   // 有跳转链接时打开
   if (row.linkJson) {
@@ -146,13 +156,6 @@ async function handleRowClick(row: Message) {
       }
     }
   }
-}
-
-async function handleRead(row: Message) {
-  await markAsRead(row.id)
-  row.status = 'SENT'
-  refreshUnread()
-  ElMessage.success('已标记为已读')
 }
 
 async function handleBatchRead() {

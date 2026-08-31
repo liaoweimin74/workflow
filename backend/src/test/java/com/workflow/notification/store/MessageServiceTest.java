@@ -167,4 +167,34 @@ class MessageServiceTest {
 
         verify(recipientRepository, never()).markBatchAsRead(any(), any(), any());
     }
+
+    @Test
+    void toggleRead_flips_unread_to_read() {
+        when(recipientRepository.findByMessageIdAndUserId(1L, 1000L)).thenReturn(Optional.of(testRecipient));
+
+        MessageStatus newStatus = messageService.toggleRead(1L, 1000L);
+
+        assertThat(newStatus).isEqualTo(MessageStatus.SENT);
+        verify(recipientRepository).save(testRecipient);
+        verify(notificationCache).invalidateUnread(1000L);
+    }
+
+    @Test
+    void toggleRead_flips_read_to_unread() {
+        testRecipient.setStatus(MessageStatus.SENT);
+        when(recipientRepository.findByMessageIdAndUserId(1L, 1000L)).thenReturn(Optional.of(testRecipient));
+
+        MessageStatus newStatus = messageService.toggleRead(1L, 1000L);
+
+        assertThat(newStatus).isEqualTo(MessageStatus.PENDING);
+        verify(recipientRepository).save(testRecipient);
+    }
+
+    @Test
+    void toggleRead_throws_when_message_not_found() {
+        when(recipientRepository.findByMessageIdAndUserId(1L, 1000L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> messageService.toggleRead(1L, 1000L))
+                .isInstanceOf(com.workflow.common.exception.BusinessException.class);
+    }
 }

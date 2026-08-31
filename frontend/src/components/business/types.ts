@@ -79,8 +79,8 @@ export interface ActionButton {
   size?: 'small' | 'default' | 'large'
   /** 文本按钮（Element Plus 3.0 link 模式）。配置后渲染为 link 按钮，type 字段仅控制颜色 */
   link?: boolean
-  /** Element Plus 图标组件。配置后渲染为圆形图标按钮，hover 显示 label */
-  icon?: Component
+  /** Element Plus 图标组件，或根据行数据动态返回图标的函数。配置后渲染为圆形图标按钮，hover 显示 label */
+  icon?: Component | ((row: any) => Component)
   permission?: string
   confirm?: string
   /** 返回 false 则隐藏此按钮 */

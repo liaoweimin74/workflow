@@ -22,6 +22,11 @@ public interface RecipientRepository extends JpaRepository<Recipient, Long> {
     List<Recipient> findByUserIdAndStatus(Long userId, MessageStatus status);
 
     /**
+     * 根据消息ID和用户ID查询收件人记录
+     */
+    java.util.Optional<Recipient> findByMessageIdAndUserId(Long messageId, Long userId);
+
+    /**
      * 批量标记已读
      */
     @Modifying

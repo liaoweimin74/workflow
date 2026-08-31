@@ -161,6 +161,20 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     @Transactional
+    public MessageStatus toggleRead(Long id, Long userId) {
+        Recipient recipient = recipientRepository.findByMessageIdAndUserId(id, userId)
+                .orElseThrow(() -> new BusinessException("消息不存在"));
+        boolean unread = recipient.getStatus() == MessageStatus.PENDING;
+        recipient.setStatus(unread ? MessageStatus.SENT : MessageStatus.PENDING);
+        recipient.setSentAt(unread ? LocalDateTime.now() : null);
+        recipientRepository.save(recipient);
+        // 失效缓存
+        notificationCache.invalidateUnread(userId);
+        return recipient.getStatus();
+    }
+
+    @Override
+    @Transactional
     public void markAllAsRead(Long userId) {
         recipientRepository.markAllAsRead(userId, LocalDateTime.now());
         // 失效缓存

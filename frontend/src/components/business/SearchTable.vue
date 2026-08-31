@@ -140,13 +140,13 @@
                 <!-- 图标 + confirm -->
                 <el-popconfirm v-if="btn.icon && btn.confirm" :title="btn.confirm" @confirm="btn.onClick(row)">
                   <template #reference>
-                    <el-button :icon="btn.icon" circle plain size="small" :type="btn.type" :title="btn.label" v-permission="btn.permission" @click.stop />
+                    <el-button :icon="resolveIcon(btn, row)" circle plain size="small" :type="btn.type" :title="btn.label" v-permission="btn.permission" @click.stop />
                   </template>
                 </el-popconfirm>
 
                 <!-- 图标无 confirm -->
                 <el-tooltip v-else-if="btn.icon" :content="btn.label" placement="top" :show-after="200">
-                  <el-button :icon="btn.icon" circle plain size="small" :type="btn.type" v-permission="btn.permission" @click.stop="btn.onClick(row)" />
+                  <el-button :icon="resolveIcon(btn, row)" circle plain size="small" :type="btn.type" v-permission="btn.permission" @click.stop="btn.onClick(row)" />
                 </el-tooltip>
 
                 <!-- 文本 + confirm -->
@@ -186,14 +186,14 @@
                   <el-dropdown-menu>
                     <template v-for="btn in dropdownButtons" :key="btn.label">
                       <el-dropdown-item v-if="(!btn.show || btn.show(row)) && !btn.confirm" @click="btn.onClick(row)">
-                        <el-icon v-if="btn.icon" :size="14" style="margin-right: 6px; vertical-align: -2px"><component :is="btn.icon" /></el-icon>
+                        <el-icon v-if="btn.icon" :size="14" style="margin-right: 6px; vertical-align: -2px"><component :is="resolveIcon(btn, row)" /></el-icon>
                         {{ btn.label }}
                       </el-dropdown-item>
                       <el-dropdown-item v-else-if="(!btn.show || btn.show(row)) && btn.confirm">
                         <el-popconfirm :title="btn.confirm" @confirm="btn.onClick(row)">
                           <template #reference>
                             <span>
-                              <el-icon v-if="btn.icon" :size="14" style="margin-right: 6px; vertical-align: -2px"><component :is="btn.icon" /></el-icon>
+                              <el-icon v-if="btn.icon" :size="14" style="margin-right: 6px; vertical-align: -2px"><component :is="resolveIcon(btn, row)" /></el-icon>
                               {{ btn.label }}
                             </span>
                           </template>
@@ -275,6 +275,11 @@ const RenderCell = defineComponent({
     }
   },
 })
+
+/** 解析操作按钮图标：静态组件直接返回，函数形式按行动态解析 */
+function resolveIcon(btn: ActionButton, row: any) {
+  return typeof btn.icon === 'function' ? btn.icon(row) : btn.icon
+}
 
 const props = withDefaults(defineProps<SearchTableProps>(), {
   defaultPageSize: 10,

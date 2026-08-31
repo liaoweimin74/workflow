@@ -65,6 +65,15 @@ public interface MessageService {
     void batchMarkAsRead(List<Long> messageIds, Long userId);
 
     /**
+     * 切换消息已读状态（未读↔已读）
+     *
+     * @param id     消息ID
+     * @param userId 用户ID
+     * @return 切换后的状态（PENDING=未读，SENT=已读）
+     */
+    MessageStatus toggleRead(Long id, Long userId);
+
+    /**
      * 标记所有消息已读
      *
      * @param userId 用户ID

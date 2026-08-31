@@ -32,6 +32,11 @@ export function markBatchAsRead(messageIds: number[]) {
   return http.post('/v1/notifications/read-batch', messageIds)
 }
 
+/** 切换已读状态（未读↔已读），返回新状态 */
+export function toggleRead(id: number) {
+  return http.post(`/v1/notifications/${id}/toggle-read`)
+}
+
 /** 全部已读 */
 export function markAllAsRead() {
   return http.post('/v1/notifications/read-all')

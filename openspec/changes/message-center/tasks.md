@@ -56,9 +56,9 @@
 - [x] 5.1 实现 SMS 渠道适配器（ChannelAdapter 接口 + HTTP API 调用 + 变量渲染）
 - [x] 5.2 实现 WECHAT_WORK 渠道适配器（企业微信应用消息 API + access_token 管理）
 - [x] 5.3 实现 WECHAT_MINIPROGRAM 渠道适配器（微信订阅消息 API + 模板 ID 映射）
-- [ ] 5.4 渠道配置加密存储（AES-256 加密 api_key 等敏感参数）
-- [ ] 5.5 实现渠道健康检查接口（成功率、平均延迟统计）
-- [ ] 5.6 实现渠道测试连通性接口（POST /channels/{id}/test）
+- [x] 5.4 渠道配置加密存储（AES-256 加密 api_key 等敏感参数）
+- [x] 5.5 实现渠道健康检查接口（成功率、平均延迟统计）
+- [x] 5.6 实现渠道测试连通性接口（POST /channels/{id}/test）
 - [x] 5.7 实现内部 API：POST /api/v1/internal/notifications/send（服务间调用）
 - [ ] 5.8 权限控制：用户端仅操作自己的消息、管理端需 ADMIN/NOTIFICATION_MANAGER 角色、内部 API 限服务间
 - [ ] 5.9 各渠道适配器单元测试（Mock 外部 API）

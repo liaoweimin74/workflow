@@ -4,6 +4,7 @@ import com.workflow.common.domain.PageResult;
 import com.workflow.common.domain.R;
 import com.workflow.notification.model.MessageTemplate;
 import com.workflow.notification.template.TemplateService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/admin/notification/templates")
+@PreAuthorize("hasAnyRole('ADMIN', 'NOTIFICATION_MANAGER')")
 public class TemplateController {
 
     private final TemplateService templateService;

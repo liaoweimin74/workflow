@@ -40,8 +40,8 @@ public class SubscriptionRule {
     private Boolean enable;
 
     /** 条件表达式 */
-    @Column(name = "condition", columnDefinition = "TEXT")
-    private String condition;
+    @Column(name = "condition_expr", columnDefinition = "TEXT")
+    private String conditionExpr;
 
     /** 创建人 */
     @Column(name = "created_by", length = 64)
@@ -71,8 +71,8 @@ public class SubscriptionRule {
     public Boolean getEnable() { return enable; }
     public void setEnable(Boolean enable) { this.enable = enable; }
 
-    public String getCondition() { return condition; }
-    public void setCondition(String condition) { this.condition = condition; }
+    public String getConditionExpr() { return conditionExpr; }
+    public void setConditionExpr(String conditionExpr) { this.conditionExpr = conditionExpr; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }

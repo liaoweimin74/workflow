@@ -153,6 +153,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '404' }
       },
       {
+        path: 'messages',
+        name: 'MessageCenter',
+        component: () => import('@/modules/notification/views/MessageCenter.vue'),
+        meta: { title: '消息中心' }
+      },
+      {
         path: '/:pathMatch(.*)*',
         redirect: '/404'
       }

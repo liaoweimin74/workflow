@@ -6,6 +6,7 @@ import { ElMessage } from 'element-plus'
 import { Fold, Expand, HomeFilled, Sunny, Moon, Lock } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
+import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -214,8 +215,9 @@ onUnmounted(() => {
         </el-breadcrumb>
       </div>
 
-      <!-- 右侧：暗色切换 + 用户区 -->
+      <!-- 右侧：消息通知 + 暗色切换 + 用户区 -->
       <div class="flex items-center gap-3">
+        <NotificationBell />
         <button
           @click="toggleDark"
           class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"

@@ -1,128 +1,82 @@
-<template>
-  <div class="channel-config">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>渠道管理</span>
-        </div>
-      </template>
-      <el-table :data="channels" v-loading="loading" stripe>
-        <el-table-column prop="name" label="渠道名称" width="180" />
-        <el-table-column prop="type" label="渠道类型" width="160">
-          <template #default="{ row }">
-            <el-tag size="small">{{ row.type }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="enabled" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
-              {{ row.enabled ? '启用' : '停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="successRate" label="成功率" width="120">
-          <template #default="{ row }">
-            <span :class="row.successRate >= 95 ? 'text-green-600' : 'text-red-600'">
-              {{ row.successRate ?? '--' }}%
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="avgLatency" label="平均延迟" width="120">
-          <template #default="{ row }">
-            {{ row.avgLatency ? row.avgLatency + 'ms' : '--' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="200">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="handleConfig(row)">配置</el-button>
-            <el-button type="warning" link @click="handleTest(row)">测试</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <!-- 配置弹窗 -->
-    <el-dialog v-model="configVisible" title="渠道配置" width="500px">
-      <el-form v-if="currentChannel" label-width="120px">
-        <el-form-item label="API Key">
-          <el-input v-model="configForm.apiKey" placeholder="API Key" />
-        </el-form-item>
-        <el-form-item label="API Secret">
-          <el-input v-model="configForm.apiSecret" type="password" show-password placeholder="API Secret" />
-        </el-form-item>
-        <el-form-item label="签名/应用ID">
-          <el-input v-model="configForm.extra" placeholder="签名名称 或 Agent ID 或 App ID" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="configVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveConfig">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+defineOptions({ name: 'MessageChannelConfig' })
+
+import { SearchTable } from '@/components/business'
+import { Aim } from '@element-plus/icons-vue'
+import type { TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import type { Rule } from '@form-create/element-ui'
 import { getChannels, updateChannelConfig, testChannel } from '../../api/admin'
 import { ElMessage } from 'element-plus'
 
-interface Channel {
-  id: number
-  name: string
-  type: string
-  enabled: boolean
-  successRate?: number
-  avgLatency?: number
-}
+const columns: TableColumn[] = [
+  { prop: 'name', label: '渠道名称', minWidth: 180 },
+  {
+    prop: 'type', label: '渠道类型', width: 160,
+    render: (row: any) => channelTypeLabel(row.type),
+  },
+  {
+    prop: 'enabled', label: '状态', width: 100,
+    render: (row: any) => (row.enabled ? '启用' : '停用'),
+  },
+  {
+    prop: 'successRate', label: '成功率', width: 120,
+    render: (row: any) => (row.successRate != null ? `${row.successRate}%` : '--'),
+  },
+  {
+    prop: 'avgLatency', label: '平均延迟', width: 120,
+    render: (row: any) => (row.avgLatency ? `${row.avgLatency}ms` : '--'),
+  },
+]
 
-const channels = ref<Channel[]>([])
-const loading = ref(false)
-const configVisible = ref(false)
-const currentChannel = ref<Channel | null>(null)
-const configForm = reactive({ apiKey: '', apiSecret: '', extra: '' })
-
-onMounted(() => { fetchChannels() })
-
-async function fetchChannels() {
-  loading.value = true
-  try {
-    const res = await getChannels()
-    channels.value = (res.data as any) || []
-  } finally {
-    loading.value = false
+function channelTypeLabel(type: string) {
+  const m: Record<string, string> = {
+    IN_APP: '站内信', SMS: '短信', WECHAT_WORK: '企业微信', WECHAT_MINIPROGRAM: '小程序', APP: 'APP',
   }
+  return m[type] || type || '--'
 }
 
-function handleConfig(row: Channel) {
-  currentChannel.value = row
-  configForm.apiKey = ''
-  configForm.apiSecret = ''
-  configForm.extra = ''
-  configVisible.value = true
+async function fetchApi(params: any) {
+  const res = await getChannels()
+  const list = (res.data as any[]) || []
+  // 本地分页（后端返回全量数组）
+  const total = list.length
+  const page = params.page || 1
+  const size = params.size || 10
+  return { rows: list.slice((page - 1) * size, page * size), total }
 }
 
-async function handleSaveConfig() {
-  if (!currentChannel.value) return
-  await updateChannelConfig(currentChannel.value.id, configForm)
-  ElMessage.success('配置已保存')
-  configVisible.value = false
+const formConfig: FormConfig = {
+  rule: [
+    { type: 'input', field: 'apiKey', title: 'API Key', props: { placeholder: 'API Key' } },
+    { type: 'input', field: 'apiSecret', title: 'API Secret', props: { type: 'password', showPassword: true, placeholder: 'API Secret' } },
+    { type: 'input', field: 'extra', title: '签名/应用ID', props: { placeholder: '签名名称 或 Agent ID 或 App ID' } },
+  ] as Rule[],
+  updateApi: (id: number | string, data: any) => updateChannelConfig(id as number, data) as any,
+  dialogTitle: { edit: '渠道配置' },
 }
 
-async function handleTest(row: Channel) {
-  try {
-    await testChannel(row.id)
-    ElMessage.success('渠道测试通过')
-  } catch {
-    ElMessage.error('渠道测试失败')
-  }
-}
+const actionButtons: ActionButton[] = [
+  {
+    label: '测试', icon: Aim, size: 'small', link: true,
+    onClick: async (row: any) => {
+      try {
+        await testChannel(row.id)
+        ElMessage.success('渠道测试通过')
+      } catch {
+        ElMessage.error('渠道测试失败')
+      }
+    },
+  },
+]
 </script>
 
-<style scoped>
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-</style>
+<template>
+  <SearchTable
+    :columns="columns"
+    :action-buttons="actionButtons"
+    :fetch-api="fetchApi"
+    :form-config="formConfig"
+    :show-search="false"
+    :show-create-button="false"
+  />
+</template>

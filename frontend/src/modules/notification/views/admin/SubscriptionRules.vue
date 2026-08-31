@@ -1,132 +1,91 @@
-<template>
-  <div class="subscription-rules">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>订阅规则管理</span>
-          <el-button type="primary" @click="handleCreate">新建规则</el-button>
-        </div>
-      </template>
-      <el-table :data="rules" v-loading="loading" stripe>
-        <el-table-column prop="eventCode" label="事件代码" width="180" />
-        <el-table-column prop="channel" label="渠道" width="140">
-          <template #default="{ row }">
-            <el-tag size="small">{{ row.channel }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="priority" label="优先级" width="100" />
-        <el-table-column prop="enable" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.enable ? 'success' : 'info'" size="small">
-              {{ row.enable ? '启用' : '停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="condition" label="条件" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="createdBy" label="创建人" width="120" />
-        <el-table-column label="操作" width="120">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <!-- 新建/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingRule ? '编辑规则' : '新建规则'" width="500px">
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="事件代码">
-          <el-input v-model="form.eventCode" placeholder="如 TASK_CREATED, URGENT_REMIND" />
-        </el-form-item>
-        <el-form-item label="渠道">
-          <el-select v-model="form.channel">
-            <el-option label="站内信" value="IN_APP" />
-            <el-option label="短信" value="SMS" />
-            <el-option label="企业微信" value="WECHAT_WORK" />
-            <el-option label="小程序" value="WECHAT_MINIPROGRAM" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="优先级">
-          <el-select v-model="form.priority">
-            <el-option label="低" value="LOW" />
-            <el-option label="普通" value="NORMAL" />
-            <el-option label="高" value="HIGH" />
-            <el-option label="紧急" value="URGENT" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="条件表达式">
-          <el-input v-model="form.condition" type="textarea" :rows="3" placeholder="如 user.role == 'ADMIN'" />
-        </el-form-item>
-        <el-form-item label="启用">
-          <el-switch v-model="form.enable" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave">保存</el-button>
-      </template>
-    </el-dialog>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { getSubscriptionRules, createSubscriptionRule } from '../../api/admin'
-import { ElMessage } from 'element-plus'
+defineOptions({ name: 'MessageSubscriptionRules' })
 
-const rules = ref<any[]>([])
-const loading = ref(false)
-const dialogVisible = ref(false)
-const editingRule = ref<any>(null)
+import { SearchTable } from '@/components/business'
+import type { SearchField, TableColumn, FormConfig } from '@/components/business/types'
+import type { Rule } from '@form-create/element-ui'
+import { getSubscriptionRules, createSubscriptionRule, updateSubscriptionRule } from '../../api/admin'
 
-const form = reactive({
-  eventCode: '',
-  channel: 'IN_APP',
-  priority: 'NORMAL',
-  condition: '',
-  enable: true,
-})
+const searchFields: SearchField[] = [
+  { type: 'input', label: '事件代码', prop: 'eventCode', placeholder: '输入事件代码' },
+]
 
-onMounted(() => { fetchRules() })
+const channelOptions = [
+  { value: 'IN_APP', label: '站内信' },
+  { value: 'SMS', label: '短信' },
+  { value: 'WECHAT_WORK', label: '企业微信' },
+  { value: 'WECHAT_MINIPROGRAM', label: '小程序' },
+  { value: 'APP', label: 'APP' },
+]
+const priorityOptions = [
+  { value: 'LOW', label: '低' },
+  { value: 'NORMAL', label: '普通' },
+  { value: 'HIGH', label: '高' },
+  { value: 'URGENT', label: '紧急' },
+]
 
-async function fetchRules() {
-  loading.value = true
-  try {
-    const res = await getSubscriptionRules()
-    rules.value = (res.data as any)?.rows || []
-  } finally {
-    loading.value = false
-  }
+const columns: TableColumn[] = [
+  { prop: 'eventCode', label: '事件代码', minWidth: 180 },
+  {
+    prop: 'channel', label: '渠道', width: 140,
+    render: (row: any) => {
+      const m: Record<string, string> = {
+        IN_APP: '站内信', SMS: '短信', WECHAT_WORK: '企业微信', WECHAT_MINIPROGRAM: '小程序', APP: 'APP',
+      }
+      return m[row.channel] || row.channel || '--'
+    },
+  },
+  {
+    prop: 'priority', label: '优先级', width: 100,
+    render: (row: any) => {
+      const m: Record<string, string> = { LOW: '低', NORMAL: '普通', HIGH: '高', URGENT: '紧急' }
+      return m[row.priority] || row.priority || '--'
+    },
+  },
+  {
+    prop: 'enable', label: '状态', width: 100,
+    render: (row: any) => (row.enable ? '启用' : '停用'),
+  },
+  { prop: 'condition', label: '条件', minWidth: 200, showOverflowTooltip: true },
+  { prop: 'createdBy', label: '创建人', width: 120 },
+]
+
+async function fetchApi(params: any) {
+  const res = await getSubscriptionRules({
+    page: (params.page || 1) - 1,
+    size: params.size || 10,
+    eventCode: params.eventCode,
+  })
+  const data = res.data as any
+  return { rows: data?.rows || [], total: data?.total || 0 }
 }
 
-function handleCreate() {
-  editingRule.value = null
-  form.eventCode = ''
-  form.channel = 'IN_APP'
-  form.priority = 'NORMAL'
-  form.condition = ''
-  form.enable = true
-  dialogVisible.value = true
-}
-
-function handleEdit(row: any) {
-  editingRule.value = row
-  Object.assign(form, row)
-  dialogVisible.value = true
-}
-
-async function handleSave() {
-  await createSubscriptionRule(form)
-  ElMessage.success('保存成功')
-  dialogVisible.value = false
-  fetchRules()
+const formConfig: FormConfig = {
+  rule: [
+    {
+      type: 'input', field: 'eventCode', title: '事件代码',
+      props: { placeholder: '如 TASK_CREATED, URGENT_REMIND' },
+      validate: [{ required: true, message: '请输入事件代码', trigger: 'blur' }],
+    },
+    { type: 'select', field: 'channel', title: '渠道', options: channelOptions, value: 'IN_APP' },
+    { type: 'select', field: 'priority', title: '优先级', options: priorityOptions, value: 'NORMAL' },
+    {
+      type: 'input', field: 'condition', title: '条件表达式',
+      props: { type: 'textarea', rows: 3, placeholder: '如 user.role == \'ADMIN\'' },
+    },
+    { type: 'switch', field: 'enable', title: '启用', value: true },
+  ] as Rule[],
+  createApi: (data: any) => createSubscriptionRule(data) as any,
+  updateApi: (id: number | string, data: any) => updateSubscriptionRule(id as number, data) as any,
+  dialogTitle: { create: '新建规则', edit: '编辑规则' },
 }
 </script>
 
-<style scoped>
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-</style>
+<template>
+  <SearchTable
+    :search-fields="searchFields"
+    :columns="columns"
+    :fetch-api="fetchApi"
+    :form-config="formConfig"
+  />
+</template>

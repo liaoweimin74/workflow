@@ -39,13 +39,18 @@ export function testChannel(id: number) {
 }
 
 /** 订阅规则列表 */
-export function getSubscriptionRules(params?: { page?: number; size?: number }) {
+export function getSubscriptionRules(params?: Record<string, any>) {
   return http.get('/v1/admin/notification/subscriptions', { params })
 }
 
 /** 创建订阅规则 */
 export function createSubscriptionRule(data: any) {
   return http.post('/v1/admin/notification/subscriptions', data)
+}
+
+/** 更新订阅规则 */
+export function updateSubscriptionRule(id: number, data: any) {
+  return http.put(`/v1/admin/notification/subscriptions/${id}`, data)
 }
 
 /** 发送记录 */

@@ -190,12 +190,6 @@ export interface SearchTableProps<T = any> {
   deleteConfirm?: (row: T) => string
   /** 操作列宽度（px），覆盖自动计算（icon 按钮 32px/个 + 24px padding） */
   actionColumnWidth?: number
-  /**
-   * 状态缓存 key（如菜单全路径）。提供后，SearchTable 挂载时按此 key 恢复
-   * query（page/size/筛选字段）与排序，并在变化时保存。用于「视图/页面渲染」这类
-   * 动态路由（共用组件、无法用 keep-alive 区分实例）手动持久化查询状态。缺省不缓存。
-   */
-  cacheKey?: string
 }
 
 // --- ReferencePicker props ---

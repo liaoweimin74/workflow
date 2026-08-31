@@ -252,12 +252,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch, nextTick, defineComponent, h, type PropType } from 'vue'
+import { ref, reactive, onMounted, computed, defineComponent, h, type PropType } from 'vue'
 import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { SearchTableProps, ActionButton, QueryParams, TableColumn } from './types'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import { getPageQueryState, setPageQueryState } from '@/stores/pageQueryStateStore'
 
 /** 承接 TableColumn.render 的小型函数式组件（返回 VNode 或字符串） */
 const RenderCell = defineComponent({
@@ -289,7 +288,6 @@ const props = withDefaults(defineProps<SearchTableProps>(), {
   mergeDefaultActions: true,
   tableSize: 'default',
   toolbarButtons: () => [],
-  cacheKey: '',
 })
 
 /** 树形表格属性：透传给 el-table */
@@ -413,51 +411,10 @@ function initSearchDefaults() {
   Object.assign(query, initialQuery.value)
 }
 
-/** 恢复查询状态过程中置位，抑制排序变化的冗余请求与冗余持久化 */
-let isRestoring = false
-
 onMounted(() => {
   initSearchDefaults()
-  restoreQueryState()
   fetchList()
 })
-
-/** 依 cacheKey 恢复 query（page/size/筛选字段）与排序；无缓存或未配置 cacheKey 时不作任何处理 */
-function restoreQueryState() {
-  if (!props.cacheKey) return
-  const saved = getPageQueryState(props.cacheKey)
-  if (!saved) return
-  isRestoring = true
-  try {
-    // 恢复筛选字段 + 分页（以缓存为准覆盖默认值，保留 query 中非缓存字段）
-    Object.assign(query, saved.query || {})
-    if (saved.sort) {
-      sortState.value = { ...saved.sort }
-      // 同步表头排序箭头（server 排序，仅显示用）；isRestoring 使 handleSortChange 不重复请求
-      nextTick(() => {
-        try {
-          if (tableRef.value) tableRef.value.sort(saved.sort!.prop, saved.sort!.order === 'desc' ? 'descending' : 'ascending')
-        } catch {
-          // 列当前不可排序时忽略箭头同步（数据仍按 sortState 正确排序）
-        }
-        isRestoring = false
-      })
-    } else {
-      isRestoring = false
-    }
-  } catch {
-    isRestoring = false
-  }
-}
-
-// 查询/分页/排序变化时保存到 store（仅在配置 cacheKey 时生效）
-function persistQueryState() {
-  if (props.cacheKey) {
-    setPageQueryState(props.cacheKey, { query: { ...query }, sort: sortState.value ? { ...sortState.value } : null })
-  }
-}
-watch(query, persistQueryState, { deep: true })
-watch(sortState, persistQueryState)
 
 async function fetchList() {
   loading.value = true
@@ -482,8 +439,7 @@ function handleSortChange(args: { column: any; prop: string; order: string }) {
     ? { prop: args.prop, order: args.order === 'ascending' ? 'asc' : 'desc' }
     : null
   emit('sort-change', args)
-  // 恢复状态过程中的程序化排序仅用于显示箭头，数据已由初始 fetchList 按 sortState 拉取
-  if (!isRestoring) fetchList()
+  fetchList()
 }
 
 function handleSearch() {

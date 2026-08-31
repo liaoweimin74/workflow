@@ -161,6 +161,9 @@
 </template>
 
 <script setup lang="ts">
+// 路由组件 name 与路由 name 一致，供 AdminLayout keep-alive include 匹配缓存
+defineOptions({ name: 'PageRenderer' })
+
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -323,6 +326,24 @@ watch(pageKey, () => {
   detailRules.value = []
   load()
 })
+
+// ========== 强制刷新（keep-alive 场景） ==========
+// AdminLayout 菜单重击当前页签时携带 query._t 强制导航（keep-alive 下组件不重挂载）。
+// 缓存的所有实例都会收到全局 route 变化，仅当前激活实例（path 匹配自身）响应。
+const ownPath = route.path
+watch(
+  () => route.query._t,
+  () => {
+    if (route.path !== ownPath) return
+    refresh()
+  },
+)
+
+/** 强制刷新：重新拉取列表数据（保留搜索条件/分页/排序，不重置表单状态） */
+function refresh() {
+  if (page.value?.type === 'PAGE') return
+  searchTableRef.value?.fetchList()
+}
 
 async function load() {
   try {

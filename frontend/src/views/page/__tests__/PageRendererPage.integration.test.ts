@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { defineComponent, h } from 'vue'
+import { nextTick, defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
 
 vi.mock('@/api/page', () => ({
@@ -105,14 +105,21 @@ vi.mock('@/views/form/components/DsBindingEngine', () => ({
   }),
 }))
 
-const mockRoute = vi.hoisted(() => ({
+const mockRouteState = vi.hoisted(() => ({
   params: { pageKey: 'emp_page' },
   query: {} as Record<string, string>,
+  path: '/page/emp_page',
 }))
-vi.mock('vue-router', () => ({
-  useRoute: () => mockRoute,
-  useRouter: () => ({ push: vi.fn(), resolve: (to: any) => ({ href: `/page/emp_page?${new URLSearchParams(to.query || {}).toString()}` }) }),
-}))
+const routeHolder = vi.hoisted(() => ({ route: null as any }))
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue')
+  const route = reactive(mockRouteState)
+  routeHolder.route = route
+  return {
+    useRoute: () => route,
+    useRouter: () => ({ push: vi.fn(), resolve: (to: any) => ({ href: `/page/emp_page?${new URLSearchParams(to.query || {}).toString()}` }) }),
+  }
+})
 
 import { pageApi } from '@/api/page'
 import type { PageDefinitionDetailDTO } from '@/api/page'
@@ -193,7 +200,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   openEditSpy.mockClear()
   engineMocks.length = 0
-  mockRoute.query = {}
+  routeHolder.route.query = {}
+  routeHolder.route.path = '/page/emp_page'
 })
 
 describe('用户场景：表格编辑按钮 → 容器弹窗联动', () => {
@@ -261,5 +269,40 @@ describe('definition props 下传（PAGE definition 单次加载）', () => {
 
     expect(pageApi.getPageByKey).toHaveBeenCalledTimes(1)
     expect(wrapper.find('.stub-col-btn-0').exists()).toBe(true)
+  })
+})
+
+describe('PAGE 页面强制刷新（keep-alive 场景）', () => {
+  it('query._t 变化且 path 匹配时，遍历 componentRefs 调用各数据组件 refresh', async () => {
+    const wrapper = await mountPage(userPageSchema())
+
+    // componentRefs 存的是 PageDataTable emit('ready') 的 payload（含 refresh 方法引用）
+    const dataTable = wrapper.findComponent(PageDataTable)
+    expect(dataTable.exists()).toBe(true)
+    const readyPayload = dataTable.emitted('ready')?.at(-1)?.[0] as any
+    expect(readyPayload?.refresh).toBeTypeOf('function')
+    const refreshSpy = vi.spyOn(readyPayload, 'refresh')
+
+    routeHolder.route.query = { _t: String(Date.now()) }
+    await nextTick()
+    await flushPromises()
+
+    expect(refreshSpy).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('path 不匹配自身（其他页签实例）时不刷新', async () => {
+    const wrapper = await mountPage(userPageSchema())
+    const dataTable = wrapper.findComponent(PageDataTable)
+    const readyPayload = dataTable.emitted('ready')?.at(-1)?.[0] as any
+    const refreshSpy = vi.spyOn(readyPayload, 'refresh')
+
+    routeHolder.route.path = '/page/other'
+    routeHolder.route.query = { _t: String(Date.now()) }
+    await nextTick()
+    await flushPromises()
+
+    expect(refreshSpy).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })

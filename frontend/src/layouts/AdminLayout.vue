@@ -18,7 +18,19 @@ function toggleDark() {
   isDark.value = !isDark.value
   document.documentElement.classList.toggle('dark', isDark.value)
 }
-const tags = ref<{ path: string; title: string; locked?: boolean }[]>([])
+/** 页签集合：path 唯一；name=路由 name（与组件 defineOptions name 一致，供 keep-alive include 匹配） */
+const tags = ref<{ path: string; title: string; locked?: boolean; name?: string }[]>([])
+
+/** keep-alive 缓存组件名集合（派生自 tags，关闭页签自动移除同名缓存；多页签共享同一组件时保留） */
+const cachedViews = computed(() =>
+  tags.value
+    .map(t => t.name)
+    .filter((n): n is string => !!n)
+    .filter((n, i, arr) => arr.indexOf(n) === i),
+)
+
+/** keep-alive 缓存实例上限：超出后 LRU 驱逐最久未访问实例 */
+const MAX_CACHED_VIEWS = 15
 
 const activeMenu = computed(() => route.path)
 
@@ -33,7 +45,14 @@ function addTag(to: { path: string; meta?: { title?: string }; name?: string }) 
     || (to.meta?.title as string)
     || to.path
   if (!tags.value.find(t => t.path === to.path)) {
-    tags.value.push({ path: to.path, title })
+    tags.value.push({ path: to.path, title, name: to.name as string | undefined })
+  }
+}
+
+/** 菜单重击当前页签：携带递增 query 强制导航，触发组件 watch route.query 重新加载（keep-alive 下组件不重挂载） */
+function handleMenuSelect(index: string) {
+  if (index === route.path) {
+    router.push({ path: index, query: { ...route.query, _t: Date.now() } })
   }
 }
 
@@ -234,6 +253,7 @@ onUnmounted(() => {
             text-color="#4b5563"
             active-text-color="#f59e0b"
             style="border-right: none"
+            @select="handleMenuSelect"
           >
             <!-- 首页（固定） -->
             <el-menu-item index="/dashboard" :class="collapsed ? '!my-0.5 !rounded-lg' : '!my-0.5 !mx-2 !rounded-lg'">
@@ -336,9 +356,13 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- 主内容 -->
+        <!-- 主内容（keep-alive 缓存页签组件实例：切换页签保留状态；max 限制内存，LRU 驱逐） -->
         <main class="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-gray-900">
-          <router-view />
+          <router-view v-slot="{ Component }">
+            <keep-alive :include="cachedViews" :max="MAX_CACHED_VIEWS">
+              <component :is="Component" :key="route.path" />
+            </keep-alive>
+          </router-view>
         </main>
       </div>
     </div>

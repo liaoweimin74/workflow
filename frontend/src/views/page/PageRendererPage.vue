@@ -245,6 +245,20 @@ const drawerContainers = computed(() => dialogContainers.value.filter((c) => c.d
 
 onMounted(load)
 
+// ========== 强制刷新（keep-alive 场景） ==========
+// AdminLayout 菜单重击当前页签时携带 query._t 强制导航。缓存的所有实例都会收到
+// 全局 route 变化，仅当前激活实例（path 匹配自身）响应：遍历已注册数据组件实例刷新。
+const ownPath = route.path
+watch(
+  () => route.query._t,
+  () => {
+    if (route.path !== ownPath) return
+    for (const inst of Object.values(componentRefs)) {
+      inst?.refresh?.()
+    }
+  },
+)
+
 async function load() {
   const preview = route.query.preview === 'true'
   loading.value = true

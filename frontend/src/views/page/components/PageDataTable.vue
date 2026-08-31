@@ -15,7 +15,6 @@
     :show-pagination="pagination"
     :default-page-size="pageSize || 20"
     :page-sizes="pageSizes || [10, 20, 50]"
-    :cache-key="cacheKey"
     :table-size="tableSize"
     :delete-confirm="deleteConfirm"
     @row-click="handleRowClick"
@@ -120,8 +119,6 @@ const props = withDefaults(defineProps<{
   dataSourceId?: string
   /** 全局数据源 refId（由 PageRendererPage.transformComponent 注入） */
   dsRefId?: string
-  /** 查询状态缓存 key（null/'' 不缓存）：由父组件按「菜单路径 + dataSourceId」注入，使页签切换后保留查询/分页/排序 */
-  cacheKey?: string
   /** 列配置（ViewDesigner 风格：{ key, label, width, align, sortable, formatter, fixed }） */
   columns?: any[]
   /** 组件级可排序字段（受数据源 metadata 上限约束；缺省=跟随数据源全部可排字段） */

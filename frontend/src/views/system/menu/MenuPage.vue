@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'MenuManagement' })
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { SearchTable } from '@/components/business'
 import { FolderAdd } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
@@ -50,6 +50,14 @@ async function loadPublishedPages() {
   } catch {
     publishedPages.value = []
   }
+}
+
+// ---------- 加载已发布页面（延迟到首次打开表单） ----------
+let _pagesLoaded = false
+async function ensurePublishedPages() {
+  if (_pagesLoaded) return
+  _pagesLoaded = true
+  await loadPublishedPages()
 }
 
 // ---------- 新增子菜单 ----------
@@ -143,6 +151,7 @@ const formConfig = computed<FormConfig<MenuTree>>(() => {
     createPermission: 'system:menu:create',
     editPermission: 'system:menu:update',
     deletePermission: 'system:menu:delete',
+    onFormOpen: ensurePublishedPages,
   } as FormConfig<MenuTree>
 })
 
@@ -163,12 +172,6 @@ function findNode(tree: MenuTree[], id: number): MenuTree | null {
   }
   return null
 }
-
-onMounted(async () => {
-  const res = await getMenuTree()
-  list.value = res.data
-  await loadPublishedPages()
-})
 </script>
 
 <template>

@@ -30,14 +30,21 @@ public interface ChannelAdapter {
     /**
      * 测试渠道连通性
      *
-     * <p>默认实现基于 {@link #isAvailable()} 判断配置是否就绪；
-     * 需要真实连通性探测的渠道可覆写此方法（如获取 token、心跳检测）。
+     * <p>默认实现：先校验配置（{@link #isAvailable()}），
+     * 再构造测试消息真实调用 {@link #send(ChannelMessage)} 走完整发送链路，
+     * 以真实投递结果判定渠道是否可用。需要定制测试消息内容的渠道可覆写此方法。
      *
-     * @return 测试结果，success=true 表示渠道可用
+     * @return 测试结果，success=true 表示渠道测试消息发送成功
      */
     default ChannelDeliveryResult test() {
-        return isAvailable()
-                ? ChannelDeliveryResult.success("渠道配置就绪")
-                : ChannelDeliveryResult.failure("渠道未配置或配置不完整");
+        if (!isAvailable()) {
+            return ChannelDeliveryResult.failure("渠道未配置或配置不完整");
+        }
+        ChannelMessage testMessage = new ChannelMessage();
+        testMessage.setMessageId(-1L);
+        testMessage.setTenantId("default");
+        testMessage.setTitle("【渠道测试】这是一条连通性测试消息");
+        testMessage.setContent("渠道连通性测试，收到请忽略");
+        return send(testMessage);
     }
 }

@@ -1,24 +1,39 @@
 package com.workflow.notification.admin;
 
 import com.workflow.common.domain.R;
+import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.channel.ChannelAdapter;
 import com.workflow.notification.channel.ChannelDeliveryResult;
 import com.workflow.notification.channel.InAppChannelAdapter;
 import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.sse.SseEmitterManager;
+import com.workflow.notification.store.MessageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * ChannelController 渠道测试逻辑验证
  */
 class ChannelControllerTest {
 
+    private MessageService messageService;
+    private SseEmitterManager sseManager;
     private ChannelController controller;
 
     @BeforeEach
@@ -29,7 +44,16 @@ class ChannelControllerTest {
         when(unavailable.isAvailable()).thenReturn(false);
         when(unavailable.test()).thenReturn(ChannelDeliveryResult.failure("渠道未配置"));
 
-        controller = new ChannelController(List.of(inApp, unavailable));
+        messageService = mock(MessageService.class);
+        sseManager = new SseEmitterManager();
+
+        controller = new ChannelController(List.of(inApp, unavailable), messageService, sseManager);
+
+        // 默认登录用户 100
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        new LoginUser(100L, "admin", "x", List.of("ROLE_ADMIN"), Set.of(), true),
+                        null));
     }
 
     @Test
@@ -48,10 +72,14 @@ class ChannelControllerTest {
     }
 
     @Test
-    void test_available_channel_returns_ok() {
+    void test_inApp_sends_real_message_to_current_user() {
         R<Void> res = controller.test(1L); // IN_APP
 
         assertThat(res.getCode()).isEqualTo(200);
+        verify(messageService).send(argThat(m ->
+                "CHANNEL_TEST".equals(m.getTemplateCode()) &&
+                "SYSTEM".equals(m.getSenderType()) &&
+                m.getSenderId().equals(100L)), eq(List.of(100L)));
     }
 
     @Test
@@ -59,6 +87,7 @@ class ChannelControllerTest {
         R<Void> res = controller.test(2L); // SMS 未配置
 
         assertThat(res.getCode()).isNotEqualTo(200);
+        verify(messageService, never()).send(any(), anyList());
     }
 
     @Test

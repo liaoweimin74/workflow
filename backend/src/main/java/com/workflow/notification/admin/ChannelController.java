@@ -1,9 +1,18 @@
 package com.workflow.notification.admin;
 
 import com.workflow.common.domain.R;
+import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.channel.ChannelAdapter;
 import com.workflow.notification.channel.ChannelDeliveryResult;
 import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.model.Message;
+import com.workflow.notification.model.MessageCategory;
+import com.workflow.notification.model.MessagePriority;
+import com.workflow.notification.model.MessageType;
+import com.workflow.notification.sse.SseEmitterManager;
+import com.workflow.notification.store.MessageService;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -29,13 +38,22 @@ public class ChannelController {
         CHANNEL_BY_ID.put(4, ChannelType.WECHAT_MINIPROGRAM);
     }
 
-    private final Map<ChannelType, ChannelAdapter> adapters;
+    /** 测试消息模板编码 */
+    private static final String TEST_TEMPLATE_CODE = "CHANNEL_TEST";
 
-    public ChannelController(List<ChannelAdapter> channelAdapters) {
+    private final Map<ChannelType, ChannelAdapter> adapters;
+    private final MessageService messageService;
+    private final SseEmitterManager sseManager;
+
+    public ChannelController(List<ChannelAdapter> channelAdapters,
+                             MessageService messageService,
+                             SseEmitterManager sseManager) {
         this.adapters = new ConcurrentHashMap<>();
         for (ChannelAdapter adapter : channelAdapters) {
             adapters.put(adapter.getChannelType(), adapter);
         }
+        this.messageService = messageService;
+        this.sseManager = sseManager;
     }
 
     /**
@@ -69,7 +87,11 @@ public class ChannelController {
     /**
      * 测试渠道连通性
      *
-     * <p>通过渠道 ID 定位对应适配器，调用其 test() 方法返回真实探测结果。
+     * <p>发送一条真实的测试消息：
+     * <ul>
+     *   <li>站内信：给当前登录用户创建一条站内信（落库 + SSE 推送），可在消息中心直接查看</li>
+     *   <li>外部渠道：调用适配器 {@code send} 走完整发送链路，以真实投递结果判定连通性</li>
+     * </ul>
      */
     @PostMapping("/{id}/test")
     public R<Void> test(@PathVariable Long id) {
@@ -77,6 +99,12 @@ public class ChannelController {
         if (type == null) {
             return R.fail("未知渠道 ID: " + id);
         }
+
+        // 站内信：真实创建一条测试消息给当前用户
+        if (type == ChannelType.IN_APP) {
+            return sendInAppTestMessage();
+        }
+
         ChannelAdapter adapter = adapters.get(type);
         if (adapter == null) {
             return R.fail("渠道适配器未注册: " + type);
@@ -86,6 +114,39 @@ public class ChannelController {
             return R.fail("渠道测试失败: " + result.getError());
         }
         return R.ok();
+    }
+
+    /**
+     * 给当前登录用户发送一条真实的站内信测试消息
+     */
+    private R<Void> sendInAppTestMessage() {
+        Long userId = currentUserId();
+
+        Message message = new Message();
+        message.setTenantId("default");
+        message.setTemplateCode(TEST_TEMPLATE_CODE);
+        message.setSenderId(userId);
+        message.setSenderType("SYSTEM");
+        message.setTitle("【渠道测试】站内信连通性测试");
+        message.setContent(Map.of("content", "这是一条渠道连通性测试消息，收到即表示站内信渠道正常。"));
+        message.setPriority(MessagePriority.NORMAL);
+        message.setCategory(MessageCategory.SYSTEM);
+        message.setMessageType(MessageType.PRIVATE);
+
+        messageService.send(message, List.of(userId));
+        sseManager.sendToUser(userId, "new-message", message);
+        return R.ok();
+    }
+
+    /**
+     * 从 SecurityContext 获取当前登录用户 ID
+     */
+    private Long currentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
+            return loginUser.getUserId();
+        }
+        throw new com.workflow.common.exception.BusinessException("未获取到当前登录用户");
     }
 
     private String channelName(ChannelType type) {

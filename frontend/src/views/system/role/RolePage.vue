@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'RoleManagement' })
 
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Key } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
@@ -41,8 +41,17 @@ const columns: TableColumn[] = [
 ]
 
 // ---------- 分配菜单 ----------
+let _menuTreeLoaded = false
+async function ensureMenuTree() {
+  if (_menuTreeLoaded) return
+  _menuTreeLoaded = true
+  const res = await getMenuTree()
+  menuTree.value = res.data
+}
+
 async function handleAssignMenu(row: RoleVO) {
   currentRoleId.value = row.id
+  await ensureMenuTree()
   const res = await getRoleMenus(row.id)
   checkedMenuKeys.value = res.data || []
   menuDialogVisible.value = true
@@ -85,11 +94,6 @@ const formConfig: FormConfig<RoleVO> = {
   editPermission: 'system:role:update',
   deletePermission: 'system:role:delete',
 }
-
-onMounted(async () => {
-  const menuRes = await getMenuTree()
-  menuTree.value = menuRes.data
-})
 </script>
 
 <template>

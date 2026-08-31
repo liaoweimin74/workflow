@@ -1,7 +1,7 @@
 <template>
   <div class="page-renderer">
-    <!-- 自定义页面（PAGE）：独立渲染组件（数据源注册 + 动作总线） -->
-    <PageRendererPage v-if="page?.type === 'PAGE'" />
+    <!-- 自定义页面（PAGE）：独立渲染组件（数据源注册 + 动作总线）；definition 由宿主下传，避免二次请求 -->
+    <PageRendererPage v-if="page?.type === 'PAGE'" :definition="page" />
     <!-- 错误态：不存在/未发布/schema 畸形，不白屏 -->
     <el-result
       v-else-if="error"

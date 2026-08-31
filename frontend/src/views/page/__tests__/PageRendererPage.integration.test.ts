@@ -115,6 +115,7 @@ vi.mock('vue-router', () => ({
 }))
 
 import { pageApi } from '@/api/page'
+import type { PageDefinitionDetailDTO } from '@/api/page'
 import PageRendererPage from '../PageRendererPage.vue'
 
 /** 用户场景页面 schema */
@@ -170,9 +171,10 @@ const ElDialogStub = defineComponent({
   },
 })
 
-async function mountPage(schema: any) {
+async function mountPage(schema: any, props: Record<string, unknown> = {}) {
   ;(pageApi.getPageByKey as any).mockResolvedValue({ data: { type: 'PAGE', schema: JSON.stringify(schema) } })
   const wrapper = mount(PageRendererPage, {
+    props,
     global: {
       plugins: [ElementPlus],
       stubs: {
@@ -224,5 +226,40 @@ describe('用户场景：表格编辑按钮 → 容器弹窗联动', () => {
     expect(wrapper.findAll('.dialog-stub.visible').length).toBe(0)
     // 回退内建编辑
     expect(openEditSpy).toHaveBeenCalled()
+  })
+})
+
+describe('definition props 下传（PAGE definition 单次加载）', () => {
+  function buildDefinition(schema: unknown): PageDefinitionDetailDTO {
+    return {
+      id: 'p1',
+      name: '用户页',
+      key: 'emp_page',
+      type: 'PAGE',
+      formKey: null,
+      dataSourceId: null,
+      version: 1,
+      status: 'PUBLISHED',
+      publishedVersion: 1,
+      createdBy: null,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      schema: JSON.stringify(schema),
+    }
+  }
+
+  it('传入 definition props 时不发起 getPageByKey 请求，直接渲染 schema', async () => {
+    const wrapper = await mountPage(userPageSchema(), { definition: buildDefinition(userPageSchema()) })
+
+    expect(pageApi.getPageByKey).not.toHaveBeenCalled()
+    // 渲染成功标志：page-table 操作列按钮（SearchTable 桩渲染）
+    expect(wrapper.find('.stub-col-btn-0').exists()).toBe(true)
+  })
+
+  it('未传 definition 时回退自行加载（getPageByKey 恰 1 次）', async () => {
+    const wrapper = await mountPage(userPageSchema())
+
+    expect(pageApi.getPageByKey).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('.stub-col-btn-0').exists()).toBe(true)
   })
 })

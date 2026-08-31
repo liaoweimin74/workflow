@@ -99,6 +99,9 @@ import { useLinkageContainer } from '@/views/form/composables/useLinkageContaine
 formCreate.component('page-table', PageDataTable)
 formCreate.component('page-tree', PageDataTree)
 
+/** 宿主（PageRenderer）已加载的页面定义；传入时直接使用不自行请求，缺省回退按 pageKey 加载 */
+const props = defineProps<{ definition?: PageDefinitionDetailDTO }>()
+
 /** 数据组件通过 inject 获取动作总线 */
 const ACTION_BUS_KEY = 'pageActionBus'
 provide(ACTION_BUS_KEY, {
@@ -246,8 +249,8 @@ async function load() {
   const preview = route.query.preview === 'true'
   loading.value = true
   try {
-    const res = await pageApi.getPageByKey(pageKey.value, preview)
-    const def = res.data as PageDefinitionDetailDTO
+    // 宿主下传定义时直接使用（definition 单次加载）；无 props 回退按 pageKey 自行加载（直接挂载/测试场景）
+    const def = (props.definition ?? (await pageApi.getPageByKey(pageKey.value, preview)).data) as PageDefinitionDetailDTO
     if (def.type !== 'PAGE') {
       error.value = '页面类型不是自定义页面'
       return

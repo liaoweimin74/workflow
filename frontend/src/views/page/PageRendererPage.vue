@@ -121,15 +121,9 @@ provide(ACTION_BUS_KEY, {
 })
 const route = useRoute()
 const router = useRouter()
+// 挂载时快照：keep-alive 按 :key="route.path" 隔离实例，不同 pageKey 是独立实例；
+// 缓存实例的全局 route 会随其他页签导航变化，此处不能 watch route.params（否则缓存实例错误重载）
 const pageKey = ref(route.params.pageKey as string)
-// 同一组件不同 pageKey 切换（vue-router 复用实例）时更新
-watch(() => route.params.pageKey, (val) => {
-  pageKey.value = val as string
-  error.value = ''
-  loading.value = false
-  rule.value = []
-  load()
-})
 
 const error = ref('')
 const loading = ref(false)

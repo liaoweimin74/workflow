@@ -185,7 +185,9 @@ import { buildCellRender } from '@/utils/tableColumnRenderer'
 const route = useRoute()
 const router = useRouter()
 
-const pageKey = computed(() => route.params.pageKey as string)
+// 挂载时快照：keep-alive 按 :key="route.path" 隔离实例，不同 pageKey 是独立实例；
+// 缓存实例的全局 route 会随其他页签导航变化，此处不能 watch route.params（否则缓存实例错误重载）
+const pageKey = ref(route.params.pageKey as string)
 
 // ========== 加载状态 ==========
 const error = ref('')
@@ -315,17 +317,8 @@ const drawerFormRef = ref<InstanceType<typeof FormRenderer>>()
 
 // ========== 加载页面 ==========
 onMounted(load)
-// 同一组件不同 pageKey 切换（vue-router 复用实例）时重新加载
-watch(pageKey, () => {
-  // 重置旧页面状态，避免切换后残留
-  error.value = ''
-  page.value = null
-  ready.value = false
-  dataSourceMeta.value = null
-  boundDataSource.value = null
-  detailRules.value = []
-  load()
-})
+// 说明：不同 pageKey 由 AdminLayout keep-alive :key="route.path" 隔离为独立实例，
+// 各自 onMounted 时按快照 pageKey 加载；缓存实例不再监听 route.params 变化。
 
 // ========== 强制刷新（keep-alive 场景） ==========
 // AdminLayout 菜单重击当前页签时携带 query._t 强制导航（keep-alive 下组件不重挂载）。

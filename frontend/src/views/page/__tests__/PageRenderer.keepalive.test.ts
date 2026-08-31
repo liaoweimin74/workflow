@@ -82,6 +82,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   routeHolder.route.query = {}
   routeHolder.route.path = '/page/emp_view'
+  routeHolder.route.params = { pageKey: 'emp_view' }
   ;(pageApi.getPageByKey as any).mockResolvedValue({ data: pageDef })
   ;(pageApi.queryPageData as any).mockResolvedValue({
     data: { records: [], total: 0, page: 0, size: 20 },
@@ -89,6 +90,24 @@ beforeEach(() => {
 })
 
 describe('PageRenderer — keep-alive 强制刷新', () => {
+  it('缓存实例 pageKey 为挂载快照：全局 route.params 变化（其他页签导航）不重新 load', async () => {
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    expect(pageApi.getPageByKey).toHaveBeenCalledTimes(1)
+
+    // 模拟切换其他页签：全局 route.params.pageKey 变为其他值（keep-alive 缓存实例共享全局 route）
+    routeHolder.route.params = { pageKey: 'test_view_2' }
+    routeHolder.route.path = '/page/test_view_2'
+    await nextTick()
+    await flushPromises()
+
+    // 缓存实例不应因其他页签导航而重新加载（否则页签切换丢失状态、重复请求）
+    expect(pageApi.getPageByKey).toHaveBeenCalledTimes(1)
+    expect(pageApi.queryPageData).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('菜单重击（query._t 变化）且 path 匹配自身时，重新拉取列表数据', async () => {
     const wrapper = createWrapper()
     await nextTick()

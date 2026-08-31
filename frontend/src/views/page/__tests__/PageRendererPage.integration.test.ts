@@ -202,6 +202,7 @@ beforeEach(() => {
   engineMocks.length = 0
   routeHolder.route.query = {}
   routeHolder.route.path = '/page/emp_page'
+  routeHolder.route.params = { pageKey: 'emp_page' }
 })
 
 describe('用户场景：表格编辑按钮 → 容器弹窗联动', () => {

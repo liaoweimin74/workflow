@@ -216,6 +216,16 @@ const kvDetailColumns = computed(() => {
   return tableColumns.value.map((c) => ({ key: c.prop, label: c.label }))
 })
 
+/** 确保数据源定义已加载（打开表单前调用，单次加载） */
+async function ensureBoundDataSource() {
+  if (boundDataSource.value || !page.value?.dataSourceId) return
+  try {
+    boundDataSource.value = (await dataSourceApi.getDataSource(page.value.dataSourceId)).data
+  } catch {
+    boundDataSource.value = null
+  }
+}
+
 // ========== 编译产物解析结果 ==========
 interface CompiledColumn {
   prop: string
@@ -332,18 +342,12 @@ async function load() {
       error.value = '页面配置异常，请联系管理员'
       return
     }
-    // 数据源协议：绑定 dataSourceId 时拉取 metadata（列 + writable）与定义（FORM 反查 formKey）
+    // 数据源协议：绑定 dataSourceId 时拉取 metadata（列 + writable），定义（FORM 反查 formKey）延迟到首次表单打开时加载
     if (res.data.dataSourceId) {
       try {
-        const [metaRes, dsRes] = await Promise.all([
-          dataSourceApi.getMetadata(res.data.dataSourceId),
-          dataSourceApi.getDataSource(res.data.dataSourceId),
-        ])
-        dataSourceMeta.value = metaRes.data
-        boundDataSource.value = dsRes.data
+        dataSourceMeta.value = (await dataSourceApi.getMetadata(res.data.dataSourceId)).data
       } catch {
         dataSourceMeta.value = null
-        boundDataSource.value = null
       }
     }
     ready.value = true
@@ -712,6 +716,7 @@ async function handleInlineSubmit() {
 }
 
 async function openDetail(row?: any) {
+  await ensureBoundDataSource()
   if (openFormContainer('view', row)) return
   if (!row) {
     row = requireRow()
@@ -746,7 +751,8 @@ async function loadDetailSchema() {
 }
 
 // ========== 新增/编辑 ==========
-function openCreate() {
+async function openCreate() {
+  await ensureBoundDataSource()
   if (isReadonly.value) {
     ElMessage.warning('数据源为只读，不支持新增')
     return
@@ -761,7 +767,8 @@ function openCreate() {
   }
 }
 
-function openEdit(row?: any) {
+async function openEdit(row?: any) {
+  await ensureBoundDataSource()
   if (isReadonly.value) {
     ElMessage.warning('数据源为只读，不支持编辑')
     return

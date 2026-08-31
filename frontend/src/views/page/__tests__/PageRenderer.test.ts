@@ -559,3 +559,84 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     wrapper.unmount()
   })
 })
+
+describe('VIEW ds定义懒加载（ensureBoundDataSource）', () => {
+  const viewPageDef = {
+    ...pageDef,
+    dataSourceId: 'ds_xyz',
+  }
+
+  beforeEach(() => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: { columns: [{ key: 'name', label: '姓名' }], writable: true },
+    })
+    ;(dataSourceApi.getDataSource as any).mockResolvedValue({
+      data: { id: 'ds_xyz', type: 'FORM', formKey: 'emp_profile' },
+    })
+  })
+
+  it('首屏不请求数据源定义（getDataSource），仅请求元数据（getMetadata）', async () => {
+    ;(pageApi.getPageByKey as any).mockResolvedValue({ data: viewPageDef })
+    ;(pageApi.queryPageData as any).mockResolvedValue({
+      data: { records: [], total: 0, page: 0, size: 20 },
+    })
+    createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    expect(dataSourceApi.getMetadata).toHaveBeenCalledWith('ds_xyz')
+    expect(dataSourceApi.getDataSource).not.toHaveBeenCalled()
+  })
+
+  it('打开详情前先确保定义就绪（ensureBoundDataSource）', async () => {
+    ;(pageApi.getPageByKey as any).mockResolvedValue({ data: viewPageDef })
+    ;(pageApi.queryPageData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { name: '张三', age: 30 }, version: 1 }], total: 1, page: 0, size: 20 },
+    })
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
+      data: { key: 'emp_profile', name: '员工档案', schema: JSON.stringify([{ type: 'input', field: 'name', title: '姓名' }]) },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    expect(dataSourceApi.getDataSource).not.toHaveBeenCalled()
+
+    // 点击表格行触发 open-detail
+    const row = wrapper.find('.el-table__row')
+    await row.trigger('click')
+    await flushPromises()
+
+    expect(dataSourceApi.getDataSource).toHaveBeenCalledWith('ds_xyz')
+    expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('emp_profile')
+    wrapper.unmount()
+  })
+
+  it('定义已加载后不重复请求', async () => {
+    ;(pageApi.getPageByKey as any).mockResolvedValue({ data: viewPageDef })
+    ;(pageApi.queryPageData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { name: '张三', age: 30 }, version: 1 }], total: 1, page: 0, size: 20 },
+    })
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
+      data: { key: 'emp_profile', name: '员工档案', schema: JSON.stringify([{ type: 'input', field: 'name', title: '姓名' }]) },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    // 第一次点击行 → 加载 ds 定义
+    await wrapper.find('.el-table__row').trigger('click')
+    await flushPromises()
+    expect(dataSourceApi.getDataSource).toHaveBeenCalledTimes(1)
+
+    // 关闭详情弹窗
+    wrapper.find('.dialog-stub.visible')?.trigger('close')
+    await flushPromises()
+
+    // 第二次点击行 → 不重复加载
+    await wrapper.find('.el-table__row').trigger('click')
+    await flushPromises()
+    expect(dataSourceApi.getDataSource).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+})

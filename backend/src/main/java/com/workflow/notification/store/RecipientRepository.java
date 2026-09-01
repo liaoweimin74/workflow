@@ -1,8 +1,8 @@
 package com.workflow.notification.store;
 
 import com.workflow.notification.model.ChannelType;
-import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.Recipient;
+import com.workflow.notification.model.RecipientStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -20,7 +20,7 @@ public interface RecipientRepository extends JpaRepository<Recipient, Long> {
 
     List<Recipient> findByUserId(Long userId);
 
-    List<Recipient> findByUserIdAndStatus(Long userId, MessageStatus status);
+    List<Recipient> findByUserIdAndStatus(Long userId, RecipientStatus status);
 
     /**
      * 按用户名模糊查询收件人记录（发送记录按收件人过滤用）。
@@ -41,15 +41,15 @@ public interface RecipientRepository extends JpaRepository<Recipient, Long> {
      * 批量标记已读
      */
     @Modifying
-    @Query("UPDATE Recipient r SET r.status = com.workflow.notification.model.MessageStatus.SENT, r.sentAt = :now " +
-           "WHERE r.userId = :userId AND r.status = com.workflow.notification.model.MessageStatus.PENDING")
+    @Query("UPDATE Recipient r SET r.status = com.workflow.notification.model.RecipientStatus.SENT, r.sentAt = :now " +
+           "WHERE r.userId = :userId AND r.status = com.workflow.notification.model.RecipientStatus.PENDING")
     int markAllAsRead(@Param("userId") Long userId, @Param("now") LocalDateTime now);
 
     /**
      * 标记单条已读（按消息ID + 用户ID）
      */
     @Modifying
-    @Query("UPDATE Recipient r SET r.status = com.workflow.notification.model.MessageStatus.SENT, r.sentAt = :now " +
+    @Query("UPDATE Recipient r SET r.status = com.workflow.notification.model.RecipientStatus.SENT, r.sentAt = :now " +
            "WHERE r.messageId = :messageId AND r.userId = :userId")
     int markAsRead(@Param("messageId") Long messageId, @Param("userId") Long userId, @Param("now") LocalDateTime now);
 
@@ -57,7 +57,7 @@ public interface RecipientRepository extends JpaRepository<Recipient, Long> {
      * 批量标记已读（按消息ID + 用户ID）
      */
     @Modifying
-    @Query("UPDATE Recipient r SET r.status = com.workflow.notification.model.MessageStatus.SENT, r.sentAt = :now " +
+    @Query("UPDATE Recipient r SET r.status = com.workflow.notification.model.RecipientStatus.SENT, r.sentAt = :now " +
            "WHERE r.userId = :userId AND r.messageId IN :messageIds")
     int markBatchAsRead(@Param("userId") Long userId, @Param("messageIds") List<Long> messageIds,
                         @Param("now") LocalDateTime now);

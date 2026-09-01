@@ -81,6 +81,10 @@ public class Message {
     @Column(name = "status", length = 16)
     private MessageStatus status;
 
+    /** 当前用户已读状态（PENDING=未读，SENT=已读），仅列表/详情接口回填，不落库 */
+    @Transient
+    private RecipientStatus readStatus;
+
     /** 创建时间 */
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -149,6 +153,9 @@ public class Message {
 
     public MessageStatus getStatus() { return status; }
     public void setStatus(MessageStatus status) { this.status = status; }
+
+    public RecipientStatus getReadStatus() { return readStatus; }
+    public void setReadStatus(RecipientStatus readStatus) { this.readStatus = readStatus; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

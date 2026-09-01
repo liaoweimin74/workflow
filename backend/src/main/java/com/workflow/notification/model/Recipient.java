@@ -50,10 +50,10 @@ public class Recipient {
     @Column(name = "channel", length = 16, nullable = false)
     private ChannelType channel;
 
-    /** 消息状态 */
+    /** 接收状态（PENDING=未读，SENT=已读；与消息发送状态 MessageStatus 分离） */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 16, nullable = false)
-    private MessageStatus status;
+    private RecipientStatus status;
 
     /** 发送时间 */
     @Column(name = "sent_at")
@@ -92,8 +92,8 @@ public class Recipient {
     public ChannelType getChannel() { return channel; }
     public void setChannel(ChannelType channel) { this.channel = channel; }
 
-    public MessageStatus getStatus() { return status; }
-    public void setStatus(MessageStatus status) { this.status = status; }
+    public RecipientStatus getStatus() { return status; }
+    public void setStatus(RecipientStatus status) { this.status = status; }
 
     public LocalDateTime getSentAt() { return sentAt; }
     public void setSentAt(LocalDateTime sentAt) { this.sentAt = sentAt; }

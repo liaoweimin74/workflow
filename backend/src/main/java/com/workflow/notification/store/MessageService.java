@@ -5,6 +5,7 @@ import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.MessageType;
+import com.workflow.notification.model.RecipientStatus;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -35,7 +36,8 @@ public interface MessageService {
      * @param start    起始时间
      * @param end      结束时间
      * @param messageType 消息类型过滤（null=全部）
-     * @return 分页结果（每条消息 status 为当前用户的已读状态：PENDING=未读，SENT=已读）
+     * @return 分页结果（每条消息 readStatus 为当前用户的已读状态：PENDING=未读，SENT=已读；
+     *         status 保留消息发送状态，二者分离）
      */
     PageResult<Message> listByUserId(Long userId, int page, int size, String keyword,
                                      MessageCategory category, Boolean unread,
@@ -72,9 +74,9 @@ public interface MessageService {
      *
      * @param id     消息ID
      * @param userId 用户ID
-     * @return 切换后的状态（PENDING=未读，SENT=已读）
+     * @return 切换后的已读状态（PENDING=未读，SENT=已读）
      */
-    MessageStatus toggleRead(Long id, Long userId);
+    RecipientStatus toggleRead(Long id, Long userId);
 
     /**
      * 标记所有消息已读

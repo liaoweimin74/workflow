@@ -8,7 +8,7 @@
     <div v-loading="loading" class="detail-content">
       <el-descriptions :column="2" border size="small">
         <el-descriptions-item label="分类">{{ categoryLabel(detail?.category) }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ detail?.status === 'PENDING' ? '未读' : '已读' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ detail?.readStatus === 'PENDING' ? '未读' : '已读' }}</el-descriptions-item>
         <el-descriptions-item label="优先级">{{ priorityLabel(detail?.priority) }}</el-descriptions-item>
         <el-descriptions-item label="时间">{{ formatDateTime(detail?.createdAt || '') }}</el-descriptions-item>
       </el-descriptions>
@@ -65,9 +65,9 @@ watch(
       try {
         const res = await getNotification(id)
         detail.value = res.data
-        if (res.data.status === 'PENDING') {
+        if (res.data.readStatus === 'PENDING') {
           await markAsRead(id)
-          detail.value.status = 'SENT'
+          detail.value.readStatus = 'SENT'
           emit('read')
         }
       } finally {

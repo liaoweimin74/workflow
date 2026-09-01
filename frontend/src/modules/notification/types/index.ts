@@ -14,8 +14,11 @@ export type MessageType = 'PUBLIC' | 'PRIVATE' | 'SYSTEM'
 /** 内容渲染类型（与后端 TemplateContentType 一致）：正文按纯文本或 Markdown 展示 */
 export type ContentType = 'TEXT' | 'MARKDOWN'
 
-/** 消息状态：列表接口返回当前用户的已读状态（PENDING=未读，SENT=已读） */
+/** 消息状态：发送状态（保留 MessageStatus 枚举） */
 export type MessageStatus = 'PENDING' | 'SENT' | 'READ' | 'DELETED' | 'FAILED'
+
+/** 接收状态（已读语义）：PENDING=未读，SENT=已读 */
+export type RecipientStatus = 'PENDING' | 'SENT' | 'DELIVERED' | 'FAILED' | 'READ'
 
 /** 渠道类型 */
 export type ChannelType = 'IN_APP' | 'SMS' | 'WECHAT_WORK' | 'WECHAT_MINIPROGRAM' | 'APP'
@@ -41,7 +44,10 @@ export interface Message {
   category: MessageCategory
   messageType: MessageType
   contentType?: ContentType
+  /** 消息发送状态 */
   status: MessageStatus
+  /** 当前用户已读状态（列表/详情接口回填）：PENDING=未读，SENT=已读 */
+  readStatus?: RecipientStatus
   createdAt: string
 }
 

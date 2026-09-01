@@ -80,7 +80,7 @@ public class NotificationController {
      * 切换消息已读状态（未读↔已读）
      */
     @PostMapping("/{id}/toggle-read")
-    public R<MessageStatus> toggleRead(@PathVariable Long id) {
+    public R<com.workflow.notification.model.RecipientStatus> toggleRead(@PathVariable Long id) {
         return R.ok(messageService.toggleRead(id, currentUserId()));
     }
 

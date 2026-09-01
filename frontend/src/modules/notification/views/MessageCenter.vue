@@ -92,11 +92,11 @@ const searchFields: SearchField[] = [
 const columns: TableColumn[] = [
   {
     prop: 'title', label: '标题', minWidth: 220,
-    render: (row: any) => (row.status === 'PENDING' ? `◉ ${row.title || '--'}` : row.title || '--'),
+    render: (row: any) => (row.readStatus === 'PENDING' ? `◉ ${row.title || '--'}` : row.title || '--'),
   },
   {
     prop: 'status', label: '状态', width: 90, align: 'center',
-    render: (row: any) => (row.status === 'PENDING' ? '未读' : '已读'),
+    render: (row: any) => (row.readStatus === 'PENDING' ? '未读' : '已读'),
   },
   {
     prop: 'category', label: '分类', width: 110, align: 'center',
@@ -136,12 +136,12 @@ const actionButtons: ActionButton[] = [
   },
   {
     label: '切换已读状态', size: 'small',
-    // 图标随状态切换：未读→Check（标记已读），已读→Message（标记未读）
-    icon: (row: any) => (row.status === 'PENDING' ? Check : MessageIcon),
+    // 图标随已读状态切换：未读→Check（标记已读），已读→Message（标记未读）
+    icon: (row: any) => (row.readStatus === 'PENDING' ? Check : MessageIcon),
     onClick: async (row: any) => {
       const res = await toggleRead(row.id)
-      row.status = (res.data as any) || (row.status === 'PENDING' ? 'SENT' : 'PENDING')
-      ElMessage.success(row.status === 'PENDING' ? '已标记为未读' : '已标记为已读')
+      row.readStatus = (res.data as any) || (row.readStatus === 'PENDING' ? 'SENT' : 'PENDING')
+      ElMessage.success(row.readStatus === 'PENDING' ? '已标记为未读' : '已标记为已读')
       refreshUnread()
       tableRef.value?.fetchList()
     },
@@ -204,16 +204,16 @@ function openDetail(row: Message) {
   detailVisible.value = true
 }
 
-/** 抽屉内消息从未读变为已读：同步行状态 + 刷新角标 */
+/** 抽屉内消息从未读变为已读：同步行已读状态 + 刷新角标 */
 function handleDrawerRead() {
   if (detailRow.value) {
-    detailRow.value.status = 'SENT'
+    detailRow.value.readStatus = 'SENT'
   }
   refreshUnread()
 }
 
 async function handleBatchRead() {
-  const ids = selectedRows.value.filter(r => r.status === 'PENDING').map(r => r.id)
+  const ids = selectedRows.value.filter(r => r.readStatus === 'PENDING').map(r => r.id)
   if (ids.length === 0) {
     ElMessage.warning('请先勾选未读消息')
     return

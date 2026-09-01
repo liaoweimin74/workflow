@@ -37,7 +37,7 @@ describe('MessageDetailDrawer', () => {
 
   it('打开未读消息抽屉：拉取详情、自动标记已读并触发 read 事件', async () => {
     mockGet.mockResolvedValue({
-      data: { id: 1, status: 'PENDING', title: '未读消息', content: { text: '内容' } },
+      data: { id: 1, readStatus: 'PENDING', title: '未读消息', content: { text: '内容' } },
     })
     mockMarkRead.mockResolvedValue({})
 
@@ -54,7 +54,7 @@ describe('MessageDetailDrawer', () => {
 
   it('打开已读消息抽屉：不调用 markAsRead、不触发 read 事件', async () => {
     mockGet.mockResolvedValue({
-      data: { id: 2, status: 'SENT', title: '已读消息' },
+      data: { id: 2, readStatus: 'SENT', title: '已读消息' },
     })
 
     const wrapper = mountDrawer()
@@ -66,14 +66,14 @@ describe('MessageDetailDrawer', () => {
   })
 
   it('切换消息时按新 messageId 重新加载', async () => {
-    mockGet.mockResolvedValue({ data: { id: 1, status: 'SENT', title: '消息一' } })
+    mockGet.mockResolvedValue({ data: { id: 1, readStatus: 'SENT', title: '消息一' } })
     const wrapper = mountDrawer()
     await wrapper.setProps({ modelValue: true, messageId: 1 })
     await flushPromises()
     // 详情已加载（SENT 状态渲染为"已读"）
     expect(wrapper.text()).toContain('已读')
 
-    mockGet.mockResolvedValue({ data: { id: 2, status: 'SENT', title: '消息二' } })
+    mockGet.mockResolvedValue({ data: { id: 2, readStatus: 'SENT', title: '消息二' } })
     await wrapper.setProps({ modelValue: true, messageId: 2 })
     await flushPromises()
     expect(mockGet).toHaveBeenLastCalledWith(2)
@@ -83,7 +83,7 @@ describe('MessageDetailDrawer', () => {
     mockGet.mockResolvedValue({
       data: {
         id: 3,
-        status: 'SENT',
+        readStatus: 'SENT',
         title: 'Markdown 消息',
         contentType: 'MARKDOWN',
         content: { text: '# 审批通过\n\n您的**请假申请**已通过。' },
@@ -104,7 +104,7 @@ describe('MessageDetailDrawer', () => {
 
   it('contentType=TEXT 或无 contentType 时正文按纯文本 pre 展示', async () => {
     mockGet.mockResolvedValue({
-      data: { id: 4, status: 'SENT', title: '纯文本消息', contentType: 'TEXT', content: { text: '纯文本正文' } },
+      data: { id: 4, readStatus: 'SENT', title: '纯文本消息', contentType: 'TEXT', content: { text: '纯文本正文' } },
     })
     const wrapper = mountDrawer()
     await wrapper.setProps({ modelValue: true, messageId: 4 })

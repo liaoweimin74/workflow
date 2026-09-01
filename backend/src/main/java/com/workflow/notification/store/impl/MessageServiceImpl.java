@@ -134,6 +134,11 @@ public class MessageServiceImpl implements MessageService {
             throw new BusinessException(403, "无权查看此消息");
         }
 
+        // 回填当前用户的已读状态（与 listByUserId 一致：PENDING=未读，SENT=已读），
+        // 覆盖 Message 实体的发送状态，前端据此判断是否需要标记已读
+        recipientRepository.findByMessageIdAndUserId(id, userId)
+                .ifPresent(r -> message.setStatus(r.getStatus()));
+
         return message;
     }
 

@@ -86,6 +86,32 @@ class MessageServiceTest {
     }
 
     @Test
+    void getById_backfills_recipient_unread_status() {
+        when(messageRepository.findById(1L)).thenReturn(Optional.of(testMessage));
+        when(recipientRepository.findByMessageId(1L)).thenReturn(List.of(testRecipient));
+        when(recipientRepository.findByMessageIdAndUserId(1L, 1000L)).thenReturn(Optional.of(testRecipient));
+
+        Message result = messageService.getById(1L, 1000L);
+
+        // 未读消息详情返回当前用户的已读状态 PENDING，前端据此触发标记已读
+        assertThat(result.getStatus()).isEqualTo(MessageStatus.PENDING);
+    }
+
+    @Test
+    void getById_backfills_recipient_read_status() {
+        testMessage.setStatus(MessageStatus.SENT);
+        testRecipient.setStatus(MessageStatus.SENT);
+        when(messageRepository.findById(1L)).thenReturn(Optional.of(testMessage));
+        when(recipientRepository.findByMessageId(1L)).thenReturn(List.of(testRecipient));
+        when(recipientRepository.findByMessageIdAndUserId(1L, 1000L)).thenReturn(Optional.of(testRecipient));
+
+        Message result = messageService.getById(1L, 1000L);
+
+        // 已读消息详情返回 SENT
+        assertThat(result.getStatus()).isEqualTo(MessageStatus.SENT);
+    }
+
+    @Test
     void getById_throws_when_unauthorized() {
         when(messageRepository.findById(1L)).thenReturn(Optional.of(testMessage));
         when(recipientRepository.findByMessageId(1L)).thenReturn(List.of(testRecipient));

@@ -46,13 +46,20 @@ function escapeHtml(s: string) {
 }
 
 /** 当前模板内容类型是否为 Markdown */
-const isMarkdown = computed(() =>
-  props.formCreateInject?.api?.getValue?.('contentType') === 'MARKDOWN',
-)
+const isMarkdown = computed(() => {
+  const api = props.formCreateInject?.api
+  const ct = api?.form?.['contentType'] ?? api?.getValue?.('contentType')
+  return ct === 'MARKDOWN'
+})
 
-/** 读取预览字段的原始值（含变量替换） */
+/** 读取预览字段的原始值（含变量替换）
+ *
+ * 优先从响应式 form model（api.form）读取——getValue 在 computed 中不被依赖追踪，
+ * 输入变化不会触发重算（新建/编辑预览停留初始值）。api.form 为 Vue reactive，可直接追踪。
+ */
 const rawText = computed(() => {
-  const value = props.formCreateInject?.api?.getValue?.(props.source)
+  const api = props.formCreateInject?.api
+  const value = api?.form?.[props.source] ?? api?.getValue?.(props.source)
   if (value === undefined || value === null || value === '') return ''
   return previewText(String(value))
 })

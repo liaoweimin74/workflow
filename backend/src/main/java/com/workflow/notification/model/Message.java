@@ -4,6 +4,7 @@ import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessagePriority;
 import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.MessageType;
+import com.workflow.notification.model.TemplateContentType;
 
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -69,6 +70,11 @@ public class Message {
     @Enumerated(EnumType.STRING)
     @Column(name = "message_type", length = 16)
     private MessageType messageType;
+
+    /** 内容渲染类型：TEXT=纯文本，MARKDOWN=Markdown 富文本（由发送时的模板 contentType 决定） */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "content_type", length = 16)
+    private TemplateContentType contentType;
 
     /** 消息状态 */
     @Enumerated(EnumType.STRING)
@@ -137,6 +143,9 @@ public class Message {
 
     public MessageType getMessageType() { return messageType; }
     public void setMessageType(MessageType messageType) { this.messageType = messageType; }
+
+    public TemplateContentType getContentType() { return contentType; }
+    public void setContentType(TemplateContentType contentType) { this.contentType = contentType; }
 
     public MessageStatus getStatus() { return status; }
     public void setStatus(MessageStatus status) { this.status = status; }

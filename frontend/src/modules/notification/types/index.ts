@@ -11,6 +11,9 @@ export type MessageCategory = 'WORKFLOW' | 'SYSTEM' | 'NOTIFICATION' | 'TASK' | 
 /** 消息类型 */
 export type MessageType = 'PUBLIC' | 'PRIVATE'
 
+/** 内容渲染类型（与后端 TemplateContentType 一致）：正文按纯文本或 Markdown 展示 */
+export type ContentType = 'TEXT' | 'MARKDOWN'
+
 /** 消息状态：列表接口返回当前用户的已读状态（PENDING=未读，SENT=已读） */
 export type MessageStatus = 'PENDING' | 'SENT' | 'READ' | 'DELETED' | 'FAILED'
 
@@ -30,6 +33,7 @@ export interface Message {
   priority: MessagePriority
   category: MessageCategory
   messageType: MessageType
+  contentType?: ContentType
   status: MessageStatus
   createdAt: string
 }

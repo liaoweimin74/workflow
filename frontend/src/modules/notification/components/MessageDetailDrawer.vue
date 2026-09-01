@@ -14,7 +14,10 @@
       </el-descriptions>
 
       <el-divider content-position="left">消息内容</el-divider>
-      <pre class="detail-body">{{ renderContent(detail?.content) }}</pre>
+      <!-- Markdown 内容：按 contentType 渲染为富文本 -->
+      <div v-if="isMarkdown" class="detail-body detail-body--md" v-html="bodyHtml"></div>
+      <!-- 纯文本内容：pre-wrap 展示 -->
+      <pre v-else class="detail-body">{{ renderContent(detail?.content) }}</pre>
 
       <template v-if="linkUrl">
         <el-divider content-position="left">相关链接</el-divider>
@@ -26,8 +29,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import MarkdownIt from 'markdown-it'
 import { getNotification, markAsRead } from '../api/notification'
 import type { Message, MessageCategory, MessagePriority } from '../types'
+
+/** Markdown 渲染器：不转义原始 HTML（html:false），开启链接识别（与模板预览保持一致，防注入） */
+const md = new MarkdownIt({ html: false, linkify: true })
 
 const props = defineProps<{
   modelValue: boolean
@@ -74,6 +81,17 @@ watch(
 const linkUrl = computed(() => {
   const link = detail.value?.linkJson as { url?: string } | undefined
   return link?.url || ''
+})
+
+/** 是否为 Markdown 富文本内容（由消息 contentType 决定；缺省按纯文本处理） */
+const isMarkdown = computed(() => detail.value?.contentType === 'MARKDOWN')
+
+/** Markdown 正文：优先取 content.text（发送时渲染后的可读正文），渲染为富文本 HTML */
+const bodyHtml = computed(() => {
+  if (!isMarkdown.value) return ''
+  const text = detail.value?.content?.text
+  if (typeof text !== 'string' || !text) return ''
+  return md.render(text)
 })
 
 // ========== 展示辅助 ==========

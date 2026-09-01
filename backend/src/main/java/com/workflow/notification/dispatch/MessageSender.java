@@ -44,8 +44,10 @@ public class MessageSender {
      *
      * <p>从数据库加载 {@code templateCode} 对应模板，校验标题与内容模板的必填变量
      * （缺失将抛 {@link com.workflow.common.exception.BusinessException} 且不发送），
-     * 渲染标题作为用户可见标题；内容以变量 Map（JSON templateData）形式存入，
-     * 供外部渠道二次渲染。优先级/类别取模板默认值，收件人与渠道由调用方指定。
+     * 渲染标题作为用户可见标题；内容以 {@code {text, variables}} 结构存入——
+     * {@code text} 为渲染后的可读正文（站内信/前端展示层直接使用，按 {@code contentType}
+     * 决定 TEXT 或 Markdown 渲染），{@code variables} 为原始变量 Map（供外部渠道二次渲染）。
+     * 渲染类型/优先级/类别取模板默认值，收件人与渠道由调用方指定。
      *
      * @param senderId     发送者ID（系统模板通常为系统用户ID）
      * @param templateCode 模板代码
@@ -71,8 +73,13 @@ public class MessageSender {
         message.setSenderId(senderId);
         message.setSenderType("SYSTEM");
         message.setTitle(templateService.render(tpl.getTitle(), variables));
-        // 内容以变量 Map 存储（JSON），作为外部渠道二次渲染的 templateData
-        message.setContent(variables != null ? new HashMap<>(variables) : new HashMap<>());
+        // 内容结构：text=渲染后的可读正文（前端按 contentType 渲染），
+        //          variables=原始变量 Map（供外部渠道二次渲染的 templateData）
+        Map<String, Object> content = new HashMap<>();
+        content.put("text", templateService.render(tpl.getContent(), variables));
+        content.put("variables", variables != null ? new HashMap<>(variables) : new HashMap<>());
+        message.setContent(content);
+        message.setContentType(tpl.getContentType());
         message.setPriority(tpl.getPriority());
         message.setCategory(tpl.getCategory());
         message.setMessageType(MessageType.PRIVATE);

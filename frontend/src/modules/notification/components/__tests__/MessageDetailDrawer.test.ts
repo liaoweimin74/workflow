@@ -78,4 +78,40 @@ describe('MessageDetailDrawer', () => {
     await flushPromises()
     expect(mockGet).toHaveBeenLastCalledWith(2)
   })
+
+  it('contentType=MARKDOWN 时正文按 Markdown 渲染为富文本', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        id: 3,
+        status: 'SENT',
+        title: 'Markdown 消息',
+        contentType: 'MARKDOWN',
+        content: { text: '# 审批通过\n\n您的**请假申请**已通过。' },
+      },
+    })
+    const wrapper = mountDrawer()
+    await wrapper.setProps({ modelValue: true, messageId: 3 })
+    await flushPromises()
+
+    const md = wrapper.find('.detail-body--md')
+    expect(md.exists()).toBe(true)
+    // markdown-it 将 # 标题与 **加粗** 渲染为对应 HTML 标签
+    expect(md.html()).toContain('<h1>')
+    expect(md.html()).toContain('<strong>请假申请</strong>')
+    // 纯文本 <pre> 分支不应出现
+    expect(wrapper.find('pre.detail-body').exists()).toBe(false)
+  })
+
+  it('contentType=TEXT 或无 contentType 时正文按纯文本 pre 展示', async () => {
+    mockGet.mockResolvedValue({
+      data: { id: 4, status: 'SENT', title: '纯文本消息', contentType: 'TEXT', content: { text: '纯文本正文' } },
+    })
+    const wrapper = mountDrawer()
+    await wrapper.setProps({ modelValue: true, messageId: 4 })
+    await flushPromises()
+
+    expect(wrapper.find('pre.detail-body').exists()).toBe(true)
+    expect(wrapper.find('.detail-body--md').exists()).toBe(false)
+    expect(wrapper.find('pre.detail-body').text()).toContain('纯文本正文')
+  })
 })

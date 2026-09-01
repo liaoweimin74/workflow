@@ -8,6 +8,7 @@ import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessagePriority;
 import com.workflow.notification.model.MessageTemplate;
 import com.workflow.notification.model.MessageType;
+import com.workflow.notification.model.TemplateContentType;
 import com.workflow.notification.template.TemplateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,7 +61,18 @@ class MessageSenderTest {
     void sendByTemplate_rendersTitleContentAndPublishesEvent() {
         when(tenantProvider.getTenantId()).thenReturn("default");
         MessageTemplate tpl = template("您有新的待办：${taskName}", "来自流程：${processName}");
+        tpl.setContentType(TemplateContentType.MARKDOWN);
         when(templateService.getTemplate("WEB_NOTICE", "default")).thenReturn(tpl);
+        // 模拟真实渲染：${key} → 变量值（标题与内容共用，避免严格存根不匹配告警）
+        when(templateService.render(anyString(), any())).thenAnswer(inv -> {
+            String template = inv.getArgument(0);
+            Map<String, Object> vars = inv.getArgument(1);
+            String out = template;
+            for (Map.Entry<String, Object> e : vars.entrySet()) {
+                out = out.replace("${" + e.getKey() + "}", String.valueOf(e.getValue()));
+            }
+            return out;
+        });
 
         Map<String, Object> variables = Map.of("taskName", "审批任务", "processName", "请假流程");
 
@@ -81,9 +93,15 @@ class MessageSenderTest {
         assertThat(message.getTenantId()).isEqualTo("default");
         assertThat(message.getSenderId()).isEqualTo(100L);
         assertThat(message.getSenderType()).isEqualTo("SYSTEM");
-        // content 为变量 Map（JSON templateData），供外部渠道二次渲染
-        assertThat(message.getContent()).containsEntry("taskName", "审批任务");
-        assertThat(message.getContent()).containsEntry("processName", "请假流程");
+        // 内容：text=渲染后的可读正文，variables=原始变量 Map（供外部渠道二次渲染）
+        assertThat(message.getContent()).containsEntry("text", "来自流程：请假流程");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> storedVariables = (Map<String, Object>) message.getContent().get("variables");
+        assertThat(storedVariables)
+                .containsEntry("taskName", "审批任务")
+                .containsEntry("processName", "请假流程");
+        // 渲染类型来自模板 contentType
+        assertThat(message.getContentType()).isEqualTo(TemplateContentType.MARKDOWN);
         assertThat(event.getRecipientIds()).containsExactly(1000L);
         assertThat(event.getChannels()).containsExactly(ChannelType.IN_APP);
     }

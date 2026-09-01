@@ -185,7 +185,7 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
 
     expect(pageApi.getPageByKey).toHaveBeenCalledWith('emp_view', false)
     // 首次数据加载：page 0 基，无 filter
-    expect(pageApi.queryPageData).toHaveBeenCalledWith('emp_view', { page: 0, size: 20 })
+    expect(pageApi.queryPageData).toHaveBeenCalledWith('emp_view', { page: 1, size: 20 })
     // 查询条件区（like 列 → input）
     expect(wrapper.find('input[placeholder="姓名"]').exists()).toBe(true)
     // 表格渲染行数据（row.data 内层取值）
@@ -218,7 +218,7 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     const lastCall = (pageApi.queryPageData as any).mock.calls.at(-1)
     expect(lastCall[0]).toBe('emp_view')
     expect(lastCall[1]).toEqual({
-      page: 0,
+      page: 1,
       size: 20,
       filter: JSON.stringify({ logic: 'AND', conditions: [{ column: 'name', op: 'like', value: '张' }] }),
     })
@@ -483,7 +483,7 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
 
     const lastCall = (pageApi.queryPageData as any).mock.calls.at(-1)
     expect(lastCall[0]).toBe('emp_view')
-    expect(lastCall[1]).toEqual({ page: 0, size: 20, sort: 'name', order: 'asc' })
+    expect(lastCall[1]).toEqual({ page: 1, size: 20, sort: 'name', order: 'asc' })
     wrapper.unmount()
   })
 

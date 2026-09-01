@@ -4,6 +4,7 @@ import com.workflow.common.domain.PageResult;
 import com.workflow.notification.cache.NotificationCache;
 import com.workflow.notification.model.*;
 import com.workflow.system.repository.SysUserRepository;
+import com.workflow.notification.subscription.ChannelConfigService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +35,9 @@ class MessageServiceTest {
 
     @Mock
     private SysUserRepository sysUserRepository;
+
+    @Mock
+    private ChannelConfigService channelConfigService;
 
     @InjectMocks
     private com.workflow.notification.store.impl.MessageServiceImpl messageService;
@@ -67,6 +71,7 @@ class MessageServiceTest {
 
     @Test
     void send_creates_message_and_recipients() {
+        when(channelConfigService.isEnabled(ChannelType.IN_APP)).thenReturn(true);
         when(messageRepository.save(any(Message.class))).thenReturn(testMessage);
         when(recipientRepository.save(any(Recipient.class))).thenReturn(testRecipient);
 
@@ -76,6 +81,19 @@ class MessageServiceTest {
         assertThat(result.getStatus()).isEqualTo(MessageStatus.SENT);
         verify(messageRepository, times(1)).save(any(Message.class));
         verify(recipientRepository, times(2)).save(any(Recipient.class));
+    }
+
+    @Test
+    void send_skips_new_in_app_recipient_when_channel_disabled() {
+        when(channelConfigService.isEnabled(ChannelType.IN_APP)).thenReturn(false);
+        when(messageRepository.save(any(Message.class))).thenReturn(testMessage);
+
+        Message result = messageService.send(testMessage, List.of(1000L));
+
+        assertThat(result).isSameAs(testMessage);
+        verify(messageRepository).save(testMessage);
+        verify(recipientRepository, never()).save(any(Recipient.class));
+        verify(notificationCache, never()).incrementUnread(anyLong());
     }
 
     @Test

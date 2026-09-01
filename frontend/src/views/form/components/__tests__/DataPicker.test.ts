@@ -132,7 +132,7 @@ describe('DataPicker — 选择交互', () => {
     expect(document.body.querySelector('.el-dialog')).toBeTruthy()
     expect(bizDataApi.list).toHaveBeenCalledWith(
       'emp_profile',
-      expect.objectContaining({ page: 0, size: 10 }),
+      expect.objectContaining({ page: 1, size: 10 }),
     )
   })
 
@@ -728,7 +728,7 @@ describe('DataPicker — 查看已选列表', () => {
     expect(bizDataApi.list).toHaveBeenLastCalledWith(
       'emp_profile',
       expect.objectContaining({
-        page: 0,
+      page: 1,
         filter: {
           logic: 'AND',
           conditions: [{ column: 'id', op: 'in', value: ['t1', 't2'] }],

@@ -85,7 +85,7 @@ beforeEach(() => {
   routeHolder.route.params = { pageKey: 'emp_view' }
   ;(pageApi.getPageByKey as any).mockResolvedValue({ data: pageDef })
   ;(pageApi.queryPageData as any).mockResolvedValue({
-    data: { records: [], total: 0, page: 0, size: 20 },
+  data: { records: [], total: 0, page: 1, size: 20 },
   })
 })
 
@@ -146,7 +146,7 @@ describe('PageRenderer — keep-alive 强制刷新', () => {
 
     // 通过 SearchTable.setQuery 注入搜索条件（模拟用户在搜索框输入后提交）
     ;(pageApi.queryPageData as any).mockResolvedValue({
-      data: { records: [{ id: 'r1', data: { name: '张三' }, version: 1 }], total: 1, page: 0, size: 20 },
+  data: { records: [{ id: 'r1', data: { name: '张三' }, version: 1 }], total: 1, page: 1, size: 20 },
     })
     const searchTable = wrapper.findComponent(SearchTable)
     ;(searchTable.vm as any).setQuery({ name: '张' })

@@ -70,7 +70,7 @@ describe('LookupPicker — 弹窗交互', () => {
     await flushPromises()
     expect(mockHttp.get).toHaveBeenCalledWith(
       '/v1/data-sources/emp_profile/data',
-      expect.objectContaining({ params: expect.objectContaining({ page: 0, size: 10 }) }),
+        expect.objectContaining({ params: expect.objectContaining({ page: 1, size: 10 }) }),
     )
   })
 })
@@ -347,14 +347,14 @@ describe('buildFetchApiFromConfig — 分页基准', () => {
     expect(params.page).toBe(2)
   })
 
-  it('pageBase=0 时把 el-pagination 的 1 起页码转为 0 起（底表接口）', async () => {
+    it('所有配置统一把 el-pagination 的页码按 1 起发送', async () => {
     mockHttp.get.mockResolvedValue({ code: 200, data: { records: [], total: 0 } })
     const fetchApi = buildFetchApiFromConfig({ action: '/v1/biz-data/emp_profile', pageBase: 0 })
     await fetchApi({ page: 1, size: 10 })
     const params = mockHttp.get.mock.calls[0][1].params
-    expect(params.page).toBe(0)
+    expect(params.page).toBe(1)
     await fetchApi({ page: 2, size: 10 })
-    expect(mockHttp.get.mock.calls[1][1].params.page).toBe(1)
+    expect(mockHttp.get.mock.calls[1][1].params.page).toBe(2)
   })
 })
 
@@ -365,7 +365,7 @@ describe('buildFetchApiFromConfig — 搜索参数匹配', () => {
     await fetchApi({ page: 1, size: 10, keyword: '张' })
     expect(mockHttp.get).toHaveBeenCalledWith(
       '/v1/biz-data/emp_profile',
-      expect.objectContaining({ params: expect.objectContaining({ keyword: '张', page: 0, size: 10 }) }),
+        expect.objectContaining({ params: expect.objectContaining({ keyword: '张', page: 1, size: 10 }) }),
     )
   })
 
@@ -398,7 +398,7 @@ describe('buildFetchApiFromConfig — 搜索参数匹配', () => {
     await fetchApi({ page: 1, size: 10 })
     const params = mockHttp.get.mock.calls[0][1].params
     expect(params.keyword).toBeUndefined()
-    expect(params.page).toBe(0)
+    expect(params.page).toBe(1)
   })
 })
 
@@ -421,7 +421,7 @@ describe('LookupPicker — dataSourceId 模式', () => {
     await flushPromises()
     expect(mockHttp.get).toHaveBeenCalledWith(
       '/v1/data-sources/emp_profile/data',
-      expect.objectContaining({ params: expect.objectContaining({ page: 0, size: 10 }) }),
+        expect.objectContaining({ params: expect.objectContaining({ page: 1, size: 10 }) }),
     )
     expect((wrapper.vm as any).tableData.length).toBe(1)
   })

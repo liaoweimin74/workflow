@@ -151,7 +151,7 @@ class WorkflowFormDataQueryServiceTest {
 
     private BizDataQueryRequest req() {
         BizDataQueryRequest r = new BizDataQueryRequest();
-        r.setPage(0);
+        r.setPage(1);
         r.setSize(20);
         return r;
     }
@@ -168,7 +168,7 @@ class WorkflowFormDataQueryServiceTest {
 
         assertEquals(2L, page.getTotal());
         assertEquals(1, page.getRecords().size());
-        assertEquals(0, page.getPage());
+        assertEquals(1, page.getPage());
         assertEquals(20, page.getSize());
 
         BizDataVO vo = page.getRecords().get(0);

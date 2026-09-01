@@ -113,6 +113,21 @@ class AnnouncementControllerTest {
     }
 
     @Test
+    void detail_returns_markdown_content_type_and_body() {
+        Message announcement = new Message();
+        announcement.setId(8L);
+        announcement.setTemplateCode("ANNOUNCEMENT");
+        announcement.setContentType(TemplateContentType.MARKDOWN);
+        announcement.setContent(Map.of("text", "# 标题\n\n**正文**", "variables", Map.of()));
+        when(messageRepository.findById(8L)).thenReturn(java.util.Optional.of(announcement));
+
+        R<Message> res = controller.detail(8L);
+
+        assertThat(res.getData().getContentType()).isEqualTo(TemplateContentType.MARKDOWN);
+        assertThat(res.getData().getContent().get("text")).isEqualTo("# 标题\n\n**正文**");
+    }
+
+    @Test
     void recall_deletes_recipients_and_message() {
         Message announcement = new Message();
         announcement.setId(5L);

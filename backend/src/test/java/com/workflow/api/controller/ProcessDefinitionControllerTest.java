@@ -120,7 +120,7 @@ class ProcessDefinitionControllerTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
         ProcessDefinitionController controller = createController(mockService);
 
-        R<PageResponse<Map<String, Object>>> result = controller.list(0, 20, null, null, null);
+        R<PageResponse<Map<String, Object>>> result = controller.list(1, 20, null, null, null);
 
         assertThat(result.getCode()).isEqualTo(200);
         verify(mockService).listProcessDefinitions(
@@ -144,7 +144,7 @@ class ProcessDefinitionControllerTest {
         assertThat(result.getCode()).isEqualTo(200);
         assertThat(result.getData().getContent()).hasSize(1);
         assertThat(result.getData().getTotalElements()).isEqualTo(1);
-        assertThat(result.getData().getPageNumber()).isEqualTo(0);
+        assertThat(result.getData().getPageNumber()).isEqualTo(1);
         assertThat(result.getData().getPageSize()).isEqualTo(20);
     }
 

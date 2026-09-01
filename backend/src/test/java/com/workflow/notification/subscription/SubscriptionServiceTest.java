@@ -16,9 +16,6 @@ import static org.mockito.Mockito.when;
 class SubscriptionServiceTest {
 
     @Mock
-    private UserSubscriptionRepository userSubscriptionRepository;
-
-    @Mock
     private SubscriptionRuleRepository subscriptionRuleRepository;
 
     @InjectMocks
@@ -40,13 +37,19 @@ class SubscriptionServiceTest {
     }
 
     @Test
-    void shouldSend_private_always_sends() {
+    void shouldSend_private_external_channel_is_allowed_by_default() {
         Message msg = createMessage(MessagePriority.NORMAL, MessageType.PRIVATE, MessageCategory.WORKFLOW);
         assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isTrue();
     }
 
     @Test
-    void shouldSend_system_always_sends() {
+    void shouldSend_private_inApp_is_always_kept() {
+        Message msg = createMessage(MessagePriority.NORMAL, MessageType.PRIVATE, MessageCategory.WORKFLOW);
+        assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.IN_APP)).isTrue();
+    }
+
+    @Test
+    void shouldSend_system_external_channel_is_allowed_by_default() {
         Message msg = createMessage(MessagePriority.NORMAL, MessageType.PUBLIC, MessageCategory.SYSTEM);
         assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isTrue();
     }
@@ -54,19 +57,13 @@ class SubscriptionServiceTest {
     @Test
     void shouldSend_default_true_when_no_preference() {
         Message msg = createMessage(MessagePriority.NORMAL, MessageType.PUBLIC, MessageCategory.WORKFLOW);
-        when(userSubscriptionRepository.findByTenantIdAndUserIdAndChannel("default", 1000L, ChannelType.SMS))
-                .thenReturn(null);
         assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isTrue();
     }
 
     @Test
-    void shouldSend_false_when_unsubscribed() {
+    void shouldSend_ignores_legacy_user_unsubscribe() {
         Message msg = createMessage(MessagePriority.NORMAL, MessageType.PUBLIC, MessageCategory.WORKFLOW);
-        UserSubscription sub = new UserSubscription();
-        sub.setSubscribed(false);
-        when(userSubscriptionRepository.findByTenantIdAndUserIdAndChannel("default", 1000L, ChannelType.SMS))
-                .thenReturn(sub);
-        assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isFalse();
+        assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isTrue();
     }
 
     @Test
@@ -95,7 +92,7 @@ class SubscriptionServiceTest {
     }
 
     @Test
-    void shouldSend_allow_rule_allows_unsubscribed_user() {
+    void shouldSend_allow_rule_allows_delivery() {
         Message msg = createMessage(MessagePriority.NORMAL, MessageType.PUBLIC, MessageCategory.WORKFLOW);
         msg.setEventCode("TASK_CREATED");
         SubscriptionRule rule = new SubscriptionRule();

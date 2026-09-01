@@ -53,6 +53,7 @@ class ChannelControllerTest {
         messageService = mock(MessageService.class);
         sseManager = new SseEmitterManager();
         channelConfigService = mock(ChannelConfigService.class);
+        when(channelConfigService.isEnabled(ChannelType.IN_APP)).thenReturn(true);
         retryRepository = mock(DeliveryRetryRepository.class);
 
         controller = new ChannelController(List.of(inApp, unavailable), messageService, sseManager,
@@ -71,7 +72,7 @@ class ChannelControllerTest {
 
         assertThat(res.getCode()).isEqualTo(200);
         List<Map<String, Object>> channels = res.getData();
-        assertThat(channels).hasSize(4);
+        assertThat(channels).hasSize(5);
         // 站内信可用
         Map<String, Object> inApp = channels.get(0);
         assertThat(inApp.get("enabled")).isEqualTo(true);
@@ -149,6 +150,7 @@ class ChannelControllerTest {
     @Test
     void list_enabled_true_when_channel_configured() {
         when(channelConfigService.isConfigured(ChannelType.SMS)).thenReturn(true);
+        when(channelConfigService.isEnabled(ChannelType.SMS)).thenReturn(true);
 
         R<List<Map<String, Object>>> res = controller.list();
 
@@ -180,5 +182,16 @@ class ChannelControllerTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.list())
                 .isInstanceOf(com.workflow.common.exception.BusinessException.class)
                 .hasMessage("需要管理员权限");
+    }
+
+    @Test
+    void enableAndDisable_updates_channel_state() {
+        R<Void> enabled = controller.enable(2L);
+        R<Void> disabled = controller.disable(2L);
+
+        assertThat(enabled.getCode()).isEqualTo(200);
+        assertThat(disabled.getCode()).isEqualTo(200);
+        verify(channelConfigService).setEnabled(ChannelType.SMS, true);
+        verify(channelConfigService).setEnabled(ChannelType.SMS, false);
     }
 }

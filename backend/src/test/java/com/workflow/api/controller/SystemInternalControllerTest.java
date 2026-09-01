@@ -99,6 +99,7 @@ class SystemInternalControllerTest {
         assertThat(row.getData().get("nickname")).isEqualTo("管理员");
         assertThat(row.getData().get("orgName")).isEqualTo("技术部");
         assertThat(r.getData().getTotal()).isEqualTo(1L);
+        verify(userService).list(argThat(query -> query.page() == 1 && query.size() == 20));
     }
 
     @Test

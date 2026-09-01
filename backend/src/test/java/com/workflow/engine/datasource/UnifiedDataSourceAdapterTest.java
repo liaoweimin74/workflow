@@ -172,6 +172,7 @@ class UnifiedDataSourceAdapterTest {
         assertEquals(1, page.getRecords().size());
         assertEquals("7", page.getRecords().get(0).getId());
         assertEquals(1L, page.getTotal());
+        verify(userService).list(argThat(query -> query.page() == 1 && query.size() == 20));
     }
 
     @Test
@@ -181,6 +182,14 @@ class UnifiedDataSourceAdapterTest {
         assertFalse(meta.isWritable());
         assertEquals(4, meta.getColumns().size());
         assertEquals("id", meta.getColumns().get(0).getKey());
+    }
+
+    @Test
+    void systemMetadata_userTreeReturnsChineseColumnLabels() {
+        DataSourceMetadata meta = adapter.metadata(ds("SYSTEM", "user-tree"));
+
+        assertEquals(List.of("用户 ID", "用户名", "昵称", "部门 ID", "部门名称", "状态"),
+                meta.getColumns().stream().map(ColumnConfig::getLabel).toList());
     }
 
     @Test

@@ -10,6 +10,7 @@ import com.workflow.notification.store.DeliveryRetryRepository;
 import com.workflow.notification.store.MessageService;
 import com.workflow.notification.store.RecipientRepository;
 import com.workflow.notification.subscription.SubscriptionService;
+import com.workflow.notification.subscription.ChannelConfigService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +38,12 @@ class MessageDispatcherTest {
     @Mock
     private DeliveryRetryRepository retryRepository;
 
+    @Mock
+    private ChannelConfigService channelConfigService;
+
+    @Mock
+    private ChannelAdapter smsAdapter;
+
     private InAppChannelAdapter inAppAdapter;
     private SseEmitterManager sseManager;
 
@@ -48,8 +55,13 @@ class MessageDispatcherTest {
     void setUp() {
         // 使用真实实例
         inAppAdapter = new InAppChannelAdapter();
+        when(smsAdapter.getChannelType()).thenReturn(ChannelType.SMS);
+        lenient().when(smsAdapter.isAvailable()).thenReturn(true);
+        lenient().when(channelConfigService.isEnabled(ChannelType.IN_APP)).thenReturn(true);
+        lenient().when(subscriptionService.shouldSend(any(Message.class), anyLong(), any(ChannelType.class))).thenReturn(true);
         sseManager = new SseEmitterManager();
-        dispatcher = new MessageDispatcher(messageService, recipientRepository, sseManager, List.of(inAppAdapter));
+        dispatcher = new MessageDispatcher(messageService, recipientRepository, sseManager,
+                subscriptionService, retryRepository, channelConfigService, List.of(inAppAdapter, smsAdapter));
 
         testMessage = new Message();
         testMessage.setId(1L);
@@ -62,6 +74,23 @@ class MessageDispatcherTest {
         testMessage.setPriority(MessagePriority.NORMAL);
         testMessage.setCategory(MessageCategory.WORKFLOW);
         testMessage.setMessageType(MessageType.PRIVATE);
+    }
+
+    @Test
+    void disabled_channel_is_not_dispatched_for_new_message() {
+        when(channelConfigService.isEnabled(ChannelType.SMS)).thenReturn(false);
+        dispatcher.handleMessageEvent(new MessageEvent(this, testMessage, List.of(100L), List.of(ChannelType.SMS)));
+
+        verify(smsAdapter, never()).send(any());
+    }
+
+    @Test
+    void queued_message_continues_without_rechecking_channel_state() {
+        when(smsAdapter.send(any(ChannelMessage.class))).thenReturn(ChannelDeliveryResult.success("sent"));
+        dispatcher.asyncSend(smsAdapter, testMessage, List.of(100L));
+
+        verify(smsAdapter).send(any());
+        verify(channelConfigService, never()).isEnabled(ChannelType.SMS);
     }
 
     @Test
@@ -89,36 +118,25 @@ class MessageDispatcherTest {
     // ==================== P0-3: 订阅判定接线 ====================
 
     @Test
-    void handleMessageEvent_filters_in_app_recipients_by_subscription() {
+    void handleMessageEvent_doesNotFilter_in_app_by_user_subscription() {
         dispatcher = new MessageDispatcher(messageService, recipientRepository, sseManager,
                 subscriptionService, retryRepository, List.of(inAppAdapter));
-
-        // 用户 1000 未订阅站内信 → 被过滤
-        when(subscriptionService.shouldSend(eq(testMessage), eq(1000L), eq(ChannelType.IN_APP)))
-                .thenReturn(false);
 
         MessageEvent event = new MessageEvent(this, testMessage, List.of(1000L), List.of(ChannelType.IN_APP));
         dispatcher.handleMessageEvent(event);
 
-        // 站内信落库不应被调用（收件人全被过滤）
-        verify(messageService, never()).send(any(), anyList());
+        verify(messageService).send(eq(testMessage), eq(List.of(1000L)));
     }
 
     @Test
-    void handleMessageEvent_sends_only_subscribed_in_app_recipients() {
+    void handleMessageEvent_sends_all_in_app_recipients() {
         dispatcher = new MessageDispatcher(messageService, recipientRepository, sseManager,
                 subscriptionService, retryRepository, List.of(inAppAdapter));
-
-        // 1000 订阅、2000 未订阅
-        when(subscriptionService.shouldSend(eq(testMessage), eq(1000L), eq(ChannelType.IN_APP)))
-                .thenReturn(true);
-        when(subscriptionService.shouldSend(eq(testMessage), eq(2000L), eq(ChannelType.IN_APP)))
-                .thenReturn(false);
 
         MessageEvent event = new MessageEvent(this, testMessage, List.of(1000L, 2000L), List.of(ChannelType.IN_APP));
         dispatcher.handleMessageEvent(event);
 
-        verify(messageService, times(1)).send(eq(testMessage), eq(List.of(1000L)));
+        verify(messageService, times(1)).send(eq(testMessage), eq(List.of(1000L, 2000L)));
     }
 
     // ==================== P0-2a: 外部渠道失败写入重试表 ====================

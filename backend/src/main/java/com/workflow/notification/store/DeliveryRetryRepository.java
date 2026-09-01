@@ -18,6 +18,16 @@ public interface DeliveryRetryRepository extends JpaRepository<DeliveryRetry, Lo
     List<DeliveryRetry> findByStatusAndNextRetryAtLessThanEqual(MessageStatus status, LocalDateTime now);
 
     /**
+     * 按消息ID查找重试记录（发送记录状态真实化用）
+     */
+    List<DeliveryRetry> findByMessageId(Long messageId);
+
+    /**
+     * 按渠道查找重试记录（渠道成功率统计用）
+     */
+    List<DeliveryRetry> findByChannel(com.workflow.notification.model.ChannelType channel);
+
+    /**
      * 根据收件人ID和渠道查找
      */
     DeliveryRetry findByRecipientIdAndChannel(Long recipientId, com.workflow.notification.model.ChannelType channel);

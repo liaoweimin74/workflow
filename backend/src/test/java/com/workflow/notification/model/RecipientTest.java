@@ -1,7 +1,6 @@
 package com.workflow.notification.model;
 
 import com.workflow.notification.model.Recipient;
-import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.MessageType;
 import com.workflow.notification.model.ChannelType;
 import org.junit.jupiter.api.Test;
@@ -23,7 +22,7 @@ class RecipientTest {
         recipient.setEmail("test@example.com");
         recipient.setPhone("13800138000");
         recipient.setChannel(ChannelType.SMS);
-        recipient.setStatus(MessageStatus.PENDING);
+        recipient.setStatus(RecipientStatus.PENDING);
         recipient.setSentAt(LocalDateTime.now());
 
         assertThat(recipient.getTenantId()).isEqualTo("default");
@@ -31,6 +30,6 @@ class RecipientTest {
         assertThat(recipient.getUserId()).isEqualTo(1000L);
         assertThat(recipient.getUsername()).isEqualTo("test_user");
         assertThat(recipient.getChannel()).isEqualTo(ChannelType.SMS);
-        assertThat(recipient.getStatus()).isEqualTo(MessageStatus.PENDING);
+        assertThat(recipient.getStatus()).isEqualTo(RecipientStatus.PENDING);
     }
 }

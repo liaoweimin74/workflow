@@ -309,3 +309,60 @@ export interface ReferencePickerProps<T = any> {
   disabled?: boolean
   clearable?: boolean
 }
+
+// --- ListCards types (card column model for card-based list views) ---
+
+/**
+ * 卡片列配置（CardColumn - 用于 ListCards 组件）
+ * 相对于 TableColumn，支持 title/subtitle/tag/hidden/valueType 等卡片特有字段
+ * 可序列化：指仅包含可 JSON 序列化的字段，formatter 为函数类型
+ */
+export interface CardColumn {
+  /** 列主键 */
+  prop?: string
+  /** 列显示标签 */
+  label?: string
+  /** 卡片标题（主要展示文本） */
+  title?: string
+  /** 卡片副标题（次要展示文本） */
+  subtitle?: string
+  /** 卡片标签字段 */
+  tag?: string
+  /** 是否在卡片中隐藏此列 */
+  hidden?: boolean
+  /** 值类型：string | number | date | boolean */
+  valueType?: 'string' | 'number' | 'date' | 'boolean'
+  /** 单元格宽度 */
+  width?: number | string
+  /** 最小宽度 */
+  minWidth?: number | string
+  /** 对齐方式 */
+  align?: 'left' | 'center' | 'right'
+  /** 是否固定列 */
+  fixed?: 'left' | 'right'
+  /** 是否可排序 */
+  sortable?: boolean
+  /** 单元格格式化函数（runtime-only，不可序列化为 JSON） */
+  formatter?: (row: any, column: CardColumn, cellValue: any, index?: number) => any
+  /** 内容超长省略并显示 tooltip */
+  showOverflowTooltip?: boolean
+  /** 单元格 class */
+  cellClassName?: string
+}
+
+/**
+ * ListCards 查询参数
+ * 是 QueryParams 的子类型，用于卡片列表查询
+ */
+export type ListQueryParams = QueryParams
+
+/**
+ * ListCards 分页结果
+ * 通用分页返回结构
+ */
+export interface ListPageResult<T = any> {
+  /** 当前页数据行 */
+  rows: T[]
+  /** 总记录数 */
+  total: number
+}

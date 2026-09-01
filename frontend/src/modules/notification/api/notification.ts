@@ -2,7 +2,7 @@
  * 用户端消息 API
  */
 import http from '@/utils/http'
-import type { Message, MessageCategory, PageResult } from '../types'
+import type { Message, MessageCategory, MessageType, PageResult } from '../types'
 
 /** 获取消息列表（支持筛选） */
 export function getNotifications(params: {
@@ -10,6 +10,7 @@ export function getNotifications(params: {
   size?: number
   keyword?: string
   category?: MessageCategory
+  messageType?: MessageType
   unread?: boolean
   start?: string
   end?: string

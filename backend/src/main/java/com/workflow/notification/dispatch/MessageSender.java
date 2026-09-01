@@ -60,6 +60,22 @@ public class MessageSender {
                                Map<String, Object> variables,
                                List<Long> recipientIds,
                                List<ChannelType> channels) {
+        sendByTemplate(senderId, templateCode, variables, MessageType.PRIVATE, recipientIds, channels);
+    }
+
+    /**
+     * 按模板发送消息，并显式指定消息类型。
+     *
+     * <p>行为与 {@link #sendByTemplate(Long, String, Map, List, List)} 一致，
+     * 额外允许调用方指定消息类型（PRIVATE 用户间通信 / PUBLIC 公共广播 / SYSTEM 系统公告），
+     * 使 PUBLIC 广播语义不依赖调用方在消息构建外的特殊处理。
+     */
+    public void sendByTemplate(Long senderId,
+                               String templateCode,
+                               Map<String, Object> variables,
+                               MessageType messageType,
+                               List<Long> recipientIds,
+                               List<ChannelType> channels) {
         String tenantId = tenantProvider.getTenantId();
         MessageTemplate tpl = templateService.getTemplate(templateCode, tenantId);
 
@@ -82,7 +98,7 @@ public class MessageSender {
         message.setContentType(tpl.getContentType());
         message.setPriority(tpl.getPriority());
         message.setCategory(tpl.getCategory());
-        message.setMessageType(MessageType.PRIVATE);
+        message.setMessageType(messageType);
 
         eventPublisher.publishEvent(new MessageEvent(this, message, recipientIds, channels));
     }

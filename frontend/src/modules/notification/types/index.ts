@@ -8,8 +8,8 @@ export type MessagePriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT'
 /** 消息分类（与后端 MessageCategory 枚举一致） */
 export type MessageCategory = 'WORKFLOW' | 'SYSTEM' | 'NOTIFICATION' | 'TASK' | 'APPROVAL'
 
-/** 消息类型 */
-export type MessageType = 'PUBLIC' | 'PRIVATE'
+/** 消息类型（与后端 MessageType 枚举一致） */
+export type MessageType = 'PUBLIC' | 'PRIVATE' | 'SYSTEM'
 
 /** 内容渲染类型（与后端 TemplateContentType 一致）：正文按纯文本或 Markdown 展示 */
 export type ContentType = 'TEXT' | 'MARKDOWN'
@@ -44,6 +44,7 @@ export interface MessageFilter {
   size?: number
   keyword?: string
   category?: MessageCategory
+  messageType?: MessageType
   unread?: boolean
   start?: string
   end?: string

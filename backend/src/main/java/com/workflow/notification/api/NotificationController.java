@@ -6,6 +6,7 @@ import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessageStatus;
+import com.workflow.notification.model.MessageType;
 import com.workflow.notification.store.MessageService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.Authentication;
@@ -44,8 +45,9 @@ public class NotificationController {
             @RequestParam(required = false) MessageCategory category,
             @RequestParam(required = false) Boolean unread,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime start,
-            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime end) {
-        return R.ok(messageService.listByUserId(currentUserId(), page, size, keyword, category, unread, start, end));
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime end,
+            @RequestParam(required = false) MessageType messageType) {
+        return R.ok(messageService.listByUserId(currentUserId(), page, size, keyword, category, unread, start, end, messageType));
     }
 
     /**

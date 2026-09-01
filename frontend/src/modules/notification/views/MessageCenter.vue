@@ -60,6 +60,14 @@ const searchFields: SearchField[] = [
     ],
   },
   {
+    type: 'select', label: '类型', prop: 'messageType', placeholder: '全部类型', style: 'width: 130px',
+    options: [
+      { label: '公开', value: 'PUBLIC' },
+      { label: '私人', value: 'PRIVATE' },
+      { label: '系统', value: 'SYSTEM' },
+    ],
+  },
+  {
     type: 'select', label: '状态', prop: 'unread', placeholder: '全部', style: 'width: 120px',
     // 默认搜索条件：未读
     defaultValue: true,
@@ -84,6 +92,10 @@ const columns: TableColumn[] = [
   {
     prop: 'category', label: '分类', width: 110, align: 'center',
     render: (row: any) => categoryLabel(row.category),
+  },
+  {
+    prop: 'messageType', label: '类型', width: 90, align: 'center',
+    render: (row: any) => messageTypeLabel(row.messageType),
   },
   {
     prop: 'createdAt', label: '时间', width: 170,
@@ -141,6 +153,7 @@ async function fetchApi(params: any) {
     size: params.size || 10,
     keyword: params.keyword || undefined,
     category: params.category || undefined,
+    messageType: params.messageType || undefined,
     unread: params.unread ?? undefined,
     start: start || undefined,
     end: end || undefined,
@@ -217,6 +230,13 @@ function categoryLabel(category?: MessageCategory) {
     WORKFLOW: '工作流', SYSTEM: '系统', NOTIFICATION: '通知', TASK: '任务', APPROVAL: '审批',
   }
   return (category && labels[category]) || category || '--'
+}
+
+function messageTypeLabel(type?: string) {
+  const labels: Record<string, string> = {
+    PUBLIC: '公开', PRIVATE: '私人', SYSTEM: '系统',
+  }
+  return (type && labels[type]) || type || '--'
 }
 
 function formatDateTime(time: string) {

@@ -6,6 +6,7 @@ import com.workflow.notification.cache.NotificationCache;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessageStatus;
+import com.workflow.notification.model.MessageType;
 import com.workflow.notification.model.Recipient;
 import com.workflow.notification.store.MessageService;
 import com.workflow.notification.store.MessageRepository;
@@ -72,7 +73,8 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public PageResult<Message> listByUserId(Long userId, int page, int size, String keyword,
                                            MessageCategory category, Boolean unread,
-                                           LocalDateTime start, LocalDateTime end) {
+                                           LocalDateTime start, LocalDateTime end,
+                                           MessageType messageType) {
         // 1. 按用户 + 已读状态过滤收件人记录，得到消息ID集合
         List<Recipient> recipients;
         if (unread != null) {
@@ -96,6 +98,9 @@ public class MessageServiceImpl implements MessageService {
             }
             if (category != null) {
                 predicates.add(cb.equal(root.get("category"), category));
+            }
+            if (messageType != null) {
+                predicates.add(cb.equal(root.get("messageType"), messageType));
             }
             if (start != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), start));

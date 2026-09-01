@@ -123,6 +123,21 @@ class MessageSenderTest {
     }
 
     @Test
+    void sendByTemplate_withMessageType_carriesSpecifiedType() {
+        when(tenantProvider.getTenantId()).thenReturn("default");
+        when(templateService.getTemplate("WEB_NOTICE", "default"))
+                .thenReturn(template("标题", "内容"));
+
+        messageSender.sendByTemplate(100L, "WEB_NOTICE", Map.of(),
+                MessageType.PUBLIC, List.of(1000L), List.of(ChannelType.IN_APP));
+
+        ArgumentCaptor<MessageEvent> eventCaptor = ArgumentCaptor.forClass(MessageEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        Message message = eventCaptor.getValue().getMessage();
+        assertThat(message.getMessageType()).isEqualTo(MessageType.PUBLIC);
+    }
+
+    @Test
     void sendByTemplate_rejectsMissingTitleVariableBeforePublish() {
         when(tenantProvider.getTenantId()).thenReturn("default");
         when(templateService.getTemplate("WEB_NOTICE", "default"))

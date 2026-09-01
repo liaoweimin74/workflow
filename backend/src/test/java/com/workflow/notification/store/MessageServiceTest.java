@@ -156,7 +156,7 @@ class MessageServiceTest {
     void listByUserId_returns_empty_when_no_messages() {
         when(recipientRepository.findByUserId(1000L)).thenReturn(Collections.emptyList());
 
-        PageResult<Message> result = messageService.listByUserId(1000L, 0, 10, null, null, null, null, null);
+        PageResult<Message> result = messageService.listByUserId(1000L, 0, 10, null, null, null, null, null, null);
 
         assertThat(result.getTotal()).isEqualTo(0);
         assertThat(result.getRows()).isEmpty();
@@ -170,7 +170,7 @@ class MessageServiceTest {
                 any(org.springframework.data.domain.PageRequest.class)))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(Collections.emptyList()));
 
-        PageResult<Message> result = messageService.listByUserId(1000L, 0, 10, null, null, true, null, null);
+        PageResult<Message> result = messageService.listByUserId(1000L, 0, 10, null, null, true, null, null, null);
 
         assertThat(result.getTotal()).isEqualTo(0); // 无消息匹配
         verify(recipientRepository).findByUserIdAndStatus(1000L, MessageStatus.PENDING);

@@ -1,5 +1,7 @@
 package com.workflow.notification.api;
 
+import com.workflow.notification.model.MessageType;
+
 import java.util.Map;
 
 /**
@@ -19,6 +21,9 @@ public class TemplateSendRequest {
     /** 模板变量，发送前校验必填并用于渲染标题与内容 */
     private Map<String, Object> variables;
 
+    /** 消息类型（PRIVATE/PUBLIC/SYSTEM），缺省为 PRIVATE */
+    private MessageType messageType;
+
     public Long getSenderId() { return senderId; }
     public void setSenderId(Long senderId) { this.senderId = senderId; }
 
@@ -27,4 +32,7 @@ public class TemplateSendRequest {
 
     public Map<String, Object> getVariables() { return variables; }
     public void setVariables(Map<String, Object> variables) { this.variables = variables; }
+
+    public MessageType getMessageType() { return messageType; }
+    public void setMessageType(MessageType messageType) { this.messageType = messageType; }
 }

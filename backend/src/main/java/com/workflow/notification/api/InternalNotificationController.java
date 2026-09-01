@@ -49,6 +49,7 @@ public class InternalNotificationController {
                 request.getSenderId(),
                 request.getTemplateCode(),
                 request.getVariables(),
+                request.getMessageType() != null ? request.getMessageType() : com.workflow.notification.model.MessageType.PRIVATE,
                 recipientIds,
                 channels);
         return R.ok();

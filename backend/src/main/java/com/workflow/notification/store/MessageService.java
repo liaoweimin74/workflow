@@ -4,6 +4,7 @@ import com.workflow.common.domain.PageResult;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessageStatus;
+import com.workflow.notification.model.MessageType;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,11 +34,13 @@ public interface MessageService {
      * @param unread   已读/未读过滤：null=全部，true=未读，false=已读
      * @param start    起始时间
      * @param end      结束时间
+     * @param messageType 消息类型过滤（null=全部）
      * @return 分页结果（每条消息 status 为当前用户的已读状态：PENDING=未读，SENT=已读）
      */
     PageResult<Message> listByUserId(Long userId, int page, int size, String keyword,
                                      MessageCategory category, Boolean unread,
-                                     LocalDateTime start, LocalDateTime end);
+                                     LocalDateTime start, LocalDateTime end,
+                                     MessageType messageType);
 
     /**
      * 获取消息详情

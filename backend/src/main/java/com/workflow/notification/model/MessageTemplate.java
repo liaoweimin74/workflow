@@ -25,6 +25,10 @@ public class MessageTemplate {
     @Column(name = "template_code", length = 64, nullable = false)
     private String templateCode;
 
+    /** 业务事件代码；兼容旧模板时可为空 */
+    @Column(name = "event_code", length = 64)
+    private String eventCode;
+
     /** 模板名称 */
     @Column(name = "name", length = 128, nullable = false)
     private String name;
@@ -79,6 +83,8 @@ public class MessageTemplate {
 
     public String getTemplateCode() { return templateCode; }
     public void setTemplateCode(String templateCode) { this.templateCode = templateCode; }
+    public String getEventCode() { return eventCode; }
+    public void setEventCode(String eventCode) { this.eventCode = eventCode; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

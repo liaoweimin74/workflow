@@ -2,7 +2,10 @@ package com.workflow.notification.template;
 
 import com.workflow.common.exception.BusinessException;
 import com.workflow.notification.model.MessageTemplate;
+import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.event.NotificationEventService;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -19,9 +22,17 @@ public class TemplateService {
     private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
 
     private final MessageTemplateRepository templateRepository;
+    private final NotificationEventService eventService;
 
     public TemplateService(MessageTemplateRepository templateRepository) {
+        this(templateRepository, null);
+    }
+
+    @Autowired
+    public TemplateService(MessageTemplateRepository templateRepository,
+                           NotificationEventService eventService) {
         this.templateRepository = templateRepository;
+        this.eventService = eventService;
     }
 
     /**
@@ -34,6 +45,17 @@ public class TemplateService {
                 .orElseThrow(() -> new BusinessException("模板不存在: " + templateCode));
         if (!Boolean.TRUE.equals(template.getEnabled())) {
             throw new BusinessException("模板已停用: " + templateCode);
+        }
+        return template;
+    }
+
+    /** 按业务事件和渠道获取唯一启用模板。 */
+    public MessageTemplate getTemplateForEvent(String tenantId, String eventCode, ChannelType channel) {
+        MessageTemplate template = templateRepository
+                .findByTenantIdAndEventCodeAndChannelAndEnabled(tenantId, eventCode, channel, true)
+                .orElseThrow(() -> new BusinessException("事件没有可用模板: " + eventCode + "/" + channel));
+        if (!Boolean.TRUE.equals(template.getEnabled())) {
+            throw new BusinessException("模板已停用: " + template.getTemplateCode());
         }
         return template;
     }
@@ -84,6 +106,15 @@ public class TemplateService {
         template.setIsSystem(false);
         if (template.getEnabled() == null) {
             template.setEnabled(true);
+        }
+        if (template.getEventCode() != null && !template.getEventCode().isBlank()
+                && eventService != null) {
+            eventService.requireEnabled(template.getTenantId(), template.getEventCode());
+            if (Boolean.TRUE.equals(template.getEnabled()) && template.getChannel() != null
+                    && templateRepository.existsByTenantIdAndEventCodeAndChannelAndEnabled(
+                    template.getTenantId(), template.getEventCode(), template.getChannel(), true)) {
+                throw new BusinessException("同一事件和渠道已有启用模板");
+            }
         }
         return templateRepository.save(template);
     }

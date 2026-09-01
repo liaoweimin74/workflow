@@ -54,7 +54,22 @@ export function updateSubscriptionRule(id: number, data: any) {
 }
 
 /** 发送记录 */
-export function getDeliveryLogs(params?: { page?: number; size?: number }) {
+export interface DeliveryLogParams {
+  page?: number
+  size?: number
+  /** 标题关键字（模糊） */
+  keyword?: string
+  /** 收件人用户名（模糊） */
+  recipient?: string
+  /** 渠道 */
+  channel?: string
+  /** 开始时间 yyyy-MM-dd HH:mm:ss */
+  start?: string
+  /** 结束时间 yyyy-MM-dd HH:mm:ss */
+  end?: string
+}
+
+export function getDeliveryLogs(params?: DeliveryLogParams) {
   return http.get('/v1/admin/notification/deliveries', { params })
 }
 

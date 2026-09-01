@@ -4,9 +4,23 @@ defineOptions({ name: 'MessageDeliveryLog' })
 import { ref } from 'vue'
 import { SearchTable } from '@/components/business'
 import { RefreshRight } from '@element-plus/icons-vue'
-import type { TableColumn, ActionButton } from '@/components/business/types'
+import type { TableColumn, ActionButton, SearchField } from '@/components/business/types'
 import { getDeliveryLogs, retryDelivery } from '../../api/admin'
 import { ElMessage } from 'element-plus'
+
+const channelMap: Record<string, string> = {
+  IN_APP: '站内信', SMS: '短信', WECHAT_WORK: '企业微信', WECHAT_MINIPROGRAM: '小程序', APP: 'APP',
+}
+
+const searchFields: SearchField[] = [
+  { prop: 'keyword', label: '标题', type: 'input', placeholder: '标题关键字' },
+  { prop: 'recipient', label: '收件人', type: 'input', placeholder: '收件人用户名' },
+  {
+    prop: 'channel', label: '渠道', type: 'select', placeholder: '全部渠道',
+    options: Object.entries(channelMap).map(([value, label]) => ({ value, label })),
+  },
+  { prop: 'timeRange', label: '时间段', type: 'date-range', time: true, placeholder: '发送时间范围' },
+]
 
 const columns: TableColumn[] = [
   { prop: 'id', label: 'ID', width: 80 },
@@ -22,12 +36,7 @@ const columns: TableColumn[] = [
   },
   {
     prop: 'channel', label: '渠道', width: 110,
-    render: (row: any) => {
-      const m: Record<string, string> = {
-        IN_APP: '站内信', SMS: '短信', WECHAT_WORK: '企业微信', WECHAT_MINIPROGRAM: '小程序', APP: 'APP',
-      }
-      return m[row.channel] || row.channel || '--'
-    },
+    render: (row: any) => channelMap[row.channel] || row.channel || '--',
   },
   {
     prop: 'status', label: '状态', width: 100,
@@ -37,9 +46,15 @@ const columns: TableColumn[] = [
 ]
 
 async function fetchApi(params: any) {
+  const [start, end] = Array.isArray(params.timeRange) ? params.timeRange : [undefined, undefined]
   const res = await getDeliveryLogs({
     page: (params.page || 1) - 1,
     size: params.size || 20,
+    keyword: params.keyword || undefined,
+    recipient: params.recipient || undefined,
+    channel: params.channel || undefined,
+    start: start || undefined,
+    end: end || undefined,
   })
   const data = res.data as any
   return { rows: data?.rows || [], total: data?.total || 0 }
@@ -66,7 +81,8 @@ const tableRef = ref()
     :columns="columns"
     :action-buttons="actionButtons"
     :fetch-api="fetchApi"
-    :show-search="false"
+    :search-fields="searchFields"
+    :show-search="true"
     :show-create-button="false"
   />
 </template>

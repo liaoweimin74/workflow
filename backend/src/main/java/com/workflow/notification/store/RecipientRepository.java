@@ -1,5 +1,6 @@
 package com.workflow.notification.store;
 
+import com.workflow.notification.model.ChannelType;
 import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.Recipient;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,6 +21,16 @@ public interface RecipientRepository extends JpaRepository<Recipient, Long> {
     List<Recipient> findByUserId(Long userId);
 
     List<Recipient> findByUserIdAndStatus(Long userId, MessageStatus status);
+
+    /**
+     * 按用户名模糊查询收件人记录（发送记录按收件人过滤用）。
+     */
+    List<Recipient> findByUsernameContaining(String username);
+
+    /**
+     * 按渠道查询收件人记录（发送记录按渠道过滤用）。
+     */
+    List<Recipient> findByChannel(ChannelType channel);
 
     /**
      * 根据消息ID和用户ID查询收件人记录

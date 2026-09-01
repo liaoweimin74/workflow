@@ -6,6 +6,8 @@ import com.workflow.notification.channel.ChannelAdapter;
 import com.workflow.notification.channel.ChannelDeliveryResult;
 import com.workflow.notification.channel.InAppChannelAdapter;
 import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.model.Message;
+import com.workflow.notification.model.TemplateContentType;
 import com.workflow.notification.sse.SseEmitterManager;
 import com.workflow.notification.store.MessageService;
 import org.junit.jupiter.api.BeforeEach;
@@ -80,6 +82,19 @@ class ChannelControllerTest {
                 "CHANNEL_TEST".equals(m.getTemplateCode()) &&
                 "SYSTEM".equals(m.getSenderType()) &&
                 m.getSenderId().equals(100L)), eq(List.of(100L)));
+    }
+
+    @Test
+    void test_inApp_message_is_markdown_with_bold_test_message() {
+        controller.test(1L); // IN_APP
+
+        verify(messageService).send(argThat(m -> {
+            assertThat(m.getContentType()).isEqualTo(TemplateContentType.MARKDOWN);
+            Object text = m.getContent().get("text");
+            assertThat(text).isEqualTo(
+                    "这是一条渠道连通性**测试消息**，收到即表示站内信渠道正常。");
+            return true;
+        }), eq(List.of(100L)));
     }
 
     @Test

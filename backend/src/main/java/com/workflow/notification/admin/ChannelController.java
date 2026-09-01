@@ -9,6 +9,7 @@ import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessagePriority;
 import com.workflow.notification.model.MessageType;
+import com.workflow.notification.model.TemplateContentType;
 import com.workflow.notification.sse.SseEmitterManager;
 import com.workflow.notification.store.MessageService;
 import org.springframework.security.core.Authentication;
@@ -128,7 +129,10 @@ public class ChannelController {
         message.setSenderId(userId);
         message.setSenderType("SYSTEM");
         message.setTitle("【渠道测试】站内信连通性测试");
-        message.setContent(Map.of("content", "这是一条渠道连通性测试消息，收到即表示站内信渠道正常。"));
+        message.setContentType(TemplateContentType.MARKDOWN);
+        message.setContent(Map.of(
+                "text", "这是一条渠道连通性**测试消息**，收到即表示站内信渠道正常。",
+                "variables", Map.of()));
         message.setPriority(MessagePriority.NORMAL);
         message.setCategory(MessageCategory.SYSTEM);
         message.setMessageType(MessageType.PRIVATE);

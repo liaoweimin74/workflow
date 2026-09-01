@@ -40,7 +40,10 @@ const columns: TableColumn[] = [
   },
   {
     prop: 'status', label: '状态', width: 100,
-    render: (row: any) => (row.status === 'SENT' ? '已发送' : row.status || '--'),
+    render: (row: any) => {
+      const m: Record<string, string> = { SENT: '已发送', FAILED: '投递失败', PENDING: '重试中' }
+      return m[row.status] || row.status || '--'
+    },
   },
   { prop: 'createdAt', label: '发送时间', width: 180 },
 ]

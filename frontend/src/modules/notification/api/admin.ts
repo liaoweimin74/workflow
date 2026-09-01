@@ -53,6 +53,11 @@ export function updateSubscriptionRule(id: number, data: any) {
   return http.put(`/v1/admin/notification/subscriptions/${id}`, data)
 }
 
+/** 删除订阅规则 */
+export function deleteSubscriptionRule(id: number) {
+  return http.delete(`/v1/admin/notification/subscriptions/${id}`)
+}
+
 /** 发送记录 */
 export interface DeliveryLogParams {
   page?: number
@@ -76,4 +81,19 @@ export function getDeliveryLogs(params?: DeliveryLogParams) {
 /** 手动重发 */
 export function retryDelivery(id: number) {
   return http.post(`/v1/admin/notification/deliveries/${id}/retry`)
+}
+
+/** 公告列表 */
+export function getAnnouncements(params?: { page?: number; size?: number; keyword?: string }) {
+  return http.get('/v1/admin/notification/announcements', { params })
+}
+
+/** 发布公告 */
+export function publishAnnouncement(data: { title: string; content: string; recipientIds: number[] }) {
+  return http.post('/v1/admin/notification/announcements', null, { params: data })
+}
+
+/** 撤回公告 */
+export function recallAnnouncement(id: number) {
+  return http.delete(`/v1/admin/notification/announcements/${id}`)
 }

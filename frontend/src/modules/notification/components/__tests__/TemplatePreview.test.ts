@@ -111,9 +111,10 @@ describe('TemplatePreview', () => {
     // 初始为空 → 占位
     expect(wrapper.text()).toContain('（未填写）')
 
-    // 模拟用户输入内容（form-create 更新响应式 model）
+    // 模拟用户输入内容（form-create 更新响应式 model），轮询同步在 300ms 内反映
     form.content = '刚输入的新内容'
-    await nextTick()
-    expect(wrapper.text()).toContain('刚输入的新内容')
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('刚输入的新内容')
+    }, { timeout: 1500, interval: 50 })
   })
 })

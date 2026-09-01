@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 
 /** Markdown 渲染器：不转义原始 HTML（html:false），开启链接识别 */
@@ -45,32 +45,37 @@ function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-/** 当前模板内容类型是否为 Markdown */
-const isMarkdown = computed(() => {
+const displayText = ref('（未填写）')
+const displayHtml = ref('（未填写）')
+const isMarkdown = ref(false)
+
+/** 从 formCreateInject 读取字段值并刷新展示状态 */
+function sync() {
   const api = props.formCreateInject?.api
   const ct = api?.form?.['contentType'] ?? api?.getValue?.('contentType')
-  return ct === 'MARKDOWN'
-})
+  isMarkdown.value = ct === 'MARKDOWN'
 
-/** 读取预览字段的原始值（含变量替换）
- *
- * 优先从响应式 form model（api.form）读取——getValue 在 computed 中不被依赖追踪，
- * 输入变化不会触发重算（新建/编辑预览停留初始值）。api.form 为 Vue reactive，可直接追踪。
- */
-const rawText = computed(() => {
-  const api = props.formCreateInject?.api
   const value = api?.form?.[props.source] ?? api?.getValue?.(props.source)
-  if (value === undefined || value === null || value === '') return ''
-  return previewText(String(value))
+  if (value === undefined || value === null || value === '') {
+    displayText.value = props.placeholder || '（未填写）'
+    displayHtml.value = escapeHtml(props.placeholder || '（未填写）')
+    return
+  }
+  const text = previewText(String(value))
+  displayText.value = text
+  displayHtml.value = md.render(text)
+}
+
+// form-create 注入的 formCreateInject 在 Vue props（shallowReactive）边界内，
+// deep watch / computed 无法可靠追踪其内部变化（实测不触发）。
+// setup 时立即同步一次（props 已就绪），再用轻量轮询兜底实时更新（300ms 内）。
+sync()
+let timer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  timer = setInterval(sync, 300)
 })
-
-/** 纯文本展示（未填写时显示占位） */
-const displayText = computed(() => rawText.value || props.placeholder || '（未填写）')
-
-/** Markdown 展示（未填写时显示转义的占位） */
-const displayHtml = computed(() => {
-  if (!rawText.value) return escapeHtml(props.placeholder || '（未填写）')
-  return md.render(rawText.value)
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
 })
 </script>
 

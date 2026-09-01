@@ -21,6 +21,7 @@ vi.mock('@/api/form', () => ({
 
 import { formApi } from '@/api/form'
 import { dataSourceApi } from '@/api/data-source'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 // Mock dataSourceApi for FORM container binding engine
 vi.mock('@/api/data-source', () => ({
@@ -108,6 +109,10 @@ function createWrapper(props: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  activeDsBindings.value = [
+    { id: 'ds_1', refId: 'ds_1' },
+    { id: 'ds_inline', refId: 'uuid-inline-1' },
+  ]
 })
 
 describe('FormRenderer — rule prop (直接渲染，无 API 调用)', () => {

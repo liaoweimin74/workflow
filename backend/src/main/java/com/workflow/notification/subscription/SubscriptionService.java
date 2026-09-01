@@ -4,7 +4,10 @@ import com.workflow.notification.model.ChannelType;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessagePriority;
 import com.workflow.notification.model.UserSubscription;
+import com.workflow.notification.model.SubscriptionRule;
+import com.workflow.notification.model.SubscriptionRuleAction;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
@@ -15,9 +18,17 @@ import java.util.List;
 public class SubscriptionService {
 
     private final UserSubscriptionRepository userSubscriptionRepository;
+    private final SubscriptionRuleRepository subscriptionRuleRepository;
 
     public SubscriptionService(UserSubscriptionRepository userSubscriptionRepository) {
+        this(userSubscriptionRepository, null);
+    }
+
+    @Autowired
+    public SubscriptionService(UserSubscriptionRepository userSubscriptionRepository,
+                               SubscriptionRuleRepository subscriptionRuleRepository) {
         this.userSubscriptionRepository = userSubscriptionRepository;
+        this.subscriptionRuleRepository = subscriptionRuleRepository;
     }
 
     /**
@@ -43,6 +54,21 @@ public class SubscriptionService {
         // 系统公告始终发送
         if (message.getCategory() == com.workflow.notification.model.MessageCategory.SYSTEM) {
             return true;
+        }
+
+        if (subscriptionRuleRepository != null && message.getEventCode() != null
+                && message.getPriority() != null) {
+            SubscriptionRule rule = subscriptionRuleRepository
+                    .findByTenantIdAndEventCodeAndChannelAndPriorityAndEnableTrue(
+                            message.getTenantId(), message.getEventCode(), channel, message.getPriority())
+                    .orElse(null);
+            if (rule != null) {
+                SubscriptionRuleAction action = rule.getAction() == null
+                        ? SubscriptionRuleAction.ALLOW : rule.getAction();
+                if (action == SubscriptionRuleAction.FORCE) return true;
+                if (action == SubscriptionRuleAction.DENY) return false;
+                if (action == SubscriptionRuleAction.ALLOW) return true;
+            }
         }
 
         // 检查用户订阅偏好

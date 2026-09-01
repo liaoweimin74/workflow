@@ -18,6 +18,9 @@ class SubscriptionServiceTest {
     @Mock
     private UserSubscriptionRepository userSubscriptionRepository;
 
+    @Mock
+    private SubscriptionRuleRepository subscriptionRuleRepository;
+
     @InjectMocks
     private SubscriptionService subscriptionService;
 
@@ -64,5 +67,43 @@ class SubscriptionServiceTest {
         when(userSubscriptionRepository.findByTenantIdAndUserIdAndChannel("default", 1000L, ChannelType.SMS))
                 .thenReturn(sub);
         assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isFalse();
+    }
+
+    @Test
+    void shouldSend_force_rule_overrides_unsubscribe() {
+        Message msg = createMessage(MessagePriority.HIGH, MessageType.PUBLIC, MessageCategory.WORKFLOW);
+        msg.setEventCode("FINANCE_URGE");
+        SubscriptionRule rule = new SubscriptionRule();
+        rule.setAction(SubscriptionRuleAction.FORCE);
+        when(subscriptionRuleRepository.findByTenantIdAndEventCodeAndChannelAndPriorityAndEnableTrue(
+                "default", "FINANCE_URGE", ChannelType.SMS, MessagePriority.HIGH))
+                .thenReturn(java.util.Optional.of(rule));
+        assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isTrue();
+    }
+
+    @Test
+    void shouldSend_deny_rule_blocks_subscribed_user() {
+        Message msg = createMessage(MessagePriority.NORMAL, MessageType.PUBLIC, MessageCategory.WORKFLOW);
+        msg.setEventCode("TASK_CREATED");
+        SubscriptionRule rule = new SubscriptionRule();
+        rule.setAction(SubscriptionRuleAction.DENY);
+        when(subscriptionRuleRepository.findByTenantIdAndEventCodeAndChannelAndPriorityAndEnableTrue(
+                "default", "TASK_CREATED", ChannelType.SMS, MessagePriority.NORMAL))
+                .thenReturn(java.util.Optional.of(rule));
+
+        assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isFalse();
+    }
+
+    @Test
+    void shouldSend_allow_rule_allows_unsubscribed_user() {
+        Message msg = createMessage(MessagePriority.NORMAL, MessageType.PUBLIC, MessageCategory.WORKFLOW);
+        msg.setEventCode("TASK_CREATED");
+        SubscriptionRule rule = new SubscriptionRule();
+        rule.setAction(SubscriptionRuleAction.ALLOW);
+        when(subscriptionRuleRepository.findByTenantIdAndEventCodeAndChannelAndPriorityAndEnableTrue(
+                "default", "TASK_CREATED", ChannelType.SMS, MessagePriority.NORMAL))
+                .thenReturn(java.util.Optional.of(rule));
+
+        assertThat(subscriptionService.shouldSend(msg, 1000L, ChannelType.SMS)).isTrue();
     }
 }

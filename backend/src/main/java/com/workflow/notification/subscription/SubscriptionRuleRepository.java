@@ -11,4 +11,17 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
  */
 public interface SubscriptionRuleRepository
         extends JpaRepository<SubscriptionRule, Long>, JpaSpecificationExecutor<SubscriptionRule> {
+
+    boolean existsByTenantIdAndEventCode(String tenantId, String eventCode);
+
+    java.util.Optional<SubscriptionRule> findByTenantIdAndEventCodeAndChannelAndPriorityAndEnable(
+            String tenantId, String eventCode,
+            com.workflow.notification.model.ChannelType channel,
+            com.workflow.notification.model.MessagePriority priority,
+            Boolean enable);
+
+    java.util.Optional<SubscriptionRule> findByTenantIdAndEventCodeAndChannelAndPriorityAndEnableTrue(
+            String tenantId, String eventCode,
+            com.workflow.notification.model.ChannelType channel,
+            com.workflow.notification.model.MessagePriority priority);
 }

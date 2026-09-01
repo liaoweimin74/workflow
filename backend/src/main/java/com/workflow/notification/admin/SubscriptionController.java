@@ -1,10 +1,12 @@
 package com.workflow.notification.admin;
 
 import com.workflow.common.domain.R;
+import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.model.ChannelType;
 import com.workflow.notification.model.MessagePriority;
 import com.workflow.notification.model.SubscriptionRule;
+import com.workflow.notification.model.SubscriptionRuleAction;
 import com.workflow.notification.subscription.SubscriptionRuleRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -31,9 +33,11 @@ import java.util.Map;
 public class SubscriptionController {
 
     private final SubscriptionRuleRepository repository;
+    private final TenantProvider tenantProvider;
 
-    public SubscriptionController(SubscriptionRuleRepository repository) {
+    public SubscriptionController(SubscriptionRuleRepository repository, TenantProvider tenantProvider) {
         this.repository = repository;
+        this.tenantProvider = tenantProvider;
     }
 
     /**
@@ -64,6 +68,7 @@ public class SubscriptionController {
             row.put("channel", r.getChannel());
             row.put("priority", r.getPriority());
             row.put("enable", r.getEnable());
+            row.put("action", r.getAction());
             row.put("condition", r.getConditionExpr());
             row.put("createdBy", r.getCreatedBy());
             row.put("createdAt", r.getCreatedAt());
@@ -83,7 +88,7 @@ public class SubscriptionController {
     public R<Void> create(@RequestBody Map<String, Object> rule) {
         NotificationAdminAuthorization.requireAdmin();
         SubscriptionRule entity = new SubscriptionRule();
-        entity.setTenantId("default");
+        entity.setTenantId(tenantProvider.getTenantId());
         entity.setCreatedBy(currentUsername());
         applyFields(entity, rule);
         repository.save(entity);
@@ -128,6 +133,9 @@ public class SubscriptionController {
         }
         if (rule.get("enable") != null) {
             entity.setEnable(Boolean.valueOf(String.valueOf(rule.get("enable"))));
+        }
+        if (rule.get("action") != null) {
+            entity.setAction(SubscriptionRuleAction.valueOf(String.valueOf(rule.get("action"))));
         }
         if (rule.get("condition") != null) {
             entity.setConditionExpr(String.valueOf(rule.get("condition")));

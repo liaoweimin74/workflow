@@ -39,6 +39,11 @@ public class SubscriptionRule {
     @Column(name = "enable", nullable = false)
     private Boolean enable;
 
+    /** 规则动作：ALLOW/DENY/FORCE。 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "action", length = 16, nullable = false)
+    private SubscriptionRuleAction action = SubscriptionRuleAction.ALLOW;
+
     /** 条件表达式 */
     @Column(name = "condition_expr", columnDefinition = "TEXT")
     private String conditionExpr;
@@ -70,6 +75,8 @@ public class SubscriptionRule {
 
     public Boolean getEnable() { return enable; }
     public void setEnable(Boolean enable) { this.enable = enable; }
+    public SubscriptionRuleAction getAction() { return action; }
+    public void setAction(SubscriptionRuleAction action) { this.action = action; }
 
     public String getConditionExpr() { return conditionExpr; }
     public void setConditionExpr(String conditionExpr) { this.conditionExpr = conditionExpr; }

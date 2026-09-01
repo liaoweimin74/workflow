@@ -1,6 +1,7 @@
 package com.workflow.notification.admin;
 
 import com.workflow.common.domain.R;
+import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.model.ChannelType;
 import com.workflow.notification.model.MessagePriority;
@@ -28,12 +29,15 @@ import static org.mockito.Mockito.*;
 class SubscriptionControllerTest {
 
     private SubscriptionRuleRepository repository;
+    private TenantProvider tenantProvider;
     private SubscriptionController controller;
 
     @BeforeEach
     void setUp() {
         repository = mock(SubscriptionRuleRepository.class);
-        controller = new SubscriptionController(repository);
+        tenantProvider = mock(TenantProvider.class);
+        when(tenantProvider.getTenantId()).thenReturn("default");
+        controller = new SubscriptionController(repository, tenantProvider);
 
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(

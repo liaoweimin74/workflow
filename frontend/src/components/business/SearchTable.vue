@@ -237,7 +237,7 @@
           :key="dialogFormKey"
           ref="formRendererRef"
           :rule="formConfig.rule"
-          :option="formConfig.option"
+           :option="dialogFormOption"
           :initial-values="dialogInitialValues"
           :actions="formConfig.actions"
           :data-sources="formConfig.dataSources"
@@ -258,6 +258,7 @@ import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom } from '@ele
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { SearchTableProps, ActionButton, QueryParams, TableColumn } from './types'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
+import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
 
 /** 承接 TableColumn.render 的小型函数式组件（返回 VNode 或字符串） */
 const RenderCell = defineComponent({
@@ -340,6 +341,16 @@ const isEdit = ref(false)
 const editId = ref<number | string>(0)
 const editingRow = ref<any>(null)
 const dialogInitialValues = ref<Record<string, any>>({})
+
+/** 根据弹窗表单中最长字段标题计算标签宽度，避免固定宽度造成过大的左侧空白。 */
+const dialogFormOption = computed(() => ({
+  ...(props.formConfig?.option || {}),
+  form: {
+    ...(props.formConfig?.option?.form || {}),
+    labelWidth: `${measureFormLabelWidth(props.formConfig?.rule || [])}px`,
+  },
+}))
+
 const formLoading = ref(false)
 const formRendererRef = ref<InstanceType<typeof FormRenderer> | null>(null)
 /** 每次打开弹窗递增，强制重建 FormRenderer（确保读取最新 initialValues，避免复用实例时表单残留旧数据） */
@@ -693,5 +704,22 @@ function getList() {
 /* 表单弹窗内容区：配置 dialogHeight 时固定高度、超出滚动 */
 .st-dialog-body {
   overflow-y: auto;
+}
+
+/* 表单弹窗内容区：让 form-create 的根节点与 dialog body 使用同一条水平边界，
+   避免不同表单规则/全局样式造成左右留白不一致。 */
+.st-dialog-body :deep(.form-create) {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+.st-dialog-body :deep(.el-form) {
+  width: 100%;
+  margin: 0;
+}
+.st-dialog-body :deep(.el-form-item) {
+  margin-left: 0;
+  margin-right: 0;
 }
 </style>

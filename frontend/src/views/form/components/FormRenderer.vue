@@ -19,7 +19,7 @@
       class="fc-container-dialog"
     >
       <div class="fc-dialog-body" :style="{ height: c.height }">
-        <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="dialogOption" v-model="c.formData" />
+          <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="containerOption(c)" v-model="c.formData" />
       </div>
       <!-- 只读（查看）：仅显示关闭按钮；非只读：容器按钮（互斥独立 v-if，避免 v-else-if 编译问题） -->
       <template #footer v-if="c.readonly">
@@ -39,7 +39,7 @@
       destroy-on-close
     >
       <div class="fc-dialog-body" :style="{ height: c.height }">
-        <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="dialogOption" v-model="c.formData" />
+          <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="containerOption(c)" v-model="c.formData" />
       </div>
       <template #footer v-if="c.readonly">
         <el-button type="primary" @click="c.visible = false">关闭</el-button>
@@ -63,7 +63,7 @@
         <el-button class="btn-cancel" text @click="containerAction(c, 'cancel')">关闭</el-button>
       </div>
       <div class="fc-inline-body" :style="{ height: c.height }">
-        <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="dialogOption" v-model="c.formData" />
+          <form-create v-if="c.visible" :rule="containerRenderRule(c)" :option="containerOption(c)" v-model="c.formData" />
       </div>
       <div v-if="c.readonly" class="container-buttons fc-inline-footer">
         <el-button type="primary" @click="containerAction(c, 'cancel')">关闭</el-button>
@@ -77,6 +77,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted, computed, provide, nextTick } from 'vue'
+import { measureFormLabelWidth } from './formLabelWidth'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import formCreate, { type Rule } from '@form-create/element-ui'
@@ -254,6 +255,18 @@ const dialogOption = computed<Record<string, any>>(() => ({
   form: { ...(renderOption.value.form || {}) },
 }))
 
+/** 抽屉/嵌入式容器也使用按字段标题计算的标签宽度，避免回退到 form-create 默认 125px。 */
+function containerOption(container: { renderRule?: any[] }) {
+  return {
+    ...dialogOption.value,
+    form: {
+      ...(dialogOption.value.form || {}),
+      labelWidth: `${measureFormLabelWidth(container.renderRule || [])}px`,
+    },
+  }
+}
+
+
 /**
  * 从 rule 树提取联动容器（须在 normalizeForRender 之前调用，此时 type 仍为 formContainer）。
  * dialog / inline / newTab 统一从主树移除，注册为独立容器（独立引擎 + formData），仅渲染位置不同：
@@ -323,6 +336,14 @@ const renderOption = ref<Record<string, any>>({
   form: {},
 })
 
+/** 将当前表单规则的最长标题宽度应用到主表单；主表单 option 也供 drawer/inline 容器继承。 */
+function applyDynamicLabelWidth() {
+  renderOption.value.form = {
+    ...(renderOption.value.form || {}),
+    labelWidth: `${measureFormLabelWidth(resolvedSchema.value)}px`,
+  }
+}
+
 /** 应用设计器 option.form 的布局配置（剔除设计器内部字段） */
 function applyOption(option: Record<string, any> | undefined | null) {
   if (!option) return
@@ -344,6 +365,7 @@ onMounted(async () => {
   } else if (props.rule) {
     resolvedSchema.value = props.rule
   }
+  applyDynamicLabelWidth()
   if (props.initialValues) {
     formData.value = { ...props.initialValues }
   }

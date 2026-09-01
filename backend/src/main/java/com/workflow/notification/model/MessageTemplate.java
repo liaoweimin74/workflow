@@ -61,6 +61,10 @@ public class MessageTemplate {
     @Column(name = "is_system", nullable = false)
     private Boolean isSystem;
 
+    /** 是否启用（停用的模板发送时被拒绝） */
+    @Column(name = "enabled", nullable = false)
+    private Boolean enabled = true;
+
     /** 创建时间 */
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -99,6 +103,9 @@ public class MessageTemplate {
 
     public Boolean getIsSystem() { return isSystem; }
     public void setIsSystem(Boolean isSystem) { this.isSystem = isSystem; }
+
+    public Boolean getEnabled() { return enabled; }
+    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

@@ -91,4 +91,39 @@ class TemplateServiceTest {
         assertThatThrownBy(() -> templateService.create(template))
                 .isInstanceOf(com.workflow.common.exception.BusinessException.class);
     }
+
+    // ==================== P2-4: 模板启停 ====================
+
+    @Test
+    void toggle_flips_enabled_state() {
+        MessageTemplate template = new MessageTemplate();
+        template.setId(1L);
+        template.setEnabled(true);
+        when(templateRepository.findById(1L)).thenReturn(java.util.Optional.of(template));
+
+        templateService.toggle(1L);
+
+        verify(templateRepository).save(argThat(t -> Boolean.FALSE.equals(t.getEnabled())));
+    }
+
+    @Test
+    void toggle_throws_when_template_not_found() {
+        when(templateRepository.findById(99L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> templateService.toggle(99L))
+                .isInstanceOf(com.workflow.common.exception.BusinessException.class);
+    }
+
+    @Test
+    void getTemplate_throws_when_template_disabled() {
+        MessageTemplate template = new MessageTemplate();
+        template.setTemplateCode("DISABLED");
+        template.setTenantId("default");
+        template.setEnabled(false);
+        when(templateRepository.findByTemplateCodeAndTenantId("DISABLED", "default"))
+                .thenReturn(java.util.Optional.of(template));
+
+        assertThatThrownBy(() -> templateService.getTemplate("DISABLED", "default"))
+                .isInstanceOf(com.workflow.common.exception.BusinessException.class);
+    }
 }

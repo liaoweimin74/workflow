@@ -26,10 +26,16 @@ public class TemplateService {
 
     /**
      * 根据模板代码和租户ID获取模板
+     *
+     * @throws BusinessException 模板不存在或已停用
      */
     public MessageTemplate getTemplate(String templateCode, String tenantId) {
-        return templateRepository.findByTemplateCodeAndTenantId(templateCode, tenantId)
+        MessageTemplate template = templateRepository.findByTemplateCodeAndTenantId(templateCode, tenantId)
                 .orElseThrow(() -> new BusinessException("模板不存在: " + templateCode));
+        if (!Boolean.TRUE.equals(template.getEnabled())) {
+            throw new BusinessException("模板已停用: " + templateCode);
+        }
+        return template;
     }
 
     /**
@@ -67,7 +73,7 @@ public class TemplateService {
     /**
      * 创建模板
      * 
-     * <p>用户创建的一律为普通模板（isSystem=false），
+     * <p>用户创建的一律为普通模板（isSystem=false），默认启用（enabled=true），
      * 系统模板由系统初始化预置，不允许用户创建
      */
     @Transactional
@@ -76,6 +82,9 @@ public class TemplateService {
             throw new BusinessException("模板代码已存在: " + template.getTemplateCode());
         }
         template.setIsSystem(false);
+        if (template.getEnabled() == null) {
+            template.setEnabled(true);
+        }
         return templateRepository.save(template);
     }
 
@@ -96,6 +105,9 @@ public class TemplateService {
         if (updated.getContentType() != null) {
             existing.setContentType(updated.getContentType());
         }
+        if (updated.getEnabled() != null) {
+            existing.setEnabled(updated.getEnabled());
+        }
         if (!isSystem) {
             existing.setPriority(updated.getPriority());
             existing.setCategory(updated.getCategory());
@@ -108,7 +120,10 @@ public class TemplateService {
      */
     @Transactional
     public void toggle(Long id) {
-        // 模板无 status 字段，此方法为占位
+        MessageTemplate existing = templateRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("模板不存在"));
+        existing.setEnabled(!Boolean.TRUE.equals(existing.getEnabled()));
+        templateRepository.save(existing);
     }
 
     /**

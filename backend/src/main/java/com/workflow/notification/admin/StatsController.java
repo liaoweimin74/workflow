@@ -32,6 +32,7 @@ public class StatsController {
      */
     @GetMapping("/overview")
     public R<Map<String, Object>> overview() {
+        NotificationAdminAuthorization.requireAdmin();
         long totalMessages = messageRepository.count();
         long totalRecipients = recipientRepository.count();
         long failedRetries = deliveryRetryRepository.count();
@@ -42,4 +43,5 @@ public class StatsController {
                 "failedRetries", failedRetries
         ));
     }
+
 }

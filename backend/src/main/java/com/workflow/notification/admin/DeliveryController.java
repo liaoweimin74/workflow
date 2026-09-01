@@ -12,10 +12,7 @@ import com.workflow.notification.store.DeliveryRetryRepository;
 import com.workflow.notification.store.MessageRepository;
 import com.workflow.notification.store.MessageService;
 import com.workflow.notification.store.RecipientRepository;
-import com.workflow.framework.security.domain.LoginUser;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -74,7 +71,7 @@ public class DeliveryController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime start,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime end) {
 
-        requireAdmin();
+        NotificationAdminAuthorization.requireAdmin();
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         // 1. 按收件人/渠道过滤时：从收件人表反查匹配的消息ID集合
@@ -154,7 +151,7 @@ public class DeliveryController {
      */
     @PostMapping("/{id}/retry")
     public R<Void> retry(@PathVariable Long id) {
-        requireAdmin();
+        NotificationAdminAuthorization.requireAdmin();
         Message message = messageRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("消息不存在: " + id));
 
@@ -196,15 +193,4 @@ public class DeliveryController {
         return message.getStatus() != null ? message.getStatus().name() : "SENT";
     }
 
-    private void requireAdmin() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !(auth.getPrincipal() instanceof LoginUser loginUser)) {
-            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
-        }
-        boolean isAdmin = loginUser.getRoles().stream()
-                .anyMatch(r -> "ROLE_ADMIN".equals(r) || "admin".equals(r));
-        if (!isAdmin) {
-            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
-        }
-    }
 }

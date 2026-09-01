@@ -28,11 +28,13 @@ public class TemplateController {
 
     @GetMapping
     public R<List<MessageTemplate>> list() {
+        NotificationAdminAuthorization.requireAdmin();
         return R.ok(templateService.list(tenantProvider.getTenantId()));
     }
 
     @PostMapping
     public R<MessageTemplate> create(@RequestBody MessageTemplate template) {
+        NotificationAdminAuthorization.requireAdmin();
         template.setTenantId(tenantProvider.getTenantId());
         return R.ok(templateService.create(template));
     }
@@ -40,12 +42,15 @@ public class TemplateController {
     @PutMapping("/{id}")
     public R<MessageTemplate> update(@PathVariable Long id,
                                      @RequestBody MessageTemplate template) {
+        NotificationAdminAuthorization.requireAdmin();
         return R.ok(templateService.update(id, template));
     }
 
     @PostMapping("/{id}/toggle")
     public R<Void> toggle(@PathVariable Long id) {
+        NotificationAdminAuthorization.requireAdmin();
         templateService.toggle(id);
         return R.ok();
     }
+
 }

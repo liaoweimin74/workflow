@@ -183,6 +183,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '发送记录' }
       },
       {
+        path: 'messages/announcements',
+        name: 'MessageAnnouncementList',
+        component: () => import('@/modules/notification/views/admin/AnnouncementList.vue'),
+        meta: { title: '公告管理' }
+      },
+      {
         path: '/:pathMatch(.*)*',
         redirect: '/404'
       }

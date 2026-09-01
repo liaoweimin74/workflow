@@ -371,7 +371,7 @@ const columns: TableColumn[] = [
 // ========== 数据获取 ==========
 async function fetchApi(params: any) {
   const res = await dataSourceApi.getDataSources({
-    page: (params.page || 1) - 1,
+      page: params.page || 1,
     size: params.size || 20,
     name: params.name || undefined,
     status: params.status || undefined,
@@ -535,7 +535,7 @@ async function loadPreviewData() {
   dataError.value = null
   try {
     const res = await dataSourceApi.queryData(editingId.value, {
-      page: previewPage.value - 1, // API 使用 0-indexed 页码
+      page: previewPage.value,
       size: previewSize.value,
       keyword: previewKeyword.value || undefined,
     })
@@ -1011,4 +1011,3 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 </style>
-

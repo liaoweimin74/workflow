@@ -258,7 +258,7 @@ const columns: TableColumn[] = [
 
 async function fetchApi(params: any) {
   const res = await processDesignApi.listDrafts({
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 20,
     name: params.name || undefined,
     categoryId: selectedCategory.value?.id || undefined,

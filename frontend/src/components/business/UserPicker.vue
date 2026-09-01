@@ -50,7 +50,7 @@ async function handleSearch(query: string) {
   }
   loading.value = true
   try {
-    const res = await getUserList({ username: query, page: 0, size: 20 })
+  const res = await getUserList({ username: query, page: 1, size: 20 })
     options.value = res.data.rows
   } catch {
     options.value = []

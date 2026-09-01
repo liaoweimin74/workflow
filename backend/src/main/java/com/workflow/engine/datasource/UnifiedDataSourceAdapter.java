@@ -246,8 +246,9 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     }
 
     private BizDataPageVO queryUsers(BizDataQueryRequest req) {
+        int userServicePage = Math.max(req.getPage(), 1);
         UserQueryRequest query = new UserQueryRequest(
-                req.getKeyword(), null, null, null, null, null, req.getPage(), req.getSize());
+                req.getKeyword(), null, null, null, null, null, userServicePage, req.getSize());
         PageResult<UserVO> page = userService.list(query);
         List<BizDataVO> rows = new ArrayList<>();
         for (UserVO u : page.getRows() == null ? List.<UserVO>of() : page.getRows()) {
@@ -260,7 +261,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             data.put("status", u.status());
             rows.add(new BizDataVO(String.valueOf(u.id()), data, null, null, null));
         }
-        return new BizDataPageVO(rows, page.getTotal(), req.getPage(), req.getSize());
+        return new BizDataPageVO(rows, page.getTotal(), userServicePage, req.getSize());
     }
 
     // ===== API helpers =====
@@ -444,6 +445,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     }
 
     private BizDataPageVO toPageVO(Object raw, Map<String, Object> op, BizDataQueryRequest req) {
+        int normalizedPage = Math.max(req.getPage(), 1);
         JsonNode root = toJsonNode(raw);
         JsonNode recordsNode = root;
         String parse = str(op.get("parse"));
@@ -451,7 +453,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             recordsNode = walkPath(root, parse);
         }
         if (recordsNode == null || !recordsNode.isArray()) {
-            return new BizDataPageVO(List.of(), 0, req.getPage(), req.getSize());
+            return new BizDataPageVO(List.of(), 0, normalizedPage, req.getSize());
         }
         List<BizDataVO> records = new ArrayList<>();
         for (JsonNode item : recordsNode) {
@@ -465,7 +467,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             JsonNode totalNode = walkPath(root, totalParse);
             if (totalNode != null && totalNode.isNumber()) total = totalNode.asLong();
         }
-        return new BizDataPageVO(records, total, req.getPage(), req.getSize());
+        return new BizDataPageVO(records, total, normalizedPage, req.getSize());
     }
 
     @SuppressWarnings("unchecked")

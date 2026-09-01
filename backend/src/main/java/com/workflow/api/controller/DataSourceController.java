@@ -39,17 +39,18 @@ public class DataSourceController {
      */
     @GetMapping
     public R<PageResponse<DataSourceDTO>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String status) {
 
-        Page<DataSourceDefinition> result = dataSourceService.list(type, status, PageRequest.of(page, size));
+        int normalizedPage = Math.max(page, 1);
+        Page<DataSourceDefinition> result = dataSourceService.list(type, status, PageRequest.of(normalizedPage - 1, size));
         List<DataSourceDTO> dtos = result.getContent().stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
         PageResponse<DataSourceDTO> response = new PageResponse<>(
-                dtos, result.getNumber(), result.getSize(), result.getTotalElements());
+                dtos, result.getNumber() + 1, result.getSize(), result.getTotalElements());
         return R.ok(response);
     }
 

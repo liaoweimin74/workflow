@@ -219,7 +219,7 @@ async function fetchData() {
   loading.value = true
   try {
     const params: Record<string, unknown> = {
-      page: query.page - 1,
+      page: query.page,
       size: query.size,
     }
     if (keyword.value) {

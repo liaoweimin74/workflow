@@ -45,13 +45,13 @@ public class FormDefinitionController {
      */
     @GetMapping
     public R<PageResponse<FormDefinitionDTO>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String type) {
 
-        PageRequest pageable = PageRequest.of(page, size);
+        PageRequest pageable = PageRequest.of(Math.max(page, 1) - 1, size);
         Page<FormDefinition> result = formDefService.list(status, name, type, pageable);
 
         List<FormDefinitionDTO> dtos = result.getContent().stream()
@@ -60,7 +60,7 @@ public class FormDefinitionController {
 
         PageResponse<FormDefinitionDTO> response = new PageResponse<>(
                 dtos,
-                result.getNumber(),
+                result.getNumber() + 1,
                 result.getSize(),
                 result.getTotalElements()
         );

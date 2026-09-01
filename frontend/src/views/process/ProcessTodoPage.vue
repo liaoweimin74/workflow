@@ -126,7 +126,7 @@ const todoActionButtons: ActionButton[] = [
 async function todoFetchApi(params: QueryParams): Promise<{ rows: TaskTodoVO[]; total: number }> {
   const p: TaskTodoQueryParams = {
     assignee: String(authStore.user?.id ?? ''),
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 20,
   }
   if (params.processName) p.processName = params.processName
@@ -181,7 +181,7 @@ const doneActionButtons: ActionButton[] = [
 async function doneFetchApi(params: QueryParams): Promise<{ rows: TaskDoneVO[]; total: number }> {
   const p: TaskDoneQueryParams = {
     userId: String(authStore.user?.id ?? ''),
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 20,
   }
   if (params.processName) p.processName = params.processName
@@ -240,7 +240,7 @@ const initiatedActionButtons: ActionButton[] = [
 async function initiatedFetchApi(params: QueryParams): Promise<{ rows: ProcessInstanceVO[]; total: number }> {
   const p: ProcessInstanceQueryParams = {
     initiator: String(authStore.user?.id ?? ''),
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 20,
   }
   if (params.processName) p.processName = params.processName

@@ -52,7 +52,7 @@ public class TaskController {
     @GetMapping
     public R<PageResponse<TaskTodoVO>> listTodo(
             @RequestParam String assignee,
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String processName,
             @RequestParam(required = false) String initiator,
@@ -60,11 +60,12 @@ public class TaskController {
             @RequestParam(required = false) String createTimeEnd) {
 
         TaskTodoFilter filter = new TaskTodoFilter(processName, initiator, createTimeStart, createTimeEnd);
-        Page<TaskTodoVO> result = taskService.listTodoTasksVO(assignee, PageRequest.of(page, size), filter);
+        int normalizedPage = Math.max(page, 1);
+        Page<TaskTodoVO> result = taskService.listTodoTasksVO(assignee, PageRequest.of(normalizedPage - 1, size), filter);
 
         PageResponse<TaskTodoVO> response = new PageResponse<>(
                 result.getContent(),
-                result.getNumber(),
+                result.getNumber() + 1,
                 result.getSize(),
                 result.getTotalElements()
         );
@@ -75,7 +76,7 @@ public class TaskController {
     @GetMapping("/historic")
     public R<PageResponse<TaskDoneVO>> listHistoric(
             @RequestParam String userId,
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String processName,
             @RequestParam(required = false) String initiator,
@@ -84,11 +85,12 @@ public class TaskController {
             @RequestParam(required = false) String approveResult) {
 
         TaskDoneFilter filter = new TaskDoneFilter(processName, initiator, endTimeStart, endTimeEnd, approveResult);
-        Page<TaskDoneVO> result = taskService.listHistoricTasksVO(userId, PageRequest.of(page, size), filter);
+        int normalizedPage = Math.max(page, 1);
+        Page<TaskDoneVO> result = taskService.listHistoricTasksVO(userId, PageRequest.of(normalizedPage - 1, size), filter);
 
         PageResponse<TaskDoneVO> response = new PageResponse<>(
                 result.getContent(),
-                result.getNumber(),
+                result.getNumber() + 1,
                 result.getSize(),
                 result.getTotalElements()
         );

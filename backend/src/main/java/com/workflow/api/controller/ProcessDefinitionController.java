@@ -66,18 +66,18 @@ public class ProcessDefinitionController {
 
     @GetMapping
     public R<PageResponse<Map<String, Object>>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String categoryId,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String status) {
 
         Page<ProcessDefinition> result = processService.listProcessDefinitions(
-                PageRequest.of(page, size), categoryId, name, status);
+                PageRequest.of(Math.max(page, 1) - 1, size), categoryId, name, status);
 
         PageResponse<Map<String, Object>> response = new PageResponse<>(
                 result.getContent().stream().map(this::toMap).toList(),
-                result.getNumber(),
+                result.getNumber() + 1,
                 result.getSize(),
                 result.getTotalElements()
         );

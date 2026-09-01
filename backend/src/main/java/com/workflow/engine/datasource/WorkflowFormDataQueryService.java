@@ -120,7 +120,8 @@ public class WorkflowFormDataQueryService {
         List<String> ids = versionIds(tenantId, formKey);
         int size = Math.max(1, req.getSize());
         if (ids.isEmpty()) {
-            return new BizDataPageVO(List.of(), 0L, Math.max(0, req.getPage()), size);
+            int page = Math.max(req.getPage(), 1);
+            return new BizDataPageVO(List.of(), 0L, page, size);
         }
 
         StringBuilder where = new StringBuilder(BASE_FROM);
@@ -147,11 +148,12 @@ public class WorkflowFormDataQueryService {
         Query rowsQ = em.createNativeQuery(PAGE_SELECT + where + buildOrderBy(req, bizCols)
                 + " LIMIT :limit OFFSET :offset");
         params.put("limit", size);
-        params.put("offset", Math.max(0, req.getPage()) * size);
+        int page = Math.max(req.getPage(), 1);
+        params.put("offset", (page - 1) * size);
         bind(rowsQ, params);
         List<?> rows = rowsQ.getResultList();
 
-        return assemble(formKey, rows, total, Math.max(0, req.getPage()), size);
+        return assemble(formKey, rows, total, page, size);
     }
 
     /** 解析 sort/order 生成 ORDER BY 片段；缺省保持默认排序。 */

@@ -499,7 +499,7 @@ describe('DataSourceListPage', () => {
 
     expect(dataSourceApi.queryData).toHaveBeenCalledWith(
       'ds-api',
-      expect.objectContaining({ page: 0, size: 20 })
+      expect.objectContaining({ page: 1, size: 20 })
     )
     const html = wrapper.html()
     expect(html).toContain('测试')

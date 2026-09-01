@@ -57,14 +57,15 @@ public class SystemInternalController {
      */
     @GetMapping("/system/users")
     public R<BizDataPageVO> users(@RequestParam(required = false) String keyword,
-                                  @RequestParam(defaultValue = "0") Integer page,
+                                  @RequestParam(defaultValue = "1") Integer page,
                                   @RequestParam(defaultValue = "20") Integer size) {
-        UserQueryRequest query = new UserQueryRequest(keyword, null, null, null, null, null, page, size);
+        int userServicePage = Math.max(page, 1);
+        UserQueryRequest query = new UserQueryRequest(keyword, null, null, null, null, null, userServicePage, size);
         PageResult<UserVO> result = userService.list(query);
         List<BizDataVO> records = result.getRows().stream()
                 .map(this::toUserRow)
                 .collect(Collectors.toList());
-        BizDataPageVO pageVo = new BizDataPageVO(records, result.getTotal(), page, size);
+        BizDataPageVO pageVo = new BizDataPageVO(records, result.getTotal(), userServicePage, size);
         return R.ok(pageVo);
     }
 

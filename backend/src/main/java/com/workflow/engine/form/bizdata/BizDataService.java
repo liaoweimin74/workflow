@@ -131,7 +131,7 @@ public class BizDataService {
         BizDataContext ctx = loadContext(formKey);
 
         Map<String, Object> filters = parseFilter(req.getFilter());
-        int page = Math.max(req.getPage(), 0);
+        int page = Math.max(req.getPage(), 1);
         // size <= 0 表示不分页取全部（buildSelect 跳过 LIMIT/OFFSET）；正数沿用原钳制上限
         int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
 
@@ -142,7 +142,7 @@ public class BizDataService {
 
             BizDataQueryBuilder.SqlAndParams select = BizDataQueryBuilder.buildSelect(
                     ctx.tableName, ctx.columnKeys, tenantId, filters,
-                    req.getKeyword(), req.getKeywordColumn(), req.getSort(), req.getOrder(), page, size);
+                    req.getKeyword(), req.getKeywordColumn(), req.getSort(), req.getOrder(), page - 1, size);
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(select.sql(), select.params().toArray());
 
             List<BizDataVO> records = rows.stream()
@@ -575,7 +575,8 @@ public class BizDataService {
         int page = 0;
         final int size = 100;
         while (true) {
-            Page<FormDefinition> defs = formDefService.list(null, null, "BUSINESS", PageRequest.of(page, size));
+        Page<FormDefinition> defs = formDefService.list(null, null, "BUSINESS",
+                PageRequest.of(Math.max(page, 1) - 1, size));
             for (FormDefinition def : defs.getContent()) {
                 collectPickerRefs(def, result);
             }

@@ -212,10 +212,7 @@ export interface LookupFetchConfig {
   searchParam?: string
   /** 搜索字段列名（底表 API 用；如 keywordColumn=name 表示按 name 列模糊搜索） */
   keywordColumn?: string
-  /**
-   * 页码基准：1（默认，页码按原样透传，el-pagination 1 起）；
-   * 0（后端 0 起，如 biz-data 分页接口，发送 page=页码-1）
-   */
+  /** 已废弃：所有分页接口统一使用 1-based 页码。 */
   pageBase?: 0 | 1
   /** 请求头（可选） */
   headers?: Record<string, string>

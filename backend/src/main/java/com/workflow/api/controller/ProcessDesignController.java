@@ -40,12 +40,12 @@ public class ProcessDesignController {
      */
     @GetMapping("/drafts")
     public R<PageResponse<ProcessDraft>> listDrafts(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String categoryId,
             @RequestParam(required = false) String name) {
 
-        PageRequest pageable = PageRequest.of(page, size);
+        PageRequest pageable = PageRequest.of(Math.max(page, 1) - 1, size);
         Page<ProcessDraft> result;
 
         if (name != null && !name.isBlank()) {
@@ -58,7 +58,7 @@ public class ProcessDesignController {
 
         PageResponse<ProcessDraft> response = new PageResponse<>(
                 result.getContent(),
-                result.getNumber(),
+                result.getNumber() + 1,
                 result.getSize(),
                 result.getTotalElements()
         );

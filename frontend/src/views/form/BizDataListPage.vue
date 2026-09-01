@@ -256,7 +256,7 @@ async function fetchApi(params: any) {
     }
   }
   const res = await bizDataApi.list(formKey.value, {
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 20,
     filter,
     sort: params.sort,

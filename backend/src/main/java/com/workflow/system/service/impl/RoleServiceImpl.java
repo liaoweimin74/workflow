@@ -53,7 +53,7 @@ public class RoleServiceImpl implements RoleService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        int page = query.page() != null ? query.page() : 1;
+        int page = query.page() != null ? Math.max(query.page(), 1) : 1;
         int size = query.size() != null ? query.size() : 10;
         PageRequest pageRequest = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 

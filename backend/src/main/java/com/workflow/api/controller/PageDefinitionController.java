@@ -48,13 +48,13 @@ public class PageDefinitionController {
      */
     @GetMapping
     public R<PageResponse<PageDefinitionDTO>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String type) {
 
-        PageRequest pageable = PageRequest.of(page, size);
+        PageRequest pageable = PageRequest.of(Math.max(page, 1) - 1, size);
         Page<PageDefinition> result = pageDefService.list(status, name, type, pageable);
 
         List<PageDefinitionDTO> dtos = result.getContent().stream()
@@ -62,7 +62,7 @@ public class PageDefinitionController {
                 .collect(Collectors.toList());
 
         PageResponse<PageDefinitionDTO> response = new PageResponse<>(
-                dtos, result.getNumber(), result.getSize(), result.getTotalElements());
+                dtos, result.getNumber() + 1, result.getSize(), result.getTotalElements());
         return R.ok(response);
     }
 

@@ -20,8 +20,8 @@ public class BizDataQueryRequest {
     /** 排序方向（asc/desc，默认 desc） */
     private String order;
 
-    /** 页码（0 起） */
-    private int page = 0;
+    /** 页码（从 1 开始） */
+    private int page = 1;
 
     /** 每页大小 */
     private int size = 20;

@@ -104,18 +104,18 @@ public class ProcessInstanceController {
 
     @GetMapping
     public R<PageResponse<Map<String, Object>>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String initiator,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String processName) {
 
         Page<ProcessInstance> result = processInstanceService.listProcessInstances(
-                PageRequest.of(page, size), initiator, status, processName);
+                PageRequest.of(Math.max(page, 1) - 1, size), initiator, status, processName);
 
         PageResponse<Map<String, Object>> response = new PageResponse<>(
                 result.getContent().stream().map(this::toMap).toList(),
-                result.getNumber(),
+                result.getNumber() + 1,
                 result.getSize(),
                 result.getTotalElements()
         );
@@ -169,18 +169,18 @@ public class ProcessInstanceController {
      */
     @GetMapping("/history")
     public R<PageResponse<Map<String, Object>>> listHistory(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String initiator,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String processName) {
 
         Page<HistoricProcessInstance> result = processInstanceService.listHistoricProcessInstances(
-                PageRequest.of(page, size), initiator, status, processName);
+                PageRequest.of(Math.max(page, 1) - 1, size), initiator, status, processName);
 
         PageResponse<Map<String, Object>> response = new PageResponse<>(
                 result.getContent().stream().map(this::toHistoricMap).toList(),
-                result.getNumber(),
+                result.getNumber() + 1,
                 result.getSize(),
                 result.getTotalElements()
         );

@@ -214,7 +214,7 @@ const columns: TableColumn[] = [
 // ========== 数据获取 ==========
 async function fetchApi(params: any) {
   const res = await pageApi.getPages({
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 20,
     name: params.name || undefined,
     status: params.status || undefined,

@@ -452,7 +452,7 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
   const query: Record<string, any> = props.pagination === false
     // 不分页：请求全部数据（后端 size<=0 跳过 LIMIT），保留排序
     ? { size: -1 }
-    : { page: Math.max(0, params.page - 1), size: params.size }
+        : { page: Math.max(1, params.page), size: params.size }
   // 排序状态透传（SearchTable 内部维护，服务器端排序）
   if (params.sort) query.sort = params.sort
   if (params.order) query.order = params.order

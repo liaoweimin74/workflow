@@ -25,7 +25,7 @@
       class="linkage-container-dialog"
     >
       <div class="lc-dialog-body" :style="{ height: c.height }">
-        <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption" />
+      <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption(c)" />
       </div>
       <!-- 只读（查看）：仅显示关闭按钮；非只读：容器按钮（互斥独立 v-if，避免 v-else-if 编译问题） -->
       <template #footer v-if="c.readonly">
@@ -45,7 +45,7 @@
       destroy-on-close
     >
       <div class="lc-dialog-body" :style="{ height: c.height }">
-        <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption" />
+      <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption(c)" />
       </div>
       <template #footer v-if="c.readonly">
         <el-button type="primary" @click="c.visible = false">关闭</el-button>
@@ -67,7 +67,7 @@
           <el-button text @click="containerAction(c, 'cancel')">关闭</el-button>
         </div>
         <div class="lc-dialog-body" :style="{ height: c.height }">
-          <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption" />
+          <form-create v-if="c.visible" v-model="c.formData" :rule="containerRenderRule(c)" :option="containerOption(c)" />
         </div>
         <div v-if="c.readonly" class="lc-inline-footer">
           <el-button type="primary" @click="containerAction(c, 'cancel')">关闭</el-button>
@@ -88,6 +88,7 @@ import { ElMessage } from 'element-plus'
 import formCreate from '@form-create/element-ui'
 import PageDataTable from './components/PageDataTable.vue'
 import PageDataTree from './components/PageDataTree.vue'
+import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
@@ -491,7 +492,13 @@ function containerRenderRule(c: any): any[] {
 }
 
 /** 容器内 form-create 选项：隐藏默认提交/重置按钮（按钮由 ContainerButtons 控制）。submitBtn/resetBtn 须为对象结构 { show: false } */
-const containerOption = { submitBtn: { show: false }, resetBtn: { show: false } }
+function containerOption(c: any) {
+  return {
+    submitBtn: { show: false },
+    resetBtn: { show: false },
+    form: { labelWidth: `${measureFormLabelWidth(c.renderRule || [])}px` },
+  }
+}
 
 /** 解析 step value 模板（{node.id} / {row.id} / 字面量） */
 function resolveStepValue(tpl: string | undefined, eventData: any): unknown {

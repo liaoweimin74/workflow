@@ -22,27 +22,21 @@ export function readCellValue(row: any, key?: string): any {
 }
 
 /**
- * 页码是否按 0 起发送：显式 pageBase=0 优先；
- * 未配置时，若 action 指向系统底表接口（/v1/biz-data/，后端 0 起分页）则按 0 起，兼容旧配置。
+ * 全部外部调用统一使用 1-based 页码。
  */
-function isZeroBasedPage(fetch: LookupFetchConfig): boolean {
-  if (fetch.pageBase !== undefined) return fetch.pageBase === 0
-  return fetch.action.startsWith('/v1/biz-data/')
-}
-
 /**
  * 由可序列化的 fetch 配置构造 fetchApi 函数。
  * 响应约定：http 拦截器已解包 R 包装，业务数据在 res.data；
  * parse/totalParse 表达式基于业务数据层（如 'records' / 'content' / 'total'）。
  * 请求参数：固定 data 与分页/关键字 params 合并（params 优先）。
- * 页码基准：0 起（底表接口 /v1/biz-data/ 或显式 pageBase=0）时把 el-pagination 的 1 起页码减 1；默认 1 起原样透传。
+ * 页码基准：统一使用 1 起页码，直接透传给后端。
  */
 export function buildFetchApiFromConfig(fetch: LookupFetchConfig) {
   return async (params: QueryParams & { keyword?: string }): Promise<{ rows: any[]; total: number }> => {
     const method = (fetch.method || 'GET').toUpperCase()
     // 固定参数 + 分页/关键字；关键字映射到 searchParam（默认 keyword）
     const query: Record<string, unknown> = { ...(fetch.data || {}) }
-    query.page = isZeroBasedPage(fetch) ? Math.max((params.page || 1) - 1, 0) : params.page
+    query.page = Math.max(params.page || 1, 1)
     query.size = params.size
     if (params.keyword) {
       query[fetch.searchParam || 'keyword'] = params.keyword

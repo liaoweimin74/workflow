@@ -50,7 +50,7 @@ async function fetchData() {
   loading.value = true
   try {
     const res: any = await http.get(`/v1/pages/${props.pageKey}/ds/${dsId}/data`, {
-      params: { page: 0, size: 200 },
+    params: { page: 1, size: 200 },
     })
     const data = res?.data ?? res
     treeData.value = (data.records || []).map((r: any) => ({ ...(r.data || {}), id: r.id }))

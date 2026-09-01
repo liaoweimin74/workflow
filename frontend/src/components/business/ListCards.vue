@@ -1,11 +1,13 @@
 <template>
   <div class="list-cards" :class="{ 'is-loading': loading }">
-    <!-- 加载中骨架屏 -->
-    <el-skeleton v-if="loading" :paragraph="{ rows: 3 }" active :grid="skeletonGrid">
-      <template #image>
-        <el-skeleton-item variant="rect" width="100%" height="180" />
-      </template>
-    </el-skeleton>
+<!-- 加载中骨架屏 -->
+    <div v-if="loading" class="loading-skeleton">
+      <el-skeleton :paragraph="{ rows: 3 }" active :grid="skeletonGrid">
+        <template #image>
+          <el-skeleton-item variant="rect" width="100%" height="180" />
+        </template>
+      </el-skeleton>
+    </div>
 
     <!-- 错误状态 -->
     <div v-else-if="error" class="error-state">
@@ -147,7 +149,7 @@ defineExpose({ fetchData, refresh, retry })
 .card-field { margin-bottom: 8px; }
 .field-label { display: block; font-size: 12px; color: #909399; margin-bottom: 4px; }
 .field-value { font-size: 14px; color: #303133; }
-.empty-state, .error-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; text-align: center; }
-.error-state { flex-direction: row; }
+.error-state { display: flex; flex-direction: row; align-items: center; justify-content: center; padding: 40px 20px; }
+.error-message { color: #909399; margin: 0 12px; }
 .retry-btn { min-width: 100px; }
 </style>

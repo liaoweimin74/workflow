@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createDsBindingEngine } from '../DsBindingEngine'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import type { Rule } from '@form-create/element-ui'
 
 function containerRule(props: Record<string, unknown>, children: Rule[]): Rule {
@@ -18,6 +19,9 @@ describe('createDsBindingEngine', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    activeDsBindings.value = [
+      'ds_1', 'ds_ro', 'ds_test', 'ds_v', 'ds_g',
+    ].map((id) => ({ id, refId: id }))
   })
 
   function makeDeps(overrides: Record<string, unknown> = {}) {
@@ -36,19 +40,19 @@ describe('createDsBindingEngine', () => {
 
   it('mount 含容器返回 true，无容器返回 false', () => {
     const engine = createDsBindingEngine({ dsApi } as never, makeDeps() as never)
-    expect(engine.mount([containerRule({ dataSourceId: 'ds_1', recordLocator: { type: 'current-record' } }, [])])).toBe(true)
+    expect(engine.mount([containerRule({ dataSourceId: 'global-1', recordLocator: { type: 'current-record' } }, [])])).toBe(true)
     expect(engine.mount([{ type: 'input', field: 'a' } as unknown as Rule])).toBe(false)
   })
 
   it('loadRecord 按字段填充容器内组件（含嵌套 items）', async () => {
     const deps = makeDeps()
     const engine = createDsBindingEngine({ dsApi } as never, deps as never)
-    engine.mount([containerRule({ dataSourceId: 'ds_1' }, [
+    engine.mount([containerRule({ dataSourceId: 'global-1' }, [
       { type: 'input', field: 'name' } as unknown as Rule,
       { type: 'group', field: 'items', props: { rule: [{ type: 'input', field: 'product' }] } } as unknown as Rule,
     ])])
     await engine.loadRecord('rec_1')
-    expect(dsApi.getData).toHaveBeenCalledWith('ds_1', 'rec_1')
+    expect(dsApi.getData).toHaveBeenCalledWith('global-1', 'rec_1')
     expect(deps.api.setValue).toHaveBeenCalledWith('name', '张三')
     expect(deps.api.setValue).toHaveBeenCalledWith('items', [{ product: 'A', qty: 2 }])
   })

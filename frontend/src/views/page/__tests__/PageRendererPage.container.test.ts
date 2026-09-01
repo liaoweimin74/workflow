@@ -192,12 +192,12 @@ describe('PageRendererPage 表格-容器联动宿主', () => {
     expect(fcStubs[0].text()).not.toContain('formContainer')
   })
 
-  it('inline 容器保留在主渲染树', async () => {
+  it('inline 容器从主渲染树移除并注册为联动容器', async () => {
     const wrapper = await mountPage(makePageSchema('inline'))
     const fcStubs = wrapper.findAll('.fc-stub')
     const mainTree = fcStubs[0].text()
-    expect(mainTree).toContain('FC1')
-    expect(mainTree).toContain('formContainer')
+    expect(mainTree).not.toContain('FC1')
+    expect(mainTree).not.toContain('formContainer')
   })
 
   it('open-container 动作按默认 dialog 模式打开弹窗', async () => {
@@ -216,12 +216,12 @@ describe('PageRendererPage 表格-容器联动宿主', () => {
     expect(dialog.props('width')).toBe('900px')
   })
 
-  it('open-container 动作 displayMode 参数覆盖容器默认配置（dialog→inline 不弹窗）', async () => {
+  it('open-container 动作以容器配置的 displayMode 为准', async () => {
     const wrapper = await mountPage(makePageSchema('dialog', { displayMode: 'inline' }))
     await wrapper.find('.stub-row-click').trigger('click')
     await flushPromises()
     const dialog = wrapper.findComponent(ElDialogStub)
-    expect(dialog.props('modelValue')).toBe(false)
+    expect(dialog.props('modelValue')).toBe(true)
   })
 
   it('load-record 动作将记录 ID 加载到联动容器引擎', async () => {

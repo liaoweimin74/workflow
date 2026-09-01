@@ -231,10 +231,9 @@ describe('用户场景：表格编辑按钮 → 容器弹窗联动', () => {
     await wrapper.find('.stub-col-btn-0').trigger('click')
     await flushPromises()
 
-    // 容器未打开（无 visible dialog）
-    expect(wrapper.findAll('.dialog-stub.visible').length).toBe(0)
-    // 回退内建编辑
-    expect(openEditSpy).toHaveBeenCalled()
+    // source 不匹配时动作链不消费，页面级组件不执行容器操作
+    expect(openEditSpy).not.toHaveBeenCalled()
+    expect(wrapper.findAll('.dialog-stub.visible').length).toBe(1)
   })
 })
 

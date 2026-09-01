@@ -98,12 +98,13 @@ const emit = defineEmits<{
  * 兜底从 inject 读取（运行时 FormRenderer 通过 provide 传递）
  */
 const instance = getCurrentInstance()
+const providedFormCreateInject = inject<FormCreateInject | undefined>('formCreateInject', undefined)
 const formCreateInject = computed<FormCreateInject | undefined>(() => {
   // FcDesigner 通过 prop 传递 formCreateInject
   const fromProp = (instance?.proxy?.$props as any)?.formCreateInject
   if (fromProp) return fromProp
   // 运行时 FormRenderer 通过 provide 传递
-  return inject<FormCreateInject | undefined>('formCreateInject', undefined)
+  return providedFormCreateInject
 })
 
 /** 当前组件的绑定上下文（通过 dataSourceId 从模块级存储解析） */

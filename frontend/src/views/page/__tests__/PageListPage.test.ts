@@ -3,6 +3,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia } from 'pinia'
 import { nextTick, defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
 import PageListPage from '../PageListPage.vue'
@@ -52,7 +53,7 @@ const SearchTableStub = defineComponent({
 function createWrapper() {
   return mount(PageListPage, {
     global: {
-      plugins: [ElementPlus],
+        plugins: [ElementPlus, createPinia()],
       stubs: { SearchTable: SearchTableStub },
     },
   })
@@ -86,11 +87,11 @@ describe('PageListPage — 发布/删除交互', () => {
     const pageCtl = typeRule.control.find((c: any) => c.value === 'PAGE')
     const pageFormKeyRule = pageCtl.rule.find((r: any) => r.field === 'formKey')
     expect(pageFormKeyRule.options).toHaveLength(1)
-    // fetchApi：SearchTable 透传的查询参数 → pageApi.getPages（page 转 0 基）
+    // fetchApi：SearchTable 透传的查询参数 → pageApi.getPages（page 按 1 基）
     const fetchApi = stub.props('fetchApi') as (params: any) => Promise<any>
     const res = await fetchApi({ page: 2, size: 20, name: '视图', status: 'DRAFT', type: 'VIEW' })
     expect(pageApi.getPages).toHaveBeenCalledWith({
-      page: 1,
+      page: 2,
       size: 20,
       name: '视图',
       status: 'DRAFT',

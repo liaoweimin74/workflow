@@ -499,8 +499,10 @@ function isButtonVisibleForRow(b: { key: string; visible?: string; events?: any[
   }
 }
 
-/** 表格尺寸：统一正常尺寸（预览与正式访问一致） */
-const tableSize = computed<'default' | 'small'>(() => 'default')
+/** 正式页面使用紧凑表格，设计器预览使用正常尺寸。 */
+const tableSize = computed<'default' | 'small'>(() =>
+  route.query.preview === 'true' ? 'default' : 'small',
+)
 
 /** 内置按钮默认图标（未配置 icon 时按 key 注入，操作列圆形图标用） */
 const defaultIcons: Record<string, any> = { create: Plus, edit: Edit, delete: Delete, view: View }

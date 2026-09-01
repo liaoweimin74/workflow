@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import ViewDesigner from '../ViewDesigner.vue'
 
 vi.mock('@/api/page', () => ({
@@ -111,7 +112,7 @@ function mockMetadata() {
 function createWrapper() {
   return mount(ViewDesigner, {
     global: {
-      plugins: [ElementPlus],
+      plugins: [ElementPlus, createPinia()],
       stubs: componentStubs,
     },
   })

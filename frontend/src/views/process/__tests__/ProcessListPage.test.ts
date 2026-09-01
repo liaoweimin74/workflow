@@ -39,6 +39,7 @@ vi.mock('@element-plus/icons-vue', () => ({
   Upload: { name: 'Upload', render: () => h('span', '↑') },
   CopyDocument: { name: 'CopyDocument', render: () => h('span', '⊕') },
   Delete: { name: 'Delete', render: () => h('span', '×') },
+  Clock: { name: 'Clock', render: () => h('span', '◷') },
 }))
 
 const ElMessage = (await import('element-plus')).ElMessage as any
@@ -107,7 +108,7 @@ describe('ProcessListPage', () => {
     wrapper.unmount()
   })
 
-  it('版本按钮无 icon（文本按钮）', async () => {
+  it('版本按钮有 Clock icon', async () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
@@ -116,7 +117,7 @@ describe('ProcessListPage', () => {
     const actionButtons = rightTable.props('actionButtons') as any[]
     const versionBtn = actionButtons.find((b: any) => b.label === '版本')
     expect(versionBtn).toBeDefined()
-    expect(versionBtn.icon).toBeUndefined()
+    expect(versionBtn.icon).toBeDefined()
     wrapper.unmount()
   })
 

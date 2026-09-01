@@ -135,6 +135,26 @@
           <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
         </el-form-item>
 
+        <el-form-item label="显示模式">
+          <el-select v-model="container.displayMode" style="width: 100%">
+            <el-option label="弹出窗口" value="dialog" />
+            <el-option label="新开页签" value="newTab" />
+            <el-option label="页面内嵌" value="inline" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="container.displayMode === 'dialog'" label="弹窗宽度">
+          <el-input v-model="container.dialogWidth" />
+        </el-form-item>
+        <el-form-item v-if="container.displayMode === 'dialog'" label="弹窗高度">
+          <el-input v-model="container.dialogHeight" />
+        </el-form-item>
+        <el-form-item v-if="container.displayMode === 'newTab'" label="页签标题">
+          <el-input v-model="container.tabTitle" />
+        </el-form-item>
+        <el-form-item v-if="container.displayMode === 'inline'" label="内嵌高度">
+          <el-input v-model="container.inlineHeight" />
+        </el-form-item>
+
         <!-- 按钮配置 -->
         <el-divider content-position="left">按钮</el-divider>
         <el-form-item label="新增按钮">
@@ -229,6 +249,11 @@ const container = reactive({
   showDeleteButton: false,
   showCopyButton: false,
   customButtonsText: '',
+  displayMode: 'dialog' as 'dialog' | 'newTab' | 'inline',
+  dialogWidth: '800px',
+  dialogHeight: '600px',
+  tabTitle: '',
+  inlineHeight: '600px',
 })
 
 /** 从 bindingProps 回填容器按钮配置 */
@@ -241,6 +266,11 @@ function initContainerConfig(bp: Record<string, any>) {
   container.customButtonsText = Array.isArray(bp.customButtons)
     ? JSON.stringify(bp.customButtons)
     : ''
+  container.displayMode = bp.displayMode || 'dialog'
+  container.dialogWidth = bp.dialogWidth || '800px'
+  container.dialogHeight = bp.dialogHeight || '600px'
+  container.tabTitle = bp.tabTitle || ''
+  container.inlineHeight = bp.inlineHeight || '600px'
 }
 
 /** 解析自定义按钮 JSON（非法输入返回空数组） */
@@ -431,6 +461,11 @@ function handleConfirm() {
     result.showDeleteButton = container.showDeleteButton
     result.showCopyButton = container.showCopyButton
     result.customButtons = parseCustomButtons()
+    result.displayMode = container.displayMode
+    result.dialogWidth = container.dialogWidth
+    result.dialogHeight = container.dialogHeight
+    result.tabTitle = container.tabTitle
+    result.inlineHeight = container.inlineHeight
   }
   emit('confirm', result)
   visible.value = false

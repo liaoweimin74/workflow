@@ -328,6 +328,10 @@ export interface CardColumn {
   subtitle?: string
   /** 卡片标签字段 */
   tag?: string
+  /** 卡片渲染角色：title|subtitle|tag|field|metric */
+  role?: 'title' | 'subtitle' | 'tag' | 'field' | 'metric'
+  /** 标签配置 */
+  tagConfig?: { type?: 'default' | 'primary' | 'success' | 'warning' | 'info' | 'danger'; text?: string }
   /** 是否在卡片中隐藏此列 */
   hidden?: boolean
   /** 值类型：string | number | date | boolean */

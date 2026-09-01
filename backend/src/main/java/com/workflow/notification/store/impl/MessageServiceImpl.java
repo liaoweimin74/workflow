@@ -8,9 +8,12 @@ import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.MessageType;
 import com.workflow.notification.model.Recipient;
+import com.workflow.notification.model.RecipientStatus;
 import com.workflow.notification.store.MessageService;
 import com.workflow.notification.store.MessageRepository;
 import com.workflow.notification.store.RecipientRepository;
+import com.workflow.system.domain.entity.SysUser;
+import com.workflow.system.repository.SysUserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -20,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -33,12 +37,14 @@ public class MessageServiceImpl implements MessageService {
     private final MessageRepository messageRepository;
     private final RecipientRepository recipientRepository;
     private final NotificationCache notificationCache;
+    private final SysUserRepository sysUserRepository;
 
     public MessageServiceImpl(MessageRepository messageRepository, RecipientRepository recipientRepository,
-                              NotificationCache notificationCache) {
+                              NotificationCache notificationCache, SysUserRepository sysUserRepository) {
         this.messageRepository = messageRepository;
         this.recipientRepository = recipientRepository;
         this.notificationCache = notificationCache;
+        this.sysUserRepository = sysUserRepository;
     }
 
     @Override
@@ -51,15 +57,30 @@ public class MessageServiceImpl implements MessageService {
         }
         Message savedMessage = messageRepository.save(message);
 
+        // 批量加载收件人真实用户信息（姓名/昵称/邮箱/手机号），缺失用户回退占位
+        Map<Long, SysUser> usersById = new HashMap<>();
+        if (sysUserRepository != null && !recipientIds.isEmpty()) {
+            sysUserRepository.findAllById(recipientIds)
+                    .forEach(u -> usersById.put(u.getId(), u));
+        }
+
         // 创建收件人记录
         for (Long userId : recipientIds) {
             Recipient recipient = new Recipient();
             recipient.setTenantId(message.getTenantId());
             recipient.setMessageId(savedMessage.getId());
             recipient.setUserId(userId);
-            recipient.setUsername("user_" + userId); // TODO: 从 UserService 获取
+            SysUser user = usersById.get(userId);
+            if (user != null) {
+                recipient.setUsername(user.getUsername() != null ? user.getUsername() : "user_" + userId);
+                recipient.setNickname(user.getNickname());
+                recipient.setEmail(user.getEmail());
+                recipient.setPhone(user.getPhone());
+            } else {
+                recipient.setUsername("user_" + userId);
+            }
             recipient.setChannel(com.workflow.notification.model.ChannelType.IN_APP);
-            recipient.setStatus(MessageStatus.PENDING);
+            recipient.setStatus(com.workflow.notification.model.RecipientStatus.PENDING);
             recipient.setCreatedAt(LocalDateTime.now());
             recipientRepository.save(recipient);
 
@@ -79,7 +100,7 @@ public class MessageServiceImpl implements MessageService {
         List<Recipient> recipients;
         if (unread != null) {
             recipients = recipientRepository.findByUserIdAndStatus(userId,
-                    unread ? MessageStatus.PENDING : MessageStatus.SENT);
+                    unread ? RecipientStatus.PENDING : RecipientStatus.SENT);
         } else {
             recipients = recipientRepository.findByUserId(userId);
         }
@@ -112,12 +133,12 @@ public class MessageServiceImpl implements MessageService {
         };
         Page<Message> messagePage = messageRepository.findAll(spec, pageRequest);
 
-        // 3. 将该用户对每条消息的已读状态回填到 message.status
-        //    （recipient: PENDING=未读, SENT=已读；Message.status 原为发送状态，此处覆盖为已读状态）
-        Map<Long, MessageStatus> statusByMessage = recipients.stream()
+        // 3. 将该用户对每条消息的已读状态回填到 message.readStatus
+        //    （recipient: PENDING=未读, SENT=已读；Message.status 保留发送状态，二者分离）
+        Map<Long, RecipientStatus> statusByMessage = recipients.stream()
                 .collect(java.util.stream.Collectors.toMap(
                         Recipient::getMessageId, Recipient::getStatus, (a, b) -> a));
-        messagePage.getContent().forEach(m -> m.setStatus(statusByMessage.get(m.getId())));
+        messagePage.getContent().forEach(m -> m.setReadStatus(statusByMessage.get(m.getId())));
 
         return new PageResult<>(
                 messagePage.getTotalElements(),
@@ -140,9 +161,9 @@ public class MessageServiceImpl implements MessageService {
         }
 
         // 回填当前用户的已读状态（与 listByUserId 一致：PENDING=未读，SENT=已读），
-        // 覆盖 Message 实体的发送状态，前端据此判断是否需要标记已读
+        // Message.status 保留发送状态，前端据此判断是否需要标记已读
         recipientRepository.findByMessageIdAndUserId(id, userId)
-                .ifPresent(r -> message.setStatus(r.getStatus()));
+                .ifPresent(r -> message.setReadStatus(r.getStatus()));
 
         return message;
     }
@@ -171,11 +192,11 @@ public class MessageServiceImpl implements MessageService {
 
     @Override
     @Transactional
-    public MessageStatus toggleRead(Long id, Long userId) {
+    public RecipientStatus toggleRead(Long id, Long userId) {
         Recipient recipient = recipientRepository.findByMessageIdAndUserId(id, userId)
                 .orElseThrow(() -> new BusinessException("消息不存在"));
-        boolean unread = recipient.getStatus() == MessageStatus.PENDING;
-        recipient.setStatus(unread ? MessageStatus.SENT : MessageStatus.PENDING);
+        boolean unread = recipient.getStatus() == RecipientStatus.PENDING;
+        recipient.setStatus(unread ? RecipientStatus.SENT : RecipientStatus.PENDING);
         recipient.setSentAt(unread ? LocalDateTime.now() : null);
         recipientRepository.save(recipient);
         // 失效缓存
@@ -214,7 +235,7 @@ public class MessageServiceImpl implements MessageService {
         }
 
         // 缓存未命中，查询数据库
-        long count = recipientRepository.findByUserIdAndStatus(userId, MessageStatus.PENDING).size();
+        long count = recipientRepository.findByUserIdAndStatus(userId, RecipientStatus.PENDING).size();
 
         // 回填缓存
         notificationCache.setUnreadCount(userId, count);

@@ -3,6 +3,7 @@ package com.workflow.notification.store;
 import com.workflow.common.domain.PageResult;
 import com.workflow.notification.cache.NotificationCache;
 import com.workflow.notification.model.*;
+import com.workflow.system.repository.SysUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,9 @@ class MessageServiceTest {
     @Mock
     private NotificationCache notificationCache;
 
+    @Mock
+    private SysUserRepository sysUserRepository;
+
     @InjectMocks
     private com.workflow.notification.store.impl.MessageServiceImpl messageService;
 
@@ -58,7 +62,7 @@ class MessageServiceTest {
         testRecipient.setUserId(1000L);
         testRecipient.setUsername("test_user");
         testRecipient.setChannel(ChannelType.IN_APP);
-        testRecipient.setStatus(MessageStatus.PENDING);
+        testRecipient.setStatus(RecipientStatus.PENDING);
     }
 
     @Test
@@ -94,13 +98,13 @@ class MessageServiceTest {
         Message result = messageService.getById(1L, 1000L);
 
         // 未读消息详情返回当前用户的已读状态 PENDING，前端据此触发标记已读
-        assertThat(result.getStatus()).isEqualTo(MessageStatus.PENDING);
+        assertThat(result.getReadStatus()).isEqualTo(RecipientStatus.PENDING);
     }
 
     @Test
     void getById_backfills_recipient_read_status() {
         testMessage.setStatus(MessageStatus.SENT);
-        testRecipient.setStatus(MessageStatus.SENT);
+        testRecipient.setStatus(RecipientStatus.SENT);
         when(messageRepository.findById(1L)).thenReturn(Optional.of(testMessage));
         when(recipientRepository.findByMessageId(1L)).thenReturn(List.of(testRecipient));
         when(recipientRepository.findByMessageIdAndUserId(1L, 1000L)).thenReturn(Optional.of(testRecipient));
@@ -108,7 +112,7 @@ class MessageServiceTest {
         Message result = messageService.getById(1L, 1000L);
 
         // 已读消息详情返回 SENT
-        assertThat(result.getStatus()).isEqualTo(MessageStatus.SENT);
+        assertThat(result.getReadStatus()).isEqualTo(RecipientStatus.SENT);
     }
 
     @Test
@@ -142,7 +146,7 @@ class MessageServiceTest {
     void getUnreadCount_returns_number() {
         // 缓存未命中，返回 null
         when(notificationCache.getUnreadCount(1000L)).thenReturn(null);
-        when(recipientRepository.findByUserIdAndStatus(1000L, MessageStatus.PENDING))
+        when(recipientRepository.findByUserIdAndStatus(1000L, RecipientStatus.PENDING))
                 .thenReturn(List.of(testRecipient));
 
         long count = messageService.getUnreadCount(1000L);
@@ -164,7 +168,7 @@ class MessageServiceTest {
 
     @Test
     void listByUserId_filters_by_unread_status() {
-        when(recipientRepository.findByUserIdAndStatus(1000L, MessageStatus.PENDING))
+        when(recipientRepository.findByUserIdAndStatus(1000L, RecipientStatus.PENDING))
                 .thenReturn(List.of(testRecipient));
         when(messageRepository.findAll(any(org.springframework.data.jpa.domain.Specification.class),
                 any(org.springframework.data.domain.PageRequest.class)))
@@ -173,7 +177,7 @@ class MessageServiceTest {
         PageResult<Message> result = messageService.listByUserId(1000L, 0, 10, null, null, true, null, null, null);
 
         assertThat(result.getTotal()).isEqualTo(0); // 无消息匹配
-        verify(recipientRepository).findByUserIdAndStatus(1000L, MessageStatus.PENDING);
+        verify(recipientRepository).findByUserIdAndStatus(1000L, RecipientStatus.PENDING);
     }
 
     @Test
@@ -198,21 +202,21 @@ class MessageServiceTest {
     void toggleRead_flips_unread_to_read() {
         when(recipientRepository.findByMessageIdAndUserId(1L, 1000L)).thenReturn(Optional.of(testRecipient));
 
-        MessageStatus newStatus = messageService.toggleRead(1L, 1000L);
+        RecipientStatus newStatus = messageService.toggleRead(1L, 1000L);
 
-        assertThat(newStatus).isEqualTo(MessageStatus.SENT);
+        assertThat(newStatus).isEqualTo(RecipientStatus.SENT);
         verify(recipientRepository).save(testRecipient);
         verify(notificationCache).invalidateUnread(1000L);
     }
 
     @Test
     void toggleRead_flips_read_to_unread() {
-        testRecipient.setStatus(MessageStatus.SENT);
+        testRecipient.setStatus(RecipientStatus.SENT);
         when(recipientRepository.findByMessageIdAndUserId(1L, 1000L)).thenReturn(Optional.of(testRecipient));
 
-        MessageStatus newStatus = messageService.toggleRead(1L, 1000L);
+        RecipientStatus newStatus = messageService.toggleRead(1L, 1000L);
 
-        assertThat(newStatus).isEqualTo(MessageStatus.PENDING);
+        assertThat(newStatus).isEqualTo(RecipientStatus.PENDING);
         verify(recipientRepository).save(testRecipient);
     }
 

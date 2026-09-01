@@ -209,6 +209,8 @@ const props = withDefaults(
     sourceFormKey?: string
     /** 页面内数据源绑定 ID */
     dataSourceId?: string
+    /** 直接指定全局数据源 ID，供独立页面使用；不依赖表单绑定上下文 */
+    globalDataSourceId?: string
     /** 目标表显示字段 */
     displayField?: string
     /** 弹窗列表列（目标表列 key），缺省显示 displayField */
@@ -261,7 +263,7 @@ const currentBinding = computed<DataSourceBindingContext | undefined>(() => {
 })
 
 /** 全局数据源 refId（由绑定解析） */
-const dsRefId = computed(() => currentBinding.value?.refId || '')
+const dsRefId = computed(() => currentBinding.value?.refId || props.globalDataSourceId || '')
 
 /** 有效表单 key：从 DS 定义动态获取 */
 const effectiveFormKey = ref(props.sourceFormKey || '')
@@ -425,6 +427,19 @@ const columnLabelMap = ref<Record<string, string>>({})
 
 async function loadColumnLabels() {
   const fk = effectiveFormKey.value
+  if (!fk && dsRefId.value) {
+    try {
+      const res = await dataSourceApi.getMetadata(dsRefId.value)
+      const map: Record<string, string> = {}
+      for (const column of res.data?.columns || []) {
+        if (column.key && column.label) map[column.key] = column.label
+      }
+      columnLabelMap.value = map
+    } catch {
+      columnLabelMap.value = {}
+    }
+    return
+  }
   if (!fk) return
   try {
     const res = await formApi.getFormDefinitionByKey(fk)
@@ -569,7 +584,7 @@ async function openViewDialog() {
     const fk = effectiveFormKey.value
     if (dsRefId.value) {
       const res = await dataSourceApi.queryData(dsRefId.value, {
-        page: 0,
+        page: 1,
         size: 100,
         filter: JSON.stringify({
           logic: 'AND',
@@ -580,7 +595,7 @@ async function openViewDialog() {
       viewRows.value = ids.map(id => byId.get(id)).filter(Boolean)
     } else if (fk) {
       const res = await bizDataApi.list(fk, {
-        page: 0,
+        page: 1,
         size: 100,
         filter: {
           logic: 'AND',
@@ -611,7 +626,7 @@ async function fetchData() {
   loading.value = true
   try {
     const params: Record<string, unknown> = {
-      page: query.value.page - 1,
+        page: query.value.page,
       size: query.value.size,
     }
     if (keyword.value && resolvedSearchColumns.value.length > 0) {

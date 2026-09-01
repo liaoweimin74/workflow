@@ -189,6 +189,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '公告管理' }
       },
       {
+        path: 'messages/events',
+        name: 'MessageEventDefinitionList',
+        component: () => import('@/modules/notification/views/admin/EventDefinitionList.vue'),
+        meta: { title: '事件管理' }
+      },
+      {
         path: '/:pathMatch(.*)*',
         redirect: '/404'
       }

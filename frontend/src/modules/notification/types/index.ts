@@ -20,6 +20,22 @@ export type MessageStatus = 'PENDING' | 'SENT' | 'READ' | 'DELETED' | 'FAILED'
 /** 接收状态（已读语义）：PENDING=未读，SENT=已读 */
 export type RecipientStatus = 'PENDING' | 'SENT' | 'DELIVERED' | 'FAILED' | 'READ'
 
+/** 订阅规则动作 */
+export type SubscriptionRuleAction = 'ALLOW' | 'DENY' | 'FORCE'
+
+/** 业务消息事件定义 */
+export interface EventDefinition {
+  id: number
+  eventCode: string
+  eventName: string
+  description?: string
+  businessDomain?: string
+  enabled: boolean
+  templateCount?: number
+  ruleCount?: number
+  createdAt?: string
+}
+
 /** 渠道类型 */
 export type ChannelType = 'IN_APP' | 'SMS' | 'WECHAT_WORK' | 'WECHAT_MINIPROGRAM' | 'APP'
 

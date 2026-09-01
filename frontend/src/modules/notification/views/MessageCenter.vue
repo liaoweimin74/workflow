@@ -18,6 +18,11 @@
       :message-id="detailId"
       @read="handleDrawerRead"
     />
+
+    <NotificationSettingsDrawer
+      v-model="settingsVisible"
+      @saved="handleSettingsSaved"
+    />
   </div>
 </template>
 
@@ -25,10 +30,11 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SearchTable } from '@/components/business'
-import { Check, Reading, Message as MessageIcon, Delete, View } from '@element-plus/icons-vue'
+import { Check, Reading, Message as MessageIcon, Delete, View, Setting } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, ToolbarButton } from '@/components/business/types'
 import { ElMessage } from 'element-plus'
 import MessageDetailDrawer from '../components/MessageDetailDrawer.vue'
+import NotificationSettingsDrawer from '../components/NotificationSettingsDrawer.vue'
 import { getNotifications, markBatchAsRead, markAllAsRead, toggleRead, deleteNotification } from '../api/notification'
 import { useNotificationStore } from '../stores/notification'
 import type { Message, MessageCategory } from '../types'
@@ -45,6 +51,9 @@ const detailVisible = ref(false)
 const detailId = ref<number | null>(null)
 /** 正在抽屉中查看的行（read 事件时更新其状态） */
 const detailRow = ref<Message | null>(null)
+
+/** 通知设置抽屉 */
+const settingsVisible = ref(false)
 
 // ========== 查询栏 ==========
 const searchFields: SearchField[] = [
@@ -105,6 +114,10 @@ const columns: TableColumn[] = [
 
 // ========== 工具栏按钮（带图标普通按钮） ==========
 const toolbarButtons: ToolbarButton[] = [
+  {
+    label: '通知设置', icon: Setting,
+    onClick: () => { settingsVisible.value = true },
+  },
   {
     label: '批量已读', icon: Check, type: 'primary',
     onClick: handleBatchRead,
@@ -222,6 +235,11 @@ async function handleReadAll() {
 /** 刷新未读数角标 */
 function refreshUnread() {
   store.fetchUnreadCount()
+}
+
+/** 通知设置保存后：无需额外处理（订阅偏好仅在后续发送时生效） */
+function handleSettingsSaved() {
+  // 占位：后续如需提示"新设置将在下次发送时生效"可在此补充
 }
 
 // ========== 展示辅助 ==========

@@ -9,7 +9,9 @@ import com.workflow.notification.model.ChannelType;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.TemplateContentType;
 import com.workflow.notification.sse.SseEmitterManager;
+import com.workflow.notification.store.DeliveryRetryRepository;
 import com.workflow.notification.store.MessageService;
+import com.workflow.notification.subscription.ChannelConfigService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -36,6 +38,8 @@ class ChannelControllerTest {
 
     private MessageService messageService;
     private SseEmitterManager sseManager;
+    private ChannelConfigService channelConfigService;
+    private DeliveryRetryRepository retryRepository;
     private ChannelController controller;
 
     @BeforeEach
@@ -48,8 +52,11 @@ class ChannelControllerTest {
 
         messageService = mock(MessageService.class);
         sseManager = new SseEmitterManager();
+        channelConfigService = mock(ChannelConfigService.class);
+        retryRepository = mock(DeliveryRetryRepository.class);
 
-        controller = new ChannelController(List.of(inApp, unavailable), messageService, sseManager);
+        controller = new ChannelController(List.of(inApp, unavailable), messageService, sseManager,
+                channelConfigService, retryRepository);
 
         // 默认登录用户 100
         SecurityContextHolder.getContext().setAuthentication(
@@ -119,5 +126,59 @@ class ChannelControllerTest {
         List<Map<String, Object>> channels = res.getData();
         assertThat(channels.get(0).get("successRate")).isEqualTo(100);   // IN_APP
         assertThat(channels.get(1).get("successRate")).isNull();          // SMS
+    }
+
+    // ==================== P1-1: 渠道配置保存 + 成功率真实化 ====================
+
+    @Test
+    void updateConfig_saves_config_for_channel() {
+        R<Void> res = controller.updateConfig(2L, Map.of("url", "https://sms.example.com", "apiKey", "k1"));
+
+        assertThat(res.getCode()).isEqualTo(200);
+        verify(channelConfigService).save(ChannelType.SMS, Map.of("url", "https://sms.example.com", "apiKey", "k1"));
+    }
+
+    @Test
+    void updateConfig_unknown_channel_returns_fail() {
+        R<Void> res = controller.updateConfig(999L, Map.of());
+
+        assertThat(res.getCode()).isNotEqualTo(200);
+        verify(channelConfigService, never()).save(any(), any());
+    }
+
+    @Test
+    void list_enabled_true_when_channel_configured() {
+        when(channelConfigService.isConfigured(ChannelType.SMS)).thenReturn(true);
+
+        R<List<Map<String, Object>>> res = controller.list();
+
+        Map<String, Object> sms = res.getData().stream()
+                .filter(c -> "SMS".equals(c.get("type"))).findFirst().orElseThrow();
+        assertThat(sms.get("enabled")).isEqualTo(true);
+    }
+
+    @Test
+    void list_successRate_zero_when_channel_has_failed_retries() {
+        com.workflow.notification.model.DeliveryRetry failed = new com.workflow.notification.model.DeliveryRetry();
+        failed.setStatus(com.workflow.notification.model.MessageStatus.FAILED);
+        when(retryRepository.findByChannel(ChannelType.SMS)).thenReturn(List.of(failed));
+
+        R<List<Map<String, Object>>> res = controller.list();
+
+        Map<String, Object> sms = res.getData().stream()
+                .filter(c -> "SMS".equals(c.get("type"))).findFirst().orElseThrow();
+        assertThat(sms.get("successRate")).isEqualTo(0);
+    }
+
+    @Test
+    void non_admin_cannot_access_channel_management() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        new LoginUser(200L, "user", "x", List.of("ROLE_USER"), Set.of(), true),
+                        null));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.list())
+                .isInstanceOf(com.workflow.common.exception.BusinessException.class)
+                .hasMessage("需要管理员权限");
     }
 }

@@ -5,13 +5,17 @@ import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.channel.ChannelAdapter;
 import com.workflow.notification.channel.ChannelDeliveryResult;
 import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.model.DeliveryRetry;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageCategory;
 import com.workflow.notification.model.MessagePriority;
+import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.MessageType;
 import com.workflow.notification.model.TemplateContentType;
 import com.workflow.notification.sse.SseEmitterManager;
+import com.workflow.notification.store.DeliveryRetryRepository;
 import com.workflow.notification.store.MessageService;
+import com.workflow.notification.subscription.ChannelConfigService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -45,43 +49,88 @@ public class ChannelController {
     private final Map<ChannelType, ChannelAdapter> adapters;
     private final MessageService messageService;
     private final SseEmitterManager sseManager;
+    private final ChannelConfigService channelConfigService;
+    private final DeliveryRetryRepository retryRepository;
 
     public ChannelController(List<ChannelAdapter> channelAdapters,
                              MessageService messageService,
-                             SseEmitterManager sseManager) {
+                             SseEmitterManager sseManager,
+                             ChannelConfigService channelConfigService,
+                             DeliveryRetryRepository retryRepository) {
         this.adapters = new ConcurrentHashMap<>();
         for (ChannelAdapter adapter : channelAdapters) {
             adapters.put(adapter.getChannelType(), adapter);
         }
         this.messageService = messageService;
         this.sseManager = sseManager;
+        this.channelConfigService = channelConfigService;
+        this.retryRepository = retryRepository;
     }
 
     /**
      * 渠道列表
+     *
+     * <p>enabled：站内信恒可用；外部渠道 = 已配置运行时配置（或配置项齐全的静态配置）。
+     * successRate：站内信 100；外部渠道按该渠道重试记录统计（成功=无失败/重试中记录）。
      */
     @GetMapping
     public R<List<Map<String, Object>>> list() {
+        requireAdmin();
         List<Map<String, Object>> channels = new ArrayList<>();
         for (Map.Entry<Integer, ChannelType> entry : CHANNEL_BY_ID.entrySet()) {
-            ChannelAdapter adapter = adapters.get(entry.getValue());
+            ChannelType type = entry.getValue();
+            ChannelAdapter adapter = adapters.get(type);
             Map<String, Object> channel = new LinkedHashMap<>();
             channel.put("id", entry.getKey());
-            channel.put("name", channelName(entry.getValue()));
-            channel.put("type", entry.getValue().name());
-            channel.put("enabled", adapter != null && adapter.isAvailable());
-            channel.put("successRate", adapter != null && adapter.isAvailable() ? 100 : null);
+            channel.put("name", channelName(type));
+            channel.put("type", type.name());
+            boolean enabled;
+            if (type == ChannelType.IN_APP) {
+                enabled = true;
+            } else {
+                enabled = channelConfigService.isConfigured(type)
+                        || (adapter != null && adapter.isAvailable());
+            }
+            channel.put("enabled", enabled);
+            channel.put("successRate", successRate(type));
             channels.add(channel);
         }
         return R.ok(channels);
     }
 
     /**
-     * 更新渠道配置
+     * 渠道成功率：站内信 100%；外部渠道按该渠道重试记录估算——
+     * 有 FAILED 记 0%，有 PENDING（重试中）记 50%，无异常记录且已配置记 100%。
+     */
+    private Integer successRate(ChannelType type) {
+        if (type == ChannelType.IN_APP) {
+            return 100;
+        }
+        List<DeliveryRetry> retries = retryRepository.findByChannel(type);
+        if (retries == null || retries.isEmpty()) {
+            return channelConfigService.isConfigured(type) ? 100 : null;
+        }
+        boolean hasFailed = retries.stream()
+                .anyMatch(r -> r.getStatus() == MessageStatus.FAILED);
+        if (hasFailed) {
+            return 0;
+        }
+        boolean hasPending = retries.stream()
+                .anyMatch(r -> r.getStatus() == MessageStatus.PENDING);
+        return hasPending ? 50 : 100;
+    }
+
+    /**
+     * 更新渠道配置（敏感字段加密存储）
      */
     @PutMapping("/{id}/config")
     public R<Void> updateConfig(@PathVariable Long id, @RequestBody Map<String, String> config) {
-        // TODO: 保存加密后的配置
+        requireAdmin();
+        ChannelType type = CHANNEL_BY_ID.get(id.intValue());
+        if (type == null) {
+            return R.fail("未知渠道 ID: " + id);
+        }
+        channelConfigService.save(type, config);
         return R.ok();
     }
 
@@ -96,6 +145,7 @@ public class ChannelController {
      */
     @PostMapping("/{id}/test")
     public R<Void> test(@PathVariable Long id) {
+        requireAdmin();
         ChannelType type = CHANNEL_BY_ID.get(id.intValue());
         if (type == null) {
             return R.fail("未知渠道 ID: " + id);
@@ -161,5 +211,17 @@ public class ChannelController {
             case WECHAT_MINIPROGRAM -> "小程序";
             case APP -> "APP";
         };
+    }
+
+    private void requireAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof LoginUser loginUser)) {
+            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
+        }
+        boolean isAdmin = loginUser.getRoles().stream()
+                .anyMatch(r -> "ROLE_ADMIN".equals(r) || "admin".equals(r));
+        if (!isAdmin) {
+            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
+        }
     }
 }

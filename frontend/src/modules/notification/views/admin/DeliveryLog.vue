@@ -51,7 +51,7 @@ const columns: TableColumn[] = [
 async function fetchApi(params: any) {
   const [start, end] = Array.isArray(params.timeRange) ? params.timeRange : [undefined, undefined]
   const res = await getDeliveryLogs({
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 20,
     keyword: params.keyword || undefined,
     recipient: params.recipient || undefined,

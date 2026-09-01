@@ -34,7 +34,9 @@ public class NotificationEventService {
 
     public PageResult<NotificationEventDefinition> list(String tenantId, int page, int size,
                                                          String keyword, Boolean enabled) {
-        PageRequest request = PageRequest.of(Math.max(page, 0), Math.max(size, 1),
+        int normalizedPage = Math.max(page, 1);
+        int normalizedSize = Math.max(size, 1);
+        PageRequest request = PageRequest.of(normalizedPage - 1, normalizedSize,
                 Sort.by(Sort.Direction.DESC, "createdAt"));
         Specification<NotificationEventDefinition> specification = (root, query, cb) -> {
             var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
@@ -48,7 +50,7 @@ public class NotificationEventService {
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
         };
         var result = repository.findAll(specification, request);
-        return new PageResult<>(result.getTotalElements(), page, size, result.getContent());
+        return new PageResult<>(result.getTotalElements(), normalizedPage, normalizedSize, result.getContent());
     }
 
     @Transactional

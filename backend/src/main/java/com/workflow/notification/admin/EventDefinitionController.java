@@ -27,7 +27,7 @@ public class EventDefinitionController {
 
     @GetMapping
     public R<PageResult<NotificationEventDefinition>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean enabled) {

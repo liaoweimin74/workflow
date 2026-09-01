@@ -41,6 +41,7 @@ public class ChannelController {
         CHANNEL_BY_ID.put(2, ChannelType.SMS);
         CHANNEL_BY_ID.put(3, ChannelType.WECHAT_WORK);
         CHANNEL_BY_ID.put(4, ChannelType.WECHAT_MINIPROGRAM);
+        CHANNEL_BY_ID.put(5, ChannelType.APP);
     }
 
     /** 测试消息模板编码 */
@@ -85,17 +86,30 @@ public class ChannelController {
             channel.put("name", channelName(type));
             channel.put("type", type.name());
             boolean enabled;
-            if (type == ChannelType.IN_APP) {
-                enabled = true;
-            } else {
-                enabled = channelConfigService.isConfigured(type)
-                        || (adapter != null && adapter.isAvailable());
-            }
+            enabled = channelConfigService.isEnabled(type);
             channel.put("enabled", enabled);
             channel.put("successRate", successRate(type));
             channels.add(channel);
         }
         return R.ok(channels);
+    }
+
+    @PostMapping("/{id}/enable")
+    public R<Void> enable(@PathVariable Long id) {
+        NotificationAdminAuthorization.requireAdmin();
+        ChannelType type = CHANNEL_BY_ID.get(id.intValue());
+        if (type == null) return R.fail("未知渠道 ID: " + id);
+        channelConfigService.setEnabled(type, true);
+        return R.ok();
+    }
+
+    @PostMapping("/{id}/disable")
+    public R<Void> disable(@PathVariable Long id) {
+        NotificationAdminAuthorization.requireAdmin();
+        ChannelType type = CHANNEL_BY_ID.get(id.intValue());
+        if (type == null) return R.fail("未知渠道 ID: " + id);
+        channelConfigService.setEnabled(type, false);
+        return R.ok();
     }
 
     /**

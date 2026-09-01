@@ -22,6 +22,8 @@ import java.util.stream.Collectors;
 @Service
 public class ChannelConfigService {
 
+    private static final String ENABLED_KEY = "__enabled";
+
     private final ChannelConfigRepository configRepository;
     private final EncryptionUtil encryptionUtil;
 
@@ -38,7 +40,9 @@ public class ChannelConfigService {
     public void save(ChannelType channel, Map<String, String> config) {
         // 先删除该渠道全部既有配置，再写入新配置（覆盖语义）
         List<ChannelConfig> existing = configRepository.findByChannel(channel);
-        configRepository.deleteAll(existing);
+        configRepository.deleteAll(existing.stream()
+                .filter(row -> !ENABLED_KEY.equals(row.getConfigKey()))
+                .toList());
 
         if (config != null) {
             for (Map.Entry<String, String> entry : config.entrySet()) {
@@ -76,7 +80,35 @@ public class ChannelConfigService {
      */
     public boolean isConfigured(ChannelType channel) {
         return configRepository.findByChannel(channel).stream()
+                .filter(c -> !ENABLED_KEY.equals(c.getConfigKey()))
                 .anyMatch(c -> c.getConfigValue() != null && !c.getConfigValue().isEmpty());
+    }
+
+    /** 管理员渠道启停状态；历史已有配置默认视为启用。 */
+    public boolean isEnabled(ChannelType channel) {
+        List<ChannelConfig> configs = configRepository.findByChannel(channel);
+        return configs.stream()
+                .filter(c -> ENABLED_KEY.equals(c.getConfigKey()))
+                .findFirst()
+                .map(c -> Boolean.parseBoolean(c.getConfigValue()))
+                .orElse(channel == ChannelType.IN_APP || isConfigured(channel));
+    }
+
+    @Transactional
+    public void setEnabled(ChannelType channel, boolean enabled) {
+        ChannelConfig row = configRepository.findByChannel(channel).stream()
+                .filter(c -> ENABLED_KEY.equals(c.getConfigKey()))
+                .findFirst()
+                .orElseGet(() -> {
+                    ChannelConfig created = new ChannelConfig();
+                    created.setChannel(channel);
+                    created.setConfigKey(ENABLED_KEY);
+                    created.setEncrypted(false);
+                    return created;
+                });
+        row.setConfigValue(Boolean.toString(enabled));
+        row.setEncrypted(false);
+        configRepository.save(row);
     }
 
     /**

@@ -23,7 +23,7 @@ const tableRef = ref()
 const eventOptions = ref<{ value: string; label: string }[]>([])
 
 onMounted(async () => {
-  const res = await getEventDefinitions({ page: 0, size: 200, enabled: true })
+  const res = await getEventDefinitions({ page: 1, size: 200, enabled: true })
   const data = res.data as any
   eventOptions.value = (data?.rows || []).map((e: any) => ({
     value: e.eventCode,

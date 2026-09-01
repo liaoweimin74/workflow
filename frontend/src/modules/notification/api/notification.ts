@@ -2,7 +2,7 @@
  * 用户端消息 API
  */
 import http from '@/utils/http'
-import type { Message, MessageCategory, MessageType, PageResult, SubscriptionPreference } from '../types'
+import type { Message, MessageCategory, MessageType, PageResult } from '../types'
 
 /** 获取消息列表（支持筛选） */
 export function getNotifications(params: {
@@ -16,16 +16,6 @@ export function getNotifications(params: {
   end?: string
 }) {
   return http.get<PageResult<Message>>('/v1/notifications', { params })
-}
-
-/** 获取当前用户全部渠道的订阅偏好（未设置的渠道默认 subscribed=true） */
-export function getSubscriptionPreferences() {
-  return http.get<SubscriptionPreference[]>('/v1/notifications/subscriptions')
-}
-
-/** 批量更新当前用户订阅偏好（[{channel, subscribed}]） */
-export function updateSubscriptionPreferences(items: { channel: string; subscribed: boolean }[]) {
-  return http.put('/v1/notifications/subscriptions', items)
 }
 
 /** 获取消息详情 */

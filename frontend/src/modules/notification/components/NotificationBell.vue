@@ -100,7 +100,7 @@ function handleTabChange() {
 async function loadList(unread: boolean) {
   loading.value = true
   try {
-    const res = await getNotifications({ page: 0, size: MAX_LIST_SIZE, unread })
+  const res = await getNotifications({ page: 1, size: MAX_LIST_SIZE, unread })
     const rows = (res.data as PageResult<Message>).rows || []
     if (unread) {
       unreadList.value = rows

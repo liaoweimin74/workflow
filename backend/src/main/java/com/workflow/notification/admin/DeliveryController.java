@@ -63,7 +63,7 @@ public class DeliveryController {
      */
     @GetMapping
     public R<Map<String, Object>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String recipient,
@@ -72,7 +72,7 @@ public class DeliveryController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime end) {
 
         NotificationAdminAuthorization.requireAdmin();
-        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageable = PageRequest.of(Math.max(page, 1) - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         // 1. 按收件人/渠道过滤时：从收件人表反查匹配的消息ID集合
         List<Long> filteredMessageIds = null;
@@ -92,6 +92,8 @@ public class DeliveryController {
                 Map<String, Object> empty = new LinkedHashMap<>();
                 empty.put("rows", new ArrayList<>());
                 empty.put("total", 0L);
+                empty.put("page", Math.max(page, 1));
+                empty.put("size", Math.max(size, 1));
                 return R.ok(empty);
             }
         }
@@ -139,6 +141,8 @@ public class DeliveryController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rows", rows);
         result.put("total", messages.getTotalElements());
+        result.put("page", Math.max(page, 1));
+        result.put("size", Math.max(size, 1));
         return R.ok(result);
     }
 

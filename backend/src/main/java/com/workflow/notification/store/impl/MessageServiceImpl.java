@@ -14,6 +14,7 @@ import com.workflow.notification.store.MessageRepository;
 import com.workflow.notification.store.RecipientRepository;
 import com.workflow.system.domain.entity.SysUser;
 import com.workflow.system.repository.SysUserRepository;
+import com.workflow.notification.subscription.ChannelConfigService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -38,13 +39,16 @@ public class MessageServiceImpl implements MessageService {
     private final RecipientRepository recipientRepository;
     private final NotificationCache notificationCache;
     private final SysUserRepository sysUserRepository;
+    private final ChannelConfigService channelConfigService;
 
     public MessageServiceImpl(MessageRepository messageRepository, RecipientRepository recipientRepository,
-                              NotificationCache notificationCache, SysUserRepository sysUserRepository) {
+                              NotificationCache notificationCache, SysUserRepository sysUserRepository,
+                              ChannelConfigService channelConfigService) {
         this.messageRepository = messageRepository;
         this.recipientRepository = recipientRepository;
         this.notificationCache = notificationCache;
         this.sysUserRepository = sysUserRepository;
+        this.channelConfigService = channelConfigService;
     }
 
     @Override
@@ -56,6 +60,11 @@ public class MessageServiceImpl implements MessageService {
             message.setCreatedAt(LocalDateTime.now());
         }
         Message savedMessage = messageRepository.save(message);
+
+        if (channelConfigService != null
+                && !channelConfigService.isEnabled(com.workflow.notification.model.ChannelType.IN_APP)) {
+            return savedMessage;
+        }
 
         // 批量加载收件人真实用户信息（姓名/昵称/邮箱/手机号），缺失用户回退占位
         Map<Long, SysUser> usersById = new HashMap<>();
@@ -105,12 +114,13 @@ public class MessageServiceImpl implements MessageService {
             recipients = recipientRepository.findByUserId(userId);
         }
         if (recipients.isEmpty()) {
-            return new PageResult<>(0, page, size, new ArrayList<>());
+            return new PageResult<>(0, Math.max(page, 1), Math.max(size, 1), new ArrayList<>());
         }
         List<Long> messageIds = recipients.stream().map(Recipient::getMessageId).distinct().toList();
 
         // 2. 查询消息 + 筛选（关键字/分类/时间）
-        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        int normalizedPage = Math.max(page, 1);
+        PageRequest pageRequest = PageRequest.of(normalizedPage - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Specification<Message> spec = (root, query, cb) -> {
             List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
             predicates.add(root.get("id").in(messageIds));
@@ -142,7 +152,7 @@ public class MessageServiceImpl implements MessageService {
 
         return new PageResult<>(
                 messagePage.getTotalElements(),
-                page,
+                normalizedPage,
                 size,
                 messagePage.getContent()
         );

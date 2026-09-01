@@ -39,7 +39,7 @@ public class NotificationController {
      */
     @GetMapping
     public R<PageResult<Message>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) MessageCategory category,

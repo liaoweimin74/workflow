@@ -38,6 +38,14 @@ export function testChannel(id: number) {
   return http.post(`/v1/admin/notification/channels/${id}/test`)
 }
 
+export function enableChannel(id: number) {
+  return http.post(`/v1/admin/notification/channels/${id}/enable`)
+}
+
+export function disableChannel(id: number) {
+  return http.post(`/v1/admin/notification/channels/${id}/disable`)
+}
+
 /** 订阅规则列表 */
 export function getSubscriptionRules(params?: Record<string, any>) {
   return http.get('/v1/admin/notification/subscriptions', { params })
@@ -86,6 +94,11 @@ export function retryDelivery(id: number) {
 /** 公告列表 */
 export function getAnnouncements(params?: { page?: number; size?: number; keyword?: string }) {
   return http.get('/v1/admin/notification/announcements', { params })
+}
+
+/** 公告详情（管理员查看完整 Markdown 内容） */
+export function getAnnouncement(id: number) {
+  return http.get(`/v1/admin/notification/announcements/${id}`)
 }
 
 /** 发布公告 */

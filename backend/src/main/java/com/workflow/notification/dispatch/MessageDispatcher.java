@@ -13,6 +13,7 @@ import com.workflow.notification.store.DeliveryRetryRepository;
 import com.workflow.notification.store.MessageService;
 import com.workflow.notification.store.RecipientRepository;
 import com.workflow.notification.subscription.SubscriptionService;
+import com.workflow.notification.subscription.ChannelConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,8 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 消息分发协调器
  * 
  * <p>监听 MessageEvent，同步写入站内信，异步发送外部渠道。
- * 每个收件人 × 渠道在投递前都会经过 {@link SubscriptionService#shouldSend} 判定，
- * 被订阅偏好拦截的用户不会收到消息。
+ * 新消息创建渠道投递时会检查管理员渠道启用状态和业务订阅规则；
+ * 已创建的投递记录由发送/重试链路继续处理，不受后续渠道状态变化影响。
  * 外部渠道投递失败/异常时会写入 {@link DeliveryRetry} 重试表，交由 {@code RetryTask} 按退避策略重发。
  */
 @Component
@@ -42,6 +43,7 @@ public class MessageDispatcher {
     private final RecipientRepository recipientRepository;
     private final SseEmitterManager sseManager;
     private final SubscriptionService subscriptionService;
+    private final ChannelConfigService channelConfigService;
     private final DeliveryRetryRepository retryRepository;
     private final Map<ChannelType, ChannelAdapter> adapters;
 
@@ -49,7 +51,16 @@ public class MessageDispatcher {
                              RecipientRepository recipientRepository,
                              SseEmitterManager sseManager,
                              List<ChannelAdapter> channelAdapters) {
-        this(messageService, recipientRepository, sseManager, null, null, channelAdapters);
+        this(messageService, recipientRepository, sseManager, null, null, null, channelAdapters);
+    }
+
+    public MessageDispatcher(MessageService messageService,
+                             RecipientRepository recipientRepository,
+                             SseEmitterManager sseManager,
+                             SubscriptionService subscriptionService,
+                             DeliveryRetryRepository retryRepository,
+                             List<ChannelAdapter> channelAdapters) {
+        this(messageService, recipientRepository, sseManager, subscriptionService, retryRepository, null, channelAdapters);
     }
 
     @Autowired
@@ -58,12 +69,14 @@ public class MessageDispatcher {
                              SseEmitterManager sseManager,
                              SubscriptionService subscriptionService,
                              DeliveryRetryRepository retryRepository,
-                             List<ChannelAdapter> channelAdapters) {
+                             ChannelConfigService channelConfigService,
+                              List<ChannelAdapter> channelAdapters) {
         this.messageService = messageService;
         this.recipientRepository = recipientRepository;
         this.sseManager = sseManager;
         this.subscriptionService = subscriptionService;
         this.retryRepository = retryRepository;
+        this.channelConfigService = channelConfigService;
         this.adapters = new ConcurrentHashMap<>();
         for (ChannelAdapter adapter : channelAdapters) {
             adapters.put(adapter.getChannelType(), adapter);
@@ -71,7 +84,7 @@ public class MessageDispatcher {
     }
 
     /**
-     * 过滤出应接收该渠道消息的收件人（应用订阅判定）。
+     * 过滤出业务规则允许接收该渠道消息的收件人。
      * 未注入 SubscriptionService（如纯单元测试）时不过滤，保持向后兼容。
      */
     private List<Long> eligibleRecipients(Message message, List<Long> recipientIds, ChannelType channel) {
@@ -96,8 +109,9 @@ public class MessageDispatcher {
                 message.getTemplateCode(), recipientIds.size(), channels);
 
         // 1. 同步写入站内信（站内信收件人经订阅判定过滤）
-        if (channels.contains(ChannelType.IN_APP)) {
-            List<Long> inAppRecipients = eligibleRecipients(message, recipientIds, ChannelType.IN_APP);
+        if (channels.contains(ChannelType.IN_APP)
+                && (channelConfigService == null || channelConfigService.isEnabled(ChannelType.IN_APP))) {
+            List<Long> inAppRecipients = recipientIds;
             if (!inAppRecipients.isEmpty()) {
                 messageService.send(message, inAppRecipients);
                 log.info("站内信投递完成: messageId={}, recipients={}", message.getId(), inAppRecipients.size());
@@ -114,6 +128,11 @@ public class MessageDispatcher {
         // 2. 异步发送外部渠道（外部渠道收件人同样经订阅判定过滤）
         for (ChannelType channelType : channels) {
             if (channelType == ChannelType.IN_APP) continue;
+
+            if (channelConfigService != null && !channelConfigService.isEnabled(channelType)) {
+                log.info("渠道已禁用，跳过新消息投递: channel={}, messageId={}", channelType, message.getId());
+                continue;
+            }
             
             ChannelAdapter adapter = adapters.get(channelType);
             if (adapter == null || !adapter.isAvailable()) {

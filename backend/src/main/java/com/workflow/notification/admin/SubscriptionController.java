@@ -45,12 +45,12 @@ public class SubscriptionController {
      */
     @GetMapping
     public R<Map<String, Object>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String eventCode) {
 
         NotificationAdminAuthorization.requireAdmin();
-        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageable = PageRequest.of(Math.max(page, 1) - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Specification<SubscriptionRule> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (eventCode != null && !eventCode.isBlank()) {
@@ -78,6 +78,8 @@ public class SubscriptionController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rows", rows);
         result.put("total", rules.getTotalElements());
+        result.put("page", Math.max(page, 1));
+        result.put("size", Math.max(size, 1));
         return R.ok(result);
     }
 

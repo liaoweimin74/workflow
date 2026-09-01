@@ -39,13 +39,6 @@ export interface EventDefinition {
 /** 渠道类型 */
 export type ChannelType = 'IN_APP' | 'SMS' | 'WECHAT_WORK' | 'WECHAT_MINIPROGRAM' | 'APP'
 
-/** 用户订阅偏好（单渠道开关） */
-export interface SubscriptionPreference {
-  channel: ChannelType
-  channelName: string
-  subscribed: boolean
-}
-
 /** 消息实体 */
 export interface Message {
   id: number

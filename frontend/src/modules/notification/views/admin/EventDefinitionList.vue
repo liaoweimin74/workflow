@@ -34,7 +34,7 @@ const columns: TableColumn[] = [
 
 async function fetchApi(params: any) {
   const res = await getEventDefinitions({
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 10,
     keyword: params.keyword || undefined,
     enabled: params.enabled,

@@ -1,12 +1,15 @@
 <script setup lang="ts">
 defineOptions({ name: 'MessageAnnouncementList' })
 
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { SearchTable } from '@/components/business'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus, Delete, View } from '@element-plus/icons-vue'
 import type { TableColumn, ActionButton, SearchField } from '@/components/business/types'
-import { getAnnouncements, publishAnnouncement, recallAnnouncement } from '../../api/admin'
+import { getAnnouncements, getAnnouncement, publishAnnouncement, recallAnnouncement } from '../../api/admin'
 import { ElMessage } from 'element-plus'
+import DataPicker from '@/views/form/components/DataPicker.vue'
+import { dataSourceApi } from '@/api/data-source'
+import MarkdownIt from 'markdown-it'
 
 const searchFields: SearchField[] = [
   { type: 'input', label: '标题', prop: 'keyword', placeholder: '按标题搜索' },
@@ -19,9 +22,22 @@ const columns: TableColumn[] = [
   { prop: 'createdAt', label: '发布时间', width: 180 },
 ]
 
+const detailVisible = ref(false)
+const userDataSourceId = ref('')
+const detailLoading = ref(false)
+const detail = ref<{ title?: string; contentType?: string; content?: { text?: string } } | null>(null)
+const markdown = new MarkdownIt({ html: false, linkify: true })
+const detailHtml = ref('')
+
+onMounted(async () => {
+  const response = await dataSourceApi.getEnabledDataSources()
+  const source = (response.data || []).find(item => item.type === 'SYSTEM' && item.sourceKey === 'user-tree')
+  userDataSourceId.value = source?.id || ''
+})
+
 async function fetchApi(params: any) {
   const res = await getAnnouncements({
-    page: (params.page || 1) - 1,
+    page: params.page || 1,
     size: params.size || 10,
     keyword: params.keyword || undefined,
   })
@@ -32,10 +48,10 @@ async function fetchApi(params: any) {
 // ========== 发布公告对话框 ==========
 const publishVisible = ref(false)
 const publishing = ref(false)
-const publishForm = ref({ title: '', content: '', recipientIds: '' })
+const publishForm = ref({ title: '', content: '', recipientIds: '[]' })
 
 function openPublish() {
-  publishForm.value = { title: '', content: '', recipientIds: '' }
+  publishForm.value = { title: '', content: '', recipientIds: '[]' }
   publishVisible.value = true
 }
 
@@ -44,11 +60,15 @@ async function handlePublish() {
     ElMessage.warning('请填写标题和内容')
     return
   }
-  // recipientIds: 逗号分隔的用户ID（留空则发给当前用户）
-  const ids = publishForm.value.recipientIds
-    .split(',')
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isInteger(n) && n > 0)
+  let ids: number[] = []
+  try {
+    const parsed: unknown = JSON.parse(publishForm.value.recipientIds || '[]')
+    ids = Array.isArray(parsed)
+      ? parsed.map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0)
+      : []
+  } catch {
+    ids = []
+  }
   if (ids.length === 0) {
     ElMessage.warning('请填写至少一个接收用户ID（逗号分隔）')
     return
@@ -68,7 +88,25 @@ async function handlePublish() {
   }
 }
 
-// ========== 撤回 ==========
+// ========== 查看/撤回 ==========
+function handleView(row: any) {
+  detailVisible.value = true
+  detailLoading.value = true
+  detail.value = null
+  getAnnouncement(row.id).then((response) => {
+    detail.value = response.data
+    detailHtml.value = response.data?.contentType === 'MARKDOWN'
+      ? markdown.render(response.data?.content?.text || '')
+      : ''
+  }).catch((error: unknown) => {
+    if (error instanceof Error) {
+      ElMessage.error(error.message)
+      return
+    }
+    throw error
+  }).finally(() => { detailLoading.value = false })
+}
+
 async function handleRecall(row: any) {
   await recallAnnouncement(row.id)
   ElMessage.success('公告已撤回')
@@ -77,7 +115,11 @@ async function handleRecall(row: any) {
 
 const actionButtons: ActionButton[] = [
   {
-    label: '撤回', icon: Delete, type: 'danger', size: 'small', link: true,
+    label: '查看', icon: View, size: 'small', link: true,
+    onClick: handleView,
+  },
+  {
+    label: '删除', icon: Delete, type: 'danger', size: 'small', link: true,
     confirm: '确定撤回该公告吗？（将删除所有收件人记录）',
     onClick: handleRecall,
   },
@@ -97,6 +139,13 @@ const tableRef = ref()
       :toolbar-buttons="[{ label: '发布公告', icon: Plus, type: 'primary', onClick: openPublish }]"
     />
 
+    <el-dialog v-model="detailVisible" :title="detail?.title || '公告详情'" width="640px">
+      <div v-loading="detailLoading" class="announcement-detail">
+        <div v-if="detail?.contentType === 'MARKDOWN'" class="markdown-body" v-html="detailHtml"></div>
+        <pre v-else>{{ detail?.content?.text || '--' }}</pre>
+      </div>
+    </el-dialog>
+
     <!-- 发布公告对话框 -->
     <el-dialog
       v-model="publishVisible"
@@ -113,14 +162,20 @@ const tableRef = ref()
             v-model="publishForm.content"
             type="textarea"
             :rows="6"
-            placeholder="支持 Markdown 语法"
+            placeholder="支持 Markdown 语法，例如：**加粗**、# 标题、- 列表"
           />
         </el-form-item>
         <el-form-item label="接收用户">
-          <el-input
+          <DataPicker
+            v-if="userDataSourceId"
             v-model="publishForm.recipientIds"
-            placeholder="用户ID，逗号分隔，如 1,2,3"
+            :global-data-source-id="userDataSourceId"
+            display-field="nickname"
+            :columns="['username', 'nickname', 'orgName']"
+            :search-columns="['username', 'nickname']"
+            placeholder="选择系统用户，可多选"
           />
+          <span v-else class="data-source-loading">正在加载系统用户数据源...</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -130,3 +185,26 @@ const tableRef = ref()
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.announcement-detail {
+  min-height: 120px;
+}
+
+.markdown-body {
+  color: #303133;
+  line-height: 1.7;
+}
+
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3) {
+  margin: 0 0 12px;
+}
+
+.markdown-body :deep(p),
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  margin: 8px 0;
+}
+</style>

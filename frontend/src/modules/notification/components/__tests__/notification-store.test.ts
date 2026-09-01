@@ -27,7 +27,7 @@ describe('useNotificationStore', () => {
       if (typeof url === 'string' && url.includes('unread-count')) {
         return Promise.resolve({ data: 0 })
       }
-      return Promise.resolve({ data: { rows: [], total: 0, page: 0, size: 20 } })
+  return Promise.resolve({ data: { rows: [], total: 0, page: 1, size: 20 } })
     })
   })
 

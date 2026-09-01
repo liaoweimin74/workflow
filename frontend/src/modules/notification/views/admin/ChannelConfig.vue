@@ -3,9 +3,9 @@ defineOptions({ name: 'MessageChannelConfig' })
 
 import { ref } from 'vue'
 import { SearchTable } from '@/components/business'
-import { Aim, Setting } from '@element-plus/icons-vue'
+import { Aim, Setting, CircleCheck, VideoPause } from '@element-plus/icons-vue'
 import type { TableColumn, ActionButton } from '@/components/business/types'
-import { getChannels, updateChannelConfig, testChannel } from '../../api/admin'
+import { getChannels, updateChannelConfig, testChannel, enableChannel, disableChannel } from '../../api/admin'
 import { ElMessage } from 'element-plus'
 
 const columns: TableColumn[] = [
@@ -16,7 +16,7 @@ const columns: TableColumn[] = [
   },
   {
     prop: 'enabled', label: '状态', width: 100,
-    render: (row: any) => (row.enabled ? '启用' : '停用'),
+    render: (row: any) => (row.enabled ? '已启用' : '已禁用'),
   },
   {
     prop: 'successRate', label: '成功率', width: 120,
@@ -69,6 +69,7 @@ const channelFieldDefs: Record<string, { key: string; label: string; type?: 'pas
 }
 
 const configValues = ref<Record<string, string>>({})
+const tableRef = ref()
 
 function openConfig(row: any) {
   currentChannel.value = row
@@ -93,7 +94,33 @@ async function handleConfigSave() {
   }
 }
 
+async function toggleChannel(row: any) {
+  try {
+    if (row.enabled) {
+      await disableChannel(row.id)
+      ElMessage.success('渠道已禁用')
+    } else {
+      await enableChannel(row.id)
+      ElMessage.success('渠道已启用')
+    }
+    tableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已提示具体错误
+  }
+}
+
 const actionButtons: ActionButton[] = [
+  {
+    label: '启用', icon: CircleCheck, type: 'success', size: 'small', link: true,
+    show: (row: any) => !row.enabled,
+    onClick: toggleChannel,
+  },
+  {
+    label: '禁用', icon: VideoPause, type: 'warning', size: 'small', link: true,
+    show: (row: any) => row.enabled,
+    confirm: '禁用后只影响新消息，已进入队列的消息仍会继续处理。确定禁用吗？',
+    onClick: toggleChannel,
+  },
   {
     label: '配置', icon: Setting, size: 'small', link: true,
     show: (row: any) => row.type !== 'IN_APP' && row.type !== 'APP',
@@ -116,6 +143,7 @@ const actionButtons: ActionButton[] = [
 <template>
   <div>
     <SearchTable
+      ref="tableRef"
       :columns="columns"
       :action-buttons="actionButtons"
       :fetch-api="fetchApi"

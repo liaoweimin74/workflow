@@ -17,17 +17,9 @@ import java.util.List;
 @Service
 public class SubscriptionService {
 
-    private final UserSubscriptionRepository userSubscriptionRepository;
     private final SubscriptionRuleRepository subscriptionRuleRepository;
 
-    public SubscriptionService(UserSubscriptionRepository userSubscriptionRepository) {
-        this(userSubscriptionRepository, null);
-    }
-
-    @Autowired
-    public SubscriptionService(UserSubscriptionRepository userSubscriptionRepository,
-                               SubscriptionRuleRepository subscriptionRuleRepository) {
-        this.userSubscriptionRepository = userSubscriptionRepository;
+    public SubscriptionService(SubscriptionRuleRepository subscriptionRuleRepository) {
         this.subscriptionRuleRepository = subscriptionRuleRepository;
     }
 
@@ -35,27 +27,12 @@ public class SubscriptionService {
      * 判断消息是否应该发送给用户
      * 
      * <p>规则：
-     * 1. 紧急消息（URGENT）绕过所有订阅设置
-     * 2. 用户间通信（PRIVATE）始终发送
-     * 3. 系统公告始终发送
-     * 4. 其他情况检查用户订阅偏好
+     * 1. FORCE 规则允许投递
+     * 2. DENY 规则禁止投递
+     * 3. ALLOW 规则允许投递
+     * 4. 没有规则时默认允许
      */
     public boolean shouldSend(Message message, Long userId, ChannelType channel) {
-        // 紧急消息绕过
-        if (message.getPriority() == MessagePriority.URGENT) {
-            return true;
-        }
-
-        // 用户间通信始终发送
-        if (message.getMessageType() == com.workflow.notification.model.MessageType.PRIVATE) {
-            return true;
-        }
-
-        // 系统公告始终发送
-        if (message.getCategory() == com.workflow.notification.model.MessageCategory.SYSTEM) {
-            return true;
-        }
-
         if (subscriptionRuleRepository != null && message.getEventCode() != null
                 && message.getPriority() != null) {
             SubscriptionRule rule = subscriptionRuleRepository
@@ -70,41 +47,6 @@ public class SubscriptionService {
                 if (action == SubscriptionRuleAction.ALLOW) return true;
             }
         }
-
-        // 检查用户订阅偏好
-        UserSubscription subscription = userSubscriptionRepository
-                .findByTenantIdAndUserIdAndChannel(message.getTenantId(), userId, channel);
-
-        // 默认订阅，无记录时发送
-        if (subscription == null) {
-            return true;
-        }
-
-        return subscription.getSubscribed();
-    }
-
-    /**
-     * 获取用户订阅偏好
-     */
-    public List<UserSubscription> getUserPreferences(String tenantId, Long userId) {
-        return userSubscriptionRepository.findByTenantIdAndUserId(tenantId, userId);
-    }
-
-    /**
-     * 更新用户订阅偏好
-     */
-    public void updatePreference(String tenantId, Long userId, ChannelType channel, boolean subscribed) {
-        UserSubscription existing = userSubscriptionRepository
-                .findByTenantIdAndUserIdAndChannel(tenantId, userId, channel);
-
-        if (existing == null) {
-            existing = new UserSubscription();
-            existing.setTenantId(tenantId);
-            existing.setUserId(userId);
-            existing.setUsername("user_" + userId);
-            existing.setChannel(channel);
-        }
-        existing.setSubscribed(subscribed);
-        userSubscriptionRepository.save(existing);
+        return true;
     }
 }

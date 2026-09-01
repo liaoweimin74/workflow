@@ -97,12 +97,12 @@ public class AnnouncementController {
      */
     @GetMapping
     public R<Map<String, Object>> list(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword) {
 
         NotificationAdminAuthorization.requireAdmin();
-        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageable = PageRequest.of(Math.max(page, 1) - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Specification<Message> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("templateCode"), ANNOUNCEMENT_TEMPLATE));
@@ -127,7 +127,21 @@ public class AnnouncementController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rows", rows);
         result.put("total", announcements.getTotalElements());
+        result.put("page", Math.max(page, 1));
+        result.put("size", Math.max(size, 1));
         return R.ok(result);
+    }
+
+    /** 管理员查看公告详情，返回完整 Markdown 内容。 */
+    @GetMapping("/{id}")
+    public R<Message> detail(@PathVariable Long id) {
+        NotificationAdminAuthorization.requireAdmin();
+        Message message = messageRepository.findById(id)
+                .orElseThrow(() -> new com.workflow.common.exception.BusinessException("公告不存在: " + id));
+        if (!ANNOUNCEMENT_TEMPLATE.equals(message.getTemplateCode())) {
+            throw new com.workflow.common.exception.BusinessException("非公告消息: " + id);
+        }
+        return R.ok(message);
     }
 
     /**

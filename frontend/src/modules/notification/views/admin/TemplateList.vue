@@ -99,6 +99,7 @@ const formConfig = computed<FormConfig>(() => {
       {
         type: 'elTabs',
         props: { type: 'border-card' },
+        style: { width: '100%' },
         // 切换 tab（切到"模板预览"时）触发预览刷新信号
         on: {
           'tab-change': () => {

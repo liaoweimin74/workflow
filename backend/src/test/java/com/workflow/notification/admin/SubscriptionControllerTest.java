@@ -105,4 +105,25 @@ class SubscriptionControllerTest {
             return true;
         }));
     }
+
+    // ==================== P1-2: 删除 ====================
+
+    @Test
+    void delete_removesRule() {
+        when(repository.existsById(5L)).thenReturn(true);
+
+        R<Void> res = controller.delete(5L);
+
+        assertThat(res.getCode()).isEqualTo(200);
+        verify(repository).deleteById(5L);
+    }
+
+    @Test
+    void delete_throws_when_rule_not_found() {
+        when(repository.existsById(99L)).thenReturn(false);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.delete(99L))
+                .isInstanceOf(com.workflow.common.exception.BusinessException.class);
+        verify(repository, never()).deleteById(any());
+    }
 }

@@ -45,6 +45,7 @@ public class SubscriptionController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String eventCode) {
 
+        requireAdmin();
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Specification<SubscriptionRule> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -80,6 +81,7 @@ public class SubscriptionController {
      */
     @PostMapping
     public R<Void> create(@RequestBody Map<String, Object> rule) {
+        requireAdmin();
         SubscriptionRule entity = new SubscriptionRule();
         entity.setTenantId("default");
         entity.setCreatedBy(currentUsername());
@@ -93,10 +95,24 @@ public class SubscriptionController {
      */
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> rule) {
+        requireAdmin();
         SubscriptionRule entity = repository.findById(id)
                 .orElseThrow(() -> new com.workflow.common.exception.BusinessException("订阅规则不存在: " + id));
         applyFields(entity, rule);
         repository.save(entity);
+        return R.ok();
+    }
+
+    /**
+     * 删除订阅规则
+     */
+    @DeleteMapping("/{id}")
+    public R<Void> delete(@PathVariable Long id) {
+        requireAdmin();
+        if (!repository.existsById(id)) {
+            throw new com.workflow.common.exception.BusinessException("订阅规则不存在: " + id);
+        }
+        repository.deleteById(id);
         return R.ok();
     }
 
@@ -126,5 +142,17 @@ public class SubscriptionController {
             return loginUser.getUsername();
         }
         return "system";
+    }
+
+    private void requireAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof LoginUser loginUser)) {
+            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
+        }
+        boolean isAdmin = loginUser.getRoles().stream()
+                .anyMatch(r -> "ROLE_ADMIN".equals(r) || "admin".equals(r));
+        if (!isAdmin) {
+            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
+        }
     }
 }

@@ -4,7 +4,8 @@ defineOptions({ name: 'MessageSubscriptionRules' })
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
-import { getSubscriptionRules, createSubscriptionRule, updateSubscriptionRule } from '../../api/admin'
+import { getSubscriptionRules, createSubscriptionRule, updateSubscriptionRule, deleteSubscriptionRule } from '../../api/admin'
+import { ElMessage } from 'element-plus'
 
 const searchFields: SearchField[] = [
   { type: 'input', label: '事件代码', prop: 'eventCode', placeholder: '输入事件代码' },
@@ -77,6 +78,10 @@ const formConfig: FormConfig = {
   ] as Rule[],
   createApi: (data: any) => createSubscriptionRule(data) as any,
   updateApi: (id: number | string, data: any) => updateSubscriptionRule(id as number, data) as any,
+  deleteApi: async (id: number | string) => {
+    await deleteSubscriptionRule(id as number)
+    ElMessage.success('删除成功')
+  },
   dialogTitle: { create: '新建规则', edit: '编辑规则' },
 }
 </script>

@@ -40,6 +40,10 @@ const columns: TableColumn[] = [
     prop: 'isSystem', label: '系统模板', width: 100,
     render: (row: any) => (row.isSystem ? '是' : '否'),
   },
+  {
+    prop: 'enabled', label: '状态', width: 100,
+    render: (row: any) => (row.enabled === false ? '已停用' : '启用'),
+  },
 ]
 
 function channelLabel(channel: string) {

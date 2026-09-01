@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'MessageTemplateList' })
 
-import { ref, computed } from 'vue'
+import { ref, computed, provide } from 'vue'
 import { SearchTable } from '@/components/business'
 import { Switch } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
@@ -13,6 +13,10 @@ import { ElMessage } from 'element-plus'
 
 // 注册预览静态文本组件到 form-create（表单渲染用）
 formCreate.component('template-preview', TemplatePreview)
+
+/** 模板预览刷新信号：切换 tab 到预览页时 +1，通知 TemplatePreview 重新读取表单值 */
+const tabRefreshSignal = ref(0)
+provide('templatePreviewRefresh', tabRefreshSignal)
 
 const tableRef = ref()
 
@@ -95,7 +99,12 @@ const formConfig = computed<FormConfig>(() => {
       {
         type: 'elTabs',
         props: { type: 'border-card' },
-        style: { width: '100%' },
+        // 切换 tab（切到"模板预览"时）触发预览刷新信号
+        on: {
+          'tab-change': () => {
+            tabRefreshSignal.value++
+          },
+        },
         children: [
           {
             type: 'elTabPane',

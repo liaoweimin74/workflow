@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { reactive, nextTick } from 'vue'
+import { reactive, ref, nextTick } from 'vue'
 import TemplatePreview from '../TemplatePreview.vue'
 
 /** form-create 注入对象（与 LookupPicker 相同的取值方式，含响应式 form model） */
@@ -101,20 +101,27 @@ describe('TemplatePreview', () => {
 
   it('api.form 为响应式时，字段变化后预览实时更新（不依赖 getValue 快照）', async () => {
     const form = reactive({ contentType: 'TEXT', content: '' })
+    // 模拟父级"切换 tab 到预览页"的刷新信号
+    const refreshSignal = ref(0)
     const wrapper = mount(TemplatePreview, {
       props: {
         source: 'content',
         label: '内容预览',
         formCreateInject: { api: { getValue: (f: string) => form[f as keyof typeof form], form } },
       },
+      global: {
+        provide: {
+          templatePreviewRefresh: refreshSignal,
+        },
+      },
     })
     // 初始为空 → 占位
     expect(wrapper.text()).toContain('（未填写）')
 
-    // 模拟用户输入内容（form-create 更新响应式 model），轮询同步在 300ms 内反映
+    // 模拟用户输入内容（form-create 更新响应式 model），然后父级切到预览 tab 触发刷新信号
     form.content = '刚输入的新内容'
-    await vi.waitFor(() => {
-      expect(wrapper.text()).toContain('刚输入的新内容')
-    }, { timeout: 1500, interval: 50 })
+    refreshSignal.value++
+    await nextTick()
+    expect(wrapper.text()).toContain('刚输入的新内容')
   })
 })

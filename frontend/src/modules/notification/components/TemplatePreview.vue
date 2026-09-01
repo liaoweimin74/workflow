@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { inject, ref, watch, type Ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 
 /** Markdown 渲染器：不转义原始 HTML（html:false），开启链接识别 */
@@ -67,16 +67,15 @@ function sync() {
 }
 
 // form-create 注入的 formCreateInject 在 Vue props（shallowReactive）边界内，
-// deep watch / computed 无法可靠追踪其内部变化（实测不触发）。
-// setup 时立即同步一次（props 已就绪），再用轻量轮询兜底实时更新（300ms 内）。
+// computed / deep watch 无法可靠追踪其内部变化（实测不触发）。
+// 因此由父级在"切换 tab 到预览页"时通过 inject 信号通知刷新，此时重新读取最新表单值。
+// setup 时先同步一次（props 已就绪，覆盖默认激活"模板预览"的场景）。
 sync()
-let timer: ReturnType<typeof setInterval> | null = null
-onMounted(() => {
-  timer = setInterval(sync, 300)
-})
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+
+const refreshSignal = inject<Ref<number> | null>('templatePreviewRefresh', null)
+if (refreshSignal) {
+  watch(refreshSignal, () => sync())
+}
 </script>
 
 <style scoped>

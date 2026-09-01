@@ -14,9 +14,9 @@ const channelMap: Record<string, string> = {
 
 const searchFields: SearchField[] = [
   { prop: 'keyword', label: '标题', type: 'input', placeholder: '标题关键字' },
-  { prop: 'recipient', label: '收件人', type: 'input', placeholder: '收件人用户名' },
+  { prop: 'recipient', label: '收件人', type: 'input', placeholder: '收件人用户名', style: 'width: 124px' },
   {
-    prop: 'channel', label: '渠道', type: 'select', placeholder: '全部渠道',
+    prop: 'channel', label: '渠道', type: 'select', placeholder: '全部渠道', style: 'width: 110px',
     options: Object.entries(channelMap).map(([value, label]) => ({ value, label })),
   },
   { prop: 'timeRange', label: '时间段', type: 'date-range', time: true, placeholder: '发送时间范围' },

@@ -45,13 +45,15 @@ public class InternalNotificationController {
     public R<Void> sendByTemplate(@RequestBody TemplateSendRequest request,
                                   @RequestParam List<Long> recipientIds,
                                   @RequestParam List<ChannelType> channels) {
-        messageSender.sendByTemplate(
-                request.getSenderId(),
-                request.getTemplateCode(),
-                request.getVariables(),
-                request.getMessageType() != null ? request.getMessageType() : com.workflow.notification.model.MessageType.PRIVATE,
-                recipientIds,
-                channels);
+        var messageType = request.getMessageType() != null
+                ? request.getMessageType() : com.workflow.notification.model.MessageType.PRIVATE;
+        if (request.getEventCode() != null && !request.getEventCode().isBlank()) {
+            messageSender.sendByTemplate(request.getSenderId(), request.getTemplateCode(), request.getVariables(),
+                    messageType, recipientIds, channels, request.getEventCode());
+        } else {
+            messageSender.sendByTemplate(request.getSenderId(), request.getTemplateCode(), request.getVariables(),
+                    messageType, recipientIds, channels);
+        }
         return R.ok();
     }
 }

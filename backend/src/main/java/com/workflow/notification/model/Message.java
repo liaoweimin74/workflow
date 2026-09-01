@@ -34,6 +34,10 @@ public class Message {
     @Column(name = "template_code", length = 64, nullable = false)
     private String templateCode;
 
+    /** 业务事件代码；无业务事件的兼容消息可为空 */
+    @Column(name = "event_code", length = 64)
+    private String eventCode;
+
     /** 发送者ID */
     @Column(name = "sender_id", nullable = false)
     private Long senderId;
@@ -123,6 +127,9 @@ public class Message {
 
     public String getTemplateCode() { return templateCode; }
     public void setTemplateCode(String templateCode) { this.templateCode = templateCode; }
+
+    public String getEventCode() { return eventCode; }
+    public void setEventCode(String eventCode) { this.eventCode = eventCode; }
 
     public Long getSenderId() { return senderId; }
     public void setSenderId(Long senderId) { this.senderId = senderId; }

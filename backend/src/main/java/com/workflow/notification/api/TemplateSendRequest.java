@@ -24,6 +24,9 @@ public class TemplateSendRequest {
     /** 消息类型（PRIVATE/PUBLIC/SYSTEM），缺省为 PRIVATE */
     private MessageType messageType;
 
+    /** 业务事件代码，可选；推荐业务发送使用 send-by-event */
+    private String eventCode;
+
     public Long getSenderId() { return senderId; }
     public void setSenderId(Long senderId) { this.senderId = senderId; }
 
@@ -35,4 +38,7 @@ public class TemplateSendRequest {
 
     public MessageType getMessageType() { return messageType; }
     public void setMessageType(MessageType messageType) { this.messageType = messageType; }
+
+    public String getEventCode() { return eventCode; }
+    public void setEventCode(String eventCode) { this.eventCode = eventCode; }
 }

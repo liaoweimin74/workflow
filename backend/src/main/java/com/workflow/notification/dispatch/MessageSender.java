@@ -5,8 +5,10 @@ import com.workflow.notification.model.ChannelType;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageTemplate;
 import com.workflow.notification.model.MessageType;
+import com.workflow.notification.event.NotificationEventService;
 import com.workflow.notification.template.TemplateService;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -30,13 +32,23 @@ public class MessageSender {
     private final TemplateService templateService;
     private final TenantProvider tenantProvider;
     private final ApplicationEventPublisher eventPublisher;
+    private final NotificationEventService eventService;
 
     public MessageSender(TemplateService templateService,
                          TenantProvider tenantProvider,
                          ApplicationEventPublisher eventPublisher) {
+        this(templateService, tenantProvider, eventPublisher, null);
+    }
+
+    @Autowired
+    public MessageSender(TemplateService templateService,
+                         TenantProvider tenantProvider,
+                         ApplicationEventPublisher eventPublisher,
+                         NotificationEventService eventService) {
         this.templateService = templateService;
         this.tenantProvider = tenantProvider;
         this.eventPublisher = eventPublisher;
+        this.eventService = eventService;
     }
 
     /**
@@ -75,8 +87,38 @@ public class MessageSender {
                                Map<String, Object> variables,
                                MessageType messageType,
                                List<Long> recipientIds,
-                               List<ChannelType> channels) {
+                                List<ChannelType> channels) {
+        sendByTemplate(senderId, templateCode, variables, messageType, recipientIds, channels, null);
+    }
+
+    /** 按指定业务事件发送；事件必须存在且启用。 */
+    public void sendByEvent(Long senderId,
+                            String eventCode,
+                            Map<String, Object> variables,
+                            MessageType messageType,
+                            List<Long> recipientIds,
+                            List<ChannelType> channels) {
         String tenantId = tenantProvider.getTenantId();
+        eventService.requireEnabled(tenantId, eventCode);
+        for (ChannelType channel : channels) {
+            MessageTemplate template = templateService.getTemplateForEvent(tenantId, eventCode, channel);
+            sendByTemplate(senderId, template.getTemplateCode(), variables, messageType,
+                    recipientIds, List.of(channel), eventCode);
+        }
+    }
+
+    /** 按模板发送并携带业务事件代码；模板选择将在事件模板绑定能力中完成。 */
+    public void sendByTemplate(Long senderId,
+                               String templateCode,
+                               Map<String, Object> variables,
+                               MessageType messageType,
+                               List<Long> recipientIds,
+                               List<ChannelType> channels,
+                               String eventCode) {
+        String tenantId = tenantProvider.getTenantId();
+        if (eventCode != null && !eventCode.isBlank()) {
+            eventService.requireEnabled(tenantId, eventCode);
+        }
         MessageTemplate tpl = templateService.getTemplate(templateCode, tenantId);
 
         // 发送前校验标题与内容模板的必填变量，缺失即拒绝，避免 ${var} 残留传给用户
@@ -86,6 +128,7 @@ public class MessageSender {
         Message message = new Message();
         message.setTenantId(tenantId);
         message.setTemplateCode(templateCode);
+        message.setEventCode(eventCode);
         message.setSenderId(senderId);
         message.setSenderType("SYSTEM");
         message.setTitle(templateService.render(tpl.getTitle(), variables));

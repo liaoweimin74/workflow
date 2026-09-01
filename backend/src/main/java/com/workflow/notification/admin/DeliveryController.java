@@ -1,11 +1,21 @@
 package com.workflow.notification.admin;
 
 import com.workflow.common.domain.R;
+import com.workflow.common.exception.BusinessException;
+import com.workflow.notification.dispatch.MessageEvent;
 import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.model.DeliveryRetry;
 import com.workflow.notification.model.Message;
+import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.Recipient;
+import com.workflow.notification.store.DeliveryRetryRepository;
 import com.workflow.notification.store.MessageRepository;
+import com.workflow.notification.store.MessageService;
 import com.workflow.notification.store.RecipientRepository;
+import com.workflow.framework.security.domain.LoginUser;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -33,10 +43,17 @@ public class DeliveryController {
 
     private final MessageRepository messageRepository;
     private final RecipientRepository recipientRepository;
+    private final DeliveryRetryRepository retryRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public DeliveryController(MessageRepository messageRepository, RecipientRepository recipientRepository) {
+    public DeliveryController(MessageRepository messageRepository,
+                              RecipientRepository recipientRepository,
+                              DeliveryRetryRepository retryRepository,
+                              ApplicationEventPublisher eventPublisher) {
         this.messageRepository = messageRepository;
         this.recipientRepository = recipientRepository;
+        this.retryRepository = retryRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -57,6 +74,7 @@ public class DeliveryController {
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime start,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime end) {
 
+        requireAdmin();
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         // 1. 按收件人/渠道过滤时：从收件人表反查匹配的消息ID集合
@@ -112,11 +130,11 @@ public class DeliveryController {
                 Map<String, Object> rec = new LinkedHashMap<>();
                 rec.put("userId", r.getUserId());
                 rec.put("username", r.getUsername());
-                rec.put("status", r.getStatus().name());
+                rec.put("status", r.getStatus() != null ? r.getStatus().name() : "PENDING");
                 return rec;
             }).toList());
             row.put("channel", recipients.isEmpty() ? "IN_APP" : recipients.get(0).getChannel().name());
-            row.put("status", m.getStatus() != null ? m.getStatus().name() : "SENT");
+            row.put("status", deliveryStatus(m));
             row.put("createdAt", m.getCreatedAt());
             rows.add(row);
         }
@@ -129,10 +147,64 @@ public class DeliveryController {
 
     /**
      * 手动重发
+     *
+     * <p>按消息ID从库加载原消息，重新发布 {@link MessageEvent} 走完整发送链路
+     * （站内信落库 + 外部渠道投递 + SSE 推送 + 失败进重试表）。
+     * 收件人取该消息现有收件人记录的用户ID，渠道取收件人记录的渠道集合。
      */
     @PostMapping("/{id}/retry")
     public R<Void> retry(@PathVariable Long id) {
-        // TODO: 重新触发发送
+        requireAdmin();
+        Message message = messageRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("消息不存在: " + id));
+
+        List<Recipient> recipients = recipientRepository.findByMessageId(id);
+        if (recipients.isEmpty()) {
+            return R.fail("该消息无收件人记录，无法重发");
+        }
+
+        List<Long> recipientIds = recipients.stream().map(Recipient::getUserId).distinct().toList();
+        List<ChannelType> channels = recipients.stream()
+                .map(Recipient::getChannel)
+                .distinct()
+                .toList();
+        if (channels.isEmpty()) {
+            channels = List.of(ChannelType.IN_APP);
+        }
+
+        eventPublisher.publishEvent(new MessageEvent(this, message, recipientIds, channels));
         return R.ok();
+    }
+
+    /**
+     * 发送记录的真实投递状态：
+     * 优先看该消息是否有重试记录——有 FAILED 记为失败、有 PENDING 记为重试中；
+     * 否则回退到消息发送状态。
+     */
+    private String deliveryStatus(Message message) {
+        List<DeliveryRetry> retries = retryRepository.findByMessageId(message.getId());
+        for (DeliveryRetry r : retries) {
+            if (r.getStatus() == MessageStatus.FAILED) {
+                return "FAILED";
+            }
+        }
+        for (DeliveryRetry r : retries) {
+            if (r.getStatus() == MessageStatus.PENDING) {
+                return "PENDING";
+            }
+        }
+        return message.getStatus() != null ? message.getStatus().name() : "SENT";
+    }
+
+    private void requireAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof LoginUser loginUser)) {
+            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
+        }
+        boolean isAdmin = loginUser.getRoles().stream()
+                .anyMatch(r -> "ROLE_ADMIN".equals(r) || "admin".equals(r));
+        if (!isAdmin) {
+            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
+        }
     }
 }

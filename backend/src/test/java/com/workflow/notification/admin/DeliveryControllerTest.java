@@ -1,10 +1,14 @@
 package com.workflow.notification.admin;
 
 import com.workflow.common.domain.R;
+import com.workflow.notification.dispatch.MessageEvent;
 import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.model.DeliveryRetry;
 import com.workflow.notification.model.Message;
 import com.workflow.notification.model.MessageStatus;
 import com.workflow.notification.model.Recipient;
+import com.workflow.notification.model.RecipientStatus;
+import com.workflow.notification.store.DeliveryRetryRepository;
 import com.workflow.notification.store.MessageRepository;
 import com.workflow.notification.store.RecipientRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -14,6 +18,7 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +27,7 @@ import org.springframework.data.jpa.domain.Specification;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,8 +48,10 @@ class DeliveryControllerTest {
 
     private final MessageRepository messageRepository = mock(MessageRepository.class);
     private final RecipientRepository recipientRepository = mock(RecipientRepository.class);
+    private final DeliveryRetryRepository retryRepository = mock(DeliveryRetryRepository.class);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final DeliveryController controller =
-            new DeliveryController(messageRepository, recipientRepository);
+            new DeliveryController(messageRepository, recipientRepository, retryRepository, eventPublisher);
 
     private Message message(long id, String title, LocalDateTime createdAt) {
         Message m = new Message();
@@ -60,7 +68,7 @@ class DeliveryControllerTest {
         r.setUsername(username);
         r.setMessageId(messageId);
         r.setChannel(ChannelType.IN_APP);
-        r.setStatus(MessageStatus.PENDING);
+        r.setStatus(RecipientStatus.PENDING);
         return r;
     }
 
@@ -194,5 +202,82 @@ class DeliveryControllerTest {
         spec.toPredicate(root, query, cb);
         verify(cb).greaterThanOrEqualTo(createdAtPath, start);
         verify(cb).lessThanOrEqualTo(createdAtPath, end);
+    }
+
+    // ==================== P1-3: 手动重发 + 状态真实化 ====================
+
+    @Test
+    void retry_publishes_message_event_with_recipients_and_channels() {
+        Message m = new Message();
+        m.setId(1L);
+        m.setTenantId("default");
+        m.setTitle("重发消息");
+        when(messageRepository.findById(1L)).thenReturn(Optional.of(m));
+        when(recipientRepository.findByMessageId(1L)).thenReturn(List.of(
+                recipient(100L, "admin", 1L),
+                recipient(200L, "user2", 1L)));
+
+        R<Void> res = controller.retry(1L);
+
+        assertThat(res.getCode()).isEqualTo(200);
+        ArgumentCaptor<MessageEvent> captor = ArgumentCaptor.forClass(MessageEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        MessageEvent event = captor.getValue();
+        assertThat(event.getMessage().getId()).isEqualTo(1L);
+        assertThat(event.getRecipientIds()).containsExactlyInAnyOrder(100L, 200L);
+        assertThat(event.getChannels()).containsExactly(ChannelType.IN_APP);
+    }
+
+    @Test
+    void retry_throws_when_message_not_found() {
+        when(messageRepository.findById(99L)).thenReturn(Optional.empty());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.retry(99L))
+                .isInstanceOf(com.workflow.common.exception.BusinessException.class);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void retry_returns_fail_when_no_recipients() {
+        Message m = new Message();
+        m.setId(1L);
+        m.setTitle("无收件人");
+        when(messageRepository.findById(1L)).thenReturn(Optional.of(m));
+        when(recipientRepository.findByMessageId(1L)).thenReturn(List.of());
+
+        R<Void> res = controller.retry(1L);
+
+        assertThat(res.getCode()).isNotEqualTo(200);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void list_status_reflects_failed_retry() {
+        Message m = message(1L, "失败消息", LocalDateTime.now());
+        when(messageRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(m), PageRequest.of(0, 20), 1));
+        when(recipientRepository.findByMessageId(1L)).thenReturn(List.of(recipient(100L, "admin", 1L)));
+        DeliveryRetry failed = new DeliveryRetry();
+        failed.setStatus(MessageStatus.FAILED);
+        when(retryRepository.findByMessageId(1L)).thenReturn(List.of(failed));
+
+        R<Map<String, Object>> res = controller.list(0, 20, null, null, null, null, null);
+
+        Map<String, Object> row = ((List<Map<String, Object>>) res.getData().get("rows")).get(0);
+        assertThat(row.get("status")).isEqualTo("FAILED");
+    }
+
+    @Test
+    void list_status_falls_back_to_message_status_when_no_retry() {
+        Message m = message(1L, "正常消息", LocalDateTime.now());
+        when(messageRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(m), PageRequest.of(0, 20), 1));
+        when(recipientRepository.findByMessageId(1L)).thenReturn(List.of(recipient(100L, "admin", 1L)));
+        when(retryRepository.findByMessageId(1L)).thenReturn(List.of());
+
+        R<Map<String, Object>> res = controller.list(0, 20, null, null, null, null, null);
+
+        Map<String, Object> row = ((List<Map<String, Object>>) res.getData().get("rows")).get(0);
+        assertThat(row.get("status")).isEqualTo("SENT");
     }
 }

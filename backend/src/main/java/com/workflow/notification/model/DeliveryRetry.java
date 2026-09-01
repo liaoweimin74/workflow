@@ -20,6 +20,10 @@ public class DeliveryRetry {
     @Column(name = "tenant_id", nullable = false, length = 64)
     private String tenantId;
 
+    /** 消息ID（重试时据此重建消息内容） */
+    @Column(name = "message_id", nullable = false)
+    private Long messageId;
+
     /** 收件人ID */
     @Column(name = "recipient_id", nullable = false)
     private Long recipientId;
@@ -64,6 +68,8 @@ public class DeliveryRetry {
     public void setId(Long id) { this.id = id; }
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public Long getMessageId() { return messageId; }
+    public void setMessageId(Long messageId) { this.messageId = messageId; }
     public Long getRecipientId() { return recipientId; }
     public void setRecipientId(Long recipientId) { this.recipientId = recipientId; }
     public ChannelType getChannel() { return channel; }

@@ -9,6 +9,7 @@ public class ChannelMessage {
 
     private Long messageId;
     private String tenantId;
+    private Long recipientUserId;
     private String title;
     private String content;
     private Map<String, Object> templateData;
@@ -20,6 +21,8 @@ public class ChannelMessage {
     public void setMessageId(Long messageId) { this.messageId = messageId; }
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public Long getRecipientUserId() { return recipientUserId; }
+    public void setRecipientUserId(Long recipientUserId) { this.recipientUserId = recipientUserId; }
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
     public String getContent() { return content; }

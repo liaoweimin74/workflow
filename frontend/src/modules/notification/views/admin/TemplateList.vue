@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'MessageTemplateList' })
 
-import { ref, computed, provide } from 'vue'
+import { ref, computed, provide, onMounted } from 'vue'
 import { SearchTable } from '@/components/business'
 import { Switch } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
@@ -10,6 +10,7 @@ import formCreate from '@form-create/element-ui'
 import { getTemplates, createTemplate, updateTemplate, toggleTemplate } from '../../api/admin'
 import TemplatePreview from '../../components/TemplatePreview.vue'
 import { ElMessage } from 'element-plus'
+import { getEventDefinitions } from '../../api/event'
 
 // 注册预览静态文本组件到 form-create（表单渲染用）
 formCreate.component('template-preview', TemplatePreview)
@@ -19,14 +20,26 @@ const tabRefreshSignal = ref(0)
 provide('templatePreviewRefresh', tabRefreshSignal)
 
 const tableRef = ref()
+const eventOptions = ref<{ value: string; label: string }[]>([])
 
-const searchFields: SearchField[] = [
+onMounted(async () => {
+  const res = await getEventDefinitions({ page: 0, size: 200, enabled: true })
+  const data = res.data as any
+  eventOptions.value = (data?.rows || []).map((e: any) => ({
+    value: e.eventCode,
+    label: `${e.eventCode} - ${e.eventName}`,
+  }))
+})
+
+const searchFields = computed<SearchField[]>(() => [
   { type: 'input', label: '模板名称', prop: 'name', placeholder: '输入模板名称' },
   { type: 'input', label: '模板编码', prop: 'templateCode', placeholder: '输入模板编码' },
-]
+  { type: 'select', label: '业务事件', prop: 'eventCode', placeholder: '全部事件', options: eventOptions.value },
+])
 
 const columns: TableColumn[] = [
   { prop: 'templateCode', label: '模板编码', width: 180 },
+  { prop: 'eventCode', label: '业务事件', minWidth: 180 },
   { prop: 'name', label: '模板名称', minWidth: 200 },
   {
     prop: 'channel', label: '渠道', width: 120,
@@ -59,6 +72,7 @@ async function fetchApi(params: any) {
   let list = (res.data as any[]) || []
   if (params.name) list = list.filter((t: any) => t.name?.includes(params.name))
   if (params.templateCode) list = list.filter((t: any) => t.templateCode?.includes(params.templateCode))
+  if (params.eventCode) list = list.filter((t: any) => t.eventCode === params.eventCode)
   const total = list.length
   const page = params.page || 1
   const size = params.size || 10
@@ -137,6 +151,10 @@ const formConfig = computed<FormConfig>(() => {
               },
               {
                 type: 'select', field: 'channel', title: '渠道', options: channelOptions, value: 'IN_APP',
+                props: structural(),
+              },
+              {
+                type: 'select', field: 'eventCode', title: '业务事件', options: eventOptions,
                 props: structural(),
               },
               {

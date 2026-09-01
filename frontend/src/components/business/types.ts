@@ -79,8 +79,8 @@ export interface ActionButton {
   size?: 'small' | 'default' | 'large'
   /** 文本按钮（Element Plus 3.0 link 模式）。配置后渲染为 link 按钮，type 字段仅控制颜色 */
   link?: boolean
-  /** Element Plus 图标组件，或根据行数据动态返回图标的函数。配置后渲染为圆形图标按钮，hover 显示 label */
-  icon?: Component | ((row: any) => Component)
+  /** Element Plus 图标组件。配置后渲染为圆形图标按钮，hover 显示 label */
+  icon?: Component
   permission?: string
   confirm?: string
   /** 返回 false 则隐藏此按钮 */
@@ -190,8 +190,6 @@ export interface SearchTableProps<T = any> {
   deleteConfirm?: (row: T) => string
   /** 操作列宽度（px），覆盖自动计算（icon 按钮 32px/个 + 24px padding） */
   actionColumnWidth?: number
-  /** 是否显示多选列（type=selection），默认 false。选中行经 selection-change 事件对外暴露 */
-  showSelection?: boolean
 }
 
 // --- ReferencePicker props ---
@@ -212,7 +210,10 @@ export interface LookupFetchConfig {
   searchParam?: string
   /** 搜索字段列名（底表 API 用；如 keywordColumn=name 表示按 name 列模糊搜索） */
   keywordColumn?: string
-  /** 已废弃：所有分页接口统一使用 1-based 页码。 */
+  /**
+   * 页码基准：1（默认，页码按原样透传，el-pagination 1 起）；
+   * 0（后端 0 起，如 biz-data 分页接口，发送 page=页码-1）
+   */
   pageBase?: 0 | 1
   /** 请求头（可选） */
   headers?: Record<string, string>
@@ -315,7 +316,7 @@ export interface ReferencePickerProps<T = any> {
 /**
  * 卡片列配置（CardColumn - 用于 ListCards 组件）
  * 相对于 TableColumn，支持 title/subtitle/tag/hidden/valueType 等卡片特有字段
- * 可序列化：指仅包含可 JSON 序列化的字段，formatter 为函数类型
+ * 可序列化：仅包含可JSON序列化的字段，不包含函数类型
  */
 export interface CardColumn {
   /** 列主键 */
@@ -346,7 +347,7 @@ export interface CardColumn {
   fixed?: 'left' | 'right'
   /** 是否可排序 */
   sortable?: boolean
-  /** 单元格格式化函数（runtime-only，不可序列化为 JSON） */
+  /** 单元格格式化函数 */
   formatter?: (row: any, column: CardColumn, cellValue: any, index?: number) => any
   /** 内容超长省略并显示 tooltip */
   showOverflowTooltip?: boolean
@@ -356,7 +357,7 @@ export interface CardColumn {
 
 /**
  * ListCards 查询参数
- * 是 QueryParams 的子类型，用于卡片列表查询
+ * 是 QueryParams 的子集，用于卡片列表查询
  */
 export type ListQueryParams = QueryParams
 

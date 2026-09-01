@@ -75,7 +75,7 @@ public class ChannelController {
      */
     @GetMapping
     public R<List<Map<String, Object>>> list() {
-        requireAdmin();
+        NotificationAdminAuthorization.requireAdmin();
         List<Map<String, Object>> channels = new ArrayList<>();
         for (Map.Entry<Integer, ChannelType> entry : CHANNEL_BY_ID.entrySet()) {
             ChannelType type = entry.getValue();
@@ -125,7 +125,7 @@ public class ChannelController {
      */
     @PutMapping("/{id}/config")
     public R<Void> updateConfig(@PathVariable Long id, @RequestBody Map<String, String> config) {
-        requireAdmin();
+        NotificationAdminAuthorization.requireAdmin();
         ChannelType type = CHANNEL_BY_ID.get(id.intValue());
         if (type == null) {
             return R.fail("未知渠道 ID: " + id);
@@ -145,7 +145,7 @@ public class ChannelController {
      */
     @PostMapping("/{id}/test")
     public R<Void> test(@PathVariable Long id) {
-        requireAdmin();
+        NotificationAdminAuthorization.requireAdmin();
         ChannelType type = CHANNEL_BY_ID.get(id.intValue());
         if (type == null) {
             return R.fail("未知渠道 ID: " + id);
@@ -213,15 +213,4 @@ public class ChannelController {
         };
     }
 
-    private void requireAdmin() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !(auth.getPrincipal() instanceof LoginUser loginUser)) {
-            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
-        }
-        boolean isAdmin = loginUser.getRoles().stream()
-                .anyMatch(r -> "ROLE_ADMIN".equals(r) || "admin".equals(r));
-        if (!isAdmin) {
-            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
-        }
-    }
 }

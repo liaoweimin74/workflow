@@ -66,7 +66,7 @@ public class AnnouncementController {
     public R<Void> publish(@RequestParam String title,
                            @RequestParam String content,
                            @RequestParam List<Long> recipientIds) {
-        requireAdmin();
+        NotificationAdminAuthorization.requireAdmin();
         Long userId = currentUserId();
 
         Message message = new Message();
@@ -101,7 +101,7 @@ public class AnnouncementController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String keyword) {
 
-        requireAdmin();
+        NotificationAdminAuthorization.requireAdmin();
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Specification<Message> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -135,7 +135,7 @@ public class AnnouncementController {
      */
     @DeleteMapping("/{id}")
     public R<Void> recall(@PathVariable Long id) {
-        requireAdmin();
+        NotificationAdminAuthorization.requireAdmin();
         Message message = messageRepository.findById(id)
                 .orElseThrow(() -> new com.workflow.common.exception.BusinessException("公告不存在: " + id));
         if (!ANNOUNCEMENT_TEMPLATE.equals(message.getTemplateCode())) {
@@ -156,15 +156,4 @@ public class AnnouncementController {
         throw new com.workflow.common.exception.BusinessException("未获取到当前登录用户");
     }
 
-    private void requireAdmin() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !(auth.getPrincipal() instanceof LoginUser loginUser)) {
-            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
-        }
-        boolean isAdmin = loginUser.getRoles().stream()
-                .anyMatch(r -> "ROLE_ADMIN".equals(r) || "admin".equals(r));
-        if (!isAdmin) {
-            throw new com.workflow.common.exception.BusinessException("需要管理员权限");
-        }
-    }
 }

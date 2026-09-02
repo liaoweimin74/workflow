@@ -38,6 +38,16 @@ import ListCards from '@/components/business/ListCards.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { CardColumn, DataSourceBindingContext, ListQueryParams, ListPageResult } from '@/components/business/types'
 
+/** 卡片操作按钮配置（对齐 ViewDesigner.ViewActionButton / ListCards.actions） */
+interface ViewActionButton {
+  key: string
+  label: string
+  placement?: 'toolbar' | 'column' | 'row'
+  style?: 'button' | 'icon' | 'text'
+  icon?: string
+  type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+}
+
 const props = withDefaults(defineProps<{
   pageKey?: string
   dataSourceId?: string
@@ -46,7 +56,7 @@ const props = withDefaults(defineProps<{
   cardMinWidth?: number | string
   pageSize?: number
   pagination?: boolean
-  viewActions?: { buttons?: Array<{ key: string; label: string; placement?: string }> }
+  viewActions?: { buttons?: Array<ViewActionButton> }
   groupBy?: string
   designMode?: boolean
   stretch?: boolean
@@ -91,10 +101,16 @@ const columnsForRender = computed(() => props.designMode && props.columns?.lengt
   ? metadataColumns.value.map((column) => ({ prop: column.key, label: column.label || column.key, role: column.role || 'field' }))
   : resolvedColumns.value)
 
-// 行级操作按钮（设计态/运行态一致：配置了按钮则预览/运行都显示，便于设计器所见即所得）
+// 行级操作按钮（设计态/运行态一致：配置了按钮则预览/运行都显示，便于设计器所见即所得；保留 style/icon/type 供卡片按形态渲染）
 const resolvedActions = computed(() => (props.viewActions?.buttons || [])
   .filter((button) => button.placement !== 'toolbar')
-  .map((button) => ({ key: button.key, label: button.label })))
+  .map((button) => ({
+    key: button.key,
+    label: button.label,
+    style: button.style,
+    icon: button.icon,
+    type: button.type,
+  })))
 
 const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
   if (!resolvedRefId.value) return { rows: [], total: 0 }

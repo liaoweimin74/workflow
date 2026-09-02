@@ -148,7 +148,7 @@ describe('PageDataCards', () => {
         dsRefId: 'global-orders',
         columns: [{ prop: 'name', role: 'title' }],
         viewActions: { buttons: [
-          { key: 'edit', label: '编辑', placement: 'row' },
+          { key: 'edit', label: '编辑', placement: 'row', style: 'button', icon: 'Edit' },
           { key: 'create', label: '新增', placement: 'toolbar' },
         ] },
       },
@@ -158,8 +158,10 @@ describe('PageDataCards', () => {
     await flushPromises()
 
     const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
-    // 设计态也显示操作按钮：行级按钮透传（toolbar 按钮被过滤）
-    expect(cardsStub.props('actions')).toEqual([{ key: 'edit', label: '编辑' }])
+    // 设计态也显示操作按钮：行级按钮透传（toolbar 按钮被过滤），且保留 style/icon 供卡片按形态渲染
+    expect(cardsStub.props('actions')).toEqual([
+      { key: 'edit', label: '编辑', style: 'button', icon: 'Edit', type: undefined },
+    ])
     wrapper.unmount()
   })
 

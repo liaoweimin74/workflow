@@ -41,15 +41,43 @@
         </div>
         <div v-if="hasRoleMetric" class="card-metric" :style="columnStyle(metricColumn)">{{ formatValue(row, metricColumn) }}</div>
         <div v-if="actions.length > 0" class="card-actions">
-          <el-button
-            v-for="action in actions"
-            :key="action.key"
-            :class="`card-action-${action.key}`"
-            size="small"
-            @click.stop="handleActionClick(action, row)"
-          >
-            {{ action.label }}
-          </el-button>
+          <template v-for="action in actions" :key="action.key">
+            <!-- icon 形态：仅图标的圆形按钮，hover 显示 label -->
+            <el-tooltip v-if="action.style === 'icon'" :content="action.label" placement="top" :show-after="200">
+              <el-button
+                :class="`card-action-${action.key}`"
+                :type="action.type"
+                size="small"
+                circle
+                @click.stop="handleActionClick(action, row)"
+              >
+                <el-icon><component :is="getIcon(action.icon, action.key)" /></el-icon>
+              </el-button>
+            </el-tooltip>
+            <!-- text 形态：文字链接按钮 -->
+            <el-button
+              v-else-if="action.style === 'text'"
+              :class="`card-action-${action.key}`"
+              :type="action.type"
+              size="small"
+              link
+              @click.stop="handleActionClick(action, row)"
+            >
+              <el-icon v-if="action.icon" style="margin-right: 4px"><component :is="getIcon(action.icon, action.key)" /></el-icon>
+              {{ action.label }}
+            </el-button>
+            <!-- button 形态（默认）：带图标+文字按钮 -->
+            <el-button
+              v-else
+              :class="`card-action-${action.key}`"
+              :type="action.type"
+              size="small"
+              @click.stop="handleActionClick(action, row)"
+            >
+              <el-icon v-if="action.icon" style="margin-right: 6px"><component :is="getIcon(action.icon, action.key)" /></el-icon>
+              {{ action.label }}
+            </el-button>
+          </template>
         </div>
           </div>
         </div>
@@ -69,7 +97,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Warning } from '@element-plus/icons-vue'
+import {
+  Warning, Plus, Edit, Delete, View, Search, Refresh, Upload, Download,
+  Document, Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+} from '@element-plus/icons-vue'
 import type { CardColumn, ListQueryParams, ListPageResult } from './types'
 
 interface ListCardsProps {
@@ -79,7 +110,15 @@ interface ListCardsProps {
   defaultPageSize?: number
   showPagination?: boolean
   designMode?: boolean
-  actions?: Array<{ key: string; label: string }>
+  /** 操作按钮（style 控制形态：button=带图标+文字 / icon=仅图标圆形 / text=文字链接） */
+  actions?: Array<{
+    key: string
+    label: string
+    style?: 'button' | 'icon' | 'text'
+    icon?: string
+    type?: string
+    placement?: string
+  }>
   groupBy?: string
 }
 
@@ -105,6 +144,19 @@ let requestId = 0
 
 const query = reactive<ListQueryParams>({ page: 1, size: props.defaultPageSize })
 const actions = computed(() => props.actions)
+
+// ===== 操作按钮图标 =====
+/** 图标名 → 组件（对齐 ActionsConfig.iconOptions / PageDataTable） */
+const iconMap: Record<string, any> = {
+  Plus, Edit, Delete, View, Search, Refresh, Upload, Download, Document,
+  Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+}
+/** 内置按钮默认图标名（PascalCase，对齐 ActionsConfig.iconOptions value） */
+const BUILTIN_ICONS: Record<string, string> = { create: 'Plus', edit: 'Edit', delete: 'Delete', view: 'View' }
+function getIcon(name?: string, key?: string): any {
+  const resolved = name || (key ? BUILTIN_ICONS[key] : undefined)
+  return resolved ? iconMap[resolved] : Edit
+}
 const groupedRows = computed(() => {
   if (!props.groupBy) return [{ key: '__all__', label: '', rows: rows.value }]
   const groups = new Map<string, any[]>()

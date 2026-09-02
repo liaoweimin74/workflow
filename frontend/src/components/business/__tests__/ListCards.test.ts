@@ -94,7 +94,7 @@ describe('ListCards 组件', () => {
     fetchApi?: (params: ListQueryParams) => Promise<ListPageResult>
     defaultPageSize?: number
     showPagination?: boolean
-    actions?: Array<{ key: string; label: string }>
+    actions?: Array<{ key: string; label: string; style?: string; icon?: string; type?: string }>
     groupBy?: string
   }) {
     return mount(ListCards, {
@@ -253,6 +253,70 @@ describe('ListCards 组件', () => {
     await wrapper.find('.card-action-edit').trigger('click')
     expect(wrapper.emitted('action-click')?.[0]).toEqual([{ key: 'edit', label: '编辑' }, { id: 1, name: '订单' }])
     expect(wrapper.emitted('row-click')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('style=button 时渲染为带图标+文字的普通按钮', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      actions: [{ key: 'edit', label: '编辑', style: 'button', icon: 'Edit' }],
+    })
+    await flushPromises()
+
+    const btn = wrapper.find('.card-action-edit')
+    expect(btn.exists()).toBe(true)
+    // 普通按钮（非圆形、非文字链接）
+    expect(btn.classes()).not.toContain('is-circle')
+    expect(btn.classes()).not.toContain('is-link')
+    // 渲染图标 + 文字
+    expect(btn.find('.el-icon').exists()).toBe(true)
+    expect(btn.text()).toContain('编辑')
+    wrapper.unmount()
+  })
+
+  it('style=icon 时渲染为仅图标的圆形按钮', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      actions: [{ key: 'delete', label: '删除', style: 'icon', icon: 'Delete' }],
+    })
+    await flushPromises()
+
+    const btn = wrapper.find('.card-action-delete')
+    expect(btn.exists()).toBe(true)
+    // 圆形仅图标按钮
+    expect(btn.classes()).toContain('is-circle')
+    expect(btn.find('.el-icon').exists()).toBe(true)
+    expect(btn.text()).not.toContain('删除') // 无文字，仅图标
+    wrapper.unmount()
+  })
+
+  it('style=text 时渲染为文字链接按钮（带可选图标）', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      actions: [{ key: 'view', label: '查看', style: 'text' }],
+    })
+    await flushPromises()
+
+    const btn = wrapper.find('.card-action-view')
+    expect(btn.exists()).toBe(true)
+    // 文字链接按钮
+    expect(btn.classes()).toContain('is-link')
+    expect(btn.text()).toContain('查看')
+    wrapper.unmount()
+  })
+
+  it('action-click 仍携带完整 action（含 style/icon）', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 7, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      actions: [{ key: 'edit', label: '编辑', style: 'text', icon: 'Edit' }],
+    })
+    await flushPromises()
+    await wrapper.find('.card-action-edit').trigger('click')
+    expect(wrapper.emitted('action-click')?.[0]).toEqual([{ key: 'edit', label: '编辑', style: 'text', icon: 'Edit' }, { id: 7, name: '订单' }])
     wrapper.unmount()
   })
 

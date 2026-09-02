@@ -1,6 +1,9 @@
 <template>
-  <el-dialog v-model="visible" title="数据源配置" :width="isListMode ? '860px' : '600px'" :close-on-click-modal="false">
+  <el-dialog v-model="visible" :title="dialogTitle" :width="isListMode ? '860px' : '600px'" :close-on-click-modal="false">
     <template v-if="isListMode">
+      <el-alert v-if="effectiveListMode === 'card'" title="卡片列表配置" type="info" :closable="false" show-icon class="card-mode-tip">
+        可配置卡片分组、列字体和卡片操作区；点击每列的“高级配置”设置字体样式。
+      </el-alert>
       <el-tabs v-model="activeTab" type="border-card">
         <!-- Tab 1: 数据源 + 组件级数据筛选 -->
         <el-tab-pane label="数据源" name="binding">
@@ -52,9 +55,13 @@
           </el-form>
         </el-tab-pane>
         <!-- Tab 2: 显示列 -->
-        <el-tab-pane label="显示列" name="columns">
+        <el-tab-pane :label="effectiveListMode === 'card' ? '卡片字段' : '显示列'" name="columns">
           <!-- 查询栏开关：开启后可配置查询列（QueryColumnsConfig 显示查询勾选），运行时显示查询栏 -->
           <el-form label-width="100px" size="default">
+            <el-form-item v-if="effectiveListMode === 'card'">
+              <template #label>卡片最小宽度</template>
+              <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" />
+            </el-form-item>
             <el-form-item>
               <template #label>
                 <span class="label-with-tip">
@@ -244,6 +251,7 @@ const effectiveListMode = computed<'table' | 'card' | undefined>(() =>
 /** 是否为列表配置模式（table/card tabs；false = form-container 按钮配置） */
 const isListMode = computed(() => effectiveListMode.value !== undefined)
 const activeTab = ref('binding')
+const dialogTitle = computed(() => effectiveListMode.value === 'card' ? '卡片列表数据源配置' : '数据源配置')
 
 // ==================== 数据源 + 组件级数据筛选（表格模式） ====================
 const dsColumns = ref<ColumnConfigItem[]>([])
@@ -343,6 +351,7 @@ const tableData = reactive({
   detail: { width: '800px', type: 'form' } as any,
   events: [] as any[],
   groupBy: '' as string,
+  cardMinWidth: 280,
 })
 
 /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不可配置） */
@@ -400,6 +409,7 @@ function initTableData() {
   tableData.detail = bp.viewDetail || { width: '800px', type: 'form' }
   tableData.events = bp.viewEvents || []
   tableData.groupBy = bp.groupBy || ''
+  tableData.cardMinWidth = Number(bp.cardMinWidth) > 0 ? Number(bp.cardMinWidth) : 280
 }
 
 // ==================== 打开/回填 ====================
@@ -483,6 +493,7 @@ function handleConfirm() {
     result.viewDetail = { ...tableData.detail }
     result.viewEvents = [...tableData.events]
     if (effectiveListMode.value === 'card' && tableData.groupBy) result.groupBy = tableData.groupBy
+    if (effectiveListMode.value === 'card') result.cardMinWidth = tableData.cardMinWidth
   } else {
     // 容器按钮配置
     result.showNewButton = container.showNewButton

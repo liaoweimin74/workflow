@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, ref } from 'vue'
+import { computed, inject, onMounted, ref, watch } from 'vue'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import ListCards from '@/components/business/ListCards.vue'
@@ -87,39 +87,51 @@ const resolvedColumns = computed<CardColumn[]>(() => (props.columns || []).filte
 })))
 
 const metadataColumns = ref<any[]>([])
-const designRows = ref<Record<string, unknown>[]>([])
 const columnsForRender = computed(() => props.designMode && props.columns?.length === 0
   ? metadataColumns.value.map((column) => ({ prop: column.key, label: column.label || column.key, role: column.role || 'field' }))
   : resolvedColumns.value)
-
-function mockValue(columnType?: string): unknown {
-  switch ((columnType || '').toUpperCase()) {
-    case 'INT': case 'INTEGER': case 'BIGINT': return 128
-    case 'DECIMAL': case 'DOUBLE': case 'FLOAT': return 128.5
-    case 'BOOLEAN': return true
-    case 'TINYINT': return 1
-    case 'DATE': return '2026-01-15'
-    case 'DATETIME': case 'TIMESTAMP': return '2026-01-15 10:30:00'
-    case 'JSON': return '{}'
-    default: return '示例文本'
-  }
-}
 
 const resolvedActions = computed(() => props.designMode ? [] : (props.viewActions?.buttons || [])
   .filter((button) => button.placement !== 'toolbar')
   .map((button) => ({ key: button.key, label: button.label })))
 
 const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
-  if (props.designMode) return { rows: designRows.value, total: designRows.value.length }
   if (!resolvedRefId.value) return { rows: [], total: 0 }
+  const isDesign = props.designMode
   const response = await dataSourceApi.queryData(resolvedRefId.value, {
-    page: Math.max(1, params.page),
-    size: params.size,
+    // 设计态预览固定取首页，且最多 10 条；运行态透传分页
+    page: isDesign ? 1 : Math.max(1, params.page),
+    size: isDesign ? Math.min(params.size || 10, 10) : params.size,
   })
   const rows = (response.data?.records || []).map((record: any) => ({ ...(record.data || {}), id: record.id, version: record.version }))
   emit('loaded', rows)
   return { rows, total: response.data?.total || 0 }
 }
+
+/** 设计态空 columns 时读取元数据生成 fallback 展示列 */
+async function loadDesignMetadata() {
+  if (!props.designMode || !resolvedRefId.value || (props.columns?.length ?? 0) > 0) return
+  try {
+    const response = await dataSourceApi.getMetadata(resolvedRefId.value)
+    metadataColumns.value = response.data?.columns || []
+  } catch {
+    metadataColumns.value = []
+  }
+}
+
+// 数据源（含设计态绑定）变化：清空旧列定义并用新数据源重新取元数据 + 显示数据
+watch(resolvedRefId, () => {
+  metadataColumns.value = []
+  void loadDesignMetadata()
+  void cardsRef.value?.fetchData()
+})
+
+onMounted(() => {
+  void loadDesignMetadata()
+  const instance = { fetchData: () => cardsRef.value?.fetchData(), refresh: () => cardsRef.value?.refresh() }
+  actionBus?.register?.(props.dataSourceId || '', instance)
+  emit('ready', instance)
+})
 
 function handleRowClick(row: any) {
   emit('row-click', row)
@@ -166,20 +178,6 @@ async function saveLocalForm() {
   else if (localFormId.value !== undefined) await dataSourceApi.updateData(resolvedRefId.value, localFormId.value, values)
   localFormVisible.value = false
   await cardsRef.value?.refresh()
-}
-
-onMounted(() => {
-  const instance = { fetchData: () => cardsRef.value?.fetchData(), refresh: () => cardsRef.value?.refresh() }
-  actionBus?.register?.(props.dataSourceId || '', instance)
-  emit('ready', instance)
-})
-
-if (props.designMode && resolvedRefId.value) {
-  void dataSourceApi.getMetadata(resolvedRefId.value).then((response) => {
-    metadataColumns.value = response.data?.columns || []
-    designRows.value = [Object.fromEntries(metadataColumns.value.map((column: any) => [column.key, mockValue(column.columnType)]))]
-    void cardsRef.value?.fetchData()
-  })
 }
 </script>
 

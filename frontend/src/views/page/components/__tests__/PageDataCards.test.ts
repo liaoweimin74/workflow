@@ -23,10 +23,12 @@ vi.mock('@/utils/formDsBindingsStore', () => ({
 vi.mock('@/components/business/ListCards.vue', () => ({
   default: defineComponent({
     name: 'ListCardsStub',
-    props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'showPagination', 'actions', 'designMode'],
+    props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'showPagination', 'actions', 'designMode', 'groupBy'],
     setup(props: any, { expose }: any) {
-      expose({ fetchData: vi.fn() })
-      onMounted(() => { if (!props.designMode) void props.fetchApi({ page: 2, size: 10 }) })
+      // fetchData 暴露真实函数，供 PageDataCards 通过 cardsRef 触发取数
+      expose({ fetchData: () => props.fetchApi({ page: 2, size: 10 }) })
+      // 非设计态透传分页参数；设计态传入超大 size，验证 fetchApi 钳制到 10 条
+      onMounted(() => { void props.fetchApi(props.designMode ? { page: 3, size: 100 } : { page: 2, size: 10 }) })
       return () => h('div', { class: 'list-cards-stub' })
     },
   }),
@@ -103,14 +105,11 @@ describe('PageDataCards', () => {
     wrapper.unmount()
   })
 
-  it('设计态只取元数据并生成一条按字段类型映射的 Mock 数据', async () => {
+  it('设计态不 mock 数据：走真实 queryData 但最多取 10 条', async () => {
     getMetadata.mockResolvedValueOnce({ data: { columns: [
       { key: 'name', label: '名称', columnType: 'VARCHAR' },
       { key: 'count', label: '数量', columnType: 'INT' },
       { key: 'amount', label: '金额', columnType: 'DECIMAL' },
-      { key: 'createdAt', label: '创建时间', columnType: 'DATETIME' },
-      { key: 'enabled', label: '启用', columnType: 'BOOLEAN' },
-      { key: 'extra', label: '扩展', columnType: 'JSON' },
     ] } })
     const wrapper = mount(PageDataCards, {
       props: {
@@ -124,18 +123,51 @@ describe('PageDataCards', () => {
     await flushPromises()
 
     const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
-    expect(queryData).not.toHaveBeenCalled()
-    expect(cardsStub.props('actions')).toEqual([])
-    expect(cardsStub.props('showPagination')).toBe(false)
+    // 设计态也调用 queryData，但 size 固定为 10（最多 10 条）
+    expect(queryData).toHaveBeenCalledWith('global-orders', { page: 1, size: 10 })
+    // 空 columns 时用元数据列作为 fallback 列
     expect(cardsStub.props('columns')).toEqual(expect.arrayContaining([
       expect.objectContaining({ prop: 'name' }),
       expect.objectContaining({ prop: 'count' }),
       expect.objectContaining({ prop: 'amount' }),
-      expect.objectContaining({ prop: 'createdAt' }),
-      expect.objectContaining({ prop: 'enabled' }),
-      expect.objectContaining({ prop: 'extra' }),
     ]))
+    expect(cardsStub.props('showPagination')).toBe(false)
+    expect(cardsStub.props('actions')).toEqual([])
     expect(cardsStub.props('fetchApi')).toBeTypeOf('function')
+    wrapper.unmount()
+  })
+
+  it('切换数据源后：清空并重新取元数据 + 重新取显示数据', async () => {
+    const wrapper = mount(PageDataCards, {
+      props: {
+        designMode: true,
+        dataSourceId: 'orders',
+        dsRefId: 'global-orders',
+        columns: [],
+      },
+      global: { provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => true, openLinkedContainer: vi.fn() } } },
+    })
+    await wrapper.vm.$nextTick()
+    expect(getMetadata).toHaveBeenCalledTimes(1)
+
+    // 模拟用户在配置面板把 dataSourceId 切到另一个绑定
+    queryData.mockClear()
+    getMetadata.mockClear()
+    getMetadata.mockResolvedValue({ data: { columns: [{ key: 'email', label: '邮箱', columnType: 'VARCHAR' }] } })
+    await wrapper.setProps({ dsRefId: 'global-customers' })
+    await wrapper.vm.$nextTick()
+    await flushPromises()
+
+    // 重新取元数据 + 重新取显示数据（都用新 refId）
+    expect(getMetadata).toHaveBeenCalledTimes(1)
+    expect(getMetadata).toHaveBeenCalledWith('global-customers')
+    expect(queryData).toHaveBeenCalled()
+    expect(queryData).toHaveBeenCalledWith('global-customers', expect.any(Object))
+    // fallback 列来自新元数据
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    expect(cardsStub.props('columns')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prop: 'email' }),
+    ]))
     wrapper.unmount()
   })
 })

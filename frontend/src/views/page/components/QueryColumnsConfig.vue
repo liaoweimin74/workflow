@@ -142,7 +142,7 @@
             v-if="isColumnChecked(row.key)"
             link
             type="primary"
-            @click="openAdvanced(row.key)"
+            @click="mode === 'card' ? openCardAdvanced(row.key) : openAdvanced(row.key)"
           >
             高级配置
           </el-button>
@@ -173,6 +173,14 @@
       :column="advancedColumn"
       @update:visible="advancedVisible = $event"
       @save="saveAdvanced"
+    />
+    <CardColumnAdvancedConfig
+      v-if="mode === 'card'"
+      class="card-advanced-config"
+      :visible="cardAdvancedVisible"
+      :column="cardAdvancedColumn"
+      @update:visible="cardAdvancedVisible = $event"
+      @save="saveCardAdvanced"
     />
 
     <!-- 添加自定义列弹窗 -->
@@ -206,6 +214,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import Sortable from 'sortablejs'
 import { Plus, QuestionFilled, Delete } from '@element-plus/icons-vue'
 import ColumnAdvancedConfig from './ColumnAdvancedConfig.vue'
+import CardColumnAdvancedConfig from './CardColumnAdvancedConfig.vue'
 import type { ColumnConfigItem } from '@/api/bizData'
 import type { SearchFieldConfig, ColumnViewConfig } from '../ViewDesigner.vue'
 
@@ -221,8 +230,10 @@ const props = withDefaults(defineProps<{
   sortableFields?: string[]
   /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不出现） */
   sortableCandidates?: { key: string; label: string }[]
+  mode?: 'table' | 'card'
 }>(), {
   showSearch: true,
+  mode: 'table',
 })
 
 const emit = defineEmits<{
@@ -411,6 +422,18 @@ function setColumnProp(key: string, prop: 'width' | 'align' | 'formatter' | 'fix
 const advancedVisible = ref(false)
 /** 当前正在编辑高级配置的列副本 */
 const advancedColumn = ref<ColumnViewConfig | null>(null)
+type CardColumnConfig = ColumnViewConfig & {
+  role?: string
+  span?: number
+  fieldMinWidth?: number
+  valueType?: string
+  prefix?: string
+  suffix?: string
+  color?: string
+  truncate?: boolean
+}
+const cardAdvancedVisible = ref(false)
+const cardAdvancedColumn = ref<CardColumnConfig | null>(null)
 
 function openAdvanced(key: string) {
   const col = findColumn(key)
@@ -425,6 +448,13 @@ function openAdvanced(key: string) {
   advancedVisible.value = true
 }
 
+function openCardAdvanced(key: string) {
+  const col = findColumn(key)
+  if (!col) return
+  cardAdvancedColumn.value = { ...col }
+  cardAdvancedVisible.value = true
+}
+
 function saveAdvanced(updated: ColumnViewConfig) {
   const col = findColumn(updated.key)
   if (!col) return
@@ -432,6 +462,28 @@ function saveAdvanced(updated: ColumnViewConfig) {
     c.key === updated.key ? { ...c, ...pickAdvanced(updated) } : c,
   )
   emit('update:columns', next)
+}
+
+function saveCardAdvanced(updated: CardColumnConfig) {
+  const col = findColumn(updated.key)
+  if (!col) return
+  emit('update:columns', props.columns.map((c) =>
+    c.key === updated.key ? { ...c, ...pickCardAdvanced(updated) } : c,
+  ))
+}
+
+function pickCardAdvanced(c: CardColumnConfig): Partial<CardColumnConfig> {
+  return {
+    ...(c.role !== undefined ? { role: c.role } : {}),
+    ...(c.span !== undefined ? { span: c.span } : {}),
+    ...(c.fieldMinWidth !== undefined ? { fieldMinWidth: c.fieldMinWidth } : {}),
+    ...(c.align !== undefined ? { align: c.align } : {}),
+    ...(c.valueType !== undefined ? { valueType: c.valueType } : {}),
+    ...(c.prefix !== undefined ? { prefix: c.prefix } : {}),
+    ...(c.suffix !== undefined ? { suffix: c.suffix } : {}),
+    ...(c.color !== undefined ? { color: c.color } : {}),
+    ...(c.truncate !== undefined ? { truncate: c.truncate } : {}),
+  }
 }
 
 /** 仅取高级配置相关字段写回，避免覆盖 width/align/fixed 等基础字段 */

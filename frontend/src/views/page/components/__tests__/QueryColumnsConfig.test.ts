@@ -6,6 +6,7 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ElementPlus from 'element-plus'
 import QueryColumnsConfig from '../QueryColumnsConfig.vue'
+import CardColumnAdvancedConfig from '../CardColumnAdvancedConfig.vue'
 
 const candidates = [
   { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 50, indexed: true, hidden: false },
@@ -467,6 +468,85 @@ describe('QueryColumnsConfig — 添加自定义列', () => {
     await wrapper.setProps({ columns: cols })
     await nextTick()
     expect(vm.isColumnChecked('total')).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+describe('QueryColumnsConfig — 卡片模式扩展', () => {
+  it('card mode 保留共享查询/展示/排序能力并显示卡片字段入口', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [{ key: 'name', label: '姓名', matchType: 'like' }],
+        columns: [{ key: 'name', label: '姓名', width: 200, align: 'center', formatter: 'date' }],
+        mode: 'card',
+        sortableFields: ['name'],
+        sortableCandidates: [{ key: 'name', label: '姓名' }],
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.isSearchChecked('name')).toBe(true)
+    expect(vm.isColumnChecked('name')).toBe(true)
+    expect(vm.columnWidthOf('name')).toBe(200)
+    expect(vm.columnAlignOf('name')).toBe('center')
+    expect(wrapper.find('.sortable-config').exists()).toBe(true)
+    expect(wrapper.findComponent(CardColumnAdvancedConfig).exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('card mode 保存高级字段时仅写回卡片配置且保持基础字段', async () => {
+    const wrapper = mount(QueryColumnsConfig, {
+      props: {
+        candidates: visibleCandidates,
+        searchFields: [],
+        columns: [{ key: 'name', label: '姓名', width: 200, align: 'center' }],
+        mode: 'card',
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    ;(wrapper.vm as any).saveCardAdvanced({
+      key: 'name',
+      role: 'title',
+      span: 2,
+      fieldMinWidth: 180,
+      align: 'right',
+      valueType: 'currency',
+      prefix: '￥',
+      suffix: '元',
+      color: '#409eff',
+      truncate: true,
+    })
+    await nextTick()
+    const emitted = wrapper.emitted('update:columns') as any[]
+    const name = emitted[emitted.length - 1][0][0]
+    expect(name).toMatchObject({ role: 'title', span: 2, fieldMinWidth: 180, align: 'right', valueType: 'currency', prefix: '￥', suffix: '元', color: '#409eff', truncate: true })
+    expect(name.width).toBe(200)
+    expect(JSON.parse(JSON.stringify(name))).toEqual(name)
+    wrapper.unmount()
+  })
+})
+
+describe('CardColumnAdvancedConfig', () => {
+  it('提供卡片专属字段并以可序列化对象保存', async () => {
+    const wrapper = mount(CardColumnAdvancedConfig, {
+      props: {
+        visible: true,
+        column: { key: 'name', label: '姓名', width: 130, align: 'left' },
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    expect(wrapper.find('.card-column-advanced-config').exists()).toBe(true)
+    expect(wrapper.text()).toContain('角色')
+    expect(wrapper.text()).toContain('字段最小宽度')
+    ;(wrapper.vm as any).patch({ role: 'metric', span: 3, fieldMinWidth: 240, valueType: 'number', prefix: '共', suffix: '项', color: '#67c23a', truncate: true })
+    ;(wrapper.vm as any).handleSave()
+    const saved = (wrapper.emitted('save') as any[])[0][0]
+    expect(saved).toMatchObject({ role: 'metric', span: 3, fieldMinWidth: 240, valueType: 'number', prefix: '共', suffix: '项', color: '#67c23a', truncate: true })
+    expect(JSON.parse(JSON.stringify(saved))).toEqual(saved)
     wrapper.unmount()
   })
 })

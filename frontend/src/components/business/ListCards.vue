@@ -40,7 +40,7 @@
       </div>
     </div>
     <el-pagination
-      v-if="total > 0"
+      v-if="showPagination && total > 0"
       class="card-pagination"
       :current-page="query.page"
       :page-size="query.size"
@@ -61,11 +61,13 @@ interface ListCardsProps {
   columns: CardColumn[]
   cardMinWidth?: number | string
   defaultPageSize?: number
+  showPagination?: boolean
 }
 
 const props = withDefaults(defineProps<ListCardsProps>(), {
   defaultPageSize: 10,
   cardMinWidth: 200,
+  showPagination: true,
 })
 
 const emit = defineEmits<{ 'row-click': [row: any]; refresh: [] }>()

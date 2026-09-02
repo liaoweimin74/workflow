@@ -93,6 +93,7 @@ describe('ListCards 组件', () => {
     columns?: CardColumn[]
     fetchApi?: (params: ListQueryParams) => Promise<ListPageResult>
     defaultPageSize?: number
+    showPagination?: boolean
   }) {
     return mount(ListCards, {
       props: {
@@ -227,6 +228,15 @@ describe('ListCards 组件', () => {
     await wrapper.find('.next-page').trigger('click')
     await flushPromises()
     expect(mockFetch).toHaveBeenLastCalledWith({ page: 2, size: 10 })
+    wrapper.unmount()
+  })
+
+  it('showPagination=false 时不渲染分页控件', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1 }], total: 25 })
+    const wrapper = createWrapper({ fetchApi: mockFetch, showPagination: false })
+    await flushPromises()
+
+    expect(wrapper.find('.stub-pagination').exists()).toBe(false)
     wrapper.unmount()
   })
 })

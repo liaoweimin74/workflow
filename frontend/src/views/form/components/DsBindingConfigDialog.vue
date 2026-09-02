@@ -58,37 +58,40 @@
         <el-tab-pane :label="effectiveListMode === 'card' ? '卡片字段' : '显示列'" name="columns">
           <!-- 查询栏开关：开启后可配置查询列（QueryColumnsConfig 显示查询勾选），运行时显示查询栏 -->
           <el-form label-width="100px" size="default">
-            <el-form-item v-if="effectiveListMode === 'card'">
-              <template #label>卡片最小宽度</template>
-              <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" />
-            </el-form-item>
-            <el-form-item>
-              <template #label>
-                <span class="label-with-tip">
-                  显示查询栏
-                  <el-tooltip content="默认不显示；开启后可按下列勾选可查询字段" placement="top">
-                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </span>
-              </template>
-              <el-switch v-model="tableData.showSearch" />
-            </el-form-item>
-            <el-form-item>
-              <template #label>
-                <span class="label-with-tip">
-                  撑满
-                  <el-tooltip content="开启后表格占满父容器宽高，数据区域内部滚动" placement="top">
-                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </span>
-              </template>
-              <el-switch v-model="tableData.stretch" />
-            </el-form-item>
-            <el-form-item v-if="effectiveListMode === 'card'" label="分组字段">
-              <el-select v-model="tableData.groupBy" clearable placeholder="不分组" style="width: 220px">
-                <el-option v-for="c in tableCandidates" :key="c.key" :label="c.label || c.key" :value="c.key" />
-              </el-select>
-            </el-form-item>
+            <!-- 卡片顶部快捷配置：显示查询栏/撑满/分组字段/卡片最小宽度 单行（放不下自动换行） -->
+            <div class="card-quick-config">
+              <el-form-item>
+                <template #label>
+                  <span class="label-with-tip">
+                    显示查询栏
+                    <el-tooltip content="默认不显示；开启后可按下列勾选可查询字段" placement="top">
+                      <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-switch v-model="tableData.showSearch" />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <span class="label-with-tip">
+                    撑满
+                    <el-tooltip content="开启后表格占满父容器宽高，数据区域内部滚动" placement="top">
+                      <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-switch v-model="tableData.stretch" />
+              </el-form-item>
+              <el-form-item v-if="effectiveListMode === 'card'" label="分组字段">
+                <el-select v-model="tableData.groupBy" clearable placeholder="不分组" style="width: 220px">
+                  <el-option v-for="c in tableCandidates" :key="c.key" :label="c.label || c.key" :value="c.key" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="effectiveListMode === 'card'">
+                <template #label>卡片最小宽度</template>
+                <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" />
+              </el-form-item>
+            </div>
           </el-form>
           <QueryColumnsConfig
             v-if="tableCandidates.length > 0"
@@ -517,6 +520,16 @@ function handleConfirm() {
   margin-top: 4px;
   font-size: 12px;
   color: #909399;
+}
+/* 卡片顶部快捷配置：横向流式布局（放不下自动换行） */
+.card-quick-config {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+.card-quick-config .el-form-item {
+  margin-bottom: 0;
 }
 /* 分页设置：横向流式布局（放不下自动换行） */
 .pagination-config {

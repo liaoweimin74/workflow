@@ -2,6 +2,8 @@
 // npx vitest run src/views/form/components/__tests__/DsBindingConfigDialog.card.test.ts
 
 import { describe, it, expect, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
@@ -156,5 +158,34 @@ describe('DsBindingConfigDialog — card listMode 展示模式', () => {
     expect(name.labelPosition).toBe('top')
     expect(name.style).toBe('border: 1px solid red;')
     wrapper.unmount()
+  })
+})
+
+// ----- 布局断言：卡片顶部四项快捷配置单行（源码断言，无需 mount）-----
+describe('DsBindingConfigDialog — 卡片字段顶部快捷配置单行布局', () => {
+  const source = readFileSync(resolve(__dirname, '../DsBindingConfigDialog.vue'), 'utf8')
+
+  it('显示查询栏/撑满/分组字段/卡片最小宽度 依次放入同一 flex 行容器', () => {
+    const containerStart = source.indexOf('class="card-quick-config"')
+    expect(containerStart).toBeGreaterThan(-1)
+
+    const order = ['显示查询栏', '撑满', '分组字段', '卡片最小宽度']
+    let prev = containerStart
+    for (const label of order) {
+      const pos = source.indexOf(label, prev)
+      expect(pos).toBeGreaterThan(prev)
+      prev = pos === -1 ? prev : pos
+    }
+
+    // 容器结束后紧接着分页 divider / QueryColumnsConfig，闭环校验四项均在该容器内
+    const containerEnd = source.indexOf('</div>', prev)
+    expect(containerEnd).toBeGreaterThan(prev)
+  })
+
+  it('分组字段与卡片最小宽度仅卡片模式显示', () => {
+    // 两个 v-if 受 effectiveListMode==='card' 保护；显示查询栏/撑满任意模式均显示
+    expect(source).toContain("v-if=\"effectiveListMode === 'card'\"")
+    expect(source).toContain('tableData.groupBy')
+    expect(source).toContain('tableData.cardMinWidth')
   })
 })

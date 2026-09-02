@@ -132,8 +132,34 @@ describe('PageDataCards', () => {
       expect.objectContaining({ prop: 'amount' }),
     ]))
     expect(cardsStub.props('showPagination')).toBe(false)
+    // 设计态未配置操作按钮时不显示 actions（无按钮可渲染）
     expect(cardsStub.props('actions')).toEqual([])
     expect(cardsStub.props('fetchApi')).toBeTypeOf('function')
+    wrapper.unmount()
+  })
+
+  it('设计态配置了操作按钮时，actions 传递给 ListCards 供预览（不再强制置空）', async () => {
+    getMetadata.mockResolvedValueOnce({ data: { columns: [] } })
+    queryData.mockResolvedValue({ data: { records: [], total: 0 } })
+    const wrapper = mount(PageDataCards, {
+      props: {
+        designMode: true,
+        dataSourceId: 'orders',
+        dsRefId: 'global-orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [
+          { key: 'edit', label: '编辑', placement: 'row' },
+          { key: 'create', label: '新增', placement: 'toolbar' },
+        ] },
+      },
+      global: { provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => true, openLinkedContainer: vi.fn() } } },
+    })
+    await wrapper.vm.$nextTick()
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    // 设计态也显示操作按钮：行级按钮透传（toolbar 按钮被过滤）
+    expect(cardsStub.props('actions')).toEqual([{ key: 'edit', label: '编辑' }])
     wrapper.unmount()
   })
 

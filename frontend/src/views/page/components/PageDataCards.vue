@@ -7,7 +7,7 @@
       :card-min-width="cardMinWidth"
       :default-page-size="pageSize || 20"
       :show-pagination="designMode ? false : pagination"
-      :actions="designMode ? [] : resolvedActions"
+      :actions="resolvedActions"
       :group-by="groupBy"
       :design-mode="designMode"
       @row-click="handleRowClick"
@@ -91,7 +91,8 @@ const columnsForRender = computed(() => props.designMode && props.columns?.lengt
   ? metadataColumns.value.map((column) => ({ prop: column.key, label: column.label || column.key, role: column.role || 'field' }))
   : resolvedColumns.value)
 
-const resolvedActions = computed(() => props.designMode ? [] : (props.viewActions?.buttons || [])
+// 行级操作按钮（设计态/运行态一致：配置了按钮则预览/运行都显示，便于设计器所见即所得）
+const resolvedActions = computed(() => (props.viewActions?.buttons || [])
   .filter((button) => button.placement !== 'toolbar')
   .map((button) => ({ key: button.key, label: button.label })))
 

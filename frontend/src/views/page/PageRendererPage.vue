@@ -88,6 +88,7 @@ import { ElMessage } from 'element-plus'
 import formCreate from '@form-create/element-ui'
 import PageDataTable from './components/PageDataTable.vue'
 import PageDataTree from './components/PageDataTree.vue'
+import PageDataCards from './components/PageDataCards.vue'
 import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi } from '@/api/data-source'
@@ -99,6 +100,7 @@ import { useLinkageContainer } from '@/views/form/composables/useLinkageContaine
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
 formCreate.component('page-table', PageDataTable)
 formCreate.component('page-tree', PageDataTree)
+formCreate.component('page-list-cards', PageDataCards)
 
 /** 宿主（PageRenderer）已加载的页面定义；传入时直接使用不自行请求，缺省回退按 pageKey 加载 */
 const props = defineProps<{ definition?: PageDefinitionDetailDTO }>()

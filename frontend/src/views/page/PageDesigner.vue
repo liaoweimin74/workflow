@@ -496,6 +496,26 @@ function registerPageComponents() {
   designerRef.value?.setComponentRuleConfig('page-table', dataSourceProps, true)
 
   designerRef.value?.addComponent({
+    label: '卡片列表',
+    name: 'page-list-cards',
+    icon: 'icon-grid',
+    menu: 'main',
+    rule: () => ({
+      type: 'page-list-cards',
+      field: 'cards' + Date.now(),
+      title: '卡片列表',
+      props: {
+        dataSourceId: '',
+        columns: [],
+        pagination: true,
+        pageSize: 20,
+        cardMinWidth: 280,
+      },
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-list-cards', dataSourceProps, true)
+
+  designerRef.value?.addComponent({
     label: '树形数据',
     name: 'page-tree',
     icon: 'icon-tree',

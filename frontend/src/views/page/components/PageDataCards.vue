@@ -7,7 +7,9 @@
       :card-min-width="cardMinWidth"
       :default-page-size="pageSize || 20"
       :show-pagination="pagination"
+      :actions="resolvedActions"
       @row-click="handleRowClick"
+      @action-click="handleActionClick"
     />
   </div>
 </template>
@@ -27,6 +29,7 @@ const props = withDefaults(defineProps<{
   cardMinWidth?: number | string
   pageSize?: number
   pagination?: boolean
+  viewActions?: { buttons?: Array<{ key: string; label: string; placement?: string }> }
   stretch?: boolean
   [key: string]: any
 }>(), { pageSize: 20, pagination: true, cardMinWidth: 280, stretch: false })
@@ -52,6 +55,10 @@ const resolvedColumns = computed<CardColumn[]>(() => (props.columns || []).filte
   label: column.label || column.prop || (column as any).key,
 })))
 
+const resolvedActions = computed(() => (props.viewActions?.buttons || [])
+  .filter((button) => button.placement !== 'toolbar')
+  .map((button) => ({ key: button.key, label: button.label })))
+
 const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
   if (!resolvedRefId.value) return { rows: [], total: 0 }
   const response = await dataSourceApi.queryData(resolvedRefId.value, {
@@ -66,6 +73,15 @@ const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
 function handleRowClick(row: any) {
   emit('row-click', row)
   actionBus?.dispatch('row-click', { node: row, row, source: props.dataSourceId })
+}
+
+function handleActionClick(action: { key: string; label: string }, row: any) {
+  const mode = action.key === 'create' ? 'create' : action.key === 'view' ? 'view' : action.key === 'edit' ? 'edit' : undefined
+  if (mode && actionBus?.openLinkedContainer) {
+    actionBus.openLinkedContainer(props.dataSourceId || '', mode, row)
+    return
+  }
+  actionBus?.dispatch('action-click', { action, row, source: props.dataSourceId })
 }
 
 onMounted(() => {

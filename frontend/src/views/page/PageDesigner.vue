@@ -171,6 +171,7 @@ import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from '@/views/form/formRuleWalk'
+import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
@@ -600,6 +601,9 @@ onMounted(async () => {
       try {
         const parsed = JSON.parse(def.schema)
         schema.dataSources = parsed.dataSources || []
+        // 写入模块级绑定存储：设计态卡片/数据组件据此解析 dataSourceId → refId，
+        // 否则依赖运行态残留才显示（先开运行页再开设计页才有数据）
+        setActiveDsBindings(schema.dataSources as any)
         schema.actions = parsed.actions || []
         // 设置 FcDesigner rule（等待设计器就绪后 setRule）
         if (designerRef.value) {
@@ -634,6 +638,8 @@ function addDataSource() {
 
 function updateDataSources(newDataSources: { id: string; refId: string; searchFields?: string[] }[]) {
   schema.dataSources.splice(0, schema.dataSources.length, ...newDataSources)
+  // 数据源配置变更同步模块级绑定存储，卡片组件 reactive 立即按新绑定重取
+  setActiveDsBindings(newDataSources as any)
 }
 
 function updateActions(newActions: any[]) {

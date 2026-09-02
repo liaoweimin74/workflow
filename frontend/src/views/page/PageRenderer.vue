@@ -41,9 +41,9 @@
         </el-form>
       </el-card>
 
-      <!-- 数据表格（统一基于 SearchTable） -->
+      <!-- 数据表格（统一基于 SearchTable） / 卡片列表（display=card，字段由表格列自动映射） -->
       <SearchTable
-        v-if="ready"
+        v-if="ready && displayMode === 'table'"
         ref="searchTableRef"
         class="page-search-table"
         :columns="searchTableColumns"
@@ -60,6 +60,18 @@
         @cell-click="handleCellClick"
         @selection-change="handleSelectionChange"
         @sort-change="handleSortChange"
+      />
+      <ListCards
+        v-else-if="ready && displayMode === 'card'"
+        ref="cardsRef"
+        class="page-search-cards"
+        :columns="cardColumns"
+        :actions="cardActions"
+        :fetch-api="cardFetchApi"
+        :show-pagination="paginationConfig.show"
+        :default-page-size="paginationConfig.pageSize"
+        @row-click="handleRowClick"
+        @action-click="handleCardActionClick"
       />
     </template>
 
@@ -174,13 +186,14 @@ import {
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import PageRendererPage from './PageRendererPage.vue'
 import SearchTable from '@/components/business/SearchTable.vue'
-import type { TableColumn, ActionButton, ToolbarButton, QueryParams } from '@/components/business/types'
+import ListCards from '@/components/business/ListCards.vue'
+import type { TableColumn, ActionButton, ToolbarButton, QueryParams, CardColumn, ListQueryParams, ListPageResult } from '@/components/business/types'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { formApi } from '@/api/form'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import { bizDataApi } from '@/api/bizData'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
-import { buildCellRender } from '@/utils/tableColumnRenderer'
+import { buildCellRender, renderCellContent, type CellContentConfig } from '@/utils/tableColumnRenderer'
 
 const route = useRoute()
 const router = useRouter()
@@ -196,6 +209,8 @@ const page = ref<PageDefinitionDetailDTO | null>(null)
 const ready = ref(false)
 /** SearchTable 实例 ref（供 setQuery / sort / clearSelection / fetchList 控制） */
 const searchTableRef = ref<InstanceType<typeof SearchTable> | null>(null)
+/** ListCards 实例 ref（display=card 时的取数/刷新控制） */
+const cardsRef = ref<InstanceType<typeof ListCards> | null>(null)
 /** 当前选中行（selection-change 事件） */
 const selectedRows = ref<any[]>([])
 
@@ -243,6 +258,10 @@ interface CompiledColumn {
   fixed?: string
   /** 列值格式化器（currency/date/datetime/boolean/enum） */
   formatter?: string
+  /** 列内容类型：expression（JS 表达式）/ template（${字段} 插值） */
+  contentType?: 'expression' | 'template'
+  /** 列内容值（与 contentType 配对） */
+  contentValue?: string
   /** 列内容模板（${字段} 插值；优先级高于 formatter，低于 expression） */
   template?: string
   /** 列动态内容表达式（$row.xxx 求值，结果仅作文本渲染；优先级最高） */
@@ -265,6 +284,8 @@ interface SearchRule {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const searchRules = ref<SearchRule[]>([])
 const tableColumns = ref<CompiledColumn[]>([])
+/** 显示方式：table（表格，默认）/ card（卡片，由视图 schema.display 编译透传） */
+const displayMode = ref<'table' | 'card'>('table')
 /** 视图级可排序字段（编译产物 sortableFields；空=跟随数据源全部可排字段） */
 const sortableFieldKeys = ref<string[]>([])
 /** 分页配置（编译产物 pagination；缺省显示分页 / 20 条 / [10,20,50]） */
@@ -335,7 +356,8 @@ watch(
 /** 强制刷新：重新拉取列表数据（保留搜索条件/分页/排序，不重置表单状态） */
 function refresh() {
   if (page.value?.type === 'PAGE') return
-  searchTableRef.value?.fetchList()
+  if (displayMode.value === 'card') cardsRef.value?.fetchData()
+  else searchTableRef.value?.fetchList()
 }
 
 async function load() {
@@ -376,6 +398,8 @@ function parseSchema(schema: string): boolean {
   try {
     const parsed = JSON.parse(schema || '{}')
     const rule: any[] = Array.isArray(parsed) ? parsed : (parsed.rule || [])
+    // 显示方式（编译产物顶层 display；缺省表格）
+    displayMode.value = parsed.display === 'card' ? 'card' : 'table'
     detailOption.value = Array.isArray(parsed) ? {} : (parsed.option || {})
     searchRules.value = rule.filter((r) => r.type === 'input' || r.type === 'datePicker')
     // 视图级可排序字段（编译产物顶层 sortableFields；未声明=跟随数据源全部可排字段）
@@ -437,15 +461,23 @@ const searchTableFetchApi = async (params: QueryParams): Promise<{ rows: any[]; 
   return { rows: data.records || [], total: data.total || 0 }
 }
 
+/** 卡片取数：ListCards 仅传 {page,size}，合并当前搜索 query 后经同一 fetchApi 取数（与表格共享查询/分页/排序语义） */
+const cardFetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
+  const merged: QueryParams = { ...query, page: params.page, size: params.size }
+  return searchTableFetchApi(merged)
+}
+
 // ========== 查询交互 ==========
 function handleSearch() {
   searchTableRef.value?.setQuery({ ...query })
+  if (displayMode.value === 'card') cardsRef.value?.fetchData()
   triggerEvents('search', 'search', { row: null, params: route.query || {} })
 }
 
 function handleReset() {
   Object.keys(queryDefaults.value).forEach((k) => { query[k] = queryDefaults.value[k] })
   searchTableRef.value?.setQuery({ ...query })
+  if (displayMode.value === 'card') cardsRef.value?.fetchData()
 }
 
 /** 行取值：优先 BizDataVO 内层 row.data[key]，回退顶层 row[key] */
@@ -588,6 +620,67 @@ const searchTableActionButtons = computed<ActionButton[]>(() =>
       }
     }),
 )
+
+// ========== 卡片显示（display=card）：表格列自动映射卡片字段，复用同一查询/分页/取数/操作按钮 ==========
+/** 卡片字段：由表格列（CompiledColumn）自动映射（role=field；contentType/contentValue/expression/template/formatter 兼容属性保留原生渲染）
+ *  formatter 为字符串格式化器，转成 CardColumn.formatter 函数以复用同一渲染语义 */
+const cardColumns = computed<CardColumn[]>(() =>
+  tableColumns.value
+    .filter((c) => !(c as any).hidden)
+    .map((c): CardColumn => {
+      const contentConfig: CellContentConfig = {
+        key: c.prop,
+        contentType: c.contentType,
+        contentValue: c.contentValue,
+        expression: c.expression,
+        template: c.template,
+        formatter: c.formatter,
+      }
+      const hasContent = !!(contentConfig.contentType && contentConfig.contentValue) || !!(contentConfig.expression) || !!(contentConfig.template) || !!(contentConfig.formatter)
+      return {
+        prop: c.prop,
+        label: c.label,
+        width: c.width,
+        minWidth: c.minWidth,
+        align: (c.align as CardColumn['align']) || undefined,
+        sortable: c.sortable,
+        fixed: (c.fixed as CardColumn['fixed']) || undefined,
+        // 表格列默认卡片字段角色；内容列走 renderCellContent（含表达式/模板/格式化器）
+        role: 'field' as const,
+        formatter: hasContent
+          ? (row: any) => renderCellContent(contentConfig, row)
+          : undefined,
+        valueType: undefined,
+      }
+    }),
+)
+
+/** 卡片操作按钮（placement=column）→ ListCards action（复用同一 onClick；icon 传图标名字符串，ListCards 内部经 getIcon 解析为组件）
+ *  注：ListCards 不消费 show（行级 visible），按钮统一渲染后由 handleActionClick 决定行为 */
+const cardActions = computed<Array<{ key: string; label: string; style: 'button' | 'icon' | 'text'; icon?: string; type?: string; onClick: (row: any) => void }>>(() =>
+  actionButtonsConfig.value
+    .filter((b) => b.placement === 'column' && isActionVisible(b))
+    .map((b) => {
+      const cfg = toButtonConfig(b)
+      return {
+        key: b.key,
+        label: cfg.label,
+        style: cfg.style,
+        icon: b.icon && iconMap[b.icon] ? b.icon : undefined,
+        type: cfg.type || undefined,
+        onClick: (row: any) => cfg.onClick(row),
+      }
+    }),
+)
+
+/** 卡片行点击 → 与表格行点击一致（复用 handleRowClick：设 currentRow + 触发 row-click 事件链） */
+// (见模板 @row-click="handleRowClick" 卡片分支)
+
+/** 卡片操作点击（ListCards 统一 emit，action 仅带 key/label）：按 key 匹配 cardActions 执行同一行为 */
+function handleCardActionClick(action: { key: string; label: string }, row: any) {
+  const matched = cardActions.value.find((a) => a.key === action.key)
+  if (matched) matched.onClick(row)
+}
 
 /** 自定义按钮：点击触发其绑定事件链（trigger 恒为 click，target=按钮 key） */
 function handleCustomButton(btn: { key: string; events?: any[] }, row?: any) {

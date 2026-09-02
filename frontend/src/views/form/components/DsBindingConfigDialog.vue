@@ -92,6 +92,25 @@
                 <template #label><span class="qi-label">卡片最小宽度</span></template>
                 <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" class="qi-number" />
               </el-form-item>
+              <el-form-item v-if="effectiveListMode === 'card'">
+                <template #label>
+                  <span class="label-with-tip">
+                    分组可折叠
+                    <el-tooltip content="开启后分组标题可点击折叠/展开该组卡片（仅设置了分组字段时生效）" placement="top">
+                      <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </span>
+                </template>
+                <el-switch v-model="tableData.collapsibleGroups" />
+              </el-form-item>
+              <el-form-item v-if="effectiveListMode === 'card'" class="qi-actions-placement">
+                <template #label><span class="qi-label">操作区位置</span></template>
+                <el-select v-model="tableData.actionsPlacement" class="qi-select">
+                  <el-option label="底部（默认）" value="bottom" />
+                  <el-option label="顶部" value="top" />
+                  <el-option label="右侧（纵向排列）" value="right" />
+                </el-select>
+              </el-form-item>
             </div>
           </el-form>
           <QueryColumnsConfig
@@ -356,6 +375,10 @@ const tableData = reactive({
   events: [] as any[],
   groupBy: '' as string,
   cardMinWidth: 280,
+  /** 分组是否可折叠（card 模式，仅 groupBy 生效时才有意义） */
+  collapsibleGroups: false,
+  /** 卡片操作区位置（card 模式）：top / bottom（默认）/ right */
+  actionsPlacement: 'bottom' as 'top' | 'bottom' | 'right',
 })
 
 /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不可配置） */
@@ -414,6 +437,9 @@ function initTableData() {
   tableData.events = bp.viewEvents || []
   tableData.groupBy = bp.groupBy || ''
   tableData.cardMinWidth = Number(bp.cardMinWidth) > 0 ? Number(bp.cardMinWidth) : 280
+  tableData.collapsibleGroups = bp.collapsibleGroups === true
+  const placement = bp.actionsPlacement
+  tableData.actionsPlacement = placement === 'top' || placement === 'right' ? placement : 'bottom'
 }
 
 // ==================== 打开/回填 ====================
@@ -495,6 +521,8 @@ function handleConfirm() {
     result.viewEvents = [...tableData.events]
     if (effectiveListMode.value === 'card' && tableData.groupBy) result.groupBy = tableData.groupBy
     if (effectiveListMode.value === 'card') result.cardMinWidth = tableData.cardMinWidth
+    if (effectiveListMode.value === 'card') result.collapsibleGroups = tableData.collapsibleGroups
+    if (effectiveListMode.value === 'card') result.actionsPlacement = tableData.actionsPlacement
   } else {
     // 容器按钮配置
     result.showNewButton = container.showNewButton

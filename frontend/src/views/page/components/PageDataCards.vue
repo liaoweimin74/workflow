@@ -9,6 +9,8 @@
       :show-pagination="designMode ? false : pagination"
       :actions="resolvedActions"
       :group-by="groupBy"
+      :collapsible-groups="collapsibleGroups"
+      :actions-placement="actionsPlacement"
       :design-mode="designMode"
       @row-click="handleRowClick"
       @action-click="handleActionClick"
@@ -58,6 +60,10 @@ const props = withDefaults(defineProps<{
   pagination?: boolean
   viewActions?: { buttons?: Array<ViewActionButton> }
   groupBy?: string
+  /** 分组是否可折叠 */
+  collapsibleGroups?: boolean
+  /** 卡片操作区位置 */
+  actionsPlacement?: 'top' | 'bottom' | 'right'
   designMode?: boolean
   stretch?: boolean
   [key: string]: any

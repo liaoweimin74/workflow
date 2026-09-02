@@ -74,6 +74,16 @@
             v-model:sortable-fields="schema.sortableFields"
             :sortable-candidates="sortableCandidates"
           />
+          <!-- 显示方式：表格 / 卡片（切换后兼容属性在渲染时保留，表格列自动映射卡片字段） -->
+          <el-divider content-position="left">显示方式</el-divider>
+          <el-form label-width="100px" size="default">
+            <el-form-item label="显示方式">
+              <el-radio-group v-model="schema.display">
+                <el-radio-button value="table">表格</el-radio-button>
+                <el-radio-button value="card">卡片</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+          </el-form>
           <!-- 分页配置（视图级） -->
           <el-divider content-position="left">分页</el-divider>
           <el-form label-width="100px" size="default">
@@ -260,6 +270,8 @@ export interface ViewSchema {
   actions: ViewActionsConfig
   detail: ViewDetailConfig
   events: any[]
+  /** 显示方式：table（表格）/ card（卡片）；缺省表格 */
+  display?: 'table' | 'card'
   /** 数据源静态筛选（可选；运行时与用户搜索条件 AND 合并） */
   filter?: { logic: 'AND' | 'OR'; conditions: Array<{ column: string; op: string; source: 'fixed'; value: string }> }
 }
@@ -365,6 +377,7 @@ const schema = reactive<ViewSchema>({
   sortableFields: [],
   pagination: { show: true, pageSize: 20, pageSizes: [10, 20, 50] },
   columns: [],
+  display: 'table',
   actions: {
     buttons: [
       { key: 'create', label: '新增', placement: 'toolbar', style: 'button' },
@@ -433,6 +446,7 @@ onMounted(async () => {
         Object.assign(schema, JSON.parse(def.schema))
         normalizeActions()
         normalizePagination()
+        normalizeDisplay()
       } catch {
         // schema 解析失败，使用默认空配置
       }
@@ -474,6 +488,12 @@ function normalizePagination() {
     pageSize: Number(p.pageSize) > 0 ? Number(p.pageSize) : 20,
     pageSizes: Array.isArray(p.pageSizes) && p.pageSizes.length ? [...p.pageSizes] : [10, 20, 50],
   }
+}
+
+/** 归一化显示方式：兼容旧 schema 缺失 display，缺省表格 */
+function normalizeDisplay() {
+  const d = schema.display
+  schema.display = d === 'card' ? 'card' : 'table'
 }
 
 /** 加载绑定数据源 metadata 列（候选字段来源） */

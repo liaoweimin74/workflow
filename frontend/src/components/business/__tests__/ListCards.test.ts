@@ -96,6 +96,8 @@ describe('ListCards 组件', () => {
     showPagination?: boolean
     actions?: Array<{ key: string; label: string; style?: string; icon?: string; type?: string }>
     groupBy?: string
+    collapsibleGroups?: boolean
+    actionsPlacement?: 'top' | 'bottom' | 'right'
   }) {
     return mount(ListCards, {
       props: {
@@ -334,6 +336,42 @@ describe('ListCards 组件', () => {
     wrapper.unmount()
   })
 
+  it('collapsibleGroups=false（默认）时分组标题为纯文本无折叠按钮', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, team: '研发', name: '甲' }], total: 1 })
+    const wrapper = createWrapper({ fetchApi: mockFetch, groupBy: 'team' })
+    await flushPromises()
+
+    expect(wrapper.find('.card-group-title').text()).toBe('研发')
+    expect(wrapper.find('.card-group-toggle').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('collapsibleGroups=true 时分组标题渲染折叠按钮，点击后折叠该组卡片网格', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      rows: [{ id: 1, team: '研发', name: '甲' }, { id: 2, team: '设计', name: '乙' }],
+      total: 2,
+    })
+    const wrapper = createWrapper({ fetchApi: mockFetch, groupBy: 'team', collapsibleGroups: true })
+    await flushPromises()
+
+    // 每个分组标题都有折叠按钮；默认展开（分组网格可见）
+    expect(wrapper.findAll('.card-group-toggle').length).toBe(2)
+    expect(wrapper.findAll('.card-grid')).toHaveLength(2)
+
+    // 点击第一个分组折叠按钮 → 该分组网格隐藏（v-show 置 display:none），另一组仍展开
+    await wrapper.findAll('.card-group-toggle')[0].trigger('click')
+    await flushPromises()
+    const grids = wrapper.findAll('.card-grid')
+    const displayed = grids.filter((el) => (el.element as HTMLElement).style.display !== 'none')
+    expect(displayed.length).toBe(1)
+    // 被折叠分组标题带 is-collapsed 标记
+    wrapper.findAll('.card-group-title').forEach((title, i) => {
+      if (i === 0) expect(title.classes()).toContain('is-collapsed')
+      else expect(title.classes()).not.toContain('is-collapsed')
+    })
+    wrapper.unmount()
+  })
+
   it('按列配置渲染字体样式', async () => {
     const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
     const wrapper = createWrapper({
@@ -364,6 +402,58 @@ describe('ListCards 组件', () => {
     expect(wrapper.find('.field-label').exists()).toBe(false)
     expect(wrapper.find('.card-field').attributes('style')).toContain('text-align: right')
     expect(wrapper.find('.field-value').attributes('style')).toContain('border: 1px solid red')
+    wrapper.unmount()
+  })
+
+  it('actionsPlacement 默认 bottom：卡片带 bottom 位置类，含内容与操作区', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      actions: [{ key: 'edit', label: '编辑', style: 'text' }],
+    })
+    await flushPromises()
+
+    const card = wrapper.find('.card-item')
+    expect(card.classes()).toContain('actions-placement-bottom')
+    expect(card.find('.card-content').exists()).toBe(true)
+    expect(card.find('.card-actions').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('actionsPlacement=top 时卡片带 top 位置类，操作区渲染', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      actions: [{ key: 'edit', label: '编辑', style: 'text' }],
+      actionsPlacement: 'top',
+    })
+    await flushPromises()
+
+    const card = wrapper.find('.card-item')
+    expect(card.classes()).toContain('actions-placement-top')
+    // 内容与操作区均渲染，卡片为 flex column（order 视觉排序交由样式控制）
+    expect(card.find('.card-content').exists()).toBe(true)
+    expect(card.find('.card-actions').exists()).toBe(true)
+    expect(card.classes()).not.toContain('actions-placement-right')
+    wrapper.unmount()
+  })
+
+  it('actionsPlacement=right 时卡片为横向布局，操作区在右侧纵向排列', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      actions: [
+        { key: 'edit', label: '编辑', style: 'text' },
+        { key: 'delete', label: '删除', style: 'text' },
+      ],
+      actionsPlacement: 'right',
+    })
+    await flushPromises()
+
+    const card = wrapper.find('.card-item')
+    expect(card.classes()).toContain('actions-placement-right')
+    const actionsEl = card.find('.card-actions')
+    expect(actionsEl.attributes('style')).toContain('flex-direction: column')
     wrapper.unmount()
   })
 })

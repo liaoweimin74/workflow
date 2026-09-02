@@ -25,9 +25,15 @@
     <!-- 卡片网格渲染 -->
     <div v-else class="card-groups">
       <section v-for="group in groupedRows" :key="group.key" class="card-group">
-        <div v-if="groupBy" class="card-group-title">{{ group.label }}</div>
-        <div class="card-grid" :style="gridStyle">
-          <div v-for="row in group.rows" :key="row.id || row._index" class="card-item" @click="handleCardClick(row)">
+        <div v-if="groupBy" class="card-group-title" :class="{ 'is-collapsible': collapsibleGroups, 'is-collapsed': collapsibleGroups && !isGroupExpanded(group.key) }" @click="collapsibleGroups && toggleGroup(group.key)">
+          <span class="card-group-title-text">{{ group.label }}</span>
+<span v-if="collapsibleGroups" class="card-group-toggle">
+            <el-icon :class="{ 'is-collapsed-icon': !expandedGroups[group.key] }"><ArrowDown /></el-icon>
+          </span>
+        </div>
+        <div v-show="!(groupBy && collapsibleGroups && !isGroupExpanded(group.key))" class="card-grid" :style="gridStyle">
+          <div v-for="row in group.rows" :key="row.id || row._index" class="card-item" :class="`actions-placement-${actionsPlacement}`" @click="handleCardClick(row)">
+        <div class="card-content">
         <div v-if="hasRoleTitle" class="card-title" :style="columnStyle(titleColumn)">{{ formatValue(row, titleColumn) }}</div>
         <div v-if="hasRoleSubtitle" class="card-subtitle" :style="columnStyle(subtitleColumn)">{{ formatValue(row, subtitleColumn) }}</div>
         <div v-if="hasRoleTag" class="card-tags">
@@ -40,7 +46,8 @@
           </div>
         </div>
         <div v-if="hasRoleMetric" class="card-metric" :style="columnStyle(metricColumn)">{{ formatValue(row, metricColumn) }}</div>
-        <div v-if="actions.length > 0" class="card-actions">
+        </div>
+        <div v-if="actions.length > 0" class="card-actions" :style="actionsPlacement === 'right' ? 'flex-direction: column' : undefined">
           <template v-for="action in actions" :key="action.key">
             <!-- icon 形态：仅图标的圆形按钮，hover 显示 label -->
             <el-tooltip v-if="action.style === 'icon'" :content="action.label" placement="top" :show-after="200">
@@ -99,7 +106,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import {
   Warning, Plus, Edit, Delete, View, Search, Refresh, Upload, Download,
-  Document, Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock,
+  Document, Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock, ArrowDown,
 } from '@element-plus/icons-vue'
 import type { CardColumn, ListQueryParams, ListPageResult } from './types'
 
@@ -120,6 +127,10 @@ interface ListCardsProps {
     placement?: string
   }>
   groupBy?: string
+  /** 分组是否可折叠（仅 groupBy 生效时才有意义；默认展开） */
+  collapsibleGroups?: boolean
+  /** 卡片操作区位置：top=内容上方 / bottom=内容下方（默认）/ right=内容右侧纵向排列 */
+  actionsPlacement?: 'top' | 'bottom' | 'right'
 }
 
 const props = withDefaults(defineProps<ListCardsProps>(), {
@@ -128,6 +139,8 @@ const props = withDefaults(defineProps<ListCardsProps>(), {
   showPagination: true,
   designMode: false,
   actions: () => [],
+  collapsibleGroups: false,
+  actionsPlacement: 'bottom',
 })
 
 const emit = defineEmits<{
@@ -168,6 +181,14 @@ const groupedRows = computed(() => {
   }
   return Array.from(groups, ([key, grouped]) => ({ key, label: key === 'uncategorized' ? '未分类' : key, rows: grouped }))
 })
+/** 分组折叠状态（key → 是否展开；collapsibleGroups 开启时生效，默认全展开） */
+const expandedGroups = reactive<Record<string, boolean>>({})
+function isGroupExpanded(key: string): boolean {
+  return expandedGroups[key] !== false
+}
+function toggleGroup(key: string) {
+  expandedGroups[key] = !isGroupExpanded(key)
+}
 const titleColumn = computed(() => props.columns.find(c => c.role === 'title'))
 const subtitleColumn = computed(() => props.columns.find(c => c.role === 'subtitle'))
 const tagColumn = computed(() => props.columns.find(c => c.role === 'tag'))
@@ -264,9 +285,24 @@ defineExpose({ fetchData, refresh, retry })
 .card-groups { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
 .card-group + .card-group { margin-top: 24px; }
 .card-group-title { margin-bottom: 12px; font-size: 15px; font-weight: 600; color: #303133; }
+.card-group-title.is-collapsible { cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }
+.card-group-toggle { display: inline-flex; align-items: center; justify-content: center; color: #909399; }
+.card-group-toggle .el-icon { transition: transform 0.2s; }
+.card-group-title.is-collapsed .card-group-toggle .el-icon { transform: rotate(-90deg); }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 16px; }
-.card-item { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; min-height: 120px; }
+.card-item { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; min-height: 120px; display: flex; flex-direction: column; }
 .card-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-1px); }
+/* 卡片内容主体：flex column 下占据弹性空间 */
+.card-content { flex: 1; min-width: 0; }
+/* 操作区：bottom 时在内容下方（默认，order 2） */
+.card-item .card-actions { order: 2; margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* 操作区在顶部：order 0，位于内容上方 */
+.card-item.actions-placement-top .card-actions { order: 0; margin-top: 0; margin-bottom: 12px; }
+.card-item.actions-placement-top .card-content { order: 1; }
+/* 操作区在右侧：整卡横向布局，内容在左、操作区纵向排列在右 */
+.card-item.actions-placement-right { flex-direction: row; align-items: stretch; }
+.card-item.actions-placement-right .card-content { order: 0; flex: 1; }
+.card-item.actions-placement-right .card-actions { order: 1; margin-top: 0; margin-left: 12px; flex-direction: column; align-items: flex-end; gap: 8px; }
 .card-title { font-size: 16px; font-weight: 600; color: #303133; margin-bottom: 8px; }
 .card-subtitle { font-size: 14px; color: #909399; margin-bottom: 12px; }
 .card-tags { margin-bottom: 12px; }

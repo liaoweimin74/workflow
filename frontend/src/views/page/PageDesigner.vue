@@ -530,6 +530,7 @@ function registerPageComponents() {
         pageSize: 20,
         cardMinWidth: 280,
         groupBy: '',
+        collapsibleGroups: false,
         designMode: true,
       },
     }),

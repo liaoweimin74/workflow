@@ -359,6 +359,9 @@ public class PageDefinitionService {
             if (compiledNode.has("option")) {
                 root.set("option", compiledNode.get("option"));
             }
+            if (compiledNode.has("display")) {
+                root.put("display", compiledNode.get("display").asText());
+            }
             return objectMapper.writeValueAsString(root);
         } catch (JsonProcessingException e) {
             throw new BusinessException(400, "视图编译产物合并失败");

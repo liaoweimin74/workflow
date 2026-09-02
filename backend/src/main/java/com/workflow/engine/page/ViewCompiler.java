@@ -56,6 +56,7 @@ public class ViewCompiler {
             ArrayNode rule = result.putArray("rule");
             ObjectNode option = result.putObject("option");
 
+            compileDisplay(root, result);
             compileSearchFields(root, rule, validKeys);
             compileColumns(root, rule, validKeys);
             compileSortableFields(root, result, validKeys);
@@ -165,6 +166,19 @@ public class ViewCompiler {
         }
         if (sizes.isEmpty()) {
             sizes.add(10).add(20).add(50);
+        }
+    }
+
+    /**
+     * display → 产物顶层（显示方式：table / card，缺省 table）。
+     * 兼容旧 schema 缺失 display 字段：不写默认值，渲染侧按缺省表格处理。
+     */
+    private void compileDisplay(JsonNode root, ObjectNode result) {
+        String display = root.path("display").asText("");
+        if ("card".equals(display)) {
+            result.put("display", "card");
+        } else {
+            result.put("display", "table");
         }
     }
 

@@ -361,6 +361,12 @@ export interface CardColumn {
   fontWeight?: string | number
   /** 字体颜色 */
   fontColor?: string
+  /** 是否显示字段标题，默认 true */
+  showLabel?: boolean
+  /** 字段标题布局位置 */
+  labelPosition?: 'left' | 'right' | 'top'
+  /** 字段声明式 CSS 样式 */
+  style?: string
 }
 
 /**

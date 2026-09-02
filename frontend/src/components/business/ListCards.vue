@@ -34,8 +34,8 @@
           <el-tag :type="getTagType(row, tagColumn?.tagConfig)" :style="columnStyle(tagColumn)">{{ formatValue(row, tagColumn) }}</el-tag>
         </div>
         <div class="card-fields">
-          <div v-for="col in visibleColumns" :key="col.prop" :class="['card-field', `card-field-${col.prop}`]">
-            <span class="field-label" :style="columnStyle(col)">{{ col.label }}</span>
+          <div v-for="col in visibleColumns" :key="col.prop" :class="['card-field', `card-field-${col.prop}`, `label-position-${col.labelPosition || 'left'}`]" :style="fieldStyle(col)">
+            <span v-if="col.showLabel !== false" class="field-label" :style="columnStyle(col)">{{ col.label }}</span>
             <span class="field-value" :style="columnStyle(col)">{{ formatValue(row, col) }}</span>
           </div>
         </div>
@@ -184,7 +184,14 @@ function columnStyle(column: CardColumn | undefined): Record<string, string> {
     ...(column.fontSize ? { fontSize: `${column.fontSize}px` } : {}),
     ...(column.fontWeight ? { fontWeight: String(column.fontWeight) } : {}),
     ...(column.fontColor ? { color: column.fontColor } : {}),
+    ...(column.style ? parseStyle(column.style) : {}),
   }
+}
+function fieldStyle(column: CardColumn): Record<string, string> {
+  return column.align ? { textAlign: column.align } : {}
+}
+function parseStyle(style: string): Record<string, string> {
+  return Object.fromEntries(style.split(';').map((entry) => entry.trim().split(':')).filter((parts) => parts.length === 2 && parts[0] && parts[1]).map(([key, value]) => [key.trim().replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()), value.trim()]))
 }
 function handlePageChange(page: number) {
   query.page = page
@@ -212,6 +219,10 @@ defineExpose({ fetchData, refresh, retry })
 .card-fields { margin-bottom: 12px; }
 .card-metric { font-size: 18px; font-weight: 600; color: #409eff; margin-top: 8px; }
 .card-field { margin-bottom: 8px; }
+.card-field.label-position-left,
+.card-field.label-position-right { display: flex; align-items: baseline; gap: 8px; }
+.card-field.label-position-right { justify-content: flex-end; }
+.card-field.label-position-top { display: block; }
 .field-label { display: block; font-size: 12px; color: #909399; margin-bottom: 4px; }
 .field-value { font-size: 14px; color: #303133; }
 .error-state { display: flex; flex-direction: row; align-items: center; justify-content: center; padding: 40px 20px; }

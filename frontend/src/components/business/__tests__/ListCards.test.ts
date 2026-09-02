@@ -285,4 +285,21 @@ describe('ListCards 组件', () => {
     expect(fieldValue.attributes('style')).toContain('color: rgb(18, 52, 86)')
     wrapper.unmount()
   })
+
+  it('支持隐藏字段标签并按标签位置和样式语法渲染', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      columns: [{
+        prop: 'name', label: '名称', showLabel: false, labelPosition: 'top', align: 'right',
+        style: 'border: 1px solid red; background: rgb(1, 2, 3);',
+      }],
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.field-label').exists()).toBe(false)
+    expect(wrapper.find('.card-field').attributes('style')).toContain('text-align: right')
+    expect(wrapper.find('.field-value').attributes('style')).toContain('border: 1px solid red')
+    wrapper.unmount()
+  })
 })

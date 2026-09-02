@@ -12,6 +12,20 @@
       @row-click="handleRowClick"
       @action-click="handleActionClick"
     />
+    <el-dialog v-model="localFormVisible" :title="localFormTitle" width="560px" destroy-on-close>
+      <FormRenderer
+        v-if="localFormVisible"
+        ref="localFormRef"
+        :rule="localFormRules"
+        :option="{ labelWidth: '100px', submitBtn: { show: false }, resetBtn: { show: false } }"
+        :initial-values="localFormValues"
+        :readonly="localFormMode === 'view'"
+      />
+      <template #footer>
+        <el-button @click="localFormVisible = false">取消</el-button>
+        <el-button v-if="localFormMode !== 'view'" type="primary" @click="saveLocalForm">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -20,6 +34,7 @@ import { computed, inject, onMounted, ref } from 'vue'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import ListCards from '@/components/business/ListCards.vue'
+import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { CardColumn, DataSourceBindingContext, ListQueryParams, ListPageResult } from '@/components/business/types'
 
 const props = withDefaults(defineProps<{
@@ -49,6 +64,13 @@ const actionBus = inject<{
   openLinkedContainer?: (id: string, mode: 'create' | 'edit' | 'view', row: any) => void
 }>('pageActionBus')
 const cardsRef = ref<InstanceType<typeof ListCards>>()
+const localFormVisible = ref(false)
+const localFormMode = ref<'create' | 'edit' | 'view'>('edit')
+const localFormTitle = computed(() => localFormMode.value === 'create' ? '新增数据' : localFormMode.value === 'view' ? '详情' : '编辑数据')
+const localFormRef = ref<InstanceType<typeof FormRenderer>>()
+const localFormRules = ref<any[]>([])
+const localFormValues = ref<Record<string, any>>({})
+const localFormId = ref<string | number>()
 
 const resolvedRefId = computed(() => {
   if (props.dsRefId) return props.dsRefId
@@ -88,7 +110,40 @@ function handleActionClick(action: { key: string; label: string }, row: any) {
     actionBus.openLinkedContainer(props.dataSourceId || '', mode, row)
     return
   }
+  if (mode) {
+    void openLocalForm(mode, row)
+    return
+  }
   actionBus?.dispatch('action-click', { action, row, source: props.dataSourceId })
+}
+
+async function openLocalForm(mode: 'create' | 'edit' | 'view', row: any) {
+  if (!resolvedRefId.value) return
+  localFormMode.value = mode
+  localFormRules.value = []
+  const metadata = await dataSourceApi.getMetadata(resolvedRefId.value)
+  localFormRules.value = (metadata.data?.columns || []).map((column: any) => ({
+    type: column.columnType === 'DATE' || column.columnType === 'DATETIME' ? 'datePicker' : 'input',
+    field: column.key,
+    title: column.label || column.key,
+    validate: column.required ? [{ required: true, message: `${column.label || column.key}不能为空` }] : [],
+  }))
+  localFormValues.value = row || {}
+  localFormId.value = row?.id
+  if (mode !== 'create' && row?.id) {
+    const detail = await dataSourceApi.getData(resolvedRefId.value, row.id)
+    localFormValues.value = { ...localFormValues.value, ...(detail.data?.data || {}) }
+  }
+  localFormVisible.value = true
+}
+
+async function saveLocalForm() {
+  if (!resolvedRefId.value) return
+  const values = localFormRef.value?.getFormData() || localFormValues.value
+  if (localFormMode.value === 'create') await dataSourceApi.createData(resolvedRefId.value, values)
+  else if (localFormId.value !== undefined) await dataSourceApi.updateData(resolvedRefId.value, localFormId.value, values)
+  localFormVisible.value = false
+  await cardsRef.value?.refresh()
 }
 
 onMounted(() => {
@@ -99,6 +154,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-data-cards { height: 100%; min-height: 0; }
+.page-data-cards { width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .stretch-fill { height: 100%; }
 </style>

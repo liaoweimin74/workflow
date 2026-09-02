@@ -2,6 +2,16 @@
 
 项目已有 Vue 3 + Element Plus 的 `SearchTable`，统一处理搜索、分页、数据源查询、CRUD 表单和操作按钮；页面设计器通过 `PageDataTable`、`FormRenderer` 及 dataSource binding 使用同一套数据源能力。`SearchTable` 面向行列数据，不适合强调单条记录信息层级的卡片布局。本变更需要同时服务代码页面和 form-create/page designer，且不能引入第二套 UI 体系或破坏现有表格。
 
+### 共享配置架构
+
+本方案复用现有的页面设计器配置组件：
+
+- **QueryColumnsConfig**：作为 table 和 card 的共享字段配置入口，支持查询字段勾选、展示列配置、排序字段；card 模式在此基础上添加 role、span、order、valueType、prefix、suffix、color、truncate 等卡片专属属性，避免 CardColumnsConfig 重复实现。
+
+- **ActionsConfig**：作为 core CRUD/permissions/confirm/visibility/events/detail/form 模式的共享配置；仅 placements（toolbar/column/action-column-width）和 UI 展示差异，card 仍支持 form-container link 机制。
+
+- **EventsConfig**：作为 core event/action-chain model 的共享；card 支持 row-click、refresh、CRUD success、open-container/load-record/save-container/close-container 等容器链接；首版本制选择/cell capabilities 由触发器选项过滤实现。
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -40,6 +50,25 @@
 ### 5. form-create 采用结构化配置
 
 注册 `page-list-cards`。其 props 保存数据源、分页、网格、字段和动作等 JSON 数据，不保存函数和任意 rule。代码组件保留 slots/render 作为非设计器扩展出口。
+
+### 6. 公共配置组件的 Card 扩展
+
+ViewDesigner 与 PageDesigner/DsBindingConfigDialog 已共同使用 `QueryColumnsConfig`、`ActionsConfig`、`EventsConfig` 的核心能力。Card 不复制完整配置组件，而是复用公共配置模型并增加展示模式扩展：
+
+- `QueryColumnsConfig` 保留为公共字段/查询配置入口，继续负责 metadata 候选、显示/隐藏、顺序、label、搜索/筛选/排序、自定义字段和 formatter/template/expression；Card 通过 `CardColumnAdvancedConfig` 增加 role、span、fieldMinWidth、align、valueType、prefix、suffix、color、truncate。
+- `ActionsConfig` 继续共享 CRUD、权限、可见条件、确认、事件链、详情和表单模式；Card 只改变 item/card placement，不能移除打开、加载、保存、关闭表单容器的联动能力。
+- `EventsConfig` 继续共享事件动作链、变量和容器联动；Card 支持 row-click、refresh、CRUD success、open-container、load-record、save-container、close-container；首版仅过滤未实现的 selection/cell 能力。
+
+`DsBindingConfigDialog` 将 table/card 视为 list display 模式，同时保留 form-container binding 模式。Card 与 form-container 是列表联动的两端，不是互斥模式。
+
+### 7. ViewDesigner 与 PageDesigner 集成
+
+ViewDesigner 与 PageDesigner 使用现有的共享配置组件：
+- QueryColumnsConfig：card mode 的 columns 额外包含 role、span、order、valueType、prefix、suffix、color、truncate
+- ActionsConfig：card mode 的 buttons placement 支持 cardToolbar/cardColumn 之外的卡片布局选项
+- EventsConfig：card 模式的触发器包括 row-click、refresh、open-container 等容器链接触发器
+
+ListCards 是另一种 renderer，非数据源系统，复用 dataSourceId 与数据源路径完全一致。
 
 ## Risks / Trade-offs
 

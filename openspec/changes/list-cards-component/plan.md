@@ -18,105 +18,59 @@
 
 ---
 
+## Task 0: Shared Configuration Extension (先做共享配置)
+
+### 0.1 QueryColumnsConfig 卡片模式扩展
+
+- [ ] **Step 1:** 读取 QueryColumnsConfig.vue 理解当前字段配置结构
+- [ ] **Step 2:** 保留公共字段/查询属性（metadata candidates、display/hidden/order/label、search/filter/sort、custom、formatter/template/expression），并添加 card-specific 属性到 CardColumn 配置
+- [ ] **Step 3:** 在 QueryColumnsConfig 中增加 card mode 扩展入口，公共字段编辑逻辑不复制
+- [ ] **Step 4:** 添加 CardColumnAdvancedConfig.vue 用于卡片专属高级配置（role/layout/valueType/prefix/suffix/color/truncate）
+- [ ] **Step 5:** 编写可测试场景：验证卡片角色配置保存为 JSON 可序列化
+
+### 0.2 ActionsConfig 卡片模式支持
+
+- [ ] **Step 1:** 扩展 ActionsConfig 支持 card/item placement，保留 CRUD、权限、确认、事件链、详情、表单模式和表单容器联动
+- [ ] **Step 2:** 添加可测试场景：验证卡片模式下按钮 placement 正确映射且旧 column 配置兼容
+
+### 0.3 EventsConfig 卡片触发器
+
+- [ ] **Step 1:** 增加 card capability 过滤；保留 row-click、refresh、CRUD success、open-container、load-record、save-container、close-container
+- [ ] **Step 2:** 添加可测试场景：验证 card 仍可联动 form-container，且仅隐藏首版不支持的 selection/cell 能力
+
+### 0.4 DsBindingConfigDialog 双模式支持
+
+- [ ] **Step 1:** 将 table/card 视为 list display 模式，复用数据源、字段、操作、事件配置
+- [ ] **Step 2:** 保留容器 binding 模式的配置
+- [ ] **Step 3:** 添加可测试场景：验证 tableMode false 时显示容器配置
+
+---
+
 ## Task 1: Shared contracts and card field model
 
-**Files:**
-- Modify: `frontend/src/components/business/types.ts`
-- Test: `frontend/src/components/business/__tests__/ListCards.test.ts`
+- [ ] 1.1 Extend `frontend/src/components/business/types.ts` with serializable ListCards query/result and card-column/action types - expect shared TypeScript contracts for fetchApi, dataSourceId, roles, value types, and responsive layout
+- [ ] 1.2 Add `frontend/src/components/business/ListCards.vue` with fetch lifecycle, request race protection, structured card areas, and Element Plus states - expect standalone data-card renderer without SearchTable regressions
+- [ ] 1.3 Add `frontend/src/components/business/__tests__/ListCards.test.ts` for initial query, pagination, loading, empty, error/retry, formatters, and event isolation - expect executable coverage of core rendering behavior
 
-**Interfaces:**
-- Produces `ListQueryParams`, `ListPageResult<T>`, `CardColumn`, and ListCards prop/action types consumed by later tasks.
+## Task 2: CRUD and business integration
 
-- [ ] **Step 1: Write the failing type/behavior test** for a row with `title`, `subtitle`, `tag`, hidden, formatter, and valueType fields.
-- [ ] **Step 2: Run** `npm --prefix frontend exec vitest run src/components/business/__tests__/ListCards.test.ts` and confirm the new component/types are absent.
-- [ ] **Step 3: Add** serializable card-column unions and the shared paged result/query interfaces without changing existing TableColumn fields.
-- [ ] **Step 4: Run** `npm --prefix frontend exec vue-tsc --noEmit` and confirm the contracts type-check.
-- [ ] **Step 5: Commit** the contracts and their test together with a focused feature commit.
+- [ ] 2.1 Reuse existing SearchTable action/form conventions in ListCards for view/create/edit/delete/custom actions - expect permission, confirmation, and refresh behavior consistent with existing lists
+- [ ] 2.2 Add ListCards export in `frontend/src/components/business/index.ts` and verify existing imports/build - expect public component availability without changing current callers
+- [ ] 2.3 Add integration tests for CRUD action visibility, read-only metadata, and row-click versus action-click behavior - expect no action bubbling and correct writable handling
 
-## Task 2: Core ListCards query state and rendering
+## Task 3: Pages wrapper
 
-**Files:**
-- Create: `frontend/src/components/business/ListCards.vue`
-- Test: `frontend/src/components/business/__tests__/ListCards.test.ts`
+- [ ] 3.1 Add a page-level card list wrapper beside `frontend/src/views/page/components/PageDataTable.vue` - expect dataSourceId resolution through the existing unified data-source API and `{ rows, total }` adapter
+- [ ] 3.2 Add page wrapper tests for valid, unresolved, and read-only data-source bindings - expect deterministic error handling and action filtering
 
-**Interfaces:**
-- Consumes `ListQueryParams`, `ListPageResult`, `CardColumn`.
-- Produces `ListCards` props/events: `fetchApi`, rows/total state, `row-click`, retry, page/size changes, card field rendering.
+## Task 4: form-create and designer support
 
-- [ ] **Step 1: Add failing tests** for initial fetch, `{ rows, total }` rendering, hidden fields, title/subtitle/field roles, and formatter output.
-- [ ] **Step 2: Run** `npm --prefix frontend exec vitest run src/components/business/__tests__/ListCards.test.ts` and verify failures.
-- [ ] **Step 3: Implement** the minimal fetch lifecycle with request sequence protection, default page/size, and replacement of rows/total.
-- [ ] **Step 4: Implement** the fixed title/field/action card structure with CSS Grid and `cardMinWidth`/responsive column support.
-- [ ] **Step 5: Add** loading skeleton, Element Plus empty state, error state with retry, and deterministic fallback for invalid roles.
-- [ ] **Step 6: Run** the focused test file and confirm all core scenarios pass.
-- [ ] **Step 7: Run** `npm --prefix frontend run build` and fix only errors introduced by this component.
-- [ ] **Step 8: Commit** ListCards implementation and direct tests together.
+- [ ] 4.1 Register `page-list-cards` in the form-create/runtime component registry and render mapping - expect saved rules to instantiate ListCards
+- [ ] 4.2 Add structured card property configuration using existing table column/data-source configuration patterns - expect serializable columns, roles, value types, layout, pagination, and actions
+- [ ] 4.3 Add form-create/page-renderer tests for rule serialization, metadata refresh, defaults, and unsupported role fallback - expect backward-compatible rendering and JSON-only configuration
 
-## Task 3: Pagination, click isolation, and CRUD actions
+## Task 5: Validation and documentation
 
-**Files:**
-- Modify: `frontend/src/components/business/ListCards.vue`
-- Modify: `frontend/src/components/business/types.ts`
-- Test: `frontend/src/components/business/__tests__/ListCards.test.ts`
-
-**Interfaces:**
-- Consumes existing `ActionButton`, `FormConfig`, permission and confirmation conventions from SearchTable.
-- Produces bottom pagination, isolated card/action click behavior, and create/edit/delete/view/custom action hooks.
-
-- [ ] **Step 1: Add failing tests** for bottom pagination, reset-to-first-page after query changes, `row-click`, action click stopping propagation, visibility and read-only action filtering.
-- [ ] **Step 2: Run** the focused tests and confirm failures.
-- [ ] **Step 3: Implement** `el-pagination` binding to page/size/total and reload behavior, including page reset on data-source/query identity changes.
-- [ ] **Step 4: Implement** card click emission and action event isolation; reuse existing ActionButton callback/permission/confirm contracts rather than inventing a second action format.
-- [ ] **Step 5: Wire** view/create/edit/delete to the existing form configuration path and refresh after successful writes.
-- [ ] **Step 6: Run** focused tests plus `npm --prefix frontend run build`.
-- [ ] **Step 7: Commit** pagination/action behavior with its regression tests.
-
-## Task 4: Public export and page data-source wrapper
-
-**Files:**
-- Modify: `frontend/src/components/business/index.ts`
-- Create: `frontend/src/views/page/components/PageDataCards.vue`
-- Test: `frontend/src/views/page/components/__tests__/PageDataCards.test.ts`
-
-**Interfaces:**
-- Consumes `dataSourceApi`, `activeDsBindings`, existing `PageDataTable` data-source and action-bus conventions.
-- Produces page-level `PageDataCards` with `dataSourceId`, optional `dsRefId`, metadata-derived columns, records/loaded/ready events, and writable action filtering.
-
-- [ ] **Step 1: Add failing wrapper tests** for valid binding, unresolved binding, metadata columns, and read-only data source.
-- [ ] **Step 2: Run** `npm --prefix frontend exec vitest run src/views/page/components/__tests__/PageDataCards.test.ts` and verify failures.
-- [ ] **Step 3: Implement** refId resolution using the existing store/path; unresolved bindings MUST skip invalid requests and show a deterministic renderable error state.
-- [ ] **Step 4: Implement** metadata-to-card-column adaptation and page query adapter returning `{ rows, total }`.
-- [ ] **Step 5: Register** the public business component export and run wrapper tests plus `npm --prefix frontend run build`.
-- [ ] **Step 6: Commit** the page wrapper, export, and direct tests together.
-
-## Task 5: form-create/page designer registration
-
-**Files:**
-- Modify: `frontend/src/views/form/components/FormRenderer.vue`
-- Modify: relevant form-create registry/designer configuration files identified by existing `page-table` registration
-- Test: `frontend/src/views/form/components/__tests__/FormRenderer.test.ts` or a focused `PageListCards.test.ts`
-
-**Interfaces:**
-- Consumes `PageDataCards` and serializable `page-list-cards` props.
-- Produces runtime recognition, rendering, defaults, structured field configuration, metadata refresh, and action-bus integration.
-
-- [ ] **Step 1: Add failing tests** for loading a saved `page-list-cards` rule, JSON serialization without functions, default props, unsupported role fallback, and dataSourceId mapping.
-- [ ] **Step 2: Run** the focused form-create tests and confirm failures.
-- [ ] **Step 3: Register** `page-list-cards` beside the existing page-table runtime mapping without changing old schema behavior.
-- [ ] **Step 4: Add** structured property configuration for card roles, value types, min width/columns, pagination/search, and actions; do not expose arbitrary nested rule editing.
-- [ ] **Step 5: Connect** metadata and action-bus behavior, including hiding/disabling write actions for read-only data sources.
-- [ ] **Step 6: Run** focused tests and `npm --prefix frontend run build`.
-- [ ] **Step 7: Commit** designer/runtime registration and tests together.
-
-## Task 6: Documentation and integration regression
-
-**Files:**
-- Modify: `docs/features.md` or the project’s existing component/configuration documentation
-- Test: existing page renderer/form renderer suites and new ListCards suites
-
-- [ ] **Step 1: Add** a documented code usage example and a serialized `page-list-cards` example, including explicit first-version non-goals.
-- [ ] **Step 2: Run** `npm --prefix frontend test -- --run` and record the complete result.
-- [ ] **Step 3: Run** `npm --prefix frontend run build` and confirm TypeScript/Vite success.
-- [ ] **Step 4: Run** targeted page-designer smoke verification for query, pagination, CRUD, click isolation, and responsive grid behavior; record any manual-only check for later verification.
-- [ ] **Step 5: Review** changed files for stale generated output, unhandled function values in serialized config, and accidental SearchTable behavior changes.
-- [ ] **Step 6: Commit** documentation and final regression adjustments.
+- [ ] 5.1 Run frontend unit tests and TypeScript/Vite build, fixing only regressions introduced by this change - expect green automated validation
+- [ ] 5.2 Run targeted page-designer smoke verification at the existing integration boundary - expect card query, pagination, CRUD, and responsive layout evidence
+- [ ] 5.3 Update relevant component/configuration documentation with ListCards examples and explicit non-goals - expect maintainers can configure code and designer variants

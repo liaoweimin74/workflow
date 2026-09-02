@@ -14,7 +14,7 @@ The form-create/page designer runtime MUST recognize `page-list-cards` and rende
 
 ### Requirement: The designer card configuration SHALL reuse table column semantics and add card roles
 
-The configuration UI or schema MUST preserve key, label, formatter/value type, hidden, and display semantics from table columns and MUST expose structured card roles such as title, subtitle, field, tag, avatar, and metric.
+The configuration UI or schema MUST preserve key, label, formatter/value type, hidden, and display semantics from table columns and MUST expose structured card roles such as title, subtitle, field, tag, avatar, and metric. The designer MUST use existing shared configuration components (QueryColumnsConfig, ActionsConfig, EventsConfig) with card-mode extensions rather than create full duplicates (e.g., CardQueryColumnsConfig, CardActionsConfig, CardEventsConfig).
 
 #### Scenario: Configure card fields
 - **WHEN** a designer selects a metadata field and assigns a card role
@@ -26,24 +26,74 @@ The configuration UI or schema MUST preserve key, label, formatter/value type, h
 
 ### Requirement: The form-create integration SHALL resolve dataSourceId through the existing data-source path
 
-The page component MUST use the existing global data-source resolution and query/CRUD path for dataSourceId; it MUST NOT introduce a second endpoint format or silently treat an unresolved page binding as a global refId.
+The page component MUST use the existing global data-source resolution and query/CRUD path for dataSourceId; it MUST NOT introduce a second endpoint format or silently treat an unresolved page binding as a global refId. ListCards is another renderer that reuses the same data-source path, not a new data-source system.
 
-#### Scenario: Valid data source binding
+#### Scenario: Resolved data source
 - **WHEN** dataSourceId resolves to an enabled data source
-- **THEN** the component queries it using the shared pagination contract and applies its writable metadata to available actions
+- **THEN** the component queries rows/total through the existing unified API
 
-#### Scenario: Invalid or removed binding
+#### Scenario: Unresolved data source
 - **WHEN** dataSourceId cannot be resolved
-- **THEN** the component avoids constructing an invalid request, displays a deterministic error/empty state, and keeps the page renderable
+- **THEN** the designer reports the binding error and does not render a silent fallback
 
 ### Requirement: Designer actions SHALL support CRUD and event-bus integration
 
-The form-create/page designer integration MUST support view, create, edit, delete, and custom action configuration, with permission/confirmation behavior consistent with SearchTable and existing page action bus conventions.
+The form-create/page designer MUST configure core CRUD (view/create/edit/delete), permissions, confirmations, visibility, events, detail/form mode, and action-bus integration using the shared ActionsConfig. Only placement and action-column-width UI MUST differ between table and card display modes. Card still supports form-container linkage via the same event/action-chain model.
 
-#### Scenario: Writable data source
-- **WHEN** a writable data source and corresponding action are configured
-- **THEN** the action invokes the existing data-source write path and refreshes the card page after success
+#### Scenario: Configure core CRUD actions
+- **WHEN** a designer configures view/create/edit/delete on a card list
+- **THEN** the actions are saved with permission, confirmation, and visibility rules shared with table lists
 
-#### Scenario: Read-only data source
-- **WHEN** metadata marks the data source read-only
-- **THEN** create/edit/delete actions are hidden or disabled while view and custom read actions remain available
+#### Scenario: Card-mode placement
+- **WHEN** the display mode is card
+- **THEN** placement options adapt to card toolbar / action-column layout, and other core action semantics remain identical to table
+
+#### Scenario: Form-container linkage preserved
+- **WHEN** an action is configured to open a form container (dialog/drawer) with a bound form
+- **THEN** the card list triggers the same open-container / load-record / save-container / close-container linkage as a table list
+
+### Requirement: DsBindingConfigDialog SHALL treat table and card as list display modes
+
+The DsBindingConfigDialog MUST treat both `table` and `card` as list display mode variants (sharing field/actions/events configuration paths) while preserving the separate container binding mode for dialog/drawer-style form bindings.
+
+#### Scenario: List display mode
+- **WHEN** the binding target is a table or card list component
+- **THEN** the dialog presents the shared data-source, field, action, and event configuration (with card-specific layout extras)
+
+#### Scenario: Container binding mode
+- **WHEN** the binding target is a form container (dialog/drawer)
+- **THEN** the dialog presents the container-specific form binding configuration unchanged
+
+### Requirement: Card configuration SHALL reuse shared configuration components
+
+The designer MUST compose `QueryColumnsConfig`, `CardColumnAdvancedConfig`, `ActionsConfig`, and `EventsConfig` rather than create complete Card-specific duplicates. Card MUST retain the same data-source binding and form-container linkage used by table lists.
+
+#### Scenario: Shared configuration composition
+- **WHEN** a designer configures a Card list in ViewDesigner or PageDesigner
+- **THEN** the host composes the shared field, action, and event configuration components and adds only Card-specific field/layout extensions
+
+#### Scenario: Card to form-container linkage
+- **WHEN** a Card row triggers an existing open-container/load-record/save-container/close-container action chain
+- **THEN** the same bound form-container protocol and row context used by table lists is executed
+
+### TESTABLE Scenarios for Shared Configuration Extension
+
+#### Scenario: QueryColumnsConfig card-mode extension
+- **WHEN** QueryColumnsConfig runs in card mode
+- **THEN** it exposes the same shared field/query configuration (metadata candidates, display/hidden/order/label, search/filter/sort, custom fields, formatter/template/expression) plus card-specific columns for role, span, valueType, prefix, suffix, color, truncate — without introducing a separate `CardQueryColumnsConfig` duplication
+
+#### Scenario: CardColumnAdvancedConfig
+- **WHEN** a designer opens the card column advanced config from QueryColumnsConfig
+- **THEN** the focused `CardColumnAdvancedConfig` dialog contains role, layout, valueType, prefix, suffix, color, truncate — the focused card-specific set, distinct from the shared table `ColumnAdvancedConfig`
+
+#### Scenario: ActionsConfig card placement
+- **WHEN** the designer switches ActionsConfig to card mode
+- **THEN** the placement options include cardToolbar / actionColumn variants while permissions/confirm/visibility/events/detail/form mode remain identical to table
+
+#### Scenario: EventsConfig card triggers
+- **WHEN** the designer configures events in card mode
+- **THEN** trigger options include row-click, refresh, CRUD success, open-container, load-record, save-container, close-container; capability filters hide selection/cell triggers that table-only contexts expose
+
+#### Scenario: ViewDesigner / PageDesigner integration
+- **WHEN** ViewDesigner or PageDesigner configures a card-list row
+- **THEN** it composes the same shared components (QueryColumnsConfig + CardColumnAdvancedConfig + ActionsConfig + EventsConfig) and reuses the existing data-source binding path — ListCards is a renderer, not a new data-source system

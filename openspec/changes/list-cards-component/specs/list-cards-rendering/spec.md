@@ -75,3 +75,21 @@ The code component MUST support optional slot or render-function customization f
 #### Scenario: Serializable configuration
 - **WHEN** the component is serialized by the page designer
 - **THEN** its configuration contains only JSON-compatible values
+
+### TESTABLE Scenarios for Shared Configuration Extension
+
+#### Scenario: Card column role configuration in QueryColumnsConfig
+- **WHEN** a designer selects a column and assigns role="title"
+- **THEN** the column config saves with role field as JSON-serializable value
+
+#### Scenario: Card column advanced config serialization
+- **WHEN** a designer configures role, span, order, valueType, prefix, suffix, color, truncate
+- **THEN** the configuration saves to schema without function values
+
+#### Scenario: ActionsConfig card mode placement
+- **WHEN** the designer switches to card mode
+- **THEN** the placement options include cardToolbar, cardColumn with appropriate action-column-width configuration
+
+#### Scenario: EventsConfig card-specific triggers
+- **WHEN** the designer configures events for card mode
+- **THEN** the trigger options include row-click, refresh, open-container, load-record, save-container, close-container

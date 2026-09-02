@@ -161,6 +161,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion, View, Document, Menu } from '@element-plus/icons-vue'
 import FcDesigner from '@form-create/designer'
 import PageDataTable from './components/PageDataTable.vue'
+import PageDataCards from './components/PageDataCards.vue'
 import { tableFilterStore } from './components/tableFilterStore'
 import PageDataTree from './components/PageDataTree.vue'
 import { pageApi, type PageDefinitionDetailDTO, type PageMenuItem } from '@/api/page'
@@ -176,6 +177,7 @@ import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
 FcDesigner.component('page-tree', PageDataTree)
+FcDesigner.component('page-list-cards', PageDataCards)
 
 const route = useRoute()
 const router = useRouter()
@@ -390,7 +392,10 @@ function handlePageTableConfirm(newProps: Record<string, any>) {
 function enableCardDesignMode(rules: any[]): any[] {
   return rules.map((rule) => {
     const next = { ...rule, props: rule.props ? { ...rule.props } : rule.props }
-    if (next.type === 'page-list-cards') next.props = { ...(next.props || {}), designMode: true }
+    // 设计态标记：卡片/表格据此固定取首页且最多 10 条（与运行态分页语义区分）
+    if (next.type === 'page-list-cards' || next.type === 'page-table') {
+      next.props = { ...(next.props || {}), designMode: true }
+    }
     if (Array.isArray(next.children)) next.children = enableCardDesignMode(next.children)
     if (Array.isArray(next.props?.rule)) next.props.rule = enableCardDesignMode(next.props.rule)
     return next

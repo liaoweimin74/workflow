@@ -22,4 +22,23 @@ describe('PageDesigner card data-source entry', () => {
     // 数据源配置变更时同步写入，reactive 生效触发组件重新取数
     expect(source).toContain('setActiveDsBindings(newDataSources as any)')
   })
+
+  it('registers page-list-cards on the designer form-create so the card renders in canvas', () => {
+    const source = readFileSync(resolve(__dirname, '../PageDesigner.vue'), 'utf8')
+
+    // 缺 this registration 时 fc-designer 画布会把 page-list-cards 渲染为空壳自定义标签
+    // （无 PageDataCards DOM），既不发 getMetadata 也不发 queryData，卡片永不显示。
+    // 与 page-table/page-tree 的 FcDesigner.component 注册对称。
+    expect(source).toContain("import PageDataCards from './components/PageDataCards.vue'")
+    expect(source).toContain("FcDesigner.component('page-list-cards', PageDataCards)")
+  })
+
+  it('marks page-table as design mode so it clamps to ≤10 rows and refetches on switch', () => {
+    const source = readFileSync(resolve(__dirname, '../PageDesigner.vue'), 'utf8')
+
+    // enableCardDesignMode 需对 page-table 也注入 designMode:true，
+    // 否则 PageDataTable 收不到标记，设计态取数不受 ≤10 限制、且无法区分运行态分页。
+    expect(source).toContain("if (next.type === 'page-list-cards' || next.type === 'page-table')")
+    expect(source).toContain('designMode: true')
+  })
 })

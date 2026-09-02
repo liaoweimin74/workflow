@@ -251,3 +251,59 @@ describe('PageDataTable — 列级定制（template/expression/formatter/classNa
     wrapper.unmount()
   })
 })
+
+describe('PageDataTable — 数据源切换后重新取数', () => {
+  it('resolvedRefId 变化时重新发起 queryData（用新 refId）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: { writable: false, columns: [] } })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [{ id: '1', name: '订单' }], total: 1 } })
+
+    const wrapper = createWrapper({ dsRefId: 'ds-emp', designMode: true })
+    await nextTick()
+    await flushPromises()
+    ;(dataSourceApi.queryData as any).mockClear()
+
+    // 模拟设计态配置确定/切换数据源：dsRefId 变化
+    await wrapper.setProps({ dsRefId: 'ds-customers' })
+    await nextTick()
+    await flushPromises()
+
+    // 重新取数（不仅取元数据）
+    expect(dataSourceApi.queryData).toHaveBeenCalledWith(
+      'ds-customers',
+      expect.objectContaining({ page: expect.any(Number), size: expect.any(Number) }),
+    )
+    wrapper.unmount()
+  })
+})
+
+describe('PageDataTable — 设计态取数钳制', () => {
+  it('designMode 下分页取数 size 钳制到 ≤10', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: { writable: false, columns: [] } })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({ dsRefId: 'ds-emp', designMode: true, pagination: true })
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    expect(st.exists()).toBe(true)
+    // 首次取数应钳制 size（pageSize 默认 20 但设计态最多 10）
+    expect(dataSourceApi.queryData).toHaveBeenCalledWith(
+      'ds-emp',
+      expect.objectContaining({ page: 1, size: 10 }),
+    )
+    wrapper.unmount()
+  })
+
+  it('designMode 下不分页也钳制到 10 条（不请求全量 size=-1）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: { writable: false, columns: [] } })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({ dsRefId: 'ds-emp', designMode: true, pagination: false })
+    await nextTick()
+    await flushPromises()
+
+    expect(dataSourceApi.queryData).toHaveBeenCalledWith('ds-emp', expect.objectContaining({ page: 1, size: 10 }))
+    wrapper.unmount()
+  })
+})

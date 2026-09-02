@@ -143,6 +143,8 @@ const props = withDefaults(defineProps<{
   selectionMode?: 'none' | 'single' | 'multiple'
   /** 是否占满父容器高度（true 时表格撑满父容器，表格区域内部滚动） */
   stretch?: boolean
+  /** 设计态标记：PageDesigner.enableCardDesignMode 注入，取数固定取首页且最多 10 条 */
+  designMode?: boolean
   /** 附加属性（border/stripe 等） */
   [key: string]: any
 }>(), {
@@ -449,10 +451,13 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
     if (v === '' || v === null || v === undefined) continue
     filterConditions.push({ column: field.prop, op: 'like', value: v })
   }
-  const query: Record<string, any> = props.pagination === false
-    // 不分页：请求全部数据（后端 size<=0 跳过 LIMIT），保留排序
-    ? { size: -1 }
-        : { page: Math.max(1, params.page), size: params.size }
+  const query: Record<string, any> = props.designMode
+    // 设计态预览固定取首页且最多 10 条（含"不分页"场景，避免 size:-1 拉全量）
+    ? { page: 1, size: Math.min(params.size || 10, 10) }
+    : props.pagination === false
+      // 不分页：请求全部数据（后端 size<=0 跳过 LIMIT），保留排序
+      ? { size: -1 }
+          : { page: Math.max(1, params.page), size: params.size }
   // 排序状态透传（SearchTable 内部维护，服务器端排序）
   if (params.sort) query.sort = params.sort
   if (params.order) query.order = params.order
@@ -794,10 +799,12 @@ onMounted(async () => {
   emit('ready', { refresh, setFilter, resetFilter, openCreate, records })
 })
 
-// 数据源切换时重新加载元数据，标记使用元数据列
+// 数据源切换时重新加载元数据，标记使用元数据列；
+// 设计态额外补发取数：配置数据源确定/切换后立即渲染表格（运行态由 _pendingFirstFetch 保证首次请求单次触发，不重复取数）
 watch(() => resolvedRefId.value, () => {
   useMetadataColumns.value = true
   loadMetadata()
+  if (props.designMode) nextTick(() => { tableRef.value?.fetchList() })
 })
 </script>
 

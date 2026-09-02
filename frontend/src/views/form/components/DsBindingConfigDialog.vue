@@ -77,6 +77,11 @@
               </template>
               <el-switch v-model="tableData.stretch" />
             </el-form-item>
+            <el-form-item v-if="effectiveListMode === 'card'" label="分组字段">
+              <el-select v-model="tableData.groupBy" clearable placeholder="不分组" style="width: 220px">
+                <el-option v-for="c in tableCandidates" :key="c.key" :label="c.label || c.key" :value="c.key" />
+              </el-select>
+            </el-form-item>
           </el-form>
           <QueryColumnsConfig
             v-if="tableCandidates.length > 0"
@@ -337,6 +342,7 @@ const tableData = reactive({
   ], permissions: '' } as any,
   detail: { width: '800px', type: 'form' } as any,
   events: [] as any[],
+  groupBy: '' as string,
 })
 
 /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不可配置） */
@@ -393,6 +399,7 @@ function initTableData() {
   ], permissions: '' }
   tableData.detail = bp.viewDetail || { width: '800px', type: 'form' }
   tableData.events = bp.viewEvents || []
+  tableData.groupBy = bp.groupBy || ''
 }
 
 // ==================== 打开/回填 ====================
@@ -463,6 +470,10 @@ function handleConfirm() {
       ...(c.suffix !== undefined ? { suffix: c.suffix } : {}),
       ...(c.color !== undefined ? { color: c.color } : {}),
       ...(c.truncate !== undefined ? { truncate: c.truncate } : {}),
+      ...(c.fontFamily !== undefined ? { fontFamily: c.fontFamily } : {}),
+      ...(c.fontSize !== undefined ? { fontSize: c.fontSize } : {}),
+      ...(c.fontWeight !== undefined ? { fontWeight: c.fontWeight } : {}),
+      ...(c.fontColor !== undefined ? { fontColor: c.fontColor } : {}),
     }))
     result.sortableFields = [...tableData.sortableFields]
     result.pagination = tableData.pagination
@@ -471,6 +482,7 @@ function handleConfirm() {
     result.viewActions = { ...tableData.actions }
     result.viewDetail = { ...tableData.detail }
     result.viewEvents = [...tableData.events]
+    if (effectiveListMode.value === 'card' && tableData.groupBy) result.groupBy = tableData.groupBy
   } else {
     // 容器按钮配置
     result.showNewButton = container.showNewButton

@@ -431,6 +431,10 @@ type CardColumnConfig = ColumnViewConfig & {
   suffix?: string
   color?: string
   truncate?: boolean
+  fontFamily?: string
+  fontSize?: number
+  fontWeight?: string | number
+  fontColor?: string
 }
 const cardAdvancedVisible = ref(false)
 const cardAdvancedColumn = ref<CardColumnConfig | null>(null)
@@ -483,6 +487,10 @@ function pickCardAdvanced(c: CardColumnConfig): Partial<CardColumnConfig> {
     ...(c.suffix !== undefined ? { suffix: c.suffix } : {}),
     ...(c.color !== undefined ? { color: c.color } : {}),
     ...(c.truncate !== undefined ? { truncate: c.truncate } : {}),
+    ...(c.fontFamily !== undefined ? { fontFamily: c.fontFamily } : {}),
+    ...(c.fontSize !== undefined ? { fontSize: c.fontSize } : {}),
+    ...(c.fontWeight !== undefined ? { fontWeight: c.fontWeight } : {}),
+    ...(c.fontColor !== undefined ? { fontColor: c.fontColor } : {}),
   }
 }
 

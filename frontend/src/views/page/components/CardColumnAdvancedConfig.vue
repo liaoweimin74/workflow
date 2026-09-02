@@ -29,6 +29,17 @@
       <el-form-item label="后缀"><el-input :model-value="col?.suffix" @input="(v: string) => patch({ suffix: v || undefined })" /></el-form-item>
       <el-form-item label="颜色"><el-input :model-value="col?.color" placeholder="#409eff" @input="(v: string) => patch({ color: v || undefined })" /></el-form-item>
       <el-form-item label="超长截断"><el-switch :model-value="col?.truncate === true" @change="(v: boolean) => patch({ truncate: v })" /></el-form-item>
+      <el-form-item label="字体">
+        <el-select :model-value="col?.fontFamily" clearable @change="(v: string) => patch({ fontFamily: v || undefined })">
+          <el-option label="系统默认" value="system-ui" />
+          <el-option label="微软雅黑" value="Microsoft YaHei" />
+          <el-option label="等线" value="DengXian" />
+          <el-option label="宋体" value="SimSun" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="字号"><el-input-number :model-value="col?.fontSize" :min="10" :max="48" @change="(v: number | undefined) => patch({ fontSize: v })" /></el-form-item>
+      <el-form-item label="字重"><el-select :model-value="String(col?.fontWeight || '')" clearable @change="(v: string) => patch({ fontWeight: v ? Number(v) : undefined })"><el-option label="常规" value="400" /><el-option label="中等" value="500" /><el-option label="加粗" value="700" /></el-select></el-form-item>
+      <el-form-item label="字体颜色"><el-input :model-value="col?.fontColor" placeholder="#303133" @input="(v: string) => patch({ fontColor: v || undefined })" /></el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="$emit('update:visible', false)">取消</el-button>

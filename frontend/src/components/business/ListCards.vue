@@ -198,7 +198,7 @@ defineExpose({ fetchData, refresh, retry })
 </script>
 
 <style scoped>
-.list-cards { height: 100%; display: flex; flex-direction: column; }
+.list-cards { width: 100%; height: 100%; min-width: 0; display: flex; flex-direction: column; }
 .is-loading { opacity: 0.6; }
 .card-groups { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
 .card-group + .card-group { margin-top: 24px; }

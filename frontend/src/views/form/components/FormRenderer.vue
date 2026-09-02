@@ -687,6 +687,11 @@ const componentRefs = new Map<string, any>()
 /** 供表单内 PageDataTable 注入的动作总线 */
 provide('pageActionBus', {
   dispatch: dispatchAction,
+  hasLinkedContainer: (dataSourceId?: string) => !!dataSourceId && !!findContainer(dataSourceId),
+  openLinkedContainer: (dataSourceId: string, mode: 'create' | 'edit' | 'view', row: any) => {
+    const rid = mode === 'create' ? '' : String(row?.id ?? '')
+    openContainer(dataSourceId, rid, containerModes.get(dataSourceId), mode === 'view')
+  },
   register: (dataSourceId: string, instance: any) => {
     componentRefs.set(dataSourceId, instance)
   },

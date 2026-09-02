@@ -8,6 +8,7 @@
       :default-page-size="pageSize || 20"
       :show-pagination="pagination"
       :actions="resolvedActions"
+      :group-by="groupBy"
       @row-click="handleRowClick"
       @action-click="handleActionClick"
     />
@@ -30,6 +31,7 @@ const props = withDefaults(defineProps<{
   pageSize?: number
   pagination?: boolean
   viewActions?: { buttons?: Array<{ key: string; label: string; placement?: string }> }
+  groupBy?: string
   stretch?: boolean
   [key: string]: any
 }>(), { pageSize: 20, pagination: true, cardMinWidth: 280, stretch: false })
@@ -40,7 +42,12 @@ const emit = defineEmits<{
   (e: 'ready', instance: any): void
 }>()
 
-const actionBus = inject<{ dispatch: (trigger: string, data: any) => boolean; register?: (id: string, instance: any) => void }>('pageActionBus')
+const actionBus = inject<{
+  dispatch: (trigger: string, data: any) => boolean
+  register?: (id: string, instance: any) => void
+  hasLinkedContainer?: (id?: string) => boolean
+  openLinkedContainer?: (id: string, mode: 'create' | 'edit' | 'view', row: any) => void
+}>('pageActionBus')
 const cardsRef = ref<InstanceType<typeof ListCards>>()
 
 const resolvedRefId = computed(() => {
@@ -77,7 +84,7 @@ function handleRowClick(row: any) {
 
 function handleActionClick(action: { key: string; label: string }, row: any) {
   const mode = action.key === 'create' ? 'create' : action.key === 'view' ? 'view' : action.key === 'edit' ? 'edit' : undefined
-  if (mode && actionBus?.openLinkedContainer) {
+  if (mode && actionBus?.hasLinkedContainer?.(props.dataSourceId) && actionBus.openLinkedContainer) {
     actionBus.openLinkedContainer(props.dataSourceId || '', mode, row)
     return
   }

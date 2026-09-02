@@ -46,4 +46,22 @@ describe('PageDataCards', () => {
     expect(wrapper.emitted('loaded')?.[0]).toEqual([[{ id: 7, name: '订单', version: 3 }]])
     wrapper.unmount()
   })
+
+  it('编辑动作调用关联容器打开接口', async () => {
+    const openLinkedContainer = vi.fn()
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'edit', label: '编辑' }] },
+      },
+      global: { provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => true, openLinkedContainer } } },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', { key: 'edit', label: '编辑' }, { id: 7 })
+
+    expect(openLinkedContainer).toHaveBeenCalledWith('orders', 'edit', { id: 7 })
+    wrapper.unmount()
+  })
 })

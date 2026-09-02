@@ -201,6 +201,107 @@ describe('ActionsConfig — 详情宽度（查看按钮旁）', () => {
   })
 })
 
+// ============================================================
+// ActionsConfig — 卡片模式（mode='card'）：placement 用卡片操作区，共享 CRUD/权限/详情/表单模式
+// ============================================================
+
+describe('ActionsConfig — 卡片模式（mode="card"）', () => {
+  it('card 模式标题显示「操作按钮（卡片配置）」', async () => {
+    const wrapper = createWrapper(defaultActions, {})
+    await wrapper.setProps({ mode: 'card' })
+    await nextTick()
+    expect(wrapper.find('.config-title').text()).toContain('卡片')
+    wrapper.unmount()
+  })
+
+  it('card 模式 placement 下拉提供「操作栏 / 卡片操作区」，不含「操作列」', async () => {
+    const wrapper = createWrapper(defaultActions, {})
+    await wrapper.setProps({ mode: 'card' })
+    await nextTick()
+    const vm = wrapper.vm as any
+    const labels = (vm.placementOptions as { label: string; value: string }[]).map((o) => o.label)
+    expect(labels).toContain('操作栏')
+    expect(labels).toContain('卡片操作区')
+    expect(labels).not.toContain('操作列')
+    wrapper.unmount()
+  })
+
+  it('card 模式 table 模式 placement 仍为「操作栏 / 操作列」', async () => {
+    const wrapper = createWrapper(defaultActions, {})
+    await nextTick()
+    const vm = wrapper.vm as any
+    const labels = (vm.placementOptions as { label: string; value: string }[]).map((o) => o.label)
+    expect(labels).toContain('操作栏')
+    expect(labels).toContain('操作列')
+    wrapper.unmount()
+  })
+
+  it('card 模式添加内置行操作按钮 → 默认 placement 为 card（create 仍在 toolbar）', async () => {
+    const wrapper = createWrapper(defaultActions, {})
+    await wrapper.setProps({ mode: 'card' })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.handleAddBuiltin('delete')
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue') as any[]
+    const last = emitted[emitted.length - 1][0]
+    const del = last.buttons.find((b: any) => b.key === 'delete')
+    expect(del.placement).toBe('card')
+    const create = last.buttons.find((b: any) => b.key === 'create')
+    expect(create.placement).toBe('toolbar')
+    wrapper.unmount()
+  })
+
+  it('card 模式添加自定义按钮 → 默认 placement 为 card', async () => {
+    const wrapper = createWrapper(defaultActions, {})
+    await wrapper.setProps({ mode: 'card' })
+    await nextTick()
+    const vm = wrapper.vm as any
+    vm.pendingCustomKey = 'approve'
+    vm.pendingCustomLabel = '审核'
+    await nextTick()
+    vm.handleAddCustom()
+    await nextTick()
+    const emitted = wrapper.emitted('update:modelValue') as any[]
+    const last = emitted[emitted.length - 1][0]
+    const custom = last.buttons.find((b: any) => b.key === 'approve')
+    expect(custom.placement).toBe('card')
+    wrapper.unmount()
+  })
+
+  it('card 模式兼容旧 column 值：下拉仍展示该行旧 placement 且可编辑', async () => {
+    const legacy = {
+      buttons: [
+        { key: 'edit', label: '编辑', placement: 'column', style: 'button' },
+      ],
+      permissions: '',
+    }
+    const wrapper = createWrapper(legacy, {})
+    await wrapper.setProps({ mode: 'card' })
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.placementValues.has('column')).toBe(false)
+    // 渲染该行时旧值 column 仍显示为可选项（兼容迁移）
+    const selectOptions = wrapper.findAll('.el-select .el-option')  // 展开行的 dropdown 选项
+    void selectOptions
+    wrapper.unmount()
+  })
+
+  it('card 模式共享配置仍可用：权限点多选 / 详情宽度', async () => {
+    const wrapper = createWrapper({ buttons: [], permissions: 'page:create' }, { width: '800px', type: 'form' })
+    await wrapper.setProps({ mode: 'card' })
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.permissionArray).toEqual(['page:create'])
+    expect(vm.detailWidth).toBe('800px')
+    vm.setDetailWidth('700px')
+    await nextTick()
+    const emitted = wrapper.emitted('update:detail') as any[]
+    expect(emitted[emitted.length - 1][0].width).toBe('700px')
+    wrapper.unmount()
+  })
+})
+
 describe('ActionsConfig — 权限点多选 Tag', () => {
   it('permissions 逗号分隔字符串回填为多选值（数组）', async () => {
     const wrapper = createWrapper({

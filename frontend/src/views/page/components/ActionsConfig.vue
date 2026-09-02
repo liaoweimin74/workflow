@@ -1,7 +1,7 @@
 <template>
   <div class="actions-config">
     <div class="config-header">
-      <span class="config-title">操作按钮（表格配置）</span>
+      <span class="config-title">操作按钮（{{ mode === 'card' ? '卡片' : '表格' }}配置）</span>
     </div>
 
     <!-- 添加按钮 -->
@@ -100,8 +100,13 @@
             style="width: 93px"
             @change="(v: any) => updateButton(row.key, { placement: v })"
           >
-            <el-option label="操作栏" value="toolbar" />
-            <el-option label="操作列" value="column" />
+            <!-- 兼容旧模式保存的 placement 值（如表格 column 迁移到卡片），保留原值可选 -->
+            <el-option
+              v-if="row.placement && !placementValues.has(row.placement)"
+              :label="row.placement === 'column' ? '操作列（旧）' : row.placement"
+              :value="row.placement"
+            />
+            <el-option v-for="opt in placementOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </template>
       </el-table-column>
@@ -178,7 +183,7 @@
     <!-- 其他设置：列宽度 / 弹窗宽度 / 权限点（说明文字以 ? 图标悬浮显示） -->
     <el-divider content-position="left">其他设置</el-divider>
     <el-form label-width="90px"  style="max-width: 520px">
-      <el-form-item>
+      <el-form-item v-if="mode !== 'card'">
         <template #label>
           <span class="label-with-tip">
             列宽度
@@ -289,12 +294,35 @@ const props = defineProps<{
   modelValue: ViewActionsConfig
   /** 详情配置（由"查看"按钮启用，此处仅配置宽度） */
   detail?: ViewDetailConfig
+  /** 展示模式：table（操作栏/操作列）或 card（操作栏/卡片操作区） */
+  mode?: 'table' | 'card'
 }>()
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: ViewActionsConfig): void
   (e: 'update:detail', v: ViewDetailConfig): void
 }>()
+
+/** 模式化 placement 选项：table=操作栏/操作列，card=操作栏/卡片操作区 */
+const placementOptions = computed(() =>
+  props.mode === 'card'
+    ? [
+        { label: '操作栏', value: 'toolbar' },
+        { label: '卡片操作区', value: 'card' },
+      ]
+    : [
+        { label: '操作栏', value: 'toolbar' },
+        { label: '操作列', value: 'column' },
+      ],
+)
+
+/** 当前模式可选 placement 值集合（用于兼容渲染旧数据） */
+const placementValues = computed(() => new Set(placementOptions.value.map((o) => o.value)))
+
+/** 行操作按钮的默认 placement（create 恒为工具栏，其余随模式：表格=操作列，卡片=卡片操作区） */
+function defaultRowPlacement(): string {
+  return props.mode === 'card' ? 'card' : 'column'
+}
 
 /** 内置按钮定义（固定行为，不可删除） */
 const BUILTIN_BUTTONS: { key: string; label: string }[] = [
@@ -384,8 +412,8 @@ const missingBuiltins = computed(() =>
 function handleAddBuiltin(key: string) {
   const def = BUILTIN_BUTTONS.find((b) => b.key === key)
   if (!def) return
-  // 内置按钮默认：create 在操作栏，行操作在操作列
-  const placement = key === 'create' ? 'toolbar' : 'column'
+  // 内置按钮默认：create 在操作栏，行操作随模式（表格=操作列，卡片=卡片操作区）
+  const placement = key === 'create' ? 'toolbar' : defaultRowPlacement()
   commit({ ...props.modelValue, buttons: [...props.modelValue.buttons, { key, label: def.label, placement, style: 'button' }] })
   pendingBuiltin.value = ''
 }
@@ -399,7 +427,7 @@ function handleAddCustom() {
     ...props.modelValue,
     buttons: [
       ...props.modelValue.buttons,
-      { key, label, placement: 'column', style: 'text', events: [] },
+      { key, label, placement: defaultRowPlacement(), style: 'text', events: [] },
     ],
   })
   pendingCustomKey.value = ''

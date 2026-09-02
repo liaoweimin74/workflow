@@ -22,6 +22,12 @@
             style="width: 140px"
             @change="(v: string) => patchEvent(idx, { trigger: v })"
           >
+            <!-- 兼容旧模式保存的触发器（如表格 cell-click 迁移到卡片），保留原值可选 -->
+            <el-option
+              v-if="ev.trigger && filteredTriggerValues.has(ev.trigger)"
+              :label="`${legacyTriggerLabel(ev.trigger)}（旧）`"
+              :value="ev.trigger"
+            />
             <el-option v-for="t in triggerOptions" :key="t.value" :label="t.label" :value="t.value" />
           </el-select>
         </el-form-item>
@@ -76,6 +82,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Plus, Delete } from '@element-plus/icons-vue'
 
 export interface EventActionParam {
@@ -92,15 +99,23 @@ export interface PageEventConfig {
   actions: EventAction[]
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: PageEventConfig[]
-}>()
+  /** 展示模式：card 模式过滤表格专属触发器（首版 selection/cell 能力未实现） */
+  mode?: 'table' | 'card'
+}>(), {
+  mode: 'table',
+})
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: PageEventConfig[]): void
 }>()
 
-const triggerOptions = [
+/** 表格专属触发器（卡片模式过滤；首版 selection/cell 能力未实现，后续放开） */
+const TABLE_ONLY_TRIGGERS = new Set(['cell-click', 'selection-change', 'current-change'])
+
+/** 全部触发器候选（表格模式全部展示） */
+const ALL_TRIGGERS = [
   { label: '行点击', value: 'row-click' },
   // ===== 表格-容器联动触发器 =====
   { label: '行编辑', value: 'row-edit' },
@@ -119,6 +134,23 @@ const triggerOptions = [
   { label: '保存成功', value: 'save-success' },
   { label: '删除成功', value: 'delete-success' },
 ]
+
+/** 按模式过滤后的触发器候选（card 过滤表格专属） */
+const triggerOptions = computed(() =>
+  props.mode === 'card'
+    ? ALL_TRIGGERS.filter((t) => !TABLE_ONLY_TRIGGERS.has(t.value))
+    : ALL_TRIGGERS,
+)
+
+/** 当前模式被过滤掉的触发器值集合（用于旧数据兼容渲染） */
+const filteredTriggerValues = computed(() =>
+  props.mode === 'card' ? TABLE_ONLY_TRIGGERS : new Set<string>(),
+)
+
+/** 表格专属触发器中文标签（旧数据兼容项展示） */
+function legacyTriggerLabel(value: string): string {
+  return ALL_TRIGGERS.find((t) => t.value === value)?.label || value
+}
 
 const actionTypeOptions = [
   { label: '设置筛选', value: 'set-filter' },

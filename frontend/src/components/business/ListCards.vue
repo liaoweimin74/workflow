@@ -37,6 +37,17 @@
           </div>
         </div>
         <div v-if="hasRoleMetric" class="card-metric">{{ formatValue(row, metricColumn) }}</div>
+        <div v-if="actions.length > 0" class="card-actions">
+          <el-button
+            v-for="action in actions"
+            :key="action.key"
+            :class="`card-action-${action.key}`"
+            size="small"
+            @click.stop="handleActionClick(action, row)"
+          >
+            {{ action.label }}
+          </el-button>
+        </div>
       </div>
     </div>
     <el-pagination
@@ -62,15 +73,21 @@ interface ListCardsProps {
   cardMinWidth?: number | string
   defaultPageSize?: number
   showPagination?: boolean
+  actions?: Array<{ key: string; label: string }>
 }
 
 const props = withDefaults(defineProps<ListCardsProps>(), {
   defaultPageSize: 10,
   cardMinWidth: 200,
   showPagination: true,
+  actions: () => [],
 })
 
-const emit = defineEmits<{ 'row-click': [row: any]; refresh: [] }>()
+const emit = defineEmits<{
+  'row-click': [row: any]
+  refresh: []
+  'action-click': [action: { key: string; label: string }, row: any]
+}>()
 
 const loading = ref(false)
 const rows = ref<any[]>([])
@@ -79,6 +96,7 @@ const error = ref<string | null>(null)
 let requestId = 0
 
 const query = reactive<ListQueryParams>({ page: 1, size: props.defaultPageSize })
+const actions = computed(() => props.actions)
 const titleColumn = computed(() => props.columns.find(c => c.role === 'title'))
 const subtitleColumn = computed(() => props.columns.find(c => c.role === 'subtitle'))
 const tagColumn = computed(() => props.columns.find(c => c.role === 'tag'))
@@ -139,6 +157,9 @@ async function fetchData(params?: Partial<ListQueryParams>) {
 }
 
 function handleCardClick(row: any) { emit('row-click', row) }
+function handleActionClick(action: { key: string; label: string }, row: any) {
+  emit('action-click', action, row)
+}
 function handlePageChange(page: number) {
   query.page = page
   fetchData()

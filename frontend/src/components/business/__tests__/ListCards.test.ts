@@ -94,6 +94,7 @@ describe('ListCards 组件', () => {
     fetchApi?: (params: ListQueryParams) => Promise<ListPageResult>
     defaultPageSize?: number
     showPagination?: boolean
+    actions?: Array<{ key: string; label: string }>
   }) {
     return mount(ListCards, {
       props: {
@@ -237,6 +238,20 @@ describe('ListCards 组件', () => {
     await flushPromises()
 
     expect(wrapper.find('.stub-pagination').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('渲染卡片操作区并在点击操作时阻止卡片点击', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      actions: [{ key: 'edit', label: '编辑' }],
+    })
+    await flushPromises()
+
+    await wrapper.find('.card-action-edit').trigger('click')
+    expect(wrapper.emitted('action-click')?.[0]).toEqual([{ key: 'edit', label: '编辑' }, { id: 1, name: '订单' }])
+    expect(wrapper.emitted('row-click')).toBeUndefined()
     wrapper.unmount()
   })
 })

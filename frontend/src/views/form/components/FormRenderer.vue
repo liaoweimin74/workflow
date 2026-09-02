@@ -90,6 +90,7 @@ import { normalizeForRender, deepDisableRules, deepDisableField } from '../schem
 import type { DataSourceBindingContext } from '@/components/business/types'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
+import { resolveOptionDataSource } from '@/vendor/option-datasource'
 import { useLinkageContainer, type LinkageContainer } from '../composables/useLinkageContainer'
 import ContainerButtons from './ContainerButtons.vue'
 
@@ -323,6 +324,32 @@ const mainSchema = ref<Rule[]>([])
 /** 渲染用 schema：将 formContainer 规范化为 fcRow 供 form-create 运行时渲染 */
 const renderSchema = computed(() => normalizeForRender(mainSchema.value))
 
+async function resolveOptionRules(rules: Rule[]): Promise<Rule[]> {
+  const resolved = await Promise.all(rules.map(async (rule) => {
+    const node = { ...rule } as Rule & { effect?: Record<string, unknown>; options?: unknown[]; children?: Rule[]; props?: Record<string, any> }
+    const datasource = node.effect?.datasource
+    if (datasource && typeof datasource === 'object') {
+      node.options = await resolveOptionDataSource(datasource as Parameters<typeof resolveOptionDataSource>[0])
+    }
+    if (Array.isArray(node.children)) node.children = await resolveOptionRules(node.children)
+    if (node.props && Array.isArray(node.props.rule)) {
+      node.props = { ...node.props, rule: await resolveOptionRules(node.props.rule) }
+    }
+    return node
+  }))
+  return resolved
+}
+
+function hasOptionDatasource(rules: Rule[]): boolean {
+  return rules.some((rule) => {
+    const node = rule as Rule & { effect?: Record<string, unknown>; children?: Rule[]; props?: Record<string, any> }
+    return Boolean(node.effect?.datasource)
+      || (Array.isArray(node.children) && hasOptionDatasource(node.children))
+      || (Array.isArray(node.props?.rule) && hasOptionDatasource(node.props.rule))
+  })
+}
+
+
 // resolvedSchema 变化 → 同步 mainSchema（提取 dialog 容器到弹窗）+ 收集表格组件配置
 watch(resolvedSchema, (val) => {
   collectTableConfigs(val)
@@ -363,7 +390,9 @@ onMounted(async () => {
   if (props.formDefId) {
     await loadSchema()
   } else if (props.rule) {
-    resolvedSchema.value = props.rule
+    resolvedSchema.value = hasOptionDatasource(props.rule)
+      ? await resolveOptionRules(props.rule)
+      : props.rule
   }
   applyDynamicLabelWidth()
   if (props.initialValues) {
@@ -405,9 +434,11 @@ watch(() => props.initialValues, (newVal) => {
 
 // 监听 rule 变化：父组件可能先挂载（rule 为空）再异步加载 schema（如页面渲染器详情/新增/编辑弹窗），
 // 必须响应式同步，否则 resolvedSchema 停留在空数组导致"暂无表单"
-watch(() => props.rule, (newVal) => {
+watch(() => props.rule, async (newVal) => {
   if (!Array.isArray(newVal) || newVal.length === 0) return
-  resolvedSchema.value = newVal
+  resolvedSchema.value = hasOptionDatasource(newVal)
+    ? await resolveOptionRules(newVal)
+    : newVal
   if (props.readonly) {
     resolvedSchema.value = deepDisableRules(resolvedSchema.value)
   }
@@ -429,7 +460,9 @@ async function loadSchema() {
     }
     const schema = JSON.parse(formDef.schema)
     const rules = Array.isArray(schema) ? schema : (schema.rule || [])
-    resolvedSchema.value = rules
+    resolvedSchema.value = hasOptionDatasource(rules)
+      ? await resolveOptionRules(rules)
+      : rules
     // 恢复表单级数据源绑定（供 LookupPicker/dataPicker 按 dataSourceId 解析）
     if (!Array.isArray(schema) && Array.isArray(schema.dataSources)) {
       schemaDataSources.value = schema.dataSources

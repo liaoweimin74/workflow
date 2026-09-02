@@ -38,6 +38,7 @@ export function makeTreeOptions(pre, config, level, data = []) {
 
 export function makeOptionsRule(t, to, label, value, children) {
     const options = [
+        {'label': t('fetch.optionsType.datasource'), 'value': 6},
         {'label': t('fetch.optionsType.struct'), 'value': 2},
         {'label': t('fetch.optionsType.text'), 'value': 4},
         {'label': t('fetch.optionsType.json'), 'value': 5},
@@ -46,6 +47,10 @@ export function makeOptionsRule(t, to, label, value, children) {
     const field = 'formCreate' + upper(to).replace('.', '>');
 
     const control = [
+        {
+            value: 6,
+            rule: [{ type: 'DataSourceConfig', field: 'formCreateEffect>datasource', props: { to } }]
+        },
         {
             value: 1,
             rule: [
@@ -121,6 +126,7 @@ export function makeOptionsRule(t, to, label, value, children) {
 
 export function makeTreeOptionsRule(t, to, label, value, children) {
     const options = [
+        {'label': t('fetch.optionsType.datasource'), 'value': 6},
         {'label': t('fetch.optionsType.struct'), 'value': 2},
         {'label': t('fetch.optionsType.text'), 'value': 4},
         {'label': t('fetch.optionsType.json'), 'value': 5},
@@ -129,6 +135,10 @@ export function makeTreeOptionsRule(t, to, label, value, children) {
     const field = 'formCreate' + upper(to).replace('.', '>');
 
     const control = [
+        {
+            value: 6,
+            rule: [{ type: 'DataSourceConfig', field: 'formCreateEffect>datasource', props: { to } }]
+        },
         {
             value: 1,
             rule: [

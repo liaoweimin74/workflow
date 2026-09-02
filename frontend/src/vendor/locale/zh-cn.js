@@ -202,6 +202,7 @@ const ZhCn = {
             struct: '静态数据',
             text: '文本录入',
             json: 'JSON数据',
+            datasource: '数据源',
         },
         preview: '预览响应数据',
         test: '测试请求',
@@ -980,4 +981,3 @@ const ZhCn = {
 };
 
 export default ZhCn;
-

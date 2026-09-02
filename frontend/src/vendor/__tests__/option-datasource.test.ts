@@ -124,4 +124,17 @@ describe('mapOptionRecords', () => {
     const result = mapOptionRecords(records, config)
     expect(result).toHaveLength(2)
   })
+
+  it('builds flat trees when children appear before their parents', () => {
+    const config: OptionDataSourceConfig = {
+      labelField: 'name',
+      valueField: 'id',
+      parentField: 'parentId',
+    }
+    const result = mapOptionRecords([
+      { id: 'child', parentId: 'root', name: 'Child' },
+      { id: 'root', parentId: null, name: 'Root' },
+    ], config)
+    expect(result).toEqual([{ label: 'Root', value: 'root', children: [{ label: 'Child', value: 'child' }] }])
+  })
 })

@@ -1,4 +1,8 @@
+import { dataSourceApi } from '@/api/data-source'
+
 export interface OptionDataSourceConfig {
+  readonly dataSourceId?: string
+  readonly filters?: string
   readonly labelField: string
   readonly valueField: string
   readonly childrenField?: string
@@ -54,30 +58,35 @@ function mapRecords(records: unknown, config: OptionDataSourceConfig): OptionNod
 
 function mapFlatTree(records: DataRecord[], config: OptionDataSourceConfig): OptionNode[] {
   const nodes = records.map((record) => mapRecord(record, { ...config, parentField: undefined }))
-  const byValue = new Map<unknown, OptionNode>()
-  records.forEach((_, index) => {
-    const node = nodes[index]
-    if (node) byValue.set(node.value, node)
-  })
-  const roots: OptionNode[] = []
-
+  const nodeByValue = new Map<unknown, OptionNode>()
+  const parentByValue = new Map<unknown, unknown>()
   records.forEach((record, index) => {
     const node = nodes[index]
     if (!node || !config.parentField) return
-    const parentValue = record[config.parentField]
-    const parent = byValue.get(parentValue)
-    if (parent && parent !== node) {
-      const children = parent.children ? [...parent.children, node] : [node]
-      byValue.set(parent.value, { ...parent, children })
-      const parentIndex = nodes.indexOf(parent)
-      const updatedParent = byValue.get(parent.value)
-      if (parentIndex >= 0 && updatedParent) nodes[parentIndex] = updatedParent
-    } else {
-      roots.push(node)
-    }
+    nodeByValue.set(node.value, node)
+    parentByValue.set(node.value, record[config.parentField])
   })
 
-  return roots
+  const childrenByParent = new Map<unknown, OptionNode[]>()
+  for (const node of nodes) {
+    const parentValue = parentByValue.get(node.value)
+    if (nodeByValue.has(parentValue)) {
+      const children = childrenByParent.get(parentValue) ?? []
+      children.push(node)
+      childrenByParent.set(parentValue, children)
+    }
+  }
+
+  const attachChildren = (node: OptionNode): OptionNode => {
+    const children = childrenByParent.get(node.value)
+    return children && children.length > 0
+      ? { ...node, children: children.map(attachChildren) }
+      : node
+  }
+
+  return nodes
+    .filter((node) => !nodeByValue.has(parentByValue.get(node.value)))
+    .map(attachChildren)
 }
 
 export function mapOptionRecords(records: unknown, config: OptionDataSourceConfig): OptionNode[] {
@@ -88,4 +97,15 @@ export function mapOptionRecords(records: unknown, config: OptionDataSourceConfi
   const validRecords = records.filter(isRecord)
   if (config.parentField) return mapFlatTree(validRecords, config)
   return mapRecords(validRecords, config)
+}
+
+export async function resolveOptionDataSource(config: OptionDataSourceConfig): Promise<OptionNode[]> {
+  if (!config.dataSourceId) return []
+  const response = await dataSourceApi.queryData(config.dataSourceId, {
+    page: 1,
+    size: 1000,
+    ...(config.filters ? { filter: config.filters } : {}),
+  })
+  const records = response.data?.records
+  return mapOptionRecords(records, config)
 }

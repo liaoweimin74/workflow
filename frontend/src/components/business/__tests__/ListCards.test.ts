@@ -95,6 +95,7 @@ describe('ListCards 组件', () => {
     defaultPageSize?: number
     showPagination?: boolean
     actions?: Array<{ key: string; label: string }>
+    groupBy?: string
   }) {
     return mount(ListCards, {
       props: {
@@ -252,6 +253,36 @@ describe('ListCards 组件', () => {
     await wrapper.find('.card-action-edit').trigger('click')
     expect(wrapper.emitted('action-click')?.[0]).toEqual([{ key: 'edit', label: '编辑' }, { id: 1, name: '订单' }])
     expect(wrapper.emitted('row-click')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('按 groupBy 分组渲染卡片，并保持每组横向自动换行网格', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      rows: [{ id: 1, team: '研发', name: '甲' }, { id: 2, team: '设计', name: '乙' }, { id: 3, team: '研发', name: '丙' }],
+      total: 3,
+    })
+    const wrapper = createWrapper({ fetchApi: mockFetch, groupBy: 'team' })
+    await flushPromises()
+
+    expect(wrapper.findAll('.card-group')).toHaveLength(2)
+    expect(wrapper.findAll('.card-grid').length).toBe(2)
+    expect(wrapper.find('.card-grid').attributes('style')).toContain('repeat(auto-fill')
+    wrapper.unmount()
+  })
+
+  it('按列配置渲染字体样式', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '订单' }], total: 1 })
+    const wrapper = createWrapper({
+      fetchApi: mockFetch,
+      columns: [{ prop: 'name', label: '名称', fontFamily: 'Microsoft YaHei', fontSize: 18, fontWeight: 700, fontColor: '#123456' }],
+    })
+    await flushPromises()
+
+    const fieldValue = wrapper.find('.field-value')
+    expect(fieldValue.attributes('style')).toMatch(/font-family:\s*["']?Microsoft YaHei["']?/)
+    expect(fieldValue.attributes('style')).toContain('font-size: 18px')
+    expect(fieldValue.attributes('style')).toContain('font-weight: 700')
+    expect(fieldValue.attributes('style')).toContain('color: rgb(18, 52, 86)')
     wrapper.unmount()
   })
 })

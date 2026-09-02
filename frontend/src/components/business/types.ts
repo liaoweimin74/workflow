@@ -353,6 +353,14 @@ export interface CardColumn {
   showOverflowTooltip?: boolean
   /** 单元格 class */
   cellClassName?: string
+  /** 字体族 */
+  fontFamily?: string
+  /** 字体大小（px） */
+  fontSize?: number
+  /** 字体粗细 */
+  fontWeight?: string | number
+  /** 字体颜色 */
+  fontColor?: string
 }
 
 /**

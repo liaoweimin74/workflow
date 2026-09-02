@@ -79,11 +79,17 @@ function mountDialog(bindingProps: Record<string, any> = {}, listMode = 'card') 
             })
           },
         },
+        'el-input-number': {
+          name: 'ElInputNumberStub',
+          props: ['modelValue'],
+          emits: ['update:modelValue'],
+          template: '<input class="stub-input-number" :value="modelValue" />',
+        },
         'el-radio-group': true,
         'el-radio-button': true,
         'el-button': true,
-        'el-tabs': true,
-        'el-tab-pane': true,
+        'el-tabs': { template: '<div class="stub-tabs"><slot /></div>' },
+        'el-tab-pane': { template: '<div class="stub-tab-pane"><slot /></div>' },
       },
     },
   })
@@ -105,6 +111,7 @@ describe('DsBindingConfigDialog — card listMode 展示模式', () => {
     mockMetadata()
     const wrapper = mountDialog({ dataSourceId: 'ds1' })
     await wrapper.setProps({ modelValue: true })
+    await flushPromises()
     await flushPromises()
 
     const vm = wrapper.vm as any

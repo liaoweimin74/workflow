@@ -1,6 +1,6 @@
 <template>
-  <el-dialog v-model="visible" :title="isTableMode ? '数据源配置' : '数据源配置'" :width="isTableMode ? '860px' : '600px'" :close-on-click-modal="false">
-    <template v-if="isTableMode">
+  <el-dialog v-model="visible" title="数据源配置" :width="isListMode ? '860px' : '600px'" :close-on-click-modal="false">
+    <template v-if="isListMode">
       <el-tabs v-model="activeTab" type="border-card">
         <!-- Tab 1: 数据源 + 组件级数据筛选 -->
         <el-tab-pane label="数据源" name="binding">
@@ -87,6 +87,7 @@
             :show-search="tableData.showSearch"
             v-model:sortable-fields="tableData.sortableFields"
             :sortable-candidates="tableSortableCandidates"
+            :mode="effectiveListMode"
           />
           <el-empty v-else description="请先选择数据源" :image-size="60" />
           <!-- 分页配置（默认显示分页，20 条/页，可选 [10,20,50]；横向流式布局） -->
@@ -116,11 +117,11 @@
         </el-tab-pane>
         <!-- Tab 3: 操作 -->
         <el-tab-pane label="操作" name="actions">
-          <ActionsConfig v-model="tableData.actions" v-model:detail="tableData.detail" />
+          <ActionsConfig v-model="tableData.actions" v-model:detail="tableData.detail" :mode="effectiveListMode" />
         </el-tab-pane>
         <!-- Tab 4: 事件 -->
         <el-tab-pane label="事件" name="events">
-          <EventsConfig v-model="tableData.events" />
+          <EventsConfig v-model="tableData.events" :mode="effectiveListMode" />
         </el-tab-pane>
       </el-tabs>
     </template>
@@ -212,8 +213,10 @@ const props = withDefaults(defineProps<{
   bindingProps?: Record<string, any>
   /** 页面内数据源绑定配置 */
   formDataSources: Array<{ id: string; refId: string }>
-  /** 是否为数据表格模式（显示列/操作/事件 tabs） */
+  /** 是否为数据表格模式（显示列/操作/事件 tabs）（兼容旧调用方） */
   tableMode?: boolean
+  /** 列表展示模式：table / card；缺省且未开 tableMode 时为 form-container 模式 */
+  listMode?: 'table' | 'card'
 }>(), {
   tableMode: false,
 })
@@ -228,7 +231,13 @@ const visible = computed({
   set: (v: boolean) => emit('update:modelValue', v),
 })
 
-const isTableMode = computed(() => props.tableMode)
+/** 归一化列表展示模式：listMode 优先，兼容 tableMode=true 视为 table */
+const effectiveListMode = computed<'table' | 'card' | undefined>(() =>
+  props.listMode || (props.tableMode ? 'table' : undefined),
+)
+
+/** 是否为列表配置模式（table/card tabs；false = form-container 按钮配置） */
+const isListMode = computed(() => effectiveListMode.value !== undefined)
 const activeTab = ref('binding')
 
 // ==================== 数据源 + 组件级数据筛选（表格模式） ====================
@@ -298,7 +307,7 @@ async function loadDsColumns() {
 async function handleDataSourceChange() {
   form.filterRows = []
   await loadDsColumns()
-  if (props.tableMode) {
+  if (isListMode.value) {
     await loadTableCandidates()
     initTableData()
   }
@@ -405,7 +414,7 @@ watch(() => props.modelValue, async (val) => {
     form.filterRows = []
   }
   await loadDsColumns()
-  if (props.tableMode) {
+  if (isListMode.value) {
     await loadTableCandidates()
     initTableData()
   } else {
@@ -426,8 +435,8 @@ function handleConfirm() {
   if (conditions.length > 0) {
     result.filter = { logic: form.filterLogic, conditions }
   }
-  // 表格配置
-  if (props.tableMode) {
+  // 列表配置（table/card）
+  if (isListMode.value) {
     result.showSearch = tableData.showSearch
     result.stretch = tableData.stretch
     result.searchFields = [...tableData.searchFields]
@@ -445,6 +454,15 @@ function handleConfirm() {
       ...(c.onCellClick !== undefined ? { onCellClick: c.onCellClick } : {}),
       ...(c.custom !== undefined ? { custom: c.custom } : {}),
       ...(c.hidden !== undefined ? { hidden: c.hidden } : {}),
+      // ===== 卡片专属字段（card 模式） =====
+      ...(c.role !== undefined ? { role: c.role } : {}),
+      ...(c.span !== undefined ? { span: c.span } : {}),
+      ...(c.fieldMinWidth !== undefined ? { fieldMinWidth: c.fieldMinWidth } : {}),
+      ...(c.valueType !== undefined ? { valueType: c.valueType } : {}),
+      ...(c.prefix !== undefined ? { prefix: c.prefix } : {}),
+      ...(c.suffix !== undefined ? { suffix: c.suffix } : {}),
+      ...(c.color !== undefined ? { color: c.color } : {}),
+      ...(c.truncate !== undefined ? { truncate: c.truncate } : {}),
     }))
     result.sortableFields = [...tableData.sortableFields]
     result.pagination = tableData.pagination
@@ -469,7 +487,7 @@ function handleConfirm() {
   }
   emit('confirm', result)
   visible.value = false
-  ElMessage.success(props.tableMode ? '数据源与表格配置已保存' : '数据源配置已保存')
+  ElMessage.success(isListMode.value ? '数据源与列表配置已保存' : '数据源配置已保存')
 }
 </script>
 

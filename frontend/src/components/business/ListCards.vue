@@ -39,6 +39,15 @@
         <div v-if="hasRoleMetric" class="card-metric">{{ formatValue(row, metricColumn) }}</div>
       </div>
     </div>
+    <el-pagination
+      v-if="total > 0"
+      class="card-pagination"
+      :current-page="query.page"
+      :page-size="query.size"
+      :total="total"
+      layout="prev, pager, next"
+      @current-change="handlePageChange"
+    />
   </div>
 </template>
 
@@ -128,6 +137,10 @@ async function fetchData(params?: Partial<ListQueryParams>) {
 }
 
 function handleCardClick(row: any) { emit('row-click', row) }
+function handlePageChange(page: number) {
+  query.page = page
+  fetchData()
+}
 function retry() { error.value = null; fetchData() }
 function refresh() { emit('refresh'); fetchData() }
 

@@ -92,6 +92,7 @@ describe('ListCards 组件', () => {
   function createWrapper(props: {
     columns?: CardColumn[]
     fetchApi?: (params: ListQueryParams) => Promise<ListPageResult>
+    defaultPageSize?: number
   }) {
     return mount(ListCards, {
       props: {
@@ -99,7 +100,16 @@ describe('ListCards 组件', () => {
         fetchApi: props.fetchApi || (() => Promise.resolve({ rows: [], total: 0 })),
         ...props,
       },
-      global: { plugins: [ElementPlus] },
+      global: {
+        plugins: [ElementPlus],
+        stubs: {
+          'el-pagination': {
+            props: ['currentPage', 'pageSize', 'total', 'pageSizes'],
+            emits: ['update:currentPage', 'update:pageSize', 'current-change', 'size-change'],
+            template: '<div class="stub-pagination" :data-current-page="currentPage" :data-page-size="pageSize" :data-total="total"><button class="next-page" @click="$emit(\'current-change\', currentPage + 1)">next</button></div>',
+          },
+        },
+      },
     })
   }
 
@@ -202,6 +212,21 @@ describe('ListCards 组件', () => {
     const wrapper = createWrapper({ fetchApi: mockFetch, cardMinWidth: 300 })
     await flushPromises()
     expect(wrapper.find('.card-grid').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('显示分页并在切换页码时携带 page 和 size 查询', async () => {
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ id: 1 }], total: 25 })
+      .mockResolvedValueOnce({ rows: [{ id: 11 }], total: 25 })
+    const wrapper = createWrapper({ fetchApi: mockFetch, defaultPageSize: 10 })
+    await flushPromises()
+
+    expect(wrapper.find('.stub-pagination').exists()).toBe(true)
+    expect(wrapper.find('.stub-pagination').attributes('data-current-page')).toBe('1')
+    await wrapper.find('.next-page').trigger('click')
+    await flushPromises()
+    expect(mockFetch).toHaveBeenLastCalledWith({ page: 2, size: 10 })
     wrapper.unmount()
   })
 })

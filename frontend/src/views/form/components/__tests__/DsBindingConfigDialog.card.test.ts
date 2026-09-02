@@ -188,4 +188,14 @@ describe('DsBindingConfigDialog — 卡片字段顶部快捷配置单行布局',
     expect(source).toContain('tableData.groupBy')
     expect(source).toContain('tableData.cardMinWidth')
   })
+
+  it('四项强制单行：nowrap + label 按内容宽（不换行）+ 控件可收缩', () => {
+    // 目的：显示查询栏/撑满/分组字段/卡片最小宽度 始终在一行展示，不因超宽换行。
+    expect(source).toMatch(/\.card-quick-config\s*\{[\s\S]*?flex-wrap:\s*nowrap;/)
+    // 四项 label 区去掉 el-form 100px 固定留白，改为按内容宽并 nowrap
+    expect(source).toMatch(/\.card-quick-config \.el-form-item__label\s*\{[\s\S]*?white-space:\s*nowrap;/)
+    expect(source).toMatch(/--el-form-label-width:\s*max-content;/)
+    // 控件弹性收缩，确保四项能被压缩进一行
+    expect(source).toMatch(/\.el-form-item__content\s*\{[\s\S]*?flex: 1 1 auto;/)
+  })
 })

@@ -82,14 +82,15 @@
                 </template>
                 <el-switch v-model="tableData.stretch" />
               </el-form-item>
-              <el-form-item v-if="effectiveListMode === 'card'" label="分组字段">
-                <el-select v-model="tableData.groupBy" clearable placeholder="不分组" style="width: 220px">
+              <el-form-item v-if="effectiveListMode === 'card'" class="qi-group-field">
+                <template #label><span class="qi-label">分组字段</span></template>
+                <el-select v-model="tableData.groupBy" clearable placeholder="不分组" class="qi-select">
                   <el-option v-for="c in tableCandidates" :key="c.key" :label="c.label || c.key" :value="c.key" />
                 </el-select>
               </el-form-item>
-              <el-form-item v-if="effectiveListMode === 'card'">
-                <template #label>卡片最小宽度</template>
-                <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" />
+              <el-form-item v-if="effectiveListMode === 'card'" class="qi-min-width">
+                <template #label><span class="qi-label">卡片最小宽度</span></template>
+                <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" class="qi-number" />
               </el-form-item>
             </div>
           </el-form>
@@ -522,14 +523,38 @@ function handleConfirm() {
   color: #909399;
 }
 /* 卡片顶部快捷配置：横向流式布局（放不下自动换行） */
+/* 卡片顶部快捷配置：四项强制单行展示。
+   el-form 默认 label-width=100px，四项 label+控件合计超宽会触发 flex 换行。
+   这里统一把 label 区改为按内容宽（nowrap 不换行），控件允许收缩，并强制 nowrap，
+   使 显示查询栏/撑满/分组字段/卡片最小宽度 始终在一行内。 */
 .card-quick-config {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 12px;
-  align-items: flex-start;
+  align-items: center;
 }
 .card-quick-config .el-form-item {
   margin-bottom: 0;
+  min-width: 0;
+  /* 去掉 el-form label-width=100px 的固定留白：四项 label 都按内容宽 */
+  --el-form-label-width: max-content;
+}
+.card-quick-config .el-form-item__label {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+/* 控件允许收缩，确保四项挤进一行 */
+.card-quick-config .el-form-item__content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 分组字段下拉：紧凑宽度（随容器可再收缩） */
+.card-quick-config .qi-select {
+  width: 170px;
+}
+/* 卡片最小宽度数字：紧凑宽度 */
+.card-quick-config .qi-number {
+  width: 138px;
 }
 /* 分页设置：横向流式布局（放不下自动换行） */
 .pagination-config {

@@ -23,9 +23,10 @@ vi.mock('@/utils/formDsBindingsStore', () => ({
 vi.mock('@/components/business/ListCards.vue', () => ({
   default: defineComponent({
     name: 'ListCardsStub',
-    props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'showPagination'],
-    setup(props: any) {
-      onMounted(() => props.fetchApi({ page: 2, size: 10 }))
+    props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'showPagination', 'actions', 'designMode'],
+    setup(props: any, { expose }: any) {
+      expose({ fetchData: vi.fn() })
+      onMounted(() => { if (!props.designMode) void props.fetchApi({ page: 2, size: 10 }) })
       return () => h('div', { class: 'list-cards-stub' })
     },
   }),
@@ -99,6 +100,42 @@ describe('PageDataCards', () => {
     expect(wrapper.find('.default-form-dialog').exists()).toBe(true)
     expect(wrapper.find('.default-form-stub').exists()).toBe(true)
     expect(getData).toHaveBeenCalledWith('global-orders', 7)
+    wrapper.unmount()
+  })
+
+  it('设计态只取元数据并生成一条按字段类型映射的 Mock 数据', async () => {
+    getMetadata.mockResolvedValueOnce({ data: { columns: [
+      { key: 'name', label: '名称', columnType: 'VARCHAR' },
+      { key: 'count', label: '数量', columnType: 'INT' },
+      { key: 'amount', label: '金额', columnType: 'DECIMAL' },
+      { key: 'createdAt', label: '创建时间', columnType: 'DATETIME' },
+      { key: 'enabled', label: '启用', columnType: 'BOOLEAN' },
+      { key: 'extra', label: '扩展', columnType: 'JSON' },
+    ] } })
+    const wrapper = mount(PageDataCards, {
+      props: {
+        designMode: true,
+        dataSourceId: 'orders',
+        columns: [],
+      },
+      global: { provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => true, openLinkedContainer: vi.fn() } } },
+    })
+    await wrapper.vm.$nextTick()
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    expect(queryData).not.toHaveBeenCalled()
+    expect(cardsStub.props('actions')).toEqual([])
+    expect(cardsStub.props('showPagination')).toBe(false)
+    expect(cardsStub.props('columns')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prop: 'name' }),
+      expect.objectContaining({ prop: 'count' }),
+      expect.objectContaining({ prop: 'amount' }),
+      expect.objectContaining({ prop: 'createdAt' }),
+      expect.objectContaining({ prop: 'enabled' }),
+      expect.objectContaining({ prop: 'extra' }),
+    ]))
+    expect(cardsStub.props('fetchApi')).toBeTypeOf('function')
     wrapper.unmount()
   })
 })

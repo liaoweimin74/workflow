@@ -386,6 +386,16 @@ function handlePageTableConfirm(newProps: Record<string, any>) {
   ElMessage.success('数据表格数据源配置已保存')
 }
 
+function enableCardDesignMode(rules: any[]): any[] {
+  return rules.map((rule) => {
+    const next = { ...rule, props: rule.props ? { ...rule.props } : rule.props }
+    if (next.type === 'page-list-cards') next.props = { ...(next.props || {}), designMode: true }
+    if (Array.isArray(next.children)) next.children = enableCardDesignMode(next.children)
+    if (Array.isArray(next.props?.rule)) next.props.rule = enableCardDesignMode(next.props.rule)
+    return next
+  })
+}
+
 // ===== 页面数据表单容器配置（复用 DsBindingConfigDialog 非表格模式） =====
 const formContainerDialogVisible = ref(false)
 /** 数据容器 rule：画布中 loadRule 后 type 为 FcRow，序列化前为 formContainer，两者兼容判断 */
@@ -514,6 +524,7 @@ function registerPageComponents() {
         pageSize: 20,
         cardMinWidth: 280,
         groupBy: '',
+        designMode: true,
       },
     }),
   })
@@ -592,7 +603,7 @@ onMounted(async () => {
         schema.actions = parsed.actions || []
         // 设置 FcDesigner rule（等待设计器就绪后 setRule）
         if (designerRef.value) {
-          designerRef.value.setRule(parsed.rule || [])
+          designerRef.value.setRule(enableCardDesignMode(parsed.rule || []))
           designerRef.value.setOption(parsed.option || {})
           // 从已保存的 rule 中恢复静态筛选到 tableFilterStore
           const rules = parsed.rule || []

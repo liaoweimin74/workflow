@@ -2,13 +2,14 @@
   <div class="page-data-cards" :class="{ 'stretch-fill': stretch }">
     <ListCards
       ref="cardsRef"
-      :columns="resolvedColumns"
+      :columns="columnsForRender"
       :fetch-api="fetchApi"
       :card-min-width="cardMinWidth"
       :default-page-size="pageSize || 20"
-      :show-pagination="pagination"
-      :actions="resolvedActions"
+      :show-pagination="designMode ? false : pagination"
+      :actions="designMode ? [] : resolvedActions"
       :group-by="groupBy"
+      :design-mode="designMode"
       @row-click="handleRowClick"
       @action-click="handleActionClick"
     />
@@ -47,6 +48,7 @@ const props = withDefaults(defineProps<{
   pagination?: boolean
   viewActions?: { buttons?: Array<{ key: string; label: string; placement?: string }> }
   groupBy?: string
+  designMode?: boolean
   stretch?: boolean
   [key: string]: any
 }>(), { pageSize: 20, pagination: true, cardMinWidth: 280, stretch: false })
@@ -84,11 +86,31 @@ const resolvedColumns = computed<CardColumn[]>(() => (props.columns || []).filte
   label: column.label || column.prop || (column as any).key,
 })))
 
-const resolvedActions = computed(() => (props.viewActions?.buttons || [])
+const metadataColumns = ref<any[]>([])
+const designRows = ref<Record<string, unknown>[]>([])
+const columnsForRender = computed(() => props.designMode && props.columns?.length === 0
+  ? metadataColumns.value.map((column) => ({ prop: column.key, label: column.label || column.key, role: column.role || 'field' }))
+  : resolvedColumns.value)
+
+function mockValue(columnType?: string): unknown {
+  switch ((columnType || '').toUpperCase()) {
+    case 'INT': case 'INTEGER': case 'BIGINT': return 128
+    case 'DECIMAL': case 'DOUBLE': case 'FLOAT': return 128.5
+    case 'BOOLEAN': return true
+    case 'TINYINT': return 1
+    case 'DATE': return '2026-01-15'
+    case 'DATETIME': case 'TIMESTAMP': return '2026-01-15 10:30:00'
+    case 'JSON': return '{}'
+    default: return '示例文本'
+  }
+}
+
+const resolvedActions = computed(() => props.designMode ? [] : (props.viewActions?.buttons || [])
   .filter((button) => button.placement !== 'toolbar')
   .map((button) => ({ key: button.key, label: button.label })))
 
 const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
+  if (props.designMode) return { rows: designRows.value, total: designRows.value.length }
   if (!resolvedRefId.value) return { rows: [], total: 0 }
   const response = await dataSourceApi.queryData(resolvedRefId.value, {
     page: Math.max(1, params.page),
@@ -151,6 +173,14 @@ onMounted(() => {
   actionBus?.register?.(props.dataSourceId || '', instance)
   emit('ready', instance)
 })
+
+if (props.designMode && resolvedRefId.value) {
+  void dataSourceApi.getMetadata(resolvedRefId.value).then((response) => {
+    metadataColumns.value = response.data?.columns || []
+    designRows.value = [Object.fromEntries(metadataColumns.value.map((column: any) => [column.key, mockValue(column.columnType)]))]
+    void cardsRef.value?.fetchData()
+  })
+}
 </script>
 
 <style scoped>

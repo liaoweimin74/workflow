@@ -285,6 +285,7 @@ onMounted(async () => {
         pageSize: 20,
         cardMinWidth: 280,
         groupBy: '',
+        designMode: true,
       },
     }),
   })
@@ -386,7 +387,7 @@ onMounted(async () => {
         // 等待设计器渲染完成
         await nextTick()
         if (designerRef.value) {
-          designerRef.value.setRule(rule)
+          designerRef.value.setRule(enableCardDesignMode(rule))
           if (option) {
             // 将数据库中的 name 同步到 option 中显示
             if (!option.form) option.form = {}
@@ -441,6 +442,16 @@ function registerFormContainerProps() {
     ],
     false,
   )
+}
+
+function enableCardDesignMode(rules: any[]): any[] {
+  return rules.map((item) => {
+    const next = { ...item, props: item.props ? { ...item.props } : item.props }
+    if (next.type === 'page-list-cards') next.props = { ...(next.props || {}), designMode: true }
+    if (Array.isArray(next.children)) next.children = enableCardDesignMode(next.children)
+    if (Array.isArray(next.props?.rule)) next.props.rule = enableCardDesignMode(next.props.rule)
+    return next
+  })
 }
 
 /** 注册数据表格数据源属性面板（按钮 → 弹窗配置） */

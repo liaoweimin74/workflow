@@ -13,13 +13,13 @@
     <div v-else-if="error" class="error-state">
       <el-icon :size="48" style="color: #ff4d4f"><Warning /></el-icon>
       <div class="error-message">{{ error }}</div>
-      <el-button type="primary" @click="retry" class="retry-btn">重试</el-button>
+      <el-button v-if="!designMode" type="primary" @click="retry" class="retry-btn">重试</el-button>
     </div>
 
     <!-- 空状态 -->
     <div v-else-if="total === 0 && rows.length === 0" class="empty-state">
       <el-empty description="暂无数据" />
-      <el-button type="primary" @click="retry" class="retry-btn">重试</el-button>
+      <el-button v-if="!designMode" type="primary" @click="retry" class="retry-btn">重试</el-button>
     </div>
 
     <!-- 卡片网格渲染 -->
@@ -78,6 +78,7 @@ interface ListCardsProps {
   cardMinWidth?: number | string
   defaultPageSize?: number
   showPagination?: boolean
+  designMode?: boolean
   actions?: Array<{ key: string; label: string }>
   groupBy?: string
 }
@@ -86,6 +87,7 @@ const props = withDefaults(defineProps<ListCardsProps>(), {
   defaultPageSize: 10,
   cardMinWidth: 200,
   showPagination: true,
+  designMode: false,
   actions: () => [],
 })
 

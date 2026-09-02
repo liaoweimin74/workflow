@@ -269,6 +269,25 @@ onMounted(async () => {
     ],
   })
 
+  designerRef.value?.addComponent({
+    label: '卡片列表',
+    name: 'page-list-cards',
+    icon: 'icon-grid',
+    menu: 'main',
+    rule: () => ({
+      type: 'page-list-cards',
+      field: 'cards' + Date.now(),
+      title: '卡片列表',
+      props: {
+        dataSourceId: '',
+        columns: [],
+        pagination: true,
+        pageSize: 20,
+        cardMinWidth: 280,
+      },
+    }),
+  })
+
   // 注册数据引用（dataPicker）组件
   designerRef.value?.addComponent({
     label: '数据引用',

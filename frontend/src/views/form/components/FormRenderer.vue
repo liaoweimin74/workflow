@@ -90,11 +90,13 @@ import { normalizeForRender, deepDisableRules, deepDisableField } from '../schem
 import type { DataSourceBindingContext } from '@/components/business/types'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
+import PageDataCards from '@/views/page/components/PageDataCards.vue'
 import { useLinkageContainer, type LinkageContainer } from '../composables/useLinkageContainer'
 import ContainerButtons from './ContainerButtons.vue'
 
 // 注册数据表格组件到 form-create（表单内嵌 page-table 支持）
 formCreate.component('page-table', PageDataTable)
+formCreate.component('page-list-cards', PageDataCards)
 
 /** 表单级动作链类型（对齐 DataSourceConfigPanel Action：trigger/source/steps） */
 interface FormActionStep {

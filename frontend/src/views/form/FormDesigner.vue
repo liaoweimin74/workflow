@@ -284,6 +284,7 @@ onMounted(async () => {
         pagination: true,
         pageSize: 20,
         cardMinWidth: 280,
+        groupBy: '',
       },
     }),
   })

@@ -68,7 +68,7 @@
       :current-fields="currentFieldKeys"
       :binding-props="currentPageTableProps"
       :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
-      :table-mode="true"
+      :list-mode="currentPageListMode"
       @confirm="handlePageTableConfirm"
     />
 
@@ -365,6 +365,9 @@ const currentPageTableProps = computed(() => {
   const active = designerRef.value?.activeRule as any
   return active?.props || {}
 })
+const currentPageListMode = computed<'table' | 'card'>(() =>
+  designerRef.value?.activeRule?.type === 'page-list-cards' ? 'card' : 'table',
+)
 function openPageTableDsConfig() {
   pageTableDialogVisible.value = true
 }
@@ -510,6 +513,7 @@ function registerPageComponents() {
         pagination: true,
         pageSize: 20,
         cardMinWidth: 280,
+        groupBy: '',
       },
     }),
   })

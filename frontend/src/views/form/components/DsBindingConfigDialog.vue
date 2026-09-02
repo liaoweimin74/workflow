@@ -473,17 +473,14 @@ function handleConfirm() {
       ...(c.hidden !== undefined ? { hidden: c.hidden } : {}),
       // ===== 卡片专属字段（card 模式） =====
       ...(c.role !== undefined ? { role: c.role } : {}),
-      ...(c.span !== undefined ? { span: c.span } : {}),
-      ...(c.fieldMinWidth !== undefined ? { fieldMinWidth: c.fieldMinWidth } : {}),
       ...(c.valueType !== undefined ? { valueType: c.valueType } : {}),
-      ...(c.prefix !== undefined ? { prefix: c.prefix } : {}),
-      ...(c.suffix !== undefined ? { suffix: c.suffix } : {}),
-      ...(c.color !== undefined ? { color: c.color } : {}),
-      ...(c.truncate !== undefined ? { truncate: c.truncate } : {}),
       ...(c.fontFamily !== undefined ? { fontFamily: c.fontFamily } : {}),
       ...(c.fontSize !== undefined ? { fontSize: c.fontSize } : {}),
       ...(c.fontWeight !== undefined ? { fontWeight: c.fontWeight } : {}),
       ...(c.fontColor !== undefined ? { fontColor: c.fontColor } : {}),
+      ...(c.showLabel !== undefined ? { showLabel: c.showLabel } : {}),
+      ...(c.labelPosition !== undefined ? { labelPosition: c.labelPosition } : {}),
+      ...(c.style !== undefined ? { style: c.style } : {}),
     }))
     result.sortableFields = [...tableData.sortableFields]
     result.pagination = tableData.pagination

@@ -424,17 +424,14 @@ const advancedVisible = ref(false)
 const advancedColumn = ref<ColumnViewConfig | null>(null)
 type CardColumnConfig = ColumnViewConfig & {
   role?: string
-  span?: number
-  fieldMinWidth?: number
   valueType?: string
-  prefix?: string
-  suffix?: string
-  color?: string
-  truncate?: boolean
   fontFamily?: string
   fontSize?: number
   fontWeight?: string | number
   fontColor?: string
+  showLabel?: boolean
+  labelPosition?: 'left' | 'right' | 'top'
+  style?: string
 }
 const cardAdvancedVisible = ref(false)
 const cardAdvancedColumn = ref<CardColumnConfig | null>(null)
@@ -479,18 +476,15 @@ function saveCardAdvanced(updated: CardColumnConfig) {
 function pickCardAdvanced(c: CardColumnConfig): Partial<CardColumnConfig> {
   return {
     ...(c.role !== undefined ? { role: c.role } : {}),
-    ...(c.span !== undefined ? { span: c.span } : {}),
-    ...(c.fieldMinWidth !== undefined ? { fieldMinWidth: c.fieldMinWidth } : {}),
     ...(c.align !== undefined ? { align: c.align } : {}),
     ...(c.valueType !== undefined ? { valueType: c.valueType } : {}),
-    ...(c.prefix !== undefined ? { prefix: c.prefix } : {}),
-    ...(c.suffix !== undefined ? { suffix: c.suffix } : {}),
-    ...(c.color !== undefined ? { color: c.color } : {}),
-    ...(c.truncate !== undefined ? { truncate: c.truncate } : {}),
     ...(c.fontFamily !== undefined ? { fontFamily: c.fontFamily } : {}),
     ...(c.fontSize !== undefined ? { fontSize: c.fontSize } : {}),
     ...(c.fontWeight !== undefined ? { fontWeight: c.fontWeight } : {}),
     ...(c.fontColor !== undefined ? { fontColor: c.fontColor } : {}),
+    ...(c.showLabel !== undefined ? { showLabel: c.showLabel } : {}),
+    ...(c.labelPosition !== undefined ? { labelPosition: c.labelPosition } : {}),
+    ...(c.style !== undefined ? { style: c.style } : {}),
   }
 }
 

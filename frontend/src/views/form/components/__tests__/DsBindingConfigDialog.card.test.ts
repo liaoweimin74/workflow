@@ -123,14 +123,15 @@ describe('DsBindingConfigDialog — card listMode 展示模式', () => {
     wrapper.unmount()
   })
 
-  it('listMode="card" 保存结果列序列化含卡片字段（role/span/fieldMinWidth/valueType/prefix/suffix/color/truncate）', async () => {
+  it('listMode="card" 保存结果列序列化含已实现卡片字段', async () => {
     mockMetadata()
     const wrapper = mountDialog({
       dataSourceId: 'ds1',
       columns: [
         { prop: 'name', label: '姓名', width: 130, align: 'left',
-          role: 'title', span: 12, fieldMinWidth: 100, valueType: 'currency',
-          prefix: '¥', suffix: '元', color: '#409eff', truncate: true },
+           role: 'title', valueType: 'currency', fontFamily: 'Microsoft YaHei', fontSize: 18,
+           fontWeight: 700, fontColor: '#409eff', showLabel: false, labelPosition: 'top',
+           style: 'border: 1px solid red;' },
         { prop: 'age', label: '年龄' },
       ],
     })
@@ -140,19 +141,20 @@ describe('DsBindingConfigDialog — card listMode 展示模式', () => {
     // 回填：卡片字段进入组件列表数据
     const vm = wrapper.vm as any
     expect(vm.tableData.columns[0].role).toBe('title')
-    expect(vm.tableData.columns[0].truncate).toBe(true)
+    expect(vm.tableData.columns[0].showLabel).toBe(false)
 
     ;(wrapper.vm as any).handleConfirm()
     const result = (wrapper.emitted('confirm') as any[])[0][0]
     const name = result.columns.find((c: any) => c.prop === 'name')
     expect(name.role).toBe('title')
-    expect(name.span).toBe(12)
-    expect(name.fieldMinWidth).toBe(100)
     expect(name.valueType).toBe('currency')
-    expect(name.prefix).toBe('¥')
-    expect(name.suffix).toBe('元')
-    expect(name.color).toBe('#409eff')
-    expect(name.truncate).toBe(true)
+    expect(name.fontFamily).toBe('Microsoft YaHei')
+    expect(name.fontSize).toBe(18)
+    expect(name.fontWeight).toBe(700)
+    expect(name.fontColor).toBe('#409eff')
+    expect(name.showLabel).toBe(false)
+    expect(name.labelPosition).toBe('top')
+    expect(name.style).toBe('border: 1px solid red;')
     wrapper.unmount()
   })
 })

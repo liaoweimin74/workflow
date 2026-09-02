@@ -510,19 +510,20 @@ describe('QueryColumnsConfig — 卡片模式扩展', () => {
     ;(wrapper.vm as any).saveCardAdvanced({
       key: 'name',
       role: 'title',
-      span: 2,
-      fieldMinWidth: 180,
-      align: 'right',
-      valueType: 'currency',
-      prefix: '￥',
-      suffix: '元',
-      color: '#409eff',
-      truncate: true,
+       align: 'right',
+       valueType: 'currency',
+       fontFamily: 'Microsoft YaHei',
+       fontSize: 18,
+       fontWeight: 700,
+       fontColor: '#409eff',
+       showLabel: false,
+       labelPosition: 'top',
+       style: 'color: #409eff;',
     })
     await nextTick()
     const emitted = wrapper.emitted('update:columns') as any[]
     const name = emitted[emitted.length - 1][0][0]
-    expect(name).toMatchObject({ role: 'title', span: 2, fieldMinWidth: 180, align: 'right', valueType: 'currency', prefix: '￥', suffix: '元', color: '#409eff', truncate: true })
+     expect(name).toMatchObject({ role: 'title', align: 'right', valueType: 'currency', fontFamily: 'Microsoft YaHei', fontSize: 18, fontWeight: 700, fontColor: '#409eff', showLabel: false, labelPosition: 'top', style: 'color: #409eff;' })
     expect(name.width).toBe(200)
     expect(JSON.parse(JSON.stringify(name))).toEqual(name)
     wrapper.unmount()
@@ -541,11 +542,14 @@ describe('CardColumnAdvancedConfig', () => {
     await nextTick()
     expect(wrapper.find('.card-column-advanced-config').exists()).toBe(true)
     expect(wrapper.text()).toContain('角色')
-    expect(wrapper.text()).toContain('字段最小宽度')
-    ;(wrapper.vm as any).patch({ role: 'metric', span: 3, fieldMinWidth: 240, valueType: 'number', prefix: '共', suffix: '项', color: '#67c23a', truncate: true })
+     expect(wrapper.text()).toContain('颜色')
+     expect(wrapper.text()).toContain('显示标签')
+     expect(wrapper.text()).toContain('标签位置')
+     expect(wrapper.text()).toContain('样式语法')
+     ;(wrapper.vm as any).patch({ role: 'metric', valueType: 'number', align: 'center', fontSize: 20, fontWeight: 700, fontColor: '#67c23a', showLabel: false, labelPosition: 'top', style: 'color: #67c23a;' })
     ;(wrapper.vm as any).handleSave()
     const saved = (wrapper.emitted('save') as any[])[0][0]
-    expect(saved).toMatchObject({ role: 'metric', span: 3, fieldMinWidth: 240, valueType: 'number', prefix: '共', suffix: '项', color: '#67c23a', truncate: true })
+     expect(saved).toMatchObject({ role: 'metric', valueType: 'number', align: 'center', fontSize: 20, fontWeight: 700, fontColor: '#67c23a', showLabel: false, labelPosition: 'top', style: 'color: #67c23a;' })
     expect(JSON.parse(JSON.stringify(saved))).toEqual(saved)
     wrapper.unmount()
   })

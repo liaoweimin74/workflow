@@ -1,5 +1,8 @@
-## ADDED Requirements
+# form-create-list-cards Specification
 
+## Purpose
+TBD - created by archiving change list-cards-component. Update Purpose after archive.
+## Requirements
 ### Requirement: The form-create integration SHALL register a serializable page-list-cards component
 
 The form-create/page designer runtime MUST recognize `page-list-cards` and render it through the ListCards implementation. Its props MUST include dataSourceId, pagination/search settings, card layout settings, structured columns, and action configuration.
@@ -76,24 +79,3 @@ The designer MUST compose `QueryColumnsConfig`, `CardColumnAdvancedConfig`, `Act
 - **WHEN** a Card row triggers an existing open-container/load-record/save-container/close-container action chain
 - **THEN** the same bound form-container protocol and row context used by table lists is executed
 
-### TESTABLE Scenarios for Shared Configuration Extension
-
-#### Scenario: QueryColumnsConfig card-mode extension
-- **WHEN** QueryColumnsConfig runs in card mode
-- **THEN** it exposes the same shared field/query configuration (metadata candidates, display/hidden/order/label, search/filter/sort, custom fields, formatter/template/expression) plus card-specific columns for role, span, valueType, prefix, suffix, color, truncate — without introducing a separate `CardQueryColumnsConfig` duplication
-
-#### Scenario: CardColumnAdvancedConfig
-- **WHEN** a designer opens the card column advanced config from QueryColumnsConfig
-- **THEN** the focused `CardColumnAdvancedConfig` dialog contains role, layout, valueType, prefix, suffix, color, truncate — the focused card-specific set, distinct from the shared table `ColumnAdvancedConfig`
-
-#### Scenario: ActionsConfig card placement
-- **WHEN** the designer switches ActionsConfig to card mode
-- **THEN** the placement options include cardToolbar / actionColumn variants while permissions/confirm/visibility/events/detail/form mode remain identical to table
-
-#### Scenario: EventsConfig card triggers
-- **WHEN** the designer configures events in card mode
-- **THEN** trigger options include row-click, refresh, CRUD success, open-container, load-record, save-container, close-container; capability filters hide selection/cell triggers that table-only contexts expose
-
-#### Scenario: ViewDesigner / PageDesigner integration
-- **WHEN** ViewDesigner or PageDesigner configures a card-list row
-- **THEN** it composes the same shared components (QueryColumnsConfig + CardColumnAdvancedConfig + ActionsConfig + EventsConfig) and reuses the existing data-source binding path — ListCards is a renderer, not a new data-source system

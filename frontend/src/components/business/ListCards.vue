@@ -1,5 +1,21 @@
 <template>
   <div class="list-cards" :class="{ 'is-loading': loading }">
+    <el-card v-if="showSearch" class="search-card card-search" shadow="never">
+      <el-form :inline="true" :model="query" @submit.prevent="handleSearch">
+        <el-form-item v-for="field in searchFields" :key="field.prop" :label="field.label">
+          <el-input
+            v-model="query[field.prop]"
+            :placeholder="field.placeholder || field.label"
+            clearable
+            @keyup.enter="handleSearch"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+          <el-button :icon="Refresh" @click="handleReset">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
 <!-- 加载中骨架屏 -->
     <div v-if="loading" class="loading-skeleton">
       <el-skeleton :paragraph="{ rows: 3 }" active :grid="skeletonGrid">
@@ -96,8 +112,10 @@
       :current-page="query.page"
       :page-size="query.size"
       :total="total"
-      layout="prev, pager, next"
+      :page-sizes="pageSizes"
+      layout="total, sizes, prev, pager, next"
       @current-change="handlePageChange"
+      @size-change="handlePageSizeChange"
     />
   </div>
 </template>
@@ -108,7 +126,7 @@ import {
   Warning, Plus, Edit, Delete, View, Search, Refresh, Upload, Download,
   Document, Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock, ArrowDown,
 } from '@element-plus/icons-vue'
-import type { CardColumn, ListQueryParams, ListPageResult } from './types'
+import type { CardColumn, ListQueryParams, ListPageResult, SearchField } from './types'
 import { renderCellContent } from '@/utils/tableColumnRenderer'
 
 interface ListCardsProps {
@@ -116,6 +134,9 @@ interface ListCardsProps {
   columns: CardColumn[]
   cardMinWidth?: number | string
   defaultPageSize?: number
+  searchFields?: SearchField[]
+  showSearch?: boolean
+  pageSizes?: number[]
   showPagination?: boolean
   designMode?: boolean
   /** 操作按钮（style 控制形态：button=带图标+文字 / icon=仅图标圆形 / text=文字链接） */
@@ -136,6 +157,9 @@ interface ListCardsProps {
 
 const props = withDefaults(defineProps<ListCardsProps>(), {
   defaultPageSize: 10,
+  searchFields: () => [],
+  showSearch: false,
+  pageSizes: () => [10, 20, 50],
   cardMinWidth: 200,
   showPagination: true,
   designMode: false,
@@ -157,6 +181,15 @@ const error = ref<string | null>(null)
 let requestId = 0
 
 const query = reactive<ListQueryParams>({ page: 1, size: props.defaultPageSize })
+const searchFields = computed(() => props.searchFields.filter((field) => Boolean(field.prop)))
+const showSearch = computed(() => props.showSearch && searchFields.value.length > 0)
+const initialQuery = computed(() => Object.fromEntries([
+  ['page', 1],
+  ['size', props.defaultPageSize],
+  ...searchFields.value
+    .filter((field) => field.defaultValue !== undefined)
+    .map((field) => [field.prop, field.defaultValue]),
+]))
 const actions = computed(() => props.actions)
 
 // ===== 操作按钮图标 =====
@@ -248,7 +281,7 @@ async function fetchData(params?: Partial<ListQueryParams>) {
   error.value = null
   const reqId = ++requestId
   try {
-    const result = await props.fetchApi({ page: query.page, size: query.size, ...params } as ListQueryParams)
+    const result = await props.fetchApi({ ...query, ...params } as ListQueryParams)
     if (reqId === requestId) {
       rows.value = result.rows ?? []
       total.value = result.total ?? 0
@@ -288,10 +321,27 @@ function handlePageChange(page: number) {
   query.page = page
   fetchData()
 }
+function handlePageSizeChange(size: number) {
+  query.size = size
+  query.page = 1
+  fetchData()
+}
+function handleSearch() {
+  query.page = 1
+  fetchData()
+}
+function handleReset() {
+  for (const key of Object.keys(query)) delete query[key]
+  Object.assign(query, initialQuery.value)
+  fetchData()
+}
 function retry() { error.value = null; fetchData() }
 function refresh() { emit('refresh'); fetchData() }
 
-onMounted(() => fetchData())
+onMounted(() => {
+  Object.assign(query, initialQuery.value)
+  fetchData()
+})
 defineExpose({ fetchData, refresh, retry })
 </script>
 

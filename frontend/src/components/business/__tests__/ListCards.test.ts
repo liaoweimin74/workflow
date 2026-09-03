@@ -4,7 +4,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
-import type { CardColumn, ListQueryParams, ListPageResult } from '../types'
+import type { CardColumn, ListQueryParams, ListPageResult, SearchField } from '../types'
 import ListCards from '../ListCards.vue'
 
 // ===== 类型测试 =====
@@ -98,6 +98,9 @@ describe('ListCards 组件', () => {
     groupBy?: string
     collapsibleGroups?: boolean
     actionsPlacement?: 'top' | 'bottom' | 'right'
+    searchFields?: SearchField[]
+    showSearch?: boolean
+    pageSizes?: number[]
   }) {
     return mount(ListCards, {
       props: {
@@ -111,7 +114,7 @@ describe('ListCards 组件', () => {
           'el-pagination': {
             props: ['currentPage', 'pageSize', 'total', 'pageSizes'],
             emits: ['update:currentPage', 'update:pageSize', 'current-change', 'size-change'],
-            template: '<div class="stub-pagination" :data-current-page="currentPage" :data-page-size="pageSize" :data-total="total"><button class="next-page" @click="$emit(\'current-change\', currentPage + 1)">next</button></div>',
+             template: '<div class="stub-pagination" :data-current-page="currentPage" :data-page-size="pageSize" :data-total="total"><button class="next-page" @click="$emit(\'current-change\', currentPage + 1)">next</button><button class="change-size" @click="$emit(\'size-change\', 20)">size</button></div>',
           },
         },
       },
@@ -496,6 +499,165 @@ describe('ListCards 组件', () => {
       await flushPromises()
 
       expect(wrapper.find('.field-value').text()).toContain('商品')
+      wrapper.unmount()
+    })
+  })
+  // ===== RED→GREEN: 查询栏与 page-size 变化 (Task 1) =====
+  describe('查询栏与分页', () => {
+    const inputFields: SearchField[] = [
+      { type: 'input', label: '名称', prop: 'name' },
+    ]
+
+    it('showSearch=true 且 searchFields 存在时渲染查询输入框和查询/重置按钮', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: 'A' }], total: 1 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name' }],
+        showSearch: true,
+        searchFields: inputFields,
+      })
+      await flushPromises()
+
+      // 查询栏可见
+      expect(wrapper.find('.search-card').exists()).toBe(true)
+      // 输入框存在（el-input 渲染为 .el-input__inner）
+      const inputs = wrapper.findAll('.search-card input')
+      expect(inputs.length).toBeGreaterThanOrEqual(1)
+      // 查询按钮（primary）和重置按钮存在
+      const buttons = wrapper.findAll('.search-card .el-button')
+      expect(buttons.length).toBeGreaterThanOrEqual(2)
+      wrapper.unmount()
+    })
+
+    it('showSearch=false 时不渲染查询栏', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1 }], total: 1 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name' }],
+        showSearch: false,
+        searchFields: inputFields,
+      })
+      await flushPromises()
+      expect(wrapper.find('.search-card').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('showSearch=true 但 searchFields 为空时不渲染查询栏', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1 }], total: 1 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name' }],
+        showSearch: true,
+        searchFields: [],
+      })
+      await flushPromises()
+      expect(wrapper.find('.search-card').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('点击查询按钮时携带字段值、page 重置为 1，且 fetchApi 收到当前 page/size/字段值', async () => {
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], total: 25 })
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], total: 25 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name' }],
+        showSearch: true,
+        searchFields: inputFields,
+        defaultPageSize: 10,
+        pageSizes: [10, 20],
+      })
+      await flushPromises()
+
+      // 模拟进入第 2 页
+      await wrapper.find('.next-page').trigger('click')
+      await flushPromises()
+      expect(mockFetch).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, size: 10 }))
+
+      // 填入搜索字段并点击查询按钮（第一个 primary 按钮）
+      const input = wrapper.find('.search-card input')
+      await input.setValue('订单')
+      const searchBtn = wrapper.find('.search-card .el-button--primary')
+      await searchBtn.trigger('click')
+      await flushPromises()
+
+      expect(mockFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({ name: '订单', page: 1, size: 10 })
+      )
+      wrapper.unmount()
+    })
+
+    it('点击重置按钮时清空字段值、page 重置为 1', async () => {
+      const mockFetch = vi.fn().mockResolvedValueOnce({ rows: [{ id: 1 }], total: 25 })
+        .mockResolvedValue({ rows: [{ id: 1 }], total: 25 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name' }],
+        showSearch: true,
+        searchFields: inputFields,
+        defaultPageSize: 10,
+      })
+      await flushPromises()
+
+      // 填入搜索字段并点击查询
+      const input = wrapper.find('.search-card input')
+      await input.setValue('订单')
+      const searchBtn = wrapper.find('.search-card .el-button--primary')
+      await searchBtn.trigger('click')
+      await flushPromises()
+
+      // 点击重置按钮（非 primary 的第二个按钮）
+      const buttons = wrapper.findAll('.search-card .el-button')
+      const resetBtn = buttons[buttons.length - 1]
+      await resetBtn.trigger('click')
+      await flushPromises()
+
+      // 重置后输入框应清空（el-input modelValue 被清空）
+      expect((wrapper.find('.search-card input').element as HTMLInputElement).value).toBe('')
+      // fetchApi 最后调用应包含 page=1
+      expect(mockFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({ page: 1, size: 10 })
+      )
+      wrapper.unmount()
+    })
+
+    it('分页切换到新页码时 fetchApi 收到对应 page', async () => {
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], total: 50 })
+        .mockResolvedValueOnce({ rows: [{ id: 11 }], total: 50 })
+        .mockResolvedValueOnce({ rows: [{ id: 21 }], total: 50 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name' }],
+        defaultPageSize: 10,
+      })
+      await flushPromises()
+
+      // 初始加载后切到第 2 页
+      await wrapper.find('.next-page').trigger('click')
+      await flushPromises()
+      expect(mockFetch).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2, size: 10 }))
+      wrapper.unmount()
+    })
+
+    it('分页切换 page size 时回到第一页并传递新 size', async () => {
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], total: 50 })
+        .mockResolvedValueOnce({ rows: [{ id: 11 }], total: 50 })
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], total: 50 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name' }],
+        defaultPageSize: 10,
+        pageSizes: [10, 20],
+      })
+      await flushPromises()
+      await wrapper.find('.next-page').trigger('click')
+      await flushPromises()
+      await wrapper.find('.change-size').trigger('click')
+      await flushPromises()
+
+      expect(mockFetch).toHaveBeenLastCalledWith({ page: 1, size: 20 })
       wrapper.unmount()
     })
   })

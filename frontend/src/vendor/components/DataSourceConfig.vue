@@ -1,11 +1,19 @@
 <template>
   <div class="option-datasource-control">
     <el-button class="option-ds-button" plain size="small" @click="openDialog">配置数据源</el-button>
-    <el-dialog v-model="dialogVisible" title="配置数据源" width="860px" :close-on-click-modal="false" @close="discardDraft">
+    <el-dialog
+      v-model="dialogVisible"
+      class="datasource-config-dialog"
+      title="配置数据源"
+      width="860px"
+      append-to-body
+      :close-on-click-modal="false"
+      @close="discardDraft"
+    >
     <el-tabs v-model="activeTab" type="border-card">
-      <el-tab-pane label="数据源" name="source">
-        <DataSourceBindingTab
-          ref="sourceTabRef"
+        <el-tab-pane label="数据源" name="source">
+         <UniDataSourceBinding
+           ref="sourceTabRef"
           :model-value="sourceDraft"
           @update:model-value="updateSourceDraft"
           :form-data-sources="sourceBindings"
@@ -51,7 +59,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { ColumnConfigItem } from '@/api/bizData'
-import DataSourceBindingTab, { type DataSourceTabValue } from '@/views/form/components/DataSourceBindingTab.vue'
+import UniDataSourceBinding, { type UniDataSourceValue } from '@/views/form/components/UniDataSourceBinding.vue'
 import type { OptionDataSourceConfig } from '../option-datasource'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
@@ -65,8 +73,8 @@ const emit = defineEmits<{ (event: 'update:modelValue', value: OptionConfig): vo
 const dialogVisible = ref(false)
 const activeTab = ref('source')
 const columns = ref<ColumnConfigItem[]>([])
-const sourceTabRef = ref<InstanceType<typeof DataSourceBindingTab> | null>(null)
-const sourceDraft = ref<DataSourceTabValue>({ dataSourceId: '' })
+const sourceTabRef = ref<InstanceType<typeof UniDataSourceBinding> | null>(null)
+const sourceDraft = ref<UniDataSourceValue>({ dataSourceId: '' })
 const fieldDraft = reactive({ labelField: '', valueField: '', childrenField: '', parentField: '' })
 const sourceBindings = computed(() => props.formDataSources ?? activeDsBindings.value)
 const valid = computed(() => Boolean(sourceDraft.value.dataSourceId && fieldDraft.labelField && fieldDraft.valueField)
@@ -112,7 +120,7 @@ function discardDraft() {
   resetDraft()
 }
 
-function updateSourceDraft(value: DataSourceTabValue) {
+function updateSourceDraft(value: UniDataSourceValue) {
   sourceDraft.value = value
 }
 
@@ -120,7 +128,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function parseFilter(value: string): DataSourceTabValue['filter'] {
+function parseFilter(value: string): UniDataSourceValue['filter'] {
   try {
     const parsed: unknown = JSON.parse(value)
     if (isRecord(parsed)) {
@@ -142,6 +150,38 @@ function parseFilter(value: string): DataSourceTabValue['filter'] {
 <style scoped>
 .option-datasource-control {
   width: 100%;
+  font-size: var(--el-font-size-base, 14px);
+}
+
+/* 对齐 DsBindingConfigDialog：隔离设计器属性面板的字体和表单项间距继承。 */
+:global(.datasource-config-dialog) {
+  --el-font-size-base: 14px;
+  --el-component-size: 32px;
+  --el-component-size-small: 24px;
+  font-size: var(--el-font-size-base);
+  font-family: var(--el-font-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
+}
+
+:global(.datasource-config-dialog .el-dialog__body) {
+  font-size: 14px;
+}
+
+:global(.datasource-config-dialog .el-tabs__content) {
+  padding: 15px;
+}
+
+:global(.datasource-config-dialog .el-form-item) {
+  margin-bottom: 18px;
+}
+
+:global(.datasource-config-dialog .el-form-item__label),
+:global(.datasource-config-dialog .el-input__inner),
+:global(.datasource-config-dialog .el-select__selected-item),
+:global(.datasource-config-dialog .el-select__placeholder),
+:global(.datasource-config-dialog .el-radio-button__inner),
+:global(.datasource-config-dialog .el-button) {
+  font-family: var(--el-font-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  font-size: 14px;
 }
 
 .option-datasource-control .el-button.option-ds-button {

@@ -109,6 +109,7 @@ import {
   Document, Printer, Setting, Check, Close, Star, Collection, Message, Bell, User, Lock, Unlock, ArrowDown,
 } from '@element-plus/icons-vue'
 import type { CardColumn, ListQueryParams, ListPageResult } from './types'
+import { renderCellContent } from '@/utils/tableColumnRenderer'
 
 interface ListCardsProps {
   fetchApi: (params: ListQueryParams) => Promise<ListPageResult>
@@ -224,7 +225,22 @@ function getTagType(row: any, tagConfig?: any): string {
 function formatValue(row: any, column: CardColumn): string {
   const value = row?.[column.prop]
   if (column.formatter) return column.formatter(row, column, value) ?? ''
+  // 列含内容配置（模板/表达式）时统一走 renderCellContent，保证页面卡片与视图卡片渲染一致
+  if (hasCellContent(column)) {
+    return renderCellContent({
+      key: column.prop,
+      contentType: column.contentType,
+      contentValue: column.contentValue,
+      expression: column.expression,
+      template: column.template,
+    }, row)
+  }
   return column.valueType === 'date' && value ? new Date(value).toLocaleDateString() : value ?? ''
+}
+
+/** 是否有内容配置（对齐 PageRenderer.cardColumns 的 hasContent 判断） */
+function hasCellContent(column: CardColumn): boolean {
+  return !!((column.contentType && column.contentValue) || column.expression || column.template || column.formatter)
 }
 
 async function fetchData(params?: Partial<ListQueryParams>) {

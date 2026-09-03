@@ -456,4 +456,47 @@ describe('ListCards 组件', () => {
     expect(actionsEl.attributes('style')).toContain('flex-direction: column')
     wrapper.unmount()
   })
+
+  // ===== RED→GREEN: 无 formatter 的列应内置解析 contentType 模板（对齐 PageRenderer 的 renderCellContent）=====
+  describe('contentType 模板渲染（无 formatter 调用方，如 PageDataCards 页面卡片）', () => {
+    it('contentType=template 的列渲染 ${ name }(${ dept }) 插值', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '张三', dept: '设备部' }], total: 1 })
+      const columns: CardColumn[] = [{
+        prop: 'name',
+        label: '人员',
+        contentType: 'template',
+        contentValue: '${name}(${dept})',
+      } as CardColumn]
+      const wrapper = createWrapper({ fetchApi: mockFetch, columns })
+      await flushPromises()
+
+      expect(wrapper.find('.field-value').text()).toContain('张三(设备部)')
+      wrapper.unmount()
+    })
+
+    it('contentType=template 按 title 角色渲染时同样插值', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '李四', dept: '设计部' }], total: 1 })
+      const columns: CardColumn[] = [{
+        prop: 'name',
+        role: 'title',
+        contentType: 'template',
+        contentValue: '${name}(${dept})',
+      } as CardColumn]
+      const wrapper = createWrapper({ fetchApi: mockFetch, columns })
+      await flushPromises()
+
+      expect(wrapper.find('.card-title').text()).toContain('李四(设计部)')
+      wrapper.unmount()
+    })
+
+    it('无 contentType 的普通字段仍显示原始值（不受影响）', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '商品' }], total: 1 })
+      const columns: CardColumn[] = [{ prop: 'name', label: '名称' }]
+      const wrapper = createWrapper({ fetchApi: mockFetch, columns })
+      await flushPromises()
+
+      expect(wrapper.find('.field-value').text()).toContain('商品')
+      wrapper.unmount()
+    })
+  })
 })

@@ -73,6 +73,7 @@
             v-model:columns="schema.columns"
             v-model:sortable-fields="schema.sortableFields"
             :sortable-candidates="sortableCandidates"
+            :mode="schema.display === 'card' ? 'card' : 'table'"
           />
           <!-- 显示方式：表格 / 卡片（切换后兼容属性在渲染时保留，表格列自动映射卡片字段） -->
           <el-divider content-position="left">显示方式</el-divider>

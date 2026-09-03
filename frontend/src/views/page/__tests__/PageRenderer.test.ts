@@ -362,22 +362,22 @@ describe('PageRenderer — 视图渲染/错误处理/事件动作', () => {
     wrapper.unmount()
   })
 
-  it('preview 模式下表格为普通尺寸（default），非预览为紧凑（small）', async () => {
+  it('视图表格始终为普通尺寸（default），不使用 compact small 模式', async () => {
     ;(pageApi.getPageByKey as any).mockResolvedValue({ data: pageDef })
     ;(pageApi.queryPageData as any).mockResolvedValue({
       data: { records: [], total: 0, page: 0, size: 20 },
     })
+    // 非预览 → 仍为 default（无 small class）
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    // 非预览 → small
-    expect(wrapper.find('.el-table--small').exists()).toBe(true)
+    expect(wrapper.find('.el-table--small').exists()).toBe(false)
 
+    // 预览 → 同样为 default（无 small class）
     mockRoute.query = { preview: 'true' }
     const wrapper2 = createWrapper()
     await nextTick()
     await flushPromises()
-    // 预览 → default（无 small class）
     expect(wrapper2.find('.el-table--small').exists()).toBe(false)
     wrapper.unmount()
     wrapper2.unmount()

@@ -335,6 +335,14 @@ export interface CardColumn {
   tagConfig?: { type?: 'default' | 'primary' | 'success' | 'warning' | 'info' | 'danger'; text?: string }
   /** 是否在卡片中隐藏此列 */
   hidden?: boolean
+  /** 内容类型：expression（JS 表达式）/ template（${字段} 插值） */
+  contentType?: 'expression' | 'template'
+  /** 内容值（与 contentType 配对） */
+  contentValue?: string
+  /** @deprecated 兼容旧数据：模板插值 */
+  template?: string
+  /** @deprecated 兼容旧数据：表达式 */
+  expression?: string
   /** 值类型：string | number | date | boolean */
   valueType?: 'string' | 'number' | 'date' | 'boolean'
   /** 单元格宽度 */

@@ -6,7 +6,7 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ElementPlus from 'element-plus'
 import QueryColumnsConfig from '../QueryColumnsConfig.vue'
-import CardColumnAdvancedConfig from '../CardColumnAdvancedConfig.vue'
+import ColumnAdvancedConfig from '../ColumnAdvancedConfig.vue'
 
 const candidates = [
   { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 50, indexed: true, hidden: false },
@@ -492,11 +492,14 @@ describe('QueryColumnsConfig — 卡片模式扩展', () => {
     expect(vm.columnWidthOf('name')).toBe(200)
     expect(vm.columnAlignOf('name')).toBe('center')
     expect(wrapper.find('.sortable-config').exists()).toBe(true)
-    expect(wrapper.findComponent(CardColumnAdvancedConfig).exists()).toBe(true)
+    // 合并组件（含表格与卡片设置）始终挂载，card mode 传 mode='card'
+    const adv = wrapper.findComponent(ColumnAdvancedConfig)
+    expect(adv.exists()).toBe(true)
+    expect(adv.props('mode')).toBe('card')
     wrapper.unmount()
   })
 
-  it('card mode 保存高级字段时仅写回卡片配置且保持基础字段', async () => {
+  it('card mode 保存高级字段时写回卡片配置与基础配置且保持基础字段', async () => {
     const wrapper = mount(QueryColumnsConfig, {
       props: {
         candidates: visibleCandidates,
@@ -507,7 +510,7 @@ describe('QueryColumnsConfig — 卡片模式扩展', () => {
       global: { plugins: [ElementPlus] },
     })
     await nextTick()
-    ;(wrapper.vm as any).saveCardAdvanced({
+    ;(wrapper.vm as any).saveAdvanced({
       key: 'name',
       role: 'title',
        align: 'right',
@@ -519,33 +522,73 @@ describe('QueryColumnsConfig — 卡片模式扩展', () => {
        showLabel: false,
        labelPosition: 'top',
        style: 'color: #409eff;',
+       contentType: 'template',
+       contentValue: '${name}',
+       className: 'col-red',
+       styleExpr: "$row.age > 30 ? 'color:red' : ''",
     })
     await nextTick()
     const emitted = wrapper.emitted('update:columns') as any[]
     const name = emitted[emitted.length - 1][0][0]
      expect(name).toMatchObject({ role: 'title', align: 'right', valueType: 'currency', fontFamily: 'Microsoft YaHei', fontSize: 18, fontWeight: 700, fontColor: '#409eff', showLabel: false, labelPosition: 'top', style: 'color: #409eff;' })
+    // 基础设置（表格高级配置）字段一并写回
+    expect(name.contentType).toBe('template')
+    expect(name.contentValue).toBe('${name}')
+    expect(name.className).toBe('col-red')
+    expect(name.styleExpr).toBe("$row.age > 30 ? 'color:red' : ''")
     expect(name.width).toBe(200)
     expect(JSON.parse(JSON.stringify(name))).toEqual(name)
     wrapper.unmount()
   })
 })
 
-describe('CardColumnAdvancedConfig', () => {
-  it('提供卡片专属字段并以可序列化对象保存', async () => {
-    const wrapper = mount(CardColumnAdvancedConfig, {
+describe('ColumnAdvancedConfig — 合并基础设置 + 卡片配置', () => {
+  it('table mode 仅显示「基础设置」页签', async () => {
+    const wrapper = mount(ColumnAdvancedConfig, {
       props: {
         visible: true,
         column: { key: 'name', label: '姓名', width: 130, align: 'left' },
+        mode: 'table',
       },
       global: { plugins: [ElementPlus] },
     })
     await nextTick()
-    expect(wrapper.find('.card-column-advanced-config').exists()).toBe(true)
+    const tabs = wrapper.findAll('.el-tabs__item')
+    expect(tabs.map((t) => t.text())).toEqual(['基础设置'])
+    expect(wrapper.find('.card-column-advanced-config').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('card mode 显示「基础设置」+「卡片配置」双页签且卡片配置项齐全', async () => {
+    const wrapper = mount(ColumnAdvancedConfig, {
+      props: {
+        visible: true,
+        column: { key: 'name', label: '姓名', width: 130, align: 'left' },
+        mode: 'card',
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
+    const tabs = wrapper.findAll('.el-tabs__item')
+    expect(tabs.map((t) => t.text())).toEqual(['基础设置', '卡片配置'])
+    // 卡片配置页签内容存在（角色/颜色/显示标签/标签位置/样式语法）
     expect(wrapper.text()).toContain('角色')
-     expect(wrapper.text()).toContain('颜色')
-     expect(wrapper.text()).toContain('显示标签')
-     expect(wrapper.text()).toContain('标签位置')
-     expect(wrapper.text()).toContain('样式语法')
+    expect(wrapper.text()).toContain('显示标签')
+    expect(wrapper.text()).toContain('标签位置')
+    expect(wrapper.text()).toContain('样式语法')
+    wrapper.unmount()
+  })
+
+  it('保存时以可序列化对象同时写回卡片字段', async () => {
+    const wrapper = mount(ColumnAdvancedConfig, {
+      props: {
+        visible: true,
+        column: { key: 'name', label: '姓名', width: 130, align: 'left' },
+        mode: 'card',
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    await nextTick()
      ;(wrapper.vm as any).patch({ role: 'metric', valueType: 'number', align: 'center', fontSize: 20, fontWeight: 700, fontColor: '#67c23a', showLabel: false, labelPosition: 'top', style: 'color: #67c23a;' })
     ;(wrapper.vm as any).handleSave()
     const saved = (wrapper.emitted('save') as any[])[0][0]

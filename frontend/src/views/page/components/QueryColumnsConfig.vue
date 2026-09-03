@@ -142,7 +142,7 @@
             v-if="isColumnChecked(row.key)"
             link
             type="primary"
-            @click="mode === 'card' ? openCardAdvanced(row.key) : openAdvanced(row.key)"
+            @click="openAdvanced(row.key)"
           >
             高级配置
           </el-button>
@@ -167,20 +167,13 @@
 
     <el-empty v-if="displayCandidates.length === 0" description="当前表单无可配置字段" :image-size="60" />
 
-    <!-- 列高级配置子面板 -->
+    <!-- 列高级配置子面板（合并组件：表格只显基础设置，卡片显基础设置+卡片配置） -->
     <ColumnAdvancedConfig
       :visible="advancedVisible"
       :column="advancedColumn"
+      :mode="mode"
       @update:visible="advancedVisible = $event"
       @save="saveAdvanced"
-    />
-    <CardColumnAdvancedConfig
-      v-if="mode === 'card'"
-      class="card-advanced-config"
-      :visible="cardAdvancedVisible"
-      :column="cardAdvancedColumn"
-      @update:visible="cardAdvancedVisible = $event"
-      @save="saveCardAdvanced"
     />
 
     <!-- 添加自定义列弹窗 -->
@@ -214,7 +207,6 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import Sortable from 'sortablejs'
 import { Plus, QuestionFilled, Delete } from '@element-plus/icons-vue'
 import ColumnAdvancedConfig from './ColumnAdvancedConfig.vue'
-import CardColumnAdvancedConfig from './CardColumnAdvancedConfig.vue'
 import type { ColumnConfigItem } from '@/api/bizData'
 import type { SearchFieldConfig, ColumnViewConfig } from '../ViewDesigner.vue'
 
@@ -419,9 +411,7 @@ function setColumnProp(key: string, prop: 'width' | 'align' | 'formatter' | 'fix
 }
 
 // ========== 列高级配置子面板 ==========
-const advancedVisible = ref(false)
-/** 当前正在编辑高级配置的列副本 */
-const advancedColumn = ref<ColumnViewConfig | null>(null)
+/** 列高级配置类型（合并基础设置 + 卡片配置字段） */
 type CardColumnConfig = ColumnViewConfig & {
   role?: string
   valueType?: string
@@ -433,13 +423,14 @@ type CardColumnConfig = ColumnViewConfig & {
   labelPosition?: 'left' | 'right' | 'top'
   style?: string
 }
-const cardAdvancedVisible = ref(false)
-const cardAdvancedColumn = ref<CardColumnConfig | null>(null)
+const advancedVisible = ref(false)
+/** 当前正在编辑高级配置的列副本 */
+const advancedColumn = ref<CardColumnConfig | null>(null)
 
 function openAdvanced(key: string) {
   const col = findColumn(key)
   if (!col) return
-  // 传入副本，避免编辑期间污染 props
+  // 传入副本，避免编辑期间污染 props（基础设置与卡片配置共用同一副本）
   advancedColumn.value = {
     ...col,
     onCellClick: col.onCellClick
@@ -449,31 +440,20 @@ function openAdvanced(key: string) {
   advancedVisible.value = true
 }
 
-function openCardAdvanced(key: string) {
-  const col = findColumn(key)
-  if (!col) return
-  cardAdvancedColumn.value = { ...col }
-  cardAdvancedVisible.value = true
-}
-
-function saveAdvanced(updated: ColumnViewConfig) {
+/** 合并写回：基础设置（contentType/className/styleExpr/onCellClick）+ 卡片配置（role/valueType/字体等）全部字段 */
+function saveAdvanced(updated: CardColumnConfig) {
   const col = findColumn(updated.key)
   if (!col) return
   const next = props.columns.map((c) =>
-    c.key === updated.key ? { ...c, ...pickAdvanced(updated) } : c,
+    c.key === updated.key
+      ? { ...c, ...pickAdvanced(updated), ...pickCardFields(updated) }
+      : c,
   )
   emit('update:columns', next)
 }
 
-function saveCardAdvanced(updated: CardColumnConfig) {
-  const col = findColumn(updated.key)
-  if (!col) return
-  emit('update:columns', props.columns.map((c) =>
-    c.key === updated.key ? { ...c, ...pickCardAdvanced(updated) } : c,
-  ))
-}
-
-function pickCardAdvanced(c: CardColumnConfig): Partial<CardColumnConfig> {
+/** 仅取卡片配置相关字段写回，避免覆盖 width/align/fixed 等基础字段 */
+function pickCardFields(c: CardColumnConfig): Partial<CardColumnConfig> {
   return {
     ...(c.role !== undefined ? { role: c.role } : {}),
     ...(c.align !== undefined ? { align: c.align } : {}),

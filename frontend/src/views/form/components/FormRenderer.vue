@@ -329,7 +329,10 @@ async function resolveOptionRules(rules: Rule[]): Promise<Rule[]> {
     const node = { ...rule } as Rule & { effect?: Record<string, unknown>; options?: unknown[]; children?: Rule[]; props?: Record<string, any> }
     const datasource = node.effect?.datasource
     if (datasource && typeof datasource === 'object') {
-      node.options = await resolveOptionDataSource(datasource as Parameters<typeof resolveOptionDataSource>[0])
+      node.options = await resolveOptionDataSource(
+        datasource as Parameters<typeof resolveOptionDataSource>[0],
+        dsBindings.value,
+      )
     }
     if (Array.isArray(node.children)) node.children = await resolveOptionRules(node.children)
     if (node.props && Array.isArray(node.props.rule)) {

@@ -1,5 +1,6 @@
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
+import type { DataSourceBindingContext } from '@/components/business/types'
 
 export interface OptionDataSourceConfig {
   readonly dataSourceId?: string
@@ -100,9 +101,18 @@ export function mapOptionRecords(records: unknown, config: OptionDataSourceConfi
   return mapRecords(validRecords, config)
 }
 
-export async function resolveOptionDataSource(config: OptionDataSourceConfig): Promise<OptionNode[]> {
+/**
+ * 解析选项数据源为 render 可用的选项列表。
+ * @param bindings 当前表单/表单级数据源绑定（页内 id → 全局 refId）。缺省回退全局 activeDsBindings。
+ *                 推荐由调用方传入当前表单绑定位，避免依赖全局 store 的写入时序。
+ */
+export async function resolveOptionDataSource(
+  config: OptionDataSourceConfig,
+  bindings?: DataSourceBindingContext[],
+): Promise<OptionNode[]> {
   if (!config.dataSourceId) return []
-  const binding = activeDsBindings.value.find((item) => item.id === config.dataSourceId)
+  const lookup = bindings ?? activeDsBindings.value
+  const binding = lookup.find((item) => item.id === config.dataSourceId)
   const sourceId = binding?.refId ?? config.dataSourceId
   const response = await dataSourceApi.queryData(sourceId, {
     page: 1,

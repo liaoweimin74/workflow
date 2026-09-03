@@ -68,6 +68,7 @@
       :current-fields="currentFieldKeys"
       :picker-props="currentPickerProps"
       :form-data-sources="formDataSources"
+      :enabled-data-sources="enabledDataSources"
       @confirm="handlePickerConfirm"
     />
 
@@ -77,6 +78,7 @@
       :current-fields="currentFieldKeys"
       :lookup-props="currentLookupProps"
       :form-data-sources="formDataSources"
+      :enabled-data-sources="enabledDataSources"
       @confirm="handleLookupConfirm"
     />
 

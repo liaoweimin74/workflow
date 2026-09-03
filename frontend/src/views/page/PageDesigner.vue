@@ -68,6 +68,7 @@
       :current-fields="currentFieldKeys"
       :binding-props="currentPageTableProps"
       :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
+      :enabled-data-sources="enabledDataSources"
       :table-mode="true"
       @confirm="handlePageTableConfirm"
     />
@@ -78,6 +79,7 @@
       :current-fields="[]"
       :binding-props="currentFormContainerProps"
       :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
+      :enabled-data-sources="enabledDataSources"
       @confirm="handleFormContainerConfirm"
     />
 

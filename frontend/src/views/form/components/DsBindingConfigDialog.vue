@@ -9,6 +9,7 @@
             :model-value="sourceTabValue"
             @update:model-value="updateSourceTabValue"
             :form-data-sources="formDataSources"
+            :enabled-data-sources="enabledDataSources"
             :current-fields="currentFields"
             @columns="dsColumns = $event"
           />
@@ -162,6 +163,7 @@ import { ElMessage } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
+import type { DataSourceDTO } from '@/api/data-source'
 import QueryColumnsConfig from '@/views/page/components/QueryColumnsConfig.vue'
 import ActionsConfig from '@/views/page/components/ActionsConfig.vue'
 import EventsConfig from '@/views/page/components/EventsConfig.vue'
@@ -175,6 +177,7 @@ const props = withDefaults(defineProps<{
   bindingProps?: Record<string, any>
   /** 页面内数据源绑定配置 */
   formDataSources: Array<{ id: string; refId: string }>
+  enabledDataSources?: DataSourceDTO[]
   /** 是否为数据表格模式（显示列/操作/事件 tabs） */
   tableMode?: boolean
 }>(), {

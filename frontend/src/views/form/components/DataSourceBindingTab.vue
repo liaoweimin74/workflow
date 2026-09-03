@@ -10,7 +10,7 @@
         </span>
       </template>
       <el-select v-model="draft.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
-        <el-option v-for="source in formDataSources" :key="source.id" :label="source.id" :value="source.id" />
+        <el-option v-for="source in formDataSources" :key="source.id" :label="source.name" :value="source.id" />
       </el-select>
     </el-form-item>
     <el-divider content-position="left">组件级数据筛选</el-divider>
@@ -66,6 +66,7 @@ export interface DataSourceTabValue {
 const props = withDefaults(defineProps<{
   modelValue?: DataSourceTabValue
   formDataSources: Array<{ id: string; refId: string }>
+  enabledDataSources?: Array<{ id: string; name: string }>
   currentFields?: string[]
 }>(), { currentFields: () => [] })
 
@@ -80,7 +81,10 @@ const draft = reactive({
   filterRows: [] as DataSourceFilterRow[],
 })
 const columns = ref<ColumnConfigItem[]>([])
-const formDataSources = computed(() => props.formDataSources)
+const formDataSources = computed(() => props.formDataSources.map((binding) => ({
+  ...binding,
+  name: props.enabledDataSources?.find((source) => source.id === binding.refId)?.name ?? binding.id,
+})))
 const currentFields = computed(() => props.currentFields)
 const visibleColumns = computed(() => columns.value.filter((column) => !column.hidden))
 

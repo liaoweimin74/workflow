@@ -1,7 +1,7 @@
 <template>
   <div class="option-datasource-control">
-    <el-button type="primary" plain @click="dialogVisible = true">配置数据源</el-button>
-    <el-dialog v-model="dialogVisible" title="配置数据源" width="680px" :close-on-click-modal="false">
+    <el-button type="primary" plain style="width: 100%" @click="openDialog">配置数据源</el-button>
+    <el-dialog v-model="dialogVisible" title="配置数据源" width="860px" :close-on-click-modal="false" @close="discardDraft">
     <el-tabs v-model="activeTab" type="border-card">
       <el-tab-pane label="数据源" name="source">
         <DataSourceBindingTab
@@ -9,6 +9,7 @@
           :model-value="sourceDraft"
           @update:model-value="updateSourceDraft"
           :form-data-sources="sourceBindings"
+          :enabled-data-sources="availableSources"
           :current-fields="[]"
           @columns="columns = $event"
         />
@@ -40,7 +41,7 @@
       </el-tab-pane>
     </el-tabs>
       <template #footer>
-      <el-button @click="visible = false">取消</el-button>
+      <el-button @click="discardDraft">取消</el-button>
       <el-button type="primary" :disabled="!valid" @click="confirm">确定</el-button>
       </template>
     </el-dialog>
@@ -69,21 +70,24 @@ const sourceTabRef = ref<InstanceType<typeof DataSourceBindingTab> | null>(null)
 const sourceDraft = ref<DataSourceTabValue>({ dataSourceId: '' })
 const fieldDraft = reactive({ labelField: '', valueField: '', childrenField: '', parentField: '' })
 const sourceBindings = computed(() => activeDsBindings.value.length > 0
-  ? activeDsBindings.value
-  : availableSources.value.map((source) => ({ id: source.id, refId: source.id })))
+  ? activeDsBindings.value.map((binding) => ({
+    ...binding,
+    name: availableSources.value.find((source) => source.id === binding.refId)?.name ?? binding.id,
+  }))
+  : availableSources.value.map((source) => ({ id: source.id, refId: source.id, name: source.name })))
 const valid = computed(() => Boolean(sourceDraft.value.dataSourceId && fieldDraft.labelField && fieldDraft.valueField)
   && !(fieldDraft.childrenField && fieldDraft.parentField))
 
 watch(() => props.modelValue, (value) => {
-  sourceDraft.value = { dataSourceId: value?.dataSourceId ?? '', filter: value?.filters ? parseFilter(value.filters) : undefined }
-  fieldDraft.labelField = value?.labelField ?? ''
-  fieldDraft.valueField = value?.valueField ?? ''
-  fieldDraft.childrenField = value?.childrenField ?? ''
-  fieldDraft.parentField = value?.parentField ?? ''
+  if (!dialogVisible.value) resetDraft(value)
 }, { immediate: true, deep: true })
 
 onMounted(async () => {
-  availableSources.value = (await dataSourceApi.getEnabledDataSources()).data ?? []
+  try {
+    availableSources.value = (await dataSourceApi.getEnabledDataSources()).data ?? []
+  } catch {
+    ElMessage.error('数据源列表加载失败')
+  }
 })
 
 function confirm() {
@@ -101,6 +105,25 @@ function confirm() {
     ...(fieldDraft.parentField ? { parentField: fieldDraft.parentField } : {}),
   })
   dialogVisible.value = false
+}
+
+function resetDraft(value = props.modelValue) {
+  sourceDraft.value = { dataSourceId: value?.dataSourceId ?? '', filter: value?.filters ? parseFilter(value.filters) : undefined }
+  fieldDraft.labelField = value?.labelField ?? ''
+  fieldDraft.valueField = value?.valueField ?? ''
+  fieldDraft.childrenField = value?.childrenField ?? ''
+  fieldDraft.parentField = value?.parentField ?? ''
+  activeTab.value = 'source'
+}
+
+function openDialog() {
+  resetDraft()
+  dialogVisible.value = true
+}
+
+function discardDraft() {
+  dialogVisible.value = false
+  resetDraft()
 }
 
 function updateSourceDraft(value: DataSourceTabValue) {

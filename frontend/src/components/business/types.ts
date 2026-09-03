@@ -333,6 +333,8 @@ export interface CardColumn {
   tag?: string
   /** 卡片渲染角色：title|subtitle|tag|field|metric */
   role?: 'title' | 'subtitle' | 'tag' | 'field' | 'metric'
+  /** 栅格跨度（12 列系统：12=整行，6=半行，4=三分之一） */
+  span?: number
   /** 标签配置 */
   tagConfig?: { type?: 'default' | 'primary' | 'success' | 'warning' | 'info' | 'danger'; text?: string }
   /** 是否在卡片中隐藏此列 */

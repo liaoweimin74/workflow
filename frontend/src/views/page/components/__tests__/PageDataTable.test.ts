@@ -219,7 +219,7 @@ describe('PageDataTable — 列级定制（template/expression/formatter/classNa
     expect(amountV.children).toBe('¥1,234.56')
     // styleExpr 经 render 应用
     const stV = (cols[2].render as Function)({ status: 'PENDING' } as any)
-    expect(stV.props.style).toContain('color:red')
+    expect(stV.props.style).toEqual({ color: 'red' })
     wrapper.unmount()
   })
 

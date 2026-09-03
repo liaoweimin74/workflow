@@ -592,7 +592,10 @@ describe('ColumnAdvancedConfig — 合并基础设置 + 卡片配置', () => {
      ;(wrapper.vm as any).patch({ role: 'metric', valueType: 'number', align: 'center', fontSize: 20, fontWeight: 700, fontColor: '#67c23a', showLabel: false, labelPosition: 'top', style: 'color: #67c23a;' })
     ;(wrapper.vm as any).handleSave()
     const saved = (wrapper.emitted('save') as any[])[0][0]
-     expect(saved).toMatchObject({ role: 'metric', valueType: 'number', align: 'center', fontSize: 20, fontWeight: 700, fontColor: '#67c23a', showLabel: false, labelPosition: 'top', style: 'color: #67c23a;' })
+     expect(saved).toMatchObject({ role: 'metric', valueType: 'number', align: 'center', fontSize: 20, fontWeight: 700, fontColor: '#67c23a', showLabel: false, labelPosition: 'top' })
+    // style 被 normalizeColumnStyle 收敛为对象
+    expect(saved.style).toBeDefined()
+    expect(saved.style.css).toBe('color: #67c23a;')
     expect(JSON.parse(JSON.stringify(saved))).toEqual(saved)
     wrapper.unmount()
   })

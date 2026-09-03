@@ -15,6 +15,8 @@
       :collapsible-groups="collapsibleGroups"
       :actions-placement="actionsPlacement"
       :design-mode="designMode"
+      :theme="theme"
+      :style="style"
       @row-click="handleRowClick"
       @action-click="handleActionClick"
     />
@@ -58,6 +60,7 @@ import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import ListCards from '@/components/business/ListCards.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { CardColumn, DataSourceBindingContext, ListQueryParams, ListPageResult } from '@/components/business/types'
+import type { CardTheme, CardStyle } from '@/components/business/ListCards.types'
 
 /** 卡片操作按钮配置（对齐 ViewDesigner.ViewActionButton / ListCards.actions） */
 interface ViewActionButton {
@@ -90,6 +93,10 @@ const props = withDefaults(defineProps<{
   actionsPlacement?: 'top' | 'bottom' | 'right'
   designMode?: boolean
   stretch?: boolean
+  /** 内置主题模板 */
+  theme?: CardTheme
+  /** 卡片整体样式（覆盖主题） */
+  style?: CardStyle
   [key: string]: any
 }>(), { pageSize: 20, showSearch: false, pageSizes: () => [10, 20, 50], pagination: true, cardMinWidth: 280, stretch: false })
 

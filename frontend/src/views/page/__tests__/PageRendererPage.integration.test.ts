@@ -195,6 +195,10 @@ async function mountPage(schema: any, props: Record<string, unknown> = {}) {
       plugins: [ElementPlus],
       stubs: {
         'el-dialog': ElDialogStub,
+        'el-pagination': {
+          props: ['currentPage', 'pageSize', 'pageSizes', 'total'],
+          template: '<div class="card-pagination" :data-current-page="currentPage" :data-page-size="pageSize" :data-total="total" />',
+        },
         'el-result': { template: '<div class="result-stub" />' },
         'el-empty': { template: '<div class="empty-stub" />' },
         teleport: true,

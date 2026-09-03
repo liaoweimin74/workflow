@@ -173,6 +173,7 @@ import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from '@/views/form/formRuleWalk'
+import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
@@ -270,6 +271,7 @@ const dsConfigPanelRef = ref<InstanceType<typeof DataSourceConfigPanel> | null>(
 function confirmDsConfig() {
   dsConfigPanelRef.value?.confirm()
   dsDialogVisible.value = false
+  setActiveDsBindings(schema.dataSources as any)
 }
 const dsTab = ref('ds')
 
@@ -571,6 +573,7 @@ onMounted(async () => {
           ...binding,
           name: enabledDataSources.value.find((source) => source.id === binding.refId)?.name,
         }))
+        setActiveDsBindings(schema.dataSources as any)
         schema.actions = parsed.actions || []
         // 设置 FcDesigner rule（等待设计器就绪后 setRule）
         if (designerRef.value) {

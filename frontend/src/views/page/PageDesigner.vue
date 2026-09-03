@@ -77,7 +77,8 @@
       v-model="formContainerDialogVisible"
       :current-fields="[]"
       :binding-props="currentFormContainerProps"
-      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
+      :form-data-sources="schema.dataSources"
+      :enabled-data-sources="enabledDataSources"
       @confirm="handleFormContainerConfirm"
     />
 
@@ -271,6 +272,7 @@ const dsConfigPanelRef = ref<InstanceType<typeof DataSourceConfigPanel> | null>(
 function confirmDsConfig() {
   dsConfigPanelRef.value?.confirm()
   dsDialogVisible.value = false
+  setActiveDsBindings(schema.dataSources as any)
 }
 const dsTab = ref('ds')
 

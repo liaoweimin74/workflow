@@ -16,6 +16,8 @@ export const FORM_DS_BINDINGS_KEY: string = 'formDataSourceBindings'
 export interface DataSourceBindingContext {
   /** 页面内标识 */
   id: string
+  /** 绑定数据源名称（仅用于配置界面展示） */
+  name?: string
   /** 全局数据源ID */
   refId: string
   /** 搜索字段（可选） */

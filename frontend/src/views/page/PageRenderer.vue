@@ -82,6 +82,7 @@
           v-if="detailVisible && isFormDetail"
           :rule="detailRules"
           :option="detailOption"
+          :data-sources="detailDataSources"
           :initial-values="currentRow && currentRow.data"
           readonly
         />
@@ -101,6 +102,7 @@
           ref="editFormRef"
           :rule="detailRules"
           :option="detailOption"
+          :data-sources="detailDataSources"
           :initial-values="editInitialValues"
         />
       </div>
@@ -123,6 +125,7 @@
             ref="inlineFormRef"
             :rule="detailRules"
             :option="detailOption"
+            :data-sources="detailDataSources"
             :initial-values="inlineInitialValues"
             :readonly="inlineMode === 'view'"
           />
@@ -151,6 +154,7 @@
         ref="drawerFormRef"
         :rule="detailRules"
         :option="detailOption"
+        :data-sources="detailDataSources"
         :initial-values="drawerInitialValues"
         :readonly="drawerMode === 'view'"
       />
@@ -299,6 +303,8 @@ const detailConfig = ref<Record<string, any>>({ enabled: false, width: '800px', 
 const eventsList = ref<any[]>([])
 const detailRules = ref<any[]>([])
 const detailOption = ref<Record<string, any>>({})
+/** 绑定表单级数据源绑定（供 FormRenderer 选项数据源/数据组件按 dataSourceId 解析 refId） */
+const detailDataSources = ref<Array<{ id: string; refId: string; name?: string }>>([])
 
 // ========== 查询 ==========
 const query = reactive<Record<string, any>>({})
@@ -851,6 +857,7 @@ async function loadDetailSchema() {
     } else if (schema?.rule) {
       detailRules.value = schema.rule
       detailOption.value = schema.option || {}
+      detailDataSources.value = schema.dataSources || []
     }
   } catch {
     ElMessage.error('绑定表单 schema 加载失败')

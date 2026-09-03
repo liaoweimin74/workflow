@@ -151,6 +151,8 @@ import type { LookupFilterConfig } from './types'
 export interface DataSourceBinding {
   /** 页面内标识 */
   id: string
+  /** 绑定数据源名称（仅用于配置界面展示） */
+  name?: string
   /** 全局数据源ID */
   refId: string
   /** 搜索字段（可选） */
@@ -348,7 +350,10 @@ defineExpose({ confirm })
 /** 验证并触发数据源更新 */
 function validateAndEmit() {
   validateAll()
-  emit('update:dataSources', [...localDataSources.value])
+  emit('update:dataSources', localDataSources.value.map((binding) => ({
+    ...binding,
+    name: props.enabledDataSources.find((source) => source.id === binding.refId)?.name,
+  })))
 }
 
 /** 触发动作更新 */

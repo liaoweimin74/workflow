@@ -91,6 +91,7 @@ import type { DataSourceBindingContext } from '@/components/business/types'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import PageDataCards from '@/views/page/components/PageDataCards.vue'
+import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
 import { useLinkageContainer, type LinkageContainer } from '../composables/useLinkageContainer'
 import ContainerButtons from './ContainerButtons.vue'
 
@@ -365,7 +366,9 @@ onMounted(async () => {
   if (props.formDefId) {
     await loadSchema()
   } else if (props.rule) {
-    resolvedSchema.value = props.rule
+    resolvedSchema.value = hasOptionDatasource(props.rule)
+      ? await resolveOptionRules(props.rule, dsBindings.value)
+      : props.rule
   }
   applyDynamicLabelWidth()
   if (props.initialValues) {
@@ -407,9 +410,11 @@ watch(() => props.initialValues, (newVal) => {
 
 // 监听 rule 变化：父组件可能先挂载（rule 为空）再异步加载 schema（如页面渲染器详情/新增/编辑弹窗），
 // 必须响应式同步，否则 resolvedSchema 停留在空数组导致"暂无表单"
-watch(() => props.rule, (newVal) => {
+watch(() => props.rule, async (newVal) => {
   if (!Array.isArray(newVal) || newVal.length === 0) return
-  resolvedSchema.value = newVal
+  resolvedSchema.value = hasOptionDatasource(newVal)
+    ? await resolveOptionRules(newVal, dsBindings.value)
+    : newVal
   if (props.readonly) {
     resolvedSchema.value = deepDisableRules(resolvedSchema.value)
   }
@@ -431,11 +436,16 @@ async function loadSchema() {
     }
     const schema = JSON.parse(formDef.schema)
     const rules = Array.isArray(schema) ? schema : (schema.rule || [])
-    resolvedSchema.value = rules
-    // 恢复表单级数据源绑定（供 LookupPicker/dataPicker 按 dataSourceId 解析）
+    // 恢复表单级数据源绑定（供 LookupPicker/dataPicker 及选项数据源按 dataSourceId 解析）
+    // 必须在 resolveOptionRules 之前写入 activeDsBindings，否则选项数据源解析时绑定位仍为空，
+    // 会把页面内绑定 ID 误当全局 refId 请求导致下拉无数据。
     if (!Array.isArray(schema) && Array.isArray(schema.dataSources)) {
       schemaDataSources.value = schema.dataSources
+      setActiveDsBindings(schema.dataSources)
     }
+    resolvedSchema.value = hasOptionDatasource(rules)
+      ? await resolveOptionRules(rules, dsBindings.value)
+      : rules
     // 恢复表单级动作链（表格-容器联动）
     if (!Array.isArray(schema) && Array.isArray(schema.actions)) {
       schemaActions.value = schema.actions

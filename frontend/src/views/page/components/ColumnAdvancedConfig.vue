@@ -39,6 +39,30 @@
               @input="(v: string) => patch({ className: v || undefined })"
             />
           </el-form-item>
+          <el-form-item label="字体">
+            <el-select :model-value="col?.fontFamily" clearable @change="(v: string) => patch({ fontFamily: v || undefined })">
+              <el-option label="系统默认" value="system-ui" />
+              <el-option label="微软雅黑" value="Microsoft YaHei" />
+              <el-option label="等线" value="DengXian" />
+              <el-option label="宋体" value="SimSun" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="字号">
+            <el-input-number :model-value="col?.fontSize" :min="10" :max="48" @change="(v: number | undefined) => patch({ fontSize: v })" />
+          </el-form-item>
+          <el-form-item label="字重">
+            <el-select :model-value="String(col?.fontWeight || '')" clearable @change="(v: string) => patch({ fontWeight: v ? Number(v) : undefined })">
+              <el-option label="常规" value="400" /><el-option label="中等" value="500" /><el-option label="加粗" value="700" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="颜色">
+            <el-input :model-value="col?.fontColor" placeholder="如 #303133" @input="(v: string) => patch({ fontColor: v || undefined })" />
+          </el-form-item>
+          <el-form-item label="对齐">
+            <el-select :model-value="col?.align" @change="(v: string) => patch({ align: v })">
+              <el-option label="左对齐" value="left" /><el-option label="居中" value="center" /><el-option label="右对齐" value="right" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="条件样式">
             <el-input
               :model-value="col?.styleExpr"
@@ -156,8 +180,8 @@
           </div>
           <div class="cfg-row">
             <div class="cfg-field cfg-field-full">
-              <span class="cfg-label">样式语法</span>
-              <el-input :model-value="col?.style" type="textarea" :rows="3" placeholder="color: #409eff; font-weight: 700;" @input="(v: string) => patch({ style: v || undefined })" />
+              <span class="cfg-label">样式语法（CSS）</span>
+              <el-input :model-value="typeof col?.style === 'object' ? col?.style?.css : col?.style" type="textarea" :rows="3" placeholder="color: #409eff; font-weight: 700;" @input="(v: string) => patch({ style: v ? (typeof col?.style === 'object' ? { ...col?.style, css: v } : v) : undefined })" />
             </div>
           </div>
         </el-form>
@@ -175,6 +199,8 @@
 import { ref, computed, watch } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import type { ColumnViewConfig } from '../ViewDesigner.vue'
+import type { FieldStyle } from '@/utils/fieldStyle'
+import { normalizeColumnStyle } from '@/utils/fieldStyle'
 
 /** 合并后的列高级配置：基础设置（原表格配置）+ 卡片配置（仅卡片模式） */
 export type MergedColumnConfig = ColumnViewConfig & {
@@ -186,7 +212,8 @@ export type MergedColumnConfig = ColumnViewConfig & {
   fontColor?: string
   showLabel?: boolean
   labelPosition?: 'left' | 'right' | 'top'
-  style?: string
+  /** 统一字段样式（结构化）或旧 CSS 字符串 */
+  style?: FieldStyle | string
 }
 
 const props = defineProps<{
@@ -320,7 +347,10 @@ function handleSave() {
   if (!col.value) return
   // 保存时清理旧字段（已迁移到 contentType/contentValue）
   const { expression, template, formatter, ...rest } = col.value as any
-  emit('save', rest)
+  // 使用 normalizeColumnStyle 收敛旧字段到 style
+  const normalized = normalizeColumnStyle(rest)
+  const saved = { ...rest, ...normalized }
+  emit('save', saved)
   emit('update:visible', false)
 }
 

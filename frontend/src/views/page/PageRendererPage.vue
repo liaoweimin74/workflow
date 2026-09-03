@@ -365,7 +365,7 @@ function transformComponent(node: any): any {
   // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
   if (typeof node !== 'object' || node === null) return node
   const next = { ...node, props: { ...(node.props || {}) }, on: { ...(node.on || {}) } }
-  if (next.type === 'page-table' || next.type === 'page-tree') {
+  if (next.type === 'page-table' || next.type === 'page-tree' || next.type === 'page-list-cards') {
     next.props.pageKey = pageKey.value
     // 注入 dsRefId（页面内 dataSourceId → 全局数据源 refId，供写操作用）
     if (next.props.dataSourceId) {

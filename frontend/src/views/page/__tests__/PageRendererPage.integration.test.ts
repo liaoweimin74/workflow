@@ -282,6 +282,20 @@ describe('definition props 下传（PAGE definition 单次加载）', () => {
 })
 
 describe('PAGE 卡片列表运行态配置', () => {
+  it('为卡片列表注入所属页面数据源 refId，避免切换 PAGE 后依赖全局绑定', async () => {
+    const schema = userPageSchema()
+    schema.rule[0] = {
+      type: 'page-list-cards',
+      field: 'cards',
+      props: { dataSourceId: 'ds_mta77dtz', columns: [] },
+    }
+    const wrapper = await mountPage(schema)
+    const cards = wrapper.findComponent(PageDataCards)
+
+    expect(cards.props('dsRefId')).toBe('global1')
+    wrapper.unmount()
+  })
+
   it('已发布页面忽略持久化的 designMode，显示查询和分页配置', async () => {
     const schema = userPageSchema()
     schema.rule[0] = {

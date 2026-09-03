@@ -1,23 +1,14 @@
 <template>
   <el-dialog v-model="visible" title="数据引用配置" width="640px" :close-on-click-modal="false">
     <el-form label-width="110px" size="default">
-      <!-- 页面内数据源 -->
-      <el-form-item label="页面内数据源" required>
-        <el-select
-          v-model="form.dataSourceId"
-          placeholder="选择页面数据源绑定"
-          style="width: 100%"
-          @change="handleDataSourceChange"
-        >
-          <el-option
-            v-for="ds in formDataSources"
-            :key="ds.id"
-            :label="ds.id"
-            :value="ds.id"
-          />
-        </el-select>
-        <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
-      </el-form-item>
+      <!-- 页面内数据源（由 UniDataSourceBinding 统一管理） -->
+      <UniDataSourceBinding
+        :model-value="dsBindingValue"
+        @update:model-value="syncBinding"
+        :form-data-sources="formDataSources || []"
+        :current-fields="currentFields"
+        @columns="handleUnifiedColumns"
+      />
 
       <el-form-item label="显示字段" required>
         <el-select v-model="form.displayField" placeholder="选择显示字段（输入框回显）" style="width: 100%">
@@ -43,56 +34,6 @@
         <span class="form-tip">缺省不限；填 1 为单选（点行即选），>1 限制勾选数量</span>
       </el-form-item>
 
-      <!-- 组件级数据筛选 -->
-      <el-divider content-position="left">组件级数据筛选</el-divider>
-      <el-form-item label="筛选条件">
-        <div style="width: 100%">
-          <el-radio-group v-model="form.filterLogic" size="small">
-            <el-radio-button value="AND">所有（且）</el-radio-button>
-            <el-radio-button value="OR">任一（或）</el-radio-button>
-          </el-radio-group>
-          <div
-            v-for="(row, i) in form.filterRows"
-            :key="i"
-            style="display: flex; gap: 8px; margin-top: 8px; align-items: center"
-          >
-            <el-select v-model="row.column" placeholder="目标表列" style="width: 24%">
-              <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-            </el-select>
-            <el-select v-model="row.op" style="width: 20%">
-              <el-option label="等于" value="eq" />
-              <el-option label="不等于" value="ne" />
-              <el-option label="包含" value="like" />
-              <el-option label="属于" value="in" />
-              <el-option label="为空" value="isEmpty" />
-              <el-option label="不为空" value="isNotEmpty" />
-            </el-select>
-            <el-select v-model="row.source" style="width: 18%">
-              <el-option label="固定值" value="fixed" />
-              <el-option label="表单字段" value="field" />
-            </el-select>
-            <el-select
-              v-if="row.source === 'field'"
-              v-model="row.field"
-              placeholder="当前表单字段"
-              clearable
-              style="width: 26%"
-            >
-              <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
-            </el-select>
-            <el-input
-              v-else
-              v-model="row.fixedValue"
-              :placeholder="row.op === 'in' ? '多个值逗号分隔' : '固定值'"
-              style="width: 26%"
-            />
-            <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
-          </div>
-          <el-button type="primary" link style="margin-top: 8px" @click="addFilterRow">+ 添加筛选条件</el-button>
-          <span class="form-tip">与数据源级筛选（数据源配置中设置）以「且」合并；动态条件依赖表单字段，值变化时自动刷新选项</span>
-        </div>
-      </el-form-item>
-
       <el-form-item label="行为设置">
         <div style="display: flex; flex-direction: column; gap: 10px; width: 100%">
           <el-switch v-model="form.clearOnCascadeChange" active-text="级联变化时清空已选值" />
@@ -115,6 +56,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { ColumnConfigItem } from '@/api/bizData'
 import { dataSourceApi } from '@/api/data-source'
+import UniDataSourceBinding, { type UniDataSourceValue } from '@/views/form/components/UniDataSourceBinding.vue'
 
 /** 筛选条件行（对齐 LookupPicker：op + 固定值/表单字段 来源） */
 interface FilterRow {
@@ -171,6 +113,45 @@ const form = reactive({
   detailReadonly: true,
 })
 
+// ==================== UniDataSourceBinding 桥接 ====================
+const dsBindingValue = ref<UniDataSourceValue>({ dataSourceId: '' })
+
+function syncBinding(value: UniDataSourceValue) {
+  dsBindingValue.value = value
+  form.dataSourceId = value.dataSourceId ?? ''
+  const filter = value.filter
+  if (filter && Array.isArray(filter.conditions)) {
+    form.filterLogic = filter.logic
+    form.filterRows = filter.conditions.map((c: any) => ({
+      column: String(c.column ?? ''), op: String(c.op ?? 'eq'),
+      source: c.source === 'field' ? 'field' : 'fixed',
+      fixedValue: String(c.value ?? c.fixedValue ?? ''), field: String(c.field ?? ''),
+    }))
+  } else {
+    form.filterLogic = 'AND'
+    form.filterRows = []
+  }
+}
+
+function handleUnifiedColumns(cols: ColumnConfigItem[]) {
+  dsColumns.value = cols
+}
+
+// DataPicker 独属副作用：监听数据源变更，清空字段配置并加载列
+watch(
+  () => dsBindingValue.value.dataSourceId,
+  (newId, oldId) => {
+    if (newId && oldId && newId !== oldId) {
+      form.displayField = ''
+      form.columns = []
+      form.searchColumns = []
+      form.filterRows.forEach(r => { r.column = '' })
+      void loadDsColumns()
+    }
+  },
+  { immediate: false },
+)
+
 /** 按绑定 refId 加载数据源列定义 */
 async function loadDsColumns() {
   dsColumns.value = []
@@ -182,15 +163,6 @@ async function loadDsColumns() {
   } catch {
     // http 拦截器已提示
   }
-}
-
-/** 切换数据源：清空依赖列配置并重新加载列候选 */
-function handleDataSourceChange() {
-  form.displayField = ''
-  form.columns = []
-  form.searchColumns = []
-  form.filterRows.forEach(r => { r.column = '' })
-  void loadDsColumns()
 }
 
 watch(
@@ -235,6 +207,16 @@ watch(
     form.detailReadonly = props.pickerProps?.detailReadonly !== false
     if (form.dataSourceId && (props.formDataSources || []).length > 0) {
       void loadDsColumns()
+    }
+    // 初始化 dsBindingValue 供 UniDataSourceBinding 读取
+    dsBindingValue.value = {
+      dataSourceId: form.dataSourceId,
+      ...(form.filterRows.length > 0 ? {
+        filter: { logic: form.filterLogic, conditions: form.filterRows.map(r => ({
+          column: r.column, op: r.op, source: r.source,
+          ...(r.source === 'field' ? { field: r.field } : { value: r.fixedValue }),
+        })) }
+      } : {}),
     }
   },
   { immediate: true },

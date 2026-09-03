@@ -5,54 +5,15 @@
         可配置卡片分组、列字体和卡片操作区；点击每列的“高级配置”设置字体样式。
       </el-alert>
       <el-tabs v-model="activeTab" type="border-card">
-        <!-- Tab 1: 数据源 + 组件级数据筛选 -->
+        <!-- Tab 1: 数据源 + 组件级数据筛选（统一组件） -->
         <el-tab-pane label="数据源" name="binding">
-          <el-form label-width="110px" size="default">
-            <el-form-item required>
-              <template #label>
-                <span class="label-with-tip">
-                  数据源
-                  <el-tooltip content="数据源在「数据源配置」中绑定；切换后自动加载列定义" placement="top">
-                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </span>
-              </template>
-              <el-select v-model="form.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
-                <el-option v-for="ds in formDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
-              </el-select>
-            </el-form-item>
-            <el-divider content-position="left">组件级数据筛选</el-divider>
-            <el-form-item label="筛选条件">
-              <div style="width: 100%">
-                <el-radio-group v-model="form.filterLogic" size="small">
-                  <el-radio-button value="AND">所有（且）</el-radio-button>
-                  <el-radio-button value="OR">任一（或）</el-radio-button>
-                </el-radio-group>
-                <div v-for="(row, i) in form.filterRows" :key="i" style="display: flex; gap: 8px; margin-top: 8px">
-                  <el-select v-model="row.column" placeholder="目标列" style="width: 30%">
-                    <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-                  </el-select>
-                  <el-select v-model="row.op" style="width: 22%">
-                    <el-option label="等于" value="eq" /><el-option label="不等于" value="ne" />
-                    <el-option label="包含" value="like" /><el-option label="属于" value="in" />
-                    <el-option label="为空" value="isEmpty" /><el-option label="不为空" value="isNotEmpty" />
-                  </el-select>
-                  <el-select v-model="row.source" style="width: 22%">
-                    <el-option label="固定值" value="fixed" /><el-option label="表单字段" value="field" />
-                  </el-select>
-                  <el-select v-if="row.source === 'field'" v-model="row.field" placeholder="当前表单字段" style="width: 30%">
-                    <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
-                  </el-select>
-                  <el-input v-else v-model="row.fixedValue" placeholder="固定值" style="width: 30%" />
-                  <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
-                </div>
-                <el-button type="primary" link style="margin-top: 8px"
-                  @click="form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })">
-                  + 添加筛选条件
-                </el-button>
-              </div>
-            </el-form-item>
-          </el-form>
+          <UniDataSourceBinding
+            :model-value="dsBindingValue"
+            @update:model-value="syncBinding"
+            :form-data-sources="formDataSources"
+            :current-fields="currentFields"
+            @columns="handleUnifiedColumns"
+          />
         </el-tab-pane>
         <!-- Tab 2: 显示列 -->
         <el-tab-pane :label="effectiveListMode === 'card' ? '卡片字段' : '显示列'" name="columns">
@@ -240,6 +201,7 @@ import { ElMessage } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
+import UniDataSourceBinding, { type UniDataSourceValue } from '@/views/form/components/UniDataSourceBinding.vue'
 import QueryColumnsConfig from '@/views/page/components/QueryColumnsConfig.vue'
 import ActionsConfig from '@/views/page/components/ActionsConfig.vue'
 import EventsConfig from '@/views/page/components/EventsConfig.vue'
@@ -289,6 +251,57 @@ const form = reactive({
   filterLogic: 'AND' as 'AND' | 'OR',
   filterRows: [] as { column: string; op: string; source: 'fixed' | 'field'; fixedValue: string; field: string }[],
 })
+
+// ==================== 统一组件桥接（列表模式 tab1 由 UniDataSourceBinding 代理 UI） ====================
+const dsBindingValue = ref<UniDataSourceValue>({ dataSourceId: '' })
+
+/** form ↔ dsBindingValue 双向桥接：form 变化 → 派生 dsBindingValue（组件 v-model） */
+watch(
+  [() => form.dataSourceId, () => form.filterLogic, () => form.filterRows],
+  ([id, logic, rows]) => {
+    const conds = (rows as any[] || []).filter((r) => r.column).map((r) => ({
+      column: r.column,
+      op: r.op,
+      source: r.source,
+      ...(r.source === 'field' ? { field: r.field } : { value: r.fixedValue }),
+    }))
+    dsBindingValue.value = conds.length > 0
+      ? { dataSourceId: id, filter: { logic, conditions: conds } }
+      : { dataSourceId: id }
+  },
+  { deep: true, immediate: true },
+)
+
+/** 组件 → 父：组件 update:modelValue 时，回写 form（数据源 + 筛选） */
+function syncBinding(value: UniDataSourceValue) {
+  dsBindingValue.value = value
+  form.dataSourceId = value.dataSourceId ?? ''
+  const filter = value.filter
+  if (filter && Array.isArray(filter.conditions)) {
+    form.filterLogic = filter.logic
+    form.filterRows = filter.conditions.map((c: any) => ({
+      column: String(c.column ?? ''),
+      op: String(c.op ?? 'eq'),
+      source: c.source === 'field' ? 'field' : 'fixed',
+      fixedValue: String(c.value ?? c.fixedValue ?? ''),
+      field: String(c.field ?? ''),
+    }))
+  } else {
+    form.filterLogic = 'AND'
+    form.filterRows = []
+  }
+}
+
+/** 组件 → 父：组件加载列后，同步 dsColumns（预览）。
+ *  列表模式的显示列候选/初始化在数据源 id 变化时联动（避免编辑筛选时被覆盖）。 */
+const lastBoundDsId = ref('')
+function handleUnifiedColumns(cols: ColumnConfigItem[]) {
+  dsColumns.value = cols
+  if (isListMode.value && form.dataSourceId && form.dataSourceId !== lastBoundDsId.value) {
+    lastBoundDsId.value = form.dataSourceId
+    loadTableCandidates().then(() => initTableData())
+  }
+}
 
 // ==================== 容器按钮配置（formContainer 模式） ====================
 const container = reactive({
@@ -453,6 +466,7 @@ watch(() => props.modelValue, async (val) => {
   const bp = props.bindingProps || {}
   // 回填数据源 + 组件级数据筛选
   form.dataSourceId = bp.dataSourceId || ''
+  lastBoundDsId.value = bp.dataSourceId || ''
   const filter = bp.filter
   if (filter && typeof filter === 'object') {
     form.filterLogic = filter.logic || 'AND'

@@ -1,23 +1,14 @@
 <template>
   <el-dialog v-model="visible" title="数据源配置" width="720px" :close-on-click-modal="false">
     <el-form label-width="110px" size="default">
-      <!-- 页面内数据源 -->
-      <el-form-item label="页面内数据源" required>
-        <el-select
-          v-model="form.dataSourceId"
-          placeholder="选择页面数据源绑定"
-          style="width: 100%"
-          @change="handleDataSourceChange"
-        >
-          <el-option
-            v-for="ds in formDataSources"
-            :key="ds.id"
-            :label="ds.id"
-            :value="ds.id"
-          />
-        </el-select>
-        <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
-      </el-form-item>
+      <!-- 页面内数据源（由 UniDataSourceBinding 统一管理） -->
+      <UniDataSourceBinding
+        :model-value="dsBindingValue"
+        @update:model-value="syncBinding"
+        :form-data-sources="formDataSources || []"
+        :current-fields="currentFields"
+        @columns="handleUnifiedColumns"
+      />
 
       <!-- 显示与回填 -->
       <el-divider content-position="left">显示与回填</el-divider>
@@ -59,43 +50,6 @@
         </div>
       </el-form-item>
 
-      <!-- 组件级数据筛选 -->
-      <el-divider content-position="left">组件级数据筛选</el-divider>
-      <el-form-item label="筛选条件">
-        <div style="width: 100%">
-          <el-radio-group v-model="form.filterLogic" size="small">
-            <el-radio-button value="AND">所有（且）</el-radio-button>
-            <el-radio-button value="OR">任一（或）</el-radio-button>
-          </el-radio-group>
-          <div v-for="(row, i) in form.filterRows" :key="i" style="display: flex; gap: 8px; margin-top: 8px">
-            <el-select v-model="row.column" placeholder="目标列" style="width: 30%">
-              <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-            </el-select>
-            <el-select v-model="row.op" style="width: 22%">
-              <el-option label="等于" value="eq" />
-              <el-option label="不等于" value="ne" />
-              <el-option label="包含" value="like" />
-              <el-option label="属于" value="in" />
-              <el-option label="为空" value="isEmpty" />
-              <el-option label="不为空" value="isNotEmpty" />
-            </el-select>
-            <el-select v-model="row.source" style="width: 22%">
-              <el-option label="固定值" value="fixed" />
-              <el-option label="表单字段" value="field" />
-            </el-select>
-            <el-select v-if="row.source === 'field'" v-model="row.field" placeholder="当前表单字段" style="width: 30%">
-              <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
-            </el-select>
-            <el-input v-else v-model="row.fixedValue" placeholder="固定值" style="width: 30%" />
-            <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
-          </div>
-          <el-button type="primary" link style="margin-top: 8px"
-            @click="form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })">
-            + 添加筛选条件
-          </el-button>
-          <span class="form-tip">与数据源级筛选（数据源配置中设置）以「且」合并；动态条件依赖表单字段，变化时自动刷新选项</span>
-        </div>
-      </el-form-item>
     </el-form>
 
     <template #footer>
@@ -110,6 +64,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { ColumnConfigItem } from '@/api/bizData'
 import { dataSourceApi } from '@/api/data-source'
+import UniDataSourceBinding, { type UniDataSourceValue } from '@/views/form/components/UniDataSourceBinding.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -171,6 +126,39 @@ const form = reactive({
   headerRows: [] as { key: string; value: string }[],
 })
 
+// ==================== UniDataSourceBinding bridge ====================
+const dsBindingValue = ref<UniDataSourceValue>({ dataSourceId: '' })
+
+function syncBinding(value: UniDataSourceValue) {
+  form.dataSourceId = value.dataSourceId ?? ''
+  const filter = value.filter
+  form.filterLogic = filter?.logic ?? 'AND'
+  form.filterRows = filter?.conditions?.map((condition: any) => ({
+    column: String(condition.column ?? ''),
+    op: String(condition.op ?? 'eq'),
+    source: condition.source === 'field' ? 'field' : 'fixed',
+    fixedValue: String(condition.value ?? condition.fixedValue ?? ''),
+    field: String(condition.field ?? ''),
+  })) ?? []
+}
+
+function handleUnifiedColumns(columns: ColumnConfigItem[]) {
+  dsColumns.value = columns
+}
+
+/** LookupPicker 的专属切换行为：数据源变更后清空依赖当前列的配置。 */
+watch(
+  () => dsBindingValue.value.dataSourceId,
+  (newId, oldId) => {
+    if (!newId || !oldId || newId === oldId) return
+    form.displayField = ''
+    form.selectedColumns = []
+    form.searchColumns = []
+    form.filterRows.forEach((row) => { row.column = '' })
+    void loadDsColumns()
+  },
+)
+
 /** 按绑定 refId 加载数据源列定义 */
 async function loadDsColumns() {
   dsColumns.value = []
@@ -182,15 +170,6 @@ async function loadDsColumns() {
   } catch {
     // http 拦截器已提示
   }
-}
-
-/** 切换数据源：清空依赖列配置并重新加载列候选 */
-function handleDataSourceChange() {
-  form.displayField = ''
-  form.selectedColumns = []
-  form.searchColumns = []
-  form.filterRows.forEach(r => { r.column = '' })
-  void loadDsColumns()
 }
 
 /** 旧版页面数据源选择：将页面绑定 refId 解析为 FORM/API 配置 */
@@ -272,6 +251,20 @@ watch(
     }))
     if (form.dataSourceId && (props.formDataSources || []).length > 0) {
       void loadDsColumns()
+    }
+    dsBindingValue.value = {
+      dataSourceId: form.dataSourceId,
+      ...(form.filterRows.length > 0 ? {
+        filter: {
+          logic: form.filterLogic,
+          conditions: form.filterRows.map((row) => ({
+            column: row.column,
+            op: row.op,
+            source: row.source,
+            ...(row.source === 'field' ? { field: row.field } : { value: row.fixedValue }),
+          })),
+        },
+      } : {}),
     }
   },
 )

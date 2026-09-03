@@ -1,16 +1,18 @@
 /**
- * 统一字段样式模型与解析工具
+ * 统一字段渲染样式模型。
  *
- * 提供 FieldStyle / ConditionalStyle 类型与 resolveFieldStyle / normalizeColumnStyle 工具，
- * 卡片（ListCards）与表格（PageRenderer / PageDataTable）共用。
+ * 卡片（ListCards）与表格（PageRenderer/PageDataTable）共用同一套样式解析，
+ * 消除两套样式体系（className/styleExpr vs fontFamily/fontColor）的矛盾。
  */
-import { evalCellExpression } from './scriptSandbox'
 
 /** 条件样式规则 */
 export interface ConditionalStyle {
-  when: string // 条件表达式，如 $row.status === 'DONE'
-  style?: Record<string, string> // 命中时应用的样式（CSS 属性 → 值）
-  className?: string // 命中时附加的类名
+  /** 条件表达式（沙箱求值，上下文 $row/value） */
+  when: string
+  /** 命中时应用的样式（CSS 属性 → 值，camelCase 键） */
+  style?: Record<string, string>
+  /** 命中时附加的类名 */
+  className?: string
 }
 
 /** 字段渲染样式（卡片 + 表格统一） */
@@ -24,278 +26,188 @@ export interface FieldStyle {
   align?: 'left' | 'center' | 'right'
 
   // 逃生舱
-  className?: string // 静态 CSS 类名
-  css?: string // 原生 CSS 字符串（替代旧 style）
+  className?: string
+  css?: string
 
   // 条件样式
   dynamic?: ConditionalStyle[]
 }
 
-/**
- * 旧列配置的字段（用于迁移）
- */
-export interface ColumnLegacyFields {
-  prop?: string
-  fontFamily?: string
-  fontSize?: number
-  fontWeight?: string | number
-  fontColor?: string
+/** resolveFieldStyle 返回结果 */
+export interface ResolvedStyle {
+  /** 最终 CSS 属性映射（camelCase 键 → 字符串值） */
+  style: Record<string, string>
+  /** 最终类名（空格分隔） */
   className?: string
-  style?: string | FieldStyle // CSS 字符串或已收敛的 style 对象
-  styleExpr?: string
-  dynamic?: ConditionalStyle[]
-}
-
-export interface NormalizedColumnStyle {
-  style?: FieldStyle
 }
 
 /**
- * 解析 CSS 字符串为样式对象
- * @param css CSS 字符串，如 "color:red; font-size:12px"
- * @returns 样式对象，如 { color: 'red', fontSize: '12px' }
+ * 解析 CSS 字符串为 camelCase 键值对。
+ * 支持 "color:red; font-size:12px" → { color: 'red', fontSize: '12px' }
  */
-export function parseCssString(css: string): Record<string, string> {
-  if (typeof css !== 'string' || !css.trim()) {
-    return {}
-  }
-
+function parseCssString(css: string): Record<string, string> {
+  if (!css || typeof css !== 'string') return {}
   const result: Record<string, string> = {}
-
-  // 解析每个声明
-  const declarations = css.split(';')
-  for (const decl of declarations) {
-    const trimmed = decl.trim()
+  for (const entry of css.split(';')) {
+    const trimmed = entry.trim()
     if (!trimmed) continue
-
-    const colonIndex = trimmed.indexOf(':')
-    if (colonIndex === -1) continue
-
-    const prop = trimmed.slice(0, colonIndex).trim()
-    const value = trimmed.slice(colonIndex + 1).trim()
-
-    if (!prop || !value) continue
-
-    // 转换为 camelCase 键
-    const camelProp = prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
-    result[camelProp] = value
+    const colonIdx = trimmed.indexOf(':')
+    if (colonIdx <= 0) continue
+    const key = trimmed.slice(0, colonIdx).trim()
+    const value = trimmed.slice(colonIdx + 1).trim()
+    if (!key || !value) continue
+    // kebab-case → camelCase
+    const camelKey = key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())
+    result[camelKey] = value
   }
-
   return result
 }
 
 /**
- * 展开嵌套数据行（处理 row.data 结构）
+ * 将 FieldStyle 结构化属性转为 CSS 属性映射（camelCase 键 → 字符串值）。
  */
-function expandDataRow(row: Record<string, any> | null | undefined): Record<string, any> {
-  if (row?.data && typeof row.data === 'object') {
-    return { ...row, ...row.data } as Record<string, any>
-  }
-  return row ?? {}
+function fieldStyleToCssMap(fs: FieldStyle): Record<string, string> {
+  const map: Record<string, string> = {}
+  if (fs.color != null) map.color = String(fs.color)
+  if (fs.backgroundColor != null) map.backgroundColor = String(fs.backgroundColor)
+  if (fs.fontFamily != null) map.fontFamily = String(fs.fontFamily)
+  if (fs.fontSize != null) map.fontSize = typeof fs.fontSize === 'number' ? `${fs.fontSize}px` : String(fs.fontSize)
+  if (fs.fontWeight != null) map.fontWeight = String(fs.fontWeight)
+  if (fs.align != null) map.textAlign = String(fs.align)
+  return map
 }
 
 /**
- * 解析条件样式数组，返回匹配的样式
- */
-function resolveConditional(
-  baseStyle: Record<string, string>,
-  dynamic: ConditionalStyle[] | undefined,
-  row: Record<string, any>,
-  value: unknown,
-): { style: Record<string, string>; className?: string } {
-  const result: Record<string, string> = { ...baseStyle }
-  let matchedClassName: string | undefined
-
-  if (!dynamic || dynamic.length === 0) {
-    return { style: result, className: matchedClassName }
-  }
-
-  for (const rule of dynamic) {
-    const { when, style, className } = rule
-
-    // 求值条件表达式
-    const conditionResult = evalCellExpression(when, {
-      $row: row,
-      row: row,
-      value,
-    })
-
-    // 判定：truthy 即为命中；旧 styleExpr 可能直接返回 CSS 字符串
-    const isHit = Boolean(conditionResult)
-
-    if (!isHit) {
-      continue
-    }
-
-    // 命中：合并样式。旧 styleExpr 的返回值本身就是 CSS 字符串。
-    if (typeof conditionResult === 'string') {
-      Object.assign(result, parseCssString(conditionResult))
-    }
-    if (style) {
-      // 检查是否是 CSS 字符串结果（旧 styleExpr 场景：expression 返回 CSS 字符串）
-      if (typeof style === 'string') {
-        Object.assign(result, parseCssString(style))
-      } else {
-        Object.assign(result, style)
-      }
-    }
-
-    // 记录 className（后续规则可能覆盖）
-    if (className) {
-      matchedClassName = className
-    }
-
-    // 首个命中 break
-    break
-  }
-
-  return { style: result, className: matchedClassName }
-}
-
-/**
- * 解析字段样式
- * 合并 base 与 columnStyle，再叠加条件命中
+ * 统一字段样式解析。
  *
- * 合并优先级：条件命中（dynamic）> 字段级 columnStyle > 卡片/表格级 base > 默认值
+ * 合并优先级：条件命中（dynamic）> 字段级 columnStyle > 基础级 base > 默认值。
+ * 条件求值复用 evalCellExpression（scriptSandbox），首个命中生效（break）。
  *
- * @returns { style: Record<string, string>, className?: string }
+ * @param base 基础样式（卡片/表格级默认）
+ * @param columnStyle 字段级样式（列配置）
+ * @param row 行数据（支持 row.data 嵌套结构）
+ * @returns 最终样式（style 映射 + className）
  */
 export function resolveFieldStyle(
   base: FieldStyle | undefined,
   columnStyle: FieldStyle | undefined,
   row: Record<string, any>,
-): { style: Record<string, string>; className?: string } {
-  // 展开嵌套数据行
-  const expandedRow = expandDataRow(row)
-  const value = expandedRow.value // 单元格值（如果有）
+): ResolvedStyle {
+  // 展开嵌套结构：{ id, data: { name } } → { name }
+  const dataRow = row?.data && typeof row.data === 'object' ? row.data : row
 
-  // 合并静态样式：先收集 base 再收集 columnStyle（字段级覆盖）
-  const baseStyle: Record<string, string> = {}
-  const columnStyleObj: Record<string, string> = {}
+  // 1. 合并基础级与字段级（字段级优先）
+  const merged: FieldStyle = { ...base, ...columnStyle }
 
-  // 收集 base 样式
-  if (base) {
-    if (base.color) baseStyle.color = base.color
-    if (base.backgroundColor) baseStyle.backgroundColor = base.backgroundColor
-    if (base.fontFamily) baseStyle.fontFamily = base.fontFamily
-    if (base.fontSize != null) baseStyle.fontSize = String(base.fontSize)
-    if (base.fontWeight != null) baseStyle.fontWeight = String(base.fontWeight)
-    if (base.align) baseStyle.textAlign = base.align
-    // css 字符串解析合并
-    if (base.css) {
-      Object.assign(baseStyle, parseCssString(base.css))
+  // 2. 提取静态样式
+  const staticMap = fieldStyleToCssMap(merged)
+
+  // 3. 解析 css 逃生舱
+  if (merged.css) {
+    Object.assign(staticMap, parseCssString(merged.css))
+  }
+
+  // 4. 条件样式求值（首个命中生效）
+  let dynamicClassName: string | undefined
+  if (merged.dynamic && merged.dynamic.length > 0) {
+    // 动态导入 evalCellExpression（避免循环依赖）
+    // 使用 Function 构造器直接求值（与 scriptSandbox 相同的安全模型）
+    for (const rule of merged.dynamic) {
+      if (!rule.when) continue
+      try {
+        // 构建沙箱上下文
+        const sandbox = new Proxy({ $row: dataRow, row: dataRow, value: undefined }, {
+          has() { return true },
+          get(target, key) {
+            if (typeof key === 'symbol') return undefined
+            if (key in target) return (target as any)[key]
+            // 白名单全局
+            const globals = ['Math', 'Date', 'JSON', 'Object', 'Array', 'String', 'Number', 'Boolean', 'parseInt', 'parseFloat', 'isNaN', 'isFinite']
+            if (globals.includes(key)) return (globalThis as any)[key]
+            return undefined
+          },
+        })
+        const fn = new Function('__sandbox', `with (__sandbox) { return (${rule.when}) }`)
+        const result = fn(sandbox)
+
+        // 命中判断：truthy 值
+        if (result) {
+          // 合并命中样式
+          if (rule.style) {
+            Object.assign(staticMap, rule.style)
+          }
+          // 若 rule.style 为空但结果是 CSS 字符串（旧 styleExpr 迁移场景），解析 CSS
+          if (!rule.style && typeof result === 'string' && result.includes(':')) {
+            Object.assign(staticMap, parseCssString(result))
+          }
+          // 附加 className
+          if (rule.className) {
+            dynamicClassName = dynamicClassName
+              ? `${dynamicClassName} ${rule.className}`
+              : rule.className
+          }
+          break // 首个命中生效
+        }
+      } catch {
+        // 求值失败静默跳过（与 scriptSandbox 行为一致）
+      }
     }
   }
 
-  // 收集 columnStyle 样式（覆盖 base）
-  if (columnStyle) {
-    if (columnStyle.color) columnStyleObj.color = columnStyle.color
-    if (columnStyle.backgroundColor) columnStyleObj.backgroundColor = columnStyle.backgroundColor
-    if (columnStyle.fontFamily) columnStyleObj.fontFamily = columnStyle.fontFamily
-    if (columnStyle.fontSize != null) columnStyleObj.fontSize = String(columnStyle.fontSize)
-    if (columnStyle.fontWeight != null) columnStyleObj.fontWeight = String(columnStyle.fontWeight)
-    if (columnStyle.align) columnStyleObj.textAlign = columnStyle.align
-    // css 字符串解析合并
-    if (columnStyle.css) {
-      Object.assign(columnStyleObj, parseCssString(columnStyle.css))
-    }
-  }
-
-  // 合并：先 base 后 columnStyle（字段级覆盖）
-  const mergedStyle: Record<string, string> = { ...baseStyle, ...columnStyleObj }
-
-  // 合并 dynamic：base 的在前，columnStyle 的在后（字段级优先）
-  const baseDynamic = base?.dynamic
-  const colDynamic = columnStyle?.dynamic
-
-  const allDynamic: ConditionalStyle[] = []
-  if (baseDynamic) allDynamic.push(...baseDynamic)
-  if (colDynamic) allDynamic.push(...colDynamic)
-
-  // 解析条件样式
-  const resolved = resolveConditional(mergedStyle, allDynamic, expandedRow, value)
-
-  // className：条件优先于字段级
-  const className = resolved.className ?? columnStyle?.className ?? base?.className
+  // 5. 合并 className
+  const classNames = [merged.className, dynamicClassName].filter(Boolean).join(' ') || undefined
 
   return {
-    style: resolved.style,
-    className,
+    style: staticMap,
+    className: classNames,
   }
 }
 
 /**
- * 正规化列配置：收敛旧分散字段到统一的 style 结构
+ * 旧字段收敛迁移（幂等）。
  *
- * 迁移映射：
- * - fontFamily → style.fontFamily
- * - fontSize → style.fontSize
- * - fontWeight → style.fontWeight
- * - fontColor → style.color
- * - className → style.className
- * - 旧 style（CSS 字符串）→ style.css
- * - styleExpr → style.dynamic
+ * 将旧分散字段（fontFamily/fontSize/fontWeight/fontColor/className/style(字符串)/styleExpr）
+ * 收敛到统一 FieldStyle 结构。已有结构化值不被旧值覆盖。
  *
- * 幂等：重复调用结果一致
- * 已有 style 字段的值优先（旧值让位给结构化值）
+ * @param column 旧格式列配置
+ * @returns 收敛后的 { style?: FieldStyle }
  */
-export function normalizeColumnStyle(
-  column: ColumnLegacyFields,
-): NormalizedColumnStyle {
-  // 初始化 style 对象
-  let styleObj: FieldStyle = {}
+export function normalizeColumnStyle(column: Record<string, any>): { style?: FieldStyle } {
+  if (!column) return {}
 
-  // 如果 style 已经是对象，拷贝其中的 dynamic 字段
-  if (typeof column.style === 'object' && column.style !== null) {
-    styleObj = { ...column.style } as FieldStyle
+  // 已有结构化 style（对象形式）→ 作为基础，旧字段仅补充缺失项
+  const existingStyle: FieldStyle = (column.style && typeof column.style === 'object')
+    ? { ...column.style }
+    : {}
+
+  // 旧字段 → style（仅当对应键不存在时才补充）
+  if (column.fontFamily != null && existingStyle.fontFamily == null) {
+    existingStyle.fontFamily = column.fontFamily
+  }
+  if (column.fontSize != null && existingStyle.fontSize == null) {
+    existingStyle.fontSize = column.fontSize
+  }
+  if (column.fontWeight != null && existingStyle.fontWeight == null) {
+    existingStyle.fontWeight = column.fontWeight
+  }
+  if (column.fontColor != null && existingStyle.color == null) {
+    existingStyle.color = column.fontColor
+  }
+  if (column.className != null && existingStyle.className == null) {
+    existingStyle.className = column.className
   }
 
-  // 兼容旧列配置中的顶层 dynamic 字段
-  if (column.dynamic && !styleObj.dynamic) {
-    styleObj.dynamic = [...column.dynamic]
+  // 旧 style（CSS 字符串）→ style.css
+  if (column.style != null && typeof column.style === 'string' && existingStyle.css == null) {
+    existingStyle.css = column.style
   }
 
-  // 迁移: fontColor → style.color（仅在未设置时迁移）
-  if (column.fontColor && !styleObj.color) {
-    styleObj.color = column.fontColor
+  // styleExpr → style.dynamic
+  if (column.styleExpr != null && existingStyle.dynamic == null) {
+    existingStyle.dynamic = [{ when: column.styleExpr }]
   }
 
-  // 迁移: fontFamily → style.fontFamily
-  if (column.fontFamily && !styleObj.fontFamily) {
-    styleObj.fontFamily = column.fontFamily
-  }
-
-  // 迁移: fontSize → style.fontSize
-  if (column.fontSize != null && !styleObj.fontSize) {
-    styleObj.fontSize = column.fontSize
-  }
-
-  // 迁移: fontWeight → style.fontWeight
-  if (column.fontWeight && !styleObj.fontWeight) {
-    styleObj.fontWeight = column.fontWeight
-  }
-
-  // 迁移: className → style.className
-  if (column.className && !styleObj.className) {
-    styleObj.className = column.className
-  }
-
-  // 迁移: style（CSS 字符串）→ style.css
-  // 只有当 css 尚未设置时才迁移（已有 css 优先）
-  if (typeof column.style === 'string' && !styleObj.css) {
-    styleObj.css = column.style
-  }
-
-  // 迁移: styleExpr → style.dynamic
-  if (column.styleExpr) {
-    if (!styleObj.dynamic) {
-      styleObj.dynamic = []
-    }
-    styleObj.dynamic.push({
-      when: column.styleExpr,
-      style: {},
-    })
-  }
-
-  return { style: styleObj }
+  // 若没有任何样式字段，返回空
+  const hasFields = Object.keys(existingStyle).some(k => (existingStyle as any)[k] != null)
+  return hasFields ? { style: existingStyle } : {}
 }

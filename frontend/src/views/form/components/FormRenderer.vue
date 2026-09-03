@@ -460,13 +460,16 @@ async function loadSchema() {
     }
     const schema = JSON.parse(formDef.schema)
     const rules = Array.isArray(schema) ? schema : (schema.rule || [])
+    // 恢复表单级数据源绑定（供 LookupPicker/dataPicker 及选项数据源按 dataSourceId 解析）
+    // 必须在 resolveOptionRules 之前写入 activeDsBindings，否则选项数据源解析时绑定位仍为空，
+    // 会把页面内绑定 ID 误当全局 refId 请求导致下拉无数据。
+    if (!Array.isArray(schema) && Array.isArray(schema.dataSources)) {
+      schemaDataSources.value = schema.dataSources
+      setActiveDsBindings(schema.dataSources)
+    }
     resolvedSchema.value = hasOptionDatasource(rules)
       ? await resolveOptionRules(rules)
       : rules
-    // 恢复表单级数据源绑定（供 LookupPicker/dataPicker 按 dataSourceId 解析）
-    if (!Array.isArray(schema) && Array.isArray(schema.dataSources)) {
-      schemaDataSources.value = schema.dataSources
-    }
     // 恢复表单级动作链（表格-容器联动）
     if (!Array.isArray(schema) && Array.isArray(schema.actions)) {
       schemaActions.value = schema.actions

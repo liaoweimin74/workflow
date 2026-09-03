@@ -50,7 +50,7 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
 
-export interface DataSourceFilterRow {
+export interface UniDataSourceFilterRow {
   column: string
   op: string
   source: 'fixed' | 'field'
@@ -58,27 +58,28 @@ export interface DataSourceFilterRow {
   field: string
 }
 
-export interface DataSourceTabValue {
+export interface UniDataSourceValue {
   dataSourceId: string
   filter?: { logic: 'AND' | 'OR'; conditions: Record<string, unknown>[] }
 }
 
 const props = withDefaults(defineProps<{
-  modelValue?: DataSourceTabValue
+  modelValue?: UniDataSourceValue
   formDataSources: Array<{ id: string; refId: string; name?: string }>
   currentFields?: string[]
 }>(), { currentFields: () => [] })
 
 const emit = defineEmits<{
-  (event: 'update:modelValue', value: DataSourceTabValue): void
+  (event: 'update:modelValue', value: UniDataSourceValue): void
   (event: 'columns', value: ColumnConfigItem[]): void
 }>()
 
 const draft = reactive({
   dataSourceId: '',
   filterLogic: 'AND' as 'AND' | 'OR',
-  filterRows: [] as DataSourceFilterRow[],
+  filterRows: [] as UniDataSourceFilterRow[],
 })
+let lastModelSignature = ''
 const columns = ref<ColumnConfigItem[]>([])
 const formDataSources = computed(() => props.formDataSources.map((binding) => ({
   ...binding,
@@ -98,8 +99,17 @@ watch(() => props.modelValue, (value) => {
     fixedValue: String(condition.value ?? condition.fixedValue ?? ''),
     field: String(condition.field ?? ''),
   }))
+  lastModelSignature = JSON.stringify(valueOfDraft())
   if (draft.dataSourceId) void loadColumns()
 }, { immediate: true, deep: true })
+
+watch(draft, () => {
+  const next = valueOfDraft()
+  const signature = JSON.stringify(next)
+  if (signature === lastModelSignature) return
+  lastModelSignature = signature
+  emit('update:modelValue', next)
+}, { deep: true })
 
 async function loadColumns() {
   const binding = formDataSources.value.find((source) => source.id === draft.dataSourceId)
@@ -114,14 +124,16 @@ async function loadColumns() {
 function handleDataSourceChange() {
   draft.filterRows = []
   void loadColumns()
-  emit('update:modelValue', value())
+  const next = valueOfDraft()
+  lastModelSignature = JSON.stringify(next)
+  emit('update:modelValue', next)
 }
 
 function addFilter() {
   draft.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })
 }
 
-function value(): DataSourceTabValue {
+function valueOfDraft(): UniDataSourceValue {
   const conditions = draft.filterRows.filter((row) => row.column).map((row) => ({
     column: row.column,
     op: row.op,
@@ -132,6 +144,10 @@ function value(): DataSourceTabValue {
     dataSourceId: draft.dataSourceId,
     ...(conditions.length > 0 ? { filter: { logic: draft.filterLogic, conditions } } : {}),
   }
+}
+
+function value(): UniDataSourceValue {
+  return valueOfDraft()
 }
 
 defineExpose({ value })

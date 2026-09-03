@@ -1,8 +1,5 @@
-# unified-datasource-binding Specification
+## ADDED Requirements
 
-## Purpose
-TBD - created by archiving change unify-datasource-binding-components. Update Purpose after archive.
-## Requirements
 ### Requirement: Unified datasource binding SHALL provide reusable component-level binding UI
 
 The designer SHALL provide one reusable binding component for selecting a page datasource, editing component-level filters, and loading datasource column metadata. The component SHALL be reusable by option controls and list configuration dialogs without owning page-level datasource declarations.
@@ -38,4 +35,3 @@ The unified component integration SHALL read existing `value` and `fixedValue` c
 #### Scenario: Save a legacy lookup configuration
 - **WHEN** a user saves a lookup picker using legacy FORM/API datasource fields
 - **THEN** the legacy fields SHALL remain in the saved configuration while the unified binding handles only the page datasource/filter portion
-

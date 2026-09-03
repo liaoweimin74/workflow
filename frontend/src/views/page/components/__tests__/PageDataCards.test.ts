@@ -23,7 +23,7 @@ vi.mock('@/utils/formDsBindingsStore', () => ({
 vi.mock('@/components/business/ListCards.vue', () => ({
   default: defineComponent({
     name: 'ListCardsStub',
-    props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'showPagination', 'actions', 'designMode', 'groupBy'],
+     props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'searchFields', 'showSearch', 'pageSizes', 'showPagination', 'actions', 'designMode', 'groupBy'],
     setup(props: any, { expose }: any) {
       // fetchData 暴露真实函数，供 PageDataCards 通过 cardsRef 触发取数
       expose({ fetchData: () => props.fetchApi({ page: 2, size: 10 }) })
@@ -59,6 +59,53 @@ describe('PageDataCards', () => {
 
     expect(queryData).toHaveBeenCalledWith('global-orders', { page: 2, size: 10 })
     expect(wrapper.emitted('loaded')?.[0]).toEqual([[{ id: 7, name: '订单', version: 3 }]])
+    wrapper.unmount()
+  })
+
+  it('透传查询配置并把非空字段转换为 like filter', async () => {
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        searchFields: [{ key: 'name', label: '名称' }],
+        showSearch: true,
+        pageSizes: [10, 20],
+      },
+    })
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    expect(cardsStub.props('showSearch')).toBe(true)
+    expect(cardsStub.props('pageSizes')).toEqual([10, 20])
+    await cardsStub.props('fetchApi')({ page: 1, size: 20, name: '订单' })
+
+    expect(queryData).toHaveBeenLastCalledWith('global-orders', {
+      page: 1,
+      size: 20,
+      filter: JSON.stringify({
+        logic: 'AND',
+        conditions: [{ column: 'name', op: 'like', value: '订单' }],
+      }),
+    })
+    wrapper.unmount()
+  })
+
+  it('设计态隐藏查询栏和分页栏', async () => {
+    const wrapper = mount(PageDataCards, {
+      props: {
+        designMode: true,
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        searchFields: [{ key: 'name', label: '名称' }],
+        showSearch: true,
+        pagination: true,
+      },
+    })
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    expect(cardsStub.props('showSearch')).toBe(false)
+    expect(cardsStub.props('showPagination')).toBe(false)
     wrapper.unmount()
   })
 

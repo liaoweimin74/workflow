@@ -6,6 +6,9 @@
       :fetch-api="fetchApi"
       :card-min-width="cardMinWidth"
       :default-page-size="pageSize || 20"
+      :search-fields="resolvedSearchFields"
+      :show-search="designMode ? false : showSearch"
+      :page-sizes="pageSizes"
       :show-pagination="designMode ? false : pagination"
       :actions="resolvedActions"
       :group-by="groupBy"
@@ -57,6 +60,9 @@ const props = withDefaults(defineProps<{
   columns?: CardColumn[]
   cardMinWidth?: number | string
   pageSize?: number
+  searchFields?: Array<{ key?: string; field?: string; label?: string }>
+  showSearch?: boolean
+  pageSizes?: number[]
   pagination?: boolean
   viewActions?: { buttons?: Array<ViewActionButton> }
   groupBy?: string
@@ -67,7 +73,7 @@ const props = withDefaults(defineProps<{
   designMode?: boolean
   stretch?: boolean
   [key: string]: any
-}>(), { pageSize: 20, pagination: true, cardMinWidth: 280, stretch: false })
+}>(), { pageSize: 20, showSearch: false, pageSizes: () => [10, 20, 50], pagination: true, cardMinWidth: 280, stretch: false })
 
 const emit = defineEmits<{
   (e: 'row-click', row: any): void
@@ -106,6 +112,13 @@ const metadataColumns = ref<any[]>([])
 const columnsForRender = computed(() => props.designMode && props.columns?.length === 0
   ? metadataColumns.value.map((column) => ({ prop: column.key, label: column.label || column.key, role: column.role || 'field' }))
   : resolvedColumns.value)
+const resolvedSearchFields = computed(() => (props.searchFields || [])
+  .map((field) => ({
+    type: 'input' as const,
+    prop: field.key || field.field || '',
+    label: field.label || field.key || field.field || '',
+  }))
+  .filter((field) => field.prop))
 
 // 行级操作按钮（设计态/运行态一致：配置了按钮则预览/运行都显示，便于设计器所见即所得；保留 style/icon/type 供卡片按形态渲染）
 const resolvedActions = computed(() => (props.viewActions?.buttons || [])
@@ -121,11 +134,22 @@ const resolvedActions = computed(() => (props.viewActions?.buttons || [])
 const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
   if (!resolvedRefId.value) return { rows: [], total: 0 }
   const isDesign = props.designMode
-  const response = await dataSourceApi.queryData(resolvedRefId.value, {
+  const filterConditions = resolvedSearchFields.value
+    .map((field) => ({ column: field.prop, op: 'like', value: params[field.prop] }))
+    .filter((condition) => condition.value !== '' && condition.value !== null && condition.value !== undefined)
+  const queryParams: Record<string, any> = {
     // 设计态预览固定取首页，且最多 10 条；运行态透传分页
     page: isDesign ? 1 : Math.max(1, params.page),
     size: isDesign ? Math.min(params.size || 10, 10) : params.size,
-  })
+  }
+  if (props.pagination === false && !isDesign) {
+    delete queryParams.page
+    queryParams.size = -1
+  }
+  if (filterConditions.length > 0) {
+    queryParams.filter = JSON.stringify({ logic: 'AND', conditions: filterConditions })
+  }
+  const response = await dataSourceApi.queryData(resolvedRefId.value, queryParams)
   const rows = (response.data?.records || []).map((record: any) => ({ ...(record.data || {}), id: record.id, version: record.version }))
   emit('loaded', rows)
   return { rows, total: response.data?.total || 0 }

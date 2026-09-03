@@ -41,4 +41,11 @@ describe('PageDesigner card data-source entry', () => {
     expect(source).toContain("if (next.type === 'page-list-cards' || next.type === 'page-table')")
     expect(source).toContain('designMode: true')
   })
+
+  it('keeps an empty groupBy value in the card confirmation payload so clearing persists', () => {
+    const source = readFileSync(resolve(__dirname, '../../form/components/DsBindingConfigDialog.vue'), 'utf8')
+
+    expect(source).toContain("result.groupBy = tableData.groupBy")
+    expect(source).not.toContain("if (effectiveListMode.value === 'card' && tableData.groupBy) result.groupBy")
+  })
 })

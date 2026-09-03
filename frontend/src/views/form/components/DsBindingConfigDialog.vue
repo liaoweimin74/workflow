@@ -537,7 +537,7 @@ function handleConfirm() {
     result.viewActions = { ...tableData.actions }
     result.viewDetail = { ...tableData.detail }
     result.viewEvents = [...tableData.events]
-    if (effectiveListMode.value === 'card' && tableData.groupBy) result.groupBy = tableData.groupBy
+    if (effectiveListMode.value === 'card') result.groupBy = tableData.groupBy
     if (effectiveListMode.value === 'card') result.cardMinWidth = tableData.cardMinWidth
     if (effectiveListMode.value === 'card') result.collapsibleGroups = tableData.collapsibleGroups
     if (effectiveListMode.value === 'card') result.actionsPlacement = tableData.actionsPlacement

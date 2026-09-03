@@ -58,59 +58,63 @@
         <el-tab-pane :label="effectiveListMode === 'card' ? '卡片字段' : '显示列'" name="columns">
           <!-- 查询栏开关：开启后可配置查询列（QueryColumnsConfig 显示查询勾选），运行时显示查询栏 -->
           <el-form label-width="100px" size="default">
-            <!-- 卡片顶部快捷配置：显示查询栏/撑满/分组字段/卡片最小宽度 单行（放不下自动换行） -->
+            <!-- 卡片顶部快捷配置：两行。第一行：显示查询栏/撑满/卡片最小宽度；第二行：分组字段/分组可折叠/操作区位置 -->
             <div class="card-quick-config">
-              <el-form-item>
-                <template #label>
-                  <span class="label-with-tip">
-                    显示查询栏
-                    <el-tooltip content="默认不显示；开启后可按下列勾选可查询字段" placement="top">
-                      <el-icon class="tip-icon"><QuestionFilled /></el-icon>
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-switch v-model="tableData.showSearch" />
-              </el-form-item>
-              <el-form-item>
-                <template #label>
-                  <span class="label-with-tip">
-                    撑满
-                    <el-tooltip content="开启后表格占满父容器宽高，数据区域内部滚动" placement="top">
-                      <el-icon class="tip-icon"><QuestionFilled /></el-icon>
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-switch v-model="tableData.stretch" />
-              </el-form-item>
-              <el-form-item v-if="effectiveListMode === 'card'" class="qi-group-field">
-                <template #label><span class="qi-label">分组字段</span></template>
-                <el-select v-model="tableData.groupBy" clearable placeholder="不分组" class="qi-select">
-                  <el-option v-for="c in tableCandidates" :key="c.key" :label="c.label || c.key" :value="c.key" />
-                </el-select>
-              </el-form-item>
-              <el-form-item v-if="effectiveListMode === 'card'" class="qi-min-width">
-                <template #label><span class="qi-label">卡片最小宽度</span></template>
-                <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" class="qi-number" />
-              </el-form-item>
-              <el-form-item v-if="effectiveListMode === 'card'">
-                <template #label>
-                  <span class="label-with-tip">
-                    分组可折叠
-                    <el-tooltip content="开启后分组标题可点击折叠/展开该组卡片（仅设置了分组字段时生效）" placement="top">
-                      <el-icon class="tip-icon"><QuestionFilled /></el-icon>
-                    </el-tooltip>
-                  </span>
-                </template>
-                <el-switch v-model="tableData.collapsibleGroups" />
-              </el-form-item>
-              <el-form-item v-if="effectiveListMode === 'card'" class="qi-actions-placement">
-                <template #label><span class="qi-label">操作区位置</span></template>
-                <el-select v-model="tableData.actionsPlacement" class="qi-select">
-                  <el-option label="底部（默认）" value="bottom" />
-                  <el-option label="顶部" value="top" />
-                  <el-option label="右侧（纵向排列）" value="right" />
-                </el-select>
-              </el-form-item>
+              <div class="card-quick-row">
+                <el-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      显示查询栏
+                      <el-tooltip content="默认不显示；开启后可按下列勾选可查询字段" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-switch v-model="tableData.showSearch" />
+                </el-form-item>
+                <el-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      撑满
+                      <el-tooltip content="开启后表格占满父容器宽高，数据区域内部滚动" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-switch v-model="tableData.stretch" />
+                </el-form-item>
+                <el-form-item v-if="effectiveListMode === 'card'" class="qi-min-width">
+                  <template #label><span class="qi-label">卡片最小宽度</span></template>
+                  <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" class="qi-number" />
+                </el-form-item>
+              </div>
+              <div v-if="effectiveListMode === 'card'" class="card-quick-row">
+                <el-form-item class="qi-group-field">
+                  <template #label><span class="qi-label">分组字段</span></template>
+                  <el-select v-model="tableData.groupBy" clearable placeholder="不分组" class="qi-select">
+                    <el-option v-for="c in tableCandidates" :key="c.key" :label="c.label || c.key" :value="c.key" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      分组可折叠
+                      <el-tooltip content="开启后分组标题可点击折叠/展开该组卡片（仅设置了分组字段时生效）" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-switch v-model="tableData.collapsibleGroups" />
+                </el-form-item>
+                <el-form-item class="qi-actions-placement">
+                  <template #label><span class="qi-label">操作区位置</span></template>
+                  <el-select v-model="tableData.actionsPlacement" class="qi-select">
+                    <el-option label="底部（默认）" value="bottom" />
+                    <el-option label="顶部" value="top" />
+                    <el-option label="右侧（纵向排列）" value="right" />
+                  </el-select>
+                </el-form-item>
+              </div>
             </div>
           </el-form>
           <QueryColumnsConfig
@@ -550,38 +554,50 @@ function handleConfirm() {
   font-size: 12px;
   color: #909399;
 }
-/* 卡片顶部快捷配置：横向流式布局（放不下自动换行） */
-/* 卡片顶部快捷配置：四项强制单行展示。
-   el-form 默认 label-width=100px，四项 label+控件合计超宽会触发 flex 换行。
-   这里统一把 label 区改为按内容宽（nowrap 不换行），控件允许收缩，并强制 nowrap，
-   使 显示查询栏/撑满/分组字段/卡片最小宽度 始终在一行内。 */
+/* 卡片顶部快捷配置：纵向两行容器。
+   el-form 默认 label-width=100px，六项 label+控件合计超宽会触发 flex 换行。
+   拆为两行（每行三~四项）：第一行 显示查询栏/撑满/卡片最小宽度，
+   第二行 分组字段/分组可折叠/操作区位置。行内统一按内容宽（nowrap 不换行），
+   使每行都能在一行内放下。 */
 .card-quick-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card-quick-row {
   display: flex;
   flex-wrap: nowrap;
   gap: 12px;
   align-items: center;
 }
-.card-quick-config .el-form-item {
+.card-quick-row .el-form-item {
   margin-bottom: 0;
   min-width: 0;
-  /* 去掉 el-form label-width=100px 的固定留白：四项 label 都按内容宽 */
+  /* 去掉 el-form label-width=100px 的固定留白：各项 label 都按内容宽 */
   --el-form-label-width: max-content;
 }
-.card-quick-config .el-form-item__label {
+.card-quick-row .el-form-item__label {
   white-space: nowrap;
   flex: 0 0 auto;
 }
-/* 控件允许收缩，确保四项挤进一行 */
-.card-quick-config .el-form-item__content {
+/* label 左对齐：el-form 默认 label 右对齐（element-plus 内联规则 .el-form-item--label-right
+   强制 justify-content:flex-end），字数不同的 label 右对齐后文字左边缘错位，
+   导致第二行（分组字段/分组可折叠/操作区位置）看起来比第一行缩进。
+   label 是 el-form-item 子组件内部元素，须用 :deep 才能命中覆盖。 */
+.card-quick-row :deep(.el-form-item__label) {
+  justify-content: flex-start;
+}
+/* 控件允许收缩，确保各项挤进一行 */
+.card-quick-row .el-form-item__content {
   flex: 1 1 auto;
   min-width: 0;
 }
 /* 分组字段下拉：紧凑宽度（随容器可再收缩） */
-.card-quick-config .qi-select {
+.card-quick-row .qi-select {
   width: 170px;
 }
 /* 卡片最小宽度数字：紧凑宽度 */
-.card-quick-config .qi-number {
+.card-quick-row .qi-number {
   width: 138px;
 }
 /* 分页设置：横向流式布局（放不下自动换行） */

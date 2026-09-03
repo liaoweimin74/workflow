@@ -161,41 +161,68 @@ describe('DsBindingConfigDialog — card listMode 展示模式', () => {
   })
 })
 
-// ----- 布局断言：卡片顶部四项快捷配置单行（源码断言，无需 mount）-----
-describe('DsBindingConfigDialog — 卡片字段顶部快捷配置单行布局', () => {
+// ----- 布局断言：卡片顶部快捷配置两行布局（源码断言，无需 mount）-----
+describe('DsBindingConfigDialog — 卡片字段顶部快捷配置两行布局', () => {
   const source = readFileSync(resolve(__dirname, '../DsBindingConfigDialog.vue'), 'utf8')
 
-  it('显示查询栏/撑满/分组字段/卡片最小宽度 依次放入同一 flex 行容器', () => {
-    const containerStart = source.indexOf('class="card-quick-config"')
-    expect(containerStart).toBeGreaterThan(-1)
+  it('第一行：显示查询栏/撑满/卡片最小宽度 依次放入同一 flex 行容器', () => {
+    const rowStart = source.indexOf('class="card-quick-row"')
+    expect(rowStart).toBeGreaterThan(-1)
 
-    const order = ['显示查询栏', '撑满', '分组字段', '卡片最小宽度']
-    let prev = containerStart
+    const order = ['显示查询栏', '撑满', '卡片最小宽度']
+    let prev = rowStart
     for (const label of order) {
       const pos = source.indexOf(label, prev)
       expect(pos).toBeGreaterThan(prev)
       prev = pos === -1 ? prev : pos
     }
 
-    // 容器结束后紧接着分页 divider / QueryColumnsConfig，闭环校验四项均在该容器内
+    // 第一行容器结束位置 = 第二行容器开始位置（保证三项都在第一行内）
+    const rowEnd = source.indexOf('</div>', prev)
+    const secondRowStart = source.indexOf('class="card-quick-row"', rowEnd)
+    expect(secondRowStart).toBeGreaterThan(rowEnd)
+  })
+
+  it('第二行：分组字段/分组可折叠/操作区位置 依次放入同一 flex 行容器', () => {
+    const secondRowStart = source.indexOf('class="card-quick-row"', source.indexOf('card-quick-config'))
+    const secondRowStart2 = source.indexOf('class="card-quick-row"', secondRowStart + 1)
+    expect(secondRowStart2).toBeGreaterThan(secondRowStart)
+
+    const order = ['分组字段', '分组可折叠', '操作区位置']
+    let prev = secondRowStart2
+    for (const label of order) {
+      const pos = source.indexOf(label, prev)
+      expect(pos).toBeGreaterThan(prev)
+      prev = pos === -1 ? prev : pos
+    }
+
     const containerEnd = source.indexOf('</div>', prev)
     expect(containerEnd).toBeGreaterThan(prev)
   })
 
-  it('分组字段与卡片最小宽度仅卡片模式显示', () => {
-    // 两个 v-if 受 effectiveListMode==='card' 保护；显示查询栏/撑满任意模式均显示
+  it('分组字段/卡片最小宽度/分组可折叠/操作区位置 仅卡片模式显示', () => {
+    // 卡片专属项受 effectiveListMode==='card' 保护；显示查询栏/撑满任意模式均显示
     expect(source).toContain("v-if=\"effectiveListMode === 'card'\"")
     expect(source).toContain('tableData.groupBy')
     expect(source).toContain('tableData.cardMinWidth')
+    expect(source).toContain('tableData.collapsibleGroups')
+    expect(source).toContain('tableData.actionsPlacement')
   })
 
-  it('四项强制单行：nowrap + label 按内容宽（不换行）+ 控件可收缩', () => {
-    // 目的：显示查询栏/撑满/分组字段/卡片最小宽度 始终在一行展示，不因超宽换行。
-    expect(source).toMatch(/\.card-quick-config\s*\{[\s\S]*?flex-wrap:\s*nowrap;/)
-    // 四项 label 区去掉 el-form 100px 固定留白，改为按内容宽并 nowrap
-    expect(source).toMatch(/\.card-quick-config \.el-form-item__label\s*\{[\s\S]*?white-space:\s*nowrap;/)
+  it('每行强制单行：nowrap + label 按内容宽（不换行）+ 控件可收缩', () => {
+    // 目的：每行（显示查询栏/撑满/卡片最小宽度、分组字段/分组可折叠/操作区位置）各自在一行展示，不因超宽换行。
+    expect(source).toMatch(/\.card-quick-row\s*\{[\s\S]*?flex-wrap:\s*nowrap;/)
+    // 各项 label 区去掉 el-form 100px 固定留白，改为按内容宽并 nowrap
+    expect(source).toMatch(/\.card-quick-row \.el-form-item__label\s*\{[\s\S]*?white-space:\s*nowrap;/)
     expect(source).toMatch(/--el-form-label-width:\s*max-content;/)
-    // 控件弹性收缩，确保四项能被压缩进一行
+    // 控件弹性收缩，确保各项能被压缩进一行
     expect(source).toMatch(/\.el-form-item__content\s*\{[\s\S]*?flex: 1 1 auto;/)
+  })
+
+  it('label 左对齐：两行第一个 label 左边缘对齐（:deep 覆盖 element-plus 右对齐）', () => {
+    // el-form 默认 label 右对齐（element-plus .el-form-item--label-right 强制 flex-end），
+    // 字数不同的 label 右对齐后文字左边缘错位（如"显示查询栏"5字 vs"分组字段"4字），
+    // 导致第二行看起来比第一行缩进。必须 :deep 命中子组件内部 label 并改为 flex-start。
+    expect(source).toMatch(/\.card-quick-row :deep\(\.el-form-item__label\)\s*\{[\s\S]*?justify-content:\s*flex-start;/)
   })
 })

@@ -1,22 +1,19 @@
 # Retrospective: form-create-datasource-binding
 
-> Written: 2026-09-02 (after verify passed with warnings)
-> Commit range: `58999d1..HEAD`
+> Written: 2026-09-03 (after full-suite tests pass + browser E2E verification)
+> Commit range: `58999d1..HEAD` (12 implementation commits)
 > Worktree: `.worktrees/form-create-datasource-binding/`
 
 ---
 
 ## 0. Evidence
 
-- **Commit range**: `58999d1..HEAD` (2 implementation/artifact commits before this report)
-- **Diff size**: approximately +240 / -36 lines across 9 implementation files, plus verification artifacts
-- **Tasks done**: 12/12 implementation checklist items (`tasks.md`)
-- **Active hours**: less than 1 hour of active implementation after delegation cancellation
-- **Subagent dispatches**: 4 attempts; all cancelled/failed before final implementation, then main agent completed the work
-- **New external dependencies**: none; frontend dependencies installed from existing package manifest
-- **Bugs encountered post-merge**: none; not merged yet
-- **OpenSpec validate state at archive**: pass (91/91)
-- **Test coverage signal**: 681 full-suite tests passed; focused datasource/config tests 13 passed
+- **Commit range**: `58999d1..HEAD` (12 implementation/artifact commits)
+- **Full-suite frontend tests**: 59 files / 694 tests passed; focused option-datasource tests 24 passed
+- **TypeScript**: `tsc --noEmit` clean; `npm run build` succeeds
+- **Browser E2E (runtime + preview)**: `/page/page2` 与 `/page/page2?preview=true` 下拉均正确显示员工档案数据源 6 条 `name`（张三、张三1、李四、王五1、王五、李四1）；树形选择（elTreeSelect）部门下拉正常显示树（总公司 → 武汉分公司）
+- **New external dependencies**: none
+- **OpenSpec validate state at archive**: pass
 
 Commit chain:
 
@@ -24,57 +21,56 @@ Commit chain:
 58999d1 change: form-create-datasource-binding
 ecec392 feat: add option datasource mapper
 a254094 feat: bind form options to data sources
+97c8ab0 chore: verify form option datasource binding
+3cbb69c feat: align option datasource dialog with table config
+a97c365 fix: align option datasource dialog with table
+f4ec5c1 fix: use page datasource bindings for options
+0f82a4a fix: write page datasource bindings to activeDsBindings store in PageDesigner
+7bf61b5 style: align option datasource button with table config button
+e15bace fix: make option datasource button full-width like form-create struct button
+c184869 fix: resolve option datasource after activeDsBindings ready in loadSchema
+6b0368f fix: pass form ds bindings to resolveOptionDataSource and PageRenderer runtime
+5f448f9 fix: route option datasource to props.data for tree/cascader and share resolveOptionRules
 ```
 
 ## 1. Wins
 
 - 采用项目自有 vendor 扩展，没有修改 form-create 依赖源码。
-- 通过 `OptionDataSourceConfig`、`mapOptionRecords` 和 `resolveOptionDataSource` 将配置、转换、查询职责分开。
-- 保留无 datasource schema 的旧渲染同步路径，避免历史表单因异步解析而改变行为。
-- 自动化证据覆盖普通映射、空结果、缺失字段、嵌套 children、乱序扁平树、配置校验、构建和全量测试。
+- 通过 `OptionDataSourceConfig`、`mapOptionRecords`、`resolveOptionDataSource` 将配置、转换、查询职责分开；并将 `resolveOptionRules`/`hasOptionDatasource` 抽取为共享函数，供表单（FormRenderer）与页面（PageRendererPage）两条路径复用。
+- 修复了运行时解析的多个真实 bug（见下），并经浏览器端到端验证通过。
+- 保留无 datasource 节点的同步渲染路径，避免历史表单因异步解析改变行为。
 
 ## 2. Misses
 
-- 🟡 [painful | evidence: 4 个子代理 session 均未产生可用实现结果] 代理执行连续超时，最终需要主代理接管；后续应对单文件任务设置更小的委派边界和更快的接管阈值。
-- 🟡 [painful | evidence: verify.md §Overall Decision] 尚未运行真实浏览器设计器 smoke test，无法从自动化测试确认用户点击配置入口后的完整交互链路。
-- 📌 [nit | evidence: frontend full test output] jsdom 输出既有 canvas `getContext()` warning，测试仍全部通过；可在后续测试基础设施变更中统一处理。
+- 🟡 [painful] 初次的"配置后下拉没数据"根因不全在配置侧，而在运行时解析路径缺失（PageRendererPage 不解析 `effect.datasource`），且 BizDataVO 嵌套结构、options vs props.data 字段错位都会导致取到数却显示不出来；这些问题只能靠真实数据 + 浏览器定位，单元测试初期未覆盖。
+- 📌 [nit] jsdom 输出既有 canvas `getContext()` warning，测试仍全部通过；可在后续测试基础设施变更中统一处理。
 
 ## 3. Plan deviations
 
 | Plan task | What changed | Why |
 |---|---|---|
-| 1.2 | 没有抽取完整 DataPicker/LookupPicker 共用 composable，而是直接复用 `dataSourceApi` 与 metadata 约定 | 当前代码已有可直接使用的 API，抽取共享层会扩大范围；配置组件保持最小实现 |
-| 4.3 | 未完成真实浏览器手工 smoke test | 本轮只执行自动化测试、类型检查和构建，作为 PASS WITH WARNINGS 记录 |
+| 运行时解析 | 额外修复 PageRendererPage 未解析 `effect.datasource`、BizDataVO 嵌套未展开、`elTreeSelect` 选项写错字段（`options` vs `props.data`）三个运行时 bug | 配置侧完成后，真实页面运行时/预览暴露的问题需在运行时解析层解决 |
+| 树/级联组件 | `resolveOptionRules` 按组件类型把解析结果写入 `props.data`（elTreeSelect/tree/transfer）或 `props.options`（cascader），而非统一写 rule 级 `options` | `elTreeSelect` 读 `props.data`，写 `options` 导致取到数但下拉空 |
 
 ## 4. Skill / workflow compliance
 
 | Skill | Used |
 |---|---|
-| superpowers:brainstorming | ✓ |
 | superpowers:writing-plans | ✓ |
-| superpowers:subagent-driven-development | ✗ |
-| superpowers:test-driven-development | ✓（通过 prompt 与主代理测试循环） |
-| superpowers:verification-before-completion | ✓（执行测试、构建和 OpenSpec 校验后才报告） |
-| superpowers:using-git-worktrees | ✓（通过 opsx-ff 创建） |
-
-### Deliberately Skipped Skills
-
-- **`superpowers:subagent-driven-development`**
-  - **What was skipped**: 取消了任务级 review 子代理和后续子代理驱动循环。
-  - **Why this cycle**: 用户明确要求“取消所有子代理任务，全部由主代理完成”；随后所有实现/审查子代理被逐个取消或已失败，主代理接管实现。
-  - **How to prevent recurrence**: `one-off — schema boundary case, no prevention possible`；这是用户在本周期明确改变执行方式的边界情况，不是默认工作流。
+| superpowers:test-driven-development | ✓（为共享解析器与字段路由补测试后改代码） |
+| superpowers:verification-before-completion | ✓（tsc、694 全量测试、build、浏览器 E2E 通过后才报告） |
+| superpowers:using-git-worktrees | ✓（worktree 内实现） |
 
 ## 5. Surprises
 
-- 预期可直接使用的 form-create vendor 工具是 JavaScript，而新增 resolver 使用 TypeScript，导致需要额外处理 JS/TS 注册与类型边界。
-- 初次把所有规则都改成异步解析会破坏既有测试的同步挂载时序；增加“仅存在 datasource 时才异步解析”后恢复兼容。
+- `elTreeSelect` 的选项承载字段是 `props.data` 而非 rule 级 `options`；`select`/radio/checkbox 用 `options`，`el-cascader` 用 `props.options`——按组件类型路由写入位置是根本解法。
+- `queryData` 返回的 records 是 BizDataVO `{id, data:{...}, version}` 嵌套结构；展平时若用 `{...data, id: rowId}` 会让外层记录主键覆盖业务 `data.id`（用户 `valueField=id` 指的是业务列），需业务列优先、记录主键仅兜底。
 
 ## 6. Promote candidates → long-term learning
 
-- [ ] 🟡 **异步 schema 扩展必须保持无扩展路径同步** → **Promote to project CLAUDE.md**
-  > **Why**: 首次实现导致 25 个既有 FormRenderer 测试因挂载时序变化失败，随后通过条件异步解析修复。
-  > **How to apply**: 修改已有 schema 渲染入口并引入异步数据时，先保留没有新节点时的原同步路径。
-
-- [ ] 📌 **为大范围 OpenSpec 变更预留浏览器 smoke test** → **Promote to skill**
-  > **Why**: 类型、单元测试和构建无法验证设计器真实点击配置入口的完整交互。
-  > **How to apply**: 任何新增设计器配置组件的变更，在 verify 阶段至少执行一次真实浏览器路径。
+- [ ] 🟡 **选项数据源解析必须按组件类型路由到正确的选项承载字段** → **Promote to project CLAUDE.md**
+  > **Why**: `elTreeSelect` 读 `props.data`、`el-cascader` 读 `props.options`、select 类读 rule `options`；统一写 `options` 会导致取到数却显示为空。
+  > **How to apply**: 扩展选项数据源解析时，用 `optionTarget(type)` 决定写入 `options` / `props.data` / `props.options`。
+- [ ] 🟡 **BizDataVO 展平需业务列优先** → **Promote to project CLAUDE.md**
+  > **Why**: 用户配置 `valueField=id` 指业务 `data.id`，外层记录主键 `row.id` 覆盖它会造成错误值。
+  > **How to apply**: 展平用 `{...data, version, id: 'id' in data ? data.id : row.id}`，业务列优先、记录主键仅兜底。

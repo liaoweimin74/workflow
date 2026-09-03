@@ -1,6 +1,6 @@
 <template>
   <div class="option-datasource-control">
-    <el-button type="primary" plain style="width: 100%" @click="openDialog">配置数据源</el-button>
+    <el-button size="small" style="width: 100%; border-color: #2E73FF; color: #2E73FF" @click="openDialog">配置数据源</el-button>
     <el-dialog v-model="dialogVisible" title="配置数据源" width="860px" :close-on-click-modal="false" @close="discardDraft">
     <el-tabs v-model="activeTab" type="border-card">
       <el-tab-pane label="数据源" name="source">

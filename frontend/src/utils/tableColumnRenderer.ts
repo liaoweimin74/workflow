@@ -6,6 +6,7 @@
  */
 import { formatCellValue } from './formatters'
 import { evalCellExpression } from './scriptSandbox'
+import { resolveFieldStyle, type FieldStyle } from './fieldStyle'
 import { h, type VNode } from 'vue'
 
 /**
@@ -107,11 +108,13 @@ export function renderCellContent(config: CellContentConfig, row: Record<string,
 export interface CellStyleConfig {
   className?: string
   styleExpr?: string
+  /** 统一字段样式（结构化，替代 styleExpr） */
+  style?: FieldStyle
 }
 
 /**
  * 构建列 render 函数：返回可注入 TableColumn.render 的 (row) => VNode。
- * 内部承载内容并把 className / styleExpr 应用到包裹的 span 上。
+ * 内部承载内容并把 className / styleExpr / FieldStyle 应用到包裹的 span 上。
  */
 export function buildCellRender(
   config: CellContentConfig & CellStyleConfig,
@@ -119,14 +122,48 @@ export function buildCellRender(
   return (row: Record<string, any>) => {
     const content = renderCellContent(config, row)
     const dataRow = row?.data && typeof row.data === 'object' ? row.data : row
-    const style =
-      config.styleExpr != null && config.styleExpr !== ''
-        ? evalCellExpression(config.styleExpr, { $row: dataRow, row: dataRow, value: getCellValue(row, config.key ?? '') })
-        : undefined
+
+    // 统一样式解析：优先使用 FieldStyle，回退到旧 styleExpr
+    let style: Record<string, string> | undefined
+    let className = config.className
+
+    if (config.style) {
+      // 使用统一 FieldStyle 解析
+      const result = resolveFieldStyle(undefined, config.style, row)
+      style = Object.keys(result.style).length > 0 ? result.style : undefined
+      if (result.className) {
+        className = className ? `${className} ${result.className}` : result.className
+      }
+    } else if (config.styleExpr != null && config.styleExpr !== '') {
+      // 兼容旧 styleExpr：求值结果可能是 CSS 字符串或对象
+      const result = evalCellExpression(config.styleExpr, { $row: dataRow, row: dataRow, value: getCellValue(row, config.key ?? '') })
+      if (result != null && result !== '') {
+        if (typeof result === 'string') {
+          // CSS 字符串：解析为对象
+          const parsed: Record<string, string> = {}
+          for (const entry of result.split(';')) {
+            const trimmed = entry.trim()
+            if (!trimmed) continue
+            const colonIdx = trimmed.indexOf(':')
+            if (colonIdx <= 0) continue
+            const key = trimmed.slice(0, colonIdx).trim()
+            const value = trimmed.slice(colonIdx + 1).trim()
+            if (key && value) {
+              parsed[key.replace(/-([a-z])/g, (_, l) => l.toUpperCase())] = value
+            }
+          }
+          style = Object.keys(parsed).length > 0 ? parsed : undefined
+        } else if (typeof result === 'object') {
+          // 对象：直接使用
+          style = result as Record<string, string>
+        }
+      }
+    }
+
     return h(
       'span',
       {
-        class: config.className,
+        class: className,
         style,
       },
       content,

@@ -66,11 +66,56 @@ describe('buildCellRender — 构建列 render 函数', () => {
   it('styleExpr 按行求值应用 style', () => {
     const render = buildCellRender({ key: 'status', styleExpr: '$row.status === "异常" ? "color:red" : ""' })
     const vnode = render({ status: '异常' })
-    expect(vnode.props.style).toContain('color:red')
+    expect(vnode.props.style).toEqual({ color: 'red' })
   })
   it('无样式时 style 为 undefined', () => {
     const render = buildCellRender({ key: 'code' })
     const vnode = render({ code: 'A1' })
     expect(vnode.props.style).toBeUndefined()
+  })
+
+  // 新增：统一 FieldStyle 测试
+  it('FieldStyle 结构化样式生效', () => {
+    const render = buildCellRender({
+      key: 'name',
+      style: { color: 'red', fontSize: '14px' },
+    })
+    const vnode = render({ name: '测试' })
+    expect(vnode.props.style).toEqual({ color: 'red', fontSize: '14px' })
+  })
+
+  it('FieldStyle dynamic 条件样式按行生效', () => {
+    const render = buildCellRender({
+      key: 'status',
+      style: {
+        dynamic: [
+          { when: "$row.status === '异常'", style: { color: 'red' } },
+        ],
+      },
+    })
+    const vnode1 = render({ status: '正常' })
+    expect(vnode1.props.style).toBeUndefined() // 条件未命中，无样式
+    const vnode2 = render({ status: '异常' })
+    expect(vnode2.props.style).toEqual({ color: 'red' })
+  })
+
+  it('旧 styleExpr 兼容：返回 CSS 字符串时按 CSS 解析', () => {
+    const render = buildCellRender({
+      key: 'status',
+      styleExpr: "$row.status === '异常' ? 'color:red; font-size:14px' : ''",
+    })
+    const vnode = render({ status: '异常' })
+    expect(vnode.props.style).toEqual({ color: 'red', fontSize: '14px' })
+  })
+
+  it('className 与 style 可同时生效', () => {
+    const render = buildCellRender({
+      key: 'name',
+      className: 'col-highlight',
+      style: { color: 'red' },
+    })
+    const vnode = render({ name: '测试' })
+    expect(vnode.props.class).toBe('col-highlight')
+    expect(vnode.props.style).toEqual({ color: 'red' })
   })
 })

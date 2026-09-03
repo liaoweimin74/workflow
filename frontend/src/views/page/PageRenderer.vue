@@ -68,8 +68,10 @@
         :columns="cardColumns"
         :actions="cardActions"
         :fetch-api="cardFetchApi"
+        :show-search="false"
         :show-pagination="paginationConfig.show"
         :default-page-size="paginationConfig.pageSize"
+        :page-sizes="paginationConfig.pageSizes"
         @row-click="handleRowClick"
         @action-click="handleCardActionClick"
       />

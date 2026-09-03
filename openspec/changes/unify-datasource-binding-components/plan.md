@@ -18,8 +18,8 @@
 
 ## 阶段 1：组件抽象
 
-### 步骤 1：创建统一组件
-基于 `DataSourceBindingTab.vue` 创建 `UnifiedDatasourceBinding.vue`，或在其基础上增加接口适配。
+### 步骤 1：重命名并复用统一组件
+将已有 `DataSourceBindingTab.vue` 重命名为 `UniDataSourceBinding.vue`，在其基础上增加必要的状态同步接口。
 
 判断标准：
 - 是否能通过 `v-model:binding` 接收和输出完整配置？

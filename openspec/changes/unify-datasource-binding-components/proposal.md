@@ -12,7 +12,7 @@
 
 ## What Changes
 
-1. **创建统一数据源绑定组件**：基于 `DataSourceBindingTab.vue` 创建 `UnifiedDatasourceBinding.vue`，支持：
+1. **统一数据源绑定组件**：将已有 `DataSourceBindingTab.vue` 重命名为 `UniDataSourceBinding.vue`，作为统一复用组件，支持：
    - 数据源选择和变更事件
    - 筛选条件管理（固定值 + 表单字段引用两种模式）
    - 列定义动态加载

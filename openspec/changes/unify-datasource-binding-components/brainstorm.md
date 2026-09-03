@@ -77,7 +77,7 @@
 ## 推荐方向
 
 **方案 B+**：
-1. 以 `DataSourceBindingTab.vue` 为蓝本，创建 `DatasourceBinding.vue` 统一入口
+1. 将已有 `DataSourceBindingTab.vue` 重命名为 `UniDataSourceBinding.vue` 作为统一入口
 2. 统一 TypeScript 接口：`DataSourceBindingProps`、`DataSourceBindingEmit`
 3. 逐步改造：
    - 首先改造 `DsBindingConfigDialog.vue`

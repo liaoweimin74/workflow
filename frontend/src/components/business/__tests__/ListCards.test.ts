@@ -2,6 +2,8 @@
 // npx vitest run src/components/business/__tests__/ListCards.test.ts
 
 import { describe, it, expect, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import type { CardColumn, ListQueryParams, ListPageResult, SearchField } from '../types'
@@ -659,6 +661,11 @@ describe('ListCards 组件', () => {
 
       expect(mockFetch).toHaveBeenLastCalledWith({ page: 1, size: 20 })
       wrapper.unmount()
+    })
+
+    it('分页栏位于卡片列表右下角', () => {
+      const source = readFileSync(resolve(__dirname, '../ListCards.vue'), 'utf8')
+      expect(source).toContain('.card-pagination { align-self: flex-end;')
     })
   })
 })

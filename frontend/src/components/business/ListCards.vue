@@ -349,6 +349,7 @@ defineExpose({ fetchData, refresh, retry })
 .list-cards { width: 100%; height: 100%; min-width: 0; display: flex; flex-direction: column; }
 .is-loading { opacity: 0.6; }
 .card-groups { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.card-pagination { align-self: flex-end; margin: 0 16px 16px; }
 .card-group + .card-group { margin-top: 24px; }
 .card-group-title { margin-bottom: 12px; font-size: 15px; font-weight: 600; color: #303133; }
 .card-group-title.is-collapsible { cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }

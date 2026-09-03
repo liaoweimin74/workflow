@@ -90,7 +90,7 @@ describe('PageDataCards', () => {
     wrapper.unmount()
   })
 
-  it('设计态隐藏查询栏和分页栏', async () => {
+  it('设计态仍显示查询栏和分页栏', async () => {
     const wrapper = mount(PageDataCards, {
       props: {
         designMode: true,
@@ -104,8 +104,8 @@ describe('PageDataCards', () => {
     await flushPromises()
 
     const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
-    expect(cardsStub.props('showSearch')).toBe(false)
-    expect(cardsStub.props('showPagination')).toBe(false)
+    expect(cardsStub.props('showSearch')).toBe(true)
+    expect(cardsStub.props('showPagination')).toBe(true)
     wrapper.unmount()
   })
 
@@ -178,7 +178,7 @@ describe('PageDataCards', () => {
       expect.objectContaining({ prop: 'count' }),
       expect.objectContaining({ prop: 'amount' }),
     ]))
-    expect(cardsStub.props('showPagination')).toBe(false)
+    expect(cardsStub.props('showPagination')).toBe(true)
     // 设计态未配置操作按钮时不显示 actions（无按钮可渲染）
     expect(cardsStub.props('actions')).toEqual([])
     expect(cardsStub.props('fetchApi')).toBeTypeOf('function')

@@ -107,7 +107,7 @@
       </section>
     </div>
     <el-pagination
-      v-if="showPagination && total > 0"
+      v-if="showPagination"
       class="card-pagination"
       :current-page="query.page"
       :page-size="query.size"

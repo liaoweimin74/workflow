@@ -20,7 +20,7 @@ vi.mock('@/api/data-source', () => ({
     createData: vi.fn(),
     deleteData: vi.fn(),
     getMetadata: vi.fn(() => Promise.resolve({ data: { writable: true, columns: [{ key: 'name', label: '姓名' }] } })),
-    queryData: vi.fn(() => Promise.resolve({ data: { records: [{ id: 'R1', version: 1, data: { name: '张三' } }], total: 1 } })),
+     queryData: vi.fn(() => Promise.resolve({ data: { records: [{ id: 'R1', version: 1, data: { name: '张三' } }], total: 21 } })),
   },
 }))
 
@@ -62,6 +62,7 @@ vi.mock('@/components/business/SearchTable.vue', () => {
 
 // form-create 桩：page-table 渲染为真实 PageDataTable（保留其内部 dispatch 链路）
 import PageDataTable from '../components/PageDataTable.vue'
+import PageDataCards from '../components/PageDataCards.vue'
 vi.mock('@form-create/element-ui', () => {
   const FormCreateStub = defineComponent({
     name: 'FormCreate',
@@ -77,6 +78,14 @@ vi.mock('@form-create/element-ui', () => {
                 pageKey: node.props?.pageKey,
                 viewActions: node.props?.viewActions,
                 viewEvents: node.props?.viewEvents,
+                onReady: node.on?.['ready'],
+              })
+            }
+            if (node?.type === 'page-list-cards') {
+              return h(PageDataCards, {
+                key: i,
+                ...node.props,
+                pageKey: node.props?.pageKey,
                 onReady: node.on?.['ready'],
               })
             }
@@ -269,6 +278,29 @@ describe('definition props 下传（PAGE definition 单次加载）', () => {
 
     expect(pageApi.getPageByKey).toHaveBeenCalledTimes(1)
     expect(wrapper.find('.stub-col-btn-0').exists()).toBe(true)
+  })
+})
+
+describe('PAGE 卡片列表运行态配置', () => {
+  it('已发布页面忽略持久化的 designMode，显示查询和分页配置', async () => {
+    const schema = userPageSchema()
+    schema.rule[0] = {
+      type: 'page-list-cards',
+      field: 'cards',
+      props: {
+        dataSourceId: 'ds_mta77dtz',
+        designMode: true,
+        showSearch: true,
+        searchFields: [{ key: 'name', label: '姓名' }],
+        pagination: true,
+        pageSize: 10,
+      },
+    }
+    const wrapper = await mountPage(schema)
+    expect(wrapper.find('.page-data-cards').exists()).toBe(true)
+    expect(wrapper.find('.search-card').exists()).toBe(true)
+    expect(wrapper.find('.card-pagination').exists()).toBe(true)
+    wrapper.unmount()
   })
 })
 

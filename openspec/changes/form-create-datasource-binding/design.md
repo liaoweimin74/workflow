@@ -28,15 +28,15 @@
 
 ### 配置界面复用
 
-新增或抽取项目内 `DataSourceConfig` 配置组件，复用 DataPicker 与 LookupPicker 共用的配置代码、数据源 API 和 `DsBindingEngine` 约定。配置组件负责选择数据源、配置过滤条件、选择 label/value 字段并提供数据预览；不复制两套实现。
+选项数据选择“数据源”后，通过“配置数据源”按钮打开独立弹窗。弹窗固定包含两个页签：“数据源”页签复用数据表格组件使用的 `DsBindingConfigDialog` 数据源配置代码，包含数据源选择、metadata 加载和查询条件配置；“字段配置”页签不使用表格，只使用四个下拉框配置显示字段、值字段、子节点字段和父节点字段。字段候选项来自所选数据源的 metadata。
 
 ### 运行时取数
 
-运行时检测到有效 datasource 配置后，调用现有前端数据源查询 API，按字段映射把记录转换为组件需要的选项。普通选项输出 `{label, value}`；树形选项额外应用父子节点/children 映射。请求状态、空结果和错误提示遵循 DataPicker/LookupPicker 现有约定。
+运行时检测到有效 datasource 配置后，调用现有前端数据源查询 API，按字段配置页签保存的映射把记录转换为组件需要的选项。普通选项输出 `{label, value}`；树形选项额外应用父子节点/children 映射。请求状态、空结果和错误提示遵循数据表格数据源绑定现有约定。
 
 ### 优先级与兼容性
 
-同一规则选中 datasource 时，数据源结果优先；未选中 datasource 时走原有 options/effect.fetch 路径。配置切换时清理不再适用的 datasource 状态，避免旧绑定意外覆盖静态或远程配置。
+同一规则选中 datasource 时，数据源结果优先；未选中 datasource 时走原有 options/effect.fetch 路径。配置切换时清理不再适用的 datasource 状态，避免旧绑定意外覆盖静态或远程配置。子节点字段与父节点字段不能同时保存为有效值。
 
 ### 备选方案
 
@@ -44,7 +44,7 @@
 
 ## Risks / Trade-offs
 
-- [配置组件存在重复逻辑] → 先定位 DataPicker/LookupPicker 共用实现，抽取最小共享层，禁止再复制一份完整表单。
+- [配置组件存在重复逻辑] → 复用 `DsBindingConfigDialog` 的数据源页签或抽取最小共享子组件，禁止再复制一份完整数据源配置表单。
 - [不同数据源返回结构不一致] → 统一通过现有查询 API 的记录列表，并强制要求显式 label/value 字段映射。
 - [级联数据层级表达不同] → 配置中明确 children/parent 字段；普通列表和树形列表分别校验必需映射。
 - [设计器预览与正式渲染不一致] → 共用同一个 datasource resolver，并覆盖保存、重新加载、预览和正式渲染测试。

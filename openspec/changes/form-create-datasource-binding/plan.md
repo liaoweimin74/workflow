@@ -37,21 +37,21 @@
 - [ ] **Step 5: Run the focused tests** and confirm all model/mapper/query tests pass.
 - [ ] **Step 6: Commit** with `git add frontend/src/vendor/datasource frontend/src/api/dataSource.ts` and `git commit -m "feat: add option datasource resolver"`.
 
-### Task 2: 可复用数据源配置界面
+### Task 2: 两页签数据源配置弹窗
 
 **Files:**
 - Create or modify: `frontend/src/vendor/components/DataSourceConfig.vue`
-- Modify: shared DataPicker/LookupPicker configuration component or composable identified in Task 1 discovery
+- Modify or extract: `frontend/src/views/form/components/DsBindingConfigDialog.vue` data-source tab logic
 - Test: existing frontend component test location for vendor components
 
 **Interfaces:**
 - Consumes `OptionDataSourceConfig` and emits `update:modelValue`/project-equivalent v-model events.
 - Produces a serializable configuration containing source selection, filters, label/value mapping, and optional hierarchy mapping.
 
-- [ ] **Step 1: Write failing component tests** for opening source configuration, selecting each supported type, loading metadata fields, saving mappings, and validating missing mappings.
+- [ ] **Step 1: Write failing component tests** for opening the two-tab dialog, selecting a source in the reused data-source tab, loading metadata, saving four field mappings, and validating missing mappings.
 - [ ] **Step 2: Run focused component tests** and verify the new component behavior fails.
-- [ ] **Step 3: Reuse the common DataPicker/LookupPicker configuration logic** instead of duplicating source selection and filter forms.
-- [ ] **Step 4: Add普通/树形字段映射 controls** and wire the save/cancel/preview events to the serialized model.
+- [ ] **Step 3: Reuse or extract the `DsBindingConfigDialog` data-source tab** instead of duplicating source selection and filter forms.
+- [ ] **Step 4: Add only four dropdown controls** (显示字段、值字段、子节点字段、父节点字段), make children/parent mutually exclusive, and wire save/cancel events to the serialized model.
 - [ ] **Step 5: Run focused component tests** and verify configuration, validation, and re-open behavior pass.
 - [ ] **Step 6: Commit** the configuration UI and its tests with `git commit -m "feat: add option datasource config"`.
 

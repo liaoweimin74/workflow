@@ -1,4 +1,5 @@
 import { dataSourceApi } from '@/api/data-source'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 export interface OptionDataSourceConfig {
   readonly dataSourceId?: string
@@ -101,7 +102,9 @@ export function mapOptionRecords(records: unknown, config: OptionDataSourceConfi
 
 export async function resolveOptionDataSource(config: OptionDataSourceConfig): Promise<OptionNode[]> {
   if (!config.dataSourceId) return []
-  const response = await dataSourceApi.queryData(config.dataSourceId, {
+  const binding = activeDsBindings.value.find((item) => item.id === config.dataSourceId)
+  const sourceId = binding?.refId ?? config.dataSourceId
+  const response = await dataSourceApi.queryData(sourceId, {
     page: 1,
     size: 1000,
     ...(config.filters ? { filter: config.filters } : {}),

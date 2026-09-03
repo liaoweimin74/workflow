@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DataSourceConfig from '../components/DataSourceConfig.vue'
+
+vi.mock('@/api/data-source', () => ({
+  dataSourceApi: {
+    getEnabledDataSources: vi.fn().mockResolvedValue({ data: [] }),
+    getMetadata: vi.fn().mockResolvedValue({ data: { columns: [] } }),
+  },
+}))
 
 const stubs = {
   'el-form': { template: '<form><slot /></form>' },
@@ -8,27 +15,37 @@ const stubs = {
   'el-select': { template: '<div><slot /></div>' },
   'el-option': { template: '<span />' },
   'el-input': { template: '<textarea />' },
+  'el-tabs': { template: '<div><slot /></div>' },
+  'el-tab-pane': { props: ['label'], template: '<section><span>{{ label }}</span><slot /></section>' },
+  'el-dialog': { props: ['modelValue'], template: '<div v-if="modelValue"><slot /><slot name="footer" /></div>' },
+  'el-alert': { template: '<div><slot /></div>' },
   'el-button': { props: ['disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>' },
 }
 
 describe('DataSourceConfig', () => {
-  it('disables applying an incomplete mapping', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('opens a dialog with source and field tabs', async () => {
     const wrapper = mount(DataSourceConfig, {
       global: { stubs },
-      props: { sources: [{ id: 'ds-1', name: '用户', type: 'SYSTEM' }] },
+      props: { modelValue: undefined },
     })
-    expect(wrapper.find('button').attributes('disabled')).toBeDefined()
+    await wrapper.find('button').trigger('click')
+    expect(wrapper.text()).toContain('数据源')
+    expect(wrapper.text()).toContain('字段配置')
   })
 
   it('emits the complete mapping when configuration is valid', async () => {
     const wrapper = mount(DataSourceConfig, {
       global: { stubs },
-      props: { modelValue: { dataSourceId: 'ds-1', labelField: 'name', valueField: 'id' }, sources: [] },
+      props: { modelValue: { dataSourceId: 'ds-1', labelField: 'name', valueField: 'id' } },
     })
-    const button = wrapper.find('button')
+    await wrapper.find('button').trigger('click')
+    const button = wrapper.findAll('button').at(-1)
+    if (!button) throw new Error('confirm button missing')
     await button.trigger('click')
     expect(wrapper.emitted('update:modelValue')).toEqual([[{
-      dataSourceId: 'ds-1', labelField: 'name', valueField: 'id', childrenField: '', parentField: '', filters: '',
+      dataSourceId: 'ds-1', labelField: 'name', valueField: 'id',
     }]])
   })
 })

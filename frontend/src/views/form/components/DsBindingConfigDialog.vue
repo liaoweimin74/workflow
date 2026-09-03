@@ -4,52 +4,14 @@
       <el-tabs v-model="activeTab" type="border-card">
         <!-- Tab 1: 数据源 + 组件级数据筛选 -->
         <el-tab-pane label="数据源" name="binding">
-          <el-form label-width="110px" size="default">
-            <el-form-item required>
-              <template #label>
-                <span class="label-with-tip">
-                  数据源
-                  <el-tooltip content="数据源在「数据源配置」中绑定；切换后自动加载列定义" placement="top">
-                    <el-icon class="tip-icon"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </span>
-              </template>
-              <el-select v-model="form.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
-                <el-option v-for="ds in formDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
-              </el-select>
-            </el-form-item>
-            <el-divider content-position="left">组件级数据筛选</el-divider>
-            <el-form-item label="筛选条件">
-              <div style="width: 100%">
-                <el-radio-group v-model="form.filterLogic" size="small">
-                  <el-radio-button value="AND">所有（且）</el-radio-button>
-                  <el-radio-button value="OR">任一（或）</el-radio-button>
-                </el-radio-group>
-                <div v-for="(row, i) in form.filterRows" :key="i" style="display: flex; gap: 8px; margin-top: 8px">
-                  <el-select v-model="row.column" placeholder="目标列" style="width: 30%">
-                    <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-                  </el-select>
-                  <el-select v-model="row.op" style="width: 22%">
-                    <el-option label="等于" value="eq" /><el-option label="不等于" value="ne" />
-                    <el-option label="包含" value="like" /><el-option label="属于" value="in" />
-                    <el-option label="为空" value="isEmpty" /><el-option label="不为空" value="isNotEmpty" />
-                  </el-select>
-                  <el-select v-model="row.source" style="width: 22%">
-                    <el-option label="固定值" value="fixed" /><el-option label="表单字段" value="field" />
-                  </el-select>
-                  <el-select v-if="row.source === 'field'" v-model="row.field" placeholder="当前表单字段" style="width: 30%">
-                    <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
-                  </el-select>
-                  <el-input v-else v-model="row.fixedValue" placeholder="固定值" style="width: 30%" />
-                  <el-button type="danger" link @click="form.filterRows.splice(i, 1)">删除</el-button>
-                </div>
-                <el-button type="primary" link style="margin-top: 8px"
-                  @click="form.filterRows.push({ column: '', op: 'eq', source: 'fixed', fixedValue: '', field: '' })">
-                  + 添加筛选条件
-                </el-button>
-              </div>
-            </el-form-item>
-          </el-form>
+          <DataSourceBindingTab
+            ref="sourceTabRef"
+            :model-value="sourceTabValue"
+            @update:model-value="updateSourceTabValue"
+            :form-data-sources="formDataSources"
+            :current-fields="currentFields"
+            @columns="dsColumns = $event"
+          />
         </el-tab-pane>
         <!-- Tab 2: 显示列 -->
         <el-tab-pane label="显示列" name="columns">
@@ -203,6 +165,7 @@ import type { ColumnConfigItem } from '@/api/bizData'
 import QueryColumnsConfig from '@/views/page/components/QueryColumnsConfig.vue'
 import ActionsConfig from '@/views/page/components/ActionsConfig.vue'
 import EventsConfig from '@/views/page/components/EventsConfig.vue'
+import DataSourceBindingTab, { type DataSourceTabValue } from './DataSourceBindingTab.vue'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -230,6 +193,13 @@ const visible = computed({
 
 const isTableMode = computed(() => props.tableMode)
 const activeTab = ref('binding')
+const sourceTabRef = ref<InstanceType<typeof DataSourceBindingTab> | null>(null)
+const sourceTabValue = reactive<DataSourceTabValue>({ dataSourceId: '' })
+
+function updateSourceTabValue(value: DataSourceTabValue) {
+  sourceTabValue.dataSourceId = value.dataSourceId
+  sourceTabValue.filter = value.filter
+}
 
 // ==================== 数据源 + 组件级数据筛选（表格模式） ====================
 const dsColumns = ref<ColumnConfigItem[]>([])
@@ -393,6 +363,7 @@ watch(() => props.modelValue, async (val) => {
   const bp = props.bindingProps || {}
   // 回填数据源 + 组件级数据筛选
   form.dataSourceId = bp.dataSourceId || ''
+  sourceTabValue.dataSourceId = form.dataSourceId
   const filter = bp.filter
   if (filter && typeof filter === 'object') {
     form.filterLogic = filter.logic || 'AND'
@@ -404,6 +375,9 @@ watch(() => props.modelValue, async (val) => {
     form.filterLogic = 'AND'
     form.filterRows = []
   }
+  sourceTabValue.filter = filter && typeof filter === 'object'
+    ? { logic: filter.logic || 'AND', conditions: filter.conditions || [] }
+    : undefined
   await loadDsColumns()
   if (props.tableMode) {
     await loadTableCandidates()
@@ -416,6 +390,17 @@ watch(() => props.modelValue, async (val) => {
 // ==================== 确认 ====================
 function handleConfirm() {
   if (!form.dataSourceId) return
+  if (props.tableMode) {
+    const source = sourceTabRef.value?.value()
+    if (source) {
+      form.dataSourceId = source.dataSourceId
+      form.filterLogic = source.filter?.logic || 'AND'
+      form.filterRows = (source.filter?.conditions || []).map((condition: any) => ({
+        column: condition.column || '', op: condition.op || 'eq', source: condition.source || 'fixed',
+        fixedValue: condition.value || '', field: condition.field || '',
+      }))
+    }
+  }
   const result: Record<string, any> = { dataSourceId: form.dataSourceId }
   // 组件级数据筛选（表格模式）
   const conditions = form.filterRows.filter(r => r.column).map(r => ({

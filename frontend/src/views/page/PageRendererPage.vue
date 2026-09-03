@@ -94,6 +94,7 @@ import { dataSourceApi } from '@/api/data-source'
 import { createDsBindingEngine } from '@/views/form/components/DsBindingEngine'
 import { normalizeForRender, deepDisableRules } from '@/views/form/schemaRules'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
+import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
 import { useLinkageContainer } from '@/views/form/composables/useLinkageContainer'
 
 // 注册页面数据组件到 form-create（type: page-table / page-tree）
@@ -276,8 +277,12 @@ async function load() {
     collectTableConfigs(parsed.rule || [])
     // 提取容器（dialog/inline/newTab 从主树移除），注册独立容器引擎
     const mainRule = extractContainers(parsed.rule || [])
+    // 选项数据源解析：effect.datasource → 选项列表（绑定位用页面 dataSources，避免依赖全局 store 写入时序）
+    const resolvedRule = hasOptionDatasource(mainRule)
+      ? await resolveOptionRules(mainRule, pageSchema.dataSources as any)
+      : mainRule
     // 数据组件类型替换：el-table/el-tree → page-table/page-tree，注入 pageKey
-    rule.value = normalizeForRender(mainRule).map((r: any) => transformComponent(r))
+    rule.value = normalizeForRender(resolvedRule).map((r: any) => transformComponent(r))
     // 渲染选项：保留设计器布局配置，但强制隐藏 form-create 默认提交/重置按钮（页面非表单提交场景）。
     // 注意 submitBtn/resetBtn 必须是对象结构 { show: false }（form-create 约定），布尔值无效。
     option.value = { ...(parsed.option || {}), submitBtn: { show: false }, resetBtn: { show: false } }

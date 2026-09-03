@@ -1,5 +1,26 @@
-import { describe, it, expect } from 'vitest'
-import { mapOptionRecords, OptionDataSourceConfig, OptionMappingError } from '../option-datasource'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('@/api/data-source', () => ({
+  dataSourceApi: {
+    queryData: vi.fn(),
+  },
+}))
+
+import {
+  mapOptionRecords,
+  resolveOptionDataSource,
+  resolveOptionRules,
+  hasOptionDatasource,
+  OptionDataSourceConfig,
+  OptionMappingError,
+} from '../option-datasource'
+import { dataSourceApi } from '@/api/data-source'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  activeDsBindings.value = []
+})
 
 describe('mapOptionRecords', () => {
   it('returns empty array for null input', () => {
@@ -136,5 +157,153 @@ describe('mapOptionRecords', () => {
       { id: 'root', parentId: null, name: 'Root' },
     ], config)
     expect(result).toEqual([{ label: 'Root', value: 'root', children: [{ label: 'Child', value: 'child' }] }])
+  })
+})
+
+describe('resolveOptionDataSource — BizDataVO 嵌套 data 展开', () => {
+  const config: OptionDataSourceConfig = { dataSourceId: 'ds_1', labelField: 'name', valueField: 'name' }
+
+  it('将 queryData 返回的 { id, data:{...} } 嵌套记录展开后映射 label/value', async () => {
+    activeDsBindings.value = [{ id: 'ds_1', refId: 'ref_emp' }]
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: {
+        records: [
+          { id: 'r1', data: { name: '张三', dept: '研发' }, version: 1 },
+          { id: 'r2', data: { name: '李四', dept: '财务' }, version: 1 },
+        ],
+      },
+    })
+
+    const result = await resolveOptionDataSource(config)
+    expect(result).toEqual([
+      { label: '张三', value: '张三' },
+      { label: '李四', value: '李四' },
+    ])
+    // 展开后用解析后的全局 refId 调接口
+    expect(dataSourceApi.queryData).toHaveBeenCalledWith('ref_emp', expect.objectContaining({ page: 1, size: 1000 }))
+  })
+
+  it('dataSourceId 在绑定位缺失时回退用 dataSourceId 作为全局 refId', async () => {
+    activeDsBindings.value = []
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { name: '电子产品' }, version: 1 }] },
+    })
+    const result = await resolveOptionDataSource({ ...config, dataSourceId: 'cat_1' })
+    expect(dataSourceApi.queryData).toHaveBeenCalledWith('cat_1', expect.anything())
+    expect(result).toEqual([{ label: '电子产品', value: '电子产品' }])
+  })
+
+  it('业务列缺失时抛出 OptionMappingError（展开后仍校验 label/value 字段）', async () => {
+    activeDsBindings.value = [{ id: 'ds_1', refId: 'ref_emp' }]
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { dept: '研发' }, version: 1 }] },
+    })
+    await expect(resolveOptionDataSource(config)).rejects.toThrow(OptionMappingError)
+    await expect(resolveOptionDataSource(config)).rejects.toThrow('Missing required label field: name')
+  })
+})
+
+describe('hasOptionDatasource — 递归检测 effect.datasource', () => {
+  it('顶层节点含 datasource 返回 true', () => {
+    expect(hasOptionDatasource([{ type: 'select', field: 's', effect: { datasource: { dataSourceId: 'ds' } } } as any])).toBe(true)
+  })
+
+  it('children 递归命中', () => {
+    const rules = [{ type: 'fcRow', field: 'r', children: [{ type: 'select', field: 's', effect: { datasource: { dataSourceId: 'ds' } } }] } as any]
+    expect(hasOptionDatasource(rules)).toBe(true)
+  })
+
+  it('props.rule 递归命中（group/子表）', () => {
+    const rules = [{ type: 'group', field: 'g', props: { rule: [{ type: 'select', field: 's', effect: { datasource: { dataSourceId: 'ds' } } }] } } as any]
+    expect(hasOptionDatasource(rules)).toBe(true)
+  })
+
+  it('无 datasource 返回 false', () => {
+    expect(hasOptionDatasource([{ type: 'input', field: 'a' } as any])).toBe(false)
+  })
+})
+
+describe('resolveOptionRules — 共享选项解析', () => {
+  it('解析顶层 select，传绑定上下文', async () => {
+    const bindings = [{ id: 'ds_1', refId: 'ref_emp' }]
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { name: '张三' }, version: 1 }] },
+    })
+    const rules = [{ type: 'select', field: 's', effect: { datasource: { dataSourceId: 'ds_1', labelField: 'name', valueField: 'name' } } } as any]
+    const resolved = await resolveOptionRules(rules, bindings)
+    expect(resolved[0].options).toEqual([{ label: '张三', value: '张三' }])
+  })
+
+  it('递归解析 children 与 props.rule', async () => {
+    const bindings = [{ id: 'ds_1', refId: 'ref_emp' }]
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { name: '李四' }, version: 1 }] },
+    })
+    const rules = [{
+      type: 'fcRow', field: 'r',
+      children: [{ type: 'select', field: 's', effect: { datasource: { dataSourceId: 'ds_1', labelField: 'name', valueField: 'name' } } } as any],
+    } as any]
+    const resolved = await resolveOptionRules(rules, bindings)
+    expect(resolved[0].children[0].options).toEqual([{ label: '李四', value: '李四' }])
+  })
+
+  it('未传 bindings 时回退全局 activeDsBindings', async () => {
+    activeDsBindings.value = [{ id: 'ds_1', refId: 'ref_emp' }]
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { name: '王五' }, version: 1 }] },
+    })
+    const rules = [{ type: 'select', field: 's', effect: { datasource: { dataSourceId: 'ds_1', labelField: 'name', valueField: 'name' } } } as any]
+    const resolved = await resolveOptionRules(rules)
+    expect(resolved[0].options).toEqual([{ label: '王五', value: '王五' }])
+  })
+})
+
+describe('resolveOptionRules — 树形/级联组件选项承载字段', () => {
+  const bindings = [{ id: 'ds_1', refId: 'ref_emp' }]
+
+  it('elTreeSelect 的选项写入 props.data 而非 rule.options', async () => {
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: {
+        records: [
+          { id: 'r1', data: { id: '1', parentId: '', label: '总公司' }, version: 1 },
+          { id: 'r2', data: { id: '2', parentId: '1', label: '武汉分公司' }, version: 1 },
+        ],
+      },
+    })
+    const rules = [{
+      type: 'elTreeSelect', field: 'org',
+      effect: { datasource: { dataSourceId: 'ds_1', labelField: 'label', valueField: 'id', parentField: 'parentId' } },
+      props: { nodeKey: 'value', data: [] },
+    } as any]
+    const resolved = await resolveOptionRules(rules, bindings)
+    // 写入 props.data，构造 parentId 树
+    expect((resolved[0] as any).props.data).toEqual([
+      { label: '总公司', value: '1', children: [{ label: '武汉分公司', value: '2' }] },
+    ])
+    // 不写入 rule.options
+    expect((resolved[0] as any).options).toBeUndefined()
+  })
+
+  it('el-cascader 的选项写入 props.options', async () => {
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { id: 'a', name: '电子产品' }, version: 1 }] },
+    })
+    const rules = [{
+      type: 'el-cascader', field: 'cat',
+      effect: { datasource: { dataSourceId: 'ds_1', labelField: 'name', valueField: 'id' } },
+    } as any]
+    const resolved = await resolveOptionRules(rules, bindings)
+    expect((resolved[0] as any).props.options).toEqual([{ label: '电子产品', value: 'a' }])
+    expect((resolved[0] as any).options).toBeUndefined()
+  })
+
+  it('select 仍写入 rule.options（回归）', async () => {
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [{ id: 'r1', data: { name: '张三' }, version: 1 }] },
+    })
+    const rules = [{ type: 'select', field: 's', effect: { datasource: { dataSourceId: 'ds_1', labelField: 'name', valueField: 'name' } } } as any]
+    const resolved = await resolveOptionRules(rules, bindings)
+    expect((resolved[0] as any).options).toEqual([{ label: '张三', value: '张三' }])
+    expect((resolved[0] as any).props?.data).toBeUndefined()
   })
 })

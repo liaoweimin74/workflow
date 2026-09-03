@@ -267,6 +267,7 @@ public class ViewCompiler {
             copyIfPresent(column, col, "formatter");
             copyIfPresent(column, col, "className");
             copyIfPresent(column, col, "styleExpr");
+            copyIfPresent(column, col, "style");
             copyIfPresent(column, col, "custom");
             copyIfPresent(column, col, "onCellClick");
         }

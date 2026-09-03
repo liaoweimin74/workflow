@@ -225,6 +225,8 @@ export interface ColumnViewConfig {
   className?: string
   /** 单元格样式表达式（返回样式字符串/CSSProperties 对象，如 $row.status==='PENDING' ? 'color:red' : ''） */
   styleExpr?: string
+  /** 统一字段样式（结构化，替代 className/styleExpr） */
+  style?: import('@/utils/fieldStyle').FieldStyle
   /** 列头点击事件链（点击本列单元格触发；配置后短路整表级 cell-click） */
   onCellClick?: { actions: any[] }
   /** 自定义计算列标记（key 非数据源字段；由"添加自定义列"写入，后端编译时跳过引用列校验） */

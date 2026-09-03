@@ -2,12 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DataSourceConfig from '../components/DataSourceConfig.vue'
 
-vi.mock('@/api/data-source', () => ({
-  dataSourceApi: {
-    getEnabledDataSources: vi.fn().mockResolvedValue({ data: [] }),
-    getMetadata: vi.fn().mockResolvedValue({ data: { columns: [] } }),
-  },
-}))
+vi.mock('@/api/data-source', () => ({ dataSourceApi: { getMetadata: vi.fn().mockResolvedValue({ data: { columns: [] } }) } }))
 
 const stubs = {
   'el-form': { template: '<form><slot /></form>' },
@@ -28,7 +23,7 @@ describe('DataSourceConfig', () => {
   it('opens a dialog with source and field tabs', async () => {
     const wrapper = mount(DataSourceConfig, {
       global: { stubs },
-      props: { modelValue: undefined },
+      props: { modelValue: undefined, formDataSources: [] },
     })
     await wrapper.find('button').trigger('click')
     expect(wrapper.text()).toContain('数据源')
@@ -38,7 +33,10 @@ describe('DataSourceConfig', () => {
   it('emits the complete mapping when configuration is valid', async () => {
     const wrapper = mount(DataSourceConfig, {
       global: { stubs },
-      props: { modelValue: { dataSourceId: 'ds-1', labelField: 'name', valueField: 'id' } },
+      props: {
+        modelValue: { dataSourceId: 'ds-1', labelField: 'name', valueField: 'id' },
+        formDataSources: [{ id: 'ds-1', refId: 'global-1', name: '部门数据源' }],
+      },
     })
     await wrapper.find('button').trigger('click')
     const button = wrapper.findAll('button').at(-1)

@@ -9,7 +9,6 @@
           :model-value="sourceDraft"
           @update:model-value="updateSourceDraft"
           :form-data-sources="sourceBindings"
-          :enabled-data-sources="availableSources"
           :current-fields="[]"
           @columns="columns = $event"
         />
@@ -49,10 +48,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { dataSourceApi } from '@/api/data-source'
-import type { DataSourceDTO } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
 import DataSourceBindingTab, { type DataSourceTabValue } from '@/views/form/components/DataSourceBindingTab.vue'
 import type { OptionDataSourceConfig } from '../option-datasource'
@@ -60,35 +57,24 @@ import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 type OptionConfig = OptionDataSourceConfig & { readonly dataSourceId: string }
 
-const props = defineProps<{ modelValue?: OptionConfig }>()
+const props = defineProps<{
+  modelValue?: OptionConfig
+  formDataSources?: Array<{ id: string; refId: string; name?: string }>
+}>()
 const emit = defineEmits<{ (event: 'update:modelValue', value: OptionConfig): void }>()
 const dialogVisible = ref(false)
 const activeTab = ref('source')
 const columns = ref<ColumnConfigItem[]>([])
-const availableSources = ref<DataSourceDTO[]>([])
 const sourceTabRef = ref<InstanceType<typeof DataSourceBindingTab> | null>(null)
 const sourceDraft = ref<DataSourceTabValue>({ dataSourceId: '' })
 const fieldDraft = reactive({ labelField: '', valueField: '', childrenField: '', parentField: '' })
-const sourceBindings = computed(() => activeDsBindings.value.length > 0
-  ? activeDsBindings.value.map((binding) => ({
-    ...binding,
-    name: availableSources.value.find((source) => source.id === binding.refId)?.name ?? binding.id,
-  }))
-  : availableSources.value.map((source) => ({ id: source.id, refId: source.id, name: source.name })))
+const sourceBindings = computed(() => props.formDataSources ?? activeDsBindings.value)
 const valid = computed(() => Boolean(sourceDraft.value.dataSourceId && fieldDraft.labelField && fieldDraft.valueField)
   && !(fieldDraft.childrenField && fieldDraft.parentField))
 
 watch(() => props.modelValue, (value) => {
   if (!dialogVisible.value) resetDraft(value)
 }, { immediate: true, deep: true })
-
-onMounted(async () => {
-  try {
-    availableSources.value = (await dataSourceApi.getEnabledDataSources()).data ?? []
-  } catch {
-    ElMessage.error('数据源列表加载失败')
-  }
-})
 
 function confirm() {
   if (!valid.value) {

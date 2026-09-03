@@ -390,6 +390,11 @@ onMounted(async () => {
       enabledDataSources.value = (dsRes.data || []).filter(
         (d: any) => d.status === 'ENABLED' && (d.type === 'FORM' || d.type === 'API' || d.type === 'SYSTEM'),
       )
+      formDataSources.value = formDataSources.value.map((binding) => ({
+        ...binding,
+        name: enabledDataSources.value.find((source) => source.id === binding.refId)?.name,
+      }))
+      setActiveDsBindings(formDataSources.value)
     } catch { /* http 拦截器已提示 */ }
     // 注册 FORM 容器数据源属性面板
     registerFormContainerProps()

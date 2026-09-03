@@ -67,7 +67,7 @@
       v-model="pageTableDialogVisible"
       :current-fields="currentFieldKeys"
       :binding-props="currentPageTableProps"
-      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
+      :form-data-sources="schema.dataSources"
       :enabled-data-sources="enabledDataSources"
       :table-mode="true"
       @confirm="handlePageTableConfirm"
@@ -78,7 +78,7 @@
       v-model="formContainerDialogVisible"
       :current-fields="[]"
       :binding-props="currentFormContainerProps"
-      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
+      :form-data-sources="schema.dataSources"
       :enabled-data-sources="enabledDataSources"
       @confirm="handleFormContainerConfirm"
     />
@@ -567,6 +567,10 @@ onMounted(async () => {
       try {
         const parsed = JSON.parse(def.schema)
         schema.dataSources = parsed.dataSources || []
+        schema.dataSources = schema.dataSources.map((binding) => ({
+          ...binding,
+          name: enabledDataSources.value.find((source) => source.id === binding.refId)?.name,
+        }))
         schema.actions = parsed.actions || []
         // 设置 FcDesigner rule（等待设计器就绪后 setRule）
         if (designerRef.value) {

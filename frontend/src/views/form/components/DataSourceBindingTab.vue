@@ -65,8 +65,7 @@ export interface DataSourceTabValue {
 
 const props = withDefaults(defineProps<{
   modelValue?: DataSourceTabValue
-  formDataSources: Array<{ id: string; refId: string }>
-  enabledDataSources?: Array<{ id: string; name: string }>
+  formDataSources: Array<{ id: string; refId: string; name?: string }>
   currentFields?: string[]
 }>(), { currentFields: () => [] })
 
@@ -83,7 +82,7 @@ const draft = reactive({
 const columns = ref<ColumnConfigItem[]>([])
 const formDataSources = computed(() => props.formDataSources.map((binding) => ({
   ...binding,
-  name: props.enabledDataSources?.find((source) => source.id === binding.refId)?.name ?? binding.id,
+  name: binding.name ?? binding.id,
 })))
 const currentFields = computed(() => props.currentFields)
 const visibleColumns = computed(() => columns.value.filter((column) => !column.hidden))

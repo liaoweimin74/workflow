@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="title" width="680px" :close-on-click-modal="false" :append-to-body="true" :modal="true" :z-index="3000">
+  <el-dialog v-model="visible" :title="title" width="680px" :close-on-click-modal="false" :append-to-body="true" :modal="true" :lock-scroll="false" :z-index="3000">
     <div class="scope-tip">作用范围：{{ scope }}</div>
     <el-input v-model="draft" type="textarea" :rows="14" autocomplete="off" placeholder="background-color: #0f2747;\nborder-color: #1677ff;" />
     <div class="script-tip">请输入不带选择器的 CSS 属性声明，每行一条规则。</div>

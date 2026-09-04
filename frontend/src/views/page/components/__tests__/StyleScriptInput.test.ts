@@ -27,6 +27,7 @@ describe('StyleScriptInput', () => {
     const dialog = wrapper.findComponent({ name: 'ElDialog' })
     expect(dialog.props('appendToBody')).toBe(true)
     expect(dialog.props('modal')).toBe(true)
+    expect(dialog.props('lockScroll')).toBe(false)
     expect(dialog.props('zIndex')).toBe(3000)
   })
 

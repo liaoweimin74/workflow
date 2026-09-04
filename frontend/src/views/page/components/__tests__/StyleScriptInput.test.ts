@@ -22,13 +22,20 @@ describe('StyleScriptInput', () => {
     expect(wrapper.find('.script-editor-shell > .el-input').exists()).toBe(true)
   })
 
+  it('脚本编辑弹窗使用独立遮罩并挂载到 body', () => {
+    const wrapper = mount(StyleScriptInput, { props: { modelValue: 'color: red;', title: '编辑样式脚本', scope: '整张卡片' }, global: { plugins: [ElementPlus] } })
+    const dialog = wrapper.findComponent({ name: 'ElDialog' })
+    expect(dialog.props('appendToBody')).toBe(true)
+    expect(dialog.props('modal')).toBe(true)
+    expect(dialog.props('zIndex')).toBe(3000)
+  })
+
   it('直接输入和弹窗确认都更新脚本值', async () => {
     const wrapper = mount(StyleScriptInput, { props: { modelValue: '', title: '编辑样式脚本', scope: '整张卡片' }, global: { plugins: [ElementPlus] } })
     await wrapper.find('textarea').setValue('padding: 16px;')
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toBe('padding: 16px;')
     await wrapper.find('button[aria-label="打开样式脚本编辑器"]').trigger('click')
-    const vm = wrapper.vm as any
-    vm.dialogVisible = true
-    expect(wrapper.text()).toContain('编辑样式脚本')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(document.body.textContent).toContain('编辑样式脚本')
   })
 })

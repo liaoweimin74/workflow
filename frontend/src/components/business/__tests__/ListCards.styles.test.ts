@@ -35,6 +35,14 @@ describe('CARD_THEMES — 内置主题', () => {
     expect(CARD_THEMES.techBlue.backgroundColor).toBe('#0f2747')
     expect(CARD_THEMES.techBlue.borderColor).toBe('#1677ff')
   })
+
+  it.each(['dark', 'techBlue'] as const)('%s 主题字段文字使用高对比颜色', (name) => {
+    const theme = CARD_THEMES[name]
+    expect(theme.fieldLabelColor).not.toBe('#909399')
+    expect(theme.fieldValueColor).not.toBe('#303133')
+    expect(theme.fieldLabelColor).toBeDefined()
+    expect(theme.fieldValueColor).toBeDefined()
+  })
 })
 
 describe('mergeCardStyle — 主题与样式合并', () => {

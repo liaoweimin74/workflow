@@ -6,7 +6,7 @@
  */
 import { formatCellValue } from './formatters'
 import { evalCellExpression } from './scriptSandbox'
-import { resolveFieldStyle, type FieldStyle } from './fieldStyle'
+import { resolveFieldStyle, resolveStyleRules, type FieldStyle } from './fieldStyle'
 import { h, type VNode } from 'vue'
 
 /**
@@ -128,8 +128,10 @@ export function buildCellRender(
     let className = config.className
 
     if (config.style) {
-      // 使用统一 FieldStyle 解析
-      const result = resolveFieldStyle(undefined, config.style, row)
+      // 使用统一 FieldStyle 解析；新规则模型直接按 CELL 的值求值
+      const result = config.style.base || config.style.rules
+        ? resolveStyleRules(config.style.base, config.style.rules, dataRow, getCellValue(row, config.key ?? ''))
+        : resolveFieldStyle(undefined, config.style, row)
       style = Object.keys(result.style).length > 0 ? result.style : undefined
       if (result.className) {
         className = className ? `${className} ${result.className}` : result.className

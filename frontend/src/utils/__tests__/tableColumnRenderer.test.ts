@@ -118,4 +118,17 @@ describe('buildCellRender — 构建列 render 函数', () => {
     expect(vnode.props.class).toBe('col-highlight')
     expect(vnode.props.style).toEqual({ color: 'red' })
   })
+
+  it('统一字段规则可按 CELL 值应用 CSS 和多个 class', () => {
+    const render = buildCellRender({
+      key: 'status',
+      style: {
+        base: { enabled: true, css: 'font-weight: 600;', className: 'status-cell' },
+        rules: [{ enabled: true, when: "$value === '异常'", css: 'color: red;', className: 'status-error is-alert' }],
+      },
+    })
+    const vnode = render({ status: '异常' })
+    expect(vnode.props?.class).toBe('status-cell status-error is-alert')
+    expect(vnode.props?.style).toMatchObject({ fontWeight: '600', color: 'red' })
+  })
 })

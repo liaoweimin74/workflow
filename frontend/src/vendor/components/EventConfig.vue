@@ -497,12 +497,16 @@ export default defineComponent({
     display: flex;
     flex-direction: column;
     justify-content: center;
-    width: 225px;
+    padding: 10px 20px 10px 0;
     font-size: 14px;
+    line-height: 1em;
     font-family: monospace;
+    width: 100%;
     color: #9D238C;
     overflow: hidden;
     white-space: pre-wrap;
+    position: relative;
+    box-sizing: border-box;
 }
 
 ._fd-event-method ._fd-label {

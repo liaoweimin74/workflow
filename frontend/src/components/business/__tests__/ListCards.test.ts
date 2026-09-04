@@ -7,6 +7,7 @@ import { resolve } from 'node:path'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import type { CardColumn, ListQueryParams, ListPageResult, SearchField } from '../types'
+import type { CardStyle } from '../ListCards.types'
 import ListCards from '../ListCards.vue'
 
 // ===== 类型测试 =====
@@ -103,6 +104,8 @@ describe('ListCards 组件', () => {
     searchFields?: SearchField[]
     showSearch?: boolean
     pageSizes?: number[]
+    formStyle?: Record<string, string>
+    style?: CardStyle
   }) {
     return mount(ListCards, {
       props: {
@@ -666,6 +669,111 @@ describe('ListCards 组件', () => {
     it('分页栏位于卡片列表右下角', () => {
       const source = readFileSync(resolve(__dirname, '../ListCards.vue'), 'utf8')
       expect(source).toContain('.card-pagination { align-self: flex-end;')
+    })
+  })
+
+  // ===== RED→GREEN: form-create 组件级 CSS 样式应用到每张卡片（.card-item）=====
+  describe('formStyle（form-create 组件级样式透传）', () => {
+    it('formStyle 内联样式应用到每张 card-item 元素', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '甲' }, { id: 2, name: '乙' }], total: 2 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name', label: '名称' }],
+        formStyle: { color: 'red', backgroundColor: '#f5f5f5' },
+      })
+      await flushPromises()
+
+      const cards = wrapper.findAll('.card-item')
+      expect(cards.length).toBe(2)
+      for (const card of cards) {
+        const style = card.attributes('style') || ''
+        expect(style).toContain('color: red')
+        expect(style).toContain('background-color: rgb(245, 245, 245)')
+      }
+      wrapper.unmount()
+    })
+
+    it('未传 formStyle 时不注入额外内联样式', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '甲' }], total: 1 })
+      const wrapper = createWrapper({ fetchApi: mockFetch, columns: [{ prop: 'name', label: '名称' }] })
+      await flushPromises()
+
+      const card = wrapper.find('.card-item')
+      expect(card.attributes('style') || '').not.toContain('color: red')
+      wrapper.unmount()
+    })
+
+    it('通过 PageDataCards.style prop 透传：style 接收 form-create CSS 对象并绑为 formStyle', () => {
+      // 源码契约：PageDataCards 将 form-create 传入的 style（CSS 对象）透传给 ListCards.formStyle
+      const listCardsSource = readFileSync(resolve(__dirname, '../../../views/page/components/PageDataCards.vue'), 'utf8')
+      expect(listCardsSource).toContain(':form-style="style"')
+      expect(listCardsSource).toMatch(/style\??:\s*Record<string, string>/)
+    })
+  })
+
+  // ===== RED→GREEN: CardStyle.css 逃生舱作用于每张卡片 =====
+  describe('CardStyle.css 逃生舱（结构化样式）', () => {
+    it('CardStyle.css 字符串解析后应用到每张 card-item 内联样式', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '甲' }], total: 1 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name', label: '名称' }],
+        style: { css: 'opacity: 0.9; border: 2px dashed red' },
+      })
+      await flushPromises()
+
+      const card = wrapper.find('.card-item')
+      const style = card.attributes('style') || ''
+      expect(style).toContain('opacity: 0.9')
+      expect(style).toContain('border: 2px dashed red')
+      wrapper.unmount()
+    })
+
+    it('未配置 CardStyle.css 时不注入逃生舱样式', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '甲' }], total: 1 })
+      const wrapper = createWrapper({ fetchApi: mockFetch, columns: [{ prop: 'name', label: '名称' }] })
+      await flushPromises()
+
+      const style = wrapper.find('.card-item').attributes('style') || ''
+      expect(style).not.toContain('opacity')
+      wrapper.unmount()
+    })
+  })
+
+  // ===== RED→GREEN: CardStyle.fields 字段区域布局生效 =====
+  describe('CardStyle.fields 字段区域布局', () => {
+    it('grid 布局与列数注入 .card-fields 容器的 data-layout 与 --fields-columns 变量', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '甲', dept: '研发' }], total: 1 })
+      const wrapper = createWrapper({
+        fetchApi: mockFetch,
+        columns: [{ prop: 'name', label: '名称' }, { prop: 'dept', label: '部门' }],
+        style: { fields: { layout: 'grid', columns: 2, gap: 12 } },
+      })
+      await flushPromises()
+
+      const fields = wrapper.find('.card-fields')
+      expect(fields.attributes('data-layout')).toBe('grid')
+      expect(fields.attributes('style') || '').toContain('--fields-columns: 2')
+      expect(fields.attributes('style') || '').toContain('--fields-gap: 12px')
+      wrapper.unmount()
+    })
+
+    it('默认布局为 list（单列堆叠）', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ rows: [{ id: 1, name: '甲' }], total: 1 })
+      const wrapper = createWrapper({ fetchApi: mockFetch, columns: [{ prop: 'name', label: '名称' }] })
+      await flushPromises()
+
+      expect(wrapper.find('.card-fields').attributes('data-layout')).toBe('list')
+      wrapper.unmount()
+    })
+  })
+
+  // ===== RED→GREEN: PageDataCards 透传结构化 cardStyle 到 ListCards :style =====
+  describe('PageDataCards cardStyle 透传（结构化 CardStyle）', () => {
+    it('PageDataCards 将 cardStyle prop 透传给 ListCards :style（覆盖主题）', () => {
+      const source = readFileSync(resolve(__dirname, '../../../views/page/components/PageDataCards.vue'), 'utf8')
+      expect(source).toContain(':style="cardStyle"')
+      expect(source).toMatch(/cardStyle\??:\s*CardStyle/)
     })
   })
 })

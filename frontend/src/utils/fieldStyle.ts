@@ -45,7 +45,7 @@ export interface ResolvedStyle {
  * 解析 CSS 字符串为 camelCase 键值对。
  * 支持 "color:red; font-size:12px" → { color: 'red', fontSize: '12px' }
  */
-function parseCssString(css: string): Record<string, string> {
+export function parseCssString(css: string): Record<string, string> {
   if (!css || typeof css !== 'string') return {}
   const result: Record<string, string> = {}
   for (const entry of css.split(';')) {

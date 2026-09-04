@@ -48,7 +48,7 @@
           </span>
         </div>
         <div v-show="!(groupBy && collapsibleGroups && !isGroupExpanded(group.key))" class="card-grid" :style="gridStyle">
-          <div v-for="row in group.rows" :key="row.id || row._index" class="card-item" :class="`actions-placement-${actionsPlacement}`" :style="{ ...cardCssVars, ...resolveCardDynamicStyle(row) }" @click="handleCardClick(row)">
+          <div v-for="row in group.rows" :key="row.id || row._index" class="card-item" :class="`actions-placement-${actionsPlacement}`" :style="{ ...cardCssVars, ...cardCssEscape, ...formStyle, ...resolveCardDynamicStyle(row) }" @click="handleCardClick(row)">
         <div v-if="resolvedCardStyle.regions?.header?.show" class="card-header">
           <span v-if="resolvedCardStyle.regions.header.icon" class="card-header-icon">
             <el-icon :size="typeof resolvedCardStyle.regions.header.icon === 'object' ? resolvedCardStyle.regions.header.icon.size : 20" :style="{ color: typeof resolvedCardStyle.regions.header.icon === 'object' ? resolvedCardStyle.regions.header.icon.color : undefined }">
@@ -62,7 +62,7 @@
         <div v-if="hasRoleTag" class="card-tags">
           <el-tag :type="getTagType(row, tagColumn?.tagConfig)" :style="columnStyle(tagColumn, row)">{{ formatValue(row, tagColumn) }}</el-tag>
         </div>
-        <div class="card-fields">
+        <div class="card-fields" :data-layout="resolvedCardStyle.fields?.layout || 'list'" :style="fieldsCssVars">
           <div v-for="col in visibleColumns" :key="col.prop" :class="['card-field', `card-field-${col.prop}`, `label-position-${col.labelPosition || 'left'}`]" :style="fieldStyle(col)">
             <span v-if="col.showLabel !== false" class="field-label" :style="columnStyle(col, row)">{{ col.label }}</span>
             <span class="field-value" :style="columnStyle(col, row)">{{ formatValue(row, col) }}</span>
@@ -136,9 +136,9 @@ import {
 import type { CardColumn, ListQueryParams, ListPageResult, SearchField } from './types'
 import type { CardTheme, CardStyle } from './ListCards.types'
 import { renderCellContent } from '@/utils/tableColumnRenderer'
-import { resolveFieldStyle, normalizeColumnStyle } from '@/utils/fieldStyle'
+import { resolveFieldStyle, normalizeColumnStyle, parseCssString } from '@/utils/fieldStyle'
 import { CARD_THEMES } from './ListCards.themes'
-import { mergeCardStyle, buildCardCssVars } from './ListCards.styles'
+import { mergeCardStyle, buildCardCssVars, buildFieldsCssVars } from './ListCards.styles'
 
 interface ListCardsProps {
   fetchApi: (params: ListQueryParams) => Promise<ListPageResult>
@@ -152,8 +152,10 @@ interface ListCardsProps {
   designMode?: boolean
   /** 内置主题模板 */
   theme?: CardTheme
-  /** 卡片整体样式（覆盖主题） */
+  /** 卡片整体样式（覆盖主题，结构化 CardStyle） */
   style?: CardStyle
+  /** form-create 组件级样式（原始 CSS 样式对象，如 { color, backgroundColor }），应用到每张卡片 */
+  formStyle?: Record<string, string>
   /** 操作按钮（style 控制形态：button=带图标+文字 / icon=仅图标圆形 / text=文字链接） */
   actions?: Array<{
     key: string
@@ -216,6 +218,15 @@ const resolvedCardStyle = computed(() => {
 
 /** CSS 变量注入 */
 const cardCssVars = computed(() => buildCardCssVars(resolvedCardStyle.value))
+
+/** CSS 逃生舱：解析后的键值对（作用于每张卡片） */
+const cardCssEscape = computed(() => {
+  const css = resolvedCardStyle.value.css
+  return css ? parseCssString(css) : {}
+})
+
+/** 字段区域 CSS 变量注入（layout/columns/gap/labelPosition/labelWidth/showLabel） */
+const fieldsCssVars = computed(() => buildFieldsCssVars(resolvedCardStyle.value.fields))
 
 /** 卡片级条件样式（根据行数据切换整卡外观） */
 function resolveCardDynamicStyle(row: Record<string, any>): Record<string, string> {
@@ -422,8 +433,17 @@ defineExpose({ fetchData, refresh, retry })
 .card-subtitle { font-size: 14px; color: #909399; margin-bottom: 12px; }
 .card-tags { margin-bottom: 12px; }
 .card-fields { margin-bottom: 12px; }
+/* 字段区域布局（grid/list）由 --fields-* CSS 变量驱动 */
+.card-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--fields-gap, 8px);
+}
+/* --fields-layout: grid 且指定列数时按列栅格排布 */
+.card-fields[data-layout='grid'] { grid-template-columns: repeat(var(--fields-columns, 1), minmax(0, 1fr)); }
 .card-metric { font-size: 18px; font-weight: 600; color: #409eff; margin-top: 8px; }
 .card-field { margin-bottom: 8px; }
+.card-fields[data-layout='grid'] .card-field { margin-bottom: 0; }
 .card-field.label-position-left,
 .card-field.label-position-right { display: flex; align-items: baseline; gap: 8px; }
 .card-field.label-position-right { justify-content: flex-end; }

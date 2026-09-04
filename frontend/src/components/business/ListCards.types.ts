@@ -63,6 +63,9 @@ export interface CardStyle {
     }
   }
 
+  // CSS 逃生舱（作用于每张卡片的原始 CSS 字符串，如 "border: 2px dashed red"）
+  css?: string
+
   // 条件样式（卡片整体，根据行数据切换外观）
   dynamic?: ConditionalStyle[]
 }

@@ -72,6 +72,13 @@
       @confirm="handlePageTableConfirm"
     />
 
+    <!-- 卡片样式脚本配置（结构化 CardStyle，覆盖主题） -->
+    <CardStyleConfigDialog
+      v-model="cardStyleDialogVisible"
+      :card-style="currentCardStyle"
+      @confirm="handleCardStyleConfirm"
+    />
+
     <!-- 数据表单容器配置：与表单设计器复用同一套非表格模式绑定弹窗 -->
     <DsBindingConfigDialog
       v-model="formContainerDialogVisible"
@@ -172,6 +179,8 @@ import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.v
 import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog.vue'
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
+import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
+import type { CardStyle } from '@/components/business/ListCards.types'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from '@/views/form/formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
@@ -391,6 +400,27 @@ function handlePageTableConfirm(newProps: Record<string, any>) {
   ElMessage.success('数据表格数据源配置已保存')
 }
 
+// ===== 卡片样式脚本配置 =====
+const cardStyleDialogVisible = ref(false)
+const currentCardStyle = computed<CardStyle | undefined>(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.props?.cardStyle || undefined
+})
+function openCardStyleConfig() {
+  cardStyleDialogVisible.value = true
+}
+function handleCardStyleConfirm(style: CardStyle) {
+  const active = designerRef.value?.activeRule as any
+  if (active?.props) {
+    if (style && Object.keys(style).length > 0) {
+      active.props.cardStyle = style
+    } else {
+      delete active.props.cardStyle
+    }
+  }
+  ElMessage.success('卡片样式已保存')
+}
+
 function enableCardDesignMode(rules: any[]): any[] {
   return rules.map((rule) => {
     const next = { ...rule, props: rule.props ? { ...rule.props } : rule.props }
@@ -451,6 +481,21 @@ function registerPageComponents() {
       style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
       props: { size: 'small' },
       on: { click: onClick },
+    },
+  ]
+
+  /** 卡片列表专属配置：配置数据源 + 卡片样式脚本（样式脚本位于数据源下方） */
+  const cardListProps = () => [
+    ...dataSourceProps(),
+    {
+      type: 'button',
+      field: 'cardStyleTrigger',
+      title: '卡片样式脚本',
+      children: ['卡片样式脚本'],
+      native: true,
+      style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+      props: { size: 'small' },
+      on: { click: () => openCardStyleConfig() },
     },
   ]
 
@@ -537,7 +582,7 @@ function registerPageComponents() {
       },
     }),
   })
-  designerRef.value?.setComponentRuleConfig('page-list-cards', dataSourceProps, true)
+  designerRef.value?.setComponentRuleConfig('page-list-cards', cardListProps, true)
 
   designerRef.value?.addComponent({
     label: '树形数据',

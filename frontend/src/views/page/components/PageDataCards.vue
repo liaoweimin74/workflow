@@ -16,7 +16,8 @@
       :actions-placement="actionsPlacement"
       :design-mode="designMode"
       :theme="theme"
-      :style="style"
+      :form-style="style"
+      :style="cardStyle"
       @row-click="handleRowClick"
       @action-click="handleActionClick"
     />
@@ -95,8 +96,10 @@ const props = withDefaults(defineProps<{
   stretch?: boolean
   /** 内置主题模板 */
   theme?: CardTheme
-  /** 卡片整体样式（覆盖主题） */
-  style?: CardStyle
+  /** form-create 组件级样式（原始 CSS 样式对象，如 { color, backgroundColor }），应用到每张卡片 */
+  style?: Record<string, string>
+  /** 结构化卡片整体样式（覆盖主题），通过「卡片样式脚本」配置 */
+  cardStyle?: CardStyle
   [key: string]: any
 }>(), { pageSize: 20, showSearch: false, pageSizes: () => [10, 20, 50], pagination: true, cardMinWidth: 280, stretch: false })
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="search-table" :class="{ 'is-small': tableSize === 'small' }">
+  <div class="search-table" :class="[tableClassName, { 'is-small': tableSize === 'small' }]" :style="tableStyle">
     <!-- 搜索栏 -->
     <el-card v-if="showSearch" class="search-card" style="margin-bottom: 16px">
       <el-form :inline="true" :model="query" :size="tableSize" @submit.prevent>
@@ -101,7 +101,7 @@
       </div>
 
       <div class="table-wrapper">
-      <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @row-dblclick="(row: any, col: any, evt: Event) => emit('row-dblclick', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
+       <el-table ref="tableRef" :data="list" v-loading="loading" border :size="tableSize" height="100%" v-bind="treeTableAttrs" :row-class-name="rowClassName" :row-style="rowStyle" @row-click="(row: any, col: any, evt: Event) => emit('row-click', row, col, evt)" @row-dblclick="(row: any, col: any, evt: Event) => emit('row-dblclick', row, col, evt)" @cell-click="(row: any, col: any, cell: any, evt: Event) => emit('cell-click', row, col, cell, evt)" @selection-change="(selection: any[]) => emit('selection-change', selection)" @sort-change="handleSortChange">
         <el-table-column v-if="props.showSelection" type="selection" width="42" align="center" fixed="left" />
         <el-table-column
           v-for="col in columns"
@@ -257,6 +257,7 @@ import { ref, reactive, onMounted, computed, defineComponent, h, type PropType }
 import { Search, Refresh, Download, Plus, Edit, Delete, CaretBottom } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { SearchTableProps, ActionButton, QueryParams, TableColumn } from './types'
+import { resolveStyleRules } from '@/utils/fieldStyle'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
 
@@ -296,6 +297,23 @@ const props = withDefaults(defineProps<SearchTableProps>(), {
   tableSize: 'default',
   toolbarButtons: () => [],
 })
+
+const tableClassName = computed(() => props.styleRule?.base?.className || '')
+const tableStyle = computed(() => ({ ...(props.style || {}), ...(props.styleRule?.base?.css ? parseCss(props.styleRule.base.css) : {}) }))
+function parseCss(css: string): Record<string, string> {
+  return Object.fromEntries(css.split(';').map(item => item.trim()).filter(Boolean).map(item => {
+    const index = item.indexOf(':')
+    return index > 0 ? [item.slice(0, index).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase()), item.slice(index + 1).trim()] : ['', '']
+  }).filter(([key, value]) => key && value))
+}
+function rowClassName({ row }: { row: any }) {
+  if (!props.styleRule) return ''
+  return resolveStyleRules(props.styleRule.base, props.styleRule.rules, row).className || ''
+}
+function rowStyle({ row }: { row: any }) {
+  if (!props.styleRule) return {}
+  return resolveStyleRules(props.styleRule.base, props.styleRule.rules, row).style
+}
 
 /** 树形表格属性：透传给 el-table */
 const treeTableAttrs = computed(() => {

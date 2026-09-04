@@ -54,7 +54,8 @@
         :show-pagination="paginationConfig.show"
         :default-page-size="paginationConfig.pageSize"
         :page-sizes="paginationConfig.pageSizes"
-        :table-size="tableSize"
+         :table-size="tableSize"
+         :style-rule="tableStyle"
         :max-visible-buttons="20"
         @row-click="handleRowClick"
         @cell-click="handleCellClick"
@@ -71,7 +72,8 @@
         :show-search="false"
         :show-pagination="paginationConfig.show"
         :default-page-size="paginationConfig.pageSize"
-        :page-sizes="paginationConfig.pageSizes"
+         :page-sizes="paginationConfig.pageSizes"
+         :style="cardStyle"
         @row-click="handleRowClick"
         @action-click="handleCardActionClick"
       />
@@ -200,6 +202,7 @@ import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@
 import { bizDataApi } from '@/api/bizData'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import { buildCellRender, renderCellContent, type CellContentConfig } from '@/utils/tableColumnRenderer'
+import type { CardStyle } from '@/components/business/ListCards.types'
 
 const route = useRoute()
 const router = useRouter()
@@ -278,6 +281,7 @@ interface CompiledColumn {
   styleExpr?: string
   /** 列头点击事件链（点击本列单元格触发；配置后短路整表级 cell-click） */
   onCellClick?: { actions: any[] }
+  style?: import('@/utils/fieldStyle').FieldStyle
 }
 interface SearchRule {
   type: string
@@ -292,6 +296,8 @@ const searchRules = ref<SearchRule[]>([])
 const tableColumns = ref<CompiledColumn[]>([])
 /** 显示方式：table（表格，默认）/ card（卡片，由视图 schema.display 编译透传） */
 const displayMode = ref<'table' | 'card'>('table')
+const tableStyle = ref<CardStyle | undefined>(undefined)
+const cardStyle = ref<CardStyle | undefined>(undefined)
 /** 视图级可排序字段（编译产物 sortableFields；空=跟随数据源全部可排字段） */
 const sortableFieldKeys = ref<string[]>([])
 /** 分页配置（编译产物 pagination；缺省显示分页 / 20 条 / [10,20,50]） */
@@ -421,6 +427,8 @@ function parseSchema(schema: string): boolean {
     }
     const tableRule = rule.find((r) => r.type === 'table')
     tableColumns.value = (tableRule?.props?.columns || []) as CompiledColumn[]
+    tableStyle.value = tableRule?.props?.style as CardStyle | undefined
+    cardStyle.value = tableRule?.props?.cardStyle as CardStyle | undefined
     const actionsRule = rule.find((r) => r.type === '__page_actions')
     actionConfig.value = actionsRule?.props || {}
     const detailRule = rule.find((r) => r.type === '__page_detail')
@@ -590,6 +598,7 @@ const searchTableColumns = computed<TableColumn[]>(() =>
       formatter: c.formatter,
       className: c.className,
       styleExpr: c.styleExpr,
+      style: c.style,
     }),
   })),
 )
@@ -657,6 +666,7 @@ const cardColumns = computed<CardColumn[]>(() =>
           ? (row: any) => renderCellContent(contentConfig, row)
           : undefined,
         valueType: undefined,
+        style: c.style,
       }
     }),
 )

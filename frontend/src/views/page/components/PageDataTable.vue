@@ -5,6 +5,7 @@
     ref="tableRef"
     :search-fields="resolvedSearchFields"
     :columns="resolvedColumns"
+    :style-rule="props.styleRule"
     :action-buttons="resolvedActionButtons"
     :toolbar-buttons="resolvedToolbarButtons"
     :merge-default-actions="false"
@@ -98,6 +99,7 @@ import { buildCellRender } from '@/utils/tableColumnRenderer'
 import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
+import type { CardStyle } from '@/components/business/ListCards.types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import { tableFilterStore } from './tableFilterStore'
 
@@ -145,6 +147,7 @@ const props = withDefaults(defineProps<{
   stretch?: boolean
   /** 设计态标记：PageDesigner.enableCardDesignMode 注入，取数固定取首页且最多 10 条 */
   designMode?: boolean
+  styleRule?: CardStyle
   /** 附加属性（border/stripe 等） */
   [key: string]: any
 }>(), {

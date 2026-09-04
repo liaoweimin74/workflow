@@ -48,7 +48,7 @@
           </span>
         </div>
         <div v-show="!(groupBy && collapsibleGroups && !isGroupExpanded(group.key))" class="card-grid" :style="gridStyle">
-          <div v-for="row in group.rows" :key="row.id || row._index" class="card-item" :class="`actions-placement-${actionsPlacement}`" :style="{ ...cardCssVars, ...cardCssEscape, ...formStyle, ...resolveCardDynamicStyle(row) }" @click="handleCardClick(row)">
+          <div v-for="row in group.rows" :key="row.id || row._index" class="card-item" :class="cardClasses(row)" :style="{ ...cardCssVars, ...cardCssEscape, ...formStyle, ...resolveCardDynamicStyle(row) }" @click="handleCardClick(row)">
         <div v-if="resolvedCardStyle.regions?.header?.show" class="card-header">
           <span v-if="resolvedCardStyle.regions.header.icon" class="card-header-icon">
             <el-icon :size="typeof resolvedCardStyle.regions.header.icon === 'object' ? resolvedCardStyle.regions.header.icon.size : 20" :style="{ color: typeof resolvedCardStyle.regions.header.icon === 'object' ? resolvedCardStyle.regions.header.icon.color : undefined }">
@@ -57,18 +57,18 @@
           </span>
         </div>
         <div class="card-content">
-        <div v-if="hasRoleTitle" class="card-title" :style="columnStyle(titleColumn, row)">{{ formatValue(row, titleColumn) }}</div>
-        <div v-if="hasRoleSubtitle" class="card-subtitle" :style="columnStyle(subtitleColumn, row)">{{ formatValue(row, subtitleColumn) }}</div>
+        <div v-if="hasRoleTitle" class="card-title" :class="columnClass(titleColumn, row)" :style="columnStyle(titleColumn, row)">{{ formatValue(row, titleColumn) }}</div>
+        <div v-if="hasRoleSubtitle" class="card-subtitle" :class="columnClass(subtitleColumn, row)" :style="columnStyle(subtitleColumn, row)">{{ formatValue(row, subtitleColumn) }}</div>
         <div v-if="hasRoleTag" class="card-tags">
-          <el-tag :type="getTagType(row, tagColumn?.tagConfig)" :style="columnStyle(tagColumn, row)">{{ formatValue(row, tagColumn) }}</el-tag>
+          <el-tag :type="getTagType(row, tagColumn?.tagConfig)" :class="columnClass(tagColumn, row)" :style="columnStyle(tagColumn, row)">{{ formatValue(row, tagColumn) }}</el-tag>
         </div>
         <div class="card-fields" :data-layout="resolvedCardStyle.fields?.layout || 'list'" :style="fieldsCssVars">
-          <div v-for="col in visibleColumns" :key="col.prop" :class="['card-field', `card-field-${col.prop}`, `label-position-${col.labelPosition || 'left'}`]" :style="fieldStyle(col)">
+          <div v-for="col in visibleColumns" :key="col.prop" :class="['card-field', `card-field-${col.prop}`, `label-position-${col.labelPosition || 'left'}`, columnClass(col, row)]" :style="fieldStyle(col)">
             <span v-if="col.showLabel !== false" class="field-label" :style="columnStyle(col, row)">{{ col.label }}</span>
             <span class="field-value" :style="columnStyle(col, row)">{{ formatValue(row, col) }}</span>
           </div>
         </div>
-        <div v-if="hasRoleMetric" class="card-metric" :style="columnStyle(metricColumn, row)">{{ formatValue(row, metricColumn) }}</div>
+        <div v-if="hasRoleMetric" class="card-metric" :class="columnClass(metricColumn, row)" :style="columnStyle(metricColumn, row)">{{ formatValue(row, metricColumn) }}</div>
         </div>
         <div v-if="actions.length > 0" class="card-actions" :style="actionsPlacement === 'right' ? 'flex-direction: column' : undefined">
           <template v-for="action in actions" :key="action.key">
@@ -136,7 +136,7 @@ import {
 import type { CardColumn, ListQueryParams, ListPageResult, SearchField } from './types'
 import type { CardTheme, CardStyle } from './ListCards.types'
 import { renderCellContent } from '@/utils/tableColumnRenderer'
-import { resolveFieldStyle, normalizeColumnStyle, parseCssString } from '@/utils/fieldStyle'
+import { resolveFieldStyle, resolveStyleRules, normalizeColumnStyle, parseCssString } from '@/utils/fieldStyle'
 import { CARD_THEMES } from './ListCards.themes'
 import { mergeCardStyle, buildCardCssVars, buildFieldsCssVars } from './ListCards.styles'
 
@@ -212,8 +212,18 @@ const actions = computed(() => props.actions)
 // ===== 卡片样式 =====
 /** 合并主题与用户样式 */
 const resolvedCardStyle = computed(() => {
-  const themeStyle = props.theme ? CARD_THEMES[props.theme] : undefined
-  return mergeCardStyle(themeStyle, props.style)
+  // 配置面板选中的预制主题作为主题源并展开具体值；否则回退组件 theme
+  const baseKey = props.style?.theme && CARD_THEMES[props.style.theme]
+    ? props.style.theme
+    : props.style?.baseTheme && CARD_THEMES[props.style.baseTheme]
+      ? props.style.baseTheme
+    : props.theme
+  const themeStyle = baseKey ? CARD_THEMES[baseKey] : undefined
+  const style = mergeCardStyle(themeStyle, props.style)
+  if (props.style?.base?.css) {
+    style.css = [props.style.base.css, style.css].filter(Boolean).join('\n')
+  }
+  return style
 })
 
 /** CSS 变量注入 */
@@ -230,10 +240,20 @@ const fieldsCssVars = computed(() => buildFieldsCssVars(resolvedCardStyle.value.
 
 /** 卡片级条件样式（根据行数据切换整卡外观） */
 function resolveCardDynamicStyle(row: Record<string, any>): Record<string, string> {
-  const dynamic = resolvedCardStyle.value.dynamic
-  if (!dynamic || dynamic.length === 0) return {}
-  const result = resolveFieldStyle(undefined, { dynamic }, row)
-  return result.style
+  const resolved = resolvedCardStyle.value.base || resolvedCardStyle.value.rules
+    ? resolveStyleRules(resolvedCardStyle.value.base, resolvedCardStyle.value.rules, row)
+    : resolveFieldStyle(undefined, { dynamic: resolvedCardStyle.value.dynamic }, row)
+  return resolved.style
+}
+
+function resolveCardClass(row: Record<string, any>): string | undefined {
+  if (resolvedCardStyle.value.base || resolvedCardStyle.value.rules) {
+    return resolveStyleRules(resolvedCardStyle.value.base, resolvedCardStyle.value.rules, row).className
+  }
+  return undefined
+}
+function cardClasses(row: Record<string, any>): string[] {
+  return [`actions-placement-${props.actionsPlacement}`, resolveCardClass(row)].filter((value): value is string => Boolean(value))
 }
 
 // ===== 操作按钮图标 =====
@@ -351,11 +371,14 @@ function columnStyle(column: CardColumn | undefined, row?: Record<string, any>):
   const normalized = normalizeColumnStyle(column as any)
   const fieldStyle = normalized.style
   if (fieldStyle) {
-    const result = resolveFieldStyle(
-      resolvedCardStyle.value.fields?.fieldStyle,
-      fieldStyle,
-      row || {},
-    )
+    const result = fieldStyle.base || fieldStyle.rules
+      ? resolveStyleRules(
+        fieldStyle.base,
+        fieldStyle.rules,
+        row || {},
+        row?.[column.prop || ''],
+      )
+      : resolveFieldStyle(resolvedCardStyle.value.fields?.fieldStyle, fieldStyle, row || {})
     return result.style
   }
   // 兼容旧字段（无 FieldStyle 时回退到旧逻辑）
@@ -365,6 +388,16 @@ function columnStyle(column: CardColumn | undefined, row?: Record<string, any>):
     ...(column.fontWeight ? { fontWeight: String(column.fontWeight) } : {}),
     ...(column.fontColor ? { color: column.fontColor } : {}),
   }
+}
+function columnClass(column: CardColumn | undefined, row?: Record<string, any>): string | undefined {
+  if (!column) return undefined
+  const normalized = normalizeColumnStyle(column as any)
+  const fieldStyle = normalized.style
+  if (!fieldStyle) return undefined
+  const result = fieldStyle.base || fieldStyle.rules
+    ? resolveStyleRules(fieldStyle.base, fieldStyle.rules, row || {}, row?.[column.prop || ''])
+    : resolveFieldStyle(resolvedCardStyle.value.fields?.fieldStyle, fieldStyle, row || {})
+  return result.className
 }
 function fieldStyle(column: CardColumn): Record<string, string> {
   const styles: Record<string, string> = {}

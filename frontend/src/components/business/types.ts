@@ -1,5 +1,7 @@
 import type { Component, VNode } from 'vue'
 import type { Rule } from '@form-create/element-ui'
+import type { FieldStyle } from '@/utils/fieldStyle'
+import type { CardStyle } from './ListCards.types'
 
 // ============================================================
 // 公共业务组件类型定义
@@ -71,6 +73,7 @@ export interface TableColumn {
   showOverflowTooltip?: boolean
   /** 单元格 class（透传 el-table-column class-name 注入 <td>），静态样式预留 */
   cellClassName?: string
+  style?: FieldStyle
 }
 
 // --- 操作按钮 ---
@@ -192,6 +195,10 @@ export interface SearchTableProps<T = any> {
   deleteConfirm?: (row: T) => string
   /** 操作列宽度（px），覆盖自动计算（icon 按钮 32px/个 + 24px padding） */
   actionColumnWidth?: number
+  /** 表格整体样式规则；条件规则按当前表格行求值并绑定到行 */
+  styleRule?: CardStyle
+  /** 表格整体静态样式对象 */
+  style?: Record<string, string>
 }
 
 // --- ReferencePicker props ---
@@ -377,8 +384,8 @@ export interface CardColumn {
   showLabel?: boolean
   /** 字段标题布局位置 */
   labelPosition?: 'left' | 'right' | 'top'
-  /** 字段声明式 CSS 样式 */
-  style?: string
+  /** 字段统一样式规则 */
+  style?: FieldStyle
 }
 
 /**

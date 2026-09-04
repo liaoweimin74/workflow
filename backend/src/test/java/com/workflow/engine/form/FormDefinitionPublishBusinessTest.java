@@ -90,6 +90,23 @@ class FormDefinitionPublishBusinessTest {
     }
 
     @Test
+    void publishBusinessForm_withCardList_doesNotCreateCardColumnOrRejectPublish() {
+        String columnConfig = "[{\"key\":\"title\",\"columnType\":\"VARCHAR\",\"length\":255},"
+                + "{\"key\":\"cards\",\"columnType\":\"VARCHAR\",\"length\":255,"
+                + "\"componentType\":\"page-list-cards\"}]";
+        FormDefinition d = draft("f1", "biz_with_cards", "BUSINESS",
+                "{\"rule\":[{\"type\":\"input\",\"field\":\"title\"},"
+                        + "{\"type\":\"page-list-cards\",\"field\":\"cards\"}]}", columnConfig);
+        stubDraft(d);
+
+        FormDefinition result = formDefService.publish("f1");
+
+        assertEquals("PUBLISHED", result.getStatus());
+        verify(tableManager).ensureTable(eq("biz_with_cards"), argThat(columns ->
+                columns.stream().noneMatch(column -> "cards".equals(column.getKey()))));
+    }
+
+    @Test
     void publishWorkflowForm_doesNotCreateTable() {
         FormDefinition d = draft("f1", "wf_leave", "WORKFLOW",
                 "{\"rule\":[{\"type\":\"input\",\"field\":\"reason\"}]}", null);

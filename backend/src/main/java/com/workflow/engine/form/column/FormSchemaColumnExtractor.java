@@ -85,7 +85,7 @@ public class FormSchemaColumnExtractor {
 
             // formContainer 绑定外部数据源，其子字段不生成 DDL，整体跳过（不提取列、不递归子节点）
             // page-table 为数据表格展示组件，数据来自外部数据源，同样不生成 DDL
-            if ("formContainer".equals(type) || "page-table".equals(type)) {
+            if ("formContainer".equals(type) || "page-table".equals(type) || "page-list-cards".equals(type)) {
                 continue;
             }
 

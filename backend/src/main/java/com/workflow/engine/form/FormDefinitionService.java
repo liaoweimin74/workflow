@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.Set;
 import java.util.UUID;
 
@@ -283,8 +284,15 @@ public class FormDefinitionService {
         if ("BUSINESS".equals(draft.getType())) {
             validateBusinessSchema(draft.getSchema());
             validatePickerReferences(draft.getSchema());
-            List<ColumnConfig> columns = parseColumnConfig(draft.getColumnConfig());
-            tableManager.ensureTable(draft.getKey(), columns);
+            Set<String> externalDisplayFields = collectExternalDisplayFields(draft.getSchema());
+            List<ColumnConfig> columns = parseColumnConfig(draft.getColumnConfig()).stream()
+                    .filter(column -> !"page-list-cards".equals(column.getComponentType()))
+                    .filter(column -> !externalDisplayFields.contains(column.getKey()))
+                    .collect(Collectors.toList());
+            // 仅包含外部数据展示组件时无需创建业务底表；混合真实字段时只为真实字段建表。
+            if (!columns.isEmpty()) {
+                tableManager.ensureTable(draft.getKey(), columns);
+            }
             // 子表字段：创建/变更独立子表物理表 wf_biz_<formKey>_<field>
             for (ColumnConfig c : columns) {
                 if (c.getSubColumns() != null && !c.getSubColumns().isEmpty()) {
@@ -331,6 +339,44 @@ public class FormDefinitionService {
             }
         } catch (JsonProcessingException e) {
             throw new BusinessException(400, "表单 schema 解析失败");
+        }
+    }
+
+    /**
+     * 收集仅展示外部数据的组件字段，防止旧版 column_config 残留时误生成业务表列。
+     */
+    private Set<String> collectExternalDisplayFields(String schema) throws BusinessException {
+        Set<String> fields = new java.util.HashSet<>();
+        try {
+            JsonNode root = objectMapper.readTree(schema == null ? "[]" : schema);
+            JsonNode rule = root.isArray() ? root : root.path("rule");
+            collectExternalDisplayFields(rule, fields);
+            return fields;
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(400, "表单 schema 解析失败");
+        }
+    }
+
+    private void collectExternalDisplayFields(JsonNode rules, Set<String> fields) {
+        if (!rules.isArray()) {
+            return;
+        }
+        for (JsonNode field : rules) {
+            if ("page-list-cards".equals(field.path("type").asText())) {
+                String key = field.path("field").asText();
+                if (!key.isBlank()) {
+                    fields.add(key);
+                }
+                continue;
+            }
+            collectExternalDisplayFields(field.path("children"), fields);
+            collectExternalDisplayFields(field.path("props").path("rule"), fields);
+            JsonNode columns = field.path("props").path("columns");
+            if (columns.isArray()) {
+                for (JsonNode column : columns) {
+                    collectExternalDisplayFields(column.path("rule"), fields);
+                }
+            }
         }
     }
 

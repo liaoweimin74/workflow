@@ -16,6 +16,12 @@ describe('StyleScriptInput', () => {
     expect(wrapper.find('input').element.value).toBe('color: red;')
   })
 
+  it('编辑图标位于输入框外侧', () => {
+    const wrapper = mount(StyleScriptInput, { props: { modelValue: 'color: red;', title: '编辑样式脚本', scope: '整张卡片', multiline: false }, global: { plugins: [ElementPlus] } })
+    expect(wrapper.find('.script-editor-shell > .script-edit-button').exists()).toBe(true)
+    expect(wrapper.find('.script-editor-shell > .el-input').exists()).toBe(true)
+  })
+
   it('直接输入和弹窗确认都更新脚本值', async () => {
     const wrapper = mount(StyleScriptInput, { props: { modelValue: '', title: '编辑样式脚本', scope: '整张卡片' }, global: { plugins: [ElementPlus] } })
     await wrapper.find('textarea').setValue('padding: 16px;')

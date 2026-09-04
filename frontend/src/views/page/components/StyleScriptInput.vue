@@ -1,6 +1,6 @@
 <template>
   <div class="style-script-input">
-    <div class="script-editor-shell">
+    <div class="script-editor-shell" :class="{ 'is-multiline': multiline }">
       <el-input v-model="value" :type="multiline ? 'textarea' : 'text'" :rows="multiline ? rows : undefined" :placeholder="placeholder" />
       <el-button class="script-edit-button" :icon="Edit" aria-label="打开样式脚本编辑器" @click="dialogVisible = true" />
     </div>
@@ -27,8 +27,9 @@ const dialogVisible = ref(false)
 </script>
 
 <style scoped>
-.style-script-input :deep(.el-textarea) { width: 100%; }
-.script-editor-shell { position: relative; }
-.script-editor-shell :deep(.el-textarea__inner) { padding-right: 52px; }
-.script-edit-button { position: absolute; right: 4px; bottom: 4px; z-index: 1; border: 0; background: transparent; }
+.style-script-input { width: 100%; min-width: 0; }
+.script-editor-shell { display: flex; align-items: flex-start; width: 100%; gap: 4px; }
+.script-editor-shell :deep(.el-input) { flex: 1 1 auto; width: 100%; min-width: 0; }
+.script-edit-button { flex: 0 0 32px; width: 32px; height: 32px; margin-top: 1px; }
+.script-editor-shell.is-multiline .script-edit-button { margin-top: 1px; }
 </style>

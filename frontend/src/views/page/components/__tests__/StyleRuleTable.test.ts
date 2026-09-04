@@ -30,4 +30,10 @@ describe('StyleRuleTable', () => {
     expect(columns[2].props('width')).toBe('calc((100% - 56px) / 3)')
     expect(columns[3].props('width')).toBe('56')
   })
+
+  it('规则表格作为普通文档流内容嵌入，不使用浮动定位', () => {
+    const wrapper = mount(StyleRuleTable, { props: { modelValue: [{ enabled: true, when: 'true', css: 'color:red;', className: '' }], scope: 'card' }, global: { plugins: [ElementPlus] } })
+    expect(wrapper.find('.style-rule-table').classes()).not.toContain('is-floating')
+    expect(wrapper.find('.style-rule-table').element.style.position).toBe('')
+  })
 })

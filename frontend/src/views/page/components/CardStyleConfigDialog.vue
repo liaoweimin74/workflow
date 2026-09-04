@@ -76,6 +76,7 @@ function handleConfirm() {
 .card-style-form > :deep(.el-form-item) { grid-column: span 24; margin-bottom: 0; }
 .card-style-form :deep(.el-form-item__content) { width: 100%; min-width: 0; }
 .card-style-form :deep(.el-form-item__label) { line-height: 1.4; margin-bottom: 6px; }
+.card-style-form :deep(.el-form-item__content) { display: block; }
 .card-style-form :deep(.el-select), .card-style-form :deep(.el-input) { width: 100%; }
 .script-summary { width: 100%; min-height: 44px; padding: 8px 10px; overflow: hidden; border: 1px dashed var(--el-border-color); border-radius: 4px; background: var(--el-fill-color-blank); color: var(--el-text-color-secondary); text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 </style>

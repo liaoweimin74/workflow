@@ -344,6 +344,7 @@ function handleClosed() {
 .advanced-column-form :deep(.style-rule-table), .advanced-column-form :deep(.cellclick-editor) { width: 100%; }
 .advanced-column-form > :deep(.style-rule-table) { grid-column: span 24; min-width: 0; }
 .advanced-column-form :deep(.el-form-item__label) { line-height: 1.4; margin-bottom: 6px; }
+.advanced-column-form :deep(.el-form-item__content) { display: block; }
 .alignment-class-row { display: grid; grid-column: span 24; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; }
 .alignment-class-row :deep(.el-form-item) { margin-bottom: 0; min-width: 0; }
 .event-action-row {

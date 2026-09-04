@@ -42,7 +42,7 @@ function patch(index: number, value: Partial<StyleRule>) {
 .help-icon { margin-left: 4px; color: var(--el-color-info); cursor: help; vertical-align: middle; }
 .empty-rule { margin-bottom: 10px; color: #909399; font-size: 13px; }
 .style-rule-table :deep(.el-table__cell) { vertical-align: top; }
-.style-rule-table { width: 100%; min-width: 0; }
-.style-rule-table :deep(.el-table) { width: 100%; }
+.style-rule-table { position: static !important; display: block; width: 100%; min-width: 0; flex: 0 0 auto; align-self: stretch; transform: none; }
+.style-rule-table :deep(.el-table) { position: static !important; display: block; width: 100%; max-width: 100%; flex: none; transform: none; }
 .style-rule-table :deep(.el-table .cell) { overflow: visible; }
 </style>

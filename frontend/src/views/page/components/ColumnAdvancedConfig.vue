@@ -30,18 +30,19 @@
             />
           </el-form-item>
 
-          <el-form-item label="对齐">
-            <el-select :model-value="col?.align" @change="(v: string) => patch({ align: v })">
-              <el-option label="左对齐" value="left" /><el-option label="居中" value="center" /><el-option label="右对齐" value="right" />
-            </el-select>
-          </el-form-item>
-
           <el-form-item label="样式脚本">
             <StyleScriptInput v-model="fieldBase.css" title="编辑样式脚本" scope="当前字段" @update:model-value="syncFieldStyle" />
           </el-form-item>
-          <el-form-item label="基础 class">
-            <el-input :model-value="fieldBase.className" placeholder="基础 class，可填写多个并以空格分隔" @input="(v: string) => { fieldBase.className = v; syncFieldStyle() }" />
-          </el-form-item>
+          <div class="alignment-class-row">
+            <el-form-item label="对齐">
+              <el-select :model-value="col?.align" @change="(v: string) => patch({ align: v })">
+                <el-option label="左对齐" value="left" /><el-option label="居中" value="center" /><el-option label="右对齐" value="right" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="基础 class">
+              <el-input :model-value="fieldBase.className" placeholder="可填写多个 class，以空格分隔" @input="(v: string) => { fieldBase.className = v; syncFieldStyle() }" />
+            </el-form-item>
+          </div>
           <StyleRuleEditor v-model="fieldRules" scope="field" @update:model-value="syncFieldStyle" />
 
           <el-form-item>
@@ -341,7 +342,10 @@ function handleClosed() {
 .advanced-column-form > :deep(.el-form-item:nth-of-type(5)) { grid-column: span 12; }
 .advanced-column-form :deep(.el-input), .advanced-column-form :deep(.el-select), .advanced-column-form :deep(.el-input-number) { width: 100%; }
 .advanced-column-form :deep(.style-rule-table), .advanced-column-form :deep(.cellclick-editor) { width: 100%; }
+.advanced-column-form > :deep(.style-rule-table) { grid-column: span 24; min-width: 0; }
 .advanced-column-form :deep(.el-form-item__label) { line-height: 1.4; margin-bottom: 6px; }
+.alignment-class-row { display: grid; grid-column: span 24; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; }
+.alignment-class-row :deep(.el-form-item) { margin-bottom: 0; min-width: 0; }
 .event-action-row {
   display: flex;
   align-items: center;

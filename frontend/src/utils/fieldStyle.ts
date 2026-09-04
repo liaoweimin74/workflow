@@ -5,6 +5,8 @@
  * 消除两套样式体系（className/styleExpr vs fontFamily/fontColor）的矛盾。
  */
 
+import { evalCellExpression } from './scriptSandbox'
+
 /** 条件样式规则 */
 export interface ConditionalStyle {
   /** 条件表达式（沙箱求值，上下文 $row/value） */
@@ -15,8 +17,21 @@ export interface ConditionalStyle {
   className?: string
 }
 
+/** 统一样式规则；when 为空表示始终生效。 */
+export interface StyleRule {
+  enabled: boolean
+  when?: string
+  css: string
+  className?: string
+}
+
 /** 字段渲染样式（卡片 + 表格统一） */
 export interface FieldStyle {
+  /** 始终生效的字段样式规则 */
+  base?: StyleRule
+  /** 按当前字段值或数据行命中的字段样式规则 */
+  rules?: StyleRule[]
+
   // 结构化视觉（静态）
   color?: string
   backgroundColor?: string
@@ -39,6 +54,37 @@ export interface ResolvedStyle {
   style: Record<string, string>
   /** 最终类名（空格分隔） */
   className?: string
+}
+
+/**
+ * 解析统一样式规则。
+ * 基础规则先应用，随后按顺序合并所有命中的启用规则。
+ */
+export function resolveStyleRules(
+  base: StyleRule | undefined,
+  rules: StyleRule[] | undefined,
+  row: Record<string, any>,
+  value?: unknown,
+): ResolvedStyle {
+  const result: Record<string, string> = {}
+  const classNames: string[] = []
+  const apply = (rule: StyleRule) => {
+    if (!rule.enabled) return
+    Object.assign(result, parseCssString(rule.css))
+    if (rule.className?.trim()) classNames.push(rule.className.trim())
+  }
+
+  if (base) apply(base)
+  for (const rule of rules || []) {
+    if (!rule.enabled || !rule.when?.trim()) continue
+    const matched = evalCellExpression(rule.when, { $row: row, row, $value: value, value })
+    if (matched) apply(rule)
+  }
+
+  return {
+    style: result,
+    className: classNames.length > 0 ? classNames.join(' ') : undefined,
+  }
 }
 
 /**

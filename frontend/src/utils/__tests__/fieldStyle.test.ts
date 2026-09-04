@@ -1,5 +1,33 @@
 import { describe, it, expect } from 'vitest'
-import { resolveFieldStyle, normalizeColumnStyle } from '../fieldStyle'
+import { resolveFieldStyle, normalizeColumnStyle, resolveStyleRules } from '../fieldStyle'
+
+describe('resolveStyleRules — 统一样式规则解析', () => {
+  it('合并无条件规则和所有命中的条件规则，并合并 class', () => {
+    const result = resolveStyleRules(
+      { enabled: true, css: 'color: #333; padding: 8px;', className: 'base' },
+      [
+        { enabled: true, when: "$row.status === '异常'", css: 'color: red;', className: 'error' },
+        { enabled: true, when: "$row.priority === '高'", css: 'color: orange; font-weight: 700;', className: 'urgent' },
+      ],
+      { status: '异常', priority: '高' },
+    )
+    expect(result.style).toMatchObject({ color: 'orange', padding: '8px', fontWeight: '700' })
+    expect(result.className).toBe('base error urgent')
+  })
+
+  it('跳过禁用规则和未命中的规则，并支持 $value', () => {
+    const result = resolveStyleRules(
+      undefined,
+      [
+        { enabled: false, when: 'true', css: 'color: red;' },
+        { enabled: true, when: "$value === '异常'", css: 'color: #f56c6c;' },
+      ],
+      { status: '异常' },
+      '异常',
+    )
+    expect(result.style.color).toBe('#f56c6c')
+  })
+})
 
 describe('resolveFieldStyle — 统一字段样式解析', () => {
   // 合并优先级：字段级 > 基础级

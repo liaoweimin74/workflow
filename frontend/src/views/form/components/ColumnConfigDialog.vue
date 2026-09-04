@@ -442,7 +442,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
     }
     // formContainer：数据源容器，子字段数据来自外部数据源，不参与当前表单列映射
     // page-table：数据表格展示外部数据源，不生成数据列，整体忽略（不阻止发布）
-    if (type === 'formContainer' || type === 'page-table') {
+    if (type === 'formContainer' || type === 'page-table' || type === 'page-list-cards') {
       continue
     }
     // 子表组件：提取子列映射到独立物理表 wf_biz_<formKey>_<field>

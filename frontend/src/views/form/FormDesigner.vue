@@ -421,6 +421,8 @@ onMounted(async () => {
     registerFormContainerProps()
     // 注册数据表格数据源属性面板
     registerDataTableProps()
+    // 注册卡片列表数据源属性面板（与页面设计器、数据表格共用表单级绑定）
+    registerCardListProps()
   }
 })
 
@@ -466,6 +468,27 @@ function registerDataTableProps() {
   if (!designerRef.value) return
   designerRef.value.setComponentRuleConfig(
     'page-table',
+    () => [
+      {
+        type: 'button',
+        field: 'dsConfigTrigger',
+        title: '数据源',
+        children: ['配置数据源'],
+        native: true,
+        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        props: { size: 'small' },
+        on: { click: () => openTableDsConfig() },
+      },
+    ],
+    false,
+  )
+}
+
+/** 注册卡片列表数据源属性面板（按钮 → 复用数据源配置弹窗） */
+function registerCardListProps() {
+  if (!designerRef.value) return
+  designerRef.value.setComponentRuleConfig(
+    'page-list-cards',
     () => [
       {
         type: 'button',

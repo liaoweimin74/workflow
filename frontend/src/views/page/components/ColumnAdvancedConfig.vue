@@ -1,10 +1,9 @@
 <template>
   <el-dialog :model-value="visible" :title="mode === 'card' ? '字段高级配置' : '高级配置'" width="620px" :close-on-click-modal="false" @update:model-value="$emit('update:visible', $event)" @closed="handleClosed">
     <el-tabs v-if="column" :model-value="activeTab">
-      <!-- 基础设置：原表格高级配置（动态内容/列样式/单元格点击事件） -->
+      <!-- 基础设置：内容、显示、样式与点击动作 -->
       <el-tab-pane label="基础设置" name="base">
-        <el-form label-width="110px">
-          <el-divider content-position="left">动态内容</el-divider>
+        <el-form label-position="top" class="advanced-column-form">
           <el-form-item label="内容模式">
             <el-radio-group :model-value="contentMode" @update:model-value="handleModeChange">
               <el-radio value="expression">表达式</el-radio>
@@ -37,15 +36,14 @@
             </el-select>
           </el-form-item>
 
-          <el-divider content-position="left">字段样式</el-divider>
-          <el-form-item label="始终生效样式">
-            <button type="button" class="script-summary" @click="fieldScriptVisible = true">{{ summarize(fieldBase.css) }}</button>
+          <el-form-item label="样式脚本">
+            <StyleScriptInput v-model="fieldBase.css" title="编辑样式脚本" scope="当前字段" @update:model-value="syncFieldStyle" />
+          </el-form-item>
+          <el-form-item label="基础 class">
             <el-input :model-value="fieldBase.className" placeholder="基础 class，可填写多个并以空格分隔" @input="(v: string) => { fieldBase.className = v; syncFieldStyle() }" />
           </el-form-item>
           <StyleRuleEditor v-model="fieldRules" scope="field" @update:model-value="syncFieldStyle" />
-          <StyleScriptDialog v-model="fieldScriptVisible" title="编辑字段样式脚本" scope="当前字段" :script="fieldBase.css" @confirm="(v: string) => { fieldBase.css = v; syncFieldStyle() }" />
 
-          <el-divider content-position="left">单元格点击事件（配置后优先于整表级点击）</el-divider>
           <el-form-item>
             <template #label>
               <span class="label-with-tip">
@@ -168,7 +166,7 @@ import type { ColumnViewConfig } from '../ViewDesigner.vue'
 import type { FieldStyle, StyleRule } from '@/utils/fieldStyle'
 import { normalizeColumnStyle } from '@/utils/fieldStyle'
 import StyleRuleEditor from './StyleRuleEditor.vue'
-import StyleScriptDialog from './StyleScriptDialog.vue'
+import StyleScriptInput from './StyleScriptInput.vue'
 
 /** 合并后的列高级配置：基础设置（原表格配置）+ 卡片配置（仅卡片模式） */
 export type MergedColumnConfig = ColumnViewConfig & {
@@ -203,7 +201,6 @@ const activeTab = computed(() => (props.mode === 'card' ? 'card' : 'base'))
 const col = ref<MergedColumnConfig | null>(null)
 const fieldBase = ref<StyleRule>({ enabled: true, css: '', className: '' })
 const fieldRules = ref<StyleRule[]>([])
-const fieldScriptVisible = ref(false)
 
 /**
  * 将旧格式字段（expression/template/formatter）迁移为 contentType/contentValue。
@@ -270,11 +267,6 @@ function syncFieldStyle() {
   patch({ style: { base: { ...fieldBase.value }, rules: fieldRules.value.map(rule => ({ ...rule })) } })
 }
 
-function summarize(css: string) {
-  if (!css?.trim()) return '未设置样式脚本（点击编辑）'
-  const lines = css.trim().split('\n')
-  return `${lines.slice(0, 3).join(' ')}${lines.length > 3 ? ' …' : ''}`
-}
 
 /** 当前动作列表 */
 function actions(): any[] {
@@ -343,6 +335,13 @@ function handleClosed() {
 </script>
 
 <style scoped>
+.advanced-column-form { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 16px; }
+.advanced-column-form > :deep(.el-form-item) { grid-column: span 24; margin-bottom: 0; }
+.advanced-column-form > :deep(.el-form-item:nth-of-type(4)),
+.advanced-column-form > :deep(.el-form-item:nth-of-type(5)) { grid-column: span 12; }
+.advanced-column-form :deep(.el-input), .advanced-column-form :deep(.el-select), .advanced-column-form :deep(.el-input-number) { width: 100%; }
+.advanced-column-form :deep(.style-rule-table), .advanced-column-form :deep(.cellclick-editor) { width: 100%; }
+.advanced-column-form :deep(.el-form-item__label) { line-height: 1.4; margin-bottom: 6px; }
 .event-action-row {
   display: flex;
   align-items: center;

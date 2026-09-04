@@ -575,7 +575,7 @@ describe('ColumnAdvancedConfig — 合并基础设置 + 卡片配置', () => {
     expect(wrapper.text()).toContain('角色')
     expect(wrapper.text()).toContain('显示标签')
     expect(wrapper.text()).toContain('标签位置')
-    expect(wrapper.text()).toContain('始终生效样式')
+    expect(wrapper.text()).toContain('样式脚本')
     expect(wrapper.text()).toContain('添加条件样式')
     wrapper.unmount()
   })

@@ -19,7 +19,17 @@ describe('CardStyleConfigDialog', () => {
     expect(vm.theme).toBe('techBlue')
     expect(vm.base.css).toBe(themeToCssScript(CARD_THEMES.techBlue))
     expect(wrapper.text()).toContain('蓝色科技 · 霓虹科技风格')
+    expect(wrapper.findAll('.el-select-dropdown__item').filter(item => item.text().includes('蓝色科技'))).toHaveLength(0)
+    expect((vm.themeOptions as Array<{ value: string }>).filter(option => option.value === 'techBlue')).toHaveLength(1)
     expect(wrapper.findAll('.el-select-dropdown__item')).toHaveLength(0)
+  })
+
+  it('基础区域使用样式脚本和基础 class 独立标签', async () => {
+    const wrapper = createWrapper()
+    await nextTick()
+    expect(wrapper.text()).toContain('样式脚本')
+    expect(wrapper.text()).toContain('基础 class')
+    expect(wrapper.findComponent({ name: 'StyleRuleEditor' }).exists()).toBe(true)
   })
 
   it('保存基础样式、条件规则和 className', async () => {

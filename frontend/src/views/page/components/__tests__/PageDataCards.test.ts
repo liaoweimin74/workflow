@@ -4,9 +4,15 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 const { queryData } = vi.hoisted(() => ({ queryData: vi.fn() }))
 const { getMetadata, getData } = vi.hoisted(() => ({ getMetadata: vi.fn(), getData: vi.fn() }))
+const { elMessage, elMessageBox } = vi.hoisted(() => ({ elMessage: vi.fn(), elMessageBox: { confirm: vi.fn() } }))
 
 vi.mock('@/api/data-source', () => ({
   dataSourceApi: { queryData, getMetadata, getData },
+}))
+
+vi.mock('element-plus', () => ({
+  ElMessage: elMessage,
+  ElMessageBox: elMessageBox,
 }))
 
 vi.mock('@/views/form/components/FormRenderer.vue', () => ({
@@ -41,6 +47,8 @@ describe('PageDataCards', () => {
     queryData.mockReset()
     getMetadata.mockReset()
     getData.mockReset()
+    elMessage.mockReset()
+    elMessageBox.confirm.mockReset()
     queryData.mockResolvedValue({ data: { records: [{ id: 7, data: { name: '订单' }, version: 3 }], total: 21 } })
     getMetadata.mockResolvedValue({ data: { writable: true, columns: [{ key: 'name', label: '名称', columnType: 'VARCHAR' }] } })
     getData.mockResolvedValue({ data: { data: { name: '订单详情' } } })
@@ -149,6 +157,124 @@ describe('PageDataCards', () => {
     expect(wrapper.find('.default-form-dialog').exists()).toBe(true)
     expect(wrapper.find('.default-form-stub').exists()).toBe(true)
     expect(getData).toHaveBeenCalledWith('global-orders', 7)
+    wrapper.unmount()
+  })
+
+  it('带事件链的按钮优先执行事件链，不落回默认编辑行为', async () => {
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [
+          { key: 'edit', label: '编辑', events: [{ actions: [{ type: 'message', params: [{ key: 'text', value: '自定义提示' }] }] }] },
+        ] },
+      },
+      global: {
+        provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => false } },
+        stubs: {
+          'el-dialog': { props: ['modelValue', 'title'], template: '<div v-if="modelValue" class="default-form-dialog"><slot /></div>' },
+        },
+      },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    // 通过 resolvedActions 透传了 events 的按钮对象触发
+    await cardsStub.vm.$emit('action-click', {
+      key: 'edit', label: '编辑',
+      events: [{ actions: [{ type: 'message', params: [{ key: 'text', value: '自定义提示' }] }] }],
+    }, { id: 7, name: '订单' })
+    await flushPromises()
+
+    // 事件链 message 动作被执行，而非默认编辑表单（getData 不被调用）
+    expect(elMessage).toHaveBeenCalledWith(expect.objectContaining({ message: '自定义提示' }))
+    expect(getData).not.toHaveBeenCalled()
+    expect(wrapper.find('.default-form-dialog').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('view 按钮在 popup 模式打开独立详情弹窗（宽度取 viewDetail.width），不打开本地编辑表单', async () => {
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'view', label: '查看' }] },
+        viewDetail: { width: '700px', formMode: 'popup' },
+      },
+      global: {
+        provide: { pageActionBus: { dispatch: vi.fn(), hasLinkedContainer: () => false } },
+        stubs: {
+          'el-dialog': {
+            props: ['modelValue', 'title'],
+            template: '<div v-if="modelValue" class="dialog" :data-title="title"><slot /></div>',
+          },
+        },
+      },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', { key: 'view', label: '查看' }, { id: 7, name: '订单' })
+    await flushPromises()
+
+    // 独立详情弹窗打开（标题"详情"），且宽度传递为 viewDetail.width
+    const detailDialog = wrapper.find('.dialog[data-title="详情"]')
+    expect(detailDialog.exists()).toBe(true)
+    // 本地编辑表单弹窗未打开
+    expect(wrapper.find('.dialog[data-title="编辑数据"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('自定义按钮（非内置 key）携带事件链时执行其事件链动作', async () => {
+    const dispatch = vi.fn()
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [
+          { key: 'custom-action', label: '自定义', placement: 'card', events: [{ actions: [{ type: 'message', params: [{ key: 'text', value: '自定义动作已触发' }] }] }] },
+        ] },
+      },
+      global: {
+        provide: { pageActionBus: { dispatch, hasLinkedContainer: () => false } },
+        stubs: {
+          'el-dialog': { props: ['modelValue', 'title'], template: '<div v-if="modelValue" class="dialog"><slot /></div>' },
+        },
+      },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', {
+      key: 'custom-action', label: '自定义',
+      events: [{ actions: [{ type: 'message', params: [{ key: 'text', value: '自定义动作已触发' }] }] }],
+    }, { id: 7, name: '订单' })
+    await flushPromises()
+
+    // 事件链执行而非落入 action-click 兜底
+    expect(elMessage).toHaveBeenCalledWith(expect.objectContaining({ message: '自定义动作已触发' }))
+    expect(dispatch).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('无事件链的自定义按钮兜底触发 action-click 分发', async () => {
+    const dispatch = vi.fn()
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [{ key: 'custom-action', label: '自定义', placement: 'card' }] },
+      },
+      global: {
+        provide: { pageActionBus: { dispatch, hasLinkedContainer: () => false } },
+        stubs: {
+          'el-dialog': { props: ['modelValue', 'title'], template: '<div v-if="modelValue" class="dialog"><slot /></div>' },
+        },
+      },
+    })
+    await flushPromises()
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    await cardsStub.vm.$emit('action-click', { key: 'custom-action', label: '自定义' }, { id: 7, name: '订单' })
+    await flushPromises()
+
+    expect(dispatch).toHaveBeenCalledWith('action-click', expect.objectContaining({ action: expect.objectContaining({ key: 'custom-action' }) }))
     wrapper.unmount()
   })
 

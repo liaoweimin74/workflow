@@ -46,7 +46,7 @@ C:\Users\foxwe\.cache\opencode\packages\superpowers@git+https_\github.com\obra\s
 - 按 Read 到的内容执行
 
 ### 子 Agent 调度
-
+所有任务都由主代理自己完成，不要委派给子代理
 | 任务类型    | 调用方式                                                                                                                                |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | 实现任务    | `task(load_skills=[], ...)` — prompt 中嵌入 TDD 指令（Read C:\Users\foxwe\.cache\opencode\packages\superpowers@git+https_\github.com\obra\superpowers.git\node_modules\superpowers\skills\test-driven-development/SKILL.md） |
@@ -102,6 +102,9 @@ Superpowers 技能（TDD、brainstorming 等）是文件系统上的 `.md` 文�
 - `docs/local/` — 个人本地工作区（`.gitignore` 排除，不纳入版本控制）
   - `inbox/` — 待分析的原始材料、未分类草稿
   - `notes/` — 个人笔记、非正式记录
+
+### 测试账号
+- 登录用户名admin 密码admin123
 
 <!-- openspec-superpowers-opencode_instructions -->
 <!-- ⛔ 上方 openspec-superpowers-opencode_instructions 区块为自动生成，禁止修改 ⛔ -->

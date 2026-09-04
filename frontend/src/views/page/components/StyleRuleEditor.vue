@@ -44,5 +44,6 @@ function patch(index: number, value: Partial<StyleRule>) {
 .style-rule-table :deep(.el-table__cell) { vertical-align: top; }
 .style-rule-table { position: static !important; display: block; width: 100%; min-width: 0; flex: 0 0 auto; align-self: stretch; transform: none; }
 .style-rule-table :deep(.el-table) { position: static !important; display: block; width: 100%; max-width: 100%; flex: none; transform: none; }
+.style-rule-table :deep(.el-table--border::before) { display: none !important; }
 .style-rule-table :deep(.el-table .cell) { overflow: visible; }
 </style>

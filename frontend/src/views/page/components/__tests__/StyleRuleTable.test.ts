@@ -36,4 +36,9 @@ describe('StyleRuleTable', () => {
     expect(wrapper.find('.style-rule-table').classes()).not.toContain('is-floating')
     expect(wrapper.find('.style-rule-table').element.style.position).toBe('')
   })
+
+  it('覆盖 Element Plus 表格底部伪元素，避免嵌套弹窗关闭后残留竖线', () => {
+    const wrapper = mount(StyleRuleTable, { props: { modelValue: [{ enabled: true, when: 'true', css: 'color:red;', className: '' }], scope: 'field' }, global: { plugins: [ElementPlus] } })
+    expect(wrapper.html()).toContain('el-table--border')
+  })
 })

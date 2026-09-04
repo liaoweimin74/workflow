@@ -5,14 +5,24 @@
  * 以及扩展的卡片列配置（ListCardsColumn）。
  */
 
-import type { FieldStyle, ConditionalStyle } from '@/utils/fieldStyle'
+import type { FieldStyle, StyleRule, ConditionalStyle } from '@/utils/fieldStyle'
 import type { VNode } from 'vue'
 
 /** 内置主题名称 */
-export type CardTheme = 'default' | 'compact' | 'loose' | 'dark' | 'borderless'
+export type CardTheme = 'default' | 'compact' | 'loose' | 'dark' | 'borderless' | 'techBlue'
 
 /** 卡片整体样式 */
 export interface CardStyle {
+  /** 预制主题 */
+  theme?: CardTheme
+  /** 选中的预制主题（用于配置面板回显与"默认"基底），运行态渲染全量展开为具体样式 */
+  baseTheme?: CardTheme
+
+  /** 始终生效的整体样式规则 */
+  base?: StyleRule
+  /** 按当前数据行命中的整体样式规则 */
+  rules?: StyleRule[]
+
   // 颜色
   backgroundColor?: string
   borderColor?: string

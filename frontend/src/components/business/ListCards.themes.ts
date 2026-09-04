@@ -142,4 +142,31 @@ export const CARD_THEMES: Record<CardTheme, CardStyle> = {
       tags: { gap: 8, size: 'default' },
     },
   },
+
+  techBlue: {
+    backgroundColor: '#0f2747',
+    borderColor: '#1677ff',
+    hoverShadowColor: 'rgba(22, 119, 255, 0.45)',
+    borderRadius: 8,
+    padding: 16,
+    gap: 16,
+    titleFontSize: 16,
+    titleFontWeight: 600,
+    titleColor: '#e6f4ff',
+    fieldFontSize: 14,
+    fieldLabelColor: '#91caff',
+    fieldValueColor: '#ffffff',
+    fields: {
+      layout: 'grid',
+      columns: 2,
+      gap: 8,
+      labelPosition: 'left',
+      showLabel: true,
+    },
+    regions: {
+      header: { show: false, iconPosition: 'left' },
+      actions: { position: 'bottom', gap: 8, justify: 'start' },
+      tags: { gap: 8, size: 'default' },
+    },
+  },
 }

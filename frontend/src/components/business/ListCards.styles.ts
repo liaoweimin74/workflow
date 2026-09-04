@@ -95,3 +95,33 @@ export function buildFieldsCssVars(fields: CardStyle['fields']): Record<string, 
 
   return vars
 }
+
+/**
+ * 将主题（CardStyle）转为可编辑的 CSS 声明文本。
+ *
+ * 生成人类可读、可直接编辑的卡片样式脚本（如 "background-color: #1d1e1f;
+ * border-radius: 8px;"），作为配置面板"预制样式"选中后的预设脚本内容。
+ * 数字尺寸自动加 px，字符串尺寸原样保留，undefined/null 值跳过。
+ */
+export function themeToCssScript(style: CardStyle): string {
+  const decls: string[] = []
+  const push = (prop: string, value: string | number | undefined, unit = '') => {
+    if (value != null) {
+      decls.push(`${prop}: ${typeof value === 'number' ? `${value}${unit}` : value};`)
+    }
+  }
+
+  push('background-color', style.backgroundColor)
+  push('border-color', style.borderColor)
+  push('border-radius', style.borderRadius, 'px')
+  push('padding', style.padding, 'px')
+  push('gap', style.gap, 'px')
+  push('font-size', style.titleFontSize, 'px')
+  push('font-weight', style.titleFontWeight)
+  push('color', style.titleColor)
+  push('--card-field-font-size', style.fieldFontSize, 'px')
+  push('--card-field-label-color', style.fieldLabelColor)
+  push('--card-field-value-color', style.fieldValueColor)
+
+  return decls.join('\n')
+}

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { CARD_THEMES } from '../ListCards.themes'
-import { mergeCardStyle, buildCardCssVars } from '../ListCards.styles'
+import { mergeCardStyle, buildCardCssVars, themeToCssScript } from '../ListCards.styles'
 import type { CardStyle, CardTheme } from '../ListCards.types'
 
 describe('CARD_THEMES — 内置主题', () => {
-  const themeNames: CardTheme[] = ['default', 'compact', 'loose', 'dark', 'borderless']
+  const themeNames: CardTheme[] = ['default', 'compact', 'loose', 'dark', 'borderless', 'techBlue']
 
   it.each(themeNames)('主题 "%s" 存在且字段完整', (name) => {
     const theme = CARD_THEMES[name]
@@ -29,6 +29,11 @@ describe('CARD_THEMES — 内置主题', () => {
     // 深色背景：RGB 值较低
     const r = parseInt(bg.slice(1, 3), 16)
     expect(r).toBeLessThan(100)
+  })
+
+  it('techBlue 主题使用深蓝背景和亮蓝边框', () => {
+    expect(CARD_THEMES.techBlue.backgroundColor).toBe('#0f2747')
+    expect(CARD_THEMES.techBlue.borderColor).toBe('#1677ff')
   })
 })
 
@@ -96,4 +101,43 @@ describe('buildCardCssVars — CSS 变量注入', () => {
     const cssVars = buildCardCssVars({})
     expect(Object.keys(cssVars)).toHaveLength(0)
   })
+})
+
+describe('themeToCssScript — 主题转可编辑 CSS 脚本', () => {
+  it('将主题关键值转为带分号的 CSS 声明', () => {
+    const script = themeToCssScript({
+      backgroundColor: '#1d1e1f',
+      borderRadius: 8,
+      padding: 16,
+      gap: 16,
+      titleFontSize: 16,
+      titleFontWeight: 600,
+      titleColor: '#e5eaf3',
+      fieldFontSize: 14,
+      fieldLabelColor: '#a3a6ad',
+      fieldValueColor: '#e5eaf3',
+    })
+    expect(script).toContain('background-color: #1d1e1f;')
+    expect(script).toContain('border-radius: 8px;')
+    expect(script).toContain('padding: 16px;')
+    expect(script).toContain('font-weight: 600;')
+    expect(script).toContain('color: #e5eaf3;')
+  })
+
+  it('数字尺寸自动加 px，字符串尺寸保留', () => {
+    expect(themeToCssScript({ borderRadius: 12 })).toContain('border-radius: 12px;')
+    expect(themeToCssScript({ padding: '1rem' })).toContain('padding: 1rem;')
+  })
+
+  it('空主题返回空字符串', () => {
+    expect(themeToCssScript({})).toBe('')
+  })
+
+  it.each<CardTheme>(['default', 'compact', 'loose', 'dark', 'borderless', 'techBlue'])(
+    '预制主题 "%s" 可生成非空脚本',
+    (name) => {
+      const script = themeToCssScript(CARD_THEMES[name])
+      expect(script.trim().length).toBeGreaterThan(0)
+    },
+  )
 })

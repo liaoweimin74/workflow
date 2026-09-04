@@ -100,13 +100,33 @@ interface FieldStyle {
 
 ### 3.2 预制样式
 
-预制样式下拉框提供 5 个选项：
+预制样式下拉框提供 6 个选项：
 
 - 默认 · 标准网格卡片；
 - 紧凑 · 小号间距精简；
 - 宽松 · 大间距舒适留白；
 - 深色 · 暗色主题；
-- 无边框 · 极简透明。
+- 无边框 · 极简透明；
+- 蓝色科技 · 霓虹科技风格。
+
+“蓝色科技 · 霓虹科技风格”使用深蓝背景、亮蓝边框和冷色高对比文字，建议视觉参数为：
+
+```ts
+{
+  backgroundColor: '#0f2747',
+  borderColor: '#1677ff',
+  hoverShadowColor: 'rgba(22, 119, 255, 0.45)',
+  borderRadius: 8,
+  padding: 16,
+  gap: 16,
+  titleFontSize: 16,
+  titleFontWeight: 600,
+  titleColor: '#e6f4ff',
+  fieldFontSize: 14,
+  fieldLabelColor: '#91caff',
+  fieldValueColor: '#ffffff',
+}
+```
 
 选择预制样式后，将该主题转换为 CSS 声明并写入“始终生效样式”的脚本内容。用户随后可以编辑脚本，编辑后的内容优先于原始预设内容。
 

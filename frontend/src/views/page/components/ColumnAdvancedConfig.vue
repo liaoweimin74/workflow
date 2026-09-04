@@ -31,47 +31,19 @@
             />
           </el-form-item>
 
-          <el-divider content-position="left">列样式</el-divider>
-          <el-form-item label="CSS 类名">
-            <el-input
-              :model-value="col?.className"
-              placeholder="作用于单元格的静态 CSS 类名"
-              @input="(v: string) => patch({ className: v || undefined })"
-            />
-          </el-form-item>
-          <el-form-item label="字体">
-            <el-select :model-value="col?.fontFamily" clearable @change="(v: string) => patch({ fontFamily: v || undefined })">
-              <el-option label="系统默认" value="system-ui" />
-              <el-option label="微软雅黑" value="Microsoft YaHei" />
-              <el-option label="等线" value="DengXian" />
-              <el-option label="宋体" value="SimSun" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="字号">
-            <el-input-number :model-value="col?.fontSize" :min="10" :max="48" @change="(v: number | undefined) => patch({ fontSize: v })" />
-          </el-form-item>
-          <el-form-item label="字重">
-            <el-select :model-value="String(col?.fontWeight || '')" clearable @change="(v: string) => patch({ fontWeight: v ? Number(v) : undefined })">
-              <el-option label="常规" value="400" /><el-option label="中等" value="500" /><el-option label="加粗" value="700" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="颜色">
-            <el-input :model-value="col?.fontColor" placeholder="如 #303133" @input="(v: string) => patch({ fontColor: v || undefined })" />
-          </el-form-item>
           <el-form-item label="对齐">
             <el-select :model-value="col?.align" @change="(v: string) => patch({ align: v })">
               <el-option label="左对齐" value="left" /><el-option label="居中" value="center" /><el-option label="右对齐" value="right" />
             </el-select>
           </el-form-item>
-          <el-form-item label="条件样式">
-            <el-input
-              :model-value="col?.styleExpr"
-              type="textarea"
-              :rows="2"
-              placeholder="如 $row.status === 'PENDING' ? 'color:red' : ''"
-              @input="(v: string) => patch({ styleExpr: v || undefined })"
-            />
+
+          <el-divider content-position="left">字段样式</el-divider>
+          <el-form-item label="始终生效样式">
+            <button type="button" class="script-summary" @click="fieldScriptVisible = true">{{ summarize(fieldBase.css) }}</button>
+            <el-input :model-value="fieldBase.className" placeholder="基础 class，可填写多个并以空格分隔" @input="(v: string) => { fieldBase.className = v; syncFieldStyle() }" />
           </el-form-item>
+          <StyleRuleEditor v-model="fieldRules" scope="field" @update:model-value="syncFieldStyle" />
+          <StyleScriptDialog v-model="fieldScriptVisible" title="编辑字段样式脚本" scope="当前字段" :script="fieldBase.css" @confirm="(v: string) => { fieldBase.css = v; syncFieldStyle() }" />
 
           <el-divider content-position="left">单元格点击事件（配置后优先于整表级点击）</el-divider>
           <el-form-item>
@@ -178,12 +150,6 @@
               </el-select>
             </div>
           </div>
-          <div class="cfg-row">
-            <div class="cfg-field cfg-field-full">
-              <span class="cfg-label">样式语法（CSS）</span>
-              <el-input :model-value="typeof col?.style === 'object' ? col?.style?.css : col?.style" type="textarea" :rows="3" placeholder="color: #409eff; font-weight: 700;" @input="(v: string) => patch({ style: v ? (typeof col?.style === 'object' ? { ...col?.style, css: v } : v) : undefined })" />
-            </div>
-          </div>
         </el-form>
       </el-tab-pane>
     </el-tabs>
@@ -199,8 +165,10 @@
 import { ref, computed, watch } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import type { ColumnViewConfig } from '../ViewDesigner.vue'
-import type { FieldStyle } from '@/utils/fieldStyle'
+import type { FieldStyle, StyleRule } from '@/utils/fieldStyle'
 import { normalizeColumnStyle } from '@/utils/fieldStyle'
+import StyleRuleEditor from './StyleRuleEditor.vue'
+import StyleScriptDialog from './StyleScriptDialog.vue'
 
 /** 合并后的列高级配置：基础设置（原表格配置）+ 卡片配置（仅卡片模式） */
 export type MergedColumnConfig = ColumnViewConfig & {
@@ -213,7 +181,7 @@ export type MergedColumnConfig = ColumnViewConfig & {
   showLabel?: boolean
   labelPosition?: 'left' | 'right' | 'top'
   /** 统一字段样式（结构化）或旧 CSS 字符串 */
-  style?: FieldStyle | string
+  style?: FieldStyle
 }
 
 const props = defineProps<{
@@ -233,6 +201,9 @@ const activeTab = computed(() => (props.mode === 'card' ? 'card' : 'base'))
 
 /** 编辑副本（保存时写回，避免直接改 props） */
 const col = ref<MergedColumnConfig | null>(null)
+const fieldBase = ref<StyleRule>({ enabled: true, css: '', className: '' })
+const fieldRules = ref<StyleRule[]>([])
+const fieldScriptVisible = ref(false)
 
 /**
  * 将旧格式字段（expression/template/formatter）迁移为 contentType/contentValue。
@@ -251,6 +222,8 @@ watch(
   () => props.column,
   (c) => {
     col.value = c ? migrateLegacy({ ...c, onCellClick: c.onCellClick ? { actions: (c.onCellClick.actions || []).map((a: any) => ({ ...a, params: [...(a.params || [])] })) } : undefined }) : null
+    fieldBase.value = { enabled: true, css: c?.style?.base?.css || '', className: c?.style?.base?.className || '' }
+    fieldRules.value = (c?.style?.rules || []).map(rule => ({ ...rule }))
   },
   { immediate: true },
 )
@@ -291,6 +264,16 @@ const actionTypeOptions = [
 function patch(p: Partial<MergedColumnConfig>) {
   if (!col.value) return
   col.value = { ...col.value, ...p }
+}
+
+function syncFieldStyle() {
+  patch({ style: { base: { ...fieldBase.value }, rules: fieldRules.value.map(rule => ({ ...rule })) } })
+}
+
+function summarize(css: string) {
+  if (!css?.trim()) return '未设置样式脚本（点击编辑）'
+  const lines = css.trim().split('\n')
+  return `${lines.slice(0, 3).join(' ')}${lines.length > 3 ? ' …' : ''}`
 }
 
 /** 当前动作列表 */

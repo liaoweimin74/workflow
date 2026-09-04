@@ -493,7 +493,7 @@ function registerPageComponents() {
       title: '卡片样式脚本',
       children: ['卡片样式脚本'],
       native: true,
-      style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+      style: { width: '100%', marginLeft: '0', borderColor: '#2E73FF', color: '#2E73FF' },
       props: { size: 'small' },
       on: { click: () => openCardStyleConfig() },
     },

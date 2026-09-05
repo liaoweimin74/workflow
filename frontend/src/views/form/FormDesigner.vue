@@ -149,7 +149,7 @@ import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.v
 import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
 import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'
 import type { CardStyle } from '@/components/business/ListCards.types'
-import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from './formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 const route = useRoute()
@@ -397,7 +397,7 @@ onMounted(async () => {
         // 等待设计器渲染完成
         await nextTick()
         if (designerRef.value) {
-          designerRef.value.setRule(enableCardDesignMode(rule))
+          designerRef.value.setRule(ensureRuleProps(enableCardDesignMode(rule)))
           if (option) {
             // 将数据库中的 name 同步到 option 中显示
             if (!option.form) option.form = {}
@@ -653,7 +653,7 @@ async function openPickerConfig() {
 function handlePickerConfirm(newProps: Record<string, any>) {
   const rules = designerRef.value?.getRule() || []
   patchFieldProps(rules, 'dataPicker', selectedPickerField.value, newProps)
-  designerRef.value?.setRule(rules)
+  designerRef.value?.setRule(ensureRuleProps(rules))
   ElMessage.success('数据引用配置已保存')
 }
 
@@ -684,7 +684,7 @@ function openLookupConfig() {
 function handleLookupConfirm(newProps: Record<string, any>) {
   const rules = designerRef.value?.getRule() || []
   patchFieldProps(rules, 'LookupPicker', selectedLookupField.value, newProps)
-  designerRef.value?.setRule(rules)
+  designerRef.value?.setRule(ensureRuleProps(rules))
   ElMessage.success('数据源配置已保存')
 }
 

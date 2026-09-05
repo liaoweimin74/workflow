@@ -61,6 +61,23 @@ export function collectFieldKeys(rules: RuleLike[] | undefined): string[] {
 }
 
 /**
+ * 递归确保 rule 树中每个 rule 都有 props 对象（原地修改）。
+ *
+ * fc-designer 在保存（parseRule）时会删除空的 props:{}，导致从数据库加载的
+ * schema 中无 props 的 rule 在选中时崩溃：updateRuleFormData 执行
+ * Object.keys(rule.props) 抛 TypeError，属性面板不再回显（后续 handleChange
+ * 写入 props 同样失败）。在 setRule 前调用本函数即可根治。
+ */
+export function ensureRuleProps(rules: RuleLike[] | undefined): RuleLike[] {
+  walkRules(rules, (rule) => {
+    if (rule && typeof rule === 'object' && (rule.props === undefined || rule.props === null || typeof rule.props !== 'object')) {
+      rule.props = {}
+    }
+  })
+  return rules ?? []
+}
+
+/**
  * 将 newProps 合并到匹配 type + field 的 rule 的 props（穿透子表内部）。
  * 找到并更新后返回 true；未找到返回 false。
  */

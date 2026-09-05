@@ -181,7 +181,7 @@ import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDial
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
 import type { CardStyle } from '@/components/business/ListCards.types'
-import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from '@/views/form/formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
@@ -346,7 +346,7 @@ function openPickerConfig() {
 function handlePickerConfirm(newProps: Record<string, any>) {
   const rules = designerRef.value?.getRule() || []
   patchFieldProps(rules, 'dataPicker', selectedPickerField.value, newProps)
-  designerRef.value?.setRule(rules)
+  designerRef.value?.setRule(ensureRuleProps(rules))
   ElMessage.success('数据引用配置已保存')
 }
 
@@ -366,7 +366,7 @@ function openLookupConfig() {
 function handleLookupConfirm(newProps: Record<string, any>) {
   const rules = designerRef.value?.getRule() || []
   patchFieldProps(rules, 'LookupPicker', selectedLookupField.value, newProps)
-  designerRef.value?.setRule(rules)
+  designerRef.value?.setRule(ensureRuleProps(rules))
   ElMessage.success('查找带回配置已保存')
 }
 
@@ -660,7 +660,7 @@ onMounted(async () => {
         schema.actions = parsed.actions || []
         // 设置 FcDesigner rule（等待设计器就绪后 setRule）
         if (designerRef.value) {
-          designerRef.value.setRule(enableCardDesignMode(parsed.rule || []))
+          designerRef.value.setRule(ensureRuleProps(enableCardDesignMode(parsed.rule || [])))
           designerRef.value.setOption(parsed.option || {})
           // 从已保存的 rule 中恢复静态筛选到 tableFilterStore
           const rules = parsed.rule || []

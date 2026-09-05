@@ -151,6 +151,41 @@ describe('PageDataTable — 排序能力（数据源 metadata 驱动）', () => 
   })
 })
 
+describe('PageDataTable — 元数据列数组值格式化（对齐 BizDataListPage）', () => {
+  it('透传 componentType，数组值组件列 formatter 逗号拼接', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', componentType: 'input' },
+          { key: 'tags', label: '标签', columnType: 'JSON', componentType: 'multiSelect' },
+          { key: 'users', label: '穿梭', columnType: 'JSON', componentType: 'elTransfer' },
+          { key: 'tree', label: '树', columnType: 'JSON', componentType: 'elTreeSelect' },
+          { key: 'region', label: '级联', columnType: 'JSON', componentType: 'cascader' },
+        ],
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: { records: [], total: 0 },
+    })
+
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    const cols = st.props('columns') as any[]
+    // 数组值组件列：formatter 把数组 join 成可读文本
+    expect(cols.find((c: any) => c.prop === 'tags')?.formatter?.(null, null, ['a', 'b'], 0)).toBe('a, b')
+    expect(cols.find((c: any) => c.prop === 'users')?.formatter?.(null, null, ['u1', 'u2'], 0)).toBe('u1, u2')
+    expect(cols.find((c: any) => c.prop === 'tree')?.formatter?.(null, null, ['x', 'y'], 0)).toBe('x, y')
+    expect(cols.find((c: any) => c.prop === 'region')?.formatter?.(null, null, ['cn', 'sh'], 0)).toBe('cn, sh')
+    // 非数组组件：无 formatter（原样显示）
+    expect(cols.find((c: any) => c.prop === 'name')?.formatter).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
 describe('PageDataTable — 分页配置透传', () => {
   it('pageSize/pageSizes/pagination 透传到 SearchTable', async () => {
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({

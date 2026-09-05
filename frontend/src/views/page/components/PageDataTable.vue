@@ -167,7 +167,7 @@ const tableSize = computed(() => props.size || 'default')
 const records = ref<any[]>([])
 
 /** 数据源列定义（metadata，供 formConfig 动态生成表单） */
-const metaColumns = ref<{ key: string; label: string; columnType?: string; required?: boolean; scale?: number; sortable?: boolean }[]>([])
+const metaColumns = ref<{ key: string; label: string; columnType?: string; componentType?: string; required?: boolean; scale?: number; sortable?: boolean }[]>([])
 /** 数据源可写标记 */
 const writable = ref(false)
 /** 当前 filter（动作总线 set-filter 注入） */
@@ -288,6 +288,24 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
 )
 
 // ==================== 列适配 ====================
+/** 数组值组件类型：列表展示时 formatter 逗号拼接（对齐 BizDataListPage renderByComponentType） */
+const ARRAY_COMPONENT_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
+
+/** JSON 数组 → 逗号拼接；非数组（旧逗号串/字符串）原样返回 */
+function formatArrayValue(v: unknown): unknown {
+  if (Array.isArray(v)) return v.join(', ')
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v)
+      if (Array.isArray(parsed)) return parsed.join(', ')
+    } catch {
+      // 旧逗号串或普通字符串，原样
+    }
+    return v
+  }
+  return v
+}
+
 /** ColumnViewConfig → SearchTable TableColumn（formatter 字符串映射为函数） */
 const resolvedColumns = computed<TableColumn[]>(() => {
   /** 组件级收窄：metadata 可排 ∧ (sortableFields 未声明或包含该列) */
@@ -302,8 +320,11 @@ const resolvedColumns = computed<TableColumn[]>(() => {
     return metaColumns.value.map((c) => ({
       prop: c.key,
       label: c.label || c.key,
-      minWidth: 120,
+      minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 120,
       sortable: sortableOf(c.key),
+      ...(ARRAY_COMPONENT_TYPES.includes(c.componentType || '')
+        ? { formatter: (_row: any, _col: any, cellValue: unknown) => formatArrayValue(cellValue) }
+        : {}),
     }))
   }
   // 有用户配置的列时使用用户配置；排序能力由数据源 metadata + 组件 sortableFields 决定
@@ -788,6 +809,7 @@ async function loadMetadata() {
       key: c.key,
       label: c.label || c.key,
       columnType: c.columnType,
+      componentType: c.componentType,
       required: c.required,
       scale: c.scale,
       sortable: c.sortable,

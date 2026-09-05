@@ -17,6 +17,9 @@ public class DataSourceMetadata {
     /** 是否支持增删改（只读数据源 false） */
     private boolean writable;
 
+    /** 绑定表单 formKey（FORM/WORKFLOW 数据源；SYSTEM/API 为空）——编辑弹窗按表单 schema 构建组件用 */
+    private String formKey;
+
     public DataSourceMetadata() {}
 
     public DataSourceMetadata(List<ColumnConfig> columns, boolean writable) {
@@ -29,4 +32,7 @@ public class DataSourceMetadata {
 
     public boolean isWritable() { return writable; }
     public void setWritable(boolean writable) { this.writable = writable; }
+
+    public String getFormKey() { return formKey; }
+    public void setFormKey(String formKey) { this.formKey = formKey; }
 }

@@ -135,6 +135,14 @@ SearchTable 查询栏 SHALL 按数据源字段元数据（column_config.componen
 - **WHEN** 用户筛选单选字段等于 `x`（主列存 `["x"]`，结构化筛选传 value）
 - **THEN** 查询条件为 `col->>'$[0]' = 'x'` 或 `JSON_CONTAINS(col, '"x"')`，命中该记录
 
+### Requirement: 页面表格列表显示显示值
+
+页面设计器数据表格（PageDataTable）列表 SHALL 对数组值组件列显示**显示值（label）**而非原始 value：用户配置列渲染 SHALL 按数据源 metadata 的 componentType 识别数组值组件，优先读取 `<key>_text` 冗余显示列（`leafDisplayText` 取叶子 label），缺失时回退 value join——与业务数据管理（BizDataListPage）显示一致。
+
+#### Scenario: 页面表格显示显示值
+- **WHEN** 页面表格绑定含单选 select 字段 `dept`（主列 JSON）的数据源，列表行数据含 `dept_text: '研发部'` 与 `dept: ['7']`
+- **THEN** 列表 `dept` 列显示 `研发部`（读 `dept_text`），而非原始 value `7`
+
 ### Requirement: 表单回显走主列值
 
 表单回显 SHALL 用主列 value 匹配渲染时已加载的选项（`resolveOptionRules` 或静态选项）。树形/级联**单选**主列为数组时 SHALL 解包为单值（取最后一段叶子，兼容存量路径数组），并做**类型归一化**（v-model 与树节点 value 类型一致，字符串 `'7'` → 数字 `7`），保证 el-tree-select/el-cascader 按 nodeKey 匹配成功、输入框正常回显节点名称。

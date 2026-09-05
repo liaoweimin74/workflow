@@ -52,6 +52,7 @@
 ### 4. 显示方式（对齐 dataPicker 双列）
 - 列表列 prop=主列 key，`render`/`formatter` 读 `row.data[<key>_text]`，经 `leafDisplayText` 取**叶子 label**（每段路径取最后一段，逗号连接）显示；缺失回退主列 value。
 - 改动点：`BizDataListPage.vue`（columns render）+ `PageDataTable.vue`（元数据列 formatter 读 text 列）。
+- **页面表格用户配置列**：`PageDataTable.resolvedColumns` 用户配置列分支按 metaColumns 的 componentType 识别数组值组件，覆盖 render 读 `<key>_text`（叶子 label），缺失回退 value join——与元数据列分支/metaColumns 分支一致。
 
 ### 5. 查询
 - 模糊搜索：用户文本输入，`<key>_text` 列 LIKE（单选多选统一；text 列 VARCHAR 可进 `filterableColumns`）。

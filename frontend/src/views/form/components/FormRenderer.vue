@@ -88,7 +88,7 @@ import type { DsLink } from './DsActionBus'
 import { dataSourceApi } from '@/api/data-source'
 import { normalizeForRender, deepDisableRules, deepDisableField } from '../schemaRules'
 import type { DataSourceBindingContext } from '@/components/business/types'
-import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
+import { setActiveDsBindings, activeDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import PageDataCards from '@/views/page/components/PageDataCards.vue'
 import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
@@ -300,10 +300,12 @@ function extractDialogContainers(rules: Rule[]): Rule[] {
   return mainTree
 }
 
-/** 注入给数据组件的绑定上下文：prop 直传优先，其次 schema 加载结果 */
-const dsBindings = computed<DataSourceBindingContext[]>(
-  () => props.dataSources ?? schemaDataSources.value,
-)
+/** 注入给数据组件的绑定上下文：prop 直传优先，其次 schema 加载结果；两者皆空回退全局 activeDsBindings
+ * （页面渲染场景 PageRendererPage 已 setActiveDsBindings 写入页面绑定，供选项数据源 effect.datasource 解析页内 id → refId） */
+const dsBindings = computed<DataSourceBindingContext[]>(() => {
+  const direct = props.dataSources ?? schemaDataSources.value
+  return direct && direct.length > 0 ? direct : activeDsBindings.value
+})
 
 /** 引擎是否已挂载（防重复挂载） */
 let engineMounted = false

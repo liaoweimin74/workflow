@@ -91,12 +91,16 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             case "FORM" -> {
                 List<ColumnConfig> cols = formDefService.getBusinessColumnsByKey(ds.getFormKey());
                 SortableResolver.resolve(cols);
-                yield new DataSourceMetadata(cols, true);
+                DataSourceMetadata m = new DataSourceMetadata(cols, true);
+                m.setFormKey(ds.getFormKey());
+                yield m;
             }
             case "WORKFLOW" -> {
                 List<ColumnConfig> cols = workflowQueryService.columnsFor(ds.getFormKey());
                 SortableResolver.resolve(cols);
-                yield new DataSourceMetadata(cols, false);
+                DataSourceMetadata m = new DataSourceMetadata(cols, false);
+                m.setFormKey(ds.getFormKey());
+                yield m;
             }
             case "SYSTEM" -> {
                 List<ColumnConfig> cols = "user-tree".equals(ds.getSourceKey())

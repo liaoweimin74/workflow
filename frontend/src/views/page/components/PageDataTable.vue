@@ -33,6 +33,7 @@
         :rule="detailRules"
         :option="{ labelWidth: '100px' }"
         :initial-values="detailRow"
+        :data-sources="formDataSources"
         readonly
       />
     </div>
@@ -46,6 +47,7 @@
       :rule="localFormRules"
       :option="{ labelWidth: '100px' }"
       :initial-values="localInitialValues"
+      :data-sources="formDataSources"
       :readonly="localFormMode === 'view'"
     />
     <template #footer>
@@ -70,6 +72,7 @@
           :rule="localFormRules"
           :option="{ labelWidth: '100px' }"
           :initial-values="localInitialValues"
+          :data-sources="formDataSources"
           :readonly="localFormMode === 'view'"
         />
       </div>
@@ -95,10 +98,11 @@ import {
 } from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
-import { buildCellRender } from '@/utils/tableColumnRenderer'
+import { buildCellRender, getCellValue } from '@/utils/tableColumnRenderer'
 import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import { leafDisplayText } from '@/views/form/arrayValueLabel'
+import { leafDisplayText, withArrayLabels } from '@/views/form/arrayValueLabel'
+import { formApi } from '@/api/form'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
@@ -171,6 +175,12 @@ const records = ref<any[]>([])
 const metaColumns = ref<{ key: string; label: string; columnType?: string; componentType?: string; required?: boolean; scale?: number; sortable?: boolean }[]>([])
 /** 数据源可写标记 */
 const writable = ref(false)
+/** 数据源绑定表单 formKey（FORM/WORKFLOW metadata 返回；非空时编辑弹窗按表单 schema 构建组件） */
+const formKey = ref('')
+/** 业务表单 schema rule（formKey 加载；组件/选项/校验按表单定义，取代列映射基础组件） */
+const formSchemaRule = ref<Array<Record<string, any>>>([])
+/** 业务表单级数据源绑定（schema.dataSources：表单内 id → 全局 refId；供表单内 select 等选项数据源 effect.datasource 解析） */
+const formDataSources = ref<DataSourceBindingContext[]>([])
 /** 当前 filter（动作总线 set-filter 注入） */
 const currentFilter = ref<Record<string, unknown> | undefined>(undefined)
 /** 切换数据源后标记为 true，忽略 props.columns 旧配置 */
@@ -196,8 +206,8 @@ const localFormRef = ref<InstanceType<typeof FormRenderer>>()
 const localSaving = ref(false)
 /** 表单宽度（viewDetail.width 为准，缺省 500px 对齐 SearchTable 弹窗） */
 const localFormWidth = computed(() => props.viewDetail?.width || '500px')
-/** 本地编辑/新增表单规则（复用 buildFormRule） */
-const localFormRules = computed(() => buildFormRule())
+/** 本地编辑/新增表单规则（FORM 数据源用业务表单 schema，其余回退列映射） */
+const localFormRules = computed(() => formRules.value)
 
 /** 按表单方式打开编辑/新增/查看：popup → SearchTable 弹窗/详情弹窗；drawer → 右侧抽屉；inline → 覆盖层 */
 function openLocalForm(mode: 'create' | 'edit' | 'view', row?: any) {
@@ -339,27 +349,55 @@ const resolvedColumns = computed<TableColumn[]>(() => {
   // 过滤 hidden 列（自定义列取消展示时置 true，保留定义但不渲染）
   return (props.columns || [])
     .filter((c: any) => !c.hidden)
-    .map((c: any) => ({
-    prop: c.key ?? c.prop,
-    label: c.label || c.key || c.prop,
-    width: c.width,
-    minWidth: c.minWidth || 120,
-    align: c.align as any,
-    fixed: c.fixed as any,
-    cellClassName: c.className,
-    sortable: sortableOf(c.key ?? c.prop),
-    render: buildCellRender({
-      key: c.key ?? c.prop,
-      contentType: c.contentType,
-      contentValue: c.contentValue,
-      // 兼容旧数据（expression/template/formatter 字段）
-      expression: c.expression,
-      template: c.template,
-      formatter: c.formatter,
-      className: c.className,
-      styleExpr: c.styleExpr,
-    }),
-  }))
+    .map((c: any) => {
+      const key = c.key ?? c.prop
+      const meta = metaColumns.value.find((m) => m.key === key)
+      // 数组值组件列（用户配置列无 componentType，从 metaColumns 查询）：优先显示冗余显示列 <key>_text（叶子 label），缺失回退 value join
+      const isArrayCol = !!meta && ARRAY_COMPONENT_TYPES.includes(meta.componentType || '')
+      const base = {
+        prop: key,
+        label: c.label || key,
+        width: c.width,
+        minWidth: c.minWidth || 120,
+        align: c.align as any,
+        fixed: c.fixed as any,
+        cellClassName: c.className,
+        sortable: sortableOf(key),
+      }
+      if (isArrayCol) {
+        return {
+          ...base,
+          render: (row: any) => {
+            const text = row?.[key + '_text']
+            const display = text !== undefined && text !== null && text !== ''
+              ? leafDisplayText(text)
+              : formatArrayValue(getCellValue(row, key))
+            // 覆盖单元格值为显示文本，其余配置（className/styleExpr/style/template）保留
+            return buildCellRender({
+              key,
+              template: c.template,
+              className: c.className,
+              styleExpr: c.styleExpr,
+              style: c.style,
+            })({ ...row, [key]: display })
+          },
+        }
+      }
+      return {
+        ...base,
+        render: buildCellRender({
+          key,
+          contentType: c.contentType,
+          contentValue: c.contentValue,
+          // 兼容旧数据（expression/template/formatter 字段）
+          expression: c.expression,
+          template: c.template,
+          formatter: c.formatter,
+          className: c.className,
+          styleExpr: c.styleExpr,
+        }),
+      }
+    })
 })
 
 // ==================== 操作按钮适配 ====================
@@ -511,7 +549,7 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
 }
 
 // ==================== formConfig（CRUD 弹窗动态生成） ====================
-/** 由数据源列定义生成表单规则（新增/编辑/详情共用） */
+/** 由数据源列定义生成表单规则（新增/编辑/详情共用；无表单 schema 时的回退：组件按 columnType 映射基础组件） */
 function buildFormRule() {
   return metaColumns.value.map((c) => ({
     type: inputTypeOf(c.columnType),
@@ -522,16 +560,44 @@ function buildFormRule() {
   }))
 }
 
+/** 加载业务表单 schema（FORM 数据源编辑弹窗按定义构建组件：select/级联/树形/穿梭框 + 选项 + 校验） */
+async function loadFormSchema() {
+  if (!formKey.value) {
+    formSchemaRule.value = []
+    return
+  }
+  try {
+    const res = await formApi.getFormDefinitionByKey(formKey.value)
+    const raw = (res.data as any)?.schema
+    const schema = JSON.parse(raw || '[]')
+    formSchemaRule.value = Array.isArray(schema) ? schema : (schema.rule || [])
+    // 表单级数据源绑定（select 等选项数据源 effect.datasource.dataSourceId 为表单内 id → 全局 refId）
+    formDataSources.value = !Array.isArray(schema) && Array.isArray(schema.dataSources) ? schema.dataSources : []
+  } catch {
+    formSchemaRule.value = []
+    formDataSources.value = []
+  }
+}
+
+/** 编辑弹窗表单规则：FORM 数据源用业务表单 schema（组件按定义渲染）；其余回退列定义映射 */
+const formRules = computed(() =>
+  formSchemaRule.value.length > 0 ? formSchemaRule.value : buildFormRule(),
+)
+
 /** 详情弹窗规则（只读表单） */
-const detailRules = computed(() => buildFormRule())
+const detailRules = computed(() => formRules.value)
 
 const formConfig = computed(() => {
   if (!writable.value) return undefined
+  const rules = formRules.value
   return {
-    rule: buildFormRule(),
+    rule: rules,
     labelWidth: '100px',
-    createApi: (data: any) => dataSourceApi.createData(resolvedRefId.value, data),
-    updateApi: (id: string, data: any, row?: any) => dataSourceApi.updateData(resolvedRefId.value, id, data, row?.version),
+    dataSources: formDataSources.value,
+    createApi: (data: any) =>
+      dataSourceApi.createData(resolvedRefId.value, withArrayLabels(data, rules)),
+    updateApi: (id: string, data: any, row?: any) =>
+      dataSourceApi.updateData(resolvedRefId.value, id, withArrayLabels(data, rules), row?.version),
     deleteApi: (id: string) => dataSourceApi.deleteData(resolvedRefId.value, id),
     getApi: async (id: string) => {
       const r = await dataSourceApi.getData(resolvedRefId.value, id)
@@ -545,7 +611,7 @@ const formConfig = computed(() => {
 })
 
 function inputTypeOf(columnType?: string): string {
-  if (columnType === 'INTEGER' || columnType === 'BIGINT' || columnType === 'TINYINT' || columnType === 'DECIMAL') return 'inputNumber'
+  if (columnType === 'INT' || columnType === 'INTEGER' || columnType === 'BIGINT' || columnType === 'TINYINT' || columnType === 'DECIMAL') return 'inputNumber'
   if (columnType === 'DATETIME' || columnType === 'DATE') return 'datePicker'
   return 'input'
 }
@@ -820,6 +886,8 @@ async function loadMetadata() {
     const res = await dataSourceApi.getMetadata(resolvedRefId.value)
     const meta = res.data as any
     writable.value = !!meta?.writable
+    formKey.value = meta?.formKey || ''
+    await loadFormSchema()
     metaColumns.value = (meta?.columns || []).map((c: any) => ({
       key: c.key,
       label: c.label || c.key,

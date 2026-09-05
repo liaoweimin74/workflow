@@ -127,6 +127,7 @@ class UnifiedDataSourceAdapterTest {
         DataSourceMetadata meta = adapter.metadata(ds);
         assertTrue(meta.isWritable());
         assertEquals(1, meta.getColumns().size());
+        assertEquals("order", meta.getFormKey());
     }
 
     @Test
@@ -287,6 +288,7 @@ class UnifiedDataSourceAdapterTest {
             assertFalse(meta.isWritable());
             assertEquals(2, meta.getColumns().size());
             assertEquals("reason", meta.getColumns().get(1).getKey());
+            assertEquals("leave", meta.getFormKey());
             verify(workflowQueryService).columnsFor("leave");
         }
 

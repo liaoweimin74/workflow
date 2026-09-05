@@ -32,7 +32,14 @@ vi.mock('@/api/data-source', () => ({
   },
 }))
 
+vi.mock('@/api/form', () => ({
+  formApi: {
+    getFormDefinitionByKey: vi.fn(),
+  },
+}))
+
 import { dataSourceApi } from '@/api/data-source'
+import { formApi } from '@/api/form'
 
 const FormRendererStub = {
   name: 'FormRenderer',
@@ -387,6 +394,106 @@ describe('PageDataTable — 数组值组件搜索映射 <key>_text', () => {
         }),
       }),
     )
+    wrapper.unmount()
+  })
+})
+
+describe('PageDataTable — FORM 数据源编辑弹窗按表单 schema 构建组件', () => {
+  it('metadata 含 formKey 时 formConfig.rule 用业务表单 schema（select 组件 + options，无 _text 列）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: true,
+        formKey: 'emp',
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', componentType: 'input' },
+          { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
+          { key: 'dept_text', label: '部门（显示）', columnType: 'VARCHAR', componentType: 'selectText', hidden: true },
+        ],
+      },
+    })
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
+      data: {
+        schema: JSON.stringify({
+          rule: [
+            { type: 'input', field: 'name', title: '姓名' },
+            { type: 'select', field: 'dept', title: '部门', options: [{ label: '研发部', value: 1 }] },
+          ],
+          dataSources: [{ id: 'ds_a', refId: 'ref-a' }, { id: 'ds_b', refId: 'ref-b' }],
+        }),
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({ dsRefId: 'ds-emp' })
+    await nextTick()
+    await flushPromises()
+
+    const rule = (wrapper.vm as any).formConfig?.rule as any[]
+    // 按表单 schema 构建：select 组件（含 options 选项），无 _text 列
+    expect(rule).toHaveLength(2)
+    expect(rule.find((r: any) => r.field === 'dept')?.type).toBe('select')
+    expect(rule.find((r: any) => r.field === 'dept')?.options).toEqual([{ label: '研发部', value: 1 }])
+    expect(rule.find((r: any) => r.field === 'dept_text')).toBeUndefined()
+    // 表单级数据源绑定透传（select 等选项数据源 effect.datasource 页内 id → refId 解析）
+    expect((wrapper.vm as any).formConfig?.dataSources).toEqual([
+      { id: 'ds_a', refId: 'ref-a' },
+      { id: 'ds_b', refId: 'ref-b' },
+    ])
+    wrapper.unmount()
+  })
+
+  it('无 formKey（SYSTEM/API 数据源）时回退列定义映射（组件按 columnType）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: true,
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', componentType: 'input' },
+          { key: 'age', label: '年龄', columnType: 'INT', componentType: 'inputNumber' },
+        ],
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({ dsRefId: 'ds-sys' })
+    await nextTick()
+    await flushPromises()
+
+    const rule = (wrapper.vm as any).formConfig?.rule as any[]
+    expect(rule.find((r: any) => r.field === 'name')?.type).toBe('input')
+    expect(rule.find((r: any) => r.field === 'age')?.type).toBe('inputNumber')
+    wrapper.unmount()
+  })
+})
+
+describe('PageDataTable — 用户配置列数组值组件显示', () => {
+  it('数组值组件列 render 优先读 <key>_text（叶子 label），缺失回退 value join', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', componentType: 'input' },
+          { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
+        ],
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({
+      dsRefId: 'ds-emp',
+      columns: [{ key: 'dept', label: '部门' }],
+    })
+    await nextTick()
+    await flushPromises()
+
+    const st = wrapper.findComponent(SearchTable)
+    const cols = st.props('columns') as any[]
+    expect(cols).toHaveLength(1)
+    // 有 _text：显示叶子 label（列表显示显示值而非原始 value）
+    const v1 = (cols[0].render as Function)({ dept: ['r', 'm'], dept_text: '研发部, 市场部' } as any)
+    expect(v1.children).toBe('研发部, 市场部')
+    // 无 _text：回退 value join
+    const v2 = (cols[0].render as Function)({ dept: ['r', 'm'] } as any)
+    expect(v2.children).toBe('r, m')
     wrapper.unmount()
   })
 })

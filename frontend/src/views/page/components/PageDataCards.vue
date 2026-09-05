@@ -11,6 +11,7 @@
       :page-sizes="pageSizes"
       :show-pagination="pagination"
       :actions="resolvedActions"
+      :toolbar-buttons="toolbarButtons"
       :group-by="groupBy"
       :collapsible-groups="collapsibleGroups"
       :actions-placement="actionsPlacement"
@@ -20,6 +21,7 @@
       :style="cardStyle"
       @row-click="handleRowClick"
       @action-click="handleActionClick"
+      @toolbar-action="handleToolbarAction"
     />
     <!-- 详情弹窗（view 按钮：只读表单，宽度取 viewDetail.width） -->
     <el-dialog v-model="detailVisible" title="详情" :width="detailWidth" :close-on-click-modal="false">
@@ -177,6 +179,35 @@ const resolvedActions = computed(() => (props.viewActions?.buttons || [])
     type: button.type,
     events: button.events,
   })))
+const toolbarButtons = computed(() => (props.viewActions?.buttons || [])
+  .filter((button) => button.placement === 'toolbar')
+  .map((button) => ({
+    key: button.key,
+    label: button.label,
+    icon: button.icon || defaultIconOf(button.key),
+    type: button.type || defaultTypeOf(button.key),
+    link: button.style === 'text',
+    circle: button.style === 'icon',
+    size: 'default' as const,
+    events: button.events,
+  })))
+
+const BUILTIN_ACTION_ICONS: Record<string, string> = {
+  create: 'Plus',
+  edit: 'Edit',
+  delete: 'Delete',
+  view: 'View',
+}
+
+function defaultIconOf(key: string): string | undefined {
+  return BUILTIN_ACTION_ICONS[key]
+}
+
+function defaultTypeOf(key: string): 'primary' | 'success' | 'warning' | 'danger' | 'info' | undefined {
+  if (key === 'create') return 'primary'
+  if (key === 'delete') return 'danger'
+  return undefined
+}
 
 const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
   if (!resolvedRefId.value) return { rows: [], total: 0 }
@@ -268,6 +299,10 @@ function handleActionClick(action: { key: string; label: string; events?: any[] 
     return
   }
   actionBus?.dispatch('action-click', { action, row, source: props.dataSourceId })
+}
+
+function handleToolbarAction(action: { key: string; label: string; icon?: string; type?: string; events?: any[] }) {
+  handleActionClick(action, undefined)
 }
 
 // ==================== 按钮事件链动作执行器（对齐 PageDataTable/PageRenderer dispatchAction） ====================
@@ -460,7 +495,8 @@ async function saveLocalForm() {
 </script>
 
 <style scoped>
-.page-data-cards { width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.page-data-cards { width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.page-data-cards :deep(.list-cards) { flex: 1 1 auto; min-height: 0; }
 .stretch-fill { height: 100%; }
 .detail-body-scroll { overflow-y: auto; }
 </style>

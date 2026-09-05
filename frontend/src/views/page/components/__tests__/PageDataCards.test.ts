@@ -29,7 +29,7 @@ vi.mock('@/utils/formDsBindingsStore', () => ({
 vi.mock('@/components/business/ListCards.vue', () => ({
   default: defineComponent({
     name: 'ListCardsStub',
-     props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'searchFields', 'showSearch', 'pageSizes', 'showPagination', 'actions', 'designMode', 'groupBy'],
+     props: ['columns', 'fetchApi', 'cardMinWidth', 'defaultPageSize', 'searchFields', 'showSearch', 'pageSizes', 'showPagination', 'actions', 'toolbarButtons', 'designMode', 'groupBy'],
     setup(props: any, { expose }: any) {
       // fetchData 暴露真实函数，供 PageDataCards 通过 cardsRef 触发取数
       expose({ fetchData: () => props.fetchApi({ page: 2, size: 10 }) })
@@ -67,6 +67,29 @@ describe('PageDataCards', () => {
 
     expect(queryData).toHaveBeenCalledWith('global-orders', { page: 2, size: 10 })
     expect(wrapper.emitted('loaded')?.[0]).toEqual([[{ id: 7, name: '订单', version: 3 }]])
+    wrapper.unmount()
+  })
+
+  it('将 placement=toolbar 的按钮传给工具栏并复用新增动作', async () => {
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        viewActions: { buttons: [
+          { key: 'create', label: '新增', placement: 'toolbar', type: 'primary' },
+          { key: 'edit', label: '编辑', placement: 'card' },
+        ] },
+      },
+      global: { stubs: { 'el-dialog': { template: '<div v-if="modelValue"><slot /></div>', props: ['modelValue'] } } },
+    })
+    await flushPromises()
+
+    const cards = wrapper.findComponent({ name: 'ListCardsStub' })
+    expect(cards.props('toolbarButtons')).toEqual([{ key: 'create', label: '新增', icon: 'Plus', type: 'primary', link: false, circle: false, size: 'default', events: undefined }])
+    await cards.vm.$emit('toolbar-action', { key: 'create', label: '新增', type: 'primary' })
+    await flushPromises()
+    expect(getMetadata).toHaveBeenCalledWith('global-orders')
+    expect(wrapper.find('.default-form-stub').exists()).toBe(true)
     wrapper.unmount()
   })
 

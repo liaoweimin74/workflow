@@ -92,6 +92,66 @@ describe('ListPageResult 类型', () => {
 
 // ===== 组件测试 =====
 describe('ListCards 组件', () => {
+  it('将卡片内容放在查询栏与分页栏之间的独立可滚动数据区', () => {
+    const source = readFileSync(resolve(__dirname, '../ListCards.vue'), 'utf8')
+
+    expect(source).toContain('<div class="card-data-area">')
+    expect(source).toContain('.card-data-area { flex: 1; min-height: 0; overflow-y: auto; }')
+    expect(source).toContain('.card-pagination { align-self: flex-end; flex-shrink: 0;')
+    expect(source).toContain('.list-cards { width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }')
+    expect(source).not.toContain('.card-groups { flex: 1; min-height: 0; overflow-y: auto;')
+  })
+
+  it('渲染 toolbarButtons 到查询栏上方的工具栏', async () => {
+    const wrapper = createWrapper({
+      toolbarButtons: [{ key: 'create', label: '新增', type: 'primary' }],
+    } as any)
+    await flushPromises()
+
+    expect(wrapper.find('.card-toolbar').exists()).toBe(true)
+    expect(wrapper.find('.card-toolbar-create').text()).toContain('新增')
+    wrapper.unmount()
+  })
+
+  it('工具栏样式与数据表格一致：固定高度、左对齐、8px 间距和 12px 底部间距', () => {
+    const source = readFileSync(resolve(__dirname, '../ListCards.vue'), 'utf8')
+
+    expect(source).toMatch(/\.card-toolbar\s*\{[^}]*flex-shrink:\s*0;[^}]*margin:\s*20px 16px 12px;[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*gap:\s*8px;/s)
+    expect(source).toContain(':size="action.size || \'default\'"')
+    expect(source).toContain(':link="action.link"')
+    expect(source).toContain('circle')
+  })
+
+  it('工具栏间距对齐 SearchTable 的 table-card body', () => {
+    const source = readFileSync(resolve(__dirname, '../ListCards.vue'), 'utf8')
+
+    expect(source).toMatch(/\.card-toolbar\s*\{[^}]*flex-shrink:\s*0;[^}]*margin:\s*20px 16px 12px;/s)
+    expect(source).toMatch(/\.search-card\s*\{[^}]*flex-shrink:\s*0;[^}]*margin-bottom:\s*16px\s*!important;/s)
+  })
+
+  it('工具栏按钮重置外边距避免与 el-button 默认间距叠加', () => {
+    const source = readFileSync(resolve(__dirname, '../ListCards.vue'), 'utf8')
+
+    expect(source).toContain('.card-toolbar .el-button { margin: 0; }')
+  })
+
+  it('查询栏与操作栏相邻时不叠加顶部外边距（对齐 SearchTable 16px 间距）', () => {
+    const source = readFileSync(resolve(__dirname, '../ListCards.vue'), 'utf8')
+
+    // 查询栏在上、操作栏在下：查询栏 margin-bottom(16px) 与操作栏 margin-top(20px) 会叠加成 36px；
+    // 须用兄弟选择器在相邻时取消操作栏顶部外边距，保持与 SearchTable 一致的单边 16px 间距
+    expect(source).toMatch(/\.search-card\s*\+\s*\.card-toolbar\s*\{[^}]*margin-top:\s*0;/s)
+  })
+
+  it('查询栏查询和重置按钮默认使用圆形图标按钮', () => {
+    const source = readFileSync(resolve(__dirname, '../ListCards.vue'), 'utf8')
+
+    expect(source).toContain('<el-button type="primary" :icon="Search" circle size="small"')
+    expect(source).toContain('<el-button :icon="Refresh" circle size="small"')
+    expect(source).not.toContain('<el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>')
+    expect(source).not.toContain('<el-button :icon="Refresh" @click="handleReset">重置</el-button>')
+  })
+
   function createWrapper(props: {
     columns?: CardColumn[]
     fetchApi?: (params: ListQueryParams) => Promise<ListPageResult>

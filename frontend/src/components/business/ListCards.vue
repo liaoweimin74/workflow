@@ -11,44 +11,72 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
-          <el-button :icon="Refresh" @click="handleReset">重置</el-button>
+          <el-button type="primary" :icon="Search" circle size="small" title="查询" @click="handleSearch" />
+          <el-button :icon="Refresh" circle size="small" title="重置" @click="handleReset" />
         </el-form-item>
       </el-form>
     </el-card>
-<!-- 加载中骨架屏 -->
-    <div v-if="loading" class="loading-skeleton">
-      <el-skeleton :paragraph="{ rows: 3 }" active :grid="skeletonGrid">
-        <template #image>
-          <el-skeleton-item variant="rect" width="100%" height="180" />
-        </template>
-      </el-skeleton>
+    <div v-if="toolbarButtons.length > 0" class="card-toolbar">
+      <template v-for="action in toolbarButtons" :key="action.key">
+        <el-tooltip v-if="action.circle" :content="action.label" placement="top" :show-after="200">
+          <el-button
+            :class="`card-toolbar-${action.key}`"
+            :type="action.type"
+            :size="action.size || 'default'"
+            plain
+            circle
+            :icon="getIcon(action.icon, action.key)"
+            @click="handleToolbarAction(action)"
+          />
+        </el-tooltip>
+        <el-button
+          v-else
+          :class="`card-toolbar-${action.key}`"
+          :type="action.type"
+          :size="action.size || 'default'"
+          :link="action.link"
+          :icon="getIcon(action.icon, action.key)"
+          @click="handleToolbarAction(action)"
+        >
+          {{ action.label }}
+        </el-button>
+      </template>
     </div>
+    <!-- 数据区：查询栏和分页栏固定，超出高度时仅此区域滚动 -->
+    <div class="card-data-area">
+      <!-- 加载中骨架屏 -->
+      <div v-if="loading" class="loading-skeleton">
+        <el-skeleton :paragraph="{ rows: 3 }" active :grid="skeletonGrid">
+          <template #image>
+            <el-skeleton-item variant="rect" width="100%" height="180" />
+          </template>
+        </el-skeleton>
+      </div>
 
-    <!-- 错误状态 -->
-    <div v-else-if="error" class="error-state">
-      <el-icon :size="48" style="color: #ff4d4f"><Warning /></el-icon>
-      <div class="error-message">{{ error }}</div>
-      <el-button v-if="!designMode" type="primary" @click="retry" class="retry-btn">重试</el-button>
-    </div>
+      <!-- 错误状态 -->
+      <div v-else-if="error" class="error-state">
+        <el-icon :size="48" style="color: #ff4d4f"><Warning /></el-icon>
+        <div class="error-message">{{ error }}</div>
+        <el-button v-if="!designMode" type="primary" @click="retry" class="retry-btn">重试</el-button>
+      </div>
 
-    <!-- 空状态 -->
-    <div v-else-if="total === 0 && rows.length === 0" class="empty-state">
-      <el-empty description="暂无数据" />
-      <el-button v-if="!designMode" type="primary" @click="retry" class="retry-btn">重试</el-button>
-    </div>
+      <!-- 空状态 -->
+      <div v-else-if="total === 0 && rows.length === 0" class="empty-state">
+        <el-empty description="暂无数据" />
+        <el-button v-if="!designMode" type="primary" @click="retry" class="retry-btn">重试</el-button>
+      </div>
 
-    <!-- 卡片网格渲染 -->
-    <div v-else class="card-groups">
-      <section v-for="group in groupedRows" :key="group.key" class="card-group">
-        <div v-if="groupBy" class="card-group-title" :class="{ 'is-collapsible': collapsibleGroups, 'is-collapsed': collapsibleGroups && !isGroupExpanded(group.key) }" @click="collapsibleGroups && toggleGroup(group.key)">
-          <span class="card-group-title-text">{{ group.label }}</span>
-<span v-if="collapsibleGroups" class="card-group-toggle">
-            <el-icon :class="{ 'is-collapsed-icon': !expandedGroups[group.key] }"><ArrowDown /></el-icon>
-          </span>
-        </div>
-        <div v-show="!(groupBy && collapsibleGroups && !isGroupExpanded(group.key))" class="card-grid" :style="gridStyle">
-          <div v-for="row in group.rows" :key="row.id || row._index" class="card-item" :class="cardClasses(row)" :style="{ ...cardCssVars, ...cardCssEscape, ...formStyle, ...resolveCardDynamicStyle(row) }" @click="handleCardClick(row)">
+      <!-- 卡片网格渲染 -->
+      <div v-else class="card-groups">
+        <section v-for="group in groupedRows" :key="group.key" class="card-group">
+          <div v-if="groupBy" class="card-group-title" :class="{ 'is-collapsible': collapsibleGroups, 'is-collapsed': collapsibleGroups && !isGroupExpanded(group.key) }" @click="collapsibleGroups && toggleGroup(group.key)">
+            <span class="card-group-title-text">{{ group.label }}</span>
+            <span v-if="collapsibleGroups" class="card-group-toggle">
+              <el-icon :class="{ 'is-collapsed-icon': !expandedGroups[group.key] }"><ArrowDown /></el-icon>
+            </span>
+          </div>
+          <div v-show="!(groupBy && collapsibleGroups && !isGroupExpanded(group.key))" class="card-grid" :style="gridStyle">
+            <div v-for="row in group.rows" :key="row.id || row._index" class="card-item" :class="cardClasses(row)" :style="{ ...cardCssVars, ...cardCssEscape, ...formStyle, ...resolveCardDynamicStyle(row) }" @click="handleCardClick(row)">
         <div v-if="resolvedCardStyle.regions?.header?.show" class="card-header">
           <span v-if="resolvedCardStyle.regions.header.icon" class="card-header-icon">
             <el-icon :size="typeof resolvedCardStyle.regions.header.icon === 'object' ? resolvedCardStyle.regions.header.icon.size : 20" :style="{ color: typeof resolvedCardStyle.regions.header.icon === 'object' ? resolvedCardStyle.regions.header.icon.color : undefined }">
@@ -109,9 +137,10 @@
             </el-button>
           </template>
         </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
     <el-pagination
       v-if="showPagination"
@@ -165,6 +194,17 @@ interface ListCardsProps {
     type?: string
     placement?: string
   }>
+  /** 工具栏操作按钮（placement=toolbar） */
+  toolbarButtons?: Array<{
+    key: string
+    label: string
+    icon?: string
+    type?: string
+    size?: 'small' | 'default' | 'large'
+    link?: boolean
+    circle?: boolean
+    events?: any[]
+  }>
   groupBy?: string
   /** 分组是否可折叠（仅 groupBy 生效时才有意义；默认展开） */
   collapsibleGroups?: boolean
@@ -181,6 +221,7 @@ const props = withDefaults(defineProps<ListCardsProps>(), {
   showPagination: true,
   designMode: false,
   actions: () => [],
+  toolbarButtons: () => [],
   collapsibleGroups: false,
   actionsPlacement: 'bottom',
 })
@@ -189,6 +230,7 @@ const emit = defineEmits<{
   'row-click': [row: any]
   refresh: []
   'action-click': [action: { key: string; label: string }, row: any]
+  'toolbar-action': [action: { key: string; label: string; icon?: string; type?: string; events?: any[] }]
 }>()
 
 const loading = ref(false)
@@ -365,6 +407,9 @@ function handleCardClick(row: any) { emit('row-click', row) }
 function handleActionClick(action: { key: string; label: string }, row: any) {
   emit('action-click', action, row)
 }
+function handleToolbarAction(action: { key: string; label: string; icon?: string; type?: string; events?: any[] }) {
+  emit('toolbar-action', action)
+}
 function columnStyle(column: CardColumn | undefined, row?: Record<string, any>): Record<string, string> {
   if (!column) return {}
   // 使用统一字段样式解析（FieldStyle 模型）
@@ -436,10 +481,16 @@ defineExpose({ fetchData, refresh, retry })
 </script>
 
 <style scoped>
-.list-cards { width: 100%; height: 100%; min-width: 0; display: flex; flex-direction: column; }
-.is-loading { opacity: 0.6; }
-.card-groups { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
-.card-pagination { align-self: flex-end; margin: 0 16px 16px; }
+ .list-cards { width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+ .is-loading { opacity: 0.6; }
+ .search-card { flex-shrink: 0; margin-bottom: 16px !important; }
+ .card-data-area { flex: 1; min-height: 0; overflow-y: auto; }
+ .card-groups { padding: 16px; }
+    .card-toolbar { flex-shrink: 0; margin: 20px 16px 12px; display: flex; align-items: center; gap: 8px; padding: 0; }
+  .card-toolbar .el-button { margin: 0; }
+  /* 查询栏在上、操作栏在下：相邻时取消操作栏顶部外边距，避免与查询栏 margin-bottom 叠加成 36px（对齐 SearchTable 16px 单边间距） */
+  .search-card + .card-toolbar { margin-top: 0; }
+ .card-pagination { align-self: flex-end; flex-shrink: 0; margin: 0 16px 16px; }
 .card-group + .card-group { margin-top: 24px; }
 .card-group-title { margin-bottom: 12px; font-size: 15px; font-weight: 600; color: #303133; }
 .card-group-title.is-collapsible { cursor: pointer; display: flex; align-items: center; gap: 6px; user-select: none; }

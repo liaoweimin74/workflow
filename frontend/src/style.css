@@ -3,11 +3,29 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-industrial: #1a56db;
-  --color-industrial-50: #eff6ff;
-  --color-industrial-100: #dbeafe;
-  --color-industrial-600: #1a56db;
-  --color-industrial-700: #1e40af;
+  /* 靛蓝主色（参考稿提取 #5755ee / #5452d3） */
+  --color-industrial: #5755ee;
+  --color-industrial-50: #f3f3fe;
+  --color-industrial-100: #e9eaff;
+  --color-industrial-200: #d6d6fd;
+  --color-industrial-300: #b9b9f9;
+  --color-industrial-400: #8a8af4;
+  --color-industrial-500: #5755ee;
+  --color-industrial-600: #5452d3;
+  --color-industrial-700: #4342b5;
+  --color-industrial-800: #35349a;
+  --color-industrial-900: #2a2970;
+  /* 青色点缀（参考稿 #46c9d6 / #48e0dd） */
+  --color-accent: #46c9d6;
+  --color-accent-50: #ecfbfd;
+  --color-accent-100: #c6edf4;
+  --color-accent-200: #a5e4ee;
+  --color-accent-300: #6fd8e5;
+  --color-accent-400: #48e0dd;
+  --color-accent-500: #46c9d6;
+  --color-accent-600: #2ca7b5;
+  --color-accent-700: #1f8592;
+  /* 安全语义色（琥珀，保留） */
   --color-safety: #f59e0b;
   --color-safety-50: #fffbeb;
   --color-safety-100: #fef3c7;
@@ -23,17 +41,37 @@ html, body, #app {
   font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif;
   font-size: 14px;
   color: #374151;
-  background: #f8f9fb;
+  background: linear-gradient(#f4f6fe, #eef1fc);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Element Plus override for light theme */
-.el-button--primary {
-  --el-button-bg-color: #1a56db;
-  --el-button-border-color: #1a56db;
-  --el-button-hover-bg-color: #1e40af;
-  --el-button-hover-border-color: #1e40af;
+/* ====== Element Plus 亮色主题覆盖（靛蓝 + 浅蓝紫） ====== */
+:root {
+  --el-color-primary: #5755ee;
+  --el-color-primary-light-3: #8a8af4;
+  --el-color-primary-light-5: #abaaf6;
+  --el-color-primary-light-7: #c6c5f7;
+  --el-color-primary-light-8: #d7d6f8;
+  --el-color-primary-light-9: #e8e8f8;
+  --el-color-primary-dark-2: #4544be;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f1f4fe;
+  --el-border-color: #e3e8f7;
+  --el-border-color-light: #e9edfa;
+  --el-border-color-lighter: #eef1fc;
+  --el-border-color-extra-light: #f4f6fe;
+  --el-fill-color: #f0f1fb;
+  --el-fill-color-light: #f4f6fe;
+  --el-fill-color-lighter: #f8f9fe;
+  --el-fill-color-blank: #ffffff;
+  --el-text-color-primary: #1f2437;
+  --el-text-color-regular: #4b5169;
+  --el-text-color-secondary: #8b91ab;
+  --el-text-color-placeholder: #b0b5c9;
 }
 
 .el-menu {
@@ -55,7 +93,7 @@ html, body, #app {
 }
 
 .el-table th.el-table__cell {
-  background-color: #f8f9fb;
+  background-color: #eef1fc;
   color: #6b7280;
   font-weight: 500;
 }
@@ -68,20 +106,30 @@ html, body, #app {
   border-radius: 4px;
 }
 
-/* ====== 暗色模式全局适配 ====== */
+/* ====== 暗色模式全局适配（深蓝紫主题） ====== */
 .dark {
-  --el-bg-color: #1f2937;
-  --el-bg-color-overlay: #1f2937;
+  --el-color-primary: #7c7ff0;
+  --el-color-primary-light-3: #999bf4;
+  --el-color-primary-light-5: #b0b2f7;
+  --el-color-primary-light-7: #c8c9fa;
+  --el-color-primary-light-9: #e0e1fc;
+  --el-color-primary-dark-2: #6365c2;
+  --el-bg-color: #1b2040;
+  --el-bg-color-overlay: #222750;
   --el-text-color-primary: #e5e7eb;
-  --el-text-color-regular: #d1d5db;
-  --el-border-color: #374151;
-  --el-border-color-light: #374151;
-  --el-fill-color-blank: #1f2937;
-  --el-fill-color-light: #374151;
+  --el-text-color-regular: #c3c8d9;
+  --el-text-color-secondary: #94a3b8;
+  --el-border-color: #2a3054;
+  --el-border-color-light: #323a63;
+  --el-border-color-lighter: #3a4370;
+  --el-fill-color-blank: #1b2040;
+  --el-fill-color: #232950;
+  --el-fill-color-light: #2a3158;
+  --el-fill-color-lighter: #303860;
 }
 
 .dark body {
-  background: #111827;
+  background: #12162b;
   color: #e5e7eb;
 }
 
@@ -92,45 +140,45 @@ html, body, #app {
 
 .dark .el-menu-item,
 .dark .el-sub-menu__title {
-  color: #d1d5db;
+  color: #c3c8d9;
 }
 
 .dark .el-menu-item:hover,
 .dark .el-sub-menu__title:hover {
-  background-color: #374151 !important;
+  background-color: #2a3158 !important;
 }
 
 /* 暗色模式下表格 */
 .dark .el-table {
-  background-color: #1f2937;
-  --el-table-bg-color: #1f2937;
-  --el-table-tr-bg-color: #1f2937;
-  --el-table-border-color: #374151;
-  --el-table-header-bg-color: #111827;
+  background-color: #1b2040;
+  --el-table-bg-color: #1b2040;
+  --el-table-tr-bg-color: #1b2040;
+  --el-table-border-color: #2a3054;
+  --el-table-header-bg-color: #161b36;
   --el-table-text-color: #e5e7eb;
 }
 
 .dark .el-table th.el-table__cell {
-  background-color: #111827;
-  color: #9ca3af;
+  background-color: #161b36;
+  color: #94a3b8;
 }
 
 /* 暗色下面包屑 */
 .dark .el-breadcrumb__inner {
-  color: #9ca3af !important;
+  color: #94a3b8 !important;
 }
 
 /* 暗色下下拉菜单 */
 .dark .el-dropdown-menu {
-  background-color: #1f2937;
-  border-color: #374151;
+  background-color: #222750;
+  border-color: #2a3054;
 }
 
 .dark .el-dropdown-menu__item {
-  color: #d1d5db;
+  color: #c3c8d9;
 }
 
 .dark .el-dropdown-menu__item:hover {
-  background-color: #374151;
-  color: #f59e0b;
+  background-color: #2a3158;
+  color: #7c7ff0;
 }

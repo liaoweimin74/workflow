@@ -73,7 +73,7 @@ openspec validate --all --json → 97 items 全部 "valid": true
 - [x] Worktree 內無未 staged 的檔案（统一提交后）
 - [ ] 所有相關 commit 已推送（feature 分支，待 `/opsx-finish` 合并）
 
-**Commit 範圍**（若知道）：`2d3e9b7`（artifacts）.. `<实现 commit>`
+**Commit 範圍**（若知道）：`2d3e9b7`（artifacts）.. `de90a8f`（7 任务实现）、`d0ccac7`（方案 A：select 单选统一 JSON 双列）
 
 ---
 
@@ -102,9 +102,10 @@ plan.md 无 `[~]` 標記 row，本節不適用（空白即 PASS）。
 - [ ] ❌ FAIL — 返回失敗的 artifact 修正後重跑 verify
 
 **驗證摘要**：
-- 前端 vitest：54 文件 724 测试全过；vue-tsc 无新增错误（arrayValueLabel 类型已修复，其余为既有错误集）
+- 前端 vitest：73 文件 891 测试全过（含方案 A 后）；vue-tsc 无新增错误（arrayValueLabel/ColumnConfigDialog 改动文件类型干净，其余为既有错误集）
 - 后端 mvn test：821 测试，仅 1 个既有失败（PageDefinitionPublishIntegrationTest.publish_sameContent_rejectedAsUnchanged，stash 隔离验证与本次改动无关）
 - openspec validate：97 项全部 valid
 - 实现覆盖：后端列映射双列生成（ColumnTypeMapper）、前端列映射双列生成（ColumnConfigDialog）+ cascader emitPath=false、提交生成 label（arrayValueLabel + BizDataListPage）、列表显示走 text 列（BizDataListPage/PageDataTable）、模糊查询走 text LIKE + 精确查询走 JSON_CONTAINS/JSON_OVERLAPS（BizDataQueryBuilder + BizDataService）
+- 方案 A（select 单选统一 JSON，commit `d0ccac7`）：`isArrayComponent`/`mapComponentToColumn` 对 select 一律 JSON+text 双列（前后端同步），查询全走 `_text` 列；select 单选提交单值字符串存 JSON 列，读回单值兼容回显；ColumnTypeMapperTest 44/44、ColumnConfigDialog 39/39、arrayValueLabel 12/12
 
 **下一步**：`/opsx-finish` 合并 worktree 到 main、同步 delta specs、归档。

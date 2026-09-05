@@ -31,8 +31,8 @@
 | `<key>` | JSON | 叶子 value 数组（单选 `["x"]`、多选 `["x","y"]`） | 回显、精确查询（JSON_CONTAINS）、统计 |
 | `<key>_text` | VARCHAR(255) | 显示文本：cascader 全路径 `/` 分隔；其余叶子 label；多选叶子间 `, ` | 列表显示、模糊查询（LIKE） |
 
-- 数组组件集合：`select`（multiple 时）/ `checkbox` / `multiSelect` / `multiSelectPro` / `tree` / `elTreeSelect` / `elTransfer` / `cascader`。
-- select 单选仍 VARCHAR 单值（非数组组件语义）；仅多选与树/穿梭/级联走双列。
+- 数组组件集合：`select`（单选与多选）/ `checkbox` / `multiSelect` / `multiSelectPro` / `tree` / `elTreeSelect` / `elTransfer` / `cascader`。
+- select 单选/多选统一 JSON 双列（查询走 `_text` 列，主列仅存值回显；select 单选提交单值字符串存入 JSON 列，宽松兼容）。
 - 列映射改动点：`ColumnTypeMapper.java`（后端）+ `ColumnConfigDialog.vue`（前端）为数组组件生成主列 + text 列。
 
 ### 2. cascader emitPath=false

@@ -10,7 +10,7 @@
 
 业务表单列映射 SHALL 为数组值组件生成两列：主列 `<key>`（JSON，叶子 value 数组）与显示列 `<key>_text`（VARCHAR(255)，显示文本）。
 
-数组值组件集合 SHALL 包括：`checkbox`、`multiSelect`、`multiSelectPro`、`elTransfer`、`tree`（多选与单选）、`elTreeSelect`（多选与单选）、`cascader`（单选与多选）、`select`（multiple=true）。
+数组值组件集合 SHALL 包括：`checkbox`、`multiSelect`、`multiSelectPro`、`elTransfer`、`tree`（多选与单选）、`elTreeSelect`（多选与单选）、`cascader`（单选与多选）、`select`（单选与多选）。
 
 显示列 SHALL 标记为隐藏列（不参与列表列生成），主列 SHALL 为可显示列。
 
@@ -21,6 +21,10 @@
 #### Scenario: select 多选生成双列
 - **WHEN** 业务表单 schema 含 `{ type: 'select', field: 'dept', props: { multiple: true } }`
 - **THEN** 列映射草案生成 `{ key: 'dept', columnType: 'JSON' }` 与 `{ key: 'dept_text', columnType: 'VARCHAR', length: 255, hidden: true }`
+
+#### Scenario: select 单选生成双列
+- **WHEN** 业务表单 schema 含 `{ type: 'select', field: 'grade', props: { multiple: false } }`
+- **THEN** 列映射草案生成 `{ key: 'grade', columnType: 'JSON' }` 与 `{ key: 'grade_text', columnType: 'VARCHAR', length: 255, hidden: true }`
 
 #### Scenario: elTreeSelect 单选生成双列
 - **WHEN** 业务表单 schema 含 `{ type: 'elTreeSelect', field: 'org', props: { multiple: false } }`

@@ -14,9 +14,9 @@
 | `elTreeSelect`（单选与多选） | JSON + `<key>_text` |
 | `elTransfer` | JSON + `<key>_text` |
 | `cascader`（单选与多选） | JSON + `<key>_text` |
-| `select`（multiple=true） | JSON + `<key>_text` |
+| `select`（单选与多选） | JSON + `<key>_text` |
 
-与上一版本相比：映射范围由"多值组件"扩展为"数组值组件"（select 多选、cascader、elTreeSelect 单选、tree 单选也统一 JSON 数组）；每列生成额外 `<key>_text` 显示冗余列（hidden，VARCHAR(255)）；elTreeSelect 单选不再映射为 VARCHAR。
+与上一版本相比：映射范围由"多值组件"扩展为"数组值组件"（select 单选与多选、cascader、elTreeSelect 单选、tree 单选也统一 JSON 数组）；每列生成额外 `<key>_text` 显示冗余列（hidden，VARCHAR(255)）；elTreeSelect 单选不再映射为 VARCHAR、select 单选不再映射为 VARCHAR。
 
 原有 checkbox/multiSelect 映射为 TEXT（逗号拼接）的规则 SHALL 不再适用。
 
@@ -35,10 +35,10 @@
 - **THEN** 列映射草案生成 `{ key: 'region', columnType: 'JSON' }`
 - **AND** 生成 `{ key: 'region_text', columnType: 'VARCHAR', length: 255, hidden: true }`
 
-#### Scenario: select 单选仍 VARCHAR
+#### Scenario: select 单选映射为双列
 - **WHEN** 业务表单 schema 含 `{ type: 'select', field: 'grade', props: { multiple: false } }`
-- **THEN** 列映射草案生成 `{ key: 'grade', columnType: 'VARCHAR', length: 255 }`
-- **AND** 不生成 `<key>_text` 列
+- **THEN** 列映射草案生成 `{ key: 'grade', columnType: 'JSON' }`（不再为 VARCHAR）
+- **AND** 生成 `{ key: 'grade_text', columnType: 'VARCHAR', length: 255, hidden: true }`
 
 ### Requirement: JSON 值序列化写入
 

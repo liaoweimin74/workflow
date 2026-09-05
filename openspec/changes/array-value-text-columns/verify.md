@@ -108,5 +108,6 @@ plan.md 无 `[~]` 標記 row，本節不適用（空白即 PASS）。
 - 实现覆盖：后端列映射双列生成（ColumnTypeMapper）、前端列映射双列生成（ColumnConfigDialog）+ cascader emitPath=false、提交生成 label（arrayValueLabel + BizDataListPage）、列表显示走 text 列（BizDataListPage/PageDataTable）、模糊查询走 text LIKE + 精确查询走 JSON_CONTAINS/JSON_OVERLAPS（BizDataQueryBuilder + BizDataService）
 - 方案 A（select 单选统一 JSON，commit `d0ccac7`）：`isArrayComponent`/`mapComponentToColumn` 对 select 一律 JSON+text 双列（前后端同步），查询全走 `_text` 列；select 单选提交单值字符串存 JSON 列，读回单值兼容回显；ColumnTypeMapperTest 44/44、ColumnConfigDialog 39/39、arrayValueLabel 12/12
 - 回显兜底修复（`injectFallbackOptions` + FormRenderer 接入）：数组组件 options 无匹配时用 `<key>_text` 注入 `{value, label}` 兜底显示，避免显示原始 value（覆盖异步数据源未就绪/类型不匹配/静态缺失）；arrayValueLabel.test.ts 新增 8 用例（20/20）、FormRenderer.test.ts 36/36；前端全量 73 文件 899 测试全过，vue-tsc 无新增错误
+- `_text` 生成修复（commit 待定）：①树形/级联显示文本改全路径 `/` 分割（tree/elTreeSelect 由叶子 label 改 collectPathLabels）；②提交用渲染时解析后选项（FormRenderer.getFormData 基于 resolvedSchema 跑 withArrayLabels，BizDataListPage 已有 `_text` 不覆盖）；arrayValueLabel 21/21、FormRenderer 37/37；前端全量 73 文件 901 测试全过，vue-tsc 无新增错误
 
 **下一步**：`/opsx-finish` 合并 worktree 到 main、同步 delta specs、归档。

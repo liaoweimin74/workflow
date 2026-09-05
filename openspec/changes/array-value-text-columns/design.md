@@ -29,7 +29,7 @@
 | 列 | 类型 | 内容 | 用途 |
 |---|---|---|---|
 | `<key>` | JSON | 叶子 value 数组（单选 `["x"]`、多选 `["x","y"]`） | 回显、精确查询（JSON_CONTAINS）、统计 |
-| `<key>_text` | VARCHAR(255) | 显示文本：cascader 全路径 `/` 分隔；其余叶子 label；多选叶子间 `, ` | 列表显示、模糊查询（LIKE） |
+| `<key>_text` | VARCHAR(255) | 显示文本：树形/级联（cascader/tree/elTreeSelect）完整路径 `/` 分隔；select/checkbox/transfer 叶子 label；多选叶子间 `, ` | 列表显示、模糊查询（LIKE） |
 
 - 数组组件集合：`select`（单选与多选）/ `checkbox` / `multiSelect` / `multiSelectPro` / `tree` / `elTreeSelect` / `elTransfer` / `cascader`。
 - select 单选/多选统一 JSON 双列（查询走 `_text` 列，主列仅存值回显；select 单选提交单值字符串存入 JSON 列，宽松兼容）。
@@ -41,6 +41,8 @@
 
 ### 3. label 由前端提交生成
 - 前端在提交预处理中遍历 schema 数组组件，用渲染时持有的 options 做 value→label 映射，生成 `<key>_text` 一并提交。
+- **必须使用渲染时解析后的选项**（FormRenderer.getFormData 基于 resolvedSchema——异步数据源已加载）；原始 schema（schemaRules）的选项可能为空，会导致映射失败回退 value。
+- 树形（tree/elTreeSelect）与级联（cascader）显示文本为完整路径 `/` 分隔；select/checkbox/transfer 为叶子 label；多选叶子间 `, ` 连接。
 - 后端 `BizDataService.create/update` 直接落两列，不做 options 解析。
 - 组件 options 取值位置：`rule.options`（select/checkbox）/ `props.data`（tree/transfer/elTreeSelect）/ `props.options`（cascader）。
 

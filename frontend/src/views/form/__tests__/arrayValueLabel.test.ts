@@ -32,7 +32,7 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
     expect(out.tags_text).toBe('标签1')
   })
 
-  it('elTreeSelect 多选：props.data 树中叶子 label 逗号拼接', () => {
+  it('elTreeSelect 多选：props.data 树中全路径 / 分隔', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: {
         data: [
@@ -41,7 +41,19 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
       },
     } as any]
     const out = withArrayLabels({ org: ['1', '2'] }, rules)
-    expect(out.org_text).toBe('总公司, 武汉分公司')
+    expect(out.org_text).toBe('总公司, 总公司/武汉分公司')
+  })
+
+  it('elTreeSelect 单选：全路径 / 分隔', () => {
+    const rules = [{
+      type: 'elTreeSelect', field: 'org', props: {
+        data: [
+          { label: '总公司', value: '1', children: [{ label: '武汉分公司', value: '2' }] },
+        ],
+      },
+    } as any]
+    const out = withArrayLabels({ org: '2' }, rules)
+    expect(out.org_text).toBe('总公司/武汉分公司')
   })
 
   it('elTransfer：props.data 叶子 label', () => {

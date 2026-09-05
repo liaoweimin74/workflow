@@ -50,22 +50,7 @@ function labelOf(options: any[] | undefined, value: unknown): string | undefined
   return undefined
 }
 
-/** 树中查找 value 匹配节点的 label（叶子 label） */
-function findNodeLabel(tree: TreeNode[] | undefined, value: unknown): string | undefined {
-  if (!Array.isArray(tree)) return undefined
-  for (const node of tree) {
-    if (node.value === value || String(node.value) === String(value)) {
-      return node.label === undefined ? undefined : String(node.label)
-    }
-    if (Array.isArray(node.children)) {
-      const r = findNodeLabel(node.children, value)
-      if (r !== undefined) return r
-    }
-  }
-  return undefined
-}
-
-/** 树中收集 value 匹配节点的完整路径 label（`/` 分隔；cascader 用） */
+/** 树中收集 value 匹配节点的完整路径 label（`/` 分隔；cascader/树形用） */
 function collectPathLabels(tree: TreeNode[] | undefined, value: unknown, path: string[]): string[] {
   const out: string[] = []
   if (!Array.isArray(tree)) return out
@@ -94,7 +79,10 @@ function buildText(type: string, rule: RuleNode, value: unknown): string {
   }
   if (type === 'tree' || type === 'elTreeSelect' || type === 'elTransfer') {
     const tree: TreeNode[] | undefined = rule.props?.data
-    const parts = values.map((v) => findNodeLabel(tree, v) ?? String(v))
+    const parts = values.flatMap((v) => {
+      const paths = collectPathLabels(tree, v, [])
+      return paths.length > 0 ? paths : [String(v)]
+    })
     return parts.join(', ')
   }
   // select / checkbox / multiSelect / multiSelectPro

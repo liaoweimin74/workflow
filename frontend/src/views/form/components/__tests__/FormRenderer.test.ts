@@ -257,6 +257,20 @@ describe('FormRenderer — getFormData() 方法', () => {
     const vm = wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }
     expect(typeof vm.getFormData).toBe('function')
   })
+
+  it('getFormData 为数组组件字段附加 _text（用解析后选项映射）', async () => {
+    const wrapper = createWrapper({
+      rule: [{
+        type: 'select', field: 'grade', props: {},
+        options: [{ label: 'A', value: 'a' }],
+      }] as unknown as Rule[],
+      initialValues: { grade: 'a' },
+    })
+    await nextTick()
+    const data = (wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }).getFormData()
+    expect(data.grade).toBe('a')
+    expect(data.grade_text).toBe('A')
+  })
 })
 
 describe('FormRenderer — validate() 方法（详情弹窗保存校验）', () => {

@@ -92,7 +92,7 @@ import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import PageDataCards from '@/views/page/components/PageDataCards.vue'
 import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
-import { injectFallbackOptions } from '@/views/form/arrayValueLabel'
+import { injectFallbackOptions, withArrayLabels } from '@/views/form/arrayValueLabel'
 import { useLinkageContainer, type LinkageContainer } from '../composables/useLinkageContainer'
 import ContainerButtons from './ContainerButtons.vue'
 
@@ -540,7 +540,9 @@ async function submit(): Promise<boolean> {
 }
 
 function getFormData(): Record<string, unknown> {
-  return formData.value
+  // 用解析后选项（resolvedSchema，含异步数据源）为数组组件附加 <key>_text 显示文本，
+  // 保证提交时冗余字段取到真实 label/全路径（原始 schema 的选项可能为空）
+  return withArrayLabels(formData.value, resolvedSchema.value)
 }
 
 /** form-create 实例 API（校验等），通过全局注入获取 */

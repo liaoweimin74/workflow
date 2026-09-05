@@ -48,11 +48,17 @@
 
 表单提交时，前端 SHALL 遍历 schema 数组值组件，用渲染时持有的选项映射（value→label）生成 `<key>_text` 显示文本并随提交携带；后端保存 SHALL 将主列与显示列一并落库。
 
-组件选项取值位置 SHALL 为：`rule.options`（select/checkbox）、`props.data`（tree/elTreeSelect/elTransfer）、`props.options`（cascader）。
+组件选项取值位置 SHALL 为：`rule.options`（select/checkbox）、`props.data`（tree/elTreeSelect/elTransfer）、`props.options`（cascader）。树形（tree/elTreeSelect）与级联（cascader）显示文本 SHALL 为完整路径（`/` 分隔），select/checkbox/transfer 为叶子 label。
+
+提交时 SHALL 使用渲染时已解析的选项（异步数据源已加载，经 FormRenderer 解析后 schema），而非原始 schema（其选项可能为空导致映射失败回退 value）。
 
 #### Scenario: 多选提交生成 label
 - **WHEN** 用户提交多选字段值为 `["a","b"]` 且选项映射为 `{a: 张三, b: 李四}`
 - **THEN** 提交数据含 `field: ["a","b"]` 与 `field_text: "张三, 李四"`
+
+#### Scenario: 树形提交生成全路径
+- **WHEN** 用户提交树形字段值为 `["2"]` 且路径 label 为 `总公司/武汉分公司`
+- **THEN** 提交数据含 `field: ["2"]` 与 `field_text: "总公司/武汉分公司"`
 
 #### Scenario: 级联提交生成全路径
 - **WHEN** 用户提交级联字段叶子值为 `["leaf-a"]` 且路径 label 为 `省级/市级/leaf-a`

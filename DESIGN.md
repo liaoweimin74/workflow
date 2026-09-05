@@ -10,15 +10,50 @@ An operational admin console: compact, calm, and information-dense without feeli
 
 ## 2. Color
 
+### 2.1 Brand Colors (靛蓝主色 & 青色点缀)
+
+| Role | Token | Value | Usage |
+|---|---|---|---|
+| Industrial 500 (Primary) | `--ds-industrial-500` | `#5755ee` | 主色靛蓝 - 品牌主色 |
+| Industrial 600 | `--ds-industrial-600` | `#5452d3` | 主色靛蓝深调 - hover/focus |
+| Accent 100 | `--ds-accent-100` | `#c6edf4` | 青色淡雅 - 背景点缀 |
+| Accent 400 | `--ds-accent-400` | `#48e0dd` | 青色点缀 - 次要操作 |
+| Accent 500 | `--ds-accent-500` | `#46c9d6` | 青色点缀 - 强调和反馈 |
+
+### 2.2 Semantic Colors
+
 | Role | Token | Value | Usage |
 |---|---|---|---|
 | Surface | `--ds-surface` | `#ffffff` | Dialog and editor surfaces |
 | Text primary | `--ds-text-primary` | `#303133` | Labels and values |
 | Text secondary | `--ds-text-secondary` | `#606266` | Hints and summaries |
 | Text muted | `--ds-text-muted` | `#909399` | Empty states |
-| Border | `--ds-border` | `#dcdfe6` | Inputs and tables |
-| Accent | `--ds-accent` | `#409eff` | Primary actions and focus |
+| Border | `--ds-border` | `#e9edfa` | 卡片边框 - 细边框 |
+| Selected | `--ds-selected` | `#e9eaff` | 选中态 - 列表/按钮 |
+| Card Shadow | `rgba(87, 85, 238, 0.06)` | Shadow | 卡片阴影 - `0 1px 3px` |
 | Danger | `--ds-danger` | `#f56c6c` | Delete actions and invalid states |
+| Safety | `--ds-safety` | `#f59e0b` | 安全业务语义色 - 琥珀色 |
+
+### 2.3 Background System (浅蓝紫背景)
+
+| 场景 | Token | Value |
+|---|---|---|
+| 页面底 | `--ds-bg-page` | `#f1f4fe` |
+| 侧边栏亮模式 | `--ds-bg-sidebar-light` | `#eef0fc` |
+| 侧边栏暗模式 | `--ds-bg-sidebar-dark` | `#161b36` |
+| 背景渐变 | Gradient | `linear-gradient(#f4f6fe, #eef1fc)` |
+
+### 2.4 Dark Mode Colors (暗色模式)
+
+| Role | Token | Value | Usage |
+|---|---|---|---|
+| Dark Base | `--ds-dark-base` | `#12162b` | 暗色底 |
+| Dark Card | `--ds-dark-card` | `#1b2040` | 暗色卡片背景 |
+| Dark Border | `--ds-dark-border` | `#2a3054` | 暗色边框 |
+| Industrial Lite | `--ds-dark-industrial-lite` | `#7c7ff0` | 主色微亮 |
+| Cyan | `--ds-dark-cyan` | `#5ee7e8` | 青色 - 暗色主题点缀 |
+| Text Primary | `--ds-dark-text-primary` | `#e5e7eb` | 暗色文字主 |
+| Text Secondary | `--ds-dark-text-secondary` | `#94a3b8` | 暗色文字次 |
 
 ## 3. Typography
 

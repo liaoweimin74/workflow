@@ -187,19 +187,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-screen min-w-[1024px] max-w-[1920px] mx-auto bg-white dark:bg-gray-900">
+  <div class="flex flex-col h-screen min-w-[1024px] max-w-[1920px] mx-auto bg-transparent dark:bg-transparent">
     <!-- ====== 顶部标题栏（整行） ====== -->
-    <header class="h-14 flex items-center justify-between px-4 border-b border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700 shrink-0">
+    <header class="h-14 flex items-center justify-between px-4 border-b border-[#e9edfa] bg-white dark:bg-[#161b36] dark:border-[#2a3054] shrink-0">
       <!-- 左侧：折叠按钮 + Logo + 面包屑 -->
       <div class="flex items-center gap-4">
         <button
           @click="toggleCollapsed"
-          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors shrink-0"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] transition-colors shrink-0"
         >
           <el-icon :size="18"><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
         </button>
         <div class="flex items-center gap-2 shrink-0">
-          <div class="w-8 h-8 rounded-lg bg-industrial-600 flex items-center justify-center">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#5755ee] to-[#46c9d6] flex items-center justify-center shadow-sm">
             <span class="text-white text-sm font-bold">MB</span>
           </div>
           <span class="text-base font-semibold text-gray-800 dark:text-gray-100">工作流管理系统</span>
@@ -220,7 +220,7 @@ onUnmounted(() => {
         <NotificationBell />
         <button
           @click="toggleDark"
-          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] transition-colors"
         >
           <el-icon :size="18"><Sunny v-if="isDark" /><Moon v-else /></el-icon>
         </button>
@@ -244,7 +244,7 @@ onUnmounted(() => {
       <!-- 左侧菜单 -->
       <aside
         :class="collapsed ? 'w-16' : 'w-56'"
-        class="flex flex-col bg-gray-50 border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700 transition-all duration-300 shrink-0"
+        class="flex flex-col bg-[#eef0fc] border-r border-[#e9edfa] dark:bg-[#161b36] dark:border-[#2a3054] transition-all duration-300 shrink-0"
       >
         <div class="flex-1 overflow-y-auto overflow-x-hidden py-2">
           <el-menu
@@ -253,7 +253,7 @@ onUnmounted(() => {
             router
             background-color="transparent"
             text-color="#4b5563"
-            active-text-color="#f59e0b"
+            active-text-color="#5755ee"
             style="border-right: none"
             @select="handleMenuSelect"
           >
@@ -274,7 +274,7 @@ onUnmounted(() => {
       <!-- 右侧内容区 -->
       <div class="flex-1 flex flex-col min-w-0">
         <!-- 页签栏 -->
-        <div class="h-10 flex items-center gap-0 px-3 border-b border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 overflow-x-auto shrink-0">
+        <div class="h-10 flex items-center gap-0 px-3 border-b border-[#e9edfa] bg-[#eef0fc] dark:bg-[#161b36] dark:border-[#2a3054] overflow-x-auto shrink-0">
           <draggable
             v-model="tags"
             item-key="path"
@@ -286,11 +286,11 @@ onUnmounted(() => {
             <template #item="{ element: tag }">
               <div
                 :class="[
-                  'h-full flex items-center gap-1.5 px-3 border-r border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 transition-colors text-sm select-none',
+                  'h-full flex items-center gap-1.5 px-3 border-r border-[#e9edfa] dark:border-[#2a3054] cursor-pointer shrink-0 transition-colors text-sm select-none',
                   tag.path === '/dashboard' ? 'no-drag' : '',
                   route.path === tag.path
-                    ? 'bg-white dark:bg-gray-900 text-industrial-600 border-t-2 border-t-safety-500 -mt-px'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    ? 'bg-white dark:bg-[#1b2040] text-industrial-600 border-t-2 border-t-accent-500 -mt-px'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]'
                 ]"
                 @click="router.push(tag.path)"
                 @contextmenu.prevent="onTagContextMenu($event, tag)"
@@ -302,7 +302,7 @@ onUnmounted(() => {
                 <button
                   v-else-if="tag.path !== '/dashboard'"
                   @click.stop="removeTag(tag.path)"
-                  class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-gray-200 shrink-0"
+                  class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-[#e9edfa] dark:hover:bg-[#2a3054] shrink-0"
                 >
                   <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -316,13 +316,13 @@ onUnmounted(() => {
         <!-- 右键菜单 -->
         <div
           v-if="contextMenu.visible"
-          class="fixed z-50 min-w-[140px] bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 py-1 text-sm"
+          class="fixed z-50 min-w-[140px] bg-white dark:bg-[#222750] rounded-md shadow-lg border border-[#e9edfa] dark:border-[#2a3054] py-1 text-sm"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
           @click.stop
         >
           <div
             :class="[
-              'px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700',
+              'px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]',
               (tags.find(t => t.path === contextMenu.targetPath)?.locked || contextMenu.targetPath === '/dashboard')
                 ? 'text-gray-300 cursor-not-allowed hover:bg-transparent'
                 : 'text-gray-700 dark:text-gray-200'
@@ -332,26 +332,26 @@ onUnmounted(() => {
             关闭本页
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
             @click="closeLeft(contextMenu.targetPath)"
           >
             关闭左侧
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
             @click="closeRight(contextMenu.targetPath)"
           >
             关闭右侧
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
             @click="closeAll()"
           >
             关闭所有
           </div>
           <div
             v-if="contextMenu.targetPath !== '/dashboard'"
-            class="px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 border-t border-gray-100 dark:border-gray-700"
+            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200 border-t border-[#e9edfa] dark:border-[#2a3054]"
             @click="toggleLock(contextMenu.targetPath)"
           >
             {{ tags.find(t => t.path === contextMenu.targetPath)?.locked ? '解锁本页' : '锁定本页' }}
@@ -359,7 +359,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 主内容（keep-alive 缓存页签组件实例：切换页签保留状态；max 限制内存，LRU 驱逐） -->
-        <main class="flex-1 overflow-auto p-4 bg-gray-50 dark:bg-gray-900">
+        <main class="flex-1 overflow-auto p-4 bg-transparent dark:bg-transparent">
           <router-view v-slot="{ Component }">
             <keep-alive :include="cachedViews" :max="MAX_CACHED_VIEWS">
               <component :is="Component" :key="route.path" />

@@ -92,6 +92,19 @@ html, body, #app {
   font-size: 14px !important;
 }
 
+/* ====== 菜单激活态：靛蓝文字 + 蓝紫圆角底块 ====== */
+.el-menu-item.is-active {
+  background-color: #e9eaff !important;
+  color: #5755ee !important;
+  border-radius: 8px !important;
+  font-weight: 500;
+}
+
+.dark .el-menu-item.is-active {
+  background-color: #2a3158 !important;
+  color: #7c7ff0 !important;
+}
+
 .el-table th.el-table__cell {
   background-color: #eef1fc;
   color: #6b7280;

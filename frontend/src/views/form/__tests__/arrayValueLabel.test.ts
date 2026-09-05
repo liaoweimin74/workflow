@@ -150,12 +150,12 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
     expect(out.region_text).toBe('/A/X,/B/Y')
   })
 
-  it('选项缺失：回退 value join', () => {
+  it('选项缺失且无已有 _text：不生成（留空暴露问题，不做 value 兜底）', () => {
     const rules = [{
       type: 'select', field: 'dept', props: { multiple: true }, options: [],
     } as any]
     const out = withArrayLabels({ dept: ['a', 'b'] }, rules)
-    expect(out.dept_text).toBe('a, b')
+    expect(out.dept_text).toBeUndefined()
   })
 
   it('非数组组件不生成 _text', () => {

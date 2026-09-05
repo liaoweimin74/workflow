@@ -182,9 +182,9 @@ function walk(rules: RuleNode[], formData: Record<string, unknown>): void {
           formData[key] = raw
         }
         const { text, mapped } = buildText(type as string, rule, raw)
-        // 选项映射失败（纯 value 回退，mapped=false）时保留已有 _text（回显显示文本），避免劣化；
-        // 值可映射（mapped=true）时始终覆盖，保证编辑修改值后 _text 与 value 一致
-        if (formData[key + '_text'] === undefined || mapped) {
+        // 仅当映射成功（mapped=true）时写入/覆盖 _text；映射失败（选项缺失）不生成新值——
+        // 已有 _text 保留（历史显示值），无则留空，暴露选项缺失问题（不做 value 兜底，便于查错）
+        if (mapped) {
           formData[key + '_text'] = text
         }
       }

@@ -236,12 +236,12 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 
-  it('select 单选 → VARCHAR(255)', async () => {
+  it('select 单选 → JSON（单选/多选统一 JSON 存储，查询走 _text 列）', async () => {
     const wrapper = createWrapper({ schema: extSchema('select') })
     await openAndBuild(wrapper)
     const col = confirmItems(wrapper).find(i => i.key === 'f1')
-    expect(col?.columnType).toBe('VARCHAR')
-    expect(col?.length).toBe(255)
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.length).toBeNull()
     wrapper.unmount()
   })
 
@@ -452,18 +452,20 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 
-  it('select 单选仅 VARCHAR(255)，不生成 <key>_text', async () => {
+  it('select 单选也生成主列 JSON + <key>_text（单选/多选统一双列）', async () => {
     const wrapper = createWrapper({ schema: extSchema('select') })
     await openAndBuild(wrapper)
     const items = confirmItems(wrapper)
-    // 主列 VARCHAR
+    // 主列 JSON
     const mainCol = items.find(i => i.key === 'f1')
     expect(mainCol).toBeDefined()
-    expect(mainCol?.columnType).toBe('VARCHAR')
-    expect(mainCol?.length).toBe(255)
-    // 不生成文本列
+    expect(mainCol?.columnType).toBe('JSON')
+    // 文本列：VARCHAR(255)、hidden
     const textCol = items.find(i => i.key === 'f1_text')
-    expect(textCol).toBeUndefined()
+    expect(textCol).toBeDefined()
+    expect(textCol?.columnType).toBe('VARCHAR')
+    expect(textCol?.length).toBe(255)
+    expect(textCol?.hidden).toBe(true)
     wrapper.unmount()
   })
 })

@@ -95,13 +95,13 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
     expect(out.name_text).toBeUndefined()
   })
 
-  it('select 单选（multiple 未开启）不生成 _text', () => {
+  it('select 单选（multiple 未开启）也生成 _text（查询走文本列）', () => {
     const rules = [{
       type: 'select', field: 'grade', props: { multiple: false },
       options: [{ label: 'A', value: 'a' }],
     } as any]
     const out = withArrayLabels({ grade: 'a' }, rules)
-    expect(out.grade_text).toBeUndefined()
+    expect(out.grade_text).toBe('A')
   })
 
   it('递归子表单 props.rule 中的数组组件生成 _text', () => {

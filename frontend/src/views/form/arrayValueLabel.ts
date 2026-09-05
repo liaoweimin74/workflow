@@ -1,5 +1,5 @@
 /**
- * 数组值组件提交预处理：为数组值组件（select 多选 / checkbox / multiSelect /
+ * 数组值组件提交预处理：为数组值组件（select / checkbox / multiSelect /
  * multiSelectPro / elTransfer / tree / elTreeSelect / cascader）生成 `<key>_text`
  * 显示文本，供列表显示与模糊查询使用。
  *
@@ -12,7 +12,7 @@
  * 已有 `<key>_text` 不覆盖（保留前端既有显示值）。
  */
 
-const ARRAY_COMPONENTS = new Set(['checkbox', 'multiSelect', 'multiSelectPro', 'elTransfer', 'tree', 'elTreeSelect', 'cascader'])
+const ARRAY_COMPONENTS = new Set(['select', 'checkbox', 'multiSelect', 'multiSelectPro', 'elTransfer', 'tree', 'elTreeSelect', 'cascader'])
 
 interface TreeNode {
   label?: unknown
@@ -30,10 +30,9 @@ interface RuleNode {
 }
 
 /** 数组值组件判定（对齐 ColumnConfigDialog / ColumnTypeMapper） */
-function isArrayComponent(type: string | undefined, props: Record<string, any> | undefined): boolean {
+function isArrayComponent(type: string | undefined): boolean {
   if (!type) return false
-  if (ARRAY_COMPONENTS.has(type)) return true
-  return type === 'select' && props?.multiple === true
+  return ARRAY_COMPONENTS.has(type)
 }
 
 /** 扁平 options 中 value → label（支持 el-option-group 嵌套） */
@@ -107,7 +106,7 @@ function buildText(type: string, rule: RuleNode, value: unknown): string {
 function walk(rules: RuleNode[], formData: Record<string, unknown>): void {
   for (const rule of rules) {
     const type = rule.type as string | undefined
-    if (isArrayComponent(type, rule.props)) {
+    if (isArrayComponent(type)) {
       const key = rule.field as string | undefined
       if (key && formData[key] !== undefined && formData[key] !== null && formData[key + '_text'] === undefined) {
         formData[key + '_text'] = buildText(type as string, rule, formData[key])

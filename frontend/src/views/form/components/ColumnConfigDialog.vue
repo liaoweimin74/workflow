@@ -225,9 +225,8 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
         : { columnType: 'INT', length: null, scale: null }
     }
     case 'select': {
-      // 单选存单值 → VARCHAR(255)；多选（multiple）值为数组 → JSON（避免数组序列化存 VARCHAR 回显异常）
-      if (propsMap?.multiple) return { columnType: 'JSON', length: null, scale: null }
-      return { columnType: 'VARCHAR', length: 255, scale: null }
+      // 单选/多选统一 JSON 存储：主列仅存值用于回显，查询走 _text 文本列
+      return { columnType: 'JSON', length: null, scale: null }
     }
     case 'radio':
       return { columnType: 'VARCHAR', length: 255, scale: null }
@@ -561,8 +560,8 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
     const existing = props.existingColumns?.find(c => c.key === field)
 
     // 判断是否为数组值组件（需要生成双列：主列 + 隐藏文本列）
-    const arrayValueTypes = ['checkbox', 'multiSelect', 'multiSelectPro', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
-    const isArrayComponent = arrayValueTypes.includes(type) || (type === 'select' && rule?.props?.multiple)
+    const arrayValueTypes = ['select', 'checkbox', 'multiSelect', 'multiSelectPro', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
+    const isArrayComponent = arrayValueTypes.includes(type)
     const isTextColumnNeeded = isArrayComponent
 
     if (isTextColumnNeeded) {
@@ -591,7 +590,7 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         unique: false,
         indexed: false,
         hidden: true,
-        componentType: type === 'select' && rule?.props?.multiple ? 'selectText' : type + 'Text',
+        componentType: type === 'select' ? 'selectText' : type + 'Text',
         existingType: props.existingColumns?.find(c => c.key === field + '_text')?.columnType,
       })
       continue

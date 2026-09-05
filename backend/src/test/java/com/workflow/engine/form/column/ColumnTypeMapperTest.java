@@ -51,10 +51,11 @@ class ColumnTypeMapperTest {
     }
 
     @Test
-    void mapSelect_returnsVarchar255() {
+    void mapSelect_returnsJson() {
+        // select 单选/多选统一 JSON 存储：查询走 _text 文本列，主列仅存值用于回显
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("select", Map.of());
-        assertThat(c.getColumnType()).isEqualTo("VARCHAR");
-        assertThat(c.getLength()).isEqualTo(255);
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+        assertThat(c.getLength()).isNull();
     }
 
     @Test
@@ -353,12 +354,15 @@ class ColumnTypeMapperTest {
     }
 
     @Test
-    void mapArrayComponent_selectSingle_returnsSingleColumn() {
+    void mapArrayComponent_selectSingle_generatesTwoColumns() {
+        // select 单选与多选统一：主列 JSON + _text 文本列（查询走文本列）
         List<ColumnConfig> cols = ColumnTypeMapper.mapArrayComponentToColumns("grade", "select", Map.of());
 
-        assertThat(cols).hasSize(1);
+        assertThat(cols).hasSize(2);
         assertThat(cols.get(0).getKey()).isEqualTo("grade");
-        assertThat(cols.get(0).getColumnType()).isEqualTo("VARCHAR");
-        assertThat(cols.get(0).getLength()).isEqualTo(255);
+        assertThat(cols.get(0).getColumnType()).isEqualTo("JSON");
+        assertThat(cols.get(1).getKey()).isEqualTo("grade_text");
+        assertThat(cols.get(1).getColumnType()).isEqualTo("VARCHAR");
+        assertThat(cols.get(1).isHidden()).isTrue();
     }
 }

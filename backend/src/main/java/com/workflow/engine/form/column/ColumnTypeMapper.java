@@ -44,7 +44,7 @@ public final class ColumnTypeMapper {
             case "input" -> applyString(c, 255);
             case "textarea", "RichText", "richText" -> applyText(c);
             case "inputNumber" -> applyNumber(c, props);
-            case "select" -> applySelect(c, props);
+            case "select" -> applyJson(c);
             case "radio" -> applyString(c, 255);
             case "cascader" -> applyJson(c);
             case "checkbox", "multiSelect", "multiSelectPro" -> applyJson(c);
@@ -109,18 +109,6 @@ public final class ColumnTypeMapper {
         c.setLength(1);
     }
 
-    /**
-     * select 单选存单值 → VARCHAR(255)；多选（multiple=true）值为数组 → JSON，
-     * 否则数组序列化后存 VARCHAR、读取不反序列化导致回显异常（对齐前端 ColumnConfigDialog）。
-     */
-    private static void applySelect(ColumnConfig c, Map<String, Object> props) {
-        if (props != null && Boolean.TRUE.equals(props.get("multiple"))) {
-            applyJson(c);
-        } else {
-            applyString(c, 255);
-        }
-    }
-
     private static void applyInt(ColumnConfig c) {
         c.setColumnType("INT");
     }
@@ -165,12 +153,12 @@ public final class ColumnTypeMapper {
 
     /**
      * 数组值组件判定：值以数组/JSON 存储（单选为长度 1 的数组）。
-     * 与前端 ColumnConfigDialog.mapComponentToColumn 数组组件集合保持一致。
+     * select 单选/多选、tree 单选/多选等统一按数组组件处理（查询走 <key>_text 文本列，
+     * 主列仅存值用于回显），与前端 ColumnConfigDialog 数组组件集合保持一致。
      */
-    private static boolean isArrayComponent(String componentType, Map<String, Object> props) {
+    private static boolean isArrayComponent(String componentType) {
         return switch (componentType) {
-            case "checkbox", "multiSelect", "multiSelectPro", "elTransfer", "tree", "elTreeSelect", "cascader" -> true;
-            case "select" -> props != null && Boolean.TRUE.equals(props.get("multiple"));
+            case "select", "checkbox", "multiSelect", "multiSelectPro", "elTransfer", "tree", "elTreeSelect", "cascader" -> true;
             default -> false;
         };
     }
@@ -180,16 +168,16 @@ public final class ColumnTypeMapper {
      * <key> JSON 存叶子 value 数组（单选 ["x"]、多选 ["x","y"]）
      * <key>_text VARCHAR(255) 存显示文本（hidden=true，仅参与 CRUD 写入，供列表显示与模糊查询）
      *
-     * 非数组组件（如 select 单选）退回单列映射，不生成 <key>_text。
+     * 非数组组件退回单列映射，不生成 <key>_text。
      *
      * @param key           字段 key
      * @param componentType form-create rule 的 type
-     * @param props         form-create rule 的 props（用于 select multiple 判定）
+     * @param props         form-create rule 的 props（单列映射时用于列类型判定）
      * @return 双列（主列 + text 列）或单列映射；组件不支持时返回空列表
      */
     public static List<ColumnConfig> mapArrayComponentToColumns(String key, String componentType,
                                                                 Map<String, Object> props) {
-        if (!isArrayComponent(componentType, props)) {
+        if (!isArrayComponent(componentType)) {
             ColumnConfig single = mapComponentToColumn(componentType, props);
             if (single == null) {
                 return List.of();

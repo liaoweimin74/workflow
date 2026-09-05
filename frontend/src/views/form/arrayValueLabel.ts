@@ -40,16 +40,25 @@ function isPathComponent(type: string): boolean {
   return type === 'cascader' || type === 'tree' || type === 'elTreeSelect'
 }
 
-/** 树形/级联值 → 叶子 value 数组：单选单值 → [v]；cascader emitPath=true 路径数组 → 每路径取最后段（叶子） */
+/** 树形/级联值 → 叶子 value 数组：单选单值 → [v]；cascader emitPath=true 路径数组 → 每路径取最后段（叶子）。
+ * 多选（multiple）时扁平数组为**已转换的叶子数组**（FormRenderer.getFormData 生成后 BizDataListPage 双跑
+ * 传入），保持原样不压缩；单选时扁平数组为路径数组 → 取最后一段。 */
 function toLeafArray(type: string, rule: RuleNode, value: unknown): unknown[] {
   if (type === 'cascader') {
     const inner = rule.props?.props as Record<string, any> | undefined
+    const isMulti = inner?.multiple === true
     if (inner?.emitPath !== false) {
-      // emitPath=true：值是路径数组（单选 [l1,l2,leaf]）或多选路径数组的数组（[[...],[...]]）
+      // emitPath=true：值是路径数组（单选 [l1,l2,leaf]）或路径数组的数组（多选 [[...],[...]]）
       if (Array.isArray(value)) {
         if (Array.isArray((value as unknown[])[0])) {
+          // 数组的数组：多选路径 → 每路径取最后段（叶子）
           return (value as unknown[][]).map((p) => (Array.isArray(p) && p.length > 0 ? p[p.length - 1] : p))
         }
+        if (isMulti) {
+          // 多选 + 扁平数组：已是叶子数组（getFormData 已转换后双跑传入）→ 保持，不得按单选路径压缩
+          return value as unknown[]
+        }
+        // 单选路径数组 → 取最后一段（叶子）
         return (value as unknown[]).length > 0 ? [(value as unknown[])[(value as unknown[]).length - 1]] : []
       }
       return [value]

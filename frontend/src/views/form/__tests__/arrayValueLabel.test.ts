@@ -123,6 +123,22 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
     expect(out.region_text).toBe('/A/X,/B/Y')
   })
 
+  it('cascader 多选 emitPath=true：扁平叶子数组（getFormData 已转换后 BizDataListPage 双跑）不压缩', () => {
+    const rules = [{
+      type: 'cascader', field: 'region', props: {
+        props: { emitPath: true, multiple: true },
+        options: [
+          { label: 'A', value: 'a', children: [{ label: 'X', value: 'x' }] },
+          { label: 'B', value: 'b', children: [{ label: 'Y', value: 'y' }] },
+        ],
+      },
+    } as any]
+    // 双跑场景：data 里主列已是叶子数组（getFormData 生成）→ 不得按单选路径压缩成单元素
+    const out = withArrayLabels({ region: ['x', 'y'], region_text: '/A/X,/B/Y' }, rules)
+    expect(out.region).toEqual(['x', 'y'])
+    expect(out.region_text).toBe('/A/X,/B/Y')
+  })
+
   it('选项缺失：回退 value join', () => {
     const rules = [{
       type: 'select', field: 'dept', props: { multiple: true }, options: [],

@@ -48,11 +48,13 @@ async function handleLogin() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-    <div class="w-[400px] bg-white dark:bg-gray-800 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-black/30 p-10">
+  <div class="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-[#eef1fc] via-[#dcdcfb] to-[#c6edf4] dark:from-[#12162b] dark:via-[#1b2040] dark:to-[#2a3054]">
+    <div class="absolute -top-20 -right-20 w-96 h-96 rounded-full bg-accent-400/20 dark:bg-accent-500/10 blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-[#5755ee]/15 dark:bg-[#7c7ff0]/10 blur-3xl pointer-events-none"></div>
+    <div class="relative w-[400px] bg-white dark:bg-[#1b2040] rounded-[20px] border border-[#e9edfa] dark:border-[#2a3054] shadow-[0_8px_30px_rgba(87,85,238,0.08)] dark:shadow-black/30 p-10">
       <!-- Logo 区 -->
       <div class="text-center mb-8">
-        <div class="w-14 h-14 rounded-2xl bg-industrial-600 flex items-center justify-center mx-auto mb-4">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#5755ee] to-[#46c9d6] flex items-center justify-center mx-auto mb-4 shadow-md">
           <span class="text-white text-xl font-bold">MB</span>
         </div>
         <h1 class="text-xl font-semibold text-gray-800 dark:text-gray-100">工作流管理系统</h1>
@@ -87,7 +89,7 @@ async function handleLogin() {
             type="primary"
             size="large"
             :loading="loading"
-            class="w-full !rounded-lg !bg-industrial-600 !border-industrial-600 hover:!bg-industrial-700 !h-11 !text-base"
+            class="w-full !rounded-lg !h-11 !text-base !bg-gradient-to-r !from-[#5755ee] !to-[#46c9d6] !border-transparent hover:!from-[#6361f0] hover:!to-[#5ad4df]"
             @click="handleLogin"
           >
             登 录

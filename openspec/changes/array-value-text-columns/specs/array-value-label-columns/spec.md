@@ -105,6 +105,20 @@ SearchTable 查询栏 SHALL 按数据源字段元数据（column_config.componen
 
 结构化筛选（PageDataTable 表格联动等传 value 的场景）SHALL 继续对数组值组件主列使用 MySQL JSON 函数：`eq` → `JSON_CONTAINS(col, ?)`（value 参数序列化为 JSON 片段），单选可用 `col->>'$[0]' = ?`；`in` → `JSON_OVERLAPS(col, ?)`。
 
+### Requirement: 页面设计器表格选项组件可查询
+
+页面设计器（ViewDesigner）绑定 FORM 数据源的表格/卡片组件，其"显示&查询"页签 SHALL 允许选项类组件（select/multiSelect/elTransfer/tree/elTreeSelect/cascader）主列设置"可查询"（查询勾选不得因主列为 JSON 而禁用）。
+
+查询执行时 SHALL 将选项类组件主列（JSON）映射到 `<key>_text` 显示列：查询参数（搜索栏文本输入或筛选条件）以显示值（label）匹配，后端对 `<key>_text` 列 LIKE 模糊（搜索栏）或等值（筛选 eq）匹配。
+
+#### Scenario: 设计器选项组件可勾选查询
+- **WHEN** 页面设计器绑定含单选 select 字段 `dept`（主列 JSON）的 FORM 数据源，打开"显示&查询"页签
+- **THEN** `dept` 行的"查询"复选框可勾选（不被禁用），勾选后配置保存到 `searchFields`
+
+#### Scenario: 页面表格查询映射显示列
+- **WHEN** 页面表格（PageDataTable）配置了 `dept` 为搜索字段，用户在查询栏输入显示值 `研发部` 并触发查询
+- **THEN** 提交的筛选条件为 `{ column: 'dept_text', op: 'like', value: '研发部' }`（映射到 `<key>_text` 列，LIKE 匹配显示值）
+
 #### Scenario: 单选选项字段查询栏下拉
 - **WHEN** 字段 `dept` 为单选 select（选项 研发部/市场部）
 - **THEN** 查询栏生成下拉组件（prop=`dept_text`，选项 label=value=研发部/市场部），选定 `研发部` 后查询参数 `dept_text = '研发部'`（`<key>_text` 列精确等值）

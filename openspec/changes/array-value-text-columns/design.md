@@ -56,6 +56,7 @@
 ### 5. 查询
 - 模糊搜索：用户文本输入，`<key>_text` 列 LIKE（单选多选统一；text 列 VARCHAR 可进 `filterableColumns`）。
 - **查询栏组件化**（SearchTable）：单选选项类字段（select/tree/elTreeSelect/cascader 单选）生成下拉组件（选项=显示值 label，查询值=label，`_text` 列精确等值）；日期字段日期选择器；其余 input 模糊。
+- **页面设计器表格（ViewDesigner/PageDataTable）选项组件可查询**：选项类组件主列（JSON）在"显示&查询"页签视为可筛（`filterableColumns` 保留 componentType 选项类的 JSON 列）；查询栏输入/筛选提交时 `resolveSearchColumn` 将主列映射 `<key>_text`（显示值 label，LIKE/等值匹配显示列）——与业务列表查询语义一致。
 - 精确筛选（PageDataTable 结构化 filter / 数据表格联动，传 value）：主列 JSON 分支——`eq → JSON_CONTAINS(col, ?)`（value 参数序列化为 JSON 片段 `'"x"'`）、单选 `col->>'$[0]' = ?`、`in → JSON_OVERLAPS`。
 - 改动点：`BizDataQueryBuilder.appendStructuredFilters` 按列类型分支；`BizDataListPage.searchFields` 按 componentType + schema rule 生成查询组件（`resolveOptionRules` 解析选项供下拉）。
 

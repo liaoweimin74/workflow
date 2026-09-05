@@ -91,6 +91,7 @@ const componentStubs = {
 const columnConfigJson = JSON.stringify([
   { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 50, indexed: true, hidden: false },
   { key: 'age', label: '年龄', columnType: 'INT', length: null, indexed: true, hidden: false },
+  { key: 'dept', label: '部门', columnType: 'JSON', length: null, indexed: false, hidden: false, componentType: 'select' },
   { key: 'content', label: '内容', columnType: 'TEXT', length: null, indexed: false, hidden: false },
   { key: 'remark_hidden', label: '隐藏备注', columnType: 'VARCHAR', length: 50, indexed: false, hidden: true },
   { key: 'color', label: '颜色', columnType: 'VARCHAR', length: 20, indexed: false, hidden: false, componentType: 'colorPicker' },
@@ -158,11 +159,13 @@ describe('ViewDesigner — 清单勾选式视图配置', () => {
     // 单表配置：候选列为全部可展示列（非隐藏）
     const queryStub = wrapper.findComponent(QueryColumnsStub)
     const candidates = JSON.parse(queryStub.find('.stub-candidates').text()) as any[]
-    expect(candidates.map((c) => c.key)).toEqual(['name', 'age', 'content', 'color'])
+    expect(candidates.map((c) => c.key)).toEqual(['name', 'age', 'dept', 'content', 'color'])
     // 传入 filterableKeys（查询勾选禁用依据）
     const filterableKeys = queryStub.props('filterableKeys') as Set<string>
     expect(filterableKeys.has('name')).toBe(true)
     expect(filterableKeys.has('content')).toBe(false)
+    // 选项类组件主列（JSON，componentType=select）也可筛（查询走 <key>_text 显示列）
+    expect(filterableKeys.has('dept')).toBe(true)
 
     // 勾选查询条件（文本列 like）+ 展示列（width/align/sortable）
     // 驱动方式：点击桩的 emit 按钮，桩发出预置载荷（模拟 v-model 双向勾选）

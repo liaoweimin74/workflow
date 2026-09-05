@@ -348,3 +348,45 @@ describe('PageDataTable — 设计态取数钳制', () => {
     wrapper.unmount()
   })
 })
+
+describe('PageDataTable — 数组值组件搜索映射 <key>_text', () => {
+  it('选项类组件主列（JSON）查询条件映射到 <key>_text（查询值=显示值 label，LIKE 匹配显示列）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', componentType: 'input' },
+          { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
+        ],
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({
+      dsRefId: 'ds-emp',
+      showSearch: true,
+      searchFields: [{ key: 'dept', label: '部门', matchType: 'like' }],
+    })
+    await nextTick()
+    await flushPromises()
+
+    // 搜索框输入显示值 label 并触发查询
+    const st = wrapper.findComponent(SearchTable)
+    await st.find('.search-card input').setValue('研发部')
+    await st.find('.search-card button').trigger('click')
+    await nextTick()
+    await flushPromises()
+
+    // 主列 dept（JSON）→ 查询 dept_text（显示列）
+    expect(dataSourceApi.queryData).toHaveBeenCalledWith(
+      'ds-emp',
+      expect.objectContaining({
+        filter: JSON.stringify({
+          logic: 'AND',
+          conditions: [{ column: 'dept_text', op: 'like', value: '研发部' }],
+        }),
+      }),
+    )
+    wrapper.unmount()
+  })
+})

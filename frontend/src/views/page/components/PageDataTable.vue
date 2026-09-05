@@ -453,6 +453,13 @@ watch(activeDsBindings, () => {
   }
 })
 
+/** 数组值组件主列（JSON）搜索 → 用 <key>_text 列（查询值=显示值 label，后端 LIKE/等值匹配显示列） */
+function resolveSearchColumn(key: string): string {
+  const col = metaColumns.value.find((c) => c.key === key)
+  if (col && ARRAY_COMPONENT_TYPES.includes(col.componentType || '')) return `${key}_text`
+  return key
+}
+
 const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {
   const dsId = resolvedRefId.value
   if (!dsId) return { rows: [], total: 0 }
@@ -477,11 +484,11 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
       filterConditions.push({ column, op: 'eq', value })
     }
   }
-  // 3. 搜索栏条件
+  // 3. 搜索栏条件（数组值组件主列 → 映射 <key>_text 显示列查询 label）
   for (const field of resolvedSearchFields.value) {
     const v = params[field.prop]
     if (v === '' || v === null || v === undefined) continue
-    filterConditions.push({ column: field.prop, op: 'like', value: v })
+    filterConditions.push({ column: resolveSearchColumn(field.prop), op: 'like', value: v })
   }
   const query: Record<string, any> = props.designMode
     // 设计态预览固定取首页且最多 10 条（含"不分页"场景，避免 size:-1 拉全量）

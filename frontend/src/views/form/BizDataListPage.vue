@@ -116,8 +116,10 @@ const filterableColumns = computed<ColumnConfigItem[]>(() =>
   }),
 )
 
-/** 单选选项类组件（select/tree/elTreeSelect/cascader 单选；多选保持模糊 input） */
-const SINGLE_OPTION_TYPES = ['select', 'tree', 'elTreeSelect', 'cascader']
+/** 查询组件类型映射：字段是什么组件类型，查询输入就是什么组件（选择器/多选框/穿梭框 → select；树形 → tree-select；级联 → cascader） */
+const QUERY_SELECT_TYPES = ['select', 'multiSelect', 'multiSelectPro', 'checkbox', 'elTransfer']
+const QUERY_TREE_TYPES = ['tree', 'elTreeSelect']
+const QUERY_PICKER_TYPES = ['LookupPicker', 'DataPicker']
 
 /** 按列 key 找 schema rule（数组组件列 key 为 <key>_text → 去后缀找 field） */
 function findRuleByFieldKey(fieldKey: string): Record<string, any> | undefined {
@@ -125,27 +127,18 @@ function findRuleByFieldKey(fieldKey: string): Record<string, any> | undefined {
   return resolvedRules.value.find((r) => r.field === baseKey)
 }
 
-/** 是否单选选项类字段（查询生成 select 组件，精确匹配显示列）。
- * 组件类型以 schema rule.type 为准（_text 冗余列 componentType 是 selectText 等派生值） */
-function isSingleOptionField(c: ColumnConfigItem): boolean {
-  const rule = findRuleByFieldKey(c.key) as any
-  const compType = rule?.type || c.componentType
-  if (!SINGLE_OPTION_TYPES.includes(compType)) return false
-  if (rule) {
-    if (rule.props?.multiple) return false
-    if (rule.props?.props?.multiple) return false
-  }
-  return true
-}
-
-/** 选项显示值列表（label；树/级联递归 children），查询值=显示值（label），后端 _text 列精确等值 */
+/** 选项显示值列表（label；树/级联/穿梭递归 children），查询值=显示值（label），后端 _text 列精确等值 */
 function optionLabelItems(c: ColumnConfigItem): { label: string; value: string }[] {
   const rule = findRuleByFieldKey(c.key) as any
   const compType = rule?.type || c.componentType
   let list: any[] = []
-  if (compType === 'tree' || compType === 'elTreeSelect') list = rule?.props?.data ?? []
-  else if (compType === 'cascader') list = rule?.props?.options ?? []
-  else list = rule?.options ?? []
+  if (compType === 'tree' || compType === 'elTreeSelect' || compType === 'elTransfer' || compType === 'el-transfer' || compType === 'transfer') {
+    list = rule?.props?.data ?? []
+  } else if (compType === 'cascader') {
+    list = rule?.props?.options ?? []
+  } else {
+    list = rule?.options ?? []
+  }
   const labels: string[] = []
   const collect = (items: any[]) => {
     for (const it of items) {
@@ -157,18 +150,43 @@ function optionLabelItems(c: ColumnConfigItem): { label: string; value: string }
   return labels.map((l) => ({ label: l, value: l }))
 }
 
-/** 搜索栏（由 column_config 动态生成）：单选选项字段 → select（查询显示值精确匹配 _text）；日期 → date-picker；其余 → input（模糊 LIKE） */
+/** 树形选择查询组件数据：保留树结构，节点 value=label（查询值=显示 label，后端 _text LIKE 匹配） */
+function treeSearchProps(rule: any): { data: any[]; props: { label: string; value: string; children?: string } } {
+  return {
+    data: rule?.props?.data ?? [],
+    props: { label: 'label', value: 'label', children: 'children' },
+  }
+}
+
+/** 级联选择查询组件数据：保留树结构，节点 value=label（选中路径=label 数组，查询 join('/') 匹配 _text 全路径） */
+function cascaderSearchProps(rule: any): { options: any[]; props: { label?: string; value?: string; children?: string } } {
+  return {
+    options: rule?.props?.options ?? [],
+    props: { label: 'label', value: 'label', children: 'children' },
+  }
+}
+
+/** 数据引用（lookupPicker/dataPicker）查询组件配置：透传 rule.props（fetch/columns/dataSourceId/displayField 等），LookupPicker 选中回填显示文本 label */
+function lookupSearchProps(rule: any): Record<string, any> {
+  return { ...(rule?.props || {}) }
+}
+
+/** 搜索栏（由 column_config 动态生成）：按字段组件类型构建查询组件（选择器/多选框/穿梭框→select；树形→tree-select；级联→cascader；数据引用→LookupPicker；日期→date-picker；其余→input） */
 const searchFields = computed<SearchField[]>(() =>
   filterableColumns.value.map(c => {
-    if (isSingleOptionField(c)) {
-      return {
-        type: 'select',
-        label: c.label,
-        prop: c.key,
-        options: optionLabelItems(c),
-        placeholder: c.label,
-        style: 'width: 180px',
-      }
+    const rule = findRuleByFieldKey(c.key) as any
+    const compType = rule?.type || c.componentType
+    if (QUERY_TREE_TYPES.includes(compType)) {
+      return { type: 'tree-select', label: c.label, prop: c.key, treeProps: treeSearchProps(rule), placeholder: c.label, style: 'width: 200px' }
+    }
+    if (compType === 'cascader') {
+      return { type: 'cascader', label: c.label, prop: c.key, cascaderProps: cascaderSearchProps(rule), placeholder: c.label, style: 'width: 200px' }
+    }
+    if (QUERY_SELECT_TYPES.includes(compType)) {
+      return { type: 'select', label: c.label, prop: c.key, options: optionLabelItems(c), placeholder: c.label, style: 'width: 180px' }
+    }
+    if (QUERY_PICKER_TYPES.includes(compType)) {
+      return { type: 'lookupPicker', label: c.label, prop: c.key, lookupProps: lookupSearchProps(rule), placeholder: c.label, style: 'width: 200px' }
     }
     if (c.componentType === 'DatePicker' || c.componentType === 'datePicker' || c.componentType === 'date') {
       return { type: 'date-picker', label: c.label, prop: c.key, placeholder: c.label }
@@ -314,21 +332,29 @@ function isColumnSortable(c: ColumnConfigItem): boolean {
   return true
 }
 
+/** 精确匹配列（数值/日期）：等值；其余（文本/选项类/数据引用）LIKE 模糊（选项类查询值=显示 label，_text LIKE 命中路径/多值） */
+function isExactMatchCol(c: ColumnConfigItem): boolean {
+  const t = c.columnType
+  if (t === 'DATE' || t === 'DATETIME' || t === 'INT' || t === 'BIGINT' || t === 'TINYINT' || t === 'DECIMAL') return true
+  return false
+}
+
 /**
- * fetchApi 适配层：SearchTable 平铺查询参数 → biz-data 的 filter JSON
+ * fetchApi 适配层：SearchTable 平铺查询参数 → biz-data 的结构化 filter JSON
+ * （选项类/文本 LIKE 模糊，数值/日期等值；级联选中路径 label 数组 join('/') 匹配 _text 全路径）
  */
 async function fetchApi(params: any) {
-  const filter: Record<string, unknown> = {}
+  const conditions: any[] = []
   for (const col of filterableColumns.value) {
-    const v = params[col.key]
-    if (v !== undefined && v !== null && v !== '') {
-      filter[col.key] = v
-    }
+    const raw = params[col.key]
+    if (raw === undefined || raw === null || raw === '') continue
+    const v = Array.isArray(raw) ? raw.join('/') : raw
+    conditions.push({ column: col.key, op: isExactMatchCol(col) ? 'eq' : 'like', value: v })
   }
   const res = await bizDataApi.list(formKey.value, {
     page: params.page || 1,
     size: params.size || 20,
-    filter,
+    filter: conditions.length > 0 ? { logic: 'AND', conditions } : undefined,
     sort: params.sort,
     order: params.order,
   })

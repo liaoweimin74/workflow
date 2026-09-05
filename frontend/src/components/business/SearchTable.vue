@@ -35,6 +35,21 @@
             check-strictly
             @visible-change="(visible: boolean) => { if (visible && field.onExpand && (!field.treeProps?.data || field.treeProps.data.length === 0)) field.onExpand() }"
           />
+          <el-cascader
+            v-else-if="field.type === 'cascader'"
+            v-model="query[field.prop]"
+            v-bind="field.cascaderProps"
+            :placeholder="field.placeholder"
+            clearable
+            :style="field.style || 'width: 200px'"
+          />
+          <LookupPicker
+            v-else-if="field.type === 'lookupPicker'"
+            v-model="query[field.prop]"
+            v-bind="field.lookupProps"
+            :placeholder="field.placeholder"
+            :style="field.style || 'width: 200px'"
+          />
           <el-date-picker
             v-else-if="field.type === 'date-picker'"
             v-model="query[field.prop]"
@@ -259,6 +274,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { SearchTableProps, ActionButton, QueryParams, TableColumn } from './types'
 import { resolveStyleRules } from '@/utils/fieldStyle'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
+import LookupPicker from './LookupPicker.vue'
 import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
 
 /** 承接 TableColumn.render 的小型函数式组件（返回 VNode 或字符串） */

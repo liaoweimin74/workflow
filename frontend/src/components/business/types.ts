@@ -32,7 +32,7 @@ export interface DataSourceBindingContext {
 // --- 查询字段 ---
 
 export interface SearchField {
-  type: 'input' | 'select' | 'tree-select' | 'date-picker' | 'date-range'
+  type: 'input' | 'select' | 'tree-select' | 'date-picker' | 'date-range' | 'cascader' | 'lookupPicker'
   label: string
   prop: string
   placeholder?: string
@@ -42,6 +42,14 @@ export interface SearchField {
     data: any[]
     props: { label: string; value: string; children?: string }
   }
+  /** 级联选择器（查询输入按字段组件类型：级联选择 → el-cascader） */
+  cascaderProps?: {
+    options: any[]
+    props?: { label?: string; value?: string; children?: string }
+    [k: string]: any
+  }
+  /** 数据引用（lookupPicker/dataPicker）查询输入：LookupPicker 组件配置（rule.props 透传，动态 props 用 any 避免 v-bind 类型检查） */
+  lookupProps?: any
   style?: string
   /** 仅 date-range 有效：true 渲染 datetimerange（含时分秒），false/缺省渲染 daterange（仅日期） */
   time?: boolean

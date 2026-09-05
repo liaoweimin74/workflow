@@ -356,15 +356,24 @@ describe('PageDataTable — 设计态取数钳制', () => {
   })
 })
 
-describe('PageDataTable — 数组值组件搜索映射 <key>_text', () => {
-  it('选项类组件主列（JSON）查询条件映射到 <key>_text（查询值=显示值 label，LIKE 匹配显示列）', async () => {
+describe('PageDataTable — 查询组件按字段组件类型 + 搜索映射 <key>_text', () => {
+  it('选项类组件主列（JSON）查询组件为 select，选中显示值 label 后映射到 <key>_text LIKE 匹配显示列', async () => {
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({
       data: {
         writable: false,
+        formKey: 'emp',
         columns: [
           { key: 'name', label: '姓名', columnType: 'VARCHAR', componentType: 'input' },
           { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
         ],
+      },
+    })
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
+      data: {
+        schema: JSON.stringify({
+          rule: [{ type: 'select', field: 'dept', title: '部门', options: [{ label: '研发部', value: 'r' }] }],
+          dataSources: [],
+        }),
       },
     })
     ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
@@ -377,14 +386,23 @@ describe('PageDataTable — 数组值组件搜索映射 <key>_text', () => {
     await nextTick()
     await flushPromises()
 
-    // 搜索框输入显示值 label 并触发查询
     const st = wrapper.findComponent(SearchTable)
-    await st.find('.search-card input').setValue('研发部')
+    // 查询组件按字段组件类型：select → 选择器（选项=显示值 label）
+    expect(st.props('searchFields')[0].type).toBe('select')
+    expect(st.props('searchFields')[0].options).toEqual([{ label: '研发部', value: '研发部' }])
+
+    // el-select 选中显示值 label 并触发查询
+    await st.find('.search-card .el-select').trigger('click')
+    await nextTick()
+    const items = document.querySelectorAll('.el-select-dropdown__item')
+    const opt = Array.from(items).find((el) => el.textContent === '研发部')
+    ;(opt as HTMLElement).click()
+    await nextTick()
     await st.find('.search-card button').trigger('click')
     await nextTick()
     await flushPromises()
 
-    // 主列 dept（JSON）→ 查询 dept_text（显示列）
+    // 主列 dept（JSON）→ 查询 dept_text（显示列，LIKE 匹配显示值）
     expect(dataSourceApi.queryData).toHaveBeenCalledWith(
       'ds-emp',
       expect.objectContaining({
@@ -394,6 +412,51 @@ describe('PageDataTable — 数组值组件搜索映射 <key>_text', () => {
         }),
       }),
     )
+    wrapper.unmount()
+  })
+
+  it('树形/级联/多选框查询组件按字段组件类型生成（tree-select/cascader/select）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        formKey: 'emp',
+        columns: [
+          { key: 'tree', label: '树', columnType: 'JSON', componentType: 'elTreeSelect' },
+          { key: 'region', label: '级联', columnType: 'JSON', componentType: 'cascader' },
+          { key: 'tags', label: '标签', columnType: 'JSON', componentType: 'multiSelect' },
+        ],
+      },
+    })
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
+      data: {
+        schema: JSON.stringify({
+          rule: [
+            { type: 'elTreeSelect', field: 'tree', title: '树', props: { data: [{ label: '总公司', children: [{ label: '分公司' }] }] } },
+            { type: 'cascader', field: 'region', title: '级联', props: { options: [{ label: '省', children: [{ label: '市' }] }] } },
+            { type: 'multiSelect', field: 'tags', title: '标签', options: [{ label: '标签1', value: 't1' }] },
+          ],
+          dataSources: [],
+        }),
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({
+      dsRefId: 'ds-emp',
+      showSearch: true,
+      searchFields: [
+        { key: 'tree', label: '树', matchType: 'like' },
+        { key: 'region', label: '级联', matchType: 'like' },
+        { key: 'tags', label: '标签', matchType: 'like' },
+      ],
+    })
+    await nextTick()
+    await flushPromises()
+
+    const sf = wrapper.findComponent(SearchTable).props('searchFields') as any[]
+    expect(sf.find((s: any) => s.prop === 'tree')?.type).toBe('tree-select')
+    expect(sf.find((s: any) => s.prop === 'region')?.type).toBe('cascader')
+    expect(sf.find((s: any) => s.prop === 'tags')?.type).toBe('select')
     wrapper.unmount()
   })
 })

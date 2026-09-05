@@ -260,6 +260,8 @@ describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）',
           { key: 'dept_text', label: '部门（显示）', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false, hidden: true },
           { key: 'tags', label: '标签', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'checkbox' },
           { key: 'tags_text', label: '标签（显示）', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false, hidden: true },
+          { key: 'users', label: '穿梭', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'elTransfer' },
+          { key: 'users_text', label: '穿梭（显示）', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false, hidden: true },
           { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: true },
         ]),
         schema: JSON.stringify({ rule: schemaRule, option: {}, dataSources: [], actions: [] }),
@@ -285,16 +287,22 @@ describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）',
     wrapper.unmount()
   })
 
-  it('多选选项字段保持 input（模糊查询 _text）', async () => {
+  it('多选框字段查询组件为 select（选择器；多选框/穿梭框统一选择器，查询显示值 label）', async () => {
     const wrapper = mountWith([
       { type: 'select', field: 'dept', props: { multiple: false }, options: [{ label: '研发部', value: 'r' }] },
       { type: 'checkbox', field: 'tags', options: [{ label: '标签1', value: 't1' }] },
+      { type: 'elTransfer', field: 'users', props: { data: [{ key: 'u1', value: 'u1', label: '前端组' }, { key: 'u2', value: 'u2', label: '后端组' }] } },
     ])
     await nextTick()
     await flushPromises()
     const searchFields = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
     const tags = searchFields.find((s: any) => s.prop === 'tags_text')
-    expect(tags?.type).toBe('input')
+    expect(tags?.type).toBe('select')
+    expect(tags?.options).toEqual([{ label: '标签1', value: '标签1' }])
+    // 穿梭框：选项从 props.data 取（resolveOptionRules 承载字段），查询组件 select
+    const users = searchFields.find((s: any) => s.prop === 'users_text')
+    expect(users?.type).toBe('select')
+    expect(users?.options).toEqual([{ label: '前端组', value: '前端组' }, { label: '后端组', value: '后端组' }])
     wrapper.unmount()
   })
 

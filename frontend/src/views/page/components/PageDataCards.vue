@@ -62,6 +62,7 @@ import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import ListCards from '@/components/business/ListCards.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
+import { leafDisplayText } from '@/views/form/arrayValueLabel'
 import type { CardColumn, DataSourceBindingContext, ListQueryParams, ListPageResult } from '@/components/business/types'
 import type { CardTheme, CardStyle } from '@/components/business/ListCards.types'
 
@@ -150,11 +151,44 @@ const resolvedRefId = computed(() => {
   return binding?.refId || ''
 })
 
-const resolvedColumns = computed<CardColumn[]>(() => (props.columns || []).filter((column) => !column.hidden).map((column) => ({
-  ...column,
-  prop: column.prop || (column as any).key,
-  label: column.label || column.prop || (column as any).key,
-})))
+const resolvedColumns = computed<CardColumn[]>(() => (props.columns || []).filter((column) => !column.hidden).map((column) => {
+  const prop = column.prop || (column as any).key
+  const meta = metadataColumns.value.find((m) => m.key === prop)
+  // 数组值组件列（卡片字段显示显示值而非原始 value）：formatter 优先读 <key>_text（叶子 label），缺失回退 value join（对齐 PageDataTable）
+  const isArrayCol = !!meta && ARRAY_COMPONENT_TYPES.includes(meta.componentType || '')
+  return {
+    ...column,
+    prop,
+    label: column.label || column.prop || (column as any).key,
+    ...(isArrayCol && !column.formatter
+      ? {
+          formatter: (row: any, _col: any, value: unknown) => {
+            const text = row?.[prop + '_text']
+            if (text !== undefined && text !== null && text !== '') return leafDisplayText(text)
+            return formatArrayValue(value)
+          },
+        }
+      : {}),
+  }
+}))
+
+/** 数组值组件类型（卡片字段显示按组件类型渲染显示值 label） */
+const ARRAY_COMPONENT_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'select', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
+
+/** JSON 数组 → 逗号拼接；非数组（旧逗号串/字符串）原样返回 */
+function formatArrayValue(v: unknown): unknown {
+  if (Array.isArray(v)) return v.join(', ')
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v)
+      if (Array.isArray(parsed)) return parsed.join(', ')
+    } catch {
+      // 旧逗号串或普通字符串，原样
+    }
+    return v
+  }
+  return v
+}
 
 const metadataColumns = ref<any[]>([])
 const columnsForRender = computed(() => props.designMode && props.columns?.length === 0
@@ -241,9 +275,9 @@ const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
   return { rows, total: response.data?.total || 0 }
 }
 
-/** 设计态空 columns 时读取元数据生成 fallback 展示列 */
-async function loadDesignMetadata() {
-  if (!props.designMode || !resolvedRefId.value || (props.columns?.length ?? 0) > 0) return
+/** 加载数据源 metadata（运行态查 componentType 供数组值列渲染显示值；设计态空 columns 时同时生成 fallback 展示列） */
+async function loadMetadata() {
+  if (!resolvedRefId.value) return
   try {
     const response = await dataSourceApi.getMetadata(resolvedRefId.value)
     metadataColumns.value = response.data?.columns || []
@@ -255,12 +289,12 @@ async function loadDesignMetadata() {
 // 数据源（含设计态绑定）变化：清空旧列定义并用新数据源重新取元数据 + 显示数据
 watch(resolvedRefId, () => {
   metadataColumns.value = []
-  void loadDesignMetadata()
+  void loadMetadata()
   void cardsRef.value?.fetchData()
 })
 
 onMounted(() => {
-  void loadDesignMetadata()
+  void loadMetadata()
   const instance = { fetchData: () => cardsRef.value?.fetchData(), refresh: () => cardsRef.value?.refresh() }
   actionBus?.register?.(props.dataSourceId || '', instance)
   emit('ready', instance)

@@ -394,4 +394,27 @@ describe('PageDataCards', () => {
     ]))
     wrapper.unmount()
   })
+
+  it('数组值组件列 formatter 读 <key>_text（叶子 label），缺失回退 value join（对齐 PageDataTable）', async () => {
+    getMetadata.mockResolvedValue({
+      data: { writable: true, columns: [{ key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' }] },
+    })
+    queryData.mockResolvedValue({ data: { records: [{ id: 7, data: { dept: ['r'], dept_text: '研发部' }, version: 3 }], total: 1 } })
+
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'dept', role: 'field' }],
+      },
+    })
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    const col = cardsStub.props('columns').find((c: any) => c.prop === 'dept')
+    // 卡片字段显示显示值（读 _text 叶子 label），而非原始 value
+    expect(col?.formatter?.({ dept: ['r'], dept_text: '研发部' }, null, ['r'])).toBe('研发部')
+    // 缺失 _text 回退 value join
+    expect(col?.formatter?.({ dept: ['r', 'm'] }, null, ['r', 'm'])).toBe('r, m')
+    wrapper.unmount()
+  })
 })

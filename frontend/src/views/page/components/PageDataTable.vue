@@ -103,6 +103,7 @@ import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import { leafDisplayText, withArrayLabels } from '@/views/form/arrayValueLabel'
 import { formApi } from '@/api/form'
+import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
@@ -289,13 +290,76 @@ function getIcon(name?: string): any {
 // ==================== 搜索字段适配 ====================
 /** 查询栏显示：显式开启 且 至少配置了一个可查询列（避免空查询栏只有按钮） */
 const showSearch = computed(() => props.showSearch === true && resolvedSearchFields.value.length > 0)
-/** SearchFieldConfig({key,label,matchType}) → SearchField({prop,label,type}) */
+
+/** 查询组件类型映射（按数据源 metadata componentType；选项数据源来自业务表单 schema） */
+const QUERY_SELECT_TYPES = ['select', 'multiSelect', 'multiSelectPro', 'checkbox', 'elTransfer']
+const QUERY_TREE_TYPES = ['tree', 'elTreeSelect']
+const QUERY_PICKER_TYPES = ['LookupPicker', 'DataPicker']
+
+/** 按列 key 找业务表单 schema rule（组件类型与选项数据源） */
+function findFormRuleByKey(fieldKey: string): Record<string, any> | undefined {
+  return formSchemaRule.value.find((r) => (r as any).field === fieldKey)
+}
+
+/** 扁平选项 label 列表（select 类查询：label=value；树/级联/穿梭从 props.data/props.options 取） */
+function formOptionLabelItems(rule: any): { label: string; value: string }[] {
+  const list: any[] = rule?.options ?? rule?.props?.options ?? rule?.props?.data ?? []
+  const labels: string[] = []
+  const collect = (items: any[]) => {
+    for (const it of items) {
+      if (it && it.label !== undefined) labels.push(String(it.label))
+      if (Array.isArray(it.children)) collect(it.children)
+    }
+  }
+  collect(list)
+  return labels.map((l) => ({ label: l, value: l }))
+}
+
+/** SearchFieldConfig({key,label,matchType}) → SearchField({prop,label,type})：按字段组件类型构建查询输入组件 */
 const resolvedSearchFields = computed<SearchField[]>(() =>
-  (props.searchFields || []).map((f: any) => ({
-    type: 'input',
-    prop: f.key ?? f.field,
-    label: f.label || f.key,
-  })),
+  (props.searchFields || []).map((f: any) => {
+    const key = f.key ?? f.field
+    const meta = metaColumns.value.find((m) => m.key === key)
+    const compType = meta?.componentType || ''
+    const rule = findFormRuleByKey(key)
+    const base = { label: f.label || f.key || key, prop: key, placeholder: f.label || key }
+    if (QUERY_TREE_TYPES.includes(compType)) {
+      return {
+        ...base,
+        type: 'tree-select' as const,
+        treeProps: { data: rule?.props?.data ?? [], props: { label: 'label', value: 'label', children: 'children' } },
+        style: 'width: 200px',
+      }
+    }
+    if (compType === 'cascader') {
+      return {
+        ...base,
+        type: 'cascader' as const,
+        cascaderProps: { options: rule?.props?.options ?? [], props: { label: 'label', value: 'label', children: 'children' } },
+        style: 'width: 200px',
+      }
+    }
+    if (QUERY_SELECT_TYPES.includes(compType)) {
+      return {
+        ...base,
+        type: 'select' as const,
+        options: formOptionLabelItems(rule),
+        style: 'width: 180px',
+      }
+    }
+    if (QUERY_PICKER_TYPES.includes(compType)) {
+      return {
+        ...base,
+        type: 'lookupPicker' as const,
+        lookupProps: { ...(rule?.props || {}) },
+        style: 'width: 200px',
+      }
+    }
+    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date') {
+      return { ...base, type: 'date-picker' as const }
+    }
+    return { ...base, type: 'input' as const, style: 'width: 180px' }
+  }),
 )
 
 // ==================== 列适配 ====================
@@ -522,10 +586,11 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
       filterConditions.push({ column, op: 'eq', value })
     }
   }
-  // 3. 搜索栏条件（数组值组件主列 → 映射 <key>_text 显示列查询 label）
+  // 3. 搜索栏条件（数组值组件主列 → 映射 <key>_text 显示列查询 label；级联路径 label 数组 join('/') 匹配 _text 全路径）
   for (const field of resolvedSearchFields.value) {
-    const v = params[field.prop]
-    if (v === '' || v === null || v === undefined) continue
+    const raw = params[field.prop]
+    if (raw === '' || raw === null || raw === undefined) continue
+    const v = Array.isArray(raw) ? raw.join('/') : raw
     filterConditions.push({ column: resolveSearchColumn(field.prop), op: 'like', value: v })
   }
   const query: Record<string, any> = props.designMode
@@ -560,19 +625,24 @@ function buildFormRule() {
   }))
 }
 
-/** 加载业务表单 schema（FORM 数据源编辑弹窗按定义构建组件：select/级联/树形/穿梭框 + 选项 + 校验） */
+/** 加载业务表单 schema（FORM 数据源编辑弹窗/查询栏按定义构建组件：select/级联/树形/穿梭框 + 选项 + 校验） */
 async function loadFormSchema() {
   if (!formKey.value) {
     formSchemaRule.value = []
+    formDataSources.value = []
     return
   }
   try {
     const res = await formApi.getFormDefinitionByKey(formKey.value)
     const raw = (res.data as any)?.schema
     const schema = JSON.parse(raw || '[]')
-    formSchemaRule.value = Array.isArray(schema) ? schema : (schema.rule || [])
+    const rules = Array.isArray(schema) ? schema : (schema.rule || [])
     // 表单级数据源绑定（select 等选项数据源 effect.datasource.dataSourceId 为表单内 id → 全局 refId）
     formDataSources.value = !Array.isArray(schema) && Array.isArray(schema.dataSources) ? schema.dataSources : []
+    // 选项数据源解析：effect.datasource → 选项列表（查询栏/编辑弹窗 select/tree/cascader 按表单字段配置取数）
+    formSchemaRule.value = hasOptionDatasource(rules)
+      ? await resolveOptionRules(rules, formDataSources.value)
+      : rules
   } catch {
     formSchemaRule.value = []
     formDataSources.value = []

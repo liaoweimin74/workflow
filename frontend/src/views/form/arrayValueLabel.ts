@@ -17,7 +17,13 @@ const ARRAY_COMPONENTS = new Set(['select', 'checkbox', 'multiSelect', 'multiSel
 interface TreeNode {
   label?: unknown
   value?: unknown
+  key?: unknown
   children?: TreeNode[]
+}
+
+/** 节点匹配值：优先 value，缺失回退 key（el-transfer 静态选项用 {label, key}，与其他选项组件统一） */
+function nodeValue(node: TreeNode): unknown {
+  return node.value !== undefined ? node.value : node.key
 }
 
 interface RuleNode {
@@ -71,7 +77,8 @@ function toLeafArray(type: string, rule: RuleNode, value: unknown): unknown[] {
 function labelOf(options: any[] | undefined, value: unknown): string | undefined {
   if (!Array.isArray(options)) return undefined
   for (const o of options) {
-    if (o && (o.value === value || String(o.value) === String(value))) {
+    const ov = o?.value !== undefined ? o.value : o?.key
+    if (o && (ov === value || String(ov) === String(value))) {
       return o.label === undefined ? undefined : String(o.label)
     }
     if (o && Array.isArray(o.options)) {
@@ -86,7 +93,8 @@ function labelOf(options: any[] | undefined, value: unknown): string | undefined
 function findNodeLabelByValue(tree: TreeNode[] | undefined, value: unknown): string | undefined {
   if (!Array.isArray(tree)) return undefined
   for (const node of tree) {
-    if (node.value === value || String(node.value) === String(value)) {
+    const nv = nodeValue(node)
+    if (nv === value || String(nv) === String(value)) {
       return node.label === undefined ? undefined : String(node.label)
     }
     if (Array.isArray(node.children)) {
@@ -103,7 +111,7 @@ function collectPathLabels(tree: TreeNode[] | undefined, value: unknown, path: s
   if (!Array.isArray(tree)) return out
   for (const node of tree) {
     const nextPath = [...path, node.label === undefined ? '' : String(node.label)]
-    if (node.value === value || String(node.value) === String(value)) {
+    if (nodeValue(node) === value || String(nodeValue(node)) === String(value)) {
       out.push(nextPath.join('/'))
     }
     if (Array.isArray(node.children)) {

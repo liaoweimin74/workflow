@@ -67,6 +67,17 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
     expect(out.team_text).toBe('前端组, 后端组')
   })
 
+  it('elTransfer 静态选项（{label, key} 无 value）：_text 生成 label 而非值（与其他选项组件逻辑一致）', () => {
+    const rules = [{
+      type: 'elTransfer', field: 'team', props: {
+        data: [{ label: '前端组', key: 'fe' }, { label: '后端组', key: 'be' }],
+      },
+    } as any]
+    const out = withArrayLabels({ team: ['fe', 'be'] }, rules)
+    expect(out.team).toEqual(['fe', 'be'])
+    expect(out.team_text).toBe('前端组, 后端组')
+  })
+
   it('cascader 单选（emitPath=false）：叶子 value → 全路径 / 分隔', () => {
     const rules = [{
       type: 'cascader', field: 'region', props: {

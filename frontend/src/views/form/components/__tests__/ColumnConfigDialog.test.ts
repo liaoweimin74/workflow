@@ -374,6 +374,112 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     expect(col?.unsupported).toBeUndefined()
     wrapper.unmount()
   })
+
+  // ===== 数组值组件双列生成测试 =====
+  it('select 多选（multiple=true）生成主列 JSON + <key>_text（VARCHAR(255)、hidden=true）', async () => {
+    const wrapper = createWrapper({ schema: extSchema('select', { multiple: true }) })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    // 主列 JSON
+    const mainCol = items.find(i => i.key === 'f1')
+    expect(mainCol).toBeDefined()
+    expect(mainCol?.columnType).toBe('JSON')
+    expect(mainCol?.length).toBeNull()
+    expect(mainCol?.hidden).toBeFalsy()
+    // 隐藏文本列
+    const textCol = items.find(i => i.key === 'f1_text')
+    expect(textCol).toBeDefined()
+    expect(textCol?.columnType).toBe('VARCHAR')
+    expect(textCol?.length).toBe(255)
+    expect(textCol?.hidden).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('elTreeSelect 单选（multiple=false）生成主列 JSON + <key>_text（VARCHAR(255)、hidden=true）', async () => {
+    const wrapper = createWrapper({ schema: extSchema('elTreeSelect', { multiple: false }) })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    // 主列 JSON
+    const mainCol = items.find(i => i.key === 'f1')
+    expect(mainCol).toBeDefined()
+    expect(mainCol?.columnType).toBe('JSON')
+    expect(mainCol?.length).toBeNull()
+    expect(mainCol?.hidden).toBeFalsy()
+    // 隐藏文本列
+    const textCol = items.find(i => i.key === 'f1_text')
+    expect(textCol).toBeDefined()
+    expect(textCol?.columnType).toBe('VARCHAR')
+    expect(textCol?.length).toBe(255)
+    expect(textCol?.hidden).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('cascader 生成主列 JSON + <key>_text（VARCHAR(255)、hidden=true）', async () => {
+    const wrapper = createWrapper({ schema: extSchema('cascader') })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    // 主列 JSON
+    const mainCol = items.find(i => i.key === 'f1')
+    expect(mainCol).toBeDefined()
+    expect(mainCol?.columnType).toBe('JSON')
+    expect(mainCol?.length).toBeNull()
+    expect(mainCol?.hidden).toBeFalsy()
+    // 隐藏文本列
+    const textCol = items.find(i => i.key === 'f1_text')
+    expect(textCol).toBeDefined()
+    expect(textCol?.columnType).toBe('VARCHAR')
+    expect(textCol?.length).toBe(255)
+    expect(textCol?.hidden).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('checkbox 生成主列 JSON + <key>_text（VARCHAR(255)、hidden=true）', async () => {
+    const wrapper = createWrapper({ schema: extSchema('checkbox') })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    // 主列 JSON
+    const mainCol = items.find(i => i.key === 'f1')
+    expect(mainCol).toBeDefined()
+    expect(mainCol?.columnType).toBe('JSON')
+    expect(mainCol?.length).toBeNull()
+    expect(mainCol?.hidden).toBeFalsy()
+    // 隐藏文本列
+    const textCol = items.find(i => i.key === 'f1_text')
+    expect(textCol).toBeDefined()
+    expect(textCol?.columnType).toBe('VARCHAR')
+    expect(textCol?.length).toBe(255)
+    expect(textCol?.hidden).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('select 单选仅 VARCHAR(255)，不生成 <key>_text', async () => {
+    const wrapper = createWrapper({ schema: extSchema('select') })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    // 主列 VARCHAR
+    const mainCol = items.find(i => i.key === 'f1')
+    expect(mainCol).toBeDefined()
+    expect(mainCol?.columnType).toBe('VARCHAR')
+    expect(mainCol?.length).toBe(255)
+    // 不生成文本列
+    const textCol = items.find(i => i.key === 'f1_text')
+    expect(textCol).toBeUndefined()
+    wrapper.unmount()
+  })
+})
+
+describe('cascader.js — emitPath 默认值', () => {
+  it('cascader emitPath 默认为 false（只存叶子值，不存路径数组）', async () => {
+    // 读取源文件断言 emitPath 默认值
+    const fs = await import('fs')
+    const path = await import('path')
+    const cascaderPath = path.resolve(__dirname, '../../../../vendor/config/rule/cascader.js')
+    const source = fs.readFileSync(cascaderPath, 'utf-8')
+    // 断言 emitPath 的 value 为 false
+    const emitPathMatch = source.match(/field:\s*['"]emitPath['"]\s*,?\s*\n\s*value:\s*(true|false)/)
+    expect(emitPathMatch).not.toBeNull()
+    expect(emitPathMatch![1]).toBe('false')
+  })
 })
 
 // ----- 真实场景（ref_test 表单）：group 子表内部字段存放在 props.rule（fcRow/col 布局嵌套） -----

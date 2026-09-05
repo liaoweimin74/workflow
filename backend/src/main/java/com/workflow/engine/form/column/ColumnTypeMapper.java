@@ -164,6 +164,55 @@ public final class ColumnTypeMapper {
     }
 
     /**
+     * 数组值组件判定：值以数组/JSON 存储（单选为长度 1 的数组）。
+     * 与前端 ColumnConfigDialog.mapComponentToColumn 数组组件集合保持一致。
+     */
+    private static boolean isArrayComponent(String componentType, Map<String, Object> props) {
+        return switch (componentType) {
+            case "checkbox", "multiSelect", "multiSelectPro", "elTransfer", "tree", "elTreeSelect", "cascader" -> true;
+            case "select" -> props != null && Boolean.TRUE.equals(props.get("multiple"));
+            default -> false;
+        };
+    }
+
+    /**
+     * 数组值组件双列映射（value + 显示文本冗余列）：
+     * <key> JSON 存叶子 value 数组（单选 ["x"]、多选 ["x","y"]）
+     * <key>_text VARCHAR(255) 存显示文本（hidden=true，仅参与 CRUD 写入，供列表显示与模糊查询）
+     *
+     * 非数组组件（如 select 单选）退回单列映射，不生成 <key>_text。
+     *
+     * @param key           字段 key
+     * @param componentType form-create rule 的 type
+     * @param props         form-create rule 的 props（用于 select multiple 判定）
+     * @return 双列（主列 + text 列）或单列映射；组件不支持时返回空列表
+     */
+    public static List<ColumnConfig> mapArrayComponentToColumns(String key, String componentType,
+                                                                Map<String, Object> props) {
+        if (!isArrayComponent(componentType, props)) {
+            ColumnConfig single = mapComponentToColumn(componentType, props);
+            if (single == null) {
+                return List.of();
+            }
+            single.setKey(key);
+            return List.of(single);
+        }
+        ColumnConfig main = new ColumnConfig();
+        main.setKey(key);
+        main.setColumnType("JSON");
+        main.setComponentType(componentType);
+
+        ColumnConfig text = new ColumnConfig();
+        text.setKey(key + "_text");
+        text.setColumnType("VARCHAR");
+        text.setLength(255);
+        text.setHidden(true);
+        text.setComponentType(componentType + "Text");
+
+        return List.of(main, text);
+    }
+
+    /**
      * 生成 data-picker 字段的两列映射：
      * <key> TEXT 存被引用记录 id 数组（JSON，如 ["u1","u2"]；单选为 ["u1"]）
      * <key>_text TEXT 存冗余显示文本数组（JSON，hidden=true）

@@ -28,6 +28,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 业务数据服务。
@@ -131,17 +132,21 @@ public class BizDataService {
         BizDataContext ctx = loadContext(formKey);
 
         Map<String, Object> filters = parseFilter(req.getFilter());
+        // 列类型映射（key → columnType）：JSON 数组列筛选走 JSON 函数（JSON_CONTAINS/JSON_OVERLAPS）
+        Map<String, String> columnTypeOf = ctx.columns().stream()
+                .collect(Collectors.toMap(ColumnConfig::getKey,
+                        c -> c.getColumnType() == null ? "" : c.getColumnType().toUpperCase(), (a, b) -> a));
         int page = Math.max(req.getPage(), 1);
         // size <= 0 表示不分页取全部（buildSelect 跳过 LIMIT/OFFSET）；正数沿用原钳制上限
         int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
 
         try {
             BizDataQueryBuilder.SqlAndParams count = BizDataQueryBuilder.buildCount(
-                    ctx.tableName, ctx.columnKeys, tenantId, filters, req.getKeyword(), req.getKeywordColumn());
+                    ctx.tableName(), ctx.columnKeys(), columnTypeOf, tenantId, filters, req.getKeyword(), req.getKeywordColumn());
             Long total = jdbcTemplate.queryForObject(count.sql(), Long.class, count.params().toArray());
 
             BizDataQueryBuilder.SqlAndParams select = BizDataQueryBuilder.buildSelect(
-                    ctx.tableName, ctx.columnKeys, tenantId, filters,
+                    ctx.tableName(), ctx.columnKeys(), columnTypeOf, tenantId, filters,
                     req.getKeyword(), req.getKeywordColumn(), req.getSort(), req.getOrder(), page - 1, size);
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(select.sql(), select.params().toArray());
 

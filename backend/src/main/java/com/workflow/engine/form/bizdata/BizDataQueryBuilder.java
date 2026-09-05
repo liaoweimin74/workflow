@@ -1,5 +1,8 @@
 package com.workflow.engine.form.bizdata;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,10 +20,26 @@ public final class BizDataQueryBuilder {
 
     private static final Set<String> ALLOWED_ORDER = Set.of("asc", "desc");
 
+    private static final ObjectMapper OM = new ObjectMapper();
+
     private BizDataQueryBuilder() {}
 
     /** SQL 与参数对 */
     public record SqlAndParams(String sql, List<Object> params) {}
+
+    /** JSON 数组列：筛选走 JSON 函数（JSON_CONTAINS / JSON_OVERLAPS），普通列走标量比较 */
+    private static boolean isJsonColumn(Map<String, String> columnTypeOf, String column) {
+        return "JSON".equalsIgnoreCase(columnTypeOf.getOrDefault(column, ""));
+    }
+
+    /** 筛选值序列化为 JSON 片段（eq 的 `"v"`、in 的 `["a","b"]`），供 JSON_CONTAINS/JSON_OVERLAPS 匹配 */
+    private static Object jsonValue(Object v) {
+        try {
+            return OM.writeValueAsString(v);
+        } catch (JsonProcessingException e) {
+            return v;
+        }
+    }
 
     /**
      * 生成分页 SELECT。
@@ -40,11 +59,24 @@ public final class BizDataQueryBuilder {
     public static SqlAndParams buildSelect(String tableName, List<String> allowedColumns, String tenantId,
                                            Map<String, Object> filters, String keyword, String keywordColumn,
                                            String sort, String order, int page, int size) {
+        return buildSelect(tableName, allowedColumns, Map.of(), tenantId, filters, keyword, keywordColumn,
+                sort, order, page, size);
+    }
+
+    /**
+     * 生成分页 SELECT（带列类型，JSON 数组列走 JSON 函数筛选）。
+     *
+     * @param columnTypeOf  列类型映射（key → columnType 大写；JSON 列触发 JSON_CONTAINS/JSON_OVERLAPS 分支）
+     */
+    public static SqlAndParams buildSelect(String tableName, List<String> allowedColumns,
+                                           Map<String, String> columnTypeOf, String tenantId,
+                                           Map<String, Object> filters, String keyword, String keywordColumn,
+                                           String sort, String order, int page, int size) {
         StringBuilder sql = new StringBuilder("SELECT * FROM ").append(tableName).append(" WHERE tenant_id = ?");
         List<Object> params = new ArrayList<>();
         params.add(tenantId);
 
-        appendFilters(sql, params, allowedColumns, filters);
+        appendFilters(sql, params, allowedColumns, columnTypeOf, filters);
 
         appendKeyword(sql, params, allowedColumns, keyword, keywordColumn);
 
@@ -70,11 +102,20 @@ public final class BizDataQueryBuilder {
      */
     public static SqlAndParams buildCount(String tableName, List<String> allowedColumns, String tenantId,
                                           Map<String, Object> filters, String keyword, String keywordColumn) {
+        return buildCount(tableName, allowedColumns, Map.of(), tenantId, filters, keyword, keywordColumn);
+    }
+
+    /**
+     * 生成 COUNT 查询（分页总数，过滤条件与 buildSelect 一致，支持 JSON 列分支）。
+     */
+    public static SqlAndParams buildCount(String tableName, List<String> allowedColumns,
+                                          Map<String, String> columnTypeOf, String tenantId,
+                                          Map<String, Object> filters, String keyword, String keywordColumn) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(1) FROM ").append(tableName).append(" WHERE tenant_id = ?");
         List<Object> params = new ArrayList<>();
         params.add(tenantId);
 
-        appendFilters(sql, params, allowedColumns, filters);
+        appendFilters(sql, params, allowedColumns, columnTypeOf, filters);
 
         appendKeyword(sql, params, allowedColumns, keyword, keywordColumn);
         return new SqlAndParams(sql.toString(), params);
@@ -174,14 +215,15 @@ public final class BizDataQueryBuilder {
     }
 
     private static void appendFilters(StringBuilder sql, List<Object> params,
-                                      List<String> allowedColumns, Map<String, Object> filters) {
+                                      List<String> allowedColumns, Map<String, String> columnTypeOf,
+                                      Map<String, Object> filters) {
         if (filters == null || filters.isEmpty()) {
             return;
         }
         // 结构化格式：{ "logic": "AND"|"OR", "conditions": [{column, op, value}] }
         if (filters.get("conditions") instanceof List<?> condList) {
             String logic = "AND".equalsIgnoreCase(String.valueOf(filters.getOrDefault("logic", "AND"))) ? "AND" : "OR";
-            appendStructuredFilters(sql, params, allowedColumns, logic, castConditions(condList));
+            appendStructuredFilters(sql, params, allowedColumns, columnTypeOf, logic, castConditions(condList));
             return;
         }
         // 旧格式：{col: value} 等值 AND
@@ -190,8 +232,13 @@ public final class BizDataQueryBuilder {
             if (e.getValue() == null) {
                 continue;
             }
-            sql.append(" AND ").append(e.getKey()).append(" = ?");
-            params.add(e.getValue());
+            if (isJsonColumn(columnTypeOf, e.getKey())) {
+                sql.append(" AND JSON_CONTAINS(").append(e.getKey()).append(", ?)");
+                params.add(jsonValue(e.getValue()));
+            } else {
+                sql.append(" AND ").append(e.getKey()).append(" = ?");
+                params.add(e.getValue());
+            }
         }
     }
 
@@ -211,23 +258,35 @@ public final class BizDataQueryBuilder {
      * 运算符：eq/ne/like/in/isEmpty/isNotEmpty（isEmpty/isNotEmpty 忽略 value）。
      */
     private static void appendStructuredFilters(StringBuilder sql, List<Object> params,
-                                                List<String> allowedColumns, String logic,
-                                                List<Map<String, Object>> conditions) {
+                                                List<String> allowedColumns, Map<String, String> columnTypeOf,
+                                                String logic, List<Map<String, Object>> conditions) {
         List<String> fragments = new ArrayList<>();
         for (Map<String, Object> c : conditions) {
             String column = String.valueOf(c.get("column"));
             validateColumn(column, allowedColumns, "筛选字段");
             String op = c.get("op") == null ? "eq" : String.valueOf(c.get("op")).toLowerCase();
+            boolean json = isJsonColumn(columnTypeOf, column);
             switch (op) {
                 case "eq" -> {
                     if (c.get("value") == null) continue;
-                    fragments.add(column + " = ?");
-                    params.add(c.get("value"));
+                    // JSON 数组列：数组含元素（多选命中）；普通列：标量等值
+                    if (json) {
+                        fragments.add("JSON_CONTAINS(" + column + ", ?)");
+                        params.add(jsonValue(c.get("value")));
+                    } else {
+                        fragments.add(column + " = ?");
+                        params.add(c.get("value"));
+                    }
                 }
                 case "ne" -> {
                     if (c.get("value") == null) continue;
-                    fragments.add(column + " <> ?");
-                    params.add(c.get("value"));
+                    if (json) {
+                        fragments.add("NOT JSON_CONTAINS(" + column + ", ?)");
+                        params.add(jsonValue(c.get("value")));
+                    } else {
+                        fragments.add(column + " <> ?");
+                        params.add(c.get("value"));
+                    }
                 }
                 case "like" -> {
                     if (c.get("value") == null) continue;
@@ -237,9 +296,15 @@ public final class BizDataQueryBuilder {
                 case "in" -> {
                     Object v = c.get("value");
                     if (!(v instanceof List<?> values) || values.isEmpty()) continue;
-                    String marks = String.join(", ", java.util.Collections.nCopies(values.size(), "?"));
-                    fragments.add(column + " IN (" + marks + ")");
-                    params.addAll(values);
+                    if (json) {
+                        // JSON 数组列：与候选集有交集（任一命中）
+                        fragments.add("JSON_OVERLAPS(" + column + ", ?)");
+                        params.add(jsonValue(values));
+                    } else {
+                        String marks = String.join(", ", java.util.Collections.nCopies(values.size(), "?"));
+                        fragments.add(column + " IN (" + marks + ")");
+                        params.addAll(values);
+                    }
                 }
                 case "range" -> {
                     Object v = c.get("value");

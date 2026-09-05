@@ -71,6 +71,7 @@ import { bizDataApi, type ColumnConfigItem } from '@/api/bizData'
 import FormRenderer from './components/FormRenderer.vue'
 import { walkRules, type RuleLike } from './formRuleWalk'
 import { parseSubRows } from './subtableDisplay'
+import { withArrayLabels } from './arrayValueLabel'
 import type { Rule } from '@form-create/element-ui'
 
 const route = useRoute()
@@ -96,13 +97,19 @@ const bizColumns = computed(() => columnConfig.value.filter(c => !c.unsupported 
 /** 子表字段列（subColumns 非空）：列表中以 [子表名称] 链接展示，点击弹窗查看子表行 */
 const subtableCols = computed(() => bizColumns.value.filter(c => c.subColumns && c.subColumns.length > 0))
 
-/** 可筛选列（非 JSON/TEXT、非 colorPicker，且 indexed 或短文本） */
-const filterableColumns = computed(() =>
-  bizColumns.value.filter(
-    c => c.columnType !== 'JSON' && c.columnType !== 'TEXT'
+/** 可筛选列（非 JSON/TEXT、非 colorPicker，且 indexed 或短文本；数组组件用 <key>_text 冗余列） */
+const filterableColumns = computed<ColumnConfigItem[]>(() =>
+  bizColumns.value.flatMap((c) => {
+    // 数组值组件（columnConfig 含 <key>_text 冗余列）：主列 JSON 不可筛，改用 <key>_text（VARCHAR LIKE）
+    const textCol = columnConfig.value.find((x) => x.key === c.key + '_text')
+    if (textCol) return [{ ...textCol, label: c.label }]
+    if (c.columnType !== 'JSON' && c.columnType !== 'TEXT'
       && c.componentType !== 'colorPicker'
-      && (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
-  ),
+      && (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR')) {
+      return [c]
+    }
+    return []
+  }),
 )
 
 /** 搜索栏（由 column_config 动态生成） */
@@ -148,6 +155,9 @@ const columns = computed<TableColumn[]>(() => {
             return String(text)
           }
         }
+        // 数组值组件：优先显示冗余显示列 <key>_text（label/全路径；数组组件才会生成该列数据），缺失回退 value
+        const text = row.data?.[c.key + '_text']
+        if (text !== undefined && text !== null && text !== '') return String(text)
         return renderByComponentType(c.componentType || undefined, c.columnType, v)
       },
     }
@@ -182,11 +192,12 @@ function renderByComponentType(componentType: string | undefined, _columnType: s
     case 'checkbox':
     case 'multiSelect':
     case 'multiSelectPro':
+    case 'select':
     case 'elTransfer':
     case 'tree':
     case 'elTreeSelect':
     case 'cascader':
-      // 数组值组件（穿梭框/树形/级联等）→ 逗号拼接可读展示
+      // 数组值组件（含 select 多选）→ 逗号拼接可读展示；select 单选字符串原样
       return formatArray(v)
     case 'slider':
       return Array.isArray(v) ? v.join(' ~ ') : formatCell(v)
@@ -289,8 +300,8 @@ const formConfig = computed<FormConfig<Record<string, any>>>(() => ({
     const res = await bizDataApi.detail(formKey.value, String(id))
     return res.data.data
   },
-  createApi: (data) => bizDataApi.create(formKey.value, data),
-  updateApi: (id, data, row) => bizDataApi.update(formKey.value, String(id), data, row?.version ?? 1),
+  createApi: (data) => bizDataApi.create(formKey.value, withArrayLabels(data, schemaRules.value)),
+  updateApi: (id, data, row) => bizDataApi.update(formKey.value, String(id), withArrayLabels(data, schemaRules.value), row?.version ?? 1),
   deleteApi: (id) => bizDataApi.remove(formKey.value, String(id)),
 }))
 

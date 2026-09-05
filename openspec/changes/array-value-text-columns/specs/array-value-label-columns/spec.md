@@ -4,7 +4,7 @@
 
 业务表单中数组值组件（select/tree/elTreeSelect/transfer/cascader）统一"叶子 value（JSON 主列）+ 显示文本（`<key>_text` 冗余列）"双列存储，解决列类型随单选/多选配置漂移、列表显示原始 value、按 label 查询不可用的问题。
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: 数组组件双列映射
 

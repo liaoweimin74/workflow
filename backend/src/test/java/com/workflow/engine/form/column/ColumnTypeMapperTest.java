@@ -300,4 +300,65 @@ class ColumnTypeMapperTest {
         // maxCount 缺省为 null（不限）
         assertThat(cols.get(0).getPickerConfig()).contains("\"maxCount\":null");
     }
+
+    @Test
+    void mapArrayComponent_checkbox_generatesTwoColumns() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapArrayComponentToColumns("tags", "checkbox", Map.of());
+
+        assertThat(cols).hasSize(2);
+        assertThat(cols.get(0).getKey()).isEqualTo("tags");
+        assertThat(cols.get(0).getColumnType()).isEqualTo("JSON");
+        assertThat(cols.get(1).getKey()).isEqualTo("tags_text");
+        assertThat(cols.get(1).getColumnType()).isEqualTo("VARCHAR");
+        assertThat(cols.get(1).getLength()).isEqualTo(255);
+        assertThat(cols.get(1).isHidden()).isTrue();
+    }
+
+    @Test
+    void mapArrayComponent_selectMultiple_generatesTwoColumns() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapArrayComponentToColumns("dept", "select",
+                Map.of("multiple", true));
+
+        assertThat(cols).hasSize(2);
+        assertThat(cols.get(0).getKey()).isEqualTo("dept");
+        assertThat(cols.get(0).getColumnType()).isEqualTo("JSON");
+        assertThat(cols.get(1).getKey()).isEqualTo("dept_text");
+        assertThat(cols.get(1).getColumnType()).isEqualTo("VARCHAR");
+        assertThat(cols.get(1).isHidden()).isTrue();
+    }
+
+    @Test
+    void mapArrayComponent_treeSelectSingle_generatesTwoColumns() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapArrayComponentToColumns("org", "elTreeSelect",
+                Map.of("multiple", false));
+
+        assertThat(cols).hasSize(2);
+        assertThat(cols.get(0).getKey()).isEqualTo("org");
+        assertThat(cols.get(0).getColumnType()).isEqualTo("JSON");
+        assertThat(cols.get(1).getKey()).isEqualTo("org_text");
+        assertThat(cols.get(1).getColumnType()).isEqualTo("VARCHAR");
+        assertThat(cols.get(1).isHidden()).isTrue();
+    }
+
+    @Test
+    void mapArrayComponent_cascader_generatesTwoColumns() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapArrayComponentToColumns("region", "cascader", Map.of());
+
+        assertThat(cols).hasSize(2);
+        assertThat(cols.get(0).getKey()).isEqualTo("region");
+        assertThat(cols.get(0).getColumnType()).isEqualTo("JSON");
+        assertThat(cols.get(1).getKey()).isEqualTo("region_text");
+        assertThat(cols.get(1).getColumnType()).isEqualTo("VARCHAR");
+        assertThat(cols.get(1).isHidden()).isTrue();
+    }
+
+    @Test
+    void mapArrayComponent_selectSingle_returnsSingleColumn() {
+        List<ColumnConfig> cols = ColumnTypeMapper.mapArrayComponentToColumns("grade", "select", Map.of());
+
+        assertThat(cols).hasSize(1);
+        assertThat(cols.get(0).getKey()).isEqualTo("grade");
+        assertThat(cols.get(0).getColumnType()).isEqualTo("VARCHAR");
+        assertThat(cols.get(0).getLength()).isEqualTo(255);
+    }
 }

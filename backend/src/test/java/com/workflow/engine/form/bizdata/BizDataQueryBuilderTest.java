@@ -236,4 +236,62 @@ class BizDataQueryBuilderTest {
         assertThat(sp.sql()).contains("(name LIKE ? OR dept LIKE ?)");
         assertThat(sp.params()).contains("%张%", "%张%");
     }
+
+    // ---------- JSON 数组列精确筛选（columnTypeOf 驱动） ----------
+
+    @Test
+    void buildSelect_jsonColumn_eq_usesJsonContains() {
+        Map<String, String> ct = Map.of("dept", "JSON");
+        List<Map<String, Object>> conds = List.of(Map.of("column", "dept", "op", "eq", "value", "研发部"));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, ct, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("JSON_CONTAINS(dept, ?)");
+        assertThat(sp.params()).contains("\"研发部\"");
+    }
+
+    @Test
+    void buildSelect_jsonColumn_ne_usesNotJsonContains() {
+        Map<String, String> ct = Map.of("dept", "JSON");
+        List<Map<String, Object>> conds = List.of(Map.of("column", "dept", "op", "ne", "value", "行政部"));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, ct, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("NOT JSON_CONTAINS(dept, ?)");
+        assertThat(sp.params()).contains("\"行政部\"");
+    }
+
+    @Test
+    void buildSelect_jsonColumn_in_usesJsonOverlaps() {
+        Map<String, String> ct = Map.of("dept", "JSON");
+        List<Map<String, Object>> conds = List.of(
+                Map.of("column", "dept", "op", "in", "value", List.of("研发部", "市场部")));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, ct, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("JSON_OVERLAPS(dept, ?)");
+        assertThat(sp.params()).contains("[\"研发部\",\"市场部\"]");
+    }
+
+    @Test
+    void buildSelect_jsonColumn_legacyFilterMap_usesJsonContains() {
+        Map<String, String> ct = Map.of("dept", "JSON");
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, ct, "t1", Map.of("dept", "研发部"),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("JSON_CONTAINS(dept, ?)");
+        assertThat(sp.params()).contains("\"研发部\"");
+    }
+
+    @Test
+    void buildSelect_nonJsonColumn_eq_keepsEquals() {
+        // 普通列（VARCHAR）不受 JSON 分支影响
+        Map<String, String> ct = Map.of("dept", "JSON");
+        List<Map<String, Object>> conds = List.of(Map.of("column", "name", "op", "eq", "value", "张三"));
+        BizDataQueryBuilder.SqlAndParams sp = BizDataQueryBuilder.buildSelect(
+                "wf_biz_biz_leave", COLUMNS, ct, "t1", structFilter("AND", conds),
+                null, null, null, "desc", 0, 20);
+        assertThat(sp.sql()).contains("name = ?");
+        assertThat(sp.params()).contains("张三");
+    }
 }

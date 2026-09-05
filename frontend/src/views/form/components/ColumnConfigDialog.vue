@@ -559,6 +559,44 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       continue
     }
     const existing = props.existingColumns?.find(c => c.key === field)
+
+    // 判断是否为数组值组件（需要生成双列：主列 + 隐藏文本列）
+    const arrayValueTypes = ['checkbox', 'multiSelect', 'multiSelectPro', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
+    const isArrayComponent = arrayValueTypes.includes(type) || (type === 'select' && rule?.props?.multiple)
+    const isTextColumnNeeded = isArrayComponent
+
+    if (isTextColumnNeeded) {
+      // 数组值组件：生成双列
+      // 主列：JSON 存储数组值
+      out.push({
+        key: field,
+        label,
+        columnType: mapped.columnType,
+        length: mapped.length,
+        scale: mapped.scale,
+        required: Boolean(rule?.validate?.some?.((v: any) => v.required)),
+        unique: existing?.unique ?? false,
+        indexed: existing?.indexed ?? false,
+        componentType: type,
+        existingType: existing?.columnType,
+      })
+      // 隐藏文本列：VARCHAR(255)，供显示使用
+      out.push({
+        key: field + '_text',
+        label: label + '（显示）',
+        columnType: 'VARCHAR',
+        length: 255,
+        scale: null,
+        required: false,
+        unique: false,
+        indexed: false,
+        hidden: true,
+        componentType: type === 'select' && rule?.props?.multiple ? 'selectText' : type + 'Text',
+        existingType: props.existingColumns?.find(c => c.key === field + '_text')?.columnType,
+      })
+      continue
+    }
+
     out.push({
       key: field,
       label,

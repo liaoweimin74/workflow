@@ -64,7 +64,7 @@ export default {
                         }, {
                             type: 'switch',
                             field: 'emitPath',
-                            value: true
+                            value: false
                         }, {
                             type: 'input',
                             field: 'value',

@@ -289,7 +289,7 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
 
 // ==================== 列适配 ====================
 /** 数组值组件类型：列表展示时 formatter 逗号拼接（对齐 BizDataListPage renderByComponentType） */
-const ARRAY_COMPONENT_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
+const ARRAY_COMPONENT_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'select', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
 
 /** JSON 数组 → 逗号拼接；非数组（旧逗号串/字符串）原样返回 */
 function formatArrayValue(v: unknown): unknown {
@@ -323,7 +323,14 @@ const resolvedColumns = computed<TableColumn[]>(() => {
       minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 120,
       sortable: sortableOf(c.key),
       ...(ARRAY_COMPONENT_TYPES.includes(c.componentType || '')
-        ? { formatter: (_row: any, _col: any, cellValue: unknown) => formatArrayValue(cellValue) }
+        ? {
+            formatter: (row: any, _col: any, cellValue: unknown) => {
+              // 优先显示冗余显示列 <key>_text（前端提交时生成，数据平铺在行顶层）；缺失回退 value join
+              const text = row?.[c.key + '_text']
+              if (text !== undefined && text !== null && text !== '') return String(text)
+              return formatArrayValue(cellValue)
+            },
+          }
         : {}),
     }))
   }

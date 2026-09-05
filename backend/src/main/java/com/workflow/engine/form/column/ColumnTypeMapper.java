@@ -44,7 +44,8 @@ public final class ColumnTypeMapper {
             case "input" -> applyString(c, 255);
             case "textarea", "RichText", "richText" -> applyText(c);
             case "inputNumber" -> applyNumber(c, props);
-            case "select", "radio" -> applyString(c, 255);
+            case "select" -> applySelect(c, props);
+            case "radio" -> applyString(c, 255);
             case "cascader" -> applyJson(c);
             case "checkbox", "multiSelect", "multiSelectPro" -> applyJson(c);
             case "LookupPicker" -> {
@@ -57,7 +58,8 @@ public final class ColumnTypeMapper {
             case "Upload", "upload", "fileUpload" -> applyJson(c);
             case "rate" -> applyInt(c);
             case "colorPicker" -> applyString(c, 16);
-            case "tree", "elTreeSelect" -> applyTree(c, props);
+            case "tree" -> applyTree(c, props);
+            case "elTreeSelect" -> applyJson(c);
             case "elTransfer" -> applyJson(c);
             case "fcEditor" -> applyText(c);
             case "signaturePad" -> applyText(c);
@@ -105,6 +107,18 @@ public final class ColumnTypeMapper {
     private static void applyTinyint(ColumnConfig c) {
         c.setColumnType("TINYINT");
         c.setLength(1);
+    }
+
+    /**
+     * select 单选存单值 → VARCHAR(255)；多选（multiple=true）值为数组 → JSON，
+     * 否则数组序列化后存 VARCHAR、读取不反序列化导致回显异常（对齐前端 ColumnConfigDialog）。
+     */
+    private static void applySelect(ColumnConfig c, Map<String, Object> props) {
+        if (props != null && Boolean.TRUE.equals(props.get("multiple"))) {
+            applyJson(c);
+        } else {
+            applyString(c, 255);
+        }
     }
 
     private static void applyInt(ColumnConfig c) {

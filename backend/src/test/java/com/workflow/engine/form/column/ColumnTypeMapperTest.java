@@ -58,6 +58,14 @@ class ColumnTypeMapperTest {
     }
 
     @Test
+    void mapSelectMultiple_returnsJson() {
+        // select 配置多选后值为数组；VARCHAR 列存 JSON 字符串且读取不反序列化导致回显异常 → 多选 JSON
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("select", Map.of("multiple", true));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+        assertThat(c.getLength()).isNull();
+    }
+
+    @Test
     void mapCheckbox_returnsJson() {
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("checkbox", Map.of());
         assertThat(c.getColumnType()).isEqualTo("JSON");
@@ -104,10 +112,11 @@ class ColumnTypeMapperTest {
     }
 
     @Test
-    void mapTreeSelectSingle_returnsVarchar255() {
+    void mapTreeSelectSingle_returnsJson() {
+        // elTreeSelect 单选：node-key 值可能是数字，VARCHAR 经后端序列化后回显类型不匹配 → 一律 JSON 保真
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("elTreeSelect", Map.of("multiple", false));
-        assertThat(c.getColumnType()).isEqualTo("VARCHAR");
-        assertThat(c.getLength()).isEqualTo(255);
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+        assertThat(c.getLength()).isNull();
     }
 
     @Test

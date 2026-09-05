@@ -67,3 +67,4 @@ docs/test-records/*
 docs/local/
 
 # <!-- openspec-superpowers-opencode_gitignore -->
+.playwright-mcp/

@@ -136,6 +136,18 @@ export async function resolveOptionDataSource(
 }
 
 /** 递归判断 rule 树中是否存在选项数据源（effect.datasource）节点 */
+/** 是否穿梭框组件（el-transfer 用 key 作为选中值标识，静态选项 value 字段即 key） */
+function isTransferComponent(type: string | undefined): boolean {
+  return type === 'elTransfer' || type === 'el-transfer' || type === 'transfer'
+}
+
+/** el-transfer 数据项：key=value（选中标识），保留 value 供显示/提交映射；递归 children */
+function toTransferItem(node: OptionNode): Record<string, unknown> {
+  const item: Record<string, unknown> = { key: node.value, label: node.label, value: node.value }
+  if (Array.isArray(node.children)) item.children = node.children.map(toTransferItem)
+  return item
+}
+
 export function hasOptionDatasource(rules: Rule[]): boolean {
   return rules.some((rule) => {
     const node = rule as Rule & { effect?: Record<string, unknown>; children?: Rule[]; props?: Record<string, any> }
@@ -176,7 +188,10 @@ export async function resolveOptionRules(
       const target = optionTarget(node.type)
       if (target.propsKey) {
         // 树/级联/穿梭组件：选项承载在 props.data / props.options（elTreeSelect 读 props.data，el-cascader 读 props.options）
-        node.props = { ...(node.props || {}), [target.propsKey]: opts }
+        node.props = {
+          ...(node.props || {}),
+          [target.propsKey]: isTransferComponent(node.type) ? opts.map(toTransferItem) : opts,
+        }
       } else {
         node.options = opts
       }

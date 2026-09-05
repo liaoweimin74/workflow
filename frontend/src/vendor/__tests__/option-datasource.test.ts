@@ -284,7 +284,7 @@ describe('resolveOptionRules — 树形/级联组件选项承载字段', () => {
     expect((resolved[0] as any).options).toBeUndefined()
   })
 
-  it('elTransfer 的选项写入 props.data 而非 rule.options（驼峰类型匹配）', async () => {
+  it('elTransfer 的选项写入 props.data 且补 key=value（key 为选中标识，防全选联动）', async () => {
     ;(dataSourceApi.queryData as any).mockResolvedValue({
       data: {
         records: [
@@ -299,9 +299,10 @@ describe('resolveOptionRules — 树形/级联组件选项承载字段', () => {
       props: { data: [] },
     } as any]
     const resolved = await resolveOptionRules(rules, bindings)
-    // 穿梭框读 props.data；type 为驼峰 elTransfer，须命中 data 分支
+    // 穿梭框读 props.data 且用 key 作为选中值标识（无 key 时所有项 key 相同 → 全选联动）；
+    // 数据源映射生成 {label,value} → 需补 key=value（递归 children），保留 value 供显示映射
     expect((resolved[0] as any).props.data).toEqual([
-      { label: '研发部', value: '1', children: [{ label: '前端组', value: '2' }] },
+      { label: '研发部', value: '1', key: '1', children: [{ label: '前端组', value: '2', key: '2' }] },
     ])
     expect((resolved[0] as any).options).toBeUndefined()
   })

@@ -2,6 +2,7 @@
   <!-- 根包裹无定位（static），使 inline 覆盖层 absolute 定位锚向上到页面内容区容器；stretch=true 时撑满父容器高度 -->
   <div class="page-data-table" :class="{ 'stretch-fill': stretch }">
   <SearchTable
+    v-if="metaLoaded"
     ref="tableRef"
     :search-fields="resolvedSearchFields"
     :columns="resolvedColumns"
@@ -174,6 +175,8 @@ const records = ref<any[]>([])
 
 /** 数据源列定义（metadata，供 formConfig 动态生成表单） */
 const metaColumns = ref<{ key: string; label: string; columnType?: string; componentType?: string; required?: boolean; scale?: number; sortable?: boolean }[]>([])
+/** 元数据加载完成标记：SearchTable 在列定义就绪后才挂载，保证首次取数渲染即带 formatter（数组值列显示 label 而非原始 value） */
+const metaLoaded = ref(false)
 /** 数据源可写标记 */
 const writable = ref(false)
 /** 数据源绑定表单 formKey（FORM/WORKFLOW metadata 返回；非空时编辑弹窗按表单 schema 构建组件） */
@@ -957,7 +960,7 @@ async function loadMetadata() {
     const meta = res.data as any
     writable.value = !!meta?.writable
     formKey.value = meta?.formKey || ''
-    await loadFormSchema()
+    // metaColumns 先赋值（数组值列 formatter/查询映射依赖 componentType，避免首次取数时列无 formatter 显示原始 value）
     metaColumns.value = (meta?.columns || []).map((c: any) => ({
       key: c.key,
       label: c.label || c.key,
@@ -967,9 +970,13 @@ async function loadMetadata() {
       scale: c.scale,
       sortable: c.sortable,
     }))
+    // 表单 schema + 选项数据源取数较慢：异步加载（不阻塞首次取数/ready；查询栏选项与编辑弹窗规则随后就绪）
+    void loadFormSchema()
   } catch {
     // 元数据加载失败不阻断表格展示
   }
+  // 列定义就绪（成功含列/失败空列）：放行 SearchTable 挂载（挂载后首次取数即用最新列定义）
+  metaLoaded.value = true
 }
 
 onMounted(async () => {

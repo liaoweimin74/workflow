@@ -1,6 +1,7 @@
 <template>
   <div class="page-data-cards" :class="{ 'stretch-fill': stretch }">
     <ListCards
+      v-if="metaLoaded"
       ref="cardsRef"
       :columns="columnsForRender"
       :fetch-api="fetchApi"
@@ -32,6 +33,7 @@
           :rule="detailRules"
           :option="{ labelWidth: '100px' }"
           :initial-values="detailRow"
+          :data-sources="formDataSources"
           readonly
         />
       </div>
@@ -43,6 +45,7 @@
         :rule="localFormRules"
         :option="{ labelWidth: '100px', submitBtn: { show: false }, resetBtn: { show: false } }"
         :initial-values="localFormValues"
+        :data-sources="formDataSources"
         :readonly="localFormMode === 'view'"
       />
       <template #footer>
@@ -58,11 +61,13 @@ import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { dataSourceApi } from '@/api/data-source'
+import { formApi } from '@/api/form'
+import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import ListCards from '@/components/business/ListCards.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import { leafDisplayText } from '@/views/form/arrayValueLabel'
+import { leafDisplayText, withArrayLabels } from '@/views/form/arrayValueLabel'
 import type { CardColumn, DataSourceBindingContext, ListQueryParams, ListPageResult } from '@/components/business/types'
 import type { CardTheme, CardStyle } from '@/components/business/ListCards.types'
 
@@ -175,6 +180,13 @@ const resolvedColumns = computed<CardColumn[]>(() => (props.columns || []).filte
 /** 数组值组件类型（卡片字段显示按组件类型渲染显示值 label） */
 const ARRAY_COMPONENT_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'select', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
 
+/** 数组值组件主列（JSON）搜索 → 用 <key>_text 列（查询值=显示值 label，后端 LIKE 匹配显示列；对齐 PageDataTable） */
+function resolveSearchColumn(key: string): string {
+  const meta = metadataColumns.value.find((m) => m.key === key)
+  if (meta && ARRAY_COMPONENT_TYPES.includes(meta.componentType || '')) return `${key}_text`
+  return key
+}
+
 /** JSON 数组 → 逗号拼接；非数组（旧逗号串/字符串）原样返回 */
 function formatArrayValue(v: unknown): unknown {
   if (Array.isArray(v)) return v.join(', ')
@@ -191,15 +203,85 @@ function formatArrayValue(v: unknown): unknown {
 }
 
 const metadataColumns = ref<any[]>([])
+/** 元数据加载完成标记：ListCards 在列定义就绪后才挂载，保证首次取数渲染即带 formatter（数组值列显示 label 而非原始 value） */
+const metaLoaded = ref(false)
+/** 数据源绑定表单 formKey（FORM metadata 返回；非空时查询栏/编辑弹窗按表单 schema 构建组件与选项） */
+const formKey = ref('')
+/** 业务表单 schema rule（formKey 加载 + resolveOptionRules 解析选项数据源） */
+const formSchemaRule = ref<Array<Record<string, any>>>([])
+/** 表单级数据源绑定（schema.dataSources：表单内 id → 全局 refId） */
+const formDataSources = ref<DataSourceBindingContext[]>([])
 const columnsForRender = computed(() => props.designMode && props.columns?.length === 0
   ? metadataColumns.value.map((column) => ({ prop: column.key, label: column.label || column.key, role: column.role || 'field' }))
   : resolvedColumns.value)
+/** 查询组件类型映射（按数据源 metadata componentType；选项数据源来自业务表单 schema，对齐 PageDataTable） */
+const QUERY_SELECT_TYPES = ['select', 'multiSelect', 'multiSelectPro', 'checkbox', 'elTransfer']
+const QUERY_TREE_TYPES = ['tree', 'elTreeSelect']
+const QUERY_PICKER_TYPES = ['LookupPicker', 'DataPicker']
+
+/** 按列 key 找业务表单 schema rule */
+function findFormRuleByKey(fieldKey: string): Record<string, any> | undefined {
+  return formSchemaRule.value.find((r) => (r as any).field === fieldKey)
+}
+
+/** 扁平选项 label 列表（select 类查询：label=value；树/级联/穿梭从 props.data/props.options 取） */
+function formOptionLabelItems(rule: any): { label: string; value: string }[] {
+  const list: any[] = rule?.options ?? rule?.props?.options ?? rule?.props?.data ?? []
+  const labels: string[] = []
+  const collect = (items: any[]) => {
+    for (const it of items) {
+      if (it && it.label !== undefined) labels.push(String(it.label))
+      if (Array.isArray(it.children)) collect(it.children)
+    }
+  }
+  collect(list)
+  return labels.map((l) => ({ label: l, value: l }))
+}
+
 const resolvedSearchFields = computed(() => (props.searchFields || [])
-  .map((field) => ({
-    type: 'input' as const,
-    prop: field.key || field.field || '',
-    label: field.label || field.key || field.field || '',
-  }))
+  .map((field) => {
+    const key = field.key || field.field || ''
+    const meta = metadataColumns.value.find((m) => m.key === key)
+    const compType = meta?.componentType || ''
+    const rule = findFormRuleByKey(key)
+    const base = { prop: key, label: field.label || key }
+    if (QUERY_TREE_TYPES.includes(compType)) {
+      return {
+        ...base,
+        type: 'tree-select' as const,
+        treeProps: { data: rule?.props?.data ?? [], props: { label: 'label', value: 'label', children: 'children' } },
+        style: 'width: 200px',
+      }
+    }
+    if (compType === 'cascader') {
+      return {
+        ...base,
+        type: 'cascader' as const,
+        cascaderProps: { options: rule?.props?.options ?? [], props: { label: 'label', value: 'label', children: 'children' } },
+        style: 'width: 200px',
+      }
+    }
+    if (QUERY_SELECT_TYPES.includes(compType)) {
+      return {
+        ...base,
+        type: 'select' as const,
+        options: formOptionLabelItems(rule),
+        style: 'width: 180px',
+      }
+    }
+    if (QUERY_PICKER_TYPES.includes(compType)) {
+      return {
+        ...base,
+        type: 'lookupPicker' as const,
+        lookupProps: { ...(rule?.props || {}) },
+        style: 'width: 200px',
+      }
+    }
+    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date') {
+      return { ...base, type: 'date-picker' as const }
+    }
+    return { ...base, type: 'input' as const, style: 'width: 180px' }
+  })
   .filter((field) => field.prop))
 
 // 行级操作按钮（设计态/运行态一致：配置了按钮则预览/运行都显示，便于设计器所见即所得；保留 style/icon/type/events 供卡片按形态渲染与分发）
@@ -253,7 +335,12 @@ const fetchApi = async (params: ListQueryParams): Promise<ListPageResult> => {
           .map(([column, value]) => ({ column, op: 'eq', value }))
       : []),
     ...resolvedSearchFields.value
-      .map((field) => ({ column: field.prop, op: 'like', value: params[field.prop] }))
+      .map((field) => {
+        const raw = params[field.prop]
+        const v = Array.isArray(raw) ? raw.join('/') : raw
+        // 数组值组件主列（JSON）→ 映射 <key>_text 显示列查询 label（对齐 PageDataTable）
+        return { column: resolveSearchColumn(field.prop), op: 'like', value: v }
+      })
       .filter((condition) => condition.value !== '' && condition.value !== null && condition.value !== undefined),
   ]
   const queryParams: Record<string, any> = {
@@ -281,16 +368,46 @@ async function loadMetadata() {
   try {
     const response = await dataSourceApi.getMetadata(resolvedRefId.value)
     metadataColumns.value = response.data?.columns || []
+    formKey.value = response.data?.formKey || ''
+    // 表单 schema + 选项数据源取数较慢：异步加载（不阻塞首次取数/ready；查询栏选项与编辑弹窗规则随后就绪）
+    void loadFormSchema()
   } catch {
     metadataColumns.value = []
+    formKey.value = ''
+    formSchemaRule.value = []
+    formDataSources.value = []
+  }
+  // 列定义就绪（成功含列/失败空列）：放行 ListCards 挂载（挂载后首次取数即用最新列定义）
+  metaLoaded.value = true
+}
+
+/** 加载业务表单 schema（查询栏 select/tree/cascader 选项数据源取数，对齐 PageDataTable） */
+async function loadFormSchema() {
+  if (!formKey.value) {
+    formSchemaRule.value = []
+    formDataSources.value = []
+    return
+  }
+  try {
+    const res = await formApi.getFormDefinitionByKey(formKey.value)
+    const raw = (res.data as any)?.schema
+    const schema = JSON.parse(raw || '[]')
+    const rules = Array.isArray(schema) ? schema : (schema.rule || [])
+    formDataSources.value = !Array.isArray(schema) && Array.isArray(schema.dataSources) ? schema.dataSources : []
+    formSchemaRule.value = hasOptionDatasource(rules)
+      ? await resolveOptionRules(rules, formDataSources.value)
+      : rules
+  } catch {
+    formSchemaRule.value = []
+    formDataSources.value = []
   }
 }
 
-// 数据源（含设计态绑定）变化：清空旧列定义并用新数据源重新取元数据 + 显示数据
+// 数据源（含设计态绑定）变化：清空旧列定义并重新取元数据（metaLoaded 置 false 卸载 ListCards，重挂载后取数即用新列定义）
 watch(resolvedRefId, () => {
   metadataColumns.value = []
+  metaLoaded.value = false
   void loadMetadata()
-  void cardsRef.value?.fetchData()
 })
 
 onMounted(() => {
@@ -447,6 +564,19 @@ async function dispatchButtonAction(action: { type: string; params?: { key: stri
 }
 
 // ==================== 详情（view）与动作总线接口 ====================
+/** 表单规则回退（无表单 schema 的 SYSTEM/API 数据源）：列定义映射基础组件（对齐 PageDataTable buildFormRule） */
+function buildFormRule() {
+  return metadataColumns.value.map((column: any) => ({
+    type: column.columnType === 'DATE' || column.columnType === 'DATETIME' ? 'datePicker' : 'input',
+    field: column.key,
+    title: column.label || column.key,
+    validate: column.required ? [{ required: true, message: `${column.label || column.key}不能为空` }] : [],
+  }))
+}
+
+/** 编辑/详情表单规则：FORM 数据源用业务表单 schema（组件/选项/校验按定义，无 _text 重复列）；其余回退列映射（对齐 PageDataTable） */
+const formRules = computed(() => (formSchemaRule.value.length > 0 ? formSchemaRule.value : buildFormRule()))
+
 /** 详情：popup → 独立详情弹窗；drawer/inline → 本地表单只读查看 */
 function openDetail(row: any) {
   if (!row) return
@@ -458,22 +588,7 @@ function openDetail(row: any) {
   detailRow.value = row
   detailFormKey.value++
   detailVisible.value = true
-  void loadDetailRules()
-}
-
-async function loadDetailRules() {
-  if (!resolvedRefId.value) return
-  try {
-    const metadata = await dataSourceApi.getMetadata(resolvedRefId.value)
-    detailRules.value = (metadata.data?.columns || []).map((column: any) => ({
-      type: column.columnType === 'DATE' || column.columnType === 'DATETIME' ? 'datePicker' : 'input',
-      field: column.key,
-      title: column.label || column.key,
-      validate: column.required ? [{ required: true, message: `${column.label || column.key}不能为空` }] : [],
-    }))
-  } catch {
-    detailRules.value = []
-  }
+  detailRules.value = formRules.value
 }
 
 function setFilter(filter: Record<string, unknown>) {
@@ -501,28 +616,24 @@ async function handleDelete(row: any) {
 async function openLocalForm(mode: 'create' | 'edit' | 'view', row?: any) {
   if (!resolvedRefId.value) return
   localFormMode.value = mode
-  localFormRules.value = []
-  const metadata = await dataSourceApi.getMetadata(resolvedRefId.value)
-  localFormRules.value = (metadata.data?.columns || []).map((column: any) => ({
-    type: column.columnType === 'DATE' || column.columnType === 'DATETIME' ? 'datePicker' : 'input',
-    field: column.key,
-    title: column.label || column.key,
-    validate: column.required ? [{ required: true, message: `${column.label || column.key}不能为空` }] : [],
-  }))
   localFormValues.value = row || {}
   localFormId.value = row?.id
   if (mode !== 'create' && row?.id) {
     const detail = await dataSourceApi.getData(resolvedRefId.value, row.id)
     localFormValues.value = { ...localFormValues.value, ...(detail.data?.data || {}) }
   }
+  // 表单规则：FORM 数据源用业务表单 schema（组件/选项/校验按定义），其余回退列映射
+  localFormRules.value = formRules.value
   localFormVisible.value = true
 }
 
 async function saveLocalForm() {
   if (!resolvedRefId.value) return
   const values = localFormRef.value?.getFormData() || localFormValues.value
-  if (localFormMode.value === 'create') await dataSourceApi.createData(resolvedRefId.value, values)
-  else if (localFormId.value !== undefined) await dataSourceApi.updateData(resolvedRefId.value, String(localFormId.value), values)
+  // 提交生成 <key>_text 显示列（数组值组件 value → label，对齐 PageDataTable/BizDataListPage）
+  const payload = withArrayLabels(values, formSchemaRule.value)
+  if (localFormMode.value === 'create') await dataSourceApi.createData(resolvedRefId.value, payload)
+  else if (localFormId.value !== undefined) await dataSourceApi.updateData(resolvedRefId.value, String(localFormId.value), payload)
   localFormVisible.value = false
   await cardsRef.value?.refresh()
 }

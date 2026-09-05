@@ -263,20 +263,22 @@ describe('ListCards 组件', () => {
     wrapper.unmount()
   })
 
-  it('空数据时显示空状态', async () => {
+  it('空数据时显示空状态（不显示重试按钮——正常空结果无需重试）', async () => {
     const mockFetch = vi.fn().mockResolvedValue({ rows: [], total: 0 })
     const wrapper = createWrapper({ fetchApi: mockFetch })
     await flushPromises()
     expect(wrapper.find('.empty-state').exists()).toBe(true)
+    expect(wrapper.find('.retry-btn').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('错误时显示错误状态', async () => {
+  it('错误时显示错误状态（含重试按钮）', async () => {
     const mockFetch = vi.fn().mockRejectedValue(new Error('网络错误'))
     const wrapper = createWrapper({ fetchApi: mockFetch })
     await flushPromises()
     expect(wrapper.vm['error']).toBeTruthy()
     expect(wrapper.find('.error-state').exists()).toBe(true)
+    expect(wrapper.find('.retry-btn').exists()).toBe(true)
     wrapper.unmount()
   })
 

@@ -4,10 +4,54 @@
       <el-form :inline="true" :model="query" @submit.prevent="handleSearch">
         <el-form-item v-for="field in searchFields" :key="field.prop" :label="field.label">
           <el-input
+            v-if="field.type === 'input'"
             v-model="query[field.prop]"
             :placeholder="field.placeholder || field.label"
             clearable
             @keyup.enter="handleSearch"
+          />
+          <el-select
+            v-else-if="field.type === 'select'"
+            v-model="query[field.prop]"
+            :placeholder="field.placeholder"
+            clearable
+            :style="field.style || 'width: 180px'"
+          >
+            <el-option
+              v-for="opt in field.options"
+              :key="String(opt.value)"
+              :label="opt.label"
+              :value="opt.value"
+            />
+          </el-select>
+          <el-tree-select
+            v-else-if="field.type === 'tree-select'"
+            v-model="query[field.prop]"
+            v-bind="field.treeProps"
+            :placeholder="field.placeholder"
+            clearable
+            :style="field.style || 'width: 200px'"
+            check-strictly
+          />
+          <el-cascader
+            v-else-if="field.type === 'cascader'"
+            v-model="query[field.prop]"
+            v-bind="field.cascaderProps"
+            :placeholder="field.placeholder"
+            clearable
+            :style="field.style || 'width: 200px'"
+          />
+          <LookupPicker
+            v-else-if="field.type === 'lookupPicker'"
+            v-model="query[field.prop]"
+            v-bind="field.lookupProps"
+            :placeholder="field.placeholder"
+            :style="field.style || 'width: 200px'"
+          />
+          <el-date-picker
+            v-else-if="field.type === 'date-picker'"
+            v-model="query[field.prop]"
+            :placeholder="field.placeholder"
           />
         </el-form-item>
         <el-form-item>
@@ -60,10 +104,9 @@
         <el-button v-if="!designMode" type="primary" @click="retry" class="retry-btn">重试</el-button>
       </div>
 
-      <!-- 空状态 -->
+      <!-- 空状态（正常空结果：无需重试，重试仅用于错误状态） -->
       <div v-else-if="total === 0 && rows.length === 0" class="empty-state">
         <el-empty description="暂无数据" />
-        <el-button v-if="!designMode" type="primary" @click="retry" class="retry-btn">重试</el-button>
       </div>
 
       <!-- 卡片网格渲染 -->
@@ -166,6 +209,7 @@ import type { CardColumn, ListQueryParams, ListPageResult, SearchField } from '.
 import type { CardTheme, CardStyle } from './ListCards.types'
 import { renderCellContent } from '@/utils/tableColumnRenderer'
 import { resolveFieldStyle, resolveStyleRules, normalizeColumnStyle, parseCssString } from '@/utils/fieldStyle'
+import LookupPicker from './LookupPicker.vue'
 import { CARD_THEMES } from './ListCards.themes'
 import { mergeCardStyle, buildCardCssVars, buildFieldsCssVars } from './ListCards.styles'
 

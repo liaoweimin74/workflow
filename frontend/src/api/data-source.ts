@@ -31,6 +31,8 @@ export interface DataSourceMetadataDTO {
   columns: ColumnConfigItem[]
   /** 是否支持增删改（只读数据源 false） */
   writable: boolean
+  /** 绑定表单 formKey（FORM/WORKFLOW 数据源；SYSTEM/API 空）——编辑弹窗/查询栏按表单 schema 构建 */
+  formKey?: string
 }
 
 /** 数据源数据查询参数（对齐后端 BizDataQueryRequest） */

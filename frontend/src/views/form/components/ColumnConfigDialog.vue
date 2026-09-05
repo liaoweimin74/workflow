@@ -224,7 +224,11 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
         ? { columnType: 'DECIMAL', length: 18, scale: precision }
         : { columnType: 'INT', length: null, scale: null }
     }
-    case 'select':
+    case 'select': {
+      // 单选存单值 → VARCHAR(255)；多选（multiple）值为数组 → JSON（避免数组序列化存 VARCHAR 回显异常）
+      if (propsMap?.multiple) return { columnType: 'JSON', length: null, scale: null }
+      return { columnType: 'VARCHAR', length: 255, scale: null }
+    }
     case 'radio':
       return { columnType: 'VARCHAR', length: 255, scale: null }
     case 'cascader':
@@ -256,14 +260,16 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
       return { columnType: 'INT', length: null, scale: null }
     case 'colorPicker':
       return { columnType: 'VARCHAR', length: 16, scale: null }
-    case 'tree':
-    case 'elTreeSelect': {
+    case 'tree': {
       // 多选（showCheckbox/multiple）以数组/JSON 存储，单选存值 → VARCHAR(255)
       const multi = propsMap?.multiple || propsMap?.showCheckbox
       return multi
         ? { columnType: 'JSON', length: null, scale: null }
         : { columnType: 'VARCHAR', length: 255, scale: null }
     }
+    case 'elTreeSelect':
+      // 单选 node-key 值可能为数字，VARCHAR 经后端序列化后回显类型不匹配 → 一律 JSON 保真（与后端 ColumnTypeMapper 对齐）
+      return { columnType: 'JSON', length: null, scale: null }
     case 'elTransfer':
       return { columnType: 'JSON', length: null, scale: null }
     case 'fcEditor':
@@ -295,8 +301,9 @@ const UNSUPPORTED_TYPES = ['divider', 'groupContainer', 'dataTable']
 /** 子表组件：group/tableForm 映射独立物理表，子列由 children 递归提取 */
 const SUBTABLE_TYPES = ['group', 'tableForm']
 
-/** 列映射生成但不在业务数据列表展示的组件（隐藏列：仅参与 CRUD 写入） */
-const HIDDEN_COMPONENT_TYPES = ['subForm', 'elTransfer', 'tree', 'elTreeSelect', 'fcEditor', 'cascader', 'signaturePad']
+/** 列映射生成但不在业务数据列表展示的组件（隐藏列：仅参与 CRUD 写入）。
+ *  穿梭框/树形/级联等数组值组件不在此列：业务列表可显示，由渲染层做数组格式化（对齐 BizDataListPage/PageDataTable）。 */
+const HIDDEN_COMPONENT_TYPES = ['subForm', 'fcEditor', 'signaturePad']
 
 /** 从 LookupPicker fetch.action（/v1/biz-data/<formKey>）推断数据源表单 key */
 function inferSourceFormKey(propsMap: Record<string, any>): string | undefined {

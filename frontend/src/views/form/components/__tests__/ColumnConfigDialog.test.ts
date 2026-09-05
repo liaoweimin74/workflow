@@ -227,12 +227,30 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 
-  it('elTreeSelect 单选（multiple=false）→ VARCHAR(255)', async () => {
+  it('elTreeSelect 单选（multiple=false）→ JSON（值保真，避免 VARCHAR 序列化破坏 node-key 类型）', async () => {
     const wrapper = createWrapper({ schema: extSchema('elTreeSelect', { multiple: false }) })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.length).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('select 单选 → VARCHAR(255)', async () => {
+    const wrapper = createWrapper({ schema: extSchema('select') })
     await openAndBuild(wrapper)
     const col = confirmItems(wrapper).find(i => i.key === 'f1')
     expect(col?.columnType).toBe('VARCHAR')
     expect(col?.length).toBe(255)
+    wrapper.unmount()
+  })
+
+  it('select 多选（multiple=true）→ JSON（多选值为数组）', async () => {
+    const wrapper = createWrapper({ schema: extSchema('select', { multiple: true }) })
+    await openAndBuild(wrapper)
+    const col = confirmItems(wrapper).find(i => i.key === 'f1')
+    expect(col?.columnType).toBe('JSON')
+    expect(col?.length).toBeNull()
     wrapper.unmount()
   })
 
@@ -283,13 +301,24 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     wrapper.unmount()
   })
 
-  it('隐藏组件（elTransfer/tree/elTreeSelect/fcEditor/cascader/signaturePad）均标记 hidden', async () => {
-    for (const type of ['elTransfer', 'tree', 'elTreeSelect', 'fcEditor', 'cascader', 'signaturePad']) {
+  it('隐藏组件（fcEditor/signaturePad）仍标记 hidden', async () => {
+    for (const type of ['fcEditor', 'signaturePad']) {
       const wrapper = createWrapper({ schema: extSchema(type) })
       await openAndBuild(wrapper)
       const items = confirmItems(wrapper)
       const col = items.find(i => i.key === 'f1')
       expect(col?.hidden).toBe(true)
+      wrapper.unmount()
+    }
+  })
+
+  it('穿梭框/树形/级联/树形选择不再标记 hidden（业务列表可显示，数组值由渲染层格式化）', async () => {
+    for (const type of ['elTransfer', 'tree', 'elTreeSelect', 'cascader']) {
+      const wrapper = createWrapper({ schema: extSchema(type) })
+      await openAndBuild(wrapper)
+      const items = confirmItems(wrapper)
+      const col = items.find(i => i.key === 'f1')
+      expect(col?.hidden, `${type} 应可显示`).toBeFalsy()
       wrapper.unmount()
     }
   })

@@ -271,6 +271,27 @@ describe('FormRenderer — getFormData() 方法', () => {
     expect(data.grade).toBe('a')
     expect(data.grade_text).toBe('A')
   })
+
+  it('select 选项数据源（effect.datasource）：getFormData 用解析后选项生成 _text', async () => {
+    ;(dataSourceApi.queryData as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { records: [
+        { id: '1', data: { name: '研发部', code: 'r' }, version: 1 },
+        { id: '2', data: { name: '市场部', code: 'm' }, version: 1 },
+      ] },
+    })
+    const wrapper = createWrapper({
+      rule: [{
+        type: 'select', field: 'dept', props: {},
+        options: [],
+        effect: { datasource: { dataSourceId: 'ds_1', labelField: 'name', valueField: 'code' } },
+      }] as unknown as Rule[],
+      initialValues: { dept: 'r' },
+    })
+    await new Promise((r) => setTimeout(r, 50))
+    const data = (wrapper.vm as unknown as { getFormData: () => Record<string, unknown> }).getFormData()
+    expect(data.dept).toBe('r')
+    expect(data.dept_text).toBe('研发部')
+  })
 })
 
 describe('FormRenderer — validate() 方法（详情弹窗保存校验）', () => {

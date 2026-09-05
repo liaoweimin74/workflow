@@ -199,6 +199,17 @@ describe('injectFallbackOptions — 回显时 options 无匹配用 _text 注入�
     expect(rules[0].options).toEqual([{ label: 'A', value: 'a' }])
   })
 
+  it('类型不匹配（字符串 v-model vs 数字 option value）时注入兜底显示 label', () => {
+    const rules = [{
+      type: 'select', field: 'dept', props: {},
+      options: [{ label: '张三', value: 7 }],
+    } as any]
+    injectFallbackOptions(rules, { dept: '7', dept_text: '张三' })
+    // 严格类型比较：'7' !== 7 → 注入字符串 value 兜底项，组件能匹配显示 label
+    expect(rules[0].options).toContainEqual({ value: '7', label: '张三' })
+    expect(rules[0].options).toHaveLength(2)
+  })
+
   it('elTreeSelect 单选：props.data 无匹配时不注入（避免污染树结构）', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: { data: [] },

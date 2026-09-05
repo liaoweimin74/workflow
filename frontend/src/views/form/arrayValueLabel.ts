@@ -257,10 +257,11 @@ function optionContainerOf(type: string, rule: RuleNode): unknown[] | null {
   return rule.options
 }
 
-/** options 列表中是否存在 value 匹配项（String 比较容错） */
+/** options 列表中是否存在 value 匹配项（严格类型比较：组件内 el-select/el-tree 匹配是类型敏感的，
+ * 字符串 v-model 与数字 option value 不匹配时必须注入兜底项才能显示 label） */
 function hasOption(list: unknown[], value: unknown): boolean {
   return list.some((o) => o !== null && typeof o === 'object'
-    && ((o as Record<string, unknown>).value === value || String((o as Record<string, unknown>).value) === String(value)))
+    && (o as Record<string, unknown>).value === value)
 }
 
 /** 从 `<key>_text` 提取各 value 对应的叶子 label（路径最后一段）；顺序与 values 对应 */

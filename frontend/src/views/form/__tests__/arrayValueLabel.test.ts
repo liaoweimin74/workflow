@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { withArrayLabels } from '../arrayValueLabel'
+import { withArrayLabels, injectFallbackOptions } from '../arrayValueLabel'
 
 describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文本', () => {
   it('select 多选：value → options label 逗号拼接', () => {
@@ -124,5 +124,78 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
     } as any]
     const out = withArrayLabels({ dept: ['r'], dept_text: '旧文本' }, rules)
     expect(out.dept_text).toBe('旧文本')
+  })
+})
+
+describe('injectFallbackOptions — 回显时 options 无匹配用 _text 注入兜底 option', () => {
+  it('select 单选：options 无匹配项时注入 {value, label:_text}', () => {
+    const rules = [{
+      type: 'select', field: 'grade', props: {},
+      options: [{ label: 'B', value: 'b' }],
+    } as any]
+    injectFallbackOptions(rules, { grade: 'a', grade_text: 'A' })
+    expect(rules[0].options).toContainEqual({ value: 'a', label: 'A' })
+    expect(rules[0].options).toHaveLength(2)
+  })
+
+  it('select 单选：options 已有匹配项时不注入', () => {
+    const rules = [{
+      type: 'select', field: 'grade', props: {},
+      options: [{ label: 'A', value: 'a' }],
+    } as any]
+    injectFallbackOptions(rules, { grade: 'a', grade_text: 'A' })
+    expect(rules[0].options).toEqual([{ label: 'A', value: 'a' }])
+  })
+
+  it('elTreeSelect 单选：props.data 无匹配时注入节点', () => {
+    const rules = [{
+      type: 'elTreeSelect', field: 'org', props: { data: [] },
+    } as any]
+    injectFallbackOptions(rules, { org: 'x', org_text: '研发部' })
+    expect(rules[0].props.data).toContainEqual({ value: 'x', label: '研发部' })
+  })
+
+  it('cascader 单选：props.options 无匹配时注入叶子', () => {
+    const rules = [{
+      type: 'cascader', field: 'region', props: { options: [] },
+    } as any]
+    injectFallbackOptions(rules, { region: 'leaf', region_text: '省/市/leaf' })
+    expect(rules[0].props.options).toContainEqual({ value: 'leaf', label: '省/市/leaf' })
+  })
+
+  it('无 _text 时不注入', () => {
+    const rules = [{
+      type: 'select', field: 'grade', props: {}, options: [],
+    } as any]
+    injectFallbackOptions(rules, { grade: 'a' })
+    expect(rules[0].options).toHaveLength(0)
+  })
+
+  it('多选：缺失的值逐一注入（label 用整体文本）', () => {
+    const rules = [{
+      type: 'select', field: 'dept', props: { multiple: true },
+      options: [{ label: '研发部', value: 'r' }],
+    } as any]
+    injectFallbackOptions(rules, { dept: ['r', 'm'], dept_text: '研发部, 市场部' })
+    expect(rules[0].options).toContainEqual({ value: 'm', label: '研发部, 市场部' })
+    expect(rules[0].options).toHaveLength(2)
+  })
+
+  it('递归 props.rule 子表单中的数组组件注入', () => {
+    const rules = [{
+      type: 'group', field: 'g', props: {
+        rule: [{ type: 'select', field: 'inner', props: {}, options: [] }],
+      },
+    } as any]
+    injectFallbackOptions(rules, { inner: 'i', inner_text: '内' })
+    expect(rules[0].props.rule[0].options).toContainEqual({ value: 'i', label: '内' })
+  })
+
+  it('值缺失或 _text 为空时不注入', () => {
+    const rules = [{
+      type: 'select', field: 'grade', props: {}, options: [],
+    } as any]
+    injectFallbackOptions(rules, { grade: 'a', grade_text: '' })
+    expect(rules[0].options).toHaveLength(0)
   })
 })

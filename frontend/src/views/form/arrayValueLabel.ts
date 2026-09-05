@@ -137,3 +137,72 @@ export function withArrayLabels(formData: Record<string, unknown>, rules: Array<
   walk(rules as unknown as RuleNode[], out)
   return out
 }
+
+/**
+ * 回显兜底：为数组组件注入缺失的选项项。
+ *
+ * 表单回显时，数组组件的 options（rule.options / props.data / props.options）若找不到
+ * 主列 value 的匹配项（异步数据源未就绪、value 类型不匹配、静态选项缺失），element 组件
+ * 会回退显示原始 value。此处用 `<key>_text` 显示文本注入 `{ value, label }` 兜底项，
+ * 使组件直接显示显示文本；已有匹配项时不注入（保留真实 label）。
+ * 就地修改 rule（不深拷贝），调用方应在组件渲染前使用。
+ */
+export function injectFallbackOptions(rules: Array<Record<string, any>>, formData: Record<string, unknown> | undefined): void {
+  if (!Array.isArray(rules) || !formData) return
+  for (const rawRule of rules) {
+    const rule = rawRule as RuleNode
+    const type = rule.type as string | undefined
+    if (isArrayComponent(type)) {
+      const key = rule.field as string | undefined
+      if (key) {
+        const v = formData[key]
+        const text = formData[key + '_text']
+        if (v !== undefined && v !== null && text !== undefined && text !== null && String(text) !== '') {
+          const list = optionContainerOf(type as string, rule)
+          if (list) {
+            const values = Array.isArray(v) ? v : [v]
+            for (const single of values) {
+              if (single !== undefined && single !== null && !hasOption(list, single)) {
+                list.push({ value: single, label: String(text) })
+              }
+            }
+          }
+        }
+      }
+    }
+    if (Array.isArray(rule.children)) {
+      injectFallbackOptions(rule.children as RuleNode[], formData)
+    }
+    if (Array.isArray(rule.props?.rule)) {
+      injectFallbackOptions(rule.props.rule as RuleNode[], formData)
+    }
+    if (Array.isArray(rule.props?.columns)) {
+      for (const col of rule.props.columns) {
+        if (col && Array.isArray(col.rule)) injectFallbackOptions(col.rule as RuleNode[], formData)
+      }
+    }
+  }
+}
+
+/** 数组组件选项容器：select/checkbox/multiSelect → rule.options；树/穿梭 → props.data；级联 → props.options */
+function optionContainerOf(type: string, rule: RuleNode): unknown[] | null {
+  if (type === 'tree' || type === 'elTreeSelect' || type === 'elTransfer') {
+    if (!rule.props) rule.props = {}
+    if (!Array.isArray(rule.props.data)) rule.props.data = []
+    return rule.props.data
+  }
+  if (type === 'cascader') {
+    if (!rule.props) rule.props = {}
+    if (!Array.isArray(rule.props.options)) rule.props.options = []
+    return rule.props.options
+  }
+  // select / checkbox / multiSelect / multiSelectPro
+  if (!Array.isArray(rule.options)) rule.options = []
+  return rule.options
+}
+
+/** options 列表中是否存在 value 匹配项（String 比较容错） */
+function hasOption(list: unknown[], value: unknown): boolean {
+  return list.some((o) => o !== null && typeof o === 'object'
+    && ((o as Record<string, unknown>).value === value || String((o as Record<string, unknown>).value) === String(value)))
+}

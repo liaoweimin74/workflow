@@ -101,3 +101,7 @@
 #### Scenario: 级联回显
 - **WHEN** 表单打开且主列值为 `["leaf-a"]`
 - **THEN** 级联组件通过已加载的选项树定位叶子 `leaf-a` 并回显其路径
+
+#### Scenario: options 无匹配回显兜底
+- **WHEN** 表单回显且数组组件 options（`rule.options` / `props.data` / `props.options`）中找不到主列 value 的匹配项（异步数据源未就绪、类型不匹配、静态缺失），但提交数据含 `<key>_text`
+- **THEN** 用 `<key>_text` 注入 `{ value, label: <key>_text }` 兜底选项项，组件显示显示文本而非原始 value

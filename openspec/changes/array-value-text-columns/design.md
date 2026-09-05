@@ -54,7 +54,8 @@
 - 改动点：`BizDataQueryBuilder.appendStructuredFilters` 按列类型分支。
 
 ### 6. 回显
-- 不变：主列 value 数组匹配渲染时已加载的 options（`resolveOptionRules` / 静态 options）。
+- 主列 value 匹配渲染时已加载的 options（`resolveOptionRules` / 静态 options），显示文本由组件自身渲染，不读显示列。
+- 兜底：options 无匹配项时（异步数据源未就绪/类型不匹配/静态缺失），用 `<key>_text` 注入 `{value, label}` 兜底选项项（`injectFallbackOptions`，FormRenderer 渲染前接入），避免组件回退显示原始 value。
 
 ## Risks / Trade-offs
 

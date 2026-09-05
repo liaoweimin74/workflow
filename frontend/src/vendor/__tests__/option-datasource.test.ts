@@ -284,6 +284,28 @@ describe('resolveOptionRules — 树形/级联组件选项承载字段', () => {
     expect((resolved[0] as any).options).toBeUndefined()
   })
 
+  it('elTransfer 的选项写入 props.data 而非 rule.options（驼峰类型匹配）', async () => {
+    ;(dataSourceApi.queryData as any).mockResolvedValue({
+      data: {
+        records: [
+          { id: 'r1', data: { id: '1', parentId: '', label: '研发部' }, version: 1 },
+          { id: 'r2', data: { id: '2', parentId: '1', label: '前端组' }, version: 1 },
+        ],
+      },
+    })
+    const rules = [{
+      type: 'elTransfer', field: 'team',
+      effect: { datasource: { dataSourceId: 'ds_1', labelField: 'label', valueField: 'id', parentField: 'parentId' } },
+      props: { data: [] },
+    } as any]
+    const resolved = await resolveOptionRules(rules, bindings)
+    // 穿梭框读 props.data；type 为驼峰 elTransfer，须命中 data 分支
+    expect((resolved[0] as any).props.data).toEqual([
+      { label: '研发部', value: '1', children: [{ label: '前端组', value: '2' }] },
+    ])
+    expect((resolved[0] as any).options).toBeUndefined()
+  })
+
   it('el-cascader 的选项写入 props.options', async () => {
     ;(dataSourceApi.queryData as any).mockResolvedValue({
       data: { records: [{ id: 'r1', data: { id: 'a', name: '电子产品' }, version: 1 }] },

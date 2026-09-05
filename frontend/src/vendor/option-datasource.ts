@@ -147,7 +147,7 @@ export function hasOptionDatasource(rules: Rule[]): boolean {
 
 /** 按组件类型返回选项承载字段：select 类用 rule.options，树/穿梭/级联用 props 下的字段 */
 function optionTarget(type?: string): { key?: undefined; propsKey?: 'data' | 'options' } {
-  if (type === 'elTreeSelect' || type === 'tree' || type === 'el-transfer' || type === 'transfer') {
+  if (type === 'elTreeSelect' || type === 'elTransfer' || type === 'tree' || type === 'el-transfer' || type === 'transfer') {
     return { propsKey: 'data' }
   }
   if (type === 'el-cascader' || type === 'cascader') {

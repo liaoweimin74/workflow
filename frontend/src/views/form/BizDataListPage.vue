@@ -182,6 +182,11 @@ function renderByComponentType(componentType: string | undefined, _columnType: s
     case 'checkbox':
     case 'multiSelect':
     case 'multiSelectPro':
+    case 'elTransfer':
+    case 'tree':
+    case 'elTreeSelect':
+    case 'cascader':
+      // 数组值组件（穿梭框/树形/级联等）→ 逗号拼接可读展示
       return formatArray(v)
     case 'slider':
       return Array.isArray(v) ? v.join(' ~ ') : formatCell(v)

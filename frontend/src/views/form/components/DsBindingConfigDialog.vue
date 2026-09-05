@@ -398,9 +398,12 @@ async function loadTableCandidates() {
     const meta = res.data as any
     const cols = (meta?.columns || []).filter((c: any) => !c.hidden)
     tableCandidates.value = cols
+    // 选项类组件主列（JSON）也可查询——查询按显示值 label 匹配 <key>_text 列（PageDataTable fetchApi 自动映射）
+    const ARRAY_QUERY_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'select', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
     const filterable = cols.filter((c: any) =>
-      c.columnType !== 'JSON' && c.columnType !== 'TEXT' &&
-      (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR'),
+      ARRAY_QUERY_TYPES.includes(c.componentType) ||
+      (c.columnType !== 'JSON' && c.columnType !== 'TEXT' &&
+        (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR')),
     )
     tableFilterableKeys.value = new Set(filterable.map((c: any) => c.key))
   } catch {

@@ -213,4 +213,35 @@ describe('DsBindingConfigDialog — table-mode sortableFields', () => {
     expect(col.hidden).toBe(true)
     wrapper.unmount()
   })
+
+  it('选项类组件主列（JSON）可查询：filterableKeys 含 select/tree/cascader/transfer 列', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        columns: [
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', componentType: 'input' },
+          { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
+          { key: 'tags', label: '标签', columnType: 'JSON', componentType: 'multiSelect' },
+          { key: 'region', label: '级联', columnType: 'JSON', componentType: 'cascader' },
+          { key: 'tree', label: '树', columnType: 'JSON', componentType: 'elTreeSelect' },
+          { key: 'users', label: '穿梭', columnType: 'JSON', componentType: 'elTransfer' },
+          { key: 'content', label: '内容', columnType: 'TEXT', componentType: 'textarea' },
+        ],
+      },
+    })
+    const wrapper = mountDialog({ dataSourceId: 'ds1' })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const keys = (wrapper.vm as any).tableFilterableKeys as Set<string>
+    // 选项类组件主列（JSON）可查询（查询走 <key>_text 显示列）
+    expect(keys.has('dept')).toBe(true)
+    expect(keys.has('tags')).toBe(true)
+    expect(keys.has('region')).toBe(true)
+    expect(keys.has('tree')).toBe(true)
+    expect(keys.has('users')).toBe(true)
+    // 文本列仍可查；TEXT 列仍不可查
+    expect(keys.has('name')).toBe(true)
+    expect(keys.has('content')).toBe(false)
+    wrapper.unmount()
+  })
 })

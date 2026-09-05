@@ -40,10 +40,31 @@ describe('PageDesigner card data-source entry', () => {
     expect(source).toContain("on: { click: () => openTableDsConfig() }")
   })
 
+  it('FormDesigner exposes card style configuration for page-list-cards', () => {
+    const source = readFileSync(resolve(__dirname, '../../form/FormDesigner.vue'), 'utf8')
+
+    expect(source).toContain("import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'")
+    expect(source).toContain('<CardStyleConfigDialog')
+    expect(source).toContain("field: 'cardStyleConfigTrigger'")
+    expect(source).toContain("on: { click: () => openCardStyleConfig() }")
+    expect(source).toContain("width: '100%', marginLeft: '0', borderColor: '#2E73FF'")
+    expect(source).toContain('active.props.cardStyle = style')
+  })
+
   it('business-form column mapping ignores page-list-cards instead of marking it unsupported', () => {
     const source = readFileSync(resolve(__dirname, '../../form/components/ColumnConfigDialog.vue'), 'utf8')
 
     expect(source).toContain("type === 'formContainer' || type === 'page-table' || type === 'page-list-cards'")
+  })
+
+  it('FormDesigner exposes card style configuration for page-list-cards', () => {
+    const source = readFileSync(resolve(__dirname, '../../form/FormDesigner.vue'), 'utf8')
+
+    expect(source).toContain("import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'")
+    expect(source).toContain('<CardStyleConfigDialog')
+    expect(source).toContain("field: 'cardStyleConfigTrigger'")
+    expect(source).toContain("on: { click: () => openCardStyleConfig() }")
+    expect(source).toContain('active.props.cardStyle = style')
   })
 
   it('marks page-table as design mode so it clamps to ≤10 rows and refetches on switch', () => {

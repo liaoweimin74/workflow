@@ -159,19 +159,19 @@ const pageSchema = reactive<{
 /** 组件引用注册表：dataSourceId → 组件实例（供 refresh/set-filter） */
 const componentRefs = reactive<Record<string, any>>({})
 
-/** 数据表格组件配置注册表：dataSourceId → page-table 节点 props（含 viewDetail；联动容器"以数据表格配置为准"） */
+/** 列表组件配置注册表：dataSourceId → page-table/page-list-cards 节点 props（含 viewDetail） */
 const tableViewConfigs = reactive<Record<string, any>>({})
 
-/** 页面是否存在撑满（stretch）表格：开启后让 form-create 布局链传递 100% 高度，表格撑满页面内容区 */
+/** 页面是否存在需要满高数据区的列表：让 form-create 布局链传递 100% 高度 */
 const hasStretchTable = ref(false)
 
-/** 递归收集 rule 树中 page-table 组件配置（供 resolveContainerStyle 取 viewDetail；须在 extractContainers 前调用） */
+/** 递归收集 page-table/page-list-cards 配置（供 resolveContainerStyle 取 viewDetail；须在 extractContainers 前调用） */
 function collectTableConfigs(rules: any[]) {
   for (const n of rules || []) {
     const node = n as Record<string, any>
-    if (node.type === 'page-table' && node.props?.dataSourceId) {
+    if ((node.type === 'page-table' || node.type === 'page-list-cards') && node.props?.dataSourceId) {
       tableViewConfigs[node.props.dataSourceId] = node.props
-      if (node.props.stretch === true) hasStretchTable.value = true
+      if (node.props.stretch === true || node.type === 'page-list-cards') hasStretchTable.value = true
     }
     if (Array.isArray(node.children)) collectTableConfigs(node.children as any[])
     if (node.props && Array.isArray(node.props.rule)) collectTableConfigs(node.props.rule as any[])
@@ -534,10 +534,12 @@ function resolveStepValue(tpl: string | undefined, eventData: any): unknown {
 }
 .page-canvas {
   min-height: 300px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* ===== 页面含撑满（stretch）表格：form-create 布局链传递 100% 高度，使表格撑满页面内容区 =====
-   :has() 精准匹配"包含 page-data-table 的 form-item"，避免影响 SearchTable 查询栏内部的 form-item（否则查询栏被撑高出现滚动条） */
+   :has() 精准匹配包含数据列表组件的 form-item，避免影响 SearchTable 查询栏内部的 form-item（否则查询栏被撑高出现滚动条） */
 .page-renderer-page.has-stretch {
   height: 100%;
   display: flex;
@@ -547,13 +549,24 @@ function resolveStepValue(tpl: string | undefined, eventData: any): unknown {
   flex: 1;
   min-height: 0;
 }
-.page-renderer-page.has-stretch .page-canvas :deep(.el-form),
-.page-renderer-page.has-stretch .page-canvas :deep(.el-row),
-.page-renderer-page.has-stretch .page-canvas :deep(.el-col),
-.page-renderer-page.has-stretch .page-canvas :deep(.el-form-item:has(> .el-form-item__content > .page-data-table)),
-.page-renderer-page.has-stretch .page-canvas :deep(.el-form-item__content:has(> .page-data-table)) {
-  height: 100%;
-}
+ .page-renderer-page.has-stretch .page-canvas :deep(.el-form),
+ .page-renderer-page.has-stretch .page-canvas :deep(.el-row),
+ .page-renderer-page.has-stretch .page-canvas :deep(.el-col),
+ .page-renderer-page.has-stretch .page-canvas :deep(.el-form-item:has(> .el-form-item__content > .page-data-table)),
+ .page-renderer-page.has-stretch .page-canvas :deep(.el-form-item:has(> .el-form-item__content > .page-data-cards)),
+ .page-renderer-page.has-stretch .page-canvas :deep(.el-form-item__content:has(> .page-data-table)),
+ .page-renderer-page.has-stretch .page-canvas :deep(.el-form-item__content:has(> .page-data-cards)) {
+   height: 100%;
+   min-height: 0;
+   min-width: 0;
+   overflow: hidden;
+ }
+ .page-renderer-page.has-stretch .page-canvas :deep(.page-data-cards) {
+   height: 100%;
+   min-height: 0;
+   min-width: 0;
+   overflow: hidden;
+ }
 
 /* 容器弹窗/抽屉内容区：配置高度时固定高度、超出滚动 */
 .lc-dialog-body {

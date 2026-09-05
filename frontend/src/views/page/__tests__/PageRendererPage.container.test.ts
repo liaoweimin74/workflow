@@ -5,6 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 vi.mock('@/api/page', () => ({
   pageApi: { getPageByKey: vi.fn() },
@@ -35,7 +37,7 @@ vi.mock('@form-create/element-ui', () => {
       return () =>
         h('div', { class: 'fc-stub' }, [
           ...(props.rule || []).map((node: any, i: number) => {
-            if (node?.type === 'page-table' || node?.type === 'page-tree') {
+            if (node?.type === 'page-table' || node?.type === 'page-list-cards' || node?.type === 'page-tree') {
               return h('button', {
                 key: i,
                 class: 'stub-row-click',
@@ -198,6 +200,30 @@ describe('PageRendererPage 表格-容器联动宿主', () => {
     const mainTree = fcStubs[0].text()
     expect(mainTree).not.toContain('FC1')
     expect(mainTree).not.toContain('formContainer')
+  })
+
+  it('卡片列表 viewDetail.formMode=inline 时按 inline 容器打开而不是 dialog', async () => {
+    const schema = makePageSchema('dialog')
+    schema.rule[0] = {
+      type: 'page-list-cards',
+      field: 'cards1',
+      title: '卡片列表',
+      props: { dataSourceId: 'dsForm', viewDetail: { formMode: 'inline', width: '700px', height: '400px' } },
+    }
+    const wrapper = await mountPage(schema)
+
+    await wrapper.find('.stub-row-click').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.lc-inline-container').exists()).toBe(true)
+    expect(wrapper.find('.dialog-stub.visible').exists()).toBe(false)
+  })
+
+  it('页面包含卡片列表时建立页面数据区的满高布局链', async () => {
+    const source = readFileSync(resolve(__dirname, '../PageRendererPage.vue'), 'utf8')
+
+    expect(source).toContain("node.type === 'page-table' || node.type === 'page-list-cards'")
+    expect(source).toContain('.page-renderer-page.has-stretch .page-canvas :deep(.el-form-item__content:has(> .page-data-cards))')
   })
 
   it('open-container 动作按默认 dialog 模式打开弹窗', async () => {

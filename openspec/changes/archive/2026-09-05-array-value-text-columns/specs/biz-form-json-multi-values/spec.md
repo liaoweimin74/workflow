@@ -2,7 +2,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: 数组组件 JSON 列映射
+### Requirement: 多值组件 JSON 列映射
 
 系统 SHALL 将以下数组值组件映射为 JSON 列类型，并生成 `<key>_text` 显示冗余列（见 array-value-label-columns 能力）：
 

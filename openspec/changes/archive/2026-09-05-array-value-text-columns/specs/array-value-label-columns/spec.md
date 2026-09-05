@@ -97,13 +97,24 @@
 - **WHEN** 用户在搜索框输入 `杭州`
 - **THEN** 对数组值组件列执行 `<key>_text LIKE '%杭州%'`，命中含"杭州"文本的记录
 
-### Requirement: 查询栏组件化（精确查询走显示列）
+### Requirement: 查询栏组件化（模糊查询走显示列）
 
-SearchTable 查询栏 SHALL 按数据源字段元数据（column_config.componentType + schema rule）生成查询组件：单选选项类字段（select/tree/elTreeSelect/cascader 单选）生成下拉组件，选项为显示值（label），**选定后以显示值（label）作为查询参数**，后端对 `<key>_text` 列**精确等值匹配**；日期字段生成日期选择器（主列等值）；其余字段保持文本输入（模糊）。
-
-模糊查询 SHALL 由用户文本输入，后端对 `<key>_text` 列（选项类）或主列（文本类）LIKE 模糊匹配。
+查询栏 SHALL 按数据源字段元数据（column_config.componentType + schema rule + matchType）生成查询组件：**匹配方式=模糊（like）的字段 SHALL 直接用文本输入框渲染**（页面表格 / 卡片列表据 `matchType === 'like'` 判定；业务数据管理选项类字段本身为 LIKE 模糊语义，同样渲染文本输入框），用户输入关键字后提交为 `<key>_text` 列 **LIKE 模糊匹配**显示值——不渲染可输入选择器（filterable/allow-create）；数据源引用（lookupPicker/dataPicker）SHALL 生成 LookupPicker 弹窗选择；日期字段 SHALL 生成日期选择器（主列等值）；匹配方式缺省/等值（eq）的选项类字段 SHALL 保持原选择器组件（select/tree-select/cascader），不附加可输入标记。
 
 结构化筛选（PageDataTable 表格联动等传 value 的场景）SHALL 继续对数组值组件主列使用 MySQL JSON 函数：`eq` → `JSON_CONTAINS(col, ?)`（value 参数序列化为 JSON 片段），单选可用 `col->>'$[0]' = ?`；`in` → `JSON_OVERLAPS(col, ?)`。
+
+#### Scenario: 模糊字段文本输入框查询
+- **WHEN** 字段 `dept` 匹配方式=模糊（like），页面表格/卡片查询栏渲染
+- **THEN** 查询栏渲染文本输入框（el-input，非下拉选择器），用户输入关键字 `研发部` 触发查询
+- **AND** 提交的筛选条件为 `{ column: 'dept_text', op: 'like', value: '研发部' }`（`<key>_text` 显示列 LIKE 匹配显示值）
+
+#### Scenario: 业务表单选项类字段文本输入框
+- **WHEN** 业务数据管理列表含选项类字段 `dept`（select）、`org`（树形）、`region`（级联）——均为 LIKE 模糊语义
+- **THEN** 查询栏三者均渲染文本输入框（prop=`<key>_text`），输入关键字模糊匹配显示列，不渲染 select/tree-select/cascader
+
+#### Scenario: 缺省/等值字段保持原选择器
+- **WHEN** 字段 `dept` 匹配方式缺省或等值（eq）
+- **THEN** 查询栏保持原控件（select/tree-select/cascader），不附加 filterable/allow-create
 
 ### Requirement: 页面设计器表格选项组件可查询
 
@@ -119,9 +130,9 @@ SearchTable 查询栏 SHALL 按数据源字段元数据（column_config.componen
 - **WHEN** 页面表格（PageDataTable）配置了 `dept` 为搜索字段，用户在查询栏输入显示值 `研发部` 并触发查询
 - **THEN** 提交的筛选条件为 `{ column: 'dept_text', op: 'like', value: '研发部' }`（映射到 `<key>_text` 列，LIKE 匹配显示值）
 
-#### Scenario: 单选选项字段查询栏下拉
-- **WHEN** 字段 `dept` 为单选 select（选项 研发部/市场部）
-- **THEN** 查询栏生成下拉组件（prop=`dept_text`，选项 label=value=研发部/市场部），选定 `研发部` 后查询参数 `dept_text = '研发部'`（`<key>_text` 列精确等值）
+#### Scenario: 单选选项字段查询栏文本输入框
+- **WHEN** 字段 `dept` 为单选 select（选项 研发部/市场部），匹配方式=模糊
+- **THEN** 查询栏渲染文本输入框（prop=`dept_text`），输入 `研发部` 后查询参数 `dept_text LIKE '%研发部%'`（`<key>_text` 列 LIKE 模糊匹配显示值）
 
 #### Scenario: 文本字段模糊查询
 - **WHEN** 用户在文本字段输入 `张`

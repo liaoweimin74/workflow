@@ -90,7 +90,7 @@ const props = withDefaults(defineProps<{
   columns?: CardColumn[]
   cardMinWidth?: number | string
   pageSize?: number
-  searchFields?: Array<{ key?: string; field?: string; label?: string }>
+  searchFields?: Array<{ key?: string; field?: string; label?: string; matchType?: string }>
   showSearch?: boolean
   pageSizes?: number[]
   pagination?: boolean
@@ -245,6 +245,10 @@ const resolvedSearchFields = computed(() => (props.searchFields || [])
     const compType = meta?.componentType || ''
     const rule = findFormRuleByKey(key)
     const base = { prop: key, label: field.label || key }
+    if (field.matchType === 'like') {
+      // 模糊查询：直接用文本输入框（用户输入关键字，后端 LIKE 匹配）
+      return { ...base, type: 'input' as const, style: 'width: 180px' }
+    }
     if (QUERY_TREE_TYPES.includes(compType)) {
       return {
         ...base,

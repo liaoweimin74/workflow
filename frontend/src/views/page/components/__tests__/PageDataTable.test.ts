@@ -357,7 +357,7 @@ describe('PageDataTable — 设计态取数钳制', () => {
 })
 
 describe('PageDataTable — 查询组件按字段组件类型 + 搜索映射 <key>_text', () => {
-  it('选项类组件主列（JSON）查询组件为 select，选中显示值 label 后映射到 <key>_text LIKE 匹配显示列', async () => {
+  it('模糊(like)的选项类主列（JSON）直接用文本输入框，输入关键字后映射 <key>_text LIKE 匹配显示列', async () => {
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({
       data: {
         writable: false,
@@ -387,22 +387,17 @@ describe('PageDataTable — 查询组件按字段组件类型 + 搜索映射 <ke
     await flushPromises()
 
     const st = wrapper.findComponent(SearchTable)
-    // 查询组件按字段组件类型：select → 选择器（选项=显示值 label）
-    expect(st.props('searchFields')[0].type).toBe('select')
-    expect(st.props('searchFields')[0].options).toEqual([{ label: '研发部', value: '研发部' }])
+    // 模糊查询：不再渲染选择器，直接用文本输入框
+    expect(st.props('searchFields')[0].type).toBe('input')
+    expect(st.props('searchFields')[0].options).toBeUndefined()
 
-    // el-select 选中显示值 label 并触发查询
-    await st.find('.search-card .el-select').trigger('click')
-    await nextTick()
-    const items = document.querySelectorAll('.el-select-dropdown__item')
-    const opt = Array.from(items).find((el) => el.textContent === '研发部')
-    ;(opt as HTMLElement).click()
-    await nextTick()
+    // 输入关键字并触发查询
+    await st.find('.search-card input').setValue('研发部')
     await st.find('.search-card button').trigger('click')
     await nextTick()
     await flushPromises()
 
-    // 主列 dept（JSON）→ 查询 dept_text（显示列，LIKE 匹配显示值）
+    // 主列 dept（JSON）→ 查询 dept_text（显示列，LIKE 匹配关键字）
     expect(dataSourceApi.queryData).toHaveBeenCalledWith(
       'ds-emp',
       expect.objectContaining({
@@ -415,7 +410,7 @@ describe('PageDataTable — 查询组件按字段组件类型 + 搜索映射 <ke
     wrapper.unmount()
   })
 
-  it('树形/级联/多选框查询组件按字段组件类型生成（tree-select/cascader/select）', async () => {
+  it('模糊(like)的树形/级联/多选字段统一直接用文本输入框', async () => {
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({
       data: {
         writable: false,
@@ -454,9 +449,45 @@ describe('PageDataTable — 查询组件按字段组件类型 + 搜索映射 <ke
     await flushPromises()
 
     const sf = wrapper.findComponent(SearchTable).props('searchFields') as any[]
-    expect(sf.find((s: any) => s.prop === 'tree')?.type).toBe('tree-select')
-    expect(sf.find((s: any) => s.prop === 'region')?.type).toBe('cascader')
-    expect(sf.find((s: any) => s.prop === 'tags')?.type).toBe('select')
+    expect(sf.find((s: any) => s.prop === 'tree')?.type).toBe('input')
+    expect(sf.find((s: any) => s.prop === 'region')?.type).toBe('input')
+    expect(sf.find((s: any) => s.prop === 'tags')?.type).toBe('input')
+    wrapper.unmount()
+  })
+
+  it('匹配方式缺省/等值(eq)的选项类字段保持原控件（不附加 filterable/allow-create）', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        formKey: 'emp',
+        columns: [
+          { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
+        ],
+      },
+    })
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
+      data: {
+        schema: JSON.stringify({
+          rule: [{ type: 'select', field: 'dept', title: '部门', options: [{ label: '研发部', value: 'r' }] }],
+          dataSources: [],
+        }),
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({
+      dsRefId: 'ds-emp',
+      showSearch: true,
+      searchFields: [{ key: 'dept', label: '部门' }],
+    })
+    await nextTick()
+    await flushPromises()
+
+    const sf = wrapper.findComponent(SearchTable).props('searchFields') as any[]
+    const dept = sf.find((s: any) => s.prop === 'dept')
+    expect(dept?.type).toBe('select')
+    expect(dept?.filterable).toBeUndefined()
+    expect(dept?.allowCreate).toBeUndefined()
     wrapper.unmount()
   })
 })

@@ -116,9 +116,7 @@ const filterableColumns = computed<ColumnConfigItem[]>(() =>
   }),
 )
 
-/** 查询组件类型映射：字段是什么组件类型，查询输入就是什么组件（选择器/多选框/穿梭框 → select；树形 → tree-select；级联 → cascader） */
-const QUERY_SELECT_TYPES = ['select', 'multiSelect', 'multiSelectPro', 'checkbox', 'elTransfer']
-const QUERY_TREE_TYPES = ['tree', 'elTreeSelect']
+/** 查询组件类型映射：数据引用 → LookupPicker（弹窗选择）；日期 → date-picker；其余（选项类/文本）→ input */
 const QUERY_PICKER_TYPES = ['LookupPicker', 'DataPicker']
 
 /** 按列 key 找 schema rule（数组组件列 key 为 <key>_text → 去后缀找 field） */
@@ -127,68 +125,20 @@ function findRuleByFieldKey(fieldKey: string): Record<string, any> | undefined {
   return resolvedRules.value.find((r) => r.field === baseKey)
 }
 
-/** 选项显示值列表（label；树/级联/穿梭递归 children），查询值=显示值（label），后端 _text 列精确等值 */
-function optionLabelItems(c: ColumnConfigItem): { label: string; value: string }[] {
-  const rule = findRuleByFieldKey(c.key) as any
-  const compType = rule?.type || c.componentType
-  let list: any[] = []
-  if (compType === 'tree' || compType === 'elTreeSelect' || compType === 'elTransfer' || compType === 'el-transfer' || compType === 'transfer') {
-    list = rule?.props?.data ?? []
-  } else if (compType === 'cascader') {
-    list = rule?.props?.options ?? []
-  } else {
-    list = rule?.options ?? []
-  }
-  const labels: string[] = []
-  const collect = (items: any[]) => {
-    for (const it of items) {
-      if (it && it.label !== undefined) labels.push(String(it.label))
-      if (Array.isArray(it.children)) collect(it.children)
-    }
-  }
-  collect(list)
-  return labels.map((l) => ({ label: l, value: l }))
-}
-
-/** 树形选择查询组件数据：保留树结构，节点 value=label（查询值=显示 label，后端 _text LIKE 匹配） */
-function treeSearchProps(rule: any): { data: any[]; props: { label: string; value: string; children?: string } } {
-  return {
-    data: rule?.props?.data ?? [],
-    props: { label: 'label', value: 'label', children: 'children' },
-  }
-}
-
-/** 级联选择查询组件数据：保留树结构，节点 value=label（选中路径=label 数组，查询 join('/') 匹配 _text 全路径） */
-function cascaderSearchProps(rule: any): { options: any[]; props: { label?: string; value?: string; children?: string } } {
-  return {
-    options: rule?.props?.options ?? [],
-    props: { label: 'label', value: 'label', children: 'children' },
-  }
-}
-
 /** 数据引用（lookupPicker/dataPicker）查询组件配置：透传 rule.props（fetch/columns/dataSourceId/displayField 等），LookupPicker 选中回填显示文本 label */
 function lookupSearchProps(rule: any): Record<string, any> {
   return { ...(rule?.props || {}) }
 }
 
-/** 搜索栏（由 column_config 动态生成）：按字段组件类型构建查询组件（选择器/多选框/穿梭框→select；树形→tree-select；级联→cascader；数据引用→LookupPicker；日期→date-picker；其余→input） */
+/** 搜索栏（由 column_config 动态生成）：字段为 LIKE 模糊查询（fetchApi 对非数值/日期列一律 like），统一用文本输入框（用户输入关键字，_text 显示列 LIKE 匹配）；数据引用→LookupPicker；日期→date-picker） */
 const searchFields = computed<SearchField[]>(() =>
   filterableColumns.value.map(c => {
     const rule = findRuleByFieldKey(c.key) as any
     const compType = rule?.type || c.componentType
-    if (QUERY_TREE_TYPES.includes(compType)) {
-      return { type: 'tree-select', label: c.label, prop: c.key, treeProps: treeSearchProps(rule), placeholder: c.label, style: 'width: 200px' }
-    }
-    if (compType === 'cascader') {
-      return { type: 'cascader', label: c.label, prop: c.key, cascaderProps: cascaderSearchProps(rule), placeholder: c.label, style: 'width: 200px' }
-    }
-    if (QUERY_SELECT_TYPES.includes(compType)) {
-      return { type: 'select', label: c.label, prop: c.key, options: optionLabelItems(c), placeholder: c.label, style: 'width: 180px' }
-    }
     if (QUERY_PICKER_TYPES.includes(compType)) {
       return { type: 'lookupPicker', label: c.label, prop: c.key, lookupProps: lookupSearchProps(rule), placeholder: c.label, style: 'width: 200px' }
     }
-    if (c.componentType === 'DatePicker' || c.componentType === 'datePicker' || c.componentType === 'date') {
+    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date') {
       return { type: 'date-picker', label: c.label, prop: c.key, placeholder: c.label }
     }
     return { type: 'input', label: c.label, prop: c.key, placeholder: c.label, style: 'width: 180px' }

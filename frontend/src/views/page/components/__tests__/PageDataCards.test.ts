@@ -121,6 +121,78 @@ describe('PageDataCards', () => {
     wrapper.unmount()
   })
 
+  it('匹配方式=模糊(like)的选项类字段直接用文本输入框（select/tree/cascader 均为 input）', async () => {
+    getMetadata.mockResolvedValue({ data: { writable: false, columns: [
+      { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
+      { key: 'tree', label: '树', columnType: 'JSON', componentType: 'elTreeSelect' },
+      { key: 'region', label: '级联', columnType: 'JSON', componentType: 'cascader' },
+    ] } })
+    queryData.mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        searchFields: [
+          { key: 'dept', label: '部门', matchType: 'like' },
+          { key: 'tree', label: '树', matchType: 'like' },
+          { key: 'region', label: '级联', matchType: 'like' },
+        ],
+        showSearch: true,
+        pageSizes: [10, 20],
+      },
+    })
+    await flushPromises()
+
+    const sf = wrapper.findComponent({ name: 'ListCardsStub' }).props('searchFields') as any[]
+    const dept = sf.find((s: any) => s.prop === 'dept')
+    expect(dept?.type).toBe('input')
+    expect(dept?.filterable).toBeUndefined()
+    expect(dept?.allowCreate).toBeUndefined()
+    const tree = sf.find((s: any) => s.prop === 'tree')
+    expect(tree?.type).toBe('input')
+    const region = sf.find((s: any) => s.prop === 'region')
+    expect(region?.type).toBe('input')
+    wrapper.unmount()
+  })
+
+  it('匹配方式缺省/等值(eq)的选项类字段保持原控件（不附加 filterable/allow-create）', async () => {
+    getMetadata.mockResolvedValue({ data: { writable: false, columns: [
+      { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
+      { key: 'tree', label: '树', columnType: 'JSON', componentType: 'elTreeSelect' },
+      { key: 'region', label: '级联', columnType: 'JSON', componentType: 'cascader' },
+    ] } })
+    queryData.mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'name', role: 'title' }],
+        searchFields: [
+          { key: 'dept', label: '部门' },
+          { key: 'tree', label: '树' },
+          { key: 'region', label: '级联' },
+        ],
+        showSearch: true,
+        pageSizes: [10, 20],
+      },
+    })
+    await flushPromises()
+
+    const sf = wrapper.findComponent({ name: 'ListCardsStub' }).props('searchFields') as any[]
+    const dept = sf.find((s: any) => s.prop === 'dept')
+    expect(dept?.type).toBe('select')
+    expect(dept?.filterable).toBeUndefined()
+    expect(dept?.allowCreate).toBeUndefined()
+    const tree = sf.find((s: any) => s.prop === 'tree')
+    expect(tree?.type).toBe('tree-select')
+    expect(tree?.filterable).toBeUndefined()
+    const region = sf.find((s: any) => s.prop === 'region')
+    expect(region?.type).toBe('cascader')
+    expect(region?.filterable).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('设计态仍显示查询栏和分页栏', async () => {
     const wrapper = mount(PageDataCards, {
       props: {

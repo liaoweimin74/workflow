@@ -251,7 +251,7 @@ describe('BizDataListPage — 提交时数组组件附加显示文本', () => {
 })
 
 describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）', () => {
-  function mountWith(schemaRule: any[]) {
+  function mountWith(schemaRule: any[], extraColumns: any[] = []) {
     ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
       data: {
         name: '员工档案',
@@ -263,6 +263,7 @@ describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）',
           { key: 'users', label: '穿梭', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'elTransfer' },
           { key: 'users_text', label: '穿梭（显示）', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false, hidden: true },
           { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: true },
+          ...extraColumns,
         ]),
         schema: JSON.stringify({ rule: schemaRule, option: {}, dataSources: [], actions: [] }),
       },
@@ -273,7 +274,7 @@ describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）',
     })
   }
 
-  it('单选选项字段生成 select 查询组件（prop=_text、options 为显示值 label 精确查询）', async () => {
+  it('单选选项字段（LIKE 模糊）直接用文本输入框（prop=_text，输入关键字模糊匹配显示列）', async () => {
     const wrapper = mountWith([
       { type: 'select', field: 'dept', props: { multiple: false }, options: [{ label: '研发部', value: 'r' }, { label: '市场部', value: 'm' }] },
     ])
@@ -281,13 +282,12 @@ describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）',
     await flushPromises()
     const searchFields = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
     const dept = searchFields.find((s: any) => s.prop === 'dept_text')
-    expect(dept?.type).toBe('select')
-    // 查询值 = 显示值（label），后端 _text 列精确等值匹配
-    expect(dept?.options).toEqual([{ label: '研发部', value: '研发部' }, { label: '市场部', value: '市场部' }])
+    expect(dept?.type).toBe('input')
+    expect(dept?.options).toBeUndefined()
     wrapper.unmount()
   })
 
-  it('多选框字段查询组件为 select（选择器；多选框/穿梭框统一选择器，查询显示值 label）', async () => {
+  it('多选框/穿梭框字段（LIKE 模糊）直接用文本输入框（不再渲染选择器）', async () => {
     const wrapper = mountWith([
       { type: 'select', field: 'dept', props: { multiple: false }, options: [{ label: '研发部', value: 'r' }] },
       { type: 'checkbox', field: 'tags', options: [{ label: '标签1', value: 't1' }] },
@@ -297,12 +297,12 @@ describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）',
     await flushPromises()
     const searchFields = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
     const tags = searchFields.find((s: any) => s.prop === 'tags_text')
-    expect(tags?.type).toBe('select')
-    expect(tags?.options).toEqual([{ label: '标签1', value: '标签1' }])
-    // 穿梭框：选项从 props.data 取（resolveOptionRules 承载字段），查询组件 select
+    expect(tags?.type).toBe('input')
+    expect(tags?.options).toBeUndefined()
+    // 穿梭框：同样为文本输入框
     const users = searchFields.find((s: any) => s.prop === 'users_text')
-    expect(users?.type).toBe('select')
-    expect(users?.options).toEqual([{ label: '前端组', value: '前端组' }, { label: '后端组', value: '后端组' }])
+    expect(users?.type).toBe('input')
+    expect(users?.options).toBeUndefined()
     wrapper.unmount()
   })
 
@@ -315,6 +315,35 @@ describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）',
     const searchFields = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
     const name = searchFields.find((s: any) => s.prop === 'name')
     expect(name?.type).toBe('input')
+    wrapper.unmount()
+  })
+
+  it('业务表单选项类字段（select/tree-select/cascader）为模糊查询，直接用文本输入框', async () => {
+    const wrapper = mountWith([
+      { type: 'select', field: 'dept', props: { multiple: false }, options: [{ label: '研发部', value: 'r' }] },
+      { type: 'elTreeSelect', field: 'org', title: '组织', props: { data: [{ label: '总公司', children: [{ label: '分公司' }] }] } },
+      { type: 'cascader', field: 'region', title: '地区', props: { options: [{ label: '省', children: [{ label: '市' }] }] } },
+    ], [
+      { key: 'org', label: '组织', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'elTreeSelect' },
+      { key: 'org_text', label: '组织（显示）', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false, hidden: true },
+      { key: 'region', label: '地区', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'cascader' },
+      { key: 'region_text', label: '地区（显示）', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false, hidden: true },
+    ])
+    await nextTick()
+    await flushPromises()
+    const searchFields = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
+    const dept = searchFields.find((s: any) => s.prop === 'dept_text')
+    expect(dept?.type).toBe('input')
+    expect(dept?.filterable).toBeUndefined()
+    expect(dept?.allowCreate).toBeUndefined()
+    const org = searchFields.find((s: any) => s.prop === 'org_text')
+    expect(org?.type).toBe('input')
+    expect(org?.filterable).toBeUndefined()
+    expect(org?.allowCreate).toBeUndefined()
+    const region = searchFields.find((s: any) => s.prop === 'region_text')
+    expect(region?.type).toBe('input')
+    expect(region?.filterable).toBeUndefined()
+    expect(region?.allowCreate).toBeUndefined()
     wrapper.unmount()
   })
 })

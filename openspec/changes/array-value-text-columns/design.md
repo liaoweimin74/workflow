@@ -54,9 +54,10 @@
 - 改动点：`BizDataListPage.vue`（columns render）+ `PageDataTable.vue`（元数据列 formatter 读 text 列）。
 
 ### 5. 查询
-- 模糊搜索：`<key>_text` 列 LIKE（单选多选统一；text 列 VARCHAR 可进 `filterableColumns`）。
-- 精确筛选（结构化 filter / 数据表格联动）：主列 JSON 分支——`eq → JSON_CONTAINS(col, ?)`（value 参数序列化为 JSON 片段 `'"x"'`）、单选 `col->>'$[0]' = ?`、`in → JSON_OVERLAPS`。
-- 改动点：`BizDataQueryBuilder.appendStructuredFilters` 按列类型分支。
+- 模糊搜索：用户文本输入，`<key>_text` 列 LIKE（单选多选统一；text 列 VARCHAR 可进 `filterableColumns`）。
+- **查询栏组件化**（SearchTable）：单选选项类字段（select/tree/elTreeSelect/cascader 单选）生成下拉组件（选项=显示值 label，查询值=label，`_text` 列精确等值）；日期字段日期选择器；其余 input 模糊。
+- 精确筛选（PageDataTable 结构化 filter / 数据表格联动，传 value）：主列 JSON 分支——`eq → JSON_CONTAINS(col, ?)`（value 参数序列化为 JSON 片段 `'"x"'`）、单选 `col->>'$[0]' = ?`、`in → JSON_OVERLAPS`。
+- 改动点：`BizDataQueryBuilder.appendStructuredFilters` 按列类型分支；`BizDataListPage.searchFields` 按 componentType + schema rule 生成查询组件（`resolveOptionRules` 解析选项供下拉）。
 
 ### 6. 回显
 - 主列 value 匹配渲染时已加载的 options（`resolveOptionRules` / 静态 options）。

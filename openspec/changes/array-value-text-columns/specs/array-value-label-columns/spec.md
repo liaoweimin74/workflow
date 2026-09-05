@@ -97,16 +97,28 @@
 - **WHEN** 用户在搜索框输入 `杭州`
 - **THEN** 对数组值组件列执行 `<key>_text LIKE '%杭州%'`，命中含"杭州"文本的记录
 
-### Requirement: 精确查询走主列 JSON
+### Requirement: 查询栏组件化（精确查询走显示列）
 
-结构化筛选 SHALL 对数组值组件主列使用 MySQL JSON 函数：`eq` → `JSON_CONTAINS(col, ?)`（value 参数序列化为 JSON 片段），单选可用 `col->>'$[0]' = ?`；`in` → `JSON_OVERLAPS(col, ?)`。
+SearchTable 查询栏 SHALL 按数据源字段元数据（column_config.componentType + schema rule）生成查询组件：单选选项类字段（select/tree/elTreeSelect/cascader 单选）生成下拉组件，选项为显示值（label），**选定后以显示值（label）作为查询参数**，后端对 `<key>_text` 列**精确等值匹配**；日期字段生成日期选择器（主列等值）；其余字段保持文本输入（模糊）。
+
+模糊查询 SHALL 由用户文本输入，后端对 `<key>_text` 列（选项类）或主列（文本类）LIKE 模糊匹配。
+
+结构化筛选（PageDataTable 表格联动等传 value 的场景）SHALL 继续对数组值组件主列使用 MySQL JSON 函数：`eq` → `JSON_CONTAINS(col, ?)`（value 参数序列化为 JSON 片段），单选可用 `col->>'$[0]' = ?`；`in` → `JSON_OVERLAPS(col, ?)`。
+
+#### Scenario: 单选选项字段查询栏下拉
+- **WHEN** 字段 `dept` 为单选 select（选项 研发部/市场部）
+- **THEN** 查询栏生成下拉组件（prop=`dept_text`，选项 label=value=研发部/市场部），选定 `研发部` 后查询参数 `dept_text = '研发部'`（`<key>_text` 列精确等值）
+
+#### Scenario: 文本字段模糊查询
+- **WHEN** 用户在文本字段输入 `张`
+- **THEN** 后端 `name LIKE '%张%'` 模糊匹配
 
 #### Scenario: 多选精确筛选
-- **WHEN** 用户筛选"包含选项 b"（主列存 `["a","b"]`）
+- **WHEN** 用户筛选"包含选项 b"（主列存 `["a","b"]`，结构化筛选传 value）
 - **THEN** 查询条件为 `JSON_CONTAINS(col, '"b"')`，命中该记录
 
 #### Scenario: 单选精确筛选
-- **WHEN** 用户筛选单选字段等于 `x`（主列存 `["x"]`）
+- **WHEN** 用户筛选单选字段等于 `x`（主列存 `["x"]`，结构化筛选传 value）
 - **THEN** 查询条件为 `col->>'$[0]' = 'x'` 或 `JSON_CONTAINS(col, '"x"')`，命中该记录
 
 ### Requirement: 表单回显走主列值

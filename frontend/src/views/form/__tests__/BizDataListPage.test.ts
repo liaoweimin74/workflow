@@ -249,3 +249,64 @@ describe('BizDataListPage — 提交时数组组件附加显示文本', () => {
     wrapper.unmount()
   })
 })
+
+describe('BizDataListPage — 搜索栏组件化（精确查询用显示值）', () => {
+  function mountWith(schemaRule: any[]) {
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
+      data: {
+        name: '员工档案',
+        columnConfig: JSON.stringify([
+          { key: 'dept', label: '部门', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'select' },
+          { key: 'dept_text', label: '部门（显示）', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false, hidden: true },
+          { key: 'tags', label: '标签', columnType: 'JSON', length: null, scale: null, required: false, unique: false, indexed: false, componentType: 'checkbox' },
+          { key: 'tags_text', label: '标签（显示）', columnType: 'VARCHAR', length: 255, scale: null, required: false, unique: false, indexed: false, hidden: true },
+          { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: true },
+        ]),
+        schema: JSON.stringify({ rule: schemaRule, option: {}, dataSources: [], actions: [] }),
+      },
+    })
+    ;(bizDataApi.referencedCount as any).mockResolvedValue({ data: {} })
+    return mount(BizDataListPage, {
+      global: { plugins: [ElementPlus], stubs: { SearchTable: SearchTableStub } },
+    })
+  }
+
+  it('单选选项字段生成 select 查询组件（prop=_text、options 为显示值 label 精确查询）', async () => {
+    const wrapper = mountWith([
+      { type: 'select', field: 'dept', props: { multiple: false }, options: [{ label: '研发部', value: 'r' }, { label: '市场部', value: 'm' }] },
+    ])
+    await nextTick()
+    await flushPromises()
+    const searchFields = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
+    const dept = searchFields.find((s: any) => s.prop === 'dept_text')
+    expect(dept?.type).toBe('select')
+    // 查询值 = 显示值（label），后端 _text 列精确等值匹配
+    expect(dept?.options).toEqual([{ label: '研发部', value: '研发部' }, { label: '市场部', value: '市场部' }])
+    wrapper.unmount()
+  })
+
+  it('多选选项字段保持 input（模糊查询 _text）', async () => {
+    const wrapper = mountWith([
+      { type: 'select', field: 'dept', props: { multiple: false }, options: [{ label: '研发部', value: 'r' }] },
+      { type: 'checkbox', field: 'tags', options: [{ label: '标签1', value: 't1' }] },
+    ])
+    await nextTick()
+    await flushPromises()
+    const searchFields = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
+    const tags = searchFields.find((s: any) => s.prop === 'tags_text')
+    expect(tags?.type).toBe('input')
+    wrapper.unmount()
+  })
+
+  it('文本字段 input 模糊查询', async () => {
+    const wrapper = mountWith([
+      { type: 'select', field: 'dept', props: { multiple: false }, options: [{ label: '研发部', value: 'r' }] },
+    ])
+    await nextTick()
+    await flushPromises()
+    const searchFields = wrapper.findComponent(SearchTableStub).props('searchFields') as any[]
+    const name = searchFields.find((s: any) => s.prop === 'name')
+    expect(name?.type).toBe('input')
+    wrapper.unmount()
+  })
+})

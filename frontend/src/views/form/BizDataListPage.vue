@@ -72,6 +72,7 @@ import FormRenderer from './components/FormRenderer.vue'
 import { walkRules, type RuleLike } from './formRuleWalk'
 import { parseSubRows } from './subtableDisplay'
 import { withArrayLabels, leafDisplayText } from './arrayValueLabel'
+import { resolveOptionRules } from '@/vendor/option-datasource'
 import type { Rule } from '@form-create/element-ui'
 
 const route = useRoute()
@@ -86,6 +87,9 @@ const schemaOption = ref<Record<string, any>>({})
 const schemaActions = ref<any[]>([])
 /** 表单级数据源绑定（schema.dataSources，供表单内数据组件解析 refId） */
 const schemaDataSources = ref<any[]>([])
+/** 渲染时解析后的 schema（选项数据源已填充 rule.options / props.data / props.options），搜索栏选项与提交映射共用。
+ * 用宽松 Record 类型承载：form-create Rule 的 children 要求 Creator 方法，JSON schema 数据不满足 */
+const resolvedRules = ref<Array<Record<string, any>>>([])
 const loaded = ref(false)
 
 /** 引用感知：本表单被 dataPicker 引用统计（{ count, referencedBy }） */
@@ -112,15 +116,65 @@ const filterableColumns = computed<ColumnConfigItem[]>(() =>
   }),
 )
 
-/** 搜索栏（由 column_config 动态生成） */
+/** 单选选项类组件（select/tree/elTreeSelect/cascader 单选；多选保持模糊 input） */
+const SINGLE_OPTION_TYPES = ['select', 'tree', 'elTreeSelect', 'cascader']
+
+/** 按列 key 找 schema rule（数组组件列 key 为 <key>_text → 去后缀找 field） */
+function findRuleByFieldKey(fieldKey: string): Record<string, any> | undefined {
+  const baseKey = fieldKey.endsWith('_text') ? fieldKey.slice(0, -5) : fieldKey
+  return resolvedRules.value.find((r) => r.field === baseKey)
+}
+
+/** 是否单选选项类字段（查询生成 select 组件，精确匹配显示列）。
+ * 组件类型以 schema rule.type 为准（_text 冗余列 componentType 是 selectText 等派生值） */
+function isSingleOptionField(c: ColumnConfigItem): boolean {
+  const rule = findRuleByFieldKey(c.key) as any
+  const compType = rule?.type || c.componentType
+  if (!SINGLE_OPTION_TYPES.includes(compType)) return false
+  if (rule) {
+    if (rule.props?.multiple) return false
+    if (rule.props?.props?.multiple) return false
+  }
+  return true
+}
+
+/** 选项显示值列表（label；树/级联递归 children），查询值=显示值（label），后端 _text 列精确等值 */
+function optionLabelItems(c: ColumnConfigItem): { label: string; value: string }[] {
+  const rule = findRuleByFieldKey(c.key) as any
+  const compType = rule?.type || c.componentType
+  let list: any[] = []
+  if (compType === 'tree' || compType === 'elTreeSelect') list = rule?.props?.data ?? []
+  else if (compType === 'cascader') list = rule?.props?.options ?? []
+  else list = rule?.options ?? []
+  const labels: string[] = []
+  const collect = (items: any[]) => {
+    for (const it of items) {
+      if (it && it.label !== undefined) labels.push(String(it.label))
+      if (Array.isArray(it.children)) collect(it.children)
+    }
+  }
+  collect(list)
+  return labels.map((l) => ({ label: l, value: l }))
+}
+
+/** 搜索栏（由 column_config 动态生成）：单选选项字段 → select（查询显示值精确匹配 _text）；日期 → date-picker；其余 → input（模糊 LIKE） */
 const searchFields = computed<SearchField[]>(() =>
-  filterableColumns.value.map(c => ({
-    type: 'input',
-    label: c.label,
-    prop: c.key,
-    placeholder: c.label,
-    style: 'width: 180px',
-  })),
+  filterableColumns.value.map(c => {
+    if (isSingleOptionField(c)) {
+      return {
+        type: 'select',
+        label: c.label,
+        prop: c.key,
+        options: optionLabelItems(c),
+        placeholder: c.label,
+        style: 'width: 180px',
+      }
+    }
+    if (c.componentType === 'DatePicker' || c.componentType === 'datePicker' || c.componentType === 'date') {
+      return { type: 'date-picker', label: c.label, prop: c.key, placeholder: c.label }
+    }
+    return { type: 'input', label: c.label, prop: c.key, placeholder: c.label, style: 'width: 180px' }
+  }),
 )
 
 /** 表格列（render 读 row.data[key]；data-picker 引用列优先显示冗余文本；子表字段用 slotName 渲染链接） */
@@ -362,6 +416,13 @@ async function loadFormMeta() {
       schemaActions.value = !Array.isArray(parsed) && Array.isArray(parsed.actions) ? parsed.actions : []
       // 表单级数据源绑定（表单内 page-table/LookupPicker 解析 refId 依赖）
       schemaDataSources.value = !Array.isArray(parsed) && Array.isArray(parsed.dataSources) ? parsed.dataSources : []
+    }
+    // 解析选项数据源（搜索栏 select 选项、提交 label 映射共用）；失败回退原始 schema，不影响主流程
+    try {
+      // form-create Rule 类型 children 约束 Creator，JSON schema 数据用显式断言绕过（运行时结构兼容）
+      resolvedRules.value = await resolveOptionRules(schemaRules.value as unknown as Rule[], schemaDataSources.value as any)
+    } catch {
+      resolvedRules.value = schemaRules.value
     }
     loaded.value = true
   } catch {

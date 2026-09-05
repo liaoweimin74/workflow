@@ -182,7 +182,7 @@ describe('PageDataTable — 元数据列数组值格式化（对齐 BizDataListP
     expect(tags?.formatter?.({}, null, ['a', 'b'], 0)).toBe('a, b')
     expect(cols.find((c: any) => c.prop === 'users')?.formatter?.({ users_text: '前端组, 后端组' }, null, ['u1', 'u2'], 0)).toBe('前端组, 后端组')
     expect(cols.find((c: any) => c.prop === 'tree')?.formatter?.({}, null, ['x', 'y'], 0)).toBe('x, y')
-    expect(cols.find((c: any) => c.prop === 'region')?.formatter?.({ region_text: '省级/市级/叶子区' }, null, ['cn'], 0)).toBe('省级/市级/叶子区')
+    expect(cols.find((c: any) => c.prop === 'region')?.formatter?.({ region_text: '/省级/市级/叶子区' }, null, ['cn'], 0)).toBe('叶子区')
     // select（多选存数组）也走数组格式化；有 text 优先显示
     expect(cols.find((c: any) => c.prop === 'dept')?.formatter?.({ dept_text: '研发部' }, null, ['r'], 0)).toBe('研发部')
     expect(cols.find((c: any) => c.prop === 'dept')?.formatter?.({}, null, ['r', 'm'], 0)).toBe('r, m')

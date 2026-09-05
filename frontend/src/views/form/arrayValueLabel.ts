@@ -35,6 +35,29 @@ function isArrayComponent(type: string | undefined): boolean {
   return ARRAY_COMPONENTS.has(type)
 }
 
+/** 树形/级联组件（主列统一叶子 value 数组存储） */
+function isPathComponent(type: string): boolean {
+  return type === 'cascader' || type === 'tree' || type === 'elTreeSelect'
+}
+
+/** 树形/级联值 → 叶子 value 数组：单选单值 → [v]；cascader emitPath=true 路径数组 → 每路径取最后段（叶子） */
+function toLeafArray(type: string, rule: RuleNode, value: unknown): unknown[] {
+  if (type === 'cascader') {
+    const inner = rule.props?.props as Record<string, any> | undefined
+    if (inner?.emitPath !== false) {
+      // emitPath=true：值是路径数组（单选 [l1,l2,leaf]）或多选路径数组的数组（[[...],[...]]）
+      if (Array.isArray(value)) {
+        if (Array.isArray((value as unknown[])[0])) {
+          return (value as unknown[][]).map((p) => (Array.isArray(p) && p.length > 0 ? p[p.length - 1] : p))
+        }
+        return (value as unknown[]).length > 0 ? [(value as unknown[])[(value as unknown[]).length - 1]] : []
+      }
+      return [value]
+    }
+  }
+  return Array.isArray(value) ? value : [value]
+}
+
 /** 扁平 options 中 value → label（支持 el-option-group 嵌套） */
 function labelOf(options: any[] | undefined, value: unknown): string | undefined {
   if (!Array.isArray(options)) return undefined
@@ -85,31 +108,27 @@ function collectPathLabels(tree: TreeNode[] | undefined, value: unknown, path: s
 function buildText(type: string, rule: RuleNode, value: unknown): string {
   const values = Array.isArray(value) ? value : [value]
   if (type === 'cascader') {
+    // 主列值已由 toLeafArray 统一为叶子 value 数组（walk 预处理）→ 每叶子取完整路径
     const tree: TreeNode[] | undefined = rule.props?.options
-    const inner = rule.props?.props as Record<string, any> | undefined
-    if (inner?.emitPath !== false) {
-      // emitPath=true（默认）：值是路径数组（单选 [l1,l2,leaf]）或路径数组的数组（多选 [[...],[...]]）
-      const isGrouped = Array.isArray(value) && Array.isArray((value as unknown[])[0])
-      const groups: unknown[][] = isGrouped ? (value as unknown[][]) : [values]
-      return groups.map((path) => {
-        const segs = Array.isArray(path) ? path : [path]
-        return segs.map((seg) => findNodeLabelByValue(tree, seg) ?? String(seg)).join('/')
-      }).join(', ')
-    }
-    // emitPath=false：值是叶子 value（单值或叶子数组）→ 每个叶子取完整路径
     const parts = values.flatMap((v) => {
       const paths = collectPathLabels(tree, v, [])
-      return paths.length > 0 ? paths : [String(v)]
+      return paths.length > 0 ? paths.map((p) => '/' + p) : [String(v)]
     })
-    return parts.join(', ')
+    return parts.join(',')
   }
   if (type === 'tree' || type === 'elTreeSelect' || type === 'elTransfer') {
     const tree: TreeNode[] | undefined = rule.props?.data
+    if (type === 'elTransfer') {
+      // 穿梭框无层级：叶子 label 逗号连接（无路径前缀）
+      const parts = values.map((v) => findNodeLabelByValue(tree, v) ?? String(v))
+      return parts.join(', ')
+    }
+    // 树形：完整路径带前导 /，多选逗号连接
     const parts = values.flatMap((v) => {
       const paths = collectPathLabels(tree, v, [])
-      return paths.length > 0 ? paths : [String(v)]
+      return paths.length > 0 ? paths.map((p) => '/' + p) : [String(v)]
     })
-    return parts.join(', ')
+    return parts.join(',')
   }
   // select / checkbox / multiSelect / multiSelectPro
   const parts = values.map((v) => labelOf(rule.options, v) ?? String(v))
@@ -123,11 +142,16 @@ function walk(rules: RuleNode[], formData: Record<string, unknown>): void {
     if (isArrayComponent(type)) {
       const key = rule.field as string | undefined
       if (key && formData[key] !== undefined && formData[key] !== null) {
-        const raw = formData[key]
+        let raw = formData[key]
+        if (isPathComponent(type as string)) {
+          // 树形/级联：主列统一为叶子 value 数组（单选单值 → [v]；cascader emitPath=true 路径数组 → 取叶子）
+          raw = toLeafArray(type as string, rule, raw)
+          formData[key] = raw
+        }
         const text = buildText(type as string, rule, raw)
         // 选项映射失败（纯 value 回退）时保留已有 _text（回显显示文本），避免劣化；
         // 值可映射时始终覆盖，保证编辑修改值后 _text 与 value 一致
-        const plainFallback = String(text) === (Array.isArray(raw) ? raw : [raw]).map((x) => String(x)).join(', ')
+        const plainFallback = String(text) === (Array.isArray(raw) ? raw : [raw]).map((x) => String(x)).join(',')
         if (formData[key + '_text'] === undefined || !plainFallback) {
           formData[key + '_text'] = text
         }
@@ -182,9 +206,11 @@ export function injectFallbackOptions(rules: Array<Record<string, any>>, formDat
           const list = optionContainerOf(type as string, rule)
           if (list) {
             const values = Array.isArray(v) ? v : [v]
-            for (const single of values) {
+            const labels = leafLabelsOf(text, values)
+            for (let i = 0; i < values.length; i++) {
+              const single = values[i]
               if (single !== undefined && single !== null && !hasOption(list, single)) {
-                list.push({ value: single, label: String(text) })
+                list.push({ value: single, label: labels[i] ?? String(text) })
               }
             }
           }
@@ -213,9 +239,6 @@ function optionContainerOf(type: string, rule: RuleNode): unknown[] | null {
     return rule.props.data
   }
   if (type === 'cascader') {
-    // emitPath=true（路径数组形态）：单节点兜底无法重建树路径，跳过注入
-    const inner = rule.props?.props as Record<string, any> | undefined
-    if (inner?.emitPath !== false) return null
     if (!rule.props) rule.props = {}
     if (!Array.isArray(rule.props.options)) rule.props.options = []
     return rule.props.options
@@ -229,4 +252,71 @@ function optionContainerOf(type: string, rule: RuleNode): unknown[] | null {
 function hasOption(list: unknown[], value: unknown): boolean {
   return list.some((o) => o !== null && typeof o === 'object'
     && ((o as Record<string, unknown>).value === value || String((o as Record<string, unknown>).value) === String(value)))
+}
+
+/** 从 `<key>_text` 提取各 value 对应的叶子 label（路径最后一段）；顺序与 values 对应 */
+function leafLabelsOf(text: unknown, values: unknown[]): (string | undefined)[] {
+  if (text === null || text === undefined) return values.map(() => undefined)
+  const segments = String(text).split(',')
+  return values.map((_v, i) => {
+    const seg = segments[i]?.trim()
+    if (!seg) return undefined
+    const leaf = seg.split('/').pop()
+    return leaf === undefined || leaf === '' ? undefined : leaf
+  })
+}
+
+/** 树形/级联是否单选（无 multiple / showCheckbox 配置） */
+function isSingleSelect(rule: RuleNode): boolean {
+  const props = rule.props as Record<string, any> | undefined
+  if (props?.multiple || props?.showCheckbox) return false
+  const inner = props?.props as Record<string, any> | undefined
+  if (inner?.multiple) return false
+  return true
+}
+
+/**
+ * 回显规范化：树形/级联单选数组解包为单值（兼容存量路径数组取最后一段叶子），
+ * 再注入 options 兜底（无匹配项时用 `<key>_text` 叶子 label）。表单渲染前调用，
+ * 保证单选组件 v-model 为单值且 options 缺失时显示叶子 label 而非原始 value。
+ */
+export function normalizeEchoData(rules: Array<Record<string, any>>, formData: Record<string, unknown>): void {
+  if (!Array.isArray(rules) || !formData) return
+  for (const rawRule of rules) {
+    const rule = rawRule as RuleNode
+    const type = rule.type as string | undefined
+    if (isPathComponent(type as string) && isSingleSelect(rule)) {
+      const key = rule.field as string | undefined
+      if (key && Array.isArray(formData[key])) {
+        const arr = formData[key] as unknown[]
+        formData[key] = arr.length > 0 ? arr[arr.length - 1] : ''
+      }
+    }
+    if (Array.isArray(rule.children)) normalizeEchoData(rule.children as unknown as Array<Record<string, any>>, formData)
+    if (Array.isArray(rule.props?.rule)) normalizeEchoData(rule.props.rule as unknown as Array<Record<string, any>>, formData)
+    if (Array.isArray(rule.props?.columns)) {
+      for (const col of rule.props.columns) {
+        if (col && Array.isArray(col.rule)) normalizeEchoData(col.rule as unknown as Array<Record<string, any>>, formData)
+      }
+    }
+  }
+  injectFallbackOptions(rules, formData)
+}
+
+/**
+ * 表格列/显示用：从 `<key>_text` 提取显示文本——每段路径取最后一段（叶子 label），逗号连接。
+ * select/checkbox/transfer 的 `_text` 无 `/`，原样返回（叶子 label）；树形/级联 `/总公司/武汉分公司` → `武汉分公司`。
+ */
+export function leafDisplayText(text: unknown): string {
+  if (text === null || text === undefined) return ''
+  return String(text)
+    .split(',')
+    .map((s) => {
+      const seg = s.trim()
+      if (!seg) return ''
+      const leaf = seg.split('/').pop()
+      return leaf === undefined || leaf === '' ? seg : leaf
+    })
+    .filter(Boolean)
+    .join(', ')
 }

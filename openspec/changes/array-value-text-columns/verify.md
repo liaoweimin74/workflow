@@ -110,5 +110,6 @@ plan.md 无 `[~]` 標記 row，本節不適用（空白即 PASS）。
 - 回显兜底修复（`injectFallbackOptions` + FormRenderer 接入）：数组组件 options 无匹配时用 `<key>_text` 注入 `{value, label}` 兜底显示，避免显示原始 value（覆盖异步数据源未就绪/类型不匹配/静态缺失）；arrayValueLabel.test.ts 新增 8 用例（20/20）、FormRenderer.test.ts 36/36；前端全量 73 文件 899 测试全过，vue-tsc 无新增错误
 - `_text` 生成修复（commit 待定）：①树形/级联显示文本改全路径 `/` 分割（tree/elTreeSelect 由叶子 label 改 collectPathLabels）；②提交用渲染时解析后选项（FormRenderer.getFormData 基于 resolvedSchema 跑 withArrayLabels，BizDataListPage 已有 `_text` 不覆盖）；arrayValueLabel 21/21、FormRenderer 37/37；前端全量 73 文件 901 测试全过，vue-tsc 无新增错误
 - cascader emitPath 修复（commit 待定）：①`emitPath=true`（存量/已配置）提交值为路径数组，buildText 按路径段映射 label 并 `/` 连接（修掉"逗号分割多值"）；`injectFallbackOptions` 对 cascader emitPath=true 跳过注入（单节点无法重建树路径）；②`_text` 覆盖策略改"值可映射覆盖、纯回退保留"，编辑改值后 `_text` 与 value 一致；arrayValueLabel 25/25；前端全量 73 文件 905 测试全过，vue-tsc 无新增错误
+- 级联/树形统一规范（commit 待定）：①主列统一叶子 value 数组（`toLeafArray`：单选单值 → `[v]`、cascader emitPath=true 路径数组 → 取叶子）；②`_text` 带前导 `/` 完整路径（`/总公司/武汉分公司`），多选逗号无空格连接；③编辑框回显 `normalizeEchoData` 单选数组解包为单值（兼容存量路径数组）+ 注入叶子 label 兜底；④表格列显示 `leafDisplayText` 取叶子 label（BizDataListPage/PageDataTable）；arrayValueLabel 34/34、FormRenderer 37/37、BizDataListPage 11/11、PageDataTable 11/11；前端全量 73 文件 914 测试全过，vue-tsc 无新增错误
 
 **下一步**：`/opsx-finish` 合并 worktree 到 main、同步 delta specs、归档。

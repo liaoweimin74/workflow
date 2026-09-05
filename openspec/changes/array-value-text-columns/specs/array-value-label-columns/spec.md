@@ -30,19 +30,28 @@
 - **WHEN** 业务表单 schema 含 `{ type: 'elTreeSelect', field: 'org', props: { multiple: false } }`
 - **THEN** 列映射草案生成 `{ key: 'org', columnType: 'JSON' }` 与 `{ key: 'org_text', columnType: 'VARCHAR', length: 255, hidden: true }`
 
-### Requirement: cascader 值只存叶子
+### Requirement: cascader/树形值统一叶子数组
 
-级联选择器 SHALL 默认 `emitPath: false`，主列值只存最下级叶子 value 数组；显示列存全路径文本（`/` 分隔，多选叶子间 `, `）。已配置/存量组件 `emitPath: true` 时，提交值为路径数组（单选 `[l1,l2,leaf]`、多选路径数组的数组），显示列 SHALL 按路径段映射 label 并 `/` 连接（而非把每段当独立叶子）。
+级联选择器与树形选择器（tree/elTreeSelect）SHALL 主列统一存最下级叶子 value 数组（单选 `["leaf"]`、多选 `["leaf1","leaf2"]`）。提交时单选单值、cascader `emitPath=true` 的路径数组（单选 `[l1,l2,leaf]`、多选路径数组的数组）SHALL 转换为叶子数组（路径取最后一段）。
+
+显示列 SHALL 存带前导 `/` 的完整路径（`/省/市/leaf`；多选逗号无空格连接 `/A/x,/B/y`）。
+
+编辑框回显与表格列 SHALL 显示叶子 label（路径最后一段，如 `leaf`），而非全路径。
 
 #### Scenario: cascader 单选叶子值
 - **WHEN** 级联选择器单选选中叶子值 `leaf-a`（路径 label 为 `省级/市级/leaf-a`）
 - **THEN** 主列写入 `["leaf-a"]`
-- **AND** 显示列写入 `省级/市级/leaf-a`
+- **AND** 显示列写入 `/省级/市级/leaf-a`
+
+#### Scenario: cascader emitPath=true 提交路径数组
+- **WHEN** 级联选择器（`emitPath: true`）单选提交路径数组 `["p","c","leaf"]`（label 省级/市级/叶子区）
+- **THEN** 主列写入 `["leaf"]`（取路径最后一段）
+- **AND** 显示列写入 `/省级/市级/叶子区`
 
 #### Scenario: cascader 多选叶子值
 - **WHEN** 级联选择器多选选中两个叶子（路径 label 分别为 `A/x`、`B/y`）
 - **THEN** 主列写入 `["x","y"]`
-- **AND** 显示列写入 `A/x, B/y`
+- **AND** 显示列写入 `/A/X,/B/Y`
 
 ### Requirement: 前端提交生成显示文本
 
@@ -57,24 +66,24 @@
 - **THEN** 提交数据含 `field: ["a","b"]` 与 `field_text: "张三, 李四"`
 
 #### Scenario: 树形提交生成全路径
-- **WHEN** 用户提交树形字段值为 `["2"]` 且路径 label 为 `总公司/武汉分公司`
-- **THEN** 提交数据含 `field: ["2"]` 与 `field_text: "总公司/武汉分公司"`
+- **WHEN** 用户提交树形字段单选值为 `"2"`（路径 label 为 `总公司/武汉分公司`）
+- **THEN** 提交数据含 `field: ["2"]`（统一叶子数组）与 `field_text: "/总公司/武汉分公司"`（前导 `/`）
 
 #### Scenario: 级联提交生成全路径
 - **WHEN** 用户提交级联字段叶子值为 `["leaf-a"]` 且路径 label 为 `省级/市级/leaf-a`
-- **THEN** 提交数据含 `field: ["leaf-a"]` 与 `field_text: "省级/市级/leaf-a"`
-
-#### Scenario: 级联 emitPath=true 提交路径数组
-- **WHEN** 用户提交级联字段为路径数组 `["p","c","leaf"]`（对应 label 省级/市级/叶子区）
-- **THEN** 提交数据含 `field: ["p","c","leaf"]` 与 `field_text: "省级/市级/叶子区"`（非 `"省级, 省级/市级, 省级/市级/叶子区"`）
+- **THEN** 提交数据含 `field: ["leaf-a"]` 与 `field_text: "/省级/市级/leaf-a"`
 
 ### Requirement: 列表显示走显示列
 
-业务数据列表与页面数据表格 SHALL 对数组值组件列显示 `<key>_text` 值，缺失时回退主列 value。
+业务数据列表与页面数据表格 SHALL 对数组值组件列显示 `<key>_text` 的**叶子 label**（每段路径取最后一段，逗号连接），缺失时回退主列 value。
 
-#### Scenario: 列表显示 label
+#### Scenario: 列表显示叶子 label
 - **WHEN** 数据行 `data` 含 `{ field: ["a"], field_text: "张三" }`
 - **THEN** 列表该列渲染为 `张三`（而非 value `["a"]`）
+
+#### Scenario: 树形/级联列表显示叶子
+- **WHEN** 数据行 `data` 含 `{ field: ["2"], field_text: "/总公司/武汉分公司" }`
+- **THEN** 列表该列渲染为 `武汉分公司`（取路径最后一段，而非全路径）
 
 #### Scenario: 显示列缺失回退
 - **WHEN** 数据行 `data` 含 `{ field: ["a"] }` 且无 `field_text`
@@ -102,16 +111,16 @@
 
 ### Requirement: 表单回显走主列值
 
-表单回显 SHALL 保持现状：主列 value 数组匹配渲染时已加载的选项（`resolveOptionRules` 或静态选项），显示文本由组件自身渲染，不读显示列。
+表单回显 SHALL 用主列 value 匹配渲染时已加载的选项（`resolveOptionRules` 或静态选项），显示文本由组件自身渲染（树形/级联显示叶子 label）。树形/级联**单选**主列为数组时 SHALL 解包为单值（取最后一段叶子，兼容存量路径数组）后赋给单选组件。
 
 #### Scenario: 多选回显
 - **WHEN** 表单打开且主列值为 `["a","b"]`
 - **THEN** 多选组件选中 value 为 `a`、`b` 的选项并显示其 label
 
-#### Scenario: 级联回显
-- **WHEN** 表单打开且主列值为 `["leaf-a"]`
-- **THEN** 级联组件通过已加载的选项树定位叶子 `leaf-a` 并回显其路径
+#### Scenario: 级联/树形单选回显
+- **WHEN** 表单打开且级联单选主列值为 `["leaf-a"]`（或存量路径数组 `["p","c","leaf-a"]`）
+- **THEN** 解包为单值 `leaf-a` 赋给单选组件，显示叶子 label `leaf-a`
 
 #### Scenario: options 无匹配回显兜底
 - **WHEN** 表单回显且数组组件 options（`rule.options` / `props.data` / `props.options`）中找不到主列 value 的匹配项（异步数据源未就绪、类型不匹配、静态缺失），但提交数据含 `<key>_text`
-- **THEN** 用 `<key>_text` 注入 `{ value, label: <key>_text }` 兜底选项项，组件显示显示文本而非原始 value
+- **THEN** 用 `<key>_text` 的叶子 label 注入 `{ value, label: 叶子 }` 兜底选项项，组件显示叶子 label 而非原始 value

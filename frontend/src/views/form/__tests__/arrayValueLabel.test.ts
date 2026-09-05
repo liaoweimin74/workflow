@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { withArrayLabels, injectFallbackOptions } from '../arrayValueLabel'
+import { withArrayLabels, injectFallbackOptions, normalizeEchoData, leafDisplayText } from '../arrayValueLabel'
 
 describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文本', () => {
   it('select 多选：value → options label 逗号拼接', () => {
@@ -32,7 +32,7 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
     expect(out.tags_text).toBe('标签1')
   })
 
-  it('elTreeSelect 多选：props.data 树中全路径 / 分隔', () => {
+  it('elTreeSelect 多选：props.data 树中全路径带前导 / 逗号连接', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: {
         data: [
@@ -41,10 +41,10 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
       },
     } as any]
     const out = withArrayLabels({ org: ['1', '2'] }, rules)
-    expect(out.org_text).toBe('总公司, 总公司/武汉分公司')
+    expect(out.org_text).toBe('/总公司,/总公司/武汉分公司')
   })
 
-  it('elTreeSelect 单选：全路径 / 分隔', () => {
+  it('elTreeSelect 单选：全路径带前导 /', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: {
         data: [
@@ -53,7 +53,8 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
       },
     } as any]
     const out = withArrayLabels({ org: '2' }, rules)
-    expect(out.org_text).toBe('总公司/武汉分公司')
+    expect(out.org).toEqual(['2'])
+    expect(out.org_text).toBe('/总公司/武汉分公司')
   })
 
   it('elTransfer：props.data 叶子 label', () => {
@@ -76,10 +77,10 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
       },
     } as any]
     const out = withArrayLabels({ region: ['leaf'] }, rules)
-    expect(out.region_text).toBe('省级/市级/叶子区')
+    expect(out.region_text).toBe('/省级/市级/叶子区')
   })
 
-  it('cascader 单选（emitPath=true）：路径数组 → 全路径 / 分隔', () => {
+  it('cascader 单选（emitPath=true）：路径数组 → 全路径带前导 /', () => {
     const rules = [{
       type: 'cascader', field: 'region', props: {
         props: { emitPath: true },
@@ -89,7 +90,8 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
       },
     } as any]
     const out = withArrayLabels({ region: ['p', 'c', 'leaf'] }, rules)
-    expect(out.region_text).toBe('省级/市级/叶子区')
+    expect(out.region).toEqual(['leaf'])
+    expect(out.region_text).toBe('/省级/市级/叶子区')
   })
 
   it('cascader 多选（emitPath=false）：多叶子逗号拼接', () => {
@@ -103,10 +105,10 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
       },
     } as any]
     const out = withArrayLabels({ region: ['x', 'y'] }, rules)
-    expect(out.region_text).toBe('A/X, B/Y')
+    expect(out.region_text).toBe('/A/X,/B/Y')
   })
 
-  it('cascader 多选（emitPath=true）：路径数组的数组 → 各路径 / 分隔逗号连接', () => {
+  it('cascader 多选（emitPath=true）：路径数组的数组 → 各路径前导 / 逗号连接', () => {
     const rules = [{
       type: 'cascader', field: 'region', props: {
         props: { emitPath: true, multiple: true },
@@ -117,7 +119,8 @@ describe('withArrayLabels — 数组组件提交时生成 <key>_text 显示文�
       },
     } as any]
     const out = withArrayLabels({ region: [['a', 'x'], ['b', 'y']] }, rules)
-    expect(out.region_text).toBe('A/X, B/Y')
+    expect(out.region).toEqual(['x', 'y'])
+    expect(out.region_text).toBe('/A/X,/B/Y')
   })
 
   it('选项缺失：回退 value join', () => {
@@ -204,20 +207,20 @@ describe('injectFallbackOptions — 回显时 options 无匹配用 _text 注入�
     expect(rules[0].props.data).toContainEqual({ value: 'x', label: '研发部' })
   })
 
-  it('cascader 单选（emitPath=false）：props.options 无匹配时注入叶子', () => {
+  it('cascader 单选（emitPath=false）：props.options 无匹配时注入叶子 label', () => {
     const rules = [{
       type: 'cascader', field: 'region', props: { props: { emitPath: false }, options: [] },
     } as any]
-    injectFallbackOptions(rules, { region: 'leaf', region_text: '省/市/leaf' })
-    expect(rules[0].props.options).toContainEqual({ value: 'leaf', label: '省/市/leaf' })
+    injectFallbackOptions(rules, { region: 'leaf', region_text: '/省/市/leaf' })
+    expect(rules[0].props.options).toContainEqual({ value: 'leaf', label: 'leaf' })
   })
 
-  it('cascader emitPath=true（路径数组形态）：跳过注入', () => {
+  it('cascader 单选（emitPath=true，值已解包为叶子单值）：注入叶子 label', () => {
     const rules = [{
       type: 'cascader', field: 'region', props: { props: { emitPath: true }, options: [] },
     } as any]
-    injectFallbackOptions(rules, { region: ['p', 'c', 'leaf'], region_text: '省/市/leaf' })
-    expect(rules[0].props.options).toHaveLength(0)
+    injectFallbackOptions(rules, { region: 'leaf', region_text: '/省/市/leaf' })
+    expect(rules[0].props.options).toContainEqual({ value: 'leaf', label: 'leaf' })
   })
 
   it('无 _text 时不注入', () => {
@@ -228,13 +231,13 @@ describe('injectFallbackOptions — 回显时 options 无匹配用 _text 注入�
     expect(rules[0].options).toHaveLength(0)
   })
 
-  it('多选：缺失的值逐一注入（label 用整体文本）', () => {
+  it('多选：缺失的值逐一注入（label 用对应叶子）', () => {
     const rules = [{
       type: 'select', field: 'dept', props: { multiple: true },
       options: [{ label: '研发部', value: 'r' }],
     } as any]
     injectFallbackOptions(rules, { dept: ['r', 'm'], dept_text: '研发部, 市场部' })
-    expect(rules[0].options).toContainEqual({ value: 'm', label: '研发部, 市场部' })
+    expect(rules[0].options).toContainEqual({ value: 'm', label: '市场部' })
     expect(rules[0].options).toHaveLength(2)
   })
 
@@ -254,5 +257,77 @@ describe('injectFallbackOptions — 回显时 options 无匹配用 _text 注入�
     } as any]
     injectFallbackOptions(rules, { grade: 'a', grade_text: '' })
     expect(rules[0].options).toHaveLength(0)
+  })
+})
+
+describe('normalizeEchoData — 回显规范化（单选数组解包 + 注入叶子兜底）', () => {
+  it('cascader 单选：数组解包为单值', () => {
+    const rules = [{
+      type: 'cascader', field: 'region', props: { props: { emitPath: false }, options: [] },
+    } as any]
+    const data = { region: ['leaf'], region_text: '/省/市/leaf' }
+    normalizeEchoData(rules, data)
+    expect(data.region).toBe('leaf')
+  })
+
+  it('cascader 单选：存量路径数组取最后段（叶子）解包', () => {
+    const rules = [{
+      type: 'cascader', field: 'region', props: { props: { emitPath: true }, options: [] },
+    } as any]
+    const data = { region: ['p', 'c', 'leaf'], region_text: '/省/市/leaf' }
+    normalizeEchoData(rules, data)
+    expect(data.region).toBe('leaf')
+  })
+
+  it('elTreeSelect 单选：数组解包并注入叶子兜底', () => {
+    const rules = [{
+      type: 'elTreeSelect', field: 'org', props: { data: [] },
+    } as any]
+    const data = { org: ['2'], org_text: '/总公司/武汉分公司' }
+    normalizeEchoData(rules, data)
+    expect(data.org).toBe('2')
+    expect(rules[0].props.data).toContainEqual({ value: '2', label: '武汉分公司' })
+  })
+
+  it('多选：不解包，注入各叶子 label', () => {
+    const rules = [{
+      type: 'elTreeSelect', field: 'org', props: { multiple: true, data: [] },
+    } as any]
+    const data = { org: ['2', '3'], org_text: '/总公司/武汉分公司,/总公司/北京分公司' }
+    normalizeEchoData(rules, data)
+    expect(data.org).toEqual(['2', '3'])
+    expect(rules[0].props.data).toContainEqual({ value: '2', label: '武汉分公司' })
+    expect(rules[0].props.data).toContainEqual({ value: '3', label: '北京分公司' })
+  })
+
+  it('options 已有匹配时不注入', () => {
+    const rules = [{
+      type: 'elTreeSelect', field: 'org', props: {
+        data: [{ label: '武汉分公司', value: '2' }],
+      },
+    } as any]
+    const data = { org: '2', org_text: '/总公司/武汉分公司' }
+    normalizeEchoData(rules, data)
+    expect(rules[0].props.data).toEqual([{ label: '武汉分公司', value: '2' }])
+  })
+})
+
+describe('leafDisplayText — 表格列显示取叶子 label', () => {
+  it('树形/级联全路径取最后一段叶子', () => {
+    expect(leafDisplayText('/总公司/武汉分公司')).toBe('武汉分公司')
+  })
+
+  it('多选路径逗号连接各叶子', () => {
+    expect(leafDisplayText('/总公司/武汉分公司,/总公司/北京分公司')).toBe('武汉分公司, 北京分公司')
+  })
+
+  it('select/checkbox 叶子 label 原样（无 /）', () => {
+    expect(leafDisplayText('研发部, 市场部')).toBe('研发部, 市场部')
+  })
+
+  it('空/null 返回空串', () => {
+    expect(leafDisplayText('')).toBe('')
+    expect(leafDisplayText(null)).toBe('')
+    expect(leafDisplayText(undefined)).toBe('')
   })
 })

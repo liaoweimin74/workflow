@@ -29,27 +29,28 @@
 | 列 | 类型 | 内容 | 用途 |
 |---|---|---|---|
 | `<key>` | JSON | 叶子 value 数组（单选 `["x"]`、多选 `["x","y"]`） | 回显、精确查询（JSON_CONTAINS）、统计 |
-| `<key>_text` | VARCHAR(255) | 显示文本：树形/级联（cascader/tree/elTreeSelect）完整路径 `/` 分隔；select/checkbox/transfer 叶子 label；多选叶子间 `, ` | 列表显示、模糊查询（LIKE） |
+| `<key>_text` | VARCHAR(255) | 显示文本：树形/级联（cascader/tree/elTreeSelect）带前导 `/` 的完整路径（`/总公司/武汉分公司`），多选逗号无空格连接（`/A/x,/B/y`）；select/checkbox/transfer 叶子 label | 列表显示（取叶子 label）、模糊查询（LIKE） |
 
 - 数组组件集合：`select`（单选与多选）/ `checkbox` / `multiSelect` / `multiSelectPro` / `tree` / `elTreeSelect` / `elTransfer` / `cascader`。
 - select 单选/多选统一 JSON 双列（查询走 `_text` 列，主列仅存值回显；select 单选提交单值字符串存入 JSON 列，宽松兼容）。
 - 列映射改动点：`ColumnTypeMapper.java`（后端）+ `ColumnConfigDialog.vue`（前端）为数组组件生成主列 + text 列。
 
-### 2. cascader emitPath=false
+### 2. cascader/树形值统一叶子数组
 - `cascader.js` 默认 `props.emitPath = false`（新建组件默认）；存量已建组件保持用户配置。
-- 值字段只存最下级叶子 value；text 列存全路径（`/` 分隔，多选叶子间 `, `）。
+- **主列统一存最下级叶子 value 数组**（单选 `["leaf"]`、多选 `["leaf1","leaf2"]`）。提交时单选单值、`emitPath=true` 路径数组（`[l1,l2,leaf]`）统一转换为叶子数组（取路径最后一段）。
+- text 列存带前导 `/` 的完整路径（`/省/市/leaf`；多选逗号无空格连接 `/A/x,/B/y`）。
 
 ### 3. label 由前端提交生成
 - 前端在提交预处理中遍历 schema 数组组件，用渲染时持有的 options 做 value→label 映射，生成 `<key>_text` 一并提交。
 - **必须使用渲染时解析后的选项**（FormRenderer.getFormData 基于 resolvedSchema——异步数据源已加载）；原始 schema（schemaRules）的选项可能为空，会导致映射失败回退 value。
-- 树形（tree/elTreeSelect）与级联（cascader）显示文本为完整路径 `/` 分隔；select/checkbox/transfer 为叶子 label；多选叶子间 `, ` 连接。
-- **cascader emitPath=true（存量/已配置）**：提交值为路径数组（单选 `[l1,l2,leaf]`），按路径段映射 label 并 `/` 连接；`emitPath=false`（默认）值为叶子，每叶子取完整路径。
+- 树形（tree/elTreeSelect）与级联（cascader）显示文本为**带前导 `/`** 的完整路径（多选逗号无空格连接）；select/checkbox/transfer 为叶子 label。
+- **树形/级联提交统一转叶子数组**：单选单值 → `[v]`；cascader `emitPath=true` 路径数组 → 取路径最后一段（叶子）后存数组（`toLeafArray`）。
 - **`<key>_text` 覆盖策略**：值可映射时覆盖为最新文本（编辑改值保持一致）；选项缺失（纯 value 回退）时保留已有 `_text`，避免劣化。
 - 后端 `BizDataService.create/update` 直接落两列，不做 options 解析。
 - 组件 options 取值位置：`rule.options`（select/checkbox）/ `props.data`（tree/transfer/elTreeSelect）/ `props.options`（cascader）。
 
 ### 4. 显示方式（对齐 dataPicker 双列）
-- 列表列 prop=主列 key，`render` 读 `row.data[<key>_text]`，缺失回退主列 value。
+- 列表列 prop=主列 key，`render`/`formatter` 读 `row.data[<key>_text]`，经 `leafDisplayText` 取**叶子 label**（每段路径取最后一段，逗号连接）显示；缺失回退主列 value。
 - 改动点：`BizDataListPage.vue`（columns render）+ `PageDataTable.vue`（元数据列 formatter 读 text 列）。
 
 ### 5. 查询
@@ -58,8 +59,9 @@
 - 改动点：`BizDataQueryBuilder.appendStructuredFilters` 按列类型分支。
 
 ### 6. 回显
-- 主列 value 匹配渲染时已加载的 options（`resolveOptionRules` / 静态 options），显示文本由组件自身渲染，不读显示列。
-- 兜底：options 无匹配项时（异步数据源未就绪/类型不匹配/静态缺失），用 `<key>_text` 注入 `{value, label}` 兜底选项项（`injectFallbackOptions`，FormRenderer 渲染前接入），避免组件回退显示原始 value。
+- 主列 value 匹配渲染时已加载的 options（`resolveOptionRules` / 静态 options），显示文本由组件自身渲染（树形/级联显示叶子 label）。
+- **单选数组解包**：树形/级联单选主列为数组时解包为单值（取最后一段叶子，兼容存量路径数组）后赋给单选组件（`normalizeEchoData`，FormRenderer 回显接入）。
+- 兜底：options 无匹配项时（异步数据源未就绪/类型不匹配/静态缺失），用 `<key>_text` 的**叶子 label** 注入 `{value, label: 叶子}` 兜底选项项（`injectFallbackOptions`），避免组件回退显示原始 value。
 
 ## Risks / Trade-offs
 

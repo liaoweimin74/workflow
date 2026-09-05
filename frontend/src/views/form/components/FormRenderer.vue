@@ -92,7 +92,7 @@ import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import PageDataCards from '@/views/page/components/PageDataCards.vue'
 import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
-import { injectFallbackOptions, withArrayLabels } from '@/views/form/arrayValueLabel'
+import { normalizeEchoData, withArrayLabels } from '@/views/form/arrayValueLabel'
 import { useLinkageContainer, type LinkageContainer } from '../composables/useLinkageContainer'
 import ContainerButtons from './ContainerButtons.vue'
 
@@ -370,13 +370,13 @@ onMounted(async () => {
     const resolved = hasOptionDatasource(props.rule)
       ? await resolveOptionRules(props.rule, dsBindings.value)
       : props.rule
-    // 回显兜底：数组组件 options 无匹配时用 <key>_text 注入 {value, label}，避免显示原始 value
-    injectFallbackOptions(resolved, props.initialValues)
     resolvedSchema.value = resolved
   }
   applyDynamicLabelWidth()
   if (props.initialValues) {
     formData.value = { ...props.initialValues }
+    // 回显规范化：树形/级联单选数组解包为单值 + 注入叶子兜底（需 formData 就绪）
+    normalizeEchoData(resolvedSchema.value, formData.value)
   }
   if (props.processInstanceId) {
     await loadData()
@@ -384,6 +384,7 @@ onMounted(async () => {
   if (props.mappedData) {
     // mappedData 先铺底、本表单数据（initialValues/loadData）后覆盖
     formData.value = { ...props.mappedData, ...formData.value }
+    normalizeEchoData(resolvedSchema.value, formData.value)
   }
   if (props.readonly) {
     // form-create 的 rule 用 props.disabled 控制字段禁用。
@@ -408,8 +409,8 @@ onMounted(async () => {
 // 监听 initialValues 变化，同步到 formData
 watch(() => props.initialValues, (newVal) => {
   if (newVal) {
-    injectFallbackOptions(resolvedSchema.value, newVal)
     formData.value = { ...newVal }
+    normalizeEchoData(resolvedSchema.value, formData.value)
   }
 })
 
@@ -477,6 +478,7 @@ async function loadData() {
         existingFormDataId.value = snapRes.data.id
         try {
           formData.value = JSON.parse(snapRes.data.dataJson || '{}')
+          normalizeEchoData(resolvedSchema.value, formData.value)
         } catch {
           formData.value = {}
         }
@@ -491,6 +493,7 @@ async function loadData() {
       existingFormDataId.value = formDataDto.id
       try {
         formData.value = JSON.parse(formDataDto.dataJson || '{}')
+        normalizeEchoData(resolvedSchema.value, formData.value)
       } catch {
         formData.value = {}
       }

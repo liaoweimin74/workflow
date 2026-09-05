@@ -170,7 +170,7 @@ describe('BizDataListPage — 新列类型展示适配', () => {
     const region = columns.find((c: any) => c.prop === 'region')
     // 有 <key>_text → 显示文本
     expect(dept?.render?.({ data: { dept: ['r'], dept_text: '研发部' } })).toBe('研发部')
-    expect(region?.render?.({ data: { region: ['leaf'], region_text: '省级/市级/叶子区' } })).toBe('省级/市级/叶子区')
+    expect(region?.render?.({ data: { region: ['leaf'], region_text: '/省级/市级/叶子区' } })).toBe('叶子区')
     // 缺失 <key>_text → 回退 value join
     expect(dept?.render?.({ data: { dept: ['r', 'm'] } })).toBe('r, m')
     wrapper.unmount()

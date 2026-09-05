@@ -98,6 +98,7 @@ import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import { buildCellRender } from '@/utils/tableColumnRenderer'
 import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
+import { leafDisplayText } from '@/views/form/arrayValueLabel'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
@@ -325,9 +326,9 @@ const resolvedColumns = computed<TableColumn[]>(() => {
       ...(ARRAY_COMPONENT_TYPES.includes(c.componentType || '')
         ? {
             formatter: (row: any, _col: any, cellValue: unknown) => {
-              // 优先显示冗余显示列 <key>_text（前端提交时生成，数据平铺在行顶层）；缺失回退 value join
+              // 优先显示冗余显示列 <key>_text（取叶子 label，树形/级联全路径取最后一段）；缺失回退 value join
               const text = row?.[c.key + '_text']
-              if (text !== undefined && text !== null && text !== '') return String(text)
+              if (text !== undefined && text !== null && text !== '') return leafDisplayText(text)
               return formatArrayValue(cellValue)
             },
           }

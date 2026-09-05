@@ -71,7 +71,7 @@ import { bizDataApi, type ColumnConfigItem } from '@/api/bizData'
 import FormRenderer from './components/FormRenderer.vue'
 import { walkRules, type RuleLike } from './formRuleWalk'
 import { parseSubRows } from './subtableDisplay'
-import { withArrayLabels } from './arrayValueLabel'
+import { withArrayLabels, leafDisplayText } from './arrayValueLabel'
 import type { Rule } from '@form-create/element-ui'
 
 const route = useRoute()
@@ -155,9 +155,9 @@ const columns = computed<TableColumn[]>(() => {
             return String(text)
           }
         }
-        // 数组值组件：优先显示冗余显示列 <key>_text（label/全路径；数组组件才会生成该列数据），缺失回退 value
+        // 数组值组件：优先显示冗余显示列 <key>_text（取叶子 label；树形/级联全路径取最后一段），缺失回退 value
         const text = row.data?.[c.key + '_text']
-        if (text !== undefined && text !== null && text !== '') return String(text)
+        if (text !== undefined && text !== null && text !== '') return leafDisplayText(text)
         return renderByComponentType(c.componentType || undefined, c.columnType, v)
       },
     }

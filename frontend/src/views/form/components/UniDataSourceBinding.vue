@@ -10,7 +10,7 @@
         </span>
       </template>
       <el-select v-model="draft.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
-        <el-option v-for="source in formDataSources" :key="source.id" :label="source.name" :value="source.id" />
+         <el-option v-for="source in formDataSources" :key="source.id" :label="source.id" :value="source.id" />
       </el-select>
     </el-form-item>
     <el-divider content-position="left">组件级数据筛选</el-divider>

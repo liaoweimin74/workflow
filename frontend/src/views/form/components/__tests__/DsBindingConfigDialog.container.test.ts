@@ -95,9 +95,9 @@ function mountDialog(bindingProps: Record<string, any> = {}, tableMode = false) 
         'el-form-item': {
           name: 'ElFormItemStub',
           props: ['label'],
-          setup(props: any, { slots }: any) {
+            setup(props: any, { slots }: any) {
             return () => h('div', { class: 'stub-form-item' }, [
-              h('span', { class: 'stub-label' }, String(props.label || '')),
+              h('span', { class: 'stub-label' }, slots.label?.() || String(props.label || '')),
               slots.default?.(),
             ])
           },
@@ -128,41 +128,15 @@ beforeEach(() => {
 })
 
 describe('DsBindingConfigDialog formContainer 显示与按钮配置', () => {
-  it('formContainer 模式显示 displayMode 下拉（弹窗/新页签/内嵌）', async () => {
-    const wrapper = mountDialog({ displayMode: 'newTab' })
+  it('formContainer 模式不再显示已废弃的显示模式与弹窗尺寸配置', async () => {
+    const wrapper = mountDialog({ displayMode: 'newTab', dialogWidth: '900px', dialogHeight: '500px' })
     await flushPromises()
 
     // stub 渲染为 .stub-form-item，label 在 .stub-label
     const labels = wrapper.findAll('.stub-label').map((f) => f.text())
-    expect(labels.join(' ')).toContain('显示模式')
-    // 弹窗/新页签/内嵌选项存在（displayMode 下拉：含全部三种选项的那个 select）
-    const selectText = wrapper.findAll('.stub-select').map((s) => s.text()).join(' ')
-    expect(selectText).toContain('弹出窗口')
-    expect(selectText).toContain('新开页签')
-    expect(selectText).toContain('页面内嵌')
-  })
-
-  it('formContainer 模式按显示模式条件渲染尺寸/标题/内嵌高度', async () => {
-    // newTab：显示页签标题，隐藏弹窗宽度
-    const w1 = mountDialog({ displayMode: 'newTab' })
-    await flushPromises()
-    expect(w1.text()).toContain('页签标题')
-    expect(w1.text()).not.toContain('弹窗宽度')
-    w1.unmount()
-
-    // dialog（默认）：显示弹窗宽度/高度，隐藏页签标题
-    const w2 = mountDialog({ displayMode: 'dialog' })
-    await flushPromises()
-    expect(w2.text()).toContain('弹窗宽度')
-    expect(w2.text()).toContain('弹窗高度')
-    expect(w2.text()).not.toContain('页签标题')
-    w2.unmount()
-
-    // inline：显示内嵌高度
-    const w3 = mountDialog({ displayMode: 'inline' })
-    await flushPromises()
-    expect(w3.text()).toContain('内嵌高度')
-    w3.unmount()
+    expect(labels.join(' ')).not.toContain('显示模式')
+    expect(labels.join(' ')).not.toContain('弹窗宽度')
+    expect(labels.join(' ')).not.toContain('弹窗高度')
   })
 
   it('formContainer 模式显示按钮开关（新增/取消/确定/删除/复制）', async () => {
@@ -182,7 +156,7 @@ describe('DsBindingConfigDialog formContainer 显示与按钮配置', () => {
     expect(wrapper.text()).toContain('自定义按钮')
   })
 
-  it('确认时提交显示模式/尺寸/按钮配置', async () => {
+  it('确认时只提交有效的按钮配置', async () => {
     const wrapper = mountDialog({
       dataSourceId: 'ds1',
       displayMode: 'dialog',
@@ -208,11 +182,11 @@ describe('DsBindingConfigDialog formContainer 显示与按钮配置', () => {
     const emitted = wrapper.emitted('confirm') as any[]
     expect(emitted).toBeTruthy()
     const result = emitted[0][0]
-    expect(result.displayMode).toBe('dialog')
-    expect(result.dialogWidth).toBe('900px')
-    expect(result.dialogHeight).toBe('500px')
-    expect(result.tabTitle).toBe('编辑员工')
-    expect(result.inlineHeight).toBe('auto')
+    expect(result.displayMode).toBeUndefined()
+    expect(result.dialogWidth).toBeUndefined()
+    expect(result.dialogHeight).toBeUndefined()
+    expect(result.tabTitle).toBeUndefined()
+    expect(result.inlineHeight).toBeUndefined()
     expect(result.showDeleteButton).toBe(false)
     expect(result.showCopyButton).toBe(false)
     expect(result.customButtons).toEqual([{ key: 'x', label: 'X' }])

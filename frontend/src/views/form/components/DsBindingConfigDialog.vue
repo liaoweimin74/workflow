@@ -128,54 +128,49 @@
 
     <template v-else>
       <!-- 非表格模式：数据源 + 按钮 -->
-      <el-form label-width="110px" size="default">
-        <el-form-item label="页面内数据源" required>
+      <el-form label-position="top" class="container-form" size="default">
+        <el-form-item required>
+          <template #label>
+            <span class="label-with-tip">
+              页面内数据源
+              <el-tooltip content="数据源在「数据源配置」中绑定；切换后自动加载列定义" placement="top">
+                <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
+          </template>
           <el-select v-model="form.dataSourceId" placeholder="选择页面数据源绑定" style="width: 100%" @change="handleDataSourceChange">
             <el-option v-for="ds in formDataSources" :key="ds.id" :label="ds.id" :value="ds.id" />
           </el-select>
-          <span class="form-tip">数据源在「数据源配置」中绑定；切换后自动加载列定义</span>
-        </el-form-item>
-
-        <el-form-item label="显示模式">
-          <el-select v-model="container.displayMode" style="width: 100%">
-            <el-option label="弹出窗口" value="dialog" />
-            <el-option label="新开页签" value="newTab" />
-            <el-option label="页面内嵌" value="inline" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="container.displayMode === 'dialog'" label="弹窗宽度">
-          <el-input v-model="container.dialogWidth" />
-        </el-form-item>
-        <el-form-item v-if="container.displayMode === 'dialog'" label="弹窗高度">
-          <el-input v-model="container.dialogHeight" />
-        </el-form-item>
-        <el-form-item v-if="container.displayMode === 'newTab'" label="页签标题">
-          <el-input v-model="container.tabTitle" />
-        </el-form-item>
-        <el-form-item v-if="container.displayMode === 'inline'" label="内嵌高度">
-          <el-input v-model="container.inlineHeight" />
         </el-form-item>
 
         <!-- 按钮配置 -->
         <el-divider content-position="left">按钮</el-divider>
-        <el-form-item label="新增按钮">
-          <el-switch v-model="container.showNewButton" />
-        </el-form-item>
-        <el-form-item label="取消按钮">
-          <el-switch v-model="container.showCancelButton" />
-        </el-form-item>
-        <el-form-item label="确定按钮">
-          <el-switch v-model="container.showConfirmButton" />
-        </el-form-item>
-        <el-form-item label="删除按钮">
-          <el-switch v-model="container.showDeleteButton" />
-          <span class="form-tip">默认隐藏</span>
-        </el-form-item>
-        <el-form-item label="复制按钮">
-          <el-switch v-model="container.showCopyButton" />
-          <span class="form-tip">默认隐藏</span>
-        </el-form-item>
-        <el-form-item label="自定义按钮">
+        <div class="container-button-grid">
+          <el-form-item label="新增按钮">
+            <el-switch v-model="container.showNewButton" />
+          </el-form-item>
+          <el-form-item label="取消按钮">
+            <el-switch v-model="container.showCancelButton" />
+          </el-form-item>
+          <el-form-item label="确定按钮">
+            <el-switch v-model="container.showConfirmButton" />
+          </el-form-item>
+          <el-form-item label="删除按钮">
+            <el-switch v-model="container.showDeleteButton" />
+          </el-form-item>
+          <el-form-item label="复制按钮">
+            <el-switch v-model="container.showCopyButton" />
+          </el-form-item>
+        </div>
+        <el-form-item>
+          <template #label>
+            <span class="label-with-tip">
+              自定义按钮
+              <el-tooltip content="请输入 JSON 数组，格式：[{ &quot;key&quot;: &quot;approve&quot;, &quot;label&quot;: &quot;审核&quot;, &quot;actions&quot;: [{ &quot;op&quot;: &quot;refresh&quot;, &quot;target&quot;: &quot;ds1&quot; }] }]" placement="top">
+                <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
+          </template>
           <el-input
             v-model="container.customButtonsText"
             type="textarea"
@@ -183,7 +178,6 @@
             placeholder='[{ "key": "approve", "label": "审核", "actions": [{ "op": "refresh", "target": "ds1" }] }]'
             style="width: 100%"
           />
-          <span class="form-tip">JSON 数组：key/label/type/actions（事件链）</span>
         </el-form-item>
       </el-form>
     </template>
@@ -311,11 +305,6 @@ const container = reactive({
   showDeleteButton: false,
   showCopyButton: false,
   customButtonsText: '',
-  displayMode: 'dialog' as 'dialog' | 'newTab' | 'inline',
-  dialogWidth: '800px',
-  dialogHeight: '600px',
-  tabTitle: '',
-  inlineHeight: '600px',
 })
 
 /** 从 bindingProps 回填容器按钮配置 */
@@ -328,11 +317,6 @@ function initContainerConfig(bp: Record<string, any>) {
   container.customButtonsText = Array.isArray(bp.customButtons)
     ? JSON.stringify(bp.customButtons)
     : ''
-  container.displayMode = bp.displayMode || 'dialog'
-  container.dialogWidth = bp.dialogWidth || '800px'
-  container.dialogHeight = bp.dialogHeight || '600px'
-  container.tabTitle = bp.tabTitle || ''
-  container.inlineHeight = bp.inlineHeight || '600px'
 }
 
 /** 解析自定义按钮 JSON（非法输入返回空数组） */
@@ -549,11 +533,6 @@ function handleConfirm() {
     result.showDeleteButton = container.showDeleteButton
     result.showCopyButton = container.showCopyButton
     result.customButtons = parseCustomButtons()
-    result.displayMode = container.displayMode
-    result.dialogWidth = container.dialogWidth
-    result.dialogHeight = container.dialogHeight
-    result.tabTitle = container.tabTitle
-    result.inlineHeight = container.inlineHeight
   }
   emit('confirm', result)
   visible.value = false
@@ -635,5 +614,29 @@ function handleConfirm() {
   margin-left: 4px;
   color: #909399;
   cursor: help;
+}
+/* 数据容器配置：label 独占一行并左对齐，控件占满下一行 */
+.container-form :deep(.el-form-item__label) {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
+}
+.container-form :deep(.el-form-item__content) {
+  width: 100%;
+  margin-left: 0 !important;
+}
+.container-button-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+.container-button-grid :deep(.el-form-item) {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.container-button-grid :deep(.el-form-item__label) {
+  white-space: nowrap;
 }
 </style>

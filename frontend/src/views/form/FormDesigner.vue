@@ -98,6 +98,12 @@
       :table-mode="true"
       @confirm="handleTableDsConfirm"
     />
+    <!-- 卡片列表样式配置 -->
+    <CardStyleConfigDialog
+      v-model="cardStyleDialogVisible"
+      :card-style="currentCardStyle"
+      @confirm="handleCardStyleConfirm"
+    />
 
     <!-- 数据源配置弹窗 -->
     <el-dialog v-model="dsDialogVisible" title="数据源绑定与动作总线" width="680px">
@@ -141,6 +147,8 @@ import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
 import DsBindingConfigDialog from './components/DsBindingConfigDialog.vue'
 import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.vue'
 import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
+import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'
+import type { CardStyle } from '@/components/business/ListCards.types'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField } from './formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
@@ -500,9 +508,42 @@ function registerCardListProps() {
         props: { size: 'small' },
         on: { click: () => openTableDsConfig() },
       },
+      {
+        type: 'button',
+        field: 'cardStyleConfigTrigger',
+        title: '卡片样式',
+        children: ['配置卡片样式'],
+        native: true,
+        style: { width: '100%', marginLeft: '0', borderColor: '#2E73FF', color: '#2E73FF' },
+        props: { size: 'small' },
+        on: { click: () => openCardStyleConfig() },
+      },
     ],
     false,
   )
+}
+
+/** 卡片列表样式配置（复用页面设计器的结构化样式弹窗） */
+const cardStyleDialogVisible = ref(false)
+const currentCardStyle = computed<CardStyle>(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.props?.cardStyle || {}
+})
+
+function openCardStyleConfig() {
+  cardStyleDialogVisible.value = true
+}
+
+function handleCardStyleConfirm(style: CardStyle) {
+  const active = designerRef.value?.activeRule as any
+  if (active?.props) {
+    if (style && Object.keys(style).length > 0) {
+      active.props.cardStyle = style
+    } else {
+      delete active.props.cardStyle
+    }
+  }
+  ElMessage.success('卡片样式已保存')
 }
 
 async function handleSave() {

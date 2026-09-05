@@ -55,6 +55,38 @@ An operational admin console: compact, calm, and information-dense without feeli
 | Text Primary | `--ds-dark-text-primary` | `#e5e7eb` | 暗色文字主 |
 | Text Secondary | `--ds-dark-text-secondary` | `#94a3b8` | 暗色文字次 |
 
+### 2.5 Extended Scales (Tailwind @theme 扩展色阶)
+
+`frontend/src/style.css` `@theme` 中的完整色阶（令牌名保留 `industrial` / 新增 `accent`）：
+
+| Scale | 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `industrial` (靛蓝) | `#f3f3fe` | `#e9eaff` | `#d6d6fd` | `#b9b9f9` | `#8a8af4` | `#5755ee` | `#5452d3` | `#4342b5` | `#35349a` | `#2a2970` |
+| `accent` (青) | `#ecfbfd` | `#c6edf4` | `#a5e4ee` | `#6fd8e5` | `#48e0dd` | `#46c9d6` | `#2ca7b5` | `#1f8592` | — | — |
+
+### 2.6 Element Plus 派生变量（style.css 覆盖）
+
+亮色 `:root`：
+- primary 系：`--el-color-primary: #5755ee`；light-3 `#8a8af4` / light-5 `#abaaf6` / light-7 `#c6c5f7` / light-8 `#d7d6f8` / light-9 `#e8e8f8` / dark-2 `#4544be`
+- 边框系：`#e3e8f7`（border）/ `#e9edfa`（light）/ `#eef1fc`（lighter）/ `#f4f6fe`（extra-light）
+- 填充系：`#f0f1fb`（fill）/ `#f4f6fe`（light）/ `#f8f9fe`（lighter）/ `#ffffff`（blank）
+- 文字系：`#1f2437`（primary）/ `#4b5169`（regular）/ `#8b91ab`（secondary）/ `#b0b5c9`（placeholder）
+
+暗色 `.dark`：
+- primary 系：`--el-color-primary: #7c7ff0`；light-3 `#999bf4` / light-5 `#b0b2f7` / light-7 `#c8c9fa` / light-9 `#e0e1fc` / dark-2 `#6365c2`
+- 表面系：`--el-bg-color: #1b2040`；overlay `#222750`；fill `#232950` / fill-light `#2a3158` / fill-lighter `#303860`
+- 边框系：`#2a3054` / `#323a63` / `#3a4370`
+- 文字系：`#e5e7eb`（primary）/ `#c3c8d9`（regular）/ `#94a3b8`（secondary）
+
+### 2.7 Decorative Gradients (装饰渐变)
+
+| 用途 | Value |
+|---|---|
+| 登录页背景 | `linear-gradient(135deg, #eef1fc 0%, #dcdcfb 45%, #c6edf4 100%)`（暗色：`#12162b → #1b2040 → #2a3054`） |
+| 登录按钮/Logo 渐变 | `linear-gradient(90deg, #5755ee, #46c9d6)`；hover 微亮 `#6361f0 → #5ad4df` |
+| 仪表盘横幅 | `linear-gradient(90deg, #eef0fc, #f8f9fe)`（暗色：`#1b2040 → #222750`） |
+| 流程卡片 hover 上条 | `linear-gradient(90deg, #5755ee, #46c9d6)`
+
 ## 3. Typography
 
 - Primary: system UI stack already used by the application.

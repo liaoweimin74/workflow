@@ -172,11 +172,34 @@ onMounted(() => {
 
 .process-card {
   cursor: pointer;
-  transition: box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+/* 顶部青色条 hover 滑入 */
+.process-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #5755ee, #46c9d6);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.25s ease;
+  z-index: 1;
+}
+
+.process-card:hover::before {
+  transform: scaleX(1);
 }
 
 .process-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(87, 85, 238, 0.12);
+  border-color: #46c9d6;
+  transform: translateY(-1px);
 }
 
 .card-content {

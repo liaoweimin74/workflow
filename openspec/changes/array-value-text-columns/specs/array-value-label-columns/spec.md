@@ -32,7 +32,7 @@
 
 ### Requirement: cascader 值只存叶子
 
-级联选择器 SHALL 默认 `emitPath: false`，主列值只存最下级叶子 value 数组；显示列存全路径文本（`/` 分隔，多选叶子间 `, `）。
+级联选择器 SHALL 默认 `emitPath: false`，主列值只存最下级叶子 value 数组；显示列存全路径文本（`/` 分隔，多选叶子间 `, `）。已配置/存量组件 `emitPath: true` 时，提交值为路径数组（单选 `[l1,l2,leaf]`、多选路径数组的数组），显示列 SHALL 按路径段映射 label 并 `/` 连接（而非把每段当独立叶子）。
 
 #### Scenario: cascader 单选叶子值
 - **WHEN** 级联选择器单选选中叶子值 `leaf-a`（路径 label 为 `省级/市级/leaf-a`）
@@ -63,6 +63,10 @@
 #### Scenario: 级联提交生成全路径
 - **WHEN** 用户提交级联字段叶子值为 `["leaf-a"]` 且路径 label 为 `省级/市级/leaf-a`
 - **THEN** 提交数据含 `field: ["leaf-a"]` 与 `field_text: "省级/市级/leaf-a"`
+
+#### Scenario: 级联 emitPath=true 提交路径数组
+- **WHEN** 用户提交级联字段为路径数组 `["p","c","leaf"]`（对应 label 省级/市级/叶子区）
+- **THEN** 提交数据含 `field: ["p","c","leaf"]` 与 `field_text: "省级/市级/叶子区"`（非 `"省级, 省级/市级, 省级/市级/叶子区"`）
 
 ### Requirement: 列表显示走显示列
 

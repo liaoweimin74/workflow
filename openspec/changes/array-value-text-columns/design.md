@@ -43,6 +43,8 @@
 - 前端在提交预处理中遍历 schema 数组组件，用渲染时持有的 options 做 value→label 映射，生成 `<key>_text` 一并提交。
 - **必须使用渲染时解析后的选项**（FormRenderer.getFormData 基于 resolvedSchema——异步数据源已加载）；原始 schema（schemaRules）的选项可能为空，会导致映射失败回退 value。
 - 树形（tree/elTreeSelect）与级联（cascader）显示文本为完整路径 `/` 分隔；select/checkbox/transfer 为叶子 label；多选叶子间 `, ` 连接。
+- **cascader emitPath=true（存量/已配置）**：提交值为路径数组（单选 `[l1,l2,leaf]`），按路径段映射 label 并 `/` 连接；`emitPath=false`（默认）值为叶子，每叶子取完整路径。
+- **`<key>_text` 覆盖策略**：值可映射时覆盖为最新文本（编辑改值保持一致）；选项缺失（纯 value 回退）时保留已有 `_text`，避免劣化。
 - 后端 `BizDataService.create/update` 直接落两列，不做 options 解析。
 - 组件 options 取值位置：`rule.options`（select/checkbox）/ `props.data`（tree/transfer/elTreeSelect）/ `props.options`（cascader）。
 

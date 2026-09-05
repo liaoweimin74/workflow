@@ -9,7 +9,7 @@
  * - cascader：props.options（树，显示文本为完整路径 `/` 分隔）
  *
  * 单选值统一为长度 1 的数组（主列 JSON 语义）。选项缺失时回退 value join。
- * 已有 `<key>_text` 不覆盖（保留前端既有显示值）。
+ * 已有 `<key>_text`：值可映射时覆盖为最新文本（编辑改值保持一致）；选项缺失（纯回退）时保留已有。
  */
 
 const ARRAY_COMPONENTS = new Set(['select', 'checkbox', 'multiSelect', 'multiSelectPro', 'elTransfer', 'tree', 'elTreeSelect', 'cascader'])
@@ -50,6 +50,21 @@ function labelOf(options: any[] | undefined, value: unknown): string | undefined
   return undefined
 }
 
+/** 树中查找 value 匹配节点的 label（任意层级；cascader 路径段用） */
+function findNodeLabelByValue(tree: TreeNode[] | undefined, value: unknown): string | undefined {
+  if (!Array.isArray(tree)) return undefined
+  for (const node of tree) {
+    if (node.value === value || String(node.value) === String(value)) {
+      return node.label === undefined ? undefined : String(node.label)
+    }
+    if (Array.isArray(node.children)) {
+      const r = findNodeLabelByValue(node.children, value)
+      if (r !== undefined) return r
+    }
+  }
+  return undefined
+}
+
 /** 树中收集 value 匹配节点的完整路径 label（`/` 分隔；cascader/树形用） */
 function collectPathLabels(tree: TreeNode[] | undefined, value: unknown, path: string[]): string[] {
   const out: string[] = []
@@ -71,6 +86,17 @@ function buildText(type: string, rule: RuleNode, value: unknown): string {
   const values = Array.isArray(value) ? value : [value]
   if (type === 'cascader') {
     const tree: TreeNode[] | undefined = rule.props?.options
+    const inner = rule.props?.props as Record<string, any> | undefined
+    if (inner?.emitPath !== false) {
+      // emitPath=true（默认）：值是路径数组（单选 [l1,l2,leaf]）或路径数组的数组（多选 [[...],[...]]）
+      const isGrouped = Array.isArray(value) && Array.isArray((value as unknown[])[0])
+      const groups: unknown[][] = isGrouped ? (value as unknown[][]) : [values]
+      return groups.map((path) => {
+        const segs = Array.isArray(path) ? path : [path]
+        return segs.map((seg) => findNodeLabelByValue(tree, seg) ?? String(seg)).join('/')
+      }).join(', ')
+    }
+    // emitPath=false：值是叶子 value（单值或叶子数组）→ 每个叶子取完整路径
     const parts = values.flatMap((v) => {
       const paths = collectPathLabels(tree, v, [])
       return paths.length > 0 ? paths : [String(v)]
@@ -96,8 +122,15 @@ function walk(rules: RuleNode[], formData: Record<string, unknown>): void {
     const type = rule.type as string | undefined
     if (isArrayComponent(type)) {
       const key = rule.field as string | undefined
-      if (key && formData[key] !== undefined && formData[key] !== null && formData[key + '_text'] === undefined) {
-        formData[key + '_text'] = buildText(type as string, rule, formData[key])
+      if (key && formData[key] !== undefined && formData[key] !== null) {
+        const raw = formData[key]
+        const text = buildText(type as string, rule, raw)
+        // 选项映射失败（纯 value 回退）时保留已有 _text（回显显示文本），避免劣化；
+        // 值可映射时始终覆盖，保证编辑修改值后 _text 与 value 一致
+        const plainFallback = String(text) === (Array.isArray(raw) ? raw : [raw]).map((x) => String(x)).join(', ')
+        if (formData[key + '_text'] === undefined || !plainFallback) {
+          formData[key + '_text'] = text
+        }
       }
     }
     if (Array.isArray(rule.children)) {
@@ -180,6 +213,9 @@ function optionContainerOf(type: string, rule: RuleNode): unknown[] | null {
     return rule.props.data
   }
   if (type === 'cascader') {
+    // emitPath=true（路径数组形态）：单节点兜底无法重建树路径，跳过注入
+    const inner = rule.props?.props as Record<string, any> | undefined
+    if (inner?.emitPath !== false) return null
     if (!rule.props) rule.props = {}
     if (!Array.isArray(rule.props.options)) rule.props.options = []
     return rule.props.options

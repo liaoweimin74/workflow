@@ -45,7 +45,7 @@
 - **必须使用渲染时解析后的选项**（FormRenderer.getFormData 基于 resolvedSchema——异步数据源已加载）；原始 schema（schemaRules）的选项可能为空，会导致映射失败回退 value。
 - 树形（tree/elTreeSelect）与级联（cascader）显示文本为**带前导 `/`** 的完整路径（多选逗号无空格连接）；select/checkbox/transfer 为叶子 label。
 - **树形/级联提交统一转叶子数组**：单选单值 → `[v]`；cascader `emitPath=true` 路径数组 → 取路径最后一段（叶子）后存数组（`toLeafArray`）。
-- **`<key>_text` 覆盖策略**：值可映射时覆盖为最新文本（编辑改值保持一致）；选项缺失（纯 value 回退）时保留已有 `_text`，避免劣化。
+- **`<key>_text` 覆盖策略**：`buildText` 返回 `{text, mapped}`——`mapped=true`（至少一个 value 映射成功）时覆盖为最新文本；`mapped=false`（全部回退 value）时保留已有 `_text`，避免双跑（FormRenderer 生成 → BizDataListPage 用原始 schemaRules 再跑）时选项缺失导致覆盖为 value（分隔符比较（`, ` vs `,`）有歧义，已改结构化标志）。
 - 后端 `BizDataService.create/update` 直接落两列，不做 options 解析。
 - 组件 options 取值位置：`rule.options`（select/checkbox）/ `props.data`（tree/transfer/elTreeSelect）/ `props.options`（cascader）。
 
@@ -59,9 +59,10 @@
 - 改动点：`BizDataQueryBuilder.appendStructuredFilters` 按列类型分支。
 
 ### 6. 回显
-- 主列 value 匹配渲染时已加载的 options（`resolveOptionRules` / 静态 options），显示文本由组件自身渲染（树形/级联显示叶子 label）。
+- 主列 value 匹配渲染时已加载的 options（`resolveOptionRules` / 静态 options）。
 - **单选数组解包**：树形/级联单选主列为数组时解包为单值（取最后一段叶子，兼容存量路径数组）后赋给单选组件（`normalizeEchoData`，FormRenderer 回显接入）。
-- 兜底：options 无匹配项时（异步数据源未就绪/类型不匹配/静态缺失），用 `<key>_text` 的**叶子 label** 注入 `{value, label: 叶子}` 兜底选项项（`injectFallbackOptions`），避免组件回退显示原始 value。
+- **树形显示全路径**：`normalizeEchoData` 递归为 tree/elTreeSelect 树节点注解 `fullPath`（前导 `/`），显示 label 字段指向 `fullPath`（用户未自定义时）——编辑框与下拉树显示全路径。
+- **兜底注入仅限扁平组件**：select/checkbox/multiSelect 等扁平选项组件 options 无匹配时注入 `{value, label: 叶子}`；树形结构组件（tree/elTreeSelect/cascader）**不注入**——根级孤立节点会污染树结构，导致组件匹配/选中节点错乱。
 
 ## Risks / Trade-offs
 

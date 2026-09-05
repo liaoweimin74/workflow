@@ -36,7 +36,7 @@
 
 显示列 SHALL 存带前导 `/` 的完整路径（`/省/市/leaf`；多选逗号无空格连接 `/A/x,/B/y`）。
 
-编辑框回显与表格列 SHALL 显示叶子 label（路径最后一段，如 `leaf`），而非全路径。
+表格列 SHALL 显示叶子 label（路径最后一段，如 `leaf`）；树形编辑框回显 SHALL 显示全路径（`/总公司/武汉分公司`）。
 
 #### Scenario: cascader 单选叶子值
 - **WHEN** 级联选择器单选选中叶子值 `leaf-a`（路径 label 为 `省级/市级/leaf-a`）
@@ -111,7 +111,11 @@
 
 ### Requirement: 表单回显走主列值
 
-表单回显 SHALL 用主列 value 匹配渲染时已加载的选项（`resolveOptionRules` 或静态选项），显示文本由组件自身渲染（树形/级联显示叶子 label）。树形/级联**单选**主列为数组时 SHALL 解包为单值（取最后一段叶子，兼容存量路径数组）后赋给单选组件。
+表单回显 SHALL 用主列 value 匹配渲染时已加载的选项（`resolveOptionRules` 或静态选项）。树形/级联**单选**主列为数组时 SHALL 解包为单值（取最后一段叶子，兼容存量路径数组）后赋给单选组件。
+
+树形（tree/elTreeSelect）回显 SHALL 显示全路径：递归为树节点注解 `fullPath`（前导 `/`），显示 label 字段指向 `fullPath`（用户未自定义 label 字段时）。
+
+兜底注入 SHALL 仅适用于扁平选项组件（select/checkbox/multiSelect 等）；树形结构组件（tree/elTreeSelect/cascader）SHALL NOT 注入兜底节点（根级孤立节点会污染树结构，导致组件选中节点错乱）。
 
 #### Scenario: 多选回显
 - **WHEN** 表单打开且主列值为 `["a","b"]`
@@ -119,8 +123,12 @@
 
 #### Scenario: 级联/树形单选回显
 - **WHEN** 表单打开且级联单选主列值为 `["leaf-a"]`（或存量路径数组 `["p","c","leaf-a"]`）
-- **THEN** 解包为单值 `leaf-a` 赋给单选组件，显示叶子 label `leaf-a`
+- **THEN** 解包为单值 `leaf-a` 赋给单选组件
 
-#### Scenario: options 无匹配回显兜底
-- **WHEN** 表单回显且数组组件 options（`rule.options` / `props.data` / `props.options`）中找不到主列 value 的匹配项（异步数据源未就绪、类型不匹配、静态缺失），但提交数据含 `<key>_text`
+#### Scenario: 树形回显显示全路径
+- **WHEN** 表单打开且树形单选值为 `2`（树 `总公司→武汉分公司`）
+- **THEN** 编辑框显示 `/总公司/武汉分公司`（fullPath），下拉树节点文本亦为全路径
+
+#### Scenario: 扁平组件 options 无匹配回显兜底
+- **WHEN** 表单回显且扁平选项组件（select/checkbox）options 中找不到主列 value 的匹配项，但提交数据含 `<key>_text`
 - **THEN** 用 `<key>_text` 的叶子 label 注入 `{ value, label: 叶子 }` 兜底选项项，组件显示叶子 label 而非原始 value

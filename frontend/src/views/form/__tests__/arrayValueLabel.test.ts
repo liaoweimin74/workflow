@@ -199,28 +199,28 @@ describe('injectFallbackOptions — 回显时 options 无匹配用 _text 注入�
     expect(rules[0].options).toEqual([{ label: 'A', value: 'a' }])
   })
 
-  it('elTreeSelect 单选：props.data 无匹配时注入节点', () => {
+  it('elTreeSelect 单选：props.data 无匹配时不注入（避免污染树结构）', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: { data: [] },
     } as any]
-    injectFallbackOptions(rules, { org: 'x', org_text: '研发部' })
-    expect(rules[0].props.data).toContainEqual({ value: 'x', label: '研发部' })
+    injectFallbackOptions(rules, { org: 'x', org_text: '/研发部/前端组' })
+    expect(rules[0].props.data).toHaveLength(0)
   })
 
-  it('cascader 单选（emitPath=false）：props.options 无匹配时注入叶子 label', () => {
+  it('cascader 单选（emitPath=false）：不注入兜底（树形结构组件统一不注入）', () => {
     const rules = [{
       type: 'cascader', field: 'region', props: { props: { emitPath: false }, options: [] },
     } as any]
     injectFallbackOptions(rules, { region: 'leaf', region_text: '/省/市/leaf' })
-    expect(rules[0].props.options).toContainEqual({ value: 'leaf', label: 'leaf' })
+    expect(rules[0].props.options).toHaveLength(0)
   })
 
-  it('cascader 单选（emitPath=true，值已解包为叶子单值）：注入叶子 label', () => {
+  it('cascader 单选（emitPath=true，值已解包为叶子单值）：不注入兜底', () => {
     const rules = [{
       type: 'cascader', field: 'region', props: { props: { emitPath: true }, options: [] },
     } as any]
     injectFallbackOptions(rules, { region: 'leaf', region_text: '/省/市/leaf' })
-    expect(rules[0].props.options).toContainEqual({ value: 'leaf', label: 'leaf' })
+    expect(rules[0].props.options).toHaveLength(0)
   })
 
   it('无 _text 时不注入', () => {
@@ -239,6 +239,20 @@ describe('injectFallbackOptions — 回显时 options 无匹配用 _text 注入�
     injectFallbackOptions(rules, { dept: ['r', 'm'], dept_text: '研发部, 市场部' })
     expect(rules[0].options).toContainEqual({ value: 'm', label: '市场部' })
     expect(rules[0].options).toHaveLength(2)
+  })
+
+  it('树形/级联不注入兜底（避免污染树结构导致选择节点错乱）', () => {
+    const treeRules = [{
+      type: 'elTreeSelect', field: 'org', props: { data: [] },
+    } as any]
+    injectFallbackOptions(treeRules, { org: 'x', org_text: '/研发部/前端组' })
+    expect(treeRules[0].props.data).toHaveLength(0)
+
+    const cascaderRules = [{
+      type: 'cascader', field: 'region', props: { props: { emitPath: false }, options: [] },
+    } as any]
+    injectFallbackOptions(cascaderRules, { region: 'leaf', region_text: '/省/市/leaf' })
+    expect(cascaderRules[0].props.options).toHaveLength(0)
   })
 
   it('递归 props.rule 子表单中的数组组件注入', () => {
@@ -279,28 +293,51 @@ describe('normalizeEchoData — 回显规范化（单选数组解包 + 注入叶
     expect(data.region).toBe('leaf')
   })
 
-  it('elTreeSelect 单选：数组解包并注入叶子兜底', () => {
+  it('elTreeSelect 单选：数组解包（不注入兜底）并预处理 fullPath 显示全路径', () => {
     const rules = [{
-      type: 'elTreeSelect', field: 'org', props: { data: [] },
+      type: 'elTreeSelect', field: 'org', props: {
+        data: [
+          { label: '总公司', value: '1', children: [{ label: '武汉分公司', value: '2' }] },
+        ],
+      },
     } as any]
     const data = { org: ['2'], org_text: '/总公司/武汉分公司' }
     normalizeEchoData(rules, data)
     expect(data.org).toBe('2')
-    expect(rules[0].props.data).toContainEqual({ value: '2', label: '武汉分公司' })
+    // 不污染树结构（不注入兜底节点）
+    expect(rules[0].props.data).toHaveLength(1)
+    expect(rules[0].props.data[0].children).toHaveLength(1)
+    // 递归添加 fullPath（带前导 /）
+    expect(rules[0].props.data[0].fullPath).toBe('/总公司')
+    expect(rules[0].props.data[0].children[0].fullPath).toBe('/总公司/武汉分公司')
+    // label 显示字段指向 fullPath（用户未自定义时）
+    expect(rules[0].props.props).toMatchObject({ label: 'fullPath' })
   })
 
-  it('多选：不解包，注入各叶子 label', () => {
+  it('elTreeSelect 用户已自定义 label 字段时不覆盖', () => {
+    const rules = [{
+      type: 'elTreeSelect', field: 'org', props: {
+        props: { label: 'name' },
+        data: [{ label: '总公司', value: '1' }],
+      },
+    } as any]
+    normalizeEchoData(rules, { org: '1' })
+    expect(rules[0].props.props).toMatchObject({ label: 'name' })
+    // fullPath 仍会添加（对显示无害）
+    expect(rules[0].props.data[0].fullPath).toBe('/总公司')
+  })
+
+  it('多选：不解包（不注入兜底）', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: { multiple: true, data: [] },
     } as any]
     const data = { org: ['2', '3'], org_text: '/总公司/武汉分公司,/总公司/北京分公司' }
     normalizeEchoData(rules, data)
     expect(data.org).toEqual(['2', '3'])
-    expect(rules[0].props.data).toContainEqual({ value: '2', label: '武汉分公司' })
-    expect(rules[0].props.data).toContainEqual({ value: '3', label: '北京分公司' })
+    expect(rules[0].props.data).toHaveLength(0)
   })
 
-  it('options 已有匹配时不注入', () => {
+  it('options 已有匹配时数据不变（无注入无重复）', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: {
         data: [{ label: '武汉分公司', value: '2' }],
@@ -308,7 +345,16 @@ describe('normalizeEchoData — 回显规范化（单选数组解包 + 注入叶
     } as any]
     const data = { org: '2', org_text: '/总公司/武汉分公司' }
     normalizeEchoData(rules, data)
-    expect(rules[0].props.data).toEqual([{ label: '武汉分公司', value: '2' }])
+    expect(rules[0].props.data).toEqual([{ label: '武汉分公司', value: '2', fullPath: '/武汉分公司' }])
+  })
+
+  it('多选 options 缺失（纯回退）保留已有 _text（修分隔符误判覆盖 bug）', () => {
+    const rules = [{
+      type: 'select', field: 'dept', props: { multiple: true }, options: [],
+    } as any]
+    // FormRenderer 已生成正确 _text；BizDataListPage 双跑时 schemaRules options 为空
+    const out = withArrayLabels({ dept: ['r', 'm'], dept_text: '研发部, 市场部' }, rules)
+    expect(out.dept_text).toBe('研发部, 市场部')
   })
 })
 

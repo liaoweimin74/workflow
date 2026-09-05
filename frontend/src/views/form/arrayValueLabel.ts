@@ -18,6 +18,7 @@ interface TreeNode {
   label?: unknown
   value?: unknown
   children?: TreeNode[]
+  fullPath?: string
 }
 
 interface RuleNode {
@@ -104,35 +105,51 @@ function collectPathLabels(tree: TreeNode[] | undefined, value: unknown, path: s
   return out
 }
 
-/** 构建单个数组组件的显示文本 */
-function buildText(type: string, rule: RuleNode, value: unknown): string {
+/** 构建单个数组组件的显示文本；mapped=至少一个 value 成功映射到 label/路径（非纯 value 回退） */
+function buildText(type: string, rule: RuleNode, value: unknown): { text: string; mapped: boolean } {
   const values = Array.isArray(value) ? value : [value]
   if (type === 'cascader') {
     // 主列值已由 toLeafArray 统一为叶子 value 数组（walk 预处理）→ 每叶子取完整路径
     const tree: TreeNode[] | undefined = rule.props?.options
-    const parts = values.flatMap((v) => {
+    const parts: string[] = []
+    let mapped = false
+    for (const v of values) {
       const paths = collectPathLabels(tree, v, [])
-      return paths.length > 0 ? paths.map((p) => '/' + p) : [String(v)]
-    })
-    return parts.join(',')
+      if (paths.length > 0) {
+        mapped = true
+        parts.push(...paths.map((p) => '/' + p))
+      } else {
+        parts.push(String(v))
+      }
+    }
+    return { text: parts.join(','), mapped }
   }
   if (type === 'tree' || type === 'elTreeSelect' || type === 'elTransfer') {
     const tree: TreeNode[] | undefined = rule.props?.data
     if (type === 'elTransfer') {
       // 穿梭框无层级：叶子 label 逗号连接（无路径前缀）
       const parts = values.map((v) => findNodeLabelByValue(tree, v) ?? String(v))
-      return parts.join(', ')
+      const mapped = values.some((v) => findNodeLabelByValue(tree, v) !== undefined)
+      return { text: parts.join(', '), mapped }
     }
     // 树形：完整路径带前导 /，多选逗号连接
-    const parts = values.flatMap((v) => {
+    const parts: string[] = []
+    let mapped = false
+    for (const v of values) {
       const paths = collectPathLabels(tree, v, [])
-      return paths.length > 0 ? paths.map((p) => '/' + p) : [String(v)]
-    })
-    return parts.join(',')
+      if (paths.length > 0) {
+        mapped = true
+        parts.push(...paths.map((p) => '/' + p))
+      } else {
+        parts.push(String(v))
+      }
+    }
+    return { text: parts.join(','), mapped }
   }
   // select / checkbox / multiSelect / multiSelectPro
   const parts = values.map((v) => labelOf(rule.options, v) ?? String(v))
-  return parts.join(', ')
+  const mapped = values.some((v) => labelOf(rule.options, v) !== undefined)
+  return { text: parts.join(', '), mapped }
 }
 
 /** 递归遍历 rule 树，为数组组件生成 `<key>_text` */
@@ -148,11 +165,10 @@ function walk(rules: RuleNode[], formData: Record<string, unknown>): void {
           raw = toLeafArray(type as string, rule, raw)
           formData[key] = raw
         }
-        const text = buildText(type as string, rule, raw)
-        // 选项映射失败（纯 value 回退）时保留已有 _text（回显显示文本），避免劣化；
-        // 值可映射时始终覆盖，保证编辑修改值后 _text 与 value 一致
-        const plainFallback = String(text) === (Array.isArray(raw) ? raw : [raw]).map((x) => String(x)).join(',')
-        if (formData[key + '_text'] === undefined || !plainFallback) {
+        const { text, mapped } = buildText(type as string, rule, raw)
+        // 选项映射失败（纯 value 回退，mapped=false）时保留已有 _text（回显显示文本），避免劣化；
+        // 值可映射（mapped=true）时始终覆盖，保证编辑修改值后 _text 与 value 一致
+        if (formData[key + '_text'] === undefined || mapped) {
           formData[key + '_text'] = text
         }
       }
@@ -231,18 +247,11 @@ export function injectFallbackOptions(rules: Array<Record<string, any>>, formDat
   }
 }
 
-/** 数组组件选项容器：select/checkbox/multiSelect → rule.options；树/穿梭 → props.data；级联 → props.options */
+/** 扁平选项组件的选项容器：select/checkbox/multiSelect → rule.options。
+ * 树形结构组件（tree/elTreeSelect/cascader）返回 null——根级注入孤立节点会污染树结构，
+ * 导致组件匹配/选中节点错乱（回显显示全路径由 prepareTreeFullPath 处理）。 */
 function optionContainerOf(type: string, rule: RuleNode): unknown[] | null {
-  if (type === 'tree' || type === 'elTreeSelect' || type === 'elTransfer') {
-    if (!rule.props) rule.props = {}
-    if (!Array.isArray(rule.props.data)) rule.props.data = []
-    return rule.props.data
-  }
-  if (type === 'cascader') {
-    if (!rule.props) rule.props = {}
-    if (!Array.isArray(rule.props.options)) rule.props.options = []
-    return rule.props.options
-  }
+  if (type === 'tree' || type === 'elTreeSelect' || type === 'cascader') return null
   // select / checkbox / multiSelect / multiSelectPro
   if (!Array.isArray(rule.options)) rule.options = []
   return rule.options
@@ -275,16 +284,39 @@ function isSingleSelect(rule: RuleNode): boolean {
   return true
 }
 
+/** 递归为树节点添加 fullPath（前导 / 全路径，如 /总公司/武汉分公司） */
+function annotateFullPath(nodes: TreeNode[], parentPath: string): void {
+  for (const node of nodes) {
+    const label = node.label === undefined ? '' : String(node.label)
+    const fullPath = parentPath + '/' + label
+    node.fullPath = fullPath
+    if (Array.isArray(node.children)) annotateFullPath(node.children, fullPath)
+  }
+}
+
 /**
- * 回显规范化：树形/级联单选数组解包为单值（兼容存量路径数组取最后一段叶子），
- * 再注入 options 兜底（无匹配项时用 `<key>_text` 叶子 label）。表单渲染前调用，
- * 保证单选组件 v-model 为单值且 options 缺失时显示叶子 label 而非原始 value。
+ * 回显规范化：
+ * 1. 树形（tree/elTreeSelect）递归为树节点添加 fullPath 并将显示 label 字段指向 fullPath
+ *    （用户未自定义 label 字段时），输入框与下拉树显示全路径；
+ * 2. 树形/级联单选主列为数组时解包为单值（取最后一段叶子，兼容存量路径数组）；
+ * 3. 扁平选项组件（select/checkbox 等）options 无匹配时注入 `<key>_text` 叶子 label 兜底。
+ * 表单渲染前调用。
  */
 export function normalizeEchoData(rules: Array<Record<string, any>>, formData: Record<string, unknown>): void {
   if (!Array.isArray(rules) || !formData) return
   for (const rawRule of rules) {
     const rule = rawRule as RuleNode
     const type = rule.type as string | undefined
+    if (type === 'tree' || type === 'elTreeSelect') {
+      // 全路径显示预处理（单选/多选均生效）
+      if (Array.isArray(rule.props?.data)) {
+        annotateFullPath(rule.props.data as TreeNode[], '')
+        if (!rule.props) rule.props = {}
+        if (!rule.props.props) rule.props.props = {}
+        // 用户未自定义 label 字段时指向 fullPath（输入框显示选中节点全路径）
+        if (!rule.props.props.label) rule.props.props.label = 'fullPath'
+      }
+    }
     if (isPathComponent(type as string) && isSingleSelect(rule)) {
       const key = rule.field as string | undefined
       if (key && Array.isArray(formData[key])) {

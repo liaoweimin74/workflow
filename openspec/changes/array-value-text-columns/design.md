@@ -60,8 +60,7 @@
 
 ### 6. 回显
 - 主列 value 匹配渲染时已加载的 options（`resolveOptionRules` / 静态 options）。
-- **单选数组解包**：树形/级联单选主列为数组时解包为单值（取最后一段叶子，兼容存量路径数组）后赋给单选组件（`normalizeEchoData`，FormRenderer 回显接入）。
-- **树形显示全路径**：`normalizeEchoData` 递归为 tree/elTreeSelect 树节点注解 `fullPath`（前导 `/`），显示 label 字段指向 `fullPath`（用户未自定义时）——编辑框与下拉树显示全路径。
+- **单选数组解包 + 类型归一化**：树形/级联单选主列为数组时解包为单值（取最后一段叶子，兼容存量路径数组）；随后按树节点 value **类型归一化**（`findNodeValue` String 匹配 → 真实 value，字符串 `'7'` → 数字 `7`），保证 el-tree-select/el-cascader 按 nodeKey 匹配成功、输入框正常回显节点名称（`normalizeEchoData`，FormRenderer 回显接入）。单选判定仅依据 `multiple`（`showCheckbox` 仅为 UI 勾选）。
 - **兜底注入仅限扁平组件**：select/checkbox/multiSelect 等扁平选项组件 options 无匹配时注入 `{value, label: 叶子}`；**匹配判定为严格类型比较**（组件内匹配类型敏感，字符串 v-model `'7'` 与数据源数字 id `7` 视为不匹配 → 注入字符串 value 兜底项显示 label）；树形结构组件（tree/elTreeSelect/cascader）**不注入**——根级孤立节点会污染树结构，导致组件匹配/选中节点错乱。
 
 ## Risks / Trade-offs

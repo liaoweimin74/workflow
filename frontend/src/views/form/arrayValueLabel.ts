@@ -18,7 +18,6 @@ interface TreeNode {
   label?: unknown
   value?: unknown
   children?: TreeNode[]
-  fullPath?: string
 }
 
 interface RuleNode {
@@ -276,53 +275,63 @@ function leafLabelsOf(text: unknown, values: unknown[]): (string | undefined)[] 
   })
 }
 
-/** 树形/级联是否单选（无 multiple / showCheckbox 配置） */
+/** 树形/级联是否单选（值形态由 multiple 决定；showCheckbox 只是 UI 勾选，不改变单/多选值形态） */
 function isSingleSelect(rule: RuleNode): boolean {
   const props = rule.props as Record<string, any> | undefined
-  if (props?.multiple || props?.showCheckbox) return false
+  if (props?.multiple) return false
   const inner = props?.props as Record<string, any> | undefined
   if (inner?.multiple) return false
   return true
 }
 
-/** 递归为树节点添加 fullPath（前导 / 全路径，如 /总公司/武汉分公司） */
-function annotateFullPath(nodes: TreeNode[], parentPath: string): void {
-  for (const node of nodes) {
-    const label = node.label === undefined ? '' : String(node.label)
-    const fullPath = parentPath + '/' + label
-    node.fullPath = fullPath
-    if (Array.isArray(node.children)) annotateFullPath(node.children, fullPath)
+/** 树中 String 匹配 value 的节点真实 value（修复数字/字符串类型不匹配，如字符串 '7' 与数字 7；
+ * 未找到返回 undefined） */
+function findNodeValue(tree: TreeNode[] | undefined, value: unknown): unknown {
+  if (!Array.isArray(tree)) return undefined
+  for (const node of tree) {
+    if (node.value === value) return node.value
+    if (node.value !== undefined && String(node.value) === String(value)) return node.value
+    if (Array.isArray(node.children)) {
+      const r = findNodeValue(node.children, value)
+      if (r !== undefined) return r
+    }
   }
+  return undefined
 }
 
 /**
  * 回显规范化：
- * 1. 树形（tree/elTreeSelect）递归为树节点添加 fullPath 并将显示 label 字段指向 fullPath
- *    （用户未自定义 label 字段时），输入框与下拉树显示全路径；
- * 2. 树形/级联单选主列为数组时解包为单值（取最后一段叶子，兼容存量路径数组）；
- * 3. 扁平选项组件（select/checkbox 等）options 无匹配时注入 `<key>_text` 叶子 label 兜底。
- * 表单渲染前调用。
+ * 1. 树形（tree/elTreeSelect）与级联（cascader）单选主列为数组时解包为单值
+ *    （取最后一段叶子，兼容存量路径数组），并做**类型归一化**——v-model 与树节点 value
+ *    类型一致（字符串 '7' → 数字 7），保证 el-tree-select/el-cascader 按 nodeKey 匹配成功、
+ *    输入框正常回显节点名称；多选对数组元素做同样归一化。
+ * 2. 扁平选项组件（select/checkbox 等）options 无匹配时注入 `<key>_text` 叶子 label 兜底。
+ * 表单渲染前调用。树形结构组件不做节点注入（根级孤立节点污染树结构）。
  */
 export function normalizeEchoData(rules: Array<Record<string, any>>, formData: Record<string, unknown>): void {
   if (!Array.isArray(rules) || !formData) return
   for (const rawRule of rules) {
     const rule = rawRule as RuleNode
     const type = rule.type as string | undefined
-    if (type === 'tree' || type === 'elTreeSelect') {
-      // 全路径显示预处理（单选/多选均生效）
-      if (Array.isArray(rule.props?.data)) {
-        annotateFullPath(rule.props.data as TreeNode[], '')
-        if (!rule.props) rule.props = {}
-        if (!rule.props.props) rule.props.props = {}
-        // 用户未自定义 label 字段时指向 fullPath（输入框显示选中节点全路径）
-        if (!rule.props.props.label) rule.props.props.label = 'fullPath'
-      }
-    }
-    if (isPathComponent(type as string) && isSingleSelect(rule)) {
+    if (isPathComponent(type as string)) {
       const key = rule.field as string | undefined
-      if (key && Array.isArray(formData[key])) {
-        const arr = formData[key] as unknown[]
-        formData[key] = arr.length > 0 ? arr[arr.length - 1] : ''
+      if (key && formData[key] !== undefined && formData[key] !== null) {
+        const tree = (type === 'cascader' ? rule.props?.options : rule.props?.data) as TreeNode[] | undefined
+        if (isSingleSelect(rule)) {
+          let v: unknown = formData[key]
+          if (Array.isArray(v)) {
+            const arr = v as unknown[]
+            v = arr.length > 0 ? arr[arr.length - 1] : ''
+          }
+          const real = findNodeValue(tree, v)
+          if (real !== undefined) v = real
+          formData[key] = v
+        } else if (Array.isArray(formData[key])) {
+          formData[key] = (formData[key] as unknown[]).map((v) => {
+            const real = findNodeValue(tree, v)
+            return real !== undefined ? real : v
+          })
+        }
       }
     }
     if (Array.isArray(rule.children)) normalizeEchoData(rule.children as unknown as Array<Record<string, any>>, formData)

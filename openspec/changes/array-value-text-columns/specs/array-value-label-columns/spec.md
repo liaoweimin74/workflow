@@ -111,9 +111,9 @@
 
 ### Requirement: 表单回显走主列值
 
-表单回显 SHALL 用主列 value 匹配渲染时已加载的选项（`resolveOptionRules` 或静态选项）。树形/级联**单选**主列为数组时 SHALL 解包为单值（取最后一段叶子，兼容存量路径数组）后赋给单选组件。
+表单回显 SHALL 用主列 value 匹配渲染时已加载的选项（`resolveOptionRules` 或静态选项）。树形/级联**单选**主列为数组时 SHALL 解包为单值（取最后一段叶子，兼容存量路径数组），并做**类型归一化**（v-model 与树节点 value 类型一致，字符串 `'7'` → 数字 `7`），保证 el-tree-select/el-cascader 按 nodeKey 匹配成功、输入框正常回显节点名称。
 
-树形（tree/elTreeSelect）回显 SHALL 显示全路径：递归为树节点注解 `fullPath`（前导 `/`），显示 label 字段指向 `fullPath`（用户未自定义 label 字段时）。
+树形/级联单选判定 SHALL 仅依据 `multiple`（`showCheckbox` 仅为 UI 勾选，不改变值形态）。
 
 兜底注入 SHALL 仅适用于扁平选项组件（select/checkbox/multiSelect 等）；树形结构组件（tree/elTreeSelect/cascader）SHALL NOT 注入兜底节点（根级孤立节点会污染树结构，导致组件选中节点错乱）。
 
@@ -125,9 +125,9 @@
 - **WHEN** 表单打开且级联单选主列值为 `["leaf-a"]`（或存量路径数组 `["p","c","leaf-a"]`）
 - **THEN** 解包为单值 `leaf-a` 赋给单选组件
 
-#### Scenario: 树形回显显示全路径
-- **WHEN** 表单打开且树形单选值为 `2`（树 `总公司→武汉分公司`）
-- **THEN** 编辑框显示 `/总公司/武汉分公司`（fullPath），下拉树节点文本亦为全路径
+#### Scenario: 树形单选类型归一化回显
+- **WHEN** 树形选择器单选主列为字符串 `'7'`，树节点 value 为数字 `7`（数据源 id）
+- **THEN** v-model 归一化为数字 `7`，el-tree-select 按 nodeKey 匹配成功，输入框显示节点名称
 
 #### Scenario: 扁平组件 options 无匹配回显兜底
 - **WHEN** 表单回显且扁平选项组件（select/checkbox）options 中找不到主列 value 的匹配项，但提交数据含 `<key>_text`

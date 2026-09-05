@@ -304,7 +304,7 @@ describe('normalizeEchoData — 回显规范化（单选数组解包 + 注入叶
     expect(data.region).toBe('leaf')
   })
 
-  it('elTreeSelect 单选：数组解包（不注入兜底）并预处理 fullPath 显示全路径', () => {
+  it('elTreeSelect 单选：数组解包，不注入兜底、不加 fullPath、不改 label 字段', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: {
         data: [
@@ -318,24 +318,37 @@ describe('normalizeEchoData — 回显规范化（单选数组解包 + 注入叶
     // 不污染树结构（不注入兜底节点）
     expect(rules[0].props.data).toHaveLength(1)
     expect(rules[0].props.data[0].children).toHaveLength(1)
-    // 递归添加 fullPath（带前导 /）
-    expect(rules[0].props.data[0].fullPath).toBe('/总公司')
-    expect(rules[0].props.data[0].children[0].fullPath).toBe('/总公司/武汉分公司')
-    // label 显示字段指向 fullPath（用户未自定义时）
-    expect(rules[0].props.props).toMatchObject({ label: 'fullPath' })
+    // 不加 fullPath 注解、不改显示 label 字段（下拉保持节点名称）
+    expect(rules[0].props.data[0].fullPath).toBeUndefined()
+    expect(rules[0].props.data[0].children[0].fullPath).toBeUndefined()
+    expect(rules[0].props.props).toBeUndefined()
   })
 
-  it('elTreeSelect 用户已自定义 label 字段时不覆盖', () => {
+  it('elTreeSelect 单选：数字 nodeKey 与字符串 v-model 类型归一化（input 正常回显）', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: {
-        props: { label: 'name' },
-        data: [{ label: '总公司', value: '1' }],
+        data: [
+          { label: '总公司', value: 1, children: [{ label: '武汉分公司', value: 7 }] },
+        ],
       },
     } as any]
-    normalizeEchoData(rules, { org: '1' })
-    expect(rules[0].props.props).toMatchObject({ label: 'name' })
-    // fullPath 仍会添加（对显示无害）
-    expect(rules[0].props.data[0].fullPath).toBe('/总公司')
+    const data = { org: '7', org_text: '/总公司/武汉分公司' }
+    normalizeEchoData(rules, data)
+    // v-model 归一化为树节点真实 value（数字 7）→ el-tree-select 按 nodeKey 匹配成功显示节点名称
+    expect(data.org).toBe(7)
+  })
+
+  it('elTreeSelect 单选 + showCheckbox（UI 勾选非多选）：仍按单选归一化', () => {
+    const rules = [{
+      type: 'elTreeSelect', field: 'org', props: {
+        showCheckbox: true,
+        data: [{ label: '武汉分公司', value: 7 }],
+      },
+    } as any]
+    const data = { org: '7', org_text: '/总公司/武汉分公司' }
+    normalizeEchoData(rules, data)
+    // showCheckbox 只是 UI 勾选，值形态仍单选 → 类型归一化生效
+    expect(data.org).toBe(7)
   })
 
   it('多选：不解包（不注入兜底）', () => {
@@ -348,6 +361,18 @@ describe('normalizeEchoData — 回显规范化（单选数组解包 + 注入叶
     expect(rules[0].props.data).toHaveLength(0)
   })
 
+  it('树形多选：数组元素类型归一化', () => {
+    const rules = [{
+      type: 'elTreeSelect', field: 'org', props: {
+        multiple: true,
+        data: [{ label: '武汉分公司', value: 7 }, { label: '北京分公司', value: 8 }],
+      },
+    } as any]
+    const data = { org: ['7', '8'], org_text: '/总公司/武汉分公司,/总公司/北京分公司' }
+    normalizeEchoData(rules, data)
+    expect(data.org).toEqual([7, 8])
+  })
+
   it('options 已有匹配时数据不变（无注入无重复）', () => {
     const rules = [{
       type: 'elTreeSelect', field: 'org', props: {
@@ -356,7 +381,7 @@ describe('normalizeEchoData — 回显规范化（单选数组解包 + 注入叶
     } as any]
     const data = { org: '2', org_text: '/总公司/武汉分公司' }
     normalizeEchoData(rules, data)
-    expect(rules[0].props.data).toEqual([{ label: '武汉分公司', value: '2', fullPath: '/武汉分公司' }])
+    expect(rules[0].props.data).toEqual([{ label: '武汉分公司', value: '2' }])
   })
 
   it('多选 options 缺失（纯回退）保留已有 _text（修分隔符误判覆盖 bug）', () => {

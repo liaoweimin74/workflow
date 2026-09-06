@@ -1,6 +1,7 @@
 package com.workflow.engine.form.bizdata;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
 import com.workflow.common.exception.BusinessException;
@@ -227,5 +228,115 @@ class BizDataHandlerTest {
                 .hasMessageContaining("更新被拒绝");
 
         verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
+
+    // ==================== 覆盖声明（override declaration） ====================
+
+    @Test
+    void handlerOverridingQuery_takesOverQuery() {
+        BizDataHandler overriding = mock(BizDataHandler.class);
+        when(overriding.getFormKey()).thenReturn("emp_profile");
+        when(overriding.overridesQuery()).thenReturn(true);
+        BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 1, 20);
+        when(overriding.query(any())).thenReturn(expected);
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(overriding));
+
+        BizDataPageVO result = bizDataService.query("emp_profile", new BizDataQueryRequest());
+
+        assertThat(result).isSameAs(expected);
+        verify(overriding).query(any());
+        // 覆盖接管时不做通用实现的表上下文加载
+        verify(tableManager, never()).tableExists(anyString());
+    }
+
+    @Test
+    void handlerOverridingCreate_takesOverCreate() {
+        BizDataHandler overriding = mock(BizDataHandler.class);
+        when(overriding.getFormKey()).thenReturn("emp_profile");
+        when(overriding.overridesCreate()).thenReturn(true);
+        BizDataVO expected = new BizDataVO("e1", Map.of("name", "张三"), 1, null, null);
+        when(overriding.create(any())).thenReturn(expected);
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(overriding));
+
+        BizDataVO result = bizDataService.create("emp_profile", Map.of("name", "张三"));
+
+        assertThat(result).isSameAs(expected);
+        verify(overriding).create(any());
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void handlerOverridingUpdate_takesOverUpdate_skipsDecorators() {
+        BizDataHandler overriding = mock(BizDataHandler.class);
+        when(overriding.getFormKey()).thenReturn("leave_bill");
+        when(overriding.overridesUpdate()).thenReturn(true);
+        BizDataVO expected = new BizDataVO("row-1", Map.of("days", 5), 2, null, null);
+        when(overriding.update(anyString(), any(), any())).thenReturn(expected);
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(handler, overriding));
+
+        BizDataVO result = bizDataService.update("leave_bill", "row-1", Map.of("days", 5), 1);
+
+        assertThat(result).isSameAs(expected);
+        verify(overriding).update(eq("row-1"), any(), eq(1));
+        // 覆盖接管时装饰钩子链不执行
+        assertThat(handler.beforeUpdate.get()).isZero();
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void handlerOverridingDelete_takesOverDelete() {
+        BizDataHandler overriding = mock(BizDataHandler.class);
+        when(overriding.getFormKey()).thenReturn("leave_bill");
+        when(overriding.overridesDelete()).thenReturn(true);
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(handler, overriding));
+
+        bizDataService.delete("leave_bill", "row-1");
+
+        verify(overriding).delete("row-1");
+        // 覆盖接管时装饰钩子链不执行
+        assertThat(handler.beforeDelete.get()).isZero();
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void duplicateOverrideDeclaration_failsStartup() {
+        BizDataHandler a = mock(BizDataHandler.class);
+        when(a.getFormKey()).thenReturn("emp_profile");
+        when(a.overridesQuery()).thenReturn(true);
+        BizDataHandler b = mock(BizDataHandler.class);
+        when(b.getFormKey()).thenReturn("emp_profile");
+        when(b.overridesQuery()).thenReturn(true);
+
+        assertThatThrownBy(() -> new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(a, b)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("duplicate override declaration: emp_profile.query");
+    }
+
+    @Test
+    void overridingQueryOnly_updateStillGeneric() {
+        BizDataHandler overriding = mock(BizDataHandler.class);
+        when(overriding.getFormKey()).thenReturn("leave_bill");
+        when(overriding.overridesQuery()).thenReturn(true);
+        BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 1, 20);
+        when(overriding.query(any())).thenReturn(expected);
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(handler, overriding));
+
+        // update 未声明覆盖 → 继续走通用实现
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "row-1", "tenant_id", TENANT_ID, "days", 3, "version", 2)));
+
+        bizDataService.update("leave_bill", "row-1", Map.of("days", 5), 1);
+
+        assertThat(handler.beforeUpdate.get()).isEqualTo(1);
+        verify(overriding, never()).update(anyString(), any(), any());
+        // 同 service 的 query 仍被覆盖接管
+        assertThat(bizDataService.query("leave_bill", new BizDataQueryRequest())).isSameAs(expected);
     }
 }

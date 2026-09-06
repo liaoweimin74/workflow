@@ -48,6 +48,8 @@ public class BizDataService {
     private final ObjectMapper objectMapper;
     /** formKey → 钩子列表（按 Spring 注入顺序） */
     private final Map<String, List<BizDataHandler>> handlerIndex;
+    /** formKey+操作 → 覆盖 handler（覆盖声明为 true 时的短路径接管，不执行通用实现） */
+    private final Map<String, BizDataHandler> coveringIndex;
 
     /**
      * @param handlers Spring 自动注入所有 BizDataHandler bean（无则空列表）
@@ -64,6 +66,7 @@ public class BizDataService {
         this.tenantProvider = tenantProvider;
         this.objectMapper = objectMapper;
         this.handlerIndex = buildHandlerIndex(handlers);
+        this.coveringIndex = buildCoveringIndex(handlers);
     }
 
     private static Map<String, List<BizDataHandler>> buildHandlerIndex(List<BizDataHandler> handlers) {
@@ -80,6 +83,43 @@ public class BizDataService {
         return index;
     }
 
+    /** 覆盖索引的可覆盖操作集合 */
+    private static final Set<String> OVERRIDE_OPS = Set.of("create", "update", "delete", "query");
+
+    /**
+     * 构建覆盖索引（key = formKey + "." + 操作 → handler）。
+     * 同一 (formKey, op) 出现 2 个及以上有效覆盖声明时抛 IllegalStateException（启动 fail-fast）。
+     */
+    private static Map<String, BizDataHandler> buildCoveringIndex(List<BizDataHandler> handlers) {
+        Map<String, BizDataHandler> index = new HashMap<>();
+        if (handlers == null) {
+            return index;
+        }
+        for (BizDataHandler handler : handlers) {
+            String formKey = handler.getFormKey();
+            for (String op : OVERRIDE_OPS) {
+                if (!isOverriding(handler, op)) {
+                    continue;
+                }
+                BizDataHandler previous = index.putIfAbsent(formKey + "." + op, handler);
+                if (previous != null) {
+                    throw new IllegalStateException("duplicate override declaration: " + formKey + "." + op);
+                }
+            }
+        }
+        return index;
+    }
+
+    private static boolean isOverriding(BizDataHandler handler, String op) {
+        return switch (op) {
+            case "create" -> handler.overridesCreate();
+            case "update" -> handler.overridesUpdate();
+            case "delete" -> handler.overridesDelete();
+            case "query" -> handler.overridesQuery();
+            default -> false;
+        };
+    }
+
     /** 获取 formKey 对应的钩子列表（无则空） */
     private List<BizDataHandler> handlersOf(String formKey) {
         return handlerIndex.getOrDefault(formKey, List.of());
@@ -90,6 +130,10 @@ public class BizDataService {
      */
     @Transactional
     public BizDataVO create(String formKey, Map<String, Object> data) {
+        BizDataHandler covering = coveringIndex.get(formKey + ".create");
+        if (covering != null) {
+            return covering.create(data);
+        }
         String tenantId = tenantProvider.getTenantId();
         BizDataContext ctx = loadContext(formKey);
 
@@ -128,6 +172,10 @@ public class BizDataService {
      * 分页查询业务数据。
      */
     public BizDataPageVO query(String formKey, BizDataQueryRequest req) {
+        BizDataHandler covering = coveringIndex.get(formKey + ".query");
+        if (covering != null) {
+            return covering.query(req);
+        }
         String tenantId = tenantProvider.getTenantId();
         BizDataContext ctx = loadContext(formKey);
 
@@ -189,6 +237,10 @@ public class BizDataService {
      */
     @Transactional
     public BizDataVO update(String formKey, String id, Map<String, Object> data, Integer version) {
+        BizDataHandler covering = coveringIndex.get(formKey + ".update");
+        if (covering != null) {
+            return covering.update(id, data, version);
+        }
         String tenantId = tenantProvider.getTenantId();
         BizDataContext ctx = loadContext(formKey);
 
@@ -233,6 +285,11 @@ public class BizDataService {
      */
     @Transactional
     public void delete(String formKey, String id) {
+        BizDataHandler covering = coveringIndex.get(formKey + ".delete");
+        if (covering != null) {
+            covering.delete(id);
+            return;
+        }
         String tenantId = tenantProvider.getTenantId();
         BizDataContext ctx = loadContext(formKey);
 

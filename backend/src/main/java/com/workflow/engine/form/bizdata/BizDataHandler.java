@@ -1,5 +1,7 @@
 package com.workflow.engine.form.bizdata;
 
+import com.workflow.api.dto.BizDataPageVO;
+import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
 
 import java.util.Map;
@@ -49,4 +51,70 @@ public interface BizDataHandler {
      * 删除前的业务校验。抛 BusinessException 拒绝删除。
      */
     default void beforeDelete(BizDataVO existing) {}
+
+    // ==================== 覆盖声明（override declaration） ====================
+
+    /**
+     * 是否覆盖新增操作。返回 true 时 {@link #create(Map)} 完整接管新增，
+     * 通用实现与装饰钩子链不再执行。
+     */
+    default boolean overridesCreate() { return false; }
+
+    /**
+     * 是否覆盖更新操作。返回 true 时 {@link #update(String, Map, Integer)} 完整接管更新，
+     * 通用实现与装饰钩子链不再执行。
+     */
+    default boolean overridesUpdate() { return false; }
+
+    /**
+     * 是否覆盖删除操作。返回 true 时 {@link #delete(String)} 完整接管删除，
+     * 通用实现与装饰钩子链不再执行。
+     */
+    default boolean overridesDelete() { return false; }
+
+    /**
+     * 是否覆盖查询操作。返回 true 时 {@link #query(BizDataQueryRequest)} 完整接管查询，
+     * 通用实现不再执行。
+     */
+    default boolean overridesQuery() { return false; }
+
+    /**
+     * 覆盖新增。仅当 {@link #overridesCreate()} 返回 true 时被调用；
+     * 签名不含 formKey（handler 绑定即专属）。
+     *
+     * @return 新增后的业务数据行
+     */
+    default BizDataVO create(Map<String, Object> data) {
+        throw unsupportedOverride();
+    }
+
+    /**
+     * 覆盖更新（乐观锁：须携带当前 version）。
+     * 仅当 {@link #overridesUpdate()} 返回 true 时被调用。
+     *
+     * @return 更新后的业务数据行
+     */
+    default BizDataVO update(String id, Map<String, Object> data, Integer version) {
+        throw unsupportedOverride();
+    }
+
+    /**
+     * 覆盖删除。仅当 {@link #overridesDelete()} 返回 true 时被调用。
+     */
+    default void delete(String id) {
+        throw unsupportedOverride();
+    }
+
+    /**
+     * 覆盖查询。仅当 {@link #overridesQuery()} 返回 true 时被调用。
+     *
+     * @return 分页查询结果
+     */
+    default BizDataPageVO query(BizDataQueryRequest req) {
+        throw unsupportedOverride();
+    }
+
+    private UnsupportedOperationException unsupportedOverride() {
+        return new UnsupportedOperationException("handler overrides but does not implement: " + getFormKey());
+    }
 }

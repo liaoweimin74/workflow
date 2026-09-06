@@ -156,6 +156,8 @@ public class BizDataService {
         if (covering != null) {
             return covering.update(id, data, version);
         }
+        // 守卫检查（覆盖接管路径不自动执行，覆盖实现自行负责）
+        guards.stream().filter(g -> g.appliesTo(formKey)).forEach(g -> g.checkBeforeUpdate(formKey, id));
         BizDataContext ctx = support.loadContext(formKey);
         BizDataVO existing = support.findById(ctx.tableName(), tenantProvider.getTenantId(), ctx, id);
         for (BizDataHandler handler : handlersOf(formKey)) {
@@ -175,6 +177,8 @@ public class BizDataService {
             covering.delete(id);
             return;
         }
+        // 守卫检查（覆盖接管路径不自动执行，覆盖实现自行负责）
+        guards.stream().filter(g -> g.appliesTo(formKey)).forEach(g -> g.checkBeforeDelete(formKey, id));
         BizDataContext ctx = support.loadContext(formKey);
         BizDataVO existing = support.findById(ctx.tableName(), tenantProvider.getTenantId(), ctx, id);
         for (BizDataHandler handler : handlersOf(formKey)) {

@@ -365,4 +365,75 @@ class BizDataHandlerTest {
         assertThat(result.getId()).isEqualTo("row-1");
         verify(jdbcTemplate).update(anyString(), any(Object[].class));
     }
+
+    // ==================== 守卫接线（guard wiring） ====================
+
+    @Test
+    void update_activeGuard_runsCheckBeforeUpdateAndRejects409() {
+        FormProcessGuard guard = mock(FormProcessGuard.class);
+        when(guard.appliesTo("leave_bill")).thenReturn(true);
+        doThrow(new BusinessException(409, "该数据存在运行中的流程实例，禁止修改"))
+                .when(guard).checkBeforeUpdate("leave_bill", "row-1");
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(), List.of(guard));
+
+        assertThatThrownBy(() -> bizDataService.update("leave_bill", "row-1", Map.of("days", 5), 1))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getCode())
+                .isEqualTo(409);
+        verify(guard).checkBeforeUpdate("leave_bill", "row-1");
+        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test
+    void update_inactiveGuard_notInvoked() {
+        FormProcessGuard guard = mock(FormProcessGuard.class);
+        when(guard.appliesTo("leave_bill")).thenReturn(false);
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(handler), List.of(guard));
+
+        when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of("id", "row-1", "tenant_id", TENANT_ID, "days", 3, "version", 2)));
+
+        bizDataService.update("leave_bill", "row-1", Map.of("days", 5), 1);
+
+        verify(guard, never()).checkBeforeUpdate(anyString(), anyString());
+        assertThat(handler.beforeUpdate.get()).isEqualTo(1);
+    }
+
+    @Test
+    void delete_activeGuard_runsCheckBeforeDeleteAndRejects409() {
+        FormProcessGuard guard = mock(FormProcessGuard.class);
+        when(guard.appliesTo("leave_bill")).thenReturn(true);
+        doThrow(new BusinessException(409, "该数据存在关联流程实例，禁止删除"))
+                .when(guard).checkBeforeDelete("leave_bill", "row-1");
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(), List.of(guard));
+
+        assertThatThrownBy(() -> bizDataService.delete("leave_bill", "row-1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getCode())
+                .isEqualTo(409);
+        verify(guard).checkBeforeDelete("leave_bill", "row-1");
+    }
+
+    @Test
+    void coveringUpdate_skipsGuard() {
+        BizDataHandler overriding = mock(BizDataHandler.class);
+        when(overriding.getFormKey()).thenReturn("leave_bill");
+        when(overriding.overridesUpdate()).thenReturn(true);
+        BizDataVO expected = new BizDataVO("row-2", Map.of(), 1, null, null);
+        when(overriding.update(anyString(), any(), any())).thenReturn(expected);
+        FormProcessGuard guard = mock(FormProcessGuard.class);
+        // 覆盖接管路径不跑守卫 → appliesTo 不会被调用（lenient 避免 strict stubbing 报错）
+        lenient().when(guard.appliesTo("leave_bill")).thenReturn(true);
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(overriding), List.of(guard));
+
+        BizDataVO result = bizDataService.update("leave_bill", "row-1", Map.of("days", 5), 1);
+
+        assertThat(result).isSameAs(expected);
+        verify(guard, never()).checkBeforeUpdate(anyString(), anyString());
+    }
 }

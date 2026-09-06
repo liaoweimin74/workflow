@@ -70,6 +70,8 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 
 系统 SHALL 使用参数化 SQL（PreparedStatement）执行插入，禁止拼接用户输入。
 
+当 formKey 存在声明覆盖 create 的 handler 时，系统 SHALL 将该操作交接给 handler 的 create 方法，其返回值直接作为接口响应；handler 未覆盖 create 时，系统 SHALL 照常执行通用新增（含装饰钩子链）。
+
 #### Scenario: 新增业务数据
 
 - **WHEN** 用户调用 POST /api/v1/biz-data/{formKey}
@@ -97,6 +99,13 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 - **AND** formKey 对应的业务表单不存在或未发布
 - **THEN** 系统返回 404 错误
 
+#### Scenario: 覆盖 create 的 handler 接管新增
+
+- **WHEN** formKey 存在声明 overridesCreate() 的 handler
+- **AND** 用户调用 POST /api/v1/biz-data/{formKey}
+- **THEN** 系统调用该 handler 的 create 方法
+- **AND** 返回该方法的返回值
+
 ---
 
 ### Requirement: 业务数据查询
@@ -110,6 +119,8 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 所有查询 SHALL 强制按当前租户 tenant_id 过滤。
 
 系统 SHALL 提供单条详情接口：`GET /api/v1/biz-data/{formKey}/{id}`，记录不存在 SHALL 返回 404。
+
+当 formKey 存在声明覆盖 query 的 handler 时，系统 SHALL 将该查询交接给 handler 的 query 方法，其返回值（分页结构）直接作为接口响应。
 
 #### Scenario: 分页查询业务数据
 
@@ -141,6 +152,13 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 - **AND** 记录不存在或不属于当前租户
 - **THEN** 系统返回 404 错误
 
+#### Scenario: 覆盖 query 的 handler 接管查询
+
+- **WHEN** formKey 存在声明 overridesQuery() 的 handler
+- **AND** 用户调用 GET /api/v1/biz-data/{formKey}
+- **THEN** 系统调用该 handler 的 query 方法
+- **AND** 返回该方法的返回值（分页结构）
+
 ---
 
 ### Requirement: 业务数据更新
@@ -152,6 +170,10 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 更新 SHALL 应用与新增相同的字段校验（未知字段、必填字段、唯一字段冲突）。
 
 更新 SHALL 强制限定当前租户范围，跨租户访问 SHALL 返回 404。
+
+当 formKey 绑定了流程（processKey 非空）时，更新 SHALL 先执行状态守卫检查；记录关联的流程实例运行中 SHALL 返回 409 拒绝更新。
+
+当 formKey 存在声明覆盖 update 的 handler 时，系统 SHALL 将该更新交接给 handler 的 update 方法；覆盖实现 SHALL 自行负责所需守卫检查与校验。
 
 #### Scenario: 更新业务数据
 
@@ -175,6 +197,20 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 - **THEN** 系统返回 409 错误
 - **AND** 不更新记录
 
+#### Scenario: 更新运行中流程的记录被拒
+
+- **WHEN** 用户调用 PUT /api/v1/biz-data/{formKey}/{id}
+- **AND** formKey 绑定了流程且该记录关联的流程实例运行中
+- **THEN** 系统返回 409 错误
+- **AND** 记录不被更新
+
+#### Scenario: 覆盖 update 的 handler 接管更新
+
+- **WHEN** formKey 存在声明 overridesUpdate() 的 handler
+- **AND** 用户调用 PUT /api/v1/biz-data/{formKey}/{id}
+- **THEN** 系统调用该 handler 的 update 方法
+- **AND** 返回该方法的返回值
+
 ---
 
 ### Requirement: 业务数据删除
@@ -184,6 +220,10 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 删除 SHALL 强制限定当前租户范围，跨租户访问 SHALL 返回 404。
 
 删除后的记录 SHALL 从列表中消失。
+
+当 formKey 绑定了流程（processKey 非空）时，删除 SHALL 先执行状态守卫检查；记录存在任何流程实例（运行中或已结束）SHALL 返回 409 拒绝删除。
+
+当 formKey 存在声明覆盖 delete 的 handler 时，系统 SHALL 将该删除交接给 handler 的 delete 方法；覆盖实现 SHALL 自行负责所需守卫检查。
 
 #### Scenario: 删除业务数据
 
@@ -198,4 +238,17 @@ TBD - created by archiving change business-form-table. Update Purpose after arch
 - **AND** 记录不属于当前租户
 - **THEN** 系统返回 404 错误
 - **AND** 不删除记录
+
+#### Scenario: 删除已发起流程的记录被拒
+
+- **WHEN** 用户调用 DELETE /api/v1/biz-data/{formKey}/{id}
+- **AND** formKey 绑定了流程且该记录存在流程实例（运行中或已结束）
+- **THEN** 系统返回 409 错误
+- **AND** 记录不被删除
+
+#### Scenario: 覆盖 delete 的 handler 接管删除
+
+- **WHEN** formKey 存在声明 overridesDelete() 的 handler
+- **AND** 用户调用 DELETE /api/v1/biz-data/{formKey}/{id}
+- **THEN** 系统调用该 handler 的 delete 方法
 

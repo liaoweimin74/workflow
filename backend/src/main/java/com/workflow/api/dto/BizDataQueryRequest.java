@@ -20,6 +20,9 @@ public class BizDataQueryRequest {
     /** 排序方向（asc/desc，默认 desc） */
     private String order;
 
+    /** 运行时查询参数（JSON 字符串），sql 模式按 params 白名单绑定到 :paramName 占位符 */
+    private String params;
+
     /** 页码（从 1 开始） */
     private int page = 1;
 
@@ -40,6 +43,9 @@ public class BizDataQueryRequest {
 
     public String getOrder() { return order; }
     public void setOrder(String order) { this.order = order; }
+
+    public String getParams() { return params; }
+    public void setParams(String params) { this.params = params; }
 
     public int getPage() { return page; }
     public void setPage(int page) { this.page = page; }

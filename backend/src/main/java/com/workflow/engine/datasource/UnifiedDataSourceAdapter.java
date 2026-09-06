@@ -12,6 +12,8 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.bizdata.BizDataService;
+import com.workflow.engine.form.bizdata.FormQueryConfig;
+import com.workflow.engine.form.bizdata.JoinSqlGenerator.JoinConfig;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.logic.executor.HttpLogicExecutor;
 import com.workflow.engine.tenant.TenantProvider;
@@ -24,9 +26,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 统一数据源适配器：合并 FormDataSourceAdapter / SystemDataSourceAdapter / ApiDataSourceAdapter。
@@ -89,7 +94,13 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     public DataSourceMetadata metadata(DataSourceDefinition ds) {
         return switch (ds.getType()) {
             case "FORM" -> {
-                List<ColumnConfig> cols = formDefService.getBusinessColumnsByKey(ds.getFormKey());
+                List<ColumnConfig> cols = new ArrayList<>(formDefService.getBusinessColumnsByKey(ds.getFormKey()));
+                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+                if (cfg.isConfigMode()) {
+                    appendJoinColumns(cols, cfg.joins());
+                } else if (cfg.isSqlMode()) {
+                    appendDeclaredColumns(cols, cfg.columns());
+                }
                 SortableResolver.resolve(cols);
                 DataSourceMetadata m = new DataSourceMetadata(cols, true);
                 m.setFormKey(ds.getFormKey());
@@ -137,6 +148,13 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
         return switch (ds.getType()) {
             case "FORM" -> {
                 router.resolve(ds, "list");
+                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+                if (cfg.isConfigMode()) {
+                    yield bizDataService.queryJoin(ds.getFormKey(), req, cfg.joins());
+                }
+                if (cfg.isSqlMode()) {
+                    yield bizDataService.querySql(ds.getFormKey(), req, cfg);
+                }
                 yield bizDataService.query(ds.getFormKey(), req);
             }
             case "WORKFLOW" -> workflowQueryService.query(ds.getFormKey(), req);
@@ -208,7 +226,59 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     }
 
     // ===== FORM helpers =====
-    // (none extra — delegates directly to BizDataService)
+
+    /** 追加 config 模式 JOIN 虚拟列到 metadata；与主表列 key 重复的 virtualKey 跳过（防御性去重）。 */
+    private void appendJoinColumns(List<ColumnConfig> cols, List<JoinConfig> joins) {
+        Set<String> existing = cols.stream().map(ColumnConfig::getKey).collect(Collectors.toSet());
+        for (JoinConfig j : joins) {
+            if (j.virtualKey() == null || j.virtualKey().isBlank() || existing.contains(j.virtualKey())) {
+                continue;
+            }
+            ColumnConfig c = new ColumnConfig();
+            c.setKey(j.virtualKey());
+            c.setLabel(j.label() == null || j.label().isBlank() ? j.virtualKey() : j.label());
+            c.setColumnType(resolveJoinColumnType(j));
+            c.setSortable(j.sortable());
+            c.setFilterable(j.filterable());
+            cols.add(c);
+            existing.add(c.getKey());
+        }
+    }
+
+    /** 追加 sql 模式管理员声明列到 metadata；与主表列 key 重复的声明列跳过。 */
+    private void appendDeclaredColumns(List<ColumnConfig> cols, List<ColumnConfig> declared) {
+        Set<String> existing = cols.stream().map(ColumnConfig::getKey).collect(Collectors.toSet());
+        for (ColumnConfig d : declared) {
+            if (d.getKey() == null || d.getKey().isBlank() || existing.contains(d.getKey())) {
+                continue;
+            }
+            ColumnConfig c = new ColumnConfig();
+            c.setKey(d.getKey());
+            c.setLabel(d.getLabel() == null || d.getLabel().isBlank() ? d.getKey() : d.getLabel());
+            c.setColumnType(d.getColumnType());
+            c.setSortable(d.getSortable());
+            c.setFilterable(d.getFilterable());
+            cols.add(c);
+            existing.add(c.getKey());
+        }
+    }
+
+    /** 虚拟列 columnType：目标表单 joinField 的列类型；查不到 fallback "VARCHAR"。 */
+    private String resolveJoinColumnType(JoinConfig j) {
+        try {
+            List<ColumnConfig> target = formDefService.getBusinessColumnsByKey(j.targetFormKey());
+            if (target != null) {
+                for (ColumnConfig c : target) {
+                    if (j.joinField().equals(c.getKey()) && c.getColumnType() != null && !c.getColumnType().isBlank()) {
+                        return c.getColumnType().toUpperCase();
+                    }
+                }
+            }
+        } catch (BusinessException ignored) {
+            // 目标表单不可解析时回退
+        }
+        return "VARCHAR";
+    }
 
     // ===== SYSTEM helpers =====
 

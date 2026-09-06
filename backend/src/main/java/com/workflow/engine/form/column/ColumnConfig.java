@@ -50,6 +50,9 @@ public class ColumnConfig {
     /** 是否可排序（缺省 null=未推导，由 SortableResolver 填充；数据源 metadata 声明） */
     private Boolean sortable;
 
+    /** 是否可筛选（缺省 null=未推导；数据源 metadata 声明，join 虚拟列/管理员声明列显式填充） */
+    private Boolean filterable;
+
     /** 子表列映射（非空表示该 key 为子表字段，映射独立物理表 wf_biz_<formKey>_<key>） */
     private List<ColumnConfig> subColumns;
 
@@ -96,6 +99,9 @@ public class ColumnConfig {
 
     public Boolean getSortable() { return sortable; }
     public void setSortable(Boolean sortable) { this.sortable = sortable; }
+
+    public Boolean getFilterable() { return filterable; }
+    public void setFilterable(Boolean filterable) { this.filterable = filterable; }
 
     public List<ColumnConfig> getSubColumns() { return subColumns; }
     public void setSubColumns(List<ColumnConfig> subColumns) { this.subColumns = subColumns; }

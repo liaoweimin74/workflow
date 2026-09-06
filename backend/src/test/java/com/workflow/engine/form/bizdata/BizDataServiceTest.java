@@ -962,4 +962,142 @@ class BizDataServiceTest {
         Object[] params = captor.getValue();
         assertThat(params).contains("{\"addr\":\"北京市\"}");
     }
+
+    // ==================== queryJoin / querySql 门面（Task 4） ====================
+
+    @Test
+    void queryJoin_delegatesToSupport_returnsJoinedRow() {
+        ColumnConfig customerName = new ColumnConfig();
+        customerName.setKey("name");
+        customerName.setColumnType("VARCHAR");
+        when(formDefService.getBusinessColumnsByKey("customer")).thenReturn(List.of(customerName));
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "tenant_id", TENANT_ID,
+                        "name", "张三",
+                        "dept", "研发部",
+                        "customer_name", "王五",
+                        "version", 1,
+                        "created_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)),
+                        "updated_at", Timestamp.valueOf(LocalDateTime.of(2026, 8, 12, 10, 0)))));
+
+        List<JoinSqlGenerator.JoinConfig> joins = List.of(
+                new JoinSqlGenerator.JoinConfig("c", "customer", "customer_id", "id", "name",
+                        "customer_name", "客户名称", true, true));
+        BizDataQueryRequest req = new BizDataQueryRequest();
+
+        BizDataPageVO page = bizDataService.queryJoin("biz_leave", req, joins);
+
+        assertThat(page.getTotal()).isEqualTo(1);
+        assertThat(page.getRecords()).hasSize(1);
+        assertThat(page.getRecords().get(0).getData())
+                .containsEntry("name", "张三")
+                .containsEntry("customer_name", "王五");
+        verify(jdbcTemplate).queryForList(contains("c.name AS customer_name"), any(Object[].class));
+    }
+
+    @Test
+    void queryJoin_coveringHandler_shortCircuits() {
+        BizDataHandler covering = new BizDataHandler() {
+            @Override
+            public String getFormKey() {
+                return "biz_leave";
+            }
+
+            @Override
+            public boolean overridesQuery() {
+                return true;
+            }
+
+            @Override
+            public BizDataPageVO query(BizDataQueryRequest r) {
+                return new BizDataPageVO(List.of(), 99L, 1, 20);
+            }
+        };
+        BizDataService svc = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(covering), List.of());
+
+        BizDataPageVO page = svc.queryJoin("biz_leave", new BizDataQueryRequest(), List.of());
+
+        assertThat(page.getTotal()).isEqualTo(99);
+        verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void querySql_delegatesToSupport_bindsRuntimeParams() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(1L);
+        when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
+                .thenReturn(List.of(Map.of(
+                        "id", "row-1",
+                        "order_no", "NO-001",
+                        "customer_name", "王五",
+                        "amount", 88.5)));
+
+        FormQueryConfig cfg = FormQueryConfig.parse("""
+                {"queryMode":"sql","query":"SELECT order_no, customer_name, amount FROM orders_view WHERE tenant_id = :tenantId AND created_at >= :startTime",
+                 "columns":[{"key":"order_no","label":"订单号","columnType":"VARCHAR","sortable":true,"filterable":true},
+                            {"key":"customer_name","label":"客户名称","columnType":"VARCHAR","sortable":true,"filterable":true},
+                            {"key":"amount","columnType":"DECIMAL","sortable":true}],
+                 "params":["startTime"]}
+                """, new ObjectMapper());
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setParams("{\"startTime\":\"2026-01-01\"}");
+
+        BizDataPageVO page = bizDataService.querySql("biz_leave", req, cfg);
+
+        assertThat(page.getTotal()).isEqualTo(1);
+        assertThat(page.getRecords().get(0).getData()).containsEntry("order_no", "NO-001");
+        verify(jdbcTemplate).queryForList(contains("SELECT * FROM ("), any(Object[].class));
+    }
+
+    @Test
+    void querySql_invalidRuntimeParams_returns400() {
+        FormQueryConfig cfg = FormQueryConfig.parse("""
+                {"queryMode":"sql","query":"SELECT order_no, customer_name, amount FROM orders_view WHERE tenant_id = :tenantId AND created_at >= :startTime",
+                 "columns":[{"key":"order_no","label":"订单号","columnType":"VARCHAR","sortable":true,"filterable":true},
+                            {"key":"customer_name","label":"客户名称","columnType":"VARCHAR","sortable":true,"filterable":true},
+                            {"key":"amount","columnType":"DECIMAL","sortable":true}],
+                 "params":["startTime"]}
+                """, new ObjectMapper());
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setParams("not-json");
+
+        assertThatThrownBy(() -> bizDataService.querySql("biz_leave", req, cfg))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(((BusinessException) e).getCode()).isEqualTo(400));
+    }
+
+    @Test
+    void querySql_coveringHandler_shortCircuits() {
+        BizDataHandler covering = new BizDataHandler() {
+            @Override
+            public String getFormKey() {
+                return "biz_leave";
+            }
+
+            @Override
+            public boolean overridesQuery() {
+                return true;
+            }
+
+            @Override
+            public BizDataPageVO query(BizDataQueryRequest r) {
+                return new BizDataPageVO(List.of(), 88L, 1, 20);
+            }
+        };
+        BizDataService svc = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(covering), List.of());
+
+        FormQueryConfig cfg = FormQueryConfig.parse("""
+                {"queryMode":"sql","query":"SELECT order_no FROM orders_view WHERE tenant_id = :tenantId",
+                 "columns":[{"key":"order_no","columnType":"VARCHAR","sortable":true}],
+                 "params":[]}
+                """, new ObjectMapper());
+        BizDataPageVO page = svc.querySql("biz_leave", new BizDataQueryRequest(), cfg);
+
+        assertThat(page.getTotal()).isEqualTo(88);
+        verifyNoInteractions(jdbcTemplate);
+    }
 }

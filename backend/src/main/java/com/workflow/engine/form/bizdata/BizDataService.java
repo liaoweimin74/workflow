@@ -143,6 +143,32 @@ public class BizDataService {
     }
 
     /**
+     * 分页查询业务数据（config 模式：声明式 JOIN，含虚拟列）。
+     *
+     * @param joins 关联声明列表（由 FORM 数据源 params.queryMode=config 段解析）
+     */
+    public BizDataPageVO queryJoin(String formKey, BizDataQueryRequest req, List<JoinSqlGenerator.JoinConfig> joins) {
+        BizDataHandler covering = coveringIndex.get(formKey + ".query");
+        if (covering != null) {
+            return covering.query(req);
+        }
+        return support.queryJoinConfig(formKey, req, joins);
+    }
+
+    /**
+     * 分页查询业务数据（sql 模式：管理员 SQL 模板包裹，运行时参数白名单透传）。
+     *
+     * @param cfg FORM 数据源查询配置（queryMode=sql 段）
+     */
+    public BizDataPageVO querySql(String formKey, BizDataQueryRequest req, FormQueryConfig cfg) {
+        BizDataHandler covering = coveringIndex.get(formKey + ".query");
+        if (covering != null) {
+            return covering.query(req);
+        }
+        return support.querySqlTemplate(formKey, req, cfg);
+    }
+
+    /**
      * 查询单条业务数据。
      */
     public BizDataVO getById(String formKey, String id) {

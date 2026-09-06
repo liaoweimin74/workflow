@@ -48,6 +48,7 @@ public class BizDataSupport {
     private final FormDefinitionService formDefService;
     private final TenantProvider tenantProvider;
     private final ObjectMapper objectMapper;
+    private final SqlQueryEngine sqlQueryEngine;
 
     public BizDataSupport(JdbcTemplate jdbcTemplate,
                           DynamicTableManager tableManager,
@@ -59,6 +60,7 @@ public class BizDataSupport {
         this.formDefService = formDefService;
         this.tenantProvider = tenantProvider;
         this.objectMapper = objectMapper;
+        this.sqlQueryEngine = new SqlQueryEngine(jdbcTemplate);
     }
 
     // ==================== 复用面：上下文/校验/查询 ====================
@@ -261,19 +263,128 @@ public class BizDataSupport {
         try {
             BizDataQueryBuilder.SqlAndParams count = BizDataQueryBuilder.buildCount(
                     ctx.tableName(), ctx.columnKeys(), columnTypeOf, tenantId, filters, req.getKeyword(), req.getKeywordColumn());
-            Long total = jdbcTemplate.queryForObject(count.sql(), Long.class, count.params().toArray());
 
             BizDataQueryBuilder.SqlAndParams select = BizDataQueryBuilder.buildSelect(
                     ctx.tableName(), ctx.columnKeys(), columnTypeOf, tenantId, filters,
                     req.getKeyword(), req.getKeywordColumn(), req.getSort(), req.getOrder(), page - 1, size);
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(select.sql(), select.params().toArray());
 
-            List<BizDataVO> records = rows.stream()
-                    .map(row -> toVO(ctx, row))
-                    .toList();
-            return new BizDataPageVO(records, total == null ? 0 : total, page, size);
+            return sqlQueryEngine.execPage(page, size, count, select, row -> toVO(ctx, row));
         } catch (IllegalArgumentException e) {
             throw new BusinessException(400, e.getMessage());
+        }
+    }
+
+    /**
+     * config 模式分页查询实现（声明式 JOIN，含虚拟列）。
+     */
+    public BizDataPageVO queryJoinConfig(String formKey, BizDataQueryRequest req,
+                                         List<JoinSqlGenerator.JoinConfig> joins) {
+        String tenantId = tenantProvider.getTenantId();
+        BizDataContext ctx = loadContext(formKey);
+
+        List<JoinSqlGenerator.QueryColumn> columns = buildJoinColumns(ctx, joins);
+        Map<String, Object> filters = parseFilter(req.getFilter());
+        int page = Math.max(req.getPage(), 1);
+        // size <= 0 表示不分页取全部（buildSelect 跳过 LIMIT/OFFSET）；正数沿用原钳制上限
+        int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
+
+        try {
+            BizDataQueryBuilder.SqlAndParams count = JoinSqlGenerator.buildCount(
+                    ctx.tableName(), tenantId, joins, columns, filters, req.getKeyword(), req.getKeywordColumn());
+
+            BizDataQueryBuilder.SqlAndParams select = JoinSqlGenerator.buildSelect(
+                    ctx.tableName(), tenantId, joins, columns, filters,
+                    req.getKeyword(), req.getKeywordColumn(), req.getSort(), req.getOrder(), page - 1, size);
+
+            return sqlQueryEngine.execPage(page, size, count, select, row -> toJoinVO(ctx, joins, row));
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, e.getMessage());
+        }
+    }
+
+    /**
+     * sql 模式分页查询实现（管理员 SQL 模板包裹，运行时参数白名单透传）。
+     * <p>仅校验 formKey 合法性；不校验主表单物理表（管理员 SQL 独立定义，可跨表/聚合）。
+     */
+    public BizDataPageVO querySqlTemplate(String formKey, BizDataQueryRequest req, FormQueryConfig cfg) {
+        if (formKey == null || !FORM_KEY_PATTERN.matcher(formKey).matches()) {
+            throw new BusinessException(400, "非法表单 key: " + formKey);
+        }
+        String tenantId = tenantProvider.getTenantId();
+        List<JoinSqlGenerator.QueryColumn> columns = toQueryColumns(cfg.columns());
+        Map<String, Object> filters = parseFilter(req.getFilter());
+        Map<String, Object> runtimeParams = parseRuntimeParams(req.getParams());
+        int page = Math.max(req.getPage(), 1);
+        // size <= 0 表示不分页取全部；正数沿用原钳制上限
+        int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
+
+        try {
+            SqlQueryEngine.WrappedQuery wq = SqlTemplateEngine.wrap(
+                    cfg.query(), tenantId, columns, filters, req.getKeyword(), req.getKeywordColumn(),
+                    req.getSort(), req.getOrder(), page, size, cfg.declaredParams(), runtimeParams);
+            return sqlQueryEngine.execPage(page, size, wq.count(), wq.select(), this::toSqlVO);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, e.getMessage());
+        }
+    }
+
+    /** 构建查询列映射：主表列（ref="m."+key，默认全可排可筛）+ 虚拟列（ref=alias+"."+joinField，能力取 join 声明） */
+    private List<JoinSqlGenerator.QueryColumn> buildJoinColumns(BizDataContext ctx,
+                                                                List<JoinSqlGenerator.JoinConfig> joins) {
+        Map<String, String> typeOf = new HashMap<>();
+        for (ColumnConfig c : ctx.columns()) {
+            typeOf.put(c.getKey(), c.getColumnType() == null ? "" : c.getColumnType().toUpperCase());
+        }
+        List<JoinSqlGenerator.QueryColumn> columns = new ArrayList<>();
+        for (String key : ctx.columnKeys()) {
+            columns.add(new JoinSqlGenerator.QueryColumn(key, "m." + key, typeOf.getOrDefault(key, ""), true, true));
+        }
+        for (JoinSqlGenerator.JoinConfig j : joins) {
+            columns.add(new JoinSqlGenerator.QueryColumn(j.virtualKey(), j.alias() + "." + j.joinField(),
+                    resolveJoinColumnType(j), j.sortable(), j.filterable()));
+        }
+        return columns;
+    }
+
+    /** 虚拟列类型：目标表单 joinField 的列类型，找不到 fallback "VARCHAR"（查询与 metadata 两处一致） */
+    private String resolveJoinColumnType(JoinSqlGenerator.JoinConfig j) {
+        try {
+            List<ColumnConfig> targetCols = formDefService.getBusinessColumnsByKey(j.targetFormKey());
+            if (targetCols != null) {
+                for (ColumnConfig c : targetCols) {
+                    if (j.joinField().equals(c.getKey())) {
+                        return c.getColumnType() == null ? "VARCHAR" : c.getColumnType().toUpperCase();
+                    }
+                }
+            }
+        } catch (BusinessException ignored) {
+            // 目标表单不可解析时 fallback 类型
+        }
+        return "VARCHAR";
+    }
+
+    /** sql 模式列映射：管理员声明列 → QueryColumn（ref=key，外层子查询输出列名） */
+    private List<JoinSqlGenerator.QueryColumn> toQueryColumns(List<ColumnConfig> cols) {
+        List<JoinSqlGenerator.QueryColumn> out = new ArrayList<>();
+        for (ColumnConfig c : cols) {
+            out.add(new JoinSqlGenerator.QueryColumn(c.getKey(), c.getKey(),
+                    c.getColumnType() == null ? "" : c.getColumnType().toUpperCase(),
+                    Boolean.TRUE.equals(c.getSortable()), Boolean.TRUE.equals(c.getFilterable())));
+        }
+        return out;
+    }
+
+    /** 解析运行时参数（sql 模式透传）；null/空白 → 空 Map；非法 JSON → 400 */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseRuntimeParams(String paramsJson) {
+        if (paramsJson == null || paramsJson.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> map = objectMapper.readValue(paramsJson, Map.class);
+            return map == null ? Map.of() : map;
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(400, "运行时参数 params 格式非法，应为 JSON 对象: " + e.getOriginalMessage());
         }
     }
 
@@ -589,6 +700,40 @@ public class BizDataSupport {
         Integer version = asInt(row.get("version"));
         LocalDateTime createdAt = asDateTime(row.get("created_at"));
         LocalDateTime updatedAt = asDateTime(row.get("updated_at"));
+        return new BizDataVO(String.valueOf(row.get("id")), data, version, createdAt, updatedAt);
+    }
+
+    /** config 模式行映射：主表列（toVO 逻辑）+ 虚拟列（virtualKey → joinField 值） */
+    private BizDataVO toJoinVO(BizDataContext ctx, List<JoinSqlGenerator.JoinConfig> joins, Map<String, Object> row) {
+        BizDataVO vo = toVO(ctx, row);
+        Map<String, Object> data = vo.getData();
+        for (JoinSqlGenerator.JoinConfig j : joins) {
+            Object v = row.get(j.virtualKey());
+            if (v != null) {
+                data.put(j.virtualKey(), v);
+            }
+        }
+        return vo;
+    }
+
+    /**
+     * sql 模式行映射：外层子查询输出列全量保留（可含聚合列），绕过 BizDataVO 系统列字段的仅主表列逻辑。
+     * <p>键统一转小写，消除 H2 等数据库对子查询输出列名规范化为大写的影响，
+     * 保证与声明列（columns）的 key 小写约定一致。生产 MySQL 保留 SQL 书写的别名大小写（通常小写），无副作用。
+     */
+    private BizDataVO toSqlVO(Map<String, Object> row) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : row.entrySet()) {
+            data.put(e.getKey().toLowerCase(), e.getValue());
+        }
+        data.remove("version");
+        data.remove("created_at");
+        data.remove("updated_at");
+        data.remove("tenant_id");
+        Integer version = asInt(row.get("version"));
+        LocalDateTime createdAt = asDateTime(row.get("created_at"));
+        LocalDateTime updatedAt = asDateTime(row.get("updated_at"));
+        // id 保留在 data 中（管理员 SQL 输出可能有非 id 主键/聚合值），BizDataVO.id 取行内 id 兜底
         return new BizDataVO(String.valueOf(row.get("id")), data, version, createdAt, updatedAt);
     }
 

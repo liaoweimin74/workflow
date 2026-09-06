@@ -11,6 +11,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.bizdata.BizDataService;
+import com.workflow.engine.form.bizdata.JoinSqlGenerator;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.logic.executor.HttpLogicExecutor;
 import com.workflow.engine.tenant.TenantContext;
@@ -30,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -145,6 +147,144 @@ class UnifiedDataSourceAdapterTest {
         adapter.delete(ds, "1");
         verify(router).resolve(ds, "delete");
         verify(bizDataService).delete("order", "1");
+    }
+
+    // ===== FORM join/sql 查询分流（Task 4） =====
+
+    @Test
+    void formQuery_configMode_delegatesToQueryJoin() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("""
+                {"queryMode":"config","joins":[{"alias":"c","targetFormKey":"customer","localField":"customer_id",
+                "foreignField":"id","joinField":"name","virtualKey":"customer_name","label":"客户名称",
+                "sortable":true,"filterable":true}]}
+                """);
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 0, 20);
+        when(bizDataService.queryJoin(eq("order"), same(req), anyList())).thenReturn(expected);
+
+        BizDataPageVO result = adapter.query(ds, req);
+
+        assertSame(expected, result);
+        verify(router).resolve(ds, "list");
+        verify(bizDataService).queryJoin(eq("order"), same(req),
+                argThat(joins -> joins.size() == 1
+                        && ((JoinSqlGenerator.JoinConfig) joins.get(0)).virtualKey().equals("customer_name")));
+    }
+
+    @Test
+    void formQuery_sqlMode_delegatesToQuerySql() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("""
+                {"queryMode":"sql","query":"SELECT order_no FROM orders_view WHERE tenant_id = :tenantId",
+                "columns":[{"key":"order_no","columnType":"VARCHAR","sortable":true}],"params":[]}
+                """);
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 0, 20);
+        when(bizDataService.querySql(eq("order"), same(req), any())).thenReturn(expected);
+
+        BizDataPageVO result = adapter.query(ds, req);
+
+        assertSame(expected, result);
+        verify(router).resolve(ds, "list");
+        verify(bizDataService).querySql(eq("order"), same(req),
+                argThat(cfg -> cfg != null && cfg.isSqlMode()));
+    }
+
+    @Test
+    void formQuery_noQueryMode_fallsBackToSingleTable() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("{\"action\":\"list\"}"); // 无 queryMode，向后兼容
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 0, 20);
+        when(bizDataService.query("order", req)).thenReturn(expected);
+
+        BizDataPageVO result = adapter.query(ds, req);
+
+        assertSame(expected, result);
+        verify(router).resolve(ds, "list");
+        verify(bizDataService).query("order", req);
+    }
+
+    @Test
+    void formMetadata_configMode_appendsVirtualColumns() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("""
+                {"queryMode":"config","joins":[{"alias":"c","targetFormKey":"customer","localField":"customer_id",
+                "foreignField":"id","joinField":"name","virtualKey":"customer_name","label":"客户名称",
+                "sortable":true,"filterable":false}]}
+                """);
+        when(formDefService.getBusinessColumnsByKey("order"))
+                .thenReturn(new ArrayList<>(List.of(col("order_no", "订单号", "VARCHAR", 100))));
+        when(formDefService.getBusinessColumnsByKey("customer"))
+                .thenReturn(List.of(col("name", "客户名称", "VARCHAR", 100)));
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        assertEquals(2, meta.getColumns().size());
+        ColumnConfig v = meta.getColumns().get(1);
+        assertEquals("customer_name", v.getKey());
+        assertEquals("客户名称", v.getLabel());
+        assertEquals("VARCHAR", v.getColumnType());
+        assertEquals(Boolean.TRUE, v.getSortable());
+        assertEquals(Boolean.FALSE, v.getFilterable());
+        assertTrue(meta.isWritable());
+        verify(formDefService).getBusinessColumnsByKey("customer");
+    }
+
+    @Test
+    void formMetadata_configMode_skipsDuplicateVirtualKey() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("""
+                {"queryMode":"config","joins":[{"alias":"c","targetFormKey":"customer","localField":"customer_id",
+                "foreignField":"id","joinField":"name","virtualKey":"order_no","label":"冲突列",
+                "sortable":true,"filterable":true}]}
+                """);
+        when(formDefService.getBusinessColumnsByKey("order"))
+                .thenReturn(new ArrayList<>(List.of(col("order_no", "订单号", "VARCHAR", 100))));
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        // virtualKey 与主表列重名 → 跳过，不重复追加
+        assertEquals(1, meta.getColumns().size());
+        assertEquals("order_no", meta.getColumns().get(0).getKey());
+    }
+
+    @Test
+    void formMetadata_sqlMode_appendsDeclaredColumns() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("""
+                {"queryMode":"sql","query":"SELECT order_no, total FROM orders_view WHERE tenant_id = :tenantId",
+                "columns":[{"key":"total","label":"合计","columnType":"DECIMAL","sortable":true,"filterable":false}],
+                "params":[]}
+                """);
+        when(formDefService.getBusinessColumnsByKey("order"))
+                .thenReturn(new ArrayList<>(List.of(col("order_no", "订单号", "VARCHAR", 100))));
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        assertEquals(2, meta.getColumns().size());
+        ColumnConfig v = meta.getColumns().get(1);
+        assertEquals("total", v.getKey());
+        assertEquals("合计", v.getLabel());
+        assertEquals("DECIMAL", v.getColumnType());
+        assertEquals(Boolean.TRUE, v.getSortable());
+        assertEquals(Boolean.FALSE, v.getFilterable());
+    }
+
+    @Test
+    void formMetadata_sqlMode_skipsDeclaredDuplicate() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("""
+                {"queryMode":"sql","query":"SELECT order_no FROM orders_view WHERE tenant_id = :tenantId",
+                "columns":[{"key":"order_no","label":"订单号","columnType":"VARCHAR","sortable":true}],"params":[]}
+                """);
+        when(formDefService.getBusinessColumnsByKey("order"))
+                .thenReturn(new ArrayList<>(List.of(col("order_no", "订单号", "VARCHAR", 100))));
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        assertEquals(1, meta.getColumns().size());
     }
 
     // ===== SYSTEM (internal://) =====

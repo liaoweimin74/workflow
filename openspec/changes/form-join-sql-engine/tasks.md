@@ -21,25 +21,33 @@
 - [ ] 3.3 query 非空校验、columns 至少一个可排序列校验
 - [ ] 3.4 单测：非 SELECT / 缺 tenantId / 声明列不匹配被拒；分页筛选排序正确；COUNT 语义（含聚合场景）锁定
 
+## 3a. SQL 模板运行时参数透传（params）
+
+- [ ] 3a.1 BizDataQueryRequest 增加 `params`（JSON 字符串）字段，支持透传前端自定义查询参数
+- [ ] 3a.2 sql 模式配置增加 `params` 白名单声明（如 startTime/endTime），保存校验参数名合法、与 SQL 占位符匹配
+- [ ] 3a.3 SqlTemplateEngine 将命中 params 白名单的前端参数值参数化绑定到 `:paramName` 占位符；未声明/非法键拒绝（400）
+- [ ] 3a.4 单测：声明参数绑定、未声明参数拒绝、无 params 段时缺省执行
+
 ## 4. FORM 数据源 queryMode 分流与 metadata 虚拟列
 
 - [ ] 4.1 UnifiedDataSourceAdapter / BizDataSupport query 路径按 params.queryMode 分流到统一引擎
 - [ ] 4.2 metadata：config 模式从 joins 推导虚拟列（virtualKey/label/columnType/sortable/filterable）并入 column_config；sql 模式从 columns 映射，与主表列一起返回
 - [ ] 4.3 filter/sort 白名单扩展：config 模式 virtualKey + sql 模式 columns 纳入
-- [ ] 4.4 集成测试：FORM 数据源 config/sql 模式的 metadata 与 query 端到端（含关联排序/筛选/分页）
+- [ ] 4.4 集成测试：FORM 数据源 config/sql 模式的 metadata 与 query 端到端（含关联排序/筛选/分页/参数透传）
 
 ## 5. FORM 数据源 params 开放 JOIN/SQL 编辑（后端）
 
-- [ ] 5.1 DataSourceDefinitionService 支持 FORM 数据源查询配置段（queryMode/joins/query/columns）校验与保存，CRUD 接口 params 段保持不变
-- [ ] 5.2 查询配置合法性校验（config targetFormKey/virtualKey；sql SELECT/tenantId/columns）接入保存流程
+- [ ] 5.1 DataSourceDefinitionService 支持 FORM 数据源查询配置段（queryMode/joins/query/columns/params 白名单）校验与保存，CRUD 接口 params 段保持不变
+- [ ] 5.2 查询配置合法性校验（config targetFormKey/virtualKey；sql SELECT/tenantId/columns/参数声明）接入保存流程
 - [ ] 5.3 后端测试：FORM 数据源 JOIN/SQL 配置保存校验 + 非法配置 400
 
 ## 6. 前端（数据源管理页 JOIN/SQL 配置入口）
 
-- [ ] 6.1 DataSourceListPage 为 FORM 数据源增加「关联查询配置」编辑区（queryMode 选择 + config joins 编辑 / sql query+columns 编辑）
+- [ ] 6.1 DataSourceListPage 为 FORM 数据源增加「关联查询配置」编辑区（queryMode 选择 + config joins 编辑 / sql query+columns+params 编辑）
 - [ ] 6.2 config 模式 UI：targetFormKey 下拉（enabled 数据源表单）、localField/foreignField/joinField 下拉、virtualKey/label/sortable/filterable 配置、多 JOIN 增删
-- [ ] 6.3 sql 模式 UI：query 文本域 + columns 声明编辑（key/label/columnType/sortable/filterable）
+- [ ] 6.3 sql 模式 UI：query 文本域 + columns 声明编辑（key/label/columnType/sortable/filterable）+ params 白名单声明编辑
 - [ ] 6.4 保存时提交 queryMode + 配置到 params；查询侧（BizDataListPage/PageDataTable）零改动验证虚拟列自动渲染与排序/筛选
+- [ ] 6.5 前端查询请求类型支持透传 params 段（BizDataQueryParams 增加 params）
 
 ## 7. 文档与迁移
 

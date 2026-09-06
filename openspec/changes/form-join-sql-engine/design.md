@@ -96,6 +96,16 @@ config 模式：JoinSqlGenerator 解析 joins 生成 `ColumnConfig`（virtualKey
 sql 模式：管理员 columns 直接映射 `ColumnConfig`。
 统一 merge 进 FORM 数据源 metadata.columns；前端现有渲染逻辑零改动。
 
+### D7: SQL 模板运行时参数透传（params）
+
+某些复杂 SQL 需要运行时从前端传入参数（如统计 SQL 的时间段 `WHERE create_time BETWEEN :startTime AND :endTime`）。这不同于 `filter`（针对数据列的白名单筛选）——`params` 是绑定到 SQL 占位符的通用的运行时参数。
+
+- **请求侧**：`BizDataQueryRequest` 增加 `params`（JSON 字符串，与 filter 一致的解析路径），前端查询请求透传 `{startTime, endTime}`。
+- **配置侧**：sql 模式增加 `params` 白名单声明（管理员声明哪些参数可被前端传入），保存时校验参数名合法、与 SQL 占位符匹配。
+- **执行侧**：命中白名单的前端参数值参数化绑定到 `:paramName` 占位符；未声明/非法键拒绝（400）。此机制与 `:tenantId`（强制绑定、不可被前端覆盖）区分。
+
+**为什么用独立 params 段而非复用 filter**：filter 的 `{column,op,value}` 结构化条件是绑定到数据列的；而 SQL 参数可以是任意名字、任意语义（时间段、聚合阈值、分组维度等），无法用列白名单表达。独立 `params` 段 + 白名单声明，既满足灵活透传又保持安全边界。
+
 ## Risks / Trade-offs
 
 - **[SQL 兼容性]** ⚠️ sql 模式包裹子查询后，MySQL 的 ORDER BY 需基于外层别名（`customer_name`），而非内层函数列 → 缓解：SqlTemplateEngine 只允许对管理员声明的 columns key 排序，避免引用内层表达式。

@@ -93,3 +93,23 @@ FORM 数据源 metadata（`GET /api/v1/data-sources/{id}/metadata`）SHALL 输�
 #### Scenario: 声明列不在 SELECT 输出被拒
 - **WHEN** 管理员 sql 模式声明 columns 含某列，但该列别名不存在于 SQL 模板 SELECT 输出
 - **THEN** 系统返回 400 错误，提示声明列不在查询结果中
+
+### Requirement: SQL 模板运行时参数透传（params）
+
+`sql` 模式 SHALL 支持管理员在配置中声明可被前端传入的运行时参数（`params` 白名单，如 `startTime`/`endTime`），这些参数 SHALL 绑定到 SQL 模板中的 `:paramName` 占位符。前端查询请求 SHALL 通过查询请求的 `params` 段（JSON 对象）透传参数值；系统 SHALL 仅绑定命中 `params` 白名单声明的键，未声明或非法的键 SHALL 被拒绝（返回 400）。`:tenantId` 与声明参数 SHALL 均通过参数绑定（PreparedStatement）注入，杜绝 SQL 注入。
+
+#### Scenario: 前端传入声明参数绑定 SQL
+- **WHEN** sql 模式数据源声明参数 `startTime`/`endTime`，且 SQL 模板含 `WHERE create_time BETWEEN :startTime AND :endTime`
+- **AND** 前端查询请求 params 传 `{startTime:'2026-01-01', endTime:'2026-02-01'}`
+- **THEN** 系统将两个值参数化绑定到 SQL 占位符
+- **AND** 返回按时间段统计/筛选后的结果
+
+#### Scenario: 未声明参数被拒
+- **WHEN** 前端查询请求 params 传入未在 `params` 白名单声明的键（如 `xxx`）
+- **THEN** 系统返回 400 错误，提示参数不被允许
+- **AND** 不执行查询
+
+#### Scenario: 缺省无 params 段
+- **WHEN** 前端查询请求未携带 params 段或 params 为空
+- **THEN** 系统以缺省值执行（SQL 中声明参数为空值时按管理员 SQL 对该占位符的缺省语义处理）
+- **AND** 不报错

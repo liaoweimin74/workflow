@@ -214,7 +214,7 @@ class LeaveBillWorkflowIntegrationTest {
     // ==================== reject 用例 ====================
 
     @Test
-    void leaveBill_reject_movesBackToInitiatorAndMarksRejected() {
+    void leaveBill_reject_endsProcessAndAllowsUpdateBlocksDelete() {
         BizDataVO row = leaveBillBizService.createDraft(data("days", 3, "reason", "事假"));
         String id = row.getId();
         leaveBillBizService.submit(id);
@@ -230,18 +230,21 @@ class LeaveBillWorkflowIntegrationTest {
         BizDataVO rejected = leaveBillBizService.reject(managerTask.getId(), "理由不充分，请补充材料");
         assertThat(leaveBillBizService.getStatus(id)).isEqualTo("已驳回");
 
-        // 流程仍在运行，且任务回到发起人节点
-        ProcessInstance stillRunning = runtimeService.createProcessInstanceQuery()
+        // 流程已终止（运行中无实例），历史保留
+        long stillRunning = runtimeService.createProcessInstanceQuery()
                 .processInstanceTenantId(TENANT_ID)
                 .processInstanceBusinessKey(id)
-                .singleResult();
-        assertThat(stillRunning).isNotNull();
+                .count();
+        assertThat(stillRunning).isZero();
 
-        Task initiatorTask = taskService.createTaskQuery()
-                .processInstanceId(pi.getId())
-                .singleResult();
-        assertThat(initiatorTask).isNotNull();
-        assertThat(initiatorTask.getTaskDefinitionKey()).isEqualTo("submitTask");
+        // 结束后可改不可删（守卫按历史反查 → DELETE 409）
+        BizDataVO afterReject = leaveBillBizService.refresh(id);
+        assertThat(afterReject.getVersion()).isEqualTo(rejected.getVersion());
+        BizDataVO reUpdated = leaveBillBizService.updateDraft(id, data("days", 4), afterReject.getVersion());
+        assertThat(leaveBillBizService.getStatus(reUpdated.getId())).isEqualTo("已驳回");
+        assertThatThrownBy(() -> leaveBillBizService.deleteDraft(id))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("禁止删除");
     }
 
     // ==================== handler 业务校验 ====================

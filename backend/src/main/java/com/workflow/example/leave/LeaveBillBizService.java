@@ -5,7 +5,6 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.form.bizdata.BizDataService;
 import com.workflow.engine.form.bizdata.BizDataSupport;
 import com.workflow.engine.process.ProcessInstanceService;
-import com.workflow.engine.task.RejectService;
 import com.workflow.engine.task.WorkflowTaskService;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
@@ -37,18 +36,15 @@ public class LeaveBillBizService {
     private final BizDataSupport bizDataSupport;
     private final ProcessInstanceService processInstanceService;
     private final WorkflowTaskService workflowTaskService;
-    private final RejectService rejectService;
 
     public LeaveBillBizService(BizDataService bizDataService,
                                BizDataSupport bizDataSupport,
                                ProcessInstanceService processInstanceService,
-                               WorkflowTaskService workflowTaskService,
-                               RejectService rejectService) {
+                               WorkflowTaskService workflowTaskService) {
         this.bizDataService = bizDataService;
         this.bizDataSupport = bizDataSupport;
         this.processInstanceService = processInstanceService;
         this.workflowTaskService = workflowTaskService;
-        this.rejectService = rejectService;
     }
 
     // ==================== 草稿期 CRUD（走门面，含 handler + 守卫） ====================
@@ -109,13 +105,19 @@ public class LeaveBillBizService {
     }
 
     /**
-     * 驳回：流程移回发起人节点（流程仍在运行）+ 置状态「已驳回」。
+     * 驳回：终止流程（历史保留）+ 置状态「已驳回」。
+     * 流程终止后运行中实例不存在 → 后续可按需修改记录重新发起；
+     * 历史实例仍关联 businessKey → 记录不可删除（守卫按历史反查命中 409）。
      */
     @Transactional
     public BizDataVO reject(String taskId, String reason) {
-        String bizKey = requireRunningBizKey(taskId);
+        Task task = workflowTaskService.getTask(taskId)
+                .orElseThrow(() -> new BusinessException(404, "任务不存在: " + taskId));
+        ProcessInstance pi = processInstanceService.getProcessInstance(task.getProcessInstanceId())
+                .orElseThrow(() -> new BusinessException(404, "流程实例不存在: " + task.getProcessInstanceId()));
+        String bizKey = pi.getBusinessKey();
         BizDataVO current = bizDataService.getById(FORM_KEY, bizKey);
-        rejectService.reject(taskId, currentUser(), reason);
+        processInstanceService.terminateProcessInstance(pi.getId(), reason);
         return bizDataSupport.updateGeneric(FORM_KEY, bizKey, Map.of("status", "已驳回"), current.getVersion());
     }
 

@@ -2,9 +2,9 @@
 
 ## 1. 能力层：BizDataHandler 覆盖声明
 
-- [ ] 1.1 扩展 BizDataHandler 接口：新增覆盖声明方法（overridesCreate/overridesUpdate/overridesDelete/overridesQuery，default false）及强类型方法 create/update/delete/query（签名不含 formKey，default 抛 UnsupportedOperationException），编写覆盖机制单元测试（Mockito）
-- [ ] 1.2 改造 BizDataService 的 handler 索引构建：收集覆盖声明，同一 formKey 同一操作存在 2+ 覆盖声明时抛 IllegalStateException（fail-fast），编写启动冲突检测测试
-- [ ] 1.3 覆盖交接路由：BizDataService 四个 CRUD 入口在覆盖声明为 true 时直接调用 handler 强类型方法并返回其结果（装饰钩子不再自动执行），编写交接行为测试
+- [x] 1.1 扩展 BizDataHandler 接口：新增覆盖声明方法（overridesCreate/overridesUpdate/overridesDelete/overridesQuery，default false）及强类型方法 create/update/delete/query（签名不含 formKey，default 抛 UnsupportedOperationException），编写覆盖机制单元测试（Mockito）
+- [x] 1.2 改造 BizDataService 的 handler 索引构建：收集覆盖声明，同一 formKey 同一操作存在 2+ 覆盖声明时抛 IllegalStateException（fail-fast），编写启动冲突检测测试
+- [x] 1.3 覆盖交接路由：BizDataService 四个 CRUD 入口在覆盖声明为 true 时直接调用 handler 强类型方法并返回其结果（装饰钩子不再自动执行），编写交接行为测试
 
 ## 2. 能力层：BizDataSupport 复用面 + 门面化
 

@@ -125,7 +125,10 @@ public class BizDataService {
         for (BizDataHandler handler : handlersOf(formKey)) {
             handler.afterCreate(created);
         }
-        return created;
+        // afterCreate 钩子可能已通过 updateGeneric 回写默认值并自增 version，
+        // 重新查询返回最新状态，避免调用方拿到过期 version 触发乐观锁 409。
+        BizDataContext ctx2 = support.loadContext(formKey);
+        return support.findById(ctx2.tableName(), tenantProvider.getTenantId(), ctx2, created.getId());
     }
 
     /**

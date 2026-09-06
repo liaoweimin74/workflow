@@ -72,7 +72,7 @@ public class EmpProfileHandler implements BizDataHandler {
     @Override
     public void beforeCreate(Map<String, Object> data) {
         Object phone = data == null ? null : data.get("phone");
-        if (phone != null && !PHONE_PATTERN.matcher(String.valueOf(phone)).matches()) {
+        if (!PHONE_PATTERN.matcher(String.valueOf(phone)).matches()) {
             throw new BusinessException(400, "手机号格式非法: " + phone);
         }
     }

@@ -9,10 +9,15 @@
     <!-- 展开态：完整面板 -->
     <template v-else>
       <div class="panel-header">
-        <span>属性配置</span>
-        <el-tag v-if="readOnly" size="small" type="info" effect="plain">只读</el-tag>
-        <el-tag v-if="selectedNodeType" size="small" type="success">{{ nodeTypeLabel }}</el-tag>
-        <el-icon class="collapse-toggle" @click="collapsed = true"><Fold /></el-icon>
+        <div class="panel-heading">
+          <el-icon class="heading-icon"><Setting /></el-icon>
+          <span>属性配置</span>
+        </div>
+        <div class="panel-tags">
+          <el-tag v-if="readOnly" size="small" type="info" effect="plain">只读</el-tag>
+          <el-tag v-if="selectedNodeType" size="small" class="node-type-tag" effect="plain">{{ nodeTypeLabel }}</el-tag>
+          <el-icon class="collapse-toggle" @click="collapsed = true"><Fold /></el-icon>
+        </div>
       </div>
 
       <!-- 只读模式：复用同一套可视化属性组件，el-form disabled 禁编辑（tab 可切换、滚动正常） -->
@@ -156,7 +161,7 @@ const nodeTypeLabel = computed(() => {
 <style scoped>
 .property-panel {
   background: #fff;
-  border-left: 1px solid #e4e7ed;
+  border-left: 1px solid var(--color-industrial-300, #b9b9f9);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -165,7 +170,7 @@ const nodeTypeLabel = computed(() => {
 }
 
 .property-panel:not(.collapsed) {
-  width: 300px;
+  width: 320px;
 }
 
 .property-panel.collapsed {
@@ -181,13 +186,14 @@ const nodeTypeLabel = computed(() => {
   height: 100%;
   cursor: pointer;
   gap: 6px;
-  color: #606266;
-  transition: background 0.2s;
+  color: var(--el-text-color-regular, #4b5169);
+  background: var(--el-bg-color-page, #f1f4fe);
+  transition: background 0.2s, color 0.2s;
 }
 
 .collapse-bar:hover {
-  background: #f5f7fa;
-  color: #409eff;
+  background: var(--ds-selected, #e9eaff);
+  color: var(--ds-industrial-500, #5755ee);
 }
 
 .bar-icon {
@@ -198,7 +204,7 @@ const nodeTypeLabel = computed(() => {
   font-size: 12px;
   writing-mode: vertical-rl;
   letter-spacing: 2px;
-  color: #909399;
+  color: var(--el-text-color-secondary, #8b91ab);
 }
 
 /* 只读模式：视觉提示（inert 已禁用交互，此处仅弱化外观） */
@@ -210,32 +216,70 @@ const nodeTypeLabel = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--el-border-color-light, #e9edfa);
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
-  border-bottom: 1px solid #f0f0f0;
+  color: var(--el-text-color-primary, #1f2437);
+}
+
+.heading-icon {
+  color: var(--ds-industrial-500, #5755ee);
+  font-size: 16px;
+}
+
+.panel-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.node-type-tag {
+  --el-tag-bg-color: var(--ds-industrial-50, #f3f3fe) !important;
+  --el-tag-border-color: var(--ds-industrial-200, #d6d6fd) !important;
+  --el-tag-text-color: var(--ds-industrial-600, #5452d3) !important;
+  background: var(--ds-industrial-50, #f3f3fe) !important;
+  border-color: var(--ds-industrial-200, #d6d6fd) !important;
+  color: var(--ds-industrial-600, #5452d3) !important;
+  font-weight: 600;
 }
 
 .collapse-toggle {
   cursor: pointer;
-  color: #909399;
+  color: var(--el-text-color-secondary, #8b91ab);
   font-size: 16px;
   transition: color 0.2s;
 }
 
 .collapse-toggle:hover {
-  color: #409eff;
+  color: var(--ds-industrial-500, #5755ee);
 }
 
 .panel-body {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+  background: var(--el-bg-color-page, #f1f4fe);
 }
 
 /* 分组标题字体加粗 */
 .panel-body :deep(.el-divider__text) {
   font-weight: 600;
+  color: var(--el-text-color-regular, #4b5169);
+}
+
+/* 属性表单在浅底色上以白卡片呈现，结构更清晰 */
+.panel-body :deep(.el-form) {
+  background: #fff;
+  border: 1px solid var(--el-border-color-lighter, #eef1fc);
+  border-radius: 10px;
+  padding: 4px 12px 12px;
+  box-shadow: 0 1px 3px rgba(31, 36, 55, 0.04);
 }
 </style>

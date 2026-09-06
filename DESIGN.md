@@ -150,3 +150,39 @@ Strategy: mixed, using Element Plus borders for editor boundaries and restrained
 - Condition help must be available through keyboard focus as well as mouse hover.
 - Tables must remain usable at narrow widths through horizontal scrolling rather than clipped content.
 - Accepted debt: existing application-wide type errors outside the changed components are not part of this UI refinement.
+
+## 9. 流程设计器 (Process Designer) — 设计面
+
+> 视觉参考：AntV X6 BPMN 例子（`x6.antv.antgroup.com/examples/showcase/practices/#bpmn`）。
+> 风格定调：亮色、柔和、信息密度适中的 BPMN 建模器。节点用「柔和填充 + 同色描边 + 轻投影」，
+> 节点面板用卡片式分组，属性栏用分节卡片。靛蓝 `--ds-industrial-500` / 青 `--ds-accent-500` 与参考稿的
+> 主色/点缀色同源，作为本设计面主色。
+
+### 9.1 CanvasNode（画布节点）token
+
+| 节点类别 | Fill | Stroke | 备注 |
+|---|---|---|---|
+| 用户任务/发起 | `#fff`（白底） | `--ds-industrial-500` | 空白任务框，描边主色，圆角 12px |
+| 服务任务 | `#f7f8ff` | `--ds-industrial-300` | 极浅靛蓝底，副色描边 |
+| 调用活动/子流程 | 白底带标题带 | `--ds-industrial-200` | 子流程加标题条 |
+| 事件(圆) | 白底 `#fff` | 开始 `#46c9d6`(青) / 结束 `#f56c6c`(红) | 外圈白底,粗描边 |
+| 网关(菱形) | `#fffdf3` | `--ds-safety` | 浅琥珀底,琥珀描边 |
+
+- 节点投影：`0 1px 3px rgba(31, 36, 55, 0.08)`
+- 选中：描边加粗 + `box-shadow 0 0 0 3px rgba(87,85,238,0.18)` 光晕
+- hover：描边主色，轻投影加深
+
+### 9.2 NodePalette（左侧节点面板）原语
+
+- 面板底色 `#fff`，右缘 `1px solid var(--ds-border)`
+- 分组：每组一个圆角 10px 的浅色卡片块（底 `--ds-bg-page #f4f6fe`）
+- 组内项：白底圆角 8px 条目，图标置于 32px 圆角方形 chip 中，chip 底色随节点类别
+- hover：`background var(--ds-selected #e9eaff)`；active 微缩放
+- 折页态宽度 200px → 40px 竖条
+
+### 9.3 PropertyPanel（右侧属性栏）原语
+
+- 面板底色 `#fff`，左缘 `1px solid var(--ds-border)`；展开 300px
+- 头部：白底 + 底部细分隔线，标题 14px/600，右侧标签
+- 内容区：内边距 16px，分节用 `el-divider`（文本加粗 600）
+- 折页态 300px → 32px 竖条

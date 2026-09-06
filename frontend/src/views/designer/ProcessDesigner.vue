@@ -575,7 +575,7 @@ function handleDrop(event: DragEvent) {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: #f5f7fa;
+  background: var(--el-bg-color-page, #f1f4fe);
 }
 
 .designer-body {
@@ -588,7 +588,7 @@ function handleDrop(event: DragEvent) {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #fff;
+  background: transparent; /* 渐变由 designer-theme.css 的 .djs-container 提供 */
 }
 
 .canvas-wrapper {

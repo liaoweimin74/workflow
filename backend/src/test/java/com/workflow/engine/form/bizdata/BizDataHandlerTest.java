@@ -102,7 +102,7 @@ class BizDataHandlerTest {
         lenient().when(tenantProvider.getTenantId()).thenReturn(TENANT_ID);
         handler = new RecordingHandler("leave_bill");
         bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
-                new ObjectMapper(), List.of(handler));
+                new ObjectMapper(), List.of(handler), List.of());
 
         ColumnConfig days = new ColumnConfig();
         days.setKey("days");
@@ -218,7 +218,7 @@ class BizDataHandlerTest {
             }
         };
         bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
-                new ObjectMapper(), List.of(handler, rejecting));
+                new ObjectMapper(), List.of(handler, rejecting), List.of());
         // 两个 handler 都注册到 leave_bill：handler 先执行（通过），rejecting 后执行（拒绝）
         when(jdbcTemplate.queryForList(anyString(), any(Object[].class)))
                 .thenReturn(List.of(Map.of("id", "row-1", "tenant_id", TENANT_ID, "days", 3, "version", 2)));
@@ -240,7 +240,7 @@ class BizDataHandlerTest {
         BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 1, 20);
         when(overriding.query(any())).thenReturn(expected);
         bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
-                new ObjectMapper(), List.of(overriding));
+                new ObjectMapper(), List.of(overriding), List.of());
 
         BizDataPageVO result = bizDataService.query("emp_profile", new BizDataQueryRequest());
 
@@ -258,7 +258,7 @@ class BizDataHandlerTest {
         BizDataVO expected = new BizDataVO("e1", Map.of("name", "张三"), 1, null, null);
         when(overriding.create(any())).thenReturn(expected);
         bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
-                new ObjectMapper(), List.of(overriding));
+                new ObjectMapper(), List.of(overriding), List.of());
 
         BizDataVO result = bizDataService.create("emp_profile", Map.of("name", "张三"));
 
@@ -275,7 +275,7 @@ class BizDataHandlerTest {
         BizDataVO expected = new BizDataVO("row-1", Map.of("days", 5), 2, null, null);
         when(overriding.update(anyString(), any(), any())).thenReturn(expected);
         bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
-                new ObjectMapper(), List.of(handler, overriding));
+                new ObjectMapper(), List.of(handler, overriding), List.of());
 
         BizDataVO result = bizDataService.update("leave_bill", "row-1", Map.of("days", 5), 1);
 
@@ -292,7 +292,7 @@ class BizDataHandlerTest {
         when(overriding.getFormKey()).thenReturn("leave_bill");
         when(overriding.overridesDelete()).thenReturn(true);
         bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
-                new ObjectMapper(), List.of(handler, overriding));
+                new ObjectMapper(), List.of(handler, overriding), List.of());
 
         bizDataService.delete("leave_bill", "row-1");
 
@@ -312,7 +312,7 @@ class BizDataHandlerTest {
         when(b.overridesQuery()).thenReturn(true);
 
         assertThatThrownBy(() -> new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
-                new ObjectMapper(), List.of(a, b)))
+                new ObjectMapper(), List.of(a, b), List.of()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("duplicate override declaration: emp_profile.query");
     }
@@ -325,7 +325,7 @@ class BizDataHandlerTest {
         BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 1, 20);
         when(overriding.query(any())).thenReturn(expected);
         bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
-                new ObjectMapper(), List.of(handler, overriding));
+                new ObjectMapper(), List.of(handler, overriding), List.of());
 
         // update 未声明覆盖 → 继续走通用实现
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(1);
@@ -338,5 +338,31 @@ class BizDataHandlerTest {
         verify(overriding, never()).update(anyString(), any(), any());
         // 同 service 的 query 仍被覆盖接管
         assertThat(bizDataService.query("leave_bill", new BizDataQueryRequest())).isSameAs(expected);
+    }
+
+    @Test
+    void overridingCreateHandler_canDelegateToSupportGeneric() {
+        BizDataSupport support = new BizDataSupport(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper());
+        BizDataHandler delegating = new BizDataHandler() {
+            @Override
+            public String getFormKey() { return "leave_bill"; }
+
+            @Override
+            public boolean overridesCreate() { return true; }
+
+            @Override
+            public BizDataVO create(Map<String, Object> data) {
+                return support.createGeneric("leave_bill", data);
+            }
+        };
+        stubInsertReturn();
+        bizDataService = new BizDataService(jdbcTemplate, tableManager, formDefService, tenantProvider,
+                new ObjectMapper(), List.of(delegating), List.of());
+
+        BizDataVO result = bizDataService.create("leave_bill", Map.of("days", 3));
+
+        assertThat(result.getId()).isEqualTo("row-1");
+        verify(jdbcTemplate).update(anyString(), any(Object[].class));
     }
 }

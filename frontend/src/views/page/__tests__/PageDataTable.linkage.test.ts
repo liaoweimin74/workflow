@@ -1,10 +1,15 @@
-// ----- TDD: PageDataTable 表格-容器联动事件触发（row-edit/row-view/row-create） -----
+﻿// ----- TDD: PageDataTable 表格-容器联动事件触发（row-edit/row-view/row-create） -----
 // npx vitest run src/views/page/__tests__/PageDataTable.linkage.test.ts
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ params: {}, query: {} }),
+  useRouter: () => ({ push: vi.fn() }),
+}))
 
 vi.mock('@/api/data-source', () => ({
   dataSourceApi: {
@@ -61,14 +66,16 @@ vi.mock('@/components/business/SearchTable.vue', () => {
 const dispatchMock = vi.hoisted(() => vi.fn(() => false))
 
 import PageDataTable from '../components/PageDataTable.vue'
+import { activeDsBindings } from '@/utils/formDsBindingsStore'
 
 const ROW = { id: 'R1', name: '张三' }
 
-function mountTable(buttons: any[]) {
-  return mount(PageDataTable, {
+async function mountTable(buttons: any[]) {
+  const wrapper = mount(PageDataTable, {
     props: {
       pageKey: 'p1',
       dataSourceId: 'ds1',
+      dsRefId: 'global1',
       viewActions: { buttons },
     },
     global: {
@@ -81,6 +88,9 @@ function mountTable(buttons: any[]) {
       },
     },
   })
+  // SearchTable 受 metaLoaded 控制异步挂载：等待 getMetadata → metaLoaded=true → 桩渲染完成
+  await flushPromises()
+  return wrapper
 }
 
 beforeEach(() => {
@@ -88,11 +98,12 @@ beforeEach(() => {
   dispatchMock.mockImplementation(() => false)
   openEditSpy.mockClear()
   openFormDialogSpy.mockClear()
+  activeDsBindings.value = [] // 重置模块级绑定（setActiveDsBindings 空数组不覆盖非空）
 })
 
 describe('PageDataTable 表格-容器联动事件触发', () => {
   it('点击编辑按钮派发 row-edit 事件（含当前行数据 + 来源 dataSourceId）', async () => {
-    const wrapper = mountTable([{ key: 'edit', label: '编辑', placement: 'column' }])
+    const wrapper = await mountTable([{ key: 'edit', label: '编辑', placement: 'column' }])
     await wrapper.find('.stub-col-btn-0').trigger('click')
     await flushPromises()
 
@@ -109,7 +120,7 @@ describe('PageDataTable 表格-容器联动事件触发', () => {
 
   it('动作链消费（dispatch 返回 true）时跳过默认行为', async () => {
     dispatchMock.mockImplementation(() => true)
-    const wrapper = mountTable([{ key: 'edit', label: '编辑', placement: 'column' }])
+    const wrapper = await mountTable([{ key: 'edit', label: '编辑', placement: 'column' }])
     await wrapper.find('.stub-col-btn-0').trigger('click')
     await flushPromises()
 
@@ -118,7 +129,7 @@ describe('PageDataTable 表格-容器联动事件触发', () => {
   })
 
   it('点击查看按钮派发 row-view 事件（含当前行数据）', async () => {
-    const wrapper = mountTable([{ key: 'view', label: '查看', placement: 'column' }])
+    const wrapper = await mountTable([{ key: 'view', label: '查看', placement: 'column' }])
     await wrapper.find('.stub-col-btn-0').trigger('click')
     await flushPromises()
 
@@ -128,7 +139,7 @@ describe('PageDataTable 表格-容器联动事件触发', () => {
   })
 
   it('点击工具栏新增按钮派发 row-create 事件（无行数据）', async () => {
-    const wrapper = mountTable([{ key: 'create', label: '新增', placement: 'toolbar' }])
+    const wrapper = await mountTable([{ key: 'create', label: '新增', placement: 'toolbar' }])
     await wrapper.find('.stub-tb-btn-0').trigger('click')
     await flushPromises()
 
@@ -140,7 +151,7 @@ describe('PageDataTable 表格-容器联动事件触发', () => {
   })
 
   it('按钮配置了组件级事件链时不派发页面总线（现有优先级不变）', async () => {
-    const wrapper = mountTable([
+    const wrapper = await mountTable([
       { key: 'edit', label: '编辑', placement: 'column', events: [{ actions: [{ type: 'message', params: [] }] }] },
     ])
     await wrapper.find('.stub-col-btn-0').trigger('click')
@@ -152,7 +163,7 @@ describe('PageDataTable 表格-容器联动事件触发', () => {
   })
 
   it('行点击派发 row-click 事件（现有行为保持）', async () => {
-    const wrapper = mountTable([])
+    const wrapper = await mountTable([])
     const table = wrapper.findComponent({ name: 'SearchTableStub' })
     ;(wrapper.vm as any)
     // 通过组件实例调用 handleRowClick（SearchTable 桩未转发 row-click emit，直接调用内部方法）

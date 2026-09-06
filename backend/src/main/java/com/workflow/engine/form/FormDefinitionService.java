@@ -88,6 +88,16 @@ public class FormDefinitionService {
      */
     @Transactional
     public FormDefinition create(String name, String key, String type) {
+        return create(name, key, type, null);
+    }
+
+    /**
+     * 创建表单定义（含流程定义绑定）。
+     *
+     * @param processKey 绑定的流程定义 key（可选，非空时该业务表单启用流程状态守卫）
+     */
+    @Transactional
+    public FormDefinition create(String name, String key, String type, String processKey) {
         String tenantId = tenantProvider.getTenantId();
 
         if (formDefRepository.existsByTenantIdAndKey(tenantId, key)) {
@@ -100,6 +110,7 @@ public class FormDefinitionService {
         formDef.setName(name);
         formDef.setKey(key);
         formDef.setType(type == null || type.isBlank() ? "WORKFLOW" : type);
+        formDef.setProcessKey(processKey);
         formDef.setSchema("[]");
         formDef.setVersion(1);
         formDef.setStatus("DRAFT");
@@ -199,6 +210,24 @@ public class FormDefinitionService {
      */
     @Transactional
     public FormDefinition update(String id, String name, String key, String schema, String columnConfig) {
+        return update(id, name, key, schema, columnConfig, null);
+    }
+
+    /**
+     * 更新表单定义（原地更新，不创建新版本）。
+     * 直接在当前记录上更新 name、key、schema、columnConfig、processKey，无论 DRAFT 还是 PUBLISHED 状态。
+     *
+     * @param id           表单定义 ID
+     * @param name         表单名称（null 表示不更新）
+     * @param key          表单 key（null 表示不更新）
+     * @param schema       新的 schema JSON（null 表示不更新）
+     * @param columnConfig 新的列映射 JSON（null 表示不更新）
+     * @param processKey   绑定的流程定义 key（null 表示不更新）
+     * @return 更新后的表单定义
+     */
+    @Transactional
+    public FormDefinition update(String id, String name, String key, String schema, String columnConfig,
+                                 String processKey) {
         String tenantId = tenantProvider.getTenantId();
         FormDefinition current = formDefRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new RuntimeException("Form definition not found: " + id));
@@ -214,6 +243,9 @@ public class FormDefinitionService {
         }
         if (columnConfig != null) {
             current.setColumnConfig(columnConfig);
+        }
+        if (processKey != null) {
+            current.setProcessKey(processKey);
         }
         
         FormDefinition saved = formDefRepository.save(current);

@@ -50,6 +50,12 @@ public class FormDefinition {
     @Column(name = "status", length = 32, nullable = false)
     private String status = "DRAFT";
 
+    /**
+     * 绑定的流程定义 key（仅 BUSINESS 类型使用；非空时该业务表单启用流程状态守卫）。
+     */
+    @Column(name = "process_key", length = 64)
+    private String processKey;
+
     @Column(name = "published_version")
     private Integer publishedVersion;
 
@@ -102,6 +108,9 @@ public class FormDefinition {
 
     public Integer getPublishedVersion() { return publishedVersion; }
     public void setPublishedVersion(Integer publishedVersion) { this.publishedVersion = publishedVersion; }
+
+    public String getProcessKey() { return processKey; }
+    public void setProcessKey(String processKey) { this.processKey = processKey; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }

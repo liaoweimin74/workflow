@@ -14,6 +14,7 @@ public class FormDefinitionDTO {
     private Integer version;
     private String status;
     private Integer publishedVersion;
+    private String processKey;
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -55,6 +56,9 @@ public class FormDefinitionDTO {
 
     public Integer getPublishedVersion() { return publishedVersion; }
     public void setPublishedVersion(Integer publishedVersion) { this.publishedVersion = publishedVersion; }
+
+    public String getProcessKey() { return processKey; }
+    public void setProcessKey(String processKey) { this.processKey = processKey; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }

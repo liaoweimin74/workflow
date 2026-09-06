@@ -9,6 +9,7 @@ public class FormDefinitionSaveRequest {
     private String key;
     private String schema;
     private String columnConfig;
+    private String processKey;
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -21,4 +22,7 @@ public class FormDefinitionSaveRequest {
 
     public String getColumnConfig() { return columnConfig; }
     public void setColumnConfig(String columnConfig) { this.columnConfig = columnConfig; }
+
+    public String getProcessKey() { return processKey; }
+    public void setProcessKey(String processKey) { this.processKey = processKey; }
 }

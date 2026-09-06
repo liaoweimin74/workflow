@@ -35,8 +35,9 @@ public class FormDefinitionController {
     @PostMapping
     public R<FormDefinition> create(@RequestParam String name,
                                     @RequestParam String key,
-                                    @RequestParam(required = false) String type) {
-        FormDefinition formDef = formDefService.create(name, key, type);
+                                    @RequestParam(required = false) String type,
+                                    @RequestParam(required = false) String processKey) {
+        FormDefinition formDef = formDefService.create(name, key, type, processKey);
         return R.ok(formDef);
     }
 
@@ -92,7 +93,8 @@ public class FormDefinitionController {
     public R<FormDefinition> update(@PathVariable String id,
                                     @RequestBody FormDefinitionSaveRequest request) {
         FormDefinition formDef = formDefService.update(
-                id, request.getName(), request.getKey(), request.getSchema(), request.getColumnConfig());
+                id, request.getName(), request.getKey(), request.getSchema(), request.getColumnConfig(),
+                request.getProcessKey());
         return R.ok(formDef);
     }
 
@@ -148,6 +150,7 @@ public class FormDefinitionController {
         dto.setCreatedBy(formDef.getCreatedBy());
         dto.setCreatedAt(formDef.getCreatedAt());
         dto.setUpdatedAt(formDef.getUpdatedAt());
+        dto.setProcessKey(formDef.getProcessKey());
         return dto;
     }
 
@@ -165,6 +168,7 @@ public class FormDefinitionController {
         dto.setUpdatedAt(formDef.getUpdatedAt());
         dto.setSchema(formDef.getSchema());
         dto.setColumnConfig(formDef.getColumnConfig());
+        dto.setProcessKey(formDef.getProcessKey());
         return dto;
     }
 }

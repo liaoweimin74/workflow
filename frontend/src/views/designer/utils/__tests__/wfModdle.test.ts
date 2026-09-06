@@ -54,6 +54,6 @@ describe('customRendererModule', () => {
 
   it('CustomRenderer should have $inject for DI', () => {
     const CustomRenderer = customRendererModule.customRenderer[1] as any
-    expect(CustomRenderer.$inject).toEqual(['eventBus', 'bpmnRenderer', 'styles'])
+    expect(CustomRenderer.$inject).toEqual(['eventBus', 'bpmnRenderer', 'styles', 'canvas', 'elementRegistry'])
   })
 })

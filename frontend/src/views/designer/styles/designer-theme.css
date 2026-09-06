@@ -1,6 +1,8 @@
 /* ============================================================
  * BPMN Designer 视觉主题
- * 覆盖 bpmn-js / diagram-js 默认样式，匹配系统整体风格
+ * 覆盖 bpmn-js / diagram-js 默认样式
+ * 视觉参考：AntV X6 BPMN（柔和填充 + 同色描边 + 轻投影）
+ * 色板与 DESIGN.md 对齐（靛蓝 #5755ee / 青 #46c9d6 / 安全琥珀）
  * ============================================================ */
 
 /* 隐藏 bpmn.io 商业 logo */
@@ -8,88 +10,151 @@
   display: none !important;
 }
 
-/* 画布背景 */
+/* 画布背景 — 细网格 + 柔和蓝紫底 */
 .djs-container {
-  background: #fafbfc !important;
+  background: linear-gradient(#f8f9fe, #eef1fc) !important;
   background-image:
-    linear-gradient(rgba(64, 158, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(64, 158, 255, 0.04) 1px, transparent 1px) !important;
+    linear-gradient(rgba(87, 85, 238, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(87, 85, 238, 0.05) 1px, transparent 1px) !important;
   background-size: 20px 20px !important;
+  background-blend-mode: overlay;
 }
 
-/* 节点选中样式 */
+/* ===== 节点选中/悬浮 ===== */
 .djs-element.selected .djs-outline {
-  stroke: #409eff !important;
+  stroke: #5755ee !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: none !important;
+}
+
+.djs-element.selected > .djs-visual {
+  filter: drop-shadow(0 0 0 3px rgba(87, 85, 238, 0.16));
+}
+
+.djs-element:hover > .djs-visual {
+  filter: drop-shadow(0 2px 6px rgba(31, 36, 55, 0.14));
+}
+
+/* ===== 连线 ===== */
+.djs-connection .djs-visual > path {
+  stroke: #8b91ab !important;
+  stroke-width: 1.6px !important;
+  marker-end: none;
+}
+
+.djs-connection.selected .djs-visual > path {
+  stroke: #5755ee !important;
+  stroke-width: 2.2px !important;
+}
+
+/* 连线箭头（bpmn 用 marker） */
+.djs-connection .djs-visual marker path {
+  fill: #8b91ab !important;
+}
+
+.djs-connection.selected .djs-visual marker path {
+  fill: #5755ee !important;
+}
+
+/* ============================================================
+ * 节点 — 视觉参考：AntV X6 BPMN 画布节点结构
+ *   · 任务(用户/服务/调用/内嵌) : 浅蓝底(#EFF4FF) + 主色细描边 + 圆角 6
+ *   · 开始事件   : 白底 + 青(circle) 描边 2px
+ *   · 结束事件   : 白底 + 红描边 4px（粗）
+ *   · 网关       : 浅蓝底 + 主色描边 2px
+ * 注：X6 主描边 #5F95FF 以项目 DESIGN 主色 #5755ee 替代，
+ *     填充方式/描边宽度/圆角严格对齐 X6。
+ *     类型 class（.user-task/.call-activity/.start-event …）由
+ *     customRenderer 经 canvas.addMarker 加到 .djs-element 上——
+ *     bpmn-js 的 data-element-id 是随机 id，无法用 [data-element-id*=] 命中。
+ * ============================================================ */
+
+/* 用户任务 — 白底 + 主色细描边 + 圆角 6 */
+.djs-element.user-task .djs-visual rect,
+.djs-element.call-activity .djs-visual rect,
+.djs-element.subprocess .djs-visual rect,
+.djs-element.task .djs-visual rect {
+  fill: #ffffff !important;
+  stroke: #5755ee !important;
+  stroke-width: 0.8px !important;
+  rx: 6px !important;
+  ry: 6px !important;
+}
+
+/* 用户任务图标（人物）着主色 */
+.djs-element.user-task .djs-visual path {
+  fill: #5755ee !important;
+  stroke: #5755ee !important;
+}
+
+/* ===== 服务任务 — 浅靛蓝底 + 主色细描边 + 圆角 6 ===== */
+.djs-element.service-task .djs-visual rect {
+  fill: #eff4ff !important;
+  stroke: #5755ee !important;
+  stroke-width: 0.8px !important;
+  rx: 6px !important;
+  ry: 6px !important;
+}
+
+/* 服务任务图标着主色 */
+.djs-element.service-task .djs-visual path {
+  fill: #5755ee !important;
+  stroke: #5755ee !important;
+}
+
+/* ===== 内嵌子流程 — 标题着主色 ===== */
+.djs-element.subprocess .djs-label {
+  fill: #4342b5 !important;
+  font-weight: 600 !important;
+}
+
+/* ===== 事件 — 开始（青）：白底 + 青描边 2px ===== */
+/* 空开始/结束事件仅一个外圈 circle；X6 参照为白底彩色细描边（无实心内圆） */
+.djs-element.start-event .djs-visual circle {
+  fill: #ffffff !important;
+  stroke: #2ca7b5 !important;
   stroke-width: 2px !important;
 }
 
-/* 节点 hover 样式 */
-.djs-element:hover .djs-outline {
-  stroke: #a0cfff !important;
-  stroke-width: 1.5px !important;
-}
-
-/* 连线样式 */
-.djs-connection .djs-visual {
-  stroke: #606266 !important;
-  stroke-width: 1.5px !important;
-}
-
-.djs-connection.selected .djs-visual {
-  stroke: #409eff !important;
-  stroke-width: 2px !important;
-}
-
-/* 用户任务节点 */
-.djs-element[data-element-id*="UserTask"] .djs-visual rect {
-  fill: #ecf5ff !important;
-  stroke: #409eff !important;
-  stroke-width: 2px !important;
-  rx: 4px !important;
-  ry: 4px !important;
-}
-
-/* 服务任务节点 */
-.djs-element[data-element-id*="ServiceTask"] .djs-visual rect {
-  fill: #f0f9eb !important;
-  stroke: #67c23a !important;
-  stroke-width: 2px !important;
-}
-
-/* 开始事件 */
-.djs-element[data-element-id*="StartEvent"] .djs-visual circle {
-  fill: #f0f9eb !important;
-  stroke: #67c23a !important;
-  stroke-width: 2px !important;
-}
-
-/* 结束事件 */
-.djs-element[data-element-id*="EndEvent"] .djs-visual circle {
-  fill: #fef0f0 !important;
+/* ===== 事件 — 结束（红）：白底 + 红描边 4px（粗，对齐 X6） ===== */
+.djs-element.end-event .djs-visual circle {
+  fill: #ffffff !important;
   stroke: #f56c6c !important;
-  stroke-width: 3px !important;
+  stroke-width: 4px !important;
 }
 
-/* 网关 */
-.djs-element[data-element-id*="Gateway"] .djs-visual polygon {
-  fill: #fdf6ec !important;
-  stroke: #e6a23c !important;
+/* ===== 网关 — 浅靛蓝底 + 主色描边 2px（对齐 X6） ===== */
+.djs-element.exclusive-gateway .djs-visual polygon,
+.djs-element.parallel-gateway .djs-visual polygon,
+.djs-element.inclusive-gateway .djs-visual polygon,
+.djs-element.gateway .djs-visual polygon {
+  fill: #eff4ff !important;
+  stroke: #5755ee !important;
   stroke-width: 2px !important;
+}
+
+/* 网关内部图标 */
+.djs-element.exclusive-gateway .djs-visual path,
+.djs-element.parallel-gateway .djs-visual path,
+.djs-element.inclusive-gateway .djs-visual path,
+.djs-element.gateway .djs-visual path {
+  stroke: #5755ee !important;
+  fill: #5755ee !important;
 }
 
 /* 文字标签 */
 .djs-label {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif !important;
   font-size: 12px !important;
-  fill: #303133 !important;
+  fill: #374151 !important;
 }
 
-/* 工具栏（bpmn-js 内置）- 隐藏，使用左侧自定义 NodePalette */
+/* ===== 工具栏（bpmn-js 内置）- 隐藏，使用左侧自定义 NodePalette ===== */
 .djs-palette-container {
   display: none !important;
 }
 
-/* 小地图 — 右下角悬浮 */
+/* ===== 小地图 — 右下角悬浮 ===== */
 .djs-minimap {
   position: absolute !important;
   top: auto !important;
@@ -97,10 +162,10 @@
   right: 16px !important;
   width: 200px !important;
   height: 120px !important;
-  background: rgba(255, 255, 255, 0.95) !important;
-  border: 1px solid #e4e7ed !important;
-  border-radius: 4px !important;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  border: 1px solid #e9edfa !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 16px rgba(31, 36, 55, 0.14) !important;
   overflow: hidden !important;
   z-index: 100 !important;
 }
@@ -122,54 +187,74 @@
   height: 100% !important;
 }
 
-/* 上下文菜单 */
+/* ===== 上下文菜单 ===== */
 .djs-context-pad {
   background: #fff !important;
-  border: 1px solid #e4e7ed !important;
-  border-radius: 4px !important;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #e9edfa !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 16px rgba(31, 36, 55, 0.12) !important;
+  padding: 4px !important;
 }
 
 .djs-context-pad .entry {
-  width: 24px !important;
-  height: 24px !important;
-  line-height: 24px !important;
+  width: 28px !important;
+  height: 28px !important;
+  line-height: 28px !important;
   text-align: center !important;
+  border-radius: 6px !important;
 }
 
 .djs-context-pad .entry:hover {
-  background: #ecf5ff !important;
-  color: #409eff !important;
+  background: #e9eaff !important;
+  color: #5755ee !important;
 }
 
-/* 滚动条 */
+/* ===== 滚动条（左右面板统一为自定义细滚动条） ===== */
 .djs-palette-container::-webkit-scrollbar,
+.node-palette .palette-body::-webkit-scrollbar,
+.node-palette .collapsed-icons::-webkit-scrollbar,
 .property-panel ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 .djs-palette-container::-webkit-scrollbar-thumb,
+.node-palette .palette-body::-webkit-scrollbar-thumb,
+.node-palette .collapsed-icons::-webkit-scrollbar-thumb,
 .property-panel ::-webkit-scrollbar-thumb {
   background: #c0c4cc;
   border-radius: 3px;
 }
 
 .djs-palette-container::-webkit-scrollbar-track,
+.node-palette .palette-body::-webkit-scrollbar-track,
+.node-palette .collapsed-icons::-webkit-scrollbar-track,
 .property-panel ::-webkit-scrollbar-track {
   background: #f5f7fa;
 }
 
+/* 滚动条 hover 加深，反馈更明确 */
+.node-palette .palette-body::-webkit-scrollbar-thumb:hover,
+.node-palette .collapsed-icons::-webkit-scrollbar-thumb:hover,
+.property-panel ::-webkit-scrollbar-thumb:hover {
+  background: #a8adb8;
+}
+
 /* ============================================================
  * 发起人节点图标 — 与用户任务区分
- * 复用 bpmn-font 的 manual（手形）字符，着蓝色
+ * 复用 bpmn-font 的 manual（手形）字符，着靛蓝色
  * ============================================================ */
 .bpmn-icon-initiator-node:before {
   content: '\e828'; /* bpmn-icon-manual 字符 */
-  color: #409eff;
+  color: #5755ee;
 }
 
-/* NodePalette 中发起人节点图标着色 */
+/* NodePalette 中发起人节点图标着色（chip 内已用 inline 色，此处兜底） */
 .palette-item .bpmn-icon-initiator-node {
-  color: #409eff;
+  color: inherit;
+}
+
+/* 发起人节点在画布上的图标颜色 */
+.djs-element.user-task .bpmn-icon-manual {
+  color: #5755ee !important;
 }

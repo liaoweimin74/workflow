@@ -9,7 +9,7 @@
  */
 
 import BaseRenderer from 'diagram-js/lib/draw/BaseRenderer'
-import { append, create, attr } from 'tiny-svg'
+import { append, create, attr, remove as svgRemove } from 'tiny-svg'
 
 /**
  * 发起人节点填充色
@@ -26,8 +26,40 @@ const INITIATOR_ICON_COLOR = '#409eff'
  */
 const SUBFLOW_ICON_COLOR = '#409eff'
 
+/**
+ * 调用活动（CallActivity）左上角调用图标 —— 主描边色
+ * 方框 + 右下箭头，象征"调用其他流程/跳转到外部流程"
+ */
+const CALL_ICON_COLOR = '#5755ee'
+
+/**
+ * BPMN 元素类型 → CSS 标记 class（加在 .djs-element 上，供 designer-theme.css 精准命中）
+ * 注：bpmn-js 的 data-element-id 是内部随机 id（如 Activity_xxx），与类型无映射，
+ *     无法用 [data-element-id*="UserTask"] 选择，必须显式打上类型标记。
+ */
+const TYPE_MARKER_MAP: Record<string, string> = {
+  'bpmn:StartEvent': 'start-event',
+  'bpmn:EndEvent': 'end-event',
+  'bpmn:IntermediateThrowEvent': 'intermediate-throw-event',
+  'bpmn:IntermediateCatchEvent': 'intermediate-catch-event',
+  'bpmn:UserTask': 'user-task',
+  'bpmn:ServiceTask': 'service-task',
+  'bpmn:ScriptTask': 'service-task',
+  'bpmn:SendTask': 'task',
+  'bpmn:ReceiveTask': 'task',
+  'bpmn:ManualTask': 'task',
+  'bpmn:BusinessRuleTask': 'service-task',
+  'bpmn:Task': 'task',
+  'bpmn:CallActivity': 'call-activity',
+  'bpmn:SubProcess': 'subprocess',
+  'bpmn:ExclusiveGateway': 'exclusive-gateway',
+  'bpmn:ParallelGateway': 'parallel-gateway',
+  'bpmn:InclusiveGateway': 'inclusive-gateway',
+  'bpmn:EventBasedGateway': 'gateway'
+}
+
 // 依赖注入标记
-CustomRenderer.$inject = ['eventBus', 'bpmnRenderer', 'styles']
+CustomRenderer.$inject = ['eventBus', 'bpmnRenderer', 'styles', 'canvas', 'elementRegistry']
 
 /**
  * 自定义渲染器：发起人节点高亮显示。
@@ -36,21 +68,45 @@ CustomRenderer.$inject = ['eventBus', 'bpmnRenderer', 'styles']
  * @param bpmnRenderer 默认 BPMN 渲染器，用于委托绘制默认图形
  * @param styles      样式工具
  */
-function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any) {
+function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any, canvas: any, elementRegistry: any) {
   // 调用 BaseRenderer 构造函数，注册渲染优先级（高于默认 1000）
   BaseRenderer.call(this, eventBus, 2000)
 
   this.bpmnRenderer = bpmnRenderer
   this.styles = styles
+  this.canvas = canvas
+  this.elementRegistry = elementRegistry
+
+  /**
+   * 给流程节点打上 CSS 类型标记。
+   * 遍历 elementRegistry 中对每个 shape 按其 BPMN 类型 addMarker，
+   * 使 designer-theme.css 能用 .djs-element.<type> 精准命中节点样式。
+   */
+  const applyTypeMarkers = () => {
+    if (!this.canvas || !this.elementRegistry) return
+    this.elementRegistry.filter((e: any) => e && e.id).forEach((e: any) => {
+      const marker = TYPE_MARKER_MAP[e.type]
+      if (marker) {
+        this.canvas.addMarker(e, marker)
+      }
+    })
+  }
+
+  // import 完成后：为所有已渲染节点打标记
+  eventBus.on('import.done', applyTypeMarkers)
+  // 拖入新节点后：为新节点打标记
+  eventBus.on('shape.added', applyTypeMarkers)
 
   /**
    * 判断元素是否可由本渲染器渲染：
+   * - 调用活动（bpmn:CallActivity）：移除底部折叠 marker，左上角绘制调用图标
    * - 折叠态内嵌子流程（bpmn:SubProcess collapsed）：左上角绘制折叠图标，与 CallActivity 区分
    * - businessObject 上 wf:nodeRole === 'initiator' 的发起人节点
    */
   this.canRender = function (element: any): boolean {
     const bo = element && element.businessObject
     if (!bo) return false
+    if (bo.$instanceOf && bo.$instanceOf('bpmn:CallActivity')) return true
     if (bo.$instanceOf && bo.$instanceOf('bpmn:SubProcess') && element.collapsed) return true
     const nodeRole = bo.get && bo.get('wf:nodeRole')
     return nodeRole === 'initiator'
@@ -69,7 +125,36 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
     const gfx = this.bpmnRenderer.drawShape(parent, shape)
 
     const bo = shape.businessObject
-    const isSubProcess = bo && bo.$instanceOf && bo.$instanceOf('bpmn:SubProcess')
+    const isCallActivity = bo && bo.$instanceOf && bo.$instanceOf('bpmn:CallActivity')
+    if (isCallActivity) {
+      // 移除底部的折叠子流程 marker（14px 小矩形 + 两条横线），换成左上角的调用图标
+      ;[].forEach.call(parent.querySelectorAll && parent.querySelectorAll('path[data-marker], rect'), (el: any) => {
+        if (el === parent) return
+        const w = Number(el.getAttribute && el.getAttribute('width')) || 0
+        const h = Number(el.getAttribute && el.getAttribute('height')) || 0
+        // 移除 data-marker（两条横线）以及小尺寸 markerRect（宽高 < 30）
+        if (el.hasAttribute && el.hasAttribute('data-marker')) {
+          svgRemove(el)
+        } else if (w > 0 && h > 0 && w < 30 && h < 30) {
+          svgRemove(el)
+        }
+      })
+
+      // 左上角绘制"调用其他流程"图标：方框 + 右下箭头
+      const icon = create('path')
+      attr(icon, {
+        d: 'M1,1 h13 v13 h-13 z M4,12 L11,5 M6,5 h5 v5',
+        transform: 'translate(10,10)',
+        fill: 'none',
+        stroke: CALL_ICON_COLOR,
+        'stroke-width': 1.4,
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round'
+      })
+      append(parent, icon)
+    }
+
+    const isSubProcess = !isCallActivity && bo && bo.$instanceOf && bo.$instanceOf('bpmn:SubProcess')
     if (isSubProcess) {
       // 折叠态子流程：左上角蓝色折叠图标（bpmn-font \e81f）
       const icon = create('text')

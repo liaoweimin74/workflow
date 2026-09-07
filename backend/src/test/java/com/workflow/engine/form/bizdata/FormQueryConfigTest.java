@@ -186,4 +186,34 @@ class FormQueryConfigTest {
         assertThat(cfg.columns().get(0).getKey()).isEqualTo("id");
         assertThat(List.copyOf(cfg.columns())).isNotNull();
     }
+
+    @Test
+    void parse_visualMode() {
+        String params = """
+                {"queryMode":"visual",
+                 "visual":{"mainTable":"wf_biz_order","mainAlias":"m",
+                  "selectColumns":["m.order_no","m.total","c.name AS customer_name"],
+                  "joins":[{"alias":"c","targetTable":"wf_biz_customer","joinType":"LEFT",
+                            "on":"c.id = m.customer_id","columns":["c.name"]}],
+                  "where":[{"column":"m.total","op":">=","value":100}],
+                  "orderBy":[{"column":"m.created_at","order":"DESC"}]},
+                 "query":"SELECT m.order_no, m.total, c.name AS customer_name FROM wf_biz_order m LEFT JOIN wf_biz_customer c ON c.id = m.customer_id WHERE m.total >= ? AND m.tenant_id = ? ORDER BY m.created_at DESC",
+                 "columns":[{"key":"order_no","label":"订单号","columnType":"VARCHAR","sortable":true,"filterable":true},
+                            {"key":"total","label":"总金额","columnType":"DECIMAL","sortable":true,"filterable":true},
+                            {"key":"customer_name","label":"客户名称","columnType":"VARCHAR","sortable":true,"filterable":true}],
+                 "params":[]}""";
+        FormQueryConfig cfg = FormQueryConfig.parse(params, om);
+        assertThat(cfg.queryMode()).isEqualTo("visual");
+        assertThat(cfg.isVisualMode()).isTrue();
+        assertThat(cfg.isSqlMode()).isFalse();
+        assertThat(cfg.isConfigMode()).isFalse();
+        assertThat(cfg.query()).contains("wf_biz_order");
+        assertThat(cfg.columns()).hasSize(3);
+    }
+
+    @Test
+    void parse_visualMode_nullParams_returnsDefault() {
+        FormQueryConfig cfg = FormQueryConfig.parse(null, om);
+        assertThat(cfg.isVisualMode()).isFalse();
+    }
 }

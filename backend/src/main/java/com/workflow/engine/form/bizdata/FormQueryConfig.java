@@ -40,6 +40,11 @@ public record FormQueryConfig(String queryMode,
         return "sql".equals(queryMode) && query != null && !query.isBlank();
     }
 
+    /** visual（可视化构建器）模式生效：queryMode=visual 且 query 非空白 */
+    public boolean isVisualMode() {
+        return "visual".equals(queryMode) && query != null && !query.isBlank();
+    }
+
     /**
      * 解析 FORM 数据源 params JSON。null/空白返回默认配置；非法 JSON 抛 400。
      */
@@ -62,6 +67,12 @@ public record FormQueryConfig(String queryMode,
             return new FormQueryConfig(mode, joins, null, List.of(), List.of());
         }
         if ("sql".equals(mode)) {
+            String query = text(root, "query");
+            List<ColumnConfig> columns = parseColumns(root.get("columns"));
+            List<String> params = parseStrings(root.get("params"));
+            return new FormQueryConfig(mode, List.of(), query, columns, params);
+        }
+        if ("visual".equals(mode)) {
             String query = text(root, "query");
             List<ColumnConfig> columns = parseColumns(root.get("columns"));
             List<String> params = parseStrings(root.get("params"));

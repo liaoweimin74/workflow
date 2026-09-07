@@ -7,6 +7,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, defineComponent, h } from 'vue'
 import ElementPlus from 'element-plus'
 import DataSourceListPage from '../DataSourceListPage.vue'
+import VisualQueryBuilder from '../components/VisualQueryBuilder.vue'
+import FieldMappingPreview from '../components/FieldMappingPreview.vue'
 
 vi.mock('@/api/data-source', () => ({
   dataSourceApi: {
@@ -38,8 +40,10 @@ vi.mock('@element-plus/icons-vue', () => ({
   Delete: { name: 'Delete', render: () => h('span', '×') },
   Edit: { name: 'Edit', render: () => h('span', '✎') },
   View: { name: 'View', render: () => h('span', '👁') },
+  Close: { name: 'Close', render: () => h('span', '✕') },
   CircleCheck: { name: 'CircleCheck', render: () => h('span', '✓') },
   CircleClose: { name: 'CircleClose', render: () => h('span', '✕') },
+  QuestionFilled: { name: 'QuestionFilled', render: () => h('span', '?') },
 }))
 
 const ElMessage = (await import('element-plus')).ElMessage as any
@@ -169,6 +173,51 @@ describe('DataSourceListPage', () => {
 
   // ==================== SQL 数据源增删改 ====================
 
+  it('新建 SQL：sourceKey 必填（缺失时拦截，不提交）', async () => {
+    stubList()
+    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SQL'
+    component.form.name = '订单联查'
+    component.sqlConfig.visual.mainTable = 'wf_biz_order'
+    component.sqlConfig.visual.selectColumnsInput = 'm.order_no'
+    await nextTick()
+
+    await component.handleSave()
+    await flushPromises()
+
+    expect(dataSourceApi.createDataSource).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith('请输入数据源标识（sourceKey）')
+    wrapper.unmount()
+  })
+
+  it('编辑 SQL：sourceKey 输入框回填（source_key 即唯一标识）', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    await (wrapper.vm as any).openEdit({
+      id: 'ds-sql-1', name: '报表', type: 'SQL', sourceKey: 'orders-report', formKey: 'order',
+      status: 'ENABLED', params: '{}',
+    })
+    await nextTick()
+    await flushPromises()
+
+    // form 状态回填 sourceKey
+    expect((wrapper.vm as any).form.sourceKey).toBe('orders-report')
+    // SQL 标识列渲染 sourceKey 输入框（data-testid 定位组件根）
+    expect(wrapper.find('[data-testid="sql-source-key-input"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('新建 SQL（可视化模式）：保存序列化 queryMode/visual/query，调用 createDataSource', async () => {
     stubList()
     ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: {} })
@@ -189,6 +238,7 @@ describe('DataSourceListPage', () => {
 
     // 填写可视化配置
     component.form.name = '订单联查'
+    component.form.sourceKey = 'orders-report'
     component.sqlConfig.visual.mainTable = 'wf_biz_order'
     component.sqlConfig.visual.mainAlias = 'm'
     component.sqlConfig.visual.selectColumnsInput = 'm.order_no, c.name AS customer_name'
@@ -205,6 +255,7 @@ describe('DataSourceListPage', () => {
     expect(dataSourceApi.createDataSource).toHaveBeenCalled()
     const payload = (dataSourceApi.createDataSource as any).mock.calls[0][0]
     expect(payload.type).toBe('SQL')
+    expect(payload.sourceKey).toBe('orders-report')
     expect(payload.formKey).toBeNull()
     const p = JSON.parse(payload.params)
     expect(p.queryMode).toBe('visual')
@@ -216,6 +267,188 @@ describe('DataSourceListPage', () => {
     expect(p.columns[0].key).toBe('order_no')
     expect(p.params).toEqual(['tenantId'])
     expect(ElMessage.success).toHaveBeenCalledWith('创建成功')
+    wrapper.unmount()
+  })
+
+  it('SQL 配置区：接口操作分割线移除，可视化/SQL 模式改为按钮切换（保留 queryMode 逻辑）', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SQL'
+    await nextTick()
+
+    // 需求1：接口操作分割线移除
+    expect(wrapper.html()).not.toContain('接口操作')
+    // 需求2：SQL 区内部 tab 改为按钮（el-radio-group），保留可视化配置/SQL 模式文案
+    expect(wrapper.html()).toContain('可视化配置')
+    expect(wrapper.html()).toContain('SQL 模式')
+    expect(wrapper.find('.el-radio-group').exists()).toBe(true)
+    expect(component.sqlConfig.queryMode).toBe('visual')
+    // 按钮文案渲染（el-radio-button）
+    const btns = wrapper.findAll('.el-radio-button')
+    expect(btns.length).toBeGreaterThanOrEqual(2)
+    // 切换逻辑保留：切到 sql 模式且 queryText 为空时用可视化配置生成起点
+    component.sqlConfig.visual.mainTable = 'wf_biz_order'
+    component.sqlConfig.queryMode = 'sql'
+    await component.onSqlModeChange()
+    expect(component.sqlConfig.queryText).toContain('FROM wf_biz_order')
+    wrapper.unmount()
+  })
+
+  it('SQL 类型：标识 label 后 ? 提示「有值时合并表单列，CRUD 映射到主表」，仅 SQL 类型显示', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SQL'
+    await nextTick()
+
+    // ? 提示图标存在（data-testid 定位）
+    expect(wrapper.find('[data-testid="sql-form-key-hint"]').exists()).toBe(true)
+    // tooltip content 为需求文案
+    const tooltip = wrapper.findAllComponents({ name: 'ElTooltip' }).find((c) => (c.props('content') as string | undefined)?.includes('有值时合并表单列，CRUD 映射到主表'))
+    expect(tooltip).toBeDefined()
+
+    // 切换回 API 类型后 ? 消失
+    component.form.type = 'API'
+    await nextTick()
+    expect(wrapper.find('[data-testid="sql-form-key-hint"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('新建弹窗：主表单 label-width 为 auto（标识/数据源名称/数据源类型自动宽度）', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const forms = wrapper.findAllComponents({ name: 'ElForm' })
+    expect(forms.length).toBeGreaterThan(0)
+    // 主表单（含标识/数据源名称/数据源类型）label 自动宽度
+    expect(forms[0].props('labelWidth')).toBe('auto')
+    // ? 提示图标以 flex 包裹实现相对 label 垂直居中
+    const wrap = wrapper.find('[data-testid="sql-form-key-label"]')
+    expect(wrap.exists()).toBe(true)
+    const style = (wrap.attributes('style') || '').replace(/\s+/g, '')
+    expect(style).toContain('display:inline-flex')
+    expect(style).toContain('align-items:center')
+    wrapper.unmount()
+  })
+
+  it('SQL 类型：选择标识后接口配置区不再显示字段映射预览（FieldMappingPreview 已移除）', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SQL'
+    component.form.formKey = 'order'
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.findComponent(FieldMappingPreview).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('SQL 可视化配置：主表/JOIN 目标表字段按表单懒加载，tableFields 传给 VisualQueryBuilder', async () => {
+    stubList()
+    ;(formApi.getFormDefinitionByKey as any).mockImplementation((key: string) => {
+      const colsByKey: Record<string, Array<{ key: string; label: string }>> = {
+        order: [{ key: 'order_no', label: '订单号' }, { key: 'customer_id', label: '客户ID' }],
+        customer: [{ key: 'id', label: 'ID' }, { key: 'name', label: '名称' }],
+      }
+      return Promise.resolve({ data: { formKey: key, name: key, columnConfig: JSON.stringify(colsByKey[key] || []) } })
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SQL'
+    component.sqlConfig.visual.mainTable = 'wf_biz_order'
+    await nextTick()
+    await flushPromises()
+
+    // 主表变化 → 按表单懒加载字段
+    expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('order')
+    expect(component.sqlTableFields['wf_biz_order']).toEqual(['order_no', 'customer_id'])
+
+    // JOIN 目标表变化 → 懒加载目标表字段
+    component.sqlConfig.visual.joins = [{ alias: 'c', targetTable: 'wf_biz_customer', joinType: 'LEFT JOIN', on: '', columns: [] }]
+    await nextTick()
+    await flushPromises()
+    expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('customer')
+    expect(component.sqlTableFields['wf_biz_customer']).toEqual(['id', 'name'])
+
+    // VisualQueryBuilder 收到 tableFields prop
+    const vqb = wrapper.findComponent(VisualQueryBuilder)
+    expect((vqb.props('tableFields') as Record<string, string[]>)['wf_biz_order']).toEqual(['order_no', 'customer_id'])
+    expect((vqb.props('tableFields') as Record<string, string[]>)['wf_biz_customer']).toEqual(['id', 'name'])
+    wrapper.unmount()
+  })
+
+  it('SQL 可视化：主表候选不产生 wf_biz_{formKey} 字面量占位符', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SQL'
+    await nextTick()
+    await flushPromises()
+    const cands = component.visualTableCandidates as string[]
+    expect(cands.some((t) => t.includes('{formKey}'))).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('SQL 可视化：主表候选首项为已选表本身，不再拼接 wf_biz 双前缀', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SQL'
+    component.sqlConfig.visual.mainTable = 'wf_biz_order'
+    await nextTick()
+    await flushPromises()
+    const cands = component.visualTableCandidates as string[]
+    expect(cands[0]).toBe('wf_biz_order')
+    expect(cands.some((t) => t === 'wf_biz_wf_biz_order')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('SQL 可视化：双前缀表名懒加载时剥离全部 wf_biz 前缀再查表单', async () => {
+    stubList()
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({ data: { formKey: 'selector_test', columnConfig: null } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    await component.ensureTableFields('wf_biz_wf_biz_selector_test')
+    expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('selector_test')
     wrapper.unmount()
   })
 
@@ -231,6 +464,7 @@ describe('DataSourceListPage', () => {
     const component: any = wrapper.vm as any
     component.form.type = 'SQL'
     component.form.name = '未配置主表'
+    component.form.sourceKey = 'orders-report'
     await nextTick()
 
     await component.handleSave()
@@ -254,6 +488,7 @@ describe('DataSourceListPage', () => {
     const component: any = wrapper.vm as any
     component.form.type = 'SQL'
     component.form.name = '手写 SQL'
+    component.form.sourceKey = 'orders-report'
     component.sqlConfig.queryMode = 'sql'
     await nextTick()
 
@@ -283,7 +518,7 @@ describe('DataSourceListPage', () => {
     await flushPromises()
 
     await (wrapper.vm as any).openEdit({
-      id: 'ds-sql', name: '订单联查', type: 'SQL', formKey: 'order', sourceKey: null,
+      id: 'ds-sql', name: '订单联查', type: 'SQL', formKey: 'order', sourceKey: 'orders-report',
       status: 'ENABLED',
       params: JSON.stringify({
         queryMode: 'visual',
@@ -316,6 +551,7 @@ describe('DataSourceListPage', () => {
     await flushPromises()
     expect(dataSourceApi.updateDataSource).toHaveBeenCalled()
     const payload = (dataSourceApi.updateDataSource as any).mock.calls[0][1]
+    expect(payload.sourceKey).toBe('orders-report')
     const p = JSON.parse(payload.params)
     expect(p.queryMode).toBe('visual')
     expect(p.visual.mainTable).toBe('wf_biz_order')
@@ -773,6 +1009,98 @@ describe('DataSourceListPage', () => {
     const html = wrapper.html()
     expect(html).toContain('ID')
     expect(html).toContain('名称')
+    wrapper.unmount()
+  })
+
+  // ==================== 嵌入方式打开表单（替代弹窗） ====================
+
+  it('新建：表单以页内嵌入覆盖层打开（无 el-dialog，存在 inline-form-overlay + 标题）', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+
+    // 不再使用 el-dialog 弹窗
+    expect(wrapper.find('.el-dialog').exists()).toBe(false)
+    expect(wrapper.find('.el-overlay').exists()).toBe(false)
+    // 嵌入覆盖层渲染，标题保留
+    expect(wrapper.find('.inline-form-overlay').exists()).toBe(true)
+    expect(wrapper.find('.inline-form-title').text()).toContain('新建数据源')
+    wrapper.unmount()
+  })
+
+  it('新建/编辑：嵌入覆盖层 footer 含取消 + 保存按钮（保存触发 handleSave）', async () => {
+    stubList()
+    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+
+    const footer = wrapper.find('.inline-form-footer')
+    expect(footer.exists()).toBe(true)
+    const buttons = footer.findAll('button')
+    const texts = buttons.map((b) => b.text())
+    expect(texts).toContain('取消')
+    expect(texts).toContain('保存')
+
+    const component: any = wrapper.vm as any
+    component.form.name = '库存接口'
+    component.form.sourceKey = 'external-stock'
+    component.apiOps.list.action = '/v1/products'
+    await nextTick()
+    const saveBtn = buttons.find((b) => b.text() === '保存')
+    await saveBtn!.trigger('click')
+    await flushPromises()
+    expect(dataSourceApi.createDataSource).toHaveBeenCalled()
+    // 保存后覆盖层关闭
+    expect(wrapper.find('.inline-form-overlay').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('查看模式：嵌入覆盖层 footer 仅含关闭按钮（保存按钮不出现）', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-sys', name: '部门树', type: 'SYSTEM', formKey: null, sourceKey: 'dept-tree',
+      status: 'ENABLED', params: null,
+    })
+    await nextTick()
+    await flushPromises()
+
+    const footer = wrapper.find('.inline-form-footer')
+    expect(footer.exists()).toBe(true)
+    const texts = footer.findAll('button').map((b) => b.text())
+    expect(texts).toContain('关闭')
+    expect(texts).not.toContain('保存')
+    wrapper.unmount()
+  })
+
+  it('嵌入覆盖层：header 关闭按钮点击后覆盖层关闭', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    expect(wrapper.find('.inline-form-overlay').exists()).toBe(true)
+
+    const closeBtn = wrapper.find('.inline-form-header button')
+    await closeBtn.trigger('click')
+    await nextTick()
+    expect(wrapper.find('.inline-form-overlay').exists()).toBe(false)
     wrapper.unmount()
   })
 })

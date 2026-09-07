@@ -1,6 +1,6 @@
 <template>
   <div class="data-source-list-page">
-    <el-card style="overflow: hidden">
+    <el-card class="ds-list-card" style="overflow: hidden">
       <SearchTable
         ref="tableRef"
         :search-fields="searchFields"
@@ -34,71 +34,97 @@
       </SearchTable>
     </el-card>
 
-      <!-- 查看/新建/编辑数据源弹窗 -->
-      <el-dialog
-        v-model="dialogVisible"
-        :title="dialogTitle"
-        width="760px"
-        top="6vh"
-        destroy-on-close
-        :close-on-click-modal="false"
-      >
-        <el-form :model="form" label-width="110px" label-position="left">
-        <el-form-item label="数据源名称">
-          <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" :disabled="isReadonlyForm" />
-        </el-form-item>
-
-        <el-form-item label="数据源类型">
-          <template v-if="!editingId && !viewOnly">
-            <el-radio-group v-model="form.type">
-              <el-radio-button value="API">第三方 API</el-radio-button>
-              <el-radio-button value="SQL">SQL 查询</el-radio-button>
-            </el-radio-group>
-          </template>
-          <template v-else>
-            <el-tag :type="typeTagType(form.type)">{{ typeLabel(form.type) }}</el-tag>
-          </template>
-        </el-form-item>
-          <!-- ============ 统一 API 配置：FORM/SYSTEM 自动填充，API 手动配置 ============ -->
-          <el-form-item label="标识">
-            <template v-if="form.type === 'FORM'">
-              <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 320px" disabled>
-                <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
-              </el-select>
-            </template>
-            <template v-else-if="form.type === 'WORKFLOW'">
-              <el-select v-model="form.formKey" placeholder="选择已发布的工作流表单" filterable style="width: 320px" disabled>
-                <el-option v-for="f in publishedWorkflowForms" :key="f.key" :label="f.name" :value="f.key" />
-              </el-select>
-            </template>
-            <template v-else-if="form.type === 'SYSTEM'">
-              <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 320px" disabled>
-                <el-option label="部门树" value="dept-tree" />
-                <el-option label="用户列表" value="user-tree" />
-              </el-select>
-            </template>
-            <template v-else-if="form.type === 'SQL'">
-              <el-select v-model="form.formKey" placeholder="绑定主表单（可选）" filterable clearable style="width: 320px" :disabled="isReadonlyForm">
-                <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
-              </el-select>
-              <span style="margin-left: 8px; color: #909399; font-size: 12px">有值时合并表单列，CRUD 映射到主表</span>
-            </template>
-            <template v-else>
-              <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" :disabled="isReadonlyForm" />
-            </template>
-          </el-form-item>
+      <!-- 查看/新建/编辑数据源：内嵌表单覆盖层（formMode=inline 样式） -->
+      <div v-if="inlineVisible" class="inline-form-overlay">
+        <div class="inline-form-container">
+          <div class="inline-form-header">
+            <span class="inline-form-title">{{ dialogTitle }}</span>
+            <el-button text :icon="Close" @click="inlineVisible = false" />
+          </div>
+          <div class="inline-form-body">
+        <el-form :model="form" label-width="auto" label-position="top">
+          <!-- 数据源名称 / 数据源类型 / 标识：三个输入项一行，label 在输入项上方 -->
+          <el-row :gutter="16">
+            <el-col :span="8">
+              <el-form-item label="数据源名称">
+                <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" :disabled="isReadonlyForm" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="数据源类型">
+                <template v-if="!editingId && !viewOnly">
+                  <el-radio-group v-model="form.type">
+                    <el-radio-button value="API">第三方 API</el-radio-button>
+                    <el-radio-button value="SQL">SQL 查询</el-radio-button>
+                  </el-radio-group>
+                </template>
+                <template v-else>
+                  <el-tag :type="typeTagType(form.type)">{{ typeLabel(form.type) }}</el-tag>
+                </template>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <!-- ============ 统一 API 配置：FORM/SYSTEM 自动填充，API 手动配置 ============ -->
+              <el-form-item>
+                <template #label>
+                  <span style="display: inline-flex; align-items: center" data-testid="sql-form-key-label">
+                    标识
+                    <el-tooltip v-if="form.type === 'SQL'" content="有值时合并表单列，CRUD 映射到主表" placement="top">
+                      <el-icon data-testid="sql-form-key-hint" class="sql-key-hint-icon"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </span>
+                </template>
+                <template v-if="form.type === 'FORM'">
+                  <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 100%" disabled>
+                    <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+                  </el-select>
+                </template>
+                <template v-else-if="form.type === 'WORKFLOW'">
+                  <el-select v-model="form.formKey" placeholder="选择已发布的工作流表单" filterable style="width: 100%" disabled>
+                    <el-option v-for="f in publishedWorkflowForms" :key="f.key" :label="f.name" :value="f.key" />
+                  </el-select>
+                </template>
+                <template v-else-if="form.type === 'SYSTEM'">
+                  <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 100%" disabled>
+                    <el-option label="部门树" value="dept-tree" />
+                    <el-option label="用户列表" value="user-tree" />
+                  </el-select>
+                </template>
+                <template v-else-if="form.type === 'SQL'">
+                  <el-input
+                    v-model="form.sourceKey"
+                    data-testid="sql-source-key-input"
+                    placeholder="请输入唯一标识，如 orders-report（租户内唯一）"
+                    :disabled="isReadonlyForm"
+                  />
+                  <el-select
+                    v-model="form.formKey"
+                    placeholder="绑定主表单（可选，用于 CRUD）"
+                    filterable
+                    clearable
+                    style="width: 100%; margin-top: 8px"
+                    :disabled="isReadonlyForm"
+                  >
+                    <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+                  </el-select>
+                </template>
+                <template v-else>
+                  <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" :disabled="isReadonlyForm" />
+                </template>
+              </el-form-item>
+            </el-col>
+          </el-row>
         </el-form>
 
-        <el-tabs v-model="activeTab" @tab-click="onTabClick" style="margin-top: 16px">
+        <el-tabs v-model="activeTab" @tab-click="onTabClick" style="margin-top: 4px">
           <el-tab-pane label="接口配置" name="config">
-            <el-divider content-position="left">接口操作</el-divider>
+            <!-- 可滚动操作区 -->
 
-            <!-- 可滚动的接口操作区域 -->
             <div class="ops-scroll">
 
               <!-- ===== API：可编辑表单 ===== -->
               <template v-if="form.type === 'API'">
-            <el-form :model="form" label-width="110px" label-position="left">
+        <el-form :model="form" label-width="110px" label-position="left">
                   <el-form-item :label="opLabel.list">
                     <div class="op-editor">
                       <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
@@ -168,76 +194,101 @@
 
                   <el-form-item label="列">
                     <div class="column-editor">
-                      <div v-for="(col, idx) in apiColumns" :key="idx" class="column-row">
-                        <el-input v-model="col.key" placeholder="字段名" style="width: 130px" :disabled="isReadonlyForm" />
-                        <el-input v-model="col.label" placeholder="列名" style="width: 130px" :disabled="isReadonlyForm" />
-                        <el-select v-model="col.columnType" placeholder="类型" style="width: 120px" :disabled="isReadonlyForm">
-                          <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
-                        </el-select>
-                        <el-input-number
-                          v-if="needsLength(col.columnType)"
-                          v-model="col.length"
-                          :min="0"
-                          :max="10000"
-                          placeholder="长度"
-                          controls-position="right"
-                          style="width: 120px"
-                          :disabled="isReadonlyForm"
-                        />
-                        <el-input-number
-                          v-if="col.columnType === 'DECIMAL'"
-                          v-model="col.scale"
-                          :min="0"
-                          :max="10"
-                          placeholder="精度"
-                          controls-position="right"
-                          style="width: 110px"
-                          :disabled="isReadonlyForm"
-                        />
-                        <el-checkbox v-model="col.required" title="必填" :disabled="isReadonlyForm">必填</el-checkbox>
-                        <el-checkbox v-model="col.unique" title="唯一" :disabled="isReadonlyForm">唯一</el-checkbox>
-                        <el-checkbox v-model="col.indexed" title="索引" :disabled="isReadonlyForm">索引</el-checkbox>
-                        <el-button :icon="Delete" circle :disabled="isReadonlyForm" @click="apiColumns.splice(idx, 1)" />
-                      </div>
-                      <el-button type="primary" plain :icon="Plus" :disabled="isReadonlyForm" @click="addColumn">添加列</el-button>
+                      <el-table :data="apiColumns" size="small" border class="ds-col-table">
+                        <el-table-column label="字段名" min-width="110">
+                          <template #default="{ row }">
+                            <el-input v-model="row.key" placeholder="字段名" :disabled="isReadonlyForm" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="列名" min-width="110">
+                          <template #default="{ row }">
+                            <el-input v-model="row.label" placeholder="列名" :disabled="isReadonlyForm" />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="类型" width="150">
+                          <template #default="{ row }">
+                            <el-select v-model="row.columnType" placeholder="类型" style="width: 100%" :disabled="isReadonlyForm">
+                              <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+                            </el-select>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="长度" width="140" :show-overflow-tooltip="false">
+                          <template #default="{ row }">
+                            <el-input-number
+                              v-if="needsLength(row.columnType)"
+                              v-model="row.length"
+                              :min="0"
+                              :max="10000"
+                              placeholder="长度"
+                              controls-position="right"
+                              style="width: 100%"
+                              :disabled="isReadonlyForm"
+                            />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="精度" width="80">
+                          <template #default="{ row }">
+                            <el-input-number
+                              v-if="row.columnType === 'DECIMAL'"
+                              v-model="row.scale"
+                              :min="0"
+                              :max="10"
+                              placeholder="精度"
+                              controls-position="right"
+                              style="width: 100%"
+                              :disabled="isReadonlyForm"
+                            />
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="属性" width="270" align="center">
+                          <template #default="{ row }">
+                            <el-checkbox v-model="row.required" title="必填" :disabled="isReadonlyForm">必填</el-checkbox>
+                            <el-checkbox v-model="row.unique" title="唯一" :disabled="isReadonlyForm">唯一</el-checkbox>
+                            <el-checkbox v-model="row.indexed" title="索引" :disabled="isReadonlyForm">索引</el-checkbox>
+                          </template>
+                        </el-table-column>
+                        <el-table-column label="" width="52" align="center">
+                          <template #default="{ $index }">
+                            <el-button :icon="Delete" circle text :disabled="isReadonlyForm" @click="apiColumns.splice($index, 1)" />
+                          </template>
+                        </el-table-column>
+                      </el-table>
+                      <el-button type="primary" plain :icon="Plus" style="margin-top: 8px" :disabled="isReadonlyForm" @click="addColumn">添加列</el-button>
                     </div>
                   </el-form-item>
                 </el-form>
               </template>
 
-              <!-- ===== SQL：字段映射预览 + 可视化配置/SQL 模式双 tab ===== -->
+              <!-- ===== SQL：可视化配置/SQL 模式按钮切换 ===== -->
               <template v-else-if="form.type === 'SQL'">
-                <FieldMappingPreview
-                  v-if="form.formKey"
-                  :form-key="form.formKey"
-                  :columns="sqlConfig.declaredColumns"
-                  style="margin-bottom: 12px"
-                />
-                <el-tabs v-model="sqlConfig.queryMode" @tab-click="onSqlTabClick" style="margin-top: 0">
-                  <el-tab-pane label="可视化配置" name="visual">
-                    <el-alert v-if="sqlConfig.isStale" title="SQL 已手动修改，可视化配置已锁定" type="warning" show-icon :closable="false" style="margin-bottom: 12px">
-                      <template #default>
-                        <el-button size="small" type="primary" plain @click="resetToVisual">重置为可视化</el-button>
-                      </template>
-                    </el-alert>
-                    <VisualQueryBuilder
-                      v-else
-                      v-model="sqlConfig.visual"
-                      v-model:params="sqlConfig.declaredParams"
-                      :tables="visualTableCandidates"
-                      :disabled="isReadonlyForm"
-                    />
-                  </el-tab-pane>
-                  <el-tab-pane label="SQL 模式" name="sql">
-                    <SqlEditor
-                      v-model="sqlConfig.queryText"
-                      v-model:columns="sqlConfig.declaredColumns"
-                      v-model:params="sqlConfig.declaredParams"
-                      :disabled="isReadonlyForm"
-                      @update:model-value="markSqlEdited"
-                    />
-                  </el-tab-pane>
-                </el-tabs>
+                <el-radio-group v-model="sqlConfig.queryMode" style="margin-bottom: 12px" @change="onSqlModeChange">
+                  <el-radio-button value="visual">可视化配置</el-radio-button>
+                  <el-radio-button value="sql">SQL 模式</el-radio-button>
+                </el-radio-group>
+                <div v-if="sqlConfig.queryMode === 'visual'">
+                  <el-alert v-if="sqlConfig.isStale" title="SQL 已手动修改，可视化配置已锁定" type="warning" show-icon :closable="false" style="margin-bottom: 12px">
+                    <template #default>
+                      <el-button size="small" type="primary" plain @click="resetToVisual">重置为可视化</el-button>
+                    </template>
+                  </el-alert>
+                  <VisualQueryBuilder
+                    v-if="!sqlConfig.isStale"
+                    v-model="sqlConfig.visual"
+                    v-model:params="sqlConfig.declaredParams"
+                    :tables="visualTableCandidates"
+                    :table-fields="sqlTableFields"
+                    :disabled="isReadonlyForm"
+                  />
+                </div>
+                <div v-else>
+                  <SqlEditor
+                    v-model="sqlConfig.queryText"
+                    v-model:columns="sqlConfig.declaredColumns"
+                    v-model:params="sqlConfig.declaredParams"
+                    :disabled="isReadonlyForm"
+                    @update:model-value="markSqlEdited"
+                  />
+                </div>
               </template>
 
               <!-- ===== FORM / SYSTEM：只读端点展示 ===== -->
@@ -348,16 +399,27 @@
             </div>
           </el-tab-pane>
         </el-tabs>
-      </el-dialog>
+          </div>
+          <div class="inline-form-footer">
+            <template v-if="viewOnly">
+              <el-button type="primary" @click="inlineVisible = false">关闭</el-button>
+            </template>
+            <template v-else>
+              <el-button @click="inlineVisible = false">取消</el-button>
+              <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+            </template>
+          </div>
+        </div>
+      </div>
    </div>
 </template>
 
 <script setup lang="ts">
 defineOptions({ name: 'DataSourceList' })
 
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, View, Edit, Delete } from '@element-plus/icons-vue'
+import { Plus, View, Edit, Delete, Close, QuestionFilled } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
@@ -365,13 +427,24 @@ import type { ColumnConfigItem, BizDataVO } from '@/api/bizData'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 import VisualQueryBuilder, { type VisualQueryConfig } from './components/VisualQueryBuilder.vue'
 import SqlEditor from './components/SqlEditor.vue'
-import FieldMappingPreview from './components/FieldMappingPreview.vue'
 
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 
 /** 已发布业务表单（FORM 类型 formKey 下拉候选 + SQL 可视化主表候选） */
 const publishedForms = ref<FormDefinitionDTO[]>([])
-const visualTableCandidates = computed(() => ['wf_biz_' + (sqlConfig.visual.mainTable || '{formKey}')].concat(publishedForms.value.map((f) => `wf_biz_${f.key}`)))
+const visualTableCandidates = computed(() => {
+  const main = (sqlConfig.visual.mainTable || '').trim()
+  const list = main ? [main] : []
+  const seen = new Set(list)
+  for (const f of publishedForms.value) {
+    const t = `wf_biz_${f.key}`
+    if (!seen.has(t)) {
+      list.push(t)
+      seen.add(t)
+    }
+  }
+  return list
+})
 
 /** 已发布工作流表单（WORKFLOW 类型 formKey 下拉候选） */
 const publishedWorkflowForms = ref<FormDefinitionDTO[]>([])
@@ -438,8 +511,10 @@ async function fetchApi(params: any) {
   }
 }
 
-// ========== 新建/编辑弹窗状态 ==========
-const dialogVisible = ref(false)
+// ========== 新建/编辑内嵌覆盖层状态 ==========
+const inlineVisible = ref(false)
+/** 保存进行中（footer 保存按钮 loading） */
+const saving = ref(false)
 const editingId = ref<string | null>(null)
 /** 纯查看模式（openView 打开，区别于可编辑的 API 编辑模式） */
 const viewOnly = ref(false)
@@ -503,6 +578,49 @@ const sqlConfig = reactive({
   declaredParams: [] as string[],
   isStale: false,  // SQL 手改后标记为过期
 })
+
+/** SQL 可视化：主表/JOIN 目标表字段懒加载缓存（表名 → 字段 key 列表） */
+const sqlTableFields = ref<Record<string, string[]>>({})
+
+/** 按表单懒加载表字段：剥离全部 wf_biz 前缀后通过 formKey 查询字段定义 */
+async function ensureTableFields(table: string) {
+  if (!table || sqlTableFields.value[table]) return
+  const formKey = table.replace(/^(wf_biz_)+/, '')
+  try {
+    const res = await formApi.getFormDefinitionByKey(formKey)
+    const cfg = (res.data as any)?.columnConfig
+    let cols: unknown = null
+    if (typeof cfg === 'string' && cfg) {
+      try {
+        cols = JSON.parse(cfg)
+      } catch {
+        cols = null
+      }
+    } else if (Array.isArray(cfg)) {
+      cols = cfg
+    }
+    sqlTableFields.value[table] = (Array.isArray(cols) ? cols : []).map((c: any) => c.key).filter(Boolean)
+  } catch {
+    // 表单加载失败不阻断主流程
+  }
+}
+
+// 主表变化 → 懒加载字段
+watch(
+  () => sqlConfig.visual.mainTable,
+  (t) => {
+    if (t) ensureTableFields(t)
+  },
+)
+// JOIN 目标表变化 → 懒加载字段
+watch(
+  () => sqlConfig.visual.joins.map((j) => j.targetTable),
+  (targets) => {
+    targets.forEach((t) => {
+      if (t) ensureTableFields(t)
+    })
+  },
+)
 
 /** 当前激活标签：config / metadata / data */
 const activeTab = ref('config')
@@ -660,7 +778,7 @@ function openCreate() {
   resetMetadataState()
   resetPreviewState()
   activeTab.value = 'config'
-  dialogVisible.value = true
+  inlineVisible.value = true
 }
 
 async function openEdit(row: DataSourceDTO) {
@@ -730,7 +848,7 @@ async function openEdit(row: DataSourceDTO) {
   resetMetadataState()
   resetPreviewState()
   activeTab.value = 'config'
-  dialogVisible.value = true
+  inlineVisible.value = true
 }
 
 /** 查看数据源详情（只读模式） */
@@ -799,7 +917,7 @@ function openView(row: DataSourceDTO) {
   resetMetadataState()
   resetPreviewState()
   activeTab.value = 'config'
-  dialogVisible.value = true
+  inlineVisible.value = true
 }
 
    function addColumn() {
@@ -964,29 +1082,36 @@ function openView(row: DataSourceDTO) {
        return
      }
    }
-   if (form.type === 'SQL') {
-     if (sqlConfig.queryMode === 'visual' && !sqlConfig.visual.mainTable.trim()) {
-       ElMessage.warning('请配置主表')
-       return
-     }
-     if (sqlConfig.queryMode === 'sql' && !sqlConfig.queryText.trim()) {
-       ElMessage.warning('请输入 SQL 模板')
-       return
-     }
-   }
-   try {
-     const payload = normalizePayload()
-     if (editingId.value) {
-       await dataSourceApi.updateDataSource(editingId.value, payload)
-     } else {
-       await dataSourceApi.createDataSource(payload)
-     }
-     ElMessage.success(editingId.value ? '保存成功' : '创建成功')
-     dialogVisible.value = false
-     tableRef.value?.fetchList()
-   } catch {
-     // http 拦截器已弹出错误消息
-   }
+    if (form.type === 'SQL') {
+      if (!form.sourceKey || !form.sourceKey.trim()) {
+        ElMessage.warning('请输入数据源标识（sourceKey）')
+        return
+      }
+      if (sqlConfig.queryMode === 'visual' && !sqlConfig.visual.mainTable.trim()) {
+        ElMessage.warning('请配置主表')
+        return
+      }
+      if (sqlConfig.queryMode === 'sql' && !sqlConfig.queryText.trim()) {
+        ElMessage.warning('请输入 SQL 模板')
+        return
+      }
+    }
+    saving.value = true
+    try {
+      const payload = normalizePayload()
+      if (editingId.value) {
+        await dataSourceApi.updateDataSource(editingId.value, payload)
+      } else {
+        await dataSourceApi.createDataSource(payload)
+      }
+      ElMessage.success(editingId.value ? '保存成功' : '创建成功')
+      inlineVisible.value = false
+      tableRef.value?.fetchList()
+    } catch {
+      // http 拦截器已弹出错误消息
+    } finally {
+      saving.value = false
+    }
  }
 
   /** 按类型归一化提交载荷：所有类型均通过统一 API 编辑器，FORM/SYSTEM params 由前端自动生成 */
@@ -995,7 +1120,7 @@ function openView(row: DataSourceDTO) {
       name: form.name,
       type: form.type || 'FORM',
       formKey: form.type === 'SQL' ? form.formKey || null : form.type === 'FORM' || form.type === 'WORKFLOW' ? form.formKey || null : null,
-      sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : form.type === 'API' ? form.sourceKey || null : null,
+      sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : form.type === 'API' || form.type === 'SQL' ? form.sourceKey || null : null,
       params: form.type === 'SQL' ? JSON.stringify(buildSqlParams()) : JSON.stringify(buildApiParams()),
     }
   }
@@ -1095,7 +1220,7 @@ function typeLabel(type: string): string {
 }
 
 // ========== SQL 类型辅助函数 ==========
-function onSqlTabClick() {
+function onSqlModeChange() {
   // 切到 SQL 模式：若尚未生成 SQL 文本（首次进入/重置后），用当前可视化配置生成作为起点
   if (sqlConfig.queryMode === 'sql' && !sqlConfig.queryText) {
     sqlConfig.queryText = generatePreviewSql()
@@ -1160,9 +1285,37 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.data-source-list-page {
+  /* 占满 main 可视区：列表卡片内部滚动，覆盖层（absolute inset:0）高度不超过视口，
+     footer 固定于可视底部不随内容滚出屏幕 */
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.ds-list-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ds-list-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sql-key-hint-icon {
+  margin-left: 4px;
+  cursor: help;
+  color: #909399;
+}
 .ops-scroll {
-  max-height: 50vh;
-  overflow-y: auto;
+  /* 内层不再滚动：由页签内容区（.el-tabs__content）统一承接滚动 */
   padding-right: 4px;
 }
 .auto-params-display {
@@ -1209,5 +1362,61 @@ onMounted(async () => {
   gap: 6px;
   margin-bottom: 6px;
   flex-wrap: wrap;
+}
+/* 内嵌表单覆盖层（替代弹窗）：覆盖当前页签内容区，关闭后恢复视图 */
+.inline-form-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+/* 嵌入页面内表格行内组件统一普通字体 */
+.inline-form-overlay :deep(.el-table) {
+  font-size: 14px;
+}
+/* API 配置区表单项紧凑间距 */
+.inline-form-overlay :deep(.el-form-item) {
+  margin-bottom: 8px;
+}
+.inline-form-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px;
+  overflow: hidden;
+}
+.inline-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.inline-form-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.inline-form-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+/* 主表单（顶部输入区）固定不滚动 */
+.inline-form-body > .el-form {
+  flex-shrink: 0;
+}
+.inline-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 16px;
+  flex-shrink: 0;
 }
 </style>

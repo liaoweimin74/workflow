@@ -433,7 +433,7 @@ defineOptions({ name: 'DataSourceList' })
 
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, View, Edit, Delete, Close, QuestionFilled } from '@element-plus/icons-vue'
+import { Plus, View, Edit, Delete, Close, QuestionFilled, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
@@ -1009,9 +1009,7 @@ function openView(row: DataSourceDTO) {
     const params: Record<string, any> = {}
     params.queryMode = sqlConfig.queryMode
     if (sqlConfig.queryMode === 'visual') {
-      // 可视化配置：selectColumnsInput 为自由文本，保存时解析为 selectColumns
-      const text = (sqlConfig.visual.selectColumnsInput || '').trim()
-      sqlConfig.visual.selectColumns = text.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+      // 可视化配置：字段选择由 VisualQueryBuilder 直接写入 selectColumns（别名.字段），保存原样序列化
       params.visual = {
         mainTable: sqlConfig.visual.mainTable,
         mainAlias: sqlConfig.visual.mainAlias || 'm',
@@ -1179,6 +1177,36 @@ const actionButtons: ActionButton[] = [
     label: '查看',
     icon: View,
     onClick: (row: any) => openView(row),
+  },
+  {
+    label: '启用',
+    icon: CircleCheck,
+    permission: 'data-source:manage',
+    show: (row: any) => (row.type === 'API' || row.type === 'SQL') && row.status !== 'ENABLED',
+    onClick: async (row: any) => {
+      try {
+        await dataSourceApi.enableDataSource(row.id)
+        ElMessage.success('启用成功')
+        tableRef.value?.fetchList()
+      } catch {
+        // http 拦截器已弹出错误消息（如未配置完整）
+      }
+    },
+  },
+  {
+    label: '禁用',
+    icon: CircleClose,
+    permission: 'data-source:manage',
+    show: (row: any) => (row.type === 'API' || row.type === 'SQL') && row.status === 'ENABLED',
+    onClick: async (row: any) => {
+      try {
+        await dataSourceApi.disableDataSource(row.id)
+        ElMessage.success('禁用成功')
+        tableRef.value?.fetchList()
+      } catch {
+        // http 拦截器已弹出错误消息
+      }
+    },
   },
   {
     label: '编辑',

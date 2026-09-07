@@ -83,7 +83,7 @@ describe('DataSourceListPage', () => {
 
   // ==================== 操作按钮可见性 ====================
 
-  it('行操作按钮：查看(全部) + 编辑/删除(API + SQL 类型)', async () => {
+  it('行操作按钮：查看(全部) + 编辑/删除/启用/禁用(API + SQL 类型)', async () => {
     stubList()
     const wrapper = createWrapper()
     await nextTick()
@@ -94,15 +94,17 @@ describe('DataSourceListPage', () => {
     const viewBtn = actionButtons.find((b: any) => b.label === '查看')
     const editBtn = actionButtons.find((b: any) => b.label === '编辑')
     const delBtn = actionButtons.find((b: any) => b.label === '删除')
+    const enableBtn = actionButtons.find((b: any) => b.label === '启用')
+    const disableBtn = actionButtons.find((b: any) => b.label === '禁用')
 
     expect(viewBtn).toBeDefined()
     expect(editBtn).toBeDefined()
     expect(delBtn).toBeDefined()
-    // 启用/禁用入口已移除（系统管理类型不可手动启停）
-    expect(actionButtons.find((b: any) => b.label === '启用')).toBeUndefined()
-    expect(actionButtons.find((b: any) => b.label === '禁用')).toBeUndefined()
+    // 启用/禁用入口（DRAFT/DISABLED → 启用；ENABLED → 禁用），仅 API / SQL 类型
+    expect(enableBtn).toBeDefined()
+    expect(disableBtn).toBeDefined()
 
-    // 编辑/删除仅对 API / SQL 类型显示
+    // 编辑/删除/启用/禁用仅对 API / SQL 类型显示
     expect(editBtn.show({ type: 'API' })).toBe(true)
     expect(editBtn.show({ type: 'SQL' })).toBe(true)
     expect(editBtn.show({ type: 'FORM' })).toBe(false)
@@ -111,8 +113,35 @@ describe('DataSourceListPage', () => {
     expect(delBtn.show({ type: 'API' })).toBe(true)
     expect(delBtn.show({ type: 'SQL' })).toBe(true)
     expect(delBtn.show({ type: 'FORM' })).toBe(false)
+    // 启用：DRAFT/DISABLED 显示；禁用：ENABLED 显示
+    expect(enableBtn.show({ type: 'SQL', status: 'DRAFT' })).toBe(true)
+    expect(enableBtn.show({ type: 'SQL', status: 'ENABLED' })).toBe(false)
+    expect(disableBtn.show({ type: 'SQL', status: 'ENABLED' })).toBe(true)
+    expect(disableBtn.show({ type: 'SQL', status: 'DRAFT' })).toBe(false)
+    expect(enableBtn.show({ type: 'FORM', status: 'DRAFT' })).toBe(false)
     // 查看对所有类型显示
     expect(viewBtn.show).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('启用/禁用：DRAFT 启用调 enableDataSource，ENABLED 禁用调 disableDataSource', async () => {
+    stubList()
+    ;(dataSourceApi.enableDataSource as any).mockResolvedValue({ data: {} })
+    ;(dataSourceApi.disableDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const stub = wrapper.findComponent(SearchTableStub)
+    const actionButtons = stub.props('actionButtons') as any[]
+
+    const enableBtn = actionButtons.find((b: any) => b.label === '启用')
+    const disableBtn = actionButtons.find((b: any) => b.label === '禁用')
+
+    await enableBtn.onClick({ id: 'ds-1', type: 'SQL', status: 'DRAFT', name: '报表' })
+    expect(dataSourceApi.enableDataSource).toHaveBeenCalledWith('ds-1')
+
+    await disableBtn.onClick({ id: 'ds-1', type: 'SQL', status: 'ENABLED', name: '报表' })
+    expect(dataSourceApi.disableDataSource).toHaveBeenCalledWith('ds-1')
     wrapper.unmount()
   })
 
@@ -296,7 +325,7 @@ describe('DataSourceListPage', () => {
     component.form.sourceKey = 'orders-report'
     component.sqlConfig.visual.mainTable = 'wf_biz_order'
     component.sqlConfig.visual.mainAlias = 'm'
-    component.sqlConfig.visual.selectColumnsInput = 'm.order_no, c.name AS customer_name'
+    component.sqlConfig.visual.selectColumns = ['m.order_no', 'c.name AS customer_name']
     component.sqlConfig.visual.joins = [{ alias: 'c', targetTable: 'wf_biz_customer', joinType: 'LEFT JOIN', on: 'c.id = m.customer_id', columns: [] }]
     component.sqlConfig.visual.where = [{ column: 'm.status', op: '=', value: 'PAID' }]
     component.sqlConfig.visual.orderBy = [{ column: 'm.created_at', order: 'DESC' }]
@@ -322,6 +351,38 @@ describe('DataSourceListPage', () => {
     expect(p.columns[0].key).toBe('order_no')
     expect(p.params).toEqual(['tenantId'])
     expect(ElMessage.success).toHaveBeenCalledWith('创建成功')
+    wrapper.unmount()
+  })
+
+  it('新建 SQL（可视化模式）：VQB 多选字段写入 selectColumns，保存保留（不复用 selectColumnsInput）', async () => {
+    // 真实 VQB 交互：主表/JOIN 字段选择写入 visual.selectColumns（别名.字段），selectColumnsInput 不被更新
+    stubList()
+    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+    component.form.type = 'SQL'
+    component.form.name = '订单联查'
+    component.form.sourceKey = 'orders-report'
+    component.sqlConfig.visual.mainTable = 'wf_biz_order'
+    component.sqlConfig.visual.mainAlias = 'm'
+    component.sqlConfig.visual.joins = [{ alias: 'c', targetTable: 'wf_biz_customer', joinType: 'LEFT JOIN', on: 'c.id = m.customer_id', columns: [] }]
+    // VQB 多选后的权威状态（selectColumnsInput 保持初始空串，模拟真实交互）
+    component.sqlConfig.visual.selectColumns = ['m.order_no', 'c.name']
+    await nextTick()
+
+    await component.handleSave()
+    await flushPromises()
+
+    expect(dataSourceApi.createDataSource).toHaveBeenCalled()
+    const p = JSON.parse((dataSourceApi.createDataSource as any).mock.calls[0][0].params)
+    expect(p.visual.selectColumns).toContain('m.order_no')
+    expect(p.visual.selectColumns).toContain('c.name')
     wrapper.unmount()
   })
 

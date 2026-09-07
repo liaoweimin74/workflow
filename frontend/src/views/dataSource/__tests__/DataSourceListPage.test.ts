@@ -171,6 +171,61 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
+  it('新建头部：标识/数据源名称/数据源类型/业务表单 四个字段同一行', async () => {
+    stubList()
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+
+    // 四个 el-col 处于同一 el-row 内
+    const row = wrapper.find('.inline-form-body .el-row')
+    expect(row.exists()).toBe(true)
+    const cols = row.findAll('.el-col')
+    expect(cols.length).toBe(4)
+    // 四个 label 文案
+    const html = row.html()
+    expect(html).toContain('标识')
+    expect(html).toContain('数据源名称')
+    expect(html).toContain('数据源类型')
+    expect(html).toContain('业务表单')
+    wrapper.unmount()
+  })
+
+  it('新建 API：可绑定业务表单（formKey 可选，提交携带）', async () => {
+    stubList()
+    ;(dataSourceApi.createDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openCreate()
+    await nextTick()
+    await flushPromises()
+    const component: any = wrapper.vm as any
+
+    // API 类型显示业务表单绑定下拉（ds-form-key-hint 提示存在）
+    expect(component.form.type).toBe('API')
+    expect(wrapper.find('[data-testid="ds-form-key-hint"]').exists()).toBe(true)
+
+    // 绑定业务表单后提交，payload 携带 formKey
+    component.form.name = '库存接口'
+    component.form.sourceKey = 'external-stock'
+    component.form.formKey = 'order'
+    component.apiOps.list.action = '/v1/products'
+    await component.handleSave()
+    await flushPromises()
+
+    expect(dataSourceApi.createDataSource).toHaveBeenCalled()
+    const payload = (dataSourceApi.createDataSource as any).mock.calls[0][0]
+    expect(payload.formKey).toBe('order')
+    expect(payload.sourceKey).toBe('external-stock')
+    wrapper.unmount()
+  })
+
   // ==================== SQL 数据源增删改 ====================
 
   it('新建 SQL：sourceKey 必填（缺失时拦截，不提交）', async () => {
@@ -214,7 +269,7 @@ describe('DataSourceListPage', () => {
     // form 状态回填 sourceKey
     expect((wrapper.vm as any).form.sourceKey).toBe('orders-report')
     // SQL 标识列渲染 sourceKey 输入框（data-testid 定位组件根）
-    expect(wrapper.find('[data-testid="sql-source-key-input"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ds-source-key-input"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -301,7 +356,7 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('SQL 类型：标识 label 后 ? 提示「有值时合并表单列，CRUD 映射到主表」，仅 SQL 类型显示', async () => {
+  it('SQL/API 类型：业务表单 label 后 ? 提示「有值时合并表单列，CRUD 映射到主表」', async () => {
     stubList()
     const wrapper = createWrapper()
     await nextTick()
@@ -311,23 +366,28 @@ describe('DataSourceListPage', () => {
     await nextTick()
     await flushPromises()
     const component: any = wrapper.vm as any
-    component.form.type = 'SQL'
-    await nextTick()
 
-    // ? 提示图标存在（data-testid 定位）
-    expect(wrapper.find('[data-testid="sql-form-key-hint"]').exists()).toBe(true)
+    // 默认 API 类型也显示业务表单绑定 ? 提示
+    expect(wrapper.find('[data-testid="ds-form-key-hint"]').exists()).toBe(true)
     // tooltip content 为需求文案
-    const tooltip = wrapper.findAllComponents({ name: 'ElTooltip' }).find((c) => (c.props('content') as string | undefined)?.includes('有值时合并表单列，CRUD 映射到主表'))
+    let tooltip = wrapper.findAllComponents({ name: 'ElTooltip' }).find((c) => (c.props('content') as string | undefined)?.includes('有值时合并表单列，CRUD 映射到主表'))
     expect(tooltip).toBeDefined()
 
-    // 切换回 API 类型后 ? 消失
-    component.form.type = 'API'
+    // 切换到 SQL 类型后 ? 仍显示
+    component.form.type = 'SQL'
     await nextTick()
-    expect(wrapper.find('[data-testid="sql-form-key-hint"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="ds-form-key-hint"]').exists()).toBe(true)
+    tooltip = wrapper.findAllComponents({ name: 'ElTooltip' }).find((c) => (c.props('content') as string | undefined)?.includes('有值时合并表单列，CRUD 映射到主表'))
+    expect(tooltip).toBeDefined()
+
+    // 切换到 SYSTEM 类型后 ? 消失（系统结构无业务表单绑定）
+    component.form.type = 'SYSTEM'
+    await nextTick()
+    expect(wrapper.find('[data-testid="ds-form-key-hint"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('新建弹窗：主表单 label-width 为 auto（标识/数据源名称/数据源类型自动宽度）', async () => {
+  it('新建弹窗：主表单 label-width 为 auto（标识/数据源名称/数据源类型/业务表单自动宽度）', async () => {
     stubList()
     const wrapper = createWrapper()
     await nextTick()
@@ -336,10 +396,10 @@ describe('DataSourceListPage', () => {
     await flushPromises()
     const forms = wrapper.findAllComponents({ name: 'ElForm' })
     expect(forms.length).toBeGreaterThan(0)
-    // 主表单（含标识/数据源名称/数据源类型）label 自动宽度
+    // 主表单（含标识/数据源名称/数据源类型/业务表单）label 自动宽度
     expect(forms[0].props('labelWidth')).toBe('auto')
     // ? 提示图标以 flex 包裹实现相对 label 垂直居中
-    const wrap = wrapper.find('[data-testid="sql-form-key-label"]')
+    const wrap = wrapper.find('[data-testid="ds-form-key-label"]')
     expect(wrap.exists()).toBe(true)
     const style = (wrap.attributes('style') || '').replace(/\s+/g, '')
     expect(style).toContain('display:inline-flex')

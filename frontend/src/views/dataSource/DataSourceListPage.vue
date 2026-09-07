@@ -43,14 +43,36 @@
           </div>
           <div class="inline-form-body">
         <el-form :model="form" label-width="auto" label-position="top">
-          <!-- 数据源名称 / 数据源类型 / 标识：三个输入项一行，label 在输入项上方 -->
+          <!-- 标识 / 数据源名称 / 数据源类型 / 业务表单：四个输入项一行，label 在输入项上方 -->
           <el-row :gutter="16">
-            <el-col :span="8">
+            <el-col :span="6">
+              <!-- ============ 统一标识：FORM/SYSTEM 只读，API/SQL 手动填写 ============ -->
+              <el-form-item label="标识">
+                <template v-if="form.type === 'FORM' || form.type === 'WORKFLOW'">
+                  <el-input :model-value="form.formKey" disabled placeholder="表单 key 即数据源标识" data-testid="ds-key-input" />
+                </template>
+                <template v-else-if="form.type === 'SYSTEM'">
+                  <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 100%" disabled>
+                    <el-option label="部门树" value="dept-tree" />
+                    <el-option label="用户列表" value="user-tree" />
+                  </el-select>
+                </template>
+                <template v-else>
+                  <el-input
+                    v-model="form.sourceKey"
+                    data-testid="ds-source-key-input"
+                    placeholder="请输入唯一标识，如 external-stock（租户内唯一）"
+                    :disabled="isReadonlyForm"
+                  />
+                </template>
+              </el-form-item>
+            </el-col>
+            <el-col :span="6">
               <el-form-item label="数据源名称">
                 <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" :disabled="isReadonlyForm" />
               </el-form-item>
             </el-col>
-            <el-col :span="8">
+            <el-col :span="6">
               <el-form-item label="数据源类型">
                 <template v-if="!editingId && !viewOnly">
                   <el-radio-group v-model="form.type">
@@ -63,14 +85,18 @@
                 </template>
               </el-form-item>
             </el-col>
-            <el-col :span="8">
-              <!-- ============ 统一 API 配置：FORM/SYSTEM 自动填充，API 手动配置 ============ -->
+            <el-col :span="6">
+              <!-- ============ 业务表单：API/SQL 可选绑定（默认表单提供 CRUD schema），FORM/WORKFLOW 固定 ============ -->
               <el-form-item>
                 <template #label>
-                  <span style="display: inline-flex; align-items: center" data-testid="sql-form-key-label">
-                    标识
-                    <el-tooltip v-if="form.type === 'SQL'" content="有值时合并表单列，CRUD 映射到主表" placement="top">
-                      <el-icon data-testid="sql-form-key-hint" class="sql-key-hint-icon"><QuestionFilled /></el-icon>
+                  <span style="display: inline-flex; align-items: center" data-testid="ds-form-key-label">
+                    业务表单
+                    <el-tooltip
+                      v-if="form.type === 'SQL' || form.type === 'API'"
+                      content="有值时合并表单列，CRUD 映射到主表"
+                      placement="top"
+                    >
+                      <el-icon data-testid="ds-form-key-hint" class="sql-key-hint-icon"><QuestionFilled /></el-icon>
                     </el-tooltip>
                   </span>
                 </template>
@@ -85,31 +111,19 @@
                   </el-select>
                 </template>
                 <template v-else-if="form.type === 'SYSTEM'">
-                  <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 100%" disabled>
-                    <el-option label="部门树" value="dept-tree" />
-                    <el-option label="用户列表" value="user-tree" />
-                  </el-select>
+                  <el-input disabled placeholder="系统数据源无需绑定业务表单" value="" />
                 </template>
-                <template v-else-if="form.type === 'SQL'">
-                  <el-input
-                    v-model="form.sourceKey"
-                    data-testid="sql-source-key-input"
-                    placeholder="请输入唯一标识，如 orders-report（租户内唯一）"
-                    :disabled="isReadonlyForm"
-                  />
+                <template v-else-if="form.type === 'SQL' || form.type === 'API'">
                   <el-select
                     v-model="form.formKey"
-                    placeholder="绑定主表单（可选，用于 CRUD）"
+                    placeholder="绑定主表单（可选）"
                     filterable
                     clearable
-                    style="width: 100%; margin-top: 8px"
+                    style="width: 100%"
                     :disabled="isReadonlyForm"
                   >
                     <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
                   </el-select>
-                </template>
-                <template v-else>
-                  <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" :disabled="isReadonlyForm" />
                 </template>
               </el-form-item>
             </el-col>
@@ -1119,7 +1133,7 @@ function openView(row: DataSourceDTO) {
     return {
       name: form.name,
       type: form.type || 'FORM',
-      formKey: form.type === 'SQL' ? form.formKey || null : form.type === 'FORM' || form.type === 'WORKFLOW' ? form.formKey || null : null,
+      formKey: form.type === 'FORM' || form.type === 'WORKFLOW' ? form.formKey || null : form.type === 'SQL' || form.type === 'API' ? form.formKey || null : null,
       sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : form.type === 'API' || form.type === 'SQL' ? form.sourceKey || null : null,
       params: form.type === 'SQL' ? JSON.stringify(buildSqlParams()) : JSON.stringify(buildApiParams()),
     }

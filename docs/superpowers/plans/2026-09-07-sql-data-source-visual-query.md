@@ -697,33 +697,35 @@ git commit -m "feat: SqlEditor SQL 编辑器组件"
 - Consumes: `formKey`、`columns`（SQL 声明列）
 - Produces: 合并后的列预览表格
 
-- [ ] **Step 1: 实现 FieldMappingPreview**
+- [x] **Step 1: 实现 FieldMappingPreview**
 
 组件：el-table 展示合并后的列（来源、key、label、类型、可写）
 
-- [ ] **Step 2: 在 DataSourceListPage 中集成三个组件**
+- [x] **Step 2: 在 DataSourceListPage 中集成三个组件**
 
 - SQL 类型对话框的可视化 tab → `<VisualQueryBuilder>`
 - SQL 类型对话框的 SQL tab → `<SqlEditor>`
 - formKey 有值时 → `<FieldMappingPreview>`
 
-- [ ] **Step 3: 运行前端测试确认通过**
+- [x] **Step 3: 运行前端测试确认通过**
 
 Run: `cd frontend && npm test`
 Expected: PASS
 
-- [ ] **Step 4: 运行全量后端测试确认无回归**
+- [x] **Step 4: 运行全量后端测试确认无回归**
 
 Run: `mvn test -DfailIfNoTests=false`
 Expected: 917+ tests, 0 new failures
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add frontend/src/views/dataSource/components/FieldMappingPreview.vue \
         frontend/src/views/dataSource/DataSourceListPage.vue
 git commit -m "feat: FieldMappingPreview + 集成 SQL 数据源 UI"
 ```
+
+> **Task 8 备注：** 提交 `f496fe8`（含 4 文件：新组件 FieldMappingPreview.vue、其测试、DataSourceListPage.vue 集成、其测试 mock 更新）。实现要点：FieldMappingPreview 通过 `formApi.getFormDefinitionByKey(formKey)` 拉取 columnConfig JSON 解析表单列，与 SQL 声明列合并去重（表单列优先）、表单列✓/SQL 声明列✗ 可写标记、`主表单 N 列 · SQL 声明 M 列 · 合并后 K 列（X 列去重）` 统计、`未绑定主表单` 空态、非法 JSON 不崩溃；DataSourceListPage 内联 SQL 表单全部替换为三个组件（保留 el-tabs/isStale 锁定/重置/onSqlTabClick/markSqlEdited/保存逻辑），删除失效 addJoin/addWhere/addOrderBy/addParam/addSqlColumn/parseSelectColumns/sqlPreviewText/newParamName，复用 VisualQueryBuilder 导出的 `VisualQueryConfig` 类型替换本地接口，`buildSqlParams` 中内联 selectColumnsInput→selectColumns 解析（保存时自由文本解析，与后端对齐）。测试：FieldMappingPreview 7/7 GREEN，DataSourceListPage 25/25，前端全量 976/976（基线 969 + 7），vue-tsc 无新增错误（仅既有 pre-existing TS6133/其他文件）；后端全量 936 测试仅 1 失败（pre-existing `PageDefinitionPublishIntegrationTest.publish_sameContent_rejectedAsUnchanged`，与 SQL 数据源无关）。
 
 ---
 

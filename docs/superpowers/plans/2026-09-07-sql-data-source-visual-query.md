@@ -611,30 +611,14 @@ git commit -m "feat: DataSourceListPage 支持 SQL 类型数据源"  # 实际提
 - Consumes: `tables`（可用表列表）、`formKey`（可选主表单）
 - Produces: `v-model` 绑定 `VisualQueryConfig` 对象
 
-- [ ] **Step 1: 写 RED 测试**
+- [x] **Step 1: 写 RED 测试**
 
-```typescript
-// VisualQueryBuilder.test.ts
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
-import VisualQueryBuilder from '../VisualQueryBuilder.vue'
-
-describe('VisualQueryBuilder', () => {
-  it('renders main table selector', () => {
-    const wrapper = mount(VisualQueryBuilder, {
-      props: { modelValue: { mainTable: '', mainAlias: 'm', joins: [], selectColumns: [], where: [], orderBy: [] }, tables: ['order', 'customer'] }
-    })
-    expect(wrapper.text()).toContain('主表')
-  })
-})
-```
-
-- [ ] **Step 2: 运行测试确认 RED**
+- [x] **Step 2: 运行测试确认 RED**
 
 Run: `cd frontend && npm test`
 Expected: FAIL — `VisualQueryBuilder.vue` 不存在
 
-- [ ] **Step 3: 实现 VisualQueryBuilder**
+- [x] **Step 3: 实现 VisualQueryBuilder**
 
 组件结构：
 - 主表选择（el-select + 别名输入）
@@ -644,18 +628,20 @@ Expected: FAIL — `VisualQueryBuilder.vue` 不存在
 - 运行时参数（标签输入）
 - SQL 预览区（只读 textarea，watch modelValue 实时生成）
 
-- [ ] **Step 4: 运行测试确认 GREEN**
+- [x] **Step 4: 运行测试确认 GREEN**
 
 Run: `cd frontend && npm test`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add frontend/src/views/dataSource/components/VisualQueryBuilder.vue \
         frontend/src/views/dataSource/components/__tests__/VisualQueryBuilder.test.ts
 git commit -m "feat: VisualQueryBuilder 可视化查询构建组件"
 ```
+
+> **Task 6 备注：** 提交 `da96e1a`。测试 8/8 GREEN（主表/别名渲染、加 JOIN/条件/排序、选择列 blur 解析、参数回车、SQL 预览生成、disabled）。初次 GREEN 失败 3 例：Element Plus `el-input` 设 `inheritAttrs: false` 将 `data-testid` 透传到内部原生 `<input>`/`<textarea>`，后代选择器应改为 `input[data-testid=x]`/`textarea[data-testid=x]`。前端全量 960/960 通过，vue-tsc 无新增错误。组件导出 `VisualQueryConfig`/`JoinClause`/`WhereCondition`/`OrderClause` 类型（供 Task 8 集成复用）。
 
 ---
 

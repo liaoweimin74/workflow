@@ -22,6 +22,9 @@ public interface DataSourceDefinitionRepository extends JpaRepository<DataSource
 
     boolean existsByTenantIdAndName(String tenantId, String name);
 
+    /** sourceKey 租户内唯一性校验（创建/修改数据源时防止标识冲突） */
+    boolean existsByTenantIdAndSourceKey(String tenantId, String sourceKey);
+
     Page<DataSourceDefinition> findByTenantIdOrderByUpdatedAtDesc(String tenantId, Pageable pageable);
 
     Page<DataSourceDefinition> findByTenantIdAndTypeOrderByUpdatedAtDesc(String tenantId, String type, Pageable pageable);

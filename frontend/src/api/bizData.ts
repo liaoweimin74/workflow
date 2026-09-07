@@ -19,6 +19,8 @@ export interface ColumnConfigItem {
   componentType?: string | null
   /** 是否可排序（数据源 metadata 声明；缺省 undefined=未推导，前端按列类型兜底） */
   sortable?: boolean
+  /** 是否可筛选（数据源 metadata 声明；缺省 undefined=未推导） */
+  filterable?: boolean
   /** 不支持展示的列（如子表占位字段，后端无实际列） */
   unsupported?: boolean
   /** 子表列定义（group/tableForm/subForm 内部子字段） */

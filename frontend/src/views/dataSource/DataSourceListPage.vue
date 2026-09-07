@@ -49,7 +49,15 @@
         </el-form-item>
 
         <el-form-item label="数据源类型">
-          <el-tag :type="typeTagType(form.type)">{{ typeLabel(form.type) }}</el-tag>
+          <template v-if="!editingId && !viewOnly">
+            <el-radio-group v-model="form.type">
+              <el-radio-button value="API">第三方 API</el-radio-button>
+              <el-radio-button value="SQL">SQL 查询</el-radio-button>
+            </el-radio-group>
+          </template>
+          <template v-else>
+            <el-tag :type="typeTagType(form.type)">{{ typeLabel(form.type) }}</el-tag>
+          </template>
         </el-form-item>
           <!-- ============ 统一 API 配置：FORM/SYSTEM 自动填充，API 手动配置 ============ -->
           <el-form-item label="标识">
@@ -68,6 +76,12 @@
                 <el-option label="部门树" value="dept-tree" />
                 <el-option label="用户列表" value="user-tree" />
               </el-select>
+            </template>
+            <template v-else-if="form.type === 'SQL'">
+              <el-select v-model="form.formKey" placeholder="绑定主表单（可选）" filterable clearable style="width: 320px" :disabled="isReadonlyForm">
+                <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+              </el-select>
+              <span style="margin-left: 8px; color: #909399; font-size: 12px">有值时合并表单列，CRUD 映射到主表</span>
             </template>
             <template v-else>
               <el-input v-model="form.sourceKey" placeholder="如 external-stock（同一外部系统的稳定标识）" style="width: 320px" :disabled="isReadonlyForm" />
@@ -189,6 +203,109 @@
                     </div>
                   </el-form-item>
                 </el-form>
+              </template>
+
+              <!-- ===== SQL：可视化配置 + SQL 模式双 tab ===== -->
+              <template v-else-if="form.type === 'SQL'">
+                <el-tabs v-model="sqlConfig.queryMode" @tab-click="onSqlTabClick" style="margin-top: 0">
+                  <el-tab-pane label="可视化配置" name="visual">
+                    <el-alert v-if="sqlConfig.isStale" title="SQL 已手动修改，可视化配置已锁定" type="warning" show-icon :closable="false" style="margin-bottom: 12px">
+                      <template #default>
+                        <el-button size="small" type="primary" plain @click="resetToVisual">重置为可视化</el-button>
+                      </template>
+                    </el-alert>
+                    <div v-else>
+                      <el-form :model="sqlConfig.visual" label-width="80px" label-position="left">
+                        <el-form-item label="主表">
+                          <el-input v-model="sqlConfig.visual.mainTable" placeholder="表名或 formKey" style="width: 200px" :disabled="isReadonlyForm" />
+                          <el-input v-model="sqlConfig.visual.mainAlias" placeholder="别名" style="width: 80px; margin-left: 8px" :disabled="isReadonlyForm" />
+                        </el-form-item>
+                        <el-form-item label="JOIN">
+                          <div v-for="(j, idx) in sqlConfig.visual.joins" :key="idx" style="margin-bottom: 8px; padding: 8px; border: 1px solid #e4e7ed; border-radius: 4px">
+                            <div style="display: flex; gap: 8px; margin-bottom: 4px">
+                              <el-input v-model="j.targetTable" placeholder="目标表" style="width: 150px" :disabled="isReadonlyForm" />
+                              <el-input v-model="j.alias" placeholder="别名" style="width: 80px" :disabled="isReadonlyForm" />
+                              <el-select v-model="j.joinType" style="width: 130px" :disabled="isReadonlyForm">
+                                <el-option label="LEFT JOIN" value="LEFT JOIN" />
+                                <el-option label="INNER JOIN" value="INNER JOIN" />
+                                <el-option label="RIGHT JOIN" value="RIGHT JOIN" />
+                              </el-select>
+                              <el-button :icon="Delete" circle size="small" :disabled="isReadonlyForm" @click="sqlConfig.visual.joins.splice(idx, 1)" />
+                            </div>
+                            <el-input v-model="j.on" placeholder="ON 条件（如 c.id = m.customer_id）" :disabled="isReadonlyForm" />
+                          </div>
+                          <el-button v-if="!isReadonlyForm" type="primary" plain size="small" @click="addJoin">+ 添加关联</el-button>
+                        </el-form-item>
+                        <el-form-item label="选择列">
+                          <el-input v-model="sqlConfig.visual.selectColumnsInput" type="textarea" :rows="2" placeholder="逗号分隔（如 m.order_no, c.name AS customer_name）" :disabled="isReadonlyForm" @blur="parseSelectColumns" />
+                        </el-form-item>
+                        <el-form-item label="筛选条件">
+                          <div v-for="(w, idx) in sqlConfig.visual.where" :key="idx" style="display: flex; gap: 8px; margin-bottom: 4px">
+                            <el-input v-model="w.column" placeholder="列名" style="width: 150px" :disabled="isReadonlyForm" />
+                            <el-select v-model="w.op" style="width: 100px" :disabled="isReadonlyForm">
+                              <el-option label="=" value="=" />
+                              <el-option label="!=" value="!=" />
+                              <el-option label=">" value=">" />
+                              <el-option label=">=" value=">=" />
+                              <el-option label="<" value="<" />
+                              <el-option label="<=" value="<=" />
+                              <el-option label="LIKE" value="LIKE" />
+                              <el-option label="IN" value="IN" />
+                            </el-select>
+                            <el-input v-model="w.value" placeholder="值" style="width: 150px" :disabled="isReadonlyForm" />
+                            <el-button :icon="Delete" circle size="small" :disabled="isReadonlyForm" @click="sqlConfig.visual.where.splice(idx, 1)" />
+                          </div>
+                          <el-button v-if="!isReadonlyForm" type="primary" plain size="small" @click="addWhere">+ 添加条件</el-button>
+                        </el-form-item>
+                        <el-form-item label="排序">
+                          <div v-for="(o, idx) in sqlConfig.visual.orderBy" :key="idx" style="display: flex; gap: 8px; margin-bottom: 4px">
+                            <el-input v-model="o.column" placeholder="列名" style="width: 200px" :disabled="isReadonlyForm" />
+                            <el-select v-model="o.order" style="width: 100px" :disabled="isReadonlyForm">
+                              <el-option label="ASC" value="ASC" />
+                              <el-option label="DESC" value="DESC" />
+                            </el-select>
+                            <el-button :icon="Delete" circle size="small" :disabled="isReadonlyForm" @click="sqlConfig.visual.orderBy.splice(idx, 1)" />
+                          </div>
+                          <el-button v-if="!isReadonlyForm" type="primary" plain size="small" @click="addOrderBy">+ 添加排序</el-button>
+                        </el-form-item>
+                        <el-form-item label="运行时参数">
+                          <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                            <el-tag v-for="(p, idx) in sqlConfig.declaredParams" :key="idx" closable @close="sqlConfig.declaredParams.splice(idx, 1)">{{ p }}</el-tag>
+                            <el-input v-if="!isReadonlyForm" v-model="newParamName" placeholder="参数名" style="width: 120px" @keyup.enter="addParam" />
+                          </div>
+                        </el-form-item>
+                      </el-form>
+                      <el-divider content-position="left">SQL 预览（只读）</el-divider>
+                      <el-input v-model="sqlPreviewText" type="textarea" :rows="4" readonly style="font-family: monospace" />
+                    </div>
+                  </el-tab-pane>
+                  <el-tab-pane label="SQL 模式" name="sql">
+                    <el-form label-width="80px" label-position="left">
+                      <el-form-item label="SQL 模板">
+                        <el-input v-model="sqlConfig.queryText" type="textarea" :rows="6" placeholder="SELECT ... FROM wf_biz_<formKey> WHERE tenant_id = :tenantId" style="font-family: monospace" :disabled="isReadonlyForm" @input="markSqlEdited" />
+                      </el-form-item>
+                      <el-form-item label="列声明">
+                        <div v-for="(col, idx) in sqlConfig.declaredColumns" :key="idx" class="column-row">
+                          <el-input v-model="col.key" placeholder="字段名" style="width: 130px" :disabled="isReadonlyForm" />
+                          <el-input v-model="col.label" placeholder="列名" style="width: 130px" :disabled="isReadonlyForm" />
+                          <el-select v-model="col.columnType" placeholder="类型" style="width: 120px" :disabled="isReadonlyForm">
+                            <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+                          </el-select>
+                          <el-checkbox v-model="col.sortable" :disabled="isReadonlyForm">排序</el-checkbox>
+                          <el-checkbox v-model="col.filterable" :disabled="isReadonlyForm">筛选</el-checkbox>
+                          <el-button :icon="Delete" circle size="small" :disabled="isReadonlyForm" @click="sqlConfig.declaredColumns.splice(idx, 1)" />
+                        </div>
+                        <el-button v-if="!isReadonlyForm" type="primary" plain size="small" @click="addSqlColumn">+ 添加列</el-button>
+                      </el-form-item>
+                      <el-form-item label="运行时参数">
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                          <el-tag v-for="(p, idx) in sqlConfig.declaredParams" :key="idx" closable @close="sqlConfig.declaredParams.splice(idx, 1)">{{ p }}</el-tag>
+                          <el-input v-if="!isReadonlyForm" v-model="newParamName" placeholder="参数名" style="width: 120px" @keyup.enter="addParam" />
+                        </div>
+                      </el-form-item>
+                    </el-form>
+                  </el-tab-pane>
+                </el-tabs>
               </template>
 
               <!-- ===== FORM / SYSTEM：只读端点展示 ===== -->
@@ -342,6 +459,7 @@ const searchFields = computed<SearchField[]>(() => [
       { label: '工作流表单', value: 'WORKFLOW' },
       { label: '系统结构', value: 'SYSTEM' },
       { label: '第三方 API', value: 'API' },
+      { label: 'SQL 查询', value: 'SQL' },
     ],
     style: 'width: 140px',
   },
@@ -393,18 +511,18 @@ const viewOnly = ref(false)
 /** 是否为查看模式（弹窗处于打开态） */
 const isViewMode = computed(() => editingId.value !== null)
 
-/** 是否为 API 类型（唯一支持手动增删改的类型） */
-const isApiType = computed(() => form.type === 'API')
+/** 是否为可手动编辑的类型（API + SQL） */
+const isEditableType = computed(() => form.type === 'API' || form.type === 'SQL')
 
-/** 表单整体只读：纯查看模式，或非 API 类型（FORM/WORKFLOW/SYSTEM 由系统管理） */
-const isReadonlyForm = computed(() => viewOnly.value || !isApiType.value)
+/** 表单整体只读：纯查看模式，或非可编辑类型（FORM/WORKFLOW/SYSTEM 由系统管理） */
+const isReadonlyForm = computed(() => viewOnly.value || !isEditableType.value)
 
 /** 弹窗标题 */
 const dialogTitle = computed(() => {
   if (viewOnly.value) {
     return '查看数据源'
   }
-  return isApiType.value ? (editingId.value ? '编辑数据源' : '新建数据源') : '数据源详情'
+  return isEditableType.value ? (editingId.value ? '编辑数据源' : '新建数据源') : '数据源详情'
 })
 
 /** 单操作配置（多操作 params 结构） */
@@ -439,6 +557,47 @@ const apiOps = reactive<Record<'list' | 'get' | 'create' | 'update' | 'delete', 
 
 /** API 类型：列定义 */
 const apiColumns = ref<ColumnConfigItem[]>([])
+
+/** SQL 类型：查询配置 */
+interface JoinClause {
+  alias: string
+  targetTable: string
+  joinType: string
+  on: string
+  columns: string[]
+}
+interface WhereCondition {
+  column: string
+  op: string
+  value: any
+}
+interface OrderClause {
+  column: string
+  order: string
+}
+interface VisualConfig {
+  mainTable: string
+  mainAlias: string
+  joins: JoinClause[]
+  selectColumns: string[]
+  selectColumnsInput: string
+  where: WhereCondition[]
+  orderBy: OrderClause[]
+}
+const sqlConfig = reactive({
+  queryMode: 'visual' as 'visual' | 'sql',
+  visual: { mainTable: '', mainAlias: 'm', joins: [] as JoinClause[], selectColumns: [] as string[], selectColumnsInput: '', where: [] as WhereCondition[], orderBy: [] as OrderClause[] } as VisualConfig,
+  queryText: '',
+  declaredColumns: [] as ColumnConfigItem[],
+  declaredParams: [] as string[],
+  isStale: false,  // SQL 手改后标记为过期
+})
+
+/** SQL 预览文本（可视化模式下实时生成） */
+const sqlPreviewText = computed(() => {
+  if (sqlConfig.queryMode === 'sql') return sqlConfig.queryText
+  return generatePreviewSql()
+})
 
 /** 当前激活标签：config / metadata / data */
 const activeTab = ref('config')
@@ -571,7 +730,7 @@ function openCreate() {
   editingId.value = null
   viewOnly.value = false
   form.name = ''
-  // 仅第三方 API 数据源支持手动新建；系统管理类型不开放手动创建
+  // 支持手动新建 API 和 SQL 数据源
   form.type = 'API'
   form.formKey = ''
   form.sourceKey = ''
@@ -586,6 +745,13 @@ function openCreate() {
   apiOps.update = { action: '', method: 'PUT' }
   apiOps.delete = { action: '', method: 'DELETE' }
   apiColumns.value = []
+  // SQL 类型初始化
+  sqlConfig.queryMode = 'visual'
+  sqlConfig.visual = { mainTable: '', mainAlias: 'm', joins: [], selectColumns: [], selectColumnsInput: '', where: [], orderBy: [] }
+  sqlConfig.queryText = ''
+  sqlConfig.declaredColumns = []
+  sqlConfig.declaredParams = []
+  sqlConfig.isStale = false
   resetMetadataState()
   resetPreviewState()
   activeTab.value = 'config'
@@ -637,6 +803,22 @@ async function openEdit(row: DataSourceDTO) {
     form.data = p.data ? JSON.stringify(p.data) : ''
     form.headers = p.headers ? JSON.stringify(p.headers) : ''
     apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  } else if (row.type === 'SQL') {
+    // SQL 类型：解析 queryMode + visual/query
+    sqlConfig.queryMode = (p.queryMode as 'visual' | 'sql') || 'visual'
+    sqlConfig.isStale = false
+    if (p.visual) {
+      sqlConfig.visual.mainTable = p.visual.mainTable || ''
+      sqlConfig.visual.mainAlias = p.visual.mainAlias || 'm'
+      sqlConfig.visual.joins = p.visual.joins || []
+      sqlConfig.visual.selectColumns = p.visual.selectColumns || []
+      sqlConfig.visual.selectColumnsInput = (p.visual.selectColumns || []).join(', ')
+      sqlConfig.visual.where = p.visual.where || []
+      sqlConfig.visual.orderBy = p.visual.orderBy || []
+    }
+    sqlConfig.queryText = p.query || ''
+    sqlConfig.declaredColumns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+    sqlConfig.declaredParams = Array.isArray(p.params) ? (p.params as string[]) : []
   } else if (row.type === 'FORM' || row.type === 'SYSTEM') {
     // FORM/SYSTEM：只读端点展示由模板根据 formKey/sourceKey 响应式计算，无需填充 apiOps
   }
@@ -692,6 +874,22 @@ function openView(row: DataSourceDTO) {
     form.data = p.data ? JSON.stringify(p.data) : ''
     form.headers = p.headers ? JSON.stringify(p.headers) : ''
     apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  } else if (row.type === 'SQL') {
+    // SQL 类型：查看模式同样填充 sqlConfig（表单整体只读）
+    sqlConfig.queryMode = (p.queryMode as 'visual' | 'sql') || 'visual'
+    sqlConfig.isStale = false
+    if (p.visual) {
+      sqlConfig.visual.mainTable = p.visual.mainTable || ''
+      sqlConfig.visual.mainAlias = p.visual.mainAlias || 'm'
+      sqlConfig.visual.joins = p.visual.joins || []
+      sqlConfig.visual.selectColumns = p.visual.selectColumns || []
+      sqlConfig.visual.selectColumnsInput = (p.visual.selectColumns || []).join(', ')
+      sqlConfig.visual.where = p.visual.where || []
+      sqlConfig.visual.orderBy = p.visual.orderBy || []
+    }
+    sqlConfig.queryText = p.query || ''
+    sqlConfig.declaredColumns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+    sqlConfig.declaredParams = Array.isArray(p.params) ? (p.params as string[]) : []
   }
   resetMetadataState()
   resetPreviewState()
@@ -766,10 +964,73 @@ function openView(row: DataSourceDTO) {
    if (dataObj) params.data = dataObj
    const headersObj = parseParamsJson(form.headers)
    if (headersObj) params.headers = headersObj
-   return params
- }
+    return params
+  }
 
- /** 校验并保存 */
+  /** SQL 类型：组装 params JSON */
+  function buildSqlParams(): Record<string, any> {
+    const params: Record<string, any> = {}
+    params.queryMode = sqlConfig.queryMode
+    if (sqlConfig.queryMode === 'visual') {
+      // 可视化配置：解析 selectColumnsInput
+      parseSelectColumns()
+      params.visual = {
+        mainTable: sqlConfig.visual.mainTable,
+        mainAlias: sqlConfig.visual.mainAlias || 'm',
+        joins: sqlConfig.visual.joins,
+        selectColumns: sqlConfig.visual.selectColumns,
+        where: sqlConfig.visual.where,
+        orderBy: sqlConfig.visual.orderBy,
+      }
+      // 生成预览 SQL（前端简单拼接，后端 VisualSqlGenerator 会重新生成）
+      params.query = generatePreviewSql()
+    } else {
+      // SQL 模式：直接使用手写 SQL
+      params.query = sqlConfig.queryText
+    }
+    // 列声明
+    const columns = sqlConfig.declaredColumns.filter((c) => c.key && c.key.trim())
+    if (columns.length > 0) {
+      params.columns = columns.map((c) => ({
+        key: c.key.trim(),
+        label: c.label || c.key.trim(),
+        columnType: c.columnType || 'VARCHAR',
+        sortable: !!c.sortable,
+        filterable: !!c.filterable,
+      }))
+    }
+    // 运行时参数白名单
+    if (sqlConfig.declaredParams.length > 0) {
+      params.params = sqlConfig.declaredParams
+    }
+    return params
+  }
+
+  /** 可视化模式：前端生成预览 SQL（简化版，后端会重新生成） */
+  function generatePreviewSql(): string {
+    const v = sqlConfig.visual
+    if (!v.mainTable) return ''
+    let sql = `SELECT ${v.selectColumns.join(', ') || '*'}`
+    sql += ` FROM ${v.mainTable} ${v.mainAlias || 'm'}`
+    for (const j of v.joins) {
+      if (j.targetTable && j.on) {
+        sql += ` ${j.joinType} ${j.targetTable} ${j.alias} ON ${j.on}`
+      }
+    }
+    sql += ` WHERE ${v.mainAlias || 'm'}.tenant_id = :tenantId`
+    for (const w of v.where) {
+      if (w.column && w.op) {
+        sql += ` AND ${w.column} ${w.op} ?`
+      }
+    }
+    if (v.orderBy.length > 0) {
+      const parts = v.orderBy.filter((o) => o.column).map((o) => `${o.column} ${o.order || 'ASC'}`)
+      if (parts.length > 0) sql += ` ORDER BY ${parts.join(', ')}`
+    }
+    return sql
+  }
+
+  /** 校验并保存 */
  async function handleSave() {
    if (!form.name || !form.name.trim()) {
      ElMessage.warning('请输入数据源名称')
@@ -797,6 +1058,16 @@ function openView(row: DataSourceDTO) {
        return
      }
    }
+   if (form.type === 'SQL') {
+     if (sqlConfig.queryMode === 'visual' && !sqlConfig.visual.mainTable.trim()) {
+       ElMessage.warning('请配置主表')
+       return
+     }
+     if (sqlConfig.queryMode === 'sql' && !sqlConfig.queryText.trim()) {
+       ElMessage.warning('请输入 SQL 模板')
+       return
+     }
+   }
    try {
      const payload = normalizePayload()
      if (editingId.value) {
@@ -817,9 +1088,9 @@ function openView(row: DataSourceDTO) {
     return {
       name: form.name,
       type: form.type || 'FORM',
-      formKey: form.type === 'FORM' || form.type === 'WORKFLOW' ? form.formKey || null : null,
+      formKey: form.type === 'SQL' ? form.formKey || null : form.type === 'FORM' || form.type === 'WORKFLOW' ? form.formKey || null : null,
       sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : form.type === 'API' ? form.sourceKey || null : null,
-      params: JSON.stringify(buildApiParams()),
+      params: form.type === 'SQL' ? JSON.stringify(buildSqlParams()) : JSON.stringify(buildApiParams()),
     }
   }
 
@@ -857,7 +1128,7 @@ function openView(row: DataSourceDTO) {
   }
 
 // ========== 操作按钮 ==========
-/** 仅第三方 API 数据源可手动编辑/删除；FORM/WORKFLOW/SYSTEM 由系统管理，仅可查看 */
+/** API 和 SQL 类型可手动编辑/删除；FORM/WORKFLOW/SYSTEM 由系统管理，仅可查看 */
 const actionButtons: ActionButton[] = [
   {
     label: '查看',
@@ -868,7 +1139,7 @@ const actionButtons: ActionButton[] = [
     label: '编辑',
     icon: Edit,
     permission: 'data-source:manage',
-    show: (row: any) => row.type === 'API',
+    show: (row: any) => row.type === 'API' || row.type === 'SQL',
     onClick: (row: any) => openEdit(row),
   },
   {
@@ -876,7 +1147,7 @@ const actionButtons: ActionButton[] = [
     type: 'danger',
     icon: Delete,
     permission: 'data-source:manage',
-    show: (row: any) => row.type === 'API',
+    show: (row: any) => row.type === 'API' || row.type === 'SQL',
     onClick: async (row: any) => {
       try {
         await ElMessageBox.confirm('确定要删除此数据源吗？', '删除确认', { type: 'warning' })
@@ -895,12 +1166,13 @@ const actionButtons: ActionButton[] = [
 ]
 
 // ========== 工具函数 ==========
-function typeTagType(type: string): '' | 'primary' | 'success' | 'warning' {
-  const map: Record<string, '' | 'primary' | 'success' | 'warning'> = {
+function typeTagType(type: string): '' | 'primary' | 'success' | 'warning' | 'info' {
+  const map: Record<string, '' | 'primary' | 'success' | 'warning' | 'info'> = {
     FORM: 'primary',
     WORKFLOW: 'primary',
     SYSTEM: 'success',
     API: 'warning',
+    SQL: 'info',
   }
   return map[type] || ''
 }
@@ -911,8 +1183,62 @@ function typeLabel(type: string): string {
     WORKFLOW: '工作流表单',
     SYSTEM: '系统结构',
     API: '第三方 API',
+    SQL: 'SQL 查询',
   }
   return map[type] || type
+}
+
+// ========== SQL 类型辅助函数 ==========
+const newParamName = ref('')
+
+function addJoin() {
+  sqlConfig.visual.joins.push({ alias: '', targetTable: '', joinType: 'LEFT JOIN', on: '', columns: [] })
+}
+
+function addWhere() {
+  sqlConfig.visual.where.push({ column: '', op: '=', value: '' })
+}
+
+function addOrderBy() {
+  sqlConfig.visual.orderBy.push({ column: '', order: 'ASC' })
+}
+
+function addParam() {
+  const name = newParamName.value.trim()
+  if (name && !sqlConfig.declaredParams.includes(name)) {
+    sqlConfig.declaredParams.push(name)
+    newParamName.value = ''
+  }
+}
+
+function addSqlColumn() {
+  sqlConfig.declaredColumns.push({ key: '', label: '', columnType: 'VARCHAR', length: null, scale: null, required: false, unique: false, indexed: false, sortable: false, filterable: false })
+}
+
+function parseSelectColumns() {
+  // 从逗号分隔的文本解析为数组
+  const text = sqlConfig.visual.selectColumnsInput || ''
+  sqlConfig.visual.selectColumns = text.split(',').map((s: string) => s.trim()).filter((s: string) => s)
+}
+
+function onSqlTabClick() {
+  // 切到 SQL 模式：若尚未生成 SQL 文本（首次进入/重置后），用当前可视化配置生成作为起点
+  if (sqlConfig.queryMode === 'sql' && !sqlConfig.queryText) {
+    sqlConfig.queryText = generatePreviewSql()
+  }
+}
+
+/** 用户在 SQL 模式下手动编辑 SQL → 标记可视化已过期 */
+function markSqlEdited() {
+  if (sqlConfig.queryMode === 'sql' && !isReadonlyForm.value) {
+    sqlConfig.isStale = true
+  }
+}
+
+function resetToVisual() {
+  sqlConfig.isStale = false
+  sqlConfig.queryText = ''
+  sqlConfig.queryMode = 'visual'
 }
 
 function statusTagType(status: string): '' | 'success' | 'warning' | 'info' {

@@ -487,4 +487,115 @@ class DataSourceDefinitionServiceTest {
         assertEquals("SYSTEM", result.getType());
         assertEquals("dept-tree", result.getSourceKey());
     }
+
+    // ==================== source_key 泛化（Task 3） ====================
+
+    @Test
+    void create_formSource_sourceKeyAutoEqualsFormKey() {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "测试数据源")).thenReturn(false);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave")).thenReturn(true);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("测试数据源", "FORM", "biz_leave", null, null);
+
+        assertEquals("biz_leave", result.getSourceKey());
+    }
+
+    @Test
+    void create_formSource_sourceKeyParamIgnoredWhenDiffersFromFormKey() {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "测试数据源")).thenReturn(false);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave")).thenReturn(true);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("测试数据源", "FORM", "biz_leave", "custom-key", null);
+
+        // formKey 为权威源头，sourceKey 恒等于 formKey
+        assertEquals("biz_leave", result.getSourceKey());
+    }
+
+    @Test
+    void create_formSource_duplicateSourceKey_rejected() {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "测试数据源")).thenReturn(false);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave")).thenReturn(true);
+        when(dsRepository.existsByTenantIdAndSourceKey(TENANT_ID, "biz_leave")).thenReturn(true);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.create("测试数据源", "FORM", "biz_leave", null, null));
+        assertTrue(ex.getMessage().contains("sourceKey"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void create_workflowSource_sourceKeyAutoEqualsFormKey() {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "测试数据源")).thenReturn(false);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "wf_leave")).thenReturn(true);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("测试数据源", "WORKFLOW", "wf_leave", null, null);
+
+        assertEquals("wf_leave", result.getSourceKey());
+    }
+
+    @Test
+    void create_sqlSource_success_withOptionalFormKey() {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "测试数据源")).thenReturn(false);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("测试数据源", "SQL", null, "orders-report", null);
+
+        assertEquals("DRAFT", result.getStatus());
+        assertEquals("SQL", result.getType());
+        assertEquals("orders-report", result.getSourceKey());
+        assertNull(result.getFormKey());
+    }
+
+    @Test
+    void create_sqlSource_missingSourceKey_rejected() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.create("测试数据源", "SQL", null, null, null));
+        assertTrue(ex.getMessage().contains("sourceKey"));
+    }
+
+    @Test
+    void update_formSource_sourceKeyFollowsFormKeyChange() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", "biz_leave", null);
+        ds.setStatus("DRAFT");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave2")).thenReturn(true);
+        when(dsRepository.existsByTenantIdAndSourceKey(TENANT_ID, "biz_leave2")).thenReturn(false);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.update(DS_ID, null, null, "biz_leave2", null, null);
+
+        assertEquals("biz_leave2", result.getFormKey());
+        assertEquals("biz_leave2", result.getSourceKey());
+    }
+
+    @Test
+    void update_formSource_newFormKeySourceKeyConflict_rejected() {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", "biz_leave", null);
+        ds.setStatus("DRAFT");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave2")).thenReturn(true);
+        when(dsRepository.existsByTenantIdAndSourceKey(TENANT_ID, "biz_leave2")).thenReturn(true);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.update(DS_ID, null, null, "biz_leave2", null, null));
+        assertTrue(ex.getMessage().contains("sourceKey"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_unchangedSourceKey_noSelfConflict() {
+        // FORM 类型仅改名称：formKey/sourceKey 均不变 → 不做唯一性校验（自身不算冲突）
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", "biz_leave", null);
+        ds.setStatus("DRAFT");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave")).thenReturn(true);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.update(DS_ID, "新名称", null, null, null, null);
+
+        verify(dsRepository, never()).existsByTenantIdAndSourceKey(any(), any());
+    }
 }

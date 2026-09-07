@@ -39,7 +39,8 @@ public class DataSourceDefinitionService {
     private static final String TYPE_SYSTEM = "SYSTEM";
     private static final String TYPE_API = "API";
     private static final String TYPE_WORKFLOW = "WORKFLOW";
-    private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API, TYPE_WORKFLOW);
+    private static final String TYPE_SQL = "SQL";
+    private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API, TYPE_WORKFLOW, TYPE_SQL);
 
     /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist） */
     private static final Set<String> SYSTEM_SOURCE_KEYS = Set.of("dept-tree", "user-tree");
@@ -88,10 +89,18 @@ public class DataSourceDefinitionService {
         if (dsRepository.existsByTenantIdAndName(tenantId, name)) {
             throw new BusinessException(400, "数据源名称已存在: " + name);
         }
-        validateRequiredFields(type, formKey, sourceKey, params);
-        if ((TYPE_FORM.equals(type) || TYPE_WORKFLOW.equals(type))
-                && !formDefRepository.existsByTenantIdAndKey(tenantId, formKey)) {
+        // FORM/WORKFLOW：sourceKey 恒等于 formKey（formKey 权威）；其余类型以入参 sourceKey 为准
+        boolean formBound = TYPE_FORM.equals(type) || TYPE_WORKFLOW.equals(type);
+        String effSourceKey = formBound ? formKey : sourceKey;
+        validateRequiredFields(type, formKey, effSourceKey, params);
+        if (formBound && !formDefRepository.existsByTenantIdAndKey(tenantId, formKey)) {
             throw new BusinessException(400, "绑定的表单不存在: " + formKey);
+        }
+        if (effSourceKey == null || effSourceKey.isBlank()) {
+            throw new BusinessException(400, "数据源必须填写 sourceKey");
+        }
+        if (dsRepository.existsByTenantIdAndSourceKey(tenantId, effSourceKey)) {
+            throw new BusinessException(400, "数据源标识 sourceKey 已存在: " + effSourceKey);
         }
 
         DataSourceDefinition ds = new DataSourceDefinition();
@@ -100,7 +109,7 @@ public class DataSourceDefinitionService {
         ds.setName(name);
         ds.setType(type);
         ds.setFormKey(formKey);
-        ds.setSourceKey(sourceKey);
+        ds.setSourceKey(effSourceKey);
         if (TYPE_FORM.equals(type) || TYPE_SYSTEM.equals(type)) {
             ds.setParams(generateParams(type, formKey, sourceKey));
         } else {
@@ -134,10 +143,17 @@ public class DataSourceDefinitionService {
         String newFormKey = formKey == null ? ds.getFormKey() : formKey;
         String newSourceKey = sourceKey == null ? ds.getSourceKey() : sourceKey;
         String newParams = params == null ? ds.getParams() : params;
-        validateRequiredFields(newType, newFormKey, newSourceKey, newParams);
-        if ((TYPE_FORM.equals(newType) || TYPE_WORKFLOW.equals(newType))
-                && !formDefRepository.existsByTenantIdAndKey(tenantId, newFormKey)) {
+        // FORM/WORKFLOW：sourceKey 恒等于 formKey（formKey 权威），忽略入参 sourceKey 差异
+        boolean formBound = TYPE_FORM.equals(newType) || TYPE_WORKFLOW.equals(newType);
+        String effNewSourceKey = formBound ? newFormKey : newSourceKey;
+        validateRequiredFields(newType, newFormKey, effNewSourceKey, newParams);
+        if (formBound && !formDefRepository.existsByTenantIdAndKey(tenantId, newFormKey)) {
             throw new BusinessException(400, "绑定的表单不存在: " + newFormKey);
+        }
+        // sourceKey 变更（不等于当前值）时校验租户内唯一；保持不变则跳过（自身不算冲突）
+        if (!java.util.Objects.equals(effNewSourceKey, ds.getSourceKey())
+                && dsRepository.existsByTenantIdAndSourceKey(tenantId, effNewSourceKey)) {
+            throw new BusinessException(400, "数据源标识 sourceKey 已存在: " + effNewSourceKey);
         }
 
         // 已启用数据源若变更类型/绑定对象，须重新校验发布状态
@@ -153,7 +169,7 @@ public class DataSourceDefinitionService {
         ds.setName(name == null ? ds.getName() : name);
         ds.setType(newType);
         ds.setFormKey(newFormKey);
-        ds.setSourceKey(newSourceKey);
+        ds.setSourceKey(effNewSourceKey);
         ds.setParams(newParams);
         return dsRepository.save(ds);
     }
@@ -341,17 +357,13 @@ public class DataSourceDefinitionService {
 
     // ==================== 内部工具 ====================
 
-    /** 按类型校验必填项：FORM→formKey；SYSTEM/API→sourceKey；API→params 合法 JSON */
+    /** 按类型校验必填项：FORM/WORKFLOW→formKey（sourceKey 由 formKey 派生）；SYSTEM/API/SQL→sourceKey；API→params 合法 JSON */
     private void validateRequiredFields(String type, String formKey, String sourceKey, String params) {
-        if (TYPE_FORM.equals(type)) {
+        if (TYPE_FORM.equals(type) || TYPE_WORKFLOW.equals(type)) {
             if (formKey == null || formKey.isBlank()) {
-                throw new BusinessException(400, "FORM 类型数据源必须绑定表单 formKey");
+                throw new BusinessException(400, type + " 类型数据源必须绑定表单 formKey");
             }
-        } else if (TYPE_WORKFLOW.equals(type)) {
-            if (formKey == null || formKey.isBlank()) {
-                throw new BusinessException(400, "WORKFLOW 类型数据源必须绑定表单 formKey");
-            }
-        } else if (TYPE_SYSTEM.equals(type) || TYPE_API.equals(type)) {
+        } else if (TYPE_SYSTEM.equals(type) || TYPE_API.equals(type) || TYPE_SQL.equals(type)) {
             if (sourceKey == null || sourceKey.isBlank()) {
                 throw new BusinessException(400, type + " 类型数据源必须填写 sourceKey");
             }
@@ -378,6 +390,7 @@ public class DataSourceDefinitionService {
                     throw new BusinessException(400, "API 数据源参数 params 必须是合法 JSON: " + e.getOriginalMessage());
                 }
             }
+            // SQL：仅要求 sourceKey（query 配置在 params 中，DRAFT 阶段可为空，启用后由适配器校验）
         }
     }
 

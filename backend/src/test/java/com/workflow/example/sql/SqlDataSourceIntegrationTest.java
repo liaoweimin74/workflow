@@ -5,6 +5,7 @@ import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.engine.datasource.UnifiedDataSourceAdapter;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
+import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.engine.form.column.DynamicTableManager;
@@ -47,6 +48,9 @@ class SqlDataSourceIntegrationTest {
 
     @Autowired
     private UnifiedDataSourceAdapter adapter;
+
+    @Autowired
+    private DataSourceDefinitionRepository dsRepository;
 
     @MockitoBean
     private DynamicTableManager tableManager;
@@ -132,6 +136,17 @@ class SqlDataSourceIntegrationTest {
         DataSourceMetadata meta = adapter.metadata(ds);
 
         assertThat(meta.isWritable()).isFalse();
+    }
+
+    @Test
+    void formEventAutoCreatedDataSource_sourceKeyEqualsFormKey() {
+        // setUp 中 ensureFormDefinition() 触发表单创建事件 → DataSourceSyncListener 自动建 FORM 数据源
+        // 实体 @PrePersist 兜底：source_key 自动 = form_key（V31 唯一索引要求非空）
+        DataSourceDefinition ds = dsRepository.findByTenantIdAndFormKey(TENANT_ID, "order")
+                .orElseThrow(() -> new AssertionError("表单事件应自动创建 order 数据源"));
+
+        assertThat(ds.getType()).isEqualTo("FORM");
+        assertThat(ds.getSourceKey()).isEqualTo("order");
     }
 
     // ==================== helpers ====================

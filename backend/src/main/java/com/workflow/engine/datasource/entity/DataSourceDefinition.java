@@ -70,13 +70,33 @@ public class DataSourceDefinition {
 
     @PrePersist
     protected void onCreate() {
+        syncSourceKeyWithFormKey();
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
+        syncSourceKeyWithFormKey();
         updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * FORM/WORKFLOW 数据源恒等约束兜底：保存时强制 formKey 与 sourceKey 相同。
+     * 覆盖绕过 Service 直接 repository.save 的路径（表单事件自动创建、页面迁移），
+     * 保证唯一索引 uk_ds_tenant_source_key 下 FORM/WORKFLOW 行的 source_key 始终非空且 = form_key。
+     * formKey 为空而 sourceKey 非空时反向填充（兼容调用方只填其一的情形）。
+     */
+    private void syncSourceKeyWithFormKey() {
+        if ("FORM".equals(type) || "WORKFLOW".equals(type)) {
+            if (formKey == null || formKey.isBlank()) {
+                if (sourceKey != null && !sourceKey.isBlank()) {
+                    formKey = sourceKey;
+                }
+            } else if (sourceKey == null || sourceKey.isBlank()) {
+                sourceKey = formKey;
+            }
+        }
     }
 
     public String getId() { return id; }

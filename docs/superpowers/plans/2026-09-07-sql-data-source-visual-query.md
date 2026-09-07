@@ -560,42 +560,44 @@ git commit -m "test: SQL 数据源集成测试（visual/formKey/readonly）"
 - Consumes: `form.type === 'SQL'` 判断
 - Produces: SQL 类型对话框布局（名称 + 主表单选择 + 双 tab）
 
-- [ ] **Step 1: 新增 SQL 类型到类型下拉**
+- [x] **Step 1: 新增 SQL 类型到类型下拉**
 
 在 `typeOptions` 数组中追加 `{ label: 'SQL 查询', value: 'SQL' }`
 
-- [ ] **Step 2: SQL 类型对话框基础布局**
+- [x] **Step 2: SQL 类型对话框基础布局**
 
 在对话框模板中新增 SQL 类型分支（`v-if="form.type === 'SQL'"`）：
 - 名称输入框
 - 主表单选择（el-select，复用 `publishedForms`，可选）
 - 双 tab：`[可视化配置] [SQL 模式]`
 
-- [ ] **Step 3: SQL 类型保存逻辑**
+- [x] **Step 3: SQL 类型保存逻辑**
 
 在 `openSave` 函数中新增 SQL 类型处理：
 - `type: 'SQL'`
 - `formKey`: 从表单选择获取（可为 null）
 - `params`: 序列化 visual + query + columns + params
 
-- [ ] **Step 4: SQL 类型编辑填充**
+- [x] **Step 4: SQL 类型编辑填充**
 
 在 `openEditRow` 函数中新增 SQL 类型解析：
 - 解析 `params.queryMode` → 设置 activeTab
 - 解析 `params.visual` → 填充可视化配置表单
 - 解析 `params.query` → 填充 SQL 文本
 
-- [ ] **Step 5: 运行前端测试确认通过**
+- [x] **Step 5: 运行前端测试确认通过**
 
 Run: `cd frontend && npm test`
-Expected: 现有测试通过（无回归）
+Expected: 现有测试通过（无回归）— 实际：DataSourceListPage 25/25、前端全量 952/952、vue-tsc 仅剩 pre-existing 错误
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add frontend/src/views/dataSource/DataSourceListPage.vue
-git commit -m "feat: DataSourceListPage 支持 SQL 类型数据源"
+git commit -m "feat: DataSourceListPage 支持 SQL 类型数据源"  # 实际提交 f2b999a
 ```
+
+> **Task 5 备注：** 提交 `f2b999a`（含 bizData.ts 的 `ColumnConfigItem.filterable` 补全）消除了 Task 引入的 3 处 vue-tsc 类型错误；剩余 `isViewMode`(512)/`handleSave`(1034) TS6133 经核对为 main/HEAD 分支 pre-existing（HEAD 模板从未引用、测试经 vm 直接访问、无保存按钮为既有缺陷），不可删除，仅报告不修复。
 
 ---
 

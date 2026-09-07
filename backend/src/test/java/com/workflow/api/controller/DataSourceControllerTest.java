@@ -3,9 +3,12 @@ package com.workflow.api.controller;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
+import com.workflow.api.dto.DataSourceDTO;
 import com.workflow.api.dto.DataSourceMetadata;
+import com.workflow.api.dto.DataSourceSaveRequest;
 import com.workflow.common.domain.R;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
+import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.form.column.ColumnConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -103,5 +106,78 @@ class DataSourceControllerTest {
         R<Void> result = controller.deleteData("ds-1", "42");
 
         verify(dsService).deleteData("ds-1", "42");
+    }
+
+    // ==================== 数据源定义管理端点（create/update/delete/enable/disable） ====================
+
+    private DataSourceSaveRequest saveReq(String name, String type, String formKey, String sourceKey, String params) {
+        DataSourceSaveRequest req = new DataSourceSaveRequest();
+        req.setName(name);
+        req.setType(type);
+        req.setFormKey(formKey);
+        req.setSourceKey(sourceKey);
+        req.setParams(params);
+        return req;
+    }
+
+    private DataSourceDefinition ds(String id, String name, String type, String status) {
+        DataSourceDefinition d = new DataSourceDefinition();
+        d.setId(id);
+        d.setName(name);
+        d.setType(type);
+        d.setStatus(status);
+        return d;
+    }
+
+    @Test
+    void create_delegatesAndWraps() {
+        DataSourceDefinition created = ds("ds-new", "报表", "SQL", "DRAFT");
+        created.setSourceKey("orders-report");
+        when(dsService.create("报表", "SQL", null, "orders-report", "{}")).thenReturn(created);
+
+        R<DataSourceDTO> result = controller.create(saveReq("报表", "SQL", null, "orders-report", "{}"));
+
+        assertThat(result.getData().getId()).isEqualTo("ds-new");
+        assertThat(result.getData().getType()).isEqualTo("SQL");
+        assertThat(result.getData().getSourceKey()).isEqualTo("orders-report");
+    }
+
+    @Test
+    void update_delegatesAndWraps() {
+        DataSourceDefinition updated = ds("ds-1", "改名", "API", "DRAFT");
+        updated.setSourceKey("external-stock");
+        when(dsService.update("ds-1", "改名", "API", null, "external-stock", null)).thenReturn(updated);
+
+        R<DataSourceDTO> result = controller.update("ds-1", saveReq("改名", "API", null, "external-stock", null));
+
+        assertThat(result.getData().getName()).isEqualTo("改名");
+    }
+
+    @Test
+    void delete_delegates() {
+        R<Void> result = controller.delete("ds-1");
+
+        assertThat(result.getCode()).isEqualTo(200);
+        verify(dsService).delete("ds-1");
+    }
+
+    @Test
+    void enable_delegatesAndWraps() {
+        DataSourceDefinition enabled = ds("ds-1", "报表", "SQL", "ENABLED");
+        when(dsService.enable("ds-1")).thenReturn(enabled);
+
+        R<DataSourceDTO> result = controller.enable("ds-1");
+
+        assertThat(result.getData().getStatus()).isEqualTo("ENABLED");
+    }
+
+    @Test
+    void disable_delegatesAndWraps() {
+        DataSourceDefinition disabled = ds("ds-1", "报表", "SQL", "DISABLED");
+        when(dsService.disable("ds-1")).thenReturn(disabled);
+
+        R<DataSourceDTO> result = controller.disable("ds-1");
+
+        assertThat(result.getData().getStatus()).isEqualTo("DISABLED");
     }
 }

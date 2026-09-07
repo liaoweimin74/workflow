@@ -655,30 +655,14 @@ git commit -m "feat: VisualQueryBuilder 可视化查询构建组件"
 - Consumes: `v-model` SQL 文本、`columns` 列声明
 - Produces: 更新后的 SQL + 解析的 columns
 
-- [ ] **Step 1: 写 RED 测试**
+- [x] **Step 1: 写 RED 测试**
 
-```typescript
-// SqlEditor.test.ts
-import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
-import SqlEditor from '../SqlEditor.vue'
-
-describe('SqlEditor', () => {
-  it('renders SQL textarea', () => {
-    const wrapper = mount(SqlEditor, {
-      props: { modelValue: 'SELECT * FROM test', columns: [] }
-    })
-    expect(wrapper.find('textarea').exists()).toBe(true)
-  })
-})
-```
-
-- [ ] **Step 2: 运行测试确认 RED**
+- [x] **Step 2: 运行测试确认 RED**
 
 Run: `cd frontend && npm test`
 Expected: FAIL — `SqlEditor.vue` 不存在
 
-- [ ] **Step 3: 实现 SqlEditor**
+- [x] **Step 3: 实现 SqlEditor**
 
 组件结构：
 - SQL textarea（el-input type="textarea"，rows=10）
@@ -686,18 +670,20 @@ Expected: FAIL — `SqlEditor.vue` 不存在
 - 运行时参数标签输入
 - 「从 SQL 解析列」按钮（调用后端 extractSelectOutputs 或前端正则提取）
 
-- [ ] **Step 4: 运行测试确认 GREEN**
+- [x] **Step 4: 运行测试确认 GREEN**
 
 Run: `cd frontend && npm test`
 Expected: PASS
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add frontend/src/views/dataSource/components/SqlEditor.vue \
         frontend/src/views/dataSource/components/__tests__/SqlEditor.test.ts
 git commit -m "feat: SqlEditor SQL 编辑器组件"
 ```
+
+> **Task 7 备注：** 提交 `50dac5e`。测试 9/9 GREEN（textarea 渲染与编辑、列声明增删改、参数回车添加、解析列 AS 别名/点号列名、disabled）。「从 SQL 解析列」前端正则与后端 `SqlTemplateEngine.extractSelectOutputs` 对齐（大小写不敏感 + 单词边界、AS 别名优先、无别名取点号后、去反引号/引号、去重保序），复用两个 script 块共享模块作用域（`ColumnConfigItem` 仅首块 import，避免 TS2300 重复标识符）。前端全量 969/969 通过，vue-tsc 无新增错误。
 
 ---
 

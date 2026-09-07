@@ -205,8 +205,14 @@
                 </el-form>
               </template>
 
-              <!-- ===== SQL：可视化配置 + SQL 模式双 tab ===== -->
+              <!-- ===== SQL：字段映射预览 + 可视化配置/SQL 模式双 tab ===== -->
               <template v-else-if="form.type === 'SQL'">
+                <FieldMappingPreview
+                  v-if="form.formKey"
+                  :form-key="form.formKey"
+                  :columns="sqlConfig.declaredColumns"
+                  style="margin-bottom: 12px"
+                />
                 <el-tabs v-model="sqlConfig.queryMode" @tab-click="onSqlTabClick" style="margin-top: 0">
                   <el-tab-pane label="可视化配置" name="visual">
                     <el-alert v-if="sqlConfig.isStale" title="SQL 已手动修改，可视化配置已锁定" type="warning" show-icon :closable="false" style="margin-bottom: 12px">
@@ -214,96 +220,22 @@
                         <el-button size="small" type="primary" plain @click="resetToVisual">重置为可视化</el-button>
                       </template>
                     </el-alert>
-                    <div v-else>
-                      <el-form :model="sqlConfig.visual" label-width="80px" label-position="left">
-                        <el-form-item label="主表">
-                          <el-input v-model="sqlConfig.visual.mainTable" placeholder="表名或 formKey" style="width: 200px" :disabled="isReadonlyForm" />
-                          <el-input v-model="sqlConfig.visual.mainAlias" placeholder="别名" style="width: 80px; margin-left: 8px" :disabled="isReadonlyForm" />
-                        </el-form-item>
-                        <el-form-item label="JOIN">
-                          <div v-for="(j, idx) in sqlConfig.visual.joins" :key="idx" style="margin-bottom: 8px; padding: 8px; border: 1px solid #e4e7ed; border-radius: 4px">
-                            <div style="display: flex; gap: 8px; margin-bottom: 4px">
-                              <el-input v-model="j.targetTable" placeholder="目标表" style="width: 150px" :disabled="isReadonlyForm" />
-                              <el-input v-model="j.alias" placeholder="别名" style="width: 80px" :disabled="isReadonlyForm" />
-                              <el-select v-model="j.joinType" style="width: 130px" :disabled="isReadonlyForm">
-                                <el-option label="LEFT JOIN" value="LEFT JOIN" />
-                                <el-option label="INNER JOIN" value="INNER JOIN" />
-                                <el-option label="RIGHT JOIN" value="RIGHT JOIN" />
-                              </el-select>
-                              <el-button :icon="Delete" circle size="small" :disabled="isReadonlyForm" @click="sqlConfig.visual.joins.splice(idx, 1)" />
-                            </div>
-                            <el-input v-model="j.on" placeholder="ON 条件（如 c.id = m.customer_id）" :disabled="isReadonlyForm" />
-                          </div>
-                          <el-button v-if="!isReadonlyForm" type="primary" plain size="small" @click="addJoin">+ 添加关联</el-button>
-                        </el-form-item>
-                        <el-form-item label="选择列">
-                          <el-input v-model="sqlConfig.visual.selectColumnsInput" type="textarea" :rows="2" placeholder="逗号分隔（如 m.order_no, c.name AS customer_name）" :disabled="isReadonlyForm" @blur="parseSelectColumns" />
-                        </el-form-item>
-                        <el-form-item label="筛选条件">
-                          <div v-for="(w, idx) in sqlConfig.visual.where" :key="idx" style="display: flex; gap: 8px; margin-bottom: 4px">
-                            <el-input v-model="w.column" placeholder="列名" style="width: 150px" :disabled="isReadonlyForm" />
-                            <el-select v-model="w.op" style="width: 100px" :disabled="isReadonlyForm">
-                              <el-option label="=" value="=" />
-                              <el-option label="!=" value="!=" />
-                              <el-option label=">" value=">" />
-                              <el-option label=">=" value=">=" />
-                              <el-option label="<" value="<" />
-                              <el-option label="<=" value="<=" />
-                              <el-option label="LIKE" value="LIKE" />
-                              <el-option label="IN" value="IN" />
-                            </el-select>
-                            <el-input v-model="w.value" placeholder="值" style="width: 150px" :disabled="isReadonlyForm" />
-                            <el-button :icon="Delete" circle size="small" :disabled="isReadonlyForm" @click="sqlConfig.visual.where.splice(idx, 1)" />
-                          </div>
-                          <el-button v-if="!isReadonlyForm" type="primary" plain size="small" @click="addWhere">+ 添加条件</el-button>
-                        </el-form-item>
-                        <el-form-item label="排序">
-                          <div v-for="(o, idx) in sqlConfig.visual.orderBy" :key="idx" style="display: flex; gap: 8px; margin-bottom: 4px">
-                            <el-input v-model="o.column" placeholder="列名" style="width: 200px" :disabled="isReadonlyForm" />
-                            <el-select v-model="o.order" style="width: 100px" :disabled="isReadonlyForm">
-                              <el-option label="ASC" value="ASC" />
-                              <el-option label="DESC" value="DESC" />
-                            </el-select>
-                            <el-button :icon="Delete" circle size="small" :disabled="isReadonlyForm" @click="sqlConfig.visual.orderBy.splice(idx, 1)" />
-                          </div>
-                          <el-button v-if="!isReadonlyForm" type="primary" plain size="small" @click="addOrderBy">+ 添加排序</el-button>
-                        </el-form-item>
-                        <el-form-item label="运行时参数">
-                          <div style="display: flex; gap: 8px; flex-wrap: wrap">
-                            <el-tag v-for="(p, idx) in sqlConfig.declaredParams" :key="idx" closable @close="sqlConfig.declaredParams.splice(idx, 1)">{{ p }}</el-tag>
-                            <el-input v-if="!isReadonlyForm" v-model="newParamName" placeholder="参数名" style="width: 120px" @keyup.enter="addParam" />
-                          </div>
-                        </el-form-item>
-                      </el-form>
-                      <el-divider content-position="left">SQL 预览（只读）</el-divider>
-                      <el-input v-model="sqlPreviewText" type="textarea" :rows="4" readonly style="font-family: monospace" />
-                    </div>
+                    <VisualQueryBuilder
+                      v-else
+                      v-model="sqlConfig.visual"
+                      v-model:params="sqlConfig.declaredParams"
+                      :tables="visualTableCandidates"
+                      :disabled="isReadonlyForm"
+                    />
                   </el-tab-pane>
                   <el-tab-pane label="SQL 模式" name="sql">
-                    <el-form label-width="80px" label-position="left">
-                      <el-form-item label="SQL 模板">
-                        <el-input v-model="sqlConfig.queryText" type="textarea" :rows="6" placeholder="SELECT ... FROM wf_biz_<formKey> WHERE tenant_id = :tenantId" style="font-family: monospace" :disabled="isReadonlyForm" @input="markSqlEdited" />
-                      </el-form-item>
-                      <el-form-item label="列声明">
-                        <div v-for="(col, idx) in sqlConfig.declaredColumns" :key="idx" class="column-row">
-                          <el-input v-model="col.key" placeholder="字段名" style="width: 130px" :disabled="isReadonlyForm" />
-                          <el-input v-model="col.label" placeholder="列名" style="width: 130px" :disabled="isReadonlyForm" />
-                          <el-select v-model="col.columnType" placeholder="类型" style="width: 120px" :disabled="isReadonlyForm">
-                            <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
-                          </el-select>
-                          <el-checkbox v-model="col.sortable" :disabled="isReadonlyForm">排序</el-checkbox>
-                          <el-checkbox v-model="col.filterable" :disabled="isReadonlyForm">筛选</el-checkbox>
-                          <el-button :icon="Delete" circle size="small" :disabled="isReadonlyForm" @click="sqlConfig.declaredColumns.splice(idx, 1)" />
-                        </div>
-                        <el-button v-if="!isReadonlyForm" type="primary" plain size="small" @click="addSqlColumn">+ 添加列</el-button>
-                      </el-form-item>
-                      <el-form-item label="运行时参数">
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap">
-                          <el-tag v-for="(p, idx) in sqlConfig.declaredParams" :key="idx" closable @close="sqlConfig.declaredParams.splice(idx, 1)">{{ p }}</el-tag>
-                          <el-input v-if="!isReadonlyForm" v-model="newParamName" placeholder="参数名" style="width: 120px" @keyup.enter="addParam" />
-                        </div>
-                      </el-form-item>
-                    </el-form>
+                    <SqlEditor
+                      v-model="sqlConfig.queryText"
+                      v-model:columns="sqlConfig.declaredColumns"
+                      v-model:params="sqlConfig.declaredParams"
+                      :disabled="isReadonlyForm"
+                      @update:model-value="markSqlEdited"
+                    />
                   </el-tab-pane>
                 </el-tabs>
               </template>
@@ -431,11 +363,15 @@ import type { SearchField, TableColumn, ActionButton } from '@/components/busine
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import type { ColumnConfigItem, BizDataVO } from '@/api/bizData'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
+import VisualQueryBuilder, { type VisualQueryConfig } from './components/VisualQueryBuilder.vue'
+import SqlEditor from './components/SqlEditor.vue'
+import FieldMappingPreview from './components/FieldMappingPreview.vue'
 
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 
-/** 已发布业务表单（FORM 类型 formKey 下拉候选） */
+/** 已发布业务表单（FORM 类型 formKey 下拉候选 + SQL 可视化主表候选） */
 const publishedForms = ref<FormDefinitionDTO[]>([])
+const visualTableCandidates = computed(() => ['wf_biz_' + (sqlConfig.visual.mainTable || '{formKey}')].concat(publishedForms.value.map((f) => `wf_biz_${f.key}`)))
 
 /** 已发布工作流表单（WORKFLOW 类型 formKey 下拉候选） */
 const publishedWorkflowForms = ref<FormDefinitionDTO[]>([])
@@ -558,45 +494,14 @@ const apiOps = reactive<Record<'list' | 'get' | 'create' | 'update' | 'delete', 
 /** API 类型：列定义 */
 const apiColumns = ref<ColumnConfigItem[]>([])
 
-/** SQL 类型：查询配置 */
-interface JoinClause {
-  alias: string
-  targetTable: string
-  joinType: string
-  on: string
-  columns: string[]
-}
-interface WhereCondition {
-  column: string
-  op: string
-  value: any
-}
-interface OrderClause {
-  column: string
-  order: string
-}
-interface VisualConfig {
-  mainTable: string
-  mainAlias: string
-  joins: JoinClause[]
-  selectColumns: string[]
-  selectColumnsInput: string
-  where: WhereCondition[]
-  orderBy: OrderClause[]
-}
+/** SQL 类型：查询配置（复用 VisualQueryBuilder 导出的类型） */
 const sqlConfig = reactive({
   queryMode: 'visual' as 'visual' | 'sql',
-  visual: { mainTable: '', mainAlias: 'm', joins: [] as JoinClause[], selectColumns: [] as string[], selectColumnsInput: '', where: [] as WhereCondition[], orderBy: [] as OrderClause[] } as VisualConfig,
+  visual: { mainTable: '', mainAlias: 'm', joins: [], selectColumns: [] as string[], selectColumnsInput: '', where: [], orderBy: [] } as VisualQueryConfig,
   queryText: '',
   declaredColumns: [] as ColumnConfigItem[],
   declaredParams: [] as string[],
   isStale: false,  // SQL 手改后标记为过期
-})
-
-/** SQL 预览文本（可视化模式下实时生成） */
-const sqlPreviewText = computed(() => {
-  if (sqlConfig.queryMode === 'sql') return sqlConfig.queryText
-  return generatePreviewSql()
 })
 
 /** 当前激活标签：config / metadata / data */
@@ -972,8 +877,9 @@ function openView(row: DataSourceDTO) {
     const params: Record<string, any> = {}
     params.queryMode = sqlConfig.queryMode
     if (sqlConfig.queryMode === 'visual') {
-      // 可视化配置：解析 selectColumnsInput
-      parseSelectColumns()
+      // 可视化配置：selectColumnsInput 为自由文本，保存时解析为 selectColumns
+      const text = (sqlConfig.visual.selectColumnsInput || '').trim()
+      sqlConfig.visual.selectColumns = text.split(',').map((s: string) => s.trim()).filter((s: string) => s)
       params.visual = {
         mainTable: sqlConfig.visual.mainTable,
         mainAlias: sqlConfig.visual.mainAlias || 'm',
@@ -1189,38 +1095,6 @@ function typeLabel(type: string): string {
 }
 
 // ========== SQL 类型辅助函数 ==========
-const newParamName = ref('')
-
-function addJoin() {
-  sqlConfig.visual.joins.push({ alias: '', targetTable: '', joinType: 'LEFT JOIN', on: '', columns: [] })
-}
-
-function addWhere() {
-  sqlConfig.visual.where.push({ column: '', op: '=', value: '' })
-}
-
-function addOrderBy() {
-  sqlConfig.visual.orderBy.push({ column: '', order: 'ASC' })
-}
-
-function addParam() {
-  const name = newParamName.value.trim()
-  if (name && !sqlConfig.declaredParams.includes(name)) {
-    sqlConfig.declaredParams.push(name)
-    newParamName.value = ''
-  }
-}
-
-function addSqlColumn() {
-  sqlConfig.declaredColumns.push({ key: '', label: '', columnType: 'VARCHAR', length: null, scale: null, required: false, unique: false, indexed: false, sortable: false, filterable: false })
-}
-
-function parseSelectColumns() {
-  // 从逗号分隔的文本解析为数组
-  const text = sqlConfig.visual.selectColumnsInput || ''
-  sqlConfig.visual.selectColumns = text.split(',').map((s: string) => s.trim()).filter((s: string) => s)
-}
-
 function onSqlTabClick() {
   // 切到 SQL 模式：若尚未生成 SQL 文本（首次进入/重置后），用当前可视化配置生成作为起点
   if (sqlConfig.queryMode === 'sql' && !sqlConfig.queryText) {

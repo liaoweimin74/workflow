@@ -25,6 +25,7 @@ vi.mock('@/api/data-source', () => ({
 vi.mock('@/api/form', () => ({
   formApi: {
     getFormDefinitions: vi.fn(),
+    getFormDefinitionByKey: vi.fn(),
   },
 }))
 

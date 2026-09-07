@@ -307,7 +307,8 @@ public class BizDataSupport {
      * <p>仅校验 formKey 合法性；不校验主表单物理表（管理员 SQL 独立定义，可跨表/聚合）。
      */
     public BizDataPageVO querySqlTemplate(String formKey, BizDataQueryRequest req, FormQueryConfig cfg) {
-        if (formKey == null || !FORM_KEY_PATTERN.matcher(formKey).matches()) {
+        // SQL 类型无 formKey 时跳过校验（管理员 SQL 独立定义，不依赖表单）
+        if (formKey != null && !FORM_KEY_PATTERN.matcher(formKey).matches()) {
             throw new BusinessException(400, "非法表单 key: " + formKey);
         }
         String tenantId = tenantProvider.getTenantId();

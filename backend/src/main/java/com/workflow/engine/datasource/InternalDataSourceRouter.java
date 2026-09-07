@@ -47,6 +47,14 @@ public class InternalDataSourceRouter {
         if ("FORM".equals(type)) {
             return resolveForm(ds.getFormKey(), operation);
         }
+        if ("SQL".equals(type)) {
+            // SQL 类型：有 formKey 时路由到 BizDataController，无 formKey 时跳过路由
+            if (ds.getFormKey() != null && !ds.getFormKey().isBlank()) {
+                return resolveForm(ds.getFormKey(), operation);
+            }
+            // 无 formKey 的 SQL 数据源：返回虚拟端点（仅用于租户上下文验证）
+            return new ResolvedEndpoint("SqlDataSource", "query", "GET", "/api/v1/sql-data-source");
+        }
         if ("SYSTEM".equals(type)) {
             return resolveSystem(ds.getSourceKey(), operation);
         }

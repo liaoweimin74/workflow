@@ -78,6 +78,7 @@ class UnifiedDataSourceAdapterTest {
         if ("FORM".equals(type)) d.setFormKey(key);
         if ("SYSTEM".equals(type)) d.setSourceKey(key);
         if ("WORKFLOW".equals(type)) d.setFormKey(key);
+        if ("SQL".equals(type)) d.setFormKey(key);
         return d;
     }
 
@@ -359,6 +360,84 @@ class UnifiedDataSourceAdapterTest {
         assertFalse(meta.isWritable());
     }
 
+    // ===== SQL 行级操作：委托绑定表单 CRUD；未绑定 → 400 =====
+
+    @Test
+    void sqlGet_withFormKey_delegatesToBizDataService() {
+        DataSourceDefinition ds = ds("SQL", "order");
+        BizDataVO expected = new BizDataVO("r1", Map.of(), null, null, null);
+        when(bizDataService.getById("order", "r1")).thenReturn(expected);
+
+        BizDataVO result = adapter.get(ds, "r1");
+
+        assertSame(expected, result);
+        verify(bizDataService).getById("order", "r1");
+    }
+
+    @Test
+    void sqlGet_withoutFormKey_throws400() {
+        DataSourceDefinition ds = ds("SQL", null);
+        BusinessException ex = assertThrows(BusinessException.class, () -> adapter.get(ds, "r1"));
+        assertEquals(400, ex.getCode());
+        verify(bizDataService, never()).getById(any(), any());
+    }
+
+    @Test
+    void sqlCreate_withFormKey_delegatesToBizDataService() {
+        DataSourceDefinition ds = ds("SQL", "order");
+        BizDataVO created = new BizDataVO("100", Map.of(), null, null, null);
+        when(bizDataService.create(eq("order"), anyMap())).thenReturn(created);
+
+        String id = adapter.create(ds, Map.of("order_no", "X"));
+
+        assertEquals("100", id);
+        verify(bizDataService).create(eq("order"), anyMap());
+    }
+
+    @Test
+    void sqlCreate_withoutFormKey_throws400() {
+        DataSourceDefinition ds = ds("SQL", null);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> adapter.create(ds, Map.of("order_no", "X")));
+        assertEquals(400, ex.getCode());
+        verify(bizDataService, never()).create(any(), anyMap());
+    }
+
+    @Test
+    void sqlUpdate_withFormKey_delegatesToBizDataService() {
+        DataSourceDefinition ds = ds("SQL", "order");
+
+        adapter.update(ds, "r1", Map.of("total", 999), 2);
+
+        verify(bizDataService).update(eq("order"), eq("r1"), anyMap(), eq(2));
+    }
+
+    @Test
+    void sqlUpdate_withoutFormKey_throws400() {
+        DataSourceDefinition ds = ds("SQL", null);
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> adapter.update(ds, "r1", Map.of("total", 999), 1));
+        assertEquals(400, ex.getCode());
+        verify(bizDataService, never()).update(any(), any(), anyMap(), any());
+    }
+
+    @Test
+    void sqlDelete_withFormKey_delegatesToBizDataService() {
+        DataSourceDefinition ds = ds("SQL", "order");
+
+        adapter.delete(ds, "r1");
+
+        verify(bizDataService).delete("order", "r1");
+    }
+
+    @Test
+    void sqlDelete_withoutFormKey_throws400() {
+        DataSourceDefinition ds = ds("SQL", null);
+        BusinessException ex = assertThrows(BusinessException.class, () -> adapter.delete(ds, "r1"));
+        assertEquals(400, ex.getCode());
+        verify(bizDataService, never()).delete(any(), any());
+    }
+
     // ===== SYSTEM (internal://) =====
 
     @Test
@@ -446,6 +525,16 @@ class UnifiedDataSourceAdapterTest {
         ds.setParams(p.toString());
         DataSourceMetadata meta = adapter.metadata(ds);
         assertTrue(meta.isWritable());
+    }
+
+    @Test
+    void apiMetadata_boundFormKey_passesThrough() {
+        // API 数据源绑定默认表单时，metadata 透传 formKey（前端据此用表单 schema 渲染编辑弹窗）
+        DataSourceDefinition ds = ds("API", "external-stock");
+        ds.setFormKey("order");
+        ds.setParams(apiParamsJson());
+        DataSourceMetadata meta = adapter.metadata(ds);
+        assertEquals("order", meta.getFormKey());
     }
 
     @Test

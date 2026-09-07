@@ -121,7 +121,9 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             }
             case "API" -> {
                 DataSourceMetadata m = apiMetadata(ds);
-                yield new DataSourceMetadata(copyWithSortableFalse(m.getColumns()), m.isWritable());
+                DataSourceMetadata copy = new DataSourceMetadata(copyWithSortableFalse(m.getColumns()), m.isWritable());
+                copy.setFormKey(m.getFormKey());
+                yield copy;
             }
             case "SQL" -> {
                 List<ColumnConfig> cols = new ArrayList<>();
@@ -199,6 +201,10 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             case "WORKFLOW" -> workflowQueryService.getById(ds.getFormKey(), id);
             case "SYSTEM" -> systemGet(ds, id);
             case "API" -> apiGet(ds, id);
+            case "SQL" -> {
+                String fk = requireFormKey(ds, "get");
+                yield bizDataService.getById(fk, id);
+            }
             default -> throw unsupported(ds, "get");
         };
     }
@@ -212,6 +218,10 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             }
             case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
             case "API" -> apiCreate(ds, data);
+            case "SQL" -> {
+                String fk = requireFormKey(ds, "create");
+                yield bizDataService.create(fk, data).getId();
+            }
             default -> throw unsupported(ds, "create");
         };
     }
@@ -225,6 +235,10 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             }
             case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
             case "API" -> apiUpdate(ds, id, data);
+            case "SQL" -> {
+                String fk = requireFormKey(ds, "update");
+                bizDataService.update(fk, id, data, version);
+            }
             default -> throw unsupported(ds, "update");
         }
     }
@@ -243,8 +257,20 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             }
             case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
             case "API" -> apiDelete(ds, id);
+            case "SQL" -> {
+                String fk = requireFormKey(ds, "delete");
+                bizDataService.delete(fk, id);
+            }
             default -> throw unsupported(ds, "delete");
         }
+    }
+
+    /** SQL 数据源行级操作须绑定默认表单；未绑定 → 400。 */
+    private String requireFormKey(DataSourceDefinition ds, String op) {
+        if (ds.getFormKey() == null || ds.getFormKey().isBlank()) {
+            throw new BusinessException(400, "SQL 数据源未绑定表单，不支持" + op + "操作: " + ds.getName());
+        }
+        return ds.getFormKey();
     }
 
     // ===== FORM helpers =====
@@ -371,7 +397,9 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 columns.add(objectMapper.convertValue(node, ColumnConfig.class));
             }
         }
-        return new DataSourceMetadata(columns, writable(params));
+        DataSourceMetadata m = new DataSourceMetadata(columns, writable(params));
+        m.setFormKey(ds.getFormKey());
+        return m;
     }
 
     private BizDataPageVO apiQuery(DataSourceDefinition ds, BizDataQueryRequest req) {

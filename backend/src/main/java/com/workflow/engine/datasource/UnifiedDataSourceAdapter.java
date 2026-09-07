@@ -87,7 +87,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
 
     @Override
     public boolean supports(String type) {
-        return "FORM".equals(type) || "SYSTEM".equals(type) || "API".equals(type) || "WORKFLOW".equals(type);
+        return "FORM".equals(type) || "SYSTEM".equals(type) || "API".equals(type) || "WORKFLOW".equals(type) || "SQL".equals(type);
     }
 
     @Override
@@ -122,6 +122,20 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             case "API" -> {
                 DataSourceMetadata m = apiMetadata(ds);
                 yield new DataSourceMetadata(copyWithSortableFalse(m.getColumns()), m.isWritable());
+            }
+            case "SQL" -> {
+                List<ColumnConfig> cols = new ArrayList<>();
+                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+                if (ds.getFormKey() != null && !ds.getFormKey().isBlank()) {
+                    cols.addAll(formDefService.getBusinessColumnsByKey(ds.getFormKey()));
+                }
+                appendDeclaredColumns(cols, cfg.columns());
+                SortableResolver.resolve(cols);
+                DataSourceMetadata m = new DataSourceMetadata(cols, ds.getFormKey() != null && !ds.getFormKey().isBlank());
+                if (ds.getFormKey() != null && !ds.getFormKey().isBlank()) {
+                    m.setFormKey(ds.getFormKey());
+                }
+                yield m;
             }
             default -> throw unsupported(ds, "metadata");
         };
@@ -163,6 +177,14 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 yield systemQuery(ds, req);
             }
             case "API" -> apiQuery(ds, req);
+            case "SQL" -> {
+                router.resolve(ds, "list");
+                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+                if (cfg.isVisualMode() || cfg.isSqlMode()) {
+                    yield bizDataService.querySql(ds.getFormKey(), req, cfg);
+                }
+                throw new BusinessException(400, "SQL 数据源缺少查询配置");
+            }
             default -> throw unsupported(ds, "query");
         };
     }

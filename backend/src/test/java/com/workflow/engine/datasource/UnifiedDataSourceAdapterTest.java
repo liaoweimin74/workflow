@@ -287,6 +287,78 @@ class UnifiedDataSourceAdapterTest {
         assertEquals(1, meta.getColumns().size());
     }
 
+    // ===== SQL 数据源 =====
+
+    @Test
+    void sqlQuery_visualMode_delegatesToQuerySql() {
+        DataSourceDefinition ds = ds("SQL", null);
+        ds.setParams("""
+                {"queryMode":"visual","query":"SELECT order_no FROM wf_biz_order WHERE tenant_id = :tenantId",
+                 "columns":[{"key":"order_no","columnType":"VARCHAR","sortable":true}],"params":[]}
+                """);
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 0, 20);
+        when(bizDataService.querySql(isNull(), eq(req), any())).thenReturn(expected);
+
+        BizDataPageVO result = adapter.query(ds, req);
+
+        assertSame(expected, result);
+        verify(bizDataService).querySql(isNull(), eq(req), any());
+    }
+
+    @Test
+    void sqlQuery_sqlMode_delegatesToQuerySql() {
+        DataSourceDefinition ds = ds("SQL", null);
+        ds.setParams("""
+                {"queryMode":"sql","query":"SELECT id FROM test WHERE tenant_id = :tenantId",
+                 "columns":[{"key":"id","columnType":"VARCHAR","sortable":true}],"params":[]}
+                """);
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 0, 20);
+        when(bizDataService.querySql(isNull(), eq(req), any())).thenReturn(expected);
+
+        BizDataPageVO result = adapter.query(ds, req);
+
+        assertSame(expected, result);
+    }
+
+    @Test
+    void sqlMetadata_withFormKey_mergesFormColumns() {
+        DataSourceDefinition ds = ds("SQL", null);
+        ds.setFormKey("order");
+        ds.setParams("""
+                {"queryMode":"sql","query":"SELECT order_no FROM wf_biz_order WHERE tenant_id = :tenantId",
+                 "columns":[{"key":"order_no","label":"订单号","columnType":"VARCHAR","sortable":true,"filterable":true},
+                            {"key":"customer_name","label":"客户","columnType":"VARCHAR","sortable":true,"filterable":true}],
+                 "params":[]}
+                """);
+        when(formDefService.getBusinessColumnsByKey("order"))
+                .thenReturn(new ArrayList<>(List.of(col("order_no", "订单号", "VARCHAR", 100))));
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        // 表单列 order_no 优先，声明列 customer_name 追加
+        assertEquals(2, meta.getColumns().size());
+        assertEquals("order_no", meta.getColumns().get(0).getKey());
+        assertEquals("customer_name", meta.getColumns().get(1).getKey());
+        assertTrue(meta.isWritable());
+    }
+
+    @Test
+    void sqlMetadata_noFormKey_onlyDeclaredColumns() {
+        DataSourceDefinition ds = ds("SQL", null);
+        ds.setParams("""
+                {"queryMode":"sql","query":"SELECT id FROM raw_logs WHERE tenant_id = :tenantId",
+                 "columns":[{"key":"id","label":"ID","columnType":"VARCHAR","sortable":true,"filterable":true}],
+                 "params":[]}
+                """);
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        assertEquals(1, meta.getColumns().size());
+        assertFalse(meta.isWritable());
+    }
+
     // ===== SYSTEM (internal://) =====
 
     @Test

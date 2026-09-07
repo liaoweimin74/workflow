@@ -66,9 +66,6 @@ public final class SqlTemplateEngine {
         if (columns == null || columns.isEmpty()) {
             throw new IllegalArgumentException("columns 不能为空");
         }
-        if (columns.stream().noneMatch(JoinSqlGenerator.QueryColumn::sortable)) {
-            throw new IllegalArgumentException("columns 至少需要一个可排序列");
-        }
         Set<String> outputs = extractSelectOutputs(trimmed);
         if (!outputs.contains("*")) {
             for (JoinSqlGenerator.QueryColumn c : columns) {
@@ -146,27 +143,34 @@ public final class SqlTemplateEngine {
         }
         String filterFragment = filterBody.isEmpty() ? "" : " WHERE " + filterBody;
 
+        // 缺省排序：优先第一个可排序列；全部列不可排序时不附加 ORDER BY（SQL 数据源允许）
         String sortColumn = (sort == null || sort.isBlank()) ? defaultSortColumn(columns) : sort;
-        if (!isSortable(columns, sortColumn)) {
-            throw new IllegalArgumentException("该列不可排序: " + sortColumn);
+        String orderByFragment;
+        if (sortColumn == null) {
+            orderByFragment = "";
+        } else {
+            if (!isSortable(columns, sortColumn)) {
+                throw new IllegalArgumentException("该列不可排序: " + sortColumn);
+            }
+            String orderDir = (order == null || order.isBlank()) ? "desc" : order.toLowerCase();
+            if (!ALLOWED_ORDER.contains(orderDir)) {
+                throw new IllegalArgumentException("非法排序方向: " + order);
+            }
+            orderByFragment = " ORDER BY " + sortColumn + " " + orderDir.toUpperCase();
         }
-        String orderDir = (order == null || order.isBlank()) ? "desc" : order.toLowerCase();
-        if (!ALLOWED_ORDER.contains(orderDir)) {
-            throw new IllegalArgumentException("非法排序方向: " + order);
-        }
-        String orderByFragment = " ORDER BY " + sortColumn + " " + orderDir.toUpperCase();
 
         return SqlQueryEngine.wrapSubquery(
                 new BizDataQueryBuilder.SqlAndParams(innerSql, innerParams),
                 filterFragment, filterParams, orderByFragment, page, size);
     }
 
+    /** 缺省排序列：第一个可排序列；全部不可排序返回 null（调用方不加 ORDER BY）。 */
     private static String defaultSortColumn(List<JoinSqlGenerator.QueryColumn> columns) {
         return columns.stream()
                 .filter(JoinSqlGenerator.QueryColumn::sortable)
                 .map(JoinSqlGenerator.QueryColumn::key)
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("columns 至少需要一个可排序列"));
+                .orElse(null);
     }
 
     private static boolean isSortable(List<JoinSqlGenerator.QueryColumn> columns, String key) {

@@ -56,14 +56,43 @@ class SqlTemplateEngineTest {
     }
 
     @Test
-    void validate_noSortableColumn_rejected() {
+    void validate_noSortableColumn_allowed() {
+        // SQL 数据源允许全部声明列不可排序：分页查询不要求默认排序列（缺省不加 ORDER BY）
         List<JoinSqlGenerator.QueryColumn> cols = List.of(
                 new JoinSqlGenerator.QueryColumn("order_no", "order_no", "VARCHAR", false, false));
 
-        assertThatThrownBy(() -> SqlTemplateEngine.validate(
-                "SELECT o.id, o.order_no FROM wf_biz_order o WHERE o.tenant_id = :tenantId", cols))
+        SqlTemplateEngine.validate(
+                "SELECT o.id, o.order_no FROM wf_biz_order o WHERE o.tenant_id = :tenantId", cols);
+        // 不抛异常即通过
+    }
+
+    @Test
+    void wrap_noSortableColumn_noOrderByFragment() {
+        // 全部列不可排序 + 未请求排序 → 分页子查询不附加 ORDER BY
+        List<JoinSqlGenerator.QueryColumn> cols = List.of(
+                new JoinSqlGenerator.QueryColumn("order_no", "order_no", "VARCHAR", false, false));
+
+        SqlQueryEngine.WrappedQuery wrapped = SqlTemplateEngine.wrap(
+                "SELECT o.id, o.order_no FROM wf_biz_order o WHERE o.tenant_id = :tenantId",
+                TENANT, cols, Map.of(), null, null, null, null, 1, 10);
+
+        assertThat(wrapped.select().sql()).isEqualTo(
+                "SELECT * FROM (SELECT o.id, o.order_no FROM wf_biz_order o"
+                        + " WHERE o.tenant_id = ?) _qs LIMIT ? OFFSET ?");
+        assertThat(wrapped.select().params()).containsExactly(TENANT, 10, 0);
+    }
+
+    @Test
+    void wrap_explicitSortOnNonSortableColumn_stillRejected() {
+        // 显式请求排序列仍受白名单校验（不可排序列拒绝）
+        List<JoinSqlGenerator.QueryColumn> cols = List.of(
+                new JoinSqlGenerator.QueryColumn("order_no", "order_no", "VARCHAR", false, false));
+
+        assertThatThrownBy(() -> SqlTemplateEngine.wrap(
+                "SELECT o.id, o.order_no FROM wf_biz_order o WHERE o.tenant_id = :tenantId",
+                TENANT, cols, Map.of(), null, null, "order_no", "asc", 1, 10))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("可排序列");
+                .hasMessageContaining("不可排序");
     }
 
     @Test

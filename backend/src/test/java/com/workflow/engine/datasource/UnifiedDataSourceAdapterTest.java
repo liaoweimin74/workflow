@@ -291,7 +291,7 @@ class UnifiedDataSourceAdapterTest {
     // ===== SQL 数据源 =====
 
     @Test
-    void sqlQuery_visualMode_delegatesToQuerySql() {
+    void sqlQuery_visualMode_delegatesToQuerySqlRaw() {
         DataSourceDefinition ds = ds("SQL", null);
         ds.setParams("""
                 {"queryMode":"visual","query":"SELECT order_no FROM wf_biz_order WHERE tenant_id = :tenantId",
@@ -299,16 +299,16 @@ class UnifiedDataSourceAdapterTest {
                 """);
         BizDataQueryRequest req = new BizDataQueryRequest();
         BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 0, 20);
-        when(bizDataService.querySql(isNull(), eq(req), any())).thenReturn(expected);
+        when(bizDataService.querySqlRaw(isNull(), eq(req), any())).thenReturn(expected);
 
         BizDataPageVO result = adapter.query(ds, req);
 
         assertSame(expected, result);
-        verify(bizDataService).querySql(isNull(), eq(req), any());
+        verify(bizDataService).querySqlRaw(isNull(), eq(req), any());
     }
 
     @Test
-    void sqlQuery_sqlMode_delegatesToQuerySql() {
+    void sqlQuery_sqlMode_delegatesToQuerySqlRaw() {
         DataSourceDefinition ds = ds("SQL", null);
         ds.setParams("""
                 {"queryMode":"sql","query":"SELECT id FROM test WHERE tenant_id = :tenantId",
@@ -316,7 +316,7 @@ class UnifiedDataSourceAdapterTest {
                 """);
         BizDataQueryRequest req = new BizDataQueryRequest();
         BizDataPageVO expected = new BizDataPageVO(List.of(), 0L, 0, 20);
-        when(bizDataService.querySql(isNull(), eq(req), any())).thenReturn(expected);
+        when(bizDataService.querySqlRaw(isNull(), eq(req), any())).thenReturn(expected);
 
         BizDataPageVO result = adapter.query(ds, req);
 

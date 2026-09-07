@@ -169,6 +169,15 @@ public class BizDataService {
     }
 
     /**
+     * 分页查询业务数据（sql 模式，绕过业务表单 covering handler）。
+     * <p>供 SQL 数据源使用：管理员显式 SQL 模板独立定义查询语义，
+     * 不应被绑定表单的业务定制 handler（如按部门过滤）劫持短路。
+     */
+    public BizDataPageVO querySqlRaw(String formKey, BizDataQueryRequest req, FormQueryConfig cfg) {
+        return support.querySqlTemplate(formKey, req, cfg);
+    }
+
+    /**
      * 查询单条业务数据。
      */
     public BizDataVO getById(String formKey, String id) {

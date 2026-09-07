@@ -183,7 +183,8 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 router.resolve(ds, "list");
                 FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
                 if (cfg.isVisualMode() || cfg.isSqlMode()) {
-                    yield bizDataService.querySql(ds.getFormKey(), req, cfg);
+                    // 绕过表单 covering handler：SQL 数据源执行管理员显式 SQL，不被绑定表单业务定制劫持
+                    yield bizDataService.querySqlRaw(ds.getFormKey(), req, cfg);
                 }
                 throw new BusinessException(400, "SQL 数据源缺少查询配置");
             }

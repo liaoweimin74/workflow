@@ -115,7 +115,9 @@ public class DataSourceDefinitionService {
         } else {
             ds.setParams(params);
         }
-        ds.setStatus(STATUS_DRAFT);
+        // API/SQL 为手动配置的数据源：创建即发布（ENABLED）；其余类型仍 DRAFT（防御：手动创建仅 API/SQL）
+        boolean manualPublish = TYPE_API.equals(type) || TYPE_SQL.equals(type);
+        ds.setStatus(manualPublish ? STATUS_ENABLED : STATUS_DRAFT);
         return dsRepository.save(ds);
     }
 

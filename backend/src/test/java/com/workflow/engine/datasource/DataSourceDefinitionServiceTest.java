@@ -231,7 +231,7 @@ class DataSourceDefinitionServiceTest {
                         + "\"searchParam\":\"keyword\",\"keywordColumn\":\"name\",\"pageBase\":1,"
                         + "\"data\":{\"k\":\"v\"},\"headers\":{\"X-Api-Key\":\"xxx\"}}");
 
-        assertEquals("DRAFT", result.getStatus());
+        assertEquals("ENABLED", result.getStatus());
     }
 
     @Test
@@ -543,7 +543,7 @@ class DataSourceDefinitionServiceTest {
 
         DataSourceDefinition result = service.create("测试数据源", "SQL", null, "orders-report", null);
 
-        assertEquals("DRAFT", result.getStatus());
+        assertEquals("ENABLED", result.getStatus());
         assertEquals("SQL", result.getType());
         assertEquals("orders-report", result.getSourceKey());
         assertNull(result.getFormKey());
@@ -597,5 +597,27 @@ class DataSourceDefinitionServiceTest {
         service.update(DS_ID, "新名称", null, null, null, null);
 
         verify(dsRepository, never()).existsByTenantIdAndSourceKey(any(), any());
+    }
+
+    @Test
+    void create_apiSource_savesAsPublished() {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "外部库存API")).thenReturn(false);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("外部库存API", "API", null, "external-stock",
+                "{\"action\":\"/api/v1/external/stock\",\"parse\":\"records\"}");
+
+        assertEquals("ENABLED", result.getStatus());
+    }
+
+    @Test
+    void create_sqlSource_savesAsPublished() {
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "员工查询SQL")).thenReturn(false);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("员工查询SQL", "SQL", "emp_profile", "emp_profile_query",
+                "{\"querySql\":\"SELECT * FROM wf_biz_emp_profile\"}");
+
+        assertEquals("ENABLED", result.getStatus());
     }
 }

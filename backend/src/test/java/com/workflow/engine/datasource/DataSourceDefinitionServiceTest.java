@@ -9,6 +9,7 @@ import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
+import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -42,6 +43,9 @@ class DataSourceDefinitionServiceTest {
     private FormDefinitionRepository formDefRepository;
 
     @Mock
+    private PageDefinitionRepository pageRepository;
+
+    @Mock
     private TenantProvider tenantProvider;
 
     @Mock
@@ -61,7 +65,7 @@ class DataSourceDefinitionServiceTest {
         lenient().when(formAdapter.supports("FORM")).thenReturn(true);
         lenient().when(formAdapter.supports("SYSTEM")).thenReturn(false);
         lenient().when(formAdapter.supports("API")).thenReturn(false);
-        service = new DataSourceDefinitionService(dsRepository, formDefRepository,
+        service = new DataSourceDefinitionService(dsRepository, formDefRepository, pageRepository,
                 tenantProvider, objectMapper, List.of(formAdapter));
     }
 
@@ -313,6 +317,7 @@ class DataSourceDefinitionServiceTest {
     void delete_draft_success() {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(pageRepository.countByTenantIdAndDataSourceId(TENANT_ID, DS_ID)).thenReturn(0L);
 
         service.delete(DS_ID);
 
@@ -320,13 +325,26 @@ class DataSourceDefinitionServiceTest {
     }
 
     @Test
-    void delete_enabled_rejected() {
-        DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
+    void delete_enabled_noReference_success() {
+        DataSourceDefinition ds = draftDs("API", null, "external-stock", null);
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(pageRepository.countByTenantIdAndDataSourceId(TENANT_ID, DS_ID)).thenReturn(0L);
+
+        service.delete(DS_ID);
+
+        verify(dsRepository).delete(ds);
+    }
+
+    @Test
+    void delete_referencedByPage_rejected() {
+        DataSourceDefinition ds = draftDs("API", null, "external-stock", null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(pageRepository.countByTenantIdAndDataSourceId(TENANT_ID, DS_ID)).thenReturn(2L);
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(DS_ID));
-        assertTrue(ex.getMessage().contains("禁用"));
+        assertTrue(ex.getMessage().contains("引用"));
         verify(dsRepository, never()).delete(any());
     }
 

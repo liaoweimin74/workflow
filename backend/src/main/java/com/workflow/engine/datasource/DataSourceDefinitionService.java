@@ -13,6 +13,7 @@ import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
+import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,7 +27,7 @@ import java.util.UUID;
 
 /**
  * 全局数据源定义服务。
- * 状态机：DRAFT → ENABLED ⇄ DISABLED；仅 DRAFT 可删除。
+ * 状态机：DRAFT → ENABLED ⇄ DISABLED；任意状态可删除（被页面引用时拒绝）。
  * 不执行 DDL（构造不含 DynamicTableManager/JdbcTemplate，结构性排除动态建表）。
  */
 @Service
@@ -47,6 +48,7 @@ public class DataSourceDefinitionService {
 
     private final DataSourceDefinitionRepository dsRepository;
     private final FormDefinitionRepository formDefRepository;
+    private final PageDefinitionRepository pageRepository;
     private final TenantProvider tenantProvider;
     private final ObjectMapper objectMapper;
     private final List<DataSourceAdapter> adapters;
@@ -56,11 +58,13 @@ public class DataSourceDefinitionService {
      */
     public DataSourceDefinitionService(DataSourceDefinitionRepository dsRepository,
                                        FormDefinitionRepository formDefRepository,
+                                       PageDefinitionRepository pageRepository,
                                        TenantProvider tenantProvider,
                                        ObjectMapper objectMapper,
                                        List<DataSourceAdapter> adapters) {
         this.dsRepository = dsRepository;
         this.formDefRepository = formDefRepository;
+        this.pageRepository = pageRepository;
         this.tenantProvider = tenantProvider;
         this.objectMapper = objectMapper;
         this.adapters = adapters == null ? List.of() : adapters;
@@ -211,15 +215,17 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * 删除数据源：仅 DRAFT 可删除（ENABLED/DISABLED → 400）。
+     * 删除数据源：任意状态可删除（ENABLED/DISABLED 均可），但被页面引用时拒绝（400）。
      * 
      * 注意：此方法仅供系统内部调用，用户不能直接删除数据源。
      */
     @Transactional
     public void delete(String id) {
         DataSourceDefinition ds = getById(id);
-        if (!STATUS_DRAFT.equals(ds.getStatus())) {
-            throw new BusinessException(400, "仅 DRAFT 状态可删除，请先禁用后再删除");
+        String tenantId = ds.getTenantId();
+        long refCount = pageRepository.countByTenantIdAndDataSourceId(tenantId, id);
+        if (refCount > 0) {
+            throw new BusinessException(400, "数据源已被 " + refCount + " 个页面引用，无法删除");
         }
         dsRepository.delete(ds);
     }

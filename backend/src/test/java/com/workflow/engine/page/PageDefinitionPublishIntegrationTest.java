@@ -448,6 +448,13 @@ class PageDefinitionPublishIntegrationTest {
         }
 
         @Override
+        public long countByTenantIdAndDataSourceId(String tenantId, String dataSourceId) {
+            return store.values().stream()
+                    .filter(p -> tenantId.equals(p.getTenantId()) && dataSourceId.equals(p.getDataSourceId()))
+                    .count();
+        }
+
+        @Override
         public Optional<PageDefinition> findByIdForUpdate(String id, String tenantId) {
             synchronized (publishLock) {
                 return findByIdAndTenantId(id, tenantId);

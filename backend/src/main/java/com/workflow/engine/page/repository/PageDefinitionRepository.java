@@ -62,4 +62,7 @@ public interface PageDefinitionRepository extends JpaRepository<PageDefinition, 
      * 存量视图迁移扫描：type=VIEW 且 formKey 非空且 dataSourceId 未回填（跨租户，迁移器按页面租户分组处理）。
      */
     List<PageDefinition> findByTypeAndFormKeyNotNullAndDataSourceIdNull(String type);
+
+    /** 统计当前租户内引用指定数据源的页面数（删除数据源前引用保护） */
+    long countByTenantIdAndDataSourceId(String tenantId, String dataSourceId);
 }

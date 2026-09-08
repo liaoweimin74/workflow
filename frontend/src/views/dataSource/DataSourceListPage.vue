@@ -203,73 +203,6 @@
                   <el-form-item label="请求头 JSON">
                     <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
                   </el-form-item>
-
-                  <el-divider content-position="left">列定义（列表展示与编辑弹窗使用）</el-divider>
-
-                  <el-form-item label="列">
-                    <div class="column-editor">
-                      <el-table :data="apiColumns" size="small" border class="ds-col-table">
-                        <el-table-column label="字段名" min-width="110">
-                          <template #default="{ row }">
-                            <el-input v-model="row.key" placeholder="字段名" :disabled="isReadonlyForm" />
-                          </template>
-                        </el-table-column>
-                        <el-table-column label="列名" min-width="110">
-                          <template #default="{ row }">
-                            <el-input v-model="row.label" placeholder="列名" :disabled="isReadonlyForm" />
-                          </template>
-                        </el-table-column>
-                        <el-table-column label="类型" width="150">
-                          <template #default="{ row }">
-                            <el-select v-model="row.columnType" placeholder="类型" style="width: 100%" :disabled="isReadonlyForm">
-                              <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
-                            </el-select>
-                          </template>
-                        </el-table-column>
-                        <el-table-column label="长度" width="140" :show-overflow-tooltip="false">
-                          <template #default="{ row }">
-                            <el-input-number
-                              v-if="needsLength(row.columnType)"
-                              v-model="row.length"
-                              :min="0"
-                              :max="10000"
-                              placeholder="长度"
-                              controls-position="right"
-                              style="width: 100%"
-                              :disabled="isReadonlyForm"
-                            />
-                          </template>
-                        </el-table-column>
-                        <el-table-column label="精度" width="80">
-                          <template #default="{ row }">
-                            <el-input-number
-                              v-if="row.columnType === 'DECIMAL'"
-                              v-model="row.scale"
-                              :min="0"
-                              :max="10"
-                              placeholder="精度"
-                              controls-position="right"
-                              style="width: 100%"
-                              :disabled="isReadonlyForm"
-                            />
-                          </template>
-                        </el-table-column>
-                        <el-table-column label="属性" width="270" align="center">
-                          <template #default="{ row }">
-                            <el-checkbox v-model="row.required" title="必填" :disabled="isReadonlyForm">必填</el-checkbox>
-                            <el-checkbox v-model="row.unique" title="唯一" :disabled="isReadonlyForm">唯一</el-checkbox>
-                            <el-checkbox v-model="row.indexed" title="索引" :disabled="isReadonlyForm">索引</el-checkbox>
-                          </template>
-                        </el-table-column>
-                        <el-table-column label="" width="52" align="center">
-                          <template #default="{ $index }">
-                            <el-button :icon="Delete" circle text :disabled="isReadonlyForm" @click="apiColumns.splice($index, 1)" />
-                          </template>
-                        </el-table-column>
-                      </el-table>
-                      <el-button type="primary" plain :icon="Plus" style="margin-top: 8px" :disabled="isReadonlyForm" @click="addColumn">添加列</el-button>
-                    </div>
-                  </el-form-item>
                 </el-form>
               </template>
 
@@ -1182,21 +1115,7 @@ function openView(row: DataSourceDTO) {
   inlineVisible.value = true
 }
 
-   function addColumn() {
-   apiColumns.value.push({
-     key: '',
-     label: '',
-     columnType: 'VARCHAR',
-     length: null,
-     scale: null,
-     required: false,
-     unique: false,
-     indexed: false,
-   })
- }
-
- /** 长度输入框仅对需要长度的类型显示 */
- function needsLength(type?: string | null): boolean {
+   function needsLength(type?: string | null): boolean {
    return type === 'VARCHAR' || type === 'DECIMAL' || type === 'INTEGER' || type === 'BIGINT' || type === 'TINYINT'
  }
 
@@ -1609,9 +1528,6 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  width: 100%;
-}
-.column-editor {
   width: 100%;
 }
 .column-row {

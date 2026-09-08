@@ -186,15 +186,13 @@ describe('DataSourceListPage', () => {
     expect(component.form.type).toBe('API')
     // API 可编辑：接口操作区（op-editor）可见
     expect(wrapper.find('.op-editor').exists()).toBe(true)
-    // 列定义可编辑：添加列按钮可见且可新增
-    expect(wrapper.find('.column-editor').exists()).toBe(true)
-    expect(wrapper.html()).toContain('添加列')
+    // 接口配置 tab 不再有列定义编辑器（收敛到字段元数据 tab）
+    expect(wrapper.find('.column-editor').exists()).toBe(false)
+    // 字段元数据 tab 提供添加列能力（addMetadataColumn）
     const before = component.apiColumns.length
-    await component.addColumn()
+    await component.addMetadataColumn()
     await nextTick()
     expect(component.apiColumns.length).toBe(before + 1)
-    // 删除列按钮可见
-    expect(wrapper.html()).toContain('删除')
     // 填写必填项并保存
     component.form.name = '库存接口'
     component.form.sourceKey = 'external-stock'
@@ -924,8 +922,9 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('查看 API 数据源：列定义只读（添加列按钮禁用）', async () => {
+  it('查看 API 数据源：接口配置无列编辑器，字段元数据 tab 输入禁用', async () => {
     stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: { columns: [], writable: false } })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
@@ -942,11 +941,13 @@ describe('DataSourceListPage', () => {
 
     const component: any = wrapper.vm as any
     expect(component.isReadonlyForm).toBe(true)
+    // 接口配置 tab 不再有列定义编辑器（列定义收敛到字段元数据 tab）
+    expect(wrapper.find('.column-editor').exists()).toBe(false)
+    // 字段元数据 tab 回填 apiColumns（单一来源），只读标记
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
     expect(component.apiColumns.length).toBe(1)
-    // 查看模式下「添加列」按钮处于禁用态
-    const addBtn = wrapper.findAll('button').find((b) => b.text().includes('添加列'))
-    expect(addBtn).toBeDefined()
-    expect(addBtn!.attributes('disabled')).toBeDefined()
+    expect(wrapper.html()).toContain('只读')
     wrapper.unmount()
   })
 

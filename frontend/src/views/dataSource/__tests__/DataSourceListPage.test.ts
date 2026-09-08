@@ -21,6 +21,10 @@ vi.mock('@/api/data-source', () => ({
     disableDataSource: vi.fn(),
     getMetadata: vi.fn(),
     queryData: vi.fn(),
+    getDbSchemaTables: vi.fn(),
+    getDbSchemaColumns: vi.fn(),
+    exploreSql: vi.fn(),
+    exploreApi: vi.fn(),
   },
 }))
 
@@ -87,6 +91,8 @@ describe('DataSourceListPage', () => {
   function stubList() {
     ;(dataSourceApi.getDataSources as any).mockResolvedValue({ data: { content: [], totalElements: 0 } })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({ data: { content: [] } })
+    // SQL 可视化主表/JOIN 候选来自数据库全表（真实 schema）
+    ;(dataSourceApi.getDbSchemaTables as any).mockResolvedValue({ data: ['wf_biz_customer', 'wf_biz_order'] })
   }
 
   // ==================== 操作按钮可见性 ====================
@@ -486,14 +492,14 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('SQL 可视化配置：主表/JOIN 目标表字段按表单懒加载，tableFields 传给 VisualQueryBuilder', async () => {
+  it('SQL 可视化配置：主表/JOIN 目标表字段按数据库真实表结构懒加载，tableFields 传给 VisualQueryBuilder', async () => {
     stubList()
-    ;(formApi.getFormDefinitionByKey as any).mockImplementation((key: string) => {
-      const colsByKey: Record<string, Array<{ key: string; label: string }>> = {
-        order: [{ key: 'order_no', label: '订单号' }, { key: 'customer_id', label: '客户ID' }],
-        customer: [{ key: 'id', label: 'ID' }, { key: 'name', label: '名称' }],
+    ;(dataSourceApi.getDbSchemaColumns as any).mockImplementation((table: string) => {
+      const colsByTable: Record<string, Array<{ key: string; columnType: string }>> = {
+        wf_biz_order: [{ key: 'order_no', columnType: 'VARCHAR' }, { key: 'customer_id', columnType: 'VARCHAR' }],
+        wf_biz_customer: [{ key: 'id', columnType: 'VARCHAR' }, { key: 'name', columnType: 'VARCHAR' }],
       }
-      return Promise.resolve({ data: { formKey: key, name: key, columnConfig: JSON.stringify(colsByKey[key] || []) } })
+      return Promise.resolve({ data: colsByTable[table] || [] })
     })
     const wrapper = createWrapper()
     await nextTick()
@@ -508,15 +514,15 @@ describe('DataSourceListPage', () => {
     await nextTick()
     await flushPromises()
 
-    // 主表变化 → 按表单懒加载字段
-    expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('order')
+    // 主表变化 → 按真实表名查 information_schema 列
+    expect(dataSourceApi.getDbSchemaColumns).toHaveBeenCalledWith('wf_biz_order')
     expect(component.sqlTableFields['wf_biz_order']).toEqual(['order_no', 'customer_id'])
 
     // JOIN 目标表变化 → 懒加载目标表字段
     component.sqlConfig.visual.joins = [{ alias: 'c', targetTable: 'wf_biz_customer', joinType: 'LEFT JOIN', on: '', columns: [] }]
     await nextTick()
     await flushPromises()
-    expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('customer')
+    expect(dataSourceApi.getDbSchemaColumns).toHaveBeenCalledWith('wf_biz_customer')
     expect(component.sqlTableFields['wf_biz_customer']).toEqual(['id', 'name'])
 
     // VisualQueryBuilder 收到 tableFields prop
@@ -543,7 +549,7 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('SQL 可视化：主表候选首项为已选表本身，不再拼接 wf_biz 双前缀', async () => {
+  it('SQL 可视化：主表候选来自数据库全表（dbTables），首项为已选表本身', async () => {
     stubList()
     const wrapper = createWrapper()
     await nextTick()
@@ -557,20 +563,25 @@ describe('DataSourceListPage', () => {
     await nextTick()
     await flushPromises()
     const cands = component.visualTableCandidates as string[]
+    // 候选 = 数据库全表（真实 schema），首项为已选主表
     expect(cands[0]).toBe('wf_biz_order')
+    expect(cands).toContain('wf_biz_customer')
     expect(cands.some((t) => t === 'wf_biz_wf_biz_order')).toBe(false)
+    // 已选主表去重（dbTables 中的 wf_biz_order 不重复出现）
+    expect(cands.filter((t) => t === 'wf_biz_order')).toHaveLength(1)
     wrapper.unmount()
   })
 
-  it('SQL 可视化：双前缀表名懒加载时剥离全部 wf_biz 前缀再查表单', async () => {
+  it('SQL 可视化：懒加载按真实表名直接查询列（不再剥 wf_biz 前缀查表单定义）', async () => {
     stubList()
-    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({ data: { formKey: 'selector_test', columnConfig: null } })
+    ;(dataSourceApi.getDbSchemaColumns as any).mockResolvedValue({ data: [{ key: 'id', columnType: 'VARCHAR' }] })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
     const component: any = wrapper.vm as any
-    await component.ensureTableFields('wf_biz_wf_biz_selector_test')
-    expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('selector_test')
+    await component.ensureTableFields('service_log')
+    expect(dataSourceApi.getDbSchemaColumns).toHaveBeenCalledWith('service_log')
+    expect(component.sqlTableFields['service_log']).toEqual(['id'])
     wrapper.unmount()
   })
 
@@ -1025,7 +1036,7 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('字段元数据标签渲染列定义表格（key/label/type/length）', async () => {
+  it('SQL 字段元数据标签渲染可编辑列定义表格与工具栏按钮', async () => {
     stubList()
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
     const wrapper = createWrapper()
@@ -1033,8 +1044,14 @@ describe('DataSourceListPage', () => {
     await flushPromises()
 
     ;(wrapper.vm as any).openView({
-      id: 'ds-api', name: '库存接口', type: 'API', formKey: null, sourceKey: 'external-stock',
-      status: 'ENABLED', params: JSON.stringify({ list: { action: '/v1/products', method: 'GET' } }),
+      id: 'ds-sql', name: 'SQL数据源', type: 'SQL', formKey: null, sourceKey: 'emp_profile',
+      status: 'ENABLED', params: JSON.stringify({
+        queryMode: 'visual', query: 'SELECT id FROM wf_biz_emp_profile WHERE tenant_id = :tenantId',
+        columns: [
+          { key: 'id', label: 'ID', columnType: 'VARCHAR', required: true, hidden: false, sortable: true, filterable: true },
+          { key: 'name', label: '名称', columnType: 'VARCHAR', required: false, hidden: false, sortable: true, filterable: true },
+        ],
+      }),
     })
     await nextTick()
     await flushPromises()
@@ -1043,12 +1060,17 @@ describe('DataSourceListPage', () => {
     await flushPromises()
 
     const html = wrapper.html()
-    expect(html).toContain('字段名')
+    // 工具栏：执行SQL获取字段（SQL 类型）
+    expect(html).toContain('执行SQL获取字段')
+    // 行内表格表头（7 列）
     expect(html).toContain('标识')
-    expect(html).toContain('组件')
-    expect(html).toContain('类型')
-    expect(html).toContain('长度')
-    // 列数据
+    expect(html).toContain('字段名')
+    expect(html).toContain('组件类型')
+    expect(html).toContain('必填')
+    expect(html).toContain('隐藏')
+    expect(html).toContain('排序')
+    expect(html).toContain('筛选')
+    // 回填的列数据（编辑对象 = sqlConfig.declaredColumns）
     expect(html).toContain('id')
     expect(html).toContain('ID')
     expect(html).toContain('名称')
@@ -1083,6 +1105,157 @@ describe('DataSourceListPage', () => {
     )
     const html = wrapper.html()
     expect(html).toContain('测试')
+    wrapper.unmount()
+  })
+
+  it('执行SQL获取字段：调用 exploreSql 并全量替换 declaredColumns', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    ;(dataSourceApi.exploreSql as any).mockResolvedValue({
+      data: [
+        { key: 'order_no', label: 'order_no', columnType: 'VARCHAR', length: 64 },
+        { key: 'amount', label: 'amount', columnType: 'DECIMAL', length: 18, scale: 2 },
+      ],
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-sql', name: 'SQL数据源', type: 'SQL', formKey: null, sourceKey: 'emp_profile',
+      status: 'ENABLED', params: JSON.stringify({
+        queryMode: 'visual', query: 'SELECT id FROM wf_biz_emp_profile WHERE tenant_id = :tenantId',
+        columns: [{ key: 'id', label: 'ID', columnType: 'VARCHAR', sortable: true, filterable: true }],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    component.sqlConfig.queryMode = 'sql'
+    component.sqlConfig.queryText = 'SELECT order_no, amount FROM wf_biz_order WHERE tenant_id = :tenantId'
+    await component.handleExploreSql()
+    await flushPromises()
+
+    expect(dataSourceApi.exploreSql).toHaveBeenCalledWith(
+      'SELECT order_no, amount FROM wf_biz_order WHERE tenant_id = :tenantId',
+    )
+    // 全量替换（不再是 1 列）
+    expect(component.sqlConfig.declaredColumns).toHaveLength(2)
+    expect(component.sqlConfig.declaredColumns[0].key).toBe('order_no')
+    expect(component.sqlConfig.declaredColumns[0].columnType).toBe('VARCHAR')
+    expect(component.sqlConfig.declaredColumns[1].columnType).toBe('DECIMAL')
+    wrapper.unmount()
+  })
+
+  it('从接口推断字段（API）：调用 exploreApi 并全量替换 apiColumns', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    ;(dataSourceApi.exploreApi as any).mockResolvedValue({
+      data: [{ key: 'sku', label: 'sku', columnType: 'VARCHAR' }, { key: 'price', label: 'price', columnType: 'DECIMAL' }],
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-api', name: '库存接口', type: 'API', formKey: null, sourceKey: 'external-stock',
+      status: 'ENABLED', params: JSON.stringify({ list: { action: '/v1/products', method: 'GET' }, columns: [{ key: 'id', label: 'ID', columnType: 'VARCHAR' }] }),
+    })
+    await nextTick()
+    await flushPromises()
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    await component.handleExploreApi()
+    await flushPromises()
+
+    expect(dataSourceApi.exploreApi).toHaveBeenCalledWith(expect.objectContaining({ action: '/v1/products', method: 'GET' }))
+    expect(component.apiColumns).toHaveLength(2)
+    expect(component.apiColumns[0].key).toBe('sku')
+    wrapper.unmount()
+  })
+
+  it('从主表单覆盖：匹配 key 全属性覆盖，表单多出的 key 追加', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
+      data: {
+        formKey: 'emp_profile',
+        columnConfig: JSON.stringify([
+          { key: 'id', label: '员工ID', columnType: 'VARCHAR', required: true, sortable: true, filterable: true },
+          { key: 'dept', label: '部门', columnType: 'VARCHAR', required: false, sortable: true, filterable: true },
+        ]),
+      },
+    })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-sql', name: 'SQL数据源', type: 'SQL', formKey: 'emp_profile', sourceKey: 'emp_profile',
+      status: 'ENABLED', params: JSON.stringify({
+        queryMode: 'visual', query: 'SELECT id FROM wf_biz_emp_profile WHERE tenant_id = :tenantId',
+        columns: [{ key: 'id', label: 'ID', columnType: 'VARCHAR', required: false, sortable: true, filterable: true }],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    await component.handleOverlayFromForm()
+    await flushPromises()
+
+    expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('emp_profile')
+    // id：全属性覆盖（label 变 员工ID，required 变 true）
+    const idCol = component.sqlConfig.declaredColumns.find((c: any) => c.key === 'id')
+    expect(idCol.label).toBe('员工ID')
+    expect(idCol.required).toBe(true)
+    // dept：表单多出的 key 追加
+    const deptCol = component.sqlConfig.declaredColumns.find((c: any) => c.key === 'dept')
+    expect(deptCol).toBeDefined()
+    expect(deptCol.label).toBe('部门')
+    wrapper.unmount()
+  })
+
+  it('字段元数据行内编辑 + 保存：params.columns 携带全字段更新值', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-sql', name: 'SQL数据源', type: 'SQL', formKey: null, sourceKey: 'emp_profile',
+      status: 'ENABLED', params: JSON.stringify({
+        queryMode: 'visual', query: 'SELECT id FROM wf_biz_emp_profile WHERE tenant_id = :tenantId',
+        columns: [{ key: 'id', label: 'ID', columnType: 'VARCHAR', required: false, hidden: false, sortable: true, filterable: true }],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    // 行内编辑 label + required
+    component.sqlConfig.declaredColumns[0].label = '标识ID'
+    component.sqlConfig.declaredColumns[0].required = true
+
+    // 触发保存：校验 buildSqlParams 输出全字段
+    const params = component.buildSqlParams()
+    const col = params.columns[0]
+    expect(col.key).toBe('id')
+    expect(col.label).toBe('标识ID')
+    expect(col.required).toBe(true)
+    expect(col.hidden).toBe(false)
+    expect(col.sortable).toBe(true)
+    expect(col.filterable).toBe(true)
     wrapper.unmount()
   })
 

@@ -330,33 +330,133 @@
 
           <el-tab-pane label="字段元数据" name="metadata">
             <div class="metadata-section">
-              <el-row :gutter="8" class="metadata-header">
-                <el-col>
+              <el-row :gutter="8" class="metadata-header" justify="space-between" align="middle">
+                <el-col :span="8">
                   <el-tag :type="metadata?.writable ? 'success' : 'info'" size="small">
                     {{ metadata?.writable ? '可写' : '只读' }}
                   </el-tag>
+                  <span v-if="isEditableType" class="metadata-count">{{ metadataColumns.length }} 个字段</span>
+                </el-col>
+                <el-col v-if="isEditableType" :span="16" class="metadata-toolbar">
+                  <el-button v-if="form.type === 'SQL'" size="small" type="primary" plain :loading="probeLoading" @click="handleExploreSql">
+                    执行SQL获取字段
+                  </el-button>
+                  <el-button v-else-if="form.type === 'API'" size="small" type="primary" plain :loading="probeLoading" @click="handleExploreApi">
+                    从接口推断字段
+                  </el-button>
+                  <el-button v-if="form.formKey" size="small" plain :loading="overlayLoading" @click="handleOverlayFromForm">
+                    从主表单覆盖
+                  </el-button>
                 </el-col>
               </el-row>
-              <el-table
-                :data="metadata?.columns || []"
-                v-loading="metadataLoading"
-                style="width: 100%"
-                :max-height="300"
-              >
-                <el-table-column prop="label" label="字段名" min-width="180" show-overflow-tooltip />
-                <el-table-column prop="key" label="标识" min-width="160" show-overflow-tooltip />
-                <el-table-column prop="componentType" label="组件" min-width="100" />
-                <el-table-column label="必填" width="50" align="center">
-                  <template #default="{ row }">
-                    <span :style="boolIconStyle(row.required)">{{ row.required ? '✓' : '✗' }}</span>
+
+              <template v-if="isEditableType">
+                <el-table :data="metadataColumns" size="small" border style="width: 100%" :max-height="300">
+                  <el-table-column label="标识" min-width="120">
+                    <template #default="{ row }">
+                      <el-input v-model="row.key" placeholder="标识" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="字段名" min-width="130">
+                    <template #default="{ row }">
+                      <el-input v-model="row.label" placeholder="字段名" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="组件类型" min-width="110">
+                    <template #default="{ row }">
+                      <span>{{ row.componentType || '—' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="必填" width="60" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.required" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="隐藏" width="60" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.hidden" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="排序" width="60" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.sortable" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="筛选" width="60" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.filterable" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="" width="110" align="center">
+                    <template #default="{ row }">
+                      <el-button size="small" text type="primary" @click="openColumnDetail(row)">详情</el-button>
+                      <el-button size="small" text type="danger" @click="removeMetadataColumn(row)">删除</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <el-button type="primary" plain size="small" style="margin-top: 8px" @click="addMetadataColumn">添加列</el-button>
+
+                <el-dialog v-model="columnDialogVisible" title="字段详情" width="520px" append-to-body>
+                  <el-form v-if="editingColumn" label-width="90px" size="small">
+                    <el-form-item label="标识">
+                      <el-input v-model="editingColumn.key" />
+                    </el-form-item>
+                    <el-form-item label="字段名">
+                      <el-input v-model="editingColumn.label" />
+                    </el-form-item>
+                    <el-form-item label="类型">
+                      <el-select v-model="editingColumn.columnType" style="width: 100%">
+                        <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="长度" v-if="needsLength(editingColumn.columnType)">
+                      <el-input-number v-model="editingColumn.length" :min="0" :max="10000" controls-position="right" style="width: 100%" />
+                    </el-form-item>
+                    <el-form-item label="精度" v-if="editingColumn.columnType === 'DECIMAL'">
+                      <el-input-number v-model="editingColumn.scale" :min="0" :max="10" controls-position="right" style="width: 100%" />
+                    </el-form-item>
+                    <el-form-item label="属性">
+                      <el-checkbox v-model="editingColumn.required">必填</el-checkbox>
+                      <el-checkbox v-model="editingColumn.unique">唯一</el-checkbox>
+                      <el-checkbox v-model="editingColumn.indexed">索引</el-checkbox>
+                      <el-checkbox v-model="editingColumn.hidden">隐藏</el-checkbox>
+                      <el-checkbox v-model="editingColumn.sortable">排序</el-checkbox>
+                      <el-checkbox v-model="editingColumn.filterable">筛选</el-checkbox>
+                    </el-form-item>
+                    <el-form-item label="组件类型">
+                      <el-input v-model="editingColumn.componentType" placeholder="组件类型（文本）" />
+                    </el-form-item>
+                  </el-form>
+                  <template #footer>
+                    <el-button size="small" @click="columnDialogVisible = false">取消</el-button>
+                    <el-button size="small" type="primary" @click="columnDialogVisible = false">保存</el-button>
                   </template>
-                </el-table-column>
-                <el-table-column label="唯一" width="50" align="center">
-                  <template #default="{ row }">
-                    <span :style="boolIconStyle(row.unique)">{{ row.unique ? '✓' : '✗' }}</span>
-                  </template>
-                </el-table-column>
-              </el-table>
+                </el-dialog>
+              </template>
+
+              <template v-else>
+                <el-table
+                  :data="metadata?.columns || []"
+                  v-loading="metadataLoading"
+                  style="width: 100%"
+                  :max-height="300"
+                >
+                  <el-table-column prop="label" label="字段名" min-width="180" show-overflow-tooltip />
+                  <el-table-column prop="key" label="标识" min-width="160" show-overflow-tooltip />
+                  <el-table-column prop="componentType" label="组件" min-width="100" />
+                  <el-table-column label="必填" width="50" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.required)">{{ row.required ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="唯一" width="50" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.unique)">{{ row.unique ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </template>
+
               <div v-if="metadataError" class="metadata-error">
                 <el-alert :title="metadataError" type="error" />
               </div>
@@ -446,14 +546,16 @@ import SqlEditor from './components/SqlEditor.vue'
 const router = useRouter()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 
-/** 已发布业务表单（FORM 类型 formKey 下拉候选 + SQL 可视化主表候选） */
+/** 已发布业务表单（FORM 类型 formKey 下拉候选） */
 const publishedForms = ref<FormDefinitionDTO[]>([])
+/** 数据库全部基础表名（SQL 可视化主表/JOIN 目标表下拉候选，真实 schema，排除 flyway） */
+const dbTables = ref<string[]>([])
+/** SQL 可视化主表候选：已选主表首位 + 数据库全表去重（不再依赖已发布表单白名单） */
 const visualTableCandidates = computed(() => {
   const main = (sqlConfig.visual.mainTable || '').trim()
   const list = main ? [main] : []
   const seen = new Set(list)
-  for (const f of publishedForms.value) {
-    const t = `wf_biz_${f.key}`
+  for (const t of dbTables.value) {
     if (!seen.has(t)) {
       list.push(t)
       seen.add(t)
@@ -598,26 +700,15 @@ const sqlConfig = reactive({
 /** SQL 可视化：主表/JOIN 目标表字段懒加载缓存（表名 → 字段 key 列表） */
 const sqlTableFields = ref<Record<string, string[]>>({})
 
-/** 按表单懒加载表字段：剥离全部 wf_biz 前缀后通过 formKey 查询字段定义 */
+/** 按数据库真实表结构懒加载字段（information_schema 列，不再剥前缀查表单定义） */
 async function ensureTableFields(table: string) {
   if (!table || sqlTableFields.value[table]) return
-  const formKey = table.replace(/^(wf_biz_)+/, '')
   try {
-    const res = await formApi.getFormDefinitionByKey(formKey)
-    const cfg = (res.data as any)?.columnConfig
-    let cols: unknown = null
-    if (typeof cfg === 'string' && cfg) {
-      try {
-        cols = JSON.parse(cfg)
-      } catch {
-        cols = null
-      }
-    } else if (Array.isArray(cfg)) {
-      cols = cfg
-    }
-    sqlTableFields.value[table] = (Array.isArray(cols) ? cols : []).map((c: any) => c.key).filter(Boolean)
+    const res = await dataSourceApi.getDbSchemaColumns(table)
+    const cols = res.data || []
+    sqlTableFields.value[table] = cols.map((c) => c.key).filter(Boolean)
   } catch {
-    // 表单加载失败不阻断主流程
+    // 列加载失败不阻断主流程
   }
 }
 
@@ -723,6 +814,161 @@ async function loadMetadata() {
     metadataError.value = e?.message || '加载字段元数据失败'
   } finally {
     metadataLoading.value = false
+  }
+}
+
+/** ================ 字段元数据编辑（SQL/API 单一来源：sqlConfig.declaredColumns / apiColumns） ================ */
+
+/** 编辑对象：SQL → declaredColumns，API → apiColumns */
+const metadataColumns = computed(() =>
+  form.type === 'API' ? apiColumns.value : sqlConfig.declaredColumns,
+)
+
+const probeLoading = ref(false)
+const overlayLoading = ref(false)
+const editingColumn = ref<ColumnConfigItem | null>(null)
+const columnDialogVisible = ref(false)
+
+/** 执行 SQL 探测：完整 SQL（visual 预览或手写）→ 全量替换 declaredColumns */
+async function handleExploreSql() {
+  const sql = sqlConfig.queryMode === 'visual' ? generatePreviewSql() : sqlConfig.queryText
+  if (!sql?.trim()) {
+    ElMessage.warning('请先填写 SQL（可视化或 SQL 模式）')
+    return
+  }
+  probeLoading.value = true
+  try {
+    const res = await dataSourceApi.exploreSql(sql)
+    sqlConfig.declaredColumns = (res.data || []).map(toColumnConfigItem)
+    ElMessage.success(`已获取 ${sqlConfig.declaredColumns.length} 个字段`)
+  } catch (e: any) {
+    ElMessage.error(e?.message || 'SQL 探测失败')
+  } finally {
+    probeLoading.value = false
+  }
+}
+
+/** 从接口推断字段：list 操作拉样例 → 全量替换 apiColumns */
+async function handleExploreApi() {
+  const op = apiOps.list
+  if (!op.action?.trim()) {
+    ElMessage.warning('请先配置 list 操作地址')
+    return
+  }
+  probeLoading.value = true
+  try {
+    const res = await dataSourceApi.exploreApi({
+      action: op.action.trim(),
+      method: op.method || 'GET',
+      data: parseParamsJson(form.data) || undefined,
+    })
+    apiColumns.value = (res.data || []).map(toColumnConfigItem)
+    ElMessage.success(`已获取 ${apiColumns.value.length} 个字段`)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '接口字段推断失败')
+  } finally {
+    probeLoading.value = false
+  }
+}
+
+/** 从主表单覆盖（策略 C）：key 命中 → 全属性覆盖；表单多出的 key → 追加 */
+async function handleOverlayFromForm() {
+  if (!form.formKey) {
+    ElMessage.warning('未绑定主表单，无法覆盖')
+    return
+  }
+  overlayLoading.value = true
+  try {
+    const res = await formApi.getFormDefinitionByKey(form.formKey)
+    const cfg = (res.data as any)?.columnConfig
+    let formCols: ColumnConfigItem[] = []
+    if (typeof cfg === 'string' && cfg) {
+      try {
+        formCols = JSON.parse(cfg) as ColumnConfigItem[]
+      } catch {
+        formCols = []
+      }
+    } else if (Array.isArray(cfg)) {
+      formCols = cfg as ColumnConfigItem[]
+    }
+    if (formCols.length === 0) {
+      ElMessage.warning('主表单无可用列定义')
+      return
+    }
+    overlayFromFormColumns(formCols)
+    ElMessage.success(`已按主表单覆盖 ${formCols.length} 个字段`)
+  } catch (e: any) {
+    ElMessage.error(e?.message || '主表单覆盖失败')
+  } finally {
+    overlayLoading.value = false
+  }
+}
+
+/** 覆盖策略 C：命中 key 全属性覆盖（保留 key），表单多出的 key 追加，当前列保留 */
+function overlayFromFormColumns(formCols: ColumnConfigItem[]) {
+  const target = form.type === 'API' ? apiColumns.value : sqlConfig.declaredColumns
+  const byKey = new Map(target.map((c) => [c.key, c]))
+  for (const fc of formCols) {
+    if (byKey.has(fc.key)) {
+      Object.assign(byKey.get(fc.key)!, fc, { key: fc.key })
+    } else {
+      target.push({ ...fc })
+      byKey.set(fc.key, target[target.length - 1])
+    }
+  }
+}
+
+/** 探测结果 → ColumnConfigItem（全字段初始化，布尔默认值防 v-model undefined） */
+function toColumnConfigItem(c: any): ColumnConfigItem {
+  return {
+    key: c.key,
+    label: c.label || c.key,
+    columnType: c.columnType || 'VARCHAR',
+    length: c.length ?? null,
+    scale: c.scale ?? null,
+    required: false,
+    unique: false,
+    indexed: false,
+    hidden: false,
+    sortable: true,
+    filterable: true,
+    componentType: c.componentType ?? null,
+  }
+}
+
+/** ColumnConfigItem → 全字段序列化（保存 params.columns，字段元数据 tab 编辑结果单一来源） */
+function serializeColumnConfig(c: ColumnConfigItem): Record<string, any> {
+  const item: Record<string, any> = {
+    key: c.key.trim(),
+    label: c.label || c.key.trim(),
+    columnType: c.columnType || 'VARCHAR',
+    sortable: !!c.sortable,
+    filterable: !!c.filterable,
+  }
+  if (c.length != null) item.length = c.length
+  if (c.scale != null) item.scale = c.scale
+  // 布尔约束显式输出（false 也写回，保证全字段往返一致）
+  item.required = !!c.required
+  item.unique = !!c.unique
+  item.indexed = !!c.indexed
+  item.hidden = !!c.hidden
+  if (c.componentType) item.componentType = c.componentType
+  return item
+}
+
+function openColumnDetail(row: ColumnConfigItem) {
+  editingColumn.value = row
+  columnDialogVisible.value = true
+}
+
+function addMetadataColumn() {
+  metadataColumns.value.push(toColumnConfigItem({ key: '', label: '', columnType: 'VARCHAR' }))
+}
+
+function removeMetadataColumn(row: ColumnConfigItem) {
+  const idx = metadataColumns.value.indexOf(row)
+  if (idx >= 0) {
+    metadataColumns.value.splice(idx, 1)
   }
 }
 
@@ -981,20 +1227,11 @@ function openView(row: DataSourceDTO) {
        params[op] = item
      }
    }
-   // 列定义：过滤未填写 key 的行
-   const columns = apiColumns.value.filter((c) => c.key && c.key.trim())
-   if (columns.length > 0) {
-     params.columns = columns.map((c) => {
-       const item: Record<string, any> = { key: c.key.trim(), label: c.label || c.key.trim() }
-       if (c.columnType) item.columnType = c.columnType
-       if (c.length != null) item.length = c.length
-       if (c.columnType === 'DECIMAL' && c.scale != null) item.scale = c.scale
-       if (c.required) item.required = true
-       if (c.unique) item.unique = true
-       if (c.indexed) item.indexed = true
-       return item
-     })
-   }
+    // 列定义：过滤未填写 key 的行（全字段序列化，字段元数据 tab 编辑结果单一来源）
+    const columns = apiColumns.value.filter((c) => c.key && c.key.trim())
+    if (columns.length > 0) {
+      params.columns = columns.map(serializeColumnConfig)
+    }
    // 搜索/分页/固定参数/请求头
    if (form.searchParam && form.searchParam.trim()) params.searchParam = form.searchParam.trim()
    if (form.keywordColumn && form.keywordColumn.trim()) params.keywordColumn = form.keywordColumn.trim()
@@ -1026,16 +1263,10 @@ function openView(row: DataSourceDTO) {
       // SQL 模式：直接使用手写 SQL
       params.query = sqlConfig.queryText
     }
-    // 列声明
+    // 列声明（全字段序列化，字段元数据 tab 编辑结果单一来源）
     const columns = sqlConfig.declaredColumns.filter((c) => c.key && c.key.trim())
     if (columns.length > 0) {
-      params.columns = columns.map((c) => ({
-        key: c.key.trim(),
-        label: c.label || c.key.trim(),
-        columnType: c.columnType || 'VARCHAR',
-        sortable: !!c.sortable,
-        filterable: !!c.filterable,
-      }))
+      params.columns = columns.map(serializeColumnConfig)
     }
     // 运行时参数白名单
     if (sqlConfig.declaredParams.length > 0) {
@@ -1286,7 +1517,7 @@ function formatDate(dateStr: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-// ========== 初始化：加载已发布业务/工作流表单（FORM/WORKFLOW 类型 formKey 下拉候选） ==========
+// ========== 初始化：加载已发布业务/工作流表单 + 数据库全表（SQL 可视化候选） ==========
 onMounted(async () => {
   try {
     const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
@@ -1301,6 +1532,12 @@ onMounted(async () => {
     publishedWorkflowForms.value = data.content || data.rows || []
   } catch {
     // 表单加载失败不阻断列表
+  }
+  try {
+    const res = await dataSourceApi.getDbSchemaTables()
+    dbTables.value = res.data || []
+  } catch {
+    // 数据库表加载失败不阻断列表
   }
 })
 </script>

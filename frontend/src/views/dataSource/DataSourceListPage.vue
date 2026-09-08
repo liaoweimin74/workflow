@@ -263,27 +263,18 @@
 
           <el-tab-pane label="字段元数据" name="metadata">
             <div class="metadata-section">
-              <el-row :gutter="8" class="metadata-header" justify="space-between" align="middle">
-                <el-col :span="8">
-                  <el-tag :type="metadata?.writable ? 'success' : 'info'" size="small">
-                    {{ metadata?.writable ? '可写' : '只读' }}
-                  </el-tag>
-                  <span v-if="isEditableType" class="metadata-count">{{ metadataColumns.length }} 个字段</span>
-                </el-col>
-                <el-col v-if="isEditableType" :span="16" class="metadata-toolbar">
+              <template v-if="isEditableType">
+                <div class="metadata-toolbar-inline">
                   <el-button v-if="form.type === 'SQL'" size="small" type="primary" plain :loading="probeLoading" @click="handleExploreSql">
-                    执行SQL获取字段
+                    获取字段
                   </el-button>
                   <el-button v-else-if="form.type === 'API'" size="small" type="primary" plain :loading="probeLoading" @click="handleExploreApi">
-                    从接口推断字段
+                    推断字段
                   </el-button>
                   <el-button v-if="form.formKey" size="small" plain :loading="overlayLoading" @click="handleOverlayFromForm">
                     从主表单覆盖
                   </el-button>
-                </el-col>
-              </el-row>
-
-              <template v-if="isEditableType">
+                </div>
                 <el-table :data="metadataColumns" size="small" border style="width: 100%" :max-height="300">
                   <el-table-column label="标识" min-width="120">
                     <template #default="{ row }">
@@ -295,9 +286,11 @@
                       <el-input v-model="row.label" placeholder="字段名" size="small" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="组件类型" min-width="110">
+                  <el-table-column label="组件类型" min-width="120">
                     <template #default="{ row }">
-                      <span>{{ row.componentType || '—' }}</span>
+                      <el-select v-model="row.componentType" clearable filterable placeholder="—" size="small" style="width: 100%">
+                        <el-option v-for="t in FORM_CREATE_COMPONENT_TYPES" :key="t" :label="t" :value="t" />
+                      </el-select>
                     </template>
                   </el-table-column>
                   <el-table-column label="必填" width="60" align="center">
@@ -320,14 +313,14 @@
                       <el-checkbox v-model="row.filterable" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="" width="110" align="center">
+                  <el-table-column label="" width="80" align="center">
                     <template #default="{ row }">
-                      <el-button size="small" text type="primary" @click="openColumnDetail(row)">详情</el-button>
-                      <el-button size="small" text type="danger" @click="removeMetadataColumn(row)">删除</el-button>
+                      <el-button :icon="Edit" circle size="small" text @click="openColumnDetail(row)" title="详情" />
+                      <el-button :icon="Delete" circle size="small" text type="danger" @click="removeMetadataColumn(row)" title="删除" />
                     </template>
                   </el-table-column>
                 </el-table>
-                <el-button type="primary" plain size="small" style="margin-top: 8px" @click="addMetadataColumn">添加列</el-button>
+                <el-button type="primary" plain size="small" style="margin-top: 4px" @click="addMetadataColumn">添加列</el-button>
 
                 <el-dialog v-model="columnDialogVisible" title="字段详情" width="520px" append-to-body>
                   <el-form v-if="editingColumn" label-width="90px" size="small">
@@ -400,21 +393,17 @@
 
           <el-tab-pane label="数据预览" name="data">
             <div class="preview-section">
-              <el-row :gutter="8" class="preview-toolbar" style="align-items: center">
-                <el-col>
-                  <div style="display: flex; align-items: center; gap: 8px">
-                    <el-input
-                      v-model="previewKeyword"
-                      placeholder="搜索关键词"
-                      style="width: 200px"
-                      size="small"
-                    />
-                    <el-button type="primary" size="small" :loading="dataLoading" @click="onSearch">
-                      搜索
-                    </el-button>
-                  </div>
-                </el-col>
-              </el-row>
+              <div class="preview-toolbar-inline">
+                <el-input
+                  v-model="previewKeyword"
+                  placeholder="搜索关键词"
+                  style="width: 200px"
+                  size="small"
+                />
+                <el-button type="primary" size="small" :loading="dataLoading" @click="onSearch">
+                  搜索
+                </el-button>
+              </div>
               <el-table
                 :data="previewTableData"
                 v-loading="dataLoading"
@@ -1631,6 +1620,19 @@ onMounted(async () => {
 /* 主表单（顶部输入区）固定不滚动 */
 .inline-form-body > .el-form {
   flex-shrink: 0;
+}
+/* 元数据 tab 按钮行：与 tab 下沿和表格各留 4px */
+.metadata-toolbar-inline {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 4px;
+}
+/* 数据预览 tab 搜索行：与 tab 下沿和表格各留 4px */
+.preview-toolbar-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
 }
 .inline-form-footer {
   display: flex;

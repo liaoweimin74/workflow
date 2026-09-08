@@ -943,11 +943,10 @@ describe('DataSourceListPage', () => {
     expect(component.isReadonlyForm).toBe(true)
     // 接口配置 tab 不再有列定义编辑器（列定义收敛到字段元数据 tab）
     expect(wrapper.find('.column-editor').exists()).toBe(false)
-    // 字段元数据 tab 回填 apiColumns（单一来源），只读标记
+    // 字段元数据 tab 回填 apiColumns（单一来源）
     await (wrapper.vm as any).handleTabChange('metadata')
     await flushPromises()
     expect(component.apiColumns.length).toBe(1)
-    expect(wrapper.html()).toContain('只读')
     wrapper.unmount()
   })
 
@@ -1061,8 +1060,8 @@ describe('DataSourceListPage', () => {
     await flushPromises()
 
     const html = wrapper.html()
-    // 工具栏：执行SQL获取字段（SQL 类型）
-    expect(html).toContain('执行SQL获取字段')
+    // 工具栏：获取字段（SQL 类型）
+    expect(html).toContain('获取字段')
     // 行内表格表头（7 列）
     expect(html).toContain('标识')
     expect(html).toContain('字段名')
@@ -1075,8 +1074,6 @@ describe('DataSourceListPage', () => {
     expect(html).toContain('id')
     expect(html).toContain('ID')
     expect(html).toContain('名称')
-    // writable 标记
-    expect(html).toContain('可写')
     wrapper.unmount()
   })
 
@@ -1109,7 +1106,7 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('执行SQL获取字段：调用 exploreSql 并全量替换 declaredColumns', async () => {
+  it('获取字段：调用 exploreSql 并全量替换 declaredColumns', async () => {
     stubList()
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
     ;(dataSourceApi.exploreSql as any).mockResolvedValue({
@@ -1290,7 +1287,8 @@ describe('DataSourceListPage', () => {
     await (wrapper.vm as any).handleTabChange('metadata')
     await flushPromises()
 
-    expect(wrapper.html()).toContain('只读')
+    // SYSTEM 类型无编辑工具栏，显示只读表格
+    expect(wrapper.vm.isEditableType).toBe(false)
     wrapper.unmount()
   })
 

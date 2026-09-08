@@ -147,6 +147,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '数据源管理' }
       },
       {
+        path: 'data-source/:id/data',
+        name: 'DataSourceData',
+        component: () => import('@/views/dataSource/DataSourceDataPage.vue'),
+        meta: { title: '数据源数据管理' }
+      },
+      {
         path: '404',
         name: 'NotFound',
         component: () => import('@/views/error/NotFoundPage.vue'),

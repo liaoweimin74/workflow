@@ -9,6 +9,7 @@ import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
+import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantContext;
 import com.workflow.engine.tenant.TenantProvider;
@@ -18,6 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -318,6 +321,8 @@ class DataSourceDefinitionServiceTest {
         DataSourceDefinition ds = draftDs("FORM", "biz_leave", null, null);
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(pageRepository.countByTenantIdAndDataSourceId(TENANT_ID, DS_ID)).thenReturn(0L);
+        when(pageRepository.findByTenantIdAndTypeOrderByUpdatedAtDesc(eq(TENANT_ID), eq("PAGE"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         service.delete(DS_ID);
 
@@ -330,6 +335,8 @@ class DataSourceDefinitionServiceTest {
         ds.setStatus("ENABLED");
         when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
         when(pageRepository.countByTenantIdAndDataSourceId(TENANT_ID, DS_ID)).thenReturn(0L);
+        when(pageRepository.findByTenantIdAndTypeOrderByUpdatedAtDesc(eq(TENANT_ID), eq("PAGE"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         service.delete(DS_ID);
 
@@ -346,6 +353,47 @@ class DataSourceDefinitionServiceTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(DS_ID));
         assertTrue(ex.getMessage().contains("引用"));
         verify(dsRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_referencedByPageSchema_rejected() {
+        // PAGE 类型页面的引用声明在 schema.dataSources[].refId，dataSourceId 列为空 → 依赖列统计会漏
+        DataSourceDefinition ds = draftDs("API", null, "external-stock", null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(pageRepository.countByTenantIdAndDataSourceId(TENANT_ID, DS_ID)).thenReturn(0L);
+        PageDefinition page = new PageDefinition();
+        page.setId("page-1");
+        page.setTenantId(TENANT_ID);
+        page.setType("PAGE");
+        page.setSchema("{\"dataSources\":[{\"id\":\"ds_cmp\",\"refId\":\"ds-1\",\"name\":\"外部库存数据源\"}]}");
+        when(pageRepository.findByTenantIdAndTypeOrderByUpdatedAtDesc(eq(TENANT_ID), eq("PAGE"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(page), Pageable.unpaged(), 1));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.delete(DS_ID));
+        assertTrue(ex.getMessage().contains("引用"));
+        verify(dsRepository, never()).delete(any());
+    }
+
+    @Test
+    void delete_schemaRefOnlyArchivedPage_notBlocked() {
+        // 页面已软删除（ARCHIVED）不再使用，其 schema 引用不应阻塞数据源删除
+        DataSourceDefinition ds = draftDs("API", null, "external-stock", null);
+        ds.setStatus("ENABLED");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(pageRepository.countByTenantIdAndDataSourceId(TENANT_ID, DS_ID)).thenReturn(0L);
+        PageDefinition archived = new PageDefinition();
+        archived.setId("page-archived");
+        archived.setTenantId(TENANT_ID);
+        archived.setType("PAGE");
+        archived.setStatus("ARCHIVED");
+        archived.setSchema("{\"dataSources\":[{\"id\":\"ds_cmp\",\"refId\":\"ds-1\",\"name\":\"外部库存数据源\"}]}");
+        when(pageRepository.findByTenantIdAndTypeOrderByUpdatedAtDesc(eq(TENANT_ID), eq("PAGE"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(archived), Pageable.unpaged(), 1));
+
+        service.delete(DS_ID);
+
+        verify(dsRepository).delete(ds);
     }
 
     // ==================== 查询分发（Adapter SPI） ====================

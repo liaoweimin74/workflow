@@ -13,9 +13,11 @@ import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
+import com.workflow.engine.page.entity.PageDefinition;
 import com.workflow.engine.page.repository.PageDefinitionRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -216,6 +218,10 @@ public class DataSourceDefinitionService {
 
     /**
      * 删除数据源：任意状态可删除（ENABLED/DISABLED 均可），但被页面引用时拒绝（400）。
+     * 引用统计覆盖两种绑定方式：
+     * 1) PageDefinition.dataSourceId 列（VIEW 新协议，迁移器回填）；
+     * 2) PAGE 类型页面 schema.dataSources[].refId（设计器 dataSources 声明）。
+     * 两者取并集，任一命中即拒绝删除。
      * 
      * 注意：此方法仅供系统内部调用，用户不能直接删除数据源。
      */
@@ -223,11 +229,60 @@ public class DataSourceDefinitionService {
     public void delete(String id) {
         DataSourceDefinition ds = getById(id);
         String tenantId = ds.getTenantId();
-        long refCount = pageRepository.countByTenantIdAndDataSourceId(tenantId, id);
+        long refCount = countRefs(tenantId, id);
         if (refCount > 0) {
             throw new BusinessException(400, "数据源已被 " + refCount + " 个页面引用，无法删除");
         }
         dsRepository.delete(ds);
+    }
+
+    /**
+     * 统计当前租户内引用指定数据源的页面数（dataSourceId 列 + PAGE schema dataSources[].refId 并集）。
+     */
+    private long countRefs(String tenantId, String dataSourceId) {
+        long columnRefs = pageRepository.countByTenantIdAndDataSourceId(tenantId, dataSourceId);
+        if (columnRefs > 0) {
+            return columnRefs;
+        }
+        // PAGE 类型页面引用声明在 schema.dataSources[].refId（dataSourceId 列为空），需扫描；
+        // 页面软删除（ARCHIVED）后不再使用，其 schema 引用不阻塞删除
+        long schemaRefs = 0;
+        Page<PageDefinition> pages = pageRepository
+                .findByTenantIdAndTypeOrderByUpdatedAtDesc(tenantId, "PAGE", PageRequest.of(0, Integer.MAX_VALUE));
+        for (PageDefinition page : pages.getContent()) {
+            if ("ARCHIVED".equals(page.getStatus())) {
+                continue;
+            }
+            if (schemaRefsDataSource(page.getSchema(), dataSourceId)) {
+                schemaRefs++;
+            }
+        }
+        return schemaRefs;
+    }
+
+    /**
+     * 判断页面 schema 的 dataSources[].refId 是否指向指定数据源。
+     */
+    private boolean schemaRefsDataSource(String schema, String dataSourceId) {
+        if (schema == null || schema.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(schema);
+            JsonNode dataSources = root.path("dataSources");
+            if (!dataSources.isArray()) {
+                return false;
+            }
+            for (JsonNode ds : dataSources) {
+                String refId = ds.path("refId").asText(null);
+                if (dataSourceId.equals(refId)) {
+                    return true;
+                }
+            }
+        } catch (JsonProcessingException e) {
+            return false;
+        }
+        return false;
     }
 
     /**

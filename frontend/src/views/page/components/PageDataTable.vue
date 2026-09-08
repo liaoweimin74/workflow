@@ -102,13 +102,12 @@ import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import { buildCellRender, getCellValue } from '@/utils/tableColumnRenderer'
 import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import { leafDisplayText, withArrayLabels } from '@/views/form/arrayValueLabel'
-import { formApi } from '@/api/form'
-import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
+import { leafDisplayText } from '@/views/form/arrayValueLabel'
 import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceBindingContext } from '@/components/business/types'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import { tableFilterStore } from './tableFilterStore'
+import { useDataSourceCrud } from '@/composables/useDataSourceCrud'
 
 /** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费；关联容器打开能力 */
 const actionBus = inject<{
@@ -173,18 +172,6 @@ const tableSize = computed(() => props.size || 'default')
 /** 最近加载的记录（供动作总线/外部读取） */
 const records = ref<any[]>([])
 
-/** 数据源列定义（metadata，供 formConfig 动态生成表单） */
-const metaColumns = ref<{ key: string; label: string; columnType?: string; componentType?: string; required?: boolean; scale?: number; sortable?: boolean }[]>([])
-/** 元数据加载完成标记：SearchTable 在列定义就绪后才挂载，保证首次取数渲染即带 formatter（数组值列显示 label 而非原始 value） */
-const metaLoaded = ref(false)
-/** 数据源可写标记 */
-const writable = ref(false)
-/** 数据源绑定表单 formKey（FORM/WORKFLOW metadata 返回；非空时编辑弹窗按表单 schema 构建组件） */
-const formKey = ref('')
-/** 业务表单 schema rule（formKey 加载；组件/选项/校验按表单定义，取代列映射基础组件） */
-const formSchemaRule = ref<Array<Record<string, any>>>([])
-/** 业务表单级数据源绑定（schema.dataSources：表单内 id → 全局 refId；供表单内 select 等选项数据源 effect.datasource 解析） */
-const formDataSources = ref<DataSourceBindingContext[]>([])
 /** 当前 filter（动作总线 set-filter 注入） */
 const currentFilter = ref<Record<string, unknown> | undefined>(undefined)
 /** 切换数据源后标记为 true，忽略 props.columns 旧配置 */
@@ -406,11 +393,11 @@ const resolvedColumns = computed<TableColumn[]>(() => {
       sortable: sortableOf(c.key),
       ...(ARRAY_COMPONENT_TYPES.includes(c.componentType || '')
         ? {
-            formatter: (row: any, _col: any, cellValue: unknown) => {
+            formatter: (row: any, _col: any, cellValue: unknown): string => {
               // 优先显示冗余显示列 <key>_text（取叶子 label，树形/级联全路径取最后一段）；缺失回退 value join
               const text = row?.[c.key + '_text']
               if (text !== undefined && text !== null && text !== '') return leafDisplayText(text)
-              return formatArrayValue(cellValue)
+              return formatArrayValue(cellValue) as string
             },
           }
         : {}),
@@ -621,77 +608,15 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
 }
 
 // ==================== formConfig（CRUD 弹窗动态生成） ====================
-/** 由数据源列定义生成表单规则（新增/编辑/详情共用；无表单 schema 时的回退：组件按 columnType 映射基础组件） */
-function buildFormRule() {
-  return metaColumns.value.map((c) => ({
-    type: inputTypeOf(c.columnType),
-    field: c.key,
-    title: c.label,
-    props: c.columnType === 'DECIMAL' ? { precision: c.scale || 2 } : {},
-    validate: c.required ? [{ required: true, message: `${c.label}不能为空` }] : [],
-  }))
-}
-
-/** 加载业务表单 schema（FORM 数据源编辑弹窗/查询栏按定义构建组件：select/级联/树形/穿梭框 + 选项 + 校验） */
-async function loadFormSchema() {
-  if (!formKey.value) {
-    formSchemaRule.value = []
-    formDataSources.value = []
-    return
-  }
-  try {
-    const res = await formApi.getFormDefinitionByKey(formKey.value)
-    const raw = (res.data as any)?.schema
-    const schema = JSON.parse(raw || '[]')
-    const rules = Array.isArray(schema) ? schema : (schema.rule || [])
-    // 表单级数据源绑定（select 等选项数据源 effect.datasource.dataSourceId 为表单内 id → 全局 refId）
-    formDataSources.value = !Array.isArray(schema) && Array.isArray(schema.dataSources) ? schema.dataSources : []
-    // 选项数据源解析：effect.datasource → 选项列表（查询栏/编辑弹窗 select/tree/cascader 按表单字段配置取数）
-    formSchemaRule.value = hasOptionDatasource(rules)
-      ? await resolveOptionRules(rules, formDataSources.value)
-      : rules
-  } catch {
-    formSchemaRule.value = []
-    formDataSources.value = []
-  }
-}
-
-/** 编辑弹窗表单规则：FORM 数据源用业务表单 schema（组件按定义渲染）；其余回退列定义映射 */
-const formRules = computed(() =>
-  formSchemaRule.value.length > 0 ? formSchemaRule.value : buildFormRule(),
-)
+/** 数据源 CRUD 共享逻辑（metadata/formKey/formConfig 组装），与数据源数据管理页共用 */
+const crud = useDataSourceCrud(resolvedRefId, {
+  dialogWidth: computed(() => props.viewDetail?.width || '500px'),
+  dialogHeight: computed(() => props.viewDetail?.height || undefined),
+})
+const { metaLoaded, metaColumns, formSchemaRule, formDataSources, formRules, formConfig, loadMetadata } = crud
 
 /** 详情弹窗规则（只读表单） */
 const detailRules = computed(() => formRules.value)
-
-const formConfig = computed(() => {
-  if (!writable.value) return undefined
-  const rules = formRules.value
-  return {
-    rule: rules,
-    labelWidth: '100px',
-    dataSources: formDataSources.value,
-    createApi: (data: any) =>
-      dataSourceApi.createData(resolvedRefId.value, withArrayLabels(data, rules)),
-    updateApi: (id: string, data: any, row?: any) =>
-      dataSourceApi.updateData(resolvedRefId.value, id, withArrayLabels(data, rules), row?.version),
-    deleteApi: (id: string) => dataSourceApi.deleteData(resolvedRefId.value, id),
-    getApi: async (id: string) => {
-      const r = await dataSourceApi.getData(resolvedRefId.value, id)
-      return r?.data?.data || {}
-    },
-    // 以数据表格配置为准：宽度/高度取 viewDetail（缺省保持默认）
-    dialogWidth: props.viewDetail?.width || '500px',
-    dialogHeight: props.viewDetail?.height || undefined,
-    dialogTitle: { create: '新增数据', edit: '编辑数据' },
-  }
-})
-
-function inputTypeOf(columnType?: string): string {
-  if (columnType === 'INT' || columnType === 'INTEGER' || columnType === 'BIGINT' || columnType === 'TINYINT' || columnType === 'DECIMAL') return 'inputNumber'
-  if (columnType === 'DATETIME' || columnType === 'DATE') return 'datePicker'
-  return 'input'
-}
 
 // ==================== 按钮点击分发 ====================
 /** 表格-容器联动触发器映射（按钮 key → 页面总线触发器） */
@@ -955,33 +880,6 @@ function openCreate() {
 }
 
 defineExpose({ refresh, fetchData: refresh, records, setFilter, resetFilter, openCreate })
-
-/** 加载数据源元数据（列定义 + writable 标记） */
-async function loadMetadata() {
-  if (!resolvedRefId.value) return
-  try {
-    const res = await dataSourceApi.getMetadata(resolvedRefId.value)
-    const meta = res.data as any
-    writable.value = !!meta?.writable
-    formKey.value = meta?.formKey || ''
-    // metaColumns 先赋值（数组值列 formatter/查询映射依赖 componentType，避免首次取数时列无 formatter 显示原始 value）
-    metaColumns.value = (meta?.columns || []).map((c: any) => ({
-      key: c.key,
-      label: c.label || c.key,
-      columnType: c.columnType,
-      componentType: c.componentType,
-      required: c.required,
-      scale: c.scale,
-      sortable: c.sortable,
-    }))
-    // 表单 schema + 选项数据源取数较慢：异步加载（不阻塞首次取数/ready；查询栏选项与编辑弹窗规则随后就绪）
-    void loadFormSchema()
-  } catch {
-    // 元数据加载失败不阻断表格展示
-  }
-  // 列定义就绪（成功含列/失败空列）：放行 SearchTable 挂载（挂载后首次取数即用最新列定义）
-  metaLoaded.value = true
-}
 
 onMounted(async () => {
   await loadMetadata()

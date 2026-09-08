@@ -357,7 +357,9 @@
                       <el-checkbox v-model="editingColumn.filterable">筛选</el-checkbox>
                     </el-form-item>
                     <el-form-item label="组件类型">
-                      <el-input v-model="editingColumn.componentType" placeholder="组件类型（文本）" />
+                      <el-select v-model="editingColumn.componentType" clearable filterable placeholder="选择组件类型" style="width: 100%">
+                        <el-option v-for="t in FORM_CREATE_COMPONENT_TYPES" :key="t" :label="t" :value="t" />
+                      </el-select>
                     </el-form-item>
                   </el-form>
                   <template #footer>
@@ -505,6 +507,16 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const
 
 /** 列定义字段类型候选（第一版：仅列定义字段，不含 componentType） */
 const COLUMN_TYPES = ['VARCHAR', 'INTEGER', 'BIGINT', 'DECIMAL', 'DATETIME', 'DATE', 'TEXT', 'TINYINT'] as const
+
+/** form-create 已注册组件类型（对齐 ColumnConfigDialog.vue mapComponentToColumn + 项目自定义组件） */
+const FORM_CREATE_COMPONENT_TYPES = [
+  'input', 'textarea', 'inputNumber', 'select', 'radio', 'checkbox',
+  'cascader', 'multiSelect', 'multiSelectPro',
+  'datePicker', 'timePicker', 'slider', 'switch', 'rate',
+  'colorPicker', 'upload', 'tree', 'elTreeSelect', 'elTransfer',
+  'RichText', 'fcEditor', 'signaturePad',
+  'subForm', 'LookupPicker', 'dataPicker',
+] as const
 
 // ========== 搜索 ==========
 const searchFields = computed<SearchField[]>(() => [
@@ -813,7 +825,8 @@ async function handleOverlayFromForm() {
   overlayLoading.value = true
   try {
     const res = await formApi.getFormDefinitionByKey(form.formKey)
-    const cfg = (res.data as any)?.columnConfig
+    const data = res.data as any
+    const cfg = data?.columnConfig
     let formCols: ColumnConfigItem[] = []
     if (typeof cfg === 'string' && cfg) {
       try {
@@ -828,6 +841,13 @@ async function handleOverlayFromForm() {
       ElMessage.warning('主表单无可用列定义')
       return
     }
+    // 从表单 schema.rule 提取 field→componentType 映射（form-create 的 type 字段）
+    const typeByField = extractComponentTypes(data?.schema)
+    for (const col of formCols) {
+      if (!col.componentType && typeByField[col.key]) {
+        col.componentType = typeByField[col.key]
+      }
+    }
     overlayFromFormColumns(formCols)
     ElMessage.success(`已按主表单覆盖 ${formCols.length} 个字段`)
   } catch (e: any) {
@@ -835,6 +855,34 @@ async function handleOverlayFromForm() {
   } finally {
     overlayLoading.value = false
   }
+}
+
+/** 从表单 schema 递归提取 field → form-create 组件类型映射 */
+function extractComponentTypes(schemaStr: string | null): Record<string, string> {
+  const result: Record<string, string> = {}
+  if (!schemaStr) return result
+  try {
+    const schema = JSON.parse(schemaStr)
+    const rules = Array.isArray(schema) ? schema : schema?.rule
+    if (!Array.isArray(rules)) return result
+    const walk = (arr: any[]) => {
+      for (const r of arr) {
+        if (!r || typeof r !== 'object') continue
+        if (r.field && r.type && typeof r.type === 'string') {
+          result[r.field] = r.type
+        }
+        if (Array.isArray(r.children)) walk(r.children)
+        if (Array.isArray(r.props?.rule)) walk(r.props.rule)
+        if (Array.isArray(r.props?.columns)) {
+          for (const col of r.props.columns) {
+            if (Array.isArray(col?.rule)) walk(col.rule)
+          }
+        }
+      }
+    }
+    walk(rules)
+  } catch { /* 解析失败忽略 */ }
+  return result
 }
 
 /** 覆盖策略 C：命中 key 全属性覆盖（保留 key），表单多出的 key 追加，当前列保留 */

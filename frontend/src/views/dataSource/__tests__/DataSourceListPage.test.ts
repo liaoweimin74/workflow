@@ -1180,7 +1180,7 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('从主表单覆盖：匹配 key 全属性覆盖，表单多出的 key 追加', async () => {
+  it('从主表单覆盖：匹配 key 全属性覆盖，表单多出的 key 追加，schema 补 componentType', async () => {
     stubList()
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
     ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
@@ -1190,6 +1190,15 @@ describe('DataSourceListPage', () => {
           { key: 'id', label: '员工ID', columnType: 'VARCHAR', required: true, sortable: true, filterable: true },
           { key: 'dept', label: '部门', columnType: 'VARCHAR', required: false, sortable: true, filterable: true },
         ]),
+        schema: JSON.stringify({
+          rule: [{
+            type: 'fcRow', children: [
+              { type: 'input', field: 'id', title: '员工ID' },
+              { type: 'select', field: 'dept', title: '部门' },
+              { type: 'input', field: 'extra', title: '额外' },
+            ],
+          }],
+        }),
       },
     })
     const wrapper = createWrapper()
@@ -1217,10 +1226,12 @@ describe('DataSourceListPage', () => {
     const idCol = component.sqlConfig.declaredColumns.find((c: any) => c.key === 'id')
     expect(idCol.label).toBe('员工ID')
     expect(idCol.required).toBe(true)
-    // dept：表单多出的 key 追加
+    expect(idCol.componentType).toBe('input')  // schema.rule 补充
+    // dept：表单多出的 key 追加，componentType 从 schema 补充
     const deptCol = component.sqlConfig.declaredColumns.find((c: any) => c.key === 'dept')
     expect(deptCol).toBeDefined()
     expect(deptCol.label).toBe('部门')
+    expect(deptCol.componentType).toBe('select')  // schema.rule 补充
     wrapper.unmount()
   })
 

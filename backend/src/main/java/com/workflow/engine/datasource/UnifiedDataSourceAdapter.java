@@ -126,14 +126,11 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 yield copy;
             }
             case "SQL" -> {
-                List<ColumnConfig> cols = new ArrayList<>();
+                // 字段元数据 = params.columns（单一来源；探测/主表单覆盖/行内编辑由前端写入，无表单列默认合并）
                 FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
-                if (ds.getFormKey() != null && !ds.getFormKey().isBlank()) {
-                    cols.addAll(formDefService.getBusinessColumnsByKey(ds.getFormKey()));
-                }
-                appendDeclaredColumns(cols, cfg.columns());
-                SortableResolver.resolve(cols);
-                DataSourceMetadata m = new DataSourceMetadata(cols, ds.getFormKey() != null && !ds.getFormKey().isBlank());
+                List<ColumnConfig> cols = cfg.isConfigMode() ? List.of() : cfg.columns();
+                boolean writable = ds.getFormKey() != null && !ds.getFormKey().isBlank();
+                DataSourceMetadata m = new DataSourceMetadata(cols, writable);
                 if (ds.getFormKey() != null && !ds.getFormKey().isBlank()) {
                     m.setFormKey(ds.getFormKey());
                 }

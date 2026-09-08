@@ -122,6 +122,13 @@ public record FormQueryConfig(String queryMode,
             c.setKey(text(n, "key"));
             c.setLabel(text(n, "label"));
             c.setColumnType(text(n, "columnType"));
+            c.setLength(intVal(n, "length"));
+            c.setScale(intVal(n, "scale"));
+            c.setRequired(bool(n, "required"));
+            c.setUnique(bool(n, "unique"));
+            c.setIndexed(bool(n, "indexed"));
+            c.setHidden(bool(n, "hidden"));
+            c.setComponentType(text(n, "componentType"));
             c.setSortable(bool(n, "sortable"));
             c.setFilterable(bool(n, "filterable"));
             out.add(c);
@@ -150,5 +157,10 @@ public record FormQueryConfig(String queryMode,
     private static boolean bool(JsonNode node, String field) {
         JsonNode v = node.get(field);
         return v != null && v.isBoolean() && v.asBoolean();
+    }
+
+    private static Integer intVal(JsonNode node, String field) {
+        JsonNode v = node.get(field);
+        return v == null || v.isNull() || !v.isNumber() ? null : v.asInt();
     }
 }

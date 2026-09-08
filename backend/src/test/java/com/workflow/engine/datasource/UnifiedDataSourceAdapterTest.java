@@ -324,7 +324,7 @@ class UnifiedDataSourceAdapterTest {
     }
 
     @Test
-    void sqlMetadata_withFormKey_mergesFormColumns() {
+    void sqlMetadata_withFormKey_returnsParamsColumnsDirectly() {
         DataSourceDefinition ds = ds("SQL", null);
         ds.setFormKey("order");
         ds.setParams("""
@@ -333,16 +333,43 @@ class UnifiedDataSourceAdapterTest {
                             {"key":"customer_name","label":"客户","columnType":"VARCHAR","sortable":true,"filterable":true}],
                  "params":[]}
                 """);
-        when(formDefService.getBusinessColumnsByKey("order"))
-                .thenReturn(new ArrayList<>(List.of(col("order_no", "订单号", "VARCHAR", 100))));
 
         DataSourceMetadata meta = adapter.metadata(ds);
 
-        // 表单列 order_no 优先，声明列 customer_name 追加
+        // 字段元数据 = params.columns 单一来源，不再默认合并表单 columnConfig（覆盖由前端显性按钮触发）
         assertEquals(2, meta.getColumns().size());
         assertEquals("order_no", meta.getColumns().get(0).getKey());
+        assertEquals("订单号", meta.getColumns().get(0).getLabel());
         assertEquals("customer_name", meta.getColumns().get(1).getKey());
         assertTrue(meta.isWritable());
+        verify(formDefService, never()).getBusinessColumnsByKey("order");
+    }
+
+    @Test
+    void sqlMetadata_parsesFullColumnFields() {
+        DataSourceDefinition ds = ds("SQL", null);
+        ds.setParams("""
+                {"queryMode":"sql","query":"SELECT a FROM t WHERE tenant_id = :tenantId",
+                 "columns":[{"key":"a","label":"A","columnType":"VARCHAR","length":64,"scale":0,
+                             "required":true,"unique":true,"indexed":true,"hidden":true,
+                             "componentType":"input","sortable":false,"filterable":false}],
+                 "params":[]}
+                """);
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        ColumnConfig c = meta.getColumns().get(0);
+        assertEquals("a", c.getKey());
+        assertEquals("A", c.getLabel());
+        assertEquals("VARCHAR", c.getColumnType());
+        assertEquals(64, c.getLength());
+        assertTrue(c.isRequired());
+        assertTrue(c.isUnique());
+        assertTrue(c.isIndexed());
+        assertTrue(c.isHidden());
+        assertEquals("input", c.getComponentType());
+        assertEquals(Boolean.FALSE, c.getSortable());
+        assertEquals(Boolean.FALSE, c.getFilterable());
     }
 
     @Test

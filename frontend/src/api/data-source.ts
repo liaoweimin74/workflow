@@ -47,6 +47,26 @@ export interface DataSourceQueryParams {
   filter?: string
 }
 
+/** 数据库真实列定义（对齐后端 ColumnInfo，经 /v1/data-sources/db/tables/{table}/columns） */
+export interface DbSchemaColumn {
+  key: string
+  columnType: string
+  length?: number | null
+  scale?: number | null
+  nullable?: boolean
+  unique?: boolean
+}
+
+/** 探测结果列元数据（对齐后端 ColumnMeta，经 /v1/data-sources/explore-sql|explore-api） */
+export interface ColumnMeta {
+  key: string
+  label: string
+  columnType: string
+  length?: number | null
+  scale?: number | null
+  nullable?: boolean
+}
+
 export const dataSourceApi = {
   /** 分页查询数据源列表（type/status/name 过滤） */
   getDataSources(params: {
@@ -99,6 +119,28 @@ export const dataSourceApi = {
   /** 数据源元数据：列定义 + 可写标记（设计器切换数据源刷新列用；稳定数据启用 30s 缓存） */
   getMetadata(id: string): Promise<R<DataSourceMetadataDTO>> {
     return http.get(`/v1/data-sources/${id}/metadata`, { cache: true })
+  },
+
+  // ==================== 数据库结构只读（SQL 可视化配置主表/JOIN 目标表/字段下拉：真实 schema） ====================
+
+  /** 当前库全部基础表名（排除 Flyway 历史表） */
+  getDbSchemaTables(): Promise<R<string[]>> {
+    return http.get('/v1/data-sources/db/tables')
+  },
+
+  /** 按表名列举真实字段（information_schema；表不存在返回空列表） */
+  getDbSchemaColumns(table: string): Promise<R<DbSchemaColumn[]>> {
+    return http.get(`/v1/data-sources/db/tables/${encodeURIComponent(table)}/columns`)
+  },
+
+  /** 执行 SQL 探测列元数据（LIMIT 1 包裹，只取结构不返回数据） */
+  exploreSql(sql: string): Promise<R<ColumnMeta[]>> {
+    return http.post('/v1/data-sources/explore-sql', { sql })
+  },
+
+  /** 调用 API list 操作拉样例推断列元数据 */
+  exploreApi(op: { action: string; method: string; data?: Record<string, unknown> }): Promise<R<ColumnMeta[]>> {
+    return http.post('/v1/data-sources/explore-api', op)
   },
 
   /** 数据源列表分页查询 */

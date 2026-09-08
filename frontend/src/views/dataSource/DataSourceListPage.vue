@@ -432,8 +432,9 @@
 defineOptions({ name: 'DataSourceList' })
 
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, View, Edit, Delete, Close, QuestionFilled, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
@@ -442,6 +443,7 @@ import { formApi, type FormDefinitionDTO } from '@/api/form'
 import VisualQueryBuilder, { type VisualQueryConfig } from './components/VisualQueryBuilder.vue'
 import SqlEditor from './components/SqlEditor.vue'
 
+const router = useRouter()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 
 /** 已发布业务表单（FORM 类型 formKey 下拉候选 + SQL 可视化主表候选） */
@@ -1179,34 +1181,11 @@ const actionButtons: ActionButton[] = [
     onClick: (row: any) => openView(row),
   },
   {
-    label: '启用',
-    icon: CircleCheck,
+    label: '数据管理',
+    icon: Grid,
     permission: 'data-source:manage',
-    show: (row: any) => (row.type === 'API' || row.type === 'SQL') && row.status !== 'ENABLED',
-    onClick: async (row: any) => {
-      try {
-        await dataSourceApi.enableDataSource(row.id)
-        ElMessage.success('启用成功')
-        tableRef.value?.fetchList()
-      } catch {
-        // http 拦截器已弹出错误消息（如未配置完整）
-      }
-    },
-  },
-  {
-    label: '禁用',
-    icon: CircleClose,
-    permission: 'data-source:manage',
-    show: (row: any) => (row.type === 'API' || row.type === 'SQL') && row.status === 'ENABLED',
-    onClick: async (row: any) => {
-      try {
-        await dataSourceApi.disableDataSource(row.id)
-        ElMessage.success('禁用成功')
-        tableRef.value?.fetchList()
-      } catch {
-        // http 拦截器已弹出错误消息
-      }
-    },
+    show: (row: any) => row.type !== 'WORKFLOW',
+    onClick: (row: any) => router.push({ name: 'DataSourceData', params: { id: row.id } }),
   },
   {
     label: '编辑',

@@ -41,10 +41,18 @@ vi.mock('@element-plus/icons-vue', () => ({
   Edit: { name: 'Edit', render: () => h('span', '✎') },
   View: { name: 'View', render: () => h('span', '👁') },
   Close: { name: 'Close', render: () => h('span', '✕') },
+  Grid: { name: 'Grid', render: () => h('span', '☰') },
   CircleCheck: { name: 'CircleCheck', render: () => h('span', '✓') },
   CircleClose: { name: 'CircleClose', render: () => h('span', '✕') },
   QuestionFilled: { name: 'QuestionFilled', render: () => h('span', '?') },
 }))
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ params: {} }),
+  useRouter: () => ({ push: mockRouterPush }),
+}))
+
+const { mockRouterPush } = vi.hoisted(() => ({ mockRouterPush: vi.fn() }))
 
 const ElMessage = (await import('element-plus')).ElMessage as any
 const ElMessageBox = (await import('element-plus')).ElMessageBox as any
@@ -83,7 +91,7 @@ describe('DataSourceListPage', () => {
 
   // ==================== 操作按钮可见性 ====================
 
-  it('行操作按钮：查看(全部) + 编辑/删除/启用/禁用(API + SQL 类型)', async () => {
+  it('行操作按钮：查看(全部) + 数据管理(非WORKFLOW) + 编辑/删除(API + SQL 类型)', async () => {
     stubList()
     const wrapper = createWrapper()
     await nextTick()
@@ -92,19 +100,19 @@ describe('DataSourceListPage', () => {
     const actionButtons = stub.props('actionButtons') as any[]
 
     const viewBtn = actionButtons.find((b: any) => b.label === '查看')
+    const dataBtn = actionButtons.find((b: any) => b.label === '数据管理')
     const editBtn = actionButtons.find((b: any) => b.label === '编辑')
     const delBtn = actionButtons.find((b: any) => b.label === '删除')
-    const enableBtn = actionButtons.find((b: any) => b.label === '启用')
-    const disableBtn = actionButtons.find((b: any) => b.label === '禁用')
 
     expect(viewBtn).toBeDefined()
+    expect(dataBtn).toBeDefined()
     expect(editBtn).toBeDefined()
     expect(delBtn).toBeDefined()
-    // 启用/禁用入口（DRAFT/DISABLED → 启用；ENABLED → 禁用），仅 API / SQL 类型
-    expect(enableBtn).toBeDefined()
-    expect(disableBtn).toBeDefined()
+    // 启用/禁用按钮已移除（保存即发布）
+    expect(actionButtons.some((b: any) => b.label === '启用')).toBe(false)
+    expect(actionButtons.some((b: any) => b.label === '禁用')).toBe(false)
 
-    // 编辑/删除/启用/禁用仅对 API / SQL 类型显示
+    // 编辑/删除仅对 API / SQL 类型显示
     expect(editBtn.show({ type: 'API' })).toBe(true)
     expect(editBtn.show({ type: 'SQL' })).toBe(true)
     expect(editBtn.show({ type: 'FORM' })).toBe(false)
@@ -113,35 +121,28 @@ describe('DataSourceListPage', () => {
     expect(delBtn.show({ type: 'API' })).toBe(true)
     expect(delBtn.show({ type: 'SQL' })).toBe(true)
     expect(delBtn.show({ type: 'FORM' })).toBe(false)
-    // 启用：DRAFT/DISABLED 显示；禁用：ENABLED 显示
-    expect(enableBtn.show({ type: 'SQL', status: 'DRAFT' })).toBe(true)
-    expect(enableBtn.show({ type: 'SQL', status: 'ENABLED' })).toBe(false)
-    expect(disableBtn.show({ type: 'SQL', status: 'ENABLED' })).toBe(true)
-    expect(disableBtn.show({ type: 'SQL', status: 'DRAFT' })).toBe(false)
-    expect(enableBtn.show({ type: 'FORM', status: 'DRAFT' })).toBe(false)
+    // 数据管理：非 WORKFLOW 类型显示
+    expect(dataBtn.show({ type: 'FORM' })).toBe(true)
+    expect(dataBtn.show({ type: 'SYSTEM' })).toBe(true)
+    expect(dataBtn.show({ type: 'API' })).toBe(true)
+    expect(dataBtn.show({ type: 'SQL' })).toBe(true)
+    expect(dataBtn.show({ type: 'WORKFLOW' })).toBe(false)
     // 查看对所有类型显示
     expect(viewBtn.show).toBeUndefined()
     wrapper.unmount()
   })
 
-  it('启用/禁用：DRAFT 启用调 enableDataSource，ENABLED 禁用调 disableDataSource', async () => {
+  it('数据管理：点击跳转数据源数据管理页', async () => {
     stubList()
-    ;(dataSourceApi.enableDataSource as any).mockResolvedValue({ data: {} })
-    ;(dataSourceApi.disableDataSource as any).mockResolvedValue({ data: {} })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
     const stub = wrapper.findComponent(SearchTableStub)
     const actionButtons = stub.props('actionButtons') as any[]
 
-    const enableBtn = actionButtons.find((b: any) => b.label === '启用')
-    const disableBtn = actionButtons.find((b: any) => b.label === '禁用')
-
-    await enableBtn.onClick({ id: 'ds-1', type: 'SQL', status: 'DRAFT', name: '报表' })
-    expect(dataSourceApi.enableDataSource).toHaveBeenCalledWith('ds-1')
-
-    await disableBtn.onClick({ id: 'ds-1', type: 'SQL', status: 'ENABLED', name: '报表' })
-    expect(dataSourceApi.disableDataSource).toHaveBeenCalledWith('ds-1')
+    const dataBtn = actionButtons.find((b: any) => b.label === '数据管理')
+    await dataBtn.onClick({ id: 'ds-1', type: 'SQL', status: 'ENABLED', name: '报表' })
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'DataSourceData', params: { id: 'ds-1' } })
     wrapper.unmount()
   })
 

@@ -55,6 +55,18 @@ class DynamicTableManagerTest {
     }
 
     @Test
+    void listTableNames_returnsAllBaseTablesOrdered() {
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class)))
+                .thenReturn(List.of("flyway_schema_history", "wf_biz_customer", "wf_biz_order"));
+
+        List<String> tables = tableManager.listTableNames();
+
+        assertThat(tables).containsExactly("flyway_schema_history", "wf_biz_customer", "wf_biz_order");
+        // 仅枚举当前库 BASE TABLE（排除视图/系统表，未过滤由调用方决定）
+        verify(jdbcTemplate).queryForList(contains("TABLE_TYPE = 'BASE TABLE'"), eq(String.class));
+    }
+
+    @Test
     void ensureTable_createsTable_whenMissing() {
         ColumnConfig name = column("name", "VARCHAR", 255);
 

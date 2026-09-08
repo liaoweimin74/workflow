@@ -88,6 +88,21 @@ public class DynamicTableManager {
     }
 
     /**
+     * 查询当前库全部基础表名（information_schema.TABLES）。
+     * 仅枚举 BASE TABLE，排除视图与跨 schema；Flyway 历史表是否过滤由调用方决定。
+     *
+     * @return 表名列表（按表名字母序）
+     */
+    public List<String> listTableNames() {
+        String sql = """
+                SELECT TABLE_NAME FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
+                ORDER BY TABLE_NAME
+                """;
+        return jdbcTemplate.queryForList(sql, String.class);
+    }
+
+    /**
      * 判断物理表是否存在。
      */
     public boolean tableExists(String tableName) {

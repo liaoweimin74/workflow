@@ -286,6 +286,23 @@
                       <el-input v-model="row.label" placeholder="字段名" size="small" />
                     </template>
                   </el-table-column>
+                  <el-table-column label="DB类型" min-width="100">
+                    <template #default="{ row }">
+                      <el-select v-model="row.columnType" clearable filterable placeholder="—" size="small" style="width: 100%">
+                        <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="长度" width="80">
+                    <template #default="{ row }">
+                      <el-input-number v-model="row.length" :min="0" :max="10000" controls-position="right" size="small" style="width: 100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="精度" width="70">
+                    <template #default="{ row }">
+                      <el-input-number v-model="row.scale" :min="0" :max="10" controls-position="right" size="small" style="width: 100%" />
+                    </template>
+                  </el-table-column>
                   <el-table-column label="组件类型" min-width="120">
                     <template #default="{ row }">
                       <el-select v-model="row.componentType" clearable filterable placeholder="—" size="small" style="width: 100%">
@@ -293,27 +310,124 @@
                       </el-select>
                     </template>
                   </el-table-column>
-                  <el-table-column label="必填" width="60" align="center">
+                  <el-table-column label="描述" min-width="150">
+                    <template #default="{ row }">
+                      <el-input v-model="row.description" placeholder="描述" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="占位符" min-width="120">
+                    <template #default="{ row }">
+                      <el-input v-model="row.placeholder" placeholder="占位符" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="必填" width="55" align="center">
                     <template #default="{ row }">
                       <el-checkbox v-model="row.required" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="隐藏" width="60" align="center">
+                  <el-table-column label="隐藏" width="55" align="center">
                     <template #default="{ row }">
                       <el-checkbox v-model="row.hidden" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="排序" width="60" align="center">
+                  <el-table-column label="排序" width="55" align="center">
                     <template #default="{ row }">
                       <el-checkbox v-model="row.sortable" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="筛选" width="60" align="center">
+                  <el-table-column label="筛选" width="55" align="center">
                     <template #default="{ row }">
                       <el-checkbox v-model="row.filterable" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="" width="80" align="center">
+                  <el-table-column label="最小长度" width="80">
+                    <template #default="{ row }">
+                      <el-input-number v-model="row.minLength" :min="0" controls-position="right" size="small" style="width: 100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="最大长度" width="80">
+                    <template #default="{ row }">
+                      <el-input-number v-model="row.maxLength" :min="0" controls-position="right" size="small" style="width: 100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="最小值" width="80">
+                    <template #default="{ row }">
+                      <el-input-number v-model="row.minimum" controls-position="right" size="small" style="width: 100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="最大值" width="80">
+                    <template #default="{ row }">
+                      <el-input-number v-model="row.maximum" controls-position="right" size="small" style="width: 100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="正则" min-width="130">
+                    <template #default="{ row }">
+                      <el-input v-model="row.pattern" placeholder="正则表达式" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="格式" min-width="100">
+                    <template #default="{ row }">
+                      <el-input v-model="row.format" placeholder="如 date" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="选项(JSON)" min-width="150">
+                    <template #default="{ row }">
+                      <el-input v-model="row.options" type="textarea" :rows="1" placeholder='[{"label":"","value":""}]' size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="数据映射" min-width="150">
+                    <template #default="{ row }">
+                      <el-input v-model="row.dataMapping" type="textarea" :rows="1" placeholder='{"dbCol":"formField"}' size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="上传数量" width="80">
+                    <template #default="{ row }">
+                      <el-input-number v-model="row.uploadLimit" :min="0" controls-position="right" size="small" style="width: 100%" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="文件类型" min-width="120">
+                    <template #default="{ row }">
+                      <el-input v-model="row.fileTypes" placeholder=".jpg,.png" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="半选" width="55" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.allowHalf" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="透明度" width="55" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.showAlpha" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="数据类型" width="90">
+                    <template #default="{ row }">
+                      <el-select v-model="row.dataType" clearable placeholder="—" size="small" style="width: 100%">
+                        <el-option label="string" value="string" />
+                        <el-option label="number" value="number" />
+                        <el-option label="boolean" value="boolean" />
+                        <el-option label="date" value="date" />
+                        <el-option label="datetime" value="datetime" />
+                        <el-option label="time" value="time" />
+                      </el-select>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="开始占位" min-width="120">
+                    <template #default="{ row }">
+                      <el-input v-model="row.startPlaceholder" placeholder="开始占位符" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="结束占位" min-width="120">
+                    <template #default="{ row }">
+                      <el-input v-model="row.endPlaceholder" placeholder="结束占位符" size="small" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="禁用间断" width="65" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.separateDisabled" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="" width="80" align="center" fixed="right">
                     <template #default="{ row }">
                       <el-button :icon="Edit" circle size="small" text @click="openColumnDetail(row)" title="详情" />
                       <el-button :icon="Delete" circle size="small" text type="danger" @click="removeMetadataColumn(row)" title="删除" />

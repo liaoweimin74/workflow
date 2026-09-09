@@ -37,19 +37,19 @@
 
 ## 5. FORM 数据源 params 开放 JOIN/SQL 编辑（后端）
 
-- [ ] 5.1 DataSourceDefinitionService 支持 FORM 数据源查询配置段（queryMode/joins/query/columns/params 白名单）校验与保存，CRUD 接口 params 段保持不变
-- [ ] 5.2 查询配置合法性校验（config targetFormKey/virtualKey；sql SELECT/tenantId/columns/参数声明）接入保存流程
-- [ ] 5.3 后端测试：FORM 数据源 JOIN/SQL 配置保存校验 + 非法配置 400
+- [x] 5.1 DataSourceDefinitionService 支持 FORM 数据源查询配置段（queryMode/joins/query/columns/params 白名单）校验与保存，CRUD 接口 params 段保持不变
+- [x] 5.2 查询配置合法性校验（config targetFormKey/virtualKey；sql SELECT/tenantId/columns/参数声明）接入保存流程
+- [x] 5.3 后端测试：FORM 数据源 JOIN/SQL 配置保存校验 + 非法配置 400
 
 ## 6. 前端（数据源管理页 JOIN/SQL 配置入口）
 
-- [ ] 6.1 DataSourceListPage 为 FORM 数据源增加「关联查询配置」编辑区（queryMode 选择 + config joins 编辑 / sql query+columns+params 编辑）
-- [ ] 6.2 config 模式 UI：targetFormKey 下拉（enabled 数据源表单）、localField/foreignField/joinField 下拉、virtualKey/label/sortable/filterable 配置、多 JOIN 增删
-- [ ] 6.3 sql 模式 UI：query 文本域 + columns 声明编辑（key/label/columnType/sortable/filterable）+ params 白名单声明编辑
-- [ ] 6.4 保存时提交 queryMode + 配置到 params；查询侧（BizDataListPage/PageDataTable）零改动验证虚拟列自动渲染与排序/筛选
-- [ ] 6.5 前端查询请求类型支持透传 params 段（BizDataQueryParams 增加 params）
+- [x] 6.1 DataSourceListPage 为 FORM 数据源增加「关联查询配置」编辑区（queryMode 选择 + config joins 编辑 / sql query+columns+params 编辑）
+- [x] 6.2 config 模式 UI：targetFormKey 下拉（enabled 数据源表单）、localField/foreignField/joinField 下拉、virtualKey/label/sortable/filterable 配置、多 JOIN 增删
+- [x] 6.3 sql 模式 UI：query 文本域 + columns 声明编辑（key/label/columnType/sortable/filterable）+ params 白名单声明编辑
+- [x] 6.4 保存时提交 queryMode + 配置到 params；查询侧（BizDataListPage/PageDataTable）零改动验证虚拟列自动渲染与排序/筛选
+- [x] 6.5 前端查询请求类型支持透传 params 段（BizDataQueryParams 增加 params）
 
 ## 7. 文档与迁移
 
-- [ ] 7.1 更新 data-source 相关设计/文档说明 JOIN/SQL 双模式与「查看生成 SQL」迁移路径
-- [ ] 7.2 向后兼容验证：现有无 queryMode 数据源行为不变
+- [x] 7.1 更新 data-source 相关设计/文档说明 JOIN/SQL 双模式与「查看生成 SQL」迁移路径
+- [x] 7.2 向后兼容验证：现有无 queryMode 数据源行为不变

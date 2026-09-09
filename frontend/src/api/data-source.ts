@@ -45,6 +45,8 @@ export interface DataSourceQueryParams {
   order?: string
   /** 结构化筛选 JSON 字符串（{logic, conditions:[{column,op,value}]}），受 searchFields 白名单约束 */
   filter?: string
+  /** 运行时查询参数 JSON 字符串（sql 模式按 params 白名单绑定到 :paramName 占位符） */
+  params?: string
 }
 
 /** 数据库真实列定义（对齐后端 ColumnInfo，经 /v1/data-sources/db/tables/{table}/columns） */

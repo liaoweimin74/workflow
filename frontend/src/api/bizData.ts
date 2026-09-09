@@ -54,6 +54,8 @@ export interface BizDataQueryParams {
   sort?: string
   order?: string
   filter?: Record<string, unknown>
+  /** 运行时查询参数（sql 模式按 params 白名单绑定到 :paramName 占位符）；对象序列化为 JSON 字符串 */
+  params?: Record<string, unknown>
 }
 
 export const bizDataApi = {
@@ -62,6 +64,10 @@ export const bizDataApi = {
     // filter 对象序列化为 JSON 字符串（后端 BizDataQueryRequest.filter 为 String）
     if (query.filter && typeof query.filter === 'object') {
       query.filter = JSON.stringify(query.filter)
+    }
+    // params 对象序列化为 JSON 字符串（后端 BizDataQueryRequest.params 为 String）
+    if (query.params && typeof query.params === 'object') {
+      query.params = JSON.stringify(query.params)
     }
     return http.get(`/v1/biz-data/${formKey}`, { params: query })
   },

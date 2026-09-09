@@ -256,6 +256,16 @@
                     </template>
                   </div>
                 </div>
+                <!-- FORM：关联查询配置（单表 / 声明式 JOIN / SQL 模板 三模式） -->
+                <template v-if="form.type === 'FORM'">
+                  <el-divider content-position="left">关联查询配置</el-divider>
+                  <FormJoinConfig
+                    v-model="formJoin"
+                    :main-form-key="form.formKey"
+                    :target-form-options="formJoinTargets"
+                    :disabled="formJoinDisabled"
+                  />
+                </template>
               </template>
 
             </div>
@@ -549,6 +559,7 @@ import type { ColumnConfigItem, BizDataVO } from '@/api/bizData'
 import { formApi, type FormDefinitionDTO } from '@/api/form'
 import VisualQueryBuilder, { type VisualQueryConfig } from './components/VisualQueryBuilder.vue'
 import SqlEditor from './components/SqlEditor.vue'
+import FormJoinConfig, { type FormJoinConfigValue, type JoinConfigItem } from './components/FormJoinConfig.vue'
 
 const router = useRouter()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
@@ -670,7 +681,6 @@ const dialogTitle = computed(() => {
   }
   return isEditableType.value ? (editingId.value ? '编辑数据源' : '新建数据源') : '数据源详情'
 })
-
 /** 单操作配置（多操作 params 结构） */
 interface ApiOpConfig {
   action: string
@@ -713,6 +723,24 @@ const sqlConfig = reactive({
   declaredParams: [] as string[],
   isStale: false,  // SQL 手改后标记为过期
 })
+
+/** FORM 类型：关联查询配置（queryMode 选择 + config joins / sql 模板） */
+const formJoin = ref<FormJoinConfigValue>({
+  queryMode: 'none',
+  joins: [] as JoinConfigItem[],
+  query: '',
+  columns: [] as ColumnConfigItem[],
+  params: [] as string[],
+})
+
+/** FORM JOIN 目标表单候选：enabled 的 FORM 类型数据源（targetFormKey 下拉） */
+const formJoinTargets = ref<{ key: string; name: string }[]>([])
+
+/** FORM 原始 params 端点段（list/get/create/update/delete），保存时保留并叠加 queryMode 配置 */
+const formJoinBaseParams = ref<Record<string, any>>({})
+
+/** FORM 关联查询配置是否可编辑：仅编辑模式（非查看）的 FORM 类型 */
+const formJoinDisabled = computed(() => viewOnly.value || form.type !== 'FORM')
 
 /** SQL 可视化：主表/JOIN 目标表字段懒加载缓存（表名 → 字段 key 列表） */
 const sqlTableFields = ref<Record<string, string[]>>({})
@@ -1108,6 +1136,13 @@ function openCreate() {
   sqlConfig.declaredColumns = []
   sqlConfig.declaredParams = []
   sqlConfig.isStale = false
+  // FORM 关联查询配置重置
+  formJoin.value.queryMode = 'none'
+  formJoin.value.joins = []
+  formJoin.value.query = ''
+  formJoin.value.columns = []
+  formJoin.value.params = []
+  formJoinBaseParams.value = {}
   resetMetadataState()
   resetPreviewState()
   activeTab.value = 'config'
@@ -1178,6 +1213,16 @@ async function openEdit(row: DataSourceDTO) {
   } else if (row.type === 'FORM' || row.type === 'SYSTEM') {
     // FORM/SYSTEM：只读端点展示由模板根据 formKey/sourceKey 响应式计算，无需填充 apiOps
   }
+  if (row.type === 'FORM') {
+    // FORM 关联查询配置：queryMode + config joins / sql query+columns+params
+    formJoin.value.queryMode = (p.queryMode as FormJoinConfigValue['queryMode']) || 'none'
+    formJoin.value.joins = Array.isArray(p.joins) ? (p.joins as JoinConfigItem[]) : []
+    formJoin.value.query = p.query || ''
+    formJoin.value.columns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+    formJoin.value.params = Array.isArray(p.params) ? (p.params as string[]) : []
+    // 保留原始端点段（list/get/create/update/delete），保存时叠加 queryMode 配置
+    formJoinBaseParams.value = { ...p }
+  }
   resetMetadataState()
   resetPreviewState()
   activeTab.value = 'config'
@@ -1246,6 +1291,15 @@ function openView(row: DataSourceDTO) {
     sqlConfig.queryText = p.query || ''
     sqlConfig.declaredColumns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
     sqlConfig.declaredParams = Array.isArray(p.params) ? (p.params as string[]) : []
+  }
+  if (row.type === 'FORM') {
+    // FORM 关联查询配置（查看模式同样填充，表单整体只读）
+    formJoin.value.queryMode = (p.queryMode as FormJoinConfigValue['queryMode']) || 'none'
+    formJoin.value.joins = Array.isArray(p.joins) ? (p.joins as JoinConfigItem[]) : []
+    formJoin.value.query = p.query || ''
+    formJoin.value.columns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+    formJoin.value.params = Array.isArray(p.params) ? (p.params as string[]) : []
+    formJoinBaseParams.value = { ...p }
   }
   resetMetadataState()
   resetPreviewState()
@@ -1398,6 +1452,19 @@ function openView(row: DataSourceDTO) {
         return
       }
     }
+    if (form.type === 'FORM' && formJoin.value.queryMode === 'config') {
+      const incomplete = formJoin.value.joins.find(
+        (j) => !j.targetFormKey || !j.localField || !j.foreignField || !j.joinField || !j.virtualKey,
+      )
+      if (incomplete) {
+        ElMessage.warning('请完整配置关联（目标表单/关联字段/显示字段/虚拟列标识）')
+        return
+      }
+    }
+    if (form.type === 'FORM' && formJoin.value.queryMode === 'sql' && !(formJoin.value.query || '').trim()) {
+      ElMessage.warning('请输入 SQL 模板')
+      return
+    }
     saving.value = true
     try {
       const payload = normalizePayload()
@@ -1416,6 +1483,28 @@ function openView(row: DataSourceDTO) {
     }
  }
 
+  /** FORM 类型：保留原始端点段（list/get/create/update/delete）基础上叠加关联查询配置段（queryMode/joins/query/columns/params） */
+  function buildFormParams(): Record<string, any> {
+    const params: Record<string, any> = { ...formJoinBaseParams.value }
+    if (formJoin.value.queryMode === 'config') {
+      params.queryMode = 'config'
+      params.joins = formJoin.value.joins.filter((j) => j.targetFormKey && j.virtualKey)
+    } else if (formJoin.value.queryMode === 'sql') {
+      params.queryMode = 'sql'
+      if (formJoin.value.query) {
+        params.query = formJoin.value.query
+      }
+      const cols = (formJoin.value.columns || []).filter((c) => c.key && c.key.trim())
+      if (cols.length > 0) {
+        params.columns = cols.map(serializeColumnConfig)
+      }
+      if (formJoin.value.params && formJoin.value.params.length > 0) {
+        params.params = [...formJoin.value.params]
+      }
+    }
+    return params
+  }
+
   /** 按类型归一化提交载荷：所有类型均通过统一 API 编辑器，FORM/SYSTEM params 由前端自动生成 */
   function normalizePayload(): any {
     return {
@@ -1423,7 +1512,9 @@ function openView(row: DataSourceDTO) {
       type: form.type || 'FORM',
       formKey: form.type === 'FORM' || form.type === 'WORKFLOW' ? form.formKey || null : form.type === 'SQL' || form.type === 'API' ? form.formKey || null : null,
       sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : form.type === 'API' || form.type === 'SQL' ? form.sourceKey || null : null,
-      params: form.type === 'SQL' ? JSON.stringify(buildSqlParams()) : JSON.stringify(buildApiParams()),
+      params: form.type === 'SQL' ? JSON.stringify(buildSqlParams())
+        : form.type === 'FORM' ? JSON.stringify(buildFormParams())
+          : JSON.stringify(buildApiParams()),
     }
   }
 
@@ -1479,7 +1570,7 @@ const actionButtons: ActionButton[] = [
     label: '编辑',
     icon: Edit,
     permission: 'data-source:manage',
-    show: (row: any) => row.type === 'API' || row.type === 'SQL',
+    show: (row: any) => row.type === 'API' || row.type === 'SQL' || row.type === 'FORM',
     onClick: (row: any) => openEdit(row),
   },
   {
@@ -1595,6 +1686,15 @@ onMounted(async () => {
     dbTables.value = res.data || []
   } catch {
     // 数据库表加载失败不阻断列表
+  }
+  try {
+    const res = await dataSourceApi.getEnabledDataSources()
+    const list = (res.data || []) as DataSourceDTO[]
+    formJoinTargets.value = list
+      .filter((d) => d.type === 'FORM' && d.formKey)
+      .map((d) => ({ key: d.formKey as string, name: d.name }))
+  } catch {
+    // JOIN 目标表单加载失败不阻断列表
   }
 })
 </script>

@@ -11,6 +11,8 @@ import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
+import com.workflow.engine.form.bizdata.JoinSqlGenerator;
+import com.workflow.engine.form.bizdata.SqlTemplateEngine;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.page.entity.PageDefinition;
@@ -22,6 +24,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -117,7 +121,13 @@ public class DataSourceDefinitionService {
         ds.setFormKey(formKey);
         ds.setSourceKey(effSourceKey);
         if (TYPE_FORM.equals(type) || TYPE_SYSTEM.equals(type)) {
-            ds.setParams(generateParams(type, formKey, sourceKey));
+            if (TYPE_FORM.equals(type) && hasQueryModeSegment(params)) {
+                // FORM 带 queryMode 配置段：校验后与自动生成端点合并保存
+                validateFormQueryConfig(params);
+                ds.setParams(mergeQueryConfig(generateParams(type, formKey, sourceKey), params));
+            } else {
+                ds.setParams(generateParams(type, formKey, sourceKey));
+            }
         } else {
             ds.setParams(params);
         }
@@ -158,6 +168,10 @@ public class DataSourceDefinitionService {
         if (formBound && !formDefRepository.existsByTenantIdAndKey(tenantId, newFormKey)) {
             throw new BusinessException(400, "绑定的表单不存在: " + newFormKey);
         }
+        if (TYPE_FORM.equals(newType)) {
+            // FORM 查询配置段（queryMode/joins/query/columns/params）保存校验
+            validateFormQueryConfig(newParams);
+        }
         // sourceKey 变更（不等于当前值）时校验租户内唯一；保持不变则跳过（自身不算冲突）
         if (!java.util.Objects.equals(effNewSourceKey, ds.getSourceKey())
                 && dsRepository.existsByTenantIdAndSourceKey(tenantId, effNewSourceKey)) {
@@ -194,6 +208,7 @@ public class DataSourceDefinitionService {
         validateRequiredFields(ds.getType(), ds.getFormKey(), ds.getSourceKey(), ds.getParams());
         if (TYPE_FORM.equals(ds.getType())) {
             requirePublishedForm(tenantId, ds.getFormKey());
+            validateFormQueryConfig(ds.getParams());
         } else if (TYPE_WORKFLOW.equals(ds.getType())) {
             requireWorkflowForm(tenantId, ds.getFormKey());
         }
@@ -416,6 +431,169 @@ public class DataSourceDefinitionService {
             case "user-tree" -> "users";
             default -> throw new BusinessException(400, "未注册的系统数据源: " + sourceKey);
         };
+    }
+
+    // ==================== FORM 查询配置段（queryMode）校验 ====================
+
+    /** 判断 params 是否含 queryMode 配置段（非合法 JSON 视为无，由后续校验处理） */
+    private boolean hasQueryModeSegment(String params) {
+        if (params == null || params.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(params);
+            return root != null && root.isObject() && root.has("queryMode");
+        } catch (JsonProcessingException e) {
+            return false;
+        }
+    }
+
+    /**
+     * FORM 数据源查询配置段保存校验（Task 5）。
+     * <ul>
+     *   <li>无 queryMode 段 → 向后兼容，跳过校验</li>
+     *   <li>config：joins 非空；每项 alias 合法、targetFormKey 表单存在、必填字段齐全、virtualKey 唯一</li>
+     *   <li>sql：query/columns 合法性复用 SqlTemplateEngine.validate（SELECT / :tenantId / 列匹配 / 参数白名单）</li>
+     *   <li>未知 queryMode → 400</li>
+     * </ul>
+     */
+    private void validateFormQueryConfig(String params) {
+        if (params == null || params.isBlank()) {
+            return;
+        }
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(params);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(400, "数据源参数 params 必须是合法 JSON: " + e.getOriginalMessage());
+        }
+        if (root == null || !root.isObject()) {
+            throw new BusinessException(400, "数据源参数 params 必须是 JSON 对象");
+        }
+        JsonNode modeNode = root.get("queryMode");
+        if (modeNode == null || modeNode.isNull() || modeNode.asText().isBlank()) {
+            return; // 无 queryMode 段 → 单表查询，向后兼容
+        }
+        String mode = modeNode.asText();
+        if ("config".equals(mode)) {
+            validateConfigJoins(root.get("joins"));
+        } else if ("sql".equals(mode)) {
+            validateSqlConfig(root);
+        } else {
+            throw new BusinessException(400, "未知查询模式 queryMode: " + mode + "（支持 config / sql）");
+        }
+    }
+
+    /** config 模式：joins[] 结构校验（别名/目标表单/字段/虚拟列唯一性） */
+    private void validateConfigJoins(JsonNode joins) {
+        if (joins == null || !joins.isArray() || joins.isEmpty()) {
+            throw new BusinessException(400, "queryMode=config 时必须配置至少一个关联 joins");
+        }
+        String tenantId = tenantProvider.getTenantId();
+        Set<String> virtualKeys = new HashSet<>();
+        int idx = 0;
+        for (JsonNode j : joins) {
+            idx++;
+            if (j == null || !j.isObject()) {
+                throw new BusinessException(400, "joins 第 " + idx + " 项必须是对象");
+            }
+            String alias = text(j, "alias");
+            if (alias == null || !alias.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                throw new BusinessException(400, "joins 第 " + idx + " 项 alias 非法: " + alias);
+            }
+            String targetFormKey = text(j, "targetFormKey");
+            if (targetFormKey == null || targetFormKey.isBlank()) {
+                throw new BusinessException(400, "joins 第 " + idx + " 项必须指定目标表单 targetFormKey");
+            }
+            if (!formDefRepository.existsByTenantIdAndKey(tenantId, targetFormKey)) {
+                throw new BusinessException(400, "目标表单不存在: " + targetFormKey);
+            }
+            requireJoinField(j, "localField", "主表关联字段", idx);
+            requireJoinField(j, "foreignField", "目标表关联字段", idx);
+            requireJoinField(j, "joinField", "显示字段", idx);
+            requireJoinField(j, "label", "显示名称", idx);
+            String virtualKey = text(j, "virtualKey");
+            if (virtualKey == null || virtualKey.isBlank()) {
+                throw new BusinessException(400, "joins 第 " + idx + " 项必须指定虚拟列标识 virtualKey");
+            }
+            if (!virtualKeys.add(virtualKey)) {
+                throw new BusinessException(400, "虚拟列 virtualKey 重复: " + virtualKey);
+            }
+        }
+    }
+
+    private void requireJoinField(JsonNode j, String field, String label, int idx) {
+        String v = text(j, field);
+        if (v == null || v.isBlank()) {
+            throw new BusinessException(400, "joins 第 " + idx + " 项必须指定" + label + " " + field);
+        }
+    }
+
+    /** sql 模式：query/columns/参数白名单复用 SqlTemplateEngine.validate（IllegalArgumentException → 400） */
+    private void validateSqlConfig(JsonNode root) {
+        String query = text(root, "query");
+        List<JoinSqlGenerator.QueryColumn> columns = parseSqlColumns(root.get("columns"));
+        List<String> declaredParams = parseStringList(root.get("params"));
+        try {
+            SqlTemplateEngine.validate(query, columns, declaredParams);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, e.getMessage());
+        }
+    }
+
+    private List<JoinSqlGenerator.QueryColumn> parseSqlColumns(JsonNode node) {
+        List<JoinSqlGenerator.QueryColumn> out = new ArrayList<>();
+        if (node == null || !node.isArray()) {
+            return out;
+        }
+        for (JsonNode n : node) {
+            if (n == null || !n.isObject()) {
+                continue;
+            }
+            out.add(new JoinSqlGenerator.QueryColumn(
+                    text(n, "key"), text(n, "key"), text(n, "columnType"),
+                    boolVal(n, "sortable"), boolVal(n, "filterable")));
+        }
+        return out;
+    }
+
+    private List<String> parseStringList(JsonNode node) {
+        List<String> out = new ArrayList<>();
+        if (node == null || !node.isArray()) {
+            return out;
+        }
+        for (JsonNode n : node) {
+            if (n != null && n.isTextual() && !n.asText().isBlank()) {
+                out.add(n.asText());
+            }
+        }
+        return out;
+    }
+
+    /** 合并：生成端点 params 之上叠加 queryMode 配置段（config 的 joins / sql 的 query+columns+params 白名单） */
+    private String mergeQueryConfig(String generated, String params) {
+        try {
+            ObjectNode out = (ObjectNode) objectMapper.readTree(generated);
+            JsonNode input = objectMapper.readTree(params);
+            for (String field : List.of("queryMode", "joins", "query", "columns", "params")) {
+                if (input.has(field)) {
+                    out.set(field, input.get(field));
+                }
+            }
+            return out.toString();
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(400, "数据源参数 params 必须是合法 JSON: " + e.getOriginalMessage());
+        }
+    }
+
+    private static String text(JsonNode node, String field) {
+        JsonNode v = node.get(field);
+        return v == null || v.isNull() ? null : v.asText();
+    }
+
+    private static boolean boolVal(JsonNode node, String field) {
+        JsonNode v = node.get(field);
+        return v != null && v.isBoolean() && v.asBoolean();
     }
 
     // ==================== 内部工具 ====================

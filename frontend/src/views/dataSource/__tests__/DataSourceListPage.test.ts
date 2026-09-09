@@ -19,6 +19,7 @@ vi.mock('@/api/data-source', () => ({
     deleteDataSource: vi.fn(),
     enableDataSource: vi.fn(),
     disableDataSource: vi.fn(),
+    getEnabledDataSources: vi.fn(),
     getMetadata: vi.fn(),
     queryData: vi.fn(),
     getDbSchemaTables: vi.fn(),
@@ -97,7 +98,7 @@ describe('DataSourceListPage', () => {
 
   // ==================== 操作按钮可见性 ====================
 
-  it('行操作按钮：查看(全部) + 数据管理(非WORKFLOW) + 编辑/删除(API + SQL 类型)', async () => {
+  it('行操作按钮：查看(全部) + 数据管理(非WORKFLOW) + 编辑(API/SQL/FORM) / 删除(API/SQL)', async () => {
     stubList()
     const wrapper = createWrapper()
     await nextTick()
@@ -118,10 +119,10 @@ describe('DataSourceListPage', () => {
     expect(actionButtons.some((b: any) => b.label === '启用')).toBe(false)
     expect(actionButtons.some((b: any) => b.label === '禁用')).toBe(false)
 
-    // 编辑/删除仅对 API / SQL 类型显示
+    // 编辑对 API / SQL / FORM 显示（FORM 可配置关联查询）；删除仅 API / SQL
     expect(editBtn.show({ type: 'API' })).toBe(true)
     expect(editBtn.show({ type: 'SQL' })).toBe(true)
-    expect(editBtn.show({ type: 'FORM' })).toBe(false)
+    expect(editBtn.show({ type: 'FORM' })).toBe(true)
     expect(editBtn.show({ type: 'WORKFLOW' })).toBe(false)
     expect(editBtn.show({ type: 'SYSTEM' })).toBe(false)
     expect(delBtn.show({ type: 'API' })).toBe(true)
@@ -974,7 +975,7 @@ describe('DataSourceListPage', () => {
     expect((wrapper.vm as any).isEditableType).toBe(true)
     expect((wrapper.vm as any).isReadonlyForm).toBe(false)
 
-    // 查看 FORM：类型标签显示「业务表单」，radio 不渲染
+    // 查看 FORM：类型标签显示「业务表单」，类型 radio 不渲染；关联查询配置 queryMode 选择器渲染
     ;(wrapper.vm as any).openView({
       id: 'ds-form', name: '用户数据', type: 'FORM', formKey: 'user', sourceKey: null,
       status: 'ENABLED', params: null,
@@ -982,7 +983,159 @@ describe('DataSourceListPage', () => {
     await nextTick()
     await flushPromises()
     expect(wrapper.html()).toContain('业务表单')
-    expect(wrapper.find('.el-radio-group').exists()).toBe(false)
+    // 类型 radio（API/SQL 切换）不渲染，但 FORM 关联查询配置（单表/JOIN/SQL 三模式）渲染
+    expect(wrapper.html()).not.toContain('第三方 API')
+    expect(wrapper.html()).toContain('单表查询')
+    expect(wrapper.html()).toContain('声明式 JOIN')
+    expect(wrapper.html()).toContain('SQL 模板')
+    wrapper.unmount()
+  })
+
+  // ==================== FORM 关联查询配置（queryMode config/sql） ====================
+
+  const formParams = (extra: Record<string, any>) =>
+    JSON.stringify({
+      list: { action: '/api/v1/biz-data/biz_order', method: 'GET', parse: 'records', totalParse: 'total' },
+      ...extra,
+    })
+
+  it('编辑 FORM（config 模式）：解析 joins 到 formJoin，保存合并 queryMode+joins 到 params', async () => {
+    stubList()
+    ;(dataSourceApi.updateDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openEdit({
+      id: 'ds-form', name: '订单联查', type: 'FORM', formKey: 'biz_order', sourceKey: 'biz_order',
+      status: 'ENABLED',
+      params: formParams({
+        queryMode: 'config',
+        joins: [{ alias: 'j1', targetFormKey: 'biz_customer', localField: 'customer_id', foreignField: 'id', joinField: 'name', virtualKey: 'customer_name', label: '客户名称', sortable: true, filterable: true }],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    expect(component.formJoin.queryMode).toBe('config')
+    expect(component.formJoin.joins).toHaveLength(1)
+    expect(component.formJoin.joins[0].virtualKey).toBe('customer_name')
+    // 配置区可见（queryMode 三模式 + config JOIN 卡片）
+    expect(wrapper.html()).toContain('单表查询')
+    expect(wrapper.html()).toContain('声明式 JOIN')
+    expect(wrapper.html()).toContain('目标表单')
+
+    await component.handleSave()
+    await flushPromises()
+
+    expect(dataSourceApi.updateDataSource).toHaveBeenCalled()
+    const payload = (dataSourceApi.updateDataSource as any).mock.calls[0][1]
+    expect(payload.type).toBe('FORM')
+    const p = JSON.parse(payload.params)
+    expect(p.queryMode).toBe('config')
+    expect(p.joins).toHaveLength(1)
+    expect(p.joins[0].targetFormKey).toBe('biz_customer')
+    expect(p.joins[0].virtualKey).toBe('customer_name')
+    // 自动生成端点保留（CRUD 接口 params 段不变）
+    expect(p.list.action).toBe('/api/v1/biz-data/biz_order')
+    expect(ElMessage.success).toHaveBeenCalledWith('保存成功')
+    wrapper.unmount()
+  })
+
+  it('编辑 FORM（sql 模式）：解析 query/columns/params，保存序列化', async () => {
+    stubList()
+    ;(dataSourceApi.updateDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openEdit({
+      id: 'ds-form', name: '订单统计', type: 'FORM', formKey: 'biz_order', sourceKey: 'biz_order',
+      status: 'ENABLED',
+      params: formParams({
+        queryMode: 'sql',
+        query: 'SELECT m.order_no, m.amount FROM wf_biz_order m WHERE m.tenant_id = :tenantId AND m.created_at >= :startTime',
+        columns: [{ key: 'order_no', label: '订单号', columnType: 'VARCHAR', sortable: true, filterable: true }],
+        params: ['startTime'],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    expect(component.formJoin.queryMode).toBe('sql')
+    expect(component.formJoin.query).toContain(':tenantId')
+    expect(component.formJoin.columns).toHaveLength(1)
+    expect(component.formJoin.params).toEqual(['startTime'])
+    expect(wrapper.html()).toContain('SQL 模板')
+
+    await component.handleSave()
+    await flushPromises()
+
+    expect(dataSourceApi.updateDataSource).toHaveBeenCalled()
+    const payload = (dataSourceApi.updateDataSource as any).mock.calls[0][1]
+    const p = JSON.parse(payload.params)
+    expect(p.queryMode).toBe('sql')
+    expect(p.query).toContain(':tenantId')
+    expect(p.columns[0].key).toBe('order_no')
+    expect(p.params).toEqual(['startTime'])
+    wrapper.unmount()
+  })
+
+  it('编辑 FORM（无 queryMode）：保存仅自动端点（向后兼容）', async () => {
+    stubList()
+    ;(dataSourceApi.updateDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openEdit({
+      id: 'ds-form', name: '用户数据', type: 'FORM', formKey: 'biz_order', sourceKey: 'biz_order',
+      status: 'ENABLED',
+      params: formParams({}),
+    })
+    await nextTick()
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    expect(component.formJoin.queryMode).toBe('none')
+
+    await component.handleSave()
+    await flushPromises()
+
+    const payload = (dataSourceApi.updateDataSource as any).mock.calls[0][1]
+    const p = JSON.parse(payload.params)
+    expect(p.queryMode).toBeUndefined()
+    expect(p.joins).toBeUndefined()
+    expect(p.list.action).toBe('/api/v1/biz-data/biz_order')
+    wrapper.unmount()
+  })
+
+  it('FORM config 模式：join 不完整（缺 virtualKey）阻止保存', async () => {
+    stubList()
+    ;(dataSourceApi.updateDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openEdit({
+      id: 'ds-form', name: '订单联查', type: 'FORM', formKey: 'biz_order', sourceKey: 'biz_order',
+      status: 'ENABLED',
+      params: formParams({
+        queryMode: 'config',
+        joins: [{ alias: 'j1', targetFormKey: 'biz_customer', localField: 'customer_id', foreignField: 'id', joinField: 'name', virtualKey: '', label: '客户名称', sortable: true, filterable: true }],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    await component.handleSave()
+    await flushPromises()
+
+    expect(dataSourceApi.updateDataSource).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalled()
     wrapper.unmount()
   })
 

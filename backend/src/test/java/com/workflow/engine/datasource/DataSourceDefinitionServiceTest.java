@@ -7,6 +7,7 @@ import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
+import com.workflow.engine.form.bizdata.FormQueryConfig;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.page.entity.PageDefinition;
@@ -685,5 +686,207 @@ class DataSourceDefinitionServiceTest {
                 "{\"querySql\":\"SELECT * FROM wf_biz_emp_profile\"}");
 
         assertEquals("ENABLED", result.getStatus());
+    }
+
+    // ==================== FORM 查询配置段（queryMode）保存校验（Task 5） ====================
+
+    /** update FORM 数据源 params（主表单 biz_leave 已存在；expectSave=false 表示预期失败，不 stub save） */
+    private DataSourceDefinition updateFormParams(String params) {
+        return updateFormParams(params, true);
+    }
+
+    private DataSourceDefinition updateFormParams(String params, boolean expectSave) {
+        DataSourceDefinition ds = draftDs("FORM", "biz_leave", "biz_leave", "{\"list\":{}}");
+        ds.setStatus("DRAFT");
+        when(dsRepository.findByIdAccessible(DS_ID, TENANT_ID)).thenReturn(Optional.of(ds));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave")).thenReturn(true);
+        if (expectSave) {
+            when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+        }
+        return service.update(DS_ID, null, null, null, null, params);
+    }
+
+    private static String configJoinsParams(String... joinJson) {
+        return "{\"list\":{},\"queryMode\":\"config\",\"joins\":[" + String.join(",", joinJson) + "]}";
+    }
+
+    private static String sqlParams(String query, String columnsJson, String paramsJson) {
+        return "{\"list\":{},\"queryMode\":\"sql\",\"query\":\"" + query + "\",\"columns\":" + columnsJson
+                + (paramsJson == null ? "" : ",\"params\":" + paramsJson) + "}";
+    }
+
+    private static String join(String alias, String target, String local, String foreign, String joinField,
+                               String virtualKey, String label, boolean sortable, boolean filterable) {
+        return "{\"alias\":\"" + alias + "\",\"targetFormKey\":\"" + target + "\",\"localField\":\"" + local
+                + "\",\"foreignField\":\"" + foreign + "\",\"joinField\":\"" + joinField
+                + "\",\"virtualKey\":\"" + virtualKey + "\",\"label\":\"" + label
+                + "\",\"sortable\":" + sortable + ",\"filterable\":" + filterable + "}";
+    }
+
+    @Test
+    void update_formConfigMode_validJoins_saved() {
+        String params = configJoinsParams(join("j1", "biz_customer", "customer_id", "id", "name",
+                "customer_name", "客户名称", true, true));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_customer")).thenReturn(true);
+
+        DataSourceDefinition result = updateFormParams(params);
+
+        assertEquals(params, result.getParams());
+    }
+
+    @Test
+    void update_formConfigMode_multiJoins_saved() {
+        String params = configJoinsParams(
+                join("j1", "biz_customer", "customer_id", "id", "name", "customer_name", "客户名称", true, true),
+                join("j2", "biz_dept", "dept_id", "id", "name", "dept_name", "部门名称", true, false));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_customer")).thenReturn(true);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_dept")).thenReturn(true);
+
+        DataSourceDefinition result = updateFormParams(params);
+
+        assertEquals(params, result.getParams());
+    }
+
+    @Test
+    void update_formConfigMode_targetFormNotExist_rejected() {
+        String params = configJoinsParams(join("j1", "biz_customer", "customer_id", "id", "name",
+                "customer_name", "客户名称", true, true));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_customer")).thenReturn(false);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("目标表单不存在"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_formConfigMode_virtualKeyMissing_rejected() {
+        String params = configJoinsParams(join("j1", "biz_customer", "customer_id", "id", "name",
+                "", "客户名称", true, true));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_customer")).thenReturn(true);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("virtualKey"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_formConfigMode_duplicateVirtualKey_rejected() {
+        String params = configJoinsParams(
+                join("j1", "biz_customer", "customer_id", "id", "name", "customer_name", "客户名称", true, true),
+                join("j2", "biz_dept", "dept_id", "id", "name", "customer_name", "部门名称", true, false));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_customer")).thenReturn(true);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_dept")).thenReturn(true);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("virtualKey"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_formConfigMode_emptyJoins_rejected() {
+        String params = "{\"list\":{},\"queryMode\":\"config\",\"joins\":[]}";
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("joins"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_formSqlMode_valid_saved() {
+        String params = sqlParams("SELECT m.* FROM wf_biz_leave m WHERE m.tenant_id = :tenantId",
+                "[{\"key\":\"name\",\"label\":\"姓名\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}]",
+                null);
+
+        DataSourceDefinition result = updateFormParams(params);
+
+        assertEquals(params, result.getParams());
+    }
+
+    @Test
+    void update_formSqlMode_declaredParams_saved() {
+        String params = sqlParams("SELECT m.* FROM wf_biz_leave m WHERE m.tenant_id = :tenantId"
+                        + " AND m.created_at >= :startTime",
+                "[{\"key\":\"name\",\"label\":\"姓名\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}]",
+                "[\"startTime\"]");
+
+        DataSourceDefinition result = updateFormParams(params);
+
+        assertEquals(params, result.getParams());
+    }
+
+    @Test
+    void update_formSqlMode_missingTenantId_rejected() {
+        String params = sqlParams("SELECT * FROM wf_biz_leave",
+                "[{\"key\":\"name\",\"label\":\"姓名\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}]",
+                null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("tenantId"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_formSqlMode_unmatchedColumn_rejected() {
+        String params = sqlParams("SELECT name, amount FROM wf_biz_leave m WHERE m.tenant_id = :tenantId",
+                "[{\"key\":\"age\",\"label\":\"年龄\",\"columnType\":\"INTEGER\",\"sortable\":true,\"filterable\":true}]",
+                null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("不在查询结果中"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_formSqlMode_undeclaredPlaceholder_rejected() {
+        String params = sqlParams("SELECT m.* FROM wf_biz_leave m WHERE m.tenant_id = :tenantId"
+                        + " AND m.created_at >= :startTime",
+                "[{\"key\":\"name\",\"label\":\"姓名\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}]",
+                null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("未声明参数"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_formSqlMode_emptyColumns_rejected() {
+        String params = sqlParams("SELECT m.* FROM wf_biz_leave m WHERE m.tenant_id = :tenantId", "[]", null);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("columns"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void update_formNoQueryMode_backwardCompatible() {
+        // 老数据源 params 无 queryMode 段 → 不校验、原样保存（向后兼容）
+        DataSourceDefinition result = updateFormParams("{\"list\":{}}");
+
+        assertEquals("{\"list\":{}}", result.getParams());
+    }
+
+    @Test
+    void update_formUnknownQueryMode_rejected() {
+        String params = "{\"list\":{},\"queryMode\":\"weird\"}";
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> updateFormParams(params, false));
+        assertTrue(ex.getMessage().contains("queryMode"));
+        verify(dsRepository, never()).save(any());
+    }
+
+    @Test
+    void create_formWithConfigMode_mergesIntoGeneratedParams() {
+        // FORM 创建时传入 config queryMode 段：校验通过后与自动生成端点合并保存
+        String params = configJoinsParams(join("j1", "biz_customer", "customer_id", "id", "name",
+                "customer_name", "客户名称", true, true));
+        when(dsRepository.existsByTenantIdAndName(TENANT_ID, "带关联配置")).thenReturn(false);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_leave")).thenReturn(true);
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_customer")).thenReturn(true);
+        when(dsRepository.save(any(DataSourceDefinition.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DataSourceDefinition result = service.create("带关联配置", "FORM", "biz_leave", null, params);
+
+        assertEquals("config", FormQueryConfig.parse(result.getParams(), objectMapper).queryMode());
+        assertEquals(1, FormQueryConfig.parse(result.getParams(), objectMapper).joins().size());
     }
 }

@@ -234,7 +234,7 @@ export function buildTableColumns(
           prop: 'updatedAt',
           label: '更新时间',
           width: 160,
-          align: 'center',
+          align: 'center' as const,
           formatter: (row: any) => formatDate(row.updatedAt),
         }]),
   ]

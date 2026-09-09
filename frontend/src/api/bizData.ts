@@ -21,6 +21,8 @@ export interface ColumnConfigItem {
   sortable?: boolean
   /** 是否可筛选（数据源 metadata 声明；缺省 undefined=未推导） */
   filterable?: boolean
+  /** 查询方式（eq/like/range；缺省 undefined=未配置，由前端按列类型推导） */
+  matchType?: string
   /** 不支持展示的列（如子表占位字段，后端无实际列） */
   unsupported?: boolean
   /** 子表列定义（group/tableForm/subForm 内部子字段） */

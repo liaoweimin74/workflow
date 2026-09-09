@@ -3,7 +3,7 @@
 // npx vitest run src/views/dataSource/components/__tests__/SqlEditor.test.ts
 
 import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick, h } from 'vue'
 import ElementPlus from 'element-plus'
 import SqlEditor from '../SqlEditor.vue'
@@ -68,6 +68,9 @@ describe('SqlEditor', () => {
 
   it('渲染列声明编辑区并支持添加列', async () => {
     const wrapper = mountEditor()
+    await nextTick()
+    await flushPromises()
+    await nextTick()
     expect(wrapper.text()).toContain('列声明')
     expect(wrapper.find('input[data-testid="sqleditor-col-key-0"]').exists()).toBe(true)
     await wrapper.find('[data-testid="sqleditor-add-column"]').trigger('click')
@@ -77,6 +80,9 @@ describe('SqlEditor', () => {
 
   it('编辑列 key 时触发 update:columns', async () => {
     const wrapper = mountEditor()
+    await nextTick()
+    await flushPromises()
+    await nextTick()
     const keyInput = wrapper.find('input[data-testid="sqleditor-col-key-0"]')
     await keyInput.setValue('amount')
     const cols = lastColumns(wrapper)
@@ -85,6 +91,9 @@ describe('SqlEditor', () => {
 
   it('删除列触发 update:columns', async () => {
     const wrapper = mountEditor()
+    await nextTick()
+    await flushPromises()
+    await nextTick()
     await wrapper.find('[data-testid="sqleditor-del-column-0"]').trigger('click')
     const cols = lastColumns(wrapper)
     expect(cols).toHaveLength(0)

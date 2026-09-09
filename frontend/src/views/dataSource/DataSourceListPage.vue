@@ -310,19 +310,19 @@
                       </el-select>
                     </template>
                   </el-table-column>
-                  <el-table-column label="描述" min-width="150">
-                    <template #default="{ row }">
-                      <el-input v-model="row.description" placeholder="描述" size="small" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="占位符" min-width="120">
-                    <template #default="{ row }">
-                      <el-input v-model="row.placeholder" placeholder="占位符" size="small" />
-                    </template>
-                  </el-table-column>
                   <el-table-column label="必填" width="55" align="center">
                     <template #default="{ row }">
                       <el-checkbox v-model="row.required" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="唯一" width="55" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.unique" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="索引" width="55" align="center">
+                    <template #default="{ row }">
+                      <el-checkbox v-model="row.indexed" />
                     </template>
                   </el-table-column>
                   <el-table-column label="隐藏" width="55" align="center">
@@ -340,91 +340,11 @@
                       <el-checkbox v-model="row.filterable" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="最小长度" width="80">
+                  <el-table-column label="查询方式" min-width="100">
                     <template #default="{ row }">
-                      <el-input-number v-model="row.minLength" :min="0" controls-position="right" size="small" style="width: 100%" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="最大长度" width="80">
-                    <template #default="{ row }">
-                      <el-input-number v-model="row.maxLength" :min="0" controls-position="right" size="small" style="width: 100%" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="最小值" width="80">
-                    <template #default="{ row }">
-                      <el-input-number v-model="row.minimum" controls-position="right" size="small" style="width: 100%" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="最大值" width="80">
-                    <template #default="{ row }">
-                      <el-input-number v-model="row.maximum" controls-position="right" size="small" style="width: 100%" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="正则" min-width="130">
-                    <template #default="{ row }">
-                      <el-input v-model="row.pattern" placeholder="正则表达式" size="small" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="格式" min-width="100">
-                    <template #default="{ row }">
-                      <el-input v-model="row.format" placeholder="如 date" size="small" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="选项(JSON)" min-width="150">
-                    <template #default="{ row }">
-                      <el-input v-model="row.options" type="textarea" :rows="1" placeholder='[{"label":"","value":""}]' size="small" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="数据映射" min-width="150">
-                    <template #default="{ row }">
-                      <el-input v-model="row.dataMapping" type="textarea" :rows="1" placeholder='{"dbCol":"formField"}' size="small" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="上传数量" width="80">
-                    <template #default="{ row }">
-                      <el-input-number v-model="row.uploadLimit" :min="0" controls-position="right" size="small" style="width: 100%" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="文件类型" min-width="120">
-                    <template #default="{ row }">
-                      <el-input v-model="row.fileTypes" placeholder=".jpg,.png" size="small" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="半选" width="55" align="center">
-                    <template #default="{ row }">
-                      <el-checkbox v-model="row.allowHalf" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="透明度" width="55" align="center">
-                    <template #default="{ row }">
-                      <el-checkbox v-model="row.showAlpha" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="数据类型" width="90">
-                    <template #default="{ row }">
-                      <el-select v-model="row.dataType" clearable placeholder="—" size="small" style="width: 100%">
-                        <el-option label="string" value="string" />
-                        <el-option label="number" value="number" />
-                        <el-option label="boolean" value="boolean" />
-                        <el-option label="date" value="date" />
-                        <el-option label="datetime" value="datetime" />
-                        <el-option label="time" value="time" />
+                      <el-select v-model="row.matchType" clearable placeholder="按类型" size="small" style="width: 100%">
+                        <el-option v-for="opt in matchTypeOptions(row)" :key="opt.value" :label="opt.label" :value="opt.value" />
                       </el-select>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="开始占位" min-width="120">
-                    <template #default="{ row }">
-                      <el-input v-model="row.startPlaceholder" placeholder="开始占位符" size="small" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="结束占位" min-width="120">
-                    <template #default="{ row }">
-                      <el-input v-model="row.endPlaceholder" placeholder="结束占位符" size="small" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="禁用间断" width="65" align="center">
-                    <template #default="{ row }">
-                      <el-checkbox v-model="row.separateDisabled" />
                     </template>
                   </el-table-column>
                   <el-table-column label="" width="80" align="center" fixed="right">
@@ -436,42 +356,91 @@
                 </el-table>
                 <el-button type="primary" plain size="small" style="margin-top: 4px" @click="addMetadataColumn">添加列</el-button>
 
-                <el-dialog v-model="columnDialogVisible" title="字段详情" width="520px" append-to-body>
-                  <el-form v-if="editingColumn" label-width="90px" size="small">
-                    <el-form-item label="标识">
-                      <el-input v-model="editingColumn.key" />
-                    </el-form-item>
-                    <el-form-item label="字段名">
-                      <el-input v-model="editingColumn.label" />
-                    </el-form-item>
-                    <el-form-item label="类型">
-                      <el-select v-model="editingColumn.columnType" style="width: 100%">
-                        <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
-                      </el-select>
-                    </el-form-item>
-                    <el-form-item label="长度" v-if="needsLength(editingColumn.columnType)">
-                      <el-input-number v-model="editingColumn.length" :min="0" :max="10000" controls-position="right" style="width: 100%" />
-                    </el-form-item>
-                    <el-form-item label="精度" v-if="editingColumn.columnType === 'DECIMAL'">
-                      <el-input-number v-model="editingColumn.scale" :min="0" :max="10" controls-position="right" style="width: 100%" />
-                    </el-form-item>
-                    <el-form-item label="属性">
-                      <el-checkbox v-model="editingColumn.required">必填</el-checkbox>
-                      <el-checkbox v-model="editingColumn.unique">唯一</el-checkbox>
-                      <el-checkbox v-model="editingColumn.indexed">索引</el-checkbox>
-                      <el-checkbox v-model="editingColumn.hidden">隐藏</el-checkbox>
-                      <el-checkbox v-model="editingColumn.sortable">排序</el-checkbox>
-                      <el-checkbox v-model="editingColumn.filterable">筛选</el-checkbox>
-                    </el-form-item>
-                    <el-form-item label="组件类型">
-                      <el-select v-model="editingColumn.componentType" clearable filterable placeholder="选择组件类型" style="width: 100%">
-                        <el-option v-for="t in FORM_CREATE_COMPONENT_TYPES" :key="t" :label="t" :value="t" />
-                      </el-select>
-                    </el-form-item>
+                <el-dialog v-model="columnDialogVisible" title="字段详情" width="800px" append-to-body>
+                  <el-form v-if="editingColumn" label-position="top">
+                    <el-row :gutter="16">
+                      <el-col :span="8">
+                        <el-form-item label="标识">
+                          <el-input v-model="editingColumn.key" />
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="字段名">
+                          <el-input v-model="editingColumn.label" />
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="DB类型">
+                          <el-select v-model="editingColumn.columnType" style="width: 100%">
+                            <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="16">
+                      <el-col :span="8">
+                        <el-form-item label="长度">
+                          <el-input-number v-model="editingColumn.length" :min="0" :max="10000" controls-position="right" style="width: 100%" />
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="精度">
+                          <el-input-number v-model="editingColumn.scale" :min="0" :max="10" controls-position="right" style="width: 100%" />
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="8">
+                        <el-form-item label="组件类型">
+                          <el-select v-model="editingColumn.componentType" clearable filterable style="width: 100%">
+                            <el-option v-for="t in FORM_CREATE_COMPONENT_TYPES" :key="t" :label="t" :value="t" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="16">
+                      <el-col :span="4">
+                        <el-form-item label="必填">
+                          <el-checkbox v-model="editingColumn.required">启用</el-checkbox>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="4">
+                        <el-form-item label="唯一">
+                          <el-checkbox v-model="editingColumn.unique">启用</el-checkbox>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="4">
+                        <el-form-item label="索引">
+                          <el-checkbox v-model="editingColumn.indexed">启用</el-checkbox>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="4">
+                        <el-form-item label="隐藏">
+                          <el-checkbox v-model="editingColumn.hidden">启用</el-checkbox>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="4">
+                        <el-form-item label="排序">
+                          <el-checkbox v-model="editingColumn.sortable">启用</el-checkbox>
+                        </el-form-item>
+                      </el-col>
+                      <el-col :span="4">
+                        <el-form-item label="筛选">
+                          <el-checkbox v-model="editingColumn.filterable">启用</el-checkbox>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="16">
+                      <el-col :span="8">
+                        <el-form-item label="查询方式">
+                          <el-select v-model="editingColumn.matchType" clearable placeholder="按类型推导" style="width: 100%">
+                            <el-option v-for="opt in matchTypeOptions(editingColumn)" :key="opt.value" :label="opt.label" :value="opt.value" />
+                          </el-select>
+                        </el-form-item>
+                      </el-col>
+                    </el-row>
                   </el-form>
                   <template #footer>
-                    <el-button size="small" @click="columnDialogVisible = false">取消</el-button>
-                    <el-button size="small" type="primary" @click="columnDialogVisible = false">保存</el-button>
+                    <el-button @click="columnDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="columnDialogVisible = false">保存</el-button>
                   </template>
                 </el-dialog>
               </template>
@@ -790,6 +759,22 @@ function boolIconStyle(v: boolean | undefined): Record<string, string> {
   return { color: v ? '#409EFF' : '#c0c4cc', cursor: 'default' }
 }
 
+/** 查询方式选项（按列类型裁剪）：数值/日期 → 等值/范围；文本 → 等值/模糊 */
+function matchTypeOptions(col: { columnType?: string }): { label: string; value: string }[] {
+  const t = col.columnType || ''
+  if (t === 'INT' || t === 'BIGINT' || t === 'TINYINT' || t === 'DECIMAL'
+    || t === 'DATE' || t === 'DATETIME') {
+    return [
+      { label: '等值', value: 'eq' },
+      { label: '范围', value: 'range' },
+    ]
+  }
+  return [
+    { label: '等值', value: 'eq' },
+    { label: '模糊', value: 'like' },
+  ]
+}
+
 /** ================ 数据预览 ================= */
 const previewData = ref<BizDataVO[]>([])
 const previewTotal = ref(0)
@@ -1017,6 +1002,7 @@ function toColumnConfigItem(c: any): ColumnConfigItem {
     sortable: true,
     filterable: true,
     componentType: c.componentType ?? null,
+    matchType: c.matchType ?? null,
   }
 }
 
@@ -1037,6 +1023,7 @@ function serializeColumnConfig(c: ColumnConfigItem): Record<string, any> {
   item.indexed = !!c.indexed
   item.hidden = !!c.hidden
   if (c.componentType) item.componentType = c.componentType
+  if (c.matchType) item.matchType = c.matchType
   return item
 }
 

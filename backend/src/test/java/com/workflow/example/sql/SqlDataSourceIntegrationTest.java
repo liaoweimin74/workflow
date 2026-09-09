@@ -139,6 +139,27 @@ class SqlDataSourceIntegrationTest {
     }
 
     @Test
+    void sqlMode_camelCaseColumnKey_returnsDataWithConfiguredCase() {
+        // 字段元数据 key 可为驼峰（如探测 JDBC 列标签 hireDate）；查询返回列名必须按配置 key 精确对齐，
+        // 否则前端按配置 key 取值失败（历史 bug：toSqlVO 统一转小写 → hiredate，取不到 hireDate）
+        DataSourceDefinition ds = sqlDs(null, """
+                {"queryMode":"sql",
+                 "query":"SELECT m.hireDate, m.name FROM wf_biz_emp m WHERE m.tenant_id = :tenantId",
+                 "columns":[{"key":"hireDate","label":"入职日期","columnType":"DATE","sortable":true,"filterable":true},
+                            {"key":"name","label":"姓名","columnType":"VARCHAR","sortable":true,"filterable":true}],
+                 "params":[]}
+                """);
+
+        BizDataPageVO page = adapter.query(ds, pageReq(1, 20));
+
+        assertThat(page.getTotal()).isEqualTo(1);
+        Map<String, Object> first = page.getRecords().get(0).getData();
+        assertThat(first).containsKey("hireDate");
+        assertThat(first.get("hireDate")).isNotNull();
+        assertThat(first).containsKey("name");
+    }
+
+    @Test
     void formEventAutoCreatedDataSource_sourceKeyEqualsFormKey() {
         // setUp 中 ensureFormDefinition() 触发表单创建事件 → DataSourceSyncListener 自动建 FORM 数据源
         // 实体 @PrePersist 兜底：source_key 自动 = form_key（V31 唯一索引要求非空）
@@ -195,6 +216,21 @@ class SqlDataSourceIntegrationTest {
                     PRIMARY KEY (id)
                 )
                 """);
+        // 驼峰列名表：模拟 MySQL 上真实业务表定义 hireDate（H2 未加引号标识符统一转大写 HIREDATE，
+        // 恰好覆盖"数据库输出列名与配置 key 大小写不一致"的两类场景：MySQL 小写 / H2 大写）
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS wf_biz_emp (
+                    id VARCHAR(64) NOT NULL,
+                    tenant_id VARCHAR(64) NOT NULL,
+                    name VARCHAR(128),
+                    hireDate DATE,
+                    version INT NOT NULL DEFAULT 1,
+                    created_by VARCHAR(50),
+                    created_at TIMESTAMP,
+                    updated_at TIMESTAMP,
+                    PRIMARY KEY (id)
+                )
+                """);
     }
 
     private void ensureFormDefinition() {
@@ -234,5 +270,10 @@ class SqlDataSourceIntegrationTest {
                 INSERT INTO wf_biz_order (id, tenant_id, customer_id, order_no, total, version, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, 1, ?, ?)
                 """, "o3", TENANT_ID, "c1", "ORD-003", 300.00, java.sql.Timestamp.valueOf("2026-01-01 00:00:03"), java.sql.Timestamp.valueOf("2026-01-01 00:00:03"));
+        jdbcTemplate.update("""
+                INSERT INTO wf_biz_emp (id, tenant_id, name, hireDate, version, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 1, ?, ?)
+                """, "e1", TENANT_ID, "张三", java.sql.Date.valueOf("2026-03-01"),
+                java.sql.Timestamp.valueOf("2026-01-01 00:00:00"), java.sql.Timestamp.valueOf("2026-01-01 00:00:00"));
     }
 }

@@ -3,6 +3,7 @@ import { dataSourceApi } from '@/api/data-source'
 import { formApi } from '@/api/form'
 import { resolveOptionRules, hasOptionDatasource } from '@/vendor/option-datasource'
 import { withArrayLabels } from '@/views/form/arrayValueLabel'
+import type { ColumnConfigItem } from '@/api/bizData'
 import type { FormConfig, DataSourceBindingContext } from '@/components/business/types'
 
 /**
@@ -41,6 +42,8 @@ export function useDataSourceCrud(refId: Ref<string> | string, options: UseDataS
   const idRef = computed(() => (typeof refId === 'string' ? refId : refId.value))
 
   const metaColumns = ref<MetaColumn[]>([])
+  /** 原始列配置（完整 ColumnConfigItem[]，含 hidden/unsupported/subColumns/pickerConfig/indexed/length 等），供列表页做可筛列/渲染推导 */
+  const rawColumns = ref<ColumnConfigItem[]>([])
   const metaLoaded = ref(false)
   const writable = ref(false)
   const formKey = ref('')
@@ -112,6 +115,8 @@ export function useDataSourceCrud(refId: Ref<string> | string, options: UseDataS
       const meta = res.data as any
       writable.value = !!meta?.writable
       formKey.value = meta?.formKey || ''
+      // rawColumns 先赋值：列表页可筛列/渲染推导依赖完整列配置（含 hidden/unsupported/subColumns/pickerConfig/indexed/length）
+      rawColumns.value = (meta?.columns || []).map((c: any) => ({ ...c }))
       // metaColumns 先赋值（数组值列 formatter/查询映射依赖 componentType，避免首次取数时列无 formatter 显示原始 value）
       metaColumns.value = (meta?.columns || []).map((c: any) => ({
         key: c.key,
@@ -132,7 +137,7 @@ export function useDataSourceCrud(refId: Ref<string> | string, options: UseDataS
   }
 
   return {
-    metaLoaded, metaColumns, writable, formKey, formSchemaRule, formDataSources,
+    metaLoaded, metaColumns, rawColumns, writable, formKey, formSchemaRule, formDataSources,
     formRules, formConfig, loadFormSchema, loadMetadata,
   }
 }

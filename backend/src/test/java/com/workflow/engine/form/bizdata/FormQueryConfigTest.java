@@ -125,6 +125,26 @@ class FormQueryConfigTest {
     }
 
     @Test
+    void parse_sqlMode_parsesColumnMatchType() {
+        String params = """
+                {"queryMode":"sql",
+                 "query":"SELECT o.order_no, o.amount FROM wf_biz_order o",
+                 "columns":[
+                   {"key":"order_no","label":"订单号","columnType":"VARCHAR","matchType":"like"},
+                   {"key":"amount","label":"金额","columnType":"DECIMAL","matchType":"range"},
+                   {"key":"remark","label":"备注","columnType":"VARCHAR"}]}""";
+        FormQueryConfig cfg = FormQueryConfig.parse(params, om);
+        assertThat(cfg.isSqlMode()).isTrue();
+        ColumnConfig orderNo = cfg.columns().get(0);
+        assertThat(orderNo.getKey()).isEqualTo("order_no");
+        assertThat(orderNo.getMatchType()).isEqualTo("like");
+        ColumnConfig amount = cfg.columns().get(1);
+        assertThat(amount.getMatchType()).isEqualTo("range");
+        ColumnConfig remark = cfg.columns().get(2);
+        assertThat(remark.getMatchType()).isNull();
+    }
+
+    @Test
     void parse_sqlMode_missingColumnFlags_defaultFalse() {
         String params = """
                 {"queryMode":"sql",

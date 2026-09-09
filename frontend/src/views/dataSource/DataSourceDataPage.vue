@@ -10,6 +10,7 @@
     <SearchTable
       v-if="crud.metaLoaded.value"
       :columns="columns"
+      :search-fields="searchFields"
       :fetch-api="fetchApi"
       :form-config="crud.formConfig.value"
       :default-page-size="20"
@@ -29,6 +30,12 @@ import { SearchTable } from '@/components/business'
 import type { TableColumn } from '@/components/business/types'
 import { dataSourceApi } from '@/api/data-source'
 import { useDataSourceCrud } from '@/composables/useDataSourceCrud'
+import {
+  buildTableColumns,
+  buildSearchFields,
+  filterableColumnsOf,
+  collectFilterConditions,
+} from '@/utils/bizTableLayout'
 
 const route = useRoute()
 const router = useRouter()
@@ -40,22 +47,34 @@ const name = ref('')
 const type = ref('')
 const status = ref('')
 
+/** 表格列（按元数据渲染：数组值/颜色/日期定制，与业务表单数据管理一致；render 读 row.data[key]） */
 const columns = computed<TableColumn[]>(() =>
-  crud.metaColumns.value.map((c) => ({
-    prop: c.key,
-    label: c.label,
-    minWidth: 120,
-    sortable: !!c.sortable,
-  })),
+  buildTableColumns(crud.rawColumns.value.filter((c) => !c.hidden && !c.unsupported), {
+    // 数据源数据页无子表 schema 弹窗：子表列按普通 JSON 展示（不渲染 slotName 链接）
+    useSubtableSlot: false,
+    // 列严格等于用户配置的字段元数据：SQL 数据源 query 返回无 updatedAt 审计字段，内置尾列无意义
+    appendUpdatedAt: false,
+  }),
+)
+
+/** 可筛选列（非 JSON/TEXT/colorPicker，indexed 或短文本；数组组件用 <key>_text 冗余列） */
+const filterableColumns = computed(() => filterableColumnsOf(crud.rawColumns.value))
+
+/** 搜索栏（按元数据动态生成：文本 input / 日期 date-picker / 数据引用 lookupPicker，与业务表单数据管理一致） */
+const searchFields = computed(() =>
+  buildSearchFields(filterableColumns.value, crud.formSchemaRule.value),
 )
 
 const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {
+  const conditions = collectFilterConditions(filterableColumns.value, params)
   const query: Record<string, any> = { page: Math.max(1, params.page), size: params.size }
   if (params.sort) query.sort = params.sort
   if (params.order) query.order = params.order
+  // 后端 BizDataQueryRequest.filter 为 JSON 字符串（对齐 PageQueryController/BizDataSupport 解析）
+  if (conditions.length > 0) query.filter = JSON.stringify({ logic: 'AND', conditions })
   const res: any = await dataSourceApi.queryData(dsId.value, query)
-  const rows = (res?.data?.records || []).map((r: any) => ({ ...(r.data || {}), id: r.id, version: r.version }))
-  return { rows, total: res?.data?.total || 0 }
+  // 保持 records 原结构（BizDataVO：{ id, data, version, ... }），列 render 读 row.data[key]
+  return { rows: res?.data?.records || [], total: res?.data?.total || 0 }
 }
 
 onMounted(async () => {

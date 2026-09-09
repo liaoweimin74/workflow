@@ -131,6 +131,7 @@ public record FormQueryConfig(String queryMode,
             c.setComponentType(text(n, "componentType"));
             c.setSortable(bool(n, "sortable"));
             c.setFilterable(bool(n, "filterable"));
+            c.setMatchType(text(n, "matchType"));
             out.add(c);
         }
         return out;

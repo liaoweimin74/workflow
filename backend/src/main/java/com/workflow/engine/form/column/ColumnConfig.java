@@ -53,6 +53,9 @@ public class ColumnConfig {
     /** 是否可筛选（缺省 null=未推导；数据源 metadata 声明，join 虚拟列/管理员声明列显式填充） */
     private Boolean filterable;
 
+    /** 查询方式（eq/like/range；null=未配置，由前端按列类型推导） */
+    private String matchType;
+
     /** 子表列映射（非空表示该 key 为子表字段，映射独立物理表 wf_biz_<formKey>_<key>） */
     private List<ColumnConfig> subColumns;
 
@@ -102,6 +105,9 @@ public class ColumnConfig {
 
     public Boolean getFilterable() { return filterable; }
     public void setFilterable(Boolean filterable) { this.filterable = filterable; }
+
+    public String getMatchType() { return matchType; }
+    public void setMatchType(String matchType) { this.matchType = matchType; }
 
     public List<ColumnConfig> getSubColumns() { return subColumns; }
     public void setSubColumns(List<ColumnConfig> subColumns) { this.subColumns = subColumns; }

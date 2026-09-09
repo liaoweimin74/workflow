@@ -165,47 +165,61 @@ function parseFromSql() {
 
       <el-form-item label="列声明">
         <div style="width: 100%">
-          <div
-            v-for="(col, idx) in localCols"
-            :key="idx"
-            class="sql-editor-column-row"
-            style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center"
-          >
-            <el-input
-              :data-testid="`sqleditor-col-key-${idx}`"
-              v-model="col.key"
-              placeholder="字段名"
-              :disabled="disabled"
-              @input="emitColumns"
-              style="width: 130px"
-            />
-            <el-input
-              v-model="col.label"
-              placeholder="列名"
-              :disabled="disabled"
-              @input="emitColumns"
-              style="width: 130px"
-            />
-            <el-select v-model="col.columnType" :disabled="disabled" @change="emitColumns" style="width: 120px">
-              <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
-            </el-select>
-            <el-checkbox v-model="col.sortable" :disabled="disabled" @change="emitColumns">排序</el-checkbox>
-            <el-checkbox v-model="col.filterable" :disabled="disabled" @change="emitColumns">筛选</el-checkbox>
-            <el-button
-              :data-testid="`sqleditor-del-column-${idx}`"
-              :icon="Delete"
-              circle
-              size="small"
-              :disabled="disabled"
-              @click="removeColumn(idx)"
-            />
-          </div>
+          <el-table :data="localCols" size="small" border>
+            <el-table-column label="字段名" min-width="130">
+              <template #default="{ row, $index }">
+                <el-input
+                  :data-testid="`sqleditor-col-key-${$index}`"
+                  v-model="row.key"
+                  placeholder="字段名"
+                  :disabled="disabled"
+                  @input="emitColumns"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="列名" min-width="130">
+              <template #default="{ row }">
+                <el-input
+                  v-model="row.label"
+                  placeholder="列名"
+                  :disabled="disabled"
+                  @input="emitColumns"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column label="类型" width="170">
+              <template #default="{ row }">
+                <el-select v-model="row.columnType" :disabled="disabled" style="width: 100%" @change="emitColumns">
+                  <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="属性" width="150" align="center">
+              <template #default="{ row }">
+                <el-checkbox v-model="row.sortable" :disabled="disabled" @change="emitColumns">排序</el-checkbox>
+                <el-checkbox v-model="row.filterable" :disabled="disabled" @change="emitColumns">筛选</el-checkbox>
+              </template>
+            </el-table-column>
+            <el-table-column label="" width="52" align="center">
+              <template #default="{ $index }">
+                <el-button
+                  :data-testid="`sqleditor-del-column-${$index}`"
+                  :icon="Delete"
+                  circle
+                  text
+                  :disabled="disabled"
+                  @click="removeColumn($index)"
+                />
+              </template>
+            </el-table-column>
+          </el-table>
           <el-button
             data-testid="sqleditor-add-column"
             type="primary"
             plain
             size="small"
             :icon="Plus"
+            style="margin-top: 8px"
             :disabled="disabled"
             @click="addColumn"
           >
@@ -232,3 +246,10 @@ function parseFromSql() {
     </el-form>
   </div>
 </template>
+
+<style scoped>
+/* 表格 small 尺寸但字体统一为普通大小 */
+.el-table {
+  font-size: 14px;
+}
+</style>

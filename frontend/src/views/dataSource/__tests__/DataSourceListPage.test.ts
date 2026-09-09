@@ -334,7 +334,7 @@ describe('DataSourceListPage', () => {
     component.sqlConfig.visual.joins = [{ alias: 'c', targetTable: 'wf_biz_customer', joinType: 'LEFT JOIN', on: 'c.id = m.customer_id', columns: [] }]
     component.sqlConfig.visual.where = [{ column: 'm.status', op: '=', value: 'PAID' }]
     component.sqlConfig.visual.orderBy = [{ column: 'm.created_at', order: 'DESC' }]
-    component.sqlConfig.declaredColumns = [{ key: 'order_no', label: '订单号', columnType: 'VARCHAR', sortable: true, filterable: false }]
+    component.sqlConfig.declaredColumns = [{ key: 'order_no', label: '订单号', columnType: 'VARCHAR', sortable: true, filterable: false, matchType: 'like' }]
     component.sqlConfig.declaredParams = ['tenantId']
     await nextTick()
 
@@ -354,6 +354,7 @@ describe('DataSourceListPage', () => {
     // 可视化模式也会生成 SQL 文本（前端预览，后端重新生成）
     expect(p.query).toContain('FROM wf_biz_order')
     expect(p.columns[0].key).toBe('order_no')
+    expect(p.columns[0].matchType).toBe('like')
     expect(p.params).toEqual(['tenantId'])
     expect(ElMessage.success).toHaveBeenCalledWith('创建成功')
     wrapper.unmount()

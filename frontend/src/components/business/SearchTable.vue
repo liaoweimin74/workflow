@@ -65,6 +65,21 @@
             :value-format="field.time ? 'YYYY-MM-DD HH:mm:ss' : undefined"
             :style="field.style || (field.time ? 'width: 380px' : 'width: 340px')"
           />
+          <template v-else-if="field.type === 'number-range'">
+            <el-input-number
+              v-model="query[field.prop][0]"
+              :placeholder="field.placeholder || '最小值'"
+              :controls="false"
+              :style="field.style || 'width: 180px'"
+            />
+            <span style="margin: 0 8px; color: #909399">至</span>
+            <el-input-number
+              v-model="query[field.prop][1]"
+              placeholder="最大值"
+              :controls="false"
+              :style="field.style || 'width: 180px'"
+            />
+          </template>
         </el-form-item>
         <el-form-item>
           <div class="toolbar-buttons">
@@ -454,6 +469,11 @@ const dropdownButtons = computed(() =>
 function initSearchDefaults() {
   const defaults: Record<string, any> = {}
   for (const field of props.searchFields || []) {
+    // 范围区间输入：预置 [min,max] 占位数组（避免模板绑定 undefined[0] 报错；提交时后端对 null 跳过）
+    if (field.type === 'number-range' && field.defaultValue === undefined) {
+      defaults[field.prop] = [null, null]
+      continue
+    }
     if (field.defaultValue !== undefined) {
       defaults[field.prop] = field.defaultValue
     }

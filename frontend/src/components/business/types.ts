@@ -32,7 +32,7 @@ export interface DataSourceBindingContext {
 // --- 查询字段 ---
 
 export interface SearchField {
-  type: 'input' | 'select' | 'tree-select' | 'date-picker' | 'date-range' | 'cascader' | 'lookupPicker'
+  type: 'input' | 'select' | 'tree-select' | 'date-picker' | 'date-range' | 'number-range' | 'cascader' | 'lookupPicker'
   label: string
   prop: string
   placeholder?: string

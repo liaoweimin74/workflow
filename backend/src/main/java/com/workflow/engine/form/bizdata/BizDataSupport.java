@@ -323,7 +323,8 @@ public class BizDataSupport {
             SqlQueryEngine.WrappedQuery wq = SqlTemplateEngine.wrap(
                     cfg.query(), tenantId, columns, filters, req.getKeyword(), req.getKeywordColumn(),
                     req.getSort(), req.getOrder(), page, size, cfg.declaredParams(), runtimeParams);
-            return sqlQueryEngine.execPage(page, size, wq.count(), wq.select(), this::toSqlVO);
+            return sqlQueryEngine.execPage(page, size, wq.count(), wq.select(),
+                    row -> toSqlVO(cfg.columns(), row));
         } catch (IllegalArgumentException e) {
             throw new BusinessException(400, e.getMessage());
         }
@@ -719,13 +720,24 @@ public class BizDataSupport {
 
     /**
      * sql 模式行映射：外层子查询输出列全量保留（可含聚合列），绕过 BizDataVO 系统列字段的仅主表列逻辑。
-     * <p>键统一转小写，消除 H2 等数据库对子查询输出列名规范化为大写的影响，
-     * 保证与声明列（columns）的 key 小写约定一致。生产 MySQL 保留 SQL 书写的别名大小写（通常小写），无副作用。
+     * <p>输出列名与声明列（columns）的 key 做大小写不敏感对齐：匹配某声明列 key（忽略大小写）时输出声明列精确 key，
+     * 保证返回 key 与字段元数据一致（字段 key 可为驼峰，如探测 JDBC 列标签 hireDate，前端按配置 key 取值）；
+     * 未匹配列统一转小写，消除 H2 等数据库对子查询输出列名规范化为大写的影响（与声明列小写 key 约定兼容）。
      */
-    private BizDataVO toSqlVO(Map<String, Object> row) {
+    private BizDataVO toSqlVO(List<ColumnConfig> declared, Map<String, Object> row) {
+        Map<String, String> keyNormalizer = new HashMap<>();
+        if (declared != null) {
+            for (ColumnConfig c : declared) {
+                if (c.getKey() != null && !c.getKey().isBlank()) {
+                    // putIfAbsent：声明列存在仅大小写不同的重名时，保留先出现的精确 key
+                    keyNormalizer.putIfAbsent(c.getKey().toLowerCase(), c.getKey());
+                }
+            }
+        }
         Map<String, Object> data = new LinkedHashMap<>();
         for (Map.Entry<String, Object> e : row.entrySet()) {
-            data.put(e.getKey().toLowerCase(), e.getValue());
+            String lower = e.getKey().toLowerCase();
+            data.put(keyNormalizer.getOrDefault(lower, lower), e.getValue());
         }
         data.remove("version");
         data.remove("created_at");

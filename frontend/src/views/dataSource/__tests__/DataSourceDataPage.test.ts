@@ -49,14 +49,27 @@ describe('DataSourceDataPage', () => {
     expect(stub.props('formConfig').createApi).toBeTypeOf('function')
     expect(stub.props('formConfig').updateApi).toBeTypeOf('function')
     expect(stub.props('formConfig').deleteApi).toBeTypeOf('function')
+    // 数据管理页列 = 用户配置字段（id + name），不含内置更新时间尾列
     expect(stub.props('columns')).toHaveLength(2)
+    expect(stub.props('columns').map((c: any) => c.prop)).not.toContain('updatedAt')
   })
 
-  it('fetchApi 委托 dataSourceApi.queryData', async () => {
+  it('按元数据列推导 searchFields（VARCHAR 可筛 → input）', async () => {
+    const stub = wrapper.findComponent(SearchTableStub) as any
+    const fields = stub.props('searchFields') as any[]
+    expect(fields.some((f: any) => f.prop === 'name' && f.type === 'input')).toBe(true)
+    // JSON/BIGINT 非筛列不入 searchFields
+    expect(fields.some((f: any) => f.prop === 'id')).toBe(false)
+  })
+
+  it('fetchApi 委托 dataSourceApi.queryData 且保持 records 原结构（row.data[key] 契约）', async () => {
     const stub = wrapper.findComponent(SearchTableStub) as any
     const res = await stub.props('fetchApi')({ page: 1, size: 20 })
     expect(res.rows).toHaveLength(1)
     expect(res.total).toBe(1)
+    expect(res.rows[0].data?.name).toBe('张三')
+    // 不解构：业务字段在 row.data 内层（列 render 契约）
+    expect(res.rows[0].name).toBeUndefined()
   })
 
   it('只读数据源（writable=false）formConfig 为 undefined（纯列表）', async () => {

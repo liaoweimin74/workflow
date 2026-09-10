@@ -1,6 +1,6 @@
 <template>
   <el-badge :value="store.unreadCount" :hidden="!store.hasUnread" :max="99" class="notification-bell">
-    <el-popover placement="bottom-end" :width="380" trigger="click" @show="handleShow">
+    <el-popover ref="popRef" placement="bottom-end" :width="380" trigger="click" @show="handleShow">
       <template #reference>
         <el-button :icon="Bell" circle />
       </template>
@@ -17,8 +17,20 @@
               <div v-if="unreadList.length === 0" class="bell-empty">暂无未读消息</div>
               <div v-else class="bell-list">
                 <div v-for="msg in unreadList" :key="msg.id" class="bell-item" @click="handleClick(msg)">
-                  <div class="bell-item-title">{{ msg.title }}</div>
-                  <div class="bell-item-time">{{ formatTime(msg.createdAt) }}</div>
+                  <div class="bell-item-main">
+                    <div class="bell-item-title">{{ msg.title }}</div>
+                    <div class="bell-item-time">{{ formatTime(msg.createdAt) }}</div>
+                  </div>
+                  <el-button
+                    v-if="msg.category === 'WORKFLOW'"
+                    class="bell-item-action"
+                    type="primary"
+                    link
+                    size="small"
+                    @click.stop="goToProcess(msg)"
+                  >
+                    去处理<el-icon><Promotion /></el-icon>
+                  </el-button>
                 </div>
               </div>
             </div>
@@ -28,8 +40,20 @@
               <div v-if="readList.length === 0" class="bell-empty">暂无已读消息</div>
               <div v-else class="bell-list">
                 <div v-for="msg in readList" :key="msg.id" class="bell-item" @click="handleClick(msg)">
-                  <div class="bell-item-title">{{ msg.title }}</div>
-                  <div class="bell-item-time">{{ formatTime(msg.createdAt) }}</div>
+                  <div class="bell-item-main">
+                    <div class="bell-item-title">{{ msg.title }}</div>
+                    <div class="bell-item-time">{{ formatTime(msg.createdAt) }}</div>
+                  </div>
+                  <el-button
+                    v-if="msg.category === 'WORKFLOW'"
+                    class="bell-item-action"
+                    type="primary"
+                    link
+                    size="small"
+                    @click.stop="goToProcess(msg)"
+                  >
+                    去处理<el-icon><Promotion /></el-icon>
+                  </el-button>
                 </div>
               </div>
             </div>
@@ -56,7 +80,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Bell, WarningFilled } from '@element-plus/icons-vue'
+import { Bell, WarningFilled, Promotion } from '@element-plus/icons-vue'
 import { useNotificationStore } from '../stores/notification'
 import MessageDetailDrawer from './MessageDetailDrawer.vue'
 import { getNotifications } from '../api/notification'
@@ -76,6 +100,9 @@ const loading = ref(false)
 /** 详情抽屉 */
 const detailVisible = ref(false)
 const detailId = ref<number | null>(null)
+
+/** popover 实例引用：跳转前手动收起下拉 */
+const popRef = ref<{ hide?: () => void } | null>(null)
 
 onMounted(() => {
   store.fetchUnreadCount()
@@ -131,6 +158,29 @@ function handleClick(msg: Message) {
   detailVisible.value = true
 }
 
+/** 收起下拉（Element Plus el-popover 暴露 hide；兼容旧版经 popperRef） */
+function closePopover() {
+  const pop = popRef.value as { hide?: () => void; popperRef?: { hide?: () => void } } | null
+  if (pop?.hide) pop.hide()
+  else pop?.popperRef?.hide?.()
+}
+
+/** 工作流消息直达（与消息中心 goToProcess 同规则的三级跳转）：
+ *  taskId → 任务处理页；instanceId → 流程跟踪页；旧消息兑底待办列表 */
+function goToProcess(msg: Message) {
+  const vars = (msg.content as Record<string, any>)?.variables || {}
+  const taskId = typeof vars.taskId === 'string' && vars.taskId !== '-' ? vars.taskId : ''
+  const instanceId = typeof vars.processInstanceId === 'string' && vars.processInstanceId !== '-' ? vars.processInstanceId : ''
+  closePopover()
+  if (taskId) {
+    router.push(`/process/todo/${taskId}`)
+  } else if (instanceId) {
+    router.push(`/process/instance/${instanceId}`)
+  } else {
+    router.push({ name: 'ProcessTodo' })
+  }
+}
+
 /** 抽屉内消息从未读变为已读：刷新角标与当前列表 */
 async function handleDrawerRead() {
   store.fetchUnreadCount()
@@ -166,12 +216,27 @@ function goToCenter() {
   overflow-y: auto;
 }
 .bell-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 0;
   cursor: pointer;
   border-bottom: 1px solid #f0f0f0;
 }
 .bell-item:hover {
   background: #f5f7fa;
+}
+.bell-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.bell-item-action {
+  flex-shrink: 0;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+}
+.bell-item:hover .bell-item-action {
+  opacity: 1;
 }
 .bell-item-title {
   font-size: 14px;

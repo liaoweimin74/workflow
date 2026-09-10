@@ -23,6 +23,8 @@ export interface ServiceDef {
   logFile: string;
   /** 启动前置条件（如 jar 是否已构建） */
   prerequisite?: string;
+  /** 额外环境变量（如 NODE_OPTIONS 内存上限） */
+  env?: Record<string, string>;
 }
 
 export interface ServiceStatus {
@@ -50,7 +52,9 @@ export const SERVICE_DEFS: ServiceDef[] = [
     port: 8080,
     cwd: BACKEND_DIR,
     cmd: "java",
-    args: ["-jar", JAR_PATH, "--spring.profiles.active=sandbox"],
+    // 内存上限必带：沙箱仅 3.9Gi，无上限 JVM 会被 OOM-killer 连坐 next-server（历史事故），
+    // 且与 scripts/start-services.sh 的参数保持一致
+    args: ["-Xmx448m", "-XX:MaxMetaspaceSize=192m", "-jar", JAR_PATH, "--spring.profiles.active=sandbox"],
     logFile: "/home/z/tools/backend.log",
     prerequisite: JAR_PATH,
   },
@@ -62,6 +66,7 @@ export const SERVICE_DEFS: ServiceDef[] = [
     cmd: "bun",
     args: ["run", "dev"],
     logFile: "/home/z/tools/vite.log",
+    env: { NODE_OPTIONS: "--max-old-space-size=512" },
   },
 ];
 
@@ -146,7 +151,7 @@ async function spawnService(def: ServiceDef): Promise<void> {
       cwd: def.cwd,
       stdio: ["ignore", out, out],
       detached: false,
-      env: { ...process.env },
+      env: { ...process.env, ...(def.env ?? {}) },
     });
     child.on("exit", (code) => {
       const r = getRuntime(def.key);

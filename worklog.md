@@ -211,3 +211,30 @@ Stage Summary:
   1. scripts/bootstrap-after-reset.sh 一键灾后恢复（检测 jar/node_modules/jdk21 缺失 → 自动重建）
   2. service-supervisor.ts 启动参数补齐内存上限
   3. 继续功能推进：发起页审批人选择 UI、v1/v2 历史实例清理、Dashboard 环比指标、铃铛精确跳转
+
+---
+Task ID: 7
+Agent: 主控 (Z.ai Code) — 定时巡检轮次 2026-09-10 22:05 (Asia/Shanghai)
+Task: 浏览器 QA + 运维加固三件套（A1/A2/A3）+ 数据卫生清理（B5）+ 铃铛精确跳转（B7）+ 源码下载通道
+
+Work Log:
+- **QA（agent-browser，灾后恢复后首次全链路）**：登录 → dashboard（KPI 2/17/8/2、趋势合计 16 次、占比环 8/8、铃铛角标 21）→ 流程定义 → 流程中心 → 待办处理 → 消息中心全部正常，0 page error。新经验：SSE 长连接下 `wait --load networkidle` 永不满足会卡死 agent-browser 命令队列，须用固定 sleep 等待
+- **A2 supervisor 内存参数**：service-supervisor.ts SERVICE_DEFS 补齐 java `-Xmx448m -XX:MaxMetaspaceSize=192m` 与前端 `NODE_OPTIONS=--max-old-space-size=512`（def.env 注入 spawn）。已落盘，待 next dev 下次重启生效（本轮 403 抖动窗口，强制重启风险大于收益）
+- **A3 start-services.sh 端口竞态修复**：端口开 + HTTP 探活双确认（curl 任意状态码=活，000=死）；假死等待 20s → kill_stale_backend（仅匹配本平台 jar 名）→ 清场重启；Vite 同逻辑。bash -n 通过
+- **A1 bootstrap-after-reset.sh（新脚本）**：一键灾后恢复（jdk21/maven/jar/node_modules 缺失自动重建 → 调 start-services.sh），幂等、x64+aarch64、bash -n 通过
+- **B5 历史实例清理（terminate API）**：8 在途 → 清 7（2×v2 卡死 + 5×v1 无 DI 遗留），**保留 e2e-v3-check**（v3 停在经理审批节点，作表单回显演示资产）。admin 待办 2→0，running 8→1
+- **B7 铃铛精确跳转（新功能，浏览器端到端全过）**：NotificationBell.vue 工作流消息行内"去处理"按钮（Promotion 图标、hover 提亮、@click.stop）+ goToProcess 三级跳转（taskId→任务处理页；instanceId→流程跟踪页；兜底待办）+ popRef.hide() 收起下拉。taskId 消息✅ / 仅 instanceId✅ / popover 收起✅ / 0 console error
+- **源码下载通道（应用户"无法下载代码"诉求）**：沙箱封闭、仅 3000 预览端口可出网 → 打干净源码包 `public/workflow-lowcode-src-20260910.tar.gz`（2.2MB、1925 文件；排除 node_modules/target/H2 data；含 backend+frontend 源码、openspec/docs、scripts、worklog.md），Next.js public/ 静态直出，经网关验证 HTTP 200
+- 运维事件：主会话与部分子代理 Bash 多次 403 "broken session"（基础设施抖动），经子代理绕行完成全部工作；next dev 重启（激活 A2/A3）两次尝试均被打断、kill 未执行成功，服务全程零中断
+
+Stage Summary:
+- 平台状态：三端口全绿、网关 200、待办干净（admin 0 / test 1 个 v3 演示资产）、铃铛直达上线、QA 全绿、源码可经 /workflow-lowcode-src-20260910.tar.gz 下载
+- A2/A3 已落盘未激活：下次 next dev 重启自动生效
+- 未解决问题/风险：
+  - Bash 会话 403 抖动本轮 3 次；子代理绕行有效，操作失败先怀疑传输层
+  - 任务处理页对"任务已被处理"仅 toast（历史低优先）
+- 建议下一阶段优先事项：
+  1. 择机重启 next dev 激活 A2/A3
+  2. 发起页审批人选择 UI
+  3. Dashboard 环比指标 + 流程定义使用排行
+  4. 页面设计器/数据源管理深度 QA

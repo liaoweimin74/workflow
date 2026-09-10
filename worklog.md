@@ -186,3 +186,28 @@ Stage Summary:
   2. v1/v2 历史实例清理脚本（terminate + 数据卫生）
   3. Dashboard 环比指标 + 流程定义使用排行（候选需求池）
   4. 铃铛下拉接入精确跳转（复用 goToProcess）
+
+---
+Task ID: 6
+Agent: 主控 (Z.ai Code) — 会话续接：沙箱重置灾后恢复
+Task: 服务全量恢复（沙箱工作区被重置后的重建）
+
+Work Log:
+- **【重大事件】沙箱工作区被重置**：backend/target/（jar 构建产物）、frontend/node_modules、/home/z/tools/（jdk21、maven、日志）全部丢失；源代码、H2 数据库（backend/data/workflow.mv.db）、worklog 均幸存
+- **工具链重建**：系统仅有 JRE21（无 javac），重新下载 Temurin JDK 21.0.12.1 → /home/z/tools/jdk21、Maven 3.9.9 → /home/z/tools/maven（历史路径原样恢复）；~/.m2 被清空，采用在线构建
+- **后端重建**：mvn -B -DskipTests package → BUILD SUCCESS（34.9s），jar 97.7MB（Boot 4.0.7 / Flowable 8）
+- **前端恢复**：bun install → 323 包 4.3s，vite 8.1.5 可用
+- **启动竞态新形态**：服务监督器（next-server PID 1081）探测到新 jar 出现后 19s 自动拉起——但未带内存上限参数，抢占 H2 文件锁（MVStoreException file locked）；手工终止无上限实例（RSS 已 510MB）后按规范参数启动，监督器为一次性触发未再抢启
+- **最终验证全过**：8080/5173/3000 三端口 OPEN；后端 29.8s 启动完成（sandbox profile，-Xmx448m）；登录 API HTTP 200（admin 签发双 token）；3000 网关 → /lowcode/* → Vite（HTML/@vite/client/src/main.ts 全 200）、/api/auth/login → 8080 返回真实 JWT——历史破坏过的 raw-query 反代路径正常
+- 已知预期行为：/lowcode/ 尾斜杠 308 → /lowcode（Task 5 修复的中间件显式 rewrite 生效中，curl -L 跟随后落地正确）
+
+Stage Summary:
+- **灾后恢复完成**：从"全部服务死亡+构建产物丢失"恢复到"三端口全绿+登录链路+网关反代全通过"，H2 演示数据无损（请假审批 v1/v2/v3 及历史实例仍在库中）
+- 未解决问题/风险：
+  - 沙箱重置会清空构建产物与工具链（/home/z/tools 下的 jdk21/maven 已重建，但重置将再次丢失——如需快速恢复可考虑把工具链挪到项目目录内或写一键恢复脚本 scripts/bootstrap-after-reset.sh）
+  - 服务监督器自动拉起 jar 时不带内存参数（会引发 H2 锁冲突 + OOM 风险），后续可改进 service-supervisor.ts 附加内存 flag
+  - 孤儿进程 bun PID 1052（pre-reset 残留，无端口，暂无危害）
+- 建议下一阶段优先事项：
+  1. scripts/bootstrap-after-reset.sh 一键灾后恢复（检测 jar/node_modules/jdk21 缺失 → 自动重建）
+  2. service-supervisor.ts 启动参数补齐内存上限
+  3. 继续功能推进：发起页审批人选择 UI、v1/v2 历史实例清理、Dashboard 环比指标、铃铛精确跳转

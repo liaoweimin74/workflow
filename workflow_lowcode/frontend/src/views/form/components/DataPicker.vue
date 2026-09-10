@@ -88,7 +88,7 @@
           :total="total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next"
-          small
+          size="small"
           @size-change="fetchData()"
           @current-change="fetchData()"
         />

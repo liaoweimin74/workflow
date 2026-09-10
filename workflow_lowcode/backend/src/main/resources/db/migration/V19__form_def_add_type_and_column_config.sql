@@ -11,7 +11,7 @@ DEALLOCATE PREPARE stmt1;
 SET @cc_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'wf_form_def' AND COLUMN_NAME = 'column_config');
 SET @ddl2 = IF(@cc_exists = 0,
-    'ALTER TABLE wf_form_def ADD COLUMN column_config JSON NULL',
+    'ALTER TABLE wf_form_def ADD COLUMN column_config LONGTEXT NULL',
     'SELECT 1');
 PREPARE stmt2 FROM @ddl2;
 EXECUTE stmt2;

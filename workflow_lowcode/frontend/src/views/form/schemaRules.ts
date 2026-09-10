@@ -52,6 +52,15 @@ export function deepDisableField(field: any): any {
   const f = field as Record<string, any>
   const fieldProps = (f.props as Record<string, any>) || {}
   const next: Record<string, any> = { ...f, props: { ...fieldProps, disabled: true } }
+  // 只读字段不显示必填红星、不参与必填校验：
+  // - effect.required（form-create effect 风格，如流程表单设计器产物）
+  // - validate 数组中的 required 规则（表单列表/列配置生成风格）
+  if (f.effect && typeof f.effect === 'object' && 'required' in f.effect) {
+    next.effect = { ...f.effect, required: false }
+  }
+  if (Array.isArray(f.validate)) {
+    next.validate = (f.validate as any[]).filter((v) => !(v && (v as any).required))
+  }
   if (Array.isArray(f.children)) {
     next.children = (f.children as any[]).map(deepDisableField)
   }

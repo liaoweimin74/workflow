@@ -246,7 +246,7 @@
           :total="total"
           :page-sizes="pageSizes"
           layout="total, sizes, prev, pager, next, jumper"
-          :small="tableSize === 'small'"
+          :size="tableSize === 'small' ? 'small' : 'default'"
           @size-change="fetchList()"
           @current-change="fetchList()"
         />

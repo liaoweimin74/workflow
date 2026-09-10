@@ -35,7 +35,14 @@ public class NodeConfig {
     @Column(name = "node_type", length = 64, nullable = false)
     private String nodeType;
 
-    @Column(name = "config_json", nullable = false, columnDefinition = "JSON")
+    /**
+     * 注意：此列必须为文本类型（LONGTEXT/CLOB），不可用 H2/MySQL 的 JSON 列类型——
+     * H2 的 JSON 列在 setString 时会把参数包装为 JSON 字符串标量（每次写入多包一层引号），
+     * 导致读取侧 Jackson 解析得到 String 而非 Object（表单绑定解析失败）。
+     * 与 FormDefinition.schema / FormData.data_json 保持同风格（@Lob + LONGTEXT）。
+     */
+    @Lob
+    @Column(name = "config_json", nullable = false, columnDefinition = "LONGTEXT")
     private String configJson;
 
     @Column(name = "created_at")

@@ -118,7 +118,7 @@
               :total="candTotal"
               :page-sizes="[20]"
               layout="total, prev, pager, next"
-              small
+              size="small"
               @current-change="fetchCandidateUsers"
             />
           </div>

@@ -1,0 +1,7 @@
+{
+  "name": "请假申请表",
+  "key": "leave-form",
+  "schema": "{\"rule\":[{\"type\":\"input\",\"field\":\"reason\",\"title\":\"请假事由\",\"props\":{\"placeholder\":\"请输入请假事由\"},\"effect\":{\"required\":true}},{\"type\":\"select\",\"field\":\"leaveType\",\"title\":\"请假类型\",\"options\":[{\"value\":\"annual\",\"label\":\"年假\"},{\"value\":\"sick\",\"label\":\"病假\"},{\"value\":\"personal\",\"label\":\"事假\"}],\"effect\":{\"required\":true}},{\"type\":\"datePicker\",\"field\":\"startDate\",\"title\":\"开始日期\",\"props\":{\"type\":\"date\",\"valueFormat\":\"YYYY-MM-DD\"}},{\"type\":\"datePicker\",\"field\":\"endDate\",\"title\":\"结束日期\",\"props\":{\"type\":\"date\",\"valueFormat\":\"YYYY-MM-DD\"}},{\"type\":\"inputNumber\",\"field\":\"days\",\"title\":\"请假天数\",\"props\":{\"min\":0.5,\"max\":30}},{\"type\":\"textarea\",\"field\":\"comment\",\"title\":\"备注\",\"props\":{\"type\":\"textarea\",\"rows\":3}}],\"option\":{\"labelPosition\":\"right\",\"labelWidth\":\"100px\"}}",
+  "columnConfig": null,
+  "processKey": null
+}

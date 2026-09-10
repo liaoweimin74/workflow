@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS wf_node_config (
     process_def_id  VARCHAR(64)   NOT NULL,
     node_id         VARCHAR(255)  NOT NULL,
     node_type       VARCHAR(64)   NOT NULL,
-    config_json     JSON          NOT NULL,
+    config_json     LONGTEXT      NOT NULL,
     created_at      DATETIME      DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME      DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

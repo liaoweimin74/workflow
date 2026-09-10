@@ -35,9 +35,10 @@ public class FormDefinition {
     /**
      * 列映射配置 JSON（仅 BUSINESS 类型使用，WORKFLOW 为 null）。
      * 定义表单字段到物理表列的映射：类型/长度/必填/唯一/索引。
+     * 同 config_json：必须为文本列（LONGTEXT），JSON 列类型在 H2 下 setString 会被标量包装。
      */
     @Lob
-    @Column(name = "column_config", columnDefinition = "JSON")
+    @Column(name = "column_config", columnDefinition = "LONGTEXT")
     private String columnConfig;
 
     @Lob

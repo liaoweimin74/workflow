@@ -104,6 +104,6 @@ public class TaskRemindController {
         String remindTo = task.getAssignee() != null && !task.getAssignee().isBlank()
                 ? task.getAssignee() : task.getOwner();
         workflowNotifier.notifyTaskReminded(null, remindTo, from,
-                task.getName(), task.getProcessInstanceId());
+                task.getName(), task.getProcessInstanceId(), task.getId());
     }
 }

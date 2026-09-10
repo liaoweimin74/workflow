@@ -63,7 +63,7 @@ public class WorkflowNotificationListener implements FlowableEventListener {
                 return; // 未分配（候选人组场景）不推送
             }
             notifier.notifyTaskAssigned(task.getTenantId(), assignee, task.getName(),
-                    task.getProcessInstanceId(), null);
+                    task.getProcessInstanceId(), null, task.getId());
             return;
         }
 

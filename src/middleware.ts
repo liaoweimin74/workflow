@@ -53,8 +53,13 @@ export function middleware(req: NextRequest) {
   }
 
   if (pathname === "/lowcode") {
-    // 无 query、无子路径，rewrite 无改写风险
-    return NextResponse.rewrite(new URL(`${pathname}${search}`, FRONTEND_ORIGIN));
+    // 用户入口 "/lowcode/" 会被 Next.js 服务器 308 重定向为 "/lowcode"
+    // （默认 trailingSlash 规范化，发生在 middleware 之前，无法拦截），
+    // 而 Vite 对无尾斜杠的 base 路径返回 404/"did you mean" 页面。
+    // 因此 rewrite 目标必须显式带尾斜杠 "/lowcode/"：rewrite 是 Next.js
+    // 服务端对源站的内部直连，不再经过尾斜杠规范化。无子路径、query
+    // 已还原，无 rewrite 改写风险。
+    return NextResponse.rewrite(new URL(`/lowcode/${search}`, FRONTEND_ORIGIN));
   }
 
   if (pathname.startsWith("/lowcode/")) {

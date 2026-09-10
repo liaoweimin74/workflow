@@ -111,3 +111,32 @@ Stage Summary:
   2. 页面设计器/数据源管理链路深度 QA（本轮仅浅测）
   3. 消息中心详情抽屉增加流程上下文展示（businessKey/发起人），"去处理"精确跳转到具体 taskId
   4. Dashboard 环比指标、流程定义使用排行（候选需求池）
+
+---
+Task ID: 5
+Agent: 主控 (Z.ai Code) — 定时巡检轮次 2026-09-10 15:11~15:45 (Asia/Shanghai)
+Task: 浏览器 QA + 修复 3000 入口回归与流程图空白 + 消息中心→流程精确跳转实装
+
+Work Log:
+- **【严重 bug】3000 预览入口 `/lowcode/` 又白屏（回归）**：Next.js 服务器把 `/lowcode/` 308 重定向为 `/lowcode`（尾斜杠规范化，发生在 middleware 之前无法拦截），middleware 原 rewrite 目标也是无尾斜杠的 `/lowcode`，Vite（base=`/lowcode/`）对其返回 404/"did you mean" 页。修复：middleware `/lowcode` 分支 rewrite 目标显式带尾斜杠 `${FRONTEND_ORIGIN}/lowcode/${search}`（rewrite 是服务端内部直连，不再经过 Next.js 尾斜杠规范化）。Task 4 的 QA 只测了深层路径未复测根入口，本轮补上
+- **【bug】流程跟踪页流程图永远空白**：示例 `leave-bill.bpmn20.xml` 缺少 BPMNDI 图形信息（无节点坐标/连线），bpmn-js 导入成功但 0 元素可渲染。修复：源文件补全 `<bpmndi:BPMNDiagram>`（4 节点 Bounds + 3 连线 waypoints）并经 草稿→设计→部署 发布为 v2；后端重新打包（example 资源随 jar）
+- **【细节】BpmnViewer 组件无 DI 空态**：importXML 的 warnings 含 "no diagram" 时显示友好空态（图标+标题+说明"重新发布新版后可显示"），旧 v1 实例跟踪页不再白屏困惑；importXML 抛错同样置空态
+- **【新功能】消息中心 → 流程精确跳转（端到端）**
+  - 后端：`WorkflowNotificationListener` 传 `task.getId()`；`WorkflowNotifier` 三类通知（TASK_ASSIGNED/PROCESS_FINISHED/TASK_REMINDED）统一经新增 `putProcessContext()` 写入 `processInstanceId`/`taskId`/`businessKey` 到消息 `content.variables`（仅附加变量，模板校验不受影响）；`TaskRemindController` 催办调用同步传 taskId
+  - 前端 `MessageCenter.vue`："去处理"三级跳转——`taskId` → `/process/todo/{taskId}` 任务处理页；无 taskId 有 `processInstanceId` → `/process/instance/{id}` 流程跟踪页；都无（历史消息）→ 兜底待办列表
+  - 前端 `MessageDetailDrawer.vue`：WORKFLOW 消息新增"流程上下文"区块（流程名称/任务节点/发起人/业务单号/等宽字体实例ID，占位"-"字段自动隐藏）+ "去处理该任务"（primary）/"查看流程跟踪"双按钮，点击关闭抽屉后跳转
+- **端到端验证（API+浏览器）全通过**：admin 基于 v2 发起（businessKey=e2e-diagram-002）→ test 收待办消息（variables 含 taskId/instanceId/businessKey）→ 浏览器点"去处理"直达 `/process/todo/{taskId}` 任务处理页（流程编号/发起人/变量全对）→ 完成审批 `processFinished:true` → admin 收办结通知（含上下文）→ 点"去处理"正确兜底跳流程跟踪页 → v2 流程图 4 节点+3 连线渲染、已完成/当前节点蓝色高亮 ✅
+- 回归：登录/首页/消息中心/待办/流程跟踪 console 0 错误；当前后端进程（PID 随监督器管理）启动后 0 ERROR
+
+Stage Summary:
+- 平台演示主闭环再升级：**消息 →（精确）→ 任务处理/流程跟踪 →（流程图高亮）** 全链路可演示；历史遗留的"流程图空白"彻底解决
+- 库内数据：leave-bill 现有 v1（无 DI，7 实例）与 v2（含 DI）两个版本；v2 已有 1 个已完成实例（e2e-diagram-002）可作演示
+- 未解决问题/风险：
+  - v1 历史实例的跟踪页永远显示空态（数据缺陷不可追溯修复，属预期行为；如需干净演示库可 terminate v1 在途实例）
+  - TaskDetailPage 对"任务已被处理"场景仅 toast"加载任务详情失败"，可考虑友好引导回待办列表（低优先）
+  - rg 查询参数 `-rn` 会把匹配文本替换显示为 "n"（`-r` 是 replace 标志），排障时需用 `-n`，本轮曾误导排查方向数分钟
+- 建议下一阶段优先事项：
+  1. 表单设计器 → 表单绑定流程（FormPropertyTab）端到端：设计表单 → 发布 → 流程节点引用 → 发起时渲染表单（worklog Task 4 建议项，仍未启动）
+  2. Dashboard 环比指标 + 流程定义使用排行（候选需求池）
+  3. 铃铛下拉也接入精确跳转（复用 goToProcess 逻辑）
+  4. v1 在途实例清理脚本/terminate（演示库卫生）

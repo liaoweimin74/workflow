@@ -85,9 +85,10 @@ public class WorkflowNotifier {
      * @param taskName    任务节点名
      * @param instanceId  流程实例 ID（用于解析流程名/发起人）
      * @param initiatorId 发起人用户 ID（可为空）
+     * @param taskId      任务 ID（写入消息变量，供前端“去处理”精确直达任务详情，可为空）
      */
     public void notifyTaskAssigned(String tenantId, String assigneeId, String taskName,
-                                   String instanceId, String initiatorId) {
+                                   String instanceId, String initiatorId, String taskId) {
         runGuarded("TASK_ASSIGNED", tenantId, () -> {
             Long recipient = parseLong(assigneeId);
             if (recipient == null) {
@@ -101,6 +102,7 @@ public class WorkflowNotifier {
             String initiator = (initiatorId != null && !initiatorId.isBlank())
                     ? initiatorId : resolveInitiatorId(instanceId, hpi);
             vars.put("initiatorName", resolveUserName(initiator));
+            putProcessContext(vars, hpi, instanceId, taskId);
             sendWithFallback(tenantId, TPL_TASK_ASSIGNED, vars, recipient);
             log.info("[工作流通知] TASK_ASSIGNED 已推送：to={}, task={}, tpl={}",
                     recipient, taskName, TPL_TASK_ASSIGNED);
@@ -124,7 +126,7 @@ public class WorkflowNotifier {
                 return;
             }
             Map<String, Object> vars = baseVars(null, processNameOf(hpi));
-            vars.put("businessKey", hpi.getBusinessKey() != null ? hpi.getBusinessKey() : "-");
+            putProcessContext(vars, hpi, instanceId, null);
             sendWithFallback(tenantId, TPL_PROCESS_FINISHED, vars, recipient);
             log.info("[工作流通知] PROCESS_FINISHED 已推送：to={}, process={}",
                     recipient, vars.get("processName"));
@@ -139,9 +141,10 @@ public class WorkflowNotifier {
      * @param remindFromId 催办发起人用户 ID
      * @param taskName     任务节点名
      * @param instanceId   流程实例 ID
+     * @param taskId       任务 ID（写入消息变量，供前端精确直达任务详情，可为空）
      */
     public void notifyTaskReminded(String tenantId, String remindToId, String remindFromId,
-                                   String taskName, String instanceId) {
+                                   String taskName, String instanceId, String taskId) {
         runGuarded("TASK_REMINDED", tenantId, () -> {
             Long recipient = parseLong(remindToId);
             if (recipient == null) {
@@ -151,6 +154,7 @@ public class WorkflowNotifier {
             HistoricProcessInstance hpi = requireHistory(instanceId);
             Map<String, Object> vars = baseVars(taskName, processNameOf(hpi));
             vars.put("senderName", resolveUserName(remindFromId));
+            putProcessContext(vars, hpi, instanceId, taskId);
             sendWithFallback(tenantId, TPL_TASK_REMINDED, vars, recipient);
             log.info("[工作流通知] TASK_REMINDED 已推送：to={}, task={}", recipient, taskName);
         });
@@ -224,6 +228,22 @@ public class WorkflowNotifier {
             throw new BusinessException("历史流程实例不存在: " + instanceId);
         }
         return hpi;
+    }
+
+    /**
+     * 统一写入流程上下文变量（仅写入消息 content.variables，不影响模板渲染；
+     * 模板只需其用到的变量，validateVariables 只校验模板引用的变量存在，
+     * 额外键无害）。前端详情抽屉与“去处理”按钮从这里读取精确上下文。
+     */
+    private static void putProcessContext(Map<String, Object> vars, HistoricProcessInstance hpi,
+                                          String instanceId, String taskId) {
+        vars.put("processInstanceId", instanceId != null ? instanceId : "-");
+        if (taskId != null && !taskId.isBlank()) {
+            vars.put("taskId", taskId);
+        }
+        if (hpi.getBusinessKey() != null && !hpi.getBusinessKey().isBlank()) {
+            vars.put("businessKey", hpi.getBusinessKey());
+        }
     }
 
     /** 流程展示名：优先定义名（如"请假审批"），实例名未设置时回退。 */

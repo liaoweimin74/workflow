@@ -31,11 +31,21 @@ public class FlowableEngineConfig {
     /**
      * 注册 Flowable 全局事件监听器，驱动节点后端逻辑执行。
      * 依赖 flyway：Flowable 引擎构建（含建表）必须在 Flyway 迁移之后执行。
+     *
+     * <p>同时强制 Flowable 使用 MySQL 方言：
+     * 沙箱环境使用 H2 的 MODE=MySQL 承载业务表（Flyway 迁移脚本为 MySQL 方言），
+     * 而 H2 的 MySQL 兼容模式不识别 Flowable H2 方言脚本中的 {@code identity} 列类型
+     * （Unknown data type: "IDENTITY"），会导致引擎建表失败、启动崩溃循环；
+     * MySQL 方言脚本（varchar 主键 / ENGINE=InnoDB / 内联 KEY）在 H2 MySQL 模式下可完整执行，
+     * 真实 MySQL 环境下亦同样适用。
      */
     @Bean
     @DependsOn("flyway")
     public ProcessEngineConfigurationConfigurer processEngineConfigurer(BackendLogicEventListener listener) {
-        return configuration -> configuration.setEventListeners(java.util.List.of(listener));
+        return configuration -> {
+            configuration.setDatabaseType("mysql");
+            configuration.setEventListeners(java.util.List.of(listener));
+        };
     }
 
     @Bean

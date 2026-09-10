@@ -4,6 +4,17 @@ spring:
     username: root
     password: 740130
     driver-class-name: com.mysql.cj.jdbc.Driver
+  autoconfigure:
+    # 无 Redis 运行：排除 Redis 自动配置，不再创建 RedisConnectionFactory /
+    # StringRedisTemplate 等 Bean，应用启动与运行均不依赖 Redis 服务。
+    # RedisCache / RedisConfig 均为 @ConditionalOnBean，会自动退化为不装配。
+    exclude:
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisReactiveAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisRepositoriesAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.health.DataRedisHealthContributorAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.health.DataRedisReactiveHealthContributorAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.observation.LettuceObservationAutoConfiguration
   flyway:
     enabled: true
     out-of-order: true

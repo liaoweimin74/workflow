@@ -37,3 +37,37 @@ Task: 下一步候选工作项
 - H2 沙箱库的 `workflow.trace.db` 会积累告警日志，可关注体积增长
 - `AuthServiceImpl` 中残留未使用的 Redis 相关 import（可编译，建议后续顺手清理）
 - `GenHash.java` 位于 backend 根目录（工具类），可考虑移入合适位置或删除
+
+---
+Task ID: 3
+Agent: 主控 (Z.ai Code) — 定时巡检轮次 2026-09-10 13:35 (Asia/Shanghai)
+Task: 浏览器 QA 巡检 + 端到端流程链路验证 + 首页数据看板实装
+
+Work Log:
+- **全站浏览器 QA（agent-browser）**：登录页 → 登录成功跳转 /lowcode/dashboard；遍历 首页/用户管理/流程定义/流程中心/待办处理，页面渲染全部正常、前端 console 零错误、多标签页导航正常、API 全部 200（SSE 为正常挂起）
+- **端到端流程链路验证（API 驱动，验证 databaseType=mysql 运行期表现）**：
+  1. 创建草稿 `POST /api/v1/process-definitions/drafts?name=请假审批&key=leave-bill`
+  2. 保存示例 BPMN `PUT /{draftId}/design`（`example/leave-bill.bpmn20.xml`）
+  3. 部署 `POST /{draftId}/deploy` ✅
+  4. 发起实例 `POST /api/v1/process-instances`（variables: manager=1）→ 提交节点被 InitiatorNodeResolver 自动完成 ✅
+  5. 待办出现（部门经理审批，assignee=1）✅
+  6. 完成 `POST /api/v1/tasks/{taskId}/complete` → `processFinished: true` ✅
+  - 注意：所有 `/api/v1/**` 业务接口需带 `X-Tenant-Id: default` 请求头（前端 http.ts 已统一添加）；`/api/v1/tasks` 必须显式传 `assignee` 参数
+- **新功能：首页数据看板实装（前后端）**
+  - 后端新增 `api/controller/DashboardController.java`：`GET /api/v1/dashboard/stats?userId=`，聚合 Flowable 实时查询（我的待办/已办、进行中实例、最新版流程定义数、我发起的、近 7 日发起趋势、状态占比 running/finished），已重打包并重启生效
+  - 前端新增 `src/api/dashboard.ts`；重写 `DashboardPage.vue`：KPI 卡片接真实数据（我的待办任务/我的已办任务/进行中流程/已部署流程定义）、近 7 日趋势柱状图数据驱动（7 柱均分栅格与日期标签对齐，含合计/空态/tooltip）、流程状态占比环形图（分段弧长计算 + 中心总数 + 图例）、加载骨架屏、失败降级显示 "--"、卡片 hover 阴影过渡
+  - 修复自测发现的对齐 bug：趋势柱沿用旧 10 柱坐标导致与 7 个日期错位，改为 7 柱均分 + grid-cols-7 日期栅格
+  - 浏览器验证：KPI 显示 0/2/0/1（已办 2 = 自动提交 + 经理审批），9/10 趋势柱正确对齐，占比环 "已完成 1"
+- **异常排查**：后端日志共 3 条 ERROR——2 条为测试期参数缺失（非 bug）；1 条 `NoClassDefFoundError: ReactiveTypeHandler$CollectedValuesList`（05:43:08）发生在后端 kill/重启窗口期 + SSE 长连接断连时刻，正常导航后零复现，判定为重启窗口期瞬时现象
+
+Stage Summary:
+- **平台已具备完整可演示的端到端能力**：库中现有 请假审批 v1 流程定义 + 1 个已完成实例（businessKey=demo-001），流程中心卡片、待办/已办、首页看板均有真实数据
+- H2 + MySQL 方言在 Flowable 运行期（部署/发起/任务流转/历史查询/趋势统计）全部验证通过
+- 未解决问题/观察项：
+  - SSE 断线重连在服务重启窗口可能触发一次 `ReactiveTypeHandler$CollectedValuesList` NoClassDefFoundError（仅记录，暂不处理；如复现于正常运行需排查 spring-webmvc 依赖完整性）
+  - DashboardController 每次统计发起 ~12 次 Flowable 查询，数据量增大后可考虑缓存
+- 建议下一阶段优先事项：
+  1. 表单视图管理（表单列表/页面列表）链路 QA + 低代码表单设计与流程绑定演示
+  2. 系统管理其余页面（角色/菜单/组织机构/字典）QA
+  3. 消息中心（通知/SSE 推送）实测：发起流程给他人审批，验证站内消息
+  4. 清理 `AuthServiceImpl` 残留 Redis import；`GenHash.java` 归位

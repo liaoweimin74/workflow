@@ -15,79 +15,226 @@
       </svg>
     </div>
 
-    <!-- 概览卡片（数据占位） -->
+    <!-- 概览卡片（真实统计数据） -->
     <div class="grid grid-cols-4 gap-4 mb-4">
-      <div class="bg-white dark:bg-[#1b2040] rounded-xl border border-[#e9edfa] dark:border-[#2a3054] p-5 shadow-[0_1px_3px_rgba(87,85,238,0.06)] dark:shadow-none">
-        <div class="w-10 h-10 rounded-lg bg-[#e9eaff] text-[#5755ee] dark:bg-[#2a3054] dark:text-[#7c7ff0] flex items-center justify-center mb-3">
-          <el-icon :size="18"><Tickets /></el-icon>
+      <div
+        v-for="card in kpiCards"
+        :key="card.label"
+        class="bg-white dark:bg-[#1b2040] rounded-xl border border-[#e9edfa] dark:border-[#2a3054] p-5 shadow-[0_1px_3px_rgba(87,85,238,0.06)] dark:shadow-none transition-shadow hover:shadow-[0_4px_12px_rgba(87,85,238,0.12)] cursor-default"
+      >
+        <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3" :class="card.iconBoxClass">
+          <el-icon :size="18"><component :is="card.icon" /></el-icon>
         </div>
-        <div class="text-xs text-gray-400 dark:text-gray-500 mb-2">今日待作业</div>
-        <div class="text-2xl font-bold text-gray-800 dark:text-gray-100">--</div>
-      </div>
-      <div class="bg-white dark:bg-[#1b2040] rounded-xl border border-[#e9edfa] dark:border-[#2a3054] p-5 shadow-[0_1px_3px_rgba(87,85,238,0.06)] dark:shadow-none">
-        <div class="w-10 h-10 rounded-lg bg-[#c6edf4] text-accent-600 dark:bg-[#2a3054] dark:text-[#5ee7e8] flex items-center justify-center mb-3">
-          <el-icon :size="18"><CircleCheck /></el-icon>
+        <div class="text-xs text-gray-400 dark:text-gray-500 mb-2">{{ card.label }}</div>
+        <div v-if="loading" class="h-8 w-12 rounded bg-gray-100 dark:bg-[#2a3054] animate-pulse" />
+        <div v-else class="text-2xl font-bold tabular-nums" :class="card.valueClass">
+          {{ formatCount(card.value) }}
         </div>
-        <div class="text-xs text-gray-400 dark:text-gray-500 mb-2">已完成</div>
-        <div class="text-2xl font-bold text-gray-800 dark:text-gray-100">--</div>
-      </div>
-      <div class="bg-white dark:bg-[#1b2040] rounded-xl border border-[#e9edfa] dark:border-[#2a3054] p-5 shadow-[0_1px_3px_rgba(87,85,238,0.06)] dark:shadow-none">
-        <div class="w-10 h-10 rounded-lg bg-safety-50 text-safety-500 dark:bg-[#2a3054] dark:text-safety-500 flex items-center justify-center mb-3">
-          <el-icon :size="18"><Warning /></el-icon>
-        </div>
-        <div class="text-xs text-gray-400 dark:text-gray-500 mb-2">高风险提醒</div>
-        <div class="text-2xl font-bold text-safety-500">--</div>
-      </div>
-      <div class="bg-white dark:bg-[#1b2040] rounded-xl border border-[#e9edfa] dark:border-[#2a3054] p-5 shadow-[0_1px_3px_rgba(87,85,238,0.06)] dark:shadow-none">
-        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-[#5755ee] to-[#46c9d6] text-white flex items-center justify-center mb-3">
-          <el-icon :size="18"><Monitor /></el-icon>
-        </div>
-        <div class="text-xs text-gray-400 dark:text-gray-500 mb-2">设备总数</div>
-        <div class="text-2xl font-bold text-gray-800 dark:text-gray-100">--</div>
       </div>
     </div>
 
-    <!-- 装饰图表区（内联 SVG，无第三方库） -->
+    <!-- 图表区（数据驱动 SVG，无第三方库） -->
     <div class="grid grid-cols-3 gap-4">
-      <!-- 柱状趋势 -->
+      <!-- 近 7 日发起流程趋势 -->
       <div class="col-span-2 bg-white dark:bg-[#1b2040] rounded-xl border border-[#e9edfa] dark:border-[#2a3054] p-5 shadow-[0_1px_3px_rgba(87,85,238,0.06)] dark:shadow-none">
-        <div class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">作业趋势</div>
-        <svg class="w-full h-28" viewBox="0 0 300 120" preserveAspectRatio="none" aria-hidden="true">
-          <defs>
-            <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#48e0dd" />
-              <stop offset="100%" stop-color="#46c9d6" />
-            </linearGradient>
-          </defs>
-          <rect x="15" y="78" width="18" height="42" rx="4" fill="url(#trendGrad)" opacity="0.55" />
-          <rect x="43" y="52" width="18" height="68" rx="4" fill="url(#trendGrad)" opacity="0.7" />
-          <rect x="71" y="64" width="18" height="56" rx="4" fill="url(#trendGrad)" opacity="0.6" />
-          <rect x="99" y="38" width="18" height="82" rx="4" fill="url(#trendGrad)" opacity="0.85" />
-          <rect x="127" y="56" width="18" height="64" rx="4" fill="url(#trendGrad)" opacity="0.65" />
-          <rect x="155" y="28" width="18" height="92" rx="4" fill="url(#trendGrad)" />
-          <rect x="183" y="46" width="18" height="74" rx="4" fill="url(#trendGrad)" opacity="0.75" />
-          <rect x="211" y="34" width="18" height="86" rx="4" fill="url(#trendGrad)" opacity="0.9" />
-          <rect x="239" y="62" width="18" height="58" rx="4" fill="url(#trendGrad)" opacity="0.6" />
-          <rect x="267" y="44" width="18" height="76" rx="4" fill="url(#trendGrad)" opacity="0.8" />
-        </svg>
-      </div>
-      <!-- 环形占比 -->
-      <div class="bg-white dark:bg-[#1b2040] rounded-xl border border-[#e9edfa] dark:border-[#2a3054] p-5 shadow-[0_1px_3px_rgba(87,85,238,0.06)] dark:shadow-none">
-        <div class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">作业类型占比</div>
-        <div class="flex items-center justify-center py-2">
-          <svg class="w-32 h-32" viewBox="0 0 120 120" aria-hidden="true">
-            <circle cx="60" cy="60" r="46" fill="none" stroke="#eef1fc" stroke-width="14" class="dark:stroke-[#2a3054]" />
-            <circle cx="60" cy="60" r="46" fill="none" stroke="#46c9d6" stroke-width="14" stroke-linecap="round" stroke-dasharray="206 283" transform="rotate(-90 60 60)" />
-            <circle cx="60" cy="60" r="46" fill="none" stroke="#5755ee" stroke-width="14" stroke-linecap="round" stroke-dasharray="48 283" stroke-dashoffset="-206" transform="rotate(-90 60 60)" opacity="0.85" />
-          </svg>
+        <div class="flex items-center justify-between mb-4">
+          <div class="text-sm font-medium text-gray-600 dark:text-gray-300">近 7 日发起流程趋势</div>
+          <div v-if="!loading" class="text-xs text-gray-400">合计 {{ trendTotal }} 次</div>
         </div>
+        <div v-if="loading" class="h-28 rounded bg-gray-50 dark:bg-[#222750] animate-pulse" />
+        <template v-else>
+          <div class="relative">
+            <svg class="w-full h-28" viewBox="0 0 300 120" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#48e0dd" />
+                  <stop offset="100%" stop-color="#46c9d6" />
+                </linearGradient>
+              </defs>
+              <rect
+                v-for="(bar, i) in trendBars"
+                :key="i"
+                :x="bar.x"
+                :y="bar.y"
+                :width="bar.width"
+                :height="bar.height"
+                rx="4"
+                :fill="bar.max ? 'url(#trendGrad)' : 'url(#trendGrad)'"
+                :opacity="bar.opacity"
+                class="transition-all duration-500"
+              >
+                <title>{{ trend[i]?.date }}：{{ trend[i]?.count }} 次</title>
+              </rect>
+            </svg>
+            <!-- 空态 -->
+            <div
+              v-if="trendTotal === 0"
+              class="absolute inset-0 flex items-center justify-center text-xs text-gray-400 dark:text-gray-500"
+            >
+              近 7 日暂无流程发起记录
+            </div>
+          </div>
+          <!-- 横轴日期（与柱子同栅格对齐） -->
+          <div class="grid grid-cols-7 mt-2">
+            <span
+              v-for="point in trend"
+              :key="point.date"
+              class="text-[10px] text-gray-400 dark:text-gray-500 text-center"
+            >{{ point.date }}</span>
+          </div>
+        </template>
+      </div>
+
+      <!-- 流程状态占比 -->
+      <div class="bg-white dark:bg-[#1b2040] rounded-xl border border-[#e9edfa] dark:border-[#2a3054] p-5 shadow-[0_1px_3px_rgba(87,85,238,0.06)] dark:shadow-none">
+        <div class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">流程状态占比</div>
+        <div v-if="loading" class="flex items-center justify-center py-2">
+          <div class="w-32 h-32 rounded-full bg-gray-50 dark:bg-[#222750] animate-pulse" />
+        </div>
+        <template v-else>
+          <div class="flex items-center justify-center py-2 relative">
+            <svg class="w-32 h-32" viewBox="0 0 120 120" aria-hidden="true">
+              <circle cx="60" cy="60" r="46" fill="none" stroke="#eef1fc" stroke-width="14" class="dark:stroke-[#2a3054]" />
+              <!-- 已完成段（青色） -->
+              <circle
+                v-if="shareFinished > 0"
+                cx="60" cy="60" r="46" fill="none"
+                stroke="#46c9d6" stroke-width="14" stroke-linecap="round"
+                :stroke-dasharray="`${finishedArc} ${donutCircumference - finishedArc}`"
+                transform="rotate(-90 60 60)"
+                class="transition-all duration-500"
+              />
+              <!-- 进行中段（主题色） -->
+              <circle
+                v-if="shareRunning > 0"
+                cx="60" cy="60" r="46" fill="none"
+                stroke="#5755ee" stroke-width="14" stroke-linecap="round"
+                :stroke-dasharray="`${runningArc} ${donutCircumference - runningArc}`"
+                :stroke-dashoffset="`-${finishedArc}`"
+                transform="rotate(-90 60 60)"
+                opacity="0.85"
+                class="transition-all duration-500"
+              />
+            </svg>
+            <!-- 中心总数 -->
+            <div v-if="shareTotal > 0" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <div class="text-xl font-bold text-gray-700 dark:text-gray-200 tabular-nums">{{ shareTotal }}</div>
+              <div class="text-[10px] text-gray-400">流程实例</div>
+            </div>
+            <div v-else class="absolute inset-0 flex items-center justify-center text-xs text-gray-400 pointer-events-none">
+              暂无数据
+            </div>
+          </div>
+          <!-- 图例 -->
+          <div class="flex items-center justify-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#5755ee]" /> 进行中 {{ shareRunning }}
+            </span>
+            <span class="inline-flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-[#46c9d6]" /> 已完成 {{ shareFinished }}
+            </span>
+          </div>
+        </template>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Tickets, CircleCheck, Warning, Monitor } from '@element-plus/icons-vue'
+import { computed, onMounted, ref } from 'vue'
+import { Tickets, CircleCheck, Timer, FolderOpened } from '@element-plus/icons-vue'
+import { fetchDashboardStats, type DashboardStats } from '@/api/dashboard'
+import { useAuthStore } from '@/stores/auth'
 
 defineOptions({ name: 'Dashboard' })
+
+const authStore = useAuthStore()
+
+const loading = ref(true)
+const stats = ref<DashboardStats | null>(null)
+
+/** KPI 卡片定义（视觉沿用原有配色语言） */
+const kpiCards = computed(() => [
+  {
+    label: '我的待办任务',
+    value: stats.value?.todoCount ?? 0,
+    icon: Tickets,
+    iconBoxClass: 'bg-[#e9eaff] text-[#5755ee] dark:bg-[#2a3054] dark:text-[#7c7ff0]',
+    valueClass: 'text-gray-800 dark:text-gray-100'
+  },
+  {
+    label: '我的已办任务',
+    value: stats.value?.doneCount ?? 0,
+    icon: CircleCheck,
+    iconBoxClass: 'bg-[#c6edf4] text-accent-600 dark:bg-[#2a3054] dark:text-[#5ee7e8]',
+    valueClass: 'text-gray-800 dark:text-gray-100'
+  },
+  {
+    label: '进行中流程',
+    value: stats.value?.runningCount ?? 0,
+    icon: Timer,
+    iconBoxClass: 'bg-safety-50 text-safety-500 dark:bg-[#2a3054] dark:text-safety-500',
+    valueClass: 'text-safety-500'
+  },
+  {
+    label: '已部署流程定义',
+    value: stats.value?.definitionCount ?? 0,
+    icon: FolderOpened,
+    iconBoxClass: 'bg-gradient-to-br from-[#5755ee] to-[#46c9d6] text-white',
+    valueClass: 'text-gray-800 dark:text-gray-100'
+  }
+])
+
+const trend = computed(() => stats.value?.trend ?? [])
+const trendTotal = computed(() => trend.value.reduce((sum, p) => sum + (p.count || 0), 0))
+
+/** 柱状图几何计算：300×120 视窗，7 根柱均分宽度，柱子居中于每份（与下方日期栅格对齐） */
+const trendBars = computed(() => {
+  const points = trend.value
+  if (!points.length) return []
+  const max = Math.max(...points.map((p) => p.count), 1)
+  const slot = 300 / points.length
+  const barWidth = 18
+  return points.map((p, i) => {
+    const x = i * slot + (slot - barWidth) / 2
+    const maxHeight = 92
+    const height = p.count > 0 ? Math.max((p.count / max) * maxHeight, 10) : 4
+    const y = 120 - height
+    const isMax = p.count > 0 && p.count === max
+    return { x, y, width: barWidth, height, opacity: p.count === 0 ? 0.25 : isMax ? 1 : 0.55 + 0.3 * (p.count / max) }
+  })
+})
+
+const shareRunning = computed(() => stats.value?.statusShare?.running ?? 0)
+const shareFinished = computed(() => stats.value?.statusShare?.finished ?? 0)
+const shareTotal = computed(() => shareRunning.value + shareFinished.value)
+
+/** 环形图：r=46 周长 ≈ 289.03 */
+const donutCircumference = 2 * Math.PI * 46
+const finishedArc = computed(() =>
+  shareTotal.value === 0 ? 0 : (shareFinished.value / shareTotal.value) * donutCircumference
+)
+const runningArc = computed(() =>
+  shareTotal.value === 0 ? 0 : (shareRunning.value / shareTotal.value) * donutCircumference
+)
+
+function formatCount(n?: number): string {
+  return n == null ? '--' : String(n)
+}
+
+async function loadStats() {
+  loading.value = true
+  try {
+    const res = await fetchDashboardStats(authStore.user?.id)
+    if (res.code === 200) {
+      stats.value = res.data
+    }
+  } catch {
+    // 统计加载失败时保持占位显示，不阻塞首页
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadStats)
 </script>

@@ -71,3 +71,43 @@ Stage Summary:
   2. 系统管理其余页面（角色/菜单/组织机构/字典）QA
   3. 消息中心（通知/SSE 推送）实测：发起流程给他人审批，验证站内消息
   4. 清理 `AuthServiceImpl` 残留 Redis import；`GenHash.java` 归位
+
+---
+Task ID: 4
+Agent: 主控 (Z.ai Code) — 定时巡检轮次 2026-09-10 14:35~15:10 (Asia/Shanghai)
+Task: 浏览器全站 QA + 修复 3000 入口白屏 + 工作流→通知中心桥接实装
+
+Work Log:
+- **【严重 bug】3000 端口访问 /lowcode 全站白屏（用户预览面板实际入口！此前 QA 走 5173 直连未发现）**
+  - 现象：资源全部 200 但模块不执行，`import()` 报 `SyntaxError: Unexpected token '.'`，二分定位到 Vue SFC 样式模块 `*.vue?vue&type=style&index=0&lang.css`
+  - 根因：Next.js 服务器在 middleware 之前把 query 无值参数 `k` 重序列化为 `k=`（`?vue&type=...&lang.css` → `?vue=&type=...&lang.css=`），Vite 不再将其识别为样式模块（URL 不以 `.css` 结尾），返回原始 CSS 而非 JS 包装模块
+  - 排障期间用回显服务器证实：即使 middleware 里还原好 query，`NextResponse.rewrite` 执行层仍会再次改写 → middleware 层无解
+  - 修复：新增 `src/app/lowcode/[...path]/route.ts` 手动反代（restoreRawSearch 还原 query + 手动 fetch 源站流式透传），middleware 的 `/lowcode/*` 分支改为放行。修复后字节级 md5 与直连一致，浏览器全站渲染正常
+- **【bug】`v-permission` 指令从未注册**：`directives/permission.ts` 存在但 main.ts 未 `app.directive` → 全部按钮权限控制失效 + Vue 告警。已注册
+- **【bug】`el-option` value=undefined prop 告警**：Role/User 页 `{label:'全部', value:undefined}`；SearchTable.fetchList 改为剔除 ''/null/undefined 再下发（后端语义不变），选项值改 `''`
+- **【bug】ElTag type='' 无效告警 ×9 处**：FormList/Menu/DataSource×2/FormDesigner/ViewDesigner/PageDesigner/PageList 的 `|| ''` 回退与三元，统一改 `'info'`/`'primary'`
+- **【新功能】工作流 → 通知中心桥接（打通两个既有子系统）**
+  - 缺口：引擎无任何监听器推送业务消息（TASK_ASSIGNED/PROCESS_COMPLETED 无感知，催办仅 log），消息中心永远为空
+  - 后端新增 `notification/bridge/WorkflowNotifier`（模板优先→自由内容兜底、吞异常不阻断流程、租户上下文自恢复、HistoryService 用 ObjectProvider 延迟解析破循环依赖）+ `WorkflowNotificationListener`（TASK_ASSIGNED/PROCESS_COMPLETED）
+  - 接线：FlowableEngineConfig.setEventListeners 注册双监听器；TaskRemindController 催办成功后推送
+  - 种子：Flyway `V32__seed_workflow_notification.sql`（3 事件定义 + 3 站内信模板）；FlywayConfig 全局 `placeholderReplacement(false)`（模板正文 `${taskName}` 撞 Flyway 占位符语法）+ V32 加入 H2_REPLAY_VERSIONS
+  - H2 幂等坑：Hibernate 先建表无唯一键 → `INSERT IGNORE` 每次启动重复插入 → `findByTemplateCodeAndTenantId` 非唯一结果抛错。改 `INSERT...SELECT...FROM DUAL WHERE NOT EXISTS` + 一次性 H2 Shell 去重
+  - 发起人解析：startUserId 为 null（平台未调 Flowable Authentication API）→ 回退历史变量 `initiator`（ProcessInstanceController 发起时写入）
+  - **端到端验证全通过**：发起 → user2 收"您有新的待办任务：部门经理审批"✅；审批完成 → 发起人收"您的流程「请假审批」已办结"✅；催办 → user2 收"催办提醒：部门经理审批"✅；浏览器 test 用户登录：铃铛角标 4、消息中心 4 条未读（◉ 未读标记/分类"工作流"）✅
+- **【细节打磨】** 消息中心 WORKFLOW 类消息新增"去处理"按钮（仅工作流消息显示，点击直达待办处理页，已验证跳转）
+- **【清理】** AuthServiceImpl 移除残留 Redis/TimeUnit import；GenHash.java 归位至 `system/util` 并补 package 声明
+- 运维事件：期间 Next.js dev 进程崩溃一次（bun run dev 存活但 next-server 子进程死亡），已手动 `bun x next dev -p 3000` 拉起，监督器随之恢复；一次 jar 替换竞态导致的启动失败自动恢复
+
+Stage Summary:
+- **平台主链路完整度大幅提升**：工作流通知（待办/办结/催办）全自动推送 + 站内信 + SSE 铃铛实时角标，消息中心从"永远空"变为生产可用
+- **用户预览入口（3000）从白屏修复为完全可用**，这是本轮最关键的修复——此前所有经 3000 的访问都是坏的
+- 全站 QA：登录/首页/系统管理 4 页/流程 4 页/表单/页面/数据源/消息中心 6 子页/个人中心，控制台 0 error 0 warning
+- 未解决问题/风险：
+  - Next.js 对无值 query 参数的规范化是平台级行为，`route.ts` 反代仅覆盖 /lowcode/*；/api/* 走 middleware rewrite（后端对 `k` vs `k=` 语义等价，暂无影响），若未来后端出现 query 格式敏感接口需同样处理
+  - Next.js dev 进程本轮曾自行崩溃，原因未查明（疑 OOM），若复现需关注内存
+  - V32 在本沙箱 H2 已预置成功记录，本轮修复的 SQL 只影响全新库；当前库数据已通过 API/去重补齐
+- 建议下一阶段优先事项：
+  1. 表单设计器 → 表单绑定流程（FormPropertyTab）端到端演示：设计表单 → 发布 → 流程节点引用 → 发起时渲染表单
+  2. 页面设计器/数据源管理链路深度 QA（本轮仅浅测）
+  3. 消息中心详情抽屉增加流程上下文展示（businessKey/发起人），"去处理"精确跳转到具体 taskId
+  4. Dashboard 环比指标、流程定义使用排行（候选需求池）

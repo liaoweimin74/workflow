@@ -16,8 +16,32 @@ import { NextRequest, NextResponse } from "next/server";
 const BACKEND_ORIGIN = "http://localhost:8080";
 const FRONTEND_ORIGIN = "http://localhost:5173";
 
+/**
+ * 还原被 Next.js 服务器规范化前的原始 query。
+ *
+ * 背景：请求在到达 middleware 之前，Next.js 服务器已把无值参数
+ * "k" 重序列化成 "k="（实测：?vue&type=style&index=0&lang.css →
+ * ?vue=&type=style&index=0&lang.css=）。这会导致 Vite 不再把该 URL
+ * 识别为 Vue SFC 样式模块（不再以 .css 结尾），返回原始 CSS 而非
+ * JS 包装模块，浏览器按 JS 解析即报 "Unexpected token '.'"，
+ * 整个模块图加载失败，经 3000 入口访问时页面白屏。
+ *
+ * 这里做精确逆向：把所有空值参数的 "=" 去掉（"k=" → "k"）。
+ * 对常规消费者（Spring @RequestParam 等）"k" 与 "k=" 语义等价，均解析为空串，
+ * 故此还原无副作用。
+ */
+function restoreRawSearch(url: string): string {
+  const qIndex = url.indexOf("?");
+  if (qIndex < 0) return "";
+  const search = url.slice(qIndex + 1);
+  if (!search) return "";
+  const restored = search.replace(/(^|&)([^&=]+)=(&|$)/g, "$1$2$3");
+  return `?${restored}`;
+}
+
 export function middleware(req: NextRequest) {
-  const { pathname, search } = req.nextUrl;
+  const { pathname } = req.nextUrl;
+  const search = restoreRawSearch(req.url);
 
   // 门户自身控制面接口交由 Next.js 处理
   if (pathname.startsWith("/api/portal")) {
@@ -28,8 +52,16 @@ export function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL(`${pathname}${search}`, BACKEND_ORIGIN));
   }
 
-  if (pathname === "/lowcode" || pathname.startsWith("/lowcode/")) {
+  if (pathname === "/lowcode") {
+    // 无 query、无子路径，rewrite 无改写风险
     return NextResponse.rewrite(new URL(`${pathname}${search}`, FRONTEND_ORIGIN));
+  }
+
+  if (pathname.startsWith("/lowcode/")) {
+    // 交给本地路由处理器 src/app/lowcode/[...path]/route.ts 手动反代：
+    // NextResponse.rewrite 会在执行层再次改写 query（无值参数 k → k=），
+    // 无法通过 middleware 层修复，详见 route.ts 头部注释
+    return NextResponse.next();
   }
 
   return NextResponse.next();

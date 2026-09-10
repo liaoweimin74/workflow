@@ -13,12 +13,15 @@ import DataPicker from '@/views/form/components/DataPicker.vue'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import App from './App.vue'
 import router from './router'
+import { permission } from './directives/permission'
 import './style.css'
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
+// 按钮权限指令：v-permission="'sys:user:create'"（未注册会导致模板告警且权限控制失效）
+app.directive('permission', permission)
 // 注册 LookupPicker/DataPicker 为 form-create 全局组件（表单渲染 + 设计器拖拽预览双实例），
 // 使设计器和渲染器都能使用。必须用 FcDesigner.component：内部同时注册
 // designerForm（设计器画布 DragForm）与 formCreate（ViewForm/运行时渲染），

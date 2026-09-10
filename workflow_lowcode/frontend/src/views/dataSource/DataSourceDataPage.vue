@@ -89,7 +89,7 @@ function typeTagType(t: string): '' | 'primary' | 'success' | 'warning' | 'info'
   const map: Record<string, '' | 'primary' | 'success' | 'warning' | 'info'> = {
     FORM: 'primary', WORKFLOW: 'primary', SYSTEM: 'success', API: 'warning', SQL: 'info',
   }
-  return map[t] || ''
+  return map[t] || 'info'
 }
 function typeLabel(t: string): string {
   const map: Record<string, string> = { FORM: '业务表单', WORKFLOW: '工作流表单', SYSTEM: '系统结构', API: '第三方 API', SQL: 'SQL 查询' }
@@ -97,7 +97,7 @@ function typeLabel(t: string): string {
 }
 function statusTagType(s: string): '' | 'success' | 'warning' | 'info' {
   const map: Record<string, '' | 'success' | 'warning' | 'info'> = { DRAFT: 'warning', ENABLED: 'success', DISABLED: 'info' }
-  return map[s] || ''
+  return map[s] || 'info'
 }
 function statusLabel(s: string): string {
   const map: Record<string, string> = { DRAFT: '草稿', ENABLED: '已启用', DISABLED: '已禁用' }

@@ -3,6 +3,7 @@ package com.workflow.api.controller;
 import com.workflow.common.domain.R;
 import com.workflow.engine.task.TaskRemindService;
 import com.workflow.framework.security.domain.LoginUser;
+import com.workflow.notification.bridge.WorkflowNotifier;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
 import org.springframework.security.core.Authentication;
@@ -23,10 +24,14 @@ public class TaskRemindController {
 
     private final TaskRemindService taskRemindService;
     private final TaskService taskService;
+    private final WorkflowNotifier workflowNotifier;
 
-    public TaskRemindController(TaskRemindService taskRemindService, TaskService taskService) {
+    public TaskRemindController(TaskRemindService taskRemindService,
+                                TaskService taskService,
+                                WorkflowNotifier workflowNotifier) {
         this.taskRemindService = taskRemindService;
         this.taskService = taskService;
+        this.workflowNotifier = workflowNotifier;
     }
 
     /**
@@ -39,6 +44,7 @@ public class TaskRemindController {
     public R<Void> remind(@PathVariable String taskId) {
         String from = getRemindFrom();
         taskRemindService.remind(taskId, from);
+        notifyRemind(taskId, from);
         return R.ok();
     }
 
@@ -67,6 +73,7 @@ public class TaskRemindController {
             try {
                 taskRemindService.remind(task.getId(), from);
                 reminded++;
+                notifyRemind(task.getId(), from);
             } catch (IllegalStateException e) {
                 // 跳过频率限制或无 assignee 的任务
             }
@@ -83,5 +90,20 @@ public class TaskRemindController {
             return String.valueOf(loginUser.getUserId());
         }
         return null;
+    }
+
+    /**
+     * 催办成功后推送通知中心站内信（原催办服务仅记 log，本期补齐链路）。
+     * WorkflowNotifier 内部已吞异常，此处失败不影响催办结果。
+     */
+    private void notifyRemind(String taskId, String from) {
+        Task task = taskService.createTaskQuery().taskId(taskId).singleResult();
+        if (task == null) {
+            return;
+        }
+        String remindTo = task.getAssignee() != null && !task.getAssignee().isBlank()
+                ? task.getAssignee() : task.getOwner();
+        workflowNotifier.notifyTaskReminded(null, remindTo, from,
+                task.getName(), task.getProcessInstanceId());
     }
 }

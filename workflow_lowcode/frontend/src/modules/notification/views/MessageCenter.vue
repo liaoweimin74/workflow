@@ -26,7 +26,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SearchTable } from '@/components/business'
-import { Check, Reading, Message as MessageIcon, Delete, View } from '@element-plus/icons-vue'
+import { Check, Reading, Message as MessageIcon, Delete, View, Promotion } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, ToolbarButton } from '@/components/business/types'
 import { ElMessage } from 'element-plus'
 import MessageDetailDrawer from '../components/MessageDetailDrawer.vue'
@@ -122,6 +122,14 @@ const actionButtons: ActionButton[] = [
   {
     label: '查看', icon: View, size: 'small',
     onClick: openDetail,
+  },
+  {
+    label: '去处理', icon: Promotion, size: 'small',
+    // 仅工作流消息显示：一键直达待办处理页
+    show: (row: any) => row.category === 'WORKFLOW',
+    onClick: (row: any) => {
+      router.push({ name: 'ProcessTodo' })
+    },
   },
   {
     label: '切换已读状态', size: 'small',

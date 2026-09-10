@@ -17,7 +17,7 @@
           </el-tag>
         </template>
         <template #type="{ row }">
-          <el-tag :type="row.type === 'BUSINESS' ? 'primary' : ''" size="small">
+          <el-tag :type="row.type === 'BUSINESS' ? 'primary' : 'info'" size="small">
             {{ row.type === 'BUSINESS' ? '业务' : '工作流' }}
           </el-tag>
         </template>
@@ -282,7 +282,7 @@ function statusTagType(status: string): '' | 'success' | 'warning' | 'info' | 'd
     PUBLISHED: 'success',
     ARCHIVED: 'info',
   }
-  return map[status] || ''
+  return map[status] || 'info'
 }
 
 function statusLabel(status: string): string {

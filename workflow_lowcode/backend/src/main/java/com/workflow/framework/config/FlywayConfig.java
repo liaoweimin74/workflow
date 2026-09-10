@@ -45,7 +45,7 @@ public class FlywayConfig {
             List.of("8", "18", "19", "22", "23", "27", "28", "30");
 
     /** 含必需种子数据、需剥离过程式语法后在 H2 上重放的脚本 */
-    private static final List<String> H2_REPLAY_VERSIONS = List.of("29");
+    private static final List<String> H2_REPLAY_VERSIONS = List.of("29", "32");
 
     @Bean(initMethod = "migrate")
     @DependsOn("entityManagerFactory")
@@ -60,6 +60,9 @@ public class FlywayConfig {
                 .baselineOnMigrate(!h2)
                 .outOfOrder(true)
                 .validateOnMigrate(!h2)
+                // V32 种子模板正文含 ${taskName} 等 TemplateService 渲染占位符，
+                // 与 Flyway 默认占位符语法冲突，全局关闭（V2-V31 均未使用占位符）
+                .placeholderReplacement(false)
                 .load();
     }
 
@@ -182,6 +185,7 @@ public class FlywayConfig {
         }
         // jar 内无法列目录，退回已知描述
         if ("29".equals(version)) return "add_notification_event_definitions";
+        if ("32".equals(version)) return "seed_workflow_notification";
         return "";
     }
 

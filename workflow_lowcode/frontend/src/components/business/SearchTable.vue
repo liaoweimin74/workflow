@@ -490,7 +490,11 @@ onMounted(() => {
 async function fetchList() {
   loading.value = true
   try {
-    const params: Record<string, any> = { ...query }
+    const params: Record<string, any> = {}
+    // 剔除空值：''（"全部"选项）/null/undefined 不下发，后端语义与无参一致
+    Object.entries(query).forEach(([k, v]) => {
+      if (v !== '' && v !== undefined && v !== null) params[k] = v
+    })
     // 合并排序状态（服务器端排序；order 已归一化为 asc/desc）
     if (sortState.value) {
       params.sort = sortState.value.prop

@@ -747,7 +747,7 @@ function statusTagType(status: string): '' | 'success' | 'warning' | 'info' | 'd
     PUBLISHED: 'success',
     ARCHIVED: 'info',
   }
-  return map[status] || ''
+  return map[status] || 'info'
 }
 
 function statusLabel(status: string): string {

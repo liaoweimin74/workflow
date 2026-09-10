@@ -1605,7 +1605,7 @@ function typeTagType(type: string): '' | 'primary' | 'success' | 'warning' | 'in
     API: 'warning',
     SQL: 'info',
   }
-  return map[type] || ''
+  return map[type] || 'info'
 }
 
 function typeLabel(type: string): string {
@@ -1646,7 +1646,7 @@ function statusTagType(status: string): '' | 'success' | 'warning' | 'info' {
     ENABLED: 'success',
     DISABLED: 'info',
   }
-  return map[status] || ''
+  return map[status] || 'info'
 }
 
 function statusLabel(status: string): string {

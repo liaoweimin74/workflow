@@ -189,7 +189,7 @@ function findNode(tree: MenuTree[], id: number): MenuTree | null {
       <el-icon><component :is="row.icon || 'Menu'" /></el-icon>
     </template>
     <template #menuType="{ row }">
-      <el-tag :type="row.menuType === 0 ? '' : row.menuType === 1 ? 'success' : 'warning'" size="small">
+      <el-tag :type="row.menuType === 0 ? 'primary' : row.menuType === 1 ? 'success' : 'warning'" size="small">
         {{ menuTypeMap[row.menuType] }}
       </el-tag>
     </template>

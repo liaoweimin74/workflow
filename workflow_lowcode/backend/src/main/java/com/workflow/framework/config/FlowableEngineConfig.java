@@ -10,6 +10,8 @@ import com.workflow.engine.logic.parse.VariableResolver;
 import com.workflow.engine.logic.resolver.ProcessConfigResolver;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.process.repository.ProcessDraftRepository;
+import com.workflow.notification.bridge.WorkflowNotificationListener;
+import com.workflow.notification.bridge.WorkflowNotifier;
 import org.flowable.engine.RuntimeService;
 import org.flowable.spring.boot.ProcessEngineConfigurationConfigurer;
 import org.springframework.beans.factory.ObjectProvider;
@@ -41,16 +43,27 @@ public class FlowableEngineConfig {
      */
     @Bean
     @DependsOn("flyway")
-    public ProcessEngineConfigurationConfigurer processEngineConfigurer(BackendLogicEventListener listener) {
+    public ProcessEngineConfigurationConfigurer processEngineConfigurer(
+            BackendLogicEventListener backendLogicListener,
+            WorkflowNotificationListener workflowNotificationListener) {
         return configuration -> {
             configuration.setDatabaseType("mysql");
-            configuration.setEventListeners(java.util.List.of(listener));
+            configuration.setEventListeners(java.util.List.of(backendLogicListener, workflowNotificationListener));
         };
     }
 
     @Bean
     public BackendLogicEventListener backendLogicEventListener(BackendLogicExecutor executor) {
         return new BackendLogicEventListener(executor);
+    }
+
+    /**
+     * 工作流通知监听器：TASK_ASSIGNED / PROCESS_COMPLETED → 通知中心（站内信 + SSE）。
+     * 历史库延迟解析（ObjectProvider）打破引擎装配期循环依赖。
+     */
+    @Bean
+    public WorkflowNotificationListener workflowNotificationListener(WorkflowNotifier notifier) {
+        return new WorkflowNotificationListener(notifier);
     }
 
     @Bean

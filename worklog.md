@@ -238,3 +238,20 @@ Stage Summary:
   2. 发起页审批人选择 UI
   3. Dashboard 环比指标 + 流程定义使用排行
   4. 页面设计器/数据源管理深度 QA
+
+---
+Task ID: 8
+Agent: cron-restart
+Date: 2026-09-10 19:04:33 +0000
+Task: Restart next dev(3000) to activate on-disk A2/A3 changes; Vite(5173)/Java(8080) untouched.
+
+Work Log:
+- Stopped old next dev (PIDs 1055/1066 / port-holder); port 3000 released
+- Relaunched: cd /home/z/my-project && nohup env NODE_OPTIONS=--max-old-space-size=614 bun run dev >> dev.log 2>&1 &
+- Readiness: 3000 OPEN after restart; warmup request completed
+- Ports: 3000=OPEN 5173=OPEN 8080=OPEN
+- Verification: lowcode HTTP 200, login API HTTP 200
+
+Stage Summary:
+- next dev(3000) now runs with A2 (src/lib/service-supervisor.ts env field + memory params) and A3 (scripts/start-services.sh HTTP probe double-confirm + zombie cleanup restart) active
+- Cron job 374482 (nextdev restart self-termination) can terminate: later rounds see the Task 8 marker, guard-exit, and delete the job; scheduler should delete it directly if no cron tool is available in-session

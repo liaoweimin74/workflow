@@ -24,7 +24,8 @@ elif [ ! -f "$JAR" ]; then
   echo "[start-services] 跳过后端：jar 未构建 ($JAR)"
 else
   echo "[start-services] 启动 Java 后端..."
-  (cd "$BACKEND_DIR" && nohup java -jar "$JAR" --spring.profiles.active=sandbox >> "$LOG_DIR/backend.log" 2>&1 &)
+  # -Xmx448m：沙箱仅 4.1Gi 内存，限制 Java 堆防 OOM kill next-server（历史 bug：Turbopack+Java+Chrome 同挤 4G）
+  (cd "$BACKEND_DIR" && nohup java -Xmx448m -XX:MaxMetaspaceSize=192m -jar "$JAR" --spring.profiles.active=sandbox >> "$LOG_DIR/backend.log" 2>&1 &)
 fi
 
 # ---- Vite 前端 (5173) ----
@@ -32,7 +33,8 @@ if port_open 5173; then
   echo "[start-services] 前端已在运行 (5173)"
 else
   echo "[start-services] 启动 Vite 前端..."
-  (cd "$FRONTEND_DIR" && nohup bun run dev >> "$LOG_DIR/vite.log" 2>&1 &)
+  # NODE_OPTIONS 堆上限：防 Turbopack 无限增长导致系统 OOM（见 worklog 2026-09-10 OOM 分析）
+  (cd "$FRONTEND_DIR" && nohup env NODE_OPTIONS="--max-old-space-size=512" bun run dev >> "$LOG_DIR/vite.log" 2>&1 &)
 fi
 
 echo "[start-services] 完成"

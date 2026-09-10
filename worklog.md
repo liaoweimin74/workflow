@@ -140,3 +140,49 @@ Stage Summary:
   2. Dashboard 环比指标 + 流程定义使用排行（候选需求池）
   3. 铃铛下拉也接入精确跳转（复用 goToProcess 逻辑）
   4. v1 在途实例清理脚本/terminate（演示库卫生）
+
+---
+Task ID: 5b/5c
+Agent: 主控 (Z.ai Code) — 会话续接：JSON 双重编码修复验证 + 浏览器端到端 + OOM 治理
+Task: 重跑表单↔流程绑定链路端到端验证；浏览器验证发起页/待办页动态表单渲染
+
+Work Log:
+- **【5b 完成】JSON 双重编码修复的 API 级端到端验证（五条腿全过）**
+  1. FormDefinition 详情 schema：返回干净单层 JSON 字符串（无转义引号/双重编码），可正常 parse
+  2. NodeConfig.config_json → formDefId/fieldPermissions/formKey 解析：`GET /api/v1/deployed-processes/{id}` 返回 formDefId 正确、fieldPermissions 为干净 dict
+  3. FormData 草稿回环：POST/GET draft 往返，含引号/HTML 特殊字符完全无损，days 保持 int
+  4. 发起带 formDefId → FormData 快照创建，dataJson 读取干净（前端 ProcessStartPage 发起时传 formDefId，控制器 save 到 form_data）
+  5. mappedData 变量映射（form:initiator 源）值干净无编码问题
+- **【新 bug 发现并修复】单人审批节点依赖未设置的 `${manager}` 启动变量**
+  - 症状：发起后 submitTask 自动完成失败 `FlowableException: Unknown property ${manager}`（v2 实例卡死在发起节点，审批人永远收不到任务）
+  - 根因：`MultiInstanceBpmnRewriter` 已支持按节点配置 `approval.userIds` 在部署时把 assignee 改写为字面量，但 leave-form-flow/leave-bill 草稿的 managerApproval 节点配置缺少 approval 段，部署出的 BPMN 仍是 `${manager}` 表达式
+  - 修复：经设计器 API（PUT /design）给 managerApproval 补 `approval.userIds:["2"]`（test 用户）→ 重新部署为 **v3** → 部署 XML 中 assignee 已写死 `flowable:assignee="2"`；免启动变量发起成功，自动流转 ✅
+  - 注意：v2 的两个卡死实例（e2e-jsonfix-001/002）留在库中，属数据卫生问题可 terminate
+- **【重要运维问题确诊】next-server 反复静默死亡 = 系统 OOM（4.1Gi 沙箱）**
+  - dmesg 实锤：next-server（anon-rss ~1GB）被 oom-killer 反复击杀（pid 1745/31463），同批 chrome 也被杀；内存水位：Java 612MB + Vite 519MB + Turbopack ~1GB + Chrome QA 会话 > 4.1Gi
+  - 治理（三服务全加内存上限）：
+    - `scripts/start-services.sh`：java 加 `-Xmx448m -XX:MaxMetaspaceSize=192m`；Vite 加 `NODE_OPTIONS=--max-old-space-size=512`
+    - `package.json` dev 脚本：next dev 加 `NODE_OPTIONS=--max-old-space-size=614`
+  - **启动方式约定（重要）**：必须用 `(cd dir && nohup ... &)` 子壳分离模式启动（worklog 已验证可存活数小时）；`bun run dev` 的 `tee dev.log` 管道模式在会话清理时 tee 被杀 → next-server SIGPIPE 静默死亡；`setsid` 单独启动也活不过 ~90s
+  - 已知竞态：start-services.sh 的 port_open 探测与旧后端优雅关闭撞车（SSE 长连接拖住端口）→ 误判"已在运行"跳过启动；如遇 8080 未起需手动按新参数补启
+- 【杂项】test 用户密码重置为平台默认 123456（GlobalConstant.DEFAULT_PASSWORD，此前口令失传）；agent-browser 访问 3000 需 `--proxy-bypass "localhost,127.0.0.1"`（Chromium 代理设置）
+- **【5c 完成】浏览器端到端（agent-browser，console 0 error）**
+  - admin 登录 → 流程中心 → 请假审批（表单版）发起页：**动态表单 6 字段全部渲染**（请假事由/类型/起止日期/天数/备注）+ BPMN 流程图预览 4 节点
+  - 填单提交 → 跳转待办页高亮新实例 → 后端日志确认 submitTask 自动完成、test 收 TASK_ASSIGNED（to=2）
+  - test 登录 → 待办 → 任务处理页：**审批表单渲染发起人数据**，VIEW 权限字段正确 disabled（事由/类型/天数），备注可编辑，办理人=测试用户
+  - 审批通过 → `processFinished: true`，实例 ended=true，admin 收 PROCESS_FINISHED 办结通知（to=1）
+  - `agent-browser errors` 无页面错误；console 仅 vite debug + SSE 断线重连告警（预期行为）
+
+Stage Summary:
+- **表单↔流程绑定全链路（设计→发布→绑定→发起→审批）在 API 与浏览器两层全部验证通过**，JSON 列双重编码修复闭环
+- leave-form-flow v3 成为标准演示版本：免启动变量、审批人节点配置化、动态表单+权限回显完整
+- 内存治理三上限落地，next-server OOM 风险显著降低（需观察 24h 稳定性）
+- 未解决问题/风险：
+  - v2 卡死实例 2 个 + 历史 v1 实例 7 个未清理（演示库卫生，低优先）
+  - start-services.sh 端口探测竞态仍在（可改为 kill -0 探测进程而非端口，下轮可修）
+  - 沙箱 4.1Gi 内存是硬约束：避免同会话多开 Chrome；QA 时及时 close
+- 建议下一阶段优先事项：
+  1. 发起页为有"审批人变量"依赖的旧版流程提供变量预填/选择审批人 UI（或全部迁移到节点配置式审批人）
+  2. v1/v2 历史实例清理脚本（terminate + 数据卫生）
+  3. Dashboard 环比指标 + 流程定义使用排行（候选需求池）
+  4. 铃铛下拉接入精确跳转（复用 goToProcess）

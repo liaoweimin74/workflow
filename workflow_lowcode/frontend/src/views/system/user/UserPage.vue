@@ -1,0 +1,173 @@
+<script setup lang="ts">
+defineOptions({ name: 'UserManagement' })
+
+import { ref, computed, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Key } from '@element-plus/icons-vue'
+import { SearchTable } from '@/components/business'
+import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import type { Rule } from '@form-create/element-ui'
+import { getUserList, createUser, updateUser, deleteUser, updateUserStatus, resetUserPassword, getUserById } from '@/api/user'
+import { getOrgTree } from '@/api/org'
+import { getRoleList } from '@/api/role'
+import type { UserVO } from '@/types/user'
+import type { TreeNode } from '@/types/org'
+import type { RoleVO } from '@/types/role'
+
+// ---------- 下拉/树数据 ----------
+const orgTree = ref<TreeNode[]>([])
+const roleList = ref<RoleVO[]>([])
+
+// 角色列表保留首屏加载（角色列 ID→名称映射必需），已声明 cache:true 跨页面复用
+onMounted(async () => {
+  const roleRes = await getRoleList({ page: 1, size: 999 })
+  roleList.value = roleRes.data.rows
+})
+
+// ---------- 组织树延迟加载 ----------
+let _orgTreeLoaded = false
+async function ensureOrgTree() {
+  if (_orgTreeLoaded) return
+  _orgTreeLoaded = true
+  const res = await getOrgTree()
+  orgTree.value = res.data
+}
+
+// ---------- 搜索字段 ----------
+const searchFields = computed<SearchField[]>(() => [
+  { type: 'input', label: '用户名', prop: 'username', placeholder: '输入用户名' },
+  { type: 'input', label: '昵称', prop: 'nickname', placeholder: '输入昵称' },
+  {
+    type: 'tree-select',
+    label: '组织机构',
+    prop: 'orgId',
+    placeholder: '选择组织',
+    treeProps: {
+      data: orgTree.value,
+      props: { label: 'label', value: 'id', children: 'children' },
+    },
+    style: 'width: 200px',
+    onExpand: ensureOrgTree,
+  },
+  {
+    type: 'select',
+    label: '状态',
+    prop: 'status',
+    placeholder: '选择状态',
+    options: [
+      { label: '全部', value: undefined },
+      { label: '启用', value: 1 },
+      { label: '停用', value: 0 },
+    ],
+    style: 'width: 120px',
+  },
+])
+
+// ---------- 表格列 ----------
+const columns: TableColumn[] = [
+  { prop: 'username', label: '用户名', width: 120 },
+  { prop: 'nickname', label: '昵称', width: 120 },
+  { prop: 'email', label: '邮箱', minWidth: 160 },
+  { prop: 'phone', label: '手机号', width: 140 },
+  { prop: 'orgName', label: '组织机构', width: 140 },
+  {
+    label: '角色',
+    minWidth: 140,
+    slotName: 'roles',
+  },
+  {
+    label: '状态',
+    width: 80,
+    align: 'center',
+    slotName: 'status',
+  },
+  { prop: 'createdAt', label: '创建时间', width: 170 },
+]
+
+// ---------- 操作按钮（含回调） ----------
+const handleStatusChange = async (row: UserVO) => {
+  const newStatus = row.status === 1 ? 0 : 1
+  const label = newStatus === 0 ? '停用' : '启用'
+  try {
+    await ElMessageBox.confirm(`确定${label}用户「${row.nickname}」吗？`, '确认', { type: 'warning' })
+    await updateUserStatus(row.id, newStatus)
+    ElMessage.success(`${label}成功`)
+    searchTableRef.value?.fetchList()
+  } catch { /* cancelled */ }
+}
+
+const handleResetPassword = async (row: UserVO) => {
+  try {
+    await ElMessageBox.confirm(`确定重置用户「${row.nickname}」的密码吗？`, '确认重置密码', { type: 'warning' })
+    await resetUserPassword(row.id)
+    ElMessage.success('密码已重置为 123456')
+  } catch { /* cancelled */ }
+}
+
+const searchTableRef = ref()
+
+const actionButtons: ActionButton[] = [
+  {
+    label: '重置密码',
+    icon: Key,
+    size: 'small',
+    link: true,
+    confirm: '确定重置密码吗？',
+    onClick: handleResetPassword,
+  },
+]
+
+// ---------- fetchApi ----------
+async function fetchApi(params: any) {
+  const res = await getUserList(params)
+  return { rows: res.data.rows, total: res.data.total }
+}
+
+// ---------- 表单配置 ----------
+const formConfig = computed<FormConfig<UserVO>>(() => ({
+  rule: [
+    { type: 'input', field: 'username', title: '用户名', props: { placeholder: '请输入用户名' }, validate: [{ required: true, message: '请输入用户名', trigger: 'blur' }] } as Rule,
+    { type: 'input', field: 'nickname', title: '昵称', props: { placeholder: '请输入昵称' }, validate: [{ required: true, message: '请输入昵称', trigger: 'blur' }] } as Rule,
+    { type: 'input', field: 'email', title: '邮箱', props: { placeholder: '请输入邮箱' } } as Rule,
+    { type: 'input', field: 'phone', title: '手机号', props: { placeholder: '请输入手机号' } } as Rule,
+    {
+      type: 'treeSelect', field: 'orgId', title: '组织机构',
+      props: { placeholder: '选择组织', data: orgTree.value, props: { label: 'label', value: 'id', children: 'children' } },
+    } as Rule,
+    {
+      type: 'select', field: 'roleIds', title: '角色',
+      props: { multiple: true, placeholder: '选择角色' },
+      options: roleList.value.map((r) => ({ label: r.roleName, value: r.id })),
+    } as Rule,
+  ],
+  createApi: createUser,
+  updateApi: (id, data) => updateUser(id as number, data),
+  deleteApi: async (id) => { await deleteUser(id as number) },
+  getApi: (id) => getUserById(id as number).then((r) => r.data),
+  dialogTitle: { create: '新增用户', edit: '编辑用户' },
+  createPermission: 'system:user:create',
+  editPermission: 'system:user:update',
+  deletePermission: 'system:user:delete',
+  onFormOpen: ensureOrgTree,
+}))
+</script>
+
+<template>
+  <SearchTable
+    ref="searchTableRef"
+    :search-fields="searchFields"
+    :columns="columns"
+    :action-buttons="actionButtons"
+    :fetch-api="fetchApi"
+    :form-config="formConfig"
+  >
+    <!-- 角色列：ID → 名称映射 -->
+    <template #roles="{ row }">
+      {{ row.roleIds?.map((id: number) => roleList.find(r => r.id === id)?.roleName || id).join(' / ') }}
+    </template>
+    <!-- 状态列：用 Switch -->
+    <template #status="{ row }">
+      <el-switch :model-value="row.status === 1" @change="handleStatusChange(row)" />
+    </template>
+  </SearchTable>
+</template>

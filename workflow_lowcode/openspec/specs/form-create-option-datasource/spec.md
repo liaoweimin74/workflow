@@ -1,0 +1,101 @@
+# form-create-option-datasource Specification
+
+## Purpose
+TBD - created by archiving change form-create-datasource-binding. Update Purpose after archive.
+## Requirements
+### Requirement: 选项规则必须提供数据源配置类型
+
+项目自有的 form-create 选项规则扩展 SHALL 提供“数据源”配置类型，并在选择该类型后显示“配置数据源”入口；该扩展 MUST 不修改 form-create 依赖源码。
+
+#### Scenario: 设计器显示数据源类型
+- **WHEN** 用户打开选择器、级联选择器或穿梭框的选项数据配置
+- **THEN** 配置区域显示“数据源”类型，且用户选择后显示“配置数据源”按钮
+
+#### Scenario: 旧选项类型保持可用
+- **WHEN** 用户选择静态数据、文本录入、JSON 数据或远程数据
+- **THEN** 系统继续显示并使用对应的原有配置界面和数据路径
+
+### Requirement: 数据源配置必须提供两个页签
+
+数据源配置入口 SHALL 打开包含“数据源”和“字段配置”两个页签的弹窗；“数据源”页签 MUST 复用数据表格组件的数据源绑定与筛选能力，“字段配置”页签 MUST 使用下拉框配置显示字段、值字段、子节点字段和父节点字段。
+
+#### Scenario: 打开数据源配置弹窗
+- **WHEN** 用户在选项数据中选择“数据源”并点击“配置数据源”
+- **THEN** 系统打开配置弹窗，并显示“数据源”和“字段配置”两个页签
+
+#### Scenario: 配置字段映射
+- **WHEN** 用户进入“字段配置”页签
+- **THEN** 系统显示显示字段、值字段、子节点字段、父节点字段四个下拉配置项，且候选字段来自已选数据源的 metadata
+
+#### Scenario: 选择层级字段
+- **WHEN** 用户配置子节点字段或父节点字段中的任一项
+- **THEN** 另一项不能同时保存为有效值
+
+### Requirement: 数据源绑定配置必须可序列化
+
+数据源配置组件 SHALL 保存数据源类型、数据源标识、查询条件、label 字段和 value 字段；配置 MUST 写入可持久化的表单 schema，并能被设计器重新加载。
+
+#### Scenario: 保存并重新编辑绑定
+- **WHEN** 用户完成数据源配置并保存表单后重新打开设计器
+- **THEN** 原数据源类型、标识、查询条件和字段映射均恢复为已保存值
+
+#### Scenario: 字段映射不完整
+- **WHEN** 用户未配置普通选项必需的 label 或 value 字段
+- **THEN** 配置不能被视为有效绑定，并向用户显示可操作的校验提示
+
+### Requirement: 数据源配置必须复用现有绑定能力
+
+数据源配置 SHALL 复用 DataPicker/LookupPicker 的数据源选择、过滤和查询约定，且 MUST 支持 FORM、SYSTEM、API、WORKFLOW 四种现有数据源类型，不得另建一套不兼容的数据源协议。
+
+#### Scenario: 配置现有数据源
+- **WHEN** 用户打开“配置数据源”并选择任一受支持数据源类型
+- **THEN** 系统可选择对应数据源标识、配置查询条件并使用现有数据源 API 预览或查询
+
+### Requirement: 普通选项必须从绑定结果生成
+
+当规则存在有效数据源绑定时，运行时 SHALL 使用数据源查询结果而非旧的选项数据值，并按配置的字段映射生成 `{label, value}` 选项。
+
+#### Scenario: 普通选择器加载数据源
+- **WHEN** 表单渲染包含有效数据源绑定的选择器
+- **THEN** 系统查询数据源，并将每条记录映射为对应的 label/value 选项
+
+#### Scenario: 数据源返回空列表
+- **WHEN** 数据源查询成功但没有记录
+- **THEN** 组件显示空选项状态，不使用旧选项或伪造记录填充
+
+### Requirement: 树形选项必须支持层级映射
+
+级联选择器、树选择器和穿梭框等树形选项组件 SHALL 支持在普通 label/value 映射之外配置节点层级或 children 映射，并生成组件要求的树形结构。
+
+#### Scenario: 级联数据转换
+- **WHEN** 用户配置树节点 label/value 与 children 或父节点字段，并加载数据源
+- **THEN** 运行时生成可被级联选择器消费的嵌套选项结构
+
+#### Scenario: 层级配置缺失
+- **WHEN** 树形组件绑定缺少必要的层级字段映射
+- **THEN** 系统拒绝将结果作为有效树形选项，并显示配置错误
+
+### Requirement: 未绑定数据源时必须保持兼容
+
+当规则没有有效数据源绑定时，运行时 MUST 按原有 options 或 `effect.fetch` 配置加载数据，不得因为新增扩展改变已有表单的行为。
+
+#### Scenario: 已有静态配置渲染
+- **WHEN** 历史 schema 没有 datasource 节点且包含静态选项
+- **THEN** 组件按历史静态选项渲染
+
+#### Scenario: 已有远程配置渲染
+- **WHEN** 历史 schema 没有 datasource 节点且包含远程数据配置
+- **THEN** 组件继续按原有远程请求配置加载选项
+
+### Requirement: 运行时错误必须可见且不污染旧配置
+
+数据源查询失败 SHALL 按现有 DataPicker/LookupPicker 约定显示错误状态；失败或切换配置时 MUST 清理本次无效结果，不得把旧数据源结果覆盖到新的选项配置。
+
+#### Scenario: 查询失败
+- **WHEN** 绑定数据源请求失败
+- **THEN** 组件显示错误提示和空或明确的失败状态，且不静默伪造选项
+
+#### Scenario: 切换回静态数据
+- **WHEN** 用户从数据源类型切换回静态数据并保存
+- **THEN** 运行时不再请求该数据源，也不使用之前缓存的绑定结果
+

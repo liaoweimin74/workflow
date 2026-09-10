@@ -1,0 +1,217 @@
+<script setup lang="ts">
+defineOptions({ name: 'MessageTemplateList' })
+
+import { ref, computed, provide, onMounted } from 'vue'
+import { SearchTable } from '@/components/business'
+import { Switch } from '@element-plus/icons-vue'
+import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import type { Rule } from '@form-create/element-ui'
+import formCreate from '@form-create/element-ui'
+import { getTemplates, createTemplate, updateTemplate, toggleTemplate } from '../../api/admin'
+import TemplatePreview from '../../components/TemplatePreview.vue'
+import { ElMessage } from 'element-plus'
+import { getEventDefinitions } from '../../api/event'
+
+// 注册预览静态文本组件到 form-create（表单渲染用）
+formCreate.component('template-preview', TemplatePreview)
+
+/** 模板预览刷新信号：切换 tab 到预览页时 +1，通知 TemplatePreview 重新读取表单值 */
+const tabRefreshSignal = ref(0)
+provide('templatePreviewRefresh', tabRefreshSignal)
+
+const tableRef = ref()
+const eventOptions = ref<{ value: string; label: string }[]>([])
+
+onMounted(async () => {
+  const res = await getEventDefinitions({ page: 1, size: 200, enabled: true })
+  const data = res.data as any
+  eventOptions.value = (data?.rows || []).map((e: any) => ({
+    value: e.eventCode,
+    label: `${e.eventCode} - ${e.eventName}`,
+  }))
+})
+
+const searchFields = computed<SearchField[]>(() => [
+  { type: 'input', label: '模板名称', prop: 'name', placeholder: '输入模板名称' },
+  { type: 'input', label: '模板编码', prop: 'templateCode', placeholder: '输入模板编码' },
+  { type: 'select', label: '业务事件', prop: 'eventCode', placeholder: '全部事件', options: eventOptions.value },
+])
+
+const columns: TableColumn[] = [
+  { prop: 'templateCode', label: '模板编码', width: 180 },
+  { prop: 'eventCode', label: '业务事件', minWidth: 180 },
+  { prop: 'name', label: '模板名称', minWidth: 200 },
+  {
+    prop: 'channel', label: '渠道', width: 120,
+    render: (row: any) => channelLabel(row.channel),
+  },
+  {
+    prop: 'priority', label: '优先级', width: 100,
+    render: (row: any) => row.priority || '--',
+  },
+  {
+    prop: 'isSystem', label: '系统模板', width: 100,
+    render: (row: any) => (row.isSystem ? '是' : '否'),
+  },
+  {
+    prop: 'enabled', label: '状态', width: 100,
+    render: (row: any) => (row.enabled === false ? '已停用' : '启用'),
+  },
+]
+
+function channelLabel(channel: string) {
+  const map: Record<string, string> = {
+    IN_APP: '站内信', SMS: '短信', WECHAT_WORK: '企业微信',
+    WECHAT_MINIPROGRAM: '小程序', APP: 'APP',
+  }
+  return map[channel] || channel || '--'
+}
+
+async function fetchApi(params: any) {
+  const res = await getTemplates()
+  let list = (res.data as any[]) || []
+  if (params.name) list = list.filter((t: any) => t.name?.includes(params.name))
+  if (params.templateCode) list = list.filter((t: any) => t.templateCode?.includes(params.templateCode))
+  if (params.eventCode) list = list.filter((t: any) => t.eventCode === params.eventCode)
+  const total = list.length
+  const page = params.page || 1
+  const size = params.size || 10
+  return { rows: list.slice((page - 1) * size, page * size), total }
+}
+
+const channelOptions = [
+  { value: 'IN_APP', label: '站内信' },
+  { value: 'SMS', label: '短信' },
+  { value: 'WECHAT_WORK', label: '企业微信' },
+  { value: 'WECHAT_MINIPROGRAM', label: '小程序' },
+  { value: 'APP', label: 'APP' },
+]
+const priorityOptions = [
+  { value: 'NORMAL', label: '普通' },
+  { value: 'HIGH', label: '高' },
+  { value: 'URGENT', label: '紧急' },
+  { value: 'LOW', label: '低' },
+]
+const categoryOptions = [
+  { value: 'WORKFLOW', label: '流程' },
+  { value: 'TASK', label: '任务' },
+  { value: 'APPROVAL', label: '审批' },
+  { value: 'NOTIFICATION', label: '通知' },
+  { value: 'SYSTEM', label: '系统' },
+]
+const contentTypeOptions = [
+  { value: 'TEXT', label: '纯文本' },
+  { value: 'MARKDOWN', label: 'Markdown' },
+]
+
+/** 当前编辑的是否系统模板（系统模板仅文案可编辑，结构性字段锁定） */
+const editingIsSystem = ref(false)
+
+const formConfig = computed<FormConfig>(() => {
+  // 结构性字段：系统模板编辑时锁定
+  const locked = editingIsSystem.value
+  const structural = () => ({ disabled: locked })
+
+  return {
+    rule: [
+      {
+        type: 'elTabs',
+        props: { type: 'border-card' },
+        style: { width: '100%' },
+        // 切换 tab（切到"模板预览"时）触发预览刷新信号
+        on: {
+          'tab-change': () => {
+            tabRefreshSignal.value++
+          },
+        },
+        children: [
+          {
+            type: 'elTabPane',
+            props: { label: '模板配置' },
+            children: [
+              {
+                type: 'input', field: 'templateCode', title: '模板编码',
+                props: { ...structural(), placeholder: '系统模板编码不可修改' },
+                validate: [{ required: true, message: '请输入模板编码', trigger: 'blur' }],
+              },
+              {
+                type: 'input', field: 'name', title: '模板名称',
+                validate: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
+              },
+              {
+                type: 'input', field: 'title', title: '标题模板',
+                props: { placeholder: '支持变量：${变量名}' },
+              },
+              {
+                type: 'input', field: 'content', title: '内容模板',
+                props: { type: 'textarea', rows: 6, placeholder: '支持变量：${变量名}；内容类型为 Markdown 时支持 Markdown 语法' },
+              },
+              {
+                type: 'select', field: 'contentType', title: '内容类型', options: contentTypeOptions, value: 'TEXT',
+              },
+              {
+                type: 'select', field: 'channel', title: '渠道', options: channelOptions, value: 'IN_APP',
+                props: structural(),
+              },
+              {
+                type: 'select', field: 'eventCode', title: '业务事件', options: eventOptions,
+                props: structural(),
+              },
+              {
+                type: 'select', field: 'priority', title: '优先级', options: priorityOptions, value: 'NORMAL',
+                props: structural(),
+              },
+              {
+                type: 'select', field: 'category', title: '类别', options: categoryOptions, value: 'WORKFLOW',
+                props: structural(),
+              },
+              {
+                type: 'switch', field: 'isSystem', title: '系统模板', value: false,
+                // 仅编辑系统模板时显示（锁定）；新建/编辑普通模板隐藏，用户不能创建或切换为系统模板
+                hidden: !editingIsSystem.value,
+                props: { disabled: true },
+              },
+            ],
+          },
+          {
+            type: 'elTabPane',
+            props: { label: '模板预览' },
+            children: [
+              { type: 'template-preview', props: { source: 'title', label: '标题预览' } },
+              { type: 'template-preview', props: { source: 'content', label: '内容预览' } },
+            ],
+          },
+        ],
+      },
+    ] as Rule[],
+    createApi: (data: any) => createTemplate(data) as any,
+    updateApi: (id: number | string, data: any) => updateTemplate(id as number, data) as any,
+    beforeCreate: () => { editingIsSystem.value = false; return true },
+    beforeEdit: (row: any) => { editingIsSystem.value = !!row.isSystem; return true },
+    dialogTitle: { create: '新建模板', edit: '编辑模板' },
+    dialogWidth: '720px',
+  }
+})
+
+const actionButtons: ActionButton[] = [
+  {
+    label: '启用/停用', icon: Switch, size: 'small', link: true,
+    onClick: async (row: any) => {
+      await toggleTemplate(row.id)
+      ElMessage.success('操作成功')
+      tableRef.value?.fetchList()
+    },
+  },
+]
+</script>
+
+<template>
+  <SearchTable
+    ref="tableRef"
+    :search-fields="searchFields"
+    :columns="columns"
+    :action-buttons="actionButtons"
+    :fetch-api="fetchApi"
+    :form-config="formConfig"
+  />
+</template>

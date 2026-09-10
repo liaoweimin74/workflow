@@ -1,0 +1,31 @@
+# 沙箱环境专用配置：H2 数据库（MySQL 兼容模式）
+# 说明：沙箱无 MySQL/libaio，使用项目已内置的 H2 runtime 依赖
+# 注意：
+#  - MODE=MySQL 提供反引号 / INSERT IGNORE / INDEX 内联 / LONGTEXT 等 MySQL 方言兼容
+#  - 不要加 DATABASE_TO_LOWER：未加引号标识符会存成小写，破坏 Flowable 的
+#    DatabaseMetaData 大写表名存在性检查（ACT_GE_PROPERTY already exists）
+#  - CASE_INSENSITIVE_IDENTIFIERS=TRUE：让 Hibernate 的小写 default schema (public) 可命中 PUBLIC
+#  - NON_KEYWORDS=VALUE：SysDictData 实体的 value 列在 H2 中是保留字
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/workflow;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;NON_KEYWORDS=VALUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+flowable:
+  database-schema-update: true
+  async-executor-activate: false
+
+logging:
+  level:
+    com.workflow: DEBUG
+    org.flowable: INFO
+    org.springframework.modulith: WARN
+    org.flywaydb: INFO

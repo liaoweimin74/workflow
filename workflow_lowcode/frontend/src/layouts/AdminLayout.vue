@@ -1,0 +1,397 @@
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { ElMessage } from 'element-plus'
+import { Fold, Expand, HomeFilled, Sunny, Moon, Lock } from '@element-plus/icons-vue'
+import draggable from 'vuedraggable'
+import SubMenu from '@/components/SubMenu.vue'
+import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
+
+const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
+
+const collapsed = ref(false)
+const isDark = ref(false)
+
+function toggleDark() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+}
+/** 页签集合：path 唯一；name=路由 name（与组件 defineOptions name 一致，供 keep-alive include 匹配） */
+const tags = ref<{ path: string; title: string; locked?: boolean; name?: string }[]>([])
+
+/** keep-alive 缓存组件名集合（派生自 tags，关闭页签自动移除同名缓存；多页签共享同一组件时保留） */
+const cachedViews = computed(() =>
+  tags.value
+    .map(t => t.name)
+    .filter((n): n is string => !!n)
+    .filter((n, i, arr) => arr.indexOf(n) === i),
+)
+
+/** keep-alive 缓存实例上限：超出后 LRU 驱逐最久未访问实例 */
+const MAX_CACHED_VIEWS = 15
+
+const activeMenu = computed(() => route.path)
+
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
+}
+
+function addTag(to: { path: string; meta?: { title?: string }; name?: string }) {
+  // 优先使用菜单名称（菜单打开的路由标题=菜单名），回退路由 meta.title
+  const menuPath = findMenuPath(authStore.menus, to.path)
+  const title = (menuPath && menuPath.length > 0 ? menuPath[menuPath.length - 1].menuName : null)
+    || (to.meta?.title as string)
+    || to.path
+  if (!tags.value.find(t => t.path === to.path)) {
+    tags.value.push({ path: to.path, title, name: to.name as string | undefined })
+  }
+}
+
+/** 菜单重击当前页签：携带递增 query 强制导航，触发组件 watch route.query 重新加载（keep-alive 下组件不重挂载） */
+function handleMenuSelect(index: string) {
+  if (index === route.path) {
+    router.push({ path: index, query: { ...route.query, _t: Date.now() } })
+  }
+}
+
+function removeTag(path: string) {
+  const idx = tags.value.findIndex(t => t.path === path)
+  if (idx === -1) return
+  tags.value.splice(idx, 1)
+  if (route.path === path && tags.value.length > 0) {
+    router.push(tags.value[Math.min(idx, tags.value.length - 1)].path)
+  }
+}
+
+// ====== 页签右键菜单 ======
+const contextMenu = ref({ visible: false, x: 0, y: 0, targetPath: '' })
+
+function onTagContextMenu(event: MouseEvent, tag: { path: string }) {
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    targetPath: tag.path
+  }
+}
+
+function closeContextMenu() {
+  contextMenu.value.visible = false
+}
+
+function closeCurrent(path: string) {
+  const tag = tags.value.find(t => t.path === path)
+  if (!tag || tag.locked || path === '/dashboard') return
+  removeTag(path)
+  closeContextMenu()
+}
+
+function closeLeft(path: string) {
+  const idx = tags.value.findIndex(t => t.path === path)
+  if (idx <= 0) { closeContextMenu(); return }
+  tags.value = tags.value.filter((t, i) => i >= idx || t.locked || t.path === '/dashboard')
+  closeContextMenu()
+}
+
+function closeRight(path: string) {
+  const idx = tags.value.findIndex(t => t.path === path)
+  if (idx === -1) { closeContextMenu(); return }
+  tags.value = tags.value.filter((t, i) => i <= idx || t.locked || t.path === '/dashboard')
+  closeContextMenu()
+}
+
+function closeAll() {
+  tags.value = tags.value.filter(t => t.locked || t.path === '/dashboard')
+  if (!tags.value.find(t => t.path === route.path)) {
+    router.push('/dashboard')
+  }
+  closeContextMenu()
+}
+
+function toggleLock(path: string) {
+  const tag = tags.value.find(t => t.path === path)
+  if (tag) {
+    tag.locked = !tag.locked
+  }
+  closeContextMenu()
+}
+
+// 拖拽结束后确保首页在最左
+function onDragEnd() {
+  const dashIdx = tags.value.findIndex(t => t.path === '/dashboard')
+  if (dashIdx > 0) {
+    const [dash] = tags.value.splice(dashIdx, 1)
+    tags.value.unshift(dash)
+  }
+}
+
+watch(() => route.path, () => {
+  if (route.name) addTag(route)
+}, { immediate: true })
+
+async function handleLogout() {
+  await authStore.logout()
+  ElMessage.success('退出成功')
+  router.push('/login')
+}
+
+function visibleMenus(menuList: any[]): any[] {
+  return menuList
+    .filter((m: any) => m.menuType !== 2 && m.visible !== 0 && m.status !== 0)
+    .map((item: any) => ({ ...item, children: item.children ? visibleMenus(item.children) : [] }))
+    .filter((item: any) => item.menuType === 1 || item.children.length > 0)
+}
+
+// 过滤掉 /dashboard 避免重复（后端菜单可能包含首页）
+function filteredMenus(menuList: any[]) {
+  return visibleMenus(menuList).filter(m => m.path !== '/dashboard')
+}
+
+// 从菜单树递归查找路径，返回从根到目标的节点链
+// 优先匹配叶子菜单（menuType=1 有 component），避免父目录与子菜单 path 相同（如 /form）时误命中父级
+function findMenuPath(menus: any[], targetPath: string): any[] | null {
+  for (const m of menus) {
+    // 仅叶子菜单（非目录）参与 path 精确匹配
+    if ((m.menuType === undefined || m.menuType !== 0) && m.path === targetPath) {
+      return [m]
+    }
+    if (m.children && m.children.length > 0) {
+      const sub = findMenuPath(m.children, targetPath)
+      if (sub) return [m, ...sub]
+    }
+  }
+  return null
+}
+
+const breadcrumbs = computed(() => {
+  // 优先从菜单树匹配
+  const menuPath = findMenuPath(authStore.menus, route.path)
+  if (menuPath && menuPath.length > 0) {
+    return menuPath.map(m => ({ path: m.path, title: m.menuName }))
+  }
+  // 回退到 route.matched
+  const matched = route.matched.filter(r => r.meta?.title)
+  return matched.map(r => ({ path: r.path, title: r.meta?.title as string }))
+})
+
+onMounted(() => {
+  document.addEventListener('click', closeContextMenu)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeContextMenu)
+})
+</script>
+
+<template>
+  <div class="flex flex-col h-screen min-w-[1024px] max-w-[1920px] mx-auto bg-transparent dark:bg-transparent">
+    <!-- ====== 顶部标题栏（整行） ====== -->
+    <header class="h-14 flex items-center justify-between px-4 border-b border-[#e9edfa] bg-white dark:bg-[#161b36] dark:border-[#2a3054] shrink-0">
+      <!-- 左侧：折叠按钮 + Logo + 面包屑 -->
+      <div class="flex items-center gap-4">
+        <button
+          @click="toggleCollapsed"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] transition-colors shrink-0"
+        >
+          <el-icon :size="18"><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
+        </button>
+        <div class="flex items-center gap-2 shrink-0">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#5755ee] to-[#46c9d6] flex items-center justify-center shadow-sm">
+            <span class="text-white text-sm font-bold">MB</span>
+          </div>
+          <span class="text-base font-semibold text-gray-800 dark:text-gray-100">工作流管理系统</span>
+        </div>
+        <div class="w-px h-5 bg-gray-200" />
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item v-for="(b, i) in breadcrumbs" :key="b.path">
+            <span class="text-gray-500 text-sm flex items-center gap-1">
+              <el-icon v-if="i === 0" :size="14"><HomeFilled /></el-icon>
+              {{ b.title }}
+            </span>
+          </el-breadcrumb-item>
+        </el-breadcrumb>
+      </div>
+
+      <!-- 右侧：消息通知 + 暗色切换 + 用户区 -->
+      <div class="flex items-center gap-3">
+        <NotificationBell />
+        <button
+          @click="toggleDark"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] transition-colors"
+        >
+          <el-icon :size="18"><Sunny v-if="isDark" /><Moon v-else /></el-icon>
+        </button>
+        <el-dropdown trigger="click">
+        <div class="flex items-center gap-2 cursor-pointer select-none">
+          <el-avatar :size="28" icon="UserFilled" class="!bg-industrial-100 !text-industrial-600" />
+          <span class="text-sm text-gray-700 dark:text-gray-200">{{ authStore.user?.nickname || authStore.user?.username || '用户' }}</span>
+        </div>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item @click="router.push('/profile')">个人中心</el-dropdown-item>
+            <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+        </el-dropdown>
+      </div>
+    </header>
+
+    <!-- ====== 下方：菜单 + 内容 ====== -->
+    <div class="flex flex-1 min-h-0">
+      <!-- 左侧菜单 -->
+      <aside
+        :class="collapsed ? 'w-16' : 'w-56'"
+        class="flex flex-col bg-[#eef0fc] border-r border-[#e9edfa] dark:bg-[#161b36] dark:border-[#2a3054] transition-all duration-300 shrink-0"
+      >
+        <div class="flex-1 overflow-y-auto overflow-x-hidden py-2">
+          <el-menu
+            :collapse="collapsed"
+            :default-active="activeMenu"
+            router
+            background-color="transparent"
+            text-color="#4b5563"
+            active-text-color="#5755ee"
+            style="border-right: none"
+            @select="handleMenuSelect"
+          >
+            <!-- 首页（固定） -->
+            <el-menu-item index="/dashboard" :class="collapsed ? '!my-0.5 !rounded-lg' : '!my-0.5 !mx-2 !rounded-lg'">
+              <el-icon><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg></el-icon>
+              <template #title>
+                <span>首页</span>
+              </template>
+            </el-menu-item>
+            <!-- 动态菜单（已过滤首页） -->
+            <SubMenu :menuList="filteredMenus(authStore.menus)" />
+          </el-menu>
+        </div>
+
+      </aside>
+
+      <!-- 右侧内容区 -->
+      <div class="flex-1 flex flex-col min-w-0">
+        <!-- 页签栏 -->
+        <div class="h-10 flex items-center gap-0 px-3 border-b border-[#e9edfa] bg-[#eef0fc] dark:bg-[#161b36] dark:border-[#2a3054] overflow-x-auto shrink-0">
+          <draggable
+            v-model="tags"
+            item-key="path"
+            :animation="200"
+            :filter="'.no-drag'"
+            @end="onDragEnd"
+            class="flex items-center h-full"
+          >
+            <template #item="{ element: tag }">
+              <div
+                :class="[
+                  'h-full flex items-center gap-1.5 px-3 border-r border-[#e9edfa] dark:border-[#2a3054] cursor-pointer shrink-0 transition-colors text-sm select-none',
+                  tag.path === '/dashboard' ? 'no-drag' : '',
+                  route.path === tag.path
+                    ? 'bg-white dark:bg-[#1b2040] text-industrial-600 border-t-2 border-t-accent-500 -mt-px'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]'
+                ]"
+                @click="router.push(tag.path)"
+                @contextmenu.prevent="onTagContextMenu($event, tag)"
+              >
+                <span class="truncate max-w-[120px]">{{ tag.title }}</span>
+                <!-- 锁定状态：显示锁图标 -->
+                <el-icon v-if="tag.locked" :size="12" class="text-gray-400 shrink-0"><Lock /></el-icon>
+                <!-- 未锁定且非首页：显示关闭按钮 -->
+                <button
+                  v-else-if="tag.path !== '/dashboard'"
+                  @click.stop="removeTag(tag.path)"
+                  class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-[#e9edfa] dark:hover:bg-[#2a3054] shrink-0"
+                >
+                  <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+            </template>
+          </draggable>
+        </div>
+
+        <!-- 右键菜单 -->
+        <div
+          v-if="contextMenu.visible"
+          class="fixed z-50 min-w-[140px] bg-white dark:bg-[#222750] rounded-md shadow-lg border border-[#e9edfa] dark:border-[#2a3054] py-1 text-sm"
+          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+          @click.stop
+        >
+          <div
+            :class="[
+              'px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]',
+              (tags.find(t => t.path === contextMenu.targetPath)?.locked || contextMenu.targetPath === '/dashboard')
+                ? 'text-gray-300 cursor-not-allowed hover:bg-transparent'
+                : 'text-gray-700 dark:text-gray-200'
+            ]"
+            @click="closeCurrent(contextMenu.targetPath)"
+          >
+            关闭本页
+          </div>
+          <div
+            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            @click="closeLeft(contextMenu.targetPath)"
+          >
+            关闭左侧
+          </div>
+          <div
+            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            @click="closeRight(contextMenu.targetPath)"
+          >
+            关闭右侧
+          </div>
+          <div
+            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            @click="closeAll()"
+          >
+            关闭所有
+          </div>
+          <div
+            v-if="contextMenu.targetPath !== '/dashboard'"
+            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200 border-t border-[#e9edfa] dark:border-[#2a3054]"
+            @click="toggleLock(contextMenu.targetPath)"
+          >
+            {{ tags.find(t => t.path === contextMenu.targetPath)?.locked ? '解锁本页' : '锁定本页' }}
+          </div>
+        </div>
+
+        <!-- 主内容（keep-alive 缓存页签组件实例：切换页签保留状态；max 限制内存，LRU 驱逐） -->
+        <main class="flex-1 overflow-auto p-4 bg-transparent dark:bg-transparent">
+          <router-view v-slot="{ Component }">
+            <keep-alive :include="cachedViews" :max="MAX_CACHED_VIEWS">
+              <component :is="Component" :key="route.path" />
+            </keep-alive>
+          </router-view>
+        </main>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+/* 折叠态下覆盖 SubMenu.vue 硬编码的 paddingLeft，使图标居中 */
+:deep(.el-menu--collapse .el-menu-item) {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin: 0 auto !important;
+  width: 100% !important;
+  justify-content: center !important;
+}
+:deep(.el-menu--collapse .el-sub-menu__title) {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin: 0 auto !important;
+  width: 100% !important;
+  justify-content: center !important;
+}
+/* 折叠态下图标容器居中 */
+:deep(.el-menu--collapse .el-menu-item .el-icon) {
+  margin-right: 0 !important;
+}
+:deep(.el-menu--collapse .el-sub-menu__title .el-icon) {
+  margin-right: 0 !important;
+}
+</style>

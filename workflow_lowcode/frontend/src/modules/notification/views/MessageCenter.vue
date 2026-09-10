@@ -1,0 +1,258 @@
+<template>
+  <div class="message-center-page">
+    <SearchTable
+      ref="tableRef"
+      :search-fields="searchFields"
+      :columns="columns"
+      :action-buttons="actionButtons"
+      :toolbar-buttons="toolbarButtons"
+      :fetch-api="fetchApi"
+      :show-selection="true"
+      :default-page-size="10"
+      @selection-change="handleSelectionChange"
+      @row-click="handleRowClick"
+    />
+
+    <MessageDetailDrawer
+      v-model="detailVisible"
+      :message-id="detailId"
+      @read="handleDrawerRead"
+    />
+
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { SearchTable } from '@/components/business'
+import { Check, Reading, Message as MessageIcon, Delete, View } from '@element-plus/icons-vue'
+import type { SearchField, TableColumn, ActionButton, ToolbarButton } from '@/components/business/types'
+import { ElMessage } from 'element-plus'
+import MessageDetailDrawer from '../components/MessageDetailDrawer.vue'
+import { getNotifications, markBatchAsRead, markAllAsRead, toggleRead, deleteNotification } from '../api/notification'
+import { useNotificationStore } from '../stores/notification'
+import type { Message, MessageCategory } from '../types'
+
+const tableRef = ref<InstanceType<typeof SearchTable>>()
+const store = useNotificationStore()
+const router = useRouter()
+
+/** 当前勾选的行（批量已读用） */
+const selectedRows = ref<Message[]>([])
+
+/** 消息详情抽屉 */
+const detailVisible = ref(false)
+const detailId = ref<number | null>(null)
+/** 正在抽屉中查看的行（read 事件时更新其状态） */
+const detailRow = ref<Message | null>(null)
+
+
+// ========== 查询栏 ==========
+const searchFields: SearchField[] = [
+  { type: 'input', label: '标题', prop: 'keyword', placeholder: '按标题搜索', style: 'width: 200px' },
+  {
+    type: 'select', label: '分类', prop: 'category', placeholder: '全部分类', style: 'width: 140px',
+    options: [
+      { label: '工作流', value: 'WORKFLOW' },
+      { label: '系统', value: 'SYSTEM' },
+      { label: '通知', value: 'NOTIFICATION' },
+      { label: '任务', value: 'TASK' },
+      { label: '审批', value: 'APPROVAL' },
+    ],
+  },
+  {
+    type: 'select', label: '类型', prop: 'messageType', placeholder: '全部类型', style: 'width: 130px',
+    options: [
+      { label: '公开', value: 'PUBLIC' },
+      { label: '私人', value: 'PRIVATE' },
+      { label: '系统', value: 'SYSTEM' },
+    ],
+  },
+  {
+    type: 'select', label: '状态', prop: 'unread', placeholder: '全部', style: 'width: 120px',
+    // 默认搜索条件：未读
+    defaultValue: true,
+    options: [
+      { label: '未读', value: true },
+      { label: '已读', value: false },
+    ],
+  },
+  { type: 'date-range', label: '时间', prop: 'timeRange', time: true, style: 'width: 360px' },
+]
+
+// ========== 列 ==========
+const columns: TableColumn[] = [
+  {
+    prop: 'title', label: '标题', minWidth: 220,
+    render: (row: any) => (row.readStatus === 'PENDING' ? `◉ ${row.title || '--'}` : row.title || '--'),
+  },
+  {
+    prop: 'status', label: '状态', width: 90, align: 'center',
+    render: (row: any) => (row.readStatus === 'PENDING' ? '未读' : '已读'),
+  },
+  {
+    prop: 'category', label: '分类', width: 110, align: 'center',
+    render: (row: any) => categoryLabel(row.category),
+  },
+  {
+    prop: 'messageType', label: '类型', width: 90, align: 'center',
+    render: (row: any) => messageTypeLabel(row.messageType),
+  },
+  {
+    prop: 'createdAt', label: '时间', width: 170,
+    render: (row: any) => formatDateTime(row.createdAt),
+  },
+]
+
+// ========== 工具栏按钮（带图标普通按钮） ==========
+const toolbarButtons: ToolbarButton[] = [
+  {
+    label: '批量已读', icon: Check, type: 'primary',
+    onClick: handleBatchRead,
+  },
+  {
+    label: '全部已读', icon: Reading, type: 'success',
+    onClick: handleReadAll,
+  },
+]
+
+// ========== 操作列（全部图标按钮） ==========
+const actionButtons: ActionButton[] = [
+  {
+    label: '查看', icon: View, size: 'small',
+    onClick: openDetail,
+  },
+  {
+    label: '切换已读状态', size: 'small',
+    // 图标随已读状态切换：未读→Check（标记已读），已读→Message（标记未读）
+    icon: (row: any) => (row.readStatus === 'PENDING' ? Check : MessageIcon),
+    onClick: async (row: any) => {
+      const res = await toggleRead(row.id)
+      row.readStatus = (res.data as any) || (row.readStatus === 'PENDING' ? 'SENT' : 'PENDING')
+      ElMessage.success(row.readStatus === 'PENDING' ? '已标记为未读' : '已标记为已读')
+      refreshUnread()
+      tableRef.value?.fetchList()
+    },
+  },
+  {
+    label: '删除', icon: Delete, type: 'danger', size: 'small',
+    confirm: '确定删除该消息吗？',
+    onClick: async (row: any) => {
+      await deleteNotification(row.id)
+      ElMessage.success('删除成功')
+      refreshUnread()
+      tableRef.value?.fetchList()
+    },
+  },
+]
+
+// ========== 数据获取 ==========
+async function fetchApi(params: any) {
+  const [start, end] = params.timeRange || []
+  const res = await getNotifications({
+      page: params.page || 1,
+    size: params.size || 10,
+    keyword: params.keyword || undefined,
+    category: params.category || undefined,
+    messageType: params.messageType || undefined,
+    unread: params.unread ?? undefined,
+    start: start || undefined,
+    end: end || undefined,
+  })
+  const data = res.data as any
+  return {
+    rows: data.rows || [],
+    total: data.total || 0,
+  }
+}
+
+// ========== 交互 ==========
+function handleSelectionChange(selection: any[]) {
+  selectedRows.value = selection
+}
+
+/** 点击行：仅处理跳转链接，不再改变已读状态 */
+function handleRowClick(row: Message) {
+  if (row.linkJson) {
+    const link = row.linkJson as { type?: string; url?: string }
+    if (link.url) {
+      if (link.type === 'EXTERNAL') {
+        window.open(link.url, '_blank')
+      } else {
+        router.push(link.url)
+      }
+    }
+  }
+}
+
+/** 打开详情抽屉（加载与标记已读由 MessageDetailDrawer 内部处理） */
+function openDetail(row: Message) {
+  detailRow.value = row
+  detailId.value = row.id
+  detailVisible.value = true
+}
+
+/** 抽屉内消息从未读变为已读：同步行已读状态 + 刷新角标 */
+function handleDrawerRead() {
+  if (detailRow.value) {
+    detailRow.value.readStatus = 'SENT'
+  }
+  refreshUnread()
+}
+
+async function handleBatchRead() {
+  const ids = selectedRows.value.filter(r => r.readStatus === 'PENDING').map(r => r.id)
+  if (ids.length === 0) {
+    ElMessage.warning('请先勾选未读消息')
+    return
+  }
+  await markBatchAsRead(ids)
+  ElMessage.success(`已将 ${ids.length} 条消息标记为已读`)
+  refreshUnread()
+  tableRef.value?.clearSelection()
+  tableRef.value?.fetchList()
+}
+
+async function handleReadAll() {
+  await markAllAsRead()
+  ElMessage.success('全部消息已读')
+  refreshUnread()
+  tableRef.value?.fetchList()
+}
+
+/** 刷新未读数角标 */
+function refreshUnread() {
+  store.fetchUnreadCount()
+}
+
+// ========== 展示辅助 ==========
+function categoryLabel(category?: MessageCategory) {
+  const labels: Record<string, string> = {
+    WORKFLOW: '工作流', SYSTEM: '系统', NOTIFICATION: '通知', TASK: '任务', APPROVAL: '审批',
+  }
+  return (category && labels[category]) || category || '--'
+}
+
+function messageTypeLabel(type?: string) {
+  const labels: Record<string, string> = {
+    PUBLIC: '公开', PRIVATE: '私人', SYSTEM: '系统',
+  }
+  return (type && labels[type]) || type || '--'
+}
+
+function formatDateTime(time: string) {
+  if (!time) return '--'
+  const d = new Date(time)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+</script>
+
+<style scoped>
+.message-center-page {
+  height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
+</style>

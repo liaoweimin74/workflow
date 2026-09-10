@@ -1,0 +1,20 @@
+{
+  "name": "Workflow",
+  "uri": "http://workflow.com/schema/bpmn/wf",
+  "prefix": "wf",
+  "xml": { "tagAlias": "lowerCase" },
+  "associations": [],
+  "types": [
+    {
+      "name": "InitiatorNodeAttributed",
+      "extends": ["bpmn:UserTask"],
+      "properties": [
+        {
+          "name": "nodeRole",
+          "isAttr": true,
+          "type": "String"
+        }
+      ]
+    }
+  ]
+}

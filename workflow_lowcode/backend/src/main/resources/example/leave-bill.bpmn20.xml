@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  请假审批流程（示例简化版）。
+  key=leave-bill。
+  节点：提交（发起人，startProcess 后由 InitiatorNodeResolver 自动完成）
+       → 部门经理审批（示例简化：assignee 固定取流程变量 manager）
+       → 结束。
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="example">
+
+  <process id="leave-bill" name="请假审批" isExecutable="true">
+
+    <startEvent id="startEvent" name="开始" />
+
+    <!-- 提交节点：发起人节点（InitiatorNodeResolver 据此自动完成） -->
+    <userTask id="submitTask" name="提交请假" flowable:assignee="${initiator}">
+      <documentation>发起人提交节点，流程启动后自动完成；SUBMIT 任务变量 submitterId</documentation>
+    </userTask>
+
+    <!-- 部门经理审批：示例简化，assignee 固定取流程变量 manager -->
+    <userTask id="managerApproval" name="部门经理审批" flowable:assignee="${manager}">
+      <documentation>部门经理审批节点（示例简化：审批人取流程变量 manager）</documentation>
+    </userTask>
+
+    <endEvent id="endEvent" name="结束" />
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="submitTask" />
+    <sequenceFlow id="flow2" sourceRef="submitTask" targetRef="managerApproval" />
+    <sequenceFlow id="flow3" sourceRef="managerApproval" targetRef="endEvent" />
+
+  </process>
+</definitions>

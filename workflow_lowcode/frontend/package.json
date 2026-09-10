@@ -1,0 +1,41 @@
+{
+  "name": "mangban-admin",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.1.1",
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1",
+    "vitest": "^4.1.10",
+    "vue-tsc": "^3.3.8"
+  },
+  "dependencies": {
+    "@bpmn-io/properties-panel": "^3.48.0",
+    "@element-plus/icons-vue": "^2.3.2",
+    "@form-create/designer": "^3.5.0",
+    "@form-create/element-ui": "^3.3.1",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "axios": "^1.18.1",
+    "bpmn-js": "^18.22.1",
+    "diagram-js-minimap": "^5.4.0",
+    "element-plus": "^2.14.3",
+    "markdown-it": "^15.0.1",
+    "pinia": "^4.0.2",
+    "vue": "^3.5.40",
+    "vue-router": "^4.6.4",
+    "vuedraggable": "^4.1.0"
+  }
+}

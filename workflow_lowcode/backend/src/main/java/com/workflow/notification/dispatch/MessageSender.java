@@ -1,0 +1,148 @@
+package com.workflow.notification.dispatch;
+
+import com.workflow.engine.tenant.TenantProvider;
+import com.workflow.notification.model.ChannelType;
+import com.workflow.notification.model.Message;
+import com.workflow.notification.model.MessageTemplate;
+import com.workflow.notification.model.MessageType;
+import com.workflow.notification.event.NotificationEventService;
+import com.workflow.notification.template.TemplateService;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 消息发送门面（模板场景）。
+ *
+ * <p>为模板驱动的高频发送场景提供一键入口：按模板代码加载模板，
+ * 校验必填变量、渲染标题、组装 {@link Message}，最终发布 {@link MessageEvent}
+ * 交予 {@link MessageDispatcher} 分发。内部复用 {@link TemplateService}，
+ * 使各业务模块只需提供 {@code templateCode + variables}，无需关心模板渲染细节。
+ *
+ * <p>底层 {@code MessageService.send(Message, ...)} 仍保留，供自由内容（非模板）消息使用；
+ * 二者为"底层原语 + 高层门面"的分层关系，本门面委托底层事件链路，不重复写库。
+ */
+@Service
+public class MessageSender {
+
+    private final TemplateService templateService;
+    private final TenantProvider tenantProvider;
+    private final ApplicationEventPublisher eventPublisher;
+    private final NotificationEventService eventService;
+
+    public MessageSender(TemplateService templateService,
+                         TenantProvider tenantProvider,
+                         ApplicationEventPublisher eventPublisher) {
+        this(templateService, tenantProvider, eventPublisher, null);
+    }
+
+    @Autowired
+    public MessageSender(TemplateService templateService,
+                         TenantProvider tenantProvider,
+                         ApplicationEventPublisher eventPublisher,
+                         NotificationEventService eventService) {
+        this.templateService = templateService;
+        this.tenantProvider = tenantProvider;
+        this.eventPublisher = eventPublisher;
+        this.eventService = eventService;
+    }
+
+    /**
+     * 按模板发送消息。
+     *
+     * <p>从数据库加载 {@code templateCode} 对应模板，校验标题与内容模板的必填变量
+     * （缺失将抛 {@link com.workflow.common.exception.BusinessException} 且不发送），
+     * 渲染标题作为用户可见标题；内容以 {@code {text, variables}} 结构存入——
+     * {@code text} 为渲染后的可读正文（站内信/前端展示层直接使用，按 {@code contentType}
+     * 决定 TEXT 或 Markdown 渲染），{@code variables} 为原始变量 Map（供外部渠道二次渲染）。
+     * 渲染类型/优先级/类别取模板默认值，收件人与渠道由调用方指定。
+     *
+     * @param senderId     发送者ID（系统模板通常为系统用户ID）
+     * @param templateCode 模板代码
+     * @param variables    模板变量，发送前校验必填并用于渲染
+     * @param recipientIds 接收用户ID列表
+     * @param channels     投递渠道（如 IN_APP / SMS 等）
+     */
+    public void sendByTemplate(Long senderId,
+                               String templateCode,
+                               Map<String, Object> variables,
+                               List<Long> recipientIds,
+                               List<ChannelType> channels) {
+        sendByTemplate(senderId, templateCode, variables, MessageType.PRIVATE, recipientIds, channels);
+    }
+
+    /**
+     * 按模板发送消息，并显式指定消息类型。
+     *
+     * <p>行为与 {@link #sendByTemplate(Long, String, Map, List, List)} 一致，
+     * 额外允许调用方指定消息类型（PRIVATE 用户间通信 / PUBLIC 公共广播 / SYSTEM 系统公告），
+     * 使 PUBLIC 广播语义不依赖调用方在消息构建外的特殊处理。
+     */
+    public void sendByTemplate(Long senderId,
+                               String templateCode,
+                               Map<String, Object> variables,
+                               MessageType messageType,
+                               List<Long> recipientIds,
+                                List<ChannelType> channels) {
+        sendByTemplate(senderId, templateCode, variables, messageType, recipientIds, channels, null);
+    }
+
+    /** 按指定业务事件发送；事件必须存在且启用。 */
+    public void sendByEvent(Long senderId,
+                            String eventCode,
+                            Map<String, Object> variables,
+                            MessageType messageType,
+                            List<Long> recipientIds,
+                            List<ChannelType> channels) {
+        String tenantId = tenantProvider.getTenantId();
+        eventService.requireEnabled(tenantId, eventCode);
+        for (ChannelType channel : channels) {
+            MessageTemplate template = templateService.getTemplateForEvent(tenantId, eventCode, channel);
+            sendByTemplate(senderId, template.getTemplateCode(), variables, messageType,
+                    recipientIds, List.of(channel), eventCode);
+        }
+    }
+
+    /** 按模板发送并携带业务事件代码；模板选择将在事件模板绑定能力中完成。 */
+    public void sendByTemplate(Long senderId,
+                               String templateCode,
+                               Map<String, Object> variables,
+                               MessageType messageType,
+                               List<Long> recipientIds,
+                               List<ChannelType> channels,
+                               String eventCode) {
+        String tenantId = tenantProvider.getTenantId();
+        if (eventCode != null && !eventCode.isBlank()) {
+            eventService.requireEnabled(tenantId, eventCode);
+        }
+        MessageTemplate tpl = templateService.getTemplate(templateCode, tenantId);
+
+        // 发送前校验标题与内容模板的必填变量，缺失即拒绝，避免 ${var} 残留传给用户
+        templateService.validateVariables(tpl.getTitle(), variables);
+        templateService.validateVariables(tpl.getContent(), variables);
+
+        Message message = new Message();
+        message.setTenantId(tenantId);
+        message.setTemplateCode(templateCode);
+        message.setEventCode(eventCode);
+        message.setSenderId(senderId);
+        message.setSenderType("SYSTEM");
+        message.setTitle(templateService.render(tpl.getTitle(), variables));
+        // 内容结构：text=渲染后的可读正文（前端按 contentType 渲染），
+        //          variables=原始变量 Map（供外部渠道二次渲染的 templateData）
+        Map<String, Object> content = new HashMap<>();
+        content.put("text", templateService.render(tpl.getContent(), variables));
+        content.put("variables", variables != null ? new HashMap<>(variables) : new HashMap<>());
+        message.setContent(content);
+        message.setContentType(tpl.getContentType());
+        message.setPriority(tpl.getPriority());
+        message.setCategory(tpl.getCategory());
+        message.setMessageType(messageType);
+
+        eventPublisher.publishEvent(new MessageEvent(this, message, recipientIds, channels));
+    }
+}

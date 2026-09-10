@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/workflow?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&nullDatabaseMeansCurrent=true
+    username: root
+    password: 740130
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    out-of-order: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        globally_quoted_identifiers: false
+    show-sql: false
+
+flowable:
+  database-schema-update: true
+  async-executor-activate: false
+
+# DevTools 热部署配置
+spring.devtools.restart.enabled: true
+
+spring.modulith:
+  detection-strategy: explicitly-annotated
+
+server:
+  port: 8080
+
+logging:
+  level:
+    com.workflow: DEBUG
+    org.flowable: INFO
+    org.springframework.modulith: DEBUG
+    org.flywaydb: DEBUG

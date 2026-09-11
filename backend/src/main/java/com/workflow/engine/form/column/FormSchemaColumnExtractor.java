@@ -108,6 +108,10 @@ public class FormSchemaColumnExtractor {
                     if (type != null && !type.isBlank()) {
                         c.setComponentType(type);
                     }
+                    // 表单设计器中字段设为隐藏（rule.hidden=true）时，列定义同步标记 hidden
+                    if (rule.path("hidden").asBoolean(false)) {
+                        c.setHidden(true);
+                    }
                     cols.add(c);
                 }
             }

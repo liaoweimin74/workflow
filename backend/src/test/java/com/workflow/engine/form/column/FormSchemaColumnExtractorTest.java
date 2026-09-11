@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -208,5 +209,24 @@ class FormSchemaColumnExtractorTest {
         assertEquals(1, cols.size());
         assertEquals("reason", cols.get(0).getKey());
         assertEquals("事由", cols.get(0).getLabel());
+    }
+
+    @Test
+    void schema读取hidden属性_标记隐藏列() {
+        // 表单设计器中字段设为隐藏（rule.hidden=true）时，列定义应同步标记 hidden
+        String schema = "[{\"field\":\"secret\",\"title\":\"密字段\",\"type\":\"input\",\"hidden\":true},"
+                + "{\"field\":\"visible\",\"title\":\"可见字段\",\"type\":\"input\",\"hidden\":false}]";
+        List<ColumnConfig> cols = extractor.extractFromSchema(schema);
+        assertEquals(2, cols.size());
+        assertTrue(cols.get(0).isHidden(), "hidden:true 的字段应标记为隐藏列");
+        assertFalse(cols.get(1).isHidden(), "hidden:false 的字段不应标记为隐藏列");
+    }
+
+    @Test
+    void schema无hidden属性_不标记隐藏列() {
+        String schema = "[{\"field\":\"plain\",\"title\":\"普通字段\",\"type\":\"input\"}]";
+        List<ColumnConfig> cols = extractor.extractFromSchema(schema);
+        assertEquals(1, cols.size());
+        assertFalse(cols.get(0).isHidden());
     }
 }

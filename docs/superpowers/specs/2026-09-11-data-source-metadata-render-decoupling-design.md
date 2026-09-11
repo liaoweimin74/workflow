@@ -58,7 +58,7 @@
 | `PageDataTable.vue` | ① 数组值判断：`ARRAY_COMPONENT_TYPES.includes(c.componentType)`（resolvedColumns 两处、displayColumnKey）→ `hasTextColumn(c.key)`（metadata 中存在 `<key>_text`）；② 查询栏 `resolvedSearchFields`：`meta?.componentType` 分支 → `findFormRuleByKey(key)?.type` 优先，无 rule 按 columnType 降级；删除 `ARRAY_COMPONENT_TYPES` 常量 |
 | `PageDataCards.vue` | 同上（数组值判断 / displayColumnKey），删除 `ARRAY_COMPONENT_TYPES` 常量 |
 | `ViewDesigner.vue` | `filterableColumns`：`ARRAY_QUERY_TYPES.includes(c.componentType)` → `_text` 列存在性；colorPicker 特判改为有 formKey 时读表单 schema `rule.type`，无则按 columnType 常规；删除 `ARRAY_QUERY_TYPES` 常量 |
-| `DsBindingConfigDialog.vue` | `ARRAY_QUERY_TYPES.includes(c.componentType)` → `_text` 列存在性判断（按实现上下文对齐） |
+| `DsBindingConfigDialog.vue` | `loadTableCandidates` 中 `ARRAY_QUERY_TYPES.includes(c.componentType)` → `<key>_text` 列存在性判断（基于**完整 meta.columns**，因 `_text` 列为 hidden=true 不在过滤后的 cols 中） |
 | `DataSourceListPage.vue` | 字段元数据 tab：组件类型列 FORM/WORKFLOW 只读展示文本、SQL/API/SYSTEM 隐藏；「字段详情」弹窗 componentType 选择器同步只读/隐藏；「从主表单覆盖」（handleOverlayFromForm）不再补 componentType |
 
 ## 边界行为

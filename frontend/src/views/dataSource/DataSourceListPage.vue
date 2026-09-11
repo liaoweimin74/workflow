@@ -462,9 +462,16 @@
                   style="width: 100%"
                   :max-height="300"
                 >
-                  <el-table-column prop="label" label="字段名" min-width="180" show-overflow-tooltip />
-                  <el-table-column prop="key" label="标识" min-width="160" show-overflow-tooltip />
-                  <el-table-column prop="componentType" label="组件" min-width="100" />
+                  <el-table-column prop="label" label="字段名" min-width="150" show-overflow-tooltip />
+                  <el-table-column prop="key" label="标识" min-width="140" show-overflow-tooltip />
+                  <el-table-column prop="componentType" label="组件" min-width="90" />
+                  <el-table-column prop="columnType" label="DB类型" min-width="80" />
+                  <el-table-column label="长度" width="60" align="center">
+                    <template #default="{ row }">{{ row.length ?? '—' }}</template>
+                  </el-table-column>
+                  <el-table-column label="精度" width="60" align="center">
+                    <template #default="{ row }">{{ row.scale ?? '—' }}</template>
+                  </el-table-column>
                   <el-table-column label="必填" width="50" align="center">
                     <template #default="{ row }">
                       <span :style="boolIconStyle(row.required)">{{ row.required ? '✓' : '✗' }}</span>
@@ -474,6 +481,24 @@
                     <template #default="{ row }">
                       <span :style="boolIconStyle(row.unique)">{{ row.unique ? '✓' : '✗' }}</span>
                     </template>
+                  </el-table-column>
+                  <el-table-column label="隐藏" width="55" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.hidden)">{{ row.hidden ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="排序" width="55" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.sortable)">{{ row.sortable ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="筛选" width="55" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.filterable)">{{ row.filterable ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="查询方式" min-width="85">
+                    <template #default="{ row }">{{ row.matchType || '按类型' }}</template>
                   </el-table-column>
                 </el-table>
               </template>

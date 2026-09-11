@@ -1231,6 +1231,44 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
+  it('FORM 字段元数据只读表格渲染完整属性（DB类型/长度/精度/隐藏/排序/筛选/查询方式）', async () => {
+    stubList()
+    const richCols = [
+      { key: 'name', label: '名称', columnType: 'VARCHAR', length: 128, scale: null, hidden: false, sortable: true, filterable: true, matchType: 'like', componentType: 'input', required: true, unique: false, indexed: false },
+      { key: 'amount', label: '金额', columnType: 'DECIMAL', length: 18, scale: 2, hidden: true, sortable: false, filterable: false, matchType: 'eq', componentType: 'inputNumber', required: false, unique: false, indexed: false },
+    ]
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: { columns: richCols, writable: true } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-form', name: '员工档案', type: 'FORM', formKey: 'emp_profile', sourceKey: 'emp_profile',
+      status: 'ENABLED', params: null,
+    })
+    await nextTick()
+    await flushPromises()
+
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    const html = wrapper.html()
+    // 只读表格渲染完整列头
+    expect(html).toContain('DB类型')
+    expect(html).toContain('长度')
+    expect(html).toContain('精度')
+    expect(html).toContain('隐藏')
+    expect(html).toContain('排序')
+    expect(html).toContain('筛选')
+    expect(html).toContain('查询方式')
+    // 列值渲染
+    expect(html).toContain('VARCHAR')
+    expect(html).toContain('DECIMAL')
+    expect(html).toContain('128')
+    expect(html).toContain('like')
+    wrapper.unmount()
+  })
+
   it('切换到数据预览标签后调用 queryData 接口', async () => {
     stubList()
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })

@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "msg_user_subscription", 
-       uniqueConstraints = {@UniqueConstraint(columnNames = {"tenant_id", "user_id", "channel"})})
+       uniqueConstraints = {@UniqueConstraint(columnNames = {"tenant_id", "user_id", "channel"})},
+       indexes = @Index(name = "idx_user", columnList = "user_id"))
 public class UserSubscription {
 
     @Id

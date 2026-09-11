@@ -10,7 +10,8 @@ import java.time.LocalDateTime;
  * 存储事件订阅规则配置
  */
 @Entity
-@Table(name = "msg_subscription_rule")
+@Table(name = "msg_subscription_rule",
+       indexes = @Index(name = "idx_event_channel", columnList = "event_code, channel"))
 public class SubscriptionRule {
 
     @Id

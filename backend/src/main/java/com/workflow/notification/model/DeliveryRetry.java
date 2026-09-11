@@ -9,7 +9,12 @@ import java.time.LocalDateTime;
  * <p>对应 {@code msg_delivery_retry} 表
  */
 @Entity
-@Table(name = "msg_delivery_retry")
+@Table(name = "msg_delivery_retry",
+       indexes = {
+               @Index(name = "idx_recipient", columnList = "recipient_id"),
+               @Index(name = "idx_next_retry", columnList = "next_retry_at"),
+               @Index(name = "idx_retry_status_next", columnList = "status, next_retry_at")
+       })
 public class DeliveryRetry {
 
     @Id

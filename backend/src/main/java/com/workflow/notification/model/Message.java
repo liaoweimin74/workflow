@@ -19,7 +19,12 @@ import java.util.Map;
  * 存储消息的基本信息及消息内容
  */
 @Entity
-@Table(name = "msg_message")
+@Table(name = "msg_message",
+       indexes = {
+               @Index(name = "idx_tenant", columnList = "tenant_id"),
+               @Index(name = "idx_template", columnList = "template_code"),
+               @Index(name = "idx_status", columnList = "status")
+       })
 public class Message {
 
     @Id

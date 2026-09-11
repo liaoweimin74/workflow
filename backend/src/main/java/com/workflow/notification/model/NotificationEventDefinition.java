@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -17,7 +18,8 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "msg_event_definition",
-       uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "event_code"}))
+       uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "event_code"}),
+       indexes = @Index(name = "idx_event_tenant_enabled", columnList = "tenant_id, enabled"))
 public class NotificationEventDefinition {
 
     @Id

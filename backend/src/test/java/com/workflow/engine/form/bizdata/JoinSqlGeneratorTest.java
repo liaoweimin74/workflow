@@ -31,8 +31,8 @@ class JoinSqlGeneratorTest {
                 Map.of(), null, null, null, null, 0, 10);
 
         assertThat(sql.sql()).isEqualTo(
-                "SELECT m.*, c.name AS customer_name FROM wf_biz_order m"
-                        + " LEFT JOIN wf_biz_customer c ON c.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                "SELECT m.*, j1.name AS customer_name FROM wf_biz_order m"
+                        + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
                         + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
         assertThat(sql.params()).containsExactly(TENANT, 10, 0);
     }
@@ -48,9 +48,9 @@ class JoinSqlGeneratorTest {
                 Map.of(), null, null, null, null, 0, 10);
 
         assertThat(sql.sql()).isEqualTo(
-                "SELECT m.*, c.name AS customer_name, u.nickname AS owner_name FROM wf_biz_order m"
-                        + " LEFT JOIN wf_biz_customer c ON c.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
-                        + " LEFT JOIN wf_biz_user u ON u.id = JSON_UNQUOTE(JSON_EXTRACT(m.owner_id,'$[0]'))"
+                "SELECT m.*, j1.name AS customer_name, j2.nickname AS owner_name FROM wf_biz_order m"
+                        + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " LEFT JOIN wf_biz_user j2 ON j2.id = JSON_UNQUOTE(JSON_EXTRACT(m.owner_id,'$[0]'))"
                         + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
         assertThat(sql.params()).containsExactly(TENANT, 10, 0);
     }
@@ -65,15 +65,15 @@ class JoinSqlGeneratorTest {
         List<JoinSqlGenerator.QueryColumn> plainColumns = List.of(
                 new JoinSqlGenerator.QueryColumn("order_no", "m.order_no", "VARCHAR", true, true),
                 new JoinSqlGenerator.QueryColumn("customer_id", "m.customer_id", "VARCHAR", true, true),
-                new JoinSqlGenerator.QueryColumn("customer_name", "c.name", "VARCHAR", true, true));
+                new JoinSqlGenerator.QueryColumn("customer_name", "j1.name", "VARCHAR", true, true));
 
         BizDataQueryBuilder.SqlAndParams sql = JoinSqlGenerator.buildSelect(
                 MAIN, TENANT, List.of(plain), plainColumns,
                 Map.of(), null, null, null, null, 0, 10);
 
         assertThat(sql.sql()).isEqualTo(
-                "SELECT m.*, c.name AS customer_name FROM wf_biz_order m"
-                        + " LEFT JOIN wf_biz_customer c ON c.id = m.customer_id"
+                "SELECT m.*, j1.name AS customer_name FROM wf_biz_order m"
+                        + " LEFT JOIN wf_biz_customer j1 ON j1.id = m.customer_id"
                         + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
     }
 
@@ -87,9 +87,9 @@ class JoinSqlGeneratorTest {
                 filters, null, null, null, null, 0, 10);
 
         assertThat(sql.sql()).isEqualTo(
-                "SELECT m.*, c.name AS customer_name FROM wf_biz_order m"
-                        + " LEFT JOIN wf_biz_customer c ON c.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
-                        + " WHERE m.tenant_id = ? AND (c.name LIKE ?)"
+                "SELECT m.*, j1.name AS customer_name FROM wf_biz_order m"
+                        + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " WHERE m.tenant_id = ? AND (j1.name LIKE ?)"
                         + " ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
         assertThat(sql.params()).containsExactly(TENANT, "%张%", 10, 0);
     }
@@ -112,7 +112,7 @@ class JoinSqlGeneratorTest {
                 MAIN, TENANT, List.of(CUSTOMER_JOIN), queryColumns(),
                 Map.of(), null, null, "customer_name", "asc", 0, 10);
 
-        assertThat(sql.sql()).contains(" ORDER BY c.name ASC");
+        assertThat(sql.sql()).contains(" ORDER BY j1.name ASC");
     }
 
     @Test
@@ -136,7 +136,7 @@ class JoinSqlGeneratorTest {
 
         assertThat(count.sql()).isEqualTo(
                 "SELECT COUNT(1) FROM wf_biz_order m"
-                        + " LEFT JOIN wf_biz_customer c ON c.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
                         + " WHERE m.tenant_id = ?");
         assertThat(count.params()).containsExactly(TENANT);
     }
@@ -168,13 +168,61 @@ class JoinSqlGeneratorTest {
         // 不抛异常即通过
     }
 
+    @Test
+    void buildSelect_sameJoinConditionMultipleFields_mergesIntoOneLeftJoin() {
+        JoinSqlGenerator.JoinConfig name = new JoinSqlGenerator.JoinConfig(
+                "ignored", "customer", "customer_id", "id", "name",
+                "customer_name", "客户名称", true, true);
+        JoinSqlGenerator.JoinConfig phone = new JoinSqlGenerator.JoinConfig(
+                "ignored", "customer", "customer_id", "id", "phone",
+                "customer_phone", "客户电话", true, true);
+        JoinSqlGenerator.JoinConfig email = new JoinSqlGenerator.JoinConfig(
+                "ignored", "customer", "customer_id", "id", "email",
+                "customer_email", "客户邮箱", true, true);
+
+        BizDataQueryBuilder.SqlAndParams sql = JoinSqlGenerator.buildSelect(
+                MAIN, TENANT, List.of(name, phone, email), queryColumns(),
+                Map.of(), null, null, null, null, 0, 10);
+
+        assertThat(sql.sql()).isEqualTo(
+                "SELECT m.*, j1.name AS customer_name, j1.phone AS customer_phone, j1.email AS customer_email"
+                        + " FROM wf_biz_order m"
+                        + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
+    }
+
+    @Test
+    void group_distinctConditions_assignSequentialAliasesInOrder() {
+        List<JoinSqlGenerator.JoinGroup> groups = JoinSqlGenerator.group(List.of(
+                new JoinSqlGenerator.JoinConfig("a1", "customer", "customer_id", "id", "name", "customer_name", "客户名称", true, true),
+                new JoinSqlGenerator.JoinConfig("a1", "customer", "customer_id", "id", "phone", "customer_phone", "客户电话", true, true),
+                new JoinSqlGenerator.JoinConfig("a2", "user", "owner_id", "id", "nickname", "owner_name", "负责人", true, false)));
+
+        assertThat(groups).hasSize(2);
+        assertThat(groups.get(0).alias()).isEqualTo("j1");
+        assertThat(groups.get(0).members()).hasSize(2);
+        assertThat(groups.get(0).members().get(0).virtualKey()).isEqualTo("customer_name");
+        assertThat(groups.get(1).alias()).isEqualTo("j2");
+        assertThat(groups.get(1).members()).hasSize(1);
+    }
+
+    @Test
+    void validate_aliasIgnored_doesNotRejectMissingAlias() {
+        List<JoinSqlGenerator.JoinConfig> joins = List.of(
+                new JoinSqlGenerator.JoinConfig(null, "customer", "customer_id", "id", "name",
+                        "customer_name", "客户名称", true, true));
+
+        JoinSqlGenerator.validate(joins, List.of("order_no", "customer_id"));
+        // 不抛异常即通过（alias 可空、可重复，生成时按组分配）
+    }
+
     private static List<JoinSqlGenerator.QueryColumn> queryColumns() {
         // 主表列（ref = m.<key>）+ 虚拟列（ref = <alias>.<joinField>）
         return List.of(
                 new JoinSqlGenerator.QueryColumn("order_no", "m.order_no", "VARCHAR", true, true),
                 new JoinSqlGenerator.QueryColumn("customer_id", "m.customer_id", "JSON", true, true),
                 new JoinSqlGenerator.QueryColumn("owner_id", "m.owner_id", "JSON", true, true),
-                new JoinSqlGenerator.QueryColumn("customer_name", "c.name", "VARCHAR", true, true),
-                new JoinSqlGenerator.QueryColumn("owner_name", "u.nickname", "VARCHAR", true, false));
+                new JoinSqlGenerator.QueryColumn("customer_name", "j1.name", "VARCHAR", true, true),
+                new JoinSqlGenerator.QueryColumn("owner_name", "j2.nickname", "VARCHAR", true, false));
     }
 }

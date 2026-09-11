@@ -38,8 +38,34 @@ public final class JoinSqlGenerator {
                              String joinField, String virtualKey, String label,
                              boolean sortable, boolean filterable) {}
 
-    /** 查询列映射（key → SQL 引用 + 类型 + 能力标记）；ref 形如 "m.order_no" / "c.name" */
+    /** 分组后的 JOIN 单元：共享连接条件，携带组内字段成员（alias 由系统按组自动分配 j1..jN） */
+    public record JoinGroup(String alias, String targetFormKey, String localField, String foreignField,
+                            List<JoinConfig> members) {}
+
+    /** 查询列映射（key → SQL 引用 + 类型 + 能力标记）；ref 形如 "m.order_no" / "j1.name" */
     public record QueryColumn(String key, String ref, String columnType, boolean sortable, boolean filterable) {}
+
+    /**
+     * 按 (localField, targetFormKey, foreignField) 分组；保序，组序即 alias 序号（j1, j2, ...）。
+     * JoinConfig.alias 一律忽略（存量兼容），以分组分配的 alias 为准。
+     */
+    public static List<JoinGroup> group(List<JoinConfig> joins) {
+        Map<String, JoinGroup> byKey = new LinkedHashMap<>();
+        List<JoinGroup> ordered = new ArrayList<>();
+        int idx = 0;
+        for (JoinConfig j : joins) {
+            String key = j.localField() + "|" + j.targetFormKey() + "|" + j.foreignField();
+            JoinGroup g = byKey.get(key);
+            if (g == null) {
+                g = new JoinGroup("j" + (++idx), j.targetFormKey(), j.localField(), j.foreignField(),
+                        new ArrayList<>());
+                byKey.put(key, g);
+                ordered.add(g);
+            }
+            g.members().add(j);
+        }
+        return ordered;
+    }
 
     /**
      * 生成分页 SELECT：主表 m.* + 虚拟列，LEFT JOIN 链，注入白名单筛选/排序/分页/租户。
@@ -60,15 +86,18 @@ public final class JoinSqlGenerator {
                                                                String keyword, String keywordColumn,
                                                                String sort, String order, int page, int size) {
         StringBuilder sql = new StringBuilder("SELECT m.*");
-        for (JoinConfig j : joins) {
-            sql.append(", ").append(j.alias()).append(".").append(j.joinField())
-                    .append(" AS ").append(j.virtualKey());
+        List<JoinGroup> groups = group(joins);
+        for (JoinGroup g : groups) {
+            for (JoinConfig j : g.members()) {
+                sql.append(", ").append(g.alias()).append(".").append(j.joinField())
+                        .append(" AS ").append(j.virtualKey());
+            }
         }
         sql.append(" FROM ").append(mainTable).append(" m");
-        for (JoinConfig j : joins) {
-            sql.append(" LEFT JOIN wf_biz_").append(j.targetFormKey()).append(" ").append(j.alias())
-                    .append(" ON ").append(j.alias()).append(".").append(j.foreignField())
-                    .append(" = ").append(localRef(j, columns));
+        for (JoinGroup g : groups) {
+            sql.append(" LEFT JOIN wf_biz_").append(g.targetFormKey()).append(" ").append(g.alias())
+                    .append(" ON ").append(g.alias()).append(".").append(g.foreignField())
+                    .append(" = ").append(localRef(g.localField(), columns));
         }
         sql.append(" WHERE m.tenant_id = ?");
         List<Object> params = new ArrayList<>();
@@ -102,10 +131,10 @@ public final class JoinSqlGenerator {
                                                               Map<String, Object> filters,
                                                               String keyword, String keywordColumn) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(1) FROM ").append(mainTable).append(" m");
-        for (JoinConfig j : joins) {
-            sql.append(" LEFT JOIN wf_biz_").append(j.targetFormKey()).append(" ").append(j.alias())
-                    .append(" ON ").append(j.alias()).append(".").append(j.foreignField())
-                    .append(" = ").append(localRef(j, columns));
+        for (JoinGroup g : group(joins)) {
+            sql.append(" LEFT JOIN wf_biz_").append(g.targetFormKey()).append(" ").append(g.alias())
+                    .append(" ON ").append(g.alias()).append(".").append(g.foreignField())
+                    .append(" = ").append(localRef(g.localField(), columns));
         }
         sql.append(" WHERE m.tenant_id = ?");
         List<Object> params = new ArrayList<>();
@@ -118,7 +147,8 @@ public final class JoinSqlGenerator {
     }
 
     /**
-     * 保存校验：必填字段、alias/virtualKey 唯一、virtualKey 不与主表列冲突。
+     * 保存校验：必填字段、virtualKey 唯一、virtualKey 不与主表列冲突。
+     * 注：alias 由系统按组自动分配，输入值一律忽略（存量兼容）。
      *
      * @param joins       关联声明列表
      * @param mainColumns 主表列 key 列表
@@ -127,15 +157,8 @@ public final class JoinSqlGenerator {
         if (joins == null || joins.isEmpty()) {
             return;
         }
-        Set<String> aliases = new java.util.HashSet<>();
         Set<String> virtualKeys = new java.util.HashSet<>();
         for (JoinConfig j : joins) {
-            if (j.alias() == null || !j.alias().matches("[a-zA-Z][a-zA-Z0-9_]{0,63}")) {
-                throw new IllegalArgumentException("关联别名非法: " + j.alias());
-            }
-            if (!aliases.add(j.alias())) {
-                throw new IllegalArgumentException("关联别名重复: " + j.alias());
-            }
             requireText(j.targetFormKey(), "关联目标表单");
             requireText(j.localField(), "主表关联字段");
             requireText(j.foreignField(), "目标表关联字段");
@@ -175,11 +198,11 @@ public final class JoinSqlGenerator {
     }
 
     /** JOIN 匹配的 localField 引用：JSON 列提取首元素，普通列直接引用 */
-    private static String localRef(JoinConfig j, List<QueryColumn> columns) {
-        if (isJsonColumn(columns, j.localField())) {
-            return "JSON_UNQUOTE(JSON_EXTRACT(m." + j.localField() + ",'$[0]'))";
+    private static String localRef(String localField, List<QueryColumn> columns) {
+        if (isJsonColumn(columns, localField)) {
+            return "JSON_UNQUOTE(JSON_EXTRACT(m." + localField + ",'$[0]'))";
         }
-        return "m." + j.localField();
+        return "m." + localField;
     }
 
     private static boolean isJsonColumn(List<QueryColumn> columns, String key) {

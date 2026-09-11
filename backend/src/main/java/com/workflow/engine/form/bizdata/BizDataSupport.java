@@ -341,9 +341,11 @@ public class BizDataSupport {
         for (String key : ctx.columnKeys()) {
             columns.add(new JoinSqlGenerator.QueryColumn(key, "m." + key, typeOf.getOrDefault(key, ""), true, true));
         }
-        for (JoinSqlGenerator.JoinConfig j : joins) {
-            columns.add(new JoinSqlGenerator.QueryColumn(j.virtualKey(), j.alias() + "." + j.joinField(),
-                    resolveJoinColumnType(j), j.sortable(), j.filterable()));
+        for (JoinSqlGenerator.JoinGroup g : JoinSqlGenerator.group(joins)) {
+            for (JoinSqlGenerator.JoinConfig m : g.members()) {
+                columns.add(new JoinSqlGenerator.QueryColumn(m.virtualKey(), g.alias() + "." + m.joinField(),
+                        resolveJoinColumnType(m), m.sortable(), m.filterable()));
+            }
         }
         return columns;
     }

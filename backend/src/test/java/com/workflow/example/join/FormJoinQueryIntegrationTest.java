@@ -65,6 +65,17 @@ class FormJoinQueryIntegrationTest {
              "sortable":true,"filterable":true}]}
             """;
 
+    /** 同连接条件多显示字段 + 无 alias：合并为一条 LEFT JOIN，两个虚拟列 */
+    private static final String CONFIG_PARAMS_MULTI_FIELDS = """
+            {"queryMode":"config","joins":[
+             {"targetFormKey":"customer","localField":"customer_id",
+              "foreignField":"id","joinField":"name","virtualKey":"customer_name","label":"客户名称",
+              "sortable":true,"filterable":true},
+             {"targetFormKey":"customer","localField":"customer_id",
+              "foreignField":"id","joinField":"name","virtualKey":"customer_name2","label":"客户名称2",
+              "sortable":true,"filterable":true}]}
+            """;
+
     private static final String SQL_PARAMS = """
             {"queryMode":"sql","query":"SELECT order_no, SUM(total) AS total_amount FROM wf_biz_order WHERE tenant_id = :tenantId GROUP BY order_no",
              "columns":[{"key":"order_no","label":"订单号","columnType":"VARCHAR","sortable":true,"filterable":true},
@@ -170,6 +181,18 @@ class FormJoinQueryIntegrationTest {
         assertThat(page.getTotal()).isEqualTo(3);
         assertThat(page.getRecords()).hasSize(1);
         assertThat(page.getPage()).isEqualTo(2);
+    }
+
+    @Test
+    void configQuery_sameJoinConditionMultipleFields_returnsAllVirtualColumns() {
+        BizDataPageVO page = adapter.query(formDs(ORDER_KEY, CONFIG_PARAMS_MULTI_FIELDS), pageReq(1, 20));
+
+        assertThat(page.getTotal()).isEqualTo(3);
+        assertThat(page.getRecords()).hasSize(3);
+        Map<String, Object> newest = page.getRecords().get(0).getData();
+        assertThat(newest).containsEntry("order_no", "ORD-003");
+        assertThat(newest).containsEntry("customer_name", "王五");
+        assertThat(newest).containsEntry("customer_name2", "王五");
     }
 
     @Test

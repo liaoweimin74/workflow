@@ -6,8 +6,9 @@ import java.util.List;
 
 /**
  * 数据源元数据（统一 SPI metadata 方法返回）。
- * columns 复用 ColumnConfig 列定义字段（第一版仅 key/label/columnType/length/scale/required/unique/indexed/hidden），
- * 组件类型（componentType）与编辑弹窗渲染后续再做。
+ * columns 复用 ColumnConfig 列定义字段（key/label/columnType/length/scale/required/unique/indexed/hidden/sortable/filterable/matchType）。
+ * 注意：componentType 属表单渲染属性，metadata 链路已不再消费（渲染改由表单 schema rule.type 与 &lt;key&gt;_text 冗余列驱动），
+ * 字段保留仅为向后兼容，标注弃用语义，后续可独立移除。
  */
 public class DataSourceMetadata {
 

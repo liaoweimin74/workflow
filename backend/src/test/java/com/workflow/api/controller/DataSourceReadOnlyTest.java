@@ -5,6 +5,7 @@ import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
+import com.workflow.engine.form.bizdata.BizDataSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
@@ -23,12 +24,14 @@ import static org.mockito.Mockito.when;
 class DataSourceReadOnlyTest {
 
     private DataSourceDefinitionService dsService;
+    private BizDataSupport bizDataSupport;
     private DataSourceController controller;
 
     @BeforeEach
     void setUp() {
         dsService = mock(DataSourceDefinitionService.class);
-        controller = new DataSourceController(dsService);
+        bizDataSupport = mock(BizDataSupport.class);
+        controller = new DataSourceController(dsService, bizDataSupport);
     }
 
     @Test

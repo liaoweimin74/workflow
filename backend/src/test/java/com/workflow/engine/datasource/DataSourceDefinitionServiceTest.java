@@ -723,6 +723,15 @@ class DataSourceDefinitionServiceTest {
                 + "\",\"sortable\":" + sortable + ",\"filterable\":" + filterable + "}";
     }
 
+    /** alias 省略版本：alias 由系统按组自动分配，输入值不再校验 */
+    private static String joinNoAlias(String target, String local, String foreign, String joinField,
+                                      String virtualKey, String label, boolean sortable, boolean filterable) {
+        return "{\"targetFormKey\":\"" + target + "\",\"localField\":\"" + local
+                + "\",\"foreignField\":\"" + foreign + "\",\"joinField\":\"" + joinField
+                + "\",\"virtualKey\":\"" + virtualKey + "\",\"label\":\"" + label
+                + "\",\"sortable\":" + sortable + ",\"filterable\":" + filterable + "}";
+    }
+
     @Test
     void update_formConfigMode_validJoins_saved() {
         String params = configJoinsParams(join("j1", "biz_customer", "customer_id", "id", "name",
@@ -741,6 +750,18 @@ class DataSourceDefinitionServiceTest {
                 join("j2", "biz_dept", "dept_id", "id", "name", "dept_name", "部门名称", true, false));
         when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_customer")).thenReturn(true);
         when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_dept")).thenReturn(true);
+
+        DataSourceDefinition result = updateFormParams(params);
+
+        assertEquals(params, result.getParams());
+    }
+
+    @Test
+    void update_formConfigMode_joinsWithoutAlias_saved() {
+        String params = configJoinsParams(
+                joinNoAlias("biz_customer", "customer_id", "id", "name", "customer_name", "客户名称", true, true),
+                joinNoAlias("biz_customer", "customer_id", "id", "phone", "customer_phone", "客户电话", true, true));
+        when(formDefRepository.existsByTenantIdAndKey(TENANT_ID, "biz_customer")).thenReturn(true);
 
         DataSourceDefinition result = updateFormParams(params);
 

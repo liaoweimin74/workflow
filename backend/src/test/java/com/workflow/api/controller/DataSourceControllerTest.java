@@ -9,6 +9,7 @@ import com.workflow.api.dto.DataSourceSaveRequest;
 import com.workflow.common.domain.R;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
+import com.workflow.engine.form.bizdata.BizDataSupport;
 import com.workflow.engine.form.column.ColumnConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,12 +32,14 @@ import static org.mockito.Mockito.when;
 class DataSourceControllerTest {
 
     private DataSourceDefinitionService dsService;
+    private BizDataSupport bizDataSupport;
     private DataSourceController controller;
 
     @BeforeEach
     void setUp() {
         dsService = mock(DataSourceDefinitionService.class);
-        controller = new DataSourceController(dsService);
+        bizDataSupport = mock(BizDataSupport.class);
+        controller = new DataSourceController(dsService, bizDataSupport);
     }
 
     @Test

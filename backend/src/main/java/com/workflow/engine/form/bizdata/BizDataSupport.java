@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
+import com.workflow.api.dto.JoinPreviewVO;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.ColumnConfig;
@@ -348,6 +349,20 @@ public class BizDataSupport {
             }
         }
         return columns;
+    }
+
+    /**
+     * config 模式 SQL 预览：生成主表 + JOIN 虚拟列完整 SELECT（无筛选/无关键词/默认排序/不分页）。
+     * 校验 formKey 合法且主表存在（loadContext）；目标表单存在性由保存校验负责，预览不重复校验。
+     */
+    public JoinPreviewVO previewJoinSql(String formKey, List<JoinSqlGenerator.JoinConfig> joins) {
+        BizDataContext ctx = loadContext(formKey);
+        String tenantId = tenantProvider.getTenantId();
+        List<JoinSqlGenerator.QueryColumn> columns = buildJoinColumns(ctx, joins);
+        BizDataQueryBuilder.SqlAndParams select = JoinSqlGenerator.buildSelect(
+                ctx.tableName(), tenantId, joins, columns, Map.of(),
+                null, null, null, null, 0, 0);
+        return new JoinPreviewVO(select.sql(), select.params());
     }
 
     /** 虚拟列类型：目标表单 joinField 的列类型，找不到 fallback "VARCHAR"（查询与 metadata 两处一致） */

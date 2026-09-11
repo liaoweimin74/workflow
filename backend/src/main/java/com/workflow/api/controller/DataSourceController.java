@@ -6,10 +6,13 @@ import com.workflow.api.dto.BizDataVO;
 import com.workflow.api.dto.DataSourceDTO;
 import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.api.dto.DataSourceSaveRequest;
+import com.workflow.api.dto.JoinPreviewRequest;
+import com.workflow.api.dto.JoinPreviewVO;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
+import com.workflow.engine.form.bizdata.BizDataSupport;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
@@ -31,9 +34,11 @@ import java.util.stream.Collectors;
 public class DataSourceController {
 
     private final DataSourceDefinitionService dataSourceService;
+    private final BizDataSupport bizDataSupport;
 
-    public DataSourceController(DataSourceDefinitionService dataSourceService) {
+    public DataSourceController(DataSourceDefinitionService dataSourceService, BizDataSupport bizDataSupport) {
         this.dataSourceService = dataSourceService;
+        this.bizDataSupport = bizDataSupport;
     }
 
     /**
@@ -128,6 +133,15 @@ public class DataSourceController {
     @GetMapping("/{id}/metadata")
     public R<DataSourceMetadata> metadata(@PathVariable String id) {
         return R.ok(dataSourceService.metadata(id));
+    }
+
+    /**
+     * config 模式 JOIN SQL 预览：formKey + joins → 生成的 SELECT SQL（不落库不执行）。
+     * 供前端设计器配置 JOIN 后即时预览。
+     */
+    @PostMapping("/join-preview")
+    public R<JoinPreviewVO> previewJoin(@RequestBody JoinPreviewRequest req) {
+        return R.ok(bizDataSupport.previewJoinSql(req.formKey(), req.joins()));
     }
 
     /**

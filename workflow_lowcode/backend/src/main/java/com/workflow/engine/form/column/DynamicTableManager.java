@@ -122,11 +122,14 @@ public class DynamicTableManager {
      * @return 列信息列表
      */
     public List<ColumnInfo> findTableColumns(String tableName) {
-        // 跨库兼容：H2 的 information_schema.COLUMNS 无 COLUMN_KEY 列，且 DATA_TYPE 为整型类型码
-        // （类型名在 TYPE_NAME）；MySQL 无 TYPE_NAME。按数据库产品名分支，各自限定当前 schema。
+        // 跨库兼容（按数据库产品名分支，各自限定当前 schema）：
+        // - H2 2.x：COLUMNS 无 COLUMN_KEY/TYPE_NAME 列；DATA_TYPE 本身即类型名字符串
+        //   （如 INTEGER/CHARACTER VARYING/NUMERIC/TIMESTAMP，已被 normalizeType 白名单覆盖），
+        //   COLUMN_KEY 置空串（unique 标记在 H2 下不解析，均为 false）。
+        // - MySQL：DATA_TYPE 为类型名、COLUMN_KEY 可判 UNI，schema 谓词用 DATABASE()。
         String sql = isH2()
                 ? """
-                SELECT COLUMN_NAME, TYPE_NAME AS DATA_TYPE,
+                SELECT COLUMN_NAME, DATA_TYPE,
                        CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE,
                        IS_NULLABLE, '' AS COLUMN_KEY
                 FROM information_schema.COLUMNS

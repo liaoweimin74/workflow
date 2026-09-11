@@ -255,3 +255,27 @@ Work Log:
 Stage Summary:
 - next dev(3000) now runs with A2 (src/lib/service-supervisor.ts env field + memory params) and A3 (scripts/start-services.sh HTTP probe double-confirm + zombie cleanup restart) active
 - Cron job 374482 (nextdev restart self-termination) can terminate: later rounds see the Task 8 marker, guard-exit, and delete the job; scheduler should delete it directly if no cron tool is available in-session
+
+---
+Task ID: 9
+Agent: 主控 (Z.ai Code) — 用户问题排查轮次 2026-09-11 08:40~09:10 (Asia/Shanghai)
+Task: 排查修复「创建 SQL 模型时主表/目标表下拉无数据」并部署上线
+
+Work Log:
+- 用户报告：数据源管理 → 新建 → SQL 查询 → 可视化配置，主表/目标表下拉无数据
+- API 定位：GET /api/v1/data-sources/db/tables 返回 {"data":[]}（鉴权/网关/前端调用链均正常）→ 后端查询问题
+- 根因 1：DynamicTableManager 三处 information_schema 查询使用 MySQL 方言谓词 TABLE_SCHEMA = DATABASE()；H2(MODE=MySQL) 中用户表在 PUBLIC schema，DATABASE() 返回库名 → 谓词永不匹配 → 列表为空
+- 根因 2：findTableColumns SQL 引用 MySQL 专有列 COLUMN_KEY → H2 无此列 → 该端点直接 500
+- 根因 3（深挖）：H2 2.4.240 的 information_schema.COLUMNS 无 TYPE_NAME 列；一次性探针库（/tmp，h2-2.4.240.jar）实测确认 DATA_TYPE 本身即类型名字符串（INTEGER/CHARACTER VARYING/NUMERIC/TIMESTAMP，normalizeType 白名单全覆盖）
+- 并行协作事实：发现并行会话已于 00:44 UTC 修复三处查询（OR 'PUBLIC' 谓词 + isH2() 按产品名分支）并于 00:45 重建 jar，但未重启后端（旧进程 9/10 13:58 启动，修复未生效）；本会话完成 H2 分支最终修正（TYPE_NAME AS DATA_TYPE → DATA_TYPE）
+- 部署：mvn -o 重打包 → kill -9 旧后端（瞬时释放端口，规避 supervisor 竞速拉起抢 H2 文件锁，Task 6 教训）→ start-services.sh(A3) 拉起新 jar（-Xmx448m -XX:MaxMetaspaceSize=192m）→ 35s 就绪
+- 验证：/db/tables 72 张表 ✅；/db/tables/WF_FORM_DEF/columns 14 列（VARCHAR/INT/DATETIME 归一正确）✅；浏览器端到端（agent-browser，admin）：主表下拉 72 选项、选 WF_FORM_DEF 后 SQL 预览 `SELECT * FROM WF_FORM_DEF m WHERE m.tenant_id = :tenantId`、添加关联后目标表下拉 72 选项，全部 ✅；截图 download/sqlmodel-dropdown-fixed.png
+- 回归：三端口全绿；3000 网关 lowcode 200 / login 200；Vite、next dev 全程零触碰
+- 预期行为说明：wf_biz_* 业务表当前 0 张（发布带物理表的表单后自动出现）；下拉展示平台表（SYS_/WF_/MSG_）+ 引擎表（ACT_/FLW_）符合 DbSchemaController「当前库全部基础表名」设计；H2 无引号标识符存大写，下拉回传名称一致
+- 排障工具教训（再次踩坑）：rg 的 -r 是替换显示标志，-rn 会把匹配文本显示为 "n"；且 [m 序列会被输出管道吞掉（ANSI 重置码）——本轮两次被伪影误导（"db/n"、"tableFieldsainTable"），后经 od 字节级核对确认源文件均完好，未做无谓修改
+
+Stage Summary:
+- SQL 模型可视化配置的表/字段数据链路在 H2 沙箱完整修复并部署生效，浏览器端到端验证通过
+- DynamicTableManager 现为跨库兼容实现（H2 与 MySQL 双语义分支），未来切换真实 MySQL 环境无需回退
+- 未解决问题/风险：目标表下拉未排除已选主表（首项仍为 WF_FORM_DEF，低优先 UX）；TEXT 列在 H2 元数据显示为 VARCHAR(1e9)（CLOB 归一差异，低影响）
+- 建议下一阶段优先事项：1. 发布带物理表的业务表单后回归 wf_biz_* 表出现场景 2. cron Job 374482 仍需调度层删除

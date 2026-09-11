@@ -622,3 +622,38 @@ describe('ColumnConfigDialog — 数据表格组件发布忽略', () => {
     wrapper.unmount()
   })
 })
+
+describe('ColumnConfigDialog — 表单隐藏字段（rule.hidden）', () => {
+  it('rule.hidden=true 的字段生成列映射时标记 hidden，普通字段不标记', async () => {
+    const hiddenSchema = [
+      { type: 'input', field: 'visible', title: '可见字段' },
+      { type: 'input', field: 'secret', title: '密字段', hidden: true },
+    ]
+    const wrapper = createWrapper({ schema: hiddenSchema })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    const secret = items.find(i => i.key === 'secret')
+    const visible = items.find(i => i.key === 'visible')
+    expect(secret).toBeDefined()
+    expect(secret.hidden).toBe(true)
+    expect(visible).toBeDefined()
+    expect(visible.hidden).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('数组值组件字段隐藏时，主列同步标记 hidden（_text 列本就隐藏）', async () => {
+    const hiddenSchema = [
+      { type: 'checkbox', field: 'tags', title: '标签', hidden: true },
+    ]
+    const wrapper = createWrapper({ schema: hiddenSchema })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    const main = items.find(i => i.key === 'tags')
+    const text = items.find(i => i.key === 'tags_text')
+    expect(main).toBeDefined()
+    expect(main.hidden).toBe(true)
+    expect(text).toBeDefined()
+    expect(text.hidden).toBe(true)
+    wrapper.unmount()
+  })
+})

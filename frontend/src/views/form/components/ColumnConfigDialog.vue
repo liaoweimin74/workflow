@@ -577,6 +577,8 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         unique: existing?.unique ?? false,
         indexed: existing?.indexed ?? false,
         componentType: type,
+        // 表单设计器中字段设为隐藏（rule.hidden）时，主列同步标记隐藏
+        ...(rule?.hidden ? { hidden: true } : {}),
         existingType: existing?.columnType,
       })
       // 隐藏文本列：VARCHAR(255)，供显示使用
@@ -606,8 +608,9 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
       unique: existing?.unique ?? false,
       indexed: existing?.indexed ?? false,
       componentType: type,
-      // 隐藏组件（子表单/穿梭框/树形/富文本/级联/签名）：JSON 列不进列表（仅参与 CRUD 写入）
-      ...(HIDDEN_COMPONENT_TYPES.includes(type) ? { hidden: true } : {}),
+      // 隐藏列：子表单/富文本/签名等组件类型，或表单设计器中设为隐藏（rule.hidden）的字段
+      // 不进列表/筛选（仅参与 CRUD 写入），数据源字段元数据同步标记 hidden
+      ...(HIDDEN_COMPONENT_TYPES.includes(type) || rule?.hidden ? { hidden: true } : {}),
       existingType: existing?.columnType,
     })
   }

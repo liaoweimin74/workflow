@@ -279,3 +279,29 @@ Stage Summary:
 - DynamicTableManager 现为跨库兼容实现（H2 与 MySQL 双语义分支），未来切换真实 MySQL 环境无需回退
 - 未解决问题/风险：目标表下拉未排除已选主表（首项仍为 WF_FORM_DEF，低优先 UX）；TEXT 列在 H2 元数据显示为 VARCHAR(1e9)（CLOB 归一差异，低影响）
 - 建议下一阶段优先事项：1. 发布带物理表的业务表单后回归 wf_biz_* 表出现场景 2. cron Job 374482 仍需调度层删除
+
+---
+Task ID: 10
+Agent: 主控 (Z.ai Code) — 用户问题排查轮次 2026-09-11 09:20~10:10 (Asia/Shanghai)
+Task: 排查修复「创建 SQL 数据源时通过 SQL 获取字段报错」并部署上线
+
+Work Log:
+- 用户报告：SQL 数据源 → 字段元数据 → 点击「获取字段」（POST /v1/data-sources/explore-sql）报错
+- 复现与日志定位（/home/z/tools/backend.log），确认三个叠加根因：
+  1. SqlMetadataProbe.probe 用派生表包裹 SELECT * FROM (...) _probe LIMIT 1 —— H2 2.x 要求派生表列名唯一，JOIN + SELECT * 报 Duplicate column name "ID"（42121）
+  2. 可视化构建器 WHERE 条件生成裸 ? 占位符，探测器只替换 :name → Parameter "#1" is not set（90012）；且运行时模板引擎同样无法绑定 ?（该路径从未可用）
+  3. 前端 generatePreviewSql 无条件拼接 WHERE m.tenant_id = :tenantId —— SYS_USER 等平台基础表无 tenant_id 列 → Column "M.TENANT_ID" not found（42122）；运行时 SqlTemplateEngine.validate 还硬性要求 :tenantId，形成死锁（有该列才需要过滤、无该列必报错）
+- 修复（3 文件）：
+  - SqlMetadataProbe.java：引号感知扫描（''/""/``）统一替换 :name 与裸 ? → NULL；取消派生表包裹改为直接执行（顶层重复标签合法）；尾部无 LIMIT/FETCH 时补 LIMIT 1；stripTrailingLineComment 防 LIMIT 被尾注释吞掉；异常改为 BusinessException(400) 携带根因消息（原 500 "bad SQL grammar []" 无诊断价值）
+  - SqlTemplateEngine.java：validate 放宽 :tenantId 为可选（包含则运行时照常绑定租户过滤）；javadoc 同步；影响面：FORM sql 模式保存校验同样放宽（管理员显式 SQL 自行负责语义，已在注释注明）
+  - DataSourceListPage.vue：generatePreviewSql 仅当主表真实含 tenant_id 列（sqlTableFields 缓存）才追加租户过滤；WHERE 条件内联配置值（IN/LIKE/=，恒引号字面量防 H2 严格类型 Data conversion error，值空跳过）；显式选择列重复标签自动 AS _1/_2 去重（防运行时 wrapSubquery 派生表重复列）；handleExploreSql 探测前 await ensureTableFields；修正两处过时注释（VisualSqlGenerator 为死代码，前端 SQL 即运行时 SQL）
+- 踩坑记录：javadoc 写 SYS_*/WF_*/ACT_* 的 */ 提前终止注释块导致编译失败；TRAILING_LIMIT 用 matches() 缺前导 .* 永不匹配 → 改 find()
+- 部署：mvn -o 重打包 ×2（编译错误修复后）→ kill -9 旧后端 → 直接 nohup 拉起新 jar（start-services.sh 等待逻辑超时 120s，后端进程实际正常就绪 ~35s）
+- 验证：API 回归 9/9 通过（scripts/qa-explore-sql.py：用户原 SQL/JOIN+SELECT*/内联值/已带LIMIT/尾注释/单表tenant/IN/非SELECT拒绝/多语句拒绝）；运行时端到端（scripts/qa-sql-ds-runtime.py）：创建 SQL 数据源（无 :tenantId 模板）→ /data 分页查询返回 2 行真实数据（管理员/admin，JOIN 字段正确映射）；浏览器端到端（agent-browser）：新建 SQL 数据源 → 可视化配置主表 SYS_USER + 选 3 列 + 添加关联 SYS_ORGANIZATION（m.ORG_ID = s.ID + ORG_NAME）→ 获取字段 →「已获取 4 个字段」→ 保存「创建成功」，截图 download/sqlmodel-explore-fixed.png；三端口全绿 + 3000 网关 lowcode 200
+- 清理：QA 测试数据源全部删除；测试脚本沉淀 scripts/qa-explore-sql.py、qa-sql-ds-runtime.py
+
+Stage Summary:
+- SQL 数据源「获取字段」链路在 H2 沙箱完整修复并部署生效：探测、保存、运行时查询三层打通，浏览器端到端验证通过
+- 已知限制：可视化模式 SELECT *（未选列）+ JOIN 时运行时派生表仍会因重复列名失败（探测已不受影响）；建议用户显式选择列（前端已自动去重）；VisualSqlGenerator.generate 仍为死代码待后续接线或删除
+- 行为变更说明：SQL 模板 :tenantId 由强制改为可选（平台基础表无此列，原设计使该类 SQL 数据源不可能工作）；wf_biz_* 业务表场景前端仍会自动追加租户过滤
+- 建议：提示用户刷新页面（前端 HMR 已生效）后重试「获取字段」；若手写 SQL 引用不存在列，现在会返回带 H2 根因的 400 消息，可自助定位

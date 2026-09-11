@@ -892,6 +892,10 @@ const columnDialogVisible = ref(false)
 
 /** 执行 SQL 探测：完整 SQL（visual 预览或手写）→ 全量替换 declaredColumns */
 async function handleExploreSql() {
+  if (sqlConfig.queryMode === 'visual' && sqlConfig.visual.mainTable) {
+    // 确保主表字段已加载（tenant_id 条件化与列去重依赖字段缓存）
+    await ensureTableFields(sqlConfig.visual.mainTable)
+  }
   const sql = sqlConfig.queryMode === 'visual' ? generatePreviewSql() : sqlConfig.queryText
   if (!sql?.trim()) {
     ElMessage.warning('请先填写 SQL（可视化或 SQL 模式）')
@@ -1368,7 +1372,7 @@ function openView(row: DataSourceDTO) {
         where: sqlConfig.visual.where,
         orderBy: sqlConfig.visual.orderBy,
       }
-      // 生成预览 SQL（前端简单拼接，后端 VisualSqlGenerator 会重新生成）
+      // 生成 SQL 模板（保存后即运行时执行的查询，探测与运行时共用同一 SQL）
       params.query = generatePreviewSql()
     } else {
       // SQL 模式：直接使用手写 SQL
@@ -1386,28 +1390,84 @@ function openView(row: DataSourceDTO) {
     return params
   }
 
-  /** 可视化模式：前端生成预览 SQL（简化版，后端会重新生成） */
+  /** 可视化模式：前端生成预览 SQL（保存后即运行时执行的 SQL 模板，后端不再重新生成） */
   function generatePreviewSql(): string {
     const v = sqlConfig.visual
     if (!v.mainTable) return ''
-    let sql = `SELECT ${v.selectColumns.join(', ') || '*'}`
-    sql += ` FROM ${v.mainTable} ${v.mainAlias || 'm'}`
+    const alias = v.mainAlias || 'm'
+    let sql = `SELECT ${buildSelectFragment(v.selectColumns)}`
+    sql += ` FROM ${v.mainTable} ${alias}`
     for (const j of v.joins) {
       if (j.targetTable && j.on) {
         sql += ` ${j.joinType} ${j.targetTable} ${j.alias} ON ${j.on}`
       }
     }
-    sql += ` WHERE ${v.mainAlias || 'm'}.tenant_id = :tenantId`
+    // 租户过滤条件化（Task 10）：仅当主表真实存在 tenant_id 列时追加；
+    // 平台基础表（SYS_*/WF_* 等）无该列，硬拼会直接导致探测/运行时报 Column not found
+    const mainFields = sqlTableFields.value[v.mainTable]
+    const hasTenantCol = !!mainFields && mainFields.some((k) => (k || '').toLowerCase() === 'tenant_id')
+    const conditions: string[] = []
+    if (hasTenantCol) conditions.push(`${alias}.tenant_id = :tenantId`)
     for (const w of v.where) {
-      if (w.column && w.op) {
-        sql += ` AND ${w.column} ${w.op} ?`
-      }
+      const frag = buildWhereFragment(w)
+      if (frag) conditions.push(frag)
+    }
+    if (conditions.length > 0) {
+      sql += ` WHERE ${conditions.join(' AND ')}`
     }
     if (v.orderBy.length > 0) {
       const parts = v.orderBy.filter((o) => o.column).map((o) => `${o.column} ${o.order || 'ASC'}`)
       if (parts.length > 0) sql += ` ORDER BY ${parts.join(', ')}`
     }
     return sql
+  }
+
+  /** 选择列片段：输出列标签去重（重复时自动 AS 别名后缀 _1/_2，避免 H2 派生表 Duplicate column 运行时错误） */
+  function buildSelectFragment(selectColumns: string[]): string {
+    const parts: string[] = []
+    const seen = new Set<string>()
+    for (const raw of selectColumns || []) {
+      const col = (raw || '').trim()
+      if (!col) continue
+      if (/\s+AS\s+/i.test(col)) {
+        parts.push(col)
+        continue
+      }
+      const dot = col.lastIndexOf('.')
+      const label = (dot >= 0 ? col.slice(dot + 1) : col).replace(/[`"\[\]]/g, '')
+      const key = label.toLowerCase()
+      if (key && seen.has(key)) {
+        let i = 1
+        while (seen.has(`${key}_${i}`)) i++
+        parts.push(`${col} AS ${label}_${i}`)
+        seen.add(`${key}_${i}`)
+      } else {
+        if (key) seen.add(key)
+        parts.push(col)
+      }
+    }
+    return parts.join(', ') || '*'
+  }
+
+  /** WHERE 条件片段：内联配置值（裸 ? 在探测与运行时均无法绑定）；值为空时跳过该条件 */
+  function buildWhereFragment(w: { column: string; op: string; value: string }): string {
+    if (!w.column || !w.op) return ''
+    const raw = (w.value ?? '').trim()
+    if (!raw) return ''
+    if (w.op.toUpperCase() === 'IN') {
+      const items = raw.split(',').map((s) => s.trim()).filter((s) => s !== '')
+      if (items.length === 0) return ''
+      return `${w.column} IN (${items.map(sqlLiteral).join(', ')})`
+    }
+    if (w.op.toUpperCase() === 'LIKE') {
+      return `${w.column} LIKE '%${raw.replace(/'/g, "''")}%'`
+    }
+    return `${w.column} ${w.op} ${sqlLiteral(raw)}`
+  }
+
+  /** SQL 字面量：恒以字符串字面量输出（H2 严格类型下 VARCHAR 列 = 裸数字会报 Data conversion error；引号形式对数值/日期列均可隐式转换） */
+  function sqlLiteral(v: string): string {
+    return `'${v.replace(/'/g, "''")}'`
   }
 
   /** 校验并保存 */

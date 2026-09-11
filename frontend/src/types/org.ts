@@ -18,6 +18,7 @@ export interface OrgCreateForm {
 export interface OrgUpdateForm {
   name?: string
   code?: string
+  parentId?: number
   sortOrder?: number
   status?: number
 }

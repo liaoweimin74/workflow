@@ -54,6 +54,13 @@ public class OrganizationServiceImpl implements OrganizationService {
     public TreeNode update(Long id, OrganizationUpdateRequest request) {
         SysOrganization org = orgRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("组织机构不存在"));
+        if (request.parentId() != null && !request.parentId().equals(id)) {
+            // 循环引用校验：不能将节点移到自己的子孙下面
+            if (isDescendant(id, request.parentId())) {
+                throw new BusinessException("不能将组织移动到其子组织下");
+            }
+            org.setParentId(request.parentId());
+        }
         if (StringUtils.hasText(request.orgName())) org.setOrgName(request.orgName());
         if (StringUtils.hasText(request.orgCode())) org.setOrgCode(request.orgCode());
         if (request.sortOrder() != null) org.setSortOrder(request.sortOrder());
@@ -88,5 +95,18 @@ public class OrganizationServiceImpl implements OrganizationService {
         return new TreeNode(org.getId(), org.getParentId(), org.getOrgName(),
                 org.getOrgCode(), org.getSortOrder(), org.getStatus(),
                 childNodes.isEmpty() ? null : childNodes);
+    }
+
+    /**
+     * 判断 parentId 是否是 nodeId 的后代节点（防止循环引用）
+     */
+    private boolean isDescendant(Long nodeId, Long parentId) {
+        List<SysOrganization> children = orgRepository.findByParentIdOrderBySortOrder(nodeId);
+        for (SysOrganization child : children) {
+            if (child.getIsDeleted() != 0) continue;
+            if (child.getId().equals(parentId)) return true;
+            if (isDescendant(child.getId(), parentId)) return true;
+        }
+        return false;
     }
 }

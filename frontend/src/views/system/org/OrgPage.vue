@@ -45,7 +45,7 @@ const formConfig = computed<FormConfig<TreeNode>>(() => ({
   rule: [
     {
       type: 'treeSelect', field: 'parentId', title: '上级组织',
-      props: { placeholder: '选择上级（空=根组织）', data: list.value, props: { label: 'label', value: 'id', children: 'children' } },
+      props: { placeholder: '选择上级（空=根组织）', data: list.value, props: { label: 'label', value: 'id', children: 'children' }, checkStrictly: true, clearable: true },
     } as Rule,
     { type: 'input', field: 'name', title: '组织名称', validate: [{ required: true, message: '请输入组织名称', trigger: 'blur' }] } as Rule,
     { type: 'input', field: 'code', title: '组织编码', validate: [{ required: true, message: '请输入组织编码', trigger: 'blur' }] } as Rule,

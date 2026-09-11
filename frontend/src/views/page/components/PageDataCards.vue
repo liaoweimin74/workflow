@@ -158,9 +158,8 @@ const resolvedRefId = computed(() => {
 
 const resolvedColumns = computed<CardColumn[]>(() => (props.columns || []).filter((column) => !column.hidden).map((column) => {
   const prop = column.prop || (column as any).key
-  const meta = metadataColumns.value.find((m) => m.key === prop)
-  // 数组值组件列（卡片字段显示显示值而非原始 value）：formatter 优先读 <key>_text（叶子 label），缺失回退 value join（对齐 PageDataTable）
-  const isArrayCol = !!meta && ARRAY_COMPONENT_TYPES.includes(meta.componentType || '')
+  // 数组值组件列（metadata 含 <key>_text 冗余列）：formatter 优先读 <key>_text（叶子 label），缺失回退 value join（对齐 PageDataTable）
+  const isArrayCol = hasTextColumn(prop)
   return {
     ...column,
     prop,
@@ -177,13 +176,14 @@ const resolvedColumns = computed<CardColumn[]>(() => (props.columns || []).filte
   }
 }))
 
-/** 数组值组件类型（卡片字段显示按组件类型渲染显示值 label） */
-const ARRAY_COMPONENT_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'select', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
+/** metadata 中存在 <key>_text 冗余列（数组值/引用列显示信号，替代 componentType 判断） */
+function hasTextColumn(key: string): boolean {
+  return metadataColumns.value.some((m) => m.key === `${key}_text`)
+}
 
 /** 数组值组件主列（JSON）搜索 → 用 <key>_text 列（查询值=显示值 label，后端 LIKE 匹配显示列；对齐 PageDataTable） */
 function resolveSearchColumn(key: string): string {
-  const meta = metadataColumns.value.find((m) => m.key === key)
-  if (meta && ARRAY_COMPONENT_TYPES.includes(meta.componentType || '')) return `${key}_text`
+  if (hasTextColumn(key)) return `${key}_text`
   return key
 }
 
@@ -214,7 +214,7 @@ const formDataSources = ref<DataSourceBindingContext[]>([])
 const columnsForRender = computed(() => props.designMode && props.columns?.length === 0
   ? metadataColumns.value.map((column) => ({ prop: column.key, label: column.label || column.key, role: column.role || 'field' }))
   : resolvedColumns.value)
-/** 查询组件类型映射（按数据源 metadata componentType；选项数据源来自业务表单 schema，对齐 PageDataTable） */
+/** 查询组件类型映射（按表单 schema rule.type 优先 + columnType 降级；选项数据源来自业务表单 schema，对齐 PageDataTable） */
 const QUERY_SELECT_TYPES = ['select', 'multiSelect', 'multiSelectPro', 'checkbox', 'elTransfer']
 const QUERY_TREE_TYPES = ['tree', 'elTreeSelect']
 const QUERY_PICKER_TYPES = ['LookupPicker', 'DataPicker']
@@ -242,8 +242,10 @@ const resolvedSearchFields = computed(() => (props.searchFields || [])
   .map((field) => {
     const key = field.key || field.field || ''
     const meta = metadataColumns.value.find((m) => m.key === key)
-    const compType = meta?.componentType || ''
     const rule = findFormRuleByKey(key)
+    // 组件类型：优先表单 schema rule.type（含完整配置）；无 schema 时为空，走 columnType 降级
+    const compType = rule?.type || ''
+    const colType = meta?.columnType || ''
     const base = { prop: key, label: field.label || key }
     if (field.matchType === 'like') {
       // 模糊查询：直接用文本输入框（用户输入关键字，后端 LIKE 匹配）
@@ -281,7 +283,7 @@ const resolvedSearchFields = computed(() => (props.searchFields || [])
         style: 'width: 200px',
       }
     }
-    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date') {
+    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date' || colType === 'DATE' || colType === 'DATETIME') {
       return { ...base, type: 'date-picker' as const }
     }
     return { ...base, type: 'input' as const, style: 'width: 180px' }

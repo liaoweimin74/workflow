@@ -5,9 +5,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 const { queryData } = vi.hoisted(() => ({ queryData: vi.fn() }))
 const { getMetadata, getData } = vi.hoisted(() => ({ getMetadata: vi.fn(), getData: vi.fn() }))
 const { elMessage, elMessageBox } = vi.hoisted(() => ({ elMessage: vi.fn(), elMessageBox: { confirm: vi.fn() } }))
+const { getFormDefinitionByKey } = vi.hoisted(() => ({ getFormDefinitionByKey: vi.fn() }))
 
 vi.mock('@/api/data-source', () => ({
   dataSourceApi: { queryData, getMetadata, getData },
+}))
+
+vi.mock('@/api/form', () => ({
+  formApi: { getFormDefinitionByKey },
 }))
 
 vi.mock('element-plus', () => ({
@@ -47,6 +52,7 @@ describe('PageDataCards', () => {
     queryData.mockReset()
     getMetadata.mockReset()
     getData.mockReset()
+    getFormDefinitionByKey.mockReset()
     elMessage.mockReset()
     elMessageBox.confirm.mockReset()
     queryData.mockResolvedValue({ data: { records: [{ id: 7, data: { name: '订单' }, version: 3 }], total: 21 } })
@@ -157,11 +163,23 @@ describe('PageDataCards', () => {
   })
 
   it('匹配方式缺省/等值(eq)的选项类字段保持原控件（不附加 filterable/allow-create）', async () => {
-    getMetadata.mockResolvedValue({ data: { writable: false, columns: [
-      { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
-      { key: 'tree', label: '树', columnType: 'JSON', componentType: 'elTreeSelect' },
-      { key: 'region', label: '级联', columnType: 'JSON', componentType: 'cascader' },
+    getMetadata.mockResolvedValue({ data: { writable: false, formKey: 'orders', columns: [
+      { key: 'dept', label: '部门', columnType: 'JSON' },
+      { key: 'tree', label: '树', columnType: 'JSON' },
+      { key: 'region', label: '级联', columnType: 'JSON' },
     ] } })
+    getFormDefinitionByKey.mockResolvedValue({
+      data: {
+        schema: JSON.stringify({
+          rule: [
+            { type: 'select', field: 'dept', title: '部门', options: [{ label: '研发部', value: 'r' }] },
+            { type: 'elTreeSelect', field: 'tree', title: '树', props: { data: [{ label: '总公司', children: [{ label: '分公司' }] }] } },
+            { type: 'cascader', field: 'region', title: '级联', props: { options: [{ label: '省', children: [{ label: '市' }] }] } },
+          ],
+          dataSources: [],
+        }),
+      },
+    })
     queryData.mockResolvedValue({ data: { records: [], total: 0 } })
 
     const wrapper = mount(PageDataCards, {
@@ -467,9 +485,15 @@ describe('PageDataCards', () => {
     wrapper.unmount()
   })
 
-  it('数组值组件列 formatter 读 <key>_text（叶子 label），缺失回退 value join（对齐 PageDataTable）', async () => {
+  it('metadata 含 <key>_text 冗余列时数组值组件列 formatter 读 <key>_text（叶子 label），缺失回退 value join（对齐 PageDataTable）', async () => {
     getMetadata.mockResolvedValue({
-      data: { writable: true, columns: [{ key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' }] },
+      data: {
+        writable: true,
+        columns: [
+          { key: 'dept', label: '部门', columnType: 'JSON' },
+          { key: 'dept_text', label: '部门（显示）', columnType: 'VARCHAR', hidden: true },
+        ],
+      },
     })
     queryData.mockResolvedValue({ data: { records: [{ id: 7, data: { dept: ['r'], dept_text: '研发部' }, version: 3 }], total: 1 } })
 
@@ -487,6 +511,29 @@ describe('PageDataCards', () => {
     expect(col?.formatter?.({ dept: ['r'], dept_text: '研发部' }, null, ['r'])).toBe('研发部')
     // 缺失 _text 回退 value join
     expect(col?.formatter?.({ dept: ['r', 'm'] }, null, ['r', 'm'])).toBe('r, m')
+    wrapper.unmount()
+  })
+
+  it('metadata 无 <key>_text 列时不挂数组值 formatter（原始值直显）', async () => {
+    getMetadata.mockResolvedValue({
+      data: {
+        writable: true,
+        columns: [{ key: 'dept', label: '部门', columnType: 'JSON' }],
+      },
+    })
+    queryData.mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = mount(PageDataCards, {
+      props: {
+        dataSourceId: 'orders',
+        columns: [{ prop: 'dept', role: 'field' }],
+      },
+    })
+    await flushPromises()
+
+    const cardsStub = wrapper.findComponent({ name: 'ListCardsStub' })
+    const col = cardsStub.props('columns').find((c: any) => c.prop === 'dept')
+    expect(col?.formatter).toBeUndefined()
     wrapper.unmount()
   })
 })

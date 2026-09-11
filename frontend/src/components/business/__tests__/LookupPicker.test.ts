@@ -635,3 +635,52 @@ describe('LookupPicker — 搜索框 placeholder', () => {
     expect(placeholders).toContain('请输入关键字搜索')
   })
 })
+
+describe('LookupPicker — 弹窗表格列渲染（<key>_text 冗余显示列）', () => {
+  function formatCellWrapper() {
+    return mount(LookupPicker, {
+      props: {
+        modelValue: null,
+        fetchApi: vi.fn().mockResolvedValue({ rows: [], total: 0 }),
+        columns: [{ prop: 'code', label: '编号' }, { prop: 'dept', label: '部门' }],
+        displayField: 'code',
+      },
+      global: { plugins: [ElementPlus] },
+    })
+  }
+
+  it('树形组件列存在 <key>_text 时显示叶子 label（而非存储的原始 value）', async () => {
+    const wrapper = formatCellWrapper()
+    await nextTick()
+    const vm = wrapper.vm as any
+    // dept 主列存 JSON 叶子 value；dept_text 存全路径显示文本
+    expect(vm.formatCell({ code: '001', dept: '2', dept_text: '/总公司/研发部' }, 'dept')).toBe('研发部')
+    wrapper.unmount()
+  })
+
+  it('BizDataVO 内层（row.data）同样优先读 <key>_text', async () => {
+    const wrapper = formatCellWrapper()
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(
+      vm.formatCell({ code: '001', data: { dept: '2', dept_text: '/总公司/市场部' } }, 'dept'),
+    ).toBe('市场部')
+    wrapper.unmount()
+  })
+
+  it('缺失 <key>_text 时回退显示主列值', async () => {
+    const wrapper = formatCellWrapper()
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.formatCell({ code: '001', dept: '2' }, 'dept')).toBe('2')
+    wrapper.unmount()
+  })
+
+  it('非数组组件列（无 _text）保持原值显示', async () => {
+    const wrapper = formatCellWrapper()
+    await nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.formatCell({ code: 'BL-001' }, 'code')).toBe('BL-001')
+    wrapper.unmount()
+  })
+})

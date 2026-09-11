@@ -234,6 +234,71 @@ class UnifiedDataSourceAdapterTest {
     }
 
     @Test
+    void formMetadata_configMode_dataPickerVirtualColumn_keepsPickerConfigAndAppendsHiddenTextColumn() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("""
+                {"queryMode":"config","joins":[{"alias":"c","targetFormKey":"customer","localField":"customer_id",
+                "foreignField":"id","joinField":"manager","virtualKey":"customer_manager","label":"客户经理",
+                "sortable":true,"filterable":true}]}
+                """);
+        when(formDefService.getBusinessColumnsByKey("order"))
+                .thenReturn(new ArrayList<>(List.of(col("order_no", "订单号", "VARCHAR", 100))));
+        // joinField=manager 为 dataPicker 引用列（pickerConfig 非空 + 隐藏 manager_text 冗余列）
+        ColumnConfig manager = col("manager", "客户经理ID", "TEXT", 0);
+        manager.setPickerConfig("{\"sourceFormKey\":\"employee\",\"displayField\":\"name\"}");
+        ColumnConfig managerText = col("manager_text", "客户经理（显示）", "TEXT", 0);
+        managerText.setHidden(true);
+        when(formDefService.getBusinessColumnsByKey("customer"))
+                .thenReturn(List.of(manager, managerText));
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        // 虚拟列（pickerConfig 透传）+ 隐藏文本冗余列
+        assertEquals(3, meta.getColumns().size());
+        ColumnConfig v = meta.getColumns().get(1);
+        assertEquals("customer_manager", v.getKey());
+        assertEquals("客户经理", v.getLabel());
+        assertEquals("TEXT", v.getColumnType());
+        assertEquals(Boolean.TRUE, v.getSortable());
+        assertEquals(Boolean.TRUE, v.getFilterable());
+        assertEquals("{\"sourceFormKey\":\"employee\",\"displayField\":\"name\"}", v.getPickerConfig());
+
+        ColumnConfig vt = meta.getColumns().get(2);
+        assertEquals("customer_manager_text", vt.getKey());
+        assertEquals("TEXT", vt.getColumnType());
+        assertTrue(vt.isHidden());
+        assertEquals(Boolean.FALSE, vt.getSortable());
+        assertEquals(Boolean.FALSE, vt.getFilterable());
+    }
+
+    @Test
+    void formMetadata_configMode_lookupPickerVirtualColumn_keepsPickerConfigWithoutTextColumn() {
+        DataSourceDefinition ds = ds("FORM", "order");
+        ds.setParams("""
+                {"queryMode":"config","joins":[{"alias":"c","targetFormKey":"customer","localField":"customer_id",
+                "foreignField":"id","joinField":"owner","virtualKey":"customer_owner","label":"负责人",
+                "sortable":true,"filterable":true}]}
+                """);
+        when(formDefService.getBusinessColumnsByKey("order"))
+                .thenReturn(new ArrayList<>(List.of(col("order_no", "订单号", "VARCHAR", 100))));
+        // joinField=owner 为 LookupPicker 单选列（pickerConfig 非空，值=显示文本，无 _text 冗余列）
+        ColumnConfig owner = col("owner", "负责人", "VARCHAR", 255);
+        owner.setPickerConfig("{\"pickerType\":\"lookupPicker\",\"sourceFormKey\":\"user\",\"displayField\":\"nickname\"}");
+        when(formDefService.getBusinessColumnsByKey("customer"))
+                .thenReturn(List.of(owner));
+
+        DataSourceMetadata meta = adapter.metadata(ds);
+
+        // 仅虚拟列（透传 pickerConfig），不追加隐藏文本列
+        assertEquals(2, meta.getColumns().size());
+        ColumnConfig v = meta.getColumns().get(1);
+        assertEquals("customer_owner", v.getKey());
+        assertEquals("{\"pickerType\":\"lookupPicker\",\"sourceFormKey\":\"user\",\"displayField\":\"nickname\"}",
+                v.getPickerConfig());
+        assertTrue(meta.getColumns().stream().noneMatch(c -> c.getKey().equals("customer_owner_text")));
+    }
+
+    @Test
     void formMetadata_configMode_skipsDuplicateVirtualKey() {
         DataSourceDefinition ds = ds("FORM", "order");
         ds.setParams("""

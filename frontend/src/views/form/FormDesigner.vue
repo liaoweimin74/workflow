@@ -76,6 +76,7 @@
     <LookupPickerConfigDialog
       v-model="lookupDialogVisible"
       :current-fields="currentFieldKeys"
+      :current-field-options="currentFieldOptions"
       :lookup-props="currentLookupProps"
       :form-data-sources="formDataSources"
       :enabled-data-sources="enabledDataSources"
@@ -149,7 +150,7 @@ import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.v
 import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
 import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'
 import type { CardStyle } from '@/components/business/ListCards.types'
-import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, collectFieldOptions, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 const route = useRoute()
@@ -222,6 +223,9 @@ const selectedPickerField = ref<string>('')
 
 /** 当前表单所有字段 key（供回填映射/级联依赖的目标字段选择），穿透子表内部 */
 const currentFieldKeys = computed<string[]>(() => collectFieldKeys(designerRule.value))
+
+/** 当前表单所有字段 {field,title}（供下拉候选显示中文名称），穿透子表内部 */
+const currentFieldOptions = computed<{ field: string; title?: string }[]>(() => collectFieldOptions(designerRule.value))
 
 /** 当前选中 dataPicker 字段的 props（供配置弹窗回填） */
 const currentPickerProps = computed<Record<string, any>>(() => {

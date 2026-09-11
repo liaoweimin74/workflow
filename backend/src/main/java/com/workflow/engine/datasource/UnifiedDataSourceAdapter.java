@@ -280,14 +280,34 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             if (j.virtualKey() == null || j.virtualKey().isBlank() || existing.contains(j.virtualKey())) {
                 continue;
             }
+            List<ColumnConfig> targetCols = resolveJoinTargets(j);
             ColumnConfig c = new ColumnConfig();
             c.setKey(j.virtualKey());
             c.setLabel(j.label() == null || j.label().isBlank() ? j.virtualKey() : j.label());
-            c.setColumnType(resolveJoinColumnType(j));
+            c.setColumnType(findJoinColumnType(targetCols, j.joinField()));
             c.setSortable(j.sortable());
             c.setFilterable(j.filterable());
             cols.add(c);
             existing.add(c.getKey());
+
+            // 目标列为 dataPicker 引用列（pickerConfig 非空）：透传 pickerConfig，前端按引用列渲染显示文本
+            ColumnConfig target = findJoinTarget(targetCols, j.joinField());
+            if (target != null && target.getPickerConfig() != null && !target.getPickerConfig().isBlank()) {
+                c.setPickerConfig(target.getPickerConfig());
+            }
+            // 目标表含 <joinField>_text 冗余列（dataPicker 两列映射）→ 追加隐藏冗余列，供前端引用渲染取值
+            if (findJoinTarget(targetCols, j.joinField() + "_text") != null) {
+                ColumnConfig text = new ColumnConfig();
+                text.setKey(j.virtualKey() + "_text");
+                text.setLabel(c.getLabel() + "（显示）");
+                text.setColumnType(findJoinColumnType(targetCols, j.joinField() + "_text"));
+                text.setHidden(true);
+                text.setSortable(false);
+                text.setFilterable(false);
+                text.setComponentType("dataPickerText");
+                cols.add(text);
+                existing.add(text.getKey());
+            }
         }
     }
 
@@ -309,21 +329,36 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
         }
     }
 
-    /** 虚拟列 columnType：目标表单 joinField 的列类型；查不到 fallback "VARCHAR"。 */
-    private String resolveJoinColumnType(JoinConfig j) {
+    /** 目标表单列列表；解析失败/不存在 → 空列表（调用方统一按"查不到"处理）。 */
+    private List<ColumnConfig> resolveJoinTargets(JoinConfig j) {
         try {
             List<ColumnConfig> target = formDefService.getBusinessColumnsByKey(j.targetFormKey());
-            if (target != null) {
-                for (ColumnConfig c : target) {
-                    if (j.joinField().equals(c.getKey()) && c.getColumnType() != null && !c.getColumnType().isBlank()) {
-                        return c.getColumnType().toUpperCase();
-                    }
-                }
-            }
+            return target == null ? List.of() : target;
         } catch (BusinessException ignored) {
             // 目标表单不可解析时回退
+            return List.of();
         }
-        return "VARCHAR";
+    }
+
+    /** 目标列查找：按 key 匹配；查不到返回 null。 */
+    private static ColumnConfig findJoinTarget(List<ColumnConfig> cols, String key) {
+        if (cols == null) {
+            return null;
+        }
+        for (ColumnConfig c : cols) {
+            if (key.equals(c.getKey())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /** 目标列 columnType：查不到 fallback "VARCHAR"。 */
+    private static String findJoinColumnType(List<ColumnConfig> cols, String key) {
+        ColumnConfig c = findJoinTarget(cols, key);
+        return c != null && c.getColumnType() != null && !c.getColumnType().isBlank()
+                ? c.getColumnType().toUpperCase()
+                : "VARCHAR";
     }
 
     // ===== SYSTEM helpers =====

@@ -66,6 +66,7 @@ import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { LookupPickerProps, QueryParams, LookupFilterConfig, DataSourceBindingContext } from './types'
 import { readCellValue } from './lookupFetch'
+import { leafDisplayText } from '@/views/form/arrayValueLabel'
 import { mergeFilters } from '@/utils/filterMerge'
 import { resolveFilterFieldReferences } from '@/utils/filterResolve'
 import { dataSourceApi } from '@/api/data-source'
@@ -192,8 +193,15 @@ const filterDependFields = computed<string[]>(() => {
   return []
 })
 
-/** 表格单元格格式化：readCellValue 兼容 BizDataVO 内层与平铺行；对象/数组 JSON 化 */
+/** 表格单元格格式化：readCellValue 兼容 BizDataVO 内层与平铺行；对象/数组 JSON 化。
+ * 数组值组件（树形/级联/多选等）优先显示冗余显示列 <key>_text（取叶子 label），缺失回退主列值。 */
 function formatCell(row: any, key?: string): string {
+  if (!key) return ''
+  // 数组值组件：优先读 <key>_text 冗余显示列（如树形 /总公司/研发部 → 研发部）
+  const text = readCellValue(row, key + '_text')
+  if (text !== undefined && text !== null && text !== '') {
+    return leafDisplayText(text)
+  }
   const v = readCellValue(row, key)
   if (v === null || v === undefined) return ''
   return typeof v === 'object' ? JSON.stringify(v) : String(v)

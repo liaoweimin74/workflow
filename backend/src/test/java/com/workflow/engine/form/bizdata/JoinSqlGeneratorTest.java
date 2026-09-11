@@ -216,6 +216,39 @@ class JoinSqlGeneratorTest {
         // 不抛异常即通过（alias 可空、可重复，生成时按组分配）
     }
 
+    @Test
+    void buildSelect_pickerRefVirtualColumn_appendsTextColumnSelect() {
+        // joinField 为目标表单 dataPicker 引用列：columns 同时含 <virtualKey> 与 <virtualKey>_text
+        JoinSqlGenerator.JoinConfig picker = new JoinSqlGenerator.JoinConfig(
+                "c", "customer", "customer_id", "id", "manager",
+                "customer_manager", "客户经理", true, true);
+        List<JoinSqlGenerator.QueryColumn> columns = List.of(
+                new JoinSqlGenerator.QueryColumn("order_no", "m.order_no", "VARCHAR", true, true),
+                new JoinSqlGenerator.QueryColumn("customer_id", "m.customer_id", "JSON", true, true),
+                new JoinSqlGenerator.QueryColumn("customer_manager", "j1.manager", "TEXT", true, true),
+                new JoinSqlGenerator.QueryColumn("customer_manager_text", "j1.manager_text", "TEXT", false, true));
+
+        BizDataQueryBuilder.SqlAndParams sql = JoinSqlGenerator.buildSelect(
+                MAIN, TENANT, List.of(picker), columns,
+                Map.of(), null, null, null, null, 0, 10);
+
+        assertThat(sql.sql()).isEqualTo(
+                "SELECT m.*, j1.manager AS customer_manager, j1.manager_text AS customer_manager_text"
+                        + " FROM wf_biz_order m"
+                        + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
+    }
+
+    @Test
+    void buildSelect_plainVirtualColumn_doesNotAppendTextColumn() {
+        // 普通列（无 <virtualKey>_text QueryColumn）→ 不追加 _text SELECT
+        BizDataQueryBuilder.SqlAndParams sql = JoinSqlGenerator.buildSelect(
+                MAIN, TENANT, List.of(CUSTOMER_JOIN), queryColumns(),
+                Map.of(), null, null, null, null, 0, 10);
+
+        assertThat(sql.sql()).doesNotContain("_text");
+    }
+
     private static List<JoinSqlGenerator.QueryColumn> queryColumns() {
         // 主表列（ref = m.<key>）+ 虚拟列（ref = <alias>.<joinField>）
         return List.of(

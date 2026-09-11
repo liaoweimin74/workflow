@@ -91,6 +91,11 @@ public final class JoinSqlGenerator {
             for (JoinConfig j : g.members()) {
                 sql.append(", ").append(g.alias()).append(".").append(j.joinField())
                         .append(" AS ").append(j.virtualKey());
+                // 目标列为 dataPicker 引用列（含 <virtualKey>_text 冗余文本 QueryColumn）：SELECT 一并带出
+                if (hasColumn(columns, j.virtualKey() + "_text")) {
+                    sql.append(", ").append(g.alias()).append(".").append(j.joinField())
+                            .append("_text AS ").append(j.virtualKey()).append("_text");
+                }
             }
         }
         sql.append(" FROM ").append(mainTable).append(" m");
@@ -209,6 +214,19 @@ public final class JoinSqlGenerator {
         for (QueryColumn c : columns) {
             if (c.key().equals(key)) {
                 return "JSON".equalsIgnoreCase(c.columnType());
+            }
+        }
+        return false;
+    }
+
+    /** columns 中是否存在指定 key（用于判断是否带出 <virtualKey>_text 冗余列） */
+    private static boolean hasColumn(List<QueryColumn> columns, String key) {
+        if (columns == null) {
+            return false;
+        }
+        for (QueryColumn c : columns) {
+            if (c.key().equals(key)) {
+                return true;
             }
         }
         return false;

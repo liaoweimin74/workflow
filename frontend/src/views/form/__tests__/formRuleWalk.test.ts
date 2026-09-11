@@ -2,7 +2,7 @@
 // npx vitest run src/views/form/__tests__/formRuleWalk.test.ts
 
 import { describe, it, expect } from 'vitest'
-import { walkRules, collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, ensureRuleProps, type RuleLike } from '../formRuleWalk'
+import { walkRules, collectFieldsOfType, collectFieldKeys, collectFieldOptions, patchFieldProps, resolveActiveField, ensureRuleProps, type RuleLike } from '../formRuleWalk'
 
 /**
  * 主表单 schema：
@@ -73,6 +73,30 @@ describe('formRuleWalk — 子表内部字段（props.rule / props.columns[].rul
     expect(keys).toContain('item_name')
     expect(keys).toContain('row_name')
     expect(keys).toContain('remark')
+  })
+
+  it('collectFieldOptions 收集 {field,title} 且穿透子表内部字段', () => {
+    const options = collectFieldOptions(buildSchema())
+    expect(options).toEqual([
+      { field: 'remark', title: '备注' },
+      { field: 'items', title: '明细' },
+      { field: 'item_name', title: '名称' },
+      { field: 'lkp', title: '查找带回' },
+      { field: 'rows', title: '表格子表' },
+      { field: 'row_name', title: '名称' },
+      { field: 'dp', title: '数据引用' },
+    ])
+  })
+
+  it('collectFieldOptions 对无 title 字段回退空字符串', () => {
+    const options = collectFieldOptions([
+      { type: 'input', field: 'a', title: '甲' },
+      { type: 'input', field: 'b' },
+    ])
+    expect(options).toEqual([
+      { field: 'a', title: '甲' },
+      { field: 'b', title: undefined },
+    ])
   })
 
   it('patchFieldProps 能把配置写回 group 子表内部 rule 的 props', () => {

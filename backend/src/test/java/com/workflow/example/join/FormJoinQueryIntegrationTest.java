@@ -55,13 +55,22 @@ class FormJoinQueryIntegrationTest {
 
     private static final String CUSTOMER_COLUMNS = """
             [
-              {"key":"name","label":"客户名称","columnType":"VARCHAR","length":128,"required":false,"unique":false,"indexed":false,"hidden":false}
+              {"key":"name","label":"客户名称","columnType":"VARCHAR","length":128,"required":false,"unique":false,"indexed":false,"hidden":false},
+              {"key":"manager","label":"客户经理","columnType":"TEXT","required":false,"unique":false,"indexed":false,"hidden":false,"pickerConfig":"{\\"sourceFormKey\\":\\"staff\\",\\"displayField\\":\\"name\\"}"},
+              {"key":"manager_text","label":"客户经理（显示）","columnType":"TEXT","required":false,"unique":false,"indexed":false,"hidden":true,"componentType":"dataPickerText"}
             ]
             """;
 
     private static final String CONFIG_PARAMS = """
             {"queryMode":"config","joins":[{"alias":"c","targetFormKey":"customer","localField":"customer_id",
              "foreignField":"id","joinField":"name","virtualKey":"customer_name","label":"客户名称",
+             "sortable":true,"filterable":true}]}
+            """;
+
+    /** join 引用目标表单 dataPicker 引用列（manager）：应带出 <virtualKey> 与 <virtualKey>_text 冗余文本列 */
+    private static final String CONFIG_PARAMS_PICKER = """
+            {"queryMode":"config","joins":[{"alias":"c","targetFormKey":"customer","localField":"customer_id",
+             "foreignField":"id","joinField":"manager","virtualKey":"customer_manager","label":"客户经理",
              "sortable":true,"filterable":true}]}
             """;
 
@@ -196,6 +205,41 @@ class FormJoinQueryIntegrationTest {
     }
 
     @Test
+    void configMetadata_dataPickerVirtualColumn_appendsPickerConfigAndHiddenTextColumn() {
+        DataSourceMetadata meta = adapter.metadata(formDs(ORDER_KEY, CONFIG_PARAMS_PICKER));
+
+        List<String> keys = meta.getColumns().stream().map(ColumnConfig::getKey).toList();
+        assertThat(keys).contains("customer_id", "order_no", "total", "customer_manager", "customer_manager_text");
+        ColumnConfig virtual = meta.getColumns().stream()
+                .filter(c -> "customer_manager".equals(c.getKey())).findFirst().orElseThrow();
+        assertThat(virtual.getLabel()).isEqualTo("客户经理");
+        assertThat(virtual.getColumnType()).isEqualTo("TEXT");
+        assertThat(virtual.getPickerConfig()).isNotBlank();
+        assertThat(virtual.getSortable()).isTrue();
+        assertThat(virtual.getFilterable()).isTrue();
+        // 冗余文本列：隐藏、不可排序/筛选，供前端引用渲染显示文本
+        ColumnConfig text = meta.getColumns().stream()
+                .filter(c -> "customer_manager_text".equals(c.getKey())).findFirst().orElseThrow();
+        assertThat(text.getColumnType()).isEqualTo("TEXT");
+        assertThat(text.isHidden()).isTrue();
+        assertThat(text.getSortable()).isEqualTo(Boolean.FALSE);
+        assertThat(text.getFilterable()).isEqualTo(Boolean.FALSE);
+    }
+
+    @Test
+    void configQuery_dataPickerVirtualColumn_returnsIdAndTextValues() {
+        BizDataPageVO page = adapter.query(formDs(ORDER_KEY, CONFIG_PARAMS_PICKER), pageReq(1, 20));
+
+        assertThat(page.getTotal()).isEqualTo(3);
+        assertThat(page.getRecords()).hasSize(3);
+        Map<String, Object> newest = page.getRecords().get(0).getData();
+        assertThat(newest).containsEntry("order_no", "ORD-003");
+        // 引用列主值（id 数组 JSON 串）+ 冗余文本列（显示文本 JSON 串）都应返回
+        assertThat(newest).containsEntry("customer_manager", "[\"c1-mgr\"]");
+        assertThat(newest).containsEntry("customer_manager_text", "[\"张经理\"]");
+    }
+
+    @Test
     void sqlMetadata_appendsDeclaredColumns() {
         DataSourceMetadata meta = adapter.metadata(formDs(ORDER_KEY, SQL_PARAMS));
 
@@ -272,6 +316,8 @@ class FormJoinQueryIntegrationTest {
                     id VARCHAR(64) NOT NULL,
                     tenant_id VARCHAR(64) NOT NULL,
                     name VARCHAR(128),
+                    manager TEXT,
+                    manager_text TEXT,
                     version INT NOT NULL DEFAULT 1,
                     created_by VARCHAR(50),
                     created_at TIMESTAMP,
@@ -295,18 +341,18 @@ class FormJoinQueryIntegrationTest {
     }
 
     private void seedData() {
-        insertCustomer("c1", "王五");
-        insertCustomer("c2", "李四");
+        insertCustomer("c1", "王五", "[\"c1-mgr\"]", "[\"张经理\"]");
+        insertCustomer("c2", "李四", "[\"c2-mgr\"]", "[\"李经理\"]");
         insertOrder("o1", "c1", "ORD-001", 100.00, "2026-01-01 00:00:01");
         insertOrder("o2", "c2", "ORD-002", 200.00, "2026-01-01 00:00:02");
         insertOrder("o3", "c1", "ORD-003", 300.00, "2026-01-01 00:00:03");
     }
 
-    private void insertCustomer(String id, String name) {
+    private void insertCustomer(String id, String name, String manager, String managerText) {
         jdbcTemplate.update("""
-                INSERT INTO wf_biz_customer (id, tenant_id, name, version, created_at, updated_at)
-                VALUES (?, ?, ?, 1, ?, ?)
-                """, id, TENANT_ID, name, ts("2026-01-01 00:00:00"), ts("2026-01-01 00:00:00"));
+                INSERT INTO wf_biz_customer (id, tenant_id, name, manager, manager_text, version, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                """, id, TENANT_ID, name, manager, managerText, ts("2026-01-01 00:00:00"), ts("2026-01-01 00:00:00"));
     }
 
     private void insertOrder(String id, String customerId, String orderNo, double total, String createdAt) {

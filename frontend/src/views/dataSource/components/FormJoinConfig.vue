@@ -48,11 +48,7 @@ import { formApi } from '@/api/form'
 import { dataSourceApi } from '@/api/data-source'
 import SqlEditor from './SqlEditor.vue'
 import { emptyJoin, type FormJoinConfigValue, type JoinConfigItem } from './FormJoinConfig.vue'
-
-interface ColumnOption {
-  key: string
-  label: string
-}
+import { extractFormColumns, targetFormColumns, type ColumnOption } from './joinColumns'
 
 const props = withDefaults(
   defineProps<{
@@ -165,29 +161,12 @@ const declaredParams = computed<string[]>({
 const mainColumns = ref<ColumnOption[]>([])
 const targetColumnsMap = ref<Record<string, ColumnOption[]>>({})
 
-/** 从表单 schema rule 提取字段候选（field → title） */
-function extractFormColumns(schema: string | null | undefined): ColumnOption[] {
-  if (!schema) return []
-  try {
-    const parsed = JSON.parse(schema)
-    const rules = Array.isArray(parsed) ? parsed : (parsed.rule || [])
-    const out: ColumnOption[] = []
-    for (const r of rules) {
-      if (r && r.field) {
-        out.push({ key: String(r.field), label: r.title || String(r.field) })
-      }
-    }
-    return out
-  } catch {
-    return []
-  }
-}
-
-async function loadColumns(formKey: string): Promise<ColumnOption[]> {
+/** 拉取表单字段候选：主表单用 extractFormColumns（业务字段），目标表单用 targetFormColumns（业务字段 + 系统列 id） */
+async function loadColumns(formKey: string, extractor: (schema: string | null | undefined) => ColumnOption[] = extractFormColumns): Promise<ColumnOption[]> {
   if (!formKey) return []
   try {
     const res = await formApi.getFormDefinitionByKey(formKey)
-    return extractFormColumns((res.data as any)?.schema)
+    return extractor((res.data as any)?.schema)
   } catch {
     return []
   }
@@ -201,10 +180,10 @@ watch(
   { immediate: true }
 )
 
-/** 目标表单列懒加载（foreignField/joinField 候选） */
+/** 目标表单列懒加载（foreignField/joinField 候选：业务字段 + 系统列 id） */
 async function ensureTargetColumns(targetFormKey: string) {
   if (!targetFormKey || targetColumnsMap.value[targetFormKey]) return
-  targetColumnsMap.value[targetFormKey] = await loadColumns(targetFormKey)
+  targetColumnsMap.value[targetFormKey] = await loadColumns(targetFormKey, targetFormColumns)
 }
 
 function targetColumnsOf(targetFormKey: string): ColumnOption[] {

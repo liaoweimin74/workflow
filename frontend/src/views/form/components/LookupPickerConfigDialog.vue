@@ -30,7 +30,7 @@
       </el-form-item>
       <el-form-item label="id 存储字段">
         <el-select v-model="form.idField" placeholder="选择当前表单字段存储选中记录 id" clearable style="width: 100%">
-          <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
+          <el-option v-for="f in fieldOptions" :key="f.field" :label="f.label" :value="f.field" />
         </el-select>
         <span class="form-tip">选中记录的 id 将写入该字段（建议设为隐藏），用于索引与追踪</span>
       </el-form-item>
@@ -38,10 +38,10 @@
         <div style="width: 100%">
           <div v-for="(row, i) in form.returnFieldsRows" :key="i" style="display: flex; gap: 8px; margin-bottom: 8px">
             <el-select v-model="row.source" placeholder="数据源字段" style="width: 40%">
-              <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+              <el-option v-for="c in sourceColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
             </el-select>
             <el-select v-model="row.target" placeholder="回填到当前表单字段" style="width: 40%">
-              <el-option v-for="f in currentFields" :key="f" :label="f" :value="f" />
+              <el-option v-for="f in fieldOptions" :key="f.field" :label="f.label" :value="f.field" />
             </el-select>
             <el-button type="danger" link @click="form.returnFieldsRows.splice(i, 1)">删除</el-button>
           </div>
@@ -70,6 +70,8 @@ const props = defineProps<{
   modelValue: boolean
   /** 当前表单字段 key 列表（回填映射的目标字段） */
   currentFields: string[]
+  /** 当前表单字段 {field,title}（下拉候选显示中文名称；缺省回退 key） */
+  currentFieldOptions?: Array<{ field: string; title?: string }>
   /** 正在编辑的 LookupPicker 字段 props */
   lookupProps?: Record<string, any>
   /** 页面内数据源绑定配置 */
@@ -100,6 +102,28 @@ const dsColumns = ref<ColumnConfigItem[]>([])
 const visibleColumns = computed(() => {
   const columns = dsColumns.value.length > 0 ? dsColumns.value : (props.targetColumns || [])
   return columns.filter(c => !c.hidden)
+})
+
+/**
+ * 当前表单字段候选（含中文名）：优先 currentFieldOptions，缺省回退 key。
+ * 供"id 存储字段"与"回填到当前表单字段"下拉显示字段中文名称。
+ */
+const fieldOptions = computed<{ field: string; label: string }[]>(() => {
+  const opts = props.currentFieldOptions || []
+  if (opts.length > 0) {
+    return opts.map(o => ({ field: o.field, label: o.title || o.field }))
+  }
+  return props.currentFields.map(f => ({ field: f, label: f }))
+})
+
+/**
+ * 数据源字段候选（含源表单主键 id）：在可引用列基础上追加系统列 id，
+ * 使"数据源字段"（源表字段）下拉可以映射源表单主键回填。
+ */
+const sourceColumns = computed(() => {
+  const cols = visibleColumns.value
+  if (cols.some(c => c.key === 'id')) return cols
+  return [...cols, { key: 'id', label: '主键 id', columnType: 'BIGINT' }]
 })
 const legacyMode = computed(() => props.targetForms !== undefined || (props.formDataSources || []).length === 0)
 

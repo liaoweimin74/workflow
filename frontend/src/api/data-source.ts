@@ -69,6 +69,12 @@ export interface ColumnMeta {
   nullable?: boolean
 }
 
+/** JOIN 预览响应（对齐后端 JoinPreviewVO） */
+export interface JoinPreviewVO {
+  sql: string
+  params: unknown[]
+}
+
 export const dataSourceApi = {
   /** 分页查询数据源列表（type/status/name 过滤） */
   getDataSources(params: {
@@ -170,5 +176,10 @@ export const dataSourceApi = {
   /** 数据源删除 */
   deleteData(id: string, rowId: string): Promise<R<void>> {
     return http.delete(`/v1/data-sources/${id}/data/${rowId}`)
+  },
+
+  /** config 模式 JOIN SQL 预览（不落库不执行；joins 无需 alias） */
+  previewJoinSql(formKey: string, joins: Record<string, unknown>[]): Promise<R<JoinPreviewVO>> {
+    return http.post('/v1/data-sources/join-preview', { formKey, joins })
   },
 }

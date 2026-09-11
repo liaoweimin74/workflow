@@ -8,7 +8,6 @@
 import type { ColumnConfigItem } from '@/api/bizData'
 
 export interface JoinConfigItem {
-  alias: string
   targetFormKey: string
   localField: string
   foreignField: string
@@ -27,10 +26,9 @@ export interface FormJoinConfigValue {
   params?: string[]
 }
 
-/** 默认关联条目（alias 自动编号，可在编辑中改名） */
-export function emptyJoin(index: number): JoinConfigItem {
+/** 默认关联条目（alias 由后端系统按组自动分配，前端不录入） */
+export function emptyJoin(_index: number): JoinConfigItem {
   return {
-    alias: `j${index + 1}`,
     targetFormKey: '',
     localField: '',
     foreignField: '',
@@ -45,8 +43,9 @@ export function emptyJoin(index: number): JoinConfigItem {
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { Delete, Plus } from '@element-plus/icons-vue'
+import { Delete, Plus, View } from '@element-plus/icons-vue'
 import { formApi } from '@/api/form'
+import { dataSourceApi } from '@/api/data-source'
 import SqlEditor from './SqlEditor.vue'
 import { emptyJoin, type FormJoinConfigValue, type JoinConfigItem } from './FormJoinConfig.vue'
 
@@ -80,17 +79,31 @@ const local = reactive<FormJoinConfigValue>({
   params: props.modelValue?.params?.length ? [...props.modelValue.params] : [],
 })
 
+/** 防止 props→local 同步触发 local→props 回写导致无限循环 */
+let isSyncingFromProps = false
+
 watch(
   () => props.modelValue,
   (v) => {
     if (!v) return
+    isSyncingFromProps = true
     local.queryMode = v.queryMode || 'none'
     local.joins = v.joins?.length ? v.joins.map((j) => ({ ...j })) : []
     local.query = v.query || ''
     local.columns = v.columns?.length ? v.columns.map((c) => ({ ...c })) : []
     local.params = v.params?.length ? [...v.params] : []
+    Promise.resolve().then(() => { isSyncingFromProps = false })
   },
   { deep: true }
+)
+
+// el-table :data 绑定的 row 是 local.joins 项的直接引用，
+// v-model 编辑属性时只修改对象字段，不触发 computed setter，
+// 必须深监听 local.joins 变化后主动 sync 回父组件。
+watch(
+  () => local.joins,
+  () => { if (!isSyncingFromProps) sync() },
+  { deep: true },
 )
 
 /** 变更即同步回父组件 */
@@ -212,6 +225,29 @@ function removeJoin(index: number) {
   joins.value = joins.value.filter((_, i) => i !== index)
 }
 
+// ==================== JOIN SQL 预览 ====================
+
+const previewSql = ref('')
+const previewVisible = ref(false)
+const previewing = ref(false)
+
+const hasValidJoins = computed(() =>
+  (local.joins ?? []).some((j) => j.targetFormKey && j.virtualKey))
+
+async function doPreview() {
+  if (!props.mainFormKey || !hasValidJoins.value) return
+  previewing.value = true
+  previewVisible.value = true
+  try {
+    const res = await dataSourceApi.previewJoinSql(props.mainFormKey, local.joins ?? [])
+    previewSql.value = res.data.sql
+  } catch {
+    previewSql.value = '' // 拦截器已弹错误；清空旧 SQL 防止误导
+  } finally {
+    previewing.value = false
+  }
+}
+
 // 渲染时确保已有 targetFormKey 的列已加载
 watch(
   () => joins.value.map((j) => j.targetFormKey),
@@ -228,114 +264,125 @@ watch(
       <el-radio-button value="sql">SQL 模板</el-radio-button>
     </el-radio-group>
 
-    <!-- ===== config：声明式 JOIN 列表 ===== -->
+    <!-- ===== config：声明式 JOIN 表格 ===== -->
     <template v-if="queryMode === 'config'">
-      <div v-for="(join, i) in joins" :key="i" class="join-card">
-        <div class="join-card-header">
-          <span class="join-card-title">关联 {{ i + 1 }}</span>
-          <el-button
-            v-if="!disabled"
-            text
-            type="danger"
-            :icon="Delete"
-            size="small"
-            :aria-label="`删除关联 ${i + 1}`"
-            @click="removeJoin(i)"
-          />
-        </div>
-        <el-form label-width="auto" label-position="top" class="join-form">
-          <el-row :gutter="12">
-            <el-col :span="8">
-              <el-form-item label="目标表单">
-                <el-select
-                  v-model="join.targetFormKey"
-                  placeholder="选择关联业务表单"
-                  filterable
-                  style="width: 100%"
-                  :disabled="disabled"
-                  @change="onTargetFormChange(join)"
-                >
-                  <el-option v-for="t in targetFormOptions" :key="t.key" :label="t.name" :value="t.key" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="主表字段 (localField)">
-                <el-select
-                  v-model="join.localField"
-                  placeholder="主表关联字段"
-                  filterable
-                  allow-create
-                  style="width: 100%"
-                  :disabled="disabled"
-                >
-                  <el-option v-for="c in mainColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="目标表关联字段 (foreignField)">
-                <el-select
-                  v-model="join.foreignField"
-                  placeholder="目标表关联字段"
-                  filterable
-                  allow-create
-                  style="width: 100%"
-                  :disabled="disabled"
-                >
-                  <el-option v-for="c in targetColumnsOf(join.targetFormKey)" :key="c.key" :label="c.label || c.key" :value="c.key" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="12">
-            <el-col :span="8">
-              <el-form-item label="显示字段 (joinField)">
-                <el-select
-                  v-model="join.joinField"
-                  placeholder="目标表显示字段"
-                  filterable
-                  allow-create
-                  style="width: 100%"
-                  :disabled="disabled"
-                >
-                  <el-option v-for="c in targetColumnsOf(join.targetFormKey)" :key="c.key" :label="c.label || c.key" :value="c.key" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="虚拟列标识 (virtualKey)">
-                <el-input v-model="join.virtualKey" placeholder="如 customer_name" :disabled="disabled" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="显示名称 (label)">
-                <el-input v-model="join.label" placeholder="如 客户名称" :disabled="disabled" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="12">
-            <el-col :span="6">
-              <el-form-item label="别名 (alias)">
-                <el-input v-model="join.alias" placeholder="如 j1" :disabled="disabled" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="6">
-              <el-form-item label="可排序">
-                <el-switch v-model="join.sortable" :disabled="disabled" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="6">
-              <el-form-item label="可筛选">
-                <el-switch v-model="join.filterable" :disabled="disabled" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </el-form>
-      </div>
-      <el-button v-if="!disabled" size="small" :icon="Plus" type="primary" plain @click="addJoin">
+      <el-table :data="joins" size="small" border>
+        <el-table-column label="显示名称" min-width="100">
+          <template #default="{ row }">
+            <el-input v-model="row.label" placeholder="如 客户名称" :disabled="disabled" />
+          </template>
+        </el-table-column>
+        <el-table-column label="虚拟列标识" min-width="120">
+          <template #default="{ row }">
+            <el-input v-model="row.virtualKey" placeholder="如 customer_name" :disabled="disabled" />
+          </template>
+        </el-table-column>
+        <el-table-column label="主表字段" min-width="110">
+          <template #default="{ row }">
+            <el-select
+              v-model="row.localField"
+              placeholder="主表关联字段"
+              filterable
+              allow-create
+              style="width: 100%"
+              :disabled="disabled"
+            >
+              <el-option v-for="c in mainColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="目标表单" min-width="140">
+          <template #default="{ row }">
+            <el-select
+              v-model="row.targetFormKey"
+              placeholder="选择关联业务表单"
+              filterable
+              style="width: 100%"
+              :disabled="disabled"
+              @change="onTargetFormChange(row)"
+            >
+              <el-option v-for="t in targetFormOptions" :key="t.key" :label="t.name" :value="t.key" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="目标表关联字段" min-width="130">
+          <template #default="{ row }">
+            <el-select
+              v-model="row.foreignField"
+              placeholder="目标表关联字段"
+              filterable
+              allow-create
+              style="width: 100%"
+              :disabled="disabled"
+            >
+              <el-option v-for="c in targetColumnsOf(row.targetFormKey)" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="显示字段" min-width="100">
+          <template #default="{ row }">
+            <el-select
+              v-model="row.joinField"
+              placeholder="目标表显示字段"
+              filterable
+              allow-create
+              style="width: 100%"
+              :disabled="disabled"
+            >
+              <el-option v-for="c in targetColumnsOf(row.targetFormKey)" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="属性" width="150" align="center">
+          <template #default="{ row }">
+            <el-checkbox v-model="row.sortable" :disabled="disabled">排序</el-checkbox>
+            <el-checkbox v-model="row.filterable" :disabled="disabled">筛选</el-checkbox>
+          </template>
+        </el-table-column>
+        <el-table-column label="" width="52" align="center">
+          <template #default="{ $index }">
+            <el-button
+              :icon="Delete"
+              circle
+              text
+              :disabled="disabled"
+              :aria-label="`删除关联 ${$index + 1}`"
+              @click="removeJoin($index)"
+            />
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-button
+        v-if="!disabled"
+        type="primary"
+        plain
+        size="small"
+        :icon="Plus"
+        style="margin-top: 8px"
+        @click="addJoin"
+      >
         新增关联
       </el-button>
+      <el-button
+        v-if="!disabled"
+        class="preview-sql-btn"
+        size="small"
+        :icon="View"
+        :loading="previewing"
+        :disabled="!hasValidJoins"
+        style="margin-top: 8px; margin-left: 8px"
+        @click="doPreview"
+      >
+        预览 SQL
+      </el-button>
+
+      <div v-if="previewVisible" class="sql-preview">
+        <div class="sql-preview-head">
+          <span>生成 SQL（问号为参数占位，按序对应 params）</span>
+          <el-button text size="small" @click="previewVisible = false">收起</el-button>
+        </div>
+        <pre class="sql-preview-body">{{ previewSql || '预览失败' }}</pre>
+      </div>
     </template>
 
     <!-- ===== sql：SQL 模板 + 列声明 + 参数白名单 ===== -->
@@ -355,28 +402,38 @@ watch(
 </template>
 
 <style scoped>
-.join-card {
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 6px;
-  padding: 8px 12px 0;
-  margin-bottom: 10px;
-}
-.join-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-.join-card-title {
-  font-weight: 600;
-  font-size: 13px;
-}
-.join-form {
-  margin-top: 0;
+/* 表格 small 尺寸但字体统一为普通大小（与 SqlEditor 列声明表格一致） */
+.el-table {
+  font-size: 14px;
 }
 .join-empty-hint {
   color: var(--el-text-color-secondary);
   font-size: 13px;
   padding: 8px 0;
+}
+.sql-preview {
+  margin-top: 8px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+  padding: 8px;
+}
+.sql-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 6px;
+}
+.sql-preview-body {
+  margin: 0;
+  max-height: 200px;
+  overflow: auto;
+  font-family: var(--el-font-family-mono, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

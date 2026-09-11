@@ -11,7 +11,11 @@ import java.time.LocalDateTime;
  * 用于审批历史追溯。
  */
 @Entity
-@Table(name = "wf_task_comment")
+@Table(name = "wf_task_comment",
+       indexes = {
+               @Index(name = "idx_comment_task", columnList = "tenant_id, task_id"),
+               @Index(name = "idx_comment_instance", columnList = "tenant_id, process_instance_id")
+       })
 public class WfTaskComment {
 
     @Id

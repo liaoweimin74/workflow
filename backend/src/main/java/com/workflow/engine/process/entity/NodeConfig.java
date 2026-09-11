@@ -9,7 +9,9 @@ import java.time.LocalDateTime;
  * 与 BPMN XML 解耦，通过 process_def_id + node_id 关联。
  */
 @Entity
-@Table(name = "wf_node_config")
+@Table(name = "wf_node_config",
+       uniqueConstraints = @UniqueConstraint(name = "uk_node", columnNames = {"tenant_id", "process_def_id", "node_id"}),
+       indexes = @Index(name = "idx_def", columnList = "tenant_id, process_def_id"))
 public class NodeConfig {
 
     @Id

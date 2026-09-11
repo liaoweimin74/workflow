@@ -9,7 +9,9 @@ import java.time.LocalDateTime;
  * 支持多版本管理：每次保存创建新版本记录。
  */
 @Entity
-@Table(name = "wf_form_def")
+@Table(name = "wf_form_def",
+       uniqueConstraints = @UniqueConstraint(name = "uk_form_def_tenant_key_version", columnNames = {"tenant_id", "`key`", "version"}),
+       indexes = @Index(name = "idx_form_def_tenant_status", columnList = "tenant_id, status"))
 public class FormDefinition {
 
     @Id

@@ -9,7 +9,12 @@ import java.time.LocalDateTime;
  * 状态机：DRAFT → ENABLED ⇄ DISABLED；仅 DRAFT 可删除。
  */
 @Entity
-@Table(name = "wf_data_source")
+@Table(name = "wf_data_source",
+       uniqueConstraints = {
+               @UniqueConstraint(name = "uk_ds_tenant_name", columnNames = {"tenant_id", "name"}),
+               @UniqueConstraint(name = "uk_ds_tenant_source_key", columnNames = {"tenant_id", "source_key"})
+       },
+       indexes = @Index(name = "idx_ds_tenant_type", columnList = "tenant_id, `type`"))
 public class DataSourceDefinition {
 
     @Id

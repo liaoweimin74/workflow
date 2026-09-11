@@ -8,7 +8,11 @@ import java.time.LocalDateTime;
  * 支持树形结构，通过 parent_id 自关联。
  */
 @Entity
-@Table(name = "wf_category")
+@Table(name = "wf_category",
+       indexes = {
+               @Index(name = "idx_tenant", columnList = "tenant_id"),
+               @Index(name = "idx_parent", columnList = "parent_id")
+       })
 public class Category {
 
     @Id

@@ -91,10 +91,11 @@ const componentStubs = {
 const columnConfigJson = JSON.stringify([
   { key: 'name', label: '姓名', columnType: 'VARCHAR', length: 50, indexed: true, hidden: false },
   { key: 'age', label: '年龄', columnType: 'INT', length: null, indexed: true, hidden: false },
-  { key: 'dept', label: '部门', columnType: 'JSON', length: null, indexed: false, hidden: false, componentType: 'select' },
+  { key: 'dept', label: '部门', columnType: 'JSON', length: null, indexed: false, hidden: false },
+  { key: 'dept_text', label: '部门（显示）', columnType: 'VARCHAR', length: null, indexed: false, hidden: true },
   { key: 'content', label: '内容', columnType: 'TEXT', length: null, indexed: false, hidden: false },
   { key: 'remark_hidden', label: '隐藏备注', columnType: 'VARCHAR', length: 50, indexed: false, hidden: true },
-  { key: 'color', label: '颜色', columnType: 'VARCHAR', length: 20, indexed: false, hidden: false, componentType: 'colorPicker' },
+  { key: 'color', label: '颜色', columnType: 'VARCHAR', length: 20, indexed: false, hidden: false },
 ])
 
 /** 启用数据源桩：FORM/WORKFLOW 各一个 */

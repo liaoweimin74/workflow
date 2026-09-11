@@ -398,17 +398,13 @@ const schema = reactive<ViewSchema>({
 /** 可展示列（非隐藏） */
 const viewColumns = computed(() => selectedColumns.value.filter((c) => !c.hidden))
 
-/** 数组值组件类型（主列 JSON 不可筛，但查询按显示值 label 匹配 <key>_text 列 → 视为可筛） */
-const ARRAY_QUERY_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'select', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
-
-/** 可筛选列（选项类组件主列 JSON 也可筛——查询走 <key>_text 显示列；其余非 JSON/TEXT、非 colorPicker，且 indexed 或短文本）——对齐 BizDataListPage.filterableColumns */
+/** 可筛选列：存在 <key>_text 冗余列（数组值列，查询走 _text 显示列）或非 JSON/TEXT 且 indexed/短文本（colorPicker 不再从 componentType 特判，按常规列类型）——对齐 BizDataListPage.filterableColumns */
 const filterableColumns = computed(() =>
   viewColumns.value.filter(
     (c) =>
-      ARRAY_QUERY_TYPES.includes(c.componentType || '')
+      selectedColumns.value.some((x) => x.key === `${c.key}_text`)
       || (c.columnType !== 'JSON' &&
         c.columnType !== 'TEXT' &&
-        c.componentType !== 'colorPicker' &&
         (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR')),
   ),
 )

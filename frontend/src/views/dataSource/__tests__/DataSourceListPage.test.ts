@@ -1216,10 +1216,10 @@ describe('DataSourceListPage', () => {
     const html = wrapper.html()
     // 工具栏：获取字段（SQL 类型）
     expect(html).toContain('获取字段')
-    // 行内表格表头（7 列）
+    // 行内表格表头（6 列，组件类型已移除归表单管理）
     expect(html).toContain('标识')
     expect(html).toContain('字段名')
-    expect(html).toContain('组件类型')
+    expect(html).not.toContain('组件类型')
     expect(html).toContain('必填')
     expect(html).toContain('隐藏')
     expect(html).toContain('排序')
@@ -1369,7 +1369,7 @@ describe('DataSourceListPage', () => {
     wrapper.unmount()
   })
 
-  it('从主表单覆盖：匹配 key 全属性覆盖，表单多出的 key 追加，schema 补 componentType', async () => {
+  it('从主表单覆盖：匹配 key 全属性覆盖，表单多出的 key 追加（componentType 不再补充）', async () => {
     stubList()
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
     ;(formApi.getFormDefinitionByKey as any).mockResolvedValue({
@@ -1411,16 +1411,16 @@ describe('DataSourceListPage', () => {
     await flushPromises()
 
     expect(formApi.getFormDefinitionByKey).toHaveBeenCalledWith('emp_profile')
-    // id：全属性覆盖（label 变 员工ID，required 变 true）
+    // id：全属性覆盖（label 变 员工ID，required 变 true）；componentType 不再从 schema 补充（渲染属性归表单）
     const idCol = component.sqlConfig.declaredColumns.find((c: any) => c.key === 'id')
     expect(idCol.label).toBe('员工ID')
     expect(idCol.required).toBe(true)
-    expect(idCol.componentType).toBe('input')  // schema.rule 补充
-    // dept：表单多出的 key 追加，componentType 从 schema 补充
+    expect(idCol.componentType).toBeUndefined()
+    // dept：表单多出的 key 追加，componentType 不再补充
     const deptCol = component.sqlConfig.declaredColumns.find((c: any) => c.key === 'dept')
     expect(deptCol).toBeDefined()
     expect(deptCol.label).toBe('部门')
-    expect(deptCol.componentType).toBe('select')  // schema.rule 补充
+    expect(deptCol.componentType).toBeUndefined()
     wrapper.unmount()
   })
 
@@ -1457,6 +1457,30 @@ describe('DataSourceListPage', () => {
     expect(col.hidden).toBe(false)
     expect(col.sortable).toBe(true)
     expect(col.filterable).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('SQL 数据源字段元数据：可编辑表格不渲染「组件类型」列（componentType 渲染属性归表单）', async () => {
+    stubList()
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({ data: mockMetadata })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openView({
+      id: 'ds-sql', name: 'SQL数据源', type: 'SQL', formKey: null, sourceKey: 'emp_profile',
+      status: 'ENABLED', params: JSON.stringify({
+        queryMode: 'visual', query: 'SELECT id FROM wf_biz_emp_profile WHERE tenant_id = :tenantId',
+        columns: [{ key: 'id', label: 'ID', columnType: 'VARCHAR', required: false, hidden: false, sortable: true, filterable: true }],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+    await (wrapper.vm as any).handleTabChange('metadata')
+    await flushPromises()
+
+    expect(wrapper.vm.isEditableType).toBe(true)
+    expect(wrapper.html()).not.toContain('组件类型')
     wrapper.unmount()
   })
 

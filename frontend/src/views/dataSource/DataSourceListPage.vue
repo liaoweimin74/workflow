@@ -313,13 +313,6 @@
                       <el-input-number v-model="row.scale" :min="0" :max="10" controls-position="right" size="small" style="width: 100%" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="组件类型" min-width="120">
-                    <template #default="{ row }">
-                      <el-select v-model="row.componentType" clearable filterable placeholder="—" size="small" style="width: 100%">
-                        <el-option v-for="t in FORM_CREATE_COMPONENT_TYPES" :key="t" :label="t" :value="t" />
-                      </el-select>
-                    </template>
-                  </el-table-column>
                   <el-table-column label="必填" width="55" align="center">
                     <template #default="{ row }">
                       <el-checkbox v-model="row.required" />
@@ -396,13 +389,6 @@
                       <el-col :span="8">
                         <el-form-item label="精度">
                           <el-input-number v-model="editingColumn.scale" :min="0" :max="10" controls-position="right" style="width: 100%" />
-                        </el-form-item>
-                      </el-col>
-                      <el-col :span="8">
-                        <el-form-item label="组件类型">
-                          <el-select v-model="editingColumn.componentType" clearable filterable style="width: 100%">
-                            <el-option v-for="t in FORM_CREATE_COMPONENT_TYPES" :key="t" :label="t" :value="t" />
-                          </el-select>
                         </el-form-item>
                       </el-col>
                     </el-row>
@@ -615,16 +601,6 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const
 
 /** 列定义字段类型候选（第一版：仅列定义字段，不含 componentType） */
 const COLUMN_TYPES = ['VARCHAR', 'INTEGER', 'BIGINT', 'DECIMAL', 'DATETIME', 'DATE', 'TEXT', 'TINYINT'] as const
-
-/** form-create 已注册组件类型（对齐 ColumnConfigDialog.vue mapComponentToColumn + 项目自定义组件） */
-const FORM_CREATE_COMPONENT_TYPES = [
-  'input', 'textarea', 'inputNumber', 'select', 'radio', 'checkbox',
-  'cascader', 'multiSelect', 'multiSelectPro',
-  'datePicker', 'timePicker', 'slider', 'switch', 'rate',
-  'colorPicker', 'upload', 'tree', 'elTreeSelect', 'elTransfer',
-  'RichText', 'fcEditor', 'signaturePad',
-  'subForm', 'LookupPicker', 'dataPicker',
-] as const
 
 // ========== 搜索 ==========
 const searchFields = computed<SearchField[]>(() => [
@@ -982,13 +958,6 @@ async function handleOverlayFromForm() {
       ElMessage.warning('主表单无可用列定义')
       return
     }
-    // 从表单 schema.rule 提取 field→componentType 映射（form-create 的 type 字段）
-    const typeByField = extractComponentTypes(data?.schema)
-    for (const col of formCols) {
-      if (!col.componentType && typeByField[col.key]) {
-        col.componentType = typeByField[col.key]
-      }
-    }
     overlayFromFormColumns(formCols)
     ElMessage.success(`已按主表单覆盖 ${formCols.length} 个字段`)
   } catch (e: any) {
@@ -996,34 +965,6 @@ async function handleOverlayFromForm() {
   } finally {
     overlayLoading.value = false
   }
-}
-
-/** 从表单 schema 递归提取 field → form-create 组件类型映射 */
-function extractComponentTypes(schemaStr: string | null): Record<string, string> {
-  const result: Record<string, string> = {}
-  if (!schemaStr) return result
-  try {
-    const schema = JSON.parse(schemaStr)
-    const rules = Array.isArray(schema) ? schema : schema?.rule
-    if (!Array.isArray(rules)) return result
-    const walk = (arr: any[]) => {
-      for (const r of arr) {
-        if (!r || typeof r !== 'object') continue
-        if (r.field && r.type && typeof r.type === 'string') {
-          result[r.field] = r.type
-        }
-        if (Array.isArray(r.children)) walk(r.children)
-        if (Array.isArray(r.props?.rule)) walk(r.props.rule)
-        if (Array.isArray(r.props?.columns)) {
-          for (const col of r.props.columns) {
-            if (Array.isArray(col?.rule)) walk(col.rule)
-          }
-        }
-      }
-    }
-    walk(rules)
-  } catch { /* 解析失败忽略 */ }
-  return result
 }
 
 /** 覆盖策略 C：命中 key 全属性覆盖（保留 key），表单多出的 key 追加，当前列保留 */
@@ -1054,7 +995,6 @@ function toColumnConfigItem(c: any): ColumnConfigItem {
     hidden: false,
     sortable: true,
     filterable: true,
-    componentType: c.componentType ?? null,
     matchType: c.matchType ?? null,
   }
 }
@@ -1075,7 +1015,6 @@ function serializeColumnConfig(c: ColumnConfigItem): Record<string, any> {
   item.unique = !!c.unique
   item.indexed = !!c.indexed
   item.hidden = !!c.hidden
-  if (c.componentType) item.componentType = c.componentType
   if (c.matchType) item.matchType = c.matchType
   return item
 }

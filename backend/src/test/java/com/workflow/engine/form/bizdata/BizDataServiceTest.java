@@ -995,7 +995,7 @@ class BizDataServiceTest {
         assertThat(page.getRecords().get(0).getData())
                 .containsEntry("name", "张三")
                 .containsEntry("customer_name", "王五");
-        verify(jdbcTemplate).queryForList(contains("c.name AS customer_name"), any(Object[].class));
+        verify(jdbcTemplate).queryForList(contains("j1.name AS customer_name"), any(Object[].class));
     }
 
     @Test

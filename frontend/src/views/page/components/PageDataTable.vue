@@ -281,7 +281,7 @@ function getIcon(name?: string): any {
 /** 查询栏显示：显式开启 且 至少配置了一个可查询列（避免空查询栏只有按钮） */
 const showSearch = computed(() => props.showSearch === true && resolvedSearchFields.value.length > 0)
 
-/** 查询组件类型映射（按数据源 metadata componentType；选项数据源来自业务表单 schema） */
+/** 查询组件类型映射（按表单 schema rule.type 优先 + columnType 降级；选项数据源来自业务表单 schema） */
 const QUERY_SELECT_TYPES = ['select', 'multiSelect', 'multiSelectPro', 'checkbox', 'elTransfer']
 const QUERY_TREE_TYPES = ['tree', 'elTreeSelect']
 const QUERY_PICKER_TYPES = ['LookupPicker', 'DataPicker']
@@ -310,8 +310,10 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
   (props.searchFields || []).map((f: any) => {
     const key = f.key ?? f.field
     const meta = metaColumns.value.find((m) => m.key === key)
-    const compType = meta?.componentType || ''
     const rule = findFormRuleByKey(key)
+    // 组件类型：优先表单 schema rule.type（含完整配置）；无 schema 时为空，走 columnType 降级
+    const compType = rule?.type || ''
+    const colType = meta?.columnType || ''
     const base = { label: f.label || f.key || key, prop: key, placeholder: f.label || key }
     if (f.matchType === 'like') {
       // 模糊查询：直接用文本输入框（用户输入关键字，后端 LIKE 匹配）
@@ -349,7 +351,7 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
         style: 'width: 200px',
       }
     }
-    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date') {
+    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date' || colType === 'DATE' || colType === 'DATETIME') {
       return { ...base, type: 'date-picker' as const }
     }
     return { ...base, type: 'input' as const, style: 'width: 180px' }

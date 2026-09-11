@@ -486,6 +486,35 @@ describe('PageDataTable — 查询组件按字段组件类型 + 搜索映射 <ke
     wrapper.unmount()
   })
 
+  it('无 schema rule 且无 componentType：日期列用 date-picker，其余按 columnType 降级 input', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: {
+        writable: false,
+        columns: [
+          { key: 'created_at', label: '创建时间', columnType: 'DATETIME' },
+          { key: 'amount', label: '金额', columnType: 'DECIMAL' },
+        ],
+      },
+    })
+    ;(dataSourceApi.queryData as any).mockResolvedValue({ data: { records: [], total: 0 } })
+
+    const wrapper = createWrapper({
+      dsRefId: 'ds-emp',
+      showSearch: true,
+      searchFields: [
+        { key: 'created_at', label: '创建时间' },
+        { key: 'amount', label: '金额' },
+      ],
+    })
+    await nextTick()
+    await flushPromises()
+
+    const sf = wrapper.findComponent(SearchTable).props('searchFields') as any[]
+    expect(sf.find((s: any) => s.prop === 'created_at')?.type).toBe('date-picker')
+    expect(sf.find((s: any) => s.prop === 'amount')?.type).toBe('input')
+    wrapper.unmount()
+  })
+
   it('匹配方式缺省/等值(eq)的选项类字段保持原控件（不附加 filterable/allow-create）', async () => {
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({
       data: {

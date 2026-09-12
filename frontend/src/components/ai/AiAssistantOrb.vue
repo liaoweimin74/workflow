@@ -255,8 +255,8 @@ function tryApplyForm(result: unknown): boolean {
   position: fixed;
   right: 24px;
   bottom: 88px;
-  width: 400px;
-  height: min(600px, calc(100vh - 140px));
+  width: 340px;
+  height: min(480px, calc(100vh - 140px));
   display: flex;
   flex-direction: column;
   background: #fff;

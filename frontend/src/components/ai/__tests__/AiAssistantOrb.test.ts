@@ -9,7 +9,12 @@ import { aiActionBus } from '@/utils/aiActionBus'
 import { useAiAssistantStore } from '@/stores/aiAssistantStore'
 
 vi.mock('@/api/ai', () => ({ chat: vi.fn() }))
-vi.mock('vue-router', () => ({ useRoute: () => ({ name: 'FormDesigner' }) }))
+
+const { pushSpy } = vi.hoisted(() => ({ pushSpy: vi.fn() }))
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ name: 'FormDesigner', path: '/form/designer' }),
+  useRouter: () => ({ push: pushSpy }),
+}))
 
 let wrapper: VueWrapper | null = null
 let handlers: any
@@ -18,6 +23,7 @@ beforeEach(() => {
   localStorage.clear()
   setActivePinia(createPinia())
   aiActionBus.clear()
+  pushSpy.mockReset()
   handlers = null
   vi.mocked(chat).mockReset()
   vi.mocked(chat).mockImplementation((_payload: any, h: any) => {
@@ -62,7 +68,8 @@ describe('AiAssistantOrb', () => {
     expect(chat).toHaveBeenCalledTimes(1)
     const payload = vi.mocked(chat).mock.calls[0][0] as any
     expect(payload.message).toBe('生成请假单')
-    expect(payload.context).toEqual({ route: 'form-designer', formId: 'f1' })
+    expect(payload.context.route).toBe('form-designer')
+    expect(Array.isArray(payload.context.menus)).toBe(true)
   })
 
   it('form-designer 上下文下，表单工具结果自动派发回填', async () => {
@@ -105,6 +112,32 @@ describe('AiAssistantOrb', () => {
 
     expect(applied).toEqual([])
     expect(store.messages.at(-1)?.formResult).toEqual({ applied: false })
+  })
+
+  it('open_page 工具结果渲染页面入口并可跳转', () => {
+    const w = createWrapper()
+    const store = useAiAssistantStore()
+    const vm = w.vm as any
+
+    vm.input = '怎么配置流程超时'
+    vm.send()
+    handlers.onToolResult('open_page', { path: '/process/definition', label: '流程定义' })
+    handlers.onMessage('去流程定义里配置')
+
+    const message = store.messages.at(-1)
+    expect(message?.navigation).toEqual({ path: '/process/definition', label: '流程定义' })
+
+    vm.navigate(message!.navigation!)
+    expect(pushSpy).toHaveBeenCalledWith('/process/definition')
+  })
+
+  it('已在目标页时不重复跳转', () => {
+    const w = createWrapper()
+    const vm = w.vm as any
+
+    vm.navigate({ path: '/form/designer', label: '表单设计器' })
+
+    expect(pushSpy).not.toHaveBeenCalled()
   })
 
   it('错误时写入提示并复位发送状态', async () => {

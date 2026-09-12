@@ -8,6 +8,8 @@ export interface AiMessage {
   content: string
   /** 助手生成表单的结果信息（用于展示卡片） */
   formResult?: { applied: boolean }
+  /** 助手提供的页面入口（点击跳转） */
+  navigation?: { label: string; path: string }
 }
 
 const VISIBLE_KEY = 'ai_assistant_visible'
@@ -36,8 +38,13 @@ export const useAiAssistantStore = defineStore('aiAssistant', () => {
     localStorage.setItem(VISIBLE_KEY, value ? '1' : '0')
   }
 
-  function addMessage(role: AiMessage['role'], content: string, formResult?: AiMessage['formResult']): AiMessage {
-    const message: AiMessage = { id: nextId(), role, content, formResult }
+  function addMessage(
+    role: AiMessage['role'],
+    content: string,
+    formResult?: AiMessage['formResult'],
+    navigation?: AiMessage['navigation'],
+  ): AiMessage {
+    const message: AiMessage = { id: nextId(), role, content, formResult, navigation }
     messages.value.push(message)
     return message
   }

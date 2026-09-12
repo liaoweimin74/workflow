@@ -71,10 +71,10 @@ class AiChatControllerTest {
         when(properties.isConfigured()).thenReturn(true);
         when(properties.getModel()).thenReturn("test-model");
         doAnswer(inv -> {
-            AiAgentService.Events events = inv.getArgument(2);
+            AiAgentService.Events events = inv.getArgument(3);
             events.message("已为你生成表单");
             return null;
-        }).when(agentService).chat(any(), anyString(), any());
+        }).when(agentService).chat(any(), anyString(), any(), any());
 
         MvcResult result = mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body("生成请假单")))
                 .andExpect(request().asyncStarted())

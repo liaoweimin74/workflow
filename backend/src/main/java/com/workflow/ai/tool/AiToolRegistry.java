@@ -37,13 +37,13 @@ public class AiToolRegistry {
     }
 
     /** 执行工具；未知工具或执行异常返回错误 JSON，不抛出。 */
-    public String execute(String name, JsonNode arguments) {
+    public String execute(String name, JsonNode arguments, AiToolContext context) {
         AiTool tool = tools.get(name);
         if (tool == null) {
             return "{\"error\":\"未知工具: " + escape(name) + "\"}";
         }
         try {
-            return tool.execute(arguments);
+            return tool.execute(arguments, context == null ? AiToolContext.empty() : context);
         } catch (Exception e) {
             return "{\"error\":\"" + escape(e.getMessage()) + "\"}";
         }

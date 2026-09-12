@@ -8,8 +8,10 @@ import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatModel;
 import com.workflow.ai.model.ChatOptions;
 import com.workflow.ai.model.ChatResult;
+import com.workflow.ai.model.PageRef;
 import com.workflow.ai.model.ToolCall;
 import com.workflow.ai.support.AiUsageRecorder;
+import com.workflow.ai.tool.AiToolContext;
 import com.workflow.ai.tool.AiToolRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -28,13 +30,16 @@ public class AiAgentService {
 
     static final String MODULE = "assistant";
 
-    private static final String SYSTEM_PROMPT = """
+    private static final String BASE_PROMPT = """
             你是「工作流管理平台」的智能助手，通过对话帮助用户完成平台内的任务。
             你的可用能力以“工具”形式提供：
             - generate_form_schema：当用户想要新建、生成或创建一个表单时调用，传入表单的自然语言描述。
+            - open_page：当用户需要前往某页面（配置、查看、管理等）时调用，提供一个可点击的页面入口；
+              path 必须来自下方「用户可访问页面」列表，禁止编造或使用未列出的路径。
             规则：
             - 用户要求生成表单时，必须调用 generate_form_schema 工具，不要凭空编造表单结构。
-            - 工具执行后，用简洁的中文说明结果（大致有哪些字段），并告知结果已生成、可直接应用到当前表单设计器。
+            - 需要引导用户去某页面时，调用 open_page 工具。
+            - 工具执行后，用简洁的中文说明结果。
             - 与平台操作无关的问题，礼貌说明你只能协助平台内的操作。
             - 始终使用中文，回复简洁。
             """;
@@ -62,19 +67,21 @@ public class AiAgentService {
      *
      * @param history     历史消息（不含本轮 user 消息）
      * @param userMessage 本轮用户输入
+     * @param pages       当前用户可访问页面（供 open_page 白名单与系统提示）
      * @param events      事件回调（工具调用/结果/最终回复）
      */
-    public void chat(List<ChatMessage> history, String userMessage, Events events) {
+    public void chat(List<ChatMessage> history, String userMessage, List<PageRef> pages, Events events) {
         ChatModel model = requireModel();
 
         List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.system(SYSTEM_PROMPT));
+        messages.add(ChatMessage.system(buildSystemPrompt(pages)));
         if (history != null) {
             messages.addAll(history);
         }
         messages.add(ChatMessage.user(userMessage));
 
         ChatOptions options = ChatOptions.withTools(toolRegistry.specs());
+        AiToolContext context = new AiToolContext(pages == null ? List.of() : pages);
         long start = System.currentTimeMillis();
 
         for (int step = 0; step < MAX_STEPS; step++) {
@@ -90,7 +97,7 @@ public class AiAgentService {
             for (ToolCall toolCall : result.toolCalls()) {
                 JsonNode args = parse(toolCall.arguments());
                 events.toolCall(toolCall.name(), args);
-                String toolResultJson = toolRegistry.execute(toolCall.name(), args);
+                String toolResultJson = toolRegistry.execute(toolCall.name(), args, context);
                 events.toolResult(toolCall.name(), parse(toolResultJson));
                 messages.add(ChatMessage.tool(toolCall.id(), toolResultJson));
             }
@@ -99,6 +106,19 @@ public class AiAgentService {
         events.message("抱歉，处理步骤过多，请把需求拆分为更小的请求后再试。");
         recorder.recordFailure(MODULE, properties.getModel(), "max steps exceeded",
                 System.currentTimeMillis() - start);
+    }
+
+    /** 组装系统提示：固定约束 + 当前用户可访问页面清单。 */
+    private String buildSystemPrompt(List<PageRef> pages) {
+        if (pages == null || pages.isEmpty()) {
+            return BASE_PROMPT;
+        }
+        StringBuilder sb = new StringBuilder(BASE_PROMPT);
+        sb.append("\n用户可访问页面（open_page 的 path 必须取自此处）：\n");
+        for (PageRef page : pages) {
+            sb.append("- ").append(page.label()).append(" : ").append(page.path()).append('\n');
+        }
+        return sb.toString();
     }
 
     private ChatModel requireModel() {

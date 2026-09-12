@@ -17,14 +17,14 @@ class AiToolRegistryTest {
         @Override public String name() { return "fake_tool"; }
         @Override public String description() { return "desc"; }
         @Override public JsonNode parametersSchema() { return new ObjectMapper().createObjectNode().put("type", "object"); }
-        @Override public String execute(JsonNode arguments) { return "{\"ok\":true}"; }
+        @Override public String execute(JsonNode arguments, AiToolContext context) { return "{\"ok\":true}"; }
     }
 
     static class BoomTool implements AiTool {
         @Override public String name() { return "boom"; }
         @Override public String description() { return "d"; }
         @Override public JsonNode parametersSchema() { return new ObjectMapper().createObjectNode(); }
-        @Override public String execute(JsonNode arguments) { throw new RuntimeException("boom"); }
+        @Override public String execute(JsonNode arguments, AiToolContext context) { throw new RuntimeException("boom"); }
     }
 
     @Test
@@ -40,20 +40,20 @@ class AiToolRegistryTest {
     void execute_unknownTool_returnsErrorJson() {
         AiToolRegistry registry = new AiToolRegistry(List.of());
 
-        assertThat(registry.execute("nope", null)).contains("未知工具");
+        assertThat(registry.execute("nope", null, AiToolContext.empty())).contains("未知工具");
     }
 
     @Test
     void execute_toolException_returnsErrorJson() {
         AiToolRegistry registry = new AiToolRegistry(List.of(new BoomTool()));
 
-        assertThat(registry.execute("boom", null)).contains("boom");
+        assertThat(registry.execute("boom", null, AiToolContext.empty())).contains("boom");
     }
 
     @Test
     void execute_success() {
         AiToolRegistry registry = new AiToolRegistry(List.of(new FakeTool()));
 
-        assertThat(registry.execute("fake_tool", null)).isEqualTo("{\"ok\":true}");
+        assertThat(registry.execute("fake_tool", null, AiToolContext.empty())).isEqualTo("{\"ok\":true}");
     }
 }

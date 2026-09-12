@@ -50,7 +50,7 @@ public class GenerateFormSchemaTool implements AiTool {
     }
 
     @Override
-    public String execute(JsonNode arguments) {
+    public String execute(JsonNode arguments, com.workflow.ai.tool.AiToolContext context) {
         String description = arguments == null ? "" : arguments.path("description").asText("");
         AiFormGenerateResult result = service.generateSync(description);
         try {

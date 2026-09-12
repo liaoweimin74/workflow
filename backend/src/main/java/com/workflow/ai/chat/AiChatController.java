@@ -5,6 +5,7 @@ import com.workflow.ai.agent.AiAgentService;
 import com.workflow.ai.config.AiProperties;
 import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
+import com.workflow.ai.model.PageRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -54,6 +55,8 @@ public class AiChatController {
 
         String message = request.message();
         List<ChatMessage> history = toHistory(request.history());
+        List<PageRef> pages = request.context() == null || request.context().menus() == null
+                ? List.of() : request.context().menus();
 
         CompletableFuture.runAsync(() -> {
             if (!properties.isConfigured()) {
@@ -62,7 +65,7 @@ public class AiChatController {
             }
             try {
                 send(emitter, "meta", Map.of("model", properties.getModel()));
-                agentService.chat(history, message, new AiAgentService.Events() {
+                agentService.chat(history, message, pages, new AiAgentService.Events() {
                     @Override
                     public void toolCall(String name, JsonNode args) {
                         send(emitter, "tool_call", Map.of("name", name, "args", args));
@@ -132,12 +135,22 @@ public class AiChatController {
      *
      * @param message 本轮用户输入
      * @param history 历史消息（user/assistant）
-     * @param context 客户端上下文（路由/表单 id 等，供服务端感知）
+     * @param context 客户端上下文（路由/表单 id/可用菜单，供服务端感知）
      */
-    public record ChatRequest(String message, List<ChatTurn> history, Map<String, Object> context) {
+    public record ChatRequest(String message, List<ChatTurn> history, ChatContext context) {
 
         /** 历史消息项。 */
         public record ChatTurn(String role, String content) {
+        }
+
+        /**
+         * 客户端上下文。
+         *
+         * @param route 当前路由标识
+         * @param formId 当前表单 id（可空）
+         * @param menus 用户可访问菜单页面（供 open_page 白名单）
+         */
+        public record ChatContext(String route, String formId, List<PageRef> menus) {
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.workflow.ai.formgen;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.ai.tool.AiToolContext;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -32,7 +33,7 @@ class GenerateFormSchemaToolTest {
                 new AiFormGenerateResult("{\"rule\":[]}", List.of(), List.of()));
         GenerateFormSchemaTool tool = new GenerateFormSchemaTool(service, objectMapper);
 
-        String output = tool.execute(objectMapper.readTree("{\"description\":\"请假单\"}"));
+        String output = tool.execute(objectMapper.readTree("{\"description\":\"请假单\"}"), AiToolContext.empty());
 
         assertThat(output).contains("\"schema\"").contains("rule");
     }

@@ -269,8 +269,9 @@ async function generateForm(description: string, handlers: {
 ### 10.2 后端：对话 + 工具路由
 - `POST /api/v1/ai/chat`（SSE：meta → tool_call → tool_result → message → done | error）
 - `AiAgentService`：agent loop（最多 5 步）——把工具声明发给模型 → 执行 tool_calls → 回填 tool 消息 → 继续，直至最终文本
-- `AiTool` + `AiToolRegistry`：工具注册与执行（异常返回错误 JSON 不中断）
+- `AiTool` + `AiToolRegistry`：工具注册与执行（异常返回错误 JSON 不中断）；工具签名携带 `AiToolContext`
 - `GenerateFormSchemaTool`：复用 `AiFormGenerationService` 生成表单（能力层复用）
+- `OpenPageTool`：页面跳转入口——`path` 仅接受当前用户**菜单白名单**（由客户端随请求提供），拒任意 URL
 - 基础设施扩展：`ChatMessage` 增加 tool 角色 / `toolCalls` / `toolCallId`；`ChatOptions.tools`；`ChatModel.completeWithTools`；provider 解析 `tool_calls` 并序列化 tools/tool 消息
 - **移除** `FormGenerationController`（不再有独立表单生成端点）
 
@@ -280,6 +281,7 @@ async function generateForm(description: string, handlers: {
 - `aiActionBus`：`on/off/emit`（处理器异常隔离）
 - FormDesigner 监听 `applyFormSchema` → `setRule(ensureRuleProps(enableCardDesignMode(rule)))`
 - 抽屉在 form-designer 上下文收到 `generate_form_schema` 结果 → 派发动作并标记"已应用"
+- 页面入口：请求上下文携带**用户菜单展平白名单**（`utils/menuIndex.ts`）；`open_page` 工具结果 → 消息附加 `navigation` → 渲染**文字 tag 链接**，点击 `router.push`（已在目标页不跳转）
 
 ### 10.4 已知限制
 - 对话最终回复为**非流式**（agent 含工具调用，暂不做 token 级流式）；前端以"正在处理…"占位

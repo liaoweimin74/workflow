@@ -8,10 +8,13 @@ import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatModel;
 import com.workflow.ai.model.ChatOptions;
 import com.workflow.ai.model.ChatResult;
+import com.workflow.ai.model.PageRef;
 import com.workflow.ai.model.ToolCall;
 import com.workflow.ai.support.AiUsageRecorder;
 import com.workflow.ai.tool.AiTool;
+import com.workflow.ai.tool.AiToolContext;
 import com.workflow.ai.tool.AiToolRegistry;
+import com.workflow.ai.tool.OpenPageTool;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,7 +46,6 @@ class AiAgentServiceTest {
     private AiUsageRecorder recorder;
 
     private AiProperties properties;
-    private AiAgentService service;
 
     @BeforeEach
     void setUp() {
@@ -51,15 +53,17 @@ class AiAgentServiceTest {
         properties.setEnabled(true);
         properties.setApiKey("k");
         properties.setModel("m");
-        AiToolRegistry registry = new AiToolRegistry(List.of(new StubTool()));
-        service = new AiAgentService(chatModelProvider, properties, registry, recorder, new ObjectMapper());
+    }
+
+    private AiAgentService service(AiToolRegistry registry) {
+        return new AiAgentService(chatModelProvider, properties, registry, recorder, new ObjectMapper());
     }
 
     static class StubTool implements AiTool {
         @Override public String name() { return "stub"; }
         @Override public String description() { return "d"; }
         @Override public JsonNode parametersSchema() { return new ObjectMapper().createObjectNode(); }
-        @Override public String execute(JsonNode arguments) { return "{\"value\":42}"; }
+        @Override public String execute(JsonNode arguments, AiToolContext context) { return "{\"value\":42}"; }
     }
 
     private ChatModel scripted(ChatResult... results) {
@@ -77,8 +81,9 @@ class AiAgentServiceTest {
         final List<String> messages = new ArrayList<>();
         final List<String> calls = new ArrayList<>();
         final List<String> results = new ArrayList<>();
+        final List<JsonNode> resultPayloads = new ArrayList<>();
         @Override public void toolCall(String name, JsonNode args) { calls.add(name); }
-        @Override public void toolResult(String name, JsonNode result) { results.add(name); }
+        @Override public void toolResult(String name, JsonNode result) { results.add(name); resultPayloads.add(result); }
         @Override public void message(String text) { messages.add(text); }
     }
 
@@ -87,7 +92,7 @@ class AiAgentServiceTest {
         when(chatModelProvider.getIfAvailable()).thenReturn(scripted(new ChatResult("你好", List.of())));
         Recorder rec = new Recorder();
 
-        service.chat(List.of(), "hi", rec);
+        service(new AiToolRegistry(List.of(new StubTool()))).chat(List.of(), "hi", List.of(), rec);
 
         assertThat(rec.messages).containsExactly("你好");
         verify(recorder).recordSuccess(eq("assistant"), eq("m"), anyLong(), anyLong(), anyLong());
@@ -100,7 +105,7 @@ class AiAgentServiceTest {
                 new ChatResult("已完成", List.of())));
         Recorder rec = new Recorder();
 
-        service.chat(List.of(), "生成", rec);
+        service(new AiToolRegistry(List.of(new StubTool()))).chat(List.of(), "生成", List.of(), rec);
 
         assertThat(rec.calls).containsExactly("stub");
         assertThat(rec.results).containsExactly("stub");
@@ -108,11 +113,26 @@ class AiAgentServiceTest {
     }
 
     @Test
+    void openPageTool_returnsWhitelistedPage() {
+        when(chatModelProvider.getIfAvailable()).thenReturn(scripted(
+                new ChatResult("", List.of(new ToolCall("c1", "open_page", "{\"path\":\"/form\"}"))),
+                new ChatResult("点这里去表单管理", List.of())));
+        Recorder rec = new Recorder();
+        AiToolRegistry registry = new AiToolRegistry(List.of(new OpenPageTool(new ObjectMapper())));
+
+        service(registry).chat(List.of(), "去表单管理", List.of(new PageRef("/form", "表单管理")), rec);
+
+        assertThat(rec.results).containsExactly("open_page");
+        assertThat(rec.resultPayloads.get(0).path("path").asText()).isEqualTo("/form");
+        assertThat(rec.messages).containsExactly("点这里去表单管理");
+    }
+
+    @Test
     void notConfigured_throws() {
         properties.setEnabled(false);
         Recorder rec = new Recorder();
 
-        assertThatThrownBy(() -> service.chat(List.of(), "x", rec))
+        assertThatThrownBy(() -> service(new AiToolRegistry(List.of())).chat(List.of(), "x", List.of(), rec))
                 .isInstanceOf(AiException.class)
                 .extracting(e -> ((AiException) e).getCode())
                 .isEqualTo(AiException.Code.CONFIG_MISSING);

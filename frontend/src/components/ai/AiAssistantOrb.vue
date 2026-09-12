@@ -29,6 +29,15 @@
               <span v-if="message.formResult.applied">✅ 已应用到当前表单</span>
               <span v-else>表单已生成。打开表单设计器后可应用。</span>
             </div>
+            <el-tag
+              v-if="message.navigation"
+              class="ai-nav-tag"
+              type="primary"
+              effect="plain"
+              @click="navigate(message.navigation)"
+            >
+              🔗 {{ message.navigation.label }}
+            </el-tag>
           </div>
           <div v-if="sending" class="ai-msg assistant"><div class="ai-bubble">正在处理…</div></div>
         </div>
@@ -51,15 +60,19 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { MagicStick } from '@element-plus/icons-vue'
 import { chat, type AiChatTurn } from '@/api/ai'
 import { useAiAssistantStore } from '@/stores/aiAssistantStore'
+import { useAuthStore } from '@/stores/auth'
 import { aiActionBus } from '@/utils/aiActionBus'
+import { flattenMenuPages } from '@/utils/menuIndex'
 
 const route = useRoute()
+const router = useRouter()
 const store = useAiAssistantStore()
+const authStore = useAuthStore()
 
 const drawerOpen = ref(false)
 const input = ref('')
@@ -91,18 +104,34 @@ function send() {
 
   let formToolProduced = false
   let formToolApplied = false
+  let pendingNavigation: { label: string; path: string } | undefined
+
+  const menus = flattenMenuPages(authStore.menus)
 
   controller = chat(
-    { message: text, history, context: store.context ?? {} },
+    { message: text, history, context: { ...(store.context ?? {}), menus } },
     {
       onToolResult: (name, result) => {
         if (name === 'generate_form_schema') {
           formToolProduced = true
           formToolApplied = tryApplyForm(result)
+        } else if (name === 'open_page') {
+          const nav = result as { path?: unknown; label?: unknown } | null
+          if (nav && typeof nav.path === 'string') {
+            pendingNavigation = {
+              path: nav.path,
+              label: typeof nav.label === 'string' ? nav.label : nav.path,
+            }
+          }
         }
       },
       onMessage: (assistantText) => {
-        store.addMessage('assistant', assistantText, formToolProduced ? { applied: formToolApplied } : undefined)
+        store.addMessage(
+          'assistant',
+          assistantText,
+          formToolProduced ? { applied: formToolApplied } : undefined,
+          pendingNavigation,
+        )
       },
       onError: (error) => {
         sending.value = false
@@ -115,6 +144,15 @@ function send() {
       },
     },
   )
+}
+
+/** 页面入口跳转 */
+function navigate(nav: { label: string; path: string }) {
+  if (route.path === nav.path) {
+    ElMessage.info('已在该页面')
+    return
+  }
+  router.push(nav.path)
 }
 
 /** 上下文绑定：当前在表单设计器时，生成的表单自动回填画布 */
@@ -220,6 +258,10 @@ function tryApplyForm(result: unknown): boolean {
   background: #ecfbfd;
   color: #1f8592;
   font-size: 12px;
+}
+.ai-nav-tag {
+  margin-top: 6px;
+  cursor: pointer;
 }
 .ai-input {
   display: flex;

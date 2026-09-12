@@ -20,7 +20,8 @@ public interface AiTool {
      * 执行工具。
      *
      * @param arguments 参数（可能为 null 或缺字段）
+     * @param context   执行上下文（页面白名单等，可能为空）
      * @return 结果 JSON 文本
      */
-    String execute(JsonNode arguments);
+    String execute(JsonNode arguments, AiToolContext context);
 }

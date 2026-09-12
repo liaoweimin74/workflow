@@ -12,6 +12,7 @@ import com.workflow.ai.model.ToolCall;
 import com.workflow.ai.model.ToolSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -85,11 +86,12 @@ public class OpenAiCompatibleChatModel implements ChatModel {
                                Consumer<String> onDelta, Consumer<String> onDone, Consumer<AiException> onError) {
         Map<String, Object> body = buildBody(messages, options, true);
         try {
-            restClient.post()
+            RestClient.RequestBodySpec spec = restClient.post()
                     .uri(CHAT_PATH)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.TEXT_EVENT_STREAM)
-                    .body(body)
+                    .accept(MediaType.TEXT_EVENT_STREAM);
+            applyAuth(spec);
+            spec.body(body)
                     .exchange((request, response) -> {
                         if (response.getStatusCode().isError()) {
                             throw new AiException(AiException.Code.HTTP_ERROR,
@@ -129,17 +131,24 @@ public class OpenAiCompatibleChatModel implements ChatModel {
         }
     }
 
+    /** 附加 Bearer 鉴权头（api-key 非空时）。 */
+    private void applyAuth(RestClient.RequestBodySpec spec) {
+        String key = properties.getApiKey();
+        if (key != null && !key.isBlank()) {
+            spec.header(HttpHeaders.AUTHORIZATION, "Bearer " + key);
+        }
+    }
+
     /** 发送非流式请求（含 429/5xx 重试一次）。 */
     private JsonNode postChat(Map<String, Object> body) {
         int attempts = 0;
         while (true) {
             try {
-                String raw = restClient.post()
+                RestClient.RequestBodySpec spec = restClient.post()
                         .uri(CHAT_PATH)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body(body)
-                        .retrieve()
-                        .body(String.class);
+                        .contentType(MediaType.APPLICATION_JSON);
+                applyAuth(spec);
+                String raw = spec.body(body).retrieve().body(String.class);
                 return parseJson(raw);
             } catch (RestClientResponseException e) {
                 int status = e.getStatusCode().value();

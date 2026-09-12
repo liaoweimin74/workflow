@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -42,6 +43,7 @@ class OpenAiCompatibleChatModelTest {
         AiProperties props = new AiProperties();
         props.setBaseUrl("http://localhost");
         props.setModel("test-model");
+        props.setApiKey("test-key");
         RestClient.Builder builder = RestClient.builder().baseUrl("http://localhost");
         server = MockRestServiceServer.bindTo(builder).build();
         model = new OpenAiCompatibleChatModel(builder.build(), new ObjectMapper(), props);
@@ -50,6 +52,7 @@ class OpenAiCompatibleChatModelTest {
     @Test
     void complete_parsesContent() {
         server.expect(requestTo(URL))
+                .andExpect(header("Authorization", "Bearer test-key"))
                 .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"hi\"}}]}", MediaType.APPLICATION_JSON));
 
         String result = model.complete(List.of(ChatMessage.user("hello")), ChatOptions.defaults());
@@ -116,7 +119,9 @@ class OpenAiCompatibleChatModelTest {
                 + "data: {\"choices\":[{\"delta\":{}}]}\n\n"
                 + "data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}\n\n"
                 + "data: [DONE]\n\n";
-        server.expect(requestTo(URL)).andRespond(withSuccess(sse, MediaType.TEXT_EVENT_STREAM));
+        server.expect(requestTo(URL))
+                .andExpect(header("Authorization", "Bearer test-key"))
+                .andRespond(withSuccess(sse, MediaType.TEXT_EVENT_STREAM));
 
         List<String> deltas = new ArrayList<>();
         AtomicReference<Boolean> done = new AtomicReference<>(false);

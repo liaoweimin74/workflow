@@ -267,7 +267,8 @@ async function generateForm(description: string, handlers: {
 - 点击开**完全悬浮的对话窗体**（固定于悬浮球上方，非抽屉），再次点击悬浮球收起
 
 ### 10.2 后端：对话 + 工具路由
-- `POST /api/v1/ai/chat`（SSE：meta → tool_call → tool_result → message → done | error）
+- `POST /api/v1/ai/chat`（**同步返回 `text/event-stream;charset=UTF-8` 文本**，事件序列 meta → tool_call → tool_result → message → done | error）
+  - 采用同步响应体而非 `SseEmitter`：agent 为非流式产出，`SseEmitter` 异步在容器上存在响应终止缺陷（chunked 未正确收尾 → 客户端读取失败 / 代理挂起），同步返回规避该问题
 - `AiAgentService`：agent loop（最多 5 步）——把工具声明发给模型 → 执行 tool_calls → 回填 tool 消息 → 继续，直至最终文本
 - `AiTool` + `AiToolRegistry`：工具注册与执行（异常返回错误 JSON 不中断）；工具签名携带 `AiToolContext`
 - `GenerateFormSchemaTool`：复用 `AiFormGenerationService` 生成表单（能力层复用）

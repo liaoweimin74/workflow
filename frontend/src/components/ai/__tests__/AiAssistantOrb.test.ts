@@ -130,6 +130,20 @@ describe('AiAssistantOrb', () => {
     expect(pushSpy).toHaveBeenCalledWith('/process/definition')
   })
 
+  it('正文已内联链接的页面不在底部重复出现', () => {
+    const w = createWrapper()
+    const store = useAiAssistantStore()
+    const vm = w.vm as any
+
+    vm.input = '怎么添加用户'
+    vm.send()
+    handlers.onMessage('请到 [用户管理](/system/user) 页面添加', [
+      { path: '/system/user', label: '用户管理' },
+    ])
+
+    expect(store.messages.at(-1)?.navigations).toBeUndefined()
+  })
+
   it('已在目标页时不重复跳转', () => {
     const w = createWrapper()
     const vm = w.vm as any

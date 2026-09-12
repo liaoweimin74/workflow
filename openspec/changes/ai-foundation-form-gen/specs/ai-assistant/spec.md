@@ -185,25 +185,29 @@
 ### Requirement: 助手回复 Markdown 渲染
 
 助手回复 SHALL 以 Markdown 渲染（用户消息保持纯文本）。渲染 SHALL 关闭原始 HTML 并经 DOMPurify 消毒，防止 AI 输出注入。Markdown 链接处理：
-- 命中用户页面白名单的路径 SHALL 渲染为站内链接（附加 `data-nav`），点击经前端路由跳转，不触发整页刷新；
+- 命中用户页面白名单的路径 SHALL 渲染为**行内胶囊 tag**（附加 `data-nav`，带 `→` 前缀），点击经前端路由跳转，不触发整页刷新；
 - 其余链接 SHALL 以新窗口打开（`target="_blank"` + `rel="noopener noreferrer"`）。
+
+助手 SHALL 被引导在正文中以 `[页面名](/路径)` 内联输出页面链接；底部结构化入口 SHALL 与正文已内联的链接去重。渲染容器 SHALL 不使用 `pre-wrap`（避免把生成 HTML 的换行渲染成多余空行）。
 
 #### Scenario: 渲染富文本
 
 - **WHEN** 助手回复包含 Markdown 标题/加粗/列表/行内代码
 - **THEN** 渲染为对应富文本标签
+- **AND** 不产生多余空行
+
+#### Scenario: 行内页面 tag
+
+- **WHEN** 回复正文含指向白名单页面的链接（如 `[用户管理](/system/user)`）
+- **THEN** 渲染为带 `→` 的行内胶囊 tag
+- **AND** 点击经前端路由跳转，不整页刷新
+- **AND** 该页面不再在底部重复出现
 
 #### Scenario: 消毒防注入
 
 - **WHEN** 助手输出包含原始 HTML 或 `javascript:` 链接
 - **THEN** 原始 HTML 被转义
 - **AND** `javascript:` 链接被剔除（不产生可执行 href）
-
-#### Scenario: 站内链接跳转
-
-- **WHEN** 回复包含指向白名单页面的 Markdown 链接
-- **THEN** 渲染为 `data-nav` 站内链接
-- **AND** 点击经前端路由跳转，不整页刷新
 
 #### Scenario: 外链新窗口
 

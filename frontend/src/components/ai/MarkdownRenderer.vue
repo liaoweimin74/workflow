@@ -29,9 +29,10 @@ function onClick(event: MouseEvent) {
   line-height: 1.6;
   color: #303133;
   word-break: break-word;
+  white-space: normal;
 }
 .ai-markdown :deep(p) {
-  margin: 0.4em 0;
+  margin: 0.35em 0;
 }
 .ai-markdown :deep(h1),
 .ai-markdown :deep(h2),
@@ -88,7 +89,29 @@ function onClick(event: MouseEvent) {
 .ai-markdown :deep(a:hover) {
   text-decoration: underline;
 }
-.ai-markdown :deep(.ai-md-nav) {
+/* 白名单站内链接：行内胶囊 tag（带 → 前缀） */
+.ai-markdown :deep(a.ai-md-nav) {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  border: 1px solid #c6c5f7;
+  background: #f3f3fe;
+  color: #5755ee;
+  font-size: 12px;
+  line-height: 1.9;
+  text-decoration: none;
   cursor: pointer;
+  white-space: nowrap;
+}
+.ai-markdown :deep(a.ai-md-nav)::before {
+  content: '→';
+  margin-right: 3px;
+  font-weight: 600;
+}
+.ai-markdown :deep(a.ai-md-nav:hover) {
+  background: #e9eaff;
+  text-decoration: none;
 }
 </style>

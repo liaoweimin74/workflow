@@ -57,3 +57,5 @@
 - [x] 5.18 交互形态：抽屉改为**完全悬浮的对话窗体**（固定于悬浮球上方，二次点击悬浮球收起）；消息自动滚动到底部
 - [x] 5.19 Markdown 渲染：新增 `dompurify` 依赖；`utils/markdown.ts`（markdown-it html:false + DOMPurify 消毒 + 白名单链接 `data-nav` 拦截、外链新窗口）；`components/ai/MarkdownRenderer.vue`；助手消息改富文本渲染（用户消息保持纯文本）
 - [x] 5.20 测试：`markdown.test.ts`（渲染/消毒/站内 link/外链）+ `MarkdownRenderer.test.ts`（渲染 + navigate 事件）
+- [x] 5.21 修复 SSE 终止缺陷：`SseEmitter` 异步响应在容器上 chunked 未正确收尾（curl 18 / vite 代理挂起 → 浏览器 "Failed to fetch"）；`AiChatController` 改为同步返回 `text/event-stream;charset=UTF-8` 文本
+- [x] 5.22 UI 修复：Markdown 容器取消 `pre-wrap`（消除多余空行）；白名单站内链接渲染为**行内胶囊 tag（带 →）**；提示词引导模型正文内联 `[页面名](/路径)`；底部结构化入口与正文内联链接去重

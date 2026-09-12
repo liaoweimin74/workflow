@@ -151,11 +151,13 @@ function send() {
         }
       },
       onMessage: (assistantText, navigations) => {
+        // 正文已内联链接的页面，不再在底部重复出现
+        const extra = (navigations ?? []).filter((nav) => !assistantText.includes(`(${nav.path})`))
         store.addMessage(
           'assistant',
           assistantText,
           formToolProduced ? { applied: formToolApplied } : undefined,
-          navigations,
+          extra.length ? extra : undefined,
         )
       },
       onError: (error) => {
@@ -302,6 +304,7 @@ function tryApplyForm(result: unknown): boolean {
 }
 .ai-bubble-md {
   width: 88%;
+  white-space: normal;
 }
 .ai-form-card {
   margin-top: 6px;

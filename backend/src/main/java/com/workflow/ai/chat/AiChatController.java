@@ -1,6 +1,7 @@
 package com.workflow.ai.chat;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.ai.agent.AiAgentService;
 import com.workflow.ai.config.AiProperties;
 import com.workflow.ai.exception.AiException;
@@ -12,19 +13,19 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * AI 助手对话 Controller。
  *
- * <p>{@code POST /api/v1/ai/chat} 以 SSE 返回事件：
+ * <p>{@code POST /api/v1/ai/chat} 返回 {@code text/event-stream} 文本，事件序列：
  * meta → (tool_call → tool_result)* → message → done（或 error）。
+ *
+ * <p>采用同步响应体而非 {@code SseEmitter}：当前 agent 为非流式产出（事件在结束时一次性产生），
+ * 同步返回可避免 Servlet 异步在容器上的响应终止缺陷（chunked 未正确收尾导致客户端读取失败）。
  */
 @RestController
 @RequestMapping("/api/v1/ai")
@@ -32,86 +33,78 @@ public class AiChatController {
 
     private static final Logger log = LoggerFactory.getLogger(AiChatController.class);
 
-    private static final long SSE_TIMEOUT_MS = 300_000L;
-
     private final AiAgentService agentService;
     private final AiProperties properties;
+    private final ObjectMapper objectMapper;
 
-    public AiChatController(AiAgentService agentService, AiProperties properties) {
+    public AiChatController(AiAgentService agentService, AiProperties properties, ObjectMapper objectMapper) {
         this.agentService = agentService;
         this.properties = properties;
+        this.objectMapper = objectMapper;
     }
 
     /**
-     * 对话（流式事件）。
+     * 对话（SSE 文本）。
      */
-    @PostMapping("/chat")
-    public SseEmitter chat(@RequestBody(required = false) ChatRequest request) {
+    @PostMapping(value = "/chat", produces = "text/event-stream;charset=UTF-8")
+    public String chat(@RequestBody(required = false) ChatRequest request) {
         if (request == null || request.message() == null || request.message().isBlank()) {
             throw new IllegalArgumentException("消息不能为空");
         }
-        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
-        emitter.onTimeout(emitter::complete);
 
         String message = request.message();
         List<ChatMessage> history = toHistory(request.history());
         List<PageRef> pages = request.context() == null || request.context().menus() == null
                 ? List.of() : request.context().menus();
 
-        CompletableFuture.runAsync(() -> {
-            if (!properties.isConfigured()) {
-                sendError(emitter, AiException.Code.CONFIG_MISSING.name(), "AI 服务未配置");
-                return;
-            }
-            try {
-                send(emitter, "meta", Map.of("model", properties.getModel()));
-                agentService.chat(history, message, pages, new AiAgentService.Events() {
-                    @Override
-                    public void toolCall(String name, JsonNode args) {
-                        send(emitter, "tool_call", Map.of("name", name, "args", args));
-                    }
+        if (!properties.isConfigured()) {
+            return sse("error", Map.of("code", AiException.Code.CONFIG_MISSING.name(), "msg", "AI 服务未配置"));
+        }
 
-                    @Override
-                    public void toolResult(String name, JsonNode result) {
-                        send(emitter, "tool_result", Map.of("name", name, "result", result));
-                    }
+        StringBuilder body = new StringBuilder();
+        body.append(sse("meta", Map.of("model", properties.getModel())));
+        try {
+            agentService.chat(history, message, pages, new AiAgentService.Events() {
+                @Override
+                public void toolCall(String name, JsonNode args) {
+                    body.append(sse("tool_call", Map.of("name", name, "args", args)));
+                }
 
-                    @Override
-                    public void message(String text, List<PageRef> navigations) {
-                        send(emitter, "message", Map.of(
-                                "text", text,
-                                "navigations", navigations == null ? List.of() : navigations));
-                    }
-                });
-                send(emitter, "done", Map.of());
-                emitter.complete();
-            } catch (AiException e) {
-                sendError(emitter, e.getCode().name(), e.getMessage());
-            } catch (Exception e) {
-                log.warn("AI 助手对话失败", e);
-                sendError(emitter, AiException.Code.STREAM_ERROR.name(), e.getMessage());
-            }
-        });
+                @Override
+                public void toolResult(String name, JsonNode result) {
+                    body.append(sse("tool_result", Map.of("name", name, "result", result)));
+                }
 
-        return emitter;
+                @Override
+                public void message(String text, List<PageRef> navigations) {
+                    body.append(sse("message", Map.of(
+                            "text", text,
+                            "navigations", navigations == null ? List.of() : navigations)));
+                }
+            });
+            body.append(sse("done", Map.of()));
+        } catch (AiException e) {
+            body.append(sse("error", Map.of("code", e.getCode().name(), "msg", safe(e.getMessage()))));
+        } catch (Exception e) {
+            log.warn("AI 助手对话失败", e);
+            body.append(sse("error", Map.of("code", AiException.Code.STREAM_ERROR.name(), "msg", safe(e.getMessage()))));
+        }
+        return body.toString();
     }
 
-    private void send(SseEmitter emitter, String event, Object data) {
+    /** 构造一条 SSE 事件帧。 */
+    private String sse(String event, Object data) {
+        String json;
         try {
-            emitter.send(SseEmitter.event().name(event).data(data));
-        } catch (IOException e) {
-            throw new IllegalStateException("SSE 发送失败", e);
+            json = objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            json = "{}";
         }
+        return "event:" + event + "\n" + "data:" + json + "\n\n";
     }
 
-    private void sendError(SseEmitter emitter, String code, String msg) {
-        try {
-            emitter.send(SseEmitter.event().name("error")
-                    .data(Map.of("code", code, "msg", msg == null ? "" : msg)));
-            emitter.complete();
-        } catch (IOException e) {
-            emitter.completeWithError(e);
-        }
+    private static String safe(String s) {
+        return s == null ? "" : s;
     }
 
     private List<ChatMessage> toHistory(List<ChatRequest.ChatTurn> turns) {

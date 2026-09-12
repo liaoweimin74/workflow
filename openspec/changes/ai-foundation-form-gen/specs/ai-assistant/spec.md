@@ -179,3 +179,33 @@
 
 - **WHEN** 用户点击的入口正是当前所在页面
 - **THEN** 不重复跳转，仅提示
+
+---
+
+### Requirement: 助手回复 Markdown 渲染
+
+助手回复 SHALL 以 Markdown 渲染（用户消息保持纯文本）。渲染 SHALL 关闭原始 HTML 并经 DOMPurify 消毒，防止 AI 输出注入。Markdown 链接处理：
+- 命中用户页面白名单的路径 SHALL 渲染为站内链接（附加 `data-nav`），点击经前端路由跳转，不触发整页刷新；
+- 其余链接 SHALL 以新窗口打开（`target="_blank"` + `rel="noopener noreferrer"`）。
+
+#### Scenario: 渲染富文本
+
+- **WHEN** 助手回复包含 Markdown 标题/加粗/列表/行内代码
+- **THEN** 渲染为对应富文本标签
+
+#### Scenario: 消毒防注入
+
+- **WHEN** 助手输出包含原始 HTML 或 `javascript:` 链接
+- **THEN** 原始 HTML 被转义
+- **AND** `javascript:` 链接被剔除（不产生可执行 href）
+
+#### Scenario: 站内链接跳转
+
+- **WHEN** 回复包含指向白名单页面的 Markdown 链接
+- **THEN** 渲染为 `data-nav` 站内链接
+- **AND** 点击经前端路由跳转，不整页刷新
+
+#### Scenario: 外链新窗口
+
+- **WHEN** 回复包含白名单外的链接
+- **THEN** 以新窗口打开并带 `noopener noreferrer`

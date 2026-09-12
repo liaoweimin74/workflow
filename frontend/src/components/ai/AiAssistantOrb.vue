@@ -29,7 +29,10 @@
           你好，我可以帮你生成表单、指引功能入口等。试试说："帮我生成一个员工请假单表单"。
         </div>
         <div v-for="message in store.messages" :key="message.id" :class="['ai-msg', message.role]">
-          <div class="ai-bubble">{{ message.content }}</div>
+          <div v-if="message.role === 'assistant'" class="ai-bubble ai-bubble-md">
+            <MarkdownRenderer :text="message.content" :pages="menuPages" @navigate="navigate" />
+          </div>
+          <div v-else class="ai-bubble">{{ message.content }}</div>
           <div v-if="message.formResult" class="ai-form-card">
             <span v-if="message.formResult.applied">✅ 已应用到当前表单</span>
             <span v-else>表单已生成。打开表单设计器后可应用。</span>
@@ -41,7 +44,7 @@
               class="ai-nav-tag"
               type="primary"
               effect="plain"
-              @click="navigate(nav)"
+              @click="navigate(nav.path)"
             >
               🔗 {{ nav.label }}
             </el-tag>
@@ -67,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { MagicStick, Close } from '@element-plus/icons-vue'
@@ -76,6 +79,7 @@ import { useAiAssistantStore } from '@/stores/aiAssistantStore'
 import { useAuthStore } from '@/stores/auth'
 import { aiActionBus } from '@/utils/aiActionBus'
 import { flattenMenuPages } from '@/utils/menuIndex'
+import MarkdownRenderer from './MarkdownRenderer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -91,15 +95,25 @@ let controller: AbortController | null = null
 /** 登录页不显示悬浮球 */
 const showOrb = computed(() => store.visible && route.name !== 'Login')
 const canSend = computed(() => input.value.trim().length > 0 && !sending.value)
+/** 站内可跳转页面（菜单白名单） */
+const menuPages = computed(() => flattenMenuPages(authStore.menus))
 
 function toggleWindow() {
   windowOpen.value = !windowOpen.value
 }
 
 function handleClear() {
+  controller?.abort()
+  controller = null
+  sending.value = false
   store.clear()
   ElMessage.success('已清空对话')
 }
+
+onUnmounted(() => {
+  controller?.abort()
+  controller = null
+})
 
 /** 新消息滚动到底部 */
 watch(
@@ -125,7 +139,7 @@ function send() {
   let formToolProduced = false
   let formToolApplied = false
 
-  const menus = flattenMenuPages(authStore.menus)
+  const menus = menuPages.value
 
   controller = chat(
     { message: text, history, context: { ...(store.context ?? {}), menus } },
@@ -158,12 +172,13 @@ function send() {
 }
 
 /** 页面入口跳转 */
-function navigate(nav: { label: string; path: string }) {
-  if (route.path === nav.path) {
+function navigate(path: string) {
+  if (!path) return
+  if (route.path === path) {
     ElMessage.info('已在该页面')
     return
   }
-  router.push(nav.path)
+  router.push(path)
 }
 
 /** 上下文绑定：当前在表单设计器时，生成的表单自动回填画布 */
@@ -284,6 +299,9 @@ function tryApplyForm(result: unknown): boolean {
 .ai-msg.assistant .ai-bubble {
   background: #f1f4fe;
   color: #303133;
+}
+.ai-bubble-md {
+  width: 88%;
 }
 .ai-form-card {
   margin-top: 6px;

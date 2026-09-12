@@ -55,3 +55,5 @@
 - [x] 5.16 测试：后端 `OpenPageToolTest` + agent/controller 调整；前端 `menuIndex.test.ts` + 悬浮球跳转用例（后端 AI 50 项、前端专项 22 项通过）
 - [x] 5.17 入口可靠性修复：提示词禁止"已为你打开"措辞、要求涉及页面必调 open_page；入口改随 `message` 事件 `navigations` 返回（支持多个）；模型未调用工具时按回复文本中的页面名兜底匹配（≤3）；**不自动跳转**（仅点击跳转）
 - [x] 5.18 交互形态：抽屉改为**完全悬浮的对话窗体**（固定于悬浮球上方，二次点击悬浮球收起）；消息自动滚动到底部
+- [x] 5.19 Markdown 渲染：新增 `dompurify` 依赖；`utils/markdown.ts`（markdown-it html:false + DOMPurify 消毒 + 白名单链接 `data-nav` 拦截、外链新窗口）；`components/ai/MarkdownRenderer.vue`；助手消息改富文本渲染（用户消息保持纯文本）
+- [x] 5.20 测试：`markdown.test.ts`（渲染/消毒/站内 link/外链）+ `MarkdownRenderer.test.ts`（渲染 + navigate 事件）

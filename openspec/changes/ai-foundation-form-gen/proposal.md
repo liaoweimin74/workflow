@@ -45,5 +45,5 @@
 - **代码**：后端新增 `com.workflow.ai`、`com.workflow.ai.formgen`、`com.workflow.ai.tool`、`com.workflow.ai.agent`、`com.workflow.ai.chat`（Spring Modulith 新模块）；前端新增 `AiAssistantOrb.vue`、`stores/aiAssistantStore.ts`、`utils/aiActionBus.ts`、`api/ai.ts`，修改 `App.vue`/`AdminLayout.vue`/`FormDesigner.vue`
 - **API**：新增 `POST /api/v1/ai/chat`（SSE）；移除 `POST /api/v1/ai/forms/generate`；复用现有 Security 认证
 - **配置**：新增 `workflow.ai.*`（enabled/base-url/api-key/model/temperature/max-tokens/超时）
-- **依赖**：零新增（复用 `spring-boot-starter-restclient`）
+- **依赖**：后端零新增（复用 `spring-boot-starter-restclient`）；前端新增 `dompurify`（Markdown 消毒），复用已有 `markdown-it`
 - **数据**：无新表，AI 调用仅日志；会话历史仅前端内存

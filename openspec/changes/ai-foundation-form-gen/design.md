@@ -282,6 +282,7 @@ async function generateForm(description: string, handlers: {
 - FormDesigner 监听 `applyFormSchema` → `setRule(ensureRuleProps(enableCardDesignMode(rule)))`
 - 抽屉在 form-designer 上下文收到 `generate_form_schema` 结果 → 派发动作并标记"已应用"
 - 页面入口：请求上下文携带**用户菜单展平白名单**（`utils/menuIndex.ts`）；入口随 `message` 事件 `navigations` 返回（来源：`open_page` 工具结果，或模型未调用工具时按回复文本中的页面名兜底匹配）；渲染**文字 tag 链接**，点击 `router.push`（不自动跳转；已在目标页不跳转）
+- 回复渲染：助手消息经 **Markdown** 渲染（`utils/markdown.ts` = `markdown-it(html:false)` + `DOMPurify` 消毒）；链接命中白名单 → `data-nav` 站内路由跳转，否则外链新窗口；用户消息保持纯文本
 
 ### 10.4 已知限制
 - 对话最终回复为**非流式**（agent 含工具调用，暂不做 token 级流式）；前端以"正在处理…"占位

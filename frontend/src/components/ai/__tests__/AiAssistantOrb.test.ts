@@ -126,7 +126,7 @@ describe('AiAssistantOrb', () => {
     const message = store.messages.at(-1)
     expect(message?.navigations).toEqual([{ path: '/process/definition', label: '流程定义' }])
 
-    vm.navigate(message!.navigations![0])
+    vm.navigate(message!.navigations![0].path)
     expect(pushSpy).toHaveBeenCalledWith('/process/definition')
   })
 
@@ -134,7 +134,7 @@ describe('AiAssistantOrb', () => {
     const w = createWrapper()
     const vm = w.vm as any
 
-    vm.navigate({ path: '/form/designer', label: '表单设计器' })
+    vm.navigate('/form/designer')
 
     expect(pushSpy).not.toHaveBeenCalled()
   })

@@ -6,6 +6,7 @@ import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatModel;
 import com.workflow.ai.model.ChatOptions;
+import com.workflow.ai.model.ChatResult;
 import com.workflow.ai.support.AiUsageRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +60,11 @@ class AiFormGenerationServiceTest {
             }
 
             @Override
+            public ChatResult completeWithTools(List<ChatMessage> messages, ChatOptions options) {
+                return new ChatResult(payload, List.of());
+            }
+
+            @Override
             public void completeStream(List<ChatMessage> messages, ChatOptions options,
                                        Consumer<String> onDelta, Consumer<String> onDone, Consumer<AiException> onError) {
                 int mid = payload.length() / 2;
@@ -109,6 +115,11 @@ class AiFormGenerationServiceTest {
         ChatModel failing = new ChatModel() {
             @Override
             public String complete(List<ChatMessage> messages, ChatOptions options) {
+                throw new AiException(AiException.Code.TIMEOUT, "timeout");
+            }
+
+            @Override
+            public ChatResult completeWithTools(List<ChatMessage> messages, ChatOptions options) {
                 throw new AiException(AiException.Code.TIMEOUT, "timeout");
             }
 

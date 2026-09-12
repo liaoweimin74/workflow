@@ -1,10 +1,14 @@
 package com.workflow.ai.provider;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.ai.config.AiProperties;
 import com.workflow.ai.exception.AiException;
 import com.workflow.ai.model.ChatMessage;
 import com.workflow.ai.model.ChatOptions;
+import com.workflow.ai.model.ChatResult;
+import com.workflow.ai.model.ToolCall;
+import com.workflow.ai.model.ToolSpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -24,7 +28,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
- * OpenAiCompatibleChatModel 非流式/流式测试。
+ * OpenAiCompatibleChatModel 非流式/流式/工具调用测试。
  */
 class OpenAiCompatibleChatModelTest {
 
@@ -137,5 +141,61 @@ class OpenAiCompatibleChatModelTest {
                 d -> { }, d -> { }, error::set);
 
         assertThat(error.get()).isNotNull();
+    }
+
+    @Test
+    void completeWithTools_parsesToolCalls() {
+        String body = "{\"choices\":[{\"message\":{\"content\":null,\"tool_calls\":["
+                + "{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"generate_form_schema\",\"arguments\":\"{\\\"description\\\":\\\"请假单\\\"}\"}}"
+                + "]}}]}";
+        server.expect(requestTo(URL)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        ChatResult result = model.completeWithTools(List.of(ChatMessage.user("x")),
+                ChatOptions.withTools(List.of(toolSpec())));
+
+        assertThat(result.hasToolCalls()).isTrue();
+        assertThat(result.toolCalls()).hasSize(1);
+        assertThat(result.toolCalls().get(0).id()).isEqualTo("call_1");
+        assertThat(result.toolCalls().get(0).name()).isEqualTo("generate_form_schema");
+        assertThat(result.toolCalls().get(0).arguments()).contains("请假单");
+    }
+
+    @Test
+    void completeWithTools_textOnly_hasNoToolCalls() {
+        server.expect(requestTo(URL))
+                .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"你好\"}}]}", MediaType.APPLICATION_JSON));
+
+        ChatResult result = model.completeWithTools(List.of(ChatMessage.user("x")),
+                ChatOptions.withTools(List.of(toolSpec())));
+
+        assertThat(result.hasToolCalls()).isFalse();
+        assertThat(result.content()).isEqualTo("你好");
+    }
+
+    @Test
+    void completeWithTools_serializesToolsAndToolMessages() {
+        server.expect(requestTo(URL))
+                .andExpect(jsonPath("$.tools[0].type").value("function"))
+                .andExpect(jsonPath("$.tools[0].function.name").value("generate_form_schema"))
+                .andExpect(jsonPath("$.messages[2].tool_calls[0].function.name").value("generate_form_schema"))
+                .andExpect(jsonPath("$.messages[3].role").value("tool"))
+                .andExpect(jsonPath("$.messages[3].tool_call_id").value("call_1"))
+                .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"完成\"}}]}", MediaType.APPLICATION_JSON));
+
+        List<ChatMessage> messages = List.of(
+                ChatMessage.system("s"),
+                ChatMessage.user("u"),
+                ChatMessage.assistantToolCalls(List.of(new ToolCall("call_1", "generate_form_schema", "{}"))),
+                ChatMessage.tool("call_1", "{\"ok\":true}"));
+
+        ChatResult result = model.completeWithTools(messages, ChatOptions.withTools(List.of(toolSpec())));
+
+        assertThat(result.content()).isEqualTo("完成");
+        server.verify();
+    }
+
+    private ToolSpec toolSpec() {
+        JsonNode params = new ObjectMapper().createObjectNode().put("type", "object");
+        return new ToolSpec("generate_form_schema", "生成表单", params);
     }
 }

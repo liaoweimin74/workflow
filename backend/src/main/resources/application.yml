@@ -34,3 +34,15 @@ logging:
     org.flowable: INFO
     org.springframework.modulith: DEBUG
     org.flywaydb: DEBUG
+
+# AI 服务配置（默认关闭；配置 api-key 后置 enabled=true 启用）
+workflow:
+  ai:
+    enabled: false
+    base-url: ${AI_BASE_URL:https://api.deepseek.com/v1}
+    api-key: ${AI_API_KEY:}
+    model: ${AI_MODEL:deepseek-chat}
+    temperature: 0.7
+    max-tokens: 4096
+    connect-timeout-ms: 5000
+    read-timeout-ms: 120000

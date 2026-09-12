@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -50,6 +51,22 @@ class OpenAiCompatibleChatModelTest {
         String result = model.complete(List.of(ChatMessage.user("hello")), ChatOptions.defaults());
 
         assertThat(result).isEqualTo("hi");
+        server.verify();
+    }
+
+    @Test
+    void complete_sendsJsonModeFormatAndOptions() {
+        server.expect(requestTo(URL))
+                .andExpect(jsonPath("$.response_format.type").value("json_object"))
+                .andExpect(jsonPath("$.stream").value(false))
+                .andExpect(jsonPath("$.temperature").value(0.3))
+                .andExpect(jsonPath("$.max_tokens").value(100))
+                .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}", MediaType.APPLICATION_JSON));
+
+        String result = model.complete(List.of(ChatMessage.user("x")),
+                new ChatOptions(0.3, 100, false, "json_object"));
+
+        assertThat(result).isEqualTo("ok");
         server.verify();
     }
 

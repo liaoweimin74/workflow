@@ -33,6 +33,12 @@ class AiPropertiesTest {
     }
 
     @Test
+    void chatModelNotCreated_whenEnabledButApiKeyBlank() {
+        runner.withPropertyValues("workflow.ai.enabled=true")
+                .run(ctx -> assertThat(ctx).doesNotHaveBean("chatModel"));
+    }
+
+    @Test
     void chatModelCreated_whenEnabled() {
         runner.withPropertyValues("workflow.ai.enabled=true", "workflow.ai.api-key=sk-test")
                 .run(ctx -> assertThat(ctx).hasBean("chatModel"));

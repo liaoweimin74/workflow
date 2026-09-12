@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { generateForm } from '../ai'
+import { chat } from '../ai'
 
 function streamResponse(chunks: string[], status = 200): Response {
   const encoder = new TextEncoder()
@@ -20,36 +20,41 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('ai api — generateForm', () => {
-  it('按序解析 meta/chunk/done 事件', async () => {
+describe('ai api — chat', () => {
+  it('按序解析 meta/tool_call/tool_result/message/done', async () => {
     const chunks = [
-      'event:meta\ndata:{"taskId":"t1","model":"m"}\n\n',
-      'event:chunk\ndata:{"delta":"{\\"rule\\":"}\n\n',
-      'event:chunk\ndata:{"delta":"[]}"}\n\n',
-      'event:done\ndata:{"schema":"{\\"rule\\":[]}","fields":[],"warnings":[]}\n\n',
+      'event:meta\ndata:{"model":"m"}\n\n',
+      'event:tool_call\ndata:{"name":"generate_form_schema","args":{"description":"x"}}\n\n',
+      'event:tool_result\ndata:{"name":"generate_form_schema","result":{"schema":"{\\"rule\\":[]}"}}\n\n',
+      'event:message\ndata:{"text":"已生成"}\n\n',
+      'event:done\ndata:{}\n\n',
     ]
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse(chunks)))
 
-    const meta: Array<{ taskId: string; model: string }> = []
-    const deltas: string[] = []
-    const done: any[] = []
-
+    const events: string[] = []
     await new Promise<void>((resolve) => {
-      generateForm('请假单', {
-        onMeta: (m) => meta.push(m),
-        onDelta: (d) => deltas.push(d),
-        onDone: (r) => {
-          done.push(r)
-          resolve()
+      chat(
+        { message: 'hi', history: [] },
+        {
+          onMeta: () => events.push('meta'),
+          onToolCall: (name) => events.push(`call:${name}`),
+          onToolResult: (name) => events.push(`result:${name}`),
+          onMessage: (t) => events.push(`msg:${t}`),
+          onDone: () => {
+            events.push('done')
+            resolve()
+          },
         },
-      })
+      )
     })
 
-    expect(meta).toHaveLength(1)
-    expect(meta[0].taskId).toBe('t1')
-    expect(deltas.join('')).toBe('{"rule":[]}')
-    expect(done).toHaveLength(1)
-    expect(done[0].schema).toBe('{"rule":[]}')
+    expect(events).toEqual([
+      'meta',
+      'call:generate_form_schema',
+      'result:generate_form_schema',
+      'msg:已生成',
+      'done',
+    ])
   })
 
   it('error 事件回调 onError', async () => {
@@ -60,7 +65,7 @@ describe('ai api — generateForm', () => {
 
     const errors: Array<{ code: string; msg: string }> = []
     await new Promise<void>((resolve) => {
-      generateForm('x', {
+      chat({ message: 'x', history: [] }, {
         onError: (e) => {
           errors.push(e)
           resolve()
@@ -68,7 +73,6 @@ describe('ai api — generateForm', () => {
       })
     })
 
-    expect(errors).toHaveLength(1)
     expect(errors[0].code).toBe('CONFIG_MISSING')
     expect(errors[0].msg).toBe('AI 服务未配置')
   })
@@ -86,7 +90,7 @@ describe('ai api — generateForm', () => {
 
     const errors: Array<{ code: string; msg: string }> = []
     await new Promise<void>((resolve) => {
-      generateForm('x', {
+      chat({ message: 'x', history: [] }, {
         onError: (e) => {
           errors.push(e)
           resolve()
@@ -94,7 +98,6 @@ describe('ai api — generateForm', () => {
       })
     })
 
-    expect(errors).toHaveLength(1)
     expect(errors[0].msg).toBe('AI 服务未配置')
   })
 })

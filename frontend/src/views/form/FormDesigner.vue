@@ -27,7 +27,6 @@
         业务表单
       </el-tag>
       <div class="toolbar-right">
-        <el-button plain :icon="MagicStick" @click="aiDialogVisible = true">AI 生成</el-button>
         <el-button plain @click="dsDialogVisible = true">
           数据源配置（{{ formDataSources.length }}）
         </el-button>
@@ -132,22 +131,20 @@
         <el-button @click="jsonVisible = false">关闭</el-button>
       </template>
     </el-dialog>
-
-    <!-- AI 生成表单 -->
-    <AiFormGenDialog v-model="aiDialogVisible" @apply="handleAiApply" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, provide } from 'vue'
+import { ref, onMounted, onUnmounted, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion, Document, MagicStick } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Promotion, Document } from '@element-plus/icons-vue'
 import _formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
-import AiFormGenDialog from './components/AiFormGenDialog.vue'
+import { useAiAssistantStore } from '@/stores/aiAssistantStore'
+import { aiActionBus } from '@/utils/aiActionBus'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
 import DsBindingConfigDialog from './components/DsBindingConfigDialog.vue'
@@ -187,13 +184,22 @@ const dsConfigPanelRef = ref<InstanceType<typeof DataSourceConfigPanel> | null>(
 const jsonVisible = ref(false)
 const jsonText = ref('')
 
-/** AI 生成弹窗状态 */
-const aiDialogVisible = ref(false)
+/** AI 助手集成：注册当前页上下文 + 监听表单回填动作 */
+const aiAssistantStore = useAiAssistantStore()
 
-/** AI 生成结果回填画布（与加载已有 schema 同一管线） */
-function handleAiApply(rule: unknown[]) {
+/** 助手生成表单后自动回填画布（与加载已有 schema 同一管线） */
+const offApplyFormSchema = aiActionBus.on('applyFormSchema', (rule: unknown[]) => {
   designerRef.value?.setRule(ensureRuleProps(enableCardDesignMode(rule as any[])))
-}
+})
+
+onMounted(() => {
+  aiAssistantStore.setContext({ route: 'form-designer', formId: formId.value })
+})
+
+onUnmounted(() => {
+  offApplyFormSchema()
+  aiAssistantStore.setContext(null)
+})
 
 /** 查看表单配置 JSON（对齐保存结构：rule/option/dataSources/actions） */
 function handleShowJson() {

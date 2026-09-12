@@ -3,14 +3,16 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand, HomeFilled, Sunny, Moon, Lock } from '@element-plus/icons-vue'
+import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
+import { useAiAssistantStore } from '@/stores/aiAssistantStore'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const aiStore = useAiAssistantStore()
 
 const collapsed = ref(false)
 const isDark = ref(false)
@@ -215,8 +217,18 @@ onUnmounted(() => {
         </el-breadcrumb>
       </div>
 
-      <!-- 右侧：消息通知 + 暗色切换 + 用户区 -->
+      <!-- 右侧：AI 助手开关 + 消息通知 + 暗色切换 + 用户区 -->
       <div class="flex items-center gap-3">
+        <button
+          @click="aiStore.toggle()"
+          :title="aiStore.visible ? '隐藏 AI 助手' : '显示 AI 助手'"
+          class="w-8 h-8 flex items-center justify-center rounded-md transition-colors"
+          :class="aiStore.visible
+            ? 'text-[#5755ee] hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]'
+            : 'text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]'"
+        >
+          <el-icon :size="18"><MagicStick /></el-icon>
+        </button>
         <NotificationBell />
         <button
           @click="toggleDark"

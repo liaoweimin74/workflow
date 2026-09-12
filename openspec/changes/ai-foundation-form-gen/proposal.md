@@ -18,25 +18,32 @@
 - Reason: 首个 AI 场景，验证基础设施层价值
 - Impact: 非破坏性；新增 `/api/v1/ai/forms/generate`(+`/sync`) 端点
 
-**前端表单设计器新增 AI 生成入口**
-- From: FormDesigner 工具栏仅手动拖拽配置
-- To: 工具栏"AI 生成"按钮 + `AiFormGenDialog` 弹窗（描述输入、流式预览、字段清单、回填画布）
-- Reason: 嵌入式入口（已确认），贴合设计场景
-- Impact: 非破坏性；新增组件与 api 封装，复用现有 `setRule` 回填链路
+**前端新增统一 AI 助手入口（悬浮球 + 对话）**
+- From: 无任何 AI 入口（原设计器内嵌按钮方案废弃）
+- To: 全站右下角悬浮球 + 对话抽屉（多轮历史、可清空）；顶部工具栏显隐开关（默认开启，持久化）；页面注册上下文；助手经工具调用完成任务并按上下文自动回填
+- Reason: 用户要求统一入口，所有 AI 能力经对话完成，避免每个功能各挂入口
+- Impact: 非破坏性；新增 `AiAssistantOrb`/store/动作总线；表单设计器移除内嵌入口改为注册上下文 + 监听回填动作
+
+**后端新增对话与工具路由**
+- From: 单轮表单生成端点 `/api/v1/ai/forms/generate`
+- To: `POST /api/v1/ai/chat`（SSE 事件流）+ agent loop + 工具注册表；`generate_form_schema` 为首个工具；基础设施扩展到 function calling
+- Reason: 统一入口需要意图路由与工具调用
+- Impact: 移除独立表单生成端点；`ChatMessage`/`ChatOptions`/`ChatModel` 扩展工具能力
 
 ## Capabilities
 
 ### New Capabilities
-- `ai-infrastructure`: AI 调用基础设施——模型供应商抽象（OpenAI 兼容）、非流式/流式调用、JSON 结构化输出、配置与开关、异常体系、调用审计
-- `ai-form-generation`: 表单设计器 AI 生成——自然语言描述 → form-create schema 生成、校验清洗、流式回传、画布回填
+- `ai-infrastructure`: AI 调用基础设施——模型供应商抽象（OpenAI 兼容）、非流式/流式/工具调用、JSON 结构化输出、配置与开关、异常体系、调用审计
+- `ai-form-generation`: 表单 AI 生成能力——自然语言描述 → form-create schema 生成、校验清洗（作为助手工具 `generate_form_schema`，经助手触发并上下文自动回填）
+- `ai-assistant`: 统一 AI 助手——全局悬浮球入口、对话抽屉（多轮历史 + 手动清空）、页面上下文注册、对话端点与事件流、工具路由执行、结果动作派发
 
 ### Modified Capabilities
 - （无现有 capability 的需求变更）
 
 ## Impact
 
-- **代码**：后端新增 `com.workflow.ai`、`com.workflow.ai.formgen` 包（Spring Modulith 新模块）；前端新增 `AiFormGenDialog.vue`、`api/ai.ts`，修改 `FormDesigner.vue`
-- **API**：新增 `POST /api/v1/ai/forms/generate`（SSE）、`POST /api/v1/ai/forms/generate/sync`；复用现有 Security 认证
+- **代码**：后端新增 `com.workflow.ai`、`com.workflow.ai.formgen`、`com.workflow.ai.tool`、`com.workflow.ai.agent`、`com.workflow.ai.chat`（Spring Modulith 新模块）；前端新增 `AiAssistantOrb.vue`、`stores/aiAssistantStore.ts`、`utils/aiActionBus.ts`、`api/ai.ts`，修改 `App.vue`/`AdminLayout.vue`/`FormDesigner.vue`
+- **API**：新增 `POST /api/v1/ai/chat`（SSE）；移除 `POST /api/v1/ai/forms/generate`；复用现有 Security 认证
 - **配置**：新增 `workflow.ai.*`（enabled/base-url/api-key/model/temperature/max-tokens/超时）
 - **依赖**：零新增（复用 `spring-boot-starter-restclient`）
-- **数据**：无新表，AI 调用仅日志
+- **数据**：无新表，AI 调用仅日志；会话历史仅前端内存

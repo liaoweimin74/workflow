@@ -10,7 +10,8 @@
 
 ### 范围
 - **In scope**：后端 `com.workflow.ai` 模块（模型抽象 + OpenAI 兼容实现 + 配置 + 异常）；AI 表单生成（后端 prompt/校验/流式端点 + 前端弹窗交互）；前后端测试。
-- **Out of scope**：全局 AI 悬浮球助手；RAG/向量库；函数调用/工具调用；审批助手、流程生成、NL2DSL 等其他 AI 能力；多模型供应商 UI 切换（配置驱动，后续可加）。
+- **Out of scope**：RAG/向量库；审批助手、流程生成、NL2DSL 等其他 AI 能力；多模型供应商 UI 切换（配置驱动，后续可加）。
+- **入口形态（修订）**：改为**统一悬浮球 + 对话**入口；表单生成作为助手工具，经对话触发并上下文自动回填。原"设计器内嵌按钮"形态已废弃（见第 10 节）。
 
 ## 2. 架构
 
@@ -254,5 +255,33 @@ async function generateForm(description: string, handlers: {
 ## 9. 非目标与后续
 
 - 本变更不建任何新表（AI 调用仅日志）；后续如需调用统计再建表
-- 前端"AI 生成"按钮图标文案待 UI 细节确认，功能优先
 - 模型供应商多选/UI 切换 → 后续 `workflow.ai.providers` 列表扩展
+
+## 10. 统一 AI 助手（修订：悬浮球 + 对话入口）
+
+> 用户确认：改为**统一悬浮球入口**，所有 AI 能力经对话完成；**上下文绑定自动回填**；对话**保留历史且可手动清空**；悬浮球在右下角，顶部工具栏提供显隐开关（默认开启）。原设计器内嵌按钮方案废弃。
+
+### 10.1 入口
+- `App.vue` 挂载 `AiAssistantOrb.vue`（全局，覆盖全屏设计器页；登录页隐藏）
+- 悬浮球固定右下角；`AdminLayout` 顶部工具栏提供显隐开关（默认开启，`localStorage` 持久化）
+- 点击开 `el-drawer` 对话抽屉：多轮历史（前端 store 维护，手动「清空对话」）
+
+### 10.2 后端：对话 + 工具路由
+- `POST /api/v1/ai/chat`（SSE：meta → tool_call → tool_result → message → done | error）
+- `AiAgentService`：agent loop（最多 5 步）——把工具声明发给模型 → 执行 tool_calls → 回填 tool 消息 → 继续，直至最终文本
+- `AiTool` + `AiToolRegistry`：工具注册与执行（异常返回错误 JSON 不中断）
+- `GenerateFormSchemaTool`：复用 `AiFormGenerationService` 生成表单（能力层复用）
+- 基础设施扩展：`ChatMessage` 增加 tool 角色 / `toolCalls` / `toolCallId`；`ChatOptions.tools`；`ChatModel.completeWithTools`；provider 解析 `tool_calls` 并序列化 tools/tool 消息
+- **移除** `FormGenerationController`（不再有独立表单生成端点）
+
+### 10.3 上下文与动作派发
+- `aiAssistantStore`：`visible`（持久化）/ `messages` / `context`
+- 页面注册上下文：FormDesigner 挂载注册 `{route:'form-designer', formId}`，卸载清除
+- `aiActionBus`：`on/off/emit`（处理器异常隔离）
+- FormDesigner 监听 `applyFormSchema` → `setRule(ensureRuleProps(enableCardDesignMode(rule)))`
+- 抽屉在 form-designer 上下文收到 `generate_form_schema` 结果 → 派发动作并标记"已应用"
+
+### 10.4 已知限制
+- 对话最终回复为**非流式**（agent 含工具调用，暂不做 token 级流式）；前端以"正在处理…"占位
+- 会话历史仅前端内存，不落库；刷新即失（符合当前需求）
+- 本地小模型若不支持 tools，工具调用可能失败——DeepSeek/主流 OpenAI 兼容端点支持

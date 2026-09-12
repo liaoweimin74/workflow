@@ -3,25 +3,27 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 /**
- * FormDesigner AI 生成入口与回填链路的接线检查。
- * 表单设计器组件依赖 form-create、路由与 api，直接挂载成本过高，
- * 故按项目惯例（PageDesigner.card-mode.test.ts）做源码级接线断言。
+ * FormDesigner 与统一 AI 助手的接线检查：
+ * 设计器不再内嵌独立 AI 入口，改为注册上下文 + 监听回填动作。
+ * （组件依赖 form-create/路由/api，直接挂载成本高，按项目惯例做源码级断言。）
  */
-describe('FormDesigner AI generation entry', () => {
+describe('FormDesigner AI assistant integration', () => {
   const source = () => readFileSync(resolve(__dirname, '../FormDesigner.vue'), 'utf8')
 
-  it('工具栏提供 AI 生成按钮并挂载弹窗', () => {
+  it('工具栏不再内嵌 AI 生成入口', () => {
     const src = source()
-    expect(src).toContain("import AiFormGenDialog from './components/AiFormGenDialog.vue'")
-    expect(src).toContain('MagicStick')
-    expect(src).toContain('>AI 生成</el-button>')
-    expect(src).toContain('<AiFormGenDialog v-model="aiDialogVisible" @apply="handleAiApply" />')
+    expect(src).not.toContain('>AI 生成</el-button>')
+    expect(src).not.toContain('AiFormGenDialog')
+    expect(src).not.toContain('aiDialogVisible')
   })
 
-  it('回填复用 setRule + ensureRuleProps + enableCardDesignMode 管线', () => {
+  it('注册页面上下文并监听 applyFormSchema 回填', () => {
     const src = source()
-    expect(src).toContain('const aiDialogVisible = ref(false)')
-    expect(src).toContain('function handleAiApply(rule: unknown[])')
+    expect(src).toContain("import { useAiAssistantStore } from '@/stores/aiAssistantStore'")
+    expect(src).toContain("import { aiActionBus } from '@/utils/aiActionBus'")
+    expect(src).toContain("aiActionBus.on('applyFormSchema'")
+    expect(src).toContain("aiAssistantStore.setContext({ route: 'form-designer', formId: formId.value })")
     expect(src).toContain('designerRef.value?.setRule(ensureRuleProps(enableCardDesignMode(rule as any[])))')
+    expect(src).toContain('aiAssistantStore.setContext(null)')
   })
 })

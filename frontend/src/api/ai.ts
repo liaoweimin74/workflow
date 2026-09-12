@@ -1,42 +1,43 @@
 /**
- * AI 表单生成 API（SSE 流式客户端）。
+ * AI 助手对话 API（SSE 流式事件客户端）。
  *
- * POST /api/v1/ai/forms/generate 以 text/event-stream 返回事件序列：
- * meta → chunk* → done（或 error）。EventSource 无法携带 POST body，
- * 故使用 fetch + ReadableStream 手动解析。
+ * POST /api/v1/ai/chat 以 text/event-stream 返回事件：
+ * meta → (tool_call → tool_result)* → message → done（或 error）。
+ * EventSource 无法携带 POST body，故使用 fetch + ReadableStream 手动解析。
  */
 
-export interface AiFieldInfo {
-  field: string
-  title: string
-  componentType: string
+export interface AiChatTurn {
+  role: 'user' | 'assistant'
+  content: string
 }
 
-export interface AiFormGenerateResult {
-  schema: string
-  fields: AiFieldInfo[]
-  warnings: string[]
+export interface AiChatPayload {
+  message: string
+  history: AiChatTurn[]
+  context?: Record<string, unknown>
 }
 
-export interface AiFormHandlers {
-  onMeta?: (m: { taskId: string; model: string }) => void
-  onDelta?: (delta: string) => void
-  onDone?: (result: AiFormGenerateResult) => void
-  onError?: (e: { code: string; msg: string }) => void
+export interface AiChatHandlers {
+  onMeta?: (meta: { model: string }) => void
+  onToolCall?: (name: string, args: unknown) => void
+  onToolResult?: (name: string, result: unknown) => void
+  onMessage?: (text: string) => void
+  onDone?: () => void
+  onError?: (error: { code: string; msg: string }) => void
 }
 
-const GENERATE_URL = '/api/v1/ai/forms/generate'
+const CHAT_URL = '/api/v1/ai/chat'
 
 /**
- * 发起流式表单生成。
+ * 发起助手对话。
  *
- * @returns AbortController（调用 abort() 取消生成）
+ * @returns AbortController（调用 abort() 取消）
  */
-export function generateForm(description: string, handlers: AiFormHandlers): AbortController {
+export function chat(payload: AiChatPayload, handlers: AiChatHandlers): AbortController {
   const controller = new AbortController()
   void (async () => {
     try {
-      const response = await fetch(GENERATE_URL, {
+      const response = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -44,7 +45,7 @@ export function generateForm(description: string, handlers: AiFormHandlers): Abo
           Authorization: `Bearer ${localStorage.getItem('access_token') ?? ''}`,
           'X-Tenant-Id': 'default',
         },
-        body: JSON.stringify({ description }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       })
 
@@ -90,7 +91,7 @@ export function generateForm(description: string, handlers: AiFormHandlers): Abo
   return controller
 }
 
-function dispatchBlock(block: string, handlers: AiFormHandlers): void {
+function dispatchBlock(block: string, handlers: AiChatHandlers): void {
   let event = 'message'
   const dataLines: string[] = []
   for (const line of block.split('\n')) {
@@ -110,13 +111,26 @@ function dispatchBlock(block: string, handlers: AiFormHandlers): void {
     // 保留原始文本
   }
 
-  if (event === 'meta') {
-    handlers.onMeta?.(payload)
-  } else if (event === 'chunk') {
-    handlers.onDelta?.(typeof payload?.delta === 'string' ? payload.delta : '')
-  } else if (event === 'done') {
-    handlers.onDone?.(payload)
-  } else if (event === 'error') {
-    handlers.onError?.(payload)
+  switch (event) {
+    case 'meta':
+      handlers.onMeta?.(payload)
+      break
+    case 'tool_call':
+      handlers.onToolCall?.(payload?.name, payload?.args)
+      break
+    case 'tool_result':
+      handlers.onToolResult?.(payload?.name, payload?.result)
+      break
+    case 'message':
+      handlers.onMessage?.(typeof payload?.text === 'string' ? payload.text : '')
+      break
+    case 'done':
+      handlers.onDone?.()
+      break
+    case 'error':
+      handlers.onError?.(payload)
+      break
+    default:
+      break
   }
 }

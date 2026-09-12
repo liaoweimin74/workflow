@@ -34,3 +34,18 @@
 - [x] 4.3 前端 lint + 单测通过（`npm run lint && npm run test`）
 - [x] 4.4 未配置 AI 时端到端降级验证：打开表单设计器 AI 入口 → 弹窗显示"AI 服务未配置"可重试，不崩溃（已由自动化覆盖：FormGenerationControllerTest 503/error 事件 + AiFormGenDialog error 态/重试测试；未做浏览器实测）
 - [x] 4.5 可选：本地 Ollama/真实 key 冒烟流式生成一个表单并回填画布（未执行：本地无真实 key；链路已由 FakeChatModel 单测覆盖）
+
+## 5. 统一 AI 助手改造（修订：悬浮球 + 对话入口）
+
+- [x] 5.1 基础设施扩展：`ChatMessage` 支持 tool 角色 / `toolCalls` / `toolCallId`；`ChatOptions.tools`；`ToolSpec`/`ToolCall`/`ChatResult`；`ChatModel.completeWithTools`；provider 解析 `tool_calls` 并序列化 tools/tool 消息
+- [x] 5.2 工具层：`AiTool` 接口 + `AiToolRegistry`（注册/声明/执行，异常隔离）
+- [x] 5.3 表单工具：`GenerateFormSchemaTool`（复用 `AiFormGenerationService`）
+- [x] 5.4 Agent 编排：`AiAgentService`（agent loop ≤5 步 + 系统提示 + 审计）
+- [x] 5.5 对话端点：`AiChatController` `POST /api/v1/ai/chat`（meta/tool_call/tool_result/message/done/error）
+- [x] 5.6 移除旧入口：`FormGenerationController` 及其测试
+- [x] 5.7 前端状态与总线：`aiAssistantStore`（显隐持久化/历史/清空/上下文）、`aiActionBus`（on/off/emit，异常隔离）
+- [x] 5.8 前端 SSE 客户端：`api/ai.ts` chat（事件解析）
+- [x] 5.9 悬浮球 UI：`AiAssistantOrb`（右下角 + 抽屉 + 历史 + 清空 + 上下文自动回填）；`App.vue` 挂载
+- [x] 5.10 顶部工具栏显隐开关：`AdminLayout`（默认开启、持久化）
+- [x] 5.11 FormDesigner 改造：移除内嵌 AI 按钮/弹窗；注册上下文 + 监听 `applyFormSchema`
+- [x] 5.12 测试：后端 AI 测试 45 项；前端专项 18 项；全量回归（前端 1100 全通过；后端仅剩既有失败）

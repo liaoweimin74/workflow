@@ -311,3 +311,72 @@
 - [ ] **Step 3: 前端全量验证** — `npm run lint && npm run test` 全绿。
 - [ ] **Step 4: 降级冒烟** — 未配置 key 启动后端，前端打开表单设计器 AI 入口 → 弹窗提示"AI 服务未配置"可重试、页面不崩溃。
 - [ ] **Step 5: Commit** — `chore(ai): 配置示例与验证`
+
+---
+
+## Phase 2：统一 AI 助手改造（悬浮球 + 对话入口）
+
+> 入口形态修订（见 design.md 第 10 节）：表单生成改为助手工具，经对话触发并上下文自动回填。原内嵌按钮方案废弃。
+
+### Task 14: 基础设施支持工具调用
+
+**Files:**
+- Modify: `backend/.../ai/model/ChatMessage.java`（tool 角色 / toolCalls / toolCallId）
+- Create: `backend/.../ai/model/{ToolSpec,ToolCall,ChatResult}.java`
+- Modify: `backend/.../ai/model/{ChatOptions,ChatModel}.java`、`backend/.../ai/provider/OpenAiCompatibleChatModel.java`
+- Test: `OpenAiCompatibleChatModelTest`（工具解析、tools 序列化、tool 消息）
+
+- [x] 写测试 → 实现 → `mvn test -Dtest=OpenAiCompatibleChatModelTest` → Commit
+
+### Task 15: 工具层与表单工具
+
+**Files:**
+- Create: `backend/.../ai/tool/{AiTool,AiToolRegistry}.java`、`backend/.../ai/formgen/GenerateFormSchemaTool.java`
+- Test: `AiToolRegistryTest`、`GenerateFormSchemaToolTest`
+
+- [x] 实现 → 测试
+
+### Task 16: Agent 编排
+
+**Files:**
+- Create: `backend/.../ai/agent/AiAgentService.java`
+- Test: `AiAgentServiceTest`（无工具 / 工具调用后回复 / 未配置）
+
+- [x] 实现 → 测试
+
+### Task 17: 对话端点
+
+**Files:**
+- Create: `backend/.../ai/chat/AiChatController.java`
+- Delete: `backend/.../ai/formgen/FormGenerationController.java` + 测试
+- Test: `AiChatControllerTest`（400 / 未配置 error / meta-message-done）
+
+- [x] 实现 → 测试 → Commit `feat(ai): 统一助手后端（function calling agent + /ai/chat，移除独立表单端点）`
+
+### Task 18: 前端状态 / 动作总线 / SSE 客户端
+
+**Files:**
+- Create: `frontend/src/stores/aiAssistantStore.ts`、`frontend/src/utils/aiActionBus.ts`
+- Rewrite: `frontend/src/api/ai.ts`（chat SSE）
+- Delete: `frontend/src/views/form/components/AiFormGenDialog.vue` + 测试
+- Test: `aiAssistantStore.test.ts`、`aiActionBus.test.ts`、`api/__tests__/ai.test.ts`
+
+- [x] 实现 → 测试
+
+### Task 19: 悬浮球与显隐开关
+
+**Files:**
+- Create: `frontend/src/components/ai/AiAssistantOrb.vue`
+- Modify: `frontend/src/App.vue`（挂载）、`frontend/src/layouts/AdminLayout.vue`（开关）
+- Test: `AiAssistantOrb.test.ts`（可见性 / 发送 / 上下文回填 / 错误 / 清空）
+
+- [x] 实现 → 测试
+
+### Task 20: FormDesigner 改造
+
+**Files:**
+- Modify: `frontend/src/views/form/FormDesigner.vue`（移除内嵌入口；注册上下文 + 监听 applyFormSchema）
+- Test: `FormDesigner.ai.test.ts`（源码级接线断言）
+
+- [x] 实现 → 测试 → Commit `feat(ai): 统一悬浮球助手入口（前端）`
+- [x] 全量验证：前端 1100 全通过；后端 AI 45 项全通过（全量仅剩既有 `PageDefinitionPublishIntegrationTest` 失败）

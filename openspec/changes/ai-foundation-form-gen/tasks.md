@@ -59,3 +59,4 @@
 - [x] 5.20 测试：`markdown.test.ts`（渲染/消毒/站内 link/外链）+ `MarkdownRenderer.test.ts`（渲染 + navigate 事件）
 - [x] 5.21 修复 SSE 终止缺陷：`SseEmitter` 异步响应在容器上 chunked 未正确收尾（curl 18 / vite 代理挂起 → 浏览器 "Failed to fetch"）；`AiChatController` 改为同步返回 `text/event-stream;charset=UTF-8` 文本
 - [x] 5.22 UI 修复：Markdown 容器取消 `pre-wrap`（消除多余空行）；白名单站内链接渲染为**行内胶囊 tag（带 →）**；提示词引导模型正文内联 `[页面名](/路径)`；底部结构化入口与正文内联链接去重
+- [x] 5.23 品牌样式：新增 `RobotIcon.vue`；深色标题栏 + 机器人图标 + 标题「小智·AI 助手」；清除历史改图标按钮（空时禁用）；助手消息带头像；输入框 1–5 行自适应（超出滚动）

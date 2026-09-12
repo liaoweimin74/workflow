@@ -4,66 +4,81 @@
     <button
       class="ai-orb"
       :class="{ 'ai-orb-active': windowOpen }"
-      :title="windowOpen ? '收起 AI 助手' : '打开 AI 助手'"
+      :title="windowOpen ? '收起小智' : '打开小智'"
       @click="toggleWindow"
     >
-      <el-icon :size="22"><MagicStick /></el-icon>
+      <RobotIcon class="ai-orb-icon" />
     </button>
 
     <!-- 完全悬浮的对话窗体 -->
     <div v-if="windowOpen" class="ai-window">
       <div class="ai-window-header">
-        <span class="ai-title">AI 助手</span>
+        <div class="ai-window-title">
+          <span class="ai-header-avatar"><RobotIcon /></span>
+          <span class="ai-title">小智·AI 助手</span>
+        </div>
         <div class="ai-window-actions">
-          <el-button link size="small" :disabled="store.messages.length === 0" @click="handleClear">
-            清空对话
-          </el-button>
-          <el-button link size="small" @click="windowOpen = false">
-            <el-icon><Close /></el-icon>
-          </el-button>
+          <button class="ai-icon-btn" title="清除历史" :disabled="store.messages.length === 0" @click="handleClear">
+            <el-icon :size="16"><Delete /></el-icon>
+          </button>
+          <button class="ai-icon-btn" title="收起" @click="windowOpen = false">
+            <el-icon :size="16"><Close /></el-icon>
+          </button>
         </div>
       </div>
 
       <div ref="messagesRef" class="ai-messages">
         <div v-if="store.messages.length === 0" class="ai-empty">
-          你好，我可以帮你生成表单、指引功能入口等。试试说："帮我生成一个员工请假单表单"。
+          你好，我是小智。可以帮你生成表单、指引功能入口等。试试说："帮我生成一个员工请假单表单"。
         </div>
-        <div v-for="message in store.messages" :key="message.id" :class="['ai-msg', message.role]">
-          <div v-if="message.role === 'assistant'" class="ai-bubble ai-bubble-md">
-            <MarkdownRenderer :text="message.content" :pages="menuPages" @navigate="navigate" />
-          </div>
+
+        <div v-for="message in store.messages" :key="message.id" class="ai-msg" :class="message.role">
+          <template v-if="message.role === 'assistant'">
+            <span class="ai-msg-avatar"><RobotIcon /></span>
+            <div class="ai-msg-body">
+              <div class="ai-bubble ai-bubble-md">
+                <MarkdownRenderer :text="message.content" :pages="menuPages" @navigate="navigate" />
+              </div>
+              <div v-if="message.formResult" class="ai-form-card">
+                <span v-if="message.formResult.applied">✅ 已应用到当前表单</span>
+                <span v-else>表单已生成。打开表单设计器后可应用。</span>
+              </div>
+              <div v-if="message.navigations && message.navigations.length" class="ai-nav-list">
+                <el-tag
+                  v-for="nav in message.navigations"
+                  :key="nav.path"
+                  class="ai-nav-tag"
+                  type="primary"
+                  effect="plain"
+                  @click="navigate(nav.path)"
+                >
+                  → {{ nav.label }}
+                </el-tag>
+              </div>
+            </div>
+          </template>
           <div v-else class="ai-bubble">{{ message.content }}</div>
-          <div v-if="message.formResult" class="ai-form-card">
-            <span v-if="message.formResult.applied">✅ 已应用到当前表单</span>
-            <span v-else>表单已生成。打开表单设计器后可应用。</span>
-          </div>
-          <div v-if="message.navigations && message.navigations.length" class="ai-nav-list">
-            <el-tag
-              v-for="nav in message.navigations"
-              :key="nav.path"
-              class="ai-nav-tag"
-              type="primary"
-              effect="plain"
-              @click="navigate(nav.path)"
-            >
-              🔗 {{ nav.label }}
-            </el-tag>
-          </div>
         </div>
-        <div v-if="sending" class="ai-msg assistant"><div class="ai-bubble">正在处理…</div></div>
+
+        <div v-if="sending" class="ai-msg assistant">
+          <span class="ai-msg-avatar"><RobotIcon /></span>
+          <div class="ai-msg-body"><div class="ai-bubble">正在处理…</div></div>
+        </div>
       </div>
 
       <div class="ai-input">
         <el-input
           v-model="input"
           type="textarea"
-          :rows="2"
+          :autosize="{ minRows: 1, maxRows: 5 }"
           resize="none"
           :disabled="sending"
-          placeholder="输入你的需求，Enter 发送（Shift+Enter 换行）"
+          placeholder="输入问题，Enter 发送 / Shift+Enter 换行"
           @keydown.enter.exact.prevent="send"
         />
-        <el-button type="primary" :loading="sending" :disabled="!canSend" @click="send">发送</el-button>
+        <el-button class="ai-send-btn" type="primary" :loading="sending" :disabled="!canSend" @click="send">
+          <el-icon v-if="!sending"><Position /></el-icon>
+        </el-button>
       </div>
     </div>
   </div>
@@ -73,13 +88,14 @@
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { MagicStick, Close } from '@element-plus/icons-vue'
+import { Delete, Close, Position } from '@element-plus/icons-vue'
 import { chat, type AiChatTurn } from '@/api/ai'
 import { useAiAssistantStore } from '@/stores/aiAssistantStore'
 import { useAuthStore } from '@/stores/auth'
 import { aiActionBus } from '@/utils/aiActionBus'
 import { flattenMenuPages } from '@/utils/menuIndex'
 import MarkdownRenderer from './MarkdownRenderer.vue'
+import RobotIcon from './RobotIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -229,45 +245,93 @@ function tryApplyForm(result: unknown): boolean {
 .ai-orb-active {
   box-shadow: 0 0 0 3px rgba(87, 85, 238, 0.2), 0 6px 16px rgba(87, 85, 238, 0.35);
 }
+.ai-orb-icon {
+  width: 26px;
+  height: 26px;
+}
 
 /* 完全悬浮的对话窗体 */
 .ai-window {
   position: fixed;
   right: 24px;
   bottom: 88px;
-  width: 380px;
-  height: min(560px, calc(100vh - 140px));
+  width: 400px;
+  height: min(600px, calc(100vh - 140px));
   display: flex;
   flex-direction: column;
   background: #fff;
-  border: 1px solid #e9edfa;
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(31, 36, 55, 0.18);
+  border: 1px solid #d6d6fd;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(42, 41, 112, 0.24);
   z-index: 2499;
   overflow: hidden;
 }
+
+/* 深色标题栏，突出存在感 */
 .ai-window-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-bottom: 1px solid #e9edfa;
-  background: linear-gradient(90deg, #eef0fc, #f8f9fe);
+  background: linear-gradient(120deg, #4342b5, #2a2970);
+  color: #fff;
+}
+.ai-window-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-header-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.ai-header-avatar :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+.ai-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #fff;
 }
 .ai-window-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
-.ai-title {
-  font-weight: 600;
-  font-size: 14px;
-  color: #303133;
+.ai-icon-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #e5e7eb;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
 }
+.ai-icon-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.ai-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .ai-messages {
   flex: 1;
   overflow-y: auto;
   padding: 12px 14px;
+  background: #fafbff;
 }
 .ai-empty {
   color: #909399;
@@ -276,14 +340,35 @@ function tryApplyForm(result: unknown): boolean {
 }
 .ai-msg {
   display: flex;
-  flex-direction: column;
   margin-bottom: 12px;
 }
 .ai-msg.user {
-  align-items: flex-end;
+  justify-content: flex-end;
 }
 .ai-msg.assistant {
   align-items: flex-start;
+  gap: 8px;
+}
+.ai-msg-avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e9eaff;
+  color: #5755ee;
+}
+.ai-msg-avatar :deep(svg) {
+  width: 17px;
+  height: 17px;
+}
+.ai-msg-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: calc(100% - 34px);
 }
 .ai-bubble {
   max-width: 88%;
@@ -299,11 +384,13 @@ function tryApplyForm(result: unknown): boolean {
   color: #fff;
 }
 .ai-msg.assistant .ai-bubble {
-  background: #f1f4fe;
+  background: #fff;
+  border: 1px solid #e9edfa;
   color: #303133;
 }
 .ai-bubble-md {
-  width: 88%;
+  width: 100%;
+  max-width: 100%;
   white-space: normal;
 }
 .ai-form-card {
@@ -329,8 +416,16 @@ function tryApplyForm(result: unknown): boolean {
   align-items: flex-end;
   padding: 10px 14px;
   border-top: 1px solid #e9edfa;
+  background: #fff;
 }
 .ai-input .el-textarea {
   flex: 1;
+}
+.ai-send-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
 }
 </style>

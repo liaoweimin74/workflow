@@ -265,6 +265,7 @@ async function generateForm(description: string, handlers: {
 - `App.vue` 挂载 `AiAssistantOrb.vue`（全局，覆盖全屏设计器页；登录页隐藏）
 - 悬浮球固定右下角；`AdminLayout` 顶部工具栏提供显隐开关（默认开启，`localStorage` 持久化）
 - 点击开**完全悬浮的对话窗体**（固定于悬浮球上方，非抽屉），再次点击悬浮球收起
+- 品牌样式：深色标题栏（靛蓝渐变）+ 机器人图标，标题「小智·AI 助手」；清除历史为图标按钮；助手消息气泡前显示机器人头像；输入框 `autosize {minRows:1, maxRows:5}`
 
 ### 10.2 后端：对话 + 工具路由
 - `POST /api/v1/ai/chat`（**同步返回 `text/event-stream;charset=UTF-8` 文本**，事件序列 meta → tool_call → tool_result → message → done | error）

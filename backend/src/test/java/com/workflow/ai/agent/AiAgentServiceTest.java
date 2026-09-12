@@ -82,9 +82,15 @@ class AiAgentServiceTest {
         final List<String> calls = new ArrayList<>();
         final List<String> results = new ArrayList<>();
         final List<JsonNode> resultPayloads = new ArrayList<>();
+        final List<PageRef> navigations = new ArrayList<>();
+
         @Override public void toolCall(String name, JsonNode args) { calls.add(name); }
         @Override public void toolResult(String name, JsonNode result) { results.add(name); resultPayloads.add(result); }
-        @Override public void message(String text) { messages.add(text); }
+        @Override public void message(String text, List<PageRef> navs) {
+            messages.add(text);
+            navigations.clear();
+            navigations.addAll(navs);
+        }
     }
 
     @Test
@@ -95,6 +101,7 @@ class AiAgentServiceTest {
         service(new AiToolRegistry(List.of(new StubTool()))).chat(List.of(), "hi", List.of(), rec);
 
         assertThat(rec.messages).containsExactly("你好");
+        assertThat(rec.navigations).isEmpty();
         verify(recorder).recordSuccess(eq("assistant"), eq("m"), anyLong(), anyLong(), anyLong());
     }
 
@@ -113,18 +120,31 @@ class AiAgentServiceTest {
     }
 
     @Test
-    void openPageTool_returnsWhitelistedPage() {
+    void openPageTool_providesNavigation() {
         when(chatModelProvider.getIfAvailable()).thenReturn(scripted(
                 new ChatResult("", List.of(new ToolCall("c1", "open_page", "{\"path\":\"/form\"}"))),
-                new ChatResult("点这里去表单管理", List.of())));
+                new ChatResult("可点击下方入口前往表单管理", List.of())));
         Recorder rec = new Recorder();
         AiToolRegistry registry = new AiToolRegistry(List.of(new OpenPageTool(new ObjectMapper())));
 
-        service(registry).chat(List.of(), "去表单管理", List.of(new PageRef("/form", "表单管理")), rec);
+        service(registry).chat(List.of(), "表单管理在哪", List.of(new PageRef("/form", "表单管理")), rec);
 
-        assertThat(rec.results).containsExactly("open_page");
         assertThat(rec.resultPayloads.get(0).path("path").asText()).isEqualTo("/form");
-        assertThat(rec.messages).containsExactly("点这里去表单管理");
+        assertThat(rec.navigations).extracting(PageRef::path).containsExactly("/form");
+    }
+
+    @Test
+    void fallback_matchesPageLabelInTextWhenNoToolCall() {
+        when(chatModelProvider.getIfAvailable()).thenReturn(scripted(
+                new ChatResult("添加用户请到 用户管理 页面操作", List.of())));
+        Recorder rec = new Recorder();
+        List<PageRef> pages = List.of(
+                new PageRef("/system/user", "用户管理"),
+                new PageRef("/system/role", "角色管理"));
+
+        service(new AiToolRegistry(List.of())).chat(List.of(), "怎么添加用户", pages, rec);
+
+        assertThat(rec.navigations).extracting(PageRef::path).containsExactly("/system/user");
     }
 
     @Test

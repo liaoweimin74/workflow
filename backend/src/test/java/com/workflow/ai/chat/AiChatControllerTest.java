@@ -72,7 +72,7 @@ class AiChatControllerTest {
         when(properties.getModel()).thenReturn("test-model");
         doAnswer(inv -> {
             AiAgentService.Events events = inv.getArgument(3);
-            events.message("已为你生成表单");
+            events.message("已为你生成表单", java.util.List.of());
             return null;
         }).when(agentService).chat(any(), anyString(), any(), any());
 

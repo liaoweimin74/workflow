@@ -77,8 +77,10 @@ public class AiChatController {
                     }
 
                     @Override
-                    public void message(String text) {
-                        send(emitter, "message", Map.of("text", text));
+                    public void message(String text, List<PageRef> navigations) {
+                        send(emitter, "message", Map.of(
+                                "text", text,
+                                "navigations", navigations == null ? List.of() : navigations));
                     }
                 });
                 send(emitter, "done", Map.of());

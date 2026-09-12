@@ -264,7 +264,7 @@ async function generateForm(description: string, handlers: {
 ### 10.1 入口
 - `App.vue` 挂载 `AiAssistantOrb.vue`（全局，覆盖全屏设计器页；登录页隐藏）
 - 悬浮球固定右下角；`AdminLayout` 顶部工具栏提供显隐开关（默认开启，`localStorage` 持久化）
-- 点击开 `el-drawer` 对话抽屉：多轮历史（前端 store 维护，手动「清空对话」）
+- 点击开**完全悬浮的对话窗体**（固定于悬浮球上方，非抽屉），再次点击悬浮球收起
 
 ### 10.2 后端：对话 + 工具路由
 - `POST /api/v1/ai/chat`（SSE：meta → tool_call → tool_result → message → done | error）
@@ -281,7 +281,7 @@ async function generateForm(description: string, handlers: {
 - `aiActionBus`：`on/off/emit`（处理器异常隔离）
 - FormDesigner 监听 `applyFormSchema` → `setRule(ensureRuleProps(enableCardDesignMode(rule)))`
 - 抽屉在 form-designer 上下文收到 `generate_form_schema` 结果 → 派发动作并标记"已应用"
-- 页面入口：请求上下文携带**用户菜单展平白名单**（`utils/menuIndex.ts`）；`open_page` 工具结果 → 消息附加 `navigation` → 渲染**文字 tag 链接**，点击 `router.push`（已在目标页不跳转）
+- 页面入口：请求上下文携带**用户菜单展平白名单**（`utils/menuIndex.ts`）；入口随 `message` 事件 `navigations` 返回（来源：`open_page` 工具结果，或模型未调用工具时按回复文本中的页面名兜底匹配）；渲染**文字 tag 链接**，点击 `router.push`（不自动跳转；已在目标页不跳转）
 
 ### 10.4 已知限制
 - 对话最终回复为**非流式**（agent 含工具调用，暂不做 token 级流式）；前端以"正在处理…"占位

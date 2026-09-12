@@ -9,7 +9,7 @@ export interface AiMessage {
   /** 助手生成表单的结果信息（用于展示卡片） */
   formResult?: { applied: boolean }
   /** 助手提供的页面入口（点击跳转） */
-  navigation?: { label: string; path: string }
+  navigations?: { label: string; path: string }[]
 }
 
 const VISIBLE_KEY = 'ai_assistant_visible'
@@ -42,9 +42,9 @@ export const useAiAssistantStore = defineStore('aiAssistant', () => {
     role: AiMessage['role'],
     content: string,
     formResult?: AiMessage['formResult'],
-    navigation?: AiMessage['navigation'],
+    navigations?: AiMessage['navigations'],
   ): AiMessage {
-    const message: AiMessage = { id: nextId(), role, content, formResult, navigation }
+    const message: AiMessage = { id: nextId(), role, content, formResult, navigations }
     messages.value.push(message)
     return message
   }

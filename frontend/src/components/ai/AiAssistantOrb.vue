@@ -1,68 +1,76 @@
 <template>
   <div v-if="showOrb" class="ai-assistant-root">
-    <button v-if="!drawerOpen" class="ai-orb" title="AI 助手" @click="openDrawer">
+    <!-- 悬浮球（点击开/关对话窗体） -->
+    <button
+      class="ai-orb"
+      :class="{ 'ai-orb-active': windowOpen }"
+      :title="windowOpen ? '收起 AI 助手' : '打开 AI 助手'"
+      @click="toggleWindow"
+    >
       <el-icon :size="22"><MagicStick /></el-icon>
     </button>
 
-    <el-drawer
-      v-model="drawerOpen"
-      direction="rtl"
-      size="420px"
-      :append-to-body="true"
-      :with-header="false"
-    >
-      <div class="ai-drawer">
-        <div class="ai-drawer-header">
-          <span class="ai-title">AI 助手</span>
+    <!-- 完全悬浮的对话窗体 -->
+    <div v-if="windowOpen" class="ai-window">
+      <div class="ai-window-header">
+        <span class="ai-title">AI 助手</span>
+        <div class="ai-window-actions">
           <el-button link size="small" :disabled="store.messages.length === 0" @click="handleClear">
             清空对话
           </el-button>
+          <el-button link size="small" @click="windowOpen = false">
+            <el-icon><Close /></el-icon>
+          </el-button>
         </div>
+      </div>
 
-        <div class="ai-messages">
-          <div v-if="store.messages.length === 0" class="ai-empty">
-            你好，我可以帮你生成表单等。试试说："帮我生成一个员工请假单表单"。
+      <div ref="messagesRef" class="ai-messages">
+        <div v-if="store.messages.length === 0" class="ai-empty">
+          你好，我可以帮你生成表单、指引功能入口等。试试说："帮我生成一个员工请假单表单"。
+        </div>
+        <div v-for="message in store.messages" :key="message.id" :class="['ai-msg', message.role]">
+          <div class="ai-bubble">{{ message.content }}</div>
+          <div v-if="message.formResult" class="ai-form-card">
+            <span v-if="message.formResult.applied">✅ 已应用到当前表单</span>
+            <span v-else>表单已生成。打开表单设计器后可应用。</span>
           </div>
-          <div v-for="message in store.messages" :key="message.id" :class="['ai-msg', message.role]">
-            <div class="ai-bubble">{{ message.content }}</div>
-            <div v-if="message.formResult" class="ai-form-card">
-              <span v-if="message.formResult.applied">✅ 已应用到当前表单</span>
-              <span v-else>表单已生成。打开表单设计器后可应用。</span>
-            </div>
+          <div v-if="message.navigations && message.navigations.length" class="ai-nav-list">
             <el-tag
-              v-if="message.navigation"
+              v-for="nav in message.navigations"
+              :key="nav.path"
               class="ai-nav-tag"
               type="primary"
               effect="plain"
-              @click="navigate(message.navigation)"
+              @click="navigate(nav)"
             >
-              🔗 {{ message.navigation.label }}
+              🔗 {{ nav.label }}
             </el-tag>
           </div>
-          <div v-if="sending" class="ai-msg assistant"><div class="ai-bubble">正在处理…</div></div>
         </div>
-
-        <div class="ai-input">
-          <el-input
-            v-model="input"
-            type="textarea"
-            :rows="2"
-            :disabled="sending"
-            placeholder="输入你的需求，Enter 发送（Shift+Enter 换行）"
-            @keydown.enter.exact.prevent="send"
-          />
-          <el-button type="primary" :loading="sending" :disabled="!canSend" @click="send">发送</el-button>
-        </div>
+        <div v-if="sending" class="ai-msg assistant"><div class="ai-bubble">正在处理…</div></div>
       </div>
-    </el-drawer>
+
+      <div class="ai-input">
+        <el-input
+          v-model="input"
+          type="textarea"
+          :rows="2"
+          resize="none"
+          :disabled="sending"
+          placeholder="输入你的需求，Enter 发送（Shift+Enter 换行）"
+          @keydown.enter.exact.prevent="send"
+        />
+        <el-button type="primary" :loading="sending" :disabled="!canSend" @click="send">发送</el-button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { MagicStick } from '@element-plus/icons-vue'
+import { MagicStick, Close } from '@element-plus/icons-vue'
 import { chat, type AiChatTurn } from '@/api/ai'
 import { useAiAssistantStore } from '@/stores/aiAssistantStore'
 import { useAuthStore } from '@/stores/auth'
@@ -74,23 +82,35 @@ const router = useRouter()
 const store = useAiAssistantStore()
 const authStore = useAuthStore()
 
-const drawerOpen = ref(false)
+const windowOpen = ref(false)
 const input = ref('')
 const sending = ref(false)
+const messagesRef = ref<HTMLElement | null>(null)
 let controller: AbortController | null = null
 
 /** 登录页不显示悬浮球 */
 const showOrb = computed(() => store.visible && route.name !== 'Login')
 const canSend = computed(() => input.value.trim().length > 0 && !sending.value)
 
-function openDrawer() {
-  drawerOpen.value = true
+function toggleWindow() {
+  windowOpen.value = !windowOpen.value
 }
 
 function handleClear() {
   store.clear()
   ElMessage.success('已清空对话')
 }
+
+/** 新消息滚动到底部 */
+watch(
+  () => store.messages.length,
+  async () => {
+    await nextTick()
+    if (messagesRef.value) {
+      messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+    }
+  },
+)
 
 function send() {
   const text = input.value.trim()
@@ -104,7 +124,6 @@ function send() {
 
   let formToolProduced = false
   let formToolApplied = false
-  let pendingNavigation: { label: string; path: string } | undefined
 
   const menus = flattenMenuPages(authStore.menus)
 
@@ -115,22 +134,14 @@ function send() {
         if (name === 'generate_form_schema') {
           formToolProduced = true
           formToolApplied = tryApplyForm(result)
-        } else if (name === 'open_page') {
-          const nav = result as { path?: unknown; label?: unknown } | null
-          if (nav && typeof nav.path === 'string') {
-            pendingNavigation = {
-              path: nav.path,
-              label: typeof nav.label === 'string' ? nav.label : nav.path,
-            }
-          }
         }
       },
-      onMessage: (assistantText) => {
+      onMessage: (assistantText, navigations) => {
         store.addMessage(
           'assistant',
           assistantText,
           formToolProduced ? { applied: formToolApplied } : undefined,
-          pendingNavigation,
+          navigations,
         )
       },
       onError: (error) => {
@@ -198,25 +209,48 @@ function tryApplyForm(result: unknown): boolean {
 .ai-orb:hover {
   transform: scale(1.06);
 }
-.ai-drawer {
+.ai-orb-active {
+  box-shadow: 0 0 0 3px rgba(87, 85, 238, 0.2), 0 6px 16px rgba(87, 85, 238, 0.35);
+}
+
+/* 完全悬浮的对话窗体 */
+.ai-window {
+  position: fixed;
+  right: 24px;
+  bottom: 88px;
+  width: 380px;
+  height: min(560px, calc(100vh - 140px));
   display: flex;
   flex-direction: column;
-  height: 100%;
+  background: #fff;
+  border: 1px solid #e9edfa;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(31, 36, 55, 0.18);
+  z-index: 2499;
+  overflow: hidden;
 }
-.ai-drawer-header {
+.ai-window-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 10px;
+  padding: 10px 14px;
   border-bottom: 1px solid #e9edfa;
+  background: linear-gradient(90deg, #eef0fc, #f8f9fe);
+}
+.ai-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .ai-title {
   font-weight: 600;
+  font-size: 14px;
+  color: #303133;
 }
 .ai-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 2px;
+  padding: 12px 14px;
 }
 .ai-empty {
   color: #909399;
@@ -259,6 +293,11 @@ function tryApplyForm(result: unknown): boolean {
   color: #1f8592;
   font-size: 12px;
 }
+.ai-nav-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .ai-nav-tag {
   margin-top: 6px;
   cursor: pointer;
@@ -267,7 +306,7 @@ function tryApplyForm(result: unknown): boolean {
   display: flex;
   gap: 8px;
   align-items: flex-end;
-  padding-top: 10px;
+  padding: 10px 14px;
   border-top: 1px solid #e9edfa;
 }
 .ai-input .el-textarea {

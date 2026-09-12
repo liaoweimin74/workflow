@@ -17,11 +17,16 @@ export interface AiChatPayload {
   context?: Record<string, unknown>
 }
 
+export interface AiNavigation {
+  label: string
+  path: string
+}
+
 export interface AiChatHandlers {
   onMeta?: (meta: { model: string }) => void
   onToolCall?: (name: string, args: unknown) => void
   onToolResult?: (name: string, result: unknown) => void
-  onMessage?: (text: string) => void
+  onMessage?: (text: string, navigations: AiNavigation[]) => void
   onDone?: () => void
   onError?: (error: { code: string; msg: string }) => void
 }
@@ -122,7 +127,10 @@ function dispatchBlock(block: string, handlers: AiChatHandlers): void {
       handlers.onToolResult?.(payload?.name, payload?.result)
       break
     case 'message':
-      handlers.onMessage?.(typeof payload?.text === 'string' ? payload.text : '')
+      handlers.onMessage?.(
+        typeof payload?.text === 'string' ? payload.text : '',
+        Array.isArray(payload?.navigations) ? payload.navigations : [],
+      )
       break
     case 'done':
       handlers.onDone?.()

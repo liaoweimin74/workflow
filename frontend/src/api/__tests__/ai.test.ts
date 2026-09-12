@@ -26,7 +26,7 @@ describe('ai api — chat', () => {
       'event:meta\ndata:{"model":"m"}\n\n',
       'event:tool_call\ndata:{"name":"generate_form_schema","args":{"description":"x"}}\n\n',
       'event:tool_result\ndata:{"name":"generate_form_schema","result":{"schema":"{\\"rule\\":[]}"}}\n\n',
-      'event:message\ndata:{"text":"已生成"}\n\n',
+      'event:message\ndata:{"text":"已生成","navigations":[{"path":"/form","label":"表单管理"}]}\n\n',
       'event:done\ndata:{}\n\n',
     ]
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse(chunks)))
@@ -39,7 +39,7 @@ describe('ai api — chat', () => {
           onMeta: () => events.push('meta'),
           onToolCall: (name) => events.push(`call:${name}`),
           onToolResult: (name) => events.push(`result:${name}`),
-          onMessage: (t) => events.push(`msg:${t}`),
+          onMessage: (t, navs) => events.push(`msg:${t}:${navs.length}`),
           onDone: () => {
             events.push('done')
             resolve()
@@ -52,7 +52,7 @@ describe('ai api — chat', () => {
       'meta',
       'call:generate_form_schema',
       'result:generate_form_schema',
-      'msg:已生成',
+      'msg:已生成:1',
       'done',
     ])
   })

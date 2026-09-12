@@ -114,20 +114,19 @@ describe('AiAssistantOrb', () => {
     expect(store.messages.at(-1)?.formResult).toEqual({ applied: false })
   })
 
-  it('open_page 工具结果渲染页面入口并可跳转', () => {
+  it('message 事件携带的页面入口渲染为可点击 tag 并可跳转', () => {
     const w = createWrapper()
     const store = useAiAssistantStore()
     const vm = w.vm as any
 
     vm.input = '怎么配置流程超时'
     vm.send()
-    handlers.onToolResult('open_page', { path: '/process/definition', label: '流程定义' })
-    handlers.onMessage('去流程定义里配置')
+    handlers.onMessage('去流程定义里配置', [{ path: '/process/definition', label: '流程定义' }])
 
     const message = store.messages.at(-1)
-    expect(message?.navigation).toEqual({ path: '/process/definition', label: '流程定义' })
+    expect(message?.navigations).toEqual([{ path: '/process/definition', label: '流程定义' }])
 
-    vm.navigate(message!.navigation!)
+    vm.navigate(message!.navigations![0])
     expect(pushSpy).toHaveBeenCalledWith('/process/definition')
   })
 

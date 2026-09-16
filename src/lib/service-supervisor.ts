@@ -43,32 +43,59 @@ export interface ServiceStatus {
 
 const BACKEND_DIR = "/home/z/my-project/workflow_lowcode/backend";
 const FRONTEND_DIR = "/home/z/my-project/workflow_lowcode/frontend";
+const NODE_BACKEND_DIR = "/home/z/my-project/workflow_lowcode/backend-node";
 const JAR_PATH = `${BACKEND_DIR}/target/workflow-platform-1.0.0-SNAPSHOT.jar`;
 
-export const SERVICE_DEFS: ServiceDef[] = [
-  {
-    key: "backend",
-    name: "Java 后端 (Spring Boot + Flowable 8)",
-    port: 8080,
-    cwd: BACKEND_DIR,
-    cmd: "java",
-    // 内存上限必带：沙箱仅 3.9Gi，无上限 JVM 会被 OOM-killer 连坐 next-server（历史事故），
-    // 且与 scripts/start-services.sh 的参数保持一致
-    args: ["-Xmx448m", "-XX:MaxMetaspaceSize=192m", "-jar", JAR_PATH, "--spring.profiles.active=sandbox"],
-    logFile: "/home/z/tools/backend.log",
-    prerequisite: JAR_PATH,
-  },
-  {
-    key: "frontend",
-    name: "Vue 前端 (Vite dev server)",
-    port: 5173,
-    cwd: FRONTEND_DIR,
-    cmd: "bun",
-    args: ["run", "dev"],
-    logFile: "/home/z/tools/vite.log",
-    env: { NODE_OPTIONS: "--max-old-space-size=512" },
-  },
-];
+/**
+ * 引擎切换标记（Task 13-8 契约）：
+ * 文件存在 → 8080 由 backend-node (bun) 提供；不存在 → Java jar。
+ * 看门狗每次巡检（20s）动态重新决策，前端/Vite proxy 零改动。
+ * 回滚：删除标记文件 → 重启 next dev（或手动 start-services.sh）→ Java 回归。
+ */
+export const NODE_ENGINE_MARKER = "/home/z/tools/backend-engine-node";
+
+/** 动态服务定义：每次调用时按标记文件重新决策（监督器启动后仍可切换） */
+export function getServiceDefs(): ServiceDef[] {
+  const nodeEngine = fs.existsSync(NODE_ENGINE_MARKER);
+  const backendDef: ServiceDef = nodeEngine
+    ? {
+        key: "backend",
+        name: "Node 后端 (bun + Express + SQLite 引擎)",
+        port: 8080,
+        cwd: NODE_BACKEND_DIR,
+        cmd: "bun",
+        args: ["src/index.ts"],
+        logFile: "/home/z/tools/backend-node.log",
+        env: { PORT: "8080", NODE_OPTIONS: "--max-old-space-size=512" },
+      }
+    : {
+        key: "backend",
+        name: "Java 后端 (Spring Boot + Flowable 8)",
+        port: 8080,
+        cwd: BACKEND_DIR,
+        cmd: "java",
+        // 内存上限必带：沙箱仅 3.9Gi，无上限 JVM 会被 OOM-killer 连坐 next-server（历史事故），
+        // 且与 scripts/start-services.sh 的参数保持一致
+        args: ["-Xmx448m", "-XX:MaxMetaspaceSize=192m", "-jar", JAR_PATH, "--spring.profiles.active=sandbox"],
+        logFile: "/home/z/tools/backend.log",
+        prerequisite: JAR_PATH,
+      };
+  return [backendDef, FRONTEND_DEF];
+}
+
+const FRONTEND_DEF: ServiceDef = {
+  key: "frontend",
+  name: "Vue 前端 (Vite dev server)",
+  port: 5173,
+  cwd: FRONTEND_DIR,
+  cmd: "bun",
+  args: ["run", "dev"],
+  logFile: "/home/z/tools/vite.log",
+  env: { NODE_OPTIONS: "--max-old-space-size=512" },
+};
+
+/** 兼容旧导出（静态视图）；运行时请用 getServiceDefs() */
+export const SERVICE_DEFS: ServiceDef[] = getServiceDefs();
 
 interface ServiceRuntime {
   child?: import("child_process").ChildProcess;
@@ -174,7 +201,7 @@ export function startWatchdog(): void {
   const sup = getSupervisor();
   if (sup.watchdog) return;
   sup.watchdog = setInterval(() => {
-    for (const def of SERVICE_DEFS) {
+    for (const def of getServiceDefs()) {
       void (async () => {
         const portOpen = await checkPortOpen(def.port);
         const rt = getRuntime(def.key);
@@ -190,7 +217,7 @@ export function startWatchdog(): void {
 /** 确保所有服务都已拉起 */
 export async function ensureAllServices(): Promise<ServiceStatus[]> {
   startWatchdog();
-  for (const def of SERVICE_DEFS) {
+  for (const def of getServiceDefs()) {
     await spawnService(def);
   }
   return collectStatus();
@@ -198,7 +225,7 @@ export async function ensureAllServices(): Promise<ServiceStatus[]> {
 
 export async function collectStatus(): Promise<ServiceStatus[]> {
   const result: ServiceStatus[] = [];
-  for (const def of SERVICE_DEFS) {
+  for (const def of getServiceDefs()) {
     const portOpen = await checkPortOpen(def.port);
     const rt = getRuntime(def.key);
     const processAlive = isPidAlive(rt.pid);

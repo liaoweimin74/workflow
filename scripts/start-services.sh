@@ -35,6 +35,33 @@ kill_stale_backend() {
   sleep 1
 }
 
+# ---- 引擎选择（Task 13-8）：标记文件存在时 8080 由 Node 后端提供 ----
+NODE_MARKER=/home/z/tools/backend-engine-node
+NODE_BACKEND_DIR=/home/z/my-project/workflow_lowcode/backend-node
+
+if [ -f "$NODE_MARKER" ]; then
+  if port_open 8080; then
+    if http_alive 8080 "/health"; then
+      echo "[start-services] 后端已在运行 (8080, Node 引擎)"
+    else
+      echo "[start-services] 8080 被占但 /health 无响应，等待..."
+      OK=""
+      for i in 1 2 3 4; do
+        sleep 3
+        if http_alive 8080 "/health"; then OK=1; break; fi
+      done
+      if [ -z "$OK" ]; then
+        echo "[start-services] 后端假死，按 Node 引擎重启..."
+        fuser -k 8080/tcp 2>/dev/null
+        sleep 2
+        (cd "$NODE_BACKEND_DIR" && PORT=8080 NODE_OPTIONS=--max-old-space-size=512 nohup bun src/index.ts >> "$LOG_DIR/backend-node.log" 2>&1 &)
+      fi
+    fi
+  else
+    echo "[start-services] 启动 Node 后端 (bun + Express, 8080)..."
+    (cd "$NODE_BACKEND_DIR" && PORT=8080 NODE_OPTIONS=--max-old-space-size=512 nohup bun src/index.ts >> "$LOG_DIR/backend-node.log" 2>&1 &)
+  fi
+else
 # ---- Java 后端 (8080) ----
 if port_open 8080; then
   if http_alive 8080 "/"; then
@@ -62,6 +89,8 @@ elif [ ! -f "$JAR" ]; then
 else
   echo "[start-services] 启动 Java 后端..."
   (cd "$BACKEND_DIR" && nohup java -Xmx448m -XX:MaxMetaspaceSize=192m -jar "$JAR" --spring.profiles.active=sandbox >> "$LOG_DIR/backend.log" 2>&1 &)
+fi
+
 fi
 
 # ---- Vite 前端 (5173) ----

@@ -402,3 +402,60 @@ Stage Summary:
   - Java 端 Flowable ID 为 String，SYS_ 主键为 Long 数字——引擎表保留原 ID 字符串即可兼容
   - 12-a 发现的 PUT /api/auth/password 缺口与 170 端点无角色校验，属 Java 端既有行为，Node 端保持一致（不自行加严）
 - 下一阶段优先：13-4 system 模块（users/roles/menus/orgs/dicts 32 端点，数据层+序列化层已就绪，可批量移植）→ 13-5 form/datasource/page/bizdata → 13-6 工作流引擎（DSL 解释器）→ 13-7 notification/SSE → 13-8 标记切换 → 13-9 收尾
+
+---
+Task ID: 13-4/13-5a
+Agent: general-purpose 子代理 ×2（产出）+ 主控（验证修复与集成）
+Task: system 模块 30 端点 + 低代码 form/page 模块移植与验证
+
+Work Log:
+- 子代理产出（超时前完成代码，验证由主线程接管）：users/roles/menus/orgs/dicts/form/page 7 个路由文件共 3891 行 + lib/menu-tree.ts（菜单树从 auth.ts 抽取）+ lib/params.ts（Spring MVC 参数转换错误语义对齐层，含 8080 实测捕获的错误消息原文；附带 PRAGMA case_sensitive_like=ON 对齐 H2 LIKE 大小写敏感）
+- 主线程修复 10 处 tsc strict 错误（Express 5 params 类型 string|string[] → pathId 签名放宽、resultId 初始化、page.ts parseOr400 返回类型、LAST_INSERT_ROWID 误用）
+- index.ts 挂载：dicts 导出双 Router（dictTypesRouter/dictDataRouter）；form/page 自带完整路径直接挂载；404 兜底 msg 修正为无前导斜杠格式（对齐 Spring "No static resource xxx"）
+- **金标准 diff（11 端点双端口对比，时间字段容忍精度差异）：10/11 PASS**
+  - users 列表/详情/404、roles、menus/tree、orgs/tree、dict-types、dict-data/type/{code}、pages 分页、form-definitions/404 全 PASS
+  - 唯一 FAIL：form-definitions 内容差异——Java 库有 leave-form 表单数据，Node 库为空（**数据差异非代码差异**，待历史导入）
+- 已知偏差（记录不修）：HTTP 405 语义（Java "Request method 'GET' is not supported" vs Node 落入 No static resource 兜底）——Express 5 内部 matchers 不可静态解析，且前端从不发错方法，零功能影响
+- v1 分页验证：Java ?page=0 输出 pageNumber:1（0-based 请求、1-based 呈现），Node 已对齐
+
+Stage Summary:
+- **Node 端已对齐 75/197 端点**（auth 5 + system 30 + form/page 40），结构层面与 Java 全等；数据层差异留待历史数据导入（H2 dump → import-h2）
+- 遗留：form.ts 1170 行/page.ts 1418 行内部细节端点（发布/停用/复制/schema 校验）已实现未逐一 diff（列表/详情/404 已覆盖主链路）
+
+---
+Task ID: 13-5b/13-6a/13-6b/13-7（子代理产出）+ 13-8/13-9（主控执行）
+Agent: general-purpose 子代理 ×2（业务代码）+ 主控（修复/集成/切换/历史导入/收尾）
+Task: 完成剩余模块移植 + 历史数据导入 + 正式切换 Node 引擎 + 收尾
+
+Work Log:
+- **13-5b bizdata**（子代理，2158 行）：业务数据动态 CRUD/引用计数/子表路由；主控修 7 处 tsc strict（charAt 索引、toJoinVO→toVO、rows[0] cast、toIsoText→fmtIso）
+- **13-5b datasource**（子代理超时未产出，主控补写 660 行）：数据源 CRUD 9 + db/tables + columns（PRAGMA + COLUMN_KINDS 语义归一：long→INT(64)/datetime→DATETIME/TEXT→VARCHAR(1e9)）+ explore-sql（只读校验/LIMIT 补齐/错误 400）+ metadata/data 统一访问 + internal/system 10 端点
+- **13-6a**（子代理）：process-category/process-definition 路由 + engine/bpmn-ir.ts（自研 XML→IR 解析器：leave-bill 实测 4 节点 3 连线）+ deploy 全链路（版本自增/MultiInstanceBpmnRewriter 等价：${manager}→flowable:assignee="2" 字面量改写验证通过）；主控修 schema 缺列（重建库）
+- **13-6b**（子代理产出 runtime.ts 1925 行 + 主控补路由层 process-instance.ts/task.ts）：解释器核心（start/advance/complete/reject/transfer/claim/terminate/变量/审批历史/高亮/预测/催办）；修 StartResult/CompleteResult/RemindOutcome/FormConfigResult 类型对接
+- **13-7**（子代理产出 notification.ts 734 + notification-admin.ts 1269 + sse-bus.ts 116；主控修类型 + 两个关键 bug）：
+  - bug1：SSE 端点被 `/:id` 路由抢先匹配（"sse"→Long 转换失败）→ 注册顺序调整（Java 字面量优先语义）
+  - bug2：internal send 缺 tenantId 注入 → 从 X-Tenant-Id 头补齐
+  - E2E：send 200 → SSE 流收到 `event:new-message`（帧格式对齐 Spring SseEmitter）→ 收件箱 +1 → PUT read → 未读数闭环
+- **13-8 切换**：
+  1. **H2 dump ×2**（抢锁窗口）：scripts/H2Dump.java + H2DumpAct.java（自研 JDBC→JSONL）；业务表 255 行 + 引擎历史表（16 实例/30 任务/92 活动/86 变量/5 定义/9 资源）
+  2. **import-h2.ts**（主控 340 行）：业务表镜像（wf_* 列名大写→小写）+ 引擎历史转换（STATUS 映射：DELETE_REASON→terminated/END→completed/else running）+ **procDefId 重映射**（"key:ver:uuid"→"key:ver:自增"，实例/任务/活动同步）+ BPMN XML 从 ACT_GE_BYTEARRAY 迁移（5/5 全含）+ 候选人展开去重
+  3. 导入结果：340 行；**完整性校验全过**（16 实例 1 running、30 任务 1 pending、22 评论 Flowable ID 关联零孤儿）
+  4. **DDL 修正**：WF_PROC_INST/WF_TASK_INST/WF_ACTIVITY_INST 的 ID 改 TEXT PRIMARY KEY（契约要求保留 Flowable uuid）
+  5. **监督器动态决策**：service-supervisor.ts 新增 getServiceDefs()——/home/z/tools/backend-engine-node 标记存在 → 8080 由 bun 承载；start-services.sh 同步加 marker 分支（含 PORT=8080 修正）
+  6. 正式切换：落 marker → 重启 next dev（Task 8 流程）→ **8080 现由 Node 承载（bun pid 14042）**
+- **13-9 验证**：
+  - 切换后五项链路：8080 登录 ✅ / 流程定义 2 个（leave-form-flow v3 + leave-bill v2）✅ / 3000 网关登录 ✅ / lowcode HTML 200 ✅
+  - **Dashboard 输出与 Java 时代逐值一致**（todo 0/done 19/running 1/def 2/9-10 趋势 16）——历史数据迁移生效的铁证
+  - 浏览器 QA：登录 → 看板（19/16 全呈现）→ 流程中心（两个定义）→ 待办/消息页导航，console 0 error
+  - backend-node `bun run typecheck` 全绿；package.json 补 db:import / db:reset 脚本
+
+Stage Summary:
+- **🎉 Node.js 迁移（Task 13 十步计划）全部完成**：197 端点中 195+ 已在 Node 实现并挂载（auth 5/system 30/form+page 40/datasource+bizdata 38/流程定义+分类 20/运行时+任务 29/通知 36/dashboard 1）；8080 已由 bun + Express + SQLite 承载，前端/Vite proxy 零改动
+- **历史数据完整迁移**：16 实例/30 任务/92 活动/86 变量/5 定义（含 BPMN XML）/22 评论（零孤儿）/33 消息——Dashboard 逐值复现
+- 回滚方案：删除 /home/z/tools/backend-engine-node 标记 → 重启 next dev（或 start-services.sh）→ Java 回归 8080
+- 已知限制：
+  1. 多实例（会签）任务为单实例语义（IR 已带 multiInstance 字段，待后续迭代）；加签/前加签显式 400
+  2. explore-api 端点返回"当前环境不可用"（沙箱出网受限）
+  3. SQLite 秒精度时间戳（Java 微秒），格式一致
+  4. GET 405 语义偏差（Node 走 No static resource 兜底；前端从不发错方法）
+  5. H2 dump 时间戳 ".0" 后缀已剥离；后续如需再导，重跑 scripts/H2Dump*.java + db:reset

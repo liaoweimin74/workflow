@@ -149,7 +149,11 @@ export const SCHEMA_SQL: string[] = [
 
   // ===================== wf_*（Flyway + 实体补列，小写、列名加引号） =====================
 
-  // V4 wf_node_config + NodeConfig 实体的 process_definition_id（Hibernate 补列）
+  // V4 wf_node_config + NodeConfig 实体的 process_definition_id（Hibernate 补列）。
+  //     13-6a：不建 Flyway V4 的 uk_node UNIQUE（tenant_id,process_def_id,node_id）——
+  //     实库 H2 由 Hibernate 依实体建表（Flyway CREATE IF NOT EXISTS 为 no-op），
+  //     NodeConfig 实体未声明唯一约束；且 Java 部署快照逻辑对同一草稿多版本
+  //     各存一份 (tenant,draft,node) 行，若保留约束会阻断第二次部署。
   `CREATE TABLE wf_node_config (
     "id" TEXT PRIMARY KEY,
     "tenant_id" TEXT NOT NULL,
@@ -159,8 +163,7 @@ export const SCHEMA_SQL: string[] = [
     "node_type" TEXT NOT NULL,
     "config_json" TEXT NOT NULL,
     "created_at" TEXT DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TEXT DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uk_node UNIQUE ("tenant_id", "process_def_id", "node_id")
+    "updated_at" TEXT DEFAULT CURRENT_TIMESTAMP
   )`,
 
   // V5 wf_category
@@ -441,7 +444,7 @@ export const SCHEMA_SQL: string[] = [
 
 export const ENGINE_TABLES_SQL: string[] = [
   `CREATE TABLE WF_PROC_INST (
-    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    ID TEXT PRIMARY KEY,
     PROC_DEF_ID TEXT,
     BUSINESS_KEY TEXT,
     START_USER_ID TEXT,
@@ -453,7 +456,7 @@ export const ENGINE_TABLES_SQL: string[] = [
   )`,
 
   `CREATE TABLE WF_TASK_INST (
-    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    ID TEXT PRIMARY KEY,
     PROC_INST_ID TEXT,
     PROC_DEF_ID TEXT,
     TASK_DEF_KEY TEXT,
@@ -471,7 +474,7 @@ export const ENGINE_TABLES_SQL: string[] = [
   )`,
 
   `CREATE TABLE WF_ACTIVITY_INST (
-    ID INTEGER PRIMARY KEY AUTOINCREMENT,
+    ID TEXT PRIMARY KEY,
     PROC_INST_ID TEXT,
     PROC_DEF_ID TEXT,
     ACT_ID TEXT,
@@ -504,7 +507,12 @@ export const ENGINE_TABLES_SQL: string[] = [
     RESOURCE_NAME TEXT,
     DIAGRAM_RESOURCE_NAME TEXT,
     TENANT_ID TEXT,
-    CONFIG_JSON TEXT
+    CONFIG_JSON TEXT,
+    -- 13-6a 补列（对齐 Flowable ACT_RE_PROCDEF.SUSPENSION_STATE_ 1=active 2=suspended）：
+    SUSPENSION_STATE INTEGER NOT NULL DEFAULT 1,
+    -- 13-6a 补列（对齐 Flowable ACT_GE_BYTEARRAY 资源语义）：部署生效 BPMN XML 原文，
+    -- 供 /deployed-processes/{id}/xml 与历史版本 editor 按版本精确读取。
+    BPMN_XML TEXT
   )`,
 
   `CREATE TABLE WF_TASK_CANDIDATE (
@@ -682,6 +690,7 @@ export const COLUMN_KINDS: Record<string, Record<string, ColumnKind>> = {
     ID: 'long', NAME: 'text', KEY_: 'text', CATEGORY: 'text', VERSION: 'int',
     DEPLOY_TIME: 'datetime', RESOURCE_NAME: 'text', DIAGRAM_RESOURCE_NAME: 'text',
     TENANT_ID: 'text', CONFIG_JSON: 'text',
+    SUSPENSION_STATE: 'int', BPMN_XML: 'text',
   },
   WF_TASK_CANDIDATE: { ID: 'long', TASK_ID: 'text', TYPE: 'text', CANDIDATE_ID: 'text' },
   WF_ENGINE_SEQ: { NAME: 'text', NEXT_VAL: 'int' },

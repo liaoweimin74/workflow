@@ -30,6 +30,36 @@ export function toIsoText(v: unknown): unknown {
 }
 
 /**
+ * javaHashMapOrdered — 复刻 Java HashMap 的 JSON 迭代序（13-6a）。
+ *
+ * Java 侧 ProcessDefinitionController#toMap / resolveFormDefIds、
+ * ProcessDesignService#loadEditor 的 nodeConfigMap 等都是 HashMap，
+ * Jackson 按桶序（hash & (cap-1)）输出 key；Node 端对齐规则：
+ *  - String.hashCode：h = 31*h + char（int32 溢出回绕）
+ *  - spread：h ^= h >>> 16；桶 = h & (cap-1)；同桶按插入序
+ *  - 容量：cap=16 起，size 超过 0.75*cap 时翻倍（HashMap 扩容语义，
+ *    扩容后同桶内相对顺序不变）
+ * 8080 实测验证：11 键 toMap（cap16）、15 键 get（cap32）、
+ * {__PROCESS__,managerApproval} nodeConfigs 均逐字节一致。
+ */
+export function javaHashMapOrdered(obj: Record<string, unknown>): Record<string, unknown> {
+  const keys = Object.keys(obj);
+  let cap = 16;
+  while (keys.length > cap * 0.75) cap *= 2;
+  const bucket = (k: string): number => {
+    let h = 0;
+    for (let i = 0; i < k.length; i++) h = (Math.imul(31, h) + k.charCodeAt(i)) | 0;
+    h = (h ^ (h >>> 16)) | 0;
+    return h & (cap - 1);
+  };
+  const out: Record<string, unknown> = {};
+  for (const k of keys.map((k, i) => ({ k, i, b: bucket(k) })).sort((a, b) => a.b - b.b || a.i - b.i).map((x) => x.k)) {
+    out[k] = obj[k];
+  }
+  return out;
+}
+
+/**
  * 把 SQLite 行按 COLUMN_KINDS 转成「Jackson 实测风格」对象。
  *  - long → Number（实测数字）
  *  - bool → boolean

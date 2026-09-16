@@ -7,7 +7,9 @@
     "start": "bun src/index.ts",
     "typecheck": "bunx tsc --noEmit",
     "db:init": "bun scripts/db-init.ts",
-    "db:seed": "bun scripts/import-seed.ts"
+    "db:seed": "bun scripts/import-seed.ts",
+    "db:import": "bun scripts/import-h2.ts",
+    "db:reset": "bun run db:init && bun run db:seed && bun scripts/import-h2.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

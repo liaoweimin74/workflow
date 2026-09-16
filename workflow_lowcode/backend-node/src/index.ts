@@ -11,6 +11,22 @@ import express from 'express';
 import { config } from './config';
 import { errorMiddleware } from './lib/http';
 import { authRouter } from './routes/auth';
+import { usersRouter } from './routes/users';
+import { rolesRouter } from './routes/roles';
+import { menusRouter } from './routes/menus';
+import { orgsRouter } from './routes/orgs';
+import { dictTypesRouter, dictDataRouter } from './routes/dicts';
+import { formRouter } from './routes/form';
+import { pageRouter } from './routes/page';
+import { processCategoryRouter } from './routes/process-category';
+import { processDefinitionRouter } from './routes/process-definition';
+import { bizdataRouter } from './routes/bizdata';
+import { datasourceRouter, internalSystemRouter } from './routes/datasource';
+import { processInstanceRouter } from './routes/process-instance';
+import { taskRouter } from './routes/task';
+import { notificationRouter } from './routes/notification';
+import { notificationAdminRouter } from './routes/notification-admin';
+import { dashboardRouter } from './routes/dashboard';
 import { getDb, one } from './lib/db';
 
 const app = express();
@@ -46,10 +62,29 @@ app.get('/health', (_req, res) => {
 
 // —— 业务路由 ——
 app.use('/api/auth', authRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/roles', rolesRouter);
+app.use('/api/menus', menusRouter);
+app.use('/api/orgs', orgsRouter);
+app.use('/api/dict-types', dictTypesRouter);
+app.use('/api/dict-data', dictDataRouter);
+// form/page 路由自带完整路径（/api/v1/...），直接挂载
+app.use(formRouter);
+app.use(pageRouter);
+app.use(processCategoryRouter);
+app.use(processDefinitionRouter);
+app.use(bizdataRouter);
+app.use(datasourceRouter);
+app.use(internalSystemRouter);
+app.use(processInstanceRouter);
+app.use(taskRouter);
+app.use(notificationRouter);
+app.use(notificationAdminRouter);
+app.use(dashboardRouter);
 
-// —— 未知路径（对齐 Spring "No static resource" 行为：HTTP 500 + R 信封）——
+// —— 未知路径（对齐 Spring "No static resource" 行为：HTTP 500 + R 信封；首参无前导斜杠）——
 app.use((req, res) => {
-  res.status(500).json({ code: 500, msg: `No static resource ${req.path} for request '${req.path}'.`, data: null });
+  res.status(500).json({ code: 500, msg: `No static resource ${req.path.replace(/^\//, '')} for request '${req.path}'.`, data: null });
 });
 
 // —— 全局错误处理 ——

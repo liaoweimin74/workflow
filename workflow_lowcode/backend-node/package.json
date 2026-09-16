@@ -1,0 +1,22 @@
+{
+  "name": "workflow-backend-node",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "db:init": "bun scripts/db-init.ts",
+    "db:seed": "bun scripts/import-seed.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10"
+  }
+}

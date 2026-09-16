@@ -305,3 +305,100 @@ Stage Summary:
 - 已知限制：可视化模式 SELECT *（未选列）+ JOIN 时运行时派生表仍会因重复列名失败（探测已不受影响）；建议用户显式选择列（前端已自动去重）；VisualSqlGenerator.generate 仍为死代码待后续接线或删除
 - 行为变更说明：SQL 模板 :tenantId 由强制改为可选（平台基础表无此列，原设计使该类 SQL 数据源不可能工作）；wf_biz_* 业务表场景前端仍会自动追加租户过滤
 - 建议：提示用户刷新页面（前端 HMR 已生效）后重试「获取字段」；若手写 SQL 引用不存在列，现在会返回带 H2 根因的 400 消息，可自助定位
+
+---
+Task ID: 11
+Agent: 主控 (Z.ai Code) — 用户询问轮次 2026-09-16 (Asia/Shanghai)
+Task: 核实「所有任务都完成了吗」+ 发现沙箱重置 + 灾后恢复
+
+Work Log:
+- **用户询问进度，核实发现第三次沙箱重置**（约 9/16 12:50，目录时间戳证据）：
+  - 丢失：/home/z/tools（jdk21/maven/h2dump 全没，只剩 vite.log）、backend/target jar、frontend/node_modules（0 包）、**Task 13 迁移全部产物**（backend-node/ 代码、docs/migration/ 文档、h2-dump JSON、/home/z/tools/backend-engine-node 标记）
+  - 幸存：Java/Vue 源码、H2 库（workflow.mv.db 425KB）、worklog.md、scripts/（含 Task 7 的 bootstrap-after-reset.sh）、Next.js 3000
+  - 8080/5173 全挂（supervisor 日志：backend 前置文件缺失；frontend exit 127）
+- **一键恢复**：执行 scripts/bootstrap-after-reset.sh（幂等：下载 Temurin JDK21 + Maven 3.9.9 → bun install 323 包 → mvn 在线构建 jar）。主会话 10 分钟超时被杀，但各步骤实际全部完成（.m2 149M、jar 就绪）
+- **服务拉起**：start-services.sh 拉起 Vite(5173 pid1716) + Java(8080 pid1796，带 -Xmx448m -XX:MaxMetaspaceSize=192m，A2 参数生效)
+- **验证全过**：
+  - 三端口全绿（3000/5173/8080）
+  - 登录 API 直连 8080：200 + R 信封 + 双 token；3000 网关 → /api/auth/login 同样 200
+  - /lowcode 尾斜杠 308 → curl -L 最终 200（Task 5 修复持续生效）
+  - H2 数据完整性（Dashboard 聚合金标准）：doneCount=19、runningCount=1、definitionCount=2、9/10 趋势 16 次——演示数据无损
+  - 浏览器（agent-browser）：登录页渲染 → admin 登录 → Dashboard KPI 4 卡 + 趋势图 + 占比环"进行中 1" + 铃铛角标 21 + 完整菜单树，console 0 error
+- 巡检 cron job 388739（15 分钟 webDevReview）确认存活，无需重建
+
+Stage Summary:
+- **Java 平台已完全恢复可用**（三端口 + 登录 + 数据 + 浏览器主链路全绿）
+- **⚠️ Task 13（Node.js 迁移）进度归零**：摘要记录的 13-0~13-2b（现场核查/盘点/H2 dump/import-h2.ts）产物全部未能幸存，需从头重建；好消息是迁移所需的一切输入仍在（Java 源码、Flyway SQL、H2 活库、契约设计已沉淀在本 worklog 与摘要）
+- 经验确认：沙箱重置会清空构建产物/工具链/未纳入 git 的新目录；**迁移产物必须尽早写入 workflow_lowcode 内或做备份 tar**（Task 7 源码包思路）
+- 下一阶段优先：1) 重建端点盘点文档 api-surface.md（从 Java 源码静态提取） 2) backend-node 骨架（config/db/errors/jwt/http/index.ts+/health+登录） 3) Flyway DDL→SQLite schema 生成 4) 后续按 13-4~13-9 推进
+
+---
+Task ID: 12-a
+Agent: general-purpose (子代理)
+Task: 重建端点盘点文档 api-surface.md
+
+Work Log:
+- 读 worklog.md 确认 Task 11「下一阶段优先」第 1 项即本任务；确认本任务为纯研究+文档，未改任何 Java/前端代码
+- Grep `@(RestController|Controller)` 确认全项目共 39 个 Controller（system 7 + api/controller 20 + notification 10 + example 2），逐一通读全部源文件提取类级 @RequestMapping 前缀与每个方法的 HTTP 方法/路径/参数（@RequestParam/@PathVariable/@RequestBody/@RequestHeader/@AuthenticationPrincipal）
+- 核对鉴权事实：SecurityConfig 仅 `POST /api/auth/login` 与 `GET /api/v1/notifications/sse` permitAll；全项目 0 处 @PreAuthorize/@HasPermission（注解类已备未用）；通知管理端 7 个 Controller 每方法显式调 NotificationAdminAuthorization.requireAdmin()；页面数据出口经 PageAccessGuard；TenantInterceptor 拦 /api/** 读 X-Tenant-Id
+- 核对前端拼接规则：http.ts baseURL='/api' + 相对路径（/v1/...、/auth/...），而后端 Controller mapping 本身已含 /api 前缀 → 两侧一致；文档已说明
+- 撰写 docs/migration/api-surface.md：标题+生成说明、拼接规则、鉴权模型、23 个功能模块表格（方法/完整路径/方法名/参数/说明）、模块×端点数统计表、8 条异常与迁移注意点；rg 校验正文端点行数=197 与 39 Controller 一致
+- 扫描附带发现：前端 ProfilePage.vue 调 `PUT /api/auth/password`（自助改密）而后端无此端点（404 缺口），已记入文档 §23 与本摘要
+
+Stage Summary:
+- **端点总数 197，Controller 39 个，功能模块 23 组**；分组统计：认证5/用户8/角色6/菜单4/组织4/字典8/流程定义(已部署)8/流程设计(草稿)7/分类5/流程实例+变量+审批历史16/任务+催办13/表单定义9/表单数据11/业务数据11/页面12/数据源18/内部数据源9/后端逻辑1/仪表盘1/消息中心+SSE9/通知内部API2/通知管理端25/示例5
+- 文档路径：`/home/z/my-project/workflow_lowcode/docs/migration/api-surface.md`
+- 关键发现：① 权限模型=「全局 JWT 认证 + 通知管理端 requireAdmin + PageAccessGuard」三层，~170 个端点无角色校验（explore-sql/db/tables/用户 CRUD 等敏感面在内）② 分页信封双形态（PageResult vs PageResponse）③ 4 组 Controller 共用前缀、多段字面量路径规避 /{id} 冲突，Node 迁移须保持匹配优先级 ④ PUT /api/v1/process-instances/tasks/{taskId}/variables 路径非常规 ⑤ /auth/password 404 缺口 ⑥ SSE 端点 permitAll+query token 特例 ⑦ 无文件上传模块
+- 迁移建议：Node 路由直接按文档"完整路径"注册（含 /api 前缀），R 信封与两种分页形态分别对齐
+
+---
+Task ID: 12-c
+Agent: general-purpose (子代理)
+Task: 生成 SQLite schema.generated.ts + db-init/seed 脚本并验证
+
+Work Log:
+- 读 worklog（Task 11/12-a）与 docs/migration/api-surface.md「拼接规则」；backend-node/ 此前不存在，本轮创建
+- **H2 实库核对（不动原库锁）**：`cp backend/data/workflow.mv.db /tmp/h2copy.mv.db` 只读副本 + h2-2.4.240 Shell 查 INFORMATION_SCHEMA，实锤：① Hibernate 先于 Flyway 建表（Task 1 已证），Flyway 的 CREATE TABLE IF NOT EXISTS 多为 no-op，wf_*/msg_* 实际列集以 JPA 实体为准 ② 表名大写、多数列大写，实体 @Column 反引号列（`key`/`schema`/`type`/`params`）为小写 ③ 存在 Flyway 没有的列/表（deployed_xml、process_key、is_snapshot、target_user_id、msg_message.event_code/content_type、msg_channel_config 整表）
+- 生成 `backend-node/src/db/schema.generated.ts`：导出 SCHEMA_SQL(26)+ENGINE_TABLES_SQL(7)+COLUMN_KINDS（long/int/datetime/text/bool，key 与 DDL 同大小写）；转换规则按任务契约（BIGINT 主键→INTEGER PK AUTOINCREMENT、VARCHAR/CLOB/JSON/ENUM→TEXT、TIMESTAMP→TEXT、BOOLEAN→INTEGER 0/1、无 FK、UNIQUE 保留）；wf_* 保持小写+列名双引号，SYS_*/MSG_*/引擎表大写
+- 生成 `backend-node/scripts/db-init.ts`（幂等重建 data/workflow.db，单事务建 33 表，失败输出定位+回滚）与 `backend-node/scripts/import-seed.ts`（引号感知语句切分 + CSV 感知 VALUES splitter；INSERT...SELECT/UPDATE 翻译后交 SQLite 原生执行；FROM DUAL 剥离；INSERT IGNORE→INSERT；NOW()/CURRENT_TIMESTAMP→运行时 "yyyy-MM-dd HH:mm:ss" 引号外替换；TRUE/FALSE→1/0；仅 sys_*/msg_* 目标，Flowable/wf_ 语句跳过计数）
+- 创建 `backend-node/package.json`（workflow-backend-node/private/type module/scripts db:init+db:seed，零依赖）与 tsconfig.json（strict）
+- 踩坑重复 Task 10 教训：JSDoc 里写「SYS_*/MSG_*」的 `*/` 提前终止注释块 → bun 语法报错，改写为「SYS_ 与 MSG_ 系列」
+- 验证：`bun run db:init && bun run db:seed` 全绿；bun -e 全部要求的查询通过；附加验证（V21 菜单合并状态、顶级菜单树、wf_form_def 小写引号列写入回读 roundtrip、V32 模板 ${} 占位符完好、时间戳格式）通过；`bunx tsc --noEmit`（strict）exit 0；Java 进程与 H2 原库全程未触碰
+
+Stage Summary:
+- **建表 33 张**：SYS_* 8 + wf_* 10 + MSG_* 8（含 Hibernate 独建、无 Flyway DDL 的 MSG_CHANNEL_CONFIG）+ 新引擎 7（WF_PROC_INST/WF_TASK_INST/WF_ACTIVITY_INST/WF_EXEC_TOKEN/WF_PROC_DEPLOY/WF_TASK_CANDIDATE/WF_ENGINE_SEQ）
+- **种子净导入 144 行**（汇总计数 149 含 V21 UPDATE 影响 5 行）：sys_role 2、sys_user 2（admin=1/test=2）、sys_user_role 2（INSERT..SELECT 原生解析）、sys_menu 66（ids 1-27,100-103,110-115,120-133,140-142,150-154,160,250-263）、sys_role_menu 66（ROLE_ADMIN×全部菜单，NOT EXISTS 幂等）、msg_event_definition 3、msg_template 3；解析失败 0、警告 0、跳过非种子语句 102
+- **验证结果**：SYS_USER COUNT=2（admin/test，STATUS=1，IS_DELETED=0，密码 $2a$ BCrypt 前缀原样保留）；SYS_MENU=66、SYS_ROLE=2、SYS_ROLE_MENU=66、WF_FORM_DEF=0（小写表建表/查询 OK）、MSG_TEMPLATE=3、MSG_EVENT_DEFINITION=3；V21 合并态正确（120/140 软删 status=0 is_deleted=1、121/141/142 改挂 160）；CREATED_AT 格式 "2026-09-16 13:35:40"
+- **关键转换决策**：① wf_*/msg_* 列集以 JPA 实体为准（H2 实库核对），而非仅 Flyway DDL——保证 Node 仓储层与 Java 读写一致；wf_process_draft 不建 `key` 列（实体用 process_key，实库亦无）② 大小写模型：wf_* 小写+双引号列名（含 key/schema/type/params），SYS_*/MSG_*/引擎大写 ③ INSERT...SELECT 不做行级模拟，翻译后 SQLite 原生执行 ④ V21 的 UPDATE 属种子必需（复现菜单树最终态）已执行 ⑤ 产物全在 workflow_lowcode/backend-node 内（Task 11 沙箱重置教训：尽早纳入项目目录）
+- 供后续任务：db-init 可随时重跑重建空库；import-seed 幂等性依赖首跑空库（V32 的 NOT EXISTS 守卫可重放，VALUES 部分会主键冲突——重置请先 db:init）
+
+---
+Task ID: 12-b
+Agent: 主控 (Z.ai Code)（并行子任务 12-a 端点盘点、12-c SQLite schema 由 general-purpose 子代理完成）
+Task: backend-node 骨架 + auth 模块移植 + 与 Java 实测金标准 diff
+
+Work Log:
+- **12-a（子代理）**：重建 `workflow_lowcode/docs/migration/api-surface.md` —— 197 端点 / 39 Controller / 23 模块，含拼接规则（Controller 自带 /api 前缀）、分页双信封（PageResult{rows,total} vs PageResponse{records,total}）、8 条迁移注意点。重要发现：前端 ProfilePage 调 `PUT /api/auth/password` 后端无此端点；约 170 端点仅 JWT 校验无角色校验；`/api/v1/notifications/sse` 是唯一 permitAll+query token 端点
+- **12-c（子代理）**：生成 `backend-node/src/db/schema.generated.ts`（33 表 = 8 SYS 大写 + 10 wf_ 小写双引号 + 8 MSG + 7 新引擎表 + COLUMN_KINDS）、`scripts/db-init.ts`（幂等建库）、`scripts/import-seed.ts`（Flyway 种子方言翻译，149 行 0 失败）。关键决策：列集以 JPA 实体为准（Hibernate 先于 Flyway 建表，实库列比 Flyway DDL 多）；用 H2 只读副本（cp 到 /tmp）核对未动原库锁
+- **12-b（主线程）**：
+  - 依赖：express@5 / jsonwebtoken@9 / bcryptjs@3 + @types；bun 直接跑 TS（无需 tsx）；package.json 加 dev/start/typecheck
+  - 骨架：`src/config.ts`（JWT secret/exp 同源 Java @Value 默认值）、`src/lib/errors.ts`（BusinessException/IllegalArgument/TenantNotSet/EngineError + R 信封）、`src/lib/jwt.ts`（HS256 base64 key、claims {sub,username,type}、30min/10080min）、`src/lib/db.ts`（bun:sqlite 单例 WAL）、`src/lib/serialize.ts`（Jackson 对齐层）、`src/lib/http.ts`（authGuard 401 信封 / errorMiddleware 异常映射 / ah 包装 / ValidationError）、`src/index.ts`（8081 + /health + 未知路径对齐 "No static resource"）、`src/routes/auth.ts`（login/logout/refresh/userinfo/menus 全量）
+  - **契约实锤修正（重要！）**：摘要记录的 "Jackson Long→String、yyyy-MM-dd HH:mm:ss" 是 JacksonConfig 设计意图但 **MVC 实际未生效** —— 实测 8080：/api/users 返回 `"id":2`（数字）、`"createdAt":"2026-09-10T05:24:33.585796"`（ISO 带微秒）、roleIds 数字数组。Node 端已按**实测行为**对齐（id 数字、时间 ISO T 分隔）；serialize.ts 注释已记录此结论，后续模块移植一律以实测为准
+  - test 用户口令：种子哈希是 V2 旧值，Java 库运行期已重置为 123456（Task 5b）→ import-seed.ts 追加幂等 fixup（bcryptjs 现场哈希回写），重建库后凭据行为与 Java 库一致
+- **金标准 diff 验证（Node 8081 vs Java 8080，全部通过）**：
+  1. admin userinfo 逐字段全等 MATCH
+  2. admin menus 树全等 MATCH（含 children:null 约定）
+  3. login user 对象全等（permissions 59 项集合相等，顺序差异属 Java Set 无序语义）
+  4. test（非管理员）menus 全等 MATCH（祖先回溯逻辑正确）
+  5. refresh 签发新双 token ✅；无 token→401 信封 ✅；未知用户/错误密码→HTTP200+code500 "用户名或密码错误" ✅
+  - `bun run typecheck`（tsc strict）0 错误
+- 迁移产物落位策略：全部写入 workflow_lowcode/ 内（git 可覆盖目录），不再放 /tmp 或工作区外
+
+Stage Summary:
+- **backend-node 具备与 Java 逐字节级对齐的登录链路**（auth 5 端点），SQLite 数据层 33 表就绪（26 平台表 + 7 引擎表），种子数据与 Java 库一致
+- **契约基线修正**：Long→数字、LocalDateTime→ISO（实测优先于设计文档）；此结论适用于后续全部模块移植
+- 未解决问题/风险：
+  - SQLite 种子时间戳秒精度（Java 实测带微秒），格式一致但精度丢失——历史数据导入时用 H2 dump 原值可保留
+  - Java 端 Flowable ID 为 String，SYS_ 主键为 Long 数字——引擎表保留原 ID 字符串即可兼容
+  - 12-a 发现的 PUT /api/auth/password 缺口与 170 端点无角色校验，属 Java 端既有行为，Node 端保持一致（不自行加严）
+- 下一阶段优先：13-4 system 模块（users/roles/menus/orgs/dicts 32 端点，数据层+序列化层已就绪，可批量移植）→ 13-5 form/datasource/page/bizdata → 13-6 工作流引擎（DSL 解释器）→ 13-7 notification/SSE → 13-8 标记切换 → 13-9 收尾

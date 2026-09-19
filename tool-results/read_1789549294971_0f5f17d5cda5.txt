@@ -1,0 +1,567 @@
+     1→# 工作交接文档 (worklog)
+     2→
+     3→---
+     4→Task ID: 1
+     5→Agent: 主控 (Z.ai Code)
+     6→Task: 后端配置为不需要 Redis（用户指定用 yml 配置方式，不移除 pom 依赖）
+     7→
+     8→Work Log:
+     9→- 排查发现 `spring-boot-starter-data-redis` 仍在 pom.xml 中（用户明确要求不移除），`RedisConfig`/`RedisCache` 均已是 `@ConditionalOnBean` 条件装配
+    10→- 确认 Spring Boot 4.0.7 的 Redis 自动配置类全限定名（SB4 改过包名，从 `spring-boot-data-redis-4.0.7.jar` 的 `AutoConfiguration.imports` 提取）：
+    11→  - `org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration`
+    12→  - `org.springframework.boot.data.redis.autoconfigure.DataRedisReactiveAutoConfiguration`
+    13→  - `org.springframework.boot.data.redis.autoconfigure.DataRedisRepositoriesAutoConfiguration`
+    14→  - `org.springframework.boot.data.redis.autoconfigure.health.DataRedisHealthContributorAutoConfiguration`
+    15→  - `org.springframework.boot.data.redis.autoconfigure.health.DataRedisReactiveHealthContributorAutoConfiguration`
+    16→  - `org.springframework.boot.data.redis.autoconfigure.observation.LettuceObservationAutoConfiguration`
+    17→- 修改 `backend/src/main/resources/application.yml`：新增 `spring.autoconfigure.exclude` 排除以上 6 个自动配置类
+    18→- 修改 `backend/src/main/java/com/workflow/framework/config/FlowableEngineConfig.java`：`processEngineConfigurer` 中增加 `configuration.setDatabaseType("mysql")`
+    19→- 用 JDK21（`/home/z/tools/jdk21`，系统 JRE 无 javac，maven 需 `JAVA_HOME` 指向它）重新打包：`JAVA_HOME=/home/z/tools/jdk21 /home/z/tools/maven/bin/mvn -o package -DskipTests`
+    20→- 清空损坏的 H2 数据目录（旧半成品 schema 已备份到 `/home/z/backup/`，可删）
+    21→- 通过 `/api/portal/services` 触发服务监督器（Next.js 子进程常驻 + 20s 看门狗）拉起后端
+    22→
+    23→Stage Summary:
+    24→- **Redis 已通过 yml 配置彻底排除**：启动日志中 Redis 相关输出 0 条，不创建任何 Redis Bean，运行期零 Redis 依赖。`NotificationCache`（null 安全降级）与 `AuthServiceImpl`（logout no-op）无需改动即可正常工作
+    25→- **顺带修复了后端启动崩溃循环**（148 次重启的根因）：Flowable 8 的 H2 方言建表脚本使用 `identity` 列类型，而 H2 2.x（含 2.3.232/2.4.240）在 `MODE=MySQL` 下不识别该类型（`Unknown data type: "IDENTITY"`），导致首次建库失败、残留半成品 schema 后每次重启 NPE。实测验证 Flowable 的 MySQL 方言脚本（4 个共 1170 行、45 张表）可在 H2 MODE=MySQL 完整执行，故强制 `databaseType=mysql`（对真实 MySQL 环境同样正确）
+    26→- **验证结果**：两次完整启动均成功（全新库 18.7s 启动：Hibernate 建表 → Flyway 全量迁移 V2-V31 → Flowable 建表 → Tomcat；二次启动直接复用库）。登录 API 正常签发 token（admin/admin123），`/api/auth/menus` 返回完整菜单树
+    27→- **环境备忘**：后端 jar 由 Next.js 服务监督器管理（`src/lib/service-supervisor.ts`），看门狗 20s 巡检自动拉起；日志 `/home/z/tools/backend.log`；H2 库文件 `backend/data/workflow.mv.db`
+    28→- 风险提示：H2 沙箱库仅单实例可用；若换真实 MySQL 环境，`databaseType=mysql` 依然正确，无需回退
+    29→
+    30→---
+    31→Task ID: 2 (待办池，供后续巡检任务参考)
+    32→Agent: -
+    33→Task: 下一步候选工作项
+    34→
+    35→候选事项:
+    36→- 前端 Vite (5173) 与后端 (8080) 联调冒烟：通过浏览器验证登录页 → 首页 → 流程中心主链路
+    37→- H2 沙箱库的 `workflow.trace.db` 会积累告警日志，可关注体积增长
+    38→- `AuthServiceImpl` 中残留未使用的 Redis 相关 import（可编译，建议后续顺手清理）
+    39→- `GenHash.java` 位于 backend 根目录（工具类），可考虑移入合适位置或删除
+    40→
+    41→---
+    42→Task ID: 3
+    43→Agent: 主控 (Z.ai Code) — 定时巡检轮次 2026-09-10 13:35 (Asia/Shanghai)
+    44→Task: 浏览器 QA 巡检 + 端到端流程链路验证 + 首页数据看板实装
+    45→
+    46→Work Log:
+    47→- **全站浏览器 QA（agent-browser）**：登录页 → 登录成功跳转 /lowcode/dashboard；遍历 首页/用户管理/流程定义/流程中心/待办处理，页面渲染全部正常、前端 console 零错误、多标签页导航正常、API 全部 200（SSE 为正常挂起）
+    48→- **端到端流程链路验证（API 驱动，验证 databaseType=mysql 运行期表现）**：
+    49→  1. 创建草稿 `POST /api/v1/process-definitions/drafts?name=请假审批&key=leave-bill`
+    50→  2. 保存示例 BPMN `PUT /{draftId}/design`（`example/leave-bill.bpmn20.xml`）
+    51→  3. 部署 `POST /{draftId}/deploy` ✅
+    52→  4. 发起实例 `POST /api/v1/process-instances`（variables: manager=1）→ 提交节点被 InitiatorNodeResolver 自动完成 ✅
+    53→  5. 待办出现（部门经理审批，assignee=1）✅
+    54→  6. 完成 `POST /api/v1/tasks/{taskId}/complete` → `processFinished: true` ✅
+    55→  - 注意：所有 `/api/v1/**` 业务接口需带 `X-Tenant-Id: default` 请求头（前端 http.ts 已统一添加）；`/api/v1/tasks` 必须显式传 `assignee` 参数
+    56→- **新功能：首页数据看板实装（前后端）**
+    57→  - 后端新增 `api/controller/DashboardController.java`：`GET /api/v1/dashboard/stats?userId=`，聚合 Flowable 实时查询（我的待办/已办、进行中实例、最新版流程定义数、我发起的、近 7 日发起趋势、状态占比 running/finished），已重打包并重启生效
+    58→  - 前端新增 `src/api/dashboard.ts`；重写 `DashboardPage.vue`：KPI 卡片接真实数据（我的待办任务/我的已办任务/进行中流程/已部署流程定义）、近 7 日趋势柱状图数据驱动（7 柱均分栅格与日期标签对齐，含合计/空态/tooltip）、流程状态占比环形图（分段弧长计算 + 中心总数 + 图例）、加载骨架屏、失败降级显示 "--"、卡片 hover 阴影过渡
+    59→  - 修复自测发现的对齐 bug：趋势柱沿用旧 10 柱坐标导致与 7 个日期错位，改为 7 柱均分 + grid-cols-7 日期栅格
+    60→  - 浏览器验证：KPI 显示 0/2/0/1（已办 2 = 自动提交 + 经理审批），9/10 趋势柱正确对齐，占比环 "已完成 1"
+    61→- **异常排查**：后端日志共 3 条 ERROR——2 条为测试期参数缺失（非 bug）；1 条 `NoClassDefFoundError: ReactiveTypeHandler$CollectedValuesList`（05:43:08）发生在后端 kill/重启窗口期 + SSE 长连接断连时刻，正常导航后零复现，判定为重启窗口期瞬时现象
+    62→
+    63→Stage Summary:
+    64→- **平台已具备完整可演示的端到端能力**：库中现有 请假审批 v1 流程定义 + 1 个已完成实例（businessKey=demo-001），流程中心卡片、待办/已办、首页看板均有真实数据
+    65→- H2 + MySQL 方言在 Flowable 运行期（部署/发起/任务流转/历史查询/趋势统计）全部验证通过
+    66→- 未解决问题/观察项：
+    67→  - SSE 断线重连在服务重启窗口可能触发一次 `ReactiveTypeHandler$CollectedValuesList` NoClassDefFoundError（仅记录，暂不处理；如复现于正常运行需排查 spring-webmvc 依赖完整性）
+    68→  - DashboardController 每次统计发起 ~12 次 Flowable 查询，数据量增大后可考虑缓存
+    69→- 建议下一阶段优先事项：
+    70→  1. 表单视图管理（表单列表/页面列表）链路 QA + 低代码表单设计与流程绑定演示
+    71→  2. 系统管理其余页面（角色/菜单/组织机构/字典）QA
+    72→  3. 消息中心（通知/SSE 推送）实测：发起流程给他人审批，验证站内消息
+    73→  4. 清理 `AuthServiceImpl` 残留 Redis import；`GenHash.java` 归位
+    74→
+    75→---
+    76→Task ID: 4
+    77→Agent: 主控 (Z.ai Code) — 定时巡检轮次 2026-09-10 14:35~15:10 (Asia/Shanghai)
+    78→Task: 浏览器全站 QA + 修复 3000 入口白屏 + 工作流→通知中心桥接实装
+    79→
+    80→Work Log:
+    81→- **【严重 bug】3000 端口访问 /lowcode 全站白屏（用户预览面板实际入口！此前 QA 走 5173 直连未发现）**
+    82→  - 现象：资源全部 200 但模块不执行，`import()` 报 `SyntaxError: Unexpected token '.'`，二分定位到 Vue SFC 样式模块 `*.vue?vue&type=style&index=0&lang.css`
+    83→  - 根因：Next.js 服务器在 middleware 之前把 query 无值参数 `k` 重序列化为 `k=`（`?vue&type=...&lang.css` → `?vue=&type=...&lang.css=`），Vite 不再将其识别为样式模块（URL 不以 `.css` 结尾），返回原始 CSS 而非 JS 包装模块
+    84→  - 排障期间用回显服务器证实：即使 middleware 里还原好 query，`NextResponse.rewrite` 执行层仍会再次改写 → middleware 层无解
+    85→  - 修复：新增 `src/app/lowcode/[...path]/route.ts` 手动反代（restoreRawSearch 还原 query + 手动 fetch 源站流式透传），middleware 的 `/lowcode/*` 分支改为放行。修复后字节级 md5 与直连一致，浏览器全站渲染正常
+    86→- **【bug】`v-permission` 指令从未注册**：`directives/permission.ts` 存在但 main.ts 未 `app.directive` → 全部按钮权限控制失效 + Vue 告警。已注册
+    87→- **【bug】`el-option` value=undefined prop 告警**：Role/User 页 `{label:'全部', value:undefined}`；SearchTable.fetchList 改为剔除 ''/null/undefined 再下发（后端语义不变），选项值改 `''`
+    88→- **【bug】ElTag type='' 无效告警 ×9 处**：FormList/Menu/DataSource×2/FormDesigner/ViewDesigner/PageDesigner/PageList 的 `|| ''` 回退与三元，统一改 `'info'`/`'primary'`
+    89→- **【新功能】工作流 → 通知中心桥接（打通两个既有子系统）**
+    90→  - 缺口：引擎无任何监听器推送业务消息（TASK_ASSIGNED/PROCESS_COMPLETED 无感知，催办仅 log），消息中心永远为空
+    91→  - 后端新增 `notification/bridge/WorkflowNotifier`（模板优先→自由内容兜底、吞异常不阻断流程、租户上下文自恢复、HistoryService 用 ObjectProvider 延迟解析破循环依赖）+ `WorkflowNotificationListener`（TASK_ASSIGNED/PROCESS_COMPLETED）
+    92→  - 接线：FlowableEngineConfig.setEventListeners 注册双监听器；TaskRemindController 催办成功后推送
+    93→  - 种子：Flyway `V32__seed_workflow_notification.sql`（3 事件定义 + 3 站内信模板）；FlywayConfig 全局 `placeholderReplacement(false)`（模板正文 `${taskName}` 撞 Flyway 占位符语法）+ V32 加入 H2_REPLAY_VERSIONS
+    94→  - H2 幂等坑：Hibernate 先建表无唯一键 → `INSERT IGNORE` 每次启动重复插入 → `findByTemplateCodeAndTenantId` 非唯一结果抛错。改 `INSERT...SELECT...FROM DUAL WHERE NOT EXISTS` + 一次性 H2 Shell 去重
+    95→  - 发起人解析：startUserId 为 null（平台未调 Flowable Authentication API）→ 回退历史变量 `initiator`（ProcessInstanceController 发起时写入）
+    96→  - **端到端验证全通过**：发起 → user2 收"您有新的待办任务：部门经理审批"✅；审批完成 → 发起人收"您的流程「请假审批」已办结"✅；催办 → user2 收"催办提醒：部门经理审批"✅；浏览器 test 用户登录：铃铛角标 4、消息中心 4 条未读（◉ 未读标记/分类"工作流"）✅
+    97→- **【细节打磨】** 消息中心 WORKFLOW 类消息新增"去处理"按钮（仅工作流消息显示，点击直达待办处理页，已验证跳转）
+    98→- **【清理】** AuthServiceImpl 移除残留 Redis/TimeUnit import；GenHash.java 归位至 `system/util` 并补 package 声明
+    99→- 运维事件：期间 Next.js dev 进程崩溃一次（bun run dev 存活但 next-server 子进程死亡），已手动 `bun x next dev -p 3000` 拉起，监督器随之恢复；一次 jar 替换竞态导致的启动失败自动恢复
+   100→
+   101→Stage Summary:
+   102→- **平台主链路完整度大幅提升**：工作流通知（待办/办结/催办）全自动推送 + 站内信 + SSE 铃铛实时角标，消息中心从"永远空"变为生产可用
+   103→- **用户预览入口（3000）从白屏修复为完全可用**，这是本轮最关键的修复——此前所有经 3000 的访问都是坏的
+   104→- 全站 QA：登录/首页/系统管理 4 页/流程 4 页/表单/页面/数据源/消息中心 6 子页/个人中心，控制台 0 error 0 warning
+   105→- 未解决问题/风险：
+   106→  - Next.js 对无值 query 参数的规范化是平台级行为，`route.ts` 反代仅覆盖 /lowcode/*；/api/* 走 middleware rewrite（后端对 `k` vs `k=` 语义等价，暂无影响），若未来后端出现 query 格式敏感接口需同样处理
+   107→  - Next.js dev 进程本轮曾自行崩溃，原因未查明（疑 OOM），若复现需关注内存
+   108→  - V32 在本沙箱 H2 已预置成功记录，本轮修复的 SQL 只影响全新库；当前库数据已通过 API/去重补齐
+   109→- 建议下一阶段优先事项：
+   110→  1. 表单设计器 → 表单绑定流程（FormPropertyTab）端到端演示：设计表单 → 发布 → 流程节点引用 → 发起时渲染表单
+   111→  2. 页面设计器/数据源管理链路深度 QA（本轮仅浅测）
+   112→  3. 消息中心详情抽屉增加流程上下文展示（businessKey/发起人），"去处理"精确跳转到具体 taskId
+   113→  4. Dashboard 环比指标、流程定义使用排行（候选需求池）
+   114→
+   115→---
+   116→Task ID: 5
+   117→Agent: 主控 (Z.ai Code) — 定时巡检轮次 2026-09-10 15:11~15:45 (Asia/Shanghai)
+   118→Task: 浏览器 QA + 修复 3000 入口回归与流程图空白 + 消息中心→流程精确跳转实装
+   119→
+   120→Work Log:
+   121→- **【严重 bug】3000 预览入口 `/lowcode/` 又白屏（回归）**：Next.js 服务器把 `/lowcode/` 308 重定向为 `/lowcode`（尾斜杠规范化，发生在 middleware 之前无法拦截），middleware 原 rewrite 目标也是无尾斜杠的 `/lowcode`，Vite（base=`/lowcode/`）对其返回 404/"did you mean" 页。修复：middleware `/lowcode` 分支 rewrite 目标显式带尾斜杠 `${FRONTEND_ORIGIN}/lowcode/${search}`（rewrite 是服务端内部直连，不再经过 Next.js 尾斜杠规范化）。Task 4 的 QA 只测了深层路径未复测根入口，本轮补上
+   122→- **【bug】流程跟踪页流程图永远空白**：示例 `leave-bill.bpmn20.xml` 缺少 BPMNDI 图形信息（无节点坐标/连线），bpmn-js 导入成功但 0 元素可渲染。修复：源文件补全 `<bpmndi:BPMNDiagram>`（4 节点 Bounds + 3 连线 waypoints）并经 草稿→设计→部署 发布为 v2；后端重新打包（example 资源随 jar）
+   123→- **【细节】BpmnViewer 组件无 DI 空态**：importXML 的 warnings 含 "no diagram" 时显示友好空态（图标+标题+说明"重新发布新版后可显示"），旧 v1 实例跟踪页不再白屏困惑；importXML 抛错同样置空态
+   124→- **【新功能】消息中心 → 流程精确跳转（端到端）**
+   125→  - 后端：`WorkflowNotificationListener` 传 `task.getId()`；`WorkflowNotifier` 三类通知（TASK_ASSIGNED/PROCESS_FINISHED/TASK_REMINDED）统一经新增 `putProcessContext()` 写入 `processInstanceId`/`taskId`/`businessKey` 到消息 `content.variables`（仅附加变量，模板校验不受影响）；`TaskRemindController` 催办调用同步传 taskId
+   126→  - 前端 `MessageCenter.vue`："去处理"三级跳转——`taskId` → `/process/todo/{taskId}` 任务处理页；无 taskId 有 `processInstanceId` → `/process/instance/{id}` 流程跟踪页；都无（历史消息）→ 兜底待办列表
+   127→  - 前端 `MessageDetailDrawer.vue`：WORKFLOW 消息新增"流程上下文"区块（流程名称/任务节点/发起人/业务单号/等宽字体实例ID，占位"-"字段自动隐藏）+ "去处理该任务"（primary）/"查看流程跟踪"双按钮，点击关闭抽屉后跳转
+   128→- **端到端验证（API+浏览器）全通过**：admin 基于 v2 发起（businessKey=e2e-diagram-002）→ test 收待办消息（variables 含 taskId/instanceId/businessKey）→ 浏览器点"去处理"直达 `/process/todo/{taskId}` 任务处理页（流程编号/发起人/变量全对）→ 完成审批 `processFinished:true` → admin 收办结通知（含上下文）→ 点"去处理"正确兜底跳流程跟踪页 → v2 流程图 4 节点+3 连线渲染、已完成/当前节点蓝色高亮 ✅
+   129→- 回归：登录/首页/消息中心/待办/流程跟踪 console 0 错误；当前后端进程（PID 随监督器管理）启动后 0 ERROR
+   130→
+   131→Stage Summary:
+   132→- 平台演示主闭环再升级：**消息 →（精确）→ 任务处理/流程跟踪 →（流程图高亮）** 全链路可演示；历史遗留的"流程图空白"彻底解决
+   133→- 库内数据：leave-bill 现有 v1（无 DI，7 实例）与 v2（含 DI）两个版本；v2 已有 1 个已完成实例（e2e-diagram-002）可作演示
+   134→- 未解决问题/风险：
+   135→  - v1 历史实例的跟踪页永远显示空态（数据缺陷不可追溯修复，属预期行为；如需干净演示库可 terminate v1 在途实例）
+   136→  - TaskDetailPage 对"任务已被处理"场景仅 toast"加载任务详情失败"，可考虑友好引导回待办列表（低优先）
+   137→  - rg 查询参数 `-rn` 会把匹配文本替换显示为 "n"（`-r` 是 replace 标志），排障时需用 `-n`，本轮曾误导排查方向数分钟
+   138→- 建议下一阶段优先事项：
+   139→  1. 表单设计器 → 表单绑定流程（FormPropertyTab）端到端：设计表单 → 发布 → 流程节点引用 → 发起时渲染表单（worklog Task 4 建议项，仍未启动）
+   140→  2. Dashboard 环比指标 + 流程定义使用排行（候选需求池）
+   141→  3. 铃铛下拉也接入精确跳转（复用 goToProcess 逻辑）
+   142→  4. v1 在途实例清理脚本/terminate（演示库卫生）
+   143→
+   144→---
+   145→Task ID: 5b/5c
+   146→Agent: 主控 (Z.ai Code) — 会话续接：JSON 双重编码修复验证 + 浏览器端到端 + OOM 治理
+   147→Task: 重跑表单↔流程绑定链路端到端验证；浏览器验证发起页/待办页动态表单渲染
+   148→
+   149→Work Log:
+   150→- **【5b 完成】JSON 双重编码修复的 API 级端到端验证（五条腿全过）**
+   151→  1. FormDefinition 详情 schema：返回干净单层 JSON 字符串（无转义引号/双重编码），可正常 parse
+   152→  2. NodeConfig.config_json → formDefId/fieldPermissions/formKey 解析：`GET /api/v1/deployed-processes/{id}` 返回 formDefId 正确、fieldPermissions 为干净 dict
+   153→  3. FormData 草稿回环：POST/GET draft 往返，含引号/HTML 特殊字符完全无损，days 保持 int
+   154→  4. 发起带 formDefId → FormData 快照创建，dataJson 读取干净（前端 ProcessStartPage 发起时传 formDefId，控制器 save 到 form_data）
+   155→  5. mappedData 变量映射（form:initiator 源）值干净无编码问题
+   156→- **【新 bug 发现并修复】单人审批节点依赖未设置的 `${manager}` 启动变量**
+   157→  - 症状：发起后 submitTask 自动完成失败 `FlowableException: Unknown property ${manager}`（v2 实例卡死在发起节点，审批人永远收不到任务）
+   158→  - 根因：`MultiInstanceBpmnRewriter` 已支持按节点配置 `approval.userIds` 在部署时把 assignee 改写为字面量，但 leave-form-flow/leave-bill 草稿的 managerApproval 节点配置缺少 approval 段，部署出的 BPMN 仍是 `${manager}` 表达式
+   159→  - 修复：经设计器 API（PUT /design）给 managerApproval 补 `approval.userIds:["2"]`（test 用户）→ 重新部署为 **v3** → 部署 XML 中 assignee 已写死 `flowable:assignee="2"`；免启动变量发起成功，自动流转 ✅
+   160→  - 注意：v2 的两个卡死实例（e2e-jsonfix-001/002）留在库中，属数据卫生问题可 terminate
+   161→- **【重要运维问题确诊】next-server 反复静默死亡 = 系统 OOM（4.1Gi 沙箱）**
+   162→  - dmesg 实锤：next-server（anon-rss ~1GB）被 oom-killer 反复击杀（pid 1745/31463），同批 chrome 也被杀；内存水位：Java 612MB + Vite 519MB + Turbopack ~1GB + Chrome QA 会话 > 4.1Gi
+   163→  - 治理（三服务全加内存上限）：
+   164→    - `scripts/start-services.sh`：java 加 `-Xmx448m -XX:MaxMetaspaceSize=192m`；Vite 加 `NODE_OPTIONS=--max-old-space-size=512`
+   165→    - `package.json` dev 脚本：next dev 加 `NODE_OPTIONS=--max-old-space-size=614`
+   166→  - **启动方式约定（重要）**：必须用 `(cd dir && nohup ... &)` 子壳分离模式启动（worklog 已验证可存活数小时）；`bun run dev` 的 `tee dev.log` 管道模式在会话清理时 tee 被杀 → next-server SIGPIPE 静默死亡；`setsid` 单独启动也活不过 ~90s
+   167→  - 已知竞态：start-services.sh 的 port_open 探测与旧后端优雅关闭撞车（SSE 长连接拖住端口）→ 误判"已在运行"跳过启动；如遇 8080 未起需手动按新参数补启
+   168→- 【杂项】test 用户密码重置为平台默认 123456（GlobalConstant.DEFAULT_PASSWORD，此前口令失传）；agent-browser 访问 3000 需 `--proxy-bypass "localhost,127.0.0.1"`（Chromium 代理设置）
+   169→- **【5c 完成】浏览器端到端（agent-browser，console 0 error）**
+   170→  - admin 登录 → 流程中心 → 请假审批（表单版）发起页：**动态表单 6 字段全部渲染**（请假事由/类型/起止日期/天数/备注）+ BPMN 流程图预览 4 节点
+   171→  - 填单提交 → 跳转待办页高亮新实例 → 后端日志确认 submitTask 自动完成、test 收 TASK_ASSIGNED（to=2）
+   172→  - test 登录 → 待办 → 任务处理页：**审批表单渲染发起人数据**，VIEW 权限字段正确 disabled（事由/类型/天数），备注可编辑，办理人=测试用户
+   173→  - 审批通过 → `processFinished: true`，实例 ended=true，admin 收 PROCESS_FINISHED 办结通知（to=1）
+   174→  - `agent-browser errors` 无页面错误；console 仅 vite debug + SSE 断线重连告警（预期行为）
+   175→
+   176→Stage Summary:
+   177→- **表单↔流程绑定全链路（设计→发布→绑定→发起→审批）在 API 与浏览器两层全部验证通过**，JSON 列双重编码修复闭环
+   178→- leave-form-flow v3 成为标准演示版本：免启动变量、审批人节点配置化、动态表单+权限回显完整
+   179→- 内存治理三上限落地，next-server OOM 风险显著降低（需观察 24h 稳定性）
+   180→- 未解决问题/风险：
+   181→  - v2 卡死实例 2 个 + 历史 v1 实例 7 个未清理（演示库卫生，低优先）
+   182→  - start-services.sh 端口探测竞态仍在（可改为 kill -0 探测进程而非端口，下轮可修）
+   183→  - 沙箱 4.1Gi 内存是硬约束：避免同会话多开 Chrome；QA 时及时 close
+   184→- 建议下一阶段优先事项：
+   185→  1. 发起页为有"审批人变量"依赖的旧版流程提供变量预填/选择审批人 UI（或全部迁移到节点配置式审批人）
+   186→  2. v1/v2 历史实例清理脚本（terminate + 数据卫生）
+   187→  3. Dashboard 环比指标 + 流程定义使用排行（候选需求池）
+   188→  4. 铃铛下拉接入精确跳转（复用 goToProcess）
+   189→
+   190→---
+   191→Task ID: 6
+   192→Agent: 主控 (Z.ai Code) — 会话续接：沙箱重置灾后恢复
+   193→Task: 服务全量恢复（沙箱工作区被重置后的重建）
+   194→
+   195→Work Log:
+   196→- **【重大事件】沙箱工作区被重置**：backend/target/（jar 构建产物）、frontend/node_modules、/home/z/tools/（jdk21、maven、日志）全部丢失；源代码、H2 数据库（backend/data/workflow.mv.db）、worklog 均幸存
+   197→- **工具链重建**：系统仅有 JRE21（无 javac），重新下载 Temurin JDK 21.0.12.1 → /home/z/tools/jdk21、Maven 3.9.9 → /home/z/tools/maven（历史路径原样恢复）；~/.m2 被清空，采用在线构建
+   198→- **后端重建**：mvn -B -DskipTests package → BUILD SUCCESS（34.9s），jar 97.7MB（Boot 4.0.7 / Flowable 8）
+   199→- **前端恢复**：bun install → 323 包 4.3s，vite 8.1.5 可用
+   200→- **启动竞态新形态**：服务监督器（next-server PID 1081）探测到新 jar 出现后 19s 自动拉起——但未带内存上限参数，抢占 H2 文件锁（MVStoreException file locked）；手工终止无上限实例（RSS 已 510MB）后按规范参数启动，监督器为一次性触发未再抢启
+   201→- **最终验证全过**：8080/5173/3000 三端口 OPEN；后端 29.8s 启动完成（sandbox profile，-Xmx448m）；登录 API HTTP 200（admin 签发双 token）；3000 网关 → /lowcode/* → Vite（HTML/@vite/client/src/main.ts 全 200）、/api/auth/login → 8080 返回真实 JWT——历史破坏过的 raw-query 反代路径正常
+   202→- 已知预期行为：/lowcode/ 尾斜杠 308 → /lowcode（Task 5 修复的中间件显式 rewrite 生效中，curl -L 跟随后落地正确）
+   203→
+   204→Stage Summary:
+   205→- **灾后恢复完成**：从"全部服务死亡+构建产物丢失"恢复到"三端口全绿+登录链路+网关反代全通过"，H2 演示数据无损（请假审批 v1/v2/v3 及历史实例仍在库中）
+   206→- 未解决问题/风险：
+   207→  - 沙箱重置会清空构建产物与工具链（/home/z/tools 下的 jdk21/maven 已重建，但重置将再次丢失——如需快速恢复可考虑把工具链挪到项目目录内或写一键恢复脚本 scripts/bootstrap-after-reset.sh）
+   208→  - 服务监督器自动拉起 jar 时不带内存参数（会引发 H2 锁冲突 + OOM 风险），后续可改进 service-supervisor.ts 附加内存 flag
+   209→  - 孤儿进程 bun PID 1052（pre-reset 残留，无端口，暂无危害）
+   210→- 建议下一阶段优先事项：
+   211→  1. scripts/bootstrap-after-reset.sh 一键灾后恢复（检测 jar/node_modules/jdk21 缺失 → 自动重建）
+   212→  2. service-supervisor.ts 启动参数补齐内存上限
+   213→  3. 继续功能推进：发起页审批人选择 UI、v1/v2 历史实例清理、Dashboard 环比指标、铃铛精确跳转
+   214→
+   215→---
+   216→Task ID: 7
+   217→Agent: 主控 (Z.ai Code) — 定时巡检轮次 2026-09-10 22:05 (Asia/Shanghai)
+   218→Task: 浏览器 QA + 运维加固三件套（A1/A2/A3）+ 数据卫生清理（B5）+ 铃铛精确跳转（B7）+ 源码下载通道
+   219→
+   220→Work Log:
+   221→- **QA（agent-browser，灾后恢复后首次全链路）**：登录 → dashboard（KPI 2/17/8/2、趋势合计 16 次、占比环 8/8、铃铛角标 21）→ 流程定义 → 流程中心 → 待办处理 → 消息中心全部正常，0 page error。新经验：SSE 长连接下 `wait --load networkidle` 永不满足会卡死 agent-browser 命令队列，须用固定 sleep 等待
+   222→- **A2 supervisor 内存参数**：service-supervisor.ts SERVICE_DEFS 补齐 java `-Xmx448m -XX:MaxMetaspaceSize=192m` 与前端 `NODE_OPTIONS=--max-old-space-size=512`（def.env 注入 spawn）。已落盘，待 next dev 下次重启生效（本轮 403 抖动窗口，强制重启风险大于收益）
+   223→- **A3 start-services.sh 端口竞态修复**：端口开 + HTTP 探活双确认（curl 任意状态码=活，000=死）；假死等待 20s → kill_stale_backend（仅匹配本平台 jar 名）→ 清场重启；Vite 同逻辑。bash -n 通过
+   224→- **A1 bootstrap-after-reset.sh（新脚本）**：一键灾后恢复（jdk21/maven/jar/node_modules 缺失自动重建 → 调 start-services.sh），幂等、x64+aarch64、bash -n 通过
+   225→- **B5 历史实例清理（terminate API）**：8 在途 → 清 7（2×v2 卡死 + 5×v1 无 DI 遗留），**保留 e2e-v3-check**（v3 停在经理审批节点，作表单回显演示资产）。admin 待办 2→0，running 8→1
+   226→- **B7 铃铛精确跳转（新功能，浏览器端到端全过）**：NotificationBell.vue 工作流消息行内"去处理"按钮（Promotion 图标、hover 提亮、@click.stop）+ goToProcess 三级跳转（taskId→任务处理页；instanceId→流程跟踪页；兜底待办）+ popRef.hide() 收起下拉。taskId 消息✅ / 仅 instanceId✅ / popover 收起✅ / 0 console error
+   227→- **源码下载通道（应用户"无法下载代码"诉求）**：沙箱封闭、仅 3000 预览端口可出网 → 打干净源码包 `public/workflow-lowcode-src-20260910.tar.gz`（2.2MB、1925 文件；排除 node_modules/target/H2 data；含 backend+frontend 源码、openspec/docs、scripts、worklog.md），Next.js public/ 静态直出，经网关验证 HTTP 200
+   228→- 运维事件：主会话与部分子代理 Bash 多次 403 "broken session"（基础设施抖动），经子代理绕行完成全部工作；next dev 重启（激活 A2/A3）两次尝试均被打断、kill 未执行成功，服务全程零中断
+   229→
+   230→Stage Summary:
+   231→- 平台状态：三端口全绿、网关 200、待办干净（admin 0 / test 1 个 v3 演示资产）、铃铛直达上线、QA 全绿、源码可经 /workflow-lowcode-src-20260910.tar.gz 下载
+   232→- A2/A3 已落盘未激活：下次 next dev 重启自动生效
+   233→- 未解决问题/风险：
+   234→  - Bash 会话 403 抖动本轮 3 次；子代理绕行有效，操作失败先怀疑传输层
+   235→  - 任务处理页对"任务已被处理"仅 toast（历史低优先）
+   236→- 建议下一阶段优先事项：
+   237→  1. 择机重启 next dev 激活 A2/A3
+   238→  2. 发起页审批人选择 UI
+   239→  3. Dashboard 环比指标 + 流程定义使用排行
+   240→  4. 页面设计器/数据源管理深度 QA
+   241→
+   242→---
+   243→Task ID: 8
+   244→Agent: cron-restart
+   245→Date: 2026-09-10 19:04:33 +0000
+   246→Task: Restart next dev(3000) to activate on-disk A2/A3 changes; Vite(5173)/Java(8080) untouched.
+   247→
+   248→Work Log:
+   249→- Stopped old next dev (PIDs 1055/1066 / port-holder); port 3000 released
+   250→- Relaunched: cd /home/z/my-project && nohup env NODE_OPTIONS=--max-old-space-size=614 bun run dev >> dev.log 2>&1 &
+   251→- Readiness: 3000 OPEN after restart; warmup request completed
+   252→- Ports: 3000=OPEN 5173=OPEN 8080=OPEN
+   253→- Verification: lowcode HTTP 200, login API HTTP 200
+   254→
+   255→Stage Summary:
+   256→- next dev(3000) now runs with A2 (src/lib/service-supervisor.ts env field + memory params) and A3 (scripts/start-services.sh HTTP probe double-confirm + zombie cleanup restart) active
+   257→- Cron job 374482 (nextdev restart self-termination) can terminate: later rounds see the Task 8 marker, guard-exit, and delete the job; scheduler should delete it directly if no cron tool is available in-session
+   258→
+   259→---
+   260→Task ID: 9
+   261→Agent: 主控 (Z.ai Code) — 用户问题排查轮次 2026-09-11 08:40~09:10 (Asia/Shanghai)
+   262→Task: 排查修复「创建 SQL 模型时主表/目标表下拉无数据」并部署上线
+   263→
+   264→Work Log:
+   265→- 用户报告：数据源管理 → 新建 → SQL 查询 → 可视化配置，主表/目标表下拉无数据
+   266→- API 定位：GET /api/v1/data-sources/db/tables 返回 {"data":[]}（鉴权/网关/前端调用链均正常）→ 后端查询问题
+   267→- 根因 1：DynamicTableManager 三处 information_schema 查询使用 MySQL 方言谓词 TABLE_SCHEMA = DATABASE()；H2(MODE=MySQL) 中用户表在 PUBLIC schema，DATABASE() 返回库名 → 谓词永不匹配 → 列表为空
+   268→- 根因 2：findTableColumns SQL 引用 MySQL 专有列 COLUMN_KEY → H2 无此列 → 该端点直接 500
+   269→- 根因 3（深挖）：H2 2.4.240 的 information_schema.COLUMNS 无 TYPE_NAME 列；一次性探针库（/tmp，h2-2.4.240.jar）实测确认 DATA_TYPE 本身即类型名字符串（INTEGER/CHARACTER VARYING/NUMERIC/TIMESTAMP，normalizeType 白名单全覆盖）
+   270→- 并行协作事实：发现并行会话已于 00:44 UTC 修复三处查询（OR 'PUBLIC' 谓词 + isH2() 按产品名分支）并于 00:45 重建 jar，但未重启后端（旧进程 9/10 13:58 启动，修复未生效）；本会话完成 H2 分支最终修正（TYPE_NAME AS DATA_TYPE → DATA_TYPE）
+   271→- 部署：mvn -o 重打包 → kill -9 旧后端（瞬时释放端口，规避 supervisor 竞速拉起抢 H2 文件锁，Task 6 教训）→ start-services.sh(A3) 拉起新 jar（-Xmx448m -XX:MaxMetaspaceSize=192m）→ 35s 就绪
+   272→- 验证：/db/tables 72 张表 ✅；/db/tables/WF_FORM_DEF/columns 14 列（VARCHAR/INT/DATETIME 归一正确）✅；浏览器端到端（agent-browser，admin）：主表下拉 72 选项、选 WF_FORM_DEF 后 SQL 预览 `SELECT * FROM WF_FORM_DEF m WHERE m.tenant_id = :tenantId`、添加关联后目标表下拉 72 选项，全部 ✅；截图 download/sqlmodel-dropdown-fixed.png
+   273→- 回归：三端口全绿；3000 网关 lowcode 200 / login 200；Vite、next dev 全程零触碰
+   274→- 预期行为说明：wf_biz_* 业务表当前 0 张（发布带物理表的表单后自动出现）；下拉展示平台表（SYS_/WF_/MSG_）+ 引擎表（ACT_/FLW_）符合 DbSchemaController「当前库全部基础表名」设计；H2 无引号标识符存大写，下拉回传名称一致
+   275→- 排障工具教训（再次踩坑）：rg 的 -r 是替换显示标志，-rn 会把匹配文本显示为 "n"；且 [m 序列会被输出管道吞掉（ANSI 重置码）——本轮两次被伪影误导（"db/n"、"tableFieldsainTable"），后经 od 字节级核对确认源文件均完好，未做无谓修改
+   276→
+   277→Stage Summary:
+   278→- SQL 模型可视化配置的表/字段数据链路在 H2 沙箱完整修复并部署生效，浏览器端到端验证通过
+   279→- DynamicTableManager 现为跨库兼容实现（H2 与 MySQL 双语义分支），未来切换真实 MySQL 环境无需回退
+   280→- 未解决问题/风险：目标表下拉未排除已选主表（首项仍为 WF_FORM_DEF，低优先 UX）；TEXT 列在 H2 元数据显示为 VARCHAR(1e9)（CLOB 归一差异，低影响）
+   281→- 建议下一阶段优先事项：1. 发布带物理表的业务表单后回归 wf_biz_* 表出现场景 2. cron Job 374482 仍需调度层删除
+   282→
+   283→---
+   284→Task ID: 10
+   285→Agent: 主控 (Z.ai Code) — 用户问题排查轮次 2026-09-11 09:20~10:10 (Asia/Shanghai)
+   286→Task: 排查修复「创建 SQL 数据源时通过 SQL 获取字段报错」并部署上线
+   287→
+   288→Work Log:
+   289→- 用户报告：SQL 数据源 → 字段元数据 → 点击「获取字段」（POST /v1/data-sources/explore-sql）报错
+   290→- 复现与日志定位（/home/z/tools/backend.log），确认三个叠加根因：
+   291→  1. SqlMetadataProbe.probe 用派生表包裹 SELECT * FROM (...) _probe LIMIT 1 —— H2 2.x 要求派生表列名唯一，JOIN + SELECT * 报 Duplicate column name "ID"（42121）
+   292→  2. 可视化构建器 WHERE 条件生成裸 ? 占位符，探测器只替换 :name → Parameter "#1" is not set（90012）；且运行时模板引擎同样无法绑定 ?（该路径从未可用）
+   293→  3. 前端 generatePreviewSql 无条件拼接 WHERE m.tenant_id = :tenantId —— SYS_USER 等平台基础表无 tenant_id 列 → Column "M.TENANT_ID" not found（42122）；运行时 SqlTemplateEngine.validate 还硬性要求 :tenantId，形成死锁（有该列才需要过滤、无该列必报错）
+   294→- 修复（3 文件）：
+   295→  - SqlMetadataProbe.java：引号感知扫描（''/""/``）统一替换 :name 与裸 ? → NULL；取消派生表包裹改为直接执行（顶层重复标签合法）；尾部无 LIMIT/FETCH 时补 LIMIT 1；stripTrailingLineComment 防 LIMIT 被尾注释吞掉；异常改为 BusinessException(400) 携带根因消息（原 500 "bad SQL grammar []" 无诊断价值）
+   296→  - SqlTemplateEngine.java：validate 放宽 :tenantId 为可选（包含则运行时照常绑定租户过滤）；javadoc 同步；影响面：FORM sql 模式保存校验同样放宽（管理员显式 SQL 自行负责语义，已在注释注明）
+   297→  - DataSourceListPage.vue：generatePreviewSql 仅当主表真实含 tenant_id 列（sqlTableFields 缓存）才追加租户过滤；WHERE 条件内联配置值（IN/LIKE/=，恒引号字面量防 H2 严格类型 Data conversion error，值空跳过）；显式选择列重复标签自动 AS _1/_2 去重（防运行时 wrapSubquery 派生表重复列）；handleExploreSql 探测前 await ensureTableFields；修正两处过时注释（VisualSqlGenerator 为死代码，前端 SQL 即运行时 SQL）
+   298→- 踩坑记录：javadoc 写 SYS_*/WF_*/ACT_* 的 */ 提前终止注释块导致编译失败；TRAILING_LIMIT 用 matches() 缺前导 .* 永不匹配 → 改 find()
+   299→- 部署：mvn -o 重打包 ×2（编译错误修复后）→ kill -9 旧后端 → 直接 nohup 拉起新 jar（start-services.sh 等待逻辑超时 120s，后端进程实际正常就绪 ~35s）
+   300→- 验证：API 回归 9/9 通过（scripts/qa-explore-sql.py：用户原 SQL/JOIN+SELECT*/内联值/已带LIMIT/尾注释/单表tenant/IN/非SELECT拒绝/多语句拒绝）；运行时端到端（scripts/qa-sql-ds-runtime.py）：创建 SQL 数据源（无 :tenantId 模板）→ /data 分页查询返回 2 行真实数据（管理员/admin，JOIN 字段正确映射）；浏览器端到端（agent-browser）：新建 SQL 数据源 → 可视化配置主表 SYS_USER + 选 3 列 + 添加关联 SYS_ORGANIZATION（m.ORG_ID = s.ID + ORG_NAME）→ 获取字段 →「已获取 4 个字段」→ 保存「创建成功」，截图 download/sqlmodel-explore-fixed.png；三端口全绿 + 3000 网关 lowcode 200
+   301→- 清理：QA 测试数据源全部删除；测试脚本沉淀 scripts/qa-explore-sql.py、qa-sql-ds-runtime.py
+   302→
+   303→Stage Summary:
+   304→- SQL 数据源「获取字段」链路在 H2 沙箱完整修复并部署生效：探测、保存、运行时查询三层打通，浏览器端到端验证通过
+   305→- 已知限制：可视化模式 SELECT *（未选列）+ JOIN 时运行时派生表仍会因重复列名失败（探测已不受影响）；建议用户显式选择列（前端已自动去重）；VisualSqlGenerator.generate 仍为死代码待后续接线或删除
+   306→- 行为变更说明：SQL 模板 :tenantId 由强制改为可选（平台基础表无此列，原设计使该类 SQL 数据源不可能工作）；wf_biz_* 业务表场景前端仍会自动追加租户过滤
+   307→- 建议：提示用户刷新页面（前端 HMR 已生效）后重试「获取字段」；若手写 SQL 引用不存在列，现在会返回带 H2 根因的 400 消息，可自助定位
+   308→
+   309→---
+   310→Task ID: 10-b
+   311→Agent: general-purpose recovery subagent
+   312→Task: 环境重置后重放 Task 10 的 SQL 探测修复，重建 jar、装前端依赖、重启三服务并回归
+   313→
+   314→Work Log:
+   315→- 重放前盘点：读取 worklog Task 10（283-307 行）与 scripts/qa-explore-sql.py、qa-sql-ds-runtime.py；实测 backend/target/（jar）与 frontend/node_modules 确已丢失，源码为重置快照
+   316→- 源码盘点结论：SqlTemplateEngine.java（:tenantId 可选 + javadoc）与 DataSourceListPage.vue（实际路径 src/views/dataSource/，任务书写的 src/pages/ 不存在；sqlTableFields 缓存 + generatePreviewSql 租户过滤条件化 + buildWhereFragment 内联字面量跳过空值 + buildSelectFragment 重复列 AS _1/_2 去重 + handleExploreSql await ensureTableFields）在快照中已含 Task 10 修复，逐条核对后未改写
+   317→- SqlMetadataProbe.java 为部分残留（引号感知替换/直接执行/LIMIT 兜底/stripTrailingLineComment 在，但异常处理仍是 "SQL 探测失败: "+root.getMessage()）：重放缺失部分——catch DataAccessException 改为 BusinessException(400, "SQL 执行失败："+describeRootCause(e))；新增 describeRootCause（走 cause 链到根因 → 截断 "; SQL statement:" 调试段 → 剥尾部 "-- [错误码]" 标注 → 220 字符截断 → 按关键词追加中文指引：duplicate column name/table not found/column not found/syntax error；keywordHit 兼容 H2 把对象名夹在中间的形态如 Column "M.TENANT_ID" not found）；指引字符串 wf_biz_* 仅在字符串字面量中出现，javadoc 规避 */ 提前终止
+   318→- 构建环境重装：mvn 无二进制且 ~/.m2 被清 → 下载 Maven 3.9.9 至 /tmp；系统 java 为无 javac 的 JRE（"release version 21 not supported"）→ 下载 Temurin JDK 21.0.12+1 至 /tmp 作 JAVA_HOME；mvn package -DskipTests 联网下载依赖后编译成功（离线模式因本地仓库被清不可用）
+   319→- bun install：323 packages 安装完成，node_modules/.bin/vite 恢复
+   320→- 服务拉起：jar 产出后沙箱服务监督器自动以 start-services.sh 同款命令拉起后端（01:53:51，-Xmx448m -XX:MaxMetaspaceSize=192m --spring.profiles.active=sandbox，21s 就绪写入 /home/z/tools/backend.log），Vite 由监督器拉起（01:53:54）；随后按规程幂等执行 scripts/start-services.sh 确认双端健康（后端已在运行/前端已在运行）；3000 Next.js 全程未触碰
+   321→- 回归：三端口探活 3000=200 / 8080=401(Tomcat 存活) / 5173=302；python3 scripts/qa-explore-sql.py 9/9 全过（R1 用户SQL/R2 JOIN+SELECT*/R3 内联值LIKE/R4 已带LIMIT/R5 尾注释/R6 单表tenant/R7 IN/R8 非SELECT 400/R9 多语句 400）；python3 scripts/qa-sql-ds-runtime.py 全通过（创建 SQL 数据源 200 → /data 分页 2 行真实数据 → 清理 200）
+   322→- 浏览器冒烟（agent-browser）：3000 壳加载正常（显示后端 8080 PID 2491 / 前端 5173 均运行中）→ 低代码平台 admin/admin123 登录成功 → 表单视图管理 → 数据源管理页加载正常、列表有数据 → console 无 error（仅 1 条 SSE 重连 warning）→ 关闭浏览器
+   323→
+   324→Stage Summary:
+   325→- Task 10 三文件修复重放完成：SqlMetadataProbe.java 补齐 describeRootCause 根因提纯与 "SQL 执行失败：" 400 消息（本轮唯一代码改动）；SqlTemplateEngine.java、DataSourceListPage.vue（src/views/dataSource/）经逐条核对确认快照已含全部修复，未改动
+   326→- 构建产物恢复：backend/target/workflow-platform-1.0.0-SNAPSHOT.jar（约 102MB，mvn package 成功；mvn/JDK 21 为临时安装于 /tmp，重置后需重装）；frontend node_modules 恢复（bun，323 packages）
+   327→- QA 结果：qa-explore-sql.py 9/9 通过；qa-sql-ds-runtime.py 端到端通过（创建/查询 2 行/清理）
+   328→- 服务状态：8080 ✅（401 探活，后端 PID 2491，sandbox profile，约 21s 就绪）、5173 ✅（302→/lowcode/）、3000 ✅（Next.js 壳，未触碰）；agent-browser 冒烟通过、console 无报错
+   329→- 风险提示：/tmp 下的 Maven 与 JDK 随沙箱重置丢失，下次重建需重新安装（或纳入 bootstrap-after-reset.sh）；本轮三端口异常均为监督器自动恢复，未手动 kill 任何进程
+   330→
+   331→---
+   332→Task ID: 11
+   333→Agent: 主控 (Z.ai Code) — webDevReview 巡检轮（2026-09-16 上午）
+   334→Task: 巡检 QA + 数据源模块三项新功能（SQL 格式化 / 字段元数据搜索 / TEXT 类型归一），并根据用户反馈将 JOIN 目标表「排除式」过滤改为「提示式」占用标记
+   335→
+   336→Work Log:
+   337→- 状态判断：三端口全绿（3000/5173/8080）、jar 存在、后端 PID 2491 无异常日志、Task 10-b 后未再发生环境重置 → 判定稳定期，进入新需求模式
+   338→- QA 回归：qa-explore-sql.py 9/9 通过；qa-sql-ds-runtime.py 端到端通过（创建/查询 2 行/清理）
+   339→- 新功能 1（SqlEditor.vue）：新增纯函数 formatSql（引号感知占位符保护：单引号串含 '' 转义/-- 行注释/块注释 → 子句关键字换行（SELECT/FROM/WHERE/GROUP BY/ORDER BY/LIMIT/UNION）、JOIN 类换行并缩进 2 格、SELECT 顶层逗号逐列缩进（括号深度感知，函数内逗号不断行）、子句关键字统一大写、断行处去尾随空白）+「格式化」按钮（空 SQL 禁用）
+   340→- 新功能 2（DataSourceListPage.vue）：字段元数据 tab 增加搜索框（按标识/字段名过滤，仅影响展示）+「匹配 N / 共 M 个字段」计数；removeMetadataColumn 改为从源数组删除（过滤副本 splice 不影响真实数据的坑）
+   341→- 新功能 3（DataSourceListPage.vue）：normalizeProbedType 探测类型归一——H2 将 TEXT/CLOB 列报告为 VARCHAR(1e9)，归一为 TEXT（length/scale 置空），DB类型选择器可正常回显
+   342→- 初版错误与用户纠正：JOIN 目标表下拉初版排除了主表与其他 JOIN 已选表 → 用户指出「主表和已连接表也可能再次连接」（自连接如组织表 parent_id、同表多次关联如买家/卖家均合法）→ 改为 joinTableHint 提示式：下拉保留全部表，主表标「主表」、他行已选标「已关联」，不限制选择；别名自动避让（w/w1）保证自连接 SQL 合法
+   343→- 测试：VisualQueryBuilder.test.ts 新增 joinTableHint 纯函数用例 + 下拉保留全部表用例；SqlEditor.test.ts 新增 formatSql 5 用例（断行/字面量注释保留/括号内逗号/按钮回写/空禁用）；DataSourceListPage.test.ts icon mock 补 Search/MagicStick；调试中修复两处自伤：parseSelectColumns 的 return 被吞、断言 ON 大小写错误、SELECT\\s+ 捕获尾随空格
+   344→- 浏览器端到端（agent-browser）：admin 登录 → 数据源管理 → 新建 SQL 数据源 → 可视化模式：主表选 WF_FORM_DEF 后目标表下拉首项即「WF_FORM_DEF 主表」→ 自连接成功（预览 SELECT * FROM WF_FORM_DEF m LEFT JOIN WF_FORM_DEF w ON m.ID = w ID...）→ 第二行选 SYS_USER 后第三行下拉显示「SYS_USER 已关联」→ SQL 模式填乱 SQL 点格式化 → 断行/缩进/字面量/注释全部正确且无尾随空格 → 字段元数据「已获取 3 个字段」，COLUMN_CONFIG 显示 TEXT（归一生效）→ 搜索 NAME 显示「匹配 1 / 共 3 个字段」→ 截图 4 张（download/vqb-selfjoin-main-hint.png、vqb-join-hint-2nd-row.png、vqb-join-hint-joined.png、metadata-search-filter.png）→ console 0 error，弹窗未保存无脏数据
+   345→- 额外验证：探测 400 中文指引实战复现——手写 SQL 误用保留字 DESC 触发「SQL 执行失败：Column "A.DESC" not found。请核对列名，可在表/字段下拉中查看」（Task 10-b 修复特性在真实 UI 链路生效）
+   346→
+   347→Stage Summary:
+   348→- 数据源 SQL 配置体验三项增强全部上线并浏览器验证：SQL 格式化（纯前端无依赖、语义不变）、字段元数据搜索过滤、TEXT 类型归一显示
+   349→- 用户纠正落地：JOIN 目标表不再排除主表/已选表（自关联合法），仅显示「主表/已关联」占用提示；单元测试 105/105（dataSource 模块）、全量 1065/1065（78 文件）
+   350→- 新增教训：Vite HMR 长页面可能滞留旧模块（尾随空格修复未即时生效），页面刷新后验证为准；agent-browser type 为追加式，textarea 清空须用 fill
+   351→- 遗留：VisualSqlGenerator.generate 死代码待删除；发布带物理表业务表单后 wf_biz_* 表出现场景待回归
+   352→
+   353→---
+   354→Task ID: 12
+   355→Agent: 主控 (Z.ai Code) — 后端语言选型咨询轮（2026-09-16）
+   356→Task: 评估后端移植 Node.js vs Rust 两种方案的可行性（纯咨询，无代码变更）
+   357→
+   358→Work Log:
+   359→- 确认 Task 11 用户纠错已完全落地：joinTargetOptions 排除逻辑已改为 joinTableHint 提示式（grep 全 src 无排除代码残留），全量测试复跑 1065/1065 通过（78 文件，166s）
+   360→- web-search 核实两侧工作流引擎生态（2025 数据）：npm bpmn-engine v25.0.1（BPMN 2.0 执行引擎，10 个月前更新）、bpmn-server（自带状态持久化/变量管理）；Rust 侧 crates.io bpmn_engine 等均为早期实验项目（描述中持久化标注 future-ready 即尚未实现），无生产级 BPMN 引擎
+   361→- 输出选型结论：Node.js 显著优于 Rust——决定性因素为①引擎生态两边均无 Flowable 对标物但 Node 有可用起点+自研成本更低②低代码平台本质是动态 JSON 处理（serde 处理动态结构类型体操成本高）③负载为 I/O 密集中低并发，Rust 性能优势错位④前后端 TS 同构共享设计器 Schema 类型为结构性收益⑤迭代速度与人才市场；Rust 仅在未来计算热点模块以 napi-rs/gRPC「手术刀」方式有价值；Zeebe 路线因 broker 本身是 JVM 不满足去 Java 目标
+   362→
+   363→Stage Summary:
+   364→- 选型建议定稿：Node.js (NestJS/TS) 为主战地方案，Rust 整体移植不可行；维持「绞杀者模式 → 自研受控 DSL 解释器」两阶段路线；项目代码本轮零变更，测试基线 1065/1065 绿
+   365→
+   366→---
+   367→Task ID: 13-1c (开始)
+   368→Agent: Explore — 数据层语义盘点
+   369→Task: 提取表单/数据源/SQL 引擎/页面定义语义
+   370→
+   371→
+   372→---
+   373→Task ID: 13-1b (开始)
+   374→Agent: Explore — 引擎语义盘点
+   375→Task: 提取 Flowable 使用语义与设计器 JSON 规格
+   376→
+   377→
+   378→---
+   379→Task ID: 13-1a (开始)
+   380→Agent: Explore — API 面盘点
+   381→Task: 提取 Spring Boot 后端全部 REST 端点清单
+   382→
+   383→
+   384→---
+   385→Task ID: 13-1a
+   386→Agent: Explore — API 面盘点
+   387→Task: 提取 Spring Boot 后端全部 REST 端点清单
+   388→
+   389→Work Log:
+   390→- 扫描 backend/src/main/java/com/workflow/ 全部包，用 Grep 确认 @RestController 共 39 个（api 20 / system 7 / notification 10 / example 2），另含 1 个 @RestControllerAdvice（GlobalExceptionHandler）
+   391→- 逐个通读 39 个 Controller 源码，提取类级 @RequestMapping 前缀、HTTP 方法、完整路径、@PathVariable/@RequestParam/@RequestBody 参数、返回类型（R<Xxx>）、特殊说明（SSE produces、乐观锁、query 传 token 等）
+   392→- 提取全部 Request/Query DTO 字段与校验注解（@NotBlank/@Size）：api 12 个 + system 16 个 + TemplateSendRequest 等；确认 GET 端点存在无注解 POJO 绑定（BizDataQueryRequest/UserQueryRequest/RoleQueryRequest/DictTypeQueryRequest）
+   393→- 鉴权面核查：Grep 确认全库 0 处 @PreAuthorize/@HasPermission；SecurityConfig 仅 2 条 permitAll（/api/auth/login、/api/v1/notifications/sse），其余 authenticated；通知管理端为代码内 NotificationAdminAuthorization.requireAdmin()（ROLE_ADMIN/admin）；页面数据出口走 PageAccessGuard（404/403 + admin放行）
+   394→- 读取 WebConfig（TenantInterceptor 挂 /api/**，X-Tenant-Id 头）、SecurityConfig、CorsConfig（全开放+credentials）、JwtAuthenticationFilter、GlobalConstant、application.yml（port 8080、无 context-path）与 application-sandbox.yml
+   395→- 核对统一封装：R{code,msg,data}、PageResult{total,page,size,rows}、PageResponse{content,pageNumber,...}、BizDataPageVO{records,...} 三种分页形态并存；确认全库无 MultipartFile（无文件上传端点）
+   396→- 汇总产出 Markdown 文档（按 api/system/notification/example 分模块，含 DTO 字段表、放行路径、CORS、租户、迁移注意点 5 条）
+   397→
+   398→Stage Summary:
+   399→- 产出物：/home/z/my-project/workflow_lowcode/docs/migration/api-surface.md（新建，含 39 Controller / 197 端点全量清单）
+   400→- 端点总数：197 = api 121（20 个 Controller）+ system 35（7）+ notification 36（10）+ example 5（2）
+   401→- 放行路径 2 条；管理端硬编码 admin 校验；SSE 1 个非 JSON 端点；三种分页封装并存；无 context-path（base=http://localhost:8080）
+   402→- 未修改任何业务代码（纯文档产出）
+   403→
+   404→
+   405→---
+   406→Task ID: 13-1c (完成)
+   407→Agent: Explore — 数据层语义盘点
+   408→Task: 提取表单/数据源/SQL 引擎/页面定义语义
+   409→产出: docs/migration/data-layer-semantics.md (501 行)
+   410→覆盖: ColumnTypeMapper 控件→列类型全映射(含数组组件双列/dataPicker 双列/WORKFLOW schema 推断)、DdlBuilder 动态 DDL(表名/保留字/索引/ALTER 只加不减策略)、FormDefinition/FormData 版本与快照语义、form/mapping 五组件映射规则、bizdata 三种查询模式(单表/config JOIN/sql模板)与 7 操作符 filter 协议、SqlMetadataProbe 11 步移植规格、数据源 5 类型元数据/状态机/路由 allowlist、页面定义编译与菜单挂载、关键 DTO 字段、SQLite 方言适配(类型建议/DDL 重写/JSON_CONTAINS 模拟/函数差异/锁替代/大小写)
+   411→下一步: 依此文档产出 Prisma schema 与动态表引擎 Node 实现；SQLite JSON 过滤与 ALTER 重建表为最高风险项
+   412→
+   413→---
+   414→Task ID: 13-1b (结束)
+   415→Agent: Explore — 引擎语义盘点
+   416→Task: 提取 Flowable 使用语义与设计器 JSON 规格
+   417→
+   418→Stage Summary:
+   419→- 产出物: /home/z/my-project/workflow_lowcode/docs/migration/engine-semantics.md
+   420→  (A 设计器 JSON Schema / B JSON→BPMN 转换规则 / C 运行时语义清单 / D Flowable API 分组统计 / E 自研数据表建议 / F 迁移缺口)
+   421→- 关键结论:
+   422→  1) 设计器产物 = BPMN XML(bpmn-js) + node_configs 每节点 configJson（含 __PROCESS__ 流程级键），nodeType 从 XML 标签解析；
+   423→     节点类型 10 种: StartEvent/EndEvent/发起UserTask(wf:nodeRole=initiator)/审批UserTask/ServiceTask/CallActivity/SubProcess/排他/并行/包含网关。
+   424→  2) 部署管线: MultiInstanceBpmnRewriter 依据 approval.multiMode(userIds) 改写 MI(collection=${approverList}, elementVariable=approver,
+   425→     完成条件 countersign/sequential=全部 or_sign>=1, 均含 rejected||短路) + 单实例 assignee/candidateUsers + injectEventNames + SHA-256 防重 + NodeConfig 版本快照(procDefId 精确绑定)。
+   426→  3) 任务分配规则实际实现 5 种: 发起人本人(自动complete)/指定单人/指定多人候选(claim)/会签/或签/依次(MI listener 注 approverList)；
+   427→     expression 与 dept_head 仅设计器有、后端未实现。
+   428→  4) 特殊操作: 驳回=仅回发起节点(changeActivityState + rejected=true 终止 MI)，拒绝=deleteProcessInstance 终止；
+   429→     加签=MI addMultiInstanceExecution / 非MI addCandidateUser；转签=删 MI 实例(不计完成)+加新实例；转办=setAssignee(唯一强制权限校验)；委派=delegateTask/resolveTask。
+   430→     撤回 allowRecall 仅配置无实现。
+   431→  5) 后置逻辑: 全局事件监听 PROCESS_STARTED/ACTIVITY_STARTED(userTask)=ENTER、TASK_COMPLETED/ACTIVITY_COMPLETED(endEvent)=COMPLETE，
+   432→     执行 http({{var}}占位+重试)/bean(@BackendLogicBean 白名单反射)/script(groovy) 三类，resultVar 回写，errorAction=IGNORE_CONTINUE|FAIL_FLOW。
+   433→  6) Flowable API 统计: TaskService≈40(createTaskQuery 23 为最重)、RuntimeService≈45(变量读写 20+、MI 增删 5、changeActivityState 1)、
+   434→     HistoryService≈30(ProcInst 11/Task 5/Activity 3/Var 3)、RepositoryService≈20(deploy 2/getBpmnModel 5/DefQuery 7)、ManagementService=0。
+   435→  7) 自研建议: wf_process_definition(diagram_json 替代 XML)+wf_process_instance+wf_execution(令牌/MI 计数, 驳回与网关必需)+wf_task(含 delegation_state/mi 归属)+
+   436→     wf_activity_instance(mi_group_id)+wf_variable；wf_task_comment/transfer/remind/node_config/form_data 沿用现有表。
+   437→  8) 缺口清单 8 项(expression/dept_head 审批人、recall、deduplication、timeout、numberRule、addSign/delegate 权限、并行下一任务、内存过滤分页)。
+   438→
+   439→
+   440→---
+   441→Task ID: 13-a
+   442→Agent: 主控 (Z.ai Code)
+   443→Task: 后端整体迁移 Node.js（含工作流）——盘点 + 数据移植 + 骨架
+   444→
+   445→Work Log:
+   446→- 盘点完成（3 个 Explore 子代理 13-1a/1b/1c）：docs/migration/api-surface.md（39 控制器/197 端点）、engine-semantics.md（设计器 JSON 10 种节点/5 种分配规则/40 项运行时语义/引擎表建议）、data-layer-semantics.md（列类型映射/3 种查询模式/SqlMetadataProbe 11 步规格/SQLite 方言风险）
+   447→- 关键契约锁定：R{code,msg,data}；分页三形态 rows/content/records；Jackson Long→String、LocalDateTime→"yyyy-MM-dd HH:mm:ss"；JWT 同秘钥 HS256（sub/username/type claims，30min/7d）；业务异常=HTTP200+R.code、未登录=HTTP401+R.unauthorized；permitAll 仅 login+SSE；无注解鉴权但程序化检查（NotificationAdminAuthorization/PageAccessGuard）
+   448→- H2 全库导出：/home/z/tools/h2dump/DumpTool.java（JEP330 单文件源码 + fat jar 内 h2-2.4.240.jar）→ 73 表 JSON 落盘 docs/migration/h2-dump/；期间两次优雅停启 Java（监督器看门狗会复活 Java 的坑：运行中 next-server 用的旧模块不受新代码影响，改用"杀后立即 dump 再触发拉回"策略）
+   449→- backend-node 骨架（workflow_lowcode/backend-node/，bun+express+TS+bun:sqlite）：config/db(行映射 Long→string、ts 归一、JSON 列解析)/errors(BusinessException/EngineException)/jwt(与 Java 完全兼容)/http(R 信封+globalAuth 白名单+401+错误中间件)/users(共享用户查询)
+   450→- schema.generated.ts：26 业务表按原列名镜像（小写列 key/schema/params/type 引号保留；SYS_*/MSG_* 主键 AUTOINCREMENT）+ schema.engine.ts 自研引擎 7 表（WF_PROC_INST/WF_TASK_INST/WF_ACTIVITY_INST/WF_EXEC_TOKEN/WF_PROC_DEPLOY/WF_TASK_CANDIDATE/WF_ENGINE_SEQ）
+   451→- import-h2.ts 导入器：业务表 1:1（16 表有数据）+ Flowable 历史转换（WF_PROC_INST←16、WF_TASK_INST←30、WF_ACTIVITY_INST←92、运行中实例恢复 1 个、WF_PROC_DEPLOY←3 草稿）；保留原 Flowable ID 使 WF_TASK_COMMENT 关联不断裂
+   452→- 冒烟全绿（:8081）：登录（id 字符串化正确）/菜单树（admin 全量 5 根）/userinfo（ROLE_ADMIN+59 权限）/401 精确语义/错误密码 R.fail/校验白名单/stub 鉴权
+   453→- 监督器+start-services.sh 已支持引擎切换标记 /home/z/tools/backend-engine-node（存在即 Node 接管 8080）
+   454→- 三次自伤修复：块注释内 "SYS_*/" 提前闭合、db.ts 相对路径错层级、auth.ts queryRows camelCase 键与 UPPER CASE 类型不匹配致菜单树死递归 + EngineException 漏 import + globalAuth 未挂全局 + 残留旧进程 EADDRINUSE 误判
+   455→
+   456→Stage Summary:
+   457→- 13-0/13-1/13-2/13-3 全部完成；backend-node 可登录可鉴权，数据 100% 迁移（含 1 个运行中实例与全部审批历史）
+   458→- 三份迁移规格文档 + h2-dump JSON 为后续模块移植的权威依据
+   459→- 待办：13-4 system、13-5 数据层（含方言适配）、13-6 工作流引擎、13-7 通知/example、13-8 切换 8080 与回归
+   460→[Task 13-4] system 模块移植 - START
+   461→[Task 13-5 START] 数据层模块移植到 Node (form/datasource/page/internal + dialect) — by subagent
+   462→
+   463→---
+   464→Task ID: 13-6
+   465→Agent: 迁移工程子代理（写代码）— Flowable 工作流引擎 → Node.js 自研解释器
+   466→
+   467→Work Log:
+   468→- 精读 docs/migration/engine-semantics.md（A 设计器 JSON/B 部署管线/C 40 项运行时语义/D API 统计/E 表建议/F 缺口）+ schema.engine.ts 7 表 + db/http/dialect 骨架约定 + 数据实例形态（DIAGRAM_JSON=BPMN XML 字符串、NODE_CONFIGS_JSON=nodeId→config、遗留 16 实例/30 任务/1 RUNNING）
+   469→- 引擎核心 5 文件（src/lib/engine/，1665 行）：
+   470→  · types.ts：IR 类型（9 种节点+sequenceFlow；NodeConfig approval/form/operations/backendLogic/callActivity）+ resolveOperations（流程级 AND 节点级，默认 allowReject/allowTransfer=true）+ resolveFormConfig（节点级>流程级整体取用）
+   471→  · parser.ts：BPMN XML→IR（零依赖正则/状态机；9 种节点+嵌套 subProcess+sequenceFlow conditionExpression 按 flow id 回查+multiInstanceLoopCharacteristics(isSequential/collection/elementVariable/completionCondition)+wf:nodeRole/flowable:assignee/candidateUsers 扩展属性；事件缺省名补「开始/结束」）
+   472→  · expression.ts：UEL 子集递归下降求值器（变量/数字/字符串/true·false·null、== != > < >= <= 及 eq/neq/gt/lt/ge/le 别名、&& || ! / and or not、+ - * / %、括号；数字与布尔字面量宽松比较以对齐 ${approved == true}；resolveVarRef 处理 ${manager} 型 assignee；substituteDoubles 处理 {{var}}）
+   473→  · engine.ts（897 行）：令牌驱动运行时——start（建实例→startEvent→InitiatorNodeResolver 定位发起节点自动 complete(action=submit)→推进）、pump 令牌泵（startEvent 直通/exclusive 单令牌选线含无匹配报错/parallel·inclusive 分叉与按入线数汇合等待/serviceTask 后置逻辑+直通/endEvent 令牌归零完结）、userTask 到达落任务（5 种分配规则：initiator 本人/单人 assignee/多人 candidateUsers+WF_TASK_CANDIDATE/MI countersign·or_sign·sequential 每人一令牌一任务+approverList+rejected=false 注入/XML ${var} 变量解析）、completeTask（变量合并→MI 计数 all=清零/any=≥1/rejected 短路取消余员→组延续令牌立即出线不重入→advance 返回 {processFinished,nextTask}）、reject（changeActivityState 语义：rejected=true+全令牌任务取消+发起节点新令牌新任务；发起节点上驳回拦截）、refuse（REJECTED 终止）/terminate（CANCELED）/suspend/resume、addSign（MI 加子令牌+MI_TOTAL 重算；非 MI 加候选）、forwardSign（删旧实例不计完成+加新）、transfer（唯一强制 allowTransfer 校验+WF_TASK_TRANSFER 审计）、delegate（OWNER+DELEGATION=PENDING，complete 时 resolve 回 owner 不完成）、claim（候选校验）、predict（静态遍历+条件求值+visited 防环+branchStops 分支标记）、后置逻辑执行器（http {{var}} 替换+resultVar 回写+errorAction 双态；bean/script 记录 TODO）；轨迹全量记录 WF_ACTIVITY_INST（节点+sequenceFlow，对齐 ACT_HI_ACTINST 使高亮 completedFlowIds 可用）
+   474→  · deploy.ts：发布草稿→WF_PROC_DEPLOY 快照（IR 解析成功才允许发布、SHA-256(xml+规范化 nodeConfigs) 变更检测→400「流程数据未变化」、版本=WF_ENGINE_SEQ 与历史 MAX 兜底递增、NodeConfig 版本快照按 deployId 幂等重建、草稿 DEPLOYED_* 六字段绑定）
+   475→- 模块路由 7 文件（src/modules/engine/，924 行）：process-design（/api/v1/process-definitions 7 端点：drafts CRUD/editor/design/deploy/copy）、process-definition（/api/v1/deployed-processes 8 端点：列表/summaries/详情/XML 原文（bpmn-js 渲染）/key 版本/版本 editor/suspend·activate（SEQ 旁路键标记））、process-instance（16 端点合并三 Controller：start/分页/详情/suspend/resume/terminate/highlight（含 completedFlowIds，旧实例无 DEPLOY_ID 按 PROC_KEY 找最新 deploy 兜底）/prediction/history 我发起的/审批时间线（comment 按 NODE_KEY 队列关联活动）/变量 CRUD5+task 变量写；/history 与 /tasks 路由先于 /:id 注册避吞）、task（14 端点：todo/count/historic（finished+comment 反查已易主补充集+approveResult=最新 comment.action+currentNode 顿号连接）/detail VO（表单权限/operations/变量/候选人/comments 组装）/claim/complete/reject/refuse/transfer/delegate/add-sign/forward-sign/remind/by-instance remind（24h 限频 WF_TASK_REMIND））、category（5 端点树/平铺）、dashboard（/stats：todo/done/running/definition(latestVersion)/startedByMe+近 7 日趋势）、backend-logic（/beans 静态 registry http+script 两类）
+   476→- 临时入口 test-entry.ts（根目录，挂载 7 路由，不动 index.ts）；三次自伤修复：resolveOperations 误从 engine 导入、draft.PROC_KEY 应为 PROCESS_KEY、NODE_CONFIGS_JSON value 双重编码（parseNodeConfigs 归一 JSON.parse 字符串值）+MI 完成后延续令牌重入 userTask 重复建任务（改为立即沿默认出线）
+   477→- E2E（/tmp/t136.db=cp data/workflow-node.db，bun :8093）：全绿两套——①基础链路：启动→发起人自动 complete→经理待办→详情(字段权限 reason:VIEW)→complete→COMPLETED→高亮(3 节点+3 连线)→驳回回发起节点(新任务 assignee=1+rejected=true)→已办 2 条(approveResult)→预测→XML 视图→重复 deploy 400；②网关+会签：新草稿 design 保存→deploy v1→防重 400→amount=500 走 f4→MI 会签双任务→完一不停→完二完结 COMPLETED→amount=99999 走排他网关 bigApproval→转办 user1→非 MI 加签→refuse→REJECTED；tsc --noEmit 全仓 0 error
+   478→
+   479→Stage Summary:
+   480→- 交付：src/lib/engine/ 5 文件+src/modules/engine/ 7 文件+test-entry.ts 共 13 文件 2604 行，51 端点全部实装（非 stub），禁改文件未动、零新依赖
+   481→- 语义覆盖：C 章启动/分配/完成/MI/驳回拒绝/加签转签转办委派/催办/高亮/预测/变量/时间线闭环；缺口按 F 章留 TODO（expression·dept_head 审批人、callActivity·subProcess 透传、recall、deduplication、timeout、numberRule、groovy→js 执行、bean 反射白名单、deploy suspend 状态列）
+   482→- 待办：index.ts 接线 7 路由替换 stub（主控执行）；遗留 TODO 见上
+   483→
+   484→---
+   485→Task ID: 13-7
+   486→Agent: 迁移工程子代理（写代码）— notification 模块（含 SSE）+ example 模块 → backend-node
+   487→
+   488→Work Log:
+   489→- 精读 api-surface.md §3/§4（notification 36 端点/example 5 端点）+ Java 源码 24 文件（NotificationController/SseEmitterManager/InternalNotificationController/7 admin Controller/MessageServiceImpl/MessageDispatcher/MessageSender/TemplateService/NotificationEventService/ChannelConfigService/SubscriptionService/RetryTask/EncryptionUtil/example 6 文件）
+   490→- 用户端 src/modules/notification/messages.ts（8 端点）：列表（收件人 PENDING/SENT 反查消息 ID + keyword/category/messageType/start·end 过滤 + readStatus 回填，PageResult{total,page,size,rows}）/详情（403 非收件人非发送者）/未读数（Long→string）/已读单条（无匹配行→「消息不存在或已读」）/批量已读（body 直接 ID 数组）/toggle-read（PENDING↔SENT+SENT_AT 置空）/全部已读（仅 PENDING）/删除（只删本人收件记录）；路由 /unread-count·/read-batch·/read-all 先于 /:id 注册
+   491→- SSE src/modules/notification/sse.ts：sseAuthGuard ?token= 认证（强制 access_token）；响应头四件套+flushHeaders；内存连接表 Map<userId,Set<Response>>；心跳 25s；`event: xxx\ndata: {...}\n\n` 帧格式；req.on('close') 清理；导出 notifyUser/notifyUsers/onlineCount 供 internal/admin/工作流桥接复用
+   492→- 发送链路 src/modules/notification/internal.ts（2 端点 + 共享原语）：messageSend（MSG_MESSAGE 落库/更新 + MSG_RECIPIENT 按用户快照 username/nickname/email/phone，PENDING=未读，IN_APP 禁用时不写收件人）/dispatchMessageEvent（IN_APP 同步落库+SSE new-message 逐用户；外部渠道按 ChannelConfigService.__enabled 启停判定，启用但沙箱无网关→写 MSG_DELIVERY_RETRY PENDING+nextRetryAt=now，(recipientId,channel) PENDING 判重）/send-by-template（事件 requireEnabled→模板加载/停用校验→${var} 必填校验「缺少必填变量」→渲染 title+content{text,variables}）/send（自由内容完整 Message）；?recipientIds=1,2 与重复 key 两种 List 绑定都支持
+   493→- 管理端 src/modules/notification/admin/*.ts 7 文件 25 端点全部挂 requireNotificationAdmin（403「无权访问通知管理功能」）：subscriptions 4（裸 Map rows，行字段 condition←CONDITION_EXPR）/announcements 4（query 参数发布 PUBLIC+SYSTEM+ANNOUNCEMENT+MARKDOWN+tenantId=default，逐收件人 SSE；列表 rows[{id,title,senderId,recipientCount,createdAt}]；详情非公告 400；撤回删收件人+消息）/channels 5（固定 5 渠道+enabled+successRate（FAILED→0/PENDING→50/无记录已配置→100/else null）；enable/disable 未知 ID=R.fail(500)；config 整批覆盖+敏感键（key/secret/password/token）AES-256-GCM 加密（对齐 EncryptionUtil base64(iv+ct+tag)，env 可注入密钥）；test=站内信真实发 CHANNEL_TEST 消息+SSE、外部渠道 R.fail）/stats 1（三表 count，Long→string）/deliveries 2（recipient/channel 从 MSG_RECIPIENT 反查+空结果短路；状态=重试表 FAILED>PENDING>消息 status；retry 重走完整分发链路（Java 同语义会新增收件人记录），无收件人 R.fail）/templates 4（同租户模板码唯一；isSystem=false 强制；同事件同渠道启用模板唯一；update 系统模板仅 name/title/content±contentType/enabled、非系统另可 priority/category；toggle 翻转）/events 5（PageResult；code 正则 ^[A-Z][A-Z0-9_]{0,63}$；唯一→409；被模板/订阅规则引用→409 禁删；租户过滤 404）
+   494→- example：leave.ts 3 端点 + emp.ts 2 端点。Java LeaveBillHandler/EmpProfileHandler 无专用 @Table（BizDataService 动态表形态）→ 复用 form/dynamic-table 的 ensureTable（只 import 不改）惰性建 WF_BIZ_LEAVE_BILL/WF_BIZ_EMP_PROFILE（显式 columnType 过 validateColumns）；BizDataVO{id,data(键=表单字段 key),version,createdAt,updatedAt}；leave submit=startProcess(leave-bill,businessKey,{initiator,submitterId,manager:"manager"})→状态「待审批」，approve=先取 businessKey 再 completeTask→「已批准」，reject=terminateInstance（历史保留）→「已驳回」，状态回写走 updateGeneric 等价（直接 UPDATE+VERSION 自增乐观锁，409 冲突）；emp adjust-salary（amount 缺失 400）乐观锁改 salary、resign 置「离职」+reason
+   495→- bean 注册：backend-logic.ts 为静态 BEANS 常量且未导出注册 API（禁改文件）→ 在 leave.ts 维护同构 EXAMPLE_BIZ_BEANS registry（leaveBillHandler/empProfileHandler 两个 bean，BackendBean 同形态，含钩子+语义方法描述），emp.ts import 注册自身，模块加载即注册（tmp-test-137 暴露 /api/v1/example/beans 验证），主控接线时可并入 /api/v1/backend-logic/beans 输出
+   496→- E2E（/tmp/t137.db=cp data/workflow-node.db+wal+shm，bun :8094，tmp-test-137.ts 临时入口）：用户端 8 端点全绿（列表 total=21+readStatus、未读数 21→已读链路→0、toggle、批量/单条/全部已读、删除）；403 非 admin 精确；模板 CRUD 全绿（创建/重复 500/更新/toggle）；事件 CRUD（创建+非法 code 400）；渠道列表/enable/config 加密/test；stats 30/29/0；deliveries 聚合行+SSE 推送验证（3 秒连接内收到 connected+new-message 两帧，头 text/event-stream/no-cache/keep-alive）；internal 链路全绿（send-by-template 带 eventCode→SSE 实时推送+未读+1、SMS 渠道→MSG_DELIVERY_RETRY PENDING 入队、缺变量 400「缺少必填变量: taskName」、send 自由内容）；公告发布/列表/详情/撤回；订阅规则 CRUD（FORCE/DENY/condition）；example 全绿（submit→引擎实例+「部门经理审批」任务(assignee=manager)→approve「已批准」→二次发起→reject「已驳回」；emp 调薪/离职）
+   497→- 两次自伤修复：/tmp 测试库只 cp 主文件丢 WAL 数据→401（三件套齐拷）；sse 路由被 messagesRouter /:id 吞掉（/sse 命中 PUBLIC_PATHS 跳过鉴权后进 /:id，req.loginUser 未定义）→ 挂载顺序 sse 先于 messages + /:id 非数字参数 400 防御；ensureTable 显式 columnType（VARCHAR≤255）；updateGeneric 漏 UPDATED_AT 占位参数
+   498→- tsc --noEmit 全仓 0 error；禁改文件（index.ts/既有文件/package.json）未动、零新依赖
+   499→
+   500→Stage Summary:
+   501→- 交付 13 文件 1807 行（notification 11 + example 2 + 临时入口 tmp-test-137.ts 62 行可删），41 端点全部实装（用户端 8+SSE 1+internal 2+管理端 25+example 5）
+   502→- 遗留缺口：①外部渠道（SMS/企微/小程序/APP）无真实网关，启用后投递按「失败入重试表」沙箱语义（Java 静默跳过 vs 此处入重试表，为可观测性按任务要求取舍）；②EXAMPLE_BIZ_BEANS 与 backend-logic BEANS 需主控接线时合并（后者无注册 API）；③MSG_USER_SUBSCRIPTION 表已迁移但 Java 侧无用户端读写端点（未实现对应路由，与 Java 端点清单一致）；④RetryTask 定时扫描未移植（退避重发属后台任务，Node 版建议主控接线时用 setInterval 扫 MSG_DELIVERY_RETRY PENDING）；⑤example 动态表为最小列集预置（Java 由表单定义列配置驱动），接入 biz-data 表单定义后可由 13-5 通用链路接管
+   503→- 待办：index.ts 接线 10 路由（sse 必须在 messages 之前）由主控执行
+   504→
+   505→---
+   506→Task ID: 13-8
+   507→Agent: 主控 (Z.ai Code)
+   508→Task: 全模块接线、切换 8080、QA 回归与浏览器端到端验证（后端 Node.js 迁移正式切换）
+   509→
+   510→Work Log:
+   511→- 接线 index.ts：197 端点全量实装（auth 5 + system 30 + 数据层 70 + 工作流引擎 51 + 通知 36 + example 5），stub 退役删除；tsc 全仓 0 error
+   512→- 数据层修复：queryRows 升级三形态签名（两参 SQL 自动推断表名 + 未知表保守 Long 转换）；数据源列表补 OR type='SYSTEM' 可见性（对齐 Java findByAccessibleTenant）；SqlMetadataProbe 换 bun 1.3.x 元数据 API（columnNames/columnTypes getter 而非 columns()）；bizQuerySqlRaw fk 非空断言
+   513→- 数据库位置规范：backend-node/data/workflow-node.db（教训：移动 SQLite 必须连 -wal/-shm 一起或先 checkpoint，曾因丢 WAL 重导一次——import-h2.ts 可复现所以零损失）
+   514→- 切换 8080：pkill Java（优雅停）→ jar 改名 .migrated（旧监督器 prerequisite 失效）→ marker /home/z/tools/backend-engine-node → POST /api/portal/services → 监督器加载新代码以 bun run start 拉起 Node 为 next-server 常驻子进程（pid 29201，带看门狗自动重启）
+   515→- QA 回归：qa-explore-sql.py 9/9 通过（Task 10-b 探测语义在 Node 完整保留）；qa-sql-ds-runtime.py 端到端通过（创建/查询/清理）；前端 vitest 1065/1065 全绿（78 文件）
+   516→- agent-browser 浏览器 E2E（金链路全通）：admin 登录 → dashboard（菜单 4 组）→ 流程定义（草稿「请假审批（表单版）」已部署 v3）→ 流程中心（3 个已部署卡片）→ 发起页（deployed 详情 VO 修复 key 字段+formDefId 解析对齐 Java resolveFormDefIds；/xml 改 R<String> 信封）→ 表单渲染（请假事由/备注）→ 提交发起（实例 b512e8fa 创建，发起人节点自动完成）→ 引擎分配修复（resolveAssignment 放宽为凭 userIds 分配，对齐 Java 老配置无 type 字段）→ 存量任务一次性数据修复 → 退出 → test/123456 登录 → 待办处理 → 任务详情（审批表单+意见+通过/驳回）→ 填意见通过 → **实例 COMPLETED**（6 节点活动轨迹完整：startEvent→flow1→submitTask→flow2→managerApproval→flow3）→ 消息中心（收到新待办通知、未读 21、批量已读按钮）→ 数据源管理页 4 条全渲染 → console 无报错
+   517→- 截图：download/node-mig-process-center.png、node-mig-start-form.png、node-mig-start-form2.png、node-mig-messages.png
+   518→- 最终状态：backend=Node (8080) running / frontend=Vite (5173) running；Java 已退役（jar 保留 .migrated 备份）
+   519→
+   520→Stage Summary:
+   521→- **后端迁移完成**：Spring Boot + Flowable 8 (Java) → Node.js (bun + Express + TS + bun:sqlite) 全量切换，197 端点 1:1 对齐
+   522→- 工作流引擎为自研令牌驱动解释器（BPMN XML→IR 解析 + UEL 子集表达式 + 7 张引擎表），历史数据（16 实例/30 任务/92 轨迹/22 评论）保留原 ID 无缝衔接
+   523→- 回归基线：QA 脚本 9/9 + 端到端、前端 1065/1065、浏览器金链路全通
+   524→- 遗留 TODO（引擎低频语义，见 13-6）：expression/dept_head 分配、callActivity 子流程展开、recall 撤回、超时调度、编号规则、外部通知渠道真实发送（沙箱内按失败入重试表）
+   525→
+   526→---
+   527→Task ID: 14
+   528→Agent: 主控 (Z.ai Code) — webDevReview 巡检轮（Node 迁移后第一轮）
+   529→Task: 状态判断 + 浏览器 QA 巡检 + 引擎语义补齐（撤回/expression 分配/重试扫描）+ 我发起的 VO 修复
+   530→
+   531→Work Log:
+   532→- 状态判断：三端口全绿（3000/5173/8080），Node 后端监督器看护正常，dev.log 无错误 → 稳定期，进入功能补齐模式
+   533→- QA 巡检（上轮未覆盖页面）：系统管理 4 页（用户/角色/菜单/组织/字典）、表单列表（请假申请表 已发布 v1）、页面列表、数据源管理（查看抽屉：字段元数据 tab 回显 USERNAME/NICKNAME/STATUS 与 DB 类型编辑矩阵完整）→ 全部正常，console 无报错
+   534→- **Bug 修复**：/api/v1/process-instances 与 /history 返回裸 mapRow 行，缺前端 ProcessInstanceVO 契约字段（processDefinitionName/name/currentNode/status∈running|suspended|completed/suspended/ended）→ instView 重写为完整 VO（currentNode 取 WF_ACTIVITY_INST RUNNING userTask 节点名，新旧数据通用）——修复前「我发起的」tab 流程名称/当前节点/状态列显示异常
+   535→- **新功能 1 发起人撤回**：引擎 recallInstance（守卫：仅发起人/运行中/后续审批节点无完成记录；语义复用 reject 的 changeActivityState：取消令牌+PENDING 任务（DELETE_REASON='recall'）+新发起节点任务）+ POST /:id/recall 端点 + 前端「我发起的」tab 撤回按钮（危险态、仅 running 可见、ElMessageBox 可填说明、成功后 fetchList 刷新）；发-start_user 为空的历史数据走 initiator 变量兜底
+   536→- **新功能 2 expression 审批人**：resolveAssignment 支持 approval.expression（${var} 求值，Java 时代未实现的迁移缺口）；dept_head 因 SYS_ORGANIZATION 无主管列保留 TODO
+   537→- **新功能 3 投递重试扫描器**：retry-scanner.ts setInterval 60s（对齐 Java RetryTask）：IN_APP/APP 重新投递（收件人 SENT+SSE new-message 推送）/外部渠道沙箱直接 FAILED/失败指数退避 60s→1h 上限、超 MAX_RETRY 置 FAILED；随 index.ts 启动
+   538→- E2E 验证：我发起的 tab 列渲染正确 → 旧迁移实例（进行中@部门经理审批）点撤回 → 弹窗填说明 → API 200 返回新任务 → 落库验证（旧任务 CANCELED/recall、新任务 PENDING@submitTask 分配 admin、recalled 变量、评论记录）→ admin 待办出现「提交请假」→ UI 当前节点列实时变为「提交请假」
+   539→- 期间修复自伤：engine.ts 引用了不存在的 TASK 常量（改为字面量表名）；撤回守卫对无 START_USER 的 Flowable 历史数据 403 → initiator 变量兜底
+   540→- 回归：backend tsc 全绿；前端 vitest 1065/1065（78 文件）；browser console 无报错
+   541→
+   542→Stage Summary:
+   543→- Node 后端进入功能增强期：撤回/expression 分配/重试扫描三项迁移缺口补齐，「我发起的」契约修复
+   544→- 浏览器全链路（发起→审批→撤回→重新提交入口）验证通过，数据完整可追溯
+   545→- 遗留：dept_head 分配（需组织主管数据模型）、callActivity 子流程展开、超时调度、编号规则、外部通知渠道真实发送；下一轮建议：按 13-8 遗留清单继续 + 页面视觉细节打磨
+   546→---
+   547→Task ID: 15
+   548→Agent: 主控 (Z.ai Code) — webDevReview 巡检轮（2026-09-16 晨）
+   549→Task: 状态判断 + agent-browser 全页面 QA + 修复待办/实例 VO 契约缺口 + 新增任务超时调度器（remind/escalate）+ 待办行超时标签
+   550→
+   551→Work Log:
+   552→- 状态判断：三端口全绿（3000 门户壳 / 5173 Vite / 8080 Node 后端，marker 生效），接口冒烟通过 → QA + 功能补齐模式
+   553→- QA 巡检（agent-browser，console 0 error）：流程定义/流程中心/待办/已办/我发起的/表单列表/页面列表/数据源/消息中心/模板/渠道/订阅/发送记录/系统管理 5 页；org/dict 空表为数据状态非 bug
+   554→- **Bug 修复（Java 契约缺口）**：迁移的旧实例 PROC_NAME/START_USER/DEPLOY_ID 为空 → 待办列表显示原始 key「leave-form-flow」、编号/发起人/当前节点列全空。task.ts 重写 todoVO 对齐 TaskTodoVO 全字段（processName=deploy 快照名兜底→inst.PROC_NAME→PROC_KEY；新增 businessKey/currentNodeName/initiatorName(SYS_USER.NICKNAME)/reminded(WF_TASK_REMIND)/processDefinitionId）；historic VO 同步补齐；process-instance.ts instView 定义名走 loadDeployForInstance 兜底 + 列表 processDefinitionName 过滤条件兼容旧数据（EXISTS deploy 子查询，含 PROC_NAME/PROC_KEY 匹配）
+   555→- **运维要点**：监督器看门狗仅在 POST /api/portal/services（ensureAllServices）后才在本进程激活，GET 只读；沙箱重置后 next-server 若无人 POST，杀掉的后端不会自动复活——本轮已踩坑并确认恢复路径（pkill + POST）
+   556→- **新功能：任务超时调度器**（backend-node/src/modules/engine/timeout-scanner.ts，随 index.ts 启动，60s 周期）：扫描 PENDING 任务 × 实例 RUNNING × 节点配置 NodeConfig.timeout（设计器 UserTaskProperty 已有 duration 小时 + remind/escalate，Java 从未实现）；周期判重（WF_TASK_REMIND REMIND_FROM='timeout:*' 周期窗口，滞留跨周期会重复提醒）；remind→站内信+SSE 通知办理人；escalate→通知办理人+全部 ROLE_ADMIN（ROLE_CODE 查询）优先级 HIGH + 记 WF_TASK_COMMENT action=escalate
+   557→- 配套修正：types.ts NodeConfig 显式声明 timeout 字段；扫描器取配置用引擎既定 configMapOf(deploy)[nodeKey] 模式（nodeConfigOf/__cfg 为死代码勿用——parseBpmn 未挂 __cfg）
+   558→- **UI 增强**：todoVO 新增 overdueHours（超时已滞留小时数）；ProcessTodoPage 催办列优先渲染红色「超时 Nh」标签（title 提示），否则已催办铃铛徽标；api/task.ts TaskTodoVO 补 overdueHours 类型
+   559→- **生产链路 E2E**：真实库为演示实例配 timeout=2h escalate + 任务拨回 3h 前 → 重启后端 → 待办行显示「超时 1h」标签 → 扫描器自动触发 escalate（log: overdue=3h notified=1）→ MSG_MESSAGE#87「任务超时升级 — 请假审批（表单版）」HIGH/TIMEOUT + MSG_RECIPIENT PENDING + 意见记录 → 下一扫描周期判重不重发（count 恒 1）→ 消息中心可见该消息。截图 download/todo-overdue-tag.png、message-timeout.png
+   560→- 隔离库测试教训：tmp 脚本 process.env.BACKEND_NODE_DB 必须在进程启动前注入（bun 前缀环境变量），config 模块 import 时固化 dbPath；SQLite 三件套（-wal/-shm）一起拷
+   561→- 回归：backend tsc 0 error；前端 vitest 1065/1065（78 文件，168s）；qa-explore-sql.py 9/9；qa-sql-ds-runtime.py 端到端通过；最终三端口全绿
+   562→
+   563→Stage Summary:
+   564→- 待办/已办/我发起的/实例列表四页数据契约完全对齐 Java（旧迁移数据无缝补全显示）
+   565→- 引擎缺口清单再划掉一项：节点超时 remind/escalate 调度已上线（含周期判重与升级审计）；遗留：dept_head 分配（需 SYS_ORGANIZATION 主管数据模型，当前表无 leader 列且组织数据为空）、callActivity 子流程展开、recall 已完成、编号规则 numberRule、groovy→js 脚本执行
+   566→- 下一轮建议：①callActivity 子流程展开（引擎核心缺口）②组织机构管理页补录数据+主管字段 → 打通 dept_head ③消息中心 TIMEOUT 类型专属图标/筛选 ④门户壳（3000）增加服务重启按钮
+   567→

@@ -23,6 +23,7 @@
  *
  * procDefId 契约（13-6a）：`{KEY_}:{VERSION}:{WF_PROC_DEPLOY.ID}`。
  */
+import { randomUUID } from 'node:crypto';
 import { parseXml, rootElement, childElements, attr, type XmlEl } from './bpmn-ir';
 import { extractApprovalUserIds } from './bpmn-ir';
 import { all, one, run, getDb, type Row } from '../lib/db';
@@ -704,12 +705,13 @@ export function startProcessInstance(opts: {
     }
 
     const now = nowText();
+    // 13-8 修正：ID 为 TEXT PRIMARY KEY（保留 Flowable uuid 语义），必须显式生成
+    const piId = newId();
     run(
-      `INSERT INTO WF_PROC_INST (PROC_DEF_ID, BUSINESS_KEY, START_USER_ID, START_TIME, END_TIME, DURATION_MS, STATUS, TENANT_ID)
-       VALUES (?,?,?,NULL,NULL,NULL,'running',?)`,
-      [procDefId, businessKey, String(userId), tenant],
+      `INSERT INTO WF_PROC_INST (ID, PROC_DEF_ID, BUSINESS_KEY, START_USER_ID, START_TIME, END_TIME, DURATION_MS, STATUS, TENANT_ID)
+       VALUES (?,?,?,?,?,NULL,NULL,'running',?)`,
+      [piId, procDefId, businessKey, String(userId), now, tenant],
     );
-    const piId = String(Number(one(`SELECT last_insert_rowid() AS ID`)!['ID']));
 
     run(`INSERT INTO WF_EXEC_TOKEN (PROC_INST_ID, CURRENT_NODE, PARENT_TOKEN_ID, STATUS, SUSPENSION_STATE) VALUES (?,NULL,NULL,'active',1)`, [piId]);
 
@@ -751,14 +753,20 @@ function insertActivity(
   endTime: string | null,
   status: string,
   tenant: string,
-): number {
+): string {
   const duration = endTime != null ? Math.max(0, ts(endTime) - ts(startTime)) : null;
+  const id = newId();
   run(
-    `INSERT INTO WF_ACTIVITY_INST (PROC_INST_ID, PROC_DEF_ID, ACT_ID, ACT_NAME, ACT_TYPE, ASSIGNTEE, START_TIME, END_TIME, DURATION_MS, STATUS, TENANT_ID)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    [piId, procDefId, actId, actName, actType, assignee, startTime, endTime, duration, status, tenant],
+    `INSERT INTO WF_ACTIVITY_INST (ID, PROC_INST_ID, PROC_DEF_ID, ACT_ID, ACT_NAME, ACT_TYPE, ASSIGNTEE, START_TIME, END_TIME, DURATION_MS, STATUS, TENANT_ID)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, piId, procDefId, actId, actName, actType, assignee, startTime, endTime, duration, status, tenant],
   );
-  return Number(one(`SELECT last_insert_rowid() AS ID`)!['ID']);
+  return id;
+}
+
+/** 32-hex uuid（与 Flowable 迁移数据格式一致） */
+function newId(): string {
+  return randomUUID().replace(/-/g, '');
 }
 
 function ts(text: string): number {
@@ -868,9 +876,10 @@ function finishInstance(piId: string, endTime: string, status: 'completed' | 'te
 }
 
 /** 任务实例 + 候选人 + 活动实例（createTask 对位） */
-function createTaskInstance(model: RtModel, piId: string, node: IrNode, vars: Record<string, unknown>, tenant: string, overrideAssignee: string | null = null): number {
+function createTaskInstance(model: RtModel, piId: string, node: IrNode, vars: Record<string, unknown>, tenant: string, overrideAssignee: string | null = null): string {
   ensureTables();
   const now = nowText();
+  const taskRowId = newId();
   let assignee: string | null = null;
   const rawAssignee = node.assignee;
   if (overrideAssignee != null) {
@@ -879,11 +888,10 @@ function createTaskInstance(model: RtModel, piId: string, node: IrNode, vars: Re
     assignee = rawAssignee.trim().startsWith('${') ? resolveSimpleExpr(rawAssignee, vars) : rawAssignee.trim();
   }
   run(
-    `INSERT INTO WF_TASK_INST (PROC_INST_ID, PROC_DEF_ID, TASK_DEF_KEY, NAME, ASSIGNEE, OWNER, PRIORITY, CREATE_TIME, CLAIM_TIME, END_TIME, DURATION_MS, STATUS, TENANT_ID, FORM_KEY)
-     VALUES (?,?,?,?,?,NULL,50,?,NULL,NULL,NULL,'pending',?,?)`,
-    [piId, model.procDefId, node.id, node.name, assignee, now, tenant, node.formKey == null ? null : node.formKey],
+    `INSERT INTO WF_TASK_INST (ID, PROC_INST_ID, PROC_DEF_ID, TASK_DEF_KEY, NAME, ASSIGNEE, OWNER, PRIORITY, CREATE_TIME, CLAIM_TIME, END_TIME, DURATION_MS, STATUS, TENANT_ID, FORM_KEY)
+     VALUES (?,?,?,?,?,?,NULL,50,?,NULL,NULL,NULL,'pending',?,?)`,
+    [taskRowId, piId, model.procDefId, node.id, node.name, assignee, now, tenant, node.formKey == null ? null : node.formKey],
   );
-  const taskRowId = Number(one(`SELECT last_insert_rowid() AS ID`)!['ID']);
   // 候选人展开（flowable:candidateUsers/candidateGroups，部署期已把 userIds 字面量写进属性）
   const addCandidates = (raw: string | undefined, type: 'user' | 'group'): void => {
     if (raw == null || raw.trim() === '') return;
@@ -900,9 +908,10 @@ function createTaskInstance(model: RtModel, piId: string, node: IrNode, vars: Re
 }
 
 /** 自动完成发起人节点任务（写 submit 审批意见，与 Java 相同） */
-function autoCompleteTask(model: RtModel, piId: string, taskRowId: number, vars: Record<string, unknown>, ctx: AdvanceCtx): void {
+function autoCompleteTask(model: RtModel, piId: string, taskRowId: string, vars: Record<string, unknown>, ctx: AdvanceCtx): void {
   const now = nowText();
-  const task = one(`SELECT * FROM WF_TASK_INST WHERE ID = ?`, [taskRowId])!;
+  const task = one(`SELECT * FROM WF_TASK_INST WHERE ID = ?`, [taskRowId]);
+  if (!task) throw new EngineError(`task '${taskRowId}' not found`);
   const assignee = task['ASSIGNEE'] == null ? (vars['initiator'] == null ? null : String(vars['initiator'])) : String(task['ASSIGNEE']);
   run(`UPDATE WF_TASK_INST SET ASSIGNEE = ?, STATUS = 'completed', END_TIME = ?, DURATION_MS = ? WHERE ID = ?`, [
     assignee,

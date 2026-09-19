@@ -1,0 +1,702 @@
+    46→    46→    private final JdbcTemplate jdbcTemplate;
+    47→    47→    private final DynamicTableManager tableManager;
+    48→    48→    private final FormDefinitionService formDefService;
+    49→    49→    private final TenantProvider tenantProvider;
+    50→    50→    private final ObjectMapper objectMapper;
+    51→    51→    private final SqlQueryEngine sqlQueryEngine;
+    52→    52→
+    53→    53→    public BizDataSupport(JdbcTemplate jdbcTemplate,
+    54→    54→                          DynamicTableManager tableManager,
+    55→    55→                          FormDefinitionService formDefService,
+    56→    56→                          TenantProvider tenantProvider,
+    57→    57→                          ObjectMapper objectMapper) {
+    58→    58→        this.jdbcTemplate = jdbcTemplate;
+    59→    59→        this.tableManager = tableManager;
+    60→    60→        this.formDefService = formDefService;
+    61→    61→        this.tenantProvider = tenantProvider;
+    62→    62→        this.objectMapper = objectMapper;
+    63→    63→        this.sqlQueryEngine = new SqlQueryEngine(jdbcTemplate);
+    64→    64→    }
+    65→    65→
+    66→    66→    // ==================== 复用面：上下文/校验/查询 ====================
+    67→    67→
+    68→    68→    /**
+    69→    69→     * 加载表单运行时上下文（表名 + 列 + 子表元数据）。
+    70→    70→     */
+    71→    71→    public BizDataContext loadContext(String formKey) {
+    72→    72→        if (formKey == null || !FORM_KEY_PATTERN.matcher(formKey).matches()) {
+    73→    73→            throw new BusinessException(400, "非法表单 key: " + formKey);
+    74→    74→        }
+    75→    75→        String tableName = "wf_biz_" + formKey;
+    76→    76→        if (!tableManager.tableExists(tableName)) {
+    77→    77→            throw new BusinessException(404, "业务表单数据表不存在: " + formKey);
+    78→    78→        }
+    79→    79→        List<ColumnConfig> columns = formDefService.getBusinessColumnsByKey(formKey);
+    80→    80→        // 主表列：排除子表字段（子表字段映射独立物理表，非主表列）
+    81→    81→        List<String> keys = columns.stream()
+    82→    82→                .filter(c -> c.getSubColumns() == null || c.getSubColumns().isEmpty())
+    83→    83→                .map(ColumnConfig::getKey)
+    84→    84→                .toList();
+    85→    85→        Map<String, BizDataContext.SubTableDef> subTables = new LinkedHashMap<>();
+    86→    86→        for (ColumnConfig c : columns) {
+    87→    87→            if (c.getSubColumns() != null && !c.getSubColumns().isEmpty()) {
+    88→    88→                String mode = c.getSubMode() == null || c.getSubMode().isBlank() ? "embedded" : c.getSubMode();
+    89→    89→                List<String> subKeys = c.getSubColumns().stream().map(ColumnConfig::getKey).toList();
+    90→    90→                subTables.put(c.getKey(), new BizDataContext.SubTableDef(
+    91→    91→                        "wf_biz_" + formKey + "_" + c.getKey(), mode, c.getSubColumns(), subKeys));
+    92→    92→            }
+    93→    93→        }
+    94→    94→        return new BizDataContext(tableName, formKey, columns, keys, subTables);
+    95→    95→    }
+    96→    96→
+    97→    97→    /**
+    98→    98→     * 查询单条业务数据；不存在抛 404。
+    99→    99→     */
+   100→   100→    public BizDataVO findById(String tableName, String tenantId, BizDataContext ctx, String id) {
+   101→   101→        String sql = "SELECT * FROM " + tableName + " WHERE id = ? AND tenant_id = ?";
+   102→   102→        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, id, tenantId);
+   103→   103→        if (rows.isEmpty()) {
+   104→   104→            throw new BusinessException(404, "业务数据不存在: " + id);
+   105→   105→        }
+   106→   106→        return toVO(ctx, rows.get(0));
+   107→   107→    }
+   108→   108→
+   109→   109→    /**
+   110→   110→     * 必填字段校验。
+   111→   111→     */
+   112→   112→    public void validateRequired(List<ColumnConfig> columns, Map<String, Object> data) {
+   113→   113→        Map<String, Object> safe = data == null ? Map.of() : data;
+   114→   114→        for (ColumnConfig c : columns) {
+   115→   115→            if (c.isRequired()) {
+   116→   116→                Object v = safe.get(c.getKey());
+   117→   117→                if (v == null || (v instanceof String s && s.isBlank())) {
+   118→   118→                    throw new BusinessException(400, "必填字段不能为空: " + c.getLabel());
+   119→   119→                }
+   120→   120→            }
+   121→   121→        }
+   122→   122→    }
+   123→   123→
+   124→   124→    /**
+   125→   125→     * 遍历 data-picker 引用列：校验 id 存在并生成 {@code <key>_text} 展示缓存文本。
+   126→   126→     * 不修改原 data，返回附加字段（{@code <key>_text} → 文本）；引用值为空时返回空文本。
+   127→   127→     */
+   128→   128→    @SuppressWarnings("unchecked")
+   129→   129→    public Map<String, Object> resolvePickerValues(BizDataContext ctx, Map<String, Object> data) {
+   130→   130→        Map<String, Object> extra = new LinkedHashMap<>();
+   131→   131→        for (ColumnConfig col : ctx.columns()) {
+   132→   132→            String pickerConfig = col.getPickerConfig();
+   133→   133→            if (pickerConfig == null || pickerConfig.isBlank()) {
+   134→   134→                continue;
+   135→   135→            }
+   136→   136→            // 仅 data-picker 引用列生成冗余文本；LookupPicker 列跳过
+   137→   137→            if (!isDataPickerColumn(ctx, col)) {
+   138→   138→                continue;
+   139→   139→            }
+   140→   140→            String key = col.getKey();
+   141→   141→            Object raw = data.get(key);
+   142→   142→            String text = resolvePickerText(ctx, col, raw);
+   143→   143→            extra.put(key + "_text", text);
+   144→   144→        }
+   145→   145→        return extra;
+   146→   146→    }
+   147→   147→
+   148→   148→    /**
+   149→   149→     * 按表单 key 批量解析显示文本（resolve API 入口）。
+   150→   150→     */
+   151→   151→    public Map<String, String> resolveByFormKey(String formKey, List<String> ids, String displayField) {
+   152→   152→        BizDataContext ctx = loadContext(formKey);
+   153→   153→        String field = displayField;
+   154→   154→        if (field == null || field.isBlank()) {
+   155→   155→            field = ctx.columns().stream()
+   156→   156→                    .filter(c -> !c.isHidden() && c.getPickerConfig() == null)
+   157→   157→                    .map(ColumnConfig::getKey)
+   158→   158→                    .findFirst()
+   159→   159→                    .orElseThrow(() -> new BusinessException(400, "目标表单无可解析的显示字段"));
+   160→   160→        }
+   161→   161→        return resolveDisplayTexts(formKey, ids, field);
+   162→   162→    }
+   163→   163→
+   164→   164→    /**
+   165→   165→     * 批量解析被引用记录的显示文本（id → displayField 值）。
+   166→   166→     */
+   167→   167→    public Map<String, String> resolveDisplayTexts(String sourceFormKey, List<String> ids, String displayField) {
+   168→   168→        if (sourceFormKey == null || !FORM_KEY_PATTERN.matcher(sourceFormKey).matches()) {
+   169→   169→            throw new BusinessException(400, "非法目标表单 key: " + sourceFormKey);
+   170→   170→        }
+   171→   171→        if (ids == null || ids.isEmpty()) {
+   172→   172→            return Map.of();
+   173→   173→        }
+   174→   174→        if (displayField == null || !displayField.matches("^[a-zA-Z][a-zA-Z0-9_]{0,63}$")) {
+   175→   175→            throw new BusinessException(400, "非法显示字段: " + displayField);
+   176→   176→        }
+   177→   177→        String table = "wf_biz_" + sourceFormKey;
+   178→   178→        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+   179→   179→        String sql = "SELECT id, " + displayField + " FROM " + table
+   180→   180→                + " WHERE tenant_id = ? AND id IN (" + placeholders + ")";
+   181→   181→        List<Object> params = new ArrayList<>();
+   182→   182→        params.add(tenantProvider.getTenantId());
+   183→   183→        params.addAll(ids);
+   184→   184→
+   185→   185→        Map<String, String> result = new LinkedHashMap<>();
+   186→   186→        for (Map<String, Object> row : jdbcTemplate.queryForList(sql, params.toArray())) {
+   187→   187→            Object v = row.get(displayField);
+   188→   188→            result.put(String.valueOf(row.get("id")), v == null ? "" : String.valueOf(v));
+   189→   189→        }
+   190→   190→        return result;
+   191→   191→    }
+   192→   192→
+   193→   193→    /**
+   194→   194→     * 统计各业务表单被 dataPicker 引用的情况（引用感知）。
+   195→   195→     */
+   196→   196→    public Map<String, Map<String, Object>> countReferencedBy() {
+   197→   197→        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+   198→   198→        int page = 0;
+   199→   199→        final int size = 100;
+   200→   200→        while (true) {
+   201→   201→            Page<FormDefinition> defs = formDefService.list(null, null, "BUSINESS",
+   202→   202→                    PageRequest.of(Math.max(page, 1) - 1, size));
+   203→   203→            for (FormDefinition def : defs.getContent()) {
+   204→   204→                collectPickerRefs(def, result);
+   205→   205→            }
+   206→   206→            if (defs.getContent().isEmpty() || defs.isLast()) {
+   207→   207→                break;
+   208→   208→            }
+   209→   209→            page++;
+   210→   210→        }
+   211→   211→        return result;
+   212→   212→    }
+   213→   213→
+   214→   214→    // ==================== 通用 CRUD 委托点 ====================
+   215→   215→
+   216→   216→    /**
+   217→   217→     * 通用新增实现（不含装饰钩子链；覆盖 handler 委托此方法执行通用插入）。
+   218→   218→     */
+   219→   219→    @Transactional
+   220→   220→    public BizDataVO createGeneric(String formKey, Map<String, Object> data) {
+   221→   221→        String tenantId = tenantProvider.getTenantId();
+   222→   222→        BizDataContext ctx = loadContext(formKey);
+   223→   223→
+   224→   224→        validateRequired(ctx.columns(), data);
+   225→   225→
+   226→   226→        // data-picker 引用校验与冗余文本生成（不改原 data，返回附加字段）
+   227→   227→        Map<String, Object> merged = serializeJsonColumns(data);
+   228→   228→        merged.putAll(resolvePickerValues(ctx, merged));
+   229→   229→
+   230→   230→        BizDataQueryBuilder.SqlAndParams insert = BizDataQueryBuilder.buildInsert(
+   231→   231→                ctx.tableName(), ctx.columnKeys(), merged, tenantId);
+   232→   232→        jdbcTemplate.update(insert.sql(), insert.params().toArray());
+   233→   233→
+   234→   234→        // 子表行写入（随主表创建批量插入）
+   235→   235→        String bizId = insertedId(insert);
+   236→   236→        for (Map.Entry<String, BizDataContext.SubTableDef> e : ctx.subTables().entrySet()) {
+   237→   237→            Object raw = data.get(e.getKey());
+   238→   238→            if (raw instanceof List<?> rows) {
+   239→   239→                writeSubRows(e.getValue(), bizId, rows);
+   240→   240→            }
+   241→   241→        }
+   242→   242→
+   243→   243→        // 新行 id 由 buildInsert 内部生成，查询返回
+   244→   244→        return findById(ctx.tableName(), tenantId, ctx, bizId);
+   245→   245→    }
+   246→   246→
+   247→   247→    /**
+   248→   248→     * 通用分页查询实现。
+   249→   249→     */
+   250→   250→    public BizDataPageVO queryGeneric(String formKey, BizDataQueryRequest req) {
+   251→   251→        String tenantId = tenantProvider.getTenantId();
+   252→   252→        BizDataContext ctx = loadContext(formKey);
+   253→   253→
+   254→   254→        Map<String, Object> filters = parseFilter(req.getFilter());
+   255→   255→        // 列类型映射（key → columnType）：JSON 数组列筛选走 JSON 函数（JSON_CONTAINS/JSON_OVERLAPS）
+   256→   256→        Map<String, String> columnTypeOf = ctx.columns().stream()
+   257→   257→                .collect(Collectors.toMap(ColumnConfig::getKey,
+   258→   258→                        c -> c.getColumnType() == null ? "" : c.getColumnType().toUpperCase(), (a, b) -> a));
+   259→   259→        int page = Math.max(req.getPage(), 1);
+   260→   260→        // size <= 0 表示不分页取全部（buildSelect 跳过 LIMIT/OFFSET）；正数沿用原钳制上限
+   261→   261→        int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
+   262→   262→
+   263→   263→        try {
+   264→   264→            BizDataQueryBuilder.SqlAndParams count = BizDataQueryBuilder.buildCount(
+   265→   265→                    ctx.tableName(), ctx.columnKeys(), columnTypeOf, tenantId, filters, req.getKeyword(), req.getKeywordColumn());
+   266→   266→
+   267→   267→            BizDataQueryBuilder.SqlAndParams select = BizDataQueryBuilder.buildSelect(
+   268→   268→                    ctx.tableName(), ctx.columnKeys(), columnTypeOf, tenantId, filters,
+   269→   269→                    req.getKeyword(), req.getKeywordColumn(), req.getSort(), req.getOrder(), page - 1, size);
+   270→   270→
+   271→   271→            return sqlQueryEngine.execPage(page, size, count, select, row -> toVO(ctx, row));
+   272→   272→        } catch (IllegalArgumentException e) {
+   273→   273→            throw new BusinessException(400, e.getMessage());
+   274→   274→        }
+   275→   275→    }
+   276→   276→
+   277→   277→    /**
+   278→   278→     * config 模式分页查询实现（声明式 JOIN，含虚拟列）。
+   279→   279→     */
+   280→   280→    public BizDataPageVO queryJoinConfig(String formKey, BizDataQueryRequest req,
+   281→   281→                                         List<JoinSqlGenerator.JoinConfig> joins) {
+   282→   282→        String tenantId = tenantProvider.getTenantId();
+   283→   283→        BizDataContext ctx = loadContext(formKey);
+   284→   284→
+   285→   285→        List<JoinSqlGenerator.QueryColumn> columns = buildJoinColumns(ctx, joins);
+   286→   286→        Map<String, Object> filters = parseFilter(req.getFilter());
+   287→   287→        int page = Math.max(req.getPage(), 1);
+   288→   288→        // size <= 0 表示不分页取全部（buildSelect 跳过 LIMIT/OFFSET）；正数沿用原钳制上限
+   289→   289→        int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
+   290→   290→
+   291→   291→        try {
+   292→   292→            BizDataQueryBuilder.SqlAndParams count = JoinSqlGenerator.buildCount(
+   293→   293→                    ctx.tableName(), tenantId, joins, columns, filters, req.getKeyword(), req.getKeywordColumn());
+   294→   294→
+   295→   295→            BizDataQueryBuilder.SqlAndParams select = JoinSqlGenerator.buildSelect(
+   296→   296→                    ctx.tableName(), tenantId, joins, columns, filters,
+   297→   297→                    req.getKeyword(), req.getKeywordColumn(), req.getSort(), req.getOrder(), page - 1, size);
+   298→   298→
+   299→   299→            return sqlQueryEngine.execPage(page, size, count, select, row -> toJoinVO(ctx, joins, row));
+   300→   300→        } catch (IllegalArgumentException e) {
+   301→   301→            throw new BusinessException(400, e.getMessage());
+   302→   302→        }
+   303→   303→    }
+   304→   304→
+   305→   305→    /**
+   306→   306→     * sql 模式分页查询实现（管理员 SQL 模板包裹，运行时参数白名单透传）。
+   307→   307→     * <p>仅校验 formKey 合法性；不校验主表单物理表（管理员 SQL 独立定义，可跨表/聚合）。
+   308→   308→     */
+   309→   309→    public BizDataPageVO querySqlTemplate(String formKey, BizDataQueryRequest req, FormQueryConfig cfg) {
+   310→   310→        // SQL 类型无 formKey 时跳过校验（管理员 SQL 独立定义，不依赖表单）
+   311→   311→        if (formKey != null && !FORM_KEY_PATTERN.matcher(formKey).matches()) {
+   312→   312→            throw new BusinessException(400, "非法表单 key: " + formKey);
+   313→   313→        }
+   314→   314→        String tenantId = tenantProvider.getTenantId();
+   315→   315→        List<JoinSqlGenerator.QueryColumn> columns = toQueryColumns(cfg.columns());
+   316→   316→        Map<String, Object> filters = parseFilter(req.getFilter());
+   317→   317→        Map<String, Object> runtimeParams = parseRuntimeParams(req.getParams());
+   318→   318→        int page = Math.max(req.getPage(), 1);
+   319→   319→        // size <= 0 表示不分页取全部；正数沿用原钳制上限
+   320→   320→        int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
+   321→   321→
+   322→   322→        try {
+   323→   323→            SqlQueryEngine.WrappedQuery wq = SqlTemplateEngine.wrap(
+   324→   324→                    cfg.query(), tenantId, columns, filters, req.getKeyword(), req.getKeywordColumn(),
+   325→   325→                    req.getSort(), req.getOrder(), page, size, cfg.declaredParams(), runtimeParams);
+   326→   326→            return sqlQueryEngine.execPage(page, size, wq.count(), wq.select(),
+   327→   327→                    row -> toSqlVO(cfg.columns(), row));
+   328→   328→        } catch (IllegalArgumentException e) {
+   329→   329→            throw new BusinessException(400, e.getMessage());
+   330→   330→        }
+   331→   331→    }
+   332→   332→
+   333→   333→    /** 构建查询列映射：主表列（ref="m."+key，默认全可排可筛）+ 虚拟列（ref=alias+"."+joinField，能力取 join 声明） */
+   334→   334→    private List<JoinSqlGenerator.QueryColumn> buildJoinColumns(BizDataContext ctx,
+   335→   335→                                                                List<JoinSqlGenerator.JoinConfig> joins) {
+   336→   336→        Map<String, String> typeOf = new HashMap<>();
+   337→   337→        for (ColumnConfig c : ctx.columns()) {
+   338→   338→            typeOf.put(c.getKey(), c.getColumnType() == null ? "" : c.getColumnType().toUpperCase());
+   339→   339→        }
+   340→   340→        List<JoinSqlGenerator.QueryColumn> columns = new ArrayList<>();
+   341→   341→        for (String key : ctx.columnKeys()) {
+   342→   342→            columns.add(new JoinSqlGenerator.QueryColumn(key, "m." + key, typeOf.getOrDefault(key, ""), true, true));
+   343→   343→        }
+   344→   344→        for (JoinSqlGenerator.JoinConfig j : joins) {
+   345→   345→            columns.add(new JoinSqlGenerator.QueryColumn(j.virtualKey(), j.alias() + "." + j.joinField(),
+   346→   346→                    resolveJoinColumnType(j), j.sortable(), j.filterable()));
+   347→   347→        }
+   348→   348→        return columns;
+   349→   349→    }
+   350→   350→
+   351→   351→    /** 虚拟列类型：目标表单 joinField 的列类型，找不到 fallback "VARCHAR"（查询与 metadata 两处一致） */
+   352→   352→    private String resolveJoinColumnType(JoinSqlGenerator.JoinConfig j) {
+   353→   353→        try {
+   354→   354→            List<ColumnConfig> targetCols = formDefService.getBusinessColumnsByKey(j.targetFormKey());
+   355→   355→            if (targetCols != null) {
+   356→   356→                for (ColumnConfig c : targetCols) {
+   357→   357→                    if (j.joinField().equals(c.getKey())) {
+   358→   358→                        return c.getColumnType() == null ? "VARCHAR" : c.getColumnType().toUpperCase();
+   359→   359→                    }
+   360→   360→                }
+   361→   361→            }
+   362→   362→        } catch (BusinessException ignored) {
+   363→   363→            // 目标表单不可解析时 fallback 类型
+   364→   364→        }
+   365→   365→        return "VARCHAR";
+   366→   366→    }
+   367→   367→
+   368→   368→    /** sql 模式列映射：管理员声明列 → QueryColumn（ref=key，外层子查询输出列名） */
+   369→   369→    private List<JoinSqlGenerator.QueryColumn> toQueryColumns(List<ColumnConfig> cols) {
+   370→   370→        List<JoinSqlGenerator.QueryColumn> out = new ArrayList<>();
+   371→   371→        for (ColumnConfig c : cols) {
+   372→   372→            out.add(new JoinSqlGenerator.QueryColumn(c.getKey(), c.getKey(),
+   373→   373→                    c.getColumnType() == null ? "" : c.getColumnType().toUpperCase(),
+   374→   374→                    Boolean.TRUE.equals(c.getSortable()), Boolean.TRUE.equals(c.getFilterable())));
+   375→   375→        }
+   376→   376→        return out;
+   377→   377→    }
+   378→   378→
+   379→   379→    /** 解析运行时参数（sql 模式透传）；null/空白 → 空 Map；非法 JSON → 400 */
+   380→   380→    @SuppressWarnings("unchecked")
+   381→   381→    private Map<String, Object> parseRuntimeParams(String paramsJson) {
+   382→   382→        if (paramsJson == null || paramsJson.isBlank()) {
+   383→   383→            return Map.of();
+   384→   384→        }
+   385→   385→        try {
+   386→   386→            Map<String, Object> map = objectMapper.readValue(paramsJson, Map.class);
+   387→   387→            return map == null ? Map.of() : map;
+   388→   388→        } catch (JsonProcessingException e) {
+   389→   389→            throw new BusinessException(400, "运行时参数 params 格式非法，应为 JSON 对象: " + e.getOriginalMessage());
+   390→   390→        }
+   391→   391→    }
+   392→   392→
+   393→   393→    /**
+   394→   394→     * 通用更新实现（乐观锁；不含装饰钩子链）。
+   395→   395→     */
+   396→   396→    @Transactional
+   397→   397→    public BizDataVO updateGeneric(String formKey, String id, Map<String, Object> data, Integer version) {
+   398→   398→        String tenantId = tenantProvider.getTenantId();
+   399→   399→        BizDataContext ctx = loadContext(formKey);
+   400→   400→
+   401→   401→        validateRequired(ctx.columns(), data);
+   402→   402→        int currentVersion = version == null ? 1 : version;
+   403→   403→
+   404→   404→        Map<String, Object> merged = serializeJsonColumns(data);
+   405→   405→        merged.putAll(resolvePickerValues(ctx, merged));
+   406→   406→
+   407→   407→        BizDataQueryBuilder.SqlAndParams update = BizDataQueryBuilder.buildUpdate(
+   408→   408→                ctx.tableName(), ctx.columnKeys(), merged, tenantId, id, currentVersion);
+   409→   409→        int affected = jdbcTemplate.update(update.sql(), update.params().toArray());
+   410→   410→
+   411→   411→        if (affected == 0) {
+   412→   412→            // 区分"记录不存在"（404）与"版本冲突"（409）
+   413→   413→            List<Map<String, Object>> exists = jdbcTemplate.queryForList(
+   414→   414→                    "SELECT id, version FROM " + ctx.tableName() + " WHERE id = ? AND tenant_id = ?", id, tenantId);
+   415→   415→            if (exists.isEmpty()) {
+   416→   416→                throw new BusinessException(404, "业务数据不存在: " + id);
+   417→   417→            }
+   418→   418→            throw new BusinessException(409, "数据已被他人修改，请刷新后重试");
+   419→   419→        }
+   420→   420→
+   421→   421→        // 子表行增量 diff（仅当请求携带子表字段时）
+   422→   422→        for (Map.Entry<String, BizDataContext.SubTableDef> e : ctx.subTables().entrySet()) {
+   423→   423→            Object raw = data.get(e.getKey());
+   424→   424→            if (raw instanceof List<?> rows) {
+   425→   425→                diffSubRows(e.getValue(), id, rows);
+   426→   426→            }
+   427→   427→        }
+   428→   428→
+   429→   429→        return findById(ctx.tableName(), tenantId, ctx, id);
+   430→   430→    }
+   431→   431→
+   432→   432→    /**
+   433→   433→     * 通用删除实现（租户范围限定；不含装饰钩子链）。
+   434→   434→     */
+   435→   435→    @Transactional
+   436→   436→    public void deleteGeneric(String formKey, String id) {
+   437→   437→        String tenantId = tenantProvider.getTenantId();
+   438→   438→        BizDataContext ctx = loadContext(formKey);
+   439→   439→
+   440→   440→        // 级联删除子表行（同事务）
+   441→   441→        for (BizDataContext.SubTableDef def : ctx.subTables().values()) {
+   442→   442→            jdbcTemplate.update("DELETE FROM " + def.tableName() + " WHERE tenant_id = ? AND biz_id = ?",
+   443→   443→                    tenantId, id);
+   444→   444→        }
+   445→   445→
+   446→   446→        BizDataQueryBuilder.SqlAndParams delete = BizDataQueryBuilder.buildDelete(ctx.tableName(), tenantId, id);
+   447→   447→        int affected = jdbcTemplate.update(delete.sql(), delete.params().toArray());
+   448→   448→        if (affected == 0) {
+   449→   449→            throw new BusinessException(404, "业务数据不存在: " + id);
+   450→   450→        }
+   451→   451→    }
+   452→   452→
+   453→   453→    // ==================== 独立子表行 CRUD（subMode=dedicated 走此接口） ====================
+   454→   454→
+   455→   455→    /**
+   456→   456→     * 校验子表字段存在，返回子表定义。
+   457→   457→     */
+   458→   458→    private BizDataContext.SubTableDef requireSubTable(BizDataContext ctx, String field) {
+   459→   459→        BizDataContext.SubTableDef def = ctx.subTables().get(field);
+   460→   460→        if (def == null) {
+   461→   461→            throw new BusinessException(404, "子表字段不存在: " + field);
+   462→   462→        }
+   463→   463→        return def;
+   464→   464→    }
+   465→   465→
+   466→   466→    /**
+   467→   467→     * 校验主表行存在（404）。
+   468→   468→     */
+   469→   469→    private void requireMainRow(BizDataContext ctx, String id) {
+   470→   470→        findById(ctx.tableName(), tenantProvider.getTenantId(), ctx, id);
+   471→   471→    }
+   472→   472→
+   473→   473→    /**
+   474→   474→     * 分页查询独立子表行（sort_no 升序）。
+   475→   475→     */
+   476→   476→    public List<Map<String, Object>> listSubRows(String formKey, String id, String field) {
+   477→   477→        BizDataContext ctx = loadContext(formKey);
+   478→   478→        BizDataContext.SubTableDef def = requireSubTable(ctx, field);
+   479→   479→        requireMainRow(ctx, id);
+   480→   480→        return readSubRows(def, id);
+   481→   481→    }
+   482→   482→
+   483→   483→    /**
+   484→   484→     * 新增独立子表行（追加到末尾，sort_no 续接）。
+   485→   485→     */
+   486→   486→    public Map<String, Object> addSubRow(String formKey, String id, String field, Map<String, Object> data) {
+   487→   487→        BizDataContext ctx = loadContext(formKey);
+   488→   488→        BizDataContext.SubTableDef def = requireSubTable(ctx, field);
+   489→   489→        requireMainRow(ctx, id);
+   490→   490→        List<Map<String, Object>> rows = readSubRows(def, id);
+   491→   491→        if (rows.size() >= MAX_SUB_ROWS) {
+   492→   492→            throw new BusinessException(400, "子表行数超限（最多 " + MAX_SUB_ROWS + " 行）: " + def.tableName());
+   493→   493→        }
+   494→   494→        return insertOneSubRow(def, id, data, rows.size());
+   495→   495→    }
+   496→   496→
+   497→   497→    /**
+   498→   498→     * 更新独立子表行（乐观锁：须携带当前 version）。
+   499→   499→     */
+   500→   500→    public Map<String, Object> updateSubRow(String formKey, String id, String field, String rowId,
+   501→   501→                                            Map<String, Object> data, Integer version) {
+   502→   502→        BizDataContext ctx = loadContext(formKey);
+   503→   503→        BizDataContext.SubTableDef def = requireSubTable(ctx, field);
+   504→   504→        requireMainRow(ctx, id);
+   505→   505→
+   506→   506→        // 仅允许更新子业务列（白名单 subKeys 过滤，防注入/防篡改内部列）
+   507→   507→        Map<String, Object> safe = new LinkedHashMap<>();
+   508→   508→        for (String k : def.subKeys()) {
+   509→   509→            if (data.containsKey(k)) {
+   510→   510→                safe.put(k, data.get(k));
+   511→   511→            }
+   512→   512→        }
+   513→   513→        if (safe.isEmpty()) {
+   514→   514→            throw new BusinessException(400, "更新内容不能为空: " + field);
+   515→   515→        }
+   516→   516→
+   517→   517→        StringBuilder set = new StringBuilder();
+   518→   518→        List<Object> params = new ArrayList<>();
+   519→   519→        for (Map.Entry<String, Object> e : safe.entrySet()) {
+   520→   520→            set.append(e.getKey()).append(" = ?, ");
+   521→   521→            params.add(e.getValue());
+   522→   522→        }
+   523→   523→        set.append("version = version + 1, updated_at = NOW()");
+   524→   524→        params.add(tenantProvider.getTenantId());
+   525→   525→        params.add(id);
+   526→   526→        params.add(rowId);
+   527→   527→        params.add(version == null ? 1 : version);
+   528→   528→
+   529→   529→        int affected = jdbcTemplate.update("UPDATE " + def.tableName() + " SET " + set
+   530→   530→                + " WHERE tenant_id = ? AND biz_id = ? AND id = ? AND version = ?", params.toArray());
+   531→   531→        if (affected == 0) {
+   532→   532→            throw new BusinessException(409, "子表行已被他人修改或不存在，请刷新后重试");
+   533→   533→        }
+   534→   534→        return readSubRows(def, id).stream()
+   535→   535→                .filter(r -> rowId.equals(String.valueOf(r.get("id"))))
+   536→   536→                .findFirst()
+   537→   537→                .orElseThrow(() -> new BusinessException(404, "子表行不存在: " + rowId));
+   538→   538→    }
+   539→   539→
+   540→   540→    /**
+   541→   541→     * 删除独立子表行。
+   542→   542→     */
+   543→   543→    public void deleteSubRow(String formKey, String id, String field, String rowId) {
+   544→   544→        BizDataContext ctx = loadContext(formKey);
+   545→   545→        BizDataContext.SubTableDef def = requireSubTable(ctx, field);
+   546→   546→        requireMainRow(ctx, id);
+   547→   547→        jdbcTemplate.update("DELETE FROM " + def.tableName()
+   548→   548→                        + " WHERE tenant_id = ? AND biz_id = ? AND id = ?",
+   549→   549→                tenantProvider.getTenantId(), id, rowId);
+   550→   550→    }
+   551→   551→
+   552→   552→    // ==================== 内部工具 ====================
+   553→   553→
+   554→   554→    /**
+   555→   555→     * 解析 filter JSON 字符串为筛选 Map。空/空白返回空 Map，非法 JSON 抛 400。
+   556→   556→     */
+   557→   557→    @SuppressWarnings("unchecked")
+   558→   558→    private Map<String, Object> parseFilter(String filterJson) {
+   559→   559→        if (filterJson == null || filterJson.isBlank()) {
+   560→   560→            return Map.of();
+   561→   561→        }
+   562→   562→        try {
+   563→   563→            Map<String, Object> map = objectMapper.readValue(filterJson, Map.class);
+   564→   564→            return map == null ? Map.of() : map;
+   565→   565→        } catch (JsonProcessingException e) {
+   566→   566→            throw new BusinessException(400, "筛选参数 filter 格式非法，应为 JSON 对象: " + e.getOriginalMessage());
+   567→   567→        }
+   568→   568→    }
+   569→   569→
+   570→   570→    private String insertedId(BizDataQueryBuilder.SqlAndParams insert) {
+   571→   571→        // buildInsert 的第一个参数即生成的 UUID
+   572→   572→        return String.valueOf(insert.params().get(0));
+   573→   573→    }
+   574→   574→
+   575→   575→    /**
+   576→   576→     * 判断列是否为 data-picker 引用列（需生成 &lt;key&gt;_text 冗余文本）。
+   577→   577→     */
+   578→   578→    @SuppressWarnings("unchecked")
+   579→   579→    private boolean isDataPickerColumn(BizDataContext ctx, ColumnConfig col) {
+   580→   580→        String pickerConfig = col.getPickerConfig();
+   581→   581→        try {
+   582→   582→            Map<String, Object> picker = objectMapper.readValue(pickerConfig, Map.class);
+   583→   583→            String pickerType = picker.get("pickerType") == null ? null : String.valueOf(picker.get("pickerType"));
+   584→   584→            if ("lookupPicker".equals(pickerType)) {
+   585→   585→                return false;
+   586→   586→            }
+   587→   587→            if ("dataPicker".equals(pickerType)) {
+   588→   588→                return true;
+   589→   589→            }
+   590→   590→            // 无 pickerType 旧配置：LookupPicker 单选值=显示文本（"张三"），且无 <key>_text 冗余列 → 排除
+   591→   591→            boolean hasTextColumn = ctx.columns().stream()
+   592→   592→                    .anyMatch(c -> (col.getKey() + "_text").equals(c.getKey()));
+   593→   593→            return hasTextColumn;
+   594→   594→        } catch (JsonProcessingException e) {
+   595→   595→            return false;
+   596→   596→        }
+   597→   597→    }
+   598→   598→
+   599→   599→    @SuppressWarnings("unchecked")
+   600→   600→    private String resolvePickerText(BizDataContext ctx, ColumnConfig col, Object raw) {
+   601→   601→        try {
+   602→   602→            Map<String, Object> picker = objectMapper.readValue(col.getPickerConfig(), Map.class);
+   603→   603→            String sourceFormKey = picker.get("sourceFormKey") == null ? null : String.valueOf(picker.get("sourceFormKey"));
+   604→   604→            String displayField = picker.get("displayField") == null ? null : String.valueOf(picker.get("displayField"));
+   605→   605→            Object maxCountObj = picker.get("maxCount");
+   606→   606→
+   607→   607→            if (raw == null || String.valueOf(raw).isBlank()) {
+   608→   608→                return "";
+   609→   609→            }
+   610→   610→            // 值以 JSON 数组字符串存储（如 ["u1","u2"]；单选为 ["u1"]）
+   611→   611→            String rawStr = String.valueOf(raw);
+   612→   612→            List<String> ids;
+   613→   613→            try {
+   614→   614→                ids = objectMapper.readValue(rawStr,
+   615→   615→                        objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+   616→   616→            } catch (JsonProcessingException e) {
+   617→   617→                throw new BusinessException(400, "data-picker 引用值格式非法（需 JSON 数组）: " + col.getKey());
+   618→   618→            }
+   619→   619→            ids.removeIf(String::isBlank);
+   620→   620→            if (ids.isEmpty()) {
+   621→   621→                return "";
+   622→   622→            }
+   623→   623→            // maxCount 校验：配置了（非 null 非空）且超限 → 400
+   624→   624→            if (maxCountObj != null) {
+   625→   625→                int maxCount;
+   626→   626→                try {
+   627→   627→                    maxCount = Integer.parseInt(String.valueOf(maxCountObj));
+   628→   628→                } catch (NumberFormatException e) {
+   629→   629→                    throw new BusinessException(400, "data-picker maxCount 配置非法: " + col.getKey());
+   630→   630→                }
+   631→   631→                if (maxCount > 0 && ids.size() > maxCount) {
+   632→   632→                    throw new BusinessException(400,
+   633→   633→                            "data-picker 引用数量超出限制（最多 " + maxCount + "）: " + col.getKey());
+   634→   634→                }
+   635→   635→            }
+   636→   636→
+   637→   637→            Map<String, String> texts = resolveDisplayTexts(sourceFormKey, ids, displayField);
+   638→   638→            List<String> ordered = new ArrayList<>();
+   639→   639→            for (String id : ids) {
+   640→   640→                String t = texts.get(id);
+   641→   641→                if (t == null) {
+   642→   642→                    throw new BusinessException(400, "引用的数据不存在: " + col.getKey() + "=" + id);
+   643→   643→                }
+   644→   644→                ordered.add(t);
+   645→   645→            }
+   646→   646→            // 冗余文本同样以 JSON 数组存储（与 id 数组顺序一致）
+   647→   647→            return objectMapper.writeValueAsString(ordered);
+   648→   648→        } catch (JsonProcessingException e) {
+   649→   649→            throw new BusinessException(400, "data-picker 配置或引用值非法: " + col.getKey());
+   650→   650→        }
+   651→   651→    }
+   652→   652→
+   653→   653→    /** 解析单个表单 column_config 中的 dataPicker 引用列，聚合到 result */
+   654→   654→    @SuppressWarnings("unchecked")
+   655→   655→    private void collectPickerRefs(FormDefinition def, Map<String, Map<String, Object>> result) {
+   656→   656→        String columnConfig = def.getColumnConfig();
+   657→   657→        if (columnConfig == null || columnConfig.isBlank()) {
+   658→   658→            return;
+   659→   659→        }
+   660→   660→        try {
+   661→   661→            List<Map<String, Object>> cols = objectMapper.readValue(columnConfig, List.class);
+   662→   662→            for (Map<String, Object> col : cols) {
+   663→   663→                Object pickerConfig = col.get("pickerConfig");
+   664→   664→                if (!(pickerConfig instanceof String s) || s.isBlank()) {
+   665→   665→                    continue;
+   666→   666→                }
+   667→   667→                Map<String, Object> picker = objectMapper.readValue(s, Map.class);
+   668→   668→                Object target = picker.get("sourceFormKey");
+   669→   669→                if (target == null || String.valueOf(target).isBlank()) {
+   670→   670→                    continue;
+   671→   671→                }
+   672→   672→                String targetKey = String.valueOf(target);
+   673→   673→                Map<String, Object> entry = result.computeIfAbsent(targetKey, k -> {
+   674→   674→                    Map<String, Object> m = new LinkedHashMap<>();
+   675→   675→                    m.put("count", 0);
+   676→   676→                    m.put("referencedBy", new ArrayList<String>());
+   677→   677→                    return m;
+   678→   678→                });
+   679→   679→                entry.put("count", ((Number) entry.get("count")).intValue() + 1);
+   680→   680→                ((List<String>) entry.get("referencedBy")).add(def.getKey());
+   681→   681→            }
+   682→   682→        } catch (JsonProcessingException e) {
+   683→   683→            // 非法 column_config 跳过（发布链路已校验，此处容错）
+   684→   684→        }
+   685→   685→    }
+   686→   686→
+   687→   687→    private BizDataVO toVO(BizDataContext ctx, Map<String, Object> row) {
+   688→   688→        Map<String, Object> data = new LinkedHashMap<>();
+   689→   689→        for (ColumnConfig c : ctx.columns()) {
+   690→   690→            Object v = row.get(c.getKey());
+   691→   691→            if (v != null) {
+   692→   692→                data.put(c.getKey(), "JSON".equals(c.getColumnType()) ? deserializeJsonValue(v) : v);
+   693→   693→            }
+   694→   694→        }
+   695→   695→        // embedded 模式：附加子表行（按 sort_no 升序），保留 id 供前端 diff
+   696→   696→        for (Map.Entry<String, BizDataContext.SubTableDef> e : ctx.subTables().entrySet()) {
+   697→   697→            BizDataContext.SubTableDef def = e.getValue();
+   698→   698→            if ("embedded".equals(def.subMode())) {
+   699→   699→                data.put(e.getKey(), readSubRows(def, String.valueOf(row.get("id"))));
+   700→   700→            }
+   701→   701→        }
+   702→   702→        Integer version = asInt(row.get("version"));
+   703→   703→        LocalDateTime createdAt = asDateTime(row.get("created_at"));
+   704→   704→        LocalDateTime updatedAt = asDateTime(row.get("updated_at"));
+   705→   705→        return new BizDataVO(String.valueOf(row.get("id")), data, version, createdAt, updatedAt);
+   706→   706→    }
+   707→   707→
+   708→   708→    /** config 模式行映射：主表列（toVO 逻辑）+ 虚拟列（virtualKey → joinField 值） */
+   709→   709→    private BizDataVO toJoinVO(BizDataContext ctx, List<JoinSqlGenerator.JoinConfig> joins, Map<String, Object> row) {
+   710→   710→        BizDataVO vo = toVO(ctx, row);
+   711→   711→        Map<String, Object> data = vo.getData();
+   712→   712→        for (JoinSqlGenerator.JoinConfig j : joins) {
+   713→   713→            Object v = row.get(j.virtualKey());
+   714→   714→            if (v != null) {
+   715→   715→                data.put(j.virtualKey(), v);
+   716→   716→            }
+   717→   717→        }
+   718→   718→        return vo;
+   719→   719→    }
+   720→   720→
+   721→   721→    /**
+   722→   722→     * sql 模式行映射：外层子查询输出列全量保留（可含聚合列），绕过 BizDataVO 系统列字段的仅主表列逻辑。
+   723→   723→     * <p>输出列名与声明列（columns）的 key 做大小写不敏感对齐：匹配某声明列 key（忽略大小写）时输出声明列精确 key，
+   724→   724→     * 保证返回 key 与字段元数据一致（字段 key 可为驼峰，如探测 JDBC 列标签 hireDate，前端按配置 key 取值）；
+   725→   725→     * 未匹配列统一转小写，消除 H2 等数据库对子查询输出列名规范化为大写的影响（与声明列小写 key 约定兼容）。
+   726→   726→     */
+   727→   727→    private BizDataVO toSqlVO(List<ColumnConfig> declared, Map<String, Object> row) {
+   728→   728→        Map<String, String> keyNormalizer = new HashMap<>();
+   729→   729→        if (declared != null) {
+   730→   730→            for (ColumnConfig c : declared) {
+   731→   731→                if (c.getKey() != null && !c.getKey().isBlank()) {
+   732→   732→                    // putIfAbsent：声明列存在仅大小写不同的重名时，保留先出现的精确 key
+   733→   733→                    keyNormalizer.putIfAbsent(c.getKey().toLowerCase(), c.getKey());
+   734→   734→                }
+   735→   735→            }
+   736→   736→        }
+   737→   737→        Map<String, Object> data = new LinkedHashMap<>();
+   738→   738→        for (Map.Entry<String, Object> e : row.entrySet()) {
+   739→   739→            String lower = e.getKey().toLowerCase();
+   740→   740→            data.put(keyNormalizer.getOrDefault(lower, lower), e.getValue());
+   741→   741→        }
+   742→   742→        data.remove("version");
+   743→   743→        data.remove("created_at");
+   744→   744→        data.remove("updated_at");
+   745→   745→        data.remove("tenant_id");
+
+[showing lines 46-745 of 936; use offset=746 with limit to continue reading]

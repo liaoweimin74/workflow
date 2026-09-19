@@ -459,3 +459,26 @@ Stage Summary:
   3. SQLite 秒精度时间戳（Java 微秒），格式一致
   4. GET 405 语义偏差（Node 走 No static resource 兜底；前端从不发错方法）
   5. H2 dump 时间戳 ".0" 后缀已剥离；后续如需再导，重跑 scripts/H2Dump*.java + db:reset
+
+---
+Task ID: 13-R1
+Agent: 主控（Z.ai Code）
+Task: 会话重启灾后恢复 + 发起流程链路修复（用户问询"移植任务全部完成了吗"触发的全面核查）
+
+Work Log:
+- 核查发现第四次沙箱重置后进程全灭但文件完好：marker /home/z/tools/backend-engine-node 丢失、backend-node/frontend node_modules 丢失、jar/mvn 丢失；数据库 workflow.db + WAL 完好
+- 恢复：bun install ×2 → 重建 marker → start-services.sh 拉起 → 8080 Node/5173 Vite/3000 网关全绿
+- 数据验证：Dashboard 逐值复现（running 1/finished 15/def 2）；test 用户空菜单确认为与 Java 一致的正确行为（SYS_ROLE_MENU 仅授权 ROLE_ADMIN，种子设计如此；admin 口令 admin123）
+- 浏览器 E2E 发现 2 个严重 bug：
+  - Bug A（13-8 遗留）：WF_PROC_DEPLOY.BPMN_XML 5 行全为 38 字节乱码（H2Dump.java 用 getObject 读 CLOB/BLOB 得到对象 toString）+ CONFIG_JSON 全空 → 定义详情 500、发起页流程图加载死循环。修复：停服备份 → 从 wf_process_draft 草稿表（3 条完好 XML）按 KEY_:VERSION 精确匹配回填（2 条同 key 回退）→ 5/5 FIXED remaining-bad=0
+  - Bug B（13-8 遗留，根因级）：13-8 将 WF_PROC_INST/WF_TASK_INST/WF_ACTIVITY_INST 的 ID 改 TEXT PRIMARY KEY 后，runtime.ts 3 个 INSERT 均未显式生成 ID（SQLite TEXT PK 不强制 NOT NULL → ID 全 NULL），last_insert_rowid() 返回的数字 rowid 与 ID 列不符 → autoCompleteTask 查任务 null → "null is not an object (evaluating 'task.ASSIGNEE')" → 发起流程 500。修复：新增 newId()（32-hex uuid 对齐 Flowable 格式），三处 INSERT 显式带 ID（WF_PROC_INST/insertActivity/createTaskInstance），返回类型 number→string，autoCompleteTask 加空检查；顺带修复新实例 START_TIME 恒 NULL 问题（趋势/耗时统计）
+- E2E 闭环验证：curl 发起（200 + uuid 实例 ID + START_TIME 正确 + 发起人节点自动完成）→ test 待办出现新任务 → complete 返回 processFinished:true → 实例 completed 归档 END_TIME 写入；浏览器前端"确认发起"按钮 → toast 发起成功 + 页面跳转
+- 类型系统修复：重置后 tsconfig（noUncheckedIndexedAccess:true）+ 早期死代码（13-4/13-6 子代理半成品被 routes/ 重写替代）暴露 480 个 TS 错误；通过引用分析确定活跃闭包（index.ts+routes/**+lib/{serialize,page,params,menu-tree,sse-bus}+engine/**+db/schema.generated.ts），死代码归档至 src/_legacy/（modules/auth/db.ts/test-entry/import-h2/contract/lib/dialect/lib/engine/lib/users/db/schema.engine）并从 tsconfig exclude → typecheck 0 错误全绿
+- 最终回归：admin 看板 已办 22（=19迁移+3次发起 initiator）+进行中 3（=1迁移+2新）+已完成 16（=15迁移+1审批完结）逐值自洽；console 0 error
+
+Stage Summary:
+- Node.js 迁移（Task 13）保持完成态且经此轮深度修复后**发起→审批→归档全链路首次端到端验证通过**
+- 2 个 13-8 遗留根因级 bug 修复（BPMN XML 乱码回填、TEXT PK 显式 ID）；死代码归档后 typecheck 全绿（124 活文件零错误）
+- 已知限制更新：新发起的 leave-form-flow 若不传 manager 变量，经理审批任务 assignee=null（与 Java ${manager} 语义一致，忠实复刻非 bug）
+- 备份：workflow.db.bak-20260919 + workflow.db-wal.bak-20260919（修复前快照）
+- 巡检 cron 将重建（webDevReview 15 分钟）

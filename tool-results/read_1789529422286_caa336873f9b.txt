@@ -1,0 +1,1219 @@
+     1→package com.workflow.engine.task;
+     2→
+     3→import com.workflow.api.dto.CompleteTaskResponse;
+     4→import com.workflow.api.dto.FormConfigResult;
+     5→import com.workflow.api.dto.OperationsConfig;
+     6→import com.workflow.api.dto.TaskDetailVO;
+     7→import com.workflow.api.dto.TaskDoneFilter;
+     8→import com.workflow.api.dto.TaskDoneVO;
+     9→import com.workflow.api.dto.TaskTodoFilter;
+    10→import com.workflow.api.dto.TaskTodoVO;
+    11→import com.workflow.engine.form.mapping.FormDataMerger;
+    12→import com.workflow.engine.form.mapping.VariableMappingWriter;
+    13→import com.workflow.engine.history.entity.WfTaskComment;
+    14→import com.workflow.engine.history.repository.WfTaskCommentRepository;
+    15→import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+    16→import com.workflow.engine.process.entity.NodeConfig;
+    17→import com.workflow.engine.process.repository.NodeConfigRepository;
+    18→import com.workflow.engine.task.entity.WfTaskRemind;
+    19→import com.workflow.engine.task.repository.WfTaskRemindRepository;
+    20→import com.workflow.engine.tenant.TenantProvider;
+    21→import com.workflow.system.domain.vo.UserVO;
+    22→import com.workflow.system.service.UserService;
+    23→import org.flowable.engine.HistoryService;
+    24→import org.flowable.engine.RepositoryService;
+    25→import org.flowable.engine.RuntimeService;
+    26→import org.slf4j.Logger;
+    27→import org.slf4j.LoggerFactory;
+    28→import org.flowable.engine.history.HistoricProcessInstance;
+    29→import org.flowable.engine.repository.ProcessDefinition;
+    30→import org.flowable.engine.runtime.ProcessInstance;
+    31→import org.flowable.task.api.Task;
+    32→import org.flowable.task.api.history.HistoricTaskInstance;
+    33→import org.flowable.variable.api.history.HistoricVariableInstance;
+    34→import org.springframework.data.domain.Page;
+    35→import org.springframework.data.domain.PageImpl;
+    36→import org.springframework.data.domain.Pageable;
+    37→import org.springframework.stereotype.Service;
+    38→import org.springframework.transaction.annotation.Transactional;
+    39→
+    40→import com.fasterxml.jackson.databind.JsonNode;
+    41→import com.fasterxml.jackson.databind.ObjectMapper;
+    42→import java.time.ZoneId;
+    43→import java.time.format.DateTimeFormatter;
+    44→import java.util.*;
+    45→import java.util.function.Function;
+    46→import java.util.stream.Collectors;
+    47→
+    48→@Service
+    49→public class WorkflowTaskService {
+    50→
+    51→    private static final Logger log = LoggerFactory.getLogger(WorkflowTaskService.class);
+    52→
+    53→    private final org.flowable.engine.TaskService flowableTaskService;
+    54→    private final HistoryService historyService;
+    55→    private final TenantProvider tenantProvider;
+    56→    private final RuntimeService runtimeService;
+    57→    private final RepositoryService repositoryService;
+    58→    private final UserService userService;
+    59→    private final WfTaskCommentRepository commentRepository;
+    60→    private final WfTaskRemindRepository remindRepository;
+    61→    private final NodeConfigRepository nodeConfigRepository;
+    62→    private final InitiatorNodeResolver initiatorNodeResolver;
+    63→    private final FormDataMerger formDataMerger;
+    64→    private final VariableMappingWriter variableMappingWriter;
+    65→    private final ObjectMapper objectMapper;
+    66→
+    67→    public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
+    68→                               HistoryService historyService,
+    69→                               TenantProvider tenantProvider,
+    70→                               RuntimeService runtimeService,
+    71→                               RepositoryService repositoryService,
+    72→                               UserService userService,
+    73→                               WfTaskCommentRepository commentRepository,
+    74→                               WfTaskRemindRepository remindRepository,
+    75→                               NodeConfigRepository nodeConfigRepository,
+    76→                               InitiatorNodeResolver initiatorNodeResolver,
+    77→                               ObjectMapper objectMapper,
+    78→                               FormDataMerger formDataMerger,
+    79→                               VariableMappingWriter variableMappingWriter) {
+    80→        this.flowableTaskService = flowableTaskService;
+    81→        this.historyService = historyService;
+    82→        this.tenantProvider = tenantProvider;
+    83→        this.runtimeService = runtimeService;
+    84→        this.repositoryService = repositoryService;
+    85→        this.userService = userService;
+    86→        this.commentRepository = commentRepository;
+    87→        this.remindRepository = remindRepository;
+    88→        this.nodeConfigRepository = nodeConfigRepository;
+    89→        this.initiatorNodeResolver = initiatorNodeResolver;
+    90→        this.objectMapper = objectMapper;
+    91→        this.formDataMerger = formDataMerger;
+    92→        this.variableMappingWriter = variableMappingWriter;
+    93→    }
+    94→
+    95→    public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
+    96→        String tenantId = tenantProvider.getTenantId();
+    97→        var query = flowableTaskService.createTaskQuery()
+    98→                .taskTenantId(tenantId)
+    99→                .taskAssignee(assignee)
+   100→                .orderByTaskCreateTime()
+   101→                .desc();
+   102→
+   103→        long total = query.count();
+   104→        List<Task> content = query
+   105→                .listPage((int) pageable.getOffset(), pageable.getPageSize());
+   106→
+   107→        return new PageImpl<>(content, pageable, total);
+   108→    }
+   109→
+   110→    public Page<Task> listCandidateTasks(String userId, Pageable pageable) {
+   111→        String tenantId = tenantProvider.getTenantId();
+   112→        var query = flowableTaskService.createTaskQuery()
+   113→                .taskTenantId(tenantId)
+   114→                .taskCandidateUser(userId)
+   115→                .orderByTaskCreateTime()
+   116→                .desc();
+   117→
+   118→        long total = query.count();
+   119→        List<Task> content = query
+   120→                .listPage((int) pageable.getOffset(), pageable.getPageSize());
+   121→
+   122→        return new PageImpl<>(content, pageable, total);
+   123→    }
+   124→
+   125→    public Page<HistoricTaskInstance> listHistoricTasks(String userId, Pageable pageable) {
+   126→        String tenantId = tenantProvider.getTenantId();
+   127→        var query = historyService.createHistoricTaskInstanceQuery()
+   128→                .taskTenantId(tenantId)
+   129→                .taskAssignee(userId)
+   130→                .finished()
+   131→                .orderByHistoricTaskInstanceEndTime()
+   132→                .desc();
+   133→
+   134→        long total = query.count();
+   135→        List<HistoricTaskInstance> content = query
+   136→                .listPage((int) pageable.getOffset(), pageable.getPageSize());
+   137→
+   138→        return new PageImpl<>(content, pageable, total);
+   139→    }
+   140→
+   141→    // ==================== VO 方法 ====================
+   142→
+   143→    /**
+   144→     * 查询待办任务列表，返回 TaskTodoVO 分页（含关联字段）。
+   145→     *
+   146→     * <p>批量查询 ProcessInstance + UserService 避免 N+1。
+   147→     *
+   148→     * @param assignee 办理人
+   149→     * @param pageable 分页
+   150→     * @param filter   过滤参数（processName, initiator, createTimeStart/End）
+   151→     * @return TaskTodoVO 分页
+   152→     */
+   153→    public Page<TaskTodoVO> listTodoTasksVO(String assignee, Pageable pageable, TaskTodoFilter filter) {
+   154→        String tenantId = tenantProvider.getTenantId();
+   155→        var query = flowableTaskService.createTaskQuery()
+   156→                .taskTenantId(tenantId)
+   157→                .taskAssignee(assignee)
+   158→                .orderByTaskCreateTime()
+   159→                .desc();
+   160→
+   161→        // createTime 范围过滤（Flowable 原生支持 taskCreatedAfter/Before）
+   162→        if (filter != null) {
+   163→            if (filter.createTimeStart() != null) {
+   164→                query.taskCreatedAfter(parseDate(filter.createTimeStart()));
+   165→            }
+   166→            if (filter.createTimeEnd() != null) {
+   167→                query.taskCreatedBefore(parseDate(filter.createTimeEnd()));
+   168→            }
+   169→        }
+   170→
+   171→        long total = query.count();
+   172→        List<Task> tasks = query.listPage((int) pageable.getOffset(), pageable.getPageSize());
+   173→
+   174→        List<TaskTodoVO> vos = assembleTodoVOs(tasks);
+   175→
+   176→        // 内存过滤 processName / initiator（Flowable TaskQuery 不直接支持）
+   177→        if (filter != null) {
+   178→            vos = vos.stream()
+   179→                    .filter(vo -> matchesProcessName(vo, filter.processName()))
+   180→                    .filter(vo -> matchesInitiator(vo, filter.initiator()))
+   181→                    .toList();
+   182→        }
+   183→
+   184→        return new PageImpl<>(vos, pageable, total);
+   185→    }
+   186→
+   187→    /**
+   188→     * 查询已办任务列表，返回 TaskDoneVO 分页（含关联字段）。
+   189→     *
+   190→     * @param userId   办理人
+   191→     * @param pageable 分页
+   192→     * @param filter   过滤参数（processName, initiator, endTimeStart/End, approveResult）
+   193→     * @return TaskDoneVO 分页
+   194→     */
+   195→    public Page<TaskDoneVO> listHistoricTasksVO(String userId, Pageable pageable, TaskDoneFilter filter) {
+   196→        String tenantId = tenantProvider.getTenantId();
+   197→        var query = historyService.createHistoricTaskInstanceQuery()
+   198→                .taskTenantId(tenantId)
+   199→                .taskAssignee(userId)
+   200→                .finished()
+   201→                .orderByHistoricTaskInstanceEndTime()
+   202→                .desc();
+   203→
+   204→        // endTime 范围过滤
+   205→        if (filter != null) {
+   206→            if (filter.endTimeStart() != null) {
+   207→                query.taskCompletedAfter(parseDate(filter.endTimeStart()));
+   208→            }
+   209→            if (filter.endTimeEnd() != null) {
+   210→                query.taskCompletedBefore(parseDate(filter.endTimeEnd()));
+   211→            }
+   212→        }
+   213→
+   214→        long total = query.count();
+   215→        List<HistoricTaskInstance> tasks = new ArrayList<>(query.listPage((int) pageable.getOffset(), pageable.getPageSize()));
+   216→
+   217→        // 补充：用户操作过但未完成的任务（转办/委派/加签/转签后任务已换人），
+   218→        // 从 wf_task_comment 按 user_id 反查 taskId，也应出现在已办中
+   219→        Set<String> commentTaskIds = commentRepository.findByUserId(userId).stream()
+   220→                .map(WfTaskComment::getTaskId)
+   221→                .filter(Objects::nonNull)
+   222→                .collect(Collectors.toSet());
+   223→
+   224→        Set<String> existingTaskIds = tasks.stream()
+   225→                .map(HistoricTaskInstance::getId)
+   226→                .collect(Collectors.toSet());
+   227→
+   228→        // 只查不在已办列表中的任务（去重）
+   229→        Set<String> missingTaskIds = commentTaskIds.stream()
+   230→                .filter(id -> !existingTaskIds.contains(id))
+   231→                .collect(Collectors.toSet());
+   232→
+   233→        if (!missingTaskIds.isEmpty()) {
+   234→            List<HistoricTaskInstance> commentTasks = historyService
+   235→                    .createHistoricTaskInstanceQuery()
+   236→                    .taskTenantId(tenantId)
+   237→                    .taskIds(missingTaskIds)
+   238→                    .orderByHistoricTaskInstanceEndTime()
+   239→                    .desc()
+   240→                    .list();
+   241→            tasks.addAll(commentTasks);
+   242→        }
+   243→
+   244→        List<TaskDoneVO> vos = assembleDoneVOs(tasks);
+   245→
+   246→        // 内存过滤 processName / initiator / approveResult
+   247→        if (filter != null) {
+   248→            vos = vos.stream()
+   249→                    .filter(vo -> matchesProcessName(vo, filter.processName()))
+   250→                    .filter(vo -> matchesInitiator(vo, filter.initiator()))
+   251→                    .filter(vo -> filter.approveResult() == null || filter.approveResult().equals(vo.getApproveResult()))
+   252→                    .toList();
+   253→        }
+   254→
+   255→        // 排序：按 endTime 或 createTime 倒序
+   256→        vos = vos.stream()
+   257→                .sorted(Comparator.comparing(TaskDoneVO::getEndTime,
+   258→                        Comparator.nullsFirst(Comparator.naturalOrder())).reversed())
+   259→                .toList();
+   260→
+   261→        return new PageImpl<>(vos, pageable, Math.max(total, vos.size()));
+   262→    }
+   263→
+   264→    // ==================== VO 组装（批量查询，避免 N+1）====================
+   265→
+   266→    private List<TaskTodoVO> assembleTodoVOs(List<Task> tasks) {
+   267→        if (tasks.isEmpty()) {
+   268→            return List.of();
+   269→        }
+   270→
+   271→        // 1. 批量收集 processInstanceIds
+   272→        Set<String> processInstanceIds = tasks.stream()
+   273→                .map(Task::getProcessInstanceId)
+   274→                .filter(Objects::nonNull)
+   275→                .collect(Collectors.toSet());
+   276→
+   277→        // 2. 批量查询 ProcessInstance
+   278→        Map<String, ProcessInstance> piMap = batchQueryProcessInstances(processInstanceIds);
+   279→
+   280→        // 3. 批量收集 processDefinitionIds → 查 ProcessDefinition 名称
+   281→        Set<String> processDefinitionIds = tasks.stream()
+   282→                .map(Task::getProcessDefinitionId)
+   283→                .filter(Objects::nonNull)
+   284→                .collect(Collectors.toSet());
+   285→        Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(processDefinitionIds);
+   286→
+   287→        // 4. 批量查询 initiator 变量 + 解析用户名
+   288→        Map<String, String> initiatorMap = batchQueryInitiators(processInstanceIds, piMap);
+   289→        Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
+   290→
+   291→        // 5. 批量查询催办标记（哪些 task 已有催办记录）
+   292→        Set<String> taskIds = tasks.stream().map(Task::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+   293→        Set<String> remindedTaskIds = batchQueryRemindedTaskIds(taskIds);
+   294→
+   295→        // 6. 组装 VO
+   296→        return tasks.stream().map(task -> {
+   297→            TaskTodoVO vo = new TaskTodoVO();
+   298→            vo.setTaskId(task.getId());
+   299→            vo.setProcessInstanceId(task.getProcessInstanceId());
+   300→            vo.setProcessDefinitionId(task.getProcessDefinitionId());
+   301→            vo.setCurrentNodeName(task.getName());
+   302→            vo.setAssignee(task.getAssignee());
+   303→            if (task.getCreateTime() != null) {
+   304→                vo.setCreateTime(formatDate(task.getCreateTime()));
+   305→            }
+   306→
+   307→            ProcessInstance pi = piMap.get(task.getProcessInstanceId());
+   308→            if (pi != null) {
+   309→                vo.setBusinessKey(pi.getBusinessKey());
+   310→            }
+   311→
+   312→            ProcessDefinition pd = pdMap.get(task.getProcessDefinitionId());
+   313→            if (pd != null) {
+   314→                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+   315→            }
+   316→
+   317→            String initiator = initiatorMap.get(task.getProcessInstanceId());
+   318→            vo.setInitiator(initiator);
+   319→            vo.setInitiatorName(initiatorNameMap.get(initiator));
+   320→
+   321→            vo.setReminded(remindedTaskIds.contains(task.getId()));
+   322→
+   323→            return vo;
+   324→        }).toList();
+   325→    }
+   326→
+   327→    private List<TaskDoneVO> assembleDoneVOs(List<HistoricTaskInstance> tasks) {
+   328→        if (tasks.isEmpty()) {
+   329→            return List.of();
+   330→        }
+   331→
+   332→        // 1. 批量收集 processInstanceIds
+   333→        Set<String> processInstanceIds = tasks.stream()
+   334→                .map(HistoricTaskInstance::getProcessInstanceId)
+   335→                .filter(Objects::nonNull)
+   336→                .collect(Collectors.toSet());
+   337→
+   338→        // 2. 批量查询 HistoricProcessInstance
+   339→        Map<String, HistoricProcessInstance> piMap = batchQueryHistoricProcessInstances(processInstanceIds);
+   340→
+   341→        // 3. 批量收集 processDefinitionIds → 查 ProcessDefinition 名称
+   342→        Set<String> processDefinitionIds = tasks.stream()
+   343→                .map(HistoricTaskInstance::getProcessDefinitionId)
+   344→                .filter(Objects::nonNull)
+   345→                .collect(Collectors.toSet());
+   346→        Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(processDefinitionIds);
+   347→
+   348→        // 4. 批量查询 initiator 变量 + 解析用户名
+   349→        Map<String, String> initiatorMap = batchQueryHistoricInitiators(processInstanceIds);
+   350→        Map<String, String> initiatorNameMap = batchQueryInitiatorNames(initiatorMap.values());
+   351→
+   352→        // 4b. 批量查询审批意见（approveResult）
+   353→        Map<String, String> approveResultMap = new HashMap<>();
+   354→        for (HistoricTaskInstance task : tasks) {
+   355→            if (task.getId() == null) continue;
+   356→            List<WfTaskComment> comments = commentRepository.findByTaskId(task.getId());
+   357→            if (!comments.isEmpty()) {
+   358→                // 取最后一条操作
+   359→                approveResultMap.put(task.getId(), comments.get(comments.size() - 1).getAction());
+   360→            }
+   361→        }
+   362→
+   363→        // 4c. 批量查询流程当前待办节点（currentNode，区别于办理节点 currentNodeName）
+   364→        Map<String, String> currentNodeMap = new HashMap<>();
+   365→        for (String pid : processInstanceIds) {
+   366→            List<Task> activeTasks = flowableTaskService.createTaskQuery()
+   367→                    .processInstanceId(pid)
+   368→                    .active()
+   369→                    .list();
+   370→            if (activeTasks != null && !activeTasks.isEmpty()) {
+   371→                String names = activeTasks.stream()
+   372→                        .map(Task::getName)
+   373→                        .filter(n -> n != null && !n.isBlank())
+   374→                        .distinct()
+   375→                        .collect(Collectors.joining("、"));
+   376→                if (!names.isBlank()) {
+   377→                    currentNodeMap.put(pid, names);
+   378→                }
+   379→            }
+   380→        }
+   381→
+   382→        // 5. 组装 VO
+   383→        return tasks.stream().map(task -> {
+   384→            TaskDoneVO vo = new TaskDoneVO();
+   385→            vo.setTaskId(task.getId());
+   386→            vo.setProcessInstanceId(task.getProcessInstanceId());
+   387→            vo.setProcessDefinitionId(task.getProcessDefinitionId());
+   388→            vo.setCurrentNodeName(task.getName());
+   389→            vo.setAssignee(task.getAssignee());
+   390→            if (task.getStartTime() != null) {
+   391→                vo.setCreateTime(formatDate(task.getStartTime()));
+   392→            }
+   393→            if (task.getEndTime() != null) {
+   394→                vo.setEndTime(formatDate(task.getEndTime()));
+   395→            }
+   396→
+   397→            HistoricProcessInstance pi = piMap.get(task.getProcessInstanceId());
+   398→            if (pi != null) {
+   399→                vo.setBusinessKey(pi.getBusinessKey());
+   400→            }
+   401→
+   402→            ProcessDefinition pd = pdMap.get(task.getProcessDefinitionId());
+   403→            if (pd != null) {
+   404→                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+   405→            }
+   406→
+   407→            String initiator = initiatorMap.get(task.getProcessInstanceId());
+   408→            vo.setInitiator(initiator);
+   409→            vo.setInitiatorName(initiatorNameMap.get(initiator));
+   410→
+   411→            // approveResult: 从 wf_task_comment 取该任务的最新操作
+   412→            vo.setApproveResult(approveResultMap.get(task.getId()));
+   413→
+   414→            // currentNode: 流程当前待办节点（非办理节点）
+   415→            vo.setCurrentNode(currentNodeMap.get(task.getProcessInstanceId()));
+   416→
+   417→            return vo;
+   418→        }).toList();
+   419→    }
+   420→
+   421→    // ==================== 批量查询辅助方法 ====================
+   422→
+   423→    private Map<String, ProcessInstance> batchQueryProcessInstances(Set<String> processInstanceIds) {
+   424→        if (processInstanceIds.isEmpty()) {
+   425→            return Map.of();
+   426→        }
+   427→        List<ProcessInstance> instances = runtimeService.createProcessInstanceQuery()
+   428→                .processInstanceIds(processInstanceIds)
+   429→                .list();
+   430→        return instances.stream()
+   431→                .collect(Collectors.toMap(ProcessInstance::getId, Function.identity(), (a, b) -> a));
+   432→    }
+   433→
+   434→    private Map<String, HistoricProcessInstance> batchQueryHistoricProcessInstances(Set<String> processInstanceIds) {
+   435→        if (processInstanceIds.isEmpty()) {
+   436→            return Map.of();
+   437→        }
+   438→        List<HistoricProcessInstance> instances = historyService.createHistoricProcessInstanceQuery()
+   439→                .processInstanceIds(processInstanceIds)
+   440→                .list();
+   441→        return instances.stream()
+   442→                .collect(Collectors.toMap(HistoricProcessInstance::getId, Function.identity(), (a, b) -> a));
+   443→    }
+   444→
+   445→    private Map<String, ProcessDefinition> batchQueryProcessDefinitions(Set<String> processDefinitionIds) {
+   446→        if (processDefinitionIds.isEmpty()) {
+   447→            return Map.of();
+   448→        }
+   449→        List<ProcessDefinition> defs = repositoryService.createProcessDefinitionQuery()
+   450→                .processDefinitionIds(processDefinitionIds)
+   451→                .list();
+   452→        return defs.stream()
+   453→                .collect(Collectors.toMap(ProcessDefinition::getId, Function.identity(), (a, b) -> a));
+   454→    }
+   455→
+   456→    /**
+   457→     * 批量查询运行中流程实例的 initiator 变量。
+   458→     */
+   459→    private Map<String, String> batchQueryInitiators(Set<String> processInstanceIds,
+   460→                                                     Map<String, ProcessInstance> piMap) {
+   461→        if (processInstanceIds.isEmpty()) {
+   462→            return Map.of();
+   463→        }
+   464→        Map<String, String> result = new HashMap<>();
+   465→        for (String piId : processInstanceIds) {
+   466→            try {
+   467→                Object initiator = runtimeService.getVariable(piId, "initiator");
+   468→                if (initiator != null) {
+   469→                    result.put(piId, String.valueOf(initiator));
+   470→                }
+   471→            } catch (Exception e) {
+   472→                // 流程实例可能已结束，变量不可查
+   473→            }
+   474→        }
+   475→        return result;
+   476→    }
+   477→
+   478→    /**
+   479→     * 批量查询历史流程实例的 initiator 变量。
+   480→     */
+   481→    private Map<String, String> batchQueryHistoricInitiators(Set<String> processInstanceIds) {
+   482→        if (processInstanceIds.isEmpty()) {
+   483→            return Map.of();
+   484→        }
+   485→        Map<String, String> result = new HashMap<>();
+   486→        for (String piId : processInstanceIds) {
+   487→            try {
+   488→                HistoricVariableInstance hv = historyService.createHistoricVariableInstanceQuery()
+   489→                        .processInstanceId(piId)
+   490→                        .variableName("initiator")
+   491→                        .singleResult();
+   492→                if (hv != null && hv.getValue() != null) {
+   493→                    result.put(piId, String.valueOf(hv.getValue()));
+   494→                }
+   495→            } catch (Exception e) {
+   496→                // ignore
+   497→            }
+   498→        }
+   499→        return result;
+   500→    }
+   501→
+   502→    /**
+   503→     * 批量查询用户姓名。
+   504→     */
+   505→    private Map<String, String> batchQueryInitiatorNames(Collection<String> initiatorIds) {
+   506→        if (initiatorIds == null || initiatorIds.isEmpty()) {
+   507→            return Map.of();
+   508→        }
+   509→        List<Long> userIds = initiatorIds.stream()
+   510→                .filter(Objects::nonNull)
+   511→                .map(id -> {
+   512→                    try {
+   513→                        return Long.parseLong(id);
+   514→                    } catch (NumberFormatException e) {
+   515→                        return null;
+   516→                    }
+   517→                })
+   518→                .filter(Objects::nonNull)
+   519→                .toList();
+   520→
+   521→        if (userIds.isEmpty()) {
+   522→            return Map.of();
+   523→        }
+   524→
+   525→        List<UserVO> users = userService.findByIds(userIds);
+   526→        return users.stream()
+   527→                .collect(Collectors.toMap(
+   528→                        u -> String.valueOf(u.id()),
+   529→                        u -> u.nickname() != null ? u.nickname() : u.username(),
+   530→                        (a, b) -> a));
+   531→    }
+   532→
+   533→    // ==================== 过滤辅助 ====================
+   534→
+   535→    /**
+   536→     * 批量查询哪些 taskId 已有催办记录。
+   537→     *
+   538→     * @param taskIds 任务 ID 集合
+   539→     * @return 有催办记录的 taskId 集合
+   540→     */
+   541→    private Set<String> batchQueryRemindedTaskIds(Set<String> taskIds) {
+   542→        if (taskIds == null || taskIds.isEmpty()) {
+   543→            return Set.of();
+   544→        }
+   545→        try {
+   546→            return remindRepository.findByTaskIdIn(taskIds).stream()
+   547→                    .map(WfTaskRemind::getTaskId)
+   548→                    .collect(Collectors.toSet());
+   549→        } catch (Exception e) {
+   550→            // 查询失败，忽略（默认未催办）
+   551→            return Set.of();
+   552→        }
+   553→    }
+   554→
+   555→    private boolean matchesProcessName(TaskTodoVO vo, String processName) {
+   556→        return processName == null ||
+   557→                (vo.getProcessName() != null && vo.getProcessName().contains(processName));
+   558→    }
+   559→
+   560→    private boolean matchesInitiator(TaskTodoVO vo, String initiator) {
+   561→        return initiator == null || initiator.equals(vo.getInitiator());
+   562→    }
+   563→
+   564→    // ==================== 日期辅助 ====================
+   565→
+   566→    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+   567→
+   568→    private Date parseDate(String dateStr) {
+   569→        return Date.from(
+   570→                java.time.LocalDateTime.parse(dateStr, DATE_FORMATTER)
+   571→                        .atZone(ZoneId.systemDefault())
+   572→                        .toInstant());
+   573→    }
+   574→
+   575→    private String formatDate(Date date) {
+   576→        return DATE_FORMATTER.format(
+   577→                date.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+   578→    }
+   579→
+   580→    public Optional<Task> getTask(String taskId) {
+   581→        String tenantId = tenantProvider.getTenantId();
+   582→        Task task = flowableTaskService.createTaskQuery()
+   583→                .taskId(taskId)
+   584→                .taskTenantId(tenantId)
+   585→                .singleResult();
+   586→        return Optional.ofNullable(task);
+   587→    }
+   588→
+   589→    /**
+   590→     * 查询任务详情，返回 TaskDetailVO（含 processName/initiator/initiatorName/businessKey/formKey/variables）。
+   591→     *
+   592→     * <p>复用批量查询辅助方法，单任务场景直接调用。
+   593→     *
+   594→     * @param taskId 任务 ID
+   595→     * @return TaskDetailVO，任务不存在时返回 Optional.empty()
+   596→     */
+   597→    public Optional<TaskDetailVO> getTaskDetail(String taskId) {
+   598→        Optional<Task> taskOpt = getTask(taskId);
+   599→        if (taskOpt.isPresent()) {
+   600→            return Optional.of(buildTaskDetailFromRuntime(taskOpt.get()));
+   601→        }
+   602→
+   603→        // 运行时表没找到 → 查历史表（已办任务已完成，已从 ACT_RU_TASK 移到 ACT_HI_TASKINST）
+   604→        return getHistoricTaskDetail(taskId);
+   605→    }
+   606→
+   607→    /**
+   608→     * 从运行时 Task 构建 TaskDetailVO。
+   609→     */
+   610→    private TaskDetailVO buildTaskDetailFromRuntime(Task task) {
+   611→        TaskDetailVO vo = new TaskDetailVO();
+   612→        vo.setTaskId(task.getId());
+   613→        vo.setName(task.getName());
+   614→        vo.setDescription(task.getDescription());
+   615→        vo.setAssignee(task.getAssignee());
+   616→        // assignee userId → nickname
+   617→        if (task.getAssignee() != null) {
+   618→            Map<String, String> assigneeNameMap = batchQueryInitiatorNames(List.of(task.getAssignee()));
+   619→            vo.setAssigneeName(assigneeNameMap.get(task.getAssignee()));
+   620→        }
+   621→        vo.setProcessInstanceId(task.getProcessInstanceId());
+   622→        vo.setProcessDefinitionId(task.getProcessDefinitionId());
+   623→        if (task.getCreateTime() != null) {
+   624→            vo.setCreateTime(formatDate(task.getCreateTime()));
+   625→        }
+   626→
+   627→        // ProcessInstance → businessKey + initiator（复用 batch 查询模式）
+   628→        String processInstanceId = task.getProcessInstanceId();
+   629→        if (processInstanceId != null) {
+   630→            Set<String> piIdSet = Set.of(processInstanceId);
+   631→
+   632→            // 1. 复用 batchQueryProcessInstances 获取运行中 ProcessInstance
+   633→            Map<String, ProcessInstance> piMap = batchQueryProcessInstances(piIdSet);
+   634→            ProcessInstance pi = piMap.get(processInstanceId);
+   635→
+   636→            if (pi != null) {
+   637→                // 流程运行中：直接取 businessKey + initiator 变量
+   638→                vo.setBusinessKey(pi.getBusinessKey());
+   639→
+   640→                Map<String, String> initiatorMap = batchQueryInitiators(piIdSet, piMap);
+   641→                String initiator = initiatorMap.get(processInstanceId);
+   642→                if (initiator != null) {
+   643→                    vo.setInitiator(initiator);
+   644→                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiator));
+   645→                    vo.setInitiatorName(nameMap.get(initiator));
+   646→                }
+   647→            } else {
+   648→                // 2. 流程已结束：fallback 查 HistoricProcessInstance 获取 businessKey
+   649→                try {
+   650→                    HistoricProcessInstance hpi = historyService.createHistoricProcessInstanceQuery()
+   651→                            .processInstanceId(processInstanceId)
+   652→                            .singleResult();
+   653→                    if (hpi != null) {
+   654→                        vo.setBusinessKey(hpi.getBusinessKey());
+   655→                    }
+   656→                } catch (Exception e) {
+   657→                    // 历史查询失败，忽略
+   658→                }
+   659→
+   660→                // initiator 变量也从历史变量中获取
+   661→                Map<String, String> initiatorMap = batchQueryHistoricInitiators(piIdSet);
+   662→                String initiator = initiatorMap.get(processInstanceId);
+   663→                if (initiator != null) {
+   664→                    vo.setInitiator(initiator);
+   665→                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiator));
+   666→                    vo.setInitiatorName(nameMap.get(initiator));
+   667→                }
+   668→            }
+   669→        }
+   670→
+   671→        // ProcessDefinition → processName
+   672→        String processDefinitionId = task.getProcessDefinitionId();
+   673→        if (processDefinitionId != null) {
+   674→            Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(Set.of(processDefinitionId));
+   675→            ProcessDefinition pd = pdMap.get(processDefinitionId);
+   676→            if (pd != null) {
+   677→                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+   678→                vo.setProcessVersion(pd.getVersion());
+   679→            }
+   680→
+   681→            // formKey 从 BpmnModel 中当前任务的 UserTask 节点提取
+   682→            String formKey = extractFormKey(processDefinitionId, task.getTaskDefinitionKey());
+   683→            vo.setFormKey(formKey);
+   684→
+   685→// 判断是否为发起节点
+   686→            try {
+   687→                String initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
+   688→                vo.setIsInitiatorTask(initiatorNodeId != null
+   689→                        && initiatorNodeId.equals(task.getTaskDefinitionKey()));
+   690→            } catch (Exception e) {
+   691→                vo.setIsInitiatorTask(false);
+   692→            }
+   693→            // 表单字段权限 + 操作权限配置
+   694→            FormConfigResult formConfig = extractFormConfig(processDefinitionId, task.getTaskDefinitionKey());
+   695→            vo.setFieldPermissions(formConfig != null ? formConfig.getFieldPermissions() : null);
+   696→            vo.setOperations(extractOperations(processDefinitionId, task.getTaskDefinitionKey()));
+   697→        }
+   698→
+   699→        // variables
+   700→        try {
+   701→            Map<String, Object> variables = flowableTaskService.getVariables(task.getId());
+   702→            vo.setVariables(variables);
+   703→        } catch (Exception e) {
+   704→            vo.setVariables(Map.of());
+   705→        }
+   706→
+   707→        // mappedData：跨表单映射聚合（未配置映射时 merge 返回空 → 置 null）
+   708→        if (task.getProcessDefinitionId() != null && task.getProcessInstanceId() != null) {
+   709→            try {
+   710→                Map<String, Object> mappedData = formDataMerger.merge(
+   711→                        task.getProcessDefinitionId(), task.getTaskDefinitionKey(), task.getProcessInstanceId());
+   712→                vo.setMappedData(mappedData.isEmpty() ? null : mappedData);
+   713→            } catch (Exception e) {
+   714→                log.warn("Failed to merge mappedData for task [{}]: {}", task.getId(), e.getMessage());
+   715→                vo.setMappedData(null);
+   716→            }
+   717→        }
+   718→
+   719→        return vo;
+   720→    }
+   721→
+   722→    /**
+   723→     * 从历史表查询已完成的任务详情。
+   724→     * 用于已办详情页面——任务完成后已从 ACT_RU_TASK 移到 ACT_HI_TASKINST。
+   725→     */
+   726→    private Optional<TaskDetailVO> getHistoricTaskDetail(String taskId) {
+   727→        String tenantId = tenantProvider.getTenantId();
+   728→        HistoricTaskInstance histTask = historyService.createHistoricTaskInstanceQuery()
+   729→                .taskId(taskId)
+   730→                .taskTenantId(tenantId)
+   731→                .singleResult();
+   732→
+   733→        if (histTask == null) {
+   734→            return Optional.empty();
+   735→        }
+   736→
+   737→        TaskDetailVO vo = new TaskDetailVO();
+   738→        vo.setTaskId(histTask.getId());
+   739→        vo.setName(histTask.getName());
+   740→        vo.setDescription(histTask.getDescription());
+   741→        vo.setAssignee(histTask.getAssignee());
+   742→        // assignee userId → nickname
+   743→        if (histTask.getAssignee() != null) {
+   744→            Map<String, String> assigneeNameMap = batchQueryInitiatorNames(List.of(histTask.getAssignee()));
+   745→            vo.setAssigneeName(assigneeNameMap.get(histTask.getAssignee()));
+   746→        }
+   747→        vo.setProcessInstanceId(histTask.getProcessInstanceId());
+   748→        vo.setProcessDefinitionId(histTask.getProcessDefinitionId());
+   749→        if (histTask.getCreateTime() != null) {
+   750→            vo.setCreateTime(formatDate(histTask.getCreateTime()));
+   751→        }
+   752→
+   753→        // ProcessInstance → businessKey + initiator
+   754→        String processInstanceId = histTask.getProcessInstanceId();
+   755→        if (processInstanceId != null) {
+   756→            Set<String> piIdSet = Set.of(processInstanceId);
+   757→
+   758→            // 先查运行中实例
+   759→            Map<String, ProcessInstance> piMap = batchQueryProcessInstances(piIdSet);
+   760→            ProcessInstance pi = piMap.get(processInstanceId);
+   761→
+   762→            if (pi != null) {
+   763→                vo.setBusinessKey(pi.getBusinessKey());
+   764→                Map<String, String> initiatorMap = batchQueryInitiators(piIdSet, piMap);
+   765→                String initiator = initiatorMap.get(processInstanceId);
+   766→                if (initiator != null) {
+   767→                    vo.setInitiator(initiator);
+   768→                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiator));
+   769→                    vo.setInitiatorName(nameMap.get(initiator));
+   770→                }
+   771→            } else {
+   772→                // 流程已结束：查历史实例
+   773→                try {
+   774→                    HistoricProcessInstance hpi = historyService.createHistoricProcessInstanceQuery()
+   775→                            .processInstanceId(processInstanceId)
+   776→                            .singleResult();
+   777→                    if (hpi != null) {
+   778→                        vo.setBusinessKey(hpi.getBusinessKey());
+   779→                    }
+   780→                } catch (Exception e) {
+   781→                    // ignore
+   782→                }
+   783→
+   784→                Map<String, String> initiatorMap = batchQueryHistoricInitiators(piIdSet);
+   785→                String initiator = initiatorMap.get(processInstanceId);
+   786→                if (initiator != null) {
+   787→                    vo.setInitiator(initiator);
+   788→                    Map<String, String> nameMap = batchQueryInitiatorNames(List.of(initiator));
+   789→                    vo.setInitiatorName(nameMap.get(initiator));
+   790→                }
+   791→            }
+   792→        }
+   793→
+   794→        // ProcessDefinition → processName + formKey
+   795→        String processDefinitionId = histTask.getProcessDefinitionId();
+   796→        if (processDefinitionId != null) {
+   797→            Map<String, ProcessDefinition> pdMap = batchQueryProcessDefinitions(Set.of(processDefinitionId));
+   798→            ProcessDefinition pd = pdMap.get(processDefinitionId);
+   799→            if (pd != null) {
+   800→                vo.setProcessName(pd.getName() != null ? pd.getName() : pd.getKey());
+   801→                vo.setProcessVersion(pd.getVersion());
+   802→            }
+   803→
+   804→            String formKey = extractFormKey(processDefinitionId, histTask.getTaskDefinitionKey());
+   805→            vo.setFormKey(formKey);
+   806→
+   807→// 判断是否为发起节点
+   808→            try {
+   809→                String initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
+   810→                vo.setIsInitiatorTask(initiatorNodeId != null
+   811→                        && initiatorNodeId.equals(histTask.getTaskDefinitionKey()));
+   812→            } catch (Exception e) {
+   813→                vo.setIsInitiatorTask(false);
+   814→            }
+   815→            // 表单字段权限 + 操作权限配置（历史任务详情同样填充）
+   816→            FormConfigResult formConfig = extractFormConfig(processDefinitionId, histTask.getTaskDefinitionKey());
+   817→            vo.setFieldPermissions(formConfig != null ? formConfig.getFieldPermissions() : null);
+   818→            vo.setOperations(extractOperations(processDefinitionId, histTask.getTaskDefinitionKey()));
+   819→        }
+   820→
+   821→        // variables — 历史变量
+   822→        try {
+   823→            List<org.flowable.variable.api.history.HistoricVariableInstance> histVars =
+   824→                    historyService.createHistoricVariableInstanceQuery()
+   825→                            .processInstanceId(processInstanceId)
+   826→                            .list();
+   827→            Map<String, Object> variables = new java.util.HashMap<>();
+   828→            for (var hv : histVars) {
+   829→                variables.put(hv.getVariableName(), hv.getValue());
+   830→            }
+   831→            vo.setVariables(variables);
+   832→        } catch (Exception e) {
+   833→            vo.setVariables(Map.of());
+   834→        }
+   835→
+   836→        // mappedData：历史任务详情同样聚合（未配置映射时置 null）
+   837→        if (processDefinitionId != null && processInstanceId != null) {
+   838→            try {
+   839→                Map<String, Object> mappedData = formDataMerger.merge(
+   840→                        processDefinitionId, histTask.getTaskDefinitionKey(), processInstanceId);
+   841→                vo.setMappedData(mappedData.isEmpty() ? null : mappedData);
+   842→            } catch (Exception e) {
+   843→                log.warn("Failed to merge mappedData for historic task [{}]: {}", taskId, e.getMessage());
+   844→                vo.setMappedData(null);
+   845→            }
+   846→        }
+   847→
+   848→        return Optional.of(vo);
+   849→    }
+   850→
+   851→    /**
+   852→     * 从 BpmnModel 中提取指定 UserTask 节点的 formKey。
+   853→     *
+   854→     * @param processDefinitionId 流程定义 ID
+   855→     * @param taskDefinitionKey   任务定义键（BPMN 节点 ID）
+   856→     * @return formKey，未找到时返回 null
+   857→     */
+   858→    /**
+   859→     * 获取任务节点的表单配置。
+   860→     * <p>优先级：节点表单 > 流程默认表单。
+   861→     * 从 NodeConfig 表中查询，不再依赖 BPMN XML 中的 formKey。
+   862→     */
+   863→    private String extractFormKey(String processDefinitionId, String taskDefinitionKey) {
+   864→        FormConfigResult cfg = extractFormConfig(processDefinitionId, taskDefinitionKey);
+   865→        return cfg != null ? cfg.getFormDefId() : null;
+   866→    }
+   867→
+   868→    /**
+   869→     * 解析任务节点的表单配置（formDefId + fieldPermissions）。
+   870→     *
+   871→     * <p>解析逻辑：
+   872→     * <ol>
+   873→     *   <li>优先从节点配置（NodeConfig, nodeId=taskDefKey）读取 form.formDefId 和 form.fieldPermissions</li>
+   874→     *   <li>节点未配置 formDefId 时，从流程级配置（NodeConfig, nodeId=__PROCESS__）读取 form.formDefId 和 form.fieldPermissions</li>
+   875→     *   <li>均未配置时返回 null</li>
+   876→     * </ol>
+   877→     * 表单和字段权限作为整体从同一配置层取，不跨层合并。
+   878→     *
+   879→     * @param processDefinitionId 流程定义 ID
+   880→     * @param taskDefinitionKey   任务定义键（BPMN 节点 ID）
+   881→     * @return 表单配置，未找到时返回 null
+   882→     */
+   883→    public FormConfigResult extractFormConfig(String processDefinitionId, String taskDefinitionKey) {
+   884→        if (processDefinitionId == null || taskDefinitionKey == null) {
+   885→            return null;
+   886→        }
+   887→        try {
+   888→            // 精确匹配该部署版本的 NodeConfig 快照（部署时由当前配置复制生成）
+   889→            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
+   890→            FormConfigResult taskCfg = null;
+   891→            FormConfigResult processCfg = null;
+   892→
+   893→            for (NodeConfig nc : configs) {
+   894→                FormConfigResult cfg = parseFormConfigFromJson(nc.getConfigJson());
+   895→                if (cfg == null || cfg.getFormDefId() == null) continue;
+   896→
+   897→                if (taskDefinitionKey.equals(nc.getNodeId())) {
+   898→                    taskCfg = cfg;
+   899→                } else if ("__PROCESS__".equals(nc.getNodeId())) {
+   900→                    processCfg = cfg;
+   901→                }
+   902→            }
+   903→
+   904→            // 节点表单优先，没有则用流程默认表单
+   905→            FormConfigResult selected = taskCfg != null ? taskCfg : processCfg;
+   906→            if (selected != null && selected.getFieldPermissions() == null) {
+   907→                selected.setFieldPermissions(new HashMap<>());
+   908→            }
+   909→            return selected;
+   910→        } catch (Exception e) {
+   911→            log.warn("从 NodeConfig 解析表单配置失败", e);
+   912→            return null;
+   913→        }
+   914→    }
+   915→
+   916→    /**
+   917→     * 解析任务节点的操作权限配置。
+   918→     *
+   919→     * <p>叠加流程级与节点级配置（AND 规则）：从该部署版本的 {@code __PROCESS__} 节点配置读取
+   920→     * 流程级总控（JSON 路径 {@code approvalPolicy.operations}，未配置视为全开），从节点配置
+   921→     * （NodeConfig, nodeId=taskDefKey）读取节点级 operations，每个开关取两者的 AND。
+   922→     * 节点未配置 operations 时按节点级默认值处理。默认值：
+   923→     * <ul>
+   924→     *   <li>节点级：allowReject: true、allowTransfer: true、allowAddSign: false、allowDelegate: false</li>
+   925→     *   <li>流程级：allowReject/allowAddSign/allowTransfer/allowDelegate 均为 true</li>
+   926→     * </ul>
+   927→     *
+   928→     * @param processDefinitionId 流程定义 ID
+   929→     * @param taskDefinitionKey   任务定义键（BPMN 节点 ID）
+   930→     * @return 操作权限配置（永不为 null）
+   931→     */
+   932→    public OperationsConfig extractOperations(String processDefinitionId, String taskDefinitionKey) {
+   933→        if (processDefinitionId == null || taskDefinitionKey == null) {
+   934→            return new OperationsConfig();
+   935→        }
+   936→        try {
+   937→            // 精确匹配该部署版本的 NodeConfig 快照（与 extractFormConfig 保持一致）
+   938→            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
+   939→            // 流程级总控（__PROCESS__），未配置视为全开
+   940→            OperationsConfig processLevel = new OperationsConfig();
+   941→            boolean hasProcessLevel = false;
+   942→            for (NodeConfig nc : configs) {
+   943→                if ("__PROCESS__".equals(nc.getNodeId())) {
+   944→                    processLevel = parseProcessOperations(nc.getConfigJson());
+   945→                    hasProcessLevel = true;
+   946→                    break;
+   947→                }
+   948→            }
+   949→            // 节点级
+   950→            OperationsConfig nodeLevel = new OperationsConfig();
+   951→            for (NodeConfig nc : configs) {
+   952→                if (taskDefinitionKey.equals(nc.getNodeId())) {
+   953→                    nodeLevel = parseOperationsFromConfig(nc.getConfigJson());
+   954→                    break;
+   955→                }
+   956→            }
+   957→            if (!hasProcessLevel) {
+   958→                // 流程级全开时等价于节点级
+   959→                return nodeLevel;
+   960→            }
+   961→            // 流程级 && 节点级（AND 合并）
+   962→            OperationsConfig result = new OperationsConfig();
+   963→            result.setAllowReject(processLevel.isAllowReject() && nodeLevel.isAllowReject());
+   964→            result.setAllowAddSign(processLevel.isAllowAddSign() && nodeLevel.isAllowAddSign());
+   965→            result.setAllowTransfer(processLevel.isAllowTransfer() && nodeLevel.isAllowTransfer());
+   966→            result.setAllowDelegate(processLevel.isAllowDelegate() && nodeLevel.isAllowDelegate());
+   967→            return result;
+   968→        } catch (Exception e) {
+   969→            log.warn("从 NodeConfig 解析操作配置失败", e);
+   970→            return new OperationsConfig();
+   971→        }
+   972→    }
+   973→
+   974→    /**
+   975→     * 从 NodeConfig JSON 中解析 operations，缺失字段用默认值补全。
+   976→     */
+   977→    private OperationsConfig parseOperationsFromConfig(String configJson) {
+   978→        OperationsConfig result = new OperationsConfig();
+   979→        try {
+   980→            JsonNode json = objectMapper.readTree(configJson);
+   981→            JsonNode ops = json.get("operations");
+   982→            if (ops == null || !ops.isObject()) {
+   983→                return result;
+   984→            }
+   985→            if (ops.has("allowReject")) result.setAllowReject(ops.get("allowReject").asBoolean());
+   986→            if (ops.has("allowAddSign")) result.setAllowAddSign(ops.get("allowAddSign").asBoolean());
+   987→            if (ops.has("allowTransfer")) result.setAllowTransfer(ops.get("allowTransfer").asBoolean());
+   988→            if (ops.has("allowDelegate")) result.setAllowDelegate(ops.get("allowDelegate").asBoolean());
+   989→        } catch (Exception e) {
+   990→            log.warn("从 NodeConfig 解析 operations JSON 失败: {}", e.getMessage());
+   991→        }
+   992→        return result;
+   993→    }
+   994→
+   995→    /**
+   996→     * 从 {@code __PROCESS__} 配置解析流程级操作权限（JSON 路径 {@code approvalPolicy.operations}）。
+   997→     * 未配置 operations 时返回全开默认值。
+   998→     */
+   999→    private OperationsConfig parseProcessOperations(String configJson) {
+  1000→        OperationsConfig result = new OperationsConfig();
+  1001→        result.setAllowReject(true);
+  1002→        result.setAllowAddSign(true);
+  1003→        result.setAllowTransfer(true);
+  1004→        result.setAllowDelegate(true);
+  1005→        try {
+  1006→            JsonNode json = objectMapper.readTree(configJson);
+  1007→            JsonNode ops = json.path("approvalPolicy").path("operations");
+  1008→            if (ops.isObject()) {
+  1009→                if (ops.has("allowReject")) result.setAllowReject(ops.get("allowReject").asBoolean());
+  1010→                if (ops.has("allowAddSign")) result.setAllowAddSign(ops.get("allowAddSign").asBoolean());
+  1011→                if (ops.has("allowTransfer")) result.setAllowTransfer(ops.get("allowTransfer").asBoolean());
+  1012→                if (ops.has("allowDelegate")) result.setAllowDelegate(ops.get("allowDelegate").asBoolean());
+  1013→            }
+  1014→        } catch (Exception e) {
+  1015→            log.warn("从 __PROCESS__ 解析 operations JSON 失败: {}", e.getMessage());
+  1016→        }
+  1017→        return result;
+  1018→    }
+  1019→
+  1020→    /**
+  1021→     * 从 NodeConfig JSON 中解析完整表单配置（formDefId + fieldPermissions）。
+  1022→     *
+  1023→     * @param configJson NodeConfig 的 config_json
+  1024→     * @return 表单配置；JSON 无 form 节点或无 formDefId 时返回 null
+  1025→     */
+  1026→    private FormConfigResult parseFormConfigFromJson(String configJson) {
+  1027→        try {
+  1028→            JsonNode json = objectMapper.readTree(configJson);
+  1029→            JsonNode form = json.get("form");
+  1030→            if (form == null || !form.has("formDefId")) {
+  1031→                return null;
+  1032→            }
+  1033→            String val = form.get("formDefId").asText();
+  1034→            if (val == null || val.isEmpty()) {
+  1035→                return null;
+  1036→            }
+  1037→            FormConfigResult result = new FormConfigResult();
+  1038→            result.setFormDefId(val);
+  1039→            Map<String, String> permissions = new HashMap<>();
+  1040→            JsonNode permNode = form.get("fieldPermissions");
+  1041→            if (permNode != null && permNode.isObject()) {
+  1042→                permNode.fields().forEachRemaining(e -> permissions.put(e.getKey(), e.getValue().asText()));
+  1043→            }
+  1044→            result.setFieldPermissions(permissions);
+  1045→            return result;
+  1046→        } catch (Exception e) {
+  1047→            log.warn("从 NodeConfig 解析表单配置 JSON 失败: {}", e.getMessage());
+  1048→            return null;
+  1049→        }
+  1050→    }
+  1051→
+  1052→    @Transactional
+  1053→    public void claimTask(String taskId, String userId) {
+  1054→        flowableTaskService.claim(taskId, userId);
+  1055→    }
+  1056→
+  1057→    @Transactional
+  1058→    public void completeTask(String taskId, Map<String, Object> variables) {
+  1059→        Task task = flowableTaskService.createTaskQuery().taskId(taskId).singleResult();
+  1060→        if (task != null && task.getDelegationState() != null) {
+  1061→            flowableTaskService.resolveTask(taskId);
+  1062→        }
+  1063→        flowableTaskService.complete(taskId, variables);
+  1064→    }
+  1065→
+  1066→    /**
+  1067→     * 完成任务并返回下一个任务信息。
+  1068→     *
+  1069→     * @param taskId    任务 ID
+  1070→     * @param variables 流程变量
+  1071→     * @return 包含下一个任务信息和流程结束标志的响应
+  1072→     */
+  1073→    @Transactional
+  1074→    public CompleteTaskResponse completeTaskWithResponse(String taskId, Map<String, Object> variables) {
+  1075→        return completeTaskWithResponse(taskId, variables, null, null);
+  1076→    }
+  1077→
+  1078→    /**
+  1079→     * 完成任务并返回下一个任务信息，同时写入审批意见。
+  1080→     *
+  1081→     * @param taskId    任务 ID
+  1082→     * @param variables 流程变量
+  1083→     * @param userId    操作人 ID（用于审批意见记录）
+  1084→     * @param comment   审批意见（可为 null）
+  1085→     * @return 包含下一个任务信息和流程结束标志的响应
+  1086→     */
+  1087→    @Transactional
+  1088→    public CompleteTaskResponse completeTaskWithResponse(String taskId, Map<String, Object> variables,
+  1089→                                                          String userId, String comment) {
+  1090→        // 1. 查当前任务获取 processInstanceId
+  1091→        Task currentTask = flowableTaskService.createTaskQuery()
+  1092→                .taskId(taskId)
+  1093→                .singleResult();
+  1094→
+  1095→        if (currentTask == null) {
+  1096→            throw new IllegalStateException("Task not found: " + taskId);
+  1097→        }
+  1098→
+  1099→        String processInstanceId = currentTask.getProcessInstanceId();
+  1100→
+  1101→        // 2. 委派状态的任务需要先 resolve
+  1102→        org.flowable.task.api.DelegationState state = currentTask.getDelegationState();
+  1103→        if (state != null) {
+  1104→            flowableTaskService.resolveTask(taskId);
+  1105→        }
+  1106→
+  1107→        // 3. 完成任务
+  1108→        flowableTaskService.complete(taskId, variables);
+  1109→
+  1110→        // 3b. 流程变量映射写入（form:* 源需在任务数据流转后读取）
+  1111→        try {
+  1112→            if (currentTask.getProcessDefinitionId() != null) {
+  1113→                variableMappingWriter.write(currentTask.getProcessDefinitionId(), processInstanceId);
+  1114→            }
+  1115→        } catch (Exception e) {
+  1116→            log.warn("Failed to write variable mappings after complete task [{}]: {}", taskId, e.getMessage());
+  1117→        }
+  1118→
+  1119→        // 4. 写入审批意见
+  1120→        if (userId != null) {
+  1121→            saveTaskComment(taskId, processInstanceId, userId, "approve", comment);
+  1122→        }
+  1123→
+  1124→        // 4. 查流程是否仍在运行
+  1125→        ProcessInstance runningInstance = runtimeService.createProcessInstanceQuery()
+  1126→                .processInstanceId(processInstanceId)
+  1127→                .singleResult();
+  1128→
+  1129→        boolean processFinished = (runningInstance == null);
+  1130→
+  1131→        // 5. 如果流程未结束，查下一个任务
+  1132→        String nextTaskId = null;
+  1133→        String nextTaskName = null;
+  1134→        String nextTaskAssignee = null;
+  1135→        String nextTaskDefinitionKey = null;
+  1136→
+  1137→        if (!processFinished) {
+  1138→            Task nextTask = flowableTaskService.createTaskQuery()
+  1139→                    .processInstanceId(processInstanceId)
+  1140→                    .singleResult();
+  1141→
+  1142→            if (nextTask != null) {
+  1143→                nextTaskId = nextTask.getId();
+  1144→                nextTaskName = nextTask.getName();
+  1145→                nextTaskAssignee = nextTask.getAssignee();
+  1146→                nextTaskDefinitionKey = nextTask.getTaskDefinitionKey();
+  1147→            }
+  1148→        }
+  1149→
+  1150→        return CompleteTaskResponse.builder()
+  1151→                .processInstanceId(processInstanceId)
+  1152→                .processFinished(processFinished)
+  1153→                .nextTaskId(nextTaskId)
+  1154→                .nextTaskName(nextTaskName)
+  1155→                .nextTaskAssignee(nextTaskAssignee)
+  1156→                .nextTaskDefinitionKey(nextTaskDefinitionKey)
+  1157→                .build();
+  1158→    }
+  1159→
+  1160→    @Transactional
+  1161→    public void delegateTask(String taskId, String userId) {
+  1162→        flowableTaskService.delegateTask(taskId, userId);
+  1163→    }
+  1164→
+  1165→    /**
+  1166→     * 委派任务并写入审批意见。
+  1167→     *
+  1168→     * @param taskId    任务 ID
+  1169→     * @param delegateTo 被委派人
+  1170→     * @param fromUser  委派人（操作人）
+  1171→     * @param comment   委派说明
+  1172→     */
+  1173→    @Transactional
+  1174→    public void delegateTaskWithComment(String taskId, String delegateTo, String fromUser, String comment) {
+  1175→        // 1. 查询任务获取 processInstanceId
+  1176→        Task task = flowableTaskService.createTaskQuery()
+  1177→                .taskId(taskId)
+  1178→                .singleResult();
+  1179→
+  1180→        if (task == null) {
+  1181→            throw new IllegalStateException("Task not found: " + taskId);
+  1182→        }
+  1183→
+  1184→        // 2. 执行委派
+  1185→        flowableTaskService.delegateTask(taskId, delegateTo);
+  1186→
+  1187→        // 3. 写入审批意见
+  1188→        if (fromUser != null) {
+  1189→            saveTaskComment(taskId, task.getProcessInstanceId(), fromUser, "delegate", comment, delegateTo);
+  1190→        }
+  1191→    }
+  1192→
+  1193→    // ==================== 审批意见写入辅助 ====================
+  1194→
+  1195→    /**
+  1196→     * 保存审批意见到 wf_task_comment 表。
+  1197→     */
+  1198→    public void saveTaskComment(String taskId, String processInstanceId, String userId,
+  1199→                         String action, String comment) {
+  1200→        saveTaskComment(taskId, processInstanceId, userId, action, comment, null);
+  1201→    }
+  1202→
+  1203→    /**
+  1204→     * 保存审批意见到 wf_task_comment 表（带目标人）。
+  1205→     */
+  1206→    public void saveTaskComment(String taskId, String processInstanceId, String userId,
+  1207→                         String action, String comment, String targetUserId) {
+  1208→        WfTaskComment record = new WfTaskComment();
+  1209→        record.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
+  1210→        record.setTenantId(tenantProvider.getTenantId());
+  1211→        record.setTaskId(taskId);
+  1212→        record.setProcessInstanceId(processInstanceId);
+  1213→        record.setUserId(userId);
+  1214→        record.setAction(action);
+  1215→        record.setComment(comment);
+  1216→        record.setTargetUserId(targetUserId);
+  1217→        commentRepository.save(record);
+  1218→    }
+  1219→}

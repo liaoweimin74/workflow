@@ -1,0 +1,747 @@
+     1→<script lang="ts">
+     2→// ----- 可视化查询构建组件 -----
+     3→// 属性：modelValue（VisualQueryConfig）、params（运行时参数）、tables（可选表列表）、tableFields（表名→字段名列表）、disabled
+     4→// 事件：update:modelValue、update:params
+     5→// 别名规则：主表固定 m；目标表取表名去 wf_(biz_)? 前缀首字母，冲突时追加序号（c→c1→c2，自关联/同表多次关联由别名区分）
+     6→// 目标表下拉不排除主表/已选表（自关联与同表多次关联为合法场景），仅以「主表/已关联」提示占用情况
+     7→// 选择列：由 主表字段多选 + 各 JOIN 目标表字段多选 驱动，效果写入 selectColumns（别名.字段），选择列区以 tag 展示可删除
+     8→// 筛选/排序：表名下拉（主表 + JOIN 目标表）+ 字段名下拉，组装为 别名.字段 存于 column
+     9→export interface JoinClause {
+    10→  alias: string
+    11→  targetTable: string
+    12→  joinType: string
+    13→  on: string
+    14→  columns: string[]
+    15→}
+    16→export interface WhereCondition {
+    17→  column: string
+    18→  op: string
+    19→  value: string
+    20→}
+    21→export interface OrderClause {
+    22→  column: string
+    23→  order: string
+    24→}
+    25→export interface VisualQueryConfig {
+    26→  mainTable: string
+    27→  mainAlias: string
+    28→  joins: JoinClause[]
+    29→  selectColumns: string[]
+    30→  selectColumnsInput: string
+    31→  where: WhereCondition[]
+    32→  orderBy: OrderClause[]
+    33→}
+    34→
+    35→/** 主表别名固定值 */
+    36→export const MAIN_ALIAS = 'm'
+    37→
+    38→/** 目标表别名：表名去 wf_(biz_)? 前缀取首字母小写，与 used 冲突时追加序号 */
+    39→export function deriveJoinAlias(targetTable: string, used: string[]): string {
+    40→  const base = (targetTable || '').replace(/^wf_(biz_)?/, '').trim()
+    41→  const first = base ? base[0].toLowerCase() : 'j'
+    42→  let alias = first
+    43→  let i = 1
+    44→  while (used.includes(alias)) {
+    45→    alias = first + i++
+    46→  }
+    47→  return alias
+    48→}
+    49→
+    50→/** 组装 ON 条件：主表字段 = 目标表字段（均带别名限定） */
+    51→export function buildJoinOn(mainAlias: string, targetAlias: string, mainField: string, targetField: string): string {
+    52→  return `${mainAlias}.${mainField} = ${targetAlias}.${targetField}`
+    53→}
+    54→
+    55→/** 某表在目标表下拉中的占用提示：主表 → 「主表」，其他 JOIN 行已选 → 「已关联」；不限制选择（自关联/同表多次关联是合法 SQL 场景） */
+    56→export type JoinTableHint = '' | '主表' | '已关联'
+    57→export function joinTableHint(table: string, mainTable: string, joins: JoinClause[], skipIdx: number): JoinTableHint {
+    58→  if (!table) return ''
+    59→  if (table === mainTable) return '主表'
+    60→  return joins.some((j, i) => i !== skipIdx && j.targetTable === table) ? '已关联' : ''
+    61→}
+    62→
+    63→/** 解析 ON 条件字符串 → { mainField, targetField }。无别名限定/无法识别时默认左侧为主表字段 */
+    64→export function parseJoinOn(on: string, mainAlias: string): { mainField: string; targetField: string } {
+    65→  const eq = (on || '').split('=').map((s) => s.trim())
+    66→  if (eq.length !== 2) return { mainField: '', targetField: '' }
+    67→  const [left, right] = eq
+    68→  const bare = (side: string) => (side.includes('.') ? side.split('.').slice(1).join('.') : side)
+    69→  const rightAlias = right.includes('.') ? right.split('.')[0] : ''
+    70→  if (rightAlias === mainAlias) {
+    71→    // 右侧带主表别名 → 右侧为主表字段（兼容历史格式 c.id = m.customer_id）
+    72→    return { mainField: bare(right), targetField: bare(left) }
+    73→  }
+    74→  return { mainField: bare(left), targetField: bare(right) }
+    75→}
+    76→</script>
+    77→
+    78→<script setup lang="ts">
+    79→import { ref, computed, watch } from 'vue'
+    80→import { Delete, Plus } from '@element-plus/icons-vue'
+    81→
+    82→const props = withDefaults(
+    83→  defineProps<{
+    84→    modelValue: VisualQueryConfig
+    85→    params?: string[]
+    86→    tables?: string[]
+    87→    tableFields?: Record<string, string[]>
+    88→    disabled?: boolean
+    89→  }>(),
+    90→  { params: () => [], tables: () => [], tableFields: () => ({}), disabled: false }
+    91→)
+    92→
+    93→const emit = defineEmits<{
+    94→  (e: 'update:modelValue', value: VisualQueryConfig): void
+    95→  (e: 'update:params', value: string[]): void
+    96→}>()
+    97→
+    98→const WHERE_OPS = ['=', '!=', '>', '>=', '<', '<=', 'LIKE', 'IN']
+    99→
+   100→function deepClone(v: VisualQueryConfig): VisualQueryConfig {
+   101→  return JSON.parse(JSON.stringify(v)) as VisualQueryConfig
+   102→}
+   103→
+   104→// 本地副本：props 变化时整体替换，本地修改后 emit 新对象
+   105→const local = ref<VisualQueryConfig>(deepClone(props.modelValue))
+   106→watch(
+   107→  () => props.modelValue,
+   108→  (v) => {
+   109→    local.value = deepClone(v)
+   110→  },
+   111→  { deep: true }
+   112→)
+   113→
+   114→/** 每行 JOIN 的 on 字段下拉值（不入模型，仅 UI 编辑态） */
+   115→const rowFields = ref<{ mainField: string; targetField: string }[]>([])
+   116→function syncRowFields() {
+   117→  while (rowFields.value.length < local.value.joins.length) {
+   118→    const on = local.value.joins[rowFields.value.length].on || ''
+   119→    const parsed = parseJoinOn(on, MAIN_ALIAS)
+   120→    rowFields.value.push({ mainField: parsed.mainField, targetField: parsed.targetField })
+   121→  }
+   122→  while (rowFields.value.length > local.value.joins.length) {
+   123→    rowFields.value.pop()
+   124→  }
+   125→}
+   126→watch(
+   127→  () => local.value.joins,
+   128→  () => syncRowFields(),
+   129→  { deep: true, immediate: true }
+   130→)
+   131→
+   132→// ----- 别名 ↔ 表名 映射（筛选/排序表名下拉用）-----
+   133→function aliasOfTable(table: string): string {
+   134→  if (!table) return ''
+   135→  if (table === local.value.mainTable) return MAIN_ALIAS
+   136→  const j = local.value.joins.find((jj) => jj.targetTable === table)
+   137→  return j ? j.alias : ''
+   138→}
+   139→function tableOfAlias(alias: string): string {
+   140→  if (!alias) return ''
+   141→  if (alias === MAIN_ALIAS) return local.value.mainTable
+   142→  const j = local.value.joins.find((jj) => jj.alias === alias)
+   143→  return j ? j.targetTable : ''
+   144→}
+   145→function splitColumn(column: string): { alias: string; field: string } {
+   146→  const i = (column || '').indexOf('.')
+   147→  if (i < 0) return { alias: '', field: column || '' }
+   148→  return { alias: column.slice(0, i), field: column.slice(i + 1) }
+   149→}
+   150→/** 表名下拉选项：主表 + 各 JOIN 目标表 */
+   151→const tableOptions = computed(() => {
+   152→  const opts: string[] = []
+   153→  if (local.value.mainTable) opts.push(local.value.mainTable)
+   154→  for (const j of local.value.joins) {
+   155→    if (j.targetTable && !opts.includes(j.targetTable)) opts.push(j.targetTable)
+   156→  }
+   157→  return opts
+   158→})
+   159→
+   160→// ----- 筛选 UI 状态：每行 where 的 表名/字段名（column 即 别名.字段）-----
+   161→interface ColUI {
+   162→  table: string
+   163→  field: string
+   164→}
+   165→const whereUIs = ref<ColUI[]>([])
+   166→const orderUIs = ref<ColUI[]>([])
+   167→function syncColUIs(target: ColUI[], rows: Array<{ column: string }>) {
+   168→  while (target.length < rows.length) {
+   169→    const { alias, field } = splitColumn(rows[target.length].column)
+   170→    target.push({ table: tableOfAlias(alias), field })
+   171→  }
+   172→  while (target.length > rows.length) target.pop()
+   173→}
+   174→watch(
+   175→  () => local.value.where,
+   176→  () => syncColUIs(whereUIs.value, local.value.where),
+   177→  { deep: true, immediate: true }
+   178→)
+   179→watch(
+   180→  () => local.value.orderBy,
+   181→  () => syncColUIs(orderUIs.value, local.value.orderBy),
+   182→  { deep: true, immediate: true }
+   183→)
+   184→
+   185→/** 已占用别名集合：主表别名 + 其他 JOIN 的别名 */
+   186→function usedAliases(skipIdx: number): string[] {
+   187→  const used = [MAIN_ALIAS]
+   188→  for (let i = 0; i < local.value.joins.length; i++) {
+   189→    if (i !== skipIdx && local.value.joins[i].targetTable) {
+   190→      used.push(local.value.joins[i].alias || deriveJoinAlias(local.value.joins[i].targetTable, used))
+   191→    }
+   192→  }
+   193→  return used
+   194→}
+   195→
+   196→const newParamName = ref('')
+   197→
+   198→function addJoin() {
+   199→  local.value.joins.push({ alias: '', targetTable: '', joinType: 'LEFT JOIN', on: '', columns: [] })
+   200→  syncRowFields()
+   201→  emitModel()
+   202→}
+   203→function removeJoin(idx: number) {
+   204→  local.value.joins.splice(idx, 1)
+   205→  syncRowFields()
+   206→  emitModel()
+   207→}
+   208→function addWhere() {
+   209→  local.value.where.push({ column: '', op: '=', value: '' })
+   210→  emitModel()
+   211→}
+   212→function removeWhere(idx: number) {
+   213→  local.value.where.splice(idx, 1)
+   214→  emitModel()
+   215→}
+   216→function addOrderBy() {
+   217→  local.value.orderBy.push({ column: '', order: 'ASC' })
+   218→  emitModel()
+   219→}
+   220→function removeOrderBy(idx: number) {
+   221→  local.value.orderBy.splice(idx, 1)
+   222→  emitModel()
+   223→}
+   224→function addParam() {
+   225→  const name = newParamName.value.trim()
+   226→  if (name && !props.params.includes(name)) {
+   227→    emit('update:params', [...props.params, name])
+   228→    newParamName.value = ''
+   229→  }
+   230→}
+   231→function removeParam(idx: number) {
+   232→  const next = [...props.params]
+   233→  next.splice(idx, 1)
+   234→  emit('update:params', next)
+   235→}
+   236→function emitModel() {
+   237→  emit('update:modelValue', deepClone(local.value))
+   238→}
+   239→
+   240→/** JOIN 目标表选项占用提示：主表/已选表仅提示不限制（自关联合法） */
+   241→function joinOptionHint(idx: number, table: string): string {
+   242→  return joinTableHint(table, local.value.mainTable, local.value.joins, idx)
+   243→}
+   244→
+   245→/** 目标表变化：重算别名并同步（主表别名固定 m） */
+   246→function onJoinTargetChange(idx: number) {
+   247→  const j = local.value.joins[idx]
+   248→  if (j.targetTable) {
+   249→    j.alias = deriveJoinAlias(j.targetTable, usedAliases(idx))
+   250→  }
+   251→  emitModel()
+   252→}
+   253→
+   254→/** on 字段下拉变化：组装 ON 条件字符串（两者都有值才生成） */
+   255→function onJoinFieldChange(idx: number) {
+   256→  const j = local.value.joins[idx]
+   257→  const f = rowFields.value[idx]
+   258→  if (f && f.mainField && f.targetField) {
+   259→    j.alias = j.alias || deriveJoinAlias(j.targetTable, usedAliases(idx))
+   260→    j.on = buildJoinOn(MAIN_ALIAS, j.alias, f.mainField, f.targetField)
+   261→  } else {
+   262→    j.on = ''
+   263→  }
+   264→  emitModel()
+   265→}
+   266→
+   267→/** 主表变化：emit 同步（供父组件联动字段候选） */
+   268→function onMainChange() {
+   269→  emitModel()
+   270→}
+   271→
+   272→/** 主表字段候选：tableFields[mainTable] */
+   273→const mainFieldOptions = computed(() => props.tableFields[local.value.mainTable] || [])
+   274→/** 指定 JOIN 的目标表字段候选 */
+   275→function targetFieldOptions(targetTable: string): string[] {
+   276→  return props.tableFields[targetTable] || []
+   277→}
+   278→/** 筛选/排序字段候选：tableFields[表名] */
+   279→function fieldOptionsFor(table: string): string[] {
+   280→  return props.tableFields[table] || []
+   281→}
+   282→
+   283→// ----- 选择列：别名.字段 前缀集合操作 -----
+   284→function colsWithPrefix(alias: string): string[] {
+   285→  const p = alias + '.'
+   286→  return local.value.selectColumns.filter((c) => c.startsWith(p)).map((c) => c.slice(p.length))
+   287→}
+   288→function setColsWithPrefix(alias: string, fields: string[]) {
+   289→  const p = alias + '.'
+   290→  const others = local.value.selectColumns.filter((c) => !c.startsWith(p))
+   291→  local.value.selectColumns = [...others, ...fields.map((f) => p + f)]
+   292→}
+   293→/** 主表字段多选选中集 */
+   294→const mainSelectedCols = computed(() => colsWithPrefix(MAIN_ALIAS))
+   295→function onMainColsChange(v: string[]) {
+   296→  setColsWithPrefix(MAIN_ALIAS, v)
+   297→  emitModel()
+   298→}
+   299→/** JOIN 目标表字段多选选中集（别名未生成时即时推导，不写回） */
+   300→function joinColsValue(idx: number): string[] {
+   301→  const j = local.value.joins[idx]
+   302→  if (!j || !j.targetTable) return []
+   303→  const alias = j.alias || deriveJoinAlias(j.targetTable, usedAliases(idx))
+   304→  return colsWithPrefix(alias)
+   305→}
+   306→function onJoinColsChange(idx: number, v: string[]) {
+   307→  const j = local.value.joins[idx]
+   308→  if (!j || !j.targetTable) return
+   309→  const alias = j.alias || deriveJoinAlias(j.targetTable, usedAliases(idx))
+   310→  if (!j.alias) j.alias = alias
+   311→  setColsWithPrefix(alias, v)
+   312→  emitModel()
+   313→}
+   314→
+   315→// ----- 筛选/排序：表名/字段名变化 → 组装 column -----
+   316→function rebuildWhereColumn(idx: number) {
+   317→  const ui = whereUIs.value[idx]
+   318→  const w = local.value.where[idx]
+   319→  if (!ui || !w) return
+   320→  const alias = ui.table ? aliasOfTable(ui.table) : ''
+   321→  w.column = ui.field && alias ? `${alias}.${ui.field}` : ''
+   322→  emitModel()
+   323→}
+   324→function onWhereTableChange(idx: number, table: string) {
+   325→  const ui = whereUIs.value[idx]
+   326→  if (!ui) return
+   327→  ui.table = table
+   328→  ui.field = ''
+   329→  rebuildWhereColumn(idx)
+   330→}
+   331→function onWhereFieldChange(idx: number, field: string) {
+   332→  const ui = whereUIs.value[idx]
+   333→  if (!ui) return
+   334→  ui.field = field
+   335→  rebuildWhereColumn(idx)
+   336→}
+   337→function rebuildOrderColumn(idx: number) {
+   338→  const ui = orderUIs.value[idx]
+   339→  const o = local.value.orderBy[idx]
+   340→  if (!ui || !o) return
+   341→  const alias = ui.table ? aliasOfTable(ui.table) : ''
+   342→  o.column = ui.field && alias ? `${alias}.${ui.field}` : ''
+   343→  emitModel()
+   344→}
+   345→function onOrderTableChange(idx: number, table: string) {
+   346→  const ui = orderUIs.value[idx]
+   347→  if (!ui) return
+   348→  ui.table = table
+   349→  ui.field = ''
+   350→  rebuildOrderColumn(idx)
+   351→}
+   352→function onOrderFieldChange(idx: number, field: string) {
+   353→  const ui = orderUIs.value[idx]
+   354→  if (!ui) return
+   355→  ui.field = field
+   356→  rebuildOrderColumn(idx)
+   357→}
+   358→
+   359→// 只读 SQL 预览：与后端 VisualSqlGenerator 输出一致（主表别名固定 m）
+   360→const previewSql = computed(() => {
+   361→  const v = local.value
+   362→  if (!v.mainTable) return ''
+   363→  const cols = v.selectColumns || []
+   364→  let sql = `SELECT ${cols.join(', ') || '*'}`
+   365→  sql += ` FROM ${v.mainTable} ${MAIN_ALIAS}`
+   366→  for (const j of v.joins) {
+   367→    if (j.targetTable && j.on) {
+   368→      const alias = j.alias || deriveJoinAlias(j.targetTable, usedAliases(0))
+   369→      sql += ` ${j.joinType} ${j.targetTable} ${alias} ON ${j.on}`
+   370→    }
+   371→  }
+   372→  sql += ` WHERE ${MAIN_ALIAS}.tenant_id = :tenantId`
+   373→  for (const w of v.where) {
+   374→    if (w.column && w.op) {
+   375→      sql += ` AND ${w.column} ${w.op} ?`
+   376→    }
+   377→  }
+   378→  if (v.orderBy.length > 0) {
+   379→    const parts = v.orderBy.filter((o) => o.column).map((o) => `${o.column} ${o.order || 'ASC'}`)
+   380→    if (parts.length > 0) sql += ` ORDER BY ${parts.join(', ')}`
+   381→  }
+   382→  return sql
+   383→})
+   384→</script>
+   385→
+   386→<template>
+   387→  <div class="visual-query-builder">
+   388→    <el-form label-width="70px" label-position="left">
+   389→      <el-form-item label="主表">
+   390→        <div style="width: 100%; display: flex; gap: 8px; align-items: center">
+   391→          <el-select
+   392→            data-testid="vqb-main-table"
+   393→            v-model="local.mainTable"
+   394→            filterable
+   395→            allow-create
+   396→            default-first-option
+   397→            placeholder="选择或输入表名"
+   398→            :disabled="disabled"
+   399→            style="width: 180px"
+   400→            @change="onMainChange"
+   401→          >
+   402→            <el-option v-for="t in tables" :key="t" :label="t" :value="t" />
+   403→          </el-select>
+   404→          <el-select
+   405→            v-if="local.mainTable"
+   406→            data-testid="vqb-main-cols"
+   407→            :model-value="mainSelectedCols"
+   408→            multiple
+   409→            filterable
+   410→            allow-create
+   411→            default-first-option
+   412→            collapse-tags
+   413→            :max-collapse-tags="5"
+   414→            collapse-tags-tooltip
+   415→            placeholder="选择列（多选，加入选择列）"
+   416→            :disabled="disabled"
+   417→            class="vqb-main-cols"
+   418→            style="flex: 1; min-width: 0"
+   419→            @update:model-value="onMainColsChange"
+   420→          >
+   421→            <el-option v-for="c in mainFieldOptions" :key="c" :label="c" :value="c" />
+   422→          </el-select>
+   423→        </div>
+   424→      </el-form-item>
+   425→
+   426→      <el-form-item label="JOIN">
+   427→        <div style="width: 100%">
+   428→          <el-table :data="local.joins" size="small" border>
+   429→            <el-table-column label="关联" width="96" align="center">
+   430→              <template #default="{ row }">
+   431→                <el-select
+   432→                  :model-value="row.joinType"
+   433→                  :disabled="disabled"
+   434→                  style="width: 100%"
+   435→                  @update:model-value="(v: string) => { row.joinType = v; emitModel() }"
+   436→                >
+   437→                  <el-option label="左联" value="LEFT JOIN" />
+   438→                  <el-option label="内联" value="INNER JOIN" />
+   439→                  <el-option label="右联" value="RIGHT JOIN" />
+   440→                </el-select>
+   441→              </template>
+   442→            </el-table-column>
+   443→            <el-table-column label="目标表" min-width="100">
+   444→              <template #default="{ row, $index }">
+   445→                <el-select
+   446→                  :data-testid="`vqb-join-target-${$index}`"
+   447→                  v-model="row.targetTable"
+   448→                  filterable
+   449→                  allow-create
+   450→                  default-first-option
+   451→                  placeholder="目标表"
+   452→                  :disabled="disabled"
+   453→                  style="width: 100%"
+   454→                  @change="onJoinTargetChange($index)"
+   455→                >
+   456→                  <el-option v-for="t in tables" :key="t" :label="t" :value="t">
+   457→                    <div class="vqb-table-option">
+   458→                      <span>{{ t }}</span>
+   459→                      <span v-if="joinOptionHint($index, t)" class="vqb-table-option-hint">{{ joinOptionHint($index, t) }}</span>
+   460→                    </div>
+   461→                  </el-option>
+   462→                </el-select>
+   463→              </template>
+   464→            </el-table-column>
+   465→            <el-table-column label="目标表字段（多选入列）" min-width="190">
+   466→              <template #default="{ row, $index }">
+   467→                <el-select
+   468→                  v-if="row.targetTable"
+   469→                  :data-testid="`vqb-join-cols-${$index}`"
+   470→                  :model-value="joinColsValue($index)"
+   471→                  multiple
+   472→                  filterable
+   473→                  allow-create
+   474→                  default-first-option
+   475→                  collapse-tags
+   476→                  :max-collapse-tags="2"
+   477→                  collapse-tags-tooltip
+   478→                  placeholder="目标表字段"
+   479→                  :disabled="disabled"
+   480→                  style="width: 100%"
+   481→                  @update:model-value="(v: string[]) => onJoinColsChange($index, v)"
+   482→                >
+   483→                  <el-option v-for="c in targetFieldOptions(row.targetTable)" :key="c" :label="c" :value="c" />
+   484→                </el-select>
+   485→              </template>
+   486→            </el-table-column>
+   487→            <el-table-column label="关联条件" min-width="220">
+   488→              <template #default="{ row, $index }">
+   489→                <div style="display: flex; gap: 4px; align-items: center">
+   490→                  <span style="color: #303133">当</span>
+   491→                  <el-select
+   492→                    :data-testid="`vqb-join-main-col-${$index}`"
+   493→                    v-model="rowFields[$index].mainField"
+   494→                    filterable
+   495→                    allow-create
+   496→                    default-first-option
+   497→                    placeholder="主表字段"
+   498→                    :disabled="disabled"
+   499→                    style="flex: 1"
+   500→                    @change="onJoinFieldChange($index)"
+   501→                  >
+   502→                    <el-option v-for="c in mainFieldOptions" :key="c" :label="c" :value="c" />
+   503→                  </el-select>
+   504→                  <span style="color: #909399">=</span>
+   505→                  <el-select
+   506→                    :data-testid="`vqb-join-target-col-${$index}`"
+   507→                    v-model="rowFields[$index].targetField"
+   508→                    filterable
+   509→                    allow-create
+   510→                    default-first-option
+   511→                    placeholder="目标表字段"
+   512→                    :disabled="disabled"
+   513→                    style="flex: 1"
+   514→                    @change="onJoinFieldChange($index)"
+   515→                  >
+   516→                    <el-option v-for="c in targetFieldOptions(row.targetTable)" :key="c" :label="c" :value="c" />
+   517→                  </el-select>
+   518→                </div>
+   519→              </template>
+   520→            </el-table-column>
+   521→            <el-table-column label="" width="46" align="center">
+   522→              <template #default="{ $index }">
+   523→                <el-button :icon="Delete" circle text size="small" :disabled="disabled" @click="removeJoin($index)" />
+   524→              </template>
+   525→            </el-table-column>
+   526→          </el-table>
+   527→          <el-button
+   528→            data-testid="vqb-add-join"
+   529→            type="primary"
+   530→            plain
+   531→            size="small"
+   532→            :icon="Plus"
+   533→            style="margin-top: 8px"
+   534→            :disabled="disabled"
+   535→            @click="addJoin"
+   536→          >
+   537→            添加关联
+   538→          </el-button>
+   539→        </div>
+   540→      </el-form-item>
+   541→
+   542→      <el-form-item label="筛选">
+   543→        <div style="width: 100%">
+   544→          <el-table :data="local.where" size="small" border>
+   545→            <el-table-column label="表名" min-width="130">
+   546→              <template #default="{ $index }">
+   547→                <el-select
+   548→                  :data-testid="`vqb-where-table-${$index}`"
+   549→                  :model-value="whereUIs[$index]?.table"
+   550→                  filterable
+   551→                  placeholder="表名"
+   552→                  :disabled="disabled"
+   553→                  style="width: 100%"
+   554→                  @update:model-value="(t: string) => onWhereTableChange($index, t)"
+   555→                >
+   556→                  <el-option v-for="t in tableOptions" :key="t" :label="t" :value="t" />
+   557→                </el-select>
+   558→              </template>
+   559→            </el-table-column>
+   560→            <el-table-column label="字段名" min-width="120">
+   561→              <template #default="{ $index }">
+   562→                <el-select
+   563→                  :data-testid="`vqb-where-field-${$index}`"
+   564→                  :model-value="whereUIs[$index]?.field"
+   565→                  filterable
+   566→                  allow-create
+   567→                  default-first-option
+   568→                  placeholder="字段名"
+   569→                  :disabled="disabled || !whereUIs[$index]?.table"
+   570→                  style="width: 100%"
+   571→                  @update:model-value="(f: string) => onWhereFieldChange($index, f)"
+   572→                >
+   573→                  <el-option v-for="c in fieldOptionsFor(whereUIs[$index]?.table)" :key="c" :label="c" :value="c" />
+   574→                </el-select>
+   575→              </template>
+   576→            </el-table-column>
+   577→            <el-table-column label="操作符" width="92" align="center">
+   578→              <template #default="{ row }">
+   579→                <el-select
+   580→                  :model-value="row.op"
+   581→                  :disabled="disabled"
+   582→                  style="width: 100%"
+   583→                  @update:model-value="(v: string) => { row.op = v; emitModel() }"
+   584→                >
+   585→                  <el-option v-for="op in WHERE_OPS" :key="op" :label="op" :value="op" />
+   586→                </el-select>
+   587→              </template>
+   588→            </el-table-column>
+   589→            <el-table-column label="值" min-width="130">
+   590→              <template #default="{ row, $index }">
+   591→                <el-input
+   592→                  :data-testid="`vqb-where-value-${$index}`"
+   593→                  :model-value="row.value"
+   594→                  placeholder="值"
+   595→                  :disabled="disabled"
+   596→                  style="width: 100%"
+   597→                  @update:model-value="(v: string) => { row.value = v; emitModel() }"
+   598→                />
+   599→              </template>
+   600→            </el-table-column>
+   601→            <el-table-column label="" width="46" align="center">
+   602→              <template #default="{ $index }">
+   603→                <el-button :icon="Delete" circle text size="small" :disabled="disabled" @click="removeWhere($index)" />
+   604→              </template>
+   605→            </el-table-column>
+   606→          </el-table>
+   607→          <el-button
+   608→            data-testid="vqb-add-where"
+   609→            type="primary"
+   610→            plain
+   611→            size="small"
+   612→            :icon="Plus"
+   613→            style="margin-top: 8px"
+   614→            :disabled="disabled"
+   615→            @click="addWhere"
+   616→          >
+   617→            添加条件
+   618→          </el-button>
+   619→        </div>
+   620→      </el-form-item>
+   621→
+   622→      <el-form-item label="排序">
+   623→        <div style="width: 100%">
+   624→          <el-table :data="local.orderBy" size="small" border>
+   625→            <el-table-column label="表名" min-width="130">
+   626→              <template #default="{ $index }">
+   627→                <el-select
+   628→                  :data-testid="`vqb-order-table-${$index}`"
+   629→                  :model-value="orderUIs[$index]?.table"
+   630→                  filterable
+   631→                  placeholder="表名"
+   632→                  :disabled="disabled"
+   633→                  style="width: 100%"
+   634→                  @update:model-value="(t: string) => onOrderTableChange($index, t)"
+   635→                >
+   636→                  <el-option v-for="t in tableOptions" :key="t" :label="t" :value="t" />
+   637→                </el-select>
+   638→              </template>
+   639→            </el-table-column>
+   640→            <el-table-column label="字段名" min-width="120">
+   641→              <template #default="{ $index }">
+   642→                <el-select
+   643→                  :data-testid="`vqb-order-field-${$index}`"
+   644→                  :model-value="orderUIs[$index]?.field"
+   645→                  filterable
+   646→                  allow-create
+   647→                  default-first-option
+   648→                  placeholder="字段名"
+   649→                  :disabled="disabled || !orderUIs[$index]?.table"
+   650→                  style="width: 100%"
+   651→                  @update:model-value="(f: string) => onOrderFieldChange($index, f)"
+   652→                >
+   653→                  <el-option v-for="c in fieldOptionsFor(orderUIs[$index]?.table)" :key="c" :label="c" :value="c" />
+   654→                </el-select>
+   655→              </template>
+   656→            </el-table-column>
+   657→            <el-table-column label="排序方式" width="100" align="center">
+   658→              <template #default="{ row, $index }">
+   659→                <el-select
+   660→                  :data-testid="`vqb-order-dir-${$index}`"
+   661→                  :model-value="row.order"
+   662→                  :disabled="disabled"
+   663→                  style="width: 100%"
+   664→                  @update:model-value="(v: string) => { row.order = v; emitModel() }"
+   665→                >
+   666→                  <el-option label="升序" value="ASC" />
+   667→                  <el-option label="降序" value="DESC" />
+   668→                </el-select>
+   669→              </template>
+   670→            </el-table-column>
+   671→            <el-table-column label="" width="46" align="center">
+   672→              <template #default="{ $index }">
+   673→                <el-button :icon="Delete" circle text size="small" :disabled="disabled" @click="removeOrderBy($index)" />
+   674→              </template>
+   675→            </el-table-column>
+   676→          </el-table>
+   677→          <el-button
+   678→            data-testid="vqb-add-order"
+   679→            type="primary"
+   680→            plain
+   681→            size="small"
+   682→            :icon="Plus"
+   683→            style="margin-top: 8px"
+   684→            :disabled="disabled"
+   685→            @click="addOrderBy"
+   686→          >
+   687→            添加排序
+   688→          </el-button>
+   689→        </div>
+   690→      </el-form-item>
+   691→
+   692→      <el-form-item label="参数">
+   693→        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+   694→          <el-tag v-for="(p, idx) in params" :key="p" closable :disable-transitions="true" @close="removeParam(idx)">
+   695→            {{ p }}
+   696→          </el-tag>
+   697→          <el-input
+   698→            data-testid="vqb-param-input"
+   699→            v-model="newParamName"
+   700→            placeholder="参数名，回车添加"
+   701→            :disabled="disabled"
+   702→            @keyup.enter="addParam"
+   703→            style="width: 160px"
+   704→          />
+   705→        </div>
+   706→      </el-form-item>
+   707→    </el-form>
+   708→
+   709→    <el-divider content-position="left">SQL 预览（只读，保存时生成）</el-divider>
+   710→    <el-input
+   711→      data-testid="vqb-sql-preview"
+   712→      :model-value="previewSql"
+   713→      type="textarea"
+   714→      :rows="5"
+   715→      readonly
+   716→      style="font-family: var(--el-font-family-mono)"
+   717→    />
+   718→  </div>
+   719→</template>
+   720→
+   721→<style scoped>
+   722→/* 表格 small 尺寸但字体统一为普通大小 */
+   723→.el-table {
+   724→  font-size: 14px;
+   725→}
+   726→/* JOIN 目标表选项：表名 + 占用提示（主表/已关联）两端对齐 */
+   727→.vqb-table-option {
+   728→  display: flex;
+   729→  align-items: center;
+   730→  justify-content: space-between;
+   731→  gap: 8px;
+   732→}
+   733→.vqb-table-option-hint {
+   734→  font-size: 12px;
+   735→  color: #909399;
+   736→  flex-shrink: 0;
+   737→}
+   738→/* 主表字段多选：单行显示，超出截断不折行 */
+   739→.vqb-main-cols :deep(.el-select__tags) {
+   740→  max-height: 32px;
+   741→  overflow: hidden;
+   742→  flex-wrap: nowrap;
+   743→}
+   744→.vqb-main-cols :deep(.el-select__tags-text) {
+   745→  white-space: nowrap;
+   746→}
+   747→</style>

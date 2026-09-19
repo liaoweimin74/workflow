@@ -1,0 +1,535 @@
+     1→# REST API 面盘点（Spring Boot → Node.js 迁移基线）
+     2→
+     3→> Task ID: 13-1a · 生成方式：静态扫描 `backend/src/main/java/com/workflow/` 下全部 39 个 `@RestController` 源码逐个提取。
+     4→> 统计口径：一个 Java 方法上的一个 HTTP mapping 注解 = 1 个端点。
+     5→
+     6→## 0. 全局约定
+     7→
+     8→### 0.1 Base URL
+     9→
+    10→| 项 | 值 | 来源 |
+    11→|---|---|---|
+    12→| 协议/主机/端口 | `http://localhost:8080` | `application.yml` → `server.port: 8080` |
+    13→| Context-Path | **无**（根路径直接挂 `/api/...`） | `application.yml` 未配置 `server.servlet.context-path` |
+    14→| 全局路径风格 | `/api/v1/**`（业务）、`/api/**`（system 域无 v1） | 各 Controller 类级 `@RequestMapping` |
+    15→
+    16→### 0.2 鉴权方式
+    17→
+    18→- **JWT Bearer Token**：请求头 `Authorization: Bearer <accessToken>`（`GlobalConstant.TOKEN_HEADER/TOKEN_PREFIX`）。
+    19→- `JwtAuthenticationFilter`（OncePerRequestFilter）解析 token → 校验 `tokenType == access_token` → 按 `userId` 加载 `LoginUser`（含角色权限集合）写入 SecurityContext。
+    20→- Token 有效期：access 30 分钟 / refresh 7 天（`GlobalConstant`）；refresh token 端点 `POST /api/auth/refresh`。
+    21→- **无 Spring 表达式注解鉴权**：全代码库 **0 处** `@PreAuthorize` / `@HasPermission`（`HasPermission`/`PermissionEvaluator` 框架类存在但仅被 `PageAccessGuard` 程序化使用）。实际鉴权手段：
+    22→  1. SecurityConfig 路径级：除 2 条 permitAll 外全部 `authenticated()`；
+    23→  2. 通知管理端：`NotificationAdminAuthorization.requireAdmin()`（代码内硬校验角色 `ROLE_ADMIN` 或 `admin`，否则抛 `BusinessException(403)`）；
+    24→  3. 页面数据出口：`PageAccessGuard.assertPageAccess(pageKey)`（菜单权限 `page:read:{key}`；无菜单→404，无权限→403；admin 自动放行）。
+    25→
+    26→### 0.3 放行路径（permitAll，SecurityConfig）
+    27→
+    28→| # | Pattern | 方法 | 说明 |
+    29→|---|---|---|---|
+    30→| 1 | `/api/auth/login` | 全部（实际仅 POST） | 登录 |
+    31→| 2 | `/api/v1/notifications/sse` | 全部（实际仅 GET） | SSE：浏览器 EventSource 无法带 header，靠 `?token=` query 自行认证 |
+    32→
+    33→其余 `anyRequest().authenticated()`。CSRF 关闭、Session STATELESS。
+    34→
+    35→### 0.4 多租户
+    36→
+    37→- `TenantInterceptor`（WebConfig 注册，作用于 `/api/**`）：读请求头 **`X-Tenant-Id`** 写入 `TenantContext`，请求结束清理。租户头**可选**，业务层按需强制（如 `ProcessDefinitionController.listVersions`、通知管理端均取 `TenantProvider.getTenantId()`）。
+    38→
+    39→### 0.5 CORS（CorsConfig）
+    40→
+    41→`CorsFilter` 注册在 `/**`：`allowCredentials=true` + `allowedOriginPattern("*")` + 所有 header/method，`maxAge=3600`。Node 版需等价放开。
+    42→
+    43→### 0.6 统一响应封装
+    44→
+    45→| 封装 | 结构 | 使用范围 |
+    46→|---|---|---|
+    47→| `R<T>` | `{code:int, msg:string, data:T}`；成功 code=200；失败如 400/401/403/404/429/500 | **全部端点**（除 SSE 返回流） |
+    48→| `PageResult<T>` | `{total, page, size, rows[]}`（1-based） | system 域用户/角色/字典分页、通知用户端消息列表、通知事件列表 |
+    49→| `PageResponse<T>`（api/dto） | `{content[], pageNumber, pageSize, totalElements, totalPages}`（1-based） | api 域流程/表单/页面/数据源分页 |
+    50→| `BizDataPageVO` | `{records[], total, page, size}` | 业务数据 biz-data、数据源 data、internal 部门树/用户分页 |
+    51→| 裸 `Map` | `{rows[], total, page, size}` | 通知管理端 subscriptions/announcements/deliveries 列表 |
+    52→
+    53→⚠️ 迁移注意：**三种分页字段名并存**（rows/content/records），前端依赖各自字段，需逐一保真。
+    54→
+    55→### 0.7 错误处理
+    56→
+    57→- `GlobalExceptionHandler`（`@RestControllerAdvice`）+ `BusinessException(code, msg)`；`R.fail(...)` 也在业务内直接返回（404/429 等）。HTTP 状态码与 `R.code` 不完全一致（业务错误多以 200 + R.code 表达），Node 版需对齐前端判断逻辑。
+    58→
+    59→---
+    60→
+    61→## 1. 模块：api（工作流引擎 + 低代码设计器）— 20 个 Controller，121 个端点
+    62→
+    63→### 1.1 ProcessInstanceController — `/api/v1/process-instances`（9 端点）
+    64→
+    65→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+    66→|---|---|---|---|---|
+    67→| POST | `/api/v1/process-instances` | body `StartProcessRequest` | `Map`（id/processDefinitionId/processDefinitionKey/businessKey/tenantId） | 发起流程；自动注入 `initiator` 变量（取 SecurityContext）；有 formDefId 时保存表单数据并写变量映射 |
+    68→| GET | `/api/v1/process-instances` | query `page=1`, `size=20`, `initiator?`, `status?`, `processName?` | `PageResponse<Map>`（分页结构见 0.6） | 运行中实例列表 |
+    69→| GET | `/api/v1/process-instances/history` | 同上 5 个 query | `PageResponse<Map>` | 历史实例（act_hi_procinst），"我发起的"；含已结束 |
+    70→| GET | `/api/v1/process-instances/{id}` | path `id` | `Map`（404 兜底 R.fail） | runtime 优先，回退历史 |
+    71→| POST | `/api/v1/process-instances/{id}/suspend` | path `id` | `Void` | 挂起 |
+    72→| POST | `/api/v1/process-instances/{id}/resume` | path `id` | `Void` | 恢复 |
+    73→| POST | `/api/v1/process-instances/{id}/terminate` | path `id`; query `reason?` | `Void` | 终止 |
+    74→| GET | `/api/v1/process-instances/{id}/highlight` | path `id` | `Map` | 流程图高亮 |
+    75→| GET | `/api/v1/process-instances/{id}/prediction` | path `id` | `List<ExecutionNodeVO>` | 执行预测节点列表 |
+    76→
+    77→**DTO `StartProcessRequest`**：`processKey:String`（必填）、`businessKey:String?`、`formDefId:String?`、`variables:Map<String,Object>?`
+    78→
+    79→### 1.2 ProcessHistoryController — `/api/v1/process-instances`（1 端点）
+    80→
+    81→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+    82→|---|---|---|---|---|
+    83→| GET | `/api/v1/process-instances/{id}/history` | path `id` | `List<ApprovalRecordVO>` | 审批记录时间线（时间正序） |
+    84→
+    85→### 1.3 ProcessVariableController — `/api/v1/process-instances`（6 端点）
+    86→
+    87→| 方法 | 路径 | 参数 | 返回 data 类型 |
+    88→|---|---|---|---|
+    89→| GET | `/{processInstanceId}/variables` | path | `Map<String,Object>` |
+    90→| GET | `/{processInstanceId}/variables/{name}` | path | `Object` |
+    91→| PUT | `/{processInstanceId}/variables` | path + body `Map<String,Object>` | `Void` |
+    92→| PUT | `/{processInstanceId}/variables/{name}` | path + body `{value:any}` | `Void` |
+    93→| DELETE | `/{processInstanceId}/variables/{name}` | path | `Void` |
+    94→| PUT | `/tasks/{taskId}/variables` | path + body `Map<String,Object>` | `Void`（经任务设流程变量） |
+    95→
+    96→### 1.4 TaskController — `/api/v1/tasks`（11 端点）
+    97→
+    98→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+    99→|---|---|---|---|---|
+   100→| GET | `/api/v1/tasks` | query `assignee`（必填）, `page=1`, `size=20`, `processName?`, `initiator?`, `createTimeStart?`, `createTimeEnd?` | `PageResponse<TaskTodoVO>` | 待办列表 |
+   101→| GET | `/api/v1/tasks/historic` | query `userId`（必填）, `page`, `size`, `processName?`, `initiator?`, `endTimeStart?`, `endTimeEnd?`, `approveResult?` | `PageResponse<TaskDoneVO>` | 已办列表 |
+   102→| GET | `/api/v1/tasks/{id}` | path | `TaskDetailVO` | 任务详情（404 兜底） |
+   103→| POST | `/api/v1/tasks/{id}/claim` | path; query `userId`（必填） | `Void` | 认领（⚠️ 用 query 传 userId，与 complete 不同） |
+   104→| POST | `/api/v1/tasks/{id}/complete` | path; body `CompleteTaskRequest?`（可空） | `CompleteTaskResponse` | 完成；操作人取 SecurityContext（不信任 body.userId） |
+   105→| POST | `/api/v1/tasks/{id}/reject` | path; body `RejectRequest?` | `Void` | 驳回（退回发起人重填） |
+   106→| POST | `/api/v1/tasks/{id}/refuse` | path; body `RejectRequest?` | `Void` | 拒绝（终止整个流程），写 action=refuse 审批意见 |
+   107→| POST | `/api/v1/tasks/{id}/transfer` | path; body `TransferRequest?` | `Void` | 转办 |
+   108→| POST | `/api/v1/tasks/{id}/delegate` | path; body `DelegateRequest` | `Void` | 委派（resolve 后回原办理人） |
+   109→| POST | `/api/v1/tasks/{id}/add-sign` | path; body `AddSignRequest` | `Void` | 加签 |
+   110→| POST | `/api/v1/tasks/{id}/forward-sign` | path; body `ForwardSignRequest` | `Void` | 转签（换 MI 审批人） |
+   111→
+   112→**DTO 字段**：
+   113→- `CompleteTaskRequest`：`variables:Map<String,Object>?`、`userId:String?`（忽略，以 SecurityContext 为准）、`comment:String?`
+   114→- `RejectRequest`：`userId:String?`、`reason:String?`
+   115→- `TransferRequest`：`fromUser:String?`、`toUser:String`（必填语义）、`reason:String?`
+   116→- `DelegateRequest`：`delegateTo:String`（必填语义）、`fromUser:String?`、`comment:String?`
+   117→- `AddSignRequest`：`users:List<String>`（必填语义）、`userId:String?`、`comment:String?`
+   118→- `ForwardSignRequest`：`toUser:String`（必填语义）、`userId:String?`、`comment:String?`
+   119→
+   120→### 1.5 TaskRemindController — `/api/v1/tasks`（2 端点）
+   121→
+   122→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   123→|---|---|---|---|---|
+   124→| POST | `/api/v1/tasks/{taskId}/remind` | path | `Void` | 催办单人；发起人取 SecurityContext；24h 频控 |
+   125→| POST | `/api/v1/tasks/by-instance/{processInstanceId}/remind` | path | `Void` | 催办实例全部活跃任务；无任务 404、全部受限 429；成功后站内信+SSE 通知 |
+   126→
+   127→### 1.6 ProcessDesignController — `/api/v1/process-definitions`（7 端点，流程设计器·草稿）
+   128→
+   129→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   130→|---|---|---|---|
+   131→| POST | `/api/v1/process-definitions/drafts` | query `name`（必填）, `key`（必填）, `categoryId?` | `ProcessDraft` |
+   132→| GET | `/api/v1/process-definitions/drafts` | query `page=1`, `size=20`, `categoryId?`, `name?`（name 优先模糊搜索） | `PageResponse<ProcessDraft>` |
+   133→| GET | `/api/v1/process-definitions/{id}/editor` | path | `EditorDTO`（bpmnXml + nodeConfigs + status） |
+   134→| PUT | `/api/v1/process-definitions/{id}/design` | path + body `DesignSaveRequest` | `ProcessDraft` |
+   135→| POST | `/api/v1/process-definitions/{id}/deploy` | path | `ProcessDraft` |
+   136→| POST | `/api/v1/process-definitions/{id}/copy` | path | `ProcessDraft` |
+   137→| DELETE | `/api/v1/process-definitions/{id}` | path | `Void` |
+   138→
+   139→**DTO `DesignSaveRequest`**：`name:String`、`key:String`、`categoryId:String?`、`bpmnXml:String`、`nodeConfigs:Map<nodeId,configJson>`
+   140→
+   141→### 1.7 ProcessDefinitionController — `/api/v1/deployed-processes`（8 端点，已部署定义）
+   142→
+   143→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   144→|---|---|---|---|---|
+   145→| GET | `/api/v1/deployed-processes` | query `page=1`, `size=20`, `categoryId?`, `name?`, `status?` | `PageResponse<Map>` | 列表（手动序列化，防 Flowable 懒加载崩溃） |
+   146→| GET | `/api/v1/deployed-processes/summaries` | — | `List<ProcessDefinitionSummary>` | 按 key 去重取最新版本（子流程下拉） |
+   147→| GET | `/api/v1/deployed-processes/{id}` | path | `Map`（含 formDefId/fieldPermissions/initiatorFormDefId/processFormDefId 解析） | 404 兜底 |
+   148→| GET | `/api/v1/deployed-processes/{id}/xml` | path | `String`（BPMN XML） | |
+   149→| GET | `/api/v1/deployed-processes/key/{key}/versions` | path `key` | `List<ProcessVersionVO>`（procDefId/version/name/deploymentTime/latest） | 多段路径避免与 `/{id}` 冲突；按租户过滤 |
+   150→| GET | `/api/v1/deployed-processes/versions/{procDefId}/editor` | path | `EditorDTO`（status=DEPLOYED） | 历史版本编辑器快照 |
+   151→| POST | `/api/v1/deployed-processes/{id}/suspend` | path | `Void` | |
+   152→| POST | `/api/v1/deployed-processes/{id}/activate` | path | `Void` | |
+   153→
+   154→### 1.8 CategoryController — `/api/v1/categories`（5 端点）
+   155→
+   156→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   157→|---|---|---|---|
+   158→| GET | `/api/v1/categories` | — | `List<Category>` |
+   159→| GET | `/api/v1/categories/tree` | — | `List<Category>` |
+   160→| POST | `/api/v1/categories` | body `{name, parentId?, sortOrder?}`（Map 直取） | `Category` |
+   161→| PUT | `/api/v1/categories/{id}` | path + body 同上 | `Category` |
+   162→| DELETE | `/api/v1/categories/{id}` | path | `Void` |
+   163→
+   164→### 1.9 DashboardController — `/api/v1/dashboard`（1 端点）
+   165→
+   166→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   167→|---|---|---|---|
+   168→| GET | `/api/v1/dashboard/stats` | query `userId?` | `Map`（todoCount/doneCount/runningCount/definitionCount/startedByMeCount/trend[7日]/statusShare） |
+   169→
+   170→### 1.10 FormDefinitionController — `/api/v1/form-definitions`（9 端点）
+   171→
+   172→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   173→|---|---|---|---|
+   174→| POST | `/api/v1/form-definitions` | query `name`（必填）, `key`（必填）, `type?`, `processKey?` | `FormDefinition` |
+   175→| GET | `/api/v1/form-definitions` | query `page=1`, `size=20`, `status?`, `name?`, `type?` | `PageResponse<FormDefinitionDTO>` |
+   176→| GET | `/api/v1/form-definitions/by-key/{key}` | path | `FormDefinitionDetailDTO`（最新版本） |
+   177→| GET | `/api/v1/form-definitions/{id}` | path | `FormDefinitionDetailDTO`（含 schema/columnConfig） |
+   178→| PUT | `/api/v1/form-definitions/{id}` | path + body `FormDefinitionSaveRequest` | `FormDefinition`（原地更新不建版本） |
+   179→| DELETE | `/api/v1/form-definitions/{id}` | path | `Void`（软删） |
+   180→| POST | `/api/v1/form-definitions/{id}/publish` | path | `FormDefinition` |
+   181→| GET | `/api/v1/form-definitions/{id}/versions` | path | `List<FormVersionDTO>` |
+   182→| GET | `/api/v1/form-definitions/{id}/versions/{version}` | path `id`,`version:int` | `FormDefinitionDetailDTO` |
+   183→
+   184→**DTO `FormDefinitionSaveRequest`**：`name:String`、`key:String`、`schema:String(JSON)`、`columnConfig:String(JSON)?`、`processKey:String?`
+   185→
+   186→### 1.11 FormDataController — `/api/v1/form-data`（11 端点）
+   187→
+   188→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   189→|---|---|---|---|---|
+   190→| POST | `/api/v1/form-data` | body `FormDataSaveRequest` | `FormData` | upsert 当前数据 |
+   191→| POST | `/api/v1/form-data/snapshot` | body 同上 | `FormData` | 审批快照（新增不可变记录） |
+   192→| POST | `/api/v1/form-data/draft` | body 同上 | `FormData` | 发起页草稿（processInstanceId=null） |
+   193→| GET | `/api/v1/form-data/draft/{formDefId}` | path | `FormDataDTO?` | 查草稿 |
+   194→| DELETE | `/api/v1/form-data/draft/{formDefId}` | path | `Void` | 清草稿 |
+   195→| GET | `/api/v1/form-data` | query `processInstanceId`（必填）, `formDefId`（必填） | `FormDataDTO?` | 当前数据（非快照） |
+   196→| GET | `/api/v1/form-data/task/{taskId}` | path | `FormDataDTO?` | 按任务查快照 |
+   197→| GET | `/api/v1/form-data/process-instance/{processInstanceId}/snapshots` | path | `List<FormDataDTO>` | 全部快照倒序 |
+   198→| GET | `/api/v1/form-data/process-instance/{processInstanceId}` | path | `List<FormDataDTO>` | 实例全部表单数据 |
+   199→| GET | `/api/v1/form-data/{id}` | path | `FormDataDTO` | |
+   200→| PUT | `/api/v1/form-data/{id}` | path + body `FormDataSaveRequest` | `FormData` | |
+   201→
+   202→**DTO `FormDataSaveRequest`**：`formDefId:String`、`processInstanceId:String?`、`taskId:String?`、`dataJson:String(JSON)`
+   203→
+   204→### 1.12 BizDataController — `/api/v1/biz-data`（11 端点，业务底表 wf_biz_<formKey>）
+   205→
+   206→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   207→|---|---|---|---|---|
+   208→| GET | `/api/v1/biz-data/referenced-count` | — | `Map<formKey,{count,referencedBy[]}>` | dataPicker 引用感知 |
+   209→| POST | `/api/v1/biz-data/{formKey}` | path + body `Map<String,Object>`（业务字段） | `BizDataVO` | 新增 |
+   210→| GET | `/api/v1/biz-data/{formKey}` | path + query 绑定 `BizDataQueryRequest` | `BizDataPageVO` | 分页查询 |
+   211→| GET | `/api/v1/biz-data/{formKey}/resolve` | path; query `ids:List<String>`（必填）, `displayField?` | `Map<id,显示文本>` | data-picker 还原 |
+   212→| GET | `/api/v1/biz-data/{formKey}/{id}` | path | `BizDataVO` | |
+   213→| PUT | `/api/v1/biz-data/{formKey}/{id}` | path + body `Map`（须含 `version`） | `BizDataVO` | 乐观锁更新 |
+   214→| DELETE | `/api/v1/biz-data/{formKey}/{id}` | path | `Void` | |
+   215→| GET | `/api/v1/biz-data/{formKey}/{id}/sub/{field}` | path | `List<Map>` | 独立子表行列表（sort_no 升序） |
+   216→| POST | `/api/v1/biz-data/{formKey}/{id}/sub/{field}` | path + body `Map` | `Map` | 追加子表行 |
+   217→| PUT | `/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}` | path + body `Map`（须含 version） | `Map` | 子表行更新（乐观锁） |
+   218→| DELETE | `/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}` | path | `Void` | |
+   219→
+   220→**Query DTO `BizDataQueryRequest`**（GET query 绑定，无注解）：`filter:String?`（JSON，扁平 `{col:val}` 或结构化 `{logic,conditions[{column,op,value}]}`）、`keyword:String?`、`keywordColumn:String?`、`sort:String?`、`order:String?`（asc/desc 默认 desc）、`params:String?`（SQL 模式 :param 白名单）、`page:int=1`、`size:int=20`
+   221→
+   222→### 1.13 DataSourceController — `/api/v1/data-sources`（14 端点）
+   223→
+   224→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   225→|---|---|---|---|---|
+   226→| POST | `/api/v1/data-sources` | body `DataSourceSaveRequest` | `DataSourceDTO` | 默认 DRAFT；FORM/WORKFLOW/SYSTEM 由系统创建 |
+   227→| PUT | `/api/v1/data-sources/{id}` | path + body 同上 | `DataSourceDTO` | null 字段不更新 |
+   228→| DELETE | `/api/v1/data-sources/{id}` | path | `Void` | 仅 DRAFT 可删 |
+   229→| POST | `/api/v1/data-sources/{id}/enable` | path | `DataSourceDTO` | 校验必填 + FORM 须绑定已发布表单 |
+   230→| POST | `/api/v1/data-sources/{id}/disable` | path | `DataSourceDTO` | |
+   231→| GET | `/api/v1/data-sources` | query `page=1`, `size=20`, `type?`, `status?` | `PageResponse<DataSourceDTO>` | |
+   232→| GET | `/api/v1/data-sources/enabled` | — | `List<DataSourceDTO>` | 设计器下拉 |
+   233→| GET | `/api/v1/data-sources/{id}` | path | `DataSourceDTO` | |
+   234→| GET | `/api/v1/data-sources/{id}/metadata` | path | `DataSourceMetadata`（columns+可写标记） | |
+   235→| GET | `/api/v1/data-sources/{id}/data` | path + query 绑定 `BizDataQueryRequest` | `BizDataPageVO` | 统一数据访问（DataSourceAdapter SPI） |
+   236→| GET | `/api/v1/data-sources/{id}/data/{rowId}` | path | `BizDataVO` | |
+   237→| POST | `/api/v1/data-sources/{id}/data` | path + body `Map` | `String`（新 rowId） | 只读数据源 400 |
+   238→| PUT | `/api/v1/data-sources/{id}/data/{rowId}` | path; query `version?` + body `Map` | `Void` | 乐观锁可空 |
+   239→| DELETE | `/api/v1/data-sources/{id}/data/{rowId}` | path | `Void` | |
+   240→
+   241→**DTO `DataSourceSaveRequest`**：`name:String`、`type:String`（API/SQL/FORM/WORKFLOW/SYSTEM）、`formKey:String?`、`sourceKey:String?`、`params:String(JSON)?`
+   242→
+   243→### 1.14 DbSchemaController — `/api/v1/data-sources/db`（2 端点，只读）
+   244→
+   245→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   246→|---|---|---|---|---|
+   247→| GET | `/api/v1/data-sources/db/tables` | — | `List<String>` | 全部基础表名（排除 flyway_schema_history） |
+   248→| GET | `/api/v1/data-sources/db/tables/{table}/columns` | path `table` | `List<ColumnInfo>` | information_schema 真实字段 |
+   249→
+   250→### 1.15 MetadataProbeController — `/api/v1/data-sources`（2 端点）
+   251→
+   252→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   253→|---|---|---|---|---|
+   254→| POST | `/api/v1/data-sources/explore-sql` | body `{sql:String}` | `List<ColumnMeta>` | LIMIT 1 包裹执行，仅回列元数据 |
+   255→| POST | `/api/v1/data-sources/explore-api` | body `{action, method?, data?}` | `List<ColumnMeta>` | 调 API 拉样例推断列；缺 action 400；10s 超时 |
+   256→
+   257→### 1.16 PageDefinitionController — `/api/v1/pages`（7 端点）
+   258→
+   259→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   260→|---|---|---|---|---|
+   261→| POST | `/api/v1/pages` | body `PageDefinitionSaveRequest` | `PageDefinition` | |
+   262→| GET | `/api/v1/pages` | query `page=1`, `size=20`, `status?`, `name?`, `type?`（VIEW/PAGE） | `PageResponse<PageDefinitionDTO>` | |
+   263→| GET | `/api/v1/pages/{id}` | path | `PageDefinitionDetailDTO`（含 schema） | |
+   264→| GET | `/api/v1/pages/{key}/definition` | path `key`; query `preview=false` | `PageDefinitionDetailDTO` | 非 preview 走 PageAccessGuard；preview 动态编译 DRAFT |
+   265→| PUT | `/api/v1/pages/{id}` | path + body 同上 | `PageDefinition` | |
+   266→| DELETE | `/api/v1/pages/{id}` | path | `Void`（软删） | |
+   267→| POST | `/api/v1/pages/{id}/publish` | path | `PageDefinition` | 编译视图配置 |
+   268→
+   269→**DTO `PageDefinitionSaveRequest`**：`name:String`、`key:String`、`type:String`（VIEW/PAGE）、`formKey:String?`、`dataSourceId:String?`、`schema:String(JSON)`
+   270→
+   271→### 1.17 PageQueryController — `/api/v1/pages`（2 端点，渲染期数据出口）
+   272→
+   273→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   274→|---|---|---|---|---|
+   275→| GET | `/api/v1/pages/{pageKey}/data` | path + query 绑定 `BizDataQueryRequest` | `BizDataPageVO` | VIEW 页数据；PageAccessGuard；filter/sort 走 schema 白名单（searchFields/sortableFields），越界 400 |
+   276→| GET | `/api/v1/pages/{pageKey}/ds/{dataSourceId}/data` | path ×2 + query 绑定 `BizDataQueryRequest` | `BizDataPageVO` | PAGE 自定义页数据源查询；解析 schema.dataSources[].refId |
+   277→
+   278→### 1.18 PageMenuController — `/api/v1/pages`（3 端点）
+   279→
+   280→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   281→|---|---|---|---|---|
+   282→| POST | `/api/v1/pages/{id}/mount-menu` | path; body `MountMenuRequest?`（`name?`、`parentId?`） | `PageMenuResponse.MenuItem` | 仅 PUBLISHED 可挂接（否则 400）；固定 path=/page/{key}、permission=page:read:{key}；管理员挂接自动授权 ROLE_ADMIN |
+   283→| GET | `/api/v1/pages/{key}/menus` | path `key` | `PageMenuResponse`（items[]） | 按 path 反查全部菜单 |
+   284→| DELETE | `/api/v1/pages/menus/{menuId}` | path `menuId:Long` | `Void` | 软删菜单；404 兜底 |
+   285→
+   286→### 1.19 SystemInternalController — `/api/v1/internal`（9 端点，低代码内部数据源对接）
+   287→
+   288→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   289→|---|---|---|---|---|
+   290→| GET | `/api/v1/internal/system/dept-tree` | query `keyword?` | `BizDataPageVO`（扁平化部门树） | 根节点 parentId=""；keyword 匹配 label/code |
+   291→| GET | `/api/v1/internal/system/dept-tree/metadata` | — | `DataSourceMetadata` | 列：id/parentId/label/code |
+   292→| POST | `/api/v1/internal/system/dept` | body `{orgName, orgCode}` | `BizDataVO` | |
+   293→| DELETE | `/api/v1/internal/system/dept/{id}` | path | `Void` | |
+   294→| GET | `/api/v1/internal/system/users` | query `keyword?`, `page=1`, `size=20` | `BizDataPageVO` | |
+   295→| GET | `/api/v1/internal/system/users/metadata` | — | `DataSourceMetadata` | 列：id/username/nickname/orgId/orgName/status |
+   296→| GET | `/api/v1/internal/system/users/{id}` | path | `BizDataVO` | |
+   297→| POST | `/api/v1/internal/system/user` | body `{username, nickname, orgId?}` | `BizDataVO` | |
+   298→| DELETE | `/api/v1/internal/system/user/{id}` | path | `Void` | |
+   299→
+   300→### 1.20 BackendLogicBeanController — `/api/v1/backend-logic`（1 端点）
+   301→
+   302→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   303→|---|---|---|---|---|
+   304→| GET | `/api/v1/backend-logic/beans` | — | `List<BackendBeanInfo>`（beanName/methodName/displayName/parameterCount） | 已注册后端逻辑 Bean 方法清单（设计器下拉） |
+   305→
+   306→---
+   307→
+   308→## 2. 模块：system（认证 + 组织权限 + 字典）— 7 个 Controller，35 个端点
+   309→
+   310→> 路径前缀为 `/api/<资源>`（**无 v1**），分页统一 `PageResult<T>`（`{total,page,size,rows[]}`）。
+   311→
+   312→### 2.1 AuthController — `/api/auth`（5 端点）
+   313→
+   314→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   315→|---|---|---|---|---|
+   316→| POST | `/api/auth/login` | body `LoginRequest`（@Valid） | `LoginResponse`（token/refreshToken/用户信息/roles 等） | **permitAll** |
+   317→| POST | `/api/auth/logout` | header `Authorization`（Bearer token） | `Void` | token 拉黑 |
+   318→| POST | `/api/auth/refresh` | body `{refreshToken:String}` | `LoginResponse` | |
+   319→| GET | `/api/auth/userinfo` | —（`@AuthenticationPrincipal LoginUser`） | `LoginResponse` | |
+   320→| GET | `/api/auth/menus` | —（同上） | `List<MenuTree>` | 当前用户菜单树 |
+   321→
+   322→**DTO `LoginRequest`**（record）：`username:String`（@NotBlank）、`password:String`（@NotBlank）
+   323→
+   324→### 2.2 UserController — `/api/users`（8 端点）
+   325→
+   326→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   327→|---|---|---|---|
+   328→| GET | `/api/users` | query 绑定 `UserQueryRequest` | `PageResult<UserVO>` |
+   329→| GET | `/api/users/batch` | query `ids:List<Long>?` | `List<UserVO>` |
+   330→| GET | `/api/users/{id}` | path `id:Long` | `UserVO` |
+   331→| POST | `/api/users` | body `UserCreateRequest`（@Valid） | `UserVO` |
+   332→| PUT | `/api/users/{id}` | path + body `UserUpdateRequest`（@Valid） | `UserVO` |
+   333→| DELETE | `/api/users/{id}` | path | `Void` |
+   334→| PUT | `/api/users/{id}/status` | path + body `{status:Integer}` | `Void` |
+   335→| PUT | `/api/users/{id}/reset-password` | path | `Void`（重置为默认密码 123456） |
+   336→
+   337→**DTO 字段**（record，标注 = 校验）：
+   338→- `UserQueryRequest`：`username?`、`nickname?`、`status:Integer?`、`orgId:Long?`、`orgIds:List<Long>?`、`roleIds:List<Long>?`、`page:Integer?`、`size:Integer?`
+   339→- `UserCreateRequest`：`username`（@NotBlank @Size(2,50)）、`nickname`（@NotBlank @Size(max50)）、`email?`、`phone?`、`orgId:Long?`、`roleIds:Long[]?`、`status:Integer?`
+   340→- `UserUpdateRequest`：`nickname?`（@Size(max50)）、`email?`、`phone?`、`orgId?`、`roleIds?`、`status?`
+   341→
+   342→### 2.3 RoleController — `/api/roles`（6 端点）
+   343→
+   344→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   345→|---|---|---|---|
+   346→| GET | `/api/roles` | query 绑定 `RoleQueryRequest` | `PageResult<RoleVO>` |
+   347→| POST | `/api/roles` | body `RoleCreateRequest`（@Valid） | `RoleVO` |
+   348→| PUT | `/api/roles/{id}` | path + body `RoleUpdateRequest`（@Valid） | `RoleVO` |
+   349→| DELETE | `/api/roles/{id}` | path | `Void` |
+   350→| GET | `/api/roles/{id}/menus` | path | `List<Long>`（menuIds） |
+   351→| PUT | `/api/roles/{id}/menus` | path + body `{menuIds:Long[]}` | `Void` |
+   352→
+   353→**DTO 字段**：`RoleQueryRequest`：`roleName?`、`roleCode?`、`status?`、`page?`、`size?`；`RoleCreateRequest`：`roleName`（@NotBlank @Size(max100)）、`roleCode`（@NotBlank @Size(max50)）、`description?`、`status?`；`RoleUpdateRequest`：`roleName?`（@Size(max100)）、`description?`、`status?`
+   354→
+   355→### 2.4 MenuController — `/api/menus`（4 端点）
+   356→
+   357→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   358→|---|---|---|---|
+   359→| GET | `/api/menus/tree` | — | `List<MenuTree>` |
+   360→| POST | `/api/menus` | body `MenuCreateRequest`（@Valid） | `MenuTree` |
+   361→| PUT | `/api/menus/{id}` | path + body `MenuUpdateRequest`（@Valid） | `MenuTree` |
+   362→| DELETE | `/api/menus/{id}` | path | `Void` |
+   363→
+   364→**DTO 字段**：`MenuCreateRequest`：`parentId:Long?`、`menuName`（@NotBlank @Size(max100)）、`menuType`（@NotBlank Integer）、`path?`（@Size(max200)）、`component?`（@Size(max255)）、`permission?`（@Size(max100)）、`icon?`（@Size(max50)）、`sortOrder?`、`status?`；`MenuUpdateRequest` 同结构（无 parentId，menuName 可选 @Size(max100)）
+   365→
+   366→### 2.5 OrganizationController — `/api/orgs`（4 端点）
+   367→
+   368→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   369→|---|---|---|---|
+   370→| GET | `/api/orgs/tree` | — | `List<TreeNode>` |
+   371→| POST | `/api/orgs` | body `OrganizationCreateRequest`（@Valid） | `TreeNode` |
+   372→| PUT | `/api/orgs/{id}` | path + body `OrganizationUpdateRequest`（@Valid） | `TreeNode` |
+   373→| DELETE | `/api/orgs/{id}` | path | `Void` |
+   374→
+   375→**DTO 字段**：`OrganizationCreateRequest`：`parentId:Long?`、`orgName`（@NotBlank @Size(max100)）、`orgCode`（@NotBlank @Size(max50)）、`sortOrder?`、`status?`；`OrganizationUpdateRequest`：`orgName?`、`orgCode?`、`sortOrder?`、`status?`
+   376→
+   377→### 2.6 DictTypeController — `/api/dict-types`（4 端点）
+   378→
+   379→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   380→|---|---|---|---|
+   381→| GET | `/api/dict-types` | query 绑定 `DictTypeQueryRequest` | `PageResult<DictTypeVO>` |
+   382→| POST | `/api/dict-types` | body `DictTypeCreateRequest`（@Valid） | `DictTypeVO` |
+   383→| PUT | `/api/dict-types/{id}` | path + body `DictTypeUpdateRequest`（@Valid） | `DictTypeVO` |
+   384→| DELETE | `/api/dict-types/{id}` | path | `Void` |
+   385→
+   386→**DTO 字段**：`DictTypeQueryRequest`：`dictName?`、`dictCode?`、`status?`、`page?`、`size?`；`DictTypeCreateRequest`：`dictName`（@NotBlank @Size(max100)）、`dictCode`（@NotBlank @Size(max50)）、`remark?`、`status?`；`DictTypeUpdateRequest`：`dictName?`、`remark?`、`status?`
+   387→
+   388→### 2.7 DictDataController — `/api/dict-data`（4 端点）
+   389→
+   390→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   391→|---|---|---|---|
+   392→| GET | `/api/dict-data/{dictCode}` | path `dictCode:String` | `List<DictDataVO>` |
+   393→| POST | `/api/dict-data` | body `DictDataCreateRequest`（@Valid） | `DictDataVO` |
+   394→| PUT | `/api/dict-data/{id}` | path + body `DictDataUpdateRequest`（@Valid） | `DictDataVO` |
+   395→| DELETE | `/api/dict-data/{id}` | path | `Void` |
+   396→
+   397→**DTO 字段**：`DictDataCreateRequest`：`dictCode`（@NotBlank）、`label`（@NotBlank @Size(max100)）、`value`（@NotBlank @Size(max100)）、`sortOrder?`、`status?`；`DictDataUpdateRequest`：`dictCode?`（@Size(max50)）、`label?`、`value?`、`sortOrder?`、`status?`
+   398→
+   399→---
+   400→
+   401→## 3. 模块：notification（消息中心）— 10 个 Controller，36 个端点
+   402→
+   403→> 管理端（admin 包 7 个 Controller）全部在方法体内调用 `NotificationAdminAuthorization.requireAdmin()`（角色 `ROLE_ADMIN`/`admin`，否则 403）。租户取 `TenantProvider.getTenantId()`（来自 X-Tenant-Id）。
+   404→
+   405→### 3.1 NotificationController（用户端消息）— `/api/v1/notifications`（8 端点）
+   406→
+   407→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   408→|---|---|---|---|---|
+   409→| GET | `/api/v1/notifications` | query `page=1`, `size=20`, `keyword?`, `category?`(MessageCategory), `unread:Boolean?`, `start?`, `end?`（`yyyy-MM-dd HH:mm:ss` @DateTimeFormat）, `messageType?`(MessageType) | `PageResult<Message>` | 当前用户取 SecurityContext |
+   410→| GET | `/api/v1/notifications/{id}` | path `id:Long` | `Message` | |
+   411→| GET | `/api/v1/notifications/unread-count` | — | `Long` | |
+   412→| PUT | `/api/v1/notifications/{id}/read` | path | `Void` | |
+   413→| POST | `/api/v1/notifications/read-batch` | body `List<Long>`（messageIds） | `Void` | ⚠️ body 直接是数组 |
+   414→| POST | `/api/v1/notifications/{id}/toggle-read` | path | `RecipientStatus` | 未读↔已读 |
+   415→| POST | `/api/v1/notifications/read-all` | — | `Void` | |
+   416→| DELETE | `/api/v1/notifications/{id}` | path | `Void` | |
+   417→
+   418→### 3.2 NotificationSseController（SSE）— `/api/v1/notifications/sse`（1 端点）⚠️ 特殊
+   419→
+   420→| 方法 | 路径 | 参数 | 返回 | 说明 |
+   421→|---|---|---|---|---|
+   422→| GET | `/api/v1/notifications/sse` | query `token`（必填，JWT access_token） | **`SseEmitter`**，`produces=text/event-stream` | **permitAll**（EventSource 无法带 header）；手动校验 token 有效性 + 必须为 access_token 类型；按 userId 注册连接；推送事件如 `new-message` |
+   423→
+   424→### 3.3 InternalNotificationController（模块间内部调用）— `/api/v1/internal/notifications`（2 端点）
+   425→
+   426→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   427→|---|---|---|---|---|
+   428→| POST | `/api/v1/internal/notifications/send` | body 完整 `Message` + query `recipientIds:List<Long>`（必填）, `channels:List<ChannelType>`（必填） | `Void` | 发布 MessageEvent 走完整发送链路 |
+   429→| POST | `/api/v1/internal/notifications/send-by-template` | body `TemplateSendRequest` + query 同上 | `Void` | 模板渲染发送；有 eventCode 走事件通道 |
+   430→
+   431→**DTO `TemplateSendRequest`**：`senderId:Long?`、`templateCode:String`（必填语义）、`variables:Map<String,Object>?`、`messageType:MessageType?`（缺省 PRIVATE）、`eventCode:String?`
+   432→
+   433→> 注：虽然名为 internal，该路径仍在 JWT 保护下（SecurityConfig anyRequest.authenticated），迁移时不可当作无鉴权内部口。
+   434→
+   435→### 3.4 SubscriptionController（管理端·订阅规则）— `/api/v1/admin/notification/subscriptions`（4 端点）
+   436→
+   437→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   438→|---|---|---|---|
+   439→| GET | `/api/v1/admin/notification/subscriptions` | query `page=1`, `size=20`, `eventCode?`（模糊） | `Map{rows[],total,page,size}` |
+   440→| POST | `/api/v1/admin/notification/subscriptions` | body `{eventCode, channel, priority, enable, action, condition/conditionExpr}` | `Void` |
+   441→| PUT | `/api/v1/admin/notification/subscriptions/{id}` | path `id:Long` + body 同上 | `Void` |
+   442→| DELETE | `/api/v1/admin/notification/subscriptions/{id}` | path | `Void` |
+   443→
+   444→### 3.5 AnnouncementController（管理端·公告）— `/api/v1/admin/notification/announcements`（4 端点）
+   445→
+   446→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   447→|---|---|---|---|---|
+   448→| POST | `/api/v1/admin/notification/announcements` | query `title`（必填）, `content`（必填，Markdown）, `recipientIds:List<Long>`（必填） | `Void` | PUBLIC+SYSTEM 消息；templateCode=ANNOUNCEMENT；逐用户 SSE 推送 |
+   449→| GET | `/api/v1/admin/notification/announcements` | query `page=1`, `size=20`, `keyword?` | `Map{rows[{id,title,senderId,recipientCount,createdAt}],total,page,size}` | |
+   450→| GET | `/api/v1/admin/notification/announcements/{id}` | path | `Message`（完整 Markdown） | 非公告 400 |
+   451→| DELETE | `/api/v1/admin/notification/announcements/{id}` | path | `Void` | 撤回=删消息+收件人 |
+   452→
+   453→### 3.6 ChannelController（管理端·渠道）— `/api/v1/admin/notification/channels`（5 端点）
+   454→
+   455→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   456→|---|---|---|---|---|
+   457→| GET | `/api/v1/admin/notification/channels` | — | `List<Map>`（id 1~5/name/type/enabled/successRate） | 渠道固定：1站内信 2短信 3企业微信 4小程序 5APP |
+   458→| POST | `/api/v1/admin/notification/channels/{id}/enable` | path `id:Long` | `Void` | 未知 id 返回 R.fail |
+   459→| POST | `/api/v1/admin/notification/channels/{id}/disable` | path | `Void` | |
+   460→| PUT | `/api/v1/admin/notification/channels/{id}/config` | path + body `Map<String,String>` | `Void` | 敏感字段加密存储 |
+   461→| POST | `/api/v1/admin/notification/channels/{id}/test` | path | `Void` | 站内信=真实发测试消息+SSE；外部渠道走 adapter.test() |
+   462→
+   463→### 3.7 StatsController（管理端·统计）— `/api/v1/admin/notification/stats`（1 端点）
+   464→
+   465→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   466→|---|---|---|---|
+   467→| GET | `/api/v1/admin/notification/stats/overview` | — | `Map{totalMessages,totalRecipients,failedRetries}` |
+   468→
+   469→### 3.8 DeliveryController（管理端·发送记录）— `/api/v1/admin/notification/deliveries`（2 端点）
+   470→
+   471→| 方法 | 路径 | 参数 | 返回 data 类型 | 说明 |
+   472→|---|---|---|---|---|
+   473→| GET | `/api/v1/admin/notification/deliveries` | query `page=1`, `size=20`, `keyword?`, `recipient?`, `channel?`(ChannelType), `start?`, `end?`（`yyyy-MM-dd HH:mm:ss`） | `Map{rows[],total,page,size}` | 收件人/渠道从 msg_recipient 反查 |
+   474→| POST | `/api/v1/admin/notification/deliveries/{id}/retry` | path `id:Long` | `Void` | 手动重发；无收件人 R.fail |
+   475→
+   476→### 3.9 TemplateController（管理端·模板）— `/api/v1/admin/notification/templates`（4 端点）
+   477→
+   478→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   479→|---|---|---|---|
+   480→| GET | `/api/v1/admin/notification/templates` | — | `List<MessageTemplate>` |
+   481→| POST | `/api/v1/admin/notification/templates` | body `MessageTemplate`（实体直收） | `MessageTemplate` |
+   482→| PUT | `/api/v1/admin/notification/templates/{id}` | path + body `MessageTemplate` | `MessageTemplate` |
+   483→| POST | `/api/v1/admin/notification/templates/{id}/toggle` | path | `Void` |
+   484→
+   485→### 3.10 EventDefinitionController（管理端·消息事件）— `/api/v1/admin/notification/events`（5 端点）
+   486→
+   487→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   488→|---|---|---|---|
+   489→| GET | `/api/v1/admin/notification/events` | query `page=1`, `size=20`, `keyword?`, `enabled:Boolean?` | `PageResult<NotificationEventDefinition>` |
+   490→| POST | `/api/v1/admin/notification/events` | body `{eventCode,eventName,description,businessDomain}` | `NotificationEventDefinition` |
+   491→| PUT | `/api/v1/admin/notification/events/{id}` | path + body `{eventName,description,businessDomain}` | `NotificationEventDefinition` |
+   492→| DELETE | `/api/v1/admin/notification/events/{id}` | path | `Void` |
+   493→| POST | `/api/v1/admin/notification/events/{id}/toggle` | path | `Void` |
+   494→
+   495→---
+   496→
+   497→## 4. 模块：example（业务扩展示例）— 2 个 Controller，5 个端点
+   498→
+   499→### 4.1 LeaveBillController — `/api/v1/example/leave`（3 端点，请假单流程语义操作）
+   500→
+   501→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   502→|---|---|---|---|
+   503→| POST | `/api/v1/example/leave/submit` | body `{id:String}` | `BizDataVO` |
+   504→| POST | `/api/v1/example/leave/approve` | body `{taskId:String}` | `BizDataVO` |
+   505→| POST | `/api/v1/example/leave/reject` | body `{taskId:String, reason?}` | `BizDataVO`（驳回） |
+   506→
+   507→### 4.2 EmpProfileController — `/api/v1/example/emp`（2 端点，员工档案语义操作）
+   508→
+   509→| 方法 | 路径 | 参数 | 返回 data 类型 |
+   510→|---|---|---|---|
+   511→| POST | `/api/v1/example/emp/adjust-salary` | body `{id:String, amount:Number}`（amount 缺失 400） | `BizDataVO` |
+   512→| POST | `/api/v1/example/emp/resign` | body `{id:String, reason?}` | `BizDataVO` |
+   513→
+   514→---
+   515→
+   516→## 5. 端点统计总表
+   517→
+   518→| 模块 | Controller 数 | 端点数 |
+   519→|---|---:|---:|
+   520→| api（工作流 + 低代码设计器） | 20 | 121 |
+   521→| system（认证/组织/字典） | 7 | 35 |
+   522→| notification（消息中心） | 10 | 36 |
+   523→| example（业务扩展示例） | 2 | 5 |
+   524→| **合计** | **39** | **197** |
+   525→
+   526→api 模块明细：ProcessInstance 9 · ProcessHistory 1 · ProcessVariable 6 · Task 11 · TaskRemind 2 · ProcessDesign 7 · ProcessDefinition(部署) 8 · Category 5 · Dashboard 1 · FormDefinition 9 · FormData 11 · BizData 11 · DataSource 14 · DbSchema 2 · MetadataProbe 2 · PageDefinition 7 · PageQuery 2 · PageMenu 3 · SystemInternal 9 · BackendLogicBean 1。
+   527→
+   528→## 6. 迁移关键注意点
+   529→
+   530→1. **SSE 是唯一非 JSON 端点**：`GET /api/v1/notifications/sse`（produces text/event-stream，返回 SseEmitter 长连接），permitAll + `?token=` query 认证且强制 access_token 类型；Node 版需实现等价 SSE 通道（事件如 `new-message`），并处理连接注册/推送/断连。
+   531→2. **放行路径仅 2 条**：`POST /api/auth/login` 与 SSE 端点；其余全部需 JWT。且全库无 `@PreAuthorize`——管理端权限是代码内 `requireAdmin()`、页面数据出口是 `PageAccessGuard`（404/403 语义 + admin 放行），Node 版必须以中间件复刻这两类检查，不能只做"登录即可"。
+   532→3. **响应/分页封装不统一**：所有端点包 `R{code,msg,data}`；分页有三种形态（`PageResult.rows` / `PageResponse.content` / `BizDataPageVO.records`，通知管理端列表为裸 `Map.rows`）；错误码常见"HTTP 200 + R.code=4xx/5xx"。前端按字段取值，Node 版需逐端点保真。
+   533→4. **隐式契约多**：`X-Tenant-Id` 头（可选，`/api/**` 拦截器透传）；`BizDataQueryRequest`/`UserQueryRequest` 等 GET 端点用**无注解 POJO 绑定 query 参数**（含 `filter`/`params` JSON 字符串）；乐观锁 `version` 藏在 body Map 或 query；`POST /notifications/read-batch` body 直接是 `List<Long>`；`claim` 的 userId 走 query 而 complete/reject 走 SecurityContext。
+   534→5. **多 Controller 共享前缀、路径有重叠风险**：`/api/v1/process-instances`（3 个 Controller）、`/api/v1/tasks`（2 个）、`/api/v1/pages`（3 个）、`/api/v1/data-sources`（3 个含 db/explore 子前缀）。存在多段路径防冲突设计（如 `/key/{key}/versions`、`/versions/{procDefId}/editor`），路由注册顺序在 Node（Express 等）下需保持"具体路径优先于 `/{id}` 参数路径"。全库无文件上传端点（0 处 MultipartFile）。
+   535→

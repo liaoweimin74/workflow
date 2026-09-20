@@ -51,8 +51,9 @@ if [ ! -f "$NODE_MARKER" ] && [ -f "$NODE_MARKER_SAFE" ]; then
 fi
 NODE_DB="$NODE_BACKEND_DIR/data/workflow.db"
 if [ ! -f "$NODE_MARKER" ]; then
-  if [ -f "$NODE_DB" ]; then
-    echo "[start-services] 检测到 Node 引擎主库，重建引擎标记..."
+  # Task 13-R5：db 持久信号自愈仅在 jar 缺失时生效（jar 存在 + 无 marker = 显式 Java 模式，必须尊重）
+  if [ -f "$NODE_DB" ] && [ ! -f "$JAR" ]; then
+    echo "[start-services] 检测到 Node 引擎主库（且 jar 缺失），重建引擎标记使用 Node..."
     mkdir -p /home/z/tools
     touch "$NODE_MARKER_SAFE" /home/z/tools/backend-engine-node 2>/dev/null || true
     NODE_MARKER="$NODE_MARKER_SAFE"

@@ -91,9 +91,11 @@ export function nodeEngineEnabled(): boolean {
     fs.existsSync(NODE_ENGINE_MARKER)
   )
     return true;
-  // ② 持久信号：Node 引擎主库历次重置均幸存 → 判定 Node 并重建 marker 自愈
-  //   （修复发布/重置后 marker 全灭 → 误走 Java 分支 → jar 缺失死锁 blocked）
-  if (fs.existsSync(NODE_DB_FILE)) {
+  // ② 持久信号自愈：Node 引擎主库历次重置均幸存 → 判定 Node 并重建 marker。
+  //   ⚠️ 仅当 jar 缺失时生效（Task 13-R5 冲突修复）：发布/重置会同时清掉 marker 与 jar，
+  //   此时回落 Node 自愈；而显式切换 Java / 回滚 Java 时 jar 存在且 marker 被有意清除，
+  //   若此处无条件重建 marker，会在切换流程内部瞬间改回 Node（实测发生的劫持）。
+  if (fs.existsSync(NODE_DB_FILE) && !fs.existsSync(JAR_PATH)) {
     recreateEngineMarkers();
     return true;
   }
@@ -109,6 +111,11 @@ export interface EngineStatus {
   markerSafe: boolean;
   markerTools: boolean;
   nodeDbExists: boolean;
+  /** 发布版检测：平台子项目是否随部署携带 / 是否生产模式（Task 13-R5） */
+  platform: {
+    deployed: boolean;
+    productionMode: boolean;
+  };
   java: {
     jarExists: boolean;
     jdkReady: boolean;
@@ -144,6 +151,10 @@ export function getEngineStatus(): EngineStatus {
     markerSafe: fs.existsSync(NODE_ENGINE_MARKER_SAFE),
     markerTools: fs.existsSync(NODE_ENGINE_MARKER),
     nodeDbExists: fs.existsSync(NODE_DB_FILE),
+    platform: {
+      deployed: fs.existsSync(NODE_BACKEND_DIR) && fs.existsSync(FRONTEND_DIR),
+      productionMode: process.env.NODE_ENV === "production",
+    },
     java: {
       jarExists: fs.existsSync(JAR_PATH),
       jdkReady: fs.existsSync(`${JDK_PATH}/bin/javac`),
@@ -431,6 +442,15 @@ async function spawnService(def: ServiceDef): Promise<SpawnOutcome> {
   if (sup.spawning.has(def.key)) return { action: "starting", reason: "上一次拉起仍在进行" };
   sup.spawning.add(def.key);
   try {
+    // Task 13-R5：cwd 缺失（发布版部署不包含 workflow_lowcode 子项目）时，
+    // spawn 会把 ENOENT 误报在命令路径上（曾误导为 /bin/sh、bun 缺失）。
+    // 在此快速失败，给出准确原因，且不触发无谓的自愈安装。
+    if (!fs.existsSync(def.cwd)) {
+      return {
+        action: "blocked",
+        reason: "部署环境不完整（平台子项目目录缺失）：发布版仅含门户页，请使用预览面板（开发模式）访问完整平台",
+      };
+    }
     // 端口已被占用（外部手动启动 / 上次子进程仍在）→ 视为已运行
     if (await checkPortOpen(def.port)) return { action: "already-running" };
     const rt = getRuntime(def.key);

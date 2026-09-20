@@ -49,10 +49,13 @@ fi
 if [ -x "$MAVEN/bin/mvn" ]; then
   log "Maven 已存在，跳过 ($MAVEN)"
 else
-  log "下载 Maven 3.9.9..."
+  # Task 13-R5：archive.apache.org 限速严重（曾挂起 15+ 分钟），改用 Maven Central CDN 首选；
+  # curl 带 --max-time 防挂起 + --retry 抗抖动，失败回落原镜像
+  log "下载 Maven 3.9.9（repo.maven.apache.org 高速镜像）..."
   mkdir -p "$TOOLS"
-  # 用 archive.apache.org（版本固定，dlcdn 只保留最新版）
-  curl -sL -o /tmp/maven.tar.gz \
+  curl -sL --max-time 600 --retry 2 -o /tmp/maven.tar.gz \
+    "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.tar.gz" \
+    || curl -sL --max-time 600 --retry 2 -o /tmp/maven.tar.gz \
     "https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz" \
     || { log "Maven 下载失败"; exit 1; }
   tar -xzf /tmp/maven.tar.gz -C "$TOOLS"

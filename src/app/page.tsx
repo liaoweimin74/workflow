@@ -43,6 +43,10 @@ type EngineChoice = "node" | "java";
 interface EngineStatus {
   engine: EngineChoice;
   nodeDbExists: boolean;
+  platform: {
+    deployed: boolean;
+    productionMode: boolean;
+  };
   java: {
     jarExists: boolean;
     jdkReady: boolean;
@@ -402,6 +406,23 @@ export default function PortalPage() {
               </div>
             </motion.div>
 
+            {/* 发布版环境提示（Task 13-R5）：发布部署不含平台子项目，子服务无法拉起 */}
+            {engineStatus && !engineStatus.platform.deployed && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="mt-6 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 sm:p-5"
+                role="alert"
+              >
+                <p className="text-sm font-medium text-amber-200">当前访问的是「发布版」部署，仅包含门户展示页</p>
+                <p className="mt-1.5 text-xs leading-relaxed text-amber-200/70">
+                  发布快照不包含平台前后端子项目（workflow_lowcode），因此无法在发布环境内拉起 :8080 / :5173 服务 —— 这是环境限制而非故障。
+                  请在开发沙箱的预览面板中访问完整平台（流程设计器 / 发起审批 / 看板均可正常使用）。
+                </p>
+              </motion.div>
+            )}
+
             {/* 服务状态卡 */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -544,12 +565,18 @@ export default function PortalPage() {
                     </span>
                     <span
                       className={`rounded-md px-2 py-0.5 text-[11px] ${
-                        engineStatus?.java.jarExists
-                          ? "bg-emerald-400/15 text-emerald-300"
-                          : "bg-amber-400/15 text-amber-300"
+                        engineStatus?.engine === "java"
+                          ? "bg-[#46c9d6]/25 text-[#9be3ea]"
+                          : engineStatus?.java.jarExists
+                            ? "bg-emerald-400/15 text-emerald-300"
+                            : "bg-amber-400/15 text-amber-300"
                       }`}
                     >
-                      {engineStatus?.java.jarExists ? "jar 就绪 · 可切换" : "需先构建 jar"}
+                      {engineStatus?.engine === "java"
+                        ? "当前使用"
+                        : engineStatus?.java.jarExists
+                          ? "jar 就绪 · 可切换"
+                          : "需先构建 jar"}
                     </span>
                   </div>
                   <p className="mt-2 text-xs leading-relaxed text-zinc-400">

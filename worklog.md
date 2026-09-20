@@ -551,3 +551,23 @@ Stage Summary:
 - Java 版恢复路径产品化：一键后台构建（含内存保护），构建日志实时可见，完成后即可切换
 - /bin/sh ENOENT 根治（自愈直连 bun 二进制）；「bun install」疑问澄清
 - 待办：Java 构建约 15~20 分钟后完成，届时可在门户页切换 Java 版验证（H2 历史数据视图）；下一轮巡检应检查构建结果
+
+---
+Task ID: 13-R5
+Agent: 主控（Z.ai Code）
+Task: 排查「自愈失败 ENOENT posix_spawn /usr/local/bin/bun」根因（发布版环境缺文件）+ Java 构建完成 + 双引擎切换端到端验证 + 修复 marker 自愈与 Java 模式冲突
+
+Work Log:
+- 关键定位：用户报错的 posix_spawn ENOENT 来自「发布版」生产部署（bun .next/standalone/server.js，Bun 运行时错误格式），非开发沙箱（dev.log 无对应记录、三端 PID 自 11:30 未变）。ENOENT 报在命令路径上的机制 = spawn 的 cwd（workflow_lowcode 子项目）在发布快照中不存在——印证用户「是不是文件没有复制过去」的猜测：发布版仅含门户应用，平台前后端子项目未被复制且 node_modules 被 .gitignore 排除
+- 修复①发布环境优雅降级：getEngineStatus 增加 platform.deployed/productionMode；spawnService 首行 cwd 存在性快速失败（准确提示「发布版仅含门户页，请用预览面板访问完整平台」，不再触发无谓自愈）；门户页新增 amber 环境横幅（role=alert）
+- 修复②Maven 下载挂起：bootstrap-after-reset.sh 改用 repo.maven.apache.org 高速镜像 + --max-time 600 --retry 2 + archive 回落。实际构建早已自行完成（15:04 启动 → 15:13 BUILD SUCCESS，jar 98M，此前误判卡死）
+- **修复③（重要）marker 自愈与显式 Java 模式冲突**：R3 的 nodeEngineEnabled() 无条件按 workflow.db 重建 marker，导致 switchBackendEngine('java') 在 getServiceDefs() 内部被瞬间劫持回 Node（实测：java 根本没启动、bun 7918 被拉起）。修复：db 信号自愈仅在 jar 缺失时生效（发布重置场景 jar 必被清；显式 Java/回滚时 jar 存在且 marker 有意清除，必须尊重）。start-services.sh 同步修复
+- **双引擎切换端到端实测通过**：浏览器点 Java → toast「已切换为Java版，后端启动中…」→ marker 清除 + java -Xmx448m PID 8061 接管 8080（401 R 信封=Spring Security 活着）→ 引擎卡 Java「当前使用」禁点；浏览器点 Node → bun 8253 接管 → health {"engine":"node","db":"up"} → 数据完整性验证：/api/v1/dashboard/stats code200（running 3/definition 2）、/api/v1/deployed-processes code200（请假审批（表单版）v3 等迁移数据在列）
+- 排查笔记：Node 后端把未匹配路由镜像为 Spring 风格 "No static resource ..."（对齐 GlobalExceptionHandler），曾误判为 Java 在服役；登录路径 /api/auth/login（非 /api/v1）；Java 登录路径契约差异待后续核查（401 于 /api/v1/auth/login 属预期，Java 白名单路径或为 /api/auth/login）
+- UI 打磨：Java 选项徽标三态（当前使用/jar 就绪·可切换/需先构建 jar）；截图 engine-final.png；改动文件 lint 0 错误
+
+Stage Summary:
+- 「发布后拉不起来」最终定性：发布版环境限制（子项目未随部署携带），代码已优雅降级+诚实提示，不再出现误导性 ENOENT
+- 双引擎切换全链路可用：Node（现行，数据完整）⇄ Java（jar 就绪），切换=杀 8080+按新引擎拉起，实测双向切换成功且数据无损
+- 当前引擎：Node.js 版（用户数据视图完整）；Java 版随时可切换
+- 待办：Java 版登录/API 契约核查（留给巡检）；发布版如需完整平台需改造部署结构（重大变更，需用户决策）

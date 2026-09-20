@@ -22,9 +22,24 @@ interface ServiceStatus {
   name: string;
   port: number;
   portOpen: boolean;
+  managedPid?: number | null;
   processAlive: boolean;
+  restarts?: number;
+  lastSpawnAt?: number | null;
+  lastExitAt?: number | null;
   prerequisiteOk: boolean;
   state: "running" | "starting" | "stopped" | "blocked";
+}
+
+interface SpawnOutcome {
+  action: "spawned" | "already-running" | "starting" | "blocked" | "backoff";
+  reason?: string;
+}
+
+interface ToastMsg {
+  id: number;
+  kind: "success" | "error" | "info";
+  text: string;
 }
 
 interface FeatureDef {
@@ -89,13 +104,64 @@ const STATE_TEXT: Record<ServiceStatus["state"], string> = {
   running: "运行中",
   starting: "启动中",
   stopped: "已停止",
-  blocked: "未构建",
+  blocked: "未就绪",
 };
+
+const FALLBACK_SERVICES: ServiceStatus[] = [
+  { key: "backend", name: "平台后端 (:8080)", port: 8080, state: "stopped", portOpen: false, processAlive: false, prerequisiteOk: true },
+  { key: "frontend", name: "Vue 前端 (Vite dev server)", port: 5173, state: "stopped", portOpen: false, processAlive: false, prerequisiteOk: true },
+];
+
+/** 拉起结果 → 用户可读摘要 */
+function summarizeActions(
+  actions: Record<string, SpawnOutcome>,
+  services: ServiceStatus[],
+): { kind: ToastMsg["kind"]; text: string } {
+  const nameOf: Record<string, string> = { backend: "后端", frontend: "前端" };
+  const parts: string[] = [];
+  let kind: ToastMsg["kind"] = "success";
+  for (const [key, a] of Object.entries(actions)) {
+    const label = nameOf[key] ?? key;
+    switch (a.action) {
+      case "spawned":
+        parts.push(`${label}已拉起，启动中…`);
+        kind = "info";
+        break;
+      case "already-running":
+        parts.push(`${label}运行正常`);
+        break;
+      case "starting":
+        parts.push(`${label}启动中…`);
+        kind = "info";
+        break;
+      case "backoff":
+        parts.push(`${label}崩溃冷却中：${a.reason ?? ""}`);
+        kind = "error";
+        break;
+      case "blocked":
+        parts.push(`${label}未就绪：${a.reason ?? "前置条件缺失"}`);
+        kind = "error";
+        break;
+    }
+  }
+  if (parts.length === 0) return { kind: "info", text: "检查完成" };
+  return { kind, text: parts.join("；") };
+}
 
 export default function PortalPage() {
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [booting, setBooting] = useState(true);
+  const [ensuring, setEnsuring] = useState(false);
+  const ensuringRef = useRef(false);
+  const [toasts, setToasts] = useState<ToastMsg[]>([]);
+  const toastSeq = useRef(0);
   const ensured = useRef(false);
+
+  const pushToast = useCallback((kind: ToastMsg["kind"], text: string) => {
+    const id = ++toastSeq.current;
+    setToasts((prev) => [...prev.slice(-2), { id, kind, text }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 6000);
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -107,16 +173,54 @@ export default function PortalPage() {
     }
   }, []);
 
+  /** 点击「检查 / 拉起服务」：带 loading + 结果通知。
+   *  ⚠️ POST 必须携带 body：无 body 的 fetch POST 不发 Content-Length，
+   *  Next dev 的 body 解析在 keep-alive 连接上会永久挂起（本次故障根因）。 */
+  const ensureServices = useCallback(async () => {
+    if (ensuringRef.current) return;
+    ensuringRef.current = true;
+    setEnsuring(true);
+    try {
+      const res = await fetch("/api/portal/services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "manual" }),
+      });
+      const json = await res.json();
+      const data = json?.data as
+        | { services?: ServiceStatus[]; actions?: Record<string, SpawnOutcome> }
+        | undefined;
+      if (data?.services) setServices(data.services);
+      if (data?.actions) {
+        const s = summarizeActions(data.actions, data.services ?? []);
+        pushToast(s.kind, s.text);
+      } else {
+        pushToast("info", "检查完成");
+      }
+    } catch {
+      pushToast("error", "检查请求失败，请稍后重试");
+    } finally {
+      ensuringRef.current = false;
+      setEnsuring(false);
+    }
+  }, [pushToast]);
+
   useEffect(() => {
     const boot = async () => {
       if (!ensured.current) {
         ensured.current = true;
         try {
-          const res = await fetch("/api/portal/services", { method: "POST" });
+          const res = await fetch("/api/portal/services", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: "boot" }),
+          });
           const json = await res.json();
-          if (json?.data) setServices(json.data);
+          const data = json?.data as { services?: ServiceStatus[] } | undefined;
+          if (data?.services) setServices(data.services);
+          else void fetchStatus();
         } catch {
-          /* ignore */
+          void fetchStatus();
         }
       }
       setBooting(false);
@@ -205,11 +309,17 @@ export default function PortalPage() {
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                 </a>
                 <button
-                  onClick={() => void fetch("/api/portal/services", { method: "POST" }).then(fetchStatus)}
-                  className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/10"
+                  onClick={() => void ensureServices()}
+                  disabled={ensuring}
+                  aria-busy={ensuring}
+                  className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <RefreshCw className="h-4 w-4" />
-                  检查 / 拉起服务
+                  {ensuring ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {ensuring ? "正在检查…" : "检查 / 拉起服务"}
                 </button>
               </div>
             </motion.div>
@@ -223,10 +333,7 @@ export default function PortalPage() {
             >
               {(services.length > 0
                 ? services
-                : [
-                    { key: "backend", name: "Java 后端 (Spring Boot + Flowable 8)", port: 8080, state: "stopped", portOpen: false, processAlive: false, prerequisiteOk: true },
-                    { key: "frontend", name: "Vue 前端 (Vite dev server)", port: 5173, state: "stopped", portOpen: false, processAlive: false, prerequisiteOk: true },
-                  ] as ServiceStatus[]
+                : FALLBACK_SERVICES
               ).map((s) => (
                 <div
                   key={s.key}
@@ -250,17 +357,28 @@ export default function PortalPage() {
                             ? "text-emerald-400"
                             : s.state === "starting"
                               ? "text-amber-400"
-                              : "text-zinc-400"
+                              : s.state === "blocked"
+                                ? "text-rose-400"
+                                : "text-zinc-400"
                         }
                       >
                         {STATE_TEXT[s.state]}
                       </span>
+                      {s.state === "blocked" && (
+                        <span className="ml-1.5 text-zinc-600">（点击上方按钮自动修复依赖）</span>
+                      )}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
                       <Server className="h-3 w-3" />
                       {s.processAlive ? `PID ${s.managedPid ?? "-"}` : "无进程"}
                     </span>
                   </div>
+                  {typeof s.restarts === "number" && s.restarts > 0 && (
+                    <div className="mt-2 text-[11px] text-zinc-600">
+                      累计拉起 {s.restarts} 次
+                      {s.lastExitAt ? ` · 最近退出 ${new Date(s.lastExitAt).toLocaleTimeString("zh-CN")}` : ""}
+                    </div>
+                  )}
                 </div>
               ))}
             </motion.div>
@@ -336,6 +454,31 @@ export default function PortalPage() {
           </div>
         </section>
       </main>
+
+      {/* 通知栈（右上角） */}
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed right-4 top-20 z-50 flex w-[min(92vw,26rem)] flex-col gap-2"
+      >
+        {toasts.map((t) => (
+          <motion.div
+            key={t.id}
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0 }}
+            className={`pointer-events-auto rounded-xl border px-4 py-3 text-sm shadow-xl backdrop-blur ${
+              t.kind === "success"
+                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                : t.kind === "error"
+                  ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
+                  : "border-[#46c9d6]/30 bg-[#46c9d6]/10 text-[#9be3ea]"
+            }`}
+            role="status"
+          >
+            {t.text}
+          </motion.div>
+        ))}
+      </div>
 
       {/* 粘性页脚 */}
       <footer className="mt-auto border-t border-white/5 bg-[#0b0d1a]">

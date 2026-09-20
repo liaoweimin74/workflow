@@ -39,6 +39,11 @@ kill_stale_backend() {
 NODE_MARKER=/home/z/tools/backend-engine-node
 NODE_BACKEND_DIR=/home/z/my-project/workflow_lowcode/backend-node
 
+# Task 13-R2：双位置 marker（安全区优先，兼容旧位置）
+NODE_MARKER_SAFE="$NODE_BACKEND_DIR/.engine-node"
+if [ ! -f "$NODE_MARKER" ] && [ -f "$NODE_MARKER_SAFE" ]; then
+  NODE_MARKER="$NODE_MARKER_SAFE"
+fi
 if [ -f "$NODE_MARKER" ]; then
   if port_open 8080; then
     if http_alive 8080 "/health"; then

@@ -482,3 +482,30 @@ Stage Summary:
 - 已知限制更新：新发起的 leave-form-flow 若不传 manager 变量，经理审批任务 assignee=null（与 Java ${manager} 语义一致，忠实复刻非 bug）
 - 备份：workflow.db.bak-20260919 + workflow.db-wal.bak-20260919（修复前快照）
 - 巡检 cron 将重建（webDevReview 15 分钟）
+
+---
+Task ID: 13-R2
+Agent: 主控（Z.ai Code）
+Task: 修复门户页「检查/拉起服务」按钮不起作用、无状态变化无通知的问题
+
+Work Log:
+- 用户报告按钮无反应；浏览器复现：后端显示"未构建"（blocked）、前端 restarts=490 疯狂重启循环
+- 现场核查：/home/z/tools marker 又被清（工作区外不可靠）+ node_modules 被重置清空 + 8080/5173 全死
+- **根因 1（最关键）**：浏览器 fetch POST 无 body 时不发 Content-Length: 0，Next dev 的 body 解析在 keep-alive 连接上永久等待 → POST handler 永不执行 → ensureAllServices 永不返回 → 按钮无任何反馈（curl 有 Content-Length: 0 所以正常，导致后端测试一直没暴露）
+- **根因 2**：marker 单点在 /home/z/tools（沙箱重置必丢）→ supervisor 误走 Java 分支 → jar 缺失 → blocked 死路
+- **根因 3**：spawn 启动即崩无退避 → vite 3ms 崩溃 × 490 次重启刷爆计数
+- **根因 4**：前端按钮无 loading/无 toast/无结果提示；ServiceStatus 接口缺 managedPid 字段；fallback 卡片名过时（"Java 后端"）
+- 修复：
+  1. page.tsx：所有 POST 带 Content-Type+body（根因 1）；按钮 loading 态（disabled+spinner+aria-busy）；新增轻量 toast 通知栈（右上角 framer-motion，success/error/info 三色，6s 自动消退）；summarizeActions 把 spawned/already-running/blocked/backoff 翻译为用户可读摘要；接口补 managedPid/restarts/lastExitAt；状态卡显示 PID、累计拉起次数、blocked 提示"点击上方按钮自动修复依赖"；fallback 名字更新
+  2. service-supervisor.ts：marker 双位置探测（安全区 backend-node/.engine-node 主 + /home/z/tools 兼容）；Node 后端/前端加 prerequisite 哨兵（node_modules/express、node_modules/vite）+ autoFixCmd（bun install 自愈，90s 超时）；spawnService 返回 SpawnOutcome（spawned/already-running/starting/blocked/backoff+reason）；启动即崩指数退避（5s→160s 上限 120s）；watchdog 巡检尊重退避
+  3. route.ts：POST 返回 { services, actions } 结构
+  4. start-services.sh：同步双位置 marker 判断
+  5. 落 marker 双位置 + bun install 恢复依赖 + 服务全绿（8080/5173/登录全 200）
+- 验证（agent-browser 端到端）：刷新后点按钮 → toast"后端运行正常；前端运行正常"；杀后端 → 点按钮 → toast"后端已拉起，启动中…" → 状态卡自动更新"运行中 PID 4548" → /health 200；console 0 error
+- 排查中工具坑记录：<nextjs-portal> DevTools 悬浮层会遮挡按钮点击（agent-browser click 报 covered）；eval 需 IIFE 防变量重复声明
+
+Stage Summary:
+- 门户服务管理链路首次完全可用：点击 → loading → 自愈（bun install 如需）→ 拉起 → toast 通知 → 状态卡自动刷新
+- POST 无 body 挂起是 Next dev + 浏览器 fetch 的隐蔽契约坑，已写入代码注释防复发
+- marker 迁入安全区后，沙箱重置不再导致引擎分支误判；依赖缺失从"永久 blocked"变为"按钮一键自愈"
+- 遗留观察：restarts 计数保留历史值（当前 495），下次 next dev 重启自然归零；watchdog 20s 巡检 + 退避机制运行正常

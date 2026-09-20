@@ -10,8 +10,11 @@ export async function GET() {
   return NextResponse.json({ code: 200, msg: "ok", data: status });
 }
 
-/** POST /api/portal/services — 确保服务已拉起（幂等），并返回最新状态 */
+/**
+ * POST /api/portal/services — 确保服务已拉起（幂等），并返回最新状态 + 拉起结果
+ * data: { services: ServiceStatus[], actions: Record<key, {action, reason?}> }
+ */
 export async function POST(_req: NextRequest) {
-  const status = await ensureAllServices();
-  return NextResponse.json({ code: 200, msg: "ok", data: status });
+  const { services, actions } = await ensureAllServices();
+  return NextResponse.json({ code: 200, msg: "ok", data: { services, actions } });
 }

@@ -41,9 +41,39 @@ NODE_BACKEND_DIR=/home/z/my-project/workflow_lowcode/backend-node
 
 # Task 13-R2：双位置 marker（安全区优先，兼容旧位置）
 NODE_MARKER_SAFE="$NODE_BACKEND_DIR/.engine-node"
+# Task 13-R3：发布/重置会清掉 node_modules、/home/z/tools、甚至项目内 dotfile marker，
+# 但源码与 SQLite 主库历次重置均幸存。决策链：
+#   ① 双 marker 任一存在 → Node
+#   ② workflow.db 存在（最强持久信号）→ 重建 marker → Node
+#   ③ jar 缺失（Java 无法运行且无自愈）→ 重建 marker → Node
 if [ ! -f "$NODE_MARKER" ] && [ -f "$NODE_MARKER_SAFE" ]; then
   NODE_MARKER="$NODE_MARKER_SAFE"
 fi
+NODE_DB="$NODE_BACKEND_DIR/data/workflow.db"
+if [ ! -f "$NODE_MARKER" ]; then
+  if [ -f "$NODE_DB" ]; then
+    echo "[start-services] 检测到 Node 引擎主库，重建引擎标记..."
+    mkdir -p /home/z/tools
+    touch "$NODE_MARKER_SAFE" /home/z/tools/backend-engine-node 2>/dev/null || true
+    NODE_MARKER="$NODE_MARKER_SAFE"
+  elif [ ! -f "$JAR" ]; then
+    echo "[start-services] jar 缺失且无 Java 回滚条件，自动使用 Node 引擎..."
+    mkdir -p /home/z/tools
+    touch "$NODE_MARKER_SAFE" /home/z/tools/backend-engine-node 2>/dev/null || true
+    NODE_MARKER="$NODE_MARKER_SAFE"
+  fi
+fi
+
+# Node 后端启动前置自愈：依赖缺失先 bun install（后台日志到 backend-node-install.log）
+start_node_backend() {
+  if [ ! -d "$NODE_BACKEND_DIR/node_modules/express" ]; then
+    echo "[start-services] backend-node 依赖缺失，执行 bun install（最多 4 分钟）..."
+    (cd "$NODE_BACKEND_DIR" && bun install >> "$LOG_DIR/backend-node-install.log" 2>&1) \
+      || echo "[start-services] backend-node bun install 失败，仍尝试启动（详见 backend-node-install.log）"
+  fi
+  (cd "$NODE_BACKEND_DIR" && PORT=8080 NODE_OPTIONS=--max-old-space-size=512 nohup bun src/index.ts >> "$LOG_DIR/backend-node.log" 2>&1 &)
+}
+
 if [ -f "$NODE_MARKER" ]; then
   if port_open 8080; then
     if http_alive 8080 "/health"; then
@@ -59,12 +89,12 @@ if [ -f "$NODE_MARKER" ]; then
         echo "[start-services] 后端假死，按 Node 引擎重启..."
         fuser -k 8080/tcp 2>/dev/null
         sleep 2
-        (cd "$NODE_BACKEND_DIR" && PORT=8080 NODE_OPTIONS=--max-old-space-size=512 nohup bun src/index.ts >> "$LOG_DIR/backend-node.log" 2>&1 &)
+        start_node_backend
       fi
     fi
   else
     echo "[start-services] 启动 Node 后端 (bun + Express, 8080)..."
-    (cd "$NODE_BACKEND_DIR" && PORT=8080 NODE_OPTIONS=--max-old-space-size=512 nohup bun src/index.ts >> "$LOG_DIR/backend-node.log" 2>&1 &)
+    start_node_backend
   fi
 else
 # ---- Java 后端 (8080) ----
@@ -99,6 +129,16 @@ fi
 fi
 
 # ---- Vite 前端 (5173) ----
+# Task 13-R3：依赖缺失先自愈安装，避免重置后 bun run dev 因 vite 二进制缺失而 code=127 空转
+FRONTEND_NODE_MODULES="$FRONTEND_DIR/node_modules/vite"
+ensure_frontend_deps() {
+  if [ ! -d "$FRONTEND_NODE_MODULES" ]; then
+    echo "[start-services] frontend 依赖缺失，执行 bun install（最多 4 分钟）..."
+    (cd "$FRONTEND_DIR" && bun install >> "$LOG_DIR/frontend-install.log" 2>&1) \
+      || echo "[start-services] frontend bun install 失败（详见 frontend-install.log）"
+  fi
+}
+
 if port_open 5173; then
   if http_alive 5173 "/lowcode/"; then
     echo "[start-services] 前端已在运行 (5173)"
@@ -106,10 +146,12 @@ if port_open 5173; then
     echo "[start-services] 5173 端口被占但无 HTTP 响应，清场重启..."
     pkill -f "vite" 2>/dev/null || true
     sleep 2
+    ensure_frontend_deps
     (cd "$FRONTEND_DIR" && nohup env NODE_OPTIONS="--max-old-space-size=512" bun run dev >> "$LOG_DIR/vite.log" 2>&1 &)
   fi
 else
   echo "[start-services] 启动 Vite 前端..."
+  ensure_frontend_deps
   # NODE_OPTIONS 堆上限：防 Turbopack 无限增长导致系统 OOM（见 worklog 2026-09-10 OOM 分析）
   (cd "$FRONTEND_DIR" && nohup env NODE_OPTIONS="--max-old-space-size=512" bun run dev >> "$LOG_DIR/vite.log" 2>&1 &)
 fi

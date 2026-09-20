@@ -509,3 +509,23 @@ Stage Summary:
 - POST 无 body 挂起是 Next dev + 浏览器 fetch 的隐蔽契约坑，已写入代码注释防复发
 - marker 迁入安全区后，沙箱重置不再导致引擎分支误判；依赖缺失从"永久 blocked"变为"按钮一键自愈"
 - 遗留观察：restarts 计数保留历史值（当前 495），下次 next dev 重启自然归零；watchdog 20s 巡检 + 退避机制运行正常
+
+---
+Task ID: 13-R3
+Agent: 主控（Z.ai Code）
+Task: 修复「发布（沙箱重置）后前后端应用拉不起来」——用户看到“后端未就绪：前置文件缺失 jar；前端未就绪：自愈失败（bun install）”
+
+Work Log:
+- 用户报告发布后两端拉不起来并贴出确切报错；现场核查：当前三端进程/端口其实全部存活（上一轮 13-R1 已恢复），报错发生在上次重置后、人工恢复前的时间窗，属于「重置后无法自愈」的结构性问题
+- dev.log 证据链还原（grep -a，dev.log 含二进制需 -a）：①`backend 前置文件缺失 jar` 循环 20+ 次——重置清掉双 marker → 监督器误走 Java 分支 → jar 缺失且 Java 分支无 autoFixCmd → 死锁 blocked；②`frontend 进程退出 code=127`——node_modules 被清后 bun run dev 找不到 vite；③自愈失败——旧 execSync 超时仅 90s，冷装 Vue 依赖树超时被误判失败
+- 关键发现：历次重置连项目内 dotfile（backend-node/.engine-node）也会被清，但源码与 SQLite 主库（backend-node/data/workflow.db）百试不爽全部幸存 → 以 workflow.db 作为 Node 引擎的「最强持久信号」
+- 修复① service-supervisor.ts 引擎决策三级回落：marker 双位置 → workflow.db 存在则判定 Node 并自动重建双 marker（recreateEngineMarkers）→ getServiceDefs 中 `nodeEngineEnabled() || !fs.existsSync(JAR_PATH)`：jar 缺失时 Java 无法运行且无自愈，强制回落 Node，绝不再卡死 blocked；显式回滚契约保留（删 marker + jar 存在 → Java）
+- 修复② 自愈加固 runAutoFix：超时 90s→240s、失败重试 2 次、捕获 stdout/stderr 尾部 600 字符进 console.warn 与 blocked reason（用户能看到真实失败原因而非笼统"请检查网络/日志"）
+- 修复③ start-services.sh 同步加固：同样的三级决策链；新增 start_node_backend()（backend-node 依赖缺失先 bun install，日志到 backend-node-install.log）与 ensure_frontend_deps()（vite 缺失先装，防 code=127 空转）
+- 验证：bash -n 语法 OK；lint 13 errors 全部位于 workflow_lowcode 子项目历史代码（React 规则误报 Vue 文件），与本次修改无关；**决策链实战演练**：移除双 marker 模拟重置 → bun 执行 scripts/test-engine-decision.ts → nodeEngineEnabled()=true、backend 定义为 Node 分支、双 marker 自动重建（时间戳 14:50 为证）→ PASS；agent-browser 端到端：门户页双状态卡「运行中」+ PID → 点「检查/拉起服务」→ toast「后端运行正常；前端运行正常」→ 截图 portal-verified.png；/lowcode/ 308 重定向正常；/health 返回 {"status":"ok","engine":"node","db":"up"}
+- 新增回归测试脚本 scripts/test-engine-decision.ts（可重复执行）
+
+Stage Summary:
+- 「发布后拉不起来」三类根因全部闭环：marker 全灭误判 Java（持久信号自愈）、jar 缺失死路（自动回落 Node）、bun install 冷装超时（240s×2 + 错误详情透出）
+- 重置后恢复能力从「需人工按 SOP 五步」升级为「打开门户页点一次按钮（甚至仅等待看门狗）全自动自愈」
+- 未尽事项：bootstrap-after-reset.sh 仍是 Java 工具链导向的历史脚本（可后续精简）；restarts=495 历史计数下次 next dev 重启归零

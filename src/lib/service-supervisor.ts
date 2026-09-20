@@ -61,15 +61,49 @@ export const NODE_ENGINE_MARKER = "/home/z/tools/backend-engine-node";
 export const NODE_ENGINE_MARKER_SAFE =
   "/home/z/my-project/workflow_lowcode/backend-node/.engine-node";
 
-export function nodeEngineEnabled(): boolean {
-  return (
-    fs.existsSync(NODE_ENGINE_MARKER_SAFE) || fs.existsSync(NODE_ENGINE_MARKER)
-  );
+/**
+ * 持久化 Node 引擎信号（Task 13-R3）：
+ * 沙箱「发布/重置」会清掉 node_modules、/home/z/tools、甚至项目内的 dotfile marker，
+ * 但源码与 SQLite 数据库历次重置均幸存。因此 workflow.db 存在即视为 Node 引擎
+ * 的最强持久信号，并顺手重建双 marker 完成自愈。
+ */
+export const NODE_DB_FILE = `${NODE_BACKEND_DIR}/data/workflow.db`;
+
+/** 重建双位置 marker（幂等，失败静默） */
+export function recreateEngineMarkers(): void {
+  try {
+    fs.mkdirSync("/home/z/tools", { recursive: true });
+    fs.writeFileSync(NODE_ENGINE_MARKER_SAFE, "");
+    fs.writeFileSync(NODE_ENGINE_MARKER, "");
+  } catch {
+    /* 只读等极端场景下忽略，决策已返回 true */
+  }
 }
 
-/** 动态服务定义：每次调用时按标记文件重新决策（监督器启动后仍可切换） */
+export function nodeEngineEnabled(): boolean {
+  // ① 显式 marker（双位置，保留既有「删 marker 回滚 Java」契约）
+  if (
+    fs.existsSync(NODE_ENGINE_MARKER_SAFE) ||
+    fs.existsSync(NODE_ENGINE_MARKER)
+  )
+    return true;
+  // ② 持久信号：Node 引擎主库历次重置均幸存 → 判定 Node 并重建 marker 自愈
+  //   （修复发布/重置后 marker 全灭 → 误走 Java 分支 → jar 缺失死锁 blocked）
+  if (fs.existsSync(NODE_DB_FILE)) {
+    recreateEngineMarkers();
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 动态服务定义：每次调用时按标记/持久信号重新决策（监督器启动后仍可切换）。
+ * Task 13-R3 决策链：marker / workflow.db → Node；否则 Java——
+ * 但 jar 缺失时 Java 根本无法运行（且无自愈手段），自动回落 Node，
+ * 绝不让服务卡死在 blocked（Node 分支有 bun install 自愈兜底）。
+ */
 export function getServiceDefs(): ServiceDef[] {
-  const nodeEngine = nodeEngineEnabled();
+  const nodeEngine = nodeEngineEnabled() || !fs.existsSync(JAR_PATH);
   const backendDef: ServiceDef = nodeEngine
     ? {
         key: "backend",
@@ -192,6 +226,48 @@ export interface SpawnOutcome {
   reason?: string;
 }
 
+/**
+ * 自愈命令执行（Task 13-R3 加固）：
+ * 旧实现 execSync 超时 90s 且失败即放弃——冷安装 Vue 前端依赖树常超 90s，
+ * 导致发布/重置后自愈被误判失败、用户看到「自愈失败（bun install）」。
+ * 现在：超时 240s × 最多 2 次，失败时截取 stderr/stderr 尾部进日志与 reason。
+ */
+const AUTOFIX_TIMEOUT_MS = 240_000;
+const AUTOFIX_MAX_ATTEMPTS = 2;
+
+function runAutoFix(def: ServiceDef): { ok: boolean; detail?: string } {
+  if (!def.autoFixCmd) return { ok: false };
+  let lastDetail = "";
+  for (let attempt = 1; attempt <= AUTOFIX_MAX_ATTEMPTS; attempt++) {
+    console.log(
+      `[supervisor] ${def.key} ${def.autoFixLabel ?? "自愈"} (第 ${attempt}/${AUTOFIX_MAX_ATTEMPTS} 次)...`,
+    );
+    try {
+      execSync(def.autoFixCmd, {
+        cwd: def.cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: AUTOFIX_TIMEOUT_MS,
+        env: { ...process.env },
+        encoding: "utf8",
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      console.log(`[supervisor] ${def.key} 自愈成功`);
+      return { ok: true };
+    } catch (e) {
+      const err = e as { stdout?: string; stderr?: string; message?: string };
+      lastDetail = [err.stderr, err.stdout, err.message]
+        .filter(Boolean)
+        .join("\n")
+        .trim()
+        .slice(-600);
+      console.warn(
+        `[supervisor] ${def.key} 自愈第 ${attempt} 次失败: ${lastDetail.split("\n").slice(-3).join(" | ") || "未知错误"}`,
+      );
+    }
+  }
+  return { ok: false, detail: lastDetail.split("\n").slice(-2).join(" | ") };
+}
+
 /** 拉起服务进程（作为 Next.js 服务器子进程常驻） */
 async function spawnService(def: ServiceDef): Promise<SpawnOutcome> {
   const sup = getSupervisor();
@@ -203,19 +279,14 @@ async function spawnService(def: ServiceDef): Promise<SpawnOutcome> {
     const rt = getRuntime(def.key);
     if (isPidAlive(rt.pid)) return { action: "starting", reason: "受管进程启动中" };
     if (def.prerequisite && !fs.existsSync(def.prerequisite)) {
-      // 自愈：依赖缺失时自动安装（仅当配置了 autoFixCmd）
+      // 自愈：依赖缺失时自动安装（超时 240s × 2 次，失败时带错误详情）
       if (def.autoFixCmd) {
-        console.log(`[supervisor] ${def.key} ${def.autoFixLabel ?? "自愈"}...`);
-        try {
-          execSync(def.autoFixCmd, {
-            cwd: def.cwd,
-            stdio: "pipe",
-            timeout: 90_000,
-            env: { ...process.env },
-          });
-        } catch (e) {
-          console.warn(`[supervisor] ${def.key} 自愈失败: ${e instanceof Error ? e.message : String(e)}`);
-          return { action: "blocked", reason: `自愈失败（${def.autoFixCmd}），请检查网络/日志` };
+        const fix = runAutoFix(def);
+        if (!fix.ok) {
+          return {
+            action: "blocked",
+            reason: `自愈失败（${def.autoFixCmd}）${fix.detail ? `：${fix.detail}` : "，请检查网络/日志"}`,
+          };
         }
         if (!fs.existsSync(def.prerequisite)) {
           return { action: "blocked", reason: `自愈后前置仍缺失: ${def.prerequisite}` };

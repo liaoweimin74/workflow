@@ -529,3 +529,25 @@ Stage Summary:
 - 「发布后拉不起来」三类根因全部闭环：marker 全灭误判 Java（持久信号自愈）、jar 缺失死路（自动回落 Node）、bun install 冷装超时（240s×2 + 错误详情透出）
 - 重置后恢复能力从「需人工按 SOP 五步」升级为「打开门户页点一次按钮（甚至仅等待看门狗）全自动自愈」
 - 未尽事项：bootstrap-after-reset.sh 仍是 Java 工具链导向的历史脚本（可后续精简）；restarts=495 历史计数下次 next dev 重启归零
+
+---
+Task ID: 13-R4
+Agent: 主控（Z.ai Code）
+Task: 用户需求「后端可以选择用java版或nodejs版」——门户页双引擎切换 + 顺带回答 /bin/sh ENOENT 与「为什么 bun install」疑问
+
+Work Log:
+- 事实核查回应前两问：①/bin/sh、bun、node、三端进程、双 marker、node_modules 全部完好——用户看到的「ENOENT posix_spawn /bin/sh」是发布窗口期文件系统瞬时态，且当前已不可复现；②「为什么 bun install」——Task 13 已把后端迁到 Node.js（bun+Express+SQLite），bun install 是装 Node 后端依赖，非 Java
+- 用户提出双引擎需求后核查 Java 可行性：jar/JDK21/Maven 全被重置清掉，但 backend 源码与 bootstrap-after-reset.sh 完好 → 设计「Java 版=一键后台构建后可用」
+- service-supervisor.ts 新增：EngineChoice/EngineStatus、currentEngine()、getEngineStatus()（含 jar/jdk/maven 检测+构建进程 pgrep+日志尾部 800 字符）、startJavaBuild()（detached spawn bootstrap 脚本，MAVEN_OPTS=-Xmx512m 防 OOM 连坐，写 /home/z/tools/java-build.log）、isJavaBuildRunning()、switchBackendEngine(target)（同引擎幂等返回；java 目标缺 jar 时拒绝；写/清双 marker → 杀受管子进程 → 最多 10s 轮询+fuser -k 8080 兜底 → 清 crashStreak/backoff → 立即 spawnService 新引擎）
+- runAutoFix 二次加固：「bun xxx」类自愈改 execFileSync 直连 bun 二进制（/usr/local/bin/bun → /home/z/.bun/bin/bun 兜底），彻底摆脱 /bin/sh 依赖（根治 ENOENT）
+- 新增 API /api/portal/engine：GET 状态；POST {action:switch|build-java}
+- page.tsx 新增「后端引擎」卡：两个 radio 式选项（Node 当前使用高亮禁点 / Java 显示 jar 就绪状态徽标）、切换 loading 态、缺 jar 时展示一键构建按钮+构建日志实时尾部（pre max-h-24 滚动）、数据源独立说明文案
+- curl 实测：GET 状态正确；switch java 被 400 守卫拦截（信息准确）；switch node 幂等 200；build-java 200 启动
+- agent-browser 实测：引擎卡渲染完整（Node「当前使用」禁点、Java「需先构建 jar」、构建区实时日志）；点 Java 切换 → toast 守卫提示；截图 engine-card-verified.png
+- Java 构建实测：15:04 启动，JDK 21 下载完成（javac 21.0.12.1），Maven 3.9.9 下载中；内存水位 2.7G/4.0G 安全
+
+Stage Summary:
+- 门户页首次实现双引擎可视切换：Node.js 版（现行，SQLite 数据完整）⇄ Java 版（原版 Flowable，需构建）；切换=改 marker+杀 8080+按新引擎拉起，前端/门户零改动
+- Java 版恢复路径产品化：一键后台构建（含内存保护），构建日志实时可见，完成后即可切换
+- /bin/sh ENOENT 根治（自愈直连 bun 二进制）；「bun install」疑问澄清
+- 待办：Java 构建约 15~20 分钟后完成，届时可在门户页切换 Java 版验证（H2 历史数据视图）；下一轮巡检应检查构建结果

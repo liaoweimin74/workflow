@@ -1,4 +1,4 @@
-import { spawn, execSync } from "child_process";
+import { spawn, execSync, execFileSync } from "child_process";
 import net from "net";
 import fs from "fs";
 
@@ -48,6 +48,10 @@ const BACKEND_DIR = "/home/z/my-project/workflow_lowcode/backend";
 const FRONTEND_DIR = "/home/z/my-project/workflow_lowcode/frontend";
 const NODE_BACKEND_DIR = "/home/z/my-project/workflow_lowcode/backend-node";
 const JAR_PATH = `${BACKEND_DIR}/target/workflow-platform-1.0.0-SNAPSHOT.jar`;
+const JDK_PATH = "/home/z/tools/jdk21";
+const MAVEN_PATH = "/home/z/tools/maven";
+const JAVA_BUILD_LOG = "/home/z/tools/java-build.log";
+const BOOTSTRAP_SCRIPT = "/home/z/my-project/scripts/bootstrap-after-reset.sh";
 
 /**
  * 引擎切换标记（Task 13-8 契约，Task 13-R2 加固）：
@@ -81,7 +85,7 @@ export function recreateEngineMarkers(): void {
 }
 
 export function nodeEngineEnabled(): boolean {
-  // ① 显式 marker（双位置，保留既有「删 marker 回滚 Java」契约）
+  // ① 显式 marker（双位置，保留「删 marker 回滚 Java」契约）
   if (
     fs.existsSync(NODE_ENGINE_MARKER_SAFE) ||
     fs.existsSync(NODE_ENGINE_MARKER)
@@ -94,6 +98,142 @@ export function nodeEngineEnabled(): boolean {
     return true;
   }
   return false;
+}
+
+/** ---------- Task 13-R4：双引擎切换（Node.js 版 / Java 版） ---------- */
+
+export type EngineChoice = "node" | "java";
+
+export interface EngineStatus {
+  engine: EngineChoice;
+  markerSafe: boolean;
+  markerTools: boolean;
+  nodeDbExists: boolean;
+  java: {
+    jarExists: boolean;
+    jdkReady: boolean;
+    mavenReady: boolean;
+    buildRunning: boolean;
+    buildLogTail: string | null;
+  };
+}
+
+export function currentEngine(): EngineChoice {
+  return nodeEngineEnabled() ? "node" : "java";
+}
+
+export function isJavaBuildRunning(): boolean {
+  try {
+    execFileSync("pgrep", ["-f", "bootstrap-after-reset.sh"], { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getEngineStatus(): EngineStatus {
+  let buildLogTail: string | null = null;
+  try {
+    const raw = fs.readFileSync(JAVA_BUILD_LOG, "utf8");
+    buildLogTail = raw.slice(-800);
+  } catch {
+    /* 日志尚未生成 */
+  }
+  return {
+    engine: currentEngine(),
+    markerSafe: fs.existsSync(NODE_ENGINE_MARKER_SAFE),
+    markerTools: fs.existsSync(NODE_ENGINE_MARKER),
+    nodeDbExists: fs.existsSync(NODE_DB_FILE),
+    java: {
+      jarExists: fs.existsSync(JAR_PATH),
+      jdkReady: fs.existsSync(`${JDK_PATH}/bin/javac`),
+      mavenReady: fs.existsSync(`${MAVEN_PATH}/bin/mvn`),
+      buildRunning: isJavaBuildRunning(),
+      buildLogTail,
+    },
+  };
+}
+
+/** 后台一键构建 Java 版（JDK + Maven + jar，约 10~20 分钟）；重复调用安全 */
+export function startJavaBuild(): { started: boolean; reason?: string } {
+  if (isJavaBuildRunning()) return { started: false, reason: "构建已在进行中" };
+  if (fs.existsSync(JAR_PATH)) return { started: false, reason: "jar 已存在，无需构建" };
+  fs.mkdirSync("/home/z/tools", { recursive: true });
+  const out = fs.openSync(JAVA_BUILD_LOG, "a");
+  fs.appendFileSync(JAVA_BUILD_LOG, `\n===== 构建开始 ${new Date().toISOString()} =====\n`);
+  const child = spawn("bash", [BOOTSTRAP_SCRIPT], {
+    detached: true,
+    stdio: ["ignore", out, out],
+    // MAVEN_OPTS 堆上限：沙箱仅 3.9Gi，Maven 默认堆=物理 1/4 会挤压 next-server（历史 OOM 事故）
+    env: { ...process.env, MAVEN_OPTS: "-Xmx512m -XX:MaxMetaspaceSize=256m" },
+  });
+  child.unref();
+  console.log(`[supervisor] Java 构建已启动 pid=${child.pid}，日志: ${JAVA_BUILD_LOG}`);
+  return { started: true };
+}
+
+/** 切换后端引擎：写/清 marker → 杀 8080 旧进程 → 清退避 → 立即按新引擎拉起 */
+export async function switchBackendEngine(target: EngineChoice): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const cur = currentEngine();
+  if (cur === target) return { ok: true, message: `当前已是${target === "node" ? "Node.js" : "Java"}版，无需切换` };
+  if (target === "java" && !fs.existsSync(JAR_PATH)) {
+    return { ok: false, message: "Java 版 jar 尚未构建，请先点击「一键构建」后再切换" };
+  }
+  // 1. 改写引擎标记
+  if (target === "node") recreateEngineMarkers();
+  else {
+    for (const m of [NODE_ENGINE_MARKER_SAFE, NODE_ENGINE_MARKER]) {
+      try {
+        fs.rmSync(m, { force: true });
+      } catch {
+        /* 忽略 */
+      }
+    }
+  }
+  console.log(`[supervisor] 引擎切换 → ${target}，正在停止旧 8080 进程...`);
+  // 2. 停旧后端：优先本监督器受管子进程，再兜底 fuser 清端口
+  const rt = getRuntime("backend");
+  if (rt.child && isPidAlive(rt.pid)) {
+    try {
+      rt.child.kill("SIGTERM");
+    } catch {
+      /* 忽略 */
+    }
+  }
+  for (let i = 0; i < 10; i++) {
+    if (!(await checkPortOpen(8080))) break;
+    if (i === 5) {
+      try {
+        execFileSync("fuser", ["-k", "8080/tcp"], { stdio: "ignore" });
+      } catch {
+        /* fuser 缺失时忽略，循环继续等 */
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  if (await checkPortOpen(8080)) {
+    return { ok: false, message: "8080 被非受管进程占用且无法清场，切换失败（可手动 fuser -k 8080/tcp）" };
+  }
+  // 3. 清运行态（崩溃退避/启动即崩计数），立即按新引擎拉起
+  rt.child = undefined;
+  rt.pid = undefined;
+  rt.crashStreak = 0;
+  rt.backoffUntil = 0;
+  const sup = getSupervisor();
+  const def = getServiceDefs().find((d) => d.key === "backend");
+  if (!def) return { ok: false, message: "内部错误：backend 定义缺失" };
+  sup.spawning.delete("backend");
+  const outcome = await spawnService(def);
+  const text =
+    outcome.action === "spawned"
+      ? `已切换为${target === "node" ? "Node.js" : "Java"}版，后端启动中…`
+      : outcome.action === "already-running"
+        ? `已切换为${target === "node" ? "Node.js" : "Java"}版，后端运行中`
+        : `标记已切换，但拉起结果：${outcome.action}${outcome.reason ? `（${outcome.reason}）` : ""}`;
+  return { ok: outcome.action === "spawned" || outcome.action === "already-running", message: text };
 }
 
 /**
@@ -237,20 +377,37 @@ const AUTOFIX_MAX_ATTEMPTS = 2;
 
 function runAutoFix(def: ServiceDef): { ok: boolean; detail?: string } {
   if (!def.autoFixCmd) return { ok: false };
+  // Task 13-R4：不再经 /bin/sh（发布窗口期曾出现 posix_spawn '/bin/sh' ENOENT），
+  // 「bun xxx」直连 bun 二进制；其余命令保留 shell 兑底
+  const parts = def.autoFixCmd.trim().split(/\s+/);
+  const bunLike = parts[0] === "bun";
+  const bunBin = ["/usr/local/bin/bun", "/home/z/.bun/bin/bun", "bun"].find(
+    (p) => p === "bun" || fs.existsSync(p),
+  );
   let lastDetail = "";
   for (let attempt = 1; attempt <= AUTOFIX_MAX_ATTEMPTS; attempt++) {
     console.log(
       `[supervisor] ${def.key} ${def.autoFixLabel ?? "自愈"} (第 ${attempt}/${AUTOFIX_MAX_ATTEMPTS} 次)...`,
     );
     try {
-      execSync(def.autoFixCmd, {
-        cwd: def.cwd,
-        stdio: ["ignore", "pipe", "pipe"],
-        timeout: AUTOFIX_TIMEOUT_MS,
-        env: { ...process.env },
-        encoding: "utf8",
-        maxBuffer: 16 * 1024 * 1024,
-      });
+      if (bunLike && bunBin) {
+        execFileSync(bunBin, parts.slice(1), {
+          cwd: def.cwd,
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: AUTOFIX_TIMEOUT_MS,
+          env: { ...process.env },
+          maxBuffer: 16 * 1024 * 1024,
+        });
+      } else {
+        execSync(def.autoFixCmd, {
+          cwd: def.cwd,
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: AUTOFIX_TIMEOUT_MS,
+          env: { ...process.env },
+          encoding: "utf8",
+          maxBuffer: 16 * 1024 * 1024,
+        });
+      }
       console.log(`[supervisor] ${def.key} 自愈成功`);
       return { ok: true };
     } catch (e) {

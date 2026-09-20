@@ -6,8 +6,10 @@ import {
   Activity,
   ArrowRight,
   Boxes,
+  Cpu,
   Database,
   GitBranch,
+  Hammer,
   LayoutTemplate,
   Loader2,
   Network,
@@ -34,6 +36,20 @@ interface ServiceStatus {
 interface SpawnOutcome {
   action: "spawned" | "already-running" | "starting" | "blocked" | "backoff";
   reason?: string;
+}
+
+type EngineChoice = "node" | "java";
+
+interface EngineStatus {
+  engine: EngineChoice;
+  nodeDbExists: boolean;
+  java: {
+    jarExists: boolean;
+    jdkReady: boolean;
+    mavenReady: boolean;
+    buildRunning: boolean;
+    buildLogTail: string | null;
+  };
 }
 
 interface ToastMsg {
@@ -150,6 +166,9 @@ function summarizeActions(
 
 export default function PortalPage() {
   const [services, setServices] = useState<ServiceStatus[]>([]);
+  const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
+  const [switching, setSwitching] = useState<EngineChoice | null>(null);
+  const [building, setBuilding] = useState(false);
   const [booting, setBooting] = useState(true);
   const [ensuring, setEnsuring] = useState(false);
   const ensuringRef = useRef(false);
@@ -172,6 +191,61 @@ export default function PortalPage() {
       /* 忽略瞬时错误 */
     }
   }, []);
+
+  const fetchEngineStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/portal/engine", { cache: "no-store" });
+      const json = await res.json();
+      if (json?.data) setEngineStatus(json.data);
+    } catch {
+      /* 忽略瞬时错误 */
+    }
+  }, []);
+
+  /** 切换后端引擎（Node.js 版 / Java 版）：杀 8080 旧进程并按新引擎拉起 */
+  const switchEngine = useCallback(
+    async (target: EngineChoice) => {
+      if (switching) return;
+      setSwitching(target);
+      try {
+        const res = await fetch("/api/portal/engine", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "switch", engine: target }),
+        });
+        const json = await res.json();
+        pushToast(json?.code === 200 ? "success" : "error", json?.msg ?? "切换失败");
+        if (json?.data?.services) setServices(json.data.services);
+        if (json?.data?.engine) setEngineStatus(json.data.engine);
+        else void fetchEngineStatus();
+      } catch {
+        pushToast("error", "切换请求失败，请稍后重试");
+      } finally {
+        setSwitching(null);
+      }
+    },
+    [switching, pushToast, fetchEngineStatus],
+  );
+
+  /** 一键后台构建 Java 版（JDK + Maven + jar） */
+  const buildJava = useCallback(async () => {
+    if (building) return;
+    setBuilding(true);
+    try {
+      const res = await fetch("/api/portal/engine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "build-java" }),
+      });
+      const json = await res.json();
+      pushToast(json?.code === 200 ? "info" : "error", json?.msg ?? "构建启动失败");
+      if (json?.data) setEngineStatus(json.data);
+    } catch {
+      pushToast("error", "构建请求失败，请稍后重试");
+    } finally {
+      setBuilding(false);
+    }
+  }, [building, pushToast]);
 
   /** 点击「检查 / 拉起服务」：带 loading + 结果通知。
    *  ⚠️ POST 必须携带 body：无 body 的 fetch POST 不发 Content-Length，
@@ -226,10 +300,14 @@ export default function PortalPage() {
       setBooting(false);
     };
     void boot();
-    const timer = setInterval(fetchStatus, 5000);
+    const timer = setInterval(() => {
+      void fetchStatus();
+      void fetchEngineStatus();
+    }, 5000);
     void fetchStatus();
+    void fetchEngineStatus();
     return () => clearInterval(timer);
-  }, [fetchStatus]);
+  }, [fetchStatus, fetchEngineStatus]);
 
   const backend = services.find((s) => s.key === "backend");
   const frontend = services.find((s) => s.key === "frontend");
@@ -381,6 +459,140 @@ export default function PortalPage() {
                   )}
                 </div>
               ))}
+            </motion.div>
+
+            {/* 后端引擎切换卡（Task 13-R4：Node.js 版 / Java 版双引擎可选） */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.25 }}
+              className="mt-4 rounded-2xl border border-white/8 bg-white/[0.04] p-5 backdrop-blur"
+              aria-label="后端引擎切换"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#5755ee]/20 to-[#46c9d6]/15 text-[#8a8af4]">
+                  <Cpu className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-100">后端引擎</h3>
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    切换会自动重启 :8080 后端进程；两版数据源独立（Node 版 = 迁移后 SQLite 主库，Java 版 = 原始 H2 存储）
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {/* Node.js 版 */}
+                <button
+                  type="button"
+                  onClick={() => void switchEngine("node")}
+                  disabled={switching !== null || engineStatus?.engine === "node"}
+                  aria-pressed={engineStatus?.engine === "node"}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    engineStatus?.engine === "node"
+                      ? "border-[#5755ee]/60 bg-[#5755ee]/10"
+                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                  } ${switching ? "cursor-wait opacity-60" : ""}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                      <span
+                        className={`inline-block h-2.5 w-2.5 rounded-full border ${
+                          engineStatus?.engine === "node"
+                            ? "border-[#8a8af4] bg-[#8a8af4] shadow-[0_0_6px_rgba(138,138,244,0.9)]"
+                            : "border-zinc-500 bg-transparent"
+                        }`}
+                      />
+                      Node.js 版
+                    </span>
+                    {engineStatus?.engine === "node" && (
+                      <span className="rounded-md bg-[#5755ee]/25 px-2 py-0.5 text-[11px] text-[#b9b9f7]">当前使用</span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                    bun + Express + SQLite · 自研受控 DSL 引擎（现行），发起 / 审批 / 看板数据完整
+                  </p>
+                  {switching === "node" && (
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#9be3ea]">
+                      <Loader2 className="h-3 w-3 animate-spin" /> 正在切换，后端启动中…
+                    </p>
+                  )}
+                </button>
+
+                {/* Java 版 */}
+                <button
+                  type="button"
+                  onClick={() => void switchEngine("java")}
+                  disabled={switching !== null || engineStatus?.engine === "java"}
+                  aria-pressed={engineStatus?.engine === "java"}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    engineStatus?.engine === "java"
+                      ? "border-[#46c9d6]/60 bg-[#46c9d6]/10"
+                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                  } ${switching ? "cursor-wait opacity-60" : ""}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                      <span
+                        className={`inline-block h-2.5 w-2.5 rounded-full border ${
+                          engineStatus?.engine === "java"
+                            ? "border-[#46c9d6] bg-[#46c9d6] shadow-[0_0_6px_rgba(70,201,214,0.9)]"
+                            : "border-zinc-500 bg-transparent"
+                        }`}
+                      />
+                      Java 版
+                    </span>
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-[11px] ${
+                        engineStatus?.java.jarExists
+                          ? "bg-emerald-400/15 text-emerald-300"
+                          : "bg-amber-400/15 text-amber-300"
+                      }`}
+                    >
+                      {engineStatus?.java.jarExists ? "jar 就绪 · 可切换" : "需先构建 jar"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                    Spring Boot 4 + Flowable 8 · 原版实现，使用迁移前的历史数据视图
+                  </p>
+                  {switching === "java" && (
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#9be3ea]">
+                      <Loader2 className="h-3 w-3 animate-spin" /> 正在切换，Java 启动较慢…
+                    </p>
+                  )}
+                </button>
+              </div>
+
+              {/* Java 构建区：jar 缺失时展示一键构建 + 日志尾部 */}
+              {engineStatus && !engineStatus.java.jarExists && (
+                <div className="mt-3 rounded-xl border border-white/8 bg-black/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-zinc-400">
+                      {engineStatus.java.buildRunning
+                        ? "Java 版构建进行中：JDK 21 → Maven → jar 打包（约 10~20 分钟），完成后即可切换"
+                        : "Java 版构建产物已被沙箱重置清除；点击一键构建恢复（后台进行，不影响当前 Node 服务）"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void buildJava()}
+                      disabled={building || engineStatus.java.buildRunning}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-xs text-zinc-200 transition hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {building || engineStatus.java.buildRunning ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Hammer className="h-3.5 w-3.5" />
+                      )}
+                      {building || engineStatus.java.buildRunning ? "构建中…" : "一键构建 Java 版"}
+                    </button>
+                  </div>
+                  {engineStatus.java.buildLogTail && (
+                    <pre className="mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-zinc-500 [scrollbar-width:thin]">
+                      {engineStatus.java.buildLogTail}
+                    </pre>
+                  )}
+                </div>
+              )}
             </motion.div>
           </div>
         </section>

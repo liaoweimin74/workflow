@@ -313,13 +313,6 @@
                       <el-input-number v-model="row.scale" :min="0" :max="10" controls-position="right" size="small" style="width: 100%" />
                     </template>
                   </el-table-column>
-                  <el-table-column label="组件类型" min-width="120">
-                    <template #default="{ row }">
-                      <el-select v-model="row.componentType" clearable filterable placeholder="—" size="small" style="width: 100%">
-                        <el-option v-for="t in FORM_CREATE_COMPONENT_TYPES" :key="t" :label="t" :value="t" />
-                      </el-select>
-                    </template>
-                  </el-table-column>
                   <el-table-column label="必填" width="55" align="center">
                     <template #default="{ row }">
                       <el-checkbox v-model="row.required" />
@@ -398,13 +391,6 @@
                           <el-input-number v-model="editingColumn.scale" :min="0" :max="10" controls-position="right" style="width: 100%" />
                         </el-form-item>
                       </el-col>
-                      <el-col :span="8">
-                        <el-form-item label="组件类型">
-                          <el-select v-model="editingColumn.componentType" clearable filterable style="width: 100%">
-                            <el-option v-for="t in FORM_CREATE_COMPONENT_TYPES" :key="t" :label="t" :value="t" />
-                          </el-select>
-                        </el-form-item>
-                      </el-col>
                     </el-row>
                     <el-row :gutter="16">
                       <el-col :span="4">
@@ -464,7 +450,6 @@
                 >
                   <el-table-column prop="label" label="字段名" min-width="180" show-overflow-tooltip />
                   <el-table-column prop="key" label="标识" min-width="160" show-overflow-tooltip />
-                  <el-table-column prop="componentType" label="组件" min-width="100" />
                   <el-table-column label="必填" width="50" align="center">
                     <template #default="{ row }">
                       <span :style="boolIconStyle(row.required)">{{ row.required ? '✓' : '✗' }}</span>
@@ -588,18 +573,8 @@ const publishedWorkflowForms = ref<FormDefinitionDTO[]>([])
 /** API 操作 HTTP 方法候选 */
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const
 
-/** 列定义字段类型候选（第一版：仅列定义字段，不含 componentType） */
+/** 列定义字段类型候选（纯数据层字段；组件类型为内部派生元数据，不在字段元数据 UI 暴露） */
 const COLUMN_TYPES = ['VARCHAR', 'INTEGER', 'BIGINT', 'DECIMAL', 'DATETIME', 'DATE', 'TEXT', 'TINYINT'] as const
-
-/** form-create 已注册组件类型（对齐 ColumnConfigDialog.vue mapComponentToColumn + 项目自定义组件） */
-const FORM_CREATE_COMPONENT_TYPES = [
-  'input', 'textarea', 'inputNumber', 'select', 'radio', 'checkbox',
-  'cascader', 'multiSelect', 'multiSelectPro',
-  'datePicker', 'timePicker', 'slider', 'switch', 'rate',
-  'colorPicker', 'upload', 'tree', 'elTreeSelect', 'elTransfer',
-  'RichText', 'fcEditor', 'signaturePad',
-  'subForm', 'LookupPicker', 'dataPicker',
-] as const
 
 // ========== 搜索 ==========
 const searchFields = computed<SearchField[]>(() => [
@@ -1033,6 +1008,7 @@ function toColumnConfigItem(c: any): ColumnConfigItem {
     hidden: false,
     sortable: true,
     filterable: true,
+    // 探测结果可能携带组件类型（如「从主表单覆盖」补充）：内部派生元数据，UI 不展示但透传保留
     componentType: c.componentType ?? null,
     matchType: c.matchType ?? null,
   }
@@ -1054,6 +1030,7 @@ function serializeColumnConfig(c: ColumnConfigItem): Record<string, any> {
   item.unique = !!c.unique
   item.indexed = !!c.indexed
   item.hidden = !!c.hidden
+  // 组件类型为内部派生元数据（列表渲染/筛选控件映射/排序推导消费），字段元数据 UI 不编辑，原值透传
   if (c.componentType) item.componentType = c.componentType
   if (c.matchType) item.matchType = c.matchType
   return item

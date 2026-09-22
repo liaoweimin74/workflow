@@ -769,3 +769,31 @@ Stage Summary:
 - 引擎 7 类 BUG 全部修复，多人模式（会签/或签/依次）× 任务动作（转派/委托/加签/驳回/拒绝）共 17 个组合场景测试全绿；测试套件可重复执行（bun test tests/leave-flow-mi-actions.test.ts）
 - 委托与转派语义区分落地：委托保留 OWNER、受 allowDelegate 控制；转派直接换人、受 allowTransfer 控制
 - 加签语义落地：普通节点加候选人（可见待办）；MI 节点加子任务并同步上调完成票数，依次/并行模式均正确等待加签人
+
+---
+Task ID: 21
+Agent: 主控（Z.ai Code）
+Task: 用户需求「数据源中的字段元数据是不是不应该包括组件类型？」——字段元数据 UI 去除组件类型概念（内部派生元数据收敛）
+
+Work Log:
+- 勘察 componentType 全链路：来源=form-create schema rule.type 派生（FORM/WORKFLOW 表单发布同步、「从主表单覆盖」补充、SQL/API 探测默认空）；消费端=列表渲染定制（colorPicker 色块/数组值列 <key>_text 显示回退）、筛选控件映射（select→下拉/日期选择器）、排序推导（colorPicker 不可排序）——存储层不可移除
+- 结论：UI 层移除编辑/展示入口（用户观点正确：组件类型是表单设计器 UI 概念，不属于数据结构描述；SQL/API 手选 24 个 form-create 组件名是内部概念泄漏），存储与 API 透传保留（消费端功能不受影响）
+- 改动 DataSourceListPage.vue（4 处模板/脚本 + 2 处注释）：
+  ①API/SQL 可编辑表格删「组件类型」列（FORM_CREATE_COMPONENT_TYPES 下拉）
+  ②字段详情对话框删「组件类型」el-col（长度/精度行保留）
+  ③FORM/WORKFLOW/SYSTEM 只读表格删「组件」列（prop=componentType）
+  ④删除 FORM_CREATE_COMPONENT_TYPES 常量（全仓无残留引用）
+  ⑤serializeColumnConfig 保留 componentType 原值透传（加注释：内部派生元数据，UI 不编辑）
+  ⑥toColumnConfigItem 保留探测/覆盖结果的 componentType 初始化（加注释）
+- 测试更新：DataSourceListPage.test.ts 元数据表头断言 改为 not.toContain('组件类型')（含注释说明纯数据视角）
+- 验证（agent-browser 实测，截图 /tmp/ds-view-mode.png、/tmp/ds-form-meta.png）：
+  ①SQL 数据源查看+编辑模式字段元数据列头=标识/字段名/DB类型/长度/精度/必填/唯一/索引/隐藏/排序/筛选/查询方式（无组件类型）✓
+  ②字段详情对话框表单标签同上（无组件类型）✓
+  ③FORM 数据源（leave_form_copy）只读表格列头=字段名/标识/必填/唯一（无「组件」列），数据渲染正常 ✓
+  ④console 0 error；dev.log 无错误
+- 回归：DataSourceListPage.test.ts 51/51 全过（含「从主表单覆盖：schema 补 componentType」内部透传逻辑用例）
+
+Stage Summary:
+- 「字段元数据」回归纯数据视角：组件类型不再出现在数据源管理 UI 的任何位置（可编辑表格/列详情对话框/只读表格三处全移除）
+- 存储与 API 不变：componentType 作为内部派生元数据继续透传，列表渲染定制/筛选控件映射/排序推导全部不受影响；「从主表单覆盖」自动补充逻辑保留
+- 设计原则沉淀：数据源字段元数据 = 数据结构描述（标识/字段名/DB类型/长度/精度/约束/排序/筛选/查询方式）；UI 渲染语义由表单 schema 派生、仅在消费组件（表格/卡片/筛选）内部使用，不在管理界面暴露

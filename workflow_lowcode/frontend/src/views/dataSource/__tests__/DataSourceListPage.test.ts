@@ -1216,10 +1216,10 @@ describe('DataSourceListPage', () => {
     const html = wrapper.html()
     // 工具栏：获取字段（SQL 类型）
     expect(html).toContain('获取字段')
-    // 行内表格表头（7 列）
+    // 行内表格表头（字段元数据纯数据视角：组件类型为内部派生元数据，不在 UI 暴露）
     expect(html).toContain('标识')
     expect(html).toContain('字段名')
-    expect(html).toContain('组件类型')
+    expect(html).not.toContain('组件类型')
     expect(html).toContain('必填')
     expect(html).toContain('隐藏')
     expect(html).toContain('排序')

@@ -784,7 +784,7 @@ const metadataError = ref<string | null>(null)
 
 /** 布尔值图标样式：true 蓝色，false 灰色 */
 function boolIconStyle(v: boolean | undefined): Record<string, string> {
-  return { color: v ? '#409EFF' : '#c0c4cc', cursor: 'default' }
+  return { color: v ? '#0f766e' : '#c0c4cc', cursor: 'default' }
 }
 
 /** 查询方式选项（按列类型裁剪）：数值/日期 → 等值/范围；文本 → 等值/模糊 */

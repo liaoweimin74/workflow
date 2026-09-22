@@ -13,11 +13,17 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const collapsed = ref(false)
-const isDark = ref(false)
+// 暗色偏好持久化（Task 16）：优先读用户选择，从未选择时跟随系统
+const isDark = ref(localStorage.getItem('theme-dark') === '1')
+
+function applyDark() {
+  document.documentElement.classList.toggle('dark', isDark.value)
+}
 
 function toggleDark() {
   isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
+  localStorage.setItem('theme-dark', isDark.value ? '1' : '0')
+  applyDark()
 }
 /** 页签集合：path 唯一；name=路由 name（与组件 defineOptions name 一致，供 keep-alive include 匹配） */
 const tags = ref<{ path: string; title: string; locked?: boolean; name?: string }[]>([])
@@ -179,6 +185,11 @@ const breadcrumbs = computed(() => {
 
 onMounted(() => {
   document.addEventListener('click', closeContextMenu)
+  // 恢复暗色偏好；从未选择过且系统为深色时跟随系统
+  if (localStorage.getItem('theme-dark') === null && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    isDark.value = true
+  }
+  applyDark()
 })
 
 onUnmounted(() => {
@@ -188,23 +199,23 @@ onUnmounted(() => {
 
 <template>
   <div class="flex flex-col h-screen min-w-[1024px] max-w-[1920px] mx-auto bg-transparent dark:bg-transparent">
-    <!-- ====== 顶部标题栏（整行） ====== -->
-    <header class="h-14 flex items-center justify-between px-4 border-b border-[#e9edfa] bg-white dark:bg-[#161b36] dark:border-[#2a3054] shrink-0">
+    <!-- ====== 顶部标题栏（整行，玻璃感） ====== -->
+    <header class="h-14 flex items-center justify-between px-4 border-b border-[#e6e9e4] bg-white/85 dark:bg-[#181d1b]/85 dark:border-[#2b332e] backdrop-blur-md shrink-0 z-20">
       <!-- 左侧：折叠按钮 + Logo + 面包屑 -->
       <div class="flex items-center gap-4">
         <button
           @click="toggleCollapsed"
-          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] transition-colors shrink-0"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors shrink-0"
         >
           <el-icon :size="18"><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
         </button>
         <div class="flex items-center gap-2 shrink-0">
-          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#5755ee] to-[#46c9d6] flex items-center justify-center shadow-sm">
-            <span class="text-white text-sm font-bold">MB</span>
+          <div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#0f766e] to-[#22c9d6] flex items-center justify-center shadow-[0_2px_8px_rgba(15,118,110,0.35)]">
+            <span class="text-white text-sm font-bold tracking-tight">MB</span>
           </div>
-          <span class="text-base font-semibold text-gray-800 dark:text-gray-100">工作流管理系统</span>
+          <span class="text-base font-semibold tracking-tight text-gray-800 dark:text-gray-100">工作流管理系统</span>
         </div>
-        <div class="w-px h-5 bg-gray-200" />
+        <div class="w-px h-5 bg-gray-200 dark:bg-[#333d37]" />
         <el-breadcrumb separator="/">
           <el-breadcrumb-item v-for="(b, i) in breadcrumbs" :key="b.path">
             <span class="text-gray-500 text-sm flex items-center gap-1">
@@ -220,7 +231,7 @@ onUnmounted(() => {
         <NotificationBell />
         <button
           @click="toggleDark"
-          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] transition-colors"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors"
         >
           <el-icon :size="18"><Sunny v-if="isDark" /><Moon v-else /></el-icon>
         </button>
@@ -241,19 +252,19 @@ onUnmounted(() => {
 
     <!-- ====== 下方：菜单 + 内容 ====== -->
     <div class="flex flex-1 min-h-0">
-      <!-- 左侧菜单 -->
+      <!-- 左侧菜单：深墨松绿（明暗两态统一，形成纵向对比层次） -->
       <aside
         :class="collapsed ? 'w-16' : 'w-56'"
-        class="flex flex-col bg-[#eef0fc] border-r border-[#e9edfa] dark:bg-[#161b36] dark:border-[#2a3054] transition-all duration-300 shrink-0"
+        class="sidebar-ink flex flex-col bg-[#14201c] border-r border-[#0e1714] transition-all duration-300 shrink-0"
       >
-        <div class="flex-1 overflow-y-auto overflow-x-hidden py-2">
+        <div class="flex-1 overflow-y-auto overflow-x-hidden py-3">
           <el-menu
             :collapse="collapsed"
             :default-active="activeMenu"
             router
             background-color="transparent"
-            text-color="#4b5563"
-            active-text-color="#5755ee"
+            text-color="#a7b5ad"
+            active-text-color="#5eead4"
             style="border-right: none"
             @select="handleMenuSelect"
           >
@@ -273,28 +284,34 @@ onUnmounted(() => {
 
       <!-- 右侧内容区 -->
       <div class="flex-1 flex flex-col min-w-0">
-        <!-- 页签栏 -->
-        <div class="h-10 flex items-center gap-0 px-3 border-b border-[#e9edfa] bg-[#eef0fc] dark:bg-[#161b36] dark:border-[#2a3054] overflow-x-auto shrink-0">
+        <!-- 页签栏（胶囊式页签） -->
+        <div class="min-h-11 flex items-center gap-1.5 px-3 py-1.5 border-b border-[#e6e9e4] bg-white/60 dark:bg-[#181d1b]/70 dark:border-[#2b332e] backdrop-blur-sm overflow-x-auto shrink-0">
           <draggable
             v-model="tags"
             item-key="path"
             :animation="200"
             :filter="'.no-drag'"
             @end="onDragEnd"
-            class="flex items-center h-full"
+            class="flex items-center gap-1.5"
           >
             <template #item="{ element: tag }">
               <div
                 :class="[
-                  'h-full flex items-center gap-1.5 px-3 border-r border-[#e9edfa] dark:border-[#2a3054] cursor-pointer shrink-0 transition-colors text-sm select-none',
+                  'h-7 flex items-center gap-1.5 px-3 rounded-full cursor-pointer shrink-0 transition-all text-[13px] select-none border',
                   tag.path === '/dashboard' ? 'no-drag' : '',
                   route.path === tag.path
-                    ? 'bg-white dark:bg-[#1b2040] text-industrial-600 border-t-2 border-t-accent-500 -mt-px'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]'
+                    ? 'bg-[#e4f3f0] dark:bg-[rgba(45,212,191,0.14)] text-[#0f766e] dark:text-[#5eead4] border-[#c8e7e2] dark:border-[rgba(45,212,191,0.25)] font-medium shadow-[0_1px_2px_rgba(15,118,110,0.08)]'
+                    : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-200 hover:bg-[#f0f2ee] dark:hover:bg-[#252d28]'
                 ]"
                 @click="router.push(tag.path)"
                 @contextmenu.prevent="onTagContextMenu($event, tag)"
               >
+                <span
+                  :class="[
+                    'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
+                    route.path === tag.path ? 'bg-[#14a08f] dark:bg-[#2dd4bf]' : 'bg-gray-300 dark:bg-[#3b463f]'
+                  ]"
+                />
                 <span class="truncate max-w-[120px]">{{ tag.title }}</span>
                 <!-- 锁定状态：显示锁图标 -->
                 <el-icon v-if="tag.locked" :size="12" class="text-gray-400 shrink-0"><Lock /></el-icon>
@@ -302,7 +319,7 @@ onUnmounted(() => {
                 <button
                   v-else-if="tag.path !== '/dashboard'"
                   @click.stop="removeTag(tag.path)"
-                  class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-[#e9edfa] dark:hover:bg-[#2a3054] shrink-0"
+                  class="w-4 h-4 flex items-center justify-center rounded-full text-gray-300 hover:text-gray-600 hover:bg-[#dcd6d0]/40 dark:hover:bg-[#333d37] shrink-0 transition-colors"
                 >
                   <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -316,13 +333,13 @@ onUnmounted(() => {
         <!-- 右键菜单 -->
         <div
           v-if="contextMenu.visible"
-          class="fixed z-50 min-w-[140px] bg-white dark:bg-[#222750] rounded-md shadow-lg border border-[#e9edfa] dark:border-[#2a3054] py-1 text-sm"
+          class="fixed z-50 min-w-[140px] bg-white dark:bg-[#1f2522] rounded-md shadow-lg border border-[#e6e9e4] dark:border-[#2b332e] py-1 text-sm"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
           @click.stop
         >
           <div
             :class="[
-              'px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]',
+              'px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e]',
               (tags.find(t => t.path === contextMenu.targetPath)?.locked || contextMenu.targetPath === '/dashboard')
                 ? 'text-gray-300 cursor-not-allowed hover:bg-transparent'
                 : 'text-gray-700 dark:text-gray-200'
@@ -332,26 +349,26 @@ onUnmounted(() => {
             关闭本页
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] text-gray-700 dark:text-gray-200"
             @click="closeLeft(contextMenu.targetPath)"
           >
             关闭左侧
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] text-gray-700 dark:text-gray-200"
             @click="closeRight(contextMenu.targetPath)"
           >
             关闭右侧
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] text-gray-700 dark:text-gray-200"
             @click="closeAll()"
           >
             关闭所有
           </div>
           <div
             v-if="contextMenu.targetPath !== '/dashboard'"
-            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200 border-t border-[#e9edfa] dark:border-[#2a3054]"
+            class="px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] text-gray-700 dark:text-gray-200 border-t border-[#e6e9e4] dark:border-[#2b332e]"
             @click="toggleLock(contextMenu.targetPath)"
           >
             {{ tags.find(t => t.path === contextMenu.targetPath)?.locked ? '解锁本页' : '锁定本页' }}

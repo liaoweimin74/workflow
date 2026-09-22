@@ -7,7 +7,7 @@
     background-color: #FFF;
     --fc-drag-empty: "拖拽左侧列表中的组件到此处";
     --fc-child-empty: "点击右下角 \e789  按钮添加一列";
-    --fc-tool-border-color: #2E73FF;
+    --fc-tool-border-color: #0f766e;
 }
 
 ._fc-designer .CodeMirror-placeholder,
@@ -56,7 +56,7 @@
 }
 
 ._fc-l-menu-item.active {
-    color: #2E73FF;
+    color: #0f766e;
 }
 
 ._fc-l-menu-form {
@@ -68,13 +68,13 @@
 }
 
 ._fc-l-menu-item i:hover {
-    color: #2E73FF;
+    color: #0f766e;
 }
 
 ._fc-l-menu-item .el-badge__content {
     --el-badge-size: 15px;
     --el-badge-padding: 4px;
-    background-color: #2E73FF;
+    background-color: #0f766e;
 }
 
 ._fc-l-label {
@@ -178,7 +178,7 @@
 }
 
 ._fc-r {
-    --el-color-primary: #2E73FF;
+    --el-color-primary: #0f766e;
 }
 
 ._fc-r-tab-props {
@@ -249,7 +249,7 @@
 }
 
 ._fc-r-name-input .icon-group:hover {
-    color: #2E73FF;
+    color: #0f766e;
 }
 
 ._fc-r-tab-props > ._fd-config-item{
@@ -308,7 +308,7 @@
 }
 
 ._fc-tree-node.active, ._fc-tree-node.active .icon-more {
-    color: #2E73FF;
+    color: #0f766e;
 }
 
 ._fc-tree-label {
@@ -357,8 +357,8 @@
 }
 
 ._fc-l ._fc-l-tab.active {
-    color: #409EFF;
-    border-bottom: 2px solid #409EFF;
+    color: #0f766e;
+    border-bottom: 2px solid #0f766e;
 }
 
 ._fc-l-group {
@@ -418,7 +418,7 @@
 }
 
 ._fc-l-item:hover {
-    background: #2E73FF;
+    background: #0f766e;
     color: #fff;
 }
 
@@ -448,7 +448,7 @@
 }
 
 ._fc-m-tools-l .devices .fc-icon.active {
-    color: #2E73FF;
+    color: #0f766e;
 }
 
 ._fc-m-tools-l .devices .fc-icon + .fc-icon {
@@ -505,7 +505,7 @@
 }
 
 ._fc-m-tools ._fd-input-btn .is-checked .el-switch__action {
-    --el-color-white: #2E73FF;
+    --el-color-white: #0f766e;
     left: calc(100% - 20px);
 }
 
@@ -571,8 +571,8 @@
 }
 
 ._fc-r ._fc-r-tab.active {
-    color: #409EFF;
-    border-bottom: 2px solid #409EFF;
+    color: #0f766e;
+    border-bottom: 2px solid #0f766e;
 }
 
 ._fc-m-con {
@@ -778,9 +778,9 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    background: #2E73FF33;
+    background: #0f766e33;
     border-radius: 10px;
-    color: #2E73FF;
+    color: #0f766e;
     cursor: pointer;
 }
 

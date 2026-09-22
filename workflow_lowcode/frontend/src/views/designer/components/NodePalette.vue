@@ -79,7 +79,7 @@ interface PaletteGroup {
 /* 节点类别 → 图标 chip 配色（柔和填充 + 同色文字，X6 BPMN 风格） */
 const CATEGORY_STYLES: Record<string, { bg: string; color: string }> = {
   event: { bg: '#ecfbfd', color: '#2ca7b5' },      // 青 — 事件
-  activity: { bg: '#e9eaff', color: '#5452d3' },   // 靛蓝 — 活动
+  activity: { bg: '#d7f5ee', color: '#0d9488' },   // 靛蓝 — 活动
   gateway: { bg: '#fef3c7', color: '#d97706' },    // 琥珀 — 网关
 }
 
@@ -146,7 +146,7 @@ function handleClick(_node: PaletteNode) {
 <style scoped>
 .node-palette {
   background: #fff;
-  border-right: 1px solid var(--color-industrial-300, #b9b9f9);
+  border-right: 1px solid var(--color-industrial-300, #7fd8c9);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -173,13 +173,13 @@ function handleClick(_node: PaletteNode) {
   height: 40px;
   cursor: pointer;
   color: var(--el-text-color-regular, #4b5169);
-  border-bottom: 1px solid var(--el-border-color-light, #e9edfa);
+  border-bottom: 1px solid var(--el-border-color-light, #e6e9e4);
   transition: background 0.2s, color 0.2s;
 }
 
 .collapse-bar-top:hover {
-  background: var(--el-fill-color-lighter, #f8f9fe);
-  color: var(--ds-industrial-500, #5755ee);
+  background: var(--el-fill-color-lighter, #f9faf7);
+  color: var(--ds-industrial-500, #0f766e);
 }
 
 .expand-toggle {
@@ -207,7 +207,7 @@ function handleClick(_node: PaletteNode) {
 }
 
 .collapsed-item:hover {
-  background: var(--ds-selected, #e9eaff);
+  background: var(--ds-selected, #d7f5ee);
 }
 
 .collapsed-item:active {
@@ -226,7 +226,7 @@ function handleClick(_node: PaletteNode) {
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--el-border-color-light, #e9edfa);
+  border-bottom: 1px solid var(--el-border-color-light, #e6e9e4);
 }
 
 .palette-heading {
@@ -239,7 +239,7 @@ function handleClick(_node: PaletteNode) {
 }
 
 .heading-icon {
-  color: var(--ds-industrial-500, #5755ee);
+  color: var(--ds-industrial-500, #0f766e);
   font-size: 16px;
 }
 
@@ -251,7 +251,7 @@ function handleClick(_node: PaletteNode) {
 }
 
 .collapse-toggle:hover {
-  color: var(--ds-industrial-500, #5755ee);
+  color: var(--ds-industrial-500, #0f766e);
 }
 
 /* ===== 主体 ===== */
@@ -259,7 +259,7 @@ function handleClick(_node: PaletteNode) {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
-  background: var(--el-bg-color-page, #f1f4fe);
+  background: var(--el-bg-color-page, #f4f5f2);
 }
 
 .palette-group {
@@ -281,9 +281,9 @@ function handleClick(_node: PaletteNode) {
   gap: 4px;
   padding: 6px;
   background: #fff;
-  border: 1px solid var(--el-border-color-lighter, #eef1fc);
+  border: 1px solid var(--el-border-color-lighter, #f0f2ee);
   border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(31, 36, 55, 0.04);
+  box-shadow: 0 1px 3px rgba(28, 40, 35, 0.04);
 }
 
 .palette-item {
@@ -299,7 +299,7 @@ function handleClick(_node: PaletteNode) {
 }
 
 .palette-item:hover {
-  background: var(--ds-selected, #e9eaff);
+  background: var(--ds-selected, #d7f5ee);
 }
 
 .palette-item:active {

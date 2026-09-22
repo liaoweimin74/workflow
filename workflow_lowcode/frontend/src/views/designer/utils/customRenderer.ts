@@ -19,18 +19,18 @@ const INITIATOR_FILL_COLOR = '#e3f2fd'
 /**
  * 发起人节点图标色（画布内左上角标记）
  */
-const INITIATOR_ICON_COLOR = '#409eff'
+const INITIATOR_ICON_COLOR = '#0f766e'
 
 /**
  * 折叠态内嵌子流程左上角图标色（与 CallActivity 折叠态默认 marker 区分）
  */
-const SUBFLOW_ICON_COLOR = '#409eff'
+const SUBFLOW_ICON_COLOR = '#0f766e'
 
 /**
  * 调用活动（CallActivity）左上角调用图标 —— 主描边色
  * 方框 + 右下箭头，象征"调用其他流程/跳转到外部流程"
  */
-const CALL_ICON_COLOR = '#5755ee'
+const CALL_ICON_COLOR = '#0f766e'
 
 /**
  * BPMN 元素类型 → CSS 标记 class（加在 .djs-element 上，供 designer-theme.css 精准命中）

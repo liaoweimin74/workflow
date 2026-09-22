@@ -116,7 +116,7 @@ onBeforeUnmount(() => {
 }
 
 .bpmn-viewer :deep(.highlight-current) {
-  fill: #409eff !important;
-  stroke: #409eff !important;
+  fill: #0f766e !important;
+  stroke: #0f766e !important;
 }
 </style>

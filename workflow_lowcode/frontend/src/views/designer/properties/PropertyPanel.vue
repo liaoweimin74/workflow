@@ -161,7 +161,7 @@ const nodeTypeLabel = computed(() => {
 <style scoped>
 .property-panel {
   background: #fff;
-  border-left: 1px solid var(--color-industrial-300, #b9b9f9);
+  border-left: 1px solid var(--color-industrial-300, #7fd8c9);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -187,13 +187,13 @@ const nodeTypeLabel = computed(() => {
   cursor: pointer;
   gap: 6px;
   color: var(--el-text-color-regular, #4b5169);
-  background: var(--el-bg-color-page, #f1f4fe);
+  background: var(--el-bg-color-page, #f4f5f2);
   transition: background 0.2s, color 0.2s;
 }
 
 .collapse-bar:hover {
-  background: var(--ds-selected, #e9eaff);
-  color: var(--ds-industrial-500, #5755ee);
+  background: var(--ds-selected, #d7f5ee);
+  color: var(--ds-industrial-500, #0f766e);
 }
 
 .bar-icon {
@@ -217,7 +217,7 @@ const nodeTypeLabel = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--el-border-color-light, #e9edfa);
+  border-bottom: 1px solid var(--el-border-color-light, #e6e9e4);
 }
 
 .panel-heading {
@@ -230,7 +230,7 @@ const nodeTypeLabel = computed(() => {
 }
 
 .heading-icon {
-  color: var(--ds-industrial-500, #5755ee);
+  color: var(--ds-industrial-500, #0f766e);
   font-size: 16px;
 }
 
@@ -241,12 +241,12 @@ const nodeTypeLabel = computed(() => {
 }
 
 .node-type-tag {
-  --el-tag-bg-color: var(--ds-industrial-50, #f3f3fe) !important;
-  --el-tag-border-color: var(--ds-industrial-200, #d6d6fd) !important;
-  --el-tag-text-color: var(--ds-industrial-600, #5452d3) !important;
-  background: var(--ds-industrial-50, #f3f3fe) !important;
-  border-color: var(--ds-industrial-200, #d6d6fd) !important;
-  color: var(--ds-industrial-600, #5452d3) !important;
+  --el-tag-bg-color: var(--ds-industrial-50, #f0fdf9) !important;
+  --el-tag-border-color: var(--ds-industrial-200, #b0e9de) !important;
+  --el-tag-text-color: var(--ds-industrial-600, #0d9488) !important;
+  background: var(--ds-industrial-50, #f0fdf9) !important;
+  border-color: var(--ds-industrial-200, #b0e9de) !important;
+  color: var(--ds-industrial-600, #0d9488) !important;
   font-weight: 600;
 }
 
@@ -258,14 +258,14 @@ const nodeTypeLabel = computed(() => {
 }
 
 .collapse-toggle:hover {
-  color: var(--ds-industrial-500, #5755ee);
+  color: var(--ds-industrial-500, #0f766e);
 }
 
 .panel-body {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  background: var(--el-bg-color-page, #f1f4fe);
+  background: var(--el-bg-color-page, #f4f5f2);
 }
 
 /* 分组标题字体加粗 */
@@ -277,9 +277,9 @@ const nodeTypeLabel = computed(() => {
 /* 属性表单在浅底色上以白卡片呈现，结构更清晰 */
 .panel-body :deep(.el-form) {
   background: #fff;
-  border: 1px solid var(--el-border-color-lighter, #eef1fc);
+  border: 1px solid var(--el-border-color-lighter, #f0f2ee);
   border-radius: 10px;
   padding: 4px 12px 12px;
-  box-shadow: 0 1px 3px rgba(31, 36, 55, 0.04);
+  box-shadow: 0 1px 3px rgba(28, 40, 35, 0.04);
 }
 </style>

@@ -575,7 +575,7 @@ function handleDrop(event: DragEvent) {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: var(--el-bg-color-page, #f1f4fe);
+  background: var(--el-bg-color-page, #f4f5f2);
 }
 
 .designer-body {

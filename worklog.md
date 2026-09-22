@@ -593,3 +593,27 @@ Stage Summary:
 - 渲染双轨现状：VIEW=ViewDesigner+PageRenderer 内置分支（历史数据兼容，不再演进）；PAGE=PageDesigner+PageRendererPage（唯一演进轨道）。后续可做：ViewSchema→PAGE rule 转换器实现老数据一键迁移，届时可删 ViewDesigner
 - 风险/待办：看门狗引擎决策在「marker 被发布清除 + jar 存在」时会误切 Java（需显式 Java 标记区分）；表单列表会显示 ARCHIVED 行（现状行为，测试残留 smoke_copy_1/proxy_smoke_1/请假申请表-副本 留存可作演示）
 - 三端健康：3000 next dev / 5173 vite / 8080 bun（Node 引擎，SQLite wf_ 表）
+
+---
+Task ID: 16-R1
+Agent: 主控（Z.ai Code）
+Task: 用户需求「系统整体界面风格美化改造（按主控审美），先留备份点可回滚」
+
+Work Log:
+- 备份点：backups/frontend-ui-backup-20260922-111422.tar.gz（前端 src+index.html，698K）+ portal-ui-backup-20260922-111422.tar.gz（门户 page.tsx+globals.css）；一键回滚脚本 scripts/rollback-ui.sh [时间戳]
+- 设计系统 v2「青墨 Verdant Ink」落地（style.css 全量重写）：
+  - 主色 靛蓝#5755ee → 翡翠青#0f766e（teal-700），token 名 industrial 保留、值整体换血（全站 bg-industrial-*/text-industrial-* 类零改动自动变色）；点缀青瓷 accent 保留微调；中性色由蓝紫倾向改暖纸灰；暗色由藏青改石墨松绿
+  - Element Plus 变量覆盖 + 组件精修：圆角 10px/弹窗 16px、胶囊 tag、按钮悬浮微抬升+主色投影、输入聚焦青色光环、圆角分页、消息通知、细滚动条、表格表头/行悬浮、数字等宽 tnum
+- 机械替换脚本 scripts/retheme-replace.ts：9 文件 153 处（Dashboard/Login/NodePalette/PropertyPanel/ProcessDesigner/designer-theme.css/customRenderer/ProcessCenterPage/AdminLayout，含 rgba 变体与暗色藏青→石墨映射）
+- AdminLayout 骨架精修：深墨松绿侧栏#14201c（明暗两态统一，.sidebar-ink 菜单样式体系）、玻璃感顶栏 bg-white/85 backdrop-blur、胶囊式页签（圆点指示+圆角关闭钮）替代方形边框页签
+- 登录页重设计：分屏式（lg 左墨绿品牌面板：渐变标语+特性清单+网格纹理；右玻璃拟态表单卡），移动端回退居中卡；逻辑零改动
+- 门户页 page.tsx：36 处靛蓝→青玉点缀替换（布局不动），与平台品牌统一；引擎卡「已记住你的选择」文案（15-R1）渲染正常
+- FcDesigner vendor 青化：vendor/style/index.css #2E73FF×15 → #0f766e；#409eff×11 → #0f766e（vendor tabs/BpmnViewer/ListCards/DataSourceListPage/customRenderer/TemplatePreview）；测试文件中的 409eff 断言数据未动
+- 【暗色模式 3 个老 bug 修复】①Element dark css-vars 用 html.dark(0,1,1)，旧 .dark(0,1,0) 打不赢 → 暗色主色一直是 Element 默认蓝 #409eff（改造前即如此）；改 html.dark 覆盖生效（实测 computed #2dd4bf）②暗色下 #app 亮色渐变透出 → .dark #app transparent + .dark body 渐变③暗色偏好不持久 → localStorage theme-dark + 首次跟随系统 prefers-color-scheme
+- 验证：agent-browser 全链路截图（login/dashboard/process-center/proc-definition/form-list/form-designer/bpmn-designer/dark mode/portal 共 12 张存 backups/）；暗色 computed primary=#2dd4bf、bodyBg=#121614 实测；前端测试 78 文件 1058 用例全过；page.tsx lint 0 错误；console 仅 bpmn-js keyboard.bindTo 已知弃用告警（改造前既有，非回归）
+
+Stage Summary:
+- 全平台（登录/布局/看板/列表/表单设计器/BPMN设计器/暗色/门户）统一「青墨 Verdant Ink」视觉体系，回滚点 scripts/rollback-ui.sh 随时可退
+- 暗色模式首次真正可用（3 个老 bug 根治）；品牌色从靛蓝蓝紫系整体迁移至青玉系
+- 设计 token 名保持不变（industrial/accent/safety），后续页面开发沿用现有类名即可获得新主题
+- 遗留：bpmn-js 弃用告警（低优）；门户页深空底色与青玉点缀已协调，如需进一步暖化可后续微调 globals.css

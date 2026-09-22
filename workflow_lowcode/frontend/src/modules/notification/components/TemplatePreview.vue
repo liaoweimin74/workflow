@@ -136,5 +136,5 @@ if (refreshSignal) {
   border-left: 3px solid #dcdfe6;
   color: #909399;
 }
-.template-preview__md :deep(a) { color: #409eff; }
+.template-preview__md :deep(a) { color: #0f766e; }
 </style>

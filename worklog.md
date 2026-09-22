@@ -664,3 +664,35 @@ Stage Summary:
 - 机制：html[data-theme] 驱动 Tailwind @theme token 值覆盖 + 语义品牌变量（--brand 家族/wash/table/ink 文字）+ Element Plus el-* 三层（亮色/暗色/结构还原），SVG 场景用 CSS 属性类（stroke-/fill-/[stop-color:]）替代展示属性，JS 画布用 brandColor() 运行时读 var
 - 回滚锚点：20260922-122350（双主题前）与 20260922-111422（青墨改造前）两级；bash scripts/rollback-ui.sh [时间戳]
 - 遗留（低优）：①门户与前端本地分端口（3000/5173）调试时 localStorage 不互通属浏览器同源策略，线上同网关 origin 无此问题 ②classic 暗色 header 中性色仍石墨系（17-F 已记录）③vue-tsc 47 既有错误待专项清理
+
+---
+Task ID: 18-P
+Agent: 主控（Z.ai Code）
+Task: 用户需求「风格和亮色/暗色切换集成到一个风格切换按钮里（可以下拉）」——门户 + 低代码前端双端外观切换器合并（风格 × 明暗 单入口下拉）
+
+Work Log:
+- 备份点：backups/frontend-ui-backup-20260922-133417.tar.gz + portal-ui-backup-20260922-133417.tar.gz（改造前快照）；回滚 = bash scripts/rollback-ui.sh 20260922-133417
+- 门户 globals.css 变量层扩展：
+  ①新增门户外观语义变量 25 项（--portal-bg/header/line×4/surface×3/hover/inset×2/fg×2/muted/faint/fainter/ok/warn/err/chip），:root 亮色 + .dark 暗色两态；暗色值逐项对齐原硬编码（#0b0d1a 深空底等），暗色观感零变化
+  ②品牌色明暗两态适配：html:not(.dark)（verdant 亮色 teal-600/700/800 深化）+ html[data-theme='classic']:not(.dark)（classic 亮色靛蓝 #5755ee 本体作文字色）——修复亮色下 text-brand-soft (#2dd4bf)/brand-pale (#99f6e4) 对比度不足问题；级联顺序 base → classic 覆盖 → 亮色覆盖（classic:html.dark 特异性最高，四象限均正确）
+  ③.dark 弹层微靛蓝调协调：--popover/--card = oklch(0.22 0.024 278)（与 #0b0d1a 底色同族）
+- 门户 layout.tsx：防闪脚本扩展——恢复 data-theme 同时按 localStorage 'portal-ui-mode' 预置 html.dark class（缺省 dark，与门户既有默认一致）
+- 门户 page.tsx（约 60 处编辑）：
+  ①头部 radiogroup 双按钮 → 单一 DropdownMenu（shadcn，Palette 图标 + 当前组合文案「青墨/经典 · 暗色/亮色」+ ChevronDown，移动端只显图标）；菜单两个 DropdownMenuRadioGroup 分组：「界面风格」（青墨 · 翡翠青/经典 · 靛蓝，带品牌色点）+「明暗模式」（暗色 · 深空/亮色 · 清爽）；aria-label + menuitemradio 语义
+  ②新增 uiMode 状态（UiMode = dark|light，默认 dark）：读/写 localStorage 'portal-ui-mode' + html.dark class 切换 + storage 事件跨标签同步；switchUiMode 独立持久化
+  ③全页色彩 token 化：bg-[#0b0d1a]/80、border-white/5~20、bg-white/[0.03~0.06]、bg-black/20~40、text-zinc-100~600、border-zinc-500 全部替换为 --portal-* 语义变量；状态色 text-emerald/amber/rose-400 → --portal-ok/warn/err；code 芯片 bg-white/10 → --portal-chip；一次性场景（amber 发布横幅、toast 文案）用 dark: 变体双层写法；text-[#9be3ea]×3 → text-brand-soft（随主题/明暗自动适配）
+- 低代码前端 AdminLayout.vue：暗色按钮（Sunny/Moon）+ 魔棒按钮（MagicStick）两个入口 → 单一 el-popover（196px，bottom-end）：「界面风格」组（青墨/经典，色点 + Check）+「明暗模式」组（暗色/亮色，Moon/Sun 图标 + Check）；toggleDark → setDark(v)、toggleUiTheme → setUiTheme(t)；选项高亮 bg-[rgb(var(--brand-soft-rgb)/0.12)] + text-[var(--brand)]（复用 17-F 语义变量）；触发按钮 title 动态显示当前组合
+- 工具坑（防复发）：MultiEdit 顺序应用非完全原子——new_str 包含 old_str 子串时（text-amber-200 vs text-amber-200/70）会在中途失败且前序编辑已生效，需用上下文锚点补齐剩余编辑（本次实际发生，已修复）
+- 验证（agent-browser 全链路，截图存 backups/）：
+  ①门户四象限全过：verdant 暗色（默认，bg=rgb(11,13,26) 渐变 rgb(45,212,191)→(15,118,110) 逐值一致）→ verdant 亮色（#f4f5f7 底/白卡/teal-600 文字，目视对比度良好）→ 经典亮色（渐变 rgb(87,85,238)=#5755ee 与旧版逐值一致）→ 经典暗色（原版观感还原）；每次切换 data-theme/dark class/localStorage 三态同步
+  ②刷新持久化 ✓（classic+light 重载保持）；下拉弹出层亮暗两态渲染正确（暗=靛蓝调深底、亮=白底分组）
+  ③低代码端经网关登录实测：popover 分组渲染 ✓ → 经典切换（theme=classic+持久化）→ 暗色切换（html.dark+theme-dark='1'）→ 经典暗色看板目视无亮色渐变透出（17-F 修复保持）→ 恢复 verdant+light
+  ④console 0 error（门户+低代码）；dev.log 无错误；eslint（page/layout）0 错误；tsc 无 src/app 新增错误；vue-tsc AdminLayout(161) 为 17-F 已记录既有错误非本次引入
+- 重建巡检 cron：job 405996（fixed_rate 900s，webDevReview，原 405611 已失效）
+
+Stage Summary:
+- 双端外观切换从「风格+明暗分离的多按钮」收敛为「单一下拉按钮」：门户 = DropdownMenu 两分组（界面风格 × 明暗模式），低代码 = el-popover 同构两分组；菜单文案实时反映当前组合（如「经典 · 亮色」）
+- 门户首次支持亮色模式：25 个语义变量支撑全套亮暗适配，暗色观感零回归；品牌色四象限（verdant/classic × dark/light）全部保证对比度
+- 持久化：门户 portal-ui-theme（风格，与低代码共享）+ portal-ui-mode（明暗，门户独立）；低代码 portal-ui-theme + theme-dark（既有）；均防闪脚本首帧恢复
+- 回滚锚点：20260922-133417（本改造前）> 20260922-122350（双主题前）> 20260922-111422（青墨改造前）
+- 遗留（低优）：①门户与低代码明暗键不同（portal-ui-mode vs theme-dark），跨应用不联动（风格键联动保留）；统一需解决「门户默认暗/低代码默认亮」的默认值冲突 ②前端 vitest 全量未复跑（沙箱 IO 超时；rg 确认无测试引用 toggleDark/toggleUiTheme/AdminLayout，风险低，下轮巡检可补跑）③移动端下拉按钮只显图标（hidden sm:inline 文案），如需文案可后续放宽

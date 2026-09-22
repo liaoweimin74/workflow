@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick } from '@element-plus/icons-vue'
+import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick, Check } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
@@ -20,9 +20,9 @@ function applyDark() {
   document.documentElement.classList.toggle('dark', isDark.value)
 }
 
-function toggleDark() {
-  isDark.value = !isDark.value
-  localStorage.setItem('theme-dark', isDark.value ? '1' : '0')
+function setDark(v: boolean) {
+  isDark.value = v
+  localStorage.setItem('theme-dark', v ? '1' : '0')
   applyDark()
 }
 
@@ -37,8 +37,8 @@ function applyUiTheme() {
   localStorage.setItem('portal-ui-theme', uiTheme.value)
 }
 
-function toggleUiTheme() {
-  uiTheme.value = uiTheme.value === 'verdant' ? 'classic' : 'verdant'
+function setUiTheme(t: 'verdant' | 'classic') {
+  uiTheme.value = t
   applyUiTheme()
 }
 
@@ -256,25 +256,56 @@ onUnmounted(() => {
       <!-- 右侧：消息通知 + 暗色切换 + 用户区 -->
       <div class="flex items-center gap-3">
         <NotificationBell />
-        <button
-          @click="toggleDark"
-          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors"
-        >
-          <el-icon :size="18"><Sunny v-if="isDark" /><Moon v-else /></el-icon>
-        </button>
-        <!-- 风格切换：青墨 Verdant Ink / 经典 Classic（Task 17-F） -->
-        <el-tooltip content="风格：青墨 / 经典" placement="bottom">
-          <button
-            @click="toggleUiTheme"
-            class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors"
-          >
-            <el-icon :size="18"><MagicStick /></el-icon>
-            <span
-              class="w-1.5 h-1.5 rounded-full ml-0.5 shrink-0"
-              :style="{ background: uiTheme === 'verdant' ? '#2dd4bf' : '#5755ee' }"
-            />
-          </button>
-        </el-tooltip>
+        <!-- 外观切换（单入口下拉，Task 18-P）：界面风格（青墨/经典）× 明暗模式（暗色/亮色） -->
+        <el-popover trigger="click" placement="bottom-end" :width="196" popper-class="ui-style-popper">
+          <template #reference>
+            <button
+              class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors"
+              :title="`外观：${uiTheme === 'verdant' ? '青墨' : '经典'} · ${isDark ? '暗色' : '亮色'}`"
+              aria-label="切换界面风格与明暗模式"
+            >
+              <el-icon :size="18"><MagicStick /></el-icon>
+              <span
+                class="w-1.5 h-1.5 rounded-full ml-0.5 shrink-0"
+                :style="{ background: uiTheme === 'verdant' ? '#2dd4bf' : '#5755ee' }"
+              />
+            </button>
+          </template>
+          <div class="-mx-1">
+            <p class="text-[11px] font-medium text-gray-400 dark:text-gray-500 mb-1 tracking-wide px-2">界面风格</p>
+            <button
+              v-for="t in (['verdant', 'classic'] as const)"
+              :key="t"
+              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-left"
+              :class="uiTheme === t
+                ? 'bg-[rgb(var(--brand-soft-rgb)/0.12)] text-[var(--brand)] font-medium'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#262e29]'"
+              @click="setUiTheme(t)"
+            >
+              <span
+                class="w-2 h-2 rounded-full shrink-0"
+                :style="{ background: t === 'verdant' ? '#2dd4bf' : '#5755ee' }"
+              />
+              {{ t === 'verdant' ? '青墨 · 翡翠青' : '经典 · 靛蓝' }}
+              <el-icon v-if="uiTheme === t" :size="14" class="ml-auto"><Check /></el-icon>
+            </button>
+            <el-divider style="margin: 6px 0" />
+            <p class="text-[11px] font-medium text-gray-400 dark:text-gray-500 mb-1 tracking-wide px-2">明暗模式</p>
+            <button
+              v-for="m in ([true, false] as const)"
+              :key="m ? 'dark' : 'light'"
+              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-left"
+              :class="isDark === m
+                ? 'bg-[rgb(var(--brand-soft-rgb)/0.12)] text-[var(--brand)] font-medium'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#262e29]'"
+              @click="setDark(m)"
+            >
+              <el-icon :size="14"><Moon v-if="m" /><Sunny v-else /></el-icon>
+              {{ m ? '暗色模式' : '亮色模式' }}
+              <el-icon v-if="isDark === m" :size="14" class="ml-auto"><Check /></el-icon>
+            </button>
+          </div>
+        </el-popover>
         <el-dropdown trigger="click">
         <div class="flex items-center gap-2 cursor-pointer select-none">
           <el-avatar :size="28" icon="UserFilled" class="!bg-industrial-100 !text-industrial-600" />

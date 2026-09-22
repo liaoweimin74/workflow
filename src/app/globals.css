@@ -32,6 +32,26 @@ html[data-theme="classic"] {
   --brand-bright-rgb: 70 201 214;
 }
 
+/* ============================================================
+ * 明暗两态品牌适配（Task 18-P）：亮色下文字级品牌色加深保证对比度
+ * 级联顺序：@theme 基准（暗色调） → classic 覆盖 → 亮色覆盖
+ * ============================================================ */
+html:not(.dark) {
+  --color-brand-bright: #0d9488; /* teal-600 */
+  --color-brand-soft: #0f766e;   /* teal-700 */
+  --color-brand-pale: #115e59;   /* teal-800 */
+  --brand-soft-rgb: 15 118 110;
+  --brand-bright-rgb: 13 148 136;
+}
+
+html[data-theme="classic"]:not(.dark) {
+  --color-brand-bright: #0e7490; /* cyan-700 */
+  --color-brand-soft: #5755ee;   /* 经典靛蓝本体直接作亮色文字 */
+  --color-brand-pale: #4338ca;   /* indigo-700 */
+  --brand-soft-rgb: 87 85 238;
+  --brand-bright-rgb: 14 116 144;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -105,6 +125,29 @@ html[data-theme="classic"] {
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* ===== 门户外观语义变量（亮色，Task 18-P）===== */
+  --portal-bg: #f4f5f7;
+  --portal-header: rgba(255, 255, 255, 0.82);
+  --portal-line: rgba(0, 0, 0, 0.06);
+  --portal-line-2: rgba(0, 0, 0, 0.09);
+  --portal-line-3: rgba(0, 0, 0, 0.11);
+  --portal-line-4: rgba(0, 0, 0, 0.18);
+  --portal-surface: #ffffff;
+  --portal-surface-2: #ffffff;
+  --portal-surface-3: rgba(0, 0, 0, 0.02);
+  --portal-hover: rgba(0, 0, 0, 0.05);
+  --portal-inset: rgba(0, 0, 0, 0.045);
+  --portal-inset-2: rgba(0, 0, 0, 0.08);
+  --portal-fg: #18181b;
+  --portal-fg-2: #3f3f46;
+  --portal-muted: #52525b;
+  --portal-faint: #71717a;
+  --portal-fainter: #a1a1aa;
+  --portal-ok: #059669;
+  --portal-warn: #d97706;
+  --portal-err: #e11d48;
+  --portal-chip: rgba(0, 0, 0, 0.08);
 }
 
 .dark {
@@ -139,6 +182,33 @@ html[data-theme="classic"] {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* ===== 门户外观语义变量（暗色，Task 18-P）：还原深空底色 ===== */
+  --portal-bg: #0b0d1a;
+  --portal-header: rgba(11, 13, 26, 0.82);
+  --portal-line: rgba(255, 255, 255, 0.05);
+  --portal-line-2: rgba(255, 255, 255, 0.08);
+  --portal-line-3: rgba(255, 255, 255, 0.1);
+  --portal-line-4: rgba(255, 255, 255, 0.2);
+  --portal-surface: rgba(255, 255, 255, 0.04);
+  --portal-surface-2: rgba(255, 255, 255, 0.05);
+  --portal-surface-3: rgba(255, 255, 255, 0.03);
+  --portal-hover: rgba(255, 255, 255, 0.09);
+  --portal-inset: rgba(0, 0, 0, 0.25);
+  --portal-inset-2: rgba(0, 0, 0, 0.45);
+  --portal-fg: #f4f4f5;
+  --portal-fg-2: #e4e4e7;
+  --portal-muted: #a1a1aa;
+  --portal-faint: #71717a;
+  --portal-fainter: #52525b;
+  --portal-ok: #34d399;
+  --portal-warn: #fbbf24;
+  --portal-err: #fb7185;
+
+  /* 弹层与门户深空底色协调（微靛蓝调） */
+  --popover: oklch(0.22 0.024 278);
+  --card: oklch(0.22 0.024 278);
+  --portal-chip: rgba(255, 255, 255, 0.1);
 }
 
 @layer base {

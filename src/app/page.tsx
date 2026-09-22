@@ -6,6 +6,7 @@ import {
   Activity,
   ArrowRight,
   Boxes,
+  ChevronDown,
   Cpu,
   Database,
   GitBranch,
@@ -13,11 +14,21 @@ import {
   LayoutTemplate,
   Loader2,
   Network,
+  Palette,
   RefreshCw,
   Server,
   ShieldCheck,
   Workflow,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ServiceStatus {
   key: "backend" | "frontend";
@@ -39,6 +50,7 @@ interface SpawnOutcome {
 }
 
 type EngineChoice = "node" | "java";
+type UiMode = "dark" | "light";
 
 interface EngineStatus {
   engine: EngineChoice;
@@ -217,6 +229,41 @@ export default function PortalPage() {
     }
   }, []);
 
+  // ====== 明暗模式（dark/light）——门户默认暗色（深空底），独立持久化键 ======
+  const [uiMode, setUiMode] = useState<UiMode>("dark");
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("portal-ui-mode");
+    } catch {
+      /* 忽略 */
+    }
+    const m: UiMode = saved === "light" ? "light" : "dark";
+    setUiMode(m);
+    document.documentElement.classList.toggle("dark", m === "dark");
+    const onStorage = (e: StorageEvent) => {
+      if (
+        e.key === "portal-ui-mode" &&
+        (e.newValue === "light" || e.newValue === "dark")
+      ) {
+        setUiMode(e.newValue);
+        document.documentElement.classList.toggle("dark", e.newValue === "dark");
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const switchUiMode = useCallback((m: UiMode) => {
+    setUiMode(m);
+    document.documentElement.classList.toggle("dark", m === "dark");
+    try {
+      localStorage.setItem("portal-ui-mode", m);
+    } catch {
+      /* 忽略 */
+    }
+  }, []);
+
   const pushToast = useCallback((kind: ToastMsg["kind"], text: string) => {
     const id = ++toastSeq.current;
     setToasts((prev) => [...prev.slice(-2), { id, kind, text }]);
@@ -355,9 +402,9 @@ export default function PortalPage() {
   const platformReady = Boolean(frontend?.portOpen);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0b0d1a] text-zinc-100 selection:bg-brand-bright/30">
+    <div className="min-h-screen flex flex-col bg-[var(--portal-bg)] text-[var(--portal-fg)] selection:bg-brand-bright/30">
       {/* 顶部导航 */}
-      <header className="border-b border-white/5 bg-[#0b0d1a]/80 backdrop-blur sticky top-0 z-40">
+      <header className="border-b border-[var(--portal-line)] bg-[var(--portal-header)] backdrop-blur sticky top-0 z-40">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-bright shadow-lg shadow-brand/25">
@@ -365,50 +412,57 @@ export default function PortalPage() {
             </div>
             <div className="leading-tight">
               <p className="text-sm font-semibold">工作流低代码平台</p>
-              <p className="text-[11px] text-zinc-400">Flowable 8 · 低代码一体化方案</p>
+              <p className="text-[11px] text-[var(--portal-muted)]">Flowable 8 · 低代码一体化方案</p>
             </div>
           </div>
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="hidden items-center gap-4 sm:flex">
-              <span className="text-xs text-zinc-400">
+              <span className="text-xs text-[var(--portal-muted)]">
                 后端 {backend ? STATE_TEXT[backend.state] : "—"}
               </span>
-              <span className="text-xs text-zinc-400">
+              <span className="text-xs text-[var(--portal-muted)]">
                 前端 {frontend ? STATE_TEXT[frontend.state] : "—"}
               </span>
             </div>
-            {/* 界面风格切换：青墨（新版翡翠青） / 经典（改版前靛蓝） */}
-            <div
-              role="radiogroup"
-              aria-label="界面风格切换"
-              className="flex items-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.04] p-1"
-            >
-              {(["verdant", "classic"] as const).map((t) => (
+            {/* 外观切换（单入口下拉，Task 18-P）：界面风格（青墨/经典）× 明暗模式（暗色/亮色） */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <button
-                  key={t}
                   type="button"
-                  role="radio"
-                  aria-checked={uiTheme === t}
-                  onClick={() => switchUiTheme(t)}
-                  title={t === "verdant" ? "青墨 · 新版翡翠青风格" : "经典 · 改版前靛蓝风格"}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition ${
-                    uiTheme === t
-                      ? "bg-brand/20 text-brand-soft shadow-[inset_0_0_0_1px_rgb(var(--brand-rgb)/0.4)]"
-                      : "text-zinc-400 hover:text-zinc-200"
-                  }`}
+                  aria-label="切换界面风格与明暗模式"
+                  title="界面外观：风格与明暗"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[var(--portal-line-3)] bg-[var(--portal-surface-2)] px-2.5 text-xs font-medium text-[var(--portal-fg-2)] shadow-sm transition hover:border-[var(--portal-line-4)] hover:bg-[var(--portal-hover)]"
                 >
-                  <span
-                    aria-hidden
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{
-                      background:
-                        t === "verdant" ? "rgb(45 212 191)" : "rgb(138 138 244)",
-                    }}
-                  />
-                  {t === "verdant" ? "青墨" : "经典"}
+                  <Palette className="h-3.5 w-3.5 text-brand-soft" />
+                  <span className="hidden sm:inline">
+                    {uiTheme === "verdant" ? "青墨" : "经典"} · {uiMode === "dark" ? "暗色" : "亮色"}
+                  </span>
+                  <ChevronDown className="h-3 w-3 opacity-60" />
                 </button>
-              ))}
-            </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">界面风格</DropdownMenuLabel>
+                <DropdownMenuRadioGroup
+                  value={uiTheme}
+                  onValueChange={(v) => switchUiTheme(v as "verdant" | "classic")}
+                >
+                  <DropdownMenuRadioItem value="verdant">
+                    <span aria-hidden className="mr-1 inline-block h-2 w-2 shrink-0 rounded-full bg-[#2dd4bf]" />
+                    青墨 · 翡翠青
+                  </DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="classic">
+                    <span aria-hidden className="mr-1 inline-block h-2 w-2 shrink-0 rounded-full bg-[#8a8af4]" />
+                    经典 · 靛蓝
+                  </DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs text-muted-foreground">明暗模式</DropdownMenuLabel>
+                <DropdownMenuRadioGroup value={uiMode} onValueChange={(v) => switchUiMode(v as UiMode)}>
+                  <DropdownMenuRadioItem value="dark">暗色 · 深空</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="light">亮色 · 清爽</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -427,7 +481,7 @@ export default function PortalPage() {
               transition={{ duration: 0.5 }}
               className="max-w-3xl"
             >
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[var(--portal-line-3)] bg-[var(--portal-surface-2)] px-3 py-1 text-xs text-[var(--portal-fg-2)]">
                 <Activity className="h-3.5 w-3.5 text-brand-bright" />
                 Java 21 · Spring Boot 4 · Flowable 8 · Vue 3.5 · Element Plus
               </span>
@@ -437,7 +491,7 @@ export default function PortalPage() {
                   一站式低代码建模
                 </span>
               </h1>
-              <p className="mt-4 text-base leading-relaxed text-zinc-400 sm:text-lg">
+              <p className="mt-4 text-base leading-relaxed text-[var(--portal-muted)] sm:text-lg">
                 基于 Flowable 8 的工作流低代码平台已就绪：BPMN 流程设计器、拖拽表单设计器、
                 数据源与列表视图双轨设计、完整的流程执行引擎与通知中心，开箱即用。
               </p>
@@ -465,7 +519,7 @@ export default function PortalPage() {
                   onClick={() => void ensureServices()}
                   disabled={ensuring}
                   aria-busy={ensuring}
-                  className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-12 items-center gap-2 rounded-xl border border-[var(--portal-line-3)] bg-[var(--portal-surface-2)] px-5 text-sm text-[var(--portal-fg-2)] transition hover:border-[var(--portal-line-4)] hover:bg-[var(--portal-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {ensuring ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -486,8 +540,8 @@ export default function PortalPage() {
                 className="mt-6 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 sm:p-5"
                 role="alert"
               >
-                <p className="text-sm font-medium text-amber-200">当前访问的是「发布版」部署，仅包含门户展示页</p>
-                <p className="mt-1.5 text-xs leading-relaxed text-amber-200/70">
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-200">当前访问的是「发布版」部署，仅包含门户展示页</p>
+                <p className="mt-1.5 text-xs leading-relaxed text-amber-700/80 dark:text-amber-200/70">
                   发布快照不包含平台前后端子项目（workflow_lowcode），因此无法在发布环境内拉起 :8080 / :5173 服务 —— 这是环境限制而非故障。
                   请在开发沙箱的预览面板中访问完整平台（流程设计器 / 发起审批 / 看板均可正常使用）。
                 </p>
@@ -507,35 +561,35 @@ export default function PortalPage() {
               ).map((s) => (
                 <div
                   key={s.key}
-                  className="rounded-2xl border border-white/8 bg-white/[0.04] p-5 backdrop-blur transition hover:border-white/15"
+                  className="rounded-2xl border border-[var(--portal-line-2)] bg-[var(--portal-surface)] p-5 backdrop-blur transition hover:border-[var(--portal-line-3)]"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <StateDot state={s.state} />
-                      <p className="text-sm font-medium text-zinc-100">{s.name}</p>
+                      <p className="text-sm font-medium text-[var(--portal-fg)]">{s.name}</p>
                     </div>
-                    <span className="rounded-md bg-white/5 px-2 py-0.5 font-mono text-[11px] text-zinc-400">
+                    <span className="rounded-md bg-[var(--portal-surface-2)] px-2 py-0.5 font-mono text-[11px] text-[var(--portal-muted)]">
                       :{s.port}
                     </span>
                   </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+                  <div className="mt-3 flex items-center justify-between text-xs text-[var(--portal-faint)]">
                     <span>
                       状态：
                       <span
                         className={
                           s.state === "running"
-                            ? "text-emerald-400"
+                            ? "text-[var(--portal-ok)]"
                             : s.state === "starting"
-                              ? "text-amber-400"
+                              ? "text-[var(--portal-warn)]"
                               : s.state === "blocked"
-                                ? "text-rose-400"
-                                : "text-zinc-400"
+                                ? "text-[var(--portal-err)]"
+                                : "text-[var(--portal-muted)]"
                         }
                       >
                         {STATE_TEXT[s.state]}
                       </span>
                       {s.state === "blocked" && (
-                        <span className="ml-1.5 text-zinc-600">（点击上方按钮自动修复依赖）</span>
+                        <span className="ml-1.5 text-[var(--portal-fainter)]">（点击上方按钮自动修复依赖）</span>
                       )}
                     </span>
                     <span className="inline-flex items-center gap-1.5">
@@ -544,7 +598,7 @@ export default function PortalPage() {
                     </span>
                   </div>
                   {typeof s.restarts === "number" && s.restarts > 0 && (
-                    <div className="mt-2 text-[11px] text-zinc-600">
+                    <div className="mt-2 text-[11px] text-[var(--portal-fainter)]">
                       累计拉起 {s.restarts} 次
                       {s.lastExitAt ? ` · 最近退出 ${new Date(s.lastExitAt).toLocaleTimeString("zh-CN")}` : ""}
                     </div>
@@ -558,7 +612,7 @@ export default function PortalPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.25 }}
-              className="mt-4 rounded-2xl border border-white/8 bg-white/[0.04] p-5 backdrop-blur"
+              className="mt-4 rounded-2xl border border-[var(--portal-line-2)] bg-[var(--portal-surface)] p-5 backdrop-blur"
               aria-label="后端引擎切换"
             >
               <div className="flex items-center gap-2.5">
@@ -566,11 +620,11 @@ export default function PortalPage() {
                   <Cpu className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-zinc-100">后端引擎</h3>
-                  <p className="mt-0.5 text-xs text-zinc-500">
+                  <h3 className="text-sm font-semibold text-[var(--portal-fg)]">后端引擎</h3>
+                  <p className="mt-0.5 text-xs text-[var(--portal-faint)]">
                     切换会自动重启 :8080 后端进程；两版数据源独立（Node 版 = 迁移后 SQLite 主库，Java 版 = 原始 H2 存储）
                   </p>
-                  <p className="mt-1 text-[11px] text-zinc-600" aria-label="引擎持久化选择状态">
+                  <p className="mt-1 text-[11px] text-[var(--portal-fainter)]" aria-label="引擎持久化选择状态">
                     {engineStatus?.engineChoice
                       ? `已记住你的选择：${engineStatus.engineChoice === "node" ? "Node.js" : "Java"} 版（沙箱发布/重置后自动保持，不再被误切换）`
                       : "尚未显式选择过引擎：当前跟随主引擎信号（SQLite 主库存在 → Node）"}
@@ -588,16 +642,16 @@ export default function PortalPage() {
                   className={`rounded-xl border p-4 text-left transition ${
                     engineStatus?.engine === "node"
                       ? "border-brand/60 bg-brand/10"
-                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                      : "border-[var(--portal-line-3)] bg-[var(--portal-surface-3)] hover:border-[var(--portal-line-4)] hover:bg-[var(--portal-hover)]"
                   } ${switching ? "cursor-wait opacity-60" : ""}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                    <span className="flex items-center gap-2 text-sm font-medium text-[var(--portal-fg)]">
                       <span
                         className={`inline-block h-2.5 w-2.5 rounded-full border ${
                           engineStatus?.engine === "node"
                             ? "border-brand-soft bg-brand-soft shadow-[0_0_6px_rgb(var(--brand-soft-rgb)/0.9)]"
-                            : "border-zinc-500 bg-transparent"
+                            : "border-[var(--portal-fainter)] bg-transparent"
                         }`}
                       />
                       Node.js 版
@@ -606,11 +660,11 @@ export default function PortalPage() {
                       <span className="rounded-md bg-brand/25 px-2 py-0.5 text-[11px] text-brand-pale">当前使用</span>
                     )}
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--portal-muted)]">
                     bun + Express + SQLite · 自研受控 DSL 引擎（现行），发起 / 审批 / 看板数据完整
                   </p>
                   {switching === "node" && (
-                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#9be3ea]">
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-brand-soft">
                       <Loader2 className="h-3 w-3 animate-spin" /> 正在切换，后端启动中…
                     </p>
                   )}
@@ -625,16 +679,16 @@ export default function PortalPage() {
                   className={`rounded-xl border p-4 text-left transition ${
                     engineStatus?.engine === "java"
                       ? "border-brand-bright/60 bg-brand-bright/10"
-                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+                      : "border-[var(--portal-line-3)] bg-[var(--portal-surface-3)] hover:border-[var(--portal-line-4)] hover:bg-[var(--portal-hover)]"
                   } ${switching ? "cursor-wait opacity-60" : ""}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                    <span className="flex items-center gap-2 text-sm font-medium text-[var(--portal-fg)]">
                       <span
                         className={`inline-block h-2.5 w-2.5 rounded-full border ${
                           engineStatus?.engine === "java"
                             ? "border-brand-bright bg-brand-bright shadow-[0_0_6px_rgb(var(--brand-bright-rgb)/0.9)]"
-                            : "border-zinc-500 bg-transparent"
+                            : "border-[var(--portal-fainter)] bg-transparent"
                         }`}
                       />
                       Java 版
@@ -642,10 +696,10 @@ export default function PortalPage() {
                     <span
                       className={`rounded-md px-2 py-0.5 text-[11px] ${
                         engineStatus?.engine === "java"
-                          ? "bg-brand-bright/25 text-[#9be3ea]"
+                          ? "bg-brand-bright/25 text-brand-soft"
                           : engineStatus?.java.jarExists
-                            ? "bg-emerald-400/15 text-emerald-300"
-                            : "bg-amber-400/15 text-amber-300"
+                            ? "bg-emerald-400/15 text-emerald-700 dark:text-emerald-300"
+                            : "bg-amber-400/15 text-amber-700 dark:text-amber-300"
                       }`}
                     >
                       {engineStatus?.engine === "java"
@@ -655,11 +709,11 @@ export default function PortalPage() {
                           : "需先构建 jar"}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--portal-muted)]">
                     Spring Boot 4 + Flowable 8 · 原版实现，使用迁移前的历史数据视图
                   </p>
                   {switching === "java" && (
-                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#9be3ea]">
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-brand-soft">
                       <Loader2 className="h-3 w-3 animate-spin" /> 正在切换，Java 启动较慢…
                     </p>
                   )}
@@ -668,9 +722,9 @@ export default function PortalPage() {
 
               {/* Java 构建区：jar 缺失时展示一键构建 + 日志尾部 */}
               {engineStatus && !engineStatus.java.jarExists && (
-                <div className="mt-3 rounded-xl border border-white/8 bg-black/20 p-3">
+                <div className="mt-3 rounded-xl border border-[var(--portal-line-2)] bg-[var(--portal-inset)] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs text-zinc-400">
+                    <p className="text-xs text-[var(--portal-muted)]">
                       {engineStatus.java.buildRunning
                         ? "Java 版构建进行中：JDK 21 → Maven → jar 打包（约 10~20 分钟），完成后即可切换"
                         : "Java 版构建产物已被沙箱重置清除；点击一键构建恢复（后台进行，不影响当前 Node 服务）"}
@@ -679,7 +733,7 @@ export default function PortalPage() {
                       type="button"
                       onClick={() => void buildJava()}
                       disabled={building || engineStatus.java.buildRunning}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-xs text-zinc-200 transition hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--portal-line-3)] bg-[var(--portal-surface-2)] px-3 text-xs text-[var(--portal-fg-2)] transition hover:border-[var(--portal-line-4)] hover:bg-[var(--portal-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {building || engineStatus.java.buildRunning ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -690,7 +744,7 @@ export default function PortalPage() {
                     </button>
                   </div>
                   {engineStatus.java.buildLogTail && (
-                    <pre className="mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-zinc-500 [scrollbar-width:thin]">
+                    <pre className="mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-[var(--portal-inset-2)] p-2 font-mono text-[10px] leading-relaxed text-[var(--portal-faint)] [scrollbar-width:thin]">
                       {engineStatus.java.buildLogTail}
                     </pre>
                   )}
@@ -705,9 +759,9 @@ export default function PortalPage() {
           <div className="mb-6 flex items-end justify-between">
             <div>
               <h2 className="text-xl font-semibold">核心能力</h2>
-              <p className="mt-1 text-sm text-zinc-500">源自项目 PRD 与功能清单的六大能力域</p>
+              <p className="mt-1 text-sm text-[var(--portal-faint)]">源自项目 PRD 与功能清单的六大能力域</p>
             </div>
-            <span className="hidden text-xs text-zinc-600 sm:block">docs/PRD.md · docs/features.md</span>
+            <span className="hidden text-xs text-[var(--portal-fainter)] sm:block">docs/PRD.md · docs/features.md</span>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => (
@@ -717,18 +771,18 @@ export default function PortalPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-40px" }}
                 transition={{ duration: 0.4, delay: (i % 3) * 0.08 }}
-                className="group rounded-2xl border border-white/8 bg-white/[0.03] p-5 transition hover:border-brand/40 hover:bg-white/[0.05]"
+                className="group rounded-2xl border border-[var(--portal-line-2)] bg-[var(--portal-surface-3)] p-5 transition hover:border-brand/40 hover:bg-[var(--portal-surface-2)]"
               >
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand/20 to-brand-bright/15 text-brand-soft transition group-hover:text-brand-bright">
                   <f.icon className="h-5 w-5" />
                 </div>
                 <h3 className="mt-4 text-base font-semibold">{f.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-400">{f.desc}</p>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--portal-muted)]">{f.desc}</p>
                 <div className="mt-4 flex flex-wrap gap-1.5">
                   {f.tags.map((t) => (
                     <span
                       key={t}
-                      className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[11px] text-zinc-400"
+                      className="rounded-md border border-[var(--portal-line-2)] bg-[var(--portal-surface)] px-2 py-0.5 text-[11px] text-[var(--portal-muted)]"
                     >
                       {t}
                     </span>
@@ -741,27 +795,27 @@ export default function PortalPage() {
 
         {/* 访问指引 */}
         <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
-          <div className="rounded-2xl border border-white/8 bg-gradient-to-r from-brand/10 to-brand-bright/5 p-6 sm:p-8">
+          <div className="rounded-2xl border border-[var(--portal-line-2)] bg-gradient-to-r from-brand/10 to-brand-bright/5 p-6 sm:p-8">
             <h2 className="text-lg font-semibold">访问与联调</h2>
-            <div className="mt-4 grid gap-4 text-sm text-zinc-300 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/8 bg-black/20 p-4">
-                <p className="font-medium text-zinc-100">平台入口</p>
-                <p className="mt-1.5 text-zinc-400">
-                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-soft">/lowcode/</code>{" "}
+            <div className="mt-4 grid gap-4 text-sm text-[var(--portal-fg-2)] sm:grid-cols-3">
+              <div className="rounded-xl border border-[var(--portal-line-2)] bg-[var(--portal-inset)] p-4">
+                <p className="font-medium text-[var(--portal-fg)]">平台入口</p>
+                <p className="mt-1.5 text-[var(--portal-muted)]">
+                  <code className="rounded bg-[var(--portal-chip)] px-1.5 py-0.5 text-[12px] text-brand-soft">/lowcode/</code>{" "}
                   经网关代理直达 Vue 控制台
                 </p>
               </div>
-              <div className="rounded-xl border border-white/8 bg-black/20 p-4">
-                <p className="font-medium text-zinc-100">测试账号</p>
-                <p className="mt-1.5 text-zinc-400">
-                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-bright">admin / admin123</code>{" "}
+              <div className="rounded-xl border border-[var(--portal-line-2)] bg-[var(--portal-inset)] p-4">
+                <p className="font-medium text-[var(--portal-fg)]">测试账号</p>
+                <p className="mt-1.5 text-[var(--portal-muted)]">
+                  <code className="rounded bg-[var(--portal-chip)] px-1.5 py-0.5 text-[12px] text-brand-bright">admin / admin123</code>{" "}
                   内置超级管理员
                 </p>
               </div>
-              <div className="rounded-xl border border-white/8 bg-black/20 p-4">
-                <p className="font-medium text-zinc-100">REST API</p>
-                <p className="mt-1.5 text-zinc-400">
-                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-soft">/api/v1/*</code>{" "}
+              <div className="rounded-xl border border-[var(--portal-line-2)] bg-[var(--portal-inset)] p-4">
+                <p className="font-medium text-[var(--portal-fg)]">REST API</p>
+                <p className="mt-1.5 text-[var(--portal-muted)]">
+                  <code className="rounded bg-[var(--portal-chip)] px-1.5 py-0.5 text-[12px] text-brand-soft">/api/v1/*</code>{" "}
                   代理至 Spring Boot 后端
                 </p>
               </div>
@@ -783,10 +837,10 @@ export default function PortalPage() {
             exit={{ opacity: 0 }}
             className={`pointer-events-auto rounded-xl border px-4 py-3 text-sm shadow-xl backdrop-blur ${
               t.kind === "success"
-                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200"
                 : t.kind === "error"
-                  ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
-                  : "border-brand-bright/30 bg-brand-bright/10 text-[#9be3ea]"
+                  ? "border-rose-400/30 bg-rose-400/10 text-rose-700 dark:text-rose-200"
+                  : "border-brand-bright/30 bg-brand-bright/10 text-brand-soft"
             }`}
             role="status"
           >
@@ -796,8 +850,8 @@ export default function PortalPage() {
       </div>
 
       {/* 粘性页脚 */}
-      <footer className="mt-auto border-t border-white/5 bg-[#0b0d1a]">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-zinc-500 sm:flex-row sm:px-6">
+      <footer className="mt-auto border-t border-[var(--portal-line)] bg-[var(--portal-bg)]">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-[var(--portal-faint)] sm:flex-row sm:px-6">
           <p>工作流低代码平台 · Flowable 8 + Spring Boot 4 + Vue 3 · 沙箱网关单端口代理架构</p>
           <p className="font-mono">backend :8080 · frontend :5173 · portal :3000</p>
         </div>

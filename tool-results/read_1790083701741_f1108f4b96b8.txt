@@ -1,0 +1,808 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useCallback, useEffect, useRef, useState } from "react";
+     4→     4→import { motion } from "framer-motion";
+     5→     5→import {
+     6→     6→  Activity,
+     7→     7→  ArrowRight,
+     8→     8→  Boxes,
+     9→     9→  Cpu,
+    10→    10→  Database,
+    11→    11→  GitBranch,
+    12→    12→  Hammer,
+    13→    13→  LayoutTemplate,
+    14→    14→  Loader2,
+    15→    15→  Network,
+    16→    16→  RefreshCw,
+    17→    17→  Server,
+    18→    18→  ShieldCheck,
+    19→    19→  Workflow,
+    20→    20→} from "lucide-react";
+    21→    21→
+    22→    22→interface ServiceStatus {
+    23→    23→  key: "backend" | "frontend";
+    24→    24→  name: string;
+    25→    25→  port: number;
+    26→    26→  portOpen: boolean;
+    27→    27→  managedPid?: number | null;
+    28→    28→  processAlive: boolean;
+    29→    29→  restarts?: number;
+    30→    30→  lastSpawnAt?: number | null;
+    31→    31→  lastExitAt?: number | null;
+    32→    32→  prerequisiteOk: boolean;
+    33→    33→  state: "running" | "starting" | "stopped" | "blocked";
+    34→    34→}
+    35→    35→
+    36→    36→interface SpawnOutcome {
+    37→    37→  action: "spawned" | "already-running" | "starting" | "blocked" | "backoff";
+    38→    38→  reason?: string;
+    39→    39→}
+    40→    40→
+    41→    41→type EngineChoice = "node" | "java";
+    42→    42→
+    43→    43→interface EngineStatus {
+    44→    44→  engine: EngineChoice;
+    45→    45→  nodeDbExists: boolean;
+    46→    46→  /** 用户显式选择的持久化引擎（Task 15-R1）；null=从未显式切换过 */
+    47→    47→  engineChoice?: EngineChoice | null;
+    48→    48→  platform: {
+    49→    49→    deployed: boolean;
+    50→    50→    productionMode: boolean;
+    51→    51→  };
+    52→    52→  java: {
+    53→    53→    jarExists: boolean;
+    54→    54→    jdkReady: boolean;
+    55→    55→    mavenReady: boolean;
+    56→    56→    buildRunning: boolean;
+    57→    57→    buildLogTail: string | null;
+    58→    58→  };
+    59→    59→}
+    60→    60→
+    61→    61→interface ToastMsg {
+    62→    62→  id: number;
+    63→    63→  kind: "success" | "error" | "info";
+    64→    64→  text: string;
+    65→    65→}
+    66→    66→
+    67→    67→interface FeatureDef {
+    68→    68→  icon: React.ComponentType<{ className?: string }>;
+    69→    69→  title: string;
+    70→    70→  desc: string;
+    71→    71→  tags: string[];
+    72→    72→}
+    73→    73→
+    74→    74→const FEATURES: FeatureDef[] = [
+    75→    75→  {
+    76→    76→    icon: GitBranch,
+    77→    77→    title: "流程设计器",
+    78→    78→    desc: "BPMN 2.0 拖拽建模，网关 / 子流程 / 会签或签 / 超时处理，节点级后端逻辑编排",
+    79→    79→    tags: ["bpmn-js", "排他·并行网关", "嵌入式子流程"],
+    80→    80→  },
+    81→    81→  {
+    82→    82→    icon: LayoutTemplate,
+    83→    83→    title: "表单设计器",
+    84→    84→    desc: "30+ 组件拖拽构建，字段权限、事件脚本沙箱、子表 / 嵌套表单 / 数据引用",
+    85→    85→    tags: ["form-create", "字段权限", "脚本沙箱"],
+    86→    86→  },
+    87→    87→  {
+    88→    88→    icon: Workflow,
+    89→    89→    title: "流程执行引擎",
+    90→    90→    desc: "发起 / 审批 / 驳回 / 加签转签 / 催办，多租户隔离与流程版本管理",
+    91→    91→    tags: ["Flowable 8", "加签转签", "多租户"],
+    92→    92→  },
+    93→    93→  {
+    94→    94→    icon: Database,
+    95→    95→    title: "数据源与视图",
+    96→    96→    desc: "FORM / WORKFLOW / SQL 多态数据源，可视化视图设计、页面挂载与访问控制",
+    97→    97→    tags: ["SQL 数据源", "页面渲染", "权限双重校验"],
+    98→    98→  },
+    99→    99→  {
+   100→   100→    icon: Network,
+   101→   101→    title: "通知与事件治理",
+   102→   102→    desc: "流程事件驱动通知，重试索引优化、事件定义注册与统一租户类型",
+   103→   103→    tags: ["事件总线", "消息中心"],
+   104→   104→  },
+   105→   105→  {
+   106→   106→    icon: ShieldCheck,
+   107→   107→    title: "系统管理",
+   108→   108→    desc: "用户 / 角色 / 菜单 / 组织机构 / 字典，细粒度权限点控制",
+   109→   109→    tags: ["RBAC", "菜单挂载", "组织机构"],
+   110→   110→  },
+   111→   111→];
+   112→   112→
+   113→   113→function StateDot({ state }: { state: ServiceStatus["state"] }) {
+   114→   114→  const cls =
+   115→   115→    state === "running"
+   116→   116→      ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
+   117→   117→      : state === "starting"
+   118→   118→        ? "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)] animate-pulse"
+   119→   119→        : state === "blocked"
+   120→   120→          ? "bg-rose-500"
+   121→   121→          : "bg-zinc-500";
+   122→   122→  return <span className={`inline-block h-2 w-2 rounded-full ${cls}`} />;
+   123→   123→}
+   124→   124→
+   125→   125→const STATE_TEXT: Record<ServiceStatus["state"], string> = {
+   126→   126→  running: "运行中",
+   127→   127→  starting: "启动中",
+   128→   128→  stopped: "已停止",
+   129→   129→  blocked: "未就绪",
+   130→   130→};
+   131→   131→
+   132→   132→const FALLBACK_SERVICES: ServiceStatus[] = [
+   133→   133→  { key: "backend", name: "平台后端 (:8080)", port: 8080, state: "stopped", portOpen: false, processAlive: false, prerequisiteOk: true },
+   134→   134→  { key: "frontend", name: "Vue 前端 (Vite dev server)", port: 5173, state: "stopped", portOpen: false, processAlive: false, prerequisiteOk: true },
+   135→   135→];
+   136→   136→
+   137→   137→/** 拉起结果 → 用户可读摘要 */
+   138→   138→function summarizeActions(
+   139→   139→  actions: Record<string, SpawnOutcome>,
+   140→   140→  services: ServiceStatus[],
+   141→   141→): { kind: ToastMsg["kind"]; text: string } {
+   142→   142→  const nameOf: Record<string, string> = { backend: "后端", frontend: "前端" };
+   143→   143→  const parts: string[] = [];
+   144→   144→  let kind: ToastMsg["kind"] = "success";
+   145→   145→  for (const [key, a] of Object.entries(actions)) {
+   146→   146→    const label = nameOf[key] ?? key;
+   147→   147→    switch (a.action) {
+   148→   148→      case "spawned":
+   149→   149→        parts.push(`${label}已拉起，启动中…`);
+   150→   150→        kind = "info";
+   151→   151→        break;
+   152→   152→      case "already-running":
+   153→   153→        parts.push(`${label}运行正常`);
+   154→   154→        break;
+   155→   155→      case "starting":
+   156→   156→        parts.push(`${label}启动中…`);
+   157→   157→        kind = "info";
+   158→   158→        break;
+   159→   159→      case "backoff":
+   160→   160→        parts.push(`${label}崩溃冷却中：${a.reason ?? ""}`);
+   161→   161→        kind = "error";
+   162→   162→        break;
+   163→   163→      case "blocked":
+   164→   164→        parts.push(`${label}未就绪：${a.reason ?? "前置条件缺失"}`);
+   165→   165→        kind = "error";
+   166→   166→        break;
+   167→   167→    }
+   168→   168→  }
+   169→   169→  if (parts.length === 0) return { kind: "info", text: "检查完成" };
+   170→   170→  return { kind, text: parts.join("；") };
+   171→   171→}
+   172→   172→
+   173→   173→export default function PortalPage() {
+   174→   174→  const [services, setServices] = useState<ServiceStatus[]>([]);
+   175→   175→  const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
+   176→   176→  const [switching, setSwitching] = useState<EngineChoice | null>(null);
+   177→   177→  const [building, setBuilding] = useState(false);
+   178→   178→  const [booting, setBooting] = useState(true);
+   179→   179→  const [ensuring, setEnsuring] = useState(false);
+   180→   180→  const ensuringRef = useRef(false);
+   181→   181→  const [toasts, setToasts] = useState<ToastMsg[]>([]);
+   182→   182→  const toastSeq = useRef(0);
+   183→   183→  const ensured = useRef(false);
+   184→   184→
+   185→   185→  // ====== 双主题（青墨 verdant / 经典 classic）——与低代码平台共享 localStorage 键 ======
+   186→   186→  const [uiTheme, setUiTheme] = useState<"verdant" | "classic">("verdant");
+   187→   187→  useEffect(() => {
+   188→   188→    let saved: string | null = null;
+   189→   189→    try {
+   190→   190→      saved = localStorage.getItem("portal-ui-theme");
+   191→   191→    } catch {
+   192→   192→      /* 忽略 */
+   193→   193→    }
+   194→   194→    const t = saved === "classic" ? "classic" : "verdant";
+   195→   195→    setUiTheme(t);
+   196→   196→    document.documentElement.dataset.theme = t;
+   197→   197→    const onStorage = (e: StorageEvent) => {
+   198→   198→      if (
+   199→   199→        e.key === "portal-ui-theme" &&
+   200→   200→        (e.newValue === "classic" || e.newValue === "verdant")
+   201→   201→      ) {
+   202→   202→        setUiTheme(e.newValue);
+   203→   203→        document.documentElement.dataset.theme = e.newValue;
+   204→   204→      }
+   205→   205→    };
+   206→   206→    window.addEventListener("storage", onStorage);
+   207→   207→    return () => window.removeEventListener("storage", onStorage);
+   208→   208→  }, []);
+   209→   209→
+   210→   210→  const switchUiTheme = useCallback((t: "verdant" | "classic") => {
+   211→   211→    setUiTheme(t);
+   212→   212→    document.documentElement.dataset.theme = t;
+   213→   213→    try {
+   214→   214→      localStorage.setItem("portal-ui-theme", t);
+   215→   215→    } catch {
+   216→   216→      /* 忽略 */
+   217→   217→    }
+   218→   218→  }, []);
+   219→   219→
+   220→   220→  const pushToast = useCallback((kind: ToastMsg["kind"], text: string) => {
+   221→   221→    const id = ++toastSeq.current;
+   222→   222→    setToasts((prev) => [...prev.slice(-2), { id, kind, text }]);
+   223→   223→    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 6000);
+   224→   224→  }, []);
+   225→   225→
+   226→   226→  const fetchStatus = useCallback(async () => {
+   227→   227→    try {
+   228→   228→      const res = await fetch("/api/portal/services", { cache: "no-store" });
+   229→   229→      const json = await res.json();
+   230→   230→      if (json?.data) setServices(json.data);
+   231→   231→    } catch {
+   232→   232→      /* 忽略瞬时错误 */
+   233→   233→    }
+   234→   234→  }, []);
+   235→   235→
+   236→   236→  const fetchEngineStatus = useCallback(async () => {
+   237→   237→    try {
+   238→   238→      const res = await fetch("/api/portal/engine", { cache: "no-store" });
+   239→   239→      const json = await res.json();
+   240→   240→      if (json?.data) setEngineStatus(json.data);
+   241→   241→    } catch {
+   242→   242→      /* 忽略瞬时错误 */
+   243→   243→    }
+   244→   244→  }, []);
+   245→   245→
+   246→   246→  /** 切换后端引擎（Node.js 版 / Java 版）：杀 8080 旧进程并按新引擎拉起 */
+   247→   247→  const switchEngine = useCallback(
+   248→   248→    async (target: EngineChoice) => {
+   249→   249→      if (switching) return;
+   250→   250→      setSwitching(target);
+   251→   251→      try {
+   252→   252→        const res = await fetch("/api/portal/engine", {
+   253→   253→          method: "POST",
+   254→   254→          headers: { "Content-Type": "application/json" },
+   255→   255→          body: JSON.stringify({ action: "switch", engine: target }),
+   256→   256→        });
+   257→   257→        const json = await res.json();
+   258→   258→        pushToast(json?.code === 200 ? "success" : "error", json?.msg ?? "切换失败");
+   259→   259→        if (json?.data?.services) setServices(json.data.services);
+   260→   260→        if (json?.data?.engine) setEngineStatus(json.data.engine);
+   261→   261→        else void fetchEngineStatus();
+   262→   262→      } catch {
+   263→   263→        pushToast("error", "切换请求失败，请稍后重试");
+   264→   264→      } finally {
+   265→   265→        setSwitching(null);
+   266→   266→      }
+   267→   267→    },
+   268→   268→    [switching, pushToast, fetchEngineStatus],
+   269→   269→  );
+   270→   270→
+   271→   271→  /** 一键后台构建 Java 版（JDK + Maven + jar） */
+   272→   272→  const buildJava = useCallback(async () => {
+   273→   273→    if (building) return;
+   274→   274→    setBuilding(true);
+   275→   275→    try {
+   276→   276→      const res = await fetch("/api/portal/engine", {
+   277→   277→        method: "POST",
+   278→   278→        headers: { "Content-Type": "application/json" },
+   279→   279→        body: JSON.stringify({ action: "build-java" }),
+   280→   280→      });
+   281→   281→      const json = await res.json();
+   282→   282→      pushToast(json?.code === 200 ? "info" : "error", json?.msg ?? "构建启动失败");
+   283→   283→      if (json?.data) setEngineStatus(json.data);
+   284→   284→    } catch {
+   285→   285→      pushToast("error", "构建请求失败，请稍后重试");
+   286→   286→    } finally {
+   287→   287→      setBuilding(false);
+   288→   288→    }
+   289→   289→  }, [building, pushToast]);
+   290→   290→
+   291→   291→  /** 点击「检查 / 拉起服务」：带 loading + 结果通知。
+   292→   292→   *  ⚠️ POST 必须携带 body：无 body 的 fetch POST 不发 Content-Length，
+   293→   293→   *  Next dev 的 body 解析在 keep-alive 连接上会永久挂起（本次故障根因）。 */
+   294→   294→  const ensureServices = useCallback(async () => {
+   295→   295→    if (ensuringRef.current) return;
+   296→   296→    ensuringRef.current = true;
+   297→   297→    setEnsuring(true);
+   298→   298→    try {
+   299→   299→      const res = await fetch("/api/portal/services", {
+   300→   300→        method: "POST",
+   301→   301→        headers: { "Content-Type": "application/json" },
+   302→   302→        body: JSON.stringify({ source: "manual" }),
+   303→   303→      });
+   304→   304→      const json = await res.json();
+   305→   305→      const data = json?.data as
+   306→   306→        | { services?: ServiceStatus[]; actions?: Record<string, SpawnOutcome> }
+   307→   307→        | undefined;
+   308→   308→      if (data?.services) setServices(data.services);
+   309→   309→      if (data?.actions) {
+   310→   310→        const s = summarizeActions(data.actions, data.services ?? []);
+   311→   311→        pushToast(s.kind, s.text);
+   312→   312→      } else {
+   313→   313→        pushToast("info", "检查完成");
+   314→   314→      }
+   315→   315→    } catch {
+   316→   316→      pushToast("error", "检查请求失败，请稍后重试");
+   317→   317→    } finally {
+   318→   318→      ensuringRef.current = false;
+   319→   319→      setEnsuring(false);
+   320→   320→    }
+   321→   321→  }, [pushToast]);
+   322→   322→
+   323→   323→  useEffect(() => {
+   324→   324→    const boot = async () => {
+   325→   325→      if (!ensured.current) {
+   326→   326→        ensured.current = true;
+   327→   327→        try {
+   328→   328→          const res = await fetch("/api/portal/services", {
+   329→   329→            method: "POST",
+   330→   330→            headers: { "Content-Type": "application/json" },
+   331→   331→            body: JSON.stringify({ source: "boot" }),
+   332→   332→          });
+   333→   333→          const json = await res.json();
+   334→   334→          const data = json?.data as { services?: ServiceStatus[] } | undefined;
+   335→   335→          if (data?.services) setServices(data.services);
+   336→   336→          else void fetchStatus();
+   337→   337→        } catch {
+   338→   338→          void fetchStatus();
+   339→   339→        }
+   340→   340→      }
+   341→   341→      setBooting(false);
+   342→   342→    };
+   343→   343→    void boot();
+   344→   344→    const timer = setInterval(() => {
+   345→   345→      void fetchStatus();
+   346→   346→      void fetchEngineStatus();
+   347→   347→    }, 5000);
+   348→   348→    void fetchStatus();
+   349→   349→    void fetchEngineStatus();
+   350→   350→    return () => clearInterval(timer);
+   351→   351→  }, [fetchStatus, fetchEngineStatus]);
+   352→   352→
+   353→   353→  const backend = services.find((s) => s.key === "backend");
+   354→   354→  const frontend = services.find((s) => s.key === "frontend");
+   355→   355→  const platformReady = Boolean(frontend?.portOpen);
+   356→   356→
+   357→   357→  return (
+   358→   358→    <div className="min-h-screen flex flex-col bg-[#0b0d1a] text-zinc-100 selection:bg-brand-bright/30">
+   359→   359→      {/* 顶部导航 */}
+   360→   360→      <header className="border-b border-white/5 bg-[#0b0d1a]/80 backdrop-blur sticky top-0 z-40">
+   361→   361→        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+   362→   362→          <div className="flex items-center gap-3">
+   363→   363→            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-bright shadow-lg shadow-brand/25">
+   364→   364→              <Workflow className="h-5 w-5 text-white" />
+   365→   365→            </div>
+   366→   366→            <div className="leading-tight">
+   367→   367→              <p className="text-sm font-semibold">工作流低代码平台</p>
+   368→   368→              <p className="text-[11px] text-zinc-400">Flowable 8 · 低代码一体化方案</p>
+   369→   369→            </div>
+   370→   370→          </div>
+   371→   371→          <div className="flex items-center gap-3 sm:gap-4">
+   372→   372→            <div className="hidden items-center gap-4 sm:flex">
+   373→   373→              <span className="text-xs text-zinc-400">
+   374→   374→                后端 {backend ? STATE_TEXT[backend.state] : "—"}
+   375→   375→              </span>
+   376→   376→              <span className="text-xs text-zinc-400">
+   377→   377→                前端 {frontend ? STATE_TEXT[frontend.state] : "—"}
+   378→   378→              </span>
+   379→   379→            </div>
+   380→   380→            {/* 界面风格切换：青墨（新版翡翠青） / 经典（改版前靛蓝） */}
+   381→   381→            <div
+   382→   382→              role="radiogroup"
+   383→   383→              aria-label="界面风格切换"
+   384→   384→              className="flex items-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.04] p-1"
+   385→   385→            >
+   386→   386→              {(["verdant", "classic"] as const).map((t) => (
+   387→   387→                <button
+   388→   388→                  key={t}
+   389→   389→                  type="button"
+   390→   390→                  role="radio"
+   391→   391→                  aria-checked={uiTheme === t}
+   392→   392→                  onClick={() => switchUiTheme(t)}
+   393→   393→                  title={t === "verdant" ? "青墨 · 新版翡翠青风格" : "经典 · 改版前靛蓝风格"}
+   394→   394→                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition ${
+   395→   395→                    uiTheme === t
+   396→   396→                      ? "bg-brand/20 text-brand-soft shadow-[inset_0_0_0_1px_rgb(var(--brand-rgb)/0.4)]"
+   397→   397→                      : "text-zinc-400 hover:text-zinc-200"
+   398→   398→                  }`}
+   399→   399→                >
+   400→   400→                  <span
+   401→   401→                    aria-hidden
+   402→   402→                    className="h-1.5 w-1.5 rounded-full"
+   403→   403→                    style={{
+   404→   404→                      background:
+   405→   405→                        t === "verdant" ? "rgb(45 212 191)" : "rgb(138 138 244)",
+   406→   406→                    }}
+   407→   407→                  />
+   408→   408→                  {t === "verdant" ? "青墨" : "经典"}
+   409→   409→                </button>
+   410→   410→              ))}
+   411→   411→            </div>
+   412→   412→          </div>
+   413→   413→        </div>
+   414→   414→      </header>
+   415→   415→
+   416→   416→      <main className="flex-1">
+   417→   417→        {/* Hero */}
+   418→   418→        <section className="relative overflow-hidden">
+   419→   419→          <div
+   420→   420→            aria-hidden
+   421→   421→            className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_20%_0%,rgb(var(--brand-rgb)/0.22),transparent),radial-gradient(50%_45%_at_85%_10%,rgb(var(--brand-bright-rgb)/0.16),transparent)]"
+   422→   422→          />
+   423→   423→          <div className="relative mx-auto max-w-6xl px-4 pb-14 pt-16 sm:px-6 sm:pt-20">
+   424→   424→            <motion.div
+   425→   425→              initial={{ opacity: 0, y: 16 }}
+   426→   426→              animate={{ opacity: 1, y: 0 }}
+   427→   427→              transition={{ duration: 0.5 }}
+   428→   428→              className="max-w-3xl"
+   429→   429→            >
+   430→   430→              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
+   431→   431→                <Activity className="h-3.5 w-3.5 text-brand-bright" />
+   432→   432→                Java 21 · Spring Boot 4 · Flowable 8 · Vue 3.5 · Element Plus
+   433→   433→              </span>
+   434→   434→              <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+   435→   435→                流程、表单、视图
+   436→   436→                <span className="bg-gradient-to-r from-brand-soft via-brand to-brand-bright bg-clip-text text-transparent">
+   437→   437→                  一站式低代码建模
+   438→   438→                </span>
+   439→   439→              </h1>
+   440→   440→              <p className="mt-4 text-base leading-relaxed text-zinc-400 sm:text-lg">
+   441→   441→                基于 Flowable 8 的工作流低代码平台已就绪：BPMN 流程设计器、拖拽表单设计器、
+   442→   442→                数据源与列表视图双轨设计、完整的流程执行引擎与通知中心，开箱即用。
+   443→   443→              </p>
+   444→   444→
+   445→   445→              <div className="mt-8 flex flex-wrap items-center gap-4">
+   446→   446→                <a
+   447→   447→                  href="/lowcode/"
+   448→   448→                  aria-disabled={!platformReady}
+   449→   449→                  onClick={(e) => {
+   450→   450→                    if (!platformReady) e.preventDefault();
+   451→   451→                  }}
+   452→   452→                  className={`group inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-to-r from-brand to-brand-bright px-6 text-sm font-semibold text-white shadow-lg shadow-brand/30 transition hover:brightness-110 active:scale-[0.98] ${
+   453→   453→                    platformReady ? "" : "pointer-events-none opacity-60"
+   454→   454→                  }`}
+   455→   455→                >
+   456→   456→                  {booting ? (
+   457→   457→                    <Loader2 className="h-4 w-4 animate-spin" />
+   458→   458→                  ) : (
+   459→   459→                    <Boxes className="h-4 w-4" />
+   460→   460→                  )}
+   461→   461→                  进入平台控制台
+   462→   462→                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+   463→   463→                </a>
+   464→   464→                <button
+   465→   465→                  onClick={() => void ensureServices()}
+   466→   466→                  disabled={ensuring}
+   467→   467→                  aria-busy={ensuring}
+   468→   468→                  className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 text-sm text-zinc-200 transition hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+   469→   469→                >
+   470→   470→                  {ensuring ? (
+   471→   471→                    <Loader2 className="h-4 w-4 animate-spin" />
+   472→   472→                  ) : (
+   473→   473→                    <RefreshCw className="h-4 w-4" />
+   474→   474→                  )}
+   475→   475→                  {ensuring ? "正在检查…" : "检查 / 拉起服务"}
+   476→   476→                </button>
+   477→   477→              </div>
+   478→   478→            </motion.div>
+   479→   479→
+   480→   480→            {/* 发布版环境提示（Task 13-R5）：发布部署不含平台子项目，子服务无法拉起 */}
+   481→   481→            {engineStatus && !engineStatus.platform.deployed && (
+   482→   482→              <motion.div
+   483→   483→                initial={{ opacity: 0, y: 12 }}
+   484→   484→                animate={{ opacity: 1, y: 0 }}
+   485→   485→                transition={{ duration: 0.4 }}
+   486→   486→                className="mt-6 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 sm:p-5"
+   487→   487→                role="alert"
+   488→   488→              >
+   489→   489→                <p className="text-sm font-medium text-amber-200">当前访问的是「发布版」部署，仅包含门户展示页</p>
+   490→   490→                <p className="mt-1.5 text-xs leading-relaxed text-amber-200/70">
+   491→   491→                  发布快照不包含平台前后端子项目（workflow_lowcode），因此无法在发布环境内拉起 :8080 / :5173 服务 —— 这是环境限制而非故障。
+   492→   492→                  请在开发沙箱的预览面板中访问完整平台（流程设计器 / 发起审批 / 看板均可正常使用）。
+   493→   493→                </p>
+   494→   494→              </motion.div>
+   495→   495→            )}
+   496→   496→
+   497→   497→            {/* 服务状态卡 */}
+   498→   498→            <motion.div
+   499→   499→              initial={{ opacity: 0, y: 20 }}
+   500→   500→              animate={{ opacity: 1, y: 0 }}
+   501→   501→              transition={{ duration: 0.5, delay: 0.15 }}
+   502→   502→              className="mt-10 grid gap-4 sm:grid-cols-2"
+   503→   503→            >
+   504→   504→              {(services.length > 0
+   505→   505→                ? services
+   506→   506→                : FALLBACK_SERVICES
+   507→   507→              ).map((s) => (
+   508→   508→                <div
+   509→   509→                  key={s.key}
+   510→   510→                  className="rounded-2xl border border-white/8 bg-white/[0.04] p-5 backdrop-blur transition hover:border-white/15"
+   511→   511→                >
+   512→   512→                  <div className="flex items-center justify-between">
+   513→   513→                    <div className="flex items-center gap-2.5">
+   514→   514→                      <StateDot state={s.state} />
+   515→   515→                      <p className="text-sm font-medium text-zinc-100">{s.name}</p>
+   516→   516→                    </div>
+   517→   517→                    <span className="rounded-md bg-white/5 px-2 py-0.5 font-mono text-[11px] text-zinc-400">
+   518→   518→                      :{s.port}
+   519→   519→                    </span>
+   520→   520→                  </div>
+   521→   521→                  <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+   522→   522→                    <span>
+   523→   523→                      状态：
+   524→   524→                      <span
+   525→   525→                        className={
+   526→   526→                          s.state === "running"
+   527→   527→                            ? "text-emerald-400"
+   528→   528→                            : s.state === "starting"
+   529→   529→                              ? "text-amber-400"
+   530→   530→                              : s.state === "blocked"
+   531→   531→                                ? "text-rose-400"
+   532→   532→                                : "text-zinc-400"
+   533→   533→                        }
+   534→   534→                      >
+   535→   535→                        {STATE_TEXT[s.state]}
+   536→   536→                      </span>
+   537→   537→                      {s.state === "blocked" && (
+   538→   538→                        <span className="ml-1.5 text-zinc-600">（点击上方按钮自动修复依赖）</span>
+   539→   539→                      )}
+   540→   540→                    </span>
+   541→   541→                    <span className="inline-flex items-center gap-1.5">
+   542→   542→                      <Server className="h-3 w-3" />
+   543→   543→                      {s.processAlive ? `PID ${s.managedPid ?? "-"}` : "无进程"}
+   544→   544→                    </span>
+   545→   545→                  </div>
+   546→   546→                  {typeof s.restarts === "number" && s.restarts > 0 && (
+   547→   547→                    <div className="mt-2 text-[11px] text-zinc-600">
+   548→   548→                      累计拉起 {s.restarts} 次
+   549→   549→                      {s.lastExitAt ? ` · 最近退出 ${new Date(s.lastExitAt).toLocaleTimeString("zh-CN")}` : ""}
+   550→   550→                    </div>
+   551→   551→                  )}
+   552→   552→                </div>
+   553→   553→              ))}
+   554→   554→            </motion.div>
+   555→   555→
+   556→   556→            {/* 后端引擎切换卡（Task 13-R4：Node.js 版 / Java 版双引擎可选） */}
+   557→   557→            <motion.div
+   558→   558→              initial={{ opacity: 0, y: 20 }}
+   559→   559→              animate={{ opacity: 1, y: 0 }}
+   560→   560→              transition={{ duration: 0.5, delay: 0.25 }}
+   561→   561→              className="mt-4 rounded-2xl border border-white/8 bg-white/[0.04] p-5 backdrop-blur"
+   562→   562→              aria-label="后端引擎切换"
+   563→   563→            >
+   564→   564→              <div className="flex items-center gap-2.5">
+   565→   565→                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand/20 to-brand-bright/15 text-brand-soft">
+   566→   566→                  <Cpu className="h-4 w-4" />
+   567→   567→                </div>
+   568→   568→                <div>
+   569→   569→                  <h3 className="text-sm font-semibold text-zinc-100">后端引擎</h3>
+   570→   570→                  <p className="mt-0.5 text-xs text-zinc-500">
+   571→   571→                    切换会自动重启 :8080 后端进程；两版数据源独立（Node 版 = 迁移后 SQLite 主库，Java 版 = 原始 H2 存储）
+   572→   572→                  </p>
+   573→   573→                  <p className="mt-1 text-[11px] text-zinc-600" aria-label="引擎持久化选择状态">
+   574→   574→                    {engineStatus?.engineChoice
+   575→   575→                      ? `已记住你的选择：${engineStatus.engineChoice === "node" ? "Node.js" : "Java"} 版（沙箱发布/重置后自动保持，不再被误切换）`
+   576→   576→                      : "尚未显式选择过引擎：当前跟随主引擎信号（SQLite 主库存在 → Node）"}
+   577→   577→                  </p>
+   578→   578→                </div>
+   579→   579→              </div>
+   580→   580→
+   581→   581→              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+   582→   582→                {/* Node.js 版 */}
+   583→   583→                <button
+   584→   584→                  type="button"
+   585→   585→                  onClick={() => void switchEngine("node")}
+   586→   586→                  disabled={switching !== null || engineStatus?.engine === "node"}
+   587→   587→                  aria-pressed={engineStatus?.engine === "node"}
+   588→   588→                  className={`rounded-xl border p-4 text-left transition ${
+   589→   589→                    engineStatus?.engine === "node"
+   590→   590→                      ? "border-brand/60 bg-brand/10"
+   591→   591→                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+   592→   592→                  } ${switching ? "cursor-wait opacity-60" : ""}`}
+   593→   593→                >
+   594→   594→                  <div className="flex items-center justify-between">
+   595→   595→                    <span className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+   596→   596→                      <span
+   597→   597→                        className={`inline-block h-2.5 w-2.5 rounded-full border ${
+   598→   598→                          engineStatus?.engine === "node"
+   599→   599→                            ? "border-brand-soft bg-brand-soft shadow-[0_0_6px_rgb(var(--brand-soft-rgb)/0.9)]"
+   600→   600→                            : "border-zinc-500 bg-transparent"
+   601→   601→                        }`}
+   602→   602→                      />
+   603→   603→                      Node.js 版
+   604→   604→                    </span>
+   605→   605→                    {engineStatus?.engine === "node" && (
+   606→   606→                      <span className="rounded-md bg-brand/25 px-2 py-0.5 text-[11px] text-brand-pale">当前使用</span>
+   607→   607→                    )}
+   608→   608→                  </div>
+   609→   609→                  <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+   610→   610→                    bun + Express + SQLite · 自研受控 DSL 引擎（现行），发起 / 审批 / 看板数据完整
+   611→   611→                  </p>
+   612→   612→                  {switching === "node" && (
+   613→   613→                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#9be3ea]">
+   614→   614→                      <Loader2 className="h-3 w-3 animate-spin" /> 正在切换，后端启动中…
+   615→   615→                    </p>
+   616→   616→                  )}
+   617→   617→                </button>
+   618→   618→
+   619→   619→                {/* Java 版 */}
+   620→   620→                <button
+   621→   621→                  type="button"
+   622→   622→                  onClick={() => void switchEngine("java")}
+   623→   623→                  disabled={switching !== null || engineStatus?.engine === "java"}
+   624→   624→                  aria-pressed={engineStatus?.engine === "java"}
+   625→   625→                  className={`rounded-xl border p-4 text-left transition ${
+   626→   626→                    engineStatus?.engine === "java"
+   627→   627→                      ? "border-brand-bright/60 bg-brand-bright/10"
+   628→   628→                      : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+   629→   629→                  } ${switching ? "cursor-wait opacity-60" : ""}`}
+   630→   630→                >
+   631→   631→                  <div className="flex items-center justify-between">
+   632→   632→                    <span className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+   633→   633→                      <span
+   634→   634→                        className={`inline-block h-2.5 w-2.5 rounded-full border ${
+   635→   635→                          engineStatus?.engine === "java"
+   636→   636→                            ? "border-brand-bright bg-brand-bright shadow-[0_0_6px_rgb(var(--brand-bright-rgb)/0.9)]"
+   637→   637→                            : "border-zinc-500 bg-transparent"
+   638→   638→                        }`}
+   639→   639→                      />
+   640→   640→                      Java 版
+   641→   641→                    </span>
+   642→   642→                    <span
+   643→   643→                      className={`rounded-md px-2 py-0.5 text-[11px] ${
+   644→   644→                        engineStatus?.engine === "java"
+   645→   645→                          ? "bg-brand-bright/25 text-[#9be3ea]"
+   646→   646→                          : engineStatus?.java.jarExists
+   647→   647→                            ? "bg-emerald-400/15 text-emerald-300"
+   648→   648→                            : "bg-amber-400/15 text-amber-300"
+   649→   649→                      }`}
+   650→   650→                    >
+   651→   651→                      {engineStatus?.engine === "java"
+   652→   652→                        ? "当前使用"
+   653→   653→                        : engineStatus?.java.jarExists
+   654→   654→                          ? "jar 就绪 · 可切换"
+   655→   655→                          : "需先构建 jar"}
+   656→   656→                    </span>
+   657→   657→                  </div>
+   658→   658→                  <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+   659→   659→                    Spring Boot 4 + Flowable 8 · 原版实现，使用迁移前的历史数据视图
+   660→   660→                  </p>
+   661→   661→                  {switching === "java" && (
+   662→   662→                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-[#9be3ea]">
+   663→   663→                      <Loader2 className="h-3 w-3 animate-spin" /> 正在切换，Java 启动较慢…
+   664→   664→                    </p>
+   665→   665→                  )}
+   666→   666→                </button>
+   667→   667→              </div>
+   668→   668→
+   669→   669→              {/* Java 构建区：jar 缺失时展示一键构建 + 日志尾部 */}
+   670→   670→              {engineStatus && !engineStatus.java.jarExists && (
+   671→   671→                <div className="mt-3 rounded-xl border border-white/8 bg-black/20 p-3">
+   672→   672→                  <div className="flex flex-wrap items-center justify-between gap-2">
+   673→   673→                    <p className="text-xs text-zinc-400">
+   674→   674→                      {engineStatus.java.buildRunning
+   675→   675→                        ? "Java 版构建进行中：JDK 21 → Maven → jar 打包（约 10~20 分钟），完成后即可切换"
+   676→   676→                        : "Java 版构建产物已被沙箱重置清除；点击一键构建恢复（后台进行，不影响当前 Node 服务）"}
+   677→   677→                    </p>
+   678→   678→                    <button
+   679→   679→                      type="button"
+   680→   680→                      onClick={() => void buildJava()}
+   681→   681→                      disabled={building || engineStatus.java.buildRunning}
+   682→   682→                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 text-xs text-zinc-200 transition hover:border-white/20 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+   683→   683→                    >
+   684→   684→                      {building || engineStatus.java.buildRunning ? (
+   685→   685→                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+   686→   686→                      ) : (
+   687→   687→                        <Hammer className="h-3.5 w-3.5" />
+   688→   688→                      )}
+   689→   689→                      {building || engineStatus.java.buildRunning ? "构建中…" : "一键构建 Java 版"}
+   690→   690→                    </button>
+   691→   691→                  </div>
+   692→   692→                  {engineStatus.java.buildLogTail && (
+   693→   693→                    <pre className="mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-all rounded-lg bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-zinc-500 [scrollbar-width:thin]">
+   694→   694→                      {engineStatus.java.buildLogTail}
+   695→   695→                    </pre>
+   696→   696→                  )}
+   697→   697→                </div>
+   698→   698→              )}
+   699→   699→            </motion.div>
+   700→   700→          </div>
+   701→   701→        </section>
+   702→   702→
+   703→   703→        {/* 能力矩阵 */}
+   704→   704→        <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6" aria-label="平台能力">
+   705→   705→          <div className="mb-6 flex items-end justify-between">
+   706→   706→            <div>
+   707→   707→              <h2 className="text-xl font-semibold">核心能力</h2>
+   708→   708→              <p className="mt-1 text-sm text-zinc-500">源自项目 PRD 与功能清单的六大能力域</p>
+   709→   709→            </div>
+   710→   710→            <span className="hidden text-xs text-zinc-600 sm:block">docs/PRD.md · docs/features.md</span>
+   711→   711→          </div>
+   712→   712→          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+   713→   713→            {FEATURES.map((f, i) => (
+   714→   714→              <motion.article
+   715→   715→                key={f.title}
+   716→   716→                initial={{ opacity: 0, y: 18 }}
+   717→   717→                whileInView={{ opacity: 1, y: 0 }}
+   718→   718→                viewport={{ once: true, margin: "-40px" }}
+   719→   719→                transition={{ duration: 0.4, delay: (i % 3) * 0.08 }}
+   720→   720→                className="group rounded-2xl border border-white/8 bg-white/[0.03] p-5 transition hover:border-brand/40 hover:bg-white/[0.05]"
+   721→   721→              >
+   722→   722→                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand/20 to-brand-bright/15 text-brand-soft transition group-hover:text-brand-bright">
+   723→   723→                  <f.icon className="h-5 w-5" />
+   724→   724→                </div>
+   725→   725→                <h3 className="mt-4 text-base font-semibold">{f.title}</h3>
+   726→   726→                <p className="mt-2 text-sm leading-relaxed text-zinc-400">{f.desc}</p>
+   727→   727→                <div className="mt-4 flex flex-wrap gap-1.5">
+   728→   728→                  {f.tags.map((t) => (
+   729→   729→                    <span
+   730→   730→                      key={t}
+   731→   731→                      className="rounded-md border border-white/8 bg-white/[0.04] px-2 py-0.5 text-[11px] text-zinc-400"
+   732→   732→                    >
+   733→   733→                      {t}
+   734→   734→                    </span>
+   735→   735→                  ))}
+   736→   736→                </div>
+   737→   737→              </motion.article>
+   738→   738→            ))}
+   739→   739→          </div>
+   740→   740→        </section>
+   741→   741→
+   742→   742→        {/* 访问指引 */}
+   743→   743→        <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
+   744→   744→          <div className="rounded-2xl border border-white/8 bg-gradient-to-r from-brand/10 to-brand-bright/5 p-6 sm:p-8">
+   745→   745→            <h2 className="text-lg font-semibold">访问与联调</h2>
+   746→   746→            <div className="mt-4 grid gap-4 text-sm text-zinc-300 sm:grid-cols-3">
+   747→   747→              <div className="rounded-xl border border-white/8 bg-black/20 p-4">
+   748→   748→                <p className="font-medium text-zinc-100">平台入口</p>
+   749→   749→                <p className="mt-1.5 text-zinc-400">
+   750→   750→                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-soft">/lowcode/</code>{" "}
+   751→   751→                  经网关代理直达 Vue 控制台
+   752→   752→                </p>
+   753→   753→              </div>
+   754→   754→              <div className="rounded-xl border border-white/8 bg-black/20 p-4">
+   755→   755→                <p className="font-medium text-zinc-100">测试账号</p>
+   756→   756→                <p className="mt-1.5 text-zinc-400">
+   757→   757→                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-bright">admin / admin123</code>{" "}
+   758→   758→                  内置超级管理员
+   759→   759→                </p>
+   760→   760→              </div>
+   761→   761→              <div className="rounded-xl border border-white/8 bg-black/20 p-4">
+   762→   762→                <p className="font-medium text-zinc-100">REST API</p>
+   763→   763→                <p className="mt-1.5 text-zinc-400">
+   764→   764→                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-soft">/api/v1/*</code>{" "}
+   765→   765→                  代理至 Spring Boot 后端
+   766→   766→                </p>
+   767→   767→              </div>
+   768→   768→            </div>
+   769→   769→          </div>
+   770→   770→        </section>
+   771→   771→      </main>
+   772→   772→
+   773→   773→      {/* 通知栈（右上角） */}
+   774→   774→      <div
+   775→   775→        aria-live="polite"
+   776→   776→        className="pointer-events-none fixed right-4 top-20 z-50 flex w-[min(92vw,26rem)] flex-col gap-2"
+   777→   777→      >
+   778→   778→        {toasts.map((t) => (
+   779→   779→          <motion.div
+   780→   780→            key={t.id}
+   781→   781→            initial={{ opacity: 0, x: 24 }}
+   782→   782→            animate={{ opacity: 1, x: 0 }}
+   783→   783→            exit={{ opacity: 0 }}
+   784→   784→            className={`pointer-events-auto rounded-xl border px-4 py-3 text-sm shadow-xl backdrop-blur ${
+   785→   785→              t.kind === "success"
+   786→   786→                ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+   787→   787→                : t.kind === "error"
+   788→   788→                  ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
+   789→   789→                  : "border-brand-bright/30 bg-brand-bright/10 text-[#9be3ea]"
+   790→   790→            }`}
+   791→   791→            role="status"
+   792→   792→          >
+   793→   793→            {t.text}
+   794→   794→          </motion.div>
+   795→   795→        ))}
+   796→   796→      </div>
+   797→   797→
+   798→   798→      {/* 粘性页脚 */}
+   799→   799→      <footer className="mt-auto border-t border-white/5 bg-[#0b0d1a]">
+   800→   800→        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-zinc-500 sm:flex-row sm:px-6">
+   801→   801→          <p>工作流低代码平台 · Flowable 8 + Spring Boot 4 + Vue 3 · 沙箱网关单端口代理架构</p>
+   802→   802→          <p className="font-mono">backend :8080 · frontend :5173 · portal :3000</p>
+   803→   803→        </div>
+   804→   804→      </footer>
+   805→   805→    </div>
+   806→   806→  );
+   807→   807→}
+   808→   808→

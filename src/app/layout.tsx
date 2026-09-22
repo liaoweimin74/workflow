@@ -17,11 +17,11 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        {/* 首帧防闪：在样式应用前恢复用户选择的主题（与低代码平台共享 localStorage 键） */}
+        {/* 首帧防闪：在样式应用前恢复用户选择的主题与明暗模式（与低代码平台共享 localStorage 键） */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var t=localStorage.getItem('portal-ui-theme');document.documentElement.dataset.theme=t==='classic'?'classic':'verdant'}catch(e){}",
+              "try{var t=localStorage.getItem('portal-ui-theme');document.documentElement.dataset.theme=t==='classic'?'classic':'verdant';if(localStorage.getItem('portal-ui-mode')!=='light')document.documentElement.classList.add('dark')}catch(e){}",
           }}
         />
       </head>

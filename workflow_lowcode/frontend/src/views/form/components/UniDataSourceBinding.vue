@@ -1,5 +1,6 @@
 <template>
-  <el-form label-width="110px" size="default">
+  <!-- label 左对齐：label 文字与下方筛选区（且/或组、筛选行、添加按钮）统一从左缘起排 -->
+  <el-form label-width="110px" label-position="left" size="default">
     <el-form-item required>
       <template #label>
         <span class="label-with-tip">

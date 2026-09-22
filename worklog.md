@@ -724,3 +724,17 @@ Work Log:
 - 修改 UniDataSourceBinding.vue（两处）：filter form-item 加 class="filter-section"；scoped 样式新增 `.filter-section :deep(.el-form-item__content) { margin-left: 0 !important; }`（!important 击败 Element Plus 内联 margin-left:110px）
 - 验证（agent-browser 实测 /tmp/pd-7~8.png + DOM 测量）：「数据源」label 左缘=242px = 且/或组左缘=242px = 筛选行左缘=242px，像素级对齐 ✓；筛选行控件占满整行宽度（原 30/22/22/30% 分宽不变但可用空间更宽）；console 0 error
 - 回归：DataPicker/LookupPicker 配置弹窗测试 31/31 全过；测试页 ui-verify-dstable3 已删除
+
+---
+Task ID: 19-R2
+Agent: 主控（Z.ai Code）
+Task: 用户反馈「"所有(且)"应该和数据源label对齐」——label 文字与筛选区统一左对齐
+
+Work Log:
+- 根因实测（DOM 测量）：el-form 默认 label-position='right' → label 列 242..352 内 justify-content:flex-end，「* 数据源 ?」可见文字从 280px 起排，而筛选区（上轮已去缩进）在 242px，视觉错位 38px
+- 修改 UniDataSourceBinding.vue：el-form 增加 label-position="left" → label 行（含必填星号）与 且/或组、筛选行、「+ 添加筛选条件」统一从 242px 左缘起排（labelTipLeft 由 280→253，253 为星号后的文字本体，星号标记 242 起排；radioLeft=242 对齐 ✓）
+- 验证：agent-browser 重载后实测 /tmp/pd-9.png；console 0 error；DataPicker/LookupPicker 配置弹窗测试 31/31 全过；测试页 ui-verify-dstable4 已删除
+- 备注：该组件 4 处复用场景同步生效（均内嵌同一分割线+筛选区，label 左对齐全局一致）
+
+Stage Summary:
+- 「数据源配置」弹窗排版定稿：label「* 数据源 ?」与筛选区（所有（且）/任一（或）、筛选行、+ 添加筛选条件）全部左缘对齐，无冗余 label、无错位缩进

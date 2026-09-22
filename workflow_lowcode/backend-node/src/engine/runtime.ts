@@ -1018,6 +1018,12 @@ export function completeTaskById(taskId: string, variables: Record<string, unkno
       // 与 Java 相同：warn 后吞掉
     }
 
+    // 发起人重新提交：复位 rejected（否则 stale rejected=true 会让 MI 首票即满足条件提前放行）
+    if (initiatorNodeIdOf(model.ir) === String(task['TASK_DEF_KEY'])) {
+      upsertVariable(piId, 'rejected', false, now, tenant);
+      vars['rejected'] = false;
+    }
+
     if (userId != null) {
       saveComment({ tenant, taskId, processInstanceId: piId, userId, action: 'approve', comment, targetUserId: null });
     }
@@ -1053,10 +1059,17 @@ function buildCompleteResult(piId: string): CompleteResult {
   return { processInstanceId: piId, processFinished: finished, nextTaskId, nextTaskName, nextTaskAssignee, nextTaskDefinitionKey };
 }
 
+/** 同节点剩余 pending 子任务数（并行会签/依次加签场景的推进门槛） */
+function pendingSiblingCount(piId: string, nodeId: string): number {
+  return Number(one(`SELECT COUNT(*) AS C FROM WF_TASK_INST WHERE PROC_INST_ID = ? AND TASK_DEF_KEY = ? AND STATUS = 'pending'`, [piId, nodeId])?.['C'] ?? 0);
+}
+
 /**
  * 多实例（会签/或签/依次审批，尽力而为）：完成一个子任务后判断 completionCondition；
- * 未完成 → 顺序模式生成下一个 approver 子任务（返回 false）；
- * 完成（条件满足/集合耗尽）→ 取消同节点剩余子任务并推进（返回 true）。
+ * 条件满足 → 取消同节点剩余子任务并推进（返回 true）；
+ * 并行未满足 → 等待其余并行子任务（Flowable 语义：全部完成/条件满足才推进）；
+ * 依次未耗尽 → 生成下一 approver 子任务（返回 false）；
+ * 依次耗尽但有加签产生的未完成子任务（nrOfInstances > 集合长度）→ 等待（返回 false）。
  */
 function handleMultiInstanceCompletion(model: RtModel, piId: string, node: IrNode, vars: Record<string, unknown>, ctx: AdvanceCtx): boolean {
   const mi = node.multiInstance!;
@@ -1064,19 +1077,25 @@ function handleMultiInstanceCompletion(model: RtModel, piId: string, node: IrNod
   const doneCount = Number(vars['nrOfCompletedInstances'] ?? 0) + 1;
   upsertVariable(piId, 'nrOfCompletedInstances', doneCount, nowText(), ctx.tenant);
   vars['nrOfCompletedInstances'] = doneCount;
-  upsertVariable(piId, 'nrOfInstances', collection.length, nowText(), ctx.tenant);
-  vars['nrOfInstances'] = collection.length;
-  upsertVariable(piId, 'nrOfActiveInstances', Math.max(0, collection.length - doneCount), nowText(), ctx.tenant);
-  vars['nrOfActiveInstances'] = Math.max(0, collection.length - doneCount);
+  // 加签会上调 nrOfInstances（> 集合长度），此处只增不减，避免覆盖加签结果
+  const instanceCount = Math.max(Number(vars['nrOfInstances'] ?? 0), collection.length);
+  upsertVariable(piId, 'nrOfInstances', instanceCount, nowText(), ctx.tenant);
+  vars['nrOfInstances'] = instanceCount;
+  upsertVariable(piId, 'nrOfActiveInstances', Math.max(0, instanceCount - doneCount), nowText(), ctx.tenant);
+  vars['nrOfActiveInstances'] = Math.max(0, instanceCount - doneCount);
 
   const condTrue = vars['rejected'] === true || evalCondition(mi.completionCondition ?? '', vars);
   if (condTrue) {
     cancelSiblingTasks(piId, node.id);
     return true;
   }
-  if (!mi.sequential) return true; // 并行模式：等待其余子任务
+  if (!mi.sequential) {
+    // 并行模式（含会签）：其余并行子任务未全部完成前不推进（修复原实现首票即放行）
+    return pendingSiblingCount(piId, node.id) === 0;
+  }
   if (doneCount >= collection.length) {
-    return true; // 集合耗尽 → 结束本节点
+    // 集合耗尽：加签产生的未完成子任务（nrOfInstances 被上调）仍需等待
+    return pendingSiblingCount(piId, node.id) === 0;
   }
   const nextApprover = collection[doneCount]!;
   vars['approver'] = nextApprover;
@@ -1241,6 +1260,12 @@ export function rejectTaskById(taskId: string, userId: string | null, reason: st
     ]);
     closeActivityByTask(taskId, now, 'deleted');
 
+    // MI 节点驳回：同节点其余并行/后续子任务一并取消（changeActivityState 终止该节点全部执行）
+    const rejectedNode = model.nodes.get(currentNodeId);
+    if (rejectedNode?.multiInstance != null) {
+      cancelSiblingTasks(piId, currentNodeId);
+    }
+
     // 发起人节点新建任务
     const initiatorNode = model.nodes.get(initiatorNodeId);
     if (initiatorNode == null) {
@@ -1256,6 +1281,42 @@ export function rejectTaskById(taskId: string, userId: string | null, reason: st
       writeVariableMappings(model, piId, tenant);
     } catch {
       // 吞掉
+    }
+    return null;
+  });
+}
+
+/** 拒绝（RefuseService 对位）：不同意并终止整个流程（区别于驳回回发起人） */
+export function refuseTaskById(taskId: string, userId: string | null, reason: string | null, tenant: string): void {
+  ensureTables();
+  tx(() => {
+    const task = pendingTaskById(taskId);
+    const piId = String(task['PROC_INST_ID']);
+    const inst = one(`SELECT * FROM WF_PROC_INST WHERE ID = ?`, [piId]);
+    if (!inst || String(inst['STATUS']) !== 'running') {
+      throw new EngineError(`Cannot find processInstance for id ${piId}`);
+    }
+    const now = nowText();
+    // 当前任务作废
+    run(`UPDATE WF_TASK_INST SET STATUS = 'deleted', END_TIME = ?, DURATION_MS = ? WHERE ID = ?`, [
+      now,
+      Math.max(0, ts(now) - ts(String(task['CREATE_TIME'] ?? now))),
+      taskId,
+    ]);
+    closeActivityByTask(taskId, now, 'deleted');
+    // 终止语义（deleteProcessInstance 对位）：其余 pending 任务作废 + 关闭全部活动 + 实例 terminated
+    for (const t of all(`SELECT ID, CREATE_TIME FROM WF_TASK_INST WHERE PROC_INST_ID = ? AND STATUS = 'pending'`, [piId])) {
+      run(`UPDATE WF_TASK_INST SET STATUS = 'deleted', END_TIME = ?, DURATION_MS = ? WHERE ID = ?`, [
+        now,
+        Math.max(0, ts(now) - ts(String(t['CREATE_TIME'] ?? now))),
+        String(t['ID']),
+      ]);
+      closeActivityByTask(String(t['ID']), now, 'deleted');
+    }
+    run(`UPDATE WF_ACTIVITY_INST SET END_TIME = ?, STATUS = 'deleted' WHERE PROC_INST_ID = ? AND END_TIME IS NULL`, [now, piId]);
+    finishInstance(piId, now, 'terminated');
+    if (userId != null) {
+      saveComment({ tenant, taskId, processInstanceId: piId, userId, action: 'refuse', comment: reason, targetUserId: null });
     }
     return null;
   });
@@ -1321,12 +1382,20 @@ export function claimTaskById(taskId: string, userId: string, tenant: string): v
   });
 }
 
-/** 委派（delegateTaskWithComment 对位）：OWNER 保留原 assignee，ASSIGNEE 换人 */
+/** 委派（delegateTaskWithComment 对位）：OWNER 保留原 assignee，ASSIGNEE 换人；受节点/流程 allowDelegate 权限控制 */
 export function delegateTaskById(taskId: string, delegateTo: string, fromUser: string | null, comment: string | null, tenant: string): void {
   ensureTables();
   tx(() => {
+    if (delegateTo == null || delegateTo.trim() === '') {
+      throw new BusinessException('委派目标用户不能为空', 400);
+    }
     const task = pendingTaskById(taskId);
     const piId = String(task['PROC_INST_ID']);
+    const model = loadRuntimeModel(String(task['PROC_DEF_ID']));
+    // 权限：流程级 AND 节点级 allowDelegate
+    if (!extractOperations(model, String(task['TASK_DEF_KEY'])).allowDelegate) {
+      throw new BusinessException('该节点不允许委派', 400);
+    }
     const original = task['ASSIGNEE'] == null ? null : String(task['ASSIGNEE']);
     run(`UPDATE WF_TASK_INST SET OWNER = ?, ASSIGNEE = ? WHERE ID = ?`, [original, delegateTo, taskId]);
     run(`UPDATE WF_ACTIVITY_INST SET ASSIGNTEE = ? WHERE ACT_TYPE = 'userTask' AND END_TIME IS NULL AND ACT_ID = ? AND PROC_INST_ID = ?`, [
@@ -1341,7 +1410,7 @@ export function delegateTaskById(taskId: string, delegateTo: string, fromUser: s
   });
 }
 
-/** 加签（AddSignService 对位）：MI 节点新增子任务；普通节点加候选人 */
+/** 加签（AddSignService 对位）：MI 节点新增子任务；普通节点加候选人；受 allowAddSign 权限控制 */
 export function addSignTaskById(taskId: string, users: string[] | null, userId: string | null, comment: string | null, tenant: string): void {
   ensureTables();
   tx(() => {
@@ -1351,11 +1420,17 @@ export function addSignTaskById(taskId: string, users: string[] | null, userId: 
     const task = pendingTaskById(taskId);
     const piId = String(task['PROC_INST_ID']);
     const model = loadRuntimeModel(String(task['PROC_DEF_ID']));
+    // 权限：流程级 AND 节点级 allowAddSign
+    if (!extractOperations(model, String(task['TASK_DEF_KEY'])).allowAddSign) {
+      throw new BusinessException('该节点不允许加签', 400);
+    }
     const node = model.nodes.get(String(task['TASK_DEF_KEY']));
     if (node?.multiInstance != null) {
       const vars = getProcVariables(piId);
       const count = Number(vars['nrOfInstances'] ?? 0);
+      // 持久化票数上限上调（否则完成条件 nrOfCompletedInstances == nrOfInstances 不会感知加签）
       vars['nrOfInstances'] = count + users.length;
+      upsertVariable(piId, 'nrOfInstances', count + users.length, nowText(), tenant);
       for (const u of users) {
         createTaskInstance(model, piId, node, vars, tenant, u);
       }

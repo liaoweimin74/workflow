@@ -13,7 +13,11 @@ import { tenantOf } from './shared';
 import {
   completeTaskById,
   rejectTaskById,
+  refuseTaskById,
   transferTaskById,
+  delegateTaskById,
+  addSignTaskById,
+  forwardSignTaskById,
   claimTaskById,
   remindTask,
   extractOperations,
@@ -210,7 +214,8 @@ taskRouter.post(
     const tenant = tenantOf(req);
     const id = String(req.params['id'] ?? '');
     const b = req.body == null ? {} : (requireBody(req.body) as Record<string, unknown>);
-    rejectTaskById(id, String(req.userId ?? ''), bodyStr(b['reason']), tenant);
+    // 拒绝语义：不同意并终止整个流程（区别于驳回回发起人）
+    refuseTaskById(id, String(req.userId ?? ''), bodyStr(b['reason']), tenant);
     ok(res);
   }),
 );
@@ -234,9 +239,10 @@ taskRouter.post(
     const tenant = tenantOf(req);
     const id = String(req.params['id'] ?? '');
     const b = requireBody(req.body);
-    const toUser = bodyStr(b['toUser'] ?? b['userId']);
-    if (!toUser) throw new BusinessException('委派目标用户不能为空');
-    transferTaskById(id, String(req.userId ?? ''), toUser, bodyStr(b['reason']), tenant);
+    // 前端 DelegateRequest 字段为 delegateTo（兼容 toUser/userId）
+    const toUser = bodyStr(b['delegateTo'] ?? b['toUser'] ?? b['userId']);
+    if (!toUser) throw new BusinessException('委派目标用户不能为空', 400);
+    delegateTaskById(id, toUser, bodyStr(b['fromUser']) ?? String(req.userId ?? ''), bodyStr(b['comment']), tenant);
     ok(res);
   }),
 );
@@ -253,20 +259,33 @@ taskRouter.post(
   }),
 );
 
-/** 加签/前加签：当前受控引擎版本按转办记录处理（记录限制已在 worklog 注明） */
+/** 加签：MI 节点新增子任务；普通节点加候选人（AddSignService 对位） */
 taskRouter.post(
   '/api/v1/tasks/:id/add-sign',
   authGuard,
   ah(async (req: AuthedRequest, res) => {
-    throw new BusinessException('当前引擎版本不支持加签操作', 400);
+    const tenant = tenantOf(req);
+    const id = String(req.params['id'] ?? '');
+    const b = requireBody(req.body);
+    const usersRaw = b['users'] ?? b['userIds'];
+    const users = Array.isArray(usersRaw) ? usersRaw.map((u) => String(u).trim()).filter((u) => u !== '') : null;
+    addSignTaskById(id, users, bodyStr(b['userId']) ?? String(req.userId ?? ''), bodyStr(b['comment']), tenant);
+    ok(res);
   }),
 );
 
+/** 转签：MI 子任务换人（ForwardSignService 对位） */
 taskRouter.post(
   '/api/v1/tasks/:id/forward-sign',
   authGuard,
   ah(async (req: AuthedRequest, res) => {
-    throw new BusinessException('当前引擎版本不支持前加签操作', 400);
+    const tenant = tenantOf(req);
+    const id = String(req.params['id'] ?? '');
+    const b = requireBody(req.body);
+    const toUser = bodyStr(b['toUser'] ?? b['userId']);
+    if (!toUser) throw new BusinessException('转签目标用户不能为空');
+    forwardSignTaskById(id, toUser, bodyStr(b['userId']) ?? String(req.userId ?? ''), bodyStr(b['comment']), tenant);
+    ok(res);
   }),
 );
 

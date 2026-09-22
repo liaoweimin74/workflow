@@ -738,3 +738,34 @@ Work Log:
 
 Stage Summary:
 - 「数据源配置」弹窗排版定稿：label「* 数据源 ?」与筛选区（所有（且）/任一（或）、筛选行、+ 添加筛选条件）全部左缘对齐，无冗余 label、无错位缩进
+
+---
+Task ID: 20
+Agent: 主控（Z.ai Code）
+Task: 用户需求「围绕工作流表单 leave-form 编写测试用例：多人模式（会签/或签/依次审批）+ 转派/委托/加签/驳回，组合测试，测出 BUG 自行修复再测」
+
+Work Log:
+- 测试基建：补建用户 approver3/approver4（id=3/4，默认密码 123456，已有 admin=1/test=2）；测试脚本 tests/leave-flow-mi-actions.test.ts（bun:test，17 用例 96 断言，HTTP 驱动 8080 + bun:sqlite 直读 data/workflow.db 断言内部态）；流程模板 经 draft→design(bpmnXml+nodeConfigs)→deploy 装配，审批节点绑 leave-form（formDefId 4a2e8ee1…）+ operations 全开，multiMode 经 rewriteMultiInstance 生成 MI XML
+- 首轮结果 5 pass / 12 fail，定位 7 类引擎 BUG：
+  ①会签（并行 MI）首票即放行：handleMultiInstanceCompletion 并行分支 return true 注释与代码相反，未等其余并行子任务
+  ②MI 节点驳回不取消同节点其余子任务（残留 pending 可继续办理，产生双分支推进风险）
+  ③重提后 rejected 变量未复位 → 重提会签首轮任一人通过即被 stale rejected 提前放行
+  ④委托路由错接：调 transferTaskById（Owner 不保留）、不识别前端 DelegateRequest.delegateTo 字段、无 allowDelegate 校验
+  ⑤加签/转签路由直接抛「不支持」400（engine 已有 addSignTaskById/forwardSignTaskById 实现未接线）
+  ⑥依次审批加签后集合耗尽即推进：doneCount>=collection.length 未考虑加签上调的 nrOfInstances，加签人任务悬挂
+  ⑦refuse 语义错误：等同 reject 回发起人，与前端约定「不同意并终止整个流程」不符
+- 修复（engine/runtime.ts + routes/task.ts）：
+  ①并行分支改为 pendingSiblingCount==0 才推进（条件满足或全部完成）
+  ②rejectTaskById 对 MI 节点 cancelSiblingTasks
+  ③completeTaskById 完成发起人节点任务时复位 rejected=false
+  ④delegate 路由接 delegateTaskById（识别 delegateTo/toUser/userId），引擎内加 allowDelegate 权限校验 + 目标非空（400）
+  ⑤add-sign/forward-sign 路由接引擎实现，addSignTaskById 加 allowAddSign 权限校验；MI 加签持久化 nrOfInstances（原实现只改局部 vars 未落库）
+  ⑥依次耗尽分支加 pendingSiblingCount==0 门槛；handleMultiInstanceCompletion 的 nrOfInstances 只增不减（max(当前,集合长)），避免覆盖加签结果
+  ⑦新增 refuseTaskById：当前任务+其余 pending 作废、关闭活动、实例 terminated（deleteProcessInstance 对位），refuse 路由接线
+- 验证：修复后 17/17 全过，连续两轮稳定；存量 leave-form-flow:3:5 发起→审批→结束冒烟通过；dev.log 无错误
+- 备注：①R 信封 code 以响应体为准（BusinessException → HTTP 200 + body code，BusinessException 默认 code=500 需显式传 400）——测试脚本首轮误读 HTTP status 已修正 ②测试产生的 mi-test-* 草稿/部署/实例留在库中作为用例痕迹，列表可按名称辨识 ③重启后端时与门户服务监督器（20s 看门狗）存在竞争：手动 kill 后监督器自动拉起，最终以监督器进程为准，无需手动重启
+
+Stage Summary:
+- 引擎 7 类 BUG 全部修复，多人模式（会签/或签/依次）× 任务动作（转派/委托/加签/驳回/拒绝）共 17 个组合场景测试全绿；测试套件可重复执行（bun test tests/leave-flow-mi-actions.test.ts）
+- 委托与转派语义区分落地：委托保留 OWNER、受 allowDelegate 控制；转派直接换人、受 allowTransfer 控制
+- 加签语义落地：普通节点加候选人（可见待办）；MI 节点加子任务并同步上调完成票数，依次/并行模式均正确等待加签人

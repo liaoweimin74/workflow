@@ -799,6 +799,9 @@ formRouter.post(
             ensureSubTable(draft.key, c.key as string, c.subColumns);
           }
         }
+      } else {
+        // 工作流表单发布校验：schema 必须为合法 form-create rule 结构（数组或 {rule:[]}）
+        validateWorkflowSchema(draft.schema);
       }
 
       if (lastPublished) {
@@ -812,6 +815,57 @@ formRouter.post(
     });
     tx();
     ok(res, formDefEntityJson(formDefById(id, tenantId)));
+  }),
+);
+
+/** FormDefinitionService.validateWorkflowSchema（复制改类型后的发布校验：工作流表单侧） */
+function validateWorkflowSchema(schema: string | null): void {
+  const root = parseJsonOr400(schema, '表单 schema 解析失败');
+  const rule = Array.isArray(root) ? root : (root as Record<string, unknown>)['rule'];
+  if (!Array.isArray(rule)) {
+    throw new BusinessException('表单 schema 格式非法', 400);
+  }
+}
+
+/** POST /api/v1/form-definitions/{id}/copy —— 复制表单（可改变类型：WORKFLOW/BUSINESS） */
+formRouter.post(
+  '/api/v1/form-definitions/:id/copy',
+  authGuard,
+  ah(async (req: AuthedRequest, res) => {
+    const tenantId = tenantOf(req);
+    const id = req.params['id'] as string;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const name = body['name'] == null ? '' : String(body['name']).trim();
+    const key = body['key'] == null ? '' : String(body['key']).trim();
+    const type = body['type'] == null ? '' : String(body['type']).trim();
+    if (name === '') throw new BusinessException('表单名称不能为空', 400);
+    if (!/^[a-z][a-z0-9_]*$/.test(key)) {
+      throw new BusinessException('表单标识只能包含小写字母、数字、下划线，且以字母开头', 400);
+    }
+    if (type !== 'WORKFLOW' && type !== 'BUSINESS') {
+      throw new BusinessException('表单类型必须为 WORKFLOW 或 BUSINESS', 400);
+    }
+
+    const now = nowText();
+    const newId = crypto.randomUUID().replace(/-/g, '');
+    const tx = getDb().transaction(() => {
+      const src = formDefById(id, tenantId);
+      const exists = one(`SELECT 1 AS X FROM wf_form_def WHERE tenant_id = ? AND "key" = ?`, [tenantId, key]);
+      if (exists) throw new BusinessException(`表单标识已存在: ${key}`, 400);
+      // 复制 schema，类型可变：
+      //  - 复制为 BUSINESS：继承源 column_config（源为 BUSINESS 时可直接发布；
+      //    源为 WORKFLOW 时 column_config 为空，发布时被「业务表单发布前必须配置列映射」拦截，
+      //    引导用户先配置 —— 发布校验兜底）
+      //  - 复制为 WORKFLOW：column_config 不继承（业务列映射不属于工作流表单语义）
+      // 新表单为 DRAFT version 1，processKey 不继承（工作流绑定属于原表单语义）
+      const columnConfig = type === 'BUSINESS' ? (src.column_config ?? null) : null;
+      run(
+        `INSERT INTO wf_form_def (${FORM_DEF_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newId, tenantId, name, key, type, columnConfig, src.schema == null ? '[]' : src.schema, 1, 'DRAFT', null, null, null, now, now],
+      );
+    });
+    tx();
+    ok(res, formDefEntityJson(formDefById(newId, tenantId)));
   }),
 );
 

@@ -300,6 +300,38 @@ datasourceRouter.post(
 
 // ---------------------------------------------------------------- 统一数据访问（metadata + data CRUD）
 
+/** 从表单 schema 递归收集 field→title（中文名），供 metadata label 展示（需求：筛选列名显示「中文名(英文名)」） */
+function extractFieldTitles(schema: string | null): Record<string, string> {
+  const map: Record<string, string> = {};
+  const walk = (rules: unknown): void => {
+    if (!Array.isArray(rules)) return;
+    for (const it of rules) {
+      const f = (it ?? {}) as Record<string, unknown>;
+      const field = f['field'];
+      const title = f['title'];
+      if (field != null && String(field).trim() !== '' && title != null && String(title).trim() !== '') {
+        const k = String(field);
+        if (!map[k]) map[k] = String(title);
+      }
+      const props = (f['props'] ?? {}) as Record<string, unknown>;
+      walk(f['children'] as unknown);
+      walk(props['rule'] as unknown);
+      if (Array.isArray(props['columns'])) {
+        for (const col of props['columns'] as unknown[]) {
+          walk(((col ?? {}) as Record<string, unknown>)['rule'] as unknown);
+        }
+      }
+    }
+  };
+  try {
+    const root = JSON.parse(isBlank(schema) ? '{}' : (schema as string)) as Record<string, unknown>;
+    walk(Array.isArray(root) ? root : (root['rule'] as unknown));
+  } catch {
+    /* schema 非法时忽略 title 提取 */
+  }
+  return map;
+}
+
 function parseParams(row: DsRow): Record<string, unknown> {
   if (row.params == null || isBlank(row.params)) return {};
   try { return JSON.parse(row.params) as Record<string, unknown>; } catch { return {}; }
@@ -336,10 +368,20 @@ datasourceRouter.get(
       return;
     }
     // FORM：columnConfig 来自 wf_form_def
-    const def = row.form_key ? one(`SELECT "column_config" FROM wf_form_def WHERE "tenant_id" = ? AND "key" = ?`, [tenantId, row.form_key]) : null;
+    const def = row.form_key
+      ? one(`SELECT "column_config","schema" FROM wf_form_def WHERE "tenant_id" = ? AND "key" = ?`, [tenantId, row.form_key])
+      : null;
     let columns: unknown = [];
     if (def && def['column_config']) {
       try { columns = JSON.parse(String(def['column_config'])); } catch { columns = []; }
+    }
+    // 合并 schema 中的字段 title 为中文名 label（前端列名下拉据此显示「中文名(英文名)」）
+    const titles = extractFieldTitles(def ? (def['schema'] as string | null) : null);
+    if (Array.isArray(columns)) {
+      columns = (columns as Record<string, unknown>[]).map((c) => ({
+        ...c,
+        label: titles[String(c['key'] ?? '')] ?? String(c['label'] ?? c['key'] ?? ''),
+      }));
     }
     ok(res, { columns, writable: true, formKey: row.form_key });
   }),

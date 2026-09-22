@@ -60,13 +60,14 @@ function createWrapper() {
 }
 
 describe('PageListPage — 发布/删除交互', () => {
-  it('onMounted 加载已发布表单（formKey 下拉候选）；fetchApi 正确透传分页参数', async () => {
+  it('onMounted 加载已发布表单（formKey 下拉候选）；新建不选类型（统一 PAGE）；fetchApi 正确透传分页参数', async () => {
     ;(pageApi.getPages as any).mockResolvedValue({
       data: { content: [{ id: 'p1', name: '员工视图', key: 'emp_view', type: 'VIEW', status: 'DRAFT', version: 1 }], totalElements: 1 },
     })
     ;(formApi.getFormDefinitions as any).mockResolvedValue({
       data: { content: [{ id: 'f1', name: '员工档案', key: 'emp_profile', type: 'BUSINESS', status: 'PUBLISHED' }] },
     })
+    ;(pageApi.createPage as any).mockResolvedValue({ data: { id: 'p9' } })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
@@ -76,18 +77,16 @@ describe('PageListPage — 发布/删除交互', () => {
       size: 100,
     })
     const stub = wrapper.findComponent(SearchTableStub)
-    // formKey 下拉候选注入到 type control 的 VIEW 分支
     const formConfig = stub.props('formConfig') as any
-    const typeRule = formConfig.rule.find((r: any) => r.field === 'type')
-    const viewCtl = typeRule.control.find((c: any) => c.value === 'VIEW')
-    const formKeyRule = viewCtl.rule.find((r: any) => r.field === 'formKey')
+    // 页面已代替视图：不再有页面类型选择
+    expect(formConfig.rule.find((r: any) => r.field === 'type')).toBeUndefined()
+    // formKey 为顶级可选字段（无 required 校验），下拉候选注入
+    const formKeyRule = formConfig.rule.find((r: any) => r.field === 'formKey')
+    expect(formKeyRule).toBeDefined()
+    expect(formKeyRule.validate).toBeUndefined()
     expect(formKeyRule.options).toHaveLength(1)
     expect(formKeyRule.options[0]).toEqual({ label: '员工档案', value: 'emp_profile' })
-    // PAGE 分支 formKey 也可选（非必填）
-    const pageCtl = typeRule.control.find((c: any) => c.value === 'PAGE')
-    const pageFormKeyRule = pageCtl.rule.find((r: any) => r.field === 'formKey')
-    expect(pageFormKeyRule.options).toHaveLength(1)
-    // fetchApi：SearchTable 透传的查询参数 → pageApi.getPages（page 按 1 基）
+    // fetchApi：SearchTable 透传的查询参数 → pageApi.getPages（不再按类型筛选）
     const fetchApi = stub.props('fetchApi') as (params: any) => Promise<any>
     const res = await fetchApi({ page: 2, size: 20, name: '视图', status: 'DRAFT', type: 'VIEW' })
     expect(pageApi.getPages).toHaveBeenCalledWith({
@@ -95,12 +94,15 @@ describe('PageListPage — 发布/删除交互', () => {
       size: 20,
       name: '视图',
       status: 'DRAFT',
-      type: 'VIEW',
     })
     expect(res).toEqual({
       rows: [{ id: 'p1', name: '员工视图', key: 'emp_view', type: 'VIEW', status: 'DRAFT', version: 1 }],
       total: 1,
     })
+    // createApi：新建一律 type=PAGE
+    const createApi = (stub.props('formConfig') as any).createApi
+    await createApi({ name: '新页面', key: 'new_page', formKey: '' })
+    expect(pageApi.createPage).toHaveBeenCalledWith({ name: '新页面', key: 'new_page', type: 'PAGE', formKey: null })
     wrapper.unmount()
   })
 

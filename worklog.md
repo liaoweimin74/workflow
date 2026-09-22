@@ -571,3 +571,25 @@ Stage Summary:
 - 双引擎切换全链路可用：Node（现行，数据完整）⇄ Java（jar 就绪），切换=杀 8080+按新引擎拉起，实测双向切换成功且数据无损
 - 当前引擎：Node.js 版（用户数据视图完整）；Java 版随时可切换
 - 待办：Java 版登录/API 契约核查（留给巡检）；发布版如需完整平台需改造部署结构（重大变更，需用户决策）
+
+---
+Task ID: 14-R1
+Agent: 主控（Z.ai Code）
+Task: 用户 4 条平台功能需求——①页面代替视图（新建不再选类型/不强绑表单）②表单复制（可改类型+发布校验）③④筛选列名统一「中文名(英文名)」并统一界面
+
+Work Log:
+- 勘察：页面模型 PageDefinition.type（VIEW=视图/PAGE=自定义页面），设计器经 PageDesignerRouter 按 type 分发 ViewDesigner/PageDesigner，渲染端 PageRenderer.vue 内含 VIEW 自编译分支 + PageRendererPage（form-create rule）双轨；数据表格「配置数据源」弹窗=DsBindingConfigDialog（Tab1 由 UniDataSourceBinding 统一代理=「组件级数据筛选」标杆）；「数据源绑定与动作总线」弹窗=DataSourceConfigPanel
+- 需求① PageListPage.vue：新建表单删除「页面类型」选择（type 一律 'PAGE'，走 PageDesigner/PageRendererPage 单轨），formKey 提升为顶级可选字段（不再强制绑定业务表单），列表移除类型搜索、历史 VIEW 行标注「视图（旧）」，fetchApi 去掉 type 透传；后端确认 validateForPublishPage 对 PAGE+formKey 组合兼容（formKey 仅记录）。ViewDesigner/VIEW 渲染分支保留为历史数据兼容层（新数据全单轨，渐进淘汰，详见 Stage Summary）
+- 需求② 后端 form.ts 新增 POST /api/v1/form-definitions/:id/copy（name/key/type 校验、key 唯一、schema 继承、BUSINESS 继承 column_config、WORKFLOW 不继承、processKey 不继承、DRAFT v1）；publish 增强：WORKFLOW 类型补 validateWorkflowSchema（schema 合法性），BUSINESS 既有列映射/组件/引用校验形成「复制改类型→发布时按新类型校验」闭环。前端 FormListPage 加「复制」按钮+弹窗（新名称/新标识/类型 radio/类型变更警告 alert），api/form.ts 加 copyFormDefinition；修复默认 key 生成 bug：源 key 含连字符（leave-form）时 leave-form_copy 不匹配 ^[a-z][a-z0-9_]*$ 导致静默拦截——改为清洗非法字符为下划线
+- 需求③④ 新建 utils/columnOption.ts columnOptionLabel()（中文名(英文名)，无中文降级英文名）；UniDataSourceBinding（标杆）列名下拉升级该格式+filterable；DataSourceConfigPanel 三处统一：数据源级筛选列名同格式+filterable、行布局宽度对齐标杆（30/22/22/30）、AND/OR 文案恒显「所有（且）/任一（或）」、+ 添加筛选条件；动作总线 set-filter 的过滤字段从手输 el-input 升级为按目标数据源字段下拉（同格式，target 切换自动清字段并懒加载元数据）
+- 【关键后端增强】发现 FORM 数据源 metadata 直接返回 column_config（无 label 字段）——中文名从未到达前端，这是需求③的根源。datasource.ts metadata FORM 分支新增 extractFieldTitles()：从表单 schema 递归（children/props.rule/props.columns[].rule）收集 field→title 合并为 label（实测 reason→请假事由/leaveType→请假类型/days→请假天数）
+- 端到端验证（curl+agent-browser）：copy 200（schema 继承/columnConfig 按类型处置/processKey 置空）→ 复制为 BUSINESS 无列映射发布被 400「业务表单发布前必须配置列映射」拦截 ✅ → 重复 key 400 ✅；UI 全流程：新建页面弹窗无类型选择 ✅→ 跳转设计器；复制弹窗类型切换警告 ✅ → 确认后列表新行「请假申请表-副本」✅；设计器数据源级筛选列名下拉实测「请假事由(reason)/请假类型(leaveType)/请假天数(days)」✅；动作总线 set-filter 过滤字段下拉同格式 ✅（截图 req3-actionbus-verified.png）；单测 64 文件 893 用例全过（含更新后的 PageListPage.test 新断言：无 type 字段/createApi 固定 PAGE）
+- 【事件】验证途中 kill bun 重启后端时被 Java 引擎抢占 8080：今早 09:13 bootstrap 重建了 jar（发布重置清 marker + jar 在 → 看门狗决策走 Java，13-R5 边界）。已用门户 API 切回 Node（bun 4134，双 marker 重建）。改进项（下轮）：显式切 Java 时写持久标记（backend/.engine-java 安全区）与「发布清 marker」区分，避免看门狗误回 Java
+- 重建巡检 cron：job 405611（fixed_rate 900s，webDevReview，原 400898 已失效）
+
+Stage Summary:
+- 四条需求全部落地并浏览器实测：①新建页面单轨 PAGE 化+表单可选 ②表单复制（可改类型）+发布校验闭环 ③④三处筛选列名统一「中文名(英文名)」+动作总线过滤字段下拉化+界面对齐标杆
+- 深层修复：FORM 数据源 metadata 注入 schema 中文 title（label 链路打通，全平台受益）；表单 key 连字符清洗
+- 渲染双轨现状：VIEW=ViewDesigner+PageRenderer 内置分支（历史数据兼容，不再演进）；PAGE=PageDesigner+PageRendererPage（唯一演进轨道）。后续可做：ViewSchema→PAGE rule 转换器实现老数据一键迁移，届时可删 ViewDesigner
+- 风险/待办：看门狗引擎决策在「marker 被发布清除 + jar 存在」时会误切 Java（需显式 Java 标记区分）；表单列表会显示 ARCHIVED 行（现状行为，测试残留 smoke_copy_1/proxy_smoke_1/请假申请表-副本 留存可作演示）
+- 三端健康：3000 next dev / 5173 vite / 8080 bun（Node 引擎，SQLite wf_ 表）

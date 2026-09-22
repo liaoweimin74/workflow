@@ -192,8 +192,8 @@ const nodeTypeLabel = computed(() => {
 }
 
 .collapse-bar:hover {
-  background: var(--ds-selected, #d7f5ee);
-  color: var(--ds-industrial-500, #0f766e);
+  background: var(--ds-selected, var(--brand-tint));
+  color: var(--ds-industrial-500, var(--brand));
 }
 
 .bar-icon {
@@ -230,7 +230,7 @@ const nodeTypeLabel = computed(() => {
 }
 
 .heading-icon {
-  color: var(--ds-industrial-500, #0f766e);
+  color: var(--ds-industrial-500, var(--brand));
   font-size: 16px;
 }
 
@@ -243,10 +243,10 @@ const nodeTypeLabel = computed(() => {
 .node-type-tag {
   --el-tag-bg-color: var(--ds-industrial-50, #f0fdf9) !important;
   --el-tag-border-color: var(--ds-industrial-200, #b0e9de) !important;
-  --el-tag-text-color: var(--ds-industrial-600, #0d9488) !important;
+  --el-tag-text-color: var(--ds-industrial-600, var(--brand)) !important;
   background: var(--ds-industrial-50, #f0fdf9) !important;
   border-color: var(--ds-industrial-200, #b0e9de) !important;
-  color: var(--ds-industrial-600, #0d9488) !important;
+  color: var(--ds-industrial-600, var(--brand)) !important;
   font-weight: 600;
 }
 
@@ -258,7 +258,7 @@ const nodeTypeLabel = computed(() => {
 }
 
 .collapse-toggle:hover {
-  color: var(--ds-industrial-500, #0f766e);
+  color: var(--ds-industrial-500, var(--brand));
 }
 
 .panel-body {

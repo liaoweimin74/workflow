@@ -569,7 +569,7 @@ defineExpose({ fetchData, refresh, retry })
 }
 /* --fields-layout: grid 且指定列数时按列栅格排布 */
 .card-fields[data-layout='grid'] { grid-template-columns: repeat(var(--fields-columns, 1), minmax(0, 1fr)); }
-.card-metric { font-size: 18px; font-weight: 600; color: var(--card-title-color, #0f766e); margin-top: 8px; }
+.card-metric { font-size: 18px; font-weight: 600; color: var(--card-title-color, var(--brand)); margin-top: 8px; }
 .card-field { margin-bottom: 8px; }
 .card-fields[data-layout='grid'] .card-field { margin-bottom: 0; }
 .card-field.label-position-left,

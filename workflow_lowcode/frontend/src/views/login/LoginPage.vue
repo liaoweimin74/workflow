@@ -50,25 +50,25 @@ async function handleLogin() {
 <template>
   <div class="min-h-screen flex items-stretch relative overflow-hidden bg-[#f6f7f5] dark:bg-[#111514]">
     <!-- 背景装饰：青玉渐变光斑 + 细网格 -->
-    <div class="absolute -top-32 -right-24 w-[480px] h-[480px] rounded-full bg-[#2dd4bf]/18 dark:bg-[#2dd4bf]/8 blur-3xl pointer-events-none"></div>
-    <div class="absolute -bottom-40 -left-28 w-[520px] h-[520px] rounded-full bg-[#22c9d6]/14 dark:bg-[#22c9d6]/6 blur-3xl pointer-events-none"></div>
+    <div class="absolute -top-32 -right-24 w-[480px] h-[480px] rounded-full bg-[rgb(var(--brand-soft-rgb)/0.18)] dark:bg-[rgb(var(--brand-soft-rgb)/0.08)] blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-40 -left-28 w-[520px] h-[520px] rounded-full bg-[rgb(var(--brand-bright-rgb)/0.14)] dark:bg-[rgb(var(--brand-bright-rgb)/0.06)] blur-3xl pointer-events-none"></div>
     <div
       class="absolute inset-0 pointer-events-none opacity-[0.5] dark:opacity-[0.08]"
-      style="background-image: linear-gradient(rgba(15,118,110,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(15,118,110,0.05) 1px, transparent 1px); background-size: 36px 36px;"
+      style="background-image: linear-gradient(rgb(var(--brand-rgb)/0.05) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--brand-rgb)/0.05) 1px, transparent 1px); background-size: 36px 36px;"
     ></div>
 
     <!-- 左侧品牌面板（lg 及以上显示） -->
-    <div class="hidden lg:flex w-[46%] xl:w-[44%] relative flex-col justify-between p-12 bg-[#14201c] overflow-hidden">
+    <div class="hidden lg:flex w-[46%] xl:w-[44%] relative flex-col justify-between p-12 bg-(--ink) overflow-hidden">
       <!-- 墨绿面板上的青光装饰 -->
-      <div class="absolute -top-24 -left-20 w-[420px] h-[420px] rounded-full bg-[#0f766e]/40 blur-3xl pointer-events-none"></div>
-      <div class="absolute bottom-[-140px] right-[-80px] w-[380px] h-[380px] rounded-full bg-[#22c9d6]/20 blur-3xl pointer-events-none"></div>
+      <div class="absolute -top-24 -left-20 w-[420px] h-[420px] rounded-full bg-[rgb(var(--brand-rgb)/0.4)] blur-3xl pointer-events-none"></div>
+      <div class="absolute bottom-[-140px] right-[-80px] w-[380px] h-[380px] rounded-full bg-[rgb(var(--brand-bright-rgb)/0.2)] blur-3xl pointer-events-none"></div>
       <div
         class="absolute inset-0 pointer-events-none opacity-60"
-        style="background-image: linear-gradient(rgba(94,234,212,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(94,234,212,0.05) 1px, transparent 1px); background-size: 40px 40px;"
+        style="background-image: linear-gradient(rgb(var(--brand-glow-rgb)/0.05) 1px, transparent 1px), linear-gradient(90deg, rgb(var(--brand-glow-rgb)/0.05) 1px, transparent 1px); background-size: 40px 40px;"
       ></div>
 
       <div class="relative flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0f766e] to-[#22c9d6] flex items-center justify-center shadow-[0_4px_16px_rgba(15,118,110,0.5)]">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-(--brand) to-(--brand-bright) flex items-center justify-center shadow-[0_4px_16px_rgb(var(--brand-rgb)/0.5)]">
           <span class="text-white text-base font-bold tracking-tight">MB</span>
         </div>
         <div>
@@ -80,7 +80,7 @@ async function handleLogin() {
       <div class="relative max-w-md">
         <h1 class="text-3xl xl:text-4xl font-bold text-white leading-snug tracking-tight">
           让流程运转<br />
-          <span class="bg-gradient-to-r from-[#5eead4] to-[#6fdbe6] bg-clip-text text-transparent">如呼吸般自然</span>
+          <span class="bg-gradient-to-r from-(--brand-glow) to-(--color-accent-300) bg-clip-text text-transparent">如呼吸般自然</span>
         </h1>
         <p class="mt-5 text-sm leading-6 text-[#a7b5ad]">
           可视化流程设计 · 零代码表单搭建 · 页面与数据源一站式编排，
@@ -92,8 +92,8 @@ async function handleLogin() {
             { t: '零代码表单引擎', d: '字段级权限，复制即可派生新表单' },
             { t: '双引擎热切换', d: 'Node.js 高性能引擎，数据完整迁移' },
           ]" :key="feat.t" class="flex items-start gap-3">
-            <span class="mt-1 w-4 h-4 rounded-full bg-[#14a08f]/30 border border-[#2dd4bf]/50 flex items-center justify-center shrink-0">
-              <svg class="w-2.5 h-2.5 text-[#5eead4]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+            <span class="mt-1 w-4 h-4 rounded-full bg-[rgb(var(--brand-mid-rgb)/0.3)] border border-[rgb(var(--brand-soft-rgb)/0.5)] flex items-center justify-center shrink-0">
+              <svg class="w-2.5 h-2.5 text-(--brand-glow)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
             </span>
             <div>
               <p class="text-sm font-medium text-[#e6ebe8]">{{ feat.t }}</p>
@@ -111,7 +111,7 @@ async function handleLogin() {
       <div class="w-full max-w-[400px]">
         <!-- 移动端 Logo -->
         <div class="lg:hidden text-center mb-8">
-          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0f766e] to-[#22c9d6] flex items-center justify-center mx-auto mb-4 shadow-[0_4px_16px_rgba(15,118,110,0.35)]">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-(--brand) to-(--brand-bright) flex items-center justify-center mx-auto mb-4 shadow-[0_4px_16px_rgb(var(--brand-rgb)/0.35)]">
             <span class="text-white text-xl font-bold">MB</span>
           </div>
           <h1 class="text-xl font-semibold tracking-tight text-gray-800 dark:text-gray-100">工作流管理系统</h1>
@@ -151,7 +151,7 @@ async function handleLogin() {
                 type="primary"
                 size="large"
                 :loading="loading"
-                class="w-full !rounded-xl !h-11 !text-base !bg-gradient-to-r !from-[#0f766e] !to-[#14a08f] !border-transparent shadow-[0_4px_14px_rgba(15,118,110,0.35)] hover:!from-[#0d6a63] hover:!to-[#118a80] hover:!shadow-[0_6px_20px_rgba(15,118,110,0.45)] active:!translate-y-0 transition-all"
+                class="w-full !rounded-xl !h-11 !text-base !bg-gradient-to-r !from-(--brand) !to-(--brand-mid) !border-transparent shadow-[0_4px_14px_rgb(var(--brand-rgb)/0.35)] hover:!from-(--brand-deeper) hover:!to-(--brand-mid-hover) hover:!shadow-[0_6px_20px_rgb(var(--brand-rgb)/0.45)] active:!translate-y-0 transition-all"
                 @click="handleLogin"
               >
                 登 录

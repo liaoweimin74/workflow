@@ -78,8 +78,8 @@ interface PaletteGroup {
 
 /* 节点类别 → 图标 chip 配色（柔和填充 + 同色文字，X6 BPMN 风格） */
 const CATEGORY_STYLES: Record<string, { bg: string; color: string }> = {
-  event: { bg: '#ecfbfd', color: '#2ca7b5' },      // 青 — 事件
-  activity: { bg: '#d7f5ee', color: '#0d9488' },   // 靛蓝 — 活动
+  event: { bg: 'var(--color-accent-50)', color: 'var(--color-accent-600)' },   // 青 — 事件
+  activity: { bg: 'var(--brand-tint)', color: 'var(--brand)' },  // 主题色 — 活动（双主题联动）
   gateway: { bg: '#fef3c7', color: '#d97706' },    // 琥珀 — 网关
 }
 
@@ -179,7 +179,7 @@ function handleClick(_node: PaletteNode) {
 
 .collapse-bar-top:hover {
   background: var(--el-fill-color-lighter, #f9faf7);
-  color: var(--ds-industrial-500, #0f766e);
+  color: var(--ds-industrial-500, var(--brand));
 }
 
 .expand-toggle {
@@ -207,7 +207,7 @@ function handleClick(_node: PaletteNode) {
 }
 
 .collapsed-item:hover {
-  background: var(--ds-selected, #d7f5ee);
+  background: var(--ds-selected, var(--brand-tint));
 }
 
 .collapsed-item:active {
@@ -239,7 +239,7 @@ function handleClick(_node: PaletteNode) {
 }
 
 .heading-icon {
-  color: var(--ds-industrial-500, #0f766e);
+  color: var(--ds-industrial-500, var(--brand));
   font-size: 16px;
 }
 
@@ -251,7 +251,7 @@ function handleClick(_node: PaletteNode) {
 }
 
 .collapse-toggle:hover {
-  color: var(--ds-industrial-500, #0f766e);
+  color: var(--ds-industrial-500, var(--brand));
 }
 
 /* ===== 主体 ===== */
@@ -299,7 +299,7 @@ function handleClick(_node: PaletteNode) {
 }
 
 .palette-item:hover {
-  background: var(--ds-selected, #d7f5ee);
+  background: var(--ds-selected, var(--brand-tint));
 }
 
 .palette-item:active {

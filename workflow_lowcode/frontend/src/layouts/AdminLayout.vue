@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand, HomeFilled, Sunny, Moon, Lock } from '@element-plus/icons-vue'
+import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
@@ -24,6 +24,29 @@ function toggleDark() {
   isDark.value = !isDark.value
   localStorage.setItem('theme-dark', isDark.value ? '1' : '0')
   applyDark()
+}
+
+// 风格主题偏好持久化（Task 17-F 双主题）：verdant 青墨 / classic 经典靓蓝
+// style.css 按 html[data-theme] 换值；index.html 内联脚本首帧预置，避免闪烁
+const uiTheme = ref<'verdant' | 'classic'>(
+  (localStorage.getItem('portal-ui-theme') as 'classic') === 'classic' ? 'classic' : 'verdant',
+)
+
+function applyUiTheme() {
+  document.documentElement.dataset.theme = uiTheme.value
+  localStorage.setItem('portal-ui-theme', uiTheme.value)
+}
+
+function toggleUiTheme() {
+  uiTheme.value = uiTheme.value === 'verdant' ? 'classic' : 'verdant'
+  applyUiTheme()
+}
+
+function onStorage(e: StorageEvent) {
+  if (e.key === 'portal-ui-theme' && (e.newValue === 'classic' || e.newValue === 'verdant')) {
+    uiTheme.value = e.newValue
+    document.documentElement.dataset.theme = uiTheme.value
+  }
 }
 /** 页签集合：path 唯一；name=路由 name（与组件 defineOptions name 一致，供 keep-alive include 匹配） */
 const tags = ref<{ path: string; title: string; locked?: boolean; name?: string }[]>([])
@@ -190,10 +213,14 @@ onMounted(() => {
     isDark.value = true
   }
   applyDark()
+  // 风格主题：同步 html[data-theme]（防闪兜底）+ 监听多标签页同步
+  applyUiTheme()
+  window.addEventListener('storage', onStorage)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
+  window.removeEventListener('storage', onStorage)
 })
 </script>
 
@@ -210,7 +237,7 @@ onUnmounted(() => {
           <el-icon :size="18"><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
         </button>
         <div class="flex items-center gap-2 shrink-0">
-          <div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#0f766e] to-[#22c9d6] flex items-center justify-center shadow-[0_2px_8px_rgba(15,118,110,0.35)]">
+          <div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-(--brand) to-(--brand-bright) flex items-center justify-center shadow-[0_2px_8px_rgb(var(--brand-rgb)/0.35)]">
             <span class="text-white text-sm font-bold tracking-tight">MB</span>
           </div>
           <span class="text-base font-semibold tracking-tight text-gray-800 dark:text-gray-100">工作流管理系统</span>
@@ -235,6 +262,19 @@ onUnmounted(() => {
         >
           <el-icon :size="18"><Sunny v-if="isDark" /><Moon v-else /></el-icon>
         </button>
+        <!-- 风格切换：青墨 Verdant Ink / 经典 Classic（Task 17-F） -->
+        <el-tooltip content="风格：青墨 / 经典" placement="bottom">
+          <button
+            @click="toggleUiTheme"
+            class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors"
+          >
+            <el-icon :size="18"><MagicStick /></el-icon>
+            <span
+              class="w-1.5 h-1.5 rounded-full ml-0.5 shrink-0"
+              :style="{ background: uiTheme === 'verdant' ? '#2dd4bf' : '#5755ee' }"
+            />
+          </button>
+        </el-tooltip>
         <el-dropdown trigger="click">
         <div class="flex items-center gap-2 cursor-pointer select-none">
           <el-avatar :size="28" icon="UserFilled" class="!bg-industrial-100 !text-industrial-600" />
@@ -255,7 +295,7 @@ onUnmounted(() => {
       <!-- 左侧菜单：深墨松绿（明暗两态统一，形成纵向对比层次） -->
       <aside
         :class="collapsed ? 'w-16' : 'w-56'"
-        class="sidebar-ink flex flex-col bg-[#14201c] border-r border-[#0e1714] transition-all duration-300 shrink-0"
+        class="sidebar-ink flex flex-col bg-(--ink) border-r border-(--ink-border) transition-all duration-300 shrink-0"
       >
         <div class="flex-1 overflow-y-auto overflow-x-hidden py-3">
           <el-menu
@@ -264,7 +304,7 @@ onUnmounted(() => {
             router
             background-color="transparent"
             text-color="#a7b5ad"
-            active-text-color="#5eead4"
+            active-text-color="var(--brand-glow)"
             style="border-right: none"
             @select="handleMenuSelect"
           >
@@ -300,7 +340,7 @@ onUnmounted(() => {
                   'h-7 flex items-center gap-1.5 px-3 rounded-full cursor-pointer shrink-0 transition-all text-[13px] select-none border',
                   tag.path === '/dashboard' ? 'no-drag' : '',
                   route.path === tag.path
-                    ? 'bg-[#e4f3f0] dark:bg-[rgba(45,212,191,0.14)] text-[#0f766e] dark:text-[#5eead4] border-[#c8e7e2] dark:border-[rgba(45,212,191,0.25)] font-medium shadow-[0_1px_2px_rgba(15,118,110,0.08)]'
+                    ? 'bg-(--brand-tint) dark:bg-[rgb(var(--brand-soft-rgb)/0.14)] text-(--brand) dark:text-(--brand-glow) border-(--el-color-primary-light-8) dark:border-[rgb(var(--brand-soft-rgb)/0.25)] font-medium shadow-[0_1px_2px_rgb(var(--brand-rgb)/0.08)]'
                     : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-200 hover:bg-[#f0f2ee] dark:hover:bg-[#252d28]'
                 ]"
                 @click="router.push(tag.path)"
@@ -309,7 +349,7 @@ onUnmounted(() => {
                 <span
                   :class="[
                     'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
-                    route.path === tag.path ? 'bg-[#14a08f] dark:bg-[#2dd4bf]' : 'bg-gray-300 dark:bg-[#3b463f]'
+                    route.path === tag.path ? 'bg-(--brand-mid) dark:bg-(--brand-soft)' : 'bg-gray-300 dark:bg-[#3b463f]'
                   ]"
                 />
                 <span class="truncate max-w-[120px]">{{ tag.title }}</span>

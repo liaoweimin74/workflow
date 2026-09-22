@@ -97,6 +97,44 @@ html, body, #app {
   --el-box-shadow-dark: 0 8px 24px rgba(18, 46, 39, 0.14), 0 20px 48px rgba(18, 46, 39, 0.16);
 }
 
+/* ====== 语义品牌变量（Task 17-F）：双主题切换的原子层 ======
+ * 组件样式 / Tailwind 任意值 / JS 运行时统一引用这些变量；
+ * 经典主题在文件末尾 html[data-theme='classic'] 段整体换值。
+ */
+:root {
+  /* 主色族 = industrial 阶 */
+  --brand: #0f766e;            /* 主色 = industrial-600 */
+  --brand-rgb: 15 118 110;
+  --brand-mid: #14a08f;        /* industrial-500 */
+  --brand-mid-rgb: 20 160 143;
+  --brand-deep: #0d5f58;       /* industrial-700 */
+  --brand-deeper: #0d6a63;     /* 悬浮深 */
+  --brand-mid-hover: #118a80;
+  --brand-soft: #2dd4bf;       /* 柔青（Tailwind teal-400，暗色主色） */
+  --brand-soft-rgb: 45 212 191;
+  --brand-glow: #5eead4;       /* 高亮青（侧栏激活文字） */
+  --brand-glow-rgb: 94 234 212;
+  --brand-bright: #22c9d6;     /* 青瓷点缀 = accent-500 */
+  --brand-bright-rgb: 34 201 214;
+  --brand-tint: #d7f5ee;       /* 浅青激活底 = industrial-100 */
+  /* 深墨侧栏语义 */
+  --ink: #14201c;
+  --ink-border: #0e1714;
+  --ink-text: #a7b5ad;
+  --ink-text-strong: #e6ebe8;
+  --ink-text-dim: #8fa096;
+  --ink-text-faint: #5f6d66;
+  --ink-text-soft: #7d8d84;
+  /* 表头/行悬浮（中性） */
+  --table-head-bg: #f4f6f3;
+  --table-head-text: #6b7a72;
+  --table-row-hover: #f0f7f5;
+  --table-border: #edf0ec;
+  /* 看板横幅淡色洗底（双主题） */
+  --wash-from: #eaf3ef;
+  --wash-to: #f9faf7;
+}
+
 /* ====== 基础组件精修 ====== */
 
 /* 菜单（亮色页面中仍可能用到） */
@@ -120,8 +158,8 @@ html, body, #app {
 
 /* 菜单激活态：青玉底 + 主色文字 */
 .el-menu-item.is-active {
-  background-color: #d7f5ee !important;
-  color: #0f766e !important;
+  background-color: var(--brand-tint) !important;
+  color: var(--brand) !important;
   border-radius: 8px !important;
   font-weight: 600;
 }
@@ -132,46 +170,46 @@ html, body, #app {
 }
 .sidebar-ink .el-menu-item,
 .sidebar-ink .el-sub-menu__title {
-  color: #a7b5ad;
+  color: var(--ink-text);
   margin: 2px 10px;
   border-radius: 8px;
 }
 .sidebar-ink .el-menu-item:hover,
 .sidebar-ink .el-sub-menu__title:hover {
   background-color: rgba(255, 255, 255, 0.06) !important;
-  color: #e6ebe8 !important;
+  color: var(--ink-text-strong) !important;
 }
 .sidebar-ink .el-menu-item.is-active {
-  background-color: rgba(45, 212, 191, 0.14) !important;
-  color: #5eead4 !important;
+  background-color: rgb(var(--brand-glow-rgb)/0.14) !important;
+  color: var(--brand-glow) !important;
   font-weight: 600;
 }
 .sidebar-ink .el-menu-item.is-active .el-icon,
 .sidebar-ink .el-sub-menu.is-active > .el-sub-menu__title {
-  color: #5eead4 !important;
+  color: var(--brand-glow) !important;
 }
 .sidebar-ink .el-sub-menu .el-menu {
   background: transparent !important;
 }
 .sidebar-ink .el-sub-menu .el-menu .el-menu-item {
-  color: #8fa096;
+  color: var(--ink-text-dim);
 }
 .sidebar-ink .el-sub-menu .el-menu .el-menu-item:hover {
-  color: #e6ebe8;
+  color: var(--ink-text-strong);
 }
 .sidebar-ink .el-sub-menu.is-active > .el-sub-menu__title .el-sub-menu__icon-arrow {
-  color: #5eead4;
+  color: var(--brand-glow);
 }
 
 /* 表格：表头暖灰、行悬浮青雾 */
 .el-table {
-  --el-table-header-bg-color: #f4f6f3;
-  --el-table-row-hover-bg-color: #f0f7f5;
-  --el-table-border-color: #edf0ec;
+  --el-table-header-bg-color: var(--table-head-bg);
+  --el-table-row-hover-bg-color: var(--table-row-hover);
+  --el-table-border-color: var(--table-border);
 }
 .el-table th.el-table__cell {
-  background-color: #f4f6f3;
-  color: #6b7a72;
+  background-color: var(--table-head-bg);
+  color: var(--table-head-text);
   font-weight: 600;
   font-size: 13px;
 }
@@ -216,10 +254,10 @@ html, body, #app {
   transition: all 0.18s ease;
 }
 .el-button--primary:not(.is-disabled) {
-  box-shadow: 0 1px 2px rgba(15, 118, 110, 0.24);
+  box-shadow: 0 1px 2px rgb(var(--brand-rgb)/0.24);
 }
 .el-button--primary:not(.is-disabled):hover {
-  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.3);
+  box-shadow: 0 4px 12px rgb(var(--brand-rgb)/0.3);
   transform: translateY(-1px);
 }
 .el-button--primary:not(.is-disabled):active {
@@ -236,7 +274,7 @@ html, body, #app {
 }
 .el-input__wrapper.is-focus,
 .el-textarea__inner:focus {
-  box-shadow: 0 0 0 1px #0f766e inset, 0 0 0 3px rgba(20, 160, 143, 0.14) !important;
+  box-shadow: 0 0 0 1px var(--brand) inset, 0 0 0 3px rgb(var(--brand-mid-rgb)/0.14) !important;
 }
 
 /* 分页：圆角页码 */
@@ -247,7 +285,7 @@ html, body, #app {
   background-color: #f1f3f0;
 }
 .el-pagination.is-background .el-pager li.is-active {
-  background-color: #0f766e;
+  background-color: var(--brand);
 }
 
 /* 消息通知圆角 */
@@ -342,8 +380,8 @@ html.dark {
 }
 
 .dark .el-menu-item.is-active {
-  background-color: rgba(45, 212, 191, 0.14) !important;
-  color: #5eead4 !important;
+  background-color: rgb(var(--brand-glow-rgb)/0.14) !important;
+  color: var(--brand-glow) !important;
 }
 
 /* 暗色表格 */
@@ -378,10 +416,182 @@ html.dark {
 
 .dark .el-dropdown-menu__item:hover {
   background-color: #252d28;
-  color: #5eead4;
+  color: var(--brand-glow);
 }
 
 /* 暗色弹窗分割线 */
 .dark .el-dialog__header {
   border-bottom-color: #2b332e;
+}
+
+/* ============================================================
+ * 经典主题 Classic（旧靛蓝 #5755ee 系）— Task 17-F
+ * html[data-theme='classic']，色值来源：Task 16 备份点旧版 style.css，逐项对齐
+ * ============================================================ */
+html[data-theme='classic'] {
+  /* Tailwind token 值回到经典靛蓝（token 名不变，全站类名自动变色） */
+  --color-industrial-50: #f3f3fe;
+  --color-industrial-100: #e9eaff;
+  --color-industrial-200: #d6d6fd;
+  --color-industrial-300: #b9b9f9;
+  --color-industrial-400: #8a8af4;
+  --color-industrial-500: #5755ee;
+  --color-industrial-600: #5452d3;
+  --color-industrial-700: #4342b5;
+  --color-industrial-800: #35349a;
+  --color-industrial-900: #2a2970;
+  --color-accent-50: #ecfbfd;
+  --color-accent-100: #c6edf4;
+  --color-accent-200: #a5e4ee;
+  --color-accent-300: #6fd8e5;
+  --color-accent-400: #48e0dd;
+  --color-accent-500: #46c9d6;
+  --color-accent-600: #2ca7b5;
+  --color-accent-700: #1f8592;
+  --color-ink: #2a3054;
+  --color-ink-2: #1b2040;
+  --color-ink-3: #232950;
+  --color-ink-line: #323a63;
+  /* 语义品牌变量回经典 */
+  --brand: #5755ee;
+  --brand-rgb: 87 85 238;
+  --brand-mid: #5452d3;
+  --brand-mid-rgb: 84 82 211;
+  --brand-deep: #4342b5;
+  --brand-deeper: #4a48c9;
+  --brand-mid-hover: #6365c2;
+  --brand-soft: #8a8af4;
+  --brand-soft-rgb: 138 138 244;
+  --brand-glow: #7c7ff0;
+  --brand-glow-rgb: 124 127 240;
+  --brand-bright: #46c9d6;
+  --brand-bright-rgb: 70 201 214;
+  --brand-tint: #e9eaff;
+  --ink: #2a3054;
+  --ink-border: #1b2040;
+  --ink-text: #94a3b8;
+  --ink-text-strong: #c3c8d9;
+  --ink-text-dim: #94a3b8;
+  --ink-text-faint: #6b7280;
+  --ink-text-soft: #8b91ab;
+  --table-head-bg: #eef1fc;
+  --table-head-text: #6b7280;
+  --table-row-hover: #f0f3fd;
+  --table-border: #e5e9f8;
+  /* 经典洗底：淡霓蓝纸感 */
+  --wash-from: #e9edfa;
+  --wash-to: #f8f9fe;
+  /* Element Plus 亮色回经典（旧值逐项） */
+  --el-color-primary: #5755ee;
+  --el-color-primary-light-3: #8a8af4;
+  --el-color-primary-light-5: #abaaf6;
+  --el-color-primary-light-7: #c6c5f7;
+  --el-color-primary-light-8: #d7d6f8;
+  --el-color-primary-light-9: #e8e8f8;
+  --el-color-primary-dark-2: #4544be;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-bg-color-page: #f1f4fe;
+  --el-border-color: #e3e8f7;
+  --el-border-color-light: #e9edfa;
+  --el-border-color-lighter: #eef1fc;
+  --el-border-color-extra-light: #f4f6fe;
+  --el-fill-color: #f0f1fb;
+  --el-fill-color-light: #f4f6fe;
+  --el-fill-color-lighter: #f8f9fe;
+  --el-text-color-primary: #1f2437;
+  --el-text-color-regular: #4b5169;
+  --el-text-color-secondary: #8b91ab;
+  --el-text-color-placeholder: #b0b5c9;
+}
+
+/* 经典亮色页面底：旧版浅蓝紫渐变（置于文件末尾，天然覆盖上方 html/body/#app 规则） */
+html[data-theme='classic'],
+html[data-theme='classic'] body,
+html[data-theme='classic'] #app {
+  background: linear-gradient(#f4f6fe, #eef1fc);
+  background-attachment: fixed;
+}
+html[data-theme='classic'] body {
+  color: #374151;
+}
+
+/* 经典暗色（深藏青） */
+html.dark[data-theme='classic'] {
+  --el-color-primary: #7c7ff0;
+  --el-color-primary-light-3: #999bf4;
+  --el-color-primary-light-5: #b0b2f7;
+  --el-color-primary-light-7: #c8c9fa;
+  --el-color-primary-light-9: #e0e1fc;
+  --el-color-primary-dark-2: #6365c2;
+  --el-bg-color: #1b2040;
+  --el-bg-color-overlay: #222750;
+  --el-bg-color-page: #161b36;
+  --el-text-color-primary: #e5e7eb;
+  --el-text-color-regular: #c3c8d9;
+  --el-text-color-secondary: #94a3b8;
+  --el-text-color-placeholder: #5b6480;
+  --el-border-color: #2a3054;
+  --el-border-color-light: #323a63;
+  --el-border-color-lighter: #3a4370;
+  --el-border-color-extra-light: #242a4d;
+  --el-fill-color-blank: #1b2040;
+  --el-fill-color: #232950;
+  --el-fill-color-light: #2a3158;
+  --el-fill-color-lighter: #303860;
+  --el-table-header-bg-color: #161b36;
+  --el-table-row-hover-bg-color: #232950;
+  --el-table-border-color: #2a3054;
+}
+/* 暗色 classic 下 #app 需重新透明（否则上方亮色渐变会从容器层透出，同青墨 .dark #app 修正） */
+html.dark[data-theme='classic'] #app {
+  background: transparent;
+}
+html.dark[data-theme='classic'] body {
+  background: #12162b;
+  color: #e5e7eb;
+}
+html.dark[data-theme='classic'] .el-menu-item.is-active {
+  background-color: #2a3158 !important;
+  color: #7c7ff0 !important;
+}
+html.dark[data-theme='classic'] .el-menu-item:hover,
+html.dark[data-theme='classic'] .el-sub-menu__title:hover {
+  background-color: #2a3158 !important;
+}
+html.dark[data-theme='classic'] .el-menu-item,
+html.dark[data-theme='classic'] .el-sub-menu__title {
+  color: #c3c8d9;
+}
+html.dark[data-theme='classic'] .el-table th.el-table__cell {
+  background-color: #161b36;
+  color: #94a3b8;
+}
+html.dark[data-theme='classic'] .el-dropdown-menu {
+  background-color: #222750;
+  border-color: #2a3054;
+}
+html.dark[data-theme='classic'] .el-dropdown-menu__item {
+  color: #c3c8d9;
+}
+html.dark[data-theme='classic'] .el-dropdown-menu__item:hover {
+  background-color: #2a3158;
+  color: #7c7ff0;
+}
+html.dark[data-theme='classic'] .el-dialog__header {
+  border-bottom-color: #2a3054;
+}
+
+/* 经典结构还原：直角标签/小圆角弹窗 */
+html[data-theme='classic'] .el-tag {
+  border-radius: 4px;
+}
+html[data-theme='classic'] .el-dialog {
+  border-radius: 8px;
+}
+html[data-theme='classic'] .el-message-box {
+  border-radius: 8px;
+}
+html[data-theme='classic'] .el-menu-item.is-active {
+  font-weight: 500;
 }

@@ -617,3 +617,50 @@ Stage Summary:
 - 暗色模式首次真正可用（3 个老 bug 根治）；品牌色从靛蓝蓝紫系整体迁移至青玉系
 - 设计 token 名保持不变（industrial/accent/safety），后续页面开发沿用现有类名即可获得新主题
 - 遗留：bpmn-js 弃用告警（低优）；门户页深空底色与青玉点缀已协调，如需进一步暖化可后续微调 globals.css
+
+---
+Task ID: 17-F
+Agent: general-purpose（前端双主题子代理）
+Task: 低代码平台前端「青墨/经典」双主题切换（style.css 变量化 + classic 覆盖段 + AdminLayout 切换器 + index.html 防闪）
+
+Work Log:
+- 读 worklog Task 16-R1 与旧版备份 /tmp/ui-old/frontend/src/style.css（198 行），确认权威旧色值
+- A. src/style.css（387→591 行）三步改造：
+  ①:root el-* 块后新增「语义品牌变量层」：--brand/-rgb/-mid/-mid-rgb/-deep/-deeper/-mid-hover/-soft/-soft-rgb/-glow/-glow-rgb/-bright/-bright-rgb/-tint + --ink* 6 项 + --table-* 4 项（共 22 个变量，verdant 值）
+  ②内部硬编码青墨色全部变量化：.el-menu-item.is-active(#d7f5ee/#0f766e)、.sidebar-ink 全套(#a7b5ad/#e6ebe8/#5eead4/#8fa096 + rgba(45,212,191,.14)→rgb(var(--brand-glow-rgb)/0.14))、按钮阴影 2 处 rgba(15,118,110,*)、输入聚焦(#0f766e + rgba(20,160,143,.14))、分页激活、.el-table 表头/行悬浮/边框/th 文字 → var(--table-*)
+  ③文件末尾追加 classic 覆盖段：html[data-theme='classic']（Tailwind industrial/accent/ink token 回旧靛蓝家族 + 22 个语义变量回经典 + el-* 亮色旧值逐项）+ html/body/#app 回旧浅蓝紫渐变 + html.dark[data-theme='classic']（深藏青 el-* 全套 + 菜单/表格/下拉/弹窗旧配色）+ 经典结构还原（tag 4px 直角/dialog 8px/菜单 active font-weight 500）
+  ④补丁：html.dark[data-theme='classic'] #app { background: transparent } —— classic 亮色渐变段会压过 .dark #app（同特异性后来居上），不加会导致暗色经典下亮色渐变透出（同 Task 16 修过的老 bug）
+- B. 批量替换脚本 scripts/retheme-dual.ts（bun 运行）对 12 个文件替换 104 处：BpmnViewer 2 / ListCards 1 / DataSourceListPage 1 / NodePalette 3 / designer-theme.css 21 / PropertyPanel 3 / LoginPage 27 / ProcessCenterPage 2 / DashboardPage 12 / TemplatePreview 1 / vendor/style/index.css 16 / AdminLayout 15。规则：Tailwind 任意值 bg-[#0f766e]→bg-(--brand)（保留 !/dark:/hover: 前缀）；带透明度修饰符的（/18 /8 /14 /6 /40 /20 /30 /50）改完整任意值 bg-[rgb(var(--brand-soft-rgb)/0.18)] 等 8 种；rgba(x,y,z,a)→rgb(var(--x-rgb)/a) 透明度原样；vendor css 8 位 hex #0f766e33→rgb(var(--brand-rgb)/0.2)；脚本首轮有「前缀已带连字符再拼 -(--」双重连字符 bug（from--(--brand)），修脚本 + 二次修正 26 处（LoginPage 11/Dashboard 7/AdminLayout 8）
+  - 手工处理 3 类特殊点：DashboardPage 2 处 SVG stroke="#0f766e" 属性→stroke-(--brand) 类（SVG 表现属性不接受 var()，CSS stroke 属性接受）；customRenderer.ts 三常量改函数 INITIATOR/SUBFLOW/CALL_ICON_COLOR = () => brandColor('#0f766e')（运行时读 getComputedStyle(html).--brand，无 DOM 回退 fallback）；DataSourceListPage boolIconStyle 返回值 '#0f766e'→'var(--brand)'（style 绑定支持 var）
+  - 超清单补充 3 处（classic 下必须换色）：bg-[#d7f5ee]→bg-(--brand-tint)、bg-[#e4f3f0]→bg-(--brand-tint)、border-[#c8e7e2]→border-(--el-color-primary-light-8)；AdminLayout el-menu active-text-color="#5eead4"→var(--brand-glow)（查 element-plus use-menu-color.mjs 确认 activeTextColor 直通 CSS 变量不经过 tinycolor，安全）
+- C. AdminLayout.vue 切换器：uiTheme ref<'verdant'|'classic'>（localStorage 'portal-ui-theme'，非 classic 一律回 verdant）+ applyUiTheme/toggleUiTheme；storage 监听多标签同步（onMounted 注册、onUnmounted 移除）；onMounted 里 applyUiTheme() 兜底同步 data-theme；模板暗色按钮旁新增 el-tooltip「风格：青墨 / 经典」+ MagicStick 图标按钮 + 主题色点（verdant #2dd4bf / classic #5755ee），按钮容器样式与暗色按钮一致
+- D. index.html head 内样式加载前内联脚本：按 localStorage portal-ui-theme 预置 html[data-theme]，防首帧闪烁；暗色 class 引导逻辑保持 AdminLayout 现状未动
+- E. 验证：①vitest run 全量 78 文件 1058 用例全过（153.56s，无测试因色值/类名断言失败，__tests__ 零改动）②vue-tsc --noEmit 47 个错误全部为既有问题（form-create Rule 类型不兼容 38 处、未使用变量、route.name symbol 等，分布 21 文件；本任务改动行零报错，AdminLayout(161)/Dashboard(62) 错误经核对均为改造前代码）③grep 残留复查：仅 style.css 定义区（@theme token 值 + :root 语义变量 + html.dark 主色 token）+ AdminLayout 主题指示色点（任务要求）+ customRenderer fallback（运行时回退，任务要求）④dev server 5173 存活（302→登录页），实测 Vite 编译产物：--brand 双值(#0f766e/#5755ee)、bg-(--brand-tint)/stroke-(--brand)/!from-(--brand)/hover:!to-(--brand-mid-hover) 等工具类、bg-[rgb(var(--brand-soft-rgb)/0.18)] alpha 任意值、dark: :where(.dark,.dark *) 变体全部正确生成
+- 未动 src/app 门户；未跑 git；未改 token 名（industrial/accent/ink 保留）
+
+Stage Summary:
+- 双主题生效机制：html[data-theme='verdant'|'classic'] + html.dark[data-theme='classic'] 四象限覆盖；Tailwind token（industrial/accent/ink）+ 22 个语义品牌变量 + el-* 三层全部随主题切换，全站硬编码色已变量化（104+18 处），浏览器实测由主控完成
+- 测试 78 文件 1058 用例全过；类型检查无新增错误；dev server 热更新正常，编译产物已确认新工具类生成
+- 遗留风险：①vue-tsc 47 个既有错误（form-create 类型噪音）非本任务引入 ②login 页 !from- 前缀 important 写法为 v3 语法，Tailwind 4 实测仍编译出 .\!from-\(--brand\)（含 !important），行为不变 ③classic 暗色下 header/页签栏仍用 verdant 石墨中性色（#181d1b 系，任务清单未要求中性色替换），如需藏青化可后续把 AdminLayout 中性任意值接入 --el-* 变量
+
+---
+Task ID: 17-P
+Agent: 主控（Z.ai Code）
+Task: 用户需求「现在的界面风格和之前的风格作为两种风格，用户可切换」——门户（Next.js :3000）双主题 + 与 17-F（前端平台双主题）联动的统一切换体验
+
+Work Log:
+- 备份点：backups/frontend-ui-backup-20260922-122350.tar.gz + portal-ui-backup-20260922-122350.tar.gz（青墨 v1 全量快照，含 index.html/layout.tsx）；回滚 = bash scripts/rollback-ui.sh 20260922-122350（注意：不带时间戳默认回滚到最新备份，现最新即本备份）
+- 旧经典色值权威来源：16-R1 备份包解压至 /tmp/ui-old（旧 style.css 全量 token + 旧 page.tsx diff 精确对照：#5755ee/#46c9d6/#8a8af4/#b9b9f7 → #0f766e/#22c9d6/#2dd4bf/漏改）
+- 门户 globals.css：新增 @theme 品牌层 --color-brand(-bright/-soft/-pale)（verdant 默认值）+ html[data-theme='classic'] 整组覆盖（值与旧版逐项一致）+ --brand-rgb/--brand-soft-rgb/--brand-bright-rgb 三元组（供发光阴影与 radial 渐变）
+- 门户 layout.tsx：<head> 首帧防闪内联脚本（localStorage 'portal-ui-theme' 预置 data-theme，与低代码平台同键同 origin 时自动互通）；html 已有 suppressHydrationWarning
+- 门户 page.tsx：21 处编辑——19 处硬编码点缀色全部换为 brand token 工具类（bg-brand/25、from-brand to-brand-bright、text-brand-soft、shadow-brand/30、selection:bg-brand-bright/30 等，Tailwind4 透明度修饰符经 color-mix 运行时读 var）；修复 16-R1 两个遗留不一致（引擎卡 Node 圆点靛蓝辉光 rgba(138,138,244,.9)→rgb(var(--brand-soft-rgb)/.9)；「当前使用」淡紫文字 #b9b9f7→brand-pale）+ Hero radial 渐变残留旧靛蓝→var 化
+- 门户顶部新增风格切换器（radiogroup 无障碍语义 + aria-checked + title 提示 + 主题色点指示），状态 useState + useEffect 读偏好 + storage 事件跨标签同步；切换即写 localStorage + documentElement.dataset.theme
+- 17-F 收尾复核（主控补刀）：全量 grep 揪出子代理映射清单外的 6 类残留并修复——DashboardPage SVG 展示属性（fill/stroke/stop-color 不吃 var()）改 Tailwind 类 fill-(--brand-tint)/stroke-(--brand-bright)/[stop-color:var(--color-accent-500)]；NodePalette CATEGORY_STYLES JS 配色改 var()（内联 style 支持）；PropertyPanel/NodePalette 的 var(--ds-selected, #d7f5ee) 未定义变量回退值→var(--brand-tint)；designer-theme.css context-pad hover 硬编码→var(--brand-tint)；新增 --wash-from/--wash-to 洗底语义变量（:root + classic 两段）；LoginPage 标语渐变端点→--color-accent-300；ProcessCenterPage 渐变/边框→var(--brand-bright)
+- 浏览器端到端验证（agent-browser，12 张截图存 backups/theme-*.png）：门户 verdant 渐变=rgb(45,212,191)→(15,118,110)→(34,201,214)，点「经典」后=rgb(138,138,244)→(87,85,238)→(70,201,214)（与旧版逐值一致）✓；刷新持久化（data-theme=classic + localStorage=classic + radio 态正确）✓；前端登录页/看板亮暗×双主题四象限全过（dark+classic body=#12162b、primary=#7c7ff0 与旧暗色逐值一致）✓；顶栏魔棒按钮实时换肤（sidebar #2a3054⇄#14201c，无需刷新）✓；tooltip「风格：青墨 / 经典」✓
+- 回归：门户 eslint（page.tsx/layout.tsx 单独跑）0 错误（全仓 14 error 均为既有 Vue/遗留文件被 React 规则误扫，非本次引入）；前端 vitest 全量 78 文件 1058 用例全过（含主控补刀后复跑）；dev.log 无错误
+
+Stage Summary:
+- 双主题体系全平台落地：verdant「青墨」（现行翡翠青）与 classic「经典」（16-R1 改版前靛蓝，色值逐项还原自备份点）共存；门户头部切换器 + 前端顶栏魔棒按钮 + localStorage 'portal-ui-theme' 三点一致，经同一网关 origin 访问时两应用偏好互通（storage 事件跨标签实时同步）
+- 机制：html[data-theme] 驱动 Tailwind @theme token 值覆盖 + 语义品牌变量（--brand 家族/wash/table/ink 文字）+ Element Plus el-* 三层（亮色/暗色/结构还原），SVG 场景用 CSS 属性类（stroke-/fill-/[stop-color:]）替代展示属性，JS 画布用 brandColor() 运行时读 var
+- 回滚锚点：20260922-122350（双主题前）与 20260922-111422（青墨改造前）两级；bash scripts/rollback-ui.sh [时间戳]
+- 遗留（低优）：①门户与前端本地分端口（3000/5173）调试时 localStorage 不互通属浏览器同源策略，线上同网关 origin 无此问题 ②classic 暗色 header 中性色仍石墨系（17-F 已记录）③vue-tsc 47 既有错误待专项清理

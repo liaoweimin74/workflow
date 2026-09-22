@@ -5,6 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>mangban-admin</title>
+    <script>
+      // 双主题防闪（Task 17-F）：样式加载前按持久化偏好预置 html[data-theme]（verdant 青墨 / classic 经典）
+      try {
+        var t = localStorage.getItem('portal-ui-theme')
+        document.documentElement.dataset.theme = t === 'classic' ? 'classic' : 'verdant'
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="app"></div>

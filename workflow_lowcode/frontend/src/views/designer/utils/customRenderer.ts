@@ -19,18 +19,29 @@ const INITIATOR_FILL_COLOR = '#e3f2fd'
 /**
  * 发起人节点图标色（画布内左上角标记）
  */
-const INITIATOR_ICON_COLOR = '#0f766e'
+const INITIATOR_ICON_COLOR = () => brandColor('#0f766e')
 
 /**
  * 折叠态内嵌子流程左上角图标色（与 CallActivity 折叠态默认 marker 区分）
  */
-const SUBFLOW_ICON_COLOR = '#0f766e'
+const SUBFLOW_ICON_COLOR = () => brandColor('#0f766e')
 
 /**
  * 调用活动（CallActivity）左上角调用图标 —— 主描边色
  * 方框 + 右下箭头，象征"调用其他流程/跳转到外部流程"
  */
-const CALL_ICON_COLOR = '#0f766e'
+const CALL_ICON_COLOR = () => brandColor('#0f766e')
+
+/**
+ * 运行时读取语义品牌主色（Task 17-F 双主题）：SVG 属性不接受 var()，
+ * 改为绘制时从 html 根元素读取 --brand（青墨/经典随 data-theme 切换），
+ * 无 DOM 环境（SSR/单测）回退到青墨主色。
+ */
+function brandColor(fallback: string): string {
+  if (typeof document === 'undefined') return fallback
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--brand').trim()
+  return v || fallback
+}
 
 /**
  * BPMN 元素类型 → CSS 标记 class（加在 .djs-element 上，供 designer-theme.css 精准命中）
@@ -146,7 +157,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
         d: 'M1,1 h13 v13 h-13 z M4,12 L11,5 M6,5 h5 v5',
         transform: 'translate(10,10)',
         fill: 'none',
-        stroke: CALL_ICON_COLOR,
+        stroke: CALL_ICON_COLOR(),
         'stroke-width': 1.4,
         'stroke-linecap': 'round',
         'stroke-linejoin': 'round'
@@ -163,7 +174,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
         y: 18,
         'font-family': 'bpmn',
         'font-size': 14,
-        fill: SUBFLOW_ICON_COLOR
+        fill: SUBFLOW_ICON_COLOR()
       })
       icon.textContent = '\uE81F'
       append(parent, icon)
@@ -189,7 +200,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
       y: 24,
       'font-family': 'bpmn',
       'font-size': 16,
-      fill: INITIATOR_ICON_COLOR
+      fill: INITIATOR_ICON_COLOR()
     })
     icon.textContent = '\uE828'
     append(parent, icon)

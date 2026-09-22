@@ -1,17 +1,17 @@
 <template>
   <div class="dashboard-page">
     <!-- 欢迎横幅 -->
-    <div class="bg-gradient-to-r from-[#eaf3ef] to-[#f9faf7] dark:from-[#181d1b] dark:to-[#1f2522] rounded-xl border border-[#e6e9e4] dark:border-[#2b332e] p-6 mb-4 flex items-center justify-between relative overflow-hidden">
+    <div class="bg-gradient-to-r from-(--wash-from) to-(--wash-to) dark:from-[#181d1b] dark:to-[#1f2522] rounded-xl border border-[#e6e9e4] dark:border-[#2b332e] p-6 mb-4 flex items-center justify-between relative overflow-hidden">
       <div class="relative z-10">
-        <h1 class="text-2xl font-bold text-[#0f766e] dark:text-[#2dd4bf] mb-1">安全作业 · 工作流总览</h1>
+        <h1 class="text-2xl font-bold text-(--brand) dark:text-(--brand-soft) mb-1">安全作业 · 工作流总览</h1>
         <p class="text-sm text-gray-400 dark:text-gray-500">石化工厂 · 安全作业管理平台</p>
       </div>
       <!-- 青色装饰波形/圆（内联 SVG，无第三方库） -->
       <svg class="w-40 h-24 shrink-0 opacity-80" viewBox="0 0 160 96" fill="none" aria-hidden="true">
-        <circle cx="128" cy="24" r="18" fill="#c6edf4" opacity="0.6" />
-        <circle cx="32" cy="72" r="30" fill="#d7f5ee" opacity="0.5" />
-        <path d="M0 72 Q 30 56 60 66 T 120 60 T 160 64" stroke="#46c9d6" stroke-width="3" stroke-linecap="round" opacity="0.7" />
-        <path d="M0 84 Q 30 72 60 80 T 120 74 T 160 78" stroke="#0f766e" stroke-width="2" stroke-linecap="round" opacity="0.35" />
+        <circle cx="128" cy="24" r="18" class="fill-(--color-accent-100)" opacity="0.6" />
+        <circle cx="32" cy="72" r="30" class="fill-(--brand-tint)" opacity="0.5" />
+        <path d="M0 72 Q 30 56 60 66 T 120 60 T 160 64" class="stroke-(--brand-bright)" stroke-width="3" stroke-linecap="round" opacity="0.7" />
+        <path d="M0 84 Q 30 72 60 80 T 120 74 T 160 78" class="stroke-(--brand)" stroke-width="2" stroke-linecap="round" opacity="0.35" />
       </svg>
     </div>
 
@@ -20,7 +20,7 @@
       <div
         v-for="card in kpiCards"
         :key="card.label"
-        class="bg-white dark:bg-[#181d1b] rounded-xl border border-[#e6e9e4] dark:border-[#2b332e] p-5 shadow-[0_1px_3px_rgba(15,118,110,0.06)] dark:shadow-none transition-shadow hover:shadow-[0_4px_12px_rgba(15,118,110,0.12)] cursor-default"
+        class="bg-white dark:bg-[#181d1b] rounded-xl border border-[#e6e9e4] dark:border-[#2b332e] p-5 shadow-[0_1px_3px_rgb(var(--brand-rgb)/0.06)] dark:shadow-none transition-shadow hover:shadow-[0_4px_12px_rgb(var(--brand-rgb)/0.12)] cursor-default"
       >
         <div class="w-10 h-10 rounded-lg flex items-center justify-center mb-3" :class="card.iconBoxClass">
           <el-icon :size="18"><component :is="card.icon" /></el-icon>
@@ -36,7 +36,7 @@
     <!-- 图表区（数据驱动 SVG，无第三方库） -->
     <div class="grid grid-cols-3 gap-4">
       <!-- 近 7 日发起流程趋势 -->
-      <div class="col-span-2 bg-white dark:bg-[#181d1b] rounded-xl border border-[#e6e9e4] dark:border-[#2b332e] p-5 shadow-[0_1px_3px_rgba(15,118,110,0.06)] dark:shadow-none">
+      <div class="col-span-2 bg-white dark:bg-[#181d1b] rounded-xl border border-[#e6e9e4] dark:border-[#2b332e] p-5 shadow-[0_1px_3px_rgb(var(--brand-rgb)/0.06)] dark:shadow-none">
         <div class="flex items-center justify-between mb-4">
           <div class="text-sm font-medium text-gray-600 dark:text-gray-300">近 7 日发起流程趋势</div>
           <div v-if="!loading" class="text-xs text-gray-400">合计 {{ trendTotal }} 次</div>
@@ -47,8 +47,8 @@
             <svg class="w-full h-28" viewBox="0 0 300 120" preserveAspectRatio="none" aria-hidden="true">
               <defs>
                 <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#48e0dd" />
-                  <stop offset="100%" stop-color="#46c9d6" />
+                  <stop offset="0%" class="[stop-color:var(--color-accent-400)]" />
+                  <stop offset="100%" class="[stop-color:var(--color-accent-500)]" />
                 </linearGradient>
               </defs>
               <rect
@@ -86,7 +86,7 @@
       </div>
 
       <!-- 流程状态占比 -->
-      <div class="bg-white dark:bg-[#181d1b] rounded-xl border border-[#e6e9e4] dark:border-[#2b332e] p-5 shadow-[0_1px_3px_rgba(15,118,110,0.06)] dark:shadow-none">
+      <div class="bg-white dark:bg-[#181d1b] rounded-xl border border-[#e6e9e4] dark:border-[#2b332e] p-5 shadow-[0_1px_3px_rgb(var(--brand-rgb)/0.06)] dark:shadow-none">
         <div class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">流程状态占比</div>
         <div v-if="loading" class="flex items-center justify-center py-2">
           <div class="w-32 h-32 rounded-full bg-gray-50 dark:bg-[#1f2522] animate-pulse" />
@@ -99,21 +99,21 @@
               <circle
                 v-if="shareFinished > 0"
                 cx="60" cy="60" r="46" fill="none"
-                stroke="#46c9d6" stroke-width="14" stroke-linecap="round"
+                stroke-width="14" stroke-linecap="round"
                 :stroke-dasharray="`${finishedArc} ${donutCircumference - finishedArc}`"
                 transform="rotate(-90 60 60)"
-                class="transition-all duration-500"
+                class="stroke-(--brand-bright) transition-all duration-500"
               />
               <!-- 进行中段（主题色） -->
               <circle
                 v-if="shareRunning > 0"
                 cx="60" cy="60" r="46" fill="none"
-                stroke="#0f766e" stroke-width="14" stroke-linecap="round"
+                stroke-width="14" stroke-linecap="round"
                 :stroke-dasharray="`${runningArc} ${donutCircumference - runningArc}`"
                 :stroke-dashoffset="`-${finishedArc}`"
                 transform="rotate(-90 60 60)"
                 opacity="0.85"
-                class="transition-all duration-500"
+                class="stroke-(--brand) transition-all duration-500"
               />
             </svg>
             <!-- 中心总数 -->
@@ -128,10 +128,10 @@
           <!-- 图例 -->
           <div class="flex items-center justify-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
             <span class="inline-flex items-center gap-1.5">
-              <span class="w-2.5 h-2.5 rounded-full bg-[#0f766e]" /> 进行中 {{ shareRunning }}
+              <span class="w-2.5 h-2.5 rounded-full bg-(--brand)" /> 进行中 {{ shareRunning }}
             </span>
             <span class="inline-flex items-center gap-1.5">
-              <span class="w-2.5 h-2.5 rounded-full bg-[#46c9d6]" /> 已完成 {{ shareFinished }}
+              <span class="w-2.5 h-2.5 rounded-full bg-(--brand-bright)" /> 已完成 {{ shareFinished }}
             </span>
           </div>
         </template>
@@ -159,14 +159,14 @@ const kpiCards = computed(() => [
     label: '我的待办任务',
     value: stats.value?.todoCount ?? 0,
     icon: Tickets,
-    iconBoxClass: 'bg-[#d7f5ee] text-[#0f766e] dark:bg-[#2b332e] dark:text-[#2dd4bf]',
+    iconBoxClass: 'bg-(--brand-tint) text-(--brand) dark:bg-[#2b332e] dark:text-(--brand-soft)',
     valueClass: 'text-gray-800 dark:text-gray-100'
   },
   {
     label: '我的已办任务',
     value: stats.value?.doneCount ?? 0,
     icon: CircleCheck,
-    iconBoxClass: 'bg-[#c6edf4] text-accent-600 dark:bg-[#2b332e] dark:text-[#5eead4]',
+    iconBoxClass: 'bg-(--color-accent-100) text-accent-600 dark:bg-[#2b332e] dark:text-(--brand-glow)',
     valueClass: 'text-gray-800 dark:text-gray-100'
   },
   {
@@ -180,7 +180,7 @@ const kpiCards = computed(() => [
     label: '已部署流程定义',
     value: stats.value?.definitionCount ?? 0,
     icon: FolderOpened,
-    iconBoxClass: 'bg-gradient-to-br from-[#0f766e] to-[#46c9d6] text-white',
+    iconBoxClass: 'bg-gradient-to-br from-(--brand) to-(--brand-bright) text-white',
     valueClass: 'text-gray-800 dark:text-gray-100'
   }
 ])

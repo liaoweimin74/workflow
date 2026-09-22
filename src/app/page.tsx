@@ -182,6 +182,41 @@ export default function PortalPage() {
   const toastSeq = useRef(0);
   const ensured = useRef(false);
 
+  // ====== 双主题（青墨 verdant / 经典 classic）——与低代码平台共享 localStorage 键 ======
+  const [uiTheme, setUiTheme] = useState<"verdant" | "classic">("verdant");
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("portal-ui-theme");
+    } catch {
+      /* 忽略 */
+    }
+    const t = saved === "classic" ? "classic" : "verdant";
+    setUiTheme(t);
+    document.documentElement.dataset.theme = t;
+    const onStorage = (e: StorageEvent) => {
+      if (
+        e.key === "portal-ui-theme" &&
+        (e.newValue === "classic" || e.newValue === "verdant")
+      ) {
+        setUiTheme(e.newValue);
+        document.documentElement.dataset.theme = e.newValue;
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const switchUiTheme = useCallback((t: "verdant" | "classic") => {
+    setUiTheme(t);
+    document.documentElement.dataset.theme = t;
+    try {
+      localStorage.setItem("portal-ui-theme", t);
+    } catch {
+      /* 忽略 */
+    }
+  }, []);
+
   const pushToast = useCallback((kind: ToastMsg["kind"], text: string) => {
     const id = ++toastSeq.current;
     setToasts((prev) => [...prev.slice(-2), { id, kind, text }]);
@@ -320,12 +355,12 @@ export default function PortalPage() {
   const platformReady = Boolean(frontend?.portOpen);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0b0d1a] text-zinc-100 selection:bg-[#22c9d6]/30">
+    <div className="min-h-screen flex flex-col bg-[#0b0d1a] text-zinc-100 selection:bg-brand-bright/30">
       {/* 顶部导航 */}
       <header className="border-b border-white/5 bg-[#0b0d1a]/80 backdrop-blur sticky top-0 z-40">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#0f766e] to-[#22c9d6] shadow-lg shadow-[#0f766e]/25">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-bright shadow-lg shadow-brand/25">
               <Workflow className="h-5 w-5 text-white" />
             </div>
             <div className="leading-tight">
@@ -333,13 +368,47 @@ export default function PortalPage() {
               <p className="text-[11px] text-zinc-400">Flowable 8 · 低代码一体化方案</p>
             </div>
           </div>
-          <div className="hidden items-center gap-4 sm:flex">
-            <span className="text-xs text-zinc-400">
-              后端 {backend ? STATE_TEXT[backend.state] : "—"}
-            </span>
-            <span className="text-xs text-zinc-400">
-              前端 {frontend ? STATE_TEXT[frontend.state] : "—"}
-            </span>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="hidden items-center gap-4 sm:flex">
+              <span className="text-xs text-zinc-400">
+                后端 {backend ? STATE_TEXT[backend.state] : "—"}
+              </span>
+              <span className="text-xs text-zinc-400">
+                前端 {frontend ? STATE_TEXT[frontend.state] : "—"}
+              </span>
+            </div>
+            {/* 界面风格切换：青墨（新版翡翠青） / 经典（改版前靛蓝） */}
+            <div
+              role="radiogroup"
+              aria-label="界面风格切换"
+              className="flex items-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.04] p-1"
+            >
+              {(["verdant", "classic"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="radio"
+                  aria-checked={uiTheme === t}
+                  onClick={() => switchUiTheme(t)}
+                  title={t === "verdant" ? "青墨 · 新版翡翠青风格" : "经典 · 改版前靛蓝风格"}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium transition ${
+                    uiTheme === t
+                      ? "bg-brand/20 text-brand-soft shadow-[inset_0_0_0_1px_rgb(var(--brand-rgb)/0.4)]"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <span
+                    aria-hidden
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{
+                      background:
+                        t === "verdant" ? "rgb(45 212 191)" : "rgb(138 138 244)",
+                    }}
+                  />
+                  {t === "verdant" ? "青墨" : "经典"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </header>
@@ -349,7 +418,7 @@ export default function PortalPage() {
         <section className="relative overflow-hidden">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_20%_0%,rgba(87,85,238,0.22),transparent),radial-gradient(50%_45%_at_85%_10%,rgba(70,201,214,0.16),transparent)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_50%_at_20%_0%,rgb(var(--brand-rgb)/0.22),transparent),radial-gradient(50%_45%_at_85%_10%,rgb(var(--brand-bright-rgb)/0.16),transparent)]"
           />
           <div className="relative mx-auto max-w-6xl px-4 pb-14 pt-16 sm:px-6 sm:pt-20">
             <motion.div
@@ -359,12 +428,12 @@ export default function PortalPage() {
               className="max-w-3xl"
             >
               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
-                <Activity className="h-3.5 w-3.5 text-[#22c9d6]" />
+                <Activity className="h-3.5 w-3.5 text-brand-bright" />
                 Java 21 · Spring Boot 4 · Flowable 8 · Vue 3.5 · Element Plus
               </span>
               <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
                 流程、表单、视图
-                <span className="bg-gradient-to-r from-[#2dd4bf] via-[#0f766e] to-[#22c9d6] bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-brand-soft via-brand to-brand-bright bg-clip-text text-transparent">
                   一站式低代码建模
                 </span>
               </h1>
@@ -380,7 +449,7 @@ export default function PortalPage() {
                   onClick={(e) => {
                     if (!platformReady) e.preventDefault();
                   }}
-                  className={`group inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-to-r from-[#0f766e] to-[#22c9d6] px-6 text-sm font-semibold text-white shadow-lg shadow-[#0f766e]/30 transition hover:brightness-110 active:scale-[0.98] ${
+                  className={`group inline-flex h-12 items-center gap-2 rounded-xl bg-gradient-to-r from-brand to-brand-bright px-6 text-sm font-semibold text-white shadow-lg shadow-brand/30 transition hover:brightness-110 active:scale-[0.98] ${
                     platformReady ? "" : "pointer-events-none opacity-60"
                   }`}
                 >
@@ -493,7 +562,7 @@ export default function PortalPage() {
               aria-label="后端引擎切换"
             >
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0f766e]/20 to-[#22c9d6]/15 text-[#2dd4bf]">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand/20 to-brand-bright/15 text-brand-soft">
                   <Cpu className="h-4 w-4" />
                 </div>
                 <div>
@@ -518,7 +587,7 @@ export default function PortalPage() {
                   aria-pressed={engineStatus?.engine === "node"}
                   className={`rounded-xl border p-4 text-left transition ${
                     engineStatus?.engine === "node"
-                      ? "border-[#0f766e]/60 bg-[#0f766e]/10"
+                      ? "border-brand/60 bg-brand/10"
                       : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
                   } ${switching ? "cursor-wait opacity-60" : ""}`}
                 >
@@ -527,14 +596,14 @@ export default function PortalPage() {
                       <span
                         className={`inline-block h-2.5 w-2.5 rounded-full border ${
                           engineStatus?.engine === "node"
-                            ? "border-[#2dd4bf] bg-[#2dd4bf] shadow-[0_0_6px_rgba(138,138,244,0.9)]"
+                            ? "border-brand-soft bg-brand-soft shadow-[0_0_6px_rgb(var(--brand-soft-rgb)/0.9)]"
                             : "border-zinc-500 bg-transparent"
                         }`}
                       />
                       Node.js 版
                     </span>
                     {engineStatus?.engine === "node" && (
-                      <span className="rounded-md bg-[#0f766e]/25 px-2 py-0.5 text-[11px] text-[#b9b9f7]">当前使用</span>
+                      <span className="rounded-md bg-brand/25 px-2 py-0.5 text-[11px] text-brand-pale">当前使用</span>
                     )}
                   </div>
                   <p className="mt-2 text-xs leading-relaxed text-zinc-400">
@@ -555,7 +624,7 @@ export default function PortalPage() {
                   aria-pressed={engineStatus?.engine === "java"}
                   className={`rounded-xl border p-4 text-left transition ${
                     engineStatus?.engine === "java"
-                      ? "border-[#22c9d6]/60 bg-[#22c9d6]/10"
+                      ? "border-brand-bright/60 bg-brand-bright/10"
                       : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
                   } ${switching ? "cursor-wait opacity-60" : ""}`}
                 >
@@ -564,7 +633,7 @@ export default function PortalPage() {
                       <span
                         className={`inline-block h-2.5 w-2.5 rounded-full border ${
                           engineStatus?.engine === "java"
-                            ? "border-[#22c9d6] bg-[#22c9d6] shadow-[0_0_6px_rgba(70,201,214,0.9)]"
+                            ? "border-brand-bright bg-brand-bright shadow-[0_0_6px_rgb(var(--brand-bright-rgb)/0.9)]"
                             : "border-zinc-500 bg-transparent"
                         }`}
                       />
@@ -573,7 +642,7 @@ export default function PortalPage() {
                     <span
                       className={`rounded-md px-2 py-0.5 text-[11px] ${
                         engineStatus?.engine === "java"
-                          ? "bg-[#22c9d6]/25 text-[#9be3ea]"
+                          ? "bg-brand-bright/25 text-[#9be3ea]"
                           : engineStatus?.java.jarExists
                             ? "bg-emerald-400/15 text-emerald-300"
                             : "bg-amber-400/15 text-amber-300"
@@ -648,9 +717,9 @@ export default function PortalPage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-40px" }}
                 transition={{ duration: 0.4, delay: (i % 3) * 0.08 }}
-                className="group rounded-2xl border border-white/8 bg-white/[0.03] p-5 transition hover:border-[#0f766e]/40 hover:bg-white/[0.05]"
+                className="group rounded-2xl border border-white/8 bg-white/[0.03] p-5 transition hover:border-brand/40 hover:bg-white/[0.05]"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#0f766e]/20 to-[#22c9d6]/15 text-[#2dd4bf] transition group-hover:text-[#22c9d6]">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-brand/20 to-brand-bright/15 text-brand-soft transition group-hover:text-brand-bright">
                   <f.icon className="h-5 w-5" />
                 </div>
                 <h3 className="mt-4 text-base font-semibold">{f.title}</h3>
@@ -672,27 +741,27 @@ export default function PortalPage() {
 
         {/* 访问指引 */}
         <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
-          <div className="rounded-2xl border border-white/8 bg-gradient-to-r from-[#0f766e]/10 to-[#22c9d6]/5 p-6 sm:p-8">
+          <div className="rounded-2xl border border-white/8 bg-gradient-to-r from-brand/10 to-brand-bright/5 p-6 sm:p-8">
             <h2 className="text-lg font-semibold">访问与联调</h2>
             <div className="mt-4 grid gap-4 text-sm text-zinc-300 sm:grid-cols-3">
               <div className="rounded-xl border border-white/8 bg-black/20 p-4">
                 <p className="font-medium text-zinc-100">平台入口</p>
                 <p className="mt-1.5 text-zinc-400">
-                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-[#2dd4bf]">/lowcode/</code>{" "}
+                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-soft">/lowcode/</code>{" "}
                   经网关代理直达 Vue 控制台
                 </p>
               </div>
               <div className="rounded-xl border border-white/8 bg-black/20 p-4">
                 <p className="font-medium text-zinc-100">测试账号</p>
                 <p className="mt-1.5 text-zinc-400">
-                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-[#22c9d6]">admin / admin123</code>{" "}
+                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-bright">admin / admin123</code>{" "}
                   内置超级管理员
                 </p>
               </div>
               <div className="rounded-xl border border-white/8 bg-black/20 p-4">
                 <p className="font-medium text-zinc-100">REST API</p>
                 <p className="mt-1.5 text-zinc-400">
-                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-[#2dd4bf]">/api/v1/*</code>{" "}
+                  <code className="rounded bg-white/10 px-1.5 py-0.5 text-[12px] text-brand-soft">/api/v1/*</code>{" "}
                   代理至 Spring Boot 后端
                 </p>
               </div>
@@ -717,7 +786,7 @@ export default function PortalPage() {
                 ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
                 : t.kind === "error"
                   ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
-                  : "border-[#22c9d6]/30 bg-[#22c9d6]/10 text-[#9be3ea]"
+                  : "border-brand-bright/30 bg-brand-bright/10 text-[#9be3ea]"
             }`}
             role="status"
           >

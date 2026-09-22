@@ -3,6 +3,35 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+ * 门户双主题品牌层（Task 17-P）
+ * verdant（默认）= 青墨 Verdant Ink；classic = 改版前靛蓝经典
+ * 切换由 <html data-theme="classic|verdant"> 驱动（page.tsx 头部控件）
+ * ============================================================ */
+@theme {
+  --color-brand: #0f766e;        /* 主色：翡翠青 / 经典靛蓝 #5755ee */
+  --color-brand-bright: #22c9d6; /* 点缀：青瓷 / 经典亮青 #46c9d6 */
+  --color-brand-soft: #2dd4bf;   /* 柔青高亮 / 经典柔紫 #8a8af4 */
+  --color-brand-pale: #99f6e4;   /* 淡色文字 / 经典淡紫 #b9b9f7 */
+}
+
+:root {
+  /* 供发光阴影 / radial 渐变使用的 RGB 三元组（主题联动） */
+  --brand-rgb: 15 118 110;
+  --brand-soft-rgb: 45 212 191;
+  --brand-bright-rgb: 34 201 214;
+}
+
+html[data-theme="classic"] {
+  --color-brand: #5755ee;
+  --color-brand-bright: #46c9d6;
+  --color-brand-soft: #8a8af4;
+  --color-brand-pale: #b9b9f7;
+  --brand-rgb: 87 85 238;
+  --brand-soft-rgb: 138 138 244;
+  --brand-bright-rgb: 70 201 214;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

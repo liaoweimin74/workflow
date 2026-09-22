@@ -696,3 +696,20 @@ Stage Summary:
 - 持久化：门户 portal-ui-theme（风格，与低代码共享）+ portal-ui-mode（明暗，门户独立）；低代码 portal-ui-theme + theme-dark（既有）；均防闪脚本首帧恢复
 - 回滚锚点：20260922-133417（本改造前）> 20260922-122350（双主题前）> 20260922-111422（青墨改造前）
 - 遗留（低优）：①门户与低代码明暗键不同（portal-ui-mode vs theme-dark），跨应用不联动（风格键联动保留）；统一需解决「门户默认暗/低代码默认亮」的默认值冲突 ②前端 vitest 全量未复跑（沙箱 IO 超时；rg 确认无测试引用 toggleDark/toggleUiTheme/AdminLayout，风险低，下轮巡检可补跑）③移动端下拉按钮只显图标（hidden sm:inline 文案），如需文案可后续放宽
+
+---
+Task ID: 19
+Agent: 主控（Z.ai Code）
+Task: 用户需求「数据表格的配置数据源窗体中筛选条件这个label不需要」——移除冗余「筛选条件」label
+
+Work Log:
+- 定位链路：数据表格（page-table，页面设计器+表单设计器共用）属性面板「配置数据源」按钮 → DsBindingConfigDialog（title=「数据源配置」，list 模式 860px）Tab1 内嵌共享组件 UniDataSourceBinding.vue；该组件结构为分割线「组件级数据筛选」+ el-form-item label「筛选条件」，分割线已表意、label 冗余
+- 修改 src/views/form/components/UniDataSourceBinding.vue（唯一改动）：`<el-form-item label="筛选条件">` → `<el-form-item>`（留注释说明）。该组件被 4 处复用（数据表格/数据表单容器的 DsBindingConfigDialog、DataPickerConfigDialog、LookupPickerConfigDialog、vendor DataSourceConfig 选项组件配置），均带同一分割线，全局移除保持一致
+- 环境清理：误建 type=custom 的测试页被路由到 ViewDesigner（发现 PageDesignerRouter 按 type 分发：PAGE→FcDesigner 设计器，其他→ViewDesigner）；API 验证 PUT /v1/pages/{id} 不支持改 type，改用删旧建新（type=PAGE）后走通全链路；验证完已删除测试页（ui-verify-dstable2）
+- 验证（agent-browser 实测，截图 /tmp/pd-5~6.png）：登录 → 创建 PAGE 页 → 拖入「数据表格」→ 属性面板点「配置数据源」→ 弹窗 Tab1：分割线「组件级数据筛选」下直接是 所有（且）/任一（或）逻辑组，「筛选条件」label 消失 ✓；点「+ 添加筛选条件」行布局正常（目标列/操作符/来源/值 与数据源控件列对齐）✓
+- 回归：DataPickerConfigDialog + LookupPickerConfigDialog 测试 31/31 全过（无测试断言该 label）；console 仅设计画布下 PageDataTable 缺 pageKey/pageActionBus 的既有警告（改造前即存在）+ SSE 重连提示，无错误
+- 重建巡检 cron：job 406034（fixed_rate 900s，webDevReview；原 405996 已失效，cron 列表为空）
+
+Stage Summary:
+- 「数据表格 → 配置数据源」弹窗中冗余「筛选条件」label 已移除（分割线「组件级数据筛选」承担节标题职责），筛选区内容与「数据源」控件列对齐；4 处复用场景同步生效、视觉一致
+- 附带发现（低优待办）：①设计画布内 PageDataTable 因缺 pageKey/pageActionBus 必填 prop 产生 console 警告，可给 PageDataTable 设计态传占位值或将其改 optional+设计态分支消除 ②PUT /v1/pages 不支持修改 type，如需支持可在后端 update 接口放开

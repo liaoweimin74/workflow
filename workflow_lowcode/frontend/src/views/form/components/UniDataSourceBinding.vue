@@ -14,7 +14,8 @@
       </el-select>
     </el-form-item>
     <el-divider content-position="left">组件级数据筛选</el-divider>
-    <el-form-item label="筛选条件">
+    <!-- 分割线「组件级数据筛选」已表意，去掉冗余「筛选条件」label，筛选区内容占满整行 -->
+    <el-form-item>
       <div style="width: 100%">
         <el-radio-group v-model="draft.filterLogic" size="small">
           <el-radio-button value="AND">所有（且）</el-radio-button>

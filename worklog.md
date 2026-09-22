@@ -713,3 +713,14 @@ Work Log:
 Stage Summary:
 - 「数据表格 → 配置数据源」弹窗中冗余「筛选条件」label 已移除（分割线「组件级数据筛选」承担节标题职责），筛选区内容与「数据源」控件列对齐；4 处复用场景同步生效、视觉一致
 - 附带发现（低优待办）：①设计画布内 PageDataTable 因缺 pageKey/pageActionBus 必填 prop 产生 console 警告，可给 PageDataTable 设计态传占位值或将其改 optional+设计态分支消除 ②PUT /v1/pages 不支持修改 type，如需支持可在后端 update 接口放开
+
+---
+Task ID: 19-R1
+Agent: 主控（Z.ai Code）
+Task: 用户反馈「数据源配置弹窗筛选区应该与「数据源」label 左对齐」（附截图标注）
+
+Work Log:
+- 根因：上轮仅移除了 label，但 el-form 的 label-width="110px" 仍通过 inline margin-left 作用于无 label form-item 的 .el-form-item__content，导致 且/或组、筛选行、「+ 添加筛选条件」整体缩进 110px
+- 修改 UniDataSourceBinding.vue（两处）：filter form-item 加 class="filter-section"；scoped 样式新增 `.filter-section :deep(.el-form-item__content) { margin-left: 0 !important; }`（!important 击败 Element Plus 内联 margin-left:110px）
+- 验证（agent-browser 实测 /tmp/pd-7~8.png + DOM 测量）：「数据源」label 左缘=242px = 且/或组左缘=242px = 筛选行左缘=242px，像素级对齐 ✓；筛选行控件占满整行宽度（原 30/22/22/30% 分宽不变但可用空间更宽）；console 0 error
+- 回归：DataPicker/LookupPicker 配置弹窗测试 31/31 全过；测试页 ui-verify-dstable3 已删除

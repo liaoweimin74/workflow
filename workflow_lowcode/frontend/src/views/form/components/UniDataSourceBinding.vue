@@ -15,7 +15,7 @@
     </el-form-item>
     <el-divider content-position="left">组件级数据筛选</el-divider>
     <!-- 分割线「组件级数据筛选」已表意，去掉冗余「筛选条件」label，筛选区内容占满整行 -->
-    <el-form-item>
+    <el-form-item class="filter-section">
       <div style="width: 100%">
         <el-radio-group v-model="draft.filterLogic" size="small">
           <el-radio-button value="AND">所有（且）</el-radio-button>
@@ -162,6 +162,10 @@ defineExpose({ value })
 </script>
 
 <style scoped>
+/* 筛选区无 label：抵消 el-form label-width 继承的内容缩进，与「数据源」label 及分割线左对齐 */
+.filter-section :deep(.el-form-item__content) {
+  margin-left: 0 !important;
+}
 .filter-row { display: flex; gap: 8px; margin-top: 8px; }
 .label-with-tip { display: inline-flex; align-items: center; }
 .tip-icon { margin-left: 4px; color: #909399; cursor: help; }

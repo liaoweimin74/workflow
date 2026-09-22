@@ -35,34 +35,46 @@ kill_stale_backend() {
   sleep 1
 }
 
-# ---- 引擎选择（Task 13-8）：标记文件存在时 8080 由 Node 后端提供 ----
+# ---- 引擎选择（Task 13-8 → 13-R2 → 13-R3 → 15-R1，与 service-supervisor.ts 决策链保持一致）----
 NODE_MARKER=/home/z/tools/backend-engine-node
 NODE_BACKEND_DIR=/home/z/my-project/workflow_lowcode/backend-node
-
 # Task 13-R2：双位置 marker（安全区优先，兼容旧位置）
 NODE_MARKER_SAFE="$NODE_BACKEND_DIR/.engine-node"
-# Task 13-R3：发布/重置会清掉 node_modules、/home/z/tools、甚至项目内 dotfile marker，
-# 但源码与 SQLite 主库历次重置均幸存。决策链：
-#   ① 双 marker 任一存在 → Node
-#   ② workflow.db 存在（最强持久信号）→ 重建 marker → Node
-#   ③ jar 缺失（Java 无法运行且无自愈）→ 重建 marker → Node
+NODE_DB="$NODE_BACKEND_DIR/data/workflow.db"
+# Task 15-R1：用户显式引擎选择的持久化文件（发布重置后幸存，修复 14-R1 劫持事件）
+ENGINE_CHOICE_FILE="$NODE_BACKEND_DIR/data/engine-choice"
+
+use_node() {
+  echo "[start-services] 使用 Node 引擎，重建引擎标记..."
+  mkdir -p /home/z/tools
+  echo -n node > "$ENGINE_CHOICE_FILE" 2>/dev/null || true
+  touch "$NODE_MARKER_SAFE" /home/z/tools/backend-engine-node 2>/dev/null || true
+  NODE_MARKER="$NODE_MARKER_SAFE"
+}
+
 if [ ! -f "$NODE_MARKER" ] && [ -f "$NODE_MARKER_SAFE" ]; then
   NODE_MARKER="$NODE_MARKER_SAFE"
 fi
-NODE_DB="$NODE_BACKEND_DIR/data/workflow.db"
-if [ ! -f "$NODE_MARKER" ]; then
-  # Task 13-R5：db 持久信号自愈仅在 jar 缺失时生效（jar 存在 + 无 marker = 显式 Java 模式，必须尊重）
-  if [ -f "$NODE_DB" ] && [ ! -f "$JAR" ]; then
-    echo "[start-services] 检测到 Node 引擎主库（且 jar 缺失），重建引擎标记使用 Node..."
-    mkdir -p /home/z/tools
-    touch "$NODE_MARKER_SAFE" /home/z/tools/backend-engine-node 2>/dev/null || true
-    NODE_MARKER="$NODE_MARKER_SAFE"
-  elif [ ! -f "$JAR" ]; then
-    echo "[start-services] jar 缺失且无 Java 回滚条件，自动使用 Node 引擎..."
-    mkdir -p /home/z/tools
-    touch "$NODE_MARKER_SAFE" /home/z/tools/backend-engine-node 2>/dev/null || true
-    NODE_MARKER="$NODE_MARKER_SAFE"
-  fi
+
+CHOICE=""
+[ -f "$ENGINE_CHOICE_FILE" ] && CHOICE=$(tr -d '[:space:]' < "$ENGINE_CHOICE_FILE" | tr '[:upper:]' '[:lower:]')
+
+# 决策链 v3：
+#   ① 双 marker 任一存在 → Node
+#   ② 显式选择 = java 且 jar 可运行 → Java（尊重门户切换，不被 db 信号劫持）
+#   ③ 显式选择 = node → Node（重建 marker 自愈）
+#   ④ workflow.db 存在（最强持久信号）→ Node（无条件；显式 Java 意图已由②持久保护）
+#   ⑤ jar 缺失（Java 无法运行且无自愈）→ Node
+if [ -f "$NODE_MARKER" ]; then
+  :
+elif [ "$CHOICE" = "java" ] && [ -f "$JAR" ]; then
+  echo "[start-services] 检测到持久化显式选择 = Java 版，保持 Java 引擎..."
+elif [ "$CHOICE" = "node" ]; then
+  use_node
+elif [ -f "$NODE_DB" ]; then
+  use_node
+elif [ ! -f "$JAR" ]; then
+  use_node
 fi
 
 # Node 后端启动前置自愈：依赖缺失先 bun install（后台日志到 backend-node-install.log）

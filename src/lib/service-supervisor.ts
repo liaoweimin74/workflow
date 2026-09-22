@@ -73,6 +73,35 @@ export const NODE_ENGINE_MARKER_SAFE =
  */
 export const NODE_DB_FILE = `${NODE_BACKEND_DIR}/data/workflow.db`;
 
+/**
+ * 持久化「用户显式引擎选择」（Task 15-R1，修复 14-R1 劫持事件）：
+ * 与 workflow.db 同级（data/ 目录历次重置均幸存），内容为 "node" 或 "java"。
+ * 门户页 switchBackendEngine 显式切换时写入；发布重置后 marker 可被清，
+ * 但该文件幸存 → 看门狗不再把「jar 被 bootstrap 重建」误判为用户要 Java。
+ * 手动回滚 Java 的契约更新：echo java > ${ENGINE_CHOICE_FILE}（替代旧「删 marker」契约）。
+ */
+export const ENGINE_CHOICE_FILE = `${NODE_BACKEND_DIR}/data/engine-choice`;
+
+/** 读取持久化引擎选择；文件缺失/内容非法返回 null */
+export function readEngineChoice(): EngineChoice | null {
+  try {
+    const raw = fs.readFileSync(ENGINE_CHOICE_FILE, "utf8").trim().toLowerCase();
+    return raw === "node" || raw === "java" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写入持久化引擎选择（幂等，失败静默——决策链仍可依赖 db 信号） */
+export function writeEngineChoice(choice: EngineChoice): void {
+  try {
+    fs.mkdirSync(`${NODE_BACKEND_DIR}/data`, { recursive: true });
+    fs.writeFileSync(ENGINE_CHOICE_FILE, choice);
+  } catch {
+    /* 忽略 */
+  }
+}
+
 /** 重建双位置 marker（幂等，失败静默） */
 export function recreateEngineMarkers(): void {
   try {
@@ -85,17 +114,26 @@ export function recreateEngineMarkers(): void {
 }
 
 export function nodeEngineEnabled(): boolean {
-  // ① 显式 marker（双位置，保留「删 marker 回滚 Java」契约）
+  // ① 显式 marker（双位置，保留「删 marker」快速回滚契约）
   if (
     fs.existsSync(NODE_ENGINE_MARKER_SAFE) ||
     fs.existsSync(NODE_ENGINE_MARKER)
   )
     return true;
-  // ② 持久信号自愈：Node 引擎主库历次重置均幸存 → 判定 Node 并重建 marker。
-  //   ⚠️ 仅当 jar 缺失时生效（Task 13-R5 冲突修复）：发布/重置会同时清掉 marker 与 jar，
-  //   此时回落 Node 自愈；而显式切换 Java / 回滚 Java 时 jar 存在且 marker 被有意清除，
-  //   若此处无条件重建 marker，会在切换流程内部瞬间改回 Node（实测发生的劫持）。
-  if (fs.existsSync(NODE_DB_FILE) && !fs.existsSync(JAR_PATH)) {
+  // ② 用户显式选择 = java 且 jar 可运行 → 尊重（切换流程内部不被 db 信号劫持回 Node）。
+  //    jar 缺失（发布重置后）则跳过此条，交由下方 Node 自愈接管。
+  const choice = readEngineChoice();
+  if (choice === "java" && fs.existsSync(JAR_PATH)) return false;
+  // ③ 用户显式选择 = node → Node（重置后 marker 被清也能自愈重建）
+  if (choice === "node") {
+    recreateEngineMarkers();
+    return true;
+  }
+  // ④ 持久信号自愈：Node 引擎主库历次重置均幸存 → 判定 Node 并重建 marker。
+  //   Task 15-R1 改为无条件生效（修复 14-R1 劫持）：显式切 Java 的意图已由
+  //   ② 的 engine-choice 文件持久保护，此处不再需要「jar 缺失才生效」的限制——
+  //   否则「发布重置清 marker + bootstrap 重建 jar」会把用户误劫持回 Java。
+  if (fs.existsSync(NODE_DB_FILE)) {
     recreateEngineMarkers();
     return true;
   }
@@ -111,6 +149,8 @@ export interface EngineStatus {
   markerSafe: boolean;
   markerTools: boolean;
   nodeDbExists: boolean;
+  /** 用户显式选择的持久化引擎（Task 15-R1）；null=从未显式切换过 */
+  engineChoice: EngineChoice | null;
   /** 发布版检测：平台子项目是否随部署携带 / 是否生产模式（Task 13-R5） */
   platform: {
     deployed: boolean;
@@ -151,6 +191,7 @@ export function getEngineStatus(): EngineStatus {
     markerSafe: fs.existsSync(NODE_ENGINE_MARKER_SAFE),
     markerTools: fs.existsSync(NODE_ENGINE_MARKER),
     nodeDbExists: fs.existsSync(NODE_DB_FILE),
+    engineChoice: readEngineChoice(),
     platform: {
       deployed: fs.existsSync(NODE_BACKEND_DIR) && fs.existsSync(FRONTEND_DIR),
       productionMode: process.env.NODE_ENV === "production",
@@ -172,7 +213,8 @@ export function startJavaBuild(): { started: boolean; reason?: string } {
   fs.mkdirSync("/home/z/tools", { recursive: true });
   const out = fs.openSync(JAVA_BUILD_LOG, "a");
   fs.appendFileSync(JAVA_BUILD_LOG, `\n===== 构建开始 ${new Date().toISOString()} =====\n`);
-  const child = spawn("bash", [BOOTSTRAP_SCRIPT], {
+  // --build-java：bootstrap 脚本自 Task 15-R2 起默认 Node 优先，仅显式传参才构建 Java 工具链
+  const child = spawn("bash", [BOOTSTRAP_SCRIPT, "--build-java"], {
     detached: true,
     stdio: ["ignore", out, out],
     // MAVEN_OPTS 堆上限：沙箱仅 3.9Gi，Maven 默认堆=物理 1/4 会挤压 next-server（历史 OOM 事故）
@@ -193,7 +235,8 @@ export async function switchBackendEngine(target: EngineChoice): Promise<{
   if (target === "java" && !fs.existsSync(JAR_PATH)) {
     return { ok: false, message: "Java 版 jar 尚未构建，请先点击「一键构建」后再切换" };
   }
-  // 1. 改写引擎标记
+  // 1. 改写引擎标记 + 持久化显式选择（Task 15-R1：发布重置清 marker 后仍能守住意图）
+  writeEngineChoice(target);
   if (target === "node") recreateEngineMarkers();
   else {
     for (const m of [NODE_ENGINE_MARKER_SAFE, NODE_ENGINE_MARKER]) {

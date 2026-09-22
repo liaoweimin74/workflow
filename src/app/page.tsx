@@ -43,6 +43,8 @@ type EngineChoice = "node" | "java";
 interface EngineStatus {
   engine: EngineChoice;
   nodeDbExists: boolean;
+  /** 用户显式选择的持久化引擎（Task 15-R1）；null=从未显式切换过 */
+  engineChoice?: EngineChoice | null;
   platform: {
     deployed: boolean;
     productionMode: boolean;
@@ -498,6 +500,11 @@ export default function PortalPage() {
                   <h3 className="text-sm font-semibold text-zinc-100">后端引擎</h3>
                   <p className="mt-0.5 text-xs text-zinc-500">
                     切换会自动重启 :8080 后端进程；两版数据源独立（Node 版 = 迁移后 SQLite 主库，Java 版 = 原始 H2 存储）
+                  </p>
+                  <p className="mt-1 text-[11px] text-zinc-600" aria-label="引擎持久化选择状态">
+                    {engineStatus?.engineChoice
+                      ? `已记住你的选择：${engineStatus.engineChoice === "node" ? "Node.js" : "Java"} 版（沙箱发布/重置后自动保持，不再被误切换）`
+                      : "尚未显式选择过引擎：当前跟随主引擎信号（SQLite 主库存在 → Node）"}
                   </p>
                 </div>
               </div>

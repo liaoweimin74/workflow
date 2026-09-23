@@ -886,3 +886,23 @@ Stage Summary:
 - 平台已完整运行在远程 NestJS+MariaDB 线：3000 门户 / 5173 前端（base=/lowcode/ 经门户反代）/ 8080 NestJS（189 端点，契约 650/650）/ 3306 用户态 MariaDB（supervisor 托管常驻）；sandbox 分支完整保留可随时回切
 - 四态风格系统（青墨/经典 × 明暗）已在远程线全面上线：工具栏单入口下拉（MagicStick+风格色点），持久化+多标签同步+防闪
 - 未竟事项：①designer-theme.css/PropertyPanel/NodePalette/ProcessCenterPage 等仍有硬编码靛蓝（流程设计器暗色适配为既有遗留）②AI 小智悬浮球保持靛蓝人格色（可选随主题化）③workflow_lowcode 本轮改动未 commit（style.css/AdminLayout/LoginPage/DashboardPage/index.html/vite.config.ts，main 分支上待用户决定是否提交/推送）④mariadb 无开机自启，依赖 supervisor 看门狗拉起（datadir 持久）
+
+---
+Task ID: 34
+Agent: 主控（Z.ai Code）
+Task: 用户指令「系统管理的菜单不可见，修改数据库初始化脚本并更改数据表相应字段值」
+
+Work Log:
+- 【根因定位】sys_menu 表无 visible 列，可见性由 status 控制：后端 auth.service.ts filterAllowed() 要求 is_deleted==0 且 status==1 才返回；V1 建表 status 为 NOT NULL 且无默认值，V2__init_data.sql（菜单 id 1-27）与 V7__add_process_management_menus.sql（id 100-112）的 INSERT 漏写 status 列 → MariaDB 非严格模式落 0 → 系统管理/首页/流程管理整棵树被过滤；V26 写法正确（显式 status=1）故消息管理可见——API 实测 admin 菜单树只剩「表单视图管理+消息管理」证实
+- 【改初始化脚本①V2】两条 INSERT（目录/页面菜单 1-7、按钮 8-27）全部补 status=1, is_deleted=0，并加注释说明「NOT NULL 无默认值缺省落 0=禁用」的坑
+- 【改初始化脚本②V7】三条 INSERT（100、101-103、110-112）同样补齐，对齐 V26 写法；全库扫描其余 8 个含 sys_menu 插入的迁移（V12/V15/V20/V21/V26/V29）确认均已显式写 status（V29 为多行列清单，正则初扫误报，人工复核无问题）
+- 【更改数据表】UPDATE sys_menu SET status=1, updated_at=NOW() WHERE is_deleted=0 AND status=0 → 影响 34 行（V2 的 27 + V7 的 7）；验证：根级菜单 首页/系统管理/流程管理/表单视图管理/消息管理 全部 status=1；表单管理(120)/查询界面管理(140) 保持 status=0+is_deleted=1（V21 合并遗留，本就该隐藏）
+- 【checksum repair】migrator 对齐 Flyway 会校验已应用脚本 checksum → 改完 V2/V7 后执行 migrate-cli --repair（V2: 2058847229→1139911049，V7: -2053080919→1190223043），再跑全量 migrate 37/37 校验通过
+- 【API 验证】重新登录取菜单树：首页 + 系统管理(5 子菜单+20 按钮) + 流程管理(3 子菜单) + 表单视图管理 + 消息管理 全部返回 ✓
+- 【浏览器验证 agent-browser】经 3000 门户 /lowcode/：侧边栏出现「系统管理」，展开显示用户/角色/菜单/组织机构/字典管理 5 项；进入用户管理页完整渲染（搜索框/新增按钮/表格 admin 数据）；流程管理展开 3 项，流程定义页表格（发布版本列头）正常；dev.log 无错误（截图 /tmp/t34-system-menu.png）
+- 【代码保全】本地 main 分支两个 commit：7d9b643（菜单迁移修复）、6ff241b（Task 33 遗留的四态风格切换器+仪表盘品牌变量+vite base，一并入库）；未 push（待用户指示）
+
+Stage Summary:
+- 「系统管理不可见」根因是种子脚本漏写 status 列而非权限/角色问题；初始化脚本与存量数据双侧已修，新装环境不会再复现
+- 迁移历史表已 repair 对齐，后续 migrate 不会因脚本修改报 checksum mismatch
+- 遗留：本地两个 commit 未 push 到远程（PAT 在 .git/config 可直接推）；孤儿按钮 113-115（父菜单 104 已被 V11 删除）仍留在库中，可考虑后续清理

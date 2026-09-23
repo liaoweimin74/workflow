@@ -846,3 +846,21 @@ Stage Summary:
 - 全类型数据源「字段元数据」统一 12 字段落地：SQL/API（可编辑表原有）+ FORM/WORKFLOW（只读表升级，column_config 缺省时 schema 派生兜底）+ SYSTEM（新增内置列分支），浏览器+API 双层验证
 - WORKFLOW 数据源元数据从「空表」变为「schema 派生完整字段」，直接改善设计器/绑定面板对未生成动态表表单的列名供给
 - 风险记录：modules/ 死代码引用断裂（lib/db 导出面不匹配），后续挂载前必须修复；环境重启会丢失未提交改动——重要阶段应及时让自动提交器落地或手动 commit
+
+---
+Task ID: 32
+Agent: 主控（Z.ai Code）
+Task: 用户指令「git pull」——workflow_lowcode 目录关联远程仓库 git@github.com:liaoweimin74/workflow.git（用户提供 fine-grained PAT）并拉取远程代码
+
+Work Log:
+- 【诊断】workflow_lowcode 目录的 .git 丢失（沙箱 13:28 重置恢复导致），此前 git 命令实际作用于上层 /home/z/my-project 仓库（HEAD affbec0，UUID 自动提交链）；本地工作文件完好（columnOption.ts/verdant/datasource.ts 等关键文件齐全）
+- 【保全措施】改动前先全量备份：/tmp/workflow_lowcode_backup_20260923_142030.tar.gz（5.1MB，排除 node_modules/.git）
+- 【仓库重建】git init -b main + remote add origin（https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git）+ fetch origin 成功（4 分支：main/feature/array-value-text-columns/feature/process-engine-core/feature/vtj-integration）
+- 【重大发现——本地与远程是两条分叉开发线】远程 main=5851d8b（2026-09-23 11:12 foxwe 推送「feat(backend-node): 新增 NestJS+TS+Kysely 后端实现与 Flyway 兼容迁移」，backend-node 281 文件首次入库）；本地与远程差异 1929 项。远程独有：NestJS 版 backend-node（src/api+src/engine+src/modules 结构，无 src/routes）、AI 小智助手体系（aiActionBus/悬浮球/SSE/open_page 等约 15 个 feat(ai) 提交）；本地独有：bun+express 版 backend-node（8080 运行中）、Task 30-A verdant 四态主题、Task 30-B columnOption 列名中文、Task 31 十二字段元数据等全部本地成果（远程 style.css 无 verdant、utils 无 columnOption.ts）
+- 【安全 pull 落地】①本地全部现状 commit 为 3b35285「chore(sandbox): 本地工作线快照」②checkout -b sandbox（当前工作分支，工作树零变动）③main 分支指回 origin/main 纯远程（git branch -f main 5851d8b）。最终：main=远程最新镜像，sandbox=本地工作线（=远程树+本地快照提交），服务链不受影响
+- 【服务验证】8080 登录 API 200（bun PID 5225 未动）、5173 前端 200、3000 门户在监听——pull 全程零中断
+
+Stage Summary:
+- workflow_lowcode 已重建 git 身份并完成远程关联+拉取：远程代码在本地 main 分支随时可切换/对比/合并，本地 30+ Task 成果固化在 sandbox 分支（3b35285）不受任何损失
+- 关键决策：不做 hard reset（会毁掉运行中的 bun 后端与 Task 30/31 成果），改用双分支并行——用户后续可指示：A) git checkout main 切换到 NestJS 远程线 B) 以 sandbox 为主继续开发 C) 双线按模块合并（如摘取远程 AI 小智模块移植到本地线）
+- 风险提示：①远程 NestJS backend-node 从未在沙箱运行过（需 node>=24、nest build、migrate）②两条线 frontend 均有对方没有的功能，直接覆盖任一侧都会丢功能 ③PAT 已写入 .git/config（本地文件，未提交）

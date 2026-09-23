@@ -823,3 +823,26 @@ Stage Summary:
 - Task 30 验收完成：verdant 主题四态（青墨/经典 × 亮/暗）全部回归 16-R1 观感且真实切换持久化正常；14-R1 四条需求（页面 PAGE 化/表单复制/列名中文格式/统一界面）确认全部在位，无残留回归
 - 澄清了上会话摘要与代码库的状态差：30 的实装已存在于提交历史中，本会话以浏览器+API 双层证据固化验收结论
 - 遗留（不变）：①流程设计器暗色适配（designer-theme.css 硬编码→--ui-* 变量）+进入设计器返回后主题切换失效 bug ②门户与低代码明暗键不同（portal-ui-mode vs theme-dark）跨应用不联动 ③/vite-app/ 门户路由失效可清理
+
+---
+Task ID: 31
+Agent: 主控（Z.ai Code）
+Task: 用户问询「源码是否被恢复到备份状态」核查 + 用户需求「所有类型数据源的字段元数据统一包括 标识/字段名/DB类型/长度/精度/必填/唯一/索引/隐藏/排序/筛选/查询方式 12 字段」
+
+Work Log:
+- 【源码状态核查（回应用户问询）】结论：非回滚脚本所致，是环境重启回退。证据链：①reflog 仅 auto-commit 链（d1d9bb5→amend a3c00f9→8645ed0），无 reset/rollback ②上一 Task 30 会话摘要描述的 emerald 主题等「6 处差异」在全仓检索不存在 ③所有前端源文件 mtime ≤ Sep 22 16:53（Task 21 时代）④/tmp 快照目录被清空 ⑤worklog 在 Sep 22 16:57 前无更新。即 Sep 22 晚~Sep 23 会话的未提交改动已随环境重启丢失，当前代码=最后一次自动提交（Task 21 完成态）。该状态恰好满足 Task 30 的目标（16-R1 观感 + 14-R1 四需求，上轮已浏览器四态验证）
+- 【意外发现（重要，防复发）】backend-node/src/modules/ 下的 page/bizdata/form-definition/datasource 为未挂载死代码，且 form-definition.ts 引用 lib/db 不存在的导出（query/queryOne/queryRows/exec/tx——lib/db 实际导出 getDb/all/one/run/nextSeq），运行时 import 直接崩（bun -e 实测 "Export named 'query' not found"）。本次曾计划 import extractSchemaColumns 即将引发服务启动崩溃，已改为 routes/datasource.ts 内自包含实现。修复建议：模块化挂载前先对齐 lib/db 导出面
+- 后端 routes/datasource.ts（metadata 端点全类型统一 12 字段）：
+  ①normalizeMetadataColumn()：key/label/columnType/length/scale/required/unique/indexed/hidden/sortable/filterable/matchType 补齐默认值（布尔默认 false，排序/筛选默认 true）；未知扩展字段（storageMode/pickerConfig/subColumns 等）原样透传（消费方 ColumnConfigDialog/bizTableLayout/PageDesigner 不受影响）
+  ②FORM/WORKFLOW：column_config 空时新 fallback extractSchemaFields()（自包含实现：递归 children/props.rule/props.columns[].rule 收集 field 去重，componentToColumnType 推断 DB类型对齐 form-definition.inferColumnType + fcDesigner 别名，required 取 validate[].required）
+  ③SYSTEM 新分支：SYSTEM_SOURCE_COLUMNS（user-tree 6 列/dept-tree 4 列，对齐 modules/datasource 常量）→ normalize 输出；SQL 分支保持原全字段形状
+- 前端 DataSourceListPage.vue：只读元数据表（FORM/WORKFLOW/SYSTEM 视图模式）从 4 列（字段名/标识/必填/唯一）升级为 12 列只读（与可编辑表同序：标识/字段名/DB类型/长度/精度/必填/唯一/索引/隐藏/排序/筛选/查询方式），size=small+border 对齐可编辑表；新增 matchTypeLabel()（值→中文 label，空显示 —）；matchTypeOptions 签名放宽 columnType?: string|null
+- API 实测（:8080，X-Tenant-Id: default）：FORM(leave_form_copy) 3 列 12 字段齐备+storageMode 透传 ✓；WORKFLOW(leave-form 原空表) schema 派生 6 列（reason/leaveType=VARCHAR、startDate/endDate=DATETIME、days=INT、comment=TEXT，中文 label 全对）✓；SQL 回归不变 ✓；SYSTEM 临时行（user-tree）6 列 12 字段齐备后已清理 ✓
+- 前端 vue-tsc：仅 matchTypeOptions 签名 1 处新增错误已修复；余 4 处为既有（isViewMode/needsLength 未使用、formJoin.joins possibly undefined，diff 未触碰相关区域）；vitest DataSourceListPage 51/51 全过
+- 浏览器实测（agent-browser）：FORM 数据源查看→字段元数据 tab：12 列中文表头+teal 勾叉渲染（截图 /tmp/t30-meta-form.png）；WORKFLOW 数据源：6 行派生元数据同格式（DOM 逐值核对 colCount=12）；期间登录态过期重登一次；verdant 登录页/列表页渲染正常
+- 后端重启走看门狗（kill bun→20s 自动拉起，新 PID 5225，health ok）；本次改动已被自动提交器捕获（5a704aa，14:01:46），工作区仅余 matchTypeOptions 签名修复 1 行
+
+Stage Summary:
+- 全类型数据源「字段元数据」统一 12 字段落地：SQL/API（可编辑表原有）+ FORM/WORKFLOW（只读表升级，column_config 缺省时 schema 派生兜底）+ SYSTEM（新增内置列分支），浏览器+API 双层验证
+- WORKFLOW 数据源元数据从「空表」变为「schema 派生完整字段」，直接改善设计器/绑定面板对未生成动态表表单的列名供给
+- 风险记录：modules/ 死代码引用断裂（lib/db 导出面不匹配），后续挂载前必须修复；环境重启会丢失未提交改动——重要阶段应及时让自动提交器落地或手动 commit

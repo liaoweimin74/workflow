@@ -798,7 +798,7 @@ function boolIconStyle(v: boolean | undefined): Record<string, string> {
 }
 
 /** 查询方式选项（按列类型裁剪）：数值/日期 → 等值/范围；文本 → 等值/模糊 */
-function matchTypeOptions(col: { columnType?: string }): { label: string; value: string }[] {
+function matchTypeOptions(col: { columnType?: string | null }): { label: string; value: string }[] {
   const t = col.columnType || ''
   if (t === 'INT' || t === 'BIGINT' || t === 'TINYINT' || t === 'DECIMAL'
     || t === 'DATE' || t === 'DATETIME') {

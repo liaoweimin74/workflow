@@ -31,35 +31,38 @@ INSERT INTO sys_user_role (user_id, role_id)
 SELECT u.id, r.id FROM sys_user u, sys_role r WHERE u.username = 'test' AND r.role_code = 'ROLE_USER';
 
 -- Insert default menus
-INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, permission, icon, sort_order, created_at, updated_at) VALUES
-(1, NULL, '系统管理', 0, '/system', NULL, NULL, 'Setting', 1, NOW(), NOW()),
-(2, 1, '用户管理', 1, '/system/user', 'system/user/index', 'system:user:list', 'User', 1, NOW(), NOW()),
-(3, 1, '角色管理', 1, '/system/role', 'system/role/index', 'system:role:list', 'UserFilled', 2, NOW(), NOW()),
-(4, 1, '菜单管理', 1, '/system/menu', 'system/menu/index', 'system:menu:list', 'Menu', 3, NOW(), NOW()),
-(5, 1, '组织机构', 1, '/system/org', 'system/org/index', 'system:org:list', 'Organization', 4, NOW(), NOW()),
-(6, 1, '字典管理', 1, '/system/dict', 'system/dict/index', 'system:dict:list', 'List', 5, NOW(), NOW()),
-(7, NULL, '首页', 1, '/dashboard', 'dashboard/index', NULL, 'HomeFilled', 0, NOW(), NOW());
+-- ⚠️ status 必须显式写 1：sys_menu.status 为 NOT NULL 且无默认值，缺省会落 0（=禁用），
+--    而 getCurrentUserMenus 只返回 status==1 的菜单 —— 之前漏写导致「系统管理/首页」不可见。
+--    is_deleted 同理显式写 0，避免依赖隐式默认。
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, path, component, permission, icon, sort_order, status, is_deleted, created_at, updated_at) VALUES
+(1, NULL, '系统管理', 0, '/system', NULL, NULL, 'Setting', 1, 1, 0, NOW(), NOW()),
+(2, 1, '用户管理', 1, '/system/user', 'system/user/index', 'system:user:list', 'User', 1, 1, 0, NOW(), NOW()),
+(3, 1, '角色管理', 1, '/system/role', 'system/role/index', 'system:role:list', 'UserFilled', 2, 1, 0, NOW(), NOW()),
+(4, 1, '菜单管理', 1, '/system/menu', 'system/menu/index', 'system:menu:list', 'Menu', 3, 1, 0, NOW(), NOW()),
+(5, 1, '组织机构', 1, '/system/org', 'system/org/index', 'system:org:list', 'Organization', 4, 1, 0, NOW(), NOW()),
+(6, 1, '字典管理', 1, '/system/dict', 'system/dict/index', 'system:dict:list', 'List', 5, 1, 0, NOW(), NOW()),
+(7, NULL, '首页', 1, '/dashboard', 'dashboard/index', NULL, 'HomeFilled', 0, 1, 0, NOW(), NOW());
 
 
--- Menu permissions
-INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, permission, sort_order, created_at, updated_at) VALUES
-(8, 2, '用户查询', 2, 'system:user:query', 1, NOW(), NOW()),
-(9, 2, '用户新增', 2, 'system:user:create', 2, NOW(), NOW()),
-(10, 2, '用户修改', 2, 'system:user:update', 3, NOW(), NOW()),
-(11, 2, '用户删除', 2, 'system:user:delete', 4, NOW(), NOW()),
-(12, 3, '角色查询', 2, 'system:role:query', 1, NOW(), NOW()),
-(13, 3, '角色新增', 2, 'system:role:create', 2, NOW(), NOW()),
-(14, 3, '角色修改', 2, 'system:role:update', 3, NOW(), NOW()),
-(15, 3, '角色删除', 2, 'system:role:delete', 4, NOW(), NOW()),
-(16, 4, '菜单查询', 2, 'system:menu:query', 1, NOW(), NOW()),
-(17, 4, '菜单新增', 2, 'system:menu:create', 2, NOW(), NOW()),
-(18, 4, '菜单修改', 2, 'system:menu:update', 3, NOW(), NOW()),
-(19, 4, '菜单删除', 2, 'system:menu:delete', 4, NOW(), NOW()),
-(20, 5, '机构查询', 2, 'system:org:query', 1, NOW(), NOW()),
-(21, 5, '机构新增', 2, 'system:org:create', 2, NOW(), NOW()),
-(22, 5, '机构修改', 2, 'system:org:update', 3, NOW(), NOW()),
-(23, 5, '机构删除', 2, 'system:org:delete', 4, NOW(), NOW()),
-(24, 6, '字典查询', 2, 'system:dict:query', 1, NOW(), NOW()),
-(25, 6, '字典新增', 2, 'system:dict:create', 2, NOW(), NOW()),
-(26, 6, '字典修改', 2, 'system:dict:update', 3, NOW(), NOW()),
-(27, 6, '字典删除', 2, 'system:dict:delete', 4, NOW(), NOW());
+-- Menu permissions（按钮级权限同样显式 status=1，对齐 V26 的写法）
+INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, permission, sort_order, status, is_deleted, created_at, updated_at) VALUES
+(8, 2, '用户查询', 2, 'system:user:query', 1, 1, 0, NOW(), NOW()),
+(9, 2, '用户新增', 2, 'system:user:create', 2, 1, 0, NOW(), NOW()),
+(10, 2, '用户修改', 2, 'system:user:update', 3, 1, 0, NOW(), NOW()),
+(11, 2, '用户删除', 2, 'system:user:delete', 4, 1, 0, NOW(), NOW()),
+(12, 3, '角色查询', 2, 'system:role:query', 1, 1, 0, NOW(), NOW()),
+(13, 3, '角色新增', 2, 'system:role:create', 2, 1, 0, NOW(), NOW()),
+(14, 3, '角色修改', 2, 'system:role:update', 3, 1, 0, NOW(), NOW()),
+(15, 3, '角色删除', 2, 'system:role:delete', 4, 1, 0, NOW(), NOW()),
+(16, 4, '菜单查询', 2, 'system:menu:query', 1, 1, 0, NOW(), NOW()),
+(17, 4, '菜单新增', 2, 'system:menu:create', 2, 1, 0, NOW(), NOW()),
+(18, 4, '菜单修改', 2, 'system:menu:update', 3, 1, 0, NOW(), NOW()),
+(19, 4, '菜单删除', 2, 'system:menu:delete', 4, 1, 0, NOW(), NOW()),
+(20, 5, '机构查询', 2, 'system:org:query', 1, 1, 0, NOW(), NOW()),
+(21, 5, '机构新增', 2, 'system:org:create', 2, 1, 0, NOW(), NOW()),
+(22, 5, '机构修改', 2, 'system:org:update', 3, 1, 0, NOW(), NOW()),
+(23, 5, '机构删除', 2, 'system:org:delete', 4, 1, 0, NOW(), NOW()),
+(24, 6, '字典查询', 2, 'system:dict:query', 1, 1, 0, NOW(), NOW()),
+(25, 6, '字典新增', 2, 'system:dict:create', 2, 1, 0, NOW(), NOW()),
+(26, 6, '字典修改', 2, 'system:dict:update', 3, 1, 0, NOW(), NOW()),
+(27, 6, '字典删除', 2, 'system:dict:delete', 4, 1, 0, NOW(), NOW());

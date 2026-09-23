@@ -1,0 +1,86 @@
+[
+  {
+    "file": "com/workflow/system/controller/MenuController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/menus/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BackendLogicBeanController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/backend-logic/beans",
+    "methodName": "beans",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/sse/NotificationSseController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/notifications/sse",
+    "methodName": "connect",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/MenuController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/menus",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/emp/EmpProfileController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/emp/adjust-salary",
+    "methodName": "adjustSalary",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/emp/EmpProfileController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/emp/resign",
+    "methodName": "resign",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/leave/LeaveBillController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/leave/approve",
+    "methodName": "approve",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/leave/LeaveBillController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/leave/reject",
+    "methodName": "reject",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/leave/LeaveBillController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/leave/submit",
+    "methodName": "submit",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/MenuController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/menus/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  }
+]

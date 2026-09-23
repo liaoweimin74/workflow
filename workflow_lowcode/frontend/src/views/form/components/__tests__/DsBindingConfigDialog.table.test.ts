@@ -218,13 +218,18 @@ describe('DsBindingConfigDialog — table-mode sortableFields', () => {
     ;(dataSourceApi.getMetadata as any).mockResolvedValue({
       data: {
         columns: [
-          { key: 'name', label: '姓名', columnType: 'VARCHAR', componentType: 'input' },
-          { key: 'dept', label: '部门', columnType: 'JSON', componentType: 'select' },
-          { key: 'tags', label: '标签', columnType: 'JSON', componentType: 'multiSelect' },
-          { key: 'region', label: '级联', columnType: 'JSON', componentType: 'cascader' },
-          { key: 'tree', label: '树', columnType: 'JSON', componentType: 'elTreeSelect' },
-          { key: 'users', label: '穿梭', columnType: 'JSON', componentType: 'elTransfer' },
-          { key: 'content', label: '内容', columnType: 'TEXT', componentType: 'textarea' },
+          { key: 'name', label: '姓名', columnType: 'VARCHAR' },
+          { key: 'dept', label: '部门', columnType: 'JSON' },
+          { key: 'dept_text', label: '部门（显示）', columnType: 'VARCHAR', hidden: true },
+          { key: 'tags', label: '标签', columnType: 'JSON' },
+          { key: 'tags_text', label: '标签（显示）', columnType: 'VARCHAR', hidden: true },
+          { key: 'region', label: '级联', columnType: 'JSON' },
+          { key: 'region_text', label: '级联（显示）', columnType: 'VARCHAR', hidden: true },
+          { key: 'tree', label: '树', columnType: 'JSON' },
+          { key: 'tree_text', label: '树（显示）', columnType: 'VARCHAR', hidden: true },
+          { key: 'users', label: '穿梭', columnType: 'JSON' },
+          { key: 'users_text', label: '穿梭（显示）', columnType: 'VARCHAR', hidden: true },
+          { key: 'content', label: '内容', columnType: 'TEXT' },
         ],
       },
     })

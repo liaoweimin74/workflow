@@ -10,7 +10,12 @@ import java.time.LocalDateTime;
  * 记录消息的收件人信息
  */
 @Entity
-@Table(name = "msg_recipient")
+@Table(name = "msg_recipient",
+       indexes = {
+               @Index(name = "idx_message", columnList = "message_id"),
+               @Index(name = "idx_user", columnList = "user_id"),
+               @Index(name = "idx_channel", columnList = "channel")
+       })
 public class Recipient {
 
     @Id

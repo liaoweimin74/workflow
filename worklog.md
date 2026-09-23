@@ -864,3 +864,25 @@ Stage Summary:
 - workflow_lowcode 已重建 git 身份并完成远程关联+拉取：远程代码在本地 main 分支随时可切换/对比/合并，本地 30+ Task 成果固化在 sandbox 分支（3b35285）不受任何损失
 - 关键决策：不做 hard reset（会毁掉运行中的 bun 后端与 Task 30/31 成果），改用双分支并行——用户后续可指示：A) git checkout main 切换到 NestJS 远程线 B) 以 sandbox 为主继续开发 C) 双线按模块合并（如摘取远程 AI 小智模块移植到本地线）
 - 风险提示：①远程 NestJS backend-node 从未在沙箱运行过（需 node>=24、nest build、migrate）②两条线 frontend 均有对方没有的功能，直接覆盖任一侧都会丢功能 ③PAT 已写入 .git/config（本地文件，未提交）
+
+---
+Task ID: 33
+Agent: 主控（Z.ai Code）
+Task: 方案 A 落地——切换到远程 NestJS+MySQL 线（用户指示「用MYSQL」「可以 apt 装 MariaDB」）+ 新需求「工具栏明暗按钮改为四态风格切换器 + 配色细调（参考门户主页风格）」
+
+Work Log:
+- 【数据库·用户态 MariaDB 11.8.6】无 sudo → `apt-get download` 拉取官方 deb（mariadb-server-core/client-core/server + libaio1t64 + liburing2 + libncurses6）→ dpkg -x 解包到 /home/z/my-project/mariadb-user/（持久目录）；建 share/bin/libexec 布局符号链接后 mariadb-install-db 初始化 datadir 成功
+- 【关键发现·进程回收】工具调用里 spawn 的进程（含 --daemonize/nohup）会在调用结束后被沙箱回收（mariadbd 曾存活 1 分钟后被杀）→ MariaDB 必须托管在 Next 服务树内
+- 【supervisor 升级（/home/z/my-project/src/lib/service-supervisor.ts）】①ServiceKey 增加 "mysql" ②新增 MYSQL_DEF（mariadbd 前台子进程，端口 3306，prerequisite=datadir，LD_LIBRARY_PATH 注入）③Node 引擎后端定义从 bun+SQLite 改为 NestJS：`node dist/main.js`，env 注入 PORT=8080/DB_*/workflow_v6，prerequisite=dist/main.js，autoFix=bun run build
+- 【激活链】POST /api/portal/services → next-server 托管拉起 mariadbd（PID 8666，跨工具调用存活验证 ✓）→ 建库 workflow_v6 + root@127.0.0.1/root@localhost 密码 740130（127.0.0.1 会反解为 localhost，两边都要设）
+- 【迁移+构建】37 个 Flyway 兼容迁移全部应用（V1-V38，含种子数据）；构建踩坑：bun 扁平化 pnpm-lock 导致 ajv6/ajv-formats(需 ajv8) 冲突 → 改用 pnpm（npm i -g pnpm 到用户前缀）--frozen-lockfile 重装 → nest build 成功
+- 【8080 切换】kill 旧 bun(5225) → supervisor 拉起 node dist/main.js（PID 9366）→ Nest "workflow-backend-node 已启动: http://localhost:8080，数据库 127.0.0.1:3306/workflow_v6"；登录 API 200（admin/admin123 + accessToken）、/api/v1/data-sources 200 ✓；旧看门狗（旧模块闭包）若 8080 空缺会尝试拉起 bun，但 main 分支已无 src/index.ts → 秒崩退避，无害
+- 【新需求·四态风格切换器移植】从 sandbox 分支（3b35285）外科手术式移植：①style.css 整体替换（青墨 Verdant Ink 设计系统 + html[data-theme='classic'] 经典段 + html.dark[classic] 暗色段，四态全覆盖）②AdminLayout.vue 以 sandbox 版为基底回插 main 独有 AI 助手按钮（激活色改 var(--brand) 随风格）③LoginPage.vue 整体替换（verdant 网格纹+品牌渐变按钮）④index.html 加 portal-ui-theme 首帧防闪内联脚本
+- 【配色细调（需求2）】DashboardPage.vue 重写：横幅/KPI 图标/趋势渐变/环形图全部从硬编码 #5755ee 系改为品牌变量（--brand/--brand-soft/--brand-bright/--brand-rgb alpha 洗底 + el-* 变量），四态自动适配；SVG stop-color 用 Tailwind 任意属性 [stop-color:var(--x)] 实现
+- 【沙箱适配】远程 vite.config.ts 无 base → 用户唯一出口是 3000 门户，/lowcode/* 反代会 404 → 补 base:'/lowcode/'（vite 自动重启生效）
+- 【浏览器四态回归（agent-browser，5173 与 3000 双源）】verdant 亮/暗、classic 亮/暗 全部切换正常，localStorage（theme-dark + portal-ui-theme）持久化 ✓，防闪预置 ✓，AI 按钮随风格变色 ✓；dashboard 暗色 h1=#2dd4bf（brand-soft）、亮色 #0f766e（brand）逐值核对 ✓
+
+Stage Summary:
+- 平台已完整运行在远程 NestJS+MariaDB 线：3000 门户 / 5173 前端（base=/lowcode/ 经门户反代）/ 8080 NestJS（189 端点，契约 650/650）/ 3306 用户态 MariaDB（supervisor 托管常驻）；sandbox 分支完整保留可随时回切
+- 四态风格系统（青墨/经典 × 明暗）已在远程线全面上线：工具栏单入口下拉（MagicStick+风格色点），持久化+多标签同步+防闪
+- 未竟事项：①designer-theme.css/PropertyPanel/NodePalette/ProcessCenterPage 等仍有硬编码靛蓝（流程设计器暗色适配为既有遗留）②AI 小智悬浮球保持靛蓝人格色（可选随主题化）③workflow_lowcode 本轮改动未 commit（style.css/AdminLayout/LoginPage/DashboardPage/index.html/vite.config.ts，main 分支上待用户决定是否提交/推送）④mariadb 无开机自启，依赖 supervisor 看门狗拉起（datadir 持久）

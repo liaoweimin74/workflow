@@ -9,7 +9,9 @@ import java.time.LocalDateTime;
  * 支持多版本管理：每次保存创建新版本记录。
  */
 @Entity
-@Table(name = "wf_form_def")
+@Table(name = "wf_form_def",
+       uniqueConstraints = @UniqueConstraint(name = "uk_form_def_tenant_key_version", columnNames = {"tenant_id", "`key`", "version"}),
+       indexes = @Index(name = "idx_form_def_tenant_status", columnList = "tenant_id, status"))
 public class FormDefinition {
 
     @Id
@@ -35,10 +37,9 @@ public class FormDefinition {
     /**
      * 列映射配置 JSON（仅 BUSINESS 类型使用，WORKFLOW 为 null）。
      * 定义表单字段到物理表列的映射：类型/长度/必填/唯一/索引。
-     * 同 config_json：必须为文本列（LONGTEXT），JSON 列类型在 H2 下 setString 会被标量包装。
      */
     @Lob
-    @Column(name = "column_config", columnDefinition = "LONGTEXT")
+    @Column(name = "column_config", columnDefinition = "JSON")
     private String columnConfig;
 
     @Lob

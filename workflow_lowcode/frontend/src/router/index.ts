@@ -209,8 +209,7 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-  // 使用 Vite base 作为路由 base，支持部署在网关子路径（如 /lowcode/）下
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(),
   routes
 })
 

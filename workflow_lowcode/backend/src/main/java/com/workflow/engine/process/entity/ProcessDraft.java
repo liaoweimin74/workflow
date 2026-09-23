@@ -9,7 +9,12 @@ import java.time.LocalDateTime;
  * 部署后关联 Flowable 的 processDefinitionId。
  */
 @Entity
-@Table(name = "wf_process_draft")
+@Table(name = "wf_process_draft",
+       indexes = {
+               @Index(name = "idx_tenant", columnList = "tenant_id"),
+               @Index(name = "idx_wf_draft_key", columnList = "tenant_id, process_key"),
+               @Index(name = "idx_category", columnList = "category_id")
+       })
 public class ProcessDraft {
 
     @Id

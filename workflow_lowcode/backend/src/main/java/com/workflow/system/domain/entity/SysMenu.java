@@ -32,8 +32,7 @@ public class SysMenu extends BaseEntity {
     @Column(name = "sort_order")
     private Integer sortOrder = 0;
 
-    /** 数据库级默认值 1：保证种子数据省略该列时也能插入 */
-    @Column(nullable = false, columnDefinition = "integer default 1")
+    @Column(nullable = false)
     private Integer status = 1;
 
     @OneToMany(mappedBy = "parentId", fetch = FetchType.LAZY)

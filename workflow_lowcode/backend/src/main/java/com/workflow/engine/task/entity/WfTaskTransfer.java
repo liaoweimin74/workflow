@@ -8,7 +8,11 @@ import java.time.LocalDateTime;
  * 记录每次转办操作的 from→to 用户、原因，区别于 delegate（委派）。
  */
 @Entity
-@Table(name = "wf_task_transfer")
+@Table(name = "wf_task_transfer",
+       indexes = {
+               @Index(name = "idx_transfer_task", columnList = "tenant_id, task_id"),
+               @Index(name = "idx_transfer_instance", columnList = "tenant_id, process_instance_id")
+       })
 public class WfTaskTransfer {
 
     @Id

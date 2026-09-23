@@ -55,7 +55,7 @@ const searchFields = computed<SearchField[]>(() => [
     prop: 'status',
     placeholder: '选择状态',
     options: [
-      { label: '全部', value: '' },
+      { label: '全部', value: undefined },
       { label: '启用', value: 1 },
       { label: '停用', value: 0 },
     ],

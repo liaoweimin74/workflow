@@ -13,6 +13,7 @@
 export interface RuleLike {
   type?: string
   field?: string
+  title?: string
   props?: Record<string, any>
   children?: RuleLike[]
 }
@@ -58,6 +59,15 @@ export function collectFieldKeys(rules: RuleLike[] | undefined): string[] {
     if (rule.field) keys.push(rule.field)
   })
   return keys
+}
+
+/** 收集全部字段 {field, title}（供下拉候选显示中文名称），穿透子表内部 */
+export function collectFieldOptions(rules: RuleLike[] | undefined): { field: string; title?: string }[] {
+  const options: { field: string; title?: string }[] = []
+  walkRules(rules, (rule) => {
+    if (rule.field) options.push({ field: rule.field, title: rule.title })
+  })
+  return options
 }
 
 /**

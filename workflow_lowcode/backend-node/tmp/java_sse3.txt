@@ -1,3 +1,0 @@
-event:new-message
-data:{"id":118,"tenantId":"default","templateCode":"DIRECT_13_7_B","senderId":1,"senderType":"USER","title":"直发测试13-7-B","content":{"zzz":"last","text":"正文B"},"linkJson":null,"priority":null,"category":null,"messageType":"PUBLIC","status":"SENT","createdAt":"2026-09-16T16:48:45.770125133","contentType":null,"eventCode":null,"readStatus":null}
-

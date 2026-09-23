@@ -281,7 +281,7 @@ function getIcon(name?: string): any {
 /** 查询栏显示：显式开启 且 至少配置了一个可查询列（避免空查询栏只有按钮） */
 const showSearch = computed(() => props.showSearch === true && resolvedSearchFields.value.length > 0)
 
-/** 查询组件类型映射（按数据源 metadata componentType；选项数据源来自业务表单 schema） */
+/** 查询组件类型映射（按表单 schema rule.type 优先 + columnType 降级；选项数据源来自业务表单 schema） */
 const QUERY_SELECT_TYPES = ['select', 'multiSelect', 'multiSelectPro', 'checkbox', 'elTransfer']
 const QUERY_TREE_TYPES = ['tree', 'elTreeSelect']
 const QUERY_PICKER_TYPES = ['LookupPicker', 'DataPicker']
@@ -310,8 +310,10 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
   (props.searchFields || []).map((f: any) => {
     const key = f.key ?? f.field
     const meta = metaColumns.value.find((m) => m.key === key)
-    const compType = meta?.componentType || ''
     const rule = findFormRuleByKey(key)
+    // 组件类型：优先表单 schema rule.type（含完整配置）；无 schema 时为空，走 columnType 降级
+    const compType = rule?.type || ''
+    const colType = meta?.columnType || ''
     const base = { label: f.label || f.key || key, prop: key, placeholder: f.label || key }
     if (f.matchType === 'like') {
       // 模糊查询：直接用文本输入框（用户输入关键字，后端 LIKE 匹配）
@@ -349,7 +351,7 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
         style: 'width: 200px',
       }
     }
-    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date') {
+    if (compType === 'DatePicker' || compType === 'datePicker' || compType === 'date' || colType === 'DATE' || colType === 'DATETIME') {
       return { ...base, type: 'date-picker' as const }
     }
     return { ...base, type: 'input' as const, style: 'width: 180px' }
@@ -357,8 +359,10 @@ const resolvedSearchFields = computed<SearchField[]>(() =>
 )
 
 // ==================== 列适配 ====================
-/** 数组值组件类型：列表展示时 formatter 逗号拼接（对齐 BizDataListPage renderByComponentType） */
-const ARRAY_COMPONENT_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'select', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
+/** metadata 中存在 <key>_text 冗余列（数组值/引用列显示信号，替代 componentType 判断） */
+function hasTextColumn(key: string): boolean {
+  return metaColumns.value.some((m) => m.key === `${key}_text`)
+}
 
 /** JSON 数组 → 逗号拼接；非数组（旧逗号串/字符串）原样返回 */
 function formatArrayValue(v: unknown): unknown {
@@ -391,7 +395,7 @@ const resolvedColumns = computed<TableColumn[]>(() => {
       label: c.label || c.key,
       minWidth: c.columnType === 'TEXT' || c.columnType === 'JSON' ? 200 : 120,
       sortable: sortableOf(c.key),
-      ...(ARRAY_COMPONENT_TYPES.includes(c.componentType || '')
+      ...(hasTextColumn(c.key)
         ? {
             formatter: (row: any, _col: any, cellValue: unknown): string => {
               // 优先显示冗余显示列 <key>_text（取叶子 label，树形/级联全路径取最后一段）；缺失回退 value join
@@ -409,9 +413,8 @@ const resolvedColumns = computed<TableColumn[]>(() => {
     .filter((c: any) => !c.hidden)
     .map((c: any) => {
       const key = c.key ?? c.prop
-      const meta = metaColumns.value.find((m) => m.key === key)
-      // 数组值组件列（用户配置列无 componentType，从 metaColumns 查询）：优先显示冗余显示列 <key>_text（叶子 label），缺失回退 value join
-      const isArrayCol = !!meta && ARRAY_COMPONENT_TYPES.includes(meta.componentType || '')
+      // 数组值组件列（metadata 含 <key>_text 冗余列）：优先显示冗余显示列 <key>_text（叶子 label），缺失回退 value join
+      const isArrayCol = hasTextColumn(key)
       const base = {
         prop: key,
         label: c.label || key,
@@ -551,8 +554,7 @@ watch(activeDsBindings, () => {
 
 /** 数组值组件主列（JSON）搜索 → 用 <key>_text 列（查询值=显示值 label，后端 LIKE/等值匹配显示列） */
 function resolveSearchColumn(key: string): string {
-  const col = metaColumns.value.find((c) => c.key === key)
-  if (col && ARRAY_COMPONENT_TYPES.includes(col.componentType || '')) return `${key}_text`
+  if (hasTextColumn(key)) return `${key}_text`
   return key
 }
 

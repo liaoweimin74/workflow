@@ -12,9 +12,8 @@
         :max-visible-buttons="4"
       >
         <template #type="{ row }">
-          <!-- 需求：页面已完全代替视图，VIEW 仅作历史数据标识（新建一律 PAGE 单轨） -->
-          <el-tag :type="row.type === 'VIEW' ? 'info' : 'success'">
-            {{ row.type === 'VIEW' ? '视图（旧）' : '页面' }}
+          <el-tag :type="row.type === 'VIEW' ? 'primary' : 'success'">
+            {{ row.type === 'VIEW' ? '视图' : '页面' }}
           </el-tag>
         </template>
         <template #status="{ row }">
@@ -176,7 +175,17 @@ async function handleUnmount(menu: PageMenuItem) {
 // ========== 搜索 ==========
 const searchFields = computed<SearchField[]>(() => [
   { type: 'input', label: '页面名称', prop: 'name', placeholder: '搜索页面名称', style: 'width: 200px' },
-  // 页面已代替视图，不再按类型筛选（VIEW 仅为历史数据标识）
+  {
+    type: 'select',
+    label: '类型',
+    prop: 'type',
+    placeholder: '全部',
+    options: [
+      { label: '视图', value: 'VIEW' },
+      { label: '页面', value: 'PAGE' },
+    ],
+    style: 'width: 140px',
+  },
   {
     type: 'select',
     label: '状态',
@@ -209,6 +218,7 @@ async function fetchApi(params: any) {
     size: params.size || 20,
     name: params.name || undefined,
     status: params.status || undefined,
+    type: params.type || undefined,
   })
   const data = res.data as any
   return {
@@ -218,16 +228,44 @@ async function fetchApi(params: any) {
 }
 
 // ========== 创建页面 ==========
-// 页面已完全代替视图（不再区分类型）：新建一律 type=PAGE，走 PageDesigner 单轨设计/渲染；
-// 绑定表单改为可选（需要基于表单字段快速建列表时可绑，纯数据源页面可不绑）
 const formConfig = reactive<FormConfig<PageDefinitionDTO>>({
   rule: [
     {
       type: 'select',
-      field: 'formKey',
-      title: '绑定表单',
-      options: [] as { label: string; value: string; disabled?: boolean }[],
-      props: { clearable: true, placeholder: '可选：绑定已发布的业务表单（不绑也可用数据源建页面）' },
+      field: 'type',
+      title: '页面类型',
+      options: [
+        { label: '视图', value: 'VIEW' },
+        { label: '自定义页面', value: 'PAGE' },
+      ],
+      value: 'VIEW',
+      control: [
+        {
+          value: 'VIEW',
+          rule: [
+            {
+              type: 'select',
+              field: 'formKey',
+              title: '绑定表单',
+              options: [] as { label: string; value: string; disabled?: boolean }[],
+              props: { clearable: true, placeholder: '选择已发布的业务表单' },
+              validate: [{ required: true, message: '请选择绑定的业务表单', trigger: 'change' }],
+            },
+          ],
+        },
+        {
+          value: 'PAGE',
+          rule: [
+            {
+              type: 'select',
+              field: 'formKey',
+              title: '绑定表单',
+              options: [] as { label: string; value: string; disabled?: boolean }[],
+              props: { clearable: true, placeholder: '自定义页面使用数据源绑定，无需绑定表单' },
+            },
+          ],
+        },
+      ],
     },
     { type: 'input', field: 'name', title: '页面名称', validate: [{ required: true, message: '请输入页面名称', trigger: 'blur' }] },
     {
@@ -246,7 +284,7 @@ const formConfig = reactive<FormConfig<PageDefinitionDTO>>({
     const res = await pageApi.createPage({
       name: data.name,
       key: data.key,
-      type: 'PAGE',
+      type: data.type || 'VIEW',
       formKey: data.formKey || null,
     })
     router.push({ path: '/page/designer', query: { id: res.data.id } })
@@ -324,7 +362,7 @@ function statusTagType(status: string): '' | 'success' | 'warning' | 'info' | 'd
     PUBLISHED: 'success',
     ARCHIVED: 'info',
   }
-  return map[status] || 'info'
+  return map[status] || ''
 }
 
 function statusLabel(status: string): string {
@@ -352,6 +390,15 @@ onMounted(async () => {
     const formKeyRule = formConfig.rule.find((r: any) => r.field === 'formKey') as any
     if (formKeyRule) {
       formKeyRule.options = publishedForms.value.map((f) => ({ label: f.name, value: f.key }))
+    }
+    // type control 分支内的 formKey 也注入选项
+    const typeRule = formConfig.rule.find((r: any) => r.field === 'type') as any
+    for (const ctl of typeRule?.control || []) {
+      for (const r of ctl.rule || []) {
+        if (r.field === 'formKey') {
+          r.options = publishedForms.value.map((f) => ({ label: f.name, value: f.key }))
+        }
+      }
     }
   } catch {
     // 表单加载失败不阻断列表

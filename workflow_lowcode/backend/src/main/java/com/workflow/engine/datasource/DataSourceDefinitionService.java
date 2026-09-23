@@ -497,10 +497,6 @@ public class DataSourceDefinitionService {
             if (j == null || !j.isObject()) {
                 throw new BusinessException(400, "joins 第 " + idx + " 项必须是对象");
             }
-            String alias = text(j, "alias");
-            if (alias == null || !alias.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
-                throw new BusinessException(400, "joins 第 " + idx + " 项 alias 非法: " + alias);
-            }
             String targetFormKey = text(j, "targetFormKey");
             if (targetFormKey == null || targetFormKey.isBlank()) {
                 throw new BusinessException(400, "joins 第 " + idx + " 项必须指定目标表单 targetFormKey");

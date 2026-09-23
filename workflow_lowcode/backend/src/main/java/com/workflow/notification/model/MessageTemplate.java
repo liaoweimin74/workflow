@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
  * 存储消息模板配置
  */
 @Entity
-@Table(name = "msg_template")
+@Table(name = "msg_template",
+       uniqueConstraints = @UniqueConstraint(name = "uk_tenant_template", columnNames = {"tenant_id", "template_code"}),
+       indexes = @Index(name = "idx_channel", columnList = "channel"))
 public class MessageTemplate {
 
     @Id

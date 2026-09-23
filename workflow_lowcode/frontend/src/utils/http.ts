@@ -67,8 +67,7 @@ http.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
-      // 适配 Vite base 子路径部署（网关 /lowcode/ 前缀）
-      window.location.href = `${import.meta.env.BASE_URL}login`
+      window.location.href = '/login'
     } else if (!error.config?.headers?.['X-Skip-Error-Toast']) {
       // 优先取后端 R 包装返回的业务错误消息
       const bizMsg = error.response?.data?.msg

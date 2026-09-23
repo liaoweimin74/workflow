@@ -90,11 +90,6 @@ export const formApi = {
     return http.post(`/v1/form-definitions/${id}/publish`)
   },
 
-  /** 复制表单定义（可改变类型：WORKFLOW/BUSINESS；新表单为 DRAFT v1，不继承 processKey） */
-  copyFormDefinition(id: string, data: { name: string; key: string; type: string }): Promise<R<FormDefinitionDTO>> {
-    return http.post(`/v1/form-definitions/${id}/copy`, data)
-  },
-
   getFormVersions(id: string): Promise<R<FormVersionDTO[]>> {
     return http.get(`/v1/form-definitions/${id}/versions`)
   },

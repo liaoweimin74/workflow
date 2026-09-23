@@ -1,3 +1,0 @@
-event:new-message
-data:{"id":116,"tenantId":"default","templateCode":"TPL_WF_TASK_ASSIGNED","senderId":0,"senderType":"SYSTEM","title":"您有新的待办任务：SSE13_7_TEST_TASK","content":{"variables":{"processName":"P13_7","initiatorName":"张三","taskName":"SSE13_7_TEST_TASK"},"text":"流程「P13_7」已流转至节点「SSE13_7_TEST_TASK」，发起人：张三，请及时处理。"},"linkJson":null,"priority":"NORMAL","category":"WORKFLOW","messageType":"PRIVATE","status":"SENT","createdAt":"2026-09-16T16:47:01.197110481","contentType":"TEXT","eventCode":null,"readStatus":null}
-

@@ -89,27 +89,26 @@ public class DynamicTableManager {
 
     /**
      * 查询当前库全部基础表名（information_schema.TABLES）。
-     * 仅枚举 BASE TABLE，排除视图；Flyway 历史表是否过滤由调用方决定。
-     * schema 谓词跨库兼容：MySQL 用 DATABASE()，H2 表落在 PUBLIC schema（DATABASE() 返回库名而非 schema）。
+     * 仅枚举 BASE TABLE，排除视图与跨 schema；Flyway 历史表是否过滤由调用方决定。
      *
      * @return 表名列表（按表名字母序）
      */
     public List<String> listTableNames() {
         String sql = """
                 SELECT TABLE_NAME FROM information_schema.TABLES
-                WHERE (TABLE_SCHEMA = DATABASE() OR TABLE_SCHEMA = 'PUBLIC') AND TABLE_TYPE = 'BASE TABLE'
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
                 ORDER BY TABLE_NAME
                 """;
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
     /**
-     * 判断物理表是否存在（schema 谓词跨库兼容，同 listTableNames）。
+     * 判断物理表是否存在。
      */
     public boolean tableExists(String tableName) {
         String sql = """
                 SELECT COUNT(1) FROM information_schema.TABLES
-                WHERE (TABLE_SCHEMA = DATABASE() OR TABLE_SCHEMA = 'PUBLIC') AND TABLE_NAME = ?
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
                 """;
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, tableName);
         return count != null && count > 0;
@@ -122,21 +121,7 @@ public class DynamicTableManager {
      * @return 列信息列表
      */
     public List<ColumnInfo> findTableColumns(String tableName) {
-        // 跨库兼容（按数据库产品名分支，各自限定当前 schema）：
-        // - H2 2.x：COLUMNS 无 COLUMN_KEY/TYPE_NAME 列；DATA_TYPE 本身即类型名字符串
-        //   （如 INTEGER/CHARACTER VARYING/NUMERIC/TIMESTAMP，已被 normalizeType 白名单覆盖），
-        //   COLUMN_KEY 置空串（unique 标记在 H2 下不解析，均为 false）。
-        // - MySQL：DATA_TYPE 为类型名、COLUMN_KEY 可判 UNI，schema 谓词用 DATABASE()。
-        String sql = isH2()
-                ? """
-                SELECT COLUMN_NAME, DATA_TYPE,
-                       CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE,
-                       IS_NULLABLE, '' AS COLUMN_KEY
-                FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA = 'PUBLIC' AND TABLE_NAME = ?
-                ORDER BY ORDINAL_POSITION
-                """
-                : """
+        String sql = """
                 SELECT COLUMN_NAME, DATA_TYPE,
                        CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE,
                        IS_NULLABLE, COLUMN_KEY
@@ -145,27 +130,6 @@ public class DynamicTableManager {
                 ORDER BY ORDINAL_POSITION
                 """;
         return jdbcTemplate.query(sql, this::mapColumnInfo, tableName);
-    }
-
-    /** 当前数据库产品名（懒加载缓存一次；探测失败时回退 mysql 语义） */
-    private volatile String databaseProductName;
-
-    private boolean isH2() {
-        if (databaseProductName == null) {
-            synchronized (this) {
-                if (databaseProductName == null) {
-                    String name = "MySQL";
-                    try {
-                        name = jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<String>) con ->
-                                con.getMetaData().getDatabaseProductName());
-                    } catch (Exception e) {
-                        log.warn("Detect database product failed, fallback to mysql semantics: {}", e.getMessage());
-                    }
-                    databaseProductName = name == null ? "MySQL" : name;
-                }
-            }
-        }
-        return databaseProductName.toLowerCase().contains("h2");
     }
 
     private ColumnInfo mapColumnInfo(ResultSet rs, int rowNum) throws SQLException {
@@ -187,23 +151,23 @@ public class DynamicTableManager {
     private static String normalizeType(String dataType) {
         if (dataType == null) return "UNKNOWN";
         return switch (dataType.toLowerCase()) {
-            case "varchar", "character varying" -> "VARCHAR";
-            case "text", "mediumtext", "tinytext", "clob", "character large object" -> "TEXT";
+            case "varchar" -> "VARCHAR";
+            case "text", "mediumtext", "tinytext" -> "TEXT";
             case "longtext" -> "LONGTEXT";
             case "int", "integer", "bigint", "smallint", "mediumint" -> "INT";
             case "decimal", "numeric" -> "DECIMAL";
             case "date" -> "DATE";
-            case "datetime", "timestamp", "timestamp without time zone" -> "DATETIME";
+            case "datetime", "timestamp" -> "DATETIME";
             case "tinyint" -> "TINYINT";
             case "json" -> "JSON";
             default -> dataType.toUpperCase();
         };
     }
 
-    /** 读取可空整数；LONGTEXT/CLOB 的 CHARACTER_MAXIMUM_LENGTH≥int 上限 → 返回 null（无固定长度） */
+    /** 读取可空整数；LONGTEXT 的 CHARACTER_MAXIMUM_LENGTH=4294967295 超出 int 范围 → 返回 null（无固定长度） */
     private static Integer getNullableInt(ResultSet rs, String columnLabel) throws SQLException {
         long v = rs.getLong(columnLabel);
         if (rs.wasNull()) return null;
-        return v >= Integer.MAX_VALUE ? null : (int) v;
+        return v > Integer.MAX_VALUE ? null : (int) v;
     }
 }

@@ -11,7 +11,14 @@ import fs from "fs";
  * 并由看门狗定时巡检、崩溃自动重启。
  */
 
-export type ServiceKey = "backend" | "frontend";
+export type ServiceKey = "backend" | "frontend" | "mysql";
+
+/**
+ * Task 32（架构切换 A）：远程 NestJS+MySQL 线上线。
+ * 数据库改为用户态 MariaDB 11.8（无 sudo，apt deb 解包到 /home/z/my-project/mariadb-user，
+ * 由本监督器托管为 next-server 子进程常驻——沙箱会在工具调用结束后回收非 Next 树进程）。
+ */
+const MYSQL_DIR = "/home/z/my-project/mariadb-user";
 
 export interface ServiceDef {
   key: ServiceKey;
@@ -301,16 +308,24 @@ export function getServiceDefs(): ServiceDef[] {
   const backendDef: ServiceDef = nodeEngine
     ? {
         key: "backend",
-        name: "Node 后端 (bun + Express + SQLite 引擎)",
+        name: "Node 后端 (NestJS + Kysely + MariaDB 引擎)",
         port: 8080,
         cwd: NODE_BACKEND_DIR,
-        cmd: "bun",
-        args: ["src/index.ts"],
+        cmd: "node",
+        args: ["dist/main.js"],
         logFile: "/home/z/tools/backend-node.log",
-        env: { PORT: "8080", NODE_OPTIONS: "--max-old-space-size=512" },
-        prerequisite: `${NODE_BACKEND_DIR}/node_modules/express`,
-        autoFixCmd: "bun install",
-        autoFixLabel: "依赖缺失，自动执行 bun install",
+        env: {
+          PORT: "8080",
+          DB_HOST: "127.0.0.1",
+          DB_PORT: "3306",
+          DB_USER: "root",
+          DB_PASSWORD: "740130",
+          DB_NAME: "workflow_v6",
+          NODE_OPTIONS: "--max-old-space-size=768",
+        },
+        prerequisite: `${NODE_BACKEND_DIR}/dist/main.js`,
+        autoFixCmd: "bun run build",
+        autoFixLabel: "构建产物缺失，自动执行 nest build",
       }
     : {
         key: "backend",
@@ -324,8 +339,29 @@ export function getServiceDefs(): ServiceDef[] {
         logFile: "/home/z/tools/backend.log",
         prerequisite: JAR_PATH,
       };
-  return [backendDef, FRONTEND_DEF];
+  return [MYSQL_DEF, backendDef, FRONTEND_DEF];
 }
+
+/** MariaDB 用户态实例（Task 32）：作为 next-server 子进程常驻，数据目录随项目持久 */
+const MYSQL_DEF: ServiceDef = {
+  key: "mysql",
+  name: "MariaDB 11.8 (用户态 apt-deb)",
+  port: 3306,
+  cwd: MYSQL_DIR,
+  cmd: `${MYSQL_DIR}/root/usr/sbin/mariadbd`,
+  args: [
+    "--no-defaults",
+    `--basedir=${MYSQL_DIR}/root`,
+    `--datadir=${MYSQL_DIR}/root/data`,
+    `--socket=${MYSQL_DIR}/mysql.sock`,
+    `--pid-file=${MYSQL_DIR}/mysqld.pid`,
+    "--port=3306",
+    "--bind-address=127.0.0.1",
+  ],
+  logFile: `${MYSQL_DIR}/mariadbd.log`,
+  prerequisite: `${MYSQL_DIR}/root/data/mysql`,
+  env: { LD_LIBRARY_PATH: `${MYSQL_DIR}/root/usr/lib/x86_64-linux-gnu` },
+};
 
 const FRONTEND_DEF: ServiceDef = {
   key: "frontend",

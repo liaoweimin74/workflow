@@ -76,6 +76,7 @@
     <LookupPickerConfigDialog
       v-model="lookupDialogVisible"
       :current-fields="currentFieldKeys"
+      :current-field-options="currentFieldOptions"
       :lookup-props="currentLookupProps"
       :form-data-sources="formDataSources"
       :enabled-data-sources="enabledDataSources"
@@ -134,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, provide } from 'vue'
+import { ref, onMounted, onUnmounted, computed, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Promotion, Document } from '@element-plus/icons-vue'
@@ -142,6 +143,8 @@ import _formCreate from '@form-create/element-ui'
 import { formApi, type FormDefinitionDTO, type FormDefinitionDetailDTO } from '@/api/form'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import ColumnConfigDialog, { type ColumnConfigItem } from './components/ColumnConfigDialog.vue'
+import { useAiAssistantStore } from '@/stores/aiAssistantStore'
+import { aiActionBus } from '@/utils/aiActionBus'
 import DataPickerConfigDialog from './components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from './components/LookupPickerConfigDialog.vue'
 import DsBindingConfigDialog from './components/DsBindingConfigDialog.vue'
@@ -149,7 +152,7 @@ import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.v
 import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
 import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'
 import type { CardStyle } from '@/components/business/ListCards.types'
-import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, collectFieldOptions, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 const route = useRoute()
@@ -180,6 +183,23 @@ const dsConfigPanelRef = ref<InstanceType<typeof DataSourceConfigPanel> | null>(
 /** JSON 配置弹窗状态 */
 const jsonVisible = ref(false)
 const jsonText = ref('')
+
+/** AI 助手集成：注册当前页上下文 + 监听表单回填动作 */
+const aiAssistantStore = useAiAssistantStore()
+
+/** 助手生成表单后自动回填画布（与加载已有 schema 同一管线） */
+const offApplyFormSchema = aiActionBus.on('applyFormSchema', (rule: unknown[]) => {
+  designerRef.value?.setRule(ensureRuleProps(enableCardDesignMode(rule as any[])))
+})
+
+onMounted(() => {
+  aiAssistantStore.setContext({ route: 'form-designer', formId: formId.value })
+})
+
+onUnmounted(() => {
+  offApplyFormSchema()
+  aiAssistantStore.setContext(null)
+})
 
 /** 查看表单配置 JSON（对齐保存结构：rule/option/dataSources/actions） */
 function handleShowJson() {
@@ -222,6 +242,9 @@ const selectedPickerField = ref<string>('')
 
 /** 当前表单所有字段 key（供回填映射/级联依赖的目标字段选择），穿透子表内部 */
 const currentFieldKeys = computed<string[]>(() => collectFieldKeys(designerRule.value))
+
+/** 当前表单所有字段 {field,title}（供下拉候选显示中文名称），穿透子表内部 */
+const currentFieldOptions = computed<{ field: string; title?: string }[]>(() => collectFieldOptions(designerRule.value))
 
 /** 当前选中 dataPicker 字段的 props（供配置弹窗回填） */
 const currentPickerProps = computed<Record<string, any>>(() => {
@@ -747,7 +770,7 @@ function statusTagType(status: string): '' | 'success' | 'warning' | 'info' | 'd
     PUBLISHED: 'success',
     ARCHIVED: 'info',
   }
-  return map[status] || 'info'
+  return map[status] || ''
 }
 
 function statusLabel(status: string): string {

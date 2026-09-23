@@ -442,24 +442,20 @@
               </template>
 
               <template v-else>
-                <!-- 全类型统一 12 列只读元数据表：标识/字段名/DB类型/长度/精度/必填/唯一/索引/隐藏/排序/筛选/查询方式 -->
                 <el-table
                   :data="metadata?.columns || []"
                   v-loading="metadataLoading"
-                  size="small"
-                  border
                   style="width: 100%"
                   :max-height="300"
                 >
-                  <el-table-column prop="key" label="标识" min-width="120" show-overflow-tooltip />
-                  <el-table-column prop="label" label="字段名" min-width="130" show-overflow-tooltip />
-                  <el-table-column label="DB类型" width="90">
-                    <template #default="{ row }">{{ row.columnType || '—' }}</template>
-                  </el-table-column>
-                  <el-table-column label="长度" width="70" align="center">
+                  <el-table-column prop="label" label="字段名" min-width="150" show-overflow-tooltip />
+                  <el-table-column prop="key" label="标识" min-width="140" show-overflow-tooltip />
+                  <el-table-column prop="componentType" label="组件" min-width="90" />
+                  <el-table-column prop="columnType" label="DB类型" min-width="80" />
+                  <el-table-column label="长度" width="60" align="center">
                     <template #default="{ row }">{{ row.length ?? '—' }}</template>
                   </el-table-column>
-                  <el-table-column label="精度" width="65" align="center">
+                  <el-table-column label="精度" width="60" align="center">
                     <template #default="{ row }">{{ row.scale ?? '—' }}</template>
                   </el-table-column>
                   <el-table-column label="必填" width="50" align="center">
@@ -472,28 +468,23 @@
                       <span :style="boolIconStyle(row.unique)">{{ row.unique ? '✓' : '✗' }}</span>
                     </template>
                   </el-table-column>
-                  <el-table-column label="索引" width="50" align="center">
-                    <template #default="{ row }">
-                      <span :style="boolIconStyle(row.indexed)">{{ row.indexed ? '✓' : '✗' }}</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="隐藏" width="50" align="center">
+                  <el-table-column label="隐藏" width="55" align="center">
                     <template #default="{ row }">
                       <span :style="boolIconStyle(row.hidden)">{{ row.hidden ? '✓' : '✗' }}</span>
                     </template>
                   </el-table-column>
-                  <el-table-column label="排序" width="50" align="center">
+                  <el-table-column label="排序" width="55" align="center">
                     <template #default="{ row }">
                       <span :style="boolIconStyle(row.sortable)">{{ row.sortable ? '✓' : '✗' }}</span>
                     </template>
                   </el-table-column>
-                  <el-table-column label="筛选" width="50" align="center">
+                  <el-table-column label="筛选" width="55" align="center">
                     <template #default="{ row }">
                       <span :style="boolIconStyle(row.filterable)">{{ row.filterable ? '✓' : '✗' }}</span>
                     </template>
                   </el-table-column>
-                  <el-table-column label="查询方式" min-width="90">
-                    <template #default="{ row }">{{ matchTypeLabel(row) }}</template>
+                  <el-table-column label="查询方式" min-width="85">
+                    <template #default="{ row }">{{ row.matchType || '按类型' }}</template>
                   </el-table-column>
                 </el-table>
               </template>
@@ -608,7 +599,7 @@ const publishedWorkflowForms = ref<FormDefinitionDTO[]>([])
 /** API 操作 HTTP 方法候选 */
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const
 
-/** 列定义字段类型候选（纯数据层字段；组件类型为内部派生元数据，不在字段元数据 UI 暴露） */
+/** 列定义字段类型候选（第一版：仅列定义字段，不含 componentType） */
 const COLUMN_TYPES = ['VARCHAR', 'INTEGER', 'BIGINT', 'DECIMAL', 'DATETIME', 'DATE', 'TEXT', 'TINYINT'] as const
 
 // ========== 搜索 ==========
@@ -794,11 +785,11 @@ const metadataError = ref<string | null>(null)
 
 /** 布尔值图标样式：true 蓝色，false 灰色 */
 function boolIconStyle(v: boolean | undefined): Record<string, string> {
-  return { color: v ? 'var(--brand)' : '#c0c4cc', cursor: 'default' }
+  return { color: v ? '#409EFF' : '#c0c4cc', cursor: 'default' }
 }
 
 /** 查询方式选项（按列类型裁剪）：数值/日期 → 等值/范围；文本 → 等值/模糊 */
-function matchTypeOptions(col: { columnType?: string | null }): { label: string; value: string }[] {
+function matchTypeOptions(col: { columnType?: string }): { label: string; value: string }[] {
   const t = col.columnType || ''
   if (t === 'INT' || t === 'BIGINT' || t === 'TINYINT' || t === 'DECIMAL'
     || t === 'DATE' || t === 'DATETIME') {
@@ -811,12 +802,6 @@ function matchTypeOptions(col: { columnType?: string | null }): { label: string;
     { label: '等值', value: 'eq' },
     { label: '模糊', value: 'like' },
   ]
-}
-
-/** 只读元数据表：查询方式值 → 中文 label（无值/未知值显示 —） */
-function matchTypeLabel(row: { matchType?: string | null; columnType?: string | null }): string {
-  if (!row.matchType) return '—'
-  return matchTypeOptions(row).find((o) => o.value === row.matchType)?.label ?? row.matchType
 }
 
 /** ================ 数据预览 ================= */
@@ -908,10 +893,6 @@ const columnDialogVisible = ref(false)
 
 /** 执行 SQL 探测：完整 SQL（visual 预览或手写）→ 全量替换 declaredColumns */
 async function handleExploreSql() {
-  if (sqlConfig.queryMode === 'visual' && sqlConfig.visual.mainTable) {
-    // 确保主表字段已加载（tenant_id 条件化与列去重依赖字段缓存）
-    await ensureTableFields(sqlConfig.visual.mainTable)
-  }
   const sql = sqlConfig.queryMode === 'visual' ? generatePreviewSql() : sqlConfig.queryText
   if (!sql?.trim()) {
     ElMessage.warning('请先填写 SQL（可视化或 SQL 模式）')
@@ -977,13 +958,6 @@ async function handleOverlayFromForm() {
       ElMessage.warning('主表单无可用列定义')
       return
     }
-    // 从表单 schema.rule 提取 field→componentType 映射（form-create 的 type 字段）
-    const typeByField = extractComponentTypes(data?.schema)
-    for (const col of formCols) {
-      if (!col.componentType && typeByField[col.key]) {
-        col.componentType = typeByField[col.key]
-      }
-    }
     overlayFromFormColumns(formCols)
     ElMessage.success(`已按主表单覆盖 ${formCols.length} 个字段`)
   } catch (e: any) {
@@ -991,34 +965,6 @@ async function handleOverlayFromForm() {
   } finally {
     overlayLoading.value = false
   }
-}
-
-/** 从表单 schema 递归提取 field → form-create 组件类型映射 */
-function extractComponentTypes(schemaStr: string | null): Record<string, string> {
-  const result: Record<string, string> = {}
-  if (!schemaStr) return result
-  try {
-    const schema = JSON.parse(schemaStr)
-    const rules = Array.isArray(schema) ? schema : schema?.rule
-    if (!Array.isArray(rules)) return result
-    const walk = (arr: any[]) => {
-      for (const r of arr) {
-        if (!r || typeof r !== 'object') continue
-        if (r.field && r.type && typeof r.type === 'string') {
-          result[r.field] = r.type
-        }
-        if (Array.isArray(r.children)) walk(r.children)
-        if (Array.isArray(r.props?.rule)) walk(r.props.rule)
-        if (Array.isArray(r.props?.columns)) {
-          for (const col of r.props.columns) {
-            if (Array.isArray(col?.rule)) walk(col.rule)
-          }
-        }
-      }
-    }
-    walk(rules)
-  } catch { /* 解析失败忽略 */ }
-  return result
 }
 
 /** 覆盖策略 C：命中 key 全属性覆盖（保留 key），表单多出的 key 追加，当前列保留 */
@@ -1049,8 +995,6 @@ function toColumnConfigItem(c: any): ColumnConfigItem {
     hidden: false,
     sortable: true,
     filterable: true,
-    // 探测结果可能携带组件类型（如「从主表单覆盖」补充）：内部派生元数据，UI 不展示但透传保留
-    componentType: c.componentType ?? null,
     matchType: c.matchType ?? null,
   }
 }
@@ -1071,8 +1015,6 @@ function serializeColumnConfig(c: ColumnConfigItem): Record<string, any> {
   item.unique = !!c.unique
   item.indexed = !!c.indexed
   item.hidden = !!c.hidden
-  // 组件类型为内部派生元数据（列表渲染/筛选控件映射/排序推导消费），字段元数据 UI 不编辑，原值透传
-  if (c.componentType) item.componentType = c.componentType
   if (c.matchType) item.matchType = c.matchType
   return item
 }
@@ -1390,7 +1332,7 @@ function openView(row: DataSourceDTO) {
         where: sqlConfig.visual.where,
         orderBy: sqlConfig.visual.orderBy,
       }
-      // 生成 SQL 模板（保存后即运行时执行的查询，探测与运行时共用同一 SQL）
+      // 生成预览 SQL（前端简单拼接，后端 VisualSqlGenerator 会重新生成）
       params.query = generatePreviewSql()
     } else {
       // SQL 模式：直接使用手写 SQL
@@ -1408,84 +1350,28 @@ function openView(row: DataSourceDTO) {
     return params
   }
 
-  /** 可视化模式：前端生成预览 SQL（保存后即运行时执行的 SQL 模板，后端不再重新生成） */
+  /** 可视化模式：前端生成预览 SQL（简化版，后端会重新生成） */
   function generatePreviewSql(): string {
     const v = sqlConfig.visual
     if (!v.mainTable) return ''
-    const alias = v.mainAlias || 'm'
-    let sql = `SELECT ${buildSelectFragment(v.selectColumns)}`
-    sql += ` FROM ${v.mainTable} ${alias}`
+    let sql = `SELECT ${v.selectColumns.join(', ') || '*'}`
+    sql += ` FROM ${v.mainTable} ${v.mainAlias || 'm'}`
     for (const j of v.joins) {
       if (j.targetTable && j.on) {
         sql += ` ${j.joinType} ${j.targetTable} ${j.alias} ON ${j.on}`
       }
     }
-    // 租户过滤条件化（Task 10）：仅当主表真实存在 tenant_id 列时追加；
-    // 平台基础表（SYS_*/WF_* 等）无该列，硬拼会直接导致探测/运行时报 Column not found
-    const mainFields = sqlTableFields.value[v.mainTable]
-    const hasTenantCol = !!mainFields && mainFields.some((k) => (k || '').toLowerCase() === 'tenant_id')
-    const conditions: string[] = []
-    if (hasTenantCol) conditions.push(`${alias}.tenant_id = :tenantId`)
+    sql += ` WHERE ${v.mainAlias || 'm'}.tenant_id = :tenantId`
     for (const w of v.where) {
-      const frag = buildWhereFragment(w)
-      if (frag) conditions.push(frag)
-    }
-    if (conditions.length > 0) {
-      sql += ` WHERE ${conditions.join(' AND ')}`
+      if (w.column && w.op) {
+        sql += ` AND ${w.column} ${w.op} ?`
+      }
     }
     if (v.orderBy.length > 0) {
       const parts = v.orderBy.filter((o) => o.column).map((o) => `${o.column} ${o.order || 'ASC'}`)
       if (parts.length > 0) sql += ` ORDER BY ${parts.join(', ')}`
     }
     return sql
-  }
-
-  /** 选择列片段：输出列标签去重（重复时自动 AS 别名后缀 _1/_2，避免 H2 派生表 Duplicate column 运行时错误） */
-  function buildSelectFragment(selectColumns: string[]): string {
-    const parts: string[] = []
-    const seen = new Set<string>()
-    for (const raw of selectColumns || []) {
-      const col = (raw || '').trim()
-      if (!col) continue
-      if (/\s+AS\s+/i.test(col)) {
-        parts.push(col)
-        continue
-      }
-      const dot = col.lastIndexOf('.')
-      const label = (dot >= 0 ? col.slice(dot + 1) : col).replace(/[`"\[\]]/g, '')
-      const key = label.toLowerCase()
-      if (key && seen.has(key)) {
-        let i = 1
-        while (seen.has(`${key}_${i}`)) i++
-        parts.push(`${col} AS ${label}_${i}`)
-        seen.add(`${key}_${i}`)
-      } else {
-        if (key) seen.add(key)
-        parts.push(col)
-      }
-    }
-    return parts.join(', ') || '*'
-  }
-
-  /** WHERE 条件片段：内联配置值（裸 ? 在探测与运行时均无法绑定）；值为空时跳过该条件 */
-  function buildWhereFragment(w: { column: string; op: string; value: string }): string {
-    if (!w.column || !w.op) return ''
-    const raw = (w.value ?? '').trim()
-    if (!raw) return ''
-    if (w.op.toUpperCase() === 'IN') {
-      const items = raw.split(',').map((s) => s.trim()).filter((s) => s !== '')
-      if (items.length === 0) return ''
-      return `${w.column} IN (${items.map(sqlLiteral).join(', ')})`
-    }
-    if (w.op.toUpperCase() === 'LIKE') {
-      return `${w.column} LIKE '%${raw.replace(/'/g, "''")}%'`
-    }
-    return `${w.column} ${w.op} ${sqlLiteral(raw)}`
-  }
-
-  /** SQL 字面量：恒以字符串字面量输出（H2 严格类型下 VARCHAR 列 = 裸数字会报 Data conversion error；引号形式对数值/日期列均可隐式转换） */
-  function sqlLiteral(v: string): string {
-    return `'${v.replace(/'/g, "''")}'`
   }
 
   /** 校验并保存 */
@@ -1683,7 +1569,7 @@ function typeTagType(type: string): '' | 'primary' | 'success' | 'warning' | 'in
     API: 'warning',
     SQL: 'info',
   }
-  return map[type] || 'info'
+  return map[type] || ''
 }
 
 function typeLabel(type: string): string {
@@ -1724,7 +1610,7 @@ function statusTagType(status: string): '' | 'success' | 'warning' | 'info' {
     ENABLED: 'success',
     DISABLED: 'info',
   }
-  return map[status] || 'info'
+  return map[status] || ''
 }
 
 function statusLabel(status: string): string {

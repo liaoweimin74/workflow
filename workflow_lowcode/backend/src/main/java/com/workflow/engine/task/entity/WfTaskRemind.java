@@ -10,7 +10,8 @@ import java.time.LocalDateTime;
  * 每次催办操作写入一条记录，配合频率限制逻辑（默认 24h 内不可重复催办）。
  */
 @Entity
-@Table(name = "wf_task_remind")
+@Table(name = "wf_task_remind",
+       indexes = @Index(name = "idx_remind_task", columnList = "tenant_id, task_id"))
 public class WfTaskRemind {
 
     @Id

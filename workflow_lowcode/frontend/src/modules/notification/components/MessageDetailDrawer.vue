@@ -23,33 +23,13 @@
         <el-divider content-position="left">相关链接</el-divider>
         <el-link type="primary" :href="linkUrl" target="_blank">{{ linkUrl }}</el-link>
       </template>
-
-      <!-- 流程上下文：工作流消息且携带流程变量时展示（WorkflowNotifier 写入 content.variables） -->
-      <template v-if="processCtx">
-        <el-divider content-position="left">流程上下文</el-divider>
-        <el-descriptions :column="1" border size="small">
-          <el-descriptions-item label="流程名称">{{ ctxVal('processName') }}</el-descriptions-item>
-          <el-descriptions-item v-if="ctxVal('taskName')" label="任务节点">{{ ctxVal('taskName') }}</el-descriptions-item>
-          <el-descriptions-item v-if="ctxVal('initiatorName')" label="发起人">{{ ctxVal('initiatorName') }}</el-descriptions-item>
-          <el-descriptions-item v-if="ctxVal('businessKey')" label="业务单号">{{ ctxVal('businessKey') }}</el-descriptions-item>
-          <el-descriptions-item label="实例ID">
-            <span class="ctx-mono">{{ ctxRaw('processInstanceId') }}</span>
-          </el-descriptions-item>
-        </el-descriptions>
-        <div class="ctx-actions">
-          <el-button v-if="taskId" type="primary" size="small" :icon="Promotion" @click="goTask">去处理该任务</el-button>
-          <el-button v-if="instanceId" size="small" :icon="Share" @click="goTrack">查看流程跟踪</el-button>
-        </div>
-      </template>
     </div>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import MarkdownIt from 'markdown-it'
-import { Promotion, Share } from '@element-plus/icons-vue'
 import { getNotification, markAsRead } from '../api/notification'
 import type { Message, MessageCategory, MessagePriority } from '../types'
 
@@ -151,48 +131,6 @@ function formatDateTime(time: string) {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
-
-// ========== 流程上下文（工作流消息专用） ==========
-const router = useRouter()
-
-/** 工作流消息携带的流程变量（WorkflowNotifier 写入 content.variables）；非工作流消息返回 null */
-const processCtx = computed<Record<string, any> | null>(() => {
-  if (detail.value?.category !== 'WORKFLOW') return null
-  const vars = detail.value?.content?.variables
-  if (!vars || typeof vars !== 'object') return null
-  return vars as Record<string, any>
-})
-
-const taskId = computed(() => {
-  const v = processCtx.value?.taskId
-  return typeof v === 'string' && v && v !== '-' ? v : ''
-})
-
-const instanceId = computed(() => {
-  const v = processCtx.value?.processInstanceId
-  return typeof v === 'string' && v && v !== '-' ? v : ''
-})
-
-/** 上下文取值：过滤占位符 "-"，为空返回空串（模板层用 v-if 隐藏） */
-function ctxRaw(key: string): string {
-  const v = processCtx.value?.[key]
-  return typeof v === 'string' && v && v !== '-' ? v : ''
-}
-function ctxVal(key: string): string {
-  return ctxRaw(key) || '--'
-}
-
-/** 精确直达待办任务处理页（taskId 为发送时刻的活跃任务，可能已被处理） */
-function goTask() {
-  drawerVisible.value = false
-  router.push(`/process/todo/${taskId.value}`)
-}
-
-/** 打开流程跟踪页（流程图 + 节点轨迹） */
-function goTrack() {
-  drawerVisible.value = false
-  router.push(`/process/instance/${instanceId.value}`)
-}
 </script>
 
 <style scoped>
@@ -204,22 +142,5 @@ function goTrack() {
   font-size: 14px;
   line-height: 1.6;
   color: #303133;
-}
-
-/* 流程上下文操作区：右对齐按钮组，与描述列表留出间距 */
-.ctx-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-/* 实例 ID 等技术标识：等宽字体 + 可选中复制 */
-.ctx-mono {
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  color: #606266;
-  word-break: break-all;
-  user-select: all;
 }
 </style>

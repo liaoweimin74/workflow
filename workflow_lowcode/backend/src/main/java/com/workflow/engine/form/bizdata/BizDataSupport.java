@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
+import com.workflow.api.dto.JoinPreviewVO;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.ColumnConfig;
@@ -341,28 +342,66 @@ public class BizDataSupport {
         for (String key : ctx.columnKeys()) {
             columns.add(new JoinSqlGenerator.QueryColumn(key, "m." + key, typeOf.getOrDefault(key, ""), true, true));
         }
-        for (JoinSqlGenerator.JoinConfig j : joins) {
-            columns.add(new JoinSqlGenerator.QueryColumn(j.virtualKey(), j.alias() + "." + j.joinField(),
-                    resolveJoinColumnType(j), j.sortable(), j.filterable()));
+        for (JoinSqlGenerator.JoinGroup g : JoinSqlGenerator.group(joins)) {
+            for (JoinSqlGenerator.JoinConfig m : g.members()) {
+                List<ColumnConfig> targetCols = resolveJoinTargets(m);
+                columns.add(new JoinSqlGenerator.QueryColumn(m.virtualKey(), g.alias() + "." + m.joinField(),
+                        joinColumnType(targetCols, m.joinField()), m.sortable(), m.filterable()));
+                // 目标表单含 <joinField>_text 冗余文本列（dataPicker 引用列）→ 带出 <virtualKey>_text，供前端引用渲染显示文本
+                if (findJoinTarget(targetCols, m.joinField() + "_text") != null) {
+                    columns.add(new JoinSqlGenerator.QueryColumn(m.virtualKey() + "_text",
+                            g.alias() + "." + m.joinField() + "_text",
+                            joinColumnType(targetCols, m.joinField() + "_text"), false, false));
+                }
+            }
         }
         return columns;
     }
 
-    /** 虚拟列类型：目标表单 joinField 的列类型，找不到 fallback "VARCHAR"（查询与 metadata 两处一致） */
-    private String resolveJoinColumnType(JoinSqlGenerator.JoinConfig j) {
+    /**
+     * config 模式 SQL 预览：生成主表 + JOIN 虚拟列完整 SELECT（无筛选/无关键词/默认排序/不分页）。
+     * 校验 formKey 合法且主表存在（loadContext）；目标表单存在性由保存校验负责，预览不重复校验。
+     */
+    public JoinPreviewVO previewJoinSql(String formKey, List<JoinSqlGenerator.JoinConfig> joins) {
+        BizDataContext ctx = loadContext(formKey);
+        String tenantId = tenantProvider.getTenantId();
+        List<JoinSqlGenerator.QueryColumn> columns = buildJoinColumns(ctx, joins);
+        BizDataQueryBuilder.SqlAndParams select = JoinSqlGenerator.buildSelect(
+                ctx.tableName(), tenantId, joins, columns, Map.of(),
+                null, null, null, null, 0, 0);
+        return new JoinPreviewVO(select.sql(), select.params());
+    }
+
+    /** 目标表单列列表；解析失败/不存在 → 空列表（调用方统一按"查不到"处理）。 */
+    private List<ColumnConfig> resolveJoinTargets(JoinSqlGenerator.JoinConfig j) {
         try {
-            List<ColumnConfig> targetCols = formDefService.getBusinessColumnsByKey(j.targetFormKey());
-            if (targetCols != null) {
-                for (ColumnConfig c : targetCols) {
-                    if (j.joinField().equals(c.getKey())) {
-                        return c.getColumnType() == null ? "VARCHAR" : c.getColumnType().toUpperCase();
-                    }
-                }
-            }
+            List<ColumnConfig> target = formDefService.getBusinessColumnsByKey(j.targetFormKey());
+            return target == null ? List.of() : target;
         } catch (BusinessException ignored) {
-            // 目标表单不可解析时 fallback 类型
+            // 目标表单不可解析时回退
+            return List.of();
         }
-        return "VARCHAR";
+    }
+
+    /** 目标列查找：按 key 匹配；查不到返回 null。 */
+    private static ColumnConfig findJoinTarget(List<ColumnConfig> cols, String key) {
+        if (cols == null) {
+            return null;
+        }
+        for (ColumnConfig c : cols) {
+            if (key.equals(c.getKey())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /** 目标列 columnType：查不到 fallback "VARCHAR"（查询与 metadata 两处一致）。 */
+    private static String joinColumnType(List<ColumnConfig> cols, String key) {
+        ColumnConfig c = findJoinTarget(cols, key);
+        return c != null && c.getColumnType() != null && !c.getColumnType().isBlank()
+                ? c.getColumnType().toUpperCase()
+                : "VARCHAR";
     }
 
     /** sql 模式列映射：管理员声明列 → QueryColumn（ref=key，外层子查询输出列名） */
@@ -705,7 +744,7 @@ public class BizDataSupport {
         return new BizDataVO(String.valueOf(row.get("id")), data, version, createdAt, updatedAt);
     }
 
-    /** config 模式行映射：主表列（toVO 逻辑）+ 虚拟列（virtualKey → joinField 值） */
+    /** config 模式行映射：主表列（toVO 逻辑）+ 虚拟列（virtualKey → joinField 值，含 dataPicker 冗余 _text） */
     private BizDataVO toJoinVO(BizDataContext ctx, List<JoinSqlGenerator.JoinConfig> joins, Map<String, Object> row) {
         BizDataVO vo = toVO(ctx, row);
         Map<String, Object> data = vo.getData();
@@ -713,6 +752,10 @@ public class BizDataSupport {
             Object v = row.get(j.virtualKey());
             if (v != null) {
                 data.put(j.virtualKey(), v);
+            }
+            Object vt = row.get(j.virtualKey() + "_text");
+            if (vt != null) {
+                data.put(j.virtualKey() + "_text", vt);
             }
         }
         return vo;

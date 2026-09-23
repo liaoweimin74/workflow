@@ -396,12 +396,13 @@ async function loadTableCandidates() {
   try {
     const res = await dataSourceApi.getMetadata(binding.refId)
     const meta = res.data as any
-    const cols = (meta?.columns || []).filter((c: any) => !c.hidden)
+    const allCols = meta?.columns || []
+    const cols = allCols.filter((c: any) => !c.hidden)
     tableCandidates.value = cols
-    // 选项类组件主列（JSON）也可查询——查询按显示值 label 匹配 <key>_text 列（PageDataTable fetchApi 自动映射）
-    const ARRAY_QUERY_TYPES = ['checkbox', 'multiSelect', 'multiSelectPro', 'select', 'elTransfer', 'tree', 'elTreeSelect', 'cascader']
+    // 可筛：存在 <key>_text 冗余列（数组值/引用列，查询走 _text 显示列）或非 JSON/TEXT 且 indexed/短文本
+    const hasText = (key: string) => allCols.some((x: any) => x.key === `${key}_text`)
     const filterable = cols.filter((c: any) =>
-      ARRAY_QUERY_TYPES.includes(c.componentType) ||
+      hasText(c.key) ||
       (c.columnType !== 'JSON' && c.columnType !== 'TEXT' &&
         (c.indexed || (c.length != null && c.length <= 64) || c.columnType === 'VARCHAR')),
     )

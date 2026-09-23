@@ -754,7 +754,7 @@ function handlePreview() {
     ElMessage.warning('页面标识为空，无法预览')
     return
   }
-  window.open(`${import.meta.env.BASE_URL}page/${pageKey.value}?preview=true`, "_blank")
+  window.open(`/page/${pageKey.value}?preview=true`, '_blank')
 }
 
 function handleShowJson() {
@@ -786,7 +786,7 @@ function statusTagType(status: string): '' | 'success' | 'warning' | 'info' {
     PUBLISHED: 'success',
     ARCHIVED: 'info',
   }
-  return map[status] || 'info'
+  return map[status] || ''
 }
 
 function statusLabel(status: string): string {

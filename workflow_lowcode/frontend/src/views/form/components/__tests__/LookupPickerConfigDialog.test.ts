@@ -352,3 +352,64 @@ describe('LookupPickerConfigDialog — 页面内数据源下拉（数据源管�
     wrapper.unmount()
   })
 })
+
+describe('LookupPickerConfigDialog — 字段中文名与源表单 id', () => {
+  it('传入 currentFieldOptions 时 id 存储字段与回填字段候选显示中文名', async () => {
+    const wrapper = createWrapper({
+      currentFields: ['name', 'dept'],
+      currentFieldOptions: [
+        { field: 'name', title: '员工姓名' },
+        { field: 'dept', title: '所属部门' },
+      ],
+    })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.fieldOptions).toEqual([
+      { field: 'name', label: '员工姓名' },
+      { field: 'dept', label: '所属部门' },
+    ])
+    wrapper.unmount()
+  })
+
+  it('未传 currentFieldOptions 时回退显示字段 key', async () => {
+    const wrapper = createWrapper({ currentFields: ['name', 'dept'] })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.fieldOptions).toEqual([
+      { field: 'name', label: 'name' },
+      { field: 'dept', label: 'dept' },
+    ])
+    wrapper.unmount()
+  })
+
+  it('sourceColumns 在可见列基础上追加源表单主键 id', async () => {
+    const wrapper = createWrapper({
+      targetColumns: [
+        { key: 'name', label: '员工名称', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: false },
+        { key: 'dept', label: '部门', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: false },
+      ],
+    })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.sourceColumns.map((c: any) => c.key)).toEqual(['name', 'dept', 'id'])
+    expect(vm.sourceColumns[2].label).toBe('主键 id')
+    wrapper.unmount()
+  })
+
+  it('可见列已含 id 时不重复追加', async () => {
+    const wrapper = createWrapper({
+      targetColumns: [
+        { key: 'id', label: '主键', columnType: 'BIGINT', length: null, scale: null, required: false, unique: false, indexed: false },
+        { key: 'name', label: '员工名称', columnType: 'VARCHAR', length: 64, scale: null, required: false, unique: false, indexed: false },
+      ],
+    })
+    await wrapper.vm.$nextTick()
+    await wrapper.vm.$nextTick()
+    const vm = wrapper.vm as any
+    expect(vm.sourceColumns.map((c: any) => c.key)).toEqual(['id', 'name'])
+    wrapper.unmount()
+  })
+})

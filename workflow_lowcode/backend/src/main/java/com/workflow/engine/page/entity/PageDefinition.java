@@ -9,7 +9,12 @@ import java.time.LocalDateTime;
  * 发布不建表，仅绑定已发布的业务表单物理表。
  */
 @Entity
-@Table(name = "wf_page_def")
+@Table(name = "wf_page_def",
+       uniqueConstraints = @UniqueConstraint(name = "uk_page_def_tenant_key_version", columnNames = {"tenant_id", "`key`", "version"}),
+       indexes = {
+               @Index(name = "idx_page_def_tenant_form", columnList = "tenant_id, form_key"),
+               @Index(name = "idx_page_def_tenant_status", columnList = "tenant_id, status")
+       })
 public class PageDefinition {
 
     @Id

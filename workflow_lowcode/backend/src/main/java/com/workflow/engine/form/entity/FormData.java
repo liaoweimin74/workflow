@@ -8,7 +8,11 @@ import java.time.LocalDateTime;
  * 存储流程实例关联的表单数据 JSON，记录表单版本快照。
  */
 @Entity
-@Table(name = "wf_form_data")
+@Table(name = "wf_form_data",
+       indexes = {
+               @Index(name = "idx_form_data_def_proc", columnList = "form_def_id, process_instance_id"),
+               @Index(name = "idx_form_data_tenant_proc", columnList = "tenant_id, process_instance_id")
+       })
 public class FormData {
 
     @Id

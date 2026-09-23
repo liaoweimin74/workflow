@@ -26,7 +26,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SearchTable } from '@/components/business'
-import { Check, Reading, Message as MessageIcon, Delete, View, Promotion } from '@element-plus/icons-vue'
+import { Check, Reading, Message as MessageIcon, Delete, View } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, ToolbarButton } from '@/components/business/types'
 import { ElMessage } from 'element-plus'
 import MessageDetailDrawer from '../components/MessageDetailDrawer.vue'
@@ -124,12 +124,6 @@ const actionButtons: ActionButton[] = [
     onClick: openDetail,
   },
   {
-    label: '去处理', icon: Promotion, size: 'small',
-    // 仅工作流消息显示：优先直达具体任务处理页，其次流程跟踪页，旧消息兼底待办列表
-    show: (row: any) => row.category === 'WORKFLOW',
-    onClick: (row: any) => goToProcess(row),
-  },
-  {
     label: '切换已读状态', size: 'small',
     // 图标随已读状态切换：未读→Check（标记已读），已读→Message（标记未读）
     icon: (row: any) => (row.readStatus === 'PENDING' ? Check : MessageIcon),
@@ -197,25 +191,6 @@ function openDetail(row: Message) {
   detailRow.value = row
   detailId.value = row.id
   detailVisible.value = true
-}
-
-/**
- * 工作流消息精确跳转：
- * 1. content.variables.taskId → 任务处理页（新消息由后端写入，直达待办任务）
- * 2. content.variables.processInstanceId → 流程跟踪页（已办结/旧消息看流程轨迹）
- * 3. 兼底：待办列表（历史消息无流程变量）
- */
-function goToProcess(row: Message) {
-  const vars = (row.content as Record<string, any>)?.variables || {}
-  const taskId = typeof vars.taskId === 'string' && vars.taskId !== '-' ? vars.taskId : ''
-  const instanceId = typeof vars.processInstanceId === 'string' && vars.processInstanceId !== '-' ? vars.processInstanceId : ''
-  if (taskId) {
-    router.push(`/process/todo/${taskId}`)
-  } else if (instanceId) {
-    router.push(`/process/instance/${instanceId}`)
-  } else {
-    router.push({ name: 'ProcessTodo' })
-  }
 }
 
 /** 抽屉内消息从未读变为已读：同步行已读状态 + 刷新角标 */

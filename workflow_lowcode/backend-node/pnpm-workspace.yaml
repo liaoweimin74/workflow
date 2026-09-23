@@ -1,0 +1,11 @@
+# pnpm 11 起，原先写在 package.json 的 `pnpm` 字段的设置迁到这里。
+#
+# @swc/core 与 esbuild 都通过「平台可选依赖」提供原生绑定
+# （本机为 @swc/core-win32-x64-msvc），不依赖安装后脚本。
+# 其 postinstall 在受限沙箱中会因 pnpm 以管道捕获子进程输出而报 EPERM，
+# 而该脚本对功能并非必需 —— 因此显式拒绝执行，避免安装失败。
+#
+# 若在不受限环境中遇到原生绑定缺失，把对应项改为 true 后重装即可。
+allowBuilds:
+  '@swc/core': false
+  esbuild: false

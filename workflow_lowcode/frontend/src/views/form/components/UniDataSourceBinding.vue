@@ -1,6 +1,5 @@
 <template>
-  <!-- label 左对齐：label 文字与下方筛选区（且/或组、筛选行、添加按钮）统一从左缘起排 -->
-  <el-form label-width="110px" label-position="left" size="default">
+  <el-form label-width="110px" size="default">
     <el-form-item required>
       <template #label>
         <span class="label-with-tip">
@@ -15,22 +14,15 @@
       </el-select>
     </el-form-item>
     <el-divider content-position="left">组件级数据筛选</el-divider>
-    <!-- 分割线「组件级数据筛选」已表意，去掉冗余「筛选条件」label，筛选区内容占满整行 -->
-    <el-form-item class="filter-section">
+    <el-form-item label="筛选条件">
       <div style="width: 100%">
         <el-radio-group v-model="draft.filterLogic" size="small">
           <el-radio-button value="AND">所有（且）</el-radio-button>
           <el-radio-button value="OR">任一（或）</el-radio-button>
         </el-radio-group>
         <div v-for="(row, index) in draft.filterRows" :key="index" class="filter-row">
-          <el-select v-model="row.column" placeholder="目标列" style="width: 30%" filterable>
-            <!-- 列名统一展示：中文名(英文名)，取自对应数据源字段（与数据源绑定/动作总线一致） -->
-            <el-option
-              v-for="column in visibleColumns"
-              :key="column.key"
-              :label="columnOptionLabel(column)"
-              :value="column.key"
-            />
+          <el-select v-model="row.column" placeholder="目标列" style="width: 30%">
+            <el-option v-for="column in visibleColumns" :key="column.key" :label="column.label || column.key" :value="column.key" />
           </el-select>
           <el-select v-model="row.op" style="width: 22%">
             <el-option label="等于" value="eq" /><el-option label="不等于" value="ne" />
@@ -57,7 +49,6 @@ import { computed, reactive, ref, watch } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import { dataSourceApi } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
-import { columnOptionLabel } from '@/utils/columnOption'
 
 export interface UniDataSourceFilterRow {
   column: string
@@ -163,10 +154,6 @@ defineExpose({ value })
 </script>
 
 <style scoped>
-/* 筛选区无 label：抵消 el-form label-width 继承的内容缩进，与「数据源」label 及分割线左对齐 */
-.filter-section :deep(.el-form-item__content) {
-  margin-left: 0 !important;
-}
 .filter-row { display: flex; gap: 8px; margin-top: 8px; }
 .label-with-tip { display: inline-flex; align-items: center; }
 .tip-icon { margin-left: 4px; color: #909399; cursor: help; }

@@ -115,13 +115,7 @@ public class FormDefinitionService {
         formDef.setVersion(1);
         formDef.setStatus("DRAFT");
 
-        FormDefinition saved = formDefRepository.save(formDef);
-        
-        // 发布表单创建事件（含类型：BUSINESS → FORM 数据源；WORKFLOW → WORKFLOW 数据源）
-        eventPublisher.publishEvent(new FormCreatedEvent(this, saved.getId(), saved.getName(), saved.getKey(),
-                tenantId, saved.getType()));
-        
-        return saved;
+        return formDefRepository.save(formDef);
     }
 
     /**

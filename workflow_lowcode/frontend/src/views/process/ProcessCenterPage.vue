@@ -185,7 +185,7 @@ onMounted(() => {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--brand), var(--brand-bright));
+  background: linear-gradient(90deg, #5755ee, #46c9d6);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.25s ease;
@@ -197,8 +197,8 @@ onMounted(() => {
 }
 
 .process-card:hover {
-  box-shadow: 0 4px 16px rgb(var(--brand-rgb)/ 0.12);
-  border-color: var(--brand-bright);
+  box-shadow: 0 4px 16px rgba(87, 85, 238, 0.12);
+  border-color: #46c9d6;
   transform: translateY(-1px);
 }
 

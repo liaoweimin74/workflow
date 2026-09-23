@@ -4,6 +4,7 @@ import com.workflow.common.constant.GlobalConstant;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.framework.security.jwt.JwtTokenProvider;
+import com.workflow.framework.redis.RedisCache;
 import com.workflow.system.domain.dto.LoginRequest;
 import com.workflow.system.domain.entity.*;
 import com.workflow.system.domain.vo.LoginResponse;
@@ -11,11 +12,13 @@ import com.workflow.system.domain.vo.MenuTree;
 import com.workflow.system.domain.vo.UserInfo;
 import com.workflow.system.repository.*;
 import com.workflow.system.service.AuthService;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service

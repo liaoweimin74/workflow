@@ -9,7 +9,7 @@
         :fetch-api="fetchApi"
         :form-config="formConfig"
         :default-page-size="20"
-        :max-visible-buttons="6"
+        :max-visible-buttons="5"
       >
         <template #status="{ row }">
           <el-tag :type="statusTagType(row.status)" size="small">
@@ -17,7 +17,7 @@
           </el-tag>
         </template>
         <template #type="{ row }">
-          <el-tag :type="row.type === 'BUSINESS' ? 'primary' : 'info'" size="small">
+          <el-tag :type="row.type === 'BUSINESS' ? 'primary' : ''" size="small">
             {{ row.type === 'BUSINESS' ? '业务' : '工作流' }}
           </el-tag>
         </template>
@@ -64,42 +64,6 @@
         <el-button @click="versionDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
-
-    <!-- 复制表单弹窗（可改变类型：工作流表单/业务表单） -->
-    <el-dialog v-model="copyDialogVisible" title="复制表单" width="520px">
-      <el-form label-width="90px" @submit.prevent>
-        <el-form-item label="源表单">
-          <el-tag size="small" :type="copySource?.type === 'BUSINESS' ? 'primary' : 'info'">
-            {{ copySource?.type === 'BUSINESS' ? '业务' : '工作流' }}
-          </el-tag>
-          <span style="margin-left: 8px">{{ copySource?.name }}</span>
-        </el-form-item>
-        <el-form-item label="新名称" required>
-          <el-input v-model="copyForm.name" placeholder="新表单名称" maxlength="50" />
-        </el-form-item>
-        <el-form-item label="新标识" required>
-          <el-input v-model="copyForm.key" placeholder="小写字母/数字/下划线，字母开头" />
-        </el-form-item>
-        <el-form-item label="表单类型" required>
-          <el-radio-group v-model="copyForm.type">
-            <el-radio-button value="WORKFLOW">工作流表单</el-radio-button>
-            <el-radio-button value="BUSINESS">业务表单</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-alert
-          v-if="copyForm.type !== copySource?.type"
-          type="warning"
-          :closable="false"
-          show-icon
-          :title="copyTypeChangeTip"
-          style="margin-bottom: 4px"
-        />
-      </el-form>
-      <template #footer>
-        <el-button @click="copyDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="copying" @click="confirmCopy">复制</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -109,7 +73,7 @@ defineOptions({ name: 'FormList' })
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus as _Plus, EditPen, Grid, Promotion, Clock, Delete, CopyDocument } from '@element-plus/icons-vue'
+import { Plus as _Plus, EditPen, Grid, Promotion, Clock, Delete } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { formApi, type FormDefinitionDTO, type FormVersionDTO } from '@/api/form'
@@ -279,15 +243,6 @@ const actionButtons: ActionButton[] = [
     },
   },
   {
-    label: '复制',
-    icon: CopyDocument,
-    size: 'small',
-    permission: 'form:create',
-    onClick: (row: any) => {
-      openCopyDialog(row as FormDefinitionDTO)
-    },
-  },
-  {
     label: '删除',
     icon: Delete,
     size: 'small',
@@ -320,56 +275,6 @@ const versionDialogVisible = ref(false)
 const versionLoading = ref(false)
 const versionList = ref<FormVersionDTO[]>([])
 
-// ========== 复制表单（可改变类型） ==========
-const copyDialogVisible = ref(false)
-const copying = ref(false)
-const copySource = ref<FormDefinitionDTO | null>(null)
-const copyForm = reactive({ name: '', key: '', type: 'WORKFLOW' })
-
-/** 类型变更提示：发布时按新类型校验 */
-const copyTypeChangeTip = computed(() => {
-  if (!copySource.value) return ''
-  if (copyForm.type === 'BUSINESS') {
-    return copySource.value.type === 'BUSINESS'
-      ? ''
-      : '工作流表单 → 业务表单：将复制表单设计；发布前需在表单设计器配置列映射（column_config），否则发布校验不通过'
-  }
-  return '业务表单 → 工作流表单：列映射不会被继承，发布时仅校验表单设计合法性'
-})
-
-function openCopyDialog(row: FormDefinitionDTO) {
-  copySource.value = row
-  copyForm.name = `${row.name}-副本`
-  // 历史表单 key 可能含连字符（如 leave-form），新 key 校验仅允许 [a-z0-9_]，需先清洗
-  copyForm.key = `${row.key.replace(/[^a-z0-9_]/g, '_')}_copy`
-  copyForm.type = row.type === 'BUSINESS' ? 'BUSINESS' : 'WORKFLOW'
-  copyDialogVisible.value = true
-}
-
-async function confirmCopy() {
-  const src = copySource.value
-  if (!src) return
-  if (!copyForm.name.trim()) {
-    ElMessage.warning('请输入新表单名称')
-    return
-  }
-  if (!/^[a-z][a-z0-9_]*$/.test(copyForm.key)) {
-    ElMessage.warning('表单标识只能包含小写字母、数字、下划线，且以字母开头')
-    return
-  }
-  copying.value = true
-  try {
-    await formApi.copyFormDefinition(src.id, { name: copyForm.name.trim(), key: copyForm.key, type: copyForm.type })
-    ElMessage.success('复制成功，新表单为草稿状态')
-    copyDialogVisible.value = false
-    tableRef.value?.fetchList()
-  } catch {
-    // http 拦截器已弹出错误消息（如同名标识已存在）
-  } finally {
-    copying.value = false
-  }
-}
-
 // ========== 工具函数 ==========
 function statusTagType(status: string): '' | 'success' | 'warning' | 'info' | 'danger' {
   const map: Record<string, '' | 'success' | 'warning' | 'info' | 'danger'> = {
@@ -377,7 +282,7 @@ function statusTagType(status: string): '' | 'success' | 'warning' | 'info' | 'd
     PUBLISHED: 'success',
     ARCHIVED: 'info',
   }
-  return map[status] || 'info'
+  return map[status] || ''
 }
 
 function statusLabel(status: string): string {

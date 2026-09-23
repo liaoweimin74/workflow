@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 /**
  * sql 模式 SQL 模板引擎。
  * <p>
- * 管理员 SQL 模板（可选包含 {@code :tenantId} 占位符）作为子查询被包裹为分页查询：
+ * 管理员 SQL 模板（必须包含 {@code :tenantId} 占位符）作为子查询被包裹为分页查询：
  * <pre>
  *   SELECT * FROM (&lt;管理员SQL&gt;) _qs {白名单筛选} ORDER BY &lt;声明列&gt; LIMIT ? OFFSET ?
  *   SELECT COUNT(*) FROM (&lt;管理员SQL&gt;) _qs {白名单筛选}
@@ -33,12 +33,8 @@ public final class SqlTemplateEngine {
     private SqlTemplateEngine() {}
 
     /**
-     * 校验 SQL 模板：仅允许 SELECT、columns 非空且至少一个可排序列、
+     * 校验 SQL 模板：仅允许 SELECT、必须含 :tenantId、columns 非空且至少一个可排序列、
      * 每个声明列 key 必须出现在 SELECT 输出列（或别名）中。
-     * <p>
-     * Task 10：{@code :tenantId} 改为可选——平台基础表（SYS_、WF_、ACT_ 等前缀表）无 tenant_id 列，
-     * 硬校验导致此类表的 SQL 模板无法通过保存与查询；模板包含 :tenantId 时运行时照常绑定租户过滤，
-     * 不包含则跳过租户过滤（管理员显式 SQL 自行负责查询语义）。
      *
      * @param query   管理员 SQL 模板
      * @param columns 声明列映射（key 需与 SELECT 输出列/别名匹配）
@@ -49,7 +45,7 @@ public final class SqlTemplateEngine {
 
     /**
      * 校验 SQL 模板（含参数白名单声明）：模板中每个非 :tenantId 占位符必须命中参数白名单，
-     * 白名单参数名必须是合法标识符。无参数白名单时模板不得包含其他未声明占位符。
+     * 白名单参数名必须是合法标识符。无参数白名单时模板不得包含其他占位符。
      *
      * @param query          管理员 SQL 模板
      * @param columns        声明列映射
@@ -64,7 +60,9 @@ public final class SqlTemplateEngine {
         if (!trimmed.regionMatches(true, 0, "SELECT", 0, 6)) {
             throw new IllegalArgumentException("仅允许 SELECT 查询");
         }
-        // :tenantId 可选（Task 10）：包含则运行时绑定租户过滤；平台基础表无此列时不强制
+        if (!query.contains(":tenantId")) {
+            throw new IllegalArgumentException("SQL 模板必须包含 :tenantId 占位符");
+        }
         if (columns == null || columns.isEmpty()) {
             throw new IllegalArgumentException("columns 不能为空");
         }
@@ -94,9 +92,9 @@ public final class SqlTemplateEngine {
 
     /**
      * 包裹查询：替换占位符绑定参数，注入白名单筛选/排序，派生行查询与 COUNT 查询。
-     * 模板除 :tenantId 外不得包含其他未声明占位符（无参数白名单场景）。
+     * 模板除 :tenantId 外不得包含其他占位符（无参数白名单场景）。
      *
-     * @param query   管理员 SQL 模板（:tenantId 可选）
+     * @param query   管理员 SQL 模板（含 :tenantId）
      * @param tenantId 当前租户
      * @param columns 声明列映射
      * @param filters 字段筛选（结构化 {logic,conditions} 或旧格式 {col:value}）
@@ -115,7 +113,7 @@ public final class SqlTemplateEngine {
      * 包裹查询（含参数透传）：命中 declaredParams 白名单的运行时参数值绑定到对应 :paramName 占位符，
      * 未声明占位符 / 白名单内缺值 / 非法键一律拒绝。
      *
-     * @param query          管理员 SQL 模板（:tenantId 可选）
+     * @param query          管理员 SQL 模板（含 :tenantId）
      * @param tenantId       当前租户
      * @param columns        声明列映射
      * @param filters        字段筛选
@@ -184,7 +182,7 @@ public final class SqlTemplateEngine {
         return false;
     }
 
-    /** 替换全部 :占位符；:tenantId 存在时绑定租户（可选），白名单参数绑定运行时值，其余占位符/缺值拒绝 */
+    /** 替换全部 :占位符；:tenantId 绑定租户，白名单参数绑定运行时值，其余占位符/缺值拒绝 */
     private static String bindPlaceholders(String query, String tenantId,
                                            List<String> declaredParams, Map<String, Object> runtimeParams,
                                            List<Object> params) {
@@ -214,7 +212,7 @@ public final class SqlTemplateEngine {
         return sb.toString();
     }
 
-    /** 提取模板中全部 :占位符（:tenantId 可选出现） */
+    /** 提取模板中全部 :占位符（含 :tenantId） */
     static List<String> extractPlaceholders(String sql) {
         List<String> out = new ArrayList<>();
         Matcher m = PLACEHOLDER.matcher(sql);

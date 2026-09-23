@@ -9,8 +9,7 @@ public abstract class BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 数据库级默认值 0：保证 Flyway 种子数据省略该列时也能插入（H2 不会像 MySQL 那样填隐式默认值） */
-    @Column(name = "is_deleted", nullable = false, columnDefinition = "integer default 0")
+    @Column(name = "is_deleted", nullable = false)
     private Integer isDeleted = 0;
 
     @Column(name = "created_by", length = 50)

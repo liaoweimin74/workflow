@@ -26,7 +26,7 @@ const searchFields: SearchField[] = [
   { type: 'input', label: '角色名称', prop: 'roleName', placeholder: '输入角色名称' },
   {
     type: 'select', label: '状态', prop: 'status', placeholder: '选择状态',
-    options: [{ label: '全部', value: '' }, { label: '启用', value: 1 }, { label: '停用', value: 0 }],
+    options: [{ label: '全部', value: undefined }, { label: '启用', value: 1 }, { label: '停用', value: 0 }],
     style: 'width: 120px',
   },
 ]

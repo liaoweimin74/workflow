@@ -7,10 +7,12 @@ import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick, Check } from '
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
+import { useAiAssistantStore } from '@/stores/aiAssistantStore'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const aiStore = useAiAssistantStore()
 
 const collapsed = ref(false)
 // 暗色偏好持久化（Task 16）：优先读用户选择，从未选择时跟随系统
@@ -253,8 +255,19 @@ onUnmounted(() => {
         </el-breadcrumb>
       </div>
 
-      <!-- 右侧：消息通知 + 暗色切换 + 用户区 -->
+      <!-- 右侧：AI 助手开关 + 消息通知 + 外观切换 + 用户区 -->
       <div class="flex items-center gap-3">
+        <!-- AI 助手开关（远程线独有）：激活色随风格变量 -->
+        <button
+          @click="aiStore.toggle()"
+          :title="aiStore.visible ? '隐藏 AI 助手' : '显示 AI 助手'"
+          class="w-8 h-8 flex items-center justify-center rounded-md transition-colors"
+          :class="aiStore.visible
+            ? 'text-[var(--brand)] hover:bg-[rgb(var(--brand-soft-rgb)/0.1)]'
+            : 'text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e]'"
+        >
+          <el-icon :size="18"><MagicStick /></el-icon>
+        </button>
         <NotificationBell />
         <!-- 外观切换（单入口下拉，Task 18-P）：界面风格（青墨/经典）× 明暗模式（暗色/亮色） -->
         <el-popover trigger="click" placement="bottom-end" :width="196" popper-class="ui-style-popper">

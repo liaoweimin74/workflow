@@ -141,7 +141,7 @@ const actionButtons: ActionButton[] = [
 </script>
 
 <template>
-  <div>
+  <div class="channel-config-page">
     <SearchTable
       ref="tableRef"
       :columns="columns"
@@ -182,3 +182,16 @@ const actionButtons: ActionButton[] = [
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+/* 对齐用户管理布局标准：根容器撑满 main，SearchTable 填满内容区，底部留白由 main 的 p-4 唯一决定 */
+.channel-config-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.channel-config-page > :deep(.search-table) {
+  flex: 1;
+  min-height: 0;
+}
+</style>

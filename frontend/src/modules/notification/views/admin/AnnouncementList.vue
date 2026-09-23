@@ -129,7 +129,7 @@ const tableRef = ref()
 </script>
 
 <template>
-  <div>
+  <div class="announcement-list-page">
     <SearchTable
       ref="tableRef"
       :search-fields="searchFields"
@@ -187,6 +187,17 @@ const tableRef = ref()
 </template>
 
 <style scoped>
+/* 对齐用户管理布局标准：根容器撑满 main，SearchTable 填满内容区，底部留白由 main 的 p-4 唯一决定 */
+.announcement-list-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.announcement-list-page > :deep(.search-table) {
+  flex: 1;
+  min-height: 0;
+}
+
 .announcement-detail {
   min-height: 120px;
 }

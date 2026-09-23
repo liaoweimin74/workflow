@@ -301,3 +301,24 @@ function formatDate(dateStr: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 </script>
+
+<style scoped>
+/* 对齐用户管理布局标准：根容器撑满 main，卡片与内部 SearchTable 逐级接管剩余高度，
+   底部留白由 main 的 p-4 唯一决定（原页面高度塌陷，底部空白可达 150px） */
+.form-list-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.form-list-page > :deep(.el-card) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.form-list-page > :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+</style>

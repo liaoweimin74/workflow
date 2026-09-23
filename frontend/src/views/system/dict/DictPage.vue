@@ -159,7 +159,9 @@ const dataActionButtons: ActionButton[] = [
 </script>
 
 <template>
-  <div style="display: flex; gap: 12px; height: calc(100vh - 140px)">
+  <!-- 高度用 100% 撑满 main（p-4 唯一决定四周留白），对齐用户管理 SearchTable 的布局标准；
+       之前的 calc(100vh - 140px) 是硬编码视口高度，顶栏/页签高度变化时底部留白会漂移 -->
+  <div style="display: flex; gap: 12px; height: 100%">
     <!-- 左侧：字典类型 -->
     <el-card style="width: 520px; flex-shrink: 0">
       <template #header><span style="font-weight: bold; font-size: 14px">字典类型</span></template>

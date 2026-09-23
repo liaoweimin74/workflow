@@ -328,6 +328,35 @@ function instanceStatusTagType(status: string): 'primary' | 'warning' | 'info' {
 
 <style scoped>
 .process-todo-page {
-  padding: 16px;
+  /* 对齐用户管理布局标准：高度撑满 main，底部留白由 main 的 p-4 唯一决定 */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 卡片→页签→表格逐级接管剩余高度，让 SearchTable 像用户管理一样填满内容区 */
+.process-todo-page > :deep(.el-card) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.process-todo-page > :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.process-todo-page :deep(.el-tabs) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.process-todo-page :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.process-todo-page :deep(.el-tab-pane) {
+  height: 100%;
 }
 </style>

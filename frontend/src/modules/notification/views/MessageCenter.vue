@@ -251,8 +251,7 @@ function formatDateTime(time: string) {
 
 <style scoped>
 .message-center-page {
+  /* 对齐用户管理布局标准：高度撑满 main，留白全部交给 main 的 p-4（原自带 16px padding 会叠加成 32px） */
   height: 100%;
-  padding: 16px;
-  box-sizing: border-box;
 }
 </style>

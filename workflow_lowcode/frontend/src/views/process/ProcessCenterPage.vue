@@ -149,7 +149,27 @@ onMounted(() => {
 
 <style scoped>
 .process-center-page {
-  padding: 16px;
+  /* 对齐用户管理布局标准：高度撑满 main，底部留白由 main 的 p-4 唯一决定
+     （原自带 16px padding 会叠加成 32px 且导致内容溢出滚动） */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 搜索卡片固定高度，列表卡片接管剩余高度；空态/少量内容时底边也对齐标准位置 */
+.process-center-page > :deep(.el-card) {
+  flex-shrink: 0;
+}
+.process-center-page > :deep(.el-card:last-child) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.process-center-page > :deep(.el-card:last-child > .el-card__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .search-bar {

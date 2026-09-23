@@ -937,3 +937,25 @@ Work Log:
 Stage Summary:
 - 工具栏三图标语义现在互不混淆：魔法棒=AI助手、铃铛=通知、T恤=风格切换
 - ShirtIcon 可复用（components/icons/），后续若需要更多自定义图标可按此模式扩展
+
+---
+Task ID: 37
+Agent: 主控（Z.ai Code）
+Task: 用户指令「字典管理/流程管理全部菜单/表单列表/页面列表/消息中心/渠道配置/公告管理的内容区下边距与用户管理不一致，以用户管理内容区布局为标准修改」
+
+Work Log:
+- 【量化基线】AdminLayout main 统一 p-4，标准=用户管理（SearchTable 根 height:100% 撑满）→ 实测底边距 14px（el-table 边框扣除 2px）；用 eval 注入 router.push + getBoundingClientRect 逐页测量，三类根因：
+  ① calc(100vh-140px) 硬编码视口高度：字典管理/流程定义（底边距 38.5px，随顶栏高度漂移）
+  ② 根容器自带 padding:16px 与 main p-4 叠加：流程中心（且内容溢出滚动 scrolls:true）/待办处理（87.5px）/消息中心（30px）
+  ③ 父级无确定高度致 SearchTable height:100% 塌陷：表单列表（149.5px）/页面列表（175.5px）/渠道配置（122.5px）/公告管理（217.5px）
+- 【修复①】DictPage/ProcessListPage 根 style calc → height:100%（flex 拉伸卡片底边对齐）
+- 【修复②】ProcessCenter/ProcessTodo 根删 padding:16px；MessageCenter 删 padding+box-sizing（保留 height:100%）
+- 【修复③】FormListPage（新增 style 块）/PageListPage/ProcessTodoPage/ProcessCenter 补「根 flex column height:100% → el-card flex:1 → el-card__body flex:1 overflow:hidden/auto」逐级接管高度链；ChannelConfig/AnnouncementList 裸 div 补 class + 撑满链；待办处理额外打通 el-tabs__content/el-tab-pane 高度使页签内表格真正填满
+- 【浏览器回归】agent-browser 全量复测 10 页面（标准+9 修复）contentGap **全部 14px**、无滚动异常；截图字典管理/流程定义目检卡片底边对齐；dev.log 无编译错误
+- 【类型检查】vue-tsc 全量跑：错误均在未触碰的既有代码（form-create Rule 类型、PageRenderer 等），9 个修改文件零新增
+- 【入库】commit 2161931 已 push（33fb9fb..2161931）
+
+Stage Summary:
+- 全平台 10 个列表/管理页内容区布局统一：底边距恒等 14px（由 main p-4 唯一决定），空态/少量数据时不再出现大空白，流程中心溢出滚动一并消除
+- 布局规约沉淀：页面根容器禁止自带 padding、禁止 calc(100vh-X) 硬编码，统一 height:100% + flex 链；后续新页面按此标准
+- 备忘：测量用的「404」页签是深链刷新触发动态路由丢失所致（既有行为），登录后从菜单进入不受影响

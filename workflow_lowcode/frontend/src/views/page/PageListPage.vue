@@ -407,6 +407,24 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 对齐用户管理布局标准：根容器撑满 main，卡片与内部 SearchTable 逐级接管剩余高度 */
+.page-list-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.page-list-page > :deep(.el-card) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.page-list-page > :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .mounted-menus {
   margin-bottom: 12px;
 }

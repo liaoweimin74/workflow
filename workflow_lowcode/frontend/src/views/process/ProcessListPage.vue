@@ -1,5 +1,6 @@
 <template>
-  <div class="process-list-page" style="display: flex; gap: 12px; height: calc(100vh - 140px)">
+  <!-- 高度用 100% 撑满 main（p-4 唯一决定四周留白），对齐用户管理 SearchTable 的布局标准 -->
+  <div class="process-list-page" style="display: flex; gap: 12px; height: 100%">
     <!-- 左侧：流程分类（可折叠） -->
     <el-card class="category-card" :style="categoryCardStyle" style="flex-shrink: 0; overflow: hidden">
       <template #header>

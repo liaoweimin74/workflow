@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick } from '@element-plus/icons-vue'
+import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick, Check } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
@@ -15,11 +15,40 @@ const authStore = useAuthStore()
 const aiStore = useAiAssistantStore()
 
 const collapsed = ref(false)
-const isDark = ref(false)
+// 暗色偏好持久化（Task 16）：优先读用户选择，从未选择时跟随系统
+const isDark = ref(localStorage.getItem('theme-dark') === '1')
 
-function toggleDark() {
-  isDark.value = !isDark.value
+function applyDark() {
   document.documentElement.classList.toggle('dark', isDark.value)
+}
+
+function setDark(v: boolean) {
+  isDark.value = v
+  localStorage.setItem('theme-dark', v ? '1' : '0')
+  applyDark()
+}
+
+// 风格主题偏好持久化（Task 17-F 双主题）：verdant 青墨 / classic 经典靓蓝
+// style.css 按 html[data-theme] 换值；index.html 内联脚本首帧预置，避免闪烁
+const uiTheme = ref<'verdant' | 'classic'>(
+  (localStorage.getItem('portal-ui-theme') as 'classic') === 'classic' ? 'classic' : 'verdant',
+)
+
+function applyUiTheme() {
+  document.documentElement.dataset.theme = uiTheme.value
+  localStorage.setItem('portal-ui-theme', uiTheme.value)
+}
+
+function setUiTheme(t: 'verdant' | 'classic') {
+  uiTheme.value = t
+  applyUiTheme()
+}
+
+function onStorage(e: StorageEvent) {
+  if (e.key === 'portal-ui-theme' && (e.newValue === 'classic' || e.newValue === 'verdant')) {
+    uiTheme.value = e.newValue
+    document.documentElement.dataset.theme = uiTheme.value
+  }
 }
 /** 页签集合：path 唯一；name=路由 name（与组件 defineOptions name 一致，供 keep-alive include 匹配） */
 const tags = ref<{ path: string; title: string; locked?: boolean; name?: string }[]>([])
@@ -181,32 +210,41 @@ const breadcrumbs = computed(() => {
 
 onMounted(() => {
   document.addEventListener('click', closeContextMenu)
+  // 恢复暗色偏好；从未选择过且系统为深色时跟随系统
+  if (localStorage.getItem('theme-dark') === null && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    isDark.value = true
+  }
+  applyDark()
+  // 风格主题：同步 html[data-theme]（防闪兜底）+ 监听多标签页同步
+  applyUiTheme()
+  window.addEventListener('storage', onStorage)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
+  window.removeEventListener('storage', onStorage)
 })
 </script>
 
 <template>
   <div class="flex flex-col h-screen min-w-[1024px] max-w-[1920px] mx-auto bg-transparent dark:bg-transparent">
-    <!-- ====== 顶部标题栏（整行） ====== -->
-    <header class="h-14 flex items-center justify-between px-4 border-b border-[#e9edfa] bg-white dark:bg-[#161b36] dark:border-[#2a3054] shrink-0">
+    <!-- ====== 顶部标题栏（整行，玻璃感） ====== -->
+    <header class="h-14 flex items-center justify-between px-4 border-b border-[#e6e9e4] bg-white/85 dark:bg-[#181d1b]/85 dark:border-[#2b332e] backdrop-blur-md shrink-0 z-20">
       <!-- 左侧：折叠按钮 + Logo + 面包屑 -->
       <div class="flex items-center gap-4">
         <button
           @click="toggleCollapsed"
-          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] transition-colors shrink-0"
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors shrink-0"
         >
           <el-icon :size="18"><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
         </button>
         <div class="flex items-center gap-2 shrink-0">
-          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#5755ee] to-[#46c9d6] flex items-center justify-center shadow-sm">
-            <span class="text-white text-sm font-bold">MB</span>
+          <div class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-(--brand) to-(--brand-bright) flex items-center justify-center shadow-[0_2px_8px_rgb(var(--brand-rgb)/0.35)]">
+            <span class="text-white text-sm font-bold tracking-tight">MB</span>
           </div>
-          <span class="text-base font-semibold text-gray-800 dark:text-gray-100">工作流管理系统</span>
+          <span class="text-base font-semibold tracking-tight text-gray-800 dark:text-gray-100">工作流管理系统</span>
         </div>
-        <div class="w-px h-5 bg-gray-200" />
+        <div class="w-px h-5 bg-gray-200 dark:bg-[#333d37]" />
         <el-breadcrumb separator="/">
           <el-breadcrumb-item v-for="(b, i) in breadcrumbs" :key="b.path">
             <span class="text-gray-500 text-sm flex items-center gap-1">
@@ -217,25 +255,70 @@ onUnmounted(() => {
         </el-breadcrumb>
       </div>
 
-      <!-- 右侧：AI 助手开关 + 消息通知 + 暗色切换 + 用户区 -->
+      <!-- 右侧：AI 助手开关 + 消息通知 + 外观切换 + 用户区 -->
       <div class="flex items-center gap-3">
+        <!-- AI 助手开关（远程线独有）：激活色随风格变量 -->
         <button
           @click="aiStore.toggle()"
           :title="aiStore.visible ? '隐藏 AI 助手' : '显示 AI 助手'"
           class="w-8 h-8 flex items-center justify-center rounded-md transition-colors"
           :class="aiStore.visible
-            ? 'text-[#5755ee] hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]'
-            : 'text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]'"
+            ? 'text-[var(--brand)] hover:bg-[rgb(var(--brand-soft-rgb)/0.1)]'
+            : 'text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e]'"
         >
           <el-icon :size="18"><MagicStick /></el-icon>
         </button>
         <NotificationBell />
-        <button
-          @click="toggleDark"
-          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] transition-colors"
-        >
-          <el-icon :size="18"><Sunny v-if="isDark" /><Moon v-else /></el-icon>
-        </button>
+        <!-- 外观切换（单入口下拉，Task 18-P）：界面风格（青墨/经典）× 明暗模式（暗色/亮色） -->
+        <el-popover trigger="click" placement="bottom-end" :width="196" popper-class="ui-style-popper">
+          <template #reference>
+            <button
+              class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] transition-colors"
+              :title="`外观：${uiTheme === 'verdant' ? '青墨' : '经典'} · ${isDark ? '暗色' : '亮色'}`"
+              aria-label="切换界面风格与明暗模式"
+            >
+              <el-icon :size="18"><MagicStick /></el-icon>
+              <span
+                class="w-1.5 h-1.5 rounded-full ml-0.5 shrink-0"
+                :style="{ background: uiTheme === 'verdant' ? '#2dd4bf' : '#5755ee' }"
+              />
+            </button>
+          </template>
+          <div class="-mx-1">
+            <p class="text-[11px] font-medium text-gray-400 dark:text-gray-500 mb-1 tracking-wide px-2">界面风格</p>
+            <button
+              v-for="t in (['verdant', 'classic'] as const)"
+              :key="t"
+              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-left"
+              :class="uiTheme === t
+                ? 'bg-[rgb(var(--brand-soft-rgb)/0.12)] text-[var(--brand)] font-medium'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#262e29]'"
+              @click="setUiTheme(t)"
+            >
+              <span
+                class="w-2 h-2 rounded-full shrink-0"
+                :style="{ background: t === 'verdant' ? '#2dd4bf' : '#5755ee' }"
+              />
+              {{ t === 'verdant' ? '青墨 · 翡翠青' : '经典 · 靛蓝' }}
+              <el-icon v-if="uiTheme === t" :size="14" class="ml-auto"><Check /></el-icon>
+            </button>
+            <el-divider style="margin: 6px 0" />
+            <p class="text-[11px] font-medium text-gray-400 dark:text-gray-500 mb-1 tracking-wide px-2">明暗模式</p>
+            <button
+              v-for="m in ([true, false] as const)"
+              :key="m ? 'dark' : 'light'"
+              class="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors text-left"
+              :class="isDark === m
+                ? 'bg-[rgb(var(--brand-soft-rgb)/0.12)] text-[var(--brand)] font-medium'
+                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#262e29]'"
+              @click="setDark(m)"
+            >
+              <el-icon :size="14"><Moon v-if="m" /><Sunny v-else /></el-icon>
+              {{ m ? '暗色模式' : '亮色模式' }}
+              <el-icon v-if="isDark === m" :size="14" class="ml-auto"><Check /></el-icon>
+            </button>
+          </div>
+        </el-popover>
         <el-dropdown trigger="click">
         <div class="flex items-center gap-2 cursor-pointer select-none">
           <el-avatar :size="28" icon="UserFilled" class="!bg-industrial-100 !text-industrial-600" />
@@ -253,19 +336,19 @@ onUnmounted(() => {
 
     <!-- ====== 下方：菜单 + 内容 ====== -->
     <div class="flex flex-1 min-h-0">
-      <!-- 左侧菜单 -->
+      <!-- 左侧菜单：深墨松绿（明暗两态统一，形成纵向对比层次） -->
       <aside
         :class="collapsed ? 'w-16' : 'w-56'"
-        class="flex flex-col bg-[#eef0fc] border-r border-[#e9edfa] dark:bg-[#161b36] dark:border-[#2a3054] transition-all duration-300 shrink-0"
+        class="sidebar-ink flex flex-col bg-(--ink) border-r border-(--ink-border) transition-all duration-300 shrink-0"
       >
-        <div class="flex-1 overflow-y-auto overflow-x-hidden py-2">
+        <div class="flex-1 overflow-y-auto overflow-x-hidden py-3">
           <el-menu
             :collapse="collapsed"
             :default-active="activeMenu"
             router
             background-color="transparent"
-            text-color="#4b5563"
-            active-text-color="#5755ee"
+            text-color="#a7b5ad"
+            active-text-color="var(--brand-glow)"
             style="border-right: none"
             @select="handleMenuSelect"
           >
@@ -285,28 +368,34 @@ onUnmounted(() => {
 
       <!-- 右侧内容区 -->
       <div class="flex-1 flex flex-col min-w-0">
-        <!-- 页签栏 -->
-        <div class="h-10 flex items-center gap-0 px-3 border-b border-[#e9edfa] bg-[#eef0fc] dark:bg-[#161b36] dark:border-[#2a3054] overflow-x-auto shrink-0">
+        <!-- 页签栏（胶囊式页签） -->
+        <div class="min-h-11 flex items-center gap-1.5 px-3 py-1.5 border-b border-[#e6e9e4] bg-white/60 dark:bg-[#181d1b]/70 dark:border-[#2b332e] backdrop-blur-sm overflow-x-auto shrink-0">
           <draggable
             v-model="tags"
             item-key="path"
             :animation="200"
             :filter="'.no-drag'"
             @end="onDragEnd"
-            class="flex items-center h-full"
+            class="flex items-center gap-1.5"
           >
             <template #item="{ element: tag }">
               <div
                 :class="[
-                  'h-full flex items-center gap-1.5 px-3 border-r border-[#e9edfa] dark:border-[#2a3054] cursor-pointer shrink-0 transition-colors text-sm select-none',
+                  'h-7 flex items-center gap-1.5 px-3 rounded-full cursor-pointer shrink-0 transition-all text-[13px] select-none border',
                   tag.path === '/dashboard' ? 'no-drag' : '',
                   route.path === tag.path
-                    ? 'bg-white dark:bg-[#1b2040] text-industrial-600 border-t-2 border-t-accent-500 -mt-px'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]'
+                    ? 'bg-(--brand-tint) dark:bg-[rgb(var(--brand-soft-rgb)/0.14)] text-(--brand) dark:text-(--brand-glow) border-(--el-color-primary-light-8) dark:border-[rgb(var(--brand-soft-rgb)/0.25)] font-medium shadow-[0_1px_2px_rgb(var(--brand-rgb)/0.08)]'
+                    : 'text-gray-500 dark:text-gray-400 border-transparent hover:text-gray-700 dark:hover:text-gray-200 hover:bg-[#f0f2ee] dark:hover:bg-[#252d28]'
                 ]"
                 @click="router.push(tag.path)"
                 @contextmenu.prevent="onTagContextMenu($event, tag)"
               >
+                <span
+                  :class="[
+                    'w-1.5 h-1.5 rounded-full shrink-0 transition-colors',
+                    route.path === tag.path ? 'bg-(--brand-mid) dark:bg-(--brand-soft)' : 'bg-gray-300 dark:bg-[#3b463f]'
+                  ]"
+                />
                 <span class="truncate max-w-[120px]">{{ tag.title }}</span>
                 <!-- 锁定状态：显示锁图标 -->
                 <el-icon v-if="tag.locked" :size="12" class="text-gray-400 shrink-0"><Lock /></el-icon>
@@ -314,7 +403,7 @@ onUnmounted(() => {
                 <button
                   v-else-if="tag.path !== '/dashboard'"
                   @click.stop="removeTag(tag.path)"
-                  class="w-4 h-4 flex items-center justify-center rounded text-gray-300 hover:text-gray-500 hover:bg-[#e9edfa] dark:hover:bg-[#2a3054] shrink-0"
+                  class="w-4 h-4 flex items-center justify-center rounded-full text-gray-300 hover:text-gray-600 hover:bg-[#dcd6d0]/40 dark:hover:bg-[#333d37] shrink-0 transition-colors"
                 >
                   <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -328,13 +417,13 @@ onUnmounted(() => {
         <!-- 右键菜单 -->
         <div
           v-if="contextMenu.visible"
-          class="fixed z-50 min-w-[140px] bg-white dark:bg-[#222750] rounded-md shadow-lg border border-[#e9edfa] dark:border-[#2a3054] py-1 text-sm"
+          class="fixed z-50 min-w-[140px] bg-white dark:bg-[#1f2522] rounded-md shadow-lg border border-[#e6e9e4] dark:border-[#2b332e] py-1 text-sm"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
           @click.stop
         >
           <div
             :class="[
-              'px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054]',
+              'px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e]',
               (tags.find(t => t.path === contextMenu.targetPath)?.locked || contextMenu.targetPath === '/dashboard')
                 ? 'text-gray-300 cursor-not-allowed hover:bg-transparent'
                 : 'text-gray-700 dark:text-gray-200'
@@ -344,26 +433,26 @@ onUnmounted(() => {
             关闭本页
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] text-gray-700 dark:text-gray-200"
             @click="closeLeft(contextMenu.targetPath)"
           >
             关闭左侧
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] text-gray-700 dark:text-gray-200"
             @click="closeRight(contextMenu.targetPath)"
           >
             关闭右侧
           </div>
           <div
-            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200"
+            class="px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] text-gray-700 dark:text-gray-200"
             @click="closeAll()"
           >
             关闭所有
           </div>
           <div
             v-if="contextMenu.targetPath !== '/dashboard'"
-            class="px-4 py-2 cursor-pointer hover:bg-[#eef1fc] dark:hover:bg-[#2a3054] text-gray-700 dark:text-gray-200 border-t border-[#e9edfa] dark:border-[#2a3054]"
+            class="px-4 py-2 cursor-pointer hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] text-gray-700 dark:text-gray-200 border-t border-[#e6e9e4] dark:border-[#2b332e]"
             @click="toggleLock(contextMenu.targetPath)"
           >
             {{ tags.find(t => t.path === contextMenu.targetPath)?.locked ? '解锁本页' : '锁定本页' }}

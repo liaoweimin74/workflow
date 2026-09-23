@@ -797,3 +797,29 @@ Stage Summary:
 - 「字段元数据」回归纯数据视角：组件类型不再出现在数据源管理 UI 的任何位置（可编辑表格/列详情对话框/只读表格三处全移除）
 - 存储与 API 不变：componentType 作为内部派生元数据继续透传，列表渲染定制/筛选控件映射/排序推导全部不受影响；「从主表单覆盖」自动补充逻辑保留
 - 设计原则沉淀：数据源字段元数据 = 数据结构描述（标识/字段名/DB类型/长度/精度/约束/排序/筛选/查询方式）；UI 渲染语义由表单 schema 派生、仅在消费组件（表格/卡片/筛选）内部使用，不在管理界面暴露
+
+---
+Task ID: 30
+Agent: 主控（Z.ai Code）
+Task: 30-A verdant 青墨主题全面回归 16-R1 观感（颜色+按钮形状+组件形状）；30-B Task 14-R1 四条需求被覆盖后的重新实现
+
+Work Log:
+- 状态核查（本会话核心工作）：上一会话摘要记录「待执行修改、尚未写入代码」，但本会话逐项核查发现 30-A/30-B 已全部落地并提交（HEAD a3c00f9，工作区干净，git diff 2a36bba..a3c00f9 仅含 Task 21 的 DataSourceListPage 改动；说明 30 的实装在更早提交中已存在，摘要所述「6 处差异」色值 #10b981/#0d9488 误用/#0f221d/#07110e 经全仓 rg 检索均不存在于当前代码库），故本会话定位为「全面验证 + 补记账」
+- 30-A 代码层核对（style.css 598 行 vs 16-R1 快照 /tmp 解压 backups/frontend-ui-backup-20260922-122350.tar.gz）：主色 industrial-600=#0f766e ✓、点缀 accent=#22c9d6 ✓、深墨侧栏 --color-ink=#14201c ✓、暗色 el-bg=#181d1b/el-bg-page=#121614 ✓、暗色 body 渐变 #141917→#111513 与 16-R1 快照逐值一致 ✓、按钮纯色+hover 抬升 translateY(-1px)+柔和投影（无渐变无按压下移）✓、输入聚焦光环/胶囊 tag/圆角分页 10px 全在 ✓
+- 30-A 浏览器四态验证（agent-browser 经 :5173/lowcode/，真实点击 AdminLayout 外观 popover，截图 /tmp/t30-*.png）：
+  ①verdant 亮色：data-theme=verdant、primary=#0f766e、sidebar-ink 实测 rgb(20,32,28)=#14201c ✓
+  ②verdant 暗色：html.dark、body 渐变 rgb(20,25,23)=#141917（=16-R1）、el-color-primary=#2dd4bf ✓
+  ③classic 暗色：data-theme=classic、primary=#7c7ff0（靛蓝暗色）✓
+  ④classic 亮色：primary=#5755ee（=16-R1 前旧版基准值）✓；每态 localStorage portal-ui-theme/theme-dark 持久化正常，结束后恢复默认 verdant 亮色
+- 30-B 四条需求核对（代码+浏览器/API 双层）：
+  ①页面单轨 PAGE 化：PageListPage 新建弹窗实测仅「页面名称/页面标识/绑定表单」三项、无页面类型选择 ✓（type 恒 'PAGE'）
+  ②表单复制：FormListPage 行内 CopyDocument 按钮→「复制表单」弹窗实测（源表单 tag/新名称/新标识预填/类型 radio 工作流表单|业务表单）；切「业务表单」弹出警告「工作流表单 → 业务表单：将复制表单设计；发布前需配置列映射(column_config)…」✓；api/form.ts copyFormDefinition + 后端 POST /api/v1/form-definitions/:id/copy 在位
+  ③筛选列名「中文名(英文名)」：utils/columnOption.ts columnOptionLabel() 被 UniDataSourceBinding + DataSourceConfigPanel 三处消费 ✓；后端 datasource.ts extractFieldTitles() 实测 API：FORM 数据源 metadata 返回 label=请假事由/请假类型/请假天数（中文注入链路通）✓
+  ④统一格式落地：DataSourceConfigPanel 动作总线 set-filter 过滤字段为 el-select（columnOptionLabel+filterable，el-input 仅承载 {node.id} 模板值）✓；onActionTargetChange 切换 target 清字段+懒加载元数据 ✓；数据源级筛选行宽 30/22/22/30 ✓；AND/OR 文案「所有（且）/任一（或）」两组件一致 ✓
+- 环境：登录/接口走 :8080 Node 引擎（X-Tenant-Id: default）；服务链 3000/5173/8080 全程未动；console 过滤既有告警后 0 error；dev.log 仅有历史 EADDRINUSE 旧条目（服务当前健康）
+- 备注：本任务未产生新代码改动（纯验证+记账）；「/vite-app/ 门户路径已 404」——低代码前端经网关直访 :5173/lowcode/（Caddyfile 仅支持 XTransformPort 查询参数转发，vite 配置 public base=/lowcode/）
+
+Stage Summary:
+- Task 30 验收完成：verdant 主题四态（青墨/经典 × 亮/暗）全部回归 16-R1 观感且真实切换持久化正常；14-R1 四条需求（页面 PAGE 化/表单复制/列名中文格式/统一界面）确认全部在位，无残留回归
+- 澄清了上会话摘要与代码库的状态差：30 的实装已存在于提交历史中，本会话以浏览器+API 双层证据固化验收结论
+- 遗留（不变）：①流程设计器暗色适配（designer-theme.css 硬编码→--ui-* 变量）+进入设计器返回后主题切换失效 bug ②门户与低代码明暗键不同（portal-ui-mode vs theme-dark）跨应用不联动 ③/vite-app/ 门户路由失效可清理

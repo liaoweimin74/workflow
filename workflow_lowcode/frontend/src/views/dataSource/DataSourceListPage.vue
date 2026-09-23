@@ -442,14 +442,26 @@
               </template>
 
               <template v-else>
+                <!-- 全类型统一 12 列只读元数据表：标识/字段名/DB类型/长度/精度/必填/唯一/索引/隐藏/排序/筛选/查询方式 -->
                 <el-table
                   :data="metadata?.columns || []"
                   v-loading="metadataLoading"
+                  size="small"
+                  border
                   style="width: 100%"
                   :max-height="300"
                 >
-                  <el-table-column prop="label" label="字段名" min-width="180" show-overflow-tooltip />
-                  <el-table-column prop="key" label="标识" min-width="160" show-overflow-tooltip />
+                  <el-table-column prop="key" label="标识" min-width="120" show-overflow-tooltip />
+                  <el-table-column prop="label" label="字段名" min-width="130" show-overflow-tooltip />
+                  <el-table-column label="DB类型" width="90">
+                    <template #default="{ row }">{{ row.columnType || '—' }}</template>
+                  </el-table-column>
+                  <el-table-column label="长度" width="70" align="center">
+                    <template #default="{ row }">{{ row.length ?? '—' }}</template>
+                  </el-table-column>
+                  <el-table-column label="精度" width="65" align="center">
+                    <template #default="{ row }">{{ row.scale ?? '—' }}</template>
+                  </el-table-column>
                   <el-table-column label="必填" width="50" align="center">
                     <template #default="{ row }">
                       <span :style="boolIconStyle(row.required)">{{ row.required ? '✓' : '✗' }}</span>
@@ -459,6 +471,29 @@
                     <template #default="{ row }">
                       <span :style="boolIconStyle(row.unique)">{{ row.unique ? '✓' : '✗' }}</span>
                     </template>
+                  </el-table-column>
+                  <el-table-column label="索引" width="50" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.indexed)">{{ row.indexed ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="隐藏" width="50" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.hidden)">{{ row.hidden ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="排序" width="50" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.sortable)">{{ row.sortable ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="筛选" width="50" align="center">
+                    <template #default="{ row }">
+                      <span :style="boolIconStyle(row.filterable)">{{ row.filterable ? '✓' : '✗' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="查询方式" min-width="90">
+                    <template #default="{ row }">{{ matchTypeLabel(row) }}</template>
                   </el-table-column>
                 </el-table>
               </template>
@@ -776,6 +811,12 @@ function matchTypeOptions(col: { columnType?: string }): { label: string; value:
     { label: '等值', value: 'eq' },
     { label: '模糊', value: 'like' },
   ]
+}
+
+/** 只读元数据表：查询方式值 → 中文 label（无值/未知值显示 —） */
+function matchTypeLabel(row: { matchType?: string | null; columnType?: string | null }): string {
+  if (!row.matchType) return '—'
+  return matchTypeOptions(row).find((o) => o.value === row.matchType)?.label ?? row.matchType
 }
 
 /** ================ 数据预览 ================= */

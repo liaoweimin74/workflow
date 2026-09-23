@@ -342,6 +342,115 @@ function bizPage(records: Record<string, unknown>[], total: number, page: number
   return { records, total, page, size };
 }
 
+/** SYSTEM 内置数据源列（与 modules/datasource USER_COLUMNS/DEPT_COLUMNS 对齐） */
+const SYSTEM_SOURCE_COLUMNS: Record<string, Record<string, unknown>[]> = {
+  'user-tree': [
+    { key: 'id', label: 'ID', columnType: 'VARCHAR' },
+    { key: 'username', label: '用户名', columnType: 'VARCHAR' },
+    { key: 'nickname', label: '昵称', columnType: 'VARCHAR' },
+    { key: 'orgId', label: '组织ID', columnType: 'VARCHAR' },
+    { key: 'orgName', label: '组织名称', columnType: 'VARCHAR' },
+    { key: 'status', label: '状态', columnType: 'TINYINT' },
+  ],
+  'dept-tree': [
+    { key: 'id', label: 'ID', columnType: 'VARCHAR' },
+    { key: 'parentId', label: '父节点', columnType: 'VARCHAR' },
+    { key: 'label', label: '名称', columnType: 'VARCHAR' },
+    { key: 'code', label: '编码', columnType: 'VARCHAR' },
+  ],
+};
+
+/**
+ * 组件类型 → DB 类型推断（对齐 modules/form/form-definition.inferColumnType + fcDesigner 组件别名）
+ */
+function componentToColumnType(type: string): string {
+  switch (type) {
+    case 'inputNumber': case 'rate': case 'slider': return 'INT';
+    case 'inputTextarea': case 'textarea': case 'editor': case 'upload': return 'TEXT';
+    case 'date': case 'datetime': case 'time': case 'dateRange': case 'dateTimeRange':
+    case 'datePicker': return 'DATETIME';
+    case 'switch': case 'checkbox': return 'TINYINT';
+    default: return 'VARCHAR';
+  }
+}
+
+/**
+ * 从 form-create schema 派生字段（column_config 缺省时的兑底，如 WORKFLOW 表单未生成动态表）：
+ * 递归 children/props.rule/props.columns[].rule 收集 field（去重），
+ * DB类型按组件推断、必填取 validate[].required；注意：不可 import modules/form/form-definition
+ * （其引用了 lib/db 不存在的导出，是未挂载的死代码，运行时 import 会崩溃）
+ */
+function extractSchemaFields(schema: string | null): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  const walk = (rules: unknown): void => {
+    if (!Array.isArray(rules)) return;
+    for (const it of rules) {
+      const f = (it ?? {}) as Record<string, unknown>;
+      const field = f['field'];
+      const type = String(f['type'] ?? '');
+      if (field != null && String(field).trim() !== '' && !seen.has(String(field))) {
+        seen.add(String(field));
+        let required = false;
+        if (Array.isArray(f['validate'])) {
+          required = (f['validate'] as unknown[]).some((v) => !!(v as Record<string, unknown>)?.['required']);
+        }
+        out.push({
+          key: String(field),
+          label: f['title'] != null && String(f['title']).trim() !== '' ? String(f['title']) : String(field),
+          columnType: componentToColumnType(type),
+          length: null,
+          scale: null,
+          required,
+          componentType: type || null,
+        });
+      }
+      const props = (f['props'] ?? {}) as Record<string, unknown>;
+      walk(f['children'] as unknown);
+      walk(props['rule'] as unknown);
+      if (Array.isArray(props['columns'])) {
+        for (const col of props['columns'] as unknown[]) {
+          walk(((col ?? {}) as Record<string, unknown>)['rule'] as unknown);
+        }
+      }
+    }
+  };
+  try {
+    const root = JSON.parse(isBlank(schema) ? '{}' : (schema as string)) as Record<string, unknown>;
+    walk(Array.isArray(root) ? root : (root['rule'] as unknown));
+  } catch {
+    /* schema 非法时忽略派生 */
+  }
+  return out;
+}
+
+/**
+ * 元数据列统一形态（全类型 12 字段）：标识/字段名/DB类型/长度/精度/必填/唯一/索引/隐藏/排序/筛选/查询方式
+ * FORM/WORKFLOW 的 column_config 与 SYSTEM 内置列可能缺省部分字段，此处补齐默认值；
+ * 未知扩展字段（storageMode/pickerConfig/subColumns 等）原样透传（消费方：ColumnConfigDialog/bizTableLayout/PageDesigner）
+ */
+function normalizeMetadataColumn(c: Record<string, unknown>): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    key: String(c['key'] ?? ''),
+    label: String(c['label'] ?? c['key'] ?? ''),
+    columnType: String(c['columnType'] ?? 'VARCHAR'),
+    length: c['length'] ?? null,
+    scale: c['scale'] ?? null,
+    required: !!c['required'],
+    unique: !!c['unique'],
+    indexed: !!c['indexed'],
+    hidden: !!c['hidden'],
+    sortable: c['sortable'] == null ? true : !!c['sortable'],
+    filterable: c['filterable'] == null ? true : !!c['filterable'],
+    matchType: (c['matchType'] as string | null) ?? null,
+    componentType: (c['componentType'] as string | null) ?? null,
+  };
+  for (const [k, v] of Object.entries(c)) {
+    if (!(k in base)) base[k] = v;
+  }
+  return base;
+}
+
 datasourceRouter.get(
   '/api/v1/data-sources/:id/metadata',
   authGuard,
@@ -367,7 +476,13 @@ datasourceRouter.get(
       }
       return;
     }
-    // FORM：columnConfig 来自 wf_form_def
+    if (row.type === 'SYSTEM') {
+      const src = String(params['sourceKey'] ?? row.source_key ?? '');
+      const cols = SYSTEM_SOURCE_COLUMNS[src] ?? [];
+      ok(res, { columns: cols.map(normalizeMetadataColumn), writable: false, formKey: null });
+      return;
+    }
+    // FORM/WORKFLOW：columnConfig 来自 wf_form_def
     const def = row.form_key
       ? one(`SELECT "column_config","schema" FROM wf_form_def WHERE "tenant_id" = ? AND "key" = ?`, [tenantId, row.form_key])
       : null;
@@ -375,13 +490,19 @@ datasourceRouter.get(
     if (def && def['column_config']) {
       try { columns = JSON.parse(String(def['column_config'])); } catch { columns = []; }
     }
+    if (!Array.isArray(columns) || columns.length === 0) {
+      // column_config 缺省（如 WORKFLOW 表单未生成动态表）：从 schema 派生字段，保证元数据完整
+      columns = extractSchemaFields(def ? (def['schema'] as string | null) : null);
+    }
     // 合并 schema 中的字段 title 为中文名 label（前端列名下拉据此显示「中文名(英文名)」）
     const titles = extractFieldTitles(def ? (def['schema'] as string | null) : null);
     if (Array.isArray(columns)) {
-      columns = (columns as Record<string, unknown>[]).map((c) => ({
-        ...c,
-        label: titles[String(c['key'] ?? '')] ?? String(c['label'] ?? c['key'] ?? ''),
-      }));
+      columns = (columns as Record<string, unknown>[]).map((c) =>
+        normalizeMetadataColumn({
+          ...c,
+          label: titles[String(c['key'] ?? '')] ?? String(c['label'] ?? c['key'] ?? ''),
+        }),
+      );
     }
     ok(res, { columns, writable: true, formKey: row.form_key });
   }),

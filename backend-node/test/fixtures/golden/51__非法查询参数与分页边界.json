@@ -1,0 +1,1068 @@
+{
+  "scenario": "非法查询参数与分页边界",
+  "recordedAt": "2026-09-18T03:21:03.649Z",
+  "steps": [
+    {
+      "id": "qiListPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'page': Failed to convert value of type 'java.lang.String' to required type 'int'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiListSizeBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "size": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'size': Failed to convert value of type 'java.lang.String' to required type 'int'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiListSizeOverflow",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "size": "99999999999999999999"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'size': Failed to convert value of type 'java.lang.String' to required type 'int'; For input string: \"99999999999999999999\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiListSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiListSizeNeg",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "size": "-1"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiListPageZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "page": "0",
+          "type": "SYSTEM",
+          "status": "ENABLED"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": null,
+                "id": "<ID>",
+                "name": "用户树数据源",
+                "params": null,
+                "sourceKey": "user-tree",
+                "status": "ENABLED",
+                "tenantId": "system",
+                "type": "SYSTEM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": null,
+                "id": "<ID>",
+                "name": "部门树数据源",
+                "params": null,
+                "sourceKey": "dept-tree",
+                "status": "ENABLED",
+                "tenantId": "system",
+                "type": "SYSTEM",
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 2,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "qiListSizeEmpty",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "size": "",
+          "type": "SYSTEM",
+          "status": "ENABLED"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": null,
+                "id": "<ID>",
+                "name": "用户树数据源",
+                "params": null,
+                "sourceKey": "user-tree",
+                "status": "ENABLED",
+                "tenantId": "system",
+                "type": "SYSTEM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": null,
+                "id": "<ID>",
+                "name": "部门树数据源",
+                "params": null,
+                "sourceKey": "dept-tree",
+                "status": "ENABLED",
+                "tenantId": "system",
+                "type": "SYSTEM",
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 2,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "qiUsersSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users"
+      },
+      "requestTemplate": {
+        "path": "/api/users",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiUsersPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users"
+      },
+      "requestTemplate": {
+        "path": "/api/users",
+        "query": {
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Failed to convert value of type 'java.lang.String' to required type 'java.lang.Integer'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiFormDefsSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiPagesSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiNotifSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiNotifPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'page': Failed to convert value of type 'java.lang.String' to required type 'int'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiInternalPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/users"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/users",
+        "query": {
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/users",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'page': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Integer'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiVersionBad",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/contract_missing_ds/data/contract_missing_row",
+        "query": {
+          "version": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/contract_missing_ds/data/contract_missing_row",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'version': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Integer'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiPathLongBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/contract-not-a-number",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/contract-not-a-number",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'id': Failed to convert value of type 'java.lang.String' to required type 'java.lang.Long'; For input string: \"contract-not-a-number\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiBinderPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/contract_missing_ds/data",
+        "query": {
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/contract_missing_ds/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Failed to convert property value of type 'java.lang.String' to required type 'int' for property 'page'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiBinderSizeBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person",
+        "query": {
+          "size": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Failed to convert property value of type 'java.lang.String' to required type 'int' for property 'size'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiBinderSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "code": "001",
+                  "name": "张三",
+                  "dept": [
+                    "2"
+                  ],
+                  "dept_text": "/总公司/武汉分公司"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "qiTasksSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks",
+        "query": {
+          "assignee": "1",
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiTasksPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks",
+        "query": {
+          "assignee": "1",
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'page': Failed to convert value of type 'java.lang.String' to required type 'int'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiTasksHistoricSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks/historic"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/historic",
+        "query": {
+          "userId": "1",
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/historic",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiDeployedSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/deployed-processes"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/deployed-processes",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/deployed-processes",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiInstancesPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances",
+        "query": {
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'page': Failed to convert value of type 'java.lang.String' to required type 'int'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiFormDefsPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'page': Failed to convert value of type 'java.lang.String' to required type 'int'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiPagesPageBad",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages",
+        "query": {
+          "page": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Method parameter 'page': Failed to convert value of type 'java.lang.String' to required type 'int'; For input string: \"abc\"",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiNotifAdminAnnouncementsSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/announcements"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiNotifAdminDeliveriesSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/deliveries"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/deliveries",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/deliveries",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiNotifAdminSubsSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "Page size must not be less than one",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qiNotifAdminEventsSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 0,
+            "page": 1,
+            "size": 1,
+            "rows": []
+          }
+        }
+      }
+    },
+    {
+      "id": "qiNotifAdminChannelsSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/channels"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "name": "站内信",
+              "type": "IN_APP",
+              "enabled": true,
+              "successRate": 100
+            },
+            {
+              "id": "<NUM>",
+              "name": "短信",
+              "type": "SMS",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "企业微信",
+              "type": "WECHAT_WORK",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "小程序",
+              "type": "WECHAT_MINIPROGRAM",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "APP",
+              "type": "APP",
+              "enabled": false,
+              "successRate": null
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

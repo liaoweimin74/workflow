@@ -1,0 +1,182 @@
+{
+  "scenario": "API 数据源读路径",
+  "recordedAt": "2026-09-18T03:21:01.033Z",
+  "steps": [
+    {
+      "id": "adApiCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约API数据源",
+          "type": "API",
+          "sourceKey": "contract_dsapi_{{$runId}}",
+          "params": "{\"columns\":[{\"key\":\"code\",\"label\":\"编码\",\"columnType\":\"VARCHAR\",\"length\":64},{\"key\":\"name\",\"label\":\"名称\",\"columnType\":\"VARCHAR\",\"length\":64}],\"action\":\"http://127.0.0.1:9/list\",\"method\":\"GET\",\"parse\":\"data.records\",\"totalParse\":\"data.total\",\"searchParam\":\"kw\",\"headers\":{\"x-tag\":\"contract\"},\"data\":{\"fixed\":\"1\"},\"create\":{\"action\":\"http://127.0.0.1:9/create\",\"method\":\"POST\"}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约API数据源",
+            "params": "{\"columns\":[{\"key\":\"code\",\"label\":\"编码\",\"columnType\":\"VARCHAR\",\"length\":64},{\"key\":\"name\",\"label\":\"名称\",\"columnType\":\"VARCHAR\",\"length\":64}],\"action\":\"http://127.0.0.1:9/list\",\"method\":\"GET\",\"parse\":\"data.records\",\"totalParse\":\"data.total\",\"searchParam\":\"kw\",\"headers\":{\"x-tag\":\"contract\"},\"data\":{\"fixed\":\"1\"},\"create\":{\"action\":\"http://127.0.0.1:9/create\",\"method\":\"POST\"}}",
+            "sourceKey": "contract_dsapi_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "API",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "adApiMetadata",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{adApiCreate.data.id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/cd752eb337bc4b0aa4991bc5bb55f20b/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "code",
+                "label": "编码",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "name",
+                "label": "名称",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": true,
+            "formKey": null
+          }
+        }
+      }
+    },
+    {
+      "id": "adApiQuery",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{adApiCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "5",
+          "keyword": "abc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/cd752eb337bc4b0aa4991bc5bb55f20b/data",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "HTTP request failed after 1 attempts",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "adApiGetNoOp",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{adApiCreate.data.id}}/data/contract_missing_row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/cd752eb337bc4b0aa4991bc5bb55f20b/data/contract_missing_row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "API 数据源未配置 get 操作: 契约API数据源",
+          "data": null
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1085 @@
+{
+  "scenario": "业务数据写操作",
+  "recordedAt": "2026-09-18T03:20:56.825Z",
+  "steps": [
+    {
+      "id": "bwCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_P_{{$runId}}",
+          "name": "契约人员",
+          "dept": [
+            "01"
+          ],
+          "dept_text": "总公司"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "CONTRACT_P_<RUN>",
+              "name": "契约人员",
+              "dept": [
+                "01"
+              ],
+              "dept_text": "总公司"
+            },
+            "version": 1,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "bwGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{bwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/b08357cba0a143ed8e24736dd862fb9a",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "CONTRACT_P_<RUN>",
+              "name": "契约人员",
+              "dept": [
+                "01"
+              ],
+              "dept_text": "总公司"
+            },
+            "version": 1,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "bwCreateMissingRequired",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_OTHER_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "必填字段不能为空: 人员姓名",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwCreateIgnoresUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_Q_{{$runId}}",
+          "name": "契约人员乙",
+          "bogus": "应当被忽略",
+          "id": "client-supplied-id",
+          "tenant_id": "hacked",
+          "version": 99
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "CONTRACT_Q_<RUN>",
+              "name": "契约人员乙"
+            },
+            "version": 1,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "bwListAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "filter": "{\"name\":{\"op\":\"like\",\"value\":\"契约\"}}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [],
+            "total": 0,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "bwUpdateConflict",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{bwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_P_{{$runId}}",
+          "name": "契约人员-冲突",
+          "version": 99
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/b08357cba0a143ed8e24736dd862fb9a",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 409,
+          "msg": "数据已被他人修改，请刷新后重试",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwUpdateNotFound",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/ffffffffffffffffffffffffffffffff",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_X_{{$runId}}",
+          "name": "不存在",
+          "version": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/ffffffffffffffffffffffffffffffff",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "业务数据不存在: <ID>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{bwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_P_{{$runId}}",
+          "name": "契约人员-改名",
+          "dept": [
+            "01"
+          ],
+          "dept_text": "总公司",
+          "version": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/b08357cba0a143ed8e24736dd862fb9a",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "CONTRACT_P_<RUN>",
+              "name": "契约人员-改名",
+              "dept": [
+                "01"
+              ],
+              "dept_text": "总公司"
+            },
+            "version": 2,
+            "createdAt": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "bwDeleteNotFound",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/ffffffffffffffffffffffffffffffff",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/ffffffffffffffffffffffffffffffff",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "业务数据不存在: <ID>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{bwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/b08357cba0a143ed8e24736dd862fb9a",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwGetAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{bwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/b08357cba0a143ed8e24736dd862fb9a",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "业务数据不存在: <ID>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwDeleteSecond",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{bwCreateIgnoresUnknown.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/90ae7ada20714abe81625b26651e2fe7",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwDraftSubForm",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "name": "契约子表表单",
+          "key": "contract_sub_{{$runId}}",
+          "type": "BUSINESS"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_sub_<RUN>",
+            "name": "契约子表表单",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "bwPublishSubForm",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{bwDraftSubForm.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "[{\"type\":\"input\",\"field\":\"title\"}]",
+          "columnConfig": "[{\"key\":\"title\",\"columnType\":\"VARCHAR\",\"length\":128,\"required\":true},{\"key\":\"owner\",\"columnType\":\"VARCHAR\",\"length\":64},{\"key\":\"items\",\"componentType\":\"subForm\",\"subColumns\":[{\"key\":\"sku\",\"columnType\":\"VARCHAR\",\"length\":64},{\"key\":\"qty\",\"columnType\":\"INT\"}]}]"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/311fe3ee0a704ce9a5c347671a259f96",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\":\"title\",\"columnType\":\"VARCHAR\",\"length\":128,\"required\":true},{\"key\":\"owner\",\"columnType\":\"VARCHAR\",\"length\":64},{\"key\":\"items\",\"componentType\":\"subForm\",\"subColumns\":[{\"key\":\"sku\",\"columnType\":\"VARCHAR\",\"length\":64},{\"key\":\"qty\",\"columnType\":\"INT\"}]}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_sub_<RUN>",
+            "name": "契约子表表单",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[{\"type\":\"input\",\"field\":\"title\"}]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "bwPublishSubFormRun",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{bwDraftSubForm.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/311fe3ee0a704ce9a5c347671a259f96/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"title\", \"length\": 128, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"owner\", \"length\": 64, \"columnType\": \"VARCHAR\"}, {\"key\": \"items\", \"subColumns\": [{\"key\": \"sku\", \"length\": 64, \"columnType\": \"VARCHAR\"}, {\"key\": \"qty\", \"columnType\": \"INT\"}], \"componentType\": \"subForm\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_sub_<RUN>",
+            "name": "契约子表表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"input\",\"field\":\"title\"}]",
+            "status": "PUBLISHED",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "bwSubCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "title": "契约订单",
+          "owner": "admin",
+          "items": [
+            {
+              "sku": "A-1",
+              "qty": 2
+            },
+            {
+              "sku": "A-2",
+              "qty": 3
+            }
+          ]
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "title": "契约订单",
+              "owner": "admin",
+              "items": [
+                {
+                  "id": "<ID>",
+                  "biz_id": "<ID>",
+                  "tenant_id": "default",
+                  "sku": "A-1",
+                  "qty": 2,
+                  "sort_no": 0,
+                  "version": 1,
+                  "created_by": null,
+                  "created_at": null,
+                  "updated_at": null
+                },
+                {
+                  "id": "<ID>",
+                  "biz_id": "<ID>",
+                  "tenant_id": "default",
+                  "sku": "A-2",
+                  "qty": 3,
+                  "sort_no": 1,
+                  "version": 1,
+                  "created_by": null,
+                  "created_at": null,
+                  "updated_at": null
+                }
+              ]
+            },
+            "version": 1,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "bwSubList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<ID>",
+              "biz_id": "<ID>",
+              "tenant_id": "default",
+              "sku": "A-1",
+              "qty": 2,
+              "sort_no": 0,
+              "version": 1,
+              "created_by": null,
+              "created_at": null,
+              "updated_at": null
+            },
+            {
+              "id": "<ID>",
+              "biz_id": "<ID>",
+              "tenant_id": "default",
+              "sku": "A-2",
+              "qty": 3,
+              "sort_no": 1,
+              "version": 1,
+              "created_by": null,
+              "created_at": null,
+              "updated_at": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bwSubAdd",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sku": "A-3",
+          "qty": 5
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "sku": "A-3",
+            "qty": 5,
+            "id": "<ID>",
+            "sort_no": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "bwSubUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items/{{bwSubAdd.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sku": "A-3-改",
+          "qty": 7,
+          "version": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items/5abaee54554e443cb6f019dbef239b8f",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "biz_id": "<ID>",
+            "tenant_id": "default",
+            "sku": "A-3-改",
+            "qty": 7,
+            "sort_no": 2,
+            "version": 2,
+            "created_by": null,
+            "created_at": null,
+            "updated_at": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "bwSubUpdateConflict",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items/{{bwSubAdd.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sku": "A-3-再改",
+          "version": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items/5abaee54554e443cb6f019dbef239b8f",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 409,
+          "msg": "子表行已被他人修改或不存在，请刷新后重试",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwSubUpdateEmpty",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items/{{bwSubAdd.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "version": 2,
+          "id": "hacked",
+          "biz_id": "hacked"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items/5abaee54554e443cb6f019dbef239b8f",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "更新内容不能为空: items",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwSubListAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<ID>",
+              "biz_id": "<ID>",
+              "tenant_id": "default",
+              "sku": "A-1",
+              "qty": 2,
+              "sort_no": 0,
+              "version": 1,
+              "created_by": null,
+              "created_at": null,
+              "updated_at": null
+            },
+            {
+              "id": "<ID>",
+              "biz_id": "<ID>",
+              "tenant_id": "default",
+              "sku": "A-2",
+              "qty": 3,
+              "sort_no": 1,
+              "version": 1,
+              "created_by": null,
+              "created_at": null,
+              "updated_at": null
+            },
+            {
+              "id": "<ID>",
+              "biz_id": "<ID>",
+              "tenant_id": "default",
+              "sku": "A-3-改",
+              "qty": 7,
+              "sort_no": 2,
+              "version": 2,
+              "created_by": null,
+              "created_at": null,
+              "updated_at": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bwSubDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items/{{bwSubAdd.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items/5abaee54554e443cb6f019dbef239b8f",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwSubDeleteAgain",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items/{{bwSubAdd.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items/5abaee54554e443cb6f019dbef239b8f",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwSubFieldNotFound",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/nosuchfield",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/nosuchfield",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "子表字段不存在: nosuchfield",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwSubMainRowNotFound",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/ffffffffffffffffffffffffffffffff/sub/items",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/ffffffffffffffffffffffffffffffff/sub/items",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "业务数据不存在: <ID>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "bwSubDiffRemove",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "title": "契约订单-改",
+          "items": [],
+          "version": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "title": "契约订单-改",
+              "owner": "admin",
+              "items": []
+            },
+            "version": 2,
+            "createdAt": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "bwSubListAfterDiff",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_sub_{{$runId}}/{{bwSubCreate.data.id}}/sub/items",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_sub_4miozb/345adaebedc14c3686b5fdb9b313227b/sub/items",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": []
+        }
+      }
+    }
+  ]
+}

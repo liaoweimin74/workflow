@@ -1,0 +1,597 @@
+{
+  "scenario": "表单数据读写",
+  "recordedAt": "2026-09-18T03:20:49.376Z",
+  "steps": [
+    {
+      "id": "fdFormDefList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "type": "BUSINESS"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "id": "<ID>",
+                "name": "请假单-业务表单",
+                "key": "leave_apply_biz",
+                "type": "BUSINESS",
+                "version": 1,
+                "status": "PUBLISHED",
+                "publishedVersion": 1,
+                "createdBy": null,
+                "createdAt": "<TIME>",
+                "updatedAt": "<TIME>",
+                "processKey": null
+              },
+              {
+                "id": "<ID>",
+                "name": "请假人员",
+                "key": "person",
+                "type": "BUSINESS",
+                "version": 1,
+                "status": "PUBLISHED",
+                "publishedVersion": 1,
+                "createdBy": null,
+                "createdAt": "<TIME>",
+                "updatedAt": "<TIME>",
+                "processKey": null
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 2,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "fdSave",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "formDefId": "{{fdFormDefList.data.content[0].id}}",
+          "processInstanceId": "fd-pi-{{$runId}}",
+          "taskId": null,
+          "dataJson": "{\"code\":\"A001\",\"name\":\"张三\"}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"code\":\"A001\",\"name\":\"张三\"}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": false,
+            "processInstanceId": "fd-pi-<RUN>",
+            "taskId": null,
+            "tenantId": "default",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdGetByInstance",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data",
+        "query": {
+          "processInstanceId": "fd-pi-{{$runId}}",
+          "formDefId": "{{fdFormDefList.data.content[0].id}}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"code\":\"A001\",\"name\":\"张三\"}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": false,
+            "processInstanceId": "fd-pi-<RUN>",
+            "taskId": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdGetById",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-data/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/{{fdSave.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/48d17e40a13b43479a6c629b4e717703",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"code\":\"A001\",\"name\":\"张三\"}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": false,
+            "processInstanceId": "fd-pi-<RUN>",
+            "taskId": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-data/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/{{fdSave.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "dataJson": "{\"code\":\"A002\",\"name\":\"李四\"}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/48d17e40a13b43479a6c629b4e717703",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"code\":\"A002\",\"name\":\"李四\"}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": false,
+            "processInstanceId": "fd-pi-<RUN>",
+            "taskId": null,
+            "tenantId": "default",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdGetByIdAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-data/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/{{fdSave.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/48d17e40a13b43479a6c629b4e717703",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"code\":\"A002\",\"name\":\"李四\"}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": false,
+            "processInstanceId": "fd-pi-<RUN>",
+            "taskId": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdSnapshot",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-data/snapshot"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/snapshot",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "formDefId": "{{fdFormDefList.data.content[0].id}}",
+          "processInstanceId": "fd-pi-{{$runId}}",
+          "taskId": "fd-task-{{$runId}}",
+          "dataJson": "{\"approved\":true}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/snapshot",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"approved\":true}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": true,
+            "processInstanceId": "fd-pi-<RUN>",
+            "taskId": "fd-task-<RUN>",
+            "tenantId": "default",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdGetByTask",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-data/task/{taskId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/task/fd-task-{{$runId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/task/fd-task-4miozb",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"approved\":true}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": true,
+            "processInstanceId": "fd-pi-<RUN>",
+            "taskId": "fd-task-<RUN>",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdSnapshots",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-data/process-instance/{processInstanceId}/snapshots"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/process-instance/fd-pi-{{$runId}}/snapshots",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/process-instance/fd-pi-4miozb/snapshots",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "createdBy": null,
+              "dataJson": "{\"approved\":true}",
+              "formDefId": "<ID>",
+              "formVersion": 1,
+              "id": "<ID>",
+              "isSnapshot": true,
+              "processInstanceId": "fd-pi-<RUN>",
+              "taskId": "fd-task-<RUN>",
+              "updatedAt": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fdByInstanceAll",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-data/process-instance/{processInstanceId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/process-instance/fd-pi-{{$runId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/process-instance/fd-pi-4miozb",
+      "unorderedArrays": [
+        "$.data"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "createdBy": null,
+              "dataJson": "{\"code\":\"A002\",\"name\":\"李四\"}",
+              "formDefId": "<ID>",
+              "formVersion": 1,
+              "id": "<ID>",
+              "isSnapshot": false,
+              "processInstanceId": "fd-pi-<RUN>",
+              "taskId": null,
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": null,
+              "dataJson": "{\"approved\":true}",
+              "formDefId": "<ID>",
+              "formVersion": 1,
+              "id": "<ID>",
+              "isSnapshot": true,
+              "processInstanceId": "fd-pi-<RUN>",
+              "taskId": "fd-task-<RUN>",
+              "updatedAt": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fdSaveDraft",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-data/draft"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/draft",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "formDefId": "{{fdFormDefList.data.content[0].id}}",
+          "dataJson": "{\"draft\":true}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/draft",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"draft\":true}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": false,
+            "processInstanceId": null,
+            "taskId": null,
+            "tenantId": "default",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdGetDraft",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-data/draft/{formDefId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/draft/{{fdFormDefList.data.content[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/draft/3761079572ed48158ccd31159a3ac7ae",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"draft\":true}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": false,
+            "processInstanceId": null,
+            "taskId": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "fdClearDraft",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/form-data/draft/{formDefId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/draft/{{fdFormDefList.data.content[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/draft/3761079572ed48158ccd31159a3ac7ae",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "fdGetDraftAfterClear",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-data/draft/{formDefId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data/draft/{{fdFormDefList.data.content[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data/draft/3761079572ed48158ccd31159a3ac7ae",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    }
+  ]
+}

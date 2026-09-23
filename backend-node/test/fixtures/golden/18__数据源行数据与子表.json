@@ -1,0 +1,220 @@
+{
+  "scenario": "数据源行数据与子表",
+  "recordedAt": "2026-09-18T03:20:48.572Z",
+  "steps": [
+    {
+      "id": "dsEnabled4",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/enabled"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/enabled",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/enabled",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "person",
+              "id": "<ID>",
+              "name": "请假人员 数据源",
+              "params": null,
+              "sourceKey": "person",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "FORM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": null,
+              "id": "<ID>",
+              "name": "用户树数据源",
+              "params": null,
+              "sourceKey": "user-tree",
+              "status": "ENABLED",
+              "tenantId": "system",
+              "type": "SYSTEM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": null,
+              "id": "<ID>",
+              "name": "部门树数据源",
+              "params": null,
+              "sourceKey": "dept-tree",
+              "status": "ENABLED",
+              "tenantId": "system",
+              "type": "SYSTEM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "leave_apply_biz",
+              "id": "<ID>",
+              "name": "请假单-业务表单 数据源",
+              "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"j1\",\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"leave_name\",\"label\":\"姓名-请假人\",\"sortable\":true,\"filterable\":true},{\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"leave_dept\",\"label\":\"部门-请假人\",\"sortable\":true,\"filterable\":true}]}",
+              "sourceKey": "leave_apply_biz",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "FORM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "baoxiaodan",
+              "id": "<ID>",
+              "name": "报销单 数据源",
+              "params": null,
+              "sourceKey": "baoxiaodan",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "WORKFLOW",
+              "updatedAt": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dsData4",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsEnabled4.data[0].id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/20f476f047ca4386bfd1365ea5516832/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "code": "001",
+                  "name": "张三",
+                  "dept": [
+                    "2"
+                  ],
+                  "dept_text": "/总公司/武汉分公司"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "dsRowGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsEnabled4.data[0].id}}/data/{{dsData4.data.records[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/20f476f047ca4386bfd1365ea5516832/data/7567d2a6c0f843b990c0d59b609453f2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "001",
+              "name": "张三",
+              "dept": [
+                "2"
+              ],
+              "dept_text": "/总公司/武汉分公司"
+            },
+            "version": 2,
+            "createdAt": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "bizSubRows",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{dsData4.data.records[0].id}}/sub/dept",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/7567d2a6c0f843b990c0d59b609453f2/sub/dept",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "子表字段不存在: dept",
+          "data": null
+        }
+      }
+    }
+  ]
+}

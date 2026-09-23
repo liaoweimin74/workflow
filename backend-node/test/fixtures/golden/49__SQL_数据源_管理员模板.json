@@ -1,0 +1,834 @@
+{
+  "scenario": "SQL 数据源（管理员模板）",
+  "recordedAt": "2026-09-18T03:21:02.596Z",
+  "steps": [
+    {
+      "id": "qsCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约SQL数据源_{{$runId}}",
+          "type": "SQL",
+          "sourceKey": "contract_qsql_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id, code, name, dept, version FROM wf_biz_person WHERE tenant_id = :tenantId AND version >= :minVersion\",\"columns\":[{\"key\":\"id\",\"label\":\"ID\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":false},{\"key\":\"code\",\"label\":\"编码\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true},{\"key\":\"name\",\"label\":\"姓名\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true},{\"key\":\"dept\",\"label\":\"部门\",\"columnType\":\"JSON\",\"sortable\":false,\"filterable\":true}],\"params\":[\"minVersion\"]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约SQL数据源_<RUN>",
+            "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id, code, name, dept, version FROM wf_biz_person WHERE tenant_id = :tenantId AND version >= :minVersion\",\"columns\":[{\"key\":\"id\",\"label\":\"ID\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":false},{\"key\":\"code\",\"label\":\"编码\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true},{\"key\":\"name\",\"label\":\"姓名\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true},{\"key\":\"dept\",\"label\":\"部门\",\"columnType\":\"JSON\",\"sortable\":false,\"filterable\":true}],\"params\":[\"minVersion\"]}",
+            "sourceKey": "contract_qsql_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qsGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约SQL数据源_<RUN>",
+            "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id, code, name, dept, version FROM wf_biz_person WHERE tenant_id = :tenantId AND version >= :minVersion\",\"columns\":[{\"key\":\"id\",\"label\":\"ID\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":false},{\"key\":\"code\",\"label\":\"编码\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true},{\"key\":\"name\",\"label\":\"姓名\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true},{\"key\":\"dept\",\"label\":\"部门\",\"columnType\":\"JSON\",\"sortable\":false,\"filterable\":true}],\"params\":[\"minVersion\"]}",
+            "sourceKey": "contract_qsql_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qsMetadata",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": false,
+                "hidden": false,
+                "indexed": false,
+                "key": "id",
+                "label": "ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": true,
+                "hidden": false,
+                "indexed": false,
+                "key": "code",
+                "label": "编码",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": true,
+                "hidden": false,
+                "indexed": false,
+                "key": "name",
+                "label": "姓名",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "JSON",
+                "componentType": null,
+                "filterable": true,
+                "hidden": false,
+                "indexed": false,
+                "key": "dept",
+                "label": "部门",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": false,
+            "formKey": null
+          }
+        }
+      }
+    },
+    {
+      "id": "qsData",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "params": "{\"minVersion\":1}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "code": "001",
+                  "name": "张三",
+                  "dept": "[\"2\"]"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qsDataKeyword",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data",
+        "query": {
+          "keyword": "张",
+          "keywordColumn": "name",
+          "params": "{\"minVersion\":1}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "code": "001",
+                  "name": "张三",
+                  "dept": "[\"2\"]"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qsDataFilterJson",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data",
+        "query": {
+          "filter": "{\"dept\":[\"2\"]}",
+          "params": "{\"minVersion\":1}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "code": "001",
+                  "name": "张三",
+                  "dept": "[\"2\"]"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qsDataFilterNotFilterable",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data",
+        "query": {
+          "filter": "{\"id\":\"x\"}",
+          "params": "{\"minVersion\":1}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "该列不可筛选字段: id",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qsDataSortNotSortable",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data",
+        "query": {
+          "sort": "dept",
+          "params": "{\"minVersion\":1}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "该列不可排序: dept",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qsDataMissingParam",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "缺少运行时参数值: :minVersion",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qsDataParamsNotObject",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data",
+        "query": {
+          "params": "[1,2]"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data",
+      "shapeOnly": [
+        "$.msg"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "运行时参数 params 格式非法，应为 JSON 对象: Cannot deserialize value of type `java.util.LinkedHashMap<java.lang.Object,java.lang.Object>` from Array value (token `JsonToken.START_ARRAY`)",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qsDataSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data",
+        "query": {
+          "size": "0",
+          "params": "{\"minVersion\":0}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "code": "001",
+                  "name": "张三",
+                  "dept": "[\"2\"]"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "qsGetRowNoFormKey",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreate.data.id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/f7490021757f485699e547ad824d52f3/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "SQL 数据源未绑定表单，不支持get操作: 契约SQL数据源_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qsCreateNoMode",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约SQL数据源-无模式_{{$runId}}",
+          "type": "SQL",
+          "sourceKey": "contract_qsq_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约SQL数据源-无模式_<RUN>",
+            "params": null,
+            "sourceKey": "contract_qsq_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qsNoModeMetadata",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreateNoMode.data.id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/28ff539f498e4ca193c762918d023c42/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [],
+            "writable": false,
+            "formKey": null
+          }
+        }
+      }
+    },
+    {
+      "id": "qsNoModeData",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreateNoMode.data.id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/28ff539f498e4ca193c762918d023c42/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "SQL 数据源缺少查询配置",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qsCreateConfigMode",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约SQL数据源-config模式_{{$runId}}",
+          "type": "SQL",
+          "sourceKey": "contract_qsc_{{$runId}}",
+          "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约SQL数据源-config模式_<RUN>",
+            "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true}]}",
+            "sourceKey": "contract_qsc_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qsConfigModeData",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreateConfigMode.data.id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/02cd9348b4d9495e97b994b0e1ffb3b1/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "SQL 数据源缺少查询配置",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qsConfigModeMetadata",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreateConfigMode.data.id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/02cd9348b4d9495e97b994b0e1ffb3b1/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [],
+            "writable": false,
+            "formKey": null
+          }
+        }
+      }
+    },
+    {
+      "id": "qsCreateNoTenant",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约SQL数据源-缺占位符_{{$runId}}",
+          "type": "SQL",
+          "sourceKey": "contract_qsn_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id, code FROM wf_biz_person WHERE version >= 0\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约SQL数据源-缺占位符_<RUN>",
+            "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id, code FROM wf_biz_person WHERE version >= 0\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}]}",
+            "sourceKey": "contract_qsn_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qsNoTenantData",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qsCreateNoTenant.data.id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/1ccab28768a64f92b65874a409139162/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "SQL 模板必须包含 :tenantId 占位符",
+          "data": null
+        }
+      }
+    }
+  ]
+}

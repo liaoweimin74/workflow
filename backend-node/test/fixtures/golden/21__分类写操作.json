@@ -1,0 +1,224 @@
+{
+  "scenario": "分类写操作",
+  "recordedAt": "2026-09-18T03:20:49.473Z",
+  "steps": [
+    {
+      "id": "catCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/categories"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/categories",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约分类",
+          "parentId": null,
+          "sortOrder": 5
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/categories",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "id": "<ID>",
+            "name": "契约分类",
+            "parentId": null,
+            "sortOrder": 5,
+            "tenantId": "default"
+          }
+        }
+      }
+    },
+    {
+      "id": "catUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/categories/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/categories/{{catCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约分类-改名"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/categories/c8d8dad0de4f4e928462eacdb8558d53",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "id": "<ID>",
+            "name": "契约分类-改名",
+            "parentId": null,
+            "sortOrder": 5,
+            "tenantId": "default"
+          }
+        }
+      }
+    },
+    {
+      "id": "catListAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/categories"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/categories",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/categories",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "常用流程",
+              "parentId": null,
+              "sortOrder": 0,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "考勤相关",
+              "parentId": null,
+              "sortOrder": 1,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "报销流程",
+              "parentId": null,
+              "sortOrder": 2,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "契约分类-改名",
+              "parentId": null,
+              "sortOrder": 5,
+              "tenantId": "default"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "catDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/categories/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/categories/{{catCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/categories/c8d8dad0de4f4e928462eacdb8558d53",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "catListAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/categories"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/categories",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/categories",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "常用流程",
+              "parentId": null,
+              "sortOrder": 0,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "考勤相关",
+              "parentId": null,
+              "sortOrder": 1,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "报销流程",
+              "parentId": null,
+              "sortOrder": 2,
+              "tenantId": "default"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

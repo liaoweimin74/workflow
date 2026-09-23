@@ -1,0 +1,1113 @@
+{
+  "scenario": "任务加签",
+  "recordedAt": "2026-09-18T03:20:59.949Z",
+  "steps": [
+    {
+      "id": "agDraft",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/drafts"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/drafts",
+        "query": {
+          "name": "契约加签流程",
+          "key": "contract_ag_{{$runId}}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/drafts",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"http://flowable.org/bpmn\">\n  <bpmn:process id=\"contract_ag_<RUN>\" name=\"契约加签流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"startEvent_1\"/>\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"contract_ag_<RUN>\">\n      <bpmndi:BPMNShape id=\"startEvent_1_di\" bpmnElement=\"startEvent_1\">\n        <dc:Rect x=\"160\" y=\"160\" width=\"36\" height=\"36\"/>\n      </bpmndi:BPMNShape>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_ag_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约加签流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "agSaveDesign",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/process-definitions/{id}/design"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{agDraft.data.id}}/design",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "key": "contract_ag_{{$runId}}",
+          "name": "契约加签流程",
+          "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_ag_{{$runId}}\" name=\"契约加签流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"会签节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+          "nodeConfigs": {
+            "Approve_1": "{\"approval\":{\"userIds\":[\"1\",\"2\"],\"multiMode\":\"countersign\"}}"
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/d6cf666d8c6e48199b0a419c16179815/design",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_ag_<RUN>\" name=\"契约加签流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"会签节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_ag_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约加签流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "agDeploy",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/{id}/deploy"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{agDraft.data.id}}/deploy",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/d6cf666d8c6e48199b0a419c16179815/deploy",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_ag_<RUN>\" name=\"契约加签流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"会签节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": "<UUID>",
+            "deployedConfigHash": "41a721d5b749b0ad8801f525be8d82cba7afedc9616dadf785dc44fd52d684eb",
+            "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n          \r\n    \r\n    <bpmn:process id=\"contract_ag_<RUN>\" isExecutable=\"true\" name=\"契约加签流程\">\r\n                    \r\n        \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n                        \r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n                    \r\n        </bpmn:startEvent>\r\n                    \r\n        \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n                    \r\n        \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n                        \r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n                        \r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n                    \r\n        </bpmn:userTask>\r\n                    \r\n        \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n                    \r\n        \r\n        <bpmn:userTask flowable:assignee=\"${approver}\" id=\"Approve_1\" name=\"会签节点\">\r\n                        \r\n            <bpmn:extensionElements>\r\n                                \r\n                <flowable:executionListener delegateExpression=\"${multiInstanceApproverListener}\" event=\"start\"/>\r\n                            \r\n            </bpmn:extensionElements>\r\n                        \r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n                        \r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n                        \r\n            <bpmn:multiInstanceLoopCharacteristics flowable:collection=\"${approverList}\" flowable:elementVariable=\"approver\" isSequential=\"false\">\r\n                                \r\n                <bpmn:completionCondition>${rejected || (nrOfCompletedInstances == nrOfInstances)}</bpmn:completionCondition>\r\n                            \r\n            </bpmn:multiInstanceLoopCharacteristics>\r\n                    \r\n        </bpmn:userTask>\r\n                    \r\n        \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n                    \r\n        \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n                        \r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n                    \r\n        </bpmn:endEvent>\r\n                  \r\n    \r\n    </bpmn:process>\r\n        \r\n\r\n</bpmn:definitions>\r\n",
+            "id": "<ID>",
+            "key": "contract_ag_<RUN>",
+            "lastDeployedAt": "<TIME>",
+            "name": "契约加签流程",
+            "processDefinitionId": "contract_ag_<RUN>:1:<UUID>",
+            "status": "DEPLOYED",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "agStart",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-instances"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "processKey": "contract_ag_{{$runId}}",
+          "businessKey": "contract-ag-{{$runId}}",
+          "variables": {
+            "initiator": "1"
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "processDefinitionId": "contract_ag_<RUN>:1:<UUID>",
+            "businessKey": "contract-ag-<RUN>",
+            "tenantId": "default",
+            "id": "<UUID>",
+            "processDefinitionKey": "contract_ag_<RUN>"
+          }
+        }
+      }
+    },
+    {
+      "id": "agTodoUser1",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks",
+        "query": {
+          "assignee": "1",
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-<RUN>",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-dpyzhu",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-e798k3",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-1265po",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-muqad5",
+                "reminded": false,
+                "taskId": "<UUID>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 146,
+            "totalPages": 8
+          }
+        }
+      }
+    },
+    {
+      "id": "agTaskGetBefore",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{agTodoUser1.data.content[0].taskId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f82e4858-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "assignee": "1",
+            "assigneeName": "管理员",
+            "businessKey": "contract-ag-<RUN>",
+            "createTime": "<TIME>",
+            "description": null,
+            "fieldPermissions": null,
+            "formKey": null,
+            "initiator": "1",
+            "initiatorName": "管理员",
+            "isInitiatorTask": false,
+            "mappedData": null,
+            "name": "会签节点",
+            "operations": {
+              "allowAddSign": false,
+              "allowDelegate": false,
+              "allowReject": true,
+              "allowTransfer": true
+            },
+            "processDefinitionId": "contract_ag_<RUN>:1:<UUID>",
+            "processInstanceId": "<UUID>",
+            "processName": "契约加签流程",
+            "processVersion": 1,
+            "taskId": "<UUID>",
+            "variables": {
+              "approver": "1",
+              "nrOfActiveInstances": 2,
+              "rejected": false,
+              "initiator": "1",
+              "loopCounter": 0,
+              "approverList": [
+                "1",
+                "2"
+              ],
+              "nrOfInstances": 2,
+              "nrOfCompletedInstances": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "agAddSignEmpty",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/add-sign"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{agTodoUser1.data.content[0].taskId}}/add-sign",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "users": [],
+          "comment": "空加签人不该生效"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f82e4858-b30f-11f1-8aad-7c8ae1a7aa09/add-sign",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "AddSign users cannot be empty",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "agAddSignMissingTask",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/add-sign"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/contract_missing_task/add-sign",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "users": [
+            "4"
+          ],
+          "comment": "任务不存在"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/contract_missing_task/add-sign",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Task not found: contract_missing_task",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "agAddSign",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/add-sign"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{agTodoUser1.data.content[0].taskId}}/add-sign",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "users": [
+            "4"
+          ],
+          "comment": "契约加签"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f82e4858-b30f-11f1-8aad-7c8ae1a7aa09/add-sign",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "agTodoUser4",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks",
+        "query": {
+          "assignee": "4",
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-nxcq7l",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_nxcq7l:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-2rfunp",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_2rfunp:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-if75hu",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_if75hu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-c9cbk3",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_c9cbk3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-twdwtw",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_twdwtw:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-gx16j3",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_gx16j3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-7yzabj",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_7yzabj:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-etqi33",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_etqi33:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-z2wpow",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_z2wpow:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-7p2alh",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_7p2alh:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-kilhcy",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_kilhcy:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-5mheq4",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_5mheq4:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-y51vdc",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_y51vdc:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "4",
+                "businessKey": "contract-ag-e5rk6o",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_e5rk6o:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 19,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "agTask4Get",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{agTodoUser4.data.content[0].taskId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f855a683-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "assignee": "4",
+            "assigneeName": "契约用户-改名",
+            "businessKey": "contract-ag-<RUN>",
+            "createTime": "<TIME>",
+            "description": null,
+            "fieldPermissions": null,
+            "formKey": null,
+            "initiator": "1",
+            "initiatorName": "管理员",
+            "isInitiatorTask": false,
+            "mappedData": null,
+            "name": "会签节点",
+            "operations": {
+              "allowAddSign": false,
+              "allowDelegate": false,
+              "allowReject": true,
+              "allowTransfer": true
+            },
+            "processDefinitionId": "contract_ag_<RUN>:1:<UUID>",
+            "processInstanceId": "<UUID>",
+            "processName": "契约加签流程",
+            "processVersion": 1,
+            "taskId": "<UUID>",
+            "variables": {
+              "approver": "4",
+              "nrOfActiveInstances": 3,
+              "rejected": false,
+              "initiator": "1",
+              "loopCounter": 2,
+              "approverList": [
+                "1",
+                "2"
+              ],
+              "nrOfInstances": 3,
+              "nrOfCompletedInstances": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "agHistory",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{id}/history"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{agStart.data.id}}/history",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/f8293f30-b30f-11f1-8aad-7c8ae1a7aa09/history",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "action": "submit",
+              "activityId": "Initiator_1",
+              "activityName": "发起节点",
+              "assignee": "1",
+              "assigneeName": "管理员",
+              "comment": null,
+              "endTime": "<TIME>",
+              "startTime": "<TIME>"
+            },
+            {
+              "action": "add_sign",
+              "activityId": "Approve_1",
+              "activityName": "会签节点",
+              "assignee": "1",
+              "assigneeName": "管理员",
+              "comment": "契约加签",
+              "endTime": null,
+              "startTime": "<TIME>"
+            },
+            {
+              "action": null,
+              "activityId": "Approve_1",
+              "activityName": "会签节点",
+              "assignee": "2",
+              "assigneeName": "测试用户",
+              "comment": null,
+              "endTime": null,
+              "startTime": "<TIME>"
+            },
+            {
+              "action": null,
+              "activityId": "Approve_1",
+              "activityName": "会签节点",
+              "assignee": "4",
+              "assigneeName": "契约用户-改名",
+              "comment": null,
+              "endTime": null,
+              "startTime": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "agInstanceGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{agStart.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/f8293f30-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "processDefinitionId": "contract_ag_<RUN>:1:<UUID>",
+            "businessKey": "contract-ag-<RUN>",
+            "tenantId": "default",
+            "ended": false,
+            "name": null,
+            "currentNode": null,
+            "processDefinitionName": "契约加签流程",
+            "startTime": "<TIME>",
+            "id": "<UUID>",
+            "suspended": false,
+            "processDefinitionKey": "contract_ag_<RUN>",
+            "status": "running"
+          }
+        }
+      }
+    }
+  ]
+}

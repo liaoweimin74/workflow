@@ -1,0 +1,1255 @@
+{
+  "scenario": "数据源行数据写路径",
+  "recordedAt": "2026-09-18T03:20:57.591Z",
+  "steps": [
+    {
+      "id": "dsrListForm",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "type": "FORM",
+          "status": "ENABLED",
+          "size": "100"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "contract_pub_<RUN>",
+                "id": "<ID>",
+                "name": "契约发布表单 数据源",
+                "params": null,
+                "sourceKey": "contract_pub_<RUN>",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "FORM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "contract_sub_<RUN>",
+                "id": "<ID>",
+                "name": "契约子表表单 数据源",
+                "params": null,
+                "sourceKey": "contract_sub_<RUN>",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "FORM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "leave_apply_biz",
+                "id": "<ID>",
+                "name": "请假单-业务表单 数据源",
+                "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"j1\",\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"leave_name\",\"label\":\"姓名-请假人\",\"sortable\":true,\"filterable\":true},{\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"leave_dept\",\"label\":\"部门-请假人\",\"sortable\":true,\"filterable\":true}]}",
+                "sourceKey": "leave_apply_biz",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "FORM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "person",
+                "id": "<ID>",
+                "name": "请假人员 数据源",
+                "params": null,
+                "sourceKey": "person",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "FORM",
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 100,
+            "totalElements": 4,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrListWorkflow",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "type": "WORKFLOW",
+          "status": "ENABLED",
+          "size": "100"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "baoxiaodan",
+                "id": "<ID>",
+                "name": "报销单 数据源",
+                "params": null,
+                "sourceKey": "baoxiaodan",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "WORKFLOW",
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 100,
+            "totalElements": 1,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrListSystem",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "type": "SYSTEM",
+          "status": "ENABLED",
+          "size": "100"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": null,
+                "id": "<ID>",
+                "name": "用户树数据源",
+                "params": null,
+                "sourceKey": "user-tree",
+                "status": "ENABLED",
+                "tenantId": "system",
+                "type": "SYSTEM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": null,
+                "id": "<ID>",
+                "name": "部门树数据源",
+                "params": null,
+                "sourceKey": "dept-tree",
+                "status": "ENABLED",
+                "tenantId": "system",
+                "type": "SYSTEM",
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 100,
+            "totalElements": 2,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrMissingSourceCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/contract_missing_ds/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/contract_missing_ds/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "数据源不存在: contract_missing_ds",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrFormDeleteMissingRow",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrListForm.data.content[0].id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/aecc541a87654ee49b274501ad85f36c/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "业务数据不存在: contract-missing-row",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrWorkflowCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrListWorkflow.data.content[0].id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_WF_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "工作流表单数据源为只读，不支持该操作",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrWorkflowUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrListWorkflow.data.content[0].id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "工作流表单数据源为只读，不支持该操作",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrWorkflowDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrListWorkflow.data.content[0].id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "工作流表单数据源为只读，不支持该操作",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrSystemCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrListSystem.data.content[0].id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/574181d96527400e8267fadfecc0b347/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "该数据源不支持create: 用户树数据源",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrSystemUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrListSystem.data.content[0].id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/574181d96527400e8267fadfecc0b347/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "该数据源不支持update: 用户树数据源",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrSystemDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrListSystem.data.content[0].id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/574181d96527400e8267fadfecc0b347/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "该数据源不支持delete: 用户树数据源",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrSqlNoFkCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约行数据源-未绑定表单",
+          "type": "SQL",
+          "sourceKey": "contract_dsrow_nofk_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约行数据源-未绑定表单",
+            "params": null,
+            "sourceKey": "contract_dsrow_nofk_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrSqlNoFkCreateData",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlNoFkCreate.data.id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_NOFK_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/4132209a2d3340cfa0b55738ffebc497/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "SQL 数据源未绑定表单，不支持create操作: 契约行数据源-未绑定表单",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrSqlNoFkUpdateData",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlNoFkCreate.data.id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/4132209a2d3340cfa0b55738ffebc497/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "SQL 数据源未绑定表单，不支持update操作: 契约行数据源-未绑定表单",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrSqlNoFkDeleteData",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlNoFkCreate.data.id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/4132209a2d3340cfa0b55738ffebc497/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "SQL 数据源未绑定表单，不支持delete操作: 契约行数据源-未绑定表单",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrApiCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约行数据源-API",
+          "type": "API",
+          "sourceKey": "contract_dsrow_api_{{$runId}}",
+          "params": "{\"action\":\"/api/v1/ping\"}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约行数据源-API",
+            "params": "{\"action\":\"/api/v1/ping\"}",
+            "sourceKey": "contract_dsrow_api_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "API",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrApiCreateData",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrApiCreate.data.id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_API_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/1cef312d51144a22b211c971588f1370/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "API 数据源未配置 create 操作: 契约行数据源-API",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrApiUpdateData",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrApiCreate.data.id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/1cef312d51144a22b211c971588f1370/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "API 数据源未配置 update 操作: 契约行数据源-API",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrApiDeleteData",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrApiCreate.data.id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/1cef312d51144a22b211c971588f1370/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "API 数据源未配置 delete 操作: 契约行数据源-API",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrSqlCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约行数据源",
+          "type": "SQL",
+          "sourceKey": "contract_dsrow_{{$runId}}",
+          "formKey": "person"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "name": "契约行数据源",
+            "params": null,
+            "sourceKey": "contract_dsrow_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrDisable",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/disable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/disable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/disable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "name": "契约行数据源",
+            "params": null,
+            "sourceKey": "contract_dsrow_<RUN>",
+            "status": "DISABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrDisabledCreateData",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_DISABLED_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源未启用，无法访问: 契约行数据源",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrDisabledUpdateData",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源未启用，无法访问: 契约行数据源",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrDisabledDeleteData",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源未启用，无法访问: 契约行数据源",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrEnable",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/enable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/enable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/enable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "name": "契约行数据源",
+            "params": null,
+            "sourceKey": "contract_dsrow_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrRowCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_DSR_{{$runId}}",
+          "name": "契约行人员",
+          "dept": [
+            "01"
+          ],
+          "dept_text": "总公司"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": "<ID>"
+        }
+      }
+    },
+    {
+      "id": "dsrRowGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{dsrRowCreate.data}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/14efb623be424ad7b79e42d5418bc0d2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "CONTRACT_DSR_<RUN>",
+              "name": "契约行人员",
+              "dept": [
+                "01"
+              ],
+              "dept_text": "总公司"
+            },
+            "version": 1,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrRowUpdateNoVersion",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data/{{dsrRowCreate.data}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_DSR_{{$runId}}",
+          "name": "契约行人员-改名"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data/14efb623be424ad7b79e42d5418bc0d2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrRowGetAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{dsrRowCreate.data}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/14efb623be424ad7b79e42d5418bc0d2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "CONTRACT_DSR_<RUN>",
+              "name": "契约行人员-改名",
+              "dept": [
+                "01"
+              ],
+              "dept_text": "总公司"
+            },
+            "version": 2,
+            "createdAt": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrRowUpdateBodyVersionIgnored",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data/{{dsrRowCreate.data}}",
+        "query": {
+          "version": "2"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_DSR_{{$runId}}",
+          "name": "契约行人员-再改名",
+          "version": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data/14efb623be424ad7b79e42d5418bc0d2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrRowGetAfterBodyVersion",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{dsrRowCreate.data}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/14efb623be424ad7b79e42d5418bc0d2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "CONTRACT_DSR_<RUN>",
+              "name": "契约行人员-再改名",
+              "dept": [
+                "01"
+              ],
+              "dept_text": "总公司"
+            },
+            "version": 3,
+            "createdAt": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dsrRowUpdateStaleQueryVersion",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data/{{dsrRowCreate.data}}",
+        "query": {
+          "version": "2"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_DSR_{{$runId}}",
+          "name": "契约行人员-冲突"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data/14efb623be424ad7b79e42d5418bc0d2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 409,
+          "msg": "数据已被他人修改，请刷新后重试",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrRowUpdateMissing",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data/contract-missing-row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "code": "CONTRACT_DSR_MISSING_{{$runId}}",
+          "name": "不存在"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data/contract-missing-row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "业务数据不存在: contract-missing-row",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrRowDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dsrSqlCreate.data.id}}/data/{{dsrRowCreate.data}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/ab7eaa473b0c4bbbb80180c394b0b148/data/14efb623be424ad7b79e42d5418bc0d2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dsrRowGetAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{dsrRowCreate.data}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/14efb623be424ad7b79e42d5418bc0d2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "业务数据不存在: <ID>",
+          "data": null
+        }
+      }
+    }
+  ]
+}

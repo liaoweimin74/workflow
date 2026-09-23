@@ -1,0 +1,604 @@
+{
+  "scenario": "流程定义复制",
+  "recordedAt": "2026-09-18T03:20:55.533Z",
+  "steps": [
+    {
+      "id": "cpDraft",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/drafts"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/drafts",
+        "query": {
+          "name": "契约复制流程",
+          "key": "contract_copy_{{$runId}}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/drafts",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"http://flowable.org/bpmn\">\n  <bpmn:process id=\"contract_copy_<RUN>\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"startEvent_1\"/>\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"contract_copy_<RUN>\">\n      <bpmndi:BPMNShape id=\"startEvent_1_di\" bpmnElement=\"startEvent_1\">\n        <dc:Rect x=\"160\" y=\"160\" width=\"36\" height=\"36\"/>\n      </bpmndi:BPMNShape>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_copy_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约复制流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "cpSaveDesign",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/process-definitions/{id}/design"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{cpDraft.data.id}}/design",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "key": "contract_copy_{{$runId}}",
+          "name": "契约复制流程",
+          "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_copy_{{$runId}}\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+          "nodeConfigs": {
+            "__PROCESS__": "{\"approvalPolicy\":{\"operations\":{\"allowReject\":true}}}",
+            "Approve_1": "{\"operations\":{\"allowTransfer\":true,\"allowAddSign\":true}}"
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/bb81486a1b7643b7b1efa8919471b675/design",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_copy_<RUN>\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_copy_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约复制流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "cpEditorBeforeCopy",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-definitions/{id}/editor"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{cpDraft.data.id}}/editor",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/bb81486a1b7643b7b1efa8919471b675/editor",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_copy_<RUN>\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "id": "<ID>",
+            "key": "contract_copy_<RUN>",
+            "name": "契约复制流程",
+            "nodeConfigs": {
+              "Approve_1": "{\"operations\": {\"allowAddSign\": true, \"allowTransfer\": true}}",
+              "__PROCESS__": "{\"approvalPolicy\": {\"operations\": {\"allowReject\": true}}}"
+            },
+            "status": "DRAFT"
+          }
+        }
+      }
+    },
+    {
+      "id": "cpCopy",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/{id}/copy"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{cpDraft.data.id}}/copy",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/bb81486a1b7643b7b1efa8919471b675/copy",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_copy_<RUN>\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": null,
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_copy_<RUN>_copy_<ID8>",
+            "lastDeployedAt": null,
+            "name": "契约复制流程 (副本)",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": null,
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "cpSourceEditor",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-definitions/{id}/editor"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{cpDraft.data.id}}/editor",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/bb81486a1b7643b7b1efa8919471b675/editor",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_copy_<RUN>\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "id": "<ID>",
+            "key": "contract_copy_<RUN>",
+            "name": "契约复制流程",
+            "nodeConfigs": {
+              "Approve_1": "{\"operations\": {\"allowAddSign\": true, \"allowTransfer\": true}}",
+              "__PROCESS__": "{\"approvalPolicy\": {\"operations\": {\"allowReject\": true}}}"
+            },
+            "status": "DRAFT"
+          }
+        }
+      }
+    },
+    {
+      "id": "cpCopyEditor",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-definitions/{id}/editor"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{cpCopy.data.id}}/editor",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/508f95082db349d6907f6302786d3876/editor",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_copy_<RUN>\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "id": "<ID>",
+            "key": "contract_copy_<RUN>_copy_<ID8>",
+            "name": "契约复制流程 (副本)",
+            "nodeConfigs": {
+              "Approve_1": "{\"operations\": {\"allowAddSign\": true, \"allowTransfer\": true}}",
+              "__PROCESS__": "{\"approvalPolicy\": {\"operations\": {\"allowReject\": true}}}"
+            },
+            "status": "DRAFT"
+          }
+        }
+      }
+    },
+    {
+      "id": "cpDraftsList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-definitions/drafts"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/drafts",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/drafts",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_copy_<RUN>\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": null,
+                "deployedConfigHash": null,
+                "deployedXml": null,
+                "id": "<ID>",
+                "key": "contract_copy_<RUN>_copy_<ID8>",
+                "lastDeployedAt": null,
+                "name": "契约复制流程 (副本)",
+                "processDefinitionId": null,
+                "status": "DRAFT",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 0
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_copy_<RUN>\" name=\"契约复制流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": null,
+                "deployedConfigHash": null,
+                "deployedXml": null,
+                "id": "<ID>",
+                "key": "contract_copy_<RUN>",
+                "lastDeployedAt": null,
+                "name": "契约复制流程",
+                "processDefinitionId": null,
+                "status": "DRAFT",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 0
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_reject_<RUN>\" name=\"契约驳回流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "9a35d82b9412259cfe260a69868a9f59b3ddda002d8d89a11e7906da6662b201",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_reject_<RUN>\" isExecutable=\"true\" name=\"契约驳回流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "contract_reject_<RUN>",
+                "lastDeployedAt": "<TIME>",
+                "name": "契约驳回流程",
+                "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 1
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_tf_b_<RUN>\" name=\"契约转办流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "26d8978b4a0cc33a6c3b9785aab766efd9bac3679ab44264967cd42313a1602d",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_tf_b_<RUN>\" isExecutable=\"true\" name=\"契约转办流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "contract_tf_b_<RUN>",
+                "lastDeployedAt": "<TIME>",
+                "name": "契约转办流程B",
+                "processDefinitionId": "contract_tf_b_<RUN>:1:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 1
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_tf_a_<RUN>\" name=\"契约转办流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "98c85910642ff93c6f1e8f83e67329e755cd6fd9e48485c7888bbffa71d2f319",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_tf_a_<RUN>\" isExecutable=\"true\" name=\"契约转办流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "contract_tf_a_<RUN>",
+                "lastDeployedAt": "<TIME>",
+                "name": "契约转办流程A",
+                "processDefinitionId": "contract_tf_a_<RUN>:1:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 1
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_inst_<RUN>\" name=\"契约测试流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "563da98ddbb55fa1dbc622980b43e769f78b1dfe1bedccae377acf6526f93606",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_inst_<RUN>\" isExecutable=\"true\" name=\"契约测试流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "contract_inst_<RUN>",
+                "lastDeployedAt": "<TIME>",
+                "name": "契约测试流程",
+                "processDefinitionId": "contract_inst_<RUN>:1:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 1
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_state_<RUN>\" name=\"契约测试流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "6801baf506d413bec3f413122db884aa51bcd1a2b7abacbed471046e4baca745",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_state_<RUN>\" isExecutable=\"true\" name=\"契约测试流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "contract_state_<RUN>",
+                "lastDeployedAt": "<TIME>",
+                "name": "契约测试流程",
+                "processDefinitionId": "contract_state_<RUN>:1:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 1
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_var_<RUN>\" name=\"契约测试流程-<RUN>\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "0736ad285560f69ac3cf74eb04d265186b86649b9bfae328de55b68c400bdf06",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_var_<RUN>\" isExecutable=\"true\" name=\"契约测试流程-<RUN>\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "contract_var_<RUN>",
+                "lastDeployedAt": "<TIME>",
+                "name": "契约测试流程",
+                "processDefinitionId": "contract_var_<RUN>:1:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 1
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_flow_<RUN>\" name=\"契约测试流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "0863f8f0b4b63920b7b4405e2f9a58732961b19326f23940d786407fbc0439c1",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_flow_<RUN>\" isExecutable=\"true\" name=\"契约测试流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "contract_flow_<RUN>",
+                "lastDeployedAt": "<TIME>",
+                "name": "契约测试流程",
+                "processDefinitionId": "contract_flow_<RUN>:2:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 2
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_flow_<RUN>\" name=\"契约测试流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "0863f8f0b4b63920b7b4405e2f9a58732961b19326f23940d786407fbc0439c1",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_flow_<RUN>\" isExecutable=\"true\" name=\"契约测试流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "contract_flow_<RUN>",
+                "lastDeployedAt": "<TIME>",
+                "name": "契约测试流程",
+                "processDefinitionId": "contract_flow_<RUN>:1:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 1
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\"><bpmn:process id=\"probe_fs_80421152\" name=\"probe\" isExecutable=\"true\"><bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent><bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" /><bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask><bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" /><bpmn:userTask id=\"Approve_1\" name=\"会签节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask><bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" /><bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent></bpmn:process></bpmn:definitions>",
+                "categoryId": null,
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": "<UUID>",
+                "deployedConfigHash": "1921aeca58b5214c994e143ec1eda65e5836b7b81af3b0199b7b7a59902da2a8",
+                "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n        \r\n    <bpmn:process id=\"probe_fs_80421152\" isExecutable=\"true\" name=\"probe\">\r\n                \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n                        \r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n                    \r\n        </bpmn:startEvent>\r\n                \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n                \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n                        \r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n                        \r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n                    \r\n        </bpmn:userTask>\r\n                \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n                \r\n        <bpmn:userTask flowable:assignee=\"${approver}\" id=\"Approve_1\" name=\"会签节点\">\r\n                        \r\n            <bpmn:extensionElements>\r\n                                \r\n                <flowable:executionListener delegateExpression=\"${multiInstanceApproverListener}\" event=\"start\"/>\r\n                            \r\n            </bpmn:extensionElements>\r\n                        \r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n                        \r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n                        \r\n            <bpmn:multiInstanceLoopCharacteristics flowable:collection=\"${approverList}\" flowable:elementVariable=\"approver\" isSequential=\"false\">\r\n                                \r\n                <bpmn:completionCondition>${rejected || (nrOfCompletedInstances == nrOfInstances)}</bpmn:completionCondition>\r\n                            \r\n            </bpmn:multiInstanceLoopCharacteristics>\r\n                    \r\n        </bpmn:userTask>\r\n                \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n                \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n                        \r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n                    \r\n        </bpmn:endEvent>\r\n            \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+                "id": "<ID>",
+                "key": "probe_fs_80421152",
+                "lastDeployedAt": "<TIME>",
+                "name": "probe",
+                "processDefinitionId": "probe_fs_80421152:1:<UUID>",
+                "status": "DEPLOYED",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 1
+              },
+              {
+                "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"<ID>\">\n  <bpmn:process id=\"leave_apply\" name=\"请假流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Event_1c3exx9\">\n      <bpmn:outgoing>Flow_18tdmgw</bpmn:outgoing>\n    </bpmn:startEvent>\n    <bpmn:userTask id=\"Activity_1dd4ed3\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\">\n      <bpmn:incoming>Flow_18tdmgw</bpmn:incoming>\n      <bpmn:outgoing>Flow_1h1y4wd</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_18tdmgw\" sourceRef=\"Event_1c3exx9\" targetRef=\"Activity_1dd4ed3\" />\n    <bpmn:userTask id=\"Activity_0lwswse\" name=\"多人审批\">\n      <bpmn:incoming>Flow_1h1y4wd</bpmn:incoming>\n      <bpmn:outgoing>Flow_0cbe119</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_1h1y4wd\" sourceRef=\"Activity_1dd4ed3\" targetRef=\"Activity_0lwswse\" />\n    <bpmn:userTask id=\"Activity_1tsdpa6\" name=\"去重审批\">\n      <bpmn:incoming>Flow_0cbe119</bpmn:incoming>\n      <bpmn:outgoing>Flow_1cusaqg</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_0cbe119\" sourceRef=\"Activity_0lwswse\" targetRef=\"Activity_1tsdpa6\" />\n    <bpmn:userTask id=\"Activity_0rrplp3\" name=\"多表单\">\n      <bpmn:incoming>Flow_1cusaqg</bpmn:incoming>\n      <bpmn:outgoing>Flow_0xzyx7i</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_1cusaqg\" sourceRef=\"Activity_1tsdpa6\" targetRef=\"Activity_0rrplp3\" />\n    <bpmn:endEvent id=\"Event_0ua71tz\">\n      <bpmn:incoming>Flow_0xzyx7i</bpmn:incoming>\n    </bpmn:endEvent>\n    <bpmn:sequenceFlow id=\"Flow_0xzyx7i\" sourceRef=\"Activity_0rrplp3\" targetRef=\"Event_0ua71tz\" />\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"leave_apply\">\n      <bpmndi:BPMNShape id=\"Event_1c3exx9_di\" bpmnElement=\"Event_1c3exx9\">\n        <dc:Bounds x=\"127\" y=\"285\" width=\"36\" height=\"36\" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id=\"Activity_1dd4ed3_di\" bpmnElement=\"Activity_1dd4ed3\">\n        <dc:Bounds x=\"220\" y=\"263\" width=\"100\" height=\"80\" />\n        <bpmndi:BPMNLabel />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id=\"Activity_0lwswse_di\" bpmnElement=\"Activity_0lwswse\">\n        <dc:Bounds x=\"380\" y=\"263\" width=\"100\" height=\"80\" />\n        <bpmndi:BPMNLabel />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id=\"Activity_1tsdpa6_di\" bpmnElement=\"Activity_1tsdpa6\">\n        <dc:Bounds x=\"540\" y=\"263\" width=\"100\" height=\"80\" />\n        <bpmndi:BPMNLabel />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id=\"Activity_0rrplp3_di\" bpmnElement=\"Activity_0rrplp3\">\n        <dc:Bounds x=\"690\" y=\"263\" width=\"100\" height=\"80\" />\n        <bpmndi:BPMNLabel />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id=\"Event_0ua71tz_di\" bpmnElement=\"Event_0ua71tz\">\n        <dc:Bounds x=\"842\" y=\"285\" width=\"36\" height=\"36\" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNEdge id=\"Flow_18tdmgw_di\" bpmnElement=\"Flow_18tdmgw\">\n        <di:waypoint x=\"163\" y=\"303\" />\n        <di:waypoint x=\"220\" y=\"303\" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id=\"Flow_1h1y4wd_di\" bpmnElement=\"Flow_1h1y4wd\">\n        <di:waypoint x=\"320\" y=\"303\" />\n        <di:waypoint x=\"380\" y=\"303\" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id=\"Flow_0cbe119_di\" bpmnElement=\"Flow_0cbe119\">\n        <di:waypoint x=\"480\" y=\"303\" />\n        <di:waypoint x=\"540\" y=\"303\" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id=\"Flow_1cusaqg_di\" bpmnElement=\"Flow_1cusaqg\">\n        <di:waypoint x=\"640\" y=\"303\" />\n        <di:waypoint x=\"690\" y=\"303\" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id=\"Flow_0xzyx7i_di\" bpmnElement=\"Flow_0xzyx7i\">\n        <di:waypoint x=\"790\" y=\"303\" />\n        <di:waypoint x=\"842\" y=\"303\" />\n      </bpmndi:BPMNEdge>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>\n",
+                "categoryId": "<ID>",
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "deployId": null,
+                "deployedConfigHash": null,
+                "deployedXml": null,
+                "id": "<ID>",
+                "key": "leave_apply",
+                "lastDeployedAt": null,
+                "name": "请假流程",
+                "processDefinitionId": null,
+                "status": "DRAFT",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "version": 0
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 12,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "cpCopyUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/{id}/copy"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/ffffffffffffffffffffffffffffffff/copy",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/ffffffffffffffffffffffffffffffff/copy",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Process draft not found: <ID>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "cpCleanupCopy",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/process-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{cpCopy.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/508f95082db349d6907f6302786d3876",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "cpCleanupSource",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/process-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{cpDraft.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/bb81486a1b7643b7b1efa8919471b675",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    }
+  ]
+}

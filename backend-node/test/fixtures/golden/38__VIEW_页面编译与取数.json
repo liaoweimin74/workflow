@@ -1,0 +1,1309 @@
+{
+  "scenario": "VIEW 页面编译与取数",
+  "recordedAt": "2026-09-18T03:20:58.698Z",
+  "steps": [
+    {
+      "id": "vpListFormDs",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "type": "FORM",
+          "status": "ENABLED",
+          "size": "100"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "contract_pub_<RUN>",
+                "id": "<ID>",
+                "name": "契约发布表单 数据源",
+                "params": null,
+                "sourceKey": "contract_pub_<RUN>",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "FORM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "contract_sub_<RUN>",
+                "id": "<ID>",
+                "name": "契约子表表单 数据源",
+                "params": null,
+                "sourceKey": "contract_sub_<RUN>",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "FORM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "leave_apply_biz",
+                "id": "<ID>",
+                "name": "请假单-业务表单 数据源",
+                "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"j1\",\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"leave_name\",\"label\":\"姓名-请假人\",\"sortable\":true,\"filterable\":true},{\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"leave_dept\",\"label\":\"部门-请假人\",\"sortable\":true,\"filterable\":true}]}",
+                "sourceKey": "leave_apply_biz",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "FORM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "person",
+                "id": "<ID>",
+                "name": "请假人员 数据源",
+                "params": null,
+                "sourceKey": "person",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "FORM",
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 100,
+            "totalElements": 4,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpDsMeta",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{vpListFormDs.data.content[0].id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/aecc541a87654ee49b274501ad85f36c/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "empNo",
+                "label": null,
+                "length": 255,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": true,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": true
+              },
+              {
+                "columnType": "TEXT",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "remark",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "DECIMAL",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "salary",
+                "label": null,
+                "length": 18,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": 2,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "INT",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "age",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "DATE",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "hireDate",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "clock",
+                "label": null,
+                "length": 32,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "TINYINT",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "active",
+                "label": null,
+                "length": 1,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "JSON",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "tags",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "INT",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": true,
+                "key": "score",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "LONGTEXT",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "bio",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "DATETIME",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "updatedOn",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": true,
+                "key": "note",
+                "label": null,
+                "length": 64,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": "subForm",
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "items",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": [
+                  {
+                    "columnType": "VARCHAR",
+                    "componentType": null,
+                    "filterable": null,
+                    "hidden": false,
+                    "indexed": false,
+                    "key": "sku",
+                    "label": null,
+                    "length": 64,
+                    "matchType": null,
+                    "pickerConfig": null,
+                    "required": true,
+                    "scale": null,
+                    "sortable": null,
+                    "storageMode": "JSON",
+                    "subColumns": null,
+                    "subMode": null,
+                    "unique": false
+                  },
+                  {
+                    "columnType": "INT",
+                    "componentType": null,
+                    "filterable": null,
+                    "hidden": false,
+                    "indexed": false,
+                    "key": "qty",
+                    "label": null,
+                    "length": null,
+                    "matchType": null,
+                    "pickerConfig": null,
+                    "required": false,
+                    "scale": null,
+                    "sortable": null,
+                    "storageMode": "JSON",
+                    "subColumns": null,
+                    "subMode": null,
+                    "unique": false
+                  }
+                ],
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": true,
+            "formKey": "contract_pub_<RUN>"
+          }
+        }
+      }
+    },
+    {
+      "id": "vpCreateA",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约视图-表单绑定",
+          "key": "contract_view_{{$runId}}",
+          "type": "VIEW",
+          "formKey": "person"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_<RUN>",
+            "name": "契约视图-表单绑定",
+            "publishedVersion": null,
+            "schema": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpUpdateBadMatchType",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "{\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\",\"matchType\":\"unknown\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_<RUN>",
+            "name": "契约视图-表单绑定",
+            "publishedVersion": null,
+            "schema": "{\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\",\"matchType\":\"unknown\"}]}",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpPublishBadMatchType",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "未知查询匹配类型: unknown",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "vpUpdateBadPlacement",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "{\"actions\":{\"buttons\":[{\"key\":\"view\",\"placement\":\"nowhere\"}]}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_<RUN>",
+            "name": "契约视图-表单绑定",
+            "publishedVersion": null,
+            "schema": "{\"actions\":{\"buttons\":[{\"key\":\"view\",\"placement\":\"nowhere\"}]}}",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpPublishBadPlacement",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "未知操作位置 placement: nowhere",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "vpUpdateBadPageSize",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "{\"pagination\":{\"pageSize\":0}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_<RUN>",
+            "name": "契约视图-表单绑定",
+            "publishedVersion": null,
+            "schema": "{\"pagination\":{\"pageSize\":0}}",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpPublishBadPageSize",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "每页条数必须为正整数: 0",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "vpUpdateBadColumn",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "{\"columns\":[{\"key\":\"nope\",\"label\":\"不存在\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_<RUN>",
+            "name": "契约视图-表单绑定",
+            "publishedVersion": null,
+            "schema": "{\"columns\":[{\"key\":\"nope\",\"label\":\"不存在\"}]}",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpPublishBadColumn",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "展示列引用列不存在: nope",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "vpUpdateA",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "{\"display\":\"card\",\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\",\"matchType\":\"eq\"},{\"key\":\"name\",\"label\":\"名称\",\"matchType\":\"like\"},{\"key\":\"code\",\"label\":\"时间范围\",\"matchType\":\"range\"}],\"columns\":[{\"key\":\"code\",\"label\":\"编码列\",\"width\":200,\"align\":\"center\"},{\"key\":\"name\",\"label\":\"名称列\"},{\"key\":\"calc\",\"label\":\"计算列\",\"custom\":true,\"contentType\":\"text\"},{\"key\":\"name\",\"label\":\"隐藏列\",\"hidden\":true}],\"sortableFields\":[\"code\"],\"pagination\":{\"show\":true,\"pageSize\":50,\"pageSizes\":[10,50,100]},\"filter\":{\"logic\":\"OR\",\"conditions\":[{\"column\":\"code\",\"op\":\"eq\",\"value\":\"x\"}]},\"actions\":{\"permissions\":\"page:read\",\"actionColumnWidth\":180,\"buttons\":[{\"key\":\"view\",\"label\":\"查看\",\"placement\":\"toolbar\",\"style\":\"text\",\"icon\":\"View\"},{\"key\":\"export\",\"label\":\"导出\",\"events\":[{\"on\":\"click\",\"steps\":[]}]}]},\"detail\":{\"width\":\"900px\",\"height\":\"600px\",\"formMode\":\"drawer\"},\"events\":[{\"on\":\"mounted\",\"steps\":[]}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_<RUN>",
+            "name": "契约视图-表单绑定",
+            "publishedVersion": null,
+            "schema": "{\"display\":\"card\",\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\",\"matchType\":\"eq\"},{\"key\":\"name\",\"label\":\"名称\",\"matchType\":\"like\"},{\"key\":\"code\",\"label\":\"时间范围\",\"matchType\":\"range\"}],\"columns\":[{\"key\":\"code\",\"label\":\"编码列\",\"width\":200,\"align\":\"center\"},{\"key\":\"name\",\"label\":\"名称列\"},{\"key\":\"calc\",\"label\":\"计算列\",\"custom\":true,\"contentType\":\"text\"},{\"key\":\"name\",\"label\":\"隐藏列\",\"hidden\":true}],\"sortableFields\":[\"code\"],\"pagination\":{\"show\":true,\"pageSize\":50,\"pageSizes\":[10,50,100]},\"filter\":{\"logic\":\"OR\",\"conditions\":[{\"column\":\"code\",\"op\":\"eq\",\"value\":\"x\"}]},\"actions\":{\"permissions\":\"page:read\",\"actionColumnWidth\":180,\"buttons\":[{\"key\":\"view\",\"label\":\"查看\",\"placement\":\"toolbar\",\"style\":\"text\",\"icon\":\"View\"},{\"key\":\"export\",\"label\":\"导出\",\"events\":[{\"on\":\"click\",\"steps\":[]}]}]},\"detail\":{\"width\":\"900px\",\"height\":\"600px\",\"formMode\":\"drawer\"},\"events\":[{\"on\":\"mounted\",\"steps\":[]}]}",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpPublishA",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_<RUN>",
+            "name": "契约视图-表单绑定",
+            "publishedVersion": 1,
+            "schema": "{\"display\":\"card\",\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\",\"matchType\":\"eq\"},{\"key\":\"name\",\"label\":\"名称\",\"matchType\":\"like\"},{\"key\":\"code\",\"label\":\"时间范围\",\"matchType\":\"range\"}],\"columns\":[{\"key\":\"code\",\"label\":\"编码列\",\"width\":200,\"align\":\"center\"},{\"key\":\"name\",\"label\":\"名称列\"},{\"key\":\"calc\",\"label\":\"计算列\",\"custom\":true,\"contentType\":\"text\"},{\"key\":\"name\",\"label\":\"隐藏列\",\"hidden\":true}],\"sortableFields\":[\"code\"],\"pagination\":{\"show\":true,\"pageSize\":50,\"pageSizes\":[10,50,100]},\"filter\":{\"logic\":\"OR\",\"conditions\":[{\"column\":\"code\",\"op\":\"eq\",\"value\":\"x\"}]},\"actions\":{\"permissions\":\"page:read\",\"actionColumnWidth\":180,\"buttons\":[{\"key\":\"view\",\"label\":\"查看\",\"placement\":\"toolbar\",\"style\":\"text\",\"icon\":\"View\"},{\"key\":\"export\",\"label\":\"导出\",\"events\":[{\"on\":\"click\",\"steps\":[]}]}]},\"detail\":{\"width\":\"900px\",\"height\":\"600px\",\"formMode\":\"drawer\"},\"events\":[{\"on\":\"mounted\",\"steps\":[]}],\"rule\":[{\"type\":\"input\",\"field\":\"code\",\"title\":\"编码\",\"value\":\"\",\"props\":{\"placeholder\":\"编码\",\"style\":\"width: 180px\"},\"matchType\":\"eq\"},{\"type\":\"input\",\"field\":\"name\",\"title\":\"名称\",\"value\":\"\",\"props\":{\"placeholder\":\"名称\",\"style\":\"width: 180px\"},\"matchType\":\"like\"},{\"type\":\"datePicker\",\"field\":\"code\",\"title\":\"时间范围\",\"value\":[],\"props\":{\"placeholder\":\"时间范围\",\"style\":\"width: 180px\",\"type\":\"datetimerange\",\"valueFormat\":\"yyyy-MM-dd HH:mm:ss\",\"startPlaceholder\":\"开始时间范围\",\"endPlaceholder\":\"结束时间范围\"},\"matchType\":\"range\"},{\"type\":\"table\",\"field\":\"__page_table\",\"title\":\"数据列表\",\"props\":{\"columns\":[{\"prop\":\"code\",\"label\":\"编码列\",\"minWidth\":200,\"align\":\"center\"},{\"prop\":\"name\",\"label\":\"名称列\",\"minWidth\":130},{\"prop\":\"calc\",\"label\":\"计算列\",\"minWidth\":130,\"contentType\":\"text\",\"custom\":true}]}},{\"type\":\"__page_actions\",\"field\":\"__page_actions\",\"title\":\"操作\",\"props\":{\"permissions\":\"page:read\",\"actionColumnWidth\":180,\"buttons\":[{\"key\":\"view\",\"label\":\"查看\",\"placement\":\"toolbar\",\"style\":\"text\",\"icon\":\"View\"},{\"key\":\"export\",\"label\":\"导出\",\"placement\":\"column\",\"style\":\"button\",\"events\":[{\"on\":\"click\",\"steps\":[]}]}]}},{\"type\":\"__page_detail\",\"field\":\"__page_detail\",\"title\":\"详情\",\"props\":{\"enabled\":true,\"width\":\"900px\",\"height\":\"600px\",\"type\":\"form\",\"formMode\":\"drawer\"}},{\"type\":\"__page_events\",\"field\":\"__page_events\",\"title\":\"事件\",\"events\":[{\"on\":\"mounted\",\"steps\":[]}]}],\"option\":{}}",
+            "status": "PUBLISHED",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpGetAfterPublishA",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_<RUN>",
+            "name": "契约视图-表单绑定",
+            "publishedVersion": 1,
+            "schema": "{\"display\":\"card\",\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\",\"matchType\":\"eq\"},{\"key\":\"name\",\"label\":\"名称\",\"matchType\":\"like\"},{\"key\":\"code\",\"label\":\"时间范围\",\"matchType\":\"range\"}],\"columns\":[{\"key\":\"code\",\"label\":\"编码列\",\"width\":200,\"align\":\"center\"},{\"key\":\"name\",\"label\":\"名称列\"},{\"key\":\"calc\",\"label\":\"计算列\",\"custom\":true,\"contentType\":\"text\"},{\"key\":\"name\",\"label\":\"隐藏列\",\"hidden\":true}],\"sortableFields\":[\"code\"],\"pagination\":{\"show\":true,\"pageSize\":50,\"pageSizes\":[10,50,100]},\"filter\":{\"logic\":\"OR\",\"conditions\":[{\"column\":\"code\",\"op\":\"eq\",\"value\":\"x\"}]},\"actions\":{\"permissions\":\"page:read\",\"actionColumnWidth\":180,\"buttons\":[{\"key\":\"view\",\"label\":\"查看\",\"placement\":\"toolbar\",\"style\":\"text\",\"icon\":\"View\"},{\"key\":\"export\",\"label\":\"导出\",\"events\":[{\"on\":\"click\",\"steps\":[]}]}]},\"detail\":{\"width\":\"900px\",\"height\":\"600px\",\"formMode\":\"drawer\"},\"events\":[{\"on\":\"mounted\",\"steps\":[]}],\"rule\":[{\"type\":\"input\",\"field\":\"code\",\"title\":\"编码\",\"value\":\"\",\"props\":{\"placeholder\":\"编码\",\"style\":\"width: 180px\"},\"matchType\":\"eq\"},{\"type\":\"input\",\"field\":\"name\",\"title\":\"名称\",\"value\":\"\",\"props\":{\"placeholder\":\"名称\",\"style\":\"width: 180px\"},\"matchType\":\"like\"},{\"type\":\"datePicker\",\"field\":\"code\",\"title\":\"时间范围\",\"value\":[],\"props\":{\"placeholder\":\"时间范围\",\"style\":\"width: 180px\",\"type\":\"datetimerange\",\"valueFormat\":\"yyyy-MM-dd HH:mm:ss\",\"startPlaceholder\":\"开始时间范围\",\"endPlaceholder\":\"结束时间范围\"},\"matchType\":\"range\"},{\"type\":\"table\",\"field\":\"__page_table\",\"title\":\"数据列表\",\"props\":{\"columns\":[{\"prop\":\"code\",\"label\":\"编码列\",\"minWidth\":200,\"align\":\"center\"},{\"prop\":\"name\",\"label\":\"名称列\",\"minWidth\":130},{\"prop\":\"calc\",\"label\":\"计算列\",\"minWidth\":130,\"contentType\":\"text\",\"custom\":true}]}},{\"type\":\"__page_actions\",\"field\":\"__page_actions\",\"title\":\"操作\",\"props\":{\"permissions\":\"page:read\",\"actionColumnWidth\":180,\"buttons\":[{\"key\":\"view\",\"label\":\"查看\",\"placement\":\"toolbar\",\"style\":\"text\",\"icon\":\"View\"},{\"key\":\"export\",\"label\":\"导出\",\"placement\":\"column\",\"style\":\"button\",\"events\":[{\"on\":\"click\",\"steps\":[]}]}]}},{\"type\":\"__page_detail\",\"field\":\"__page_detail\",\"title\":\"详情\",\"props\":{\"enabled\":true,\"width\":\"900px\",\"height\":\"600px\",\"type\":\"form\",\"formMode\":\"drawer\"}},{\"type\":\"__page_events\",\"field\":\"__page_events\",\"title\":\"事件\",\"events\":[{\"on\":\"mounted\",\"steps\":[]}]}],\"option\":{}}",
+            "status": "PUBLISHED",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpMountA",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages/{id}/mount-menu"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateA.data.id}}/mount-menu",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约视图菜单"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9bf3c237a343488a88852d16fdcc0680/mount-menu",
+      "shapeOnly": [
+        ".menuId"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "menuId": 420,
+            "menuName": "契约视图菜单",
+            "parentId": null,
+            "path": "/page/contract_view_<RUN>",
+            "permission": "page:read:contract_view_<RUN>",
+            "status": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpDataA",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{pageKey}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/contract_view_{{$runId}}/data",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/contract_view_4miozb/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "code": "001",
+                  "name": "张三",
+                  "dept": [
+                    "2"
+                  ],
+                  "dept_text": "/总公司/武汉分公司"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "vpDataBadFilterA",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{pageKey}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/contract_view_{{$runId}}/data",
+        "query": {
+          "filter": "{\"contract_bogus_col\":\"x\"}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/contract_view_4miozb/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "筛选字段不在页面声明白名单: contract_bogus_col",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "vpDataBadSortA",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{pageKey}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/contract_view_{{$runId}}/data",
+        "query": {
+          "sort": "contract_bogus_col"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/contract_view_4miozb/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "排序字段不在页面声明的可排序字段中: contract_bogus_col",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "vpCreateB",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约视图-数据源绑定",
+          "key": "contract_view_ds_{{$runId}}",
+          "type": "VIEW",
+          "dataSourceId": "{{vpListFormDs.data.content[0].id}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": "<ID>",
+            "formKey": null,
+            "id": "<ID>",
+            "key": "contract_view_ds_<RUN>",
+            "name": "契约视图-数据源绑定",
+            "publishedVersion": null,
+            "schema": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpUpdateB",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateB.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "{\"searchFields\":[{\"key\":\"{{vpDsMeta.data.columns[0].key}}\"}],\"columns\":[{\"key\":\"{{vpDsMeta.data.columns[0].key}}\",\"label\":\"首列\"}],\"actions\":{\"view\":true}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/9b149edb33774ab7b299294d9c443b31",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": "<ID>",
+            "formKey": null,
+            "id": "<ID>",
+            "key": "contract_view_ds_<RUN>",
+            "name": "契约视图-数据源绑定",
+            "publishedVersion": null,
+            "schema": "{\"searchFields\":[{\"key\":\"empNo\"}],\"columns\":[{\"key\":\"empNo\",\"label\":\"首列\"}],\"actions\":{\"view\":true}}",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpCreateC",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/pages"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约视图-预览",
+          "key": "contract_view_prev_{{$runId}}",
+          "type": "VIEW",
+          "formKey": "person"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_prev_<RUN>",
+            "name": "契约视图-预览",
+            "publishedVersion": null,
+            "schema": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpUpdateC",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateC.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "{\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\"}],\"columns\":[{\"key\":\"name\",\"label\":\"名称\"}],\"actions\":{\"view\":true}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/45dd8e7c6e3a4db5992f99fda521a813",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_prev_<RUN>",
+            "name": "契约视图-预览",
+            "publishedVersion": null,
+            "schema": "{\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\"}],\"columns\":[{\"key\":\"name\",\"label\":\"名称\"}],\"actions\":{\"view\":true}}",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpPreviewC",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{key}/definition"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/contract_view_prev_{{$runId}}/definition",
+        "query": {
+          "preview": "true"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/contract_view_prev_4miozb/definition",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_prev_<RUN>",
+            "name": "契约视图-预览",
+            "publishedVersion": null,
+            "schema": "{\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\"}],\"columns\":[{\"key\":\"name\",\"label\":\"名称\"}],\"actions\":{\"view\":true},\"rule\":[{\"type\":\"input\",\"field\":\"code\",\"title\":\"编码\",\"value\":\"\",\"props\":{\"placeholder\":\"编码\",\"style\":\"width: 180px\"},\"matchType\":\"eq\"},{\"type\":\"table\",\"field\":\"__page_table\",\"title\":\"数据列表\",\"props\":{\"columns\":[{\"prop\":\"name\",\"label\":\"名称\",\"minWidth\":130}]}},{\"type\":\"__page_actions\",\"field\":\"__page_actions\",\"title\":\"操作\",\"props\":{\"view\":true,\"placement\":\"column\",\"style\":\"button\"}}],\"option\":{},\"display\":\"table\"}",
+            "status": "DRAFT",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "vpGetAfterPreviewC",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{vpCreateC.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/45dd8e7c6e3a4db5992f99fda521a813",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": "person",
+            "id": "<ID>",
+            "key": "contract_view_prev_<RUN>",
+            "name": "契约视图-预览",
+            "publishedVersion": null,
+            "schema": "{\"searchFields\":[{\"key\":\"code\",\"label\":\"编码\"}],\"columns\":[{\"key\":\"name\",\"label\":\"名称\"}],\"actions\":{\"view\":true}}",
+            "status": "DRAFT",
+            "type": "VIEW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,159 @@
+{
+  "scenario": "业务数据查询",
+  "recordedAt": "2026-09-18T03:20:47.962Z",
+  "steps": [
+    {
+      "id": "bizPersonList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "code": "001",
+                  "name": "张三",
+                  "dept": [
+                    "2"
+                  ],
+                  "dept_text": "/总公司/武汉分公司"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "bizPersonGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/{{bizPersonList.data.records[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/7567d2a6c0f843b990c0d59b609453f2",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "code": "001",
+              "name": "张三",
+              "dept": [
+                "2"
+              ],
+              "dept_text": "/总公司/武汉分公司"
+            },
+            "version": 2,
+            "createdAt": null,
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "bizPersonResolve",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}/resolve"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person/resolve",
+        "query": {
+          "ids": "{{bizPersonList.data.records[0].id}}",
+          "displayField": "name"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person/resolve",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "7567d2a6c0f843b990c0d59b609453f2": "张三"
+          }
+        }
+      }
+    },
+    {
+      "id": "bizReferencedCount",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/referenced-count"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/referenced-count",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/referenced-count",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {}
+        }
+      }
+    }
+  ]
+}

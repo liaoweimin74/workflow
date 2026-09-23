@@ -1,0 +1,212 @@
+{
+  "scenario": "页面详情与菜单",
+  "recordedAt": "2026-09-18T03:20:47.753Z",
+  "steps": [
+    {
+      "id": "pageList2",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": null,
+                "dataSourceId": null,
+                "formKey": null,
+                "id": "<ID>",
+                "key": "test_page",
+                "name": "测试页面",
+                "publishedVersion": 1,
+                "status": "PUBLISHED",
+                "type": "PAGE",
+                "updatedAt": "<TIME>",
+                "version": 1
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 1,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pageDetail",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{pageList2.data.content[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/bbc2d83f6100453c92c6d239cc192e7d",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": null,
+            "id": "<ID>",
+            "key": "test_page",
+            "name": "测试页面",
+            "publishedVersion": 1,
+            "schema": "{\"rule\":[{\"type\":\"page-table\",\"field\":\"table1789468745852\",\"title\":\"\",\"props\":{\"dataSourceId\":\"ds_mu2jhb3n\",\"border\":true,\"stripe\":true,\"columns\":[{\"prop\":\"code\",\"label\":\"人员编码\"},{\"prop\":\"name\",\"label\":\"人员姓名\"},{\"prop\":\"dept\",\"label\":\"所属部门\"}],\"sortable\":false,\"filterable\":false,\"pagination\":true,\"selectionMode\":\"none\",\"actionColumnWidth\":0,\"showSearch\":true,\"stretch\":true,\"searchFields\":[{\"key\":\"code\",\"label\":\"人员编码\",\"matchType\":\"eq\"},{\"key\":\"name\",\"label\":\"人员姓名\",\"matchType\":\"eq\"},{\"key\":\"dept\",\"label\":\"所属部门\",\"matchType\":\"eq\"}],\"sortableFields\":[\"code\",\"name\"],\"pageSize\":20,\"pageSizes\":[10,20,50],\"viewActions\":{\"buttons\":[{\"key\":\"edit\",\"label\":\"编辑\",\"placement\":\"column\",\"style\":\"icon\"},{\"key\":\"delete\",\"label\":\"删除\",\"placement\":\"column\",\"style\":\"icon\"},{\"key\":\"create\",\"label\":\"新增\",\"placement\":\"toolbar\",\"style\":\"button\"},{\"key\":\"view\",\"label\":\"查看\",\"placement\":\"column\",\"style\":\"button\"}],\"permissions\":\"\"},\"viewDetail\":{\"width\":\"800px\",\"type\":\"form\",\"formMode\":\"drawer\"},\"viewEvents\":[],\"designMode\":true},\"_fc_id\":\"id_Fei8mu2jhl6kapc\",\"name\":\"ref_Fp3xmu2jhl6kaqc\",\"_fc_drag_tag\":\"page-table\",\"display\":true,\"hidden\":false},{\"type\":\"formContainer\",\"field\":\"F7n9mu2jn6reabc\",\"title\":\"数据容器\",\"info\":\"\",\"$required\":false,\"props\":{\"recordLocator\":{\"type\":\"current-record\"},\"displayMode\":\"dialog\",\"dialogWidth\":\"800px\",\"dialogHeight\":\"600px\",\"tabTitle\":\"编辑记录\",\"inlineHeight\":\"auto\",\"showNewButton\":true,\"showCancelButton\":true,\"showConfirmButton\":true,\"showDeleteButton\":false,\"showCopyButton\":false,\"customButtons\":[],\"dataSourceId\":\"ds_mu2jhb3n\",\"rule\":[{\"type\":\"input\",\"field\":\"name\",\"title\":\"姓名\",\"info\":\"\",\"$required\":false,\"_fc_id\":\"id_Fi7lmu2jnbojafc\",\"name\":\"ref_F411mu2jnbojagc\",\"_fc_drag_tag\":\"input\",\"display\":true,\"hidden\":false}]},\"_fc_id\":\"id_Ffydmu2jn6reacc\",\"name\":\"ref_Fre6mu2jn6readc\",\"_fc_drag_tag\":\"formContainer\",\"display\":true,\"hidden\":false}],\"option\":{\"form\":{\"inline\":false,\"hideRequiredAsterisk\":false,\"labelPosition\":\"right\",\"size\":\"default\",\"labelWidth\":\"125px\"},\"resetBtn\":{\"show\":false,\"innerText\":\"重置\"},\"submitBtn\":{\"show\":true,\"innerText\":\"提交\"}},\"dataSources\":[{\"id\":\"ds_mu2jhb3n\",\"refId\":\"<ID>\",\"name\":\"请假人员 数据源\"}],\"actions\":[{\"trigger\":\"row-edit\",\"source\":\"ds_mu2jhb3n\",\"steps\":[{\"op\":\"open-container\",\"target\":\"ds_mu2jhb3n\",\"displayMode\":\"dialog\"}]}]}",
+            "status": "PUBLISHED",
+            "type": "PAGE",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pageDefinition",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{key}/definition"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{pageList2.data.content[0].key}}/definition",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/test_page/definition",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataSourceId": null,
+            "formKey": null,
+            "id": "<ID>",
+            "key": "test_page",
+            "name": "测试页面",
+            "publishedVersion": 1,
+            "schema": "{\"rule\":[{\"type\":\"page-table\",\"field\":\"table1789468745852\",\"title\":\"\",\"props\":{\"dataSourceId\":\"ds_mu2jhb3n\",\"border\":true,\"stripe\":true,\"columns\":[{\"prop\":\"code\",\"label\":\"人员编码\"},{\"prop\":\"name\",\"label\":\"人员姓名\"},{\"prop\":\"dept\",\"label\":\"所属部门\"}],\"sortable\":false,\"filterable\":false,\"pagination\":true,\"selectionMode\":\"none\",\"actionColumnWidth\":0,\"showSearch\":true,\"stretch\":true,\"searchFields\":[{\"key\":\"code\",\"label\":\"人员编码\",\"matchType\":\"eq\"},{\"key\":\"name\",\"label\":\"人员姓名\",\"matchType\":\"eq\"},{\"key\":\"dept\",\"label\":\"所属部门\",\"matchType\":\"eq\"}],\"sortableFields\":[\"code\",\"name\"],\"pageSize\":20,\"pageSizes\":[10,20,50],\"viewActions\":{\"buttons\":[{\"key\":\"edit\",\"label\":\"编辑\",\"placement\":\"column\",\"style\":\"icon\"},{\"key\":\"delete\",\"label\":\"删除\",\"placement\":\"column\",\"style\":\"icon\"},{\"key\":\"create\",\"label\":\"新增\",\"placement\":\"toolbar\",\"style\":\"button\"},{\"key\":\"view\",\"label\":\"查看\",\"placement\":\"column\",\"style\":\"button\"}],\"permissions\":\"\"},\"viewDetail\":{\"width\":\"800px\",\"type\":\"form\",\"formMode\":\"drawer\"},\"viewEvents\":[],\"designMode\":true},\"_fc_id\":\"id_Fei8mu2jhl6kapc\",\"name\":\"ref_Fp3xmu2jhl6kaqc\",\"_fc_drag_tag\":\"page-table\",\"display\":true,\"hidden\":false},{\"type\":\"formContainer\",\"field\":\"F7n9mu2jn6reabc\",\"title\":\"数据容器\",\"info\":\"\",\"$required\":false,\"props\":{\"recordLocator\":{\"type\":\"current-record\"},\"displayMode\":\"dialog\",\"dialogWidth\":\"800px\",\"dialogHeight\":\"600px\",\"tabTitle\":\"编辑记录\",\"inlineHeight\":\"auto\",\"showNewButton\":true,\"showCancelButton\":true,\"showConfirmButton\":true,\"showDeleteButton\":false,\"showCopyButton\":false,\"customButtons\":[],\"dataSourceId\":\"ds_mu2jhb3n\",\"rule\":[{\"type\":\"input\",\"field\":\"name\",\"title\":\"姓名\",\"info\":\"\",\"$required\":false,\"_fc_id\":\"id_Fi7lmu2jnbojafc\",\"name\":\"ref_F411mu2jnbojagc\",\"_fc_drag_tag\":\"input\",\"display\":true,\"hidden\":false}]},\"_fc_id\":\"id_Ffydmu2jn6reacc\",\"name\":\"ref_Fre6mu2jn6readc\",\"_fc_drag_tag\":\"formContainer\",\"display\":true,\"hidden\":false}],\"option\":{\"form\":{\"inline\":false,\"hideRequiredAsterisk\":false,\"labelPosition\":\"right\",\"size\":\"default\",\"labelWidth\":\"125px\"},\"resetBtn\":{\"show\":false,\"innerText\":\"重置\"},\"submitBtn\":{\"show\":true,\"innerText\":\"提交\"}},\"dataSources\":[{\"id\":\"ds_mu2jhb3n\",\"refId\":\"<ID>\",\"name\":\"请假人员 数据源\"}],\"actions\":[{\"trigger\":\"row-edit\",\"source\":\"ds_mu2jhb3n\",\"steps\":[{\"op\":\"open-container\",\"target\":\"ds_mu2jhb3n\",\"displayMode\":\"dialog\"}]}]}",
+            "status": "PUBLISHED",
+            "type": "PAGE",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pageMenus",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{key}/menus"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{pageList2.data.content[0].key}}/menus",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/test_page/menus",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "items": [
+              {
+                "menuId": 304,
+                "menuName": "演示页面",
+                "parentId": 160,
+                "path": "/page/test_page",
+                "permission": "page:read:test_page",
+                "status": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "pageData",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/pages/{pageKey}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/pages/{{pageList2.data.content[0].key}}/data",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/pages/test_page/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "页面 test_page 不是视图类型，不支持数据查询",
+          "data": null
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1010 @@
+{
+  "scenario": "系统管理（只读）",
+  "recordedAt": "2026-09-18T03:20:46.980Z",
+  "steps": [
+    {
+      "id": "users",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users"
+      },
+      "requestTemplate": {
+        "path": "/api/users",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 2,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "username": "admin",
+                "nickname": "管理员",
+                "email": "admin@workflow.com",
+                "phone": null,
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 1,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  1
+                ]
+              },
+              {
+                "id": "<NUM>",
+                "username": "test",
+                "nickname": "测试用户",
+                "email": "test@workflow.com",
+                "phone": null,
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 1,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "roles",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/roles"
+      },
+      "requestTemplate": {
+        "path": "/api/roles",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/roles",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 2,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "roleName": "超级管理员",
+                "roleCode": "ROLE_ADMIN",
+                "description": "系统超级管理员",
+                "status": 1,
+                "createdAt": "<TIME>"
+              },
+              {
+                "id": "<NUM>",
+                "roleName": "普通用户",
+                "roleCode": "ROLE_USER",
+                "description": "系统普通用户",
+                "status": 1,
+                "createdAt": "<TIME>"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "menuTree",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/menus/tree"
+      },
+      "requestTemplate": {
+        "path": "/api/menus/tree",
+        "query": {},
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/menus/tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "menuName": "首页",
+              "menuType": 1,
+              "path": "/dashboard",
+              "component": "dashboard/index",
+              "permission": null,
+              "icon": "HomeFilled",
+              "sortOrder": 0,
+              "children": null
+            },
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "menuName": "系统管理",
+              "menuType": 0,
+              "path": "/system",
+              "component": null,
+              "permission": null,
+              "icon": "Setting",
+              "sortOrder": 1,
+              "children": [
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "menuName": "用户管理",
+                  "menuType": 1,
+                  "path": "/system/user",
+                  "component": "system/user/index",
+                  "permission": "system:user:list",
+                  "icon": "User",
+                  "sortOrder": 1,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 2,
+                      "menuName": "用户查询",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:user:query",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 2,
+                      "menuName": "用户新增",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:user:create",
+                      "icon": null,
+                      "sortOrder": 2,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 2,
+                      "menuName": "用户修改",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:user:update",
+                      "icon": null,
+                      "sortOrder": 3,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 2,
+                      "menuName": "用户删除",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:user:delete",
+                      "icon": null,
+                      "sortOrder": 4,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "menuName": "角色管理",
+                  "menuType": 1,
+                  "path": "/system/role",
+                  "component": "system/role/index",
+                  "permission": "system:role:list",
+                  "icon": "UserFilled",
+                  "sortOrder": 2,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 3,
+                      "menuName": "角色查询",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:role:query",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 3,
+                      "menuName": "角色新增",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:role:create",
+                      "icon": null,
+                      "sortOrder": 2,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 3,
+                      "menuName": "角色修改",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:role:update",
+                      "icon": null,
+                      "sortOrder": 3,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 3,
+                      "menuName": "角色删除",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:role:delete",
+                      "icon": null,
+                      "sortOrder": 4,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "menuName": "菜单管理",
+                  "menuType": 1,
+                  "path": "/system/menu",
+                  "component": "system/menu/index",
+                  "permission": "system:menu:list",
+                  "icon": "Menu",
+                  "sortOrder": 3,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 4,
+                      "menuName": "菜单查询",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:menu:query",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 4,
+                      "menuName": "菜单新增",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:menu:create",
+                      "icon": null,
+                      "sortOrder": 2,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 4,
+                      "menuName": "菜单修改",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:menu:update",
+                      "icon": null,
+                      "sortOrder": 3,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 4,
+                      "menuName": "菜单删除",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:menu:delete",
+                      "icon": null,
+                      "sortOrder": 4,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "menuName": "组织机构",
+                  "menuType": 1,
+                  "path": "/system/org",
+                  "component": "system/org/index",
+                  "permission": "system:org:list",
+                  "icon": "Organization",
+                  "sortOrder": 4,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 5,
+                      "menuName": "机构查询",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:org:query",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 5,
+                      "menuName": "机构新增",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:org:create",
+                      "icon": null,
+                      "sortOrder": 2,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 5,
+                      "menuName": "机构修改",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:org:update",
+                      "icon": null,
+                      "sortOrder": 3,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 5,
+                      "menuName": "机构删除",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:org:delete",
+                      "icon": null,
+                      "sortOrder": 4,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "menuName": "字典管理",
+                  "menuType": 1,
+                  "path": "/system/dict",
+                  "component": "system/dict/index",
+                  "permission": "system:dict:list",
+                  "icon": "List",
+                  "sortOrder": 5,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 6,
+                      "menuName": "字典查询",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:dict:query",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 6,
+                      "menuName": "字典新增",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:dict:create",
+                      "icon": null,
+                      "sortOrder": 2,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 6,
+                      "menuName": "字典修改",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:dict:update",
+                      "icon": null,
+                      "sortOrder": 3,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 6,
+                      "menuName": "字典删除",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "system:dict:delete",
+                      "icon": null,
+                      "sortOrder": 4,
+                      "children": null
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "menuName": "流程管理",
+              "menuType": 0,
+              "path": "/process",
+              "component": null,
+              "permission": null,
+              "icon": "Operation",
+              "sortOrder": 2,
+              "children": [
+                {
+                  "id": "<NUM>",
+                  "parentId": 100,
+                  "menuName": "流程定义",
+                  "menuType": 1,
+                  "path": "/process/definition",
+                  "component": "process/ProcessListPage",
+                  "permission": "process:definition:list",
+                  "icon": "Document",
+                  "sortOrder": 1,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 101,
+                      "menuName": "流程创建",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "process:definition:create",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 101,
+                      "menuName": "流程部署",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "process:definition:deploy",
+                      "icon": null,
+                      "sortOrder": 2,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 101,
+                      "menuName": "流程删除",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "process:definition:delete",
+                      "icon": null,
+                      "sortOrder": 3,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 100,
+                  "menuName": "流程中心",
+                  "menuType": 1,
+                  "path": "/process/center",
+                  "component": "process/ProcessCenterPage",
+                  "permission": "process:center:list",
+                  "icon": "Files",
+                  "sortOrder": 2,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 100,
+                  "menuName": "待办处理",
+                  "menuType": 1,
+                  "path": "/process/todo",
+                  "component": "process/ProcessTodoPage",
+                  "permission": "process:todo:list",
+                  "icon": "BellFilled",
+                  "sortOrder": 3,
+                  "children": null
+                }
+              ]
+            },
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "menuName": "表单视图管理",
+              "menuType": 0,
+              "path": "/form",
+              "component": null,
+              "permission": null,
+              "icon": "Grid",
+              "sortOrder": 3,
+              "children": [
+                {
+                  "id": "<NUM>",
+                  "parentId": 160,
+                  "menuName": "演示页面",
+                  "menuType": 1,
+                  "path": "/page/test_page",
+                  "component": "page/PageRenderer",
+                  "permission": "page:read:test_page",
+                  "icon": null,
+                  "sortOrder": 0,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 160,
+                  "menuName": "表单列表",
+                  "menuType": 1,
+                  "path": "/form",
+                  "component": "form/FormListPage",
+                  "permission": "form:list",
+                  "icon": "Document",
+                  "sortOrder": 1,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 121,
+                      "menuName": "表单创建",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "form:create",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 121,
+                      "menuName": "表单编辑",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "form:edit",
+                      "icon": null,
+                      "sortOrder": 2,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 121,
+                      "menuName": "表单发布",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "form:publish",
+                      "icon": null,
+                      "sortOrder": 3,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 121,
+                      "menuName": "表单删除",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "form:delete",
+                      "icon": null,
+                      "sortOrder": 4,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 160,
+                  "menuName": "页面列表",
+                  "menuType": 1,
+                  "path": "/page",
+                  "component": "page/PageListPage",
+                  "permission": "page:list",
+                  "icon": "Document",
+                  "sortOrder": 1,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 141,
+                      "menuName": "页面创建",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "page:create",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 141,
+                      "menuName": "页面编辑",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "page:edit",
+                      "icon": null,
+                      "sortOrder": 2,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 141,
+                      "menuName": "页面发布",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "page:publish",
+                      "icon": null,
+                      "sortOrder": 3,
+                      "children": null
+                    },
+                    {
+                      "id": "<NUM>",
+                      "parentId": 141,
+                      "menuName": "页面删除",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "page:delete",
+                      "icon": null,
+                      "sortOrder": 4,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 160,
+                  "menuName": "数据源管理",
+                  "menuType": 1,
+                  "path": "/data-source/list",
+                  "component": "dataSource/DataSourceListPage",
+                  "permission": "data-source:list",
+                  "icon": "Connection",
+                  "sortOrder": 2,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 142,
+                      "menuName": "数据源管理",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "data-source:manage",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "menuName": "消息管理",
+              "menuType": 0,
+              "path": "/messages",
+              "component": null,
+              "permission": null,
+              "icon": "Bell",
+              "sortOrder": 5,
+              "children": [
+                {
+                  "id": "<NUM>",
+                  "parentId": 250,
+                  "menuName": "消息中心",
+                  "menuType": 1,
+                  "path": "/messages",
+                  "component": "modules/notification/views/MessageCenter",
+                  "permission": "notification:message:list",
+                  "icon": "Message",
+                  "sortOrder": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 250,
+                  "menuName": "模板管理",
+                  "menuType": 1,
+                  "path": "/messages/templates",
+                  "component": "modules/notification/views/admin/TemplateList",
+                  "permission": "notification:template:list",
+                  "icon": "Document",
+                  "sortOrder": 2,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 252,
+                      "menuName": "模板管理",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "notification:template:manage",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 250,
+                  "menuName": "渠道配置",
+                  "menuType": 1,
+                  "path": "/messages/channels",
+                  "component": "modules/notification/views/admin/ChannelConfig",
+                  "permission": "notification:channel:list",
+                  "icon": "Connection",
+                  "sortOrder": 3,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 253,
+                      "menuName": "渠道配置",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "notification:channel:manage",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 250,
+                  "menuName": "订阅规则",
+                  "menuType": 1,
+                  "path": "/messages/subscriptions",
+                  "component": "modules/notification/views/admin/SubscriptionRules",
+                  "permission": "notification:subscription:list",
+                  "icon": "SetUp",
+                  "sortOrder": 4,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 254,
+                      "menuName": "订阅规则",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "notification:subscription:manage",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 250,
+                  "menuName": "发送记录",
+                  "menuType": 1,
+                  "path": "/messages/deliveries",
+                  "component": "modules/notification/views/admin/DeliveryLog",
+                  "permission": "notification:delivery:list",
+                  "icon": "Tickets",
+                  "sortOrder": 5,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 255,
+                      "menuName": "发送记录重发",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "notification:delivery:retry",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 250,
+                  "menuName": "公告管理",
+                  "menuType": 1,
+                  "path": "/messages/announcements",
+                  "component": "modules/notification/views/admin/AnnouncementList",
+                  "permission": "notification:announcement:list",
+                  "icon": "Notification",
+                  "sortOrder": 6,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 260,
+                      "menuName": "公告管理",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "notification:announcement:manage",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    }
+                  ]
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 250,
+                  "menuName": "事件管理",
+                  "menuType": 1,
+                  "path": "/messages/events",
+                  "component": "modules/notification/views/admin/EventDefinitionList",
+                  "permission": "notification:event:list",
+                  "icon": "Operation",
+                  "sortOrder": 7,
+                  "children": [
+                    {
+                      "id": "<NUM>",
+                      "parentId": 261,
+                      "menuName": "事件管理",
+                      "menuType": 2,
+                      "path": null,
+                      "component": null,
+                      "permission": "notification:event:manage",
+                      "icon": null,
+                      "sortOrder": 1,
+                      "children": null
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "orgTree",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/orgs/tree"
+      },
+      "requestTemplate": {
+        "path": "/api/orgs/tree",
+        "query": {},
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/orgs/tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "label": "总公司",
+              "code": "01",
+              "sortOrder": 0,
+              "status": 1,
+              "children": [
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "武汉分公司",
+                  "code": "0101",
+                  "sortOrder": 1,
+                  "status": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "北京分公司",
+                  "code": "0102",
+                  "sortOrder": 2,
+                  "status": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "海南分公司",
+                  "code": "0103",
+                  "sortOrder": 3,
+                  "status": 1,
+                  "children": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dictTypes",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/dict-types"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-types",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-types",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 0,
+            "page": 1,
+            "size": 20,
+            "rows": []
+          }
+        }
+      }
+    }
+  ]
+}

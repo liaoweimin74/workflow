@@ -1,0 +1,512 @@
+{
+  "scenario": "节点后端逻辑（HTTP 动作）",
+  "recordedAt": "2026-09-18T03:21:04.537Z",
+  "steps": [
+    {
+      "id": "blDraftCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/drafts"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/drafts",
+        "query": {
+          "name": "契约后端逻辑流程",
+          "key": "contract_bl_{{$runId}}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/drafts",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"http://flowable.org/bpmn\">\n  <bpmn:process id=\"contract_bl_<RUN>\" name=\"契约后端逻辑流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"startEvent_1\"/>\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"contract_bl_<RUN>\">\n      <bpmndi:BPMNShape id=\"startEvent_1_di\" bpmnElement=\"startEvent_1\">\n        <dc:Rect x=\"160\" y=\"160\" width=\"36\" height=\"36\"/>\n      </bpmndi:BPMNShape>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_bl_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约后端逻辑流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "blSaveDesign",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/process-definitions/{id}/design"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{blDraftCreate.data.id}}/design",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约后端逻辑流程",
+          "key": "contract_bl_{{$runId}}",
+          "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_bl_{{$runId}}\" name=\"契约后端逻辑流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点一\" flowable:assignee=\"bl{{$runId}}\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"Sub_1\" />\n    <bpmn:subProcess id=\"Sub_1\" name=\"子流程\">\n      <bpmn:incoming>Flow_3</bpmn:incoming>\n      <bpmn:outgoing>Flow_4</bpmn:outgoing>\n      <bpmn:startEvent id=\"Start_2\"><bpmn:outgoing>Flow_5</bpmn:outgoing></bpmn:startEvent>\n      <bpmn:sequenceFlow id=\"Flow_5\" sourceRef=\"Start_2\" targetRef=\"End_2\" />\n      <bpmn:endEvent id=\"End_2\"><bpmn:incoming>Flow_5</bpmn:incoming></bpmn:endEvent>\n    </bpmn:subProcess>\n    <bpmn:sequenceFlow id=\"Flow_4\" sourceRef=\"Sub_1\" targetRef=\"Approve_2\" />\n    <bpmn:userTask id=\"Approve_2\" name=\"审批节点二\" flowable:assignee=\"bl2{{$runId}}\"><bpmn:incoming>Flow_4</bpmn:incoming><bpmn:outgoing>Flow_6</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_6\" sourceRef=\"Approve_2\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_6</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+          "nodeConfigs": {
+            "Approve_1": "{\"basic\":{\"name\":\"审批节点一\"},\"approval\":{\"multiMode\":\"\"},\"operations\":{\"allowReject\":true},\"backendLogic\":[{\"id\":\"bl-enter-loginResult\",\"name\":\"登录校验-进入\",\"enabled\":true,\"trigger\":\"ENTER\",\"type\":\"http\",\"errorAction\":\"FAIL_FLOW\",\"resultVar\":\"loginResult\",\"http\":{\"url\":\"http://localhost:8081/api/auth/login\",\"method\":\"POST\",\"bodyParams\":[{\"source\":\"username\",\"target\":\"username\"},{\"source\":\"password\",\"target\":\"password\"}]}},{\"id\":\"bl-complete-approveResult\",\"name\":\"登录校验-完成\",\"enabled\":true,\"trigger\":\"COMPLETE\",\"type\":\"http\",\"errorAction\":\"FAIL_FLOW\",\"resultVar\":\"approveResult\",\"http\":{\"url\":\"http://localhost:8081/api/auth/login\",\"method\":\"POST\",\"bodyParams\":[{\"source\":\"username\",\"target\":\"username\"},{\"source\":\"password\",\"target\":\"password\"}]}}]}",
+            "End_2": "{\"basic\":{\"name\":\"子流程结束\"},\"backendLogic\":[{\"id\":\"bl-complete-subEndResult\",\"name\":\"子流程结束-回调\",\"enabled\":true,\"trigger\":\"COMPLETE\",\"type\":\"http\",\"errorAction\":\"FAIL_FLOW\",\"resultVar\":\"subEndResult\",\"http\":{\"url\":\"http://localhost:8081/api/auth/login\",\"method\":\"POST\",\"bodyParams\":[{\"source\":\"username\",\"target\":\"username\"},{\"source\":\"password\",\"target\":\"password\"}]}}]}",
+            "__PROCESS__": "{\"numberRule\":{\"enabled\":false},\"approvalPolicy\":{\"operations\":{\"allowReject\":true},\"allowRecall\":true}}"
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/bed8b7f0f56a401d820d51f568855952/design",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_bl_<RUN>\" name=\"契约后端逻辑流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点一\" flowable:assignee=\"bl<RUN>\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"Sub_1\" />\n    <bpmn:subProcess id=\"Sub_1\" name=\"子流程\">\n      <bpmn:incoming>Flow_3</bpmn:incoming>\n      <bpmn:outgoing>Flow_4</bpmn:outgoing>\n      <bpmn:startEvent id=\"Start_2\"><bpmn:outgoing>Flow_5</bpmn:outgoing></bpmn:startEvent>\n      <bpmn:sequenceFlow id=\"Flow_5\" sourceRef=\"Start_2\" targetRef=\"End_2\" />\n      <bpmn:endEvent id=\"End_2\"><bpmn:incoming>Flow_5</bpmn:incoming></bpmn:endEvent>\n    </bpmn:subProcess>\n    <bpmn:sequenceFlow id=\"Flow_4\" sourceRef=\"Sub_1\" targetRef=\"Approve_2\" />\n    <bpmn:userTask id=\"Approve_2\" name=\"审批节点二\" flowable:assignee=\"bl2<RUN>\"><bpmn:incoming>Flow_4</bpmn:incoming><bpmn:outgoing>Flow_6</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_6\" sourceRef=\"Approve_2\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_6</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_bl_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约后端逻辑流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "blDeploy",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/{id}/deploy"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{blDraftCreate.data.id}}/deploy",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/bed8b7f0f56a401d820d51f568855952/deploy",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_bl_<RUN>\" name=\"契约后端逻辑流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点一\" flowable:assignee=\"bl<RUN>\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"Sub_1\" />\n    <bpmn:subProcess id=\"Sub_1\" name=\"子流程\">\n      <bpmn:incoming>Flow_3</bpmn:incoming>\n      <bpmn:outgoing>Flow_4</bpmn:outgoing>\n      <bpmn:startEvent id=\"Start_2\"><bpmn:outgoing>Flow_5</bpmn:outgoing></bpmn:startEvent>\n      <bpmn:sequenceFlow id=\"Flow_5\" sourceRef=\"Start_2\" targetRef=\"End_2\" />\n      <bpmn:endEvent id=\"End_2\"><bpmn:incoming>Flow_5</bpmn:incoming></bpmn:endEvent>\n    </bpmn:subProcess>\n    <bpmn:sequenceFlow id=\"Flow_4\" sourceRef=\"Sub_1\" targetRef=\"Approve_2\" />\n    <bpmn:userTask id=\"Approve_2\" name=\"审批节点二\" flowable:assignee=\"bl2<RUN>\"><bpmn:incoming>Flow_4</bpmn:incoming><bpmn:outgoing>Flow_6</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_6\" sourceRef=\"Approve_2\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_6</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": "<UUID>",
+            "deployedConfigHash": "9834134021eb5109275fe3ea2723818db98102acaae7f54fabcf066a4e14041e",
+            "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_bl_<RUN>\" isExecutable=\"true\" name=\"契约后端逻辑流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"bl<RUN>\" id=\"Approve_1\" name=\"审批节点一\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"Sub_1\"/>\r\n            \r\n        <bpmn:subProcess id=\"Sub_1\" name=\"子流程\">\r\n                  \r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n                  \r\n            <bpmn:outgoing>Flow_4</bpmn:outgoing>\r\n                  \r\n            <bpmn:startEvent id=\"Start_2\" name=\"开始\">\r\n                <bpmn:outgoing>Flow_5</bpmn:outgoing>\r\n            </bpmn:startEvent>\r\n                  \r\n            <bpmn:sequenceFlow id=\"Flow_5\" sourceRef=\"Start_2\" targetRef=\"End_2\"/>\r\n                  \r\n            <bpmn:endEvent id=\"End_2\" name=\"结束\">\r\n                <bpmn:incoming>Flow_5</bpmn:incoming>\r\n            </bpmn:endEvent>\r\n                \r\n        </bpmn:subProcess>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_4\" sourceRef=\"Sub_1\" targetRef=\"Approve_2\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"bl2<RUN>\" id=\"Approve_2\" name=\"审批节点二\">\r\n            <bpmn:incoming>Flow_4</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_6</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_6\" sourceRef=\"Approve_2\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_6</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+            "id": "<ID>",
+            "key": "contract_bl_<RUN>",
+            "lastDeployedAt": "<TIME>",
+            "name": "契约后端逻辑流程",
+            "processDefinitionId": "contract_bl_<RUN>:1:<UUID>",
+            "status": "DEPLOYED",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "blStart",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-instances"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "processKey": "contract_bl_{{$runId}}",
+          "businessKey": "contract-bl-{{$runId}}",
+          "variables": {
+            "initiator": "1",
+            "username": "admin",
+            "password": "wrong-{{$runId}}"
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "processDefinitionId": "contract_bl_<RUN>:1:<UUID>",
+            "businessKey": "contract-bl-<RUN>",
+            "tenantId": "default",
+            "id": "<UUID>",
+            "processDefinitionKey": "contract_bl_<RUN>"
+          }
+        }
+      }
+    },
+    {
+      "id": "blVarsAfterStart",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{processInstanceId}/variables"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{blStart.data.id}}/variables",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/fabcbb8f-b30f-11f1-8aad-7c8ae1a7aa09/variables",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "loginResult": "{\"code\":500,\"msg\":\"用户名或密码错误\",\"data\":null}",
+            "password": "wrong-<RUN>",
+            "initiator": "1",
+            "username": "admin"
+          }
+        }
+      }
+    },
+    {
+      "id": "blTodoList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks",
+        "query": {
+          "assignee": "bl{{$runId}}",
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "assignee": "bl<RUN>",
+                "businessKey": "contract-bl-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点一",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_bl_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约后端逻辑流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 1,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "blComplete",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/complete"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{blTodoList.data.content[0].taskId}}/complete",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "userId": "bl{{$runId}}",
+          "comment": "同意"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/fae0492d-b30f-11f1-8aad-7c8ae1a7aa09/complete",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "nextTaskAssignee": "bl2<RUN>",
+            "nextTaskDefinitionKey": "Approve_2",
+            "nextTaskId": "<UUID>",
+            "nextTaskName": "审批节点二",
+            "processFinished": false,
+            "processInstanceId": "<UUID>"
+          }
+        }
+      }
+    },
+    {
+      "id": "blVarsAfterFirstApprove",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{processInstanceId}/variables"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{blStart.data.id}}/variables",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/fabcbb8f-b30f-11f1-8aad-7c8ae1a7aa09/variables",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "loginResult": "{\"code\":500,\"msg\":\"用户名或密码错误\",\"data\":null}",
+            "password": "wrong-<RUN>",
+            "approveResult": "{\"code\":500,\"msg\":\"用户名或密码错误\",\"data\":null}",
+            "initiator": "1",
+            "subEndResult": "{\"code\":500,\"msg\":\"用户名或密码错误\",\"data\":null}",
+            "username": "admin"
+          }
+        }
+      }
+    },
+    {
+      "id": "blTodoList2",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks",
+        "query": {
+          "assignee": "bl2{{$runId}}",
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "assignee": "bl2<RUN>",
+                "businessKey": "contract-bl-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点二",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_bl_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约后端逻辑流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 1,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "blComplete2",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/complete"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{blTodoList2.data.content[0].taskId}}/complete",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "userId": "bl2{{$runId}}",
+          "comment": "同意"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/fb1514dc-b30f-11f1-8aad-7c8ae1a7aa09/complete",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "nextTaskAssignee": null,
+            "nextTaskDefinitionKey": null,
+            "nextTaskId": null,
+            "nextTaskName": null,
+            "processFinished": true,
+            "processInstanceId": "<UUID>"
+          }
+        }
+      }
+    },
+    {
+      "id": "blInstanceAfterFinish",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{blStart.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/fabcbb8f-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "processDefinitionId": "contract_bl_<RUN>:1:<UUID>",
+            "businessKey": "contract-bl-<RUN>",
+            "tenantId": "default",
+            "ended": true,
+            "name": null,
+            "currentNode": null,
+            "processDefinitionName": "契约后端逻辑流程",
+            "startTime": "<TIME>",
+            "id": "<UUID>",
+            "suspended": false,
+            "processDefinitionKey": "contract_bl_<RUN>",
+            "status": "completed"
+          }
+        }
+      }
+    },
+    {
+      "id": "blVarsAfterFinish",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{processInstanceId}/variables"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{blStart.data.id}}/variables",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/fabcbb8f-b30f-11f1-8aad-7c8ae1a7aa09/variables",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "流程引擎错误: execution <UUID> doesn't exist",
+          "data": null
+        }
+      }
+    }
+  ]
+}

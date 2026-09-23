@@ -1,0 +1,452 @@
+{
+  "scenario": "WORKFLOW 数据源读路径",
+  "recordedAt": "2026-09-18T03:21:01.303Z",
+  "steps": [
+    {
+      "id": "wfDsList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "type": "WORKFLOW",
+          "status": "ENABLED",
+          "size": "100"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": "baoxiaodan",
+                "id": "<ID>",
+                "name": "报销单 数据源",
+                "params": null,
+                "sourceKey": "baoxiaodan",
+                "status": "ENABLED",
+                "tenantId": "default",
+                "type": "WORKFLOW",
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 100,
+            "totalElements": 1,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "wfFormDef",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/by-key/{key}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/by-key/baoxiaodan",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/by-key/baoxiaodan",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "baoxiaodan",
+            "name": "报销单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[]",
+            "status": "PUBLISHED",
+            "type": "WORKFLOW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "wfMeta",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [],
+            "writable": false,
+            "formKey": "baoxiaodan"
+          }
+        }
+      }
+    },
+    {
+      "id": "wfQuery",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/data",
+        "query": {
+          "page": "1",
+          "size": "10"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [],
+            "total": 0,
+            "page": 1,
+            "size": 10
+          }
+        }
+      }
+    },
+    {
+      "id": "wfCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "formDefId": "{{wfFormDef.data.id}}",
+          "processInstanceId": "wf-pi-{{$runId}}",
+          "taskId": null,
+          "dataJson": "{\"amount\":100}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "dataJson": "{\"amount\":100}",
+            "formDefId": "<ID>",
+            "formVersion": 1,
+            "id": "<ID>",
+            "isSnapshot": false,
+            "processInstanceId": "wf-pi-<RUN>",
+            "taskId": null,
+            "tenantId": "default",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "wfQueryAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/data",
+        "query": {
+          "page": "1",
+          "size": "10"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "instanceId": "wf-pi-<RUN>",
+                  "processStatus": "completed",
+                  "initiatorName": null,
+                  "startTime": null,
+                  "currentNodeName": null
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 10
+          }
+        }
+      }
+    },
+    {
+      "id": "wfGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/data/{{wfCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data/59d063b22c444bf4a13f1ef636397285",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "instanceId": "wf-pi-<RUN>",
+              "processStatus": "completed",
+              "initiatorName": null,
+              "startTime": null,
+              "currentNodeName": null
+            },
+            "version": null,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "wfGetMissing",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/data/contract_missing_row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data/contract_missing_row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "数据不存在: contract_missing_row",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "wfQueryBadFilter",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/data",
+        "query": {
+          "filter": "{\"contract_bogus_col\":\"x\"}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "筛选项不在表单字段中: contract_bogus_col",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "wfQueryBadSortDerived",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/data",
+        "query": {
+          "sort": "instanceId"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "排序字段不可排序: instanceId",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "wfQueryBadSortColumn",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/data",
+        "query": {
+          "sort": "contract_bogus_col"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "排序字段不在表单字段中: contract_bogus_col",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "wfQueryBadKeywordColumn",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{wfDsList.data.content[0].id}}/data",
+        "query": {
+          "keyword": "x",
+          "keywordColumn": "contract_bogus_col"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a9d5b0d6f0274d19b6f39937175620c3/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "关键词列不在表单字段中: contract_bogus_col",
+          "data": null
+        }
+      }
+    }
+  ]
+}

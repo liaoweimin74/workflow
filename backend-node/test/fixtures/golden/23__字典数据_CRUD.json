@@ -1,0 +1,287 @@
+{
+  "scenario": "字典数据 CRUD",
+  "recordedAt": "2026-09-18T03:20:49.829Z",
+  "steps": [
+    {
+      "id": "ddCreateType",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/dict-types"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-types",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "dictName": "契约测试字典",
+          "dictCode": "contract_dict_{{$runId}}",
+          "remark": "契约测试用",
+          "status": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-types",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "dictName": "契约测试字典",
+            "dictCode": "contract_dict_<RUN>",
+            "remark": "契约测试用",
+            "status": 1,
+            "createdAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "ddCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/dict-data"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-data",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "dictCode": "contract_dict_{{$runId}}",
+          "label": "契约标签",
+          "value": "contract_value",
+          "sortOrder": 1,
+          "status": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "dictCode": "contract_dict_<RUN>",
+            "label": "契约标签",
+            "value": "contract_value",
+            "sortOrder": 1,
+            "status": 1,
+            "createdAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "ddList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/dict-data/{dictCode}"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-data/contract_dict_{{$runId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-data/contract_dict_4miozb",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "dictCode": "contract_dict_<RUN>",
+              "label": "契约标签",
+              "value": "contract_value",
+              "sortOrder": 1,
+              "status": 1,
+              "createdAt": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ddUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/dict-data/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-data/{{ddCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "label": "契约标签-改名",
+          "value": "contract_value_2"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-data/134",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "dictCode": "contract_dict_<RUN>",
+            "label": "契约标签-改名",
+            "value": "contract_value_2",
+            "sortOrder": 1,
+            "status": 1,
+            "createdAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "ddListAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/dict-data/{dictCode}"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-data/contract_dict_{{$runId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-data/contract_dict_4miozb",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "dictCode": "contract_dict_<RUN>",
+              "label": "契约标签-改名",
+              "value": "contract_value_2",
+              "sortOrder": 1,
+              "status": 1,
+              "createdAt": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ddDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/dict-data/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-data/{{ddCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-data/134",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "ddListAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/dict-data/{dictCode}"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-data/contract_dict_{{$runId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-data/contract_dict_4miozb",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "ddDeleteType",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/dict-types/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-types/{{ddCreateType.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-types/309",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    }
+  ]
+}

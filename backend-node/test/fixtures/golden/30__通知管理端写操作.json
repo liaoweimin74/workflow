@@ -1,0 +1,1983 @@
+{
+  "scenario": "通知管理端写操作",
+  "recordedAt": "2026-09-18T03:20:53.601Z",
+  "steps": [
+    {
+      "id": "nweEvtCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventCode": "CONTRACT_EVT",
+          "eventName": "契约事件",
+          "description": "契约事件说明",
+          "businessDomain": "contract"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "businessDomain": "contract",
+            "createdAt": "<TIME>",
+            "createdBy": "admin",
+            "description": "契约事件说明",
+            "enabled": true,
+            "eventCode": "CONTRACT_EVT",
+            "eventName": "契约事件",
+            "id": "<NUM>",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "updatedBy": "admin"
+          }
+        }
+      }
+    },
+    {
+      "id": "nweEvtList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 1,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "businessDomain": "contract",
+                "createdAt": "<TIME>",
+                "createdBy": "admin",
+                "description": "契约事件说明",
+                "enabled": true,
+                "eventCode": "CONTRACT_EVT",
+                "eventName": "契约事件",
+                "id": "<NUM>",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "updatedBy": "admin"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "nweEvtCreateDuplicate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventCode": "{{nweEvtCreate.data.eventCode}}",
+          "eventName": "重复事件"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 409,
+          "msg": "事件代码已存在: CONTRACT_EVT",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtCreateBadCode",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventCode": "lower_case",
+          "eventName": "格式非法"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "事件代码必须为大写字母、数字和下划线，且首字符为大写字母",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtCreateBlankName",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventCode": "CONTRACT_EVT2",
+          "eventName": "   "
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "事件名称不能为空",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtListAfterFailures",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 1,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "businessDomain": "contract",
+                "createdAt": "<TIME>",
+                "createdBy": "admin",
+                "description": "契约事件说明",
+                "enabled": true,
+                "eventCode": "CONTRACT_EVT",
+                "eventName": "契约事件",
+                "id": "<NUM>",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "updatedBy": "admin"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "nweEvtUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/events/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/{{nweEvtCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventName": "契约事件-改名",
+          "description": "改后说明",
+          "businessDomain": "contract-2"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/92",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "businessDomain": "contract-2",
+            "createdAt": "<TIME>",
+            "createdBy": "admin",
+            "description": "改后说明",
+            "enabled": true,
+            "eventCode": "CONTRACT_EVT",
+            "eventName": "契约事件-改名",
+            "id": "<NUM>",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "updatedBy": "admin"
+          }
+        }
+      }
+    },
+    {
+      "id": "nweEvtUpdateBlankName",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/events/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/{{nweEvtCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventName": "",
+          "description": "不该生效"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/92",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "事件名称不能为空",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtGetAfterBlankName",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 1,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "businessDomain": "contract-2",
+                "createdAt": "<TIME>",
+                "createdBy": "admin",
+                "description": "改后说明",
+                "enabled": true,
+                "eventCode": "CONTRACT_EVT",
+                "eventName": "契约事件-改名",
+                "id": "<NUM>",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "updatedBy": "admin"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "nweEvtToggle",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/events/{id}/toggle"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/{{nweEvtCreate.data.id}}/toggle",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/92/toggle",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtListDisabled",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "enabled": "false"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 1,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "businessDomain": "contract-2",
+                "createdAt": "<TIME>",
+                "createdBy": "admin",
+                "description": "改后说明",
+                "enabled": false,
+                "eventCode": "CONTRACT_EVT",
+                "eventName": "契约事件-改名",
+                "id": "<NUM>",
+                "tenantId": "default",
+                "updatedAt": "<TIME>",
+                "updatedBy": "admin"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "nweEvtListEnabled",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "enabled": "true"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 0,
+            "page": 1,
+            "size": 20,
+            "rows": []
+          }
+        }
+      }
+    },
+    {
+      "id": "nweEvtToggleBack",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/events/{id}/toggle"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/{{nweEvtCreate.data.id}}/toggle",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/92/toggle",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtUpdateUnknown",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/events/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/99999999",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventName": "不存在"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/99999999",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "事件不存在: 99999999",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtToggleUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/events/{id}/toggle"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/99999999/toggle",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/99999999/toggle",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "事件不存在: 99999999",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtDeleteUnknown",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/events/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/99999999",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/99999999",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "事件不存在: 99999999",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweSubCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventCode": "{{nweEvtCreate.data.eventCode}}",
+          "channel": "IN_APP",
+          "priority": "HIGH",
+          "enable": true,
+          "action": "ALLOW",
+          "condition": "amount > 100"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweSubList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "eventCode": "CONTRACT_EVT",
+                "channel": "IN_APP",
+                "priority": "HIGH",
+                "enable": true,
+                "action": "ALLOW",
+                "condition": "amount > 100",
+                "createdBy": "admin",
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "nweSubCreateBadChannel",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventCode": "{{nweEvtCreate.data.eventCode}}",
+          "channel": "EMAIL",
+          "enable": true,
+          "action": "ALLOW"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "No enum constant com.workflow.notification.model.ChannelType.EMAIL",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweSubCreateBadAction",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "eventCode": "{{nweEvtCreate.data.eventCode}}",
+          "channel": "IN_APP",
+          "enable": true,
+          "action": "NOPE"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "No enum constant com.workflow.notification.model.SubscriptionRuleAction.NOPE",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweSubListAfterFailures",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "eventCode": "CONTRACT_EVT",
+                "channel": "IN_APP",
+                "priority": "HIGH",
+                "enable": true,
+                "action": "ALLOW",
+                "condition": "amount > 100",
+                "createdBy": "admin",
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "nweSubUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/subscriptions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions/{{nweSubList.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "priority": "LOW",
+          "conditionExpr": "amount < 50"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions/91",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweSubListAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "eventCode": "CONTRACT_EVT",
+                "channel": "IN_APP",
+                "priority": "LOW",
+                "enable": true,
+                "action": "ALLOW",
+                "condition": "amount < 50",
+                "createdBy": "admin",
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "nweSubUpdateUnknown",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/subscriptions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions/99999999",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions/99999999",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "订阅规则不存在: 99999999",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweSubDeleteUnknown",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/subscriptions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions/99999999",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions/99999999",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "订阅规则不存在: 99999999",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtDeleteReferenced",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/events/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/{{nweEvtCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/92",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 409,
+          "msg": "事件已被模板或订阅规则引用，不能删除",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweSubDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/subscriptions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions/{{nweSubList.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions/91",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweSubListEmpty",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [],
+            "total": 0,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "nweEvtDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/events/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events/{{nweEvtCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events/92",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweEvtListEmpty",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/events"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/events",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/events",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 0,
+            "page": 1,
+            "size": 20,
+            "rows": []
+          }
+        }
+      }
+    },
+    {
+      "id": "nweChnListBaseline",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/channels"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "name": "站内信",
+              "type": "IN_APP",
+              "enabled": true,
+              "successRate": 100
+            },
+            {
+              "id": "<NUM>",
+              "name": "短信",
+              "type": "SMS",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "企业微信",
+              "type": "WECHAT_WORK",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "小程序",
+              "type": "WECHAT_MINIPROGRAM",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "APP",
+              "type": "APP",
+              "enabled": false,
+              "successRate": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "nweChnEnableSms",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/channels/{id}/enable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels/2/enable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels/2/enable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweChnListEnabled",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/channels"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "name": "站内信",
+              "type": "IN_APP",
+              "enabled": true,
+              "successRate": 100
+            },
+            {
+              "id": "<NUM>",
+              "name": "短信",
+              "type": "SMS",
+              "enabled": true,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "企业微信",
+              "type": "WECHAT_WORK",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "小程序",
+              "type": "WECHAT_MINIPROGRAM",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "APP",
+              "type": "APP",
+              "enabled": false,
+              "successRate": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "nweChnConfigSms",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/channels/{id}/config"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels/2/config",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "webhook": "http://contract.local/hook",
+          "apiKey": "contract-secret"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels/2/config",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweChnListConfigured",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/channels"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "name": "站内信",
+              "type": "IN_APP",
+              "enabled": true,
+              "successRate": 100
+            },
+            {
+              "id": "<NUM>",
+              "name": "短信",
+              "type": "SMS",
+              "enabled": true,
+              "successRate": 100
+            },
+            {
+              "id": "<NUM>",
+              "name": "企业微信",
+              "type": "WECHAT_WORK",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "小程序",
+              "type": "WECHAT_MINIPROGRAM",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "APP",
+              "type": "APP",
+              "enabled": false,
+              "successRate": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "nweChnConfigClear",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/channels/{id}/config"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels/2/config",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels/2/config",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweChnListCleared",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/channels"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "name": "站内信",
+              "type": "IN_APP",
+              "enabled": true,
+              "successRate": 100
+            },
+            {
+              "id": "<NUM>",
+              "name": "短信",
+              "type": "SMS",
+              "enabled": true,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "企业微信",
+              "type": "WECHAT_WORK",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "小程序",
+              "type": "WECHAT_MINIPROGRAM",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "APP",
+              "type": "APP",
+              "enabled": false,
+              "successRate": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "nweChnDisableSms",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/channels/{id}/disable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels/2/disable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels/2/disable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweChnListRestored",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/channels"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "name": "站内信",
+              "type": "IN_APP",
+              "enabled": true,
+              "successRate": 100
+            },
+            {
+              "id": "<NUM>",
+              "name": "短信",
+              "type": "SMS",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "企业微信",
+              "type": "WECHAT_WORK",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "小程序",
+              "type": "WECHAT_MINIPROGRAM",
+              "enabled": false,
+              "successRate": null
+            },
+            {
+              "id": "<NUM>",
+              "name": "APP",
+              "type": "APP",
+              "enabled": false,
+              "successRate": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "nweChnEnableUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/channels/{id}/enable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels/99/enable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels/99/enable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "未知渠道 ID: 99",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweChnDisableUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/channels/{id}/disable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels/99/disable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels/99/disable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "未知渠道 ID: 99",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweChnConfigUnknown",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/channels/{id}/config"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels/99/config",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels/99/config",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "未知渠道 ID: 99",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweChnTestUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/channels/{id}/test"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/channels/99/test",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/channels/99/test",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "未知渠道 ID: 99",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweRetrySource",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/internal/notifications/send"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/notifications/send",
+        "query": {
+          "recipientIds": "1",
+          "channels": "IN_APP"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "tenantId": "default",
+          "templateCode": "ANNOUNCEMENT",
+          "senderId": 1,
+          "senderType": "SYSTEM",
+          "title": "契约重发消息",
+          "content": {
+            "text": "重发正文",
+            "variables": {}
+          },
+          "priority": "NORMAL",
+          "category": "SYSTEM",
+          "messageType": "PRIVATE"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/notifications/send",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweDelListBeforeRetry",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/deliveries"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/deliveries",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "keyword": "契约重发"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/deliveries",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "契约重发消息",
+                "recipientCount": 1,
+                "recipients": [
+                  {
+                    "userId": 1,
+                    "username": "admin",
+                    "status": "PENDING"
+                  }
+                ],
+                "channel": "IN_APP",
+                "status": "SENT",
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "nweDelRetry",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/deliveries/{id}/retry"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/deliveries/{{nweDelListBeforeRetry.data.rows[0].id}}/retry",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/deliveries/291/retry",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweDelListAfterRetry",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/deliveries"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/deliveries",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "keyword": "契约重发"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/deliveries",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "契约重发消息",
+                "recipientCount": 2,
+                "recipients": [
+                  {
+                    "userId": 1,
+                    "username": "admin",
+                    "status": "PENDING"
+                  },
+                  {
+                    "userId": 1,
+                    "username": "admin",
+                    "status": "PENDING"
+                  }
+                ],
+                "channel": "IN_APP",
+                "status": "SENT",
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "nweDelListByRecipient",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/deliveries"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/deliveries",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "recipient": "admin"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/deliveries",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "契约重发消息",
+                "recipientCount": 2,
+                "recipients": [
+                  {
+                    "userId": 1,
+                    "username": "admin",
+                    "status": "PENDING"
+                  },
+                  {
+                    "userId": 1,
+                    "username": "admin",
+                    "status": "PENDING"
+                  }
+                ],
+                "channel": "IN_APP",
+                "status": "SENT",
+                "createdAt": "<TIME>"
+              },
+              {
+                "id": "<NUM>",
+                "title": "大撒大撒",
+                "recipientCount": 1,
+                "recipients": [
+                  {
+                    "userId": 1,
+                    "username": "admin",
+                    "status": "SENT"
+                  }
+                ],
+                "channel": "IN_APP",
+                "status": "SENT",
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "nweDelRetryUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/deliveries/{id}/retry"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/deliveries/99999999/retry",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/deliveries/99999999/retry",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "消息不存在: 99999999",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweRetryCleanup",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/announcements/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements/{{nweDelListBeforeRetry.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements/291",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "nweDelListAfterCleanup",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/deliveries"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/deliveries",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "keyword": "契约重发"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/deliveries",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [],
+            "total": 0,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    }
+  ]
+}

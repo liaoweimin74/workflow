@@ -1,0 +1,443 @@
+{
+  "scenario": "内部系统数据源",
+  "recordedAt": "2026-09-18T03:20:48.143Z",
+  "steps": [
+    {
+      "id": "internalDeptTree",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/dept-tree"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/dept-tree",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/dept-tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "01",
+                  "label": "总公司",
+                  "parentId": ""
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0101",
+                  "label": "武汉分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0102",
+                  "label": "北京分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0103",
+                  "label": "海南分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 4,
+            "page": 0,
+            "size": 4
+          }
+        }
+      }
+    },
+    {
+      "id": "internalDeptTreeMeta",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/dept-tree/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/dept-tree/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/dept-tree/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "id",
+                "label": "ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "parentId",
+                "label": "父节点",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "label",
+                "label": "名称",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "code",
+                "label": "编码",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": true,
+            "formKey": null
+          }
+        }
+      }
+    },
+    {
+      "id": "internalUsers",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/users"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/users",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<NUM>",
+                "data": {
+                  "orgName": null,
+                  "nickname": "管理员",
+                  "orgId": null,
+                  "username": "admin",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "orgName": null,
+                  "nickname": "测试用户",
+                  "orgId": null,
+                  "username": "test",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "internalUsersMeta",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/users/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/users/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/users/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "id",
+                "label": "ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "username",
+                "label": "用户名",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "nickname",
+                "label": "昵称",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "orgId",
+                "label": "组织ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "orgName",
+                "label": "组织名称",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": null,
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "status",
+                "label": "状态",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": null,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": true,
+            "formKey": null
+          }
+        }
+      }
+    },
+    {
+      "id": "internalUserGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/users/{{internalUsers.data.records[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/users/1",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "data": {
+              "orgName": null,
+              "nickname": "管理员",
+              "orgId": null,
+              "username": "admin",
+              "status": 1
+            },
+            "version": null,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    }
+  ]
+}

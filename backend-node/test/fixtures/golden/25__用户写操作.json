@@ -1,0 +1,515 @@
+{
+  "scenario": "用户写操作",
+  "recordedAt": "2026-09-18T03:20:50.436Z",
+  "steps": [
+    {
+      "id": "userCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/users"
+      },
+      "requestTemplate": {
+        "path": "/api/users",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "username": "contract_user_{{$runId}}",
+          "nickname": "契约用户",
+          "email": "contract@workflow.com",
+          "phone": "13900000000",
+          "orgId": null,
+          "roleIds": [
+            2
+          ],
+          "status": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "username": "contract_user_<RUN>",
+            "nickname": "契约用户",
+            "email": "contract@workflow.com",
+            "phone": "13900000000",
+            "avatar": null,
+            "orgId": null,
+            "orgName": null,
+            "status": 1,
+            "createdAt": "<TIME>",
+            "roleIds": [
+              2
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "userByIdAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{userCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/237",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "username": "contract_user_<RUN>",
+            "nickname": "契约用户",
+            "email": "contract@workflow.com",
+            "phone": "13900000000",
+            "avatar": null,
+            "orgId": null,
+            "orgName": null,
+            "status": 1,
+            "createdAt": "<TIME>",
+            "roleIds": [
+              2
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "userUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{userCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "nickname": "契约用户-改名",
+          "phone": "13800000000",
+          "roleIds": [
+            1,
+            2
+          ]
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/237",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "username": "contract_user_<RUN>",
+            "nickname": "契约用户-改名",
+            "email": "contract@workflow.com",
+            "phone": "13800000000",
+            "avatar": null,
+            "orgId": null,
+            "orgName": null,
+            "status": 1,
+            "createdAt": "<TIME>",
+            "roleIds": [
+              1,
+              2
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "userByIdAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{userCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/237",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "username": "contract_user_<RUN>",
+            "nickname": "契约用户-改名",
+            "email": "contract@workflow.com",
+            "phone": "13800000000",
+            "avatar": null,
+            "orgId": null,
+            "orgName": null,
+            "status": 1,
+            "createdAt": "<TIME>",
+            "roleIds": [
+              1,
+              2
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "userUpdateStatus",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/users/{id}/status"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{userCreate.data.id}}/status",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "status": 0
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/237/status",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "userByIdAfterStatus",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{userCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/237",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "username": "contract_user_<RUN>",
+            "nickname": "契约用户-改名",
+            "email": "contract@workflow.com",
+            "phone": "13800000000",
+            "avatar": null,
+            "orgId": null,
+            "orgName": null,
+            "status": 0,
+            "createdAt": "<TIME>",
+            "roleIds": [
+              1,
+              2
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "userResetPassword",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/users/{id}/reset-password"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{userCreate.data.id}}/reset-password",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/237/reset-password",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "userListBeforeDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users"
+      },
+      "requestTemplate": {
+        "path": "/api/users",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 3,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "username": "contract_user_<RUN>",
+                "nickname": "契约用户-改名",
+                "email": "contract@workflow.com",
+                "phone": "13800000000",
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 0,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  1,
+                  2
+                ]
+              },
+              {
+                "id": "<NUM>",
+                "username": "admin",
+                "nickname": "管理员",
+                "email": "admin@workflow.com",
+                "phone": null,
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 1,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  1
+                ]
+              },
+              {
+                "id": "<NUM>",
+                "username": "test",
+                "nickname": "测试用户",
+                "email": "test@workflow.com",
+                "phone": null,
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 1,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "userDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{userCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/237",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "userListAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users"
+      },
+      "requestTemplate": {
+        "path": "/api/users",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 2,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "username": "admin",
+                "nickname": "管理员",
+                "email": "admin@workflow.com",
+                "phone": null,
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 1,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  1
+                ]
+              },
+              {
+                "id": "<NUM>",
+                "username": "test",
+                "nickname": "测试用户",
+                "email": "test@workflow.com",
+                "phone": null,
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 1,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "userByIdAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{userCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/237",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "username": "contract_user_<RUN>",
+            "nickname": "契约用户-改名",
+            "email": "contract@workflow.com",
+            "phone": "13800000000",
+            "avatar": null,
+            "orgId": null,
+            "orgName": null,
+            "status": 0,
+            "createdAt": "<TIME>",
+            "roleIds": [
+              1,
+              2
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

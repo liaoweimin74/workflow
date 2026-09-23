@@ -1,0 +1,141 @@
+{
+  "scenario": "登出",
+  "recordedAt": "2026-09-18T03:21:01.451Z",
+  "steps": [
+    {
+      "id": "loginForLogout",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/auth/login"
+      },
+      "requestTemplate": {
+        "path": "/api/auth/login",
+        "query": {},
+        "headers": {},
+        "body": {
+          "username": "admin",
+          "password": "admin123"
+        },
+        "auth": "none"
+      },
+      "resolvedPath": "/api/auth/login",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "accessToken": "<JWT>",
+            "refreshToken": "<JWT>",
+            "user": {
+              "id": "<NUM>",
+              "username": "admin",
+              "nickname": "管理员",
+              "email": "admin@workflow.com",
+              "phone": null,
+              "avatar": null,
+              "orgId": null,
+              "orgName": null,
+              "roles": [
+                "ROLE_ADMIN"
+              ],
+              "permissions": [
+                "notification:template:list",
+                "process:category:create",
+                "system:menu:query",
+                "system:menu:list",
+                "process:definition:delete",
+                "page:list",
+                "page:edit",
+                "system:user:query",
+                "system:org:create",
+                "notification:message:list",
+                "page:read:contract_page_<RUN>",
+                "page:create",
+                "system:dict:list",
+                "notification:announcement:list",
+                "form:publish",
+                "data-source:list",
+                "system:role:delete",
+                "notification:announcement:manage",
+                "notification:channel:list",
+                "notification:delivery:retry",
+                "system:menu:create",
+                "page:read:contract_view_<RUN>",
+                "system:dict:create",
+                "page:delete",
+                "system:dict:query",
+                "notification:delivery:list",
+                "form:create",
+                "system:dict:update",
+                "process:category:update",
+                "notification:event:manage",
+                "notification:channel:manage",
+                "system:org:update",
+                "process:definition:deploy",
+                "form:delete",
+                "form:list",
+                "system:role:list",
+                "system:user:delete",
+                "page:publish",
+                "form:edit",
+                "system:org:list",
+                "system:user:update",
+                "notification:event:list",
+                "system:menu:delete",
+                "page:read:test_page",
+                "process:definition:create",
+                "system:menu:update",
+                "system:org:delete",
+                "system:role:update",
+                "process:definition:list",
+                "system:user:list",
+                "process:center:list",
+                "notification:template:manage",
+                "system:user:create",
+                "notification:subscription:manage",
+                "process:todo:list",
+                "process:category:delete",
+                "data-source:manage",
+                "system:org:query",
+                "system:role:create",
+                "system:dict:delete",
+                "notification:subscription:list",
+                "system:role:query"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "logout",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/auth/logout"
+      },
+      "requestTemplate": {
+        "path": "/api/auth/logout",
+        "query": {},
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/auth/logout",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    }
+  ]
+}

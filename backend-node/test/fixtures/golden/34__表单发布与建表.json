@@ -1,0 +1,1032 @@
+{
+  "scenario": "表单发布与建表",
+  "recordedAt": "2026-09-18T03:20:55.997Z",
+  "steps": [
+    {
+      "id": "pubCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "name": "契约发布表单",
+          "key": "contract_pub_{{$runId}}",
+          "type": "BUSINESS"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubPublishNoColumns",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "业务表单发布前必须配置列映射（column_config）",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "pubUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+          "columnConfig": "[{\"key\":\"empNo\",\"columnType\":\"VARCHAR\",\"length\":255,\"required\":true,\"unique\":true},{\"key\":\"remark\",\"columnType\":\"TEXT\"},{\"key\":\"salary\",\"columnType\":\"DECIMAL\",\"length\":18,\"scale\":2},{\"key\":\"age\",\"columnType\":\"INT\"},{\"key\":\"hireDate\",\"columnType\":\"DATE\"},{\"key\":\"clock\",\"columnType\":\"VARCHAR\",\"length\":32},{\"key\":\"active\",\"columnType\":\"TINYINT\",\"length\":1},{\"key\":\"tags\",\"columnType\":\"JSON\"},{\"key\":\"score\",\"columnType\":\"INT\",\"indexed\":true},{\"key\":\"bio\",\"columnType\":\"LONGTEXT\"},{\"key\":\"updatedOn\",\"columnType\":\"DATETIME\"},{\"key\":\"note\",\"columnType\":\"VARCHAR\",\"length\":64,\"indexed\":true},{\"key\":\"items\",\"componentType\":\"subForm\",\"subColumns\":[{\"key\":\"sku\",\"columnType\":\"VARCHAR\",\"length\":64,\"required\":true},{\"key\":\"qty\",\"columnType\":\"INT\"}]}]"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\":\"empNo\",\"columnType\":\"VARCHAR\",\"length\":255,\"required\":true,\"unique\":true},{\"key\":\"remark\",\"columnType\":\"TEXT\"},{\"key\":\"salary\",\"columnType\":\"DECIMAL\",\"length\":18,\"scale\":2},{\"key\":\"age\",\"columnType\":\"INT\"},{\"key\":\"hireDate\",\"columnType\":\"DATE\"},{\"key\":\"clock\",\"columnType\":\"VARCHAR\",\"length\":32},{\"key\":\"active\",\"columnType\":\"TINYINT\",\"length\":1},{\"key\":\"tags\",\"columnType\":\"JSON\"},{\"key\":\"score\",\"columnType\":\"INT\",\"indexed\":true},{\"key\":\"bio\",\"columnType\":\"LONGTEXT\"},{\"key\":\"updatedOn\",\"columnType\":\"DATETIME\"},{\"key\":\"note\",\"columnType\":\"VARCHAR\",\"length\":64,\"indexed\":true},{\"key\":\"items\",\"componentType\":\"subForm\",\"subColumns\":[{\"key\":\"sku\",\"columnType\":\"VARCHAR\",\"length\":64,\"required\":true},{\"key\":\"qty\",\"columnType\":\"INT\"}]}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubPublish",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"empNo\", \"length\": 255, \"unique\": true, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"remark\", \"columnType\": \"TEXT\"}, {\"key\": \"salary\", \"scale\": 2, \"length\": 18, \"columnType\": \"DECIMAL\"}, {\"key\": \"age\", \"columnType\": \"INT\"}, {\"key\": \"hireDate\", \"columnType\": \"DATE\"}, {\"key\": \"clock\", \"length\": 32, \"columnType\": \"VARCHAR\"}, {\"key\": \"active\", \"length\": 1, \"columnType\": \"TINYINT\"}, {\"key\": \"tags\", \"columnType\": \"JSON\"}, {\"key\": \"score\", \"indexed\": true, \"columnType\": \"INT\"}, {\"key\": \"bio\", \"columnType\": \"LONGTEXT\"}, {\"key\": \"updatedOn\", \"columnType\": \"DATETIME\"}, {\"key\": \"note\", \"length\": 64, \"indexed\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"items\", \"subColumns\": [{\"key\": \"sku\", \"length\": 64, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"qty\", \"columnType\": \"INT\"}], \"componentType\": \"subForm\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+            "status": "PUBLISHED",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubPublishAgain",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880/publish",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "列 active 不允许缩短长度/精度（防数据截断）",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "pubColumnsMain",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/db/tables/{table}/columns"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/db/tables/wf_biz_{{pubCreate.data.key}}/columns",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/db/tables/wf_biz_contract_pub_4miozb/columns",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "columnType": "VARCHAR",
+              "key": "id",
+              "length": 64,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "tenant_id",
+              "length": 64,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "empNo",
+              "length": 255,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "TEXT",
+              "key": "remark",
+              "length": 65535,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DECIMAL",
+              "key": "salary",
+              "length": 18,
+              "nullable": true,
+              "scale": 2,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "age",
+              "length": 10,
+              "nullable": true,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "DATE",
+              "key": "hireDate",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "clock",
+              "length": 32,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "TINYINT",
+              "key": "active",
+              "length": 3,
+              "nullable": true,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "JSON",
+              "key": "tags",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "score",
+              "length": 10,
+              "nullable": true,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "LONGTEXT",
+              "key": "bio",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DATETIME",
+              "key": "updatedOn",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "note",
+              "length": 64,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "version",
+              "length": 10,
+              "nullable": false,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "created_by",
+              "length": 50,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DATETIME",
+              "key": "created_at",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DATETIME",
+              "key": "updated_at",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pubColumnsSub",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/db/tables/{table}/columns"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/db/tables/wf_biz_{{pubCreate.data.key}}_items/columns",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/db/tables/wf_biz_contract_pub_4miozb_items/columns",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "columnType": "VARCHAR",
+              "key": "id",
+              "length": 64,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "biz_id",
+              "length": 64,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "tenant_id",
+              "length": 64,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "sku",
+              "length": 64,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "qty",
+              "length": 10,
+              "nullable": true,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "sort_no",
+              "length": 10,
+              "nullable": false,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "version",
+              "length": 10,
+              "nullable": false,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "created_by",
+              "length": 50,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DATETIME",
+              "key": "created_at",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DATETIME",
+              "key": "updated_at",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pubDetail",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"empNo\", \"length\": 255, \"unique\": true, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"remark\", \"columnType\": \"TEXT\"}, {\"key\": \"salary\", \"scale\": 2, \"length\": 18, \"columnType\": \"DECIMAL\"}, {\"key\": \"age\", \"columnType\": \"INT\"}, {\"key\": \"hireDate\", \"columnType\": \"DATE\"}, {\"key\": \"clock\", \"length\": 32, \"columnType\": \"VARCHAR\"}, {\"key\": \"active\", \"length\": 1, \"columnType\": \"TINYINT\"}, {\"key\": \"tags\", \"columnType\": \"JSON\"}, {\"key\": \"score\", \"indexed\": true, \"columnType\": \"INT\"}, {\"key\": \"bio\", \"columnType\": \"LONGTEXT\"}, {\"key\": \"updatedOn\", \"columnType\": \"DATETIME\"}, {\"key\": \"note\", \"length\": 64, \"indexed\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"items\", \"subColumns\": [{\"key\": \"sku\", \"length\": 64, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"qty\", \"columnType\": \"INT\"}], \"componentType\": \"subForm\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+            "status": "PUBLISHED",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubByKey",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/by-key/{key}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/by-key/{{pubCreate.data.key}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/by-key/contract_pub_4miozb",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"empNo\", \"length\": 255, \"unique\": true, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"remark\", \"columnType\": \"TEXT\"}, {\"key\": \"salary\", \"scale\": 2, \"length\": 18, \"columnType\": \"DECIMAL\"}, {\"key\": \"age\", \"columnType\": \"INT\"}, {\"key\": \"hireDate\", \"columnType\": \"DATE\"}, {\"key\": \"clock\", \"length\": 32, \"columnType\": \"VARCHAR\"}, {\"key\": \"active\", \"length\": 1, \"columnType\": \"TINYINT\"}, {\"key\": \"tags\", \"columnType\": \"JSON\"}, {\"key\": \"score\", \"indexed\": true, \"columnType\": \"INT\"}, {\"key\": \"bio\", \"columnType\": \"LONGTEXT\"}, {\"key\": \"updatedOn\", \"columnType\": \"DATETIME\"}, {\"key\": \"note\", \"length\": 64, \"indexed\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"items\", \"subColumns\": [{\"key\": \"sku\", \"length\": 64, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"qty\", \"columnType\": \"INT\"}], \"componentType\": \"subForm\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+            "status": "PUBLISHED",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubUpdateBadSchema",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "[{\"type\":\"divider\",\"field\":\"div1\"}]"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"empNo\", \"length\": 255, \"unique\": true, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"remark\", \"columnType\": \"TEXT\"}, {\"key\": \"salary\", \"scale\": 2, \"length\": 18, \"columnType\": \"DECIMAL\"}, {\"key\": \"age\", \"columnType\": \"INT\"}, {\"key\": \"hireDate\", \"columnType\": \"DATE\"}, {\"key\": \"clock\", \"length\": 32, \"columnType\": \"VARCHAR\"}, {\"key\": \"active\", \"length\": 1, \"columnType\": \"TINYINT\"}, {\"key\": \"tags\", \"columnType\": \"JSON\"}, {\"key\": \"score\", \"indexed\": true, \"columnType\": \"INT\"}, {\"key\": \"bio\", \"columnType\": \"LONGTEXT\"}, {\"key\": \"updatedOn\", \"columnType\": \"DATETIME\"}, {\"key\": \"note\", \"length\": 64, \"indexed\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"items\", \"subColumns\": [{\"key\": \"sku\", \"length\": 64, \"required\": true, \"columnType\": \"VARCHAR\"}, {\"key\": \"qty\", \"columnType\": \"INT\"}], \"componentType\": \"subForm\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"divider\",\"field\":\"div1\"}]",
+            "status": "PUBLISHED",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubPublishBadSchema",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "业务表单暂不支持组件（divider），请移除后发布",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "pubUpdateBadType",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+          "columnConfig": "[{\"key\":\"x\",\"columnType\":\"BLOB\"}]"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\":\"x\",\"columnType\":\"BLOB\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+            "status": "PUBLISHED",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubPublishBadType",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "非法列类型: BLOB",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "pubUpdateLongVarchar",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+          "columnConfig": "[{\"key\":\"x\",\"columnType\":\"VARCHAR\",\"length\":300}]"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\":\"x\",\"columnType\":\"VARCHAR\",\"length\":300}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+            "status": "PUBLISHED",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubPublishLongVarchar",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880/publish",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "VARCHAR 长度必须在 1~255 之间: x",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "pubUpdateRestore",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+          "columnConfig": "[{\"key\":\"empNo\",\"columnType\":\"VARCHAR\",\"length\":255,\"required\":true,\"unique\":true},{\"key\":\"remark\",\"columnType\":\"TEXT\"},{\"key\":\"salary\",\"columnType\":\"DECIMAL\",\"length\":18,\"scale\":2},{\"key\":\"age\",\"columnType\":\"INT\"},{\"key\":\"hireDate\",\"columnType\":\"DATE\"},{\"key\":\"clock\",\"columnType\":\"VARCHAR\",\"length\":32},{\"key\":\"active\",\"columnType\":\"TINYINT\",\"length\":1},{\"key\":\"tags\",\"columnType\":\"JSON\"},{\"key\":\"score\",\"columnType\":\"INT\",\"indexed\":true},{\"key\":\"bio\",\"columnType\":\"LONGTEXT\"},{\"key\":\"updatedOn\",\"columnType\":\"DATETIME\"},{\"key\":\"note\",\"columnType\":\"VARCHAR\",\"length\":64,\"indexed\":true},{\"key\":\"items\",\"componentType\":\"subForm\",\"subColumns\":[{\"key\":\"sku\",\"columnType\":\"VARCHAR\",\"length\":64,\"required\":true},{\"key\":\"qty\",\"columnType\":\"INT\"}]}]"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\":\"empNo\",\"columnType\":\"VARCHAR\",\"length\":255,\"required\":true,\"unique\":true},{\"key\":\"remark\",\"columnType\":\"TEXT\"},{\"key\":\"salary\",\"columnType\":\"DECIMAL\",\"length\":18,\"scale\":2},{\"key\":\"age\",\"columnType\":\"INT\"},{\"key\":\"hireDate\",\"columnType\":\"DATE\"},{\"key\":\"clock\",\"columnType\":\"VARCHAR\",\"length\":32},{\"key\":\"active\",\"columnType\":\"TINYINT\",\"length\":1},{\"key\":\"tags\",\"columnType\":\"JSON\"},{\"key\":\"score\",\"columnType\":\"INT\",\"indexed\":true},{\"key\":\"bio\",\"columnType\":\"LONGTEXT\"},{\"key\":\"updatedOn\",\"columnType\":\"DATETIME\"},{\"key\":\"note\",\"columnType\":\"VARCHAR\",\"length\":64,\"indexed\":true},{\"key\":\"items\",\"componentType\":\"subForm\",\"subColumns\":[{\"key\":\"sku\",\"columnType\":\"VARCHAR\",\"length\":64,\"required\":true},{\"key\":\"qty\",\"columnType\":\"INT\"}]}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_pub_<RUN>",
+            "name": "契约发布表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"input\",\"field\":\"empNo\"},{\"type\":\"textarea\",\"field\":\"remark\"}]",
+            "status": "PUBLISHED",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "pubPublishRestore",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{pubCreate.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/bf6b86b119f942acbda3d7435a59c880/publish",
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "列 active 不允许缩短长度/精度（防数据截断）",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "pubColumnsAfterRestore",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/db/tables/{table}/columns"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/db/tables/wf_biz_{{pubCreate.data.key}}/columns",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/db/tables/wf_biz_contract_pub_4miozb/columns",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "columnType": "VARCHAR",
+              "key": "id",
+              "length": 64,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "tenant_id",
+              "length": 64,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "empNo",
+              "length": 255,
+              "nullable": false,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "TEXT",
+              "key": "remark",
+              "length": 65535,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DECIMAL",
+              "key": "salary",
+              "length": 18,
+              "nullable": true,
+              "scale": 2,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "age",
+              "length": 10,
+              "nullable": true,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "DATE",
+              "key": "hireDate",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "clock",
+              "length": 32,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "TINYINT",
+              "key": "active",
+              "length": 3,
+              "nullable": true,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "JSON",
+              "key": "tags",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "score",
+              "length": 10,
+              "nullable": true,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "LONGTEXT",
+              "key": "bio",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DATETIME",
+              "key": "updatedOn",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "note",
+              "length": 64,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "INT",
+              "key": "version",
+              "length": 10,
+              "nullable": false,
+              "scale": 0,
+              "unique": false
+            },
+            {
+              "columnType": "VARCHAR",
+              "key": "created_by",
+              "length": 50,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DATETIME",
+              "key": "created_at",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            },
+            {
+              "columnType": "DATETIME",
+              "key": "updated_at",
+              "length": null,
+              "nullable": true,
+              "scale": null,
+              "unique": false
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

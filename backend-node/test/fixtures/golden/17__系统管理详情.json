@@ -1,0 +1,161 @@
+{
+  "scenario": "系统管理详情",
+  "recordedAt": "2026-09-18T03:20:48.490Z",
+  "steps": [
+    {
+      "id": "users2",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users"
+      },
+      "requestTemplate": {
+        "path": "/api/users",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 2,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "username": "admin",
+                "nickname": "管理员",
+                "email": "admin@workflow.com",
+                "phone": null,
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 1,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  1
+                ]
+              },
+              {
+                "id": "<NUM>",
+                "username": "test",
+                "nickname": "测试用户",
+                "email": "test@workflow.com",
+                "phone": null,
+                "avatar": null,
+                "orgId": null,
+                "orgName": null,
+                "status": 1,
+                "createdAt": "<TIME>",
+                "roleIds": [
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "userById",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/users/{{users2.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/1",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "username": "admin",
+            "nickname": "管理员",
+            "email": "admin@workflow.com",
+            "phone": null,
+            "avatar": null,
+            "orgId": null,
+            "orgName": null,
+            "status": 1,
+            "createdAt": "<TIME>",
+            "roleIds": [
+              1
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "usersBatch",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/users/batch"
+      },
+      "requestTemplate": {
+        "path": "/api/users/batch",
+        "query": {
+          "ids": "{{users2.data.rows[0].id}}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/users/batch",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "username": "admin",
+              "nickname": "管理员",
+              "email": "admin@workflow.com",
+              "phone": null,
+              "avatar": null,
+              "orgId": null,
+              "orgName": null,
+              "status": 1,
+              "createdAt": "<TIME>",
+              "roleIds": [
+                1
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,166 @@
+{
+  "scenario": "通知管理端列表",
+  "recordedAt": "2026-09-18T03:20:48.044Z",
+  "steps": [
+    {
+      "id": "notifUnreadCount",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/unread-count"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/unread-count",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/unread-count",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": 0
+        }
+      }
+    },
+    {
+      "id": "announcementList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/announcements"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "大撒大撒",
+                "senderId": 1,
+                "recipientCount": 1,
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "deliveryList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/deliveries"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/deliveries",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/deliveries",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "大撒大撒",
+                "recipientCount": 1,
+                "recipients": [
+                  {
+                    "userId": 1,
+                    "username": "admin",
+                    "status": "SENT"
+                  }
+                ],
+                "channel": "IN_APP",
+                "status": "SENT",
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "subscriptionList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/subscriptions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/subscriptions",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/subscriptions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [],
+            "total": 0,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,462 @@
+{
+  "scenario": "表单定义写操作",
+  "recordedAt": "2026-09-18T03:20:47.337Z",
+  "steps": [
+    {
+      "id": "fdwCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "name": "契约表单定义",
+          "key": "contract_formdef_{{$runId}}",
+          "type": "WORKFLOW"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_formdef_<RUN>",
+            "name": "契约表单定义",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "WORKFLOW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "fdwEnabledAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/enabled"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/enabled",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/enabled",
+      "unorderedArrays": [
+        "$.data"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "person",
+              "id": "<ID>",
+              "name": "请假人员 数据源",
+              "params": null,
+              "sourceKey": "person",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "FORM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": null,
+              "id": "<ID>",
+              "name": "用户树数据源",
+              "params": null,
+              "sourceKey": "user-tree",
+              "status": "ENABLED",
+              "tenantId": "system",
+              "type": "SYSTEM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": null,
+              "id": "<ID>",
+              "name": "部门树数据源",
+              "params": null,
+              "sourceKey": "dept-tree",
+              "status": "ENABLED",
+              "tenantId": "system",
+              "type": "SYSTEM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "leave_apply_biz",
+              "id": "<ID>",
+              "name": "请假单-业务表单 数据源",
+              "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"j1\",\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"leave_name\",\"label\":\"姓名-请假人\",\"sortable\":true,\"filterable\":true},{\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"leave_dept\",\"label\":\"部门-请假人\",\"sortable\":true,\"filterable\":true}]}",
+              "sourceKey": "leave_apply_biz",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "FORM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "baoxiaodan",
+              "id": "<ID>",
+              "name": "报销单 数据源",
+              "params": null,
+              "sourceKey": "baoxiaodan",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "WORKFLOW",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "contract_formdef_<RUN>",
+              "id": "<ID>",
+              "name": "契约表单定义 数据源",
+              "params": null,
+              "sourceKey": "contract_formdef_<RUN>",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "WORKFLOW",
+              "updatedAt": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fdwGetAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{fdwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/694833b864b64349a110468508f1dbe6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_formdef_<RUN>",
+            "name": "契约表单定义",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[]",
+            "status": "DRAFT",
+            "type": "WORKFLOW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "fdwUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{fdwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约表单定义-改名",
+          "schema": "[{\"type\":\"input\",\"field\":\"contractField\",\"title\":\"契约字段\"}]",
+          "columnConfig": "[{\"key\":\"contract_field\",\"label\":\"契约字段\",\"columnType\":\"VARCHAR\",\"length\":255}]",
+          "processKey": "contract_formdef_proc"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/694833b864b64349a110468508f1dbe6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\":\"contract_field\",\"label\":\"契约字段\",\"columnType\":\"VARCHAR\",\"length\":255}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_formdef_<RUN>",
+            "name": "契约表单定义-改名",
+            "processKey": "contract_formdef_proc",
+            "publishedVersion": null,
+            "schema": "[{\"type\":\"input\",\"field\":\"contractField\",\"title\":\"契约字段\"}]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "WORKFLOW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "fdwGetAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{fdwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/694833b864b64349a110468508f1dbe6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"contract_field\", \"label\": \"契约字段\", \"length\": 255, \"columnType\": \"VARCHAR\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_formdef_<RUN>",
+            "name": "契约表单定义-改名",
+            "processKey": "contract_formdef_proc",
+            "publishedVersion": null,
+            "schema": "[{\"type\":\"input\",\"field\":\"contractField\",\"title\":\"契约字段\"}]",
+            "status": "DRAFT",
+            "type": "WORKFLOW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "fdwDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{fdwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/694833b864b64349a110468508f1dbe6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "fdwEnabledAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/enabled"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/enabled",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/enabled",
+      "unorderedArrays": [
+        "$.data"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "person",
+              "id": "<ID>",
+              "name": "请假人员 数据源",
+              "params": null,
+              "sourceKey": "person",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "FORM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": null,
+              "id": "<ID>",
+              "name": "用户树数据源",
+              "params": null,
+              "sourceKey": "user-tree",
+              "status": "ENABLED",
+              "tenantId": "system",
+              "type": "SYSTEM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": null,
+              "id": "<ID>",
+              "name": "部门树数据源",
+              "params": null,
+              "sourceKey": "dept-tree",
+              "status": "ENABLED",
+              "tenantId": "system",
+              "type": "SYSTEM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "leave_apply_biz",
+              "id": "<ID>",
+              "name": "请假单-业务表单 数据源",
+              "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"j1\",\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"leave_name\",\"label\":\"姓名-请假人\",\"sortable\":true,\"filterable\":true},{\"targetFormKey\":\"person\",\"localField\":\"user_id\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"leave_dept\",\"label\":\"部门-请假人\",\"sortable\":true,\"filterable\":true}]}",
+              "sourceKey": "leave_apply_biz",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "FORM",
+              "updatedAt": "<TIME>"
+            },
+            {
+              "createdAt": "<TIME>",
+              "createdBy": "system",
+              "formKey": "baoxiaodan",
+              "id": "<ID>",
+              "name": "报销单 数据源",
+              "params": null,
+              "sourceKey": "baoxiaodan",
+              "status": "ENABLED",
+              "tenantId": "default",
+              "type": "WORKFLOW",
+              "updatedAt": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fdwGetAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{fdwCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/694833b864b64349a110468508f1dbe6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"contract_field\", \"label\": \"契约字段\", \"length\": 255, \"columnType\": \"VARCHAR\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_formdef_<RUN>",
+            "name": "契约表单定义-改名",
+            "processKey": "contract_formdef_proc",
+            "publishedVersion": null,
+            "schema": "[{\"type\":\"input\",\"field\":\"contractField\",\"title\":\"契约字段\"}]",
+            "status": "ARCHIVED",
+            "type": "WORKFLOW",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    }
+  ]
+}

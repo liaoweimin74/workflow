@@ -1,0 +1,112 @@
+{
+  "scenario": "流程分类",
+  "recordedAt": "2026-09-18T03:20:47.789Z",
+  "steps": [
+    {
+      "id": "catList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/categories"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/categories",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/categories",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "常用流程",
+              "parentId": null,
+              "sortOrder": 0,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "考勤相关",
+              "parentId": null,
+              "sortOrder": 1,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "报销流程",
+              "parentId": null,
+              "sortOrder": 2,
+              "tenantId": "default"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "catTree",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/categories/tree"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/categories/tree",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/categories/tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "常用流程",
+              "parentId": null,
+              "sortOrder": 0,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "考勤相关",
+              "parentId": null,
+              "sortOrder": 1,
+              "tenantId": "default"
+            },
+            {
+              "createdAt": "<TIME>",
+              "id": "<ID>",
+              "name": "报销流程",
+              "parentId": null,
+              "sortOrder": 2,
+              "tenantId": "default"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

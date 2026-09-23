@@ -1,0 +1,61 @@
+{
+  "name": "workflow-backend-node",
+  "version": "1.0.0",
+  "private": true,
+  "description": "工作流平台 Node.js 后端（NestJS + TypeScript + Kysely）",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "dev": "nest start --watch",
+    "test": "vitest run --exclude \"**/integration/**\"",
+    "test:all": "vitest run",
+    "test:integration": "nest build && vitest run test/integration",
+    "test:e2e": "nest build && vitest run test/integration/built-app.spec.ts",
+    "lint": "eslint src tools test",
+    "migrate": "tsx src/framework/database/migrate-cli.ts",
+    "migrate:repair": "tsx src/framework/database/migrate-cli.ts --repair",
+    "endpoints": "tsx tools/extract-endpoints.ts",
+    "endpoints:implemented": "tsx tools/list-implemented.ts",
+    "residue:clean": "tsx tools/cleanup-contract-residue.ts",
+    "golden:record": "tsx tools/record-golden.ts",
+    "contract": "tsx tools/compare-contract.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.0.3",
+    "@nestjs/core": "^12.0.3",
+    "@nestjs/jwt": "^12.0.2",
+    "@nestjs/platform-express": "^12.0.3",
+    "bcryptjs": "^3.0.3",
+    "fast-xml-parser": "^5.11.1",
+    "ioredis": "^6.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "kysely": "^0.29.5",
+    "mysql2": "^3.24.4",
+    "nestjs-pino": "^5.2.0",
+    "pino": "^10.3.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@nestjs/cli": "^12.0.1",
+    "@nestjs/testing": "^12.0.3",
+    "@swc/core": "^1.16.2",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.5.1",
+    "@types/supertest": "^7.2.1",
+    "eslint": "^10.10.0",
+    "eslint-plugin-import": "^2.32.0",
+    "supertest": "^7.2.2",
+    "tsx": "^4.23.13",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.70.0",
+    "unplugin-swc": "^1.6.0",
+    "vitest": "^5.0.1"
+  }
+}

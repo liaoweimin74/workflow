@@ -1,0 +1,1835 @@
+[
+  {
+    "file": "com/workflow/system/controller/DictDataController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/dict-data/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/DictTypeController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/dict-types/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/MenuController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/menus/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/OrganizationController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/orgs/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/RoleController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/roles/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/UserController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/users/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/AnnouncementController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/admin/notification/announcements/{id}",
+    "methodName": "recall",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/EventDefinitionController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/admin/notification/events/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/SubscriptionController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/admin/notification/subscriptions/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/biz-data/{formKey}/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "formKey",
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}",
+    "methodName": "deleteSubRow",
+    "pathParams": [
+      "formKey",
+      "id",
+      "field",
+      "rowId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/CategoryController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/categories/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/data-sources/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/data-sources/{id}/data/{rowId}",
+    "methodName": "deleteData",
+    "pathParams": [
+      "id",
+      "rowId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/form-data/draft/{formDefId}",
+    "methodName": "clearDraft",
+    "pathParams": [
+      "formDefId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/form-definitions/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/internal/system/dept/{id}",
+    "methodName": "deleteDept",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/internal/system/user/{id}",
+    "methodName": "deleteUser",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/api/NotificationController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/notifications/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageDefinitionController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/pages/{id}",
+    "methodName": "delete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageMenuController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/pages/menus/{menuId}",
+    "methodName": "unmountMenu",
+    "pathParams": [
+      "menuId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDesignController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/process-definitions/{id}",
+    "methodName": "deleteDraft",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessVariableController.java",
+    "httpMethod": "DELETE",
+    "fullPath": "/api/v1/process-instances/{processInstanceId}/variables/{name}",
+    "methodName": "removeVariable",
+    "pathParams": [
+      "processInstanceId",
+      "name"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/AuthController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/auth/menus",
+    "methodName": "getMenus",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/AuthController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/auth/userinfo",
+    "methodName": "getCurrentUser",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/DictDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/dict-data/{dictCode}",
+    "methodName": "list",
+    "pathParams": [
+      "dictCode"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/DictTypeController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/dict-types",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/MenuController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/menus/tree",
+    "methodName": "tree",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/OrganizationController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/orgs/tree",
+    "methodName": "tree",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/RoleController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/roles",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/RoleController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/roles/{id}/menus",
+    "methodName": "getRoleMenus",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/UserController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/users",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/UserController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/users/{id}",
+    "methodName": "getById",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/UserController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/users/batch",
+    "methodName": "batch",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/AnnouncementController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/admin/notification/announcements",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/AnnouncementController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/admin/notification/announcements/{id}",
+    "methodName": "detail",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/ChannelController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/admin/notification/channels",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/DeliveryController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/admin/notification/deliveries",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/EventDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/admin/notification/events",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/StatsController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/admin/notification/stats/overview",
+    "methodName": "overview",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/SubscriptionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/admin/notification/subscriptions",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/TemplateController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/admin/notification/templates",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BackendLogicBeanController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/backend-logic/beans",
+    "methodName": "beans",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/biz-data/{formKey}",
+    "methodName": "query",
+    "pathParams": [
+      "formKey"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/biz-data/{formKey}/{id}",
+    "methodName": "getById",
+    "pathParams": [
+      "formKey",
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}",
+    "methodName": "listSubRows",
+    "pathParams": [
+      "formKey",
+      "id",
+      "field"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/biz-data/{formKey}/resolve",
+    "methodName": "resolve",
+    "pathParams": [
+      "formKey"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/biz-data/referenced-count",
+    "methodName": "referencedCount",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/CategoryController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/categories",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/CategoryController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/categories/tree",
+    "methodName": "tree",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/data-sources",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/data-sources/{id}",
+    "methodName": "getById",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/data-sources/{id}/data",
+    "methodName": "queryData",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/data-sources/{id}/data/{rowId}",
+    "methodName": "getData",
+    "pathParams": [
+      "id",
+      "rowId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/data-sources/{id}/metadata",
+    "methodName": "metadata",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DbSchemaController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/data-sources/db/tables",
+    "methodName": "tables",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DbSchemaController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/data-sources/db/tables/{table}/columns",
+    "methodName": "columns",
+    "pathParams": [
+      "table"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/data-sources/enabled",
+    "methodName": "enabled",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/deployed-processes",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/deployed-processes/{id}",
+    "methodName": "get",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/deployed-processes/{id}/xml",
+    "methodName": "getXml",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/deployed-processes/key/{key}/versions",
+    "methodName": "listVersions",
+    "pathParams": [
+      "key"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/deployed-processes/summaries",
+    "methodName": "summaries",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/deployed-processes/versions/{procDefId}/editor",
+    "methodName": "getVersionEditor",
+    "pathParams": [
+      "procDefId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-data",
+    "methodName": "getByProcessInstance",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-data/{id}",
+    "methodName": "getById",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-data/draft/{formDefId}",
+    "methodName": "getDraft",
+    "pathParams": [
+      "formDefId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-data/process-instance/{processInstanceId}",
+    "methodName": "getByProcessInstance",
+    "pathParams": [
+      "processInstanceId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-data/process-instance/{processInstanceId}/snapshots",
+    "methodName": "getSnapshots",
+    "pathParams": [
+      "processInstanceId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-data/task/{taskId}",
+    "methodName": "getByTaskId",
+    "pathParams": [
+      "taskId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-definitions",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-definitions/{id}",
+    "methodName": "getById",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-definitions/{id}/versions",
+    "methodName": "getVersions",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-definitions/{id}/versions/{version}",
+    "methodName": "getByVersion",
+    "pathParams": [
+      "id",
+      "version"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/form-definitions/by-key/{key}",
+    "methodName": "getByKey",
+    "pathParams": [
+      "key"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/internal/system/dept-tree",
+    "methodName": "deptTree",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/internal/system/dept-tree/metadata",
+    "methodName": "deptTreeMetadata",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/internal/system/users",
+    "methodName": "users",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/internal/system/users/{id}",
+    "methodName": "getUser",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/internal/system/users/metadata",
+    "methodName": "usersMetadata",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/api/NotificationController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/notifications",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/api/NotificationController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/notifications/{id}",
+    "methodName": "getById",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/sse/NotificationSseController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/notifications/sse",
+    "methodName": "connect",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/api/NotificationController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/notifications/unread-count",
+    "methodName": "getUnreadCount",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/pages",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/pages/{id}",
+    "methodName": "getById",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageDefinitionController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/pages/{key}/definition",
+    "methodName": "getByKey",
+    "pathParams": [
+      "key"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageMenuController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/pages/{key}/menus",
+    "methodName": "getMenus",
+    "pathParams": [
+      "key"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageQueryController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/pages/{pageKey}/data",
+    "methodName": "query",
+    "pathParams": [
+      "pageKey"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageQueryController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/pages/{pageKey}/ds/{dataSourceId}/data",
+    "methodName": "queryPageDataSource",
+    "pathParams": [
+      "pageKey",
+      "dataSourceId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDesignController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-definitions/{id}/editor",
+    "methodName": "loadEditor",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDesignController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-definitions/drafts",
+    "methodName": "listDrafts",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-instances",
+    "methodName": "list",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-instances/{id}",
+    "methodName": "get",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-instances/{id}/highlight",
+    "methodName": "highlight",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessHistoryController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-instances/{id}/history",
+    "methodName": "history",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-instances/{id}/prediction",
+    "methodName": "prediction",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessVariableController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-instances/{processInstanceId}/variables",
+    "methodName": "getVariables",
+    "pathParams": [
+      "processInstanceId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessVariableController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-instances/{processInstanceId}/variables/{name}",
+    "methodName": "getVariable",
+    "pathParams": [
+      "processInstanceId",
+      "name"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/process-instances/history",
+    "methodName": "listHistory",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/tasks",
+    "methodName": "listTodo",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/tasks/{id}",
+    "methodName": "get",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "GET",
+    "fullPath": "/api/v1/tasks/historic",
+    "methodName": "listHistoric",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/AuthController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/auth/login",
+    "methodName": "login",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/AuthController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/auth/logout",
+    "methodName": "logout",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/AuthController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/auth/refresh",
+    "methodName": "refresh",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/DictDataController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/dict-data",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/DictTypeController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/dict-types",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/MenuController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/menus",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/OrganizationController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/orgs",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/RoleController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/roles",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/UserController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/users",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/admin/AnnouncementController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/announcements",
+    "methodName": "publish",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/ChannelController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/channels/{id}/disable",
+    "methodName": "disable",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/ChannelController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/channels/{id}/enable",
+    "methodName": "enable",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/ChannelController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/channels/{id}/test",
+    "methodName": "test",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/DeliveryController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/deliveries/{id}/retry",
+    "methodName": "retry",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/EventDefinitionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/events",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/admin/EventDefinitionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/events/{id}/toggle",
+    "methodName": "toggle",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/admin/SubscriptionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/subscriptions",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/admin/TemplateController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/templates",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/admin/TemplateController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/admin/notification/templates/{id}/toggle",
+    "methodName": "toggle",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/biz-data/{formKey}",
+    "methodName": "create",
+    "pathParams": [
+      "formKey"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}",
+    "methodName": "addSubRow",
+    "pathParams": [
+      "formKey",
+      "id",
+      "field"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/CategoryController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/categories",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/data-sources",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/data-sources/{id}/data",
+    "methodName": "createData",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/data-sources/{id}/disable",
+    "methodName": "disable",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/data-sources/{id}/enable",
+    "methodName": "enable",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/MetadataProbeController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/data-sources/explore-api",
+    "methodName": "exploreApi",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/MetadataProbeController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/data-sources/explore-sql",
+    "methodName": "exploreSql",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDefinitionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/deployed-processes/{id}/activate",
+    "methodName": "activate",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDefinitionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/deployed-processes/{id}/suspend",
+    "methodName": "suspend",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/example/emp/EmpProfileController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/emp/adjust-salary",
+    "methodName": "adjustSalary",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/emp/EmpProfileController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/emp/resign",
+    "methodName": "resign",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/leave/LeaveBillController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/leave/approve",
+    "methodName": "approve",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/leave/LeaveBillController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/leave/reject",
+    "methodName": "reject",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/example/leave/LeaveBillController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/example/leave/submit",
+    "methodName": "submit",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/form-data",
+    "methodName": "save",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/form-data/draft",
+    "methodName": "saveDraft",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/form-data/snapshot",
+    "methodName": "saveSnapshot",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/form-definitions",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/form-definitions/{id}/publish",
+    "methodName": "publish",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/api/InternalNotificationController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/internal/notifications/send",
+    "methodName": "send",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/api/InternalNotificationController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/internal/notifications/send-by-template",
+    "methodName": "sendByTemplate",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/internal/system/dept",
+    "methodName": "createDept",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/SystemInternalController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/internal/system/user",
+    "methodName": "createUser",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/api/NotificationController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/notifications/{id}/toggle-read",
+    "methodName": "toggleRead",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/api/NotificationController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/notifications/read-all",
+    "methodName": "markAllAsRead",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/notification/api/NotificationController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/notifications/read-batch",
+    "methodName": "batchMarkAsRead",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/PageDefinitionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/pages",
+    "methodName": "create",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/PageMenuController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/pages/{id}/mount-menu",
+    "methodName": "mountMenu",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/PageDefinitionController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/pages/{id}/publish",
+    "methodName": "publish",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDesignController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/process-definitions/{id}/copy",
+    "methodName": "copyProcess",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDesignController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/process-definitions/{id}/deploy",
+    "methodName": "deploy",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDesignController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/process-definitions/drafts",
+    "methodName": "createDraft",
+    "pathParams": [],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/process-instances",
+    "methodName": "start",
+    "pathParams": [],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/process-instances/{id}/resume",
+    "methodName": "resume",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/process-instances/{id}/suspend",
+    "methodName": "suspend",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessInstanceController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/process-instances/{id}/terminate",
+    "methodName": "terminate",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{id}/add-sign",
+    "methodName": "addSign",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{id}/claim",
+    "methodName": "claim",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{id}/complete",
+    "methodName": "complete",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{id}/delegate",
+    "methodName": "delegate",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{id}/forward-sign",
+    "methodName": "forwardSign",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{id}/refuse",
+    "methodName": "refuse",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{id}/reject",
+    "methodName": "reject",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/TaskController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{id}/transfer",
+    "methodName": "transfer",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/TaskRemindController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/{taskId}/remind",
+    "methodName": "remind",
+    "pathParams": [
+      "taskId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/TaskRemindController.java",
+    "httpMethod": "POST",
+    "fullPath": "/api/v1/tasks/by-instance/{processInstanceId}/remind",
+    "methodName": "remindByInstance",
+    "pathParams": [
+      "processInstanceId"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/DictDataController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/dict-data/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/DictTypeController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/dict-types/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/MenuController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/menus/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/OrganizationController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/orgs/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/RoleController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/roles/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/RoleController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/roles/{id}/menus",
+    "methodName": "assignMenus",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/UserController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/users/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/system/controller/UserController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/users/{id}/reset-password",
+    "methodName": "resetPassword",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/system/controller/UserController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/users/{id}/status",
+    "methodName": "updateStatus",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/admin/ChannelController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/admin/notification/channels/{id}/config",
+    "methodName": "updateConfig",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/admin/EventDefinitionController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/admin/notification/events/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/admin/SubscriptionController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/admin/notification/subscriptions/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/admin/TemplateController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/admin/notification/templates/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/biz-data/{formKey}/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "formKey",
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/BizDataController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/biz-data/{formKey}/{id}/sub/{field}/{rowId}",
+    "methodName": "updateSubRow",
+    "pathParams": [
+      "formKey",
+      "id",
+      "field",
+      "rowId"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/CategoryController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/categories/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/data-sources/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/DataSourceController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/data-sources/{id}/data/{rowId}",
+    "methodName": "updateData",
+    "pathParams": [
+      "id",
+      "rowId"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/FormDataController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/form-data/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/FormDefinitionController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/form-definitions/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/notification/api/NotificationController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/notifications/{id}/read",
+    "methodName": "markAsRead",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": false
+  },
+  {
+    "file": "com/workflow/api/controller/PageDefinitionController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/pages/{id}",
+    "methodName": "update",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessDesignController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/process-definitions/{id}/design",
+    "methodName": "saveDesign",
+    "pathParams": [
+      "id"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessVariableController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/process-instances/{processInstanceId}/variables",
+    "methodName": "setVariables",
+    "pathParams": [
+      "processInstanceId"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessVariableController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/process-instances/{processInstanceId}/variables/{name}",
+    "methodName": "setVariable",
+    "pathParams": [
+      "processInstanceId",
+      "name"
+    ],
+    "hasRequestBody": true
+  },
+  {
+    "file": "com/workflow/api/controller/ProcessVariableController.java",
+    "httpMethod": "PUT",
+    "fullPath": "/api/v1/process-instances/tasks/{taskId}/variables",
+    "methodName": "setTaskVariables",
+    "pathParams": [
+      "taskId"
+    ],
+    "hasRequestBody": true
+  }
+]

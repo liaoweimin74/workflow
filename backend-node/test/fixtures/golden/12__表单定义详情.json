@@ -1,0 +1,233 @@
+{
+  "scenario": "表单定义详情",
+  "recordedAt": "2026-09-18T03:20:47.886Z",
+  "steps": [
+    {
+      "id": "formDefList2",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "type": "BUSINESS"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "id": "<ID>",
+                "name": "请假单-业务表单",
+                "key": "leave_apply_biz",
+                "type": "BUSINESS",
+                "version": 1,
+                "status": "PUBLISHED",
+                "publishedVersion": 1,
+                "createdBy": null,
+                "createdAt": "<TIME>",
+                "updatedAt": "<TIME>",
+                "processKey": null
+              },
+              {
+                "id": "<ID>",
+                "name": "请假人员",
+                "key": "person",
+                "type": "BUSINESS",
+                "version": 1,
+                "status": "PUBLISHED",
+                "publishedVersion": 1,
+                "createdBy": null,
+                "createdAt": "<TIME>",
+                "updatedAt": "<TIME>",
+                "processKey": null
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 2,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "formDefDetail",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{formDefList2.data.content[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/3761079572ed48158ccd31159a3ac7ae",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"leave_type\", \"label\": \"请假类别\", \"scale\": null, \"length\": null, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"JSON\", \"componentType\": \"select\"}, {\"key\": \"leave_type_text\", \"label\": \"请假类别（显示）\", \"scale\": null, \"hidden\": true, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"selectText\"}, {\"key\": \"reason\", \"label\": \"请假原因\", \"scale\": null, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"input\"}, {\"key\": \"user_id\", \"label\": \"人员ID\", \"scale\": null, \"hidden\": true, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"input\"}, {\"key\": \"name\", \"label\": \"人员姓名\", \"scale\": null, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"pickerConfig\": \"{\\\"displayField\\\":\\\"name\\\",\\\"mode\\\":\\\"single\\\",\\\"pickerType\\\":\\\"lookupPicker\\\"}\", \"componentType\": \"LookupPicker\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "leave_apply_biz",
+            "name": "请假单-业务表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "{\"rule\":[{\"type\":\"select\",\"field\":\"leave_type\",\"title\":\"请假类别\",\"info\":\"\",\"effect\":{\"fetch\":\"\"},\"$required\":false,\"options\":[{\"label\":\"选项01\",\"value\":\"1\"},{\"label\":\"选项02\",\"value\":\"2\"},{\"label\":\"选项03\",\"value\":\"3\"}],\"_fc_id\":\"id_Faawmtwd2avoafc\",\"name\":\"ref_F6g2mtwd2avoagc\",\"_fc_drag_tag\":\"select\",\"display\":true,\"hidden\":false},{\"type\":\"input\",\"field\":\"reason\",\"title\":\"请假原因\",\"info\":\"\",\"$required\":false,\"props\":{\"type\":\"textarea\"},\"_fc_id\":\"id_F932mtwd28i3acc\",\"name\":\"ref_Fy91mtwd28i3adc\",\"_fc_drag_tag\":\"textarea\",\"display\":true,\"hidden\":false},{\"type\":\"input\",\"field\":\"user_id\",\"title\":\"人员ID\",\"info\":\"\",\"$required\":false,\"_fc_id\":\"id_F39bmtwd4wr8akc\",\"name\":\"ref_F2vxmtwd4wr8alc\",\"_fc_drag_tag\":\"input\",\"display\":true,\"hidden\":true},{\"type\":\"LookupPicker\",\"field\":\"name\",\"title\":\"人员姓名\",\"props\":{\"columns\":[{\"prop\":\"code\",\"label\":\"人员编码\"},{\"prop\":\"name\",\"label\":\"人员姓名\"},{\"prop\":\"dept\",\"label\":\"所属部门\"}],\"returnFields\":{\"id\":\"user_id\",\"name\":\"name\"},\"dataSourceId\":\"ds_mtwlm13u\",\"displayField\":\"name\",\"searchColumns\":[\"name\",\"dept\"],\"idField\":\"user_id\"},\"_fc_id\":\"id_F0ofmtwd4iyoahc\",\"name\":\"ref_Foismtwd4iyoaic\",\"_fc_drag_tag\":\"LookupPicker\",\"display\":true,\"hidden\":false}],\"option\":{\"form\":{\"inline\":false,\"hideRequiredAsterisk\":false,\"labelPosition\":\"right\",\"size\":\"default\",\"labelWidth\":\"125px\",\"formCreateFormName\":\"请假单-业务表单\"},\"resetBtn\":{\"show\":false,\"innerText\":\"重置\"},\"submitBtn\":{\"show\":true,\"innerText\":\"提交\"},\"formName\":\"请假单-业务表单\"},\"dataSources\":[{\"id\":\"ds_mtwlm13u\",\"refId\":\"<ID>\",\"name\":\"请假人员 数据源\"}],\"actions\":[]}",
+            "status": "PUBLISHED",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "formDefByKey",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/by-key/{key}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/by-key/{{formDefList2.data.content[0].key}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/by-key/leave_apply_biz",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"leave_type\", \"label\": \"请假类别\", \"scale\": null, \"length\": null, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"JSON\", \"componentType\": \"select\"}, {\"key\": \"leave_type_text\", \"label\": \"请假类别（显示）\", \"scale\": null, \"hidden\": true, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"selectText\"}, {\"key\": \"reason\", \"label\": \"请假原因\", \"scale\": null, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"input\"}, {\"key\": \"user_id\", \"label\": \"人员ID\", \"scale\": null, \"hidden\": true, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"input\"}, {\"key\": \"name\", \"label\": \"人员姓名\", \"scale\": null, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"pickerConfig\": \"{\\\"displayField\\\":\\\"name\\\",\\\"mode\\\":\\\"single\\\",\\\"pickerType\\\":\\\"lookupPicker\\\"}\", \"componentType\": \"LookupPicker\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "leave_apply_biz",
+            "name": "请假单-业务表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "{\"rule\":[{\"type\":\"select\",\"field\":\"leave_type\",\"title\":\"请假类别\",\"info\":\"\",\"effect\":{\"fetch\":\"\"},\"$required\":false,\"options\":[{\"label\":\"选项01\",\"value\":\"1\"},{\"label\":\"选项02\",\"value\":\"2\"},{\"label\":\"选项03\",\"value\":\"3\"}],\"_fc_id\":\"id_Faawmtwd2avoafc\",\"name\":\"ref_F6g2mtwd2avoagc\",\"_fc_drag_tag\":\"select\",\"display\":true,\"hidden\":false},{\"type\":\"input\",\"field\":\"reason\",\"title\":\"请假原因\",\"info\":\"\",\"$required\":false,\"props\":{\"type\":\"textarea\"},\"_fc_id\":\"id_F932mtwd28i3acc\",\"name\":\"ref_Fy91mtwd28i3adc\",\"_fc_drag_tag\":\"textarea\",\"display\":true,\"hidden\":false},{\"type\":\"input\",\"field\":\"user_id\",\"title\":\"人员ID\",\"info\":\"\",\"$required\":false,\"_fc_id\":\"id_F39bmtwd4wr8akc\",\"name\":\"ref_F2vxmtwd4wr8alc\",\"_fc_drag_tag\":\"input\",\"display\":true,\"hidden\":true},{\"type\":\"LookupPicker\",\"field\":\"name\",\"title\":\"人员姓名\",\"props\":{\"columns\":[{\"prop\":\"code\",\"label\":\"人员编码\"},{\"prop\":\"name\",\"label\":\"人员姓名\"},{\"prop\":\"dept\",\"label\":\"所属部门\"}],\"returnFields\":{\"id\":\"user_id\",\"name\":\"name\"},\"dataSourceId\":\"ds_mtwlm13u\",\"displayField\":\"name\",\"searchColumns\":[\"name\",\"dept\"],\"idField\":\"user_id\"},\"_fc_id\":\"id_F0ofmtwd4iyoahc\",\"name\":\"ref_Foismtwd4iyoaic\",\"_fc_drag_tag\":\"LookupPicker\",\"display\":true,\"hidden\":false}],\"option\":{\"form\":{\"inline\":false,\"hideRequiredAsterisk\":false,\"labelPosition\":\"right\",\"size\":\"default\",\"labelWidth\":\"125px\",\"formCreateFormName\":\"请假单-业务表单\"},\"resetBtn\":{\"show\":false,\"innerText\":\"重置\"},\"submitBtn\":{\"show\":true,\"innerText\":\"提交\"},\"formName\":\"请假单-业务表单\"},\"dataSources\":[{\"id\":\"ds_mtwlm13u\",\"refId\":\"<ID>\",\"name\":\"请假人员 数据源\"}],\"actions\":[]}",
+            "status": "PUBLISHED",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "formDefVersions",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/{id}/versions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{formDefList2.data.content[0].id}}/versions",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/3761079572ed48158ccd31159a3ac7ae/versions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<ID>",
+              "version": 1,
+              "status": "PUBLISHED",
+              "createdBy": null,
+              "createdAt": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "formDefVersion",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/form-definitions/{id}/versions/{version}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{formDefList2.data.content[0].id}}/versions/{{formDefList2.data.content[0].version}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/3761079572ed48158ccd31159a3ac7ae/versions/1",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"leave_type\", \"label\": \"请假类别\", \"scale\": null, \"length\": null, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"JSON\", \"componentType\": \"select\"}, {\"key\": \"leave_type_text\", \"label\": \"请假类别（显示）\", \"scale\": null, \"hidden\": true, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"selectText\"}, {\"key\": \"reason\", \"label\": \"请假原因\", \"scale\": null, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"input\"}, {\"key\": \"user_id\", \"label\": \"人员ID\", \"scale\": null, \"hidden\": true, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"componentType\": \"input\"}, {\"key\": \"name\", \"label\": \"人员姓名\", \"scale\": null, \"length\": 255, \"unique\": false, \"indexed\": false, \"required\": false, \"columnType\": \"VARCHAR\", \"pickerConfig\": \"{\\\"displayField\\\":\\\"name\\\",\\\"mode\\\":\\\"single\\\",\\\"pickerType\\\":\\\"lookupPicker\\\"}\", \"componentType\": \"LookupPicker\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "leave_apply_biz",
+            "name": "请假单-业务表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "{\"rule\":[{\"type\":\"select\",\"field\":\"leave_type\",\"title\":\"请假类别\",\"info\":\"\",\"effect\":{\"fetch\":\"\"},\"$required\":false,\"options\":[{\"label\":\"选项01\",\"value\":\"1\"},{\"label\":\"选项02\",\"value\":\"2\"},{\"label\":\"选项03\",\"value\":\"3\"}],\"_fc_id\":\"id_Faawmtwd2avoafc\",\"name\":\"ref_F6g2mtwd2avoagc\",\"_fc_drag_tag\":\"select\",\"display\":true,\"hidden\":false},{\"type\":\"input\",\"field\":\"reason\",\"title\":\"请假原因\",\"info\":\"\",\"$required\":false,\"props\":{\"type\":\"textarea\"},\"_fc_id\":\"id_F932mtwd28i3acc\",\"name\":\"ref_Fy91mtwd28i3adc\",\"_fc_drag_tag\":\"textarea\",\"display\":true,\"hidden\":false},{\"type\":\"input\",\"field\":\"user_id\",\"title\":\"人员ID\",\"info\":\"\",\"$required\":false,\"_fc_id\":\"id_F39bmtwd4wr8akc\",\"name\":\"ref_F2vxmtwd4wr8alc\",\"_fc_drag_tag\":\"input\",\"display\":true,\"hidden\":true},{\"type\":\"LookupPicker\",\"field\":\"name\",\"title\":\"人员姓名\",\"props\":{\"columns\":[{\"prop\":\"code\",\"label\":\"人员编码\"},{\"prop\":\"name\",\"label\":\"人员姓名\"},{\"prop\":\"dept\",\"label\":\"所属部门\"}],\"returnFields\":{\"id\":\"user_id\",\"name\":\"name\"},\"dataSourceId\":\"ds_mtwlm13u\",\"displayField\":\"name\",\"searchColumns\":[\"name\",\"dept\"],\"idField\":\"user_id\"},\"_fc_id\":\"id_F0ofmtwd4iyoahc\",\"name\":\"ref_Foismtwd4iyoaic\",\"_fc_drag_tag\":\"LookupPicker\",\"display\":true,\"hidden\":false}],\"option\":{\"form\":{\"inline\":false,\"hideRequiredAsterisk\":false,\"labelPosition\":\"right\",\"size\":\"default\",\"labelWidth\":\"125px\",\"formCreateFormName\":\"请假单-业务表单\"},\"resetBtn\":{\"show\":false,\"innerText\":\"重置\"},\"submitBtn\":{\"show\":true,\"innerText\":\"提交\"},\"formName\":\"请假单-业务表单\"},\"dataSources\":[{\"id\":\"ds_mtwlm13u\",\"refId\":\"<ID>\",\"name\":\"请假人员 数据源\"}],\"actions\":[]}",
+            "status": "PUBLISHED",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    }
+  ]
+}

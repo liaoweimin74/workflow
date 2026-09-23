@@ -1,0 +1,252 @@
+{
+  "scenario": "SQL 列元数据探测",
+  "recordedAt": "2026-09-18T03:21:00.703Z",
+  "steps": [
+    {
+      "id": "mpEmpty",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-sql"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-sql",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sql": "   "
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-sql",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "SQL 不能为空",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mpNotSelect",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-sql"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-sql",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sql": "UPDATE wf_biz_person SET name = 'x'"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-sql",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "仅支持 SELECT 查询",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mpMultiStatement",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-sql"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-sql",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sql": "SELECT code FROM wf_biz_person; DELETE FROM wf_biz_person"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-sql",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "仅支持单条 SELECT 查询",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mpProbe",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-sql"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-sql",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sql": "SELECT code, name, dept, version, created_at, updated_at FROM wf_biz_person WHERE code LIKE :prefix"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-sql",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "key": "code",
+              "label": "code",
+              "columnType": "VARCHAR",
+              "length": 255,
+              "scale": null,
+              "nullable": false
+            },
+            {
+              "key": "name",
+              "label": "name",
+              "columnType": "VARCHAR",
+              "length": 255,
+              "scale": null,
+              "nullable": false
+            },
+            {
+              "key": "dept",
+              "label": "dept",
+              "columnType": "VARCHAR",
+              "length": 536870911,
+              "scale": null,
+              "nullable": true
+            },
+            {
+              "key": "version",
+              "label": "version",
+              "columnType": "INT",
+              "length": 10,
+              "scale": null,
+              "nullable": false
+            },
+            {
+              "key": "created_at",
+              "label": "created_at",
+              "columnType": "DATETIME",
+              "length": 19,
+              "scale": null,
+              "nullable": true
+            },
+            {
+              "key": "updated_at",
+              "label": "updated_at",
+              "columnType": "DATETIME",
+              "length": 19,
+              "scale": null,
+              "nullable": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "mpProbeAlias",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-sql"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-sql",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sql": "SELECT COUNT(*) AS total, MAX(code) AS max_code FROM wf_biz_person"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-sql",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "key": "total",
+              "label": "total",
+              "columnType": "INT",
+              "length": 19,
+              "scale": null,
+              "nullable": false
+            },
+            {
+              "key": "max_code",
+              "label": "max_code",
+              "columnType": "VARCHAR",
+              "length": 255,
+              "scale": null,
+              "nullable": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "mpProbeBadTable",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-sql"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-sql",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "sql": "SELECT * FROM wf_no_such_table_contract"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-sql",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "PreparedStatementCallback; bad SQL grammar []",
+          "data": null
+        }
+      }
+    }
+  ]
+}

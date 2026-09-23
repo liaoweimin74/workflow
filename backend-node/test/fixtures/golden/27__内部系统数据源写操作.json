@@ -1,0 +1,493 @@
+{
+  "scenario": "内部系统数据源写操作",
+  "recordedAt": "2026-09-18T03:20:51.184Z",
+  "steps": [
+    {
+      "id": "iuCreateDept",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/internal/system/dept"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/dept",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "orgName": "契约内部机构",
+          "orgCode": "it_dept_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/dept",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "data": {
+              "code": "it_dept_<RUN>",
+              "label": "契约内部机构",
+              "parentId": ""
+            },
+            "version": null,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "iuDeptTreeAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/dept-tree"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/dept-tree",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/dept-tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "01",
+                  "label": "总公司",
+                  "parentId": ""
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0101",
+                  "label": "武汉分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0102",
+                  "label": "北京分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0103",
+                  "label": "海南分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "it_dept_<RUN>",
+                  "label": "契约内部机构",
+                  "parentId": ""
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 5,
+            "page": 0,
+            "size": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "iuCreateUser",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/internal/system/user"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/user",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "username": "it_user_{{$runId}}",
+          "nickname": "契约内部用户",
+          "orgId": null
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/user",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "data": {
+              "orgName": null,
+              "nickname": "契约内部用户",
+              "orgId": null,
+              "username": "it_user_<RUN>",
+              "status": 1
+            },
+            "version": null,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "iuGetUser",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/users/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/users/{{iuCreateUser.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/users/238",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "data": {
+              "orgName": null,
+              "nickname": "契约内部用户",
+              "orgId": null,
+              "username": "it_user_<RUN>",
+              "status": 1
+            },
+            "version": null,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "iuUsersAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/users"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/users",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<NUM>",
+                "data": {
+                  "orgName": null,
+                  "nickname": "契约内部用户",
+                  "orgId": null,
+                  "username": "it_user_<RUN>",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "orgName": null,
+                  "nickname": "管理员",
+                  "orgId": null,
+                  "username": "admin",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "orgName": null,
+                  "nickname": "测试用户",
+                  "orgId": null,
+                  "username": "test",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 3,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "iuDeleteUser",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/internal/system/user/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/user/{{iuCreateUser.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/user/238",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "iuUsersAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/users"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/users",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/users",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<NUM>",
+                "data": {
+                  "orgName": null,
+                  "nickname": "管理员",
+                  "orgId": null,
+                  "username": "admin",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "orgName": null,
+                  "nickname": "测试用户",
+                  "orgId": null,
+                  "username": "test",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "iuDeleteDept",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/internal/system/dept/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/dept/{{iuCreateDept.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/dept/244",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "iuDeptTreeAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/internal/system/dept-tree"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/system/dept-tree",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/system/dept-tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "01",
+                  "label": "总公司",
+                  "parentId": ""
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0101",
+                  "label": "武汉分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0102",
+                  "label": "北京分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "code": "0103",
+                  "label": "海南分公司",
+                  "parentId": "1"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 4,
+            "page": 0,
+            "size": 4
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,3885 @@
+{
+  "scenario": "消息发送与用户端消息操作",
+  "recordedAt": "2026-09-18T03:20:52.474Z",
+  "steps": [
+    {
+      "id": "mscTplCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/templates"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/templates",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "templateCode": "CONTRACT_TPL_{{$runId}}",
+          "name": "契约消息模板",
+          "title": "契约标题-${name}",
+          "content": "契约正文-${name}",
+          "contentType": "TEXT",
+          "channel": "IN_APP",
+          "priority": "NORMAL",
+          "category": "SYSTEM"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/templates",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "category": "SYSTEM",
+            "channel": "IN_APP",
+            "content": "契约正文-${name}",
+            "contentType": "TEXT",
+            "createdAt": "<TIME>",
+            "enabled": true,
+            "eventCode": null,
+            "id": "<NUM>",
+            "isSystem": false,
+            "name": "契约消息模板",
+            "priority": "NORMAL",
+            "templateCode": "CONTRACT_TPL_<RUN>",
+            "tenantId": "default",
+            "title": "契约标题-${name}"
+          }
+        }
+      }
+    },
+    {
+      "id": "mscTplList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/templates"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/templates",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/templates",
+      "shapeOnly": [
+        "$.data"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_5y9mfy",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": null,
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_5je7r0",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_69uh4i",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_2q5b9d",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_ktdzug",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_pp6d1j",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_hd90px",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_eda8fa",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_c7cmw6",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_dhxh3f",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_vcelly",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_bwlrao",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_z04uqp",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_dxd1si",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_k5jc5t",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_mhbfby",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_effkkr",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_4k15lx",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_siyqht",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_te9znx",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_oj7y9p",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_njlgc6",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_5wbcsx",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_deq1be",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_i7mrrk",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_yzqpzh",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_on16c9",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_9c6qt6",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_obzt7v",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_ytyhr1",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_30lwoz",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_31kl97",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_wqtm85",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_5vzz3c",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_g4ld9k",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_tqpbpm",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_6wbu34",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_6pqbgo",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_9lpabs",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_xkpmwm",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_6zaz9m",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_0xr4ri",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_tb1q4f",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_ww9eiz",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_yl46bo",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_s1fk43",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_138rp5",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_v49sgh",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_3oayqe",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_0pvqfa",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_dhauil",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_4uizvp",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_93tjtt",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_e5rk6o",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_tj1f3u",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_wf9ku9",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_y51vdc",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_r0usbd",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_hx24uy",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_5mheq4",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_l9d1hd",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_6n98db",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_konqyd",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_kilhcy",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_2tjepj",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_l7ch8l",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_r5ihyf",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_7p2alh",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_0eiy2o",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_z2wpow",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_jky39i",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_etqi33",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_amnpcz",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_e4l2fg",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_7yzabj",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_q1nmm7",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_gx16j3",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_twdwtw",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_h4yi7p",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_c9cbk3",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_6ol1ix",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_if75hu",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_s2savr",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_2rfunp",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_nxcq7l",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_rj1u1i",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_muqad5",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_g7uh64",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_q5tzbm",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_1265po",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_uww2di",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_fta608",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_e798k3",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_dpyzhu",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_3o260z",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_3w7yum",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "TASK",
+              "channel": "IN_APP",
+              "content": "契约正文V2-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板-改名",
+              "priority": "HIGH",
+              "templateCode": "CONTRACT_TPL_zupytt",
+              "tenantId": "default",
+              "title": "契约标题V2-${name}"
+            },
+            {
+              "category": "SYSTEM",
+              "channel": "IN_APP",
+              "content": "契约正文-${name}",
+              "contentType": "TEXT",
+              "createdAt": "<TIME>",
+              "enabled": true,
+              "eventCode": null,
+              "id": "<NUM>",
+              "isSystem": false,
+              "name": "契约消息模板",
+              "priority": "NORMAL",
+              "templateCode": "CONTRACT_TPL_<RUN>",
+              "tenantId": "default",
+              "title": "契约标题-${name}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "mscTplToggleOff",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/templates/{id}/toggle"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/templates/{{mscTplCreate.data.id}}/toggle",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/templates/99/toggle",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscSendByTemplateDisabled",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/internal/notifications/send-by-template"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/notifications/send-by-template",
+        "query": {
+          "recipientIds": "1",
+          "channels": "IN_APP"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "senderId": 1,
+          "templateCode": "{{mscTplCreate.data.templateCode}}",
+          "variables": {
+            "name": "张三"
+          },
+          "messageType": "PRIVATE"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/notifications/send-by-template",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "模板已停用: CONTRACT_TPL_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscTplToggleOn",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/templates/{id}/toggle"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/templates/{{mscTplCreate.data.id}}/toggle",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/templates/99/toggle",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscTplUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/admin/notification/templates/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/templates/{{mscTplCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约消息模板-改名",
+          "title": "契约标题V2-${name}",
+          "content": "契约正文V2-${name}",
+          "priority": "HIGH",
+          "category": "TASK"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/templates/99",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "category": "TASK",
+            "channel": "IN_APP",
+            "content": "契约正文V2-${name}",
+            "contentType": "TEXT",
+            "createdAt": "<TIME>",
+            "enabled": true,
+            "eventCode": null,
+            "id": "<NUM>",
+            "isSystem": false,
+            "name": "契约消息模板-改名",
+            "priority": "HIGH",
+            "templateCode": "CONTRACT_TPL_<RUN>",
+            "tenantId": "default",
+            "title": "契约标题V2-${name}"
+          }
+        }
+      }
+    },
+    {
+      "id": "mscSendByTemplateMissingVar",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/internal/notifications/send-by-template"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/notifications/send-by-template",
+        "query": {
+          "recipientIds": "1",
+          "channels": "IN_APP"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "senderId": 1,
+          "templateCode": "{{mscTplCreate.data.templateCode}}",
+          "variables": {},
+          "messageType": "PRIVATE"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/notifications/send-by-template",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "缺少必填变量: name",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscTplToggleOffByUnknownId",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/templates/{id}/toggle"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/templates/99999999/toggle",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/templates/99999999/toggle",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "模板不存在",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscSendFree",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/internal/notifications/send"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/internal/notifications/send",
+        "query": {
+          "recipientIds": "1",
+          "channels": "IN_APP"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "tenantId": "default",
+          "templateCode": "ANNOUNCEMENT",
+          "senderId": 1,
+          "senderType": "SYSTEM",
+          "title": "契约自由消息",
+          "content": {
+            "text": "自由正文",
+            "variables": {}
+          },
+          "priority": "NORMAL",
+          "category": "SYSTEM",
+          "messageType": "PRIVATE"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/internal/notifications/send",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscAnnPublish",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/admin/notification/announcements"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements",
+        "query": {
+          "title": "契约公告",
+          "content": "契约公告正文",
+          "recipientIds": "1"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 3,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约公告",
+                "content": {
+                  "text": "契约公告正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "PENDING"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约自由消息",
+                "content": {
+                  "text": "自由正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PRIVATE",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": null,
+                "eventCode": null,
+                "readStatus": "PENDING"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscUnreadCount",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/unread-count"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/unread-count",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/unread-count",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": 2
+        }
+      }
+    },
+    {
+      "id": "mscListUnread",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "unread": "true"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 2,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约公告",
+                "content": {
+                  "text": "契约公告正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "PENDING"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约自由消息",
+                "content": {
+                  "text": "自由正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PRIVATE",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": null,
+                "eventCode": null,
+                "readStatus": "PENDING"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscListRead",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "unread": "false"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 1,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscListKeyword",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "keyword": "契约"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 2,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约公告",
+                "content": {
+                  "text": "契约公告正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "PENDING"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约自由消息",
+                "content": {
+                  "text": "自由正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PRIVATE",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": null,
+                "eventCode": null,
+                "readStatus": "PENDING"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscListCategorySystem",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "category": "SYSTEM"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 3,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约公告",
+                "content": {
+                  "text": "契约公告正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "PENDING"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约自由消息",
+                "content": {
+                  "text": "自由正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PRIVATE",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": null,
+                "eventCode": null,
+                "readStatus": "PENDING"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscListCategoryTask",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "category": "TASK"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 0,
+            "page": 1,
+            "size": 20,
+            "rows": []
+          }
+        }
+      }
+    },
+    {
+      "id": "mscListMessageTypePrivate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "messageType": "PRIVATE"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 1,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约自由消息",
+                "content": {
+                  "text": "自由正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PRIVATE",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": null,
+                "eventCode": null,
+                "readStatus": "PENDING"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscListMessageTypePublic",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "messageType": "PUBLIC"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 2,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约公告",
+                "content": {
+                  "text": "契约公告正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "PENDING"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscGetNewest",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "tenantId": "default",
+            "templateCode": "ANNOUNCEMENT",
+            "senderId": 1,
+            "senderType": "SYSTEM",
+            "title": "契约公告",
+            "content": {
+              "text": "契约公告正文",
+              "variables": {}
+            },
+            "linkJson": null,
+            "priority": "NORMAL",
+            "category": "SYSTEM",
+            "messageType": "PUBLIC",
+            "status": "SENT",
+            "createdAt": "<TIME>",
+            "contentType": "MARKDOWN",
+            "eventCode": null,
+            "readStatus": "PENDING"
+          }
+        }
+      }
+    },
+    {
+      "id": "mscReadNewest",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/notifications/{id}/read"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}/read",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290/read",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscGetNewestAfterRead",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "tenantId": "default",
+            "templateCode": "ANNOUNCEMENT",
+            "senderId": 1,
+            "senderType": "SYSTEM",
+            "title": "契约公告",
+            "content": {
+              "text": "契约公告正文",
+              "variables": {}
+            },
+            "linkJson": null,
+            "priority": "NORMAL",
+            "category": "SYSTEM",
+            "messageType": "PUBLIC",
+            "status": "SENT",
+            "createdAt": "<TIME>",
+            "contentType": "MARKDOWN",
+            "eventCode": null,
+            "readStatus": "SENT"
+          }
+        }
+      }
+    },
+    {
+      "id": "mscUnreadAfterRead",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/unread-count"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/unread-count",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/unread-count",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": 1
+        }
+      }
+    },
+    {
+      "id": "mscReadNewestAgain",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/notifications/{id}/read"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}/read",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290/read",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscToggleNewest",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/notifications/{id}/toggle-read"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}/toggle-read",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290/toggle-read",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": "PENDING"
+        }
+      }
+    },
+    {
+      "id": "mscToggleNewestBack",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/notifications/{id}/toggle-read"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}/toggle-read",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290/toggle-read",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": "SENT"
+        }
+      }
+    },
+    {
+      "id": "mscReadBatch",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/notifications/read-batch"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/read-batch",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": [
+          "{{mscList.data.rows[0].id}}",
+          "{{mscList.data.rows[1].id}}"
+        ],
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/read-batch",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscListAfterBatch",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 3,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约公告",
+                "content": {
+                  "text": "契约公告正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约自由消息",
+                "content": {
+                  "text": "自由正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PRIVATE",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": null,
+                "eventCode": null,
+                "readStatus": "SENT"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscToggleNewestUnread",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/notifications/{id}/toggle-read"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}/toggle-read",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290/toggle-read",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": "PENDING"
+        }
+      }
+    },
+    {
+      "id": "mscReadAll",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/notifications/read-all"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/read-all",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/read-all",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscListAfterReadAll",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 3,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约公告",
+                "content": {
+                  "text": "契约公告正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约自由消息",
+                "content": {
+                  "text": "自由正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PRIVATE",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": null,
+                "eventCode": null,
+                "readStatus": "SENT"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscUnreadAfterReadAll",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/unread-count"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/unread-count",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/unread-count",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": 0
+        }
+      }
+    },
+    {
+      "id": "mscDeleteNewest",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/notifications/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscListAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 2,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "契约自由消息",
+                "content": {
+                  "text": "自由正文",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PRIVATE",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": null,
+                "eventCode": null,
+                "readStatus": "SENT"
+              },
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscGetAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/290",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "tenantId": "default",
+            "templateCode": "ANNOUNCEMENT",
+            "senderId": 1,
+            "senderType": "SYSTEM",
+            "title": "契约公告",
+            "content": {
+              "text": "契约公告正文",
+              "variables": {}
+            },
+            "linkJson": null,
+            "priority": "NORMAL",
+            "category": "SYSTEM",
+            "messageType": "PUBLIC",
+            "status": "SENT",
+            "createdAt": "<TIME>",
+            "contentType": "MARKDOWN",
+            "eventCode": null,
+            "readStatus": null
+          }
+        }
+      }
+    },
+    {
+      "id": "mscDeleteOlder",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/notifications/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/{{mscList.data.rows[1].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/289",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscListEmpty",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 1,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "mscGetUnknown",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/99999999",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/99999999",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "消息不存在",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscReadUnknown",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/notifications/{id}/read"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/99999999/read",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/99999999/read",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "消息不存在或已读",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscDeleteUnknown",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/notifications/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/99999999",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/99999999",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 403,
+          "msg": "无权删除此消息",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscToggleUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/notifications/{id}/toggle-read"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications/99999999/toggle-read",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications/99999999/toggle-read",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "消息不存在",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscAnnList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/announcements"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "契约公告",
+                "senderId": 1,
+                "recipientCount": 0,
+                "createdAt": "<TIME>"
+              },
+              {
+                "id": "<NUM>",
+                "title": "契约自由消息",
+                "senderId": 1,
+                "recipientCount": 0,
+                "createdAt": "<TIME>"
+              },
+              {
+                "id": "<NUM>",
+                "title": "大撒大撒",
+                "senderId": 1,
+                "recipientCount": 1,
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 3,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "mscAnnKeyword",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/announcements"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "keyword": "契约公告"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "契约公告",
+                "senderId": 1,
+                "recipientCount": 0,
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "mscAnnDetail",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/announcements/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements/{{mscAnnList.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements/290",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "tenantId": "default",
+            "templateCode": "ANNOUNCEMENT",
+            "senderId": 1,
+            "senderType": "SYSTEM",
+            "title": "契约公告",
+            "content": {
+              "text": "契约公告正文",
+              "variables": {}
+            },
+            "linkJson": null,
+            "priority": "NORMAL",
+            "category": "SYSTEM",
+            "messageType": "PUBLIC",
+            "status": "SENT",
+            "createdAt": "<TIME>",
+            "contentType": "MARKDOWN",
+            "eventCode": null,
+            "readStatus": null
+          }
+        }
+      }
+    },
+    {
+      "id": "mscAnnDetailUnknown",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/announcements/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements/99999999",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements/99999999",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "公告不存在: 99999999",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscAnnRecallUnknown",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/announcements/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements/99999999",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements/99999999",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "公告不存在: 99999999",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscAnnRecallFirst",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/announcements/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements/{{mscAnnList.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements/290",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscAnnListAfterFirstRecall",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/announcements"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "契约自由消息",
+                "senderId": 1,
+                "recipientCount": 0,
+                "createdAt": "<TIME>"
+              },
+              {
+                "id": "<NUM>",
+                "title": "大撒大撒",
+                "senderId": 1,
+                "recipientCount": 1,
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "mscAnnRecallSecond",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/admin/notification/announcements/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements/{{mscAnnListAfterFirstRecall.data.rows[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements/289",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "mscAnnListEmpty",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/admin/notification/announcements"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/admin/notification/announcements",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/admin/notification/announcements",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "rows": [
+              {
+                "id": "<NUM>",
+                "title": "大撒大撒",
+                "senderId": 1,
+                "recipientCount": 1,
+                "createdAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "mscUserListAfterCleanup",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/notifications"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/notifications",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/notifications",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "total": 1,
+            "page": 1,
+            "size": 20,
+            "rows": [
+              {
+                "id": "<NUM>",
+                "tenantId": "default",
+                "templateCode": "ANNOUNCEMENT",
+                "senderId": 1,
+                "senderType": "SYSTEM",
+                "title": "大撒大撒",
+                "content": {
+                  "text": " 大大撒旦a",
+                  "variables": {}
+                },
+                "linkJson": null,
+                "priority": "NORMAL",
+                "category": "SYSTEM",
+                "messageType": "PUBLIC",
+                "status": "SENT",
+                "createdAt": "<TIME>",
+                "contentType": "MARKDOWN",
+                "eventCode": null,
+                "readStatus": "SENT"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

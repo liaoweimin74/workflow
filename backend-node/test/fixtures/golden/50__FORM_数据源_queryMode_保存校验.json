@@ -1,0 +1,774 @@
+{
+  "scenario": "FORM 数据源 queryMode 保存校验",
+  "recordedAt": "2026-09-18T03:21:03.064Z",
+  "steps": [
+    {
+      "id": "qvPhCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约占位数据源-校验_{{$runId}}",
+          "type": "API",
+          "sourceKey": "contract_qvph_{{$runId}}",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"action\":\"/api/v1/ping\"}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qv_<RUN>",
+            "id": "<ID>",
+            "name": "契约占位数据源-校验_<RUN>",
+            "params": "{\"action\":\"/api/v1/ping\"}",
+            "sourceKey": "contract_qvph_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "API",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qvFormCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "name": "契约校验表单",
+          "key": "contract_qv_{{$runId}}",
+          "type": "BUSINESS"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_qv_<RUN>",
+            "name": "契约校验表单",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "qvPhDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qvPhCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/7f80c5621ef7423c88de7483b08f3dc0",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvValidSql",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-合法_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id FROM wf_biz_contract_qv_{{$runId}} WHERE tenant_id = :tenantId\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qv_<RUN>",
+            "id": "<ID>",
+            "name": "契约校验数据源-合法_<RUN>",
+            "params": "{\"list\":{\"action\":\"/api/v1/biz-data/contract_qv_<RUN>\",\"method\":\"GET\",\"parse\":\"records\",\"totalParse\":\"total\"},\"create\":{\"action\":\"/api/v1/biz-data/contract_qv_<RUN>\",\"method\":\"POST\"},\"get\":{\"action\":\"/api/v1/biz-data/contract_qv_<RUN>/{id}\",\"method\":\"GET\"},\"update\":{\"action\":\"/api/v1/biz-data/contract_qv_<RUN>/{id}\",\"method\":\"PUT\"},\"delete\":{\"action\":\"/api/v1/biz-data/contract_qv_<RUN>/{id}\",\"method\":\"DELETE\"},\"queryMode\":\"sql\",\"query\":\"SELECT id FROM wf_biz_contract_qv_<RUN> WHERE tenant_id = :tenantId\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}]}",
+            "sourceKey": "contract_qv_<RUN>",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "FORM",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qvEnableUnpublished",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/enable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qvValidSql.data.id}}/enable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a0e0009fea8e46489233d100569475a6/enable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "绑定的表单未发布，无法启用: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvSqlNoTenant",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-缺占位符_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id FROM t WHERE 1 = 1\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvSqlNotSelect",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-非查询_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"DELETE FROM t WHERE tenant_id = :tenantId\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvSqlNoColumns",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-无声明列_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id FROM t WHERE tenant_id = :tenantId\",\"columns\":[]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvSqlDeclaredMissing",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-声明列不存在_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id FROM t WHERE tenant_id = :tenantId\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\"},{\"key\":\"nope\",\"columnType\":\"VARCHAR\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvSqlUndeclaredParam",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-未声明参数_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id FROM t WHERE tenant_id = :tenantId AND code = :code\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvSqlBadParamName",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-非法参数名_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id FROM t WHERE tenant_id = :tenantId\",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\"}],\"params\":[\"9bad\"]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvSqlBlankQuery",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-空模板_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",\"query\":\"   \",\"columns\":[{\"key\":\"id\",\"columnType\":\"VARCHAR\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvConfigNoJoins",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-config无joins_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"config\"}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvConfigBadAlias",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-非法别名_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"1p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvConfigMissingTarget",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-目标表单不存在_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"no_such_form\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvConfigNoField",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-缺字段_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvConfigDupVirtualKey",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-虚拟列重复_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\"},{\"alias\":\"q\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"code\",\"virtualKey\":\"userName\",\"label\":\"人员编码\"}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvUnknownMode",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-未知模式_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"visual\",\"query\":\"SELECT id FROM t WHERE tenant_id = :tenantId\"}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvParamsNotJson",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约校验数据源-params非JSON_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qv_{{$runId}}",
+          "params": "{\"queryMode\":\"sql\",oops}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源标识 sourceKey 已存在: contract_qv_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvUpdateBadConfig",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qvValidSql.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "params": "{\"queryMode\":\"config\",\"joins\":[]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a0e0009fea8e46489233d100569475a6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "queryMode=config 时必须配置至少一个关联 joins",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qvUpdateGoodConfig",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qvValidSql.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a0e0009fea8e46489233d100569475a6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qv_<RUN>",
+            "id": "<ID>",
+            "name": "契约校验数据源-合法_<RUN>",
+            "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true}]}",
+            "sourceKey": "contract_qv_<RUN>",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "FORM",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qvGetAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qvValidSql.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/a0e0009fea8e46489233d100569475a6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qv_<RUN>",
+            "id": "<ID>",
+            "name": "契约校验数据源-合法_<RUN>",
+            "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true}]}",
+            "sourceKey": "contract_qv_<RUN>",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "FORM",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    }
+  ]
+}

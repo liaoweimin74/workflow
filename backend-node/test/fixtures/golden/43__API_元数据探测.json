@@ -1,0 +1,99 @@
+{
+  "scenario": "API 元数据探测",
+  "recordedAt": "2026-09-18T03:21:00.776Z",
+  "steps": [
+    {
+      "id": "eaMissingAction",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-api"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-api",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {},
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-api",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "缺少 action（list 操作地址）",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "eaUnreachable",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-api"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-api",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "action": "http://127.0.0.1:9/probe",
+          "method": "GET"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-api",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "HTTP request failed after 1 attempts",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "eaUnauthorized",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/explore-api"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/explore-api",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "action": "http://localhost:8082/api/v1/tasks",
+          "method": "GET",
+          "data": {
+            "assignee": "1"
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/explore-api",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "401 Unauthorized: \"{\"code\":401,\"msg\":\"未登录或Token已过期\",\"data\":null}\"",
+          "data": null
+        }
+      }
+    }
+  ]
+}

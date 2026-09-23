@@ -1,0 +1,546 @@
+{
+  "scenario": "SYSTEM 数据源读路径",
+  "recordedAt": "2026-09-18T03:21:00.932Z",
+  "steps": [
+    {
+      "id": "sdSysList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {
+          "type": "SYSTEM",
+          "status": "ENABLED",
+          "size": "100"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": null,
+                "id": "<ID>",
+                "name": "用户树数据源",
+                "params": null,
+                "sourceKey": "user-tree",
+                "status": "ENABLED",
+                "tenantId": "system",
+                "type": "SYSTEM",
+                "updatedAt": "<TIME>"
+              },
+              {
+                "createdAt": "<TIME>",
+                "createdBy": "system",
+                "formKey": null,
+                "id": "<ID>",
+                "name": "部门树数据源",
+                "params": null,
+                "sourceKey": "dept-tree",
+                "status": "ENABLED",
+                "tenantId": "system",
+                "type": "SYSTEM",
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 100,
+            "totalElements": 2,
+            "totalPages": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "sdSysMeta0",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{sdSysList.data.content[0].id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/574181d96527400e8267fadfecc0b347/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "id",
+                "label": "用户 ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "username",
+                "label": "用户名",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "nickname",
+                "label": "昵称",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "orgId",
+                "label": "部门 ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "orgName",
+                "label": "部门名称",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "TINYINT",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "status",
+                "label": "状态",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": false,
+            "formKey": null
+          }
+        }
+      }
+    },
+    {
+      "id": "sdSysQuery0",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{sdSysList.data.content[0].id}}/data",
+        "query": {
+          "page": "1",
+          "size": "5"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/574181d96527400e8267fadfecc0b347/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<NUM>",
+                "data": {
+                  "id": "<NUM>",
+                  "username": "admin",
+                  "nickname": "管理员",
+                  "orgId": "",
+                  "orgName": "",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "id": "<NUM>",
+                  "username": "test",
+                  "nickname": "测试用户",
+                  "orgId": "",
+                  "orgName": "",
+                  "status": 1
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 5
+          }
+        }
+      }
+    },
+    {
+      "id": "sdSysGet0",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{sdSysList.data.content[0].id}}/data/{{sdSysQuery0.data.records[0].id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/574181d96527400e8267fadfecc0b347/data/1",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "data": {
+              "id": "<NUM>",
+              "username": "admin",
+              "nickname": "管理员",
+              "orgId": "",
+              "orgName": "",
+              "status": 1
+            },
+            "version": null,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "sdSysGet0Missing",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data/{rowId}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{sdSysList.data.content[0].id}}/data/contract_missing_row",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/574181d96527400e8267fadfecc0b347/data/contract_missing_row",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "系统数据不存在: contract_missing_row",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "sdSysMeta1",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{sdSysList.data.content[1].id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/67043fe7960b4b2098e88b69330c8b62/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "id",
+                "label": "部门 ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "parentId",
+                "label": "上级部门 ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "label",
+                "label": "部门名称",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "code",
+                "label": "部门编码",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": false,
+            "formKey": null
+          }
+        }
+      }
+    },
+    {
+      "id": "sdSysQuery1",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{sdSysList.data.content[1].id}}/data",
+        "query": {
+          "page": "1",
+          "size": "5"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/67043fe7960b4b2098e88b69330c8b62/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<NUM>",
+                "data": {
+                  "id": "<NUM>",
+                  "parentId": "",
+                  "label": "总公司",
+                  "code": "01"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "id": "<NUM>",
+                  "parentId": "1",
+                  "label": "武汉分公司",
+                  "code": "0101"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "id": "<NUM>",
+                  "parentId": "1",
+                  "label": "北京分公司",
+                  "code": "0102"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<NUM>",
+                "data": {
+                  "id": "<NUM>",
+                  "parentId": "1",
+                  "label": "海南分公司",
+                  "code": "0103"
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 4,
+            "page": 0,
+            "size": 4
+          }
+        }
+      }
+    }
+  ]
+}

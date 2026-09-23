@@ -1,0 +1,340 @@
+{
+  "scenario": "流程定义启停",
+  "recordedAt": "2026-09-18T03:20:49.675Z",
+  "steps": [
+    {
+      "id": "psCreateDraft",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/drafts"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/drafts",
+        "query": {
+          "name": "契约测试流程",
+          "key": "contract_state_{{$runId}}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/drafts",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"http://flowable.org/bpmn\">\n  <bpmn:process id=\"contract_state_<RUN>\" name=\"契约测试流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"startEvent_1\"/>\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"contract_state_<RUN>\">\n      <bpmndi:BPMNShape id=\"startEvent_1_di\" bpmnElement=\"startEvent_1\">\n        <dc:Rect x=\"160\" y=\"160\" width=\"36\" height=\"36\"/>\n      </bpmndi:BPMNShape>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_state_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约测试流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "psSaveDesign",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/process-definitions/{id}/design"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{psCreateDraft.data.id}}/design",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约测试流程",
+          "key": "contract_state_{{$runId}}",
+          "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_state_{{$runId}}\" name=\"契约测试流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+          "nodeConfigs": {
+            "Approve_1": "{\"basic\":{\"name\":\"审批节点\"},\"approval\":{\"multiMode\":\"\"},\"operations\":{\"allowReject\":true,\"allowTransfer\":true}}",
+            "__PROCESS__": "{\"numberRule\":{\"enabled\":false},\"approvalPolicy\":{\"operations\":{\"allowReject\":true},\"allowRecall\":true}}"
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/5e7a20e4bbd0417187f22b5a89ceaa4e/design",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_state_<RUN>\" name=\"契约测试流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_state_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约测试流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "psDeploy",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/{id}/deploy"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{psCreateDraft.data.id}}/deploy",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/5e7a20e4bbd0417187f22b5a89ceaa4e/deploy",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_state_<RUN>\" name=\"契约测试流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>\n",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": "<UUID>",
+            "deployedConfigHash": "6801baf506d413bec3f413122db884aa51bcd1a2b7abacbed471046e4baca745",
+            "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_state_<RUN>\" isExecutable=\"true\" name=\"契约测试流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+            "id": "<ID>",
+            "key": "contract_state_<RUN>",
+            "lastDeployedAt": "<TIME>",
+            "name": "契约测试流程",
+            "processDefinitionId": "contract_state_<RUN>:1:<UUID>",
+            "status": "DEPLOYED",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "psGetActive",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/deployed-processes/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/deployed-processes/{{psDeploy.data.processDefinitionId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/deployed-processes/contract_state_4miozb:1:f24252d4-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "formDefId": null,
+            "description": null,
+            "resourceName": "contract_state_<RUN>.bpmn20.xml",
+            "version": 1,
+            "suspended": false,
+            "fieldPermissions": null,
+            "processFormDefId": null,
+            "diagramResourceName": null,
+            "deploymentId": "<UUID>",
+            "initiatorFormDefId": null,
+            "name": "契约测试流程",
+            "tenantId": "default",
+            "id": "contract_state_<RUN>:1:<UUID>",
+            "category": "contract",
+            "key": "contract_state_<RUN>"
+          }
+        }
+      }
+    },
+    {
+      "id": "psSuspend",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/deployed-processes/{id}/suspend"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/deployed-processes/{{psDeploy.data.processDefinitionId}}/suspend",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/deployed-processes/contract_state_4miozb:1:f24252d4-b30f-11f1-8aad-7c8ae1a7aa09/suspend",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "psGetSuspended",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/deployed-processes/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/deployed-processes/{{psDeploy.data.processDefinitionId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/deployed-processes/contract_state_4miozb:1:f24252d4-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "formDefId": null,
+            "description": null,
+            "resourceName": "contract_state_<RUN>.bpmn20.xml",
+            "version": 1,
+            "suspended": true,
+            "fieldPermissions": null,
+            "processFormDefId": null,
+            "diagramResourceName": null,
+            "deploymentId": "<UUID>",
+            "initiatorFormDefId": null,
+            "name": "契约测试流程",
+            "tenantId": "default",
+            "id": "contract_state_<RUN>:1:<UUID>",
+            "category": "contract",
+            "key": "contract_state_<RUN>"
+          }
+        }
+      }
+    },
+    {
+      "id": "psActivate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/deployed-processes/{id}/activate"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/deployed-processes/{{psDeploy.data.processDefinitionId}}/activate",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/deployed-processes/contract_state_4miozb:1:f24252d4-b30f-11f1-8aad-7c8ae1a7aa09/activate",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "psGetReactivated",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/deployed-processes/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/deployed-processes/{{psDeploy.data.processDefinitionId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/deployed-processes/contract_state_4miozb:1:f24252d4-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "formDefId": null,
+            "description": null,
+            "resourceName": "contract_state_<RUN>.bpmn20.xml",
+            "version": 1,
+            "suspended": false,
+            "fieldPermissions": null,
+            "processFormDefId": null,
+            "diagramResourceName": null,
+            "deploymentId": "<UUID>",
+            "initiatorFormDefId": null,
+            "name": "契约测试流程",
+            "tenantId": "default",
+            "id": "contract_state_<RUN>:1:<UUID>",
+            "category": "contract",
+            "key": "contract_state_<RUN>"
+          }
+        }
+      }
+    }
+  ]
+}

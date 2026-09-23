@@ -1,0 +1,331 @@
+{
+  "scenario": "组织写操作",
+  "recordedAt": "2026-09-18T03:20:49.982Z",
+  "steps": [
+    {
+      "id": "orgCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/orgs"
+      },
+      "requestTemplate": {
+        "path": "/api/orgs",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "parentId": null,
+          "orgName": "契约机构",
+          "orgCode": "contract_org_{{$runId}}",
+          "sortOrder": 99,
+          "status": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/orgs",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "parentId": null,
+            "label": "契约机构",
+            "code": "contract_org_<RUN>",
+            "sortOrder": 99,
+            "status": 1,
+            "children": null
+          }
+        }
+      }
+    },
+    {
+      "id": "orgTreeAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/orgs/tree"
+      },
+      "requestTemplate": {
+        "path": "/api/orgs/tree",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/orgs/tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "label": "总公司",
+              "code": "01",
+              "sortOrder": 0,
+              "status": 1,
+              "children": [
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "武汉分公司",
+                  "code": "0101",
+                  "sortOrder": 1,
+                  "status": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "北京分公司",
+                  "code": "0102",
+                  "sortOrder": 2,
+                  "status": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "海南分公司",
+                  "code": "0103",
+                  "sortOrder": 3,
+                  "status": 1,
+                  "children": null
+                }
+              ]
+            },
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "label": "契约机构",
+              "code": "contract_org_<RUN>",
+              "sortOrder": 99,
+              "status": 1,
+              "children": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "orgUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/orgs/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/orgs/{{orgCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "orgName": "契约机构-改名",
+          "sortOrder": 98
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/orgs/243",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "parentId": null,
+            "label": "契约机构-改名",
+            "code": "contract_org_<RUN>",
+            "sortOrder": 98,
+            "status": 1,
+            "children": null
+          }
+        }
+      }
+    },
+    {
+      "id": "orgTreeAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/orgs/tree"
+      },
+      "requestTemplate": {
+        "path": "/api/orgs/tree",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/orgs/tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "label": "总公司",
+              "code": "01",
+              "sortOrder": 0,
+              "status": 1,
+              "children": [
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "武汉分公司",
+                  "code": "0101",
+                  "sortOrder": 1,
+                  "status": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "北京分公司",
+                  "code": "0102",
+                  "sortOrder": 2,
+                  "status": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "海南分公司",
+                  "code": "0103",
+                  "sortOrder": 3,
+                  "status": 1,
+                  "children": null
+                }
+              ]
+            },
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "label": "契约机构-改名",
+              "code": "contract_org_<RUN>",
+              "sortOrder": 98,
+              "status": 1,
+              "children": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "orgDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/orgs/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/orgs/{{orgCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/orgs/243",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "orgTreeAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/orgs/tree"
+      },
+      "requestTemplate": {
+        "path": "/api/orgs/tree",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/orgs/tree",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "id": "<NUM>",
+              "parentId": null,
+              "label": "总公司",
+              "code": "01",
+              "sortOrder": 0,
+              "status": 1,
+              "children": [
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "武汉分公司",
+                  "code": "0101",
+                  "sortOrder": 1,
+                  "status": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "北京分公司",
+                  "code": "0102",
+                  "sortOrder": 2,
+                  "status": 1,
+                  "children": null
+                },
+                {
+                  "id": "<NUM>",
+                  "parentId": 1,
+                  "label": "海南分公司",
+                  "code": "0103",
+                  "sortOrder": 3,
+                  "status": 1,
+                  "children": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

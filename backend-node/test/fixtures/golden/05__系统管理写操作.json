@@ -1,0 +1,296 @@
+{
+  "scenario": "系统管理写操作",
+  "recordedAt": "2026-09-18T03:20:47.167Z",
+  "steps": [
+    {
+      "id": "createRole",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/roles"
+      },
+      "requestTemplate": {
+        "path": "/api/roles",
+        "query": {},
+        "headers": {},
+        "body": {
+          "roleName": "契约测试角色",
+          "roleCode": "ROLE_CONTRACT_{{$runId}}",
+          "description": "契约测试用",
+          "status": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/roles",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "roleName": "契约测试角色",
+            "roleCode": "ROLE_CONTRACT_<RUN>",
+            "description": "契约测试用",
+            "status": 1,
+            "createdAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "updateRole",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/roles/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/roles/{{createRole.data.id}}",
+        "query": {},
+        "headers": {},
+        "body": {
+          "roleName": "契约测试角色改",
+          "description": "已修改",
+          "status": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/roles/177",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "roleName": "契约测试角色改",
+            "roleCode": "ROLE_CONTRACT_<RUN>",
+            "description": "已修改",
+            "status": 1,
+            "createdAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "roleMenusBefore",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/roles/{id}/menus"
+      },
+      "requestTemplate": {
+        "path": "/api/roles/{{createRole.data.id}}/menus",
+        "query": {},
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/roles/177/menus",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": []
+        }
+      }
+    },
+    {
+      "id": "assignMenus",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/roles/{id}/menus"
+      },
+      "requestTemplate": {
+        "path": "/api/roles/{{createRole.data.id}}/menus",
+        "query": {},
+        "headers": {},
+        "body": {
+          "menuIds": [
+            1,
+            2,
+            3
+          ]
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/roles/177/menus",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "roleMenusAfter",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/roles/{id}/menus"
+      },
+      "requestTemplate": {
+        "path": "/api/roles/{{createRole.data.id}}/menus",
+        "query": {},
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/roles/177/menus",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            1,
+            2,
+            3
+          ]
+        }
+      }
+    },
+    {
+      "id": "createDictType",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/dict-types"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-types",
+        "query": {},
+        "headers": {},
+        "body": {
+          "dictName": "契约测试字典",
+          "dictCode": "contract_{{$runId}}",
+          "remark": "契约测试用",
+          "status": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-types",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "dictName": "契约测试字典",
+            "dictCode": "contract_<RUN>",
+            "remark": "契约测试用",
+            "status": 1,
+            "createdAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "updateDictType",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/dict-types/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-types/{{createDictType.data.id}}",
+        "query": {},
+        "headers": {},
+        "body": {
+          "dictName": "契约测试字典改",
+          "remark": "已修改",
+          "status": 1
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-types/308",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<NUM>",
+            "dictName": "契约测试字典改",
+            "dictCode": "contract_<RUN>",
+            "remark": "已修改",
+            "status": 1,
+            "createdAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "deleteDictType",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/dict-types/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/dict-types/{{createDictType.data.id}}",
+        "query": {},
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/dict-types/308",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "deleteRole",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/roles/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/roles/{{createRole.data.id}}",
+        "query": {},
+        "headers": {},
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/roles/177",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    }
+  ]
+}

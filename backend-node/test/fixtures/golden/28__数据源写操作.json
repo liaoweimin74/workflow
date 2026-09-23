@@ -1,0 +1,420 @@
+{
+  "scenario": "数据源写操作",
+  "recordedAt": "2026-09-18T03:20:51.391Z",
+  "steps": [
+    {
+      "id": "dswCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约数据源",
+          "type": "SQL",
+          "sourceKey": "contract_ds_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约数据源",
+            "params": null,
+            "sourceKey": "contract_ds_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dswGetAfterCreate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约数据源",
+            "params": null,
+            "sourceKey": "contract_ds_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dswCreateDuplicateName",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约数据源",
+          "type": "SQL",
+          "sourceKey": "contract_ds_dup_{{$runId}}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源名称已存在: 契约数据源",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dswUpdate",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约数据源-改名"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约数据源-改名",
+            "params": null,
+            "sourceKey": "contract_ds_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dswGetAfterUpdate",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约数据源-改名",
+            "params": null,
+            "sourceKey": "contract_ds_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dswDisable",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/disable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}/disable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3/disable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约数据源-改名",
+            "params": null,
+            "sourceKey": "contract_ds_<RUN>",
+            "status": "DISABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dswGetDisabled",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约数据源-改名",
+            "params": null,
+            "sourceKey": "contract_ds_<RUN>",
+            "status": "DISABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dswEnable",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/enable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}/enable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3/enable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约数据源-改名",
+            "params": null,
+            "sourceKey": "contract_ds_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dswGetEnabled",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": null,
+            "id": "<ID>",
+            "name": "契约数据源-改名",
+            "params": null,
+            "sourceKey": "contract_ds_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "SQL",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "dswDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "dswGetAfterDelete",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{dswCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/e3ddecdc29db4ce1985b138fe1d622f3",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 404,
+          "msg": "数据源不存在: <ID>",
+          "data": null
+        }
+      }
+    }
+  ]
+}

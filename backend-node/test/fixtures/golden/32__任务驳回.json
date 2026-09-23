@@ -1,0 +1,1240 @@
+{
+  "scenario": "任务驳回",
+  "recordedAt": "2026-09-18T03:20:55.305Z",
+  "steps": [
+    {
+      "id": "rjDraft",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/drafts"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/drafts",
+        "query": {
+          "name": "契约驳回流程",
+          "key": "contract_reject_{{$runId}}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/drafts",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\" xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\" xmlns:di=\"http://www.omg.org/spec/DD/20100524/DI\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"http://flowable.org/bpmn\">\n  <bpmn:process id=\"contract_reject_<RUN>\" name=\"契约驳回流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"startEvent_1\"/>\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"contract_reject_<RUN>\">\n      <bpmndi:BPMNShape id=\"startEvent_1_di\" bpmnElement=\"startEvent_1\">\n        <dc:Rect x=\"160\" y=\"160\" width=\"36\" height=\"36\"/>\n      </bpmndi:BPMNShape>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_reject_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约驳回流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "rjSaveDesign",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/process-definitions/{id}/design"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{rjDraft.data.id}}/design",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "key": "contract_reject_{{$runId}}",
+          "name": "契约驳回流程",
+          "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_reject_{{$runId}}\" name=\"契约驳回流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+          "nodeConfigs": {
+            "Approve_1": "{\"operations\":{\"allowTransfer\":true}}"
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/62cc280e22194514b263a3a24cadb2b5/design",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_reject_<RUN>\" name=\"契约驳回流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": null,
+            "deployedConfigHash": null,
+            "deployedXml": null,
+            "id": "<ID>",
+            "key": "contract_reject_<RUN>",
+            "lastDeployedAt": null,
+            "name": "契约驳回流程",
+            "processDefinitionId": null,
+            "status": "DRAFT",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "rjDeploy",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-definitions/{id}/deploy"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{rjDraft.data.id}}/deploy",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/62cc280e22194514b263a3a24cadb2b5/deploy",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "bpmnXml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"contract\">\n  <bpmn:process id=\"contract_reject_<RUN>\" name=\"契约驳回流程\" isExecutable=\"true\">\n    <bpmn:startEvent id=\"Start_1\"><bpmn:outgoing>Flow_1</bpmn:outgoing></bpmn:startEvent>\n    <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\" />\n    <bpmn:userTask id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\" flowable:assignee=\"${initiator}\"><bpmn:incoming>Flow_1</bpmn:incoming><bpmn:outgoing>Flow_2</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\" />\n    <bpmn:userTask id=\"Approve_1\" name=\"审批节点\" flowable:assignee=\"1\"><bpmn:incoming>Flow_2</bpmn:incoming><bpmn:outgoing>Flow_3</bpmn:outgoing></bpmn:userTask>\n    <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\" />\n    <bpmn:endEvent id=\"End_1\"><bpmn:incoming>Flow_3</bpmn:incoming></bpmn:endEvent>\n  </bpmn:process>\n</bpmn:definitions>",
+            "categoryId": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "deployId": "<UUID>",
+            "deployedConfigHash": "9a35d82b9412259cfe260a69868a9f59b3ddda002d8d89a11e7906da6662b201",
+            "deployedXml": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" xmlns:wf=\"http://workflow.com/schema/bpmn/wf\" targetNamespace=\"contract\">\r\n      \r\n    <bpmn:process id=\"contract_reject_<RUN>\" isExecutable=\"true\" name=\"契约驳回流程\">\r\n            \r\n        <bpmn:startEvent id=\"Start_1\" name=\"开始\">\r\n            <bpmn:outgoing>Flow_1</bpmn:outgoing>\r\n        </bpmn:startEvent>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_1\" sourceRef=\"Start_1\" targetRef=\"Initiator_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"${initiator}\" id=\"Initiator_1\" name=\"发起节点\" wf:nodeRole=\"initiator\">\r\n            <bpmn:incoming>Flow_1</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_2</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_2\" sourceRef=\"Initiator_1\" targetRef=\"Approve_1\"/>\r\n            \r\n        <bpmn:userTask flowable:assignee=\"1\" id=\"Approve_1\" name=\"审批节点\">\r\n            <bpmn:incoming>Flow_2</bpmn:incoming>\r\n            <bpmn:outgoing>Flow_3</bpmn:outgoing>\r\n        </bpmn:userTask>\r\n            \r\n        <bpmn:sequenceFlow id=\"Flow_3\" sourceRef=\"Approve_1\" targetRef=\"End_1\"/>\r\n            \r\n        <bpmn:endEvent id=\"End_1\" name=\"结束\">\r\n            <bpmn:incoming>Flow_3</bpmn:incoming>\r\n        </bpmn:endEvent>\r\n          \r\n    </bpmn:process>\r\n    \r\n</bpmn:definitions>\r\n",
+            "id": "<ID>",
+            "key": "contract_reject_<RUN>",
+            "lastDeployedAt": "<TIME>",
+            "name": "契约驳回流程",
+            "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+            "status": "DEPLOYED",
+            "tenantId": "default",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "rjStart",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/process-instances"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "processKey": "contract_reject_{{$runId}}",
+          "businessKey": "contract-rj-{{$runId}}",
+          "variables": {
+            "initiator": "1",
+            "amount": 30
+          }
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+            "businessKey": "contract-rj-<RUN>",
+            "tenantId": "default",
+            "id": "<UUID>",
+            "processDefinitionKey": "contract_reject_<RUN>"
+          }
+        }
+      }
+    },
+    {
+      "id": "rjTodo",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks",
+        "query": {
+          "assignee": "1",
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-<RUN>",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-dpyzhu",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-e798k3",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-1265po",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-muqad5",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-nxcq7l",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_nxcq7l:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 145,
+            "totalPages": 8
+          }
+        }
+      }
+    },
+    {
+      "id": "rjTaskGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{rjTodo.data.content[0].taskId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f55c3c4c-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "assignee": "1",
+            "assigneeName": "管理员",
+            "businessKey": "contract-rj-<RUN>",
+            "createTime": "<TIME>",
+            "description": null,
+            "fieldPermissions": null,
+            "formKey": null,
+            "initiator": "1",
+            "initiatorName": "管理员",
+            "isInitiatorTask": false,
+            "mappedData": null,
+            "name": "审批节点",
+            "operations": {
+              "allowAddSign": false,
+              "allowDelegate": false,
+              "allowReject": true,
+              "allowTransfer": true
+            },
+            "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+            "processInstanceId": "<UUID>",
+            "processName": "契约驳回流程",
+            "processVersion": 1,
+            "taskId": "<UUID>",
+            "variables": {
+              "amount": 30,
+              "initiator": "1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "rjClaim",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/claim"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{rjTodo.data.content[0].taskId}}/claim",
+        "query": {
+          "userId": "1"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f55c3c4c-b30f-11f1-8aad-7c8ae1a7aa09/claim",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "rjReject",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/reject"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{rjTodo.data.content[0].taskId}}/reject",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "reason": "契约驳回原因"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f55c3c4c-b30f-11f1-8aad-7c8ae1a7aa09/reject",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "rjOldTaskGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{rjTodo.data.content[0].taskId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f55c3c4c-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "assignee": "1",
+            "assigneeName": "管理员",
+            "businessKey": "contract-rj-<RUN>",
+            "createTime": "<TIME>",
+            "description": null,
+            "fieldPermissions": null,
+            "formKey": null,
+            "initiator": "1",
+            "initiatorName": "管理员",
+            "isInitiatorTask": false,
+            "mappedData": null,
+            "name": "审批节点",
+            "operations": {
+              "allowAddSign": false,
+              "allowDelegate": false,
+              "allowReject": true,
+              "allowTransfer": true
+            },
+            "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+            "processInstanceId": "<UUID>",
+            "processName": "契约驳回流程",
+            "processVersion": 1,
+            "taskId": "<UUID>",
+            "variables": {
+              "amount": 30,
+              "rejected": true,
+              "initiator": "1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "rjTodoAfter",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks",
+        "query": {
+          "assignee": "1",
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "content": [
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-<RUN>",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_<RUN>:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-<RUN>",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-dpyzhu",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_dpyzhu:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-dpyzhu",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-e798k3",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_e798k3:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-e798k3",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-1265po",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_1265po:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-1265po",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-rj-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "发起节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_reject_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约驳回流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-tf-a-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_tf_a_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约转办流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-var-biz-muqad5",
+                "createTime": "<TIME>",
+                "currentNodeName": "审批节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_var_muqad5:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约测试流程-muqad5",
+                "reminded": false,
+                "taskId": "<UUID>"
+              },
+              {
+                "assignee": "1",
+                "businessKey": "contract-ag-nxcq7l",
+                "createTime": "<TIME>",
+                "currentNodeName": "会签节点",
+                "initiator": "1",
+                "initiatorName": "管理员",
+                "processDefinitionId": "contract_ag_nxcq7l:1:<UUID>",
+                "processInstanceId": "<UUID>",
+                "processName": "契约加签流程",
+                "reminded": false,
+                "taskId": "<UUID>"
+              }
+            ],
+            "pageNumber": 1,
+            "pageSize": 20,
+            "totalElements": 145,
+            "totalPages": 8
+          }
+        }
+      }
+    },
+    {
+      "id": "rjNewTaskGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/tasks/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{rjTodoAfter.data.content[0].taskId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f57d0ac2-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "assignee": "1",
+            "assigneeName": "管理员",
+            "businessKey": "contract-rj-<RUN>",
+            "createTime": "<TIME>",
+            "description": null,
+            "fieldPermissions": null,
+            "formKey": null,
+            "initiator": "1",
+            "initiatorName": "管理员",
+            "isInitiatorTask": true,
+            "mappedData": null,
+            "name": "发起节点",
+            "operations": {
+              "allowAddSign": false,
+              "allowDelegate": false,
+              "allowReject": true,
+              "allowTransfer": true
+            },
+            "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+            "processInstanceId": "<UUID>",
+            "processName": "契约驳回流程",
+            "processVersion": 1,
+            "taskId": "<UUID>",
+            "variables": {
+              "amount": 30,
+              "rejected": true,
+              "initiator": "1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "rjInstanceGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{rjStart.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/f5575a40-b30f-11f1-8aad-7c8ae1a7aa09",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "processDefinitionId": "contract_reject_<RUN>:1:<UUID>",
+            "businessKey": "contract-rj-<RUN>",
+            "tenantId": "default",
+            "ended": false,
+            "name": null,
+            "currentNode": null,
+            "processDefinitionName": "契约驳回流程",
+            "startTime": "<TIME>",
+            "id": "<UUID>",
+            "suspended": false,
+            "processDefinitionKey": "contract_reject_<RUN>",
+            "status": "running"
+          }
+        }
+      }
+    },
+    {
+      "id": "rjVariables",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{processInstanceId}/variables"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{rjStart.data.id}}/variables",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/f5575a40-b30f-11f1-8aad-7c8ae1a7aa09/variables",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "amount": 30,
+            "rejected": true,
+            "initiator": "1"
+          }
+        }
+      }
+    },
+    {
+      "id": "rjHistory",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/process-instances/{id}/history"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-instances/{{rjStart.data.id}}/history",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-instances/f5575a40-b30f-11f1-8aad-7c8ae1a7aa09/history",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": [
+            {
+              "action": "submit",
+              "activityId": "Initiator_1",
+              "activityName": "发起节点",
+              "assignee": "1",
+              "assigneeName": "管理员",
+              "comment": null,
+              "endTime": "<TIME>",
+              "startTime": "<TIME>"
+            },
+            {
+              "action": "reject",
+              "activityId": "Approve_1",
+              "activityName": "审批节点",
+              "assignee": "1",
+              "assigneeName": "管理员",
+              "comment": "契约驳回原因",
+              "endTime": "<TIME>",
+              "startTime": "<TIME>"
+            },
+            {
+              "action": null,
+              "activityId": "Initiator_1",
+              "activityName": "发起节点",
+              "assignee": "1",
+              "assigneeName": "管理员",
+              "comment": null,
+              "endTime": null,
+              "startTime": "<TIME>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "rjRejectAtInitiator",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/reject"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/{{rjTodoAfter.data.content[0].taskId}}/reject",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "reason": "不该成功"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/f57d0ac2-b30f-11f1-8aad-7c8ae1a7aa09/reject",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Cannot reject: current node is already the initiator node",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "rjRejectUnknown",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/tasks/{id}/reject"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/tasks/00000000000000000000000000000000/reject",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "reason": "不存在"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/tasks/00000000000000000000000000000000/reject",
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 500,
+          "msg": "Task not found: <ID>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "rjCleanup",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/process-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/process-definitions/{{rjDraft.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/process-definitions/62cc280e22194514b263a3a24cadb2b5",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "已部署过的流程不允许删除，请先停用",
+          "data": null
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1556 @@
+{
+  "scenario": "FORM 数据源 config 与 sql 查询模式",
+  "recordedAt": "2026-09-18T03:21:02.195Z",
+  "steps": [
+    {
+      "id": "qjPhCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约占位数据源-JOIN_{{$runId}}",
+          "type": "API",
+          "sourceKey": "contract_qjph_{{$runId}}",
+          "formKey": "contract_qj_{{$runId}}",
+          "params": "{\"action\":\"/api/v1/ping\"}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qj_<RUN>",
+            "id": "<ID>",
+            "name": "契约占位数据源-JOIN_<RUN>",
+            "params": "{\"action\":\"/api/v1/ping\"}",
+            "sourceKey": "contract_qjph_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "API",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qjFormCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions",
+        "query": {
+          "name": "契约JOIN表单",
+          "key": "contract_qj_{{$runId}}",
+          "type": "BUSINESS"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": null,
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_qj_<RUN>",
+            "name": "契约JOIN表单",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "qjPhDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjPhCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/9949dcf8d5d94ebf945789c5c7df52e6",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qjDsCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "name": "契约JOIN数据源_{{$runId}}",
+          "type": "FORM",
+          "formKey": "contract_qj_{{$runId}}",
+          "params": "{\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true},{\"alias\":\"pa\",\"targetFormKey\":\"person\",\"localField\":\"refUser\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"userDept\",\"label\":\"人员部门\",\"sortable\":false,\"filterable\":true}]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qj_<RUN>",
+            "id": "<ID>",
+            "name": "契约JOIN数据源_<RUN>",
+            "params": "{\"list\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>\",\"method\":\"GET\",\"parse\":\"records\",\"totalParse\":\"total\"},\"create\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>\",\"method\":\"POST\"},\"get\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"GET\"},\"update\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"PUT\"},\"delete\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"DELETE\"},\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true},{\"alias\":\"pa\",\"targetFormKey\":\"person\",\"localField\":\"refUser\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"userDept\",\"label\":\"人员部门\",\"sortable\":false,\"filterable\":true}]}",
+            "sourceKey": "contract_qj_<RUN>",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "FORM",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qjDsGet",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qj_<RUN>",
+            "id": "<ID>",
+            "name": "契约JOIN数据源_<RUN>",
+            "params": "{\"list\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>\",\"method\":\"GET\",\"parse\":\"records\",\"totalParse\":\"total\"},\"create\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>\",\"method\":\"POST\"},\"get\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"GET\"},\"update\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"PUT\"},\"delete\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"DELETE\"},\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true},{\"alias\":\"pa\",\"targetFormKey\":\"person\",\"localField\":\"refUser\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"userDept\",\"label\":\"人员部门\",\"sortable\":false,\"filterable\":true}]}",
+            "sourceKey": "contract_qj_<RUN>",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "FORM",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qjDsMetadataDraft",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "数据源未启用，无法访问: 契约JOIN数据源_<RUN>",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qjFormConfig",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/form-definitions/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{qjFormCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "schema": "[{\"type\":\"input\",\"field\":\"title\"},{\"type\":\"input\",\"field\":\"userId\"},{\"type\":\"input\",\"field\":\"refUser\"},{\"type\":\"input\",\"field\":\"amount\"}]",
+          "columnConfig": "[{\"key\":\"title\",\"columnType\":\"VARCHAR\",\"length\":128},{\"key\":\"userId\",\"columnType\":\"VARCHAR\",\"length\":64},{\"key\":\"refUser\",\"columnType\":\"JSON\"},{\"key\":\"amount\",\"columnType\":\"DECIMAL\",\"length\":18,\"scale\":2}]"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/6f190af2dda64dd382a8e7e5adfc6995",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\":\"title\",\"columnType\":\"VARCHAR\",\"length\":128},{\"key\":\"userId\",\"columnType\":\"VARCHAR\",\"length\":64},{\"key\":\"refUser\",\"columnType\":\"JSON\"},{\"key\":\"amount\",\"columnType\":\"DECIMAL\",\"length\":18,\"scale\":2}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_qj_<RUN>",
+            "name": "契约JOIN表单",
+            "processKey": null,
+            "publishedVersion": null,
+            "schema": "[{\"type\":\"input\",\"field\":\"title\"},{\"type\":\"input\",\"field\":\"userId\"},{\"type\":\"input\",\"field\":\"refUser\"},{\"type\":\"input\",\"field\":\"amount\"}]",
+            "status": "DRAFT",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "qjFormPublish",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/form-definitions/{id}/publish"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/form-definitions/{{qjFormCreate.data.id}}/publish",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/form-definitions/6f190af2dda64dd382a8e7e5adfc6995/publish",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columnConfig": "[{\"key\": \"title\", \"length\": 128, \"columnType\": \"VARCHAR\"}, {\"key\": \"userId\", \"length\": 64, \"columnType\": \"VARCHAR\"}, {\"key\": \"refUser\", \"columnType\": \"JSON\"}, {\"key\": \"amount\", \"scale\": 2, \"length\": 18, \"columnType\": \"DECIMAL\"}]",
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "id": "<ID>",
+            "key": "contract_qj_<RUN>",
+            "name": "契约JOIN表单",
+            "processKey": null,
+            "publishedVersion": 1,
+            "schema": "[{\"type\":\"input\",\"field\":\"title\"},{\"type\":\"input\",\"field\":\"userId\"},{\"type\":\"input\",\"field\":\"refUser\"},{\"type\":\"input\",\"field\":\"amount\"}]",
+            "status": "PUBLISHED",
+            "tenantId": "default",
+            "type": "BUSINESS",
+            "updatedAt": "<TIME>",
+            "version": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "qjDsEnable",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/data-sources/{id}/enable"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/enable",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/enable",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qj_<RUN>",
+            "id": "<ID>",
+            "name": "契约JOIN表单 数据源",
+            "params": "{\"list\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>\",\"method\":\"GET\",\"parse\":\"records\",\"totalParse\":\"total\"},\"create\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>\",\"method\":\"POST\"},\"get\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"GET\"},\"update\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"PUT\"},\"delete\":{\"action\":\"/api/v1/biz-data/contract_qj_<RUN>/{id}\",\"method\":\"DELETE\"},\"queryMode\":\"config\",\"joins\":[{\"alias\":\"p\",\"targetFormKey\":\"person\",\"localField\":\"userId\",\"foreignField\":\"id\",\"joinField\":\"name\",\"virtualKey\":\"userName\",\"label\":\"人员姓名\",\"sortable\":true,\"filterable\":true},{\"alias\":\"pa\",\"targetFormKey\":\"person\",\"localField\":\"refUser\",\"foreignField\":\"id\",\"joinField\":\"dept\",\"virtualKey\":\"userDept\",\"label\":\"人员部门\",\"sortable\":false,\"filterable\":true}]}",
+            "sourceKey": "contract_qj_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "FORM",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qjPersonList",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/person",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/person",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "code": "001",
+                  "name": "张三",
+                  "dept": [
+                    "2"
+                  ],
+                  "dept_text": "/总公司/武汉分公司"
+                },
+                "version": 2,
+                "createdAt": null,
+                "updatedAt": "<TIME>"
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qjRowCreate",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_qj_{{$runId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "title": "契约JOIN行_{{$runId}}",
+          "userId": "{{qjPersonList.data.records[0].id}}",
+          "refUser": [
+            "{{qjPersonList.data.records[0].id}}"
+          ],
+          "amount": 12.34
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_qj_4miozb",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "title": "契约JOIN行_<RUN>",
+              "userId": "<ID>",
+              "refUser": [
+                "<ID>"
+              ],
+              "amount": 12.34
+            },
+            "version": 1,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "qjRowCreateNoRef",
+      "endpoint": {
+        "httpMethod": "POST",
+        "fullPath": "/api/v1/biz-data/{formKey}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_qj_{{$runId}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "title": "契约JOIN行-无匹配_{{$runId}}",
+          "userId": "no-such-user",
+          "amount": 5
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_qj_4miozb",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "id": "<ID>",
+            "data": {
+              "title": "契约JOIN行-无匹配_<RUN>",
+              "userId": "no-such-user",
+              "amount": 5
+            },
+            "version": 1,
+            "createdAt": null,
+            "updatedAt": null
+          }
+        }
+      }
+    },
+    {
+      "id": "qjMetadata",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "title",
+                "label": null,
+                "length": 128,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "userId",
+                "label": null,
+                "length": 64,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "JSON",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "refUser",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "DECIMAL",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "amount",
+                "label": null,
+                "length": 18,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": 2,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": true,
+                "hidden": false,
+                "indexed": false,
+                "key": "userName",
+                "label": "人员姓名",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "JSON",
+                "componentType": null,
+                "filterable": true,
+                "hidden": false,
+                "indexed": false,
+                "key": "userDept",
+                "label": "人员部门",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": true,
+            "formKey": "contract_qj_<RUN>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qjData",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "sort": "userName",
+          "order": "asc"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "title": "契约JOIN行-无匹配_<RUN>",
+                  "userId": "no-such-user",
+                  "amount": 5
+                },
+                "version": 1,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<ID>",
+                "data": {
+                  "title": "契约JOIN行_<RUN>",
+                  "userId": "<ID>",
+                  "refUser": [
+                    "<ID>"
+                  ],
+                  "amount": 12.34,
+                  "userName": "张三",
+                  "userDept": "[\"2\"]"
+                },
+                "version": 1,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qjDataKeyword",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "keyword": "契约JOIN",
+          "keywordColumn": "title"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "title": "契约JOIN行-无匹配_<RUN>",
+                  "userId": "no-such-user",
+                  "amount": 5
+                },
+                "version": 1,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<ID>",
+                "data": {
+                  "title": "契约JOIN行_<RUN>",
+                  "userId": "<ID>",
+                  "refUser": [
+                    "<ID>"
+                  ],
+                  "amount": 12.34,
+                  "userName": "张三",
+                  "userDept": "[\"2\"]"
+                },
+                "version": 1,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qjDataFilterVirtual",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "filter": "{\"userName\":\"张三\"}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "title": "契约JOIN行_<RUN>",
+                  "userId": "<ID>",
+                  "refUser": [
+                    "<ID>"
+                  ],
+                  "amount": 12.34,
+                  "userName": "张三",
+                  "userDept": "[\"2\"]"
+                },
+                "version": 1,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qjDataFilterJson",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "filter": "{\"refUser\":[\"{{qjPersonList.data.records[0].id}}\"]}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "title": "契约JOIN行_<RUN>",
+                  "userId": "<ID>",
+                  "refUser": [
+                    "<ID>"
+                  ],
+                  "amount": 12.34,
+                  "userName": "张三",
+                  "userDept": "[\"2\"]"
+                },
+                "version": 1,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 1,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qjDataSortNotSortable",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "sort": "userDept"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "该列不可排序: userDept",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qjDataBadFilter",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "filter": "{\"nope\":1}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "非法筛选字段: nope",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qjDataBadKeyword",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "keyword": "x",
+          "keywordColumn": ""
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "关键词匹配列不能为空",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qjDataSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "size": "0"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "unorderedArrays": [
+        "$.data.records"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "title": "契约JOIN行-无匹配_<RUN>",
+                  "userId": "no-such-user",
+                  "amount": 5
+                },
+                "version": 1,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<ID>",
+                "data": {
+                  "title": "契约JOIN行_<RUN>",
+                  "userId": "<ID>",
+                  "refUser": [
+                    "<ID>"
+                  ],
+                  "amount": 12.34,
+                  "userName": "张三",
+                  "userDept": "[\"2\"]"
+                },
+                "version": 1,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "qjDsUpdateSql",
+      "endpoint": {
+        "httpMethod": "PUT",
+        "fullPath": "/api/v1/data-sources/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": {
+          "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id, title, amount, amount * 2 AS doubleAmount FROM wf_biz_contract_qj_{{$runId}} WHERE tenant_id = :tenantId AND amount >= :minAmount\",\"columns\":[{\"key\":\"doubleAmount\",\"label\":\"金额两倍\",\"columnType\":\"DECIMAL\",\"sortable\":true,\"filterable\":false},{\"key\":\"title\",\"label\":\"标题\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true},{\"key\":\"id\",\"label\":\"ID\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}],\"params\":[\"minAmount\"]}"
+        },
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "createdAt": "<TIME>",
+            "createdBy": null,
+            "formKey": "contract_qj_<RUN>",
+            "id": "<ID>",
+            "name": "契约JOIN表单 数据源",
+            "params": "{\"queryMode\":\"sql\",\"query\":\"SELECT id, title, amount, amount * 2 AS doubleAmount FROM wf_biz_contract_qj_<RUN> WHERE tenant_id = :tenantId AND amount >= :minAmount\",\"columns\":[{\"key\":\"doubleAmount\",\"label\":\"金额两倍\",\"columnType\":\"DECIMAL\",\"sortable\":true,\"filterable\":false},{\"key\":\"title\",\"label\":\"标题\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true},{\"key\":\"id\",\"label\":\"ID\",\"columnType\":\"VARCHAR\",\"sortable\":true,\"filterable\":true}],\"params\":[\"minAmount\"]}",
+            "sourceKey": "contract_qj_<RUN>",
+            "status": "ENABLED",
+            "tenantId": "default",
+            "type": "FORM",
+            "updatedAt": "<TIME>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qjSqlMetadata",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/metadata"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/metadata",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/metadata",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "columns": [
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "title",
+                "label": null,
+                "length": 128,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "userId",
+                "label": null,
+                "length": 64,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "JSON",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "refUser",
+                "label": null,
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": false,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "DECIMAL",
+                "componentType": null,
+                "filterable": null,
+                "hidden": false,
+                "indexed": false,
+                "key": "amount",
+                "label": null,
+                "length": 18,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": 2,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "DECIMAL",
+                "componentType": null,
+                "filterable": false,
+                "hidden": false,
+                "indexed": false,
+                "key": "doubleAmount",
+                "label": "金额两倍",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              },
+              {
+                "columnType": "VARCHAR",
+                "componentType": null,
+                "filterable": true,
+                "hidden": false,
+                "indexed": false,
+                "key": "id",
+                "label": "ID",
+                "length": null,
+                "matchType": null,
+                "pickerConfig": null,
+                "required": false,
+                "scale": null,
+                "sortable": true,
+                "storageMode": "JSON",
+                "subColumns": null,
+                "subMode": null,
+                "unique": false
+              }
+            ],
+            "writable": true,
+            "formKey": "contract_qj_<RUN>"
+          }
+        }
+      }
+    },
+    {
+      "id": "qjSqlData",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "sort": "doubleAmount",
+          "order": "desc",
+          "params": "{\"minAmount\":1}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "title": "契约JOIN行_<RUN>",
+                  "amount": 12.34,
+                  "doubleAmount": 24.68
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "title": "契约JOIN行-无匹配_<RUN>",
+                  "amount": 5,
+                  "doubleAmount": 10
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qjSqlDataMissingParam",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "缺少运行时参数值: :minAmount",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qjSqlDataBadFilter",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "page": "1",
+          "size": "20",
+          "filter": "{\"doubleAmount\":1}",
+          "params": "{\"minAmount\":1}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 400,
+          "msg": "该列不可筛选字段: doubleAmount",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qjSqlDataKeyword",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "keyword": "契约JOIN",
+          "keywordColumn": "title",
+          "params": "{\"minAmount\":0}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "title": "契约JOIN行_<RUN>",
+                  "amount": 12.34,
+                  "doubleAmount": 24.68
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "title": "契约JOIN行-无匹配_<RUN>",
+                  "amount": 5,
+                  "doubleAmount": 10
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 20
+          }
+        }
+      }
+    },
+    {
+      "id": "qjSqlDataSizeZero",
+      "endpoint": {
+        "httpMethod": "GET",
+        "fullPath": "/api/v1/data-sources/{id}/data"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/data-sources/{{qjDsCreate.data.id}}/data",
+        "query": {
+          "size": "0",
+          "params": "{\"minAmount\":0}"
+        },
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/data-sources/53e9fbd696f54728b9157637c40dc520/data",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": {
+            "records": [
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "title": "契约JOIN行_<RUN>",
+                  "amount": 12.34,
+                  "doubleAmount": 24.68
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              },
+              {
+                "id": "<ID>",
+                "data": {
+                  "id": "<ID>",
+                  "title": "契约JOIN行-无匹配_<RUN>",
+                  "amount": 5,
+                  "doubleAmount": 10
+                },
+                "version": null,
+                "createdAt": null,
+                "updatedAt": null
+              }
+            ],
+            "total": 2,
+            "page": 1,
+            "size": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "qjRowDelete",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_qj_{{$runId}}/{{qjRowCreate.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_qj_4miozb/4261a0b069b846dbb2a8205c9c6dbfc4",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    },
+    {
+      "id": "qjRowDeleteNoRef",
+      "endpoint": {
+        "httpMethod": "DELETE",
+        "fullPath": "/api/v1/biz-data/{formKey}/{id}"
+      },
+      "requestTemplate": {
+        "path": "/api/v1/biz-data/contract_qj_{{$runId}}/{{qjRowCreateNoRef.data.id}}",
+        "query": {},
+        "headers": {
+          "X-Tenant-Id": "default"
+        },
+        "body": null,
+        "auth": "admin"
+      },
+      "resolvedPath": "/api/v1/biz-data/contract_qj_4miozb/6fb05338da8a413596ecda14419f3d0e",
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "code": 200,
+          "msg": "success",
+          "data": null
+        }
+      }
+    }
+  ]
+}

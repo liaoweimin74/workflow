@@ -7,6 +7,7 @@ import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick, Check } from '
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
+import ShirtIcon from '@/components/icons/ShirtIcon.vue'
 import { useAiAssistantStore } from '@/stores/aiAssistantStore'
 
 const router = useRouter()
@@ -277,7 +278,7 @@ onUnmounted(() => {
               :title="`外观：${uiTheme === 'verdant' ? '青墨' : '经典'} · ${isDark ? '暗色' : '亮色'}`"
               aria-label="切换界面风格与明暗模式"
             >
-              <el-icon :size="18"><MagicStick /></el-icon>
+              <el-icon :size="18"><ShirtIcon /></el-icon>
               <span
                 class="w-1.5 h-1.5 rounded-full ml-0.5 shrink-0"
                 :style="{ background: uiTheme === 'verdant' ? '#2dd4bf' : '#5755ee' }"

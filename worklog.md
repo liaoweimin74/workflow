@@ -921,3 +921,19 @@ Work Log:
 Stage Summary:
 - 本地 main 与远程 main 已同步，Task 33/34 全部成果已入 GitHub（liaoweimin74/workflow）
 - 未入库项（有意保留本地）：backend-node/.engine-node（运行时产物）、backend-node/data/（本地数据）、frontend/bun.lock（项目用 pnpm，bun.lock 不该提交，可加 .gitignore）
+
+---
+Task ID: 36
+Agent: 主控（Z.ai Code）
+Task: 用户指令「切换风格的图标改成衣服的图标」
+
+Work Log:
+- 【定位】风格切换按钮在 AdminLayout.vue 工具栏（aria-label=切换界面风格与明暗模式），原用 MagicStick；同文件另一处 MagicStick 是 AI 助手开关（保留不动）
+- 【实现】@element-plus/icons-vue 无服装类图标 → 新建 src/components/icons/ShirtIcon.vue（内联 SVG T恤描边图形，width/height=1em 可随 el-icon :size 缩放，stroke=currentColor 随四态风格取色）
+- 【替换】AdminLayout.vue 导入 ShirtIcon，外观切换按钮 MagicStick → ShirtIcon；图标旁风格色点（翡翠青/靛蓝）不变
+- 【验证】agent-browser 登录后实测：DOM 校验按钮内 svg viewBox=0 0 24 24、渲染宽 18px、stroke=currentColor；截图 /tmp/t36-shirt-icon.png 确认 T恤图标清晰渲染（暗色青墨主题下灰色描边+青色风格点）；点开下拉「界面风格 青墨·翡翠青 / 经典·靛蓝 + 明暗模式」功能正常；vite 编译 ShirtIcon.vue 304 无错误
+- 【入库】commit 33fb9fb 已 push 到远程 main（6ff241b..33fb9fb）
+
+Stage Summary:
+- 工具栏三图标语义现在互不混淆：魔法棒=AI助手、铃铛=通知、T恤=风格切换
+- ShirtIcon 可复用（components/icons/），后续若需要更多自定义图标可按此模式扩展

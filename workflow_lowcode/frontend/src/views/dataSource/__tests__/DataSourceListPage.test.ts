@@ -47,6 +47,7 @@ vi.mock('@element-plus/icons-vue', () => ({
   View: { name: 'View', render: () => h('span', '👁') },
   Close: { name: 'Close', render: () => h('span', '✕') },
   Grid: { name: 'Grid', render: () => h('span', '☰') },
+  Rank: { name: 'Rank', render: () => h('span', '⇅') },
   CircleCheck: { name: 'CircleCheck', render: () => h('span', '✓') },
   CircleClose: { name: 'CircleClose', render: () => h('span', '✕') },
   QuestionFilled: { name: 'QuestionFilled', render: () => h('span', '?') },
@@ -1109,6 +1110,81 @@ describe('DataSourceListPage', () => {
     const p = JSON.parse(payload.params)
     expect(p.queryMode).toBeUndefined()
     expect(p.joins).toBeUndefined()
+    expect(p.list.action).toBe('/api/v1/biz-data/biz_order')
+    wrapper.unmount()
+  })
+
+  it('FORM 双段并存：config 生效段 + sql 草稿段同时入库（原始输入可迭代）', async () => {
+    stubList()
+    ;(dataSourceApi.updateDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openEdit({
+      id: 'ds-form', name: '订单联查', type: 'FORM', formKey: 'biz_order', sourceKey: 'biz_order',
+      status: 'ENABLED',
+      params: formParams({
+        queryMode: 'config',
+        joins: [{ alias: 'j1', targetFormKey: 'biz_customer', localField: 'customer_id', foreignField: 'id', joinField: 'name', virtualKey: 'customer_name', label: '客户名称', sortable: true, filterable: true }],
+        // 旧 sql 草稿：切换模式后不再被清空，保存时一并入库
+        query: 'SELECT m.order_no FROM wf_biz_order m WHERE m.tenant_id = :tenantId',
+        columns: [{ key: 'order_no', label: '订单号', columnType: 'VARCHAR', sortable: true, filterable: true }],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    expect(component.formJoin.joins).toHaveLength(1)
+    // 回填：非活跃段（sql 草稿）也还原到 formJoin
+    expect(component.formJoin.query).toContain(':tenantId')
+
+    await component.handleSave()
+    await flushPromises()
+
+    const p = JSON.parse((dataSourceApi.updateDataSource as any).mock.calls[0][1].params)
+    expect(p.queryMode).toBe('config')
+    expect(p.joins).toHaveLength(1)
+    // sql 草稿段保留入库
+    expect(p.query).toContain(':tenantId')
+    expect(p.columns[0].key).toBe('order_no')
+    expect(p.list.action).toBe('/api/v1/biz-data/biz_order')
+    wrapper.unmount()
+  })
+
+  it('FORM 切到单表查询：queryMode 从 params 移除（单表真正生效），joins 保留为草稿可切回迭代', async () => {
+    stubList()
+    ;(dataSourceApi.updateDataSource as any).mockResolvedValue({ data: {} })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+
+    ;(wrapper.vm as any).openEdit({
+      id: 'ds-form', name: '订单联查', type: 'FORM', formKey: 'biz_order', sourceKey: 'biz_order',
+      status: 'ENABLED',
+      params: formParams({
+        queryMode: 'config',
+        joins: [{ alias: 'j1', targetFormKey: 'biz_customer', localField: 'customer_id', foreignField: 'id', joinField: 'name', virtualKey: 'customer_name', label: '客户名称', sortable: true, filterable: true }],
+      }),
+    })
+    await nextTick()
+    await flushPromises()
+
+    const component: any = wrapper.vm as any
+    // 模拟用户点「单表查询」radio（v-model 直接改值）
+    component.formJoin.queryMode = 'none'
+    await nextTick()
+
+    await component.handleSave()
+    await flushPromises()
+
+    const p = JSON.parse((dataSourceApi.updateDataSource as any).mock.calls[0][1].params)
+    // queryMode 不写入 → 运行时 parseFormQueryConfig 走单表路径（旧 bug：残留 config 段继续 JOIN）
+    expect(p.queryMode).toBeUndefined()
+    // joins 草稿保留入库：重新打开编辑器切回声明式 JOIN 可继续在原输入上修改
+    expect(p.joins).toHaveLength(1)
+    expect(p.joins[0].virtualKey).toBe('customer_name')
     expect(p.list.action).toBe('/api/v1/biz-data/biz_order')
     wrapper.unmount()
   })

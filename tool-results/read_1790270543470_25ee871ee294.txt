@@ -1,0 +1,805 @@
+     1→package com.workflow.engine.datasource;
+     2→
+     3→import com.fasterxml.jackson.core.JsonProcessingException;
+     4→import com.fasterxml.jackson.databind.JsonNode;
+     5→import com.fasterxml.jackson.databind.ObjectMapper;
+     6→import com.fasterxml.jackson.databind.node.ObjectNode;
+     7→import com.workflow.api.dto.BizDataPageVO;
+     8→import com.workflow.api.dto.BizDataQueryRequest;
+     9→import com.workflow.api.dto.BizDataVO;
+    10→import com.workflow.api.dto.DataSourceMetadata;
+    11→import com.workflow.common.exception.BusinessException;
+    12→import com.workflow.engine.datasource.entity.DataSourceDefinition;
+    13→import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
+    14→import com.workflow.engine.form.bizdata.JoinSqlGenerator;
+    15→import com.workflow.engine.form.bizdata.JoinTargetCatalog;
+    16→import com.workflow.engine.form.bizdata.SqlTemplateEngine;
+    17→import com.workflow.engine.form.column.ColumnConfig;
+    18→import com.workflow.engine.form.entity.FormDefinition;
+    19→import com.workflow.engine.form.repository.FormDefinitionRepository;
+    20→import com.workflow.engine.page.entity.PageDefinition;
+    21→import com.workflow.engine.page.repository.PageDefinitionRepository;
+    22→import com.workflow.engine.tenant.TenantProvider;
+    23→import org.springframework.data.domain.Page;
+    24→import org.springframework.data.domain.PageRequest;
+    25→import org.springframework.data.domain.Pageable;
+    26→import org.springframework.stereotype.Service;
+    27→import org.springframework.transaction.annotation.Transactional;
+    28→
+    29→import java.util.ArrayList;
+    30→import java.util.HashSet;
+    31→import java.util.List;
+    32→import java.util.Map;
+    33→import java.util.Set;
+    34→import java.util.UUID;
+    35→import java.util.regex.Pattern;
+    36→
+    37→/**
+    38→ * 全局数据源定义服务。
+    39→ * 状态机：DRAFT → ENABLED ⇄ DISABLED；任意状态可删除（被页面引用时拒绝）。
+    40→ * 不执行 DDL（构造不含 DynamicTableManager/JdbcTemplate，结构性排除动态建表）。
+    41→ */
+    42→@Service
+    43→public class DataSourceDefinitionService {
+    44→
+    45→    private static final String STATUS_DRAFT = "DRAFT";
+    46→    private static final String STATUS_ENABLED = "ENABLED";
+    47→    private static final String STATUS_DISABLED = "DISABLED";
+    48→    private static final String TYPE_FORM = "FORM";
+    49→    private static final String TYPE_SYSTEM = "SYSTEM";
+    50→    private static final String TYPE_API = "API";
+    51→    private static final String TYPE_WORKFLOW = "WORKFLOW";
+    52→    private static final String TYPE_SQL = "SQL";
+    53→    private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API, TYPE_WORKFLOW, TYPE_SQL);
+    54→
+    55→    /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist；唯一事实源见 BuiltInSystemSources，8 个内建数据源） */
+    56→    private static final Set<String> SYSTEM_SOURCE_KEYS = BuiltInSystemSources.SOURCE_KEYS;
+    57→
+    58→    /** FORM 目标 key 合法格式（对齐 NodeJS 保存校验 /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/） */
+    59→    private static final Pattern FORM_KEY_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{0,63}$");
+    60→
+    61→    /** joins[] alias 合法格式（传入才校验；缺省由运行时自动分配） */
+    62→    private static final Pattern JOIN_ALIAS_PATTERN = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*$");
+    63→
+    64→    /** joins[] 主表关联字段合法格式（对齐 Node 新版 JOIN_FIELD_PATTERN；首字符允许下划线，上限 64 字符） */
+    65→    private static final Pattern JOIN_FIELD_PATTERN = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
+    66→
+    67→    private final DataSourceDefinitionRepository dsRepository;
+    68→    private final FormDefinitionRepository formDefRepository;
+    69→    private final PageDefinitionRepository pageRepository;
+    70→    private final TenantProvider tenantProvider;
+    71→    private final ObjectMapper objectMapper;
+    72→    private final List<DataSourceAdapter> adapters;
+    73→
+    74→    /**
+    75→     * @param adapters Spring 自动注入所有 DataSourceAdapter bean（无则空列表）
+    76→     */
+    77→    public DataSourceDefinitionService(DataSourceDefinitionRepository dsRepository,
+    78→                                       FormDefinitionRepository formDefRepository,
+    79→                                       PageDefinitionRepository pageRepository,
+    80→                                       TenantProvider tenantProvider,
+    81→                                       ObjectMapper objectMapper,
+    82→                                       List<DataSourceAdapter> adapters) {
+    83→        this.dsRepository = dsRepository;
+    84→        this.formDefRepository = formDefRepository;
+    85→        this.pageRepository = pageRepository;
+    86→        this.tenantProvider = tenantProvider;
+    87→        this.objectMapper = objectMapper;
+    88→        this.adapters = adapters == null ? List.of() : adapters;
+    89→    }
+    90→
+    91→    /**
+    92→     * 创建数据源（默认 DRAFT）。
+    93→     * 校验：type 必填且合法；同租户 name 唯一；按类型必填项（FORM→formKey + 表单存在；
+    94→     * SYSTEM/API→sourceKey；API→params 须为合法 JSON）。
+    95→     * 
+    96→     * 注意：此方法仅供系统内部调用，用户不能直接创建数据源。
+    97→     */
+    98→    @Transactional
+    99→    public DataSourceDefinition create(String name, String type, String formKey, String sourceKey, String params) {
+   100→        String tenantId = tenantProvider.getTenantId();
+   101→
+   102→        if (type == null || type.isBlank()) {
+   103→            throw new BusinessException(400, "数据源类型 type 必填");
+   104→        }
+   105→        if (!SUPPORTED_TYPES.contains(type)) {
+   106→            throw new BusinessException(400, "不支持的数据源类型: " + type);
+   107→        }
+   108→        if (name == null || name.isBlank()) {
+   109→            throw new BusinessException(400, "数据源名称不能为空");
+   110→        }
+   111→        if (dsRepository.existsByTenantIdAndName(tenantId, name)) {
+   112→            throw new BusinessException(400, "数据源名称已存在: " + name);
+   113→        }
+   114→        // FORM/WORKFLOW：sourceKey 恒等于 formKey（formKey 权威）；其余类型以入参 sourceKey 为准
+   115→        boolean formBound = TYPE_FORM.equals(type) || TYPE_WORKFLOW.equals(type);
+   116→        String effSourceKey = formBound ? formKey : sourceKey;
+   117→        validateRequiredFields(type, formKey, effSourceKey, params);
+   118→        if (formBound && !formDefRepository.existsByTenantIdAndKey(tenantId, formKey)) {
+   119→            throw new BusinessException(400, "绑定的表单不存在: " + formKey);
+   120→        }
+   121→        if (effSourceKey == null || effSourceKey.isBlank()) {
+   122→            throw new BusinessException(400, "数据源必须填写 sourceKey");
+   123→        }
+   124→        if (dsRepository.existsByTenantIdAndSourceKey(tenantId, effSourceKey)) {
+   125→            throw new BusinessException(400, "数据源标识 sourceKey 已存在: " + effSourceKey);
+   126→        }
+   127→
+   128→        DataSourceDefinition ds = new DataSourceDefinition();
+   129→        ds.setId(UUID.randomUUID().toString().replace("-", ""));
+   130→        ds.setTenantId(tenantId);
+   131→        ds.setName(name);
+   132→        ds.setType(type);
+   133→        ds.setFormKey(formKey);
+   134→        ds.setSourceKey(effSourceKey);
+   135→        if (TYPE_FORM.equals(type) || TYPE_SYSTEM.equals(type)) {
+   136→            if (TYPE_FORM.equals(type) && hasQueryModeSegment(params)) {
+   137→                // FORM 带 queryMode 配置段：校验后与自动生成端点合并保存（主表 key = 入参 formKey，对齐 Node create 分支）
+   138→                validateFormQueryConfig(params, formKey);
+   139→                ds.setParams(mergeQueryConfig(generateParams(type, formKey, sourceKey), params));
+   140→            } else {
+   141→                ds.setParams(generateParams(type, formKey, sourceKey));
+   142→            }
+   143→        } else {
+   144→            ds.setParams(params);
+   145→        }
+   146→        // API/SQL 为手动配置的数据源：创建即发布（ENABLED）；其余类型仍 DRAFT（防御：手动创建仅 API/SQL）
+   147→        boolean manualPublish = TYPE_API.equals(type) || TYPE_SQL.equals(type);
+   148→        ds.setStatus(manualPublish ? STATUS_ENABLED : STATUS_DRAFT);
+   149→        return dsRepository.save(ds);
+   150→    }
+   151→
+   152→    /**
+   153→     * 原地更新数据源（name/type/formKey/sourceKey/params；null 表示不更新）。
+   154→     * 若当前 ENABLED 且 type/formKey 变更，重新校验（FORM 须仍指向已发布表单）。
+   155→     * 
+   156→     * 注意：此方法仅供系统内部调用，用户不能直接编辑数据源。
+   157→     */
+   158→    @Transactional
+   159→    public DataSourceDefinition update(String id, String name, String type, String formKey,
+   160→                                       String sourceKey, String params) {
+   161→        String tenantId = tenantProvider.getTenantId();
+   162→        DataSourceDefinition ds = getById(id);
+   163→        // 内建保护：tenant_id='system' 的预置行不允许修改（对齐 NodeJS requireNotBuiltIn）
+   164→        requireNotBuiltIn(ds, "修改");
+   165→
+   166→        String newType = type == null || type.isBlank() ? ds.getType() : type;
+   167→        if (type != null && !type.isBlank() && !SUPPORTED_TYPES.contains(newType)) {
+   168→            throw new BusinessException(400, "不支持的数据源类型: " + newType);
+   169→        }
+   170→        if (name != null && !name.isBlank() && !name.equals(ds.getName())
+   171→                && dsRepository.existsByTenantIdAndName(tenantId, name)) {
+   172→            throw new BusinessException(400, "数据源名称已存在: " + name);
+   173→        }
+   174→
+   175→        String newFormKey = formKey == null ? ds.getFormKey() : formKey;
+   176→        String newSourceKey = sourceKey == null ? ds.getSourceKey() : sourceKey;
+   177→        String newParams = params == null ? ds.getParams() : params;
+   178→        // FORM/WORKFLOW：sourceKey 恒等于 formKey（formKey 权威），忽略入参 sourceKey 差异
+   179→        boolean formBound = TYPE_FORM.equals(newType) || TYPE_WORKFLOW.equals(newType);
+   180→        String effNewSourceKey = formBound ? newFormKey : newSourceKey;
+   181→        validateRequiredFields(newType, newFormKey, effNewSourceKey, newParams);
+   182→        if (formBound && !formDefRepository.existsByTenantIdAndKey(tenantId, newFormKey)) {
+   183→            throw new BusinessException(400, "绑定的表单不存在: " + newFormKey);
+   184→        }
+   185→        if (TYPE_FORM.equals(newType)) {
+   186→            // FORM 查询配置段（queryMode/joins/query/columns/params）保存校验（主表 key = newFormKey，对齐 Node update 分支）
+   187→            validateFormQueryConfig(newParams, newFormKey);
+   188→        }
+   189→        // sourceKey 变更（不等于当前值）时校验租户内唯一；保持不变则跳过（自身不算冲突）
+   190→        if (!java.util.Objects.equals(effNewSourceKey, ds.getSourceKey())
+   191→                && dsRepository.existsByTenantIdAndSourceKey(tenantId, effNewSourceKey)) {
+   192→            throw new BusinessException(400, "数据源标识 sourceKey 已存在: " + effNewSourceKey);
+   193→        }
+   194→
+   195→        // 已启用数据源若变更类型/绑定对象，须重新校验发布状态
+   196→        boolean bindChanged = !TYPE_FORM.equals(ds.getType()) || (formKey != null && !formKey.equals(ds.getFormKey()));
+   197→        if (STATUS_ENABLED.equals(ds.getStatus()) && bindChanged) {
+   198→            if (TYPE_FORM.equals(newType)) {
+   199→                requirePublishedForm(tenantId, newFormKey);
+   200→            } else if (TYPE_WORKFLOW.equals(newType)) {
+   201→                requireWorkflowForm(tenantId, newFormKey);
+   202→            }
+   203→        }
+   204→
+   205→        ds.setName(name == null ? ds.getName() : name);
+   206→        ds.setType(newType);
+   207→        ds.setFormKey(newFormKey);
+   208→        ds.setSourceKey(effNewSourceKey);
+   209→        ds.setParams(newParams);
+   210→        return dsRepository.save(ds);
+   211→    }
+   212→
+   213→    /**
+   214→     * 启用数据源：校验按类型必填项齐全；FORM 类型须绑定已发布表单。成功置 ENABLED。
+   215→     * 
+   216→     * 注意：此方法仅供系统内部调用，用户不能直接启用数据源。
+   217→     */
+   218→    @Transactional
+   219→    public DataSourceDefinition enable(String id) {
+   220→        String tenantId = tenantProvider.getTenantId();
+   221→        DataSourceDefinition ds = getById(id);
+   222→        validateRequiredFields(ds.getType(), ds.getFormKey(), ds.getSourceKey(), ds.getParams());
+   223→        if (TYPE_FORM.equals(ds.getType())) {
+   224→            requirePublishedForm(tenantId, ds.getFormKey());
+   225→            // 主表 key = 已落数据源的 formKey（对齐 Node enable 分支 ds.form_key）
+   226→            validateFormQueryConfig(ds.getParams(), ds.getFormKey());
+   227→        } else if (TYPE_WORKFLOW.equals(ds.getType())) {
+   228→            requireWorkflowForm(tenantId, ds.getFormKey());
+   229→        }
+   230→        ds.setStatus(STATUS_ENABLED);
+   231→        if ((TYPE_FORM.equals(ds.getType()) || TYPE_SYSTEM.equals(ds.getType())) && ds.getParams() == null) {
+   232→            ds.setParams(generateParams(ds.getType(), ds.getFormKey(), ds.getSourceKey()));
+   233→        }
+   234→        return dsRepository.save(ds);
+   235→    }
+   236→
+   237→    /**
+   238→     * 禁用数据源（不校验引用；不影响已发布页面运行）。
+   239→     * 
+   240→     * 注意：此方法仅供系统内部调用，用户不能直接禁用数据源。
+   241→     */
+   242→    @Transactional
+   243→    public DataSourceDefinition disable(String id) {
+   244→        DataSourceDefinition ds = getById(id);
+   245→        // 内建保护：禁用会让设计器/页面取数失败，直接 400（对齐 NodeJS requireNotBuiltIn）
+   246→        requireNotBuiltIn(ds, "禁用");
+   247→        ds.setStatus(STATUS_DISABLED);
+   248→        return dsRepository.save(ds);
+   249→    }
+   250→
+   251→    /**
+   252→     * 删除数据源：任意状态可删除（ENABLED/DISABLED 均可），但被页面引用时拒绝（400）。
+   253→     * 引用统计覆盖两种绑定方式：
+   254→     * 1) PageDefinition.dataSourceId 列（VIEW 新协议，迁移器回填）；
+   255→     * 2) PAGE 类型页面 schema.dataSources[].refId（设计器 dataSources 声明）。
+   256→     * 两者取并集，任一命中即拒绝删除。
+   257→     * 
+   258→     * 注意：此方法仅供系统内部调用，用户不能直接删除数据源。
+   259→     */
+   260→    @Transactional
+   261→    public void delete(String id) {
+   262→        DataSourceDefinition ds = getById(id);
+   263→        // 内建保护：先于引用统计（对齐 NodeJS remove：requireNotBuiltIn → countRefs → delete）
+   264→        requireNotBuiltIn(ds, "删除");
+   265→        String tenantId = ds.getTenantId();
+   266→        long refCount = countRefs(tenantId, id);
+   267→        if (refCount > 0) {
+   268→            throw new BusinessException(400, "数据源已被 " + refCount + " 个页面引用，无法删除");
+   269→        }
+   270→        dsRepository.delete(ds);
+   271→    }
+   272→
+   273→    /**
+   274→     * 统计当前租户内引用指定数据源的页面数（dataSourceId 列 + PAGE schema dataSources[].refId 并集）。
+   275→     */
+   276→    private long countRefs(String tenantId, String dataSourceId) {
+   277→        long columnRefs = pageRepository.countByTenantIdAndDataSourceId(tenantId, dataSourceId);
+   278→        if (columnRefs > 0) {
+   279→            return columnRefs;
+   280→        }
+   281→        // PAGE 类型页面引用声明在 schema.dataSources[].refId（dataSourceId 列为空），需扫描；
+   282→        // 页面软删除（ARCHIVED）后不再使用，其 schema 引用不阻塞删除
+   283→        long schemaRefs = 0;
+   284→        Page<PageDefinition> pages = pageRepository
+   285→                .findByTenantIdAndTypeOrderByUpdatedAtDesc(tenantId, "PAGE", PageRequest.of(0, Integer.MAX_VALUE));
+   286→        for (PageDefinition page : pages.getContent()) {
+   287→            if ("ARCHIVED".equals(page.getStatus())) {
+   288→                continue;
+   289→            }
+   290→            if (schemaRefsDataSource(page.getSchema(), dataSourceId)) {
+   291→                schemaRefs++;
+   292→            }
+   293→        }
+   294→        return schemaRefs;
+   295→    }
+   296→
+   297→    /**
+   298→     * 判断页面 schema 的 dataSources[].refId 是否指向指定数据源。
+   299→     */
+   300→    private boolean schemaRefsDataSource(String schema, String dataSourceId) {
+   301→        if (schema == null || schema.isBlank()) {
+   302→            return false;
+   303→        }
+   304→        try {
+   305→            JsonNode root = objectMapper.readTree(schema);
+   306→            JsonNode dataSources = root.path("dataSources");
+   307→            if (!dataSources.isArray()) {
+   308→                return false;
+   309→            }
+   310→            for (JsonNode ds : dataSources) {
+   311→                String refId = ds.path("refId").asText(null);
+   312→                if (dataSourceId.equals(refId)) {
+   313→                    return true;
+   314→                }
+   315→            }
+   316→        } catch (JsonProcessingException e) {
+   317→            return false;
+   318→        }
+   319→        return false;
+   320→    }
+   321→
+   322→    /**
+   323→     * 按 id 获取数据源（租户隔离；SYSTEM 类型跨租户可见；不存在 → 404）。
+   324→     */
+   325→    public DataSourceDefinition getById(String id) {
+   326→        String tenantId = tenantProvider.getTenantId();
+   327→        return dsRepository.findByIdAccessible(id, tenantId)
+   328→                .orElseThrow(() -> new BusinessException(404, "数据源不存在: " + id));
+   329→    }
+   330→
+   331→    /**
+   332→     * 分页查询数据源列表（type/status 可选过滤，按更新时间倒序）。
+   333→     * SYSTEM 类型（系统结构）对所有租户可见（跨租户查询）。
+   334→     */
+   335→    public Page<DataSourceDefinition> list(String type, String status, Pageable pageable) {
+   336→        String tenantId = tenantProvider.getTenantId();
+   337→        boolean hasType = type != null && !type.isBlank();
+   338→        boolean hasStatus = status != null && !status.isBlank();
+   339→        if (hasType && hasStatus) {
+   340→            return dsRepository.findByAccessibleTenantAndTypeAndStatusOrderByUpdatedAtDesc(tenantId, type, status, pageable);
+   341→        }
+   342→        if (hasType) {
+   343→            return dsRepository.findByAccessibleTenantAndTypeOrderByUpdatedAtDesc(tenantId, type, pageable);
+   344→        }
+   345→        if (hasStatus) {
+   346→            return dsRepository.findByAccessibleTenantAndStatusOrderByUpdatedAtDesc(tenantId, status, pageable);
+   347→        }
+   348→        return dsRepository.findByAccessibleTenantOrderByUpdatedAtDesc(tenantId, pageable);
+   349→    }
+   350→
+   351→    /**
+   352→     * 仅已启用数据源（页面设计器下拉用）。
+   353→     * SYSTEM 类型（系统结构）对所有租户可见。
+   354→     */
+   355→    public List<DataSourceDefinition> getEnabled() {
+   356→        String tenantId = tenantProvider.getTenantId();
+   357→        return dsRepository.findByStatusAndAccessibleTenant(STATUS_ENABLED, tenantId);
+   358→    }
+   359→
+   360→    /**
+   361→     * 数据源查询分发：数据源须 ENABLED；按 type 找 supports 的适配器；
+   362→     * 无适配器 → 400"数据源类型未启用"。
+   363→     */
+   364→    public BizDataPageVO queryData(String id, BizDataQueryRequest req) {
+   365→        if (req == null) {
+   366→            req = new BizDataQueryRequest();
+   367→        }
+   368→        return adapterOf(id).query(getById(id), req);
+   369→    }
+   370→
+   371→    /**
+   372→     * 数据源元数据分发：数据源须 ENABLED。
+   373→     */
+   374→    public DataSourceMetadata metadata(String id) {
+   375→        return adapterOf(id).metadata(getById(id));
+   376→    }
+   377→
+   378→    /**
+   379→     * 数据源单条查询分发。
+   380→     */
+   381→    public BizDataVO getData(String id, String rowId) {
+   382→        return adapterOf(id).get(getById(id), rowId);
+   383→    }
+   384→
+   385→    /**
+   386→     * 数据源新增分发（只读数据源 → 适配器 default 抛不支持）。
+   387→     */
+   388→    public String createData(String id, Map<String, Object> data) {
+   389→        return adapterOf(id).create(getById(id), data);
+   390→    }
+   391→
+   392→    /**
+   393→     * 数据源修改分发。
+   394→     */
+   395→    public void updateData(String id, String rowId, Map<String, Object> data, Integer version) {
+   396→        adapterOf(id).update(getById(id), rowId, data, version);
+   397→    }
+   398→
+   399→    /**
+   400→     * 数据源删除分发。
+   401→     */
+   402→    public void deleteData(String id, String rowId) {
+   403→        adapterOf(id).delete(getById(id), rowId);
+   404→    }
+   405→
+   406→    /** 按数据源类型找适配器（数据源须 ENABLED） */
+   407→    private DataSourceAdapter adapterOf(String id) {
+   408→        DataSourceDefinition ds = getById(id);
+   409→        if (!STATUS_ENABLED.equals(ds.getStatus())) {
+   410→            throw new BusinessException(400, "数据源未启用，无法访问: " + ds.getName());
+   411→        }
+   412→        for (DataSourceAdapter adapter : adapters) {
+   413→            if (adapter.supports(ds.getType())) {
+   414→                return adapter;
+   415→            }
+   416→        }
+   417→        throw new BusinessException(400, "数据源类型未启用: " + ds.getType());
+   418→    }
+   419→
+   420→    // ==================== 参数自动生成 ====================
+   421→
+   422→    /**
+   423→     * 为 FORM/SYSTEM 数据源自动生成 params JSON（只读配置，UI 不可编辑）。
+   424→     * - FORM：list/get/create/update/delete → /api/v1/biz-data/{formKey}[/{id}]
+   425→     * - SYSTEM：list → /api/v1/internal/system/{internalKey}，internalKey 由 sourceKey 映射
+   426→     */
+   427→    private String generateParams(String type, String formKey, String sourceKey) {
+   428→        ObjectNode params = objectMapper.getNodeFactory().objectNode();
+   429→        if (TYPE_FORM.equals(type)) {
+   430→            String base = "/api/v1/biz-data/" + formKey;
+   431→            JsonNode list = params.putObject("list")
+   432→                    .put("action", base).put("method", "GET")
+   433→                    .put("parse", "records").put("totalParse", "total");
+   434→            params.putObject("create").put("action", base).put("method", "POST");
+   435→            params.putObject("get").put("action", base + "/{id}").put("method", "GET");
+   436→            params.putObject("update").put("action", base + "/{id}").put("method", "PUT");
+   437→            params.putObject("delete").put("action", base + "/{id}").put("method", "DELETE");
+   438→        } else if (TYPE_SYSTEM.equals(type)) {
+   439→            params.putObject("list")
+   440→                    .put("action", "/api/v1/internal/system/" + mapSystemInternalKey(sourceKey))
+   441→                    .put("method", "GET");
+   442→        }
+   443→        return params.toString();
+   444→    }
+   445→
+   446→    /** sourceKey → internal API 路径 key 映射（唯一事实源见 BuiltInSystemSources.mapSystemInternalPath） */
+   447→    private String mapSystemInternalKey(String sourceKey) {
+   448→        String path = BuiltInSystemSources.mapSystemInternalPath(sourceKey);
+   449→        if (path == null || path.isBlank()) {
+   450→            throw new BusinessException(400, "未注册的系统数据源: " + sourceKey);
+   451→        }
+   452→        return path;
+   453→    }
+   454→
+   455→    // ==================== FORM 查询配置段（queryMode）校验 ====================
+   456→
+   457→    /** 判断 params 是否含 queryMode 配置段（非合法 JSON 视为无，由后续校验处理） */
+   458→    private boolean hasQueryModeSegment(String params) {
+   459→        if (params == null || params.isBlank()) {
+   460→            return false;
+   461→        }
+   462→        try {
+   463→            JsonNode root = objectMapper.readTree(params);
+   464→            return root != null && root.isObject() && root.has("queryMode");
+   465→        } catch (JsonProcessingException e) {
+   466→            return false;
+   467→        }
+   468→    }
+   469→
+   470→    /**
+   471→     * FORM 数据源查询配置段保存校验（Task 5；Task 51 扩展内建目标）。
+   472→     * <ul>
+   473→     *   <li>无 queryMode 段 → 向后兼容，跳过校验</li>
+   474→     *   <li>config：joins 非空；alias 可缺省（运行时自动分配）；目标支持业务表单（存在性）
+   475→     *       与内建数据源（JoinTargetCatalog 物理列白名单）；必填字段齐全、virtualKey 唯一；
+   476→     *       主表/目标物理列存在性按已发布表单校验（主表 key 三条路径穿透：create=入参 formKey /
+   477→     *       update=newFormKey / enable=ds.formKey，对齐 Node 三处调用点）</li>
+   478→     *   <li>sql：query/columns 合法性复用 SqlTemplateEngine.validate（SELECT / :tenantId / 列匹配 / 参数白名单）</li>
+   479→     *   <li>未知 queryMode → 400</li>
+   480→     * </ul>
+   481→     */
+   482→    private void validateFormQueryConfig(String params, String mainFormKey) {
+   483→        if (params == null || params.isBlank()) {
+   484→            return;
+   485→        }
+   486→        JsonNode root;
+   487→        try {
+   488→            root = objectMapper.readTree(params);
+   489→        } catch (JsonProcessingException e) {
+   490→            throw new BusinessException(400, "数据源参数 params 必须是合法 JSON: " + e.getOriginalMessage());
+   491→        }
+   492→        if (root == null || !root.isObject()) {
+   493→            throw new BusinessException(400, "数据源参数 params 必须是 JSON 对象");
+   494→        }
+   495→        JsonNode modeNode = root.get("queryMode");
+   496→        if (modeNode == null || modeNode.isNull() || modeNode.asText().isBlank()) {
+   497→            return; // 无 queryMode 段 → 单表查询，向后兼容
+   498→        }
+   499→        String mode = modeNode.asText();
+   500→        if ("config".equals(mode)) {
+   501→            validateConfigJoins(root.get("joins"), mainFormKey);
+   502→        } else if ("sql".equals(mode)) {
+   503→            validateSqlConfig(root);
+   504→        } else {
+   505→            throw new BusinessException(400, "未知查询模式 queryMode: " + mode + "（支持 config / sql）");
+   506→        }
+   507→    }
+   508→
+   509→    /** config 模式：joins[] 结构校验（别名/目标表/字段/虚拟列唯一性）。
+   510→     * <p>
+   511→     * alias 可缺省：前端不录入，由运行时 {@code FormQueryConfig.parseJoins} 自动分配（j1/j2/...）；
+   512→     * 传入则校验格式与唯一性。目标表支持内建数据源（JoinTargetCatalog 白名单）：
+   513→     * SYSTEM 目标不查 form_def，且 foreignField/joinField 必须是目录内物理列。
+   514→     * <p>
+   515→     * 新增（对齐 Node 新版）：主表关联字段格式 + 存在性校验（避免手输错列名保存成功、
+   516→     * 运行时才爆 SQL 错）；FORM 目标的 foreignField/joinField 存在性校验（与 SYSTEM 目标
+   517→     * 白名单对称）；virtualKey 与主表列冲突校验（SELECT m.* 同名重复列）。
+   518→     * 主表/目标表单未发布时存在性校验优雅降级跳过（启用时 requirePublishedForm 兜底），
+   519→     * 格式校验始终生效。
+   520→     *
+   521→     * @param mainFormKey 数据源绑定的主表单 key（调用链拿不到时传 null，存在性校验降级）
+   522→     */
+   523→    private void validateConfigJoins(JsonNode joins, String mainFormKey) {
+   524→        if (joins == null || !joins.isArray() || joins.isEmpty()) {
+   525→            throw new BusinessException(400, "queryMode=config 时必须配置至少一个关联 joins");
+   526→        }
+   527→        String tenantId = tenantProvider.getTenantId();
+   528→        // 主表物理列候选：业务列 + 系统列（id/created_at/updated_at；SELECT m.* 全量带出，
+   529→        // virtualKey 同名会重复列）。主表单未发布 → null（存在性校验降级跳过）
+   530→        Set<String> mainColumns = publishedColumnKeys(mainFormKey, tenantId, true);
+   531→        Set<String> virtualKeys = new HashSet<>();
+   532→        Set<String> aliases = new HashSet<>();
+   533→        int idx = 0;
+   534→        for (JsonNode j : joins) {
+   535→            idx++;
+   536→            if (j == null || !j.isObject()) {
+   537→                throw new BusinessException(400, "joins 第 " + idx + " 项必须是对象");
+   538→            }
+   539→            String alias = text(j, "alias");
+   540→            if (alias != null) {
+   541→                if (!JOIN_ALIAS_PATTERN.matcher(alias).matches()) {
+   542→                    throw new BusinessException(400, "joins 第 " + idx + " 项 alias 非法: " + alias);
+   543→                }
+   544→                if (!aliases.add(alias)) {
+   545→                    throw new BusinessException(400, "joins 第 " + idx + " 项 alias 重复: " + alias);
+   546→                }
+   547→            }
+   548→            String targetFormKey = text(j, "targetFormKey");
+   549→            if (targetFormKey == null || targetFormKey.isBlank()) {
+   550→                throw new BusinessException(400, "joins 第 " + idx + " 项必须指定目标表 targetFormKey");
+   551→            }
+   552→            Set<String> foreignCandidates = null;
+   553→            if (JoinTargetCatalog.isJoinTargetSystemKey(targetFormKey)) {
+   554→                // 内建目标：物理列白名单来自 JoinTargetCatalog（不走 form_def）
+   555→                foreignCandidates = JoinTargetCatalog.systemColumnKeys(targetFormKey);
+   556→            } else {
+   557→                if (!FORM_KEY_PATTERN.matcher(targetFormKey).matches()) {
+   558→                    throw new BusinessException(400, "非法关联目标: " + targetFormKey);
+   559→                }
+   560→                if (!formDefRepository.existsByTenantIdAndKey(tenantId, targetFormKey)) {
+   561→                    throw new BusinessException(400, "目标表单不存在: " + targetFormKey);
+   562→                }
+   563→                // FORM 目标：物理列候选 = 目标表单业务列 + id（对齐前端 targetFormColumns 候选）
+   564→                Set<String> targetColumns = publishedColumnKeys(targetFormKey, tenantId, false);
+   565→                if (targetColumns != null) {
+   566→                    foreignCandidates = targetColumns;
+   567→                }
+   568→            }
+   569→            String foreignField = text(j, "foreignField");
+   570→            String localField = text(j, "localField");
+   571→            requireJoinField(j, "foreignField", "目标表关联字段", idx);
+   572→            requireJoinField(j, "localField", "主表关联字段", idx);
+   573→            requireJoinField(j, "joinField", "显示字段", idx);
+   574→            // 主表关联字段：格式 + 存在性（引用列必须在主表物理列中，杜绝运行时畸形 SQL）
+   575→            if (localField != null && !JOIN_FIELD_PATTERN.matcher(localField).matches()) {
+   576→                throw new BusinessException(400, "joins 第 " + idx + " 项主表关联字段非法: " + localField);
+   577→            }
+   578→            if (mainColumns != null && localField != null && !mainColumns.contains(localField)) {
+   579→                throw new BusinessException(400, "joins 第 " + idx + " 项主表关联字段不在绑定表单列中: " + localField);
+   580→            }
+   581→            if (foreignCandidates != null) {
+   582→                if (foreignField == null || !foreignCandidates.contains(foreignField)) {
+   583→                    String label = JoinTargetCatalog.isJoinTargetSystemKey(targetFormKey)
+   584→                            ? "joins 第 " + idx + " 项目标表关联字段不在内建数据源物理列中: " + foreignField
+   585→                            : "joins 第 " + idx + " 项目标表关联字段不在目标表单列中: " + foreignField;
+   586→                    throw new BusinessException(400, label);
+   587→                }
+   588→                String joinFieldValue = text(j, "joinField");
+   589→                if (joinFieldValue == null || !foreignCandidates.contains(joinFieldValue)) {
+   590→                    String label = JoinTargetCatalog.isJoinTargetSystemKey(targetFormKey)
+   591→                            ? "joins 第 " + idx + " 项显示字段不在内建数据源物理列中: " + joinFieldValue
+   592→                            : "joins 第 " + idx + " 项显示字段不在目标表单列中: " + joinFieldValue;
+   593→                    throw new BusinessException(400, label);
+   594→                }
+   595→            }
+   596→            requireJoinField(j, "label", "显示名称", idx);
+   597→            String virtualKey = text(j, "virtualKey");
+   598→            if (virtualKey == null || virtualKey.isBlank()) {
+   599→                throw new BusinessException(400, "joins 第 " + idx + " 项必须指定虚拟列标识 virtualKey");
+   600→            }
+   601→            if (!virtualKeys.add(virtualKey)) {
+   602→                throw new BusinessException(400, "虚拟列 virtualKey 重复: " + virtualKey);
+   603→            }
+   604→            if (mainColumns != null && mainColumns.contains(virtualKey)) {
+   605→                throw new BusinessException(400, "joins 第 " + idx + " 项虚拟列 virtualKey 与主表列冲突: " + virtualKey);
+   606→            }
+   607→        }
+   608→    }
+   609→
+   610→    private void requireJoinField(JsonNode j, String field, String label, int idx) {
+   611→        String v = text(j, field);
+   612→        if (v == null || v.isBlank()) {
+   613→            throw new BusinessException(400, "joins 第 " + idx + " 项必须指定" + label + " " + field);
+   614→        }
+   615→    }
+   616→
+   617→    /**
+   618→     * 已发布表单的物理列候选集合：业务列（column_config）+ 系统列。
+   619→     *
+   620→     * @param formKey         表单 key（null/空白 → null）
+   621→     * @param tenantId        租户
+   622→     * @param withTimeColumns 是否附加 created_at/updated_at（主表候选要；目标表 JOIN 候选不要）
+   623→     * @return 未发布 → null（调用方降级跳过存在性校验）；id 始终在候选中
+   624→     */
+   625→    private Set<String> publishedColumnKeys(String formKey, String tenantId, boolean withTimeColumns) {
+   626→        if (formKey == null || formKey.isBlank()) {
+   627→            return null;
+   628→        }
+   629→        FormDefinition published = formDefRepository
+   630→                .findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, formKey, "PUBLISHED")
+   631→                .orElse(null);
+   632→        if (published == null) {
+   633→            return null;
+   634→        }
+   635→        Set<String> keys = new HashSet<>();
+   636→        keys.add("id");
+   637→        if (withTimeColumns) {
+   638→            keys.add("created_at");
+   639→            keys.add("updated_at");
+   640→        }
+   641→        for (ColumnConfig column : parsePublishedColumnConfig(published.getColumnConfig())) {
+   642→            if (column.getKey() != null && !column.getKey().isBlank()) {
+   643→                keys.add(column.getKey());
+   644→            }
+   645→        }
+   646→        return keys;
+   647→    }
+   648→
+   649→    /**
+   650→     * 解析 column_config JSON 为列映射列表（与 FormDefinitionService.getBusinessColumnsByKey
+   651→     * 同一解析链路：Jackson → ColumnConfig 列表；缺失/非法配置按既有文案 400）。
+   652→     */
+   653→    private List<ColumnConfig> parsePublishedColumnConfig(String columnConfig) {
+   654→        if (columnConfig == null || columnConfig.isBlank()) {
+   655→            throw new BusinessException(400, "业务表单发布前必须配置列映射（column_config）");
+   656→        }
+   657→        try {
+   658→            List<ColumnConfig> columns = objectMapper.readValue(columnConfig,
+   659→                    objectMapper.getTypeFactory().constructCollectionType(List.class, ColumnConfig.class));
+   660→            if (columns == null || columns.isEmpty()) {
+   661→                throw new BusinessException(400, "业务表单列映射不能为空");
+   662→            }
+   663→            return columns;
+   664→        } catch (JsonProcessingException e) {
+   665→            throw new BusinessException(400, "业务表单列映射配置非法: " + e.getOriginalMessage());
+   666→        }
+   667→    }
+   668→
+   669→    /** sql 模式：query/columns/参数白名单复用 SqlTemplateEngine.validate（IllegalArgumentException → 400） */
+   670→    private void validateSqlConfig(JsonNode root) {
+   671→        String query = text(root, "query");
+   672→        List<JoinSqlGenerator.QueryColumn> columns = parseSqlColumns(root.get("columns"));
+   673→        List<String> declaredParams = parseStringList(root.get("params"));
+   674→        try {
+   675→            SqlTemplateEngine.validate(query, columns, declaredParams);
+   676→        } catch (IllegalArgumentException e) {
+   677→            throw new BusinessException(400, e.getMessage());
+   678→        }
+   679→    }
+   680→
+   681→    private List<JoinSqlGenerator.QueryColumn> parseSqlColumns(JsonNode node) {
+   682→        List<JoinSqlGenerator.QueryColumn> out = new ArrayList<>();
+   683→        if (node == null || !node.isArray()) {
+   684→            return out;
+   685→        }
+   686→        for (JsonNode n : node) {
+   687→            if (n == null || !n.isObject()) {
+   688→                continue;
+   689→            }
+   690→            out.add(new JoinSqlGenerator.QueryColumn(
+   691→                    text(n, "key"), text(n, "key"), text(n, "columnType"),
+   692→                    boolVal(n, "sortable"), boolVal(n, "filterable")));
+   693→        }
+   694→        return out;
+   695→    }
+   696→
+   697→    private List<String> parseStringList(JsonNode node) {
+   698→        List<String> out = new ArrayList<>();
+   699→        if (node == null || !node.isArray()) {
+   700→            return out;
+   701→        }
+   702→        for (JsonNode n : node) {
+   703→            if (n != null && n.isTextual() && !n.asText().isBlank()) {
+   704→                out.add(n.asText());
+   705→            }
+   706→        }
+   707→        return out;
+   708→    }
+   709→
+   710→    /** 合并：生成端点 params 之上叠加 queryMode 配置段（config 的 joins / sql 的 query+columns+params 白名单） */
+   711→    private String mergeQueryConfig(String generated, String params) {
+   712→        try {
+   713→            ObjectNode out = (ObjectNode) objectMapper.readTree(generated);
+   714→            JsonNode input = objectMapper.readTree(params);
+   715→            for (String field : List.of("queryMode", "joins", "query", "columns", "params")) {
+   716→                if (input.has(field)) {
+   717→                    out.set(field, input.get(field));
+   718→                }
+   719→            }
+   720→            return out.toString();
+   721→        } catch (JsonProcessingException e) {
+   722→            throw new BusinessException(400, "数据源参数 params 必须是合法 JSON: " + e.getOriginalMessage());
+   723→        }
+   724→    }
+   725→
+   726→    private static String text(JsonNode node, String field) {
+   727→        JsonNode v = node.get(field);
+   728→        return v == null || v.isNull() ? null : v.asText();
+   729→    }
+   730→
+   731→    private static boolean boolVal(JsonNode node, String field) {
+   732→        JsonNode v = node.get(field);
+   733→        return v != null && v.isBoolean() && v.asBoolean();
+   734→    }
+   735→
+   736→    // ==================== 内部工具 ====================
+   737→
+   738→    /**
+   739→     * 内建保护：{@code tenant_id = BUILT_IN_TENANT} 的预置行不允许修改/禁用/删除。
+   740→     * enable 不拦（对已 ENABLED 的内建行是幂等空操作，且拦了反而让前端开关卡死）。
+   741→     */
+   742→    private void requireNotBuiltIn(DataSourceDefinition ds, String action) {
+   743→        if (BuiltInSystemSources.BUILT_IN_TENANT.equals(ds.getTenantId())) {
+   744→            throw new BusinessException(400, "系统内建数据源不允许" + action + ": " + ds.getName());
+   745→        }
+   746→    }
+   747→
+   748→    /** 按类型校验必填项：FORM/WORKFLOW→formKey（sourceKey 由 formKey 派生）；SYSTEM/API/SQL→sourceKey；API→params 合法 JSON */
+   749→    private void validateRequiredFields(String type, String formKey, String sourceKey, String params) {
+   750→        if (TYPE_FORM.equals(type) || TYPE_WORKFLOW.equals(type)) {
+   751→            if (formKey == null || formKey.isBlank()) {
+   752→                throw new BusinessException(400, type + " 类型数据源必须绑定表单 formKey");
+   753→            }
+   754→        } else if (TYPE_SYSTEM.equals(type) || TYPE_API.equals(type) || TYPE_SQL.equals(type)) {
+   755→            if (sourceKey == null || sourceKey.isBlank()) {
+   756→                throw new BusinessException(400, type + " 类型数据源必须填写 sourceKey");
+   757→            }
+   758→            if (TYPE_SYSTEM.equals(type) && !SYSTEM_SOURCE_KEYS.contains(sourceKey)) {
+   759→                throw new BusinessException(400, "未注册的系统数据源: " + sourceKey);
+   760→            }
+   761→            if (TYPE_API.equals(type)) {
+   762→                // LookupFetchConfig 契约：params 须为 JSON 对象且 action 必填
+   763→                if (params == null || params.isBlank()) {
+   764→                    throw new BusinessException(400, "API 数据源参数 params 必须包含 action（API 路径）");
+   765→                }
+   766→                try {
+   767→                    JsonNode node = objectMapper.readTree(params);
+   768→                    if (!node.isObject()) {
+   769→                        throw new BusinessException(400, "API 数据源参数 params 必须是 JSON 对象");
+   770→                    }
+   771→                    JsonNode action = node.get("action");
+   772→                    if (action == null || action.isNull() || action.asText().isBlank()) {
+   773→                        throw new BusinessException(400, "API 数据源参数 params 必须包含 action（API 路径）");
+   774→                    }
+   775→                } catch (BusinessException e) {
+   776→                    throw e;
+   777→                } catch (JsonProcessingException e) {
+   778→                    throw new BusinessException(400, "API 数据源参数 params 必须是合法 JSON: " + e.getOriginalMessage());
+   779→                }
+   780→            }
+   781→            // SQL：仅要求 sourceKey（query 配置在 params 中，DRAFT 阶段可为空，启用后由适配器校验）
+   782→        }
+   783→    }
+   784→
+   785→    /** FORM 数据源启用/重绑前置校验：须存在已发布版本 */
+   786→    private void requirePublishedForm(String tenantId, String formKey) {
+   787→        if (formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(tenantId, formKey, "PUBLISHED")
+   788→                .isEmpty()) {
+   789→            throw new BusinessException(400, "绑定的表单未发布，无法启用: " + formKey);
+   790→        }
+   791→    }
+   792→
+   793→    /** WORKFLOW 数据源启用前置校验：表单存在、已发布且非 BUSINESS（业务表单无流程实例，无法跨实例聚合）。 */
+   794→    private void requireWorkflowForm(String tenantId, String formKey) {
+   795→        if (!formDefRepository.existsByTenantIdAndKey(tenantId, formKey)) {
+   796→            throw new BusinessException(400, "表单不存在: " + formKey);
+   797→        }
+   798→        FormDefinition form = formDefRepository.findFirstByTenantIdAndKeyAndStatusOrderByVersionDesc(
+   799→                        tenantId, formKey, "PUBLISHED")
+   800→                .orElseThrow(() -> new BusinessException(400, "工作流表单必须先发布: " + formKey));
+   801→        if ("BUSINESS".equals(form.getType())) {
+   802→            throw new BusinessException(400, "业务表单不可配置为工作流表单数据源: " + formKey);
+   803→        }
+   804→    }
+   805→}

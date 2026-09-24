@@ -64,6 +64,15 @@ public class DataSourceDefinitionService {
     /** joins[] 主表关联字段合法格式（对齐 Node 新版 JOIN_FIELD_PATTERN；首字符允许下划线，上限 64 字符） */
     private static final Pattern JOIN_FIELD_PATTERN = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
 
+    /**
+     * FORM 查询配置段字段清单（对齐 Node data-source-write.service）。
+     * 双段并存语义：queryMode 标注当前生效段（单表查询=不写 queryMode），
+     * joins/query/columns/params 为草稿段——草稿段随 params 落库供下次迭代，
+     * 运行时 FormQueryConfig.parse 只读 queryMode 对应活跃段，草稿段不参与执行。
+     * create 草稿判定（hasFormQueryDraft）与端点合并（mergeQueryConfig）共用此清单防漂移。
+     */
+    private static final List<String> FORM_QUERY_FIELDS = List.of("queryMode", "joins", "query", "columns", "params");
+
     private final DataSourceDefinitionRepository dsRepository;
     private final FormDefinitionRepository formDefRepository;
     private final PageDefinitionRepository pageRepository;
@@ -133,8 +142,10 @@ public class DataSourceDefinitionService {
         ds.setFormKey(formKey);
         ds.setSourceKey(effSourceKey);
         if (TYPE_FORM.equals(type) || TYPE_SYSTEM.equals(type)) {
-            if (TYPE_FORM.equals(type) && hasQueryModeSegment(params)) {
-                // FORM 带 queryMode 配置段：校验后与自动生成端点合并保存（主表 key = 入参 formKey，对齐 Node create 分支）
+            if (TYPE_FORM.equals(type) && hasFormQueryDraft(params)) {
+                // FORM 携带 query 配置段（queryMode 或任一草稿段）：端点段系统权威重建，
+                // 草稿段原样保留入库（支持迭代修改）；queryMode 缺省（单表查询+草稿）时
+                // validateFormQueryConfig 对活跃段早退不校验（对齐 Node create 分支）
                 validateFormQueryConfig(params, formKey);
                 ds.setParams(mergeQueryConfig(generateParams(type, formKey, sourceKey), params));
             } else {
@@ -178,6 +189,11 @@ public class DataSourceDefinitionService {
         // FORM/WORKFLOW：sourceKey 恒等于 formKey（formKey 权威），忽略入参 sourceKey 差异
         boolean formBound = TYPE_FORM.equals(newType) || TYPE_WORKFLOW.equals(newType);
         String effNewSourceKey = formBound ? newFormKey : newSourceKey;
+        // FORM + 入参 params 非空：与 generateParams 的端点段合并（对齐 Node update 分支）——
+        // 端点段系统权威重建，queryMode/joins/query/columns/params 草稿段原样保留入库
+        if (TYPE_FORM.equals(newType) && params != null && !params.isBlank()) {
+            newParams = mergeQueryConfig(generateParams(newType, newFormKey, effNewSourceKey), newParams);
+        }
         validateRequiredFields(newType, newFormKey, effNewSourceKey, newParams);
         if (formBound && !formDefRepository.existsByTenantIdAndKey(tenantId, newFormKey)) {
             throw new BusinessException(400, "绑定的表单不存在: " + newFormKey);
@@ -452,16 +468,31 @@ public class DataSourceDefinitionService {
         return path;
     }
 
-    // ==================== FORM 查询配置段（queryMode）校验 ====================
+    // ==================== FORM 查询配置段（queryMode + 草稿段）判定与校验 ====================
 
-    /** 判断 params 是否含 queryMode 配置段（非合法 JSON 视为无，由后续校验处理） */
-    private boolean hasQueryModeSegment(String params) {
+    /**
+     * FORM params 是否携带 query 配置段（queryMode 或任一草稿段 joins/query/columns/params）。
+     * <p>
+     * 双段并存语义：前端可能只提交草稿段（如声明式 JOIN 配好后切回单表查询保存，
+     * queryMode 缺省但 joins 保留以便下次迭代），create 路径据此走 mergeQueryConfig
+     * 合并而非纯 generateParams 覆盖（对齐 Node hasFormQueryDraft 与 update 路径行为）。
+     * null/空白/非法 JSON/非 JSON 对象（数组、标量）→ false，交给后续校验或覆盖处理。
+     */
+    private boolean hasFormQueryDraft(String params) {
         if (params == null || params.isBlank()) {
             return false;
         }
         try {
             JsonNode root = objectMapper.readTree(params);
-            return root != null && root.isObject() && root.has("queryMode");
+            if (root == null || !root.isObject()) {
+                return false;
+            }
+            for (String field : FORM_QUERY_FIELDS) {
+                if (root.has(field)) {
+                    return true;
+                }
+            }
+            return false;
         } catch (JsonProcessingException e) {
             return false;
         }
@@ -707,12 +738,12 @@ public class DataSourceDefinitionService {
         return out;
     }
 
-    /** 合并：生成端点 params 之上叠加 queryMode 配置段（config 的 joins / sql 的 query+columns+params 白名单） */
+    /** 合并：生成端点 params 之上叠加 query 配置段（queryMode 活跃段 + joins/query/columns/params 草稿段原样保留） */
     private String mergeQueryConfig(String generated, String params) {
         try {
             ObjectNode out = (ObjectNode) objectMapper.readTree(generated);
             JsonNode input = objectMapper.readTree(params);
-            for (String field : List.of("queryMode", "joins", "query", "columns", "params")) {
+            for (String field : FORM_QUERY_FIELDS) {
                 if (input.has(field)) {
                     out.set(field, input.get(field));
                 }

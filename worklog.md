@@ -1323,3 +1323,43 @@ Stage Summary:
 - 关键坑位：buildSelect/buildCount 的 params 必须在 JOIN 循环前创建（Java 原实现先 WHERE 后 params，直接加 JOIN 租户参会错序）——已按「JOIN 租户参→主租户→筛选→关键词→LIMIT/OFFSET」重排并推演验证
 - 行为收紧说明（与 Node 一致，非缺陷）：存量配置若 localField 不在主表列中/标识符非法，运行时与保存期均改为 400（原 Java 运行时直接拼进 SQL）；FORM 目标预览 SQL 将带 AND j1.tenant_id = ?（params 同步带租户值），与 Node previewJoinSql 同构
 - 遗留风险：沙箱无 javac/maven 全部为静态审查（配平+逐引用 grep+消息比对+参数推演），未经编译；建议主代理有构建环境时先 mvn -o compile 再回归 bizdata/datasource 两包行为（含双 FORM 组分组、SYSTEM 目标、未发布目标降级三场景）；Node/前端工作区未提交改动系上一批次产物，与本任务无关未触碰
+---
+Task ID: 52-a
+Agent: Java backend sync agent (Z.ai Code)
+Task: Java 端静态同步「声明式 SQL 原始输入保存（双段并存）」——create 路径 hasFormQueryDraft
+
+Work Log:
+- 【事实源精读】Node data-source-write.service.ts 当前工作区版本：hasFormQueryDraft（L614，5 字段 some(f in record)）、create 分支（L112-119，hasFormQueryDraft→validateFormQueryConfig→mergeQueryConfig(generateParams(type,formKey,sourceKey),params)）、update 分支（L187-190，FORM+params 非空→mergeQueryConfig(generateParams(newType,newFormKey,effNewSourceKey),newParams)，置于 validateRequiredFields 之前）、validateFormQueryConfig（L404，queryMode null/undefined/空白早退）、mergeQueryConfig（L703，同 5 字段白名单）
+- 【Java create 分支改判定】DataSourceDefinitionService.create：hasQueryModeSegment(params) → hasFormQueryDraft(params)（原判据只认 queryMode 存在，会漏「queryMode 缺省但 joins 草稿保留」的保存——该场景原走纯 generateParams 覆盖把草稿丢掉）；注释同步双段并存语义（端点段权威重建/草稿段原样保留/queryMode 缺省时 validateFormQueryConfig 活跃段早退）
+- 【新增 hasFormQueryDraft】对齐 Node 逐行为：null/isBlank→false；JsonProcessingException→false；root==null/!isObject()→false（覆盖 JSON 数组/标量/NullNode）；FORM_QUERY_FIELDS 逐字段 root.has()（key 存在即 true，含 null 值字段，等价 `'f' in record`）。沿用既有实例方法风格（objectMapper 为注入字段，与原 hasQueryModeSegment 同构，未强行 static）
+- 【新增 FORM_QUERY_FIELDS 常量】private static final List.of("queryMode","joins","query","columns","params")（L74），hasFormQueryDraft 与 mergeQueryConfig 共用（原 mergeQueryConfig 内联 List.of 同清单改为引用常量）——单一事实源防两处清单漂移；注释写明双段并存语义（queryMode 标注活跃段/单表查询不写/草稿段只落库不执行）
+- 【补齐 update 端点段权威重建】Java update 原先 params 直接落库（无 merge，与 Node 之前已提交版本漂移）——按 Node update 分支补：effNewSourceKey 计算后、validateRequiredFields 前，`TYPE_FORM.equals(newType) && params != null && !params.isBlank()` → newParams = mergeQueryConfig(generateParams(newType, newFormKey, effNewSourceKey), newParams)；源 key 用 effNewSourceKey（对齐 Node update；create 路径两端均用原始 sourceKey，逐分支核对一致）；merge 后的 newParams 流入 validateRequiredFields 与 validateFormQueryConfig（顺序：merge→validateRequiredFields→表单存在→validateFormQueryConfig，与 Node 逐步对齐）
+- 【确认项 4：validateFormQueryConfig 早退】Java L495-497：modeNode==null/isNull/asText().isBlank() → return（无 queryMode 段早退，草稿段不触发校验）——与 Node `modeNode===null||undefined||String(modeNode).trim()===''` 逐条等价，未改动
+- 【确认项 5：运行时忽略草稿】FormQueryConfig.parse（form/bizdata/FormQueryConfig.java L87-88）：queryMode 缺省/未知 → isConfigMode/isSqlMode 均 false、joins=query=List.of()，调用方回退单表查询，草稿段不参与执行——已如此，未改运行时行为
+- 【清理】hasQueryModeSegment 全库 grep 仅 1 调用点+1 定义（backend 无 src/test，无测试引用）→ 替换后原方法删除，无死代码
+- 【静态自查（沙箱无 javac/maven/jdk）】①括号配平：去注释/字符串后 {} 153/153、() 545/545、[] 0/0 全平衡；②逐引用 grep：hasQueryModeSegment 残留 0、hasFormQueryDraft 定义@481+调用@145（1:1）、FORM_QUERY_FIELDS 定义@74+消费@490/@746；③git status backend/ 仅本文件改动（+39/−8，共 5 处 hunk）；④与 Node 语义逐条比对：create 判定/合并/覆盖三分支、update 合并条件与 generateParams 实参（newFormKey+effNewSourceKey）、validateFormQueryConfig 双参调用三路径（create=入参 formKey/update=newFormKey/enable=ds.formKey）不变、mergeQueryConfig 字段白名单及 `has→set` 覆盖语义（含 null 值字段）一致
+- 【边界用例推演】①FORM create 带 joins 无 queryMode：旧=覆盖丢弃，新=validateFormQueryConfig 早退后 merge 保留 joins（本次修复目标）；②FORM create queryMode=config：行为不变（validateConfigJoins 照跑）；③FORM update 只传草稿段：merge 后端点段重建+草稿保留（对齐 Node）；④params 非法 JSON：hasFormQueryDraft=false 走纯 generateParams（create，与 Node 同）；update 则 mergeQueryConfig 抛 400（与 Node 同）；⑤SYSTEM/API/SQL/WORKFLOW 路径零变化
+
+Stage Summary:
+- Java 端与 Node「双段并存」保存语义对齐完成：①create 判定 hasQueryModeSegment→hasFormQueryDraft（草稿段 joins/query/columns/params 任一存在即走合并，单表查询+草稿不再被覆盖丢弃）；②update 补齐端点段权威重建（FORM+params 非空→mergeQueryConfig，此前 Java 缺失该步是本批最大漂移）；③5 字段清单收敛为 FORM_QUERY_FIELDS 单一事实源
+- 未触碰运行时：FormQueryConfig.parse/JoinSqlGenerator/BizDataSupport 零改动，queryMode 缺省/未知时草稿段照旧不参与执行（已确认项 4/5 原本就对齐）
+- 风险：沙箱无编译环境，全部改动仅静态审查（括号配平+逐引用 grep+Node/Java 逐行为比对+边界用例推演）；建议主代理有构建环境时先 mvn -o compile，再回归三场景：FORM create 带 joins 无 queryMode、FORM update 换绑表单（端点段应随新 formKey 重建）、FORM update 不传 params（null→保留原值不合并）
+- 改动清单：仅 backend/src/main/java/com/workflow/engine/datasource/DataSourceDefinitionService.java（+39/−8）；其余 Node/前端工作区改动为主控上一批次产物，未触碰
+
+---
+Task ID: 52
+Agent: Z.ai Code (main)
+Task: ①PAT 到手后恢复 push（沙箱重置仓库重建）②声明式 SQL 原始输入保存（双段并存）③字段元数据拖拽排序
+
+Work Log:
+- push 恢复：沙箱重置后 /home/z/my-project 被重建为外层 checkpoint 仓库（无共同祖先、1626 个 mode 噪音、267 文件丢失、backend 124 个 Java 文件缺失）；在 workflow_lowcode 内 git init 重建仓库，fetch origin/main 后 soft reset + 恢复全部丢失文件 + core.fileMode=false 剥离 mode 噪音，收敛为干净 11 文件 diff（方案A +599/-101 含 worklog），提交 47fd125 推送成功
+- 顺手修复：恢复的测试文件与 src 漂移（UnifiedDataSourceAdapter 构造器 5→6 参，2 个 spec 补第 6 参）；update 路径 FORM params 端点段权威重建已随 47fd125 入库
+- 任务 52 调查→实施→验证全链路（详见 workflow_lowcode/docs/ops/worklog.md Task 52 节）：双段并存（前端 FormJoinConfig sync + buildFormParams + Node hasFormQueryDraft + Java 同步）与拖拽排序（useTableDragSort composable + 三处表格 + sortablejs 显式依赖）
+- 调试坑位：①agent-browser drag 触发 onEnd 双次（drop+dragend 双完成路径）重复 splice 抵消 → endHandled 单次守卫；②就地 splice 不触发 el-table 重渲染（setData 依赖引用）→ 引用替换；③Sortable 外部移动 DOM 后 vdom 失配 → WeakMap row-key keyed patch 收敛；④AI 悬浮球遮挡按钮（老坑复现，先隐藏）；⑤「数据」按钮跳页（老坑复现）
+- E2E 实证：双段落库（queryMode=config + joins + query 草稿）、转 SQL 模板按钮、单表切换 queryMode 移除草稿保留、SQL 元数据拖拽保存后 params.columns 与 metadata 端点顺序一致、FORM joins 拖拽换序入库；测试数据全部清理（drag_test_sql 删除、办公用品恢复端点段原始形态）
+- 提交 c5cd45d 推送成功（47fd125..c5cd45d）
+
+Stage Summary:
+- 两项用户需求全部交付并浏览器端到端实证；仓库结构与远程历史已完全对齐（main == origin/main == c5cd45d）
+- 前端 111/111、后端 74/74；全量套件 2 个预存失败（PageDesigner.card-mode / PageListPage 断言漂移，早于本任务）留给下轮巡检修复
+- 巡检 cron 待重建（沙箱重置后旧 job 失效）

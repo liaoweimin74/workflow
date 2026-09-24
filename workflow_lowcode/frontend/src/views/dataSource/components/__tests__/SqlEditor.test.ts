@@ -12,6 +12,7 @@ import type { ColumnConfigItem } from '@/api/bizData'
 vi.mock('@element-plus/icons-vue', () => ({
   Plus: { name: 'Plus', render: () => h('span', '+') },
   Delete: { name: 'Delete', render: () => h('span', '×') },
+  Rank: { name: 'Rank', render: () => h('span', '⇅') },
 }))
 
 function makeColumn(key: string, label?: string): ColumnConfigItem {

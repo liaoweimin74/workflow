@@ -1055,3 +1055,23 @@ Stage Summary:
 - 表单设计器四态暗色补全完成，用户三反馈全数解决并截图实证
 - 沉淀：#app 继承断层是暗色「文字看不清」类问题的总根（上溯多个任务的零散暗色问题可能均源于此）；全局 CSS 覆盖层必须以 ._fc-designer 前缀保证特异性；vendor SFC scoped 样式（如 AiPanel）只能改源文件
 - 风险备忘：fc-designer 画布内组件选中描边仍为 form-create 默认蓝（可读性无碍，暂留）；后续若做选中态主题化可在 vendor/index.css 覆盖 .draggable-drag 边框
+---
+Task ID: 45
+Agent: 主控（Z.ai Code）
+Task: 用户「ai助手的后端llm配置改成平台内置的模型」——NestJS 自建 AI 模块，内化两套外部 LLM 依赖
+
+Work Log:
+- 【侦察·发现双重外依赖】①小智助手调 POST /api/v1/ai/chat（SSE 协议 meta→tool_call→tool_result→message→done/error），该端点只在已停用 Java 后端（外部 DeepSeek apiKey 配置）实现，NestJS 现役后端 404；②fc-designer 内置 AiPanel 默认调 form-create 官方外部云 api.form-create.com
+- 【SDK 验证】backend-node bun add z-ai-web-dev-sdk；连通测试模型名 glm-4-plus；确认无原生 function calling（skill 指引）→ agent 用文本协议模拟工具调用（系统提示约定 {"tool","args"} JSON 响应 + TOOL_RESULT 回灌循环 MAX_STEPS=5）
+- 【NestJS 新模块 backend-node/src/ai/（12 文件自包含）】zai-llm.service（client 缓存+AiError 错误码）；ai-agent.service（对齐 Java AiAgentService：BASE_PROMPT+页面白名单拼装+导航收集+页面名兜底匹配 MAX_NAVIGATIONS=3）；tools/（open_page 白名单校验、generate_form_schema 异步工具）；formgen 三件套移植（英文 prompt/类型白名单/字段 snake_case 归一化/去重重命名/标题回填/warnings）；ai-chat.controller（SSE 帧格式与 Java 版逐字节对齐 event:xxx\ndata:{json}\n\n）；fc-chat.controller（AiPanel 兼容：OpenAI delta 流+[DONE]+[FC_TOOL] 思考步骤+fcRuleDiff 围栏按边界独立成块）
+- 【关键坑·AiPanel 围栏拆包】AiPanel 对每个 delta chunk 做 startsWith('```fcRuleDiff') 检查触发 DIFF 包装（newJson=chunk.slice(13,-3)），120 字符等长切块把围栏切碎导致 DIFF 不渲染——splitByDiffFence 按围栏边界重新拆包修复（围栏单 chunk 归一格式 ```fcRuleDiff\n<JSON>\n```）
+- 【前端接线】vendor AiPanel.vue 三处：默认 api→/api/v1/ai/fc-chat；token 默认取 localStorage access_token（过 JwtAuthGuard）；fetch 补 X-Tenant-Id: default
+- 【部署·自动愈合实证】bun run build → kill 8080 → supervisor 周期检查自动补位（新进程为 next-server 树内子进程 PPID 合法，~20s 复活）——Task 40 铁律的天然解法：NestJS 挂了会被 portal 内 supervisor 自动 respawn
+- 【E2E 全绿（curl + agent-browser）】①小智对话：中文回复+内联 Markdown 链接渲染+点击跳转 /system/user+导航标签去重过滤（正文已含链接时按设计不重复）；②open_page 工具：tool_call/tool_result 事件+白名单校验；③generate_form_schema：请假单 5 字段（select 带 options、必填校验、warnings 空）+「✅已应用到当前表单」+aiActionBus 画布回填实证；④AiPanel：思考步骤+DIFF 差异块+导入按钮→手机号字段落画布
+- 【测试数据】保留「AI小智测试表单」(ai_xiaozhi_test) 作为用户演示入口
+- 【入库】commit 5ea3c47 已 push（f518df0..5ea3c47），15 文件 +1039/-3；docs/ops/worklog.md 同步本记录
+
+Stage Summary:
+- 平台 AI 能力 100% 内化：小智助手（对话/导航/表单生成）与设计器 AiPanel（规则 diff 编辑）全部跑平台内置 GLM（glm-4-plus），零外部 API key 配置，开箱即用
+- 架构沉淀：SDK 无 function calling 时的文本协议工具模拟模式；vendor 流式协议对 chunk 边界的隐式约束（startsWidth/slice 截取）必须逐字节对齐；supervisor 自动补位使 8080 具备自愈能力
+- 风险备忘：fc-chat 系统提示约束的 rule 完整性依赖模型自觉（GLM 表现稳定）；后续可选做 server 端 rule 合并校验

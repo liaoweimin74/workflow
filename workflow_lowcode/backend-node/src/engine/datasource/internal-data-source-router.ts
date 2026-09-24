@@ -2,14 +2,15 @@ import { Injectable } from '@nestjs/common'
 import { BusinessException } from '../../common/exception/business-exception'
 import { getTenantId } from '../../framework/tenant/tenant-context'
 import type { DataSourceRef } from './adapter/data-source-adapter'
+import { BUILT_IN_SOURCE_KEYS, mapSystemInternalPath } from './service/system-source-catalog'
 
 /**
  * SYSTEM 数据源允许的 `sourceKey`，对齐 Java `InternalDataSourceRouter.SYSTEM_SOURCE_KEYS`。
  *
- * 这是一份 **allowlist**：`internal://` 只允许派发到已注册的控制器方法，
- * 防止它被当成任意路径探测（Java 注释里写明是 SSRF-safe 的意图）。
+ * 白名单与内建目录同源（`BUILT_IN_SOURCE_KEYS`，8 个）：`internal://` 只允许派发
+ * 到已注册的控制器方法，防止它被当成任意路径探测（Java 注释里写明是 SSRF-safe 的意图）。
  */
-const SYSTEM_SOURCE_KEYS = new Set(['dept-tree', 'user-tree'])
+const SYSTEM_SOURCE_KEYS = BUILT_IN_SOURCE_KEYS
 
 /** 内部端点描述：目标 controller + 方法 + HTTP 方法 + REST 路径。 */
 export interface ResolvedEndpoint {
@@ -93,6 +94,8 @@ function resolveSystem(sourceKey: string | null, operation: string): ResolvedEnd
   if (!SYSTEM_SOURCE_KEYS.has(sourceKey)) {
     throw new BusinessException(400, `未注册的系统数据源: ${sourceKey}`)
   }
+  // 历史两个 key 的操作面不对称（dept-tree 无 get/update，user-tree 无 update），
+  // 逐字保留各自的 default 报错；新 6 个 key 的操作面只有 list/get（只读数据源）。
   if (sourceKey === 'dept-tree') {
     switch (operation) {
       case 'list':
@@ -121,37 +124,59 @@ function resolveSystem(sourceKey: string | null, operation: string): ResolvedEnd
         throw new BusinessException(400, `dept-tree 不支持的操作: ${operation}`)
     }
   }
+  if (sourceKey === 'user-tree') {
+    switch (operation) {
+      case 'list':
+        return {
+          controller: 'SystemInternalController',
+          method: 'users',
+          httpMethod: 'GET',
+          path: '/api/v1/internal/system/users',
+        }
+      case 'get':
+        return {
+          controller: 'SystemInternalController',
+          method: 'getUser',
+          httpMethod: 'GET',
+          path: '/api/v1/internal/system/users/{id}',
+        }
+      case 'create':
+        return {
+          controller: 'SystemInternalController',
+          method: 'createUser',
+          httpMethod: 'POST',
+          path: '/api/v1/internal/system/user',
+        }
+      case 'delete':
+        return {
+          controller: 'SystemInternalController',
+          method: 'deleteUser',
+          httpMethod: 'DELETE',
+          path: '/api/v1/internal/system/user/{id}',
+        }
+      // user-tree 仅支持 list/get/create/delete（无 update endpoint）
+      default:
+        throw new BusinessException(400, `user-tree 不支持的操作: ${operation}`)
+    }
+  }
+  // 新 6 个内建系统数据源（菜单/角色/字典/流程定义/流程实例/待办任务）：只读，list/get
+  const mapped = mapSystemInternalPath(sourceKey)
   switch (operation) {
     case 'list':
       return {
         controller: 'SystemInternalController',
-        method: 'users',
+        method: 'systemSourceList',
         httpMethod: 'GET',
-        path: '/api/v1/internal/system/users',
+        path: `/api/v1/internal/system/${mapped}`,
       }
     case 'get':
       return {
         controller: 'SystemInternalController',
-        method: 'getUser',
+        method: 'systemSourceGet',
         httpMethod: 'GET',
-        path: '/api/v1/internal/system/users/{id}',
+        path: `/api/v1/internal/system/${mapped}/{id}`,
       }
-    case 'create':
-      return {
-        controller: 'SystemInternalController',
-        method: 'createUser',
-        httpMethod: 'POST',
-        path: '/api/v1/internal/system/user',
-      }
-    case 'delete':
-      return {
-        controller: 'SystemInternalController',
-        method: 'deleteUser',
-        httpMethod: 'DELETE',
-        path: '/api/v1/internal/system/user/{id}',
-      }
-    // user-tree 仅支持 list/get/create/delete（无 update endpoint）
     default:
-      throw new BusinessException(400, `user-tree 不支持的操作: ${operation}`)
+      throw new BusinessException(400, `${sourceKey} 不支持的操作: ${operation}`)
   }
 }

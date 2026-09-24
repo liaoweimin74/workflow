@@ -1,0 +1,1820 @@
+     1→<template>
+     2→  <div class="data-source-list-page">
+     3→    <el-card class="ds-list-card" style="overflow: hidden">
+     4→      <SearchTable
+     5→        ref="tableRef"
+     6→        :search-fields="searchFields"
+     7→        :columns="columns"
+     8→        :action-buttons="actionButtons"
+     9→        :fetch-api="fetchApi"
+    10→        :default-page-size="20"
+    11→        :max-visible-buttons="5"
+    12→      >
+    13→        <template #default>
+    14→          <el-button type="primary" :icon="Plus" v-permission="'data-source:manage'" @click="openCreate">
+    15→            新建
+    16→          </el-button>
+    17→        </template>
+    18→        <template #type="{ row }">
+    19→          <el-tag :type="typeTagType(row.type)">
+    20→            {{ typeLabel(row.type) }}
+    21→          </el-tag>
+    22→        </template>
+    23→        <template #bound="{ row }">
+    24→          <span>{{ row.formKey || row.sourceKey || '—' }}</span>
+    25→        </template>
+    26→        <template #status="{ row }">
+    27→          <el-tag :type="statusTagType(row.status)">
+    28→            {{ statusLabel(row.status) }}
+    29→          </el-tag>
+    30→        </template>
+    31→        <template #updatedAt="{ row }">
+    32→          {{ formatDate(row.updatedAt) }}
+    33→        </template>
+    34→      </SearchTable>
+    35→    </el-card>
+    36→
+    37→      <!-- 查看/新建/编辑数据源：内嵌表单覆盖层（formMode=inline 样式） -->
+    38→      <div v-if="inlineVisible" class="inline-form-overlay">
+    39→        <div class="inline-form-container">
+    40→          <div class="inline-form-header">
+    41→            <span class="inline-form-title">{{ dialogTitle }}</span>
+    42→            <el-button text :icon="Close" @click="inlineVisible = false" />
+    43→          </div>
+    44→          <div class="inline-form-body">
+    45→        <el-form :model="form" label-width="auto" label-position="top">
+    46→          <!-- 标识 / 数据源名称 / 数据源类型 / 业务表单：四个输入项一行，label 在输入项上方 -->
+    47→          <el-row :gutter="16">
+    48→            <el-col :span="6">
+    49→              <!-- ============ 统一标识：FORM/SYSTEM 只读，API/SQL 手动填写 ============ -->
+    50→              <el-form-item label="标识">
+    51→                <template v-if="form.type === 'FORM' || form.type === 'WORKFLOW'">
+    52→                  <el-input :model-value="form.formKey" disabled placeholder="表单 key 即数据源标识" data-testid="ds-key-input" />
+    53→                </template>
+    54→                <template v-else-if="form.type === 'SYSTEM'">
+    55→                  <el-select v-model="form.sourceKey" placeholder="选择系统结构" style="width: 100%" disabled>
+    56→                    <el-option label="部门树" value="dept-tree" />
+    57→                    <el-option label="用户列表" value="user-tree" />
+    58→                  </el-select>
+    59→                </template>
+    60→                <template v-else>
+    61→                  <el-input
+    62→                    v-model="form.sourceKey"
+    63→                    data-testid="ds-source-key-input"
+    64→                    placeholder="请输入唯一标识，如 external-stock（租户内唯一）"
+    65→                    :disabled="isReadonlyForm"
+    66→                  />
+    67→                </template>
+    68→              </el-form-item>
+    69→            </el-col>
+    70→            <el-col :span="6">
+    71→              <el-form-item label="数据源名称">
+    72→                <el-input v-model="form.name" placeholder="请输入数据源名称" maxlength="50" :disabled="isReadonlyForm" />
+    73→              </el-form-item>
+    74→            </el-col>
+    75→            <el-col :span="6">
+    76→              <el-form-item label="数据源类型">
+    77→                <template v-if="!editingId && !viewOnly">
+    78→                  <el-radio-group v-model="form.type">
+    79→                    <el-radio-button value="API">第三方 API</el-radio-button>
+    80→                    <el-radio-button value="SQL">SQL 查询</el-radio-button>
+    81→                  </el-radio-group>
+    82→                </template>
+    83→                <template v-else>
+    84→                  <el-tag :type="typeTagType(form.type)">{{ typeLabel(form.type) }}</el-tag>
+    85→                </template>
+    86→              </el-form-item>
+    87→            </el-col>
+    88→            <el-col :span="6">
+    89→              <!-- ============ 业务表单：API/SQL 可选绑定（默认表单提供 CRUD schema），FORM/WORKFLOW 固定 ============ -->
+    90→              <el-form-item>
+    91→                <template #label>
+    92→                  <span style="display: inline-flex; align-items: center" data-testid="ds-form-key-label">
+    93→                    业务表单
+    94→                    <el-tooltip
+    95→                      v-if="form.type === 'SQL' || form.type === 'API'"
+    96→                      content="有值时合并表单列，CRUD 映射到主表"
+    97→                      placement="top"
+    98→                    >
+    99→                      <el-icon data-testid="ds-form-key-hint" class="sql-key-hint-icon"><QuestionFilled /></el-icon>
+   100→                    </el-tooltip>
+   101→                  </span>
+   102→                </template>
+   103→                <template v-if="form.type === 'FORM'">
+   104→                  <el-select v-model="form.formKey" placeholder="选择已发布的业务表单" filterable style="width: 100%" disabled>
+   105→                    <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+   106→                  </el-select>
+   107→                </template>
+   108→                <template v-else-if="form.type === 'WORKFLOW'">
+   109→                  <el-select v-model="form.formKey" placeholder="选择已发布的工作流表单" filterable style="width: 100%" disabled>
+   110→                    <el-option v-for="f in publishedWorkflowForms" :key="f.key" :label="f.name" :value="f.key" />
+   111→                  </el-select>
+   112→                </template>
+   113→                <template v-else-if="form.type === 'SYSTEM'">
+   114→                  <el-input disabled placeholder="系统数据源无需绑定业务表单" value="" />
+   115→                </template>
+   116→                <template v-else-if="form.type === 'SQL' || form.type === 'API'">
+   117→                  <el-select
+   118→                    v-model="form.formKey"
+   119→                    placeholder="绑定主表单（可选）"
+   120→                    filterable
+   121→                    clearable
+   122→                    style="width: 100%"
+   123→                    :disabled="isReadonlyForm"
+   124→                  >
+   125→                    <el-option v-for="f in publishedForms" :key="f.key" :label="f.name" :value="f.key" />
+   126→                  </el-select>
+   127→                </template>
+   128→              </el-form-item>
+   129→            </el-col>
+   130→          </el-row>
+   131→        </el-form>
+   132→
+   133→        <el-tabs v-model="activeTab" @tab-click="onTabClick" style="margin-top: 4px">
+   134→          <el-tab-pane label="接口配置" name="config">
+   135→            <!-- 可滚动操作区 -->
+   136→
+   137→            <div class="ops-scroll">
+   138→
+   139→              <!-- ===== API：可编辑表单 ===== -->
+   140→              <template v-if="form.type === 'API'">
+   141→        <el-form :model="form" label-width="110px" label-position="left">
+   142→                  <el-form-item :label="opLabel.list">
+   143→                    <div class="op-editor">
+   144→                      <el-input v-model="apiOps.list.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
+   145→                      <el-select v-model="apiOps.list.method" style="width: 110px" :disabled="isReadonlyForm">
+   146→                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+   147→                      </el-select>
+   148→                      <el-input v-model="apiOps.list.parse" placeholder="列表解析（如 records / content / data.records）" style="width: 200px" :disabled="isReadonlyForm" />
+   149→                      <el-input v-model="apiOps.list.totalParse" placeholder="总数解析（留空取数组长度）" style="width: 180px" :disabled="isReadonlyForm" />
+   150→                    </div>
+   151→                  </el-form-item>
+   152→
+   153→                  <el-form-item :label="opLabel.get">
+   154→                    <div class="op-editor">
+   155→                      <el-input v-model="apiOps.get.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+   156→                      <el-select v-model="apiOps.get.method" style="width: 110px" :disabled="isReadonlyForm">
+   157→                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+   158→                      </el-select>
+   159→                    </div>
+   160→                  </el-form-item>
+   161→
+   162→                  <el-form-item :label="opLabel.create">
+   163→                    <div class="op-editor">
+   164→                      <el-input v-model="apiOps.create.action" placeholder="如 /v1/products" style="width: 260px" :disabled="isReadonlyForm" />
+   165→                      <el-select v-model="apiOps.create.method" style="width: 110px" :disabled="isReadonlyForm">
+   166→                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+   167→                      </el-select>
+   168→                    </div>
+   169→                  </el-form-item>
+   170→
+   171→                  <el-form-item :label="opLabel.update">
+   172→                    <div class="op-editor">
+   173→                      <el-input v-model="apiOps.update.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+   174→                      <el-select v-model="apiOps.update.method" style="width: 110px" :disabled="isReadonlyForm">
+   175→                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+   176→                      </el-select>
+   177→                    </div>
+   178→                  </el-form-item>
+   179→
+   180→                  <el-form-item :label="opLabel.delete">
+   181→                    <div class="op-editor">
+   182→                      <el-input v-model="apiOps.delete.action" placeholder="如 /v1/products/{id}" style="width: 260px" :disabled="isReadonlyForm" />
+   183→                      <el-select v-model="apiOps.delete.method" style="width: 110px" :disabled="isReadonlyForm">
+   184→                        <el-option v-for="m in HTTP_METHODS" :key="m" :label="m" :value="m" />
+   185→                      </el-select>
+   186→                    </div>
+   187→                  </el-form-item>
+   188→
+   189→                  <el-form-item label="搜索参数">
+   190→                    <div class="op-editor">
+   191→                      <el-input v-model="form.searchParam" placeholder="搜索参数名（如 kw，默认 keyword）" style="width: 200px" :disabled="isReadonlyForm" />
+   192→                      <el-input v-model="form.keywordColumn" placeholder="搜索列名（如 name）" style="width: 200px" :disabled="isReadonlyForm" />
+   193→                      <el-select v-model="form.pageBase" style="width: 130px" :disabled="isReadonlyForm">
+   194→                        <el-option label="页码从 1 开始" :value="1" />
+   195→                        <el-option label="页码从 0 开始" :value="0" />
+   196→                      </el-select>
+   197→                    </div>
+   198→                  </el-form-item>
+   199→
+   200→                  <el-form-item label="固定参数 JSON">
+   201→                    <el-input v-model="form.data" placeholder='可选，如 {"dept":"IT"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
+   202→                  </el-form-item>
+   203→                  <el-form-item label="请求头 JSON">
+   204→                    <el-input v-model="form.headers" placeholder='可选，如 {"X-Api-Key":"abc"}' rows="2" type="textarea" :disabled="isReadonlyForm" />
+   205→                  </el-form-item>
+   206→                </el-form>
+   207→              </template>
+   208→
+   209→              <!-- ===== SQL：可视化配置/SQL 模式按钮切换 ===== -->
+   210→              <template v-else-if="form.type === 'SQL'">
+   211→                <el-radio-group v-model="sqlConfig.queryMode" style="margin-bottom: 12px" @change="onSqlModeChange">
+   212→                  <el-radio-button value="visual">可视化配置</el-radio-button>
+   213→                  <el-radio-button value="sql">SQL 模式</el-radio-button>
+   214→                </el-radio-group>
+   215→                <div v-if="sqlConfig.queryMode === 'visual'">
+   216→                  <el-alert v-if="sqlConfig.isStale" title="SQL 已手动修改，可视化配置已锁定" type="warning" show-icon :closable="false" style="margin-bottom: 12px">
+   217→                    <template #default>
+   218→                      <el-button size="small" type="primary" plain @click="resetToVisual">重置为可视化</el-button>
+   219→                    </template>
+   220→                  </el-alert>
+   221→                  <VisualQueryBuilder
+   222→                    v-if="!sqlConfig.isStale"
+   223→                    v-model="sqlConfig.visual"
+   224→                    v-model:params="sqlConfig.declaredParams"
+   225→                    :tables="visualTableCandidates"
+   226→                    :table-fields="sqlTableFields"
+   227→                    :disabled="isReadonlyForm"
+   228→                  />
+   229→                </div>
+   230→                <div v-else>
+   231→                  <SqlEditor
+   232→                    v-model="sqlConfig.queryText"
+   233→                    v-model:columns="sqlConfig.declaredColumns"
+   234→                    v-model:params="sqlConfig.declaredParams"
+   235→                    :disabled="isReadonlyForm"
+   236→                    @update:model-value="markSqlEdited"
+   237→                  />
+   238→                </div>
+   239→              </template>
+   240→
+   241→              <!-- ===== FORM / SYSTEM：只读端点展示 ===== -->
+   242→              <template v-else-if="generateEndpoints()">
+   243→                <div class="auto-params-display">
+   244→                  <div v-for="(op, name) in generateEndpoints()" :key="name" class="op-row">
+   245→                    <el-tag :type="op.readonly ? 'info' : op.method === 'GET' ? 'primary' : op.method === 'POST' ? 'success' : 'warning'" size="small">
+   246→                      {{ op.method }}
+   247→                    </el-tag>
+   248→                    <code>{{ op.action }}</code>
+   249→                    <span class="op-label">（{{ name }}）</span>
+   250→                    <el-tag v-if="op.readonly" type="danger" size="small">只读</el-tag>
+   251→                    <template v-if="op.parse">
+   252→                      <span class="op-meta">parse: {{ op.parse }}</span>
+   253→                    </template>
+   254→                    <template v-if="op.totalParse">
+   255→                      <span class="op-meta">totalParse: {{ op.totalParse }}</span>
+   256→                    </template>
+   257→                  </div>
+   258→                </div>
+   259→                <!-- FORM：关联查询配置（单表 / 声明式 JOIN / SQL 模板 三模式） -->
+   260→                <template v-if="form.type === 'FORM'">
+   261→                  <el-divider content-position="left">关联查询配置</el-divider>
+   262→                  <FormJoinConfig
+   263→                    v-model="formJoin"
+   264→                    :main-form-key="form.formKey"
+   265→                    :target-form-options="formJoinTargets"
+   266→                    :disabled="formJoinDisabled"
+   267→                  />
+   268→                </template>
+   269→              </template>
+   270→
+   271→            </div>
+   272→          </el-tab-pane>
+   273→
+   274→          <el-tab-pane label="字段元数据" name="metadata">
+   275→            <div class="metadata-section">
+   276→              <template v-if="isEditableType">
+   277→                <div class="metadata-toolbar-inline">
+   278→                  <el-button v-if="form.type === 'SQL'" size="small" type="primary" plain :loading="probeLoading" @click="handleExploreSql">
+   279→                    获取字段
+   280→                  </el-button>
+   281→                  <el-button v-else-if="form.type === 'API'" size="small" type="primary" plain :loading="probeLoading" @click="handleExploreApi">
+   282→                    推断字段
+   283→                  </el-button>
+   284→                  <el-button v-if="form.formKey" size="small" plain :loading="overlayLoading" @click="handleOverlayFromForm">
+   285→                    从主表单覆盖
+   286→                  </el-button>
+   287→                </div>
+   288→                <el-table :data="metadataColumns" size="small" border style="width: 100%" :max-height="300">
+   289→                  <el-table-column label="标识" min-width="120">
+   290→                    <template #default="{ row }">
+   291→                      <el-input v-model="row.key" placeholder="标识" size="small" />
+   292→                    </template>
+   293→                  </el-table-column>
+   294→                  <el-table-column label="字段名" min-width="130">
+   295→                    <template #default="{ row }">
+   296→                      <el-input v-model="row.label" placeholder="字段名" size="small" />
+   297→                    </template>
+   298→                  </el-table-column>
+   299→                  <el-table-column label="DB类型" min-width="100">
+   300→                    <template #default="{ row }">
+   301→                      <el-select v-model="row.columnType" clearable filterable placeholder="—" size="small" style="width: 100%">
+   302→                        <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+   303→                      </el-select>
+   304→                    </template>
+   305→                  </el-table-column>
+   306→                  <el-table-column label="长度" width="80">
+   307→                    <template #default="{ row }">
+   308→                      <el-input-number v-model="row.length" :min="0" :max="10000" controls-position="right" size="small" style="width: 100%" />
+   309→                    </template>
+   310→                  </el-table-column>
+   311→                  <el-table-column label="精度" width="70">
+   312→                    <template #default="{ row }">
+   313→                      <el-input-number v-model="row.scale" :min="0" :max="10" controls-position="right" size="small" style="width: 100%" />
+   314→                    </template>
+   315→                  </el-table-column>
+   316→                  <el-table-column label="必填" width="55" align="center">
+   317→                    <template #default="{ row }">
+   318→                      <el-checkbox v-model="row.required" />
+   319→                    </template>
+   320→                  </el-table-column>
+   321→                  <el-table-column label="唯一" width="55" align="center">
+   322→                    <template #default="{ row }">
+   323→                      <el-checkbox v-model="row.unique" />
+   324→                    </template>
+   325→                  </el-table-column>
+   326→                  <el-table-column label="索引" width="55" align="center">
+   327→                    <template #default="{ row }">
+   328→                      <el-checkbox v-model="row.indexed" />
+   329→                    </template>
+   330→                  </el-table-column>
+   331→                  <el-table-column label="隐藏" width="55" align="center">
+   332→                    <template #default="{ row }">
+   333→                      <el-checkbox v-model="row.hidden" />
+   334→                    </template>
+   335→                  </el-table-column>
+   336→                  <el-table-column label="排序" width="55" align="center">
+   337→                    <template #default="{ row }">
+   338→                      <el-checkbox v-model="row.sortable" />
+   339→                    </template>
+   340→                  </el-table-column>
+   341→                  <el-table-column label="筛选" width="55" align="center">
+   342→                    <template #default="{ row }">
+   343→                      <el-checkbox v-model="row.filterable" />
+   344→                    </template>
+   345→                  </el-table-column>
+   346→                  <el-table-column label="查询方式" min-width="100">
+   347→                    <template #default="{ row }">
+   348→                      <el-select v-model="row.matchType" clearable placeholder="按类型" size="small" style="width: 100%">
+   349→                        <el-option v-for="opt in matchTypeOptions(row)" :key="opt.value" :label="opt.label" :value="opt.value" />
+   350→                      </el-select>
+   351→                    </template>
+   352→                  </el-table-column>
+   353→                  <el-table-column label="" width="80" align="center" fixed="right">
+   354→                    <template #default="{ row }">
+   355→                      <el-button :icon="Edit" circle size="small" text @click="openColumnDetail(row)" title="详情" />
+   356→                      <el-button :icon="Delete" circle size="small" text type="danger" @click="removeMetadataColumn(row)" title="删除" />
+   357→                    </template>
+   358→                  </el-table-column>
+   359→                </el-table>
+   360→                <el-button type="primary" plain size="small" style="margin-top: 4px" @click="addMetadataColumn">添加列</el-button>
+   361→
+   362→                <el-dialog v-model="columnDialogVisible" title="字段详情" width="800px" append-to-body>
+   363→                  <el-form v-if="editingColumn" label-position="top">
+   364→                    <el-row :gutter="16">
+   365→                      <el-col :span="8">
+   366→                        <el-form-item label="标识">
+   367→                          <el-input v-model="editingColumn.key" />
+   368→                        </el-form-item>
+   369→                      </el-col>
+   370→                      <el-col :span="8">
+   371→                        <el-form-item label="字段名">
+   372→                          <el-input v-model="editingColumn.label" />
+   373→                        </el-form-item>
+   374→                      </el-col>
+   375→                      <el-col :span="8">
+   376→                        <el-form-item label="DB类型">
+   377→                          <el-select v-model="editingColumn.columnType" style="width: 100%">
+   378→                            <el-option v-for="t in COLUMN_TYPES" :key="t" :label="t" :value="t" />
+   379→                          </el-select>
+   380→                        </el-form-item>
+   381→                      </el-col>
+   382→                    </el-row>
+   383→                    <el-row :gutter="16">
+   384→                      <el-col :span="8">
+   385→                        <el-form-item label="长度">
+   386→                          <el-input-number v-model="editingColumn.length" :min="0" :max="10000" controls-position="right" style="width: 100%" />
+   387→                        </el-form-item>
+   388→                      </el-col>
+   389→                      <el-col :span="8">
+   390→                        <el-form-item label="精度">
+   391→                          <el-input-number v-model="editingColumn.scale" :min="0" :max="10" controls-position="right" style="width: 100%" />
+   392→                        </el-form-item>
+   393→                      </el-col>
+   394→                    </el-row>
+   395→                    <el-row :gutter="16">
+   396→                      <el-col :span="4">
+   397→                        <el-form-item label="必填">
+   398→                          <el-checkbox v-model="editingColumn.required">启用</el-checkbox>
+   399→                        </el-form-item>
+   400→                      </el-col>
+   401→                      <el-col :span="4">
+   402→                        <el-form-item label="唯一">
+   403→                          <el-checkbox v-model="editingColumn.unique">启用</el-checkbox>
+   404→                        </el-form-item>
+   405→                      </el-col>
+   406→                      <el-col :span="4">
+   407→                        <el-form-item label="索引">
+   408→                          <el-checkbox v-model="editingColumn.indexed">启用</el-checkbox>
+   409→                        </el-form-item>
+   410→                      </el-col>
+   411→                      <el-col :span="4">
+   412→                        <el-form-item label="隐藏">
+   413→                          <el-checkbox v-model="editingColumn.hidden">启用</el-checkbox>
+   414→                        </el-form-item>
+   415→                      </el-col>
+   416→                      <el-col :span="4">
+   417→                        <el-form-item label="排序">
+   418→                          <el-checkbox v-model="editingColumn.sortable">启用</el-checkbox>
+   419→                        </el-form-item>
+   420→                      </el-col>
+   421→                      <el-col :span="4">
+   422→                        <el-form-item label="筛选">
+   423→                          <el-checkbox v-model="editingColumn.filterable">启用</el-checkbox>
+   424→                        </el-form-item>
+   425→                      </el-col>
+   426→                    </el-row>
+   427→                    <el-row :gutter="16">
+   428→                      <el-col :span="8">
+   429→                        <el-form-item label="查询方式">
+   430→                          <el-select v-model="editingColumn.matchType" clearable placeholder="按类型推导" style="width: 100%">
+   431→                            <el-option v-for="opt in matchTypeOptions(editingColumn)" :key="opt.value" :label="opt.label" :value="opt.value" />
+   432→                          </el-select>
+   433→                        </el-form-item>
+   434→                      </el-col>
+   435→                    </el-row>
+   436→                  </el-form>
+   437→                  <template #footer>
+   438→                    <el-button @click="columnDialogVisible = false">取消</el-button>
+   439→                    <el-button type="primary" @click="columnDialogVisible = false">保存</el-button>
+   440→                  </template>
+   441→                </el-dialog>
+   442→              </template>
+   443→
+   444→              <template v-else>
+   445→                <el-table
+   446→                  :data="metadata?.columns || []"
+   447→                  v-loading="metadataLoading"
+   448→                  style="width: 100%"
+   449→                  :max-height="300"
+   450→                >
+   451→                  <template #empty>
+   452→                    <el-empty
+   453→                      :description="form.type === 'FORM' || form.type === 'WORKFLOW'
+   454→                        ? '绑定表单尚未发布，发布表单后此处将展示字段元数据'
+   455→                        : '暂无字段元数据'"
+   456→                      :image-size="64"
+   457→                    />
+   458→                  </template>
+   459→                  <el-table-column prop="label" label="字段名" min-width="150" show-overflow-tooltip />
+   460→                  <el-table-column prop="key" label="标识" min-width="140" show-overflow-tooltip />
+   461→                  <el-table-column prop="componentType" label="组件" min-width="90" />
+   462→                  <el-table-column prop="columnType" label="DB类型" min-width="80" />
+   463→                  <el-table-column label="长度" width="60" align="center">
+   464→                    <template #default="{ row }">{{ row.length ?? '—' }}</template>
+   465→                  </el-table-column>
+   466→                  <el-table-column label="精度" width="60" align="center">
+   467→                    <template #default="{ row }">{{ row.scale ?? '—' }}</template>
+   468→                  </el-table-column>
+   469→                  <el-table-column label="必填" width="50" align="center">
+   470→                    <template #default="{ row }">
+   471→                      <span :style="boolIconStyle(row.required)">{{ row.required ? '✓' : '✗' }}</span>
+   472→                    </template>
+   473→                  </el-table-column>
+   474→                  <el-table-column label="唯一" width="50" align="center">
+   475→                    <template #default="{ row }">
+   476→                      <span :style="boolIconStyle(row.unique)">{{ row.unique ? '✓' : '✗' }}</span>
+   477→                    </template>
+   478→                  </el-table-column>
+   479→                  <el-table-column label="隐藏" width="55" align="center">
+   480→                    <template #default="{ row }">
+   481→                      <span :style="boolIconStyle(row.hidden)">{{ row.hidden ? '✓' : '✗' }}</span>
+   482→                    </template>
+   483→                  </el-table-column>
+   484→                  <el-table-column label="排序" width="55" align="center">
+   485→                    <template #default="{ row }">
+   486→                      <span :style="boolIconStyle(row.sortable)">{{ row.sortable ? '✓' : '✗' }}</span>
+   487→                    </template>
+   488→                  </el-table-column>
+   489→                  <el-table-column label="筛选" width="55" align="center">
+   490→                    <template #default="{ row }">
+   491→                      <span :style="boolIconStyle(row.filterable)">{{ row.filterable ? '✓' : '✗' }}</span>
+   492→                    </template>
+   493→                  </el-table-column>
+   494→                  <el-table-column label="查询方式" min-width="85">
+   495→                    <template #default="{ row }">{{ row.matchType || '按类型' }}</template>
+   496→                  </el-table-column>
+   497→                </el-table>
+   498→              </template>
+   499→
+   500→              <div v-if="metadataError" class="metadata-error">
+   501→                <el-alert :title="metadataError" type="error" />
+   502→              </div>
+   503→            </div>
+   504→          </el-tab-pane>
+   505→
+   506→          <el-tab-pane label="数据预览" name="data">
+   507→            <div class="preview-section">
+   508→              <div class="preview-toolbar-inline">
+   509→                <el-input
+   510→                  v-model="previewKeyword"
+   511→                  placeholder="搜索关键词"
+   512→                  style="width: 200px"
+   513→                  size="small"
+   514→                />
+   515→                <el-button type="primary" size="small" :loading="dataLoading" @click="onSearch">
+   516→                  搜索
+   517→                </el-button>
+   518→              </div>
+   519→              <el-table
+   520→                :data="previewTableData"
+   521→                v-loading="dataLoading"
+   522→                style="width: 100%"
+   523→                :max-height="300"
+   524→              >
+   525→                <el-table-column
+   526→                  v-for="col in displayColumns"
+   527→                  :key="col.key"
+   528→                  :prop="col.key"
+   529→                  :label="col.label"
+   530→                  min-width="120"
+   531→                  show-overflow-tooltip
+   532→                />
+   533→              </el-table>
+   534→              <el-row :gutter="8" class="preview-pagination" style="margin-top: 8px">
+   535→                <el-col style="display: flex; justify-content: flex-end">
+   536→                  <el-pagination
+   537→                    layout="total, prev, pager, next"
+   538→                    :page-size="previewSize"
+   539→                    :total="previewTotal"
+   540→                    :current-page="previewPage"
+   541→                    @size-change="onPageSizeChange"
+   542→                    @current-change="onPageChange"
+   543→                  />
+   544→                </el-col>
+   545→              </el-row>
+   546→              <div v-if="dataError" class="preview-error">
+   547→                <el-alert :title="dataError" type="error" />
+   548→              </div>
+   549→            </div>
+   550→          </el-tab-pane>
+   551→        </el-tabs>
+   552→          </div>
+   553→          <div class="inline-form-footer">
+   554→            <template v-if="viewOnly">
+   555→              <el-button type="primary" @click="inlineVisible = false">关闭</el-button>
+   556→            </template>
+   557→            <template v-else>
+   558→              <el-button @click="inlineVisible = false">取消</el-button>
+   559→              <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+   560→            </template>
+   561→          </div>
+   562→        </div>
+   563→      </div>
+   564→   </div>
+   565→</template>
+   566→
+   567→<script setup lang="ts">
+   568→defineOptions({ name: 'DataSourceList' })
+   569→
+   570→import { ref, reactive, computed, onMounted, watch } from 'vue'
+   571→import { useRouter } from 'vue-router'
+   572→import { ElMessage, ElMessageBox } from 'element-plus'
+   573→import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid } from '@element-plus/icons-vue'
+   574→import { SearchTable } from '@/components/business'
+   575→import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
+   576→import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
+   577→import type { ColumnConfigItem, BizDataVO } from '@/api/bizData'
+   578→import { formApi, type FormDefinitionDTO } from '@/api/form'
+   579→import VisualQueryBuilder, { type VisualQueryConfig } from './components/VisualQueryBuilder.vue'
+   580→import SqlEditor from './components/SqlEditor.vue'
+   581→import FormJoinConfig, { type FormJoinConfigValue, type JoinConfigItem } from './components/FormJoinConfig.vue'
+   582→
+   583→const router = useRouter()
+   584→const tableRef = ref<InstanceType<typeof SearchTable>>()
+   585→
+   586→/** 已发布业务表单（FORM 类型 formKey 下拉候选） */
+   587→const publishedForms = ref<FormDefinitionDTO[]>([])
+   588→/** 数据库全部基础表名（SQL 可视化主表/JOIN 目标表下拉候选，真实 schema，排除 flyway） */
+   589→const dbTables = ref<string[]>([])
+   590→/** SQL 可视化主表候选：已选主表首位 + 数据库全表去重（不再依赖已发布表单白名单） */
+   591→const visualTableCandidates = computed(() => {
+   592→  const main = (sqlConfig.visual.mainTable || '').trim()
+   593→  const list = main ? [main] : []
+   594→  const seen = new Set(list)
+   595→  for (const t of dbTables.value) {
+   596→    if (!seen.has(t)) {
+   597→      list.push(t)
+   598→      seen.add(t)
+   599→    }
+   600→  }
+   601→  return list
+   602→})
+   603→
+   604→/** 已发布工作流表单（WORKFLOW 类型 formKey 下拉候选） */
+   605→const publishedWorkflowForms = ref<FormDefinitionDTO[]>([])
+   606→
+   607→/** API 操作 HTTP 方法候选 */
+   608→const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE'] as const
+   609→
+   610→/** 列定义字段类型候选（第一版：仅列定义字段，不含 componentType） */
+   611→const COLUMN_TYPES = ['VARCHAR', 'INTEGER', 'BIGINT', 'DECIMAL', 'DATETIME', 'DATE', 'TEXT', 'TINYINT'] as const
+   612→
+   613→// ========== 搜索 ==========
+   614→const searchFields = computed<SearchField[]>(() => [
+   615→  { type: 'input', label: '数据源名称', prop: 'name', placeholder: '搜索数据源名称', style: 'width: 200px' },
+   616→  {
+   617→    type: 'select',
+   618→    label: '类型',
+   619→    prop: 'type',
+   620→    placeholder: '全部',
+   621→    options: [
+   622→      { label: '业务表单', value: 'FORM' },
+   623→      { label: '工作流表单', value: 'WORKFLOW' },
+   624→      { label: '系统结构', value: 'SYSTEM' },
+   625→      { label: '第三方 API', value: 'API' },
+   626→      { label: 'SQL 查询', value: 'SQL' },
+   627→    ],
+   628→    style: 'width: 140px',
+   629→  },
+   630→  {
+   631→    type: 'select',
+   632→    label: '状态',
+   633→    prop: 'status',
+   634→    placeholder: '全部',
+   635→    options: [
+   636→      { label: '草稿', value: 'DRAFT' },
+   637→      { label: '已启用', value: 'ENABLED' },
+   638→      { label: '已禁用', value: 'DISABLED' },
+   639→    ],
+   640→    style: 'width: 140px',
+   641→  },
+   642→])
+   643→
+   644→// ========== 列 ==========
+   645→const columns: TableColumn[] = [
+   646→  { prop: 'name', label: '数据源名称', minWidth: 180 },
+   647→  { prop: 'type', label: '类型', width: 110, align: 'center', slotName: 'type' },
+   648→  { prop: 'bound', label: '绑定对象', minWidth: 160, slotName: 'bound' },
+   649→  { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
+   650→  { prop: 'updatedAt', label: '最近更新时间', width: 170, slotName: 'updatedAt' },
+   651→]
+   652→
+   653→// ========== 数据获取 ==========
+   654→async function fetchApi(params: any) {
+   655→  const res = await dataSourceApi.getDataSources({
+   656→      page: params.page || 1,
+   657→    size: params.size || 20,
+   658→    name: params.name || undefined,
+   659→    status: params.status || undefined,
+   660→    type: params.type || undefined,
+   661→  })
+   662→  const data = res.data as any
+   663→  return {
+   664→    rows: data.content || data.rows || [],
+   665→    total: data.totalElements || data.total || 0,
+   666→  }
+   667→}
+   668→
+   669→// ========== 新建/编辑内嵌覆盖层状态 ==========
+   670→const inlineVisible = ref(false)
+   671→/** 保存进行中（footer 保存按钮 loading） */
+   672→const saving = ref(false)
+   673→const editingId = ref<string | null>(null)
+   674→/** 纯查看模式（openView 打开，区别于可编辑的 API 编辑模式） */
+   675→const viewOnly = ref(false)
+   676→
+   677→/** 是否为查看模式（弹窗处于打开态） */
+   678→const isViewMode = computed(() => editingId.value !== null)
+   679→
+   680→/** 是否为可手动编辑的类型（API + SQL） */
+   681→const isEditableType = computed(() => form.type === 'API' || form.type === 'SQL')
+   682→
+   683→/** 表单整体只读：纯查看模式，或非可编辑类型（FORM/WORKFLOW/SYSTEM 由系统管理） */
+   684→const isReadonlyForm = computed(() => viewOnly.value || !isEditableType.value)
+   685→
+   686→/** 弹窗标题 */
+   687→const dialogTitle = computed(() => {
+   688→  if (viewOnly.value) {
+   689→    return '查看数据源'
+   690→  }
+   691→  return isEditableType.value ? (editingId.value ? '编辑数据源' : '新建数据源') : '数据源详情'
+   692→})
+   693→/** 单操作配置（多操作 params 结构） */
+   694→interface ApiOpConfig {
+   695→  action: string
+   696→  method: string
+   697→  parse?: string
+   698→  totalParse?: string
+   699→}
+   700→
+   701→/** 弹窗表单（类型无关字段 + API 公共字段） */
+   702→const form = reactive({
+   703→  name: '',
+   704→  type: 'FORM' as string,
+   705→  formKey: '',
+   706→  sourceKey: '',
+   707→  searchParam: '',
+   708→  keywordColumn: '',
+   709→  pageBase: 1 as 0 | 1,
+   710→  data: '',
+   711→  headers: '',
+   712→})
+   713→
+   714→/** API 类型：五个操作配置 */
+   715→const apiOps = reactive<Record<'list' | 'get' | 'create' | 'update' | 'delete', ApiOpConfig>>({
+   716→  list: { action: '', method: 'GET' },
+   717→  get: { action: '', method: 'GET' },
+   718→  create: { action: '', method: 'POST' },
+   719→  update: { action: '', method: 'PUT' },
+   720→  delete: { action: '', method: 'DELETE' },
+   721→})
+   722→
+   723→/** API 类型：列定义 */
+   724→const apiColumns = ref<ColumnConfigItem[]>([])
+   725→
+   726→/** SQL 类型：查询配置（复用 VisualQueryBuilder 导出的类型） */
+   727→const sqlConfig = reactive({
+   728→  queryMode: 'visual' as 'visual' | 'sql',
+   729→  visual: { mainTable: '', mainAlias: 'm', joins: [], selectColumns: [] as string[], selectColumnsInput: '', where: [], orderBy: [] } as VisualQueryConfig,
+   730→  queryText: '',
+   731→  declaredColumns: [] as ColumnConfigItem[],
+   732→  declaredParams: [] as string[],
+   733→  isStale: false,  // SQL 手改后标记为过期
+   734→})
+   735→
+   736→/** FORM 类型：关联查询配置（queryMode 选择 + config joins / sql 模板） */
+   737→const formJoin = ref<FormJoinConfigValue>({
+   738→  queryMode: 'none',
+   739→  joins: [] as JoinConfigItem[],
+   740→  query: '',
+   741→  columns: [] as ColumnConfigItem[],
+   742→  params: [] as string[],
+   743→})
+   744→
+   745→/** FORM JOIN 目标表单候选：enabled 的 FORM 类型数据源（targetFormKey 下拉） */
+   746→const formJoinTargets = ref<{ key: string; name: string }[]>([])
+   747→
+   748→/** FORM 原始 params 端点段（list/get/create/update/delete），保存时保留并叠加 queryMode 配置 */
+   749→const formJoinBaseParams = ref<Record<string, any>>({})
+   750→
+   751→/** FORM 关联查询配置是否可编辑：仅编辑模式（非查看）的 FORM 类型 */
+   752→const formJoinDisabled = computed(() => viewOnly.value || form.type !== 'FORM')
+   753→
+   754→/** SQL 可视化：主表/JOIN 目标表字段懒加载缓存（表名 → 字段 key 列表） */
+   755→const sqlTableFields = ref<Record<string, string[]>>({})
+   756→
+   757→/** 按数据库真实表结构懒加载字段（information_schema 列，不再剥前缀查表单定义） */
+   758→async function ensureTableFields(table: string) {
+   759→  if (!table || sqlTableFields.value[table]) return
+   760→  try {
+   761→    const res = await dataSourceApi.getDbSchemaColumns(table)
+   762→    const cols = res.data || []
+   763→    sqlTableFields.value[table] = cols.map((c) => c.key).filter(Boolean)
+   764→  } catch {
+   765→    // 列加载失败不阻断主流程
+   766→  }
+   767→}
+   768→
+   769→// 主表变化 → 懒加载字段
+   770→watch(
+   771→  () => sqlConfig.visual.mainTable,
+   772→  (t) => {
+   773→    if (t) ensureTableFields(t)
+   774→  },
+   775→)
+   776→// JOIN 目标表变化 → 懒加载字段
+   777→watch(
+   778→  () => sqlConfig.visual.joins.map((j) => j.targetTable),
+   779→  (targets) => {
+   780→    targets.forEach((t) => {
+   781→      if (t) ensureTableFields(t)
+   782→    })
+   783→  },
+   784→)
+   785→
+   786→/** 当前激活标签：config / metadata / data */
+   787→const activeTab = ref('config')
+   788→
+   789→/** ================ 字段元数据 ================= */
+   790→const metadata = ref<DataSourceMetadataDTO | null>(null)
+   791→const metadataLoading = ref(false)
+   792→const metadataError = ref<string | null>(null)
+   793→
+   794→/** 布尔值图标样式：true 蓝色，false 灰色 */
+   795→function boolIconStyle(v: boolean | undefined): Record<string, string> {
+   796→  return { color: v ? '#409EFF' : '#c0c4cc', cursor: 'default' }
+   797→}
+   798→
+   799→/** 查询方式选项（按列类型裁剪）：数值/日期 → 等值/范围；文本 → 等值/模糊 */
+   800→function matchTypeOptions(col: { columnType?: string }): { label: string; value: string }[] {
+   801→  const t = col.columnType || ''
+   802→  if (t === 'INT' || t === 'BIGINT' || t === 'TINYINT' || t === 'DECIMAL'
+   803→    || t === 'DATE' || t === 'DATETIME') {
+   804→    return [
+   805→      { label: '等值', value: 'eq' },
+   806→      { label: '范围', value: 'range' },
+   807→    ]
+   808→  }
+   809→  return [
+   810→    { label: '等值', value: 'eq' },
+   811→    { label: '模糊', value: 'like' },
+   812→  ]
+   813→}
+   814→
+   815→/** ================ 数据预览 ================= */
+   816→const previewData = ref<BizDataVO[]>([])
+   817→const previewTotal = ref(0)
+   818→const previewPage = ref(1)
+   819→const previewSize = ref(20)
+   820→const previewKeyword = ref('')
+   821→const dataLoading = ref(false)
+   822→const dataError = ref<string | null>(null)
+   823→
+   824→/** 操作表单标签（统一界面，所有类型显示相同标签） */
+   825→const opLabel = computed(() => ({ list: '列表查询 (list)', get: '单条查询 (get)', create: '新增 (create)', update: '修改 (update)', delete: '删除 (delete)' }))
+   826→
+   827→/** 元数据表格列定义（用于渲染） */
+   828→const displayColumns = computed(() => metadata.value?.columns || [])
+   829→
+   830→/** 数据预览表格显示数据（扁平化 BizDataVO.data） */
+   831→const previewTableData = computed(() => {
+   832→  return previewData.value.map((row) => ({
+   833→    id: row.id,
+   834→    _version: row.version,
+   835→    ...(row.data || {})
+   836→  }))
+   837→})
+   838→
+   839→/** 重置元数据/预览状态（每次打开弹窗时清空） */
+   840→function resetMetadataState() {
+   841→  metadata.value = null
+   842→  metadataLoading.value = false
+   843→  metadataError.value = null
+   844→}
+   845→
+   846→function resetPreviewState() {
+   847→  previewData.value = []
+   848→  previewTotal.value = 0
+   849→  previewPage.value = 1
+   850→  previewKeyword.value = ''
+   851→  dataLoading.value = false
+   852→  dataError.value = null
+   853→}
+   854→
+   855→/** 处理标签切换 (el-tabs @tab-click 事件) */
+   856→async function onTabClick(tab: { props: { name: string } }) {
+   857→  await handleTabChange(tab.props.name)
+   858→}
+   859→
+   860→/** 处理标签切换 (直接调用用) */
+   861→async function handleTabChange(tab: string) {
+   862→  activeTab.value = tab
+   863→  if (tab === 'metadata' && editingId.value && !metadata.value) {
+   864→    await loadMetadata()
+   865→  }
+   866→  if (tab === 'data' && editingId.value) {
+   867→    // 数据预览需要列定义：若元数据未加载，先加载元数据
+   868→    if (!metadata.value) {
+   869→      await loadMetadata()
+   870→    }
+   871→    await loadPreviewData()
+   872→  }
+   873→}
+   874→
+   875→/** 加载元数据 */
+   876→async function loadMetadata() {
+   877→  if (!editingId.value) return
+   878→  metadataLoading.value = true
+   879→  metadataError.value = null
+   880→  try {
+   881→    const res = await dataSourceApi.getMetadata(editingId.value)
+   882→    metadata.value = res.data
+   883→  } catch (e: any) {
+   884→    metadataError.value = e?.message || '加载字段元数据失败'
+   885→  } finally {
+   886→    metadataLoading.value = false
+   887→  }
+   888→}
+   889→
+   890→/** ================ 字段元数据编辑（SQL/API 单一来源：sqlConfig.declaredColumns / apiColumns） ================ */
+   891→
+   892→/** 编辑对象：SQL → declaredColumns，API → apiColumns */
+   893→const metadataColumns = computed(() =>
+   894→  form.type === 'API' ? apiColumns.value : sqlConfig.declaredColumns,
+   895→)
+   896→
+   897→const probeLoading = ref(false)
+   898→const overlayLoading = ref(false)
+   899→const editingColumn = ref<ColumnConfigItem | null>(null)
+   900→const columnDialogVisible = ref(false)
+   901→
+   902→/** 执行 SQL 探测：完整 SQL（visual 预览或手写）→ 全量替换 declaredColumns */
+   903→async function handleExploreSql() {
+   904→  const sql = sqlConfig.queryMode === 'visual' ? generatePreviewSql() : sqlConfig.queryText
+   905→  if (!sql?.trim()) {
+   906→    ElMessage.warning('请先填写 SQL（可视化或 SQL 模式）')
+   907→    return
+   908→  }
+   909→  probeLoading.value = true
+   910→  try {
+   911→    const res = await dataSourceApi.exploreSql(sql)
+   912→    sqlConfig.declaredColumns = (res.data || []).map(toColumnConfigItem)
+   913→    ElMessage.success(`已获取 ${sqlConfig.declaredColumns.length} 个字段`)
+   914→  } catch (e: any) {
+   915→    ElMessage.error(e?.message || 'SQL 探测失败')
+   916→  } finally {
+   917→    probeLoading.value = false
+   918→  }
+   919→}
+   920→
+   921→/** 从接口推断字段：list 操作拉样例 → 全量替换 apiColumns */
+   922→async function handleExploreApi() {
+   923→  const op = apiOps.list
+   924→  if (!op.action?.trim()) {
+   925→    ElMessage.warning('请先配置 list 操作地址')
+   926→    return
+   927→  }
+   928→  probeLoading.value = true
+   929→  try {
+   930→    const res = await dataSourceApi.exploreApi({
+   931→      action: op.action.trim(),
+   932→      method: op.method || 'GET',
+   933→      data: parseParamsJson(form.data) || undefined,
+   934→    })
+   935→    apiColumns.value = (res.data || []).map(toColumnConfigItem)
+   936→    ElMessage.success(`已获取 ${apiColumns.value.length} 个字段`)
+   937→  } catch (e: any) {
+   938→    ElMessage.error(e?.message || '接口字段推断失败')
+   939→  } finally {
+   940→    probeLoading.value = false
+   941→  }
+   942→}
+   943→
+   944→/** 从主表单覆盖（策略 C）：key 命中 → 全属性覆盖；表单多出的 key → 追加 */
+   945→async function handleOverlayFromForm() {
+   946→  if (!form.formKey) {
+   947→    ElMessage.warning('未绑定主表单，无法覆盖')
+   948→    return
+   949→  }
+   950→  overlayLoading.value = true
+   951→  try {
+   952→    const res = await formApi.getFormDefinitionByKey(form.formKey)
+   953→    const data = res.data as any
+   954→    const cfg = data?.columnConfig
+   955→    let formCols: ColumnConfigItem[] = []
+   956→    if (typeof cfg === 'string' && cfg) {
+   957→      try {
+   958→        formCols = JSON.parse(cfg) as ColumnConfigItem[]
+   959→      } catch {
+   960→        formCols = []
+   961→      }
+   962→    } else if (Array.isArray(cfg)) {
+   963→      formCols = cfg as ColumnConfigItem[]
+   964→    }
+   965→    if (formCols.length === 0) {
+   966→      ElMessage.warning('主表单无可用列定义')
+   967→      return
+   968→    }
+   969→    overlayFromFormColumns(formCols)
+   970→    ElMessage.success(`已按主表单覆盖 ${formCols.length} 个字段`)
+   971→  } catch (e: any) {
+   972→    ElMessage.error(e?.message || '主表单覆盖失败')
+   973→  } finally {
+   974→    overlayLoading.value = false
+   975→  }
+   976→}
+   977→
+   978→/** 覆盖策略 C：命中 key 全属性覆盖（保留 key），表单多出的 key 追加，当前列保留 */
+   979→function overlayFromFormColumns(formCols: ColumnConfigItem[]) {
+   980→  const target = form.type === 'API' ? apiColumns.value : sqlConfig.declaredColumns
+   981→  const byKey = new Map(target.map((c) => [c.key, c]))
+   982→  for (const fc of formCols) {
+   983→    if (byKey.has(fc.key)) {
+   984→      Object.assign(byKey.get(fc.key)!, fc, { key: fc.key })
+   985→    } else {
+   986→      target.push({ ...fc })
+   987→      byKey.set(fc.key, target[target.length - 1])
+   988→    }
+   989→  }
+   990→}
+   991→
+   992→/** 探测结果 → ColumnConfigItem（全字段初始化，布尔默认值防 v-model undefined） */
+   993→function toColumnConfigItem(c: any): ColumnConfigItem {
+   994→  return {
+   995→    key: c.key,
+   996→    label: c.label || c.key,
+   997→    columnType: c.columnType || 'VARCHAR',
+   998→    length: c.length ?? null,
+   999→    scale: c.scale ?? null,
+  1000→    required: false,
+  1001→    unique: false,
+  1002→    indexed: false,
+  1003→    hidden: false,
+  1004→    sortable: true,
+  1005→    filterable: true,
+  1006→    matchType: c.matchType ?? null,
+  1007→  }
+  1008→}
+  1009→
+  1010→/** ColumnConfigItem → 全字段序列化（保存 params.columns，字段元数据 tab 编辑结果单一来源） */
+  1011→function serializeColumnConfig(c: ColumnConfigItem): Record<string, any> {
+  1012→  const item: Record<string, any> = {
+  1013→    key: c.key.trim(),
+  1014→    label: c.label || c.key.trim(),
+  1015→    columnType: c.columnType || 'VARCHAR',
+  1016→    sortable: !!c.sortable,
+  1017→    filterable: !!c.filterable,
+  1018→  }
+  1019→  if (c.length != null) item.length = c.length
+  1020→  if (c.scale != null) item.scale = c.scale
+  1021→  // 布尔约束显式输出（false 也写回，保证全字段往返一致）
+  1022→  item.required = !!c.required
+  1023→  item.unique = !!c.unique
+  1024→  item.indexed = !!c.indexed
+  1025→  item.hidden = !!c.hidden
+  1026→  if (c.matchType) item.matchType = c.matchType
+  1027→  return item
+  1028→}
+  1029→
+  1030→function openColumnDetail(row: ColumnConfigItem) {
+  1031→  editingColumn.value = row
+  1032→  columnDialogVisible.value = true
+  1033→}
+  1034→
+  1035→function addMetadataColumn() {
+  1036→  metadataColumns.value.push(toColumnConfigItem({ key: '', label: '', columnType: 'VARCHAR' }))
+  1037→}
+  1038→
+  1039→function removeMetadataColumn(row: ColumnConfigItem) {
+  1040→  const idx = metadataColumns.value.indexOf(row)
+  1041→  if (idx >= 0) {
+  1042→    metadataColumns.value.splice(idx, 1)
+  1043→  }
+  1044→}
+  1045→
+  1046→/** 加载数据预览 */
+  1047→async function loadPreviewData() {
+  1048→  if (!editingId.value) return
+  1049→  dataLoading.value = true
+  1050→  dataError.value = null
+  1051→  try {
+  1052→    const res = await dataSourceApi.queryData(editingId.value, {
+  1053→      page: previewPage.value,
+  1054→      size: previewSize.value,
+  1055→      keyword: previewKeyword.value || undefined,
+  1056→    })
+  1057→    previewData.value = res.data.records || []
+  1058→    previewTotal.value = res.data.total || 0
+  1059→  } catch (e: any) {
+  1060→    dataError.value = e?.message || '加载数据失败'
+  1061→  } finally {
+  1062→    dataLoading.value = false
+  1063→  }
+  1064→}
+  1065→
+  1066→/** 搜索 */
+  1067→function onSearch() {
+  1068→  previewPage.value = 1
+  1069→  loadPreviewData()
+  1070→}
+  1071→
+  1072→/** 分页尺寸改变 */
+  1073→function onPageSizeChange(size: number) {
+  1074→  previewSize.value = size
+  1075→  previewPage.value = 1
+  1076→  loadPreviewData()
+  1077→}
+  1078→
+  1079→/** 页码改变 */
+  1080→function onPageChange(page: number) {
+  1081→  previewPage.value = page
+  1082→  loadPreviewData()
+  1083→}
+  1084→
+  1085→function openCreate() {
+  1086→  editingId.value = null
+  1087→  viewOnly.value = false
+  1088→  form.name = ''
+  1089→  // 支持手动新建 API 和 SQL 数据源
+  1090→  form.type = 'API'
+  1091→  form.formKey = ''
+  1092→  form.sourceKey = ''
+  1093→  form.searchParam = ''
+  1094→  form.keywordColumn = ''
+  1095→  form.pageBase = 1
+  1096→  form.data = ''
+  1097→  form.headers = ''
+  1098→  apiOps.list = { action: '', method: 'GET' }
+  1099→  apiOps.get = { action: '', method: 'GET' }
+  1100→  apiOps.create = { action: '', method: 'POST' }
+  1101→  apiOps.update = { action: '', method: 'PUT' }
+  1102→  apiOps.delete = { action: '', method: 'DELETE' }
+  1103→  apiColumns.value = []
+  1104→  // SQL 类型初始化
+  1105→  sqlConfig.queryMode = 'visual'
+  1106→  sqlConfig.visual = { mainTable: '', mainAlias: 'm', joins: [], selectColumns: [], selectColumnsInput: '', where: [], orderBy: [] }
+  1107→  sqlConfig.queryText = ''
+  1108→  sqlConfig.declaredColumns = []
+  1109→  sqlConfig.declaredParams = []
+  1110→  sqlConfig.isStale = false
+  1111→  // FORM 关联查询配置重置
+  1112→  formJoin.value.queryMode = 'none'
+  1113→  formJoin.value.joins = []
+  1114→  formJoin.value.query = ''
+  1115→  formJoin.value.columns = []
+  1116→  formJoin.value.params = []
+  1117→  formJoinBaseParams.value = {}
+  1118→  resetMetadataState()
+  1119→  resetPreviewState()
+  1120→  activeTab.value = 'config'
+  1121→  inlineVisible.value = true
+  1122→}
+  1123→
+  1124→async function openEdit(row: DataSourceDTO) {
+  1125→  editingId.value = row.id
+  1126→  viewOnly.value = false
+  1127→  form.name = row.name
+  1128→  form.type = row.type
+  1129→  form.formKey = row.formKey || ''
+  1130→  form.sourceKey = row.sourceKey || ''
+  1131→  form.searchParam = ''
+  1132→  form.keywordColumn = ''
+  1133→  form.pageBase = 1
+  1134→  form.data = ''
+  1135→  form.headers = ''
+  1136→  apiOps.list = { action: '', method: 'GET' }
+  1137→  apiOps.get = { action: '', method: 'GET' }
+  1138→  apiOps.create = { action: '', method: 'POST' }
+  1139→  apiOps.update = { action: '', method: 'PUT' }
+  1140→  apiOps.delete = { action: '', method: 'DELETE' }
+  1141→   apiColumns.value = []
+  1142→  // 解析 params JSON：API类型手动配置；FORM/SYSTEM则根据标识自动填充
+  1143→  let p: Record<string, any> = {}
+  1144→  if (row.params) {
+  1145→    try {
+  1146→      p = JSON.parse(row.params)
+  1147→    } catch {
+  1148→      p = {}
+  1149→    }
+  1150→  }
+  1151→  if (row.type === 'API') {
+  1152→    for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+  1153→      const cfg = p[op]
+  1154→      if (cfg && typeof cfg === 'object') {
+  1155→        apiOps[op] = {
+  1156→          action: cfg.action || '',
+  1157→          method: (cfg.method || 'GET').toUpperCase(),
+  1158→          parse: cfg.parse || '',
+  1159→          totalParse: cfg.totalParse || '',
+  1160→        }
+  1161→      }
+  1162→    }
+  1163→    form.searchParam = p.searchParam || ''
+  1164→    form.keywordColumn = p.keywordColumn || ''
+  1165→    form.pageBase = p.pageBase === 0 ? 0 : 1
+  1166→    form.data = p.data ? JSON.stringify(p.data) : ''
+  1167→    form.headers = p.headers ? JSON.stringify(p.headers) : ''
+  1168→    apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  1169→  } else if (row.type === 'SQL') {
+  1170→    // SQL 类型：解析 queryMode + visual/query
+  1171→    sqlConfig.queryMode = (p.queryMode as 'visual' | 'sql') || 'visual'
+  1172→    sqlConfig.isStale = false
+  1173→    if (p.visual) {
+  1174→      sqlConfig.visual.mainTable = p.visual.mainTable || ''
+  1175→      sqlConfig.visual.mainAlias = p.visual.mainAlias || 'm'
+  1176→      sqlConfig.visual.joins = p.visual.joins || []
+  1177→      sqlConfig.visual.selectColumns = p.visual.selectColumns || []
+  1178→      sqlConfig.visual.selectColumnsInput = (p.visual.selectColumns || []).join(', ')
+  1179→      sqlConfig.visual.where = p.visual.where || []
+  1180→      sqlConfig.visual.orderBy = p.visual.orderBy || []
+  1181→    }
+  1182→    sqlConfig.queryText = p.query || ''
+  1183→    sqlConfig.declaredColumns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  1184→    sqlConfig.declaredParams = Array.isArray(p.params) ? (p.params as string[]) : []
+  1185→  } else if (row.type === 'FORM' || row.type === 'SYSTEM') {
+  1186→    // FORM/SYSTEM：只读端点展示由模板根据 formKey/sourceKey 响应式计算，无需填充 apiOps
+  1187→  }
+  1188→  if (row.type === 'FORM') {
+  1189→    // FORM 关联查询配置：queryMode + config joins / sql query+columns+params
+  1190→    formJoin.value.queryMode = (p.queryMode as FormJoinConfigValue['queryMode']) || 'none'
+  1191→    formJoin.value.joins = Array.isArray(p.joins) ? (p.joins as JoinConfigItem[]) : []
+  1192→    formJoin.value.query = p.query || ''
+  1193→    formJoin.value.columns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  1194→    formJoin.value.params = Array.isArray(p.params) ? (p.params as string[]) : []
+  1195→    // 保留原始端点段（list/get/create/update/delete），保存时叠加 queryMode 配置
+  1196→    formJoinBaseParams.value = { ...p }
+  1197→  }
+  1198→  resetMetadataState()
+  1199→  resetPreviewState()
+  1200→  activeTab.value = 'config'
+  1201→  inlineVisible.value = true
+  1202→}
+  1203→
+  1204→/** 查看数据源详情（只读模式） */
+  1205→function openView(row: DataSourceDTO) {
+  1206→  editingId.value = row.id
+  1207→  viewOnly.value = true
+  1208→  form.name = row.name
+  1209→  form.type = row.type
+  1210→  form.formKey = row.formKey || ''
+  1211→  form.sourceKey = row.sourceKey || ''
+  1212→  form.searchParam = ''
+  1213→  form.keywordColumn = ''
+  1214→  form.pageBase = 1
+  1215→  form.data = ''
+  1216→  form.headers = ''
+  1217→  apiOps.list = { action: '', method: 'GET' }
+  1218→  apiOps.get = { action: '', method: 'GET' }
+  1219→  apiOps.create = { action: '', method: 'POST' }
+  1220→  apiOps.update = { action: '', method: 'PUT' }
+  1221→  apiOps.delete = { action: '', method: 'DELETE' }
+  1222→  apiColumns.value = []
+  1223→  // 解析 params JSON
+  1224→  let p: Record<string, any> = {}
+  1225→  if (row.params) {
+  1226→    try {
+  1227→      p = JSON.parse(row.params)
+  1228→    } catch {
+  1229→      p = {}
+  1230→    }
+  1231→  }
+  1232→  if (row.type === 'API') {
+  1233→    for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+  1234→      const cfg = p[op]
+  1235→      if (cfg && typeof cfg === 'object') {
+  1236→        apiOps[op] = {
+  1237→          action: cfg.action || '',
+  1238→          method: (cfg.method || 'GET').toUpperCase(),
+  1239→          parse: cfg.parse || '',
+  1240→          totalParse: cfg.totalParse || '',
+  1241→        }
+  1242→      }
+  1243→    }
+  1244→    form.searchParam = p.searchParam || ''
+  1245→    form.keywordColumn = p.keywordColumn || ''
+  1246→    form.pageBase = p.pageBase === 0 ? 0 : 1
+  1247→    form.data = p.data ? JSON.stringify(p.data) : ''
+  1248→    form.headers = p.headers ? JSON.stringify(p.headers) : ''
+  1249→    apiColumns.value = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  1250→  } else if (row.type === 'SQL') {
+  1251→    // SQL 类型：查看模式同样填充 sqlConfig（表单整体只读）
+  1252→    sqlConfig.queryMode = (p.queryMode as 'visual' | 'sql') || 'visual'
+  1253→    sqlConfig.isStale = false
+  1254→    if (p.visual) {
+  1255→      sqlConfig.visual.mainTable = p.visual.mainTable || ''
+  1256→      sqlConfig.visual.mainAlias = p.visual.mainAlias || 'm'
+  1257→      sqlConfig.visual.joins = p.visual.joins || []
+  1258→      sqlConfig.visual.selectColumns = p.visual.selectColumns || []
+  1259→      sqlConfig.visual.selectColumnsInput = (p.visual.selectColumns || []).join(', ')
+  1260→      sqlConfig.visual.where = p.visual.where || []
+  1261→      sqlConfig.visual.orderBy = p.visual.orderBy || []
+  1262→    }
+  1263→    sqlConfig.queryText = p.query || ''
+  1264→    sqlConfig.declaredColumns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  1265→    sqlConfig.declaredParams = Array.isArray(p.params) ? (p.params as string[]) : []
+  1266→  }
+  1267→  if (row.type === 'FORM') {
+  1268→    // FORM 关联查询配置（查看模式同样填充，表单整体只读）
+  1269→    formJoin.value.queryMode = (p.queryMode as FormJoinConfigValue['queryMode']) || 'none'
+  1270→    formJoin.value.joins = Array.isArray(p.joins) ? (p.joins as JoinConfigItem[]) : []
+  1271→    formJoin.value.query = p.query || ''
+  1272→    formJoin.value.columns = Array.isArray(p.columns) ? (p.columns as ColumnConfigItem[]) : []
+  1273→    formJoin.value.params = Array.isArray(p.params) ? (p.params as string[]) : []
+  1274→    formJoinBaseParams.value = { ...p }
+  1275→  }
+  1276→  resetMetadataState()
+  1277→  resetPreviewState()
+  1278→  activeTab.value = 'config'
+  1279→  inlineVisible.value = true
+  1280→}
+  1281→
+  1282→   function needsLength(type?: string | null): boolean {
+  1283→   return type === 'VARCHAR' || type === 'DECIMAL' || type === 'INTEGER' || type === 'BIGINT' || type === 'TINYINT'
+  1284→ }
+  1285→
+  1286→ /** 解析 params JSON 为对象，空/非法返回 undefined */
+  1287→ function parseParamsJson(text: string | null | undefined): Record<string, any> | undefined {
+  1288→   if (!text || !text.trim()) return undefined
+  1289→   try {
+  1290→     const parsed = JSON.parse(text)
+  1291→     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+  1292→     return undefined
+  1293→   } catch {
+  1294→     return undefined
+  1295→   }
+  1296→ }
+  1297→
+  1298→ /** API 类型：组装多操作 params（未配置的操作省略；列定义仅写入非空 key 行） */
+  1299→ function buildApiParams(): Record<string, any> {
+  1300→   const params: Record<string, any> = {}
+  1301→   // 五个操作：action 为空则整体省略
+  1302→   for (const op of Object.keys(apiOps) as (keyof typeof apiOps)[]) {
+  1303→     const cfg = apiOps[op]
+  1304→     if (cfg.action && cfg.action.trim()) {
+  1305→       const item: Record<string, any> = { action: cfg.action.trim(), method: (cfg.method || 'GET').toUpperCase() }
+  1306→       if (op === 'list') {
+  1307→         if (cfg.parse && cfg.parse.trim()) item.parse = cfg.parse.trim()
+  1308→         if (cfg.totalParse && cfg.totalParse.trim()) item.totalParse = cfg.totalParse.trim()
+  1309→       }
+  1310→       params[op] = item
+  1311→     }
+  1312→   }
+  1313→    // 列定义：过滤未填写 key 的行（全字段序列化，字段元数据 tab 编辑结果单一来源）
+  1314→    const columns = apiColumns.value.filter((c) => c.key && c.key.trim())
+  1315→    if (columns.length > 0) {
+  1316→      params.columns = columns.map(serializeColumnConfig)
+  1317→    }
+  1318→   // 搜索/分页/固定参数/请求头
+  1319→   if (form.searchParam && form.searchParam.trim()) params.searchParam = form.searchParam.trim()
+  1320→   if (form.keywordColumn && form.keywordColumn.trim()) params.keywordColumn = form.keywordColumn.trim()
+  1321→   if (form.pageBase === 0 || form.pageBase === 1) params.pageBase = form.pageBase
+  1322→   const dataObj = parseParamsJson(form.data)
+  1323→   if (dataObj) params.data = dataObj
+  1324→   const headersObj = parseParamsJson(form.headers)
+  1325→   if (headersObj) params.headers = headersObj
+  1326→    return params
+  1327→  }
+  1328→
+  1329→  /** SQL 类型：组装 params JSON */
+  1330→  function buildSqlParams(): Record<string, any> {
+  1331→    const params: Record<string, any> = {}
+  1332→    params.queryMode = sqlConfig.queryMode
+  1333→    if (sqlConfig.queryMode === 'visual') {
+  1334→      // 可视化配置：字段选择由 VisualQueryBuilder 直接写入 selectColumns（别名.字段），保存原样序列化
+  1335→      params.visual = {
+  1336→        mainTable: sqlConfig.visual.mainTable,
+  1337→        mainAlias: sqlConfig.visual.mainAlias || 'm',
+  1338→        joins: sqlConfig.visual.joins,
+  1339→        selectColumns: sqlConfig.visual.selectColumns,
+  1340→        where: sqlConfig.visual.where,
+  1341→        orderBy: sqlConfig.visual.orderBy,
+  1342→      }
+  1343→      // 生成预览 SQL（前端简单拼接，后端 VisualSqlGenerator 会重新生成）
+  1344→      params.query = generatePreviewSql()
+  1345→    } else {
+  1346→      // SQL 模式：直接使用手写 SQL
+  1347→      params.query = sqlConfig.queryText
+  1348→    }
+  1349→    // 列声明（全字段序列化，字段元数据 tab 编辑结果单一来源）
+  1350→    const columns = sqlConfig.declaredColumns.filter((c) => c.key && c.key.trim())
+  1351→    if (columns.length > 0) {
+  1352→      params.columns = columns.map(serializeColumnConfig)
+  1353→    }
+  1354→    // 运行时参数白名单
+  1355→    if (sqlConfig.declaredParams.length > 0) {
+  1356→      params.params = sqlConfig.declaredParams
+  1357→    }
+  1358→    return params
+  1359→  }
+  1360→
+  1361→  /** 可视化模式：前端生成预览 SQL（简化版，后端会重新生成） */
+  1362→  function generatePreviewSql(): string {
+  1363→    const v = sqlConfig.visual
+  1364→    if (!v.mainTable) return ''
+  1365→    let sql = `SELECT ${v.selectColumns.join(', ') || '*'}`
+  1366→    sql += ` FROM ${v.mainTable} ${v.mainAlias || 'm'}`
+  1367→    for (const j of v.joins) {
+  1368→      if (j.targetTable && j.on) {
+  1369→        sql += ` ${j.joinType} ${j.targetTable} ${j.alias} ON ${j.on}`
+  1370→      }
+  1371→    }
+  1372→    sql += ` WHERE ${v.mainAlias || 'm'}.tenant_id = :tenantId`
+  1373→    for (const w of v.where) {
+  1374→      if (w.column && w.op) {
+  1375→        sql += ` AND ${w.column} ${w.op} ?`
+  1376→      }
+  1377→    }
+  1378→    if (v.orderBy.length > 0) {
+  1379→      const parts = v.orderBy.filter((o) => o.column).map((o) => `${o.column} ${o.order || 'ASC'}`)
+  1380→      if (parts.length > 0) sql += ` ORDER BY ${parts.join(', ')}`
+  1381→    }
+  1382→    return sql
+  1383→  }
+  1384→
+  1385→  /** 校验并保存 */
+  1386→ async function handleSave() {
+  1387→   if (!form.name || !form.name.trim()) {
+  1388→     ElMessage.warning('请输入数据源名称')
+  1389→     return
+  1390→   }
+  1391→    if (form.type === 'FORM' && !form.formKey) {
+  1392→      ElMessage.warning('请选择绑定的业务表单')
+  1393→      return
+  1394→    }
+  1395→    if (form.type === 'WORKFLOW' && !form.formKey) {
+  1396→      ElMessage.warning('请选择绑定的工作流表单')
+  1397→      return
+  1398→    }
+  1399→   if (form.type === 'SYSTEM' && !form.sourceKey) {
+  1400→     ElMessage.warning('请选择系统结构')
+  1401→     return
+  1402→   }
+  1403→   if (form.type === 'API') {
+  1404→     if (!form.sourceKey || !form.sourceKey.trim()) {
+  1405→       ElMessage.warning('请输入接口标识')
+  1406→       return
+  1407→     }
+  1408→     if (!apiOps.list.action || !apiOps.list.action.trim()) {
+  1409→       ElMessage.warning('列表查询 (list) 接口路径必填')
+  1410→       return
+  1411→     }
+  1412→   }
+  1413→    if (form.type === 'SQL') {
+  1414→      if (!form.sourceKey || !form.sourceKey.trim()) {
+  1415→        ElMessage.warning('请输入数据源标识（sourceKey）')
+  1416→        return
+  1417→      }
+  1418→      if (sqlConfig.queryMode === 'visual' && !sqlConfig.visual.mainTable.trim()) {
+  1419→        ElMessage.warning('请配置主表')
+  1420→        return
+  1421→      }
+  1422→      if (sqlConfig.queryMode === 'sql' && !sqlConfig.queryText.trim()) {
+  1423→        ElMessage.warning('请输入 SQL 模板')
+  1424→        return
+  1425→      }
+  1426→    }
+  1427→    if (form.type === 'FORM' && formJoin.value.queryMode === 'config') {
+  1428→      const incomplete = formJoin.value.joins.find(
+  1429→        (j) => !j.targetFormKey || !j.localField || !j.foreignField || !j.joinField || !j.virtualKey,
+  1430→      )
+  1431→      if (incomplete) {
+  1432→        ElMessage.warning('请完整配置关联（目标表单/关联字段/显示字段/虚拟列标识）')
+  1433→        return
+  1434→      }
+  1435→    }
+  1436→    if (form.type === 'FORM' && formJoin.value.queryMode === 'sql' && !(formJoin.value.query || '').trim()) {
+  1437→      ElMessage.warning('请输入 SQL 模板')
+  1438→      return
+  1439→    }
+  1440→    saving.value = true
+  1441→    try {
+  1442→      const payload = normalizePayload()
+  1443→      if (editingId.value) {
+  1444→        await dataSourceApi.updateDataSource(editingId.value, payload)
+  1445→      } else {
+  1446→        await dataSourceApi.createDataSource(payload)
+  1447→      }
+  1448→      ElMessage.success(editingId.value ? '保存成功' : '创建成功')
+  1449→      inlineVisible.value = false
+  1450→      tableRef.value?.fetchList()
+  1451→    } catch {
+  1452→      // http 拦截器已弹出错误消息
+  1453→    } finally {
+  1454→      saving.value = false
+  1455→    }
+  1456→ }
+  1457→
+  1458→  /** FORM 类型：保留原始端点段（list/get/create/update/delete）基础上叠加关联查询配置段（queryMode/joins/query/columns/params） */
+  1459→  function buildFormParams(): Record<string, any> {
+  1460→    const params: Record<string, any> = { ...formJoinBaseParams.value }
+  1461→    if (formJoin.value.queryMode === 'config') {
+  1462→      params.queryMode = 'config'
+  1463→      params.joins = formJoin.value.joins.filter((j) => j.targetFormKey && j.virtualKey)
+  1464→    } else if (formJoin.value.queryMode === 'sql') {
+  1465→      params.queryMode = 'sql'
+  1466→      if (formJoin.value.query) {
+  1467→        params.query = formJoin.value.query
+  1468→      }
+  1469→      const cols = (formJoin.value.columns || []).filter((c) => c.key && c.key.trim())
+  1470→      if (cols.length > 0) {
+  1471→        params.columns = cols.map(serializeColumnConfig)
+  1472→      }
+  1473→      if (formJoin.value.params && formJoin.value.params.length > 0) {
+  1474→        params.params = [...formJoin.value.params]
+  1475→      }
+  1476→    }
+  1477→    return params
+  1478→  }
+  1479→
+  1480→  /** 按类型归一化提交载荷：所有类型均通过统一 API 编辑器，FORM/SYSTEM params 由前端自动生成 */
+  1481→  function normalizePayload(): any {
+  1482→    return {
+  1483→      name: form.name,
+  1484→      type: form.type || 'FORM',
+  1485→      formKey: form.type === 'FORM' || form.type === 'WORKFLOW' ? form.formKey || null : form.type === 'SQL' || form.type === 'API' ? form.formKey || null : null,
+  1486→      sourceKey: form.type === 'SYSTEM' ? form.sourceKey || null : form.type === 'API' || form.type === 'SQL' ? form.sourceKey || null : null,
+  1487→      params: form.type === 'SQL' ? JSON.stringify(buildSqlParams())
+  1488→        : form.type === 'FORM' ? JSON.stringify(buildFormParams())
+  1489→          : JSON.stringify(buildApiParams()),
+  1490→    }
+  1491→  }
+  1492→
+  1493→  /** 生成统一 API 端点描述（FORM/SYSTEM 自动填充到 API 编辑器；WORKFLOW 经 SPI 按数据源 ID 访问） */
+  1494→  function generateEndpoints(): Record<string, any> | null {
+  1495→    if (form.type === 'FORM' && form.formKey) {
+  1496→      const base = `/api/v1/biz-data/${form.formKey}`
+  1497→      return {
+  1498→        list: { action: base, method: 'GET', parse: 'records', totalParse: 'total' },
+  1499→        get: { action: `${base}/{id}`, method: 'GET' },
+  1500→        create: { action: base, method: 'POST' },
+  1501→        update: { action: `${base}/{id}`, method: 'PUT' },
+  1502→        delete: { action: `${base}/{id}`, method: 'DELETE' },
+  1503→      }
+  1504→    }
+  1505→    if (form.type === 'SYSTEM' && form.sourceKey) {
+  1506→      const internalKey = form.sourceKey === 'user-tree' ? 'users' : form.sourceKey
+  1507→      return {
+  1508→        list: { action: `/api/v1/internal/system/${internalKey}`, method: 'GET' },
+  1509→      }
+  1510→    }
+  1511→    // WORKFLOW：只读数据源，经统一 SPI（DataSourceController）按数据源 ID 访问；写操作一律 400 拒绝
+  1512→    if (form.type === 'WORKFLOW' && editingId.value) {
+  1513→      const base = `/api/v1/data-sources/${editingId.value}`
+  1514→      return {
+  1515→        metadata: { action: `${base}/metadata`, method: 'GET' },
+  1516→        list: { action: `${base}/data`, method: 'GET', parse: 'records', totalParse: 'total' },
+  1517→        get: { action: `${base}/data/{id}`, method: 'GET' },
+  1518→        create: { action: `${base}/data`, method: 'POST', readonly: true },
+  1519→        update: { action: `${base}/data/{id}`, method: 'PUT', readonly: true },
+  1520→        delete: { action: `${base}/data/{id}`, method: 'DELETE', readonly: true },
+  1521→      }
+  1522→    }
+  1523→    return null
+  1524→  }
+  1525→
+  1526→// ========== 操作按钮 ==========
+  1527→/** API 和 SQL 类型可手动编辑/删除；FORM/WORKFLOW/SYSTEM 由系统管理，仅可查看 */
+  1528→const actionButtons: ActionButton[] = [
+  1529→  {
+  1530→    label: '查看',
+  1531→    icon: View,
+  1532→    onClick: (row: any) => openView(row),
+  1533→  },
+  1534→  {
+  1535→    label: '数据管理',
+  1536→    icon: Grid,
+  1537→    permission: 'data-source:manage',
+  1538→    show: (row: any) => row.type !== 'WORKFLOW',
+  1539→    onClick: (row: any) => router.push({ name: 'DataSourceData', params: { id: row.id } }),
+  1540→  },
+  1541→  {
+  1542→    label: '编辑',
+  1543→    icon: Edit,
+  1544→    permission: 'data-source:manage',
+  1545→    show: (row: any) => row.type === 'API' || row.type === 'SQL' || row.type === 'FORM',
+  1546→    onClick: (row: any) => openEdit(row),
+  1547→  },
+  1548→  {
+  1549→    label: '删除',
+  1550→    type: 'danger',
+  1551→    icon: Delete,
+  1552→    permission: 'data-source:manage',
+  1553→    show: (row: any) => row.type === 'API' || row.type === 'SQL',
+  1554→    onClick: async (row: any) => {
+  1555→      try {
+  1556→        await ElMessageBox.confirm('确定要删除此数据源吗？', '删除确认', { type: 'warning' })
+  1557→      } catch {
+  1558→        return
+  1559→      }
+  1560→      try {
+  1561→        await dataSourceApi.deleteDataSource(row.id)
+  1562→        ElMessage.success('删除成功')
+  1563→        tableRef.value?.fetchList()
+  1564→      } catch {
+  1565→        // http 拦截器已弹出错误消息（如"请先禁用"）
+  1566→      }
+  1567→    },
+  1568→  },
+  1569→]
+  1570→
+  1571→// ========== 工具函数 ==========
+  1572→function typeTagType(type: string): '' | 'primary' | 'success' | 'warning' | 'info' {
+  1573→  const map: Record<string, '' | 'primary' | 'success' | 'warning' | 'info'> = {
+  1574→    FORM: 'primary',
+  1575→    WORKFLOW: 'primary',
+  1576→    SYSTEM: 'success',
+  1577→    API: 'warning',
+  1578→    SQL: 'info',
+  1579→  }
+  1580→  return map[type] || ''
+  1581→}
+  1582→
+  1583→function typeLabel(type: string): string {
+  1584→  const map: Record<string, string> = {
+  1585→    FORM: '业务表单',
+  1586→    WORKFLOW: '工作流表单',
+  1587→    SYSTEM: '系统结构',
+  1588→    API: '第三方 API',
+  1589→    SQL: 'SQL 查询',
+  1590→  }
+  1591→  return map[type] || type
+  1592→}
+  1593→
+  1594→// ========== SQL 类型辅助函数 ==========
+  1595→function onSqlModeChange() {
+  1596→  // 切到 SQL 模式：若尚未生成 SQL 文本（首次进入/重置后），用当前可视化配置生成作为起点
+  1597→  if (sqlConfig.queryMode === 'sql' && !sqlConfig.queryText) {
+  1598→    sqlConfig.queryText = generatePreviewSql()
+  1599→  }
+  1600→}
+  1601→
+  1602→/** 用户在 SQL 模式下手动编辑 SQL → 标记可视化已过期 */
+  1603→function markSqlEdited() {
+  1604→  if (sqlConfig.queryMode === 'sql' && !isReadonlyForm.value) {
+  1605→    sqlConfig.isStale = true
+  1606→  }
+  1607→}
+  1608→
+  1609→function resetToVisual() {
+  1610→  sqlConfig.isStale = false
+  1611→  sqlConfig.queryText = ''
+  1612→  sqlConfig.queryMode = 'visual'
+  1613→}
+  1614→
+  1615→function statusTagType(status: string): '' | 'success' | 'warning' | 'info' {
+  1616→  const map: Record<string, '' | 'success' | 'warning' | 'info'> = {
+  1617→    DRAFT: 'warning',
+  1618→    ENABLED: 'success',
+  1619→    DISABLED: 'info',
+  1620→  }
+  1621→  return map[status] || ''
+  1622→}
+  1623→
+  1624→function statusLabel(status: string): string {
+  1625→  const map: Record<string, string> = {
+  1626→    DRAFT: '草稿',
+  1627→    ENABLED: '已启用',
+  1628→    DISABLED: '已禁用',
+  1629→  }
+  1630→  return map[status] || status
+  1631→}
+  1632→
+  1633→function formatDate(dateStr: string): string {
+  1634→  if (!dateStr) return '—'
+  1635→  const d = new Date(dateStr)
+  1636→  const pad = (n: number) => String(n).padStart(2, '0')
+  1637→  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  1638→}
+  1639→
+  1640→// ========== 初始化：加载已发布业务/工作流表单 + 数据库全表（SQL 可视化候选） ==========
+  1641→onMounted(async () => {
+  1642→  try {
+  1643→    const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 100 })
+  1644→    const data = res.data as any
+  1645→    publishedForms.value = data.content || data.rows || []
+  1646→  } catch {
+  1647→    // 表单加载失败不阻断列表
+  1648→  }
+  1649→  try {
+  1650→    const res = await formApi.getFormDefinitions({ type: 'WORKFLOW', status: 'PUBLISHED', size: 100 })
+  1651→    const data = res.data as any
+  1652→    publishedWorkflowForms.value = data.content || data.rows || []
+  1653→  } catch {
+  1654→    // 表单加载失败不阻断列表
+  1655→  }
+  1656→  try {
+  1657→    const res = await dataSourceApi.getDbSchemaTables()
+  1658→    dbTables.value = res.data || []
+  1659→  } catch {
+  1660→    // 数据库表加载失败不阻断列表
+  1661→  }
+  1662→  try {
+  1663→    const res = await dataSourceApi.getEnabledDataSources()
+  1664→    const list = (res.data || []) as DataSourceDTO[]
+  1665→    formJoinTargets.value = list
+  1666→      .filter((d) => d.type === 'FORM' && d.formKey)
+  1667→      .map((d) => ({ key: d.formKey as string, name: d.name }))
+  1668→  } catch {
+  1669→    // JOIN 目标表单加载失败不阻断列表
+  1670→  }
+  1671→})
+  1672→</script>
+  1673→
+  1674→<style scoped>
+  1675→.data-source-list-page {
+  1676→  /* 占满 main 可视区：列表卡片内部滚动，覆盖层（absolute inset:0）高度不超过视口，
+  1677→     footer 固定于可视底部不随内容滚出屏幕 */
+  1678→  height: 100%;
+  1679→  min-height: 0;
+  1680→  display: flex;
+  1681→  flex-direction: column;
+  1682→  position: relative;
+  1683→  overflow: hidden;
+  1684→}
+  1685→.ds-list-card {
+  1686→  flex: 1;
+  1687→  min-height: 0;
+  1688→  display: flex;
+  1689→  flex-direction: column;
+  1690→  overflow: hidden;
+  1691→}
+  1692→.ds-list-card :deep(.el-card__body) {
+  1693→  flex: 1;
+  1694→  min-height: 0;
+  1695→  display: flex;
+  1696→  flex-direction: column;
+  1697→  overflow: hidden;
+  1698→}
+  1699→.sql-key-hint-icon {
+  1700→  margin-left: 4px;
+  1701→  cursor: help;
+  1702→  color: #909399;
+  1703→}
+  1704→.ops-scroll {
+  1705→  /* 内层不再滚动：由页签内容区（.el-tabs__content）统一承接滚动 */
+  1706→  padding-right: 4px;
+  1707→}
+  1708→.auto-params-display {
+  1709→  display: flex;
+  1710→  flex-direction: column;
+  1711→  gap: 8px;
+  1712→  padding: 4px 0;
+  1713→}
+  1714→.op-row {
+  1715→  display: flex;
+  1716→  align-items: center;
+  1717→  gap: 8px;
+  1718→  font-size: 13px;
+  1719→}
+  1720→.op-row code {
+  1721→  font-family: 'Courier New', monospace;
+  1722→  background: #f4f6f8;
+  1723→  padding: 2px 6px;
+  1724→  border-radius: 3px;
+  1725→}
+  1726→.op-label {
+  1727→  color: #909399;
+  1728→  font-size: 12px;
+  1729→}
+  1730→.op-meta {
+  1731→  color: #909399;
+  1732→  font-size: 12px;
+  1733→  background: #f4f6f8;
+  1734→  padding: 1px 6px;
+  1735→  border-radius: 3px;
+  1736→}
+  1737→.op-editor {
+  1738→  display: flex;
+  1739→  flex-wrap: wrap;
+  1740→  gap: 8px;
+  1741→  width: 100%;
+  1742→}
+  1743→.column-row {
+  1744→  display: flex;
+  1745→  align-items: center;
+  1746→  gap: 6px;
+  1747→  margin-bottom: 6px;
+  1748→  flex-wrap: wrap;
+  1749→}
+  1750→/* 内嵌表单覆盖层（替代弹窗）：覆盖当前页签内容区，关闭后恢复视图 */
+  1751→.inline-form-overlay {
+  1752→  position: absolute;
+  1753→  inset: 0;
+  1754→  z-index: 100;
+  1755→  background: #fff;
+  1756→  display: flex;
+  1757→  flex-direction: column;
+  1758→}
+  1759→/* 嵌入页面内表格行内组件统一普通字体 */
+  1760→.inline-form-overlay :deep(.el-table) {
+  1761→  font-size: 14px;
+  1762→}
+  1763→/* API 配置区表单项紧凑间距 */
+  1764→.inline-form-overlay :deep(.el-form-item) {
+  1765→  margin-bottom: 8px;
+  1766→}
+  1767→.inline-form-container {
+  1768→  flex: 1;
+  1769→  display: flex;
+  1770→  flex-direction: column;
+  1771→  padding: 16px 24px;
+  1772→  overflow: hidden;
+  1773→}
+  1774→.inline-form-header {
+  1775→  display: flex;
+  1776→  align-items: center;
+  1777→  justify-content: space-between;
+  1778→  padding-bottom: 12px;
+  1779→  border-bottom: 1px solid #e5e7eb;
+  1780→  margin-bottom: 16px;
+  1781→  flex-shrink: 0;
+  1782→}
+  1783→.inline-form-title {
+  1784→  font-size: 16px;
+  1785→  font-weight: 600;
+  1786→  color: #303133;
+  1787→}
+  1788→.inline-form-body {
+  1789→  flex: 1;
+  1790→  min-height: 0;
+  1791→  overflow: auto;
+  1792→}
+  1793→/* 主表单（顶部输入区）固定不滚动 */
+  1794→.inline-form-body > .el-form {
+  1795→  flex-shrink: 0;
+  1796→}
+  1797→/* 元数据 tab 按钮行：与 tab 下沿和表格各留 4px */
+  1798→.metadata-toolbar-inline {
+  1799→  display: flex;
+  1800→  gap: 4px;
+  1801→  margin: 0 0 4px;
+  1802→}
+  1803→/* 数据预览 tab 搜索行：与 tab 下沿和表格各留 4px */
+  1804→.preview-toolbar-inline {
+  1805→  display: flex;
+  1806→  align-items: center;
+  1807→  gap: 4px;
+  1808→  margin: 0 0 4px;
+  1809→}
+  1810→.inline-form-footer {
+  1811→  display: flex;
+  1812→  justify-content: flex-end;
+  1813→  gap: 8px;
+  1814→  padding-top: 12px;
+  1815→  border-top: 1px solid #e5e7eb;
+  1816→  margin-top: 16px;
+  1817→  flex-shrink: 0;
+  1818→}
+  1819→</style>
+  1820→

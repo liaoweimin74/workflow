@@ -19,6 +19,9 @@
           <el-tag :type="typeTagType(row.type)">
             {{ typeLabel(row.type) }}
           </el-tag>
+          <el-tooltip v-if="isBuiltIn(row)" content="系统内建数据源，随应用启动自动预置，不可编辑/删除/禁用" placement="top">
+            <el-tag class="builtin-tag" size="small" type="success" effect="plain" round>内建</el-tag>
+          </el-tooltip>
         </template>
         <template #bound="{ row }">
           <span>{{ row.formKey || row.sourceKey || '—' }}</span>
@@ -1524,7 +1527,8 @@ function openView(row: DataSourceDTO) {
   }
 
 // ========== 操作按钮 ==========
-/** API 和 SQL 类型可手动编辑/删除；FORM/WORKFLOW/SYSTEM 由系统管理，仅可查看 */
+/** API 和 SQL 类型可手动编辑/删除；FORM/WORKFLOW/SYSTEM 由系统管理，仅可查看；
+ *  系统内建数据源（tenantId=system，随应用启动预置）只读且不可删改/禁用 */
 const actionButtons: ActionButton[] = [
   {
     label: '查看',
@@ -1542,7 +1546,7 @@ const actionButtons: ActionButton[] = [
     label: '编辑',
     icon: Edit,
     permission: 'data-source:manage',
-    show: (row: any) => row.type === 'API' || row.type === 'SQL' || row.type === 'FORM',
+    show: (row: any) => !isBuiltIn(row) && (row.type === 'API' || row.type === 'SQL' || row.type === 'FORM'),
     onClick: (row: any) => openEdit(row),
   },
   {
@@ -1550,7 +1554,7 @@ const actionButtons: ActionButton[] = [
     type: 'danger',
     icon: Delete,
     permission: 'data-source:manage',
-    show: (row: any) => row.type === 'API' || row.type === 'SQL',
+    show: (row: any) => !isBuiltIn(row) && (row.type === 'API' || row.type === 'SQL'),
     onClick: async (row: any) => {
       try {
         await ElMessageBox.confirm('确定要删除此数据源吗？', '删除确认', { type: 'warning' })
@@ -1569,6 +1573,11 @@ const actionButtons: ActionButton[] = [
 ]
 
 // ========== 工具函数 ==========
+/** 是否系统内建数据源（seeder 预置，tenant_id 固定为保留域 system；后端同步保护写操作）。 */
+function isBuiltIn(row: any): boolean {
+  return row?.tenantId === 'system'
+}
+
 function typeTagType(type: string): '' | 'primary' | 'success' | 'warning' | 'info' {
   const map: Record<string, '' | 'primary' | 'success' | 'warning' | 'info'> = {
     FORM: 'primary',
@@ -1815,5 +1824,9 @@ onMounted(async () => {
   border-top: 1px solid #e5e7eb;
   margin-top: 16px;
   flex-shrink: 0;
+}
+/* 类型列「内建」标记：与类型 tag 同行、左留 6px 间距 */
+.builtin-tag {
+  margin-left: 6px;
 }
 </style>

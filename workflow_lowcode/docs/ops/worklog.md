@@ -1304,3 +1304,19 @@ Stage Summary:
 - 提交 3ebac1e（NodeJS+前端）+ 8f5cf52（Java），已推送（3b09292..8f5cf52）
 - 声明式 JOIN 现支持：业务表单目标（不变）+ 5 个结构化内建数据源目标；预览端点双端齐备
 - 遗留：Java 端无编译环境仅静态审查；流程类 3 个数据源（流程定义/实例/待办）JOIN 目标未开放（派生列语义），后续如有真实场景再扩展
+
+---
+Task ID: 51-verify
+Agent: Z.ai Code (main)
+Task: Task 51 闭环验证——①join-preview 端点可用性 ②「目标表」下拉含内建数据源（用户问「任务完成了吗」触发的实证）
+
+Work Log:
+- API 实证（curl + admin token）：POST /api/v1/data-sources/join-preview 双场景全过——FORM→FORM（bill_test→ai_muf52ksu88）返回 `SELECT m.*, j1.name AS biz_name FROM wf_biz_bill_test m LEFT JOIN wf_biz_ai_muf52ksu88 j1 ...`；FORM→内建（dept-tree）返回 `LEFT JOIN sys_organization j1`（join-target-catalog 物理表解析正确）；params=["default"]（租户占位绑定）
+- 负例确认：formKey=biz_order（不存在）→ 业务 404「业务表单数据表不存在: biz_order」（校验生效，非路由 404）
+- agent-browser UI 端到端：登录 → 数据源列表 → 测试表单行「编辑」→ 关联查询配置切「声明式 JOIN」→ 表头确认为「目标表」（非「目标表单」）→ 目标表下拉实选候选 = 6 个业务表单 + 5 个内建（组织机构/系统字典/系统菜单/系统角色/系统用户，均带「（内建）」后缀）→ 选组织机构后关联/显示字段下拉正确加载物理列（主键 id/上级部门 id/部门名称/部门编码）→ 点「预览 SQL」展示 `SELECT m.*, j1.org_name AS dept_name FROM wf_biz_bill_test m LEFT JOIN sys_organization j1 ON j1.id = m.department WHERE m.tenant_id = ? ORDER BY m.created_at DESC` → 取消不保存
+- 环境备注：AI 悬浮球会遮挡弹窗「关闭」按钮（agent-browser 报 covered），隐藏 AI 助手后正常；行操作按钮顺序为 查看/数据/编辑
+
+Stage Summary:
+- Task 51 两项均闭环实证通过：①join-preview 404 已根治（端点在 dist 且进程已加载，API+UI 双验证）；②「目标表」文案 + 内建数据源候选 + 物理列联动 + 预览全链路可用
+- 未保存任何数据源配置变更（验证用配置已取消）
+- 已创建 15 分钟 webDevReview 巡检任务（job_id 411264）

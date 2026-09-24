@@ -1019,3 +1019,39 @@ Stage Summary:
 - 「文件和目录看不到」为预览面板显示问题（根源是门户 000 白屏），文件系统经 ls 确认完好无缺
 - 运维规约沉淀：不得杀 mariadbd/NestJS/vite 常驻进程；next dev 堆上限 614MB；每回合预览前先跑 start-portal.sh；远程 workflow 仓库 main 即权威备份
 - 风险备忘：3000 在每个 agent 回合结束后仍会被沙箱回收（结构性），用户如遇白屏，对助手说「启动门户」即可秒级恢复
+---
+Task ID: 41
+Agent: 主控（Z.ai Code）
+Task: 用户指令「代码push到仓库」
+
+Work Log:
+- 【仓库体检】workflow_lowcode/.git 幸存（未随沙箱重置丢失）；HEAD == origin/main == a632b25（Task 39 成果已在远程）；源码零未提交变更，仅 4 个运行时产物未跟踪
+- 【成果入库】Task 40 运维资产原本在门户项目（仓库外），复制进仓库存档：docs/ops/start-portal.sh（3000 幂等保活脚本）+ docs/ops/worklog.md（Task 32-40 交接文档快照，144KB/1021 行）
+- 【备忘落实】.gitignore 顶部补 frontend/bun.lock 与 backend-node/bun.lock（Task 38 遗留备忘：lock 文件为运行时产物，bun install 可再生）
+- 【提交推送】commit e2f3b5b（3 files, +1078）：「chore(ops): 收录门户保活脚本与工作交接文档，落实 bun.lock 忽略」→ push 成功 a632b25..e2f3b5b → HEAD == origin/main 验证一致
+
+Stage Summary:
+- 远程 liaoweimin74/workflow main 分支已含全部历史成果（7d9b643 菜单修复 / 6ff241b+33fb9fb 风格切换 / 2161931 布局统一 / a632b25 设计器四态主题化 / e2f3b5b 运维资产存档）
+- 交接文档首次随仓库分发（docs/ops/worklog.md），异地恢复时可直接读取运维铁律与启动方案
+- 本地工作区干净（仅 .engine-node/data/ 运行时产物未跟踪，符合设计）
+
+---
+Task ID: 42
+Agent: 主控（Z.ai Code）
+Task: 用户反馈「表单设计器页面与暗色风格不匹配，图标及字体看不清楚，画布周围还有白色空白」
+
+Work Log:
+- 【浏览器实测取证】agent-browser 登录→暗色（ verdant）→/form/designer：三问题全部复现；批量 computedStyle 取样定位漏网点
+- 【根因①·#app 颜色断层（最关键）】style.css `html,body,#app{color:#1f2a25}` 以 (1,0,0) 特异性直接命中 #app，`.dark #app` 只覆盖 background 未覆盖 color → 继承链在 #app 断层，全平台所有依赖继承的文字暗色下全灭。修复：.dark #app 补 color:#e8ebe8（根性修复，全站受益）
+- 【根因②·Task 39 兜底反噬】vendor/index.css Task 39 兜底 `._fc-designer div{color:inherit}` 特异性 (0,1,1) 压过同文件单 class 覆盖 (0,1,0)——修复①后 inherit 链通，兜底恢复正向作用
+- 【根因③·漏网硬编码】._fc-m-con 画布外围 #F5F5F5（白框元凶）、_fc-l-tab/_fc-r-tab #303133、_fc-r-title #333、_fd-m-extend #666/#f1f1f1、fc 内置 AI 侧栏白底——vendor/index.css 追加「补充二」覆盖块（全部带 ._fc-designer 前缀保证特异性）
+- 【根因④·AiPanel.vue】fc-designer 内置 AI 面板为 vendor SFC（scoped 样式特异性压过全局覆盖），Task 39 只主题化了悬浮球未改面板本体——本轮全量语义化 30+ 处硬编码（#fff/#262626/#666/#f5f5f5/#aaa/#2e73ff/#ececec→--el-* + color-mix）
+- 【四态浏览器实证】verdant 暗：组件库图标/文字、画布、右栏配置、AI 面板全部清晰可读，白框消除，拖入组件交互态正常；verdant 亮回归无破坏；classic 暗（#1b2040 底+#7c7ff0 主色）协调
+- 【测试数据清理】E2E 建的「暗色测试表单」经 API（X-Tenant-Id: default 头）定位并 DELETE 200
+- 【质量与入库】vue-tsc 46 个错误全为既有基线（修改文件零命中）；commit 3199b38 已 push（e2f3b5b..3199b38），3 文件 +143/-48
+- 【附注】主题调试经验：手动 classList.add('dark') 会被 AdminLayout mounted 读 localStorage('theme-dark') 重置——浏览器调试主题必须 setItem('theme-dark','1') 后再加 class
+
+Stage Summary:
+- 表单设计器四态暗色补全完成，用户三反馈全数解决并截图实证
+- 沉淀：#app 继承断层是暗色「文字看不清」类问题的总根（上溯多个任务的零散暗色问题可能均源于此）；全局 CSS 覆盖层必须以 ._fc-designer 前缀保证特异性；vendor SFC scoped 样式（如 AiPanel）只能改源文件
+- 风险备忘：fc-designer 画布内组件选中描边仍为 form-create 默认蓝（可读性无碍，暂留）；后续若做选中态主题化可在 vendor/index.css 覆盖 .draggable-drag 边框

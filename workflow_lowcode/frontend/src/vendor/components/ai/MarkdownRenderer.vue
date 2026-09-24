@@ -1,5 +1,5 @@
 <template>
-    <div class="_fd-markdown-renderer" v-html="renderedMarkdown"></div>
+    <div class="_fd-markdown-renderer" @click="onRootClick" v-html="renderedMarkdown"></div>
 </template>
 
 <script>
@@ -42,10 +42,14 @@ export default {
                 return `<pre><code class="language-${lang || 'text'}">${highlighted}</code></pre>`;
             };
 
-            // 重写链接渲染器，让链接在新窗口打开
+            // 重写链接渲染器：站内路由链接（/ 开头，排除 //）交前端路由跳转（经 data-nav 点击拦截），其余新窗口打开
             renderer.link = ({href, title, text}) => {
                 const titleAttr = title ? ` title="${title}"` : '';
-                return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+                const isInternal = href.startsWith('/') && !href.startsWith('//');
+                const targetAttr = isInternal
+                    ? ' data-nav="1"'
+                    : ' target="_blank" rel="noopener noreferrer"';
+                return `<a href="${href}"${titleAttr}${targetAttr}>${text}</a>`;
             };
 
             // 配置 marked 选项
@@ -63,6 +67,19 @@ export default {
         },
     },
     methods: {
+        // 站内路由链接点击拦截：走前端路由（自动补 /lowcode base），避免整页跳 :3000/form/... 404
+        onRootClick(event) {
+            const target = event.target;
+            if (!target || typeof target.closest !== 'function') return;
+            const anchor = target.closest('a[data-nav]');
+            if (!anchor) return;
+            const href = anchor.getAttribute('href') || '';
+            if (!href.startsWith('/') || href.startsWith('//')) return;
+            event.preventDefault();
+            if (this.$router) {
+                this.$router.push(href);
+            }
+        },
         // 后处理HTML，添加复制功能
         postprocessHtml(html) {
             // 为代码块添加复制按钮和语言显示

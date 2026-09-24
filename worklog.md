@@ -1145,3 +1145,24 @@ Stage Summary:
 - 业务表单/工作流表单语义在小智话术层固化：业务表单永不提流程
 - 顺手排掉 MariaDB typeCast 地雷：此前任何 BUSINESS 表单手动发布也会崩（column_config 首次非空即触发），与 AI 改造无关但被本轮验证逼出
 - Java 侧同步（CreateFormTool + BASE_PROMPT）沙箱无 javac 静态审查，模式完全复制 NestJS 版
+
+---
+Task ID: 48
+Agent: 主控（Z.ai Code）
+Task: 用户报障——点击 AI 话术里的「设计器中打开」链接报 404
+
+Work Log:
+- 【根因三连环】①AI 生成 Markdown 链接 `/form/designer?id=xxx`（router 相对路径）在小智渲染器（src/utils/markdown.ts link_open 规则）与设计器 vendor 渲染器（vendor/components/ai/MarkdownRenderer.vue）里均落到「未命中白名单→target=_blank」分支，点击新开标签整页直达 :3000/form/designer → 门户无此路由 → 404；②vue-router `createWebHistory()` 无参 base 为空串（实测 eval $router.options.history.base=''，并不会自动取 vite base /lowcode/），应用内跳转产出 /login、/dashboard 等缺前缀 URL，刷新即 404（历史已知「深链刷新 404」的真因）；③缺前缀 URL 粘贴/外链场景门户无兜底
+- 【修复①渲染层拦截】src/utils/markdown.ts link_open 新增站内分支（href 以单 / 开头、排除协议相对 //）→ 打 data-nav 走既有点击拦截（小智 MarkdownRenderer onClick→emit navigate→AiAssistantOrb navigate→router.push），复用现有胶囊机制，不再 target=_blank
+- 【修复②设计器 AiPanel】vendor MarkdownRenderer.vue：renderer.link 站内链接改 data-nav="1" 去 target=_blank；根节点加 @click onRootClick → closest('a[data-nav]') → preventDefault + this.$router.push(href)（app.use(router) 全局属性可用）
+- 【修复③router base 根治】router/index.ts `createWebHistory(import.meta.env.BASE_URL)`（/lowcode/），应用内 URL 从此带 base 前缀、刷新可直达；http.ts 401 跳登录改 `import.meta.env.BASE_URL + 'login'` 保持一致；全库 grep 确认无其他 location.pathname 依赖
+- 【修复④门户兜底】Next 门户 src/proxy.ts（middleware.ts 按 Next 16 弃用警告迁移改名，函数 middleware→proxy）：新增 LOWCODE_FIRST_SEGMENTS 白名单（login/designer/form/page/biz-data/process/system/dashboard/profile/data-source/messages/404），命中即 307 重定向补 /lowcode 前缀（req.nextUrl.clone 保留 query）；matcher 扩展对应前缀；与门户自有路由（/、/api/*、/lowcode/*）零冲突
+- 【验证·curl】/form/designer?id=123→307 location=/lowcode/form/designer?id=123（query 保留）；/biz-data/xxx→307；补前缀后 200；门户首页 200；门户 API 200——迁移 proxy.ts 后复验五场景全过
+- 【验证·浏览器全链路】登录→小智创建「会议室预约业务表单」→ 回复链接实测 href=/form/designer?id=648b850b...、data-nav 已打、target=null → 点击 → URL 变 /lowcode/form/designer?id=... → 设计器画布加载（表单名称/标识 ai_muf5sckj12/字段齐全）；深链刷新设计器页 → 正常；粘贴缺前缀 URL → 307 → 设计器正常
+- 【验证·落库与单测】API 列表确认 ai_muf5sckj12 DRAFT 在库（X-Tenant-Id: default）；既有单测 AiAssistantOrb 9 + MarkdownRenderer 2 = 11/11 通过；改动文件 ESLint 0 error
+- 【注】MariaDB 客户端本轮回归（无 mysql CLI、find 全盘超时），落库验证改走 API + 浏览器整页刷新双实证，结论等价
+
+Stage Summary:
+- AI 话术站内链接全场景打通：普通点击（前端路由拦截）、新标签/粘贴/外链（门户 307 兜底）、刷新（router base 修复）三层各自闭环
+- 沉淀：vue-router createWebHistory() 必须显式传 import.meta.env.BASE_URL——「无参自动取 base」是常见误解，本例中它就是深链 404 的总根源；AI 生成链接的渲染层应一律拦截站内路径走 SPA 路由
+- 门户 middleware→proxy 完成 Next 16 惯例迁移，弃用警告清零

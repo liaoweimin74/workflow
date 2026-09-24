@@ -39,7 +39,34 @@ function restoreRawSearch(url: string): string {
   return `?${restored}`;
 }
 
-export function middleware(req: NextRequest) {
+/**
+ * 低代码 SPA 深链前缀白名单。
+ *
+ * 背景：Vue 前端挂在 /lowcode/（vite base），vue-router 用的是不含 base 的
+ * 路由路径（如 /form/designer?id=xxx）。AI 话术生成的 Markdown 链接是
+ * router 相对路径——正常点击已被前端拦截走 vue-router（自动补 base），
+ * 但粘贴到新标签、Ctrl+点击、或从外部打开时浏览器会直接请求
+ * :3000/form/designer → Next 门户无此页面 → 404。
+ *
+ * 这里按 vue-router 顶层路由的首段白名单做 307 重定向补上 /lowcode 前缀，
+ * 与门户自有页面（/、/api/*、/lowcode/*）零冲突。
+ */
+const LOWCODE_FIRST_SEGMENTS = new Set([
+  "login",
+  "designer",
+  "form",
+  "page",
+  "biz-data",
+  "process",
+  "system",
+  "dashboard",
+  "profile",
+  "data-source",
+  "messages",
+  "404",
+]);
+
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const search = restoreRawSearch(req.url);
 
@@ -50,6 +77,14 @@ export function middleware(req: NextRequest) {
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.rewrite(new URL(`${pathname}${search}`, BACKEND_ORIGIN));
+  }
+
+  // 低代码 SPA 深链缺 base 前缀：307 重定向补 /lowcode（保留 query）
+  const firstSegment = pathname.split("/")[1] ?? "";
+  if (firstSegment && LOWCODE_FIRST_SEGMENTS.has(firstSegment)) {
+    const target = req.nextUrl.clone();
+    target.pathname = `/lowcode${pathname}`;
+    return NextResponse.redirect(target, 307);
   }
 
   if (pathname === "/lowcode") {
@@ -73,5 +108,26 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/lowcode/:path*", "/lowcode", "/api/:path*"],
+  matcher: [
+    "/lowcode/:path*",
+    "/lowcode",
+    "/api/:path*",
+    // 低代码 SPA 深链（缺 /lowcode 前缀时在 middleware 内 307 补齐）
+    "/login",
+    "/login/:path*",
+    "/designer",
+    "/designer/:path*",
+    "/form/:path*",
+    "/page/:path*",
+    "/biz-data/:path*",
+    "/process/:path*",
+    "/system/:path*",
+    "/dashboard",
+    "/dashboard/:path*",
+    "/profile",
+    "/profile/:path*",
+    "/data-source/:path*",
+    "/messages/:path*",
+    "/404",
+  ],
 };

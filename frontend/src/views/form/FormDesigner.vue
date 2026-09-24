@@ -295,7 +295,7 @@ onMounted(async () => {
         title: '',
         children: ['配置数据源'],
         native: true,
-        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        style: { width: '100%', borderColor: 'var(--el-color-primary)', color: 'var(--el-color-primary)' },
         props: { size: 'small' },
         on: { click: () => openLookupConfig() },
       },
@@ -348,7 +348,7 @@ onMounted(async () => {
         title: '',
         children: ['配置数据源'],
         native: true,
-        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        style: { width: '100%', borderColor: 'var(--el-color-primary)', color: 'var(--el-color-primary)' },
         props: { size: 'small' },
         on: { click: () => openPickerConfig() },
       },
@@ -469,7 +469,7 @@ function registerFormContainerProps() {
         title: '数据源',
         children: ['配置数据源'],
         native: true,
-        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        style: { width: '100%', borderColor: 'var(--el-color-primary)', color: 'var(--el-color-primary)' },
         props: { size: 'small' },
         on: { click: () => openContainerConfig() },
       },
@@ -506,7 +506,7 @@ function registerDataTableProps() {
         title: '数据源',
         children: ['配置数据源'],
         native: true,
-        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        style: { width: '100%', borderColor: 'var(--el-color-primary)', color: 'var(--el-color-primary)' },
         props: { size: 'small' },
         on: { click: () => openTableDsConfig() },
       },
@@ -527,7 +527,7 @@ function registerCardListProps() {
         title: '数据源',
         children: ['配置数据源'],
         native: true,
-        style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+        style: { width: '100%', borderColor: 'var(--el-color-primary)', color: 'var(--el-color-primary)' },
         props: { size: 'small' },
         on: { click: () => openTableDsConfig() },
       },
@@ -537,7 +537,7 @@ function registerCardListProps() {
         title: '卡片样式',
         children: ['配置卡片样式'],
         native: true,
-        style: { width: '100%', marginLeft: '0', borderColor: '#2E73FF', color: '#2E73FF' },
+        style: { width: '100%', marginLeft: '0', borderColor: 'var(--el-color-primary)', color: 'var(--el-color-primary)' },
         props: { size: 'small' },
         on: { click: () => openCardStyleConfig() },
       },
@@ -797,8 +797,8 @@ import { nextTick } from 'vue'
   display: flex;
   align-items: center;
   padding: 8px 16px;
-  background: #fff;
-  border-bottom: 1px solid #e8e8e8;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
   gap: 8px;
   height: 50px;
   flex-shrink: 0;
@@ -831,7 +831,7 @@ import { nextTick } from 'vue'
 .preview-json {
   max-height: 60vh;
   overflow: auto;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
   padding: 12px;
   border-radius: 4px;
   font-size: 14px;

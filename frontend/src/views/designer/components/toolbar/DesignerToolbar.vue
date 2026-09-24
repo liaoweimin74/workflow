@@ -105,8 +105,8 @@ defineEmits<{
   justify-content: space-between;
   padding: 0 16px;
   height: 48px;
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-light);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   z-index: 10;
 }
@@ -123,7 +123,7 @@ defineEmits<{
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .designer-title {
@@ -139,7 +139,7 @@ defineEmits<{
 
 .toggle-label {
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   white-space: nowrap;
 }
 </style>

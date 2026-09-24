@@ -76,11 +76,12 @@ interface PaletteGroup {
   items: PaletteNode[]
 }
 
-/* 节点类别 → 图标 chip 配色（柔和填充 + 同色文字，X6 BPMN 风格） */
+/* 节点类别 → 图标 chip 配色（柔和填充 + 同色文字，X6 BPMN 风格）
+   全部走语义变量/半透明洗底：四态（青墨/经典 × 明暗）自动适配 */
 const CATEGORY_STYLES: Record<string, { bg: string; color: string }> = {
-  event: { bg: '#ecfbfd', color: '#2ca7b5' },      // 青 — 事件
-  activity: { bg: '#e9eaff', color: '#5452d3' },   // 靛蓝 — 活动
-  gateway: { bg: '#fef3c7', color: '#d97706' },    // 琥珀 — 网关
+  event: { bg: 'color-mix(in srgb, var(--brand-bright, #2ca7b5) 13%, transparent)', color: 'var(--brand-bright, #2ca7b5)' },      // 青瓷 — 事件
+  activity: { bg: 'var(--ds-industrial-50)', color: 'var(--ds-industrial-600)' },   // 主题色 — 活动
+  gateway: { bg: 'color-mix(in srgb, var(--el-color-warning) 14%, transparent)', color: 'var(--el-color-warning)' },    // 琥珀 — 网关
 }
 
 const props = defineProps<{ collapsed?: boolean }>()
@@ -145,8 +146,8 @@ function handleClick(_node: PaletteNode) {
 
 <style scoped>
 .node-palette {
-  background: #fff;
-  border-right: 1px solid var(--color-industrial-300, #b9b9f9);
+  background: var(--el-bg-color);
+  border-right: 1px solid var(--el-border-color-light);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -280,7 +281,7 @@ function handleClick(_node: PaletteNode) {
   flex-direction: column;
   gap: 4px;
   padding: 6px;
-  background: #fff;
+  background: var(--el-bg-color-overlay);
   border: 1px solid var(--el-border-color-lighter, #eef1fc);
   border-radius: 10px;
   box-shadow: 0 1px 3px rgba(31, 36, 55, 0.04);

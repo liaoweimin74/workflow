@@ -1102,3 +1102,26 @@ Stage Summary:
 - 平台 AI 能力 100% 内化：小智助手（对话/导航/表单生成）与设计器 AiPanel（规则 diff 编辑）全部跑平台内置 GLM（glm-4-plus），零外部 API key 配置，开箱即用
 - 架构沉淀：SDK 无 function calling 时的文本协议工具模拟模式；vendor 流式协议对 chunk 边界的隐式约束（startsWidth/slice 截取）必须逐字节对齐；supervisor 自动补位使 8080 具备自愈能力
 - 风险备忘：fc-chat 系统提示约束的 rule 完整性依赖模型自觉（GLM 表现稳定）；后续可选做 server 端 rule 合并校验
+---
+Task ID: 46
+Agent: 主控（Z.ai Code）
+Task: 用户两条指令——「Java 后端未废弃，AI 需同步改为平台内置模型」+「修复数据源管理编辑业务表单时字段元数据报『业务表单不存在或未发布: bill_test』」
+
+Work Log:
+- 【纠偏确认】worklog Task 45 已完成 NestJS 侧 AI 内化（commit 5ea3c47）；本轮补 Java 侧（用户指出 Java 后端仍在使用，非废弃）并修数据源 bug
+- 【内部 LLM 网关（核心新增）】backend-node/src/ai/controller/internal-llm.controller.ts：OpenAI 兼容端点 POST /api/internal/llm/v1/chat/completions，@Public + Bearer 内部密钥校验（env INTERNAL_LLM_KEY，默认 internal-llm）；无 tools 直通 GLM；有 tools 走文本协议模拟（与 AiAgentService 同款 {"tool","args"} 约定）并转换为标准 OpenAI tool_calls 响应；stream=true 攒帧合成 delta+[DONE]（消费方均为全量处理语义）；角色映射 system→assistant、tool→user(TOOL_RESULT: 回灌)、assistant.tool_calls→协议 JSON 文本
+- 【Java AI 同步内化】AiProperties 默认值：enabled=true、baseUrl=http://127.0.0.1:8080/api/internal/llm/v1、apiKey=internal-llm、model=glm-4-plus；application.yml 同步（AI_BASE_URL/AI_API_KEY/AI_MODEL 环境变量仍可覆盖接 DeepSeek 等外部服务）；AiChatController/AiAgentService/formgen 零改动，SSE 协议不变
+- 【Java 编译环境限制】沙箱仅 JRE 无 javac/maven（ps 无 java 进程佐证 Java 在用户环境部署）——Java 改动经静态审查保障（简单赋值 + JEP 361 switch/yield 标准语法），NestJS 侧 curl 全链路实证
+- 【bug 根因】bill_test 在 wf_form_def 中 status=DRAFT 从未发布；数据源 getMetadata → FORM 适配器 → loadColumns → findLatestPublishedByKey 要求 PUBLISHED → null → 404
+- 【bug 修复·两后端对齐】NestJS + Java 的 UnifiedDataSourceAdapter metadata：FORM 与 WORKFLOW 分支对「表单不存在或未发布」404 降级为空列（writable:false + formKey 保留），其余异常照抛；前端 DataSourceListPage.vue el-table #empty 空态引导「绑定表单尚未发布，发布表单后此处将展示字段元数据」
+- 【验证·curl 四连】①网关非流式 200+正常回复；②tools 模拟→tool_calls(finish_reason=tool_calls)；③stream→delta 帧+[DONE]；④错误 key→401
+- 【验证·metadata】bill_test（FORM）与 ai_xiaozhi_test（WORKFLOW）均 404→200 {columns:[],writable:false,formKey}；WORKFLOW 降级为一致性顺手补齐（用户未报但同病）
+- 【验证·浏览器】agent-browser 登录→数据源管理→bill_test 编辑→字段元数据 tab：报错消失、空态引导出现；小智面板对话回归正常（GLM 回复+Markdown 链接）
+- 【验证·单测】DataSourceListPage.test.ts 53/53 通过；backend-node nest build 通过
+- 【测试数据保留】bill_test(DRAFT) 与 ai_xiaozhi_test(DRAFT) 数据源保留作为降级场景演示入口
+
+Stage Summary:
+- Java AI 模块平台内置模型化完成：默认零配置直连 NestJS 内部网关跑 GLM，两后端 AI 全链路收敛，外部部署保留 env 覆盖能力
+- 内部 LLM 网关是通用基础设施：任何 OpenAI 兼容客户端（含未来服务）经 Bearer internal-llm 即可用平台内置模型；文本协议模拟 tool_calls 让无 function calling 的 SDK 无缝支撑 Java agent 循环
+- 数据源字段元数据 404 降级空列：编辑体验不再被「未发布」阻断，空态文案给出行动指引（发布表单）
+- 沉淀：跨栈行为对齐类改动必须 NestJS/Java 同轮同改（本轮 FORM+WORKFLOW 四分支）；沙箱无 javac 时 Java 改动靠静态审查+NestJS 侧 curl 实证

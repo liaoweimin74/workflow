@@ -35,13 +35,14 @@ logging:
     org.springframework.modulith: DEBUG
     org.flywaydb: DEBUG
 
-# AI 服务配置（默认关闭；配置 api-key 后置 enabled=true 启用）
+# AI 服务配置：默认走平台内置模型（经 NestJS 内部 LLM 网关，开箱即用，无需外部 API key）。
+# 外部部署时可用环境变量覆盖，接入任意 OpenAI 兼容服务（如 DeepSeek）。
 workflow:
   ai:
-    enabled: false
-    base-url: ${AI_BASE_URL:https://api.deepseek.com/v1}
-    api-key: ${AI_API_KEY:}
-    model: ${AI_MODEL:deepseek-chat}
+    enabled: true
+    base-url: ${AI_BASE_URL:http://127.0.0.1:8080/api/internal/llm/v1}
+    api-key: ${AI_API_KEY:internal-llm}
+    model: ${AI_MODEL:glm-4-plus}
     temperature: 0.7
     max-tokens: 4096
     connect-timeout-ms: 5000

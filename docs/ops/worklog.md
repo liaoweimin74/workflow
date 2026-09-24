@@ -1189,3 +1189,22 @@ Stage Summary:
 - AI formgen 词汇表与前端设计器组件注册表逐一对齐（三方同源：prompt=validator=发布白名单），模型旧习惯输出由别名归一兜底
 - 沉淀：跨栈对齐类修复（NestJS+Java）必须同步改四处（校验/提示/validator/列类型推断）；运行进程加载 dist 的服务改代码后「build+重启」缺一不可
 - 遗留：migrator.spec V2 checksum 断言失败为历史问题（不阻塞），建议后续核对 flyway 历史表实际值
+
+---
+Task ID: 50
+Agent: Z.ai Code (main)
+Task: 用户质疑澄清——内建数据源是否存储在数据源表？为什么需要改代码？+ 收尾提交已实施改动
+
+Work Log:
+- 调查发现 Task 50 代码已由后台巡检任务实施在工作区（未提交）：新增 system-source-catalog.ts（8 个内建数据源唯一事实源）、built-in-data-source-seeder.ts（启动幂等播种）、system-source-query.service.ts（统一取数适配）等
+- 验证编译与进程：dist 产物齐全，NestJS 8080 进程已加载新代码
+- API 实测数据源列表：15 条中 8 条 ds-builtin-*（组织机构/系统用户/系统菜单/系统角色/系统字典/流程定义/流程实例/待办任务），全部 type=SYSTEM、ENABLED
+- 取数实测：系统菜单返回真实菜单树数据、系统用户返回 admin/test 等用户；流程定义/待办任务返回空——与底层 API（/api/v1/deployed-processes/summaries 返回 []）一致，属数据为空而非查询缺陷
+- 写保护实测：删除→400「系统内建数据源不允许删除: 组织机构」；改名→400 不允许修改；禁用→400 不允许禁用
+- 提交 df84c3d（12 文件 +846/−59），未 push（等用户指示）
+- 向用户澄清架构：数据（8 行记录）确实存在 wf_data_source 表；代码负责三件事——启动播种（自愈式预置）、异构系统数据取数适配（菜单/流程数据无统一物理表可通用查询）、写保护防误删
+
+Stage Summary:
+- Task 50 功能完成并验证：8 个内建数据源已在数据源列表可见、可取数、受保护
+- 关键设计：seed 而非手工 SQL/迁移（误删自愈、新环境零操作）；type=SYSTEM 跨租户可见；BUILT_IN_TENANT='system' 保留域判定写保护
+- 遗留：改动未 push（等用户指令）；前端列表页 SYSTEM 徽标已改但未做浏览器级验证（API 层已实测通过）

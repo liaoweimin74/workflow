@@ -49,8 +49,8 @@ public class DataSourceDefinitionService {
     private static final String TYPE_SQL = "SQL";
     private static final Set<String> SUPPORTED_TYPES = Set.of(TYPE_FORM, TYPE_SYSTEM, TYPE_API, TYPE_WORKFLOW, TYPE_SQL);
 
-    /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist） */
-    private static final Set<String> SYSTEM_SOURCE_KEYS = Set.of("dept-tree", "user-tree");
+    /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist；唯一事实源见 BuiltInSystemSources，8 个内建数据源） */
+    private static final Set<String> SYSTEM_SOURCE_KEYS = BuiltInSystemSources.SOURCE_KEYS;
 
     private final DataSourceDefinitionRepository dsRepository;
     private final FormDefinitionRepository formDefRepository;
@@ -148,6 +148,8 @@ public class DataSourceDefinitionService {
                                        String sourceKey, String params) {
         String tenantId = tenantProvider.getTenantId();
         DataSourceDefinition ds = getById(id);
+        // 内建保护：tenant_id='system' 的预置行不允许修改（对齐 NodeJS requireNotBuiltIn）
+        requireNotBuiltIn(ds, "修改");
 
         String newType = type == null || type.isBlank() ? ds.getType() : type;
         if (type != null && !type.isBlank() && !SUPPORTED_TYPES.contains(newType)) {
@@ -227,6 +229,8 @@ public class DataSourceDefinitionService {
     @Transactional
     public DataSourceDefinition disable(String id) {
         DataSourceDefinition ds = getById(id);
+        // 内建保护：禁用会让设计器/页面取数失败，直接 400（对齐 NodeJS requireNotBuiltIn）
+        requireNotBuiltIn(ds, "禁用");
         ds.setStatus(STATUS_DISABLED);
         return dsRepository.save(ds);
     }
@@ -243,6 +247,8 @@ public class DataSourceDefinitionService {
     @Transactional
     public void delete(String id) {
         DataSourceDefinition ds = getById(id);
+        // 内建保护：先于引用统计（对齐 NodeJS remove：requireNotBuiltIn → countRefs → delete）
+        requireNotBuiltIn(ds, "删除");
         String tenantId = ds.getTenantId();
         long refCount = countRefs(tenantId, id);
         if (refCount > 0) {
@@ -424,13 +430,13 @@ public class DataSourceDefinitionService {
         return params.toString();
     }
 
-    /** sourceKey → internal API 路径 key 映射（dept-tree→dept-tree，user-tree→users） */
+    /** sourceKey → internal API 路径 key 映射（唯一事实源见 BuiltInSystemSources.mapSystemInternalPath） */
     private String mapSystemInternalKey(String sourceKey) {
-        return switch (sourceKey) {
-            case "dept-tree" -> "dept-tree";
-            case "user-tree" -> "users";
-            default -> throw new BusinessException(400, "未注册的系统数据源: " + sourceKey);
-        };
+        String path = BuiltInSystemSources.mapSystemInternalPath(sourceKey);
+        if (path == null || path.isBlank()) {
+            throw new BusinessException(400, "未注册的系统数据源: " + sourceKey);
+        }
+        return path;
     }
 
     // ==================== FORM 查询配置段（queryMode）校验 ====================
@@ -593,6 +599,16 @@ public class DataSourceDefinitionService {
     }
 
     // ==================== 内部工具 ====================
+
+    /**
+     * 内建保护：{@code tenant_id = BUILT_IN_TENANT} 的预置行不允许修改/禁用/删除。
+     * enable 不拦（对已 ENABLED 的内建行是幂等空操作，且拦了反而让前端开关卡死）。
+     */
+    private void requireNotBuiltIn(DataSourceDefinition ds, String action) {
+        if (BuiltInSystemSources.BUILT_IN_TENANT.equals(ds.getTenantId())) {
+            throw new BusinessException(400, "系统内建数据源不允许" + action + ": " + ds.getName());
+        }
+    }
 
     /** 按类型校验必填项：FORM/WORKFLOW→formKey（sourceKey 由 formKey 派生）；SYSTEM/API/SQL→sourceKey；API→params 合法 JSON */
     private void validateRequiredFields(String type, String formKey, String sourceKey, String params) {

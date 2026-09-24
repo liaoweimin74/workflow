@@ -4,7 +4,8 @@ import { newColumnConfig, type ColumnConfig } from '../../../common/domain/colum
  * 系统内建数据源目录 —— **唯一事实源**。
  *
  * 消费方（各自取所需，改这里一处全联动）：
- *   - `built-in-data-source-seeder.ts`：启动时按本目录幂等预置 `wf_data_source` 行；
+ *   - `migrations/V39__builtin_data_sources.sql`（两端同内容）：按本目录幂等预置
+ *     `wf_data_source` 行（Flyway/Node migrator 执行；**初始化不走启动代码**）；
  *   - `unified-data-source-adapter.ts`：SYSTEM 元数据列 / 取数分支；
  *   - `internal-data-source-router.ts` 与 `data-source-write.service.ts`：
  *     SYSTEM sourceKey 白名单（原来两处各抄一份 `['dept-tree','user-tree']`，已收编）；

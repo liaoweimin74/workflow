@@ -54,6 +54,7 @@ class UnifiedDataSourceAdapterTest {
     @Mock private HttpLogicExecutor httpExecutor;
     @Mock private InternalDataSourceRouter router;
     @Mock private WorkflowFormDataQueryService workflowQueryService;
+    @Mock private BuiltInSystemSourceQueryService builtInSourceQueryService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private UnifiedDataSourceAdapter adapter;
@@ -64,7 +65,7 @@ class UnifiedDataSourceAdapterTest {
         when(router.resolve(any(), any())).thenReturn(
             new InternalDataSourceRouter.ResolvedEndpoint("T", "t", "GET", "/t"));
         adapter = new UnifiedDataSourceAdapter(bizDataService, formDefService, organizationService,
-                userService, httpExecutor, objectMapper, router, workflowQueryService);
+                userService, httpExecutor, objectMapper, router, workflowQueryService, builtInSourceQueryService);
     }
 
     @AfterEach

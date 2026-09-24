@@ -6,6 +6,7 @@ import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.domain.PageResult;
 import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.BuiltInSystemSourceQueryService;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.system.domain.dto.OrganizationCreateRequest;
 import com.workflow.system.domain.dto.UserCreateRequest;
@@ -32,13 +33,15 @@ class SystemInternalControllerTest {
 
     private OrganizationService organizationService;
     private UserService userService;
+    private BuiltInSystemSourceQueryService builtInSourceQuery;
     private SystemInternalController controller;
 
     @BeforeEach
     void setUp() {
         organizationService = mock(OrganizationService.class);
         userService = mock(UserService.class);
-        controller = new SystemInternalController(organizationService, userService);
+        builtInSourceQuery = mock(BuiltInSystemSourceQueryService.class);
+        controller = new SystemInternalController(organizationService, userService, builtInSourceQuery);
     }
 
     private TreeNode node(Long id, Long parentId, String label, String code, List<TreeNode> children) {

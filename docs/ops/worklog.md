@@ -1304,3 +1304,63 @@ Stage Summary:
 - 提交 3ebac1e（NodeJS+前端）+ 8f5cf52（Java），已推送（3b09292..8f5cf52）
 - 声明式 JOIN 现支持：业务表单目标（不变）+ 5 个结构化内建数据源目标；预览端点双端齐备
 - 遗留：Java 端无编译环境仅静态审查；流程类 3 个数据源（流程定义/实例/待办）JOIN 目标未开放（派生列语义），后续如有真实场景再扩展
+
+---
+Task ID: 51-verify
+Agent: Z.ai Code (main)
+Task: Task 51 闭环验证——①join-preview 端点可用性 ②「目标表」下拉含内建数据源（用户问「任务完成了吗」触发的实证）
+
+Work Log:
+- API 实证（curl + admin token）：POST /api/v1/data-sources/join-preview 双场景全过——FORM→FORM（bill_test→ai_muf52ksu88）返回 `SELECT m.*, j1.name AS biz_name FROM wf_biz_bill_test m LEFT JOIN wf_biz_ai_muf52ksu88 j1 ...`；FORM→内建（dept-tree）返回 `LEFT JOIN sys_organization j1`（join-target-catalog 物理表解析正确）；params=["default"]（租户占位绑定）
+- 负例确认：formKey=biz_order（不存在）→ 业务 404「业务表单数据表不存在: biz_order」（校验生效，非路由 404）
+- agent-browser UI 端到端：登录 → 数据源列表 → 测试表单行「编辑」→ 关联查询配置切「声明式 JOIN」→ 表头确认为「目标表」（非「目标表单」）→ 目标表下拉实选候选 = 6 个业务表单 + 5 个内建（组织机构/系统字典/系统菜单/系统角色/系统用户，均带「（内建）」后缀）→ 选组织机构后关联/显示字段下拉正确加载物理列（主键 id/上级部门 id/部门名称/部门编码）→ 点「预览 SQL」展示 `SELECT m.*, j1.org_name AS dept_name FROM wf_biz_bill_test m LEFT JOIN sys_organization j1 ON j1.id = m.department WHERE m.tenant_id = ? ORDER BY m.created_at DESC` → 取消不保存
+- 环境备注：AI 悬浮球会遮挡弹窗「关闭」按钮（agent-browser 报 covered），隐藏 AI 助手后正常；行操作按钮顺序为 查看/数据/编辑
+
+Stage Summary:
+- Task 51 两项均闭环实证通过：①join-preview 404 已根治（端点在 dist 且进程已加载，API+UI 双验证）；②「目标表」文案 + 内建数据源候选 + 物理列联动 + 预览全链路可用
+- 未保存任何数据源配置变更（验证用配置已取消）
+- 已创建 15 分钟 webDevReview 巡检任务（job_id 411264）
+
+---
+Task ID: 51-analysis
+Agent: Z.ai Code (main)
+Task: 关联查询配置（FORM queryMode config/sql）作用与问题全面分析（用户要求）
+
+Work Log:
+- 通读 Node 端全链路：form-query-config.ts（parse+ensureAlias）→ join-sql-generator.ts（buildSelect/Count/validate/localRef JSON_EXTRACT '$[0]'）→ join-target-catalog.ts（5 内建物理映射）→ biz-data-support.ts（queryJoinConfig/previewJoinSql/buildJoinColumns/toJoinVO）→ unified-data-source-adapter.ts（metadata appendJoinColumns/query 分流）→ data-source-write.service.ts（validateConfigJoins）→ filter-sql.ts（appendFilters/Keyword 白名单）
+- 核对 Java 端 JoinSqlGenerator 确认 JoinGroup 分组实现（Node 端无分组，逐 join 生成 LEFT JOIN，两端结构性差异）
+- 识别问题清单（详见用户报告）：JSON 只取首元素/同条件 JOIN 未分组/foreignField 非唯一膨胀/保存校验缺口（localField 无格式校验、FORM 目标字段无存在性校验、virtualKey 主表冲突校验未被运行时调用）/JOIN 目标表无租户过滤/一层直连能力边界/JSON_EXTRACT 无索引/三处校验分裂/metadata 30s 缓存延迟等
+
+Stage Summary:
+- 输出 10+ 项问题（分正确性/安全/性能/一致性/体验五级），未做代码修改——等用户决策修复优先级
+- 快赢候选：①localField+FORM 目标字段保存侧白名单校验 ②Node 对齐 Java JoinGroup 分组 ③运行时补调 JoinSqlGenerator.validate
+
+---
+Task ID: 51-fix
+Agent: Z.ai Code (main)
+Task: 方案 A 全量修复——声明式 JOIN 分组对齐/租户过滤/校验加固/体验补齐（Node+Java+前端三端）
+
+Work Log:
+- Node join-sql-generator.ts 重构：①groupJoins 按 (localField,targetFormKey,foreignField) 分组，同条件多字段合并一条 LEFT JOIN（alias=j1..jN 按组序，传入 alias 忽略）——消除同表重复 JOIN 膨胀 + 双引擎漂移；②joinOnClause：FORM 目标 ON 子句追加 AND j1.tenant_id=?（LEFT JOIN 语义必须放 ON；sys_* 无 tenant_id 列不加）params 顺序 join 租户参在前主租户在后；③localRef 白名单前置（BUILTIN 短路→columns 存在且 ref 主表前缀，否则「主表关联字段不存在」）封死存量脏 params 标识符注入面；④requireIdentifier（JOIN_FIELD_PATTERN）覆盖 joinField/virtualKey/localField/foreignField；⑤validate 删 alias 校验（对齐 Java D3）加标识符四连
+- Node biz-data-support.ts：queryJoinConfig try 内调 validateJoins(joins, columnKeys+id)（运行时兜底 400）；buildJoinColumns 改分组 ref（组 alias 与生成器同源）+ <joinField>_text 冗余列带出（对齐 Java buildJoinColumns，hasColumn/findJoinTarget/joinTargetColumnType/resolveJoinTargets）
+- Node data-source-write.service.ts：validateConfigJoins 线程化 mainFormKey（create/update/enable 三调用点）+ publishedColumnKeys（未发布优雅降级）→ localField 格式+存在性、FORM 目标 foreignField/joinField 存在性（SYSTEM 白名单文案逐字保留）、virtualKey 主表冲突
+- 前端：FormJoinConfig.vue 加配置提示块（合并语义/多选仅首值/外键建议唯一/流程类不出现说明）、目标表下拉双行显示 name+key、预览区脚注（基础语句 vs 实际查询差异）；http.ts 新增 clearHttpCache(prefix)；DataSourceListPage 保存/删除成功后清 /v1/data-sources 缓存——修「配完 JOIN 元数据 30s 不可见」；测试陈旧断言「目标表单」→「目标表」
+- Java 静态同步（子代理 51-fix-java）：JoinSqlGenerator（joinOnClause 提取+租户过滤+参数顺序修正+localRef 白名单+requireIdentifier+validate 标识符）、BizDataSupport.queryJoinConfig 调 validate(columnKeys+id)、DataSourceDefinitionService（formKey 线程化三路径+publishedColumnKeys+全部文案对齐）；静态自查括号配平/逐引用 grep/参数顺序推演通过
+- 实证：①负例 4 连（不存在列/注入形态/FORM 目标错列/virtualKey 冲突）全部精确 400；②预览 SQL 实测「同条件 2 行→1 条 JOIN + AND j1.tenant_id=?」；③运行时全链路（造真实数据）：bill_test 经数据源查询带出 zzz_item_name=测试签字笔（LEFT JOIN 数据流通），org 无匹配→null 键缺失语义正确；④浏览器端到端：新提示块/双行下拉/预览脚注渲染，保存成功后元数据 Tab 立即显示虚拟列（缓存失效生效）；⑤前端 107 测试全过；测试数据与临时配置已清理恢复
+- 遗留说明：①Node metadata appendJoinColumns 不带 _text（与 Java metadata 一致，仅查询带出）；②Java 端沙箱无编译，建议构建环境跑 mvn compile 回归三场景（双 FORM 组/SYSTEM 目标/未发布降级）；③多选 dataPicker 仅匹配首值属既定语义（两端一致），UI 已提示
+
+Stage Summary:
+- 方案 A 十五项问题清单落地：P0（分组/校验缺口/运行时 validate/localRef 注入面/租户过滤）全修，P1-P2 体验项（提示/预览说明/下拉 key/缓存失效）全修；两端引擎语义对齐（分组、_text、validate、租户过滤、保存校验五层同构）
+- origin/main 将推进本批提交；巡检任务 job_id 411264 持续 QA
+
+---
+Task ID: 51-push-note
+Agent: Z.ai Code (main)
+Task: push 阻塞记录
+
+Work Log:
+- commit 75f4281（11 文件 +551/-100）已落库；尝试 push 时发现沙箱重置导致 .git 丢失后重建的仓库**未配置 remote**，且 ssh 二进制缺失、旧 .git/config 中的 PAT（x-access-token 形式）随之销毁，worklog 中已脱敏无法恢复
+- 待用户提供 fine-grained PAT 后：git remote add origin https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git && git push origin main 即可同步（本地领先远程 3b09292 之后若干提交）
+
+Stage Summary:
+- 推送阻塞原因=环境重置丢凭据，非代码问题；本地提交链完整（git log --all 70 commits）

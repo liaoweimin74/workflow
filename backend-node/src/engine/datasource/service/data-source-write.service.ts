@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { BusinessException } from '../../../common/exception/business-exception'
 import { getTenantId } from '../../../framework/tenant/tenant-context'
 import { FormDefinitionRepository } from '../../form/repository/form-definition.repository'
+import { parseBusinessColumnConfig } from '../../form/column/column-config-parser'
 import { PageDefinitionRepository } from '../../page/repository/page-definition.repository'
 import { validate } from '../../form/bizdata/sql-template-engine'
 import type { QueryColumn } from '../../form/bizdata/join-sql-generator'
@@ -32,6 +33,9 @@ const TYPE_SQL = 'SQL'
 const STATUS_DRAFT = 'DRAFT'
 const STATUS_ENABLED = 'ENABLED'
 const STATUS_DISABLED = 'DISABLED'
+
+/** JOIN 列标识符模式（主表关联字段等；与运行时 join-sql-generator 的 JOIN_FIELD_PATTERN 一致）。 */
+const JOIN_FIELD_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/
 
 /**
  * 已注册的系统数据源 key，与内建目录同源（`BUILT_IN_SOURCE_KEYS`，8 个）。
@@ -106,7 +110,7 @@ export class DataSourceWriteService {
     let storedParams: string | null
     if (type === TYPE_FORM || type === TYPE_SYSTEM) {
       if (type === TYPE_FORM && hasQueryModeSegment(params)) {
-        await this.validateFormQueryConfig(params)
+        await this.validateFormQueryConfig(params, formKey)
         storedParams = mergeQueryConfig(generateParams(type, String(formKey), sourceKey), String(params))
       } else {
         storedParams = generateParams(type, String(formKey), sourceKey)
@@ -174,16 +178,21 @@ export class DataSourceWriteService {
 
     const newFormKey = formKey === null ? current.form_key : formKey
     const newSourceKey = sourceKey === null ? current.source_key : sourceKey
-    const newParams = params === null ? current.params : params
     const formBound = newType === TYPE_FORM || newType === TYPE_WORKFLOW
     // FORM/WORKFLOW：sourceKey 恒等于 formKey（formKey 权威），忽略入参 sourceKey 差异
     const effNewSourceKey = formBound ? newFormKey : newSourceKey
+    // FORM：入参 params 非空时与 generateParams 的端点段合并（对齐 create；
+    // queryMode/joins/query/columns/params 由前端供给，端点段系统权威重建）
+    let newParams = params === null ? current.params : params
+    if (newType === TYPE_FORM && params !== null && params.trim() !== '') {
+      newParams = mergeQueryConfig(generateParams(newType, String(newFormKey), effNewSourceKey), String(newParams))
+    }
     this.validateRequiredFields(newType, newFormKey, effNewSourceKey, newParams)
     if (formBound && !(await this.formDefRepository.existsByKey(String(newFormKey), tenantId))) {
       throw new BusinessException(400, `绑定的表单不存在: ${String(newFormKey)}`)
     }
     if (newType === TYPE_FORM) {
-      await this.validateFormQueryConfig(newParams)
+      await this.validateFormQueryConfig(newParams, newFormKey)
     }
     // sourceKey 变更（不等于当前值）时校验租户内唯一；保持不变则跳过（自身不算冲突）
     if (
@@ -228,7 +237,7 @@ export class DataSourceWriteService {
     this.validateRequiredFields(ds.type, ds.form_key, ds.source_key, ds.params)
     if (ds.type === TYPE_FORM) {
       await this.requirePublishedForm(tenantId, String(ds.form_key))
-      await this.validateFormQueryConfig(ds.params)
+      await this.validateFormQueryConfig(ds.params, ds.form_key)
     } else if (ds.type === TYPE_WORKFLOW) {
       await this.requireWorkflowForm(tenantId, String(ds.form_key))
     }
@@ -390,7 +399,7 @@ export class DataSourceWriteService {
    * ⚠️ `validate` 抛的是 `IllegalArgumentException` 形态（HTTP 400），这里统一转成
    *    `BusinessException(400, 同文案)` —— 两条路径的错误码一致，且消息逐字保留。
    */
-  private async validateFormQueryConfig(params: string | null): Promise<void> {
+  private async validateFormQueryConfig(params: string | null, formKey: string | null): Promise<void> {
     if (params === null || params.trim() === '') return
     let root: unknown
     try {
@@ -409,7 +418,7 @@ export class DataSourceWriteService {
     if (modeNode === null || modeNode === undefined || String(modeNode).trim() === '') return
     const mode = String(modeNode)
     if (mode === 'config') {
-      await this.validateConfigJoins(record.joins)
+      await this.validateConfigJoins(record.joins, formKey)
       return
     }
     if (mode === 'sql') {
@@ -435,12 +444,21 @@ export class DataSourceWriteService {
    *
    * alias 可缺省：前端不录入，由运行时 parseJoins 自动分配（j1/j2/...）；
    * 传入则校验格式与唯一性。目标表支持内建数据源（join-target-catalog 白名单）：
-   * SYSTEM 目标不查 form_def，且 foreignField/joinField 必须是目录内物理列。 */
-  private async validateConfigJoins(joins: unknown): Promise<void> {
+   * SYSTEM 目标不查 form_def，且 foreignField/joinField 必须是目录内物理列。
+   *
+   * 新增（对齐 Java 新版）：主表关联字段格式 + **存在性**校验（避免手输错列名保存成功、
+   * 运行时才爆 SQL 错）；FORM 目标的 foreignField/joinField 存在性校验（与 SYSTEM 目标
+   * 白名单对称）；virtualKey 与主表列冲突校验（SELECT m.* 同名重复列）。
+   * 主表/目标表单未发布时存在性校验**优雅降级跳过**（启用时 requirePublishedForm 兜底），
+   * 格式校验始终生效。 */
+  private async validateConfigJoins(joins: unknown, mainFormKey: string | null): Promise<void> {
     if (!Array.isArray(joins) || joins.length === 0) {
       throw new BusinessException(400, 'queryMode=config 时必须配置至少一个关联 joins')
     }
     const tenantId = getTenantId()
+    // 主表物理列候选：业务列 + 系统列（id/created_at/updated_at；SELECT m.* 全量带出，
+    // virtualKey 同名会重复列）。主表单未发布 → null（存在性校验降级跳过）
+    const mainColumns = await this.publishedColumnKeys(mainFormKey, tenantId, true)
     const virtualKeys = new Set<string>()
     const aliases = new Set<string>()
     let idx = 0
@@ -476,18 +494,35 @@ export class DataSourceWriteService {
         if (!(await this.formDefRepository.existsByKey(targetFormKey, tenantId))) {
           throw new BusinessException(400, `目标表单不存在: ${targetFormKey}`)
         }
+        // FORM 目标：物理列候选 = 目标表单业务列 + id（对齐前端 targetFormColumns 候选）
+        const targetColumns = await this.publishedColumnKeys(targetFormKey, tenantId, false)
+        if (targetColumns !== null) foreignCandidates = new Set(targetColumns)
       }
       const foreignField = textOf(join, 'foreignField')
+      const localField = textOf(join, 'localField')
       requireJoinField(join, 'foreignField', '目标表关联字段', idx)
       requireJoinField(join, 'localField', '主表关联字段', idx)
       requireJoinField(join, 'joinField', '显示字段', idx)
+      // 主表关联字段：格式 + 存在性（引用列必须在主表物理列中，杜绝运行时畸形 SQL）
+      if (localField !== null && !JOIN_FIELD_PATTERN.test(localField)) {
+        throw new BusinessException(400, `joins 第 ${idx} 项主表关联字段非法: ${localField}`)
+      }
+      if (mainColumns !== null && localField !== null && !mainColumns.has(localField)) {
+        throw new BusinessException(400, `joins 第 ${idx} 项主表关联字段不在绑定表单列中: ${localField}`)
+      }
       if (foreignCandidates !== null) {
         if (foreignField === null || !foreignCandidates.has(foreignField)) {
-          throw new BusinessException(400, `joins 第 ${idx} 项目标表关联字段不在内建数据源物理列中: ${String(foreignField)}`)
+          const label = isJoinTargetSystemKey(targetFormKey)
+            ? `joins 第 ${idx} 项目标表关联字段不在内建数据源物理列中: ${String(foreignField)}`
+            : `joins 第 ${idx} 项目标表关联字段不在目标表单列中: ${String(foreignField)}`
+          throw new BusinessException(400, label)
         }
         const joinFieldValue = textOf(join, 'joinField')
         if (joinFieldValue === null || !foreignCandidates.has(joinFieldValue)) {
-          throw new BusinessException(400, `joins 第 ${idx} 项显示字段不在内建数据源物理列中: ${String(joinFieldValue)}`)
+          const label = isJoinTargetSystemKey(targetFormKey)
+            ? `joins 第 ${idx} 项显示字段不在内建数据源物理列中: ${String(joinFieldValue)}`
+            : `joins 第 ${idx} 项显示字段不在目标表单列中: ${String(joinFieldValue)}`
+          throw new BusinessException(400, label)
         }
       }
       requireJoinField(join, 'label', '显示名称', idx)
@@ -498,8 +533,38 @@ export class DataSourceWriteService {
       if (virtualKeys.has(virtualKey)) {
         throw new BusinessException(400, `虚拟列 virtualKey 重复: ${virtualKey}`)
       }
+      if (mainColumns !== null && mainColumns.has(virtualKey)) {
+        throw new BusinessException(400, `joins 第 ${idx} 项虚拟列 virtualKey 与主表列冲突: ${virtualKey}`)
+      }
       virtualKeys.add(virtualKey)
     }
+  }
+
+  /**
+   * 已发布表单的物理列候选集合：业务列（column_config）+ 系统列。
+   *
+   * @param formKey    表单 key（null/空白 → null）
+   * @param tenantId   租户
+   * @param withTimeColumns 是否附加 created_at/updated_at（主表候选要；目标表 JOIN 候选不要）
+   * @returns 未发布 → null（调用方降级跳过存在性校验）；id 始终在候选中
+   */
+  private async publishedColumnKeys(
+    formKey: string | null,
+    tenantId: string,
+    withTimeColumns: boolean,
+  ): Promise<Set<string> | null> {
+    if (formKey === null || String(formKey).trim() === '') return null
+    const published = await this.formDefRepository.findLatestPublishedByKey(String(formKey), tenantId)
+    if (published === null) return null
+    const keys = new Set<string>(['id'])
+    if (withTimeColumns) {
+      keys.add('created_at')
+      keys.add('updated_at')
+    }
+    for (const column of parseBusinessColumnConfig(published.column_config)) {
+      if (column.key !== null && column.key.trim() !== '') keys.add(column.key)
+    }
+    return keys
   }
 }
 

@@ -575,6 +575,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid } from '@element-plus/icons-vue'
+import { clearHttpCache } from '@/utils/http'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
@@ -1454,6 +1455,8 @@ function openView(row: DataSourceDTO) {
         await dataSourceApi.createDataSource(payload)
       }
       ElMessage.success(editingId.value ? '保存成功' : '创建成功')
+      // 清数据源 GET 缓存（含 metadata 30s TTL）：否则新配的 JOIN 虚拟列在元数据/编辑弹窗里最长 30s 不可见
+      clearHttpCache('/v1/data-sources')
       inlineVisible.value = false
       tableRef.value?.fetchList()
     } catch {
@@ -1569,6 +1572,7 @@ const actionButtons: ActionButton[] = [
       try {
         await dataSourceApi.deleteDataSource(row.id)
         ElMessage.success('删除成功')
+        clearHttpCache('/v1/data-sources')
         tableRef.value?.fetchList()
       } catch {
         // http 拦截器已弹出错误消息（如"请先禁用"）

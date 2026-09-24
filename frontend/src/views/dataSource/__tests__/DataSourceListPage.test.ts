@@ -1024,7 +1024,8 @@ describe('DataSourceListPage', () => {
     // 配置区可见（queryMode 三模式 + config JOIN 卡片）
     expect(wrapper.html()).toContain('单表查询')
     expect(wrapper.html()).toContain('声明式 JOIN')
-    expect(wrapper.html()).toContain('目标表单')
+    // 列头文案自 Task 51 起为「目标表」（业务表单 + 内建数据源统一语义）
+    expect(wrapper.html()).toContain('目标表')
 
     await component.handleSave()
     await flushPromises()

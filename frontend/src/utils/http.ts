@@ -127,4 +127,25 @@ http.get = <T = unknown, R = T, D = unknown>(
   return request
 }
 
+/**
+ * 按前缀清除 GET 缓存（mutation 成功后调用，避免 30s TTL 内读到旧数据）。
+ *
+ * 典型场景：数据源保存/启用/禁用后清 `/v1/data-sources` 缓存 —— 否则编辑完
+ * JOIN 配置，字段元数据（getMetadata cache:true）最长 30s 仍返回旧列清单，
+ * 用户会误以为「配置了 JOIN 但元数据里没有虚拟列」。
+ *
+ * @param prefix 缓存键前缀（如 '/v1/data-sources'）；缺省清空全部缓存
+ */
+export function clearHttpCache(prefix?: string): void {
+  if (prefix === undefined) {
+    responseCache.clear()
+    return
+  }
+  for (const key of [...responseCache.keys()]) {
+    if (key.startsWith(`GET ${prefix}`)) {
+      responseCache.delete(key)
+    }
+  }
+}
+
 export default http

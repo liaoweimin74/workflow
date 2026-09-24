@@ -25,10 +25,12 @@ import {
 import {
   buildCount as buildJoinCount,
   buildSelect as buildJoinSelect,
+  groupJoins,
+  validate as validateJoins,
   type JoinConfig,
   type QueryColumn,
 } from './join-sql-generator'
-import { joinTargetSystemColumnType, isJoinTargetSystemKey } from './join-target-catalog'
+import { joinTargetSystemByKey, isJoinTargetSystemKey } from './join-target-catalog'
 import { isConfigMode, type FormQueryConfig } from './form-query-config'
 import { ensureAlias } from './form-query-config'
 import { SqlQueryEngine } from './sql-query-engine'
@@ -176,6 +178,10 @@ export class BizDataSupport {
     const size = req.size <= 0 ? req.size : Math.min(Math.max(req.size, 1), 100)
 
     try {
+      // 运行时兑底校验（新增，对齐 Java 新版）：必填/标识符格式/唯一/主表冲突 ——
+      // 存量脏配置快速 400（asBusinessException）而非畸形 SQL；mainColumns 需含 id
+      // （SELECT m.* 已带主键，虚拟列同名会重复列错误）
+      validateJoins(joins, [...ctx.columnKeys, 'id'])
       const count = buildJoinCount(
         ctx.tableName,
         tenantId,
@@ -304,7 +310,8 @@ export class BizDataSupport {
 
   /**
    * 构建查询列映射：主表列（`ref = "m." + key`，默认全可排可筛）+ 虚拟列
-   * （`ref = alias + "." + joinField`，能力取 join 声明）。
+   * （`ref = 组alias + "." + joinField`，能力取 join 声明；同条件 join 经 groupJoins 合并组，
+   * 组 alias 即 JOIN 表别名 —— 与生成器同源，杜绝 ref 与 SQL 快照漂移）。
    */
   private async buildJoinColumns(
     ctx: BizDataContext,
@@ -324,37 +331,49 @@ export class BizDataSupport {
         filterable: true,
       })
     }
-    for (const join of joins) {
-      columns.push({
-        key: String(join.virtualKey),
-        ref: `${String(join.alias)}.${String(join.joinField)}`,
-        columnType: await this.resolveJoinColumnType(join),
-        sortable: join.sortable,
-        filterable: join.filterable,
-      })
+    for (const group of groupJoins(joins)) {
+      for (const member of group.members) {
+        const targetColumns = await this.resolveJoinTargets(member)
+        columns.push({
+          key: String(member.virtualKey),
+          ref: `${group.alias}.${String(member.joinField)}`,
+          columnType: joinTargetColumnType(targetColumns, String(member.joinField)),
+          sortable: member.sortable,
+          filterable: member.filterable,
+        })
+        // 目标含 <joinField>_text 冗余文本列（dataPicker 引用列）→ 带出 <virtualKey>_text，
+        // 供前端引用渲染显示文本（对齐 Java buildJoinColumns）
+        if (findJoinTarget(targetColumns, `${String(member.joinField)}_text`) !== null) {
+          columns.push({
+            key: `${String(member.virtualKey)}_text`,
+            ref: `${group.alias}.${String(member.joinField)}_text`,
+            columnType: joinTargetColumnType(targetColumns, `${String(member.joinField)}_text`),
+            sortable: false,
+            filterable: false,
+          })
+        }
+      }
     }
     return columns
   }
 
   /**
-   * 虚拟列类型：内建目标 → join-target-catalog 物理列类型；FORM 目标 → 目标表单
-   * `joinField` 的列类型，找不到 fallback `"VARCHAR"`（查询与 metadata 两处必须一致）。
+   * 目标列列表：内建数据源 → join-target-catalog 物理列；业务表单 → 已发布 form 列；
+   * 解析失败/不存在 → 空列表（调用方统一按「查不到」处理，对齐 Java `resolveJoinTargets`）。
    */
-  private async resolveJoinColumnType(join: JoinConfig): Promise<string> {
-    const systemType = joinTargetSystemColumnType(String(join.targetFormKey), String(join.joinField))
-    if (systemType !== null) return systemType
-    try {
-      const targetColumns = await this.loadColumns(String(join.targetFormKey))
-      for (const column of targetColumns) {
-        if (join.joinField === column.key) {
-          return column.columnType === null ? 'VARCHAR' : column.columnType.toUpperCase()
-        }
-      }
-    } catch (error) {
-      // 目标表单不可解析时 fallback 类型（对齐 Java 的 `catch (BusinessException ignored)`）
-      if (!(error instanceof BusinessException)) throw error
+  private async resolveJoinTargets(join: JoinConfig): Promise<JoinTargetColumn[]> {
+    const system = joinTargetSystemByKey(String(join.targetFormKey))
+    if (system !== null) {
+      return system.columns.map((c) => ({ key: c.key, columnType: c.columnType }))
     }
-    return 'VARCHAR'
+    try {
+      const columns = await this.loadColumns(String(join.targetFormKey))
+      return columns.map((c) => ({ key: String(c.key), columnType: c.columnType }))
+    } catch (error) {
+      // 目标表单不可解析时回退空列表（对齐 Java 的 `catch (BusinessException ignored)`）
+      if (!(error instanceof BusinessException)) throw error
+      return []
+    }
   }
 
   /** 查询单条业务数据；不存在抛 404（对齐 Java `findById`）。 */
@@ -1102,6 +1121,26 @@ export function asInt(value: unknown): number | null {
   if (typeof value === 'number') return Math.trunc(value)
   const parsed = Number(value)
   return Number.isFinite(parsed) ? Math.trunc(parsed) : null
+}
+
+/** 目标列精简视图（JOIN 虚拟列类型/冗余列判定只需要 key + columnType）。 */
+interface JoinTargetColumn {
+  key: string
+  columnType: string | null
+}
+
+/**
+ * 目标列类型：按 key 匹配取大写类型；查不到/类型空 fallback `"VARCHAR"`
+ * （对齐 Java `joinColumnType`；查询与 metadata 两处必须一致）。
+ */
+function joinTargetColumnType(columns: JoinTargetColumn[], key: string): string {
+  const column = columns.find((c) => c.key === key)
+  return column === undefined || column.columnType === null ? 'VARCHAR' : column.columnType.toUpperCase()
+}
+
+/** 目标列查找：按 key 匹配；查不到返回 null（对齐 Java `findJoinTarget`）。 */
+function findJoinTarget(columns: JoinTargetColumn[], key: string): JoinTargetColumn | null {
+  return columns.find((c) => c.key === key) ?? null
 }
 
 /**

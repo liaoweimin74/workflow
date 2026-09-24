@@ -1019,6 +1019,7 @@ Stage Summary:
 - 「文件和目录看不到」为预览面板显示问题（根源是门户 000 白屏），文件系统经 ls 确认完好无缺
 - 运维规约沉淀：不得杀 mariadbd/NestJS/vite 常驻进程；next dev 堆上限 614MB；每回合预览前先跑 start-portal.sh；远程 workflow 仓库 main 即权威备份
 - 风险备忘：3000 在每个 agent 回合结束后仍会被沙箱回收（结构性），用户如遇白屏，对助手说「启动门户」即可秒级恢复
+
 ---
 Task ID: 41
 Agent: 主控（Z.ai Code）
@@ -1056,25 +1057,14 @@ Stage Summary:
 - 沉淀：#app 继承断层是暗色「文字看不清」类问题的总根（上溯多个任务的零散暗色问题可能均源于此）；全局 CSS 覆盖层必须以 ._fc-designer 前缀保证特异性；vendor SFC scoped 样式（如 AiPanel）只能改源文件
 - 风险备忘：fc-designer 画布内组件选中描边仍为 form-create 默认蓝（可读性无碍，暂留）；后续若做选中态主题化可在 vendor/index.css 覆盖 .draggable-drag 边框
 ---
-Task ID: 45
+Task ID: 43
 Agent: 主控（Z.ai Code）
-Task: 用户「ai助手的后端llm配置改成平台内置的模型」——NestJS 自建 AI 模块，内化两套外部 LLM 依赖
+Task: 用户指令「push到仓库」——确认 Task 42 在远程并同步交接文档入库
 
 Work Log:
-- 【侦察·发现双重外依赖】①小智助手调 POST /api/v1/ai/chat（SSE 协议 meta→tool_call→tool_result→message→done/error），该端点只在已停用 Java 后端（外部 DeepSeek apiKey 配置）实现，NestJS 现役后端 404；②fc-designer 内置 AiPanel 默认调 form-create 官方外部云 api.form-create.com
-- 【SDK 验证】backend-node bun add z-ai-web-dev-sdk；连通测试模型名 glm-4-plus；确认无原生 function calling（skill 指引）→ agent 用文本协议模拟工具调用（系统提示约定 {"tool","args"} JSON 响应 + TOOL_RESULT 回灌循环 MAX_STEPS=5）
-- 【NestJS 新模块 backend-node/src/ai/（12 文件自包含）】zai-llm.service（client 缓存+AiError 错误码）；ai-agent.service（对齐 Java AiAgentService：BASE_PROMPT+页面白名单拼装+导航收集+页面名兜底匹配 MAX_NAVIGATIONS=3）；tools/（open_page 白名单校验、generate_form_schema 异步工具）；formgen 三件套移植（英文 prompt/类型白名单/字段 snake_case 归一化/去重重命名/标题回填/warnings）；ai-chat.controller（SSE 帧格式与 Java 版逐字节对齐 event:xxx\ndata:{json}\n\n）；fc-chat.controller（AiPanel 兼容：OpenAI delta 流+[DONE]+[FC_TOOL] 思考步骤+fcRuleDiff 围栏按边界独立成块）
-- 【关键坑·AiPanel 围栏拆包】AiPanel 对每个 delta chunk 做 startsWith('```fcRuleDiff') 检查触发 DIFF 包装（newJson=chunk.slice(13,-3)），120 字符等长切块把围栏切碎导致 DIFF 不渲染——splitByDiffFence 按围栏边界重新拆包修复（围栏单 chunk 归一格式 ```fcRuleDiff\n<JSON>\n```）
-- 【前端接线】vendor AiPanel.vue 三处：默认 api→/api/v1/ai/fc-chat；token 默认取 localStorage access_token（过 JwtAuthGuard）；fetch 补 X-Tenant-Id: default
-- 【部署·自动愈合实证】bun run build → kill 8080 → supervisor 周期检查自动补位（新进程为 next-server 树内子进程 PPID 合法，~20s 复活）——Task 40 铁律的天然解法：NestJS 挂了会被 portal 内 supervisor 自动 respawn
-- 【E2E 全绿（curl + agent-browser）】①小智对话：中文回复+内联 Markdown 链接渲染+点击跳转 /system/user+导航标签去重过滤（正文已含链接时按设计不重复）；②open_page 工具：tool_call/tool_result 事件+白名单校验；③generate_form_schema：请假单 5 字段（select 带 options、必填校验、warnings 空）+「✅已应用到当前表单」+aiActionBus 画布回填实证；④AiPanel：思考步骤+DIFF 差异块+导入按钮→手机号字段落画布
-- 【测试数据】保留「AI小智测试表单」(ai_xiaozhi_test) 作为用户演示入口
-- 【入库】commit 5ea3c47 已 push（f518df0..5ea3c47），15 文件 +1039/-3；docs/ops/worklog.md 同步本记录
-
-Stage Summary:
-- 平台 AI 能力 100% 内化：小智助手（对话/导航/表单生成）与设计器 AiPanel（规则 diff 编辑）全部跑平台内置 GLM（glm-4-plus），零外部 API key 配置，开箱即用
-- 架构沉淀：SDK 无 function calling 时的文本协议工具模拟模式；vendor 流式协议对 chunk 边界的隐式约束（startsWidth/slice 截取）必须逐字节对齐；supervisor 自动补位使 8080 具备自愈能力
-- 风险备忘：fc-chat 系统提示约束的 rule 完整性依赖模型自觉（GLM 表现稳定）；后续可选做 server 端 rule 合并校验
+- 【状态盘点】Task 42（表单设计器暗色修复）上轮已完成：commit 3199b38 且 HEAD == origin/main == 远程 ls-remote 一致，源码零未提交变更；三服务全部存活（3000/5173/8080 均 200）
+- 【docs/ops/worklog.md 同步】仓库内交接文档快照原截止 Task 40（1021 行），从主 worklog 提取 Task 41/42 段落（含 --- 分隔行）追加 → 1057 行，交接链完整
+- 【.gitignore 收尾】补 backend-node/.engine-node（0 字节空文件）与 backend-node/data/（engine-choice 运行时缓存）忽略条目，工作区未跟踪产物清零
 - 【提交推送】commit f518df0（2 files, +40）「chore(ops): 同步 Task 41/42 交接记录入库，忽略 backend 运行时产物」→ push 3199b38..f518df0 成功 → HEAD == origin/main == ls-remote 三重验证一致
 
 Stage Summary:
@@ -1135,41 +1125,6 @@ Stage Summary:
 - 内部 LLM 网关是通用基础设施：任何 OpenAI 兼容客户端（含未来服务）经 Bearer internal-llm 即可用平台内置模型；文本协议模拟 tool_calls 让无 function calling 的 SDK 无缝支撑 Java agent 循环
 - 数据源字段元数据 404 降级空列：编辑体验不再被「未发布」阻断，空态文案给出行动指引（发布表单）
 - 沉淀：跨栈行为对齐类改动必须 NestJS/Java 同轮同改（本轮 FORM+WORKFLOW 四分支）；沙箱无 javac 时 Java 改动靠静态审查+NestJS 侧 curl 实证
-- 【NestJS 新模块 backend-node/src/ai/（12 文件自包含）】zai-llm.service（client 缓存+AiError 错误码）；ai-agent.service（对齐 Java AiAgentService：BASE_PROMPT+页面白名单拼装+导航收集+页面名兜底匹配 MAX_NAVIGATIONS=3）；tools/（open_page 白名单校验、generate_form_schema 异步工具）；formgen 三件套移植（英文 prompt/类型白名单/字段 snake_case 归一化/去重重命名/标题回填/warnings）；ai-chat.controller（SSE 帧格式与 Java 版逐字节对齐 event:xxx\ndata:{json}\n\n）；fc-chat.controller（AiPanel 兼容：OpenAI delta 流+[DONE]+[FC_TOOL] 思考步骤+fcRuleDiff 围栏按边界独立成块）
-- 【关键坑·AiPanel 围栏拆包】AiPanel 对每个 delta chunk 做 startsWith('```fcRuleDiff') 检查触发 DIFF 包装（newJson=chunk.slice(13,-3)），120 字符等长切块把围栏切碎导致 DIFF 不渲染——splitByDiffFence 按围栏边界重新拆包修复（围栏单 chunk 归一格式 ```fcRuleDiff\n<JSON>\n```）
-- 【前端接线】vendor AiPanel.vue 三处：默认 api→/api/v1/ai/fc-chat；token 默认取 localStorage access_token（过 JwtAuthGuard）；fetch 补 X-Tenant-Id: default
-- 【部署·自动愈合实证】bun run build → kill 8080 → supervisor 周期检查自动补位（新进程为 next-server 树内子进程 PPID 合法，~20s 复活）——Task 40 铁律的天然解法：NestJS 挂了会被 portal 内 supervisor 自动 respawn
-- 【E2E 全绿（curl + agent-browser）】①小智对话：中文回复+内联 Markdown 链接渲染+点击跳转 /system/user+导航标签去重过滤（正文已含链接时按设计不重复）；②open_page 工具：tool_call/tool_result 事件+白名单校验；③generate_form_schema：请假单 5 字段（select 带 options、必填校验、warnings 空）+「✅已应用到当前表单」+aiActionBus 画布回填实证；④AiPanel：思考步骤+DIFF 差异块+导入按钮→手机号字段落画布
-- 【测试数据】保留「AI小智测试表单」(ai_xiaozhi_test) 作为用户演示入口
-- 【入库】commit 5ea3c47 已 push（f518df0..5ea3c47），15 文件 +1039/-3；docs/ops/worklog.md 同步本记录
-
-Stage Summary:
-- 平台 AI 能力 100% 内化：小智助手（对话/导航/表单生成）与设计器 AiPanel（规则 diff 编辑）全部跑平台内置 GLM（glm-4-plus），零外部 API key 配置，开箱即用
-- 架构沉淀：SDK 无 function calling 时的文本协议工具模拟模式；vendor 流式协议对 chunk 边界的隐式约束（startsWidth/slice 截取）必须逐字节对齐；supervisor 自动补位使 8080 具备自愈能力
-- 风险备忘：fc-chat 系统提示约束的 rule 完整性依赖模型自觉（GLM 表现稳定）；后续可选做 server 端 rule 合并校验
----
-Task ID: 46
-Agent: 主控（Z.ai Code）
-Task: 用户两条指令——「Java 后端未废弃，AI 需同步改为平台内置模型」+「修复数据源管理编辑业务表单时字段元数据报『业务表单不存在或未发布: bill_test』」
-
-Work Log:
-- 【纠偏确认】worklog Task 45 已完成 NestJS 侧 AI 内化（commit 5ea3c47）；本轮补 Java 侧（用户指出 Java 后端仍在使用，非废弃）并修数据源 bug
-- 【内部 LLM 网关（核心新增）】backend-node/src/ai/controller/internal-llm.controller.ts：OpenAI 兼容端点 POST /api/internal/llm/v1/chat/completions，@Public + Bearer 内部密钥校验（env INTERNAL_LLM_KEY，默认 internal-llm）；无 tools 直通 GLM；有 tools 走文本协议模拟（与 AiAgentService 同款 {"tool","args"} 约定）并转换为标准 OpenAI tool_calls 响应；stream=true 攒帧合成 delta+[DONE]（消费方均为全量处理语义）；角色映射 system→assistant、tool→user(TOOL_RESULT: 回灌)、assistant.tool_calls→协议 JSON 文本
-- 【Java AI 同步内化】AiProperties 默认值：enabled=true、baseUrl=http://127.0.0.1:8080/api/internal/llm/v1、apiKey=internal-llm、model=glm-4-plus；application.yml 同步（AI_BASE_URL/AI_API_KEY/AI_MODEL 环境变量仍可覆盖接 DeepSeek 等外部服务）；AiChatController/AiAgentService/formgen 零改动，SSE 协议不变
-- 【Java 编译环境限制】沙箱仅 JRE 无 javac/maven（ps 无 java 进程佐证 Java 在用户环境部署）——Java 改动经静态审查保障（简单赋值 + JEP 361 switch/yield 标准语法），NestJS 侧 curl 全链路实证
-- 【bug 根因】bill_test 在 wf_form_def 中 status=DRAFT 从未发布；数据源 getMetadata → FORM 适配器 → loadColumns → findLatestPublishedByKey 要求 PUBLISHED → null → 404
-- 【bug 修复·两后端对齐】NestJS + Java 的 UnifiedDataSourceAdapter metadata：FORM 与 WORKFLOW 分支对「表单不存在或未发布」404 降级为空列（writable:false + formKey 保留），其余异常照抛；前端 DataSourceListPage.vue el-table #empty 空态引导「绑定表单尚未发布，发布表单后此处将展示字段元数据」
-- 【验证·curl 四连】①网关非流式 200+正常回复；②tools 模拟→tool_calls(finish_reason=tool_calls)；③stream→delta 帧+[DONE]；④错误 key→401
-- 【验证·metadata】bill_test（FORM）与 ai_xiaozhi_test（WORKFLOW）均 404→200 {columns:[],writable:false,formKey}；WORKFLOW 降级为一致性顺手补齐（用户未报但同病）
-- 【验证·浏览器】agent-browser 登录→数据源管理→bill_test 编辑→字段元数据 tab：报错消失、空态引导出现；小智面板对话回归正常（GLM 回复+Markdown 链接）
-- 【验证·单测】DataSourceListPage.test.ts 53/53 通过；backend-node nest build 通过
-- 【测试数据保留】bill_test(DRAFT) 与 ai_xiaozhi_test(DRAFT) 数据源保留作为降级场景演示入口
-
-Stage Summary:
-- Java AI 模块平台内置模型化完成：默认零配置直连 NestJS 内部网关跑 GLM，两后端 AI 全链路收敛，外部部署保留 env 覆盖能力
-- 内部 LLM 网关是通用基础设施：任何 OpenAI 兼容客户端（含未来服务）经 Bearer internal-llm 即可用平台内置模型；文本协议模拟 tool_calls 让无 function calling 的 SDK 无缝支撑 Java agent 循环
-- 数据源字段元数据 404 降级空列：编辑体验不再被「未发布」阻断，空态文案给出行动指引（发布表单）
-- 沉淀：跨栈行为对齐类改动必须 NestJS/Java 同轮同改（本轮 FORM+WORKFLOW 四分支）；沙箱无 javac 时 Java 改动靠静态审查+NestJS 侧 curl 实证
 ---
 Task ID: 47
 Agent: 主控（Z.ai Code）
@@ -1190,3 +1145,24 @@ Stage Summary:
 - 业务表单/工作流表单语义在小智话术层固化：业务表单永不提流程
 - 顺手排掉 MariaDB typeCast 地雷：此前任何 BUSINESS 表单手动发布也会崩（column_config 首次非空即触发），与 AI 改造无关但被本轮验证逼出
 - Java 侧同步（CreateFormTool + BASE_PROMPT）沙箱无 javac 静态审查，模式完全复制 NestJS 版
+
+---
+Task ID: 48
+Agent: 主控（Z.ai Code）
+Task: 用户报障——点击 AI 话术里的「设计器中打开」链接报 404
+
+Work Log:
+- 【根因三连环】①AI 生成 Markdown 链接 `/form/designer?id=xxx`（router 相对路径）在小智渲染器（src/utils/markdown.ts link_open 规则）与设计器 vendor 渲染器（vendor/components/ai/MarkdownRenderer.vue）里均落到「未命中白名单→target=_blank」分支，点击新开标签整页直达 :3000/form/designer → 门户无此路由 → 404；②vue-router `createWebHistory()` 无参 base 为空串（实测 eval $router.options.history.base=''，并不会自动取 vite base /lowcode/），应用内跳转产出 /login、/dashboard 等缺前缀 URL，刷新即 404（历史已知「深链刷新 404」的真因）；③缺前缀 URL 粘贴/外链场景门户无兜底
+- 【修复①渲染层拦截】src/utils/markdown.ts link_open 新增站内分支（href 以单 / 开头、排除协议相对 //）→ 打 data-nav 走既有点击拦截（小智 MarkdownRenderer onClick→emit navigate→AiAssistantOrb navigate→router.push），复用现有胶囊机制，不再 target=_blank
+- 【修复②设计器 AiPanel】vendor MarkdownRenderer.vue：renderer.link 站内链接改 data-nav="1" 去 target=_blank；根节点加 @click onRootClick → closest('a[data-nav]') → preventDefault + this.$router.push(href)（app.use(router) 全局属性可用）
+- 【修复③router base 根治】router/index.ts `createWebHistory(import.meta.env.BASE_URL)`（/lowcode/），应用内 URL 从此带 base 前缀、刷新可直达；http.ts 401 跳登录改 `import.meta.env.BASE_URL + 'login'` 保持一致；全库 grep 确认无其他 location.pathname 依赖
+- 【修复④门户兜底】Next 门户 src/proxy.ts（middleware.ts 按 Next 16 弃用警告迁移改名，函数 middleware→proxy）：新增 LOWCODE_FIRST_SEGMENTS 白名单（login/designer/form/page/biz-data/process/system/dashboard/profile/data-source/messages/404），命中即 307 重定向补 /lowcode 前缀（req.nextUrl.clone 保留 query）；matcher 扩展对应前缀；与门户自有路由（/、/api/*、/lowcode/*）零冲突
+- 【验证·curl】/form/designer?id=123→307 location=/lowcode/form/designer?id=123（query 保留）；/biz-data/xxx→307；补前缀后 200；门户首页 200；门户 API 200——迁移 proxy.ts 后复验五场景全过
+- 【验证·浏览器全链路】登录→小智创建「会议室预约业务表单」→ 回复链接实测 href=/form/designer?id=648b850b...、data-nav 已打、target=null → 点击 → URL 变 /lowcode/form/designer?id=... → 设计器画布加载（表单名称/标识 ai_muf5sckj12/字段齐全）；深链刷新设计器页 → 正常；粘贴缺前缀 URL → 307 → 设计器正常
+- 【验证·落库与单测】API 列表确认 ai_muf5sckj12 DRAFT 在库（X-Tenant-Id: default）；既有单测 AiAssistantOrb 9 + MarkdownRenderer 2 = 11/11 通过；改动文件 ESLint 0 error
+- 【注】MariaDB 客户端本轮回归（无 mysql CLI、find 全盘超时），落库验证改走 API + 浏览器整页刷新双实证，结论等价
+
+Stage Summary:
+- AI 话术站内链接全场景打通：普通点击（前端路由拦截）、新标签/粘贴/外链（门户 307 兜底）、刷新（router base 修复）三层各自闭环
+- 沉淀：vue-router createWebHistory() 必须显式传 import.meta.env.BASE_URL——「无参自动取 base」是常见误解，本例中它就是深链 404 的总根源；AI 生成链接的渲染层应一律拦截站内路径走 SPA 路由
+- 门户 middleware→proxy 完成 Next 16 惯例迁移，弃用警告清零

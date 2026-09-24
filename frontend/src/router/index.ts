@@ -209,7 +209,11 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  // base 必须显式取 vite base（/lowcode/）：createWebHistory() 无参时 base 为 ''，
+  // 应用内跳转产出 /login、/form/designer 等缺前缀 URL，刷新即 404，
+  // AI 话术生成的站内链接（如 /form/designer?id=xxx）也无法直达。
+  // 传 BASE_URL 后 vue-router 自动在路径前补 /lowcode，与 vite 静态资源前缀一致。
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes
 })
 

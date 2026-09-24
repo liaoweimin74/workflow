@@ -67,7 +67,8 @@ http.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
-      window.location.href = '/login'
+      // 带上 vite base（/lowcode/），与 vue-router base 保持一致
+      window.location.href = import.meta.env.BASE_URL + 'login'
     } else if (!error.config?.headers?.['X-Skip-Error-Toast']) {
       // 优先取后端 R 包装返回的业务错误消息
       const bizMsg = error.response?.data?.msg

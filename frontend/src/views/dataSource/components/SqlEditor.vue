@@ -66,7 +66,7 @@ export function parseSelectColumns(sql: string): string[] {
 </script>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, toRaw, watch } from 'vue'
 import { Delete, Plus, Rank } from '@element-plus/icons-vue'
 import { moveItem, useTableDragSort } from '@/composables/useTableDragSort'
 
@@ -86,11 +86,15 @@ const emit = defineEmits<{
   (e: 'update:params', value: string[]): void
 }>()
 
-// 列声明本地副本：props 变化时整体替换，本地修改后 emit 新数组
+// 列声明本地副本：props 变化时整体替换，本地修改后 emit 同引用数组
 const localCols = ref<ColumnConfigItem[]>(props.columns.map((c) => ({ ...c })))
 watch(
   () => props.columns,
   (v) => {
+    // v-model 回声守卫：emitColumns 同引用 emit 后父组件存回的就是本数组（toRaw 归一比较）。
+    // 若不跳过，每次键入都会走到下方克隆重建 → 全部行对象换新 → row-key（WeakMap 按
+    // 对象身份分配）全变 → el-table 整表 remount → 输入框敲一个字符即失焦。
+    if (v && toRaw(v) === toRaw(localCols.value)) return
     localCols.value = v.map((c) => ({ ...c }))
   },
   { deep: true }
@@ -98,18 +102,18 @@ watch(
 
 const newParamName = ref('')
 
+/** 同引用 emit：不克隆行对象，保证 WeakMap row-key 稳定（输入不失焦的关键）；
+ *  父级 v-model 存回同引用后由上方回声守卫跳过重建。 */
 function emitColumns() {
-  emit(
-    'update:columns',
-    localCols.value.map((c) => ({ ...c }))
-  )
+  emit('update:columns', localCols.value)
 }
 function addColumn() {
-  localCols.value.push(emptyColumn())
+  // 引用替换而非就地 push：el-table 行重渲染依赖 data 引用变化
+  localCols.value = [...localCols.value, emptyColumn()]
   emitColumns()
 }
 function removeColumn(idx: number) {
-  localCols.value.splice(idx, 1)
+  localCols.value = localCols.value.filter((_, i) => i !== idx)
   emitColumns()
 }
 
@@ -167,7 +171,8 @@ function parseFromSql() {
   const keys = parseSelectColumns(props.modelValue)
   const next = keys.map((key) => ({ ...emptyColumn(), key, label: key }))
   if (next.length > 0) {
-    emit('update:columns', next)
+    localCols.value = next
+    emitColumns()
   }
 }
 </script>

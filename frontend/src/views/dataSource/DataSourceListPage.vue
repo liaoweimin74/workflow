@@ -289,7 +289,13 @@
                     从主表单覆盖
                   </el-button>
                 </div>
-                <el-table :data="metadataColumns" size="small" border style="width: 100%" :max-height="300">
+                <div ref="metadataTableRef">
+                <el-table :data="metadataColumns" :row-key="metadataRowKey" size="small" border style="width: 100%" :max-height="300">
+                  <el-table-column label="" width="36" align="center" class-name="drag-col">
+                    <template #default>
+                      <el-icon class="drag-handle" title="拖拽排序"><Rank /></el-icon>
+                    </template>
+                  </el-table-column>
                   <el-table-column label="标识" min-width="120">
                     <template #default="{ row }">
                       <el-input v-model="row.key" placeholder="标识" size="small" />
@@ -361,6 +367,8 @@
                     </template>
                   </el-table-column>
                 </el-table>
+                </div>
+                <div class="metadata-toolbar-hint">拖动行首把手可调整字段顺序；顺序即保存后的元数据展示顺序</div>
                 <el-button type="primary" plain size="small" style="margin-top: 4px" @click="addMetadataColumn">添加列</el-button>
 
                 <el-dialog v-model="columnDialogVisible" title="字段详情" width="800px" append-to-body>
@@ -571,11 +579,12 @@
 <script setup lang="ts">
 defineOptions({ name: 'DataSourceList' })
 
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid } from '@element-plus/icons-vue'
+import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid, Rank } from '@element-plus/icons-vue'
 import { clearHttpCache } from '@/utils/http'
+import { moveItem, useTableDragSort } from '@/composables/useTableDragSort'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
@@ -872,6 +881,10 @@ async function handleTabChange(tab: string) {
   if (tab === 'metadata' && editingId.value && !metadata.value) {
     await loadMetadata()
   }
+  if (tab === 'metadata' && isEditableType.value && !viewOnly.value) {
+    // 元数据表格 v-if 渲染完成后绑定行拖拽
+    nextTick(() => initMetadataSort())
+  }
   if (tab === 'data' && editingId.value) {
     // 数据预览需要列定义：若元数据未加载，先加载元数据
     if (!metadata.value) {
@@ -1051,6 +1064,41 @@ function removeMetadataColumn(row: ColumnConfigItem) {
     metadataColumns.value.splice(idx, 1)
   }
 }
+
+// ==================== 字段元数据拖拽排序 ====================
+// 数组顺序即 params.columns 存储顺序：拖拽重排后保存，metadata 端点与所有设计器字段列表按新顺序返回
+const metadataTableRef = ref<HTMLElement>()
+
+// 行身份键：Sortable 外部移动 DOM 后，keyed patch 依 key 确定性收敛（WeakMap 不污染数据）
+const rowUidMap = new WeakMap<object, number>()
+let rowUidSeq = 0
+function metadataRowKey(row: ColumnConfigItem): string {
+  if (!rowUidMap.has(row)) rowUidMap.set(row, ++rowUidSeq)
+  return String(rowUidMap.get(row))
+}
+
+function onMetadataReorder(oldIndex: number, newIndex: number) {
+  // 必须替换数组引用（而非就地 splice）：el-table 的 setData 依赖 data 引用变化，
+  // 就地修改不会触发行重渲染，Sortable 已移动的 DOM 会被还原
+  const next = [...metadataColumns.value]
+  moveItem(next, oldIndex, newIndex)
+  if (form.type === 'API') {
+    apiColumns.value = next
+  } else {
+    sqlConfig.declaredColumns = next
+  }
+}
+
+const { init: initMetadataSort, destroy: destroyMetadataSort } = useTableDragSort({
+  getTbody: () => metadataTableRef.value?.querySelector('.el-table__body-wrapper tbody'),
+  handle: '.drag-handle',
+  disabled: () => viewOnly.value,
+  onReorder: onMetadataReorder,
+})
+
+watch(inlineVisible, (v) => {
+  if (!v) destroyMetadataSort()
+})
 
 /** 加载数据预览 */
 async function loadPreviewData() {
@@ -1466,24 +1514,37 @@ function openView(row: DataSourceDTO) {
     }
  }
 
-  /** FORM 类型：保留原始端点段（list/get/create/update/delete）基础上叠加关联查询配置段（queryMode/joins/query/columns/params） */
+  /** FORM 类型：双段并存保存原始输入。
+   *
+   * query 配置段（queryMode/joins/query/columns/params）先整体移除再按当前编辑态重写：
+   * - queryMode 标注当前生效段（单表查询 = 不写 queryMode）；
+   * - 未生效段的输入作为草稿一并入库（声明式 JOIN 与 SQL 模板可来回切换迭代修改），
+   *   运行时 parseFormQueryConfig 只读 queryMode 对应的活跃段，草稿不参与执行；
+   * - 端点段（list/get/create/update/delete）来自 formJoinBaseParams 原样保留。 */
   function buildFormParams(): Record<string, any> {
     const params: Record<string, any> = { ...formJoinBaseParams.value }
-    if (formJoin.value.queryMode === 'config') {
-      params.queryMode = 'config'
-      params.joins = formJoin.value.joins.filter((j) => j.targetFormKey && j.virtualKey)
-    } else if (formJoin.value.queryMode === 'sql') {
-      params.queryMode = 'sql'
-      if (formJoin.value.query) {
-        params.query = formJoin.value.query
-      }
-      const cols = (formJoin.value.columns || []).filter((c) => c.key && c.key.trim())
-      if (cols.length > 0) {
-        params.columns = cols.map(serializeColumnConfig)
-      }
-      if (formJoin.value.params && formJoin.value.params.length > 0) {
-        params.params = [...formJoin.value.params]
-      }
+    delete params.queryMode
+    delete params.joins
+    delete params.query
+    delete params.columns
+    delete params.params
+    const mode = formJoin.value.queryMode || 'none'
+    if (mode === 'config' || mode === 'sql') {
+      params.queryMode = mode
+    }
+    const joins = (formJoin.value.joins || []).filter((j) => j.targetFormKey && j.virtualKey)
+    if (joins.length > 0) {
+      params.joins = joins
+    }
+    if (formJoin.value.query && formJoin.value.query.trim()) {
+      params.query = formJoin.value.query
+    }
+    const cols = (formJoin.value.columns || []).filter((c) => c.key && c.key.trim())
+    if (cols.length > 0) {
+      params.columns = cols.map(serializeColumnConfig)
+    }
+    if (formJoin.value.params && formJoin.value.params.length > 0) {
+      params.params = [...formJoin.value.params]
     }
     return params
   }
@@ -1823,6 +1884,29 @@ onMounted(async () => {
   display: flex;
   gap: 4px;
   margin: 0 0 4px;
+}
+/* 拖拽排序提示行（元数据表格下方） */
+.metadata-toolbar-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 4px;
+}
+/* 拖拽把手列：抓手光标 + 悬停高亮，提示可拖拽排序 */
+.drag-handle {
+  cursor: grab;
+  color: var(--el-text-color-placeholder);
+  transition: color 0.2s;
+}
+.drag-handle:hover {
+  color: var(--el-color-primary);
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.drag-col .cell {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 /* 数据预览 tab 搜索行：与 tab 下沿和表格各留 4px */
 .preview-toolbar-inline {

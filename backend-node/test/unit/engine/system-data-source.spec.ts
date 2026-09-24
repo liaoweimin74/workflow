@@ -57,6 +57,7 @@ function adapterWith(overrides: {
     } as never,
     {} as never,
     {} as never,
+    {} as never,
   )
 }
 

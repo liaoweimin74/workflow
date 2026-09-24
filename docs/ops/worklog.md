@@ -1364,3 +1364,39 @@ Work Log:
 
 Stage Summary:
 - 推送阻塞原因=环境重置丢凭据，非代码问题；本地提交链完整（git log --all 70 commits）
+
+---
+## Task 52 — 声明式 SQL 原始输入保存（双段并存）+ 字段元数据拖拽排序（用户需求）
+
+### 背景
+用户提出两项需求：①业务表单数据源编辑时，声明式 SQL 只保存了最终 SQL，未保存生成它的原始输入，无法在原输入基础上迭代修改；②字段元数据无法自由排序，希望拖拽排序，且其他数据源（SQL 等）同样支持。
+
+### 根因（调查结论）
+- 原始输入丢失两处叠加：`FormJoinConfig.vue sync()` 模式切换瞬间把非活跃段 emit 为 `undefined`（父子两侧同时清空）；`buildFormParams()` 保存时只序列化当前活跃模式段。衍生 bug：切「单表查询」后旧 queryMode+joins 残留，运行时仍按 JOIN 执行。
+- 元数据顺序：ColumnConfig 前后端均无排序字段，数组位置即唯一顺序来源；排序为纯前端改动，后端按数组顺序透传（Node/Java metadata 端点保序），契约不变。
+
+### 实施
+**A. 双段并存（前端 2 文件 + 后端 create 判定 + Java 同步）**
+- `FormJoinConfig.vue sync()`：joins 与 query/columns/params 一律 emit 保留值，切模式不再清空草稿；新增「转为 SQL 模板继续编辑 →」按钮（复用 previewJoinSql 结果填入 query 并切模式，声明式配置保留）。
+- `DataSourceListPage.vue buildFormParams()`：先 delete 五个 query 段再按当前编辑态重写；queryMode 标注活跃段（单表查询=不写）；未活跃段草稿一并入库。
+- Node `data-source-write.service.ts`：新增 `hasFormQueryDraft`（queryMode 或任一草稿段存在即 true）；create 路径判定由 hasQueryModeSegment 换为 hasFormQueryDraft——草稿-only params 也走 validate+mergeQueryConfig（端点段权威重建+草稿保留）。update 路径（上一提交）已对齐。
+- Java `DataSourceDefinitionService.java`（52-a 子代理）：新增 FORM_QUERY_FIELDS 常量 + hasFormQueryDraft（替换 hasQueryModeSegment），create 判定同步；update 补齐端点段权威重建 mergeQueryConfig（此前 Java 完全无 merge，属存量漂移）；静态自查（括号配平/逐引用 grep/5 组边界推演）通过。
+- 运行时安全性：parseFormQueryConfig mode 缺省/none 时忽略草稿段；validateFormQueryConfig 按活跃段各管各的——草稿不校验不执行，零运行时风险。
+
+**B. 字段元数据拖拽排序（纯前端）**
+- 新增 `src/composables/useTableDragSort.ts`：sortablejs 直绑 `.el-table__body-wrapper tbody` + 把手（handle）模式 composable（create/destroy 生命周期 + onEnd 单次守卫 + moveItem 工具）。
+- 三处表格接入：①DataSourceListPage 元数据表格（SQL/API 列定义，把手列+提示行）；②SqlEditor 列声明（SQL sql 模式与 FORM sql 模式共用）；③FormJoinConfig joins 表格（FORM 声明式虚拟列顺序）。
+- `bun add sortablejs` 显式声明依赖（原为 vuedraggable 传递依赖 phantom）。
+- 关键坑位两枚：①onEnd 双触发——合成 drop+dragend 双双进入完成路径，重复 splice 相互抵消，加 endHandled 单次守卫（onStart 重置）；②就地 splice 数组 el-table 不重渲染（setData 依赖引用变化）且 Sortable 已移动的 DOM 被还原——重排必须替换数组引用；再加 WeakMap row-key 让 keyed patch 在 Sortable 外部移动 DOM 后确定性收敛（三处表格均加）。
+
+### 验证（agent-browser 端到端 + API/DB 实证）
+- 双段保存：办公用品数据源 config 模式配 JOIN→预览 SQL→转 SQL 模板→切回声明式（输入完整保留）→保存→API 实证 params 同时含 queryMode=config + joins + query 草稿；重开编辑器两段完整回填。
+- 单表切换：切单表保存→queryMode 从 params 移除（单表真正生效），joins 保留草稿可切回迭代。
+- 拖拽排序：SQL 测试数据源元数据表格拖拽 row1→row2 → 保存 → params.columns=[quantity,item_name,price] 与 metadata 端点返回顺序一致；FORM joins 拖拽换序 → 保存 → params.joins 顺序同步变化。
+- 测试数据清理：drag_test_sql 已删除；办公用品数据源 params 已恢复端点段原始形态。
+- 测试：前端 dataSource 111/111（新增双段并存/单表切换/转 SQL 模板/切换保留 5 用例）；后端 tsc 干净 + data-source-write 74/74（新增 hasFormQueryDraft 4 组 + create 草稿 + update 双段/清除 3 用例）；全量套件 1113 过/2 失败为 PageDesigner/PageListPage 预存断言漂移（FormDesigner 源码断言过期，早于本任务，待下轮修复）。
+
+### 遗留/风险
+- Java 端无编译环境仅静态审查，建议构建环境 `mvn -o compile` 回归三场景（FORM create 草稿/FORM update 换绑端点重建/params=null 保留）。
+- FormJoinConfig 拖拽把手列与 el-checkbox 属性列并列宽度略紧（36px 把手列已留）；如需更宽松可后续微调列宽。
+- push 恢复：本次会话已在 workflow_lowcode 内重建 git 仓库（沙箱重置后原提交误入外层 checkpoint 仓库），从 origin/main 软重置+恢复 267 个丢失文件后干净提交推送（47fd125）。

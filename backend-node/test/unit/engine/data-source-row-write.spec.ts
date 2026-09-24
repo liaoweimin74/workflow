@@ -46,7 +46,8 @@ function adapterWith(): Recorded {
   return {
     calls,
     // 第三个参数是 SystemService（SYSTEM 数据源的读路径用它）；写路径用不到，给空壳
-    adapter: new UnifiedDataSourceAdapter(bizDataService as never, router, {} as never, {} as never, {} as never),
+    // 第六参 SystemSourceQueryService：写路径用不到，给空壳（构造器已扩至 6 参）
+    adapter: new UnifiedDataSourceAdapter(bizDataService as never, router, {} as never, {} as never, {} as never, {} as never),
   }
 }
 
@@ -250,6 +251,7 @@ describe('UnifiedDataSourceAdapter 写路径 / API', () => {
           throw new Error('HTTP request failed after 1 attempts')
         },
       } as never,
+      {} as never,
       {} as never,
     )
     const ds = ref({ type: 'API', params: '{"delete":{"action":"http://x/d","method":"delete"}}' })

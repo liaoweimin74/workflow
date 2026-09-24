@@ -13,6 +13,7 @@ vi.mock('@element-plus/icons-vue', () => ({
   Plus: { name: 'Plus', render: () => h('span', '+') },
   Delete: { name: 'Delete', render: () => h('span', '×') },
   View: { name: 'View', render: () => h('span', '👁') },
+  Rank: { name: 'Rank', render: () => h('span', '⇅') },
 }))
 
 vi.mock('@/api/form', () => ({
@@ -82,5 +83,60 @@ describe('FormJoinConfig 多字段 JOIN + SQL 预览', () => {
     expect(api.dataSourceApi.previewJoinSql).toHaveBeenCalledWith('biz_order', expect.any(Array))
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('customer_name')
+  })
+
+  it('切换模式双段并存：config→sql→config 输入不丢失', async () => {
+    const wrapper = mount(FormJoinConfig, {
+      props: {
+        modelValue: { ...modelValue(), query: 'SELECT m.id FROM wf_biz_order m WHERE m.tenant_id = :tenantId' },
+        mainFormKey: 'biz_order',
+        targetFormOptions: targets,
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    // 切到 SQL 模板（radio: none=0 / config=1 / sql=2）
+    const radios = () => wrapper.findAll('input[type="radio"]')
+    await radios()[2].setValue()
+    await wrapper.vm.$nextTick()
+    let emitted = wrapper.emitted('update:modelValue') as FormJoinConfigValue[][]
+    let last = emitted.at(-1)![0]
+    expect(last.queryMode).toBe('sql')
+    // sql 模式下 joins 草稿仍随事件带出（不再置 undefined）
+    expect(last.joins).toHaveLength(1)
+    expect(last.joins![0].virtualKey).toBe('customer_name')
+
+    // 切回声明式 JOIN：sql 输入（query）也不丢失
+    await radios()[1].setValue()
+    await wrapper.vm.$nextTick()
+    emitted = wrapper.emitted('update:modelValue') as FormJoinConfigValue[][]
+    last = emitted.at(-1)![0]
+    expect(last.queryMode).toBe('config')
+    expect(last.joins).toHaveLength(1)
+    expect(last.query).toContain(':tenantId')
+    wrapper.unmount()
+  })
+
+  it('预览后「转为 SQL 模板」：SQL 填入 query 并切换模式，joins 草稿保留', async () => {
+    const api = await import('@/api/data-source')
+    const sql = 'SELECT m.*, j1.name AS customer_name FROM wf_biz_order m LEFT JOIN wf_biz_customer j1 ON j1.id = m.customer_id'
+    vi.mocked(api.dataSourceApi.previewJoinSql).mockResolvedValue({
+      code: 0,
+      message: 'ok',
+      data: { sql, params: ['t1'] },
+    })
+    const wrapper = mountConfig()
+    await wrapper.find('button.preview-sql-btn').trigger('click')
+    await wrapper.vm.$nextTick()
+    // 预览面板出现后点击转换按钮
+    const convertBtn = wrapper.findAll('button').find((b) => b.text().includes('转为 SQL 模板'))
+    expect(convertBtn).toBeTruthy()
+    await convertBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+    const emitted = wrapper.emitted('update:modelValue') as FormJoinConfigValue[][]
+    const last = emitted.at(-1)![0]
+    expect(last.queryMode).toBe('sql')
+    expect(last.query).toBe(sql)
+    expect(last.joins).toHaveLength(1)
+    wrapper.unmount()
   })
 })

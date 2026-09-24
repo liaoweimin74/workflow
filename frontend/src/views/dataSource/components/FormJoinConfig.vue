@@ -42,13 +42,14 @@ export function emptyJoin(_index: number): JoinConfigItem {
 </script>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { Delete, Plus, View } from '@element-plus/icons-vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { Delete, Plus, Rank, View } from '@element-plus/icons-vue'
 import { formApi } from '@/api/form'
 import { dataSourceApi } from '@/api/data-source'
 import SqlEditor from './SqlEditor.vue'
 import { emptyJoin, type FormJoinConfigValue, type JoinConfigItem } from './FormJoinConfig.vue'
 import { extractFormColumns, isSystemJoinTarget, SYSTEM_JOIN_TARGET_COLUMNS, targetFormColumns, type ColumnOption } from './joinColumns'
+import { moveItem, useTableDragSort } from '@/composables/useTableDragSort'
 
 const props = withDefaults(
   defineProps<{
@@ -102,14 +103,18 @@ watch(
   { deep: true },
 )
 
-/** 变更即同步回父组件 */
+/** 变更即同步回父组件。
+ *
+ * 双段并存：joins 与 query/columns/params 均为「草稿」，切模式时不清空非活跃段——
+ * 用户在声明式 JOIN 与 SQL 模板之间的输入都保留，支持来回切换迭代修改；
+ * 当前生效段由 queryMode 标注，保存时全部入库，运行时只读活跃段。 */
 function sync() {
   emit('update:modelValue', {
     queryMode: local.queryMode,
-    joins: local.queryMode === 'config' ? local.joins : undefined,
-    query: local.queryMode === 'sql' ? local.query : undefined,
-    columns: local.queryMode === 'sql' ? local.columns : undefined,
-    params: local.queryMode === 'sql' ? local.params : undefined,
+    joins: local.joins,
+    query: local.query,
+    columns: local.columns,
+    params: local.params,
   })
 }
 
@@ -209,6 +214,40 @@ function removeJoin(index: number) {
   joins.value = joins.value.filter((_, i) => i !== index)
 }
 
+// ==================== 关联行拖拽排序 ====================
+// 拖拽调整 joins 顺序：决定运行时 LEFT JOIN 分组顺序与虚拟列在元数据中的追加顺序
+const joinsTableRef = ref<HTMLElement>()
+
+// 行身份键（WeakMap 不污染数据）：Sortable 外部移动 DOM 后 keyed patch 确定性收敛
+const joinUidMap = new WeakMap<object, number>()
+let joinUidSeq = 0
+function joinRowKey(row: JoinConfigItem): string {
+  if (!joinUidMap.has(row)) joinUidMap.set(row, ++joinUidSeq)
+  return String(joinUidMap.get(row))
+}
+
+function onJoinReorder(oldIndex: number, newIndex: number) {
+  const list = [...(local.joins || [])]
+  moveItem(list, oldIndex, newIndex)
+  joins.value = list // 触发 computed setter → sync()
+}
+
+const { init: initJoinSort, destroy: destroyJoinSort } = useTableDragSort({
+  getTbody: () => joinsTableRef.value?.querySelector('.el-table__body-wrapper tbody'),
+  handle: '.drag-handle',
+  disabled: () => props.disabled,
+  onReorder: onJoinReorder,
+})
+
+// config 表格由 v-if 控制渲染：模式切入后 nextTick 绑定，切出即解绑
+watch(queryMode, (mode) => {
+  if (mode === 'config') {
+    nextTick(() => initJoinSort())
+  } else {
+    destroyJoinSort()
+  }
+})
+
 // ==================== JOIN SQL 预览 ====================
 
 const previewSql = ref('')
@@ -232,12 +271,25 @@ async function doPreview() {
   }
 }
 
+/** 把预览 SQL 转入 SQL 模板模式继续微调（声明式配置保留为草稿，可随时切回） */
+function convertPreviewToSql() {
+  if (!previewSql.value) return
+  local.query = previewSql.value
+  queryMode.value = 'sql' // setter 内部会 sync()
+  previewVisible.value = false
+}
+
 // 渲染时确保已有 targetFormKey 的列已加载
 watch(
   () => joins.value.map((j) => j.targetFormKey),
   (keys) => keys.forEach((k) => k && void ensureTargetColumns(k)),
   { immediate: true }
 )
+
+// 首挂载即处于 config 模式（编辑既有声明式数据源）时补绑定拖拽
+if (local.queryMode === 'config') {
+  nextTick(() => initJoinSort())
+}
 </script>
 
 <template>
@@ -254,7 +306,13 @@ watch(
         <div>同连接条件的多个显示字段会合并为一条 LEFT JOIN；主表关联字段为多选（dataPicker 多选）时仅匹配首个关联值；目标表关联字段建议选择主键 id 或唯一列，避免结果集膨胀。</div>
         <div>流程定义 / 流程实例 / 待办任务为派生列数据源，不支持作为关联目标。</div>
       </div>
-      <el-table :data="joins" size="small" border>
+      <div ref="joinsTableRef">
+      <el-table :data="joins" :row-key="joinRowKey" size="small" border>
+        <el-table-column label="" width="36" align="center" class-name="drag-col">
+          <template #default>
+            <el-icon class="drag-handle" title="拖拽排序"><Rank /></el-icon>
+          </template>
+        </el-table-column>
         <el-table-column label="显示名称" min-width="100">
           <template #default="{ row }">
             <el-input v-model="row.label" placeholder="如 客户名称" :disabled="disabled" />
@@ -345,6 +403,7 @@ watch(
           </template>
         </el-table-column>
       </el-table>
+      </div>
       <el-button
         v-if="!disabled"
         type="primary"
@@ -375,7 +434,12 @@ watch(
           <el-button text size="small" @click="previewVisible = false">收起</el-button>
         </div>
         <pre class="sql-preview-body">{{ previewSql || '预览失败' }}</pre>
-        <div class="sql-preview-foot">预览为无筛选 / 无关键词 / 默认排序 / 不分页的基础语句；实际查询会按需追加筛选、排序与分页。</div>
+        <div class="sql-preview-foot">
+          <span>预览为无筛选 / 无关键词 / 默认排序 / 不分页的基础语句；实际查询会按需追加筛选、排序与分页。</span>
+          <el-button v-if="previewSql && !disabled" type="primary" link size="small" @click="convertPreviewToSql">
+            转为 SQL 模板继续编辑 →
+          </el-button>
+        </div>
       </div>
     </template>
 
@@ -457,5 +521,26 @@ watch(
   color: var(--el-text-color-secondary);
   font-size: 12px;
   line-height: 1.6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* 拖拽把手列：抓手光标 + 悬停高亮，提示可拖拽排序 */
+.drag-handle {
+  cursor: grab;
+  color: var(--el-text-color-placeholder);
+  transition: color 0.2s;
+}
+.drag-handle:hover {
+  color: var(--el-color-primary);
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+.drag-col .cell {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 </style>

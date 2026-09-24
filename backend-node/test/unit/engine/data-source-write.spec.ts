@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DataSourceWriteService,
   generateParams,
+  hasFormQueryDraft,
   hasQueryModeSegment,
   mergeQueryConfig,
   schemaRefsDataSource,
@@ -183,6 +184,31 @@ describe('hasQueryModeSegment', () => {
   })
 })
 
+describe('hasFormQueryDraft（queryMode 或任一草稿段）', () => {
+  it('queryMode / joins / query / columns / params 任一存在 → true', () => {
+    expect(hasFormQueryDraft('{"queryMode":"config"}')).toBe(true)
+    expect(hasFormQueryDraft('{"joins":[{"virtualKey":"k"}]}')).toBe(true)
+    expect(hasFormQueryDraft('{"query":"SELECT 1"}')).toBe(true)
+    expect(hasFormQueryDraft('{"columns":[{"key":"a"}]}')).toBe(true)
+    expect(hasFormQueryDraft('{"params":["a"]}')).toBe(true)
+  })
+
+  it('双段并存（草稿+活跃段）→ true', () => {
+    expect(hasFormQueryDraft('{"queryMode":"sql","joins":[]}')).toBe(true)
+  })
+
+  it('仅端点段 → false（FORM 走纯 generateParams）', () => {
+    expect(hasFormQueryDraft('{"list":{"action":"/x"}}')).toBe(false)
+  })
+
+  it('null / 空串 / 非法 JSON / 数组 → false', () => {
+    expect(hasFormQueryDraft(null)).toBe(false)
+    expect(hasFormQueryDraft('')).toBe(false)
+    expect(hasFormQueryDraft('{')).toBe(false)
+    expect(hasFormQueryDraft('[1]')).toBe(false)
+  })
+})
+
 describe('mergeQueryConfig', () => {
   it('保留生成端点的键顺序，追加段固定为 queryMode/joins/query/columns/params 顺序', () => {
     const merged = mergeQueryConfig(generateParams('FORM', 'person', 'person'), '{"queryMode":"config"}')
@@ -260,6 +286,25 @@ describe('create（校验顺序对齐 Java 第 90–114 行）', () => {
     expect(out.sourceKey).toBe('person')
     expect(h.inserted[0].source_key).toBe('person')
     expect(h.inserted[0].params).toContain('/api/v1/biz-data/person')
+  })
+
+  it('FORM 创建携带草稿段（无 queryMode）→ 端点段重建 + 草稿保留（双段并存）', async () => {
+    const h = harness()
+    await inTenant(() =>
+      h.service.create({
+        name: 'f',
+        type: 'FORM',
+        formKey: 'person',
+        sourceKey: 'person',
+        // 单表查询 + 声明式草稿：queryMode 缺省，joins 保留入库供下次迭代
+        params: '{"joins":[{"targetFormKey":"customer","localField":"id","foreignField":"id","joinField":"name","virtualKey":"customer_name","label":"客户名称","sortable":true,"filterable":true}]}',
+      }),
+    )
+    const stored = h.inserted[0].params ?? ''
+    expect(stored).toContain('/api/v1/biz-data/person')
+    expect(stored).toContain('"joins"')
+    expect(stored).toContain('"customer_name"')
+    expect(stored).not.toContain('"queryMode"')
   })
 
   it('出参不含 formId（对齐 Java toDTO 的 11 个字段）', async () => {
@@ -415,11 +460,52 @@ describe('update', () => {
   it('current 已是 FORM 且只改 type 字段以外内容时不做发布校验', async () => {
     const h = harness({ type: 'FORM', form_key: 'person', source_key: 'person' })
     h.setPublishedForm(null)
-    // 只改 params，不碰 formKey/type → bindChanged=false
+    // 只改 params，不碰 formKey/type → bindChanged=false；
+    // params 无 query 配置段 → 端点段系统权威重建（对齐 create）
     const out = await inTenant(() =>
       h.service.update(DS_ROW.id, { name: null, type: null, formKey: null, sourceKey: null, params: '{}' }),
     )
-    expect(out.params).toBe('{}')
+    expect(out.params).toContain('"list"')
+    expect(out.params).toContain('/api/v1/biz-data/person')
+  })
+
+  it('FORM update 双段并存：sql 段生效 + joins 草稿保留 + 端点段重建', async () => {
+    const h = harness({ type: 'FORM', form_key: 'person', source_key: 'person' })
+    await inTenant(() =>
+      h.service.update(DS_ROW.id, {
+        name: null,
+        type: null,
+        formKey: null,
+        sourceKey: null,
+        params:
+          '{"queryMode":"sql","query":"SELECT id FROM t WHERE tenant_id = :tenantId","columns":[{"key":"id"}],' +
+          '"joins":[{"targetFormKey":"customer","localField":"id","foreignField":"id","joinField":"name","virtualKey":"customer_name","label":"客户名称","sortable":true,"filterable":true}]}',
+      }),
+    )
+    const stored = h.replaced.at(-1)?.patch.params ?? ''
+    expect(stored).toContain('"queryMode":"sql"')
+    expect(stored).toContain('"joins"')
+    expect(stored).toContain('"customer_name"')
+    // 端点段权威重建：换绑 formKey 后旧端点不残留
+    expect(stored).toContain('/api/v1/biz-data/person')
+  })
+
+  it('FORM update 切回单表查询（无 queryMode）→ 旧 config 段被清除，草稿按当前编辑态重写', async () => {
+    const h = harness({
+      type: 'FORM',
+      form_key: 'person',
+      source_key: 'person',
+      // 存量：config 模式 + joins（旧 bug：切单表后残留，运行时仍走 JOIN）
+      params:
+        '{"list":{"action":"/api/v1/biz-data/person","method":"GET"},"queryMode":"config","joins":[{"targetFormKey":"customer","virtualKey":"old_col"}]}',
+    })
+    await inTenant(() =>
+      h.service.update(DS_ROW.id, { name: null, type: null, formKey: null, sourceKey: null, params: '{}' }),
+    )
+    const stored = h.replaced.at(-1)?.patch.params ?? ''
+    expect(stored).not.toContain('"queryMode"')
+    expect(stored).not.toContain('"joins"')
+    expect(stored).toContain('"list"')
   })
 
   it('WORKFLOW 目标为 BUSINESS 表单 → 400（业务表单没有流程实例可聚合）', async () => {

@@ -109,7 +109,9 @@ export class DataSourceWriteService {
 
     let storedParams: string | null
     if (type === TYPE_FORM || type === TYPE_SYSTEM) {
-      if (type === TYPE_FORM && hasQueryModeSegment(params)) {
+      if (type === TYPE_FORM && hasFormQueryDraft(params)) {
+        // 携带 query 配置段（含仅草稿段）：端点段系统权威重建 + 草稿段原样保留；
+        // queryMode 缺省（单表查询+草稿）时 validateFormQueryConfig 对活跃段早退不校验
         await this.validateFormQueryConfig(params, formKey)
         storedParams = mergeQueryConfig(generateParams(type, String(formKey), sourceKey), String(params))
       } else {
@@ -597,6 +599,25 @@ export function hasQueryModeSegment(params: string | null): boolean {
       !Array.isArray(root) &&
       'queryMode' in (root as Record<string, unknown>)
     )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * FORM params 是否携带 query 配置段（queryMode 或任一草稿段 joins/query/columns/params）。
+ *
+ * 双段并存语义：前端可能只提交草稿段（如声明式 JOIN 配好后切回单表查询保存，
+ * queryMode 缺省但 joins 需要保留以便下次迭代），create 路径据此决定是否走
+ * mergeQueryConfig 合并而非纯 generateParams 覆盖（对齐 update 路径行为）。
+ */
+export function hasFormQueryDraft(params: string | null): boolean {
+  if (params === null || params.trim() === '') return false
+  try {
+    const root: unknown = JSON.parse(params)
+    if (root === null || typeof root !== 'object' || Array.isArray(root)) return false
+    const record = root as Record<string, unknown>
+    return ['queryMode', 'joins', 'query', 'columns', 'params'].some((f) => f in record)
   } catch {
     return false
   }

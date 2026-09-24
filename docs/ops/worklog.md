@@ -1201,10 +1201,67 @@ Work Log:
 - API 实测数据源列表：15 条中 8 条 ds-builtin-*（组织机构/系统用户/系统菜单/系统角色/系统字典/流程定义/流程实例/待办任务），全部 type=SYSTEM、ENABLED
 - 取数实测：系统菜单返回真实菜单树数据、系统用户返回 admin/test 等用户；流程定义/待办任务返回空——与底层 API（/api/v1/deployed-processes/summaries 返回 []）一致，属数据为空而非查询缺陷
 - 写保护实测：删除→400「系统内建数据源不允许删除: 组织机构」；改名→400 不允许修改；禁用→400 不允许禁用
-- 提交 df84c3d（12 文件 +846/−59），未 push（等用户指示）
+- 提交 df84c3d（12 文件 +846/−59），已随 99c5db1 一并推送远程（origin/main=99c5db1）
 - 向用户澄清架构：数据（8 行记录）确实存在 wf_data_source 表；代码负责三件事——启动播种（自愈式预置）、异构系统数据取数适配（菜单/流程数据无统一物理表可通用查询）、写保护防误删
 
 Stage Summary:
 - Task 50 功能完成并验证：8 个内建数据源已在数据源列表可见、可取数、受保护
 - 关键设计：seed 而非手工 SQL/迁移（误删自愈、新环境零操作）；type=SYSTEM 跨租户可见；BUILT_IN_TENANT='system' 保留域判定写保护
 - 遗留：改动未 push（等用户指令）；前端列表页 SYSTEM 徽标已改但未做浏览器级验证（API 层已实测通过）
+
+---
+Task ID: 50-a
+Agent: Java backend sync agent
+Task: Java 端同步「系统内建数据源」——初始化迁入 Flyway（V39 逐字节复制）+ 6 个新 sourceKey 取数/写保护代码补齐（对齐 NodeJS 权威语义）
+
+Work Log:
+- 【V39 迁移】`cp backend-node/migrations/V39__builtin_data_sources.sql → backend/src/main/resources/db/migration/`，md5 双侧一致（22db7fdc...，cmp BYTE-IDENTICAL），checksum 必同；未动任何已应用迁移（V2__init.sql 等）
+- 【删旧播种器】grep 全库确认无显式引用后删除 `SystemDataSourceInitializer.java`（旧 @PostConstruct 播种 2 条旧名称「部门树数据源/用户树数据源」）及其孤儿测试 `SystemDataSourceInitializerTest.java`（测试对象已删，保留会编译失败）；初始化职责移交 Flyway V39（V39 首段 DELETE 正是清理该播种器遗留的随机 UUID 旧行）
+- 【新建 BuiltInSystemSources.java】（com.workflow.engine.datasource）常量目录类，对齐 NodeJS system-source-catalog.ts：BUILT_IN_TENANT="system"、BUILT_IN_ID_PREFIX="ds-builtin-"、record BuiltInSystemSource(sourceKey,name,columns,paging)、8 条目录（dept-tree=full/user-tree=paged/sys-menus=full/sys-roles=paged/sys-dicts=paged/process-definitions=full/process-instances=paged/todo-tasks=paged）、8 组列常量逐字段对齐（MENU 7 列/ROLE 5 列/DICT 5 列/PROCESS_DEF 4 列/PROCESS_INSTANCE 7 列/TODO_TASK 6 列，INTEGER 列不设 length）、SOURCE_KEYS 由目录 stream 派生防漂移、byKey()、mapSystemInternalPath（新 6 个：menus/roles/dicts/process/definitions/process/instances/process/todo-tasks）
+- 【新建 BuiltInSystemSourceQueryService.java】6 个新 key 统一取数（@Service，双消费方 SPI+REST 共享）：先 grep 核实 Java 服务真名再写——系统菜单 MenuService.tree()（MenuTree record 前序扁平化，空值→空串）；角色 RoleService.list(RoleQueryRequest(null,null,null,page,size))；字典 DictTypeService.list(DictTypeQueryRequest(...))；流程定义 ProcessService.listSummaries()（List<ProcessDefinitionSummary>，full 外壳 page=0,size=n）；流程实例 ProcessInstanceService.listProcessInstances(PageRequest.of(page-1,size))，字段映射复刻 ProcessInstanceController.toMap（currentNode=isEnded?null:activityId、status=suspended/completed/running、startTime=LocalDateTime.toString()），外壳页码 getNumber()+1；待办 WorkflowTaskService.listTodoTasksVO(assignee,PageRequest,null)，assignee 取 SecurityContextHolder principal instanceof LoginUser（复刻 TaskController.getCurrentUserId），拿不到→BusinessException(400,"待办任务数据源需要登录用户上下文")；static handles(sourceKey) 供 adapter 判路；columnsOf 未知 key→400
+- 【InternalDataSourceRouter】SYSTEM_SOURCE_KEYS 改引 BuiltInSystemSources.SOURCE_KEYS（8 个）；resolveSystem 新增 6 个 case 只支持 list→requireListOnly helper（非 list→400「<key> 不支持的操作: <op>」），映射 SystemInternalController 方法名 systemMenus/systemRoles/systemDicts/processDefinitions/processInstances/processTodoTasks + 路径 /api/v1/internal/system/...；历史 2 个 dept-tree（list/create/delete）/user-tree（list/get/create/delete）原样；default 错误消息「未注册的系统数据源: 」保持
+- 【SystemInternalController】构造器注入 BuiltInSystemSourceQueryService；补 6 个 list 端点（/system/menus|roles|dicts|process/definitions|process/instances|process/todo-tasks，page/size defaultValue 1/20 同 users）+ 6 个 /metadata 端点（列来自 BuiltInSystemSources 经 columnsOf→columnConfig(key,label)，writable=true 同 deptTreeMetadata）；helper：listRequest（Integer null 防御+Math.max(page,1)）、sourceMetadata；类注释补「数据源 SPI 另一半」语义
+- 【UnifiedDataSourceAdapter】构造器追加 builtInSourceQuery；metadata case SYSTEM：列按 sourceKey 从 BuiltInSystemSources.byKey 取（未知 key 回退 DEPT_COLUMNS 保持旧行为，对齐 NodeJS DEPT_FALLBACK_COLUMNS），仍 copyWithSortableFalse+writable=false（copy 只拷 key/label/columnType，不拷 length，golden 契约）；query case SYSTEM→systemQuery：user-tree 原位→handles(新6)委托 builtInSourceQuery.query→else queryDeptTree（未知 key 回退部门树，顺序对齐 NodeJS）；systemGet 不动（new BizDataQueryRequest 默认 1/20，与 NodeJS adapter systemGet page=1,size=20 同构）；删除 adapter 内被收编的 USER_COLUMNS 死常量（DEPT_COLUMNS 保留作回退）
+- 【DataSourceDefinitionService】SYSTEM_SOURCE_KEYS 改引 BuiltInSystemSources.SOURCE_KEYS；mapSystemInternalKey 改委托 BuiltInSystemSources.mapSystemInternalPath（空串→原 400 消息）；update(147)/disable(228)/delete(244) 三方法开头 getById 后插 requireNotBuiltIn(ds,"修改|禁用|删除")——tenantId="system"→400「系统内建数据源不允许<动作>: <name>」；enable 不拦；delete 保护先于 countRefs（对齐 NodeJS remove 短路顺序）
+- 【测试最小修补（非新增测试）】UnifiedDataSourceAdapterTest/SystemInternalControllerTest 补 mock 新服务+构造参数（否则删改后编译失败）；InternalDataSourceRouterTest/DataSourceDefinitionServiceTest 检查无需动（unknown-key 仍 400，既有用例全是 tenant-1 租户行不触发内建保护，SYSTEM 只读用例仍通过）
+- 【静态自查】沙箱确认无 javac/maven/jdk21/.m2（/home/z/tools 下仅日志），无法编译——逐项 grep 验证：全部引用方法签名真实存在（listSummaries@121、listTodoTasksVO@153、listProcessInstances@115、MenuService.tree@28、RoleServiceImpl/DictTypeServiceImpl list 页码归一化返回 PageResult(page=归一页)、record 访问器、Flowable ProcessInstance getName/getStartTime/getActivityId/isSuspended/isEnded 均在既有 ProcessInstanceController.toMap 中使用过）；流程实例 NodeJS 侧 running 列表 currentNode=null→''，Java 复刻 toMap 填 activityId——记录为已知有意差异（Java REST 端点既定语义优先，空值约定仍遵守）；6 文件大括号/圆括号配平校验全过；V39 落表前提核实：Java 约定表结构由 ddl-auto=update 建、Flyway 只做数据（V2 头注释明示），wf_data_source 由 JPA 实体建表保证先于迁移存在；V39 的 DELETE 恰好清掉 workflow.sql dump 里 tenant='system' 的两条旧 UUID 行，uk_ds_tenant_source_key 无冲突
+
+Stage Summary:
+- Java 端与 NodeJS 内建数据源完全对齐：8 个 sourceKey 单一事实源（BuiltInSystemSources）、6 个新 key 取数（BuiltInSystemSourceQueryService，SPI+REST 双消费方同实现）、写保护（update/disable/delete 三关卡，enable 放行）、初始化迁 Flyway V39（逐字节同 checksum，删启动播种器）
+- REST 面新增 12 端点（6 list + 6 metadata），路径与 V39 预置 params.list.action 完全咬合（/api/v1/internal/system/menus 等 6 条）
+- 关键决策：①历史 2 key 逻辑原位不动（golden 契约），新 6 key 委托新服务；②流程实例 currentNode 沿用 Java toMap（运行中填 activityId）而非 NodeJS 的恒空—— Java REST 既定语义优先；③adapter 未知 sourceKey 元数据回退部门列、取数回退部门树，保持旧行为
+- 风险：沙箱无 javac/maven，全部改动仅静态审查（签名 grep 核实+括号配平），不能编译验证；建议主代理在有构建环境处先 `mvn -o compile` 再启动
+- 改动清单：新增 3 文件（BuiltInSystemSources/BuiltInSystemSourceQueryService/V39.sql）；删除 2 文件（SystemDataSourceInitializer+Test）；修改 6 文件（Router/DefinitionService/Adapter/SystemInternalController/两个既有测试构造补参）
+
+---
+Task ID: 50-b
+Agent: Z.ai Code (main)
+Task: 内建数据源初始化迁入迁移脚本（V39 双端同源）+ Java 端同步补齐（用户指示：初始化用迁移工具，Java 有 Flyway，NodeJS 有等价 migrator 也可用）
+
+Work Log:
+- 调查确认两端迁移机制：Java Flyway（backend/src/main/resources/db/migration，启动自动执行）；NodeJS 自研 Flyway 兼容 migrator（backend-node/migrations V1..V38，`bun run migrate` CLI 手动执行，共用 flyway_schema_history 语义与 CRC32 checksum 算法）
+- 关键事实：两端连**不同库**（Node→workflow_v6，Java→workflow，后者因 V2 checksum 损坏 Java 当前无法启动）；wf_data_source DDL 由 JPA ddl-auto 管理；V31 已建 uk_ds_tenant_source_key 唯一索引
+- 设计 V39__builtin_data_sources.sql（幂等）：①清理 tenant_id='system' 保留域内非规范旧行（Java 旧初始化器播的 UUID 行「部门树数据源/用户树数据源」）②8 条固定 id ds-builtin-<key> INSERT...WHERE NOT EXISTS（params 为紧凑 JSON，与 generateParams('SYSTEM',...) 逐字节同构，list.action 指向 8 个 internalPath）
+- Task 50-a（子代理，Java 端）：V39 复制至 Java migration 目录（md5 双端一致 22db7fdc...）；删 SystemDataSourceInitializer+其测试；新增 BuiltInSystemSources（8 条目录/列常量/路由映射）+ BuiltInSystemSourceQueryService（6 个新 key 取数，SPI+REST 双消费方）；InternalDataSourceRouter/SystemInternalController(+6 list 端点+6 metadata 端点)/UnifiedDataSourceAdapter/DataSourceDefinitionService（白名单收编+写保护 requireNotBuiltIn：修改/禁用/删除，enable 不拦）；AdapterTest/ControllerTest 构造签名适配；沙箱无 javac 全部静态审查（签名逐个 grep 核实+括号配平）
+- Task 50-b（本代理，NodeJS 端）：删 built-in-data-source-seeder.ts + engine.module.ts 注册；catalog 注释指向 V39；nest build 通过；`bun run migrate` 应用 V39（应用 1 个、跳过 37 个、checksum 校验通过）；重启后 API 回归
+- 验证（8080，守护脚本自动拉起新 dist）：列表 15 条含 8 条内建（V39 幂等未重复未覆盖）；系统菜单取数正常；params 抽检与 V39 契约一致；写保护三连（删除/修改/禁用全 400）；lint 干净
+- 进程观察：kill 旧 32354 后守护机制（ppid 20964）09:09:36 自动拉起 2461 监听 8080 且加载新 dist；无需手动保活
+
+Stage Summary:
+- 初始化机制三段式收敛：迁移脚本管预置（V39 双端同源，误删兜底由 NOT EXISTS+保留域清理保证语义收敛）、代码只管取数适配与写保护
+- 双端行为一致：8 个 sourceKey 白名单/REST 路由/列元数据/params 契约/写保护语义全部对齐；Java 端待有构建环境时建议先 mvn compile 再启动（工作流库 V2 checksum 损坏问题独立存在）
+- 提交 99c5db1（16 文件 +844/−291），已推送远程（7441d5e..99c5db1，ls-remote 实证）
+- 遗留：Java 端仅静态审查未经编译；Java 所连 workflow 库历史损坏致其当前无法启动（与本任务无关，V39 已就位待其恢复后自动应用）
+
+---
+Task ID: 50-c
+Agent: Z.ai Code (main)
+Task: 数据源管理列表「类型」列——内建行只显示「内建」（用户 UI 反馈）
+
+Work Log:
+- DataSourceListPage.vue 类型列模板：isBuiltIn(tenantId='system') 行由「系统结构」+「内建」双标签改为单一「内建」标签（tooltip 保留，文案同步迁移化语义「随迁移脚本自动预置」）；手动 SYSTEM 行仍显示「系统结构」
+- 清理失效 .builtin-tag 样式；isBuiltIn 注释 seeder→V39 迁移
+- agent-browser 浏览器实证：登录→/lowcode/data-source/list——8 条内建行全部只显示「内建」（计数=8，无「内建 内建」重复），非内建行「业务表单/工作流表单」无回归
+
+Stage Summary:
+- 提交待 push；前端显示与 Task 50 收敛一致：内建数据源对外统一「内建」身份

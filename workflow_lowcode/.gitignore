@@ -4,6 +4,10 @@
 frontend/bun.lock
 backend-node/bun.lock
 
+# Backend runtime artifacts (prisma engine choice / data cache)
+backend-node/.engine-node
+backend-node/data/
+
 # Maven build output
 target/
 *.class

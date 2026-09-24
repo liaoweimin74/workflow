@@ -379,9 +379,13 @@ html.dark {
   color: #e8ebe8;
 }
 
-/* 暗色下 #app 容器背景改为透明（否则亮色渐变会从容器层透出） */
+/* 暗色下 #app 容器背景改为透明（否则亮色渐变会从容器层透出）；
+   color 必须一并覆盖：html,body,#app 分组规则以 (1,0,0) 特异性直接命中
+   #app 写死 #1f2a25，若只覆盖 background，继承链在 #app 断层，
+   所有依赖继承的文字（含 fc-designer 内 inherit 兜底层）暗色下仍是深色（Task 40 用户反馈根因） */
 .dark #app {
   background: transparent;
+  color: #e8ebe8;
 }
 
 /* 暗色菜单（浅色容器中使用的 el-menu） */

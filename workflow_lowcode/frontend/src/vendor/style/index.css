@@ -953,3 +953,94 @@
     background: var(--ds-selected);
     color: var(--el-color-primary);
 }
+
+/* ============================================================
+ * 四态主题适配补充二（Task 40）：表单设计器暗色残留修复
+ * 用户反馈：①图标及字体看不清 ②画布周围白色空白 ③与暗色不匹配
+ * 根因：a) #app 层 color 断层（style.css 已修）b) 以下硬编码漏网
+ * 所有规则带 ._fc-designer 前缀，特异性压过 0,1,1 的 inherit 兜底
+ * ============================================================ */
+
+/* 画布外围白框：#F5F5F5 硬编码 → 页面底色（画布内容区与外围形成层次） */
+._fc-designer ._fc-m-con {
+    background-color: var(--el-bg-color-page);
+}
+
+/* 左侧「组件/大纲」tab 文字：#303133 深色 → 常规文字（active 态仍走主色规则） */
+._fc-designer ._fc-l-tab {
+    color: var(--el-text-color-regular);
+}
+
+/* 组件库分组容器边框：#EEEEEE 亮边 → 暗色边 */
+._fc-designer ._fc-l-group {
+    border-color: var(--el-border-color-lighter);
+}
+
+/* 右栏分区标题：#333 深色 → 常规文字 */
+._fc-designer ._fc-r-title {
+    color: var(--el-text-color-regular);
+}
+
+/* 中间工具区图标（撤销/恢复/清空等 fc-icon）：继承链已通，双保险着常规色 */
+._fc-designer ._fc-m-tools-l .fc-icon {
+    color: var(--el-text-color-regular);
+}
+._fc-designer ._fc-m-tools-l .fc-icon.disabled {
+    color: var(--el-text-color-placeholder);
+}
+
+/* 工具区扩展按钮：#666/#ccc/#f1f1f1 全硬编码 → 语义变量 */
+._fc-designer ._fc-m-tools ._fd-m-extend {
+    color: var(--el-text-color-regular);
+    border-color: var(--el-border-color);
+    background-color: var(--el-fill-color-light);
+}
+
+/* fc-designer 内置 AI 侧栏：纯白表面/输入区 → 暗色语义面 */
+._fd-ai-panel {
+    background-color: var(--el-bg-color) !important;
+    color: var(--el-text-color-regular);
+}
+._fd-ai-header,
+._fd-ai-title {
+    color: var(--el-text-color-primary);
+}
+._fd-ai-input,
+._fd-ai-input-container {
+    background-color: var(--el-bg-color);
+}
+._fd-ai-input-container textarea,
+._fd-ai-input textarea {
+    background-color: var(--el-fill-color-blank);
+    color: var(--el-text-color-regular);
+}
+._fd-ai-welcome {
+    color: var(--el-text-color-secondary);
+}
+
+/* 分隔线与占位文字：#D8D8D8/#aaa → 语义变量 */
+._fd-row-line {
+    background: var(--el-border-color-lighter);
+}
+._fc-designer .CodeMirror-placeholder,
+._fd-config-dialog .CodeMirror-placeholder,
+._fd-struct-con .CodeMirror-placeholder {
+    color: var(--el-text-color-placeholder) !important;
+}
+
+/* 组件库格子图标/名称双保险（修复继承断层后实际已通，防回归） */
+._fc-designer ._fc-l-item,
+._fc-designer ._fc-l-item i,
+._fc-designer ._fc-l-item ._fc-l-name {
+    color: var(--el-text-color-regular);
+}
+
+/* 右栏「表单配置/组件配置」tab：._fc-r ._fc-r-tab (0,2,0) 硬编码 #303133 → 语义色（active 主色规则 0,3,0 仍优先） */
+._fc-designer ._fc-r ._fc-r-tab {
+    color: var(--el-text-color-regular);
+}
+
+/* 右栏关闭 X 按钮：#666 硬编码 → 次要文字色 */
+._fc-designer ._fc-r-tools-close {
+    color: var(--el-text-color-secondary);
+}

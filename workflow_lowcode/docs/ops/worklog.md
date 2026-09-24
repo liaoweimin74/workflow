@@ -1320,3 +1320,17 @@ Stage Summary:
 - Task 51 两项均闭环实证通过：①join-preview 404 已根治（端点在 dist 且进程已加载，API+UI 双验证）；②「目标表」文案 + 内建数据源候选 + 物理列联动 + 预览全链路可用
 - 未保存任何数据源配置变更（验证用配置已取消）
 - 已创建 15 分钟 webDevReview 巡检任务（job_id 411264）
+
+---
+Task ID: 51-analysis
+Agent: Z.ai Code (main)
+Task: 关联查询配置（FORM queryMode config/sql）作用与问题全面分析（用户要求）
+
+Work Log:
+- 通读 Node 端全链路：form-query-config.ts（parse+ensureAlias）→ join-sql-generator.ts（buildSelect/Count/validate/localRef JSON_EXTRACT '$[0]'）→ join-target-catalog.ts（5 内建物理映射）→ biz-data-support.ts（queryJoinConfig/previewJoinSql/buildJoinColumns/toJoinVO）→ unified-data-source-adapter.ts（metadata appendJoinColumns/query 分流）→ data-source-write.service.ts（validateConfigJoins）→ filter-sql.ts（appendFilters/Keyword 白名单）
+- 核对 Java 端 JoinSqlGenerator 确认 JoinGroup 分组实现（Node 端无分组，逐 join 生成 LEFT JOIN，两端结构性差异）
+- 识别问题清单（详见用户报告）：JSON 只取首元素/同条件 JOIN 未分组/foreignField 非唯一膨胀/保存校验缺口（localField 无格式校验、FORM 目标字段无存在性校验、virtualKey 主表冲突校验未被运行时调用）/JOIN 目标表无租户过滤/一层直连能力边界/JSON_EXTRACT 无索引/三处校验分裂/metadata 30s 缓存延迟等
+
+Stage Summary:
+- 输出 10+ 项问题（分正确性/安全/性能/一致性/体验五级），未做代码修改——等用户决策修复优先级
+- 快赢候选：①localField+FORM 目标字段保存侧白名单校验 ②Node 对齐 Java JoinGroup 分组 ③运行时补调 JoinSqlGenerator.validate

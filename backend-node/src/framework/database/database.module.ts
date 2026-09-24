@@ -38,15 +38,30 @@ export const MYSQL_POOL = Symbol('MYSQL_POOL')
           timezone: '+08:00',
           connectionLimit: 10,
           /**
-           * MySQL `json` 列默认会被 mysql2 解析成 JS 对象。
+           * JSON / 文本列统一返回**原始文本**。
            *
            * ⚠️ 这里刻意改成返回**原始文本**：Java 侧把 json 列映射成 String，
            *    响应里返回的就是库里的原始 JSON 文本（保留空白与键顺序）。
            *    若让 mysql2 解析再由我们序列化，会丢掉空白、并让字段类型从 string 变成 object
            *    —— 实测踩到过：`editor` 的 `nodeConfigs` 值因此与 Java 不一致。
+           *
+           * ⚠️ MariaDB 差异（publish 表单实测踩到）：MariaDB 把 JSON 别名列在
+           *    wire protocol 里标记为 **BLOB**（MySQL 8 标记为 JSON），
+           *    mysql2 对 BLOB 载荷里的合法 JSON 会自动 parse 成 JS 对象 ——
+           *    导致下游 `columnConfig.trim()` / `JSON.parse()` 类逻辑崩溃。
+           *    本库无二进制列，JSON 与 BLOB 系（TEXT/LONGTEXT 等均走 BLOB 类型）
+           *    统一还原为原始文本，等价于 MySQL 8 的默认文本行为。
            */
           typeCast: (field, next) => {
-            if (field.type === 'JSON') return field.string('utf8')
+            if (
+              field.type === 'JSON' ||
+              field.type === 'BLOB' ||
+              field.type === 'TINY_BLOB' ||
+              field.type === 'MEDIUM_BLOB' ||
+              field.type === 'LONG_BLOB'
+            ) {
+              return field.string('utf8')
+            }
             return next()
           },
           /**

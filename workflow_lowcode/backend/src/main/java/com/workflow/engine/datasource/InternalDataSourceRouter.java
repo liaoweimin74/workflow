@@ -13,7 +13,8 @@ import java.util.Set;
  *
  * 约定：
  * - FORM：formKey → BizDataController REST 路径
- * - SYSTEM：sourceKey 必须在 allowlist 中（dept-tree / user-tree）→ SystemInternalController REST 路径
+ * - SYSTEM：sourceKey 必须在 allowlist 中（BuiltInSystemSources.SOURCE_KEYS，8 个内建数据源）
+ *   → SystemInternalController REST 路径；历史 2 个支持多操作，新 6 个只读（list）
  * - 未注册类型 / 缺少 formKey / 未知 sourceKey → 400 拒绝
  *
  * allowlist 仅允许已注册的 controller 方法调用，防止 internal:// 被用于任意路径探测（SSRF-safe）。
@@ -21,8 +22,8 @@ import java.util.Set;
 @Component
 public class InternalDataSourceRouter {
 
-    /** SYSTEM sourceKey 允许列表 */
-    private static final Set<String> SYSTEM_SOURCE_KEYS = Set.of("dept-tree", "user-tree");
+    /** SYSTEM sourceKey 允许列表（8 个内建数据源，唯一事实源见 BuiltInSystemSources） */
+    private static final Set<String> SYSTEM_SOURCE_KEYS = BuiltInSystemSources.SOURCE_KEYS;
 
     private final TenantProvider tenantProvider;
 
@@ -107,7 +108,29 @@ public class InternalDataSourceRouter {
                 // user-tree 仅支持 list/get/create/delete（无 update endpoint）
                 default -> throw new BusinessException(400, "user-tree 不支持的操作: " + operation);
             };
+            // 新 6 个内建系统数据源（50-a）：只读，仅支持 list
+            case "sys-menus" -> requireListOnly(operation, "sys-menus", "systemMenus",
+                    "/api/v1/internal/system/menus");
+            case "sys-roles" -> requireListOnly(operation, "sys-roles", "systemRoles",
+                    "/api/v1/internal/system/roles");
+            case "sys-dicts" -> requireListOnly(operation, "sys-dicts", "systemDicts",
+                    "/api/v1/internal/system/dicts");
+            case "process-definitions" -> requireListOnly(operation, "process-definitions", "processDefinitions",
+                    "/api/v1/internal/system/process/definitions");
+            case "process-instances" -> requireListOnly(operation, "process-instances", "processInstances",
+                    "/api/v1/internal/system/process/instances");
+            case "todo-tasks" -> requireListOnly(operation, "todo-tasks", "processTodoTasks",
+                    "/api/v1/internal/system/process/todo-tasks");
             default -> throw new BusinessException(400, "未注册的系统数据源: " + sourceKey);
         };
+    }
+
+    /** 新 6 个内建数据源只读：非 list 操作 → 400；list → SystemInternalController 对应端点。 */
+    private ResolvedEndpoint requireListOnly(String operation, String sourceKey,
+                                             String methodName, String path) {
+        if (!"list".equals(operation)) {
+            throw new BusinessException(400, sourceKey + " 不支持的操作: " + operation);
+        }
+        return new ResolvedEndpoint("SystemInternalController", methodName, "GET", path);
     }
 }

@@ -44,19 +44,12 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     private static final int DEFAULT_TIMEOUT_MS = 10000;
     private static final int DEFAULT_RETRY = 0;
 
+    /** 未知 sourceKey 的元数据列回退（保持旧行为：非 user-tree 一律部门列；目录权威定义见 BuiltInSystemSources）。 */
     private static final List<ColumnConfig> DEPT_COLUMNS = List.of(
             column("id", "部门 ID", "VARCHAR", 64),
             column("parentId", "上级部门 ID", "VARCHAR", 64),
             column("label", "部门名称", "VARCHAR", 128),
             column("code", "部门编码", "VARCHAR", 64));
-
-    private static final List<ColumnConfig> USER_COLUMNS = List.of(
-            column("id", "用户 ID", "VARCHAR", 64),
-            column("username", "用户名", "VARCHAR", 64),
-            column("nickname", "昵称", "VARCHAR", 64),
-            column("orgId", "部门 ID", "VARCHAR", 64),
-            column("orgName", "部门名称", "VARCHAR", 128),
-            column("status", "状态", "TINYINT", 1));
 
     private final BizDataService bizDataService;
     private final FormDefinitionService formDefService;
@@ -66,6 +59,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     private final ObjectMapper objectMapper;
     private final InternalDataSourceRouter router;
     private final WorkflowFormDataQueryService workflowQueryService;
+    private final BuiltInSystemSourceQueryService builtInSourceQuery;
 
     public UnifiedDataSourceAdapter(BizDataService bizDataService,
                                     FormDefinitionService formDefService,
@@ -74,7 +68,8 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                                     HttpLogicExecutor httpExecutor,
                                     ObjectMapper objectMapper,
                                     InternalDataSourceRouter router,
-                                    WorkflowFormDataQueryService workflowQueryService) {
+                                    WorkflowFormDataQueryService workflowQueryService,
+                                    BuiltInSystemSourceQueryService builtInSourceQuery) {
         this.bizDataService = bizDataService;
         this.formDefService = formDefService;
         this.organizationService = organizationService;
@@ -83,6 +78,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
         this.objectMapper = objectMapper;
         this.router = router;
         this.workflowQueryService = workflowQueryService;
+        this.builtInSourceQuery = builtInSourceQuery;
     }
 
     @Override
@@ -137,9 +133,12 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 yield m;
             }
             case "SYSTEM" -> {
-                List<ColumnConfig> cols = "user-tree".equals(ds.getSourceKey())
-                        ? copyWithSortableFalse(USER_COLUMNS)
-                        : copyWithSortableFalse(DEPT_COLUMNS);
+                // 列是常量（唯一事实源 BuiltInSystemSources，与 NodeJS catalog 同源），不查库；
+                // writable=false（系统数据源只读）。未知 sourceKey 回退部门列（保持旧行为）。
+                BuiltInSystemSources.BuiltInSystemSource source =
+                        BuiltInSystemSources.byKey(ds.getSourceKey());
+                List<ColumnConfig> cols = copyWithSortableFalse(
+                        source == null ? DEPT_COLUMNS : source.columns());
                 yield new DataSourceMetadata(cols, false);
             }
             case "API" -> {
@@ -387,8 +386,14 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     // ===== SYSTEM helpers =====
 
     private BizDataPageVO systemQuery(DataSourceDefinition ds, BizDataQueryRequest req) {
-        if ("user-tree".equals(ds.getSourceKey())) {
+        String sourceKey = ds.getSourceKey();
+        if ("user-tree".equals(sourceKey)) {
             return queryUsers(req);
+        }
+        // 新 6 个内建系统数据源（菜单/角色/字典/流程定义/流程实例/待办任务）统一委托
+        // BuiltInSystemSourceQueryService —— 与 SystemInternalController 的 REST 端点共享同一份实现，避免双实现漂移
+        if (BuiltInSystemSourceQueryService.handles(sourceKey)) {
+            return builtInSourceQuery.query(sourceKey, req);
         }
         return queryDeptTree();
     }

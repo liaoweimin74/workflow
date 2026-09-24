@@ -1,11 +1,13 @@
 package com.workflow.api.controller;
 
 import com.workflow.api.dto.BizDataPageVO;
+import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
 import com.workflow.api.dto.DataSourceMetadata;
 import com.workflow.common.domain.PageResult;
 import com.workflow.common.domain.R;
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.datasource.BuiltInSystemSourceQueryService;
 import com.workflow.engine.form.column.ColumnConfig;
 import com.workflow.system.domain.dto.OrganizationCreateRequest;
 import com.workflow.system.domain.dto.UserCreateRequest;
@@ -25,6 +27,11 @@ import java.util.stream.Collectors;
 /**
  * SYSTEM 内部 REST 控制器。
  * 部门树扁平化（parentId=root 时为空串）；用户分页；元数据只读标记；CRUD 委托。
+ *
+ * 这些端点不是给前端直接调的，而是<b>数据源 SPI 的另一半</b>：
+ * {@code /api/v1/data-sources} 里类型为 SYSTEM 的数据源（部门树、用户、内建系统数据源）转发到这里。
+ * 响应用 {@code BizDataVO} / {@code BizDataPageVO}，与业务表单数据同构，
+ * 页面设计器才能用同一套渲染逻辑。
  */
 @RestController
 @RequestMapping("/api/v1/internal")
@@ -32,10 +39,14 @@ public class SystemInternalController {
 
     private final OrganizationService organizationService;
     private final UserService userService;
+    private final BuiltInSystemSourceQueryService builtInSourceQuery;
 
-    public SystemInternalController(OrganizationService organizationService, UserService userService) {
+    public SystemInternalController(OrganizationService organizationService,
+                                    UserService userService,
+                                    BuiltInSystemSourceQueryService builtInSourceQuery) {
         this.organizationService = organizationService;
         this.userService = userService;
+        this.builtInSourceQuery = builtInSourceQuery;
     }
 
     // ==================== READ ====================
@@ -143,6 +154,89 @@ public class SystemInternalController {
         return R.ok();
     }
 
+    // ==================== 内建系统数据源 REST 化取数（新 6 个，50-a） ====================
+    //
+    // 这些端点与数据源 SPI（adapter 直调服务）共享同一份实现（BuiltInSystemSourceQueryService），
+    // 是 V39 迁移脚本预置的 params.list.action 的落点；也给前端/页面直连提供 REST 形状。取数均只读。
+
+    /** 系统菜单列表（全量扁平化）。 */
+    @GetMapping("/system/menus")
+    public R<BizDataPageVO> systemMenus(@RequestParam(defaultValue = "1") Integer page,
+                                        @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(builtInSourceQuery.query("sys-menus", listRequest(page, size)));
+    }
+
+    /** 系统菜单元数据。 */
+    @GetMapping("/system/menus/metadata")
+    public R<DataSourceMetadata> systemMenusMetadata() {
+        return R.ok(sourceMetadata("sys-menus"));
+    }
+
+    /** 系统角色列表（标准分页）。 */
+    @GetMapping("/system/roles")
+    public R<BizDataPageVO> systemRoles(@RequestParam(defaultValue = "1") Integer page,
+                                        @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(builtInSourceQuery.query("sys-roles", listRequest(page, size)));
+    }
+
+    /** 系统角色元数据。 */
+    @GetMapping("/system/roles/metadata")
+    public R<DataSourceMetadata> systemRolesMetadata() {
+        return R.ok(sourceMetadata("sys-roles"));
+    }
+
+    /** 系统字典（类型）列表（标准分页）。 */
+    @GetMapping("/system/dicts")
+    public R<BizDataPageVO> systemDicts(@RequestParam(defaultValue = "1") Integer page,
+                                        @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(builtInSourceQuery.query("sys-dicts", listRequest(page, size)));
+    }
+
+    /** 系统字典元数据。 */
+    @GetMapping("/system/dicts/metadata")
+    public R<DataSourceMetadata> systemDictsMetadata() {
+        return R.ok(sourceMetadata("sys-dicts"));
+    }
+
+    /** 流程定义列表（全量）。 */
+    @GetMapping("/system/process/definitions")
+    public R<BizDataPageVO> processDefinitions(@RequestParam(defaultValue = "1") Integer page,
+                                               @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(builtInSourceQuery.query("process-definitions", listRequest(page, size)));
+    }
+
+    /** 流程定义元数据。 */
+    @GetMapping("/system/process/definitions/metadata")
+    public R<DataSourceMetadata> processDefinitionsMetadata() {
+        return R.ok(sourceMetadata("process-definitions"));
+    }
+
+    /** 流程实例列表（标准分页，运行中）。 */
+    @GetMapping("/system/process/instances")
+    public R<BizDataPageVO> processInstances(@RequestParam(defaultValue = "1") Integer page,
+                                             @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(builtInSourceQuery.query("process-instances", listRequest(page, size)));
+    }
+
+    /** 流程实例元数据。 */
+    @GetMapping("/system/process/instances/metadata")
+    public R<DataSourceMetadata> processInstancesMetadata() {
+        return R.ok(sourceMetadata("process-instances"));
+    }
+
+    /** 待办任务列表（标准分页，按当前登录人过滤）。 */
+    @GetMapping("/system/process/todo-tasks")
+    public R<BizDataPageVO> processTodoTasks(@RequestParam(defaultValue = "1") Integer page,
+                                             @RequestParam(defaultValue = "20") Integer size) {
+        return R.ok(builtInSourceQuery.query("todo-tasks", listRequest(page, size)));
+    }
+
+    /** 待办任务元数据。 */
+    @GetMapping("/system/process/todo-tasks/metadata")
+    public R<DataSourceMetadata> processTodoTasksMetadata() {
+        return R.ok(sourceMetadata("todo-tasks"));
+    }
+
     // ==================== helpers ====================
 
     private ColumnConfig columnConfig(String key, String label) {
@@ -150,6 +244,26 @@ public class SystemInternalController {
         c.setKey(key);
         c.setLabel(label);
         return c;
+    }
+
+    /** 内建数据源取数请求（page/size 缺省与 users 端点同默认：1/20）。 */
+    private BizDataQueryRequest listRequest(Integer page, Integer size) {
+        BizDataQueryRequest req = new BizDataQueryRequest();
+        req.setPage(Math.max(page == null ? 1 : page, 1));
+        req.setSize(size == null ? 20 : size);
+        return req;
+    }
+
+    /**
+     * 内建数据源元数据（列来自目录常量 BuiltInSystemSources）。
+     * 与既有 deptTreeMetadata/usersMetadata 同构传 writable=true。
+     */
+    private DataSourceMetadata sourceMetadata(String sourceKey) {
+        List<ColumnConfig> columns = new ArrayList<>();
+        for (ColumnConfig c : builtInSourceQuery.columnsOf(sourceKey)) {
+            columns.add(columnConfig(c.getKey(), c.getLabel()));
+        }
+        return new DataSourceMetadata(columns, true);
     }
 
     private List<BizDataVO> flattenTree(List<TreeNode> nodes, String keyword) {

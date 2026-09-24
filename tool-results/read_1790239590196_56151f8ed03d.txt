@@ -1,0 +1,635 @@
+    40→    40→ */
+    41→    41→@Component
+    42→    42→public class UnifiedDataSourceAdapter implements DataSourceAdapter {
+    43→    43→
+    44→    44→    private static final int DEFAULT_TIMEOUT_MS = 10000;
+    45→    45→    private static final int DEFAULT_RETRY = 0;
+    46→    46→
+    47→    47→    private static final List<ColumnConfig> DEPT_COLUMNS = List.of(
+    48→    48→            column("id", "部门 ID", "VARCHAR", 64),
+    49→    49→            column("parentId", "上级部门 ID", "VARCHAR", 64),
+    50→    50→            column("label", "部门名称", "VARCHAR", 128),
+    51→    51→            column("code", "部门编码", "VARCHAR", 64));
+    52→    52→
+    53→    53→    private static final List<ColumnConfig> USER_COLUMNS = List.of(
+    54→    54→            column("id", "用户 ID", "VARCHAR", 64),
+    55→    55→            column("username", "用户名", "VARCHAR", 64),
+    56→    56→            column("nickname", "昵称", "VARCHAR", 64),
+    57→    57→            column("orgId", "部门 ID", "VARCHAR", 64),
+    58→    58→            column("orgName", "部门名称", "VARCHAR", 128),
+    59→    59→            column("status", "状态", "TINYINT", 1));
+    60→    60→
+    61→    61→    private final BizDataService bizDataService;
+    62→    62→    private final FormDefinitionService formDefService;
+    63→    63→    private final OrganizationService organizationService;
+    64→    64→    private final UserService userService;
+    65→    65→    private final HttpLogicExecutor httpExecutor;
+    66→    66→    private final ObjectMapper objectMapper;
+    67→    67→    private final InternalDataSourceRouter router;
+    68→    68→    private final WorkflowFormDataQueryService workflowQueryService;
+    69→    69→
+    70→    70→    public UnifiedDataSourceAdapter(BizDataService bizDataService,
+    71→    71→                                    FormDefinitionService formDefService,
+    72→    72→                                    OrganizationService organizationService,
+    73→    73→                                    UserService userService,
+    74→    74→                                    HttpLogicExecutor httpExecutor,
+    75→    75→                                    ObjectMapper objectMapper,
+    76→    76→                                    InternalDataSourceRouter router,
+    77→    77→                                    WorkflowFormDataQueryService workflowQueryService) {
+    78→    78→        this.bizDataService = bizDataService;
+    79→    79→        this.formDefService = formDefService;
+    80→    80→        this.organizationService = organizationService;
+    81→    81→        this.userService = userService;
+    82→    82→        this.httpExecutor = httpExecutor;
+    83→    83→        this.objectMapper = objectMapper;
+    84→    84→        this.router = router;
+    85→    85→        this.workflowQueryService = workflowQueryService;
+    86→    86→    }
+    87→    87→
+    88→    88→    @Override
+    89→    89→    public boolean supports(String type) {
+    90→    90→        return "FORM".equals(type) || "SYSTEM".equals(type) || "API".equals(type) || "WORKFLOW".equals(type) || "SQL".equals(type);
+    91→    91→    }
+    92→    92→
+    93→    93→    @Override
+    94→    94→    public DataSourceMetadata metadata(DataSourceDefinition ds) {
+    95→    95→        return switch (ds.getType()) {
+    96→    96→            case "FORM" -> {
+    97→    97→                List<ColumnConfig> cols;
+    98→    98→                try {
+    99→    99→                    cols = new ArrayList<>(formDefService.getBusinessColumnsByKey(ds.getFormKey()));
+   100→   100→                } catch (BusinessException e) {
+   101→   101→                    if (e.getCode() == 404) {
+   102→   102→                        // 绑定表单尚未发布（或不存在）：字段元数据降级为空列而非 404，
+   103→   103→                        // 不阻断数据源编辑（对齐 NestJS 侧同款降级；表单发布后自动展示）
+   104→   104→                        DataSourceMetadata empty = new DataSourceMetadata(new ArrayList<>(), false);
+   105→   105→                        empty.setFormKey(ds.getFormKey());
+   106→   106→                        yield empty;
+   107→   107→                    }
+   108→   108→                    throw e;
+   109→   109→                }
+   110→   110→                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+   111→   111→                if (cfg.isConfigMode()) {
+   112→   112→                    appendJoinColumns(cols, cfg.joins());
+   113→   113→                } else if (cfg.isSqlMode()) {
+   114→   114→                    appendDeclaredColumns(cols, cfg.columns());
+   115→   115→                }
+   116→   116→                SortableResolver.resolve(cols);
+   117→   117→                DataSourceMetadata m = new DataSourceMetadata(cols, true);
+   118→   118→                m.setFormKey(ds.getFormKey());
+   119→   119→                yield m;
+   120→   120→            }
+   121→   121→            case "WORKFLOW" -> {
+   122→   122→                List<ColumnConfig> cols;
+   123→   123→                try {
+   124→   124→                    cols = workflowQueryService.columnsFor(ds.getFormKey());
+   125→   125→                } catch (BusinessException e) {
+   126→   126→                    if (e.getCode() == 404) {
+   127→   127→                        // 绑定表单尚未发布（或不存在）：字段元数据降级为空列（对齐 FORM 分支与 NestJS 侧）
+   128→   128→                        DataSourceMetadata empty = new DataSourceMetadata(new ArrayList<>(), false);
+   129→   129→                        empty.setFormKey(ds.getFormKey());
+   130→   130→                        yield empty;
+   131→   131→                    }
+   132→   132→                    throw e;
+   133→   133→                }
+   134→   134→                SortableResolver.resolve(cols);
+   135→   135→                DataSourceMetadata m = new DataSourceMetadata(cols, false);
+   136→   136→                m.setFormKey(ds.getFormKey());
+   137→   137→                yield m;
+   138→   138→            }
+   139→   139→            case "SYSTEM" -> {
+   140→   140→                List<ColumnConfig> cols = "user-tree".equals(ds.getSourceKey())
+   141→   141→                        ? copyWithSortableFalse(USER_COLUMNS)
+   142→   142→                        : copyWithSortableFalse(DEPT_COLUMNS);
+   143→   143→                yield new DataSourceMetadata(cols, false);
+   144→   144→            }
+   145→   145→            case "API" -> {
+   146→   146→                DataSourceMetadata m = apiMetadata(ds);
+   147→   147→                DataSourceMetadata copy = new DataSourceMetadata(copyWithSortableFalse(m.getColumns()), m.isWritable());
+   148→   148→                copy.setFormKey(m.getFormKey());
+   149→   149→                yield copy;
+   150→   150→            }
+   151→   151→            case "SQL" -> {
+   152→   152→                // 字段元数据 = params.columns（单一来源；探测/主表单覆盖/行内编辑由前端写入，无表单列默认合并）
+   153→   153→                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+   154→   154→                List<ColumnConfig> cols = cfg.isConfigMode() ? List.of() : cfg.columns();
+   155→   155→                boolean writable = ds.getFormKey() != null && !ds.getFormKey().isBlank();
+   156→   156→                DataSourceMetadata m = new DataSourceMetadata(cols, writable);
+   157→   157→                if (ds.getFormKey() != null && !ds.getFormKey().isBlank()) {
+   158→   158→                    m.setFormKey(ds.getFormKey());
+   159→   159→                }
+   160→   160→                yield m;
+   161→   161→            }
+   162→   162→            default -> throw unsupported(ds, "metadata");
+   163→   163→        };
+   164→   164→    }
+   165→   165→
+   166→   166→    /** 复制列并强制标记 sortable=false（SYSTEM/API 数据源不可排序；避免就地污染共享常量列）。 */
+   167→   167→    private List<ColumnConfig> copyWithSortableFalse(List<ColumnConfig> src) {
+   168→   168→        List<ColumnConfig> out = new ArrayList<>();
+   169→   169→        if (src != null) {
+   170→   170→            for (ColumnConfig c : src) {
+   171→   171→                ColumnConfig copy = new ColumnConfig();
+   172→   172→                copy.setKey(c.getKey());
+   173→   173→                copy.setLabel(c.getLabel());
+   174→   174→                copy.setColumnType(c.getColumnType());
+   175→   175→                copy.setSortable(false);
+   176→   176→                out.add(copy);
+   177→   177→            }
+   178→   178→        }
+   179→   179→        return out;
+   180→   180→    }
+   181→   181→
+   182→   182→    @Override
+   183→   183→    public BizDataPageVO query(DataSourceDefinition ds, BizDataQueryRequest req) {
+   184→   184→        return switch (ds.getType()) {
+   185→   185→            case "FORM" -> {
+   186→   186→                router.resolve(ds, "list");
+   187→   187→                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+   188→   188→                if (cfg.isConfigMode()) {
+   189→   189→                    yield bizDataService.queryJoin(ds.getFormKey(), req, cfg.joins());
+   190→   190→                }
+   191→   191→                if (cfg.isSqlMode()) {
+   192→   192→                    yield bizDataService.querySql(ds.getFormKey(), req, cfg);
+   193→   193→                }
+   194→   194→                yield bizDataService.query(ds.getFormKey(), req);
+   195→   195→            }
+   196→   196→            case "WORKFLOW" -> workflowQueryService.query(ds.getFormKey(), req);
+   197→   197→            case "SYSTEM" -> {
+   198→   198→                router.resolve(ds, "list");
+   199→   199→                yield systemQuery(ds, req);
+   200→   200→            }
+   201→   201→            case "API" -> apiQuery(ds, req);
+   202→   202→            case "SQL" -> {
+   203→   203→                router.resolve(ds, "list");
+   204→   204→                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+   205→   205→                if (cfg.isVisualMode() || cfg.isSqlMode()) {
+   206→   206→                    // 绕过表单 covering handler：SQL 数据源执行管理员显式 SQL，不被绑定表单业务定制劫持
+   207→   207→                    yield bizDataService.querySqlRaw(ds.getFormKey(), req, cfg);
+   208→   208→                }
+   209→   209→                throw new BusinessException(400, "SQL 数据源缺少查询配置");
+   210→   210→            }
+   211→   211→            default -> throw unsupported(ds, "query");
+   212→   212→        };
+   213→   213→    }
+   214→   214→
+   215→   215→    @Override
+   216→   216→    public BizDataVO get(DataSourceDefinition ds, String id) {
+   217→   217→        return switch (ds.getType()) {
+   218→   218→            case "FORM" -> {
+   219→   219→                router.resolve(ds, "get");
+   220→   220→                yield bizDataService.getById(ds.getFormKey(), id);
+   221→   221→            }
+   222→   222→            case "WORKFLOW" -> workflowQueryService.getById(ds.getFormKey(), id);
+   223→   223→            case "SYSTEM" -> systemGet(ds, id);
+   224→   224→            case "API" -> apiGet(ds, id);
+   225→   225→            case "SQL" -> {
+   226→   226→                String fk = requireFormKey(ds, "get");
+   227→   227→                yield bizDataService.getById(fk, id);
+   228→   228→            }
+   229→   229→            default -> throw unsupported(ds, "get");
+   230→   230→        };
+   231→   231→    }
+   232→   232→
+   233→   233→    @Override
+   234→   234→    public String create(DataSourceDefinition ds, Map<String, Object> data) {
+   235→   235→        return switch (ds.getType()) {
+   236→   236→            case "FORM" -> {
+   237→   237→                router.resolve(ds, "create");
+   238→   238→                yield bizDataService.create(ds.getFormKey(), data).getId();
+   239→   239→            }
+   240→   240→            case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
+   241→   241→            case "API" -> apiCreate(ds, data);
+   242→   242→            case "SQL" -> {
+   243→   243→                String fk = requireFormKey(ds, "create");
+   244→   244→                yield bizDataService.create(fk, data).getId();
+   245→   245→            }
+   246→   246→            default -> throw unsupported(ds, "create");
+   247→   247→        };
+   248→   248→    }
+   249→   249→
+   250→   250→    @Override
+   251→   251→    public void update(DataSourceDefinition ds, String id, Map<String, Object> data, Integer version) {
+   252→   252→        switch (ds.getType()) {
+   253→   253→            case "FORM" -> {
+   254→   254→                router.resolve(ds, "update");
+   255→   255→                bizDataService.update(ds.getFormKey(), id, data, version);
+   256→   256→            }
+   257→   257→            case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
+   258→   258→            case "API" -> apiUpdate(ds, id, data);
+   259→   259→            case "SQL" -> {
+   260→   260→                String fk = requireFormKey(ds, "update");
+   261→   261→                bizDataService.update(fk, id, data, version);
+   262→   262→            }
+   263→   263→            default -> throw unsupported(ds, "update");
+   264→   264→        }
+   265→   265→    }
+   266→   266→
+   267→   267→    @Override
+   268→   268→    public void delete(DataSourceDefinition ds, String id) {
+   269→   269→        switch (ds.getType()) {
+   270→   270→            case "FORM" -> {
+   271→   271→                router.resolve(ds, "delete");
+   272→   272→                bizDataService.delete(ds.getFormKey(), id);
+   273→   273→            }
+   274→   274→            case "SYSTEM" -> {
+   275→   275→                router.resolve(ds, "delete");
+   276→   276→                // SYSTEM is read-only at adapter level; router allows for audit
+   277→   277→                throw unsupported(ds, "delete");
+   278→   278→            }
+   279→   279→            case "WORKFLOW" -> throw new BusinessException(400, "工作流表单数据源为只读，不支持该操作");
+   280→   280→            case "API" -> apiDelete(ds, id);
+   281→   281→            case "SQL" -> {
+   282→   282→                String fk = requireFormKey(ds, "delete");
+   283→   283→                bizDataService.delete(fk, id);
+   284→   284→            }
+   285→   285→            default -> throw unsupported(ds, "delete");
+   286→   286→        }
+   287→   287→    }
+   288→   288→
+   289→   289→    /** SQL 数据源行级操作须绑定默认表单；未绑定 → 400。 */
+   290→   290→    private String requireFormKey(DataSourceDefinition ds, String op) {
+   291→   291→        if (ds.getFormKey() == null || ds.getFormKey().isBlank()) {
+   292→   292→            throw new BusinessException(400, "SQL 数据源未绑定表单，不支持" + op + "操作: " + ds.getName());
+   293→   293→        }
+   294→   294→        return ds.getFormKey();
+   295→   295→    }
+   296→   296→
+   297→   297→    // ===== FORM helpers =====
+   298→   298→
+   299→   299→    /** 追加 config 模式 JOIN 虚拟列到 metadata；与主表列 key 重复的 virtualKey 跳过（防御性去重）。 */
+   300→   300→    private void appendJoinColumns(List<ColumnConfig> cols, List<JoinConfig> joins) {
+   301→   301→        Set<String> existing = cols.stream().map(ColumnConfig::getKey).collect(Collectors.toSet());
+   302→   302→        for (JoinConfig j : joins) {
+   303→   303→            if (j.virtualKey() == null || j.virtualKey().isBlank() || existing.contains(j.virtualKey())) {
+   304→   304→                continue;
+   305→   305→            }
+   306→   306→            List<ColumnConfig> targetCols = resolveJoinTargets(j);
+   307→   307→            ColumnConfig c = new ColumnConfig();
+   308→   308→            c.setKey(j.virtualKey());
+   309→   309→            c.setLabel(j.label() == null || j.label().isBlank() ? j.virtualKey() : j.label());
+   310→   310→            c.setColumnType(findJoinColumnType(targetCols, j.joinField()));
+   311→   311→            c.setSortable(j.sortable());
+   312→   312→            c.setFilterable(j.filterable());
+   313→   313→            cols.add(c);
+   314→   314→            existing.add(c.getKey());
+   315→   315→
+   316→   316→            // 目标列为 dataPicker 引用列（pickerConfig 非空）：透传 pickerConfig，前端按引用列渲染显示文本
+   317→   317→            ColumnConfig target = findJoinTarget(targetCols, j.joinField());
+   318→   318→            if (target != null && target.getPickerConfig() != null && !target.getPickerConfig().isBlank()) {
+   319→   319→                c.setPickerConfig(target.getPickerConfig());
+   320→   320→            }
+   321→   321→            // 目标表含 <joinField>_text 冗余列（dataPicker 两列映射）→ 追加隐藏冗余列，供前端引用渲染取值
+   322→   322→            if (findJoinTarget(targetCols, j.joinField() + "_text") != null) {
+   323→   323→                ColumnConfig text = new ColumnConfig();
+   324→   324→                text.setKey(j.virtualKey() + "_text");
+   325→   325→                text.setLabel(c.getLabel() + "（显示）");
+   326→   326→                text.setColumnType(findJoinColumnType(targetCols, j.joinField() + "_text"));
+   327→   327→                text.setHidden(true);
+   328→   328→                text.setSortable(false);
+   329→   329→                text.setFilterable(false);
+   330→   330→                text.setComponentType("dataPickerText");
+   331→   331→                cols.add(text);
+   332→   332→                existing.add(text.getKey());
+   333→   333→            }
+   334→   334→        }
+   335→   335→    }
+   336→   336→
+   337→   337→    /** 追加 sql 模式管理员声明列到 metadata；与主表列 key 重复的声明列跳过。 */
+   338→   338→    private void appendDeclaredColumns(List<ColumnConfig> cols, List<ColumnConfig> declared) {
+   339→   339→        Set<String> existing = cols.stream().map(ColumnConfig::getKey).collect(Collectors.toSet());
+   340→   340→        for (ColumnConfig d : declared) {
+   341→   341→            if (d.getKey() == null || d.getKey().isBlank() || existing.contains(d.getKey())) {
+   342→   342→                continue;
+   343→   343→            }
+   344→   344→            ColumnConfig c = new ColumnConfig();
+   345→   345→            c.setKey(d.getKey());
+   346→   346→            c.setLabel(d.getLabel() == null || d.getLabel().isBlank() ? d.getKey() : d.getLabel());
+   347→   347→            c.setColumnType(d.getColumnType());
+   348→   348→            c.setSortable(d.getSortable());
+   349→   349→            c.setFilterable(d.getFilterable());
+   350→   350→            cols.add(c);
+   351→   351→            existing.add(c.getKey());
+   352→   352→        }
+   353→   353→    }
+   354→   354→
+   355→   355→    /** 目标表单列列表；解析失败/不存在 → 空列表（调用方统一按"查不到"处理）。 */
+   356→   356→    private List<ColumnConfig> resolveJoinTargets(JoinConfig j) {
+   357→   357→        try {
+   358→   358→            List<ColumnConfig> target = formDefService.getBusinessColumnsByKey(j.targetFormKey());
+   359→   359→            return target == null ? List.of() : target;
+   360→   360→        } catch (BusinessException ignored) {
+   361→   361→            // 目标表单不可解析时回退
+   362→   362→            return List.of();
+   363→   363→        }
+   364→   364→    }
+   365→   365→
+   366→   366→    /** 目标列查找：按 key 匹配；查不到返回 null。 */
+   367→   367→    private static ColumnConfig findJoinTarget(List<ColumnConfig> cols, String key) {
+   368→   368→        if (cols == null) {
+   369→   369→            return null;
+   370→   370→        }
+   371→   371→        for (ColumnConfig c : cols) {
+   372→   372→            if (key.equals(c.getKey())) {
+   373→   373→                return c;
+   374→   374→            }
+   375→   375→        }
+   376→   376→        return null;
+   377→   377→    }
+   378→   378→
+   379→   379→    /** 目标列 columnType：查不到 fallback "VARCHAR"。 */
+   380→   380→    private static String findJoinColumnType(List<ColumnConfig> cols, String key) {
+   381→   381→        ColumnConfig c = findJoinTarget(cols, key);
+   382→   382→        return c != null && c.getColumnType() != null && !c.getColumnType().isBlank()
+   383→   383→                ? c.getColumnType().toUpperCase()
+   384→   384→                : "VARCHAR";
+   385→   385→    }
+   386→   386→
+   387→   387→    // ===== SYSTEM helpers =====
+   388→   388→
+   389→   389→    private BizDataPageVO systemQuery(DataSourceDefinition ds, BizDataQueryRequest req) {
+   390→   390→        if ("user-tree".equals(ds.getSourceKey())) {
+   391→   391→            return queryUsers(req);
+   392→   392→        }
+   393→   393→        return queryDeptTree();
+   394→   394→    }
+   395→   395→
+   396→   396→    private BizDataVO systemGet(DataSourceDefinition ds, String id) {
+   397→   397→        List<BizDataVO> all = systemQuery(ds, new BizDataQueryRequest()).getRecords();
+   398→   398→        for (BizDataVO row : all) {
+   399→   399→            if (row.getId().equals(id)) return row;
+   400→   400→        }
+   401→   401→        throw new BusinessException(404, "系统数据不存在: " + id);
+   402→   402→    }
+   403→   403→
+   404→   404→    private BizDataPageVO queryDeptTree() {
+   405→   405→        List<BizDataVO> rows = new ArrayList<>();
+   406→   406→        for (TreeNode node : organizationService.tree()) {
+   407→   407→            collectNode(node, rows);
+   408→   408→        }
+   409→   409→        return new BizDataPageVO(rows, rows.size(), 0, rows.size());
+   410→   410→    }
+   411→   411→
+   412→   412→    private void collectNode(TreeNode node, List<BizDataVO> out) {
+   413→   413→        Map<String, Object> data = new LinkedHashMap<>();
+   414→   414→        data.put("id", String.valueOf(node.id()));
+   415→   415→        data.put("parentId", node.parentId() == null ? "" : String.valueOf(node.parentId()));
+   416→   416→        data.put("label", node.label() == null ? "" : node.label());
+   417→   417→        data.put("code", node.code() == null ? "" : node.code());
+   418→   418→        out.add(new BizDataVO(String.valueOf(node.id()), data, null, null, null));
+   419→   419→        if (node.children() != null) {
+   420→   420→            for (TreeNode child : node.children()) {
+   421→   421→                collectNode(child, out);
+   422→   422→            }
+   423→   423→        }
+   424→   424→    }
+   425→   425→
+   426→   426→    private BizDataPageVO queryUsers(BizDataQueryRequest req) {
+   427→   427→        int userServicePage = Math.max(req.getPage(), 1);
+   428→   428→        UserQueryRequest query = new UserQueryRequest(
+   429→   429→                req.getKeyword(), null, null, null, null, null, userServicePage, req.getSize());
+   430→   430→        PageResult<UserVO> page = userService.list(query);
+   431→   431→        List<BizDataVO> rows = new ArrayList<>();
+   432→   432→        for (UserVO u : page.getRows() == null ? List.<UserVO>of() : page.getRows()) {
+   433→   433→            Map<String, Object> data = new LinkedHashMap<>();
+   434→   434→            data.put("id", String.valueOf(u.id()));
+   435→   435→            data.put("username", u.username());
+   436→   436→            data.put("nickname", u.nickname() == null ? "" : u.nickname());
+   437→   437→            data.put("orgId", u.orgId() == null ? "" : String.valueOf(u.orgId()));
+   438→   438→            data.put("orgName", u.orgName() == null ? "" : u.orgName());
+   439→   439→            data.put("status", u.status());
+   440→   440→            rows.add(new BizDataVO(String.valueOf(u.id()), data, null, null, null));
+   441→   441→        }
+   442→   442→        return new BizDataPageVO(rows, page.getTotal(), userServicePage, req.getSize());
+   443→   443→    }
+   444→   444→
+   445→   445→    // ===== API helpers =====
+   446→   446→
+   447→   447→    private DataSourceMetadata apiMetadata(DataSourceDefinition ds) {
+   448→   448→        Map<String, Object> params = parseParams(ds);
+   449→   449→        List<ColumnConfig> columns = new ArrayList<>();
+   450→   450→        JsonNode colsNode = jsonNode(params, "columns");
+   451→   451→        if (colsNode != null && colsNode.isArray()) {
+   452→   452→            for (JsonNode node : colsNode) {
+   453→   453→                columns.add(objectMapper.convertValue(node, ColumnConfig.class));
+   454→   454→            }
+   455→   455→        }
+   456→   456→        DataSourceMetadata m = new DataSourceMetadata(columns, writable(params));
+   457→   457→        m.setFormKey(ds.getFormKey());
+   458→   458→        return m;
+   459→   459→    }
+   460→   460→
+   461→   461→    private BizDataPageVO apiQuery(DataSourceDefinition ds, BizDataQueryRequest req) {
+   462→   462→        Map<String, Object> params = parseParams(ds);
+   463→   463→        Map<String, Object> op = operation(params, "list");
+   464→   464→        if (op == null) {
+   465→   465→            throw new BusinessException(400, "API 数据源未配置 list 操作: " + ds.getName());
+   466→   466→        }
+   467→   467→        String action = requireAction(op, "list");
+   468→   468→        String method = opMethod(op);
+   469→   469→        Map<String, Object> vars = new HashMap<>();
+   470→   470→        if (params.get("data") instanceof Map<?, ?> data) {
+   471→   471→            for (Map.Entry<?, ?> e : data.entrySet()) {
+   472→   472→                vars.put(String.valueOf(e.getKey()), e.getValue());
+   473→   473→            }
+   474→   474→        }
+   475→   475→        vars.put("page", req.getPage());
+   476→   476→        vars.put("size", req.getSize());
+   477→   477→        String kw = req.getKeyword();
+   478→   478→        vars.put("keyword", kw == null ? "" : kw);
+   479→   479→        String searchParam = str(params.get("searchParam"));
+   480→   480→        if (kw != null && !kw.isBlank() && searchParam != null && !searchParam.isBlank()) {
+   481→   481→            vars.put(searchParam, kw);
+   482→   482→        }
+   483→   483→        Object raw = httpExecutor.execute(action, method, headers(params), List.of(), List.of(),
+   484→   484→                vars, DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_RETRY);
+   485→   485→        return toPageVO(raw, op, req);
+   486→   486→    }
+   487→   487→
+   488→   488→    private BizDataVO apiGet(DataSourceDefinition ds, String id) {
+   489→   489→        Map<String, Object> params = parseParams(ds);
+   490→   490→        Map<String, Object> op = operation(params, "get");
+   491→   491→        if (op == null) {
+   492→   492→            throw new BusinessException(400, "API 数据源未配置 get 操作: " + ds.getName());
+   493→   493→        }
+   494→   494→        String action = requireAction(op, "get");
+   495→   495→        Map<String, Object> vars = Map.of("id", id);
+   496→   496→        Object raw = httpExecutor.execute(action, opMethod(op), headers(params), List.of(), List.of(),
+   497→   497→                vars, DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_RETRY);
+   498→   498→        return new BizDataVO(id, asDataMap(raw), null, null, null);
+   499→   499→    }
+   500→   500→
+   501→   501→    private String apiCreate(DataSourceDefinition ds, Map<String, Object> data) {
+   502→   502→        Map<String, Object> params = parseParams(ds);
+   503→   503→        Map<String, Object> op = operation(params, "create");
+   504→   504→        if (op == null) {
+   505→   505→            throw new BusinessException(400, "API 数据源未配置 create 操作: " + ds.getName());
+   506→   506→        }
+   507→   507→        String action = requireAction(op, "create");
+   508→   508→        Map<String, Object> vars = new HashMap<>(data);
+   509→   509→        Object raw = httpExecutor.execute(action, opMethod(op), headers(params), List.of(), List.of(),
+   510→   510→                vars, DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_RETRY);
+   511→   511→        Object id = asDataMap(raw).get("id");
+   512→   512→        return id == null ? "" : String.valueOf(id);
+   513→   513→    }
+   514→   514→
+   515→   515→    private void apiUpdate(DataSourceDefinition ds, String id, Map<String, Object> data) {
+   516→   516→        Map<String, Object> params = parseParams(ds);
+   517→   517→        Map<String, Object> op = operation(params, "update");
+   518→   518→        if (op == null) {
+   519→   519→            throw new BusinessException(400, "API 数据源未配置 update 操作: " + ds.getName());
+   520→   520→        }
+   521→   521→        String action = requireAction(op, "update");
+   522→   522→        Map<String, Object> vars = new HashMap<>();
+   523→   523→        vars.put("id", id);
+   524→   524→        vars.putAll(data);
+   525→   525→        httpExecutor.execute(action, opMethod(op), headers(params), List.of(), List.of(),
+   526→   526→                vars, DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_RETRY);
+   527→   527→    }
+   528→   528→
+   529→   529→    private void apiDelete(DataSourceDefinition ds, String id) {
+   530→   530→        Map<String, Object> params = parseParams(ds);
+   531→   531→        Map<String, Object> op = operation(params, "delete");
+   532→   532→        if (op == null) {
+   533→   533→            throw new BusinessException(400, "API 数据源未配置 delete 操作: " + ds.getName());
+   534→   534→        }
+   535→   535→        String action = requireAction(op, "delete");
+   536→   536→        httpExecutor.execute(action, opMethod(op), headers(params), List.of(), List.of(),
+   537→   537→                Map.of("id", id), DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, DEFAULT_RETRY);
+   538→   538→    }
+   539→   539→
+   540→   540→    @SuppressWarnings("unchecked")
+   541→   541→    private Map<String, Object> parseParams(DataSourceDefinition ds) {
+   542→   542→        String json = ds.getParams();
+   543→   543→        if (json == null || json.isBlank()) {
+   544→   544→            throw new BusinessException(400, "API 数据源缺少 params: " + ds.getName());
+   545→   545→        }
+   546→   546→        try {
+   547→   547→            JsonNode node = objectMapper.readTree(json);
+   548→   548→            if (!node.isObject()) {
+   549→   549→                throw new BusinessException(400, "API 数据源 params 必须是 JSON 对象: " + ds.getName());
+   550→   550→            }
+   551→   551→            return objectMapper.convertValue(node, Map.class);
+   552→   552→        } catch (JsonProcessingException e) {
+   553→   553→            throw new BusinessException(400, "API 数据源 params 不是合法 JSON: " + ds.getName());
+   554→   554→        }
+   555→   555→    }
+   556→   556→
+   557→   557→    @SuppressWarnings("unchecked")
+   558→   558→    private Map<String, Object> operation(Map<String, Object> params, String name) {
+   559→   559→        Object op = params.get(name);
+   560→   560→        if (op instanceof Map<?, ?> m) return (Map<String, Object>) m;
+   561→   561→        if ("list".equals(name) && params.get("action") != null) {
+   562→   562→            Map<String, Object> legacy = new LinkedHashMap<>();
+   563→   563→            legacy.put("action", params.get("action"));
+   564→   564→            legacy.put("method", params.get("method"));
+   565→   565→            legacy.put("parse", params.get("parse"));
+   566→   566→            legacy.put("totalParse", params.get("totalParse"));
+   567→   567→            return legacy;
+   568→   568→        }
+   569→   569→        return null;
+   570→   570→    }
+   571→   571→
+   572→   572→    private String requireAction(Map<String, Object> op, String name) {
+   573→   573→        String action = str(op.get("action"));
+   574→   574→        if (action == null || action.isBlank()) {
+   575→   575→            throw new BusinessException(400, "API 数据源 " + name + " 操作缺少 action");
+   576→   576→        }
+   577→   577→        return action;
+   578→   578→    }
+   579→   579→
+   580→   580→    private String opMethod(Map<String, Object> op) {
+   581→   581→        String method = str(op.get("method"));
+   582→   582→        return method == null || method.isBlank() ? "GET" : method.toUpperCase();
+   583→   583→    }
+   584→   584→
+   585→   585→    @SuppressWarnings("unchecked")
+   586→   586→    private Map<String, String> headers(Map<String, Object> params) {
+   587→   587→        Map<String, String> headers = new LinkedHashMap<>();
+   588→   588→        Object h = params.get("headers");
+   589→   589→        if (h instanceof Map<?, ?> hm) {
+   590→   590→            for (Map.Entry<?, ?> e : hm.entrySet()) {
+   591→   591→                headers.put(String.valueOf(e.getKey()), String.valueOf(e.getValue()));
+   592→   592→            }
+   593→   593→        }
+   594→   594→        return headers;
+   595→   595→    }
+   596→   596→
+   597→   597→    private boolean writable(Map<String, Object> params) {
+   598→   598→        return operation(params, "create") != null
+   599→   599→                || operation(params, "update") != null
+   600→   600→                || operation(params, "delete") != null;
+   601→   601→    }
+   602→   602→
+   603→   603→    private JsonNode jsonNode(Map<String, Object> params, String key) {
+   604→   604→        Object v = params.get(key);
+   605→   605→        if (v == null) return null;
+   606→   606→        if (v instanceof JsonNode jn) return jn;
+   607→   607→        try { return objectMapper.valueToTree(v); } catch (IllegalArgumentException e) { return null; }
+   608→   608→    }
+   609→   609→
+   610→   610→    private JsonNode toJsonNode(Object raw) {
+   611→   611→        if (raw instanceof String s) {
+   612→   612→            try { return objectMapper.readTree(s); }
+   613→   613→            catch (JsonProcessingException e) { throw new BusinessException(400, "外部 API 响应不是合法 JSON"); }
+   614→   614→        }
+   615→   615→        return objectMapper.valueToTree(raw);
+   616→   616→    }
+   617→   617→
+   618→   618→    private JsonNode walkPath(JsonNode root, String path) {
+   619→   619→        JsonNode cur = root;
+   620→   620→        for (String part : path.split("\\.")) {
+   621→   621→            if (cur == null || cur.isMissingNode() || !cur.isObject()) return null;
+   622→   622→            cur = cur.get(part);
+   623→   623→        }
+   624→   624→        return cur;
+   625→   625→    }
+   626→   626→
+   627→   627→    private BizDataPageVO toPageVO(Object raw, Map<String, Object> op, BizDataQueryRequest req) {
+   628→   628→        int normalizedPage = Math.max(req.getPage(), 1);
+   629→   629→        JsonNode root = toJsonNode(raw);
+   630→   630→        JsonNode recordsNode = root;
+   631→   631→        String parse = str(op.get("parse"));
+   632→   632→        if (parse != null && !parse.isBlank()) {
+   633→   633→            recordsNode = walkPath(root, parse);
+   634→   634→        }
+   635→   635→        if (recordsNode == null || !recordsNode.isArray()) {
+   636→   636→            return new BizDataPageVO(List.of(), 0, normalizedPage, req.getSize());
+   637→   637→        }
+   638→   638→        List<BizDataVO> records = new ArrayList<>();
+   639→   639→        for (JsonNode item : recordsNode) {
+   640→   640→            Map<String, Object> data = objectMapper.convertValue(item, Map.class);
+   641→   641→            Object id = item.has("id") ? item.get("id").asText() : null;
+   642→   642→            records.add(new BizDataVO(id == null ? "" : String.valueOf(id), data, null, null, null));
+   643→   643→        }
+   644→   644→        long total = records.size();
+   645→   645→        String totalParse = str(op.get("totalParse"));
+   646→   646→        if (totalParse != null && !totalParse.isBlank()) {
+   647→   647→            JsonNode totalNode = walkPath(root, totalParse);
+   648→   648→            if (totalNode != null && totalNode.isNumber()) total = totalNode.asLong();
+   649→   649→        }
+   650→   650→        return new BizDataPageVO(records, total, normalizedPage, req.getSize());
+   651→   651→    }
+   652→   652→
+   653→   653→    @SuppressWarnings("unchecked")
+   654→   654→    private Map<String, Object> asDataMap(Object raw) {
+   655→   655→        if (raw == null) return Map.of();
+   656→   656→        if (raw instanceof Map<?, ?> m) return (Map<String, Object>) m;
+   657→   657→        return objectMapper.convertValue(toJsonNode(raw), Map.class);
+   658→   658→    }
+   659→   659→
+   660→   660→    private String str(Object v) { return v == null ? null : String.valueOf(v); }
+   661→   661→
+   662→   662→    // ===== shared helpers =====
+   663→   663→
+   664→   664→    private BusinessException unsupported(DataSourceDefinition ds, String op) {
+   665→   665→        return new BusinessException(400, "该数据源不支持" + op + ": " + ds.getName());
+   666→   666→    }
+   667→   667→
+   668→   668→    private static ColumnConfig column(String key, String label, String type, int length) {
+   669→   669→        ColumnConfig c = new ColumnConfig();
+   670→   670→        c.setKey(key); c.setLabel(label); c.setColumnType(type); c.setLength(length);
+   671→   671→        return c;
+   672→   672→    }
+   673→   673→}
+   674→   674→

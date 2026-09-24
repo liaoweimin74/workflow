@@ -94,7 +94,19 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     public DataSourceMetadata metadata(DataSourceDefinition ds) {
         return switch (ds.getType()) {
             case "FORM" -> {
-                List<ColumnConfig> cols = new ArrayList<>(formDefService.getBusinessColumnsByKey(ds.getFormKey()));
+                List<ColumnConfig> cols;
+                try {
+                    cols = new ArrayList<>(formDefService.getBusinessColumnsByKey(ds.getFormKey()));
+                } catch (BusinessException e) {
+                    if (e.getCode() == 404) {
+                        // 绑定表单尚未发布（或不存在）：字段元数据降级为空列而非 404，
+                        // 不阻断数据源编辑（对齐 NestJS 侧同款降级；表单发布后自动展示）
+                        DataSourceMetadata empty = new DataSourceMetadata(new ArrayList<>(), false);
+                        empty.setFormKey(ds.getFormKey());
+                        yield empty;
+                    }
+                    throw e;
+                }
                 FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
                 if (cfg.isConfigMode()) {
                     appendJoinColumns(cols, cfg.joins());
@@ -107,7 +119,18 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
                 yield m;
             }
             case "WORKFLOW" -> {
-                List<ColumnConfig> cols = workflowQueryService.columnsFor(ds.getFormKey());
+                List<ColumnConfig> cols;
+                try {
+                    cols = workflowQueryService.columnsFor(ds.getFormKey());
+                } catch (BusinessException e) {
+                    if (e.getCode() == 404) {
+                        // 绑定表单尚未发布（或不存在）：字段元数据降级为空列（对齐 FORM 分支与 NestJS 侧）
+                        DataSourceMetadata empty = new DataSourceMetadata(new ArrayList<>(), false);
+                        empty.setFormKey(ds.getFormKey());
+                        yield empty;
+                    }
+                    throw e;
+                }
                 SortableResolver.resolve(cols);
                 DataSourceMetadata m = new DataSourceMetadata(cols, false);
                 m.setFormKey(ds.getFormKey());

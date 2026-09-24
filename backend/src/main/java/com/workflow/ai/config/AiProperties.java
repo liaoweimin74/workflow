@@ -5,23 +5,27 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * AI 服务配置。
  *
- * <p>前缀 {@code workflow.ai}。默认关闭（{@code enabled=false}），
- * 配置 {@code api-key} 后置 {@code enabled=true} 启用。
+ * <p>前缀 {@code workflow.ai}。默认接入<b>平台内置模型</b>：经 NestJS 后端的
+ * 内部 LLM 网关（{@code http://127.0.0.1:8080/api/internal/llm/v1}）调用
+ * GLM，无需外部 API key，开箱即用。
+ *
+ * <p>外部部署时可用 {@code AI_BASE_URL}/{@code AI_API_KEY}/{@code AI_MODEL}
+ * 环境变量覆盖，接入任意 OpenAI 兼容服务（如 DeepSeek）。
  */
 @ConfigurationProperties(prefix = "workflow.ai")
 public class AiProperties {
 
-    /** AI 服务开关，默认关闭。 */
-    private boolean enabled = false;
+    /** AI 服务开关，默认启用（平台内置模型开箱即用）。 */
+    private boolean enabled = true;
 
-    /** OpenAI 兼容端点基础地址。 */
-    private String baseUrl = "https://api.deepseek.com/v1";
+    /** OpenAI 兼容端点基础地址，默认指向平台内部 LLM 网关（NestJS）。 */
+    private String baseUrl = "http://127.0.0.1:8080/api/internal/llm/v1";
 
-    /** API 密钥，为空时视为未配置。 */
-    private String apiKey = "";
+    /** API 密钥，为空时视为未配置（内部网关默认密钥与之互通）。 */
+    private String apiKey = "internal-llm";
 
-    /** 模型名称。 */
-    private String model = "deepseek-chat";
+    /** 模型名称（平台内置模型，网关以实际返回校准）。 */
+    private String model = "glm-4-plus";
 
     /** 默认温度。 */
     private double temperature = 0.7;

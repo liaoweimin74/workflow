@@ -448,6 +448,14 @@
                   style="width: 100%"
                   :max-height="300"
                 >
+                  <template #empty>
+                    <el-empty
+                      :description="form.type === 'FORM' || form.type === 'WORKFLOW'
+                        ? '绑定表单尚未发布，发布表单后此处将展示字段元数据'
+                        : '暂无字段元数据'"
+                      :image-size="64"
+                    />
+                  </template>
                   <el-table-column prop="label" label="字段名" min-width="150" show-overflow-tooltip />
                   <el-table-column prop="key" label="标识" min-width="140" show-overflow-tooltip />
                   <el-table-column prop="componentType" label="组件" min-width="90" />

@@ -131,8 +131,16 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
     }
     if (dataSource.type === 'WORKFLOW') {
       // 列来自最新 PUBLISHED 表单的 **schema**（WORKFLOW 表单的 columnConfig 为空），
-      // 只读，formKey 原样带出。
-      const columns = await this.workflowQuery.columnsFor(requireFormKey(dataSource, 'metadata'))
+      // 只读，formKey 原样带出。表单未发布时降级为空列（对齐 FORM 分支与 Java 侧）。
+      let columns: ColumnConfig[]
+      try {
+        columns = await this.workflowQuery.columnsFor(requireFormKey(dataSource, 'metadata'))
+      } catch (e) {
+        if (e instanceof BusinessException && e.code === 404) {
+          return { columns: [], writable: false, formKey: dataSource.formKey }
+        }
+        throw e
+      }
       resolveSortable(columns)
       return { columns, writable: false, formKey: dataSource.formKey }
     }
@@ -155,7 +163,17 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
       throw notMigrated(dataSource, 'metadata')
     }
     const formKey = requireFormKey(dataSource, 'metadata')
-    const columns = cloneColumns(await this.bizDataService.loadColumns(formKey))
+    let columns: ColumnConfig[]
+    try {
+      columns = cloneColumns(await this.bizDataService.loadColumns(formKey))
+    } catch (e) {
+      // 绑定表单尚未发布（或不存在）：字段元数据降级为空列而非 404，
+      // 不阻断数据源编辑（对齐 Java 侧同款降级；表单发布后此处自动展示列）
+      if (e instanceof BusinessException && e.code === 404) {
+        return { columns: [], writable: false, formKey }
+      }
+      throw e
+    }
 
     // config / sql 两种 queryMode 会往列清单里追加 JOIN 虚拟列或声明列
     // （对齐 Java `metadata` 的 FORM 分支：config → appendJoinColumns，sql → appendDeclaredColumns）

@@ -1352,3 +1352,15 @@ Work Log:
 Stage Summary:
 - 方案 A 十五项问题清单落地：P0（分组/校验缺口/运行时 validate/localRef 注入面/租户过滤）全修，P1-P2 体验项（提示/预览说明/下拉 key/缓存失效）全修；两端引擎语义对齐（分组、_text、validate、租户过滤、保存校验五层同构）
 - origin/main 将推进本批提交；巡检任务 job_id 411264 持续 QA
+
+---
+Task ID: 51-push-note
+Agent: Z.ai Code (main)
+Task: push 阻塞记录
+
+Work Log:
+- commit 75f4281（11 文件 +551/-100）已落库；尝试 push 时发现沙箱重置导致 .git 丢失后重建的仓库**未配置 remote**，且 ssh 二进制缺失、旧 .git/config 中的 PAT（x-access-token 形式）随之销毁，worklog 中已脱敏无法恢复
+- 待用户提供 fine-grained PAT 后：git remote add origin https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git && git push origin main 即可同步（本地领先远程 3b09292 之后若干提交）
+
+Stage Summary:
+- 推送阻塞原因=环境重置丢凭据，非代码问题；本地提交链完整（git log --all 70 commits）

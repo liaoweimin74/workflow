@@ -149,8 +149,12 @@ public class FormSchemaColumnExtractor {
         }
         return switch (componentType) {
             case "inputNumber", "rate" -> "INT";
-            case "inputTextarea", "editor" -> "TEXT";
-            case "date", "datetime", "time", "dateRange", "dateTimeRange" -> "DATETIME";
+            // 多行文本：设计器产物为 input + props.type=textarea；form-create 别名 textarea；
+            // AI formgen 历史输出 inputTextarea；富文本 fcEditor（vendor editor.js）
+            case "inputTextarea", "textarea", "fcEditor", "editor" -> "TEXT";
+            // 日期族：设计器标准 datePicker/timePicker（AI formgen 历史输出 date/datetime/time/dateRange）
+            case "datePicker", "timePicker",
+                 "date", "datetime", "time", "dateRange", "dateTimeRange" -> "DATETIME";
             case "switch", "checkbox" -> "TINYINT";
             default -> "VARCHAR";
         };

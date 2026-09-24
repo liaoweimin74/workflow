@@ -1166,3 +1166,26 @@ Stage Summary:
 - AI 话术站内链接全场景打通：普通点击（前端路由拦截）、新标签/粘贴/外链（门户 307 兜底）、刷新（router base 修复）三层各自闭环
 - 沉淀：vue-router createWebHistory() 必须显式传 import.meta.env.BASE_URL——「无参自动取 base」是常见误解，本例中它就是深链 404 的总根源；AI 生成链接的渲染层应一律拦截站内路径走 SPA 路由
 - 门户 middleware→proxy 完成 Next 16 惯例迁移，弃用警告清零
+
+---
+Task ID: 49
+Agent: 主控（Z.ai Code）
+Task: 用户报障——「办公用品登记业务表单」含不支持字段类型（登记日期/备注显示「不支持」）却在列表发布成功；上一条报障为列表发布与设计器发布业务逻辑不一致
+
+Work Log:
+- 【根因】AI formgen 词汇表（form-schema-prompt-builder 的 system prompt）用了前端不存在的设计器类型：日期写成 date/datetime/dateRange（设计器真实组件是 datePicker，区间/日期时间用 props.type）、多行文本写成 inputTextarea（设计器产物是 input + props.type=textarea）、富文本 editor（真实是 fcEditor）；发布校验 validateBusinessSchema 为黑名单制（userPicker/deptPicker/divider/groupContainer/dataTable 五个）对未知类型放行 → 非法 schema 落库、设计器渲染「不支持」占位、发布照常建表
+- 【白名单制（防线根治）】NestJS 新增 engine/form/column/business-component-whitelist.ts：BUSINESS_FORM_ALLOWED_TYPES = 前端 vendor/config/rule 组件注册全集 ∪ 自定义组件（LookupPicker/dataPicker/page-list-cards/page-table）∪ 子表 ∪ 布局辅助；collectUnknownBusinessComponentTypes 递归 children/props.rule/props.columns[].rule；validateBusinessSchema 白名单制（未知 type 一律 400「业务表单暂不支持组件（X），请在设计器中使用标准组件后发布」）；Java FormDefinitionService 同步（BUSINESS_FORM_ALLOWED_COMPONENTS + collectUnknownComponentTypes，删 UNSUPPORTED 黑名单）
+- 【AI 词汇表对齐（源头根治）】NestJS prompt-builder/validator/fc-chat 三处 + Java FormSchemaPromptBuilder/FormSchemaValidator 同步：新词汇表 input/inputNumber/select/radio/checkbox/datePicker（datetime/daterange 用 props.type）/timePicker/switch/rate/slider/fcEditor；validator 增加别名归一（旧词汇 date→datePicker、inputTextarea→input+textarea 等自动修正并警告，divider/groupContainer 丢弃），替代原「降级为 input」逻辑
+- 【inferColumnType 扩展】NestJS + Java：datePicker/timePicker→DATETIME、textarea/fcEditor→TEXT（保留旧类型名兼容存量 column_config）
+- 【存量数据修复】node+mysql2 不可用客户端背景下走 API（PUT update 不改状态）：办公用品登记 ai_muf52ksu88 修 2 节点/2 列、员工请假 ai_muf4tjek39 修 3 节点/3 列（schema type + column_config componentType 同步）
+- 【验证·拦截】白名单未生效排查：8080 跑旧 dist，重启后实测——含 fakeComp 的 BUSINESS 表单 publish → 400「业务表单暂不支持组件（fakeComp）」；未发布可正常删除清理
+- 【验证·渲染】办公用品表单设计器：「不支持」出现 0 次，登记日期→combobox（datePicker 渲染）、备注→多行输入框；员工请假表单同步修复
+- 【验证·AI 端到端】小智创建「会议室预约表单」→ 落库 schema booking_time=datePicker、column_config 同步、设计器渲染 0 个不支持、AI 回复带 data-nav 设计器链接（Task 48 链路持续有效）
+- 【验证·单测】backend-node 779/780（publish.spec 更新为新文案+新增 date/inputTextarea 拦截回归用例；唯一失败 migrator.spec checksum 为历史遗留——migrations 自初始提交未改，与本轮无关，已记录）
+- 【运维】NestJS 8080 重启两次加载新 dist（改 src 必须 nest build + 重启进程，仅 build 不重启不生效——本轮实测踩坑）
+
+Stage Summary:
+- 业务表单组件类型从「黑名单放行未知」升级为「白名单拒绝未知」，AI/手写非法 schema 在发布关卡被拦截并给出可行动指引
+- AI formgen 词汇表与前端设计器组件注册表逐一对齐（三方同源：prompt=validator=发布白名单），模型旧习惯输出由别名归一兜底
+- 沉淀：跨栈对齐类修复（NestJS+Java）必须同步改四处（校验/提示/validator/列类型推断）；运行进程加载 dist 的服务改代码后「build+重启」缺一不可
+- 遗留：migrator.spec V2 checksum 断言失败为历史问题（不阻塞），建议后续核对 flyway 历史表实际值

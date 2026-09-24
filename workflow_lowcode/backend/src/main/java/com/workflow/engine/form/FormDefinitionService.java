@@ -45,9 +45,27 @@ public class FormDefinitionService {
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher eventPublisher;
 
-    /** 不支持映射为业务表单列的组件（人员/部门选择、分割线、容器、历史数据表组件等） */
-    private static final Set<String> UNSUPPORTED_COMPONENTS = Set.of(
-            "userPicker", "deptPicker", "divider", "groupContainer", "dataTable");
+    /**
+     * 业务表单允许的组件 type 白名单 —— 唯一事实来源 = 前端设计器真实注册组件
+     * （frontend/src/vendor/config/rule/*.js）∪ 项目自定义组件 ∪ form-create 内部布局名。
+     * 对齐 NestJS {@code business-component-whitelist.ts} 的 {@code BUSINESS_FORM_ALLOWED_TYPES}。
+     *
+     * <p>⚠️ 黑名单制已被证明不设防：AI formgen 曾生成不存在的 {@code date} /
+     * {@code inputTextarea} 类型（设计器渲染为「不支持」占位）却照常发布建表。
+     */
+    private static final Set<String> BUSINESS_FORM_ALLOWED_COMPONENTS = Set.of(
+            // 业务字段（可渲染、可映射列）
+            "input", "textarea", "inputNumber", "select", "radio", "checkbox",
+            "datePicker", "timePicker", "switch", "rate", "slider", "cascader",
+            "colorPicker", "upload", "tree", "fcEditor", "signaturePad",
+            // 外部数据展示（合法、不生成业务列）
+            "dataPicker", "page-list-cards", "page-table", "LookupPicker",
+            // 子表（发布流程建独立物理表）
+            "group", "tableForm", "subForm",
+            // 布局/辅助（无 field，纯渲染）
+            "fcRow", "fcTable", "fcFrame", "fcFragment", "fcGroup", "col", "space",
+            "div", "html", "text", "elCard", "elCollapse", "elCollapseItem", "elTabs",
+            "elTabPane", "elDivider", "elTag", "elAlert", "elButton", "elImage");
 
     /** 子表组件：发布时创建独立子表物理表（wf_biz_<formKey>_<field>） */
     private static final Set<String> SUBTABLE_COMPONENTS = Set.of("group", "tableForm", "subForm");
@@ -346,25 +364,49 @@ public class FormDefinitionService {
     }
 
     /**
-     * 校验业务表单 schema 不含不支持组件（人员/部门选择、分割线、容器等）。
-     * 子表组件（group/tableForm/subForm）放行，由发布流程创建独立子表物理表。
+     * 校验业务表单 schema 的组件 type 全部在设计器支持白名单内（{@code validateBusinessSchema}）。
+     * 子表组件（group/tableForm/subForm）与布局容器放行，由发布流程建独立子表物理表。
      * schema 格式兼容：{rule: [...]} 与纯数组两种。
      */
     private void validateBusinessSchema(String schema) throws BusinessException {
+        JsonNode rule;
         try {
             JsonNode root = objectMapper.readTree(schema == null ? "[]" : schema);
-            JsonNode rule = root.isArray() ? root : root.path("rule");
-            if (!rule.isArray()) {
-                throw new BusinessException(400, "表单 schema 格式非法");
-            }
-            for (JsonNode field : rule) {
-                String type = field.path("type").asText();
-                if (UNSUPPORTED_COMPONENTS.contains(type)) {
-                    throw new BusinessException(400, "业务表单暂不支持组件（" + type + "），请移除后发布");
-                }
-            }
+            rule = root.isArray() ? root : root.path("rule");
         } catch (JsonProcessingException e) {
             throw new BusinessException(400, "表单 schema 解析失败");
+        }
+        if (!rule.isArray()) {
+            throw new BusinessException(400, "表单 schema 格式非法");
+        }
+        // ⚠️ 白名单制：递归 children/props.rule/props.columns[].rule，未知 type 一律拒绝。
+        // 原黑名单制对「AI 生成的不存在类型名」（formgen 曾输出 date/inputTextarea）不设防。
+        Set<String> unknown = new java.util.HashSet<>();
+        collectUnknownComponentTypes(rule, unknown);
+        if (!unknown.isEmpty()) {
+            throw new BusinessException(400, "业务表单暂不支持组件（" + String.join("、", unknown)
+                    + "），请在设计器中使用标准组件后发布");
+        }
+    }
+
+    /** 递归收集不在白名单的组件 type（children / props.rule / props.columns[].rule）。 */
+    private void collectUnknownComponentTypes(JsonNode rules, Set<String> out) {
+        if (!rules.isArray()) {
+            return;
+        }
+        for (JsonNode field : rules) {
+            String type = field.path("type").asText("").trim();
+            if (!type.isEmpty() && !BUSINESS_FORM_ALLOWED_COMPONENTS.contains(type)) {
+                out.add(type);
+            }
+            collectUnknownComponentTypes(field.path("children"), out);
+            collectUnknownComponentTypes(field.path("props").path("rule"), out);
+            JsonNode columns = field.path("props").path("columns");
+            if (columns.isArray()) {
+                for (JsonNode column : columns) {
+                    collectUnknownComponentTypes(column.path("rule"), out);
+                }
+            }
         }
     }
 

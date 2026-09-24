@@ -35,14 +35,62 @@ export interface AiFormGenerateResult {
 
 const COL_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/
 
+/**
+ * AI 词汇表 = 设计器标准组件（与 form-schema-prompt-builder.ts 一致）。
+ *
+ * ⚠️ 历史教训：旧词汇表用了不存在的设计器类型（date/inputTextarea/editor 等），
+ * 生成物在设计器里渲染为「不支持」占位却能发布建表。现词汇表与前端
+ * vendor/config/rule 的真实 type 逐一对齐，另设别名归一兼容旧输出。
+ */
 const ALLOWED_TYPES = new Set([
-  'input', 'inputTextarea', 'inputNumber', 'select', 'checkbox', 'radio',
-  'date', 'datetime', 'time', 'dateRange', 'switch', 'editor', 'rate',
-  'divider', 'groupContainer',
+  'input', 'inputNumber', 'select', 'checkbox', 'radio',
+  'datePicker', 'timePicker', 'switch', 'rate', 'slider', 'cascader',
+  'fcEditor',
 ])
 
-/** 布局类组件：不要求 field，不计入字段清单。 */
-const LAYOUT_TYPES = new Set(['divider', 'groupContainer'])
+/**
+ * 旧词汇表别名 → 设计器标准 type（归一时同步补 props.type）。
+ * divider/groupContainer 等布局组件不在映射内 → 归一后不在白名单 → 丢弃。
+ */
+function normalizeComponentType(
+  item: Record<string, unknown>,
+): { original: string; type: string; propsType: string | null } {
+  const original = String(item.type ?? '').trim()
+  let type = original
+  let propsType: string | null = null
+  switch (original) {
+    case 'date':
+      type = 'datePicker'
+      break
+    case 'datetime':
+      type = 'datePicker'
+      propsType = 'datetime'
+      break
+    case 'dateRange':
+      type = 'datePicker'
+      propsType = 'daterange'
+      break
+    case 'time':
+      type = 'timePicker'
+      break
+    case 'inputTextarea':
+      type = 'input'
+      propsType = 'textarea'
+      break
+    case 'editor':
+      type = 'fcEditor'
+      break
+    default:
+      break
+  }
+  if (propsType !== null) {
+    if (item.props === null || typeof item.props !== 'object' || Array.isArray(item.props)) {
+      item.props = {}
+    }
+    ;(item.props as Record<string, unknown>).type = propsType
+  }
+  return { original, type, propsType }
+}
 
 @Injectable()
 export class FormSchemaValidator {
@@ -72,17 +120,16 @@ export class FormSchemaValidator {
       }
       const item = entry as RuleItem
 
-      let type = String(item.type ?? '').trim()
-      if (!type || !ALLOWED_TYPES.has(type)) {
-        warnings.push(`组件类型 "${type}" 不在白名单，已降级为 input`)
-        type = 'input'
+      const { original, type: normalizedType } = normalizeComponentType(item)
+      const type = normalizedType
+      if (type !== original) {
+        warnings.push(`组件类型 "${original}" 不被设计器支持，已修正为 "${type}"`)
       }
-      item.type = type
-
-      if (LAYOUT_TYPES.has(type)) {
-        cleaned.push(item)
+      if (!type || !ALLOWED_TYPES.has(type)) {
+        warnings.push(`组件类型 "${original || '(空)'}" 不在白名单，已丢弃该条目`)
         return
       }
+      item.type = type
 
       const rawField = String(item.field ?? '').trim()
       let field = normalizeField(rawField)

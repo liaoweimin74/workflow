@@ -24,13 +24,17 @@ public class FormSchemaValidator {
 
     private static final Pattern COL_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{0,63}$");
 
+    /**
+     * AI 词汇表 = 设计器标准组件（与 FormSchemaPromptBuilder 一致）。
+     *
+     * <p>⚠️ 历史教训：旧词汇表用了不存在的设计器类型（date/inputTextarea/editor 等），
+     * 生成物在设计器里渲染为「不支持」占位却能发布建表。现词汇表与前端
+     * vendor/config/rule 的真实 type 逐一对齐，另设别名归一兼容旧输出。
+     */
     private static final Set<String> ALLOWED_TYPES = Set.of(
-            "input", "inputTextarea", "inputNumber", "select", "checkbox", "radio",
-            "date", "datetime", "time", "dateRange", "switch", "editor", "rate",
-            "divider", "groupContainer");
-
-    /** 布局类组件：不要求 field，不计入字段清单。 */
-    private static final Set<String> LAYOUT_TYPES = Set.of("divider", "groupContainer");
+            "input", "inputNumber", "select", "checkbox", "radio",
+            "datePicker", "timePicker", "switch", "rate", "slider", "cascader",
+            "fcEditor");
 
     private final ObjectMapper objectMapper;
 
@@ -66,17 +70,19 @@ public class FormSchemaValidator {
             ObjectNode item = (ObjectNode) rule;
             idx++;
 
-            String type = item.path("type").asText("").trim();
-            if (type.isEmpty() || !ALLOWED_TYPES.contains(type)) {
-                warnings.add("组件类型 \"" + type + "\" 不在白名单，已降级为 input");
-                type = "input";
+            // 旧词汇表别名归一（date -> datePicker、inputTextarea -> input+textarea 等），
+            // 归一后仍不在白名单（如 divider/groupContainer）则丢弃该条目
+            NormalizedType normalized = normalizeComponentType(item);
+            String type = normalized.type;
+            if (!type.equals(normalized.original)) {
+                warnings.add("组件类型 \"" + normalized.original + "\" 不被设计器支持，已修正为 \"" + type + "\"");
             }
-            item.put("type", type);
-
-            if (LAYOUT_TYPES.contains(type)) {
-                cleaned.add(item);
+            if (type.isEmpty() || !ALLOWED_TYPES.contains(type)) {
+                warnings.add("组件类型 \"" + (normalized.original.isEmpty() ? "(空)" : normalized.original)
+                        + "\" 不在白名单，已丢弃该条目");
                 continue;
             }
+            item.put("type", type);
 
             String rawField = item.path("field").asText("").trim();
             String field = normalizeField(rawField);
@@ -123,6 +129,57 @@ public class FormSchemaValidator {
             throw new AiException(AiException.Code.EMPTY_RESPONSE, "生成结果序列化失败", e);
         }
         return new AiFormGenerateResult(schema, fields, warnings);
+    }
+
+    /** 归一结果：原始 type、归一后 type、需补进 props.type 的值（null 表示不用补）。 */
+    private static final class NormalizedType {
+        final String original;
+        final String type;
+        final String propsType;
+
+        NormalizedType(String original, String type, String propsType) {
+            this.original = original;
+            this.type = type;
+            this.propsType = propsType;
+        }
+    }
+
+    /**
+     * 旧词汇表别名 → 设计器标准 type（对齐 NestJS {@code normalizeComponentType}）。
+     *
+     * <p>归一时同步补 props.type（datetime/daterange/textarea）；divider/groupContainer
+     * 等布局组件不在映射内 → 归一后不在白名单 → 由调用方丢弃。
+     */
+    private NormalizedType normalizeComponentType(ObjectNode item) {
+        String original = item.path("type").asText("").trim();
+        String type = original;
+        String propsType = null;
+        switch (original) {
+            case "date" -> type = "datePicker";
+            case "datetime" -> {
+                type = "datePicker";
+                propsType = "datetime";
+            }
+            case "dateRange" -> {
+                type = "datePicker";
+                propsType = "daterange";
+            }
+            case "time" -> type = "timePicker";
+            case "inputTextarea" -> {
+                type = "input";
+                propsType = "textarea";
+            }
+            case "editor" -> type = "fcEditor";
+            default -> {
+            }
+        }
+        if (propsType != null) {
+            JsonNode props = item.path("props");
+            ObjectNode propsNode = (props.isObject()) ? (ObjectNode) props : objectMapper.createObjectNode();
+            propsNode.put("type", propsType);
+            item.set("props", propsNode);
+        }
+        return new NormalizedType(original, type, propsType);
     }
 
     /** 解析根节点：容忍 markdown 代码围栏与前后包裹文本。 */

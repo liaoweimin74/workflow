@@ -1252,3 +1252,16 @@ Stage Summary:
 - 双端行为一致：8 个 sourceKey 白名单/REST 路由/列元数据/params 契约/写保护语义全部对齐；Java 端待有构建环境时建议先 mvn compile 再启动（工作流库 V2 checksum 损坏问题独立存在）
 - 提交 99c5db1（16 文件 +844/−291），已推送远程（7441d5e..99c5db1，ls-remote 实证）
 - 遗留：Java 端仅静态审查未经编译；Java 所连 workflow 库历史损坏致其当前无法启动（与本任务无关，V39 已就位待其恢复后自动应用）
+
+---
+Task ID: 50-c
+Agent: Z.ai Code (main)
+Task: 数据源管理列表「类型」列——内建行只显示「内建」（用户 UI 反馈）
+
+Work Log:
+- DataSourceListPage.vue 类型列模板：isBuiltIn(tenantId='system') 行由「系统结构」+「内建」双标签改为单一「内建」标签（tooltip 保留，文案同步迁移化语义「随迁移脚本自动预置」）；手动 SYSTEM 行仍显示「系统结构」
+- 清理失效 .builtin-tag 样式；isBuiltIn 注释 seeder→V39 迁移
+- agent-browser 浏览器实证：登录→/lowcode/data-source/list——8 条内建行全部只显示「内建」（计数=8，无「内建 内建」重复），非内建行「业务表单/工作流表单」无回归
+
+Stage Summary:
+- 提交待 push；前端显示与 Task 50 收敛一致：内建数据源对外统一「内建」身份

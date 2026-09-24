@@ -12,6 +12,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.datasource.repository.DataSourceDefinitionRepository;
 import com.workflow.engine.form.bizdata.JoinSqlGenerator;
+import com.workflow.engine.form.bizdata.JoinTargetCatalog;
 import com.workflow.engine.form.bizdata.SqlTemplateEngine;
 import com.workflow.engine.form.entity.FormDefinition;
 import com.workflow.engine.form.repository.FormDefinitionRepository;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * 全局数据源定义服务。
@@ -51,6 +53,12 @@ public class DataSourceDefinitionService {
 
     /** SYSTEM 数据源 sourceKey 枚举（internal:// allowlist；唯一事实源见 BuiltInSystemSources，8 个内建数据源） */
     private static final Set<String> SYSTEM_SOURCE_KEYS = BuiltInSystemSources.SOURCE_KEYS;
+
+    /** FORM 目标 key 合法格式（对齐 NodeJS 保存校验 /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/） */
+    private static final Pattern FORM_KEY_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{0,63}$");
+
+    /** joins[] alias 合法格式（传入才校验；缺省由运行时自动分配） */
+    private static final Pattern JOIN_ALIAS_PATTERN = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*$");
 
     private final DataSourceDefinitionRepository dsRepository;
     private final FormDefinitionRepository formDefRepository;
@@ -455,10 +463,11 @@ public class DataSourceDefinitionService {
     }
 
     /**
-     * FORM 数据源查询配置段保存校验（Task 5）。
+     * FORM 数据源查询配置段保存校验（Task 5；Task 51 扩展内建目标）。
      * <ul>
      *   <li>无 queryMode 段 → 向后兼容，跳过校验</li>
-     *   <li>config：joins 非空；每项 alias 合法、targetFormKey 表单存在、必填字段齐全、virtualKey 唯一</li>
+     *   <li>config：joins 非空；alias 可缺省（运行时自动分配）；目标支持业务表单（存在性）
+     *       与内建数据源（JoinTargetCatalog 物理列白名单）；必填字段齐全、virtualKey 唯一</li>
      *   <li>sql：query/columns 合法性复用 SqlTemplateEngine.validate（SELECT / :tenantId / 列匹配 / 参数白名单）</li>
      *   <li>未知 queryMode → 400</li>
      * </ul>
@@ -490,29 +499,64 @@ public class DataSourceDefinitionService {
         }
     }
 
-    /** config 模式：joins[] 结构校验（别名/目标表单/字段/虚拟列唯一性） */
+    /** config 模式：joins[] 结构校验（别名/目标表/字段/虚拟列唯一性）。
+     * <p>
+     * alias 可缺省：前端不录入，由运行时 {@code FormQueryConfig.parseJoins} 自动分配（j1/j2/...）；
+     * 传入则校验格式与唯一性。目标表支持内建数据源（JoinTargetCatalog 白名单）：
+     * SYSTEM 目标不查 form_def，且 foreignField/joinField 必须是目录内物理列。 */
     private void validateConfigJoins(JsonNode joins) {
         if (joins == null || !joins.isArray() || joins.isEmpty()) {
             throw new BusinessException(400, "queryMode=config 时必须配置至少一个关联 joins");
         }
         String tenantId = tenantProvider.getTenantId();
         Set<String> virtualKeys = new HashSet<>();
+        Set<String> aliases = new HashSet<>();
         int idx = 0;
         for (JsonNode j : joins) {
             idx++;
             if (j == null || !j.isObject()) {
                 throw new BusinessException(400, "joins 第 " + idx + " 项必须是对象");
             }
+            String alias = text(j, "alias");
+            if (alias != null) {
+                if (!JOIN_ALIAS_PATTERN.matcher(alias).matches()) {
+                    throw new BusinessException(400, "joins 第 " + idx + " 项 alias 非法: " + alias);
+                }
+                if (!aliases.add(alias)) {
+                    throw new BusinessException(400, "joins 第 " + idx + " 项 alias 重复: " + alias);
+                }
+            }
             String targetFormKey = text(j, "targetFormKey");
             if (targetFormKey == null || targetFormKey.isBlank()) {
-                throw new BusinessException(400, "joins 第 " + idx + " 项必须指定目标表单 targetFormKey");
+                throw new BusinessException(400, "joins 第 " + idx + " 项必须指定目标表 targetFormKey");
             }
-            if (!formDefRepository.existsByTenantIdAndKey(tenantId, targetFormKey)) {
-                throw new BusinessException(400, "目标表单不存在: " + targetFormKey);
+            Set<String> foreignCandidates = null;
+            if (JoinTargetCatalog.isJoinTargetSystemKey(targetFormKey)) {
+                // 内建目标：物理列白名单来自 JoinTargetCatalog（不走 form_def）
+                foreignCandidates = JoinTargetCatalog.systemColumnKeys(targetFormKey);
+            } else {
+                if (!FORM_KEY_PATTERN.matcher(targetFormKey).matches()) {
+                    throw new BusinessException(400, "非法关联目标: " + targetFormKey);
+                }
+                if (!formDefRepository.existsByTenantIdAndKey(tenantId, targetFormKey)) {
+                    throw new BusinessException(400, "目标表单不存在: " + targetFormKey);
+                }
             }
-            requireJoinField(j, "localField", "主表关联字段", idx);
+            String foreignField = text(j, "foreignField");
             requireJoinField(j, "foreignField", "目标表关联字段", idx);
+            requireJoinField(j, "localField", "主表关联字段", idx);
             requireJoinField(j, "joinField", "显示字段", idx);
+            if (foreignCandidates != null) {
+                if (!foreignCandidates.contains(foreignField)) {
+                    throw new BusinessException(400, "joins 第 " + idx
+                            + " 项目标表关联字段不在内建数据源物理列中: " + foreignField);
+                }
+                String joinFieldValue = text(j, "joinField");
+                if (joinFieldValue == null || !foreignCandidates.contains(joinFieldValue)) {
+                    throw new BusinessException(400, "joins 第 " + idx
+                            + " 项显示字段不在内建数据源物理列中: " + joinFieldValue);
+                }
+            }
             requireJoinField(j, "label", "显示名称", idx);
             String virtualKey = text(j, "virtualKey");
             if (virtualKey == null || virtualKey.isBlank()) {

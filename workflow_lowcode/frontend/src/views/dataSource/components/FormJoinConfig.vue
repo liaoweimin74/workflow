@@ -48,7 +48,7 @@ import { formApi } from '@/api/form'
 import { dataSourceApi } from '@/api/data-source'
 import SqlEditor from './SqlEditor.vue'
 import { emptyJoin, type FormJoinConfigValue, type JoinConfigItem } from './FormJoinConfig.vue'
-import { extractFormColumns, targetFormColumns, type ColumnOption } from './joinColumns'
+import { extractFormColumns, isSystemJoinTarget, SYSTEM_JOIN_TARGET_COLUMNS, targetFormColumns, type ColumnOption } from './joinColumns'
 
 const props = withDefaults(
   defineProps<{
@@ -180,10 +180,15 @@ watch(
   { immediate: true }
 )
 
-/** 目标表单列懒加载（foreignField/joinField 候选：业务字段 + 系统列 id） */
-async function ensureTargetColumns(targetFormKey: string) {
-  if (!targetFormKey || targetColumnsMap.value[targetFormKey]) return
-  targetColumnsMap.value[targetFormKey] = await loadColumns(targetFormKey, targetFormColumns)
+/** 目标表列懒加载（foreignField/joinField 候选）：内建数据源 → 物理列映射；业务表单 → schema 业务字段 + 系统列 id */
+async function ensureTargetColumns(targetKey: string) {
+  if (!targetKey || targetColumnsMap.value[targetKey]) return
+  if (isSystemJoinTarget(targetKey)) {
+    // 内建数据源：物理列来自本地映射（与后端 join-target-catalog 对齐），不走表单 schema
+    targetColumnsMap.value[targetKey] = SYSTEM_JOIN_TARGET_COLUMNS[targetKey] || []
+    return
+  }
+  targetColumnsMap.value[targetKey] = await loadColumns(targetKey, targetFormColumns)
 }
 
 function targetColumnsOf(targetFormKey: string): ColumnOption[] {
@@ -270,11 +275,11 @@ watch(
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column label="目标表单" min-width="140">
+        <el-table-column label="目标表" min-width="140">
           <template #default="{ row }">
             <el-select
               v-model="row.targetFormKey"
-              placeholder="选择关联业务表单"
+              placeholder="选择目标表（业务表单/内建数据源）"
               filterable
               style="width: 100%"
               :disabled="disabled"

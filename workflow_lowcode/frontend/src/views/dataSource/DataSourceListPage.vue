@@ -583,6 +583,7 @@ import { formApi, type FormDefinitionDTO } from '@/api/form'
 import VisualQueryBuilder, { type VisualQueryConfig } from './components/VisualQueryBuilder.vue'
 import SqlEditor from './components/SqlEditor.vue'
 import FormJoinConfig, { type FormJoinConfigValue, type JoinConfigItem } from './components/FormJoinConfig.vue'
+import { SYSTEM_JOIN_TARGET_KEYS } from './components/joinColumns'
 
 const router = useRouter()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
@@ -746,8 +747,11 @@ const formJoin = ref<FormJoinConfigValue>({
   params: [] as string[],
 })
 
-/** FORM JOIN 目标表单候选：enabled 的 FORM 类型数据源（targetFormKey 下拉） */
+/** FORM JOIN 目标表候选：enabled 的 FORM 类型数据源 + 5 个结构化内建数据源（targetFormKey 下拉） */
 const formJoinTargets = ref<{ key: string; name: string }[]>([])
+
+/** 内建 JOIN 目标白名单（与 joinColumns.ts SYSTEM_JOIN_TARGET_COLUMNS 同源） */
+const JOIN_BUILTIN_TARGET_KEYS = SYSTEM_JOIN_TARGET_KEYS
 
 /** FORM 原始 params 端点段（list/get/create/update/delete），保存时保留并叠加 queryMode 配置 */
 const formJoinBaseParams = ref<Record<string, any>>({})
@@ -1433,7 +1437,7 @@ function openView(row: DataSourceDTO) {
         (j) => !j.targetFormKey || !j.localField || !j.foreignField || !j.joinField || !j.virtualKey,
       )
       if (incomplete) {
-        ElMessage.warning('请完整配置关联（目标表单/关联字段/显示字段/虚拟列标识）')
+        ElMessage.warning('请完整配置关联（目标表/关联字段/显示字段/虚拟列标识）')
         return
       }
     }
@@ -1672,11 +1676,17 @@ onMounted(async () => {
   try {
     const res = await dataSourceApi.getEnabledDataSources()
     const list = (res.data || []) as DataSourceDTO[]
-    formJoinTargets.value = list
+    const formTargets = list
       .filter((d) => d.type === 'FORM' && d.formKey)
       .map((d) => ({ key: d.formKey as string, name: d.name }))
+    // 内建数据源目标：与后端 join-target-catalog 的 JOIN_TARGET_SYSTEM_SOURCES 同步
+    // （流程类 3 个为派生列，不纳入；与前端 joinColumns.ts 的 SYSTEM_JOIN_TARGET_COLUMNS 同一白名单）
+    const builtinTargets = list
+      .filter((d) => d.type === 'SYSTEM' && JOIN_BUILTIN_TARGET_KEYS.includes(String(d.sourceKey)))
+      .map((d) => ({ key: String(d.sourceKey), name: `${d.name}（内建）` }))
+    formJoinTargets.value = [...formTargets, ...builtinTargets]
   } catch {
-    // JOIN 目标表单加载失败不阻断列表
+    // JOIN 目标表加载失败不阻断列表
   }
 })
 </script>

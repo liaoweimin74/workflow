@@ -20,7 +20,8 @@ import java.util.Set;
  * </pre>
  * 主表固定别名 m；localField 为 JSON 列（dataPicker 外键数组）时走 JSON_EXTRACT 提取首元素匹配，
  * 普通列直接等值连接。所有标识符（列/表/排序）来自调用方传入的 QueryColumn 映射或内置白名单，
- * 值全部参数绑定，杜绝 SQL 注入。
+ * 值全部参数绑定，杜绝 SQL 注入。LEFT JOIN 目标表由 {@link JoinTargetCatalog#resolveJoinTargetTable}
+ * 解析：内建数据源 → 系统物理表，业务表单 → wf_biz_<formKey>（既有行为不变）。
  */
 public final class JoinSqlGenerator {
 
@@ -100,7 +101,8 @@ public final class JoinSqlGenerator {
         }
         sql.append(" FROM ").append(mainTable).append(" m");
         for (JoinGroup g : groups) {
-            sql.append(" LEFT JOIN wf_biz_").append(g.targetFormKey()).append(" ").append(g.alias())
+            sql.append(" LEFT JOIN ").append(JoinTargetCatalog.resolveJoinTargetTable(g.targetFormKey()))
+                    .append(" ").append(g.alias())
                     .append(" ON ").append(g.alias()).append(".").append(g.foreignField())
                     .append(" = ").append(localRef(g.localField(), columns));
         }
@@ -137,7 +139,8 @@ public final class JoinSqlGenerator {
                                                               String keyword, String keywordColumn) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(1) FROM ").append(mainTable).append(" m");
         for (JoinGroup g : group(joins)) {
-            sql.append(" LEFT JOIN wf_biz_").append(g.targetFormKey()).append(" ").append(g.alias())
+            sql.append(" LEFT JOIN ").append(JoinTargetCatalog.resolveJoinTargetTable(g.targetFormKey()))
+                    .append(" ").append(g.alias())
                     .append(" ON ").append(g.alias()).append(".").append(g.foreignField())
                     .append(" = ").append(localRef(g.localField(), columns));
         }
@@ -164,7 +167,7 @@ public final class JoinSqlGenerator {
         }
         Set<String> virtualKeys = new java.util.HashSet<>();
         for (JoinConfig j : joins) {
-            requireText(j.targetFormKey(), "关联目标表单");
+            requireText(j.targetFormKey(), "关联目标表");
             requireText(j.localField(), "主表关联字段");
             requireText(j.foreignField(), "目标表关联字段");
             requireText(j.joinField(), "目标表展示字段");
@@ -179,7 +182,8 @@ public final class JoinSqlGenerator {
     }
 
     /**
-     * 保存校验：targetFormKey 对应业务表单物理表必须存在（防止配置引用不存在的表单）。
+     * 保存校验：目标物理表必须存在（FORM → {@code wf_biz_<formKey>}；内建数据源 → 系统物理表，
+     * 由 JoinTargetCatalog 白名单解析，杜绝任意表名拼接）。
      *
      * @param joins        关联声明列表
      * @param tableExists  物理表存在性判断（如 dynamicTableManager::tableExists）
@@ -189,9 +193,12 @@ public final class JoinSqlGenerator {
             return;
         }
         for (JoinConfig j : joins) {
-            String table = "wf_biz_" + j.targetFormKey();
-            if (!tableExists.test(table)) {
-                throw new IllegalArgumentException("关联表单不存在: " + j.targetFormKey());
+            String targetKey = j.targetFormKey();
+            if (JoinTargetCatalog.isJoinTargetSystemKey(targetKey)) {
+                continue; // 内建目标表由 baseline 迁移建表，必然存在
+            }
+            if (!tableExists.test("wf_biz_" + targetKey)) {
+                throw new IllegalArgumentException("关联表单不存在: " + targetKey);
             }
         }
     }

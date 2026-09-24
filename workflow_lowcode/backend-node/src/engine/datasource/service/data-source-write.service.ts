@@ -7,6 +7,10 @@ import { PageDefinitionRepository } from '../../page/repository/page-definition.
 import { validate } from '../../form/bizdata/sql-template-engine'
 import type { QueryColumn } from '../../form/bizdata/join-sql-generator'
 import {
+  isJoinTargetSystemKey,
+  joinTargetSystemByKey,
+} from '../../form/bizdata/join-target-catalog'
+import {
   DataSourceRepository,
   type DataSourceRow,
 } from '../repository/data-source.repository'
@@ -427,13 +431,18 @@ export class DataSourceWriteService {
     }
   }
 
-  /** config 模式：joins[] 结构校验（别名/目标表单/字段/虚拟列唯一性）。 */
+  /** config 模式：joins[] 结构校验（别名/目标表/字段/虚拟列唯一性）。
+   *
+   * alias 可缺省：前端不录入，由运行时 parseJoins 自动分配（j1/j2/...）；
+   * 传入则校验格式与唯一性。目标表支持内建数据源（join-target-catalog 白名单）：
+   * SYSTEM 目标不查 form_def，且 foreignField/joinField 必须是目录内物理列。 */
   private async validateConfigJoins(joins: unknown): Promise<void> {
     if (!Array.isArray(joins) || joins.length === 0) {
       throw new BusinessException(400, 'queryMode=config 时必须配置至少一个关联 joins')
     }
     const tenantId = getTenantId()
     const virtualKeys = new Set<string>()
+    const aliases = new Set<string>()
     let idx = 0
     for (const item of joins) {
       idx++
@@ -442,19 +451,45 @@ export class DataSourceWriteService {
       }
       const join = item as Record<string, unknown>
       const alias = textOf(join, 'alias')
-      if (alias === null || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(alias)) {
-        throw new BusinessException(400, `joins 第 ${idx} 项 alias 非法: ${String(alias)}`)
+      if (alias !== null) {
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(alias)) {
+          throw new BusinessException(400, `joins 第 ${idx} 项 alias 非法: ${alias}`)
+        }
+        if (aliases.has(alias)) {
+          throw new BusinessException(400, `joins 第 ${idx} 项 alias 重复: ${alias}`)
+        }
+        aliases.add(alias)
       }
       const targetFormKey = textOf(join, 'targetFormKey')
       if (targetFormKey === null || targetFormKey.trim() === '') {
-        throw new BusinessException(400, `joins 第 ${idx} 项必须指定目标表单 targetFormKey`)
+        throw new BusinessException(400, `joins 第 ${idx} 项必须指定目标表 targetFormKey`)
       }
-      if (!(await this.formDefRepository.existsByKey(targetFormKey, tenantId))) {
-        throw new BusinessException(400, `目标表单不存在: ${targetFormKey}`)
+      let foreignCandidates: ReadonlySet<string> | null = null
+      if (isJoinTargetSystemKey(targetFormKey)) {
+        // 内建目标：物理列白名单来自 join-target-catalog（不走 form_def）
+        const system = joinTargetSystemByKey(targetFormKey)
+        foreignCandidates = system !== null ? new Set(system.columns.map((c) => c.key)) : null
+      } else {
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(targetFormKey)) {
+          throw new BusinessException(400, `非法关联目标: ${targetFormKey}`)
+        }
+        if (!(await this.formDefRepository.existsByKey(targetFormKey, tenantId))) {
+          throw new BusinessException(400, `目标表单不存在: ${targetFormKey}`)
+        }
       }
-      requireJoinField(join, 'localField', '主表关联字段', idx)
+      const foreignField = textOf(join, 'foreignField')
       requireJoinField(join, 'foreignField', '目标表关联字段', idx)
+      requireJoinField(join, 'localField', '主表关联字段', idx)
       requireJoinField(join, 'joinField', '显示字段', idx)
+      if (foreignCandidates !== null) {
+        if (foreignField === null || !foreignCandidates.has(foreignField)) {
+          throw new BusinessException(400, `joins 第 ${idx} 项目标表关联字段不在内建数据源物理列中: ${String(foreignField)}`)
+        }
+        const joinFieldValue = textOf(join, 'joinField')
+        if (joinFieldValue === null || !foreignCandidates.has(joinFieldValue)) {
+          throw new BusinessException(400, `joins 第 ${idx} 项显示字段不在内建数据源物理列中: ${String(joinFieldValue)}`)
+        }
+      }
       requireJoinField(join, 'label', '显示名称', idx)
       const virtualKey = textOf(join, 'virtualKey')
       if (virtualKey === null || virtualKey.trim() === '') {

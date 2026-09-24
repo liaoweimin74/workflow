@@ -360,20 +360,71 @@ public class BizDataSupport {
 
     /**
      * config 模式 SQL 预览：生成主表 + JOIN 虚拟列完整 SELECT（无筛选/无关键词/默认排序/不分页）。
-     * 校验 formKey 合法且主表存在（loadContext）；目标表单存在性由保存校验负责，预览不重复校验。
+     * 校验 formKey 合法且主表存在（loadContext）；目标表存在性由保存校验负责，预览不重复校验。
+     * <p>
+     * 目标可为业务表单或内建数据源（{@link JoinTargetCatalog} 白名单解析物理表）。
+     * ⚠️ 目标 key 安全校验：非内建白名单 key 必须匹配 FORM key 模式，否则
+     * {@code wf_biz_<key>} 拼接会产生畸形/可注入表名 —— 生成器不做这层，这里拦。
+     * alias 兜底：前端不录入 alias（由保存侧/运行时分配），预览按序临时分配（j1/j2/...），
+     * 避免 null 引用拼进 SQL（对齐 NodeJS previewJoinSql）。
      */
     public JoinPreviewVO previewJoinSql(String formKey, List<JoinSqlGenerator.JoinConfig> joins) {
         BizDataContext ctx = loadContext(formKey);
+        if (joins != null) {
+            for (JoinSqlGenerator.JoinConfig join : joins) {
+                String targetKey = join.targetFormKey() == null ? "" : join.targetFormKey();
+                if (!JoinTargetCatalog.isJoinTargetSystemKey(targetKey)
+                        && !FORM_KEY_PATTERN.matcher(targetKey).matches()) {
+                    throw new BusinessException(400, "非法关联目标: " + targetKey);
+                }
+            }
+        }
+        List<JoinSqlGenerator.JoinConfig> aliasedJoins = withAutoAliases(joins);
         String tenantId = tenantProvider.getTenantId();
-        List<JoinSqlGenerator.QueryColumn> columns = buildJoinColumns(ctx, joins);
+        List<JoinSqlGenerator.QueryColumn> columns = buildJoinColumns(ctx, aliasedJoins);
         BizDataQueryBuilder.SqlAndParams select = JoinSqlGenerator.buildSelect(
-                ctx.tableName(), tenantId, joins, columns, Map.of(),
+                ctx.tableName(), tenantId, aliasedJoins, columns, Map.of(),
                 null, null, null, null, 0, 0);
         return new JoinPreviewVO(select.sql(), select.params());
     }
 
-    /** 目标表单列列表；解析失败/不存在 → 空列表（调用方统一按"查不到"处理）。 */
+    /** alias 兜底分配：空/非法/重复 alias 按 j1/j2/... 找空位（复用 {@link FormQueryConfig#ensureAlias}）。 */
+    private static List<JoinSqlGenerator.JoinConfig> withAutoAliases(List<JoinSqlGenerator.JoinConfig> joins) {
+        if (joins == null || joins.isEmpty()) {
+            return List.of();
+        }
+        List<JoinSqlGenerator.JoinConfig> out = new ArrayList<>(joins.size());
+        Set<String> used = new HashSet<>();
+        int idx = 0;
+        for (JoinSqlGenerator.JoinConfig j : joins) {
+            idx++;
+            out.add(new JoinSqlGenerator.JoinConfig(
+                    FormQueryConfig.ensureAlias(j.alias(), used, idx),
+                    j.targetFormKey(), j.localField(), j.foreignField(),
+                    j.joinField(), j.virtualKey(), j.label(),
+                    j.sortable(), j.filterable()));
+        }
+        return out;
+    }
+
+    /**
+     * 目标列列表：内建数据源 → {@link JoinTargetCatalog} 物理列；业务表单 → form_def 列；
+     * 解析失败/不存在 → 空列表（调用方统一按"查不到"处理）。
+     */
     private List<ColumnConfig> resolveJoinTargets(JoinSqlGenerator.JoinConfig j) {
+        List<JoinTargetCatalog.JoinTargetSystemColumn> systemColumns =
+                JoinTargetCatalog.systemColumns(j.targetFormKey());
+        if (systemColumns != null) {
+            List<ColumnConfig> out = new ArrayList<>(systemColumns.size());
+            for (JoinTargetCatalog.JoinTargetSystemColumn c : systemColumns) {
+                ColumnConfig cc = new ColumnConfig();
+                cc.setKey(c.key());
+                cc.setLabel(c.label());
+                cc.setColumnType(c.columnType());
+                out.add(cc);
+            }
+            return out;
+        }
         try {
             List<ColumnConfig> target = formDefService.getBusinessColumnsByKey(j.targetFormKey());
             return target == null ? List.of() : target;

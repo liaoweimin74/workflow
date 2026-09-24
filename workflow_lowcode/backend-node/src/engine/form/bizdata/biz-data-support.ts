@@ -28,7 +28,9 @@ import {
   type JoinConfig,
   type QueryColumn,
 } from './join-sql-generator'
+import { joinTargetSystemColumnType, isJoinTargetSystemKey } from './join-target-catalog'
 import { isConfigMode, type FormQueryConfig } from './form-query-config'
+import { ensureAlias } from './form-query-config'
 import { SqlQueryEngine } from './sql-query-engine'
 import { wrap, type WrappedQuery } from './sql-template-engine'
 
@@ -205,6 +207,50 @@ export class BizDataSupport {
   }
 
   /**
+   * config 模式 SQL 预览（对齐 Java `BizDataSupport.previewJoinSql`）：
+   * 生成主表 + JOIN 虚拟列完整 SELECT（无筛选/无关键词/默认排序/不分页），
+   * **不落库不执行** —— 供前端「声明式 JOIN」配置后即时预览生成 SQL。
+   * 目标可为业务表单或内建数据源（join-target-catalog 解析物理表）。
+   *
+   * ⚠️ 目标 key 安全校验：非内建白名单 key 必须匹配 FORM key 模式，否则
+   * `wf_biz_<key>` 拼接会产生畸形/可注入表名 —— 生成器不做这层，这里拦。
+   */
+  async previewJoinSql(
+    formKey: string,
+    joins: JoinConfig[],
+  ): Promise<{ sql: string; params: unknown[] }> {
+    const ctx = await this.loadContext(formKey)
+    for (const join of joins) {
+      const targetKey = String(join.targetFormKey ?? '')
+      if (!isJoinTargetSystemKey(targetKey) && !FORM_KEY_PATTERN.test(targetKey)) {
+        throw new BusinessException(400, `非法关联目标: ${targetKey}`)
+      }
+    }
+    // alias 兜底：前端不录入 alias（由保存侧/运行时分配），预览按序临时分配，避免生成 undefined.xxx
+    const used = new Set<string>()
+    const aliasedJoins = joins.map((j, i) => ({
+      ...j,
+      alias: ensureAlias(j.alias ?? null, used, i + 1),
+    }))
+    const tenantId = getTenantId()
+    const columns = await this.buildJoinColumns(ctx, aliasedJoins)
+    const select = buildJoinSelect(
+      ctx.tableName,
+      tenantId,
+      aliasedJoins,
+      columns,
+      null,
+      null,
+      null,
+      null,
+      null,
+      0,
+      0,
+    )
+    return { sql: select.sql, params: select.params }
+  }
+
+  /**
    * sql 模式分页查询实现（管理员 SQL 模板包裹，运行时参数白名单透传）。
    *
    * 仅校验 `formKey` 合法性（有值时），**不校验主表单物理表** ——
@@ -291,10 +337,12 @@ export class BizDataSupport {
   }
 
   /**
-   * 虚拟列类型：目标表单 `joinField` 的列类型，找不到 fallback `"VARCHAR"`
-   * （查询与 metadata 两处必须一致）。
+   * 虚拟列类型：内建目标 → join-target-catalog 物理列类型；FORM 目标 → 目标表单
+   * `joinField` 的列类型，找不到 fallback `"VARCHAR"`（查询与 metadata 两处必须一致）。
    */
   private async resolveJoinColumnType(join: JoinConfig): Promise<string> {
+    const systemType = joinTargetSystemColumnType(String(join.targetFormKey), String(join.joinField))
+    if (systemType !== null) return systemType
     try {
       const targetColumns = await this.loadColumns(String(join.targetFormKey))
       for (const column of targetColumns) {
@@ -1070,7 +1118,7 @@ export function asDateTime(value: unknown): Date | null {
 }
 
 /** 把查询生成器抛出的普通 Error 转成业务 400（对齐 Java 的 `catch (IllegalArgumentException)`）。 */
-function asBusinessException(error: unknown): BusinessException {
+export function asBusinessException(error: unknown): BusinessException {
   if (error instanceof BusinessException) return error
   return new BusinessException(400, error instanceof Error ? error.message : String(error))
 }

@@ -1135,3 +1135,58 @@ Stage Summary:
 - 内部 LLM 网关是通用基础设施：任何 OpenAI 兼容客户端（含未来服务）经 Bearer internal-llm 即可用平台内置模型；文本协议模拟 tool_calls 让无 function calling 的 SDK 无缝支撑 Java agent 循环
 - 数据源字段元数据 404 降级空列：编辑体验不再被「未发布」阻断，空态文案给出行动指引（发布表单）
 - 沉淀：跨栈行为对齐类改动必须 NestJS/Java 同轮同改（本轮 FORM+WORKFLOW 四分支）；沙箱无 javac 时 Java 改动靠静态审查+NestJS 侧 curl 实证
+- 【NestJS 新模块 backend-node/src/ai/（12 文件自包含）】zai-llm.service（client 缓存+AiError 错误码）；ai-agent.service（对齐 Java AiAgentService：BASE_PROMPT+页面白名单拼装+导航收集+页面名兜底匹配 MAX_NAVIGATIONS=3）；tools/（open_page 白名单校验、generate_form_schema 异步工具）；formgen 三件套移植（英文 prompt/类型白名单/字段 snake_case 归一化/去重重命名/标题回填/warnings）；ai-chat.controller（SSE 帧格式与 Java 版逐字节对齐 event:xxx\ndata:{json}\n\n）；fc-chat.controller（AiPanel 兼容：OpenAI delta 流+[DONE]+[FC_TOOL] 思考步骤+fcRuleDiff 围栏按边界独立成块）
+- 【关键坑·AiPanel 围栏拆包】AiPanel 对每个 delta chunk 做 startsWith('```fcRuleDiff') 检查触发 DIFF 包装（newJson=chunk.slice(13,-3)），120 字符等长切块把围栏切碎导致 DIFF 不渲染——splitByDiffFence 按围栏边界重新拆包修复（围栏单 chunk 归一格式 ```fcRuleDiff\n<JSON>\n```）
+- 【前端接线】vendor AiPanel.vue 三处：默认 api→/api/v1/ai/fc-chat；token 默认取 localStorage access_token（过 JwtAuthGuard）；fetch 补 X-Tenant-Id: default
+- 【部署·自动愈合实证】bun run build → kill 8080 → supervisor 周期检查自动补位（新进程为 next-server 树内子进程 PPID 合法，~20s 复活）——Task 40 铁律的天然解法：NestJS 挂了会被 portal 内 supervisor 自动 respawn
+- 【E2E 全绿（curl + agent-browser）】①小智对话：中文回复+内联 Markdown 链接渲染+点击跳转 /system/user+导航标签去重过滤（正文已含链接时按设计不重复）；②open_page 工具：tool_call/tool_result 事件+白名单校验；③generate_form_schema：请假单 5 字段（select 带 options、必填校验、warnings 空）+「✅已应用到当前表单」+aiActionBus 画布回填实证；④AiPanel：思考步骤+DIFF 差异块+导入按钮→手机号字段落画布
+- 【测试数据】保留「AI小智测试表单」(ai_xiaozhi_test) 作为用户演示入口
+- 【入库】commit 5ea3c47 已 push（f518df0..5ea3c47），15 文件 +1039/-3；docs/ops/worklog.md 同步本记录
+
+Stage Summary:
+- 平台 AI 能力 100% 内化：小智助手（对话/导航/表单生成）与设计器 AiPanel（规则 diff 编辑）全部跑平台内置 GLM（glm-4-plus），零外部 API key 配置，开箱即用
+- 架构沉淀：SDK 无 function calling 时的文本协议工具模拟模式；vendor 流式协议对 chunk 边界的隐式约束（startsWidth/slice 截取）必须逐字节对齐；supervisor 自动补位使 8080 具备自愈能力
+- 风险备忘：fc-chat 系统提示约束的 rule 完整性依赖模型自觉（GLM 表现稳定）；后续可选做 server 端 rule 合并校验
+---
+Task ID: 46
+Agent: 主控（Z.ai Code）
+Task: 用户两条指令——「Java 后端未废弃，AI 需同步改为平台内置模型」+「修复数据源管理编辑业务表单时字段元数据报『业务表单不存在或未发布: bill_test』」
+
+Work Log:
+- 【纠偏确认】worklog Task 45 已完成 NestJS 侧 AI 内化（commit 5ea3c47）；本轮补 Java 侧（用户指出 Java 后端仍在使用，非废弃）并修数据源 bug
+- 【内部 LLM 网关（核心新增）】backend-node/src/ai/controller/internal-llm.controller.ts：OpenAI 兼容端点 POST /api/internal/llm/v1/chat/completions，@Public + Bearer 内部密钥校验（env INTERNAL_LLM_KEY，默认 internal-llm）；无 tools 直通 GLM；有 tools 走文本协议模拟（与 AiAgentService 同款 {"tool","args"} 约定）并转换为标准 OpenAI tool_calls 响应；stream=true 攒帧合成 delta+[DONE]（消费方均为全量处理语义）；角色映射 system→assistant、tool→user(TOOL_RESULT: 回灌)、assistant.tool_calls→协议 JSON 文本
+- 【Java AI 同步内化】AiProperties 默认值：enabled=true、baseUrl=http://127.0.0.1:8080/api/internal/llm/v1、apiKey=internal-llm、model=glm-4-plus；application.yml 同步（AI_BASE_URL/AI_API_KEY/AI_MODEL 环境变量仍可覆盖接 DeepSeek 等外部服务）；AiChatController/AiAgentService/formgen 零改动，SSE 协议不变
+- 【Java 编译环境限制】沙箱仅 JRE 无 javac/maven（ps 无 java 进程佐证 Java 在用户环境部署）——Java 改动经静态审查保障（简单赋值 + JEP 361 switch/yield 标准语法），NestJS 侧 curl 全链路实证
+- 【bug 根因】bill_test 在 wf_form_def 中 status=DRAFT 从未发布；数据源 getMetadata → FORM 适配器 → loadColumns → findLatestPublishedByKey 要求 PUBLISHED → null → 404
+- 【bug 修复·两后端对齐】NestJS + Java 的 UnifiedDataSourceAdapter metadata：FORM 与 WORKFLOW 分支对「表单不存在或未发布」404 降级为空列（writable:false + formKey 保留），其余异常照抛；前端 DataSourceListPage.vue el-table #empty 空态引导「绑定表单尚未发布，发布表单后此处将展示字段元数据」
+- 【验证·curl 四连】①网关非流式 200+正常回复；②tools 模拟→tool_calls(finish_reason=tool_calls)；③stream→delta 帧+[DONE]；④错误 key→401
+- 【验证·metadata】bill_test（FORM）与 ai_xiaozhi_test（WORKFLOW）均 404→200 {columns:[],writable:false,formKey}；WORKFLOW 降级为一致性顺手补齐（用户未报但同病）
+- 【验证·浏览器】agent-browser 登录→数据源管理→bill_test 编辑→字段元数据 tab：报错消失、空态引导出现；小智面板对话回归正常（GLM 回复+Markdown 链接）
+- 【验证·单测】DataSourceListPage.test.ts 53/53 通过；backend-node nest build 通过
+- 【测试数据保留】bill_test(DRAFT) 与 ai_xiaozhi_test(DRAFT) 数据源保留作为降级场景演示入口
+
+Stage Summary:
+- Java AI 模块平台内置模型化完成：默认零配置直连 NestJS 内部网关跑 GLM，两后端 AI 全链路收敛，外部部署保留 env 覆盖能力
+- 内部 LLM 网关是通用基础设施：任何 OpenAI 兼容客户端（含未来服务）经 Bearer internal-llm 即可用平台内置模型；文本协议模拟 tool_calls 让无 function calling 的 SDK 无缝支撑 Java agent 循环
+- 数据源字段元数据 404 降级空列：编辑体验不再被「未发布」阻断，空态文案给出行动指引（发布表单）
+- 沉淀：跨栈行为对齐类改动必须 NestJS/Java 同轮同改（本轮 FORM+WORKFLOW 四分支）；沙箱无 javac 时 Java 改动靠静态审查+NestJS 侧 curl 实证
+---
+Task ID: 47
+Agent: 主控（Z.ai Code）
+Task: 用户反馈 AI 助手两问题——①「提示已创建表单但实际没落库」②「创建业务表单却提示可进入流程」
+
+Work Log:
+- 【根因①】generate_form_schema 工具只生成 schema JSON 返回（不落库），前端仅在设计器上下文经 aiActionBus 回填画布；AI 基于工具「成功」返回谎称已创建 —— 缺一个真实落库的创建工具
+- 【根因②】系统提示无表单类型语义：业务表单（BUSINESS，纯数据填报无审批流）与工作流表单（WORKFLOW，挂审批流程）未区分，AI 话术混淆
+- 【新工具 create_form（NestJS + Java 双端）】backend-node/src/ai/tools/create-form.tool.ts + backend/.../ai/formgen/CreateFormTool.java：formgen 生成 schema → writeService.create 落 DRAFT → 回填 schema；BUSINESS 额外经 extractFromSchema 生成 column_config（发布建表依赖）→ 返回 {ok,formId,formKey,fields,designerUrl,hint}；key=ai_<time36><2位随机>（符合 FORM_KEY_PATTERN）；formType 归一化兼容中英文（含"流程/审批"→WORKFLOW，缺省 BUSINESS）；NestJS 经 EngineModule exports 新增 FormDefinitionWriteService 注入（ai→engine 依赖破例已注明）；Java @Component 自动注册进 AiToolRegistry
+- 【系统提示同步双端】ai-agent.service.ts basePrompt + Java AiAgentService BASE_PROMPT：create_form 主推（真实创建）；类型语义（业务表单=BUSINESS 不关联流程）；如实话术规则（仅 ok=true 才说已创建；业务表单禁提流程/审批，引导数据页录入；成功话术=草稿未发布+[在设计器中打开]链接）
+- 【隐藏地雷·MariaDB typeCast】发布验证时踩出：MariaDB 把 JSON 别名列在 wire protocol 标记为 BLOB（MySQL 8 是 JSON），mysql2 对 BLOB 载荷合法 JSON 自动 parse 成对象 → publish 的 columnConfig.trim() 崩（500）。database.module.ts typeCast 扩展：JSON+BLOB/TINY_BLOB/MEDIUM_BLOB/LONG_BLOB 统一 field.string('utf8')（本库无二进制列，等价恢复 MySQL 文本行为）。此前库里无任何非空 column_config，故此雷从未触发——AI 创建的第一个 BUSINESS 表单成为首个触发者
+- 【验证·curl 全链路】对话「创建员工请假业务表单」→ tool_call(create_form, formType=BUSINESS) → tool_result(ok:true,6字段) → message 如实话术；DB 实证 wf_form_def 落库（schema+column_config 完整）；publish 200 → 物理表 wf_biz_ai_muf4tjek39 建成（6 业务列类型正确：VARCHAR/datetime/text）→ PUBLISHED
+- 【验证·浏览器】小智对话创建「办公用品登记业务表单」→ 回复「已创建为草稿状态」+设计器内联链接+数据页引导，零流程话术；DB 实证 ai_muf52ksu88 DRAFT 落库
+- 【测试数据】保留「员工请假业务表单」(PUBLISHED，可演示数据录入) 与「办公用品登记业务表单」(DRAFT，可演示设计器调整发布)
+
+Stage Summary:
+- AI 创建表单从「假创建（只回结构）」升级为「真创建（落库草稿+发布就绪）」：generate_form_schema 保留给设计器结构预览场景，create_form 承担对话式真实创建
+- 业务表单/工作流表单语义在小智话术层固化：业务表单永不提流程
+- 顺手排掉 MariaDB typeCast 地雷：此前任何 BUSINESS 表单手动发布也会崩（column_config 首次非空即触发），与 AI 改造无关但被本轮验证逼出
+- Java 侧同步（CreateFormTool + BASE_PROMPT）沙箱无 javac 静态审查，模式完全复制 NestJS 版

@@ -127,6 +127,7 @@ import { TaskService } from './task/task.service'
     DataSourceService,
     PageDefinitionService,
     FormDefinitionService,
+    FormDefinitionWriteService,
     BizDataService,
     BizDataSupport,
   ],

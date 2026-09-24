@@ -1125,3 +1125,23 @@ Stage Summary:
 - 内部 LLM 网关是通用基础设施：任何 OpenAI 兼容客户端（含未来服务）经 Bearer internal-llm 即可用平台内置模型；文本协议模拟 tool_calls 让无 function calling 的 SDK 无缝支撑 Java agent 循环
 - 数据源字段元数据 404 降级空列：编辑体验不再被「未发布」阻断，空态文案给出行动指引（发布表单）
 - 沉淀：跨栈行为对齐类改动必须 NestJS/Java 同轮同改（本轮 FORM+WORKFLOW 四分支）；沙箱无 javac 时 Java 改动靠静态审查+NestJS 侧 curl 实证
+---
+Task ID: 47
+Agent: 主控（Z.ai Code）
+Task: 用户反馈 AI 助手两问题——①「提示已创建表单但实际没落库」②「创建业务表单却提示可进入流程」
+
+Work Log:
+- 【根因①】generate_form_schema 工具只生成 schema JSON 返回（不落库），前端仅在设计器上下文经 aiActionBus 回填画布；AI 基于工具「成功」返回谎称已创建 —— 缺一个真实落库的创建工具
+- 【根因②】系统提示无表单类型语义：业务表单（BUSINESS，纯数据填报无审批流）与工作流表单（WORKFLOW，挂审批流程）未区分，AI 话术混淆
+- 【新工具 create_form（NestJS + Java 双端）】backend-node/src/ai/tools/create-form.tool.ts + backend/.../ai/formgen/CreateFormTool.java：formgen 生成 schema → writeService.create 落 DRAFT → 回填 schema；BUSINESS 额外经 extractFromSchema 生成 column_config（发布建表依赖）→ 返回 {ok,formId,formKey,fields,designerUrl,hint}；key=ai_<time36><2位随机>（符合 FORM_KEY_PATTERN）；formType 归一化兼容中英文（含"流程/审批"→WORKFLOW，缺省 BUSINESS）；NestJS 经 EngineModule exports 新增 FormDefinitionWriteService 注入（ai→engine 依赖破例已注明）；Java @Component 自动注册进 AiToolRegistry
+- 【系统提示同步双端】ai-agent.service.ts basePrompt + Java AiAgentService BASE_PROMPT：create_form 主推（真实创建）；类型语义（业务表单=BUSINESS 不关联流程）；如实话术规则（仅 ok=true 才说已创建；业务表单禁提流程/审批，引导数据页录入；成功话术=草稿未发布+[在设计器中打开]链接）
+- 【隐藏地雷·MariaDB typeCast】发布验证时踩出：MariaDB 把 JSON 别名列在 wire protocol 标记为 BLOB（MySQL 8 是 JSON），mysql2 对 BLOB 载荷合法 JSON 自动 parse 成对象 → publish 的 columnConfig.trim() 崩（500）。database.module.ts typeCast 扩展：JSON+BLOB/TINY_BLOB/MEDIUM_BLOB/LONG_BLOB 统一 field.string('utf8')（本库无二进制列，等价恢复 MySQL 文本行为）。此前库里无任何非空 column_config，故此雷从未触发——AI 创建的第一个 BUSINESS 表单成为首个触发者
+- 【验证·curl 全链路】对话「创建员工请假业务表单」→ tool_call(create_form, formType=BUSINESS) → tool_result(ok:true,6字段) → message 如实话术；DB 实证 wf_form_def 落库（schema+column_config 完整）；publish 200 → 物理表 wf_biz_ai_muf4tjek39 建成（6 业务列类型正确：VARCHAR/datetime/text）→ PUBLISHED
+- 【验证·浏览器】小智对话创建「办公用品登记业务表单」→ 回复「已创建为草稿状态」+设计器内联链接+数据页引导，零流程话术；DB 实证 ai_muf52ksu88 DRAFT 落库
+- 【测试数据】保留「员工请假业务表单」(PUBLISHED，可演示数据录入) 与「办公用品登记业务表单」(DRAFT，可演示设计器调整发布)
+
+Stage Summary:
+- AI 创建表单从「假创建（只回结构）」升级为「真创建（落库草稿+发布就绪）」：generate_form_schema 保留给设计器结构预览场景，create_form 承担对话式真实创建
+- 业务表单/工作流表单语义在小智话术层固化：业务表单永不提流程
+- 顺手排掉 MariaDB typeCast 地雷：此前任何 BUSINESS 表单手动发布也会崩（column_config 首次非空即触发），与 AI 改造无关但被本轮验证逼出
+- Java 侧同步（CreateFormTool + BASE_PROMPT）沙箱无 javac 静态审查，模式完全复制 NestJS 版

@@ -959,3 +959,21 @@ Stage Summary:
 - 全平台 10 个列表/管理页内容区布局统一：底边距恒等 14px（由 main p-4 唯一决定），空态/少量数据时不再出现大空白，流程中心溢出滚动一并消除
 - 布局规约沉淀：页面根容器禁止自带 padding、禁止 calc(100vh-X) 硬编码，统一 height:100% + flex 链；后续新页面按此标准
 - 备忘：测量用的「404」页签是深链刷新触发动态路由丢失所致（既有行为），登录后从菜单进入不受影响
+
+---
+Task ID: 38
+Agent: 主控（Z.ai Code）
+Task: 用户指令「push到仓库」
+
+Work Log:
+- 【发现异常】workflow_lowcode/.git 再次丢失（沙箱重置所致），git 命令实际作用于上层 /home/z/my-project 仓库（UUID 自动提交链、无 origin）——与 Task 32 同款问题
+- 【保全+重建】先全量备份（/tmp/workflow_lowcode_backup_task38.tar.gz）→ git init -b main + remote add origin（PAT）+ fetch → git reset origin/main 对齐
+- 【差异甄别】工作树 vs origin/main：1599 个 M 全为 mode-only（沙箱把文件全写成 755，内容哈希比对一致，含 hero.png/fc-icons.woff 二进制）；268 个 D 为远程独有文件（backend-node/test/* 58+52、backend/src 125、.superpowers/sdd 31、openspec/docs 等——Task 32 时代即从未本地落地）；核心源码（frontend/src/migrations）内容级差异 0
+- 【工作区对齐】git config core.fileMode false（消除 mode 噪音）+ git checkout origin/main -- .（materialize 268 个远程独有文件）→ status 仅剩 4 个未跟踪运行时产物（.engine-node/bun.lock×2/data/）
+- 【push 结论】HEAD == origin/main == 2161931（哈希相同）——Task 33-37 全部 4 个成果 commit（7d9b643 菜单修复 / 6ff241b 风格切换器 / 33fb9fb 衣服图标 / 2161931 布局统一）此前均已推送，本轮无需新推送
+- 【服务回归】checkout 后 4 服务全在（3306/5173/8080/3000），登录 API 200，前端 200
+
+Stage Summary:
+- 本地仓库已重建为远程完整镜像：HEAD=origin/main=2161931，工作树补齐全部远程文件，status 干净（仅运行时产物未跟踪）
+- 全部成果已在 GitHub（liaoweimin74/workflow）main 分支，无待推送内容
+- 风险提示：沙箱重置会再丢 .git（本次已是第二次）；远程仓库即权威备份，重建流程已固化在 worklog（备份→init→fetch→reset→fileMode false→checkout）

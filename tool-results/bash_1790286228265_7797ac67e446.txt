@@ -1,0 +1,1120 @@
+282bbae fix(quality): 全量测试套件收敛 + 数据源 params 对象输入规范化 + 拖拽绑定时序加固
+c5cd45d feat(datasource): 声明式 SQL 原始输入双段并存保存 + 字段元数据拖拽排序
+47fd125 fix(join): 方案A全量修复——分组对齐/租户过滤/校验加固/体验补齐；update 路径 FORM params 端点段权威重建（沙箱重置后基于远程历史重建提交）
+1c62d1f docs(ops): worklog Task 51
+8f5cf52 feat(join): Java 端静态同步——JOIN 目标支持内建数据源（对齐 NodeJS 3ebac1e）
+3ebac1e feat(join): 声明式 JOIN 目标表支持内建数据源 + join-preview 端点补齐（NodeJS）
+3b09292 docs(ops): worklog Task 50-c
+6b6a6a2 fix(frontend): 数据源列表类型列——系统内建行只显示「内建」
+--- 本地领先远程的提交 ---
+a1ed977 66dc2020-b17b-491e-b066-97171df3e5a4
+91fd7e0 7f5cb545-885d-4f4f-86f0-8d64470d9995
+fbc7bb3 fix(datasource): update 路径 FORM params 端点段系统权威重建（对齐 create，换绑 formKey 不再残留旧端点）
+210eaa4 30f28d28-d6c9-48aa-b1f9-d7ccd46e2d77
+3a21d4c chore(ops): 记录 push 阻塞（沙箱重置丢失 remote/PAT）
+75f4281 fix(join): 方案A全量修复——分组对齐/租户过滤/校验加固/体验补齐
+2b940c7 99ae61d0-336d-4c92-92f2-fdb4c202dc9a
+d7f720e c8685af5-4376-482a-aadf-0bf69f1c7350
+2d0dd90 c51a1628-8458-4873-b1de-5670a1553d81
+29799b0 cb4852e4-8e67-48ce-922c-686889e42eff
+2b197d7 328ac7e7-848b-4d0f-9295-0556892b208a
+af89eb5 209e7917-cd24-4b2f-b52b-4adad785c161
+b591675 916ed1b4-036c-445e-993b-7ca0d3f8d611
+5ca0d0b 1a7d1385-5209-4d1d-9e49-67e8e63f543e
+d79c251 dd54a139-d615-4326-b540-ad743e195921
+4aa5799 8fa1ee5d-3263-4b1b-aae0-ada42e7c32d4
+318905b 2efc3953-7946-41dd-8a24-80d02bfefef9
+61d9b15 d14ecfb5-6865-4249-a95e-bc91220101f5
+4e525f9 adb83343-501f-4bc7-98e8-07d24301078c
+a894299 9fea5447-bae1-4087-94db-d3a083efa1be
+244a506 3bd43dda-2db3-41f3-a1af-4586ff6feb34
+f8ff186 c486dce7-7280-4255-8e4f-609b97a4ed73
+2f57ae3 3e437d70-f61b-4c44-9b21-295b7c37c2a2
+b1845c0 e5492564-0467-454c-b267-20693e0e5232
+19abe24 05f65e69-bc81-483b-8061-bc58c7a72139
+d523d81 5f5ef86c-ff88-424e-a431-30e683dd3409
+c88bb5d e0b0ff4f-4758-4042-afc5-7e086c0e7e32
+7eefa48 f23201dd-f1d4-4db3-ae1b-98705b129c23
+04f64e4 e4be77d9-d5ed-467e-b617-7cac723d8d92
+8bd8616 05e8ce01-5558-4d39-9802-c72513f57e28
+e175ade 3438b061-afbd-47dc-adf5-59601bbdf7e9
+419f114 5c9fbc0e-428d-45ef-b614-1432fb33744b
+51aaaa0 5e01665c-695f-416c-9b33-a7426505d2fc
+2609803 00329301-30e8-4e78-b9a8-2aae1202a5f4
+362c609 a83ef457-208d-4b88-b6b9-c5c1d9417ce3
+affbec0 618d514b-a67d-46c5-b201-3c880fd05462
+5a704aa bd893908-5554-4c37-aa89-481fbde417da
+8645ed0 0063c2c5-ade1-436c-9bfa-b07d3b5c1af4
+a3c00f9 95c3cfa2-c65a-47d3-84d6-0d0047e99824
+2a36bba fe69a2dd-c548-49a7-aa03-27216b97aaf1
+a632290 59368fe5-4011-47a9-95b5-a6de0060c5b1
+27b31e0 b2b8ca5b-c0c5-4e52-8ca9-d98691b3df79
+a658050 6a0bf441-9481-4cc9-b93c-6d3fbacaced9
+40bc382 0ea9e8f5-f42c-4dac-885e-0790e9e7d308
+6988fc0 8078af9f-eafd-4e03-9edc-8d1dbb97c9d2
+9f24532 95fcb86d-6b2c-48b4-9da3-de2a8ad3fa8d
+ae05717 68a35fd8-e36c-4fe4-b208-7d75949d3ebb
+6a62fb9 5b82f6d9-ef07-4eb0-b39d-905a88bd85be
+a155d60 554bc5f3-1811-46b6-9966-4d6535793757
+3318564 9e0941e9-04ec-4405-9767-7c2303f88e42
+472eba6 70baf051-d210-49e2-84a9-d15fb6decfe8
+72b7b91 48c0c7f3-3ca7-4852-9eb7-1629d3b51bc6
+45765a2 da626c5c-8203-4eb0-a386-e1565743b534
+1855144 086f4e3f-9b01-48ea-96d8-2612b3c5a810
+5b50f90 3051d9a4-6c5c-43c2-8799-6fefddd5e969
+6270a52 b284efd7-27c2-4519-98d4-e433ad09b601
+b56d3b3 8d2746fd-7868-4b94-b0bf-70b87a7f548f
+85be03f 7e634fc2-d858-411c-ac3a-0cd79f061ebb
+691936d ffbcea77-98ab-4333-8ee8-62a9294e5711
+adefc7b 2f1b0d1d-03db-484c-995d-27b156863e4c-cron
+24b31f6 f8acb9ac-64d5-41ef-a5ee-9c1c5efce60a-cron
+5f4d82e a4593ae7-7d6c-4ad0-8591-415aaf3f54fe
+5a8d58e 44921bec-ea31-4102-b873-b1df840db628-cron
+219a9bf 259df1c9-04bd-4d7a-941d-723842f8e3dd
+82f80b1 197443aa-d4c9-40bf-88bd-b4d20eaea7b5
+ec6faf3 1aee786a-1d89-420b-830d-ef194776e74d
+7e97779 108b3904-02d2-4475-882c-d2d9ee2e6359
+343fcfd a738253b-b82f-44c4-b625-23613574c69a
+1abc44b 43f57a74-fe4b-464c-976d-3064d092325d
+d454a64 03e1be35-4a7f-4de0-ad59-7a81e86ca18f
+3ee7e92 9ed0e267-652b-48e6-b88c-11ff1855d671
+3f1d82f c8d496fc-564b-4e78-8d5a-2503eb853cc2
+5868b41 df1983e1-bd68-4fd9-a5b5-05e671d0dddb
+d59d638 88d52c9a-c2ab-4450-87de-bbd09af6a1d9
+acd3810 Initial commit
+--- 远程领先本地的提交 ---
+282bbae fix(quality): 全量测试套件收敛 + 数据源 params 对象输入规范化 + 拖拽绑定时序加固
+c5cd45d feat(datasource): 声明式 SQL 原始输入双段并存保存 + 字段元数据拖拽排序
+47fd125 fix(join): 方案A全量修复——分组对齐/租户过滤/校验加固/体验补齐；update 路径 FORM params 端点段权威重建（沙箱重置后基于远程历史重建提交）
+1c62d1f docs(ops): worklog Task 51
+8f5cf52 feat(join): Java 端静态同步——JOIN 目标支持内建数据源（对齐 NodeJS 3ebac1e）
+3ebac1e feat(join): 声明式 JOIN 目标表支持内建数据源 + join-preview 端点补齐（NodeJS）
+3b09292 docs(ops): worklog Task 50-c
+6b6a6a2 fix(frontend): 数据源列表类型列——系统内建行只显示「内建」
+99c5db1 refactor(datasource): 内建数据源初始化迁入迁移脚本 V39（双端同源）+ Java 端对齐
+df84c3d feat(datasource): 系统内建数据源预置——启动播种+取数适配+写保护
+7441d5e docs: worklog Task 49
+1a950c4 fix(form): 业务表单组件类型白名单制 + AI formgen 词汇表对齐设计器标准
+03ce4f2 fix(nav): AI 话术「设计器中打开」链接 404 根治
+4563cf3 feat(ai): 对话式真实创建表单（create_form 落库工具），修复业务表单流程话术
+f3d8d04 feat(ai+ds): Java AI 同步接入平台内置模型（内部 LLM 网关），数据源字段元数据未发布降级
+c468efc docs(ops): 同步 Task 45 AI 内化记录至仓库交接快照
+5ea3c47 feat(backend): AI 助手全面切换平台内置模型（GLM），NestJS 自建 AI 模块
+f518df0 chore(ops): 同步 Task 41/42 交接记录入库，忽略 backend 运行时产物
+3199b38 fix(frontend): 表单设计器四态暗色补全——#app颜色断层根治+画布白框+AI面板主题化
+e2f3b5b chore(ops): 收录门户保活脚本与工作交接文档，落实 bun.lock 忽略
+a632b25 feat(frontend): 设计器/AI助手四态主题化 + 暗色表格悬浮修复 + 页面新建简化
+2161931 fix(frontend): 统一各页面内容区布局，底边距对齐用户管理标准（14px）
+33fb9fb style(frontend): 风格切换按钮图标改为衣服（T恤）图标
+6ff241b feat(frontend): 四态风格切换器（青墨 Verdant × 明暗）+ 仪表盘配色接入品牌变量 + vite base=/lowcode/
+7d9b643 fix(migrations): 菜单种子数据显式 status=1/is_deleted=0，修复系统管理菜单不可见
+5851d8b feat(backend-node): 新增 Node.js 后端实现（NestJS+TS+Kysely）与 Flyway 兼容迁移
+2cf75c5 ai-foundation-form-gen: archive change
+19841ae style(ai): 缩小小智窗口尺寸（400x600 -> 340x480）
+58bfd77 feat(ai): 小智品牌样式（深色标题栏+机器人图标+头像+图标清除+输入框1-5行自适应）
+bfd10ac fix(ai): 对话端点改同步 SSE 修复响应终止；行内胶囊 tag 链接 + 消除多余空行
+4047b69 feat(ai): 助手回复 Markdown 渲染（markdown-it + DOMPurify + 链接白名单拦截）
+7dd2135 feat(ai): 助手改为完全悬浮对话窗体；入口随 message 返回并支持文本兜底匹配
+d454be6 feat(ai): 助手回复带可点击页面入口（open_page 工具 + 菜单白名单 + tag 跳转）
+dbb914d fix(ai): 请求携带 Authorization Bearer 头（修复供应商 401）
+37eba48 feat(ai): 统一悬浮球助手入口（前端 store/动作总线/悬浮球/开关 + artifacts 修订）
+13cbec1 feat(ai): 统一助手后端（function calling agent + /ai/chat，移除独立表单端点）
+5fb7d9f test(ai): 补齐 api-key 判空装配与 JSON 模式断言；勾选任务
+d892134 chore(ai): 增补 workflow.ai 配置（默认关闭）
+d7d5418 feat(ai): 表单设计器 AI 生成入口（SSE 客户端 + 生成弹窗 + 画布回填）
+987e675 feat(ai): AI 表单生成（prompt 工程/校验清洗/服务/SSE+同步端点）
+8862056 feat(ai): AI 基础设施层（配置/模型抽象/OpenAI 兼容客户端/审计）
+ebe4fcd change: ai-foundation-form-gen
+2b72e60 feat(org): 组织编辑支持修改上级组织 + 循环引用校验
+a11400f feat: JOIN 引用列渲染显示文本 + LookupPicker 配置字段中文名/主键 id
+f1466e1 test(join): queryJoin 断言对齐分组 alias（j1 代替 c）
+d3be01c feat(join): 前端删除别名录入，新增 JOIN SQL 预览
+2ab3799 feat(join): 保存校验放开 alias，新增 JOIN SQL 预览接口
+896a93e feat(join): 虚拟列 ref 改用分组 alias，支持同连接条件多字段合并查询
+2b6b55e feat(join): 声明式 JOIN 按连接条件分组合并为一行 SQL，alias 自动分配
+980c34c docs: 声明式 JOIN 多字段合并 + SQL 预览设计文档
+2622125 feat: 数据源管理页 componentType 只读化，删除可编辑列/弹窗项/覆盖补值
+cc4d8cd feat: DsBindingConfigDialog 可筛判断改 <key>_text 列存在性
+7e621ad feat: ViewDesigner 可筛列判断改 <key>_text 列存在性（移除 colorPicker componentType 特判）
+8f41905 feat: PageDataCards 数组值列判断改 <key>_text 列存在性
+ceaa467 feat: PageDataTable 查询栏组件改表单 schema rule.type 优先 + columnType 降级
+f01d1f6 feat: PageDataTable 数组值列判断改 <key>_text 列存在性（componentType 退出渲染链路）
+21353ca docs: 数据源 metadata 标注 componentType 弃用（渲染链路不再消费）
+494d3ab docs: 数据源字段元数据渲染解耦实现计划（8 个 TDD 任务）
+119e89d docs: 补充 DsBindingConfigDialog 可筛列判断改造细节（_text 列 hidden 需基于完整 meta.columns）
+6f575bb docs: 数据源字段元数据渲染解耦设计方案（componentType 退出 metadata 渲染链路）
+d70d4d5 fix: 未发布表单不再创建数据源（仅发布时触发数据源同步）
+4d1a6f5 feat: 数据源字段元数据只读表格展示完整列（DB类型/长度/精度/隐藏/排序/筛选/查询方式）
+104743c feat: 业务表单字段隐藏（rule.hidden）写入 column_config 字段元数据
+e2fc478 feat: WORKFLOW 表单字段隐藏（rule.hidden）同步到数据源字段元数据
+e32b4e4 refactor: msg_* 实体 @Table 声明索引与唯一约束（索引从迁移脚本迁入实体管理）
+be12d14 refactor: wf_* 实体 @Table 声明索引与唯一约束（索引从迁移脚本迁入实体管理）
+0d037dc refactor: 将 29 个 Flyway 迁移脚本合并为单一 V2__init.sql 初始化脚本
+96815c9 form-join-sql-engine: archive change
+1432c90 docs: form-join-sql-engine retrospective
+b253dd8 form-join-sql-engine: 补全 tasks 5/6/7 — FORM 数据源关联查询配置保存校验 + 前端 JOIN/SQL 配置 UI + 文档
+7541dc3 form-join-sql-engine: 完成 form join SQL 引擎实现
+78c4493 docs: 字段视图配置（field view config）设计 — 元数据界面属性职责分离方案
+c32f928 feat: 字段元数据表格展开全部字段行内编辑（DB类型/长度/精度/描述/占位符/验证规则/选项/数据映射等29列）
+d0e0975 style: 字段元数据 tab 布局优化 — 按钮左置+图标操作+组件类型下拉编辑+间距统一
+13b7702 fix: 主表单覆盖补 componentType（解析 schema.rule）+ 详情 dialog 组件类型改为下拉选择
+eb8d6e5 docs: 方案A 实施计划 + maven 增量编译漏编新文件踩坑记录
+92320e7 feat: SQL 数据源可视化配置候选表/字段回归数据库真实结构（DbSchemaController 表枚举+列查询端点）
+f23cc66 refactor: API 列定义编辑收敛到字段元数据 tab，移除接口配置列编辑器
+2e9653e feat: 数据源字段元数据 tab 可编辑（执行SQL/接口推断/主表单覆盖 + 行内编辑 + 详情表单）
+8b5d3ea feat: 前端 explore-sql/explore-api 接口 + ColumnMeta 类型
+9c8c00e feat: SQL/API 数据源 metadata 直接返回 params.columns 全字段（单一来源）
+7dd44c2 feat: 数据源字段元数据探测端点（explore-sql/explore-api）
+16b67d3 feat: SQL 列元数据探测器（SELECT+LIMIT1 包裹 ResultSetMetaData 映射）
+f86c278 docs: 数据源字段元数据可编辑实施计划（探测/覆盖/行内+详情编辑）
+03d4c59 docs: 数据源字段元数据可编辑设计（探测获取+编辑UI）
+dc8d2fc fix: 数据源删除保护补充 PAGE schema dataSources[].refId 引用统计，软删除页面不计入
+3157aa8 feat: 新增数据源数据管理页（SearchTable + 表单 CRUD）
+bdfff07 refactor: 抽取 useDataSourceCrud composable 供 PageDataTable 复用
+33d7f50 feat: 数据源删除放开状态限制，被页面引用时拒绝删除
+502c1af feat: 数据源列表移除启用/禁用按钮，新增数据管理入口
+a9d9d3e feat: API/SQL 数据源创建即发布（ENABLED）
+22b2209 docs: 数据源保存即发布 + 数据管理页实施计划
+d52565b docs: 数据源保存即发布 + 数据源数据管理页设计 spec
+438b022 fix(datasource): SQL 数据源查询被表单 covering handler 劫持 + 无可排序列报错
+78b58d9 fix(dataSource): SQL 可视化字段保存丢失 + 新增启用/禁用入口
+56538ec fix(datasource): 补齐数据源定义管理端点（create/update/delete/enable/disable）
+d9934ca feat(dataSource): 新建头部四列布局（标识/名称/类型/业务表单）+ API 支持绑定业务表单
+f1c50a7 feat(dataSource): SQL 类型 sourceKey 必填输入与提交（对齐后端租户内唯一标识）
+6ae2ddf feat(datasource): SQL 数据源行级操作委托绑定表单 + API metadata 透传 formKey
+ba4edf2 feat(datasource): 支持 SQL 类型 + source_key 租户唯一 + FORM formKey 自动派生
+0c94fed feat(datasource): Repository 新增 existsByTenantIdAndSourceKey
+909186d feat(datasource): V31 迁移 source_key 租户内唯一索引
+fa53f78 docs: SQL 数据源后端 + source_key 泛化设计 spec
+8cc271e docs: 勾选 Task 8 完成状态（FieldMappingPreview + 集成）
+36b851d feat: FieldMappingPreview + 集成 SQL 数据源 UI
+8919dfe docs: 勾选 Task 7 完成状态（SqlEditor）
+dd248dd feat: SqlEditor SQL 编辑器组件（SQL 模板/列声明/参数/从 SQL 解析列）
+763421b docs: 勾选 Task 6 完成状态（VisualQueryBuilder）
+0ee3f7f feat: 可视化查询构建组件 VisualQueryBuilder（主表/JOIN/筛选/排序/参数/SQL 预览）
+c87fc29 feat: 数据源管理页 SQL 类型支持（可视化构建 + SQL 模式编辑 + 字段声明）
+b01bdf0 test: SQL 数据源集成测试 + Router/Support 适配
+6cbbdc9 feat: UnifiedDataSourceAdapter 支持 SQL 类型数据源
+d83dbe1 feat: FormQueryConfig 支持 visual 模式解析
+d2cb2cb feat: VisualSqlGenerator — 可视化配置生成 SQL
+b85e84f docs: SQL 数据源 + 可视化查询构建 实施计划
+d38d5d9 docs: SQL 数据源 + 可视化查询构建 设计文档
+c6ebb67 feat(form-join-sql-engine): Task 4 — FORM 数据源 queryMode 分流与 metadata 虚拟列
+908aef9 change(form-join-sql-engine): 增加 sql 模式运行时参数透传（params）
+417882e change: form-join-sql-engine
+cda87b7 chore: 提交 sql 数据源开发过程截图
+d62d451 fix(designer): 画布节点按 BPMN 类型精准着色 — customRenderer 打类型标记、调用活动左上角图标、滚动条统一细样式
+e78dc7b style(designer): 左右面板对齐 X6 BPMN 视觉 — 节点面板/属性栏卡片式重构、边框加深区隔
+0dd4864 bizdata-extension-examples: archive change
+286fac4 fix(example): enforce phone required validation in emp_profile beforeCreate
+b6d637b chore: final verification for bizdata-extension-examples
+4a05e27 feat(example): leave workflow form domain with process guard integration
+86f7c5a feat(example): emp_profile domain with overridden query + semantic ops
+b2d4b90 feat(bizdata): wire process guards into update/delete facade
+913ec71 feat(form): process state guard interface + flowable impl + process_key binding (V30)
+5292318 refactor(bizdata): split BizDataSupport reusable surface, gate BizDataService as facade
+455aacc feat(bizdata): handler override declarations for CRUD takeover
+1a45c03 change: bizdata-extension-examples
+7e075fa sitewide-beautify: archive change
+46c108a test(page-table): fix linkage test setup - mock vue-router, inject dsRefId, await async mount
+d5abdd6 docs(retro): add verify report and retrospective
+d71a362 docs(tasks): mark all sitewide-beautify tasks complete
+93ff677 feat(theme): final polish and verification
+86b29f7 style(theme): polish login and dashboard pages
+30d34b0 style(theme): rebuild layout shell to indigo/cyan
+2c050b0 style(theme): indigo/cyan design tokens with EP light/dark overrides
+05181f7 docs(design): update design tokens to indigo/cyan theme
+1714627 change: sitewide-beautify
+58ad85a chore: ignore playwright-mcp logs
+9eb0fc9 array-value-text-columns: archive change
+bc9ab63 feat: 模糊查询字段直接用文本输入框——匹配方式=like 的字段查询栏渲染 el-input（PageDataTable/PageDataCards/BizDataListPage），移除 filterable/allow-create 选择器方案残留
+4a5fbe5 fix: 表单/页面设计器属性面板回显——setRule 前 ensureRuleProps 递归补 props，修复无 props 规则选中崩溃
+cc0587b docs: verify 同步 commit id（888f0fb→32d5ec5）+ 记录首次访问数组值列显示修复
+32d5ec5 fix: 首次访问表格/卡片列表数组值列显示原始值——metaLoaded 门控 SearchTable/ListCards 在列定义就绪后挂载取数，ListCards 查询栏按字段组件类型+空状态去重试按钮，PageDataCards 表单/查询参照 PageDataTable，metadata DTO 补 formKey
+24f6b5a feat: 查询组件按字段组件类型构建+选项数据源取数+卡片列表显示显示值——select/tree-select/cascader/lookupPicker、PageDataCards 数组值 formatter 读 _text
+cd0a5bb feat: 页面表格编辑弹窗按业务表单 schema 构建组件+列表显示显示值——metadata 返回 formKey、FormRenderer 绑定回退、formDataSources 透传、数组值列读 _text
+306bad5 fix: PageDesigner 数据表格配置数据源窗口选项组件可查询——DsBindingConfigDialog filterableKeys 同加选项类判定
+1e5435f feat: 页面设计器表格选项组件可查询——ViewDesigner 选项类主列可筛，PageDataTable 搜索映射 _text 显示列
+8ca9075 feat: SearchTable 查询栏组件化——单选选项字段生成下拉（查询值=显示值精确匹配 _text），日期选择器，其余 input 模糊
+5f94ec3 fix: 移除 _text 存储兜底——选项映射失败不生成 value，留空暴露问题便于查错
+2322fb1 fix: 选项冗余字段逻辑统一——value→label 匹配兼容 key（elTransfer 静态/数据源 _text 一致存 label）
+4e3a0cf fix: elTransfer 数据源选项补 key=value（选中标识，防选一项全选联动）
+f1c0189 fix: cascader emitPath=true 多选双跑扁平叶子数组被压缩成单值（toLeafArray 用 multiple 区分）
+5dbc43e fix: 树形回显类型归一化（showCheckbox 误判多选致 input 空）；撤销 fullPath 下拉恢复节点名称
+1b0a527 fix: 回显 select 类型不匹配（字符串 v-model vs 数字 option value）时注入兜底项显示 label（hasOption 改严格比较）
+b4fd747 fix: select _text 双跑覆盖（mapped 标志修分隔符误判）；树形/级联移除兜底注入（防树污染）；树形回显 fullPath 显示全路径
+d50ad9e feat: 级联/树形统一规范——主列叶子数组存储、_text 带前导/全路径、回显解包、显示叶子 label
+888f0fb fix: cascader emitPath=true 路径数组正确解析全路径；_text 覆盖策略改值可映射时覆盖
+1027f70 fix: _text 生成用渲染时解析后选项（异步数据源），树形/级联显示文本改全路径 / 分隔
+bca2cfc fix: 表单回显数组组件 options 无匹配时用 _text 注入兜底 option，避免显示原始 value
+6603675 docs: 同步方案A（select 单选统一 JSON 双列）到 spec/design/verify
+d0ccac7 refactor: select 单选/多选统一 JSON 双列存储（查询走 _text 文本列）
+de90a8f array-value-text-columns: 实现数组组件 value+text 双列存储（列映射/提交生成 label/显示/查询）
+2d3e9b7 docs: 数组组件 value+text 双列存储变更 artifacts
+061dd6f feat: 表单设计器卡片配置入口与数据源下拉显示
+1d91da3 feat: 页面渲染器卡片列表满高布局与配置收集
+d14e406 feat: 对齐卡片列表工具栏间距与查询/重置按钮样式
+ee46d7d fix: 数据表格元数据列数组值格式化展示（透传 componentType）
+63d3534 fix: 修复穿梭框选项数据源匹配与数组值列表可读渲染
+9f56c9c fix: 数组组件列映射改 JSON 存储并取消穿梭框/树形/级联隐藏
+d3f9326 fix: 统一数组组件列类型映射（select 多选/elTreeSelect 改 JSON 保真）
+02b5f88 card-style-customization: archive change
+8eab3e9 fix: 移除条件表格边框伪元素残留
+2bb5431 fix: 清理嵌套脚本弹窗关闭残留样式
+614bd99 fix: 修复脚本编辑弹窗遮罩层级
+4407fbf fix: 将条件样式表格嵌入配置窗体
+5b237e7 fix: 对齐字段高级配置布局
+c8140bd fix: 对齐样式脚本与条件表格宽度
+87aa331 fix: 修复暗色主题字段文字对比度
+944271c test: 覆盖样式编辑器紧凑布局交互
+ac366f0 feat: 优化样式脚本与条件表格布局
+e9f756a docs: 补充样式编辑器 UI 契约与计划
+3d25bc6 docs: 补充卡片样式编辑器布局方案
+161a066 docs: 优化卡片与字段样式编辑器布局
+6e03a3e feat: 统一字段高级样式配置
+b3ec5fe feat: 增加样式脚本弹窗与规则编辑器
+e875677 feat: 接入表格整体样式规则
+b5d0cdc feat: 接入表格 CELL 样式规则
+ef5d435 feat: 接入卡片整体与字段规则渲染
+46e1382 feat: 增加主题 CSS 脚本转换
+97993b7 feat: 增加卡片主题类型与蓝色科技主题
+d0e5808 feat: 统一样式规则解析
+9048ed5 docs: 增加蓝色科技预设样式设计
+95790bc docs: 增加卡片与字段样式编辑器设计
+f0b4bed feat(card-style): add card style script config entrance, dialog, and render wiring
+46add65 feat(page-data-cards): add theme/style passthrough and fix regression tests
+092c786 feat(view-designer): add style field to ColumnViewConfig and backend passthrough
+21db95f feat(conditional-editor): add conditional style rule editor utilities
+a86c789 feat(config-panel): unify style structure in ColumnAdvancedConfig
+091b175 feat(table-renderer): integrate resolveFieldStyle into buildCellRender
+35da263 feat(list-cards): integrate CardStyle/FieldStyle into ListCards.vue
+ba3dfec feat(list-cards): add card types, themes, and style utilities
+b6d6134 feat(field-style): add unified field style model and resolvers
+d7460ee change: card-style-customization
+f77a12e fix(form): configure card list data sources
+5075bd5 fix(form): skip card lists during business form DDL
+713e6d0 chore: update agent instructions
+d8001d3 feat(style): unify field style resolution
+b74c8ab feat(card): complete card action handling
+dc4f90d style: fix EventConfig event list layout
+54908bc docs: card list style customization design spec
+360d646 card-list-search-pagination: archive change
+1922a0b test(page): isolate pagination component in jsdom
+a7c3f35 fix(page): isolate card datasource bindings
+d6edec6 fix(card): align pagination to bottom right
+5bec851 fix(card): show controls in design mode
+19ff3d6 fix(card): persist cleared group field
+42404e3 feat(page): pass card pagination settings
+4b7a480 feat(card): wire query filters to data sources
+dc19a8b feat(card): add search and page-size controls
+9c519f5 change: card-list-search-pagination
+30ba6f8 unify-datasource-binding-components: archive change
+fa31aae docs: update datasource binding change status
+8457efc refactor: reuse datasource binding in config dialogs
+7e1a661 style: align datasource config dialog
+de624dd refactor: rename unified datasource binding component
+9e97fda docs: add unified-datasource-binding spec
+339301c docs: add unified-datasource-binding change artifacts
+229721a Merge branch 'feature/form-create-datasource-binding'
+85b9996 form-create-datasource-binding: archive change
+02e2592 docs: update retrospective with runtime fixes and treeSelect field routing
+5f448f9 fix: route option datasource to props.data for tree/cascader and share resolveOptionRules
+6b0368f fix: pass form ds bindings to resolveOptionDataSource and PageRenderer runtime
+c184869 fix: resolve option datasource after activeDsBindings ready in loadSchema
+e15bace fix: make option datasource button full-width like form-create struct button
+7bf61b5 style: align option datasource button with table config button
+0f82a4a fix: write page datasource bindings to activeDsBindings store in PageDesigner
+f4ec5c1 fix: use page datasource bindings for options
+a97c365 fix: align option datasource dialog with table
+3cbb69c feat: align option datasource dialog with table config
+1a7fc3e list-cards-component: archive change
+fb8fea3 docs(card): add verify.md + retrospective.md for list-cards-component
+1c3a035 refactor(ds-binding): 卡片快捷配置两行布局 + label 左对齐
+b0d27d0 feat(card): 表格/卡片高级配置合并、表格 normal 尺寸、页面卡片模板渲染
+42e1f0a feat(card): 卡片分组可折叠、操作区位置(顶/底/右)、视图表格/卡片显示方式切换
+4b5d05b feat(card): 卡片操作按钮支持 button/icon/text 三态渲染及图标
+4d44ed3 fix(card): 设计态卡片也显示操作按钮，配置了操作按钮时预览/运行一致
+257430d fix(ds-binding): 设计态表格配置数据源后立即取数且取数钳制≤10条
+646ec9a fix(ds-binding): 卡片顶部四项快捷配置强制单行
+2a093eb refactor(ds-binding): 卡片字段顶部快捷配置单行布局
+ea8d5e3 fix(page-list-cards): PageDesigner 主动写入 activeDsBindings，设计态卡片独立解析数据源
+294e9ac feat(card): 设计态去 mock，改真实取数≤10条且切换数据源自动刷新
+4430bfe refactor(card): 高级配置面板改为严格五行布局
+b665563 feat: add design-time card mock preview
+bb13bed feat: refine card advanced configuration
+1e6fcf0 feat: apply card field layout settings
+cc24f31 fix: make card grid fill parent width
+5f1efab fix: add default card edit form fallback
+c1e6ffc fix: clarify card data-source configuration
+772d41b fix: select card mode in page designer
+5e792a5 fix: open linked container from card actions
+feb6b9e feat: expose card typography configuration
+ee6a830 fix: support card grouping and typography
+97c8ab0 chore: verify form option datasource binding
+a254094 feat: bind form options to data sources
+ecec392 feat: add option datasource mapper
+8c29603 feat: link card actions to containers
+61afc27 feat: add card action area
+cfb8160 feat: register form list cards component
+1b6a87f feat: register page list cards component
+d4e9166 feat: add page list cards adapter
+7043d0e feat: add ListCards pagination toggle
+52895d9 feat: export ListCards business component
+7533bdf feat: add ListCards pagination
+cd4533e test: stabilize card binding dialog fixture
+58999d1 change: form-create-datasource-binding
+258022d feat: support card listMode in DsBindingConfigDialog
+dfb5e24 feat: support card mode for actions and events config
+8ab3496 feat: support card mode column fields
+7f63fe1 feat: add card column advanced config
+7944e65 change: refine shared card configuration plan
+d0dbae6 Task 2: Implement ListCards component with card-based list rendering
+f9fb364 docs: add Task 1 report for ListCards type-contract tests
+1bd8a87 test: add ListCards type-contract tests for CardColumn, ListQueryParams, ListPageResult
+da9e18a feat(types): add ListCards types CardColumn, ListQueryParams, ListPageResult
+0cd58cc change: list-cards-component
+4b80c54 Task 2: Implement ListCards component with card-based list rendering
+304fa5c feat(types): add ListCards types CardColumn, ListQueryParams, ListPageResult
+73e4270 docs: archive message center change
+0c01e9c test: isolate form renderer bindings
+60569f8 test: stabilize frontend suite
+df88867 fix: use unified data picker pagination
+3d44061 test: align notification and pagination contracts
+7877d14 docs: add pagination migration plan
+35eeb8d fix: align dynamic form labels
+557ed7f feat: centralize notification channel management
+c953d38 fix: unify pagination as one-based
+6fdad76 feat: connect templates and subscription rules to events
+efa8b07 feat: add notification event management page
+c2796aa feat: apply event subscription rule actions
+499da51 feat: bind notification templates to events and channels
+2e3bca7 feat: propagate business event codes through message sending
+e551149 feat: add notification event administration API
+6d3b807 feat: add notification event definition domain model
+59a2055 feat: add notification event and management menu migration
+8027109 docs: add notification event governance implementation plan
+a362d46 docs: design notification event governance and menu wiring
+8f463b8 fix: protect notification administration routes
+175dec5 fix: enforce admin access on notification settings
+3a3f5ef feat: add notification admin authorization guard
+1e72a00 fix: align retry lookup and recipient status test
+4f9f909 feat: add announcement management UI and template status
+efe68df feat: add channel configuration and delivery status UI
+18a623d feat: update message center for separated read status
+971db06 feat: add subscription rule deletion
+a2d8774 feat: add announcement management APIs
+3badd67 feat: make notification templates toggleable
+01e065b feat: persist channel configuration and report delivery health
+2656a6f feat: persist encrypted notification channel configuration
+7f8c173 feat: support delivery retry status and manual resend
+ab870df refactor: expose recipient read status in message service
+f5ea918 refactor: separate recipient read status from message delivery status
+111b49c feat: user subscription preferences API + notification settings drawer
+70600c4 feat: message type support, announcement publishing, subscription rule CRUD, frontend message center
+d3bbad4 feat: wire real channel delivery, retry pipeline, and subscription gating
+fca3dc1 style: narrow channel and recipient search field widths
+786e897 feat: add search filters to admin delivery log page
+f070723 test: send in-app channel test message as Markdown with bold 测试消息
+d618db7 feat: carry template render type + readable body onto message, render by type in drawer
+624f857 feat: add MessageSender facade for template-driven notification sending
+1f4808e fix: restore elTabs width 100% accidentally dropped in 6c3b09f
+6c3b09f refactor: template preview refreshes on tab switch instead of polling
+56e1f01 fix: template preview polls form model - watch/computed cannot track formCreateInject
+7fe30d4 fix: template preview reads reactive form model so it reflects live input
+3c3873a fix: getById backfills current user read status so detail drawer triggers markAsRead
+77499e9 feat: message template supports text and markdown content with md preview
+40a9e41 fix: single markAsRead matched recipient id instead of message id
+d2293c4 fix: accept space-separated datetime in notification list time range
+672351b fix: delivery log now aggregates real send records incl. test messages
+df0369f feat: message center add detail drawer with view action
+109c8c5 feat: message center add status column + read/unread toggle
+eb76d13 feat: rebuild message center with SearchTable + unread filtering
+d8a7ec5 feat: channel test sends real message through delivery pipeline
+1250079 fix: template preview variables, system template creation, channel test
+fc1ae3a refactor: convert remaining notification admin pages to SearchTable
+20bad5c feat: system templates only allow editing text fields
+fcbd3b0 refactor: use form-create elTabs for template form preview
+181460c refactor: move template preview fields to end of form
+b9fd19a refactor: use SearchTable formConfig for template CRUD dialog
+59d1ceb fix: wire up template create/edit dialog in TemplateList
+9b9e58d fix: unify notification module tenant type to String and fix auth
+f35829f feat: add notification admin menus and frontend routes
+e8f8173 fix: resolve X-User-Id header error by using JWT-authenticated user
+76616f4 fix: align V24 SQL column name with entity and fix test
+406d430 fix: 修复 V24 迁移脚本 MySQL 保留字
+d64155f chore: 标记 Task 6.5 完成
+2f5a909 fix: 修复集成测试环境
+4e18f8a chore: 标记 Task 6.4 完成
+695fc89 feat(notification): Task 6.4 - Redis 缓存未读计数
+279aae8 test(notification): Task 4.9 - 前端单元测试
+8bfb31a test(notification): Task 5.9, 6.2-6.3, 6.5
+080ffe9 test(notification): Task 5.9 - 渠道适配器单元测试
+da5cb90 chore: 标记 Task 6.1, 6.6 完成
+ce04e3e docs: 更新 PRD 3.7 通知章节
+e8f1077 feat(notification): Task 6.1 - 优化重试表索引
+90ef624 feat(notification): Task 5.8 - 管理端权限控制
+28f0f09 feat(notification): Task 5.4-5.6 + 管理端 API
+5a895b2 feat(notification): Task 4.3-4.5 - 管理端页面完成
+4586dac feat(notification): SSE 实时推送
+c058c5d chore: 标记 Task 4.7-4.8, 5.7 完成
+b9235db feat(notification): 管理端 API + 内部 API
+b96cbf1 chore: 更新 tasks.md 标记已完成任务
+d8fc3e8 feat(notification): Task 4-5 - 管理端前端 + 渠道适配器
+21bb301 feat(notification): Task 3 - 模板引擎与订阅模型
+9b9c05e feat(notification): Task 2 - 前端模块骨架与消息中心
+6048aa5 chore: 标记 Task 1 全部完成 (1.1-1.12)
+a72f70e feat(notification): Task 1.10-1.11 - 异步重试机制
+e63ceee feat(notification): Task 1.9 - 用户端 REST API
+dacd210 feat(notification): Task 1.6-1.8 - MessageEvent, ChannelAdapter SPI, MessageDispatcher
+c8a8b5f feat(notification): Task 1.5 - MessageService 消息存储服务
+da3af70 chore: 标记 Task 1.1-1.4 完成
+177826f feat(notification): Task 1 - 模块骨架与数据模型
+31d5e21 change: message-center
+c8848cc keepalive-tab-cache: archive change
+d7bfbbe keepalive-tab-cache: PageRendererPage 深链容器 watch 增加 ownPath 过滤（缓存实例不响应其他页签 query）
+e19a7b4 keepalive-tab-cache: 修复缓存实例因全局 route 变化错误重载（pageKey 改为挂载快照）
+0713312 keepalive-tab-cache: 多页签状态保持（keep-alive + 强制刷新 + 删除 pageQueryStateStore）
+67c1beb change: keepalive-tab-cache - artifacts created
+e36bfed frontend-request-optimization: archive change
+d92974c change: frontend-request-optimization apply 完成 — 所有 tasks 已标记完成
+42648d0 feat(menu): 挂载收敛（消除 getMenuTree 双重请求）+ 关联页面选项延迟加载（ensurePublishedPages）
+2f39607 feat(role): 分配菜单树延迟加载（ensureMenuTree）
+1a91777 feat(user): 组织树延迟加载（onExpand + onFormOpen ensureOrgTree）
+a596751 feat(search-table): onExpand/onFormOpen 机制（tree-select 按需加载 + 表单打开前回调）
+1141233 feat(page): VIEW 页数据源定义延迟加载（ensureBoundDataSource）
+e72ed22 feat(page-table): 首次 data 请求单次触发（消除挂载+绑定就绪双触发）
+4438b2c feat(page): PAGE 定义由 PageRenderer props 下传，消除重复加载
+283f187 feat(http): GET 并发去重与短 TTL 缓存（http-request-caching）
+f33dc80 change: frontend-request-optimization 扩展 deferred-options-loading（角色/菜单管理页选项延迟加载、onFormOpen 钩子、delta 标题修正）
+7b1b7f0 change: frontend-request-optimization
+7a0b7f4 feat(page): 页面查询状态持久化与表格筛选配置（FilterConfig/tableFilterStore/pageQueryStateStore）
+4bbad64 page-table-column-advanced-fix: archive change
+ab6a110 chore: tasks 勾选 + verify/retrospective（apply 完成）
+63448dc fix: handleConfirm 保存列时透传高级字段
+3a1798d fix: initTableData 保留列高级字段，回填不再丢弃
+678cda6 test: DsBindingConfigDialog 列高级字段回填/保存回归用例（RED）
+4c6c429 change: page-table-column-advanced-fix
+12beb67 table-column-customization: archive change
+1eeb86d feat(table-column): 表格式列级定制能力（自定义列/列样式/单元格点击/动态内容）
+26f9537 change: table-column-customization 生成全部 OpenSpec artifacts（brainstorm/design/proposal/specs/tasks/plan/verify/retrospective）
+f26174f chore: 提交既有工作区更改（页面渲染/数据表格/表单联动等）
+d8f9338 feat(biz-data): support fetching all records with size=-1; improve table config UI
+f75defe refactor(ProcessTodoPage): rebuild three tabs on SearchTable with icon action buttons and centered action column
+b90b3a5 feat(SearchTable): flush pagination to bottom, add dblclick emit / date-range time / overflow tooltip / custom action column width
+523cc22 datasource-field-sorting: archive change
+575a932 docs: add retrospective for datasource-field-sorting
+64ddd8b docs: add pagination config requirement to spec + verification report
+1aac4a8 fix: convert new-capability spec to delta format for validation
+dba67c7 style: pagination bar height aligned with table row height
+66173f4 chore: mark pagination config tasks complete
+7785a31 feat: pagination config for views and data tables (showPagination/pageSize/pageSizes)
+b57a097 fix: showPagination Boolean prop defaults to true so pagination renders
+8775a55 feat: component-level sortableFields config for page/form data tables
+b521509 fix: preserve sortable from datasource metadata in PageDataTable
+90826e6 docs: update artifacts for B1 view-level sortableFields
+12585ed feat: view-level sortableFields config bounded by datasource metadata
+a1c1014 feat: view-level sortableFields config (backend compile + sort whitelist)
+007e41a chore: mark all datasource-field-sorting tasks complete
+621182f test: update QueryColumnsConfig assertions after removing sortable switch
+6c322aa refactor: remove sortable switch from view designer column config
+cb749f5 feat: wire server-side sorting through list pages
+af7805a feat: manage server-side sort state inside SearchTable
+4cea0a0 feat: extend ColumnConfigItem with sortable
+2601bc2 feat: support dynamic ordering in workflow form datasource query
+8beeb20 feat: declare field sortability in datasource metadata
+f038904 feat: add SortableResolver for field sortability derivation
+4c1e010 feat: add sortable field to ColumnConfig
+b582be4 change: datasource-field-sorting
+b833701 page-menu-mount: archive change
+6eef2a6 fix: 侧边栏排除按钮型子菜单 + 父子同 path 时目录可正常展开（index 用唯一 id）
+ff6fb0c fix: 页面表格尺寸统一为正常（移除预览/正式访问的紧凑区分）
+47e5ca2 fix: findMenuPath 优先匹配叶子菜单，避免父目录/子菜单同 path（如 /form）误命中父级
+4d258b9 fix: 页面路由切换不重新加载（watch pageKey）+ 页签标题用菜单名称
+ef1a1d7 fix: JWT 过滤器加载真实角色权限（LoginUserService，修复挂接页面 403 根因）
+0d37877 fix: 修复挂接页面无权限访问（PermissionEvaluator admin 角色匹配 + 挂接自动授权 ROLE_ADMIN）
+1a955ac feat: 菜单管理页新增关联页面选择器（选页面自动回填 path/component/permission）
+2d138de fix: 挂接菜单目录候选改为 menuType=0（目录），排除菜单/按钮
+81febe5 feat: 页面设计器（PAGE）新增挂接菜单入口
+59e8d5d feat: 页面列表页新增挂接菜单入口（PUBLISHED 行显示）
+0850be6 chore: 标记 page-menu-mount 任务全部完成（实现已通过测试）
+5adbb6d docs: 更新功能清单（页面多挂接菜单 + 双重访问控制）
+3c1f075 feat: 页面设计器挂接菜单（多挂接管理 + 解除）
+b4b7d7e feat: 页面渲染与数据接口后端权限校验（OR 语义，PageAccessGuard）
+6f99548 feat: 页面挂接菜单接口（多挂接 + 列表 + 解除）
+fb03b37 feat: SysMenuRepository 新增 findByPathAndIsDeleted（List）
+3b70de6 docs: 更新 page-menu-mount artifacts 为多挂接设计（多入口 + 列表管理 + OR 校验）
+0442c5a change: page-menu-mount（页面挂接菜单 + 双重访问控制）
+bcd9726 docs: 设计文档更新为多挂接方案（一个页面可挂多个菜单）
+5d19bb4 docs: 页面挂接到系统菜单设计（挂接+双重权限控制）
+6e40fb4 fix: 修正过时测试断言（PageRenderer 重构为 SearchTable 渲染，分页需 showPagination 显式开启）
+2af1475 chore: 归档 table-form-container-linkage 变更至 openspec 主规格
+bca13db fix: 数据组件旧协议兼容回填与过时测试修正
+4fffa38 feat: 页面设计器复用数据组件配置
+6be7adb refactor: PageRendererPage 复用共享容器机制
+c60dadb refactor: FormRenderer 复用共享容器机制
+7b6d34f feat: 抽取共享数据容器运行时机制
+6af5c8c fix: 修复 newTab/inline/弹窗高度三个问题
+2ad208c fix: 打通数据源绑定传递链（BizDataListPage解析schema.dataSources→formConfig.dataSources→SearchTable→FormRenderer→activeDsBindings），修复表单内数据表格不调取数接口的问题
+d1db8a4 fix: PageDataTable watcher 改为 watch(activeDsBindings) 全量监听，确保绑定就绪后触发 fetchList 刷新数据表格
+b9fa4ca fix: 修复4个容器联动问题 + 数据表格数据源绑定就绪后自动刷新
+e55ce9d fix: 修复4个容器联动问题：1)引擎挂载延迟到activeDsBindings就绪(消除'数据源不存在') 2)newTab改为emit事件由父组件处理 3)inline模式open-container自动从数据源加载行数据 4)弹窗高度CSS修复
+0181068 fix: 弹窗容器引擎 getValue/setValue 通过 dialogContainers.value 查找 reactive proxy，解决闭包捕获原始对象绕过响应式的问题
+1c82b2c fix: 弹窗容器 setValue 改为 mutate 旧对象（保留引用），form-create v-model 能正确感知数据变化
+f749bc5 fix: open-container 弹窗前清空旧 formData，避免残留上一条记录内容
+0d7dbd4 feat: 动作总线步骤 target 改为数据源下拉选择（选项来自数据源绑定，新建动作默认填充第一个数据源）
+1b0a652 feat: FormRenderer 表单容器弹窗支持（displayMode=dialog 的 formContainer 从主树抽出，open-container 打开 el-dialog）
+10c4151 fix: 打通业务数据页（BizDataListPage→SearchTable→FormRenderer）表格-容器联动动作链传递（FormConfig.actions）
+429b1e3 feat: FormRenderer 支持表格-容器联动（注册 page-table + provide pageActionBus + open-container/load-record/save-container 动作）——表单设计器与页面设计器均可使用
+9ea1b69 debug: 移除联动诊断日志（已定位根因：表单设计器预览无页面运行时）；新增集成测试覆盖用户场景
+55c42f6 feat: 表单设计器添加 JSON 配置查看按钮（对齐保存结构：rule/option/dataSources/actions）
+8dbcad0 feat: 动作总线支持来源数据源匹配（Action.source + PageDataTable/PageRendererPage 按来源过滤）——多数据源场景下不同表格的联动动作互不干扰
+a9a07a6 fix: EventsConfig/ActionsConfig 补齐表格-容器联动触发器（row-edit/row-view/row-create）与容器动作选项
+4c1a698 feat: DataSourceConfigPanel 动作总线支持表格-容器联动配置（row-edit/row-view/row-create 触发器 + open-container/load-record/save-container/close-container 动作 + displayMode/recordId 参数）
+36c924e fix: 补全 formContainer 设计器配置面板（显示模式/尺寸/按钮配置） - DsBindingConfigDialog + PageDesigner 属性面板
+0b832da Task 6: EventsConfig 添加容器动作类型与触发器（open-container/load-record/save-container/close-container + dialog-open/dialog-close 等）
+4549f34 Task 6: EventsConfig添加容器动作类型及容器触发器
+49d3e2b Task 4: PageDataTable 表格-容器联动事件触发（row-edit/row-view/row-create 派发 + 动作链消费时跳过默认行为）
+3035f81 Task 3: formContainer 按钮配置（新增/取消/确定/删除/复制开关 + 自定义按钮事件链）+ 容器按钮区行为
+5e3cd2e Task 2: formContainer 显示模式扩展（dialog/newTab/inline）+ PageRendererPage 联动容器宿主（open/close/load 动作与 query 落地页）
+8692209 Task 1: DsActionBus 扩展表格-容器联动事件与动作类型（open-container/load-record/save-container/close-container + displayMode/recordId 参数）
+ac00b5e change: table-form-container-linkage
+eaa0dcb simplify-component-datasource-config: archive change
+efc8bdd feat: DataSourceConfigPanel refactoring - filter alignment, dialog buttons, column cleanup
+c050dfe fix: formDsBindingsStore 安全写入（非空优先覆盖），修复运行时数据源不存在
+f719f98 fix: handleColumnConfirm保存dataSources、后端验证适配dataSourceId、FormDesigner写入模块存储
+e3695cd fix: 修复6个运行时问题 - 模块级存储替代provide/inject、DataSourceConfigPanel筛选UI、后端验证适配、移除旧路径兼容
+d9634c0 simplify-ds-config: LookupPicker/DataPicker 运行时支持 dataSourceId 数据源路径
+845a814 simplify-ds-config: 类型定义、对话框重构、运行时上下文、工具函数与测试
+88167cb change: simplify-component-datasource-config
+7fdd0b8 feat: FormDesigner data table config entry + form schema column extractor refinement
+5ea68a9 data-table-enhancement: archive change
+75cc5a2 feat: PageRenderer 改造为 SearchTable + PageDataTable 事件链修复
+d713111 feat: rewrite PageDataTable based on SearchTable (action buttons/columns/CRUD/events via adapter)
+455f990 fix: PageDataTable support viewActions format for action buttons
+ebd6800 fix: PageDesigner table config fallback to all columns when empty
+5edd059 fix: PageDesigner table config column format conversion (key<->prop)
+abb01c5 style: ActionsConfig - reduce 位置/形态/图标 column widths
+624a3e6 style: QueryColumnsConfig - adjust column widths (展示=查询, 宽度/对齐/格式化/固定列 reduced)
+fd638fc style: QueryColumnsConfig - 匹配方式 select 77px, column 107px
+34c91ad style: QueryColumnsConfig - 匹配方式 select 70px, column 100px
+6d6144e style: QueryColumnsConfig - 匹配方式 select 85px, column 115px (30px gap)
+b45e734 style: QueryColumnsConfig - 30px gap for 匹配方式/格式化/固定列
+4ee929b style: ActionsConfig icon column width 140px for 30px gap
+0e1495c style: ActionsConfig - widen columns for better select fit
+e5ec71e fix: ActionsConfig select widths fit within column padding
+232fe57 style: ActionsConfig/QueryColumnsConfig - compact column widths
+b6e0027 feat: QueryColumnsConfig add showSearch prop, PageDesigner hides search config
+8afcae6 refactor: PageDesigner - replace scattered config with unified ViewDesigner-style config dialog
+f396e37 feat: Phase 4 - FormDesigner tableForm/tableFormColumn config extensions (formatter/fixed/actionColumnWidth/addVisible/deleteVisible)
+303c5c7 feat: Phase 3 - PageDesigner page-table config extensions (formatter/fixed/visible/actionButtons/pagination/selection)
+4d415a7 docs: mark T1-T13 as completed in tasks.md
+fa3cd94 feat: Phase 2 - PageRenderer rendering extensions (formatter/fixed/selection/cell-click/actions/visible)
+78c3e4d feat: Phase 1 - ViewDesigner config extensions (formatter/fixed/visible/triggers/actions)
+b229474 change: data-table-enhancement - update artifacts for ViewDesigner extension approach
+8120178 change: data-table-enhancement - all artifacts
+35f0a9d docs: add data table enhancement design spec
+1cc68c9 add-data-source-config-panel: archive change
+8a9c4f7 fix: 修复 spec.md 验证错误
+146b469 docs: 更新 retrospective 以反映实际实现情况
+adb7ec2 test: 更新测试用例以适配新的数据源引用方式
+c124bfe fix: 移除页面设计器中 formContainer 组件的重复注册
+e308c74 feat: 统一数据源配置弹窗，添加动作总线配置支持
+4e5329e refactor: 表单组件数据源引用改为页面内数据源
+74343fc refactor: 统一数据源配置入口到顶部工具栏
+3f98a71 feat: 在表单设计器中集成 DataSourceConfigPanel 组件
+edf0424 feat: add-data-source-config-panel - 实现通用数据源配置面板组件
+ee6c31e change: add-data-source-config-panel
+69b680b Update files
+4a86c84 form-container-datasource: archive change
+f468051 feat: containerFieldValidator + PageRendererPage engine wiring + verify PASS
+a2f65fa verify: 校验报告（FAIL：5.2/6.3 缺口）+ tasks 勾选同步 21/27
+240b356 datasource: 字段元数据仅返回业务列，前端元数据表格隐藏类型/长度并优化布局
+f26a9f8 test: 添加 WORKFLOW schema-based column 查询测试
+6186adf fix: 修复三个问题 - 1)字段元数据表格显示数据源字段定义(字段名/标识/组件) 2)SYSTEM数据源跨租户查询 3)WORKFLOW表单从schema rule推导业务列
+d437d0c ui: 确保数据预览搜索输入框和搜索按钮在同一行上不换行
+bf0247a ui: 数据预览搜索按钮同搜索输入框放在同一行，分页移到右侧
+7b9bde9 fix: onTabClick 正确处理 Element Plus @tab-click 事件格式 (tab.props.name)，修复切换字段元数据/数据预览标签时无法加载数据的 bug
+4a1ec96 fix: 数据源详情弹窗改为真正的 el-tabs 标签页切换，修复元数据/数据预览内容加载
+99dc711 feat: 数据源详情弹窗添加字段元数据+数据预览功能，支持分页查询与搜索
+cfb35ce docs: 数据源元数据+数据预览功能设计文档
+cb1abd2 fix: SYSTEM 数据源跨租户可见（部门树/用户树对所有租户可用）
+b9463c7 fix: formContainer 跳过列映射确认（子字段数据来自外部数据源，不参与当前表单列映射）
+64328d7 feat: 页面注册 FORM 容器 + 动作总线触发器泛化（field-change/record-change）
+64a13a5 feat: 表单设计器 FORM 容器数据源属性面板
+1a22a83 feat: FormRenderer 挂载数据源绑定引擎与联动总线（无容器 no-op）
+da8856f feat: DsBindingEngine 数据源绑定引擎（读回显/写防抖/乐观锁/只读跳过）
+da37864 feat: DsActionBus 统一联动模型（触发器→动作链→模板变量）
+20339d3 feat: 模板变量解析器（node/row/field/record/param）
+fac4d85 feat: 新增 FORM 容器规则（formContainer，subForm:object + 数据源 props）
+d436118 change: form-container-datasource
+17c42f3 unify-workflow-form-datasource: archive change
+c337a9f docs: 标记已实现任务（含 2 项设计变更注记，E2E 待环境验证）
+7fd505f feat(frontend): API 数据源列定义恢复增删能力（仅编辑模式）
+029a38f feat(frontend): WORKFLOW 数据源查看时展示 SPI 接口信息与只读标记
+9604134 feat(frontend): 数据源弹窗类型固定 API 展示，查看时以静态标签呈现
+68b808a feat: WORKFLOW 数据源自动创建 + 数据源管理页 API 类型可管理
+c98f0b6 fix: 迁移脚本版本号冲突 V22→V23（main 分支已占用 V22）
+030659e docs: 数据源功能说明补充工作流表单类型
+dc23b67 feat(frontend): 视图设计与渲染切换数据源协议
+662b335 feat(frontend): 数据源管理支持工作流表单类型
+4af84bc feat: 视图查询端点经统一数据源SPI
+dfa242b feat: 视图发布校验切换数据源协议
+895d381 feat: 视图存量数据源自动迁移
+cff38c4 feat: 页面定义支持绑定数据源
+0d181cf feat: WORKFLOW 数据源启用校验
+a0b2b86 feat: 统一数据源适配器接入 WORKFLOW 只读类型
+1e721f6 feat: WORKFLOW 数据源跨实例查询服务
+19a0909 feat: 表单列定义解析器 FormSchemaColumnExtractor
+5797572 docs(openspec): 新增 unify-workflow-form-datasource 变更规划 artifacts
+469feb1 datasource-auto-creation: archive change
+aef036d datasource-auto-creation: 更新 retrospective 文档
+14242ef datasource-auto-creation: 在 publish 方法中发布 FormCreatedEvent，触发数据源同步
+1187eac datasource-auto-creation: 回退 repairOnMigrate 配置，需要手动修复 schema history
+e5ebbc6 datasource-auto-creation: 添加 Flyway repairOnMigrate 配置，自动修复失败的迁移记录
+bf9286a datasource-auto-creation: 修复 Flyway 迁移脚本，添加列和索引存在性检查
+78c1d5d datasource-auto-creation: 修复测试编译错误，确保 570 个测试全部通过
+6b87767 datasource-auto-creation: 添加单元测试、集成测试和接口测试
+617bdc7 datasource-auto-creation: 更新任务状态，标记已完成的任务
+6cbe66e datasource-auto-creation: 实现数据源自动创建功能
+7bd0cf8 change: datasource-auto-creation
+2fcb9e0 chore: update AGENTS.md
+b872d50 datasource-single-http-adapter: archive change
+2eb7793 datasource-single-http-adapter: retrospective
+941a53e datasource-single-http-adapter: mark tasks done, add verify report
+941ced4 [frontend] Move 新建 button to toolbar (icon+text), align all form labels left
+7058afb [frontend] Fix: label left-align, hide ops when no identifier, openEdit crash, icon action buttons
+5648aba [frontend] FORM/SYSTEM use read-only display, API uses editable form, scrollable area below divider
+4383de1 [frontend] Move 接口操作 divider outside scroll area
+2fb101f [frontend] Fix: readonly ops for FORM/SYSTEM, auto-clear on type change, scrollable dialog body
+a9b4367 [frontend] Unify config UI: FORM/SYSTEM use same API editor with auto-fill
+25d2c9f [frontend] Task 4: read-only auto-params display for FORM/SYSTEM
+624af3f Task 3.4: DataSourceDefinitionService auto-generates params for FORM/SYSTEM
+f977366 Task 3: UnifiedDataSourceAdapter consolidating Form/System/Api adapters
+28110f6 feat(datasource): internal:// router
+6704a2f feat(internal): system internal rest api
+84306eb change: datasource-single-http-adapter
+665267e Merge branch 'feature/embedded-subprocess': unify dblclick with native subprocess drilldown
+adb3cfb fix: unify double-click with native drilldown arrow for subprocess
+2a88163 feat: distinguish subprocess visuals (palette icon, canvas marker, drill-in feedback bar)
+35cbf6c feat: enable dblclick drill-in/out editing for embedded subprocess
+6eca8ce feat: add subprocess property panel and wire into property panel
+b3c3bd9 feat: add embedded subprocess palette and context pad entries
+0c6872e feat: add subflow navigation stack with snapshots to designer store
+1a3977f feat: validate embedded subprocess start/end event boundaries
+cdc5db2 feat: add subflow navigation pure functions with tests
+87b0e52 docs: add embedded subprocess designer implementation plan
+b4a32f9 docs: add embedded subprocess designer design spec (plan B)
+40606e3 form-data-mapping: archive change
+32be944 docs: add form-data-mapping retrospective
+5bb61bf docs: mark form-data-mapping tasks complete and add verification report
+403957b style: hide dropdown caret on permission and source selects
+bfd758f style: narrow field permission table columns by char widths
+9d41364 style: align property tab container with panel content left edge
+ce9dd59 feat: revert field permission to original table with narrower columns and edit label
+fb8d1fe test: revert field mapping tests to original table row anchors (RED)
+0ef4e96 docs: revert field permission config to original table with narrower columns
+b441d5f feat: render field permission config as card list with accordion
+3ed9b55 test: migrate field mapping tests from table rows to cards (RED)
+260ff4b docs: add field permission card list implementation plan
+93f0ad6 docs: revise field permission design from compact table to card list
+152ab97 feat: make field mapping config collapsible with accordion and summary
+b09924a test: rewrite field mapping tests for collapsible source config (RED)
+75b924e docs: add field permission table compact implementation plan
+065b7c7 docs: add field permission table compact design spec
+bcd12dd feat: wire mappedData through task pages and verify form data mapping end-to-end
+a723343 feat: add process-level variable mapping panel to designer
+6357ae4 feat: add data source configuration for form fields in node properties
+c9cbfab feat: prefill form fields from mappedData in FormRenderer
+8e06d7c feat: validate form mappings on process deploy
+820086d feat: write mapped form fields to process variables on start and task completion
+93725c5 feat: return mappedData in task detail for runtime and historic tasks
+1e0a588 feat: merge mapped form data from upstream forms and variables
+4d329d5 feat: add form mapping resolver with source form lookup
+fa857ed feat: add form mapping config value objects and parser
+795d85a change: form-data-mapping
+97db712 chore: update AGENTS.md
+7db6a59 chore: fix-form-type-filter archive——retrospective 移入 archive/2026-08-17-fix-form-type-filter
+f5afee6 docs: fix-form-type-filter retrospective——5 项功能回顾（表单筛选/列宽/菜单合并/部署分类/流程页UI）
+9bf2fbd feat(process): 流程定义页 UI 改进——分类卡片可折叠(40px窄条)、操作列改图标按钮(设计/部署/复制/删除)、版本历史改名版本保留文本、删除图标仅未发布(version 空或 0)显示
+8dcfb9d feat(process): 部署时写入业务分类——方案A category(draft.categoryId)，分类为空不设置，流程中心按分类分组生效
+ac9a9bd feat(menu): V21 迁移合并表单管理+查询界面管理菜单为表单视图管理——子菜单 121/141/142 改挂父菜单 160，旧菜单 120/140 软删
+4b639f6 style(page-config): 操作页签位置/形态/图标列与显示&查询页签宽度/对齐列加宽——适配长文案不换行
+33f65f1 feat(designer): 表单/流程属性页签仅筛选工作流表单——loadFormList 加 type=WORKFLOW 过滤（userTask/initiator/表单设置）
+39b130e merge: 合并 query-view-designer 变更到 main——视图/页面设计器 + 数据源统一接口 + UI normal 化（35 commits）
+f4f0b38 chore(openspec): archive query-view-designer——4 capabilities 同步至 openspec/specs，变更移入 archive/2026-08-17-query-view-designer
+6920ddd chore(openspec): query-view-designer apply 完成——tasks 勾选 66/69、verify 正式 PASS、retrospective 正式版（覆盖 planning 占位版）
+f4f07e5 feat(datasource): 前端数据源管理/视图设计器 UI normal 化——去除紧凑样式（size=small、12/13px 小字体）+ 相关 TS 修复与测试
+ec10095 feat(datasource): 数据源统一接口后端实施——DataSourceAdapter SPI + FORM/API/SYSTEM 适配器 + 六端点 + 测试
+129c3e9 Merge branch 'main' into feature/query-view-designer
+eb0ed8a docs(datasource): 统一接口设计——第一版列元数据不含 componentType（组件类型/编辑弹窗后续再做）
+9b6cb16 docs(datasource): 数据源统一接口设计——能力接口 SPI（元数据/列表/单条/增删改）+ FORM/API/SYSTEM 适配器 + 前端配置界面
+b68f19c style(page): 表单配置页签'点击配置数据源'按钮对齐 LookupPicker 样式（label 下方全宽 + 蓝色描边 #2E73FF）
+f08e2fe feat(page): 数据源配置入口移至表单配置页签（FcDesigner vendor 源码 formConfigExtra slot 扩展）+ 动作总线配置中文化
+3c8ebad feat(page): PAGE 自定义页面前端——FcDesigner 设计器（组件面板 addComponent 注册 + 属性面板'点击配置数据源'按钮）+ 渲染器 + 数据组件
+94749e7 feat(page): PAGE 自定义页面后端——queryPageDataSource 数据查询接口 + PAGE 发布校验（dataSources/refId/actions 白名单）
+43bced9 feat(page): PageRenderer buttons[] 驱动 + 预览样式对齐 + target 事件挂接 + 自定义按钮事件
+286f74c feat(page): 视图设计器重构——页签合并/按钮数组/单表配置/自定义按钮事件/图标选择/事件解绑/操作列宽度
+b2c3d5b feat(page): 视图编译 buttons 数组（含 icon）+ preview 动态编译
+75fc4d4 fix(form): FormRenderer 响应 props.rule 动态变化（先挂载后异步加载 schema）
+77e9fed fix(page): PageQueryController 结构化 filter 白名单校验（conditions[].column）
+0b0705b feat(datasource): 数据源 API 配置扩充（LookupFetchConfig 结构）+ 设计器数据源下拉消费
+7fd003c docs(page): PRD/features 补充查询界面能力说明
+d410748 fix(bizdata): 结构化 filter 支持 range 运算符（between 闭区间，非法 value 跳过）
+88eaf96 feat(page): ScriptSandbox 沙箱脚本执行（with 白名单代理 + VITE_PAGE_SCRIPT_ENABLED 开关）
+5b37034 feat(page): 通用渲染页 PageRenderer（视图渲染/查询/增删改/事件动作）
+ee7cabb feat(datasource): 数据源管理页 DataSourceListPage
+c286424 feat(page): 视图设计器 ViewDesigner（清单勾选式）
+5e3c6ba feat(page): 页面管理列表 PageListPage
+e99a132 feat(page): 前端 pageApi/dataSourceApi 与路由
+5839a8b feat(datasource): 全局数据源管理（wf_data_source CRUD + 状态机 + Adapter SPI）
+0536b58 test(page): 发布/查询/白名单/并发 集成测试 + 同key发布锁修复
+017dbb1 feat(page): 页面 CRUD/Publish/Data 查询 API
+9deea95 feat(page): 视图编译 ViewCompiler + 发布（不建表）
+485a3f4 feat(page): 发布校验器 PageValidator（绑定/字段/类型校验）
+c152179 feat(page): PageDefinitionService CRUD（不含发布）
+c4109f6 feat(page): PageDefinition 实体与 Repository
+0eaa86a feat(page): V20 创建 wf_page_def / wf_data_source 表与页面、数据源管理菜单
+240b33e fix(rebase): 解决与 main 合并的冲突（重复测试方法/subForm hidden/测试文件重组）
+5f82483 feat(page): 多数据源绑定 + 全局数据源管理设计扩展（D8/D9、data-source-management spec、左树右表联动）
+b145877 business-form-subtable-column-mapping: archive change
+890ddab docs(openspec): 同步 business-form-subtable delta specs 到主 specs（归档前置）
+bca1841 feat(bizdata): 子表列显示 [子表名称] 链接，点击弹窗以 form-create 组件化渲染子表内容
+47c2a77 fix(form-designer): 配置弹窗按设计器当前选中字段定位（支持子表内 LookupPicker/dataPicker）
+3bc978c fix(form-designer): 发布列映射穿透子表内部字段（group props.rule / tableForm columns[].rule）
+1abba52 fix(form-designer): 子表列内 LookupPicker/dataPicker 可被收集与配置（walkRules 穿透 tableForm columns 结构）
+dc84dd8 docs(openspec): 勾选 tasks 全部完成，新增 verify 与 retrospective 报告
+e4203ac fix(bizdata): JSON 列写入前序列化为字符串（修复 CHARACTER SET 'binary' 报错）
+8e78846 fix(ddl): 主表 DDL 构建跳过子表占位字段（含 ColumnConfig 子表结构序列化测试）
+21493e0 feat(designer): ColumnConfigDialog 支持子表子列配置与传输方式选择
+ad4b7dd feat(bizdata): 独立子表行 CRUD 接口（list/add/update/delete）
+c21efea feat(bizdata): BizDataService 子表写入/增量diff/内嵌读取/级联删除
+0f2263b change: query-view-designer
+d6634b3 feat(publish): 发布流程支持子表组件（修正校验名单 + 子表建表）
+0ca682d feat(ddl): DynamicTableManager 支持子表 ensure（建表/差异变更）
+8e8d9c3 feat(ddl): DdlBuilder 支持子表建表与差异变更 SQL
+23b51b8 change: business-form-subtable-column-mapping
+6f0b54e fix: 子表(subForm)内 LookupPicker/dataPicker 字段无法发现与配置（walk 兼容 props.rule 结构）
+ba19d61 support-more-form-components: archive change
+51ce770 support-more-form-components: colorPicker 列不出现在业务数据列表搜索栏
+c6f354e support-more-form-components: 穿梭框/树形/富文本/级联/签名列在业务数据列表隐藏（hidden 标记）
+d7fab5c support-more-form-components: 列映射记录 componentType，SearchTable render 富渲染，BizDataListPage 按组件类型定制展示
+c77942d support-more-form-components: serializeJsonColumns 按值形态判定（非 JSON 列数组值也序列化，兜底 Java 序列化乱码）
+2a2a91d support-more-form-components: signaturePad 改 TEXT（弃用 LONGTEXT）、cascader 改 JSON（修复数组值 Java 序列化乱码）、getNullableInt 溢出防御
+9180722 support-more-form-components: slider 滑块组件支持 + 修复发布校验 LONGTEXT 白名单遗漏
+1103896 support-more-form-components: 业务表单发布支持 8 类组件，多值组件统一 JSON 存储，subForm 预留 storageMode
+620c7ee change: support-more-form-components
+ef216e9 fix: SearchTable 编辑提交断言对齐 updateApi 第三参（row 乐观锁）
+a22b773 feat: FormRenderer 递归禁用与校验注入
+4084349 feat: 表单设计器支持重新发布
+13b6af8 feat: 后端 dataPicker JSON 数组存储与 maxCount 校验
+035b9da feat: DataPicker 存储升级 JSON 数组并引入 maxCount 配置
+df8cb26 feat: LookupPicker 移除多选，仅支持单选
+337657b feat: dataPicker 纯引用化 + Tag 交互 + 筛选条件/搜索列对齐 LookupPicker + 详情弹窗
+ed718c1 data-picker-v2: archive change
+22f8ac3 chore: data-picker-v2 验证收尾（tasks 状态/验证报告/回顾）
+fb8765e feat: 引用感知 UI（被引用徽标 + 删除/改列风险警告 + 跳转详情）
+008d7a3 feat: DataPicker 配置弹窗升级（过滤条件编辑器/行为开关/dependOn 兼容）
+c3146c0 feat: 数据引用允许新增（DataPickerCreateDialog + 自动选中回填）
+e1db85d feat: DataPicker 运行时升级（filters/级联保留/悬空降级/跳转查看）
+acf09f2 feat: dataPicker filters 引用列发布校验 + 展示缓存语义标注
+6618c4b feat: 业务表单被引用统计接口（referenced-count）
+d2990bb change: data-picker-v2
+f0b56f5 merge: feature/data-picker 合并（查找带回多选映射 + 数据源筛选 + 全文搜索）
+f8a6987 feat: 查找带回搜索框 placeholder 提示搜索字段（多列以 / 分隔）
+f462cb8 feat: 配置弹窗搜索列改为多选（底表模式，逗号分隔产出，默认显示字段）
+6cdb6df feat: keywordColumn 支持逗号分隔多列全文搜索（OR LIKE，单列向后兼容）
+2ea94ac style: 数据筛选取值来源（固定值/表单字段）由 radio 改为下拉框
+d54744e feat: 配置弹窗支持数据源筛选（AND/OR + 静态/动态条件）
+f1636ac feat: LookupPicker 接入数据源筛选（底表 filter JSON + 外部 API 等值展开 + 动态联动）
+a30ebc7 feat: lookupFetch 新增 resolveFilter 筛选解析函数
+078e930 feat: 定义 LookupFilterConfig 类型（静态 + 动态 + AND/OR）
+5682cdf feat: BizDataQueryBuilder 支持结构化 filter（AND/OR + eq/ne/like/in/isEmpty/isNotEmpty）
+1125639 fix: 设计器画布查找带回/数据引用组件改用 FcDesigner.component 双实例注册
+1cc13ad feat: 数据引用组件图标改为链接（fc-icon icon-link）
+8eb280b feat: 查找带回组件图标改为放大镜（fc-icon icon-search）
+9a98ed7 feat: 属性面板配置按钮样式对齐设置事件（蓝色描边占满整行）
+3dfad3b feat: 设计器属性面板数据源配置触发项改为按钮形式（el-button + click）
+aa9f0ff feat: 设计器字典选择器默认 props 增加 mode 与 idField
+d1d7a85 feat: 配置弹窗支持选择模式与 id 存储字段配置
+6484565 feat: LookupPicker 多选输出快照数组并以拼接文本展示
+b11e6ba feat: LookupPicker 单选改为 emit 显示文本并支持 idField 独立存储
+e5ff355 feat: lookupFetch 新增 buildSnapshot 快照构建函数
+79f9d8c feat: LookupPickerProps 增加 idField 并放宽 modelValue 语义
+508261c fix(lookup-picker): 分页基准转换与 fetch 配置模式修复（pageBase 0 起、searchParam/keywordColumn）
+26e0bcc feat(lookup-picker): 设计器可视化配置数据源（fetch 配置对象 + 配置弹窗 + 属性面板入口）
+d471fbf docs(data-picker): 标记全部任务完成
+bffc5df fix(form-designer): 数据引用配置入口改用标准 input+click 事件（属性面板可靠渲染并触发配置弹窗）
+8cc9fff feat(form-designer): data-picker 配置入口移至属性设置栏（触发按钮 + provide/inject）
+c1e7b07 feat(data-picker): 管理页过滤 hidden 列，data-picker 列显示冗余文本
+b8140c4 fix(form-designer): addComponent 补齐 menu/icon/rule 函数，dataPicker 注册 form-create 全局组件
+431fb17 feat(form-designer): dataPicker 组件注册、可视化配置弹窗与列映射两列草案
+4e8b6b6 feat(data-picker): 运行时 DataPicker 组件（选择/回填/级联/回显）
+36287bc feat(data-picker): 发布校验 dataPicker 目标表单与引用列
+cb088f0 feat(data-picker): 批量解析接口 GET /{formKey}/resolve
+9c47507 feat(data-picker): CRUD 引用校验与冗余文本自动维护
+b0a0552 feat(data-picker): 列映射 dataPicker 两列模型（id + hidden 冗余文本）
+fc65cf2 change: data-picker
+75c225b business-form-table: archive change
+e670677 docs(business-form-table): 填写 retrospective
+d459ade style(form): 表单管理页 SearchTable 改普通模式
+1d550d2 fix(business-form-data): BizDataService 唯一构造器注入 handlers，修复多构造器导致 Spring 无法实例化
+6f08f64 feat(business-form-data): BizDataHandler 钩子（按 formKey 注册 beforeCreate/afterCreate/beforeUpdate/beforeDelete）+ CRUD 事务化
+a08c136 fix(form): FormRenderer 透传设计器 option（labelPosition 等），SearchTable 弹窗表单与预览一致
+b6ac4a5 feat(form): SearchTable 行对象透传 updateApi/deleteApi，BizDataListPage 重构复用 SearchTable+formConfig（普通模式）
+437b603 fix(business-form-data): V19 幂等迁移、乐观锁 version 自增、filter JSON 绑定
+7314a23 docs(business-form-table): 标记全部任务完成
+e6fc0ab feat(business-form-data): 业务数据管理页与按 key 查询接口
+56db38c feat(form-designer): 业务表单类型选择与列映射确认
+e916c10 feat(business-form-data): 业务数据 CRUD API
+69388b3 feat(business-form-data): 业务表单发布触发受控 DDL
+93afa6b feat(business-form-data): DdlBuilder 受控 DDL 与 DynamicTableManager
+db44a56 feat(business-form-data): 列映射模型与 ColumnTypeMapper
+8756b60 feat(form-definition): 表单定义支持 type 与 column_config
+3f1622f change: business-form-table
+73a9f14 process-config-and-version: archive change
+42d469a feat: 表单配置标签的编辑表单按钮改为图标按钮
+b4ed376 fix: 部署降级路径比较配置快照（历史数据 hash 为空时配置变化也可部署）
+5f1eb96 feat: 后端加入 spring-boot-devtools 热部署（classpath 变化自动重启）
+9192fb9 fix: 部署变化检测仅使用当前编辑配置（排除历史版本快照）
+52b652f feat: 只读属性面板改用 el-form disabled（tab 可切换、滚动正常、表单配置同样只读）
+6698516 feat: 历史版本只读属性面板复用可视化组件（inert 禁交互）
+7580eb1 fix: ProcessDesigner 补 import computed（readOnly 模式引用未导入）
+484d615 fix: V18 迁移改为条件DDL（兼容 JPA ddl-auto 先行加列）
+cb99219 chore: 标记 tasks.md 全部完成
+cf688a2 feat: 流程历史版本查看（版本历史抽屉+只读设计器）
+346da9a feat: 转办增加权限校验，锁定多实例转办语义
+cebee7b feat: 操作权限解析叠加流程级配置，移除allowForwardSign
+0685cd2 feat: 部署变化检测改为XML+配置整体hash
+1b97de5 feat: 流程历史版本列表与版本编辑器接口
+8099f38 feat: 前端配置层级收敛（流程级操作权限总控+移除转签入口）
+8c15c12 change: process-config-and-version
+8252bc8 form-and-button-rendering: archive change
+6b47010 fix: extractOperations 统一使用 NodeConfig 快照查询
+e7e1898 fix: 已结束流程实例跟踪接口支持历史表回退
+0a06688 feat: 设计器操作配置扩展为 5 个操作项
+921d8f2 feat: 发起页表单应用字段权限
+bc182f6 feat: TaskDetailPage 按钮按 operations 配置动态渲染
+7199fab feat: FormRenderer 支持字段级权限控制
+6b5b9f6 feat: 发起页接口返回 fieldPermissions
+45a2148 feat: TaskDetailVO 新增 fieldPermissions 和 operations 字段
+e02201e feat: 后端新增 extractOperations 操作权限解析
+054b83f feat: 后端新增 extractFormConfig 表单配置解析
+ecafbd3 change: form-and-button-rendering
+d469c7b process-track-prediction: archive change
+153c302 feat: 流程执行预测列表（已完成+活跃+预测节点）并整合流程跟踪页
+0970bad change: process-track-prediction
+24a672e fix: 我发起的列表改为查 act_hi_procinst，去掉实例编号列，新增标题和发起时间
+4d49b47 fix: readonly 改为设置 rule.props.disabled 而非顶层 disabled，form-create 的禁用属性在 props 内层
+8f016a1 fix: readonly 改用 rule.disabled 而非 option.disabled，form-create 初始化后 option 不响应变化
+166cd2a fix: readonly 改用 form-create option.disabled 全局禁用，确保已办详情表单不可编辑
+6a6c4c6 fix: 已办详情页表单字段未设为只读，用户可编辑
+5671a9c fix: 任务处理页表单字段值未显示，发起流程时未持久化到 form_data 表
+c544776 fix: 任务处理页面审批表单未显示，显示的是流程变量
+2458792 fix: 流程中心发起页面表单未关联显示问题
+4040014 feat: 三种多人模式拒绝即终止，依次审批串行派发
+cab4d0b feat: 多人模式增加依次审批选项，radio 改为枚举下拉
+d91661b fix: 部署时忽略 NodeConfig 变更，候选人 Tag 不回显
+e8a830d fix(designer): 配候选人默认触发会签，多实例插入位置违反 BPMN XSD 顺序
+538c725 fix(designer): 发布校验跳过发起人节点，无需配置审批人
+c0af07d fix(flyway): 重命名 V16__clear_form_def_data 为 V17 解决版本冲突
+ef515e9 Merge branch 'feature/process-todo-center'
+fb830a3 chore: archive process-todo-center change, sync specs to main
+8a0ae5f docs: add retrospective for process-todo-center change
+714a8e5 test: sync mocks with runtime changes - latestVersion, findByIds, historic fallback
+f7b62ac fix: runtime bug fixes - serialization, historic task detail, single-select picker, targetNamespace category
+d87246a fix(router): reorder routes to prevent /todo/done matching as :taskId
+71224b1 feat(track-pages): done detail + instance tracking pages
+d925107 feat(task-detail): three-section layout with approve operations and tracking
+5bd7885 feat(process-center): category-grouped process list with search
+2aa2098 refactor(components): extract BpmnViewer, ApprovalTimeline, UserPicker
+fb57cc5 feat(process-start): standalone start page with form and diagram preview
+2325a8c feat(frontend): implement todo center page with 3-tab structure
+c5b2477 fix(remind): use batch query findByTaskIdIn to avoid N+1
+9a96f7d feat(remind): add task remind API with 24h frequency limit
+b63c48a feat(frontend): add API modules for task, remind, history endpoints
+5d654ab feat(history): add approval history API, persist task comments on operations
+c68cb61 form-version-and-designer-crosslink: archive change
+fca0d36 fix: save form option into schema; fix process designer field list parsing for new schema format; hide field key column
+73fbc06 feat(process-instance): support initiator/status/processName filter
+19c6328 fix(task): reuse batch query pattern and add history fallback in getTaskDetail
+d432750 feat(task): return TaskDetailVO with process info and variables
+8e41dac feat(task): add TaskTodoVO/TaskDoneVO with batch related-field queries
+2daa9ad form-version-and-designer-crosslink: V16 清空 wf_form_def 表数据
+4d60e19 feat(process-definition): support categoryId/name/status filter in list API
+100e05a feat(form): 版本号语义改造 — 保存不递增，发布才递增
+ea50218 feat(frontend): 流程设计器跳转表单设计器 + returnTo 回跳
+0ddf050 change: form-version-and-designer-crosslink
+90cb103 feat(db): add wf_task_comment and wf_task_remind tables
+e6802ce change: process-todo-center
+d6e5eed docs(prd): 新增 3.11 流程中心、3.12 待办中心需求
+5e8a74f initiator-node-type: archive change
+7d4f950 feat(initiator-node): 发起节点功能完善
+b9d2621 initiator-node-type: implement initiator node type
+374a0bb change: initiator-node-type
+f12c957 fix(ui): replace deprecated type=text with link attribute
+2bb1649 fix(perm): enforce SearchTable button permission control
+d5cc8ba feat(db): add process:category CRUD permission points
+ddc4a71 fix(flyway): resolve V12 migration version conflict
+6805b6f process-engine-core: archive change
+ae5e751 verify: process-engine-core — 106 tests pass, specs validated
+64e983e feat: process engine core - transfer, reject, add-sign, forward-sign, delegate, variables, highlight, complete-response
+df62b59 change: process-engine-core
+77cd335 docs: update PRD
+3e47651 unify-form-create: archive change
+cd76116 fix: 删除 FormDefinitionRepository 中残留的 formKey 查询方法
+73c7cbc fix: 清理 FormDefinitionServiceTest 中残留的 formKey 测试
+63a7c0d chore: 删除 FormBuilder 及相关代码
+ee4a926 refactor: 迁移 MenuPage 到 form-create rule
+00bfb77 refactor: 迁移 UserPage + RolePage + OrgPage 到 form-create rule
+8d46560 refactor: 迁移 ProcessListPage + FormListPage 到 form-create rule
+714ef62 refactor: 迁移 DictPage 到 form-create rule
+a845fba feat: SearchTable 内部 FormBuilder → FormRenderer
+f9079db refactor: FormConfig 接口 fields → rule
+a923916 Revert "feat: 数据库迁移 — form_definition 增加 form_key 列"
+5574e6a Revert "feat: FormDefinition 增加 formKey 字段"
+deea155 feat: FormRenderer 支持 rule prop + initialValues + getFormData
+1087a85 feat: 创建 FormPageLayout 统一外壳组件
+fe11e76 feat: FcDesigner 注册 LookupPicker 到拖拽面板
+9538315 feat: main.ts 注册 LookupPicker 为 form-create 全局组件
+8f940ed feat: LookupPicker 适配 form-create — returnFields 通过 api.setValue 回填
+3ce913b change: 修订 artifacts — CRUD 表单 schema 改为前端定义,去掉后端 formKey
+ba23a8b feat: 数据库迁移 — form_definition 增加 form_key 列
+74615ae feat: FormDefinition 增加 formKey 字段
+ab1e149 change: unify-form-create
+d731d81 fix: FormBuilder input-number 类型未渲染 + 文档更新
+acdf8ac form-designer: archive change
+cf72526 feat(form-designer): 表单设计器完整实现
+c65f8cc change: form-designer
+3c2c281 fix: backend logic config bug fix + spike tests for process engine
+4e17af4 backend-logic-config: archive change
+3c1b76c feat: add backend logic dispatch executor, event listener, and engine wiring
+9d56f87 fix: URL-encode query params and retry only on network errors in HTTP executor
+879bf6c feat: add HTTP external logic executor
+eff68e4 feat: add Groovy script logic executor
+1693575 feat: add BackendBeanRegistry whitelist for invoke system service
+afd2db0 feat: add backendLogic types to designerStore
+a409f01 change: backend-logic-config
+d9351bf framework-ui-enhancements: archive change
+50f912f docs: update verify, tasks, retrospective for framework-ui-enhancements
+07e7786 fix: reset password and add subcategory buttons use text type to match edit/delete style
+8a8e82c fix: collapsed dashboard icon centering, locked tab shows lock icon
+b22419a fix: breadcrumb no click, tab horizontal layout, collapsed menu centering
+4fbb649 feat: dark mode style adaptation for AdminLayout, LoginPage, global EP overrides
+cb3794e feat: dark mode toggle with Sunny/Moon button
+cab068a feat: tab drag-to-reorder with vuedraggable, dashboard fixed
+4f67aac feat: breadcrumb menu sync and styling
+cf1bb58 feat: login remember username
+90fcf78 feat: tab context menu with close/lock actions, remove dropdown
+9e34fff feat: move collapse button to header, fix collapsed menu centering
+ad4037b chore: add vuedraggable dep, EP dark css, tailwind dark variant
+e9639ba change: framework-ui-enhancements
+afa688f chore: update AGENTS.md
+20b9974 Update files
+19923f2 approver-picker: archive change
+9152873 feat: ApproverPicker tag display + inline removal, dialogHeight prop, fuzzy search (nickname/phone OR), placeholder small font
+d174663 fix: ProcessDesigner validation use userIds/expression instead of value; add paramsSerializer for Spring-compatible array params
+6d35a39 test: ApproverPicker component tests (11 tests) + vitest @ alias config
+e4b44f2 feat: integrate ApproverPicker into UserTaskProperty, replace role type with expression, store userIds instead of value string
+d356548 feat: ApproverPicker component - three-panel transfer layout (org tree + role list + candidate table + selected users)
+70ccba8 feat: UserServiceImpl orgIds/roleIds OR query + GET /users/batch + findByIds with tests
+2dd010e feat: add orgIds/roleIds/SelectedUser/getUserBatch to frontend types and api
+d11f7d8 feat: add orgIds/roleIds to UserQueryRequest
+bc8a4a8 change: approver-picker
+71fbdc5 bpmn-designer-phase-1: archive change
+e9275df refactor: toolbar import/export/save/deploy buttons show icon only with title tooltip
+7874f41 feat: show process key next to name in designer toolbar
+9817bb1 refactor: remove basic info section from ProcessProperty
+c62f56c fix: set nodeType='process' for __PROCESS__ config entry
+e432831 fix: parse nodeType from BPMN XML instead of guessing from configJson
+b61c64b refactor: separate basic info from runtime config in process properties
+09f2857 fix: listen element.click on root to show process properties
+fd1d72d fix: show ProcessProperty when canvas empty area clicked
+58567bd feat: backfill process config from editor data on load
+abd128f fix: read categoryId from process config instead of hardcoded null
+a8cd055 feat: rewrite ProcessProperty with approval policy and number rule sections
+f01676b feat: add ProcessConfigData type and get/setProcessConfig to designerStore
+fdfc620 docs: implementation plan for process properties and approver deduplication
+87e10f6 docs: process properties and approver deduplication design spec
+16e73f9 fix: SearchTable handleCreate now calls beforeCreate callback
+889583a fix: make process formConfig reactive so category tree-select works
+0f93600 fix: make categoryFormConfig reactive so tree-select data updates
+6107298 feat: add 'add child category' icon button in category list actions
+dfad58c refactor: integrate category management into ProcessListPage with SearchTable
+0f651d2 fix: category menu path needs leading slash like other menus
+b7643e8 feat: add process category menu and move route under AdminLayout
+2d81281 fix: block deletion for any previously deployed process (deployId != null)
+eb901fe feat: prevent deletion of deployed processes
+3e7b868 style: shrink search toolbar icon buttons (small size, tighter gap)
+7050324 fix: remove validation from save, only validate on deploy
+2f2fc0b feat: enhance deploy validation (frontend + backend)
+5f47f23 fix: simplify V10 to only add deployed_xml column
+fc6c2f9 fix: make V10 migration idempotent for ddl-auto=update conflict
+0739de7 refactor: rename column key -> process_key to avoid MySQL reserved word
+35f92d4 feat: add V10 flyway migration for deployed_xml column
+9f76c35 feat: add deployedXml field for accurate deploy unchanged check
+7349972 fix: remove save unchanged check, add deploy unchanged check
+e8d877d fix: deploy proceeds when save reports unchanged; save actual process key
+f600524 fix: revert to fixed width with accurate calculation
+e8c61e8 style: change action column to auto-width (min-width instead of fixed width)
+b2f5721 style: further reduce action column width (13px per char, 12px padding)
+821a412 fix: adjust text button width calculation (14px per char)
+73772d1 style: further reduce action column width
+12c673d style: recalculate action column width for compact buttons
+3738472 style: compact action buttons (remove margin, reduce padding)
+5d6a6a1 style: add button type for deploy (primary) and delete (danger)
+accc5cc fix: el-tooltip nested in el-popconfirm blocks confirm popup
+a80d2cf fix: delete button hidden in dropdown, set maxVisibleButtons=4
+7735d28 fix: remove updatedAt column from process list
+a556bef feat: three-state status (DRAFT/MODIFIED/DEPLOYED) + version sync
+f18d0b2 feat: track process modification state via lastDeployedAt
+fe4ab9c fix(migration): make V8 idempotent for JPA ddl-auto
+70be852 fix: surface Flowable deploy error details to frontend
+cd092c2 fix(designer): move gateway help icon to divider label
+556a71d feat(designer): help text as superscript ? icon with tooltip
+b7c2c8a feat: add process management menu with 3 sub-pages, rewrite ProcessListPage with SearchTable
+8f05f74 fix(designer): cleanup orphan businessObjects before XML export
+6894bfd fix(designer): validate XML before save/deploy — block duplicate start events
+75aa0d6 fix(designer): prevent duplicate StartEvent on drop
+1cd735c feat(designer): clearer undo/redo icons, minimap toggle as text
+3cd06ea feat(designer): VS Code style collapsible side panels
+b98ed0a feat(designer): collapsible node palette and property panel
+e0abdb8 feat(designer): remove boundary event from palette
+8779686 fix(designer): move summaries to /deployed-processes base path
+de916b4 fix(designer): summaries 500 — drop .active() filter, add debug logs
+d2dfb55 fix(designer): call activity summaries 404 — avoid /{id} path conflict
+df20f2e feat(designer): implement complete call activity (subflow) support
+145f279 feat(designer): remove intermediate event from palette
+42fb22c feat(designer): use bpmn-font icons in NodePalette to match context-pad
+d4a6489 fix(designer): minimap click offset — drop transform:scale, use fixed size
+74b9d8b fix(designer): force minimap to bottom-right with top:auto override
+10ff5fe fix(designer): hide minimap toggle button and container when closed
+1d5a4ca fix(properties): reload config on node switch between same type
+fbbd95f feat(designer): minimap toggle switch in toolbar
+1e9e1ce fix(designer): minimap CSS, hide bpmn.io logo, auto-save properties
+e5f868f refactor(designer): replace default context-pad via DI module
+677e312 feat(designer): add user-task/service-task/gateways to context-pad
+4108f96 fix(designer): disable built-in palette via override module
+4c3cb1a style(designer): hide built-in bpmn-js palette, keep custom NodePalette
+ee87f08 fix(designer): import bpmn-js base CSS for context-pad and palette
+8af98ec fix(designer): use modeling.createShape for drop instead of create.start
+31635a7 fix(entity): specify LONGTEXT columnDefinition for bpmn_xml
+8f86d2a fix(jpa): enable globally_quoted_identifiers for MySQL reserved words
+86726d0 fix(http): add X-Tenant-Id header to all requests
+575808a fix(flyway): quote reserved word 'key' in V6 migration
+dd4cef6 feat(bpmn-designer): implement BPMN designer phase 1
+a5b0f75 change: bpmn-designer-phase-1
+daaeae6 core-engine-integration: implement core engine integration changes
+1239a26 core-engine-integration: archive change
+ae2f7e6 upgrade: Spring Boot 4.0.7 + Flowable 8.0.0 + Spring Modulith 2.0.0
+f0a6706 refactor: migrate to Spring Modulith modular monolith
+7c4881c refactor: separate backend and frontend directories
+56669f8 feat: implement workflow platform core engine
+0d9f4bc change: core-engine-integration
+767043e chore: initial project setup
+
+stderr:
+From https://github.com/liaoweimin74/workflow
+ * [new branch]      feature/array-value-text-columns -> origin/feature/array-value-text-columns
+ * [new branch]      feature/process-engine-core -> origin/feature/process-engine-core
+ * [new branch]      feature/vtj-integration -> origin/feature/vtj-integration
+   1c62d1f..282bbae  main                    -> origin/main

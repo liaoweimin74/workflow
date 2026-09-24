@@ -1400,3 +1400,18 @@ Stage Summary:
 - Java 端无编译环境仅静态审查，建议构建环境 `mvn -o compile` 回归三场景（FORM create 草稿/FORM update 换绑端点重建/params=null 保留）。
 - FormJoinConfig 拖拽把手列与 el-checkbox 属性列并列宽度略紧（36px 把手列已留）；如需更宽松可后续微调列宽。
 - push 恢复：本次会话已在 workflow_lowcode 内重建 git 仓库（沙箱重置后原提交误入外层 checkpoint 仓库），从 origin/main 软重置+恢复 267 个丢失文件后干净提交推送（47fd125）。
+
+---
+Task ID: 52-push-verify
+Agent: Z.ai Code (main)
+Task: 用户下达 push 指令——验证并完成推送到 GitHub
+
+Work Log:
+- 排查外层沙箱仓库（/home/z/my-project）：git push 被拒（non-fast-forward），fetch 后发现与远程历史完全无关（沙箱重置后外层被重建为 checkpoint 仓库，workflow 项目嵌套在 workflow_lowcode/ 子目录）
+- 逐文件核对本地 workflow_lowcode 子树 vs 远程根树：1619 文件为纯权限差异（755 vs 644），核心修复文件（join-sql-generator.ts / biz-data-support.ts / data-source-write.service.ts / FormJoinConfig.vue / http.ts / DataSourceListPage.vue / Java 三件 / worklog.md）内容全部一致（0 insertions/deletions）
+- 定位到真正的项目仓库 workflow_lowcode/.git：main=282bbae 与 origin/main 完全同步（rev-list left-right 0/0），git ls-remote 实证 GitHub refs/heads/main=282bbae——前序会话已完成推送：47fd125（方案A）→ c5cd45d（Task 52 双段保存+拖拽排序）→ 282bbae（质量收敛+全量测试套件）
+- 安全加固：移除外层沙箱仓库误配置的 origin（其 main 含门户/上传产物等全量文件，误推送将覆盖真实仓库结构）；真实推送通道保留在 workflow_lowcode 嵌套仓库（origin 含 x-access-token 凭据，fetch/ls-remote 实测可用）
+
+Stage Summary:
+- push 已闭环：远程 main=282bbae 含方案A修复 + Task 52 两项新任务 + 质量收敛全部提交；本地/远程零差异，无遗留待推内容
+- 风险消除：外层 checkpoint 仓库已与 GitHub 解绑，杜绝误覆盖；后续 push 一律在 workflow_lowcode 内执行

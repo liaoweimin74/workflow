@@ -16,12 +16,13 @@
           </el-button>
         </template>
         <template #type="{ row }">
-          <el-tag :type="typeTagType(row.type)">
+          <!-- 系统内建行：类型列只显示「内建」（预置 SYSTEM 数据源无需再暴露「系统结构」类型名） -->
+          <el-tooltip v-if="isBuiltIn(row)" content="系统内建数据源，随迁移脚本自动预置，不可编辑/删除/禁用" placement="top">
+            <el-tag type="success">内建</el-tag>
+          </el-tooltip>
+          <el-tag v-else :type="typeTagType(row.type)">
             {{ typeLabel(row.type) }}
           </el-tag>
-          <el-tooltip v-if="isBuiltIn(row)" content="系统内建数据源，随应用启动自动预置，不可编辑/删除/禁用" placement="top">
-            <el-tag class="builtin-tag" size="small" type="success" effect="plain" round>内建</el-tag>
-          </el-tooltip>
         </template>
         <template #bound="{ row }">
           <span>{{ row.formKey || row.sourceKey || '—' }}</span>
@@ -1573,7 +1574,7 @@ const actionButtons: ActionButton[] = [
 ]
 
 // ========== 工具函数 ==========
-/** 是否系统内建数据源（seeder 预置，tenant_id 固定为保留域 system；后端同步保护写操作）。 */
+/** 是否系统内建数据源（V39 迁移脚本预置，tenant_id 固定为保留域 system；后端同步保护写操作）。 */
 function isBuiltIn(row: any): boolean {
   return row?.tenantId === 'system'
 }
@@ -1824,9 +1825,5 @@ onMounted(async () => {
   border-top: 1px solid #e5e7eb;
   margin-top: 16px;
   flex-shrink: 0;
-}
-/* 类型列「内建」标记：与类型 tag 同行、左留 6px 间距 */
-.builtin-tag {
-  margin-left: 6px;
 }
 </style>

@@ -207,10 +207,12 @@ export default {
             return this.designer.setupState.t;
         },
         api() {
-            return this.designer.props.config?.ai?.api || 'https://api.form-create.com/ai/v2/chat/form';
+            // 平台内置模型端点（Task 45：替代 form-create 官方外部云服务）
+            return this.designer.props.config?.ai?.api || '/api/v1/ai/fc-chat';
         },
         token() {
-            let token = this.designer.props.config?.ai?.token || '';
+            // 默认携带平台登录 token（本地端点需通过 JwtAuthGuard）
+            let token = this.designer.props.config?.ai?.token || localStorage.getItem('access_token') || '';
             if (token && token.indexOf('Bearer') === -1) {
                 token = `Bearer ${token}`;
             }
@@ -273,6 +275,7 @@ export default {
                     headers: {
                         'Content-Type': 'application/json',
                         Authorization: this.token,
+                        'X-Tenant-Id': 'default',
                     },
                     body: JSON.stringify({
                         ui: 'element-plus',

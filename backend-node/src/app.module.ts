@@ -7,6 +7,7 @@ import { DatabaseModule } from './framework/database/database.module'
 import { JwtAuthGuard } from './framework/security/jwt-auth.guard'
 import { SecurityModule } from './framework/security/security.module'
 import { EngineModule } from './engine/engine.module'
+import { AiModule } from './ai/ai.module'
 import { NotificationModule } from './notification/notification.module'
 import { SystemModule } from './system/system.module'
 
@@ -23,7 +24,7 @@ import { SystemModule } from './system/system.module'
  * SecurityFilterChain 先于 TenantInterceptor 的顺序一致。
  */
 @Module({
-  imports: [DatabaseModule, SecurityModule, SystemModule, NotificationModule, EngineModule],
+  imports: [DatabaseModule, SecurityModule, SystemModule, NotificationModule, EngineModule, AiModule],
   controllers: [HealthController, SystemInternalController],
   providers: [
     // 全局认证守卫：默认要求认证，例外由 @Public() 标记

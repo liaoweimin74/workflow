@@ -293,7 +293,8 @@ interface DataSourceSaveRequest {
   type?: string | null
   formKey?: string | null
   sourceKey?: string | null
-  params?: string | null
+  // HTTP body 里可能是原生 JSON 对象（客户端未序列化）；服务层 normalizeParamsRaw 统一规范化
+  params?: unknown
 }
 
 /** 数据库结构只读端点（对齐 Java `DbSchemaController`，前缀 `/api/v1/data-sources/db`）。 */@Controller('api/v1/data-sources/db')

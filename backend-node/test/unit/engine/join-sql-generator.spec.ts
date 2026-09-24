@@ -35,13 +35,14 @@ const JOINS: JoinConfig[] = [
   },
 ]
 
+// 虚拟列 ref 对齐 buildJoinColumns 新版生成形态：`${组别名}.${joinField}`（j1..jN）
 const COLUMNS: QueryColumn[] = [
   { key: 'order_no', ref: 'm.order_no', columnType: 'VARCHAR', sortable: true, filterable: true },
   { key: 'amount', ref: 'm.amount', columnType: 'DECIMAL', sortable: true, filterable: true },
   { key: 'customer_id', ref: 'm.customer_id', columnType: 'JSON', sortable: false, filterable: true },
   {
     key: 'customer_name',
-    ref: 'c.name',
+    ref: 'j1.name',
     columnType: 'VARCHAR',
     sortable: true,
     filterable: true,
@@ -96,15 +97,30 @@ function select(
 }
 
 describe('JoinSqlGenerator.buildSelect', () => {
-  it('主表别名 m、虚拟列 AS、LEFT JOIN 与 JSON 外键提取、缺省排序 created_at desc', () => {
+  it('主表别名 m、组别名 j1、虚拟列 AS、LEFT JOIN ON 租户过滤与 JSON 外键提取、缺省排序 created_at desc', () => {
     const out = select()
     expect(out.sql).toBe(
-      'SELECT m.*, c.name AS customer_name FROM wf_biz_order m' +
-        ' LEFT JOIN wf_biz_customer c ON c.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,\'$[0]\'))' +
+      'SELECT m.*, j1.name AS customer_name FROM wf_biz_order m' +
+        " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]')) AND j1.tenant_id = ?" +
         ' WHERE m.tenant_id = ?' +
         ' ORDER BY m.created_at DESC LIMIT ? OFFSET ?',
     )
-    expect(out.params).toEqual(['default', 10, 0])
+    // 参数顺序：JOIN 租户参（组序）→ 主租户 → LIMIT/OFFSET
+    expect(out.params).toEqual(['default', 'default', 10, 0])
+  })
+
+  it('同连接条件分组合并为一条 LEFT JOIN，组内多个虚拟列；输入 alias 被忽略', () => {
+    const grouped: JoinConfig[] = [
+      { ...JOINS[0], virtualKey: 'customer_name' }, // alias 'c' 被忽略
+      { ...JOINS[0], alias: 'c2', joinField: 'created_at', virtualKey: 'customer_created' },
+    ]
+    const out = select({ joins: grouped })
+    // 只有一条 LEFT JOIN（无 j2），组内两个 SELECT 虚拟列
+    expect(out.sql).not.toContain('j2')
+    expect(out.sql).toContain('LEFT JOIN wf_biz_customer j1 ON j1.id =')
+    expect(out.sql).toContain('j1.name AS customer_name')
+    expect(out.sql).toContain('j1.created_at AS customer_created')
+    expect(out.params).toEqual(['default', 'default', 10, 0])
   })
 
   it('非 JSON 关联列直接等值连接；多个 JOIN 按声明顺序', () => {
@@ -120,22 +136,22 @@ describe('JoinSqlGenerator.buildSelect', () => {
       },
     ]
     const out = select({ joins: plain })
-    expect(out.sql).toContain('LEFT JOIN wf_biz_customer c ON c.id = m.order_no')
+    expect(out.sql).toContain('LEFT JOIN wf_biz_customer j1 ON j1.id = m.order_no AND j1.tenant_id = ?')
     expect(out.sql).toContain(
-      'LEFT JOIN wf_biz_user u ON u.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,\'$[0]\'))',
+      "LEFT JOIN wf_biz_user j2 ON j2.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]')) AND j2.tenant_id = ?",
     )
-    expect(out.sql).toContain('SELECT m.*, c.name AS customer_name, u.name AS owner_name')
+    expect(out.sql).toContain('SELECT m.*, j1.name AS customer_name, j2.name AS owner_name')
   })
 
   it('分页：offset = page * size；size<=0 时不加 LIMIT/OFFSET', () => {
-    expect(select({ page: 2, size: 20 }).params).toEqual(['default', 20, 40])
+    expect(select({ page: 2, size: 20 }).params).toEqual(['default', 'default', 20, 40])
     const all = select({ size: 0 })
     expect(all.sql).not.toContain('LIMIT')
-    expect(all.params).toEqual(['default'])
+    expect(all.params).toEqual(['default', 'default'])
   })
 
   it('排序：虚拟列走 ref，内置列走主表别名，方向白名单', () => {
-    expect(select({ sort: 'customer_name' }).sql).toContain('ORDER BY c.name DESC')
+    expect(select({ sort: 'customer_name' }).sql).toContain('ORDER BY j1.name DESC')
     expect(select({ sort: 'id', order: 'asc' }).sql).toContain('ORDER BY m.id ASC')
     expect(select({ sort: 'created_at' }).sql).toContain('ORDER BY m.created_at DESC')
     expect(messageOf(() => select({ sort: 'secret' }))).toBe('该列不可排序: secret')
@@ -152,7 +168,7 @@ describe('JoinSqlGenerator.buildSelect', () => {
 
     const plain = select({ filters: { order_no: 'A001' } })
     expect(plain.sql).toContain('AND m.order_no = ?')
-    expect(plain.params).toEqual(['default', 'A001', 10, 0])
+    expect(plain.params).toEqual(['default', 'default', 'A001', 10, 0])
 
     // 值 null 被跳过，但列名仍然过白名单
     const skipped = select({ filters: { order_no: null } })
@@ -210,8 +226,8 @@ describe('JoinSqlGenerator.buildSelect', () => {
     expect(one.params).toContain('%kw%')
 
     const many = select({ keyword: 'kw', keywordColumn: 'order_no, customer_name' })
-    expect(many.sql).toContain('AND (m.order_no LIKE ? OR c.name LIKE ?)')
-    expect(many.params).toEqual(['default', '%kw%', '%kw%', 10, 0])
+    expect(many.sql).toContain('AND (m.order_no LIKE ? OR j1.name LIKE ?)')
+    expect(many.params).toEqual(['default', 'default', '%kw%', '%kw%', 10, 0])
 
     expect(messageOf(() => select({ keyword: 'kw', keywordColumn: '' }))).toBe(
       '关键词匹配列不能为空',
@@ -238,19 +254,20 @@ describe('JoinSqlGenerator.buildCount', () => {
     const out = buildCount('wf_biz_order', 'default', JOINS, COLUMNS, { order_no: 'A' }, 'kw', 'order_no')
     expect(out.sql).toBe(
       'SELECT COUNT(1) FROM wf_biz_order m' +
-        ' LEFT JOIN wf_biz_customer c ON c.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,\'$[0]\'))' +
+        " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]')) AND j1.tenant_id = ?" +
         ' WHERE m.tenant_id = ? AND m.order_no = ? AND m.order_no LIKE ?',
     )
-    expect(out.params).toEqual(['default', 'A', '%kw%'])
+    expect(out.params).toEqual(['default', 'default', 'A', '%kw%'])
   })
 })
 
 describe('JoinSqlGenerator.validate / validateTargets', () => {
-  it('别名格式与重复、必填字段、虚拟列重复与主表冲突', () => {
-    expect(messageOf(() => validate([{ ...JOINS[0], alias: '1c' }], null))).toBe(
-      '关联别名非法: 1c',
+  it('必填字段、虚拟列重复与主表冲突（alias 由 groupJoins 自动分配，输入值忽略不校验）', () => {
+    // alias 非法/重复不再报错——生成器按组自动分配 j1..jN，输入 alias 存量兼容忽略
+    expect(() => validate([{ ...JOINS[0], alias: '1c' }], null)).not.toThrow()
+    expect(messageOf(() => validate([JOINS[0], { ...JOINS[0] }], null))).toBe(
+      '虚拟列 key 重复: customer_name',
     )
-    expect(messageOf(() => validate([JOINS[0], { ...JOINS[0] }], null))).toBe('关联别名重复: c')
     expect(messageOf(() => validate([{ ...JOINS[0], targetFormKey: ' ' }], null))).toBe(
       '关联目标表不能为空',
     )

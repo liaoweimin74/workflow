@@ -61,13 +61,14 @@ describe('schema 迁移', () => {
     const result = await migrator.run()
 
     // 用「目录里的迁移文件数」派生期望值，避免硬编码随文件增删而漂移。
-    // 当前实际为 37 个：V1 + V2..V31（其中 V10 不存在，共 29 个）
+    // 当前实际为 38 个：V1 + V2..V31（其中 V10 不存在，共 29 个）
     //   + V32 引擎运行时表 + V33 target_namespace + V34 微秒精度
     //   + V35 对齐 Hibernate 补出来的表与列 + V36 委派侧表
-    //   + V37 实例乐观锁 lock_version + V38 修 wf_node_config 唯一键 = 37。
+    //   + V37 实例乐观锁 lock_version + V38 修 wf_node_config 唯一键
+    //   + V39 内建数据源预置（seeder 迁入，双端同源）= 38。
     // 这里显式断言一个数值，是为了在文件被误删时能立刻发现（派生值单独用会掩盖丢失）。
     const expectedCount = discoverMigrations(MIGRATIONS_DIR).length
-    expect(expectedCount).toBe(37)
+    expect(expectedCount).toBe(38)
     expect(result.applied.length).toBe(expectedCount)
     expect(result.skipped).toEqual([])
 

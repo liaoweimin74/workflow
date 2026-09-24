@@ -19,7 +19,10 @@ const MIGRATIONS_DIR = join(__dirname, '..', '..', '..', 'migrations')
  */
 describe('computeChecksum（Flyway 兼容的 CRC32）', () => {
   const flywayChecksums: Array<[string, number]> = [
-    ['V2__init_data.sql', 2058847229],
+    // V2 历史上发生过文件漂移，库侧 flyway_schema_history 已重定基准（实测
+    // `SELECT checksum FROM flyway_schema_history WHERE version='2'` = 1139911049，
+    // 与当前文件 computeChecksum 一致，Node migrator 运行时校验同值通过）。
+    ['V2__init_data.sql', 1139911049],
     ['V3__grant_admin_menus.sql', 810571147],
     ['V6__create_wf_process_draft.sql', 664068881],
     ['V31__add_source_key_unique.sql', -996958868],

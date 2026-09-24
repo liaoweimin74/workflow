@@ -160,8 +160,8 @@ const nodeTypeLabel = computed(() => {
 
 <style scoped>
 .property-panel {
-  background: #fff;
-  border-left: 1px solid var(--color-industrial-300, #b9b9f9);
+  background: var(--el-bg-color);
+  border-left: 1px solid var(--el-border-color-light);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -276,7 +276,7 @@ const nodeTypeLabel = computed(() => {
 
 /* 属性表单在浅底色上以白卡片呈现，结构更清晰 */
 .panel-body :deep(.el-form) {
-  background: #fff;
+  background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-lighter, #eef1fc);
   border-radius: 10px;
   padding: 4px 12px 12px;

@@ -7,7 +7,7 @@
     background-color: #FFF;
     --fc-drag-empty: "拖拽左侧列表中的组件到此处";
     --fc-child-empty: "点击右下角 \e789  按钮添加一列";
-    --fc-tool-border-color: #2E73FF;
+    --fc-tool-border-color: var(--el-color-primary);
 }
 
 ._fc-designer .CodeMirror-placeholder,
@@ -56,7 +56,7 @@
 }
 
 ._fc-l-menu-item.active {
-    color: #2E73FF;
+    color: var(--el-color-primary);
 }
 
 ._fc-l-menu-form {
@@ -68,13 +68,13 @@
 }
 
 ._fc-l-menu-item i:hover {
-    color: #2E73FF;
+    color: var(--el-color-primary);
 }
 
 ._fc-l-menu-item .el-badge__content {
     --el-badge-size: 15px;
     --el-badge-padding: 4px;
-    background-color: #2E73FF;
+    background-color: var(--el-color-primary);
 }
 
 ._fc-l-label {
@@ -178,8 +178,11 @@
 }
 
 ._fc-r {
-    --el-color-primary: #2E73FF;
+    /* 原 --el-color-primary: #2E73FF 硬编码已移除：
+       让右侧属性面板继承应用的四态主色（青墨/经典 × 明暗），否则设计器内强制蓝色（Task 39） */
 }
+
+
 
 ._fc-r-tab-props {
     padding: 0 20px;
@@ -249,7 +252,7 @@
 }
 
 ._fc-r-name-input .icon-group:hover {
-    color: #2E73FF;
+    color: var(--el-color-primary);
 }
 
 ._fc-r-tab-props > ._fd-config-item{
@@ -308,7 +311,7 @@
 }
 
 ._fc-tree-node.active, ._fc-tree-node.active .icon-more {
-    color: #2E73FF;
+    color: var(--el-color-primary);
 }
 
 ._fc-tree-label {
@@ -357,8 +360,8 @@
 }
 
 ._fc-l ._fc-l-tab.active {
-    color: #409EFF;
-    border-bottom: 2px solid #409EFF;
+    color: var(--el-color-primary);
+    border-bottom: 2px solid var(--el-color-primary);
 }
 
 ._fc-l-group {
@@ -418,7 +421,7 @@
 }
 
 ._fc-l-item:hover {
-    background: #2E73FF;
+    background: var(--el-color-primary);
     color: #fff;
 }
 
@@ -448,7 +451,7 @@
 }
 
 ._fc-m-tools-l .devices .fc-icon.active {
-    color: #2E73FF;
+    color: var(--el-color-primary);
 }
 
 ._fc-m-tools-l .devices .fc-icon + .fc-icon {
@@ -505,7 +508,7 @@
 }
 
 ._fc-m-tools ._fd-input-btn .is-checked .el-switch__action {
-    --el-color-white: #2E73FF;
+    --el-color-white: var(--el-color-primary);
     left: calc(100% - 20px);
 }
 
@@ -571,8 +574,8 @@
 }
 
 ._fc-r ._fc-r-tab.active {
-    color: #409EFF;
-    border-bottom: 2px solid #409EFF;
+    color: var(--el-color-primary);
+    border-bottom: 2px solid var(--el-color-primary);
 }
 
 ._fc-m-con {
@@ -778,9 +781,9 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    background: #2E73FF33;
+    background: color-mix(in srgb, var(--el-color-primary) 20%, transparent);
     border-radius: 10px;
-    color: #2E73FF;
+    color: var(--el-color-primary);
     cursor: pointer;
 }
 
@@ -833,4 +836,120 @@
 
 ._fc-designer .CodeMirror-placeholder, ._fd-config-dialog .CodeMirror-placeholder, ._fd-struct-con .CodeMirror-placeholder {
     color: #aaaaaa !important;
+}
+
+/* ============================================================
+ * 四态主题适配覆盖层（Task 39）
+ * 上方 vendor 原始样式为亮色固定值；此处统一改写为语义变量，
+ * 随「青墨/经典 × 明暗」四态自动切换。仅覆盖颜色，不动布局。
+ * ============================================================ */
+
+/* 设计器根容器 + 三栏表面 */
+._fc-designer {
+    background-color: var(--el-bg-color);
+    color: var(--el-text-color-regular);
+    --fc-tool-border-color: var(--el-color-primary);
+}
+
+._fc-l, ._fc-m, ._fc-r {
+    border-top: 1px solid var(--el-border-color-light);
+}
+
+._fc-l, ._fc-m, ._fc-r,
+._fc-l > div,
+._fc-m > .draggable-drag,
+._fc-r > div {
+    background-color: var(--el-bg-color);
+}
+
+/* 左侧组件库菜单 */
+._fc-l-menu-form {
+    border-bottom: 1px solid var(--el-border-color-light);
+}
+._fc-l-menu-list .el-tree-node__content > .el-tree-node__expand-icon,
+._fc-l .el-tree-node__content > .el-tree-node__expand-icon {
+    color: var(--el-text-color-regular);
+}
+._fc-l-menu-item,
+._fc-l-menu-list .el-tree-node__label {
+    color: var(--el-text-color-regular);
+}
+
+/* CodeMirror 代码编辑区（事件/校验配置） */
+._fc-designer .CodeMirror-gutters, ._fd-fn .CodeMirror-gutters, ._fd-config-dialog .CodeMirror-gutters {
+    background-color: var(--el-fill-color-light);
+    border-right-color: var(--el-border-color-light);
+}
+._fc-designer .CodeMirror-scroll, ._fd-fn .CodeMirror-scroll, ._fd-config-dialog .CodeMirror-scroll {
+    background-color: var(--el-fill-color-blank);
+    color: var(--el-text-color-regular);
+    caret-color: var(--el-text-color-regular);
+}
+
+/* 中间画布区：拖拽占位 / 空态 / 画布底 */
+._fc-m-drag, .draggable-drag {
+    background: var(--el-bg-color);
+}
+._fd-draggable-drag.drag-holder {
+    background-color: var(--el-fill-color-light);
+}
+._fc-m .draggable-drag > div,
+._fc-m .fc-shell {
+    background-color: var(--el-bg-color);
+}
+
+/* 右侧属性面板：分区标题 / 表单容器 */
+._fc-r-tab-props,
+._fc-r .el-form-item__label {
+    color: var(--el-text-color-regular);
+}
+._fc-r > .el-tabs, ._fc-r-panel, ._fc-r .fd-config-container,
+._fc-r ._fc-form-item, ._fc-r div {
+    background-color: transparent;
+}
+
+/* 工具条 / 分隔线 / 拖拽手柄 */
+._fc-designer [class*="tool"] {
+    border-color: var(--el-border-color-light);
+}
+._fc-m-tools {
+    border-bottom: 1px solid var(--el-border-color-light);
+    background-color: var(--el-bg-color);
+}
+._fc-designer .divider, ._fc-designer hr {
+    background-color: var(--el-border-color-lighter);
+}
+._fc-designer .drag-handle, ._fc-designer .drag-btn {
+    background-color: var(--el-border-color-dark);
+}
+
+/* 结构浮层 / 弹窗内表面 */
+._fd-pop, ._fc-designer .pop,
+._fd-config-dialog .el-dialog {
+    background-color: var(--el-bg-color-overlay);
+    color: var(--el-text-color-regular);
+}
+
+/* 通用文字色兜底 */
+._fc-designer,
+._fc-designer p, ._fc-designer span, ._fc-designer label, ._fc-designer div {
+    color: inherit;
+}
+._fc-designer [style*="color: #262626"],
+._fc-designer [style*="color:#262626"] {
+    color: var(--el-text-color-regular) !important;
+}
+
+/* ============================================================
+ * 四态主题适配补充（Task 39）：左侧组件库白底项
+ * ============================================================ */
+._fc-l-item,
+._fc-m .form-create ._fc-l-item {
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-regular);
+    border-color: var(--el-border-color-lighter);
+}
+._fc-l-item:hover {
+    background: var(--ds-selected);
+    color: var(--el-color-primary);
 }

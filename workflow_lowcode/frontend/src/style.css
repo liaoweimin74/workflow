@@ -104,6 +104,15 @@ html, body, #app {
 :root {
   /* 主色族 = industrial 阶 */
   --brand: #0f766e;            /* 主色 = industrial-600 */
+
+  /* 设计器语义令牌（--ds-*）：此前从未定义导致全部落到靛蓝 fallback，
+     现按态定义 —— 流程设计器 NodePalette/PropertyPanel 随四态自适应（Task 39） */
+  --ds-industrial-50: color-mix(in srgb, var(--el-color-primary) 8%, var(--el-bg-color));
+  --ds-industrial-200: color-mix(in srgb, var(--el-color-primary) 30%, transparent);
+  --ds-industrial-500: var(--el-color-primary);
+  --ds-industrial-600: color-mix(in srgb, var(--el-color-primary) 80%, #000);
+  --ds-selected: color-mix(in srgb, var(--el-color-primary) 12%, var(--el-bg-color));
+
   --brand-rgb: 15 118 110;
   --brand-mid: #14a08f;        /* industrial-500 */
   --brand-mid-rgb: 20 160 143;
@@ -326,12 +335,23 @@ html, body, #app {
 /* ====== 暗色模式全局适配（石墨松绿 graphite-teal） ====== */
 /* 注意：必须用 html.dark（特异性 0,1,1）才能压过 Element 暗色主题的 html.dark 默认蓝 */
 html.dark {
+  /* 设计器语义令牌（暗色 verdant）：文字用亮青、洗底用半透明主色提高可读性 */
+  --ds-industrial-50: color-mix(in srgb, var(--el-color-primary) 12%, var(--el-bg-color));
+  --ds-industrial-200: color-mix(in srgb, var(--el-color-primary) 38%, transparent);
+  --ds-industrial-500: var(--el-color-primary);
+  --ds-industrial-600: color-mix(in srgb, var(--el-color-primary) 70%, #fff);
+  --ds-selected: color-mix(in srgb, var(--el-color-primary) 16%, var(--el-bg-color));
+
   --el-color-primary: #2dd4bf;
+  /* 语义表格悬浮令牌也必须给暗色值：.el-table 元素级规则（亮色段）定义了
+     --el-table-row-hover-bg-color: var(--table-row-hover)，元素自身定义压过祖先继承，
+     不重定义此令牌的话暗色下悬浮仍是近白色 #f0f7f5，与浅色文字对比度极差 */
+  --table-row-hover: #223029;
   --el-color-primary-light-3: #5ee0d0;
   --el-color-primary-light-5: #86e8db;
   --el-color-primary-light-7: #aef0e6;
-  --el-color-primary-light-8: #c8f4ed;
-  --el-color-primary-light-9: #dff8f3;
+  --el-color-primary-light-8: color-mix(in srgb, var(--el-color-primary) 18%, var(--el-bg-color));
+  --el-color-primary-light-9: color-mix(in srgb, var(--el-color-primary) 10%, var(--el-bg-color));
   --el-color-primary-dark-2: #14b8a6;
   --el-bg-color: #181d1b;
   --el-bg-color-overlay: #1f2522;
@@ -429,6 +449,12 @@ html.dark {
  * html[data-theme='classic']，色值来源：Task 16 备份点旧版 style.css，逐项对齐
  * ============================================================ */
 html[data-theme='classic'] {
+  /* 设计器语义令牌（亮色 classic）：沿用原靛蓝阶值（与历史 fallback 一致） */
+  --ds-industrial-50: #f3f3fe;
+  --ds-industrial-200: #d6d6fd;
+  --ds-industrial-500: #5755ee;
+  --ds-industrial-600: #5452d3;
+  --ds-selected: #e9eaff;
   /* Tailwind token 值回到经典靛蓝（token 名不变，全站类名自动变色） */
   --color-industrial-50: #f3f3fe;
   --color-industrial-100: #e9eaff;
@@ -518,11 +544,19 @@ html[data-theme='classic'] body {
 
 /* 经典暗色（深藏青） */
 html.dark[data-theme='classic'] {
+  /* 设计器语义令牌（暗色 classic）：亮靛蓝文字 + 半透明洗底 */
+  --ds-industrial-50: color-mix(in srgb, var(--el-color-primary) 14%, var(--el-bg-color));
+  --ds-industrial-200: color-mix(in srgb, var(--el-color-primary) 40%, transparent);
+  --ds-industrial-500: #9c9ef5;
+  --ds-industrial-600: #b6b7f8;
+  --ds-selected: color-mix(in srgb, var(--el-color-primary) 20%, var(--el-bg-color));
+
+  --table-row-hover: #232950;
   --el-color-primary: #7c7ff0;
   --el-color-primary-light-3: #999bf4;
   --el-color-primary-light-5: #b0b2f7;
   --el-color-primary-light-7: #c8c9fa;
-  --el-color-primary-light-9: #e0e1fc;
+  --el-color-primary-light-9: color-mix(in srgb, var(--el-color-primary) 12%, var(--el-bg-color));
   --el-color-primary-dark-2: #6365c2;
   --el-bg-color: #1b2040;
   --el-bg-color-overlay: #222750;

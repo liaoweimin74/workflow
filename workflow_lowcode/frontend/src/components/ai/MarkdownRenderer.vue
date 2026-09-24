@@ -27,7 +27,7 @@ function onClick(event: MouseEvent) {
 .ai-markdown {
   font-size: 13px;
   line-height: 1.6;
-  color: #303133;
+  color: var(--el-text-color-regular);
   word-break: break-word;
   white-space: normal;
 }
@@ -51,14 +51,14 @@ function onClick(event: MouseEvent) {
   margin: 0.2em 0;
 }
 .ai-markdown :deep(code) {
-  background: #f1f4fe;
+  background: var(--el-fill-color-light);
   padding: 1px 5px;
   border-radius: 3px;
   font-family: Consolas, Monaco, monospace;
   font-size: 0.92em;
 }
 .ai-markdown :deep(pre) {
-  background: #f6f8ff;
+  background: var(--el-fill-color-light);
   padding: 10px 12px;
   border-radius: 6px;
   overflow-x: auto;
@@ -70,8 +70,8 @@ function onClick(event: MouseEvent) {
 .ai-markdown :deep(blockquote) {
   margin: 0.4em 0;
   padding: 0 12px;
-  border-left: 3px solid #c6edf4;
-  color: #606266;
+  border-left: 3px solid color-mix(in srgb, var(--brand-bright, #46c9d6) 45%, transparent);
+  color: var(--el-text-color-regular);
 }
 .ai-markdown :deep(table) {
   border-collapse: collapse;
@@ -79,11 +79,11 @@ function onClick(event: MouseEvent) {
 }
 .ai-markdown :deep(th),
 .ai-markdown :deep(td) {
-  border: 1px solid #e9edfa;
+  border: 1px solid var(--el-border-color-lighter);
   padding: 4px 8px;
 }
 .ai-markdown :deep(a) {
-  color: #5755ee;
+  color: var(--el-color-primary);
   text-decoration: none;
 }
 .ai-markdown :deep(a:hover) {
@@ -96,9 +96,9 @@ function onClick(event: MouseEvent) {
   margin: 0 2px;
   padding: 1px 9px;
   border-radius: 999px;
-  border: 1px solid #c6c5f7;
-  background: #f3f3fe;
-  color: #5755ee;
+  border: 1px solid color-mix(in srgb, var(--el-color-primary) 45%, transparent);
+  background: var(--ds-industrial-50);
+  color: var(--el-color-primary);
   font-size: 12px;
   line-height: 1.9;
   text-decoration: none;
@@ -111,7 +111,7 @@ function onClick(event: MouseEvent) {
   font-weight: 600;
 }
 .ai-markdown :deep(a.ai-md-nav:hover) {
-  background: #e9eaff;
+  background: var(--ds-selected);
   text-decoration: none;
 }
 </style>

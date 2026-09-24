@@ -605,7 +605,7 @@ function handleDrop(event: DragEvent) {
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 14px;
 }
 </style>

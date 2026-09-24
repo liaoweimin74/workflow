@@ -977,3 +977,23 @@ Stage Summary:
 - 本地仓库已重建为远程完整镜像：HEAD=origin/main=2161931，工作树补齐全部远程文件，status 干净（仅运行时产物未跟踪）
 - 全部成果已在 GitHub（liaoweimin74/workflow）main 分支，无待推送内容
 - 风险提示：沙箱重置会再丢 .git（本次已是第二次）；远程仓库即权威备份，重建流程已固化在 worklog（备份→init→fetch→reset→fileMode false→checkout）
+
+---
+Task ID: 39
+Agent: 主控（Z.ai Code）
+Task: 用户三项需求——①AI助手/流程设计器/表单设计器风格不匹配（特别是暗色）②暗色表格悬浮太白看不清 ③页面列表新建去掉页面类型、绑定表单非必填
+
+Work Log:
+- 【需求②根因（浏览器实测抓到）】style.css 亮色段 .el-table 元素级规则定义 --el-table-row-hover-bg-color: var(--table-row-hover)，而元素自身定义永远压过祖先继承；暗色块只重定义了 --el-table-row-hover-bg-color 却漏了 --table-row-hover 令牌 → 暗色下 hover 解析到亮色 #f0f7f5（与浅字对比度崩坏）。修复：html.dark 补 --table-row-hover:#223029（青墨暗）、html.dark[data-theme='classic'] 补 #232950（经典暗）。实测四态：verdant 暗 #223029 / classic 暗 #232950 / 两亮色 #f0f7f5/#f0f3fd 全部正确
+- 【需求①关键发现】--ds-industrial-50/200/500/600/--ds-selected 设计器令牌族从未被定义，NodePalette/PropertyPanel 全部落到靛蓝 fallback（#5755ee 系）→ 永不随主题变。修复：style.css 四态块补齐 --ds-* 定义（亮色=EP主色实色阶，暗色=亮主色文字+color-mix 半透明洗底），一处定义全局生效
+- 【需求①改造面】designer-theme.css 全量重写（画布网格/节点描边填充/连线/小地图/上下文菜单/滚动条全走 --el-* 语义变量+color-mix，四态自动适配）；DesignerToolbar 白底黑字改语义变量；vendor/style/index.css 移除 ._fc-r 强制蓝 --el-color-primary、11处 #2E73FF→var(--el-color-primary)，并在文件末尾（不能插中部，否则被原规则居后反胜）追加四态覆盖层（画布 m-drag/drag-box、左侧组件库 _fc-l-item、CodeMirror、属性面板）；AiAssistantOrb 悬浮球渐变/窗体/标题栏/气泡全主题化（标题栏恒深色系白字保证对比）；MarkdownRenderer 同步；暗色 --el-color-primary-light-8/9 从浅薄荷改暗色调（EP 暗色语义）
+- 【需求③】PageListPage 新建弹窗移除页面类型 select（原视图/自定义页双分支 control），统一 type='PAGE'；绑定表单改「绑定表单（可选）」无 required 校验；onMounted 选项注入逻辑同步简化（后端 formKey 可空、type 透传，无阻碍）
+- 【验证】agent-browser 实测：暗色 verdant 表单设计器顶栏/画布/左侧组件库/右侧面板像素取样全部暗色（26,47,43 / 37,45,40 / 31,42,36 / 24,29,27）；流程设计器工具栏+节点面板+画布暗色统一；AI 窗口深青标题栏+暗色气泡；亮色回归无破坏；E2E 新建页面（不选表单）→ 落库 type=PAGE、form_key=NULL、跳转设计器 ✓；vue-tsc 对照 stash 确认零新增类型错误
+- 【测试数据清理】删除 E2E 页面/流程草稿/表单定义及联动数据源
+- 【入库】commit a632b25 已 push（2161931..a632b25），11 文件 +293/-173
+- 【事故记录】验证期间 3000 门户 Next dev 因 Turbopack 缓存损坏 panic 崩溃（corrupted database）；清理 .next 后本会话内可启动（200），但沙箱在工具调用结束后回收进程树（setsid/清缓存均无法常驻）→ 3000 需平台侧拉起；5173/8080/3306 属原服务树持久存活不受影响，前端功能验证已全部走 5173 直连完成
+
+Stage Summary:
+- 三项需求全部完成并浏览器实证；全平台 UI（列表页/表格/设计器×2/AI助手）现完整随「青墨/经典×明暗」四态切换
+- 设计器令牌体系沉淀：--ds-* 与 --el-* 语义变量为唯一配色来源，禁止硬编码（后续新组件守此规约）
+- 风险：3000 门户待平台侧重启（清缓存已就绪，bun run dev 即可）；沙箱回收策略下勿在本会话内强杀持久服务树进程

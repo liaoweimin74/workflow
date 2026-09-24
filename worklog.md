@@ -997,3 +997,25 @@ Stage Summary:
 - 三项需求全部完成并浏览器实证；全平台 UI（列表页/表格/设计器×2/AI助手）现完整随「青墨/经典×明暗」四态切换
 - 设计器令牌体系沉淀：--ds-* 与 --el-* 语义变量为唯一配色来源，禁止硬编码（后续新组件守此规约）
 - 风险：3000 门户待平台侧重启（清缓存已就绪，bun run dev 即可）；沙箱回收策略下勿在本会话内强杀持久服务树进程
+
+---
+Task ID: 40
+Agent: 主控（Z.ai Code）
+Task: 用户「重新启动服务」→「预览面板看不到文件」→「门户为什么起不来」→「java后端不用可停掉省内存」——服务链排障与门户保活攻坚
+
+Work Log:
+- 【服务状态盘点】3306 mariadbd(1488)/8080 NestJS(1509)/5173 vite(7933) 全程健康存活；唯独 3000 next dev 无进程（上轮 setsid 拉起的实例在回合边界被回收）
+- 【澄清用户误解】「java后端」实为 NestJS（node dist/main.js，引擎早已切 Node，仅 90MB）——低代码平台后端，不可停；真正内存大户是上轮 agent-browser 验证残留的 Chrome 实例树（10+ 进程合计 ~1.4GB），已 pkill 清理，available 内存 2793→3137MB
+- 【历史 OOM 实锤】dmesg 取证：`Out of memory: Killed process 1762 (next-server) total-vm:30GB, anon-rss:1.32GB`——更早会话中 Turbopack 内存无上限增长（Rust 侧不受 NODE_OPTIONS 限制）+ Chrome 1.4GB 挤爆 3.9Gi 沙箱，触发全局 OOM 击杀 next-server；该风险已随 Chrome 清理 + NODE_OPTIONS=614 双重缓解
+- 【根因定性】反复实验（bun run dev setsid ×2、直接 next dev ×1）发现：进程拉起后日志正常（Ready、GET 200 均有记录）、无 panic、无新 OOM，但跨工具调用必死（8~20 秒）→ 对照 service-supervisor.ts 头注释官方确认沙箱铁律：「只有 start.sh 启动的进程树（Next.js dev server）能常驻，工具调用里 spawn 的进程会在调用结束后被回收（setsid 亦无效）」。上轮「实测 200」即本回合内验证成功的假象，回合结束即回收
+- 【正确架构解读】mariadbd/NestJS/vite 之所以常驻：它们当年由 next-server 内的 service-supervisor 作为子进程 spawn（合法树内），next-server 死后孤儿化 PPID=1 幸存；platform start.sh 仅在沙箱启动时拉起 next dev
+- 【方案固化】新增 scripts/start-portal.sh 幂等脚本：端口+HTTP 双检→清假死进程→rm -rf .next（防 Turbopack 缓存损坏）→setsid nohup NODE_OPTIONS=614 next dev→40s 内轮询 200；每回合需要预览时执行一次即可
+- 【本回合内全链路验证】门户 / =200、/lowcode/ 代理链 =200（308 重定向后最终 200）、8080 login(admin/admin123)=200
+- 【保活机制】cron 巡检已重建（job_id 410039，每 15 分钟，priority 10）：每轮巡检第一优先级检查 3000 并跑 start-portal.sh 拉起，随后 agent-browser QA；旧巡检任务（408914）因沙箱重置丢失
+- 【worklog 补录】Task 39 遗留的「Task 40 未写入」已在本任务补齐；上一轮因平台工具通道故障（403 broken session，40+ 次重试）未完成的记录一并归档
+
+Stage Summary:
+- 门户「起不来」真相 = 双重历史风险叠加：①早期 Chrome 残留 + Turbopack 无上限导致 OOM 击杀（已解除）②沙箱按回合回收 agent spawn 的进程（结构性约束，setsid 无效，已用 start-portal.sh + cron 巡检方案对冲）
+- 「文件和目录看不到」为预览面板显示问题（根源是门户 000 白屏），文件系统经 ls 确认完好无缺
+- 运维规约沉淀：不得杀 mariadbd/NestJS/vite 常驻进程；next dev 堆上限 614MB；每回合预览前先跑 start-portal.sh；远程 workflow 仓库 main 即权威备份
+- 风险备忘：3000 在每个 agent 回合结束后仍会被沙箱回收（结构性），用户如遇白屏，对助手说「启动门户」即可秒级恢复

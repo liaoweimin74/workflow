@@ -178,10 +178,15 @@ export class DataSourceWriteService {
 
     const newFormKey = formKey === null ? current.form_key : formKey
     const newSourceKey = sourceKey === null ? current.source_key : sourceKey
-    const newParams = params === null ? current.params : params
     const formBound = newType === TYPE_FORM || newType === TYPE_WORKFLOW
     // FORM/WORKFLOW：sourceKey 恒等于 formKey（formKey 权威），忽略入参 sourceKey 差异
     const effNewSourceKey = formBound ? newFormKey : newSourceKey
+    // FORM：入参 params 非空时与 generateParams 的端点段合并（对齐 create；
+    // queryMode/joins/query/columns/params 由前端供给，端点段系统权威重建）
+    let newParams = params === null ? current.params : params
+    if (newType === TYPE_FORM && params !== null && params.trim() !== '') {
+      newParams = mergeQueryConfig(generateParams(newType, String(newFormKey), effNewSourceKey), String(newParams))
+    }
     this.validateRequiredFields(newType, newFormKey, effNewSourceKey, newParams)
     if (formBound && !(await this.formDefRepository.existsByKey(String(newFormKey), tenantId))) {
       throw new BusinessException(400, `绑定的表单不存在: ${String(newFormKey)}`)

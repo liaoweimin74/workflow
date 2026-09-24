@@ -1285,3 +1285,22 @@ Stage Summary:
 - 行为差异说明（既定结构差异，非本次引入）：Java 生成器按组分配别名（group() j1..jN）忽略 JoinConfig.alias，NodeJS 逐 join 用 alias——对外 SQL 形态等价；Java previewJoinSql 的 alias 兜底为数据规范化（生成 SQL 实际用组别名），防 null 引用的收益由组别名天然保证
 - 风险：沙箱无 javac/maven，全部改动仅静态审查（签名 grep 核实+括号配平+TS/Java 目录机器比对），不能编译验证；建议主代理有构建环境时先 `mvn -o compile` 再跑 bizdata/datasource 两个包的单测
 - 改动清单：新增 1 文件（JoinTargetCatalog.java）；修改 4 文件（JoinSqlGenerator/FormQueryConfig/BizDataSupport/DataSourceDefinitionService）；测试零改动（既有断言全部兼容）
+
+---
+Task ID: 51
+Agent: Z.ai Code (main)
+Task: ①声明式 JOIN 预览 404 根治（join-preview 端点 NodeJS 缺失）②「目标表单」→「目标表」并支持内建数据源（用户报告）
+
+Work Log:
+- 定位：join-preview 仅 Java 有（DataSourceController.previewJoin），NestJS 404；前端 FormJoinConfig 目标下拉只列 FORM 数据源
+- 调查物理表：8 个内建数据源中 5 个结构化源有稳定物理表（sys_organization/sys_user/sys_menu/sys_role/sys_dict_type，V1 baseline DDL 逐列核对）；流程类 3 个展示列多为跨表派生，不纳入 JOIN 目标
+- NodeJS 实施（3ebac1e）：join-target-catalog.ts（物理映射唯一事实源）；JoinSqlGenerator 目标表解析泛化；previewJoinSql 端点（@Post join-preview）；alias 语义落地（前端不录入→parseJoins 运行时 ensureAlias 自动分配 j1/j2，保存校验放宽，预览兜底——修复 undefined.xxx 畸形 SQL）；保存校验支持 SYSTEM 目标（catalog 物理列白名单校验 foreignField/joinField）；预览目标 key 安全校验（连字符等非法格式 400）；前端「目标表」文案+内建候选+物理列选项
+- 连带缺陷修复：原保存校验强制要求 alias（前端结构里根本没有 alias 字段→config 模式保存必 400）与只认业务表单目标（SYSTEM 目标必 400）——均已在本次修复
+- 验证：nest build 通过；vitest 778 通过（join spec 文案断言同步后 12/12；migrator checksum 失败为 Task 49 记录的历史遗留）；API 实测：alias 自动分配正确（j1.nickname AS user_name / LEFT JOIN sys_user j1 ON j1.id = m.item_name）、非法目标 400、FORM 目标回归不变；agent-browser 端到端——编辑办公用品数据源→声明式 JOIN→选「系统用户（内建）」→预览 SQL 完全正确
+- Java 端静态同步（51-a 子代理，8f5cf52）：JoinTargetCatalog.java（TS/Java 目录机器比对逐条一致）+ JoinSqlGenerator/FormQueryConfig/BizDataSupport/DataSourceDefinitionService 对齐；既有测试断言全兼容
+- 沙箱教训（再次确认）：agent 回合内 spawn 的进程会被回收——8080 NestJS 需每回合用 setsid 拉起（PORT=8080 node dist/main.js）；3000 门户用 scripts/start-portal.sh
+
+Stage Summary:
+- 提交 3ebac1e（NodeJS+前端）+ 8f5cf52（Java），已推送（3b09292..8f5cf52）
+- 声明式 JOIN 现支持：业务表单目标（不变）+ 5 个结构化内建数据源目标；预览端点双端齐备
+- 遗留：Java 端无编译环境仅静态审查；流程类 3 个数据源（流程定义/实例/待办）JOIN 目标未开放（派生列语义），后续如有真实场景再扩展

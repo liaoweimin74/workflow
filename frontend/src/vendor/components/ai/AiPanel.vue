@@ -541,7 +541,7 @@ export default {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #ffffff;
+    background: var(--el-bg-color);
     border-radius: 8px;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -554,8 +554,8 @@ export default {
     justify-content: space-between;
     padding: 0 20px;
     height: 40px;
-    border-bottom: 1px solid #ececec;
-    background: #ffffff;
+    border-bottom: 1px solid var(--el-border-color-light);
+    background: var(--el-bg-color);
 }
 
 ._fd-ai-title {
@@ -566,7 +566,7 @@ export default {
 
 ._fd-ai-name {
     font-weight: 600;
-    color: #262626;
+    color: var(--el-text-color-regular);
     font-size: 14px;
 }
 
@@ -581,7 +581,7 @@ export default {
     border: none;
     background: transparent;
     border-radius: 3px;
-    color: #666666;
+    color: var(--el-text-color-secondary);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -591,8 +591,8 @@ export default {
 }
 
 ._fd-ai-action-btn:hover {
-    background: #f5f5f5;
-    color: #262626;
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-regular);
     opacity: 1;
 }
 
@@ -616,7 +616,7 @@ export default {
 ._fd-ai-welcome {
     text-align: center;
     padding: 20px;
-    color: #666666;
+    color: var(--el-text-color-secondary);
     max-width: 600px;
     margin: 0 auto;
 }
@@ -633,7 +633,7 @@ export default {
     width: 64px;
     height: 64px;
     margin: 0 auto 20px;
-    background-color: #f5f5f5;
+    background-color: var(--el-fill-color-light);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -642,7 +642,7 @@ export default {
 
 ._fd-ai-welcome h3 {
     margin: 0 0 12px;
-    color: #262626;
+    color: var(--el-text-color-regular);
     font-size: 24px;
     font-weight: 600;
 }
@@ -651,7 +651,7 @@ export default {
     margin: 0 0 32px;
     font-size: 16px;
     line-height: 1.6;
-    color: #666666;
+    color: var(--el-text-color-secondary);
 }
 
 /* 建议问题样式 */
@@ -669,7 +669,7 @@ export default {
 ._fd-ai-suggestions-header span {
     font-size: 14px;
     font-weight: 500;
-    color: #262626;
+    color: var(--el-text-color-regular);
 }
 
 ._fd-ai-refresh-btn {
@@ -679,7 +679,7 @@ export default {
     padding: 4px 8px;
     border: none;
     background: transparent;
-    color: #aaaaaa;
+    color: var(--el-text-color-placeholder);
     font-size: 12px;
     cursor: pointer;
     border-radius: 4px;
@@ -687,8 +687,8 @@ export default {
 }
 
 ._fd-ai-refresh-btn:hover {
-    background: #f5f5f5;
-    color: #262626;
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-regular);
 }
 
 ._fd-ai-suggestions-list {
@@ -699,10 +699,10 @@ export default {
 
 ._fd-ai-suggestion-item {
     padding: 12px 16px;
-    border: 1px solid #ececec;
+    border: 1px solid var(--el-border-color-light);
     border-radius: 12px;
-    background: #f5f5f5;
-    color: #262626;
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-regular);
     font-size: 14px;
     text-align: left;
     cursor: pointer;
@@ -711,8 +711,8 @@ export default {
 }
 
 ._fd-ai-suggestion-item:hover {
-    border-color: #2e73ff;
-    background: #ffffff;
+    border-color: var(--el-color-primary);
+    background: var(--el-bg-color);
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -749,7 +749,7 @@ export default {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background-color: #f5f5f5;
+    background-color: var(--el-fill-color-light);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -773,20 +773,20 @@ export default {
 }
 
 ._fd-ai-message-bubble--user {
-    background: #2e73ff;
+    background: var(--el-color-primary);
     color: white;
     border-bottom-right-radius: 4px;
 }
 
 ._fd-ai-message-bubble--ai {
-    background: #f5f5f5;
-    color: #262626;
+    background: var(--el-fill-color-light);
+    color: var(--el-text-color-regular);
     border-bottom-left-radius: 4px;
 }
 
 ._fd-ai-message-bubble--thinking {
     background: rgba(46, 115, 255, 0.05);
-    border: 1px solid #2e73ff;
+    border: 1px solid var(--el-color-primary);
     border-bottom-left-radius: 4px;
 }
 
@@ -864,7 +864,7 @@ export default {
     width: 4px;
     height: 4px;
     border-radius: 50%;
-    background: #666666;
+    background: var(--el-text-color-secondary);
     animation: thinking-pulse 1.4s ease-in-out infinite both;
 }
 
@@ -908,17 +908,17 @@ export default {
     padding: 8px 12px;
     margin: 2px 0;
     font-size: 13px;
-    color: #aaaaaa;
+    color: var(--el-text-color-placeholder);
     border-radius: 8px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    border: 1px solid #ececec;
+    border: 1px solid var(--el-border-color-light);
 }
 
 ._fd-ai-thinking-step--active {
-    color: #262626;
-    background: #ffffff;
+    color: var(--el-text-color-regular);
+    background: var(--el-bg-color);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     transform: translateX(2px);
     border: 0 none;
@@ -937,15 +937,15 @@ export default {
     transition: all 0.3s ease;
     position: relative;
     z-index: 1;
-    color: #aaaaaa;
-    background: #ececec;
+    color: var(--el-text-color-placeholder);
+    background: var(--el-fill-color);
     border-radius: 50%;
     width: 20px;
     height: 20px;
 }
 
 ._fd-ai-thinking-step-icon--executing {
-    color: #2e73ff;
+    color: var(--el-color-primary);
     background: rgba(59, 130, 246, 0.1);
     border-radius: 50%;
     width: 20px;
@@ -955,7 +955,7 @@ export default {
 }
 
 ._fd-ai-thinking-step-icon--completed {
-    color: #00c050;
+    color: var(--el-color-success);
     background: rgba(34, 197, 94, 0.1);
     border-radius: 50%;
     width: 20px;
@@ -977,7 +977,7 @@ export default {
 ._fd-ai-thinking-step-loading {
     width: 10px;
     height: 10px;
-    border: 2px solid #2e73ff;
+    border: 2px solid var(--el-color-primary);
     border-top: 2px solid transparent;
     border-radius: 50%;
     animation: spin 1s linear infinite;
@@ -987,7 +987,7 @@ export default {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #aaaaaa;
+    background: var(--el-text-color-placeholder);
     opacity: 0.5;
 }
 
@@ -1003,7 +1003,7 @@ export default {
 /* 输入区域样式 */
 ._fd-ai-input {
     padding: 20px 24px;
-    background: #ffffff;
+    background: var(--el-bg-color);
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -1014,17 +1014,17 @@ export default {
     display: flex;
     align-items: flex-end;
     gap: 12px;
-    background: #f5f5f5;
+    background: var(--el-fill-color-light);
     border-radius: 15px;
     padding: 12px 16px;
-    border: 1px solid #ececec;
+    border: 1px solid var(--el-border-color-light);
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 ._fd-ai-input-container:focus-within {
-    border-color: #2e73ff;
+    border-color: var(--el-color-primary);
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1),
     0 4px 12px rgba(0, 0, 0, 0.15);
 }
@@ -1037,7 +1037,7 @@ export default {
     outline: none;
     font-size: 15px;
     line-height: 1.6;
-    color: #262626;
+    color: var(--el-text-color-regular);
     min-height: 24px;
     max-height: 120px;
     font-family: inherit;
@@ -1046,7 +1046,7 @@ export default {
 }
 
 ._fd-ai-input-field::placeholder {
-    color: #aaaaaa;
+    color: var(--el-text-color-placeholder);
     font-weight: 400;
 }
 
@@ -1054,7 +1054,7 @@ export default {
     width: 32px;
     height: 32px;
     border: none;
-    background: #2e73ff;
+    background: var(--el-color-primary);
     color: white;
     border-radius: 50%;
     cursor: pointer;
@@ -1072,7 +1072,7 @@ export default {
 }
 
 ._fd-ai-send-btn--disabled {
-    background: #aaaaaa;
+    background: var(--el-text-color-placeholder);
     cursor: not-allowed;
     opacity: 0.5;
     transform: none;
@@ -1094,7 +1094,7 @@ export default {
 /* 滚动条样式 */
 ._fd-ai-content {
     scrollbar-width: thin;
-    scrollbar-color: #ececec transparent;
+    scrollbar-color: var(--el-border-color-lighter) transparent;
 }
 
 ._fd-ai-content::-webkit-scrollbar {
@@ -1106,7 +1106,7 @@ export default {
 }
 
 ._fd-ai-content::-webkit-scrollbar-thumb {
-    background: #ececec;
+    background: var(--el-fill-color);
     border-radius: 3px;
     opacity: 0;
     transition: opacity 0.3s ease;
@@ -1117,6 +1117,6 @@ export default {
 }
 
 ._fd-ai-content::-webkit-scrollbar-thumb:hover {
-    background: #aaaaaa;
+    background: var(--el-text-color-placeholder);
 }
 </style>

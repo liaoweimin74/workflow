@@ -1415,3 +1415,19 @@ Work Log:
 Stage Summary:
 - push 已闭环：远程 main=282bbae 含方案A修复 + Task 52 两项新任务 + 质量收敛全部提交；本地/远程零差异，无遗留待推内容
 - 风险消除：外层 checkpoint 仓库已与 GitHub 解绑，杜绝误覆盖；后续 push 一律在 workflow_lowcode 内执行
+
+---
+Task ID: 53
+Agent: Z.ai Code (main)
+Task: 修复用户报告 bug——业务表单数据源「声明式 SQL（声明式 JOIN）」输入一个字符即失焦
+
+Work Log:
+- 根因定位（Task 52 拖拽排序的衍生缺陷）：编辑链路存在「回声克隆」——①FormJoinConfig.vue：行内 v-model 修改 → local.joins 深监听 → sync() emit → 父组件 v-model 原样存回 → 子组件 props.modelValue 深度监听触发 → local.joins = v.joins.map(j=>({...j})) 克隆重建全部行对象 → WeakMap row-key（按对象身份分配 uid）全变 → el-table keyed patch 整表 remount → 输入框失焦。②SqlEditor.vue 同型：emitColumns() 每次键入克隆行数组 + props.columns 深监听回声再克隆。该克隆模式 Task 52 之前就存在，但彼时无 row-key、按索引 patch，DOM 不重建，故不可见；row-key 引入后缺陷显性化。
+- 修复 FormJoinConfig.vue：props.modelValue 深监听顶部加「回声守卫」——v 与 local 各段引用逐一相等（queryMode/joins/query/columns/params，reactive 代理幂等保证同引用）时直接 return，跳过克隆重建；外部真实变更（打开编辑/加载不同数据源/重置表单）引用不同，仍走完整同步，行为不变。
+- 修复 SqlEditor.vue：①emitColumns() 改为同引用 emit（不再克隆行对象）；②props.columns 深监听加 toRaw 归一回声守卫（ref/raw 代理不一致场景归一比较）；③addColumn/removeColumn/parseFromSql 由就地 push/splice 改为数组引用替换（el-table 行重渲染依赖 data 引用变化，就地修改不触发行渲染——Task 52 已验证的坑位）。
+- 语义增强（同引用 emit 的自然结果）：SqlEditor 列声明与父级（sqlConfig.declaredColumns / formJoin.columns）共享同一数组，两处视图（基本配置列声明表 / 字段元数据表）数据严格同步，消除此前双副本在回声间隙的漂移窗口。
+- 验证：①前端 dataSource 111/111、全量 88 文件 1114/1114 全绿；②vue-tsc 对比——本次改动文件零新增类型错误（46 个 error 均为 ListCards/FormDesigner/@form-create 预存噪音）；③agent-browser 端到端：办公用品数据源 → 编辑 → 声明式 JOIN → 显示名称连打 abc / 虚拟列标识打 x 焦点全程保留且值累计；SQL 模板 textarea 打 s 焦点保留；SqlEditor 列声明添加列后打 qw 焦点保留；模式切换（声明式↔SQL 模板↔单表）后双段草稿完整回填（abc/x 保留）；④测试后取消不保存，测试数据零污染；⑤控制台无新增错误（仅预存 ElTag type 校验警告等）。
+
+Stage Summary:
+- 用户报告失焦 bug 修复闭环：根因=props 回声→克隆行对象→row-key 全变→整表 remount；修复=回声守卫（FormJoinConfig 引用比对 / SqlEditor toRaw 比对）+ 同引用 emit + 结构操作引用替换；拖拽排序（row-key 机制）与双段并存功能均回归通过。
+- 2 文件改动（FormJoinConfig.vue / SqlEditor.vue），无后端/Java 变更。

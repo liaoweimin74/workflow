@@ -83,6 +83,18 @@ watch(
   () => props.modelValue,
   (v) => {
     if (!v) return
+    // v-model 回声守卫：sync() 后父组件把 emit 的对象原样存回（各段引用一致）。
+    // 若不跳过，每次键入都会走到下方克隆重建 → 全部行对象换新 → row-key（WeakMap 按
+    // 对象身份分配）全变 → el-table 整表 remount → 输入框敲一个字符即失焦。
+    if (
+      v.queryMode === local.queryMode &&
+      v.joins === local.joins &&
+      v.query === local.query &&
+      v.columns === local.columns &&
+      v.params === local.params
+    ) {
+      return
+    }
     isSyncingFromProps = true
     local.queryMode = v.queryMode || 'none'
     local.joins = v.joins?.length ? v.joins.map((j) => ({ ...j })) : []

@@ -250,6 +250,10 @@ watch(
 
     <!-- ===== config：声明式 JOIN 表格 ===== -->
     <template v-if="queryMode === 'config'">
+      <div class="join-hint">
+        <div>同连接条件的多个显示字段会合并为一条 LEFT JOIN；主表关联字段为多选（dataPicker 多选）时仅匹配首个关联值；目标表关联字段建议选择主键 id 或唯一列，避免结果集膨胀。</div>
+        <div>流程定义 / 流程实例 / 待办任务为派生列数据源，不支持作为关联目标。</div>
+      </div>
       <el-table :data="joins" size="small" border>
         <el-table-column label="显示名称" min-width="100">
           <template #default="{ row }">
@@ -285,7 +289,12 @@ watch(
               :disabled="disabled"
               @change="onTargetFormChange(row)"
             >
-              <el-option v-for="t in targetFormOptions" :key="t.key" :label="t.name" :value="t.key" />
+              <el-option v-for="t in targetFormOptions" :key="t.key" :label="t.name" :value="t.key">
+                <div class="target-option">
+                  <span>{{ t.name }}</span>
+                  <span class="target-option-key">{{ t.key }}</span>
+                </div>
+              </el-option>
             </el-select>
           </template>
         </el-table-column>
@@ -362,10 +371,11 @@ watch(
 
       <div v-if="previewVisible" class="sql-preview">
         <div class="sql-preview-head">
-          <span>生成 SQL（问号为参数占位，按序对应 params）</span>
+          <span>生成 SQL（问号为参数占位，按序对应 params；业务表单目标会附带目标表租户过滤）</span>
           <el-button text size="small" @click="previewVisible = false">收起</el-button>
         </div>
         <pre class="sql-preview-body">{{ previewSql || '预览失败' }}</pre>
+        <div class="sql-preview-foot">预览为无筛选 / 无关键词 / 默认排序 / 不分页的基础语句；实际查询会按需追加筛选、排序与分页。</div>
       </div>
     </template>
 
@@ -395,6 +405,26 @@ watch(
   font-size: 13px;
   padding: 8px 0;
 }
+.join-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+  background: var(--el-fill-color-lighter);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+}
+.target-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.target-option-key {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  font-family: var(--el-font-family-mono, 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
+}
 .sql-preview {
   margin-top: 8px;
   border: 1px solid var(--el-border-color-lighter);
@@ -419,5 +449,13 @@ watch(
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
+}
+.sql-preview-foot {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--el-border-color-lighter);
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 </style>

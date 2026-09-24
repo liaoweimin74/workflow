@@ -290,6 +290,11 @@ public class BizDataSupport {
         int size = req.getSize() <= 0 ? req.getSize() : Math.min(Math.max(req.getSize(), 1), 100);
 
         try {
+            // 运行时兜底校验（对齐 Node 新版）：必填/标识符格式/唯一/主表冲突 —— 存量脏配置快速 400 而非畸形 SQL
+            List<String> mainColumnsWithId = new ArrayList<>(ctx.columnKeys());
+            mainColumnsWithId.add("id"); // SELECT m.* 已带主键，虚拟列同名会重复列错误
+            JoinSqlGenerator.validate(joins, mainColumnsWithId);
+
             BizDataQueryBuilder.SqlAndParams count = JoinSqlGenerator.buildCount(
                     ctx.tableName(), tenantId, joins, columns, filters, req.getKeyword(), req.getKeywordColumn());
 

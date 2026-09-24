@@ -1334,3 +1334,21 @@ Work Log:
 Stage Summary:
 - 输出 10+ 项问题（分正确性/安全/性能/一致性/体验五级），未做代码修改——等用户决策修复优先级
 - 快赢候选：①localField+FORM 目标字段保存侧白名单校验 ②Node 对齐 Java JoinGroup 分组 ③运行时补调 JoinSqlGenerator.validate
+
+---
+Task ID: 51-fix
+Agent: Z.ai Code (main)
+Task: 方案 A 全量修复——声明式 JOIN 分组对齐/租户过滤/校验加固/体验补齐（Node+Java+前端三端）
+
+Work Log:
+- Node join-sql-generator.ts 重构：①groupJoins 按 (localField,targetFormKey,foreignField) 分组，同条件多字段合并一条 LEFT JOIN（alias=j1..jN 按组序，传入 alias 忽略）——消除同表重复 JOIN 膨胀 + 双引擎漂移；②joinOnClause：FORM 目标 ON 子句追加 AND j1.tenant_id=?（LEFT JOIN 语义必须放 ON；sys_* 无 tenant_id 列不加）params 顺序 join 租户参在前主租户在后；③localRef 白名单前置（BUILTIN 短路→columns 存在且 ref 主表前缀，否则「主表关联字段不存在」）封死存量脏 params 标识符注入面；④requireIdentifier（JOIN_FIELD_PATTERN）覆盖 joinField/virtualKey/localField/foreignField；⑤validate 删 alias 校验（对齐 Java D3）加标识符四连
+- Node biz-data-support.ts：queryJoinConfig try 内调 validateJoins(joins, columnKeys+id)（运行时兜底 400）；buildJoinColumns 改分组 ref（组 alias 与生成器同源）+ <joinField>_text 冗余列带出（对齐 Java buildJoinColumns，hasColumn/findJoinTarget/joinTargetColumnType/resolveJoinTargets）
+- Node data-source-write.service.ts：validateConfigJoins 线程化 mainFormKey（create/update/enable 三调用点）+ publishedColumnKeys（未发布优雅降级）→ localField 格式+存在性、FORM 目标 foreignField/joinField 存在性（SYSTEM 白名单文案逐字保留）、virtualKey 主表冲突
+- 前端：FormJoinConfig.vue 加配置提示块（合并语义/多选仅首值/外键建议唯一/流程类不出现说明）、目标表下拉双行显示 name+key、预览区脚注（基础语句 vs 实际查询差异）；http.ts 新增 clearHttpCache(prefix)；DataSourceListPage 保存/删除成功后清 /v1/data-sources 缓存——修「配完 JOIN 元数据 30s 不可见」；测试陈旧断言「目标表单」→「目标表」
+- Java 静态同步（子代理 51-fix-java）：JoinSqlGenerator（joinOnClause 提取+租户过滤+参数顺序修正+localRef 白名单+requireIdentifier+validate 标识符）、BizDataSupport.queryJoinConfig 调 validate(columnKeys+id)、DataSourceDefinitionService（formKey 线程化三路径+publishedColumnKeys+全部文案对齐）；静态自查括号配平/逐引用 grep/参数顺序推演通过
+- 实证：①负例 4 连（不存在列/注入形态/FORM 目标错列/virtualKey 冲突）全部精确 400；②预览 SQL 实测「同条件 2 行→1 条 JOIN + AND j1.tenant_id=?」；③运行时全链路（造真实数据）：bill_test 经数据源查询带出 zzz_item_name=测试签字笔（LEFT JOIN 数据流通），org 无匹配→null 键缺失语义正确；④浏览器端到端：新提示块/双行下拉/预览脚注渲染，保存成功后元数据 Tab 立即显示虚拟列（缓存失效生效）；⑤前端 107 测试全过；测试数据与临时配置已清理恢复
+- 遗留说明：①Node metadata appendJoinColumns 不带 _text（与 Java metadata 一致，仅查询带出）；②Java 端沙箱无编译，建议构建环境跑 mvn compile 回归三场景（双 FORM 组/SYSTEM 目标/未发布降级）；③多选 dataPicker 仅匹配首值属既定语义（两端一致），UI 已提示
+
+Stage Summary:
+- 方案 A 十五项问题清单落地：P0（分组/校验缺口/运行时 validate/localRef 注入面/租户过滤）全修，P1-P2 体验项（提示/预览说明/下拉 key/缓存失效）全修；两端引擎语义对齐（分组、_text、validate、租户过滤、保存校验五层同构）
+- origin/main 将推进本批提交；巡检任务 job_id 411264 持续 QA

@@ -8,20 +8,30 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * config 模式 JOIN SQL 生成器。
  * <p>
- * 将 backups 配置的 joins[]（声明式）翻译为 LEFT JOIN + 虚拟列 SELECT：
+ * 将声明式配置的 joins[] 翻译为 LEFT JOIN + 虚拟列 SELECT：
  * <pre>
- *   SELECT m.*, c.name AS customer_name FROM wf_biz_order m
- *     LEFT JOIN wf_biz_customer c ON c.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))
+ *   SELECT m.*, j1.name AS customer_name FROM wf_biz_order m
+ *     LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))
+ *       AND j1.tenant_id = ?
  *     WHERE m.tenant_id = ? [AND 白名单筛选] ORDER BY <ref> DESC LIMIT ? OFFSET ?
  * </pre>
  * 主表固定别名 m；localField 为 JSON 列（dataPicker 外键数组）时走 JSON_EXTRACT 提取首元素匹配，
  * 普通列直接等值连接。所有标识符（列/表/排序）来自调用方传入的 QueryColumn 映射或内置白名单，
  * 值全部参数绑定，杜绝 SQL 注入。LEFT JOIN 目标表由 {@link JoinTargetCatalog#resolveJoinTargetTable}
  * 解析：内建数据源 → 系统物理表，业务表单 → wf_biz_<formKey>（既有行为不变）。
+ * <p>
+ * 【租户过滤】FORM 目标（wf_biz_*）在 ON 子句追加 {@code AND {alias}.tenant_id = ?}
+ * （LEFT JOIN 语义下必须放 ON 而不是 WHERE，否则无匹配行会被过滤成 INNER JOIN）；
+ * 内建系统表（sys_*）无 tenant_id 列（全局共享数据），不加。
+ * <p>
+ * 【标识符安全】localField 解析为主表列引用前先过列白名单（columns 中存在且 ref 为主表前缀），
+ * foreignField/joinField/virtualKey 拼接前先过标识符模式（{@code JOIN_FIELD_PATTERN}）——
+ * 值仍全部参数绑定，杜绝存量脏数据/管理员直写 params 带来的标识符注入面。
  */
 public final class JoinSqlGenerator {
 
@@ -29,6 +39,12 @@ public final class JoinSqlGenerator {
     private static final Set<String> BUILTIN_COLUMNS = Set.of("id", "created_at", "updated_at");
 
     private static final Set<String> ALLOWED_ORDER = Set.of("asc", "desc");
+
+    /**
+     * JOIN 标识符模式（列名/虚拟列 key 通用，对齐 Node 新版 {@code JOIN_FIELD_PATTERN}）。
+     * 首字符允许下划线（与 ensureAlias 一致），上限 64 字符（物理标识符限制）。
+     */
+    private static final Pattern JOIN_FIELD_PATTERN = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]{0,63}$");
 
     private static final ObjectMapper OM = new ObjectMapper();
 
@@ -90,6 +106,8 @@ public final class JoinSqlGenerator {
         List<JoinGroup> groups = group(joins);
         for (JoinGroup g : groups) {
             for (JoinConfig j : g.members()) {
+                requireIdentifier(j.joinField(), "显示字段");
+                requireIdentifier(j.virtualKey(), "虚拟列 key");
                 sql.append(", ").append(g.alias()).append(".").append(j.joinField())
                         .append(" AS ").append(j.virtualKey());
                 // 目标列为 dataPicker 引用列（含 <virtualKey>_text 冗余文本 QueryColumn）：SELECT 一并带出
@@ -100,14 +118,12 @@ public final class JoinSqlGenerator {
             }
         }
         sql.append(" FROM ").append(mainTable).append(" m");
+        // 参数顺序对齐 Node：JOIN 租户参（组序）→ 主租户 → 筛选 → 关键词 → LIMIT/OFFSET
+        List<Object> params = new ArrayList<>();
         for (JoinGroup g : groups) {
-            sql.append(" LEFT JOIN ").append(JoinTargetCatalog.resolveJoinTargetTable(g.targetFormKey()))
-                    .append(" ").append(g.alias())
-                    .append(" ON ").append(g.alias()).append(".").append(g.foreignField())
-                    .append(" = ").append(localRef(g.localField(), columns));
+            sql.append(joinOnClause(g, columns, params, tenantId));
         }
         sql.append(" WHERE m.tenant_id = ?");
-        List<Object> params = new ArrayList<>();
         params.add(tenantId);
 
         appendFilters(sql, params, columns, filters);
@@ -138,14 +154,12 @@ public final class JoinSqlGenerator {
                                                               Map<String, Object> filters,
                                                               String keyword, String keywordColumn) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(1) FROM ").append(mainTable).append(" m");
+        // 参数顺序对齐 Node：JOIN 租户参（组序）→ 主租户 → 筛选 → 关键词
+        List<Object> params = new ArrayList<>();
         for (JoinGroup g : group(joins)) {
-            sql.append(" LEFT JOIN ").append(JoinTargetCatalog.resolveJoinTargetTable(g.targetFormKey()))
-                    .append(" ").append(g.alias())
-                    .append(" ON ").append(g.alias()).append(".").append(g.foreignField())
-                    .append(" = ").append(localRef(g.localField(), columns));
+            sql.append(joinOnClause(g, columns, params, tenantId));
         }
         sql.append(" WHERE m.tenant_id = ?");
-        List<Object> params = new ArrayList<>();
         params.add(tenantId);
 
         appendFilters(sql, params, columns, filters);
@@ -155,11 +169,11 @@ public final class JoinSqlGenerator {
     }
 
     /**
-     * 保存校验：必填字段、virtualKey 唯一、virtualKey 不与主表列冲突。
+     * 保存/运行时共用校验：必填字段、标识符格式、virtualKey 唯一、virtualKey 不与主表列冲突。
      * 注：alias 由系统按组自动分配，输入值一律忽略（存量兼容）。
      *
      * @param joins       关联声明列表
-     * @param mainColumns 主表列 key 列表
+     * @param mainColumns 主表列 key 列表（含 id —— SELECT m.* 已带主键，虚拟列同名会重复列报错）
      */
     public static void validate(List<JoinConfig> joins, List<String> mainColumns) {
         if (joins == null || joins.isEmpty()) {
@@ -172,6 +186,10 @@ public final class JoinSqlGenerator {
             requireText(j.foreignField(), "目标表关联字段");
             requireText(j.joinField(), "目标表展示字段");
             requireText(j.virtualKey(), "虚拟列 key");
+            requireIdentifier(j.localField(), "主表关联字段");
+            requireIdentifier(j.foreignField(), "目标表关联字段");
+            requireIdentifier(j.joinField(), "显示字段");
+            requireIdentifier(j.virtualKey(), "虚拟列 key");
             if (!virtualKeys.add(j.virtualKey())) {
                 throw new IllegalArgumentException("虚拟列 key 重复: " + j.virtualKey());
             }
@@ -209,8 +227,54 @@ public final class JoinSqlGenerator {
         }
     }
 
-    /** JOIN 匹配的 localField 引用：JSON 列提取首元素，普通列直接引用 */
+    /** 标识符格式校验（列名/虚拟列 key；拼接进 SQL 前的最后防线） */
+    private static void requireIdentifier(String v, String label) {
+        if (v == null || !JOIN_FIELD_PATTERN.matcher(v).matches()) {
+            throw new IllegalArgumentException(label + "非法: " + v);
+        }
+    }
+
+    /**
+     * 生成单组 ON 子句片段：{@code ON {alias}.{foreignField} = {localRef}}，
+     * FORM 目标追加 {@code AND {alias}.tenant_id = ?}（租户过滤参数推入 params）。
+     */
+    private static String joinOnClause(JoinGroup g, List<QueryColumn> columns, List<Object> params, String tenantId) {
+        requireIdentifier(g.foreignField(), "目标表关联字段");
+        requireIdentifier(g.localField(), "主表关联字段");
+        StringBuilder sql = new StringBuilder(" LEFT JOIN ")
+                .append(JoinTargetCatalog.resolveJoinTargetTable(g.targetFormKey()))
+                .append(" ").append(g.alias())
+                .append(" ON ").append(g.alias()).append(".").append(g.foreignField())
+                .append(" = ").append(localRef(g.localField(), columns));
+        if (!JoinTargetCatalog.isJoinTargetSystemKey(g.targetFormKey())) {
+            // FORM 目标物理表带 tenant_id —— LEFT JOIN 语义下过滤必须放 ON（放 WHERE 会退化为 INNER JOIN）
+            sql.append(" AND ").append(g.alias()).append(".tenant_id = ?");
+            params.add(tenantId);
+        }
+        return sql.toString();
+    }
+
+    /**
+     * JOIN 匹配的 localField 引用：JSON 列提取首元素，普通列直接引用。
+     * <p>
+     * ⚠️ 白名单前置：localField 必须在 columns 中存在且为主表列（ref 主表前缀），否则拒绝拼接 ——
+     * 既防手输错列名运行时才爆 SQL 错，也封死存量脏 params 的标识符注入面。
+     * 内置系统列（id/created_at/updated_at）在白名单之前短路（DDL 必有，始终属于主表）。
+     */
     private static String localRef(String localField, List<QueryColumn> columns) {
+        if (BUILTIN_COLUMNS.contains(localField)) {
+            return "m." + localField;
+        }
+        QueryColumn column = null;
+        for (QueryColumn c : columns) {
+            if (c.key().equals(localField)) {
+                column = c;
+                break;
+            }
+        }
+        if (column == null || !column.ref().startsWith("m.")) {
+            throw new IllegalArgumentException("主表关联字段不存在: " + localField);
+        }
         if (isJsonColumn(columns, localField)) {
             return "JSON_UNQUOTE(JSON_EXTRACT(m." + localField + ",'$[0]'))";
         }

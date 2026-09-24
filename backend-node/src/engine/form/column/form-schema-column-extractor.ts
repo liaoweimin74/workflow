@@ -126,9 +126,16 @@ export function inferColumnType(componentType: string | null): string {
     case 'inputNumber':
     case 'rate':
       return 'INT'
+    // 多行文本：设计器「多行输入框」产物为 input + props.type=textarea；
+    // form-create 亦注册 input 别名 textarea；AI formgen 曾输出 inputTextarea。
     case 'inputTextarea':
+    case 'textarea':
+    case 'fcEditor':
     case 'editor':
       return 'TEXT'
+    // 日期族：设计器标准类型 datePicker/timePicker（AI formgen 曾输出 date/datetime/time/dateRange）。
+    case 'datePicker':
+    case 'timePicker':
     case 'date':
     case 'datetime':
     case 'time':

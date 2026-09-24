@@ -5,6 +5,7 @@ import { getTenantId } from '../../framework/tenant/tenant-context'
 import type { ColumnConfig } from '../../common/domain/column-config'
 import { DynamicTableManager } from './column/dynamic-table-manager'
 import { parseBusinessColumnConfig } from './column/column-config-parser'
+import { collectUnknownBusinessComponentTypes } from './column/business-component-whitelist'
 import { DataSourceRepository } from '../datasource/repository/data-source.repository'
 import {
   FormDefinitionRepository,
@@ -379,9 +380,8 @@ function toEntity(row: FormDefinitionRow): Record<string, unknown> {
 
 // ==================== schema / column_config 的解析与校验 ====================
 // 都是 `FormDefinitionService` 里同名逻辑的移植。**错误消息逐字照抄** —— 它们是契约。
-
-/** 业务表单不支持的组件（`ColumnTypeMapper.UNSUPPORTED_COMPONENTS`）。 */
-const UNSUPPORTED_COMPONENTS = new Set(['userPicker', 'deptPicker', 'divider', 'groupContainer'])
+// （历史黑名单 userPicker/deptPicker/divider/groupContainer/dataTable 已由
+//   `business-component-whitelist.ts` 的白名单制取代——它们不在白名单，自然被拒。）
 
 /**
  * 取 schema 的 rule 数组。
@@ -426,18 +426,23 @@ function asArray(value: unknown): unknown[] {
 /**
  * 校验业务表单 schema 不含不支持组件（`validateBusinessSchema`）。
  *
- * 子表组件（group/tableForm/subForm）放行 —— 它们由发布流程建独立子表物理表。
+ * ⚠️ 白名单制（`BUSINESS_FORM_ALLOWED_TYPES`）：递归 children / props.rule /
+ * props.columns[].rule，任何未知 type 一律 400 拒绝。原黑名单制（userPicker 等五个）
+ * 对「AI 生成的不存在类型名」（如 formgen 曾输出的 date/inputTextarea）不设防 ——
+ * 设计器渲染「不支持」占位却能照常发布建表。
+ * 子表组件（group/tableForm/subForm）与布局容器均在白名单内放行，逐层递归校验。
  */
 function validateBusinessSchema(schema: string | null): void {
   const rules = parseRuleArray(schema)
   if (rules === null) {
     throw new BusinessException(400, '表单 schema 格式非法')
   }
-  for (const field of rules) {
-    const type = String(field.type ?? '')
-    if (UNSUPPORTED_COMPONENTS.has(type)) {
-      throw new BusinessException(400, `业务表单暂不支持组件（${type}），请移除后发布`)
-    }
+  const unknown = collectUnknownBusinessComponentTypes(rules)
+  if (unknown.length > 0) {
+    throw new BusinessException(
+      400,
+      `业务表单暂不支持组件（${[...new Set(unknown)].join('、')}），请在设计器中使用标准组件后发布`,
+    )
   }
 }
 

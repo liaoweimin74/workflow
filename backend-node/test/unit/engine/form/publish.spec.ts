@@ -218,13 +218,25 @@ describe('publish 的校验链（错误消息逐字对齐 Java）', () => {
     })
   })
 
-  it('schema 含不支持组件 → 400（消息含组件名）', async () => {
+  it('schema 含白名单外组件 → 400（消息含组件名，白名单制拦截未知类型）', async () => {
     const { service } = harness({
       current: draft({ schema: JSON.stringify([{ type: 'userPicker', field: 'u' }]) }),
     })
     await expect(runWithTenant('default', () => service.publish('f1'))).rejects.toMatchObject({
       code: 400,
-      message: '业务表单暂不支持组件（userPicker），请移除后发布',
+      message: '业务表单暂不支持组件（userPicker），请在设计器中使用标准组件后发布',
+    })
+  })
+
+  it('schema 含 AI formgen 曾误造的不存在类型 → 400（白名单制根治 date/inputTextarea 漏网）', async () => {
+    const { service } = harness({
+      current: draft({
+        schema: JSON.stringify([{ type: 'date', field: 'd1' }, { type: 'inputTextarea', field: 'r1' }]),
+      }),
+    })
+    await expect(runWithTenant('default', () => service.publish('f1'))).rejects.toMatchObject({
+      code: 400,
+      message: '业务表单暂不支持组件（date、inputTextarea），请在设计器中使用标准组件后发布',
     })
   })
 

@@ -44,6 +44,21 @@ const JOIN_FIELD_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/
 const SYSTEM_SOURCE_KEYS = BUILT_IN_SOURCE_KEYS
 
 /**
+ * HTTP body 里 `params` 的形态规范化。
+ *
+ * 服务层契约是 **JSON 字符串**（前端 normalizePayload 一律 JSON.stringify 后提交），
+ * 但客户端直接 POST 原生 JSON 时 body.params 可能已是对象/数组 —— 若不规范化，
+ * 隐式 String() 会落库成 `"[object Object]"` 垃圾数据，使该数据源所有读取端点 400。
+ * 规则：对象/数组 → JSON.stringify；字符串原样；其余（布尔/数字/null）→ null。
+ */
+function normalizeParamsRaw(input: unknown): string | null {
+  if (input === null || input === undefined) return null
+  if (typeof input === 'string') return input
+  if (typeof input === 'object') return JSON.stringify(input)
+  return null
+}
+
+/**
  * 数据源定义的写路径（对齐 Java `DataSourceDefinitionService` 的
  * `create` / `update` / `enable` / `disable` / `delete`）。
  *
@@ -75,10 +90,11 @@ export class DataSourceWriteService {
     type: string | null
     formKey: string | null
     sourceKey: string | null
-    params: string | null
+    params: unknown
   }): Promise<Record<string, unknown>> {
     const tenantId = getTenantId()
-    const { name, type, formKey, sourceKey, params } = request
+    const { name, type, formKey, sourceKey } = request
+    const params = normalizeParamsRaw(request.params)
 
     if (type === null || type.trim() === '') {
       throw new BusinessException(400, '数据源类型 type 必填')
@@ -157,13 +173,14 @@ export class DataSourceWriteService {
       type: string | null
       formKey: string | null
       sourceKey: string | null
-      params: string | null
+      params: unknown
     },
   ): Promise<Record<string, unknown>> {
     const tenantId = getTenantId()
     const current = await this.requireById(id)
     this.requireNotBuiltIn(current, '修改')
-    const { name, type, formKey, sourceKey, params } = request
+    const { name, type, formKey, sourceKey } = request
+    const params = normalizeParamsRaw(request.params)
 
     const newType = type === null || type.trim() === '' ? current.type : type
     if (type !== null && type.trim() !== '' && !SUPPORTED_TYPES.has(newType)) {

@@ -1363,3 +1363,27 @@ Stage Summary:
 - 两项用户需求全部交付并浏览器端到端实证；仓库结构与远程历史已完全对齐（main == origin/main == c5cd45d）
 - 前端 111/111、后端 74/74；全量套件 2 个预存失败（PageDesigner.card-mode / PageListPage 断言漂移，早于本任务）留给下轮巡检修复
 - 巡检 cron 待重建（沙箱重置后旧 job 失效）
+
+---
+Task ID: 53
+Agent: Z.ai Code (main)
+Task: 全量测试套件收敛（2 预存失败 + 9 新暴露失败）+ 巡检中发现的数据源 params 对象输入规范化缺陷修复 + 拖拽绑定时序加固
+
+Work Log:
+- 进度核对：Task 52（双段并存 + 拖拽排序）已在上一回合交付并推送（c5cd45d），HEAD==origin/main；本回合处理 Task 52 遗留的「2 个预存失败（PageDesigner.card-mode / PageListPage 断言漂移）」+ 巡检 cron 重建
+- 服务巡检：8080/5173 存活、3000 门户挂 → start-portal.sh 拉起；发现全量后端套件实际有 9 个失败（Task 52 worklog 记录的 74/74 为旧数，套件已增长至 820）：join spec 7 个（方案A重写后 SQL 形态变更快照未同步）+ migrator checksum 1 + migration 计数 1
+- join-sql-generator.spec 同步方案A新契约：别名 c/u→组别名 j1/j2（输入 alias 忽略）、LEFT JOIN ON 子句 AND j1.tenant_id=? 及参数顺序（JOIN 租户参→主租户→筛选→关键词→LIMIT/OFFSET）、虚拟列 ref fixture 对齐 buildJoinColumns 生成形态（j1.name）、validate 移除 alias 校验断言（同 virtualKey 重复语义覆盖）；新增「同连接条件分组合并为一条 LEFT JOIN、组内多虚拟列」核心用例
+- migrator.spec：V2__init_data.sql 期望值 2058847229→1139911049——实测库 flyway_schema_history WHERE version='2' 当前值即 1139911049（与 computeChecksum 一致、Node migrator 运行时校验同值通过），测试注释保留「期望值=库内原值」语义并注明重定基准；migration.spec：哨兵计数 37→38（V39 内建数据源预置）并补注释
+- PageDesigner.card-mode.test.ts：删除含过期断言 borderColor:'#2E73FF' 的**重复同名用例**（主题化改造后组件用 var(--el-color-primary)，文件中已有无该断言的同名用例）；PageListPage.test.ts 首用例重写对齐「新建统一 PAGE/formKey 顶层可选下拉」需求变更（原断言 type 下拉 VIEW/PAGE control 分支的旧结构）
+- 浏览器冒烟中发现真实缺陷①：API 以原生 JSON 对象提交 params（前端 normalizePayload 一律 stringify 后提交故 UI 路径不触发）→ data-source-write.service 隐式 String() 落库 "[object Object]" → 该数据源全部读取端点 400「数据源 params 不是合法 JSON」；修复：create/update 入口 normalizeParamsRaw（对象/数组→JSON.stringify、字符串原样、其余→null），控制器 DataSourceSaveRequest.params 类型诚实化为 unknown；实测对象 PUT 落库合法 JSON OBJECT
+- 浏览器冒烟中发现真实缺陷②（同一排障链）：useTableDragSort init 在调用方 nextTick 时机 getTbody 可能拿 null（el-table body-wrapper 由内部 watcher 异步渲染）→ 绑定静默丢失（Task 52 拖拽 E2E 能过属时序运气）；修复：init 内 rAF 重试 ≤60 帧 + bindSession 会话号防 destroy 后悬挂重试
+- 排障过程澄清（避免后续误判）：列表行按钮顺序为 查看/数据管理/编辑/删除，「查看」打开 viewOnly 抽屉其拖拽按设计禁用（disabled:()=>viewOnly）——曾误判为绑定失败；SQL 数据源 queryMode 缺省按 visual 校验（mainTable 空→保存被「请配置主表」拦截）——冒烟数据源改 queryMode='sql' 后闭环
+- E2E 实证：编辑模式绑定成功（expando:1）→ 原始鼠标序列拖拽行3→行1（onEnd raw 2→0 handled:false）→ UI 顺序 sort_no,id,name → 保存 → 服务端 params.columns=['sort_no','id','name']；测试数据 smoke_drag_tmp 已删除、办公用品等存量数据未触碰
+- lint：565 错误经 git stash 对照证实为存量基线（与本次无关），4 个改动文件 eslint 0 输出；调试用 console.log 全部移除
+- 全量回归：前端 88 文件/1114 用例全绿、后端 57 文件/821 用例全绿；提交 282bbae 推送成功（c5cd45d..282bbae）
+
+Stage Summary:
+- 测试套件全绿零失败：前端 1114/1114、后端 821/821（含方案A契约快照同步 + V39 计数 + 主题化/需求变更断言对齐）
+- 两个巡检期发现并修复的真实缺陷：params 对象输入落库垃圾（400 根因）、拖拽绑定时序竞态（rAF 重试）——均为用户可感知问题，早于用户报告前消除
+- 数据库实测方法确认 V2 checksum 真值（不再以硬编码为准绳而是以 flyway_schema_history 为准绳）
+- 遗留：Java 端仍无编译环境（Node 侧 normalize 语义建议下次有环境时对齐 Java DataSourceDefinitionService——Java Jackson 对象→String 反序列化默认 400 快速失败，行为安全但与 Node 不对称）；巡检 cron 本回合重建

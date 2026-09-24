@@ -12,6 +12,8 @@ import {
 } from '../../../framework/http/query-params'
 import { DataSourceService, type DataSourceVO } from '../service/data-source.service'
 import { DataSourceWriteService } from '../service/data-source-write.service'
+import { BizDataSupport, asBusinessException } from '../../form/bizdata/biz-data-support'
+import type { JoinConfig } from '../../form/bizdata/join-sql-generator'
 import { SqlMetadataProbe } from '../../form/bizdata/sql-metadata-probe'
 import { ApiMetadataProbe } from '../../form/bizdata/api-metadata-probe'
 
@@ -32,6 +34,7 @@ export class DataSourceController {
     private readonly writeService: DataSourceWriteService,
     private readonly metadataProbe: SqlMetadataProbe,
     private readonly apiMetadataProbe: ApiMetadataProbe,
+    private readonly bizDataSupport: BizDataSupport,
   ) {}
 
   /**
@@ -97,6 +100,26 @@ export class DataSourceController {
     @Body() body: Record<string, unknown> | null,
   ): Promise<R<ColumnMeta[]>> {
     return R.ok(await this.apiMetadataProbe.probe(body))
+  }
+
+  /**
+   * config 模式 JOIN SQL 预览（对齐 Java `DataSourceController.previewJoin`）。
+   *
+   * formKey + joins → 生成的 SELECT SQL（不落库不执行）；目标可为业务表单或
+   * 内建数据源（`join-target-catalog` 白名单解析物理表）。生成器抛出的非法参数
+   * 统一转 400（与 queryJoinConfig 的 `asBusinessException` 语义一致）。
+   */
+  @Post('join-preview')
+  async previewJoin(
+    @Body() body: { formKey?: string; joins?: JoinConfig[] } | null,
+  ): Promise<R<{ sql: string; params: unknown[] }>> {
+    try {
+      return R.ok(
+        await this.bizDataSupport.previewJoinSql(String(body?.formKey ?? ''), body?.joins ?? []),
+      )
+    } catch (error) {
+      throw asBusinessException(error)
+    }
   }
 
   /** 仅已启用数据源（页面设计器数据源下拉），返回裸数组。 */

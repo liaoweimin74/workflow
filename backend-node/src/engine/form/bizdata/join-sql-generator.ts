@@ -4,6 +4,7 @@ import {
   type ColumnAccess,
   type FilterEmitOptions,
 } from './filter-sql'
+import { isJoinTargetSystemKey, resolveJoinTargetTable } from './join-target-catalog'
 
 /**
  * config 模式 JOIN SQL 生成器（对齐 Java `com.workflow.engine.form.bizdata.JoinSqlGenerator`）。
@@ -85,7 +86,7 @@ export function buildSelect(
   }
   sql += ` FROM ${mainTable} m`
   for (const join of joins) {
-    sql += ` LEFT JOIN wf_biz_${String(join.targetFormKey)} ${String(join.alias)}`
+    sql += ` LEFT JOIN ${resolveJoinTargetTable(String(join.targetFormKey))} ${String(join.alias)}`
     sql += ` ON ${String(join.alias)}.${String(join.foreignField)} = ${localRef(join, columns)}`
   }
   sql += ' WHERE m.tenant_id = ?'
@@ -123,7 +124,7 @@ export function buildCount(
 ): SqlAndParams {
   let sql = `SELECT COUNT(1) FROM ${mainTable} m`
   for (const join of joins) {
-    sql += ` LEFT JOIN wf_biz_${String(join.targetFormKey)} ${String(join.alias)}`
+    sql += ` LEFT JOIN ${resolveJoinTargetTable(String(join.targetFormKey))} ${String(join.alias)}`
     sql += ` ON ${String(join.alias)}.${String(join.foreignField)} = ${localRef(join, columns)}`
   }
   sql += ' WHERE m.tenant_id = ?'
@@ -149,7 +150,7 @@ export function validate(joins: JoinConfig[] | null, mainColumns: string[] | nul
       throw illegal(`关联别名重复: ${join.alias}`)
     }
     aliases.add(join.alias)
-    requireText(join.targetFormKey, '关联目标表单')
+    requireText(join.targetFormKey, '关联目标表')
     requireText(join.localField, '主表关联字段')
     requireText(join.foreignField, '目标表关联字段')
     requireText(join.joinField, '目标表展示字段')
@@ -165,7 +166,8 @@ export function validate(joins: JoinConfig[] | null, mainColumns: string[] | nul
 }
 
 /**
- * 保存校验：`targetFormKey` 对应业务表单物理表必须存在（防止配置引用不存在的表单）。
+ * 保存校验：目标物理表必须存在（FORM → `wf_biz_<formKey>`；内建数据源 → 系统物理表，
+ * 由 join-target-catalog 白名单解析，杜绝任意表名拼接）。
  */
 export function validateTargets(
   joins: JoinConfig[] | null,
@@ -173,9 +175,10 @@ export function validateTargets(
 ): void {
   if (joins === null || joins.length === 0) return
   for (const join of joins) {
-    const table = `wf_biz_${String(join.targetFormKey)}`
-    if (!tableExists(table)) {
-      throw illegal(`关联表单不存在: ${String(join.targetFormKey)}`)
+    const targetKey = String(join.targetFormKey)
+    if (isJoinTargetSystemKey(targetKey)) continue // 内建目标表由 baseline 迁移建表，必然存在
+    if (!tableExists(`wf_biz_${targetKey}`)) {
+      throw illegal(`关联表单不存在: ${targetKey}`)
     }
   }
 }

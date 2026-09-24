@@ -252,7 +252,7 @@ describe('JoinSqlGenerator.validate / validateTargets', () => {
     )
     expect(messageOf(() => validate([JOINS[0], { ...JOINS[0] }], null))).toBe('关联别名重复: c')
     expect(messageOf(() => validate([{ ...JOINS[0], targetFormKey: ' ' }], null))).toBe(
-      '关联目标表单不能为空',
+      '关联目标表不能为空',
     )
     expect(messageOf(() => validate([{ ...JOINS[0], localField: null }], null))).toBe(
       '主表关联字段不能为空',

@@ -90,15 +90,21 @@ export function parseFormQueryConfig(
   return { queryMode: mode, joins: [], query: null, columns: [], declaredParams: [] }
 }
 
-/** `joins[]` 解析（对齐 Java `parseJoins`：非对象项跳过，布尔字段非布尔即 false）。 */
+/** `joins[]` 解析（对齐 Java `parseJoins`：非对象项跳过，布尔字段非布尔即 false）。
+ *
+ * alias 约定：前端不录入，缺失/空白时按序自动分配 `j1/j2/...`（保证唯一），
+ * 与 FormJoinConfig「alias 由后端系统按组自动分配」的注释一致；传入的合法 alias 原样保留。 */
 function parseJoins(node: unknown): JoinConfig[] {
   const out: JoinConfig[] = []
   if (!Array.isArray(node)) return out
+  const used = new Set<string>()
+  let idx = 0
   for (const item of node) {
     if (item === null || typeof item !== 'object' || Array.isArray(item)) continue
+    idx++
     const n = item as Record<string, unknown>
     out.push({
-      alias: text(n.alias),
+      alias: ensureAlias(text(n.alias), used, idx),
       targetFormKey: text(n.targetFormKey),
       localField: text(n.localField),
       foreignField: text(n.foreignField),
@@ -110,6 +116,28 @@ function parseJoins(node: unknown): JoinConfig[] {
     })
   }
   return out
+}
+
+/**
+ * alias 确定化：合法且未用 → 原样；否则按 `j${idx}` 起步找空位。
+ * 保存侧（data-source-write.service）允许缺失，由本函数兜底，两端语义一致。
+ * 导出供 previewJoinSql（不经 parseFormQueryConfig 的裸 joins）复用。
+ */
+export function ensureAlias(alias: string | null, used: Set<string>, idx: number): string {
+  if (alias !== null && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(alias)) {
+    if (!used.has(alias)) {
+      used.add(alias)
+      return alias
+    }
+  }
+  let n = Math.max(idx, used.size + 1)
+  let candidate = `j${n}`
+  while (used.has(candidate)) {
+    n++
+    candidate = `j${n}`
+  }
+  used.add(candidate)
+  return candidate
 }
 
 /**

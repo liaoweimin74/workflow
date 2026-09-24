@@ -8,7 +8,10 @@ import com.workflow.engine.form.bizdata.JoinSqlGenerator.JoinConfig;
 import com.workflow.engine.form.column.ColumnConfig;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * FORM 数据源查询模式配置解析器。
@@ -23,6 +26,9 @@ import java.util.List;
  * </pre>
  * 缺省（无 queryMode / queryMode 未知 / config 且 joins 为空 / sql 且 query 空白）→
  * {@link #isConfigMode()}/{@link #isSqlMode()} 均为 false，调用方回退原单表查询，保持向后兼容。
+ * <p>
+ * alias 语义：joins[] 的 alias 由后端按组自动分配（前端不录入），解析时缺失/非法/重复
+ * 按 {@code j1/j2/...} 兜底分配（{@link #ensureAlias}），对齐 NodeJS parseJoins。
  */
 public record FormQueryConfig(String queryMode,
                               List<JoinConfig> joins,
@@ -91,12 +97,15 @@ public record FormQueryConfig(String queryMode,
         if (node == null || !node.isArray()) {
             return out;
         }
+        Set<String> used = new HashSet<>();
+        int idx = 0;
         for (JsonNode n : node) {
             if (n == null || !n.isObject()) {
                 continue;
             }
+            idx++;
             out.add(new JoinConfig(
-                    text(n, "alias"),
+                    ensureAlias(text(n, "alias"), used, idx),
                     text(n, "targetFormKey"),
                     text(n, "localField"),
                     text(n, "foreignField"),
@@ -107,6 +116,36 @@ public record FormQueryConfig(String queryMode,
                     bool(n, "filterable")));
         }
         return out;
+    }
+
+    /** alias 合法格式（合法且未用 → 原样保留，否则按 jN 自动分配）。 */
+    private static final Pattern ALIAS_PATTERN = Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*$");
+
+    /**
+     * alias 确定化：合法且未用 → 原样；缺失/非法/重复 → 按 {@code j<idx>} 起步找空位。
+     * <p>
+     * alias 约定：前端不录入，缺失/空白时按序自动分配 {@code j1/j2/...}（保证唯一），
+     * 与保存侧「alias 可缺省」校验语义一致。公开静态供
+     * {@link BizDataSupport}{@code #previewJoinSql}（不经 parse 的裸 joins）复用，
+     * 对齐 NodeJS {@code form-query-config.ts} 的 {@code ensureAlias}。
+     *
+     * @param alias 传入 alias（可为 null/非法/重复）
+     * @param used 已分配 alias 集合（本方法会向其登记返回值）
+     * @param idx 当前 join 序号（1 起，自动分配的起步值）
+     */
+    public static String ensureAlias(String alias, Set<String> used, int idx) {
+        if (alias != null && ALIAS_PATTERN.matcher(alias).matches() && !used.contains(alias)) {
+            used.add(alias);
+            return alias;
+        }
+        int n = Math.max(idx, used.size() + 1);
+        String candidate = "j" + n;
+        while (used.contains(candidate)) {
+            n++;
+            candidate = "j" + n;
+        }
+        used.add(candidate);
+        return candidate;
     }
 
     private static List<ColumnConfig> parseColumns(JsonNode node) {

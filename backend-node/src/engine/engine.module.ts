@@ -10,6 +10,8 @@ import { DataSourceWriteService } from './datasource/service/data-source-write.s
 import { UnifiedDataSourceAdapter } from './datasource/adapter/unified-data-source-adapter'
 import { InternalDataSourceRouter } from './datasource/internal-data-source-router'
 import { WorkflowFormDataQueryService } from './datasource/workflow-form-data-query.service'
+import { BuiltInDataSourceSeeder } from './datasource/service/built-in-data-source-seeder'
+import { SystemSourceQueryService } from './datasource/service/system-source-query.service'
 import { BizDataController } from './form/controller/biz-data.controller'
 import { FormDataController } from './form/controller/form-data.controller'
 import { FormDefinitionController } from './form/controller/form-definition.controller'
@@ -87,6 +89,8 @@ import { TaskService } from './task/task.service'
     DataSourceWriteService,
     UnifiedDataSourceAdapter,
     InternalDataSourceRouter,
+    SystemSourceQueryService,
+    BuiltInDataSourceSeeder,
     WorkflowFormDataQueryService,
     {
       // 适配器以数组形式注入 DataSourceService，形状对齐 Java 的 List<DataSourceAdapter>
@@ -125,6 +129,7 @@ import { TaskService } from './task/task.service'
     ProcessInstanceService,
     TaskService,
     DataSourceService,
+    SystemSourceQueryService,
     PageDefinitionService,
     FormDefinitionService,
     FormDefinitionWriteService,

@@ -9,6 +9,8 @@ import { InternalDataSourceRouter } from '../internal-data-source-router'
 import { SystemService } from '../../../system/service/system.service'
 import { HttpLogicExecutor } from '../../logic/http-logic-executor'
 import { WorkflowFormDataQueryService } from '../workflow-form-data-query.service'
+import { SystemSourceQueryService } from '../service/system-source-query.service'
+import { builtInSourceByKey } from '../service/system-source-catalog'
 import {
   cloneColumns,
   type DataSourceAdapter,
@@ -31,23 +33,13 @@ interface OrgTreeNode {
   children?: OrgTreeNode[] | null
 }
 
-/** 部门树列常量（对齐 Java `DEPT_COLUMNS`）。 */
-const DEPT_COLUMNS: ColumnConfig[] = [
-  { ...newColumnConfig(), key: 'id', label: '部门 ID', columnType: 'VARCHAR', length: 64 },
-  { ...newColumnConfig(), key: 'parentId', label: '上级部门 ID', columnType: 'VARCHAR', length: 64 },
-  { ...newColumnConfig(), key: 'label', label: '部门名称', columnType: 'VARCHAR', length: 128 },
-  { ...newColumnConfig(), key: 'code', label: '部门编码', columnType: 'VARCHAR', length: 64 },
-]
+/**
+ * 部门/用户列常量已收编到 `system-source-catalog.ts`（唯一事实源，与 seeder/
+ * router/写服务共享）；字段逐字段保持与 Java `DEPT_COLUMNS`/`USER_COLUMNS` 一致。
+ */
 
-/** 用户树列常量（对齐 Java `USER_COLUMNS`）。 */
-const USER_COLUMNS: ColumnConfig[] = [
-  { ...newColumnConfig(), key: 'id', label: '用户 ID', columnType: 'VARCHAR', length: 64 },
-  { ...newColumnConfig(), key: 'username', label: '用户名', columnType: 'VARCHAR', length: 64 },
-  { ...newColumnConfig(), key: 'nickname', label: '昵称', columnType: 'VARCHAR', length: 64 },
-  { ...newColumnConfig(), key: 'orgId', label: '部门 ID', columnType: 'VARCHAR', length: 64 },
-  { ...newColumnConfig(), key: 'orgName', label: '部门名称', columnType: 'VARCHAR', length: 128 },
-  { ...newColumnConfig(), key: 'status', label: '状态', columnType: 'TINYINT', length: 1 },
-]
+/** 未知 sourceKey 的元数据列回退（保持旧行为：非 user-tree 一律部门列）。 */
+const DEPT_FALLBACK_COLUMNS = builtInSourceByKey('dept-tree')?.columns ?? []
 
 /**
  * 复制列并强制 `sortable=false`（对齐 Java `copyWithSortableFalse`）。
@@ -112,6 +104,7 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
     private readonly systemService: SystemService,
     private readonly httpExecutor: HttpLogicExecutor,
     private readonly workflowQuery: WorkflowFormDataQueryService,
+    private readonly systemSourceQuery: SystemSourceQueryService,
   ) {}
 
   supports(type: string): boolean {
@@ -120,13 +113,12 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
 
   async metadata(dataSource: DataSourceRef): Promise<DataSourceMetadata> {
     if (dataSource.type === 'SYSTEM') {
-      // ⚠️ SYSTEM 的列是**常量**（Java 的 DEPT_COLUMNS / USER_COLUMNS），不查库；
+      // ⚠️ SYSTEM 的列是**常量**（目录统一维护，源对齐 Java 的 DEPT/USER_COLUMNS），不查库；
       //    且 `writable=false`（系统数据源只读）。
       //    ⚠️ `copyWithSortableFalse` 只拷 key/label/columnType —— **不拷 length**，
       //    golden 实测列上 `length: null`（尽管常量里写了 64/128）。
-      const columns = copyWithSortableFalse(
-        dataSource.sourceKey === 'user-tree' ? USER_COLUMNS : DEPT_COLUMNS,
-      )
+      const source = builtInSourceByKey(dataSource.sourceKey ?? '')
+      const columns = copyWithSortableFalse(source === null ? DEPT_FALLBACK_COLUMNS : source.columns)
       return { columns, writable: false, formKey: null }
     }
     if (dataSource.type === 'WORKFLOW') {
@@ -277,7 +269,8 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
     dataSource: DataSourceRef,
     req: BizDataQueryRequest,
   ): Promise<BizDataPageVO> {
-    if (dataSource.sourceKey === 'user-tree') {
+    const sourceKey = dataSource.sourceKey ?? ''
+    if (sourceKey === 'user-tree') {
       const page = Math.max(req.page, 1)
       const result = await this.systemService.listUsersByUsername(req.keyword, page, req.size)
       const records: BizDataVO[] = result.rows.map((row) => ({
@@ -295,6 +288,13 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
         updatedAt: null,
       }))
       return { records, total: result.total, page: result.page, size: result.size }
+    }
+
+    // 新 6 个内建系统数据源（菜单/角色/字典/流程定义/流程实例/待办任务）
+    // 统一委托 SystemSourceQueryService —— 与 SystemInternalController 的 REST
+    // 端点共享同一份实现，避免双实现漂移。
+    if (SystemSourceQueryService.handles(sourceKey)) {
+      return this.systemSourceQuery.query(sourceKey, req)
     }
 
     const nodes = await this.systemService.orgTree()

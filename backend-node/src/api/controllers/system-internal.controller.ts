@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common'
 import { R } from '../../common/domain/r'
+import { BusinessException } from '../../common/exception/business-exception'
 import {
   bizDataPageVO,
   bizDataVO,
@@ -12,8 +13,10 @@ import {
   type DataSourceMetadata,
 } from '../../common/domain/column-config'
 import { JavaStatusOk } from '../../framework/http/java-status.decorator'
-import { integerQueryParam } from '../../framework/http/query-params'
+import { bindIntProperty, integerQueryParam } from '../../framework/http/query-params'
 import { SystemService, type TreeNodeVO, type UserVO } from '../../system/service/system.service'
+import { SystemSourceQueryService } from '../../engine/datasource/service/system-source-query.service'
+import { BUILT_IN_SOURCE_KEYS } from '../../engine/datasource/service/system-source-catalog'
 
 /**
  * SYSTEM 内部 REST 控制器（对齐 Java `SystemInternalController`，前缀 `/api/v1/internal`）。
@@ -29,7 +32,10 @@ import { SystemService, type TreeNodeVO, type UserVO } from '../../system/servic
 @Controller('api/v1/internal')
 @JavaStatusOk()
 export class SystemInternalController {
-  constructor(private readonly userService: SystemService) {}
+  constructor(
+    private readonly userService: SystemService,
+    private readonly systemSourceQuery: SystemSourceQueryService,
+  ) {}
 
   /**
    * 部门树扁平化（根节点 `parentId` 为空串）。
@@ -168,6 +174,181 @@ export class SystemInternalController {
   async deleteUser(@Param('id') id: string): Promise<R<null>> {
     await this.userService.deleteUser(Number(id))
     return R.ok()
+  }
+
+  // ==================== 内建系统数据源 REST 化取数（新 6 个） ====================
+  //
+  // 这些端点与数据源 SPI（adapter 直调服务）共享同一份实现
+  // （SystemSourceQueryService），是 `generateParams` 生成的 `params.list.action`
+  // 的落点；也给前端/页面直连提供 REST 形状。取数均**只读**。
+  //
+  // ⚠️ 路由声明顺序有语义：`*/metadata` 与字面量段（process/...）必须排在
+  // 对应参数段（*/:id）之前（Nest 按声明顺序匹配，同 users 的历史教训）。
+
+  /** 系统菜单列表（全量扁平化）。 */
+  @Get('system/menus')
+  async systemMenus(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ): Promise<R<BizDataPageVO>> {
+    return R.ok(await this.sourceList('sys-menus', page, size))
+  }
+
+  /** 系统菜单元数据。 */
+  @Get('system/menus/metadata')
+  async systemMenusMetadata(): Promise<R<DataSourceMetadata>> {
+    return R.ok(await this.sourceMetadata('sys-menus'))
+  }
+
+  /** 系统菜单单条。 */
+  @Get('system/menus/:id')
+  async systemMenuById(@Param('id') id: string): Promise<R<BizDataVO>> {
+    return R.ok(await this.sourceGet('sys-menus', id))
+  }
+
+  /** 系统角色列表（标准分页）。 */
+  @Get('system/roles')
+  async systemRoles(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ): Promise<R<BizDataPageVO>> {
+    return R.ok(await this.sourceList('sys-roles', page, size))
+  }
+
+  /** 系统角色元数据。 */
+  @Get('system/roles/metadata')
+  async systemRolesMetadata(): Promise<R<DataSourceMetadata>> {
+    return R.ok(await this.sourceMetadata('sys-roles'))
+  }
+
+  /** 系统角色单条。 */
+  @Get('system/roles/:id')
+  async systemRoleById(@Param('id') id: string): Promise<R<BizDataVO>> {
+    return R.ok(await this.sourceGet('sys-roles', id))
+  }
+
+  /** 系统字典（类型）列表（标准分页）。 */
+  @Get('system/dicts')
+  async systemDicts(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ): Promise<R<BizDataPageVO>> {
+    return R.ok(await this.sourceList('sys-dicts', page, size))
+  }
+
+  /** 系统字典元数据。 */
+  @Get('system/dicts/metadata')
+  async systemDictsMetadata(): Promise<R<DataSourceMetadata>> {
+    return R.ok(await this.sourceMetadata('sys-dicts'))
+  }
+
+  /** 系统字典单条。 */
+  @Get('system/dicts/:id')
+  async systemDictById(@Param('id') id: string): Promise<R<BizDataVO>> {
+    return R.ok(await this.sourceGet('sys-dicts', id))
+  }
+
+  /** 流程定义列表（全量）。 */
+  @Get('system/process/definitions')
+  async processDefinitions(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ): Promise<R<BizDataPageVO>> {
+    return R.ok(await this.sourceList('process-definitions', page, size))
+  }
+
+  /** 流程定义元数据。 */
+  @Get('system/process/definitions/metadata')
+  async processDefinitionsMetadata(): Promise<R<DataSourceMetadata>> {
+    return R.ok(await this.sourceMetadata('process-definitions'))
+  }
+
+  /** 流程实例列表（标准分页，运行中）。 */
+  @Get('system/process/instances')
+  async processInstances(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ): Promise<R<BizDataPageVO>> {
+    return R.ok(await this.sourceList('process-instances', page, size))
+  }
+
+  /** 流程实例元数据。 */
+  @Get('system/process/instances/metadata')
+  async processInstancesMetadata(): Promise<R<DataSourceMetadata>> {
+    return R.ok(await this.sourceMetadata('process-instances'))
+  }
+
+  /** 待办任务列表（标准分页，按当前登录人过滤）。 */
+  @Get('system/process/todo-tasks')
+  async processTodoTasks(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ): Promise<R<BizDataPageVO>> {
+    return R.ok(await this.sourceList('todo-tasks', page, size))
+  }
+
+  /** 待办任务元数据。 */
+  @Get('system/process/todo-tasks/metadata')
+  async processTodoTasksMetadata(): Promise<R<DataSourceMetadata>> {
+    return R.ok(await this.sourceMetadata('todo-tasks'))
+  }
+
+  /** 内建数据源取数（page/size 缺省与 queryData 同默认：1/20）。 */
+  private async sourceList(
+    sourceKey: string,
+    page?: string,
+    size?: string,
+  ): Promise<BizDataPageVO> {
+    return this.systemSourceQuery.query(sourceKey, {
+      filter: null,
+      keyword: null,
+      keywordColumn: null,
+      sort: null,
+      order: null,
+      params: null,
+      page: bindIntProperty(page, 'page', 1),
+      size: bindIntProperty(size, 'size', 20),
+    })
+  }
+
+  /**
+   * 内建数据源元数据（列来自目录常量）。
+   *
+   * ⚠️ 第二参与既有 deptTreeMetadata/usersMetadata 同构传 `true`
+   * （历史端点的既成行为）；数据管理页实际走 SPI 路径
+   * `/data-sources/:id/metadata`（adapter 返回 writable=false 只读），
+   * 这些 REST metadata 端点当前没有前端消费方，一致性优先。
+   */
+  private async sourceMetadata(sourceKey: string): Promise<DataSourceMetadata> {
+    return dataSourceMetadata(
+      (await this.systemSourceQuery.columnsOf(sourceKey)).map((column) =>
+        columnConfig(String(column.key), String(column.label)),
+      ),
+      true,
+    )
+  }
+
+  /** 内建数据源单条：全量取回后按 id 线性查找（对齐 adapter SYSTEM get 的语义）。 */
+  private async sourceGet(sourceKey: string, id: string): Promise<BizDataVO> {
+    if (!BUILT_IN_SOURCE_KEYS.has(sourceKey)) {
+      throw new BusinessException(400, `未注册的系统数据源: ${sourceKey}`)
+    }
+    const all = await this.systemSourceQuery.query(sourceKey, {
+      filter: null,
+      keyword: null,
+      keywordColumn: null,
+      sort: null,
+      order: null,
+      params: null,
+      page: 1,
+      // 全量取回：size 给安全上限，full/paged 语义差异由服务内部处理
+      size: 100000,
+    })
+    const row = all.records.find((item) => item.id === id)
+    if (row === undefined) {
+      throw new BusinessException(404, `系统数据不存在: ${id}`)
+    }
+    return row
   }
 }
 

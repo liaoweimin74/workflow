@@ -10,6 +10,11 @@ import {
   DataSourceRepository,
   type DataSourceRow,
 } from '../repository/data-source.repository'
+import {
+  BUILT_IN_SOURCE_KEYS,
+  BUILT_IN_TENANT,
+  mapSystemInternalPath,
+} from './system-source-catalog'
 
 /** 支持的数据源类型，对齐 Java `SUPPORTED_TYPES`。 */
 const SUPPORTED_TYPES = new Set(['FORM', 'SYSTEM', 'API', 'WORKFLOW', 'SQL'])
@@ -24,8 +29,11 @@ const STATUS_DRAFT = 'DRAFT'
 const STATUS_ENABLED = 'ENABLED'
 const STATUS_DISABLED = 'DISABLED'
 
-/** 已注册的系统数据源 key，对齐 Java `SYSTEM_SOURCE_KEYS`。 */
-const SYSTEM_SOURCE_KEYS = new Set(['dept-tree', 'user-tree'])
+/**
+ * 已注册的系统数据源 key，与内建目录同源（`BUILT_IN_SOURCE_KEYS`，8 个）。
+ * 旧的两键字面量集合（dept-tree/user-tree）已收编，避免与 router/seeder 三处漂移。
+ */
+const SYSTEM_SOURCE_KEYS = BUILT_IN_SOURCE_KEYS
 
 /**
  * 数据源定义的写路径（对齐 Java `DataSourceDefinitionService` 的
@@ -129,6 +137,8 @@ export class DataSourceWriteService {
    *
    * ⚠️ 已启用且「类型或绑定表单」变化时要重新校验发布状态 —— 这是 Java 里
    *    `bindChanged` 那一段，容易漏。
+   * ⚠️ 系统内建数据源（`tenant_id = BUILT_IN_TENANT`）受保护：改名/换绑定都会
+   *    破坏预置语义与设计器引用，直接 400。
    */
   async update(
     id: string,
@@ -142,6 +152,7 @@ export class DataSourceWriteService {
   ): Promise<Record<string, unknown>> {
     const tenantId = getTenantId()
     const current = await this.requireById(id)
+    this.requireNotBuiltIn(current, '修改')
     const { name, type, formKey, sourceKey, params } = request
 
     const newType = type === null || type.trim() === '' ? current.type : type
@@ -225,9 +236,13 @@ export class DataSourceWriteService {
     return toDto({ ...ds, ...patch })
   }
 
-  /** 禁用数据源（**不做引用校验**，也不影响已发布页面运行）。 */
+  /**
+   * 禁用数据源（**不做引用校验**，也不影响已发布页面运行）。
+   * 系统内建数据源受保护：禁用会让设计器/页面取数失败，直接 400。
+   */
   async disable(id: string): Promise<Record<string, unknown>> {
     const ds = await this.requireById(id)
+    this.requireNotBuiltIn(ds, '禁用')
     await this.repository.replaceDefinition(id, { status: STATUS_DISABLED }, new Date())
     return toDto({ ...ds, status: STATUS_DISABLED })
   }
@@ -240,9 +255,11 @@ export class DataSourceWriteService {
    *   2. PAGE 类型页面 `schema.dataSources[].refId`（软删除的 ARCHIVED 页面不算）
    * ⚠️ Java 的短路顺序：列引用 > 0 时直接返回该数，不再扫 schema ——
    *    所以报出来的「被 N 个页面引用」里的 N 语义**不是总数**。照抄。
+   * ⚠️ 系统内建数据源**不允许删除**（预置语义；重启会被 seeder 补回，删除是假象）。
    */
   async remove(id: string): Promise<void> {
     const ds = await this.requireById(id)
+    this.requireNotBuiltIn(ds, '删除')
     const refCount = await this.countRefs(ds.tenant_id, id)
     if (refCount > 0) {
       throw new BusinessException(400, `数据源已被 ${refCount} 个页面引用，无法删除`)
@@ -255,6 +272,16 @@ export class DataSourceWriteService {
     const row = await this.repository.findByIdAccessible(id, getTenantId())
     if (row === null) throw new BusinessException(404, `数据源不存在: ${id}`)
     return row
+  }
+
+  /**
+   * 内建保护：`tenant_id = BUILT_IN_TENANT` 的预置行不允许修改/删除/禁用。
+   * enable 不拦（对已 ENABLED 的内建行是幂等空操作，且拦了反而让前端开关卡死）。
+   */
+  private requireNotBuiltIn(row: DataSourceRow, action: string): void {
+    if (row.tenant_id === BUILT_IN_TENANT) {
+      throw new BusinessException(400, `系统内建数据源不允许${action}: ${row.name}`)
+    }
   }
 
   /** 统计引用指定数据源的页面数（列 ∪ schema）。 */
@@ -539,11 +566,16 @@ function parseStringList(node: unknown): string[] {
   return out
 }
 
-/** sourceKey → internal API 路径 key 映射（dept-tree→dept-tree，user-tree→users）。 */
+/**
+ * sourceKey → internal API 路径段（dept-tree→dept-tree，user-tree→users；
+ * 新 6 个见 `mapSystemInternalPath`）。未知 key 报错文案逐字保留。
+ */
 function mapSystemInternalKey(sourceKey: string | null): string {
-  if (sourceKey === 'dept-tree') return 'dept-tree'
-  if (sourceKey === 'user-tree') return 'users'
-  throw new BusinessException(400, `未注册的系统数据源: ${String(sourceKey)}`)
+  const mapped = mapSystemInternalPath(sourceKey)
+  if (mapped === '') {
+    throw new BusinessException(400, `未注册的系统数据源: ${String(sourceKey)}`)
+  }
+  return mapped
 }
 
 /** 合并：生成端点 params 之上叠加 queryMode 配置段。 */

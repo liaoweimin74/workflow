@@ -1403,3 +1403,17 @@ Work Log:
 Stage Summary:
 - 两项用户需求交付闭环：显示列拖拽排序真实生效并持久化；数据源管理拖拽排序按需求全面下线
 - 待办：Java mvn compile 回归三场景（无编译环境）、PageDesigner 预存噪音跟进；随后创建 webDevReview 巡检 cron
+
+---
+Task ID: 55
+Agent: Z.ai Code (main)
+Task: 修复用户新增记录报 CONSTRAINT wf_biz_bill_test.leave_type failed（JSON 列 json_valid CHECK 失败）
+
+Work Log:
+- 根因：设计器把 select 组件（含单选）一律映射为 JSON 列（longtext CHECK json_valid），单选值是裸字符串；写路径 serializeJsonColumns 对字符串原样保留 → 撞 CHECK
+- 修复：Node+Java 双端 serializeJsonColumns 对 JSON 列字符串值归一（空白→null、非法 JSON→stringify 包裹、合法 JSON 原样）；读侧 deserializeJsonValue 已兼容，回显不变
+- 新增 6 单测 + 后端全量 794/794 全绿；API 与页面同款端点双实证（HEX 验库存形态）后清理测试数据；8080 已重建重启
+- 详细记录见 workflow_lowcode/docs/ops/worklog.md Task 55
+
+Stage Summary:
+- 用户报错修复闭环，存量 JSON 列表无需迁移；遗留子表同型隐患与前端映射优化（含迁移策略）记入下轮

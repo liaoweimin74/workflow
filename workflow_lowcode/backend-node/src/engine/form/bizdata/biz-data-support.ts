@@ -604,12 +604,32 @@ export class BizDataSupport {
    * 非字符串值序列化为 JSON 字符串（`serializeJsonColumns`）。
    *
    * ⚠️ `null` 与字符串**原样保留**（字符串是"旧格式容错"），数组/对象才序列化。
+   *
+   * ⚠️ JSON 列（`columnType == 'JSON'`，物理表为 `longtext CHECK (json_valid(...))`）的字符串值
+   *    需要归一：单选 select / 树选等组件的 value 是**裸字符串**（如 'annual'），裸字符串
+   *    不是合法 JSON，入库即撞 CHECK 约束（报 `CONSTRAINT <表>.<列> failed`）。因此：
+   *    - 空白字符串 → `null`（required 列已被 validateRequired 拦截，能到这里必是可空列）；
+   *    - 非法 JSON 的非空字符串 → `JSON.stringify(value)` 包成 JSON 字符串文档；
+   *    - 合法 JSON（含数字/布尔/null 字面量文本）→ 原样。
+   *    读取侧 `deserializeJsonValue` 对 `"annual"` parse 回 `annual`，回显不变。
    */
-  private serializeJsonColumns(data: Record<string, unknown>): Record<string, unknown> {
+  private serializeJsonColumns(data: Record<string, unknown>, columns: ColumnConfig[]): Record<string, unknown> {
+    const jsonKeys = new Set(
+      columns.filter((c) => (c.columnType ?? '').toUpperCase() === 'JSON').map((c) => String(c.key)),
+    )
     const out: Record<string, unknown> = { ...data }
     for (const [key, value] of Object.entries(data)) {
-      if (value === null || value === undefined || typeof value === 'string') continue
-      out[key] = JSON.stringify(value)
+      if (value === null || value === undefined) continue
+      if (typeof value !== 'string') {
+        out[key] = JSON.stringify(value)
+        continue
+      }
+      if (!jsonKeys.has(key)) continue // 非 JSON 列：字符串原样（旧格式容错）
+      if (value.trim() === '') {
+        out[key] = null
+        continue
+      }
+      if (!isValidJsonText(value)) out[key] = JSON.stringify(value)
     }
     return out
   }
@@ -627,7 +647,7 @@ export class BizDataSupport {
 
     this.validateRequired(ctx.columns, body)
 
-    const merged = this.serializeJsonColumns(body)
+    const merged = this.serializeJsonColumns(body, ctx.columns)
     Object.assign(merged, await this.resolvePickerValues(ctx, merged))
 
     const insert = buildInsert(ctx.tableName, ctx.columnKeys, merged, tenantId)
@@ -661,7 +681,7 @@ export class BizDataSupport {
     this.validateRequired(ctx.columns, body)
     const currentVersion = version ?? 1
 
-    const merged = this.serializeJsonColumns(body)
+    const merged = this.serializeJsonColumns(body, ctx.columns)
     Object.assign(merged, await this.resolvePickerValues(ctx, merged))
 
     const query = buildUpdate(ctx.tableName, ctx.columnKeys, merged, tenantId, id, currentVersion)
@@ -1073,6 +1093,23 @@ export function deserializeJsonValue(value: unknown): unknown {
     return JSON.parse(value)
   } catch {
     return value
+  }
+}
+
+/**
+ * 字符串是否为合法 JSON 文本（对齐 MariaDB `json_valid` 的接受域）。
+ *
+ * 仅用于 JSON 列写路径归一：`JSON.parse` 成功的文本 `json_valid` 必通过，
+ * 因此「parse 成功 → 原样入库、parse 失败 → stringify 包裹」是安全方向。
+ * 注意 `JSON.parse` 接受前后空白（`json_valid` 同样容忍），标量字面量
+ * （数字/布尔/null）也是合法 JSON 文档。
+ */
+export function isValidJsonText(value: string): boolean {
+  try {
+    JSON.parse(value)
+    return true
+  } catch {
+    return false
   }
 }
 

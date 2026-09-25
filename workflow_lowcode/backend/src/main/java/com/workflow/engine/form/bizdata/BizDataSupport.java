@@ -225,7 +225,7 @@ public class BizDataSupport {
         validateRequired(ctx.columns(), data);
 
         // data-picker 引用校验与冗余文本生成（不改原 data，返回附加字段）
-        Map<String, Object> merged = serializeJsonColumns(data);
+        Map<String, Object> merged = serializeJsonColumns(data, ctx.columns());
         merged.putAll(resolvePickerValues(ctx, merged));
 
         BizDataQueryBuilder.SqlAndParams insert = BizDataQueryBuilder.buildInsert(
@@ -496,7 +496,7 @@ public class BizDataSupport {
         validateRequired(ctx.columns(), data);
         int currentVersion = version == null ? 1 : version;
 
-        Map<String, Object> merged = serializeJsonColumns(data);
+        Map<String, Object> merged = serializeJsonColumns(data, ctx.columns());
         merged.putAll(resolvePickerValues(ctx, merged));
 
         BizDataQueryBuilder.SqlAndParams update = BizDataQueryBuilder.buildUpdate(
@@ -851,21 +851,63 @@ public class BizDataSupport {
 
     /**
      * 对非字符串值（数组/List/Map）序列化为 JSON 字符串（供参数绑定存储）。
+     *
+     * ⚠️ JSON 列（`columnType == 'JSON'`，物理表 `longtext CHECK (json_valid(...))`）的字符串值需归一：
+     * 单选 select / 树选等组件的 value 是裸字符串（如 'annual'），直接入库即撞 CHECK
+     * （报 `CONSTRAINT <表>.<列> failed`）。规则与 Node 侧逐条对齐：
+     *   - 空白字符串 → null（required 列已被 validateRequired 拦截，能到这里必是可空列）；
+     *   - 非法 JSON 的非空字符串 → Jackson writeValueAsString 包成 JSON 字符串文档；
+     *   - 合法 JSON（含数字/布尔/null 字面量文本）→ 原样（readValue 成功即 json_valid 必过）。
+     * 读取侧 deserializeJsonValue 对 "\"annual\"" parse 回 annual，回显不变。
      */
-    private Map<String, Object> serializeJsonColumns(Map<String, Object> data) {
+    private Map<String, Object> serializeJsonColumns(Map<String, Object> data, List<ColumnConfig> columns) {
+        Set<String> jsonKeys = new HashSet<>();
+        for (ColumnConfig c : columns) {
+            if (c.getColumnType() != null && "JSON".equalsIgnoreCase(c.getColumnType())) {
+                jsonKeys.add(c.getKey());
+            }
+        }
         Map<String, Object> out = new LinkedHashMap<>(data);
         for (Map.Entry<String, Object> e : data.entrySet()) {
             Object v = e.getValue();
-            if (v == null || v instanceof String) {
-                continue; // null 跳过；字符串为旧格式容错
+            if (v == null) {
+                continue;
             }
-            try {
-                out.put(e.getKey(), objectMapper.writeValueAsString(v));
-            } catch (JsonProcessingException ex) {
-                throw new BusinessException(400, "字段 " + e.getKey() + " 无法序列化为 JSON: " + ex.getOriginalMessage());
+            if (v instanceof String s) {
+                if (!jsonKeys.contains(e.getKey())) {
+                    continue; // 非 JSON 列：字符串为旧格式容错
+                }
+                if (s.isBlank()) {
+                    out.put(e.getKey(), null);
+                    continue;
+                }
+                if (!isValidJsonText(s)) {
+                    out.put(e.getKey(), writeJsonOr400(e.getKey(), s));
+                }
+                continue;
             }
+            out.put(e.getKey(), writeJsonOr400(e.getKey(), v));
         }
         return out;
+    }
+
+    /** Jackson 序列化，失败按既有语义抛 400（提取共用避免两处重复 try/catch）。 */
+    private String writeJsonOr400(String key, Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException(400, "字段 " + key + " 无法序列化为 JSON: " + ex.getOriginalMessage());
+        }
+    }
+
+    /** 字符串是否为合法 JSON 文本（对齐 MariaDB json_valid 接受域；与 Node isValidJsonText 同语义）。 */
+    private boolean isValidJsonText(String s) {
+        try {
+            objectMapper.readValue(s, Object.class);
+            return true;
+        } catch (JsonProcessingException e) {
+            return false;
+        }
     }
 
     /** 对 JSON 列值反序列化；parse 失败原样返回（兼容旧逗号串数据） */

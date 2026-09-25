@@ -26,6 +26,13 @@ export interface FormDefinitionSaveRequest {
   columnConfig?: string | null
 }
 
+/** 表单复制请求（type 为目标类型，支持跨类型：WORKFLOW ↔ BUSINESS） */
+export interface FormCopyRequest {
+  name: string
+  key: string
+  type: string
+}
+
 export interface FormVersionDTO {
   id: string
   version: number
@@ -88,6 +95,14 @@ export const formApi = {
 
   publishFormDefinition(id: string): Promise<R<FormDefinitionDTO>> {
     return http.post(`/v1/form-definitions/${id}/publish`)
+  },
+
+  /**
+   * 复制表单（可跨类型：工作流 ↔ 业务），产物为新表单草稿。
+   * 发布副本时走既有发布校验链（业务表单组件白名单 / 列映射校验）。
+   */
+  copyForm(id: string, data: FormCopyRequest): Promise<R<FormDefinitionDTO>> {
+    return http.post(`/v1/form-definitions/${id}/copy`, data)
   },
 
   getFormVersions(id: string): Promise<R<FormVersionDTO[]>> {

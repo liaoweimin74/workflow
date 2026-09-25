@@ -1473,3 +1473,23 @@ Work Log:
 Stage Summary:
 - 用户报错根因闭环：select 单选裸字符串 × JSON 列 json_valid CHECK × 写路径字符串原样容错，三者交汇；修复为写路径 JSON 列归一（Node+Java 对齐），存量 JSON 列表无需迁移即可正常写入。
 - 遗留：①子表 insertSubRow 无 JSON 归一（同型隐患，子表值多为结构化数组暂无实爆场景）；②前端 select 单选→VARCHAR 映射优化（需配套数据迁移策略）；③Java 无编译环境，改动经括号配平+逐引用静态审查，建议有环境时 mvn compile 回归。
+
+---
+Task ID: 56
+Agent: Z.ai Code (main)
+Task: 表单管理操作列新增「复制」——支持跨类型复制（工作流 ↔ 业务），副本为草稿，发布时走既有校验链
+
+Work Log:
+- 【后端】FormDefinitionWriteService.copy(sourceId, name, key, type)：新记录（新 id/key、version=1、DRAFT、publishedVersion=null）、schema 原样复制；column_config 仅目标为 BUSINESS 保留（WORKFLOW 发布链路不消费它，带过去只是脏数据）、process_key 仅目标为 WORKFLOW 保留（业务表单无流程语义）；复制即 syncOnCreated 自动建数据源（BUSINESS→FORM、WORKFLOW→WORKFLOW，name 跟随新表单名）。校验分工：源不存在 → 普通 Error（HTTP 500，与 create 族一致）；key 重复 → 普通 Error "Form key already exists"（HTTP 500）；name/key 空白、type 非法（非 WORKFLOW/BUSINESS）→ BusinessException 400。type 缺省跟随源类型。
+- 【后端】controller 新增 POST /api/v1/form-definitions/:id/copy（body: FormCopyRequest{name,key,type}），与 :id/publish 同路由模式；错误形态在注释中显式约定。
+- 【设计要点】「复制放行、发布拦截」：复制时不做组件兼容性拦截（这正是跨类型复制的意义），发布时由既有 publish 链兜底——validateBusinessSchema 白名单拦截审批类组件（userPicker 等）、parseBusinessColumnConfig 拦截未配置列映射。发布校验链零改动，语义自然覆盖副本。
+- 【前端】formApi.copyForm + FormCopyRequest；FormListPage 操作列「设计」后新增「复制」按钮（CopyDocument 图标、form:create 权限、ARCHIVED 行隐藏）；复制弹窗（520px）：目标类型 el-radio-button（默认跟随源类型）、表单名称（预填「源名 副本」）、表单标识（预填「源key_copy」+ 小写/数字/下划线校验 + 提示文案）；跨类型时 el-alert 警示发布校验影响（W→B：组件白名单/列映射拦截；B→W：不再生成业务表、列映射不保留）；提交 loading、成功 toast「复制成功，副本已创建为草稿」+ 列表刷新、失败弹窗保留可改后重试。
+- 【测试】后端新增 copy.spec.ts 13 用例（产物语义/跨类型字段去留/数据源同步/错误形态）；前端 FormListPage.test.ts 新增 6 用例（按钮可见性/预填/同类型提交参数/跨类型提示与参数/校验规则配置/key 冲突弹窗保留）。
+- 【验证】①后端全量 58 文件 840/840、前端全量 88 文件 1120/1120 全绿；②vue-tsc 46=46 基线持平（FormListPage(10,10) 等均为预存噪音，stash 对照确认）；③改动文件 ESLint 0 error；④8080 nest build + PORT=8080 重启生效；⑤API 端到端 8 场景：建含 userPicker 的工作流源 → 复制为业务（DRAFT/v1/column_config 保留/process_key 置 null）→ 发布被 400「业务表单暂不支持组件（userPicker）」精确拦截 → 复制为工作流 → 发布 200 PUBLISHED/v1 → key 重复 500 → type 非法 400 → 三个副本均自动建数据源且类型/名称正确；⑥agent-browser 浏览器端到端：列表页复制按钮 → 弹窗预填（名称/标识/类型跟随源）→ 跨类型切换出现警示 → 清空名称提交被行内校验「请输入表单名称」拦截且弹窗保留 → 补全后提交成功、列表刷新、新副本以「草稿」状态置顶可见；⑦控制台零新增 error（仅预存 warning：LookupPicker prop/SSE 重连等）。
+- 【测试数据】API+UI 两轮共 5 表单 3 数据源全部清理（DRAFT 走删除 API 软删→DB 归档行清理；PUBLISHED 的 e2e_copy_wf2 走 DB 精确删除 wf_form_def + wf_data_source）；终验零残留、用户原表单 bill_test 完好。
+- 【环境坑位备忘】①backend-node 默认端口 8081，重启必须 PORT=8080（本次误启 8081 后纠正）；②vitest 预打包环境下 element-plus el-form 表单级 validate() 静默通过（字段级正常、AsyncValidator 同步抛错被表单级 catch 吞成 undefined 载荷 → doValidateField 判空返回 true）——jsdom 单测不可靠 el-form validate 拦截断言，已改为断言规则配置 + 浏览器 E2E 实证（真实浏览器拦截正常，属测试环境特有缺陷，未修）；③DB 直查/清理用 backend-node 内置 mysql2（root/740130/workflow_v6），数据源表名为 wf_data_source。
+
+Stage Summary:
+- 表单复制功能闭环：操作列复制按钮 → 弹窗选目标类型 → 副本为草稿 → 发布走既有校验链；跨类型复制（工作流↔业务）语义自洽（column_config/process_key 按目标类型取舍，数据源同步自动建）。
+- 改动清单：后端 2 文件（write service + controller）+ copy.spec.ts；前端 3 文件（api/form.ts + FormListPage.vue + 测试）。
+- 遗留：①vitest 下 el-form 表单级 validate 静默通过的环境缺陷（影响其它依赖 formRef.validate() 的单测可信度，真实浏览器不受影响，后续可查 vite 依赖预打包互操作）；②Java 端无此新端点（Node 专属新功能，无 Java 契约对齐诉求，如需对齐再补 Java 实现）。

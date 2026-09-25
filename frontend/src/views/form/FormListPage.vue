@@ -64,6 +64,55 @@
         <el-button @click="versionDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
+
+    <!-- 复制表单弹窗：可选目标类型，支持跨类型复制（工作流 ↔ 业务） -->
+    <el-dialog
+      v-model="copyDialogVisible"
+      title="复制表单"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        v-if="copyTypeChanged"
+        :title="copyTypeHint"
+        type="warning"
+        show-icon
+        :closable="false"
+        class="copy-type-alert"
+      />
+      <el-form
+        ref="copyFormRef"
+        :model="copyFormState"
+        :rules="copyRules"
+        label-width="90px"
+      >
+        <el-form-item label="目标类型" prop="type">
+          <el-radio-group v-model="copyFormState.type">
+            <el-radio-button value="WORKFLOW">工作流表单</el-radio-button>
+            <el-radio-button value="BUSINESS">业务表单</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="表单名称" prop="name">
+          <el-input
+            v-model="copyFormState.name"
+            maxlength="255"
+            placeholder="请输入新表单名称"
+          />
+        </el-form-item>
+        <el-form-item label="表单标识" prop="key">
+          <el-input
+            v-model="copyFormState.key"
+            maxlength="255"
+            placeholder="请输入新表单标识"
+          />
+          <div class="copy-key-tip">副本为新表单，标识不能与现有表单重复；发布副本时会进行组件与列映射校验</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="copyDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="copySubmitting" @click="submitCopy">复制</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -73,7 +122,16 @@ defineOptions({ name: 'FormList' })
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus as _Plus, EditPen, Grid, Promotion, Clock, Delete } from '@element-plus/icons-vue'
+import type { FormInstance, FormRules } from 'element-plus'
+import {
+  Plus as _Plus,
+  CopyDocument,
+  EditPen,
+  Grid,
+  Promotion,
+  Clock,
+  Delete,
+} from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { formApi, type FormDefinitionDTO, type FormVersionDTO } from '@/api/form'
@@ -195,6 +253,14 @@ const actionButtons: ActionButton[] = [
     },
   },
   {
+    label: '复制',
+    icon: CopyDocument,
+    size: 'small',
+    permission: 'form:create',
+    show: (row: any) => row.status !== 'ARCHIVED',
+    onClick: (row: any) => openCopyDialog(row),
+  },
+  {
     label: '管理数据',
     icon: Grid,
     size: 'small',
@@ -270,6 +336,72 @@ const actionButtons: ActionButton[] = [
   },
 ]
 
+// ========== 复制表单 ==========
+const copyDialogVisible = ref(false)
+const copySubmitting = ref(false)
+const copySource = ref<FormDefinitionDTO | null>(null)
+const copyFormRef = ref<FormInstance>()
+const copyFormState = reactive({ type: 'WORKFLOW', name: '', key: '' })
+
+const copyRules: FormRules = {
+  type: [{ required: true, message: '请选择目标类型', trigger: 'change' }],
+  name: [{ required: true, message: '请输入表单名称', trigger: 'blur' }],
+  key: [
+    { required: true, message: '请输入表单标识', trigger: 'blur' },
+    {
+      pattern: /^[a-z][a-z0-9_]*$/,
+      message: '只能包含小写字母、数字、下划线，且以字母开头',
+      trigger: 'blur',
+    },
+  ],
+}
+
+/** 是否跨类型复制（工作流 → 业务 / 业务 → 工作流） */
+const copyTypeChanged = computed(
+  () => !!copySource.value && copyFormState.type !== copySource.value.type,
+)
+
+/** 跨类型提示：复制放行、发布拦截的校验分工 */
+const copyTypeHint = computed(() => {
+  if (!copySource.value) return ''
+  if (copyFormState.type === 'BUSINESS') {
+    return '工作流表单复制为业务表单：发布时将校验组件白名单与列映射，含审批类组件需先调整，未配置列映射将无法发布。'
+  }
+  return '业务表单复制为工作流表单：副本用于流程发起，不再生成业务数据表，列映射不会随复制保留。'
+})
+
+function openCopyDialog(row: FormDefinitionDTO) {
+  copySource.value = row
+  copyFormState.type = row.type === 'BUSINESS' ? 'BUSINESS' : 'WORKFLOW'
+  copyFormState.name = `${row.name} 副本`
+  copyFormState.key = `${row.key}_copy`
+  copyDialogVisible.value = true
+}
+
+async function submitCopy() {
+  if (!copySource.value) return
+  try {
+    await copyFormRef.value?.validate()
+  } catch {
+    return
+  }
+  copySubmitting.value = true
+  try {
+    await formApi.copyForm(copySource.value.id, {
+      name: copyFormState.name.trim(),
+      key: copyFormState.key.trim(),
+      type: copyFormState.type,
+    })
+    ElMessage.success('复制成功，副本已创建为草稿')
+    copyDialogVisible.value = false
+    tableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    copySubmitting.value = false
+  }
+}
+
 // ========== 版本历史 ==========
 const versionDialogVisible = ref(false)
 const versionLoading = ref(false)
@@ -320,5 +452,15 @@ function formatDate(dateStr: string): string {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+.copy-type-alert {
+  margin-bottom: 16px;
+}
+.copy-key-tip {
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+  margin-top: 4px;
 }
 </style>

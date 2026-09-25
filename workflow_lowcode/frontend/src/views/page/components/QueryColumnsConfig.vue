@@ -28,7 +28,9 @@
 
     <!-- 字段列表（整行可拖拽排序：已勾选展示字段的顺序随拖拽调整） -->
     <div ref="tableWrapperRef">
-    <el-table :data="displayCandidates" border max-height="460">
+    <!-- row-key（行身份键）：Sortable 物理移动 <tr> 后，keyed patch 依 key 确定性收敛；
+         缺省 key=index 时 Vue 按索引就地 patch 会与已移动的 DOM 相互抵消，拖拽形同未生效 -->
+    <el-table :data="displayCandidates" row-key="key" border max-height="460">
       <el-table-column prop="key" label="字段" width="130" />
       <el-table-column prop="label" label="标题" min-width="110" />
 
@@ -240,11 +242,10 @@ function isCustomColumn(key: string): boolean {
   return !props.candidates.some((c) => c.key === key)
 }
 
-/** 候选行显示顺序记忆（拖拽后重写；候选变化即数据源切换时重置）。
- *  不记则 emit 后 el-table 重渲染会把拖拽的行弹回原位，拖拽形同未生效。 */
-const candidateOrder = ref<string[]>([])
-
-/** 下方字段列表数据源 = 数据源字段候选 + 自定义列（计算列），自定义列参与展示/排序/编辑/删除 */
+/** 下方字段列表数据源 = 数据源字段候选 + 自定义列（计算列），自定义列参与展示/排序/编辑/删除。
+ *  行顺序派生自已保存的显示列顺序：已勾选展示列（含自定义列）按 columns 顺序在前，
+ *  未勾选候选按数据源自然顺序随后。列表顺序与保存的显示列顺序一致，
+ *  重新打开配置即可见已保存顺序；拖拽重排 columns 后同规则收敛，无额外可变状态。 */
 const displayCandidates = computed<ColumnConfigItem[]>(() => {
   const candKeys = new Set(props.candidates.map((c) => c.key))
   const customs: ColumnConfigItem[] = props.columns
@@ -261,21 +262,13 @@ const displayCandidates = computed<ColumnConfigItem[]>(() => {
       hidden: false,
     }))
   const all = [...props.candidates, ...customs]
-  if (candidateOrder.value.length === 0) return all
-  // 按记忆顺序重排；未记忆的 key（新增候选/自定义列）稳定追加在末尾
-  const pos = new Map(candidateOrder.value.map((k, i) => [k, i]))
-  return [...all].sort((a, b) => {
-    const ia = pos.get(a.key) ?? Number.MAX_SAFE_INTEGER
-    const ib = pos.get(b.key) ?? Number.MAX_SAFE_INTEGER
-    return ia === ib ? 0 : ia - ib
-  })
+  const byKey = new Map(all.map((c) => [c.key, c]))
+  const ordered = props.columns
+    .map((c) => byKey.get(c.key))
+    .filter((c): c is ColumnConfigItem => !!c)
+  const orderedKeys = new Set(ordered.map((c) => c.key))
+  return [...ordered, ...all.filter((c) => !orderedKeys.has(c.key))]
 })
-
-// 候选集合变化（切换数据源）→ 清空顺序记忆，回归候选自然顺序
-watch(
-  () => props.candidates.map((c) => c.key).join('|'),
-  () => { candidateOrder.value = [] },
-)
 
 // ========== 字段列表整行拖拽排序 ==========
 const tableWrapperRef = ref<HTMLElement>()
@@ -296,12 +289,11 @@ function initFieldSortable() {
         const oldIndex = evt.oldIndex
         const newIndex = evt.newIndex
         if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return
-        // 重排候选副本（模拟 DOM 新顺序），已勾选展示字段按新顺序重排 columns
+        // 重排候选副本（模拟 DOM 新顺序），已勾选展示字段按新顺序重排 columns；
+        // emit 后 displayCandidates（派生自 columns）按新顺序重渲染，row-key keyed patch 收敛，拖拽结果不弹回
         const cands = [...displayCandidates.value]
         const [moved] = cands.splice(oldIndex, 1)
         cands.splice(newIndex, 0, moved)
-        // 记忆候选新顺序：emit 后 el-table 重渲染按此顺序渲染，拖拽结果不弹回
-        candidateOrder.value = cands.map((c) => c.key)
         const cols = props.columns
         const newCols = cands
           .filter((c) => cols.some((x) => x.key === c.key))

@@ -1387,3 +1387,19 @@ Stage Summary:
 - 两个巡检期发现并修复的真实缺陷：params 对象输入落库垃圾（400 根因）、拖拽绑定时序竞态（rAF 重试）——均为用户可感知问题，早于用户报告前消除
 - 数据库实测方法确认 V2 checksum 真值（不再以硬编码为准绳而是以 flyway_schema_history 为准绳）
 - 遗留：Java 端仍无编译环境（Node 侧 normalize 语义建议下次有环境时对齐 Java DataSourceDefinitionService——Java Jackson 对象→String 反序列化默认 400 快速失败，行为安全但与 Node 不对称）；巡检 cron 本回合重建
+
+---
+Task ID: 54
+Agent: Z.ai Code (main)
+Task: 数据表格「数据源绑定→显示列」拖拽排序不生效修复 + 数据源管理拖拽排序功能移除收尾（SqlEditor/composable）
+
+Work Log:
+- 定位用户报告根因：QueryColumnsConfig.vue 的 el-table 缺 row-key（element-plus 回退 key=index），Vue 索引就地 patch 与 Sortable 已物理移动的 DOM 相互抵消 → 拖拽视觉弹回；重开弹窗列表按自然序渲染，已保存列顺序不可见 → 用户感知「未保存未生效」
+- 修复：el-table 加 row-key="key"；displayCandidates 改纯派生（勾选列按保存顺序在前+未勾选候选随后），删除 candidateOrder 可变状态；重开即见保存顺序，拖拽→emit→派生→keyed 收敛固定点稳定
+- 收尾上轮在途：SqlEditor 拖拽移除（保留 row-key+回声守卫）；useTableDragSort.ts 零引用删除；DataSourceListPage nextTick 死 import 清理
+- E2E（agent-browser）：页面 test1 数据表格拖拽 leave_days 0→2 → 无回弹 → 保存 → API 复核 schema.columns 顺序一致 → 重开弹窗顺序可见；字段元数据/声明式 SQL 把手全数移除；控制台零新增错误
+- 回归：全量前端 1114/1114 全绿；vue-tsc 46=46 基线持平；ESLint 0 error；详细记录见 workflow_lowcode/docs/ops/worklog.md Task 54
+
+Stage Summary:
+- 两项用户需求交付闭环：显示列拖拽排序真实生效并持久化；数据源管理拖拽排序按需求全面下线
+- 待办：Java mvn compile 回归三场景（无编译环境）、PageDesigner 预存噪音跟进；随后创建 webDevReview 巡检 cron

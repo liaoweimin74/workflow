@@ -174,7 +174,9 @@ const records = ref<any[]>([])
 
 /** 当前 filter（动作总线 set-filter 注入） */
 const currentFilter = ref<Record<string, unknown> | undefined>(undefined)
-/** 切换数据源后标记为 true，忽略 props.columns 旧配置 */
+/** 换绑后标记为 true，临时忽略 props.columns 旧配置（改用元数据列渲染）；
+ *  仅「已解析 refId → 另一 refId」的真实换绑置位，首次异步解析不置位——
+ *  否则会永久吞掉用户配置的列顺序/宽度/对齐（拖拽排序保存后不生效的根因） */
 const useMetadataColumns = ref(false)
 
 // ==================== 详情弹窗 ====================
@@ -888,12 +890,25 @@ onMounted(async () => {
   emit('ready', { refresh, setFilter, resetFilter, openCreate, records })
 })
 
-// 数据源切换时重新加载元数据，标记使用元数据列；
-// 设计态额外补发取数：配置数据源确定/切换后立即渲染表格（运行态由 _pendingFirstFetch 保证首次请求单次触发，不重复取数）
-watch(() => resolvedRefId.value, () => {
-  useMetadataColumns.value = true
+// 数据源 refId 解析/变更：重新加载元数据；
+// 仅「已解析 → 另一 refId」的真实换绑才置 useMetadataColumns（旧列配置失效），
+// 首次异步解析（'' → id）不置位，保证用户已保存的列顺序/宽度等配置生效
+// （设计态额外补发取数：配置数据源确定/切换后立即渲染表格；运行态由 _pendingFirstFetch 保证首次请求单次触发，不重复取数）
+watch(() => resolvedRefId.value, (val, oldVal) => {
+  if (oldVal && val && oldVal !== val) {
+    useMetadataColumns.value = true
+  }
   loadMetadata()
   if (props.designMode) nextTick(() => { tableRef.value?.fetchList() })
+})
+
+// 列配置更新（配置弹窗确定回写 / 页面保存）→ 恢复按用户配置渲染；
+// 若配置的列键全部不在当前元数据中，视为换绑后未重新配置的旧配置，维持元数据列
+watch(() => props.columns, (cols) => {
+  if (!cols || cols.length === 0) return
+  const metaKeys = new Set(metaColumns.value.map((c) => c.key))
+  if (metaColumns.value.length > 0 && !cols.some((c: any) => metaKeys.has(c.key ?? c.prop))) return
+  useMetadataColumns.value = false
 })
 </script>
 

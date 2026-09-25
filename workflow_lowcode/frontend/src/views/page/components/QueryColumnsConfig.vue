@@ -240,6 +240,10 @@ function isCustomColumn(key: string): boolean {
   return !props.candidates.some((c) => c.key === key)
 }
 
+/** 候选行显示顺序记忆（拖拽后重写；候选变化即数据源切换时重置）。
+ *  不记则 emit 后 el-table 重渲染会把拖拽的行弹回原位，拖拽形同未生效。 */
+const candidateOrder = ref<string[]>([])
+
 /** 下方字段列表数据源 = 数据源字段候选 + 自定义列（计算列），自定义列参与展示/排序/编辑/删除 */
 const displayCandidates = computed<ColumnConfigItem[]>(() => {
   const candKeys = new Set(props.candidates.map((c) => c.key))
@@ -256,8 +260,22 @@ const displayCandidates = computed<ColumnConfigItem[]>(() => {
       indexed: false,
       hidden: false,
     }))
-  return [...props.candidates, ...customs]
+  const all = [...props.candidates, ...customs]
+  if (candidateOrder.value.length === 0) return all
+  // 按记忆顺序重排；未记忆的 key（新增候选/自定义列）稳定追加在末尾
+  const pos = new Map(candidateOrder.value.map((k, i) => [k, i]))
+  return [...all].sort((a, b) => {
+    const ia = pos.get(a.key) ?? Number.MAX_SAFE_INTEGER
+    const ib = pos.get(b.key) ?? Number.MAX_SAFE_INTEGER
+    return ia === ib ? 0 : ia - ib
+  })
 })
+
+// 候选集合变化（切换数据源）→ 清空顺序记忆，回归候选自然顺序
+watch(
+  () => props.candidates.map((c) => c.key).join('|'),
+  () => { candidateOrder.value = [] },
+)
 
 // ========== 字段列表整行拖拽排序 ==========
 const tableWrapperRef = ref<HTMLElement>()
@@ -282,6 +300,8 @@ function initFieldSortable() {
         const cands = [...displayCandidates.value]
         const [moved] = cands.splice(oldIndex, 1)
         cands.splice(newIndex, 0, moved)
+        // 记忆候选新顺序：emit 后 el-table 重渲染按此顺序渲染，拖拽结果不弹回
+        candidateOrder.value = cands.map((c) => c.key)
         const cols = props.columns
         const newCols = cands
           .filter((c) => cols.some((x) => x.key === c.key))

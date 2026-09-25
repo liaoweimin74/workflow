@@ -1417,3 +1417,20 @@ Work Log:
 
 Stage Summary:
 - 用户报错修复闭环，存量 JSON 列表无需迁移；遗留子表同型隐患与前端映射优化（含迁移策略）记入下轮
+
+---
+Task ID: 56
+Agent: Z.ai Code (main)
+Task: workflow_lowcode 表单管理操作列新增「复制」——跨类型复制（工作流 ↔ 业务）+ 副本草稿 + 发布校验
+
+Work Log:
+- 定位：frontend/src/views/form/FormListPage.vue（SearchTable actionButtons）+ backend-node engine/form（write service/controller）
+- 后端 POST /api/v1/form-definitions/:id/copy：副本 DRAFT/v1/schema 原样；column_config 只跟 BUSINESS、process_key 只跟 WORKFLOW；自动同步建数据源；key 重复→500、name/key 空白与 type 非法→400
+- 复制放行、发布拦截：发布时既有校验链（业务组件白名单/列映射）自然覆盖副本，发布链零改动
+- 前端复制弹窗（类型 radio/名称/标识预填 + 跨类型警示 + 必填与格式校验）+ formApi.copyForm
+- 测试：后端 840/840（新增 13）、前端 1120/1120（新增 6）、vue-tsc 46=46 基线、改动文件 ESLint 0 error
+- API 端到端 8 场景 + agent-browser 浏览器端到端（预填/跨类型警示/校验拦截/成功刷新）全通过；8080 已重建重启（注意 PORT=8080）
+- 测试数据全部清理零残留；详见 workflow_lowcode/docs/ops/worklog.md Task 56
+
+Stage Summary:
+- 表单跨类型复制功能闭环推送；遗留：vitest 环境下 el-form 表单级 validate 静默通过（真实浏览器正常），建议下轮排查 vite 依赖预打包互操作。

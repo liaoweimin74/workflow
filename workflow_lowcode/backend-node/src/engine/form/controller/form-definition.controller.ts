@@ -135,6 +135,26 @@ export class FormDefinitionController {
   }
 
   /**
+   * 复制表单定义（新功能端点，支持跨类型：工作流 ↔ 业务）。
+   *
+   * ⚠️ 产物为**草稿**（version=1、publishedVersion=null），发布走既有 `publish`
+   *    校验链 —— 工作流表单复制为业务表单时，schema 中的审批类组件会在发布时
+   *    被 `validateBusinessSchema` 白名单拦截（复制不拦、发布拦截）。
+   * ⚠️ 复制会**同步创建数据源**（同 create），name 跟随新表单名。
+   * ⚠️ key 重复 → HTTP **500**（与 create 一致）；name/key 空白或 type 非法 →
+   *    业务 400（HTTP 200 + body code）。
+   */
+  @Post(':id/copy')
+  async copy(
+    @Param('id') id: string,
+    @Body() body: FormCopyRequest | null,
+  ): Promise<R<Record<string, unknown>>> {
+    return R.ok(
+      await this.writeService.copy(id, body?.name ?? '', body?.key ?? '', body?.type ?? null),
+    )
+  }
+
+  /**
    * 发布表单定义（对齐 Java `@PostMapping("/{id}/publish")`）。
    *
    * ⚠️ **建物理表就发生在这里**（不是 create）：`type=BUSINESS` 时按 `column_config`
@@ -156,4 +176,11 @@ interface FormDefinitionSaveRequest {
   schema?: string | null
   columnConfig?: string | null
   processKey?: string | null
+}
+
+/** 表单复制请求体（type：目标类型 WORKFLOW / BUSINESS，缺省跟随源类型）。 */
+interface FormCopyRequest {
+  name?: string | null
+  key?: string | null
+  type?: string | null
 }

@@ -119,6 +119,72 @@ export class FormDefinitionWriteService {
     await this.syncOnDeleted(tenantId, current)
   }
 
+  // ==================== 复制（跨类型：WORKFLOW ↔ BUSINESS） ====================
+
+  /**
+   * 复制表单定义（新功能端点，无 Java 契约；错误形态刻意向 create 族看齐）。
+   *
+   * 产物语义：
+   *  - **新记录**：新 id、新 key、`version=1`、`status=DRAFT`、`published_version=null`
+   *    —— 即「复制完为草稿」，发布走既有 `publish` 校验链；
+   *  - `schema` 原样复制（含设计器扩展段 dataSources / actions）；
+   *  - `column_config` 仅在目标类型为 BUSINESS 时保留 —— 发布建表只消费业务表单的
+   *    列映射，WORKFLOW 发布链路完全不读它，带过去只是脏数据；
+   *  - `process_key` 仅在目标类型为 WORKFLOW 时保留 —— 业务表单没有流程语义；
+   *  - 复制即建数据源（`syncOnCreated`：BUSINESS → FORM、WORKFLOW → WORKFLOW），
+   *    数据源 name 跟随**新**表单名。
+   *
+   * 校验分工（复制时不做组件兼容性拦截 —— 这正是「工作流表单复制为业务表单」
+   * 场景的设计：复制放行，**发布时**由 `validateBusinessSchema` 白名单拦截
+   * 审批类组件，由 `parseBusinessColumnConfig` 拦截未配置列映射）：
+   *  - 源不存在 → 普通 Error（→ HTTP 500，与 create/update 族一致）
+   *  - name/key 空白、type 非法 → `BusinessException` 400
+   *  - key 重复 → 普通 Error `Form key already exists`（→ HTTP 500，与 create 一致）
+   */
+  async copy(
+    sourceId: string,
+    name: string,
+    key: string,
+    type: string | null,
+  ): Promise<Record<string, unknown>> {
+    const tenantId = getTenantId()
+    const source = await this.repository.findByIdAndTenantId(sourceId, tenantId)
+    if (source === null) throw new Error(`Form definition not found: ${sourceId}`)
+
+    const trimmedName = name.trim()
+    const trimmedKey = key.trim()
+    if (trimmedName === '') throw new BusinessException(400, '表单名称不能为空')
+    if (trimmedKey === '') throw new BusinessException(400, '表单标识不能为空')
+    const targetType = type === null || type.trim() === '' ? source.type : type.trim()
+    if (targetType !== 'WORKFLOW' && targetType !== 'BUSINESS') {
+      throw new BusinessException(400, `无效的表单类型: ${targetType}`)
+    }
+    if (await this.repository.existsByKey(trimmedKey, tenantId)) {
+      throw new Error(`Form key already exists: ${trimmedKey}`)
+    }
+
+    const now = new Date()
+    const row: FormDefinitionRow = {
+      id: randomBytes(16).toString('hex'),
+      tenant_id: tenantId,
+      name: trimmedName,
+      key: trimmedKey,
+      type: targetType,
+      schema: source.schema,
+      column_config: targetType === 'BUSINESS' ? source.column_config : null,
+      version: 1,
+      status: 'DRAFT',
+      published_version: null,
+      process_key: targetType === 'WORKFLOW' ? source.process_key : null,
+      created_by: null,
+      created_at: now,
+      updated_at: now,
+    }
+    await this.repository.insert(row)
+    await this.syncOnCreated(tenantId, row)
+    return toEntity(row)
+  }
+
   // ==================== 发布（对齐 FormDefinitionService.publish） ====================
 
   /**

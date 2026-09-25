@@ -1493,3 +1493,23 @@ Stage Summary:
 - 表单复制功能闭环：操作列复制按钮 → 弹窗选目标类型 → 副本为草稿 → 发布走既有校验链；跨类型复制（工作流↔业务）语义自洽（column_config/process_key 按目标类型取舍，数据源同步自动建）。
 - 改动清单：后端 2 文件（write service + controller）+ copy.spec.ts；前端 3 文件（api/form.ts + FormListPage.vue + 测试）。
 - 遗留：①vitest 下 el-form 表单级 validate 静默通过的环境缺陷（影响其它依赖 formRef.validate() 的单测可信度，真实浏览器不受影响，后续可查 vite 依赖预打包互操作）；②Java 端无此新端点（Node 专属新功能，无 Java 契约对齐诉求，如需对齐再补 Java 实现）。
+
+---
+Task ID: 57
+Agent: Z.ai Code (main)
+Task: 沙箱再次重置后恢复 workflow_lowcode 仓库 + push 闭环实证（用户指令「push」）
+
+Work Log:
+- 现场盘点：workflow_lowcode/.git 随沙箱重置消失，外层 /home/z/my-project 重建为 UUID checkpoint 仓库（无 remote、filemode=true）；git status 323 个 M 全为运行时噪音（pid/MariaDB ibd/tool-results），core.fileMode=false 下项目代码内容与 checkpoint HEAD 零差异
+- 特征代码核验（checkpoint 是否含 Task 54/55/56 产物）：QueryColumnsConfig row-key="key" ✓、useTableDragSort.ts 已删 ✓、biz-data-support.ts serializeJsonColumns/isValidJsonText ✓、controller :id/copy 端点 ✓、FormListPage 复制按钮 ✓；copy.spec.ts 等文件系统缺失（checkpoint 丢文件老问题）
+- 仓库重建（Task 52 验证过的模式）：git init -b main + core.fileMode=false + remote add origin（无凭据 URL）+ fetch origin main 成功；远程 main HEAD=7b93965（Task 56 提交），历史完整（54/55/56/53/52…全在）
+- git reset --mixed origin/main 后 status 审查：268 个差异全部为 D（工作区丢失文件），零 M 零 ??——本地代码内容与远程完全一致，无需人工裁决
+- git checkout -- . 从索引恢复全部 268 个丢失文件（含 backend-node/test/unit/engine/form/copy.spec.ts 等）；恢复后 git status 干净（0 差异）
+- push 实证：git push 因凭据缺失被拒（「could not read Username」，PAT 随沙箱重置销毁，worklog/tool-results 均为脱敏 <PAT> 占位无真实值可恢复）；但本次无新提交——ls-remote origin main=7b93965 本地 HEAD=7b93965 完全一致，用户三任务成果（7de81e8/430ff84/7b93965）已全部在远程
+- 服务巡检：3000 门户 200 / 5173 vite 200 / 8080 登录 API 返回 accessToken / MariaDB 3306 在线——四通道全绿
+- 本节 worklog 为恢复后首个本地新增提交（领先远程 1 提交，待 PAT）
+
+Stage Summary:
+- 仓库结构恢复闭环：workflow_lowcode/.git 重建，本地 HEAD=origin/main=7b93965，工作区零差异；三个用户任务成果确认已推送远程（无需重推）
+- 待办：用户提供新 fine-grained PAT 后 git remote set-url origin https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git && git push origin main（将本节 worklog 推上去）；建议同时在每次 push 成功后将 PAT 保存到沙箱外（worklog 脱敏机制导致每次重置后凭据全灭）
+- 遗留不变：Java mvn compile 回归三场景（无编译环境）、FormDesigner vitest 环境缺陷（el-form 表单级 validate）、外层 checkpoint 仓库与内层仓库并存的固定格局

@@ -1434,3 +1434,23 @@ Work Log:
 
 Stage Summary:
 - 表单跨类型复制功能闭环推送；遗留：vitest 环境下 el-form 表单级 validate 静默通过（真实浏览器正常），建议下轮排查 vite 依赖预打包互操作。
+
+---
+Task ID: 57
+Agent: Z.ai Code (main)
+Task: 用户指令「push」——沙箱重置后恢复 workflow_lowcode 仓库 + push 闭环实证
+
+Work Log:
+- 盘点：workflow_lowcode/.git 随沙箱重置消失，外层重建为 UUID checkpoint 仓库（无 remote）；323 个 M 全为运行时噪音，项目代码与 checkpoint HEAD 零内容差异
+- 特征核验：Task 54（row-key/拖拽下线）/55（JSON 归一）/56（copy 端点+按钮）代码全在 checkpoint；copy.spec.ts 等 268 文件文件系统丢失
+- 重建：git init -b main + core.fileMode=false + remote add origin + fetch origin main → 远程 HEAD=7b93965（Task 56 提交，历史完整）
+- reset --mixed 后审查：268 差异全为 D、零 M 零 ?? → checkout -- . 全量恢复 → status 干净、HEAD=origin/main=7b93965
+- push 实证：无新提交需推送——ls-remote origin main = 本地 HEAD = 7b93965；三任务成果（7de81e8/430ff84/7b93965）已在远程
+- PAT 随重置销毁（worklog/tool-results 全为脱敏占位），git push 报 could not read Username——本地现领先远程 1 提交（Task 57 worklog），待 PAT 后一键推
+- 服务巡检四通道全绿：3000 门户 200 / 5173 vite 200 / 8080 登录 API accessToken / MariaDB 3306
+- 内部 worklog 已追加 Task 57 节并提交 ef7ec41
+
+Stage Summary:
+- 仓库恢复闭环：本地=远程=7b93965，用户三个任务（拖拽下线/显示列拖拽修复/表单复制）成果确认全部在远程，无需重推
+- 待用户提供新 fine-grained PAT：git remote set-url origin https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git && git push origin main（推 Task 57 worklog）
+- 建议：PAT 保存至沙箱外持久处，避免每次沙箱重置后凭据全灭、push 停摆

@@ -289,13 +289,7 @@
                     从主表单覆盖
                   </el-button>
                 </div>
-                <div ref="metadataTableRef">
                 <el-table :data="metadataColumns" :row-key="metadataRowKey" size="small" border style="width: 100%" :max-height="300">
-                  <el-table-column label="" width="36" align="center" class-name="drag-col">
-                    <template #default>
-                      <el-icon class="drag-handle" title="拖拽排序"><Rank /></el-icon>
-                    </template>
-                  </el-table-column>
                   <el-table-column label="标识" min-width="120">
                     <template #default="{ row }">
                       <el-input v-model="row.key" placeholder="标识" size="small" />
@@ -367,8 +361,6 @@
                     </template>
                   </el-table-column>
                 </el-table>
-                </div>
-                <div class="metadata-toolbar-hint">拖动行首把手可调整字段顺序；顺序即保存后的元数据展示顺序</div>
                 <el-button type="primary" plain size="small" style="margin-top: 4px" @click="addMetadataColumn">添加列</el-button>
 
                 <el-dialog v-model="columnDialogVisible" title="字段详情" width="800px" append-to-body>
@@ -579,12 +571,11 @@
 <script setup lang="ts">
 defineOptions({ name: 'DataSourceList' })
 
-import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid, Rank } from '@element-plus/icons-vue'
+import { Plus, View, Edit, Delete, Close, QuestionFilled, Grid } from '@element-plus/icons-vue'
 import { clearHttpCache } from '@/utils/http'
-import { moveItem, useTableDragSort } from '@/composables/useTableDragSort'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton } from '@/components/business/types'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
@@ -769,6 +760,22 @@ const formJoinBaseParams = ref<Record<string, any>>({})
 /** FORM 关联查询配置是否可编辑：仅编辑模式（非查看）的 FORM 类型 */
 const formJoinDisabled = computed(() => viewOnly.value || form.type !== 'FORM')
 
+/** FORM 列声明单一来源镜像：字段元数据 Tab（sqlConfig.declaredColumns）与
+ *  SQL 模板列声明（FormJoinConfig → formJoin.value.columns）原本是两份独立副本，
+ *  任一侧编辑对另一侧不可见，而 FORM 保存（buildFormParams）只读 formJoin.columns，
+ *  导致元数据 Tab 的编辑/覆盖保存后不生效。两个 watcher 按数组引用互为镜像（非深克隆），
+ *  引用相等即短路，天然无回环；镜像后两侧共享同一数组，就地编辑即时互通。 */
+watch(() => formJoin.value.columns, (cols) => {
+  if (form.type === 'FORM' && cols && sqlConfig.declaredColumns !== (cols as ColumnConfigItem[])) {
+    sqlConfig.declaredColumns = cols as ColumnConfigItem[]
+  }
+})
+watch(() => sqlConfig.declaredColumns, (cols) => {
+  if (form.type === 'FORM' && cols && formJoin.value.columns !== cols) {
+    formJoin.value.columns = cols
+  }
+})
+
 /** SQL 可视化：主表/JOIN 目标表字段懒加载缓存（表名 → 字段 key 列表） */
 const sqlTableFields = ref<Record<string, string[]>>({})
 
@@ -880,10 +887,6 @@ async function handleTabChange(tab: string) {
   activeTab.value = tab
   if (tab === 'metadata' && editingId.value && !metadata.value) {
     await loadMetadata()
-  }
-  if (tab === 'metadata' && isEditableType.value && !viewOnly.value) {
-    // 元数据表格 v-if 渲染完成后绑定行拖拽
-    nextTick(() => initMetadataSort())
   }
   if (tab === 'data' && editingId.value) {
     // 数据预览需要列定义：若元数据未加载，先加载元数据
@@ -1065,40 +1068,14 @@ function removeMetadataColumn(row: ColumnConfigItem) {
   }
 }
 
-// ==================== 字段元数据拖拽排序 ====================
-// 数组顺序即 params.columns 存储顺序：拖拽重排后保存，metadata 端点与所有设计器字段列表按新顺序返回
-const metadataTableRef = ref<HTMLElement>()
-
-// 行身份键：Sortable 外部移动 DOM 后，keyed patch 依 key 确定性收敛（WeakMap 不污染数据）
+// ==================== 字段元数据编辑 ====================
+// 行身份键：稳定 key 保证编辑中行不重建（原拖拽排序功能已按需求移除，row-key 保留用于渲染稳定性）
 const rowUidMap = new WeakMap<object, number>()
 let rowUidSeq = 0
 function metadataRowKey(row: ColumnConfigItem): string {
   if (!rowUidMap.has(row)) rowUidMap.set(row, ++rowUidSeq)
   return String(rowUidMap.get(row))
 }
-
-function onMetadataReorder(oldIndex: number, newIndex: number) {
-  // 必须替换数组引用（而非就地 splice）：el-table 的 setData 依赖 data 引用变化，
-  // 就地修改不会触发行重渲染，Sortable 已移动的 DOM 会被还原
-  const next = [...metadataColumns.value]
-  moveItem(next, oldIndex, newIndex)
-  if (form.type === 'API') {
-    apiColumns.value = next
-  } else {
-    sqlConfig.declaredColumns = next
-  }
-}
-
-const { init: initMetadataSort, destroy: destroyMetadataSort } = useTableDragSort({
-  getTbody: () => metadataTableRef.value?.querySelector('.el-table__body-wrapper tbody'),
-  handle: '.drag-handle',
-  disabled: () => viewOnly.value,
-  onReorder: onMetadataReorder,
-})
-
-watch(inlineVisible, (v) => {
-  if (!v) destroyMetadataSort()
-})
 
 /** 加载数据预览 */
 async function loadPreviewData() {
@@ -1884,29 +1861,6 @@ onMounted(async () => {
   display: flex;
   gap: 4px;
   margin: 0 0 4px;
-}
-/* 拖拽排序提示行（元数据表格下方） */
-.metadata-toolbar-hint {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-  margin-top: 4px;
-}
-/* 拖拽把手列：抓手光标 + 悬停高亮，提示可拖拽排序 */
-.drag-handle {
-  cursor: grab;
-  color: var(--el-text-color-placeholder);
-  transition: color 0.2s;
-}
-.drag-handle:hover {
-  color: var(--el-color-primary);
-}
-.drag-handle:active {
-  cursor: grabbing;
-}
-.drag-col .cell {
-  padding-left: 4px;
-  padding-right: 4px;
 }
 /* 数据预览 tab 搜索行：与 tab 下沿和表格各留 4px */
 .preview-toolbar-inline {

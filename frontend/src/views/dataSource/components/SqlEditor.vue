@@ -66,9 +66,8 @@ export function parseSelectColumns(sql: string): string[] {
 </script>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref, toRaw, watch } from 'vue'
-import { Delete, Plus, Rank } from '@element-plus/icons-vue'
-import { moveItem, useTableDragSort } from '@/composables/useTableDragSort'
+import { ref, toRaw, watch } from 'vue'
+import { Delete, Plus } from '@element-plus/icons-vue'
 
 const props = withDefaults(
   defineProps<{
@@ -117,42 +116,15 @@ function removeColumn(idx: number) {
   emitColumns()
 }
 
-// ==================== 列声明拖拽排序 ====================
-// 拖拽调整列顺序：params.columns 数组顺序即字段元数据展示顺序
-const colsTableRef = ref<HTMLElement>()
-
-// 行身份键（WeakMap 不污染数据）：Sortable 外部移动 DOM 后 keyed patch 确定性收敛
+// ==================== 列声明编辑 ====================
+// （原列声明拖拽排序功能已按需求移除；行身份键保留用于渲染稳定性——
+//   稳定 key 保证编辑中行不重建，配合上方回声守卫输入不失焦）
 const colUidMap = new WeakMap<object, number>()
 let colUidSeq = 0
 function colRowKey(row: ColumnConfigItem): string {
   if (!colUidMap.has(row)) colUidMap.set(row, ++colUidSeq)
   return String(colUidMap.get(row))
 }
-
-function onColReorder(oldIndex: number, newIndex: number) {
-  // 替换引用而非就地 splice：el-table 行重渲染依赖 data 引用变化
-  const next = [...localCols.value]
-  moveItem(next, oldIndex, newIndex)
-  localCols.value = next
-  emitColumns()
-}
-
-const { init: initColSort } = useTableDragSort({
-  getTbody: () => colsTableRef.value?.querySelector('.el-table__body-wrapper tbody'),
-  handle: '.drag-handle',
-  disabled: () => props.disabled,
-  onReorder: onColReorder,
-})
-
-onMounted(() => nextTick(() => initColSort()))
-// 从 SQL 重新解析/父级全量替换后行数变化，tbody 容器不变无需重绑；
-// 但 disabled 从 true → false（只读切换）时需补绑
-watch(
-  () => props.disabled,
-  (v) => {
-    if (!v) nextTick(() => initColSort())
-  }
-)
 function addParam() {
   const name = newParamName.value.trim()
   if (name && !props.params.includes(name)) {
@@ -207,13 +179,8 @@ function parseFromSql() {
       </el-form-item>
 
       <el-form-item label="列声明">
-        <div ref="colsTableRef" style="width: 100%">
+        <div style="width: 100%">
           <el-table :data="localCols" :row-key="colRowKey" size="small" border>
-            <el-table-column label="" width="36" align="center" class-name="drag-col">
-              <template #default>
-                <el-icon class="drag-handle" title="拖拽排序"><Rank /></el-icon>
-              </template>
-            </el-table-column>
             <el-table-column label="字段名" min-width="130">
               <template #default="{ row, $index }">
                 <el-input
@@ -299,21 +266,5 @@ function parseFromSql() {
 /* 表格 small 尺寸但字体统一为普通大小 */
 .el-table {
   font-size: 14px;
-}
-/* 拖拽把手列：抓手光标 + 悬停高亮，提示可拖拽排序 */
-.drag-handle {
-  cursor: grab;
-  color: var(--el-text-color-placeholder);
-  transition: color 0.2s;
-}
-.drag-handle:hover {
-  color: var(--el-color-primary);
-}
-.drag-handle:active {
-  cursor: grabbing;
-}
-.drag-col .cell {
-  padding-left: 4px;
-  padding-right: 4px;
 }
 </style>

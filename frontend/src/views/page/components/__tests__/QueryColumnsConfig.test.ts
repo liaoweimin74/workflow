@@ -383,8 +383,8 @@ describe('QueryColumnsConfig — 添加自定义列', () => {
     })
     await nextTick()
     const vm = wrapper.vm as any
-    // displayCandidates = 数据源候选 + 自定义列（total）
-    expect(vm.displayCandidates.map((c: any) => c.key)).toEqual(['name', 'age', 'content', 'total'])
+    // displayCandidates 派生自 columns：已勾选列（含自定义列 total）按保存顺序在前，未勾选候选按自然顺序随后
+    expect(vm.displayCandidates.map((c: any) => c.key)).toEqual(['name', 'total', 'age', 'content'])
     // el-table 渲染 4 行（含自定义列 total）
     expect(wrapper.findAll('.el-table__row').length).toBe(4)
     // 自定义列可识别，且不可作为查询条件（计算列）

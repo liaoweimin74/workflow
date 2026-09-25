@@ -28,7 +28,9 @@
 
     <!-- 字段列表（整行可拖拽排序：已勾选展示字段的顺序随拖拽调整） -->
     <div ref="tableWrapperRef">
-    <el-table :data="displayCandidates" border max-height="460">
+    <!-- row-key（行身份键）：Sortable 物理移动 <tr> 后，keyed patch 依 key 确定性收敛；
+         缺省 key=index 时 Vue 按索引就地 patch 会与已移动的 DOM 相互抵消，拖拽形同未生效 -->
+    <el-table :data="displayCandidates" row-key="key" border max-height="460">
       <el-table-column prop="key" label="字段" width="130" />
       <el-table-column prop="label" label="标题" min-width="110" />
 
@@ -240,7 +242,10 @@ function isCustomColumn(key: string): boolean {
   return !props.candidates.some((c) => c.key === key)
 }
 
-/** 下方字段列表数据源 = 数据源字段候选 + 自定义列（计算列），自定义列参与展示/排序/编辑/删除 */
+/** 下方字段列表数据源 = 数据源字段候选 + 自定义列（计算列），自定义列参与展示/排序/编辑/删除。
+ *  行顺序派生自已保存的显示列顺序：已勾选展示列（含自定义列）按 columns 顺序在前，
+ *  未勾选候选按数据源自然顺序随后。列表顺序与保存的显示列顺序一致，
+ *  重新打开配置即可见已保存顺序；拖拽重排 columns 后同规则收敛，无额外可变状态。 */
 const displayCandidates = computed<ColumnConfigItem[]>(() => {
   const candKeys = new Set(props.candidates.map((c) => c.key))
   const customs: ColumnConfigItem[] = props.columns
@@ -256,7 +261,13 @@ const displayCandidates = computed<ColumnConfigItem[]>(() => {
       indexed: false,
       hidden: false,
     }))
-  return [...props.candidates, ...customs]
+  const all = [...props.candidates, ...customs]
+  const byKey = new Map(all.map((c) => [c.key, c]))
+  const ordered = props.columns
+    .map((c) => byKey.get(c.key))
+    .filter((c): c is ColumnConfigItem => !!c)
+  const orderedKeys = new Set(ordered.map((c) => c.key))
+  return [...ordered, ...all.filter((c) => !orderedKeys.has(c.key))]
 })
 
 // ========== 字段列表整行拖拽排序 ==========
@@ -278,7 +289,8 @@ function initFieldSortable() {
         const oldIndex = evt.oldIndex
         const newIndex = evt.newIndex
         if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return
-        // 重排候选副本（模拟 DOM 新顺序），已勾选展示字段按新顺序重排 columns
+        // 重排候选副本（模拟 DOM 新顺序），已勾选展示字段按新顺序重排 columns；
+        // emit 后 displayCandidates（派生自 columns）按新顺序重渲染，row-key keyed patch 收敛，拖拽结果不弹回
         const cands = [...displayCandidates.value]
         const [moved] = cands.splice(oldIndex, 1)
         cands.splice(newIndex, 0, moved)

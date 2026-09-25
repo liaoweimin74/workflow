@@ -1431,3 +1431,25 @@ Work Log:
 Stage Summary:
 - 用户报告失焦 bug 修复闭环：根因=props 回声→克隆行对象→row-key 全变→整表 remount；修复=回声守卫（FormJoinConfig 引用比对 / SqlEditor toRaw 比对）+ 同引用 emit + 结构操作引用替换；拖拽排序（row-key 机制）与双段并存功能均回归通过。
 - 2 文件改动（FormJoinConfig.vue / SqlEditor.vue），无后端/Java 变更。
+
+---
+Task ID: 54
+Agent: Z.ai Code (main)
+Task: ①修复数据表格「数据源绑定 → 显示列」拖拽排序不生效（用户报告：拖到位置放开字段未到预期位置）②取消数据源管理「字段元数据 / 声明式 SQL」拖拽排序（用户前序指令，上轮在途未竟全功）
+
+Work Log:
+- 在途盘点：Task 53 之后工作区已有未提交改动（上一轮巡检中断产物）：DataSourceListPage + FormJoinConfig 拖拽已移除（row-key 保留）、PageDataTable useMetadataColumns 首解析误置位已修、QueryColumnsConfig 仅加了 candidateOrder 记忆、SqlEditor 拖拽未动。本轮补完并修正。
+- 【根因①：显示列拖拽弹回】QueryColumnsConfig 的 el-table 未设 row-key → element-plus getKeyOfRow 回退 key=index → Vue 按索引就地 patch。Sortable 物理移动 <tr> 后，onEnd 更新数据触发重渲染：位置 0 节点（实为 B）被 patch 成 A 内容、位置 1 节点（实为 A）被 patch 成 B 内容——内容互换恰好抵消 DOM 移动，视觉上弹回原序。仓库内另两张拖拽表（元数据/JOIN，Task 52）均配 row-key 故正常，唯此表缺失——强佐证。candidateOrder 记忆只改数据顺序，改不了索引 patch 的内容互换，修复不完整。
+- 【根因②：保存后不可见】重开配置弹窗时列表按数据源自然顺序渲染（candidateOrder 为空或残留上次会话），已保存的 columns 顺序在界面不可见 → 用户感知「没保存」。
+- 【修复①】el-table 加 row-key="key"：keyed patch 依 key 确定性收敛，与 Sortable 已移动的 DOM 收敛一致（Task 52 已验证的模式）。
+- 【修复②】displayCandidates 改为纯派生：已勾选展示列（含自定义列）按 columns 保存顺序在前、未勾选候选按自然顺序随后。删除 candidateOrder 可变状态；重开弹窗即见已保存顺序；拖拽 emit → 派生重算 → keyed 收敛，固定点稳定。
+- 【SqlEditor 拖拽移除】列声明表删除把手列/Rank 图标/onColReorder/useTableDragSort 绑定/disabled 补绑 watch；colRowKey（WeakMap）保留用于渲染稳定性；Task 53 回声守卫（toRaw 比对 + 同引用 emit）原样保留。
+- 【composable 清理】useTableDragSort.ts 零引用后 git rm（moveItem 一并移除）；全库 grep 仅剩 localStorage.removeItem 子串误报。
+- 【连带修复】DataSourceListPage 移除 nextTick 死 import（vue-tsc 唯一新增项，T6133）。
+- 【验证】①agent-browser E2E 全链路：页面设计器 test1 → 数据表格 → 数据源配置 → 显示列（首屏即按已保存顺序渲染 ✓）→ 原始鼠标序列拖拽 leave_days 0→2 → 0.8s 后无回弹 → 确定 → 保存成功 → API 复核 schema.columns=[leave_end_date,leave_start_date,leave_days,...] 与拖拽一致 → 重开弹窗新顺序直接可见 ✓；②数据源管理：字段元数据 tab 无把手列/无提示行，声明式 SQL 模板 SqlEditor 首列=字段名、drag-handle=0 ✓；③控制台零新增错误（仅预存 permission 指令警告）；④前端定向 138/138 + 全量 88 文件 1114/1114 全绿；⑤vue-tsc 46=46 基线持平（差异全为行号平移）；⑥ESLint 0 error。
+- 测试数据说明：页面 test1（草稿）列顺序变化即为本次修复的持久化实证，有意保留；其余数据零污染。
+
+Stage Summary:
+- 用户报告的「显示列拖拽不生效」修复闭环：根因=row-key 缺失 + 索引 patch 抵消 Sortable DOM 移动（视觉弹回）+ 重开列表不反映保存顺序（感知未保存）；修复=row-key + 派生顺序 + 派生重算收敛。
+- 数据源管理三处（字段元数据/声明式 JOIN/SQL 列声明）拖拽排序全部移除完毕，composable 下线；失焦修复（Task 53）与保存语义（Task 52 双段并存）回归无恙。
+- 改动清单：QueryColumnsConfig.vue（row-key+派生顺序）、SqlEditor.vue（拖拽移除）、DataSourceListPage.vue（nextTick 清理）、useTableDragSort.ts（删除）、QueryColumnsConfig.test.ts（顺序期望更新）；在途的 FormJoinConfig/PageDataTable/DataSourceListPage 主体改动一并验收入库。

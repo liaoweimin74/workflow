@@ -42,14 +42,13 @@ export function emptyJoin(_index: number): JoinConfigItem {
 </script>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { Delete, Plus, Rank, View } from '@element-plus/icons-vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { Delete, Plus, View } from '@element-plus/icons-vue'
 import { formApi } from '@/api/form'
 import { dataSourceApi } from '@/api/data-source'
 import SqlEditor from './SqlEditor.vue'
 import { emptyJoin, type FormJoinConfigValue, type JoinConfigItem } from './FormJoinConfig.vue'
 import { extractFormColumns, isSystemJoinTarget, SYSTEM_JOIN_TARGET_COLUMNS, targetFormColumns, type ColumnOption } from './joinColumns'
-import { moveItem, useTableDragSort } from '@/composables/useTableDragSort'
 
 const props = withDefaults(
   defineProps<{
@@ -226,39 +225,17 @@ function removeJoin(index: number) {
   joins.value = joins.value.filter((_, i) => i !== index)
 }
 
-// ==================== 关联行拖拽排序 ====================
-// 拖拽调整 joins 顺序：决定运行时 LEFT JOIN 分组顺序与虚拟列在元数据中的追加顺序
-const joinsTableRef = ref<HTMLElement>()
+// ==================== 关联行顺序 ====================
+// 关联条目顺序由添加顺序决定（运行时按此顺序做 LEFT JOIN 分组与虚拟列追加）；
+// 原拖拽排序功能已按需求移除，row-key 保留用于渲染稳定性
 
-// 行身份键（WeakMap 不污染数据）：Sortable 外部移动 DOM 后 keyed patch 确定性收敛
+// 行身份键（WeakMap 不污染数据）：keyed patch 确定性收敛
 const joinUidMap = new WeakMap<object, number>()
 let joinUidSeq = 0
 function joinRowKey(row: JoinConfigItem): string {
   if (!joinUidMap.has(row)) joinUidMap.set(row, ++joinUidSeq)
   return String(joinUidMap.get(row))
 }
-
-function onJoinReorder(oldIndex: number, newIndex: number) {
-  const list = [...(local.joins || [])]
-  moveItem(list, oldIndex, newIndex)
-  joins.value = list // 触发 computed setter → sync()
-}
-
-const { init: initJoinSort, destroy: destroyJoinSort } = useTableDragSort({
-  getTbody: () => joinsTableRef.value?.querySelector('.el-table__body-wrapper tbody'),
-  handle: '.drag-handle',
-  disabled: () => props.disabled,
-  onReorder: onJoinReorder,
-})
-
-// config 表格由 v-if 控制渲染：模式切入后 nextTick 绑定，切出即解绑
-watch(queryMode, (mode) => {
-  if (mode === 'config') {
-    nextTick(() => initJoinSort())
-  } else {
-    destroyJoinSort()
-  }
-})
 
 // ==================== JOIN SQL 预览 ====================
 
@@ -297,11 +274,6 @@ watch(
   (keys) => keys.forEach((k) => k && void ensureTargetColumns(k)),
   { immediate: true }
 )
-
-// 首挂载即处于 config 模式（编辑既有声明式数据源）时补绑定拖拽
-if (local.queryMode === 'config') {
-  nextTick(() => initJoinSort())
-}
 </script>
 
 <template>
@@ -318,13 +290,7 @@ if (local.queryMode === 'config') {
         <div>同连接条件的多个显示字段会合并为一条 LEFT JOIN；主表关联字段为多选（dataPicker 多选）时仅匹配首个关联值；目标表关联字段建议选择主键 id 或唯一列，避免结果集膨胀。</div>
         <div>流程定义 / 流程实例 / 待办任务为派生列数据源，不支持作为关联目标。</div>
       </div>
-      <div ref="joinsTableRef">
       <el-table :data="joins" :row-key="joinRowKey" size="small" border>
-        <el-table-column label="" width="36" align="center" class-name="drag-col">
-          <template #default>
-            <el-icon class="drag-handle" title="拖拽排序"><Rank /></el-icon>
-          </template>
-        </el-table-column>
         <el-table-column label="显示名称" min-width="100">
           <template #default="{ row }">
             <el-input v-model="row.label" placeholder="如 客户名称" :disabled="disabled" />
@@ -415,7 +381,6 @@ if (local.queryMode === 'config') {
           </template>
         </el-table-column>
       </el-table>
-      </div>
       <el-button
         v-if="!disabled"
         type="primary"
@@ -538,21 +503,5 @@ if (local.queryMode === 'config') {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-/* 拖拽把手列：抓手光标 + 悬停高亮，提示可拖拽排序 */
-.drag-handle {
-  cursor: grab;
-  color: var(--el-text-color-placeholder);
-  transition: color 0.2s;
-}
-.drag-handle:hover {
-  color: var(--el-color-primary);
-}
-.drag-handle:active {
-  cursor: grabbing;
-}
-.drag-col .cell {
-  padding-left: 4px;
-  padding-right: 4px;
 }
 </style>

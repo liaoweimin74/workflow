@@ -18,8 +18,12 @@ import { compile } from '../helpers/compile-sql'
 const FORM_KEY = 'contract_picker'
 const TABLE = `wf_biz_${FORM_KEY}`
 
-/** 构造一份 column_config；`picker` 用来换掉 owner 列的 pickerConfig。 */
-function columnConfig(picker: Record<string, unknown> | null, required = true): string {
+/** 构造一份 column_config；`picker` 用来换掉 owner 列的 pickerConfig；`extraColumns` 追加额外列。 */
+function columnConfig(
+  picker: Record<string, unknown> | null,
+  required = true,
+  extraColumns: Array<Record<string, unknown>> = [],
+): string {
   return JSON.stringify([
     { key: 'title', label: '标题', columnType: 'VARCHAR', length: 64, required },
     picker === null
@@ -32,6 +36,7 @@ function columnConfig(picker: Record<string, unknown> | null, required = true): 
           pickerConfig: JSON.stringify(picker),
         },
     { key: 'owner_text', label: '负责人（显示）', columnType: 'VARCHAR', length: 255 },
+    ...extraColumns,
   ])
 }
 
@@ -49,12 +54,17 @@ function harness(options: {
   rowExists?: boolean
   pickerRows?: Array<Record<string, unknown>>
   mainRow?: Record<string, unknown> | null
+  extraColumns?: Array<Record<string, unknown>>
 }): Harness {
   const writes: Array<{ sql: string; params: unknown[] }> = []
   const subDeletes: string[] = []
   const pickerQueries: string[] = []
 
-  const config = columnConfig(options.picker === undefined ? { pickerType: 'dataPicker', sourceFormKey: 'person', displayField: 'name' } : options.picker, options.required ?? true)
+  const config = columnConfig(
+    options.picker === undefined ? { pickerType: 'dataPicker', sourceFormKey: 'person', displayField: 'name' } : options.picker,
+    options.required ?? true,
+    options.extraColumns ?? [],
+  )
 
   const repository = {
     tableExists: async () => true,
@@ -222,6 +232,54 @@ describe('BizDataSupport 写路径 / data-picker 文本生成', () => {
     await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["u1"]' }))
     expect(h.pickerQueries).toHaveLength(1)
     expect(h.writes[0].params).toContain('["张三"]')
+  })
+})
+
+describe('BizDataSupport 写路径 / JSON 列裸字符串归一（json_valid CHECK 兼底）', () => {
+  /** 场景背景：select 单选列被设计器映射为 JSON 列（longtext CHECK (json_valid(...))），
+   *  裸字符串值（'annual'）入库即撞 CHECK —— 报 `CONSTRAINT <表>.<列> failed`。
+   *  写路径必须把非法 JSON 文本包成 JSON 字符串文档，读侧 deserializeJsonValue parse 回原值。 */
+  const jsonCol = { key: 'leave_type', label: '请假类型', columnType: 'JSON', required: false }
+  const jsonHarness = (): Harness => harness({ picker: null, extraColumns: [jsonCol] })
+
+  it('create：单选裸字符串 → 包成 JSON 字符串文档', async () => {
+    const h = jsonHarness()
+    await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', leave_type: 'annual' }))
+    expect(h.writes[0].params).toContain('"annual"')
+  })
+
+  it('create：合法 JSON 文本（数组/数字/布尔字面量）原样保留', async () => {
+    const h = jsonHarness()
+    await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', leave_type: '["a","b"]' }))
+    expect(h.writes[0].params).toContain('["a","b"]')
+
+    const h2 = jsonHarness()
+    await inTenant(() => h2.support.createGeneric(FORM_KEY, { title: 'T', leave_type: '42' }))
+    expect(h2.writes[0].params).toContain('42')
+  })
+
+  it('create：数组/对象值仍走 stringify（既有行为不变）', async () => {
+    const h = jsonHarness()
+    await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', leave_type: ['a', 'b'] }))
+    expect(h.writes[0].params).toContain('["a","b"]')
+  })
+
+  it('create：空白字符串 → null（可空 JSON 列存 NULL，不再存空串）', async () => {
+    const h = jsonHarness()
+    await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', leave_type: '  ' }))
+    expect(h.writes[0].params).toContain(null)
+  })
+
+  it('update：裸字符串同样归一', async () => {
+    const h = jsonHarness()
+    await inTenant(() => h.support.updateGeneric(FORM_KEY, 'row-1', { title: 'T2', leave_type: 'sick' }, null))
+    expect(h.writes[0].params).toContain('"sick"')
+  })
+
+  it('非 JSON 列的字符串不受影响（旧格式容错语义保持）', async () => {
+    const h = jsonHarness()
+    await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'annual' }))
+    expect(h.writes[0].params).toContain('annual')
   })
 })
 

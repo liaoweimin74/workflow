@@ -1453,3 +1453,23 @@ Stage Summary:
 - 用户报告的「显示列拖拽不生效」修复闭环：根因=row-key 缺失 + 索引 patch 抵消 Sortable DOM 移动（视觉弹回）+ 重开列表不反映保存顺序（感知未保存）；修复=row-key + 派生顺序 + 派生重算收敛。
 - 数据源管理三处（字段元数据/声明式 JOIN/SQL 列声明）拖拽排序全部移除完毕，composable 下线；失焦修复（Task 53）与保存语义（Task 52 双段并存）回归无恙。
 - 改动清单：QueryColumnsConfig.vue（row-key+派生顺序）、SqlEditor.vue（拖拽移除）、DataSourceListPage.vue（nextTick 清理）、useTableDragSort.ts（删除）、QueryColumnsConfig.test.ts（顺序期望更新）；在途的 FormJoinConfig/PageDataTable/DataSourceListPage 主体改动一并验收入库。
+
+---
+Task ID: 55
+Agent: Z.ai Code (main)
+Task: 用户报告——菜单「演示页面1」挂接「测试页面」，新增记录保存报 `CONSTRAINT wf_biz_bill_test.leave_type failed for workflow_v6.wf_biz_bill_test`
+
+Work Log:
+- 【表结构实证】wf_biz_bill_test.leave_type 为 `longtext NOT NULL CHECK (json_valid(...))`——MariaDB 的 JSON 列实现，约束名自动为「表名.列名」，即报错来源。表为空（从未成功插入过记录）。
+- 【组件映射实证】FormDesigner 列映射 ColumnConfigDialog.mapComponentToColumn：`select` 组件**不论单选多选一律 columnType='JSON'**（为多选数组设计）；而 form-create 单选 select 的 value 是**裸字符串**（如 'annual'）。
+- 【写路径断点】serializeJsonColumns（Node L608 / Java L855）对字符串值「原样保留（旧格式容错）」→ 裸字符串直入 INSERT → `json_valid('annual')` 失败 → CONSTRAINT 报错。必填校验只拦 required 列的 null/空白，'annual' 合法通过——用户场景完全吻合。
+- 【修复（Node+Java 双端逐条对齐）】serializeJsonColumns 增加 columns 参数，对 columnType='JSON' 列的字符串值归一：①空白→null（required 已被 validateRequired 拦，能到此处必为可空列）；②非法 JSON 文本→JSON.stringify 包成 JSON 字符串文档；③合法 JSON（数字/布尔/null 字面量文本）→原样。安全论证：JSON.parse 成功 ⇒ json_valid 必过；读侧 deserializeJsonValue 把 '"annual"' parse 回 'annual'，回显/编辑不变。Node 新增 isValidJsonText 导出；Java 提取 writeJsonOr400 消除重复 try/catch。
+- 【前端映射未动】select→JSON 的映射保持（改单选→VARCHAR 会触发存量表 JSON→VARCHAR 的 MODIFY 迁移风险）；单选存 JSON 标量文档与多选数组存储自洽，读层已兼容。
+- 【测试】biz-data-write.spec 新增 6 用例（裸字符串包裹/合法 JSON 原样/数组 stringify/空白→null/update 同归一/非 JSON 列不受影响），harness 扩展 extraColumns；后端全量 51 文件 794/794 全绿。
+- 【E2E 双实证】①API 直打 /v1/biz-data/bill_test：leave_type='annual' → 200，回读 annual；②页面同款端点 /v1/data-sources/{id}/data（PageDataTable 新增实际走的端点，经 unified-data-source-adapter.create → bizDataService.create → createGeneric 汇聚同一修复点）：leave_type='sick' → 200；两例均 HEX 验库（22616E6E75616C22/227369636B22 = "annual"/"sick" 带引号 JSON 文档），测试数据已清理。
+- 【自动化工位备忘】页面 detail 表单为 form-create 动态 schema：DOM 注入/Playwright fill 的值不进 form-create formData（受控重置），headless 下 el-select 选中值渲染在 .el-select__placeholder（而非 selected-item）——UI 全链路手工可过，自动化验证走 API 层为可靠路径。
+- 【8080 重启】nest build + node dist/main.js 重启使修复生效（旧 dist 不含修复）。
+
+Stage Summary:
+- 用户报错根因闭环：select 单选裸字符串 × JSON 列 json_valid CHECK × 写路径字符串原样容错，三者交汇；修复为写路径 JSON 列归一（Node+Java 对齐），存量 JSON 列表无需迁移即可正常写入。
+- 遗留：①子表 insertSubRow 无 JSON 归一（同型隐患，子表值多为结构化数组暂无实爆场景）；②前端 select 单选→VARCHAR 映射优化（需配套数据迁移策略）；③Java 无编译环境，改动经括号配平+逐引用静态审查，建议有环境时 mvn compile 回归。

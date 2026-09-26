@@ -5,10 +5,12 @@ import { FcChatController } from './controller/fc-chat.controller'
 import { InternalLlmController } from './controller/internal-llm.controller'
 import { AiAgentService } from './service/ai-agent.service'
 import { AiFormGenerationService } from './service/ai-form-generation.service'
+import { AiProcessGenerationService } from './service/ai-process-generation.service'
 import { FormSchemaValidator } from './service/form-schema-validator'
 import { ZaiLlmService } from './service/zai-llm.service'
 import { AiTool, AiToolRegistry } from './tools/ai-tool'
 import { CreateFormTool } from './tools/create-form.tool'
+import { CreateProcessTool } from './tools/create-process.tool'
 import { GenerateFormSchemaTool } from './tools/generate-form-schema.tool'
 import { OpenPageTool } from './tools/open-page.tool'
 
@@ -29,17 +31,20 @@ const AI_TOOLS = 'AI_TOOLS'
     ZaiLlmService,
     FormSchemaValidator,
     AiFormGenerationService,
+    AiProcessGenerationService,
     OpenPageTool,
     GenerateFormSchemaTool,
     CreateFormTool,
+    CreateProcessTool,
     {
       provide: AI_TOOLS,
-      useFactory: (openPage: OpenPageTool, generateForm: GenerateFormSchemaTool, createForm: CreateFormTool): AiTool[] => [
-        openPage,
-        generateForm,
-        createForm,
-      ],
-      inject: [OpenPageTool, GenerateFormSchemaTool, CreateFormTool],
+      useFactory: (
+        openPage: OpenPageTool,
+        generateForm: GenerateFormSchemaTool,
+        createForm: CreateFormTool,
+        createProcess: CreateProcessTool,
+      ): AiTool[] => [openPage, generateForm, createForm, createProcess],
+      inject: [OpenPageTool, GenerateFormSchemaTool, CreateFormTool, CreateProcessTool],
     },
     {
       provide: AiToolRegistry,

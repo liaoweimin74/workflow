@@ -1454,3 +1454,18 @@ Stage Summary:
 - 仓库恢复闭环：本地=远程=7b93965，用户三个任务（拖拽下线/显示列拖拽修复/表单复制）成果确认全部在远程，无需重推
 - 待用户提供新 fine-grained PAT：git remote set-url origin https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git && git push origin main（推 Task 57 worklog）
 - 建议：PAT 保存至沙箱外持久处，避免每次沙箱重置后凭据全灭、push 停摆
+
+---
+Task ID: 58
+Agent: Z.ai Code (main)
+Task: PAT 到手后 push 闭环（第二次沙箱重置后重建仓库 + 推送）
+
+Work Log:
+- PAT 到手时发现沙箱又重置一次（.git 再度消失，checkpoint 前进至 ccee972）——第三次重建（模式成熟）：init→fetch→mixed reset→恢复
+- 关键发现：工作区 worklog 保留上轮 Task 57 节（checkpoint 保存了未提交修改），零内容丢失
+- 恢复细节：中文路径文件需 git diff -z | xargs -0（quotepath 转义引号会破坏 checkout 参数）；268 文件全恢复后 status 仅剩 worklog M（有意保留）
+- 提交 15bbd96 推送成功：7b93965..15bbd96 main -> main；ls-remote 实证远程=本地=15bbd96
+
+Stage Summary:
+- push 全链路闭环：Task 57/58 worklog 双节入远程 main；三个用户任务成果+全部运维记录确认在远程（远程 main 含 52→58 完整历史）
+- 建议：PAT 保存至沙箱外持久处（.git/config 中的凭据随每次重置销毁，本轮靠用户重新提供）

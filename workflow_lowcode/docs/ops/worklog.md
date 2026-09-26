@@ -1513,3 +1513,20 @@ Stage Summary:
 - 仓库结构恢复闭环：workflow_lowcode/.git 重建，本地 HEAD=origin/main=7b93965，工作区零差异；三个用户任务成果确认已推送远程（无需重推）
 - 待办：用户提供新 fine-grained PAT 后 git remote set-url origin https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git && git push origin main（将本节 worklog 推上去）；建议同时在每次 push 成功后将 PAT 保存到沙箱外（worklog 脱敏机制导致每次重置后凭据全灭）
 - 遗留不变：Java mvn compile 回归三场景（无编译环境）、FormDesigner vitest 环境缺陷（el-form 表单级 validate）、外层 checkpoint 仓库与内层仓库并存的固定格局
+
+---
+Task ID: 58
+Agent: Z.ai Code (main)
+Task: PAT 到手后 push 闭环（第二次沙箱重置后重建仓库 + 推送 Task 57 worklog）
+
+Work Log:
+- PAT 到手，配置 remote 时发现沙箱在 PAT 给出前又重置一次（workflow_lowcode/.git 再度消失，外层 checkpoint 前进至 ccee972）
+- 第三次仓库重建（模式已成熟）：git init -b main + core.fileMode=false + remote add origin（直接带 x-access-token PAT）+ fetch origin main；远程 main HEAD 仍为 7b93965（Task 56 提交，期间无其他推送）
+- reset --mixed origin/main 后审查：268 个 D（丢失文件）+ 1 个 M（docs/ops/worklog.md 比远程多出 Task 57 节 20 行——上轮写入的 worklog 被 checkpoint 保留，零丢失）；零 ??
+- 恢复细节：git diff --name-only --diff-filter=D 直传 checkout 因 quotepath 中文转义引号失败（53 个 golden fixtures 未恢复），改用 -z（NUL 分隔）xargs -0 后全部恢复；最终 status 仅剩 worklog M（有意保留）
+- 提交并推送：Task 57 + 58 两节 worklog 随本提交入远程；ls-remote 实证远程 main 前进至本提交
+- 建议重申：PAT 保存至沙箱外（本轮 PAT 由用户在会话中重新提供，沙箱内无持久副本；重置后 remote URL 含凭据的 .git/config 亦随之销毁）
+
+Stage Summary:
+- push 闭环完成：本地=远程（新 HEAD），Task 57/58 worklog 双节入库；三次沙箱重置的仓库重建流程已完全成熟（init→fetch→mixed reset→按类别恢复→审查→提交推送）
+- 项目状态：三个用户任务（拖拽下线/显示列拖拽修复/表单复制）成果代码与记录全部在远程 main；服务四通道（3000/5173/8080/3306）上轮实证全绿

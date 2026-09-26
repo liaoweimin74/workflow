@@ -1530,3 +1530,24 @@ Work Log:
 Stage Summary:
 - push 闭环完成：本地=远程（新 HEAD），Task 57/58 worklog 双节入库；三次沙箱重置的仓库重建流程已完全成熟（init→fetch→mixed reset→按类别恢复→审查→提交推送）
 - 项目状态：三个用户任务（拖拽下线/显示列拖拽修复/表单复制）成果代码与记录全部在远程 main；服务四通道（3000/5173/8080/3306）上轮实证全绿
+
+---
+Task ID: 59
+Agent: Z.ai Code (main)
+Task: AI 助手创建流程——自然语言生成审批流程（流程属性 + 节点审批人 + 配套表单绑定），悬浮球对话触发、真实落库为草稿、部署走既有校验链
+
+Work Log:
+- 【复用 AI 基建】backend-node 已有 ai 模块（AiChatController SSE / AiAgentService 文本协议 function-calling / AiToolRegistry / CreateFormTool 先例 / AiAssistantOrb 悬浮球）——本任务按 create_form 模式新增 create_process 工具，前端零改动
+- 【新增 4 文件】①ai-process-plan.ts：ProcessPlan 中间表示 + normalizePlan 归一化（key slug 化、首节点自动补发起、user 无名单降级 dept_head、expression 缺省补默认表达式、timeout 截断 720h、未知节点类型跳过告警）；②ai-process-bpmn.ts：线性流程 BPMN 确定性拼装（start→initiator→N×userTask→end + DI 垂直布局 + wf 命名空间）；③ai-process-generation.service.ts：LLM 生成计划（prompt 输出契约 + extractPlanJson 容错）；④create-process.tool.ts：编排（计划→表单解析→XML→createDraft+saveDesign，key 冲突加后缀重试×3）
+- 【表单解析三级】formName 匹配已有工作流表单（list+精确优先）→ 匹配不到且有 formDescription 复用 formgen 管线新建 WORKFLOW 表单草稿 → 都没有则不绑定（提示设计器补配）；发起表单同时绑 __PROCESS__（流程级）与发起节点
+- 【agent prompt 扩展】create_process 工具说明（title/requirement/formRequirement/formName）+ 成功后回复规范（环节顺序/表单结果/设计器链接/部署提示）
+- 【两个 E2E 揪出的真实缺陷】①dc:Rect（empty-bpmn 契约格式）不被 bpmn-js 解析——实验证实空流程画布本就空白（既有行为）；AI 流程要「打开即见图」→ 改用标准 dc:Bounds；②编译器拓扑校验依赖节点 incoming/outgoing 子元素（不反推 flows）→ XML 补标准 incoming/outgoing——修复后部署编译通过
+- 【E2E 四轮】API 三轮（请假 3 节点+表单 6 字段/报销 3 节点含金额语义/出差 2 节点 DEPLOYED v1 编译通过）+ 悬浮球 UI 一轮（「办公用品领用流程」→ AI 回复含环节/表单 7 字段/设计器链接）；属性面板回显正确（部门负责人选中）；设计器 5 shapes + 3 标签渲染
+- 【测试】新增 test/unit/ai/ 3 spec 28 用例（plan 归一化 10/bpmn 拼装 7/工具编排 11）；后端全量 55 文件 835/835 全绿；tsc --noEmit 干净；eslint 0 error；前端零改动
+- 【测试数据零残留】4 流程草稿+1 已部署定义+4 AI 表单全部清理（wf_node_config 连带），RESIDUE 0/0/0；用户既有 leave_apply 等未触碰
+- 【坑位】stubPlan() 漏 .plan 返回 NormalizedPlan 导致 mock plan 缺字段（测试侧低级错）；vitest node 环境无 DOMParser（改正则断言）；PageResponse 字段是 totalElements 非 total；中文路径 git checkout 需 -z（Task 58 已记）
+
+Stage Summary:
+- 用户需求闭环：AI 助手可通过悬浮球对话创建流程（自然语言→流程属性/节点审批人/配套表单一次性落库为草稿），设计器打开即见完整流程图，部署走既有编译校验链；线性流程首版覆盖（发起+N 审批），网关/服务节点暂跳过并告警提示设计器补配
+- 交付物：后端 4 新文件 + 2 修改（ai.module/agent prompt）+ 3 测试文件 28 用例；前端零改动（悬浮球/设计器既有能力复用）
+- 遗留：①网关分支（排他网关+条件连线）AI 生成未支持；②serviceTask HTTP/java 节点未支持；③LLM 生成的节点审批人仅 dept_head/expression 可直接部署，指定用户需设计器补选（归一化已降级防部署失败）；④Java 端无 ai 模块（Node 专属）

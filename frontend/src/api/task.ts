@@ -82,12 +82,18 @@ export interface TaskDetailVO {
   operations?: OperationsConfig
   /** 节点类别：approver=审批节点 / handler=办理节点；缺省（旧数据）按 approver 处理 */
   taskRole?: 'approver' | 'handler'
-  /** 节点行为标记（后端从 nodeConfigs 解析）：意见必填 / 签名必填 / 签名开关 */
+  /** 节点行为标记（后端从 nodeConfigs 解析）：意见必填 / 签名必填 / 签名开关 / 上次签名回填 / 上传签名图片 */
   nodeFlags?: {
     commentRequired?: boolean
     signatureRequired?: boolean
     signatureEnabled?: boolean
+    /** 默认使用上次签名（signature.useLast） */
+    signatureUseLast?: boolean
+    /** 支持上传签名图片（signature.allowUpload） */
+    signatureAllowUpload?: boolean
   }
+  /** 上次签名 dataURL（仅 signatureUseLast=true 时后端回查，供默认回填） */
+  lastSignature?: string | null
   createTime: string
   isInitiatorTask: boolean
 }

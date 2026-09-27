@@ -126,6 +126,44 @@ function asObject<T extends object>(value: unknown): T | undefined {
   return value as T
 }
 
+/**
+ * 发起节点配置块归一化（disallowRecall/urge/reInitiate/smsOnEnd）。
+ *
+ * ⚠️ startEvent（发起节点）与 userTask（isInitiator 场景）都要调用 ——
+ *    此前只在 userTask 分支里归一化，startEvent 的 initiator 块从未进编译模型，
+ *    导致 disallowRecall/urge/smsOnEnd/reInitiate 全部静默失效（Task 64 实测暴露）。
+ */
+function extractInitiatorOptions(config: NodeConfigJson): InitiatorOptions | undefined {
+  const initiatorOptions = asObject<InitiatorOptions>(config.initiator)
+  if (initiatorOptions === undefined) return undefined
+  const normalized: InitiatorOptions = {}
+  if (asBoolean(initiatorOptions.disallowRecall) !== undefined) {
+    normalized.disallowRecall = initiatorOptions.disallowRecall
+  }
+  const urge = asObject<NonNullable<InitiatorOptions['urge']>>(initiatorOptions.urge)
+  if (urge !== undefined) {
+    const normalizedUrge: NonNullable<InitiatorOptions['urge']> = {}
+    if (asBoolean(urge.enabled) !== undefined) normalizedUrge.enabled = urge.enabled
+    const interval = asNumber(urge.interval)
+    if (interval !== undefined && interval > 0) normalizedUrge.interval = interval
+    if (
+      urge.unit === 'minute' ||
+      urge.unit === 'hour' ||
+      urge.unit === 'day'
+    ) {
+      normalizedUrge.unit = urge.unit
+    }
+    if (Object.keys(normalizedUrge).length > 0) normalized.urge = normalizedUrge
+  }
+  if (asBoolean(initiatorOptions.reInitiate) !== undefined) {
+    normalized.reInitiate = initiatorOptions.reInitiate
+  }
+  if (asBoolean(initiatorOptions.smsOnEnd) !== undefined) {
+    normalized.smsOnEnd = initiatorOptions.smsOnEnd
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined
+}
+
 /** 提取 userTask 的新版配置块（taskRole/审批类型/策略/去重/签名/通知/发起人配置）。 */
 function extractTaskOptions(
   config: NodeConfigJson,
@@ -207,35 +245,8 @@ function extractTaskOptions(
     out.notify = { sms: notify.sms }
   }
 
-  const initiatorOptions = asObject<InitiatorOptions>(config.initiator)
-  if (initiatorOptions !== undefined) {
-    const normalized: InitiatorOptions = {}
-    if (asBoolean(initiatorOptions.disallowRecall) !== undefined) {
-      normalized.disallowRecall = initiatorOptions.disallowRecall
-    }
-    const urge = asObject<NonNullable<InitiatorOptions['urge']>>(initiatorOptions.urge)
-    if (urge !== undefined) {
-      const normalizedUrge: NonNullable<InitiatorOptions['urge']> = {}
-      if (asBoolean(urge.enabled) !== undefined) normalizedUrge.enabled = urge.enabled
-      const interval = asNumber(urge.interval)
-      if (interval !== undefined && interval > 0) normalizedUrge.interval = interval
-      if (
-        urge.unit === 'minute' ||
-        urge.unit === 'hour' ||
-        urge.unit === 'day'
-      ) {
-        normalizedUrge.unit = urge.unit
-      }
-      if (Object.keys(normalizedUrge).length > 0) normalized.urge = normalizedUrge
-    }
-    if (asBoolean(initiatorOptions.reInitiate) !== undefined) {
-      normalized.reInitiate = initiatorOptions.reInitiate
-    }
-    if (asBoolean(initiatorOptions.smsOnEnd) !== undefined) {
-      normalized.smsOnEnd = initiatorOptions.smsOnEnd
-    }
-    if (Object.keys(normalized).length > 0) out.initiatorOptions = normalized
-  }
+  const initiatorNormalized = extractInitiatorOptions(config)
+  if (initiatorNormalized !== undefined) out.initiatorOptions = initiatorNormalized
 
   const timeout = asObject<NonNullable<CompiledNode['timeout']>>(config.timeout)
   if (timeout !== undefined) {
@@ -403,6 +414,13 @@ function mergeNode(node: ParsedNode, configJson: string | undefined): CompiledNo
 
   if (node.nodeType === 'serviceTask' || node.nodeType === 'callActivity') {
     compiled.config = config as Record<string, unknown>
+  }
+
+  // 发起节点（startEvent + wf:nodeRole=initiator）：initiator 配置块必须进编译模型
+  // （disallowRecall/urge/reInitiate/smsOnEnd 的运行时读取源；此前被 userTask 分支漏掉）
+  if (node.nodeType === 'startEvent' && node.isInitiator) {
+    const initiatorNormalized = extractInitiatorOptions(config)
+    if (initiatorNormalized !== undefined) compiled.initiatorOptions = initiatorNormalized
   }
 
   return compiled

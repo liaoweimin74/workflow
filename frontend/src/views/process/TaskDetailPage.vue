@@ -69,6 +69,26 @@
         <el-collapse v-if="signatureEnabled" class="signature-collapse">
           <el-collapse-item :title="`手写签名${signatureRequired ? '（必填）' : ''}`" name="signature">
             <SignaturePad v-model="signatureData" />
+            <div v-if="signatureAllowUpload || signatureUseLast" class="signature-extras">
+              <el-button
+                v-if="signatureAllowUpload"
+                size="small"
+                :icon="Upload"
+                @click="triggerSignatureUpload"
+              >
+                上传签名图片
+              </el-button>
+              <span v-if="signatureUseLast && lastSignatureApplied" class="last-sign-hint">
+                已回填上次签名
+              </span>
+              <input
+                ref="signatureFileInput"
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                style="display: none"
+                @change="handleSignatureFileChange"
+              />
+            </div>
           </el-collapse-item>
         </el-collapse>
 
@@ -170,7 +190,7 @@ defineOptions({ name: 'TaskDetail' })
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { View, ArrowDown } from '@element-plus/icons-vue'
+import { View, ArrowDown, Upload } from '@element-plus/icons-vue'
 import { taskApi } from '@/api/task'
 import { processInstanceApi as _processInstanceApi } from '@/api/processInstance'
 import { deployedProcessApi as _deployedProcessApi } from '@/api/processDefinition'
@@ -198,9 +218,44 @@ const isHandlerTask = computed(() => taskDetail.value?.taskRole === 'handler')
 const commentRequired = computed(() => !!taskDetail.value?.nodeFlags?.commentRequired)
 const signatureEnabled = computed(() => !!taskDetail.value?.nodeFlags?.signatureEnabled)
 const signatureRequired = computed(() => !!taskDetail.value?.nodeFlags?.signatureRequired)
+/** 默认使用上次签名（signature.useLast） */
+const signatureUseLast = computed(() => !!taskDetail.value?.nodeFlags?.signatureUseLast)
+/** 支持上传签名图片（signature.allowUpload） */
+const signatureAllowUpload = computed(() => !!taskDetail.value?.nodeFlags?.signatureAllowUpload)
 
 /** 手写签名 dataURL（signatureEnabled 时随 complete 提交） */
 const signatureData = ref('')
+
+/** 上次签名是否已回填（提示用） */
+const lastSignatureApplied = ref(false)
+
+/** 上传签名图片的隐藏 input ref */
+const signatureFileInput = ref<HTMLInputElement | null>(null)
+
+function triggerSignatureUpload() {
+  signatureFileInput.value?.click()
+}
+
+/** 上传签名图片 → 转 dataURL 填入签名板（signature.allowUpload） */
+function handleSignatureFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage.warning('签名图片不能超过 2MB')
+    input.value = ''
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    signatureData.value = String(reader.result ?? '')
+    lastSignatureApplied.value = false
+    ElMessage.success('签名图片已导入')
+  }
+  reader.onerror = () => ElMessage.error('签名图片读取失败')
+  reader.readAsDataURL(file)
+  input.value = ''
+}
 
 /** 意见区标题/占位文案按节点类别切换 */
 const commentLabel = computed(() => (isHandlerTask.value ? '处理意见' : '审批意见'))
@@ -272,6 +327,12 @@ async function loadDetail() {
   try {
     const res = await taskApi.getDetail(taskId)
     taskDetail.value = res.data
+    // signature.useLast=true 且后端查到上次签名 → 默认回填（用户可重画/重传覆盖）
+    const last = res.data?.lastSignature
+    if (signatureUseLast.value && last && !signatureData.value) {
+      signatureData.value = last
+      lastSignatureApplied.value = true
+    }
   } catch {
     ElMessage.error('加载任务详情失败')
   } finally {
@@ -456,5 +517,18 @@ onMounted(async () => {
   margin-top: 12px;
   border-top: 1px dashed var(--el-border-color-lighter);
   border-bottom: none;
+}
+
+/* 签名附加操作行：上传图片按钮 + 上次签名回填提示 */
+.signature-extras {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.last-sign-hint {
+  font-size: 12px;
+  color: var(--el-color-success);
 }
 </style>

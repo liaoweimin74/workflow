@@ -297,6 +297,53 @@ export class ProcessInstanceService {
     )
   }
 
+  /**
+   * 再次发起（设计器发起节点 `initiator.reInitiate=false` 时拦截）。
+   *
+   * 语义（对齐钉钉「再次发起」）：
+   *   - 仅**已结束**实例可再次发起（RUNNING/SUSPENDED → 400）
+   *   - 发起节点配置 reInitiate === false → 400「该流程不支持再次发起」
+   *   - 仅原发起人可再次发起（v1 不做管理员豁免，避免引入角色查询）
+   *   - 复制原实例**全部流程变量**作为新实例的发起变量（含 initiator，
+     便于审批人解析 `${initiator}` 一类表达式；过程变量一并带出属可接受简化）
+   *
+   * ⚠️ reInitiate 校验读**最新部署版本**的发起节点配置，而不是原实例的冻结版本
+   *    —— 用户在设计器关掉「再次发起」后，期望对**当下**的再次发起操作立即生效
+   *    （操作发生在当下，配置也应取当下）；实例运行态仍按各自的冻结版本，互不影响。
+   * ⚠️ 不能走 `getVariables`：它对已结束实例 assertExecutionAlive 抛 400
+   *    （对齐 Flowable 的行为）。再次发起恰恰只发生在实例结束后，
+   *    因此直接 loadState 读变量（结束实例的 wfe_variable 行仍在）。
+   */
+  async reInitiate(instanceId: string, userId: string): Promise<StartProcessResult> {
+    const tenantId = getTenantId()
+    const row = await this.requireInstance(instanceId)
+
+    if (row.status === 'RUNNING' || row.status === 'SUSPENDED') {
+      throw new BusinessException(400, '流程仍在进行中，无法再次发起')
+    }
+    if (row.initiator !== null && row.initiator !== '' && row.initiator !== userId) {
+      throw new BusinessException(403, '只有发起人可以再次发起')
+    }
+
+    const latestDef = await this.persistence.findLatestDeployedDef(tenantId, row.process_key)
+    if (latestDef !== null) {
+      const model = JSON.parse(latestDef.model_json) as ProcessModel
+      const initiatorNodeId = model.initiatorNodeId ?? ''
+      const initiatorNode = initiatorNodeId !== '' ? model.nodes[initiatorNodeId] : undefined
+      if (initiatorNode?.initiatorOptions?.reInitiate === false) {
+        throw new BusinessException(400, '该流程不支持再次发起')
+      }
+    }
+
+    const { variables } = await this.persistence.loadState(instanceId)
+    const startVariables: Record<string, unknown> = { ...variables }
+    if (row.initiator !== null && row.initiator !== '') {
+      startVariables.initiator = row.initiator
+    }
+
+    return this.start(row.process_key, row.business_key, startVariables)
+  }
+
   private async requireInstance(instanceId: string): Promise<InstanceRow> {
     const row = await this.persistence.findInstance(instanceId, getTenantId())
     if (row === null) throw new BusinessException(`流程实例不存在: ${instanceId}`)
@@ -680,6 +727,8 @@ export class ProcessInstanceService {
       action: string
       comment: string | null
       targetUserId: string | null
+      /** 手写签名 dataURL（V41；signature.enabled 节点 completeTask 时随 approve 意见存储） */
+      signature?: string | null
     },
   ): Promise<void> {
     await this.db
@@ -692,6 +741,7 @@ export class ProcessInstanceService {
         user_id: params.userId,
         action: params.action,
         comment: params.comment,
+        signature: params.signature ?? null,
         target_user_id: params.targetUserId,
         created_at: new Date(),
       })

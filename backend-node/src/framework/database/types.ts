@@ -312,7 +312,7 @@ export interface WfEngineNotifyTable {
   created_at: NullableTimestamp
 }
 
-/** 审批意见（V13 迁移创建）。process_instance_id + task_id 关联到引擎表。 */
+/** 审批意见（V13 迁移创建；V41 增加 signature 列）。process_instance_id + task_id 关联到引擎表。 */
 export interface WfTaskCommentTable {
   id: string
   tenant_id: string
@@ -322,6 +322,8 @@ export interface WfTaskCommentTable {
   /** submit / approve / reject / add_sign / forward_sign / transfer … */
   action: string
   comment: string | null
+  /** 手写签名 dataURL（V41；signature.enabled 节点提交时随 approve 意见存储） */
+  signature: string | null
   target_user_id: string | null
   created_at: NullableTimestamp
 }

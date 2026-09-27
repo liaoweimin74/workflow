@@ -1708,3 +1708,20 @@ Work Log:
 
 Stage Summary:
 - 设计器入口恢复，纯运维修复无代码改动
+
+---
+Task ID: 65-notify-reinit-signature
+Agent: Z.ai Code (main)
+Task: 未实现项落地——签名落库/useLast/allowUpload + reInitiate 再次发起 + 编译器 startEvent initiator 欠账修复
+
+Work Log:
+- 盘点更正：notify.sms 已完整实现（四挂点齐备），此前 grep 误用前端变量名误判
+- 签名链路：V41 migration（wf_task_comment.signature LONGTEXT）+ insertComment/completeTask 落库 + getTaskDetail 下发 useLast/allowUpload + findLastSignature 回填 + TaskDetailPage 上传按钮与回填提示
+- 再次发起：service reInitiate（状态/身份/最新部署版本 reInitiate 三重门禁，复制变量 start）+ POST :id/re-initiate + 前端按钮（已结束实例显示）
+- 编译器修复：extractInitiatorOptions 抽出，startEvent+isInitiator 分支补编译（此前 initiator 块只在 userTask 分支处理）
+- 运维：8080 真实入口 = 看门狗拉 node dist/main.js（start-services.sh 的 bun src/index.ts 路径错误且 src/index.ts 不存在）；改后端必须 build+杀进程
+- 测试：task-signature.spec 9 用例；migration 计数 39→40；后端 920/前端 1132 全绿、类型基线零新增；端到端 9 步全通（部署→发起→签名→落库→回填→拦截）
+- 测试数据零残留：sig_verify_64 全套 DB 清零
+
+Stage Summary:
+- 三未实现项闭环；编译器欠账修复使 startEvent 形态 initiator 配置真正生效；详见外层 worklog 65 节

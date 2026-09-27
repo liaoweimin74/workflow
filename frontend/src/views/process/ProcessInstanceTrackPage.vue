@@ -14,6 +14,16 @@
           <el-icon><Bell /></el-icon>
           催办
         </el-button>
+        <!-- 再次发起：仅已结束实例显示（reInitiate=false 的流程由后端拦截提示） -->
+        <el-button
+          v-if="instance && instance.ended"
+          type="primary"
+          :loading="reInitiating"
+          @click="handleReInitiate"
+        >
+          <el-icon><RefreshRight /></el-icon>
+          再次发起
+        </el-button>
       </template>
     </el-page-header>
 
@@ -70,7 +80,7 @@ defineOptions({ name: 'ProcessInstanceTrack' })
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Bell } from '@element-plus/icons-vue'
+import { Bell, RefreshRight } from '@element-plus/icons-vue'
 import { processInstanceApi } from '@/api/processInstance'
 import { deployedProcessApi } from '@/api/processDefinition'
 import { taskRemindApi } from '@/api/taskRemind'
@@ -122,6 +132,24 @@ async function handleRemind() {
     }
   } finally {
     reminding.value = false
+  }
+}
+
+const reInitiating = ref(false)
+
+/** 再次发起：复制原实例变量发起新实例，成功后跳转新实例跟踪页 */
+async function handleReInitiate() {
+  reInitiating.value = true
+  try {
+    const res = await processInstanceApi.reInitiate(instanceId)
+    ElMessage.success('已发起新流程实例')
+    if (res.data?.id) {
+      router.push({ path: `/process/instance/${res.data.id}` }).catch(() => {})
+    }
+  } catch {
+    // 错误详情（进行中/非发起人/不支持再次发起）由 http 拦截器统一提示
+  } finally {
+    reInitiating.value = false
   }
 }
 

@@ -1676,3 +1676,20 @@ Stage Summary:
 - 两条用户需求全部落地并浏览器实测闭环：①双面板悬浮卡片化（阴影+圆角+画布全幅铺底）边界问题解决 ②默认开始节点可见（新建即见+存量修复）且三层防护不可删、节点面板默认折叠（折叠态保留拖拽能力）
 - 方案备忘：dc:Rect 属 Java 契约格式保持不动，渲染层归一是最小侵入解；若未来 Java 侧改为标准 Bounds，归一函数天然幂等无需回退
 - 键盘 Delete 在 headless 环境不触达画布（点击画布亦不聚焦）属环境限制非回归——改动前后 keyboard 绑定行为一致（旧配置本就被拒绝），键盘路径由 customRules 单测确定性覆盖
+
+---
+Task ID: 63-ops-recovery
+Agent: Z.ai Code (main)
+Task: 服务恢复——Next 3000 门户 OOM 挂掉 + Turbopack 缓存损坏，诊断并恢复
+
+Work Log:
+- 探活定位：3000=000（死），5173/8080/3306 全活——仅门户挂
+- dmesg：内核 OOM 击杀 next-server（RSS 1.47GB，Turbopack 原生内存不受 NODE_OPTIONS=614 约束）
+- 重启静默秒死：前台短跑抓到 Turbopack panic「Failed to restore task data (corrupted database or bug)」→ .next 缓存损坏 → rm -rf .next 修复
+- 【Bash 工具后台启动 SOP】实证 nohup/setsid+& 均被会话清理，唯一逃逸 = timeout 强杀模式：`timeout 5 bash -c 'setsid nohup <cmd> > log 2>&1 & disown; sleep 30'`（EXIT=124 预期）
+- 恢复后 agent-browser 实测门户渲染正常，用后释放 chrome 内存（OOM 红线）
+- 外层 cron 巡检重建为 418848（注入服务恢复 SOP）
+
+Stage Summary:
+- 四通道全绿，门户渲染实测正常；纯运维恢复无代码改动
+- 备忘：启动命令与缓存损坏修复法已写入外层 worklog 63-ops-recovery 节及巡检 cron prompt

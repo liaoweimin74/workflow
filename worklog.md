@@ -1596,3 +1596,20 @@ Stage Summary:
 - 沉淀两条关键运维 SOP：①timeout 逃逸后台启动模式（此前所有后台启动失败之谜底）②Turbopack .next 缓存损坏 → rm -rf .next 修复
 - OOM 风险仍存：next-server RSS 峰值 1.6GB+，用完浏览器必须释放 chrome；vite/8080 由 Next 内置看门狗（20s 巡检）看护
 - 确认 Task 62-designer-ux（面板悬浮阴影+默认开始节点+禁删+palette 默认折叠）已由巡检代理完成推送（a7bbcf4），用户两需求均已闭环
+
+---
+Task ID: 64-vite-cache-recovery
+Agent: Z.ai Code (main)
+Task: 修复「无法进入流程设计器」——点设计按钮报 SyntaxError: Unexpected end of input (bpmn-js_lib_Modeler.js)
+
+Work Log:
+- 用户提供 console 报错：router.push('/designer') 导航失败，SyntaxError at bpmn-js_lib_Modeler.js?v=8e927e0f:1751——Vite 依赖预构建产物文件被截断
+- 根因：Task 63 OOM 事故的次生灾害——OOM 动荡期间 vite（当时仍存活）的 node_modules/.vite/deps 预构建缓存写坏，bpmn-js Modeler 模块产物不完整，加载即语法崩溃
+- 修复：fuser -k 5173 + pkill vite → rm -rf frontend/node_modules/.vite → timeout 逃逸模式重启 vite（bun run dev, NODE_OPTIONS=512MB）
+- agent-browser 完整黄金路径实测：登录 → 流程定义页 → 「请假」行「设计」按钮 → URL 跳转 /designer?id ✓ → .djs-container 画布渲染 ✓ → 默认开始节点在位 ✓ → palette 默认折叠 ✓ → console 无 SyntaxError（仅剩既有 permission 指令警告噪音）
+- 排查中两次点错表格（「请假流程」是分类表格：编辑/删除/添加子分类；「请假」才是流程定义行：设计/部署/…），误触删除确认弹窗已即时取消零残留
+- 浏览器用后即关（chrome 释放，available 1425MB，OOM 红线遵守）
+
+Stage Summary:
+- 用户报错彻底修复，设计器黄金路径全通；纯运维修复无代码改动，worklog chore 提交推送
+- 经验：OOM 事故后除了重启内存大户，必须连带检查 vite .vite/deps 预构建缓存完整性（存活进程的缓存也可能已损坏）；症状特征 = 某依赖模块 SyntaxError: Unexpected end of input

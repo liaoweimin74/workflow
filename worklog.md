@@ -1537,3 +1537,21 @@ Stage Summary:
 - Task 61 代码层完成：办理/审批拆分 + 三类面板 + 引擎逻辑（表单/字段权限/数据映射/人员解析/找不到人/动作强制/超时）+ AI 适配，测试全绿
 - 下一轮优先：恢复服务链（3000→bun run dev；8080→start-services.sh 按 marker 拉 node dist 11:55 版）→ agent-browser 端到端（palette 双入口/面板三分发/role+expression/字段权限/转签/办理节点禁拒绝）→ 提交推送
 - 边界：dept_head 等组织架构类审批人因组织表无负责人字段走「找不到人」策略兜底；截图内容丢失字段按冻结 schema+业界惯例补齐，可再校准
+
+---
+Task ID: 61-panel-width
+Agent: Z.ai Code (main)
+Task: 流程设计器右侧属性栏宽度再增加 100px（320px → 420px）
+
+Work Log:
+- 预检发现沙箱重置：workflow_lowcode/.git 丢失，按 SOP 第五次恢复（init + fileMode false + PAT remote + fetch + mixed reset + ls-tree -z 恢复 275 缺失文件）；远程已有 ed16049（Task 61 节点体系增强主体，上一巡检轮推送）
+- 改动：PropertyPanel.vue 展开宽度 320→420px；AssigneeSelector 四列网格注释同步（grid repeat(4,1fr) 随宽自适应）
+- agent-browser 实测闭环：登录→设计器→计算样式确认 420px；拖拽审批节点上画布→选中→属性面板渲染完整审批属性（审批类型/审批人设置/高级设置/字段权限设置）——顺带实证 Task 61 属性面板审批分支可用
+- 测试数据零残留：拖拽节点未保存即离开，editor API 复核草稿 XML 原状（807 字节 startEvent-only）
+- 画布空白=既有已知行为（empty-bpmn dc:Rect 契约格式不被 bpmn-js 解析，空流程画布本就空白），与本次无关
+- 提交推送：94f7e50（宽度）+ 173c09b（内层 worklog），远程 ed16049→173c09b
+- 外层巡检 cron 因沙箱重置需重建（见后续 cron 操作）
+
+Stage Summary:
+- 属性面板 420px 宽度生效并双证据实测；折叠态 32px 不变
+- Task 61 代码层已全部完成（ed16049），剩余运行时端到端复验项由巡检 cron 推进：任务详情 formKey/字段权限/转签、办理节点无拒绝按钮+后端 400、role/expression 人员解析实测

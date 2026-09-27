@@ -12,7 +12,11 @@ import { AiTool, AiToolRegistry } from './tools/ai-tool'
 import { CreateFormTool } from './tools/create-form.tool'
 import { CreateProcessTool } from './tools/create-process.tool'
 import { GenerateFormSchemaTool } from './tools/generate-form-schema.tool'
+import { ListFormsTool } from './tools/list-forms.tool'
+import { ListProcessesTool } from './tools/list-processes.tool'
 import { OpenPageTool } from './tools/open-page.tool'
+import { UpdateFormTool } from './tools/update-form.tool'
+import { UpdateProcessTool } from './tools/update-process.tool'
 
 /**
  * AI 模块：小智助手对话 + 表单生成 + 内部 LLM 网关。
@@ -36,6 +40,10 @@ const AI_TOOLS = 'AI_TOOLS'
     GenerateFormSchemaTool,
     CreateFormTool,
     CreateProcessTool,
+    UpdateFormTool,
+    UpdateProcessTool,
+    ListFormsTool,
+    ListProcessesTool,
     {
       provide: AI_TOOLS,
       useFactory: (
@@ -43,8 +51,30 @@ const AI_TOOLS = 'AI_TOOLS'
         generateForm: GenerateFormSchemaTool,
         createForm: CreateFormTool,
         createProcess: CreateProcessTool,
-      ): AiTool[] => [openPage, generateForm, createForm, createProcess],
-      inject: [OpenPageTool, GenerateFormSchemaTool, CreateFormTool, CreateProcessTool],
+        updateForm: UpdateFormTool,
+        updateProcess: UpdateProcessTool,
+        listForms: ListFormsTool,
+        listProcesses: ListProcessesTool,
+      ): AiTool[] => [
+        openPage,
+        generateForm,
+        createForm,
+        createProcess,
+        updateForm,
+        updateProcess,
+        listForms,
+        listProcesses,
+      ],
+      inject: [
+        OpenPageTool,
+        GenerateFormSchemaTool,
+        CreateFormTool,
+        CreateProcessTool,
+        UpdateFormTool,
+        UpdateProcessTool,
+        ListFormsTool,
+        ListProcessesTool,
+      ],
     },
     {
       provide: AiToolRegistry,

@@ -36,7 +36,13 @@ export class ZaiLlmService implements OnModuleDestroy {
 
   /**
    * 单轮补全。
-   * @throws AiError(MODEL_ERROR) 调用失败或输出为空
+   *
+   * 加固：
+   *   - 显式 max_tokens，避免平台默认输出上限过低导致长 JSON 被截断；
+   *   - finish_reason=length（截断）与空输出视为失败，并**重建 SDK 客户端**
+   *     （服务进程内复用 client 时偶发返回不完整内容，重建连接可自愈）。
+   *
+   * @throws AiError(MODEL_ERROR) 调用失败、输出为空或被截断
    */
   async complete(messages: LlmMessage[]): Promise<string> {
     const client = await this.getClient()
@@ -44,14 +50,24 @@ export class ZaiLlmService implements OnModuleDestroy {
       const completion = await client.chat.completions.create({
         messages: messages as never,
         thinking: { type: 'disabled' },
-      })
+        max_tokens: 2048,
+      } as never)
       const model = (completion as { model?: string }).model
       if (model && this.model === FALLBACK_MODEL) {
         this.model = model
       }
-      const content = completion.choices[0]?.message?.content
+      const choice = completion.choices[0]
+      const finish = (choice as { finish_reason?: string } | undefined)?.finish_reason
+      const content = choice?.message?.content
       if (!content || !content.trim()) {
+        this.logger.warn(`LLM 输出为空（finish=${finish ?? 'n/a'}），已重建客户端连接`)
+        this.clientPromise = null
         throw new AiError('MODEL_ERROR', '模型返回为空')
+      }
+      if (finish === 'length') {
+        this.logger.warn(`LLM 输出被截断（finish=length, len=${content.length}），已重建客户端连接`)
+        this.clientPromise = null
+        throw new AiError('MODEL_ERROR', '模型输出被截断')
       }
       return content
     } catch (e) {
@@ -60,6 +76,7 @@ export class ZaiLlmService implements OnModuleDestroy {
       }
       const msg = e instanceof Error ? e.message : String(e)
       this.logger.warn(`LLM 调用失败: ${msg}`)
+      this.clientPromise = null
       throw new AiError('MODEL_ERROR', '模型服务调用失败，请稍后重试')
     }
   }

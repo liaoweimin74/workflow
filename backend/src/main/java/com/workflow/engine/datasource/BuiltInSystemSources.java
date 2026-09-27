@@ -180,6 +180,11 @@ public final class BuiltInSystemSources {
         };
     }
 
+    /** 列定义工厂（无长度重载：INTEGER/TINYINT 等无需长度声明的列使用）。 */
+    private static ColumnConfig column(String key, String label, String type) {
+        return column(key, label, type, null);
+    }
+
     /** 列定义工厂（对齐 adapter 旧 {@code column} helper；length 传 null 表示不设长度）。 */
     private static ColumnConfig column(String key, String label, String type, Integer length) {
         ColumnConfig c = new ColumnConfig();

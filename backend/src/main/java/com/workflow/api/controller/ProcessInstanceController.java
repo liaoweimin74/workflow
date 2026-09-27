@@ -7,6 +7,7 @@ import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.engine.runtime.ProcessTaskPredictionService;
+import com.workflow.engine.task.WorkflowTaskService;
 import com.workflow.framework.security.domain.LoginUser;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
@@ -40,6 +41,7 @@ public class ProcessInstanceController {
     private final FormDataService formDataService;
     private final VariableMappingWriter variableMappingWriter;
     private final TaskService taskService;
+    private final WorkflowTaskService workflowTaskService;
     private final ObjectMapper objectMapper;
 
     public ProcessInstanceController(ProcessInstanceService processInstanceService,
@@ -48,6 +50,7 @@ public class ProcessInstanceController {
                                      FormDataService formDataService,
                                      VariableMappingWriter variableMappingWriter,
                                      TaskService taskService,
+                                     WorkflowTaskService workflowTaskService,
                                      ObjectMapper objectMapper) {
         this.processInstanceService = processInstanceService;
         this.highlightService = highlightService;
@@ -55,6 +58,7 @@ public class ProcessInstanceController {
         this.formDataService = formDataService;
         this.variableMappingWriter = variableMappingWriter;
         this.taskService = taskService;
+        this.workflowTaskService = workflowTaskService;
         this.objectMapper = objectMapper;
     }
 
@@ -150,6 +154,34 @@ public class ProcessInstanceController {
         return R.ok();
     }
 
+    /**
+     * 发起人撤回（Task 61：回退到发起节点等待重新提交）。
+     *
+     * <p>门禁：实例运行中 + 调用者为发起人 + 发起节点未配置 disallowRecall
+     * + 活跃节点未配置 blockRecall。撤回后设变量 recalled=true，意见 action='recall'。
+     */
+    @PostMapping("/{id}/recall")
+    public R<Void> recall(@PathVariable String id,
+                          @RequestBody(required = false) Map<String, Object> body) {
+        String userId = getCurrentUserId();
+        Object reasonObj = body != null ? body.get("reason") : null;
+        String reason = reasonObj == null || String.valueOf(reasonObj).isBlank()
+                ? null : String.valueOf(reasonObj);
+        workflowTaskService.recallInstance(id, userId, reason);
+        return R.ok();
+    }
+
+    /**
+     * 再次发起（Task 65：语义对齐钉钉；复制原实例全部变量开新实例）。
+     *
+     * <p>门禁：仅已结束实例 + 仅原发起人 + 最新部署版本发起节点 reInitiate !== false。
+     */
+    @PostMapping("/{id}/re-initiate")
+    public R<Map<String, Object>> reInitiate(@PathVariable String id) {
+        String userId = getCurrentUserId();
+        return R.ok(workflowTaskService.reInitiate(id, userId));
+    }
+
     @GetMapping("/{id}/highlight")
     public R<Map<String, Object>> highlight(@PathVariable String id) {
         return R.ok(highlightService.getHighlight(id));
@@ -186,6 +218,14 @@ public class ProcessInstanceController {
         );
 
         return R.ok(response);
+    }
+
+    private String getCurrentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
+            return String.valueOf(loginUser.getUserId());
+        }
+        return null;
     }
 
     private Map<String, Object> toMap(ProcessInstance instance) {

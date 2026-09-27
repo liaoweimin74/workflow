@@ -119,7 +119,9 @@ public class TaskController {
         // 从 SecurityContext 获取操作人（不依赖前端传 userId）
         String userId = getCurrentUserId();
         String comment = request != null ? request.getComment() : null;
-        return R.ok(taskService.completeTaskWithResponse(id, variables, userId, comment));
+        // 手写签名 dataURL（signature.required 节点必填校验在门禁内；V41 随 approve 意见落库）
+        String signature = request != null ? request.getSignature() : null;
+        return R.ok(taskService.completeTaskWithResponse(id, variables, userId, comment, signature));
     }
 
     @PostMapping("/{id}/reject")
@@ -139,6 +141,9 @@ public class TaskController {
         // 从 SecurityContext 获取操作人
         String userId = getCurrentUserId();
         String reason = request != null ? request.getReason() : null;
+
+        // Task 61/65 拒绝门禁：allowRefuse/allowReject 权限 + 办理节点无拒绝语义 + 意见必填
+        taskService.validateRefuseGate(id, reason);
 
         // 查 task 获取 processInstanceId
         Task task = flowableTaskService.createTaskQuery().taskId(id).singleResult();

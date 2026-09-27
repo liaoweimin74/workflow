@@ -41,6 +41,12 @@ public class WfTaskComment {
     private String action;
 
     /**
+     * 手写签名 dataURL（V41；signature.enabled 节点 completeTask 时随 approve 意见存储）。
+     */
+    @Column(name = "signature", columnDefinition = "LONGTEXT")
+    private String signature;
+
+    /**
      * 动作目标人 ID（转办/委派/加签/转签的目标人，其他动作为 null）。
      */
     @Column(name = "target_user_id", length = 64)
@@ -81,6 +87,9 @@ public class WfTaskComment {
 
     public String getTargetUserId() { return targetUserId; }
     public void setTargetUserId(String targetUserId) { this.targetUserId = targetUserId; }
+
+    public String getSignature() { return signature; }
+    public void setSignature(String signature) { this.signature = signature; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

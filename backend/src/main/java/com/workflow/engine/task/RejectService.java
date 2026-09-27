@@ -1,9 +1,15 @@
 package com.workflow.engine.task;
 
+import com.workflow.api.dto.OperationsConfig;
+import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.process.config.NodeOptions;
+import com.workflow.engine.process.config.NodeOptionsService;
+import com.workflow.engine.process.entity.NodeConfig;
+import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
@@ -13,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -35,19 +42,25 @@ public class RejectService {
     private final TenantProvider tenantProvider;
     private final WfTaskCommentRepository commentRepository;
     private final VariableMappingWriter variableMappingWriter;
+    private final NodeOptionsService nodeOptionsService;
+    private final NodeConfigRepository nodeConfigRepository;
 
     public RejectService(TaskService flowableTaskService,
                          RuntimeService runtimeService,
                          InitiatorNodeResolver initiatorNodeResolver,
                          TenantProvider tenantProvider,
                          WfTaskCommentRepository commentRepository,
-                         VariableMappingWriter variableMappingWriter) {
+                         VariableMappingWriter variableMappingWriter,
+                         NodeOptionsService nodeOptionsService,
+                         NodeConfigRepository nodeConfigRepository) {
         this.flowableTaskService = flowableTaskService;
         this.runtimeService = runtimeService;
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.tenantProvider = tenantProvider;
         this.commentRepository = commentRepository;
         this.variableMappingWriter = variableMappingWriter;
+        this.nodeOptionsService = nodeOptionsService;
+        this.nodeConfigRepository = nodeConfigRepository;
     }
 
     /**
@@ -81,6 +94,21 @@ public class RejectService {
                     "Cannot reject: current node is already the initiator node");
         }
 
+        // Task 61/65 退回门禁（对齐 NodeJS returnTask）：allowReturn/allowReject 权限
+        // + 意见必填节点退回理由也必填
+        OperationsConfig operations = extractOperationsFor(processDefinitionId, currentActivityId);
+        if (!operations.isAllowReturn() && !operations.isAllowReject()) {
+            throw new BusinessException(400, "该节点不允许退回");
+        }
+        NodeOptions nodeOpts = nodeOptionsService
+                .find(processDefinitionId, currentActivityId).orElse(null);
+        if (nodeOpts != null && Boolean.TRUE.equals(nodeOpts.getCommentRequired())
+                && (reason == null || reason.isBlank())) {
+            String label = task.getName() == null || task.getName().isBlank()
+                    ? currentActivityId : task.getName();
+            throw new BusinessException(400, "审批意见必填（节点「" + label + "」）");
+        }
+
         log.info("驳回任务 taskId={} userId={} reason={} 从 {} → {}",
                 taskId, userId, reason, currentActivityId, initiatorNodeId);
 
@@ -111,5 +139,68 @@ public class RejectService {
         } catch (Exception e) {
             log.warn("Failed to write variable mappings after reject task [{}]: {}", taskId, e.getMessage());
         }
+    }
+
+    /**
+     * 读取节点/流程两级 operations 并 AND 合成（复用 WorkflowTaskService 同名口径；
+     * 此处独立实现避免服务间环依赖）。
+     */
+    private OperationsConfig extractOperationsFor(String processDefinitionId, String taskDefinitionKey) {
+        OperationsConfig nodeLevel = new OperationsConfig();
+        try {
+            List<NodeConfig> configs = nodeConfigRepository.findByProcessDefinitionId(processDefinitionId);
+            OperationsConfig processLevel = new OperationsConfig();
+            boolean hasProcessLevel = false;
+            for (NodeConfig nc : configs) {
+                if ("__PROCESS__".equals(nc.getNodeId())) {
+                    processLevel = parseProcessOperationsFor(nc.getConfigJson());
+                    hasProcessLevel = true;
+                } else if (taskDefinitionKey.equals(nc.getNodeId())) {
+                    nodeLevel = parseOperationsFor(nc.getConfigJson());
+                }
+            }
+            if (!hasProcessLevel) {
+                return nodeLevel;
+            }
+            OperationsConfig result = new OperationsConfig();
+            result.setAllowReturn(processLevel.isAllowReturn() && nodeLevel.isAllowReturn());
+            result.setAllowReject(processLevel.isAllowReject() && nodeLevel.isAllowReject());
+            return result;
+        } catch (Exception e) {
+            log.warn("读取退回门禁操作配置失败 defId={}: {}", processDefinitionId, e.getMessage());
+            return nodeLevel;
+        }
+    }
+
+    /** 节点级 operations 解析（仅退回门禁关心的键）。 */
+    private OperationsConfig parseOperationsFor(String configJson) {
+        OperationsConfig result = new OperationsConfig();
+        try {
+            com.fasterxml.jackson.databind.JsonNode ops =
+                    new com.fasterxml.jackson.databind.ObjectMapper().readTree(configJson).get("operations");
+            if (ops != null && ops.isObject()) {
+                if (ops.has("allowReturn")) result.setAllowReturn(ops.get("allowReturn").asBoolean());
+                if (ops.has("allowReject")) result.setAllowReject(ops.get("allowReject").asBoolean());
+            }
+        } catch (Exception ignored) {
+            // 解析失败保持默认（全开）
+        }
+        return result;
+    }
+
+    /** 流程级 operations 解析（__PROCESS__ 节点 approvalPolicy.operations）。 */
+    private OperationsConfig parseProcessOperationsFor(String configJson) {
+        OperationsConfig result = new OperationsConfig();
+        try {
+            com.fasterxml.jackson.databind.JsonNode ops = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(configJson).path("approvalPolicy").path("operations");
+            if (ops.isObject()) {
+                if (ops.has("allowReturn")) result.setAllowReturn(ops.get("allowReturn").asBoolean());
+                if (ops.has("allowReject")) result.setAllowReject(ops.get("allowReject").asBoolean());
+            }
+        } catch (Exception ignored) {
+            // 解析失败保持默认（全开）
+        }
+        return result;
     }
 }

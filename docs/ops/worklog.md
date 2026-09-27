@@ -1634,3 +1634,23 @@ Stage Summary:
 - Task 61 代码层全部完成：办理/审批节点拆分（BPMN wf:nodeRole 真源 + nodeConfigs taskRole）+ 三类属性面板 + 引擎业务逻辑（表单下发/字段权限链路闭环/数据映射/role+expression 人员解析/找不到人策略/taskRole 动作强制/超时 5 动作/会签或签依次）+ AI 工具三值适配，后端 878/前端 1120 测试全绿、类型基线零新增
 - 待下一轮：①恢复服务链（3000 由 portal-watchdog 或 bun run dev；8080 由 start-services/supervisor 按 marker 拉 node dist）②agent-browser 浏览器端到端：palette 办理/审批双入口、属性面板三分发、role/expression 面板交互、任务详情 formKey/字段权限/转签、办理节点无拒绝按钮+后端 400 ③本 worklog 提交推送后工作区应干净
 - 已知边界（如实告知用户）：dept_head/连续多级/汇报上级等组织架构类审批人因 sys_organization 无负责人字段且无组织管理 UI，解析为空后按「找不到办理人」策略兜底（属数据模型欠账非逻辑欠账）；5 张属性面板截图内容在上下文压缩中丢失，属性字段全集按冻结 schema（上一 session 依截图实现）与钉钉/飞书级惯例补齐，如与截图有出入可指出后微调
+
+---
+Task ID: 61-panel-width
+Agent: Z.ai Code (main)
+Task: 用户需求「流程设计器右边的属性栏宽度再增加100px」——属性面板 320px → 420px
+
+Work Log:
+- 实施前预检：四服务探活正常（3000/5173/8080/MariaDB）；发现沙箱被重置——内层 workflow_lowcode/.git 丢失，按第四次实战 SOP 恢复（git init -b main + core.fileMode false + PAT remote + fetch + mixed reset origin/main + ls-tree -z 恢复 275 个缺失文件零遗漏）
+- 仓库对齐后确认远程已有 ed16049（上一轮 Task 61 主体已推送），工作区仅剩本轮两个文件真实改动
+- 修改：PropertyPanel.vue `.property-panel:not(.collapsed)` width 320px→420px；AssigneeSelector.vue 四列网格注释同步（repeat(4,1fr) 自适应，面板加宽每列约 70→95px）
+- 全仓 grep 确认 properties/ 下无其他 3xx 硬编码宽度；__tests__ 无 320px/PropertyPanel/AssigneeSelector 断言依赖
+- agent-browser 实测：登录→流程定义→设计器→getComputedStyle 实测 `.property-panel` 展开态 420px；palette 拖拽审批节点上画布（HTML5 drag 经 drag 命令成功）→ 点击选中 → 属性面板渲染审批节点完整属性（审批类型/审批人设置四列/高级设置/字段权限设置 tab）且布局正常——顺带验证了 Task 61 属性面板三分发的审批分支可用
+- 测试数据零残留：拖拽产生的未保存节点未点保存（保持「未保存」态），离开设计器即丢弃；editor API 复核草稿 bpmnXml 仍为 807 字节 startEvent-only 原状
+- 画布空白现象核实为既有已知行为（worklog 1544 行）：「请假」草稿系 empty-bpmn 模板（dc:Rect 契约格式），bpmn-js 不解析故空流程画布空白，与本次改动无关；控制台另有 keyboard.bindTo 配置告警（既有）
+- 提交推送：94f7e50（ed16049..94f7e50）
+
+Stage Summary:
+- 属性面板展开宽度 420px 生效并经浏览器实测（计算样式+截图双证据），审批人四列网格随宽自适应，折叠态 32px 不变
+- 沙箱重置恢复 SOP 第五次成功执行；Task 61 遗留的服务链恢复本轮已自然就绪（四通道全活）
+- Task 61 剩余待办不变：任务详情 formKey/字段权限/转签/办理节点无拒绝按钮+后端 400 等运行时端到端复验（交巡检 cron 推进）

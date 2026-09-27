@@ -1590,3 +1590,23 @@ Stage Summary:
 - 用户两大需求闭环：①AI 助手现在支持修改表单（加删改字段/重命名/改选项，含 diff 摘要与 PUBLISHED 警告）与修改流程（改审批人/增删环节/调整顺序/换绑表单/改名，含旧配置保留与网关保护）；②「AI 全操作」四阶段路线图已给出并完成阶段一（修改闭环+查询基建）；工具数 4→8
 - 顺带修复 GLM 长输出括号交错/截断缺陷（repairTruncatedJson 重建式修复）——所有 formgen 管线（create/revise）共同受益
 - 遗留：①阶段二确认与预览机制（confirm SSE 帧+前端确认弹窗，删除/发布/部署类操作）；②阶段三页面/数据源/业务数据工具；③阶段四系统管理工具（用户/角色/菜单/字典）；④update_process 重建模式对模型输出的 department/department_new 重复字段现象（LLM 行为，validator 去重名不覆盖不同名）建议下轮在 prompt 中强化去重约束
+
+---
+Task ID: 60-verify
+Agent: Z.ai Code (main)
+Task: 用户问「任务进度？」——Task 60 阶段一（AI 修改能力）浏览器端到端独立复验 + 巡检遗留测试数据清理
+
+Work Log:
+- 运行代码核实：dist 编译于 03:18-03:35 < 8080 进程启动 03:40:40 < 其后 src 零改动 → 运行中服务即 b999b24 新代码（四工具在 dist/ai/tools/ 全部在位）
+- 浏览器端到端复验（agent-browser 真实对话）：
+  ①list_processes：「列出所有流程」→ AI 返回 3 个流程及状态 ✓
+  ②update_process：「把请假流程改名+第一审批环节指定张三」→ AI 如实报告改名成功+审批人自动降级为部门负责人（API editor 复核 nodeConfigs type=dept_head、__PROCESS__ 表单绑定保留、drafts 列表名变「请假审批流」）✓
+  ③update_form：「给 ai_muj7b6wv19 加单行文本字段紧急程度」→ AI 报成功，API schema 复核 urgency_level 为第 5 字段 ✓
+  ④幻报防御：模糊表单名未匹配时 AI 追问澄清而非乱改 ✓
+- 发现两个小问题（非阻断，均已记录）：①模糊表单名匹配偏弱——「请假流程表单」在上下文中未被 AI 定位（换用精确 key 后成功）；AI 曾宣告「先查看表单列表」但回合直接结束未调工具；②发送键在回复完成后仍显示 disabled（刷新恢复；b999b24 未动前端，非本次回归）
+- 测试数据零残留：巡检遗留「请假审批流/请假申请/请假流程表单」API 删除 + wf_form_def 归档行 DB 硬删 1 行（复查 0）；09-24 及更早存量数据未触碰
+- 坑位补充：本沙箱轮 mysql CLI 不存在 → DB 操作改用 backend-node 内置 node mysql2（注意列名 key 为保留字需反引号）
+
+Stage Summary:
+- Task 60 阶段一独立复验闭环：AI 助手修改流程（改名/审批人/表单绑定保留）与修改表单（加字段）经真实浏览器对话+API 双实证可用；GLM 修复器与幻报防御在复验中均生效
+- 阶段二~四（确认预览机制/页面数据工具/系统管理工具）待后续轮次推进

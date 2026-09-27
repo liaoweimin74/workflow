@@ -1693,3 +1693,18 @@ Work Log:
 Stage Summary:
 - 四通道全绿，门户渲染实测正常；纯运维恢复无代码改动
 - 备忘：启动命令与缓存损坏修复法已写入外层 worklog 63-ops-recovery 节及巡检 cron prompt
+
+---
+Task ID: 64-vite-cache-recovery
+Agent: Z.ai Code (main)
+Task: 修复「无法进入流程设计器」——vite 预构建缓存损坏（Task 63 OOM 次生灾害）
+
+Work Log:
+- 症状：点设计按钮 router.push 导航失败，SyntaxError: Unexpected end of input at bpmn-js_lib_Modeler.js?v=8e927e0f:1751
+- 根因：OOM 动荡期间 vite 的 node_modules/.vite/deps 缓存写坏，bpmn-js Modeler 产物截断
+- 修复：杀 vite → rm -rf frontend/node_modules/.vite → timeout 逃逸模式重启（/home/z/tools/vite.log）
+- agent-browser 实测：设计按钮 → /designer 画布渲染/开始节点/palette 折叠全正常，console 无 SyntaxError
+- 备忘：vite 缓存损坏症状特征 = 某依赖模块 Unexpected end of input；OOM 后应连带清 .vite/deps
+
+Stage Summary:
+- 设计器入口恢复，纯运维修复无代码改动

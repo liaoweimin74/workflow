@@ -1654,3 +1654,25 @@ Stage Summary:
 - 属性面板展开宽度 420px 生效并经浏览器实测（计算样式+截图双证据），审批人四列网格随宽自适应，折叠态 32px 不变
 - 沙箱重置恢复 SOP 第五次成功执行；Task 61 遗留的服务链恢复本轮已自然就绪（四通道全活）
 - Task 61 剩余待办不变：任务详情 formKey/字段权限/转签/办理节点无拒绝按钮+后端 400 等运行时端到端复验（交巡检 cron 推进）
+
+---
+Task ID: 62-designer-ux
+Agent: Z.ai Code (main)
+Task: 用户两条需求——①节点面板/属性面板与画布底色太接近边界不清（用户建议阴影悬浮方案）②流程初创建应有默认开始节点且开始节点不可删除 + 节点面板默认折叠
+
+Work Log:
+- 需求①悬浮面板：NodePalette/PropertyPanel 由 flex 相邻布局改为 absolute 悬浮卡片（top/left/right/bottom 12px、border-radius 12px、双层阴影 0 6px 24px rgba(31,36,55,.14) + 0 1px 4px rgba(31,36,55,.08)、细边框），画布全幅铺底网格从面板四周透出，「悬浮于画布之上」具象化；designer-body 加 position:relative 锚点
+- 小地图避让：canvas-container 绑定 panel-right-open 类（属性面板展开时），designer-theme.css 将 .djs-minimap 右偏移 16→448px，避免被 420px 悬浮面板遮挡
+- 需求②根因分析：「每个流程初创建时就应有默认开始节点」数据层本就成立——empty-bpmn 模板含 startEvent_1，但 DI 用 dc:Rect（Java 契约格式）bpmn-js 不解析致导入失败（Cannot read properties of undefined (reading 'x')），画布空白看起来像没有开始节点
+- 方案选型：渲染前归一（前端 shim）而非改模板——不动 Node/Java 契约与 golden fixtures（避免契约链路震荡），且存量草稿（如 leave）一并修复无需数据迁移；新建 normalizeBpmnXmlForRender（<dc:Rect→<dc:Bounds、</dc:Rect→</dc:Bounds，等价改写仅标签名），接入三个渲染入口：xmlParser.importXml（设计器全路径）+ BpmnViewer.vue + ProcessStartPage.vue
+- 开始节点不可删除三层防护：①customRules 新增 elements.delete 规则（键盘 Delete/Backspace/剪切路径，EditorActions 源码证实走 rules.allowed；返回剔除开始节点的数组=混合选中时只删其他节点，全开始节点返回 false）+ shape.delete 规则（removeShape 直调路径）②customContextPad 对 StartEvent 不渲染删除按钮（UI 无入口；建模 removeElements 不查规则故必须在 provider 层拦）③PropertyPanel 无删除按钮（本就无）
+- palette 默认折叠：ProcessDesigner paletteCollapsed ref(false)→ref(true)，折叠态 40px 图标条仍可拖拽创建节点，展开按钮验证可用
+- 顺带修复（浏览器控制台两处既有报错清零）：①bpmnModeler 移除 keyboard.bindTo 配置（新版 diagram-js 键盘隐式绑定，显式配置报 unsupported configuration）②designer-theme.css 文件尾部补 .bjs-powered-by{display:none!important} 兜底（首条规则注入后于 headless 环境不生效的既有怪癖，水印 bpmn.io 一直可见）
+- 测试：新增 xmlParser.test.ts（5 用例：开/闭标签改写、标准 Bounds 原样、空串安全、改写后标签计数）+ customRules.test.ts（9 用例：经 CommandInterceptor canExecute 注册链路捕获处理器直调，elements.delete 三分支/shape.delete 两分支/connection.create 既有规则回归）；前端全量 vitest 90 文件 1132 用例全绿（基线 1120+新增14）；vue-tsc 46 error=基线零新增；后端本轮零改动
+- agent-browser 端到端：①leave 存量草稿画布出现开始节点（修复前 svg_elements=0→2）②contextPad 选中开始节点仅 [append.initiator-node, connect] 无删除项；任务节点含删除项且点击后删除成功（tasks 1→0、starts 1）③刷新设计器后控制台 keyboard.bindTo 与 failed to import 报错均消失 ④新建「浮测流程」→ 自动进设计器 → 开始节点立即可见+面板默认折叠 ⑤小地图避让、悬浮阴影截图确认
+- 测试数据零残留：浮测流程草稿 API 删除（code 200），drafts 复核仅剩 leave；设计器内拖拽/未保存改动全部未保存即离开
+
+Stage Summary:
+- 两条用户需求全部落地并浏览器实测闭环：①双面板悬浮卡片化（阴影+圆角+画布全幅铺底）边界问题解决 ②默认开始节点可见（新建即见+存量修复）且三层防护不可删、节点面板默认折叠（折叠态保留拖拽能力）
+- 方案备忘：dc:Rect 属 Java 契约格式保持不动，渲染层归一是最小侵入解；若未来 Java 侧改为标准 Bounds，归一函数天然幂等无需回退
+- 键盘 Delete 在 headless 环境不触达画布（点击画布亦不聚焦）属环境限制非回归——改动前后 keyboard 绑定行为一致（旧配置本就被拒绝），键盘路径由 customRules 单测确定性覆盖

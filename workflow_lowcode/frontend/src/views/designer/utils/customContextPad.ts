@@ -242,14 +242,17 @@ function CustomContextPadProvider(
       }
     }
 
-    // 删除入口
-    entries['delete'] = {
-      group: 'edit',
-      className: 'bpmn-icon-trash',
-      title: '删除',
-      action: {
-        click(_event: any, el: any) {
-          modeling.removeElements([el])
+    // 删除入口（开始节点不可删除：不渲染删除按钮；键盘删除由 customRules 的
+    // elements.delete / shape.delete 规则拦截）
+    if (!isStartEvent) {
+      entries['delete'] = {
+        group: 'edit',
+        className: 'bpmn-icon-trash',
+        title: '删除',
+        action: {
+          click(_event: any, el: any) {
+            modeling.removeElements([el])
+          }
         }
       }
     }

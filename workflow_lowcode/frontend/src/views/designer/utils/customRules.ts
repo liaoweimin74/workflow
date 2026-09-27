@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * 自定义 Rules — 开始节点只能连接至发起人节点
+ * 自定义 Rules — 开始节点的连接与删除约束
  *
- * 覆盖 connection.create / connection.reconnect 规则：
- * - 源为 StartEvent 时，目标必须是 wf:nodeRole=initiator 的 UserTask
+ * 覆盖 connection.create / connection.reconnect / elements.delete / shape.delete：
+ * - 源为 StartEvent 的连线，目标必须是 wf:nodeRole=initiator 的 UserTask
+ * - StartEvent 不可删除（键盘 Delete/Backspace、剪切、removeShape 全路径拦截；
+ *   contextPad 删除按钮由 customContextPad 对开始事件不渲染）
  *
  * 作为 DI 模块导出，通过 additionalModules 注册。
  */
@@ -55,6 +57,30 @@ function CustomRules(this: any, eventBus: any) {
       return isInitiatorNode(target)
     }
 
+    return
+  })
+
+  /**
+   * 开始节点不可删除：
+   * - elements.delete 拦键盘 Delete/Backspace（EditorActions.removeSelection）与剪切；
+   *   返回过滤数组 = 只允许删除选中元素中的非开始节点（比整体拒绝更友好）
+   * - shape.delete 拦直接 removeShape 的代码路径
+   * contextPad 的删除按钮由 customContextPad 对开始事件不渲染（UI 不出现）
+   */
+  this.addRule('elements.delete', 2000, function (context: any) {
+    const elements = context && context.elements
+    if (!elements || !elements.length) return
+    if (elements.some(isStartEvent)) {
+      const removable = elements.filter(function (el: any) { return !isStartEvent(el) })
+      return removable.length > 0 ? removable : false
+    }
+    return
+  })
+
+  this.addRule('shape.delete', 2000, function (context: any) {
+    if (isStartEvent(context && context.shape)) {
+      return false
+    }
     return
   })
 }

@@ -58,10 +58,9 @@ export function initModeler(options: ModelerOptions, readOnly = false): Modeler 
     additionalModules,
     moddleExtensions: {
       wf: wfModdle
-    },
-    keyboard: {
-      bindTo: window
     }
+    // 注：不配置 keyboard.bindTo —— 新版 diagram-js 键盘绑定已隐式化，
+    // 显式配置会报 "unsupported configuration <keyboard.bindTo>"
   })
 
   return modelerInstance

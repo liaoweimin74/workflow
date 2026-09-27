@@ -1555,3 +1555,23 @@ Work Log:
 Stage Summary:
 - 属性面板 420px 宽度生效并双证据实测；折叠态 32px 不变
 - Task 61 代码层已全部完成（ed16049），剩余运行时端到端复验项由巡检 cron 推进：任务详情 formKey/字段权限/转签、办理节点无拒绝按钮+后端 400、role/expression 人员解析实测
+
+---
+Task ID: 62-designer-ux
+Agent: Z.ai Code (main)
+Task: 设计器 UX 双需求——①面板与画布边界不清（悬浮阴影方案）②默认开始节点+开始节点禁删+节点面板默认折叠
+
+Work Log:
+- 需求①：NodePalette/PropertyPanel 悬浮卡片化（absolute+圆角12px+双层阴影），画布全幅铺底；小地图随右面板展开左移避让（panel-right-open 类 + right:448px）
+- 需求②根因：默认开始节点数据层一直存在（empty-bpmn 模板含 startEvent_1），但 DI 用 dc:Rect（Java 契约格式）bpmn-js 解析失败致画布空白。选型渲染前归一（不动 Node/Java 契约与 golden fixtures，存量草稿一并修复）：normalizeBpmnXmlForRender 接入设计器 importXml/BpmnViewer/ProcessStartPage 三入口
+- 禁删三层防护：customRules 新增 elements.delete（键盘/剪切，混合选中返回剔除数组）+ shape.delete 规则；customContextPad 对 StartEvent 不渲染删除按钮；PropertyPanel 本无删除入口
+- palette 默认折叠（40px 图标条保留拖拽）
+- 顺带修复既有控制台报错：移除 keyboard.bindTo（新版隐式绑定）、bjs-powered-by 水印尾部兜底规则（首条规则注入后不生效怪癖）
+- 测试：新增 14 单测（xmlParser 5 + customRules 9，后者经 CommandInterceptor canExecute 链路捕获处理器直调）；vitest 1132 全绿；vue-tsc 46=基线零新增；后端零改动
+- 浏览器实测：leave 存量草稿开始节点重现（svg 0→2 元素）；contextPad 开始节点无删除项/任务可删（1→0）；控制台两类报错清零；新建「浮测流程」打开即见开始节点+面板折叠；测试草稿 API 删除零残留（drafts 仅剩 leave）
+- 提交推送：a7bbcf4（173c09b..a7bbcf4），内层 worklog 同步
+
+Stage Summary:
+- 两条需求全部闭环：悬浮面板边界问题解决；新建流程打开即见默认开始节点且三层防护不可删；面板默认折叠保留拖拽
+- 备忘：dc:Rect 契约保持不动，渲染归一幂等——未来 Java 改标准 Bounds 也无需回退
+- 键盘 Delete 在 headless 下不触达画布属环境限制（改动前后行为一致），路径已由单测覆盖

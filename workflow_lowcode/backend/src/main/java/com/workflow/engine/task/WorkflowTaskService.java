@@ -8,9 +8,11 @@ import com.workflow.api.dto.TaskDoneFilter;
 import com.workflow.api.dto.TaskDoneVO;
 import com.workflow.api.dto.TaskTodoFilter;
 import com.workflow.api.dto.TaskTodoVO;
+import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.form.mapping.FormDataMerger;
 import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.entity.WfTaskComment;
+import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.config.NodeOptions;
@@ -67,6 +69,7 @@ public class WorkflowTaskService {
     private final ObjectMapper objectMapper;
     private final NodeOptionsService nodeOptionsService;
     private final EngineNotifyService engineNotifyService;
+    private final ProcessInstanceService processInstanceService;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
                                HistoryService historyService,
@@ -82,7 +85,8 @@ public class WorkflowTaskService {
                                FormDataMerger formDataMerger,
                                VariableMappingWriter variableMappingWriter,
                                NodeOptionsService nodeOptionsService,
-                               EngineNotifyService engineNotifyService) {
+                               EngineNotifyService engineNotifyService,
+                               ProcessInstanceService processInstanceService) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -98,6 +102,7 @@ public class WorkflowTaskService {
         this.variableMappingWriter = variableMappingWriter;
         this.nodeOptionsService = nodeOptionsService;
         this.engineNotifyService = engineNotifyService;
+        this.processInstanceService = processInstanceService;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
@@ -702,6 +707,10 @@ public class WorkflowTaskService {
             FormConfigResult formConfig = extractFormConfig(processDefinitionId, task.getTaskDefinitionKey());
             vo.setFieldPermissions(formConfig != null ? formConfig.getFieldPermissions() : null);
             vo.setOperations(extractOperations(processDefinitionId, task.getTaskDefinitionKey()));
+
+            // Task 61/65：taskRole + 节点行为开关 + 上次签名回填（对齐 NodeJS getTaskDetail）
+            fillNodeFlags(vo, processDefinitionId, task.getTaskDefinitionKey(),
+                    Boolean.TRUE.equals(vo.getIsInitiatorTask()), task.getAssignee());
         }
 
         // variables
@@ -824,6 +833,10 @@ public class WorkflowTaskService {
             FormConfigResult formConfig = extractFormConfig(processDefinitionId, histTask.getTaskDefinitionKey());
             vo.setFieldPermissions(formConfig != null ? formConfig.getFieldPermissions() : null);
             vo.setOperations(extractOperations(processDefinitionId, histTask.getTaskDefinitionKey()));
+
+            // Task 61/65：taskRole + 节点行为开关 + 上次签名回填
+            fillNodeFlags(vo, processDefinitionId, histTask.getTaskDefinitionKey(),
+                    Boolean.TRUE.equals(vo.getIsInitiatorTask()), histTask.getAssignee());
         }
 
         // variables — 历史变量
@@ -972,6 +985,9 @@ public class WorkflowTaskService {
             result.setAllowAddSign(processLevel.isAllowAddSign() && nodeLevel.isAllowAddSign());
             result.setAllowTransfer(processLevel.isAllowTransfer() && nodeLevel.isAllowTransfer());
             result.setAllowDelegate(processLevel.isAllowDelegate() && nodeLevel.isAllowDelegate());
+            result.setAllowPass(processLevel.isAllowPass() && nodeLevel.isAllowPass());
+            result.setAllowRefuse(processLevel.isAllowRefuse() && nodeLevel.isAllowRefuse());
+            result.setAllowReturn(processLevel.isAllowReturn() && nodeLevel.isAllowReturn());
             return result;
         } catch (Exception e) {
             log.warn("从 NodeConfig 解析操作配置失败", e);
@@ -994,6 +1010,9 @@ public class WorkflowTaskService {
             if (ops.has("allowAddSign")) result.setAllowAddSign(ops.get("allowAddSign").asBoolean());
             if (ops.has("allowTransfer")) result.setAllowTransfer(ops.get("allowTransfer").asBoolean());
             if (ops.has("allowDelegate")) result.setAllowDelegate(ops.get("allowDelegate").asBoolean());
+            if (ops.has("allowPass")) result.setAllowPass(ops.get("allowPass").asBoolean());
+            if (ops.has("allowRefuse")) result.setAllowRefuse(ops.get("allowRefuse").asBoolean());
+            if (ops.has("allowReturn")) result.setAllowReturn(ops.get("allowReturn").asBoolean());
         } catch (Exception e) {
             log.warn("从 NodeConfig 解析 operations JSON 失败: {}", e.getMessage());
         }
@@ -1018,6 +1037,9 @@ public class WorkflowTaskService {
                 if (ops.has("allowAddSign")) result.setAllowAddSign(ops.get("allowAddSign").asBoolean());
                 if (ops.has("allowTransfer")) result.setAllowTransfer(ops.get("allowTransfer").asBoolean());
                 if (ops.has("allowDelegate")) result.setAllowDelegate(ops.get("allowDelegate").asBoolean());
+                if (ops.has("allowPass")) result.setAllowPass(ops.get("allowPass").asBoolean());
+                if (ops.has("allowRefuse")) result.setAllowRefuse(ops.get("allowRefuse").asBoolean());
+                if (ops.has("allowReturn")) result.setAllowReturn(ops.get("allowReturn").asBoolean());
             }
         } catch (Exception e) {
             log.warn("从 __PROCESS__ 解析 operations JSON 失败: {}", e.getMessage());
@@ -1084,17 +1106,35 @@ public class WorkflowTaskService {
     }
 
     /**
-     * 完成任务并返回下一个任务信息，同时写入审批意见。
+     * 完成任务并返回下一个任务信息，同时写入审批意见（无签名重载）。
+     */
+    public CompleteTaskResponse completeTaskWithResponse(String taskId, Map<String, Object> variables,
+                                                          String userId, String comment) {
+        return completeTaskWithResponse(taskId, variables, userId, comment, null);
+    }
+
+    /**
+     * 完成任务并返回下一个任务信息，同时写入审批意见（支持手写签名）。
+     *
+     * <p>Task 61/65 门禁（引擎推进前拦截，对齐 NodeJS completeTask）：
+     * <ul>
+     *   <li>commentRequired=true → 审批/处理意见必填（handler 节点提示语为「处理」）</li>
+     *   <li>signature.required=true → 手写签名必填</li>
+     *   <li>returnOptions.mustAddSign=true → 必须已有加签意见</li>
+     *   <li>operations.allowPass=false → 不允许通过/提交</li>
+     * </ul>
+     * 意见落库携带 signature（V41 列）；实例结束且发起节点 smsOnEnd=true → 写 SMS_END。
      *
      * @param taskId    任务 ID
      * @param variables 流程变量
      * @param userId    操作人 ID（用于审批意见记录）
      * @param comment   审批意见（可为 null）
+     * @param signature 手写签名 dataURL（可为 null）
      * @return 包含下一个任务信息和流程结束标志的响应
      */
     @Transactional
     public CompleteTaskResponse completeTaskWithResponse(String taskId, Map<String, Object> variables,
-                                                          String userId, String comment) {
+                                                          String userId, String comment, String signature) {
         // 1. 查当前任务获取 processInstanceId
         Task currentTask = flowableTaskService.createTaskQuery()
                 .taskId(taskId)
@@ -1105,6 +1145,9 @@ public class WorkflowTaskService {
         }
 
         String processInstanceId = currentTask.getProcessInstanceId();
+
+        // 1b. 节点级门禁（意见必填/必签名/必须加签/allowPass）——引擎推进前拦截
+        validateCompleteGate(currentTask, comment, signature);
 
         // 2. 委派状态的任务需要先 resolve
         org.flowable.task.api.DelegationState state = currentTask.getDelegationState();
@@ -1124,9 +1167,9 @@ public class WorkflowTaskService {
             log.warn("Failed to write variable mappings after complete task [{}]: {}", taskId, e.getMessage());
         }
 
-        // 4. 写入审批意见
+        // 4. 写入审批意见（signature.enabled 节点携带手写签名 dataURL，V41 落库）
         if (userId != null) {
-            saveTaskComment(taskId, processInstanceId, userId, "approve", comment);
+            saveTaskComment(taskId, processInstanceId, userId, "approve", comment, null, signature);
         }
 
         // 4. 查流程是否仍在运行
@@ -1135,6 +1178,11 @@ public class WorkflowTaskService {
                 .singleResult();
 
         boolean processFinished = (runningInstance == null);
+
+        // 4b. 实例结束 + 发起节点 smsOnEnd=true → 给发起人的短信通知（对齐 NodeJS writeInstanceEndSms）
+        if (processFinished) {
+            writeSmsEndIfConfigured(currentTask.getProcessDefinitionId(), processInstanceId);
+        }
 
         // 5. 如果流程未结束，查下一个任务
         String nextTaskId = null;
@@ -1213,6 +1261,14 @@ public class WorkflowTaskService {
      */
     public void saveTaskComment(String taskId, String processInstanceId, String userId,
                          String action, String comment, String targetUserId) {
+        saveTaskComment(taskId, processInstanceId, userId, action, comment, targetUserId, null);
+    }
+
+    /**
+     * 保存审批意见到 wf_task_comment 表（带目标人与手写签名；V41 signature 列）。
+     */
+    public void saveTaskComment(String taskId, String processInstanceId, String userId,
+                         String action, String comment, String targetUserId, String signature) {
         WfTaskComment record = new WfTaskComment();
         record.setId(java.util.UUID.randomUUID().toString().replace("-", ""));
         record.setTenantId(tenantProvider.getTenantId());
@@ -1222,6 +1278,365 @@ public class WorkflowTaskService {
         record.setAction(action);
         record.setComment(comment);
         record.setTargetUserId(targetUserId);
+        record.setSignature(signature);
         commentRepository.save(record);
+    }
+
+    // ==================== Task 61/65 门禁与增量能力 ====================
+
+    /**
+     * 填充节点级增量字段：taskRole / nodeFlags / lastSignature。
+     *
+     * <p>taskRole：isInitiatorTask → initiator；config.taskRole → 显式值；BPMN wf:nodeRole 兑底；
+     * 缺省 approver。nodeFlags 从节点配置解析（旧数据全 false）。lastSignature 仅
+     * signature.useLast=true 时查该办理人最近一条带签名的 approve 意见回填。
+     */
+    private void fillNodeFlags(TaskDetailVO vo, String processDefinitionId, String nodeKey,
+                               boolean isInitiatorTask, String assignee) {
+        try {
+            vo.setTaskRole(nodeOptionsService.resolveTaskRole(processDefinitionId, nodeKey, isInitiatorTask));
+            TaskDetailVO.NodeFlags flags = new TaskDetailVO.NodeFlags();
+            NodeOptions opts = nodeOptionsService.find(processDefinitionId, nodeKey).orElse(null);
+            if (opts != null) {
+                flags.setCommentRequired(Boolean.TRUE.equals(opts.getCommentRequired()));
+                flags.setSignatureEnabled(Boolean.TRUE.equals(opts.getSignatureEnabled()));
+                flags.setSignatureRequired(Boolean.TRUE.equals(opts.getSignatureRequired()));
+                flags.setSignatureUseLast(Boolean.TRUE.equals(opts.getSignatureUseLast()));
+                flags.setSignatureAllowUpload(Boolean.TRUE.equals(opts.getSignatureAllowUpload()));
+                if (Boolean.TRUE.equals(opts.getSignatureUseLast())
+                        && assignee != null && !assignee.isBlank()) {
+                    commentRepository
+                            .findFirstByTenantIdAndUserIdAndActionAndSignatureIsNotNullOrderByCreatedAtDesc(
+                                    tenantProvider.getTenantId(), assignee, "approve")
+                            .map(WfTaskComment::getSignature)
+                            .ifPresent(vo::setLastSignature);
+                }
+            }
+            vo.setNodeFlags(flags);
+        } catch (Exception e) {
+            log.warn("填充节点行为标记失败 defId={} node={}: {}", processDefinitionId, nodeKey, e.getMessage());
+        }
+    }
+
+    /**
+     * complete 门禁（对齐 NodeJS completeTask ①-④）。节点无配置块（旧数据）时整体跳过，
+     * 与 NodeJS「node === undefined 时跳过全部检查」一致。
+     */
+    private void validateCompleteGate(Task task, String comment, String signature) {
+        String processDefinitionId = task.getProcessDefinitionId();
+        String nodeKey = task.getTaskDefinitionKey();
+        NodeOptions opts = nodeOptionsService.find(processDefinitionId, nodeKey).orElse(null);
+        if (opts == null) {
+            return;
+        }
+        String label = task.getName() == null || task.getName().isBlank() ? nodeKey : task.getName();
+        if (Boolean.TRUE.equals(opts.getCommentRequired())
+                && (comment == null || comment.isBlank())) {
+            throw new BusinessException(400,
+                    ("handler".equals(opts.getTaskRole()) ? "处理" : "审批")
+                            + "意见必填（节点「" + label + "」）");
+        }
+        if (Boolean.TRUE.equals(opts.getSignatureRequired())
+                && (signature == null || signature.isBlank())) {
+            throw new BusinessException(400, "此节点要求手写签名（节点「" + label + "」）");
+        }
+        if (Boolean.TRUE.equals(opts.getMustAddSign())
+                && !hasAddSignComment(task.getProcessInstanceId(), nodeKey)) {
+            throw new BusinessException(400, "此节点必须加签后才能通过（节点「" + label + "」）");
+        }
+        OperationsConfig operations = extractOperations(processDefinitionId, nodeKey);
+        if (!operations.isAllowPass()) {
+            throw new BusinessException(400, "该节点不允许通过/提交（节点「" + label + "」）");
+        }
+    }
+
+    /**
+     * refuse 门禁（对齐 NodeJS refuseTask）：allowRefuse/allowReject 权限 →
+     * 办理节点无「拒绝」语义（后端兑底拦截）→ commentRequired 时拒绝理由必填。
+     */
+    public void validateRefuseGate(String taskId, String reason) {
+        Task task = flowableTaskService.createTaskQuery().taskId(taskId).singleResult();
+        if (task == null) {
+            throw new BusinessException(400, "Task not found: " + taskId);
+        }
+        String processDefinitionId = task.getProcessDefinitionId();
+        String nodeKey = task.getTaskDefinitionKey();
+        OperationsConfig operations = extractOperations(processDefinitionId, nodeKey);
+        if (!operations.isAllowRefuse() && !operations.isAllowReject()) {
+            throw new BusinessException(400, "该节点不允许拒绝");
+        }
+        NodeOptions opts = nodeOptionsService.find(processDefinitionId, nodeKey).orElse(null);
+        if (opts != null) {
+            if ("handler".equals(opts.getTaskRole())) {
+                throw new BusinessException(400, "办理节点不支持拒绝操作");
+            }
+            String label = task.getName() == null || task.getName().isBlank() ? nodeKey : task.getName();
+            if (Boolean.TRUE.equals(opts.getCommentRequired())
+                    && (reason == null || reason.isBlank())) {
+                throw new BusinessException(400, "审批意见必填（节点「" + label + "」）");
+            }
+        }
+    }
+
+    /** 此实例+节点下是否存在加签意见（mustAddSign 门禁用；对齐 NodeJS hasAddSignComment）。 */
+    private boolean hasAddSignComment(String processInstanceId, String nodeKey) {
+        try {
+            Set<String> taskIds = new HashSet<>();
+            List<Task> openTasks = flowableTaskService.createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .taskDefinitionKey(nodeKey)
+                    .list();
+            for (Task t : openTasks) {
+                taskIds.add(t.getId());
+            }
+            List<HistoricTaskInstance> histTasks = historyService.createHistoricTaskInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .taskDefinitionKey(nodeKey)
+                    .list();
+            for (HistoricTaskInstance t : histTasks) {
+                taskIds.add(t.getId());
+            }
+            if (taskIds.isEmpty()) {
+                return false;
+            }
+            for (WfTaskComment c : commentRepository.findByProcessInstanceId(processInstanceId)) {
+                if ("add_sign".equals(c.getAction()) && c.getTaskId() != null
+                        && taskIds.contains(c.getTaskId())) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("查询加签意见失败 instance={} node={}: {}", processInstanceId, nodeKey, e.getMessage());
+            return false;
+        }
+    }
+
+    /** 实例结束 + 发起节点 smsOnEnd=true → 给发起人的短信通知记录（initiator 从历史变量读取）。 */
+    private void writeSmsEndIfConfigured(String processDefinitionId, String processInstanceId) {
+        try {
+            if (processDefinitionId == null) {
+                return;
+            }
+            String initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
+            if (initiatorNodeId == null) {
+                return;
+            }
+            NodeOptions opts = nodeOptionsService.find(processDefinitionId, initiatorNodeId).orElse(null);
+            if (opts == null || !Boolean.TRUE.equals(opts.getSmsOnEnd())) {
+                return;
+            }
+            String initiator = null;
+            try {
+                Object var = runtimeService.getVariable(processInstanceId, "initiator");
+                initiator = var == null ? null : String.valueOf(var);
+            } catch (Exception ignored) {
+                // 实例已结束，运行时变量已清理 → 历史变量兑底
+            }
+            if (initiator == null || initiator.isBlank()) {
+                HistoricVariableInstance histVar = historyService.createHistoricVariableInstanceQuery()
+                        .processInstanceId(processInstanceId)
+                        .variableName("initiator")
+                        .singleResult();
+                initiator = histVar == null || histVar.getValue() == null
+                        ? null : String.valueOf(histVar.getValue());
+            }
+            if (initiator != null && !initiator.isBlank()) {
+                engineNotifyService.writeSmsEnd(tenantProvider.getTenantId(), processInstanceId, initiator);
+            }
+        } catch (Exception e) {
+            log.warn("写入实例结束通知失败 instance={}: {}", processInstanceId, e.getMessage());
+        }
+    }
+
+    /**
+     * 发起人撤回流程（回退到发起节点等待重新提交；对齐 NodeJS recallInstance）。
+     *
+     * <p>门禁：实例运行中 + 调用者为发起人 + 发起节点未配置 disallowRecall
+     * + 活跃节点未配置 blockRecall。撤回后设变量 recalled=true，意见 action='recall'。
+     */
+    @Transactional
+    public void recallInstance(String instanceId, String userId, String reason) {
+        // 1. 实例必须仍在运行
+        ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(instanceId)
+                .singleResult();
+        if (instance == null) {
+            throw new BusinessException(400, "流程已结束，无法撤回");
+        }
+
+        // 2. 只有发起人可以撤回（initiator 变量口径，与详情页/已办列表一致）
+        String initiator = null;
+        try {
+            Object var = runtimeService.getVariable(instanceId, "initiator");
+            initiator = var == null ? null : String.valueOf(var);
+        } catch (Exception ignored) {
+            // 变量缺失按非发起人处理
+        }
+        if (initiator == null || initiator.isBlank() || userId == null || !initiator.equals(userId)) {
+            throw new BusinessException(400, "只有发起人可以撤回流程");
+        }
+
+        // 3. 发起节点定位
+        String processDefinitionId = instance.getProcessDefinitionId();
+        String initiatorNodeId;
+        try {
+            initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
+        } catch (Exception e) {
+            initiatorNodeId = null;
+        }
+        if (initiatorNodeId == null) {
+            throw new BusinessException(400, "流程缺少发起节点，无法撤回");
+        }
+
+        // 4. 发起节点配置：不允许撤销/撤回
+        NodeOptions initiatorOpts = nodeOptionsService.find(processDefinitionId, initiatorNodeId).orElse(null);
+        if (initiatorOpts != null && Boolean.TRUE.equals(initiatorOpts.getDisallowRecall())) {
+            throw new BusinessException(400, "发起人已配置不允许撤销/撤回");
+        }
+
+        // 5. 活跃节点配置：到达此节点后禁止撤销/撤回
+        List<Task> openTasks = flowableTaskService.createTaskQuery()
+                .processInstanceId(instanceId)
+                .list();
+        if (openTasks.isEmpty()) {
+            throw new BusinessException(400, "流程无待办任务，无法撤回");
+        }
+        for (Task openTask : openTasks) {
+            NodeOptions opts = nodeOptionsService
+                    .find(processDefinitionId, openTask.getTaskDefinitionKey()).orElse(null);
+            if (opts != null && Boolean.TRUE.equals(opts.getBlockRecall())) {
+                String label = openTask.getName() == null || openTask.getName().isBlank()
+                        ? openTask.getTaskDefinitionKey() : openTask.getName();
+                throw new BusinessException(400, "流程已到达「" + label + "」，该节点禁止撤销/撤回");
+            }
+        }
+
+        // 6. 设撤回标记（触发 MI completionCondition 终止多实例活动）并整体回退到发起节点
+        runtimeService.setVariable(instanceId, "recalled", true);
+        List<String> activityIds = openTasks.stream()
+                .map(Task::getTaskDefinitionKey)
+                .distinct()
+                .toList();
+        runtimeService.createChangeActivityStateBuilder()
+                .processInstanceId(instanceId)
+                .moveActivityIdsToSingleActivityId(activityIds, initiatorNodeId)
+                .changeState();
+
+        // 7. 变量映射写入（撤回后发起人重新填报）
+        try {
+            variableMappingWriter.write(processDefinitionId, instanceId);
+        } catch (Exception e) {
+            log.warn("Failed to write variable mappings after recall instance [{}]: {}",
+                    instanceId, e.getMessage());
+        }
+
+        // 8. 意见 action='recall'
+        saveTaskComment(openTasks.get(0).getId(), instanceId, userId, "recall", reason);
+    }
+
+    /**
+     * 再次发起（对齐 NodeJS reInitiate，语义对齐钉钉「再次发起」）：
+     * <ul>
+     *   <li>仅<strong>已结束</strong>实例可再次发起（运行中/挂起 → 400）</li>
+     *   <li>仅原发起人可再次发起 → 403 语义（BusinessException 403）</li>
+     *   <li>发起节点 reInitiate=false → 400「该流程不支持再次发起」</li>
+     *   <li>复制原实例全部流程变量作为新实例发起变量，按 processKey+businessKey 开新实例</li>
+     * </ul>
+     * ⚠️ reInitiate 校验读<strong>最新部署版本</strong>的发起节点配置（操作发生在当下，
+     * 配置取当下）；实例运行态仍按各自的冻结版本，互不影响。
+     *
+     * @return 新实例信息（processInstanceId / processDefinitionId）
+     */
+    @Transactional
+    public Map<String, Object> reInitiate(String instanceId, String userId) {
+        // 1. 已结束校验：运行时表仍可查到（含挂起）→ 未结束
+        ProcessInstance running = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(instanceId)
+                .singleResult();
+        if (running != null) {
+            throw new BusinessException(400, "流程仍在进行中，无法再次发起");
+        }
+
+        // 2. 历史实例
+        HistoricProcessInstance hpi = historyService.createHistoricProcessInstanceQuery()
+                .processInstanceId(instanceId)
+                .singleResult();
+        if (hpi == null) {
+            throw new BusinessException(400, "流程实例不存在: " + instanceId);
+        }
+
+        // 3. 发起人校验（initiator 变量口径，与列表/详情一致）
+        String initiator = null;
+        try {
+            HistoricVariableInstance initiatorVar = historyService.createHistoricVariableInstanceQuery()
+                    .processInstanceId(instanceId)
+                    .variableName("initiator")
+                    .singleResult();
+            initiator = initiatorVar == null || initiatorVar.getValue() == null
+                    ? null : String.valueOf(initiatorVar.getValue());
+        } catch (Exception ignored) {
+            // 变量缺失按未知发起人处理
+        }
+        if (initiator != null && !initiator.isBlank()
+                && (userId == null || !initiator.equals(userId))) {
+            throw new BusinessException(403, "只有发起人可以再次发起");
+        }
+
+        // 4. 最新部署版本的发起节点 reInitiate 门禁
+        String processKey = hpi.getProcessDefinitionKey();
+        if (processKey != null && !processKey.isBlank()) {
+            ProcessDefinition latest = repositoryService.createProcessDefinitionQuery()
+                    .processDefinitionKey(processKey)
+                    .latestVersion()
+                    .singleResult();
+            if (latest != null) {
+                String initiatorNodeId;
+                try {
+                    initiatorNodeId = initiatorNodeResolver.resolve(latest.getId());
+                } catch (Exception e) {
+                    initiatorNodeId = null;
+                }
+                if (initiatorNodeId != null) {
+                    NodeOptions initiatorOpts = nodeOptionsService
+                            .find(latest.getId(), initiatorNodeId).orElse(null);
+                    if (initiatorOpts != null && Boolean.FALSE.equals(initiatorOpts.getReInitiate())) {
+                        throw new BusinessException(400, "该流程不支持再次发起");
+                    }
+                }
+            }
+        }
+
+        // 5. 复制原实例全部流程变量（结束实例的变量走历史表）
+        Map<String, Object> startVariables = new HashMap<>();
+        List<HistoricVariableInstance> historicVars = historyService.createHistoricVariableInstanceQuery()
+                .processInstanceId(instanceId)
+                .list();
+        for (HistoricVariableInstance var : historicVars) {
+            if (var.getValue() != null) {
+                startVariables.put(var.getVariableName(), var.getValue());
+            }
+        }
+        if (initiator != null && !initiator.isBlank()) {
+            startVariables.put("initiator", initiator);
+        }
+
+        // 6. 按 key + 原 businessKey 开新实例
+        ProcessInstance newInstance = processInstanceService.startProcess(
+                processKey, hpi.getBusinessKey(), startVariables);
+
+        // 7. 变量映射写入（与 start 端点行为一致）
+        try {
+            variableMappingWriter.write(newInstance.getProcessDefinitionId(), newInstance.getId());
+        } catch (Exception e) {
+            log.warn("Failed to write variable mappings after re-initiate [{}]: {}",
+                    newInstance.getId(), e.getMessage());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("processInstanceId", newInstance.getId());
+        result.put("processDefinitionId", newInstance.getProcessDefinitionId());
+        result.put("sourceInstanceId", instanceId);
+        return result;
     }
 }

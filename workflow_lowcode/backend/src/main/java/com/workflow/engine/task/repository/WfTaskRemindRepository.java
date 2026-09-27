@@ -17,6 +17,11 @@ public interface WfTaskRemindRepository extends JpaRepository<WfTaskRemind, Stri
     List<WfTaskRemind> findByTaskIdOrderByRemindTimeDesc(String taskId);
 
     /**
+     * 按流程实例查最近催办记录（催办 urge.interval 实例级限流用；Task 61）。
+     */
+    List<WfTaskRemind> findByProcessInstanceIdOrderByRemindTimeDesc(String processInstanceId);
+
+    /**
      * 按任务 ID 查询催办记录列表。
      */
     List<WfTaskRemind> findByTaskId(String taskId);

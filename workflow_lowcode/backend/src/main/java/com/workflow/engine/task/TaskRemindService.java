@@ -1,5 +1,9 @@
 package com.workflow.engine.task;
 
+import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.process.config.NodeOptions;
+import com.workflow.engine.process.config.NodeOptionsService;
 import com.workflow.engine.task.entity.WfTaskRemind;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -30,6 +34,8 @@ public class TaskRemindService {
     private final TaskService flowableTaskService;
     private final WfTaskRemindRepository remindRepository;
     private final TenantProvider tenantProvider;
+    private final NodeOptionsService nodeOptionsService;
+    private final InitiatorNodeResolver initiatorNodeResolver;
 
     /** 催办频率限制（小时），可通过 workflow.remind.frequency-hours 配置覆盖。 */
     @Value("${workflow.remind.frequency-hours:24}")
@@ -37,10 +43,14 @@ public class TaskRemindService {
 
     public TaskRemindService(TaskService flowableTaskService,
                              WfTaskRemindRepository remindRepository,
-                             TenantProvider tenantProvider) {
+                             TenantProvider tenantProvider,
+                             NodeOptionsService nodeOptionsService,
+                             InitiatorNodeResolver initiatorNodeResolver) {
         this.flowableTaskService = flowableTaskService;
         this.remindRepository = remindRepository;
         this.tenantProvider = tenantProvider;
+        this.nodeOptionsService = nodeOptionsService;
+        this.initiatorNodeResolver = initiatorNodeResolver;
     }
 
     /**
@@ -60,6 +70,11 @@ public class TaskRemindService {
         if (task == null) {
             throw new IllegalStateException("Task not found: " + taskId);
         }
+
+        // 1b. 发起节点「审批催办」门禁（Task 61，对齐 NodeJS remindAll）：
+        //  urge.enabled=false → 不可催办；urge.enabled=true → 按 interval*unit 分钟级实例限流；
+        //  未配置（null）→ 保持 24h 任务级限流旧语义
+        applyUrgeGate(task);
 
         // 2. 频率限制：查询最后一条催办记录
         List<WfTaskRemind> existing = remindRepository.findByTaskIdOrderByRemindTimeDesc(taskId);
@@ -98,5 +113,45 @@ public class TaskRemindService {
         // 4. 触发通知（本期 log，后续对接通知中心）
         log.info("催办通知 taskId={} processInstanceId={} from={} to={} remindTo={}",
                 taskId, task.getProcessInstanceId(), remindFrom, remindTo, remindTo);
+    }
+
+    /**
+     * 发起节点 urge 配置门禁（实例级，对齐 NodeJS remindAll 的 allSkipped 语义）。
+     */
+    private void applyUrgeGate(Task task) {
+        try {
+            String processDefinitionId = task.getProcessDefinitionId();
+            String initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
+            if (initiatorNodeId == null) {
+                return;
+            }
+            NodeOptions opts = nodeOptionsService.find(processDefinitionId, initiatorNodeId).orElse(null);
+            if (opts == null) {
+                return;
+            }
+            if (Boolean.FALSE.equals(opts.getUrgeEnabled())) {
+                throw new BusinessException(400, "该流程未开启审批催办");
+            }
+            if (Boolean.TRUE.equals(opts.getUrgeEnabled())) {
+                int unitMinutes = "hour".equals(opts.getUrgeUnit()) ? 60
+                        : "day".equals(opts.getUrgeUnit()) ? 1440 : 1;
+                int intervalMinutes = Math.max(1, opts.getUrgeInterval() == null ? 5 : opts.getUrgeInterval())
+                        * unitMinutes;
+                List<WfTaskRemind> instanceReminds = remindRepository
+                        .findByProcessInstanceIdOrderByRemindTimeDesc(task.getProcessInstanceId());
+                if (!instanceReminds.isEmpty() && instanceReminds.get(0).getRemindTime() != null) {
+                    long elapsedMinutes = Duration.between(instanceReminds.get(0).getRemindTime(),
+                            LocalDateTime.now()).toMinutes();
+                    if (elapsedMinutes < intervalMinutes) {
+                        throw new BusinessException(400,
+                                "催办过于频繁，请间隔 " + intervalMinutes + " 分钟后再试");
+                    }
+                }
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            // urge 门禁读取失败不阻断催办（回退 24h 限流旧语义）
+        }
     }
 }

@@ -1652,3 +1652,20 @@ Work Log:
 Stage Summary:
 - 远程 main = 本地 = c9f062c（509aa33 Task 65 + worklog chore）；Task 65 三未实现项（签名落库/useLast/allowUpload、reInitiate、编译器 startEvent initiator 修复）确认全部在远程
 - 恢复经验：reset --mixed 后缺失文件用 git checkout -- . 全量找回，git status 0 行为完成标准
+
+---
+Task ID: 67-java-sync
+Agent: Z.ai Code (main)
+Task: 用户「同步对齐java端的代码」——Node 端 Task 61+65 十项引擎能力移植到 Java backend/（约束：内存只有4G，启动 java 前先清理内存）
+
+Work Log:
+- 移植规格：重读 /tmp/java-sync 6 个 diff（2158 行），10 项功能圈定（nodeConfig 模型/审批人类型化解析+7 策略/complete+reject+refuse 门禁+allowXxx 三键/详情 VO 增量 taskRole+nodeFlags+lastSignature/签名落库 V41/reInitiate/recall 撤回/超时扫描 5 动作/wf_engine_notify 引擎通知/urge 催办限流）
+- 基础设施核对：历史压缩前已写就 6 个新文件（NodeOptions/NodeOptionsService/TaskCreateBehaviorListener/MultiInstanceApproverListener 扩展/RoleMembershipResolver/EngineNotifyService+WfEngineNotify）完整性确认
+- 本轮实现：WorkflowTaskService.fillNodeFlags（详情 VO 增量）+validateCompleteGate（意见必填/签名必填/mustAddSign/allowPass）+completeTaskWithResponse 5 参（签名落库）+validateRefuseGate（handler 拒 400）+recallInstance（撤回回发起节点）+reInitiate（最新版本门禁+变量复制开新实例）；RejectService 退回门禁；TaskRemindService urge 门禁；TaskTimeoutScanner（@Scheduled 60s+5 动作+TIMEOUT_REMIND 幂等）；operations 三键解析+AND；端点 POST :id/recall + :id/re-initiate
+- Flyway：V40__create_engine_notify.sql + V41__add_task_comment_signature.sql（与 Node 端逐字节一致）
+- 意外收获：WorkflowApplication 补 @EnableScheduling——整个应用此前调度未启用（RetryTask @Scheduled 从未生效的隐藏 bug）
+- 静态审查四道关（JRE-only 无 javac）：括号配平 8 文件全对/imports 修 3 处缺漏（RejectService 4 个 import、CompleteTaskRequest getter、TaskCreateBehaviorListener 未用注入）/引用存在性/Flowable API 签名；engine.task→engine.process 单向无 Modulith 环
+- 内存约束遵守：未启动 Java 进程（4G 红线+8080 冲突），全静态验证；双 worklog 已写
+
+Stage Summary:
+- Java 同步完成：Node Task 61（ed16049）+ Task 65（509aa33）十项能力全部落地 backend/，9 修改+8 新增+@EnableScheduling；Flyway V40/V41 双端一致；无编译验证手段（静态审查兜底），建议有 JDK 环境时 mvn compile 复核

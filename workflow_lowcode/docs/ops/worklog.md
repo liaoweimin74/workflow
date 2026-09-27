@@ -1742,3 +1742,29 @@ Work Log:
 Stage Summary:
 - 远程 main = 本地 = 509aa33（Task 65 签名落库/useLast/allowUpload + reInitiate 再次发起 + 编译器 startEvent initiator 修复），本次 push 确认无需新提交
 - 第六次恢复经验：沙箱重置后缺失文件成批出现（.env/backend/.superpowers 等），reset --mixed 后直接 git checkout -- . 全量找回，以 git status 0 行+rev-parse 双端一致为完成标准
+
+---
+Task ID: 67-java-sync
+Agent: Z.ai Code (main)
+Task: 用户需求「同步对齐java端的代码」+「内存只有4G，如果要启动java，先清理内存」——把 Node 端 Task 61（节点体系增强 ed16049）+ Task 65（签名落库/useLast/allowUpload/reInitiate 509aa33）移植到 Java backend/（Spring Boot 4 + Flowable，com.workflow）
+
+Work Log:
+- 移植源重导出与精读：/tmp/java-sync/{t61-model,t61-compiler,t61-runtime,t61-task,t61-scanner,t65}.diff 共 2158 行全部重读，10 项功能规格逐项圈定
+- 基础设施（历史压缩前已写就，本轮核对确认完整）：NodeOptions（配置块解析模型，三态口径与 NodeJS extractTaskOptions 对齐）、NodeOptionsService（wf_node_config.config_json 读取+BPMN wf:nodeRole 真源兜底）、TaskCreateBehaviorListener（create 事件：SMS_NODE/auto_pass/auto_reject/去重/类型化解析/noAssigneePolicy 7 策略）、MultiInstanceApproverListener 扩展（类型化解析+去重+找不到人策略）、RoleMembershipResolver（roleCodes 成员+admin）、EngineNotifyService+WfEngineNotify 实体（SMS_NODE/SMS_END/TIMEOUT_REMIND）
+- 【本轮实现①详情 VO 增量】WorkflowTaskService.fillNodeFlags：运行时+历史两个 builder 填充 taskRole（isInitiatorTask→initiator/config.taskRole/BPMN wf:nodeRole/缺省 approver）+nodeFlags（commentRequired/signature 四开关，旧数据全 false）+lastSignature（useLast=true 查该办理人最近一条 approve 签名）
+- 【本轮实现②complete 门禁+签名落库】validateCompleteGate（引擎推进前：commentRequired handler 节点「处理」前缀/signature.required「此节点要求手写签名」/mustAddSign 查加签意见（运行时+历史任务 ID 集合内 action=add_sign）/allowPass 显式 false 拦截）+completeTaskWithResponse 5 参重载（CompleteTaskRequest 补 signature 字段+getter/setter，Controller 透传）+saveTaskComment 7 参重载（V41 signature 列随 approve 意见落库）
+- 【本轮实现③refuse/reject 门禁】TaskController.refuse 前置 validateRefuseGate（allowRefuse/allowReject 权限+handler 节点「办理节点不支持拒绝操作」400+commentRequired 理由必填）；RejectService.reject 前置退回门禁（allowReturn/allowReject+commentRequired，独立轻量 operations 解析避免服务环依赖）
+- 【本轮实现④operations 三键】OperationsConfig 加 allowPass/allowRefuse/allowReturn（默认 true）+节点级/流程级解析+extractOperations AND 合并（对齐 NodeJS OPERATION_KEYS 扩展）
+- 【本轮实现⑤recall 发起人撤回】WorkflowTaskService.recallInstance：运行中门禁/initiator 变量校验/disallowRecall/blockRecall 遍历开放任务/recalled=true 变量+moveActivityIdsToSingleActivityId 整体回退发起节点+variableMappingWriter+意见 action='recall'；端点 POST /api/v1/process-instances/{id}/recall
+- 【本轮实现⑥reInitiate 再次发起】WorkflowTaskService.reInitiate：运行中 400（含挂起）/历史实例发起人校验 403/最新部署版本发起节点 reInitiate===false 400「该流程不支持再次发起」（配置取当下语义）/历史变量全量复制+initiator 兜底/startProcess(key,businessKey,vars)+映射写入；端点 POST /api/v1/process-instances/{id}/re-initiate
+- 【本轮实现⑦超时扫描】TaskTimeoutScanner（@Scheduled 60s+initialDelay 20s+running 重入保护）：active() 任务扫 NodeOptions.timeout.enabled，deadline=create+duration(缺省 24)h，wf_engine_notify TIMEOUT_REMIND 幂等，5 动作（remind/escalate 提醒意见、transfer 转 admin 失败降级提醒、pass complete+approve 意见+映射写入、refuse 意见+deleteProcessInstance）；租户取 task.tenantId（无请求上下文）
+- 【本轮实现⑧urge 催办门禁】TaskRemindService.applyUrgeGate：urge.enabled=false→「该流程未开启审批催办」；true→interval(缺省 5)*unit(minute/hour/day) 分钟级实例限流（wf_task_remind 按 process_instance_id 最近一条）；未配置保持 24h 任务级旧语义；WfTaskRemindRepository 补 findByProcessInstanceIdOrderByRemindTimeDesc
+- 【本轮实现⑨Flyway 对齐】V40__create_engine_notify.sql+V41__add_task_comment_signature.sql 与 Node 端逐字节一致（保持双端 checksum 一致惯例，V39 先例）
+- 【本轮实现⑩意外收获】WorkflowApplication 补 @EnableScheduling——此前整个应用未启用调度，RetryTask 的 @Scheduled 从未生效（隐藏 bug），启用后超时扫描器+通知重试一并生效
+- 静态审查（JRE-only 无 javac/mvn 维持静态同步模式）：8 文件花括号配平全对、imports 全量核对（修 RejectService 缺 OperationsConfig/NodeConfig/NodeConfigRepository/List import、CompleteTaskRequest 缺 getSignature/setSignature）、TaskCreateBehaviorListener 清理未用 sysUserRepository 注入、engine.task→engine.process 单向依赖确认无 Modulith 循环、Flowable API 签名逐个核对（active()/latestVersion()/moveActivityIdsToSingleActivityId/HistoricProcessInstance.getProcessDefinitionKey 等）
+- 用户内存约束遵守：未启动任何 Java 进程（4G 红线+8080 与 Node 冲突双因素），全部验证为静态审查
+
+Stage Summary:
+- Node Task 61+65 十项引擎能力全部移植 Java：nodeConfig 模型/审批人类型化解析/门禁（complete+reject+refuse+三键）/详情 VO 增量/签名落库/reInitiate/recall/超时扫描/引擎通知/urge 限流；Flyway V40/V41 双端一致
+- Java 端改动：9 文件修改（WorkflowTaskService/RejectService/TaskRemindService/TaskController/ProcessInstanceController/OperationsConfig/CompleteTaskRequest/WfTaskComment+Repository/MultiInstanceApproverListener/BpmnRewriter）+ 8 文件新增（config 包 2/监听器 2/解析器 1/通知 3/迁移 2）+ WorkflowApplication @EnableScheduling
+- 无法编译验证（沙箱 JRE-only）——静态审查四道关：括号/imports/引用存在性/Flowable API 签名；后续有 JDK 环境时建议 mvn compile 兜底

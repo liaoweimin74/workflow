@@ -52,7 +52,6 @@ public class TaskCreateBehaviorListener implements TaskListener {
     private final TaskService flowableTaskService;
     private final RuntimeService runtimeService;
     private final org.flowable.engine.HistoryService historyService;
-    private final com.workflow.system.repository.SysUserRepository sysUserRepository;
     private final WfTaskCommentRepository commentRepository;
 
     public TaskCreateBehaviorListener(NodeOptionsService nodeOptionsService,
@@ -61,7 +60,6 @@ public class TaskCreateBehaviorListener implements TaskListener {
                                       TaskService flowableTaskService,
                                       RuntimeService runtimeService,
                                       org.flowable.engine.HistoryService historyService,
-                                      com.workflow.system.repository.SysUserRepository sysUserRepository,
                                       WfTaskCommentRepository commentRepository) {
         this.nodeOptionsService = nodeOptionsService;
         this.roleMembershipResolver = roleMembershipResolver;
@@ -69,7 +67,6 @@ public class TaskCreateBehaviorListener implements TaskListener {
         this.flowableTaskService = flowableTaskService;
         this.runtimeService = runtimeService;
         this.historyService = historyService;
-        this.sysUserRepository = sysUserRepository;
         this.commentRepository = commentRepository;
     }
 

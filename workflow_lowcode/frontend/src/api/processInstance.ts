@@ -124,6 +124,11 @@ export const processInstanceApi = {
     return http.post(`/v1/process-instances/${id}/recall`, { reason })
   },
 
+  /** 再次发起：复制已结束实例的流程变量重新发起新实例（reInitiate=false 的流程会被 400 拦截） */
+  reInitiate(id: string): Promise<R<StartProcessResponse>> {
+    return http.post(`/v1/process-instances/${id}/re-initiate`)
+  },
+
   /** 获取流程图高亮信息（已走节点 + 当前节点） */
   highlight(id: string): Promise<R<ProcessHighlight>> {
     return http.get(`/v1/process-instances/${id}/highlight`)

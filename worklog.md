@@ -1613,3 +1613,26 @@ Work Log:
 Stage Summary:
 - 用户报错彻底修复，设计器黄金路径全通；纯运维修复无代码改动，worklog chore 提交推送
 - 经验：OOM 事故后除了重启内存大户，必须连带检查 vite .vite/deps 预构建缓存完整性（存活进程的缓存也可能已损坏）；症状特征 = 某依赖模块 SyntaxError: Unexpected end of input
+
+---
+Task ID: 65-notify-reinit-signature
+Agent: Z.ai Code (main)
+Task: 用户需求「未实现项开始实现」——盘点三未实现项落地：reInitiate 再次发起（新功能）、签名 useLast/allowUpload（新功能）、notifySms（盘点更正为已实现）
+
+Work Log:
+- 盘点修正：notify.sms（节点级短信通知）实为**已完整实现**（start 首批任务 193-212 行 + completeTask writeNodeSmsNotifications + writeInstanceEndSms + TimeoutScanner 四挂点齐备）——此前 grep 误用前端变量名 notifySms（引擎侧字段 notify?.sms）致零命中误判，已向用户更正
+- 【真欠账①签名落库】completeTask 的 body.signature 校验完即丢弃从未落库：V41 migration（wf_task_comment 加 signature LONGTEXT）+ types.ts + insertComment 带 signature + completeTask approve 意见携带；getTaskDetail nodeFlags 扩 signatureUseLast/AllowUpload + findLastSignature（useLast=true 时查该用户最近一条 approve 签名）
+- 【真欠账②reInitiate】运行时无再次发起能力：新增 service reInitiate（RUNNING/SUSPENDED 400 / 非发起人 403 / 最新部署版本发起节点 reInitiate=false 400「该流程不支持再次发起」/ 复制原实例全部变量 start 新实例）+ controller POST :id/re-initiate + 前端 API + 实例追踪页「再次发起」按钮（已结束实例显示，成功跳新实例页）；语义选型：校验读**最新部署版本**而非原实例冻结版本（操作发生在当下，配置取当下；注释已说明）
+- 【真欠账③签名子项前端】TaskDetailPage：useLast 时 loadDetail 回填 lastSignature（可重画覆盖）+ allowUpload 时「上传签名图片」按钮（FileReader 转 dataURL，2MB 限制）+ 已回填提示
+- 【意外收获——编译器重大欠账】extractTaskOptions 只对 userTask 分支调用，startEvent 形态发起节点的 initiator 配置块（disallowRecall/urge/reInitiate/smsOnEnd）从未进编译模型——抽出 extractInitiatorOptions 公共函数，startEvent+isInitiator 分支也编译（设计器真实形态 userTask+nodeRole=initiator 原本覆盖，此修复为兼容增强）
+- 测试：新增 task-signature.spec.ts 9 用例（签名落库 3 + lastSignature 门控 2 + reInitiate 4，含 vi.spyOn(service,'start') 隔离 start 依赖技巧）；migration.spec 计数断言 39→40 同步；后端 920 全绿；vue-tsc 46=基线（修掉自己引入的 StartProcessResponse 字段错误）；前端 vitest 1132 全绿
+- 端到端 API 验证 9 步全通（t64_verify.py）：部署→发起→nodeFlags 下发→required 拦截→签名提交结束→re-initiate 放行→lastSignature 回填→DB 直查 sig_rows=1→reInitiate=false 拦截
+- 【运维发现】8080 实际入口是看门狗拉的 node dist/main.js（start-services.sh 里 bun src/index.ts 路径错误——src/index.ts 不存在，入口 src/main.ts；脚本一直靠看门狗兜底）；改后端必须 nest build + 杀进程让看门狗拉新 dist
+- 浏览器实测：已结束实例页「再次发起」按钮 ✓；任务详情签名折叠区展开后上传按钮+画布 ✓
+- 测试数据零残留：sig_verify_64 全套（13 部署版本/17 实例/草稿/意见/签名）DB 清零；t64_verify.py 保留 tool-results 备查
+- 提交推送：本次全部改动（待填 commit）
+
+Stage Summary:
+- 盘点三未实现项全部闭环：notifySms 更正为已实现；签名链路（落库+useLast 回填+allowUpload 上传）+ 再次发起（API+按钮+拦截）上线，端到端 9 步验证全通
+- 编译器 startEvent initiator 欠账修复——disallowRecall/urge/smsOnEnd/reInitiate 在 startEvent 形态下真正生效
+- 后端 920/前端 1132 全绿，类型基线零新增；工作区干净待提交

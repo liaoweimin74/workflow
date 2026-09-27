@@ -71,7 +71,13 @@ export interface TaskDetailVO {
     commentRequired: boolean
     signatureEnabled: boolean
     signatureRequired: boolean
+    /** 默认使用上次签名（signature.useLast） */
+    signatureUseLast: boolean
+    /** 支持上传签名图片（signature.allowUpload） */
+    signatureAllowUpload: boolean
   }
+  /** 上次签名 dataURL（仅 signature.useLast=true 时回查最近一条 approve 签名，供前端默认回填） */
+  lastSignature: string | null
   formKey: string | null
   fieldPermissions: unknown
   mappedData: unknown
@@ -234,7 +240,14 @@ export class TaskService {
         commentRequired: node?.commentRequired ?? false,
         signatureEnabled: node?.signature?.enabled ?? false,
         signatureRequired: node?.signature?.required ?? false,
+        signatureUseLast: node?.signature?.useLast ?? false,
+        signatureAllowUpload: node?.signature?.allowUpload ?? false,
       },
+      // 上次签名回填：仅 signature.useLast=true 时查该办理人最近一条带签名的 approve 意见
+      lastSignature:
+        node?.signature?.useLast === true
+          ? await this.findLastSignature(getTenantId(), row.assignee)
+          : null,
       // 表单：节点级 `form` > 流程级 `__PROCESS__` `form`（整体取，不跨层合并，对齐 Java extractFormConfig）
       ...(await this.loadTaskForm(row.process_def_id, row.node_id)),
       // 跨表单数据映射（form.dataMappings → targetField/value）；无配置或解析为空时为 null
@@ -497,13 +510,14 @@ export class TaskService {
 
     await this.syncInstanceStatus(row.instance_id, state)
 
-    // 审批意见（对齐 Java：action='approve'）
+    // 审批意见（对齐 Java：action='approve'）；signature.enabled 节点同时落手写签名（V41）
     await this.instances.insertComment(tenantId, {
       taskId,
       instanceId: row.instance_id,
       userId: body.userId ?? row.assignee ?? '',
       action: 'approve',
       comment: body.comment ?? null,
+      signature: body.signature ?? null,
       targetUserId: null,
     })
 
@@ -1281,6 +1295,25 @@ export class TaskService {
       .limit(1)
       .executeTakeFirst()
     return comment !== undefined
+  }
+
+  /**
+   * 查用户最近一条手写签名（signature.useLast=true 时 getTaskDetail 回填用）。
+   * 取该用户 tenant 内 action=approve 且 signature 非空的最新意见。
+   */
+  private async findLastSignature(tenantId: string, userId: string | null): Promise<string | null> {
+    if (userId === null || userId === '') return null
+    const row = await this.db
+      .selectFrom('wf_task_comment')
+      .select('signature')
+      .where('tenant_id', '=', tenantId)
+      .where('user_id', '=', userId)
+      .where('action', '=', 'approve')
+      .where('signature', 'is not', null)
+      .orderBy('created_at', 'desc')
+      .limit(1)
+      .executeTakeFirst()
+    return row?.signature ?? null
   }
 
   /** 节点 notify.sms=true 的新建待办 → 写短信通知记录（占位表，后续接入网关）。 */

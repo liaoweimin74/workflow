@@ -201,5 +201,19 @@ export class ProcessInstanceController {
     await this.taskService.recallInstance(id, String(user.userId), body?.reason ?? null)
     return R.ok()
   }
+
+  /**
+   * 再次发起（Node 引擎新能力，对齐钉钉「再次发起」）。
+   *
+   * 复制已结束实例的流程变量重新发起新实例。门禁：
+   * 实例已结束 + 调用者为原发起人 + 发起节点 reInitiate !== false。
+   */
+  @Post(':id/re-initiate')
+  async reInitiate(
+    @Param('id') id: string,
+    @CurrentUser() user: LoginUser,
+  ): Promise<R<StartProcessResult>> {
+    return R.ok(await this.service.reInitiate(id, String(user.userId)))
+  }
 }
 

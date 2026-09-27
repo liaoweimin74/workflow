@@ -1488,3 +1488,20 @@ Stage Summary:
 - 【任务完成情况总回答】①表单复制（Task 56）②显示列拖拽修复+数据源拖拽下线（Task 54）③JSON 列归一（Task 55）④声明式 SQL 双段保存+字段拖拽（Task 52）⑤失焦修复（Task 53）⑥AI 助手创建流程（Task 59）——全部完成并推送远程 main（HEAD=2ad69f8）
 - Task 59 AI 助手创建流程经浏览器真实复验可用：自然语言→流程草稿（节点审批人+配套表单）→设计器打开即见图
 - 坑位：Bash persistent shell cwd 命令间重置（git 操作需显式 cd）；AI 悬浮球可被「隐藏 AI 助手」藏起（需「显示 AI 助手」恢复）；表单删除 API 软删需 DB 清理归档行
+
+---
+Task ID: 60
+Agent: Z.ai Code (main)
+Task: 用户需求「AI 助手支持表单和流程修改 + 全系统操作方案」——四阶段方案 + 阶段一实施闭环
+
+Work Log:
+- 【方案】四阶段路线图：一修改闭环（update_form/update_process/list_forms/list_processes）/二确认预览机制/三页面与数据操作/四系统管理；本轮交付阶段一，AI 工具 4→8
+- 【实施】新增 6 文件（locate/update-form.tool/update-process.tool/list-forms.tool/list-processes.tool/ai-process-node-configs）+ 修改 7 文件（module/agent/两个 generation/prompt-builder/validator/zai-llm）
+- 【核心攻坚】E2E 揪出 GLM 确定性输出缺陷（validate 数组漏 ] 的括号交错+尾部截断，finish=stop）——三层修复：repairTruncatedJson 重建式修复器（交错补插+尾部补全）+ zai-llm 异常重建 client + reviseSync/generate 重试；AI 幻报防御（noChanges→ok:false + prompt 硬规则 error 必须告知失败）
+- 【验证】后端 64 文件 901/901 全绿（新增 35 用例）；E2E 实证：修改流程环节（API 复核 4 userTask+表单绑定保留）、修改表单字段（改名/加字段落库复核）、网关流程拒绝保护、AI 如实报告失败；测试数据零残留
+- 【推送】2ad69f8..b999b24 main->main，远程=本地
+
+Stage Summary:
+- AI 助手现在能完整完成：创建表单/修改表单/创建流程/修改流程（改审批人/增删环节/换绑表单/改名）/查询表单/查询流程——表单与流程全生命周期对话式操作闭环
+- 巡检 cron（job 417406 每 15 分钟）运行中，本轮期间已自主创建测试流程（请假流程）——巡检数据留给巡检自清理
+- 下一阶段建议：确认与预览机制（删除/发布/部署高危操作 confirm 弹窗）→ 页面/数据源工具 → 系统管理工具

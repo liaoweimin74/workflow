@@ -189,10 +189,85 @@ function parseRoot(rawJson: string): unknown {
     try {
       return JSON.parse(text.substring(start, end + 1))
     } catch {
-      // 落到下方统一报错
+      // 落到下方修复尝试
+    }
+  }
+  // 模型偶发输出未闭合的 JSON（finish=stop 但缺尾部括号）——尝试括号补全修复
+  const repaired = repairTruncatedJson(text)
+  if (repaired !== null) {
+    try {
+      return JSON.parse(repaired)
+    } catch {
+      // 修复失败落到统一报错
     }
   }
   throw new AiError('EMPTY_RESPONSE', '模型输出无法解析为表单结构')
+}
+
+/**
+ * 截断/交错 JSON 修复（重建式）：扫描时动态补全模型漏写的闭合括号。
+ *
+ * 背景：GLM 对较长 form schema 的输出存在两类确定性缺陷——
+ *   ① finish_reason=stop 但尾部缺闭合括号（截断）；
+ *   ② 括号交错（如 validate 数组漏 `]` 直接闭合字段对象）。
+ * 重建式修复在扫描中遇到「闭合符与栈顶不匹配」时，先补上中间缺失的
+ * 闭合符再消费当前符号，可无损恢复此类输出。
+ *
+ * @returns 修复后的 JSON 文本（已通过 JSON.parse 验证）；无法修复返回 null
+ */
+export function repairTruncatedJson(text: string): string | null {
+  const first = text.indexOf('{')
+  if (first < 0) return null
+  const src = text.slice(first)
+  let out = ''
+  const stack: string[] = []
+  let inStr = false
+  let esc = false
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i]
+    out += ch
+    if (inStr) {
+      if (esc) esc = false
+      else if (ch === '\\') esc = true
+      else if (ch === '"') inStr = false
+      continue
+    }
+    if (ch === '"') {
+      inStr = true
+      esc = false
+    } else if (ch === '{') {
+      stack.push('}')
+    } else if (ch === '[') {
+      stack.push(']')
+    } else if (ch === '}' || ch === ']') {
+      if (stack.length === 0) return null
+      if (stack[stack.length - 1] === ch) {
+        stack.pop()
+      } else {
+        // 交错：补全中间缺失的闭合符，再由当前符号消费其所属层
+        const idx = stack.lastIndexOf(ch)
+        if (idx === -1) return null
+        let inserts = ''
+        while (stack.length - 1 > idx) {
+          inserts += stack.pop() as string
+        }
+        stack.pop() // idx 层由 ch 消费
+        out = out.slice(0, -1) + inserts + ch
+      }
+    }
+  }
+  if (inStr) out += '"'
+  // 剥离尾部悬挂逗号/冒号（补全括号前），避免 "…}],]" 类非法序列
+  out = out.replace(/[,:]\s*$/, '')
+  while (stack.length > 0) {
+    out += stack.pop()
+  }
+  try {
+    JSON.parse(out)
+    return out
+  } catch {
+    return null
+  }
 }
 
 /** 归一化字段名为 snake_case 合法标识符（对齐 Java `normalizeField`）。 */

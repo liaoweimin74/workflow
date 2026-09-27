@@ -7,6 +7,7 @@ import {
   PlanFormRef,
 } from '../service/ai-process-plan'
 import { buildLinearProcessBpmnXml } from '../service/ai-process-bpmn'
+import { buildPlanNodeConfigs } from '../service/ai-process-node-configs'
 import { FormDefinitionService } from '../../engine/form/service/form-definition.service'
 import { FormDefinitionWriteService } from '../../engine/form/form-definition-write.service'
 import { ProcessDesignService } from '../../engine/process/process-design.service'
@@ -105,7 +106,7 @@ export class CreateProcessTool implements AiTool {
 
       // 3. 拼装 BPMN + nodeConfigs
       const bpmnXml = buildLinearProcessBpmnXml(plan, 'http://flowable.org/bpmn')
-      const nodeConfigs = this.buildNodeConfigs(plan, formId)
+      const nodeConfigs = buildPlanNodeConfigs(plan, formId)
 
       // 4. 落库：key 冲突自动加后缀重试
       const draft = await this.createDraftWithRetry(plan)
@@ -207,39 +208,6 @@ export class CreateProcessTool implements AiTool {
     const exact = res.content.find((f) => f.name === formName || f.key === formName)
     const hit = exact ?? res.content[0]
     return { id: String(hit.id), name: hit.name }
-  }
-
-  /** nodeConfigs：发起/审批节点 + __PROCESS__ 流程级表单（契约对齐设计器 PropertyPanel）。 */
-  private buildNodeConfigs(plan: ProcessPlan, formId: string | null): Record<string, string> {
-    const configs: Record<string, string> = {}
-
-    if (formId !== null) {
-      configs['__PROCESS__'] = JSON.stringify({
-        form: { formDefId: formId, fieldPermissions: null },
-      })
-    }
-
-    plan.nodes.forEach((node, index) => {
-      const nodeId = `ai_task_${index + 1}`
-      const form =
-        formId !== null && (node.type === 'initiator' || node.formRef !== null)
-          ? { formDefId: formId, fieldPermissions: null }
-          : undefined
-      if (node.type === 'initiator') {
-        const config: Record<string, unknown> = { name: node.name }
-        if (form !== undefined) config['form'] = form
-        configs[nodeId] = JSON.stringify(config)
-        return
-      }
-      const config: Record<string, unknown> = { name: node.name }
-      if (node.approval !== null) config['approval'] = node.approval
-      if (node.operations !== null) config['operations'] = node.operations
-      if (node.timeout !== null) config['timeout'] = node.timeout
-      if (form !== undefined) config['form'] = form
-      configs[nodeId] = JSON.stringify(config)
-    })
-
-    return configs
   }
 
   /** createDraft；process_key 冲突（唯一约束）时加时间戳后缀重试，最多 3 次。 */

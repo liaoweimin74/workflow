@@ -19,6 +19,8 @@ export interface ProcessPlanInput {
   requirement: string
   /** 可选：发起表单字段需求描述。 */
   formRequirement?: string
+  /** 可选：当前流程计划摘要（修改模式用，JSON 字符串）。 */
+  currentPlan?: string
 }
 
 /** 系统提示：输出契约与设计规则。 */
@@ -47,6 +49,8 @@ function buildSystemPrompt(): string {
     '- 节点不绑定表单时 form 为 null（节点表单只在用户明确说某环节需要独立填报时才给）。',
     '- 审批环节按用户描述的顺序编排；用户没描述审批环节时，设计一个合理的默认审批链（如直属负责人审批）。',
     '- name/key 不得与用户输入无关的占位词（如 xxx、test）。',
+    '- 修改模式：输入会附带「当前流程计划」，只需应用用户要求的变更；未提及的节点、名称、',
+    '  审批人、顺序必须原样保留（key 也保持不变）；仅在用户明确要求增删环节/调整顺序时才改动节点序列。',
   ].join('\n')
 }
 
@@ -59,6 +63,12 @@ export function buildProcessPlanMessages(input: ProcessPlanInput): LlmMessage[] 
   parts.push(`审批环节需求：${input.requirement.trim() || input.title.trim()}`)
   if (input.formRequirement && input.formRequirement.trim() !== '') {
     parts.push(`发起表单字段需求：${input.formRequirement.trim()}`)
+  }
+  if (input.currentPlan && input.currentPlan.trim() !== '') {
+    parts.push([
+      '当前流程计划（修改基准，未提及的部分保持原样）：',
+      input.currentPlan.trim(),
+    ].join('\n'))
   }
   return [
     { role: 'assistant', content: buildSystemPrompt() },
@@ -97,14 +107,29 @@ export class AiProcessGenerationService {
 
   constructor(private readonly llm: ZaiLlmService) {}
 
-  /** 同步生成：LLM → JSON 提取 → 归一化。 */
+  /** 同步生成：LLM → JSON 提取 → 归一化。偶发输出跑飞时自动重试一次。 */
   async generate(input: ProcessPlanInput): Promise<NormalizedPlan> {
-    const raw = await this.llm.complete(buildProcessPlanMessages(input))
-    const parsed = extractPlanJson(raw)
-    const normalized = normalizePlan(parsed)
-    this.logger.log(
-      `[${AiProcessGenerationService.MODULE}] 生成成功：nodes=${normalized.plan.nodes.length} warnings=${normalized.warnings.length}`,
-    )
-    return normalized
+    const messages = buildProcessPlanMessages(input)
+    let lastError: unknown = null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const raw = await this.llm.complete(messages)
+        const parsed = extractPlanJson(raw)
+        const normalized = normalizePlan(parsed)
+        this.logger.log(
+          `[${AiProcessGenerationService.MODULE}] 生成成功（第 ${attempt + 1} 次尝试）：nodes=${normalized.plan.nodes.length} warnings=${normalized.warnings.length}`,
+        )
+        return normalized
+      } catch (e) {
+        lastError = e
+        this.logger.warn(
+          `[${AiProcessGenerationService.MODULE}] 生成第 ${attempt + 1} 次尝试失败: ${e instanceof Error ? e.message : String(e)}`,
+        )
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+        }
+      }
+    }
+    throw lastError
   }
 }

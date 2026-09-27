@@ -1570,3 +1570,23 @@ Stage Summary:
 - Task 59 成果端到端复验通过：AI 悬浮球对话创建流程功能真实可用（创建/节点/表单/落库全链路），代码与提交已在远程 main
 - 仓库第 4 次重建完成，本地=远程=fbd0639；本节 worklog 为恢复后首个新增提交（随本提交推送）
 - 坑位备忘：①Bash persistent shell cwd 会在命令间重置，git 操作必须显式 cd 前缀；②AI 悬浮球「隐藏」后需找「显示 AI 助手」按钮恢复；③表单删除 API 为软删（ARCHIVED），彻底清理需 DB 归档行删除
+
+---
+Task ID: 60
+Agent: Z.ai Code (main)
+Task: AI 助手支持表单与流程修改（update_form / update_process / list_forms / list_processes）+「AI 全操作」分阶段方案与 LLM 输出缺陷修复链
+
+Work Log:
+- 【方案】输出四阶段路线图：一修改闭环（本轮）/二确认与预览机制/三页面与数据操作/四系统管理（高危确认）；本轮交付阶段一 4 工具
+- 【新增 6 文件】①tools/locate.ts：表单/流程按名称定位（精确→唯一模糊→多候选澄清）共享 helper；②update-form.tool.ts：定位→读 schema→reviseSync（修改模式 prompt：未提及字段原样保留）→字段级 diff（added/removed/modified）→writeService.update 落库（BUSINESS 重提取 column_config）；③update-process.tool.ts：双路径——纯改名走 saveDesign({name})；内容修改走「当前计划摘要（XML+nodeConfigs 折算）→LLM 修改模式→重建 BPMN+nodeConfigs→旧同名节点 approval/operations/timeout/form 保留合并」；key 强制锁定（防破坏已部署关联）；含网关/子流程的流程拒绝结构重建；④list-forms.tool.ts / ⑤list-processes.tool.ts：只读查询（先看后改基础）；⑥service/ai-process-node-configs.ts：buildPlanNodeConfigs（从 create-process 抽取共享）+mergeOldNodeConfigs+containsNonLinearStructure+extractUserTasks
+- 【服务层修改】form-schema-prompt-builder 加 REVISE 模式 prompt（buildFormSchemaReviseMessages）；ai-form-generation 加 reviseSync（重试 1 次）；ai-process-generation 加 currentPlan 修改模式输入+重试 1 次；ai-agent basePrompt 扩展 4 工具说明+修改后如实转述 changes/warnings+**严禁幻报成功**硬规则（error/ok=false 必须告知失败）
+- 【E2E 揪出 GLM 确定性输出缺陷+三层修复】浏览器 E2E 中 update_form 反复「说成功但未落库」：①直调 SSE 复现=「模型输出无法解析为表单结构」且重试 2 次同败；②proc fd 定位守护日志（/home/z/tools/backend-node.log）+reviseSync 临时诊断日志→finish_reason=stop 但 JSON 不完整——非 max_tokens 截断（显式 2048 无效）而是**括号交错**（validate 数组漏 `]` 直接闭合字段对象，655/704 字符确定性复现）；脚本隔离复现 3/3 成功；③修复=parseRoot 增加 repairTruncatedJson 重建式修复器（扫描遇闭合符与栈顶不匹配→补插中间缺失闭合符；尾部悬挂逗号剥离+缺尾括号补全；最终 JSON.parse 验证）+zai-llm 空输出/length 截断时重建 SDK client+reviseSync/generate 重试——修复后同 schema E2E 成功落库（remarks/department 字段真实写入）
+- 【AI 幻报防御】工具无变更时返回 ok:false+noChanges+error（防「零变更仍报成功」）；agent prompt 硬规则 error 必须告知失败——浏览器复验中 AI 面对失败如实回复「表单修改失败…建议在设计器手工添加」✓
+- 【验证】新增 3 spec 35 用例（update-form 14/update-process 15+5 repair）全量后端 64 文件 901/901 全绿；tsc/eslint 0 error；E2E：update_process（经理审批→总监审批+新增财务备案，API 实证 4 userTask+表单绑定保留）、list_forms、update_form（详细内容改名/加金额/加部门/加备注，curl+浏览器双链路落库实证）、纯改名、网关拒绝、DEPLOYED 警告、noChanges 防幻觉、AI 如实报告失败
+- 【测试数据零残留】AI修改验证流程+AI修改验证流程表单+归档行全部清理（residue 0）；「请假流程/请假流程表单」为 15 分钟巡检 cron 新建测试数据未触碰
+- 【坑位】①Bash persistent shell cwd 命令间重置→git 必须显式 cd；②8080 重启与守护竞争：pkill 后守护秒级拉起，自启 nohup 会 EADDRINUSE crash（/tmp 日志 tail 可辨）；③node mysql2 长连接偶发挂起→SQL 用 timeout 包装；④proc/<pid>/fd/1 可定位守护拉起进程的真实日志文件；⑤巡检 cron 表达式 6 位格式（0 */15 * * * ?），最短间隔 300s
+
+Stage Summary:
+- 用户两大需求闭环：①AI 助手现在支持修改表单（加删改字段/重命名/改选项，含 diff 摘要与 PUBLISHED 警告）与修改流程（改审批人/增删环节/调整顺序/换绑表单/改名，含旧配置保留与网关保护）；②「AI 全操作」四阶段路线图已给出并完成阶段一（修改闭环+查询基建）；工具数 4→8
+- 顺带修复 GLM 长输出括号交错/截断缺陷（repairTruncatedJson 重建式修复）——所有 formgen 管线（create/revise）共同受益
+- 遗留：①阶段二确认与预览机制（confirm SSE 帧+前端确认弹窗，删除/发布/部署类操作）；②阶段三页面/数据源/业务数据工具；③阶段四系统管理工具（用户/角色/菜单/字典）；④update_process 重建模式对模型输出的 department/department_new 重复字段现象（LLM 行为，validator 去重名不覆盖不同名）建议下轮在 prompt 中强化去重约束

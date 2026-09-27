@@ -61,3 +61,41 @@ export function buildFormSchemaMessages(description: string): { role: 'assistant
     { role: 'user', content: description },
   ]
 }
+
+/** 表单修改模式的 system prompt：基于现有 schema 做最小变更。 */
+export const FORM_SCHEMA_REVISE_SYSTEM_PROMPT = `${FORM_SCHEMA_SYSTEM_PROMPT}
+
+You are now in REVISE mode. The user gives you the CURRENT form schema (a {"rule":[...]} JSON)
+and a change request. Output the COMPLETE NEW schema after applying the changes.
+
+Revise rules (in addition to the base rules above):
+- Apply ONLY the requested changes. Keep every field that is not mentioned EXACTLY as-is
+  (same type, same field identifier, same title, same options, same validate) — do not
+  regenerate, rename or reorder untouched fields.
+- When the user asks to "add field X", append it at the end unless they specify a position.
+- When the user asks to remove a field, delete it completely.
+- When the user asks to change a field (rename title / switch type / make required / change
+  options), modify that field in place and keep its "field" identifier unchanged unless the
+  user explicitly asks to rename the identifier.
+- The output must still be the complete {"rule":[...]} JSON with ALL fields (changed + unchanged).
+- Output JSON only.`
+
+/**
+ * 构建表单修改消息序列：system（修改模式约束）+ user（现有 schema + 修改指令）。
+ */
+export function buildFormSchemaReviseMessages(
+  currentSchema: string,
+  changeRequest: string,
+): { role: 'assistant' | 'user'; content: string }[] {
+  const userContent = [
+    '当前表单 schema：',
+    currentSchema,
+    '',
+    '修改要求：',
+    changeRequest,
+  ].join('\n')
+  return [
+    { role: 'assistant', content: FORM_SCHEMA_REVISE_SYSTEM_PROMPT },
+    { role: 'user', content: userContent },
+  ]
+}

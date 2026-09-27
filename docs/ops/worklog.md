@@ -1551,3 +1551,22 @@ Stage Summary:
 - 用户需求闭环：AI 助手可通过悬浮球对话创建流程（自然语言→流程属性/节点审批人/配套表单一次性落库为草稿），设计器打开即见完整流程图，部署走既有编译校验链；线性流程首版覆盖（发起+N 审批），网关/服务节点暂跳过并告警提示设计器补配
 - 交付物：后端 4 新文件 + 2 修改（ai.module/agent prompt）+ 3 测试文件 28 用例；前端零改动（悬浮球/设计器既有能力复用）
 - 遗留：①网关分支（排他网关+条件连线）AI 生成未支持；②serviceTask HTTP/java 节点未支持；③LLM 生成的节点审批人仅 dept_head/expression 可直接部署，指定用户需设计器补选（归一化已降级防部署失败）；④Java 端无 ai 模块（Node 专属）
+
+---
+Task ID: 59-verify
+Agent: Z.ai Code (main)
+Task: Task 59（AI 助手创建流程）成果浏览器端到端复验 + 第四次沙箱重置仓库重建
+
+Work Log:
+- 现场盘点：沙箱第四次重置（workflow_lowcode/.git 消失，外层 checkpoint 前进至 7c0705f）；fetch origin main 发现远程 HEAD=fbd0639——Task 59 提交已在远程（前置回合完成实施+推送）
+- 第四次仓库重建（模式成熟）：init -b main → core.fileMode=false → remote add origin（PAT 直配）→ fetch → mixed reset → git diff -z | xargs -0 恢复 → status 零差异（本地=远程=fbd0639）
+- 特征核验：ai-process-plan.ts(9.5KB)/ai-process-bpmn.ts(6KB)/ai-process-generation.service.ts(5.4KB)/create-process.tool.ts(11KB) 四文件在位；test/unit/ai/ 3 spec 齐全
+- 服务探活：3000 门户 200 / 5173 vite 200 / 8080 登录 accessToken 全绿
+- 浏览器端到端复验（agent-browser）：登录 → 显示 AI 悬浮球（注意「隐藏 AI 助手」按钮会藏球，需从「显示 AI 助手」恢复）→ 悬浮球点击开面板 → 输入「帮我创建一个测试流程：发文审批流程，需要科室负责人审核和分管领导审批两个环节」→ AI 回复确认创建（3 环节+配套表单 4 字段+设计器链接+部署提示）
+- 落库实证：GET drafts 列表含「发文审批流程 | document_approval_process | DRAFT」；editor 端点 bpmnXml 3185 字节含 3 个 userTask（提交申请/科室负责人审核/分管领导审批）；配套「发文审批流程表单 | ai_mujuj29t6o19 修正: ai_muj29t6o19 | DRAFT | WORKFLOW」自动创建
+- 测试数据清理：流程 DELETE API 200；表单 DELETE API 软删 ARCHIVED → 按惯例 DB 精确清理 wf_form_def 归档行 1 行；residue check 0——零残留，用户既有 leave_apply/theme_check_flow 未触碰
+
+Stage Summary:
+- Task 59 成果端到端复验通过：AI 悬浮球对话创建流程功能真实可用（创建/节点/表单/落库全链路），代码与提交已在远程 main
+- 仓库第 4 次重建完成，本地=远程=fbd0639；本节 worklog 为恢复后首个新增提交（随本提交推送）
+- 坑位备忘：①Bash persistent shell cwd 会在命令间重置，git 操作必须显式 cd 前缀；②AI 悬浮球「隐藏」后需找「显示 AI 助手」按钮恢复；③表单删除 API 为软删（ARCHIVED），彻底清理需 DB 归档行删除

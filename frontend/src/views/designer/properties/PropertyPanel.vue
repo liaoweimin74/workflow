@@ -187,13 +187,22 @@ const nodeTypeLabel = computed(() => {
 </script>
 
 <style scoped>
+/* 悬浮卡片：浮于画布之上，阴影与圆角强化与画布的边界（与左侧节点面板对称） */
 .property-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 20;
   background: var(--el-bg-color);
-  border-left: 1px solid var(--el-border-color-light);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 12px;
+  box-shadow:
+    0 6px 24px rgba(31, 36, 55, 0.14),
+    0 1px 4px rgba(31, 36, 55, 0.08);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  flex-shrink: 0;
   transition: width 0.2s ease;
 }
 

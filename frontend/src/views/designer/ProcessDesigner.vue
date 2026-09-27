@@ -18,12 +18,13 @@
     />
 
     <div class="designer-body">
-      <!-- 左侧节点面板（只读模式隐藏） -->
+      <!-- 左侧节点面板（只读模式隐藏，悬浮卡片） -->
       <node-palette v-if="!isReadOnly" v-model:collapsed="paletteCollapsed" />
 
-      <!-- 中间画布 -->
+      <!-- 中间画布（全幅铺底，左右面板悬浮其上；panel-right-open 时小地图左移避让属性面板） -->
       <div
         class="canvas-container"
+        :class="{ 'panel-right-open': !propertyCollapsed }"
         ref="canvasContainerRef"
         @drop="handleDrop"
         @dragover.prevent="handleDragOver"
@@ -35,7 +36,7 @@
         </div>
       </div>
 
-      <!-- 右侧属性面板 -->
+      <!-- 右侧属性面板（悬浮卡片） -->
       <property-panel v-model:collapsed="propertyCollapsed" :read-only="isReadOnly" />
     </div>
 
@@ -84,7 +85,7 @@ const canvasWrapperRef = ref<HTMLElement>()
 const loading = ref(false)
 const importDialogVisible = ref(false)
 const importXmlContent = ref('')
-const paletteCollapsed = ref(false)
+const paletteCollapsed = ref(true) // 节点面板默认折叠（展开态仍可拖拽节点，折叠态保留图标拖拽条）
 const propertyCollapsed = ref(false)
 
 /** 只读模式：通过 /designer?procDefId=xxx&readonly=1 进入，查看历史版本 */
@@ -607,6 +608,7 @@ function handleDrop(event: DragEvent) {
 }
 
 .designer-body {
+  position: relative; /* 左右悬浮面板的定位锚点 */
   display: flex;
   flex: 1;
   overflow: hidden;

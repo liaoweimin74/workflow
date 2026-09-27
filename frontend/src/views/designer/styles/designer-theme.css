@@ -173,6 +173,11 @@
   z-index: 100 !important;
 }
 
+/* 小地图避让：右侧属性面板展开（悬浮 420px + 边距）时左移，避免被面板遮挡 */
+.canvas-container.panel-right-open .djs-minimap {
+  right: 448px !important;
+}
+
 /* 关闭时整体隐藏（由 toolbar 开关控制，不用自带 toggle） */
 .djs-minimap:not(.open) {
   display: none !important;
@@ -277,4 +282,13 @@
 .djs-element.handler-task .djs-label {
   fill: #1f7a56 !important;
   font-weight: 600 !important;
+}
+
+/* ============================================================
+ * 隐藏 bpmn.io 商业 logo（兜底规则）
+ * 注：文件头部已有同款规则，但注入后首条规则在部分环境不生效，
+ *     此处文件尾部再声明一次，确保水印隐藏稳定生效。
+ * ============================================================ */
+.bjs-powered-by {
+  display: none !important;
 }

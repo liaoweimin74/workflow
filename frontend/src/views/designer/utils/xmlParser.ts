@@ -1,8 +1,25 @@
 import type Modeler from 'bpmn-js/lib/BaseModeler'
 
+/**
+ * 渲染前归一：empty-bpmn 新建流程模板的 DI 用 `<dc:Rect>`（Java 契约格式），
+ * 而 bpmn-js 只认标准 `<dc:Bounds>`，直接导入会因 bounds 缺失解析失败
+ * （Cannot read properties of undefined (reading 'x')，表现为画布空白、
+ * 默认开始节点不可见）。
+ *
+ * 在渲染入口做等价改写（仅标签名不同，属性完全一致）：
+ * - 不动后端 Node/Java 契约与 golden fixtures（避免契约链路震荡）
+ * - 存量草稿（DB 中已存 dc:Rect）也一并修复，无需数据迁移
+ */
+export function normalizeBpmnXmlForRender(xml: string): string {
+  if (!xml || xml.indexOf('dc:Rect') === -1) return xml
+  return xml
+    .replace(/<dc:Rect/g, '<dc:Bounds')
+    .replace(/<\/dc:Rect/g, '</dc:Bounds')
+}
+
 export async function importXml(modeler: Modeler, xml: string): Promise<void> {
   try {
-    await modeler.importXML(xml)
+    await modeler.importXML(normalizeBpmnXmlForRender(xml))
   } catch (err: any) {
     throw new Error(`Failed to import BPMN XML: ${err?.message || err}`)
   }

@@ -77,6 +77,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import BpmnViewer from 'bpmn-js/lib/NavigatedViewer'
 import type ViewerType from 'bpmn-js/lib/NavigatedViewer'
+import { normalizeBpmnXmlForRender } from '@/views/designer/utils/xmlParser'
 import { deployedProcessApi } from '@/api/processDefinition'
 import { processInstanceApi } from '@/api/processInstance'
 import { formApi } from '@/api/form'
@@ -140,7 +141,7 @@ async function loadProcessDefinition() {
     }
     if (viewer) {
       try {
-        await viewer.importXML(xml)
+        await viewer.importXML(normalizeBpmnXmlForRender(xml))
         const canvas = viewer.get('canvas') as { zoom: (type: string, auto?: boolean) => void }
         canvas.zoom('fit-viewport', true)
       } catch {

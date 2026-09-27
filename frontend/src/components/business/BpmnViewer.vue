@@ -6,6 +6,7 @@
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import BpmnViewer from 'bpmn-js/lib/NavigatedViewer'
 import type ViewerType from 'bpmn-js/lib/NavigatedViewer'
+import { normalizeBpmnXmlForRender } from '@/views/designer/utils/xmlParser'
 
 const props = defineProps<{
   /** BPMN XML 字符串 */
@@ -25,7 +26,7 @@ let viewer: ViewerType | null = null
 async function renderDiagram() {
   if (!viewer || !props.xml) return
   try {
-    await viewer.importXML(props.xml)
+    await viewer.importXML(normalizeBpmnXmlForRender(props.xml))
     const canvas = viewer.get('canvas') as { zoom: (type: string, auto?: boolean) => void; addMarker: (id: string, cls: string) => void }
     canvas.zoom('fit-viewport', true)
     applyHighlights()

@@ -55,50 +55,81 @@
 
       <!-- 底部：审批意见 + 操作按钮 -->
       <el-card shadow="never" style="margin-top: 16px">
-        <template #header><span style="font-weight: bold">审批意见</span></template>
+        <template #header><span style="font-weight: bold">{{ commentLabel }}</span></template>
         <el-input
           v-model="comment"
           type="textarea"
           :rows="3"
-          placeholder="请输入审批意见…"
+          :placeholder="commentPlaceholder"
           maxlength="500"
           show-word-limit
         />
+
+        <!-- 手写签名（节点开启 signature.enabled 时显示，后端 nodeFlags 下发） -->
+        <el-collapse v-if="signatureEnabled" class="signature-collapse">
+          <el-collapse-item :title="`手写签名${signatureRequired ? '（必填）' : ''}`" name="signature">
+            <SignaturePad v-model="signatureData" />
+          </el-collapse-item>
+        </el-collapse>
+
         <div class="action-bar">
-          <!-- 发起节点：保存草稿/提交；审批节点：暂存/通过/驳回/拒绝/更多操作 -->
+          <!-- 发起节点：保存草稿；审批节点：暂存/通过/退回/拒绝/更多操作；办理节点：暂存/提交/更多操作 -->
           <el-button
             :loading="actionLoading === 'save'"
             @click="handleSaveDraft"
           >
             {{ taskDetail?.isInitiatorTask ? '保存草稿' : '暂存' }}
           </el-button>
-<template v-if="!taskDetail?.isInitiatorTask">
-            <el-button type="success" :loading="actionLoading === 'approve'" @click="handleApprove">
-              通过
-            </el-button>
-            <el-button
-              v-if="operations?.allowReject"
-              type="danger"
-              :loading="actionLoading === 'reject'"
-              @click="handleReject"
-            >
-              驳回
-            </el-button>
-            <el-button v-if="operations?.allowReject" type="danger" plain :loading="actionLoading === 'refuse'" @click="handleRefuse">
-              拒绝
-            </el-button>
-            <el-dropdown v-if="hasMoreOperations" trigger="click" @command="handleMoreAction">
-              <el-button>
-                更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          <template v-if="!taskDetail?.isInitiatorTask">
+            <!-- 办理节点（taskRole=handler）：主按钮提交，更多操作：转办/退回/加签，不显示通过/拒绝 -->
+            <template v-if="isHandlerTask">
+              <el-button type="success" :loading="actionLoading === 'approve'" @click="handleComplete">
+                提交
               </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-if="operations?.allowTransfer" command="transfer">转办</el-dropdown-item>
-                  <el-dropdown-item v-if="operations?.allowDelegate" command="delegate">委派</el-dropdown-item>
-                  <el-dropdown-item v-if="operations?.allowAddSign" command="addSign">加签</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+              <el-dropdown v-if="handlerHasMoreOps" trigger="click" @command="handleMoreAction">
+                <el-button>
+                  更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item v-if="operations?.allowTransfer" command="transfer">转办</el-dropdown-item>
+                    <el-dropdown-item v-if="handlerReturnEnabled" command="return">退回</el-dropdown-item>
+                    <el-dropdown-item v-if="operations?.allowAddSign" command="addSign">加签</el-dropdown-item>
+                    <el-dropdown-item v-if="operations?.allowAddSign" command="forwardSign">转签</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </template>
+            <!-- 审批节点（taskRole=approver/缺省）：通过/退回/拒绝，更多操作：转办/委派/加签 -->
+            <template v-else>
+              <el-button type="success" :loading="actionLoading === 'approve'" @click="handleComplete">
+                通过
+              </el-button>
+              <el-button
+                v-if="approverReturnEnabled"
+                type="danger"
+                :loading="actionLoading === 'reject'"
+                @click="handleReject"
+              >
+                退回
+              </el-button>
+              <el-button v-if="approverRefuseEnabled" type="danger" plain :loading="actionLoading === 'refuse'" @click="handleRefuse">
+                拒绝
+              </el-button>
+              <el-dropdown v-if="hasMoreOperations" trigger="click" @command="handleMoreAction">
+                <el-button>
+                  更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item v-if="operations?.allowTransfer" command="transfer">转办</el-dropdown-item>
+                    <el-dropdown-item v-if="operations?.allowDelegate" command="delegate">委派</el-dropdown-item>
+                    <el-dropdown-item v-if="operations?.allowAddSign" command="addSign">加签</el-dropdown-item>
+                    <el-dropdown-item v-if="operations?.allowAddSign" command="forwardSign">转签</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </template>
           </template>
         </div>
       </el-card>
@@ -145,7 +176,7 @@ import { processInstanceApi as _processInstanceApi } from '@/api/processInstance
 import { deployedProcessApi as _deployedProcessApi } from '@/api/processDefinition'
 import type { TaskDetailVO, ApprovalRecordVO as _ApprovalRecordVO, OperationsConfig } from '@/api/task'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
-import { ApproverPicker, ProcessTrackDrawer } from '@/components/business'
+import { ApproverPicker, ProcessTrackDrawer, SignaturePad } from '@/components/business'
 
 const route = useRoute()
 const router = useRouter()
@@ -160,9 +191,53 @@ const formRendererRef = ref<InstanceType<typeof FormRenderer>>()
 /** 节点操作权限配置，未配置时后端返回全默认值对象 */
 const operations = computed<OperationsConfig | undefined>(() => taskDetail.value?.operations)
 
-/** 是否存在"更多操作"下拉里的任一可用操作 */
+/** 节点类别：handler=办理节点；approver/缺省（旧数据）=审批节点 */
+const isHandlerTask = computed(() => taskDetail.value?.taskRole === 'handler')
+
+/** 节点行为标记（后端从 nodeConfigs 解析） */
+const commentRequired = computed(() => !!taskDetail.value?.nodeFlags?.commentRequired)
+const signatureEnabled = computed(() => !!taskDetail.value?.nodeFlags?.signatureEnabled)
+const signatureRequired = computed(() => !!taskDetail.value?.nodeFlags?.signatureRequired)
+
+/** 手写签名 dataURL（signatureEnabled 时随 complete 提交） */
+const signatureData = ref('')
+
+/** 意见区标题/占位文案按节点类别切换 */
+const commentLabel = computed(() => (isHandlerTask.value ? '处理意见' : '审批意见'))
+const commentPlaceholder = computed(() =>
+  isHandlerTask.value ? '请输入处理意见…' : '请输入审批意见…'
+)
+
+/** 意见必填校验：commentRequired 开启时通过/提交/退回/拒绝均必填；退回/拒绝始终必填 */
+function validateComment(): boolean {
+  if (comment.value.trim()) return true
+  ElMessage.warning(isHandlerTask.value ? '处理意见必填' : '审批意见必填')
+  return false
+}
+
+/** 审批节点：退回按钮（allowReturn 缺省回落 allowReject，兼容旧配置） */
+const approverReturnEnabled = computed(
+  () => (operations.value?.allowReturn ?? operations.value?.allowReject) === true,
+)
+
+/** 审批节点：拒绝按钮（allowRefuse 缺省回落 allowReject） */
+const approverRefuseEnabled = computed(
+  () => (operations.value?.allowRefuse ?? operations.value?.allowReject) === true,
+)
+
+/** 办理节点更多操作里的退回（allowReturn 缺省回落 allowReject） */
+const handlerReturnEnabled = computed(
+  () => (operations.value?.allowReturn ?? operations.value?.allowReject) === true,
+)
+
+/** 审批节点：是否存在"更多操作"下拉里的任一可用操作（转办/委派/加签） */
 const hasMoreOperations = computed(
   () => !!operations.value && (operations.value.allowTransfer || operations.value.allowDelegate || operations.value.allowAddSign),
+)
+
+/** 办理节点：是否存在"更多操作"下拉里的任一可用操作（转办/退回/加签） */
+const handlerHasMoreOps = computed(
+  () => !!operations.value && (operations.value.allowTransfer || handlerReturnEnabled.value || operations.value.allowAddSign),
 )
 
 // 流程跟踪
@@ -230,7 +305,16 @@ async function handleSaveDraft() {
   }
 }
 
-async function handleApprove() {
+/**
+ * 通过（审批节点）/ 提交（办理节点）：完成任务。
+ * commentRequired 时意见必填；signatureRequired 时未签名阻断。
+ */
+async function handleComplete() {
+  if (commentRequired.value && !validateComment()) return
+  if (signatureRequired.value && !signatureData.value) {
+    ElMessage.warning('请完成手写签名')
+    return
+  }
   actionLoading.value = 'approve'
   try {
     // 先保存当前表单数据 + 冻结快照，确保下一个节点能读到
@@ -242,8 +326,11 @@ async function handleApprove() {
       }
       await formRendererRef.value.saveSnapshot()
     }
-    await taskApi.complete(taskId, { comment: comment.value })
-    ElMessage.success('审批通过')
+    await taskApi.complete(taskId, {
+      comment: comment.value,
+      signature: signatureData.value || undefined,
+    })
+    ElMessage.success(isHandlerTask.value ? '提交成功' : '审批通过')
     router.push('/process/todo')
   } catch {
     ElMessage.error('操作失败')
@@ -252,11 +339,9 @@ async function handleApprove() {
   }
 }
 
+/** 退回（原「驳回」改名）：退回给发起人重新填写，意见必填 */
 async function handleReject() {
-  if (!comment.value.trim()) {
-    ElMessage.warning('驳回请填写审批意见')
-    return
-  }
+  if (!validateComment()) return
   actionLoading.value = 'reject'
   try {
     // 先保存当前表单数据 + 冻结快照
@@ -265,7 +350,7 @@ async function handleReject() {
       await formRendererRef.value.saveSnapshot()
     }
     await taskApi.reject(taskId, { reason: comment.value })
-    ElMessage.success('已驳回')
+    ElMessage.success('已退回')
     router.push('/process/todo')
   } catch {
     ElMessage.error('操作失败')
@@ -275,10 +360,7 @@ async function handleReject() {
 }
 
 async function handleRefuse() {
-  if (!comment.value.trim()) {
-    ElMessage.warning('拒绝请填写审批意见')
-    return
-  }
+  if (!validateComment()) return
   actionLoading.value = 'refuse'
   try {
     // 先保存快照
@@ -299,6 +381,9 @@ function handleMoreAction(command: string) {
   if (command === 'addSign') {
     addSignDialog.value = { users: [] }
     addSignPickerRef.value?.openDialog()
+  } else if (command === 'return') {
+    // 办理节点更多操作里的退回：与审批节点退回一致（reject API）
+    handleReject()
   } else {
     singleUserDialog.value = { action: command, userId: [] }
     singlePickerRef.value?.openDialog()
@@ -315,6 +400,8 @@ async function onSingleUserSelected(users: { id: number; nickname: string }[]) {
       await taskApi.transfer(taskId, { toUser: userIdStr, reason: comment.value })
     } else if (action === 'delegate') {
       await taskApi.delegate(taskId, { delegateTo: userIdStr, comment: comment.value })
+    } else if (action === 'forwardSign') {
+      await taskApi.forwardSign(taskId, { toUser: userIdStr, comment: comment.value })
     }
     ElMessage.success('操作成功')
     router.push('/process/todo')
@@ -363,5 +450,11 @@ onMounted(async () => {
   margin-top: 16px;
   display: flex;
   gap: 8px;
+}
+
+.signature-collapse {
+  margin-top: 12px;
+  border-top: 1px dashed var(--el-border-color-lighter);
+  border-bottom: none;
 }
 </style>

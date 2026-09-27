@@ -1610,3 +1610,27 @@ Work Log:
 Stage Summary:
 - Task 60 阶段一独立复验闭环：AI 助手修改流程（改名/审批人/表单绑定保留）与修改表单（加字段）经真实浏览器对话+API 双实证可用；GLM 修复器与幻报防御在复验中均生效
 - 阶段二~四（确认预览机制/页面数据工具/系统管理工具）待后续轮次推进
+
+---
+Task ID: 61
+Agent: Z.ai Code (main)
+Task: 工作流引擎节点体系增强——用户任务拆分为「办理节点/审批节点」+ 发起/办理/审批三类节点完整属性面板 + 属性的运行时引擎业务逻辑（用户需求①节点拆分与面板 ②"就这些属性实现引擎的相关业务逻辑"）
+
+Work Log:
+- 探索（61-1）：两个 Explore 子代理确认工作区已含上一 session 未提交的 Task 61 主体（33 文件修改+5 新文件，+2481 行）——palette 拆分（wf:nodeRole=approver/handler）、三属性面板分发、NodeConfigData 冻结 schema（18 种审批人类型/会签或签依次/找不到人 7 策略/操作权限 7 开关/字段权限/超时/签名）、引擎 MI 自研多实例、noAssigneePolicy 全策略、TimeoutScanner(60s,V40 engine_notify)、任务详情按 taskRole 分叉按钮、AI 四文件 taskRole 基础适配
+- 基线验证（61-2a）：后端单测 868 全绿；前端 vue-tsc 46 error=基线零新增；前端 vitest 1120 全绿（基线的 2 个 FormDesigner 失败已消失）
+- 引擎补齐（本轮编码）：
+  ①任务详情表单欠账（P3 补齐）：task.service 新增 loadTaskForm（节点级 form > __PROCESS__ 流程级，整体取不跨层合并，复用 extractFormConfig 对齐 Java WorkflowTaskService.extractFormConfig）+ loadMappedData/readFormFieldValue（form.dataMappings → targetField/value，source 支持 variable:* / form:initiator（经 model.initiatorNodeId） / form:<nodeId>，读 wf_form_data 非快照行，对齐 Java FormDataMerger.merge）→ getTaskDetail 的 formKey/fieldPermissions/mappedData 从恒 null 变为真实下发
+  ②审批人解析扩展：engine-runtime resolveAssignees 新增 role（roleCodes 并集查 ResolutionContext.roleMemberships）与 expression（resolveExpression：${initiator}/${initiator.deptManager}/${变量} 保守求值，纯文本按变量名兜底）；process-compiler 透传 approval.expression；task.service buildResolutionContext 预查 sys_role JOIN sys_user_role（is_deleted=0 且 status=1）构建 roleMemberships
+  ③taskRole 强制语义：refuseTask 对 handler 节点抛「办理节点不支持拒绝操作」；completeTask 增 allowPass 门禁（节点级 AND 流程级，缺省 true 显式 false 才拦）
+  ④修复真 bug（单测捕获）：mergeNode 初始对象缺 taskRole + extractTaskOptions 无条件写缺省 'approver' → BPMN wf:nodeRole="handler" 在节点从未保存属性面板时被折回审批；修复为 config 有 taskRole 才覆盖、缺省保留 parser 真源
+  ⑤AI 工具四文件：PlanApproval.type 扩 initiator_select（中文「发起人自选/自选」归一）；PlanTimeout.action 扩 5 值白名单（不支持值回退 remind 并告警）；extractUserTasks 返回 handler 三态；update-process buildCurrentPlanSummary 与 fallback 节点 type 三值；create/update 回复映射「发起/审批/办理」三值 + approver 文案加「发起人自选」；generation prompt 补 initiator_select 选项
+- 前端收尾：AssigneeSelector 加 role 类型角色编码多选（getRoleList 拉选项+allow-create 手输，写 approval.roleCodes）；designerStore NodeConfigData.approval.roleCodes 类型；UserTaskProperty/HandlerTaskProperty 五处接线（绑定/状态/重置/恢复/保存）；TaskDetailPage 审批+办理菜单接入「转签」（forwardSign API 补齐，门禁沿用 allowAddSign）
+- 新增单测：test/unit/engine/assignee-resolution.spec.ts（10 用例：role 单成员/多角色并集 countersign 展开/无匹配→候选人任务/to_user 兜底/expression 四式/handler 编译类别与办理人解析）
+- 回归：后端 878 全绿（868+10 新增）；前端 vue-tsc 46 基线持平；前端 vitest 1120 全绿；nest build 成功 dist 重建
+- 服务链事故与恢复（未完，交接下一轮）：本会话发现 3000 门户/看门狗早已死亡（session 开始时 p3000=000）、8080 依赖的门户内 supervisor 随之失效；**本会话新起的任何后台进程（nohup/setsid 均试）会在数秒~数分钟内被平台按「会话新进程」清理**（老进程 vite 1238 存活不受影响），Next 清缓存后能 Ready 但仍被杀——8080 无法以新 dist 长驻，浏览器端到端验证无法在本会话完成。dist 已重建为 11:55 版（含全部 Task 61 逻辑），下一轮会话只要按门户 supervisor 正常拉起即可（scripts/start-services.sh 按 marker 启动 node backend）
+
+Stage Summary:
+- Task 61 代码层全部完成：办理/审批节点拆分（BPMN wf:nodeRole 真源 + nodeConfigs taskRole）+ 三类属性面板 + 引擎业务逻辑（表单下发/字段权限链路闭环/数据映射/role+expression 人员解析/找不到人策略/taskRole 动作强制/超时 5 动作/会签或签依次）+ AI 工具三值适配，后端 878/前端 1120 测试全绿、类型基线零新增
+- 待下一轮：①恢复服务链（3000 由 portal-watchdog 或 bun run dev；8080 由 start-services/supervisor 按 marker 拉 node dist）②agent-browser 浏览器端到端：palette 办理/审批双入口、属性面板三分发、role/expression 面板交互、任务详情 formKey/字段权限/转签、办理节点无拒绝按钮+后端 400 ③本 worklog 提交推送后工作区应干净
+- 已知边界（如实告知用户）：dept_head/连续多级/汇报上级等组织架构类审批人因 sys_organization 无负责人字段且无组织管理 UI，解析为空后按「找不到办理人」策略兜底（属数据模型欠账非逻辑欠账）；5 张属性面板截图内容在上下文压缩中丢失，属性字段全集按冻结 schema（上一 session 依截图实现）与钉钉/飞书级惯例补齐，如与截图有出入可指出后微调

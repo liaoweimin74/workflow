@@ -131,7 +131,7 @@ export class CreateProcessTool implements AiTool {
         nodeCount: plan.nodes.length,
         nodes: plan.nodes.map((n) => ({
           name: n.name,
-          type: n.type === 'initiator' ? '发起' : '审批',
+          type: n.type === 'initiator' ? '发起' : n.type === 'handler' ? '办理' : '审批',
           approver:
             n.approval === null
               ? null
@@ -139,7 +139,9 @@ export class CreateProcessTool implements AiTool {
                 ? '部门负责人'
                 : n.approval.type === 'expression'
                   ? `表达式 ${n.approval.expression}`
-                  : '指定用户',
+                  : n.approval.type === 'initiator_select'
+                    ? '发起人自选'
+                    : '指定用户',
           formBound: formId !== null && (n.type === 'initiator' || n.formRef !== null),
         })),
         formId,

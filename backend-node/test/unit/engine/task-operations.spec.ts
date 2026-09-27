@@ -21,11 +21,15 @@ describe('parseOperationsFromConfig（节点级）', () => {
   // ⚠️ 默认值来自 Java `OperationsConfig` 的字段初始化器：
   //    allowReject = true、allowAddSign = false、allowTransfer = true、allowDelegate = false。
   //    写成「缺键即 false」会让「配置里没写 allowReject/allowTransfer」的两侧取值分叉。
+  //    allowPass/allowRefuse/allowReturn 为 Node 引擎新键，缺省 true（保持旧按钮可见行为）。
   const NODE_DEFAULTS = {
     allowReject: true,
     allowAddSign: false,
     allowTransfer: true,
     allowDelegate: false,
+    allowPass: true,
+    allowRefuse: true,
+    allowReturn: true,
   }
 
   it('null / 空配置 → 全套默认值（绝不是 null）', () => {
@@ -47,12 +51,15 @@ describe('parseOperationsFromConfig（节点级）', () => {
   })
 
   // 这一组就是契约场景 B 段节点级的形态：只配 allowAddSign
-  it('只配 allowAddSign=true → 其余三个走默认（reject/transfer 为 true）', () => {
+  it('只配 allowAddSign=true → 其余走默认（reject/transfer 为 true）', () => {
     expect(parseOperationsFromConfig('{"operations":{"allowAddSign":true}}')).toEqual({
       allowReject: true,
       allowAddSign: true,
       allowTransfer: true,
       allowDelegate: false,
+      allowPass: true,
+      allowRefuse: true,
+      allowReturn: true,
     })
   })
 
@@ -66,15 +73,27 @@ describe('parseOperationsFromConfig（节点级）', () => {
       allowAddSign: false,
       allowTransfer: false,
       allowDelegate: false,
+      allowPass: true,
+      allowRefuse: true,
+      allowReturn: true,
     })
   })
 
   it('配置里的额外开关也带回（向前兼容）', () => {
     const out = parseOperationsFromConfig('{"operations":{"allowReject":true,"allowRecall":true}}')
     expect(out.allowRecall).toBe(true)
-    // 四个已知键仍然齐全
+    // 已知键仍然齐全（四旧键 + 三新键 + 额外带回的 allowRecall）
     expect(Object.keys(out).sort()).toEqual(
-      ['allowAddSign', 'allowDelegate', 'allowRecall', 'allowReject', 'allowTransfer'].sort(),
+      [
+        'allowAddSign',
+        'allowDelegate',
+        'allowPass',
+        'allowRecall',
+        'allowRefuse',
+        'allowReject',
+        'allowReturn',
+        'allowTransfer',
+      ].sort(),
     )
   })
 })
@@ -87,6 +106,9 @@ describe('parseProcessOperations（流程级）', () => {
     allowAddSign: true,
     allowTransfer: true,
     allowDelegate: true,
+    allowPass: true,
+    allowRefuse: true,
+    allowReturn: true,
   }
 
   it('null / 非法 JSON / 缺 approvalPolicy → 全开默认值', () => {
@@ -100,7 +122,7 @@ describe('parseProcessOperations（流程级）', () => {
   })
 
   // 契约场景 A 段的形态：只配 allowTransfer=false ⇒ 其余三个仍是 true
-  it('只配 allowTransfer=false → 其余三个保持 true', () => {
+  it('只配 allowTransfer=false → 其余保持 true', () => {
     expect(
       parseProcessOperations('{"approvalPolicy":{"operations":{"allowTransfer":false}}}'),
     ).toEqual({
@@ -108,6 +130,9 @@ describe('parseProcessOperations（流程级）', () => {
       allowAddSign: true,
       allowTransfer: false,
       allowDelegate: true,
+      allowPass: true,
+      allowRefuse: true,
+      allowReturn: true,
     })
   })
 
@@ -177,6 +202,9 @@ describe('两级 AND 合并（用契约场景的两个组合复算一遍）', ()
       allowAddSign: true,
       allowTransfer: true,
       allowDelegate: false,
+      allowPass: true,
+      allowRefuse: true,
+      allowReturn: true,
     })
   })
 

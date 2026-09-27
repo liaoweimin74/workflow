@@ -46,6 +46,7 @@ import { ProcessDesignService } from './process/process-design.service'
 import { ProcessDesignRepository } from './process/repository/process-design.repository'
 import { EnginePersistence } from './runtime/engine-persistence'
 import { ProcessInstanceService } from './runtime/process-instance.service'
+import { TimeoutScannerService } from './runtime/timeout-scanner.service'
 import { TaskController } from './task/controller/task.controller'
 import { TaskService } from './task/task.service'
 
@@ -82,6 +83,7 @@ import { TaskService } from './task/task.service'
     ProcessDesignService,
     EnginePersistence,
     ProcessInstanceService,
+    TimeoutScannerService,
     TaskService,
     DataSourceRepository,
     DataSourceService,

@@ -41,8 +41,13 @@ function serviceWith(overrides: {
       terminateInstance: async (instanceId: string, reason: string | null) => {
         calls.push(`terminate:${instanceId}:${reason ?? 'null'}`)
       },
+      // 拒绝门禁要读节点配置与模型（本 spec 不覆盖权限场景，返回空即可）
+      loadModel: async () => null,
     } as never,
-    {} as never,
+    // 流程设计仓库：findNodeConfig → null ⇒ 操作开关全默认（allowRefuse=true 放行）
+    {
+      findNodeConfig: async () => null,
+    } as never,
     // 后端逻辑钩子：本 spec 不验证它，给一个空实现即可
     { run: async () => 0 } as never,
   )

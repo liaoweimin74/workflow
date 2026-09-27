@@ -40,6 +40,112 @@ export const GATEWAY_TYPES: readonly NodeType[] = [
 /** 多实例审批模式。 */
 export type MultiMode = 'single' | 'countersign' | 'or_sign' | 'sequential'
 
+/**
+ * 用户任务节点类别（wf:nodeRole 扩展属性）。
+ *
+ * - initiator：发起节点（发起人填报表单后提交）
+ * - approver：审批节点（通过/拒绝/退回/转派/加签）——**缺省值**（旧数据无 nodeRole 时按此处理）
+ * - handler：办理节点（提交/转派/退回/加签，无通过/拒绝语义）
+ */
+export type TaskRole = 'initiator' | 'approver' | 'handler'
+
+/** 审批类型（审批节点专用）：人工审批 / 自动通过 / 自动拒绝。 */
+export type ApprovalType = 'artificial' | 'auto_pass' | 'auto_reject'
+
+/**
+ * 找不到办理人/审批人时的策略。
+ *
+ * 空/未配置 = 兼容旧语义：照旧建无 assignee 任务（候选人认领）。
+ */
+export type NoAssigneePolicy =
+  | ''
+  | 'auto_pass'
+  | 'block'
+  | 'to_admin'
+  | 'to_user'
+  | 'skip'
+  | 'supervisor'
+
+/** 审批/办理人解析类型（设计器可见的完整集合；引擎 v1 只解析部分，见 resolveAssignees）。 */
+export type AssigneeType =
+  | 'user'
+  | 'initiator_select'
+  | 'post'
+  | 'member_group'
+  | 'role'
+  | 'initiator_self'
+  | 'dept_head'
+  | 'multi_level'
+  | 'report_superior'
+  | 'approval_role'
+  | 'matrix'
+  | 'form_user'
+  | 'form_dept_leader'
+  | 'form_dept_approval_role'
+  | 'approver_designate'
+  | 'external'
+  | 'external_push'
+  | 'expression'
+
+/** 办理/审批人设置（两类节点共用）。 */
+export interface AssigneeOptions {
+  allowInitiatorAdjust?: boolean
+  noAssigneePolicy?: NoAssigneePolicy
+  toUserId?: string | null
+}
+
+/** 审批节点高级设置——退回行为与必须加签。 */
+export interface ReturnOptions {
+  restartFromHere?: boolean
+  chooseStartNode?: boolean
+  mustAddSign?: boolean
+}
+
+/** 审批人去重。 */
+export interface DedupOptions {
+  enabled?: boolean
+  skipSameAsInitiator?: boolean
+}
+
+/** 手写签名。 */
+export interface SignatureOptions {
+  enabled?: boolean
+  useLast?: boolean
+  allowUpload?: boolean
+  required?: boolean
+}
+
+/** 消息通知。 */
+export interface NotifyOptions {
+  sms?: boolean
+}
+
+/** 发起节点专用配置（发起人设置）。 */
+export interface InitiatorOptions {
+  disallowRecall?: boolean
+  urge?: { enabled?: boolean; interval?: number; unit?: 'minute' | 'hour' | 'day' }
+  reInitiate?: boolean
+  smsOnEnd?: boolean
+}
+
+/**
+ * 审批/办理人解析上下文（服务层预计算，注入纯内存引擎）。
+ *
+ * 引擎刻意不碰 DB（spec：纯内存确定性），凡是需要组织架构/用户表的解析
+ * 都由服务层查好后经此传入；查不到的字段留 null，引擎按策略降级。
+ */
+export interface ResolutionContext {
+  /** 系统管理员用户 ID（审批管理员/转交兜底）。 */
+  adminUserId?: string | null
+  /** 发起人的部门负责人（supervisor/dept_head 策略兜底；org 表无负责人字段时为 null）。 */
+  initiatorSupervisor?: string | null
+  /** 角色编码 → 成员用户 ID 列表（服务层预查；approval.type=role 的解析用）。 */
+  roleMemberships?: Record<string, string[]>
+}
+
+/** 超时动作（审批：提醒/转派/通过/拒绝；办理：提醒/转派）。 */
+export type TimeoutAction = 'remind' | 'escalate' | 'transfer' | 'pass' | 'refuse'
+
 export interface CompiledFlow {
   flowId: string
   sourceId: string
@@ -51,8 +157,16 @@ export interface CompiledFlow {
 }
 
 export interface CompiledApproval {
+  /**
+   * 办理/审批人类型（nodeConfigs approval.type 原文；缺省 'user'）。
+   * 引擎据此做类型化解析（initiator_self / initiator_select / role / expression），
+   * 其余类型走「找不到办理人」策略。
+   */
+  type?: string
   userIds: string[]
   roleCodes: string[]
+  /** 表达式（type=expression 时有值，如 `${initiator.deptManager}`）。 */
+  expression?: string
   multiMode: MultiMode
 }
 
@@ -68,8 +182,33 @@ export interface CompiledNode {
   outgoing: string[]
   /** 是否为发起人节点（BPMN 上的 wf:nodeRole="initiator"）。 */
   isInitiator: boolean
+  /**
+   * 用户任务节点类别（BPMN wf:nodeRole；缺省 approver）。发起节点恒为 initiator。
+   * 非 userTask 为 undefined。
+   */
+  taskRole?: TaskRole
+  /** 审批类型（审批节点）；缺省 artificial。 */
+  approvalType?: ApprovalType
   /** userTask 的审批配置；非 userTask 为 undefined。 */
   approval?: CompiledApproval
+  /** 办理/审批人设置（找不到人策略、允许发起人调整）。 */
+  assigneeOptions?: AssigneeOptions
+  /** 审批退回行为与必须加签（审批节点）。 */
+  returnOptions?: ReturnOptions
+  /** 处理/审批意见必填。 */
+  commentRequired?: boolean
+  /** 流程到达此节点后禁止撤销/撤回。 */
+  blockRecall?: boolean
+  /** 审批人去重（审批节点）。 */
+  dedup?: DedupOptions
+  /** 手写签名。 */
+  signature?: SignatureOptions
+  /** 消息通知。 */
+  notify?: NotifyOptions
+  /** 发起节点专用配置。 */
+  initiatorOptions?: InitiatorOptions
+  /** 超时配置（服务层调度器读取）。 */
+  timeout?: { enabled?: boolean; duration?: number; action?: TimeoutAction }
   /** userTask 上直接写死的 assignee（如 flowable:assignee="1"）。 */
   assignee?: string
   /** userTask 上直接写死的候选人（flowable:candidateUsers 逗号分隔）。 */

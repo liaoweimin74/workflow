@@ -32,14 +32,15 @@ describe('buildLinearProcessBpmnXml', () => {
     expect(xml).toContain('<bpmndi:BPMNDiagram')
   })
 
-  it('发起节点带 nodeRole=initiator 与 assignee=${initiator}；审批节点不带', () => {
+  it('发起节点带 nodeRole=initiator 与 assignee=${initiator}；审批节点带 nodeRole=approver', () => {
     const xml = buildLinearProcessBpmnXml(samplePlan(), DEFAULT_NS)
     expect(xml).toContain(
       '<bpmn:userTask id="ai_task_1" name="提交请假申请" flowable:assignee="${initiator}" wf:nodeRole="initiator">',
     )
-    expect(xml).toContain('<bpmn:userTask id="ai_task_2" name="主管审批">')
-    expect(xml).toContain('<bpmn:userTask id="ai_task_3" name="HR 备案">')
+    expect(xml).toContain('<bpmn:userTask id="ai_task_2" name="主管审批" wf:nodeRole="approver">')
+    expect(xml).toContain('<bpmn:userTask id="ai_task_3" name="HR 备案" wf:nodeRole="approver">')
     expect(xml.match(/wf:nodeRole="initiator"/g)).toHaveLength(1)
+    expect(xml.match(/wf:nodeRole="approver"/g)).toHaveLength(2)
   })
 
   it('每个节点带 incoming/outgoing 子元素（编译器拓扑校验依赖）', () => {

@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * 自定义 Renderer — 发起人节点高亮
+ * 自定义 Renderer — 节点类别视觉区分
  *
- * 继承 BaseRenderer，对 wf:nodeRole="initiator" 的 UserTask
- * 在默认渲染之上追加浅蓝色（#e3f2fd）填充矩形。
+ * 继承 BaseRenderer，对带 wf:nodeRole 的 UserTask 在默认渲染之上叠加类别色：
+ * - initiator（发起节点）：浅蓝色填充矩形 + 蓝色手形图标
+ * - approver（审批节点）：浅橙色填充 + 橙色边框 + 橙色用户图标
+ * - handler（办理节点）：浅青绿填充 + 绿色边框 + 绿色扳手图标
  *
  * 作为 DI 模块导出，通过 additionalModules 注册。
  */
@@ -20,6 +22,18 @@ const INITIATOR_FILL_COLOR = '#e3f2fd'
  * 发起人节点图标色（画布内左上角标记）
  */
 const INITIATOR_ICON_COLOR = '#409eff'
+
+/**
+ * 审批节点：浅橙填充 + 橙边框/图标
+ */
+const APPROVER_FILL_COLOR = '#FFF7E6'
+const APPROVER_BORDER_COLOR = '#e6a23c'
+
+/**
+ * 办理节点：浅青绿填充 + 绿边框/图标
+ */
+const HANDLER_FILL_COLOR = '#E8F5EE'
+const HANDLER_BORDER_COLOR = '#2e9e6e'
 
 /**
  * 折叠态内嵌子流程左上角图标色（与 CallActivity 折叠态默认 marker 区分）
@@ -81,6 +95,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
    * 给流程节点打上 CSS 类型标记。
    * 遍历 elementRegistry 中对每个 shape 按其 BPMN 类型 addMarker，
    * 使 designer-theme.css 能用 .djs-element.<type> 精准命中节点样式。
+   * userTask 额外按 wf:nodeRole 追加 approver-task / handler-task / initiator-task 标记。
    */
   const applyTypeMarkers = () => {
     if (!this.canvas || !this.elementRegistry) return
@@ -88,6 +103,12 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
       const marker = TYPE_MARKER_MAP[e.type]
       if (marker) {
         this.canvas.addMarker(e, marker)
+      }
+      if (e.type === 'bpmn:UserTask') {
+        const role = e.businessObject && e.businessObject.get && e.businessObject.get('wf:nodeRole')
+        if (role === 'initiator' || role === 'approver' || role === 'handler') {
+          this.canvas.addMarker(e, `${role}-task`)
+        }
       }
     })
   }
@@ -101,7 +122,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
    * 判断元素是否可由本渲染器渲染：
    * - 调用活动（bpmn:CallActivity）：移除底部折叠 marker，左上角绘制调用图标
    * - 折叠态内嵌子流程（bpmn:SubProcess collapsed）：左上角绘制折叠图标，与 CallActivity 区分
-   * - businessObject 上 wf:nodeRole === 'initiator' 的发起人节点
+   * - businessObject 上 wf:nodeRole 为 initiator/approver/handler 的 userTask
    */
   this.canRender = function (element: any): boolean {
     const bo = element && element.businessObject
@@ -109,7 +130,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
     if (bo.$instanceOf && bo.$instanceOf('bpmn:CallActivity')) return true
     if (bo.$instanceOf && bo.$instanceOf('bpmn:SubProcess') && element.collapsed) return true
     const nodeRole = bo.get && bo.get('wf:nodeRole')
-    return nodeRole === 'initiator'
+    return nodeRole === 'initiator' || nodeRole === 'approver' || nodeRole === 'handler'
   }
 
   /**
@@ -170,7 +191,69 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
       return gfx
     }
 
-    // 追加浅蓝色填充矩形
+    const nodeRole = bo && bo.get && bo.get('wf:nodeRole')
+
+    // 审批节点：浅橙填充 + 橙边框 + 橙色用户图标（bpmn-font \e817）
+    if (nodeRole === 'approver') {
+      const rect = create('rect')
+      attr(rect, {
+        x: 0,
+        y: 0,
+        width: shape.width,
+        height: shape.height,
+        fill: APPROVER_FILL_COLOR,
+        'fill-opacity': 0.85,
+        stroke: APPROVER_BORDER_COLOR,
+        'stroke-width': 1.4,
+        rx: 6,
+        ry: 6
+      })
+      append(parent, rect)
+
+      const icon = create('text')
+      attr(icon, {
+        x: 30,
+        y: 24,
+        'font-family': 'bpmn',
+        'font-size': 16,
+        fill: APPROVER_BORDER_COLOR
+      })
+      icon.textContent = '\uE817'
+      append(parent, icon)
+      return gfx
+    }
+
+    // 办理节点：浅青绿填充 + 绿边框 + 绿色扳手图标（bpmn-font \e840）
+    if (nodeRole === 'handler') {
+      const rect = create('rect')
+      attr(rect, {
+        x: 0,
+        y: 0,
+        width: shape.width,
+        height: shape.height,
+        fill: HANDLER_FILL_COLOR,
+        'fill-opacity': 0.85,
+        stroke: HANDLER_BORDER_COLOR,
+        'stroke-width': 1.4,
+        rx: 6,
+        ry: 6
+      })
+      append(parent, rect)
+
+      const icon = create('text')
+      attr(icon, {
+        x: 30,
+        y: 24,
+        'font-family': 'bpmn',
+        'font-size': 16,
+        fill: HANDLER_BORDER_COLOR
+      })
+      icon.textContent = '\uE840'
+      append(parent, icon)
+      return gfx
+    }
+
+    // 追加浅蓝色填充矩形（发起节点）
     const rect = create('rect')
     attr(rect, {
       x: 0,

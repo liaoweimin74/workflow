@@ -186,7 +186,10 @@ function setupEventListeners(readOnly = false) {
       const type = element.type || 'unknown'
       const parts = type.split(':')
       const nodeType = parts.length > 1 ? parts[1] : type
-      designerStore.selectNode(element.id, nodeType)
+      // userTask 的 wf:nodeRole（initiator/approver/handler）入 store，供属性面板按类别分发
+      const bo = element.businessObject
+      const nodeRole = bo && bo.get ? (bo.get('wf:nodeRole') as string | undefined) || null : null
+      designerStore.selectNode(element.id, nodeType, nodeRole)
     } else {
       // 点击画布空白：显示流程属性
       designerStore.selectNode(null, 'Process')
@@ -233,14 +236,15 @@ function setupEventListeners(readOnly = false) {
 
 /**
  * 校验导出的 BPMN XML 是否符合部署要求。
- * 返回错误消息，无错误返回 null。
+ * error：阻断性错误（有则不部署）；warnings：非阻断警告（展示在部署确认中）。
  */
-function validateBpmnXml(xml: string): string | null {
+function validateBpmnXml(xml: string): { error: string | null; warnings: string[] } {
+  const warnings: string[] = []
   const parser = new DOMParser()
   const doc = parser.parseFromString(xml, 'application/xml')
   const parseError = doc.querySelector('parsererror')
   if (parseError) {
-    return 'BPMN XML 解析失败，请检查流程定义。'
+    return { error: 'BPMN XML 解析失败，请检查流程定义。', warnings }
   }
 
   const startEvents = doc.querySelectorAll('bpmn\\:startEvent, startEvent')
@@ -249,15 +253,15 @@ function validateBpmnXml(xml: string): string | null {
 
   // 1. 必须有开始事件
   if (startEvents.length === 0) {
-    return '流程缺少开始事件，请添加一个开始事件。'
+    return { error: '流程缺少开始事件，请添加一个开始事件。', warnings }
   }
   // 2. 开始事件只能有一个
   if (startEvents.length > 1) {
-    return `流程存在 ${startEvents.length} 个开始事件，只允许一个。`
+    return { error: `流程存在 ${startEvents.length} 个开始事件，只允许一个。`, warnings }
   }
   // 3. 必须有结束事件
   if (endEvents.length === 0) {
-    return '流程缺少结束事件，请添加至少一个结束事件。'
+    return { error: '流程缺少结束事件，请添加至少一个结束事件。', warnings }
   }
 
   // 4. 开始事件必须有出口连线
@@ -267,7 +271,7 @@ function validateBpmnXml(xml: string): string | null {
     `bpmn\\:sequenceFlow[sourceRef="${startId}"], sequenceFlow[sourceRef="${startId}"]`
   )
   if (!hasOutgoingFromStart) {
-    return '开始事件没有出口连线，请连接到下一个节点。'
+    return { error: '开始事件没有出口连线，请连接到下一个节点。', warnings }
   }
 
   // 5. 每个结束事件必须有入口连线
@@ -277,11 +281,11 @@ function validateBpmnXml(xml: string): string | null {
       `bpmn\\:sequenceFlow[targetRef="${endId}"], sequenceFlow[targetRef="${endId}"]`
     )
     if (!hasIncomingToEnd) {
-      return `结束事件「${endEvents[i].getAttribute('name') || endId}」没有入口连线，请连接上游节点。`
+      return { error: `结束事件「${endEvents[i].getAttribute('name') || endId}」没有入口连线，请连接上游节点。`, warnings }
     }
   }
 
-  // 6. UserTask 必须配置审批人（发起人节点除外，其 assignee 为 ${initiator}）
+  // 6. UserTask 必须配置审批/办理人（发起节点除外，其 assignee 为 ${initiator}）
   for (let i = 0; i < userTasks.length; i++) {
     const taskEl = userTasks[i]
     const taskId = taskEl.getAttribute('id')
@@ -290,35 +294,50 @@ function validateBpmnXml(xml: string): string | null {
     if (isInitiatorTaskElement(taskEl)) {
       continue
     }
-    if (taskId) {
-      const configStr = designerStore.nodeConfigs[taskId]
-      if (configStr) {
-        try {
-          const config = JSON.parse(configStr)
-          const approval = config.approval
-          if (!approval || !approval.type) {
-            return `用户任务「${taskName}」未配置审批人，请设置审批类型。`
-          }
-          if (approval.type === 'user' && (!approval.userIds || approval.userIds.length === 0)) {
-            return `用户任务「${taskName}」的审批类型为「指定用户」但未选择审批用户。`
-          }
-          if (approval.type === 'expression' && !approval.expression) {
-            return `用户任务「${taskName}」的审批类型为「流程表达式」但未设置表达式。`
-          }
-        } catch {
-          return `用户任务「${taskName}」的节点配置解析失败。`
+    if (!taskId) {
+      continue
+    }
+    // 节点类别文案：办理节点→办理人，其余（含旧数据无 nodeRole）→审批人
+    const role = taskEl.getAttribute('wf:nodeRole') || taskEl.getAttribute('nodeRole')
+    const personLabel = role === 'handler' ? '办理人' : '审批人'
+    const typeLabel = role === 'handler' ? '办理节点' : '审批节点'
+    const configStr = designerStore.nodeConfigs[taskId]
+    if (configStr) {
+      try {
+        const config = JSON.parse(configStr)
+        // 自动审批（自动通过/自动拒绝）无需配置审批人，跳过人员校验
+        if (config.approvalType === 'auto_pass' || config.approvalType === 'auto_reject') {
+          continue
         }
-      } else {
-        return `用户任务「${taskName}」未配置审批人，请设置审批类型。`
+        const approval = config.approval
+        if (!approval || !approval.type) {
+          return { error: `${typeLabel}「${taskName}」未配置${personLabel}，请设置类型。`, warnings }
+        }
+        if (approval.type === 'user' && (!approval.userIds || approval.userIds.length === 0)) {
+          const policy = config.assigneeOptions?.noAssigneePolicy || ''
+          if (policy === 'auto_pass' || policy === 'to_admin' || policy === 'to_user' || policy === 'skip' || policy === 'supervisor') {
+            // 有兕底策略：仅警告，不阻断部署
+            warnings.push(`节点「${taskName}」未指定具体人员，将按找不到${personLabel}策略处理`)
+          } else {
+            return { error: `${typeLabel}「${taskName}」的${personLabel}类型为「指定用户」但未选择用户。`, warnings }
+          }
+        }
+        if (approval.type === 'expression' && !approval.expression) {
+          return { error: `${typeLabel}「${taskName}」的${personLabel}类型为「流程表达式」但未设置表达式。`, warnings }
+        }
+      } catch {
+        return { error: `${typeLabel}「${taskName}」的节点配置解析失败。`, warnings }
       }
+    } else {
+      return { error: `${typeLabel}「${taskName}」未配置${personLabel}，请设置类型。`, warnings }
     }
   }
 
   // 7. 内嵌子流程必须包含开始与结束事件
   const subErrors = validateSubProcessBoundaries(xml)
-  if (subErrors.length) return subErrors.join('；')
+  if (subErrors.length) return { error: subErrors.join('；'), warnings }
 
-  return null
+  return { error: null, warnings }
 }
 
 async function handleSave() {
@@ -349,18 +368,22 @@ async function handleDeploy() {
   if (!designerStore.draftId) return
 
   try {
-    await ElMessageBox.confirm('确定要部署此流程吗？部署后将创建新的流程定义版本。', '确认部署', {
-      type: 'warning'
-    })
-
-    // 先保存
+    // 先导出并校验：错误直接拦截，警告合并进确认文案
     const modeler = getModeler()
     const xml = await exportXml(modeler)
 
-    const error = validateBpmnXml(xml)
-    if (error) {
-      ElMessage.error(error)
-      return
+    const validateMessage = validateBpmnXml(xml)
+    if (validateMessage) {
+      const confirmed = await ElMessageBox.confirm(
+        `${validateMessage}\n\n是否仍要继续部署？`,
+        '部署警告',
+        { type: 'warning', confirmButtonText: '继续部署', cancelButtonText: '取消' }
+      ).then(() => true).catch(() => false)
+      if (!confirmed) return
+    } else {
+      await ElMessageBox.confirm('确定要部署此流程吗？部署后将创建新的流程定义版本。', '确认部署', {
+        type: 'warning'
+      })
     }
 
     await processDesignApi.saveDesign(designerStore.draftId, {
@@ -563,6 +586,11 @@ function handleDrop(event: DragEvent) {
     modeling.updateProperties(shape, {
       'flowable:assignee': '${initiator}',
       'wf:nodeRole': 'initiator'
+    })
+  } else if (nodeRole === 'approver' || nodeRole === 'handler') {
+    // 审批节点/办理节点：写入 wf:nodeRole 区分类别
+    modeling.updateProperties(shape, {
+      'wf:nodeRole': nodeRole
     })
   }
 }

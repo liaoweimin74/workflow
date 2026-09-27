@@ -15,31 +15,97 @@ export interface FormFieldDataMapping {
   sourceField?: string
 }
 
+/** 节点类别：审批节点 / 办理节点（userTask 专用，缺省 approver；发起节点以 BPMN wf:nodeRole=initiator 标识，不写此字段） */
+export type NodeTaskRole = 'approver' | 'handler'
+
 export interface NodeConfigData {
   basic?: {
     name?: string
     description?: string
   }
+  /** userTask 专用：approver=审批节点 / handler=办理节点；缺省 approver */
+  taskRole?: NodeTaskRole
+  /** 审批节点专用「审批类型」；缺省 artificial */
+  approvalType?: 'artificial' | 'auto_pass' | 'auto_reject'
   approval?: {
-    type?: 'user' | 'dept_head' | 'expression'
-    userIds?: number[]
+    type?:
+      | 'user'
+      | 'initiator_select'
+      | 'post'
+      | 'member_group'
+      | 'role'
+      | 'initiator_self'
+      | 'dept_head'
+      | 'multi_level'
+      | 'report_superior'
+      | 'approval_role'
+      | 'matrix'
+      | 'form_user'
+      | 'form_dept_leader'
+      | 'form_dept_approval_role'
+      | 'approver_designate'
+      | 'external'
+      | 'external_push'
+      | 'expression'
+    userIds?: (string | number)[]
+    /** 角色编码（type='role' 时生效；引擎按 sys_role.role_code 解析成员） */
+    roleCodes?: string[]
     expression?: string
     multiMode?: 'countersign' | 'or_sign' | 'sequential' | ''
+  }
+  assigneeOptions?: {
+    allowInitiatorAdjust?: boolean
+    noAssigneePolicy?: '' | 'auto_pass' | 'block' | 'to_admin' | 'to_user' | 'skip' | 'supervisor'
+    toUserId?: string | null
   }
   form?: {
     formDefId?: string
     fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
     dataMappings?: FormFieldDataMapping[]
   }
-  timeout?: {
-    duration?: number
-    action?: 'remind' | 'escalate'
-  }
   operations?: {
+    allowPass?: boolean
+    allowRefuse?: boolean
+    allowReturn?: boolean
     allowReject?: boolean
     allowAddSign?: boolean
     allowTransfer?: boolean
     allowDelegate?: boolean
+  }
+  returnOptions?: {
+    restartFromHere?: boolean
+    chooseStartNode?: boolean
+    mustAddSign?: boolean
+  }
+  commentRequired?: boolean
+  blockRecall?: boolean
+  timeout?: {
+    enabled?: boolean
+    duration?: number
+    action?: 'remind' | 'escalate' | 'transfer' | 'pass' | 'refuse'
+  }
+  dedup?: {
+    enabled?: boolean
+    skipSameAsInitiator?: boolean
+  }
+  signature?: {
+    enabled?: boolean
+    useLast?: boolean
+    allowUpload?: boolean
+    required?: boolean
+  }
+  notify?: {
+    sms?: boolean
+  }
+  initiator?: {
+    disallowRecall?: boolean
+    urge?: {
+      enabled?: boolean
+      interval?: number
+      unit?: 'minute' | 'hour' | 'day'
+    }
+    reInitiate?: boolean
+    smsOnEnd?: boolean
   }
   condition?: string
   callActivity?: {
@@ -159,6 +225,8 @@ export interface DesignerState {
   nodeConfigs: Record<string, string>
   selectedNodeId: string | null
   selectedNodeType: string | null
+  /** 当前选中节点的 wf:nodeRole（initiator/approver/handler），非 userTask 为 null */
+  selectedNodeRole: string | null
   draftId: string | null
   draftName: string | null
   draftKey: string | null
@@ -171,6 +239,7 @@ export const useDesignerStore = defineStore('designer', () => {
   const nodeConfigs = ref<Record<string, string>>({})
   const selectedNodeId = ref<string | null>(null)
   const selectedNodeType = ref<string | null>(null)
+  const selectedNodeRole = ref<string | null>(null)
   const draftId = ref<string | null>(null)
   const draftName = ref<string | null>(null)
   const draftKey = ref<string | null>(null)
@@ -270,9 +339,25 @@ export const useDesignerStore = defineStore('designer', () => {
     isDirty.value = true
   }
 
-  function selectNode(nodeId: string | null, nodeType: string | null) {
+  function selectNode(nodeId: string | null, nodeType: string | null, nodeRole: string | null = null) {
     selectedNodeId.value = nodeId
     selectedNodeType.value = nodeType
+    selectedNodeRole.value = nodeRole
+  }
+
+  /**
+   * 读取节点类别（审批/办理）：取 nodeConfigs JSON 的 taskRole，缺省 approver。
+   * 与后端约定一致：旧数据无 taskRole 一律按审批节点处理。
+   */
+  function getNodeTaskRole(nodeId: string): NodeTaskRole {
+    const raw = nodeConfigs.value[nodeId]
+    if (!raw) return 'approver'
+    try {
+      const parsed = JSON.parse(raw) as NodeConfigData
+      return parsed.taskRole === 'handler' ? 'handler' : 'approver'
+    } catch {
+      return 'approver'
+    }
   }
 
   function setDraft(id: string, name: string, key: string) {
@@ -303,6 +388,7 @@ export const useDesignerStore = defineStore('designer', () => {
     nodeConfigs.value = {}
     selectedNodeId.value = null
     selectedNodeType.value = null
+    selectedNodeRole.value = null
     bpmnXml.value = ''
     draftId.value = null
     draftName.value = null
@@ -323,6 +409,7 @@ export const useDesignerStore = defineStore('designer', () => {
     nodeConfigs,
     selectedNodeId,
     selectedNodeType,
+    selectedNodeRole,
     draftId,
     draftName,
     draftKey,
@@ -334,6 +421,7 @@ export const useDesignerStore = defineStore('designer', () => {
     setNodeConfigs,
     setNodeConfig,
     getNodeConfig,
+    getNodeTaskRole,
     getProcessConfig,
     setProcessConfig,
     deleteNodeConfig,

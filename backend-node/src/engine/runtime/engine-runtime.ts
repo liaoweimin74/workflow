@@ -1,10 +1,36 @@
 import { EngineException } from '../../common/exception/engine-exception'
 import { evaluateCondition } from './expression'
-import type { CompiledNode, NodeType, ProcessModel } from '../process/compiler/process-model'
+import type {
+  CompiledNode,
+  NodeType,
+  ProcessModel,
+  ResolutionContext,
+} from '../process/compiler/process-model'
 import { GATEWAY_TYPES } from '../process/compiler/process-model'
 
 function isGatewayNode(nodeType: NodeType): boolean {
   return GATEWAY_TYPES.includes(nodeType)
+}
+
+/**
+ * 归一用户 ID 列表（发起页自选办理人变量 `assignee_<nodeId>` 可能是
+ * 字符串/数字/数组，分隔符支持逗号）。
+ */
+function normalizeUserList(raw: unknown): string[] {
+  if (raw === null || raw === undefined) return []
+  const parts: unknown[] = Array.isArray(raw) ? raw : [raw]
+  const out: string[] = []
+  for (const part of parts) {
+    if (typeof part === 'number' && Number.isFinite(part)) {
+      out.push(String(part))
+    } else if (typeof part === 'string') {
+      for (const piece of part.split(',')) {
+        const trimmed = piece.trim()
+        if (trimmed !== '') out.push(trimmed)
+      }
+    }
+  }
+  return out
 }
 
 /**
@@ -103,6 +129,21 @@ export interface StartOptions {
   variables?: Record<string, unknown>
 }
 
+/**
+ * 引擎自动产生结果的任务（非人工办理）。
+ *
+ * - approvalType auto_pass / 找不到人 auto_pass：自动通过
+ * - 找不到人 skip：跳过节点
+ * - approvalType auto_reject：自动拒绝（伴随实例终止，服务层负责落 TERMINATED）
+ *
+ * 服务层据此写审批意见（action=approve/system/refuse），保证审批时间线完整。
+ */
+export interface AutoCompletedTask {
+  taskId: string
+  nodeId: string
+  action: 'approve' | 'refuse' | 'skip'
+}
+
 export class EngineRuntime {
   private seqCounter = 0
   /** 上一次发出的时间戳（毫秒），用于保证严格递增。 */
@@ -110,6 +151,10 @@ export class EngineRuntime {
   private readonly variables: Record<string, unknown>
   /** 仅在首次进入发起人节点时自动完成；驳回后回到发起人节点则等待重新提交。 */
   private autoCompleteInitiator = false
+  /** 引擎自动产生结果的任务（自动通过/跳过/自动拒绝），服务层据此写审批意见。 */
+  private readonly autoCompleted: AutoCompletedTask[] = []
+  /** 审批类型 auto_reject 触发后置位：服务层须终止实例（TERMINATED）。 */
+  private autoRefused = false
 
   constructor(
     private readonly model: ProcessModel,
@@ -129,6 +174,13 @@ export class EngineRuntime {
      * 同时 Flowable 的实例/任务 id 本来就是 UUID，契约也要求 UUID。
      */
     private readonly makeId: (prefix: string) => string = (prefix) => `${prefix}_${++this.seqCounter}`,
+    /**
+     * 审批/办理人解析上下文（服务层预计算的组织架构数据）。
+     *
+     * 引擎刻意不碰 DB；凡是需要查用户表/组织表的解析（管理员 ID、主管）
+     * 都由服务层查好后传入，查不到留 null，引擎按策略降级。
+     */
+    private readonly resolution: ResolutionContext = {},
   ) {
     this.variables = {}
   }
@@ -339,15 +391,76 @@ export class EngineRuntime {
       return true
     }
 
+    // ① 审批类型：自动通过 / 自动拒绝（审批节点；无需建待办，直接出结果）
+    if (node.approvalType === 'auto_pass') {
+      this.autoFinishNode(execution, node, 'approve')
+      return false
+    }
+    if (node.approvalType === 'auto_reject') {
+      this.autoRefuseNode(execution, node)
+      return true
+    }
+
+    // ② 解析办理/审批人（userIds → BPMN assignee → 类型化解析）
+    let assignees = this.resolveAssignees(node)
+
+    // ③ 过滤：跳过与发起人相同 + 去重（同一审批人不用重复审批）
+    let filtered = false
+    const initiator = this.initiatorValue()
+    if (node.dedup?.skipSameAsInitiator === true && initiator !== null) {
+      const before = assignees.length
+      assignees = assignees.filter((u) => u !== initiator)
+      if (assignees.length < before) filtered = true
+    }
+    if (node.dedup?.enabled === true) {
+      const done = this.completedAssignees()
+      const before = assignees.length
+      assignees = assignees.filter((u) => !done.has(u))
+      if (assignees.length < before) filtered = true
+    }
+
+    // ④ 解析为空：去重导致 → 自动通过；否则按「找不到办理人」策略
+    if (assignees.length === 0) {
+      if (filtered) {
+        this.autoFinishNode(execution, node, 'approve')
+        return false
+      }
+      const policy = node.assigneeOptions?.noAssigneePolicy ?? ''
+      if (policy === 'auto_pass') {
+        this.autoFinishNode(execution, node, 'approve')
+        return false
+      }
+      if (policy === 'skip') {
+        this.autoFinishNode(execution, node, 'skip')
+        return false
+      }
+      if (policy === 'block') {
+        throw new EngineException(
+          `节点「${node.name !== '' ? node.name : node.nodeId}」找不到办理人/审批人，已按配置禁止提交流程`,
+        )
+      }
+      if (policy === 'to_admin') {
+        const admin = this.resolution.adminUserId ?? null
+        if (admin !== null) assignees = [admin]
+      } else if (policy === 'to_user') {
+        const to = node.assigneeOptions?.toUserId ?? null
+        if (to !== null) assignees = [to]
+      } else if (policy === 'supervisor') {
+        const supervisor = this.resolution.initiatorSupervisor ?? null
+        if (supervisor !== null) assignees = [supervisor]
+      }
+      // 策略目标仍解析不出（管理员缺失/主管缺失/未配置策略）→ 落到下方兼容旧语义：
+      // 建无 assignee 的候选人任务（与历史行为一致）
+    }
+
     if (approval.multiMode === 'single') {
       const activity = this.beginActivity(execution, node)
-      const assignee = this.singleAssignee(node, approval.userIds, execution)
       // 1 人 → assignee；多人 → 候选人（复刻 MultiInstanceBpmnRewriter.applySingleAssignee）
       const task = this.createTask(
         execution,
         node,
-        assignee.length === 1 ? assignee[0] : assignee.length > 0 ? null : (node.assignee ?? null),
-        assignee.length > 1 ? assignee : node.candidateUsers ? [...node.candidateUsers] : [],
+        assignees.length === 1 ? assignees[0] : null,
+        assignees.length > 1 ? assignees : node.candidateUsers ? [...node.candidateUsers] : [],
       )
       void activity
       void task
@@ -356,25 +469,151 @@ export class EngineRuntime {
     }
 
     // 多实例：建 MI 根作用域 + 子 execution/task
-    this.expandMultiInstance(execution, node, approval.userIds, approval.multiMode)
+    this.expandMultiInstance(execution, node, assignees, approval.multiMode)
     return true
   }
-  /** 发起人节点的 assignee：优先 BPMN 上的 `${initiator}` 语义，即当前 initiator 变量。 */
-  private initiatorAssignee(node: CompiledNode): string | null {
+
+  /** 发起人变量（归一为字符串）。 */
+  private initiatorValue(): string | null {
     const initiator = this.variables.initiator
     if (typeof initiator === 'string' && initiator !== '') return initiator
     if (typeof initiator === 'number') return String(initiator)
-    return node.assignee ?? null
+    return null
   }
 
-  /** 单实例节点的审批人：优先 NodeConfig 的 userIds，回退到 BPMN 上的 assignee。 */
-  private singleAssignee(
+  /**
+   * 解析节点的办理/审批人。
+   *
+   * 优先级：NodeConfig userIds → BPMN assignee → 类型化解析：
+   *   - initiator_self：发起人自己
+   *   - initiator_select：发起页选择的变量 `assignee_<nodeId>`
+   *   - role：roleCodes 逐个查上下文 roleMemberships（服务层预查 sys_role/sys_user_role）取并集
+   *   - expression：表达式求值（resolveExpression，v1 保守子集）
+   *   - 其余类型（dept_head/post/矩阵等，需组织架构数据）：解析为空 →
+   *     由「找不到办理人策略」接管（未配置策略则建候选人任务，兼容旧语义）
+   */
+  private resolveAssignees(node: CompiledNode): string[] {
+    const approval = node.approval
+    if (approval === undefined) return []
+    if (approval.userIds.length > 0) return [...approval.userIds]
+    if (node.assignee !== null && node.assignee !== undefined && node.assignee !== '') {
+      return [node.assignee]
+    }
+
+    const type = approval.type ?? 'user'
+    if (type === 'initiator_self') {
+      const initiator = this.initiatorValue()
+      return initiator === null ? [] : [initiator]
+    }
+    if (type === 'initiator_select') {
+      return normalizeUserList(this.variables[`assignee_${node.nodeId}`])
+    }
+    if (type === 'role') {
+      const memberships = this.resolution.roleMemberships ?? {}
+      const out = new Set<string>()
+      for (const code of approval.roleCodes) {
+        for (const userId of memberships[code] ?? []) out.add(userId)
+      }
+      return [...out]
+    }
+    if (type === 'expression') {
+      return this.resolveExpression(approval.expression ?? '')
+    }
+    return []
+  }
+
+  /**
+   * 审批人表达式求值（v1 保守子集，纯内存不碰 DB）：
+   *   - `${initiator}` → 发起人
+   *   - `${initiator.deptManager}` → 发起人部门负责人（上下文无则空，走找不到人策略）
+   *   - `${变量名}` → 流程变量（normalizeUserList）
+   * 多个表达式取并集去重；无 `${}` 的纯文本按变量名兑底（兼容设计器直接写变量名）。
+   */
+  private resolveExpression(raw: string): string[] {
+    const text = raw.trim()
+    if (text === '') return []
+    const matches = text.match(/\$\{([^{}]+)\}/g)
+    if (matches === null) return normalizeUserList(this.variables[text])
+    const out = new Set<string>()
+    for (const match of matches) {
+      const name = match.slice(2, -1).trim()
+      if (name === '') continue
+      if (name === 'initiator') {
+        const initiator = this.initiatorValue()
+        if (initiator !== null) out.add(initiator)
+        continue
+      }
+      if (name === 'initiator.deptManager') {
+        const supervisor = this.resolution.initiatorSupervisor ?? null
+        if (supervisor !== null) out.add(supervisor)
+        continue
+      }
+      for (const userId of normalizeUserList(this.variables[name])) out.add(userId)
+    }
+    return [...out]
+  }
+
+  /** 本实例中已完成过任务的办理人集合（审批人去重用）。 */
+  private completedAssignees(): Set<string> {
+    const done = new Set<string>()
+    for (const task of this.state.tasks) {
+      if (task.status === 'COMPLETED' && task.assignee !== null && task.assignee !== '') {
+        done.add(task.assignee)
+      }
+    }
+    return done
+  }
+
+  /**
+   * 自动完成节点（auto_pass / skip 策略 / 去重全过滤）：
+   * 记一条已完成任务 + 结束活动 + 继续推进，并登记到 autoCompleted 供服务层写意见。
+   */
+  private autoFinishNode(
+    execution: EngineExecution,
     node: CompiledNode,
-    userIds: string[],
-    _execution: EngineExecution,
-  ): string[] {
-    if (userIds.length > 0) return [...userIds]
-    return node.assignee !== null && node.assignee !== undefined ? [node.assignee] : []
+    action: 'approve' | 'skip',
+  ): void {
+    const activity = this.beginActivity(execution, node)
+    const task = this.createTask(execution, node, null, null)
+    this.completeTaskRecord(task)
+    this.completeActivity(activity)
+    this.autoCompleted.push({ taskId: task.id, nodeId: node.nodeId, action })
+    this.takeSingleOutgoing(execution, node)
+  }
+
+  /**
+   * 自动拒绝节点（approvalType=auto_reject）：
+   * 记已完成任务 + 取消全部活跃 token；实例终止（TERMINATED）由服务层落库。
+   */
+  private autoRefuseNode(execution: EngineExecution, node: CompiledNode): void {
+    const activity = this.beginActivity(execution, node)
+    const task = this.createTask(execution, node, null, null)
+    this.completeTaskRecord(task)
+    this.completeActivity(activity)
+    this.autoCompleted.push({ taskId: task.id, nodeId: node.nodeId, action: 'refuse' })
+
+    for (const e of this.state.executions) {
+      if (e.status === 'COMPLETED') continue
+      e.status = 'COMPLETED'
+      this.cancelTasksOfExecution(e.id)
+    }
+    this.autoRefused = true
+  }
+
+  /** 引擎自动结果（供服务层写意见）。 */
+  getAutoCompletedTasks(): AutoCompletedTask[] {
+    return [...this.autoCompleted]
+  }
+
+  /** 是否触发了自动拒绝（服务层须终止实例）。 */
+  isAutoRefused(): boolean {
+    return this.autoRefused
+  }
+  /** 发起人节点的 assignee：优先 BPMN 上的 `${initiator}` 语义，即当前 initiator 变量。 */
+  private initiatorAssignee(node: CompiledNode): string | null {
+    const initiator = this.initiatorValue()
+    if (initiator !== null) return initiator
+    return node.assignee ?? null
   }
 
   // ---------------------------------------------------------------- 多实例
@@ -1062,6 +1301,57 @@ export class EngineRuntime {
     execution.miRootId = null
     execution.miIndex = null
     this.advance(execution)
+  }
+
+  /**
+   * 发起人撤回：取消全部活跃 token，把流程退回发起节点等待重新提交。
+   *
+   * 与驳回（reject）的差异：
+   *   - 驳回由审批人发起，设 `rejected = true`；
+   *   - 撤回由发起人发起，设 `recalled = true`（网关条件/页面可据此区分）。
+   *   两者都把流程退回发起节点并等待重新提交，沿用同一套取消语义。
+   *
+   * 门禁（发起人配置 disallowRecall / 当前节点 blockRecall）由服务层校验后才调用。
+   */
+  recallToInitiator(): void {
+    const initiatorNodeId = this.model.initiatorNodeId
+    if (initiatorNodeId === null) {
+      throw new EngineException(
+        `Initiator node not found for process definition: ${this.model.processKey}`,
+      )
+    }
+
+    // 当前仍有活跃任务挂在发起节点 → 无可撤回（流程正等待发起人重新提交）
+    const activeAtInitiator = this.state.tasks.some(
+      (t) =>
+        (t.status === 'CREATED' || t.status === 'CLAIMED') &&
+        this.model.nodes[t.nodeId]?.isInitiator === true,
+    )
+    if (activeAtInitiator) {
+      throw new EngineException('流程正等待发起人提交，无需撤回')
+    }
+
+    this.variables.recalled = true
+
+    // 取消整条实例上全部仍活跃的 token 与其待办（与 reject 同一套语义，防「幽灵待办」）
+    for (const e of this.state.executions) {
+      if (e.status === 'COMPLETED') continue
+      e.status = 'COMPLETED'
+      this.cancelTasksOfExecution(e.id)
+    }
+
+    // 复活根 token 回到发起节点（发起节点分支会建真实待办并停等）
+    const carrier =
+      this.state.executions.find((e) => e.parentId === null) ?? this.state.executions[0]
+    if (carrier === undefined) {
+      throw new EngineException('流程状态缺少可复用的 token，无法撤回')
+    }
+    carrier.status = 'ACTIVE'
+    carrier.nodeId = initiatorNodeId
+    carrier.arrivedVia = null
+    carrier.miRootId = null
+    carrier.miIndex = null
+    this.advance(carrier)
   }
 
   /**

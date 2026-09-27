@@ -39,8 +39,14 @@ export interface TaskDoneVO extends TaskTodoVO {
  * 控制任务详情页操作按钮的显示，字段缺失时由后端默认值补全。
  */
 export interface OperationsConfig {
+  /** 是否允许通过/提交（主按钮），默认 true */
+  allowPass?: boolean
   /** 是否允许驳回，默认 true */
   allowReject: boolean
+  /** 是否允许退回（审批节点新键，缺省时回落 allowReject） */
+  allowReturn?: boolean
+  /** 是否允许拒绝（审批节点新键，缺省时回落 allowReject） */
+  allowRefuse?: boolean
   /** 是否允许加签，默认 false */
   allowAddSign: boolean
   /** 是否允许转办，默认 true */
@@ -74,6 +80,14 @@ export interface TaskDetailVO {
   mappedData?: Record<string, unknown> | null
   /** 节点操作权限配置。未配置时后端返回全默认值对象。 */
   operations?: OperationsConfig
+  /** 节点类别：approver=审批节点 / handler=办理节点；缺省（旧数据）按 approver 处理 */
+  taskRole?: 'approver' | 'handler'
+  /** 节点行为标记（后端从 nodeConfigs 解析）：意见必填 / 签名必填 / 签名开关 */
+  nodeFlags?: {
+    commentRequired?: boolean
+    signatureRequired?: boolean
+    signatureEnabled?: boolean
+  }
   createTime: string
   isInitiatorTask: boolean
 }
@@ -121,6 +135,8 @@ export interface CompleteTaskRequest {
   variables?: Record<string, unknown>
   userId?: string
   comment?: string
+  /** 手写签名图片 dataURL（节点开启手写签名时随 complete 提交） */
+  signature?: string
 }
 
 export interface CompleteTaskResponse {

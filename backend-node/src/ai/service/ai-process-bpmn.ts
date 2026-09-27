@@ -70,7 +70,9 @@ export function buildLinearProcessBpmnXml(plan: ProcessPlan, targetNamespace: st
     const extra =
       node.type === 'initiator'
         ? ' flowable:assignee="${initiator}" wf:nodeRole="initiator"'
-        : ''
+        : node.type === 'handler'
+          ? ' wf:nodeRole="handler"'
+          : ' wf:nodeRole="approver"'
     shapes.push({
       id,
       bpmnTag: 'userTask',

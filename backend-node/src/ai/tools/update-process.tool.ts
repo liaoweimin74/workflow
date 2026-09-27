@@ -217,7 +217,7 @@ export class UpdateProcessTool implements AiTool {
         nodeCount: plan.nodes.length,
         nodes: plan.nodes.map((n) => ({
           name: n.name,
-          type: n.type === 'initiator' ? '发起' : '审批',
+          type: n.type === 'initiator' ? '发起' : n.type === 'handler' ? '办理' : '审批',
           approver:
             n.approval === null
               ? null
@@ -225,7 +225,9 @@ export class UpdateProcessTool implements AiTool {
                 ? '部门负责人'
                 : n.approval.type === 'expression'
                   ? `表达式 ${n.approval.expression}`
-                  : '指定用户',
+                  : n.approval.type === 'initiator_select'
+                    ? '发起人自选'
+                    : '指定用户',
         })),
         formId,
         warnings,
@@ -296,7 +298,7 @@ export function buildCurrentPlanSummary(editor: EditorVO): string {
     const timeout = cfg && cfg['timeout'] != null ? cfg['timeout'] : null
     const hasForm = !!(cfg && cfg['form'] != null)
     return {
-      type: t.initiator ? 'initiator' : 'userTask',
+      type: t.initiator ? 'initiator' : t.handler ? 'handler' : 'userTask',
       name: t.name || cfg?.['name'] || t.id,
       approval,
       timeout,
@@ -311,7 +313,13 @@ export function buildCurrentPlanSummary(editor: EditorVO): string {
       try {
         const obj = JSON.parse(json) as Record<string, unknown>
         if (typeof obj['name'] === 'string') {
-          nodes.push({ type: 'userTask', name: obj['name'], approval: obj['approval'] ?? null, timeout: obj['timeout'] ?? null, form: obj['form'] != null ? '（已绑定表单）' : null })
+          nodes.push({
+            type: obj['taskRole'] === 'handler' ? 'handler' : 'userTask',
+            name: obj['name'],
+            approval: obj['approval'] ?? null,
+            timeout: obj['timeout'] ?? null,
+            form: obj['form'] != null ? '（已绑定表单）' : null,
+          })
         }
       } catch {
         // 忽略

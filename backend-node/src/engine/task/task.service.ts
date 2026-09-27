@@ -7,11 +7,19 @@ import { assertPageSize } from '../../framework/http/query-params'
 import type { DB } from '../../framework/database/types'
 import { getTenantId } from '../../framework/tenant/tenant-context'
 import { EngineRuntime } from '../runtime/engine-runtime'
-import { randomUuid } from '../process/process-design.service'
+import { extractFormConfig, randomUuid } from '../process/process-design.service'
 import { EnginePersistence, type TaskJoinRow } from '../runtime/engine-persistence'
 import { ProcessDesignRepository } from '../process/repository/process-design.repository'
 import { BackendLogicHook, completedActivityIdSnapshot, newlyCompletedEndEventNodeIds } from '../logic/backend-logic-hook'
 import { ProcessInstanceService } from '../runtime/process-instance.service'
+import type { ProcessModel, ResolutionContext } from '../process/compiler/process-model'
+
+/** 节点配置里的跨表单映射（宽松解析，对齐前端 `FormFieldDataMapping`）。 */
+interface DataMappingLike {
+  targetField?: unknown
+  source?: unknown
+  sourceField?: unknown
+}
 
 /**
  * 任务服务，对齐 Java `WorkflowTaskService` 的可观测行为。
@@ -56,6 +64,14 @@ export interface TaskDetailVO {
   initiatorName: string | null
   createTime: Date
   isInitiatorTask: boolean
+  /** 节点类别：initiator / approver / handler（运行时按钮区分；旧数据=approver）。 */
+  taskRole: 'initiator' | 'approver' | 'handler'
+  /** 节点级行为开关（前端按钮/表单渲染用）。 */
+  nodeFlags: {
+    commentRequired: boolean
+    signatureEnabled: boolean
+    signatureRequired: boolean
+  }
   formKey: string | null
   fieldPermissions: unknown
   mappedData: unknown
@@ -211,10 +227,24 @@ export class TaskService {
       initiatorName: row.initiator === null ? null : (names.get(row.initiator) ?? null),
       createTime: row.create_time,
       isInitiatorTask: node?.isInitiator ?? false,
-      // 表单相关字段属 P3（form 模块），P1 一律为 null
-      formKey: null,
-      fieldPermissions: null,
-      mappedData: null,
+      taskRole: (node?.isInitiator ?? false)
+        ? 'initiator'
+        : (node?.taskRole ?? 'approver'),
+      nodeFlags: {
+        commentRequired: node?.commentRequired ?? false,
+        signatureEnabled: node?.signature?.enabled ?? false,
+        signatureRequired: node?.signature?.required ?? false,
+      },
+      // 表单：节点级 `form` > 流程级 `__PROCESS__` `form`（整体取，不跨层合并，对齐 Java extractFormConfig）
+      ...(await this.loadTaskForm(row.process_def_id, row.node_id)),
+      // 跨表单数据映射（form.dataMappings → targetField/value）；无配置或解析为空时为 null
+      mappedData: await this.loadMappedData(
+        model,
+        row.process_def_id,
+        row.instance_id,
+        row.node_id,
+        variables,
+      ),
       // operations 来自**部署版本的 NodeConfig 快照**，不是编译模型 ——
       // 编译模型里只有 serviceTask/callActivity 带 config，userTask 的按钮开关在 wf_node_config。
       operations: await this.loadOperations(row.process_def_id, row.node_id),
@@ -250,6 +280,119 @@ export class TaskService {
     return merged
   }
 
+  /**
+   * 任务表单解析（对齐 Java `WorkflowTaskService.extractFormConfig`）：
+   * 节点级 `form` > 流程级 `__PROCESS__` `form`，表单与字段权限作为整体从同一层取，
+   * 不跨层合并（与发起页 resolveFormDefIds 同一套优先级语义）。
+   */
+  private async loadTaskForm(
+    processDefinitionId: string,
+    nodeId: string,
+  ): Promise<{ formKey: string | null; fieldPermissions: Record<string, string> | null }> {
+    const [nodeConfig, processConfig] = await Promise.all([
+      this.designRepo.findNodeConfig(processDefinitionId, nodeId),
+      this.designRepo.findNodeConfig(processDefinitionId, PROCESS_LEVEL_NODE_ID),
+    ])
+    const nodeForm = nodeConfig !== null ? extractFormConfig(nodeConfig.config_json) : null
+    if (nodeForm !== null) {
+      return { formKey: nodeForm.formDefId, fieldPermissions: nodeForm.fieldPermissions }
+    }
+    const processForm =
+      processConfig !== null ? extractFormConfig(processConfig.config_json) : null
+    return {
+      formKey: processForm?.formDefId ?? null,
+      fieldPermissions: processForm?.fieldPermissions ?? null,
+    }
+  }
+
+  /**
+   * 跨表单数据映射（对齐 Java `FormDataMerger.merge`）：读节点 `form.dataMappings`，
+   * 按 source 解析成 `targetField → value`：
+   *   - `variable:<名称>` → 流程变量
+   *   - `form:initiator` → 发起节点表单**当前数据**（非快照）的 sourceField
+   *   - `form:<nodeId>` → 指定节点表单当前数据的 sourceField
+   * 无映射配置或解析结果为空 → null（Java 同款：空 Map 上层置 null）。
+   */
+  private async loadMappedData(
+    model: ProcessModel | null,
+    processDefinitionId: string,
+    processInstanceId: string,
+    nodeId: string,
+    variables: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> {
+    const nodeConfig = await this.designRepo.findNodeConfig(processDefinitionId, nodeId)
+    if (nodeConfig === null) return null
+    let parsed: { form?: { dataMappings?: DataMappingLike[] } }
+    try {
+      parsed = JSON.parse(nodeConfig.config_json) as typeof parsed
+    } catch {
+      return null
+    }
+    const mappings = parsed.form?.dataMappings
+    if (!Array.isArray(mappings) || mappings.length === 0) return null
+
+    // 预取该部署版本全部节点配置（映射指向节点的 formDefId 从这里解）
+    const configs = await this.designRepo.findConfigsByProcessDefinitionId(processDefinitionId)
+    const formDefIdOf = (ownerNodeId: string): string | null => {
+      const row = configs.find((c) => c.node_id === ownerNodeId)
+      if (row === undefined) return null
+      return extractFormConfig(row.config_json)?.formDefId ?? null
+    }
+
+    const tenantId = getTenantId()
+    const result: Record<string, unknown> = {}
+    for (const mapping of mappings) {
+      if (mapping === null || typeof mapping !== 'object') continue
+      const targetField = typeof mapping.targetField === 'string' ? mapping.targetField : ''
+      const source = typeof mapping.source === 'string' ? mapping.source : ''
+      const sourceField = typeof mapping.sourceField === 'string' ? mapping.sourceField : ''
+      if (targetField === '' || source === '') continue
+      let value: unknown = null
+      if (source.startsWith('variable:')) {
+        value = variables[source.slice('variable:'.length)] ?? null
+      } else if (source.startsWith('form:')) {
+        const sourceNodeId = source.slice('form:'.length)
+        const ownerNodeId =
+          sourceNodeId === 'initiator' ? (model?.initiatorNodeId ?? null) : sourceNodeId
+        const formDefId = ownerNodeId !== null ? formDefIdOf(ownerNodeId) : null
+        if (formDefId !== null && sourceField !== '') {
+          value = await this.readFormFieldValue(
+            tenantId,
+            processInstanceId,
+            formDefId,
+            sourceField,
+          )
+        }
+      }
+      if (value !== null && value !== undefined) result[targetField] = value
+    }
+    return Object.keys(result).length > 0 ? result : null
+  }
+
+  /** 读流程实例下指定表单当前数据（非快照）的指定字段（对齐 Java `readFormField`）。 */
+  private async readFormFieldValue(
+    tenantId: string,
+    processInstanceId: string,
+    formDefId: string,
+    sourceField: string,
+  ): Promise<unknown> {
+    const row = await this.db
+      .selectFrom('wf_form_data')
+      .select('data_json')
+      .where('tenant_id', '=', tenantId)
+      .where('process_instance_id', '=', processInstanceId)
+      .where('form_def_id', '=', formDefId)
+      .where('is_snapshot', '=', 0)
+      .executeTakeFirst()
+    if (row?.data_json === null || row?.data_json === undefined) return null
+    try {
+      const data = JSON.parse(row.data_json) as Record<string, unknown>
+      return data[sourceField] ?? null
+    } catch {
+      return null
+    }
+  }
+
   // ------------------------------------------------------------ 写操作
 
   async claimTask(taskId: string, userId: string): Promise<void> {
@@ -267,7 +410,7 @@ export class TaskService {
 
   async completeTask(
     taskId: string,
-    body: { userId?: string; comment?: string; variables?: Record<string, unknown> },
+    body: { userId?: string; comment?: string; variables?: Record<string, unknown>; signature?: string },
   ): Promise<CompleteTaskResponse> {
     const tenantId = getTenantId()
     const row = await this.persistence.findTaskWithInstance(taskId, tenantId)
@@ -277,8 +420,41 @@ export class TaskService {
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
 
+    // ① 节点级门禁（意见必填 / 必须签名 / 必须加签）—— 在引擎推进前拦截
+    const node = model.nodes[row.node_id]
+    if (node !== undefined) {
+      const label = node.name !== '' ? node.name : row.node_id
+      if (node.commentRequired === true && (body.comment ?? '').trim() === '') {
+        throw new BusinessException(
+          400,
+          `${node.taskRole === 'handler' ? '处理' : '审批'}意见必填（节点「${label}」）`,
+        )
+      }
+      if (node.signature?.required === true && (body.signature ?? '').trim() === '') {
+        throw new BusinessException(400, `此节点要求手写签名（节点「${label}」）`)
+      }
+      if (node.returnOptions?.mustAddSign === true) {
+        const hasAddSign = await this.hasAddSignComment(row.instance_id, row.node_id)
+        if (!hasAddSign) {
+          throw new BusinessException(400, `此节点必须加签后才能通过（节点「${label}」）`)
+        }
+      }
+      // 通过/提交按钮开关（节点级 AND 流程级；缺省 true，显式 false 才拦截 ——
+      // 与前端按 operations 渲染按钮的规则一致，后端兑底）
+      const operations = await this.loadOperations(row.process_def_id, row.node_id)
+      if (operations.allowPass !== true) {
+        throw new BusinessException(400, `该节点不允许通过/提交（节点「${label}」）`)
+      }
+    }
+
     // 生产用 UUID 工厂；seedSeq 在 UUID 模式下无实际作用，保留以兼容序号模式
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      await this.buildResolutionContext(),
+    )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
 
@@ -297,6 +473,28 @@ export class TaskService {
       runtime.getVariables(),
       lockVersion,
     )
+
+    // 自动拒绝（approvalType=auto_reject）：终止实例（TERMINATED），不走 RUNNING/COMPLETED 同步
+    if (runtime.isAutoRefused()) {
+      await this.instances.insertComment(tenantId, {
+        taskId,
+        instanceId: row.instance_id,
+        userId: body.userId ?? row.assignee ?? '',
+        action: 'refuse',
+        comment: body.comment ?? '自动拒绝',
+        targetUserId: null,
+      })
+      await this.instances.terminateInstance(row.instance_id, '自动拒绝')
+      return {
+        processInstanceId: row.instance_id,
+        processFinished: true,
+        nextTaskId: null,
+        nextTaskName: null,
+        nextTaskDefinitionKey: null,
+        nextTaskAssignee: null,
+      }
+    }
+
     await this.syncInstanceStatus(row.instance_id, state)
 
     // 审批意见（对齐 Java：action='approve'）
@@ -308,6 +506,26 @@ export class TaskService {
       comment: body.comment ?? null,
       targetUserId: null,
     })
+
+    // 引擎自动结果（自动通过/跳过）→ 补审批意见，保证审批时间线完整
+    for (const auto of runtime.getAutoCompletedTasks()) {
+      if (auto.taskId === taskId) continue
+      await this.instances.insertComment(tenantId, {
+        taskId: auto.taskId,
+        instanceId: row.instance_id,
+        userId: 'system',
+        action: auto.action === 'approve' ? 'approve' : 'system',
+        comment: auto.action === 'approve' ? '自动通过' : '未找到办理人，自动跳过',
+        targetUserId: null,
+      })
+    }
+
+    // 节点「发送短信给办理人」→ 通知记录落库
+    await this.writeNodeSmsNotifications(tenantId, row.instance_id, state, model)
+    // 实例结束 + 发起节点 smsOnEnd → 给发起人的短信通知
+    if (state.status === 'COMPLETED') {
+      await this.writeInstanceEndSms(tenantId, row.instance_id, model, row.initiator)
+    }
 
     // 节点级后端逻辑（对齐 Java 的事件顺序：先 TASK_COMPLETED，再下一个节点的 ACTIVITY_STARTED，
     // 最后是本次走到的结束事件 ACTIVITY_COMPLETED(endEvent)）。
@@ -372,6 +590,18 @@ export class TaskService {
     const { state, variables, maxSeq, lockVersion } = await this.persistence.loadState(row.instance_id)
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
+
+    // 退回权限门禁：节点级 allowReturn（旧数据缺省回退 allowReject 语义）
+    const operations = await this.loadOperations(row.process_def_id, row.node_id)
+    if (operations.allowReturn !== true && operations.allowReject !== true) {
+      throw new BusinessException(400, '该节点不允许退回')
+    }
+    // 意见必填节点：退回理由也必填
+    const rejectNode = model.nodes[row.node_id]
+    if (rejectNode?.commentRequired === true && (reason ?? '').trim() === '') {
+      const label = rejectNode.name !== '' ? rejectNode.name : row.node_id
+      throw new BusinessException(400, `审批意见必填（节点「${label}」）`)
+    }
 
     // 生产用 UUID 工厂；seedSeq 在 UUID 模式无实际作用，保留以兼容序号模式
     const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
@@ -684,6 +914,23 @@ export class TaskService {
     const row = await this.persistence.findTaskWithInstance(taskId, tenantId)
     if (row === null) throw new Error(`Task not found: ${taskId}`)
 
+    // 拒绝权限门禁：节点级 allowRefuse（旧数据缺省回退 allowReject 语义）
+    const operations = await this.loadOperations(row.process_def_id, row.node_id)
+    if (operations.allowRefuse !== true && operations.allowReject !== true) {
+      throw new BusinessException(400, '该节点不允许拒绝')
+    }
+    // 意见必填节点：拒绝理由也必填；**办理节点没有「拒绝」语义**（仅审批节点可拒绝终止
+    // 流程）—— 前端已按 taskRole 隐藏按钮，这里后端兑底拦截
+    const model = await this.instances.loadModel(row.process_def_id)
+    const refuseNode = model?.nodes[row.node_id]
+    if (refuseNode?.taskRole === 'handler') {
+      throw new BusinessException(400, '办理节点不支持拒绝操作')
+    }
+    if (refuseNode?.commentRequired === true && (reason ?? '').trim() === '') {
+      const label = refuseNode.name !== '' ? refuseNode.name : row.node_id
+      throw new BusinessException(400, `审批意见必填（节点「${label}」）`)
+    }
+
     await this.instances.insertComment(tenantId, {
       taskId,
       instanceId: row.instance_id,
@@ -829,6 +1076,37 @@ export class TaskService {
     )
     if (tasks.length === 0) return 'noTasks'
 
+    // 发起节点「审批催办」配置：关闭 → 不可催办；开启 → 按间隔限流（实例级）
+    const instance = await this.db
+      .selectFrom('wfe_process_instance')
+      .select(['process_def_id'])
+      .where('id', '=', processInstanceId)
+      .executeTakeFirst()
+    if (instance !== undefined) {
+      const model = await this.instances.loadModel(instance.process_def_id)
+      const initiatorNode =
+        model?.initiatorNodeId !== null && model?.initiatorNodeId !== undefined
+          ? model.nodes[model.initiatorNodeId]
+          : undefined
+      const urge = initiatorNode?.initiatorOptions?.urge
+      if (urge?.enabled === false) return 'allSkipped'
+      if (urge?.enabled === true) {
+        const unitMinutes = urge.unit === 'hour' ? 60 : urge.unit === 'day' ? 1440 : 1
+        const intervalMinutes = Math.max(1, urge.interval ?? 5) * unitMinutes
+        const last = await this.db
+          .selectFrom('wf_task_remind')
+          .select('remind_time')
+          .where('process_instance_id', '=', processInstanceId)
+          .orderBy('remind_time', 'desc')
+          .limit(1)
+          .executeTakeFirst()
+        if (last?.remind_time !== null && last?.remind_time !== undefined) {
+          const elapsedMinutes = (Date.now() - new Date(last.remind_time).getTime()) / 60_000
+          if (elapsedMinutes < intervalMinutes) return 'allSkipped'
+        }
+      }
+    }
+
     let reminded = 0
     for (const task of tasks) {
       try {
@@ -858,6 +1136,211 @@ export class TaskService {
         `Task ${taskId} was reminded ${hours}h ago, within the ${REMIND_FREQUENCY_HOURS}h frequency limit`,
       )
     }
+  }
+
+  // ------------------------------------------------------------ 撤回
+  /**
+   * 发起人撤回流程（回退到发起节点等待重新提交）。
+   *
+   * 门禁：实例 RUNNING + 调用者为发起人 + 发起节点未配置 disallowRecall
+   *      + 活跃节点未配置 blockRecall。撤回后设变量 recalled=true，
+   *      审批意见 action='recall'。
+   */
+  async recallInstance(instanceId: string, userId: string, reason: string | null): Promise<void> {
+    const tenantId = getTenantId()
+    const instance = await this.db
+      .selectFrom('wfe_process_instance')
+      .select(['id', 'status', 'initiator', 'process_def_id'])
+      .where('id', '=', instanceId)
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirst()
+    if (instance === undefined) throw new BusinessException(`流程实例不存在: ${instanceId}`)
+    if (instance.status !== 'RUNNING') {
+      throw new BusinessException(400, '流程已结束，无法撤回')
+    }
+    if (instance.initiator === null || instance.initiator !== userId) {
+      throw new BusinessException(400, '只有发起人可以撤回流程')
+    }
+
+    const model = await this.instances.loadModel(instance.process_def_id)
+    if (model === null || model.initiatorNodeId === null) {
+      throw new BusinessException(400, '流程缺少发起节点，无法撤回')
+    }
+
+    // ① 发起节点配置：不允许撤销/撤回
+    const initiatorNode = model.nodes[model.initiatorNodeId]
+    if (initiatorNode?.initiatorOptions?.disallowRecall === true) {
+      throw new BusinessException(400, '发起人已配置不允许撤销/撤回')
+    }
+
+    // ② 活跃节点配置：流程到达此节点后禁止撤销/撤回
+    const openTasks = (await this.persistence.findTasks(instanceId)).filter(
+      (t) => t.status === 'CREATED' || t.status === 'CLAIMED',
+    )
+    for (const task of openTasks) {
+      const node = model.nodes[task.node_id]
+      if (node?.blockRecall === true) {
+        throw new BusinessException(
+          400,
+          `流程已到达「${node.name !== '' ? node.name : node.nodeId}」，该节点禁止撤销/撤回`,
+        )
+      }
+    }
+
+    const { state, variables, maxSeq, lockVersion } = await this.persistence.loadState(instanceId)
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      await this.buildResolutionContext(),
+    )
+    runtime.seedSeq(maxSeq)
+    runtime.restoreVariables(variables)
+    try {
+      runtime.recallToInitiator()
+    } catch (error) {
+      // 新 API 无 Java 对齐包袱：统一走 BusinessException（HTTP 200 + body code）
+      throw new BusinessException(400, error instanceof Error ? error.message : String(error))
+    }
+
+    await this.persistence.replaceRuntimeRows(
+      instanceId,
+      tenantId,
+      state,
+      runtime.getVariables(),
+      lockVersion,
+    )
+    await this.syncInstanceStatus(instanceId, state)
+
+    await this.instances.insertComment(tenantId, {
+      taskId: openTasks[0]?.id ?? '',
+      instanceId,
+      userId,
+      action: 'recall',
+      comment: reason,
+      targetUserId: null,
+    })
+  }
+
+  // ------------------------------------------------------------ 解析上下文与通知
+
+  /**
+   * 审批/办理人解析上下文（服务层预计算）。
+   *
+   * adminUserId：sys_user 中 username='admin' 的用户（找不到策略 to_admin / 超时转派兑底）。
+   * initiatorSupervisor：org 表无负责人字段，v1 恒为 null（supervisor/dept_head 策略降级到旧语义）。
+   * roleMemberships：角色编码 → 成员用户 ID 列表（role 类型审批人解析用；表小全量预查）。
+   */
+  private async buildResolutionContext(): Promise<ResolutionContext> {
+    const admin = await this.db
+      .selectFrom('sys_user')
+      .select('id')
+      .where('username', '=', 'admin')
+      .where('is_deleted', '=', 0)
+      .executeTakeFirst()
+    const roleRows = await this.db
+      .selectFrom('sys_role')
+      .innerJoin('sys_user_role', 'sys_user_role.role_id', 'sys_role.id')
+      .select(['sys_role.role_code', 'sys_user_role.user_id'])
+      .where('sys_role.is_deleted', '=', 0)
+      .where('sys_role.status', '=', 1)
+      .execute()
+    const roleMemberships: Record<string, string[]> = {}
+    for (const row of roleRows) {
+      if (row.role_code === null) continue
+      const members = roleMemberships[row.role_code] ?? []
+      members.push(String(row.user_id))
+      roleMemberships[row.role_code] = members
+    }
+    return {
+      adminUserId: admin === undefined ? null : String(admin.id),
+      initiatorSupervisor: null,
+      roleMemberships,
+    }
+  }
+
+  /** 此实例+节点下是否存在加签意见（必须加签门禁用）。 */
+  private async hasAddSignComment(instanceId: string, nodeId: string): Promise<boolean> {
+    const taskRows = await this.db
+      .selectFrom('wfe_task')
+      .select('id')
+      .where('instance_id', '=', instanceId)
+      .where('node_id', '=', nodeId)
+      .execute()
+    if (taskRows.length === 0) return false
+    const comment = await this.db
+      .selectFrom('wf_task_comment')
+      .select('id')
+      .where('action', '=', 'add_sign')
+      .where(
+        'task_id',
+        'in',
+        taskRows.map((r) => r.id),
+      )
+      .limit(1)
+      .executeTakeFirst()
+    return comment !== undefined
+  }
+
+  /** 节点 notify.sms=true 的新建待办 → 写短信通知记录（占位表，后续接入网关）。 */
+  private async writeNodeSmsNotifications(
+    tenantId: string,
+    instanceId: string,
+    state: { tasks: Array<{ id: string; nodeId: string; status: string; assignee: string | null }> },
+    model: { nodes: Record<string, { notify?: { sms?: boolean }; name?: string }> },
+  ): Promise<void> {
+    for (const task of state.tasks) {
+      if (task.status !== 'CREATED' && task.status !== 'CLAIMED') continue
+      const node = model.nodes[task.nodeId]
+      if (node?.notify?.sms !== true) continue
+      await this.db
+        .insertInto('wf_engine_notify')
+        .values({
+          id: randomUuid(),
+          tenant_id: tenantId,
+          instance_id: instanceId,
+          task_id: task.id,
+          notify_type: 'SMS_NODE',
+          target_user: task.assignee ?? '',
+          content: `您有新的办理任务：${node.name ?? task.nodeId}`,
+          status: 'PENDING',
+          created_at: new Date(),
+        })
+        .execute()
+    }
+  }
+
+  /** 实例结束 + 发起节点 smsOnEnd=true → 给发起人的短信通知记录。 */
+  private async writeInstanceEndSms(
+    tenantId: string,
+    instanceId: string,
+    model: {
+      initiatorNodeId: string | null
+      nodes: Record<string, { initiatorOptions?: { smsOnEnd?: boolean } }>
+    },
+    initiator: string | null,
+  ): Promise<void> {
+    if (initiator === null || initiator === '') return
+    const initiatorNode =
+      model.initiatorNodeId !== null && model.initiatorNodeId !== undefined
+        ? model.nodes[model.initiatorNodeId]
+        : undefined
+    if (initiatorNode?.initiatorOptions?.smsOnEnd !== true) return
+    await this.db
+      .insertInto('wf_engine_notify')
+      .values({
+        id: randomUuid(),
+        tenant_id: tenantId,
+        instance_id: instanceId,
+        task_id: null,
+        notify_type: 'SMS_END',
+        target_user: initiator,
+        content: '您发起的流程已结束',
+        status: 'PENDING',
+        created_at: new Date(),
+      })
+      .execute()
   }
 
   // ------------------------------------------------------------ 辅助查询
@@ -910,10 +1393,21 @@ export function versionOf(processDefinitionId: string): number | null {
 }
 
 /**
- * 操作开关的四个键（`com.workflow.api.dto.OperationsConfig` 的字段）。
+ * 操作开关的键（`com.workflow.api.dto.OperationsConfig` 的四字段 + 新增三键）。
+ *
+ * 新增键：allowPass（通过，恒真核心动作）、allowRefuse（拒绝）、allowReturn（退回）。
+ * 旧数据缺新键 → 默认 true（保持既有按钮可见行为）；显式 false 才关闭。
  * **顺序无关**（JSON 对象按键比对），但保持与 Java 声明一致便于对照。
  */
-const OPERATION_KEYS = ['allowReject', 'allowAddSign', 'allowTransfer', 'allowDelegate'] as const
+const OPERATION_KEYS = [
+  'allowReject',
+  'allowAddSign',
+  'allowTransfer',
+  'allowDelegate',
+  'allowPass',
+  'allowRefuse',
+  'allowReturn',
+] as const
 
 /** 流程级总控配置的伪节点 ID（Java `WorkflowTaskService` 里的字面量）。 */
 export const PROCESS_LEVEL_NODE_ID = '__PROCESS__'
@@ -931,6 +1425,9 @@ const OPERATION_DEFAULTS: Record<(typeof OPERATION_KEYS)[number], boolean> = {
   allowAddSign: false,
   allowTransfer: true,
   allowDelegate: false,
+  allowPass: true,
+  allowRefuse: true,
+  allowReturn: true,
 }
 
 /**
@@ -983,6 +1480,9 @@ export function parseProcessOperations(configJson: string | null): Record<string
     allowAddSign: true,
     allowTransfer: true,
     allowDelegate: true,
+    allowPass: true,
+    allowRefuse: true,
+    allowReturn: true,
   }
   if (configJson === null) return out
   let parsed: Record<string, unknown>

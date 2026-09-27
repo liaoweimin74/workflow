@@ -49,13 +49,14 @@
         <el-tab-pane label="我发起的" name="initiated">
           <SearchTable
             v-if="activeTab === 'initiated'"
+            ref="initiatedTableRef"
             :search-fields="initiatedSearchFields"
             :columns="initiatedColumns"
             :action-buttons="initiatedActionButtons"
             :fetch-api="initiatedFetchApi"
             :default-page-size="20"
             :page-sizes="[10, 20, 50]"
-            :action-column-width="106"
+            :action-column-width="150"
           >
             <!-- 状态列 -->
             <template #instanceStatus="{ row }">
@@ -82,8 +83,8 @@ defineOptions({ name: 'ProcessTodo' })
 
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Bell, Edit, View } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Bell, Edit, View, RefreshLeft } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { taskApi } from '@/api/task'
 import { taskRemindApi } from '@/api/taskRemind'
@@ -235,6 +236,14 @@ const initiatedActionButtons: ActionButton[] = [
     show: (row: ProcessInstanceVO) => row.status === 'running',
     onClick: handleInitiatedRemind,
   },
+  {
+    label: '撤回',
+    icon: RefreshLeft,
+    type: 'danger',
+    // 撤回入口：RUNNING 且发起人为当前用户的实例（「我发起的」列表已按当前用户过滤）
+    show: (row: ProcessInstanceVO) => row.status === 'running',
+    onClick: handleRecall,
+  },
 ]
 
 async function initiatedFetchApi(params: QueryParams): Promise<{ rows: ProcessInstanceVO[]; total: number }> {
@@ -260,6 +269,33 @@ async function handleInitiatedRemind(row: ProcessInstanceVO) {
       ElMessage.warning('催办频率限制：24小时内已催办过，请稍后再试')
     } else {
       ElMessage.error('催办失败')
+    }
+  }
+}
+
+// ── 我发起的：撤回（RUNNING 实例，流程回到发起节点） ──
+const initiatedTableRef = ref()
+
+async function handleRecall(row: ProcessInstanceVO) {
+  try {
+    const { value } = await ElMessageBox.prompt(
+      '确定要撤回该流程吗？撤回后流程将回到发起节点。',
+      '撤回流程',
+      {
+        type: 'warning',
+        inputPlaceholder: '请输入撤回原因（可选）',
+        inputType: 'textarea',
+        confirmButtonText: '撤回',
+        cancelButtonText: '取消',
+      }
+    )
+    await processInstanceApi.recall(row.id, value?.trim() || undefined)
+    ElMessage.success('已撤回，流程回到发起节点')
+    initiatedTableRef.value?.fetchList()
+  } catch (err: any) {
+    // ElMessageBox 取消时 reject 'cancel'，静默；其他错误由 http 拦截器弹消息
+    if (err !== 'cancel') {
+      // noop
     }
   }
 }

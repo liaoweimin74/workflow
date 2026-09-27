@@ -37,13 +37,19 @@
           :read-only="readOnly"
         />
 
-        <!-- 发起人节点（精简面板） -->
+        <!-- 发起节点（nodeRole=initiator，精简面板） -->
         <initiator-task-property
-          v-else-if="selectedNodeType === 'UserTask' && isInitiatorNode"
+          v-else-if="selectedNodeType === 'UserTask' && isSelectedInitiator"
           :read-only="readOnly"
         />
 
-        <!-- 用户任务（审批节点） -->
+        <!-- 办理节点（nodeRole=handler） -->
+        <handler-task-property
+          v-else-if="selectedNodeType === 'UserTask' && isSelectedHandler"
+          :read-only="readOnly"
+        />
+
+        <!-- 审批节点（nodeRole=approver，旧数据无 nodeRole 也按审批处理） -->
         <user-task-property
           v-else-if="selectedNodeType === 'UserTask'"
           :read-only="readOnly"
@@ -96,6 +102,7 @@ import ProcessProperty from './ProcessProperty.vue'
 import EventProperty from './EventProperty.vue'
 import UserTaskProperty from './UserTaskProperty.vue'
 import InitiatorTaskProperty from './InitiatorTaskProperty.vue'
+import HandlerTaskProperty from './HandlerTaskProperty.vue'
 import ServiceTaskProperty from './ServiceTaskProperty.vue'
 import CallActivityProperty from './CallActivityProperty.vue'
 import SubProcessProperty from './SubProcessProperty.vue'
@@ -114,6 +121,8 @@ const collapsed = computed({
 
 const selectedNodeId = computed(() => designerStore.selectedNodeId)
 const selectedNodeType = computed(() => designerStore.selectedNodeType)
+/** 当前选中 userTask 的 wf:nodeRole（initiator/approver/handler），ProcessDesigner selectNode 时写入 store */
+const selectedNodeRole = computed(() => designerStore.selectedNodeRole)
 
 const isEventNode = computed(() => {
   const type = selectedNodeType.value || ''
@@ -125,20 +134,32 @@ const isGatewayNode = computed(() => {
   return type.includes('Gateway')
 })
 
-const isInitiatorNode = computed(() => {
+/** 发起节点：nodeRole=initiator（store 由画布选中事件同步，异常时兜底查询） */
+const isSelectedInitiator = computed(() => {
   if (selectedNodeType.value !== 'UserTask') return false
-  if (!selectedNodeId.value) return false
+  return selectedNodeRole.value === 'initiator' || resolveNodeRole() === 'initiator'
+})
+
+/** 办理节点：nodeRole=handler，其余（含旧数据无 nodeRole）均按审批节点处理 */
+const isSelectedHandler = computed(() => {
+  if (selectedNodeType.value !== 'UserTask') return false
+  return selectedNodeRole.value === 'handler' || (selectedNodeRole.value === null && resolveNodeRole() === 'handler')
+})
+
+/** store 无 role 时（如面板先于选中事件渲染）直接从 modeler 兜底取 businessObject 的 wf:nodeRole */
+function resolveNodeRole(): string | null {
+  if (!selectedNodeId.value) return null
   try {
     const modeler = getModeler()
     const elementRegistry = modeler.get<{ get(id: string): Element | undefined }>('elementRegistry')
     const element = elementRegistry.get(selectedNodeId.value)
-    if (!element) return false
+    if (!element) return null
     const bo = element.businessObject
-    return bo.get('wf:nodeRole') === 'initiator'
+    return (bo.get('wf:nodeRole') as string | undefined) || null
   } catch {
-    return false
+    return null
   }
-})
+}
 
 const nodeTypeLabel = computed(() => {
   const labels: Record<string, string> = {
@@ -154,7 +175,14 @@ const nodeTypeLabel = computed(() => {
     CallActivity: '调用活动',
     SubProcess: '内嵌子流程'
   }
-  return labels[selectedNodeType.value || ''] || selectedNodeType.value || ''
+  let label = labels[selectedNodeType.value || ''] || selectedNodeType.value || ''
+  if (selectedNodeType.value === 'UserTask') {
+    const role = selectedNodeRole.value ?? resolveNodeRole()
+    if (role === 'initiator') label = '发起节点'
+    else if (role === 'handler') label = '办理节点'
+    else label = '审批节点'
+  }
+  return label
 })
 </script>
 

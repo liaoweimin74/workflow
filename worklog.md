@@ -1636,3 +1636,19 @@ Stage Summary:
 - 盘点三未实现项全部闭环：notifySms 更正为已实现；签名链路（落库+useLast 回填+allowUpload 上传）+ 再次发起（API+按钮+拦截）上线，端到端 9 步验证全通
 - 编译器 startEvent initiator 欠账修复——disallowRecall/urge/smsOnEnd/reInitiate 在 startEvent 形态下真正生效
 - 后端 920/前端 1132 全绿，类型基线零新增；工作区干净待提交
+
+---
+Task ID: 66-repo-recovery
+Agent: Z.ai Code (main)
+Task: 用户「push」——沙箱第六次重置后仓库恢复与推送确认
+
+Work Log:
+- 异常定位：workflow_lowcode/.git 消失，git 命令上行解析到 /home/z/my-project 平台 UUID 快照仓库（无 remote）
+- ls-remote 实证远程 main=509aa33 = Task 65 完整提交（代码+内层 worklog 全在，双端 worklog 1727 行一致）——Task 65 已完整推送无缺漏
+- 第六次恢复 SOP：git init -b main → core.fileMode false → remote add origin（PAT）→ fetch → reset --mixed origin/main → git checkout -- . 找回 276 项纯删除（.env×2/backend 124/backend-node 119/.superpowers 31，零内容修改）
+- 终态：git status 0 行，HEAD=origin/main，push 返回 Everything up-to-date；worklog chore c9f062c 已推送
+- 四通道探活全 OK，mem_avail 1317MB；巡检 cron 418848 被平台禁用（exec limits）→ 删除重建（prompt 更新至 HEAD=509aa33/Task 65 闭环）
+
+Stage Summary:
+- 远程 main = 本地 = c9f062c（509aa33 Task 65 + worklog chore）；Task 65 三未实现项（签名落库/useLast/allowUpload、reInitiate、编译器 startEvent initiator 修复）确认全部在远程
+- 恢复经验：reset --mixed 后缺失文件用 git checkout -- . 全量找回，git status 0 行为完成标准

@@ -92,6 +92,10 @@ public class MultiInstanceBpmnRewriter {
                     continue;
                 }
 
+                // 任务创建行为监听器（Task 61：自动审批/去重/找不到人策略/类型化解析/短信通知）
+                // 对所有有配置的 userTask 注入（含单实例与多实例），旧配置块缺失时监听器内部直接放行
+                injectTaskCreateListener(doc, userTask);
+
                 String multiMode = extractMultiMode(configJson);
                 if (multiMode != null) {
                     applyMultiInstance(doc, userTask, multiMode);
@@ -104,6 +108,7 @@ public class MultiInstanceBpmnRewriter {
                 // 1 人 → flowable:assignee；多人 → flowable:candidateUsers
                 List<String> userIds = extractUserIds(configJson);
                 if (userIds.isEmpty()) {
+                    modified = true;
                     continue;
                 }
                 applySingleAssignee(doc, userTask, userIds);
@@ -120,6 +125,30 @@ public class MultiInstanceBpmnRewriter {
             log.warn("BPMN XML 改写失败，返回原始 XML: {}", e.getMessage());
             return bpmnXml;
         }
+    }
+
+    /**
+     * 注入任务创建行为监听器（create 事件）：自动审批类型、去重、找不到人策略、
+     * 类型化审批人解析（initiator_self/initiator_select/role/expression）、短信通知落库。
+     */
+    private void injectTaskCreateListener(Document doc, Element userTask) {
+        Element extensionElements = ensureExtensionElements(doc, userTask);
+        // 防重复注入
+        NodeList existingListeners = extensionElements.getChildNodes();
+        for (int i = 0; i < existingListeners.getLength(); i++) {
+            org.w3c.dom.Node child = existingListeners.item(i);
+            if (child.getNodeType() == Node.ELEMENT_NODE) {
+                Element el = (Element) child;
+                if ("taskListener".equals(el.getLocalName())
+                        && "${taskCreateBehaviorListener}".equals(el.getAttribute("delegateExpression"))) {
+                    return;
+                }
+            }
+        }
+        Element listener = doc.createElementNS(FLOWABLE_NS, FLOWABLE_PREFIX + ":taskListener");
+        listener.setAttribute("event", "create");
+        listener.setAttribute("delegateExpression", "${taskCreateBehaviorListener}");
+        extensionElements.appendChild(listener);
     }
 
     private String extractMultiMode(String configJson) {

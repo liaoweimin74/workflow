@@ -13,6 +13,8 @@ import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.process.config.NodeOptions;
+import com.workflow.engine.process.config.NodeOptionsService;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.task.entity.WfTaskRemind;
@@ -63,6 +65,8 @@ public class WorkflowTaskService {
     private final FormDataMerger formDataMerger;
     private final VariableMappingWriter variableMappingWriter;
     private final ObjectMapper objectMapper;
+    private final NodeOptionsService nodeOptionsService;
+    private final EngineNotifyService engineNotifyService;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
                                HistoryService historyService,
@@ -76,7 +80,9 @@ public class WorkflowTaskService {
                                InitiatorNodeResolver initiatorNodeResolver,
                                ObjectMapper objectMapper,
                                FormDataMerger formDataMerger,
-                               VariableMappingWriter variableMappingWriter) {
+                               VariableMappingWriter variableMappingWriter,
+                               NodeOptionsService nodeOptionsService,
+                               EngineNotifyService engineNotifyService) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -90,6 +96,8 @@ public class WorkflowTaskService {
         this.objectMapper = objectMapper;
         this.formDataMerger = formDataMerger;
         this.variableMappingWriter = variableMappingWriter;
+        this.nodeOptionsService = nodeOptionsService;
+        this.engineNotifyService = engineNotifyService;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {

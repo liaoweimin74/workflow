@@ -16,6 +16,12 @@ public class OperationsConfig {
     private boolean allowTransfer = true;
     /** 是否允许委派，默认 false */
     private boolean allowDelegate = false;
+    /** 是否允许通过/提交（主按钮），默认 true；显式 false 才拦截（旧数据兼容） */
+    private boolean allowPass = true;
+    /** 是否允许拒绝（审批节点），默认 true；缺省时前端回落 allowReject 语义 */
+    private boolean allowRefuse = true;
+    /** 是否允许退回，默认 true；缺省时前端回落 allowReject 语义 */
+    private boolean allowReturn = true;
 
     public boolean isAllowReject() { return allowReject; }
     public void setAllowReject(boolean allowReject) { this.allowReject = allowReject; }
@@ -28,4 +34,13 @@ public class OperationsConfig {
 
     public boolean isAllowDelegate() { return allowDelegate; }
     public void setAllowDelegate(boolean allowDelegate) { this.allowDelegate = allowDelegate; }
+
+    public boolean isAllowPass() { return allowPass; }
+    public void setAllowPass(boolean allowPass) { this.allowPass = allowPass; }
+
+    public boolean isAllowRefuse() { return allowRefuse; }
+    public void setAllowRefuse(boolean allowRefuse) { this.allowRefuse = allowRefuse; }
+
+    public boolean isAllowReturn() { return allowReturn; }
+    public void setAllowReturn(boolean allowReturn) { this.allowReturn = allowReturn; }
 }

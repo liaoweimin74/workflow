@@ -1520,3 +1520,20 @@ Work Log:
 
 Stage Summary:
 - Task 60 阶段一独立复验闭环：AI 修改流程与修改表单真实可用（浏览器对话+API 双实证）；阶段二~四待推进
+
+---
+Task ID: 61
+Agent: Z.ai Code (main)
+Task: 工作流引擎节点体系增强——用户任务拆分「办理/审批」+ 三类节点属性面板 + 属性的运行时引擎业务逻辑（需求①节点拆分与面板参照截图 ②"就这些属性实现引擎的相关业务逻辑"）
+
+Work Log:
+- 探索发现工作区已含上一 session 未提交的 Task 61 主体（33 修改+5 新文件，+2481 行）：palette 审批/办理拆分（wf:nodeRole）、三属性面板、18 种审批人类型、会签/或签/依次 MI 引擎、找不到人 7 策略、TimeoutScanner(V40)
+- 本轮补齐引擎业务逻辑：①任务详情表单欠账 formKey/fieldPermissions/mappedData 真实下发（对齐 Java extractFormConfig/FormDataMerger，含跨表单数据映射 variable:*/form:initiator/form:节点）②审批人 role 解析（sys_role JOIN user_role → roleMemberships）与 expression 表达式求值（${initiator}/${initiator.deptManager}/${变量}）③taskRole 强制：handler 禁 refuse+allowPass 门禁 ④修复真 bug：wf:nodeRole=handler 被编译缺省折回 approver（extractTaskOptions 无条件覆盖）⑤AI 四文件：initiator_select 类型/超时 5 动作/办理三值文案/prompt
+- 前端：AssigneeSelector 角色多选（roleCodes）、两属性面板接线、任务详情转签按钮
+- 新增 assignee-resolution.spec 10 用例；回归：后端 878/前端 1120 全绿、vue-tsc 46 基线持平、nest build dist 重建
+- ⚠️ 服务链事故：本会话发现 3000 门户+看门狗已死、**本会话新起的后台进程一律被平台清理（nohup/setsid 均无效）**，8080 无法以新 dist 长驻——浏览器端到端验证移交下一轮；详细恢复步骤见 workflow_lowcode/docs/ops/worklog.md Task 61
+
+Stage Summary:
+- Task 61 代码层完成：办理/审批拆分 + 三类面板 + 引擎逻辑（表单/字段权限/数据映射/人员解析/找不到人/动作强制/超时）+ AI 适配，测试全绿
+- 下一轮优先：恢复服务链（3000→bun run dev；8080→start-services.sh 按 marker 拉 node dist 11:55 版）→ agent-browser 端到端（palette 双入口/面板三分发/role+expression/字段权限/转签/办理节点禁拒绝）→ 提交推送
+- 边界：dept_head 等组织架构类审批人因组织表无负责人字段走「找不到人」策略兜底；截图内容丢失字段按冻结 schema+业界惯例补齐，可再校准

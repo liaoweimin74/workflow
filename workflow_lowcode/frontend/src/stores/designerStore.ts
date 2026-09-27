@@ -48,6 +48,8 @@ export interface NodeConfigData {
       | 'external_push'
       | 'expression'
     userIds?: (string | number)[]
+    /** 角色编码（type='role' 时生效；引擎按 sys_role.role_code 解析成员） */
+    roleCodes?: string[]
     expression?: string
     multiMode?: 'countersign' | 'or_sign' | 'sequential' | ''
   }

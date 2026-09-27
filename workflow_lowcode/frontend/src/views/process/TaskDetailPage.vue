@@ -95,6 +95,7 @@
                     <el-dropdown-item v-if="operations?.allowTransfer" command="transfer">转办</el-dropdown-item>
                     <el-dropdown-item v-if="handlerReturnEnabled" command="return">退回</el-dropdown-item>
                     <el-dropdown-item v-if="operations?.allowAddSign" command="addSign">加签</el-dropdown-item>
+                    <el-dropdown-item v-if="operations?.allowAddSign" command="forwardSign">转签</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -124,6 +125,7 @@
                     <el-dropdown-item v-if="operations?.allowTransfer" command="transfer">转办</el-dropdown-item>
                     <el-dropdown-item v-if="operations?.allowDelegate" command="delegate">委派</el-dropdown-item>
                     <el-dropdown-item v-if="operations?.allowAddSign" command="addSign">加签</el-dropdown-item>
+                    <el-dropdown-item v-if="operations?.allowAddSign" command="forwardSign">转签</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -398,6 +400,8 @@ async function onSingleUserSelected(users: { id: number; nickname: string }[]) {
       await taskApi.transfer(taskId, { toUser: userIdStr, reason: comment.value })
     } else if (action === 'delegate') {
       await taskApi.delegate(taskId, { delegateTo: userIdStr, comment: comment.value })
+    } else if (action === 'forwardSign') {
+      await taskApi.forwardSign(taskId, { toUser: userIdStr, comment: comment.value })
     }
     ElMessage.success('操作成功')
     router.push('/process/todo')

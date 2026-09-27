@@ -256,6 +256,14 @@ function onTypeChange(value: string) {
   transform: scale(0.9);
 }
 
+/* 角色选择下方的灰色说明 */
+.as-role-hint {
+  font-size: 11px;
+  color: var(--el-text-color-secondary, #8b91ab);
+  line-height: 1.4;
+  margin: 4px 0 6px;
+}
+
 .as-adjust {
   display: flex;
   margin-top: 8px;

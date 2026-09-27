@@ -133,13 +133,17 @@ function extractTaskOptions(
 ): Partial<CompiledNode> {
   const out: Partial<CompiledNode> = {}
 
-  // 节点类别：发起节点恒为 initiator；其余按配置归一（非法值 → approver 兼容旧数据）
+  // 节点类别：发起节点恒为 initiator；配置里有 taskRole 时以配置为准（非法值 → approver
+  // 兼容旧数据）；配置缺省时**保留 parser 从 BPMN wf:nodeRole 解析的值**（设计器拖入
+  // 「办理节点」但从未保存过属性面板的场景），不强写缺省 —— 避免 BPMN 真源被覆盖
   const configuredRole = asString(config.taskRole)
-  out.taskRole = isInitiator
-    ? 'initiator'
-    : TASK_ROLES.includes(configuredRole as TaskRole)
+  if (isInitiator) {
+    out.taskRole = 'initiator'
+  } else if (configuredRole !== undefined) {
+    out.taskRole = TASK_ROLES.includes(configuredRole as TaskRole)
       ? (configuredRole as TaskRole)
       : 'approver'
+  }
 
   const approvalType = asString(config.approvalType)
   if (APPROVAL_TYPES.includes(approvalType as ApprovalType)) {
@@ -376,6 +380,8 @@ function mergeNode(node: ParsedNode, configJson: string | undefined): CompiledNo
     incoming: [...node.incoming],
     outgoing: [...node.outgoing],
     isInitiator: node.isInitiator,
+    // BPMN 侧 wf:nodeRole 真源（extractTaskOptions 仅在配置显式给出时覆盖）
+    taskRole: node.taskRole,
   }
 
   if (node.nodeType === 'userTask') {

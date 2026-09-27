@@ -14,10 +14,12 @@
           <AssigneeSelector
             v-model="ui.approval.type"
             :user-ids="ui.approval.userIds"
+            :role-codes="ui.approval.roleCodes"
             :allow-adjust="ui.assignee.allowInitiatorAdjust"
             kind="handler"
             :disabled="readOnly"
             @update:user-ids="(ids: number[]) => (ui.approval.userIds = ids)"
+            @update:role-codes="(codes: string[]) => (ui.approval.roleCodes = codes)"
             @update:allow-adjust="(v: boolean) => (ui.assignee.allowInitiatorAdjust = v)"
           />
 
@@ -181,6 +183,7 @@ const ui = reactive({
   approval: {
     type: '' as string,
     userIds: [] as number[],
+    roleCodes: [] as string[],
     expression: '',
     multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | '',
   },
@@ -232,6 +235,7 @@ function loadConfig() {
   // 重置为默认值，避免残留上一节点
   ui.approval.type = ''
   ui.approval.userIds = []
+  ui.approval.roleCodes = []
   ui.approval.expression = ''
   ui.approval.multiMode = ''
   ui.assignee.allowInitiatorAdjust = false
@@ -253,6 +257,7 @@ function loadConfig() {
     if (existing.approval) {
       ui.approval.type = existing.approval.type || ''
       ui.approval.userIds = (existing.approval.userIds || []).map((id) => Number(id))
+      ui.approval.roleCodes = (existing.approval.roleCodes || []).map((c) => String(c))
       ui.approval.expression = existing.approval.expression || ''
       ui.approval.multiMode = existing.approval.multiMode || ''
     }
@@ -313,6 +318,7 @@ function saveConfig() {
     approval: {
       type: (ui.approval.type || undefined) as ApprovalTypeValue | undefined,
       userIds: ui.approval.type === 'user' && ui.approval.userIds.length > 0 ? ui.approval.userIds : undefined,
+      roleCodes: ui.approval.type === 'role' && ui.approval.roleCodes.length > 0 ? [...ui.approval.roleCodes] : undefined,
       expression: ui.approval.type === 'expression' ? ui.approval.expression || undefined : undefined,
       multiMode: ui.approval.multiMode,
     },

@@ -45,10 +45,12 @@
           <AssigneeSelector
             v-model="ui.approval.type"
             :user-ids="ui.approval.userIds"
+            :role-codes="ui.approval.roleCodes"
             :allow-adjust="ui.assignee.allowInitiatorAdjust"
             kind="approver"
             :disabled="readOnly"
             @update:user-ids="(ids: number[]) => (ui.approval.userIds = ids)"
+            @update:role-codes="(codes: string[]) => (ui.approval.roleCodes = codes)"
             @update:allow-adjust="(v: boolean) => (ui.assignee.allowInitiatorAdjust = v)"
           />
 
@@ -267,6 +269,7 @@ const ui = reactive({
   approval: {
     type: '' as string,
     userIds: [] as number[],
+    roleCodes: [] as string[],
     expression: '',
     multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | '',
   },
@@ -341,6 +344,7 @@ function loadConfig() {
   ui.approvalType = 'artificial'
   ui.approval.type = ''
   ui.approval.userIds = []
+  ui.approval.roleCodes = []
   ui.approval.expression = ''
   ui.approval.multiMode = ''
   ui.assignee.allowInitiatorAdjust = false
@@ -377,6 +381,7 @@ function loadConfig() {
       // 兼容旧配置：user / dept_head / expression 直接映射；发起人自己 initiator_self 恢复为合法选项
       ui.approval.type = existing.approval.type || ''
       ui.approval.userIds = (existing.approval.userIds || []).map((id) => Number(id))
+      ui.approval.roleCodes = (existing.approval.roleCodes || []).map((c) => String(c))
       ui.approval.expression = existing.approval.expression || ''
       ui.approval.multiMode = existing.approval.multiMode || ''
     }
@@ -455,6 +460,7 @@ function saveConfig() {
     approval: {
       type: (ui.approval.type || undefined) as ApprovalTypeValue | undefined,
       userIds: ui.approval.type === 'user' && ui.approval.userIds.length > 0 ? ui.approval.userIds : undefined,
+      roleCodes: ui.approval.type === 'role' && ui.approval.roleCodes.length > 0 ? [...ui.approval.roleCodes] : undefined,
       expression: ui.approval.type === 'expression' ? ui.approval.expression || undefined : undefined,
       multiMode: ui.approval.multiMode,
     },

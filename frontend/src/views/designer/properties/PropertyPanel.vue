@@ -198,7 +198,7 @@ const nodeTypeLabel = computed(() => {
 }
 
 .property-panel:not(.collapsed) {
-  width: 320px;
+  width: 420px;
 }
 
 .property-panel.collapsed {

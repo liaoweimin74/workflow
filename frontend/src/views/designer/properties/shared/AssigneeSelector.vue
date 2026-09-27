@@ -199,7 +199,7 @@ function onTypeChange(value: string) {
   width: 100%;
 }
 
-/* 四列网格：面板 320px 内每列约 70px */
+/* 四列网格：随面板宽度自适应（面板 420px 时每列约 95px） */
 .as-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

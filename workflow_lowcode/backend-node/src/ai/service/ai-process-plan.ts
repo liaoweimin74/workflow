@@ -10,7 +10,7 @@
 
 /** 审批人配置（与设计器 UserTaskProperty 的 config.approval 契约一致）。 */
 export interface PlanApproval {
-  type: 'user' | 'dept_head' | 'expression'
+  type: 'user' | 'dept_head' | 'expression' | 'initiator_select'
   userIds: number[]
   expression: string
   multiMode: '' | 'countersign' | 'or_sign' | 'sequential'
@@ -24,10 +24,10 @@ export interface PlanOperations {
   allowDelegate: boolean
 }
 
-/** 超时设置（与设计器 UserTaskProperty 的 config.timeout 契约一致）。 */
+/** 超时设置（与设计器 UserTaskProperty 的 config.timeout 契约一致；动作全集对齐后端 TimeoutAction）。 */
 export interface PlanTimeout {
   duration: number
-  action: 'remind' | 'escalate'
+  action: 'remind' | 'escalate' | 'transfer' | 'pass' | 'refuse'
 }
 
 /** 节点表单引用：优先按名称匹配已有表单，匹配不到且有描述则新建表单。 */
@@ -36,9 +36,9 @@ export interface PlanFormRef {
   formDescription: string
 }
 
-/** 节点计划（首版支持发起节点与审批节点，线性串联）。 */
+/** 节点计划（支持发起节点、审批节点、办理节点，线性串联）。 */
 export interface PlanNode {
-  type: 'initiator' | 'userTask'
+  type: 'initiator' | 'userTask' | 'handler'
   name: string
   approval: PlanApproval | null
   operations: PlanOperations | null
@@ -92,6 +92,12 @@ function normalizeApproval(raw: unknown, nodeName: string, warnings: string[]): 
     type = 'user'
   } else if (rawType === 'expression' || rawType.includes('表达式')) {
     type = 'expression'
+  } else if (
+    rawType === 'initiator_select' ||
+    rawType.includes('发起人自选') ||
+    rawType.includes('自选')
+  ) {
+    type = 'initiator_select'
   } else {
     // dept_head / 缺省 / 中文「部门负责人」等一律归一为 dept_head
     type = 'dept_head'
@@ -134,7 +140,14 @@ function normalizeTimeout(raw: unknown, nodeName: string, warnings: string[]): P
   const obj = raw as Record<string, unknown>
   const duration = Number(obj['duration'])
   if (!Number.isFinite(duration) || duration <= 0) return null
-  const action = obj['action'] === 'escalate' ? 'escalate' : 'remind'
+  const rawAction = str(obj['action']).toLowerCase()
+  const actions: PlanTimeout['action'][] = ['remind', 'escalate', 'transfer', 'pass', 'refuse']
+  const action = actions.includes(rawAction as PlanTimeout['action'])
+    ? (rawAction as PlanTimeout['action'])
+    : 'remind'
+  if (rawAction !== '' && rawAction !== action) {
+    warnings.push(`节点「${nodeName}」超时动作「${rawAction}」不支持，已回退为提醒`)
+  }
   if (duration > 24 * 30) {
     warnings.push(`节点「${nodeName}」超时时间超过 720 小时，已截断为 720`)
     return { duration: 720, action }
@@ -186,7 +199,20 @@ export function normalizePlan(raw: unknown): NormalizedPlan {
     const nodeName = str(nodeObj['name']) || `审批节点${nodes.length + 1}`
     const isInitiator =
       rawType === 'initiator' || rawType.includes('发起') || rawType.includes('提交')
-    if (!isInitiator && rawType !== 'usertask' && rawType !== 'user_task' && rawType !== 'approval' && !rawType.includes('审批')) {
+    // 办理节点：LLM 可用 handler/办理/处理 表达（无通过/拒绝语义，只有提交/转派/退回/加签）
+    const isHandler =
+      rawType === 'handler' ||
+      rawType === 'handle' ||
+      rawType.includes('办理') ||
+      rawType.includes('处理节点')
+    if (
+      !isInitiator &&
+      !isHandler &&
+      rawType !== 'usertask' &&
+      rawType !== 'user_task' &&
+      rawType !== 'approval' &&
+      !rawType.includes('审批')
+    ) {
       // 未知类型（gateway/serviceTask 等）首版跳过并提示
       warnings.push(`节点「${nodeName}」类型 ${rawType || '未知'} 暂不支持自动生成，已跳过`)
       continue
@@ -203,7 +229,7 @@ export function normalizePlan(raw: unknown): NormalizedPlan {
       continue
     }
     nodes.push({
-      type: 'userTask',
+      type: isHandler ? 'handler' : 'userTask',
       name: nodeName,
       approval: normalizeApproval(nodeObj['approval'], nodeName, warnings),
       operations: normalizeOperations(nodeObj['operations']),

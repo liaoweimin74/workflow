@@ -1,141 +1,314 @@
 <template>
-  <el-tabs v-model="activeTab" class="user-task-property-tabs">
-    <!-- 节点配置 -->
-    <el-tab-pane label="节点配置" name="node">
-      <el-form label-width="90px" size="small" :disabled="readOnly">
-        <el-divider content-position="left">基本信息</el-divider>
+  <div class="user-task-property">
+    <!-- 顶部（tab 外）：节点名称 + 审批类型 -->
+    <el-form label-width="80px" size="small" :disabled="readOnly" class="top-form">
+      <el-form-item label="节点名称">
+        <el-input v-model="config.name" placeholder="如：部门经理审批" @change="updateBpmnName" />
+      </el-form-item>
+    </el-form>
 
-        <el-form-item label="节点ID">
-          <el-input v-model="config.id" disabled />
-        </el-form-item>
+    <div class="section-title">审批类型</div>
+    <el-radio-group
+      :model-value="ui.approvalType"
+      :disabled="readOnly"
+      class="approval-type-group"
+      @update:model-value="onApprovalTypeChange"
+    >
+      <el-radio value="artificial">人工审批</el-radio>
+      <el-radio value="auto_pass">自动通过</el-radio>
+      <el-radio value="auto_reject">自动拒绝</el-radio>
+    </el-radio-group>
 
-        <el-form-item label="节点名称">
-          <el-input v-model="config.name" placeholder="如：部门经理审批" @change="updateBpmnName" />
-        </el-form-item>
+    <!-- 自动审批类型无需配置审批人：提示 + 禁用 tabs 内容 -->
+    <el-alert
+      v-if="isAutoType"
+      class="auto-tip"
+      type="info"
+      :closable="false"
+      show-icon
+      title="自动审批类型无需配置审批人"
+    />
 
-        <el-divider content-position="left">审批人配置</el-divider>
+    <el-alert
+      v-else-if="!ui.approval.type"
+      class="auto-tip"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="请先选择审批人类型"
+    />
 
-        <el-form-item label="审批类型">
-          <el-radio-group v-model="approval.type" @change="saveConfig">
-            <el-radio value="user">指定用户</el-radio>
-            <el-radio value="dept_head">部门负责人</el-radio>
-            <el-radio value="expression">流程表达式</el-radio>
-          </el-radio-group>
-        </el-form-item>
+    <el-tabs v-model="activeTab" class="user-task-property-tabs" :class="{ 'is-auto': isAutoType }">
+      <!-- 审批人设置 -->
+      <el-tab-pane label="审批人设置" name="assignee">
+        <div class="tab-inner">
+          <AssigneeSelector
+            v-model="ui.approval.type"
+            :user-ids="ui.approval.userIds"
+            :allow-adjust="ui.assignee.allowInitiatorAdjust"
+            kind="approver"
+            :disabled="readOnly"
+            @update:user-ids="(ids: number[]) => (ui.approval.userIds = ids)"
+            @update:allow-adjust="(v: boolean) => (ui.assignee.allowInitiatorAdjust = v)"
+          />
 
-        <el-form-item v-if="approval.type === 'user'" label="审批用户">
-          <ApproverPicker
-            v-model="approval.userIds"
+          <template v-if="ui.approval.type === 'expression'">
+            <div class="section-title">流程表达式</div>
+            <el-input
+              v-model="ui.approval.expression"
+              type="textarea"
+              :rows="2"
+              placeholder="如：${initiator.deptManager}"
+              :disabled="readOnly"
+              @change="saveConfig"
+            />
+          </template>
+
+          <div class="section-title">找不到审批人时</div>
+          <el-radio-group
+            v-model="ui.assignee.noAssigneePolicy"
+            class="v-radio-group"
             :disabled="readOnly"
             @change="saveConfig"
-          />
-        </el-form-item>
-
-        <el-form-item v-if="approval.type === 'expression'" label="表达式">
-          <el-input
-            v-model="approval.expression"
-            type="textarea"
-            :rows="2"
-            placeholder="如：${initiator.deptManager}"
+          >
+            <el-radio value="auto_pass">自动通过</el-radio>
+            <el-radio value="block">禁止提交流程</el-radio>
+            <el-radio value="to_admin">转交审批管理员</el-radio>
+            <el-radio value="to_user">转交指定用户</el-radio>
+            <el-radio value="skip">跳过此审批节点</el-radio>
+            <el-radio value="supervisor">由发起人主管代审批</el-radio>
+          </el-radio-group>
+          <ApproverPicker
+            v-if="ui.assignee.noAssigneePolicy === 'to_user'"
+            v-model="ui.assignee.toUserIds"
+            :multiple="false"
+            :disabled="readOnly"
+            placeholder="选择转交用户"
+            class="to-user-picker"
             @change="saveConfig"
           />
-        </el-form-item>
 
-        <el-form-item v-if="approval.type" label="多人模式">
-          <el-select v-model="approval.multiMode" placeholder="请选择" clearable style="width: 100%" @change="saveConfig">
-            <el-option value="countersign" label="会签（并行审批，全部通过）" />
-            <el-option value="or_sign" label="或签（并行审批，一人通过即可）" />
-            <el-option value="sequential" label="依次审批（串行，全部通过）" />
-          </el-select>
-        </el-form-item>
-
-        <el-divider content-position="left">操作权限</el-divider>
-
-        <el-form-item label="允许驳回">
-          <el-switch v-model="operations.allowReject" @change="saveConfig" />
-        </el-form-item>
-
-        <el-form-item label="允许加签">
-          <el-switch v-model="operations.allowAddSign" @change="saveConfig" />
-        </el-form-item>
-
-        <el-form-item label="允许转办">
-          <el-switch v-model="operations.allowTransfer" @change="saveConfig" />
-        </el-form-item>
-
-        <el-form-item label="允许委派">
-          <el-switch v-model="operations.allowDelegate" @change="saveConfig" />
-        </el-form-item>
-
-        <el-divider content-position="left">超时设置</el-divider>
-
-        <el-form-item label="超时时间">
-          <el-input-number
-            v-model="timeout.duration"
-            :min="0"
-            :step="1"
-            controls-position="right"
-            style="width: 120px"
+          <div class="section-title">多人审批时采用审批方式</div>
+          <el-radio-group
+            v-model="ui.approval.multiMode"
+            class="v-radio-group"
+            :disabled="readOnly"
             @change="saveConfig"
-          />
-          <span style="margin-left: 8px; color: #909399;">小时</span>
-        </el-form-item>
+          >
+            <el-radio value="countersign">会签（需要所有人同意）</el-radio>
+            <el-radio value="or_sign">或签（仅需其中一人同意）</el-radio>
+            <el-radio value="sequential">依次审批</el-radio>
+          </el-radio-group>
 
-        <el-form-item label="超时动作">
-          <el-select v-model="timeout.action" placeholder="请选择" style="width: 100%" @change="saveConfig">
-            <el-option label="提醒" value="remind" />
-            <el-option label="升级" value="escalate" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-    </el-tab-pane>
+          <div class="section-title">消息通知</div>
+          <el-checkbox v-model="ui.notifySms" :disabled="readOnly" @change="saveConfig">
+            发送短信给审批人
+          </el-checkbox>
+        </div>
+      </el-tab-pane>
 
-    <!-- 表单配置 -->
-    <el-tab-pane label="表单配置" name="form">
-      <FormPropertyTab :read-only="readOnly" />
-    </el-tab-pane>
-  </el-tabs>
+      <!-- 高级设置 -->
+      <el-tab-pane label="高级设置" name="advanced">
+        <div class="tab-inner">
+          <div class="section-title">审批人可进行的操作</div>
+          <div class="checkbox-col">
+            <el-checkbox :model-value="true" disabled>通过</el-checkbox>
+            <el-checkbox v-model="ui.operations.allowRefuse" :disabled="readOnly">拒绝</el-checkbox>
+            <el-checkbox v-model="ui.operations.allowTransfer" :disabled="readOnly">转派</el-checkbox>
+            <el-checkbox v-model="ui.operations.allowReturn" :disabled="readOnly">退回</el-checkbox>
+            <el-checkbox v-model="ui.operations.allowAddSign" :disabled="readOnly">加签</el-checkbox>
+          </div>
+          <template v-if="ui.operations.allowReturn">
+            <div class="checkbox-col sub-items">
+              <el-checkbox v-model="ui.returnOptions.restartFromHere" :disabled="readOnly">
+                退回后，从此节点开始审批，已经通过的节点无需再次审批
+              </el-checkbox>
+              <el-checkbox v-model="ui.returnOptions.chooseStartNode" :disabled="readOnly">
+                退回后，由审批人选择重审的起始节点
+              </el-checkbox>
+            </div>
+          </template>
+          <template v-if="ui.operations.allowAddSign">
+            <div class="checkbox-col sub-items">
+              <el-checkbox v-model="ui.returnOptions.mustAddSign" :disabled="readOnly">
+                此节点必须加签
+              </el-checkbox>
+            </div>
+          </template>
+
+          <div class="section-title">审批意见必填</div>
+          <div class="switch-row">
+            <el-switch v-model="ui.commentRequired" :disabled="readOnly" />
+            <span class="switch-label">审批意见必填</span>
+          </div>
+          <div class="hint-text">开启后，审批人必须填写审批意见</div>
+
+          <div class="section-title">禁止撤销/撤回</div>
+          <div class="switch-row">
+            <el-switch v-model="ui.blockRecall" :disabled="readOnly" />
+            <span class="switch-label">流程到达此节点后禁止撤销/撤回</span>
+          </div>
+
+          <div class="section-title">超时处理</div>
+          <div class="switch-row">
+            <el-switch v-model="ui.timeout.enabled" :disabled="readOnly" />
+            <span class="switch-label">超时处理</span>
+          </div>
+          <div class="hint-text">支持审批超时的自动提醒、转派、通过、拒绝</div>
+          <template v-if="ui.timeout.enabled">
+            <div class="inline-row">
+              <span class="inline-label">时长</span>
+              <el-input-number
+                v-model="ui.timeout.duration"
+                :min="1"
+                :step="1"
+                controls-position="right"
+                size="small"
+                style="width: 100px"
+                :disabled="readOnly"
+                @change="saveConfig"
+              />
+              <span class="inline-label">小时</span>
+            </div>
+            <div class="inline-row">
+              <span class="inline-label">动作</span>
+              <el-select
+                v-model="ui.timeout.action"
+                size="small"
+                style="width: 140px"
+                :disabled="readOnly"
+                @change="saveConfig"
+              >
+                <el-option label="自动提醒" value="remind" />
+                <el-option label="自动转派" value="escalate" />
+                <el-option label="自动通过" value="pass" />
+                <el-option label="自动拒绝" value="refuse" />
+              </el-select>
+            </div>
+          </template>
+
+          <div class="section-title">审批人去重</div>
+          <div class="switch-row">
+            <el-switch v-model="ui.dedup.enabled" :disabled="readOnly" />
+            <span class="switch-label">审批人去重</span>
+          </div>
+          <div class="hint-text">开启后，同一审批人不用重复审批</div>
+          <div v-if="ui.dedup.enabled" class="checkbox-col sub-items">
+            <div class="inline-row dedup-row">
+              <el-checkbox
+                v-model="ui.dedup.skipSameAsInitiator"
+                :disabled="readOnly"
+                @change="saveConfig"
+              >
+                审批人与
+              </el-checkbox>
+              <el-select
+                size="small"
+                disabled
+                placeholder="发起人"
+                style="width: 90px"
+                class="dedup-select"
+              />
+              <span class="inline-label">相同时，此节点自动跳过</span>
+            </div>
+          </div>
+
+          <div class="section-title">手写签名</div>
+          <div class="switch-row">
+            <el-switch v-model="ui.signature.enabled" :disabled="readOnly" />
+            <span class="switch-label">手写签名</span>
+          </div>
+          <template v-if="ui.signature.enabled">
+            <div class="checkbox-col sub-items">
+              <el-checkbox v-model="ui.signature.useLast" :disabled="readOnly">默认使用上次签名</el-checkbox>
+              <el-checkbox v-model="ui.signature.allowUpload" :disabled="readOnly">支持上传签名图片</el-checkbox>
+              <el-checkbox v-model="ui.signature.required" :disabled="readOnly">必须签名</el-checkbox>
+            </div>
+          </template>
+        </div>
+      </el-tab-pane>
+
+      <!-- 字段权限设置 -->
+      <el-tab-pane label="字段权限设置" name="form">
+        <FormPropertyTab :read-only="readOnly" />
+      </el-tab-pane>
+    </el-tabs>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from 'vue'
+import { computed, reactive, ref, onMounted, watch } from 'vue'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
 import FormPropertyTab from './FormPropertyTab.vue'
+import AssigneeSelector from './shared/AssigneeSelector.vue'
 
 defineProps<{ readOnly?: boolean }>()
 
+/** approval.type 可选值（取自冻结 schema） */
+type ApprovalTypeValue = NonNullable<NonNullable<NodeConfigData['approval']>['type']>
+
 const designerStore = useDesignerStore()
 
-const activeTab = ref('node')
+const activeTab = ref('assignee')
 
 // 加载标志：loadConfig 期间禁止 watch 触发 saveConfig，避免把新节点值写回旧节点
 let isLoading = false
 
 const config = reactive({
-  id: '',
   name: ''
 })
 
-const approval = reactive({
-  type: '' as 'user' | 'dept_head' | 'expression' | '',
-  userIds: [] as number[],
-  expression: '',
-  multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | ''
+/** 面板 UI 态（保存时映射为冻结 schema 的 nodeConfigs 结构） */
+const ui = reactive({
+  /** 审批类型：artificial / auto_pass / auto_reject */
+  approvalType: 'artificial' as 'artificial' | 'auto_pass' | 'auto_reject',
+  approval: {
+    type: '' as string,
+    userIds: [] as number[],
+    expression: '',
+    multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | '',
+  },
+  assignee: {
+    allowInitiatorAdjust: false,
+    noAssigneePolicy: '' as '' | 'auto_pass' | 'block' | 'to_admin' | 'to_user' | 'skip' | 'supervisor',
+    toUserIds: [] as number[],
+  },
+  operations: {
+    allowRefuse: true,
+    allowReturn: true,
+    allowTransfer: true,
+    allowAddSign: false,
+    allowDelegate: false,
+  },
+  returnOptions: {
+    restartFromHere: false,
+    chooseStartNode: false,
+    mustAddSign: false,
+  },
+  commentRequired: false,
+  blockRecall: false,
+  timeout: {
+    enabled: false,
+    duration: 24,
+    action: 'remind' as 'remind' | 'escalate' | 'pass' | 'refuse',
+  },
+  dedup: {
+    enabled: false,
+    skipSameAsInitiator: false,
+  },
+  signature: {
+    enabled: false,
+    useLast: false,
+    allowUpload: false,
+    required: false,
+  },
+  notifySms: false,
 })
 
-const operations = reactive({
-  allowReject: true,
-  allowAddSign: false,
-  allowTransfer: true,
-  allowDelegate: false
-})
-
-const timeout = reactive({
-  duration: 0,
-  action: 'remind' as 'remind' | 'escalate'
-})
+/** 自动通过/自动拒绝：无需配置审批人，tabs 内容整体禁用 */
+const isAutoType = computed(() => ui.approvalType === 'auto_pass' || ui.approvalType === 'auto_reject')
 
 onMounted(() => {
   loadConfig()
@@ -148,6 +321,11 @@ watch(() => designerStore.selectedNodeId, (newId, oldId) => {
   }
 })
 
+function onApprovalTypeChange(value: string) {
+  ui.approvalType = value as typeof ui.approvalType
+  saveConfig()
+}
+
 function loadConfig() {
   const modeler = getModeler()
   const elementRegistry = (modeler as any).get('elementRegistry')
@@ -157,44 +335,91 @@ function loadConfig() {
   isLoading = true
 
   const bo = element.businessObject
-  config.id = element.id
   config.name = bo.name || ''
 
   // 重置为默认值，避免残留上一节点
-  approval.type = ''
-  approval.userIds = []
-  approval.expression = ''
-  approval.multiMode = ''
-  operations.allowReject = true
-  operations.allowAddSign = false
-  operations.allowTransfer = true
-  operations.allowDelegate = false
-  timeout.duration = 0
-  timeout.action = 'remind'
+  ui.approvalType = 'artificial'
+  ui.approval.type = ''
+  ui.approval.userIds = []
+  ui.approval.expression = ''
+  ui.approval.multiMode = ''
+  ui.assignee.allowInitiatorAdjust = false
+  ui.assignee.noAssigneePolicy = ''
+  ui.assignee.toUserIds = []
+  ui.operations.allowRefuse = true
+  ui.operations.allowReturn = true
+  ui.operations.allowTransfer = true
+  ui.operations.allowAddSign = false
+  ui.operations.allowDelegate = false
+  ui.returnOptions.restartFromHere = false
+  ui.returnOptions.chooseStartNode = false
+  ui.returnOptions.mustAddSign = false
+  ui.commentRequired = false
+  ui.blockRecall = false
+  ui.timeout.enabled = false
+  ui.timeout.duration = 24
+  ui.timeout.action = 'remind'
+  ui.dedup.enabled = false
+  ui.dedup.skipSameAsInitiator = false
+  ui.signature.enabled = false
+  ui.signature.useLast = false
+  ui.signature.allowUpload = false
+  ui.signature.required = false
+  ui.notifySms = false
 
   // 加载已有配置覆盖默认值
   const existing = designerStore.getNodeConfig(designerStore.selectedNodeId!)
   if (existing) {
+    if (existing.approvalType) {
+      ui.approvalType = existing.approvalType
+    }
     if (existing.approval) {
-      // 兼容旧配置：已移除的 initiator_self 类型回退为未配置
-      if (existing.approval.type === 'initiator_self' as any) {
-        approval.type = ''
-      } else {
-        approval.type = existing.approval.type || ''
-      }
-      approval.userIds = existing.approval.userIds || []
-      approval.expression = existing.approval.expression || ''
-      approval.multiMode = existing.approval.multiMode || ''
+      // 兼容旧配置：user / dept_head / expression 直接映射；发起人自己 initiator_self 恢复为合法选项
+      ui.approval.type = existing.approval.type || ''
+      ui.approval.userIds = (existing.approval.userIds || []).map((id) => Number(id))
+      ui.approval.expression = existing.approval.expression || ''
+      ui.approval.multiMode = existing.approval.multiMode || ''
+    }
+    if (existing.assigneeOptions) {
+      ui.assignee.allowInitiatorAdjust = existing.assigneeOptions.allowInitiatorAdjust ?? false
+      ui.assignee.noAssigneePolicy = existing.assigneeOptions.noAssigneePolicy || ''
+      ui.assignee.toUserIds = existing.assigneeOptions.toUserId
+        ? [Number(existing.assigneeOptions.toUserId)].filter((n) => !Number.isNaN(n))
+        : []
     }
     if (existing.operations) {
-      operations.allowReject = existing.operations.allowReject ?? true
-      operations.allowAddSign = existing.operations.allowAddSign ?? false
-      operations.allowTransfer = existing.operations.allowTransfer ?? true
-      operations.allowDelegate = existing.operations.allowDelegate ?? false
+      // 兼容旧配置：旧 allowReject（驳回）映射到 allowRefuse / allowReturn
+      const legacyReject = existing.operations.allowReject
+      ui.operations.allowRefuse = existing.operations.allowRefuse ?? legacyReject ?? true
+      ui.operations.allowReturn = existing.operations.allowReturn ?? legacyReject ?? true
+      ui.operations.allowTransfer = existing.operations.allowTransfer ?? true
+      ui.operations.allowAddSign = existing.operations.allowAddSign ?? false
+      ui.operations.allowDelegate = existing.operations.allowDelegate ?? false
     }
+    if (existing.returnOptions) {
+      ui.returnOptions.restartFromHere = existing.returnOptions.restartFromHere ?? false
+      ui.returnOptions.chooseStartNode = existing.returnOptions.chooseStartNode ?? false
+      ui.returnOptions.mustAddSign = existing.returnOptions.mustAddSign ?? false
+    }
+    ui.commentRequired = existing.commentRequired ?? false
+    ui.blockRecall = existing.blockRecall ?? false
     if (existing.timeout) {
-      timeout.duration = existing.timeout.duration || 0
-      timeout.action = existing.timeout.action || 'remind'
+      ui.timeout.enabled = existing.timeout.enabled ?? false
+      ui.timeout.duration = existing.timeout.duration || 24
+      ui.timeout.action = (existing.timeout.action as typeof ui.timeout.action) || 'remind'
+    }
+    if (existing.dedup) {
+      ui.dedup.enabled = existing.dedup.enabled ?? false
+      ui.dedup.skipSameAsInitiator = existing.dedup.skipSameAsInitiator ?? false
+    }
+    if (existing.signature) {
+      ui.signature.enabled = existing.signature.enabled ?? false
+      ui.signature.useLast = existing.signature.useLast ?? false
+      ui.signature.allowUpload = existing.signature.allowUpload ?? false
+      ui.signature.required = existing.signature.required ?? false
+    }
+    if (existing.notify) {
+      ui.notifySms = existing.notify.sms ?? false
     }
   }
 
@@ -216,37 +441,122 @@ function saveConfig() {
   if (!designerStore.selectedNodeId) return
   if (isLoading) return
 
+  // 在已有配置上合并，保留 form 等未在本面板编辑的块与旧 operations 键
+  const existing = designerStore.getNodeConfig(designerStore.selectedNodeId!) || {}
+
   const nodeConfig: NodeConfigData = {
+    ...existing,
     basic: {
+      ...(existing.basic || {}),
       name: config.name
     },
+    taskRole: 'approver',
+    approvalType: ui.approvalType,
     approval: {
-      type: approval.type || undefined,
-      userIds: approval.userIds.length > 0 ? approval.userIds : undefined,
-      expression: approval.expression || undefined,
-      multiMode: approval.multiMode
+      type: (ui.approval.type || undefined) as ApprovalTypeValue | undefined,
+      userIds: ui.approval.type === 'user' && ui.approval.userIds.length > 0 ? ui.approval.userIds : undefined,
+      expression: ui.approval.type === 'expression' ? ui.approval.expression || undefined : undefined,
+      multiMode: ui.approval.multiMode,
+    },
+    assigneeOptions: {
+      allowInitiatorAdjust: ui.assignee.allowInitiatorAdjust,
+      noAssigneePolicy: ui.assignee.noAssigneePolicy,
+      toUserId:
+        ui.assignee.noAssigneePolicy === 'to_user' && ui.assignee.toUserIds.length > 0
+          ? String(ui.assignee.toUserIds[0])
+          : null,
     },
     operations: {
-      allowReject: operations.allowReject,
-      allowAddSign: operations.allowAddSign,
-      allowTransfer: operations.allowTransfer,
-      allowDelegate: operations.allowDelegate
+      ...(existing.operations || {}),
+      allowPass: true,
+      allowRefuse: ui.operations.allowRefuse,
+      allowReturn: ui.operations.allowReturn,
+      allowAddSign: ui.operations.allowAddSign,
+      allowTransfer: ui.operations.allowTransfer,
+      allowDelegate: ui.operations.allowDelegate,
     },
+    returnOptions: {
+      restartFromHere: ui.returnOptions.restartFromHere,
+      chooseStartNode: ui.returnOptions.chooseStartNode,
+      mustAddSign: ui.returnOptions.mustAddSign,
+    },
+    commentRequired: ui.commentRequired,
+    blockRecall: ui.blockRecall,
     timeout: {
-      duration: timeout.duration,
-      action: timeout.action
-    }
+      enabled: ui.timeout.enabled,
+      duration: ui.timeout.duration,
+      action: ui.timeout.action,
+    },
+    dedup: {
+      enabled: ui.dedup.enabled,
+      skipSameAsInitiator: ui.dedup.skipSameAsInitiator,
+    },
+    signature: {
+      enabled: ui.signature.enabled,
+      useLast: ui.signature.useLast,
+      allowUpload: ui.signature.allowUpload,
+      required: ui.signature.required,
+    },
+    notify: {
+      sms: ui.notifySms,
+    },
   }
 
   designerStore.setNodeConfig(designerStore.selectedNodeId, nodeConfig)
 }
 
-watch([config, approval, operations, timeout], () => {
+watch(ui, () => {
   saveConfig()
 }, { deep: true })
 </script>
 
 <style scoped>
+.user-task-property {
+  display: flex;
+  flex-direction: column;
+}
+
+.top-form {
+  margin-bottom: 4px;
+}
+
+/* 分区标题：左竖条 + 加粗（截图风格『▎标题』） */
+.section-title {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary, #1f2437);
+  padding-left: 8px;
+  border-left: 3px solid var(--el-color-primary);
+  margin: 14px 0 8px;
+  line-height: 1.2;
+}
+
+.approval-type-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+}
+
+.approval-type-group .el-radio {
+  margin-right: 0;
+}
+
+.auto-tip {
+  margin: 8px 0;
+}
+
+.auto-tip :deep(.el-alert__title) {
+  font-size: 12px;
+}
+
+/* 自动审批类型：tabs 内容整体禁用（tab 仍可切换查看） */
+.user-task-property-tabs.is-auto :deep(.el-tabs__content) {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
 .user-task-property-tabs {
   padding: 0;
 }
@@ -257,5 +567,99 @@ watch([config, approval, operations, timeout], () => {
 
 .user-task-property-tabs :deep(.el-tabs__content) {
   overflow-y: auto;
+}
+
+.tab-inner {
+  padding-bottom: 8px;
+}
+
+/* 竖排 radio 组 */
+.v-radio-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.v-radio-group .el-radio {
+  height: 26px;
+  margin-right: 0;
+}
+
+.v-radio-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
+}
+
+/* 竖排 checkbox 组 */
+.checkbox-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 2px;
+}
+
+.checkbox-col .el-checkbox {
+  height: auto;
+  margin-right: 0;
+}
+
+.checkbox-col .el-checkbox :deep(.el-checkbox__label) {
+  font-size: 12px;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+/* 允许 xx 勾选后显示的子项：缩进 */
+.sub-items {
+  margin: 4px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+/* 开关行 */
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switch-label {
+  font-size: 12px;
+  color: var(--el-text-color-regular, #4b5169);
+}
+
+/* 开关下方灰色说明 */
+.hint-text {
+  font-size: 11px;
+  color: var(--el-text-color-secondary, #8b91ab);
+  line-height: 1.4;
+  margin: 2px 0 6px;
+}
+
+/* 行内编辑（超时时长/动作、去重条件） */
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.inline-label {
+  font-size: 12px;
+  color: var(--el-text-color-regular, #4b5169);
+  white-space: nowrap;
+}
+
+.dedup-row {
+  flex-wrap: wrap;
+}
+
+.dedup-row .el-checkbox :deep(.el-checkbox__label) {
+  white-space: nowrap;
+}
+
+.to-user-picker {
+  margin: 8px 0 4px;
 }
 </style>

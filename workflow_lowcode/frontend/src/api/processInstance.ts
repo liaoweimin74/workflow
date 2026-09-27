@@ -119,6 +119,11 @@ export const processInstanceApi = {
     })
   },
 
+  /** 撤回流程实例（发起人在 RUNNING 且下一节点未完成时可用，流程回到发起节点） */
+  recall(id: string, reason?: string): Promise<R<void>> {
+    return http.post(`/v1/process-instances/${id}/recall`, { reason })
+  },
+
   /** 获取流程图高亮信息（已走节点 + 当前节点） */
   highlight(id: string): Promise<R<ProcessHighlight>> {
     return http.get(`/v1/process-instances/${id}/highlight`)

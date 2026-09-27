@@ -76,12 +76,16 @@ interface PaletteGroup {
   items: PaletteNode[]
 }
 
-/* 节点类别 → 图标 chip 配色（柔和填充 + 同色文字，X6 BPMN 风格）
-   全部走语义变量/半透明洗底：四态（青墨/经典 × 明暗）自动适配 */
+/* 节点类别/节点角色 → 图标 chip 配色（柔和填充 + 同色文字，X6 BPMN 风格）
+   全部走语义变量/半透明洗底：四态（青墨/经典 × 明暗）自动适配。
+   nodeRole 优先于 category（审批=橙、办理=青绿，与画布渲染色一致） */
 const CATEGORY_STYLES: Record<string, { bg: string; color: string }> = {
   event: { bg: 'color-mix(in srgb, var(--brand-bright, #2ca7b5) 13%, transparent)', color: 'var(--brand-bright, #2ca7b5)' },      // 青瓷 — 事件
   activity: { bg: 'var(--ds-industrial-50)', color: 'var(--ds-industrial-600)' },   // 主题色 — 活动
   gateway: { bg: 'color-mix(in srgb, var(--el-color-warning) 14%, transparent)', color: 'var(--el-color-warning)' },    // 琥珀 — 网关
+  initiator: { bg: 'color-mix(in srgb, var(--el-color-primary) 13%, transparent)', color: 'var(--el-color-primary)' },  // 主色 — 发起
+  approver: { bg: 'color-mix(in srgb, #e6a23c 14%, transparent)', color: '#e6a23c' }, // 橙 — 审批
+  handler: { bg: 'color-mix(in srgb, #3fb27f 14%, transparent)', color: '#2e9e6e' },  // 青绿 — 办理
 }
 
 const props = defineProps<{ collapsed?: boolean }>()
@@ -104,7 +108,8 @@ const nodeGroups: PaletteGroup[] = [
     title: '活动',
     items: [
       { type: 'bpmn:UserTask', label: '发起节点', description: '发起人填报节点', iconClass: 'bpmn-icon-initiator-node', nodeRole: 'initiator', category: 'activity' },
-      { type: 'bpmn:UserTask', label: '用户任务', description: '需要人工审批的任务', iconClass: 'bpmn-icon-user-task', category: 'activity' },
+      { type: 'bpmn:UserTask', label: '审批节点', description: '需要人工审批的任务', iconClass: 'bpmn-icon-user-task', nodeRole: 'approver', category: 'activity' },
+      { type: 'bpmn:UserTask', label: '办理节点', description: '需要人工办理的任务', iconClass: 'bpmn-icon-manual-task', nodeRole: 'handler', category: 'activity' },
       { type: 'bpmn:ServiceTask', label: '服务任务', description: '自动执行的任务', iconClass: 'bpmn-icon-service-task', category: 'activity' },
       { type: 'bpmn:CallActivity', label: '调用活动', description: '调用子流程', iconClass: 'bpmn-icon-call-activity', category: 'activity' },
       { type: 'bpmn:SubProcess', label: '内嵌子流程', description: '子流程容器，双击进入编辑', iconClass: 'bpmn-icon-subprocess-collapsed', category: 'activity' }
@@ -126,7 +131,7 @@ const allNodes = computed(() =>
 )
 
 function chipStyle(node: PaletteNode) {
-  const s = CATEGORY_STYLES[node.category] || CATEGORY_STYLES.activity
+  const s = CATEGORY_STYLES[node.nodeRole || ''] || CATEGORY_STYLES[node.category] || CATEGORY_STYLES.activity
   return { backgroundColor: s.bg, color: s.color }
 }
 

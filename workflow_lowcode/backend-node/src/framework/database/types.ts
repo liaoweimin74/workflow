@@ -299,6 +299,19 @@ export interface WfTaskRemindTable {
   remind_time: NullableTimestamp
 }
 
+/** 引擎外发通知记录（V40 迁移创建；短信/超时提醒的落库占位，后续接入消息网关）。 */
+export interface WfEngineNotifyTable {
+  id: string
+  tenant_id: string
+  instance_id: string
+  task_id: string | null
+  notify_type: string
+  target_user: string
+  content: string
+  status: string
+  created_at: NullableTimestamp
+}
+
 /** 审批意见（V13 迁移创建）。process_instance_id + task_id 关联到引擎表。 */
 export interface WfTaskCommentTable {
   id: string
@@ -599,6 +612,7 @@ export interface DB {
   wf_task_comment: WfTaskCommentTable
   wf_task_transfer: WfTaskTransferTable
   wf_task_remind: WfTaskRemindTable
+  wf_engine_notify: WfEngineNotifyTable
   sys_dict_type: SysDictTypeTable
   sys_dict_data: SysDictDataTable
 

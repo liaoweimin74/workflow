@@ -42,6 +42,21 @@
         />
       </template>
 
+      <!-- 发起人自选办理人（节点 approval.type=initiator_select） -->
+      <template v-if="initiatorSelectNodes.length > 0">
+        <el-divider content-position="left">选择办理人</el-divider>
+        <div class="initiator-select-list">
+          <div v-for="node in initiatorSelectNodes" :key="node.id" class="initiator-select-item">
+            <div class="initiator-select-label">选择办理人：{{ node.name }}</div>
+            <ApproverPicker
+              v-model="initiatorSelectValues[node.id]"
+              multiple
+              placeholder="请选择该节点的办理人"
+            />
+          </div>
+        </div>
+      </template>
+
       <!-- 提交按钮 -->
       <div class="submit-bar">
         <el-button @click="router.back()">取消</el-button>
@@ -66,6 +81,7 @@ import { deployedProcessApi } from '@/api/processDefinition'
 import { processInstanceApi } from '@/api/processInstance'
 import { formApi } from '@/api/form'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
+import { ApproverPicker } from '@/components/business'
 import type { DeployedProcessDefinition } from '@/api/processDefinition'
 
 const route = useRoute()
@@ -81,6 +97,11 @@ const diagramCollapse = ref<string[]>([])
 const diagramRef = ref<HTMLElement>()
 const formRendererRef = ref<InstanceType<typeof FormRenderer>>()
 const draftValues = ref<Record<string, unknown> | null>(null)
+
+/** 发起人自选办理人节点（approval.type=initiator_select 的 userTask） */
+const initiatorSelectNodes = ref<{ id: string; name: string }[]>([])
+/** 自选办理人选择结果：nodeId → 用户 id 数组（提交时转字符串数组放入 assignee_<nodeId>） */
+const initiatorSelectValues = ref<Record<string, number[]>>({})
 
 let viewer: ViewerType | null = null
 
@@ -126,11 +147,59 @@ async function loadProcessDefinition() {
         // XML 解析失败，忽略
       }
     }
+
+    // 加载部署版节点配置，解析「发起人自选办理人」节点（失败不阻断发起页）
+    await loadInitiatorSelectNodes(xml)
   } catch {
     ElMessage.error('加载流程定义失败')
   } finally {
     loading.value = false
   }
+}
+
+/** 拉取部署版 editor nodeConfigs，解析 approval.type=initiator_select 的节点 */
+async function loadInitiatorSelectNodes(xml: string) {
+  try {
+    const editorRes = await deployedProcessApi.getVersionEditor(processDefinitionId)
+    const nodeConfigs = editorRes.data?.nodeConfigs || {}
+    initiatorSelectNodes.value = parseInitiatorSelectNodes(xml, nodeConfigs)
+    initiatorSelectNodes.value.forEach((n) => {
+      if (!initiatorSelectValues.value[n.id]) {
+        initiatorSelectValues.value[n.id] = []
+      }
+    })
+  } catch {
+    initiatorSelectNodes.value = []
+  }
+}
+
+/** 从 BPMN XML + nodeConfigs 解析需发起人自选办理人的节点（发起节点除外） */
+function parseInitiatorSelectNodes(xml: string, nodeConfigs: Record<string, string>): { id: string; name: string }[] {
+  const result: { id: string; name: string }[] = []
+  try {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml')
+    const tasks = doc.querySelectorAll('bpmn\\:userTask, userTask')
+    tasks.forEach((el) => {
+      const id = el.getAttribute('id')
+      if (!id) return
+      // 发起节点表单由发起人本人填写，无需自选办理人
+      const role = el.getAttribute('wf:nodeRole') || el.getAttribute('nodeRole')
+      if (role === 'initiator') return
+      const raw = nodeConfigs[id]
+      if (!raw) return
+      try {
+        const cfg = JSON.parse(raw) as { approval?: { type?: string } }
+        if (cfg?.approval?.type === 'initiator_select') {
+          result.push({ id, name: el.getAttribute('name') || id })
+        }
+      } catch {
+        // 节点配置解析失败，忽略
+      }
+    })
+  } catch {
+    // XML 解析失败，忽略
+  }
+  return result
 }
 
 // ── 保存草稿 ──
@@ -161,6 +230,12 @@ async function handleSubmit() {
 
     if (formDefId.value && formRendererRef.value) {
       variables = formRendererRef.value.getFormData()
+    }
+
+    // 发起人自选办理人：assignee_<nodeId>（字符串数组）随 variables 提交
+    for (const node of initiatorSelectNodes.value) {
+      const ids = initiatorSelectValues.value[node.id] || []
+      variables[`assignee_${node.id}`] = ids.map(String)
     }
 
     const res = await processInstanceApi.start({
@@ -221,5 +296,25 @@ onMounted(() => {
 .submit-bar {
   margin-top: 24px;
   text-align: center;
+}
+
+/* 发起人自选办理人列表 */
+.initiator-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 560px;
+}
+
+.initiator-select-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.initiator-select-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
 }
 </style>

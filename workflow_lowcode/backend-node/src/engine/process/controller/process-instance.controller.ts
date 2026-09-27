@@ -2,7 +2,10 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/
 import { R } from '../../../common/domain/r'
 import { PageResponse } from '../../../common/domain/page-response'
 import { JavaStatusOk } from '../../../framework/http/java-status.decorator'
+import { CurrentUser } from '../../../framework/security/current-user.decorator'
+import type { LoginUser } from '../../../framework/security/jwt-auth.guard'
 import { intQueryParam } from '../../../framework/http/query-params'
+import { TaskService } from '../../task/task.service'
 import {
   ProcessInstanceService,
   type ExecutionNodeVO,
@@ -27,7 +30,10 @@ interface StartProcessRequest {
 @Controller('api/v1/process-instances')
 @JavaStatusOk()
 export class ProcessInstanceController {
-  constructor(private readonly service: ProcessInstanceService) {}
+  constructor(
+    private readonly service: ProcessInstanceService,
+    private readonly taskService: TaskService,
+  ) {}
 
   @Post()
   async start(@Body() body: StartProcessRequest): Promise<R<StartProcessResult>> {
@@ -176,6 +182,23 @@ export class ProcessInstanceController {
     @Query('reason') reason?: string,
   ): Promise<R<null>> {
     await this.service.terminateInstance(id, reason ?? null)
+    return R.ok()
+  }
+
+  /**
+   * 发起人撤回（Node 引擎新能力，无 Java 对齐包袱）。
+   *
+   * 把运行中的实例退回发起节点等待重新提交（设变量 recalled=true，
+   * 审批意见 action='recall'）。门禁：调用者为发起人 + 发起节点未配置
+   * disallowRecall + 活跃节点未配置 blockRecall。
+   */
+  @Post(':id/recall')
+  async recall(
+    @Param('id') id: string,
+    @CurrentUser() user: LoginUser,
+    @Body() body: { reason?: string } | null,
+  ): Promise<R<null>> {
+    await this.taskService.recallInstance(id, String(user.userId), body?.reason ?? null)
     return R.ok()
   }
 }

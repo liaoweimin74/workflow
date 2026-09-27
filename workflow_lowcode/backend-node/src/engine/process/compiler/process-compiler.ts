@@ -1,7 +1,22 @@
 import { EngineException } from '../../../common/exception/engine-exception'
 import type { ParsedNode, ParsedProcess } from './bpmn-parser'
 import { parseBpmnXml } from './bpmn-parser'
-import type { CompiledApproval, CompiledFlow, CompiledNode, MultiMode, ProcessModel } from './process-model'
+import type {
+  ApprovalType,
+  AssigneeOptions,
+  CompiledApproval,
+  CompiledFlow,
+  CompiledNode,
+  DedupOptions,
+  InitiatorOptions,
+  MultiMode,
+  NoAssigneePolicy,
+  NotifyOptions,
+  ProcessModel,
+  ReturnOptions,
+  SignatureOptions,
+  TaskRole,
+} from './process-model'
 
 /**
  * BPMN 图 + NodeConfig → 运行时流程模型（§4.2 部署期编译）。
@@ -19,11 +34,24 @@ import type { CompiledApproval, CompiledFlow, CompiledNode, MultiMode, ProcessMo
 /** wf_node_config.config_json 里我们关心的部分（其余字段原样透传）。 */
 interface NodeConfigJson {
   basic?: { name?: string }
+  taskRole?: unknown
+  approvalType?: unknown
   approval?: {
+    type?: unknown
     userIds?: unknown
     roleCodes?: unknown
+    expression?: unknown
     multiMode?: unknown
   }
+  assigneeOptions?: unknown
+  returnOptions?: unknown
+  commentRequired?: unknown
+  blockRecall?: unknown
+  dedup?: unknown
+  signature?: unknown
+  notify?: unknown
+  initiator?: unknown
+  timeout?: unknown
   operations?: Record<string, unknown>
   [key: string]: unknown
 }
@@ -66,6 +94,164 @@ function normalizeMultiMode(value: unknown): MultiMode {
   const trimmed = value.trim()
   if (trimmed === '' || trimmed === 'single') return 'single'
   return (MULTI_MODES as readonly string[]).includes(trimmed) ? (trimmed as MultiMode) : 'single'
+}
+
+const TASK_ROLES: readonly TaskRole[] = ['approver', 'handler']
+const APPROVAL_TYPES: readonly ApprovalType[] = ['artificial', 'auto_pass', 'auto_reject']
+const NO_ASSIGNEE_POLICIES: readonly NoAssigneePolicy[] = [
+  '',
+  'auto_pass',
+  'block',
+  'to_admin',
+  'to_user',
+  'skip',
+  'supervisor',
+]
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+/** 从 config_json 抽对象块（非对象返回 undefined，不抛错——与 parseConfig 的容错口径一致）。 */
+function asObject<T extends object>(value: unknown): T | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  return value as T
+}
+
+/** 提取 userTask 的新版配置块（taskRole/审批类型/策略/去重/签名/通知/发起人配置）。 */
+function extractTaskOptions(
+  config: NodeConfigJson,
+  isInitiator: boolean,
+): Partial<CompiledNode> {
+  const out: Partial<CompiledNode> = {}
+
+  // 节点类别：发起节点恒为 initiator；其余按配置归一（非法值 → approver 兼容旧数据）
+  const configuredRole = asString(config.taskRole)
+  out.taskRole = isInitiator
+    ? 'initiator'
+    : TASK_ROLES.includes(configuredRole as TaskRole)
+      ? (configuredRole as TaskRole)
+      : 'approver'
+
+  const approvalType = asString(config.approvalType)
+  if (APPROVAL_TYPES.includes(approvalType as ApprovalType)) {
+    out.approvalType = approvalType as ApprovalType
+  }
+
+  const assigneeOptions = asObject<AssigneeOptions>(config.assigneeOptions)
+  if (assigneeOptions !== undefined) {
+    const normalized: AssigneeOptions = {}
+    if (asBoolean(assigneeOptions.allowInitiatorAdjust) !== undefined) {
+      normalized.allowInitiatorAdjust = assigneeOptions.allowInitiatorAdjust
+    }
+    const policy = assigneeOptions.noAssigneePolicy
+    if (
+      typeof policy === 'string' &&
+      NO_ASSIGNEE_POLICIES.includes(policy as NoAssigneePolicy)
+    ) {
+      normalized.noAssigneePolicy = policy as NoAssigneePolicy
+    }
+    const toUserId = asString(assigneeOptions.toUserId)
+    if (toUserId !== undefined) normalized.toUserId = toUserId
+    if (Object.keys(normalized).length > 0) out.assigneeOptions = normalized
+  }
+
+  const returnOptions = asObject<ReturnOptions>(config.returnOptions)
+  if (returnOptions !== undefined) {
+    const normalized: ReturnOptions = {}
+    for (const key of ['restartFromHere', 'chooseStartNode', 'mustAddSign'] as const) {
+      if (asBoolean(returnOptions[key]) !== undefined) normalized[key] = returnOptions[key]
+    }
+    if (Object.keys(normalized).length > 0) out.returnOptions = normalized
+  }
+
+  const commentRequired = asBoolean(config.commentRequired)
+  if (commentRequired !== undefined) out.commentRequired = commentRequired
+
+  const blockRecall = asBoolean(config.blockRecall)
+  if (blockRecall !== undefined) out.blockRecall = blockRecall
+
+  const dedup = asObject<DedupOptions>(config.dedup)
+  if (dedup !== undefined) {
+    const normalized: DedupOptions = {}
+    if (asBoolean(dedup.enabled) !== undefined) normalized.enabled = dedup.enabled
+    if (asBoolean(dedup.skipSameAsInitiator) !== undefined) {
+      normalized.skipSameAsInitiator = dedup.skipSameAsInitiator
+    }
+    if (Object.keys(normalized).length > 0) out.dedup = normalized
+  }
+
+  const signature = asObject<SignatureOptions>(config.signature)
+  if (signature !== undefined) {
+    const normalized: SignatureOptions = {}
+    for (const key of ['enabled', 'useLast', 'allowUpload', 'required'] as const) {
+      if (asBoolean(signature[key]) !== undefined) normalized[key] = signature[key]
+    }
+    if (Object.keys(normalized).length > 0) out.signature = normalized
+  }
+
+  const notify = asObject<NotifyOptions>(config.notify)
+  if (notify !== undefined && asBoolean(notify.sms) !== undefined) {
+    out.notify = { sms: notify.sms }
+  }
+
+  const initiatorOptions = asObject<InitiatorOptions>(config.initiator)
+  if (initiatorOptions !== undefined) {
+    const normalized: InitiatorOptions = {}
+    if (asBoolean(initiatorOptions.disallowRecall) !== undefined) {
+      normalized.disallowRecall = initiatorOptions.disallowRecall
+    }
+    const urge = asObject<NonNullable<InitiatorOptions['urge']>>(initiatorOptions.urge)
+    if (urge !== undefined) {
+      const normalizedUrge: NonNullable<InitiatorOptions['urge']> = {}
+      if (asBoolean(urge.enabled) !== undefined) normalizedUrge.enabled = urge.enabled
+      const interval = asNumber(urge.interval)
+      if (interval !== undefined && interval > 0) normalizedUrge.interval = interval
+      if (
+        urge.unit === 'minute' ||
+        urge.unit === 'hour' ||
+        urge.unit === 'day'
+      ) {
+        normalizedUrge.unit = urge.unit
+      }
+      if (Object.keys(normalizedUrge).length > 0) normalized.urge = normalizedUrge
+    }
+    if (asBoolean(initiatorOptions.reInitiate) !== undefined) {
+      normalized.reInitiate = initiatorOptions.reInitiate
+    }
+    if (asBoolean(initiatorOptions.smsOnEnd) !== undefined) {
+      normalized.smsOnEnd = initiatorOptions.smsOnEnd
+    }
+    if (Object.keys(normalized).length > 0) out.initiatorOptions = normalized
+  }
+
+  const timeout = asObject<NonNullable<CompiledNode['timeout']>>(config.timeout)
+  if (timeout !== undefined) {
+    const normalized: NonNullable<CompiledNode['timeout']> = {}
+    if (asBoolean(timeout.enabled) !== undefined) normalized.enabled = timeout.enabled
+    const duration = asNumber(timeout.duration)
+    if (duration !== undefined && duration > 0) normalized.duration = duration
+    if (
+      timeout.action === 'remind' ||
+      timeout.action === 'escalate' ||
+      timeout.action === 'transfer' ||
+      timeout.action === 'pass' ||
+      timeout.action === 'refuse'
+    ) {
+      normalized.action = timeout.action
+    }
+    if (Object.keys(normalized).length > 0) out.timeout = normalized
+  }
+
+  return out
 }
 
 /** 汇总校验错误，一次性报出全部问题（而不是修一个报一个）。 */
@@ -193,7 +379,16 @@ function mergeNode(node: ParsedNode, configJson: string | undefined): CompiledNo
   }
 
   if (node.nodeType === 'userTask') {
+    // 新版任务配置块（taskRole/审批类型/策略/去重/签名/通知/发起人配置/超时）
+    Object.assign(compiled, extractTaskOptions(config, node.isInitiator))
+
     const approval: CompiledApproval = { userIds, roleCodes, multiMode }
+    // 办理/审批人类型原文（引擎类型化解析与设计器读取都要用）
+    const approvalTypeRaw = asString(approvalConfig.type)
+    if (approvalTypeRaw !== undefined) approval.type = approvalTypeRaw
+    // 表达式（type=expression 时的审批人来源，如 ${initiator.deptManager}）
+    const expressionRaw = asString(approvalConfig.expression)
+    if (expressionRaw !== undefined) approval.expression = expressionRaw
     compiled.approval = approval
     // BPMN 上直接写死的 assignee / candidateUsers 保留（单实例且无 NodeConfig 审批人时生效）
     if (node.assignee !== null) compiled.assignee = node.assignee

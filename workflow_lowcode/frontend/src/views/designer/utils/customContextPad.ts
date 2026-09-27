@@ -4,7 +4,8 @@
  *
  * 完全替换 bpmn-js 默认 context-pad provider（默认会追加无类型的
  * 抽象 Task，Flowable 无法执行）。此 provider 提供有实际语义的节点：
- * - 用户任务 (UserTask)
+ * - 审批节点 (UserTask + wf:nodeRole=approver)
+ * - 办理节点 (UserTask + wf:nodeRole=handler)
  * - 服务任务 (ServiceTask)
  * - 排他网关 / 并行网关 / 包含网关
  * - 结束事件
@@ -127,6 +128,42 @@ function CustomContextPadProvider(
       }
     }
 
+    /**
+     * 追加审批节点/办理节点：创建 UserTask 后设置 wf:nodeRole 区分类别。
+     * 写法与追加发起节点一致：dragstart 路径用 businessObject.$set（创建前预置），
+     * autoPlace 路径用 modeling.updateProperties（创建后补写）。
+     */
+    function appendRoleTaskAction(type: string, className: string, title: string, role: 'approver' | 'handler') {
+      function appendStart(event: any, _element: any) {
+        const shape = elementFactory.createShape({ type })
+        if (shape.businessObject) {
+          shape.businessObject.$set('wf:nodeRole', role)
+        }
+        create.start(event, shape, { source: _element })
+      }
+
+      const append = autoPlace
+        ? (_event: any, _element: any) => {
+            const shape = elementFactory.createShape({ type })
+            const created = autoPlace.append(_element, shape)
+            const target = created || shape
+            modeling.updateProperties(target, {
+              'wf:nodeRole': role
+            })
+          }
+        : appendStart
+
+      return {
+        group: 'model',
+        className,
+        title,
+        action: {
+          dragstart: appendStart,
+          click: append
+        }
+      }
+    }
+
     const bo = element.businessObject
     const isFlowNode = bo && bo.$instanceOf && bo.$instanceOf('bpmn:FlowNode')
     const isEndEvent = bo && bo.$instanceOf && bo.$instanceOf('bpmn:EndEvent')
@@ -141,10 +178,17 @@ function CustomContextPadProvider(
         }
       } else {
         // 其他 FlowNode：完整节点入口（不含发起节点）
-        entries['append.user-task'] = appendAction(
+        entries['append.approver-task'] = appendRoleTaskAction(
           'bpmn:UserTask',
           'bpmn-icon-user-task',
-          '追加用户任务'
+          '追加审批节点',
+          'approver'
+        )
+        entries['append.handler-task'] = appendRoleTaskAction(
+          'bpmn:UserTask',
+          'bpmn-icon-manual-task',
+          '追加办理节点',
+          'handler'
         )
         entries['append.service-task'] = appendAction(
           'bpmn:ServiceTask',

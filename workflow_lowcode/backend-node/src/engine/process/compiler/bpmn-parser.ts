@@ -28,6 +28,11 @@ export interface ParsedNode {
   incoming: string[]
   outgoing: string[]
   isInitiator: boolean
+  /**
+   * 用户任务节点类别（wf:nodeRole 扩展属性）。
+   * initiator / approver / handler；无属性时按 approver（旧数据兼容）。
+   */
+  taskRole: 'initiator' | 'approver' | 'handler'
   assignee: string | null
   candidateUsers: string[]
   /** 是否声明了多实例（具体模式由 NodeConfig 决定）。 */
@@ -162,6 +167,13 @@ function collectElements(container: XmlNode, containerId: string | null, out: {
         outgoing,
         // 发起人节点在 XML 上带 wf:nodeRole="initiator"（去前缀后是 nodeRole）
         isInitiator: attributes.nodeRole === 'initiator',
+        // 节点类别：initiator / handler / approver；无属性时按 approver（旧数据兼容）
+        taskRole:
+          attributes.nodeRole === 'initiator'
+            ? 'initiator'
+            : attributes.nodeRole === 'handler'
+              ? 'handler'
+              : 'approver',
         assignee: attrOf(element, 'assignee'),
         candidateUsers:
           candidateUsersRaw === null

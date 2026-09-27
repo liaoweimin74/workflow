@@ -261,3 +261,20 @@
 .djs-element.user-task .bpmn-icon-manual {
   color: var(--el-color-primary) !important;
 }
+
+/* ============================================================
+ * 审批节点 / 办理节点 — 按节点类别着色（marker 由 customRenderer 打上：
+ * .djs-element.approver-task / .djs-element.handler-task）
+ * ============================================================ */
+
+/* 审批节点 — 标题着橙色 */
+.djs-element.approver-task .djs-label {
+  fill: #b88230 !important;
+  font-weight: 600 !important;
+}
+
+/* 办理节点 — 标题着青绿色 */
+.djs-element.handler-task .djs-label {
+  fill: #1f7a56 !important;
+  font-weight: 600 !important;
+}

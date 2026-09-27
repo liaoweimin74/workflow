@@ -8,7 +8,7 @@ import { KYSELY } from '../../framework/database/database.module'
 import type { DB } from '../../framework/database/types'
 import { assertPageSize } from '../../framework/http/query-params'
 import { getTenantId } from '../../framework/tenant/tenant-context'
-import type { ProcessModel } from '../process/compiler/process-model'
+import type { ProcessModel, ResolutionContext } from '../process/compiler/process-model'
 import { randomUuid } from '../process/process-design.service'
 import { EngineRuntime, type EngineState } from './engine-runtime'
 import { EnginePersistence, type InstanceRow } from './engine-persistence'
@@ -118,7 +118,13 @@ export class ProcessInstanceService {
     const initiator = extractInitiator(variables)
     const now = new Date()
     // 生产必须用 UUID 工厂：id 是全表主键，序号只在一个 runtime 内唯一（见引擎构造函数注释）
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      await this.buildResolutionContext(),
+    )
     runtime.start({ initiator: initiator ?? undefined, variables: variables ?? {} })
 
     // ⚠️ 实例 ID 必须是 **UUID**：Flowable 的流程实例 ID 就是 UUID，
@@ -158,6 +164,51 @@ export class ProcessInstanceService {
         comment: null,
         targetUserId: null,
       })
+    }
+
+    // 引擎自动结果（启动时即遇到的自动通过/跳过/自动拒绝节点）→ 补审批意见
+    for (const auto of runtime.getAutoCompletedTasks()) {
+      if (auto.taskId === initiatorTask?.id) continue
+      await this.insertComment(tenantId, {
+        taskId: auto.taskId,
+        instanceId,
+        userId: 'system',
+        action:
+          auto.action === 'approve' ? 'approve' : auto.action === 'refuse' ? 'refuse' : 'system',
+        comment:
+          auto.action === 'approve'
+            ? '自动通过'
+            : auto.action === 'refuse'
+              ? '自动拒绝'
+              : '未找到办理人，自动跳过',
+        targetUserId: null,
+      })
+    }
+
+    // 审批类型 auto_reject：启动即自动拒绝 → 终止实例（TERMINATED）
+    if (runtime.isAutoRefused()) {
+      await this.persistence.terminateInstance(instanceId, '自动拒绝')
+    }
+
+    // 节点 notify.sms=true 的新建待办 → 短信通知记录（占位表，后续接入网关）
+    for (const task of state.tasks) {
+      if (task.status !== 'CREATED' && task.status !== 'CLAIMED') continue
+      const node = model.nodes[task.nodeId]
+      if (node?.notify?.sms !== true) continue
+      await this.db
+        .insertInto('wf_engine_notify')
+        .values({
+          id: randomUuid(),
+          tenant_id: tenantId,
+          instance_id: instanceId,
+          task_id: task.id,
+          notify_type: 'SMS_NODE',
+          target_user: task.assignee ?? '',
+          content: `您有新的办理任务：${node.name ?? task.nodeId}`,
+          status: 'PENDING',
+          created_at: new Date(),
+        })
+        .execute()
     }
 
     // 节点级后端逻辑：用户任务 ENTER（对齐 Java `ACTIVITY_STARTED(userTask)`）。
@@ -601,6 +652,23 @@ export class ProcessInstanceService {
     const def = await this.persistence.findProcessDefById(processDefId)
     if (def === null) return null
     return JSON.parse(def.model_json) as ProcessModel
+  }
+
+  /**
+   * 审批/办理人解析上下文（服务层预计算；与 TaskService 同一口径）。
+   * adminUserId：sys_user 中 username='admin' 的用户；org 无负责人字段 → supervisor 恒 null。
+   */
+  private async buildResolutionContext(): Promise<ResolutionContext> {
+    const admin = await this.db
+      .selectFrom('sys_user')
+      .select('id')
+      .where('username', '=', 'admin')
+      .where('is_deleted', '=', 0)
+      .executeTakeFirst()
+    return {
+      adminUserId: admin === undefined ? null : String(admin.id),
+      initiatorSupervisor: null,
+    }
   }
 
   async insertComment(

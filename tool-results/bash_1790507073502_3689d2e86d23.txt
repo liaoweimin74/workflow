@@ -1,0 +1,702 @@
+     1→import { Inject, Injectable } from '@nestjs/common'
+     2→import { Kysely } from 'kysely'
+     3→import { BusinessException } from '../../common/exception/business-exception'
+     4→import { PageResponse } from '../../common/domain/page-response'
+     5→import { KYSELY } from '../../framework/database/database.module'
+     6→import { assertPageSize } from '../../framework/http/query-params'
+     7→import type { DB } from '../../framework/database/types'
+     8→import { getTenantId } from '../../framework/tenant/tenant-context'
+     9→import { EngineRuntime } from '../runtime/engine-runtime'
+    10→import { randomUuid } from '../process/process-design.service'
+    11→import { EnginePersistence, type TaskJoinRow } from '../runtime/engine-persistence'
+    12→import { ProcessDesignRepository } from '../process/repository/process-design.repository'
+    13→import { BackendLogicHook, completedActivityIdSnapshot, newlyCompletedEndEventNodeIds } from '../logic/backend-logic-hook'
+    14→import { ProcessInstanceService } from '../runtime/process-instance.service'
+    15→import type { ResolutionContext } from '../process/compiler/process-model'
+    16→
+    17→/**
+    18→ * 任务服务，对齐 Java `WorkflowTaskService` 的可观测行为。
+    19→ *
+    20→ * 每个写操作都是「装载状态 → 用引擎推进 → 落库」的固定套路：
+    21→ *   引擎是纯内存的，持久化层负责装载/覆盖写入，服务层负责编排 + 写审批意见。
+    22→ */
+    23→
+    24→export interface TaskTodoVO {
+    25→  taskId: string
+    26→  assignee: string | null
+    27→  businessKey: string | null
+    28→  processDefinitionId: string
+    29→  processInstanceId: string
+    30→  processName: string | null
+    31→  currentNodeName: string | null
+    32→  initiator: string | null
+    33→  initiatorName: string | null
+    34→  createTime: Date
+    35→  reminded: boolean
+    36→}
+    37→
+    38→export interface TaskDoneVO extends Omit<TaskTodoVO, 'createTime'> {
+    39→  createTime: Date
+    40→  endTime: Date | null
+    41→  approveResult: string | null
+    42→  currentNode: string | null
+    43→}
+    44→
+    45→export interface TaskDetailVO {
+    46→  taskId: string
+    47→  name: string | null
+    48→  description: string | null
+    49→  assignee: string | null
+    50→  assigneeName: string | null
+    51→  businessKey: string | null
+    52→  processDefinitionId: string
+    53→  processInstanceId: string
+    54→  processName: string | null
+    55→  processVersion: number | null
+    56→  initiator: string | null
+    57→  initiatorName: string | null
+    58→  createTime: Date
+    59→  isInitiatorTask: boolean
+    60→  /** 节点类别：initiator / approver / handler（运行时按钮区分；旧数据=approver）。 */
+    61→  taskRole: 'initiator' | 'approver' | 'handler'
+    62→  /** 节点级行为开关（前端按钮/表单渲染用）。 */
+    63→  nodeFlags: {
+    64→    commentRequired: boolean
+    65→    signatureEnabled: boolean
+    66→    signatureRequired: boolean
+    67→  }
+    68→  formKey: string | null
+    69→  fieldPermissions: unknown
+    70→  mappedData: unknown
+    71→  operations: Record<string, boolean> | null
+    72→  variables: Record<string, unknown>
+    73→}
+    74→
+    75→export interface CompleteTaskResponse {
+    76→  processInstanceId: string
+    77→  processFinished: boolean
+    78→  nextTaskId: string | null
+    79→  nextTaskName: string | null
+    80→  nextTaskDefinitionKey: string | null
+    81→  nextTaskAssignee: string | null
+    82→}
+    83→
+    84→/**
+    85→ * 催办频率限制（小时），对齐 Java `@Value("${workflow.remind.frequency-hours:24}")`。
+    86→ * Java 的 `application.yml` 没有覆盖这个键，所以取默认值 24。
+    87→ */
+    88→const REMIND_FREQUENCY_HOURS = 24
+    89→
+    90→/** 空串/空白视作 null（对齐 Java 的 `isBlank()`；注意也要处理 undefined）。 */
+    91→function blankToNullOf(value: string | null | undefined): string | null {
+    92→  if (value === null || value === undefined) return null
+    93→  return value.trim() === '' ? null : value
+    94→}
+    95→
+    96→@Injectable()
+    97→export class TaskService {
+    98→  constructor(
+    99→    @Inject(KYSELY) private readonly db: Kysely<DB>,
+   100→    private readonly persistence: EnginePersistence,
+   101→    private readonly instances: ProcessInstanceService,
+   102→    private readonly designRepo: ProcessDesignRepository,
+   103→    private readonly backendLogic: BackendLogicHook,
+   104→  ) {}
+   105→
+   106→  // ------------------------------------------------------------ 列表
+   107→
+   108→  async listTodo(assignee: string, page: number, size: number): Promise<PageResponse<TaskTodoVO>> {
+   109→    assertPageSize(size)
+   110→    const tenantId = getTenantId()
+   111→    const safePage = Math.max(page, 1)
+   112→    const { rows, total } = await this.persistence.findOpenTasksByAssignee(
+   113→      tenantId,
+   114→      assignee,
+   115→      (safePage - 1) * size,
+   116→      size,
+   117→    )
+   118→    const vos = await this.toTodoVOs(rows)
+   119→    return new PageResponse(vos, safePage, size, total)
+   120→  }
+   121→
+   122→  async listHistoric(userId: string, page: number, size: number): Promise<PageResponse<TaskDoneVO>> {
+   123→    assertPageSize(size)
+   124→    const tenantId = getTenantId()
+   125→    const safePage = Math.max(page, 1)
+   126→    const { rows, total } = await this.persistence.findDoneTasksByUser(
+   127→      tenantId,
+   128→      userId,
+   129→      (safePage - 1) * size,
+   130→      size,
+   131→    )
+   132→
+   133→    const names = await this.persistence.findUserNames(
+   134→      rows.map((r) => r.assignee ?? '').filter((id) => id !== ''),
+   135→    )
+   136→    const out: TaskDoneVO[] = []
+   137→    for (const row of rows) {
+   138→      const model = await this.instances.loadModel(row.process_def_id)
+   139→      const currentName = model?.nodes[row.node_id]?.name ?? null
+   140→      // done 列表里的 currentNode 是**这个任务之后**流转到的节点（实测确认）
+   141→      const nextNodeId = await this.findNextActivityAfter(row.instance_id, row.end_time ?? null)
+   142→      out.push({
+   143→        taskId: row.task_id,
+   144→        assignee: row.assignee,
+   145→        businessKey: row.business_key,
+   146→        processDefinitionId: row.process_def_id,
+   147→        processInstanceId: row.instance_id,
+   148→        processName: row.process_name,
+   149→        currentNodeName: currentName,
+   150→        currentNode: nextNodeId === null ? null : (model?.nodes[nextNodeId]?.name ?? null),
+   151→        initiator: row.initiator,
+   152→        initiatorName:
+   153→          row.initiator === null ? null : (names.get(row.initiator) ?? null),
+   154→        createTime: row.create_time,
+   155→        endTime: row.end_time ?? null,
+   156→        approveResult: await this.findApproveResult(row.task_id),
+   157→        reminded: await this.isReminded(row.task_id),
+   158→      })
+   159→    }
+   160→    return new PageResponse(out, safePage, size, total)
+   161→  }
+   162→
+   163→  private async toTodoVOs(rows: TaskJoinRow[]): Promise<TaskTodoVO[]> {
+   164→    const names = await this.persistence.findUserNames([
+   165→      ...rows.map((r) => r.assignee ?? ''),
+   166→      ...rows.map((r) => r.initiator ?? ''),
+   167→    ])
+   168→    const out: TaskTodoVO[] = []
+   169→    for (const row of rows) {
+   170→      const model = await this.instances.loadModel(row.process_def_id)
+   171→      out.push({
+   172→        taskId: row.task_id,
+   173→        assignee: row.assignee,
+   174→        businessKey: row.business_key,
+   175→        processDefinitionId: row.process_def_id,
+   176→        processInstanceId: row.instance_id,
+   177→        processName: row.process_name,
+   178→        currentNodeName: model?.nodes[row.node_id]?.name ?? null,
+   179→        initiator: row.initiator,
+   180→        initiatorName: row.initiator === null ? null : (names.get(row.initiator) ?? null),
+   181→        createTime: row.create_time,
+   182→        reminded: await this.isReminded(row.task_id),
+   183→      })
+   184→    }
+   185→    return out
+   186→  }
+   187→
+   188→  // ------------------------------------------------------------ 详情
+   189→
+   190→  async getTaskDetail(taskId: string): Promise<TaskDetailVO> {
+   191→    const tenantId = getTenantId()
+   192→    const row =
+   193→      (await this.persistence.findTaskWithInstance(taskId, tenantId)) ??
+   194→      // Java 的历史回退：运行时任务已结束（完成/取消）时按**历史任务**返回 200，
+   195→      // 而不是 404。实测于「任务委派」的 dvTaskAfterComplete（委派任务被完成、
+   196→      // 流程已结束，Java 仍返回该任务的历史快照，assignee 是 resolve 后归还的 owner）。
+   197→      // ⚠️ 只有**读**路径能这样兜底；写路径必须仍然只认待办任务（见 EnginePersistence 注释）。
+   198→      (await this.persistence.findTaskIncludingFinished(taskId, tenantId))
+   199→    if (row === null) throw new BusinessException(`任务不存在: ${taskId}`)
+   200→    const model = await this.instances.loadModel(row.process_def_id)
+   201→    const node = model?.nodes[row.node_id]
+   202→    const { state, variables } = await this.persistence.loadState(row.instance_id)
+   203→    const names = await this.persistence.findUserNames([
+   204→      row.assignee ?? '',
+   205→      row.initiator ?? '',
+   206→    ])
+   207→
+   208→    return {
+   209→      taskId,
+   210→      name: node?.name ?? null,
+   211→      description: null,
+   212→      assignee: row.assignee,
+   213→      assigneeName: row.assignee === null ? null : (names.get(row.assignee) ?? null),
+   214→      businessKey: row.business_key,
+   215→      processDefinitionId: row.process_def_id,
+   216→      processInstanceId: row.instance_id,
+   217→      processName: row.process_name,
+   218→      processVersion: versionOf(row.process_def_id),
+   219→      initiator: row.initiator,
+   220→      initiatorName: row.initiator === null ? null : (names.get(row.initiator) ?? null),
+   221→      createTime: row.create_time,
+   222→      isInitiatorTask: node?.isInitiator ?? false,
+   223→      taskRole: (node?.isInitiator ?? false)
+   224→        ? 'initiator'
+   225→        : (node?.taskRole ?? 'approver'),
+   226→      nodeFlags: {
+   227→        commentRequired: node?.commentRequired ?? false,
+   228→        signatureEnabled: node?.signature?.enabled ?? false,
+   229→        signatureRequired: node?.signature?.required ?? false,
+   230→      },
+   231→      // 表单相关字段属 P3（form 模块），P1 一律为 null
+   232→      formKey: null,
+   233→      fieldPermissions: null,
+   234→      mappedData: null,
+   235→      // operations 来自**部署版本的 NodeConfig 快照**，不是编译模型 ——
+   236→      // 编译模型里只有 serviceTask/callActivity 带 config，userTask 的按钮开关在 wf_node_config。
+   237→      operations: await this.loadOperations(row.process_def_id, row.node_id),
+   238→      variables: mergeMultiInstanceScope(state, taskId, node?.approval, variables),
+   239→    }
+   240→  }
+   241→
+   242→  /**
+   243→   * 取节点的操作按钮开关（对齐 Java `WorkflowTaskService.extractOperations`）。
+   244→   *
+   245→   * ⚠️ **必须合并流程级 `__PROCESS__`**：Java 先读该部署版本的 `__PROCESS__`
+   246→   *    节点配置（流程级总控），再与节点级**逐字段 AND**。原先只读节点级，
+   247→   *    之所以一直没暴露，是因为契约场景的 `__PROCESS__` 恰好把权限都配成 true，
+   248→   *    AND 之后与节点级相同 —— 纯属巧合。流程级一旦把某个开关配成 false，
+   249→   *    两侧立刻分叉（而 `transfer` 的权限门槛正建立在同一个判断上）。
+   250→   */
+   251→  private async loadOperations(
+   252→    processDefinitionId: string,
+   253→    nodeId: string,
+   254→  ): Promise<Record<string, boolean>> {
+   255→    const [nodeConfig, processConfig] = await Promise.all([
+   256→      this.designRepo.findNodeConfig(processDefinitionId, nodeId),
+   257→      this.designRepo.findNodeConfig(processDefinitionId, PROCESS_LEVEL_NODE_ID),
+   258→    ])
+   259→    const nodeLevel = parseOperationsFromConfig(nodeConfig?.config_json ?? null)
+   260→    if (processConfig === null) {
+   261→      // 流程级未配置 ⇒ 等价于全开 ⇒ 直接返回节点级（Java 的 `!hasProcessLevel` 分支）
+   262→      return nodeLevel
+   263→    }
+   264→    const processLevel = parseProcessOperations(processConfig.config_json)
+   265→    const merged: Record<string, boolean> = {}
+   266→    for (const key of OPERATION_KEYS) merged[key] = processLevel[key] && nodeLevel[key]
+   267→    return merged
+   268→  }
+   269→
+   270→  // ------------------------------------------------------------ 写操作
+   271→
+   272→  async claimTask(taskId: string, userId: string): Promise<void> {
+   273→    const tenantId = getTenantId()
+   274→    const row = await this.persistence.findTaskWithInstance(taskId, tenantId)
+   275→    if (row === null) throw new BusinessException(`任务不存在: ${taskId}`)
+   276→
+   277→    await this.db
+   278→      .updateTable('wfe_task')
+   279→      .set({ assignee: userId, status: 'CLAIMED', claim_time: new Date(), updated_at: new Date() })
+   280→      .where('id', '=', taskId)
+   281→      .where('status', 'in', ['CREATED', 'CLAIMED'])
+   282→      .execute()
+   283→  }
+   284→
+   285→  async completeTask(
+   286→    taskId: string,
+   287→    body: { userId?: string; comment?: string; variables?: Record<string, unknown>; signature?: string },
+   288→  ): Promise<CompleteTaskResponse> {
+   289→    const tenantId = getTenantId()
+   290→    const row = await this.persistence.findTaskWithInstance(taskId, tenantId)
+   291→    if (row === null) throw new BusinessException(`任务不存在: ${taskId}`)
+   292→
+   293→    const { state, variables, maxSeq, lockVersion } = await this.persistence.loadState(row.instance_id)
+   294→    const model = await this.instances.loadModel(row.process_def_id)
+   295→    if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
+   296→
+   297→    // ① 节点级门禁（意见必填 / 必须签名 / 必须加签）—— 在引擎推进前拦截
+   298→    const node = model.nodes[row.node_id]
+   299→    if (node !== undefined) {
+   300→      const label = node.name !== '' ? node.name : row.node_id
+   301→      if (node.commentRequired === true && (body.comment ?? '').trim() === '') {
+   302→        throw new BusinessException(
+   303→          400,
+   304→          `${node.taskRole === 'handler' ? '处理' : '审批'}意见必填（节点「${label}」）`,
+   305→        )
+   306→      }
+   307→      if (node.signature?.required === true && (body.signature ?? '').trim() === '') {
+   308→        throw new BusinessException(400, `此节点要求手写签名（节点「${label}」）`)
+   309→      }
+   310→      if (node.returnOptions?.mustAddSign === true) {
+   311→        const hasAddSign = await this.hasAddSignComment(row.instance_id, row.node_id)
+   312→        if (!hasAddSign) {
+   313→          throw new BusinessException(400, `此节点必须加签后才能通过（节点「${label}」）`)
+   314→        }
+   315→      }
+   316→    }
+   317→
+   318→    // 生产用 UUID 工厂；seedSeq 在 UUID 模式下无实际作用，保留以兼容序号模式
+   319→    const runtime = new EngineRuntime(
+   320→      model,
+   321→      state,
+   322→      () => new Date(),
+   323→      () => randomUuid(),
+   324→      await this.buildResolutionContext(),
+   325→    )
+   326→    runtime.seedSeq(maxSeq)
+   327→    runtime.restoreVariables(variables)
+   328→
+   329→    // 委派任务：先 resolve（assignee 归还 owner），再推进 —— 顺序与 Java 一致，
+   330→    // 且必须在 replaceRuntimeRows **之前**改内存态（否则重写任务行时被覆盖）。
+   331→    await this.resolveDelegationIfAny(taskId, state)
+   332→
+   333→    // 后端逻辑「结束事件 COMPLETE」需要知道**本次调用**新完成了哪些结束事件 ⇒ 推进前拍快照
+   334→    const completedBefore = completedActivityIdSnapshot(state)
+   335→    runtime.completeTask(taskId, body.variables ?? {})
+   336→
+   337→    await this.persistence.replaceRuntimeRows(
+   338→      row.instance_id,
+   339→      tenantId,
+   340→      state,
+   341→      runtime.getVariables(),
+   342→      lockVersion,
+   343→    )
+   344→
+   345→    // 自动拒绝（approvalType=auto_reject）：终止实例（TERMINATED），不走 RUNNING/COMPLETED 同步
+   346→    if (runtime.isAutoRefused()) {
+   347→      await this.instances.insertComment(tenantId, {
+   348→        taskId,
+   349→        instanceId: row.instance_id,
+   350→        userId: body.userId ?? row.assignee ?? '',
+   351→        action: 'refuse',
+   352→        comment: body.comment ?? '自动拒绝',
+   353→        targetUserId: null,
+   354→      })
+   355→      await this.instances.terminateInstance(row.instance_id, '自动拒绝')
+   356→      return {
+   357→        processInstanceId: row.instance_id,
+   358→        processFinished: true,
+   359→        nextTaskId: null,
+   360→        nextTaskName: null,
+   361→        nextTaskDefinitionKey: null,
+   362→        nextTaskAssignee: null,
+   363→      }
+   364→    }
+   365→
+   366→    await this.syncInstanceStatus(row.instance_id, state)
+   367→
+   368→    // 审批意见（对齐 Java：action='approve'）
+   369→    await this.instances.insertComment(tenantId, {
+   370→      taskId,
+   371→      instanceId: row.instance_id,
+   372→      userId: body.userId ?? row.assignee ?? '',
+   373→      action: 'approve',
+   374→      comment: body.comment ?? null,
+   375→      targetUserId: null,
+   376→    })
+   377→
+   378→    // 引擎自动结果（自动通过/跳过）→ 补审批意见，保证审批时间线完整
+   379→    for (const auto of runtime.getAutoCompletedTasks()) {
+   380→      if (auto.taskId === taskId) continue
+   381→      await this.instances.insertComment(tenantId, {
+   382→        taskId: auto.taskId,
+   383→        instanceId: row.instance_id,
+   384→        userId: 'system',
+   385→        action: auto.action === 'approve' ? 'approve' : 'system',
+   386→        comment: auto.action === 'approve' ? '自动通过' : '未找到办理人，自动跳过',
+   387→        targetUserId: null,
+   388→      })
+   389→    }
+   390→
+   391→    // 节点「发送短信给办理人」→ 通知记录落库
+   392→    await this.writeNodeSmsNotifications(tenantId, row.instance_id, state, model)
+   393→    // 实例结束 + 发起节点 smsOnEnd → 给发起人的短信通知
+   394→    if (state.status === 'COMPLETED') {
+   395→      await this.writeInstanceEndSms(tenantId, row.instance_id, model, row.initiator)
+   396→    }
+   397→
+   398→    // 节点级后端逻辑（对齐 Java 的事件顺序：先 TASK_COMPLETED，再下一个节点的 ACTIVITY_STARTED，
+   399→    // 最后是本次走到的结束事件 ACTIVITY_COMPLETED(endEvent)）。
+   400→    // ⚠️ 三次调用必须**共用同一个变量对象**：`runtime.getVariables()` 返回的是**浅拷贝**，
+   401→    //    每次各取一份会让后一次落库时覆盖掉前一次写入的 `resultVar`
+   402→    //    （实测症状：`approveResult` 丢失、只剩 `subEndResult`）。
+   403→    //    Java 侧每次事件都从**同一个执行实例**读变量，本来就看得见前一次的写入。
+   404→    // ⚠️ 必须在 `replaceRuntimeRows` **之后**跑：它按内存变量的最终值一次性落库，
+   405→    //    提前跑会被随后的覆盖写冲掉。
+   406→    const logicVars = runtime.getVariables()
+   407→    await this.backendLogic.run(row.process_def_id, row.instance_id, [row.node_id], 'COMPLETE', logicVars)
+   408→    await this.backendLogic.run(
+   409→      row.process_def_id,
+   410→      row.instance_id,
+   411→      state.tasks.filter((t) => t.status === 'CREATED' || t.status === 'CLAIMED').map((t) => t.nodeId),
+   412→      'ENTER',
+   413→      logicVars,
+   414→    )
+   415→    // 本次走到的结束事件（含子流程内部的）→ COMPLETE 触发（对齐 Java 的 ACTIVITY_COMPLETED(endEvent)）
+   416→    await this.backendLogic.run(
+   417→      row.process_def_id,
+   418→      row.instance_id,
+   419→      newlyCompletedEndEventNodeIds(state, completedBefore),
+   420→      'COMPLETE',
+   421→      logicVars,
+   422→    )
+   423→
+   424→    const nextTask = state.tasks.find((t) => t.status === 'CREATED')
+   425→    return {
+   426→      processInstanceId: row.instance_id,
+   427→      processFinished: state.status === 'COMPLETED',
+   428→      nextTaskId: nextTask?.id ?? null,
+   429→      nextTaskName:
+   430→        nextTask === undefined ? null : (model.nodes[nextTask.nodeId]?.name ?? null),
+   431→      nextTaskDefinitionKey: nextTask?.nodeId ?? null,
+   432→      nextTaskAssignee: nextTask?.assignee ?? null,
+   433→    }
+   434→  }
+   435→
+   436→  /**
+   437→   * 驳回（把任务退回发起人节点重新填写），对齐 Java `RejectService.reject`。
+   438→   *
+   439→   * ⚠️ 与「拒绝」（`refuse`）**不是一回事**：驳回让流程**继续**，拒绝直接终止实例。
+   440→   *
+   441→   * ⚠️ 两条错误的形态：
+   442→   *    - 任务不存在 → Java 抛 `IllegalStateException("Task not found: " + id)`
+   443→   *      → **HTTP 500 + body code 500**（不是 BusinessException 的 200+code）；
+   444→   *    - 引擎侧拒绝（例如「当前节点已经是发起人节点」）→ Java 同样是
+   445→   *      `IllegalStateException` → **HTTP 500**，且消息**不带任何前缀**。
+   446→   *      引擎内部抛的是 `EngineException`（全局过滤器会加「流程引擎错误: 」前缀并给 HTTP 400），
+   447→   *      所以这里必须转成普通 `Error` —— 契约场景 `rjRejectAtInitiator` 实测
+   448→   *      Java 是 `500 + "Cannot reject: current node is already the initiator node"`。
+   449→   *
+   450→   * ⚠️ 操作人取**登录态**（Java 的 `getCurrentUserId()`），不认 body 里的 userId；
+   451→   *    且 Java 只在 userId 非 null 时才写审批意见。
+   452→   */
+   453→  async rejectTask(taskId: string, userId: string, reason: string | null): Promise<void> {
+   454→    const tenantId = getTenantId()
+   455→    const row = await this.persistence.findTaskWithInstance(taskId, tenantId)
+   456→    if (row === null) throw new Error(`Task not found: ${taskId}`)
+   457→
+   458→    const { state, variables, maxSeq, lockVersion } = await this.persistence.loadState(row.instance_id)
+   459→    const model = await this.instances.loadModel(row.process_def_id)
+   460→    if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
+   461→
+   462→    // 退回权限门禁：节点级 allowReturn（旧数据缺省回退 allowReject 语义）
+   463→    const operations = await this.loadOperations(row.process_def_id, row.node_id)
+   464→    if (operations.allowReturn !== true && operations.allowReject !== true) {
+   465→      throw new BusinessException(400, '该节点不允许退回')
+   466→    }
+   467→    // 意见必填节点：退回理由也必填
+   468→    const rejectNode = model.nodes[row.node_id]
+   469→    if (rejectNode?.commentRequired === true && (reason ?? '').trim() === '') {
+   470→      const label = rejectNode.name !== '' ? rejectNode.name : row.node_id
+   471→      throw new BusinessException(400, `审批意见必填（节点「${label}」）`)
+   472→    }
+   473→
+   474→    // 生产用 UUID 工厂；seedSeq 在 UUID 模式无实际作用，保留以兼容序号模式
+   475→    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+   476→    runtime.seedSeq(maxSeq)
+   477→    runtime.restoreVariables(variables)
+   478→    try {
+   479→      runtime.reject(taskId, reason)
+   480→    } catch (error) {
+   481→      // 引擎异常 → Java 的 IllegalStateException 形态（HTTP 500、消息不加前缀）
+   482→      throw new Error(error instanceof Error ? error.message : String(error), { cause: error })
+   483→    }
+   484→
+   485→    await this.persistence.replaceRuntimeRows(
+   486→      row.instance_id,
+   487→      tenantId,
+   488→      state,
+   489→      runtime.getVariables(),
+   490→      lockVersion,
+   491→    )
+   492→    await this.syncInstanceStatus(row.instance_id, state)
+   493→    await this.instances.insertComment(tenantId, {
+   494→      taskId,
+   495→      instanceId: row.instance_id,
+   496→      userId,
+   497→      action: 'reject',
+   498→      comment: reason,
+   499→      targetUserId: null,
+   500→    })
+   501→  }
+   502→
+   503→  /**
+   504→   * 委派（对齐 Java `WorkflowTaskService.delegateTaskWithComment`）。
+   505→   *
+   506→   * ⚠️ **委派 ≠ 转办**：Java 走 Flowable `delegateTask` —— 原办理人进 `owner`、
+   507→   *    assignee 改成被委派人、任务置 `PENDING`；被委派人「完成」时**先 resolve
+   508→   *    （assignee 归还 owner）再 complete**（见下方的 `resolveDelegationIfAny`）。
+   509→   *    转办则是换人即完、没有回还。
+   510→   *
+   511→   * ⚠️ Java **不校验** `delegateTo`（与 transfer 的「同人校验」不同），也不校验它存在；
+   512→   *    空值行为照抄（golden 里没有空值场景，但不要自作主张加校验）。
+   513→   *
+   514→   * 错误形态：任务不存在 → `IllegalStateException` 形态 ⇒ **HTTP 500**。
+   515→   * 意见：`action='delegate'`、`targetUserId` = 被委派人；只有 `fromUser` 非 null 时才写。
+   516→   */
+   517→  async delegateTask(
+   518→    taskId: string,
+   519→    body: { delegateTo: string | null; fromUser: string | null; comment: string | null },
+   520→  ): Promise<void> {
+   521→    const tenantId = getTenantId()
+   522→    const row = await this.persistence.findTaskWithInstance(taskId, tenantId)
+   523→    if (row === null) throw new Error(`Task not found: ${taskId}`)
+   524→
+   525→    const now = new Date()
+   526→    // 原办理人（可能为 null：无 assignee 的候选人任务也能被委派）
+   527→    const owner = row.assignee
+   528→    await this.db
+   529→      .updateTable('wfe_task')
+   530→      .set({ assignee: body.delegateTo, updated_at: now })
+   531→      .where('id', '=', taskId)
+   532→      .execute()
+   533→
+   534→    await this.db
+   535→      .insertInto('wfe_task_delegation')
+   536→      .values({
+   537→        task_id: taskId,
+   538→        instance_id: row.instance_id,
+   539→        tenant_id: tenantId,
+   540→        owner,
+   541→        delegation_state: 'PENDING',
+   542→        created_at: now,
+   543→        updated_at: now,
+   544→      })
+   545→      .onDuplicateKeyUpdate({
+   546→        owner,
+   547→        delegation_state: 'PENDING',
+   548→        updated_at: now,
+   549→      })
+   550→      .execute()
+   551→
+   552→    if (body.fromUser !== null) {
+   553→      await this.instances.insertComment(tenantId, {
+   554→        taskId,
+   555→        instanceId: row.instance_id,
+   556→        userId: body.fromUser,
+   557→        action: 'delegate',
+   558→        comment: body.comment,
+   559→        targetUserId: body.delegateTo,
+   560→      })
+   561→    }
+   562→  }
+   563→
+   564→  /**
+   565→   * 委派任务的「完成」前处理（对齐 Java 的 `resolveTask`）。
+   566→   *
+   567→   * Java 的两条 complete 路径都是同一段：
+   568→   * ```java
+   569→   * if (task.getDelegationState() != null) { taskService.resolveTask(taskId); }
+   570→   * taskService.complete(taskId, variables);
+   571→   * ```
+   572→   * `resolveTask` 把 assignee 归还 owner、委派态置 RESOLVED —— 于是**同一个任务**
+   573→   * 在被委派人手里「完成」后，历史里那条任务记录的 assignee 是**原办理人**。
+   574→   * 契约场景据此断言（`dvTaskAfterComplete.assignee === "1"`）。
+   575→   *
+   576→   * 必须在引擎推进**之前**改内存态里的 assignee：`replaceRuntimeRows` 会用
+   577→   * `state.tasks` 整表重写，晚一步就被覆盖掉了。
+   578→   */
+   579→  private async resolveDelegationIfAny(
+   580→    taskId: string,
+   581→    state: { tasks: Array<{ id: string; assignee: string | null }> },
+   582→  ): Promise<void> {
+   583→    const delegation = await this.db
+   584→      .selectFrom('wfe_task_delegation')
+   585→      .select(['owner', 'delegation_state'])
+   586→      .where('task_id', '=', taskId)
+   587→      .executeTakeFirst()
+   588→    if (delegation === undefined || delegation.delegation_state !== 'PENDING') return
+   589→
+   590→    const task = state.tasks.find((t) => t.id === taskId)
+   591→    if (task !== undefined) task.assignee = delegation.owner
+   592→    await this.db
+   593→      .updateTable('wfe_task_delegation')
+   594→      .set({ delegation_state: 'RESOLVED', updated_at: new Date() })
+   595→      .where('task_id', '=', taskId)
+   596→      .execute()
+   597→  }
+   598→
+   599→  /**
+   600→   * 加签（对齐 Java `AddSignService.addSign`）。
+   601→   *
+   602→   * 与转签的区别：转签是**换人**（删一个槽位、加一个槽位），加签是**只加不删** ——
+   603→   * 新增的人成为新的 MI 子实例，必须他也办完流程才前进。
+   604→   *
+   605→   * 错误形态（抄 Java）：`users` 为空 → `IllegalArgumentException` 形态 ⇒ **HTTP 400**
+   606→   * （消息逐字 `AddSign users cannot be empty`）；任务不存在 → 普通 `Error` ⇒ **HTTP 500**。
+   607→   *
+   608→   * ⚠️ 意见里的 `targetUserId` 是**逗号拼接的多人**（`String.join(",", users)`），
+   609→   *    与转签/转办只记一个人的写法不同。
+   610→   */
+   611→  async addSignTask(
+   612→    taskId: string,
+   613→    body: { users: string[] | null; userId: string | null; comment: string | null },
+   614→  ): Promise<void> {
+   615→    const tenantId = getTenantId()
+   616→    const users = body.users ?? []
+   617→    if (users.length === 0) {
+   618→      const err = new Error('AddSign users cannot be empty')
+   619→      err.name = 'IllegalArgumentException'
+   620→      throw err
+   621→    }
+   622→
+   623→    const row = await this.persistence.findTaskWithInstance(taskId, tenantId)
+   624→    if (row === null) throw new Error(`Task not found: ${taskId}`)
+   625→
+   626→    const { state, variables, maxSeq, lockVersion } = await this.persistence.loadState(row.instance_id)
+   627→    const model = await this.instances.loadModel(row.process_def_id)
+   628→    if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
+   629→
+   630→    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+   631→    runtime.seedSeq(maxSeq)
+   632→    runtime.restoreVariables(variables)
+   633→
+   634→    // 分流：MI 节点 → 引擎加子实例；非 MI 节点 → 加候选人（Java 的 addCandidateUser）
+   635→    const engineTask = state.tasks.find((t) => t.id === taskId)
+   636→    const execution =
+   637→      engineTask === undefined
+   638→        ? undefined
+   639→        : state.executions.find((e) => e.id === engineTask.executionId)
+   640→    const isMultiInstance = execution !== undefined && execution.miRootId !== null
+   641→
+   642→    if (isMultiInstance) {
+   643→      try {
+   644→        runtime.addSign(taskId, users)
+   645→      } catch (error) {
+   646→        // 引擎异常 → Java 的 IllegalStateException 形态（HTTP 500、消息不加前缀）
+   647→        throw new Error(error instanceof Error ? error.message : String(error), { cause: error })
+   648→      }
+   649→    } else if (engineTask !== undefined) {
+   650→      // ⚠️ 这条分支在本项目**不可观测**（没有候选人列表端点、claim 也不校验候选人），
+   651→      //    但仍按 Java 语义写候选表 —— 数据模型要对，将来补端点时才不缺数据。规格 U37。
+   652→      for (const user of users) {
+   653→        if (!engineTask.candidateUsers.includes(user)) engineTask.candidateUsers.push(user)
+   654→      }
+   655→    }
+   656→
+   657→    await this.persistence.replaceRuntimeRows(
+   658→      row.instance_id,
+   659→      tenantId,
+   660→      state,
+   661→      runtime.getVariables(),
+   662→      lockVersion,
+   663→    )
+   664→    await this.syncInstanceStatus(row.instance_id, state)
+   665→
+   666→    if (body.userId !== null) {
+   667→      await this.instances.insertComment(tenantId, {
+   668→        taskId,
+   669→        instanceId: row.instance_id,
+   670→        userId: body.userId,
+   671→        action: 'add_sign',
+   672→        comment: body.comment,
+   673→        targetUserId: users.join(','),
+   674→      })
+   675→    }
+   676→  }
+   677→
+   678→  /**
+   679→   * 转签（对齐 Java `ForwardSignService.forwardSign`）。
+   680→   *
+   681→   * 与转办的区别：转办是**整个任务换人**（适合单实例），转签是**多实例节点里把
+   682→   * 当前审批人的那一个实例换成另一个人** —— 删除的实例**不计入完成计数**，
+   683→   * 否则会签的 `completionCondition` 会被提前满足。
+   684→   *
+   685→   * 三条错误形态必须区分（抄 Java）：
+   686→   *   1. `toUser` 为空 → `IllegalArgumentException` 形态 ⇒ **HTTP 400**
+   687→   *      （消息逐字：`toUser cannot be null or blank`）；
+   688→   *   2. 任务不存在 → 普通 `Error`（Java 是 `IllegalStateException`）⇒ **HTTP 500**；
+   689→   *   3. 节点不是多实例 → 引擎抛错，服务层转成普通 `Error`（同样 500）——
+   690→   *      照抄 `rejectTask` 的转换：**不能让 `EngineException` 冒出去**，
+   691→   *      它会被过滤器加上「流程引擎错误: 」前缀并给 400，与 Java 分叉。
+   692→   *
+   693→   * ⚠️ 审批意见只在 `userId` **非 null** 时写（Java 的 `if (userId != null)`）。
+   694→   *    `action` 是 `forward_sign`、`targetUserId` 记的是**转给谁** ——
+   695→   *    这一点与 refuse/reject（`targetUserId: null`）不同。
+   696→   */
+   697→  async forwardSignTask(
+   698→    taskId: string,
+   699→    body: { userId: string | null; toUser: string | null; comment: string | null },
+   700→  ): Promise<void> {
+
+[showing lines 1-700 of 1407; use offset=701 with limit to continue reading]

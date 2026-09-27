@@ -28,7 +28,11 @@ export function buildPlanNodeConfigs(plan: ProcessPlan, formId: string | null): 
       configs[nodeId] = JSON.stringify(config)
       return
     }
-    const config: Record<string, unknown> = { name: node.name }
+    const config: Record<string, unknown> = {
+      name: node.name,
+      // 节点类别（审批/办理）：与设计器/BPMN wf:nodeRole 同一口径，缺省审批
+      taskRole: node.type === 'handler' ? 'handler' : 'approver',
+    }
     if (node.approval !== null) config['approval'] = node.approval
     if (node.operations !== null) config['operations'] = node.operations
     if (node.timeout !== null) config['timeout'] = node.timeout
@@ -73,6 +77,11 @@ export function mergeOldNodeConfigs(
       const old = nodeName !== '' ? oldByName.get(nodeName) : undefined
       if (old) {
         let touched = false
+        // 节点类别（审批/办理）未显式给出时回填旧值，避免 AI 重建时把办理节点改回审批
+        if (obj['taskRole'] == null && old['taskRole'] != null) {
+          obj['taskRole'] = old['taskRole']
+          touched = true
+        }
         if (obj['approval'] == null && old['approval'] != null) {
           obj['approval'] = old['approval']
           warnings.push(`节点「${nodeName}」未提及审批人，已保留原配置`)
@@ -126,9 +135,11 @@ export function containsNonLinearStructure(bpmnXml: string): boolean {
   )
 }
 
-/** 从 BPMN XML 按序提取 userTask 摘要（id/name/是否发起节点）。 */
-export function extractUserTasks(bpmnXml: string): { id: string; name: string; initiator: boolean }[] {
-  const tasks: { id: string; name: string; initiator: boolean }[] = []
+/** 从 BPMN XML 按序提取 userTask 摘要（id/name/节点类别：发起/办理/审批）。 */
+export function extractUserTasks(
+  bpmnXml: string,
+): { id: string; name: string; initiator: boolean; handler: boolean }[] {
+  const tasks: { id: string; name: string; initiator: boolean; handler: boolean }[] = []
   if (!bpmnXml) return tasks
   const pattern = /<(?:[a-zA-Z0-9]+:)?userTask\b([^>]*)>/g
   let match: RegExpExecArray | null
@@ -137,7 +148,9 @@ export function extractUserTasks(bpmnXml: string): { id: string; name: string; i
     const id = /(?:\b|:)id="([^"]*)"/.exec(attrs)?.[1] ?? ''
     const name = /(?:\b|:)name="([^"]*)"/.exec(attrs)?.[1] ?? ''
     const initiator = /(?:\b|:)nodeRole="initiator"/.test(attrs) || /wf:nodeRole="initiator"/.test(attrs)
-    tasks.push({ id, name, initiator })
+    // 办理节点：wf:nodeRole="handler"（旧数据无属性 → 审批，与引擎编译口径一致）
+    const handler = !initiator && (/(?:\b|:)nodeRole="handler"/.test(attrs) || /wf:nodeRole="handler"/.test(attrs))
+    tasks.push({ id, name, initiator, handler })
   }
   return tasks
 }

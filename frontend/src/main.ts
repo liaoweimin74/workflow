@@ -13,12 +13,17 @@ import DataPicker from '@/views/form/components/DataPicker.vue'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import App from './App.vue'
 import router from './router'
+import { patchMessageBoxDraggable } from './utils/elementPlusDraggable'
 import './style.css'
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
-app.use(ElementPlus, { locale: zhCn })
+// 全局配置：所有 el-dialog 默认标题栏可拖动（EP 2.14 ConfigProvider dialog 全局项；
+// fullscreen 自动排除，个别对话框可用 :draggable="false" 关闭，overflow 默认视口钳制）
+app.use(ElementPlus, { locale: zhCn, dialog: { draggable: true } })
+// ElMessageBox（confirm/alert/prompt）无全局 draggable 配置入口，工厂方法包装默认注入
+patchMessageBoxDraggable()
 // 注册 LookupPicker/DataPicker 为 form-create 全局组件（表单渲染 + 设计器拖拽预览双实例），
 // 使设计器和渲染器都能使用。必须用 FcDesigner.component：内部同时注册
 // designerForm（设计器画布 DragForm）与 formCreate（ViewForm/运行时渲染），

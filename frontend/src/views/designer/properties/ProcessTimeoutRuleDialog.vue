@@ -182,9 +182,10 @@ function resetForm() {
 </script>
 
 <style scoped>
-/* 分组标题左对齐：与属性面板口径一致（Task 78） */
+/* 分组标题左对齐：与属性面板口径一致——去掉默认 padding-left:20px，字形与内容左缘平齐（Task 82） */
 :deep(.el-divider--horizontal .el-divider__text.is-left) {
   left: 0;
+  padding-left: 0;
 }
 
 .rule-alert {

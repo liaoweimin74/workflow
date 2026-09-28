@@ -311,9 +311,11 @@ const nodeTypeLabel = computed(() => {
   color: var(--el-text-color-regular, #4b5169);
 }
 
-/* 分组标题左对齐：is-left 默认 left:20px 缩进改 0，与表单内容左缘平齐（Task 78） */
+/* 分组标题左对齐：is-left 默认 left:20px 缩进改 0；同时去掉文本框默认 padding-left:20px，
+   让标题「字形」（而非文本盒）与 label 字形精确平齐（Task 82 修正 Task 78 遗留的 20px 视觉偏差） */
 .panel-body :deep(.el-divider--horizontal .el-divider__text.is-left) {
   left: 0;
+  padding-left: 0;
 }
 
 /* 属性表单在浅底色上以白卡片呈现，结构更清晰 */

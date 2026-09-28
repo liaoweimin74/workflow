@@ -2001,3 +2001,21 @@ Work Log:
 Stage Summary:
 - AI 助手悬浮球与对话窗体均可拖动换位（持久化+钳制+拖/点区分），遮挡内容可手动移开
 - 全部属性面板分组标题（divider 与 section-title 两种形态）与表单 label 左缘精确平齐（误差 <1px）
+
+---
+Task ID: 82-divider-glyph-align + 83-global-dialog-draggable
+Agent: Z.ai Code (main session)
+Task: 用户需求①流程属性和发起人节点的分组标题仍未对齐；②系统中所有的弹出对话框都应该允许拖动
+
+Work Log:
+- Task 82 根因：Task 78 只把 .el-divider__text.is-left 盒子 left:0（30px），但 EP 默认 padding: 0 20px——字形仍在 50px，比 label 字形（30px）多缩进 20px；跨面板对比（UserTask/HandlerTask section-title 已精确对齐）后视觉差异明显
+- 修复：PropertyPanel.vue 与 ProcessTimeoutRuleDialog.vue 的 is-left 覆盖追加 padding-left: 0（一处覆盖全部 8 个 divider 面板）
+- Task 83 方案：发现 EP 2.14 use-dialog 读取 globalConfig.dialog.draggable（嵌套结构，非顶层 draggable）——app.use(ElementPlus, { locale, dialog: { draggable: true } }) 一行让全部 el-dialog 默认标题栏可拖动（fullscreen 自动排除，:draggable="false" 可个别关闭，overflow 默认视口钳制）
+- ElMessageBox（confirm/alert/prompt）无全局配置入口：新增 src/utils/elementPlusDraggable.ts patchMessageBoxDraggable()，按 EP messageBoxFactory 归一化逻辑（title 为对象时视为 options）包装三方法默认注入 draggable: true，调用方显式传参可覆盖
+- 浏览器实测：流程属性 7 个 divider 字形 878.0 = label 878.0（修复前 898）；发起人节点（基本信息/表单配置）同口径 878.0；超时规则对话框 3 个 divider 字形贴对话框内容左缘；el-dialog 与 el-message-box 均 is-draggable class + 真实拖动位移验证（超时对话框 translate(120,-55)、MessageBox translate(-140,-71)，视口钳制生效）；AI 悬浮球/窗体拖动无回归
+- 测试：properties+ai 21/21；vue-tsc 46 既有零新增；eslint 改动文件 0 告警；console error=0
+- 测试数据零残留：临时分类「TEST-拖动验证临时分类」创建→删除确认框拖动验证→二次确认删除，页面回查 residue=0
+
+Stage Summary:
+- 全部 divider 型属性面板分组标题从「盒子对齐」升级为「字形对齐」，与 label 左缘精确平齐（误差 0px），与 section-title 面板跨面板一致
+- 系统级弹层可拖动默认开启：41 文件 109 处 el-dialog + 全部 MessageBox 确认框零业务代码侵入获得拖动能力，遮挡内容可拖移

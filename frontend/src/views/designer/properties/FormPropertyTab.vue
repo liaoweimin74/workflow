@@ -2,7 +2,7 @@
   <div class="form-property-tab">
     <el-divider content-position="left">表单配置</el-divider>
 
-    <el-form label-width="90px" size="small" :disabled="readOnly">
+    <el-form label-width="7em" label-position="left" size="small" :disabled="readOnly">
       <el-form-item label="关联表单">
         <div style="display: flex; gap: 8px; width: 100%;">
           <el-select

@@ -1,7 +1,7 @@
 <template>
   <div class="handler-task-property">
     <!-- 顶部（tab 外）：节点名称 -->
-    <el-form label-width="80px" size="small" :disabled="readOnly" class="top-form">
+    <el-form label-width="7em" label-position="left" size="small" :disabled="readOnly" class="top-form">
       <el-form-item label="节点名称">
         <el-input v-model="config.name" placeholder="如：行政办理" @change="updateBpmnName" />
       </el-form-item>

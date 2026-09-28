@@ -2,7 +2,7 @@
   <el-tabs v-model="activeTab" class="process-property-tabs">
     <!-- 流程配置（审批策略 + 流程编号合并） -->
     <el-tab-pane label="流程配置" name="process">
-      <el-form label-width="90px" size="small" :disabled="readOnly" class="process-form">
+      <el-form label-width="7em" label-position="left" size="small" :disabled="readOnly" class="process-form">
         <el-divider content-position="left">基本属性</el-divider>
 
         <el-form-item label="流程名称">
@@ -554,11 +554,11 @@ function syncToStore() {
   width: 100%;
 }
 
-/* Label 插槽内 FormLabelTip 与控件同行垂直居中：覆盖 label 默认行高 */
+/* Label 插槽内 FormLabelTip 与控件同行垂直居中：覆盖 label 默认行高（左对齐，Task 77） */
 .process-form :deep(.el-form-item__label) {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   height: auto;
   min-height: 24px;
   line-height: 1.4;

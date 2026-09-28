@@ -127,15 +127,18 @@
             <el-checkbox v-model="ui.operations.allowReturn" :disabled="readOnly">退回</el-checkbox>
             <el-checkbox v-model="ui.operations.allowAddSign" :disabled="readOnly">加签</el-checkbox>
           </div>
-          <!-- 二级选项：纵向展示在主选项下方 -->
+          <!-- 二级选项：纵向展示在主选项下方；退回模式二选一（单选，Task 79b） -->
           <template v-if="ui.operations.allowReturn">
             <div class="checkbox-col sub-items">
-              <el-checkbox v-model="ui.returnOptions.restartFromHere" :disabled="readOnly">
-                退回后，从此节点开始审批，已经通过的节点无需再次审批
-              </el-checkbox>
-              <el-checkbox v-model="ui.returnOptions.chooseStartNode" :disabled="readOnly">
-                退回后，由审批人选择重审的起始节点
-              </el-checkbox>
+              <el-radio-group
+                class="return-mode-group"
+                :model-value="returnMode"
+                :disabled="readOnly"
+                @update:model-value="setReturnMode($event as string)"
+              >
+                <el-radio value="restartFromHere">退回后，从此节点开始审批，已经通过的节点无需再次审批</el-radio>
+                <el-radio value="chooseStartNode">退回后，由审批人选择重审的起始节点</el-radio>
+              </el-radio-group>
             </div>
           </template>
           <template v-if="ui.operations.allowAddSign">
@@ -229,7 +232,8 @@
             <span class="switch-label">手写签名</span>
           </div>
           <template v-if="ui.signature.enabled">
-            <div class="checkbox-col sub-items">
+            <!-- 子选项横向排列（Task 79c）：复用主选项 checkbox-row 横排 + sub-items 缩进 -->
+            <div class="checkbox-row sub-items">
               <el-checkbox v-model="ui.signature.useLast" :disabled="readOnly">默认使用上次签名</el-checkbox>
               <el-checkbox v-model="ui.signature.allowUpload" :disabled="readOnly">支持上传签名图片</el-checkbox>
               <el-checkbox v-model="ui.signature.required" :disabled="readOnly">必须签名</el-checkbox>
@@ -323,6 +327,19 @@ const ui = reactive({
 
 /** 自动通过/自动拒绝：无需配置审批人，tabs 内容整体禁用 */
 const isAutoType = computed(() => ui.approvalType === 'auto_pass' || ui.approvalType === 'auto_reject')
+
+/** 退回模式单选（Task 79b）：restartFromHere/chooseStartNode 互斥，映射到存储里的两个布尔键（格式不变，兼容旧数据） */
+const returnMode = computed(() =>
+  ui.returnOptions.restartFromHere
+    ? 'restartFromHere'
+    : ui.returnOptions.chooseStartNode
+      ? 'chooseStartNode'
+      : '',
+)
+function setReturnMode(v: string) {
+  ui.returnOptions.restartFromHere = v === 'restartFromHere'
+  ui.returnOptions.chooseStartNode = v === 'chooseStartNode'
+}
 
 onMounted(() => {
   loadConfig()
@@ -564,7 +581,8 @@ watch(ui, () => {
   font-size: 13px;
   font-weight: 600;
   color: var(--el-text-color-primary, #1f2437);
-  padding-left: 8px;
+  /* padding 10px + 左竖条 3px = 13px：与白卡片 border 1px + padding 12px 对齐，分组标题文本与表单 label 左缘平齐（Task 81） */
+  padding-left: 10px;
   border-left: 3px solid var(--el-color-primary);
   margin: 14px 0 8px;
   line-height: 1.2;
@@ -671,6 +689,27 @@ watch(ui, () => {
   margin: 4px 0 4px 16px;
   padding-left: 8px;
   border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+/* 退回模式单选（纵向、长文案可换行） */
+.return-mode-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 2px;
+}
+
+.return-mode-group .el-radio {
+  height: auto;
+  margin-right: 0;
+  align-items: flex-start;
+}
+
+.return-mode-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 /* 开关行 */

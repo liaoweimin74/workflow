@@ -1,18 +1,32 @@
 <template>
   <div v-if="showOrb" class="ai-assistant-root">
-    <!-- 悬浮球（点击开/关对话窗体） -->
+    <!-- 悬浮球（点击开/关对话窗体；可拖动换位，Task 80b） -->
     <button
+      ref="orbEl"
       class="ai-orb"
-      :class="{ 'ai-orb-active': windowOpen }"
-      :title="windowOpen ? '收起小智' : '打开小智'"
-      @click="toggleWindow"
+      :class="{ 'ai-orb-active': windowOpen, 'ai-orb-dragging': orbDragging }"
+      :style="orbStyle"
+      :title="windowOpen ? '收起小智' : '打开小智（可拖动）'"
+      @pointerdown="onOrbPointerDown"
+      @pointermove="onOrbPointerMove"
+      @pointerup="onOrbPointerUp"
+      @pointercancel="onOrbPointerCancel"
+      @click="onOrbClick"
     >
       <RobotIcon class="ai-orb-icon" />
     </button>
 
-    <!-- 完全悬浮的对话窗体 -->
-    <div v-if="windowOpen" class="ai-window">
-      <div class="ai-window-header">
+    <!-- 完全悬浮的对话窗体（header 可拖动移动位置，Task 80） -->
+    <div v-if="windowOpen" ref="windowEl" class="ai-window" :style="winStyle">
+      <div
+        class="ai-window-header"
+        title="拖动移动位置 · 双击复位"
+        @pointerdown="onWindowDragStart"
+        @pointermove="onWindowDragMove"
+        @pointerup="onWindowDragEnd"
+        @pointercancel="onWindowDragEnd"
+        @dblclick="resetWindowPos"
+      >
         <div class="ai-window-title">
           <span class="ai-header-avatar"><RobotIcon /></span>
           <span class="ai-title">小智·AI 助手</span>
@@ -85,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Delete, Close, Position } from '@element-plus/icons-vue'
@@ -106,6 +120,7 @@ const windowOpen = ref(false)
 const input = ref('')
 const sending = ref(false)
 const messagesRef = ref<HTMLElement | null>(null)
+const windowEl = ref<HTMLElement | null>(null)
 let controller: AbortController | null = null
 
 /** 登录页不显示悬浮球 */
@@ -118,6 +133,183 @@ function toggleWindow() {
   windowOpen.value = !windowOpen.value
 }
 
+// ---------------------------------------------------------------- 悬浮球拖动（Task 80b）
+const AI_ORB_POS_KEY = 'ai-assistant-orb-pos'
+const ORB_SIZE = 52
+const DRAG_THRESHOLD = 5
+/** 球自定义位置；null = 默认右下（right:24 bottom:24） */
+const orbEl = ref<HTMLElement | null>(null)
+const orbPos = ref<{ x: number; y: number } | null>(null)
+const orbDragging = ref(false)
+let orbDrag: { startX: number; startY: number; originX: number; originY: number; moved: boolean } | null = null
+/** 拖动结束后的那次 click 不再开关窗口 */
+let suppressOrbClick = false
+
+const orbStyle = computed(() =>
+  orbPos.value
+    ? { left: `${orbPos.value.x}px`, top: `${orbPos.value.y}px`, right: 'auto', bottom: 'auto' }
+    : undefined,
+)
+
+function clampOrbPos(x: number, y: number): { x: number; y: number } {
+  return {
+    x: Math.min(Math.max(8, x), Math.max(8, window.innerWidth - ORB_SIZE - 8)),
+    y: Math.min(Math.max(8, y), Math.max(8, window.innerHeight - ORB_SIZE - 8)),
+  }
+}
+
+function onOrbPointerDown(e: PointerEvent) {
+  if (e.button !== 0) return
+  const el = orbEl.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const origin = orbPos.value ?? { x: rect.left, y: rect.top }
+  orbDrag = { startX: e.clientX, startY: e.clientY, originX: origin.x, originY: origin.y, moved: false }
+  // capture 后拖出球体/视口事件仍持续派发
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+
+function onOrbPointerMove(e: PointerEvent) {
+  if (!orbDrag) return
+  const dx = e.clientX - orbDrag.startX
+  const dy = e.clientY - orbDrag.startY
+  if (!orbDrag.moved) {
+    // 位移超过阈值才进入拖动：小于阈值仍视为点击
+    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return
+    orbDrag.moved = true
+    orbDragging.value = true
+  }
+  orbPos.value = clampOrbPos(orbDrag.originX + dx, orbDrag.originY + dy)
+}
+
+function endOrbDrag(commit: boolean) {
+  if (!orbDrag) return
+  const moved = orbDrag.moved
+  orbDrag = null
+  orbDragging.value = false
+  if (!moved) return
+  suppressOrbClick = true
+  if (commit && orbPos.value) {
+    try {
+      localStorage.setItem(AI_ORB_POS_KEY, JSON.stringify(orbPos.value))
+    } catch {
+      /* 存储不可用时位置仅本次会话有效 */
+    }
+  }
+}
+
+function onOrbPointerUp() {
+  endOrbDrag(true)
+}
+
+function onOrbPointerCancel() {
+  endOrbDrag(false)
+}
+
+function onOrbClick() {
+  // 拖动结束产生的 click 不切换窗口
+  if (suppressOrbClick) {
+    suppressOrbClick = false
+    return
+  }
+  toggleWindow()
+}
+
+// ---------------------------------------------------------------- 对话窗体拖动（Task 80）
+const AI_WIN_POS_KEY = 'ai-assistant-window-pos'
+/** 窗体自定义位置；null = 默认右下（right:24 bottom:88，不写内联 style） */
+const winPos = ref<{ x: number; y: number } | null>(null)
+let dragState: { startX: number; startY: number; originX: number; originY: number } | null = null
+
+const winStyle = computed(() =>
+  winPos.value
+    ? { left: `${winPos.value.x}px`, top: `${winPos.value.y}px`, right: 'auto', bottom: 'auto' }
+    : undefined,
+)
+
+/** 拖动越界钳制：窗体任何部分都留在视口内 */
+function clampWindowPos(x: number, y: number): { x: number; y: number } {
+  const w = windowEl.value?.offsetWidth ?? 340
+  const h = windowEl.value?.offsetHeight ?? 480
+  return {
+    x: Math.min(Math.max(8, x), Math.max(8, window.innerWidth - w - 8)),
+    y: Math.min(Math.max(8, y), Math.max(8, window.innerHeight - h - 8)),
+  }
+}
+
+function onWindowDragStart(e: PointerEvent) {
+  if (e.button !== 0) return
+  // 右上角图标按钮（清除/收起）不触发拖动
+  if ((e.target as HTMLElement).closest('.ai-icon-btn')) return
+  const el = windowEl.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  const origin = winPos.value ?? { x: rect.left, y: rect.top }
+  dragState = { startX: e.clientX, startY: e.clientY, originX: origin.x, originY: origin.y }
+  // capture 后 move/up 持续派发到 header，拖出窗体/视口也不中断
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  el.classList.add('ai-window-dragging')
+}
+
+function onWindowDragMove(e: PointerEvent) {
+  if (!dragState) return
+  winPos.value = clampWindowPos(
+    dragState.originX + (e.clientX - dragState.startX),
+    dragState.originY + (e.clientY - dragState.startY),
+  )
+}
+
+function onWindowDragEnd() {
+  if (!dragState) return
+  dragState = null
+  windowEl.value?.classList.remove('ai-window-dragging')
+  try {
+    if (winPos.value) localStorage.setItem(AI_WIN_POS_KEY, JSON.stringify(winPos.value))
+  } catch {
+    /* 隐私模式等存储不可用时静默忽略（本次会话内拖动仍然有效） */
+  }
+}
+
+/** 双击 header 复位到默认右下位置 */
+function resetWindowPos() {
+  winPos.value = null
+  try {
+    localStorage.removeItem(AI_WIN_POS_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+onMounted(() => {
+  try {
+    const orbRaw = localStorage.getItem(AI_ORB_POS_KEY)
+    if (orbRaw) {
+      const saved = JSON.parse(orbRaw) as { x: number; y: number }
+      if (typeof saved?.x === 'number' && typeof saved?.y === 'number') {
+        orbPos.value = clampOrbPos(saved.x, saved.y)
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const raw = localStorage.getItem(AI_WIN_POS_KEY)
+    if (raw) {
+      const saved = JSON.parse(raw) as { x: number; y: number }
+      if (typeof saved?.x === 'number' && typeof saved?.y === 'number') winPos.value = saved
+    }
+  } catch {
+    /* ignore */
+  }
+})
+
+// 打开窗体时钳制一次：视口比上次保存位置时小（如窗口缩小）不会越界
+watch(windowOpen, async (open) => {
+  if (!open || !winPos.value) return
+  await nextTick()
+  winPos.value = clampWindowPos(winPos.value.x, winPos.value.y)
+})
+
 function handleClear() {
   controller?.abort()
   controller = null
@@ -125,7 +317,6 @@ function handleClear() {
   store.clear()
   ElMessage.success('已清空对话')
 }
-
 onUnmounted(() => {
   controller?.abort()
   controller = null
@@ -238,6 +429,15 @@ function tryApplyForm(result: unknown): boolean {
   box-shadow: 0 6px 16px color-mix(in srgb, var(--el-color-primary) 35%, transparent);
   z-index: 2500;
   transition: transform 0.15s ease;
+  touch-action: none;
+  user-select: none;
+}
+/* 拖动中：抓取光标 + 放大 + 取消过渡（跟手） */
+.ai-orb-dragging {
+  cursor: grabbing;
+  transform: scale(1.1);
+  transition: none;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--el-color-primary) 45%, transparent);
 }
 .ai-orb:hover {
   transform: scale(1.06);
@@ -267,7 +467,7 @@ function tryApplyForm(result: unknown): boolean {
   overflow: hidden;
 }
 
-/* 深色标题栏，突出存在感（四态恒深色系：主色拼黑，白字始终可读） */
+/* 深色标题栏，突出存在感（四态恒深色系：主色拼黑，白字始终可读）；同时是拖拽把手（Task 80） */
 .ai-window-header {
   display: flex;
   align-items: center;
@@ -275,6 +475,15 @@ function tryApplyForm(result: unknown): boolean {
   padding: 10px 14px;
   background: linear-gradient(120deg, color-mix(in srgb, var(--el-color-primary) 62%, #101010), color-mix(in srgb, var(--el-color-primary) 26%, #0a0a0a));
   color: #fff;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+/* 拖动中反馈：阴影加深 + 轻微放大，与静止状态区分 */
+.ai-window-dragging {
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.38);
+  transition: none;
 }
 .ai-window-title {
   display: flex;
@@ -317,6 +526,11 @@ function tryApplyForm(result: unknown): boolean {
   align-items: center;
   justify-content: center;
   transition: background 0.15s ease;
+}
+
+/* 把手上的图标按钮保持 pointer 光标，不随 header 变 move */
+.ai-window-header .ai-icon-btn {
+  cursor: pointer;
 }
 .ai-icon-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.18);

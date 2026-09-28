@@ -1983,3 +1983,21 @@ Work Log:
 
 Stage Summary:
 - 属性面板与超时对话框分组标题与表单内容左缘平齐（Task 77 label 7em 对齐的延续，面板纵向视觉统一收口）
+
+---
+Task ID: 80-orb-drag-and-81-align
+Agent: Z.ai Code (main session)
+Task: 用户需求①AI 助手悬浮球/悬浮框允许拖动（挡住后面内容时移开）；②属性配置分组标题与 Label 左边对齐
+
+Work Log:
+- Task 80（对话窗体拖动）：AiAssistantOrb.vue 的 ai-window header 作为拖拽把手（pointer capture），位置 localStorage 持久化 + 视口钳制（8px 边距），打开时越界回钳，双击 header 复位默认右下；图标按钮排除拖动；拖动中阴影加深反馈
+- Task 80b（悬浮球拖动，用户澄清「悬浮框」实指球）：球 pointer 事件 + 5px 位移阈值区分拖动/点击（拖动不触发开窗，click 抑制标志），位置持久化 ai-assistant-orb-pos，拖动中 grabbing+scale(1.1)；键盘 Enter/Space 开窗保留（click 路径）
+- Task 81（分组标题对齐）：UserTask/HandlerTask 面板用 section-title（白卡片外），与白卡片内 label 差 2px（Range 实测 876 vs 878）——section-title padding-left 8→10px（10+左竖条3=13 = 白卡片 border1+padding12），两组件补齐；ProcessProperty 等 divider 面板 Task 78 已平齐不受影响
+- 途中破坏性编辑事故：MultiEdit 三段重组把窗口拖动实现与 handleClear 削残 → 读文件后整块重写修复；新增 1 个 vue-tsc 错误（orbEl 未声明）即修，回到 46 基线
+- 验证：球拖到画布中间（572,272）不开窗 + localStorage 持久化 + 刷新恢复 + 单击正常开窗；窗体拖动/双击复位沿用；UserTask/HandlerTask 两面板 section-title 文本与 label 文本 878=878 aligned:true（Range API）；properties+ai 测试 21/21；vue-tsc 46 既有
+- 事故：vue-tsc 再次连坐 next-server（本轮第二次）→ pkill + rm .next + 重启 bun run dev 恢复；登录态随之丢失重新登录
+- 备注：handleSave 前端无请求之谜实为 draftId 为空（URL 未带 id 进设计器），非 bug；带 ?id= 进入正常
+
+Stage Summary:
+- AI 助手悬浮球与对话窗体均可拖动换位（持久化+钳制+拖/点区分），遮挡内容可手动移开
+- 全部属性面板分组标题（divider 与 section-title 两种形态）与表单 label 左缘精确平齐（误差 <1px）

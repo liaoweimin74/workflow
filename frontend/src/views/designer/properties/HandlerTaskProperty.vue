@@ -95,6 +95,27 @@
             <el-checkbox v-model="ui.operations.allowReturn" :disabled="readOnly">退回</el-checkbox>
             <el-checkbox v-model="ui.operations.allowAddSign" :disabled="readOnly">加签</el-checkbox>
           </div>
+          <!-- 二级选项：与审批节点（UserTaskProperty）同口径，角色词按办理节点语境调整；退回模式二选一（单选，Task 79b） -->
+          <template v-if="ui.operations.allowReturn">
+            <div class="checkbox-col sub-items">
+              <el-radio-group
+                class="return-mode-group"
+                :model-value="returnMode"
+                :disabled="readOnly"
+                @update:model-value="setReturnMode($event as string)"
+              >
+                <el-radio value="restartFromHere">退回后，从此节点开始审批，已经通过的节点无需再次审批</el-radio>
+                <el-radio value="chooseStartNode">退回后，由办理人选择重审的起始节点</el-radio>
+              </el-radio-group>
+            </div>
+          </template>
+          <template v-if="ui.operations.allowAddSign">
+            <div class="checkbox-col sub-items">
+              <el-checkbox v-model="ui.returnOptions.mustAddSign" :disabled="readOnly">
+                此节点必须加签
+              </el-checkbox>
+            </div>
+          </template>
 
           <div class="section-title">处理意见必填</div>
           <div class="switch-row">
@@ -162,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from 'vue'
+import { computed, reactive, ref, onMounted, watch } from 'vue'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
@@ -207,6 +228,11 @@ const ui = reactive({
     allowTransfer: true,
     allowAddSign: false,
   },
+  returnOptions: {
+    restartFromHere: false,
+    chooseStartNode: false,
+    mustAddSign: false,
+  },
   commentRequired: false,
   blockRecall: false,
   timeout: {
@@ -219,6 +245,19 @@ const ui = reactive({
   },
   notifySms: false,
 })
+
+/** 退回模式单选（Task 79b）：restartFromHere/chooseStartNode 互斥，映射到存储里的两个布尔键（格式不变，兼容旧数据） */
+const returnMode = computed(() =>
+  ui.returnOptions.restartFromHere
+    ? 'restartFromHere'
+    : ui.returnOptions.chooseStartNode
+      ? 'chooseStartNode'
+      : '',
+)
+function setReturnMode(v: string) {
+  ui.returnOptions.restartFromHere = v === 'restartFromHere'
+  ui.returnOptions.chooseStartNode = v === 'chooseStartNode'
+}
 
 onMounted(() => {
   loadConfig()
@@ -257,6 +296,9 @@ function loadConfig() {
   ui.operations.allowReturn = true
   ui.operations.allowTransfer = true
   ui.operations.allowAddSign = false
+  ui.returnOptions.restartFromHere = false
+  ui.returnOptions.chooseStartNode = false
+  ui.returnOptions.mustAddSign = false
   ui.commentRequired = false
   ui.blockRecall = false
   ui.timeout.enabled = false
@@ -288,6 +330,11 @@ function loadConfig() {
       ui.operations.allowTransfer = existing.operations.allowTransfer ?? true
       ui.operations.allowReturn = existing.operations.allowReturn ?? true
       ui.operations.allowAddSign = existing.operations.allowAddSign ?? false
+    }
+    if (existing.returnOptions) {
+      ui.returnOptions.restartFromHere = existing.returnOptions.restartFromHere ?? false
+      ui.returnOptions.chooseStartNode = existing.returnOptions.chooseStartNode ?? false
+      ui.returnOptions.mustAddSign = existing.returnOptions.mustAddSign ?? false
     }
     ui.commentRequired = existing.commentRequired ?? false
     ui.blockRecall = existing.blockRecall ?? false
@@ -370,6 +417,11 @@ function saveConfig() {
       allowReject: false,
       allowDelegate: false,
     },
+    returnOptions: {
+      restartFromHere: ui.returnOptions.restartFromHere,
+      chooseStartNode: ui.returnOptions.chooseStartNode,
+      mustAddSign: ui.returnOptions.mustAddSign,
+    },
     commentRequired: ui.commentRequired,
     blockRecall: ui.blockRecall,
     timeout: {
@@ -410,7 +462,8 @@ watch(ui, () => {
   font-size: 13px;
   font-weight: 600;
   color: var(--el-text-color-primary, #1f2437);
-  padding-left: 8px;
+  /* padding 10px + 左竖条 3px = 13px：与白卡片 border 1px + padding 12px 对齐，分组标题文本与表单 label 左缘平齐（Task 81） */
+  padding-left: 10px;
   border-left: 3px solid #2e9e6e;
   margin: 14px 0 8px;
   line-height: 1.2;
@@ -456,6 +509,34 @@ watch(ui, () => {
   align-items: flex-start;
   width: 100%;
   gap: 2px;
+}
+
+/* 允许 xx 勾选后显示的子项：缩进（对齐 UserTaskProperty） */
+.sub-items {
+  margin: 4px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+/* 退回模式单选（纵向、长文案可换行），对齐 UserTaskProperty */
+.return-mode-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 2px;
+}
+
+.return-mode-group .el-radio {
+  height: auto;
+  margin-right: 0;
+  align-items: flex-start;
+}
+
+.return-mode-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 /* 主选项横向一行（办理人可进行的操作：提交只读 + 可勾选项） */

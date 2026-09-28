@@ -707,7 +707,9 @@ export class TaskService {
     if (rejectCommentRequired && (reason ?? '').trim() === '') {
       const label =
         rejectNode !== undefined && rejectNode.name !== '' ? rejectNode.name : row.node_id
-      throw new BusinessException(400, `审批意见必填（节点「${label}」）`)
+      // 办理节点（taskRole=handler）提示「处理意见必填」，与 completeTask 口径一致（Task 79）
+      const rejectCommentWord = rejectNode?.taskRole === 'handler' ? '处理' : '审批'
+      throw new BusinessException(400, `${rejectCommentWord}意见必填（节点「${label}」）`)
     }
 
     // 生产用 UUID 工厂；seedSeq 在 UUID 模式无实际作用，保留以兼容序号模式

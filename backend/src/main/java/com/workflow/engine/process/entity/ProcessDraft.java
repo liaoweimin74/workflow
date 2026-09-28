@@ -33,6 +33,10 @@ public class ProcessDraft {
     @Column(name = "category_id", length = 64)
     private String categoryId;
 
+    /** 流程说明（V42 迁移新增列；设计器「基本属性」分组维护） */
+    @Column(name = "description", length = 500)
+    private String description;
+
     @Lob
     @Column(name = "bpmn_xml", nullable = false, columnDefinition = "LONGTEXT")
     private String bpmnXml;
@@ -95,6 +99,9 @@ public class ProcessDraft {
 
     public String getCategoryId() { return categoryId; }
     public void setCategoryId(String categoryId) { this.categoryId = categoryId; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public String getBpmnXml() { return bpmnXml; }
     public void setBpmnXml(String bpmnXml) { this.bpmnXml = bpmnXml; }

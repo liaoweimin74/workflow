@@ -3,6 +3,49 @@
     <!-- 流程配置（审批策略 + 流程编号合并） -->
     <el-tab-pane label="流程配置" name="process">
       <el-form label-width="90px" size="small" :disabled="readOnly" class="process-form">
+        <el-divider content-position="left">基本属性</el-divider>
+
+        <el-form-item label="流程名称">
+          <el-input
+            v-model="basicForm.name"
+            placeholder="请输入流程名称"
+            maxlength="100"
+            @change="syncBasicToStore"
+          />
+        </el-form-item>
+
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="流程标识创建后不可修改，供部署版本关联与系统集成使用">流程标识</FormLabelTip>
+          </template>
+          <el-input v-model="basicForm.key" disabled />
+        </el-form-item>
+
+        <el-form-item label="所属分类">
+          <el-select
+            v-model="basicForm.categoryId"
+            class="category-select"
+            placeholder="请选择分类"
+            clearable
+            filterable
+            @change="syncBasicToStore"
+          >
+            <el-option v-for="cat in categories" :key="cat.id" :label="cat.name" :value="cat.id" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="流程说明">
+          <el-input
+            v-model="basicForm.description"
+            type="textarea"
+            :rows="3"
+            maxlength="500"
+            show-word-limit
+            placeholder="流程用途等补充说明，保存后生效"
+            @change="syncBasicToStore"
+          />
+        </el-form-item>
+
         <el-divider content-position="left">审批人去重规则</el-divider>
 
         <el-form-item label="去重规则">
@@ -262,6 +305,7 @@ import {
   type ProcessConfigData,
   type ProcessTimeoutRule,
 } from '@/stores/designerStore'
+import { categoryApi, type Category } from '@/api/category'
 import ProcessFormPropertyTab from './ProcessFormPropertyTab.vue'
 import ProcessTimeoutRuleDialog from './ProcessTimeoutRuleDialog.vue'
 import FormLabelTip from './shared/FormLabelTip.vue'
@@ -276,6 +320,34 @@ const designerStore = useDesignerStore()
 const activeTab = ref('process')
 
 const config = reactive<ProcessConfigData>(JSON.parse(JSON.stringify(DEFAULT_PROCESS_CONFIG)))
+
+// ---- 流程基本属性（Task 74：名称/标识/分类/说明，设计器内首次可编辑） ----
+const basicForm = reactive<{ name: string; key: string; categoryId: string | null; description: string }>({
+  name: '',
+  key: '',
+  categoryId: null,
+  description: '',
+})
+const categories = ref<Category[]>([])
+
+/** 分类加载失败不阻断面板（http 拦截器已提示），下拉空列表可关闭重进 */
+async function loadCategories() {
+  try {
+    const res = await categoryApi.list()
+    categories.value = res.data || []
+  } catch {
+    categories.value = []
+  }
+}
+
+/** 基本属性变更同步 store：名称 → 工具栏/导出文件名联动；保存/部署时随 payload 落库 */
+function syncBasicToStore() {
+  designerStore.setDraftBasicInfo({
+    name: basicForm.name,
+    categoryId: basicForm.categoryId,
+    description: basicForm.description,
+  })
+}
 
 const numberPreview = computed(() => {
   if (!config.numberRule.enabled || !config.numberRule.pattern) return ''
@@ -363,6 +435,14 @@ function removeRule(ruleId: string) {
 }
 
 onMounted(async () => {
+  // 基本属性回读：设计器加载 editorData 后已 setDraft/setDraftBasicInfo 入 store，
+  // 面板仅在选中流程（数据就绪）后挂载，此处直接回读即为最新值
+  basicForm.name = designerStore.draftName || ''
+  basicForm.key = designerStore.draftKey || ''
+  basicForm.categoryId = designerStore.draftCategoryId
+  basicForm.description = designerStore.draftDescription
+  void loadCategories()
+
   const stored = designerStore.getProcessConfig()
   Object.assign(config, stored)
   syncToStore()
@@ -384,6 +464,10 @@ function syncToStore() {
 
 .process-property-tabs :deep(.el-tabs__content) {
   overflow-y: auto;
+}
+
+.category-select {
+  width: 100%;
 }
 
 /* Label 插槽内 FormLabelTip 与控件同行垂直居中：覆盖 label 默认行高 */

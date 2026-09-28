@@ -120,7 +120,7 @@ onMounted(async () => {
     designerStore.setNodeConfigs(editorData.nodeConfigs || {})
     designerStore.setDraftBasicInfo({
       categoryId: editorData.categoryId || null,
-      description: '',
+      description: editorData.description || '',
     })
     designerStore.setSavedSnapshot(editorData.bpmnXml, editorData.nodeConfigs || {})
     designerStore.markClean()
@@ -354,6 +354,7 @@ async function handleSave() {
       name: designerStore.draftName || '',
       key: designerStore.draftKey || '',
       categoryId: designerStore.draftCategoryId,
+      description: designerStore.draftDescription,
       bpmnXml: xml,
       nodeConfigs: designerStore.nodeConfigs
     })
@@ -391,6 +392,7 @@ async function handleDeploy() {
       name: designerStore.draftName || '',
       key: designerStore.draftKey || '',
       categoryId: designerStore.draftCategoryId,
+      description: designerStore.draftDescription,
       bpmnXml: xml,
       nodeConfigs: designerStore.nodeConfigs
     })

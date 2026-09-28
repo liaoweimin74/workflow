@@ -501,7 +501,9 @@ export const useDesignerStore = defineStore('designer', () => {
     draftKey.value = key
   }
 
-  function setDraftBasicInfo(data: { categoryId?: string | null; description?: string }) {
+  /** 流程基本属性入 store（Task 74：名称/分类/说明均可由设计器「基本属性」分组维护） */
+  function setDraftBasicInfo(data: { name?: string; categoryId?: string | null; description?: string }) {
+    if (data.name !== undefined) draftName.value = data.name
     if (data.categoryId !== undefined) draftCategoryId.value = data.categoryId
     if (data.description !== undefined) draftDescription.value = data.description
     isDirty.value = true

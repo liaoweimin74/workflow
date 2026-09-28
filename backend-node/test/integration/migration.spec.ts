@@ -67,10 +67,11 @@ describe('schema 迁移', () => {
     //   + V37 实例乐观锁 lock_version + V38 修 wf_node_config 唯一键
     //   + V39 内建数据源预置（seeder 迁入，双端同源）
     //   + V40 引擎外发通知记录表
-    //   + V41 wf_task_comment 增加 signature 列 = 40。
+    //   + V41 wf_task_comment 增加 signature 列
+    //   + V42 wf_process_draft 增加 description 列 = 41。
     // 这里显式断言一个数值，是为了在文件被误删时能立刻发现（派生值单独用会掩盖丢失）。
     const expectedCount = discoverMigrations(MIGRATIONS_DIR).length
-    expect(expectedCount).toBe(40)
+    expect(expectedCount).toBe(41)
     expect(result.applied.length).toBe(expectedCount)
     expect(result.skipped).toEqual([])
 

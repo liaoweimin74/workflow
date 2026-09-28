@@ -23,6 +23,7 @@ export interface EditorData {
   name: string
   key: string
   categoryId: string | null
+  description: string | null
   bpmnXml: string
   nodeConfigs: Record<string, string>
   status: string
@@ -32,6 +33,8 @@ export interface DesignSaveRequest {
   name: string
   key: string
   categoryId: string | null
+  /** 流程说明（Task 74：设计器「基本属性」分组维护） */
+  description?: string | null
   bpmnXml: string
   nodeConfigs: Record<string, string>
 }

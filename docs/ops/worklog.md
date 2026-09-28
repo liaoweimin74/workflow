@@ -1894,3 +1894,21 @@ Stage Summary:
 - 流程配置说明文字全面转为 Label ? tooltip（FormLabelTip 共享组件）；顺手消除设计器页 ElOnlyChild 告警源
 - 20 文件改动（前端 9 / Node 8 / Java 9，含 5 新增）；无 DB 迁移；四项测试基线零回归 + 双轮浏览器验证闭环
 - 基础设施注意：①8080=编译产物 node dist/main.js，源码改动后需 bun run build 再杀旧进程由监督器复活；②前端全量 vitest 运行期内存压力大（曾连坐 next-server OOM），大内存操作建议错峰
+
+---
+Task ID: 74-basic-props
+Agent: Z.ai Code (main)
+Task: 流程基本属性收入「流程属性」面板，设立「基本属性」分组（名称/标识/分类/说明可编辑）
+
+Work Log:
+- 现状盘点：基本属性此前在面板内无编辑 UI——draftName 仅工具栏只读 tag；categoryId 仅 store 传递；store.draftDescription 从未落库（wf_process_draft 表无 description 列，EditorVO/DesignSaveRequest 亦无该字段）
+- DB：新增 V42__add_process_draft_description.sql（wf_process_draft 加 description VARCHAR(500) NULL）；wfe_process_def 不加列——getVersionEditor 对 name/categoryId 本就返回 null，description 对齐该语义（bun run migrate 已应用）
+- backend-node：types.ts WfProcessDraftTable + description；process-design.service.ts 六处——DesignSaveRequest/EditorVO/ProcessDraftVO/VersionEditorVO 加字段，createDraft insert 行补 null，loadEditor/saveDesign 透传（request.description ?? draft.description，AI tools 不传时零影响）；copyProcess 走 ...source 展开自动复制；migration.spec.ts 迁移计数 40→41
+- frontend：api EditorData.description + DesignSaveRequest.description?；designerStore.setDraftBasicInfo 扩展支持 name；ProcessDesigner.vue loadEditor 回读 description、save/deploy payload 携带；ProcessProperty.vue「流程配置」tab 顶部新增「基本属性」divider 分组——流程名称（input maxlength100）、流程标识（disabled + FormLabelTip 说明「创建后不可修改」）、所属分类（el-select clearable filterable，categoryApi.list() 容错空列表）、流程说明（textarea 3 行 500 字 show-word-limit）；onMounted 回读 store（面板仅在数据就绪后挂载）；syncBasicToStore 经 setDraftBasicInfo 联动（名称变更 → 工具栏 tag/导出文件名实时更新）
+- Java 同步（静态四道关自查，沙箱无 javac）：ProcessDraft 实体 + @Column(description,500) + getter/setter；DesignSaveRequest/EditorDTO + 字段；ProcessDesignService loadEditor setDescription、saveDesign if(!=null) 透传（与 Node ?? 语义一致）
+- 8080 编译产物重建（nest build + 杀旧进程监督器复活）；draft 列表 API 实测返回 description 键
+- 验证：backend-node vitest 932/932（含修正后的迁移计数用例 11/11）、frontend vitest 1132/1132、tsc 1、vue-tsc 46——四基线零回归；浏览器金路径：设计器 → 点画布空白 → 基本属性分组渲染（名称「请假」/标识「leave」只读/分类下拉/说明框）→ 改名「请假流程」工具栏 tag 实时联动 → 填说明 33/500 → 保存成功 → 后端直查落库（name/description/categoryId 全对）→ 刷新完整回显 → console 零新增错误
+- 验证插曲：列表行三个图标按钮均无 title（点出「编辑分类」「部署」两个对话框），改用 API 取草稿 id 直达 /designer?id= 路由；画布空白选中用 agent-browser mouse move/down/up（click 仅接受 selector）
+
+Stage Summary:
+- 流程基本属性首次在设计器内可编辑并持久化：分组位于「流程配置」tab 首位，名称/分类/说明可改、标识只读防部署版本错乱；Node/Java 双端 saveDesign/loadEditor 语义一致（缺省保留原值）；12 文件无迁移外 DDL 变更；提交推送见子仓库 worklog

@@ -237,12 +237,13 @@ export interface SysOrganizationTable {
   updated_by: string | null
 }
 
-/** 流程定义草稿（V6 迁移创建；deployed_config_hash 由 V18 补）。 */
+/** 流程定义草稿（V6 迁移创建；deployed_config_hash 由 V18 补；description 由 V42 补）。 */
 export interface WfProcessDraftTable {
   id: string
   process_key: string
   name: string
   category_id: string | null
+  description: string | null
   bpmn_xml: string
   status: string
   version: number

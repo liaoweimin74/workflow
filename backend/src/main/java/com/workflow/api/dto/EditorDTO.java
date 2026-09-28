@@ -20,6 +20,9 @@ public class EditorDTO {
     /** 分类 ID */
     private String categoryId;
 
+    /** 流程说明（设计器「基本属性」分组维护） */
+    private String description;
+
     /** BPMN XML 内容 */
     private String bpmnXml;
 
@@ -40,6 +43,9 @@ public class EditorDTO {
 
     public String getCategoryId() { return categoryId; }
     public void setCategoryId(String categoryId) { this.categoryId = categoryId; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public String getBpmnXml() { return bpmnXml; }
     public void setBpmnXml(String bpmnXml) { this.bpmnXml = bpmnXml; }

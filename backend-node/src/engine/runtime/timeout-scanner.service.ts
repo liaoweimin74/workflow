@@ -115,11 +115,18 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
       }
       const node = model.nodes[row.nodeId]
 
-      // 节点未开启超时 → 流程级规则组兕底（对齐设计器「超时处理」：“此配置不对已
-      // 经开启了超时处理的节点生效”；pass/refuse 对办理(handler)节点不生效）
+      // 节点未开启超时 → 流程级规则组兜底（对齐设计器「超时处理」："此配置不对已
+      // 经开启了超时处理的节点生效"；pass/refuse 对办理(handler)节点不生效）
       if (node?.timeout?.enabled !== true) {
         if (policy.timeoutRules.length === 0) continue
         await this.applyProcessTimeoutRules(row, node?.taskRole, policy.timeoutRules, policy.adminUserIds)
+        continue
+      }
+
+      // 节点级规则组优先（设计器「添加超时规则」）；同一处理逻辑复用流程级规则组
+      //（pass/refuse 对办理节点不生效、remind 重复提醒间隔等均一致）
+      if (node.timeout.rules !== undefined && node.timeout.rules.length > 0) {
+        await this.applyProcessTimeoutRules(row, node.taskRole, node.timeout.rules, policy.adminUserIds)
         continue
       }
 

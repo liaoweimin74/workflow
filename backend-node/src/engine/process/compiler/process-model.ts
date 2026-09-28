@@ -105,6 +105,8 @@ export interface ReturnOptions {
 export interface DedupOptions {
   enabled?: boolean
   skipSameAsInitiator?: boolean
+  /** 节点级命中口径：CONSECUTIVE=上一节点此审批人已同意；FIRST=前面任意节点已同意；缺省回落流程级 dedup.mode */
+  mode?: 'CONSECUTIVE' | 'FIRST'
 }
 
 /** 手写签名。 */
@@ -268,6 +270,8 @@ export interface CompiledNode {
   returnOptions?: ReturnOptions
   /** 处理/审批意见必填。 */
   commentRequired?: boolean
+  /** 意见必填范围：REJECT_RETURN=拒绝/退回必填（通过不拦）；ALL=全部操作必填；缺省按 ALL 兼容旧数据。 */
+  commentRequiredScope?: 'REJECT_RETURN' | 'ALL'
   /** 流程到达此节点后禁止撤销/撤回。 */
   blockRecall?: boolean
   /** 审批人去重（审批节点）。 */
@@ -278,8 +282,14 @@ export interface CompiledNode {
   notify?: NotifyOptions
   /** 发起节点专用配置。 */
   initiatorOptions?: InitiatorOptions
-  /** 超时配置（服务层调度器读取）。 */
-  timeout?: { enabled?: boolean; duration?: number; action?: TimeoutAction }
+  /** 超时配置（服务层调度器读取；rules 非空时按规则组处理，否则回落 legacy 单规则）。 */
+  timeout?: {
+    enabled?: boolean
+    duration?: number
+    action?: TimeoutAction
+    /** 节点级超时规则组（对齐流程级 timeoutRules；pass/refuse 对办理节点不生效） */
+    rules?: ProcessTimeoutRule[]
+  }
   /** userTask 上直接写死的 assignee（如 flowable:assignee="1"）。 */
   assignee?: string
   /** userTask 上直接写死的候选人（flowable:candidateUsers 逗号分隔）。 */

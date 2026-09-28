@@ -474,7 +474,9 @@ export class EngineRuntime {
       node.dedup?.enabled === true ||
       (node.dedup?.enabled === undefined && this.policy.dedupEnabled === true)
     if (dedupActive && !recallRecall) {
-      const mode = this.policy.dedupMode ?? 'FIRST'
+      // 节点级命中口径（截图①）优先：CONSECUTIVE=上一节点此审批人已同意 / FIRST=前面任意节点已同意；
+      // 节点未显式配置时回落流程级 dedup.mode
+      const mode = node.dedup?.mode ?? this.policy.dedupMode ?? 'FIRST'
       const before = assignees.length
       if (mode === 'LAST') {
         // 全流程仅最后需一次审批：该用户之前已办过且后续静态可见节点还会出现 → 本次跳过；

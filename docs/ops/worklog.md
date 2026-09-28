@@ -2019,3 +2019,28 @@ Work Log:
 Stage Summary:
 - 全部 divider 型属性面板分组标题从「盒子对齐」升级为「字形对齐」，与 label 左缘精确平齐（误差 0px），与 section-title 面板跨面板一致
 - 系统级弹层可拖动默认开启：41 文件 109 处 el-dialog + 全部 MessageBox 确认框零业务代码侵入获得拖动能力，遮挡内容可拖移
+
+---
+Task ID: 84-node-property-screenshots
+Agent: Z.ai Code (main session)
+Task: 用户需求——根据 4 张产品截图修改节点属性面板（审批人去重/审批意见必填/超时处理/处理意见必填）
+
+Work Log:
+- 截图①审批人去重（UserTaskProperty）：开启开关后补两组纵向 radio——「上一节点此审批人已同意时，此节点自动通过」（默认选中）/「前面任意节点此审批人已同意时，此节点自动通过」；存储 dedup.mode='CONSECUTIVE'|'FIRST'（与流程级 deduplication.mode 同词汇）；保留「审批人与 [发起人▼] 相同时，此节点自动跳过」（select 由 placeholder 改为 model-value 显示选中值）
+- 截图②审批意见必填（UserTaskProperty）：开启后补横排 radio「拒绝/退回必填」（默认）/「全部操作必填」；新增 NodeConfigData.commentRequiredScope='REJECT_RETURN'|'ALL'；存量已开必填但无 scope 的旧数据回读按 ALL 显示（与旧后端口径一致）
+- 截图③超时处理（UserTaskProperty）：时长/动作两个 inline 行替换为「添加超时规则」按钮+规则组列表（彩色动作标签/时长文案/编辑/删除）；复用 ProcessTimeoutRuleDialog（remind 可多条、transfer 1 条、pass/refuse 互斥）；legacy 单规则（duration+action）加载时自动迁移为规则组一条（escalate→transfer）；保存时 rules 与 legacy 字段双写（rules[0] 换算回 duration 小时+action）
+- 截图④处理意见必填（HandlerTaskProperty）：开启后补横排 radio「退回必填」（默认）/「全部操作必填」，同存 'REJECT_RETURN'|'ALL'
+- 后端：process-model CompiledNode 增 commentRequiredScope/dedup.mode/timeout.rules；process-compiler 逐字段归一化（scope 白名单、mode 白名单、rules 逐条校验 id/action/duration/unit）
+- 后端门禁（task.service）：completeTask 意见拦截改为 scope 口径——节点 commentRequired 且 scope（缺省 ALL 兼容存量）=ALL 时拦通过/提交，scope=REJECT_RETURN 不拦；reject/refuse 维持原口径（任意 scope 均拦）；nodeFlags 新增 commentRequiredScope 透出（节点级优先，回落流程级 commentPolicy，均未开启为 null）
+- 后端运行时：engine-runtime 去重 mode 节点级覆盖（node.dedup.mode ?? policy.dedupMode ?? 'FIRST'）；timeout-scanner 节点级 rules 非空时走 applyProcessTimeoutRules（pass/refuse 对 handler 节点不生效等逻辑复用），否则回落 legacy 单规则
+- 前端类型：designerStore NodeConfigData + api/task.ts nodeFlags 同步扩展
+- 途中发现并修复存量严重 bug：保存草稿报 Unknown column 'description' in 'SET'——V42 迁移文件（Task 74 草稿表加 description 列）从未在 workflow_v6 库执行（连 flyway 迁移记录表都不存在），saveDesign 全挂；手动 ALTER TABLE wf_process_draft ADD COLUMN description 落库，并核查 V37-V41 均已生效仅 V42 漏
+- 浏览器验证（agent-browser + 合成 DnD/事件序列）：HTML5 拖拽需 DataTransfer 合成 dragstart/dragover/drop（palette draggable=true，CDP 鼠标事件不触发 HTML5 DnD）；画布选中需补 click 事件（diagram-js 走 click 路径）；四张截图逐项验证通过（radio 默认态/横排 sameRow/纵向堆叠/规则组列表/对话框 4 动作卡）+ 保存→刷新回读一致（commentScope=全部操作必填/超时规则/去重 mode=上一节点均持久化）
+- 测试数据零残留：删除临时节点键盘 Delete 无效（keyboard binding 不响应合成事件）→ 改 DB 剪裁草稿 XML（删 2 个 userTask+DI，startEvent 字节级保留）+ 清理 wf_node_config editing 行 2 条；刷新回验仅 startEvent_1
+- 测试：backend vitest 61 文件 907/907 全绿；tsc 1 既有错误；frontend properties 7/7；vue-tsc 46 既有零新增
+- agent-browser close + pkill chrome-153 零残留
+
+Stage Summary:
+- 审批/办理节点属性面板对齐 4 张产品截图：去重口径 radio、意见必填范围 radio、节点级超时规则组（按钮+对话框+列表）三端打通（设计器配置→编译归一化→运行时门禁/去重/超时扫描）
+- 意见必填 scope 语义落地：REJECT_RETURN 仅拦拒绝/退回，ALL 拦全部操作；存量数据缺省 ALL 行为不变
+- 修复保存草稿全挂的存量 bug（V42 迁移漏执行）；HTML5 DnD 合成与 diagram-js 选中/删除的浏览器自动化经验沉淀

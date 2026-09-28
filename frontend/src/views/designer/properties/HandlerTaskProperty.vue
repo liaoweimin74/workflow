@@ -123,6 +123,19 @@
             <span class="switch-label">处理意见必填</span>
           </div>
           <div class="hint-text">开启后，办理人必须填写处理意见</div>
+          <!-- 意见必填范围单选（截图④）：默认退回必填；与审批节点同口径存 REJECT_RETURN -->
+          <template v-if="ui.commentRequired">
+            <div class="inline-radio-group sub-items">
+              <el-radio-group
+                v-model="ui.commentRequiredScope"
+                :disabled="readOnly"
+                @change="saveConfig"
+              >
+                <el-radio value="REJECT_RETURN">退回必填</el-radio>
+                <el-radio value="ALL">全部操作必填</el-radio>
+              </el-radio-group>
+            </div>
+          </template>
 
           <div class="section-title">禁止撤销/撤回</div>
           <div class="switch-row">
@@ -234,6 +247,8 @@ const ui = reactive({
     mustAddSign: false,
   },
   commentRequired: false,
+  /** 意见必填范围：REJECT_RETURN=退回必填（新开启默认）；ALL=全部操作必填（存量无 scope 兼容显示） */
+  commentRequiredScope: 'REJECT_RETURN' as 'REJECT_RETURN' | 'ALL',
   blockRecall: false,
   timeout: {
     enabled: false,
@@ -300,6 +315,7 @@ function loadConfig() {
   ui.returnOptions.chooseStartNode = false
   ui.returnOptions.mustAddSign = false
   ui.commentRequired = false
+  ui.commentRequiredScope = 'REJECT_RETURN'
   ui.blockRecall = false
   ui.timeout.enabled = false
   ui.timeout.duration = 24
@@ -337,6 +353,9 @@ function loadConfig() {
       ui.returnOptions.mustAddSign = existing.returnOptions.mustAddSign ?? false
     }
     ui.commentRequired = existing.commentRequired ?? false
+    // 意见必填范围：显式 scope 优先；存量开了必填但无 scope 按 ALL（全部操作必填，与旧后端口径一致）
+    ui.commentRequiredScope =
+      existing.commentRequiredScope ?? (existing.commentRequired ? 'ALL' : 'REJECT_RETURN')
     ui.blockRecall = existing.blockRecall ?? false
     if (existing.timeout) {
       ui.timeout.enabled = existing.timeout.enabled ?? false
@@ -423,6 +442,7 @@ function saveConfig() {
       mustAddSign: ui.returnOptions.mustAddSign,
     },
     commentRequired: ui.commentRequired,
+    commentRequiredScope: ui.commentRequired ? ui.commentRequiredScope : undefined,
     blockRecall: ui.blockRecall,
     timeout: {
       enabled: ui.timeout.enabled,
@@ -587,6 +607,28 @@ watch(ui, () => {
   color: var(--el-text-color-secondary, #8b91ab);
   line-height: 1.4;
   margin: 2px 0 6px;
+}
+
+/* 意见必填范围单选：横排一行（截图④），缩进对齐 sub-items */
+.inline-radio-group {
+  margin: 4px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+.inline-radio-group .el-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+}
+
+.inline-radio-group .el-radio {
+  height: 24px;
+  margin-right: 0;
+}
+
+.inline-radio-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
 }
 
 /* 行内编辑（超时时长/动作） */

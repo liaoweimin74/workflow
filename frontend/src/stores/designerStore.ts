@@ -88,15 +88,21 @@ export interface NodeConfigData {
     mustAddSign?: boolean
   }
   commentRequired?: boolean
+  /** 意见必填范围：REJECT_RETURN=拒绝/退回必填（缺省按 ALL 兼容旧数据）；ALL=全部操作必填 */
+  commentRequiredScope?: 'REJECT_RETURN' | 'ALL'
   blockRecall?: boolean
   timeout?: {
     enabled?: boolean
     duration?: number
     action?: 'remind' | 'escalate' | 'transfer' | 'pass' | 'refuse'
+    /** 节点级超时规则组（非空时运行时按规则组处理；legacy duration/action 保留兼容） */
+    rules?: ProcessTimeoutRule[]
   }
   dedup?: {
     enabled?: boolean
     skipSameAsInitiator?: boolean
+    /** 去重命中口径：CONSECUTIVE=上一节点此审批人已同意 / FIRST=前面任意节点已同意；缺省回落流程级 */
+    mode?: 'CONSECUTIVE' | 'FIRST'
   }
   signature?: {
     enabled?: boolean

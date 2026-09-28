@@ -13,6 +13,7 @@ import type {
   NoAssigneePolicy,
   NotifyOptions,
   ProcessModel,
+  ProcessTimeoutRule,
   ReturnOptions,
   SignatureOptions,
   TaskRole,
@@ -50,6 +51,7 @@ interface NodeConfigJson {
   assigneeOptions?: unknown
   returnOptions?: unknown
   commentRequired?: unknown
+  commentRequiredScope?: unknown
   blockRecall?: unknown
   dedup?: unknown
   signature?: unknown
@@ -221,6 +223,13 @@ function extractTaskOptions(
 
   const commentRequired = asBoolean(config.commentRequired)
   if (commentRequired !== undefined) out.commentRequired = commentRequired
+  // 意见必填范围：REJECT_RETURN=拒绝/退回必填；ALL=全部操作必填；未知/缺省不落盘（运行时按 ALL 兼容）
+  if (
+    config.commentRequiredScope === 'REJECT_RETURN' ||
+    config.commentRequiredScope === 'ALL'
+  ) {
+    out.commentRequiredScope = config.commentRequiredScope
+  }
 
   const blockRecall = asBoolean(config.blockRecall)
   if (blockRecall !== undefined) out.blockRecall = blockRecall
@@ -232,6 +241,8 @@ function extractTaskOptions(
     if (asBoolean(dedup.skipSameAsInitiator) !== undefined) {
       normalized.skipSameAsInitiator = dedup.skipSameAsInitiator
     }
+    // 节点级命中口径：CONSECUTIVE=上一节点已同意 / FIRST=前面任意节点已同意；未知不落盘（回落流程级）
+    if (dedup.mode === 'CONSECUTIVE' || dedup.mode === 'FIRST') normalized.mode = dedup.mode
     if (Object.keys(normalized).length > 0) out.dedup = normalized
   }
 
@@ -266,6 +277,42 @@ function extractTaskOptions(
       timeout.action === 'refuse'
     ) {
       normalized.action = timeout.action
+    }
+    // 节点级超时规则组：逐条校验（id/action/duration/unit 必填），非法条目丢弃
+    const rawRules: unknown = timeout.rules
+    if (Array.isArray(rawRules)) {
+      const normalizedRules: ProcessTimeoutRule[] = []
+      for (const raw of rawRules) {
+        const rule = asObject<ProcessTimeoutRule>(raw)
+        if (rule === undefined) continue
+        const id = asString(rule.id)
+        const ruleAction = asString(rule.action)
+        const ruleDuration = asNumber(rule.duration)
+        const unit = asString(rule.unit)
+        if (
+          id === undefined ||
+          ruleAction === undefined ||
+          !['remind', 'transfer', 'pass', 'refuse'].includes(ruleAction) ||
+          ruleDuration === undefined ||
+          ruleDuration <= 0 ||
+          unit === undefined ||
+          !['minute', 'hour', 'day'].includes(unit)
+        ) {
+          continue
+        }
+        normalizedRules.push({
+          id,
+          action: ruleAction as ProcessTimeoutRule['action'],
+          duration: Math.floor(ruleDuration),
+          unit: unit as ProcessTimeoutRule['unit'],
+          repeat: asBoolean(rule.repeat) === true,
+          notifyAssignee: asBoolean(rule.notifyAssignee) !== false,
+          notifyAdmin: asBoolean(rule.notifyAdmin) === true,
+          notifyUserIds: asStringArray(rule.notifyUserIds),
+          sms: asBoolean(rule.sms) !== false,
+        })
+      }
+      if (normalizedRules.length > 0) normalized.rules = normalizedRules
     }
     if (Object.keys(normalized).length > 0) out.timeout = normalized
   }

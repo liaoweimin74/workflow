@@ -155,6 +155,19 @@
             <span class="switch-label">审批意见必填</span>
           </div>
           <div class="hint-text">开启后，审批人必须填写审批意见</div>
+          <!-- 意见必填范围单选（截图②）：默认拒绝/退回必填 -->
+          <template v-if="ui.commentRequired">
+            <div class="inline-radio-group sub-items">
+              <el-radio-group
+                v-model="ui.commentRequiredScope"
+                :disabled="readOnly"
+                @change="saveConfig"
+              >
+                <el-radio value="REJECT_RETURN">拒绝/退回必填</el-radio>
+                <el-radio value="ALL">全部操作必填</el-radio>
+              </el-radio-group>
+            </div>
+          </template>
 
           <div class="section-title">禁止撤销/撤回</div>
           <div class="switch-row">
@@ -167,37 +180,28 @@
             <el-switch v-model="ui.timeout.enabled" :disabled="readOnly" />
             <span class="switch-label">超时处理</span>
           </div>
-          <div class="hint-text">支持审批超时的自动提醒、转派、通过、拒绝</div>
+          <div class="hint-text">支持审批超时自动提醒、转派、通过、拒绝</div>
+          <!-- 超时规则组（截图③）：添加超时规则 → ProcessTimeoutRuleDialog，同一规则组提醒可多条、转派 1 条、通过/拒绝互斥 -->
           <template v-if="ui.timeout.enabled">
-            <div class="inline-row">
-              <span class="inline-label">时长</span>
-              <el-input-number
-                v-model="ui.timeout.duration"
-                :min="1"
-                :step="1"
-                controls-position="right"
-                size="small"
-                style="width: 100px"
-                :disabled="readOnly"
-                @change="saveConfig"
-              />
-              <span class="inline-label">小时</span>
-            </div>
-            <div class="inline-row">
-              <span class="inline-label">动作</span>
-              <el-select
-                v-model="ui.timeout.action"
-                size="small"
-                style="width: 140px"
-                :disabled="readOnly"
-                @change="saveConfig"
-              >
-                <el-option label="自动提醒" value="remind" />
-                <el-option label="自动转派" value="escalate" />
-                <el-option label="自动通过" value="pass" />
-                <el-option label="自动拒绝" value="refuse" />
-              </el-select>
-            </div>
+            <ul v-if="ui.timeoutRules.length > 0" class="timeout-rule-list">
+              <li v-for="rule in ui.timeoutRules" :key="rule.id" class="timeout-rule-item">
+                <span class="rule-tag" :class="`rule-${rule.action}`">{{ RULE_ACTION_TEXT[rule.action] }}</span>
+                <span class="rule-text">
+                  超过 {{ rule.duration }} {{ RULE_UNIT_TEXT[rule.unit] }}未处理{{ RULE_ACTION_TEXT[rule.action] }}<template v-if="rule.action === 'remind' && rule.repeat">（重复提醒）</template>
+                </span>
+                <el-button link type="primary" size="small" :disabled="readOnly" @click="openTimeoutDialog(rule.id)">编辑</el-button>
+                <el-button link type="danger" size="small" :disabled="readOnly" @click="removeTimeoutRule(rule.id)">删除</el-button>
+              </li>
+            </ul>
+            <el-button size="small" :disabled="readOnly" class="rule-add-btn" @click="openTimeoutDialog(null)">
+              添加超时规则
+            </el-button>
+            <ProcessTimeoutRuleDialog
+              v-model:visible="timeoutDialogVisible"
+              :rules="ui.timeoutRules"
+              :edit-id="timeoutEditId"
+              @confirm="onTimeoutRuleConfirm"
+            />
           </template>
 
           <div class="section-title">审批人去重</div>
@@ -207,6 +211,16 @@
           </div>
           <div class="hint-text">开启后，同一审批人不用重复审批</div>
           <div v-if="ui.dedup.enabled" class="checkbox-col sub-items">
+            <!-- 去重命中口径（截图①）：上一节点已同意 / 前面任意节点已同意 -->
+            <el-radio-group
+              v-model="ui.dedup.mode"
+              class="return-mode-group"
+              :disabled="readOnly"
+              @change="saveConfig"
+            >
+              <el-radio value="CONSECUTIVE">上一节点此审批人已同意时，此节点自动通过</el-radio>
+              <el-radio value="FIRST">前面任意节点此审批人已同意时，此节点自动通过</el-radio>
+            </el-radio-group>
             <div class="inline-row dedup-row">
               <el-checkbox
                 v-model="ui.dedup.skipSameAsInitiator"
@@ -216,9 +230,9 @@
                 审批人与
               </el-checkbox>
               <el-select
+                :model-value="'发起人'"
                 size="small"
                 disabled
-                placeholder="发起人"
                 style="width: 90px"
                 class="dedup-select"
               />
@@ -252,11 +266,12 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, watch } from 'vue'
-import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
+import { useDesignerStore, type NodeConfigData, type ProcessTimeoutRule } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
 import FormPropertyTab from './FormPropertyTab.vue'
 import AssigneeSelector from './shared/AssigneeSelector.vue'
+import ProcessTimeoutRuleDialog from './ProcessTimeoutRuleDialog.vue'
 
 defineProps<{ readOnly?: boolean }>()
 
@@ -306,15 +321,19 @@ const ui = reactive({
     mustAddSign: false,
   },
   commentRequired: false,
+  /** 意见必填范围：REJECT_RETURN=拒绝/退回必填（新开启默认）；ALL=全部操作必填（存量无 scope 兼容显示） */
+  commentRequiredScope: 'REJECT_RETURN' as 'REJECT_RETURN' | 'ALL',
   blockRecall: false,
   timeout: {
     enabled: false,
-    duration: 24,
-    action: 'remind' as 'remind' | 'escalate' | 'pass' | 'refuse',
   },
+  /** 节点级超时规则组（对齐流程级 timeoutRules；legacy 单规则 duration/action 加载时迁移进来） */
+  timeoutRules: [] as ProcessTimeoutRule[],
   dedup: {
     enabled: false,
     skipSameAsInitiator: false,
+    /** 去重命中口径：CONSECUTIVE=上一节点已同意（默认）；FIRST=前面任意节点已同意 */
+    mode: 'CONSECUTIVE' as 'CONSECUTIVE' | 'FIRST',
   },
   signature: {
     enabled: false,
@@ -339,6 +358,57 @@ const returnMode = computed(() =>
 function setReturnMode(v: string) {
   ui.returnOptions.restartFromHere = v === 'restartFromHere'
   ui.returnOptions.chooseStartNode = v === 'chooseStartNode'
+}
+
+// ========== 超时规则组（截图③：添加超时规则）==========
+/** 超时规则对话框状态（editId=null 新增） */
+const timeoutDialogVisible = ref(false)
+const timeoutEditId = ref<string | null>(null)
+
+const RULE_ACTION_TEXT: Record<ProcessTimeoutRule['action'], string> = {
+  remind: '超时提醒',
+  transfer: '超时转派',
+  pass: '超时通过',
+  refuse: '超时拒绝',
+}
+const RULE_UNIT_TEXT: Record<ProcessTimeoutRule['unit'], string> = {
+  minute: '分钟',
+  hour: '小时',
+  day: '天',
+}
+
+/** legacy 节点级单规则（duration小时+action）→ 规则组一条（escalate 对应规则组的 transfer） */
+function legacyTimeoutToRule(duration: number | undefined, action: string | undefined): ProcessTimeoutRule {
+  const mapped = action === 'escalate' ? 'transfer' : action === 'pass' ? 'pass' : action === 'refuse' ? 'refuse' : 'remind'
+  return {
+    id: `rule-legacy-${Date.now()}`,
+    action: mapped,
+    duration: duration && duration > 0 ? duration : 24,
+    unit: 'hour',
+    repeat: false,
+    notifyAssignee: true,
+    notifyAdmin: false,
+    notifyUserIds: [],
+    sms: true,
+  }
+}
+
+function openTimeoutDialog(editId: string | null) {
+  timeoutEditId.value = editId
+  timeoutDialogVisible.value = true
+}
+
+function removeTimeoutRule(ruleId: string) {
+  ui.timeoutRules = ui.timeoutRules.filter((r) => r.id !== ruleId)
+}
+
+function onTimeoutRuleConfirm(rule: ProcessTimeoutRule) {
+  const idx = ui.timeoutRules.findIndex((r) => r.id === rule.id)
+  if (idx >= 0) {
+    ui.timeoutRules.splice(idx, 1, rule)
+  } else {
+    ui.timeoutRules.push(rule)
+  }
 }
 
 onMounted(() => {
@@ -390,12 +460,13 @@ function loadConfig() {
   ui.returnOptions.chooseStartNode = false
   ui.returnOptions.mustAddSign = false
   ui.commentRequired = false
+  ui.commentRequiredScope = 'REJECT_RETURN'
   ui.blockRecall = false
   ui.timeout.enabled = false
-  ui.timeout.duration = 24
-  ui.timeout.action = 'remind'
+  ui.timeoutRules = []
   ui.dedup.enabled = false
   ui.dedup.skipSameAsInitiator = false
+  ui.dedup.mode = 'CONSECUTIVE'
   ui.signature.enabled = false
   ui.signature.useLast = false
   ui.signature.allowUpload = false
@@ -442,15 +513,23 @@ function loadConfig() {
       ui.returnOptions.mustAddSign = existing.returnOptions.mustAddSign ?? false
     }
     ui.commentRequired = existing.commentRequired ?? false
+    // 意见必填范围：显式 scope 优先；存量开了必填但无 scope 按 ALL（全部操作必填，与旧后端口径一致）
+    ui.commentRequiredScope =
+      existing.commentRequiredScope ?? (existing.commentRequired ? 'ALL' : 'REJECT_RETURN')
     ui.blockRecall = existing.blockRecall ?? false
     if (existing.timeout) {
       ui.timeout.enabled = existing.timeout.enabled ?? false
-      ui.timeout.duration = existing.timeout.duration || 24
-      ui.timeout.action = (existing.timeout.action as typeof ui.timeout.action) || 'remind'
+      if (existing.timeout.rules && existing.timeout.rules.length > 0) {
+        ui.timeoutRules = existing.timeout.rules.map((r) => ({ ...r }))
+      } else if (ui.timeout.enabled) {
+        // legacy 单规则迁移（duration小时+action）→ 规则组一条
+        ui.timeoutRules = [legacyTimeoutToRule(existing.timeout.duration, existing.timeout.action)]
+      }
     }
     if (existing.dedup) {
       ui.dedup.enabled = existing.dedup.enabled ?? false
       ui.dedup.skipSameAsInitiator = existing.dedup.skipSameAsInitiator ?? false
+      ui.dedup.mode = existing.dedup.mode ?? 'CONSECUTIVE'
     }
     if (existing.signature) {
       ui.signature.enabled = existing.signature.enabled ?? false
@@ -535,15 +614,23 @@ function saveConfig() {
       mustAddSign: ui.returnOptions.mustAddSign,
     },
     commentRequired: ui.commentRequired,
+    commentRequiredScope: ui.commentRequired ? ui.commentRequiredScope : undefined,
     blockRecall: ui.blockRecall,
     timeout: {
       enabled: ui.timeout.enabled,
-      duration: ui.timeout.duration,
-      action: ui.timeout.action,
+      // legacy 兼容字段：取首条规则换算（规则组非空时后端以 rules 为准）
+      duration: ui.timeoutRules[0]
+        ? Math.max(1, Math.round((ui.timeoutRules[0].duration * (ui.timeoutRules[0].unit === 'minute' ? 1 : ui.timeoutRules[0].unit === 'hour' ? 60 : 1440)) / 60))
+        : 24,
+      action: ui.timeoutRules[0]
+        ? (ui.timeoutRules[0].action === 'transfer' ? 'escalate' : ui.timeoutRules[0].action)
+        : 'remind',
+      rules: ui.timeoutRules.length > 0 ? ui.timeoutRules.map((r) => ({ ...r })) : undefined,
     },
     dedup: {
       enabled: ui.dedup.enabled,
       skipSameAsInitiator: ui.dedup.skipSameAsInitiator,
+      mode: ui.dedup.mode,
     },
     signature: {
       enabled: ui.signature.enabled,
@@ -752,6 +839,83 @@ watch(ui, () => {
 
 .dedup-row .el-checkbox :deep(.el-checkbox__label) {
   white-space: nowrap;
+}
+
+/* 意见必填范围单选：横排一行（截图②），缩进对齐 sub-items */
+.inline-radio-group {
+  margin: 4px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+.inline-radio-group .el-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+}
+
+.inline-radio-group .el-radio {
+  height: 24px;
+  margin-right: 0;
+}
+
+.inline-radio-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
+}
+
+/* 节点级超时规则列表（截图③：添加超时规则） */
+.timeout-rule-list {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+
+.timeout-rule-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  background: var(--el-fill-color-lighter, #f5f7fa);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.rule-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.rule-tag.rule-remind {
+  background: #f59e0b;
+}
+
+.rule-tag.rule-transfer {
+  background: #3b82f6;
+}
+
+.rule-tag.rule-pass {
+  background: #10b981;
+}
+
+.rule-tag.rule-refuse {
+  background: #ef4444;
+}
+
+.rule-text {
+  color: var(--el-text-color-regular, #4b5169);
+  flex: 1;
+  min-width: 0;
+}
+
+.rule-add-btn {
+  margin-top: 2px;
 }
 
 .to-user-picker {

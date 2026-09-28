@@ -72,7 +72,10 @@ export interface TaskDetailVO {
   taskRole: 'initiator' | 'approver' | 'handler'
   /** 节点级行为开关（前端按钮/表单渲染用；已与流程级 commentPolicy/signaturePolicy 合并）。 */
   nodeFlags: {
+    /** 通过/提交是否必填意见（节点 scope=ALL 或流程级 scope=ALL）；拒绝/退回始终必填不在此体现 */
     commentRequired: boolean
+    /** 意见必填范围：REJECT_RETURN=拒绝/退回必填；ALL=全部操作必填；null=节点与流程级均未开启 */
+    commentRequiredScope: 'REJECT_RETURN' | 'ALL' | null
     signatureEnabled: boolean
     signatureRequired: boolean
     /** 默认使用上次签名（signature.useLast） */
@@ -283,15 +286,22 @@ export class TaskService {
     policy: ProcessPolicy
   }> {
     const policy = await this.loadProcessPolicy(processDefinitionId)
+    // 意见必填范围（截图②/④）：节点级 scope（缺省 ALL 兼容存量）=REJECT_RETURN/RETURN_ONLY 时
+    // 仅拒绝/退回必填，通过/提交不拦；ALL（或流程级 scope=ALL）时全部操作必填
+    const nodeScope =
+      node?.commentRequired === true ? (node.commentRequiredScope ?? 'ALL') : null
     const commentRequired =
-      node?.commentRequired === true ||
-      (policy.commentPolicy.enabled && policy.commentPolicy.scope === 'ALL')
+      nodeScope === 'ALL' ||
+      (nodeScope === null && policy.commentPolicy.enabled && policy.commentPolicy.scope === 'ALL')
     const sig = policy.signaturePolicy
     // 节点显式配置优先；节点未配置时用流程级默认（同 completeTask 门禁口径）
     const sigEnabled = node?.signature?.enabled ?? sig.enabled
     return {
       nodeFlags: {
         commentRequired,
+        // 生效范围：节点级显式 scope 优先，否则流程级 commentPolicy（都未开启为 null）
+        commentRequiredScope:
+          nodeScope ?? (policy.commentPolicy.enabled ? policy.commentPolicy.scope : null),
         signatureEnabled: sigEnabled,
         signatureRequired: sigEnabled ? (node?.signature?.required ?? sig.required) : false,
         signatureUseLast: sigEnabled ? (node?.signature?.useLast ?? sig.useLast) : false,
@@ -502,14 +512,15 @@ export class TaskService {
     if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
 
     // ① 门禁（意见必填 / 必须签名 / 必须加签）—— 在引擎推进前拦截。
-    //    意见必填 = 节点级 OR 流程级 commentPolicy(enabled && scope=ALL)；
+    //    意见必填（通过/提交口径）：节点级 scope（缺省 ALL 兼容存量）=ALL，或流程级 commentPolicy scope=ALL；
+    //    节点 scope=REJECT_RETURN 时通过/提交不拦（仅拒绝/退回拦，见 reject/refuse）。
     //    签名 = 流程级 enabled=false 全禁；否则节点未显式配置用流程级默认。
     const node = model.nodes[row.node_id]
     const processPolicy = await this.loadProcessPolicy(row.process_def_id)
     if (node !== undefined) {
       const label = node.name !== '' ? node.name : row.node_id
       const commentRequired =
-        node.commentRequired === true ||
+        (node.commentRequired === true && (node.commentRequiredScope ?? 'ALL') === 'ALL') ||
         (processPolicy.commentPolicy.enabled && processPolicy.commentPolicy.scope === 'ALL')
       if (commentRequired && (body.comment ?? '').trim() === '') {
         throw new BusinessException(

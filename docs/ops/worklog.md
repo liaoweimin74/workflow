@@ -1963,3 +1963,9 @@ Work Log:
 
 Stage Summary:
 - 属性面板 12 组件 label 列宽统一 7 字符、文本左对齐；? tooltip 垂直居中不受影响；零回归
+
+### Task 77 收尾补充（PAT 轮换 + 推送 + 双面板浏览器复核，主会话）
+- 用户发来新 GitHub PAT：remote set-url 更新（旧 PAT fetch 仍有效但按轮换处理），新 PAT fetch 验证通过，PAT 完整 URL 更新存储于 /home/z/my-project/tool-results/read_1790506978165_5e47df20c3f5.txt（chmod 600）
+- 推送补完：本地领先 origin/main 2 提交（bfe2ffac + 60da7e01 worklog）已推送 e7b1f9c6..60da7e01，本地=远程=60da7e01
+- 浏览器复核（agent-browser）：EventProperty（选中开始事件）4 label 全 84.0px、justify=flex-start、textAlign=left；ProcessProperty（mouse move 400,400 + down/up 唤出）21 label 全 84.0px 同口径；截图目测 label 列整齐左对齐、7 字符宽（84px=7em×12px small）；agent-browser close + pkill chrome-153 零残留
+- 附：leave 草稿画布仅 startEvent_1 一个节点（草稿内容如此，与 Task 77 无关）；fetch 拉到远程新分支 feature/array-value-text-columns、feature/process-engine-core（未处理，非 main 范畴）

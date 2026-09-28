@@ -179,7 +179,6 @@ export interface ProcessConfigData {
       scope: 'GLOBAL' | 'PHASE'
       action: 'AUTO_PASS' | 'SKIP' | 'ESCALATE'
     }
-    allowRecall: boolean
     // 流程级操作权限总控（节点级 operations 覆盖，生效 = AND）
     operations: {
       allowReject: boolean
@@ -206,7 +205,6 @@ export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {
       scope: 'GLOBAL',
       action: 'AUTO_PASS',
     },
-    allowRecall: true,
     operations: {
       allowReject: true,
       allowAddSign: true,
@@ -295,11 +293,23 @@ export const useDesignerStore = defineStore('designer', () => {
     if (!raw) return { ...DEFAULT_PROCESS_CONFIG }
     try {
       const parsed = JSON.parse(raw) as Partial<ProcessConfigData>
-      // 兼容旧配置：忽略已废弃的 allowAddSigner / allowDelegate 字段
+      // 兼容旧配置：忽略已废弃的 allowAddSigner / allowDelegate / allowRecall 字段。
+      // allowRecall 曾是流程属性面板的「允许撤回」开关，但引擎从未读取（撤回门禁
+      // 只看发起节点 initiator.disallowRecall 与活跃节点 blockRecall），已移除 UI，
+      // 存量 JSON 里的该键在此剔除，避免透传成幽灵字段。
       const storedApprovalPolicy = parsed.approvalPolicy as
-        | (Partial<ProcessConfigData['approvalPolicy']> & { allowAddSigner?: boolean; allowDelegate?: boolean })
+        | (Partial<ProcessConfigData['approvalPolicy']> & {
+            allowAddSigner?: boolean
+            allowDelegate?: boolean
+            allowRecall?: boolean
+          })
         | undefined
-      const { allowAddSigner: _allowAddSigner, allowDelegate: _allowDelegate, ...restApprovalPolicy } = storedApprovalPolicy ?? {}
+      const {
+        allowAddSigner: _allowAddSigner,
+        allowDelegate: _allowDelegate,
+        allowRecall: _allowRecall,
+        ...restApprovalPolicy
+      } = storedApprovalPolicy ?? {}
       return {
         ...DEFAULT_PROCESS_CONFIG,
         ...parsed,

@@ -26,10 +26,6 @@
           </el-form-item>
         </template>
 
-        <el-form-item label="允许撤回">
-          <el-switch v-model="config.approvalPolicy.allowRecall" @change="syncToStore" />
-        </el-form-item>
-
         <el-divider content-position="left">节点操作权限</el-divider>
 
         <el-form-item label="允许驳回">

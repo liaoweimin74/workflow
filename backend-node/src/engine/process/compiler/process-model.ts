@@ -174,6 +174,15 @@ export interface ProcessPolicy {
   retakeSkipApproved: boolean
   /** 流程级超时规则组（节点未开启 timeout 时兜底）。 */
   timeoutRules: ProcessTimeoutRule[]
+  /** 可发起人员范围（start() 门禁）：ALL=不校验；SPECIFIED=发起人须命中用户/角色名单（管理员绕过）。 */
+  starterScope: {
+    mode: 'ALL' | 'SPECIFIED'
+    userIds: string[]
+    /** 角色编码列表（sys_role.role_code，与 roleMemberships 同口径）。 */
+    roleIds: string[]
+  }
+  /** 流程级审批管理员（用户 ID 列表）：超时转派/被提醒人优先取此名单，未配置回落全局 admin。 */
+  adminUserIds: string[]
   /** 自定义审批标题模板（{{processName}}/{{initiator}}/{{date}}/{{表单字段}}）。 */
   titlePattern: string | null
   /** 自定义摘要字段（≤5）+ 短信展示摘要。 */

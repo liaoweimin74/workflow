@@ -70,6 +70,12 @@ public class ProcessPolicy {
     /** 流程级超时规则组（节点未开启 timeout 时兜底）。 */
     private List<ProcessTimeoutRule> timeoutRules = new ArrayList<>();
 
+    /** 可发起人员范围（start() 门禁）：ALL=不校验；SPECIFIED=发起人须命中用户/角色名单（管理员绕过）。 */
+    private StarterScope starterScope = new StarterScope();
+
+    /** 流程级审批管理员（用户 ID 列表）：超时转派/被提醒人优先取此名单，未配置回落全局 admin。 */
+    private List<String> adminUserIds = new ArrayList<>();
+
     /** 自定义审批标题模板（titleRule.enabled && pattern 非空时非 null）。 */
     private String titlePattern;
 
@@ -105,6 +111,17 @@ public class ProcessPolicy {
         public boolean isNotifyAdmin() { return notifyAdmin; }
         public List<String> getNotifyUserIds() { return notifyUserIds; }
         public boolean isSms() { return sms; }
+    }
+
+    /** 可发起人员范围（对齐 NodeJS starterScope；roleIds 为 sys_role.role_code）。 */
+    public static class StarterScope {
+        private String mode = "ALL";
+        private List<String> userIds = new ArrayList<>();
+        private List<String> roleIds = new ArrayList<>();
+
+        public String getMode() { return mode; }
+        public List<String> getUserIds() { return userIds; }
+        public List<String> getRoleIds() { return roleIds; }
     }
 
     // ------------------------------------------------------------ 解析
@@ -242,6 +259,18 @@ public class ProcessPolicy {
             }
         }
 
+        // 可发起人员范围（顶层 starterScope）：mode 非 SPECIFIED 一律 ALL（宽松）；名单上限防脏数据
+        JsonNode starterScope = root.get("starterScope");
+        if (starterScope != null && starterScope.isObject()
+                && "SPECIFIED".equals(starterScope.path("mode").asText(""))) {
+            out.starterScope.mode = "SPECIFIED";
+            out.starterScope.userIds = stringList(starterScope.get("userIds"), 200);
+            out.starterScope.roleIds = stringList(starterScope.get("roleIds"), 50);
+        }
+
+        // 流程级审批管理员（顶层 adminUserIds）：用户 ID 字符串列表，上限 50
+        out.adminUserIds = stringList(root.get("adminUserIds"), 50);
+
         return out;
     }
 
@@ -251,9 +280,17 @@ public class ProcessPolicy {
     }
 
     private static List<String> stringList(JsonNode node) {
+        return stringList(node, Integer.MAX_VALUE);
+    }
+
+    /** 宽松字符串列表：仅保留非空字符串（trim），截断到上限（对齐 NodeJS stringList）。 */
+    private static List<String> stringList(JsonNode node, int cap) {
         List<String> out = new ArrayList<>();
         if (node != null && node.isArray()) {
             for (JsonNode e : node) {
+                if (out.size() >= cap) {
+                    break;
+                }
                 if (e != null && e.isTextual() && !e.asText().isBlank()) {
                     out.add(e.asText().trim());
                 }
@@ -347,6 +384,8 @@ public class ProcessPolicy {
     public boolean isApproveRecall() { return approveRecall; }
     public boolean isRetakeSkipApproved() { return retakeSkipApproved; }
     public List<ProcessTimeoutRule> getTimeoutRules() { return timeoutRules; }
+    public StarterScope getStarterScope() { return starterScope; }
+    public List<String> getAdminUserIds() { return adminUserIds; }
     public String getTitlePattern() { return titlePattern; }
     public List<String> getSummaryFields() { return summaryFields; }
     public boolean isSummaryShowInSms() { return summaryShowInSms; }

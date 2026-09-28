@@ -341,7 +341,8 @@ describe('ProcessInstanceService.reInitiate', () => {
     const { service, startSpy } = reinitServiceWith({})
     const result = await runWithTenant('default', () => service.reInitiate('inst-1', '1'))
     expect(startSpy).toHaveBeenCalledTimes(1)
-    expect(startSpy).toHaveBeenCalledWith('leave', 'bk-1', { day: 3, initiator: '1' })
+    // Task 76：reInitiate 向 start 透传 startUserId（可发起范围门禁基于登录用户）
+    expect(startSpy).toHaveBeenCalledWith('leave', 'bk-1', { day: 3, initiator: '1' }, '1')
     expect(result.id).toBe('inst-new')
   })
 })

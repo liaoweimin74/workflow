@@ -4,6 +4,8 @@ import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.config.ProcessPolicy;
+import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.task.RoleMembershipResolver;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -11,6 +13,7 @@ import org.flowable.engine.HistoryService;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
+import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.runtime.ProcessInstance;
@@ -41,6 +44,9 @@ public class ProcessInstanceService {
     private final WfTaskCommentRepository commentRepository;
     /** Task 69：读取 __PROCESS__ 流程级策略（标题/摘要模板）。 */
     private final NodeConfigRepository nodeConfigRepository;
+    /** Task 76：start() 可发起范围门禁（查最新部署版本 + 角色/管理员解析）。 */
+    private final RepositoryService repositoryService;
+    private final RoleMembershipResolver roleMembershipResolver;
 
     public ProcessInstanceService(RuntimeService runtimeService,
                                   HistoryService historyService,
@@ -48,7 +54,9 @@ public class ProcessInstanceService {
                                   TaskService taskService,
                                   InitiatorNodeResolver initiatorNodeResolver,
                                   WfTaskCommentRepository commentRepository,
-                                  NodeConfigRepository nodeConfigRepository) {
+                                  NodeConfigRepository nodeConfigRepository,
+                                  RepositoryService repositoryService,
+                                  RoleMembershipResolver roleMembershipResolver) {
         this.runtimeService = runtimeService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -56,6 +64,8 @@ public class ProcessInstanceService {
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.commentRepository = commentRepository;
         this.nodeConfigRepository = nodeConfigRepository;
+        this.repositoryService = repositoryService;
+        this.roleMembershipResolver = roleMembershipResolver;
     }
 
     @Transactional
@@ -74,6 +84,53 @@ public class ProcessInstanceService {
         applyProcessTitleAndSummary(instance, processKey, variables);
         autoCompleteInitiatorTask(instance, variables);
         return instance;
+    }
+
+    /**
+     * start() 可发起范围门禁（Task 76，对齐 NodeJS assertStartAllowed）：
+     * starterScope.mode=ALL 不校验（存量流程行为不变）；SPECIFIED 时系统管理员
+     * （username='admin'）绕过，发起人须命中 userIds 名单或拥有 roleIds 任一角色。
+     * 校验失败抛 BusinessException(403, 「您不在该流程的可发起人员范围内」）。
+     *
+     * <p>⚠️ 门禁只认登录用户（控制器传入），不信任客户端 variables.initiator（可伪造）；
+     * 策略/定义读取失败时宽松放行（标题/摘要渲染同理，不阻断启动）。
+     */
+    public void assertStartAllowed(String processKey, String userId) {
+        if (userId == null || userId.isBlank()) {
+            return;
+        }
+        ProcessPolicy policy;
+        try {
+            ProcessDefinition def = repositoryService.createProcessDefinitionQuery()
+                    .processDefinitionKey(processKey)
+                    .processDefinitionTenantId(tenantProvider.getTenantId())
+                    .latestVersion()
+                    .singleResult();
+            if (def == null) {
+                return; // 未找到定义交由 startProcess 报错，此处不重复抛
+            }
+            policy = loadProcessPolicy(def.getId());
+        } catch (Exception e) {
+            log.warn("读取可发起范围失败 processKey={}: {}", processKey, e.getMessage());
+            return;
+        }
+        ProcessPolicy.StarterScope scope = policy.getStarterScope();
+        if (!"SPECIFIED".equals(scope.getMode())) {
+            return;
+        }
+        if (roleMembershipResolver.isAdminUser(userId)) {
+            return;
+        }
+        if (scope.getUserIds().contains(userId)) {
+            return;
+        }
+        List<String> userRoles = roleMembershipResolver.rolesOfUser(userId);
+        for (String code : scope.getRoleIds()) {
+            if (userRoles.contains(code)) {
+                return;
+            }
+        }
+        throw new BusinessException(403, "您不在该流程的可发起人员范围内");
     }
 
     /**

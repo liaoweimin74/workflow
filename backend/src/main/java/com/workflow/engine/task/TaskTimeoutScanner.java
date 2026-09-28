@@ -134,22 +134,24 @@ public class TaskTimeoutScanner {
         String cacheKey = defId + ":" + nodeKey;
         NodeOptions opts = optionCache.computeIfAbsent(cacheKey,
                 k -> nodeOptionsService.find(defId, nodeKey).orElse(null));
+        // Task 76：流程级审批管理员名单随策略一次读出，节点级/流程级两条路径共用
+        ProcessPolicy policy = policyCache.computeIfAbsent(defId, this::loadProcessPolicy);
         if (opts != null && Boolean.TRUE.equals(opts.getTimeoutEnabled())) {
-            applyNodeLevelTimeout(task, opts);
+            applyNodeLevelTimeout(task, opts, policy.getAdminUserIds());
             return;
         }
 
         // Task 69：节点未开启 timeout（含无节点配置块）→ 流程级规则组兕底
         //（对齐设计器「此配置不对已经开启了超时处理的节点生效」）
-        ProcessPolicy policy = policyCache.computeIfAbsent(defId, this::loadProcessPolicy);
         if (policy.getTimeoutRules().isEmpty()) {
             return;
         }
-        applyProcessTimeoutRules(task, resolveTaskRoleQuietly(defId, nodeKey), policy.getTimeoutRules());
+        applyProcessTimeoutRules(task, resolveTaskRoleQuietly(defId, nodeKey),
+                policy.getTimeoutRules(), policy.getAdminUserIds());
     }
 
-    /** 节点级超时（Task 61 原有路径，逻辑不变）。 */
-    private void applyNodeLevelTimeout(Task task, NodeOptions opts) {
+    /** 节点级超时（Task 61 原有路径；Task 76 起转派/提醒管理员解析优先流程级名单）。 */
+    private void applyNodeLevelTimeout(Task task, NodeOptions opts, List<String> processAdminUserIds) {
         int durationHours = opts.getTimeoutDuration() == null ? 24 : opts.getTimeoutDuration();
         Date createTime = task.getCreateTime();
         if (createTime == null) {
@@ -166,7 +168,7 @@ public class TaskTimeoutScanner {
         }
 
         String action = opts.getTimeoutAction() == null ? ACTION_REMIND : opts.getTimeoutAction();
-        applyTimeoutAction(task, action);
+        applyTimeoutAction(task, action, processAdminUserIds);
     }
 
     /** 节点类别（handler 节点跳过 pass/refuse 规则用）；解析失败按 approver 处理。 */
@@ -216,7 +218,8 @@ public class TaskTimeoutScanner {
      * 幂等：动作类（transfer/pass/refuse）靠 TIMEOUT_{ACTION} 通知记录；
      * remind 非重复靠 TIMEOUT_REMIND，重复提醒需距上次提醒 ≥ 规则时长。
      */
-    private void applyProcessTimeoutRules(Task task, String taskRole, List<ProcessTimeoutRule> rules) {
+    private void applyProcessTimeoutRules(Task task, String taskRole, List<ProcessTimeoutRule> rules,
+                                          List<String> processAdminUserIds) {
         String tenantId = task.getTenantId() == null || task.getTenantId().isBlank()
                 ? "default" : task.getTenantId();
         Date createTime = task.getCreateTime();
@@ -253,7 +256,7 @@ public class TaskTimeoutScanner {
                         EngineNotifyService.TYPE_TIMEOUT_REMIND, "",
                         PROCESS_RULE_REMIND_CONTENT);
                 if (rule.isSms()) {
-                    for (String target : resolveNotifyTargets(task, rule)) {
+                    for (String target : resolveNotifyTargets(task, rule, processAdminUserIds)) {
                         engineNotifyService.writeNotifyRecord(tenantId, task.getProcessInstanceId(), task.getId(),
                                 EngineNotifyService.TYPE_SMS_TIMEOUT, target, PROCESS_RULE_REMIND_CONTENT);
                     }
@@ -268,20 +271,42 @@ public class TaskTimeoutScanner {
             if (engineNotifyService.hasNotifyRecord(task.getId(), notifyType)) {
                 continue;
             }
-            applyProcessRuleAction(task, tenantId, rule.getAction(), notifyType);
+            applyProcessRuleAction(task, tenantId, rule.getAction(), notifyType, processAdminUserIds);
         }
     }
 
-    /** 被提醒人集合（当前审批人/审批管理员/更多员工；对齐 NodeJS resolveNotifyTargets）。 */
-    private List<String> resolveNotifyTargets(Task task, ProcessTimeoutRule rule) {
+    /**
+     * 转派目标解析：流程级审批管理员（adminUserIds[0]）优先，未配置回落全局 admin（Task 76）。
+     */
+    private String transferTarget(List<String> processAdminUserIds) {
+        if (processAdminUserIds != null && !processAdminUserIds.isEmpty()) {
+            return processAdminUserIds.get(0);
+        }
+        return roleMembershipResolver.findAdminUserId();
+    }
+
+    /**
+     * 被提醒人集合（当前审批人/审批管理员/更多员工；对齐 NodeJS resolveNotifyTargets）。
+     * 审批管理员：流程级 adminUserIds 优先（全量提醒），未配置回落全局 admin（Task 76）。
+     */
+    private List<String> resolveNotifyTargets(Task task, ProcessTimeoutRule rule,
+                                              List<String> processAdminUserIds) {
         List<String> targets = new ArrayList<>();
         if (rule.isNotifyAssignee() && task.getAssignee() != null && !task.getAssignee().isBlank()) {
             targets.add(task.getAssignee());
         }
         if (rule.isNotifyAdmin()) {
-            String admin = roleMembershipResolver.findAdminUserId();
-            if (admin != null) {
-                targets.add(admin);
+            if (processAdminUserIds != null && !processAdminUserIds.isEmpty()) {
+                for (String adminId : processAdminUserIds) {
+                    if (!targets.contains(adminId)) {
+                        targets.add(adminId);
+                    }
+                }
+            } else {
+                String admin = roleMembershipResolver.findAdminUserId();
+                if (admin != null) {
+                    targets.add(admin);
+                }
             }
         }
         for (String extra : rule.getNotifyUserIds()) {
@@ -296,7 +321,8 @@ public class TaskTimeoutScanner {
      * 流程级规则动作执行（transfer/pass/refuse；动作语义与节点级 applyTimeoutAction 一致，
      * 幂等标记由调用方按 TIMEOUT_{ACTION} 类型写入）。
      */
-    private void applyProcessRuleAction(Task task, String tenantId, String action, String notifyType) {
+    private void applyProcessRuleAction(Task task, String tenantId, String action, String notifyType,
+                                        List<String> processAdminUserIds) {
         String instanceId = task.getProcessInstanceId();
         String taskId = task.getId();
 
@@ -305,8 +331,9 @@ public class TaskTimeoutScanner {
 
         switch (action) {
             case ACTION_TRANSFER -> {
-                // 转派给审批管理员（sys_user admin）；查不到降级为提醒
-                String admin = roleMembershipResolver.findAdminUserId();
+                // 转派目标：流程级审批管理员（adminUserIds[0]）优先，未配置回落全局 admin；
+                // 查不到时降级为提醒
+                String admin = transferTarget(processAdminUserIds);
                 if (admin != null && !admin.isBlank()) {
                     flowableTaskService.setAssignee(taskId, admin);
                     insertComment(tenantId, taskId, instanceId,
@@ -347,7 +374,7 @@ public class TaskTimeoutScanner {
     }
 
     /** 节点级动作执行（Task 61 原有路径；opts 仅承载节点配置，动作本身只依赖 task+action）。 */
-    private void applyTimeoutAction(Task task, String action) {
+    private void applyTimeoutAction(Task task, String action, List<String> processAdminUserIds) {
         String tenantId = task.getTenantId() == null || task.getTenantId().isBlank()
                 ? "default" : task.getTenantId();
         String instanceId = task.getProcessInstanceId();
@@ -362,8 +389,8 @@ public class TaskTimeoutScanner {
                     ACTION_ESCALATE.equals(action) ? "任务超时，升级提醒" : "任务超时，自动提醒",
                     null);
             case ACTION_TRANSFER -> {
-                // 转派给审批管理员（sys_user admin）；查不到降级为提醒
-                String admin = roleMembershipResolver.findAdminUserId();
+                // 转派目标：流程级审批管理员优先，未配置回落全局 admin；查不到降级为提醒（Task 76）
+                String admin = transferTarget(processAdminUserIds);
                 if (admin != null && !admin.isBlank()) {
                     flowableTaskService.setAssignee(taskId, admin);
                     insertComment(tenantId, taskId, instanceId,

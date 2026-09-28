@@ -3,7 +3,9 @@ package com.workflow.engine.process;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.repository.NodeConfigRepository;
+import com.workflow.engine.task.RoleMembershipResolver;
 import com.workflow.engine.tenant.TenantProvider;
+import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
@@ -53,7 +55,8 @@ class ProcessInstanceServiceFilterTest {
         nodeConfigRepository = mock(NodeConfigRepository.class);
         when(tenantProvider.getTenantId()).thenReturn("test-tenant");
         service = new ProcessInstanceService(runtimeService, historyService, tenantProvider,
-                taskService, initiatorNodeResolver, commentRepository, nodeConfigRepository);
+                taskService, initiatorNodeResolver, commentRepository, nodeConfigRepository,
+                mock(RepositoryService.class), mock(RoleMembershipResolver.class));
     }
 
     /**

@@ -1927,3 +1927,19 @@ Work Log:
 
 Stage Summary:
 - 超时规则「当前审批人」默认勾选且只读上线：UI 层三处收敛（disabled + 回读归一化 + 恒写 true），引擎缺省语义本就是 true 无需改动；单文件改动、四基线零回归、浏览器双模式（提醒/转派）验证闭环
+
+---
+Task ID: 76-starter-scope-admin
+Agent: Z.ai Code (main，实现会话 + cron 420955 收尾会话合并记录)
+Task: 用户批准方案——可发起人员 + 审批管理人流程级配置：starterScope {mode ALL|SPECIFIED, userIds, roleIds} 与 adminUserIds 存流程级设计 JSON（对齐 Task 69 策略通道，不加列），引擎 start() 门禁 + 超时/兜底消费点流程级优先回落全局
+
+Work Log:
+- 前端 4 文件：designerStore.ts ProcessConfigData 扩展 starterScope/adminUserIds（随设计 JSON 持久化）；ProcessProperty.vue 流程配置 tab 新增「权限设置」分组——可发起人员（radio 全体/指定人员 + 用户多选 + 角色多选，FormLabelTip 说明「命中名单或拥有所选角色之一才可发起，系统管理员不受限」）、审批管理人（用户多选）；ProcessCenterPage.vue 列表 startableByCurrentUser 展示层过滤（SPECIFIED 未命中不展示，admin 直通，引擎门禁是真闸门）；api/processDefinition.ts DeployedProcessDefinition 扩展 starterScope 类型
+- Node 8 文件：process-policy.ts 解析扩展（mode 非 SPECIFIED 一律 ALL 宽松、名单 trim 去空、上限 userIds 200/roleIds 50/admin 50）；process-instance.service.ts start() 入口 assertStartAllowed（SPECIFIED 时发起人须命中 userIds/roleIds，admin 绕过，拒绝抛 403 语义错误）；timeout-scanner.service.ts 提醒「流程级 adminUserIds 全量优先、未配置回落全局 admin」+ 转派目标 adminUserIds[0] 优先；task.service.ts to_admin 兜底同口径（adminUserIdOverride 参数）；process-definition.controller.ts deployed-list 按 defIds 批量查 wf_node_config(node_id='__PROCESS__') 下发 starterScope（未配置 null）；process-design.repository.ts findProcessLevelConfigsByDefIds；process-model.ts 类型；新增 process-policy-scope.spec.ts 8 用例
+- Java 6 文件（静态同步，沙箱无 javac）：ProcessPolicy.java starterScope/adminUserIds 字段与解析（口径对齐 Node）；ProcessInstanceService.assertStartAllowed(processKey, userId)（注释对齐 NodeJS 实现，存量 ALL 行为不变）；TaskTimeoutScanner 提醒/转派两处流程级 admin 优先；RoleMembershipResolver 对齐；ProcessInstanceController 透传；ProcessInstanceServiceFilterTest 更新
+- 收尾会话（cron 420955）验证记录：backend-node vitest 940/940（932 基线 + 新增 8 scope 用例，`bun run test` 仅 907 是 --exclude integration 口径差异，test:all 才是全量）；frontend vitest 1132/1132；tsc 1 既有；vue-tsc 46 既有（改动文件零命中）；8080 重建重启（坑：手动启动须 env PORT=8080，缺省 8081；且逃逸启动命令漏 cd 会找不到 dist/main.js）
+- 收尾会话 E2E（一次性数据全链路）：建一次性草稿 leave_e2e76（SPECIFIED userIds [2,9] + roleIds [dept_manager] + adminUserIds [7]）→ 部署 → GET /api/v1/deployed-processes 该项 starterScope 精确下发 {"mode":"SPECIFIED","userIds":["2","9"],"roleIds":["dept_manager"]} → API 删草稿 + DB 清 wfe_process_def/wf_node_config/wf_process_draft 零残留；请假草稿全程零扰动（库中仅剩该草稿 status=DRAFT）
+- E2E 插曲勘误：①自研引擎 BPMN 解析节点出入边读节点内 <incoming>/<outgoing> 子元素（bpmn-js 序列化风格），仅写 sequenceFlow sourceRef/targetRef 不挂边会误报「流程会走死」；②部署校验要求 process id == 流程 key；③草稿 DELETE API 对 status=DEPLOYED 的草稿静默不删，需 DB 硬删；④wfe_process_def 键列名是 process_key 非 key；⑤residue 复查子查询撞排序规则（utf8mb4_unicode_ci vs uca1400_ai_ci），改逐条查询规避
+
+Stage Summary:
+- 可发起人员/审批管理人流程级配置三端上线：设计 JSON 通道零 DDL，存量流程 starterScope 缺省 ALL 行为不变；引擎 start() 真门禁 + 发起中心展示层过滤双层防护；超时提醒/转派与 to_admin 兜底均「流程级 adminUserIds 优先、未配置回落全局 admin」向后兼容；四基线零回归 + E2E 下发验证闭环 + 测试数据零残留

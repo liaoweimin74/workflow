@@ -73,8 +73,10 @@ import { deployedProcessApi } from '@/api/processDefinition'
 import { categoryApi } from '@/api/category'
 import type { DeployedProcessDefinition } from '@/api/processDefinition'
 import type { Category } from '@/api/category'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const searchKeyword = ref('')
@@ -82,10 +84,28 @@ const processes = ref<DeployedProcessDefinition[]>([])
 const categories = ref<Category[]>([])
 const expandedCategories = ref<string[]>([])
 
+/**
+ * 可发起人员范围过滤（Task 76，展示层）：SPECIFIED 时未命中名单/角色/管理员的流程
+ * 不展示；引擎 start() 门禁是真闸门，此处仅隐藏入口。
+ */
+function startableByCurrentUser(proc: DeployedProcessDefinition): boolean {
+  const scope = proc.starterScope
+  if (!scope || scope.mode !== 'SPECIFIED') return true
+  const user = authStore.user
+  if (!user) return true
+  if (user.username === 'admin') return true
+  if (scope.userIds.includes(String(user.id))) return true
+  if (scope.roleIds.length > 0 && (user.roles ?? []).some((code) => scope.roleIds.includes(code))) {
+    return true
+  }
+  return false
+}
+
 // ── 按 categoryId 分组 ──
 const groupedProcesses = computed(() => {
   const map = new Map<string, DeployedProcessDefinition[]>()
   for (const proc of processes.value) {
+    if (!startableByCurrentUser(proc)) continue
     const catId = proc.category || 'uncategorized'
     if (!map.has(catId)) map.set(catId, [])
     map.get(catId)!.push(proc)

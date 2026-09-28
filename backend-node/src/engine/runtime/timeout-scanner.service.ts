@@ -119,7 +119,7 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
       // 经开启了超时处理的节点生效”；pass/refuse 对办理(handler)节点不生效）
       if (node?.timeout?.enabled !== true) {
         if (policy.timeoutRules.length === 0) continue
-        await this.applyProcessTimeoutRules(row, node?.taskRole, policy.timeoutRules)
+        await this.applyProcessTimeoutRules(row, node?.taskRole, policy.timeoutRules, policy.adminUserIds)
         continue
       }
 
@@ -137,7 +137,7 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
         .executeTakeFirst()
       if (processed !== undefined) continue
 
-      await this.applyTimeoutAction(row, node.timeout.action ?? 'remind', 'TIMEOUT_REMIND')
+      await this.applyTimeoutAction(row, node.timeout.action ?? 'remind', 'TIMEOUT_REMIND', policy.adminUserIds)
     }
   }
 
@@ -162,6 +162,7 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
     },
     taskRole: string | undefined,
     rules: ProcessTimeoutRule[],
+    processAdminUserIds: string[],
   ): Promise<void> {
     const now = Date.now()
     for (const rule of rules) {
@@ -186,8 +187,8 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
         }
         // 幂等标记（与节点级同类型）
         await this.writeNotify(row, 'TIMEOUT_REMIND', '任务超时，自动提醒（流程级规则）')
-        // 被提醒人：当前审批人 / 审批管理员 / 更多员工
-        const targets = await this.resolveNotifyTargets(row, rule)
+        // 被提醒人：当前审批人 / 审批管理员（流程级优先）/ 更多员工
+        const targets = await this.resolveNotifyTargets(row, rule, processAdminUserIds)
         const smsTargets = rule.sms ? targets : []
         for (const target of smsTargets) {
           await this.writeNotify(row, 'SMS_TIMEOUT', '任务超时，自动提醒（流程级规则）', target)
@@ -213,27 +214,37 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
         .limit(1)
         .executeTakeFirst()
       if (done !== undefined) continue
-      await this.applyTimeoutAction(row, rule.action, notifyType)
+      await this.applyTimeoutAction(row, rule.action, notifyType, processAdminUserIds)
     }
   }
 
-  /** 被提醒人集合（当前审批人/审批管理员/更多员工）。 */
+  /**
+   * 被提醒人集合（当前审批人/审批管理员/更多员工）。
+   * 审批管理员：流程级 adminUserIds 优先（全量提醒），未配置回落全局 admin（Task 76）。
+   */
   private async resolveNotifyTargets(
     row: { taskId: string; assignee: string | null },
     rule: ProcessTimeoutRule,
+    processAdminUserIds: string[],
   ): Promise<string[]> {
     const targets: string[] = []
     if (rule.notifyAssignee && row.assignee !== null && row.assignee !== '') {
       targets.push(row.assignee)
     }
     if (rule.notifyAdmin) {
-      const admin = await this.db
-        .selectFrom('sys_user')
-        .select('id')
-        .where('username', '=', 'admin')
-        .where('is_deleted', '=', 0)
-        .executeTakeFirst()
-      if (admin !== undefined) targets.push(String(admin.id))
+      if (processAdminUserIds.length > 0) {
+        for (const adminId of processAdminUserIds) {
+          if (!targets.includes(adminId)) targets.push(adminId)
+        }
+      } else {
+        const admin = await this.db
+          .selectFrom('sys_user')
+          .select('id')
+          .where('username', '=', 'admin')
+          .where('is_deleted', '=', 0)
+          .executeTakeFirst()
+        if (admin !== undefined) targets.push(String(admin.id))
+      }
     }
     for (const extra of rule.notifyUserIds ?? []) {
       if (!targets.includes(extra)) targets.push(extra)
@@ -268,6 +279,7 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
     row: { taskId: string; instanceId: string; nodeId: string },
     action: 'remind' | 'escalate' | 'transfer' | 'pass' | 'refuse',
     notifyType: string,
+    processAdminUserIds: string[] = [],
   ): Promise<void> {
     const tenantId = getTenantId()
     // 幂等标记（remind/escalate/transfer 落通知；pass/refuse 靠任务状态自然幂等）
@@ -286,17 +298,22 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (action === 'transfer') {
-      // 转派给审批管理员（sys_user admin）；查不到降级为提醒
-      const admin = await this.db
-        .selectFrom('sys_user')
-        .select('id')
-        .where('username', '=', 'admin')
-        .where('is_deleted', '=', 0)
-        .executeTakeFirst()
-      if (admin !== undefined) {
+      // 转派目标：流程级审批管理员（adminUserIds[0]）优先，未配置回落全局 admin；
+      // 流程管理员也查不到用户时降级为提醒
+      let transferTarget: string | null = processAdminUserIds.length > 0 ? processAdminUserIds[0] : null
+      if (transferTarget === null) {
+        const admin = await this.db
+          .selectFrom('sys_user')
+          .select('id')
+          .where('username', '=', 'admin')
+          .where('is_deleted', '=', 0)
+          .executeTakeFirst()
+        transferTarget = admin === undefined ? null : String(admin.id)
+      }
+      if (transferTarget !== null) {
         await this.db
           .updateTable('wfe_task')
-          .set({ assignee: String(admin.id), updated_at: new Date() })
+          .set({ assignee: transferTarget, updated_at: new Date() })
           .where('id', '=', row.taskId)
           .execute()
         await this.instances.insertComment(tenantId, {
@@ -305,7 +322,7 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
           userId: 'system',
           action: 'transfer',
           comment: '任务超时，自动转派审批管理员',
-          targetUserId: String(admin.id),
+          targetUserId: transferTarget,
         })
         return
       }

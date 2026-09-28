@@ -9,7 +9,7 @@ import { KYSELY } from '../../framework/database/database.module'
 import type { DB } from '../../framework/database/types'
 import { assertPageSize } from '../../framework/http/query-params'
 import { getTenantId } from '../../framework/tenant/tenant-context'
-import type { ProcessModel, ResolutionContext } from '../process/compiler/process-model'
+import type { ProcessModel, ProcessPolicy, ResolutionContext } from '../process/compiler/process-model'
 import { randomUuid } from '../process/process-design.service'
 import { EngineRuntime, type EngineState } from './engine-runtime'
 import { EnginePersistence, type InstanceRow } from './engine-persistence'
@@ -110,12 +110,18 @@ export class ProcessInstanceService {
     processKey: string,
     businessKey: string | null,
     variables: Record<string, unknown> | undefined,
+    startUserId?: string | null,
   ): Promise<StartProcessResult> {
     const tenantId = getTenantId()
     const def = await this.persistence.findLatestDeployedDef(tenantId, processKey)
     if (def === null) {
       throw new EngineException(`未找到已部署的流程定义: ${processKey}`)
     }
+
+    // 流程级策略：start 门禁（可发起范围）与标题/摘要共用一次解析（Task 76）
+    const startPolicy = await this.loadStartPolicy(def.id)
+    const initiator = extractInitiator(variables)
+    await this.assertStartAllowed(startPolicy, startUserId ?? null)
 
     const model = JSON.parse(def.model_json) as ProcessModel
     const state: EngineState = {
@@ -127,7 +133,6 @@ export class ProcessInstanceService {
       activeBranchSets: {},
     }
 
-    const initiator = extractInitiator(variables)
     const now = new Date()
     // 生产必须用 UUID 工厂：id 是全表主键，序号只在一个 runtime 内唯一（见引擎构造函数注释）
     const runtime = new EngineRuntime(
@@ -135,14 +140,14 @@ export class ProcessInstanceService {
       state,
       () => new Date(),
       () => randomUuid(),
-      await this.buildResolutionContext(),
+      // to_admin 兜底/转派目标：流程级审批管理员优先，未配置回落全局 admin
+      await this.buildResolutionContext(startPolicy.adminUserIds[0] ?? undefined),
       {},
       snapshotAssigneeResolvers(),
     )
     runtime.start({ initiator: initiator ?? undefined, variables: variables ?? {} })
 
-    // 流程级策略：自定义审批标题 / 自定义摘要 → 内部变量（随 replaceRuntimeRows 落库）
-    const startPolicy = await this.loadStartPolicy(def.id)
+    // 流程级策略：自定义审批标题 / 自定义摘要 → 内部变量（随 replaceRuntimeRows 落库；startPolicy 已在门禁处解析）
     if (startPolicy.titlePattern !== null) {
       runtime.setVariable(
         '__instanceTitle',
@@ -387,7 +392,7 @@ export class ProcessInstanceService {
       startVariables.initiator = row.initiator
     }
 
-    return this.start(row.process_key, row.business_key, startVariables)
+    return this.start(row.process_key, row.business_key, startVariables, userId)
   }
 
   private async requireInstance(instanceId: string): Promise<InstanceRow> {
@@ -748,10 +753,54 @@ export class ProcessInstanceService {
   }
 
   /**
+   * start() 可发起范围门禁（Task 76）：
+   * - starterScope.mode=ALL → 不校验（向后兼容，存量流程行为不变）
+   * - SPECIFIED → 系统管理员（username='admin'）绕过；否则发起人须命中 userIds
+   *   名单或拥有 roleIds 任一角色（sys_role.role_code，角色启用未删）
+   * - startUserId 缺省（测试/内部调用未传）→ 不校验：门禁只认登录用户，
+   *   不信任客户端 variables.initiator（可伪造）
+   */
+  private async assertStartAllowed(policy: ProcessPolicy, startUserId: string | null): Promise<void> {
+    if (startUserId === null || startUserId === '') return
+    const scope = policy.starterScope
+    if (scope.mode !== 'SPECIFIED') return
+
+    const userIdNum = Number(startUserId)
+    if (Number.isFinite(userIdNum)) {
+      // 系统管理员绕过（username='admin' 即全局 admin，与 page-access.guard 口径一致）
+      const user = await this.db
+        .selectFrom('sys_user')
+        .select(['id', 'username'])
+        .where('id', '=', userIdNum)
+        .where('is_deleted', '=', 0)
+        .executeTakeFirst()
+      if (user !== undefined && user.username === 'admin') return
+    }
+
+    if (scope.userIds.includes(startUserId)) return
+
+    if (scope.roleIds.length > 0) {
+      const roleRows = await this.db
+        .selectFrom('sys_user_role')
+        .innerJoin('sys_role', 'sys_role.id', 'sys_user_role.role_id')
+        .select('sys_role.role_code')
+        .where('sys_user_role.user_id', '=', userIdNum)
+        .where('sys_role.is_deleted', '=', 0)
+        .where('sys_role.status', '=', 1)
+        .execute()
+      const codes = new Set(roleRows.map((r) => r.role_code).filter((c): c is string => c !== null))
+      if (scope.roleIds.some((code) => codes.has(code))) return
+    }
+
+    throw new BusinessException(403, '您不在该流程的可发起人员范围内')
+  }
+
+  /**
    * 审批/办理人解析上下文（服务层预计算；与 TaskService 同一口径）。
    * adminUserId：sys_user 中 username='admin' 的用户；org 无负责人字段 → supervisor 恒 null。
+   * adminUserIdOverride：流程级审批管理员（adminUserIds[0]）传入时优先，to_admin 兜底/转派走流程管理员。
    */
-  private async buildResolutionContext(): Promise<ResolutionContext> {
+  private async buildResolutionContext(adminUserIdOverride?: string): Promise<ResolutionContext> {
     const admin = await this.db
       .selectFrom('sys_user')
       .select('id')
@@ -759,7 +808,7 @@ export class ProcessInstanceService {
       .where('is_deleted', '=', 0)
       .executeTakeFirst()
     return {
-      adminUserId: admin === undefined ? null : String(admin.id),
+      adminUserId: adminUserIdOverride ?? (admin === undefined ? null : String(admin.id)),
       initiatorSupervisor: null,
     }
   }

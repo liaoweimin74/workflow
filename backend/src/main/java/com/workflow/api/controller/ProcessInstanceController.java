@@ -70,6 +70,8 @@ public class ProcessInstanceController {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.getPrincipal() instanceof LoginUser loginUser) {
             variables.put("initiator", String.valueOf(loginUser.getUserId()));
+            // 可发起范围门禁（Task 76）：基于登录用户，不信任客户端 variables.initiator（可伪造）
+            processInstanceService.assertStartAllowed(request.getProcessKey(), String.valueOf(loginUser.getUserId()));
         }
 
         ProcessInstance instance;

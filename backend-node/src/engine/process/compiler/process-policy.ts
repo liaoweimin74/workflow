@@ -34,6 +34,8 @@ export function parseProcessPolicy(configJson: string | null): ProcessPolicy {
     approveRecall: false,
     retakeSkipApproved: false,
     timeoutRules: [],
+    starterScope: { mode: 'ALL', userIds: [], roleIds: [] },
+    adminUserIds: [],
     titlePattern: null,
     summaryFields: [],
     summaryShowInSms: false,
@@ -142,7 +144,30 @@ export function parseProcessPolicy(configJson: string | null): ProcessPolicy {
     }
   }
 
+  // 可发起人员范围（顶层 starterScope）：mode 非 SPECIFIED 一律 ALL（宽松）；名单上限防脏数据
+  const starterScope = parsed.starterScope
+  if (starterScope !== null && typeof starterScope === 'object' && !Array.isArray(starterScope)) {
+    const ss = starterScope as Record<string, unknown>
+    if (ss.mode === 'SPECIFIED') {
+      out.starterScope.mode = 'SPECIFIED'
+      out.starterScope.userIds = stringList(ss.userIds, 200)
+      out.starterScope.roleIds = stringList(ss.roleIds, 50)
+    }
+  }
+
+  // 流程级审批管理员（顶层 adminUserIds）：用户 ID 字符串列表，上限 50
+  out.adminUserIds = stringList(parsed.adminUserIds, 50)
+
   return out
+}
+
+/** 宽松字符串列表：仅保留非空字符串（trim），截断到上限。 */
+function stringList(value: unknown, cap: number): string[] {
+  if (!Array.isArray(value)) return []
+  return (value as unknown[])
+    .filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+    .map((v) => v.trim())
+    .slice(0, cap)
 }
 
 /**

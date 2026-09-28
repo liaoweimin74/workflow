@@ -544,7 +544,8 @@ export class TaskService {
       state,
       () => new Date(),
       () => randomUuid(),
-      await this.buildResolutionContext(),
+      // to_admin 兜底目标：流程级审批管理员优先，未配置回落全局 admin（Task 76）
+      await this.buildResolutionContext(processPolicy.adminUserIds[0] ?? undefined),
       {
         dedupEnabled: processPolicy.dedup.enabled,
         dedupMode: processPolicy.dedup.mode,
@@ -1494,11 +1495,12 @@ export class TaskService {
   /**
    * 审批/办理人解析上下文（服务层预计算）。
    *
-   * adminUserId：sys_user 中 username='admin' 的用户（找不到策略 to_admin / 超时转派兑底）。
+   * adminUserId：sys_user 中 username='admin' 的用户（找不到策略 to_admin / 超时转派兜底）。
    * initiatorSupervisor：org 表无负责人字段，v1 恒为 null（supervisor/dept_head 策略降级到旧语义）。
    * roleMemberships：角色编码 → 成员用户 ID 列表（role 类型审批人解析用；表小全量预查）。
+   * adminUserIdOverride：流程级审批管理员（adminUserIds[0]）传入时优先（Task 76）。
    */
-  private async buildResolutionContext(): Promise<ResolutionContext> {
+  private async buildResolutionContext(adminUserIdOverride?: string): Promise<ResolutionContext> {
     const admin = await this.db
       .selectFrom('sys_user')
       .select('id')
@@ -1520,7 +1522,7 @@ export class TaskService {
       roleMemberships[row.role_code] = members
     }
     return {
-      adminUserId: admin === undefined ? null : String(admin.id),
+      adminUserId: adminUserIdOverride ?? (admin === undefined ? null : String(admin.id)),
       initiatorSupervisor: null,
       roleMemberships,
     }

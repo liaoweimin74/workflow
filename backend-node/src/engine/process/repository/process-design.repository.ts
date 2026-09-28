@@ -105,6 +105,21 @@ export class ProcessDesignRepository {
     return rows
   }
 
+  /**
+   * 批量取多个部署版本的 `__PROCESS__` 流程级配置（发起中心列表下发 starterScope 用，
+   * Task 76；一页定义数有限，单次 IN 查询避免 N+1）。
+   */
+  async findProcessLevelConfigsByDefIds(defIds: string[]): Promise<NodeConfigRow[]> {
+    if (defIds.length === 0) return []
+    const rows = await this.db
+      .selectFrom('wf_node_config')
+      .selectAll()
+      .where('process_definition_id', 'in', defIds)
+      .where('node_id', '=', '__PROCESS__')
+      .execute()
+    return rows
+  }
+
   async deleteEditingConfigs(draftId: string): Promise<void> {
     await this.db
       .deleteFrom('wf_node_config')

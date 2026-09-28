@@ -46,6 +46,52 @@
           />
         </el-form-item>
 
+        <el-divider content-position="left">权限设置</el-divider>
+
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="限制谁可以发起该流程；指定人员时，命中名单或拥有所选角色之一才可发起（系统管理员不受限）">可发起人员</FormLabelTip>
+          </template>
+          <el-radio-group v-model="config.starterScope.mode" @change="syncToStore">
+            <el-radio value="ALL">所有人</el-radio>
+            <el-radio value="SPECIFIED">指定人员</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <template v-if="config.starterScope.mode === 'SPECIFIED'">
+          <el-form-item label="指定用户">
+            <ApproverPicker
+              :model-value="starterUserIds"
+              placeholder="请选择可发起人员"
+              @update:model-value="onStarterUsersChange"
+            />
+          </el-form-item>
+          <el-form-item label="指定角色">
+            <el-select
+              v-model="config.starterScope.roleIds"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="选择或输入角色编码"
+              @change="syncToStore"
+            >
+              <el-option v-for="code in roleOptions" :key="code" :label="code" :value="code" />
+            </el-select>
+          </el-form-item>
+        </template>
+
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="超时转派/被提醒人与「找不到办理人」兜底优先取此名单（第一人为转派对象），未配置时回落系统管理员">审批管理员</FormLabelTip>
+          </template>
+          <ApproverPicker
+            :model-value="adminUserIdsNum"
+            placeholder="请选择审批管理员"
+            @update:model-value="onAdminUsersChange"
+          />
+        </el-form-item>
+
         <el-divider content-position="left">审批人去重规则</el-divider>
 
         <el-form-item label="去重规则">
@@ -306,6 +352,8 @@ import {
   type ProcessTimeoutRule,
 } from '@/stores/designerStore'
 import { categoryApi, type Category } from '@/api/category'
+import { getRoleList } from '@/api/role'
+import { ApproverPicker } from '@/components/business'
 import ProcessFormPropertyTab from './ProcessFormPropertyTab.vue'
 import ProcessTimeoutRuleDialog from './ProcessTimeoutRuleDialog.vue'
 import FormLabelTip from './shared/FormLabelTip.vue'
@@ -320,6 +368,41 @@ const designerStore = useDesignerStore()
 const activeTab = ref('process')
 
 const config = reactive<ProcessConfigData>(JSON.parse(JSON.stringify(DEFAULT_PROCESS_CONFIG)))
+
+// ---- 权限设置（Task 76：可发起人员范围 + 流程级审批管理员） ----
+
+/** 角色编码选项（与 AssigneeSelector 同源：getRoleList → roleCode，支持手动输入） */
+const roleOptions = ref<string[]>([])
+
+/** starterScope.userIds（字符串）↔ ApproverPicker（number[]）双向适配 */
+const starterUserIds = computed(() =>
+  config.starterScope.userIds.map(Number).filter((n) => Number.isFinite(n)),
+)
+const adminUserIdsNum = computed(() =>
+  config.adminUserIds.map(Number).filter((n) => Number.isFinite(n)),
+)
+
+function onStarterUsersChange(ids: number[]) {
+  config.starterScope.userIds = ids.map(String)
+  syncToStore()
+}
+
+function onAdminUsersChange(ids: number[]) {
+  config.adminUserIds = ids.map(String)
+  syncToStore()
+}
+
+/** 角色列表拉取失败不阻断面板（仍可手动输入编码，与 AssigneeSelector 一致） */
+async function loadRoleOptions() {
+  try {
+    const res = await getRoleList({ page: 1, size: 100 })
+    roleOptions.value = (res.data?.rows ?? [])
+      .map((r) => String(r.roleCode ?? ''))
+      .filter((code) => code !== '')
+  } catch {
+    roleOptions.value = []
+  }
+}
 
 // ---- 流程基本属性（Task 74：名称/标识/分类/说明，设计器内首次可编辑） ----
 const basicForm = reactive<{ name: string; key: string; categoryId: string | null; description: string }>({
@@ -442,6 +525,7 @@ onMounted(async () => {
   basicForm.categoryId = designerStore.draftCategoryId
   basicForm.description = designerStore.draftDescription
   void loadCategories()
+  void loadRoleOptions()
 
   const stored = designerStore.getProcessConfig()
   Object.assign(config, stored)

@@ -259,6 +259,16 @@ export interface ProcessConfigData {
   dynamicProcess: boolean
   /** 流程级超时规则组（节点未开启超时处理时兜底生效） */
   timeoutRules: ProcessTimeoutRule[]
+  /** 可发起人员范围：ALL=所有人可发起；SPECIFIED=仅命中用户/角色可发起（引擎 start() 门禁） */
+  starterScope: {
+    mode: 'ALL' | 'SPECIFIED'
+    /** 用户 ID 列表（字符串，与实例 initiator 同口径） */
+    userIds: string[]
+    /** 角色编码列表（与审批节点 role 选人口径一致，引擎按 sys_role.role_code 解析） */
+    roleIds: string[]
+  }
+  /** 流程级审批管理员（用户 ID 列表）：超时转派/被提醒人、找不到办理人兜底优先取此名单，未配置回落系统管理员 */
+  adminUserIds: string[]
   numberRule: {
     enabled: boolean
     pattern: string
@@ -314,6 +324,12 @@ export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {
   },
   dynamicProcess: false,
   timeoutRules: [],
+  starterScope: {
+    mode: 'ALL',
+    userIds: [],
+    roleIds: [],
+  },
+  adminUserIds: [],
   numberRule: {
     enabled: false,
     pattern: '{{year}}-{{seq:4}}',
@@ -450,6 +466,17 @@ export const useDesignerStore = defineStore('designer', () => {
         timeoutRules: Array.isArray(parsed.timeoutRules)
           ? parsed.timeoutRules
           : DEFAULT_PROCESS_CONFIG.timeoutRules,
+        starterScope: {
+          ...DEFAULT_PROCESS_CONFIG.starterScope,
+          ...(parsed.starterScope ?? {}),
+          userIds: Array.isArray(parsed.starterScope?.userIds)
+            ? parsed.starterScope.userIds
+            : [],
+          roleIds: Array.isArray(parsed.starterScope?.roleIds)
+            ? parsed.starterScope.roleIds
+            : [],
+        },
+        adminUserIds: Array.isArray(parsed.adminUserIds) ? parsed.adminUserIds : [],
         numberRule: {
           ...DEFAULT_PROCESS_CONFIG.numberRule,
           ...(parsed.numberRule ?? {}),

@@ -212,7 +212,7 @@ export interface CompiledFlow {
 export interface CompiledApproval {
   /**
    * 办理/审批人类型（nodeConfigs approval.type 原文；缺省 'user'）。
-   * 引擎据此做类型化解析（initiator_self / initiator_select / role / expression），
+   * 引擎据此做类型化解析（initiator_self / initiator_select / role / form_user / external / expression），
    * 其余类型走「找不到办理人」策略。
    */
   type?: string
@@ -220,6 +220,13 @@ export interface CompiledApproval {
   roleCodes: string[]
   /** 表达式（type=expression 时有值，如 `${initiator.deptManager}`）。 */
   expression?: string
+  /** 表单内用户字段名（type=form_user 时生效；引擎从流程变量取该字段值解析用户）。 */
+  formUserField?: string
+  /** 自定义选人（type=external 时生效；业务系统经 assignee-resolver-registry 注册的选人函数）。 */
+  external?: {
+    /** 选人函数注册名 */
+    resolver?: string
+  }
   multiMode: MultiMode
 }
 

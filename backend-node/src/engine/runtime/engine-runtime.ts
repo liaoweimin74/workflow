@@ -7,6 +7,7 @@ import type {
   ResolutionContext,
 } from '../process/compiler/process-model'
 import { GATEWAY_TYPES } from '../process/compiler/process-model'
+import type { AssigneeResolveFn } from './assignee-resolver-registry'
 
 function isGatewayNode(nodeType: NodeType): boolean {
   return GATEWAY_TYPES.includes(nodeType)
@@ -203,6 +204,14 @@ export class EngineRuntime {
      * 流程级策略（可选；缺省保持旧行为 = 全流程 FIRST 去重/无退回免审）。
      */
     private readonly policy: EngineProcessPolicy = {},
+    /**
+     * 自定义选人函数表（type=external 时按 approval.external.resolver 查找；可选）。
+     *
+     * 业务系统经 assignee-resolver-registry 的 registerAssigneeResolver 注册，
+     * 服务层用 snapshotAssigneeResolvers() 快照后传入；测试可注入自定义 map。
+     * 未注册/返回空 → 变量兑底 assignee_ext_<nodeId> → 「找不到办理人」策略。
+     */
+    private readonly assigneeResolvers: Record<string, AssigneeResolveFn> = {},
   ) {
     this.variables = {}
   }
@@ -553,8 +562,13 @@ export class EngineRuntime {
    *   - initiator_self：发起人自己
    *   - initiator_select：发起页选择的变量 `assignee_<nodeId>`
    *   - role：roleCodes 逐个查上下文 roleMemberships（服务层预查 sys_role/sys_user_role）取并集
+   *   - form_user：表单内用户 —— 流程变量中 approval.formUserField 字段的值
+   *     （发起/上一步提交的表单数据平铺写入变量；支持单个/逗号分隔/数组）
+   *   - external：自定义选人函数 —— 先按 approval.external.resolver 查进程内注册表
+   *     （业务系统经 registerAssigneeResolver 注册，服务层快照注入），未命中或返回空
+   *     再兑底变量 `assignee_ext_<nodeId>`（外部系统集成通道）
    *   - expression：表达式求值（resolveExpression，v1 保守子集）
-   *   - 其余类型（dept_head/post/矩阵等，需组织架构数据）：解析为空 →
+   *   - 其余类型（dept_head/post/矩阵等，未支持的旧类型）：解析为空 →
    *     由「找不到办理人策略」接管（未配置策略则建候选人任务，兼容旧语义）
    */
   private resolveAssignees(node: CompiledNode): string[] {
@@ -572,6 +586,34 @@ export class EngineRuntime {
     }
     if (type === 'initiator_select') {
       return normalizeUserList(this.variables[`assignee_${node.nodeId}`])
+    }
+    if (type === 'form_user') {
+      const field = (approval.formUserField ?? '').trim()
+      if (field === '') return []
+      return normalizeUserList(this.variables[field])
+    }
+    if (type === 'external') {
+      const name = (approval.external?.resolver ?? '').trim()
+      if (name !== '') {
+        const fn = this.assigneeResolvers[name]
+        if (fn !== undefined) {
+          try {
+            const list = normalizeUserList(
+              fn({
+                nodeId: node.nodeId,
+                nodeName: node.name,
+                initiator: this.initiatorValue(),
+                variables: { ...this.variables },
+              }),
+            )
+            if (list.length > 0) return list
+          } catch {
+            // 选人函数抛错：视为本次解析不出，落到变量兑底/找不到人策略
+          }
+        }
+      }
+      // 变量兑底：外部系统集成通道（发起前/服务层预置 assignee_ext_<nodeId>）
+      return normalizeUserList(this.variables[`assignee_ext_${node.nodeId}`])
     }
     if (type === 'role') {
       const memberships = this.resolution.roleMemberships ?? {}

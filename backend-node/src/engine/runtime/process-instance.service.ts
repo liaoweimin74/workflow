@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { Inject, Injectable } from '@nestjs/common'
 import { Kysely } from 'kysely'
 import { BusinessException } from '../../common/exception/business-exception'
+import { snapshotAssigneeResolvers } from './assignee-resolver-registry'
 import { EngineException } from '../../common/exception/engine-exception'
 import { PageResponse } from '../../common/domain/page-response'
 import { KYSELY } from '../../framework/database/database.module'
@@ -135,6 +136,8 @@ export class ProcessInstanceService {
       () => new Date(),
       () => randomUuid(),
       await this.buildResolutionContext(),
+      {},
+      snapshotAssigneeResolvers(),
     )
     runtime.start({ initiator: initiator ?? undefined, variables: variables ?? {} })
 

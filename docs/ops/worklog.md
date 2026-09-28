@@ -1845,3 +1845,28 @@ Work Log:
 
 Stage Summary:
 - 设计器路由导入链修复（v-pre 字面量渲染）；vue-tsc/vitest 基线零新增；提交推送
+
+---
+Task ID: 72-assignee-extend
+Agent: Z.ai Code (main + java-sync 子代理)
+Task: 用户四项需求——①属性配置栏办理人/审批人去掉引擎不支持的选项 ②支持业务系统注册选人函数扩展 ③支持表单内用户 ④审批人可进行的操作横向排列（同意/拒绝默认勾选只读，二级选项纵向）
+
+Work Log:
+- 引擎支持面核查（对齐基准）：Node engine-runtime.resolveAssignees 与 Java TaskCreateBehaviorListener.resolveTyped 实际仅类型化支持 userIds/initiator_self/initiator_select/role/expression；AssigneeSelector 原有 18 项中 post/member_group/multi_level/report_superior/approval_role/matrix/dept_head/form_dept_leader/form_dept_approval_role/approver_designate/external_push 共 11 项两端均无解析（解析为空走找不到人策略）
+- 需求①（前端 AssigneeSelector.vue 重构）：四列 18 项精简为三列 7 项——普通审批（指定用户/发起人自选/角色/发起人自己）+ 表单相关（表单内用户）+ 其他（流程表达式/自定义选人函数）；SUPPORTED_TYPES 同步更新；旧类型（designerStore approval.type 联合保留 10 个历史值防存量数据回显崩）命中时保留既有 warning alert
+- 需求②（业务系统注册选人函数）：
+  - Node 新文件 backend-node/src/engine/runtime/assignee-resolver-registry.ts：registerAssigneeResolver/unregister/list/snapshot/clear + AssigneeResolveContext{nodeId,nodeName,initiator,variables}；同步签名（引擎解析链同步纯内存，类型层面禁 Promise）；空名/非函数抛错，同名覆盖
+  - Node engine-runtime 构造第 7 参 assigneeResolvers 注入；resolveAssignees 新分支 type=external：registry 查 resolver → 未命中/返回空/抛错 → 变量兜底 assignee_ext_<nodeId>（外部系统集成通道，对齐 initiator_select 机制）→ 仍空走找不到人策略
+  - Node 服务层装配 8 处 new EngineRuntime 全部传入 snapshotAssigneeResolvers()（task.service×6 / process-instance.service / timeout-scanner）
+  - Java（子代理 Task 72-e + 主线补齐）：新 AssigneeResolver 接口 + AssigneeResolveContext record + AssigneeResolverRegistry @Component（构造注入 List<AssigneeResolver> 建 Map）；NodeOptions 加 formUserField/externalResolver 字段与 parse 宽松读取；TaskCreateBehaviorListener/MultiInstanceApproverListener 的 resolveTyped switch 加 form_user/external 两 case；external 尾部变量兜底 assignee_ext_<nodeId> 主线补齐对齐 Node
+- 需求③（表单内用户）：配置 approval.formUserField=表单字段名；前端 type=form_user 时拉取本节点绑定表单 schema（formApi.getFormDefinition）扁平化遍历（children/columns 嵌套）过滤用户类型控件（selectUser/userPicker/user/memberSelect）出字段下拉，未绑表单/无用户字段给出引导提示；Node resolveAssignees form_user 分支 = normalizeUserList(variables[formUserField])（发起时表单数据平铺进流程变量）；Java 同语义（variable(processInstanceId, field)）
+- 需求④（操作布局）：UserTaskProperty 高级设置主选项 checkbox-row 横向一行（通过✓拒绝✓灰色只读 + 转派/退回/加签可勾选）；二级选项（退回 2 项/必须加签）纵向在下方（原 sub-items 缩进样式保留）；allowRefuse 语义收敛为固定 true——loadConfig 不再读存量、saveConfig 恒写 true（旧 allowReject 兼容映射仅保留给 allowReturn）；HandlerTaskProperty 办理人操作同布局（提交✓只读 + 转派/退回/加签）
+- Node 单测：assignee-resolution.spec.ts 扩展 boot 支持第 7 参注入 + 新增 9 用例（form_user 单/多值/逗号分隔/缺字段；external 注册函数解析+上下文断言/多用户 single 候选/抛错变量兜底/未注册兜底/编译透传；registry 生命周期/覆盖/非法注册）
+- 基线验证：backend-node vitest 929/929（920 基线+9 新增）全绿、tsc 1 error=既有基线；frontend vitest 1132/1132 全绿、vue-tsc 46 errors=既有基线；eslint 改动文件 0 errors
+- 浏览器金路径（agent-browser）：设计器（真实 draft id=4f10a0d7…，id=1 不存在时 loadEditor 404 静默致面板空态为既有行为）→ 拖入审批节点 → 三列分组正确渲染 → 表单内用户/自定义选人函数选中态与配置 UI → 高级设置横向布局与只读态 → 输入注册名保存 → 刷新回显 crm_owner_resolver → 后端 nodeConfigs 持久化 JSON 结构正确（type/external.resolver/formUserField/allowRefuse:true）→ console 零报错 → 浏览器关闭
+- 事故与修复：①task.service 541/1428 两处装配时把 resolvers 误插到 policy 对象前致 8 参编译错 → 移至 policy 闭合后；②process-compiler NodeConfigJson.approval 窄化类型缺新键 → 补 formUserField/external unknown 声明
+
+Stage Summary:
+- 选人体系收敛为「引擎支持子集 + 两条扩展通道」：表单内用户（form_user，变量取值）与自定义选人函数（external，进程内 registry 注册 + assignee_ext_<nodeId> 变量兜底），Node/Java 双端语义一致；设计器面板只暴露引擎真正支持的 7 项，操作布局对齐截图风格
+- 业务系统接入方式：Node 进程内 registerAssigneeResolver(name, fn)（fn 同步返回 string[]）；Java 实现 AssigneeResolver 接口注册为 Spring Bean 自动收集
+- 20 文件改动（前端 4 / Node 7 / Java 主 8 + 测试 2 新增）；无 DB 迁移；四项测试基线零回归

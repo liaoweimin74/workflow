@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.repository.NodeConfigRepository;
+import org.flowable.bpmn.model.FlowElement;
+import org.flowable.bpmn.model.FlowNode;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -26,7 +29,8 @@ import java.util.regex.Pattern;
  *
  * <p>Task 61 扩展（对齐 NodeJS 引擎 resolveAssignees）：
  * <ul>
- *   <li>类型化解析：userIds 优先，其次 initiator_self / initiator_select / role / expression</li>
+ *   <li>类型化解析：userIds 优先，其次 initiator_self / initiator_select / role / expression /
+ *       form_user 表单内用户 / external 业务系统注册选人函数</li>
  *   <li>去重：skipSameAsInitiator（过滤与发起人相同）、dedup.enabled（过滤本实例已办过的）</li>
  *   <li>找不到人策略：auto_pass/skip（列表留空 → MI 空集合自动跳过）、block（抛错拦截）、
  *       to_admin / to_user / supervisor（回填目标人）</li>
@@ -45,15 +49,19 @@ public class MultiInstanceApproverListener implements JavaDelegate {
     private final RoleMembershipResolver roleMembershipResolver;
     private final HistoryService historyService;
     private final ObjectMapper objectMapper;
+    /** Task 72：业务系统注册选人函数注册表（approval.type=external 时按名调用）。 */
+    private final AssigneeResolverRegistry assigneeResolverRegistry;
 
     public MultiInstanceApproverListener(NodeConfigRepository nodeConfigRepository,
                                          RoleMembershipResolver roleMembershipResolver,
                                          HistoryService historyService,
-                                         ObjectMapper objectMapper) {
+                                         ObjectMapper objectMapper,
+                                         AssigneeResolverRegistry assigneeResolverRegistry) {
         this.nodeConfigRepository = nodeConfigRepository;
         this.roleMembershipResolver = roleMembershipResolver;
         this.historyService = historyService;
         this.objectMapper = objectMapper;
+        this.assigneeResolverRegistry = assigneeResolverRegistry;
     }
 
     @Override
@@ -178,7 +186,10 @@ public class MultiInstanceApproverListener implements JavaDelegate {
     /**
      * 类型化解析（approval.type）：
      * initiator_self → 发起人变量；initiator_select → 变量 assignee_&lt;nodeId&gt;；
-     * role → roleCodes 并集；expression → 表达式求值；其余类型返回空（走策略）。
+     * role → roleCodes 并集；expression → 表达式求值；
+     * form_user → 流程变量中 approval.formUserField 字段值；
+     * external → 按 approval.external.resolver 查注册表调用选人；
+     * 其余类型返回空（走策略）。
      */
     private List<String> resolveTyped(JsonNode approval, DelegateExecution execution, String activityId) {
         String type = textAt(approval, "type");
@@ -207,6 +218,31 @@ public class MultiInstanceApproverListener implements JavaDelegate {
             }
             case "expression" -> {
                 return resolveExpression(textAt(approval, "expression"), execution);
+            }
+            case "form_user" -> {
+                // 表单内用户：从流程变量取 approval.formUserField 字段值解析（单个/逗号分隔/数组均可）
+                String field = textAt(approval, "formUserField");
+                if (field == null || field.isBlank()) {
+                    return List.of();
+                }
+                return normalizeUserList(execution.getVariable(field));
+            }
+            case "external" -> {
+                // 业务系统注册选人函数：按 approval.external.resolver 查进程内注册表并调用
+                String name = textAt(approval.path("external"), "resolver");
+                if (name != null && !name.isBlank() && assigneeResolverRegistry != null) {
+                    var resolver = assigneeResolverRegistry.find(name);
+                    if (resolver.isPresent()) {
+                        try {
+                            return normalizeUserList(
+                                    resolver.get().resolve(buildResolveContext(execution, activityId)));
+                        } catch (Exception e) {
+                            // 选人函数抛错：视为本次解析不出，落到变量兜底
+                        }
+                    }
+                }
+                // 变量兜底（对齐 NodeJS）：外部系统集成通道（assignee_ext_<nodeId>）
+                return normalizeUserList(execution.getVariable("assignee_ext_" + activityId));
             }
             default -> {
                 return List.of();
@@ -246,6 +282,31 @@ public class MultiInstanceApproverListener implements JavaDelegate {
             out.addAll(normalizeUserList(execution.getVariable(name)));
         }
         return new ArrayList<>(out);
+    }
+
+    /**
+     * 组装 external 选人函数上下文（对齐 NodeJS AssigneeResolveContext）：
+     * variables 取执行级全部变量快照（读取失败按空集合，不因快照失败中断选人调用）；
+     * nodeName 取 BPMN 节点名，读取失败回退节点 ID。
+     */
+    private AssigneeResolveContext buildResolveContext(DelegateExecution execution, String activityId) {
+        Map<String, Object> variables;
+        try {
+            variables = execution.getVariables();
+        } catch (Exception e) {
+            variables = Map.of();
+        }
+        String nodeName = activityId;
+        try {
+            FlowElement element = execution.getCurrentFlowElement();
+            if (element instanceof FlowNode node && node.getName() != null && !node.getName().isBlank()) {
+                nodeName = node.getName().trim();
+            }
+        } catch (Exception ignored) {
+            // 节点名读取失败回退节点 ID
+        }
+        return new AssigneeResolveContext(activityId, nodeName,
+                stringVariable(execution, "initiator"), variables);
     }
 
     private boolean alreadyCompleted(String processInstanceId, String userId) {

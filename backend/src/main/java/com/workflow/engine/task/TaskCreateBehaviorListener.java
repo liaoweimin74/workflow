@@ -33,6 +33,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -49,7 +50,8 @@ import java.util.regex.Pattern;
  *   <li>approvalType=auto_pass / auto_reject → 自动通过 / 自动拒绝（终止实例）</li>
  *   <li>Task 69 退回免审（retakeSkipApproved）：__retakeApprovedNodes 命中 → 自动通过（「已审批，自动通过（退回重审免审）」）</li>
  *   <li>去重（节点显式配置优先 / 流程级默认；Task 69 三口径 CONSECUTIVE/FIRST/LAST）→ 过滤后为空自动通过</li>
- *   <li>未分配任务 → 类型化解析（initiator_self / initiator_select / role / expression）</li>
+ *   <li>未分配任务 → 类型化解析（initiator_self / initiator_select / role / expression /
+ *       form_user 表单内用户 / external 业务系统注册选人函数）</li>
  *   <li>解析为空 → noAssigneePolicy 策略（auto_pass/skip/block/to_admin/to_user/supervisor）</li>
  * </ol>
  *
@@ -79,6 +81,8 @@ public class TaskCreateBehaviorListener implements TaskListener {
     private final InitiatorNodeResolver initiatorNodeResolver;
     /** Task 69：LAST 去重的静态后续节点图遍历（BPMN 连线真源）。 */
     private final RepositoryService repositoryService;
+    /** Task 72：业务系统注册选人函数注册表（approval.type=external 时按名调用）。 */
+    private final AssigneeResolverRegistry assigneeResolverRegistry;
 
     public TaskCreateBehaviorListener(NodeOptionsService nodeOptionsService,
                                       RoleMembershipResolver roleMembershipResolver,
@@ -89,7 +93,8 @@ public class TaskCreateBehaviorListener implements TaskListener {
                                       WfTaskCommentRepository commentRepository,
                                       NodeConfigRepository nodeConfigRepository,
                                       InitiatorNodeResolver initiatorNodeResolver,
-                                      RepositoryService repositoryService) {
+                                      RepositoryService repositoryService,
+                                      AssigneeResolverRegistry assigneeResolverRegistry) {
         this.nodeOptionsService = nodeOptionsService;
         this.roleMembershipResolver = roleMembershipResolver;
         this.engineNotifyService = engineNotifyService;
@@ -100,6 +105,7 @@ public class TaskCreateBehaviorListener implements TaskListener {
         this.nodeConfigRepository = nodeConfigRepository;
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.repositoryService = repositoryService;
+        this.assigneeResolverRegistry = assigneeResolverRegistry;
     }
 
     @Override
@@ -511,6 +517,32 @@ public class TaskCreateBehaviorListener implements TaskListener {
             case "expression" -> {
                 return resolveExpression(opts.getApprovalExpression(), processInstanceId, initiator);
             }
+            case "form_user" -> {
+                // 表单内用户：从流程变量取 approval.formUserField 字段值解析（单个/逗号分隔/数组均可）
+                String field = opts.getFormUserField() == null ? "" : opts.getFormUserField().trim();
+                if (field.isEmpty()) {
+                    return List.of();
+                }
+                return normalizeUserList(variable(processInstanceId, field));
+            }
+            case "external" -> {
+                // 业务系统注册选人函数：按 approval.external.resolver 查进程内注册表并调用
+                String name = opts.getExternalResolver() == null ? "" : opts.getExternalResolver().trim();
+                if (!name.isEmpty() && assigneeResolverRegistry != null) {
+                    var resolver = assigneeResolverRegistry.find(name);
+                    if (resolver.isPresent()) {
+                        try {
+                            return normalizeUserList(
+                                    resolver.get().resolve(buildResolveContext(task, initiator)));
+                        } catch (Exception e) {
+                            // 选人函数抛错：视为本次解析不出，落到变量兑底
+                        }
+                    }
+                }
+                // 变量兑底（对齐 NodeJS）：外部系统集成通道（发起前/服务层预置 assignee_ext_<nodeId>）
+                return normalizeUserList(
+                        variable(processInstanceId, "assignee_ext_" + task.getTaskDefinitionKey()));
+            }
             default -> {
                 return List.of();
             }
@@ -550,6 +582,23 @@ public class TaskCreateBehaviorListener implements TaskListener {
             out.addAll(normalizeUserList(variable(processInstanceId, name)));
         }
         return new ArrayList<>(out);
+    }
+
+    /**
+     * 组装 external 选人函数上下文（对齐 NodeJS AssigneeResolveContext）：
+     * variables 取实例全部变量快照（读取失败按空集合，不因快照失败中断选人调用）；
+     * nodeName 取任务名，缺省回退节点 ID。
+     */
+    private AssigneeResolveContext buildResolveContext(DelegateTask task, String initiator) {
+        Map<String, Object> variables;
+        try {
+            variables = runtimeService.getVariables(task.getProcessInstanceId());
+        } catch (Exception e) {
+            variables = Map.of();
+        }
+        String label = task.getName() == null || task.getName().isBlank()
+                ? task.getTaskDefinitionKey() : task.getName();
+        return new AssigneeResolveContext(task.getTaskDefinitionKey(), label, initiator, variables);
     }
 
     // ------------------------------------------------------------ 辅助

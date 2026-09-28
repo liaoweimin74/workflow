@@ -6,6 +6,7 @@ import { getTenantId, runWithTenant } from '../../framework/tenant/tenant-contex
 import type { ProcessModel, ProcessPolicy, ProcessTimeoutRule } from '../process/compiler/process-model'
 import { randomUuid } from '../process/process-design.service'
 import { EnginePersistence } from './engine-persistence'
+import { snapshotAssigneeResolvers } from './assignee-resolver-registry'
 import { ProcessInstanceService } from './process-instance.service'
 import { EngineRuntime } from './engine-runtime'
 import { parseProcessPolicy } from '../process/compiler/process-policy'
@@ -348,7 +349,15 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
     )
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) return
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      {},
+      {},
+      snapshotAssigneeResolvers(),
+    )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
     try {

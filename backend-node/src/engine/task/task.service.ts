@@ -7,6 +7,7 @@ import { assertPageSize } from '../../framework/http/query-params'
 import type { DB } from '../../framework/database/types'
 import { getTenantId } from '../../framework/tenant/tenant-context'
 import { EngineRuntime } from '../runtime/engine-runtime'
+import { snapshotAssigneeResolvers } from '../runtime/assignee-resolver-registry'
 import { extractFormConfig, randomUuid } from '../process/process-design.service'
 import { EnginePersistence, type TaskJoinRow } from '../runtime/engine-persistence'
 import { ProcessDesignRepository } from '../process/repository/process-design.repository'
@@ -550,6 +551,7 @@ export class TaskService {
         dedupSkipSameAsInitiator: processPolicy.dedup.skipSameAsInitiator,
         retakeSkipApproved: processPolicy.retakeSkipApproved,
       },
+      snapshotAssigneeResolvers(),
     )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
@@ -722,6 +724,7 @@ export class TaskService {
         dedupSkipSameAsInitiator: processPolicyForReject.dedup.skipSameAsInitiator,
         retakeSkipApproved: processPolicyForReject.retakeSkipApproved,
       },
+      snapshotAssigneeResolvers(),
     )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
@@ -877,7 +880,15 @@ export class TaskService {
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
 
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      {},
+      {},
+      snapshotAssigneeResolvers(),
+    )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
 
@@ -963,7 +974,15 @@ export class TaskService {
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
 
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      {},
+      {},
+      snapshotAssigneeResolvers(),
+    )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
     try {
@@ -1317,6 +1336,8 @@ export class TaskService {
       () => new Date(),
       () => randomUuid(),
       await this.buildResolutionContext(),
+      {},
+      snapshotAssigneeResolvers(),
     )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
@@ -1439,6 +1460,7 @@ export class TaskService {
         // 召回重走必须忽略去重：否则召回者刚办过，会被去重 auto-pass 掉
         skipDedupForRecall: true,
       },
+      snapshotAssigneeResolvers(),
     )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)

@@ -47,11 +47,15 @@
             :user-ids="ui.approval.userIds"
             :role-codes="ui.approval.roleCodes"
             :allow-adjust="ui.assignee.allowInitiatorAdjust"
+            :form-user-field="ui.approval.formUserField"
+            :external-resolver="ui.approval.externalResolver"
             kind="approver"
             :disabled="readOnly"
             @update:user-ids="(ids: number[]) => (ui.approval.userIds = ids)"
             @update:role-codes="(codes: string[]) => (ui.approval.roleCodes = codes)"
             @update:allow-adjust="(v: boolean) => (ui.assignee.allowInitiatorAdjust = v)"
+            @update:form-user-field="(v: string) => (ui.approval.formUserField = v)"
+            @update:external-resolver="(v: string) => (ui.approval.externalResolver = v)"
           />
 
           <template v-if="ui.approval.type === 'expression'">
@@ -113,13 +117,15 @@
       <el-tab-pane label="高级设置" name="advanced">
         <div class="tab-inner">
           <div class="section-title">审批人可进行的操作</div>
-          <div class="checkbox-col">
+          <!-- 主选项横向一行：通过/拒绝固定开启且只读 -->
+          <div class="checkbox-row">
             <el-checkbox :model-value="true" disabled>通过</el-checkbox>
-            <el-checkbox v-model="ui.operations.allowRefuse" :disabled="readOnly">拒绝</el-checkbox>
+            <el-checkbox :model-value="true" disabled>拒绝</el-checkbox>
             <el-checkbox v-model="ui.operations.allowTransfer" :disabled="readOnly">转派</el-checkbox>
             <el-checkbox v-model="ui.operations.allowReturn" :disabled="readOnly">退回</el-checkbox>
             <el-checkbox v-model="ui.operations.allowAddSign" :disabled="readOnly">加签</el-checkbox>
           </div>
+          <!-- 二级选项：纵向展示在主选项下方 -->
           <template v-if="ui.operations.allowReturn">
             <div class="checkbox-col sub-items">
               <el-checkbox v-model="ui.returnOptions.restartFromHere" :disabled="readOnly">
@@ -271,6 +277,8 @@ const ui = reactive({
     userIds: [] as number[],
     roleCodes: [] as string[],
     expression: '',
+    formUserField: '',
+    externalResolver: '',
     multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | '',
   },
   assignee: {
@@ -346,6 +354,8 @@ function loadConfig() {
   ui.approval.userIds = []
   ui.approval.roleCodes = []
   ui.approval.expression = ''
+  ui.approval.formUserField = ''
+  ui.approval.externalResolver = ''
   ui.approval.multiMode = ''
   ui.assignee.allowInitiatorAdjust = false
   ui.assignee.noAssigneePolicy = ''
@@ -383,6 +393,8 @@ function loadConfig() {
       ui.approval.userIds = (existing.approval.userIds || []).map((id) => Number(id))
       ui.approval.roleCodes = (existing.approval.roleCodes || []).map((c) => String(c))
       ui.approval.expression = existing.approval.expression || ''
+      ui.approval.formUserField = existing.approval.formUserField || ''
+      ui.approval.externalResolver = existing.approval.external?.resolver || ''
       ui.approval.multiMode = existing.approval.multiMode || ''
     }
     if (existing.assigneeOptions) {
@@ -393,9 +405,10 @@ function loadConfig() {
         : []
     }
     if (existing.operations) {
-      // 兼容旧配置：旧 allowReject（驳回）映射到 allowRefuse / allowReturn
+      // 兼容旧配置：旧 allowReject（驳回）映射到 allowReturn；
+      // 拒绝/通过固定开启（UI 只读，allowRefuse 不再从存量配置读取）
       const legacyReject = existing.operations.allowReject
-      ui.operations.allowRefuse = existing.operations.allowRefuse ?? legacyReject ?? true
+      ui.operations.allowRefuse = true
       ui.operations.allowReturn = existing.operations.allowReturn ?? legacyReject ?? true
       ui.operations.allowTransfer = existing.operations.allowTransfer ?? true
       ui.operations.allowAddSign = existing.operations.allowAddSign ?? false
@@ -462,6 +475,12 @@ function saveConfig() {
       userIds: ui.approval.type === 'user' && ui.approval.userIds.length > 0 ? ui.approval.userIds : undefined,
       roleCodes: ui.approval.type === 'role' && ui.approval.roleCodes.length > 0 ? [...ui.approval.roleCodes] : undefined,
       expression: ui.approval.type === 'expression' ? ui.approval.expression || undefined : undefined,
+      formUserField:
+        ui.approval.type === 'form_user' ? ui.approval.formUserField || undefined : undefined,
+      external:
+        ui.approval.type === 'external' && ui.approval.externalResolver
+          ? { resolver: ui.approval.externalResolver }
+          : undefined,
       multiMode: ui.approval.multiMode,
     },
     assigneeOptions: {
@@ -475,7 +494,8 @@ function saveConfig() {
     operations: {
       ...(existing.operations || {}),
       allowPass: true,
-      allowRefuse: ui.operations.allowRefuse,
+      // 通过/拒绝固定开启（UI 只读，不随配置关闭）
+      allowRefuse: true,
       allowReturn: ui.operations.allowReturn,
       allowAddSign: ui.operations.allowAddSign,
       allowTransfer: ui.operations.allowTransfer,
@@ -603,6 +623,25 @@ watch(ui, () => {
   align-items: flex-start;
   width: 100%;
   gap: 2px;
+}
+
+/* 主选项横向一行（审批人可进行的操作：通过/拒绝只读 + 可勾选项） */
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  gap: 0 14px;
+}
+
+.checkbox-row .el-checkbox {
+  height: auto;
+  margin-right: 0;
+}
+
+.checkbox-row .el-checkbox :deep(.el-checkbox__label) {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .checkbox-col .el-checkbox {

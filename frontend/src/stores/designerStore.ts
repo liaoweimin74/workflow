@@ -31,26 +31,34 @@ export interface NodeConfigData {
     type?:
       | 'user'
       | 'initiator_select'
-      | 'post'
-      | 'member_group'
       | 'role'
       | 'initiator_self'
+      | 'form_user'
+      | 'external'
+      | 'expression'
+      // 兼容旧数据的历史类型（引擎不支持，运行时按「找不到办理人」策略处理）：
+      | 'post'
+      | 'member_group'
       | 'dept_head'
       | 'multi_level'
       | 'report_superior'
       | 'approval_role'
       | 'matrix'
-      | 'form_user'
       | 'form_dept_leader'
       | 'form_dept_approval_role'
       | 'approver_designate'
-      | 'external'
       | 'external_push'
-      | 'expression'
     userIds?: (string | number)[]
     /** 角色编码（type='role' 时生效；引擎按 sys_role.role_code 解析成员） */
     roleCodes?: string[]
     expression?: string
+    /** 表单内用户字段名（type='form_user' 时生效；引擎从流程变量取该字段值解析用户） */
+    formUserField?: string
+    /** 自定义选人（type='external' 时生效；业务系统通过引擎扩展点注册的选人函数） */
+    external?: {
+      /** 选人函数注册名（引擎进程内 registry 查找） */
+      resolver?: string
+    }
     multiMode?: 'countersign' | 'or_sign' | 'sequential' | ''
   }
   assigneeOptions?: {

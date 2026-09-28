@@ -41,6 +41,10 @@ interface NodeConfigJson {
     userIds?: unknown
     roleCodes?: unknown
     expression?: unknown
+    /** 表单内用户字段名（type=form_user 时生效） */
+    formUserField?: unknown
+    /** 自定义选人（type=external 时生效；{ resolver: 注册名 }） */
+    external?: unknown
     multiMode?: unknown
   }
   assigneeOptions?: unknown
@@ -406,6 +410,15 @@ function mergeNode(node: ParsedNode, configJson: string | undefined): CompiledNo
     // 表达式（type=expression 时的审批人来源，如 ${initiator.deptManager}）
     const expressionRaw = asString(approvalConfig.expression)
     if (expressionRaw !== undefined) approval.expression = expressionRaw
+    // 表单内用户字段名（type=form_user 时的审批人来源：流程变量中的表单字段）
+    const formUserFieldRaw = asString(approvalConfig.formUserField)
+    if (formUserFieldRaw !== undefined) approval.formUserField = formUserFieldRaw
+    // 自定义选人函数注册名（type=external 时的审批人来源：进程内 registry）
+    const externalConfig = approvalConfig.external
+    if (externalConfig !== null && typeof externalConfig === 'object') {
+      const resolverRaw = asString((externalConfig as Record<string, unknown>).resolver)
+      approval.external = { resolver: resolverRaw ?? '' }
+    }
     compiled.approval = approval
     // BPMN 上直接写死的 assignee / candidateUsers 保留（单实例且无 NodeConfig 审批人时生效）
     if (node.assignee !== null) compiled.assignee = node.assignee

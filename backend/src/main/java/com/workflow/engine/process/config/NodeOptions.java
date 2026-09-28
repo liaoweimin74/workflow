@@ -3,7 +3,10 @@ package com.workflow.engine.process.config;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -45,6 +48,8 @@ public class NodeOptions {
     private String formUserField;
     /** approval.external.resolver（type=external 时业务系统注册的选人函数名）。 */
     private String externalResolver;
+    /** approval.external.params（选人函数参数值表；运行时经 resolve(ctx, params) 第二参传入）。 */
+    private Map<String, Object> externalParams;
 
     // ---- assigneeOptions ----
     private Boolean allowInitiatorAdjust;
@@ -135,6 +140,27 @@ public class NodeOptions {
                 JsonNode resolver = ext.get("resolver");
                 if (resolver != null && resolver.isTextual() && !resolver.asText().isBlank()) {
                     o.externalResolver = resolver.asText().trim();
+                }
+                // 选人函数参数值表（仅保留原始类型值，对齐 NodeJS 宽松消毒口径）
+                JsonNode params = ext.get("params");
+                if (params != null && params.isObject()) {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    for (Iterator<Map.Entry<String, JsonNode>> it = params.fields(); it.hasNext(); ) {
+                        Map.Entry<String, JsonNode> e = it.next();
+                        JsonNode v = e.getValue();
+                        if (v.isTextual()) {
+                            map.put(e.getKey(), v.asText());
+                        } else if (v.isBoolean()) {
+                            map.put(e.getKey(), v.asBoolean());
+                        } else if (v.isIntegralNumber()) {
+                            map.put(e.getKey(), v.asLong());
+                        } else if (v.isFloatingPointNumber()) {
+                            map.put(e.getKey(), v.asDouble());
+                        }
+                    }
+                    if (!map.isEmpty()) {
+                        o.externalParams = map;
+                    }
                 }
             }
         }
@@ -256,6 +282,7 @@ public class NodeOptions {
     public String getMultiMode() { return multiMode; }
     public String getFormUserField() { return formUserField; }
     public String getExternalResolver() { return externalResolver; }
+    public Map<String, Object> getExternalParams() { return externalParams; }
     public Boolean getAllowInitiatorAdjust() { return allowInitiatorAdjust; }
     public String getNoAssigneePolicy() { return noAssigneePolicy; }
     public String getToUserId() { return toUserId; }

@@ -527,13 +527,16 @@ public class TaskCreateBehaviorListener implements TaskListener {
             }
             case "external" -> {
                 // 业务系统注册选人函数：按 approval.external.resolver 查进程内注册表并调用
+                // （节点配置的参数值表 approval.external.params 作为第二参传入，同一函数可按参数复用）
                 String name = opts.getExternalResolver() == null ? "" : opts.getExternalResolver().trim();
                 if (!name.isEmpty() && assigneeResolverRegistry != null) {
                     var resolver = assigneeResolverRegistry.find(name);
                     if (resolver.isPresent()) {
                         try {
+                            Map<String, Object> extParams =
+                                    opts.getExternalParams() == null ? Map.of() : opts.getExternalParams();
                             return normalizeUserList(
-                                    resolver.get().resolve(buildResolveContext(task, initiator)));
+                                    resolver.get().resolve(buildResolveContext(task, initiator), extParams));
                         } catch (Exception e) {
                             // 选人函数抛错：视为本次解析不出，落到变量兑底
                         }

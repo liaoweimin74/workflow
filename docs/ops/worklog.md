@@ -1870,3 +1870,27 @@ Stage Summary:
 - 选人体系收敛为「引擎支持子集 + 两条扩展通道」：表单内用户（form_user，变量取值）与自定义选人函数（external，进程内 registry 注册 + assignee_ext_<nodeId> 变量兜底），Node/Java 双端语义一致；设计器面板只暴露引擎真正支持的 7 项，操作布局对齐截图风格
 - 业务系统接入方式：Node 进程内 registerAssigneeResolver(name, fn)（fn 同步返回 string[]）；Java 实现 AssigneeResolver 接口注册为 Spring Bean 自动收集
 - 20 文件改动（前端 4 / Node 7 / Java 主 8 + 测试 2 新增）；无 DB 迁移；四项测试基线零回归
+---
+Task ID: 73-resolver-metadata
+Agent: Z.ai Code (main + 3 个通用子代理)
+Task: 用户两条新需求——①流程配置中的说明性文字改为 Label 后 ? 图标（垂直居中）悬浮提示；②选人函数扩展点深化：可注册多个、每个有唯一中文名、中文名显示在面板、函数可声明配置参数
+
+Work Log:
+- 需求②模型定稿：AssigneeResolverMeta{ name 注册名唯一 / displayName 中文名唯一 / description / params: AssigneeParamDef[]（key/label/type string|number|boolean|select/required/placeholder/defaultValue/options/description）}；选人函数签名升级 fn(ctx, params)（params=节点配置 approval.external.params，未配置传 {}，同一函数可被多节点按参数复用）
+- Node 端：registry 重构（registerAssigneeResolver 第三参 meta 可选、displayName 缺省=注册名向后兼容、中文名查重跳过自己槽位=同名覆盖仍允许、listAssigneeResolvers 返回元数据按注册名排序、getAssigneeResolverMeta 新增）；compiler 宽松消毒 external.params（仅保留 string/number/boolean 原始值）；engine-runtime external 分支第二参传 params；新文件 assignee-resolver-samples.ts 三个内置样例（项目负责人/固定用户组/顺序轮选，覆盖 string/number/select 参数+required+defaultValue）经 main.ts 注册；新控制器 GET /api/v1/assignee-resolvers（无参 R.ok(list)）注册进 EngineModule
+- 前端：新 api/assigneeResolver.ts；AssigneeSelector external 区块从自由文本输入重做为「中文名下拉（filterable+allow-create 存量兼容，未注册值回显灰色『未注册』徽标）+ 按参数声明动态渲染配置表单（input/input-number/switch/select）+ 函数 description 灰色提示」；UserTaskProperty/HandlerTaskProperty 全链路接线 externalParams（load/save/emit，空对象不落盘）；designerStore approval.external 扩展 params 类型
+- 需求①：新共享组件 FormLabelTip.vue（Label 文本+14px 圆形 ? 图标 inline-flex 垂直居中、el-tooltip 顶部弹出 max-width 280px）；ProcessProperty.vue 全部 12 处说明文字（hint-text/operations-hint/超时提示）收进 label tooltip，删除下方灰色段落与死样式；标题模板的「可用变量 {{...}}」提示改为 script 字符串常量 TITLE_PATTERN_TIP（绑定传 :tip，彻底规避 Task 71 模板插值分词器坑）；.process-form :deep(.el-form-item__label) inline-flex 垂直居中
+- Java 静态同步（无 JDK，四道静态审查）：新 AssigneeParamDef record + SampleAssigneeResolvers 三个 @Component 样例（对齐 Node 样例）+ api AssigneeResolverController（GET /api/v1/assignee-resolvers）；AssigneeResolver 接口 resolve 升双参(ctx, params)（对齐 Node）+ displayName/description/paramDefs default 方法；Registry 构造期中文名查重（不同注册名同中文名 → IllegalStateException 启动失败，同名覆盖允许）+ metadata() 按注册名排序；NodeOptions 解析 external.params（仅原始类型）；TaskCreateBehaviorListener/MultiInstanceApproverListener external 分支传参（后者新增 primitiveParams 助手）；AssigneeResolverRegistryTest 升级（双参/中文名重复抛错/同名覆盖/metadata 形状）
+- 过程事故：①kill 旧 8080(1582) 后 Bash 工具通道持续故障（主会话所有工具 403/failed），改由子代理完成全部后续操作（探活/修复/验证/提交）——属平台网关瞬时故障特征，跨会话复现待观察；②期间 next-server 再遭 OOM 击杀（09:39，dmesg 实锤，前端 vitest 全量 171s 吃内存连坐），start-portal.sh 拉回+监督器自动复活 8080（restarts=1）；③QA 抓出两个新文件自带缺陷：API 路径缺 /v1（baseURL=/api 惯例按业务模块显式 /v1，role.ts 系统管理桶不带前缀是历史风格）+ el-select 关闭态回显注册名（el-option 缺 :label）——均已修复
+- 顺手修既有告警：FormPropertyTab.vue/ProcessFormPropertyTab.vue 的 el-tooltip 内部 el-button v-if 上移到 tooltip 自身（v-if=false 时整体不渲染，行为等价），消除设计器页 [ElOnlyChild] no valid child node found ×5
+- 测试：assignee-resolution.spec.ts 18→22 用例（params 第二参断言/同一函数不同参数/编译消毒 external.params/中文名唯一抛错/同名覆盖/元数据清单排序）
+- 基线（全量重跑）：backend-node vitest 932/932（929+3）全绿、tsc 1 error=既有基线；frontend vitest 1132/1132 全绿；vue-tsc 46 errors=既有基线（改动文件零命中）；eslint 改动 ts 文件 0 errors
+- 浏览器金路径（agent-browser，两轮）：第一轮 mock 注入走通全链路并抓出缺陷；修复后第二轮真实接口复验——流程配置 12 个 ? 图标+悬浮 tooltip 正确、无残留灰色说明段；审批节点「自定义选人函数」关闭态回显「固定用户组」、下拉 3 个中文名选项（右侧灰注册名）、函数参数回显 userIds=7,8/全部用户；GET /api/v1/assignee-resolvers 真实 200；console 零 error 零 warn（ElOnlyChild 消除）；浏览器用后即关
+- 数据残留说明：QA 金路径把测试草稿 4f10a0d7… 的审批节点选人配置从 crm_owner_resolver 改存为 fixed_user_group+params（Task 72 已有同类残留先例），如需还原可用设计器改回
+- API 路径书写惯例沉淀（QA 发现）：frontend api 模块对后端 NestJS 路由（api/v1/**）必须显式写 '/v1/...' 前缀（http baseURL 仅 /api）；role/user/menu 等 /api/** 系统管理桶是历史独立风格，新业务接口勿照抄
+
+Stage Summary:
+- 选人函数扩展点升级为「元数据注册」：业务系统注册即可带唯一中文名（启动/注册期强校验）与参数声明；设计器面板中文名下拉+动态参数表单；引擎运行时 fn(ctx, params) 双端语义一致；GET /api/v1/assignee-resolvers 为面板数据源
+- 流程配置说明文字全面转为 Label ? tooltip（FormLabelTip 共享组件）；顺手消除设计器页 ElOnlyChild 告警源
+- 20 文件改动（前端 9 / Node 8 / Java 9，含 5 新增）；无 DB 迁移；四项测试基线零回归 + 双轮浏览器验证闭环
+- 基础设施注意：①8080=编译产物 node dist/main.js，源码改动后需 bun run build 再杀旧进程由监督器复活；②前端全量 vitest 运行期内存压力大（曾连坐 next-server OOM），大内存操作建议错峰

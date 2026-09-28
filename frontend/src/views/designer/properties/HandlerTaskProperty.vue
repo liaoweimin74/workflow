@@ -18,6 +18,7 @@
             :allow-adjust="ui.assignee.allowInitiatorAdjust"
             :form-user-field="ui.approval.formUserField"
             :external-resolver="ui.approval.externalResolver"
+            :external-params="ui.approval.externalParams"
             kind="handler"
             :disabled="readOnly"
             @update:user-ids="(ids: number[]) => (ui.approval.userIds = ids)"
@@ -25,6 +26,7 @@
             @update:allow-adjust="(v: boolean) => (ui.assignee.allowInitiatorAdjust = v)"
             @update:form-user-field="(v: string) => (ui.approval.formUserField = v)"
             @update:external-resolver="(v: string) => (ui.approval.externalResolver = v)"
+            @update:external-params="(p: Record<string, unknown>) => (ui.approval.externalParams = p)"
           />
 
           <template v-if="ui.approval.type === 'expression'">
@@ -192,6 +194,7 @@ const ui = reactive({
     expression: '',
     formUserField: '',
     externalResolver: '',
+    externalParams: {} as Record<string, unknown>,
     multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | '',
   },
   assignee: {
@@ -246,6 +249,7 @@ function loadConfig() {
   ui.approval.expression = ''
   ui.approval.formUserField = ''
   ui.approval.externalResolver = ''
+  ui.approval.externalParams = {}
   ui.approval.multiMode = ''
   ui.assignee.allowInitiatorAdjust = false
   ui.assignee.noAssigneePolicy = ''
@@ -270,6 +274,7 @@ function loadConfig() {
       ui.approval.expression = existing.approval.expression || ''
       ui.approval.formUserField = existing.approval.formUserField || ''
       ui.approval.externalResolver = existing.approval.external?.resolver || ''
+      ui.approval.externalParams = { ...(existing.approval.external?.params ?? {}) }
       ui.approval.multiMode = existing.approval.multiMode || ''
     }
     if (existing.assigneeOptions) {
@@ -335,7 +340,13 @@ function saveConfig() {
         ui.approval.type === 'form_user' ? ui.approval.formUserField || undefined : undefined,
       external:
         ui.approval.type === 'external' && ui.approval.externalResolver
-          ? { resolver: ui.approval.externalResolver }
+          ? {
+              resolver: ui.approval.externalResolver,
+              // 函数参数值表（空对象不落盘，保持历史配置形状）
+              ...(Object.keys(ui.approval.externalParams ?? {}).length > 0
+                ? { params: { ...ui.approval.externalParams } }
+                : {}),
+            }
           : undefined,
       multiMode: ui.approval.multiMode,
     },

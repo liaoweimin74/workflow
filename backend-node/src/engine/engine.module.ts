@@ -47,6 +47,7 @@ import { ProcessDesignRepository } from './process/repository/process-design.rep
 import { EnginePersistence } from './runtime/engine-persistence'
 import { ProcessInstanceService } from './runtime/process-instance.service'
 import { TimeoutScannerService } from './runtime/timeout-scanner.service'
+import { AssigneeResolverController } from './runtime/controller/assignee-resolver.controller'
 import { TaskController } from './task/controller/task.controller'
 import { TaskService } from './task/task.service'
 
@@ -77,6 +78,7 @@ import { TaskService } from './task/task.service'
     BizDataController,
     FormDataController,
     CategoryController,
+    AssigneeResolverController,
   ],
   providers: [
     ProcessDesignRepository,

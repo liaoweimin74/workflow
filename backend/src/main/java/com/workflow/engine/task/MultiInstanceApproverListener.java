@@ -229,13 +229,15 @@ public class MultiInstanceApproverListener implements JavaDelegate {
             }
             case "external" -> {
                 // 业务系统注册选人函数：按 approval.external.resolver 查进程内注册表并调用
+                // （节点配置的参数值表 approval.external.params 作为第二参传入，同一函数可按参数复用）
                 String name = textAt(approval.path("external"), "resolver");
                 if (name != null && !name.isBlank() && assigneeResolverRegistry != null) {
                     var resolver = assigneeResolverRegistry.find(name);
                     if (resolver.isPresent()) {
                         try {
                             return normalizeUserList(
-                                    resolver.get().resolve(buildResolveContext(execution, activityId)));
+                                    resolver.get().resolve(buildResolveContext(execution, activityId),
+                                            primitiveParams(approval.path("external").path("params"))));
                         } catch (Exception e) {
                             // 选人函数抛错：视为本次解析不出，落到变量兜底
                         }
@@ -307,6 +309,30 @@ public class MultiInstanceApproverListener implements JavaDelegate {
         }
         return new AssigneeResolveContext(activityId, nodeName,
                 stringVariable(execution, "initiator"), variables);
+    }
+
+    /**
+     * external.params JSON → 参数值表（仅保留原始类型值，对齐 NodeJS 宽松消毒口径）。
+     */
+    private Map<String, Object> primitiveParams(JsonNode params) {
+        if (params == null || !params.isObject()) {
+            return Map.of();
+        }
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        for (java.util.Iterator<Map.Entry<String, JsonNode>> it = params.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> e = it.next();
+            JsonNode v = e.getValue();
+            if (v.isTextual()) {
+                out.put(e.getKey(), v.asText());
+            } else if (v.isBoolean()) {
+                out.put(e.getKey(), v.asBoolean());
+            } else if (v.isIntegralNumber()) {
+                out.put(e.getKey(), v.asLong());
+            } else if (v.isFloatingPointNumber()) {
+                out.put(e.getKey(), v.asDouble());
+            }
+        }
+        return out;
     }
 
     private boolean alreadyCompleted(String processInstanceId, String userId) {

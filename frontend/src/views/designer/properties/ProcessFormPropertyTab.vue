@@ -18,9 +18,8 @@
               :value="form.id"
             />
           </el-select>
-          <el-tooltip content="编辑表单" placement="top">
+          <el-tooltip v-if="formConfig.formDefId && !readOnly" content="编辑表单" placement="top">
             <el-button
-              v-if="formConfig.formDefId && !readOnly"
               :icon="Edit"
               circle
               size="small"

@@ -223,6 +223,46 @@ describe('审批人类型化解析：external（业务系统注册选人函数�
     expect(received[0].variables['owner_id']).toBe(7)
   })
 
+  it('节点配置的 external.params 作为第二参传入选人函数（同一函数可按参数复用）', () => {
+    const seen: Record<string, unknown>[] = []
+    const { rt } = boot(
+      APPROVER,
+      {
+        approval: {
+          type: 'external',
+          external: { resolver: 'param_resolver', params: { level: 2, mode: 'first', flag: true } },
+        },
+      },
+      {
+        assigneeResolvers: {
+          param_resolver: (_ctx, params) => {
+            seen.push(params)
+            return [`${params['mode']}-${params['level']}`]
+          },
+        },
+      },
+    )
+    expect(targetTask(rt).assignee).toBe('first-2')
+    expect(seen).toEqual([{ level: 2, mode: 'first', flag: true }])
+
+    // 同一函数、不同参数 → 不同结果
+    const { rt: rt2 } = boot(
+      APPROVER,
+      {
+        approval: {
+          type: 'external',
+          external: { resolver: 'param_resolver', params: { level: 9, mode: 'last' } },
+        },
+      },
+      {
+        assigneeResolvers: {
+          param_resolver: (_ctx, params) => [`last-${params['level']}`],
+        },
+      },
+    )
+    expect(targetTask(rt2).assignee).toBe('last-9')
+  })
+
   it('选人函数返回多用户(single 模式) → 候选人任务；抛错 → 变量兜底 assignee_ext_<nodeId>', () => {
     const { rt } = boot(
       APPROVER,
@@ -267,7 +307,7 @@ describe('审批人类型化解析：external（业务系统注册选人函数�
     expect(targetTask(rt2).assignee).toBeNull()
   })
 
-  it('编译透传：formUserField / external.resolver 进 CompiledApproval', () => {
+  it('编译透传：formUserField / external.resolver / external.params 进 CompiledApproval', () => {
     const model = compileProcess({
       bpmnXml: DEFS(FLOW(APPROVER)),
       nodeConfigs: {
@@ -275,7 +315,7 @@ describe('审批人类型化解析：external（业务系统注册选人函数�
           basic: { name: '目标' },
           approval: {
             type: 'external',
-            external: { resolver: 'my_resolver' },
+            external: { resolver: 'my_resolver', params: { level: 3, keep: 'x', drop: [1] } },
             formUserField: 'u_field',
           },
         }),
@@ -283,11 +323,13 @@ describe('审批人类型化解析：external（业务系统注册选人函数�
     })
     expect(model.nodes['T']?.approval?.external?.resolver).toBe('my_resolver')
     expect(model.nodes['T']?.approval?.formUserField).toBe('u_field')
+    // 参数消毒：原始类型保留，非原始类型（数组/对象）剔除
+    expect(model.nodes['T']?.approval?.external?.params).toEqual({ level: 3, keep: 'x' })
   })
 })
 
 describe('选人函数注册表（assignee-resolver-registry）', () => {
-  it('register/list/snapshot/unregister 生命周期 + 同名覆盖', async () => {
+  it('register/list/snapshot/unregister 生命周期 + 同名覆盖（元数据缺省中文名=注册名）', async () => {
     const mod = await import(
       '../../../src/engine/runtime/assignee-resolver-registry'
     )
@@ -297,9 +339,11 @@ describe('选人函数注册表（assignee-resolver-registry）', () => {
 
     expect(mod.registerAssigneeResolver('r1', fnA)).toBe(false)
     expect(mod.registerAssigneeResolver('r1', fnB)).toBe(true) // 覆盖
-    expect(mod.listAssigneeResolvers()).toEqual(['r1'])
+    // list 返回元数据清单（中文名缺省取注册名），按注册名排序
+    expect(mod.listAssigneeResolvers()).toEqual([{ name: 'r1', displayName: 'r1' }])
     expect(mod.snapshotAssigneeResolvers()['r1']).toBe(fnB)
     expect(mod.getAssigneeResolver('r1')).toBe(fnB)
+    expect(mod.getAssigneeResolverMeta('r1')?.displayName).toBe('r1')
 
     mod.unregisterAssigneeResolver('r1')
     expect(mod.listAssigneeResolvers()).toEqual([])
@@ -314,5 +358,58 @@ describe('选人函数注册表（assignee-resolver-registry）', () => {
     expect(() =>
       mod.registerAssigneeResolver('bad', undefined as unknown as AssigneeResolveFn),
     ).toThrow()
+  })
+
+  it('中文名唯一：不同注册名声明同一中文名抛错；同名覆盖允许', async () => {
+    const mod = await import(
+      '../../../src/engine/runtime/assignee-resolver-registry'
+    )
+    mod.clearAssigneeResolvers()
+
+    mod.registerAssigneeResolver('a', () => ['1'], { displayName: '客户负责人' })
+    // 其他注册名抢占同一中文名 → 抛错
+    expect(() =>
+      mod.registerAssigneeResolver('b', () => ['2'], { displayName: '客户负责人' }),
+    ).toThrow(/中文名不可重复/)
+    // 同名覆盖（槽位归属自己）→ 允许，且可换新中文名
+    expect(mod.registerAssigneeResolver('a', () => ['3'], { displayName: '项目负责人' })).toBe(true)
+    expect(mod.getAssigneeResolverMeta('a')?.displayName).toBe('项目负责人')
+
+    mod.clearAssigneeResolvers()
+  })
+
+  it('list 返回中文名/描述/参数声明元数据，按注册名排序', async () => {
+    const mod = await import(
+      '../../../src/engine/runtime/assignee-resolver-registry'
+    )
+    mod.clearAssigneeResolvers()
+    mod.registerAssigneeResolver('b_fix', () => ['7', '8'], {
+      displayName: '固定用户组',
+      description: '返回参数中配置的固定用户',
+      params: [
+        { key: 'userIds', label: '用户 ID 列表', type: 'string', required: true, placeholder: '如：1,2,3' },
+        {
+          key: 'returnMode',
+          label: '返回模式',
+          type: 'select',
+          defaultValue: 'all',
+          options: [
+            { label: '全部用户', value: 'all' },
+            { label: '仅第一个', value: 'first' },
+          ],
+        },
+      ],
+    })
+    mod.registerAssigneeResolver('a_var', () => ['9'], { displayName: '项目负责人' })
+
+    const metas = mod.listAssigneeResolvers()
+    expect(metas.map((m) => m.name)).toEqual(['a_var', 'b_fix'])
+    expect(metas[0].displayName).toBe('项目负责人')
+    expect(metas[0].params).toBeUndefined()
+    expect(metas[1].displayName).toBe('固定用户组')
+    expect(metas[1].params?.[0]).toMatchObject({ key: 'userIds', required: true })
+    expect(metas[1].params?.[1].options).toHaveLength(2)
+
+    mod.clearAssigneeResolvers()
   })
 })

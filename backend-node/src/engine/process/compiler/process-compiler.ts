@@ -413,11 +413,27 @@ function mergeNode(node: ParsedNode, configJson: string | undefined): CompiledNo
     // 表单内用户字段名（type=form_user 时的审批人来源：流程变量中的表单字段）
     const formUserFieldRaw = asString(approvalConfig.formUserField)
     if (formUserFieldRaw !== undefined) approval.formUserField = formUserFieldRaw
-    // 自定义选人函数注册名（type=external 时的审批人来源：进程内 registry）
+    // 自定义选人函数（type=external 时的审批人来源：进程内 registry）
+    // external = { resolver: 注册名, params: 节点配置的参数值表（选人函数第二参） }
     const externalConfig = approvalConfig.external
     if (externalConfig !== null && typeof externalConfig === 'object') {
-      const resolverRaw = asString((externalConfig as Record<string, unknown>).resolver)
-      approval.external = { resolver: resolverRaw ?? '' }
+      const externalRecord = externalConfig as Record<string, unknown>
+      const resolverRaw = asString(externalRecord.resolver)
+      const external: { resolver: string; params?: Record<string, unknown> } = {
+        resolver: resolverRaw ?? '',
+      }
+      const paramsRaw = externalRecord.params
+      if (paramsRaw !== null && typeof paramsRaw === 'object' && !Array.isArray(paramsRaw)) {
+        // 宽松消毒：仅保留原始类型值（v1 参数声明只有 string/number/boolean）
+        const params: Record<string, unknown> = {}
+        for (const [k, v] of Object.entries(paramsRaw as Record<string, unknown>)) {
+          if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+            params[k] = v
+          }
+        }
+        if (Object.keys(params).length > 0) external.params = params
+      }
+      approval.external = external
     }
     compiled.approval = approval
     // BPMN 上直接写死的 assignee / candidateUsers 保留（单实例且无 NodeConfig 审批人时生效）

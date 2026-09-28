@@ -226,6 +226,8 @@ export interface CompiledApproval {
   external?: {
     /** 选人函数注册名 */
     resolver?: string
+    /** 节点配置的参数值表（运行时作为选人函数第二参传入，同一函数可按参数复用） */
+    params?: Record<string, unknown>
   }
   multiMode: MultiMode
 }

@@ -58,6 +58,8 @@ export interface NodeConfigData {
     external?: {
       /** 选人函数注册名（引擎进程内 registry 查找） */
       resolver?: string
+      /** 节点配置的参数值表（面板按注册函数的参数声明渲染；运行时作为函数第二参传入） */
+      params?: Record<string, unknown>
     }
     multiMode?: 'countersign' | 'or_sign' | 'sequential' | ''
   }

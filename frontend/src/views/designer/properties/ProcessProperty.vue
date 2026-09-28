@@ -2,7 +2,7 @@
   <el-tabs v-model="activeTab" class="process-property-tabs">
     <!-- 流程配置（审批策略 + 流程编号合并） -->
     <el-tab-pane label="流程配置" name="process">
-      <el-form label-width="90px" size="small" :disabled="readOnly">
+      <el-form label-width="90px" size="small" :disabled="readOnly" class="process-form">
         <el-divider content-position="left">审批人去重规则</el-divider>
 
         <el-form-item label="去重规则">
@@ -39,9 +39,11 @@
 
         <el-divider content-position="left">审批设置</el-divider>
 
-        <el-form-item label="自定义摘要">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="开启后，最多添加5个摘要；若不开启，系统将展示默认的摘要">自定义摘要</FormLabelTip>
+          </template>
           <el-switch v-model="config.summaryRule.enabled" @change="syncToStore" />
-          <div class="hint-text">开启后，最多添加5个摘要；若不开启，系统将展示默认的摘要</div>
         </el-form-item>
 
         <el-form-item v-if="config.summaryRule.enabled" label="摘要字段">
@@ -52,35 +54,43 @@
           />
         </el-form-item>
 
-        <el-form-item v-if="config.summaryRule.enabled" label="短信摘要">
+        <el-form-item v-if="config.summaryRule.enabled">
+          <template #label>
+            <FormLabelTip tip="在短信中展示摘要">短信摘要</FormLabelTip>
+          </template>
           <el-switch v-model="config.summaryRule.showInSms" @change="syncToStore" />
-          <div class="hint-text">在短信中展示摘要</div>
         </el-form-item>
 
-        <el-form-item label="自定义标题">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="开启后，审批标题支持自定义模板；关闭时使用默认的审批标题">自定义标题</FormLabelTip>
+          </template>
           <el-switch v-model="config.titleRule.enabled" @change="syncToStore" />
-          <div class="hint-text">开启后，审批标题支持自定义模板；关闭时使用默认的审批标题</div>
         </el-form-item>
 
-        <el-form-item v-if="config.titleRule.enabled" label="标题模板">
+        <el-form-item v-if="config.titleRule.enabled">
+          <template #label>
+            <FormLabelTip :tip="TITLE_PATTERN_TIP">标题模板</FormLabelTip>
+          </template>
           <el-input
             v-model="config.titleRule.pattern"
             placeholder="{{processName}}-{{initiator}}-{{date}}"
             @change="syncToStore"
           />
-          <!-- v-pre：提示文案里的 {{var}} 是字面量示例，不能交给 Vue 插值编译
-               （插值分词器遇到字符串内部的 }} 会提前闭合导致 SFC 编译 500） -->
-          <div class="hint-text" v-pre>可用变量：{{processName}}、{{initiator}}、{{date}}、表单字段名</div>
         </el-form-item>
 
-        <el-form-item label="动态流程">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="将实时查找审批人与条件分支（引擎运行时动态解析）">动态流程</FormLabelTip>
+          </template>
           <el-switch v-model="config.dynamicProcess" @change="syncToStore" />
-          <div class="hint-text">将实时查找审批人与条件分支（引擎运行时动态解析）</div>
         </el-form-item>
 
-        <el-form-item label="评论管理">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="开启后，可设置评论相关的功能">评论管理</FormLabelTip>
+          </template>
           <el-switch v-model="commentEnabled" @change="syncToStore" />
-          <div class="hint-text">开启后，可设置评论相关的功能</div>
         </el-form-item>
 
         <template v-if="commentEnabled">
@@ -101,14 +111,19 @@
           >评论时不允许上传附件/图片</el-checkbox>
         </template>
 
-        <el-form-item label="审批召回">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="开启后，审批人可在下个节点审批前召回审批单重新审批；会签节点与依次审批节点的最后一位审批人不允许召回">审批召回</FormLabelTip>
+          </template>
           <el-switch v-model="config.approvalPolicy.approveRecall" @change="syncToStore" />
-          <div class="hint-text">开启后，审批人可在下个节点审批前召回审批单重新审批；会签节点与依次审批节点的最后一位审批人不允许召回</div>
         </el-form-item>
 
         <el-divider content-position="left">节点操作权限</el-divider>
 
-        <el-form-item label="允许驳回">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="流程级总开关，节点级可覆盖；会签节点转办等同转签">允许驳回</FormLabelTip>
+          </template>
           <el-switch v-model="config.approvalPolicy.operations.allowReject" @change="syncToStore" />
         </el-form-item>
 
@@ -124,24 +139,26 @@
           <el-switch v-model="config.approvalPolicy.operations.allowDelegate" @change="syncToStore" />
         </el-form-item>
 
-        <div class="operations-hint">流程级总开关，节点级可覆盖；会签节点转办等同转签</div>
-
         <el-divider content-position="left">流程设置</el-divider>
 
-        <el-form-item label="退回免审">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="流程退回后重新审批时，已通过节点无需再审批">退回免审</FormLabelTip>
+          </template>
           <el-switch
             v-model="config.approvalPolicy.retakeSkipApproved"
             @change="syncToStore"
           />
-          <div class="hint-text">流程退回后重新审批时，已通过节点无需再审批</div>
         </el-form-item>
 
-        <el-form-item label="意见必填">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="开启后，审批人办理必须填写意见；若与节点配置冲突，将按照全部操作必填>拒绝/退回必填执行">意见必填</FormLabelTip>
+          </template>
           <el-switch
             v-model="config.approvalPolicy.commentPolicy.enabled"
             @change="syncToStore"
           />
-          <div class="hint-text">开启后，审批人办理必须填写意见；若与节点配置冲突，将按照全部操作必填&gt;拒绝/退回必填执行</div>
         </el-form-item>
 
         <el-form-item v-if="config.approvalPolicy.commentPolicy.enabled" label="必填范围">
@@ -154,12 +171,14 @@
           </el-radio-group>
         </el-form-item>
 
-        <el-form-item label="手写签名">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="开启后，节点可使用手写签名；节点未单独配置时按以下默认项执行">手写签名</FormLabelTip>
+          </template>
           <el-switch
             v-model="config.approvalPolicy.signaturePolicy.enabled"
             @change="syncToStore"
           />
-          <div class="hint-text">开启后，节点可使用手写签名；节点未单独配置时按以下默认项执行</div>
         </el-form-item>
 
         <template v-if="config.approvalPolicy.signaturePolicy.enabled">
@@ -180,15 +199,13 @@
           >必填签名</el-checkbox>
         </template>
 
-        <el-form-item label="超时处理">
-          <div class="timeout-head">
-            <span class="hint-text timeout-hint">
-              开启后，可按规则配置此审批的超时自动提醒、转派、通过、拒绝；此配置不对已开启超时处理的节点生效
-            </span>
-            <el-button size="small" type="primary" plain @click="openRuleDialog(null)">
-              添加超时规则
-            </el-button>
-          </div>
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="开启后，可按规则配置此审批的超时自动提醒、转派、通过、拒绝；此配置不对已开启超时处理的节点生效">超时处理</FormLabelTip>
+          </template>
+          <el-button size="small" type="primary" plain @click="openRuleDialog(null)">
+            添加超时规则
+          </el-button>
         </el-form-item>
 
         <el-form-item v-if="config.timeoutRules.length > 0" label="规则组">
@@ -247,6 +264,10 @@ import {
 } from '@/stores/designerStore'
 import ProcessFormPropertyTab from './ProcessFormPropertyTab.vue'
 import ProcessTimeoutRuleDialog from './ProcessTimeoutRuleDialog.vue'
+import FormLabelTip from './shared/FormLabelTip.vue'
+
+/** 标题模板可用变量（tooltip 内容；script 字符串常量避开模板插值分词器，见 Task 71 教训） */
+const TITLE_PATTERN_TIP = '可用变量：{{processName}}、{{initiator}}、{{date}}、表单字段名'
 
 const props = defineProps<{ readOnly?: boolean }>()
 
@@ -365,17 +386,14 @@ function syncToStore() {
   overflow-y: auto;
 }
 
-.operations-hint {
-  color: #909399;
-  font-size: 12px;
-  margin: 4px 0 8px;
-}
-
-.hint-text {
-  color: #909399;
-  font-size: 12px;
-  line-height: 1.5;
-  margin-top: 2px;
+/* Label 插槽内 FormLabelTip 与控件同行垂直居中：覆盖 label 默认行高 */
+.process-form :deep(.el-form-item__label) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: auto;
+  min-height: 24px;
+  line-height: 1.4;
 }
 
 .switch-row {
@@ -392,17 +410,6 @@ function syncToStore() {
 .indent-checkbox {
   display: flex;
   margin: 0 0 8px 12px;
-}
-
-.timeout-head {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-
-.timeout-hint {
-  margin-top: 0;
 }
 
 .timeout-rules {

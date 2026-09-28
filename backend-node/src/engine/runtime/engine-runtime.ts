@@ -598,13 +598,18 @@ export class EngineRuntime {
         const fn = this.assigneeResolvers[name]
         if (fn !== undefined) {
           try {
+            // 节点配置的参数值表（approval.external.params）作为选人函数第二参传入，
+            // 同一选人函数可被不同节点以不同参数复用
             const list = normalizeUserList(
-              fn({
-                nodeId: node.nodeId,
-                nodeName: node.name,
-                initiator: this.initiatorValue(),
-                variables: { ...this.variables },
-              }),
+              fn(
+                {
+                  nodeId: node.nodeId,
+                  nodeName: node.name,
+                  initiator: this.initiatorValue(),
+                  variables: { ...this.variables },
+                },
+                approval.external?.params ?? {},
+              ),
             )
             if (list.length > 0) return list
           } catch {

@@ -1912,3 +1912,18 @@ Work Log:
 
 Stage Summary:
 - 流程基本属性首次在设计器内可编辑并持久化：分组位于「流程配置」tab 首位，名称/分类/说明可改、标识只读防部署版本错乱；Node/Java 双端 saveDesign/loadEditor 语义一致（缺省保留原值）；12 文件无迁移外 DDL 变更；提交推送见子仓库 worklog
+
+---
+Task ID: 75-notify-assignee-readonly
+Agent: Z.ai Code (main)
+Task: 用户需求——超时规则对话框「被提醒人：当前审批人」默认勾选且只读（附两张钉钉式截图：超时转派/超时通过模式下均呈灰选态）
+
+Work Log:
+- 引擎侧核查先行：Node process-policy.ts:113 `notifyAssignee !== false`（缺省 true，仅显式 false 关闭）与 Java ProcessPolicy.java（字段默认 true、解析口径对齐）本就是「当前审批人默认被提醒」语义——缺口纯在前端对话框，引擎零改动
+- ProcessTimeoutRuleDialog.vue 三处修改：①notifyAssignee 勾选框加 disabled（只读），并修正转派模式误导性文案「转派给当前审批人」→「当前审批人」（该行语义是被提醒人；引擎转派对象恒为审批管理员）；②编辑回读存量规则时归一化 form.notifyAssignee = true（存量显式 false 显示为勾选态，与只读语义一致）；③confirm() 恒写 notifyAssignee: true（双保险）
+- 兼容性决策：引擎保留「显式 false 关闭」语义不动（存量草稿行为不变、零迁移），UI 归一化在用户下次编辑该规则时自然修复
+- 验证：vue-tsc 46 errors=基线（改动文件零命中）；frontend vitest 1132/1132=基线；浏览器金路径（agent-browser 登录后直达 /designer?id=4f10a0d7…，画布空白 mouse 点击唤出属性面板）——新增规则对话框「当前审批人」checked+disabled、input.click() 后状态不变（真禁用）、切「超时转派」只读态保持、确定后列表摘要「超时转派：超过 3 小时（当前审批人、短信）」、编辑回读 checked+disabled；测试规则经「删除」按钮清理零残留（草稿未全局保存，后端零扰动）；console 零新增 error/warn；浏览器 close + pkill chrome-153
+- 途中勘误：登录接口实际路径 /api/auth/login（/api/v1/auth/login 404；auth.controller SecurityConfig 放行注释为准）；drafts 列表响应为 data.content 数组（rows/list 均不是）
+
+Stage Summary:
+- 超时规则「当前审批人」默认勾选且只读上线：UI 层三处收敛（disabled + 回读归一化 + 恒写 true），引擎缺省语义本就是 true 无需改动；单文件改动、四基线零回归、浏览器双模式（提醒/转派）验证闭环

@@ -46,7 +46,8 @@
       <el-divider content-position="left">人员设置</el-divider>
       <div class="people-row">
         <span class="people-label">被提醒人：</span>
-        <el-checkbox v-model="form.notifyAssignee">{{ form.action === 'transfer' ? '转派给当前审批人' : '当前审批人' }}</el-checkbox>
+        <!-- 当前审批人：默认勾选且只读（产品规则）；引擎侧 notifyAssignee 缺省即 true，仅显式 false 才关闭 -->
+        <el-checkbox v-model="form.notifyAssignee" disabled>当前审批人</el-checkbox>
         <el-checkbox v-model="form.notifyAdmin">{{ form.action === 'transfer' ? '转派给审批管理员' : '审批管理员' }}</el-checkbox>
         <el-checkbox v-if="form.action === 'remind'" v-model="moreStaffEnabled">更多员工</el-checkbox>
       </div>
@@ -129,6 +130,8 @@ watch(
     const existing = props.editId === null ? null : props.rules.find((r) => r.id === props.editId)
     if (existing) {
       Object.assign(form, JSON.parse(JSON.stringify(existing)))
+      // 只读语义：存量规则里显式 false 一并归一为勾选态
+      form.notifyAssignee = true
       editing.value = true
       moreStaffEnabled.value = existing.notifyUserIds.length > 0
       moreStaffInput.value = existing.notifyUserIds.join(',')
@@ -156,6 +159,7 @@ function confirm() {
     ...form,
     id: editing.value ? form.id : `rule-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
     duration: Math.floor(form.duration),
+    notifyAssignee: true,
     notifyUserIds:
       form.action === 'remind' && moreStaffEnabled.value
         ? moreStaffInput

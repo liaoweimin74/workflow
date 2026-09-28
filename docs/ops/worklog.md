@@ -1792,3 +1792,22 @@ Stage Summary:
 - 结论：不是"重复的两级配置"，而是"一个死开关 + 真正生效的两级节点门禁"；已删除死开关，撤回语义收敛为 disallowRecall（发起人级）+ blockRecall（进度级）两级节点配置
 - 提交 4220a5d 已推送，远程 main = 本地 = 4220a5d（a7b419a..4220a5d）
 - Java 同步（Task 67）此前已完成并推送于 a7b419a，本轮确认其全部成果已在远程 main（TaskTimeoutScanner/NodeOptions/V40/V41 等）
+
+---
+Task ID: 69-process-policy
+Agent: Z.ai Code (main + java-sync 子代理)
+Task: 用户上传三张截图（钉钉式流程属性配置与超时设置），要求「实现流程的配置及相应的工作流引擎的处理逻辑」——流程级策略配置三端落地（前端面板+Node 引擎+Java 引擎）
+
+Work Log:
+- 配置模型定稿（designerStore ProcessConfigData 扩展 11 项）：deduplication{mode CONSECUTIVE|FIRST|LAST + skipSameAsInitiator}/commentPolicy{enabled,scope REJECT_RETURN|ALL}/signaturePolicy{enabled,useLast,allowUpload,required}/comment{disabled,disallowDelete,disallowAttachment}/approveRecall/retakeSkipApproved/titleRule{pattern}/summaryRule{fields≤5,showInSms}/dynamicProcess/timeoutRules[]（remind 多条+transfer≤1+pass/refuse 互斥）
+- 前端：ProcessProperty.vue 新增「审批设置」「流程设置」分组（摘要/短信摘要/标题模板/动态流程/评论管理/审批召回/退回免审/意见必填/手写签名默认/超时规则组列表）；新组件 ProcessTimeoutRuleDialog.vue（四卡片选型+时间设置+被提醒人+短信+唯一性校验）；getProcessConfig 深合并新键
+- Node：process-model.ts 加 ProcessPolicy/ProcessTimeoutRule 类型；新文件 process/compiler/process-policy.ts（parseProcessPolicy 宽松解析+renderProcessTemplate {{processName}}/{{initiator}}/{{date}}/{{字段}}；独立文件规避 task.service↔process-instance.service 循环 import）
+- Node 引擎：EngineRuntime 注入 EngineProcessPolicy（dedup 三口径+发起人免审优先+retakeSkipApproved 退回重审免审+recallApproval 召回重走）；completeTask 意见/签名门禁（节点显式优先，流程级=默认值提供者）；reject/refuse 理由必填 OR 流程级；approve-recall 审批召回端点（六道门禁）；超时扫描器流程级规则组兜底（remind repeat 间隔/被提醒人/handler 节点跳过 pass+refuse）；start() 渲染 __instanceTitle/__instanceSummary+SMS 摘要附尾
+- Java 同步（子代理执行，主线复核）：新类 engine/process/config/ProcessPolicy.java（宽松解析+模板渲染）；10 文件修改——TaskCreateBehaviorListener(+322 dedup 三口径/retake 免审/召回重走)、TaskTimeoutScanner(+226 流程级规则组兜底 5 动作)、WorkflowTaskService(+257 意见/签名门禁流程级兜底+processFlags+approve-recall)、RejectService(+69 理由必填 OR 流程级)、ProcessInstanceService(+61 标题摘要渲染)、EngineNotifyService(+50 TIMEOUT_{ACTION} 幂等+摘要短信)、TaskController(+18 approve-recall 端点)、TaskDetailVO(+30 processFlags 透出)、WfEngineNotifyRepository(+5)、ProcessInstanceServiceFilterTest(+5)
+- Java 静态审查：10 文件括号配平全对；ProcessPolicy 五处消费 import 全在位；approve-recall/dedup/timeoutRules/标题摘要/引擎通知五大功能点 grep 全命中；配置存设计 JSON 无需新 Flyway migration
+- 验证（收尾全量重跑）：backend-node vitest 920/920 全绿=基线（test:all 含集成）；tsc 1 error=既有基线；frontend vitest 1132/1132 全绿=基线；vue-tsc 46 errors=既有基线
+
+Stage Summary:
+- 流程级策略三端两层语义上线：节点级显式配置永远优先；流程级=默认值提供者（签名/去重/意见必填按各自合并规则）；引擎经策略对象注入，不直接读 DB
+- 规模：前端 2 改+1 新组件、Node 6 改+1 新文件、Java 10 改+1 新类 = 21 文件 +2138/-135；无 DB 迁移
+- 四项测试基线全部吻合零回归；上一会话中断的 java-sync 子代理成果经复核完整后一并提交

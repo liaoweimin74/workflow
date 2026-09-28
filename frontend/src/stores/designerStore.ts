@@ -172,12 +172,37 @@ export interface ProcessVariableMapping {
   sourceField?: string
 }
 
+/** 流程级超时规则（规则组；对齐钉钉「添加超时规则」）。
+ * 约束：remind 可多条；transfer 最多 1 条；pass/refuse 互斥且各最多 1 条；
+ * pass/refuse 对办理（handler）节点不生效（引擎扫描时跳过）。 */
+export interface ProcessTimeoutRule {
+  id: string
+  action: 'remind' | 'transfer' | 'pass' | 'refuse'
+  /** 超时时长（配合 unit） */
+  duration: number
+  unit: 'minute' | 'hour' | 'day'
+  /** 重复提醒（仅 remind；间隔 = duration） */
+  repeat: boolean
+  /** 被提醒人：当前审批人（仅 remind/transfer） */
+  notifyAssignee: boolean
+  /** 被提醒人：审批管理员（仅 remind/transfer） */
+  notifyAdmin: boolean
+  /** 被提醒人：更多员工（仅 remind；用户 ID 列表） */
+  notifyUserIds: string[]
+  /** 通知方式：短信（落 wf_engine_notify） */
+  sms: boolean
+}
+
 export interface ProcessConfigData {
   approvalPolicy: {
     deduplication: {
       enabled: boolean
       scope: 'GLOBAL' | 'PHASE'
+      /** 去重命中口径：CONSECUTIVE=连续出现仅需一次 / FIRST=全流程仅首次需审批 / LAST=全流程仅最后需审批 */
+      mode: 'CONSECUTIVE' | 'FIRST' | 'LAST'
       action: 'AUTO_PASS' | 'SKIP' | 'ESCALATE'
+      /** 发起人与审批人为同一人时无需审批 */
+      skipSameAsInitiator: boolean
     }
     // 流程级操作权限总控（节点级 operations 覆盖，生效 = AND）
     operations: {
@@ -186,7 +211,44 @@ export interface ProcessConfigData {
       allowTransfer: boolean
       allowDelegate: boolean
     }
+    /** 审批处理意见必填（流程级）：REJECT_RETURN=拒绝/退回必填；ALL=全部操作必填。与节点级冲突时取更严 */
+    commentPolicy: {
+      enabled: boolean
+      scope: 'REJECT_RETURN' | 'ALL'
+    }
+    /** 手写签名（流程级总控+默认值）：enabled=false 时全部节点禁用；节点未配置时作为默认 */
+    signaturePolicy: {
+      enabled: boolean
+      useLast: boolean
+      allowUpload: boolean
+      required: boolean
+    }
+    /** 评论管理（引擎预留：评论端点落地后生效；详情 VO 透出供前端门禁） */
+    comment: {
+      disabled: boolean
+      disallowDelete: boolean
+      disallowAttachment: boolean
+    }
+    /** 审批召回：审批人可在下个节点审批前召回自己已办的审批重新处理 */
+    approveRecall: boolean
+    /** 流程退回后重新审批时，已通过节点无需再审批（自动通过） */
+    retakeSkipApproved: boolean
   }
+  /** 自定义审批标题模板：{{processName}}/{{initiator}}/{{date}}/{{表单字段名}} */
+  titleRule: {
+    enabled: boolean
+    pattern: string
+  }
+  /** 自定义摘要（最多 5 个表单字段）；showInSms=在短信中展示摘要 */
+  summaryRule: {
+    enabled: boolean
+    fields: string[]
+    showInSms: boolean
+  }
+  /** 动态流程：实时查找审批人与条件分支（引擎审批人本就运行时解析；配置存档供扩展） */
+  dynamicProcess: boolean
+  /** 流程级超时规则组（节点未开启超时处理时兜底生效） */
+  timeoutRules: ProcessTimeoutRule[]
   numberRule: {
     enabled: boolean
     pattern: string
@@ -203,7 +265,9 @@ export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {
     deduplication: {
       enabled: false,
       scope: 'GLOBAL',
+      mode: 'CONSECUTIVE',
       action: 'AUTO_PASS',
+      skipSameAsInitiator: false,
     },
     operations: {
       allowReject: true,
@@ -211,7 +275,35 @@ export const DEFAULT_PROCESS_CONFIG: ProcessConfigData = {
       allowTransfer: true,
       allowDelegate: true,
     },
+    commentPolicy: {
+      enabled: false,
+      scope: 'REJECT_RETURN',
+    },
+    signaturePolicy: {
+      enabled: false,
+      useLast: false,
+      allowUpload: false,
+      required: false,
+    },
+    comment: {
+      disabled: false,
+      disallowDelete: false,
+      disallowAttachment: false,
+    },
+    approveRecall: false,
+    retakeSkipApproved: false,
   },
+  titleRule: {
+    enabled: false,
+    pattern: '',
+  },
+  summaryRule: {
+    enabled: false,
+    fields: [],
+    showInSms: false,
+  },
+  dynamicProcess: false,
+  timeoutRules: [],
   numberRule: {
     enabled: false,
     pattern: '{{year}}-{{seq:4}}',
@@ -324,7 +416,30 @@ export const useDesignerStore = defineStore('designer', () => {
             ...DEFAULT_PROCESS_CONFIG.approvalPolicy.operations,
             ...(restApprovalPolicy.operations ?? {}),
           },
+          commentPolicy: {
+            ...DEFAULT_PROCESS_CONFIG.approvalPolicy.commentPolicy,
+            ...(restApprovalPolicy.commentPolicy ?? {}),
+          },
+          signaturePolicy: {
+            ...DEFAULT_PROCESS_CONFIG.approvalPolicy.signaturePolicy,
+            ...(restApprovalPolicy.signaturePolicy ?? {}),
+          },
+          comment: {
+            ...DEFAULT_PROCESS_CONFIG.approvalPolicy.comment,
+            ...(restApprovalPolicy.comment ?? {}),
+          },
         },
+        titleRule: {
+          ...DEFAULT_PROCESS_CONFIG.titleRule,
+          ...(parsed.titleRule ?? {}),
+        },
+        summaryRule: {
+          ...DEFAULT_PROCESS_CONFIG.summaryRule,
+          ...(parsed.summaryRule ?? {}),
+        },
+        timeoutRules: Array.isArray(parsed.timeoutRules)
+          ? parsed.timeoutRules
+          : DEFAULT_PROCESS_CONFIG.timeoutRules,
         numberRule: {
           ...DEFAULT_PROCESS_CONFIG.numberRule,
           ...(parsed.numberRule ?? {}),

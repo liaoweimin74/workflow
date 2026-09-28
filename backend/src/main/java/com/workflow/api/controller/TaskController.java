@@ -161,6 +161,24 @@ public class TaskController {
         return R.ok();
     }
 
+    /**
+     * 审批召回（Task 69，对齐 NodeJS POST /api/v1/tasks/:taskId/approve-recall）：
+     * 审批人撤回自己已办理的审批，流程回到该节点重新处理。
+     *
+     * <p>门禁在服务层（approveRecall 开关/已办/本人/下节点未审批/非发起节点/非会签）。
+     * ⚠️ 失败统一 HTTP 200 + body code 400（对齐 NodeJS 控制器的 try/catch 宽松形态）。
+     */
+    @PostMapping("/{taskId}/approve-recall")
+    public R<Void> approveRecall(@PathVariable String taskId) {
+        String userId = getCurrentUserId();
+        try {
+            taskService.recallApproval(taskId, userId);
+        } catch (Exception e) {
+            return R.fail(400, e.getMessage());
+        }
+        return R.ok();
+    }
+
     @PostMapping("/{id}/transfer")
     public R<Void> transfer(@PathVariable String id, @RequestBody(required = false) TransferRequest request) {
         String fromUser = resolveCurrentUserId(request != null ? request.getFromUser() : null);

@@ -3,6 +3,9 @@ package com.workflow.engine.process;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.process.config.ProcessPolicy;
+import com.workflow.engine.process.entity.NodeConfig;
+import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RepositoryService;
@@ -36,25 +39,30 @@ public class ProcessInstanceService {
     private final TaskService taskService;
     private final InitiatorNodeResolver initiatorNodeResolver;
     private final WfTaskCommentRepository commentRepository;
+    /** Task 69：读取 __PROCESS__ 流程级策略（标题/摘要模板）。 */
+    private final NodeConfigRepository nodeConfigRepository;
 
     public ProcessInstanceService(RuntimeService runtimeService,
                                   HistoryService historyService,
                                   TenantProvider tenantProvider,
                                   TaskService taskService,
                                   InitiatorNodeResolver initiatorNodeResolver,
-                                  WfTaskCommentRepository commentRepository) {
+                                  WfTaskCommentRepository commentRepository,
+                                  NodeConfigRepository nodeConfigRepository) {
         this.runtimeService = runtimeService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
         this.taskService = taskService;
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.commentRepository = commentRepository;
+        this.nodeConfigRepository = nodeConfigRepository;
     }
 
     @Transactional
     public ProcessInstance startProcess(String processKey, Map<String, Object> variables) {
         String tenantId = tenantProvider.getTenantId();
         ProcessInstance instance = runtimeService.startProcessInstanceByKeyAndTenantId(processKey, variables, tenantId);
+        applyProcessTitleAndSummary(instance, processKey, variables);
         autoCompleteInitiatorTask(instance, variables);
         return instance;
     }
@@ -63,8 +71,59 @@ public class ProcessInstanceService {
     public ProcessInstance startProcess(String processKey, String businessKey, Map<String, Object> variables) {
         String tenantId = tenantProvider.getTenantId();
         ProcessInstance instance = runtimeService.startProcessInstanceByKeyAndTenantId(processKey, businessKey, variables, tenantId);
+        applyProcessTitleAndSummary(instance, processKey, variables);
         autoCompleteInitiatorTask(instance, variables);
         return instance;
+    }
+
+    /**
+     * 流程级策略：自定义审批标题 / 自定义摘要 → 实例内部变量
+     * （Task 69，对齐 NodeJS start() 的 __instanceTitle / __instanceSummary）。
+     *
+     * <p>titlePattern 非空 → 渲染 {{processName}}/{{initiator}}/{{date}}/{{表单字段}} 写 __instanceTitle；
+     * summaryFields 非空 → 按「字段名:值」空格连接写 __instanceSummary。
+     * 渲染失败仅留日志，不阻断启动。SMS_NODE 文案的【摘要】后缀由
+     * TaskCreateBehaviorListener 读 __instanceSummary / 现算拼入（summaryShowInSms=true）。
+     */
+    private void applyProcessTitleAndSummary(ProcessInstance instance, String processKey,
+                                             Map<String, Object> variables) {
+        try {
+            ProcessPolicy policy = loadProcessPolicy(instance.getProcessDefinitionId());
+            if (policy.getTitlePattern() == null && policy.getSummaryFields().isEmpty()) {
+                return;
+            }
+            Map<String, Object> scope = variables == null ? Map.of() : variables;
+            Object initiatorRaw = scope.get("initiator");
+            String initiator = initiatorRaw == null ? null : String.valueOf(initiatorRaw);
+            if (policy.getTitlePattern() != null) {
+                String processName = instance.getProcessDefinitionName() != null
+                        && !instance.getProcessDefinitionName().isBlank()
+                        ? instance.getProcessDefinitionName() : processKey;
+                runtimeService.setVariable(instance.getId(), "__instanceTitle",
+                        ProcessPolicy.renderProcessTemplate(policy.getTitlePattern(), processName, initiator, scope));
+            }
+            if (!policy.getSummaryFields().isEmpty()) {
+                runtimeService.setVariable(instance.getId(), "__instanceSummary",
+                        ProcessPolicy.renderSummary(policy.getSummaryFields(), scope));
+            }
+        } catch (Exception e) {
+            log.warn("渲染流程标题/摘要失败 instance={}: {}", instance.getId(), e.getMessage());
+        }
+    }
+
+    /** 读部署版本的流程级策略（__PROCESS__ config_json；未配置/失败返回全关默认）。 */
+    private ProcessPolicy loadProcessPolicy(String processDefinitionId) {
+        try {
+            for (NodeConfig nc : nodeConfigRepository.findByProcessDefinitionId(processDefinitionId)) {
+                if (ProcessPolicy.PROCESS_LEVEL_NODE_ID.equals(nc.getNodeId())) {
+                    return ProcessPolicy.parseProcessPolicy(nc.getConfigJson());
+                }
+            }
+            return ProcessPolicy.parseProcessPolicy(null);
+        } catch (Exception e) {
+            log.warn("读取流程级策略失败 defId={}: {}", processDefinitionId, e.getMessage());
+            return ProcessPolicy.parseProcessPolicy(null);
+        }
     }
 
     /**

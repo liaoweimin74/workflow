@@ -12,4 +12,9 @@ public interface WfEngineNotifyRepository extends JpaRepository<WfEngineNotify, 
      * 该任务是否已有指定类型的通知记录（超时调度幂等标记用）。
      */
     boolean existsByTaskIdAndNotifyType(String taskId, String notifyType);
+
+    /**
+     * 该任务最近一条指定类型的通知记录（流程级 remind 规则的重复提醒间隔用）。
+     */
+    java.util.Optional<WfEngineNotify> findTopByTaskIdAndNotifyTypeOrderByCreatedAtDesc(String taskId, String notifyType);
 }

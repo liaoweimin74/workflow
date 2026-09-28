@@ -142,6 +142,24 @@ export interface AutoCompletedTask {
   taskId: string
   nodeId: string
   action: 'approve' | 'refuse' | 'skip'
+  /** 自动结果意见（缺省由服务层按 action 给默认文案） */
+  comment?: string
+}
+
+/**
+ * 流程级策略（服务层从 `__PROCESS__` config_json 解析后注入；引擎不读 DB）。
+ * 仅包含引擎运行时需要的子集；意见必填/签名等门禁在服务层处理。
+ */
+export interface EngineProcessPolicy {
+  /** 审批人去重命中口径（流程级去重启用且节点未显式关闭时生效） */
+  dedupEnabled?: boolean
+  dedupMode?: 'CONSECUTIVE' | 'FIRST' | 'LAST'
+  /** 发起人与审批人为同一人时无需审批（节点级显式配置优先） */
+  dedupSkipSameAsInitiator?: boolean
+  /** 流程退回后重新审批时，已通过节点无需再审批（变量 __retakeApprovedNodes） */
+  retakeSkipApproved?: boolean
+  /** 召回重走时忽略去重过滤（召回者重新审批自己） */
+  skipDedupForRecall?: boolean
 }
 
 export class EngineRuntime {
@@ -181,6 +199,10 @@ export class EngineRuntime {
      * 都由服务层查好后传入，查不到留 null，引擎按策略降级。
      */
     private readonly resolution: ResolutionContext = {},
+    /**
+     * 流程级策略（可选；缺省保持旧行为 = 全流程 FIRST 去重/无退回免审）。
+     */
+    private readonly policy: EngineProcessPolicy = {},
   ) {
     this.variables = {}
   }
@@ -213,6 +235,14 @@ export class EngineRuntime {
   /** 便于测试与上层读取。 */
   getVariables(): Record<string, unknown> {
     return { ...this.variables }
+  }
+
+  /**
+   * 服务层写入内部变量（如 __instanceTitle/__instanceSummary/__retakeApprovedNodes）。
+   * 双下划线前缀 = 引擎内部键（不出现在发起表单/业务语义里）。
+   */
+  setVariable(name: string, value: unknown): void {
+    this.variables[name] = value
   }
 
   private nextId(prefix: string): string {
@@ -401,21 +431,56 @@ export class EngineRuntime {
       return true
     }
 
+    // ①' 退回免审：流程退回后重新审批时，已通过节点无需再审批
+    //（变量 __retakeApprovedNodes 由 reject() 在退回时收集；auto-pass 后移除，
+    //  同一节点再次被退回时可重新收集）
+    if (this.policy.retakeSkipApproved === true) {
+      const retake = this.variables.__retakeApprovedNodes
+      if (Array.isArray(retake)) {
+        const at = retake.indexOf(node.nodeId)
+        if (at >= 0) {
+          retake.splice(at, 1)
+          this.autoFinishNode(execution, node, 'approve', '已审批，自动通过（退回重审免审）')
+          return false
+        }
+      }
+    }
+
     // ② 解析办理/审批人（userIds → BPMN assignee → 类型化解析）
     let assignees = this.resolveAssignees(node)
 
     // ③ 过滤：跳过与发起人相同 + 去重（同一审批人不用重复审批）
+    //    节点级显式配置优先，否则落到流程级策略；召回重走（skipDedupForRecall）时忽略去重
     let filtered = false
     const initiator = this.initiatorValue()
-    if (node.dedup?.skipSameAsInitiator === true && initiator !== null) {
+    const skipSameAsInitiator =
+      node.dedup?.skipSameAsInitiator ?? this.policy.dedupSkipSameAsInitiator === true
+    const recallRecall = this.policy.skipDedupForRecall === true
+    if (skipSameAsInitiator && initiator !== null && !recallRecall) {
       const before = assignees.length
       assignees = assignees.filter((u) => u !== initiator)
       if (assignees.length < before) filtered = true
     }
-    if (node.dedup?.enabled === true) {
-      const done = this.completedAssignees()
+    const dedupActive =
+      node.dedup?.enabled === true ||
+      (node.dedup?.enabled === undefined && this.policy.dedupEnabled === true)
+    if (dedupActive && !recallRecall) {
+      const mode = this.policy.dedupMode ?? 'FIRST'
       const before = assignees.length
-      assignees = assignees.filter((u) => !done.has(u))
+      if (mode === 'LAST') {
+        // 全流程仅最后需一次审批：该用户之前已办过且后续静态可见节点还会出现 → 本次跳过；
+        // 后续不可静态判定（role/expression 动态解析）时保守不跳
+        const done = this.completedAssignees()
+        assignees = assignees.filter(
+          (u) => !(done.has(u) && this.assigneeAppearsLater(node, u)),
+        )
+      } else if (mode === 'CONSECUTIVE') {
+        const last = this.lastCompletedAssignee()
+        assignees = assignees.filter((u) => u !== last)
+      } else {
+        const done = this.completedAssignees()
+        assignees = assignees.filter((u) => !done.has(u))
+      }
       if (assignees.length < before) filtered = true
     }
 
@@ -565,19 +630,60 @@ export class EngineRuntime {
   }
 
   /**
-   * 自动完成节点（auto_pass / skip 策略 / 去重全过滤）：
+   * 最近一个已完成任务的办理人（CONSECUTIVE 连续去重用）：
+   * 仅看最后一个完成任务的 assignee —— 「连续出现同一审批人」只需与上一步比较。
+   */
+  private lastCompletedAssignee(): string | null {
+    let last: string | null = null
+    for (const task of this.state.tasks) {
+      if (task.status === 'COMPLETED' && task.assignee !== null && task.assignee !== '') {
+        last = task.assignee
+      }
+    }
+    return last
+  }
+
+  /**
+   * 该审批人在后续路径的静态可见节点中是否还会出现（LAST 去重用）。
+   * 仅检查 approval.userIds 静态列表；role/expression 等动态解析返回 false（保守不跳）。
+   */
+  private assigneeAppearsLater(node: CompiledNode, user: string): boolean {
+    const visited = new Set<string>([node.nodeId])
+    const queue: string[] = []
+    for (const flowId of node.outgoing) {
+      const flow = this.model.flows[flowId]
+      if (flow !== undefined) queue.push(flow.targetId)
+    }
+    while (queue.length > 0) {
+      const id = queue.shift()
+      if (id === undefined || visited.has(id)) continue
+      visited.add(id)
+      const next = this.model.nodes[id]
+      if (next === undefined) continue
+      if (next.approval?.userIds?.includes(user) === true) return true
+      for (const flowId of next.outgoing) {
+        const flow = this.model.flows[flowId]
+        if (flow !== undefined) queue.push(flow.targetId)
+      }
+    }
+    return false
+  }
+
+  /**
+   * 自动完成节点（auto_pass / skip 策略 / 去重全过滤 / 退回免审）：
    * 记一条已完成任务 + 结束活动 + 继续推进，并登记到 autoCompleted 供服务层写意见。
    */
   private autoFinishNode(
     execution: EngineExecution,
     node: CompiledNode,
     action: 'approve' | 'skip',
+    comment?: string,
   ): void {
     const activity = this.beginActivity(execution, node)
     const task = this.createTask(execution, node, null, null)
     this.completeTaskRecord(task)
     this.completeActivity(activity)
-    this.autoCompleted.push({ taskId: task.id, nodeId: node.nodeId, action })
+    this.autoCompleted.push({ taskId: task.id, nodeId: node.nodeId, action, comment })
     this.takeSingleOutgoing(execution, node)
   }
 
@@ -1284,6 +1390,22 @@ export class EngineRuntime {
 
     this.variables.rejected = true
 
+    // 退回免审（retakeSkipApproved）：收集本实例中已通过的节点（发起节点除外），
+    // 供重新推进时 auto-pass。每次退回覆盖重置 —— 只保留本次退回时点前的已通过节点。
+    if (this.policy.retakeSkipApproved === true) {
+      this.variables.__retakeApprovedNodes = [
+        ...new Set(
+          this.state.tasks
+            .filter(
+              (t) =>
+                t.status === 'COMPLETED' &&
+                this.model.nodes[t.nodeId]?.isInitiator !== true,
+            )
+            .map((t) => t.nodeId),
+        ),
+      ]
+    }
+
     // 取消**整条实例上**全部仍活跃的 token 与其待办 —— 包括被驳回的那个任务本身。
     // 驳回是把整个实例退回发起人；若只取消同节点、或漏掉被驳回的任务，
     // 并行分支上的其它 token 与原任务都会残留成「幽灵待办」（实测踩到过）。
@@ -1348,6 +1470,54 @@ export class EngineRuntime {
     }
     carrier.status = 'ACTIVE'
     carrier.nodeId = initiatorNodeId
+    carrier.arrivedVia = null
+    carrier.miRootId = null
+    carrier.miIndex = null
+    this.advance(carrier)
+  }
+
+  /**
+   * 审批召回：审批人撤回自己**已办理**的审批，流程回到该节点等待重新处理。
+   *
+   * 与发起人撤回（recallToInitiator）的差异：
+   *   - 发起人撤回设 `recalled = true` 并回到发起节点等重新提交；
+   *   - 审批召回设 `approveRecalled = true` 并回到**召回者的节点**重新建待办。
+   *
+   * 门禁（approveRecall 开关 / 任务已办 / 调用者=办理人 / 下个节点未审批 /
+   * 会签最后一位不可召回）由服务层校验后才调用。
+   *
+   * ⚠️ 多实例（会签/依次）节点 v1 不支持召回：取消全部活跃 token 会连带取消
+   *    同节点其他会签人的待办，重走节点会重置 MI 完成计数 —— 语义复杂，后续迭代。
+   *
+   * 召回重走时通过 policy.skipDedupForRecall 忽略去重过滤（召回者需重新审批自己，
+   * 若不去重会把召回者 auto-pass 掉）—— 由服务层在构造 runtime 时置位。
+   */
+  recallApproval(nodeId: string): void {
+    const node = this.model.nodes[nodeId]
+    if (node === undefined) {
+      throw new EngineException(`Node not found: ${nodeId}`)
+    }
+    if (node.isInitiator) {
+      throw new EngineException('发起节点任务不支持审批召回（请使用撤回）')
+    }
+
+    this.variables.approveRecalled = true
+
+    // 取消整条实例上全部仍活跃的 token 与其待办（与 reject/recall 同一套防幽灵待办语义）
+    for (const e of this.state.executions) {
+      if (e.status === 'COMPLETED') continue
+      e.status = 'COMPLETED'
+      this.cancelTasksOfExecution(e.id)
+    }
+
+    // 复活根 token 回到召回节点重走（handleUserTask 建真实待办并停等）
+    const carrier =
+      this.state.executions.find((e) => e.parentId === null) ?? this.state.executions[0]
+    if (carrier === undefined) {
+      throw new EngineException('流程状态缺少可复用的 token，无法召回')
+    }
+    carrier.status = 'ACTIVE'
+    carrier.nodeId = nodeId
     carrier.arrivedVia = null
     carrier.miRootId = null
     carrier.miIndex = null

@@ -13,6 +13,8 @@ import { randomUuid } from '../process/process-design.service'
 import { EngineRuntime, type EngineState } from './engine-runtime'
 import { EnginePersistence, type InstanceRow } from './engine-persistence'
 import { BackendLogicHook, newlyCompletedEndEventNodeIds } from '../logic/backend-logic-hook'
+import { ProcessDesignRepository } from '../process/repository/process-design.repository'
+import { parseProcessPolicy, renderProcessTemplate } from '../process/compiler/process-policy'
 
 /** 新实例启动前没有任何已完成活动（`newlyCompletedEndEventNodeIds` 的「空快照」）。 */
 const EMPTY_ACTIVITY_IDS: ReadonlySet<string> = new Set<string>()
@@ -90,9 +92,18 @@ export class ProcessInstanceService {
     @Inject(KYSELY) private readonly db: Kysely<DB>,
     private readonly persistence: EnginePersistence,
     private readonly backendLogic: BackendLogicHook,
+    /** 可选注入：测试手动 new 时不传；策略读取降级为空配置。 */
+    private readonly designRepo?: ProcessDesignRepository,
   ) {}
 
   // ------------------------------------------------------------ 启动
+
+  /** 读流程级策略（start 用；配置缺失/无 repo 安全降级为空策略）。 */
+  private async loadStartPolicy(defId: string) {
+    if (this.designRepo === undefined) return parseProcessPolicy(null)
+    const config = await this.designRepo.findNodeConfig(defId, '__PROCESS__')
+    return parseProcessPolicy(config?.config_json ?? null)
+  }
 
   async start(
     processKey: string,
@@ -126,6 +137,31 @@ export class ProcessInstanceService {
       await this.buildResolutionContext(),
     )
     runtime.start({ initiator: initiator ?? undefined, variables: variables ?? {} })
+
+    // 流程级策略：自定义审批标题 / 自定义摘要 → 内部变量（随 replaceRuntimeRows 落库）
+    const startPolicy = await this.loadStartPolicy(def.id)
+    if (startPolicy.titlePattern !== null) {
+      runtime.setVariable(
+        '__instanceTitle',
+        renderProcessTemplate(startPolicy.titlePattern, {
+          processName: def.name ?? processKey,
+          initiator,
+          variables: runtime.getVariables(),
+        }),
+      )
+    }
+    if (startPolicy.summaryFields.length > 0) {
+      const allVars = runtime.getVariables()
+      runtime.setVariable(
+        '__instanceSummary',
+        startPolicy.summaryFields
+          .map((f) => {
+            const v = allVars[f]
+            return `${f}:${v === undefined || v === null || typeof v === 'object' ? '' : String(v)}`
+          })
+          .join(' '),
+      )
+    }
 
     // ⚠️ 实例 ID 必须是 **UUID**：Flowable 的流程实例 ID 就是 UUID，
     //    而草稿/配置表用的是 32 位 hex。两者都被规范化器识别为占位符，
@@ -176,11 +212,12 @@ export class ProcessInstanceService {
         action:
           auto.action === 'approve' ? 'approve' : auto.action === 'refuse' ? 'refuse' : 'system',
         comment:
-          auto.action === 'approve'
+          auto.comment ??
+          (auto.action === 'approve'
             ? '自动通过'
             : auto.action === 'refuse'
               ? '自动拒绝'
-              : '未找到办理人，自动跳过',
+              : '未找到办理人，自动跳过'),
         targetUserId: null,
       })
     }
@@ -191,6 +228,12 @@ export class ProcessInstanceService {
     }
 
     // 节点 notify.sms=true 的新建待办 → 短信通知记录（占位表，后续接入网关）
+    // 流程级 summaryShowInSms=true 且已渲染摘要 → 文案尾部附摘要
+    const summaryValue = runtime.getVariables()['__instanceSummary']
+    const summaryText =
+      startPolicy.summaryShowInSms && typeof summaryValue === 'string' && summaryValue !== ''
+        ? `【${summaryValue}】`
+        : ''
     for (const task of state.tasks) {
       if (task.status !== 'CREATED' && task.status !== 'CLAIMED') continue
       const node = model.nodes[task.nodeId]
@@ -204,7 +247,7 @@ export class ProcessInstanceService {
           task_id: task.id,
           notify_type: 'SMS_NODE',
           target_user: task.assignee ?? '',
-          content: `您有新的办理任务：${node.name ?? task.nodeId}`,
+          content: `您有新的办理任务：${node.name ?? task.nodeId}${summaryText}`,
           status: 'PENDING',
           created_at: new Date(),
         })

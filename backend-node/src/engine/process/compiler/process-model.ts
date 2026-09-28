@@ -128,6 +128,59 @@ export interface InitiatorOptions {
   smsOnEnd?: boolean
 }
 
+/** 流程级超时规则（规则组；对齐设计器「添加超时规则」）。 */
+export interface ProcessTimeoutRule {
+  id: string
+  action: 'remind' | 'transfer' | 'pass' | 'refuse'
+  duration: number
+  unit: 'minute' | 'hour' | 'day'
+  /** 重复提醒（仅 remind；间隔 = duration） */
+  repeat?: boolean
+  /** 被提醒人：当前审批人 */
+  notifyAssignee?: boolean
+  /** 被提醒人：审批管理员 */
+  notifyAdmin?: boolean
+  /** 被提醒人：更多员工 */
+  notifyUserIds?: string[]
+  /** 通知方式：短信 */
+  sms?: boolean
+}
+
+/**
+ * 流程级策略（wf_node_config `__PROCESS__` 行 config_json 的归一化产物；
+ * 由服务层 parseProcessPolicy 解析后注入引擎/门禁，引擎本身不读 DB）。
+ */
+export interface ProcessPolicy {
+  /** 审批人去重（流程级）：命中口径 + 发起人同人免审。 */
+  dedup: {
+    enabled: boolean
+    mode: 'CONSECUTIVE' | 'FIRST' | 'LAST'
+    skipSameAsInitiator: boolean
+  }
+  /** 审批处理意见必填：scope=REJECT_RETURN 拒绝/退回必填；ALL 全部操作必填。 */
+  commentPolicy: { enabled: boolean; scope: 'REJECT_RETURN' | 'ALL' }
+  /** 手写签名流程级总控+默认值（节点未显式配置时生效）。 */
+  signaturePolicy: {
+    enabled: boolean
+    useLast: boolean
+    allowUpload: boolean
+    required: boolean
+  }
+  /** 评论管理（详情 VO 透出 + 未来评论端点门禁）。 */
+  comment: { disabled: boolean; disallowDelete: boolean; disallowAttachment: boolean }
+  /** 审批召回：审批人可在下个节点审批前召回自己已办的审批。 */
+  approveRecall: boolean
+  /** 流程退回后重新审批时，已通过节点无需再审批。 */
+  retakeSkipApproved: boolean
+  /** 流程级超时规则组（节点未开启 timeout 时兜底）。 */
+  timeoutRules: ProcessTimeoutRule[]
+  /** 自定义审批标题模板（{{processName}}/{{initiator}}/{{date}}/{{表单字段}}）。 */
+  titlePattern: string | null
+  /** 自定义摘要字段（≤5）+ 短信展示摘要。 */
+  summaryFields: string[]
+  summaryShowInSms: boolean
+}
+
 /**
  * 审批/办理人解析上下文（服务层预计算，注入纯内存引擎）。
  *

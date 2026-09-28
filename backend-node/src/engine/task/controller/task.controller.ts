@@ -228,5 +228,25 @@ export class TaskController {
     if (outcome === 'allSkipped') return R.fail(429, '催办失败：24小时内已催办过或无有效办理人')
     return R.ok()
   }
+
+  /**
+   * 审批召回：审批人撤回自己已办理的审批，流程回到该节点重新处理。
+   *
+   * 门禁在服务层（approveRecall 开关/本人/已办/下节点未审批/非会签）。
+   * 失败统一 HTTP 200 + body code（与 remind 系列一致的宽松形态）。
+   */
+  @Post(':taskId/approve-recall')
+  async approveRecall(
+    @CurrentUser() user: LoginUser,
+    @Param('taskId') taskId: string,
+  ): Promise<R<null>> {
+    try {
+      await this.service.recallApproval(taskId, String(user.userId))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return R.fail(400, message)
+    }
+    return R.ok()
+  }
 }
 

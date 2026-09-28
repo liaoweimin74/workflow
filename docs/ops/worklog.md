@@ -1948,3 +1948,18 @@ Stage Summary:
 - agent-browser 金路径：admin/admin123 登录 → 直达 /lowcode/designer?id=4f10a0d7…（跳登录页正常，登录后回 dashboard，二次进入设计器）→ mouse move 400 400 + down/up 唤出属性面板 → eval 校验 .process-form 文本：「权限设置」「可发起人员」（所有人/指定人员 radio）「审批管理员」（多选，placeholder 请选择审批管理员）三项全命中；分组顺序位于 审批人去重规则/审批设置 之前，与设计一致
 - console error=0、页面错误=0；浏览器 close + pkill chrome-153 零残留
 - 注：UI 标签定为「审批管理员」（原方案口径「审批管理人」），以 cron 校验词与实现为准
+
+---
+Task ID: 77-property-label-7em
+Agent: Z.ai Code (main)
+Task: 用户需求——属性配置面板 label 统一 7 个字符宽度、左对齐
+
+Work Log:
+- 12 个属性组件（Process/UserTask/HandlerTask/InitiatorTask/Event/Gateway/ServiceTask/SubProcess/SequenceFlow/CallActivity/FormPropertyTab/ProcessFormPropertyTab）el-form 统一 label-width="7em" + label-position="left"（原 80px/90px 混用、默认右对齐）
+- ProcessProperty.vue 唯一的 label 深度选择器 justify-content: flex-end → flex-start（Task 73 引入的 FormLabelTip 垂直居中保留）
+- 途中 OOM 事故：vue-tsc 双跑连坐 next-server（dmesg oom-kill，RSS 2GB 被杀）→ rm -rf .next 清缓存重启后稳定；根路径首次编译约 13s 属正常（探活超时要给足）
+- 验证：properties 测试 10/10；vue-tsc 46 既有零新增；浏览器实测 .process-form label width=84px（7em×12px 恰 7 汉字）、textAlign=left、justify=flex-start；console 0 错误
+- 提交推送：bfe2ffac
+
+Stage Summary:
+- 属性面板 12 组件 label 列宽统一 7 字符、文本左对齐；? tooltip 垂直居中不受影响；零回归

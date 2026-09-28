@@ -1768,3 +1768,27 @@ Stage Summary:
 - Node Task 61+65 十项引擎能力全部移植 Java：nodeConfig 模型/审批人类型化解析/门禁（complete+reject+refuse+三键）/详情 VO 增量/签名落库/reInitiate/recall/超时扫描/引擎通知/urge 限流；Flyway V40/V41 双端一致
 - Java 端改动：9 文件修改（WorkflowTaskService/RejectService/TaskRemindService/TaskController/ProcessInstanceController/OperationsConfig/CompleteTaskRequest/WfTaskComment+Repository/MultiInstanceApproverListener/BpmnRewriter）+ 8 文件新增（config 包 2/监听器 2/解析器 1/通知 3/迁移 2）+ WorkflowApplication @EnableScheduling
 - 无法编译验证（沙箱 JRE-only）——静态审查四道关：括号/imports/引用存在性/Flowable API 签名；后续有 JDK 环境时建议 mvn compile 兜底
+
+---
+Task ID: 68-recall-flag-cleanup
+Agent: Z.ai Code (main)
+Task: 用户问询「流程属性上有允许撤回，发起人节点上也有类似设置，是不是重复了？」——调查两处撤回配置的语义与实际生效情况，清理冗余
+
+Work Log:
+- 全仓精确区分两个易混字段（rg PCRE2 负向后视 (?<!dis)allowRecall，避免与 disallowRecall 子串误匹配）：
+  - 流程级 approvalPolicy.allowRecall：仅前端存在（ProcessProperty.vue 开关 + designerStore 类型/默认值/持久化/测试），backend-node process-model.ts 无此字段定义、task.service.ts recallInstance 门禁不读、Java NodeOptions/WorkflowTaskService 同样零解析 → **从未接线的死开关**
+  - 发起节点 initiator.disallowRecall：recall 门禁第①道（Node task.service.ts:1186 / Java WorkflowTaskService.java:1494）→ 真实生效
+  - 活跃节点 blockRecall：recall 门禁第②道（流程到达后禁止撤回）→ 真实生效
+- 产品判断：发起人节点是每个流程必有的唯一节点，其「不允许撤销/撤回」天然等价全局开关，流程级开关即使接线也无增量价值；保留只会误导管理员（开关拨了没任何效果）
+- 清理实现（3 文件 +17/-9）：
+  - ProcessProperty.vue 删除「允许撤回」el-form-item
+  - designerStore.ts 类型+默认值移除 allowRecall；getProcessConfig 合并时把存量 config_json 残留的 allowRecall 键与 allowAddSigner/allowDelegate 一并剔除（废弃字段剔除清单+注释留痕），历史 JSON（含 workflow.sql 种子数据）无需迁移
+  - designerStore.test.ts legacy 用例补 allowRecall 废弃断言
+- 验证：vitest 全量 1132/1132 全绿（=基线）；vue-tsc 46 errors = 既有基线零新增
+- 过程事故与修复：①顶层平台仓库与 workflow_lowcode 子仓库混淆——子仓库 .git 在沙箱重置中丢失，误把 remote 加到顶层并两次把提交打进顶层（父 2b2d63a），均 reset --mixed HEAD~1 回退；②按第六次恢复 SOP 重建子仓库（git init -b main + core.fileMode false + remote add origin PAT@github.com/liaoweimin74/workflow.git + fetch + reset --mixed origin/main + checkout -- . → status 0 行），从 /tmp 备份恢复 3 文件改动后重新提交
+- 教训沉淀：本环境 Bash cwd 在命令块之间会重置，git 操作必须单块内以显式 cd 开头完成，不能跨块依赖 cwd
+
+Stage Summary:
+- 结论：不是"重复的两级配置"，而是"一个死开关 + 真正生效的两级节点门禁"；已删除死开关，撤回语义收敛为 disallowRecall（发起人级）+ blockRecall（进度级）两级节点配置
+- 提交 4220a5d 已推送，远程 main = 本地 = 4220a5d（a7b419a..4220a5d）
+- Java 同步（Task 67）此前已完成并推送于 a7b419a，本轮确认其全部成果已在远程 main（TaskTimeoutScanner/NodeOptions/V40/V41 等）

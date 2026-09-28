@@ -1943,3 +1943,8 @@ Work Log:
 
 Stage Summary:
 - 可发起人员/审批管理人流程级配置三端上线：设计 JSON 通道零 DDL，存量流程 starterScope 缺省 ALL 行为不变；引擎 start() 真门禁 + 发起中心展示层过滤双层防护；超时提醒/转派与 to_admin 兜底均「流程级 adminUserIds 优先、未配置回落全局 admin」向后兼容；四基线零回归 + E2E 下发验证闭环 + 测试数据零残留
+
+### Task 76 浏览器验证补充（cron 420955 收尾会话）
+- agent-browser 金路径：admin/admin123 登录 → 直达 /lowcode/designer?id=4f10a0d7…（跳登录页正常，登录后回 dashboard，二次进入设计器）→ mouse move 400 400 + down/up 唤出属性面板 → eval 校验 .process-form 文本：「权限设置」「可发起人员」（所有人/指定人员 radio）「审批管理员」（多选，placeholder 请选择审批管理员）三项全命中；分组顺序位于 审批人去重规则/审批设置 之前，与设计一致
+- console error=0、页面错误=0；浏览器 close + pkill chrome-153 零残留
+- 注：UI 标签定为「审批管理员」（原方案口径「审批管理人」），以 cron 校验词与实现为准

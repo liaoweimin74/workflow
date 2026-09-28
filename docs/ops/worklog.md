@@ -1811,3 +1811,21 @@ Stage Summary:
 - 流程级策略三端两层语义上线：节点级显式配置永远优先；流程级=默认值提供者（签名/去重/意见必填按各自合并规则）；引擎经策略对象注入，不直接读 DB
 - 规模：前端 2 改+1 新组件、Node 6 改+1 新文件、Java 10 改+1 新类 = 21 文件 +2138/-135；无 DB 迁移
 - 四项测试基线全部吻合零回归；上一会话中断的 java-sync 子代理成果经复核完整后一并提交
+- 提交记录：b49a7ec（22 文件 +2927/-135，远程 main = 本地 = b49a7ec）
+
+---
+Task ID: 70-oom-recovery
+Agent: Z.ai Code (main)
+Task: 用户报「服务挂掉了」——3000 Next dev 挂死修复 + 平台服务拉起机制改良
+
+Work Log:
+- 诊断：3000 DOWN、5173/8080/3306 存活；dmesg 实锤 OOM 击杀 next-server（RSS 1.37GB/total-vm 21GB，内核 oom-kill）；平台仅在容器启动执行一次 .zscripts/dev.sh，next dev 此后无人看护；遗留两个卡 do_wait 的 start-services.sh 孤儿各拖一个 vite（5173 正牌 + 5174 重复浪费）
+- 修复三次受挫与根因：块内 nohup 后台拉起 → 命令块结束即被整树静默 SIGKILL（三次实证，setsid 亦无效）；且 SIGKILL 打断 Turbopack 持久库写入 → panic「Failed to restore task data (corrupted database)」，第二次拉起再死再写坏；清 .next 后仍因「拉起即被回收」无解
+- 最终方案（vite.config.ts revive-next-dev 自愈插件）：configureServer 钩子探测 3000，不通则以 detached spawn 根目录 bun run dev（父进程为 vite 长期存活、脱离会话回收树；其内部 start-services.sh 幂等，8080/5173 健康时跳过）；端口守卫防重复拉起；vite 监听自身配置变更自动重启 = 天然触发时机
+- 收敛过程：杀旧 vite(1239) 释放 5173 → touch 触发插件 vite 重启 → start-services.sh 拉起新 vite 占 5173(14484，带插件) + next dev(3000, 挂 init 下) ；清理 5174 残留(14113 树)；8080(1582) 全程无扰动
+- 验证：四通道全 OK；portal api 200/0.5s；浏览器金路径——门户完整渲染、面板「后端/前端 运行中」双绿灯、console 仅 HMR/DevTools 噪音零报错；/lowcode/ 经 3000 代理 308 正常；浏览器用后即关（内存回到 1378MB available）
+- 教训沉淀：①本环境命令块结束回收全部后代进程（nohup/setsid 均无效）→ 后台进程必须挂靠平台自启进程树（vite/监督器）；②next-server 被 OOM/SIGKILL 后必须 rm -rf .next（Turbopack 持久库必坏，症状 panic corrupted database）；③vite config 重启遇旧连接拖端口会自增端口且 resolvedPort 粘滞，需先释放目标端口再触发重启
+
+Stage Summary:
+- 3000 恢复且具备自愈能力：vite(5173) 内置 revive-next-dev 看门狗，next dev 再被 OOM 击杀时任何 vite 重启都会自动补拉；next dev 内置 service-supervisor 继续看护 8080/5173
+- 无业务代码改动，仅 vite.config.ts 基建加固；提交后远程同步

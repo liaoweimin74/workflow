@@ -68,7 +68,9 @@
             placeholder="{{processName}}-{{initiator}}-{{date}}"
             @change="syncToStore"
           />
-          <div class="hint-text">可用变量：{{ '{{processName}}' }}、{{ '{{initiator}}' }}、{{ '{{date}}' }}、表单字段名</div>
+          <!-- v-pre：提示文案里的 {{var}} 是字面量示例，不能交给 Vue 插值编译
+               （插值分词器遇到字符串内部的 }} 会提前闭合导致 SFC 编译 500） -->
+          <div class="hint-text" v-pre>可用变量：{{processName}}、{{initiator}}、{{date}}、表单字段名</div>
         </el-form-item>
 
         <el-form-item label="动态流程">

@@ -1829,3 +1829,19 @@ Work Log:
 Stage Summary:
 - 3000 恢复且具备自愈能力：vite(5173) 内置 revive-next-dev 看门狗，next dev 再被 OOM 击杀时任何 vite 重启都会自动补拉；next dev 内置 service-supervisor 继续看护 8080/5173
 - 无业务代码改动，仅 vite.config.ts 基建加固；提交后远程同步
+
+---
+Task ID: 71-designer-import-fix
+Agent: Z.ai Code (main)
+Task: 用户报 ProcessListPage 跳转设计器报「Failed to fetch dynamically imported module: ProcessDesigner.vue」
+
+Work Log:
+- 服务端定位：ProcessDesigner.vue 本身 200 正常；vite.log 抓到真凶——vite:vue 插件编译 ProcessProperty.vue:71:42 抛 createCompilerError（stateInterpolationClose）
+- 根因：Task 69 新增的标题模板提示文案写了 {{ '{{processName}}' }}——Vue 插值分词器不识别 JS 字符串字面量，遇字符串内部的 }} 提前闭合 → SFC 编译 500 → 设计器路由动态导入链整体断裂
+- 全仓扫描确认仅此一处（rg "\{\{ '" frontend/src --glob '*.vue'）
+- 修复：该 div 加 v-pre 字面量渲染 + 注释说明机制；上方 el-input 的 placeholder="{{...}}" 为纯属性值（Vue3 属性不做插值）本来就正确，未动
+- 验证：模块直取 200 且含目标文案；vue-tsc 46=基线；浏览器金路径——登录 admin → 流程定义 → 直接导航 /designer?id=1 → 设计器工具栏/画布完整渲染；console 仅既有 SSE 重连+permission 指令噪音，零模块加载错误；浏览器用后即关
+- 关联说明：Task 70 多次重启 vite（依赖重优化）放大了暴露概率，但编译错误自 Task 69 起就存在，浏览器旧标签页持有的失效模块图不是根因
+
+Stage Summary:
+- 设计器路由导入链修复（v-pre 字面量渲染）；vue-tsc/vitest 基线零新增；提交推送

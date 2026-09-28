@@ -311,6 +311,11 @@ const nodeTypeLabel = computed(() => {
   color: var(--el-text-color-regular, #4b5169);
 }
 
+/* 分组标题左对齐：is-left 默认 left:20px 缩进改 0，与表单内容左缘平齐（Task 78） */
+.panel-body :deep(.el-divider--horizontal .el-divider__text.is-left) {
+  left: 0;
+}
+
 /* 属性表单在浅底色上以白卡片呈现，结构更清晰 */
 .panel-body :deep(.el-form) {
   background: var(--el-bg-color);

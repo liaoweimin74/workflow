@@ -1969,3 +1969,17 @@ Stage Summary:
 - 推送补完：本地领先 origin/main 2 提交（bfe2ffac + 60da7e01 worklog）已推送 e7b1f9c6..60da7e01，本地=远程=60da7e01
 - 浏览器复核（agent-browser）：EventProperty（选中开始事件）4 label 全 84.0px、justify=flex-start、textAlign=left；ProcessProperty（mouse move 400,400 + down/up 唤出）21 label 全 84.0px 同口径；截图目测 label 列整齐左对齐、7 字符宽（84px=7em×12px small）；agent-browser close + pkill chrome-153 零残留
 - 附：leave 草稿画布仅 startEvent_1 一个节点（草稿内容如此，与 Task 77 无关）；fetch 拉到远程新分支 feature/array-value-text-columns、feature/process-engine-core（未处理，非 main 范畴）
+
+---
+Task ID: 78-divider-left-align
+Agent: Z.ai Code (main session)
+Task: 用户需求——属性配置的分组标题左对齐
+
+Work Log:
+- 根因实测：全部 el-divider 均已 content-position="left"，但 Element Plus .el-divider__text.is-left 默认 position:absolute + left:20px——分组标题比表单内容多缩进 20px（实测 divider 文本距面板左缘 50px，label 仅 30px），视觉上悬在中间
+- 修复 2 文件：PropertyPanel.vue panel-body 深度样式新增 .el-divider--horizontal .el-divider__text.is-left { left: 0 }（一处覆盖全部 12 个属性组件面板）；ProcessTimeoutRuleDialog.vue scoped style 同口径（对话框不在 panel-body 内）
+- 浏览器实测：ProcessProperty 7 个分组标题（基本属性/权限设置/审批人去重规则/审批设置/节点操作权限/流程设置/流程编号）全部 left=30px，与 el-form-item__label（30px）完全平齐；超时对话框 3 个 divider（时间设置/人员设置/通知设置）贴 body 左缘 16px（原 36px）；截图目测确认
+- 测试：properties 10/10；vue-tsc 46 既有零新增（纯 CSS 改动）
+
+Stage Summary:
+- 属性面板与超时对话框分组标题与表单内容左缘平齐（Task 77 label 7em 对齐的延续，面板纵向视觉统一收口）

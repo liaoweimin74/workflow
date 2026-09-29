@@ -1,8 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common'
 import { R } from '../../../common/domain/r'
 import { JavaStatusOk } from '../../../framework/http/java-status.decorator'
+import { CurrentUser } from '../../../framework/security/current-user.decorator'
+import type { LoginUser } from '../../../framework/security/jwt-auth.guard'
 import {
   FormDataService,
+  type DraftBoxItemVO,
   type FormDataDTOVO,
   type FormDataVO,
 } from '../form-data.service'
@@ -23,8 +26,8 @@ interface FormDataSaveRequest {
  *    读端点返回 `FormDataDTO` —— 10 个字段、**没有 `tenantId`**。
  *    已由 golden 逐字段确认。
  *
- * ⚠️ 路由顺序：`draft/...`、`task/...`、`process-instance/...` 这些字面量段
- *    必须排在 `:id` 之前。Nest 按声明顺序匹配（Spring 另有"字面量优先"兜底，Nest 没有）。
+ * ⚠️ 路由顺序：`draft/...`、`drafts`、`drafts/:id`、`task/...`、`process-instance/...`
+ *    这些字面量段必须排在 `:id` 之前。Nest 按声明顺序匹配（Spring 另有"字面量优先"兜底，Nest 没有）。
  */
 @Controller('api/v1/form-data')
 @JavaStatusOk()
@@ -57,22 +60,50 @@ export class FormDataController {
     )
   }
 
-  /** 保存发起页草稿（`processInstanceId` 为 null）。 */
+  /** 保存发起页草稿（`processInstanceId` 为 null；草稿按登录用户隔离）。 */
   @Post('draft')
-  async saveDraft(@Body() body: FormDataSaveRequest | null): Promise<R<FormDataVO>> {
-    return R.ok(await this.service.saveDraft(body?.formDefId ?? null, body?.dataJson ?? null))
+  async saveDraft(
+    @Body() body: FormDataSaveRequest | null,
+    @CurrentUser() user: LoginUser,
+  ): Promise<R<FormDataVO>> {
+    return R.ok(
+      await this.service.saveDraft(body?.formDefId ?? null, body?.dataJson ?? null, user.userId),
+    )
   }
 
-  /** 查询发起页草稿（无草稿时 data 为 null）。 */
+  /** 查询发起页草稿（当前用户自己的；无草稿时 data 为 null）。 */
   @Get('draft/:formDefId')
-  async getDraft(@Param('formDefId') formDefId: string): Promise<R<FormDataDTOVO | null>> {
-    return R.ok(await this.service.findDraft(formDefId))
+  async getDraft(
+    @Param('formDefId') formDefId: string,
+    @CurrentUser() user: LoginUser,
+  ): Promise<R<FormDataDTOVO | null>> {
+    return R.ok(await this.service.findDraft(formDefId, user.userId))
   }
 
-  /** 清除发起页草稿。 */
+  /** 清除发起页草稿（当前用户自己的）。 */
   @Delete('draft/:formDefId')
-  async clearDraft(@Param('formDefId') formDefId: string): Promise<R<null>> {
-    await this.service.clearDraft(formDefId)
+  async clearDraft(
+    @Param('formDefId') formDefId: string,
+    @CurrentUser() user: LoginUser,
+  ): Promise<R<null>> {
+    await this.service.clearDraft(formDefId, user.userId)
+    return R.ok()
+  }
+
+  /** 草稿箱：当前用户的全部发起页草稿（附表单名 + 发起流程反查）。 */
+  @Get('drafts')
+  async listDrafts(@CurrentUser() user: LoginUser): Promise<R<DraftBoxItemVO[]>> {
+    return R.ok(await this.service.listMyDrafts(user.userId))
+  }
+
+  /** 草稿箱：删除指定草稿（仅本人草稿可删）。 */
+  @Delete('drafts/:id')
+  async deleteDraft(
+    @Param('id') id: string,
+    @CurrentUser() user: LoginUser,
+  ): Promise<R<null>> {
+    const deleted = await this.service.deleteMyDraft(id, user.userId)
+    if (!deleted) return R.fail(404, '草稿不存在或无权删除')
     return R.ok()
   }
 

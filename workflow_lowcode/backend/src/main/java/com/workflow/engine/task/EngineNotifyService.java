@@ -20,6 +20,7 @@ public class EngineNotifyService {
 
     public static final String TYPE_SMS_NODE = "SMS_NODE";
     public static final String TYPE_SMS_END = "SMS_END";
+    public static final String TYPE_SMS_TIMEOUT = "SMS_TIMEOUT";
     public static final String TYPE_TIMEOUT_REMIND = "TIMEOUT_REMIND";
 
     private static final Logger log = LoggerFactory.getLogger(EngineNotifyService.class);
@@ -35,9 +36,18 @@ public class EngineNotifyService {
      */
     public void writeSmsNode(String tenantId, String instanceId, String taskId,
                              String targetUser, String nodeLabel) {
+        writeSmsNodeContent(tenantId, instanceId, taskId, targetUser,
+                "您有新的办理任务：" + (nodeLabel == null || nodeLabel.isBlank() ? taskId : nodeLabel));
+    }
+
+    /**
+     * 节点 SMS 通知（显式内容；Task 69 流程级短信摘要开启时由调用方拼好【摘要】后缀）。
+     */
+    public void writeSmsNodeContent(String tenantId, String instanceId, String taskId,
+                                    String targetUser, String content) {
         write(tenantId, instanceId, taskId, TYPE_SMS_NODE,
                 targetUser == null ? "" : targetUser,
-                "您有新的办理任务：" + (nodeLabel == null || nodeLabel.isBlank() ? taskId : nodeLabel),
+                content == null ? "" : content,
                 "PENDING");
     }
 
@@ -56,14 +66,46 @@ public class EngineNotifyService {
     }
 
     /**
+     * 通用通知记录写入（Task 69 流程级超时规则组：TIMEOUT_REMIND/TIMEOUT_TRANSFER/
+     * TIMEOUT_PASS/TIMEOUT_REFUSE/SMS_TIMEOUT，status=SENT，对齐 NodeJS 扫描器 writeNotify）。
+     */
+    public void writeNotifyRecord(String tenantId, String instanceId, String taskId,
+                                  String notifyType, String targetUser, String content) {
+        write(tenantId, instanceId, taskId, notifyType,
+                targetUser == null ? "" : targetUser,
+                content == null ? "" : content,
+                "SENT");
+    }
+
+    /**
+     * 该任务是否已有指定类型的通知记录（幂等）。
+     */
+    public boolean hasNotifyRecord(String taskId, String notifyType) {
+        try {
+            return repository.existsByTaskIdAndNotifyType(taskId, notifyType);
+        } catch (Exception e) {
+            log.warn("查询通知记录失败 taskId={} type={}: {}", taskId, notifyType, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * 该任务是否已有超时处理记录（幂等）。
      */
     public boolean hasTimeoutRecord(String taskId) {
+        return hasNotifyRecord(taskId, TYPE_TIMEOUT_REMIND);
+    }
+
+    /**
+     * 该任务最近一条指定类型的通知记录（流程级 remind 规则的重复提醒间隔用）；无则返回 null。
+     */
+    public WfEngineNotify findLatestNotify(String taskId, String notifyType) {
         try {
-            return repository.existsByTaskIdAndNotifyType(taskId, TYPE_TIMEOUT_REMIND);
+            return repository.findTopByTaskIdAndNotifyTypeOrderByCreatedAtDesc(taskId, notifyType)
+                    .orElse(null);
         } catch (Exception e) {
-            log.warn("查询超时通知记录失败 taskId={}: {}", taskId, e.getMessage());
-            return false;
+            log.warn("查询最近通知记录失败 taskId={} type={}: {}", taskId, notifyType, e.getMessage());
+            return null;
         }
     }
 

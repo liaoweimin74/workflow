@@ -1,6 +1,6 @@
 <template>
   <div class="process-form-property-tab">
-    <el-form label-width="90px" size="small" :disabled="readOnly">
+    <el-form label-width="7em" label-position="left" size="small" :disabled="readOnly">
       <el-form-item label="表单配置">
         <div style="display: flex; gap: 8px; width: 100%;">
           <el-select
@@ -18,9 +18,8 @@
               :value="form.id"
             />
           </el-select>
-          <el-tooltip content="编辑表单" placement="top">
+          <el-tooltip v-if="formConfig.formDefId && !readOnly" content="编辑表单" placement="top">
             <el-button
-              v-if="formConfig.formDefId && !readOnly"
               :icon="Edit"
               circle
               size="small"

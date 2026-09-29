@@ -17,6 +17,9 @@ public class DesignSaveRequest {
     /** 分类 ID */
     private String categoryId;
 
+    /** 流程说明（缺省时保留原值，与 name/key/categoryId 的可选语义一致） */
+    private String description;
+
     /** BPMN XML 内容 */
     private String bpmnXml;
 
@@ -31,6 +34,9 @@ public class DesignSaveRequest {
 
     public String getCategoryId() { return categoryId; }
     public void setCategoryId(String categoryId) { this.categoryId = categoryId; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public String getBpmnXml() { return bpmnXml; }
     public void setBpmnXml(String bpmnXml) { this.bpmnXml = bpmnXml; }

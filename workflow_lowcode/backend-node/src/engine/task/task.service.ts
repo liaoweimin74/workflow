@@ -7,12 +7,16 @@ import { assertPageSize } from '../../framework/http/query-params'
 import type { DB } from '../../framework/database/types'
 import { getTenantId } from '../../framework/tenant/tenant-context'
 import { EngineRuntime } from '../runtime/engine-runtime'
+import { snapshotAssigneeResolvers } from '../runtime/assignee-resolver-registry'
 import { extractFormConfig, randomUuid } from '../process/process-design.service'
 import { EnginePersistence, type TaskJoinRow } from '../runtime/engine-persistence'
 import { ProcessDesignRepository } from '../process/repository/process-design.repository'
 import { BackendLogicHook, completedActivityIdSnapshot, newlyCompletedEndEventNodeIds } from '../logic/backend-logic-hook'
 import { ProcessInstanceService } from '../runtime/process-instance.service'
-import type { ProcessModel, ResolutionContext } from '../process/compiler/process-model'
+import type { ProcessModel, ProcessPolicy, ResolutionContext } from '../process/compiler/process-model'
+import { parseProcessPolicy, PROCESS_LEVEL_NODE_ID } from '../process/compiler/process-policy'
+
+export { PROCESS_LEVEL_NODE_ID }
 
 /** 节点配置里的跨表单映射（宽松解析，对齐前端 `FormFieldDataMapping`）。 */
 interface DataMappingLike {
@@ -66,15 +70,25 @@ export interface TaskDetailVO {
   isInitiatorTask: boolean
   /** 节点类别：initiator / approver / handler（运行时按钮区分；旧数据=approver）。 */
   taskRole: 'initiator' | 'approver' | 'handler'
-  /** 节点级行为开关（前端按钮/表单渲染用）。 */
+  /** 节点级行为开关（前端按钮/表单渲染用；已与流程级 commentPolicy/signaturePolicy 合并）。 */
   nodeFlags: {
+    /** 通过/提交是否必填意见（节点 scope=ALL 或流程级 scope=ALL）；拒绝/退回始终必填不在此体现 */
     commentRequired: boolean
+    /** 意见必填范围：REJECT_RETURN=拒绝/退回必填；ALL=全部操作必填；null=节点与流程级均未开启 */
+    commentRequiredScope: 'REJECT_RETURN' | 'ALL' | null
     signatureEnabled: boolean
     signatureRequired: boolean
     /** 默认使用上次签名（signature.useLast） */
     signatureUseLast: boolean
     /** 支持上传签名图片（signature.allowUpload） */
     signatureAllowUpload: boolean
+  }
+  /** 流程级策略透出（前端按此门禁评论区/召回按钮等）。 */
+  processFlags: {
+    commentDisabled: boolean
+    commentDisallowDelete: boolean
+    commentDisallowAttachment: boolean
+    approveRecall: boolean
   }
   /** 上次签名 dataURL（仅 signature.useLast=true 时回查最近一条 approve 签名，供前端默认回填） */
   lastSignature: string | null
@@ -236,18 +250,9 @@ export class TaskService {
       taskRole: (node?.isInitiator ?? false)
         ? 'initiator'
         : (node?.taskRole ?? 'approver'),
-      nodeFlags: {
-        commentRequired: node?.commentRequired ?? false,
-        signatureEnabled: node?.signature?.enabled ?? false,
-        signatureRequired: node?.signature?.required ?? false,
-        signatureUseLast: node?.signature?.useLast ?? false,
-        signatureAllowUpload: node?.signature?.allowUpload ?? false,
-      },
-      // 上次签名回填：仅 signature.useLast=true 时查该办理人最近一条带签名的 approve 意见
-      lastSignature:
-        node?.signature?.useLast === true
-          ? await this.findLastSignature(getTenantId(), row.assignee)
-          : null,
+      ...(await this.resolveEffectiveFlags(row.process_def_id, node)),
+      // 上次签名回填：仅生效 useLast=true 时查该办理人最近一条带签名的 approve 意见
+      lastSignature: await this.findLastSignatureIfUseLast(row.process_def_id, node, row.assignee),
       // 表单：节点级 `form` > 流程级 `__PROCESS__` `form`（整体取，不跨层合并，对齐 Java extractFormConfig）
       ...(await this.loadTaskForm(row.process_def_id, row.node_id)),
       // 跨表单数据映射（form.dataMappings → targetField/value）；无配置或解析为空时为 null
@@ -263,6 +268,79 @@ export class TaskService {
       operations: await this.loadOperations(row.process_def_id, row.node_id),
       variables: mergeMultiInstanceScope(state, taskId, node?.approval, variables),
     }
+  }
+
+  /**
+   * 生效节点开关 + 流程级策略（nodeFlags 已与流程级 commentPolicy/signaturePolicy 合并）。
+   *
+   * 合并语义：
+   *   - 意见必填：节点级 commentRequired OR 流程级 commentPolicy(enabled && scope=ALL)
+   *   - 签名：流程级 enabled=false → 全部禁用；enabled=true 时节点未显式配置 → 用流程级默认项
+   */
+  private async resolveEffectiveFlags(
+    processDefinitionId: string,
+    node: ProcessModel['nodes'][string] | undefined,
+  ): Promise<{
+    nodeFlags: TaskDetailVO['nodeFlags']
+    processFlags: TaskDetailVO['processFlags']
+    policy: ProcessPolicy
+  }> {
+    const policy = await this.loadProcessPolicy(processDefinitionId)
+    // 意见必填范围（截图②/④）：节点级 scope（缺省 ALL 兼容存量）=REJECT_RETURN/RETURN_ONLY 时
+    // 仅拒绝/退回必填，通过/提交不拦；ALL（或流程级 scope=ALL）时全部操作必填
+    const nodeScope =
+      node?.commentRequired === true ? (node.commentRequiredScope ?? 'ALL') : null
+    const commentRequired =
+      nodeScope === 'ALL' ||
+      (nodeScope === null && policy.commentPolicy.enabled && policy.commentPolicy.scope === 'ALL')
+    const sig = policy.signaturePolicy
+    // 节点显式配置优先；节点未配置时用流程级默认（同 completeTask 门禁口径）
+    const sigEnabled = node?.signature?.enabled ?? sig.enabled
+    return {
+      nodeFlags: {
+        commentRequired,
+        // 生效范围：节点级显式 scope 优先，否则流程级 commentPolicy（都未开启为 null）
+        commentRequiredScope:
+          nodeScope ?? (policy.commentPolicy.enabled ? policy.commentPolicy.scope : null),
+        signatureEnabled: sigEnabled,
+        signatureRequired: sigEnabled ? (node?.signature?.required ?? sig.required) : false,
+        signatureUseLast: sigEnabled ? (node?.signature?.useLast ?? sig.useLast) : false,
+        signatureAllowUpload: sigEnabled
+          ? (node?.signature?.allowUpload ?? sig.allowUpload)
+          : false,
+      },
+      processFlags: {
+        commentDisabled: policy.comment.disabled,
+        commentDisallowDelete: policy.comment.disallowDelete,
+        commentDisallowAttachment: policy.comment.disallowAttachment,
+        approveRecall: policy.approveRecall,
+      },
+      policy,
+    }
+  }
+
+  /** 上次签名回填（仅在生效 useLast=true 时查询，供前端默认回填）。 */
+  private async findLastSignatureIfUseLast(
+    processDefinitionId: string,
+    node: ProcessModel['nodes'][string] | undefined,
+    assignee: string | null,
+  ): Promise<string | null> {
+    const policy = await this.loadProcessPolicy(processDefinitionId)
+    const sig = policy.signaturePolicy
+    // 生效 useLast：节点签名链路生效时，节点显式值优先，否则落流程级默认
+    const sigEnabled = node?.signature?.enabled ?? sig.enabled
+    const useLast = sigEnabled ? (node?.signature?.useLast ?? sig.useLast) : false
+    if (useLast !== true) return null
+    return this.findLastSignature(getTenantId(), assignee)
+  }
+
+  /** 流程级策略（__PROCESS__ config_json 归一化；每次读库无缓存，配置表量小）。 */
+  private async loadProcessPolicy(processDefinitionId: string): Promise<ProcessPolicy> {
+    const row = await this.designRepo.findNodeConfig(
+      processDefinitionId,
+      PROCESS_LEVEL_NODE_ID,
+    )
+    return parseProcessPolicy(row?.config_json ?? null)
   }
 
   /**
@@ -433,17 +511,28 @@ export class TaskService {
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
 
-    // ① 节点级门禁（意见必填 / 必须签名 / 必须加签）—— 在引擎推进前拦截
+    // ① 门禁（意见必填 / 必须签名 / 必须加签）—— 在引擎推进前拦截。
+    //    意见必填（通过/提交口径）：节点级 scope（缺省 ALL 兼容存量）=ALL，或流程级 commentPolicy scope=ALL；
+    //    节点 scope=REJECT_RETURN 时通过/提交不拦（仅拒绝/退回拦，见 reject/refuse）。
+    //    签名 = 流程级 enabled=false 全禁；否则节点未显式配置用流程级默认。
     const node = model.nodes[row.node_id]
+    const processPolicy = await this.loadProcessPolicy(row.process_def_id)
     if (node !== undefined) {
       const label = node.name !== '' ? node.name : row.node_id
-      if (node.commentRequired === true && (body.comment ?? '').trim() === '') {
+      const commentRequired =
+        (node.commentRequired === true && (node.commentRequiredScope ?? 'ALL') === 'ALL') ||
+        (processPolicy.commentPolicy.enabled && processPolicy.commentPolicy.scope === 'ALL')
+      if (commentRequired && (body.comment ?? '').trim() === '') {
         throw new BusinessException(
           400,
           `${node.taskRole === 'handler' ? '处理' : '审批'}意见必填（节点「${label}」）`,
         )
       }
-      if (node.signature?.required === true && (body.signature ?? '').trim() === '') {
+      const sig = processPolicy.signaturePolicy
+      // 节点显式配置优先；节点未配置时用流程级默认（流程级只是默认值提供者，不覆盖节点显式配置）
+      const sigEnabled = node.signature?.enabled ?? sig.enabled
+      const sigRequired = sigEnabled ? (node.signature?.required ?? sig.required) : false
+      if (sigRequired && (body.signature ?? '').trim() === '') {
         throw new BusinessException(400, `此节点要求手写签名（节点「${label}」）`)
       }
       if (node.returnOptions?.mustAddSign === true) {
@@ -466,7 +555,15 @@ export class TaskService {
       state,
       () => new Date(),
       () => randomUuid(),
-      await this.buildResolutionContext(),
+      // to_admin 兜底目标：流程级审批管理员优先，未配置回落全局 admin（Task 76）
+      await this.buildResolutionContext(processPolicy.adminUserIds[0] ?? undefined, row.instance_id),
+      {
+        dedupEnabled: processPolicy.dedup.enabled,
+        dedupMode: processPolicy.dedup.mode,
+        dedupSkipSameAsInitiator: processPolicy.dedup.skipSameAsInitiator,
+        retakeSkipApproved: processPolicy.retakeSkipApproved,
+      },
+      snapshotAssigneeResolvers(),
     )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
@@ -529,13 +626,16 @@ export class TaskService {
         instanceId: row.instance_id,
         userId: 'system',
         action: auto.action === 'approve' ? 'approve' : 'system',
-        comment: auto.action === 'approve' ? '自动通过' : '未找到办理人，自动跳过',
+        comment:
+          auto.comment ??
+          (auto.action === 'approve' ? '自动通过' : '未找到办理人，自动跳过'),
         targetUserId: null,
       })
     }
 
-    // 节点「发送短信给办理人」→ 通知记录落库
-    await this.writeNodeSmsNotifications(tenantId, row.instance_id, state, model)
+    // 节点「发送短信给办理人」→ 通知记录落库（流程级短信摘要开启时附在文案尾部）
+    const smsSummary = await this.loadSmsSummarySuffix(row.instance_id, row.process_def_id)
+    await this.writeNodeSmsNotifications(tenantId, row.instance_id, state, model, smsSummary)
     // 实例结束 + 发起节点 smsOnEnd → 给发起人的短信通知
     if (state.status === 'COMPLETED') {
       await this.writeInstanceEndSms(tenantId, row.instance_id, model, row.initiator)
@@ -610,15 +710,36 @@ export class TaskService {
     if (operations.allowReturn !== true && operations.allowReject !== true) {
       throw new BusinessException(400, '该节点不允许退回')
     }
-    // 意见必填节点：退回理由也必填
+    // 意见必填：退回理由必填 = 节点级 OR 流程级 commentPolicy(enabled)（REJECT_RETURN 与 ALL 都覆盖退回）
     const rejectNode = model.nodes[row.node_id]
-    if (rejectNode?.commentRequired === true && (reason ?? '').trim() === '') {
-      const label = rejectNode.name !== '' ? rejectNode.name : row.node_id
-      throw new BusinessException(400, `审批意见必填（节点「${label}」）`)
+    const processPolicyForReject = await this.loadProcessPolicy(row.process_def_id)
+    const rejectCommentRequired =
+      rejectNode?.commentRequired === true || processPolicyForReject.commentPolicy.enabled
+    if (rejectCommentRequired && (reason ?? '').trim() === '') {
+      const label =
+        rejectNode !== undefined && rejectNode.name !== '' ? rejectNode.name : row.node_id
+      // 办理节点（taskRole=handler）提示「处理意见必填」，与 completeTask 口径一致（Task 79）
+      const rejectCommentWord = rejectNode?.taskRole === 'handler' ? '处理' : '审批'
+      throw new BusinessException(400, `${rejectCommentWord}意见必填（节点「${label}」）`)
     }
 
     // 生产用 UUID 工厂；seedSeq 在 UUID 模式无实际作用，保留以兼容序号模式
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    // policy：retakeSkipApproved 由 reject() 收集已通过节点写入 __retakeApprovedNodes；
+    //        dedup 口径同步注入（后续重走节点的任务创建消费）
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      {},
+      {
+        dedupEnabled: processPolicyForReject.dedup.enabled,
+        dedupMode: processPolicyForReject.dedup.mode,
+        dedupSkipSameAsInitiator: processPolicyForReject.dedup.skipSameAsInitiator,
+        retakeSkipApproved: processPolicyForReject.retakeSkipApproved,
+      },
+      snapshotAssigneeResolvers(),
+    )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
     try {
@@ -773,7 +894,15 @@ export class TaskService {
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
 
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      {},
+      {},
+      snapshotAssigneeResolvers(),
+    )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
 
@@ -859,7 +988,15 @@ export class TaskService {
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
 
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      {},
+      {},
+      snapshotAssigneeResolvers(),
+    )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
     try {
@@ -940,8 +1077,13 @@ export class TaskService {
     if (refuseNode?.taskRole === 'handler') {
       throw new BusinessException(400, '办理节点不支持拒绝操作')
     }
-    if (refuseNode?.commentRequired === true && (reason ?? '').trim() === '') {
-      const label = refuseNode.name !== '' ? refuseNode.name : row.node_id
+    // 拒绝理由必填 = 节点级 OR 流程级 commentPolicy(enabled)（REJECT_RETURN 与 ALL 都覆盖拒绝）
+    const processPolicyForRefuse = await this.loadProcessPolicy(row.process_def_id)
+    const refuseCommentRequired =
+      refuseNode?.commentRequired === true || processPolicyForRefuse.commentPolicy.enabled
+    if (refuseCommentRequired && (reason ?? '').trim() === '') {
+      const label =
+        refuseNode !== undefined && refuseNode.name !== '' ? refuseNode.name : row.node_id
       throw new BusinessException(400, `审批意见必填（节点「${label}」）`)
     }
 
@@ -1207,7 +1349,9 @@ export class TaskService {
       state,
       () => new Date(),
       () => randomUuid(),
-      await this.buildResolutionContext(),
+      await this.buildResolutionContext(undefined, instanceId),
+      {},
+      snapshotAssigneeResolvers(),
     )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
@@ -1237,16 +1381,144 @@ export class TaskService {
     })
   }
 
+  // ------------------------------------------------------------ 审批召回
+
+  /**
+   * 审批召回：审批人撤回自己**已办理**的审批，流程回到该节点等待重新处理。
+   *
+   * 门禁（对齐钉钉「审批召回」）：
+   *   ① 流程级 approveRecall 开启；
+   *   ② 任务已完成且调用者 = 办理人；
+   *   ③ 实例 RUNNING；
+   *   ④ 召回之后没有其他审批人再办结（「下个节点审批前」）；
+   *   ⑤ 发起节点任务不支持（走 recallInstance）；
+   *   ⑥ 多实例（会签/依次）节点 v1 整体不支持（引擎重走会重置 MI 计数）。
+   *
+   * 意见 action='approve_recall'；实例变量 approveRecalled=true。
+   */
+  async recallApproval(taskId: string, userId: string): Promise<void> {
+    const tenantId = getTenantId()
+    const row = await this.persistence.findTaskWithInstance(taskId, tenantId)
+    if (row === null) throw new BusinessException(`任务不存在: ${taskId}`)
+
+    const taskRow = await this.db
+      .selectFrom('wfe_task')
+      .select(['id', 'status', 'assignee', 'node_id'])
+      .where('id', '=', taskId)
+      .executeTakeFirst()
+    if (taskRow === undefined) throw new BusinessException(`任务不存在: ${taskId}`)
+    if (taskRow.status !== 'COMPLETED') {
+      throw new BusinessException(400, '仅已办理的审批任务可以召回')
+    }
+    if (taskRow.assignee !== userId) {
+      throw new BusinessException(403, '仅任务办理人本人可以召回')
+    }
+
+    const instanceRow = await this.db
+      .selectFrom('wfe_process_instance')
+      .select('status')
+      .where('id', '=', row.instance_id)
+      .executeTakeFirst()
+    if (instanceRow === undefined || instanceRow.status !== 'RUNNING') {
+      throw new BusinessException(400, '流程已结束，无法召回')
+    }
+
+    const model = await this.instances.loadModel(row.process_def_id)
+    if (model === null) throw new BusinessException(`缺少流程模型: ${row.process_def_id}`)
+    const node = model.nodes[row.node_id]
+    if (node === undefined || node.isInitiator === true) {
+      throw new BusinessException(400, '发起节点任务不支持召回')
+    }
+    if (node.approval !== undefined && node.approval.multiMode !== 'single') {
+      throw new BusinessException(400, '会签/依次审批节点暂不支持召回')
+    }
+
+    const processPolicy = await this.loadProcessPolicy(row.process_def_id)
+    if (processPolicy.approveRecall !== true) {
+      throw new BusinessException(400, '该流程未开启审批召回')
+    }
+
+    // ④ 召回之后没有其他审批人再办结：比较完成时间（end_time）
+    const myEnd = await this.db
+      .selectFrom('wfe_task')
+      .select('end_time')
+      .where('id', '=', taskId)
+      .executeTakeFirst()
+    if (myEnd !== undefined && myEnd.end_time !== null) {
+      const later = await this.db
+        .selectFrom('wfe_task')
+        .select('id')
+        .where('instance_id', '=', row.instance_id)
+        .where('status', '=', 'COMPLETED')
+        .where('id', '!=', taskId)
+        .where('end_time', '>', myEnd.end_time)
+        .limit(1)
+        .executeTakeFirst()
+      if (later !== undefined) {
+        throw new BusinessException(400, '后续节点已有人办理，无法召回')
+      }
+    }
+
+    const { state, variables, maxSeq, lockVersion } = await this.persistence.loadState(row.instance_id)
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      await this.buildResolutionContext(undefined, row.instance_id),
+      {
+        dedupEnabled: processPolicy.dedup.enabled,
+        dedupMode: processPolicy.dedup.mode,
+        dedupSkipSameAsInitiator: processPolicy.dedup.skipSameAsInitiator,
+        retakeSkipApproved: false,
+        // 召回重走必须忽略去重：否则召回者刚办过，会被去重 auto-pass 掉
+        skipDedupForRecall: true,
+      },
+      snapshotAssigneeResolvers(),
+    )
+    runtime.seedSeq(maxSeq)
+    runtime.restoreVariables(variables)
+    try {
+      runtime.recallApproval(row.node_id)
+    } catch (error) {
+      throw new BusinessException(400, error instanceof Error ? error.message : String(error))
+    }
+
+    await this.persistence.replaceRuntimeRows(
+      row.instance_id,
+      tenantId,
+      state,
+      runtime.getVariables(),
+      lockVersion,
+    )
+    await this.syncInstanceStatus(row.instance_id, state)
+
+    await this.instances.insertComment(tenantId, {
+      taskId,
+      instanceId: row.instance_id,
+      userId,
+      action: 'approve_recall',
+      comment: '审批召回，重新处理',
+      targetUserId: null,
+    })
+  }
+
   // ------------------------------------------------------------ 解析上下文与通知
 
   /**
    * 审批/办理人解析上下文（服务层预计算）。
    *
-   * adminUserId：sys_user 中 username='admin' 的用户（找不到策略 to_admin / 超时转派兑底）。
-   * initiatorSupervisor：org 表无负责人字段，v1 恒为 null（supervisor/dept_head 策略降级到旧语义）。
+   * adminUserId：sys_user 中 username='admin' 的用户（找不到策略 to_admin / 超时转派兜底）。
+   * initiatorSupervisor：发起人所属组织的负责人（V43：sys_organization.leader_id；
+   *   supervisor 策略 / 表达式 initiator.deptManager 由降级变为真实生效）。
    * roleMemberships：角色编码 → 成员用户 ID 列表（role 类型审批人解析用；表小全量预查）。
+   * adminUserIdOverride：流程级审批管理员（adminUserIds[0]）传入时优先（Task 76）。
+   * instanceId：传入实例 id 时回填发起人主管（召回/撤销/完成等写路径均传）。
    */
-  private async buildResolutionContext(): Promise<ResolutionContext> {
+  private async buildResolutionContext(
+    adminUserIdOverride?: string,
+    instanceId?: string | null,
+  ): Promise<ResolutionContext> {
     const admin = await this.db
       .selectFrom('sys_user')
       .select('id')
@@ -1267,11 +1539,41 @@ export class TaskService {
       members.push(String(row.user_id))
       roleMemberships[row.role_code] = members
     }
+    let initiatorSupervisor: string | null = null
+    if (instanceId !== undefined && instanceId !== null && instanceId !== '') {
+      const inst = await this.db
+        .selectFrom('wfe_process_instance')
+        .select('initiator')
+        .where('id', '=', instanceId)
+        .executeTakeFirst()
+      if (inst?.initiator != null && inst.initiator !== '') {
+        initiatorSupervisor = await this.findOrgLeaderByUserId(inst.initiator)
+      }
+    }
     return {
-      adminUserId: admin === undefined ? null : String(admin.id),
-      initiatorSupervisor: null,
+      adminUserId: adminUserIdOverride ?? (admin === undefined ? null : String(admin.id)),
+      initiatorSupervisor,
       roleMemberships,
     }
+  }
+
+  /**
+   * 用户所属组织的负责人用户 ID（V43：sys_user.org_id → sys_organization.leader_id）。
+   * 无组织/组织无负责人/任一已删除 → null（引擎按策略降级）。
+   */
+  private async findOrgLeaderByUserId(userId: string): Promise<string | null> {
+    const idNum = Number(userId)
+    if (!Number.isFinite(idNum)) return null
+    const row = await this.db
+      .selectFrom('sys_user as u')
+      .innerJoin('sys_organization as o', 'o.id', 'u.org_id')
+      .select('o.leader_id')
+      .where('u.id', '=', idNum)
+      .where('u.is_deleted', '=', 0)
+      .where('o.is_deleted', '=', 0)
+      .executeTakeFirst()
+    if (row === undefined || row.leader_id === null || row.leader_id === undefined) return null
+    return String(row.leader_id)
   }
 
   /** 此实例+节点下是否存在加签意见（必须加签门禁用）。 */
@@ -1316,12 +1618,40 @@ export class TaskService {
     return row?.signature ?? null
   }
 
+  /**
+   * 实例变量 __instanceSummary → 短信摘要后缀（流程级 summaryShowInSms=true 时生效）。
+   * 变量未渲染（未配置摘要）或策略未开启 → 空串。
+   */
+  private async loadSmsSummarySuffix(
+    instanceId: string,
+    processDefinitionId: string,
+  ): Promise<string> {
+    const policy = await this.loadProcessPolicy(processDefinitionId)
+    if (!policy.summaryShowInSms || policy.summaryFields.length === 0) return ''
+    const row = await this.db
+      .selectFrom('wfe_variable')
+      .select('value_json')
+      .where('instance_id', '=', instanceId)
+      .where('name', '=', '__instanceSummary')
+      .executeTakeFirst()
+    if (row === undefined || row.value_json === null) return ''
+    try {
+      const value = JSON.parse(row.value_json) as unknown
+      if (typeof value === 'string' && value !== '') return `【${value}】`
+    } catch {
+      // 非 JSON 字符串也接受
+      if (row.value_json !== '') return `【${row.value_json}】`
+    }
+    return ''
+  }
+
   /** 节点 notify.sms=true 的新建待办 → 写短信通知记录（占位表，后续接入网关）。 */
   private async writeNodeSmsNotifications(
     tenantId: string,
     instanceId: string,
     state: { tasks: Array<{ id: string; nodeId: string; status: string; assignee: string | null }> },
     model: { nodes: Record<string, { notify?: { sms?: boolean }; name?: string }> },
+    smsSummarySuffix = '',
   ): Promise<void> {
     for (const task of state.tasks) {
       if (task.status !== 'CREATED' && task.status !== 'CLAIMED') continue
@@ -1336,7 +1666,7 @@ export class TaskService {
           task_id: task.id,
           notify_type: 'SMS_NODE',
           target_user: task.assignee ?? '',
-          content: `您有新的办理任务：${node.name ?? task.nodeId}`,
+          content: `您有新的办理任务：${node.name ?? task.nodeId}${smsSummarySuffix}`,
           status: 'PENDING',
           created_at: new Date(),
         })
@@ -1442,9 +1772,6 @@ const OPERATION_KEYS = [
   'allowReturn',
 ] as const
 
-/** 流程级总控配置的伪节点 ID（Java `WorkflowTaskService` 里的字面量）。 */
-export const PROCESS_LEVEL_NODE_ID = '__PROCESS__'
-
 /**
  * 节点级 operation 的**缺键默认值**。
  *
@@ -1536,7 +1863,6 @@ export function parseProcessOperations(configJson: string | null): Record<string
   }
   return out
 }
-
 
 /**
  * 多实例节点的「作用域内建变量」（对齐 Flowable 的 MI 内建变量）。

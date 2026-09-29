@@ -85,6 +85,8 @@ export interface TaskDetailVO {
   /** 节点行为标记（后端从 nodeConfigs 解析）：意见必填 / 签名必填 / 签名开关 / 上次签名回填 / 上传签名图片 */
   nodeFlags?: {
     commentRequired?: boolean
+    /** 意见必填范围：REJECT_RETURN=拒绝/退回必填；ALL=全部操作必填；null/缺省=节点与流程级均未开启 */
+    commentRequiredScope?: 'REJECT_RETURN' | 'ALL' | null
     signatureRequired?: boolean
     signatureEnabled?: boolean
     /** 默认使用上次签名（signature.useLast） */

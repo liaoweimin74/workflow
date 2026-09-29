@@ -36,8 +36,17 @@ export class FormDataRepository {
     return row ?? null
   }
 
-  /** 发起页草稿：实例为 NULL 且非快照。 */
-  async findDraft(tenantId: string, formDefId: string): Promise<FormDataRow | null> {
+  /**
+   * 发起页草稿：实例为 NULL 且非快照，且限定创建人。
+   *
+   * ⚠️ 草稿是**按用户隔离**的：不同用户发起同一流程（同一表单）时各自保存、
+   *    互不可见。`created_by` 在 `saveDraft` 时由服务层写入当前登录用户。
+   */
+  async findDraft(
+    tenantId: string,
+    formDefId: string,
+    createdBy: string,
+  ): Promise<FormDataRow | null> {
     const row = await this.db
       .selectFrom('wf_form_data')
       .selectAll()
@@ -45,8 +54,22 @@ export class FormDataRepository {
       .where('form_def_id', '=', formDefId)
       .where('process_instance_id', 'is', null)
       .where('is_snapshot', '=', 0)
+      .where('created_by', '=', createdBy)
       .executeTakeFirst()
     return row ?? null
+  }
+
+  /** 某用户的全部发起页草稿（草稿箱列表，按更新时间倒序）。 */
+  async listDraftsByUser(tenantId: string, createdBy: string): Promise<FormDataRow[]> {
+    return this.db
+      .selectFrom('wf_form_data')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('process_instance_id', 'is', null)
+      .where('is_snapshot', '=', 0)
+      .where('created_by', '=', createdBy)
+      .orderBy('updated_at', 'desc')
+      .execute()
   }
 
   /**

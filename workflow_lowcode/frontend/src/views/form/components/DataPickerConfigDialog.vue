@@ -1,48 +1,63 @@
 <template>
-  <el-dialog v-model="visible" title="数据引用配置" width="640px" :close-on-click-modal="false">
-    <el-form label-width="110px" size="default">
-      <!-- 页面内数据源（由 UniDataSourceBinding 统一管理） -->
-      <UniDataSourceBinding
-        :model-value="dsBindingValue"
-        @update:model-value="syncBinding"
-        :form-data-sources="formDataSources || []"
-        :current-fields="currentFields"
-        @columns="handleUnifiedColumns"
-      />
+  <el-dialog
+    v-model="visible"
+    class="datasource-config-dialog"
+    title="数据引用配置"
+    width="720px"
+    :close-on-click-modal="false"
+  >
+    <!-- 页签化（对齐数据表格 DataSourceConfig 范式）：数据源选择+筛选独立页签 -->
+    <el-tabs v-model="activeTab" type="border-card">
+      <el-tab-pane label="数据源" name="source">
+        <el-form label-width="110px" size="default">
+          <!-- 页面内数据源 + 组件级筛选（由 UniDataSourceBinding 统一管理） -->
+          <UniDataSourceBinding
+            :model-value="dsBindingValue"
+            @update:model-value="syncBinding"
+            :form-data-sources="formDataSources || []"
+            :current-fields="currentFields"
+            @columns="handleUnifiedColumns"
+          />
+        </el-form>
+      </el-tab-pane>
 
-      <el-form-item label="显示字段" required>
-        <el-select v-model="form.displayField" placeholder="选择显示字段（输入框回显）" style="width: 100%">
-          <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-        </el-select>
-      </el-form-item>
+      <el-tab-pane label="显示与行为" name="display">
+        <el-form label-width="110px" size="default">
+          <el-form-item label="显示字段" required>
+            <el-select v-model="form.displayField" placeholder="选择显示字段（输入框回显）" style="width: 100%">
+              <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            </el-select>
+          </el-form-item>
 
-      <el-form-item label="列表显示列">
-        <el-select v-model="form.columns" multiple placeholder="弹窗表格列（默认显示字段）" style="width: 100%">
-          <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-        </el-select>
-      </el-form-item>
+          <el-form-item label="列表显示列">
+            <el-select v-model="form.columns" multiple placeholder="弹窗表格列（默认显示字段）" style="width: 100%">
+              <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            </el-select>
+          </el-form-item>
 
-      <el-form-item label="搜索列">
-        <el-select v-model="form.searchColumns" multiple placeholder="选择参与关键字搜索的列（默认显示字段）" style="width: 100%">
-          <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
-        </el-select>
-        <span class="form-tip">支持多列全文搜索，弹窗搜索框按所选列模糊匹配（多列以 / 分隔提示）</span>
-      </el-form-item>
+          <el-form-item label="搜索列">
+            <el-select v-model="form.searchColumns" multiple placeholder="选择参与关键字搜索的列（默认显示字段）" style="width: 100%">
+              <el-option v-for="c in visibleColumns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+            </el-select>
+            <span class="form-tip">支持多列全文搜索，弹窗搜索框按所选列模糊匹配（多列以 / 分隔提示）</span>
+          </el-form-item>
 
-      <el-form-item label="最多可选数">
-        <el-input-number v-model="form.maxCount" :min="1" :max="100" placeholder="不限" style="width: 160px" />
-        <span class="form-tip">缺省不限；填 1 为单选（点行即选），>1 限制勾选数量</span>
-      </el-form-item>
+          <el-form-item label="最多可选数">
+            <el-input-number v-model="form.maxCount" :min="1" :max="100" placeholder="不限" style="width: 160px" />
+            <span class="form-tip">缺省不限；填 1 为单选（点行即选），>1 限制勾选数量</span>
+          </el-form-item>
 
-      <el-form-item label="行为设置">
-        <div style="display: flex; flex-direction: column; gap: 10px; width: 100%">
-          <el-switch v-model="form.clearOnCascadeChange" active-text="级联变化时清空已选值" />
-          <el-switch v-model="form.allowCreate" active-text="允许新增目标记录" />
-          <el-switch v-model="form.detailReadonly" active-text="详情弹窗表单只读" />
-          <span class="form-tip">点击已选 Tag 弹出目标表单详情；"详情弹窗表单只读"关闭后详情表单可编辑并支持保存修改</span>
-        </div>
-      </el-form-item>
-    </el-form>
+          <el-form-item label="行为设置">
+            <div style="display: flex; flex-direction: column; gap: 10px; width: 100%">
+              <el-switch v-model="form.clearOnCascadeChange" active-text="级联变化时清空已选值" />
+              <el-switch v-model="form.allowCreate" active-text="允许新增目标记录" />
+              <el-switch v-model="form.detailReadonly" active-text="详情弹窗表单只读" />
+              <span class="form-tip">点击已选 Tag 弹出目标表单详情；"详情弹窗表单只读"关闭后详情表单可编辑并支持保存修改</span>
+            </div>
+          </el-form-item>
+        </el-form>
+      </el-tab-pane>
+    </el-tabs>
 
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
@@ -90,6 +105,9 @@ const visible = computed({
   get: () => props.modelValue,
   set: (v: boolean) => emit('update:modelValue', v),
 })
+
+/** 当前激活页签：每次打开回到「数据源」（对齐 DataSourceConfig 范式） */
+const activeTab = ref('source')
 
 /** 当前选中绑定的列定义（来自数据源 metadata） */
 const dsColumns = ref<ColumnConfigItem[]>([])
@@ -169,6 +187,7 @@ watch(
   () => props.modelValue,
   (v) => {
     if (!v) return
+    activeTab.value = 'source'
     // 从 pickerProps 回填表单
     form.dataSourceId = props.pickerProps?.dataSourceId || props.pickerProps?.sourceFormKey || ''
     form.displayField = props.pickerProps?.displayField || ''
@@ -283,5 +302,36 @@ defineExpose({ form })
   color: #909399;
   margin-top: 4px;
   display: block;
+}
+
+/* 对齐 DataSourceConfig 参考范式：隔离设计器属性面板的字体和表单项间距继承。 */
+:global(.datasource-config-dialog) {
+  --el-font-size-base: 14px;
+  --el-component-size: 32px;
+  --el-component-size-small: 24px;
+  font-size: var(--el-font-size-base);
+  font-family: var(--el-font-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
+}
+
+:global(.datasource-config-dialog .el-dialog__body) {
+  font-size: 14px;
+}
+
+:global(.datasource-config-dialog .el-tabs__content) {
+  padding: 15px;
+}
+
+:global(.datasource-config-dialog .el-form-item) {
+  margin-bottom: 18px;
+}
+
+:global(.datasource-config-dialog .el-form-item__label),
+:global(.datasource-config-dialog .el-input__inner),
+:global(.datasource-config-dialog .el-select__selected-item),
+:global(.datasource-config-dialog .el-select__placeholder),
+:global(.datasource-config-dialog .el-radio-button__inner),
+:global(.datasource-config-dialog .el-button) {
+  font-family: var(--el-font-family, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  font-size: 14px;
 }
 </style>

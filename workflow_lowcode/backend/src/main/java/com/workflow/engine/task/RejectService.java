@@ -8,18 +8,24 @@ import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.config.NodeOptions;
 import com.workflow.engine.process.config.NodeOptionsService;
+import com.workflow.engine.process.config.ProcessPolicy;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.tenant.TenantProvider;
+import org.flowable.engine.HistoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
+import org.flowable.task.api.history.HistoricTaskInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -44,6 +50,7 @@ public class RejectService {
     private final VariableMappingWriter variableMappingWriter;
     private final NodeOptionsService nodeOptionsService;
     private final NodeConfigRepository nodeConfigRepository;
+    private final HistoryService historyService;
 
     public RejectService(TaskService flowableTaskService,
                          RuntimeService runtimeService,
@@ -52,7 +59,8 @@ public class RejectService {
                          WfTaskCommentRepository commentRepository,
                          VariableMappingWriter variableMappingWriter,
                          NodeOptionsService nodeOptionsService,
-                         NodeConfigRepository nodeConfigRepository) {
+                         NodeConfigRepository nodeConfigRepository,
+                         HistoryService historyService) {
         this.flowableTaskService = flowableTaskService;
         this.runtimeService = runtimeService;
         this.initiatorNodeResolver = initiatorNodeResolver;
@@ -61,6 +69,7 @@ public class RejectService {
         this.variableMappingWriter = variableMappingWriter;
         this.nodeOptionsService = nodeOptionsService;
         this.nodeConfigRepository = nodeConfigRepository;
+        this.historyService = historyService;
     }
 
     /**
@@ -102,8 +111,13 @@ public class RejectService {
         }
         NodeOptions nodeOpts = nodeOptionsService
                 .find(processDefinitionId, currentActivityId).orElse(null);
-        if (nodeOpts != null && Boolean.TRUE.equals(nodeOpts.getCommentRequired())
-                && (reason == null || reason.isBlank())) {
+        // Task 69：退回理由必填 = 节点级 commentRequired OR 流程级 commentPolicy(enabled)
+        //（REJECT_RETURN 与 ALL 都覆盖退回）
+        ProcessPolicy policy = loadProcessPolicy(processDefinitionId);
+        boolean rejectCommentRequired =
+                (nodeOpts != null && Boolean.TRUE.equals(nodeOpts.getCommentRequired()))
+                        || policy.isCommentPolicyEnabled();
+        if (rejectCommentRequired && (reason == null || reason.isBlank())) {
             String label = task.getName() == null || task.getName().isBlank()
                     ? currentActivityId : task.getName();
             throw new BusinessException(400, "审批意见必填（节点「" + label + "」）");
@@ -114,6 +128,16 @@ public class RejectService {
 
         // 设置拒绝标记，触发 multi-instance completionCondition 终止多实例
         runtimeService.setVariable(task.getProcessInstanceId(), "rejected", true);
+
+        // Task 69 退回免审（retakeSkipApproved）：收集本实例已通过任务的节点 ID（去重、排除发起节点），
+        // 写入 __retakeApprovedNodes（对齐 NodeJS EngineRuntime.reject）；
+        // ⚠️ 必须在 changeState **之前**写入，重走节点的 create 监听器才能读到；
+        // 退回时点前已完成才算「已通过」，changeState 撤销中的任务此刻还未 finish，天然不会误收。
+        if (policy.isRetakeSkipApproved()) {
+            runtimeService.setVariable(task.getProcessInstanceId(),
+                    WorkflowTaskService.VAR_RETAKE_APPROVED_NODES,
+                    collectApprovedNodes(processDefinitionId, initiatorNodeId));
+        }
 
         runtimeService.createChangeActivityStateBuilder()
                 .processInstanceId(task.getProcessInstanceId())
@@ -138,6 +162,45 @@ public class RejectService {
             variableMappingWriter.write(processDefinitionId, task.getProcessInstanceId());
         } catch (Exception e) {
             log.warn("Failed to write variable mappings after reject task [{}]: {}", taskId, e.getMessage());
+        }
+    }
+
+    /**
+     * 收集本实例已通过任务的节点 ID（去重、排除发起节点；对齐 NodeJS reject() 的
+     * __retakeApprovedNodes 收集口径）。
+     *
+     * <p>⚠️ 只认正常办结的任务（deleteReason 为空）——被驳回/撤回撤销的任务虽然
+     * 在历史里也带 end_time，但不算「已通过」。
+     */
+    private List<String> collectApprovedNodes(String processDefinitionId, String initiatorNodeId) {
+        Set<String> nodeIds = new LinkedHashSet<>();
+        for (HistoricTaskInstance t : historyService.createHistoricTaskInstanceQuery()
+                .processDefinitionId(processDefinitionId)
+                .finished()
+                .list()) {
+            if (t.getDeleteReason() != null) {
+                continue;
+            }
+            if (t.getTaskDefinitionKey() != null) {
+                nodeIds.add(t.getTaskDefinitionKey());
+            }
+        }
+        nodeIds.remove(initiatorNodeId);
+        return new ArrayList<>(nodeIds);
+    }
+
+    /** 流程级策略读取（{@code __PROCESS__} config_json；未配置/失败返回全关默认）。 */
+    private ProcessPolicy loadProcessPolicy(String processDefinitionId) {
+        try {
+            for (NodeConfig nc : nodeConfigRepository.findByProcessDefinitionId(processDefinitionId)) {
+                if (ProcessPolicy.PROCESS_LEVEL_NODE_ID.equals(nc.getNodeId())) {
+                    return ProcessPolicy.parseProcessPolicy(nc.getConfigJson());
+                }
+            }
+            return ProcessPolicy.parseProcessPolicy(null);
+        } catch (Exception e) {
+            log.warn("读取流程级策略失败 defId={}: {}", processDefinitionId, e.getMessage());
+            return ProcessPolicy.parseProcessPolicy(null);
         }
     }
 

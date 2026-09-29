@@ -3,11 +3,14 @@ import { Kysely } from 'kysely'
 import type { DB } from '../../framework/database/types'
 import { KYSELY } from '../../framework/database/database.module'
 import { getTenantId, runWithTenant } from '../../framework/tenant/tenant-context'
-import type { ProcessModel } from '../process/compiler/process-model'
+import type { ProcessModel, ProcessPolicy, ProcessTimeoutRule } from '../process/compiler/process-model'
 import { randomUuid } from '../process/process-design.service'
 import { EnginePersistence } from './engine-persistence'
+import { snapshotAssigneeResolvers } from './assignee-resolver-registry'
 import { ProcessInstanceService } from './process-instance.service'
 import { EngineRuntime } from './engine-runtime'
+import { parseProcessPolicy } from '../process/compiler/process-policy'
+import { ProcessDesignRepository } from '../process/repository/process-design.repository'
 
 /**
  * 超时处理调度器（节点 timeout.enabled=true 的待办任务扫描）。
@@ -36,6 +39,8 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
     @Inject(KYSELY) private readonly db: Kysely<DB>,
     private readonly persistence: EnginePersistence,
     private readonly instances: ProcessInstanceService,
+    /** 可选注入：测试手动 new 时不传；流程级规则组读取降级为空。 */
+    private readonly designRepo?: ProcessDesignRepository,
   ) {}
 
   onModuleInit(): void {
@@ -88,19 +93,43 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
         'wfe_task.instance_id as instanceId',
         'wfe_task.create_time as createTime',
         'wfe_task.tenant_id as tenantId',
+        'wfe_task.assignee as assignee',
       ])
       .where('wfe_task.tenant_id', '=', tenantId)
       .where('wfe_task.status', 'in', ['CREATED', 'CLAIMED'])
       .where('wfe_process_instance.status', '=', 'RUNNING')
       .execute()
 
-    // 按 definition 分组加载模型（一租户内定义数有限）
+    // 按 definition 分组加载模型与流程级策略（一租户内定义数有限）
     const modelCache = new Map<string, ProcessModel>()
+    const policyCache = new Map<string, ProcessPolicy>()
     for (const row of rows) {
       const model = await this.loadModelForTask(row.instanceId, modelCache)
       if (model === null) continue
+      const defId = await this.findDefIdForInstance(row.instanceId)
+      if (defId === null) continue
+      let policy = policyCache.get(defId)
+      if (policy === undefined) {
+        policy = await this.loadPolicyForDef(defId)
+        policyCache.set(defId, policy)
+      }
       const node = model.nodes[row.nodeId]
-      if (node?.timeout?.enabled !== true) continue
+
+      // 节点未开启超时 → 流程级规则组兜底（对齐设计器「超时处理」："此配置不对已
+      // 经开启了超时处理的节点生效"；pass/refuse 对办理(handler)节点不生效）
+      if (node?.timeout?.enabled !== true) {
+        if (policy.timeoutRules.length === 0) continue
+        await this.applyProcessTimeoutRules(row, node?.taskRole, policy.timeoutRules, policy.adminUserIds)
+        continue
+      }
+
+      // 节点级规则组优先（设计器「添加超时规则」）；同一处理逻辑复用流程级规则组
+      //（pass/refuse 对办理节点不生效、remind 重复提醒间隔等均一致）
+      if (node.timeout.rules !== undefined && node.timeout.rules.length > 0) {
+        await this.applyProcessTimeoutRules(row, node.taskRole, node.timeout.rules, policy.adminUserIds)
+        continue
+      }
+
       const durationHours = node.timeout.duration ?? 24
       const deadline = new Date(row.createTime).getTime() + durationHours * 3_600_000
       if (Date.now() < deadline) continue
@@ -115,30 +144,153 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
         .executeTakeFirst()
       if (processed !== undefined) continue
 
-      await this.applyTimeoutAction(row, node.timeout.action ?? 'remind')
+      await this.applyTimeoutAction(row, node.timeout.action ?? 'remind', 'TIMEOUT_REMIND', policy.adminUserIds)
     }
+  }
+
+  /** 单条规则的时长（毫秒）。 */
+  private ruleDurationMs(rule: ProcessTimeoutRule): number {
+    const unitMinutes = rule.unit === 'minute' ? 1 : rule.unit === 'hour' ? 60 : 1440
+    return rule.duration * unitMinutes * 60_000
+  }
+
+  /**
+   * 流程级规则组处理：对每条规则独立计算 deadline 与幂等标记。
+   * 幂等：动作类（transfer/pass/refuse）靠 TIMEOUT_{ACTION} notify 记录；
+   * remind 非重复靠 TIMEOUT_REMIND 记录，重复提醒需距上次提醒 ≥ 规则时长。
+   */
+  private async applyProcessTimeoutRules(
+    row: {
+      taskId: string
+      instanceId: string
+      nodeId: string
+      assignee: string | null
+      createTime: Date
+    },
+    taskRole: string | undefined,
+    rules: ProcessTimeoutRule[],
+    processAdminUserIds: string[],
+  ): Promise<void> {
+    const now = Date.now()
+    for (const rule of rules) {
+      const handlerNode = taskRole === 'handler'
+      if (handlerNode && (rule.action === 'pass' || rule.action === 'refuse')) continue
+      const durationMs = this.ruleDurationMs(rule)
+      if (now < new Date(row.createTime).getTime() + durationMs) continue
+
+      if (rule.action === 'remind') {
+        const last = await this.db
+          .selectFrom('wf_engine_notify')
+          .select(['id', 'created_at'])
+          .where('task_id', '=', row.taskId)
+          .where('notify_type', '=', 'TIMEOUT_REMIND')
+          .orderBy('created_at', 'desc')
+          .limit(1)
+          .executeTakeFirst()
+        if (last !== undefined) {
+          if (rule.repeat !== true) continue
+          const lastAt = last.created_at === null ? 0 : new Date(last.created_at).getTime()
+          if (now - lastAt < durationMs) continue
+        }
+        // 幂等标记（与节点级同类型）
+        await this.writeNotify(row, 'TIMEOUT_REMIND', '任务超时，自动提醒（流程级规则）')
+        // 被提醒人：当前审批人 / 审批管理员（流程级优先）/ 更多员工
+        const targets = await this.resolveNotifyTargets(row, rule, processAdminUserIds)
+        const smsTargets = rule.sms ? targets : []
+        for (const target of smsTargets) {
+          await this.writeNotify(row, 'SMS_TIMEOUT', '任务超时，自动提醒（流程级规则）', target)
+        }
+        await this.instances.insertComment(getTenantId(), {
+          taskId: row.taskId,
+          instanceId: row.instanceId,
+          userId: 'system',
+          action: 'remind',
+          comment: '任务超时，自动提醒（流程级规则）',
+          targetUserId: null,
+        })
+        continue
+      }
+
+      // 动作类：幂等 = 已有 TIMEOUT_{ACTION} 记录
+      const notifyType = `TIMEOUT_${rule.action.toUpperCase()}`
+      const done = await this.db
+        .selectFrom('wf_engine_notify')
+        .select('id')
+        .where('task_id', '=', row.taskId)
+        .where('notify_type', '=', notifyType)
+        .limit(1)
+        .executeTakeFirst()
+      if (done !== undefined) continue
+      await this.applyTimeoutAction(row, rule.action, notifyType, processAdminUserIds)
+    }
+  }
+
+  /**
+   * 被提醒人集合（当前审批人/审批管理员/更多员工）。
+   * 审批管理员：流程级 adminUserIds 优先（全量提醒），未配置回落全局 admin（Task 76）。
+   */
+  private async resolveNotifyTargets(
+    row: { taskId: string; assignee: string | null },
+    rule: ProcessTimeoutRule,
+    processAdminUserIds: string[],
+  ): Promise<string[]> {
+    const targets: string[] = []
+    if (rule.notifyAssignee && row.assignee !== null && row.assignee !== '') {
+      targets.push(row.assignee)
+    }
+    if (rule.notifyAdmin) {
+      if (processAdminUserIds.length > 0) {
+        for (const adminId of processAdminUserIds) {
+          if (!targets.includes(adminId)) targets.push(adminId)
+        }
+      } else {
+        const admin = await this.db
+          .selectFrom('sys_user')
+          .select('id')
+          .where('username', '=', 'admin')
+          .where('is_deleted', '=', 0)
+          .executeTakeFirst()
+        if (admin !== undefined) targets.push(String(admin.id))
+      }
+    }
+    for (const extra of rule.notifyUserIds ?? []) {
+      if (!targets.includes(extra)) targets.push(extra)
+    }
+    return targets
+  }
+
+  /** 落一条 wf_engine_notify（幂等标记 / 短信占位）。 */
+  private async writeNotify(
+    row: { instanceId: string; taskId: string },
+    notifyType: string,
+    content: string,
+    targetUser = '',
+  ): Promise<void> {
+    await this.db
+      .insertInto('wf_engine_notify')
+      .values({
+        id: randomUuid(),
+        tenant_id: getTenantId(),
+        instance_id: row.instanceId,
+        task_id: row.taskId,
+        notify_type: notifyType,
+        target_user: targetUser,
+        content,
+        status: 'SENT',
+        created_at: new Date(),
+      })
+      .execute()
   }
 
   private async applyTimeoutAction(
     row: { taskId: string; instanceId: string; nodeId: string },
     action: 'remind' | 'escalate' | 'transfer' | 'pass' | 'refuse',
+    notifyType: string,
+    processAdminUserIds: string[] = [],
   ): Promise<void> {
     const tenantId = getTenantId()
     // 幂等标记（remind/escalate/transfer 落通知；pass/refuse 靠任务状态自然幂等）
-    await this.db
-      .insertInto('wf_engine_notify')
-      .values({
-        id: randomUuid(),
-        tenant_id: tenantId,
-        instance_id: row.instanceId,
-        task_id: row.taskId,
-        notify_type: 'TIMEOUT_REMIND',
-        target_user: '',
-        content: `任务超时（${action}）`,
-        status: 'SENT',
-        created_at: new Date(),
-      })
-      .execute()
+    await this.writeNotify(row, notifyType, `任务超时（${action}）`)
 
     if (action === 'remind' || action === 'escalate') {
       await this.instances.insertComment(tenantId, {
@@ -153,17 +305,22 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (action === 'transfer') {
-      // 转派给审批管理员（sys_user admin）；查不到降级为提醒
-      const admin = await this.db
-        .selectFrom('sys_user')
-        .select('id')
-        .where('username', '=', 'admin')
-        .where('is_deleted', '=', 0)
-        .executeTakeFirst()
-      if (admin !== undefined) {
+      // 转派目标：流程级审批管理员（adminUserIds[0]）优先，未配置回落全局 admin；
+      // 流程管理员也查不到用户时降级为提醒
+      let transferTarget: string | null = processAdminUserIds.length > 0 ? processAdminUserIds[0] : null
+      if (transferTarget === null) {
+        const admin = await this.db
+          .selectFrom('sys_user')
+          .select('id')
+          .where('username', '=', 'admin')
+          .where('is_deleted', '=', 0)
+          .executeTakeFirst()
+        transferTarget = admin === undefined ? null : String(admin.id)
+      }
+      if (transferTarget !== null) {
         await this.db
           .updateTable('wfe_task')
-          .set({ assignee: String(admin.id), updated_at: new Date() })
+          .set({ assignee: transferTarget, updated_at: new Date() })
           .where('id', '=', row.taskId)
           .execute()
         await this.instances.insertComment(tenantId, {
@@ -172,7 +329,7 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
           userId: 'system',
           action: 'transfer',
           comment: '任务超时，自动转派审批管理员',
-          targetUserId: String(admin.id),
+          targetUserId: transferTarget,
         })
         return
       }
@@ -216,7 +373,15 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
     )
     const model = await this.instances.loadModel(row.process_def_id)
     if (model === null) return
-    const runtime = new EngineRuntime(model, state, () => new Date(), () => randomUuid())
+    const runtime = new EngineRuntime(
+      model,
+      state,
+      () => new Date(),
+      () => randomUuid(),
+      {},
+      {},
+      snapshotAssigneeResolvers(),
+    )
     runtime.seedSeq(maxSeq)
     runtime.restoreVariables(variables)
     try {
@@ -262,5 +427,22 @@ export class TimeoutScannerService implements OnModuleInit, OnModuleDestroy {
     const model = await this.instances.loadModel(instance.process_def_id)
     if (model !== null) cache.set(instance.process_def_id, model)
     return model
+  }
+
+  /** 实例 → 部署版本 ID（流程级策略读取用）。 */
+  private async findDefIdForInstance(instanceId: string): Promise<string | null> {
+    const row = await this.db
+      .selectFrom('wfe_process_instance')
+      .select('process_def_id')
+      .where('id', '=', instanceId)
+      .executeTakeFirst()
+    return row?.process_def_id ?? null
+  }
+
+  /** 读部署版本的流程级策略（__PROCESS__ config_json；无 repo 时空策略）。 */
+  private async loadPolicyForDef(defId: string): Promise<ProcessPolicy> {
+    if (this.designRepo === undefined) return parseProcessPolicy(null)
+    const config = await this.designRepo.findNodeConfig(defId, '__PROCESS__')
+    return parseProcessPolicy(config?.config_json ?? null)
   }
 }

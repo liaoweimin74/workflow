@@ -23,6 +23,7 @@ export interface EditorData {
   name: string
   key: string
   categoryId: string | null
+  description: string | null
   bpmnXml: string
   nodeConfigs: Record<string, string>
   status: string
@@ -32,6 +33,8 @@ export interface DesignSaveRequest {
   name: string
   key: string
   categoryId: string | null
+  /** 流程说明（Task 74：设计器「基本属性」分组维护） */
+  description?: string | null
   bpmnXml: string
   nodeConfigs: Record<string, string>
 }
@@ -52,6 +55,13 @@ export interface ProcessVersion {
   latest: boolean
 }
 
+/** 可发起人员范围（Task 76：随已部署列表下发，供发起中心展示层过滤；引擎 start() 为真闸门） */
+export interface StarterScope {
+  mode: 'ALL' | 'SPECIFIED'
+  userIds: string[]
+  roleIds: string[]
+}
+
 /**
  * 已部署流程定义（Flowable ProcessDefinition 序列化形状）。
  * 对应 GET /api/v1/deployed-processes 列表项。
@@ -70,6 +80,8 @@ export interface DeployedProcessDefinition {
   suspended: boolean
   /** 发起人节点字段级权限：field → EDIT/VIEW/HIDDEN。未配置时为 undefined。 */
   fieldPermissions?: Record<string, 'EDIT' | 'VIEW' | 'HIDDEN'>
+  /** 可发起人员范围：null/undefined = 未配置（等同 ALL） */
+  starterScope?: StarterScope | null
 }
 
 export interface DeployedProcessQueryParams {

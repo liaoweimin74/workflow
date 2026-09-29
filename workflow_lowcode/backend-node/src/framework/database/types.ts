@@ -156,7 +156,7 @@ export interface WfeVariableTable {
   update_time: Timestamp
 }
 
-/** 系统管理表（由 V1 基线创建，原本是 JPA ddl-auto 建的）。 */
+/** 系统管理表（由 V1 基线创建，原本是 JPA ddl-auto 建的；post_id 由 V43 补）。 */
 export interface SysUserTable {
   /** 自增主键：写入时省略，由数据库生成。 */
   id: Generated<number>
@@ -167,6 +167,8 @@ export interface SysUserTable {
   phone: string | null
   avatar: string | null
   org_id: number | null
+  /** 岗位 id（sys_post.id，V43 补；用户归属单个岗位）。 */
+  post_id: number | null
   status: number
   is_deleted: number
   created_at: NullableTimestamp
@@ -227,6 +229,8 @@ export interface SysOrganizationTable {
   id: Generated<number>
   org_code: string
   org_name: string
+  /** 负责人用户 id（sys_user.id，V43 补；引擎 initiatorSupervisor 由此回填）。 */
+  leader_id: number | null
   parent_id: number | null
   sort_order: number | null
   status: number | null
@@ -237,12 +241,67 @@ export interface SysOrganizationTable {
   updated_by: string | null
 }
 
-/** 流程定义草稿（V6 迁移创建；deployed_config_hash 由 V18 补）。 */
+/** 岗位（V43 创建）。 */
+export interface SysPostTable {
+  /** 自增主键：写入时省略，由数据库生成。 */
+  id: Generated<number>
+  post_code: string
+  post_name: string
+  description: string | null
+  sort_order: number | null
+  status: number
+  is_deleted: number
+  created_at: NullableTimestamp
+  created_by: string | null
+  updated_at: NullableTimestamp
+  updated_by: string | null
+}
+
+/** 成员组（V43 创建）。 */
+export interface SysMemberGroupTable {
+  /** 自增主键：写入时省略，由数据库生成。 */
+  id: Generated<number>
+  group_name: string
+  description: string | null
+  is_deleted: number
+  created_at: NullableTimestamp
+  created_by: string | null
+  updated_at: NullableTimestamp
+  updated_by: string | null
+}
+
+/** 成员组成员——手动维护部分（V43 创建；规则匹配的成员不落此表，查询时动态展开）。 */
+export interface SysMemberGroupMemberTable {
+  /** 自增主键：写入时省略，由数据库生成。 */
+  id: Generated<number>
+  group_id: number
+  user_id: number
+  is_deleted: number
+  created_at: NullableTimestamp
+  updated_at: NullableTimestamp
+}
+
+/** 成员组自动匹配规则——按岗位/按组织维度（V43 创建）。 */
+export interface SysMemberGroupRuleTable {
+  /** 自增主键：写入时省略，由数据库生成。 */
+  id: Generated<number>
+  group_id: number
+  /** 规则维度：position=按岗位 org=按组织机构。 */
+  rule_type: string
+  /** 维度取值：post_id / org_id。 */
+  rule_value: number
+  is_deleted: number
+  created_at: NullableTimestamp
+  updated_at: NullableTimestamp
+}
+
+/** 流程定义草稿（V6 迁移创建；deployed_config_hash 由 V18 补；description 由 V42 补）。 */
 export interface WfProcessDraftTable {
   id: string
   process_key: string
   name: string
   category_id: string | null
+  description: string | null
   bpmn_xml: string
   status: string
   version: number
@@ -608,6 +667,10 @@ export interface DB {
   sys_user_role: SysUserRoleTable
   sys_role_menu: SysRoleMenuTable
   sys_organization: SysOrganizationTable
+  sys_post: SysPostTable
+  sys_member_group: SysMemberGroupTable
+  sys_member_group_member: SysMemberGroupMemberTable
+  sys_member_group_rule: SysMemberGroupRuleTable
 
   wf_process_draft: WfProcessDraftTable
   wf_node_config: WfNodeConfigTable

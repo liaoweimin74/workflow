@@ -106,6 +106,14 @@ const PROCESS_INSTANCE_COLUMNS: ColumnConfig[] = [
   { ...newColumnConfig(), key: 'startTime', label: '发起时间', columnType: 'VARCHAR', length: 64 },
 ]
 
+/** 岗位列常量（`SystemService.listPosts()` 字段面；数据源仅暴露启用岗位，供成员组规则等选择场景）。 */
+const POSTS_COLUMNS: ColumnConfig[] = [
+  { ...newColumnConfig(), key: 'id', label: '岗位 ID', columnType: 'VARCHAR', length: 64 },
+  { ...newColumnConfig(), key: 'postName', label: '岗位名称', columnType: 'VARCHAR', length: 128 },
+  { ...newColumnConfig(), key: 'postCode', label: '岗位编码', columnType: 'VARCHAR', length: 64 },
+  { ...newColumnConfig(), key: 'description', label: '描述', columnType: 'VARCHAR', length: 255 },
+]
+
 /** 待办任务列常量（`TaskService.listTodo()` 字段面；主键字段是 `taskId` 不是 `id`）。 */
 const TODO_TASK_COLUMNS: ColumnConfig[] = [
   { ...newColumnConfig(), key: 'taskId', label: '任务 ID', columnType: 'VARCHAR', length: 64 },
@@ -116,13 +124,14 @@ const TODO_TASK_COLUMNS: ColumnConfig[] = [
   { ...newColumnConfig(), key: 'createTime', label: '创建时间', columnType: 'VARCHAR', length: 64 },
 ]
 
-/** 8 个系统内建数据源（顺序即预置顺序；前 2 个是历史既有 key，后 6 个本轮新增）。 */
+/** 9 个系统内建数据源（顺序即预置顺序；前 2 个是历史既有 key，中间 6 个 V39 新增，sys-posts V45 新增）。 */
 export const BUILT_IN_SYSTEM_SOURCES: BuiltInSystemSource[] = [
   { sourceKey: 'dept-tree', name: '组织机构', columns: DEPT_COLUMNS, paging: 'full' },
   { sourceKey: 'user-tree', name: '系统用户', columns: USER_COLUMNS, paging: 'paged' },
   { sourceKey: 'sys-menus', name: '系统菜单', columns: MENU_COLUMNS, paging: 'full' },
   { sourceKey: 'sys-roles', name: '系统角色', columns: ROLE_COLUMNS, paging: 'paged' },
   { sourceKey: 'sys-dicts', name: '系统字典', columns: DICT_COLUMNS, paging: 'paged' },
+  { sourceKey: 'sys-posts', name: '系统岗位', columns: POSTS_COLUMNS, paging: 'paged' },
   { sourceKey: 'process-definitions', name: '流程定义', columns: PROCESS_DEF_COLUMNS, paging: 'full' },
   { sourceKey: 'process-instances', name: '流程实例', columns: PROCESS_INSTANCE_COLUMNS, paging: 'paged' },
   { sourceKey: 'todo-tasks', name: '待办任务', columns: TODO_TASK_COLUMNS, paging: 'paged' },
@@ -156,6 +165,8 @@ export function mapSystemInternalPath(sourceKey: string | null): string {
       return 'roles'
     case 'sys-dicts':
       return 'dicts'
+    case 'sys-posts':
+      return 'posts'
     case 'process-definitions':
       return 'process/definitions'
     case 'process-instances':

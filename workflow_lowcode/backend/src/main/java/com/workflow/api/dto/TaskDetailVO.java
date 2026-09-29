@@ -33,8 +33,11 @@ public class TaskDetailVO {
     /** 节点类别：initiator / approver / handler（前端按钮区分；旧数据=approver）。 */
     private String taskRole;
 
-    /** 节点级行为开关（前端按钮/表单渲染用；从节点配置解析，旧数据全 false）。 */
+    /** 节点级行为开关（前端按钮/表单渲染用；已与流程级 commentPolicy/signaturePolicy 合并）。 */
     private NodeFlags nodeFlags;
+
+    /** 流程级策略透出（评论管理三开关 + 审批召回；对齐 NodeJS TaskDetailVO.processFlags）。 */
+    private ProcessFlags processFlags;
 
     /** 上次签名 dataURL（仅 signature.useLast=true 时回查该办理人最近一条 approve 签名回填）。 */
     private String lastSignature;
@@ -64,6 +67,29 @@ public class TaskDetailVO {
         public void setSignatureUseLast(boolean signatureUseLast) { this.signatureUseLast = signatureUseLast; }
         public boolean isSignatureAllowUpload() { return signatureAllowUpload; }
         public void setSignatureAllowUpload(boolean signatureAllowUpload) { this.signatureAllowUpload = signatureAllowUpload; }
+    }
+
+    /**
+     * 流程级策略透出（对齐 NodeJS TaskDetailVO.processFlags；来源 __PROCESS__ config_json）。
+     */
+    public static class ProcessFlags {
+        /** 评论功能禁用（comment.disabled）。 */
+        private boolean commentDisabled;
+        /** 禁止删除评论（comment.disallowDelete）。 */
+        private boolean commentDisallowDelete;
+        /** 禁止上传附件评论（comment.disallowAttachment）。 */
+        private boolean commentDisallowAttachment;
+        /** 审批召回开关（approveRecall）。 */
+        private boolean approveRecall;
+
+        public boolean isCommentDisabled() { return commentDisabled; }
+        public void setCommentDisabled(boolean commentDisabled) { this.commentDisabled = commentDisabled; }
+        public boolean isCommentDisallowDelete() { return commentDisallowDelete; }
+        public void setCommentDisallowDelete(boolean commentDisallowDelete) { this.commentDisallowDelete = commentDisallowDelete; }
+        public boolean isCommentDisallowAttachment() { return commentDisallowAttachment; }
+        public void setCommentDisallowAttachment(boolean commentDisallowAttachment) { this.commentDisallowAttachment = commentDisallowAttachment; }
+        public boolean isApproveRecall() { return approveRecall; }
+        public void setApproveRecall(boolean approveRecall) { this.approveRecall = approveRecall; }
     }
 
     public String getTaskId() { return taskId; }
@@ -108,6 +134,8 @@ public class TaskDetailVO {
     public void setTaskRole(String taskRole) { this.taskRole = taskRole; }
     public NodeFlags getNodeFlags() { return nodeFlags; }
     public void setNodeFlags(NodeFlags nodeFlags) { this.nodeFlags = nodeFlags; }
+    public ProcessFlags getProcessFlags() { return processFlags; }
+    public void setProcessFlags(ProcessFlags processFlags) { this.processFlags = processFlags; }
     public String getLastSignature() { return lastSignature; }
     public void setLastSignature(String lastSignature) { this.lastSignature = lastSignature; }
 }

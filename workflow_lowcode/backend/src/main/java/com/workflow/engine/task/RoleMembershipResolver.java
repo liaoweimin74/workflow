@@ -103,6 +103,55 @@ public class RoleMembershipResolver {
     }
 
     /**
+     * 指定用户是否为系统管理员（username='admin'，与 NodeJS start 门禁绕过口径一致）。
+     * 查询异常时返回 false（不放大权限）。
+     */
+    public boolean isAdminUser(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return false;
+        }
+        try {
+            return sysUserRepository.findById(Long.valueOf(userId))
+                    .map(u -> "admin".equals(u.getUsername()))
+                    .orElse(false);
+        } catch (Exception e) {
+            log.warn("判定系统管理员失败 userId={}: {}", userId, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 指定用户拥有的角色编码列表（启用未删角色；start 门禁角色命中用，Task 76）。
+     * 查询异常时返回空列表（不放大权限）。
+     */
+    public List<String> rolesOfUser(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return List.of();
+        }
+        try {
+            Long uid = Long.valueOf(userId);
+            Set<String> codes = new LinkedHashSet<>();
+            for (SysUserRole link : sysUserRoleRepository.findAll()) {
+                if (!uid.equals(link.getUserId())) {
+                    continue;
+                }
+                for (SysRole role : sysRoleRepository.findAll()) {
+                    if (role.getId().equals(link.getRoleId())
+                            && role.getRoleCode() != null
+                            && Integer.valueOf(0).equals(role.getIsDeleted())
+                            && (role.getStatus() == null || role.getStatus() == 1)) {
+                        codes.add(role.getRoleCode());
+                    }
+                }
+            }
+            return new ArrayList<>(codes);
+        } catch (Exception e) {
+            log.warn("解析用户角色失败 userId={}: {}", userId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
      * 全量角色成员映射（键为角色编码）。
      */
     public Map<String, List<String>> loadRoleMemberships() {

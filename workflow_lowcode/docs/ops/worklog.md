@@ -1768,3 +1768,514 @@ Stage Summary:
 - Node Task 61+65 十项引擎能力全部移植 Java：nodeConfig 模型/审批人类型化解析/门禁（complete+reject+refuse+三键）/详情 VO 增量/签名落库/reInitiate/recall/超时扫描/引擎通知/urge 限流；Flyway V40/V41 双端一致
 - Java 端改动：9 文件修改（WorkflowTaskService/RejectService/TaskRemindService/TaskController/ProcessInstanceController/OperationsConfig/CompleteTaskRequest/WfTaskComment+Repository/MultiInstanceApproverListener/BpmnRewriter）+ 8 文件新增（config 包 2/监听器 2/解析器 1/通知 3/迁移 2）+ WorkflowApplication @EnableScheduling
 - 无法编译验证（沙箱 JRE-only）——静态审查四道关：括号/imports/引用存在性/Flowable API 签名；后续有 JDK 环境时建议 mvn compile 兜底
+
+---
+Task ID: 68-recall-flag-cleanup
+Agent: Z.ai Code (main)
+Task: 用户问询「流程属性上有允许撤回，发起人节点上也有类似设置，是不是重复了？」——调查两处撤回配置的语义与实际生效情况，清理冗余
+
+Work Log:
+- 全仓精确区分两个易混字段（rg PCRE2 负向后视 (?<!dis)allowRecall，避免与 disallowRecall 子串误匹配）：
+  - 流程级 approvalPolicy.allowRecall：仅前端存在（ProcessProperty.vue 开关 + designerStore 类型/默认值/持久化/测试），backend-node process-model.ts 无此字段定义、task.service.ts recallInstance 门禁不读、Java NodeOptions/WorkflowTaskService 同样零解析 → **从未接线的死开关**
+  - 发起节点 initiator.disallowRecall：recall 门禁第①道（Node task.service.ts:1186 / Java WorkflowTaskService.java:1494）→ 真实生效
+  - 活跃节点 blockRecall：recall 门禁第②道（流程到达后禁止撤回）→ 真实生效
+- 产品判断：发起人节点是每个流程必有的唯一节点，其「不允许撤销/撤回」天然等价全局开关，流程级开关即使接线也无增量价值；保留只会误导管理员（开关拨了没任何效果）
+- 清理实现（3 文件 +17/-9）：
+  - ProcessProperty.vue 删除「允许撤回」el-form-item
+  - designerStore.ts 类型+默认值移除 allowRecall；getProcessConfig 合并时把存量 config_json 残留的 allowRecall 键与 allowAddSigner/allowDelegate 一并剔除（废弃字段剔除清单+注释留痕），历史 JSON（含 workflow.sql 种子数据）无需迁移
+  - designerStore.test.ts legacy 用例补 allowRecall 废弃断言
+- 验证：vitest 全量 1132/1132 全绿（=基线）；vue-tsc 46 errors = 既有基线零新增
+- 过程事故与修复：①顶层平台仓库与 workflow_lowcode 子仓库混淆——子仓库 .git 在沙箱重置中丢失，误把 remote 加到顶层并两次把提交打进顶层（父 2b2d63a），均 reset --mixed HEAD~1 回退；②按第六次恢复 SOP 重建子仓库（git init -b main + core.fileMode false + remote add origin PAT@github.com/liaoweimin74/workflow.git + fetch + reset --mixed origin/main + checkout -- . → status 0 行），从 /tmp 备份恢复 3 文件改动后重新提交
+- 教训沉淀：本环境 Bash cwd 在命令块之间会重置，git 操作必须单块内以显式 cd 开头完成，不能跨块依赖 cwd
+
+Stage Summary:
+- 结论：不是"重复的两级配置"，而是"一个死开关 + 真正生效的两级节点门禁"；已删除死开关，撤回语义收敛为 disallowRecall（发起人级）+ blockRecall（进度级）两级节点配置
+- 提交 4220a5d 已推送，远程 main = 本地 = 4220a5d（a7b419a..4220a5d）
+- Java 同步（Task 67）此前已完成并推送于 a7b419a，本轮确认其全部成果已在远程 main（TaskTimeoutScanner/NodeOptions/V40/V41 等）
+
+---
+Task ID: 69-process-policy
+Agent: Z.ai Code (main + java-sync 子代理)
+Task: 用户上传三张截图（钉钉式流程属性配置与超时设置），要求「实现流程的配置及相应的工作流引擎的处理逻辑」——流程级策略配置三端落地（前端面板+Node 引擎+Java 引擎）
+
+Work Log:
+- 配置模型定稿（designerStore ProcessConfigData 扩展 11 项）：deduplication{mode CONSECUTIVE|FIRST|LAST + skipSameAsInitiator}/commentPolicy{enabled,scope REJECT_RETURN|ALL}/signaturePolicy{enabled,useLast,allowUpload,required}/comment{disabled,disallowDelete,disallowAttachment}/approveRecall/retakeSkipApproved/titleRule{pattern}/summaryRule{fields≤5,showInSms}/dynamicProcess/timeoutRules[]（remind 多条+transfer≤1+pass/refuse 互斥）
+- 前端：ProcessProperty.vue 新增「审批设置」「流程设置」分组（摘要/短信摘要/标题模板/动态流程/评论管理/审批召回/退回免审/意见必填/手写签名默认/超时规则组列表）；新组件 ProcessTimeoutRuleDialog.vue（四卡片选型+时间设置+被提醒人+短信+唯一性校验）；getProcessConfig 深合并新键
+- Node：process-model.ts 加 ProcessPolicy/ProcessTimeoutRule 类型；新文件 process/compiler/process-policy.ts（parseProcessPolicy 宽松解析+renderProcessTemplate {{processName}}/{{initiator}}/{{date}}/{{字段}}；独立文件规避 task.service↔process-instance.service 循环 import）
+- Node 引擎：EngineRuntime 注入 EngineProcessPolicy（dedup 三口径+发起人免审优先+retakeSkipApproved 退回重审免审+recallApproval 召回重走）；completeTask 意见/签名门禁（节点显式优先，流程级=默认值提供者）；reject/refuse 理由必填 OR 流程级；approve-recall 审批召回端点（六道门禁）；超时扫描器流程级规则组兜底（remind repeat 间隔/被提醒人/handler 节点跳过 pass+refuse）；start() 渲染 __instanceTitle/__instanceSummary+SMS 摘要附尾
+- Java 同步（子代理执行，主线复核）：新类 engine/process/config/ProcessPolicy.java（宽松解析+模板渲染）；10 文件修改——TaskCreateBehaviorListener(+322 dedup 三口径/retake 免审/召回重走)、TaskTimeoutScanner(+226 流程级规则组兜底 5 动作)、WorkflowTaskService(+257 意见/签名门禁流程级兜底+processFlags+approve-recall)、RejectService(+69 理由必填 OR 流程级)、ProcessInstanceService(+61 标题摘要渲染)、EngineNotifyService(+50 TIMEOUT_{ACTION} 幂等+摘要短信)、TaskController(+18 approve-recall 端点)、TaskDetailVO(+30 processFlags 透出)、WfEngineNotifyRepository(+5)、ProcessInstanceServiceFilterTest(+5)
+- Java 静态审查：10 文件括号配平全对；ProcessPolicy 五处消费 import 全在位；approve-recall/dedup/timeoutRules/标题摘要/引擎通知五大功能点 grep 全命中；配置存设计 JSON 无需新 Flyway migration
+- 验证（收尾全量重跑）：backend-node vitest 920/920 全绿=基线（test:all 含集成）；tsc 1 error=既有基线；frontend vitest 1132/1132 全绿=基线；vue-tsc 46 errors=既有基线
+
+Stage Summary:
+- 流程级策略三端两层语义上线：节点级显式配置永远优先；流程级=默认值提供者（签名/去重/意见必填按各自合并规则）；引擎经策略对象注入，不直接读 DB
+- 规模：前端 2 改+1 新组件、Node 6 改+1 新文件、Java 10 改+1 新类 = 21 文件 +2138/-135；无 DB 迁移
+- 四项测试基线全部吻合零回归；上一会话中断的 java-sync 子代理成果经复核完整后一并提交
+- 提交记录：b49a7ec（22 文件 +2927/-135，远程 main = 本地 = b49a7ec）
+
+---
+Task ID: 70-oom-recovery
+Agent: Z.ai Code (main)
+Task: 用户报「服务挂掉了」——3000 Next dev 挂死修复 + 平台服务拉起机制改良
+
+Work Log:
+- 诊断：3000 DOWN、5173/8080/3306 存活；dmesg 实锤 OOM 击杀 next-server（RSS 1.37GB/total-vm 21GB，内核 oom-kill）；平台仅在容器启动执行一次 .zscripts/dev.sh，next dev 此后无人看护；遗留两个卡 do_wait 的 start-services.sh 孤儿各拖一个 vite（5173 正牌 + 5174 重复浪费）
+- 修复三次受挫与根因：块内 nohup 后台拉起 → 命令块结束即被整树静默 SIGKILL（三次实证，setsid 亦无效）；且 SIGKILL 打断 Turbopack 持久库写入 → panic「Failed to restore task data (corrupted database)」，第二次拉起再死再写坏；清 .next 后仍因「拉起即被回收」无解
+- 最终方案（vite.config.ts revive-next-dev 自愈插件）：configureServer 钩子探测 3000，不通则以 detached spawn 根目录 bun run dev（父进程为 vite 长期存活、脱离会话回收树；其内部 start-services.sh 幂等，8080/5173 健康时跳过）；端口守卫防重复拉起；vite 监听自身配置变更自动重启 = 天然触发时机
+- 收敛过程：杀旧 vite(1239) 释放 5173 → touch 触发插件 vite 重启 → start-services.sh 拉起新 vite 占 5173(14484，带插件) + next dev(3000, 挂 init 下) ；清理 5174 残留(14113 树)；8080(1582) 全程无扰动
+- 验证：四通道全 OK；portal api 200/0.5s；浏览器金路径——门户完整渲染、面板「后端/前端 运行中」双绿灯、console 仅 HMR/DevTools 噪音零报错；/lowcode/ 经 3000 代理 308 正常；浏览器用后即关（内存回到 1378MB available）
+- 教训沉淀：①本环境命令块结束回收全部后代进程（nohup/setsid 均无效）→ 后台进程必须挂靠平台自启进程树（vite/监督器）；②next-server 被 OOM/SIGKILL 后必须 rm -rf .next（Turbopack 持久库必坏，症状 panic corrupted database）；③vite config 重启遇旧连接拖端口会自增端口且 resolvedPort 粘滞，需先释放目标端口再触发重启
+
+Stage Summary:
+- 3000 恢复且具备自愈能力：vite(5173) 内置 revive-next-dev 看门狗，next dev 再被 OOM 击杀时任何 vite 重启都会自动补拉；next dev 内置 service-supervisor 继续看护 8080/5173
+- 无业务代码改动，仅 vite.config.ts 基建加固；提交后远程同步
+
+---
+Task ID: 71-designer-import-fix
+Agent: Z.ai Code (main)
+Task: 用户报 ProcessListPage 跳转设计器报「Failed to fetch dynamically imported module: ProcessDesigner.vue」
+
+Work Log:
+- 服务端定位：ProcessDesigner.vue 本身 200 正常；vite.log 抓到真凶——vite:vue 插件编译 ProcessProperty.vue:71:42 抛 createCompilerError（stateInterpolationClose）
+- 根因：Task 69 新增的标题模板提示文案写了 {{ '{{processName}}' }}——Vue 插值分词器不识别 JS 字符串字面量，遇字符串内部的 }} 提前闭合 → SFC 编译 500 → 设计器路由动态导入链整体断裂
+- 全仓扫描确认仅此一处（rg "\{\{ '" frontend/src --glob '*.vue'）
+- 修复：该 div 加 v-pre 字面量渲染 + 注释说明机制；上方 el-input 的 placeholder="{{...}}" 为纯属性值（Vue3 属性不做插值）本来就正确，未动
+- 验证：模块直取 200 且含目标文案；vue-tsc 46=基线；浏览器金路径——登录 admin → 流程定义 → 直接导航 /designer?id=1 → 设计器工具栏/画布完整渲染；console 仅既有 SSE 重连+permission 指令噪音，零模块加载错误；浏览器用后即关
+- 关联说明：Task 70 多次重启 vite（依赖重优化）放大了暴露概率，但编译错误自 Task 69 起就存在，浏览器旧标签页持有的失效模块图不是根因
+
+Stage Summary:
+- 设计器路由导入链修复（v-pre 字面量渲染）；vue-tsc/vitest 基线零新增；提交推送
+
+---
+Task ID: 72-assignee-extend
+Agent: Z.ai Code (main + java-sync 子代理)
+Task: 用户四项需求——①属性配置栏办理人/审批人去掉引擎不支持的选项 ②支持业务系统注册选人函数扩展 ③支持表单内用户 ④审批人可进行的操作横向排列（同意/拒绝默认勾选只读，二级选项纵向）
+
+Work Log:
+- 引擎支持面核查（对齐基准）：Node engine-runtime.resolveAssignees 与 Java TaskCreateBehaviorListener.resolveTyped 实际仅类型化支持 userIds/initiator_self/initiator_select/role/expression；AssigneeSelector 原有 18 项中 post/member_group/multi_level/report_superior/approval_role/matrix/dept_head/form_dept_leader/form_dept_approval_role/approver_designate/external_push 共 11 项两端均无解析（解析为空走找不到人策略）
+- 需求①（前端 AssigneeSelector.vue 重构）：四列 18 项精简为三列 7 项——普通审批（指定用户/发起人自选/角色/发起人自己）+ 表单相关（表单内用户）+ 其他（流程表达式/自定义选人函数）；SUPPORTED_TYPES 同步更新；旧类型（designerStore approval.type 联合保留 10 个历史值防存量数据回显崩）命中时保留既有 warning alert
+- 需求②（业务系统注册选人函数）：
+  - Node 新文件 backend-node/src/engine/runtime/assignee-resolver-registry.ts：registerAssigneeResolver/unregister/list/snapshot/clear + AssigneeResolveContext{nodeId,nodeName,initiator,variables}；同步签名（引擎解析链同步纯内存，类型层面禁 Promise）；空名/非函数抛错，同名覆盖
+  - Node engine-runtime 构造第 7 参 assigneeResolvers 注入；resolveAssignees 新分支 type=external：registry 查 resolver → 未命中/返回空/抛错 → 变量兜底 assignee_ext_<nodeId>（外部系统集成通道，对齐 initiator_select 机制）→ 仍空走找不到人策略
+  - Node 服务层装配 8 处 new EngineRuntime 全部传入 snapshotAssigneeResolvers()（task.service×6 / process-instance.service / timeout-scanner）
+  - Java（子代理 Task 72-e + 主线补齐）：新 AssigneeResolver 接口 + AssigneeResolveContext record + AssigneeResolverRegistry @Component（构造注入 List<AssigneeResolver> 建 Map）；NodeOptions 加 formUserField/externalResolver 字段与 parse 宽松读取；TaskCreateBehaviorListener/MultiInstanceApproverListener 的 resolveTyped switch 加 form_user/external 两 case；external 尾部变量兜底 assignee_ext_<nodeId> 主线补齐对齐 Node
+- 需求③（表单内用户）：配置 approval.formUserField=表单字段名；前端 type=form_user 时拉取本节点绑定表单 schema（formApi.getFormDefinition）扁平化遍历（children/columns 嵌套）过滤用户类型控件（selectUser/userPicker/user/memberSelect）出字段下拉，未绑表单/无用户字段给出引导提示；Node resolveAssignees form_user 分支 = normalizeUserList(variables[formUserField])（发起时表单数据平铺进流程变量）；Java 同语义（variable(processInstanceId, field)）
+- 需求④（操作布局）：UserTaskProperty 高级设置主选项 checkbox-row 横向一行（通过✓拒绝✓灰色只读 + 转派/退回/加签可勾选）；二级选项（退回 2 项/必须加签）纵向在下方（原 sub-items 缩进样式保留）；allowRefuse 语义收敛为固定 true——loadConfig 不再读存量、saveConfig 恒写 true（旧 allowReject 兼容映射仅保留给 allowReturn）；HandlerTaskProperty 办理人操作同布局（提交✓只读 + 转派/退回/加签）
+- Node 单测：assignee-resolution.spec.ts 扩展 boot 支持第 7 参注入 + 新增 9 用例（form_user 单/多值/逗号分隔/缺字段；external 注册函数解析+上下文断言/多用户 single 候选/抛错变量兜底/未注册兜底/编译透传；registry 生命周期/覆盖/非法注册）
+- 基线验证：backend-node vitest 929/929（920 基线+9 新增）全绿、tsc 1 error=既有基线；frontend vitest 1132/1132 全绿、vue-tsc 46 errors=既有基线；eslint 改动文件 0 errors
+- 浏览器金路径（agent-browser）：设计器（真实 draft id=4f10a0d7…，id=1 不存在时 loadEditor 404 静默致面板空态为既有行为）→ 拖入审批节点 → 三列分组正确渲染 → 表单内用户/自定义选人函数选中态与配置 UI → 高级设置横向布局与只读态 → 输入注册名保存 → 刷新回显 crm_owner_resolver → 后端 nodeConfigs 持久化 JSON 结构正确（type/external.resolver/formUserField/allowRefuse:true）→ console 零报错 → 浏览器关闭
+- 事故与修复：①task.service 541/1428 两处装配时把 resolvers 误插到 policy 对象前致 8 参编译错 → 移至 policy 闭合后；②process-compiler NodeConfigJson.approval 窄化类型缺新键 → 补 formUserField/external unknown 声明
+
+Stage Summary:
+- 选人体系收敛为「引擎支持子集 + 两条扩展通道」：表单内用户（form_user，变量取值）与自定义选人函数（external，进程内 registry 注册 + assignee_ext_<nodeId> 变量兜底），Node/Java 双端语义一致；设计器面板只暴露引擎真正支持的 7 项，操作布局对齐截图风格
+- 业务系统接入方式：Node 进程内 registerAssigneeResolver(name, fn)（fn 同步返回 string[]）；Java 实现 AssigneeResolver 接口注册为 Spring Bean 自动收集
+- 20 文件改动（前端 4 / Node 7 / Java 主 8 + 测试 2 新增）；无 DB 迁移；四项测试基线零回归
+---
+Task ID: 73-resolver-metadata
+Agent: Z.ai Code (main + 3 个通用子代理)
+Task: 用户两条新需求——①流程配置中的说明性文字改为 Label 后 ? 图标（垂直居中）悬浮提示；②选人函数扩展点深化：可注册多个、每个有唯一中文名、中文名显示在面板、函数可声明配置参数
+
+Work Log:
+- 需求②模型定稿：AssigneeResolverMeta{ name 注册名唯一 / displayName 中文名唯一 / description / params: AssigneeParamDef[]（key/label/type string|number|boolean|select/required/placeholder/defaultValue/options/description）}；选人函数签名升级 fn(ctx, params)（params=节点配置 approval.external.params，未配置传 {}，同一函数可被多节点按参数复用）
+- Node 端：registry 重构（registerAssigneeResolver 第三参 meta 可选、displayName 缺省=注册名向后兼容、中文名查重跳过自己槽位=同名覆盖仍允许、listAssigneeResolvers 返回元数据按注册名排序、getAssigneeResolverMeta 新增）；compiler 宽松消毒 external.params（仅保留 string/number/boolean 原始值）；engine-runtime external 分支第二参传 params；新文件 assignee-resolver-samples.ts 三个内置样例（项目负责人/固定用户组/顺序轮选，覆盖 string/number/select 参数+required+defaultValue）经 main.ts 注册；新控制器 GET /api/v1/assignee-resolvers（无参 R.ok(list)）注册进 EngineModule
+- 前端：新 api/assigneeResolver.ts；AssigneeSelector external 区块从自由文本输入重做为「中文名下拉（filterable+allow-create 存量兼容，未注册值回显灰色『未注册』徽标）+ 按参数声明动态渲染配置表单（input/input-number/switch/select）+ 函数 description 灰色提示」；UserTaskProperty/HandlerTaskProperty 全链路接线 externalParams（load/save/emit，空对象不落盘）；designerStore approval.external 扩展 params 类型
+- 需求①：新共享组件 FormLabelTip.vue（Label 文本+14px 圆形 ? 图标 inline-flex 垂直居中、el-tooltip 顶部弹出 max-width 280px）；ProcessProperty.vue 全部 12 处说明文字（hint-text/operations-hint/超时提示）收进 label tooltip，删除下方灰色段落与死样式；标题模板的「可用变量 {{...}}」提示改为 script 字符串常量 TITLE_PATTERN_TIP（绑定传 :tip，彻底规避 Task 71 模板插值分词器坑）；.process-form :deep(.el-form-item__label) inline-flex 垂直居中
+- Java 静态同步（无 JDK，四道静态审查）：新 AssigneeParamDef record + SampleAssigneeResolvers 三个 @Component 样例（对齐 Node 样例）+ api AssigneeResolverController（GET /api/v1/assignee-resolvers）；AssigneeResolver 接口 resolve 升双参(ctx, params)（对齐 Node）+ displayName/description/paramDefs default 方法；Registry 构造期中文名查重（不同注册名同中文名 → IllegalStateException 启动失败，同名覆盖允许）+ metadata() 按注册名排序；NodeOptions 解析 external.params（仅原始类型）；TaskCreateBehaviorListener/MultiInstanceApproverListener external 分支传参（后者新增 primitiveParams 助手）；AssigneeResolverRegistryTest 升级（双参/中文名重复抛错/同名覆盖/metadata 形状）
+- 过程事故：①kill 旧 8080(1582) 后 Bash 工具通道持续故障（主会话所有工具 403/failed），改由子代理完成全部后续操作（探活/修复/验证/提交）——属平台网关瞬时故障特征，跨会话复现待观察；②期间 next-server 再遭 OOM 击杀（09:39，dmesg 实锤，前端 vitest 全量 171s 吃内存连坐），start-portal.sh 拉回+监督器自动复活 8080（restarts=1）；③QA 抓出两个新文件自带缺陷：API 路径缺 /v1（baseURL=/api 惯例按业务模块显式 /v1，role.ts 系统管理桶不带前缀是历史风格）+ el-select 关闭态回显注册名（el-option 缺 :label）——均已修复
+- 顺手修既有告警：FormPropertyTab.vue/ProcessFormPropertyTab.vue 的 el-tooltip 内部 el-button v-if 上移到 tooltip 自身（v-if=false 时整体不渲染，行为等价），消除设计器页 [ElOnlyChild] no valid child node found ×5
+- 测试：assignee-resolution.spec.ts 18→22 用例（params 第二参断言/同一函数不同参数/编译消毒 external.params/中文名唯一抛错/同名覆盖/元数据清单排序）
+- 基线（全量重跑）：backend-node vitest 932/932（929+3）全绿、tsc 1 error=既有基线；frontend vitest 1132/1132 全绿；vue-tsc 46 errors=既有基线（改动文件零命中）；eslint 改动 ts 文件 0 errors
+- 浏览器金路径（agent-browser，两轮）：第一轮 mock 注入走通全链路并抓出缺陷；修复后第二轮真实接口复验——流程配置 12 个 ? 图标+悬浮 tooltip 正确、无残留灰色说明段；审批节点「自定义选人函数」关闭态回显「固定用户组」、下拉 3 个中文名选项（右侧灰注册名）、函数参数回显 userIds=7,8/全部用户；GET /api/v1/assignee-resolvers 真实 200；console 零 error 零 warn（ElOnlyChild 消除）；浏览器用后即关
+- 数据残留说明：QA 金路径把测试草稿 4f10a0d7… 的审批节点选人配置从 crm_owner_resolver 改存为 fixed_user_group+params（Task 72 已有同类残留先例），如需还原可用设计器改回
+- API 路径书写惯例沉淀（QA 发现）：frontend api 模块对后端 NestJS 路由（api/v1/**）必须显式写 '/v1/...' 前缀（http baseURL 仅 /api）；role/user/menu 等 /api/** 系统管理桶是历史独立风格，新业务接口勿照抄
+
+Stage Summary:
+- 选人函数扩展点升级为「元数据注册」：业务系统注册即可带唯一中文名（启动/注册期强校验）与参数声明；设计器面板中文名下拉+动态参数表单；引擎运行时 fn(ctx, params) 双端语义一致；GET /api/v1/assignee-resolvers 为面板数据源
+- 流程配置说明文字全面转为 Label ? tooltip（FormLabelTip 共享组件）；顺手消除设计器页 ElOnlyChild 告警源
+- 20 文件改动（前端 9 / Node 8 / Java 9，含 5 新增）；无 DB 迁移；四项测试基线零回归 + 双轮浏览器验证闭环
+- 基础设施注意：①8080=编译产物 node dist/main.js，源码改动后需 bun run build 再杀旧进程由监督器复活；②前端全量 vitest 运行期内存压力大（曾连坐 next-server OOM），大内存操作建议错峰
+
+---
+Task ID: 74-basic-props
+Agent: Z.ai Code (main)
+Task: 流程基本属性收入「流程属性」面板，设立「基本属性」分组（名称/标识/分类/说明可编辑）
+
+Work Log:
+- 现状盘点：基本属性此前在面板内无编辑 UI——draftName 仅工具栏只读 tag；categoryId 仅 store 传递；store.draftDescription 从未落库（wf_process_draft 表无 description 列，EditorVO/DesignSaveRequest 亦无该字段）
+- DB：新增 V42__add_process_draft_description.sql（wf_process_draft 加 description VARCHAR(500) NULL）；wfe_process_def 不加列——getVersionEditor 对 name/categoryId 本就返回 null，description 对齐该语义（bun run migrate 已应用）
+- backend-node：types.ts WfProcessDraftTable + description；process-design.service.ts 六处——DesignSaveRequest/EditorVO/ProcessDraftVO/VersionEditorVO 加字段，createDraft insert 行补 null，loadEditor/saveDesign 透传（request.description ?? draft.description，AI tools 不传时零影响）；copyProcess 走 ...source 展开自动复制；migration.spec.ts 迁移计数 40→41
+- frontend：api EditorData.description + DesignSaveRequest.description?；designerStore.setDraftBasicInfo 扩展支持 name；ProcessDesigner.vue loadEditor 回读 description、save/deploy payload 携带；ProcessProperty.vue「流程配置」tab 顶部新增「基本属性」divider 分组——流程名称（input maxlength100）、流程标识（disabled + FormLabelTip 说明「创建后不可修改」）、所属分类（el-select clearable filterable，categoryApi.list() 容错空列表）、流程说明（textarea 3 行 500 字 show-word-limit）；onMounted 回读 store（面板仅在数据就绪后挂载）；syncBasicToStore 经 setDraftBasicInfo 联动（名称变更 → 工具栏 tag/导出文件名实时更新）
+- Java 同步（静态四道关自查，沙箱无 javac）：ProcessDraft 实体 + @Column(description,500) + getter/setter；DesignSaveRequest/EditorDTO + 字段；ProcessDesignService loadEditor setDescription、saveDesign if(!=null) 透传（与 Node ?? 语义一致）
+- 8080 编译产物重建（nest build + 杀旧进程监督器复活）；draft 列表 API 实测返回 description 键
+- 验证：backend-node vitest 932/932（含修正后的迁移计数用例 11/11）、frontend vitest 1132/1132、tsc 1、vue-tsc 46——四基线零回归；浏览器金路径：设计器 → 点画布空白 → 基本属性分组渲染（名称「请假」/标识「leave」只读/分类下拉/说明框）→ 改名「请假流程」工具栏 tag 实时联动 → 填说明 33/500 → 保存成功 → 后端直查落库（name/description/categoryId 全对）→ 刷新完整回显 → console 零新增错误
+- 验证插曲：列表行三个图标按钮均无 title（点出「编辑分类」「部署」两个对话框），改用 API 取草稿 id 直达 /designer?id= 路由；画布空白选中用 agent-browser mouse move/down/up（click 仅接受 selector）
+
+Stage Summary:
+- 流程基本属性首次在设计器内可编辑并持久化：分组位于「流程配置」tab 首位，名称/分类/说明可改、标识只读防部署版本错乱；Node/Java 双端 saveDesign/loadEditor 语义一致（缺省保留原值）；12 文件无迁移外 DDL 变更；提交推送见子仓库 worklog
+
+---
+Task ID: 75-notify-assignee-readonly
+Agent: Z.ai Code (main)
+Task: 用户需求——超时规则对话框「被提醒人：当前审批人」默认勾选且只读（附两张钉钉式截图：超时转派/超时通过模式下均呈灰选态）
+
+Work Log:
+- 引擎侧核查先行：Node process-policy.ts:113 `notifyAssignee !== false`（缺省 true，仅显式 false 关闭）与 Java ProcessPolicy.java（字段默认 true、解析口径对齐）本就是「当前审批人默认被提醒」语义——缺口纯在前端对话框，引擎零改动
+- ProcessTimeoutRuleDialog.vue 三处修改：①notifyAssignee 勾选框加 disabled（只读），并修正转派模式误导性文案「转派给当前审批人」→「当前审批人」（该行语义是被提醒人；引擎转派对象恒为审批管理员）；②编辑回读存量规则时归一化 form.notifyAssignee = true（存量显式 false 显示为勾选态，与只读语义一致）；③confirm() 恒写 notifyAssignee: true（双保险）
+- 兼容性决策：引擎保留「显式 false 关闭」语义不动（存量草稿行为不变、零迁移），UI 归一化在用户下次编辑该规则时自然修复
+- 验证：vue-tsc 46 errors=基线（改动文件零命中）；frontend vitest 1132/1132=基线；浏览器金路径（agent-browser 登录后直达 /designer?id=4f10a0d7…，画布空白 mouse 点击唤出属性面板）——新增规则对话框「当前审批人」checked+disabled、input.click() 后状态不变（真禁用）、切「超时转派」只读态保持、确定后列表摘要「超时转派：超过 3 小时（当前审批人、短信）」、编辑回读 checked+disabled；测试规则经「删除」按钮清理零残留（草稿未全局保存，后端零扰动）；console 零新增 error/warn；浏览器 close + pkill chrome-153
+- 途中勘误：登录接口实际路径 /api/auth/login（/api/v1/auth/login 404；auth.controller SecurityConfig 放行注释为准）；drafts 列表响应为 data.content 数组（rows/list 均不是）
+
+Stage Summary:
+- 超时规则「当前审批人」默认勾选且只读上线：UI 层三处收敛（disabled + 回读归一化 + 恒写 true），引擎缺省语义本就是 true 无需改动；单文件改动、四基线零回归、浏览器双模式（提醒/转派）验证闭环
+
+---
+Task ID: 76-starter-scope-admin
+Agent: Z.ai Code (main，实现会话 + cron 420955 收尾会话合并记录)
+Task: 用户批准方案——可发起人员 + 审批管理人流程级配置：starterScope {mode ALL|SPECIFIED, userIds, roleIds} 与 adminUserIds 存流程级设计 JSON（对齐 Task 69 策略通道，不加列），引擎 start() 门禁 + 超时/兜底消费点流程级优先回落全局
+
+Work Log:
+- 前端 4 文件：designerStore.ts ProcessConfigData 扩展 starterScope/adminUserIds（随设计 JSON 持久化）；ProcessProperty.vue 流程配置 tab 新增「权限设置」分组——可发起人员（radio 全体/指定人员 + 用户多选 + 角色多选，FormLabelTip 说明「命中名单或拥有所选角色之一才可发起，系统管理员不受限」）、审批管理人（用户多选）；ProcessCenterPage.vue 列表 startableByCurrentUser 展示层过滤（SPECIFIED 未命中不展示，admin 直通，引擎门禁是真闸门）；api/processDefinition.ts DeployedProcessDefinition 扩展 starterScope 类型
+- Node 8 文件：process-policy.ts 解析扩展（mode 非 SPECIFIED 一律 ALL 宽松、名单 trim 去空、上限 userIds 200/roleIds 50/admin 50）；process-instance.service.ts start() 入口 assertStartAllowed（SPECIFIED 时发起人须命中 userIds/roleIds，admin 绕过，拒绝抛 403 语义错误）；timeout-scanner.service.ts 提醒「流程级 adminUserIds 全量优先、未配置回落全局 admin」+ 转派目标 adminUserIds[0] 优先；task.service.ts to_admin 兜底同口径（adminUserIdOverride 参数）；process-definition.controller.ts deployed-list 按 defIds 批量查 wf_node_config(node_id='__PROCESS__') 下发 starterScope（未配置 null）；process-design.repository.ts findProcessLevelConfigsByDefIds；process-model.ts 类型；新增 process-policy-scope.spec.ts 8 用例
+- Java 6 文件（静态同步，沙箱无 javac）：ProcessPolicy.java starterScope/adminUserIds 字段与解析（口径对齐 Node）；ProcessInstanceService.assertStartAllowed(processKey, userId)（注释对齐 NodeJS 实现，存量 ALL 行为不变）；TaskTimeoutScanner 提醒/转派两处流程级 admin 优先；RoleMembershipResolver 对齐；ProcessInstanceController 透传；ProcessInstanceServiceFilterTest 更新
+- 收尾会话（cron 420955）验证记录：backend-node vitest 940/940（932 基线 + 新增 8 scope 用例，`bun run test` 仅 907 是 --exclude integration 口径差异，test:all 才是全量）；frontend vitest 1132/1132；tsc 1 既有；vue-tsc 46 既有（改动文件零命中）；8080 重建重启（坑：手动启动须 env PORT=8080，缺省 8081；且逃逸启动命令漏 cd 会找不到 dist/main.js）
+- 收尾会话 E2E（一次性数据全链路）：建一次性草稿 leave_e2e76（SPECIFIED userIds [2,9] + roleIds [dept_manager] + adminUserIds [7]）→ 部署 → GET /api/v1/deployed-processes 该项 starterScope 精确下发 {"mode":"SPECIFIED","userIds":["2","9"],"roleIds":["dept_manager"]} → API 删草稿 + DB 清 wfe_process_def/wf_node_config/wf_process_draft 零残留；请假草稿全程零扰动（库中仅剩该草稿 status=DRAFT）
+- E2E 插曲勘误：①自研引擎 BPMN 解析节点出入边读节点内 <incoming>/<outgoing> 子元素（bpmn-js 序列化风格），仅写 sequenceFlow sourceRef/targetRef 不挂边会误报「流程会走死」；②部署校验要求 process id == 流程 key；③草稿 DELETE API 对 status=DEPLOYED 的草稿静默不删，需 DB 硬删；④wfe_process_def 键列名是 process_key 非 key；⑤residue 复查子查询撞排序规则（utf8mb4_unicode_ci vs uca1400_ai_ci），改逐条查询规避
+
+Stage Summary:
+- 可发起人员/审批管理人流程级配置三端上线：设计 JSON 通道零 DDL，存量流程 starterScope 缺省 ALL 行为不变；引擎 start() 真门禁 + 发起中心展示层过滤双层防护；超时提醒/转派与 to_admin 兜底均「流程级 adminUserIds 优先、未配置回落全局 admin」向后兼容；四基线零回归 + E2E 下发验证闭环 + 测试数据零残留
+
+### Task 76 浏览器验证补充（cron 420955 收尾会话）
+- agent-browser 金路径：admin/admin123 登录 → 直达 /lowcode/designer?id=4f10a0d7…（跳登录页正常，登录后回 dashboard，二次进入设计器）→ mouse move 400 400 + down/up 唤出属性面板 → eval 校验 .process-form 文本：「权限设置」「可发起人员」（所有人/指定人员 radio）「审批管理员」（多选，placeholder 请选择审批管理员）三项全命中；分组顺序位于 审批人去重规则/审批设置 之前，与设计一致
+- console error=0、页面错误=0；浏览器 close + pkill chrome-153 零残留
+- 注：UI 标签定为「审批管理员」（原方案口径「审批管理人」），以 cron 校验词与实现为准
+
+---
+Task ID: 77-property-label-7em
+Agent: Z.ai Code (main)
+Task: 用户需求——属性配置面板 label 统一 7 个字符宽度、左对齐
+
+Work Log:
+- 12 个属性组件（Process/UserTask/HandlerTask/InitiatorTask/Event/Gateway/ServiceTask/SubProcess/SequenceFlow/CallActivity/FormPropertyTab/ProcessFormPropertyTab）el-form 统一 label-width="7em" + label-position="left"（原 80px/90px 混用、默认右对齐）
+- ProcessProperty.vue 唯一的 label 深度选择器 justify-content: flex-end → flex-start（Task 73 引入的 FormLabelTip 垂直居中保留）
+- 途中 OOM 事故：vue-tsc 双跑连坐 next-server（dmesg oom-kill，RSS 2GB 被杀）→ rm -rf .next 清缓存重启后稳定；根路径首次编译约 13s 属正常（探活超时要给足）
+- 验证：properties 测试 10/10；vue-tsc 46 既有零新增；浏览器实测 .process-form label width=84px（7em×12px 恰 7 汉字）、textAlign=left、justify=flex-start；console 0 错误
+- 提交推送：bfe2ffac
+
+Stage Summary:
+- 属性面板 12 组件 label 列宽统一 7 字符、文本左对齐；? tooltip 垂直居中不受影响；零回归
+
+### Task 77 收尾补充（PAT 轮换 + 推送 + 双面板浏览器复核，主会话）
+- 用户发来新 GitHub PAT：remote set-url 更新（旧 PAT fetch 仍有效但按轮换处理），新 PAT fetch 验证通过，PAT 完整 URL 更新存储于 /home/z/my-project/tool-results/read_1790506978165_5e47df20c3f5.txt（chmod 600）
+- 推送补完：本地领先 origin/main 2 提交（bfe2ffac + 60da7e01 worklog）已推送 e7b1f9c6..60da7e01，本地=远程=60da7e01
+- 浏览器复核（agent-browser）：EventProperty（选中开始事件）4 label 全 84.0px、justify=flex-start、textAlign=left；ProcessProperty（mouse move 400,400 + down/up 唤出）21 label 全 84.0px 同口径；截图目测 label 列整齐左对齐、7 字符宽（84px=7em×12px small）；agent-browser close + pkill chrome-153 零残留
+- 附：leave 草稿画布仅 startEvent_1 一个节点（草稿内容如此，与 Task 77 无关）；fetch 拉到远程新分支 feature/array-value-text-columns、feature/process-engine-core（未处理，非 main 范畴）
+
+---
+Task ID: 78-divider-left-align
+Agent: Z.ai Code (main session)
+Task: 用户需求——属性配置的分组标题左对齐
+
+Work Log:
+- 根因实测：全部 el-divider 均已 content-position="left"，但 Element Plus .el-divider__text.is-left 默认 position:absolute + left:20px——分组标题比表单内容多缩进 20px（实测 divider 文本距面板左缘 50px，label 仅 30px），视觉上悬在中间
+- 修复 2 文件：PropertyPanel.vue panel-body 深度样式新增 .el-divider--horizontal .el-divider__text.is-left { left: 0 }（一处覆盖全部 12 个属性组件面板）；ProcessTimeoutRuleDialog.vue scoped style 同口径（对话框不在 panel-body 内）
+- 浏览器实测：ProcessProperty 7 个分组标题（基本属性/权限设置/审批人去重规则/审批设置/节点操作权限/流程设置/流程编号）全部 left=30px，与 el-form-item__label（30px）完全平齐；超时对话框 3 个 divider（时间设置/人员设置/通知设置）贴 body 左缘 16px（原 36px）；截图目测确认
+- 测试：properties 10/10；vue-tsc 46 既有零新增（纯 CSS 改动）
+
+Stage Summary:
+- 属性面板与超时对话框分组标题与表单内容左缘平齐（Task 77 label 7em 对齐的延续，面板纵向视觉统一收口）
+
+---
+Task ID: 80-orb-drag-and-81-align
+Agent: Z.ai Code (main session)
+Task: 用户需求①AI 助手悬浮球/悬浮框允许拖动（挡住后面内容时移开）；②属性配置分组标题与 Label 左边对齐
+
+Work Log:
+- Task 80（对话窗体拖动）：AiAssistantOrb.vue 的 ai-window header 作为拖拽把手（pointer capture），位置 localStorage 持久化 + 视口钳制（8px 边距），打开时越界回钳，双击 header 复位默认右下；图标按钮排除拖动；拖动中阴影加深反馈
+- Task 80b（悬浮球拖动，用户澄清「悬浮框」实指球）：球 pointer 事件 + 5px 位移阈值区分拖动/点击（拖动不触发开窗，click 抑制标志），位置持久化 ai-assistant-orb-pos，拖动中 grabbing+scale(1.1)；键盘 Enter/Space 开窗保留（click 路径）
+- Task 81（分组标题对齐）：UserTask/HandlerTask 面板用 section-title（白卡片外），与白卡片内 label 差 2px（Range 实测 876 vs 878）——section-title padding-left 8→10px（10+左竖条3=13 = 白卡片 border1+padding12），两组件补齐；ProcessProperty 等 divider 面板 Task 78 已平齐不受影响
+- 途中破坏性编辑事故：MultiEdit 三段重组把窗口拖动实现与 handleClear 削残 → 读文件后整块重写修复；新增 1 个 vue-tsc 错误（orbEl 未声明）即修，回到 46 基线
+- 验证：球拖到画布中间（572,272）不开窗 + localStorage 持久化 + 刷新恢复 + 单击正常开窗；窗体拖动/双击复位沿用；UserTask/HandlerTask 两面板 section-title 文本与 label 文本 878=878 aligned:true（Range API）；properties+ai 测试 21/21；vue-tsc 46 既有
+- 事故：vue-tsc 再次连坐 next-server（本轮第二次）→ pkill + rm .next + 重启 bun run dev 恢复；登录态随之丢失重新登录
+- 备注：handleSave 前端无请求之谜实为 draftId 为空（URL 未带 id 进设计器），非 bug；带 ?id= 进入正常
+
+Stage Summary:
+- AI 助手悬浮球与对话窗体均可拖动换位（持久化+钳制+拖/点区分），遮挡内容可手动移开
+- 全部属性面板分组标题（divider 与 section-title 两种形态）与表单 label 左缘精确平齐（误差 <1px）
+
+---
+Task ID: 82-divider-glyph-align + 83-global-dialog-draggable
+Agent: Z.ai Code (main session)
+Task: 用户需求①流程属性和发起人节点的分组标题仍未对齐；②系统中所有的弹出对话框都应该允许拖动
+
+Work Log:
+- Task 82 根因：Task 78 只把 .el-divider__text.is-left 盒子 left:0（30px），但 EP 默认 padding: 0 20px——字形仍在 50px，比 label 字形（30px）多缩进 20px；跨面板对比（UserTask/HandlerTask section-title 已精确对齐）后视觉差异明显
+- 修复：PropertyPanel.vue 与 ProcessTimeoutRuleDialog.vue 的 is-left 覆盖追加 padding-left: 0（一处覆盖全部 8 个 divider 面板）
+- Task 83 方案：发现 EP 2.14 use-dialog 读取 globalConfig.dialog.draggable（嵌套结构，非顶层 draggable）——app.use(ElementPlus, { locale, dialog: { draggable: true } }) 一行让全部 el-dialog 默认标题栏可拖动（fullscreen 自动排除，:draggable="false" 可个别关闭，overflow 默认视口钳制）
+- ElMessageBox（confirm/alert/prompt）无全局配置入口：新增 src/utils/elementPlusDraggable.ts patchMessageBoxDraggable()，按 EP messageBoxFactory 归一化逻辑（title 为对象时视为 options）包装三方法默认注入 draggable: true，调用方显式传参可覆盖
+- 浏览器实测：流程属性 7 个 divider 字形 878.0 = label 878.0（修复前 898）；发起人节点（基本信息/表单配置）同口径 878.0；超时规则对话框 3 个 divider 字形贴对话框内容左缘；el-dialog 与 el-message-box 均 is-draggable class + 真实拖动位移验证（超时对话框 translate(120,-55)、MessageBox translate(-140,-71)，视口钳制生效）；AI 悬浮球/窗体拖动无回归
+- 测试：properties+ai 21/21；vue-tsc 46 既有零新增；eslint 改动文件 0 告警；console error=0
+- 测试数据零残留：临时分类「TEST-拖动验证临时分类」创建→删除确认框拖动验证→二次确认删除，页面回查 residue=0
+
+Stage Summary:
+- 全部 divider 型属性面板分组标题从「盒子对齐」升级为「字形对齐」，与 label 左缘精确平齐（误差 0px），与 section-title 面板跨面板一致
+- 系统级弹层可拖动默认开启：41 文件 109 处 el-dialog + 全部 MessageBox 确认框零业务代码侵入获得拖动能力，遮挡内容可拖移
+
+---
+Task ID: 84-node-property-screenshots
+Agent: Z.ai Code (main session)
+Task: 用户需求——根据 4 张产品截图修改节点属性面板（审批人去重/审批意见必填/超时处理/处理意见必填）
+
+Work Log:
+- 截图①审批人去重（UserTaskProperty）：开启开关后补两组纵向 radio——「上一节点此审批人已同意时，此节点自动通过」（默认选中）/「前面任意节点此审批人已同意时，此节点自动通过」；存储 dedup.mode='CONSECUTIVE'|'FIRST'（与流程级 deduplication.mode 同词汇）；保留「审批人与 [发起人▼] 相同时，此节点自动跳过」（select 由 placeholder 改为 model-value 显示选中值）
+- 截图②审批意见必填（UserTaskProperty）：开启后补横排 radio「拒绝/退回必填」（默认）/「全部操作必填」；新增 NodeConfigData.commentRequiredScope='REJECT_RETURN'|'ALL'；存量已开必填但无 scope 的旧数据回读按 ALL 显示（与旧后端口径一致）
+- 截图③超时处理（UserTaskProperty）：时长/动作两个 inline 行替换为「添加超时规则」按钮+规则组列表（彩色动作标签/时长文案/编辑/删除）；复用 ProcessTimeoutRuleDialog（remind 可多条、transfer 1 条、pass/refuse 互斥）；legacy 单规则（duration+action）加载时自动迁移为规则组一条（escalate→transfer）；保存时 rules 与 legacy 字段双写（rules[0] 换算回 duration 小时+action）
+- 截图④处理意见必填（HandlerTaskProperty）：开启后补横排 radio「退回必填」（默认）/「全部操作必填」，同存 'REJECT_RETURN'|'ALL'
+- 后端：process-model CompiledNode 增 commentRequiredScope/dedup.mode/timeout.rules；process-compiler 逐字段归一化（scope 白名单、mode 白名单、rules 逐条校验 id/action/duration/unit）
+- 后端门禁（task.service）：completeTask 意见拦截改为 scope 口径——节点 commentRequired 且 scope（缺省 ALL 兼容存量）=ALL 时拦通过/提交，scope=REJECT_RETURN 不拦；reject/refuse 维持原口径（任意 scope 均拦）；nodeFlags 新增 commentRequiredScope 透出（节点级优先，回落流程级 commentPolicy，均未开启为 null）
+- 后端运行时：engine-runtime 去重 mode 节点级覆盖（node.dedup.mode ?? policy.dedupMode ?? 'FIRST'）；timeout-scanner 节点级 rules 非空时走 applyProcessTimeoutRules（pass/refuse 对 handler 节点不生效等逻辑复用），否则回落 legacy 单规则
+- 前端类型：designerStore NodeConfigData + api/task.ts nodeFlags 同步扩展
+- 途中发现并修复存量严重 bug：保存草稿报 Unknown column 'description' in 'SET'——V42 迁移文件（Task 74 草稿表加 description 列）从未在 workflow_v6 库执行（连 flyway 迁移记录表都不存在），saveDesign 全挂；手动 ALTER TABLE wf_process_draft ADD COLUMN description 落库，并核查 V37-V41 均已生效仅 V42 漏
+- 浏览器验证（agent-browser + 合成 DnD/事件序列）：HTML5 拖拽需 DataTransfer 合成 dragstart/dragover/drop（palette draggable=true，CDP 鼠标事件不触发 HTML5 DnD）；画布选中需补 click 事件（diagram-js 走 click 路径）；四张截图逐项验证通过（radio 默认态/横排 sameRow/纵向堆叠/规则组列表/对话框 4 动作卡）+ 保存→刷新回读一致（commentScope=全部操作必填/超时规则/去重 mode=上一节点均持久化）
+- 测试数据零残留：删除临时节点键盘 Delete 无效（keyboard binding 不响应合成事件）→ 改 DB 剪裁草稿 XML（删 2 个 userTask+DI，startEvent 字节级保留）+ 清理 wf_node_config editing 行 2 条；刷新回验仅 startEvent_1
+- 测试：backend vitest 61 文件 907/907 全绿；tsc 1 既有错误；frontend properties 7/7；vue-tsc 46 既有零新增
+- agent-browser close + pkill chrome-153 零残留
+
+Stage Summary:
+- 审批/办理节点属性面板对齐 4 张产品截图：去重口径 radio、意见必填范围 radio、节点级超时规则组（按钮+对话框+列表）三端打通（设计器配置→编译归一化→运行时门禁/去重/超时扫描）
+- 意见必填 scope 语义落地：REJECT_RETURN 仅拦拒绝/退回，ALL 拦全部操作；存量数据缺省 ALL 行为不变
+- 修复保存草稿全挂的存量 bug（V42 迁移漏执行）；HTML5 DnD 合成与 diagram-js 选中/删除的浏览器自动化经验沉淀
+
+---
+Task ID: 86-post-member-group-org-leader
+Agent: Z.ai Code (main session)
+Task: 用户需求——为配合工作流人员组织模型：①成员组管理 ②组织机构负责人字段 ③岗位管理+用户岗位字段
+
+Work Log:
+- 需求采集：两份薪福通帮助页为 React SPA，page_reader 抓不到 → agent-browser 渲染读取成功（成员组=名称+说明+成员手动/规则自动归属；岗位=组织管理-岗位管理维护+员工选岗位）
+- 后端：V43 迁移（sys_post / sys_member_group / sys_member_group_member / sys_member_group_rule 四表 + sys_user.post_id + sys_organization.leader_id + 菜单 seed id 300-311 + ROLE_ADMIN 全量授权）；types.ts 登记 4 表 2 列（DB 接口 34→38 表）
+- 仓储/服务/控制器：PostController(/api/posts 含 /options)、MemberGroupController(/api/member-groups 含 :id/members、:id/members/remove、:id/rules)；有效成员=手动∪岗位规则∪组织规则去重，来源标记 manual/position/org；查重（岗位编码/组名/规则重复）；删除保护（岗位有用户拒删，对齐组织删除语义）
+- 引擎接线：task.service 与 process-instance.service 的 buildResolutionContext 回填 initiatorSupervisor（instanceId/-initiator → sys_user.org_id → sys_organization.leader_id），supervisor 找不到人策略与表达式 initiator.deptManager 由恒 null 降级变真实生效
+- 前端：PostPage/MemberGroupPage 新建（成员组含成员+自动规则抽屉，ApproverPicker 选人，规则维度岗位/组织树切换）；UserPage 岗位 select+列；OrgPage 负责人 select+列；router 两条；api/types 六文件
+- 顺手修复：v-permission 指令从未在 main.ts 注册（权限码形同虚设）；PostPage/OrgPage 状态列缺 prop 导致 formatter cellValue 恒 undefined（RolePage 同款隐患未动）
+- 存量问题修复：V42 迁移历史行缺失（Task 84 手动 ALTER 未登记）导致 migrate 卡死 → 计算 CRC32 校验和手工补 flyway_schema_history 行后 V43 正常执行
+- 测试：backend 907/907（kysely-types 表规模断言 34→38 随之更新）、frontend 1132/1132、lint 零新增
+- 验证：API E2E 全流程通过（建岗→查重→options→组织带负责人→用户设岗→建组→加成员→加岗位规则→有效成员 2/手动 1/规则 1→keyword 过滤→移除→删规则动态生效→全链清理零残留）；vite 新模块编译 8/8
+- 环境异常记录（未解决，非应用问题）：本会话 next dev 启动后 1-2 分钟被静默回收（无 OOM/panic 日志，限堆/换启动方式均复现，EADDRINUSE 证据显示平台预览系统自管 3000 进程）；沙箱 chrome 无法连接任何本地端口（外网正常），agent-browser UI 验证不可用——改用 API E2E + vite 编译验证，UI 由用户预览面板实际渲染确认
+
+Stage Summary:
+- 岗位/成员组/组织负责人/用户岗位四项落地三端贯通；成员组支持手动+规则自动归属，供工作流后续选人扩展
+- 引擎 dept_head/supervisor 审批策略首次真正可用（发起人组织负责人）
+- v-permission 注册修复使既有+新增权限码真实生效；V42/V43 迁移链修复
+- 详见双 worklog 与提交 db341ca6（77f77492..db341ca6）
+
+---
+Task ID: 89-dialog-tabs-refactor
+Agent: Z.ai Code (main session)
+Task: 数据引用/查找带回配置弹窗页签化（对齐 DataSourceConfig 范式）
+
+Work Log:
+- DataPickerConfigDialog/LookupPickerConfigDialog 改 el-tabs border-card 双页签：「数据源」(UniDataSourceBinding=选择+筛选) + 「显示与行为」/「显示与回填」
+- 样式对齐 datasource-config-dialog 全局隔离；打开归位数据源页签；标题「查找带回配置」
+- 测试链：DataPickerConfigDialog 15/15（append-to-body 回退修复）→ 全量 1132/1132 → 浏览器双设计器实测（designer API setRule 注入字段→属性面板触发→页签+校验 toast）
+- 提交 6c2c8f2b 已推送
+
+Stage Summary:
+- 属性配置弹窗范式统一完成；逻辑零改动；回归零新增
+
+---
+Task ID: 90-date-option-display-fix
+Agent: Z.ai Code (main session)
+Task: 用户报告两修复——①演示页面1编辑保存报 `Incorrect date value: '2026-09-24T16:00:00.000Z' for column wf_biz_bill_test.leave_start_date`；②列表「是否已获得主管批准」显示 yes/no 而非 是/否
+
+Work Log:
+- 【根因①】DATE 列（物理 `date`）读侧 mysql2 把 DATE 解析成本地零点 Date → JSON 序列化成带时区 ISO（东八零点 → `2026-09-24T16:00:00.000Z`）→ 前端编辑回显后原样回传 → MariaDB 严格模式拒绝 datetime 字符串入库。连接池 `timezone:'+08:00'` 解释了偏移来源。
+- 【根因②】radio 组件 options `{label:'是',value:'yes'}`，数据库存 value（正确设计），但 PageDataTable 列渲染直接显示原始 value——缺 value→label 选项映射。
+- 【读侧修复】database.module.ts typeCast 增加 `field.type === 'DATE'` → 返回原始文本 `2026-09-25`（不转 Date，无时区语义，往返安全；JSON/BLOB 同模式既有先例）。
+- 【写侧修复·双端】biz-data-support.ts 新增 normalizeDateTimeColumns（createGeneric/updateGeneric 在 serializeJsonColumns 后调用）：DATE → 按业务时区 Asia/Shanghai 取 `YYYY-MM-DD`（`2026-09-24T16:00:00.000Z` → `2026-09-25`，用户所见日期不偏移）；DATETIME/TIMESTAMP → `YYYY-MM-DD HH:mm:ss`；纯日期/本地时间原样；不可解析原样透传（DB 兜底）。纯函数 normalizeDateColumnValue 导出。Java BizDataSupport.java 静态对齐（BIZ_ZONE/PLAIN_DATE_RE/tryParseInstant，无编译环境仅静态审查）。
+- 【前端修复】新增 utils/optionLabel.ts（extractOptionMap 兼容 rule.options/props.options/props.data 递归 children；mapOptionLabel 单值/数组/JSON 数组文本）；PageDataTable resolvedColumns 两分支接入——metadata 分支加 formatter（空值 '—' 占位）、用户配置分支 render 前覆盖值（用户已配 contentType/formatter 时尊重用户配置不叠加）。
+- 【测试】biz-data-write.spec 新增 6 用例（ISO 按东八取日期/纯日期原样/update 归一/DATETIME 补零点与时刻/非日期列与不可解析不受影响）26/26；optionLabel.test.ts 新增 10 用例全绿；PageDataTable 三测试文件 28/28；frontend utils+page 321/321；vue-tsc 46（基线持平）；backend-node 全量 945/945。
+- 【顺手修复·既有失败】migration.spec 三用例失败为 Task 86（V43 岗位/成员组）加表后未同步断言——修正：迁移计数 41→42、sys_* 清单补 sys_post/sys_member_group×3、declared.length 34→38（非本次改动引入，git stash 验证 + db341ca6 提交溯源）。
+- 【E2E 实证】API：GET 列表 leave_start_date 返回 `"2026-09-25"`（纯日期）；PUT 完整字段带 `2026-09-24T16:00:00.000Z` → 200，HEX/DATE 实库验证 09-25/09-26 正确。浏览器（ab.sh）：演示页面1 列表 is_approved 显示「是」、日期列纯文本 → 编辑弹窗回显 2026-09-25/26 → 确定 → 「更新成功」。chrome 归零。
+- 8080 重启生效：nest build 后 supervisor（start.sh 树）04:20:24 自动拉起新 dist（构建 04:20:04 之后）。
+
+Stage Summary:
+- 两问题双端根治：DATE 列全程纯日期文本（读侧 typeCast + 写侧时区感知归一），选项类列显示 label（选项映射 util，PageDataTable 先行）；数据零迁移、兼容旧格式、契约零破坏（945/945）。
+- 影响面：所有业务表单 DATE/DATETIME 列的读写往返（不止 bill_test）；选项映射已备 util，DataSourceDataPage/PageDataCards 等其余链路可后续按需接入。
+- 改动清单：backend-node（database.module.ts / biz-data-support.ts / biz-data-write.spec.ts / migration.spec.ts）、backend（BizDataSupport.java 静态对齐）、frontend（optionLabel.ts 新增+测试 / PageDataTable.vue）。
+
+---
+Task ID: 91-deploy-prevalidation
+Agent: Z.ai Code (main session)
+Task: 修复「请假流程发布报 流程部署校验失败：节点 Activity_12aok35（userTask）没有出边」——发布前预校验三端打通
+
+Work Log:
+- 【根因】用户草稿 BPMN 只有 start→发起节点→办理节点、完全没有 endEvent（空模板只含 startEvent，用户末端断链后直接从列表页发布）；后端校验本身正确但报错只吐内部节点 ID；且列表页「部署」按钮 processDesignApi.deploy(row.id) 直呼后端、跳过设计器里那套 validateBpmnXml 友好校验
+- 【顺手修真 bug】ProcessDesigner.vue handleDeploy 把 validateBpmnXml 返回的 {error,warnings} 对象当字符串判真——永远 truthy、确认框显示 "[object Object]"、阻断性错误从不阻断（与函数注释的既定意图相悖）。已改为 error 阻断 return、warnings 进确认框
+- 【重构】validateBpmnXml 整体从 ProcessDesigner.vue 抽到 utils/bpmnValidation.ts 并升级为 validateProcessXml(xml, nodeConfigs)：新增 validateFlowConnectivity（除 endEvent 外必须有出边/除 startEvent 外必须有入边/排他网关无条件分支≤1，与后端编译器规则对齐）；节点展示名 name 优先、无 name 用角色标签（发起/办理/审批节点）+ID 定位；设计器与列表页共用一套
+- 【列表页】ProcessListPage 部署按钮改为 loadEditor→validateProcessXml 预校验：error 弹 alert（标题「无法部署，请先在流程设计器中修正」+ white-space:pre-line 多行展示）不进后端；warnings 并入确认框；移除原 SearchTable confirm 属性
+- 【后端】process-compiler.ts 校验消息友好化：新增 describeNodeLabel（name+ID，无 name 按 taskRole/类型中文标签）与 NODE_TYPE_LABELS；「没有出边/没有入边/排他网关」消息统一带可读节点名并附处理建议；正则断言 /没有出边/ 等全部兼容
+- 【测试】新增 bpmnValidation.test.ts 两组 12 用例（连通性 7 + validateProcessXml 5，含用户实测场景复刻）；ProcessListPage.test 部署按钮两用例改写为预校验行为断言（alert 不调 deploy / confirm 后调 deploy）；backend process-compiler 30/30；前端全量 1154/1154（91 文件）、backend-node 全量 945/945（--no-file-parallelism）；vue-tsc 46=基线（ProcessListPage 2 处 FormConfig rule 类型为既有）
+- 【E2E 实证】临时断链草稿 qa_broken_deploy（API 建，无 endEvent）浏览器列表页点部署 → 新弹窗「流程缺少结束事件，请添加至少一个结束事件。」而非引擎原文；真流程「请假」点部署 → 确认框 → 「部署成功」；API 部署 v3 + 浏览器部署 v4 均 ACTIVE；用户中途自行补齐 endEvent（v1/v2 为其部署），链路现为 发起→审批→结束；临时草稿已删、chrome 归零
+
+Stage Summary:
+- 发布链路三层防线：列表页预校验（友好中文+节点可定位）→ 设计器错误真阻断 → 后端兜底消息可读化
+- 影响面：所有流程发布入口；空模板无 endEvent 的入门场景从此有明确引导文案
+- 遗留观察：新建草稿空模板仅含 startEvent，可考虑未来提供含发起+结束的最小模板（避免新手再次断链）
+
+---
+Task ID: 92-latest-version-and-recall
+Agent: Z.ai Code (main session)
+Task: ①流程中心只显示每个流程的最新版本（leave 连发 4 版出现 4 张可发起卡片）；②admin 发起的流程撤回报「只有发起人可以撤回流程」
+
+Work Log:
+- 【Bug2 根因】ProcessInstanceService.start 的 initiator 只从客户端 variables.initiator 提取（extractInitiator，可伪造），前端发起页不传该变量 → 实例 initiator 列落库 NULL → recallInstance 的 `instance.initiator !== userId` 判定 400。存量实例 663590e4（leave RUNNING）即此状态；发起节点待办 assignee 也成了字面量 "${initiator}"
+- 【Bug2 修复】start() 改为 `initiator = startUserId ?? extractInitiator(variables)`——服务端登录身份为真源（Task 76「不信任客户端 initiator」口径的补全），无登录态（系统内部调用）才回落客户端变量；唯一调用方 process-instance.controller 本就传 String(user.userId)。新增 test/unit/engine/process-start-initiator.spec.ts 3 用例（登录锚定/防伪造/兜底兼容）
+- 【Bug2 数据修复】存量实例回填：instance.initiator='1' + wfe_variable 补 initiator='"1"'（撤回后发起节点选人 initiator_self 依赖它）+ 历史任务字面量 assignee 归正
+- 【Bug2 E2E】重启后端（kill 20434 → PORT=8080 nohup node dist/main.js，health UP）：API recall 663590e4 → 200；旧审批任务 CANCELLED、发起节点新待办 CREATED(assignee=1)、recalled=true、实例 RUNNING；再走一遍完整闭环——API 发起新实例（不传 initiator）→ 库验 initiator='1'（列+变量）→ 拒绝终止 TERMINATED（refuse 须 reason 字段，comment 不收）
+- 【Bug1 根因】ProcessCenterPage 用 deployedProcessApi.list 拉**全部**已部署版本（size 999）逐版本渲染卡片；引擎 start() 实际按 key 解析最新版本，前端展示与引擎行为脱节
+- 【Bug1 修复】ProcessCenterPage 新增 latestVersionsOnly（按 key 取 version 最高，保持原顺序）；loadData/handleSearch 双入口接入；客户端去重兼容双引擎（Java 侧无 latestOnly 参数）
+- 【Bug1 E2E】浏览器流程中心：分类计数 1、仅「请假 v4」一张卡片带发起按钮（v1~v3 不再出现）；截图 /tmp/center-latest.png
+- 【回归】backend-node 948/948（+3）、前端 1156/1156（+2 ProcessCenterPage）、vue-tsc 46 基线；chrome 归零
+
+Stage Summary:
+- 发起人锚定服务端身份：撤回/再次发起/发起节点选人的身份链路从此以登录用户为真源；存量 NULL 实例已修复
+- 流程中心与引擎「最新版本」语义对齐；版本历史仍走 getVersions(key) 专用端点不受影响
+- 观察：发起页 initiator_select 节点若未选人直接提交，会建 assignee=null 的待办（本次 API 直发复现）——后续可考虑发起页必选校验或引擎 fallback 到审批人配置
+
+---
+Task ID: 93-draft-box
+Agent: Z.ai Code (main session)
+Task: 流程管理新增「草稿箱」——发起页保存的草稿可查看/继续填写/删除，并补上草稿的用户隔离
+
+Work Log:
+- 摸底：发起草稿存 wf_form_data（process_instance_id NULL + is_snapshot=0），原实现按 (tenant, formDefId) 全租户共享一条 —— 任何用户打开同一流程发起页都会读到/覆盖他人草稿（隐私缺陷，随本任务一并根治）
+- 后端：FormDataRepository.findDraft 增加 created_by 维度 + listDraftsByUser；FormDefinitionRepository.findByIds 批量回填表单名；ProcessDesignRepository.listDeployedDefsWithModel + findConfigsByProcessDefinitionIds（IN 批量防 N+1）
+- FormDataService：saveDraft 锚定 created_by=登录用户；findDraft/clearDraft 限定本人；新增 listMyDrafts（表单名 + 发起流程反查：仅 ACTIVE、同 key 最新版、发起人节点表单 > __PROCESS__，反查不到则 processDefId=null）与 deleteMyDraft（本人/草稿行/非快照三重校验）；FormDataController 新增 GET /form-data/drafts、DELETE /form-data/drafts/:id，存量 draft 三端点透传 @CurrentUser
+- V44 迁移：流程管理下新增「草稿箱」菜单（id=104, sort 3），待办处理顺延 sort 4，ROLE_ADMIN 授权；真库已执行；migration.spec 期望数 42→43
+- 前端：formApi.listDrafts/deleteDraft + ProcessDraftBoxItem 类型；路由 /process/drafts；ProcessDraftBoxPage（搜索卡片+表格卡片对齐流程中心布局，流程名+版本标签/已下线标签、表单名、草稿内容摘要（前3个非空字段）、最后保存时间、继续填写（下线禁用+tooltip）/删除（confirm））
+- 测试：后端新增 form-data-draft-box.spec 7 用例（created_by 锚定/本人限定/ACTIVE 最新版反查/发起人节点优先/无 ACTIVE 反查 null/删除三重校验）；前端 ProcessDraftBoxPage.test 5 用例（空态/渲染/下线禁用/过滤/删除刷新）；全量前端 1161/1161、后端 955/955；vue-tsc 46 基线零新增；backend tsc 仅剩 task-signature.spec 1 处既有错误（stash 对照确认）
+- E2E：重建后端重启（注意 PORT=8080 显式传入，缺省 8081）；API 实证 saveDraft createdBy='1'、drafts 列表反查到「请假 v4/员工请假申请单」、test 用户看不到 admin 草稿（data:null）、跨用户删除返回 404「草稿不存在或无权删除」；浏览器全链路：菜单出现→草稿箱渲染→继续填写回填「家中有事」→修改保存→摘要更新→删除确认→空态「暂无流程草稿」；用后 chrome 归零、草稿测试数据已清理（0 行残留）
+
+Stage Summary:
+- 草稿箱功能闭环：列表/继续填写/删除/隔离/下线兜底全部落地并实证；草稿从此按用户隔离，旧的全租户共享缺陷一并修复
+- 提交推送至 workflow_lowcode 嵌套仓库
+
+---
+Task ID: 94-draft-box-searchtable
+Agent: Z.ai Code (main session)
+Task: 草稿箱页面用 SearchTable 组件重构（用户指令：草稿箱用searchTable重构）
+
+Work Log:
+- ProcessDraftBoxPage 由手写 el-card+el-table 改为业务组件 SearchTable 承载（与流程中心/待办/用户管理等列表页范式统一）：搜索栏（关键字 input + 搜索/重置圆钮）、border 表格、分页栏、操作列全部交由组件
+- fetchApi 适配器：formApi.listDrafts 全量返回（本人小数据集）→ 关键字客户端过滤（流程名/表单名/processKey）→ page/size 切片 → {rows,total}；失败兜底 toast + 空表
+- 列定义 TableColumn：流程名称列 render（icon+名称+v 版本标签+已下线标签+key 副标题）、发起表单 formatter、草稿内容 render（前 3 非空字段摘要，showOverflowTooltip）、最后保存 formatter；操作列 ActionButton：继续填写（processDefId=null 的行直接隐藏）、删除（保留 ElMessageBox 详细文案 + 删除后 tableRef.fetchList()）
+- 工具栏默认 slot 放常显说明文案「发起流程时点击保存草稿…」（原 hover tooltip 升级为直接可见）；render 输出的单元格样式以 pdb- 前缀全局类承载（SearchTable 内部渲染，scoped 不可达）
+- 测试重写为挂载真实 SearchTable 6 用例：行渲染/已下线隐藏继续填写/过滤+重置/删除刷新（分页随 total 隐藏）/继续填写路由/加载失败兜底；permission 桩指令参照 SearchTable.test
+- 回归：目标文件 vitest 6/6、process 目录+SearchTable 58/58 全绿；vue-tsc 46 基线零新增（ProcessDraftBox 0 错）；lint 干净
+- E2E（浏览器实证）：登录→流程管理/草稿箱→SearchTable 布局（搜索卡+表格卡+分页「共 1 条」）→行渲染（请假 v4/leave/员工请假申请单/摘要/时间）→关键字过滤「暂无数据」→重置恢复→继续填写跳转 /process/start/leave:4:dd3b2513…；用户真实草稿（张三/事假）全程未动，chrome 归零
+- 【运维事故复盘】本轮门户两次被 OOM 杀（07:37/07:39，next-server RSS 1.4~1.5GB）：start-portal.sh 拉起后我在门户存活期间连跑 vue-tsc×2+vitest，内存挤压触发 global_oom 连杀两次 → 教训固化为纪律：重型构建/全量测试必须在门户拉起之前完成，或先停门户再跑，结束后最后一步 start-portal.sh + 浏览器复核
+
+Stage Summary:
+- 草稿箱完成 SearchTable 范式统一，功能等价重构（搜索/分页/操作列/空态全部组件化），测试与浏览器实证双闭环
+- 新增运维铁律：门户存活期间严禁并行 vue-tsc/vitest/全量测试等重型任务（OOM 实锤两次）
+
+---
+Task ID: 95-datapicker-member-group
+Agent: Z.ai Code (main session)
+Task: 成员组管理重构成用数据引用（DataPicker）组件实现组成员与自动规则的录入（用户指令；明确澄清数据引用≠LookupPicker）
+
+Work Log:
+- 摸底：数据引用组件 = views/form/components/DataPicker.vue（弹窗表格选择/搜索/分页/Tag 展示，读数据源 queryData 或底表 bizData）；数据源体系已有 8 个内建 SYSTEM 源（V39 预置：组织机构 dept-tree / 系统用户 user-tree 等），DataPicker 支持 globalDataSourceId 直连 —— 缺口仅「岗位」无源
+- 后端新增第 9 个内建系统源 sys-posts：system-source-catalog（POSTS_COLUMNS + 目录项 + mapSystemInternalPath posts）→ SystemSourceQueryService.queryPosts（listPosts(keyword,status=1) 仅启用岗位、标准分页、keyword 模糊）→ SystemInternalController 三端点（system/posts[/metadata|/:id]）→ V45 迁移幂等预置 ds-builtin-sys-posts（V39 同款模式）；V42 起 Java Flyway 不再镜像（仅到 V41），故单端实施
+- 适配器 dept-tree 分支补 keyword 过滤（非空时忽略大小写匹配 label/code，语义对齐 SystemInternalController.flattenTree；keyword 为空保持 golden 全量契约）——此前 DataPicker 搜组织是无效搜索
+- 前端 MemberGroupPage 重构：成员录入 ApproverPicker → DataPicker（ds-builtin-user-tree 多选，displayField=nickname，columns username/nickname/orgName，searchColumns username/nickname）；规则录入 el-select/el-tree-select → DataPicker（岗位=ds-builtin-sys-posts、组织=ds-builtin-dept-tree，均 maxCount=1 点行即选）；值统一 JSON id 数组字符串，提交解析 Number；删除岗位/组织 options 预载逻辑
+- 测试：后端 system-data-source.spec 扩至 11 用例（sys-posts 路由透传/元数据 4 列/启用过滤+空串语义/keyword 透传/dept-tree keyword 过滤三种形态）；migration.spec 计数 43→44；前端新建 MemberGroupPage.test 5 用例（源绑定/多选解析/单选换绑/空选校验）；backend 928+11 全绿、前端 5/5、vue-tsc 46 基线零新增、lint 干净
+- E2E：API 实证三源取数（posts 1 条启用/keyword 0、meta 4 列、dept 空库 0 行、users 2 条）；浏览器全链路——成员：DataPicker 弹窗（搜索占位用户名/昵称）勾选 admin+测试用户→Tag 显示昵称→添加成员→列表 2 行「直接添加」+picker 复位；岗位规则：单选弹窗点行→规则表「按岗位」；组织规则：切维度换绑→选「数据引用E2E部」→「按组织机构」；主列表计数联动 2/2/2；测试组+测试组织已删（仅剩既有测试成员组）、chrome 归零
+- 【运维】门户重启两次踩坑入册：①start-services.sh 的 Node 分支是陈旧脚本（bun src/index.ts 入口不存在，实际入口 src/main.ts→dist/main.js）；②裸 nohup node dist/main.js 会在命令间隙无声消失，平台同款双 fork 子壳 `(cd dir && PORT=8080 nohup node dist/main.js &)` 才能存活；③迁移不在启动时执行，须 npm run migrate（真库 workflow_v6）；④migration.spec 跑隔离库 workflow_node_test 不碰真库
+
+Stage Summary:
+- 成员组「成员+规则」录入全面切换数据引用组件，岗位数据源补齐后三个选择场景（用户/岗位/组织）全部数据源化；dept-tree keyword 补齐使组织搜索真实可用
+- 提交见 git；遗留：ApproverPicker 在流程设计器审批人配置等处仍在用（不在本次范围）
+
+---
+Task ID: 96
+Agent: Z.ai Code (main)
+Task: 成员组管理重构为业务表单（组成员/自动规则 = 数据引用字段）
+
+Work Log:
+- 数据模型：BUSINESS 表单 member_group（V46 预置 PUBLISHED + 物理表 wf_biz_member_group）；字段 group_name/description/members/post_rules/org_rules；3 个 dataPicker 分别引用 ds-builtin-user-tree（多选）/ds-builtin-sys-posts/ds-builtin-dept-tree；schema.dataSources 绑定 id=refId 双路径解析
+- 后端改造：BizDataSupport.resolvePickerText 支持 pickerConfig.dataSourceId（SYSTEM 内建源拉取+内存 Map 解析显示文本；user-tree 循环分页 20 页上限、dept-tree orgTree 扁平化对齐 adapter 空值语义、其余走 SystemSourceQueryService）；错误语义对齐 sourceFormKey 模式
+- 前端改造：ColumnConfigDialog pickerConfig 存 dataSourceId；schemaRules.injectPickerDisplayTexts + FormRenderer 注入（<field>_text → displayText）解决内建数据源编辑回显；BizDataListPage meta.formKey 兜底；member-group 路由复用 BizDataListPage；删专用页面/api/types
+- V46 踩坑：wf_form_def.column_config 是 JSON 列（json_valid CHECK），SQL 字面量内层 pickerConfig 引号必须 \\\" 双层转义（首跑失败回滚→修正→通过）
+- 旧数据：V43 的 3 组以 legacy_<id> 搬迁（当时成员/规则为空）；旧 REST /api/member-groups 保留 deprecated；菜单 306-311 按钮权限删除
+- 回归：backend 968/968（+7 dataSourceId 用例 + migration 45）、frontend 1167/1167（schemaRules +4、ColumnConfigDialog +1、删 MemberGroupPage.test）、vue-tsc 46 基线、lint 既有
+- E2E：API（CRUD+_text 全链路、已删岗位 400 拦截）+ 浏览器（列表形态/新增 DataPicker 多选/Tag 昵称/列表文本/编辑回显/保存/删除）全通过；chrome 归零
+- 引擎接入预留：members=用户 id 数组、post_rules=岗位 id 数组、org_rules=组织 id 数组，将来按组展开成员时读 wf_biz_member_group 行
+
+Stage Summary:
+- 成员组管理彻底业务表单化并实证闭环；biz-data 数据引用能力扩展至内建系统数据源（dataSourceId 模式）；旧专用实现退场（页面删除、接口 deprecated）
+
+---
+Task ID: 97-sandbox-recovery
+Agent: Z.ai Code (main session)
+Task: 沙箱第七次重置（.git 消失/工作区回滚 Sep 24/DB 回滚 V41）——全量恢复至 Task 96 完成态
+
+Work Log:
+- 恢复源：/tmp/my-project（重置前完整备份，含 Task 96 全部产物）；rsync 排除 node_modules 全量覆盖；顶层补回 src 代理三件套/scripts 四脚本
+- DB：孤儿 V39__fix_menu_visible_status.sql 归档至 migrations/_archived（其修复已生效于库），repair 后 migrate 应用 V42~V46（wf_biz_member_group/seed 表单/菜单 305/ds-builtin-sys-posts 全就位）
+- 后端：正确入口 src/main.ts（Nest）；supervisor 以 node dist/main.js 跑旧构建导致「必填字段不能为空/非法目标表单 key」假象，npm run build 重建 dist 后三分支解析实证（members=[1,2]→members_text=[管理员,测试用户]）；login 前缀 /api/auth/login
+- 前端：Next16 仅认 proxy.ts，恢复的 middleware.ts 冲突已删；3000/5173/8080 全绿
+- E2E：成员组业务表单全链路（新增 DataPicker 多选/Tag 昵称/列表/编辑回显/删除空态）+ 草稿箱 SearchTable 形态；chrome 归零、测试数据零残留
+- git 重建：ed385c7（restore）+ bfd0dd3（worklog）；PAT 未留存，推送待用户提供
+
+Stage Summary:
+- 恢复闭环至 Task 96 完成态，四层（文件/DB/服务/网关）验证通过
+- 运维新经验三条入册：入口 main.ts 勿用 index.ts；8080 旧代码行为先查进程（bun src vs node dist）并重建 dist；Nest 无 /health（探活改 /api/auth/login 判 HTTP 层活）
+
+---
+Task ID: 98-push
+Agent: Z.ai Code (main session)
+Task: 用户提供新 PAT——恢复推送闭环 + 恢复内容与远程对齐甄别
+
+Work Log:
+- remote main=0d122a8=Task 96 提交；reset --soft 对齐后发现 561 项差异：279 A=Sep 16 旧快照残留（rsync 并集混入，git ls-tree 实证远程无）、281 D=远程完整内容（backend/src 126+test 122+.env 2+.superpowers 31）、1 M=worklog
+- checkout origin/main 找回 281 项、git rm 清残留 279 项，差异收敛至 worklog；远程 migrations 本就单 V39（fix_menu 归档重置前已推送），以远程为准
+- 【重要发现】94e54552 显示 Bug C（流程中心 key 去重最新版）与 Bug D（发起人锚定服务端身份修撤回 400）重置前已闭环——遗留清单修正
+- 56ed0010 推送成功 remote=local；冒烟 3000/8080 全绿 chrome 0
+
+Stage Summary:
+- 恢复→对齐→推送全链路闭环，Task 94/95/96 全部在远程（main=56ed0010 系）
+- 教训入册：rsync 无 --delete 是并集恢复，重置恢复必须 reset --soft origin/main 后逐类甄别，以远程为权威
+
+---
+Task ID: 99-designer-theme
+Agent: Z.ai Code (main session)
+Task: 流程设计器四项 UI 优化（节点标签统一加粗明暗自适应/contextPad 暗色/人员按钮暗色/属性面板只读 ID）
+
+Work Log:
+- designer-theme.css：.djs-label 统一 600；审批/办理类别色补 html.dark 提亮档；contextPad entry 补语义色+覆盖 diagram-js --context-pad-entry-background-color 变量清白底
+- ApproverPicker：9 处硬编码亮色→Element 语义变量（暗底浅字自动切换）
+- PropertyPanel：panel-meta 只读 ID 行（等宽+复制按钮+clipboard 兜底）
+- E2E：eval 计算样式实证暗色四项 + 明暗截图比对；63df6c2b 已推送
+
+Stage Summary:
+- 四项全部闭环；diagram-js 变量覆盖手法入册；chrome 归零、服务全绿
+
+---
+Task ID: 100
+Agent: Z.ai Code (main)
+Task: 用户实测反馈设计器暗色三处残留（contextPad 白格子/选人按钮白色/办理审核节点文字看不清）+ 第八次沙箱重置恢复
+
+Work Log:
+- 第八次重置灾情：workflow_lowcode/.git 消失、工作区回滚 Sep 24、顶层 worklog 回滚至 Task 67；因 Task 98 已完整推送（远程=权威），按 SOP git init -b main + PAT remote + fetch + reset --mixed origin/main + checkout -- . 恢复至 HEAD=07ee9eb0（Task 99），git status 0 行
+- 根因定位三连（浏览器 computed style + node_modules 源码双证）：
+  a. 办理/审核节点文字看不清 = customRenderer JS 硬编码亮色 overlay（#FFF7E6/#E8F5EE）在暗画布成亮块 + .user-task rect 通用规则 !important 把 overlay 一并覆盖（类别色明暗全丢，明色也只剩白底青描边的隐藏 bug）
+  b. contextPad 白格子 = diagram-js 18 entry 白底 + 同色 box-shadow 光晕(0 0 2px 1px var(--color-white))；Task 99 只清了背景且 hover 变量名拼写错（--context-pad-entry-background-color-hover ≠ --context-pad-entry-hover-background-color）
+  c. 选人按钮白色 = 实测 trigger bg=rgb(24,29,27) 已适配，用户所见为旧状态；顺手补 popup menu（replace 弹层）全量暗色（diagram-js 默认 --popup-background-color: var(--color-white)）
+- 修复：customRenderer overlay 元素加 .wf-role-overlay(-icon) class + elements.changed 幂等补打 marker（修 handleDrop 先 create 后 updateProperties 导致的 handler marker 丢失时序 bug）；designer-theme.css 通用 rect 规则 :not() 排除 overlay + 新增 overlay 明暗两档（暗色=16~18% 类别色 mix 深底 + 提亮描边/图标）+ contextPad box-shadow:none + 变量名修正 + popup 12 个语义变量重定义
+- E2E（agent-browser）：明/暗双态截图比对——明色类别底/描边/图标恢复、暗色暗橙/暗绿底+提亮边+label(#e2b06b/#52c48f) 对比>7:1、contextPad 暗底融合无白格、选人弹窗（append-to-body）全暗色、明色零回归；vue-tsc 对改动文件零错误
+- 717f8fff 已推送远程 main；scripts/ab.sh + mem-guard.sh 重建（重置丢失）
+
+Stage Summary:
+- 三处反馈全部闭环 + 两个隐藏 bug（overlay 被吞、marker 时序）一并根除；核心手法：SVG overlay 着色权从 JS attr 移交 CSS 明暗两档，presentation attribute 只作兜底
+- 遗留：diagram-js palette（已 display:none 无需适配）；djs-hit 事件派发仅 PointerEvent 有效（MouseEvent 派发不选中，调试时注意）

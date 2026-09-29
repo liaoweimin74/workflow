@@ -49,6 +49,7 @@ export interface ProcessDraftVO {
   key: string
   name: string
   categoryId: string | null
+  description: string | null
   bpmnXml: string
   status: string
   version: number
@@ -68,6 +69,7 @@ export interface EditorVO {
   key: string
   name: string
   categoryId: string | null
+  description: string | null
   status: string
   bpmnXml: string
   nodeConfigs: Record<string, string>
@@ -77,6 +79,8 @@ export interface DesignSaveRequest {
   name?: string
   key?: string
   categoryId?: string
+  /** 流程说明（Task 74：设计器「基本属性」分组维护；缺省时保留原值） */
+  description?: string
   bpmnXml?: string
   nodeConfigs?: Record<string, string>
 }
@@ -87,6 +91,7 @@ function toDraftVO(row: DraftRow): ProcessDraftVO {
     key: row.process_key,
     name: row.name,
     categoryId: row.category_id,
+    description: row.description,
     bpmnXml: row.bpmn_xml,
     status: row.status,
     version: row.version,
@@ -116,6 +121,7 @@ export class ProcessDesignService {
       process_key: key,
       name,
       category_id: categoryId,
+      description: null,
       // 空流程的 XML 由后端生成（前端设计器在此基础上编辑）
       bpmn_xml: buildEmptyBpmnXml(key, name, categoryId),
       status: 'DRAFT',
@@ -154,6 +160,7 @@ export class ProcessDesignService {
       key: draft.process_key,
       name: draft.name,
       categoryId: draft.category_id,
+      description: draft.description,
       status: draft.status,
       bpmnXml: draft.bpmn_xml,
       nodeConfigs,
@@ -167,12 +174,14 @@ export class ProcessDesignService {
     const name = request.name ?? draft.name
     const key = request.key ?? draft.process_key
     const categoryId = request.categoryId ?? draft.category_id
+    const description = request.description ?? draft.description
     const bpmnXml = request.bpmnXml ?? draft.bpmn_xml
 
     await this.repo.updateDraft(draftId, tenantId, {
       name,
       process_key: key,
       category_id: categoryId,
+      description,
       bpmn_xml: bpmnXml,
       updated_at: new Date(),
     })
@@ -483,6 +492,7 @@ export class ProcessDesignService {
       key: null,
       name: null,
       categoryId: null,
+      description: null,
       status: 'DEPLOYED',
       bpmnXml: String(row.bpmn_xml),
       nodeConfigs,
@@ -655,6 +665,7 @@ export interface VersionEditorVO {
   key: null
   name: null
   categoryId: null
+  description: null
   status: string
   bpmnXml: string
   nodeConfigs: Record<string, string>

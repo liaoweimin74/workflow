@@ -99,5 +99,7 @@ describe('DEFAULT_PROCESS_CONFIG — 流程级操作权限', () => {
     expect(config.approvalPolicy.allowAddSigner).toBeUndefined()
     // @ts-expect-error 已移除的废弃字段不应存在
     expect(config.approvalPolicy.allowDelegate).toBeUndefined()
+    // @ts-expect-error allowRecall 曾是流程属性面板的死开关（引擎从未读取），已废弃剔除
+    expect(config.approvalPolicy.allowRecall).toBeUndefined()
   })
 })

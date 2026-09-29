@@ -3,15 +3,19 @@ package com.workflow.engine.process.config;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * 节点配置解析模型（对齐 NodeJS 端 process-compiler 的 extractTaskOptions/extractInitiatorOptions 语义）。
  *
  * <p>从 wf_node_config.config_json 解析 Task 61/65 引入的节点级配置块：
- * taskRole / approvalType / approval{type,expression} / assigneeOptions / returnOptions /
- * commentRequired / blockRecall / dedup / signature / notify / initiator / timeout。
+ * taskRole / approvalType / approval{type,expression,formUserField,external.resolver} /
+ * assigneeOptions / returnOptions / commentRequired / blockRecall / dedup / signature /
+ * notify / initiator / timeout。
  *
  * <p>解析口径（与 NodeJS 一致）：仅显式给出的合法值覆盖；缺失或非法值一律保持 null，
  * 运行时按缺省语义处理（旧数据零行为变化）。 Boolean 字段用三态（null/true/false），
@@ -40,6 +44,12 @@ public class NodeOptions {
     private List<String> roleCodes;
     /** approval.multiMode。 */
     private String multiMode;
+    /** approval.formUserField（type=form_user 时从流程变量取该表单字段解析用户）。 */
+    private String formUserField;
+    /** approval.external.resolver（type=external 时业务系统注册的选人函数名）。 */
+    private String externalResolver;
+    /** approval.external.params（选人函数参数值表；运行时经 resolve(ctx, params) 第二参传入）。 */
+    private Map<String, Object> externalParams;
 
     // ---- assigneeOptions ----
     private Boolean allowInitiatorAdjust;
@@ -117,6 +127,40 @@ public class NodeOptions {
                 String v = mm.asText().trim();
                 if (Set.of("single", "countersign", "or_sign", "sequential").contains(v)) {
                     o.multiMode = v;
+                }
+            }
+            // 表单内用户字段名（type=form_user 时的审批人来源：流程变量中的表单字段）
+            JsonNode fuf = ap.get("formUserField");
+            if (fuf != null && fuf.isTextual() && !fuf.asText().isBlank()) {
+                o.formUserField = fuf.asText().trim();
+            }
+            // 自定义选人函数注册名（type=external 时的审批人来源：进程内 AssigneeResolverRegistry）
+            JsonNode ext = ap.get("external");
+            if (ext != null && ext.isObject()) {
+                JsonNode resolver = ext.get("resolver");
+                if (resolver != null && resolver.isTextual() && !resolver.asText().isBlank()) {
+                    o.externalResolver = resolver.asText().trim();
+                }
+                // 选人函数参数值表（仅保留原始类型值，对齐 NodeJS 宽松消毒口径）
+                JsonNode params = ext.get("params");
+                if (params != null && params.isObject()) {
+                    Map<String, Object> map = new LinkedHashMap<>();
+                    for (Iterator<Map.Entry<String, JsonNode>> it = params.fields(); it.hasNext(); ) {
+                        Map.Entry<String, JsonNode> e = it.next();
+                        JsonNode v = e.getValue();
+                        if (v.isTextual()) {
+                            map.put(e.getKey(), v.asText());
+                        } else if (v.isBoolean()) {
+                            map.put(e.getKey(), v.asBoolean());
+                        } else if (v.isIntegralNumber()) {
+                            map.put(e.getKey(), v.asLong());
+                        } else if (v.isFloatingPointNumber()) {
+                            map.put(e.getKey(), v.asDouble());
+                        }
+                    }
+                    if (!map.isEmpty()) {
+                        o.externalParams = map;
+                    }
                 }
             }
         }
@@ -236,6 +280,9 @@ public class NodeOptions {
     public List<String> getUserIds() { return userIds; }
     public List<String> getRoleCodes() { return roleCodes; }
     public String getMultiMode() { return multiMode; }
+    public String getFormUserField() { return formUserField; }
+    public String getExternalResolver() { return externalResolver; }
+    public Map<String, Object> getExternalParams() { return externalParams; }
     public Boolean getAllowInitiatorAdjust() { return allowInitiatorAdjust; }
     public String getNoAssigneePolicy() { return noAssigneePolicy; }
     public String getToUserId() { return toUserId; }

@@ -371,6 +371,8 @@ function collectSubFields(rules: any[], existingSub: ColumnConfigItem[] | undefi
         indexed: existing?.indexed ?? false,
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey,
+          /** dataSourceId 模式（引用数据源，后端 resolvePickerText 按它解析显示文本；与 sourceFormKey 二选一） */
+          dataSourceId: propsMap.dataSourceId ?? null,
           displayField: propsMap.displayField,
           maxCount: propsMap.maxCount,
           pickerType: 'dataPicker',
@@ -507,6 +509,8 @@ function collectFields(rules: any[], out: ColumnConfigItem[]) {
         componentType: 'dataPicker',
         pickerConfig: JSON.stringify({
           sourceFormKey: propsMap.sourceFormKey,
+          /** dataSourceId 模式（引用数据源，后端 resolvePickerText 按它解析显示文本；与 sourceFormKey 二选一） */
+          dataSourceId: propsMap.dataSourceId ?? null,
           displayField: propsMap.displayField,
           maxCount: propsMap.maxCount,
           pickerType: 'dataPicker',

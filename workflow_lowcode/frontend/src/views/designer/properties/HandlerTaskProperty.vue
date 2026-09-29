@@ -1,7 +1,7 @@
 <template>
   <div class="handler-task-property">
     <!-- 顶部（tab 外）：节点名称 -->
-    <el-form label-width="80px" size="small" :disabled="readOnly" class="top-form">
+    <el-form label-width="7em" label-position="left" size="small" :disabled="readOnly" class="top-form">
       <el-form-item label="节点名称">
         <el-input v-model="config.name" placeholder="如：行政办理" @change="updateBpmnName" />
       </el-form-item>
@@ -16,11 +16,17 @@
             :user-ids="ui.approval.userIds"
             :role-codes="ui.approval.roleCodes"
             :allow-adjust="ui.assignee.allowInitiatorAdjust"
+            :form-user-field="ui.approval.formUserField"
+            :external-resolver="ui.approval.externalResolver"
+            :external-params="ui.approval.externalParams"
             kind="handler"
             :disabled="readOnly"
             @update:user-ids="(ids: number[]) => (ui.approval.userIds = ids)"
             @update:role-codes="(codes: string[]) => (ui.approval.roleCodes = codes)"
             @update:allow-adjust="(v: boolean) => (ui.assignee.allowInitiatorAdjust = v)"
+            @update:form-user-field="(v: string) => (ui.approval.formUserField = v)"
+            @update:external-resolver="(v: string) => (ui.approval.externalResolver = v)"
+            @update:external-params="(p: Record<string, unknown>) => (ui.approval.externalParams = p)"
           />
 
           <template v-if="ui.approval.type === 'expression'">
@@ -82,12 +88,34 @@
       <el-tab-pane label="高级设置" name="advanced">
         <div class="tab-inner">
           <div class="section-title">办理人可进行的操作</div>
-          <div class="checkbox-col">
+          <!-- 主选项横向一行：提交固定开启且只读 -->
+          <div class="checkbox-row">
             <el-checkbox :model-value="true" disabled>提交</el-checkbox>
             <el-checkbox v-model="ui.operations.allowTransfer" :disabled="readOnly">转派</el-checkbox>
             <el-checkbox v-model="ui.operations.allowReturn" :disabled="readOnly">退回</el-checkbox>
             <el-checkbox v-model="ui.operations.allowAddSign" :disabled="readOnly">加签</el-checkbox>
           </div>
+          <!-- 二级选项：与审批节点（UserTaskProperty）同口径，角色词按办理节点语境调整；退回模式二选一（单选，Task 79b） -->
+          <template v-if="ui.operations.allowReturn">
+            <div class="checkbox-col sub-items">
+              <el-radio-group
+                class="return-mode-group"
+                :model-value="returnMode"
+                :disabled="readOnly"
+                @update:model-value="setReturnMode($event as string)"
+              >
+                <el-radio value="restartFromHere">退回后，从此节点开始审批，已经通过的节点无需再次审批</el-radio>
+                <el-radio value="chooseStartNode">退回后，由办理人选择重审的起始节点</el-radio>
+              </el-radio-group>
+            </div>
+          </template>
+          <template v-if="ui.operations.allowAddSign">
+            <div class="checkbox-col sub-items">
+              <el-checkbox v-model="ui.returnOptions.mustAddSign" :disabled="readOnly">
+                此节点必须加签
+              </el-checkbox>
+            </div>
+          </template>
 
           <div class="section-title">处理意见必填</div>
           <div class="switch-row">
@@ -95,6 +123,19 @@
             <span class="switch-label">处理意见必填</span>
           </div>
           <div class="hint-text">开启后，办理人必须填写处理意见</div>
+          <!-- 意见必填范围单选（截图④）：默认退回必填；与审批节点同口径存 REJECT_RETURN -->
+          <template v-if="ui.commentRequired">
+            <div class="inline-radio-group sub-items">
+              <el-radio-group
+                v-model="ui.commentRequiredScope"
+                :disabled="readOnly"
+                @change="saveConfig"
+              >
+                <el-radio value="REJECT_RETURN">退回必填</el-radio>
+                <el-radio value="ALL">全部操作必填</el-radio>
+              </el-radio-group>
+            </div>
+          </template>
 
           <div class="section-title">禁止撤销/撤回</div>
           <div class="switch-row">
@@ -155,7 +196,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from 'vue'
+import { computed, reactive, ref, onMounted, watch } from 'vue'
 import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
@@ -185,6 +226,9 @@ const ui = reactive({
     userIds: [] as number[],
     roleCodes: [] as string[],
     expression: '',
+    formUserField: '',
+    externalResolver: '',
+    externalParams: {} as Record<string, unknown>,
     multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | '',
   },
   assignee: {
@@ -197,7 +241,14 @@ const ui = reactive({
     allowTransfer: true,
     allowAddSign: false,
   },
+  returnOptions: {
+    restartFromHere: false,
+    chooseStartNode: false,
+    mustAddSign: false,
+  },
   commentRequired: false,
+  /** 意见必填范围：REJECT_RETURN=退回必填（新开启默认）；ALL=全部操作必填（存量无 scope 兼容显示） */
+  commentRequiredScope: 'REJECT_RETURN' as 'REJECT_RETURN' | 'ALL',
   blockRecall: false,
   timeout: {
     enabled: false,
@@ -209,6 +260,19 @@ const ui = reactive({
   },
   notifySms: false,
 })
+
+/** 退回模式单选（Task 79b）：restartFromHere/chooseStartNode 互斥，映射到存储里的两个布尔键（格式不变，兼容旧数据） */
+const returnMode = computed(() =>
+  ui.returnOptions.restartFromHere
+    ? 'restartFromHere'
+    : ui.returnOptions.chooseStartNode
+      ? 'chooseStartNode'
+      : '',
+)
+function setReturnMode(v: string) {
+  ui.returnOptions.restartFromHere = v === 'restartFromHere'
+  ui.returnOptions.chooseStartNode = v === 'chooseStartNode'
+}
 
 onMounted(() => {
   loadConfig()
@@ -237,6 +301,9 @@ function loadConfig() {
   ui.approval.userIds = []
   ui.approval.roleCodes = []
   ui.approval.expression = ''
+  ui.approval.formUserField = ''
+  ui.approval.externalResolver = ''
+  ui.approval.externalParams = {}
   ui.approval.multiMode = ''
   ui.assignee.allowInitiatorAdjust = false
   ui.assignee.noAssigneePolicy = ''
@@ -244,7 +311,11 @@ function loadConfig() {
   ui.operations.allowReturn = true
   ui.operations.allowTransfer = true
   ui.operations.allowAddSign = false
+  ui.returnOptions.restartFromHere = false
+  ui.returnOptions.chooseStartNode = false
+  ui.returnOptions.mustAddSign = false
   ui.commentRequired = false
+  ui.commentRequiredScope = 'REJECT_RETURN'
   ui.blockRecall = false
   ui.timeout.enabled = false
   ui.timeout.duration = 24
@@ -259,6 +330,9 @@ function loadConfig() {
       ui.approval.userIds = (existing.approval.userIds || []).map((id) => Number(id))
       ui.approval.roleCodes = (existing.approval.roleCodes || []).map((c) => String(c))
       ui.approval.expression = existing.approval.expression || ''
+      ui.approval.formUserField = existing.approval.formUserField || ''
+      ui.approval.externalResolver = existing.approval.external?.resolver || ''
+      ui.approval.externalParams = { ...(existing.approval.external?.params ?? {}) }
       ui.approval.multiMode = existing.approval.multiMode || ''
     }
     if (existing.assigneeOptions) {
@@ -273,7 +347,15 @@ function loadConfig() {
       ui.operations.allowReturn = existing.operations.allowReturn ?? true
       ui.operations.allowAddSign = existing.operations.allowAddSign ?? false
     }
+    if (existing.returnOptions) {
+      ui.returnOptions.restartFromHere = existing.returnOptions.restartFromHere ?? false
+      ui.returnOptions.chooseStartNode = existing.returnOptions.chooseStartNode ?? false
+      ui.returnOptions.mustAddSign = existing.returnOptions.mustAddSign ?? false
+    }
     ui.commentRequired = existing.commentRequired ?? false
+    // 意见必填范围：显式 scope 优先；存量开了必填但无 scope 按 ALL（全部操作必填，与旧后端口径一致）
+    ui.commentRequiredScope =
+      existing.commentRequiredScope ?? (existing.commentRequired ? 'ALL' : 'REJECT_RETURN')
     ui.blockRecall = existing.blockRecall ?? false
     if (existing.timeout) {
       ui.timeout.enabled = existing.timeout.enabled ?? false
@@ -320,6 +402,18 @@ function saveConfig() {
       userIds: ui.approval.type === 'user' && ui.approval.userIds.length > 0 ? ui.approval.userIds : undefined,
       roleCodes: ui.approval.type === 'role' && ui.approval.roleCodes.length > 0 ? [...ui.approval.roleCodes] : undefined,
       expression: ui.approval.type === 'expression' ? ui.approval.expression || undefined : undefined,
+      formUserField:
+        ui.approval.type === 'form_user' ? ui.approval.formUserField || undefined : undefined,
+      external:
+        ui.approval.type === 'external' && ui.approval.externalResolver
+          ? {
+              resolver: ui.approval.externalResolver,
+              // 函数参数值表（空对象不落盘，保持历史配置形状）
+              ...(Object.keys(ui.approval.externalParams ?? {}).length > 0
+                ? { params: { ...ui.approval.externalParams } }
+                : {}),
+            }
+          : undefined,
       multiMode: ui.approval.multiMode,
     },
     assigneeOptions: {
@@ -342,7 +436,13 @@ function saveConfig() {
       allowReject: false,
       allowDelegate: false,
     },
+    returnOptions: {
+      restartFromHere: ui.returnOptions.restartFromHere,
+      chooseStartNode: ui.returnOptions.chooseStartNode,
+      mustAddSign: ui.returnOptions.mustAddSign,
+    },
     commentRequired: ui.commentRequired,
+    commentRequiredScope: ui.commentRequired ? ui.commentRequiredScope : undefined,
     blockRecall: ui.blockRecall,
     timeout: {
       enabled: ui.timeout.enabled,
@@ -382,7 +482,8 @@ watch(ui, () => {
   font-size: 13px;
   font-weight: 600;
   color: var(--el-text-color-primary, #1f2437);
-  padding-left: 8px;
+  /* padding 10px + 左竖条 3px = 13px：与白卡片 border 1px + padding 12px 对齐，分组标题文本与表单 label 左缘平齐（Task 81） */
+  padding-left: 10px;
   border-left: 3px solid #2e9e6e;
   margin: 14px 0 8px;
   line-height: 1.2;
@@ -430,6 +531,53 @@ watch(ui, () => {
   gap: 2px;
 }
 
+/* 允许 xx 勾选后显示的子项：缩进（对齐 UserTaskProperty） */
+.sub-items {
+  margin: 4px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+/* 退回模式单选（纵向、长文案可换行），对齐 UserTaskProperty */
+.return-mode-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 2px;
+}
+
+.return-mode-group .el-radio {
+  height: auto;
+  margin-right: 0;
+  align-items: flex-start;
+}
+
+.return-mode-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+/* 主选项横向一行（办理人可进行的操作：提交只读 + 可勾选项） */
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  gap: 0 14px;
+}
+
+.checkbox-row .el-checkbox {
+  height: auto;
+  margin-right: 0;
+}
+
+.checkbox-row .el-checkbox :deep(.el-checkbox__label) {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .checkbox-col .el-checkbox {
   height: auto;
   margin-right: 0;
@@ -459,6 +607,28 @@ watch(ui, () => {
   color: var(--el-text-color-secondary, #8b91ab);
   line-height: 1.4;
   margin: 2px 0 6px;
+}
+
+/* 意见必填范围单选：横排一行（截图④），缩进对齐 sub-items */
+.inline-radio-group {
+  margin: 4px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+.inline-radio-group .el-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+}
+
+.inline-radio-group .el-radio {
+  height: 24px;
+  margin-right: 0;
+}
+
+.inline-radio-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
 }
 
 /* 行内编辑（超时时长/动作） */

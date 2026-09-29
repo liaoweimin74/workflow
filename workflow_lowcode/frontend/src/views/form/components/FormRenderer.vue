@@ -86,7 +86,7 @@ import { createDsBindingEngine } from './DsBindingEngine'
 import { createActionBus } from './DsActionBus'
 import type { DsLink } from './DsActionBus'
 import { dataSourceApi } from '@/api/data-source'
-import { normalizeForRender, deepDisableRules, deepDisableField } from '../schemaRules'
+import { normalizeForRender, deepDisableRules, deepDisableField, injectPickerDisplayTexts } from '../schemaRules'
 import type { DataSourceBindingContext } from '@/components/business/types'
 import { setActiveDsBindings, activeDsBindings } from '@/utils/formDsBindingsStore'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
@@ -388,6 +388,9 @@ onMounted(async () => {
     formData.value = { ...props.mappedData, ...formData.value }
     normalizeEchoData(resolvedSchema.value, formData.value)
   }
+  // dataPicker 编辑回显：dataSourceId 模式（内建数据源）无 resolve 接口可查，
+  // 从 initialValues/mappedData 的 <field>_text 冗余列注入 displayText（DataPicker Tag 直读）
+  resolvedSchema.value = injectPickerDisplayTexts(resolvedSchema.value, formData.value)
   if (props.readonly) {
     // form-create 的 rule 用 props.disabled 控制字段禁用。
     // 注意：schema 可能为 fcRow 栅格布局嵌套结构（fcRow → col → input/select），

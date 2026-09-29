@@ -1669,3 +1669,18 @@ Work Log:
 
 Stage Summary:
 - Java 同步完成：Node Task 61（ed16049）+ Task 65（509aa33）十项能力全部落地 backend/，9 修改+8 新增+@EnableScheduling；Flyway V40/V41 双端一致；无编译验证手段（静态审查兜底），建议有 JDK 环境时 mvn compile 复核
+
+---
+Task ID: 100
+Agent: Z.ai Code (main)
+Task: 设计器暗色三处残留修复（contextPad 白格/选人按钮/节点文字）+ 第八次沙箱重置恢复
+
+Work Log:
+- 第八次重置：.git 消失/工作区回滚 Sep 24/顶层 worklog 回滚至 Task 67；远程为权威（Task 98 完整推送），SOP 恢复至 HEAD=07ee9eb0（Task 99），工作区 0 行
+- 根因三连：a) customRenderer JS 硬编码亮色 overlay + .user-task rect !important 吞掉 overlay（类别色明暗全丢）b) diagram-js 18 entry 白色 box-shadow 光晕残留 + Task 99 hover 变量名拼写错误 c) 选人按钮实测已适配（rgb(24,29,27)），用户所见为旧状态
+- 修复：overlay 加 .wf-role-overlay class + 通用规则 :not() 排除 + CSS 明暗两档（暗色 16~18% 类别色 mix 深底+提亮边）+ contextPad box-shadow:none + 变量名修正 + popup menu 12 变量全量暗色 + elements.changed 补打 marker（handler marker 时序 bug）
+- E2E 明暗双态截图实证全过、明色零回归；717f8fff 已推送；scripts/ab.sh、mem-guard.sh 重建
+
+Stage Summary:
+- 远程 main = 717f8fff（Task 99 四项 + Task 100 三处残留 + 2 隐藏 bug 根除）
+- 顶层 worklog 曾被重置回滚，Task 68~99 条目以远程内层 docs/ops/worklog.md 为准

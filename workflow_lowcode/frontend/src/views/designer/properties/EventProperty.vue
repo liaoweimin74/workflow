@@ -1,5 +1,5 @@
 <template>
-  <el-form label-width="80px" size="small" :disabled="readOnly">
+  <el-form label-width="7em" label-position="left" size="small" :disabled="readOnly">
     <el-divider content-position="left">基本信息</el-divider>
 
     <el-form-item label="节点ID">

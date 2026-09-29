@@ -97,6 +97,7 @@ public class ProcessDesignService {
         dto.setName(draft.getName());
         dto.setKey(draft.getKey());
         dto.setCategoryId(draft.getCategoryId());
+        dto.setDescription(draft.getDescription());
         dto.setBpmnXml(draft.getBpmnXml());
         dto.setNodeConfigs(nodeConfigMap);
         dto.setStatus(draft.getStatus());
@@ -116,6 +117,7 @@ public class ProcessDesignService {
         if (request.getName() != null) draft.setName(request.getName());
         if (request.getKey() != null) draft.setKey(request.getKey());
         if (request.getCategoryId() != null) draft.setCategoryId(request.getCategoryId());
+        if (request.getDescription() != null) draft.setDescription(request.getDescription());
 
         // 已部署的流程被修改后标记为 MODIFIED
         if ("DEPLOYED".equals(draft.getStatus())) {

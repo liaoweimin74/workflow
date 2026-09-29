@@ -7,10 +7,14 @@ import { FolderAdd } from '@element-plus/icons-vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
 import { getOrgTree, createOrg, updateOrg, deleteOrg } from '@/api/org'
+import { getUserList } from '@/api/user'
 import type { TreeNode } from '@/types/org'
+import type { UserVO } from '@/types/user'
 
 const searchTableRef = ref()
 const list = ref<TreeNode[]>([])
+/** 负责人候选（从用户中选取；首次打开表单时加载） */
+const userOptions = ref<UserVO[]>([])
 
 // ---------- 搜索字段（空） ----------
 const searchFields: SearchField[] = []
@@ -19,8 +23,9 @@ const searchFields: SearchField[] = []
 const columns: TableColumn[] = [
   { prop: 'label', label: '组织名称', minWidth: 200 },
   { prop: 'code', label: '组织编码', width: 180 },
+  { prop: 'leaderName', label: '负责人', width: 120 },
   { prop: 'sortOrder', label: '排序', width: 80, align: 'center' },
-  { label: '状态', width: 80, align: 'center', formatter: (_r: any, _c: any, v: number) => v === 1 ? '启用' : '停用' },
+  { prop: 'status', label: '状态', width: 80, align: 'center', formatter: (_r: any, _c: any, v: number) => v === 1 ? '启用' : '停用' },
 ]
 
 // ---------- fetchApi（树形无分页） ----------
@@ -49,22 +54,41 @@ const formConfig = computed<FormConfig<TreeNode>>(() => ({
     } as Rule,
     { type: 'input', field: 'name', title: '组织名称', validate: [{ required: true, message: '请输入组织名称', trigger: 'blur' }] } as Rule,
     { type: 'input', field: 'code', title: '组织编码', validate: [{ required: true, message: '请输入组织编码', trigger: 'blur' }] } as Rule,
+    {
+      type: 'select', field: 'leaderId', title: '负责人',
+      props: { placeholder: '从用户中选取负责人（可选）', clearable: true, filterable: true },
+      options: userOptions.value.map((u) => ({ label: u.nickname && u.nickname !== '' ? `${u.nickname}（${u.username}）` : u.username, value: u.id })),
+    } as Rule,
     { type: 'input', field: 'sortOrder', title: '排序' } as Rule,
   ],
-  createApi: (data: any) => createOrg({ ...data, orgName: data.name, orgCode: data.code }),
-  updateApi: (id, data: any) => updateOrg(id as number, { ...data, orgName: data.name, orgCode: data.code }),
+  createApi: (data: any) => createOrg({ ...data, orgName: data.name, orgCode: data.code, leaderId: data.leaderId ?? null }),
+  updateApi: (id, data: any) => updateOrg(id as number, { ...data, orgName: data.name, orgCode: data.code, leaderId: data.leaderId ?? null }),
   deleteApi: async (id) => { await deleteOrg(id as number) },
   getApi: async (id: number | string) => {
     const res = await getOrgTree()
     const node = findNode(res.data, Number(id))
-    if (!node) return { id: 0, label: '', code: '', parentId: 0, sortOrder: 0, status: 1, children: [] } as TreeNode
+    if (!node) return { id: 0, label: '', code: '', leaderId: null, leaderName: null, parentId: 0, sortOrder: 0, status: 1, children: [] } as TreeNode
     return { ...node, name: node.label }
   },
   dialogTitle: { create: '新增组织', edit: '编辑组织' },
   createPermission: 'system:org:create',
   editPermission: 'system:org:update',
   deletePermission: 'system:org:delete',
+  onFormOpen: ensureUserOptions,
 }))
+
+/** 负责人候选用户（首次打开表单时加载；失败下次重试） */
+let _userOptionsLoaded = false
+async function ensureUserOptions() {
+  if (_userOptionsLoaded) return
+  _userOptionsLoaded = true
+  try {
+    const res = await getUserList({ page: 1, size: 999 })
+    userOptions.value = res.data.rows
+  } catch {
+    _userOptionsLoaded = false
+  }
+}
 
 function findNode(tree: TreeNode[], id: number): TreeNode | null {
   for (const node of tree) {

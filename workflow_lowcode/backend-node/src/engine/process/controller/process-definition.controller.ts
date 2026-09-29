@@ -4,6 +4,7 @@ import { PageResponse } from '../../../common/domain/page-response'
 import { JavaStatusOk } from '../../../framework/http/java-status.decorator'
 import { intQueryParam, assertPageSize } from '../../../framework/http/query-params'
 import { getTenantId } from '../../../framework/tenant/tenant-context'
+import { parseProcessPolicy } from '../compiler/process-policy'
 import {
   ProcessDesignService,
   type ProcessDefinitionSummaryVO,
@@ -41,6 +42,19 @@ export class ProcessDefinitionController {
       .getRepository()
       .listProcessDefs(tenantId, (safePage - 1) * safeSize, safeSize)
 
+    // 流程级可发起范围下发（Task 76）：发起中心据此过滤“我能发起的流程”；
+    // 引擎 start() 门禁是真闸门，此处仅是展示层过滤
+    const defIds = rows.map((row) => String(row.id))
+    const scopeByDef = new Map<string, Record<string, unknown>>()
+    if (defIds.length > 0) {
+      const configRows = await this.service
+        .getRepository()
+        .findProcessLevelConfigsByDefIds(defIds)
+      for (const cfg of configRows) {
+        scopeByDef.set(cfg.process_definition_id ?? '', parseProcessPolicy(cfg.config_json).starterScope)
+      }
+    }
+
     const content = rows.map((row) => {
       const key = String(row.process_key)
       const version = Number(row.version)
@@ -57,6 +71,7 @@ export class ProcessDefinitionController {
         category: row.target_namespace === null ? null : String(row.target_namespace),
         tenantId,
         suspended: String(row.status) !== 'ACTIVE',
+        starterScope: scopeByDef.get(String(row.id)) ?? null,
       }
     })
 

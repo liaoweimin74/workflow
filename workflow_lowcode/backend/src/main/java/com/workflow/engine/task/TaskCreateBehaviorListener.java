@@ -1,22 +1,39 @@
 package com.workflow.engine.task;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.process.config.NodeConfig;
 import com.workflow.engine.process.config.NodeOptions;
 import com.workflow.engine.process.config.NodeOptionsService;
+import com.workflow.engine.process.config.ProcessPolicy;
+import com.workflow.engine.process.repository.NodeConfigRepository;
+import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.FlowElement;
+import org.flowable.bpmn.model.FlowNode;
+import org.flowable.bpmn.model.SequenceFlow;
+import org.flowable.bpmn.model.UserTask;
+import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.delegate.TaskListener;
 import org.flowable.identitylink.api.IdentityLink;
 import org.flowable.task.api.delegate.DelegateTask;
+import org.flowable.task.api.history.HistoricTaskInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -29,10 +46,12 @@ import java.util.regex.Pattern;
  * （{@code flowable:taskListener delegateExpression=${taskCreateBehaviorListener}}），
  * 按节点配置依次处理：
  * <ol>
- *   <li>notify.sms=true → 写 SMS_NODE 通知记录</li>
+ *   <li>notify.sms=true → 写 SMS_NODE 通知记录（Task 69：流程级短信摘要开启时附【摘要】）</li>
  *   <li>approvalType=auto_pass / auto_reject → 自动通过 / 自动拒绝（终止实例）</li>
- *   <li>去重（dedup.enabled / skipSameAsInitiator）→ 过滤后为空自动通过</li>
- *   <li>未分配任务 → 类型化解析（initiator_self / initiator_select / role / expression）</li>
+ *   <li>Task 69 退回免审（retakeSkipApproved）：__retakeApprovedNodes 命中 → 自动通过（「已审批，自动通过（退回重审免审）」）</li>
+ *   <li>去重（节点显式配置优先 / 流程级默认；Task 69 三口径 CONSECUTIVE/FIRST/LAST）→ 过滤后为空自动通过</li>
+ *   <li>未分配任务 → 类型化解析（initiator_self / initiator_select / role / expression /
+ *       form_user 表单内用户 / external 业务系统注册选人函数）</li>
  *   <li>解析为空 → noAssigneePolicy 策略（auto_pass/skip/block/to_admin/to_user/supervisor）</li>
  * </ol>
  *
@@ -46,6 +65,9 @@ public class TaskCreateBehaviorListener implements TaskListener {
 
     private static final Pattern EXPRESSION_PATTERN = Pattern.compile("\\$\\{([^{}]+)}");
 
+    /** __retakeApprovedNodes 的 JSON 字符串形态兼容解析用（RejectService 写 List，跨端为 JSON 数组）。 */
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+
     private final NodeOptionsService nodeOptionsService;
     private final RoleMembershipResolver roleMembershipResolver;
     private final EngineNotifyService engineNotifyService;
@@ -53,6 +75,14 @@ public class TaskCreateBehaviorListener implements TaskListener {
     private final RuntimeService runtimeService;
     private final org.flowable.engine.HistoryService historyService;
     private final WfTaskCommentRepository commentRepository;
+    /** Task 69：读取 __PROCESS__ 流程级策略。 */
+    private final NodeConfigRepository nodeConfigRepository;
+    /** Task 69：发起节点判定（发起节点不参与去重/退回免审，对齐 NodeJS isInitiator 先行返回）。 */
+    private final InitiatorNodeResolver initiatorNodeResolver;
+    /** Task 69：LAST 去重的静态后续节点图遍历（BPMN 连线真源）。 */
+    private final RepositoryService repositoryService;
+    /** Task 72：业务系统注册选人函数注册表（approval.type=external 时按名调用）。 */
+    private final AssigneeResolverRegistry assigneeResolverRegistry;
 
     public TaskCreateBehaviorListener(NodeOptionsService nodeOptionsService,
                                       RoleMembershipResolver roleMembershipResolver,
@@ -60,7 +90,11 @@ public class TaskCreateBehaviorListener implements TaskListener {
                                       TaskService flowableTaskService,
                                       RuntimeService runtimeService,
                                       org.flowable.engine.HistoryService historyService,
-                                      WfTaskCommentRepository commentRepository) {
+                                      WfTaskCommentRepository commentRepository,
+                                      NodeConfigRepository nodeConfigRepository,
+                                      InitiatorNodeResolver initiatorNodeResolver,
+                                      RepositoryService repositoryService,
+                                      AssigneeResolverRegistry assigneeResolverRegistry) {
         this.nodeOptionsService = nodeOptionsService;
         this.roleMembershipResolver = roleMembershipResolver;
         this.engineNotifyService = engineNotifyService;
@@ -68,6 +102,10 @@ public class TaskCreateBehaviorListener implements TaskListener {
         this.runtimeService = runtimeService;
         this.historyService = historyService;
         this.commentRepository = commentRepository;
+        this.nodeConfigRepository = nodeConfigRepository;
+        this.initiatorNodeResolver = initiatorNodeResolver;
+        this.repositoryService = repositoryService;
+        this.assigneeResolverRegistry = assigneeResolverRegistry;
     }
 
     @Override
@@ -95,55 +133,103 @@ public class TaskCreateBehaviorListener implements TaskListener {
         String tenantId = task.getTenantId();
 
         NodeOptions opts = nodeOptionsService.find(processDefinitionId, nodeId).orElse(null);
+        // Task 69：流程级策略（__PROCESS__ config_json；节点无配置块也参与合并口径）
+        ProcessPolicy policy = loadProcessPolicy(processDefinitionId);
 
-        // ① 节点「发送短信给办理人」→ 通知记录
-        if (opts != null && Boolean.TRUE.equals(opts.getNotifySms())) {
-            engineNotifyService.writeSmsNode(tenantId, processInstanceId, task.getId(),
-                    task.getAssignee(), task.getName());
+        // ⚠️ 发起节点不参与退回免审/去重/同人跳过（对齐 NodeJS handleUserTask：
+        //    isInitiator 分支先行返回，start 时自动完成、驳回后建待办等重新提交）
+        boolean initiatorNode;
+        try {
+            initiatorNode = nodeId.equals(initiatorNodeResolver.resolve(processDefinitionId));
+        } catch (Exception e) {
+            initiatorNode = false;
         }
 
-        if (opts == null) {
-            return; // 旧数据无新配置块 → 保持既有行为
+        // ① 节点「发送短信给办理人」→ 通知记录（流程级短信摘要开启时附【摘要】）
+        if (opts != null && Boolean.TRUE.equals(opts.getNotifySms())) {
+            engineNotifyService.writeSmsNodeContent(tenantId, processInstanceId, task.getId(),
+                    task.getAssignee(), buildSmsNodeContent(task, policy));
         }
 
         // ② 审批类型：自动通过 / 自动拒绝
-        if ("auto_pass".equals(opts.getApprovalType())) {
+        if (opts != null && "auto_pass".equals(opts.getApprovalType())) {
             writeComment(tenantId, task.getId(), processInstanceId, "system", "approve", "自动通过", null);
             completeQuietly(task.getId());
             return;
         }
-        if ("auto_reject".equals(opts.getApprovalType())) {
+        if (opts != null && "auto_reject".equals(opts.getApprovalType())) {
             writeComment(tenantId, task.getId(), processInstanceId, "system", "refuse", "自动拒绝", null);
             runtimeService.deleteProcessInstance(processInstanceId, "自动拒绝");
             return;
         }
 
+        // ②' 退回免审（retakeSkipApproved）：__retakeApprovedNodes 命中当前节点 →
+        //    自动通过（意见「已审批，自动通过（退回重审免审）」）并从集合移除该节点
+        if (!initiatorNode && consumeRetakeSkip(task, tenantId, processInstanceId, nodeId, policy)) {
+            return;
+        }
+
         String initiator = stringVariable(processInstanceId, "initiator");
+        // 召回重走忽略去重/同人跳过（NodeJS EngineProcessPolicy.skipDedupForRecall 的等价实现）：
+        // 召回者需重新审批自己，若不去重会被 auto-pass 掉；⚠️ 一次性标记，消费即清除
+        boolean skipDedupForRecall = !initiatorNode && consumeRecallSkipFlag(task);
+
+        // ③ 过滤开关合并（对齐 NodeJS handleUserTask ③）：节点显式配置优先，否则落流程级默认
+        boolean nodeDedupConfigured = opts != null && opts.getDedupEnabled() != null;
+        boolean dedupActive = !initiatorNode && !skipDedupForRecall && (nodeDedupConfigured
+                ? Boolean.TRUE.equals(opts.getDedupEnabled())
+                : policy.isDedupEnabled());
+        boolean nodeSkipConfigured = opts != null && opts.getSkipSameAsInitiator() != null;
+        boolean skipSameAsInitiator = !initiatorNode && !skipDedupForRecall && (nodeSkipConfigured
+                ? Boolean.TRUE.equals(opts.getSkipSameAsInitiator())
+                : policy.isDedupSkipSameAsInitiator());
+        String dedupMode = policy.getDedupMode() == null ? "FIRST" : policy.getDedupMode();
+
         boolean unassigned = isBlank(task.getAssignee()) && candidateUsers(task).isEmpty();
 
         if (!unassigned) {
-            // ③ 静态分配（部署期改写器写入）的去重兜底
-            if (Boolean.TRUE.equals(opts.getSkipSameAsInitiator())
+            // ③a 静态分配（部署期改写器写入）的去重兜底
+            if (skipSameAsInitiator
                     && task.getAssignee() != null && task.getAssignee().equals(initiator)) {
                 autoApproveFiltered(tenantId, task, processInstanceId);
                 return;
             }
-            if (Boolean.TRUE.equals(opts.getDedupEnabled()) && task.getAssignee() != null
-                    && alreadyCompleted(processInstanceId, task.getAssignee())) {
+            if (dedupActive && task.getAssignee() != null
+                    && dedupHits(processDefinitionId, nodeId, processInstanceId,
+                        task.getAssignee(), dedupMode)) {
                 autoApproveFiltered(tenantId, task, processInstanceId);
                 return;
             }
             return; // 正常人工任务
         }
 
+        if (opts == null) {
+            // 旧数据无节点配置块：无类型化解析依据 → 保持候选人任务兜底（既有行为）
+            return;
+        }
+
         // ④ 类型化解析（未分配任务）
         List<String> resolved = new ArrayList<>(resolveTyped(opts, task, initiator));
         boolean filtered = false;
-        if (!resolved.isEmpty() && Boolean.TRUE.equals(opts.getSkipSameAsInitiator()) && initiator != null) {
+        if (!resolved.isEmpty() && skipSameAsInitiator && initiator != null) {
             filtered |= resolved.removeIf(u -> u.equals(initiator));
         }
-        if (!resolved.isEmpty() && Boolean.TRUE.equals(opts.getDedupEnabled())) {
-            filtered |= resolved.removeIf(u -> alreadyCompleted(processInstanceId, u));
+        if (!resolved.isEmpty() && dedupActive) {
+            if ("LAST".equals(dedupMode)) {
+                // 全流程仅最后需一次审批：已办过且后续静态可见节点还会出现 → 本次跳过；
+                // 后续不可静态判定（role/expression 动态解析）时保守不跳
+                filtered |= resolved.removeIf(u -> alreadyCompleted(processInstanceId, u)
+                        && assigneeAppearsLater(processDefinitionId, nodeId, u));
+            } else if ("CONSECUTIVE".equals(dedupMode)) {
+                // 连续去重：仅与最近一个已完成任务的 assignee 比较
+                String last = lastCompletedAssignee(processInstanceId);
+                if (last != null) {
+                    filtered |= resolved.removeIf(u -> u.equals(last));
+                }
+            } else {
+                // FIRST（缺省）：实例内已完成 assignee 集合
+                filtered |= resolved.removeIf(u -> alreadyCompleted(processInstanceId, u));
+            }
         }
 
         // ⑤ 过滤后为空 → 自动通过（对齐 NodeJS：去重导致的全过滤按通过处理）
@@ -165,6 +251,212 @@ public class TaskCreateBehaviorListener implements TaskListener {
                 task.addCandidateUser(userId);
             }
         }
+    }
+
+    // ------------------------------------------------------------ Task 69 流程级策略辅助
+
+    /** 流程级策略读取（__PROCESS__ config_json；未配置/失败返回全关默认）。 */
+    private ProcessPolicy loadProcessPolicy(String processDefinitionId) {
+        try {
+            for (NodeConfig nc : nodeConfigRepository.findByProcessDefinitionId(processDefinitionId)) {
+                if (ProcessPolicy.PROCESS_LEVEL_NODE_ID.equals(nc.getNodeId())) {
+                    return ProcessPolicy.parseProcessPolicy(nc.getConfigJson());
+                }
+            }
+            return ProcessPolicy.parseProcessPolicy(null);
+        } catch (Exception e) {
+            log.warn("读取流程级策略失败 defId={}: {}", processDefinitionId, e.getMessage());
+            return ProcessPolicy.parseProcessPolicy(null);
+        }
+    }
+
+    /**
+     * 退回免审（retakeSkipApproved）消费（对齐 NodeJS handleUserTask ①'）：
+     * {@code __retakeApprovedNodes} 命中当前节点 → 写意见「已审批，自动通过（退回重审免审）」
+     * 并自动完成该任务，同时把节点从集合移除（同一节点再次被退回时可重新收集）。
+     */
+    private boolean consumeRetakeSkip(DelegateTask task, String tenantId, String processInstanceId,
+                                      String nodeId, ProcessPolicy policy) {
+        if (!policy.isRetakeSkipApproved()) {
+            return false;
+        }
+        List<String> nodes =
+                normalizeNodeIdList(task.getVariable(WorkflowTaskService.VAR_RETAKE_APPROVED_NODES));
+        if (!nodes.remove(nodeId)) {
+            return false;
+        }
+        task.setVariable(WorkflowTaskService.VAR_RETAKE_APPROVED_NODES, new ArrayList<>(nodes));
+        writeComment(tenantId, task.getId(), processInstanceId, "system", "approve",
+                "已审批，自动通过（退回重审免审）", null);
+        completeQuietly(task.getId());
+        return true;
+    }
+
+    /**
+     * 召回重走免重去重标记消费（对齐 NodeJS EngineProcessPolicy.skipDedupForRecall）。
+     * ⚠️ NodeJS 的 skipDedupForRecall 是请求级参数；Java 只能落在实例变量上，
+     * 消费即清除，避免污染同实例后续节点的去重口径。
+     */
+    private boolean consumeRecallSkipFlag(DelegateTask task) {
+        Object flag = task.getVariable(WorkflowTaskService.RETAKE_SKIP_DEDUP_VAR);
+        if (Boolean.TRUE.equals(flag) || "true".equals(String.valueOf(flag))) {
+            task.setVariable(WorkflowTaskService.RETAKE_SKIP_DEDUP_VAR, Boolean.FALSE);
+            return true;
+        }
+        return false;
+    }
+
+    /** {@code __retakeApprovedNodes} 兼容读取：List 直取；JSON 字符串形态解析。 */
+    private List<String> normalizeNodeIdList(Object raw) {
+        List<String> out = new ArrayList<>();
+        if (raw == null) {
+            return out;
+        }
+        if (raw instanceof java.util.Collection<?> collection) {
+            for (Object item : collection) {
+                if (item != null) {
+                    out.add(String.valueOf(item));
+                }
+            }
+            return out;
+        }
+        String text = String.valueOf(raw).trim();
+        if (!text.startsWith("[")) {
+            return out;
+        }
+        try {
+            JsonNode arr = JSON_MAPPER.readTree(text);
+            if (arr.isArray()) {
+                for (JsonNode element : arr) {
+                    if (element.isTextual() || element.isNumber()) {
+                        out.add(element.asText());
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // 非法 JSON 按空集合处理
+        }
+        return out;
+    }
+
+    /** 静态分配路径的去重命中判定（CONSECUTIVE/FIRST/LAST 三口径）。 */
+    private boolean dedupHits(String processDefinitionId, String nodeId,
+                              String processInstanceId, String assignee, String mode) {
+        String normalizedMode = mode == null ? "FIRST" : mode;
+        if ("CONSECUTIVE".equals(normalizedMode)) {
+            String last = lastCompletedAssignee(processInstanceId);
+            return last != null && last.equals(assignee);
+        }
+        boolean done = alreadyCompleted(processInstanceId, assignee);
+        if ("LAST".equals(normalizedMode)) {
+            return done && assigneeAppearsLater(processDefinitionId, nodeId, assignee);
+        }
+        return done;
+    }
+
+    /**
+     * 最近一个已完成任务的办理人（CONSECUTIVE 连续去重用；对齐 NodeJS lastCompletedAssignee）：
+     * 仅看最后一个完成任务的 assignee——「连续出现同一审批人」只需与上一步比较。
+     * ⚠️ 排除 deleteReason 非空的记录（被驳回/撤回撤销的任务不算已办理）。
+     */
+    private String lastCompletedAssignee(String processInstanceId) {
+        try {
+            List<HistoricTaskInstance> finished = historyService.createHistoricTaskInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .finished()
+                    .orderByHistoricTaskInstanceEndTime()
+                    .desc()
+                    .listPage(0, 10);
+            for (HistoricTaskInstance t : finished) {
+                if (t.getDeleteReason() != null) {
+                    continue;
+                }
+                if (t.getAssignee() != null && !t.getAssignee().isBlank()) {
+                    return t.getAssignee();
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 该审批人在后续路径的静态可见节点中是否还会出现（LAST 去重用）。
+     * 仅检查 approval.userIds 静态列表（与 NodeJS assigneeAppearsLater 同口径——
+     * NodeJS 查编译模型 approval.userIds，Java 侧对应 NodeConfig approval.userIds，
+     * 图结构走 BPMN 连线真源）；role/expression 等动态解析返回 false（保守不跳）。
+     */
+    private boolean assigneeAppearsLater(String processDefinitionId, String fromNodeId, String user) {
+        try {
+            BpmnModel model = repositoryService.getBpmnModel(processDefinitionId);
+            if (model == null || model.getProcesses().isEmpty()) {
+                return false;
+            }
+            for (org.flowable.bpmn.model.Process process : model.getProcesses()) {
+                FlowElement start = process.getFlowElement(fromNodeId);
+                if (!(start instanceof FlowNode fromNode)) {
+                    continue;
+                }
+                Set<String> visited = new HashSet<>();
+                Deque<String> queue = new ArrayDeque<>();
+                List<SequenceFlow> outgoing = fromNode.getOutgoingFlows();
+                if (outgoing != null) {
+                    for (SequenceFlow flow : outgoing) {
+                        if (flow.getTargetRef() != null) {
+                            queue.add(flow.getTargetRef());
+                        }
+                    }
+                }
+                while (!queue.isEmpty()) {
+                    String id = queue.poll();
+                    if (id == null || !visited.add(id)) {
+                        continue;
+                    }
+                    FlowElement element = process.getFlowElement(id);
+                    if (element instanceof UserTask) {
+                        NodeOptions next = nodeOptionsService.find(processDefinitionId, id).orElse(null);
+                        if (next != null && next.getUserIds() != null && next.getUserIds().contains(user)) {
+                            return true;
+                        }
+                    }
+                    if (element instanceof FlowNode flowNode && flowNode.getOutgoingFlows() != null) {
+                        for (SequenceFlow flow : flowNode.getOutgoingFlows()) {
+                            if (flow.getTargetRef() != null) {
+                                queue.add(flow.getTargetRef());
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            // 静态判定失败 → 保守不跳（与 NodeJS 保守语义一致）
+            return false;
+        }
+    }
+
+    /**
+     * SMS_NODE 文案：节点名 + 流程级摘要后缀（summaryShowInSms=true 时尾部附【摘要】，
+     * 对齐 NodeJS 的 SMS_NODE 文案拼接）。
+     * ⚠️ __instanceSummary 变量在 startProcessInstanceByKey 之后才由 ProcessInstanceService
+     * 写入——启动即创建的任务读不到该变量，此时按当前变量现算摘要兜底。
+     */
+    private String buildSmsNodeContent(DelegateTask task, ProcessPolicy policy) {
+        String label = task.getName() == null || task.getName().isBlank()
+                ? task.getTaskDefinitionKey() : task.getName();
+        String content = "您有新的办理任务：" + label;
+        if (policy.isSummaryShowInSms() && !policy.getSummaryFields().isEmpty()) {
+            Object summary = task.getVariable("__instanceSummary");
+            String text = summary == null ? "" : String.valueOf(summary).trim();
+            if (text.isEmpty()) {
+                text = ProcessPolicy.renderSummary(policy.getSummaryFields(), task.getVariables());
+            }
+            if (!text.isBlank()) {
+                content += "【" + text + "】";
+            }
+        }
+        return content;
     }
 
     // ------------------------------------------------------------ 策略
@@ -225,6 +517,35 @@ public class TaskCreateBehaviorListener implements TaskListener {
             case "expression" -> {
                 return resolveExpression(opts.getApprovalExpression(), processInstanceId, initiator);
             }
+            case "form_user" -> {
+                // 表单内用户：从流程变量取 approval.formUserField 字段值解析（单个/逗号分隔/数组均可）
+                String field = opts.getFormUserField() == null ? "" : opts.getFormUserField().trim();
+                if (field.isEmpty()) {
+                    return List.of();
+                }
+                return normalizeUserList(variable(processInstanceId, field));
+            }
+            case "external" -> {
+                // 业务系统注册选人函数：按 approval.external.resolver 查进程内注册表并调用
+                // （节点配置的参数值表 approval.external.params 作为第二参传入，同一函数可按参数复用）
+                String name = opts.getExternalResolver() == null ? "" : opts.getExternalResolver().trim();
+                if (!name.isEmpty() && assigneeResolverRegistry != null) {
+                    var resolver = assigneeResolverRegistry.find(name);
+                    if (resolver.isPresent()) {
+                        try {
+                            Map<String, Object> extParams =
+                                    opts.getExternalParams() == null ? Map.of() : opts.getExternalParams();
+                            return normalizeUserList(
+                                    resolver.get().resolve(buildResolveContext(task, initiator), extParams));
+                        } catch (Exception e) {
+                            // 选人函数抛错：视为本次解析不出，落到变量兑底
+                        }
+                    }
+                }
+                // 变量兑底（对齐 NodeJS）：外部系统集成通道（发起前/服务层预置 assignee_ext_<nodeId>）
+                return normalizeUserList(
+                        variable(processInstanceId, "assignee_ext_" + task.getTaskDefinitionKey()));
+            }
             default -> {
                 return List.of();
             }
@@ -264,6 +585,23 @@ public class TaskCreateBehaviorListener implements TaskListener {
             out.addAll(normalizeUserList(variable(processInstanceId, name)));
         }
         return new ArrayList<>(out);
+    }
+
+    /**
+     * 组装 external 选人函数上下文（对齐 NodeJS AssigneeResolveContext）：
+     * variables 取实例全部变量快照（读取失败按空集合，不因快照失败中断选人调用）；
+     * nodeName 取任务名，缺省回退节点 ID。
+     */
+    private AssigneeResolveContext buildResolveContext(DelegateTask task, String initiator) {
+        Map<String, Object> variables;
+        try {
+            variables = runtimeService.getVariables(task.getProcessInstanceId());
+        } catch (Exception e) {
+            variables = Map.of();
+        }
+        String label = task.getName() == null || task.getName().isBlank()
+                ? task.getTaskDefinitionKey() : task.getName();
+        return new AssigneeResolveContext(task.getTaskDefinitionKey(), label, initiator, variables);
     }
 
     // ------------------------------------------------------------ 辅助

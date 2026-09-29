@@ -117,3 +117,38 @@ export function normalizeForRender(rules: any[]): any[] {
     return next
   })
 }
+
+/**
+ * dataPicker 编辑回显：把 `<field>_text`（冗余显示列）注入 `rule.props.displayText`。
+ *
+ * 背景：dataPicker 的 dataSourceId 模式（引用内建数据源，如系统用户/岗位/组织）
+ * 没有业务表单的 resolve 接口可查，DataPicker 的 Tag 回显依赖 `displayText` prop；
+ * sourceFormKey 模式不受影响（DataPicker 自行调 resolve，displayText 优先且一致）。
+ *
+ * 浅拷贝替换（resolvedSchema 可能与外部 formConfig.rule 共享引用，不能原地改）；
+ * 无可注入文本时原样返回同一引用（避免触发下游不必要的响应式重算）。
+ */
+export function injectPickerDisplayTexts(rules: any[], data: Record<string, unknown>): any[] {
+  let changed = false
+  const walk = (list: any[]): any[] =>
+    list.map((node) => {
+      if (typeof node !== 'object' || node === null) return node
+      let out = node
+      if (node.type === 'dataPicker' && node.field) {
+        const t = data[`${node.field}_text`]
+        if (t !== undefined && t !== null && t !== '') {
+          changed = true
+          out = { ...node, props: { ...(node.props || {}), displayText: String(t) } }
+        }
+      }
+      if (Array.isArray(out.children) && out.children.length > 0) {
+        out = { ...out, children: walk(out.children) }
+      }
+      if (out.props && Array.isArray(out.props.rule) && out.props.rule.length > 0) {
+        out = { ...out, props: { ...out.props, rule: walk(out.props.rule) } }
+      }
+      return out
+    })
+  const next = walk(rules)
+  return changed ? next : rules
+}

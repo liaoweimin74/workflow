@@ -2,17 +2,20 @@ import { randomBytes } from 'node:crypto'
 import { Inject, Injectable } from '@nestjs/common'
 import { Kysely } from 'kysely'
 import { BusinessException } from '../../common/exception/business-exception'
+import { snapshotAssigneeResolvers } from './assignee-resolver-registry'
 import { EngineException } from '../../common/exception/engine-exception'
 import { PageResponse } from '../../common/domain/page-response'
 import { KYSELY } from '../../framework/database/database.module'
 import type { DB } from '../../framework/database/types'
 import { assertPageSize } from '../../framework/http/query-params'
 import { getTenantId } from '../../framework/tenant/tenant-context'
-import type { ProcessModel, ResolutionContext } from '../process/compiler/process-model'
+import type { ProcessModel, ProcessPolicy, ResolutionContext } from '../process/compiler/process-model'
 import { randomUuid } from '../process/process-design.service'
 import { EngineRuntime, type EngineState } from './engine-runtime'
 import { EnginePersistence, type InstanceRow } from './engine-persistence'
 import { BackendLogicHook, newlyCompletedEndEventNodeIds } from '../logic/backend-logic-hook'
+import { ProcessDesignRepository } from '../process/repository/process-design.repository'
+import { parseProcessPolicy, renderProcessTemplate } from '../process/compiler/process-policy'
 
 /** 新实例启动前没有任何已完成活动（`newlyCompletedEndEventNodeIds` 的「空快照」）。 */
 const EMPTY_ACTIVITY_IDS: ReadonlySet<string> = new Set<string>()
@@ -90,20 +93,40 @@ export class ProcessInstanceService {
     @Inject(KYSELY) private readonly db: Kysely<DB>,
     private readonly persistence: EnginePersistence,
     private readonly backendLogic: BackendLogicHook,
+    /** 可选注入：测试手动 new 时不传；策略读取降级为空配置。 */
+    private readonly designRepo?: ProcessDesignRepository,
   ) {}
 
   // ------------------------------------------------------------ 启动
+
+  /** 读流程级策略（start 用；配置缺失/无 repo 安全降级为空策略）。 */
+  private async loadStartPolicy(defId: string) {
+    if (this.designRepo === undefined) return parseProcessPolicy(null)
+    const config = await this.designRepo.findNodeConfig(defId, '__PROCESS__')
+    return parseProcessPolicy(config?.config_json ?? null)
+  }
 
   async start(
     processKey: string,
     businessKey: string | null,
     variables: Record<string, unknown> | undefined,
+    startUserId?: string | null,
   ): Promise<StartProcessResult> {
     const tenantId = getTenantId()
     const def = await this.persistence.findLatestDeployedDef(tenantId, processKey)
     if (def === null) {
       throw new EngineException(`未找到已部署的流程定义: ${processKey}`)
     }
+
+    // 流程级策略：start 门禁（可发起范围）与标题/摘要共用一次解析（Task 76）
+    const startPolicy = await this.loadStartPolicy(def.id)
+    // 发起人锚定**服务端登录身份**（startUserId）：
+    //   - variables.initiator 由客户端传入，可伪造（Task 76 同款顾虑），仅作无登录态
+    //     （系统内部调用等 startUserId 为空场景）的兜底；
+    //   - 撤回（recallInstance 按 instance.initiator 判定）、发起节点待办（initiator_self）
+    //     都依赖该值 —— 缺失会导致「admin 发起的流程撤回时提示只有发起人可撤回」。
+    const initiator = startUserId ?? extractInitiator(variables)
+    await this.assertStartAllowed(startPolicy, startUserId ?? null)
 
     const model = JSON.parse(def.model_json) as ProcessModel
     const state: EngineState = {
@@ -115,7 +138,6 @@ export class ProcessInstanceService {
       activeBranchSets: {},
     }
 
-    const initiator = extractInitiator(variables)
     const now = new Date()
     // 生产必须用 UUID 工厂：id 是全表主键，序号只在一个 runtime 内唯一（见引擎构造函数注释）
     const runtime = new EngineRuntime(
@@ -123,9 +145,36 @@ export class ProcessInstanceService {
       state,
       () => new Date(),
       () => randomUuid(),
-      await this.buildResolutionContext(),
+      // to_admin 兜底/转派目标：流程级审批管理员优先，未配置回落全局 admin
+      await this.buildResolutionContext(startPolicy.adminUserIds[0] ?? undefined, initiator ?? null),
+      {},
+      snapshotAssigneeResolvers(),
     )
     runtime.start({ initiator: initiator ?? undefined, variables: variables ?? {} })
+
+    // 流程级策略：自定义审批标题 / 自定义摘要 → 内部变量（随 replaceRuntimeRows 落库；startPolicy 已在门禁处解析）
+    if (startPolicy.titlePattern !== null) {
+      runtime.setVariable(
+        '__instanceTitle',
+        renderProcessTemplate(startPolicy.titlePattern, {
+          processName: def.name ?? processKey,
+          initiator,
+          variables: runtime.getVariables(),
+        }),
+      )
+    }
+    if (startPolicy.summaryFields.length > 0) {
+      const allVars = runtime.getVariables()
+      runtime.setVariable(
+        '__instanceSummary',
+        startPolicy.summaryFields
+          .map((f) => {
+            const v = allVars[f]
+            return `${f}:${v === undefined || v === null || typeof v === 'object' ? '' : String(v)}`
+          })
+          .join(' '),
+      )
+    }
 
     // ⚠️ 实例 ID 必须是 **UUID**：Flowable 的流程实例 ID 就是 UUID，
     //    而草稿/配置表用的是 32 位 hex。两者都被规范化器识别为占位符，
@@ -176,11 +225,12 @@ export class ProcessInstanceService {
         action:
           auto.action === 'approve' ? 'approve' : auto.action === 'refuse' ? 'refuse' : 'system',
         comment:
-          auto.action === 'approve'
+          auto.comment ??
+          (auto.action === 'approve'
             ? '自动通过'
             : auto.action === 'refuse'
               ? '自动拒绝'
-              : '未找到办理人，自动跳过',
+              : '未找到办理人，自动跳过'),
         targetUserId: null,
       })
     }
@@ -191,6 +241,12 @@ export class ProcessInstanceService {
     }
 
     // 节点 notify.sms=true 的新建待办 → 短信通知记录（占位表，后续接入网关）
+    // 流程级 summaryShowInSms=true 且已渲染摘要 → 文案尾部附摘要
+    const summaryValue = runtime.getVariables()['__instanceSummary']
+    const summaryText =
+      startPolicy.summaryShowInSms && typeof summaryValue === 'string' && summaryValue !== ''
+        ? `【${summaryValue}】`
+        : ''
     for (const task of state.tasks) {
       if (task.status !== 'CREATED' && task.status !== 'CLAIMED') continue
       const node = model.nodes[task.nodeId]
@@ -204,7 +260,7 @@ export class ProcessInstanceService {
           task_id: task.id,
           notify_type: 'SMS_NODE',
           target_user: task.assignee ?? '',
-          content: `您有新的办理任务：${node.name ?? task.nodeId}`,
+          content: `您有新的办理任务：${node.name ?? task.nodeId}${summaryText}`,
           status: 'PENDING',
           created_at: new Date(),
         })
@@ -341,7 +397,7 @@ export class ProcessInstanceService {
       startVariables.initiator = row.initiator
     }
 
-    return this.start(row.process_key, row.business_key, startVariables)
+    return this.start(row.process_key, row.business_key, startVariables, userId)
   }
 
   private async requireInstance(instanceId: string): Promise<InstanceRow> {
@@ -702,20 +758,92 @@ export class ProcessInstanceService {
   }
 
   /**
-   * 审批/办理人解析上下文（服务层预计算；与 TaskService 同一口径）。
-   * adminUserId：sys_user 中 username='admin' 的用户；org 无负责人字段 → supervisor 恒 null。
+   * start() 可发起范围门禁（Task 76）：
+   * - starterScope.mode=ALL → 不校验（向后兼容，存量流程行为不变）
+   * - SPECIFIED → 系统管理员（username='admin'）绕过；否则发起人须命中 userIds
+   *   名单或拥有 roleIds 任一角色（sys_role.role_code，角色启用未删）
+   * - startUserId 缺省（测试/内部调用未传）→ 不校验：门禁只认登录用户，
+   *   不信任客户端 variables.initiator（可伪造）
    */
-  private async buildResolutionContext(): Promise<ResolutionContext> {
+  private async assertStartAllowed(policy: ProcessPolicy, startUserId: string | null): Promise<void> {
+    if (startUserId === null || startUserId === '') return
+    const scope = policy.starterScope
+    if (scope.mode !== 'SPECIFIED') return
+
+    const userIdNum = Number(startUserId)
+    if (Number.isFinite(userIdNum)) {
+      // 系统管理员绕过（username='admin' 即全局 admin，与 page-access.guard 口径一致）
+      const user = await this.db
+        .selectFrom('sys_user')
+        .select(['id', 'username'])
+        .where('id', '=', userIdNum)
+        .where('is_deleted', '=', 0)
+        .executeTakeFirst()
+      if (user !== undefined && user.username === 'admin') return
+    }
+
+    if (scope.userIds.includes(startUserId)) return
+
+    if (scope.roleIds.length > 0) {
+      const roleRows = await this.db
+        .selectFrom('sys_user_role')
+        .innerJoin('sys_role', 'sys_role.id', 'sys_user_role.role_id')
+        .select('sys_role.role_code')
+        .where('sys_user_role.user_id', '=', userIdNum)
+        .where('sys_role.is_deleted', '=', 0)
+        .where('sys_role.status', '=', 1)
+        .execute()
+      const codes = new Set(roleRows.map((r) => r.role_code).filter((c): c is string => c !== null))
+      if (scope.roleIds.some((code) => codes.has(code))) return
+    }
+
+    throw new BusinessException(403, '您不在该流程的可发起人员范围内')
+  }
+
+  /**
+   * 审批/办理人解析上下文（服务层预计算；与 TaskService 同一口径）。
+   * adminUserId：sys_user 中 username='admin' 的用户。
+   * initiatorSupervisor：发起人所属组织的负责人（V43：sys_organization.leader_id；
+   *   supervisor 策略 / 表达式 initiator.deptManager 由降级变为真实生效）。
+   * adminUserIdOverride：流程级审批管理员（adminUserIds[0]）传入时优先，to_admin 兜底/转派走流程管理员。
+   */
+  private async buildResolutionContext(
+    adminUserIdOverride?: string,
+    initiatorUserId?: string | null,
+  ): Promise<ResolutionContext> {
     const admin = await this.db
       .selectFrom('sys_user')
       .select('id')
       .where('username', '=', 'admin')
       .where('is_deleted', '=', 0)
       .executeTakeFirst()
-    return {
-      adminUserId: admin === undefined ? null : String(admin.id),
-      initiatorSupervisor: null,
+    let initiatorSupervisor: string | null = null
+    if (initiatorUserId !== undefined && initiatorUserId !== null && initiatorUserId !== '') {
+      initiatorSupervisor = await this.findOrgLeaderByUserId(initiatorUserId)
     }
+    return {
+      adminUserId: adminUserIdOverride ?? (admin === undefined ? null : String(admin.id)),
+      initiatorSupervisor,
+    }
+  }
+
+  /**
+   * 用户所属组织的负责人用户 ID（V43：sys_user.org_id → sys_organization.leader_id）。
+   * 无组织/组织无负责人/任一已删除 → null（引擎按策略降级）。
+   */
+  private async findOrgLeaderByUserId(userId: string): Promise<string | null> {
+    const idNum = Number(userId)
+    if (!Number.isFinite(idNum)) return null
+    const row = await this.db
+      .selectFrom('sys_user as u')
+      .innerJoin('sys_organization as o', 'o.id', 'u.org_id')
+      .select('o.leader_id')
+      .where('u.id', '=', idNum)
+      .where('u.is_deleted', '=', 0)
+      .where('o.is_deleted', '=', 0)
+      .executeTakeFirst()
+    if (row === undefined || row.leader_id === null || row.leader_id === undefined) return null
+    return String(row.leader_id)
   }
 
   async insertComment(

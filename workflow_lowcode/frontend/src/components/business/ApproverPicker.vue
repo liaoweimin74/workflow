@@ -136,7 +136,7 @@
               style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0;"
             >
               <span>{{ user.nickname }} {{ user.orgName }}</span>
-              <el-icon style="cursor: pointer; color: #f56c6c;" @click="removeSelected(user.id)"><Close /></el-icon>
+              <el-icon style="cursor: pointer; color: var(--el-color-danger);" @click="removeSelected(user.id)"><Close /></el-icon>
             </div>
             <el-empty
               v-if="selectedUsers.length === 0"
@@ -456,7 +456,7 @@ async function loadSelectedUsers(ids: number[]) {
 
 .ap-left {
   width: 200px;
-  border-right: 1px solid #ebeef5;
+  border-right: 1px solid var(--el-border-color-lighter);
   padding-right: 12px;
   display: flex;
   flex-direction: column;
@@ -486,7 +486,7 @@ async function loadSelectedUsers(ids: number[]) {
 
 .ap-right {
   width: 240px;
-  border-left: 1px solid #ebeef5;
+  border-left: 1px solid var(--el-border-color-lighter);
   padding-left: 12px;
   display: flex;
   flex-direction: column;
@@ -510,27 +510,27 @@ async function loadSelectedUsers(ids: number[]) {
   gap: 6px;
   min-height: 32px;
   padding: 4px 11px;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--el-border-color);
   border-radius: 4px;
   cursor: pointer;
-  background-color: #fff;
+  background-color: var(--el-fill-color-blank);
   transition: border-color 0.2s;
   box-sizing: border-box;
   width: 100%;
 }
 
 .ap-trigger:hover {
-  border-color: #c0c4cc;
+  border-color: var(--el-color-primary);
 }
 
 .ap-trigger.is-disabled {
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color-light);
   cursor: not-allowed;
 }
 
 .ap-trigger-icon {
   margin-top: 2px;
-  color: #a8abb2;
+  color: var(--el-text-color-placeholder);
   flex-shrink: 0;
 }
 
@@ -542,7 +542,7 @@ async function loadSelectedUsers(ids: number[]) {
 }
 
 .ap-placeholder {
-  color: #a8abb2;
+  color: var(--el-text-color-placeholder);
   font-size: 12px;
   line-height: 24px;
 }

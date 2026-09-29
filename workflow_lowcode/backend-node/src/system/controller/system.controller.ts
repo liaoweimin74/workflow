@@ -7,7 +7,12 @@ import {
   SystemService,
   type DictDataVO,
   type DictTypeVO,
+  type GroupMemberVO,
+  type GroupRuleVO,
+  type MemberGroupVO,
   type MenuTreeVO,
+  type PostOptionVO,
+  type PostVO,
   type RoleVO,
   type TreeNodeVO,
   type UserVO,
@@ -68,6 +73,7 @@ export class UserController {
         email: body.email ?? null,
         phone: body.phone ?? null,
         orgId: body.orgId ?? null,
+        postId: body.postId ?? null,
         roleIds: body.roleIds ?? null,
         status: body.status ?? null,
       }),
@@ -86,6 +92,7 @@ export class UserController {
         email: body.email ?? null,
         phone: body.phone ?? null,
         orgId: body.orgId ?? null,
+        postId: body.postId,
         roleIds: body.roleIds ?? null,
         status: body.status ?? null,
       }),
@@ -122,13 +129,14 @@ export class UserController {
   }
 }
 
-/** 用户保存请求体，对齐 Java `UserCreateRequest` / `UserUpdateRequest`。 */
+/** 用户保存请求体，对齐 Java `UserCreateRequest` / `UserUpdateRequest`（postId 为 V43 扩展）。 */
 interface UserSaveRequest {
   username: string
   nickname: string
   email?: string | null
   phone?: string | null
   orgId?: number | null
+  postId?: number | null
   roleIds?: number[] | null
   status?: number | null
 }
@@ -287,7 +295,7 @@ export class OrganizationController {
     return R.ok(await this.service.orgTree())
   }
 
-  /** 新建组织（`sortOrder` 空落 0、`status` 空落 1）。 */
+  /** 新建组织（`sortOrder` 空落 0、`status` 空落 1；`leaderId` 为负责人用户 id，V43）。 */
   @Post()
   async create(@Body() body: OrgSaveRequest): Promise<R<TreeNodeVO>> {
     return R.ok(
@@ -295,6 +303,7 @@ export class OrganizationController {
         parentId: body.parentId ?? null,
         orgName: body.orgName,
         orgCode: body.orgCode,
+        leaderId: body.leaderId ?? null,
         sortOrder: body.sortOrder ?? null,
         status: body.status ?? null,
       }),
@@ -311,6 +320,7 @@ export class OrganizationController {
       await this.service.updateOrg(Number(id), {
         orgName: body.orgName ?? null,
         orgCode: body.orgCode ?? null,
+        leaderId: body.leaderId,
         sortOrder: body.sortOrder ?? null,
         status: body.status ?? null,
       }),
@@ -328,11 +338,12 @@ export class OrganizationController {
   }
 }
 
-/** 组织保存请求体，对齐 Java `OrganizationCreateRequest` / `OrganizationUpdateRequest`。 */
+/** 组织保存请求体，对齐 Java `OrganizationCreateRequest` / `OrganizationUpdateRequest`（leaderId 为 V43 扩展）。 */
 interface OrgSaveRequest {
   parentId?: number | null
   orgName: string
   orgCode: string
+  leaderId?: number | null
   sortOrder?: number | null
   status?: number | null
 }
@@ -441,4 +452,184 @@ interface DictDataSaveRequest {
   value: string
   sortOrder?: number | null
   status?: number | null
+}
+
+/** 岗位接口（`/api/posts`，V43）。 */
+@Controller('api/posts')
+@JavaStatusOk()
+export class PostController {
+  constructor(private readonly service: SystemService) {}
+
+  @Get()
+  async list(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('keyword') keyword?: string,
+    @Query('status') status?: string,
+  ): Promise<R<PageResult<PostVO>>> {
+    return R.ok(
+      await this.service.listPosts(bindIntegerProperty(page, 1), bindIntegerProperty(size, 20), {
+        keyword: keyword ?? null,
+        status: status !== undefined && status !== '' ? Number(status) : null,
+      }),
+    )
+  }
+
+  /** 启用岗位下拉选项（⚠️ 声明在 `:id` 之前，同 `/users/batch` 的教训）。 */
+  @Get('options')
+  async options(): Promise<R<PostOptionVO[]>> {
+    return R.ok(await this.service.listPostOptions())
+  }
+
+  @Post()
+  async create(
+    @Body() body: PostSaveRequest,
+  ): Promise<R<PostVO>> {
+    return R.ok(
+      await this.service.createPost({
+        postCode: body.postCode,
+        postName: body.postName,
+        description: body.description ?? null,
+        sortOrder: body.sortOrder ?? null,
+        status: body.status ?? null,
+      }),
+    )
+  }
+
+  @Put(':id')
+  async update(@Param('id') id: string, @Body() body: Partial<PostSaveRequest>): Promise<R<PostVO>> {
+    return R.ok(await this.service.updatePost(Number(id), body ?? {}))
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: string): Promise<R<null>> {
+    await this.service.deletePost(Number(id))
+    return R.ok()
+  }
+}
+
+/** 岗位保存请求体。 */
+interface PostSaveRequest {
+  postCode: string
+  postName: string
+  description?: string | null
+  sortOrder?: number | null
+  status?: number | null
+}
+
+/**
+ * 成员组接口（`/api/member-groups`，V43）。
+ *
+ * 成员 = 手动添加 ∪ 规则匹配（按岗位/按组织机构）；成员/规则端点挂在 `:id` 下。
+ */
+@Controller('api/member-groups')
+@JavaStatusOk()
+export class MemberGroupController {
+  constructor(private readonly service: SystemService) {}
+
+  @Get()
+  async list(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('keyword') keyword?: string,
+  ): Promise<R<PageResult<MemberGroupVO>>> {
+    return R.ok(
+      await this.service.listGroups(
+        bindIntegerProperty(page, 1),
+        bindIntegerProperty(size, 20),
+        keyword ?? null,
+      ),
+    )
+  }
+
+  @Post()
+  async create(@Body() body: GroupSaveRequest): Promise<R<MemberGroupVO>> {
+    return R.ok(
+      await this.service.createGroup({
+        groupName: body.groupName,
+        description: body.description ?? null,
+      }),
+    )
+  }
+
+  @Put(':id')
+  async update(@Param('id') id: string, @Body() body: Partial<GroupSaveRequest>): Promise<R<MemberGroupVO>> {
+    return R.ok(
+      await this.service.updateGroup(Number(id), {
+        groupName: body.groupName ?? null,
+        description: body.description ?? null,
+      }),
+    )
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: string): Promise<R<null>> {
+    await this.service.deleteGroup(Number(id))
+    return R.ok()
+  }
+
+  /** 有效成员分页（含来源标记）。 */
+  @Get(':id/members')
+  async members(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('keyword') keyword?: string,
+  ): Promise<R<PageResult<GroupMemberVO>>> {
+    return R.ok(
+      await this.service.listGroupMembers(
+        Number(id),
+        bindIntegerProperty(page, 1),
+        bindIntegerProperty(size, 20),
+        keyword ?? null,
+      ),
+    )
+  }
+
+  /** 批量添加手动成员。 */
+  @Post(':id/members')
+  async addMembers(@Param('id') id: string, @Body() body: { userIds?: number[] }): Promise<R<null>> {
+    await this.service.addGroupMembers(Number(id), body?.userIds ?? [])
+    return R.ok()
+  }
+
+  /** 批量移除手动成员（仅直接添加部分；规则匹配成员由删规则自动消失）。 */
+  @Post(':id/members/remove')
+  async removeMembers(@Param('id') id: string, @Body() body: { userIds?: number[] }): Promise<R<null>> {
+    await this.service.removeGroupMembers(Number(id), body?.userIds ?? [])
+    return R.ok()
+  }
+
+  /** 规则列表（带维度取值展示名）。 */
+  @Get(':id/rules')
+  async rules(@Param('id') id: string): Promise<R<GroupRuleVO[]>> {
+    return R.ok(await this.service.listGroupRules(Number(id)))
+  }
+
+  /** 添加自动匹配规则（position=按岗位 / org=按组织机构）。 */
+  @Post(':id/rules')
+  async addRule(
+    @Param('id') id: string,
+    @Body() body: { ruleType?: 'position' | 'org'; ruleValue?: number },
+  ): Promise<R<GroupRuleVO>> {
+    return R.ok(
+      await this.service.addGroupRule(Number(id), {
+        ruleType: body?.ruleType ?? ('position' as const),
+        ruleValue: body?.ruleValue ?? null,
+      }),
+    )
+  }
+
+  /** 删除自动匹配规则。 */
+  @Delete(':id/rules/:ruleId')
+  async removeRule(@Param('id') id: string, @Param('ruleId') ruleId: string): Promise<R<null>> {
+    await this.service.removeGroupRule(Number(id), Number(ruleId))
+    return R.ok()
+  }
+}
+
+/** 成员组保存请求体。 */
+interface GroupSaveRequest {
+  groupName: string
+  description?: string | null
 }

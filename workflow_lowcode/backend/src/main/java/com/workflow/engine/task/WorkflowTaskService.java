@@ -17,6 +17,7 @@ import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.config.NodeOptions;
 import com.workflow.engine.process.config.NodeOptionsService;
+import com.workflow.engine.process.config.ProcessPolicy;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.task.entity.WfTaskRemind;
@@ -53,6 +54,14 @@ import java.util.stream.Collectors;
 public class WorkflowTaskService {
 
     private static final Logger log = LoggerFactory.getLogger(WorkflowTaskService.class);
+
+    /** 退回免审变量：reject 时收集已通过节点（对齐 NodeJS {@code __retakeApprovedNodes}）。 */
+    public static final String VAR_RETAKE_APPROVED_NODES = "__retakeApprovedNodes";
+    /**
+     * 召回重走免重去重的一次性标记（对齐 NodeJS EngineProcessPolicy.skipDedupForRecall）：
+     * recallApproval 写入，TaskCreateBehaviorListener 创建任务时消费并清除。
+     */
+    public static final String RETAKE_SKIP_DEDUP_VAR = "__recallRetakeSkipDedup";
 
     private final org.flowable.engine.TaskService flowableTaskService;
     private final HistoryService historyService;
@@ -1282,65 +1291,120 @@ public class WorkflowTaskService {
         commentRepository.save(record);
     }
 
-    // ==================== Task 61/65 门禁与增量能力 ====================
+    // ==================== Task 61/65/69 门禁与增量能力 ====================
 
     /**
-     * 填充节点级增量字段：taskRole / nodeFlags / lastSignature。
+     * 流程级策略（{@code __PROCESS__} config_json 归一化；Task 69 对齐 NodeJS loadProcessPolicy）。
+     *
+     * <p>每次读库无缓存（配置表量小）；读取失败/未配置返回全关默认策略（不改变既有行为）。
+     */
+    public ProcessPolicy loadProcessPolicy(String processDefinitionId) {
+        try {
+            for (NodeConfig nc : nodeConfigRepository.findByProcessDefinitionId(processDefinitionId)) {
+                if (ProcessPolicy.PROCESS_LEVEL_NODE_ID.equals(nc.getNodeId())) {
+                    return ProcessPolicy.parseProcessPolicy(nc.getConfigJson());
+                }
+            }
+            return ProcessPolicy.parseProcessPolicy(null);
+        } catch (Exception e) {
+            log.warn("读取流程级策略失败 defId={}: {}", processDefinitionId, e.getMessage());
+            return ProcessPolicy.parseProcessPolicy(null);
+        }
+    }
+
+    /**
+     * 填充节点级增量字段：taskRole / nodeFlags / processFlags / lastSignature。
      *
      * <p>taskRole：isInitiatorTask → initiator；config.taskRole → 显式值；BPMN wf:nodeRole 兑底；
-     * 缺省 approver。nodeFlags 从节点配置解析（旧数据全 false）。lastSignature 仅
-     * signature.useLast=true 时查该办理人最近一条带签名的 approve 意见回填。
+     * 缺省 approver。nodeFlags 与流程级策略合并（Task 69 口径）：
+     * <ul>
+     *   <li>意见必填 = 节点级 commentRequired OR 流程级 commentPolicy(enabled && scope=ALL)</li>
+     *   <li>签名 = 节点显式配置优先，节点未配置时用流程级默认（⚠️ 流程级是「默认值提供者」
+     *       而不是总闸：sigEnabled = node.signature.enabled != null ? ... : policy.enabled）</li>
+     * </ul>
+     * processFlags 透出流程级评论管理三开关与审批召回开关。
      */
     private void fillNodeFlags(TaskDetailVO vo, String processDefinitionId, String nodeKey,
                                boolean isInitiatorTask, String assignee) {
         try {
             vo.setTaskRole(nodeOptionsService.resolveTaskRole(processDefinitionId, nodeKey, isInitiatorTask));
+            ProcessPolicy policy = loadProcessPolicy(processDefinitionId);
             TaskDetailVO.NodeFlags flags = new TaskDetailVO.NodeFlags();
             NodeOptions opts = nodeOptionsService.find(processDefinitionId, nodeKey).orElse(null);
-            if (opts != null) {
-                flags.setCommentRequired(Boolean.TRUE.equals(opts.getCommentRequired()));
-                flags.setSignatureEnabled(Boolean.TRUE.equals(opts.getSignatureEnabled()));
-                flags.setSignatureRequired(Boolean.TRUE.equals(opts.getSignatureRequired()));
-                flags.setSignatureUseLast(Boolean.TRUE.equals(opts.getSignatureUseLast()));
-                flags.setSignatureAllowUpload(Boolean.TRUE.equals(opts.getSignatureAllowUpload()));
-                if (Boolean.TRUE.equals(opts.getSignatureUseLast())
-                        && assignee != null && !assignee.isBlank()) {
-                    commentRepository
-                            .findFirstByTenantIdAndUserIdAndActionAndSignatureIsNotNullOrderByCreatedAtDesc(
-                                    tenantProvider.getTenantId(), assignee, "approve")
-                            .map(WfTaskComment::getSignature)
-                            .ifPresent(vo::setLastSignature);
-                }
+            // 意见必填：节点级 OR 流程级 commentPolicy(enabled && scope=ALL)
+            boolean commentRequired = (opts != null && Boolean.TRUE.equals(opts.getCommentRequired()))
+                    || (policy.isCommentPolicyEnabled() && "ALL".equals(policy.getCommentPolicyScope()));
+            flags.setCommentRequired(commentRequired);
+            // 签名：节点显式配置优先；节点未配置时用流程级默认（流程级只是默认值提供者）
+            Boolean nodeSigEnabled = opts != null ? opts.getSignatureEnabled() : null;
+            boolean sigEnabled = nodeSigEnabled != null ? nodeSigEnabled : policy.isSignatureEnabled();
+            flags.setSignatureEnabled(sigEnabled);
+            Boolean nodeSigRequired = opts != null ? opts.getSignatureRequired() : null;
+            flags.setSignatureRequired(sigEnabled ? pick(nodeSigRequired, policy.isSignatureRequired()) : false);
+            Boolean nodeSigUseLast = opts != null ? opts.getSignatureUseLast() : null;
+            boolean useLast = sigEnabled ? pick(nodeSigUseLast, policy.isSignatureUseLast()) : false;
+            flags.setSignatureUseLast(useLast);
+            Boolean nodeSigAllowUpload = opts != null ? opts.getSignatureAllowUpload() : null;
+            flags.setSignatureAllowUpload(sigEnabled
+                    ? pick(nodeSigAllowUpload, policy.isSignatureAllowUpload()) : false);
+            // 上次签名回填：仅生效 useLast=true 时查该办理人最近一条带签名的 approve 意见
+            if (useLast && assignee != null && !assignee.isBlank()) {
+                commentRepository
+                        .findFirstByTenantIdAndUserIdAndActionAndSignatureIsNotNullOrderByCreatedAtDesc(
+                                tenantProvider.getTenantId(), assignee, "approve")
+                        .map(WfTaskComment::getSignature)
+                        .ifPresent(vo::setLastSignature);
             }
             vo.setNodeFlags(flags);
+            // 流程级策略透出（评论管理 + 审批召回）
+            TaskDetailVO.ProcessFlags processFlags = new TaskDetailVO.ProcessFlags();
+            processFlags.setCommentDisabled(policy.isCommentDisabled());
+            processFlags.setCommentDisallowDelete(policy.isCommentDisallowDelete());
+            processFlags.setCommentDisallowAttachment(policy.isCommentDisallowAttachment());
+            processFlags.setApproveRecall(policy.isApproveRecall());
+            vo.setProcessFlags(processFlags);
         } catch (Exception e) {
             log.warn("填充节点行为标记失败 defId={} node={}: {}", processDefinitionId, nodeKey, e.getMessage());
         }
     }
 
+    /** 三态合并：节点显式值（可能 null）优先，否则落流程级默认。 */
+    private static boolean pick(Boolean nodeValue, boolean policyValue) {
+        return nodeValue != null ? nodeValue : policyValue;
+    }
+
     /**
-     * complete 门禁（对齐 NodeJS completeTask ①-④）。节点无配置块（旧数据）时整体跳过，
-     * 与 NodeJS「node === undefined 时跳过全部检查」一致。
+     * complete 门禁（对齐 NodeJS completeTask ①-④）。
+     *
+     * <p>Task 69 流程级合并：意见必填 = 节点级 OR 流程级 commentPolicy(enabled && scope=ALL)；
+     * 签名 = 节点显式配置优先，节点未配置时用流程级默认（「默认值提供者」语义）。
      */
     private void validateCompleteGate(Task task, String comment, String signature) {
         String processDefinitionId = task.getProcessDefinitionId();
         String nodeKey = task.getTaskDefinitionKey();
         NodeOptions opts = nodeOptionsService.find(processDefinitionId, nodeKey).orElse(null);
-        if (opts == null) {
-            return;
-        }
+        ProcessPolicy policy = loadProcessPolicy(processDefinitionId);
         String label = task.getName() == null || task.getName().isBlank() ? nodeKey : task.getName();
-        if (Boolean.TRUE.equals(opts.getCommentRequired())
-                && (comment == null || comment.isBlank())) {
+        // 意见必填 = 节点级 OR 流程级 commentPolicy(enabled && scope=ALL)
+        boolean commentRequired = (opts != null && Boolean.TRUE.equals(opts.getCommentRequired()))
+                || (policy.isCommentPolicyEnabled() && "ALL".equals(policy.getCommentPolicyScope()));
+        if (commentRequired && (comment == null || comment.isBlank())) {
+            String taskRole = opts != null ? opts.getTaskRole() : null;
             throw new BusinessException(400,
-                    ("handler".equals(opts.getTaskRole()) ? "处理" : "审批")
+                    ("handler".equals(taskRole) ? "处理" : "审批")
                             + "意见必填（节点「" + label + "」）");
         }
-        if (Boolean.TRUE.equals(opts.getSignatureRequired())
-                && (signature == null || signature.isBlank())) {
+        // 签名：节点显式配置优先；节点未配置时用流程级默认（流程级只是默认值提供者，不覆盖节点显式配置）
+        Boolean nodeSigEnabled = opts != null ? opts.getSignatureEnabled() : null;
+        boolean sigEnabled = nodeSigEnabled != null ? nodeSigEnabled : policy.isSignatureEnabled();
+        Boolean nodeSigRequired = opts != null ? opts.getSignatureRequired() : null;
+        boolean sigRequired = sigEnabled
+                ? (nodeSigRequired != null ? nodeSigRequired : policy.isSignatureRequired())
+                : false;
+        if (sigRequired && (signature == null || signature.isBlank())) {
             throw new BusinessException(400, "此节点要求手写签名（节点「" + label + "」）");
         }
-        if (Boolean.TRUE.equals(opts.getMustAddSign())
+        if (opts != null && Boolean.TRUE.equals(opts.getMustAddSign())
                 && !hasAddSignComment(task.getProcessInstanceId(), nodeKey)) {
             throw new BusinessException(400, "此节点必须加签后才能通过（节点「" + label + "」）");
         }
@@ -1352,7 +1416,10 @@ public class WorkflowTaskService {
 
     /**
      * refuse 门禁（对齐 NodeJS refuseTask）：allowRefuse/allowReject 权限 →
-     * 办理节点无「拒绝」语义（后端兑底拦截）→ commentRequired 时拒绝理由必填。
+     * 办理节点无「拒绝」语义（后端兑底拦截）→ 拒绝理由必填。
+     *
+     * <p>Task 69：理由必填 = 节点级 commentRequired OR 流程级 commentPolicy.enabled
+     * （REJECT_RETURN 与 ALL 都覆盖拒绝）。
      */
     public void validateRefuseGate(String taskId, String reason) {
         Task task = flowableTaskService.createTaskQuery().taskId(taskId).singleResult();
@@ -1366,15 +1433,16 @@ public class WorkflowTaskService {
             throw new BusinessException(400, "该节点不允许拒绝");
         }
         NodeOptions opts = nodeOptionsService.find(processDefinitionId, nodeKey).orElse(null);
-        if (opts != null) {
-            if ("handler".equals(opts.getTaskRole())) {
-                throw new BusinessException(400, "办理节点不支持拒绝操作");
-            }
+        if (opts != null && "handler".equals(opts.getTaskRole())) {
+            throw new BusinessException(400, "办理节点不支持拒绝操作");
+        }
+        // 拒绝理由必填 = 节点级 OR 流程级 commentPolicy(enabled)（REJECT_RETURN 与 ALL 都覆盖拒绝）
+        ProcessPolicy policy = loadProcessPolicy(processDefinitionId);
+        boolean refuseCommentRequired = (opts != null && Boolean.TRUE.equals(opts.getCommentRequired()))
+                || policy.isCommentPolicyEnabled();
+        if (refuseCommentRequired && (reason == null || reason.isBlank())) {
             String label = task.getName() == null || task.getName().isBlank() ? nodeKey : task.getName();
-            if (Boolean.TRUE.equals(opts.getCommentRequired())
-                    && (reason == null || reason.isBlank())) {
-                throw new BusinessException(400, "审批意见必填（节点「" + label + "」）");
-            }
+            throw new BusinessException(400, "审批意见必填（节点「" + label + "」）");
         }
     }
 
@@ -1533,6 +1601,119 @@ public class WorkflowTaskService {
 
         // 8. 意见 action='recall'
         saveTaskComment(openTasks.get(0).getId(), instanceId, userId, "recall", reason);
+    }
+
+    // ==================== Task 69 审批召回 ====================
+
+    /**
+     * 审批召回：审批人撤回自己<strong>已办理</strong>的审批，流程回到该节点等待重新处理
+     * （对齐 NodeJS recallApproval；与「发起人撤回」{@link #recallInstance} 不是一回事）。
+     *
+     * <p>门禁链（对齐钉钉「审批召回」，错误消息与 NodeJS 逐字一致）：
+     * <ol>
+     *   <li>流程级 approveRecall 开启；</li>
+     *   <li>任务已完成且调用者 = 办理人（403）；</li>
+     *   <li>实例 RUNNING；</li>
+     *   <li>召回之后没有其他审批人再办结（比较 end_time，「下个节点审批前」）；</li>
+     *   <li>发起节点任务不支持（走 recallInstance）；</li>
+     *   <li>多实例（会签/依次）节点 v1 整体不支持（引擎重走会重置 MI 计数）。</li>
+     * </ol>
+     *
+     * <p>动作：设变量 approveRecalled=true + 当前活跃节点整体移回目标任务节点
+     * （changeActivityState，与 recallInstance 同款用法）+ 意见 action='approve_recall'。
+     * 另设一次性变量 {@code __recallRetakeSkipDedup}：召回重走会命中「已办过去重」
+     * （Node 端 EngineProcessPolicy.skipDedupForRecall 的 Java 等价），由
+     * TaskCreateBehaviorListener 创建任务时消费并清除，否则召回者会被去重 auto-pass 掉。
+     */
+    @Transactional
+    public void recallApproval(String taskId, String userId) {
+        // 1. 任务已完成（运行时表查得到 = 未办结；已办任务在 ACT_HI_TASKINST）
+        Task runtimeTask = flowableTaskService.createTaskQuery().taskId(taskId).singleResult();
+        if (runtimeTask != null) {
+            throw new BusinessException(400, "仅已办理的审批任务可以召回");
+        }
+        HistoricTaskInstance task = historyService.createHistoricTaskInstanceQuery()
+                .taskId(taskId)
+                .singleResult();
+        if (task == null) {
+            throw new BusinessException(400, "任务不存在: " + taskId);
+        }
+        if (task.getEndTime() == null || task.getDeleteReason() != null) {
+            // deleteReason 非空 = 被驳回/撤回撤销的任务，不属于「已办理的审批」
+            throw new BusinessException(400, "仅已办理的审批任务可以召回");
+        }
+        if (userId == null || userId.isBlank() || !userId.equals(task.getAssignee())) {
+            throw new BusinessException(403, "仅任务办理人本人可以召回");
+        }
+
+        String instanceId = task.getProcessInstanceId();
+        String processDefinitionId = task.getProcessDefinitionId();
+        String nodeKey = task.getTaskDefinitionKey();
+
+        // 2. 实例运行中
+        ProcessInstance instance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(instanceId)
+                .singleResult();
+        if (instance == null) {
+            throw new BusinessException(400, "流程已结束，无法召回");
+        }
+
+        // 3. 发起节点任务不支持召回
+        String initiatorNodeId;
+        try {
+            initiatorNodeId = initiatorNodeResolver.resolve(processDefinitionId);
+        } catch (Exception e) {
+            initiatorNodeId = null;
+        }
+        if (initiatorNodeId != null && initiatorNodeId.equals(nodeKey)) {
+            throw new BusinessException(400, "发起节点任务不支持召回");
+        }
+
+        // 4. 多实例（会签/依次）节点 v1 拒绝（approval.multiMode 非 single）
+        NodeOptions opts = nodeOptionsService.find(processDefinitionId, nodeKey).orElse(null);
+        if (opts != null && opts.getMultiMode() != null && !"single".equals(opts.getMultiMode())) {
+            throw new BusinessException(400, "会签/依次审批节点暂不支持召回");
+        }
+
+        // 5. 流程级 approveRecall 开关
+        ProcessPolicy policy = loadProcessPolicy(processDefinitionId);
+        if (!policy.isApproveRecall()) {
+            throw new BusinessException(400, "该流程未开启审批召回");
+        }
+
+        // 6. 召回之后没有其他审批人再办结：比较完成时间（end_time 之后同实例的已完成任务）
+        //    ⚠️ 排除 deleteReason 非空的记录（被撤销的任务不算「已办理」）
+        List<HistoricTaskInstance> laterTasks = historyService.createHistoricTaskInstanceQuery()
+                .processInstanceId(instanceId)
+                .finished()
+                .taskCompletedAfter(task.getEndTime())
+                .list();
+        boolean laterHandled = laterTasks.stream()
+                .anyMatch(t -> t.getEndTime() != null && t.getDeleteReason() == null);
+        if (laterHandled) {
+            throw new BusinessException(400, "后续节点已有人办理，无法召回");
+        }
+
+        // 7. 动作：approveRecalled=true + 召回重走免重去重标记 + 当前活跃节点整体移回目标任务节点
+        runtimeService.setVariable(instanceId, "approveRecalled", true);
+        runtimeService.setVariable(instanceId, RETAKE_SKIP_DEDUP_VAR, true);
+        List<Task> openTasks = flowableTaskService.createTaskQuery()
+                .processInstanceId(instanceId)
+                .list();
+        if (openTasks.isEmpty()) {
+            throw new BusinessException(400, "流程无待办任务，无法召回");
+        }
+        List<String> activityIds = openTasks.stream()
+                .map(Task::getTaskDefinitionKey)
+                .distinct()
+                .toList();
+        runtimeService.createChangeActivityStateBuilder()
+                .processInstanceId(instanceId)
+                .moveActivityIdsToSingleActivityId(activityIds, nodeKey)
+                .changeState();
+
+        // 8. 意见 action='approve_recall'
+        saveTaskComment(taskId, instanceId, userId, "approve_recall", "审批召回，重新处理");
     }
 
     /**

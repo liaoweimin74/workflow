@@ -340,6 +340,28 @@ describe('ColumnConfigDialog — mapComponentToColumn 扩展组件映射（与�
     const textCol = items.find(i => i.key === 'emp_text')
     expect(idCol?.componentType).toBe('dataPicker')
     expect(textCol?.componentType).toBe('dataPickerText')
+    // pickerConfig 携带 sourceFormKey；dataSourceId 缺省时落 null（后端按 sourceFormKey 解析）
+    expect(JSON.parse(idCol?.pickerConfig || '{}')).toEqual({
+      sourceFormKey: 'x',
+      dataSourceId: null,
+      displayField: 'name',
+      maxCount: undefined,
+      pickerType: 'dataPicker',
+    })
+    wrapper.unmount()
+  })
+
+  it('dataPicker dataSourceId 模式：pickerConfig 保留 dataSourceId（后端数据源引用解析）', async () => {
+    const wrapper = createWrapper({
+      schema: [{ type: 'dataPicker', field: 'members', title: '组成员', props: { dataSourceId: 'ds-builtin-user-tree', displayField: 'nickname' } }] as any,
+    })
+    await openAndBuild(wrapper)
+    const items = confirmItems(wrapper)
+    const idCol = items.find(i => i.key === 'members')
+    const parsed = JSON.parse(idCol?.pickerConfig || '{}')
+    expect(parsed.dataSourceId).toBe('ds-builtin-user-tree')
+    expect(parsed.sourceFormKey).toBeUndefined()
+    expect(parsed.pickerType).toBe('dataPicker')
     wrapper.unmount()
   })
 

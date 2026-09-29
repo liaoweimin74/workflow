@@ -105,6 +105,8 @@ export interface ReturnOptions {
 export interface DedupOptions {
   enabled?: boolean
   skipSameAsInitiator?: boolean
+  /** 节点级命中口径：CONSECUTIVE=上一节点此审批人已同意；FIRST=前面任意节点已同意；缺省回落流程级 dedup.mode */
+  mode?: 'CONSECUTIVE' | 'FIRST'
 }
 
 /** 手写签名。 */
@@ -126,6 +128,68 @@ export interface InitiatorOptions {
   urge?: { enabled?: boolean; interval?: number; unit?: 'minute' | 'hour' | 'day' }
   reInitiate?: boolean
   smsOnEnd?: boolean
+}
+
+/** 流程级超时规则（规则组；对齐设计器「添加超时规则」）。 */
+export interface ProcessTimeoutRule {
+  id: string
+  action: 'remind' | 'transfer' | 'pass' | 'refuse'
+  duration: number
+  unit: 'minute' | 'hour' | 'day'
+  /** 重复提醒（仅 remind；间隔 = duration） */
+  repeat?: boolean
+  /** 被提醒人：当前审批人 */
+  notifyAssignee?: boolean
+  /** 被提醒人：审批管理员 */
+  notifyAdmin?: boolean
+  /** 被提醒人：更多员工 */
+  notifyUserIds?: string[]
+  /** 通知方式：短信 */
+  sms?: boolean
+}
+
+/**
+ * 流程级策略（wf_node_config `__PROCESS__` 行 config_json 的归一化产物；
+ * 由服务层 parseProcessPolicy 解析后注入引擎/门禁，引擎本身不读 DB）。
+ */
+export interface ProcessPolicy {
+  /** 审批人去重（流程级）：命中口径 + 发起人同人免审。 */
+  dedup: {
+    enabled: boolean
+    mode: 'CONSECUTIVE' | 'FIRST' | 'LAST'
+    skipSameAsInitiator: boolean
+  }
+  /** 审批处理意见必填：scope=REJECT_RETURN 拒绝/退回必填；ALL 全部操作必填。 */
+  commentPolicy: { enabled: boolean; scope: 'REJECT_RETURN' | 'ALL' }
+  /** 手写签名流程级总控+默认值（节点未显式配置时生效）。 */
+  signaturePolicy: {
+    enabled: boolean
+    useLast: boolean
+    allowUpload: boolean
+    required: boolean
+  }
+  /** 评论管理（详情 VO 透出 + 未来评论端点门禁）。 */
+  comment: { disabled: boolean; disallowDelete: boolean; disallowAttachment: boolean }
+  /** 审批召回：审批人可在下个节点审批前召回自己已办的审批。 */
+  approveRecall: boolean
+  /** 流程退回后重新审批时，已通过节点无需再审批。 */
+  retakeSkipApproved: boolean
+  /** 流程级超时规则组（节点未开启 timeout 时兜底）。 */
+  timeoutRules: ProcessTimeoutRule[]
+  /** 可发起人员范围（start() 门禁）：ALL=不校验；SPECIFIED=发起人须命中用户/角色名单（管理员绕过）。 */
+  starterScope: {
+    mode: 'ALL' | 'SPECIFIED'
+    userIds: string[]
+    /** 角色编码列表（sys_role.role_code，与 roleMemberships 同口径）。 */
+    roleIds: string[]
+  }
+  /** 流程级审批管理员（用户 ID 列表）：超时转派/被提醒人优先取此名单，未配置回落全局 admin。 */
+  adminUserIds: string[]
+  /** 自定义审批标题模板（{{processName}}/{{initiator}}/{{date}}/{{表单字段}}）。 */
+  titlePattern: string | null
+  /** 自定义摘要字段（≤5）+ 短信展示摘要。 */
+  summaryFields: string[]
+  summaryShowInSms: boolean
 }
 
 /**
@@ -159,7 +223,7 @@ export interface CompiledFlow {
 export interface CompiledApproval {
   /**
    * 办理/审批人类型（nodeConfigs approval.type 原文；缺省 'user'）。
-   * 引擎据此做类型化解析（initiator_self / initiator_select / role / expression），
+   * 引擎据此做类型化解析（initiator_self / initiator_select / role / form_user / external / expression），
    * 其余类型走「找不到办理人」策略。
    */
   type?: string
@@ -167,6 +231,15 @@ export interface CompiledApproval {
   roleCodes: string[]
   /** 表达式（type=expression 时有值，如 `${initiator.deptManager}`）。 */
   expression?: string
+  /** 表单内用户字段名（type=form_user 时生效；引擎从流程变量取该字段值解析用户）。 */
+  formUserField?: string
+  /** 自定义选人（type=external 时生效；业务系统经 assignee-resolver-registry 注册的选人函数）。 */
+  external?: {
+    /** 选人函数注册名 */
+    resolver?: string
+    /** 节点配置的参数值表（运行时作为选人函数第二参传入，同一函数可按参数复用） */
+    params?: Record<string, unknown>
+  }
   multiMode: MultiMode
 }
 
@@ -197,6 +270,8 @@ export interface CompiledNode {
   returnOptions?: ReturnOptions
   /** 处理/审批意见必填。 */
   commentRequired?: boolean
+  /** 意见必填范围：REJECT_RETURN=拒绝/退回必填（通过不拦）；ALL=全部操作必填；缺省按 ALL 兼容旧数据。 */
+  commentRequiredScope?: 'REJECT_RETURN' | 'ALL'
   /** 流程到达此节点后禁止撤销/撤回。 */
   blockRecall?: boolean
   /** 审批人去重（审批节点）。 */
@@ -207,8 +282,14 @@ export interface CompiledNode {
   notify?: NotifyOptions
   /** 发起节点专用配置。 */
   initiatorOptions?: InitiatorOptions
-  /** 超时配置（服务层调度器读取）。 */
-  timeout?: { enabled?: boolean; duration?: number; action?: TimeoutAction }
+  /** 超时配置（服务层调度器读取；rules 非空时按规则组处理，否则回落 legacy 单规则）。 */
+  timeout?: {
+    enabled?: boolean
+    duration?: number
+    action?: TimeoutAction
+    /** 节点级超时规则组（对齐流程级 timeoutRules；pass/refuse 对办理节点不生效） */
+    rules?: ProcessTimeoutRule[]
+  }
   /** userTask 上直接写死的 assignee（如 flowable:assignee="1"）。 */
   assignee?: string
   /** userTask 上直接写死的候选人（flowable:candidateUsers 逗号分隔）。 */

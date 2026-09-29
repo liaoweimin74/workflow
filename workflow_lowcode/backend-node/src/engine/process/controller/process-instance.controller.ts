@@ -2,9 +2,9 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/
 import { R } from '../../../common/domain/r'
 import { PageResponse } from '../../../common/domain/page-response'
 import { JavaStatusOk } from '../../../framework/http/java-status.decorator'
+import { intQueryParam } from '../../../framework/http/query-params'
 import { CurrentUser } from '../../../framework/security/current-user.decorator'
 import type { LoginUser } from '../../../framework/security/jwt-auth.guard'
-import { intQueryParam } from '../../../framework/http/query-params'
 import { TaskService } from '../../task/task.service'
 import {
   ProcessInstanceService,
@@ -36,9 +36,18 @@ export class ProcessInstanceController {
   ) {}
 
   @Post()
-  async start(@Body() body: StartProcessRequest): Promise<R<StartProcessResult>> {
+  async start(
+    @Body() body: StartProcessRequest,
+    // 可发起范围门禁（Task 76）：基于登录用户而非客户端 variables.initiator（可伪造）
+    @CurrentUser() user: LoginUser,
+  ): Promise<R<StartProcessResult>> {
     return R.ok(
-      await this.service.start(body.processKey ?? '', body.businessKey ?? null, body.variables),
+      await this.service.start(
+        body.processKey ?? '',
+        body.businessKey ?? null,
+        body.variables,
+        String(user.userId),
+      ),
     )
   }
 

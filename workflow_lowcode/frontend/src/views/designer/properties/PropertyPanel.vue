@@ -20,6 +20,13 @@
         </div>
       </div>
 
+      <!-- 节点标识（只读）： BPMN element id，点击复制；选中画布空白（流程属性）时不显示 -->
+      <div v-if="selectedNodeId" class="panel-meta">
+        <span class="meta-label">ID</span>
+        <span class="meta-value" :title="selectedNodeId">{{ selectedNodeId }}</span>
+        <el-icon class="meta-copy" title="复制节点 ID" @click="copyNodeId"><CopyDocument /></el-icon>
+      </div>
+
       <!-- 只读模式：复用同一套可视化属性组件，el-form disabled 禁编辑（tab 可切换、滚动正常） -->
       <div class="panel-body">
         <!-- 流程属性（选中画布空白时） -->
@@ -95,7 +102,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Element } from 'bpmn-js/lib/model/Types'
-import { Fold, Setting } from '@element-plus/icons-vue'
+import { CopyDocument, Fold, Setting } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import ProcessProperty from './ProcessProperty.vue'
@@ -159,6 +167,23 @@ function resolveNodeRole(): string | null {
   } catch {
     return null
   }
+}
+
+/** 复制当前节点 ID 到剪贴板（clipboard API 不可用时回退 execCommand） */
+async function copyNodeId(): Promise<void> {
+  const id = selectedNodeId.value
+  if (!id) return
+  try {
+    await navigator.clipboard.writeText(id)
+  } catch {
+    const input = document.createElement('textarea')
+    input.value = id
+    document.body.appendChild(input)
+    input.select()
+    document.execCommand('copy')
+    document.body.removeChild(input)
+  }
+  ElMessage.success(`已复制节点 ID：${id}`)
 }
 
 const nodeTypeLabel = computed(() => {
@@ -257,6 +282,48 @@ const nodeTypeLabel = computed(() => {
   border-bottom: 1px solid var(--el-border-color-light, #e9edfa);
 }
 
+/* 节点标识行：只读展示 BPMN element id，等宽字体 + 点击复制 */
+.panel-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: color-mix(in srgb, var(--el-color-primary) 4%, transparent);
+  border-bottom: 1px solid var(--el-border-color-lighter, #eef1fc);
+}
+
+.meta-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--el-text-color-secondary, #8b91ab);
+}
+
+.meta-value {
+  flex: 1;
+  min-width: 0;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  color: var(--el-text-color-regular, #4b5169);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: all;
+}
+
+.meta-copy {
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--el-text-color-secondary, #8b91ab);
+  transition: color 0.2s;
+}
+
+.meta-copy:hover {
+  color: var(--el-color-primary);
+}
+
 .panel-heading {
   display: flex;
   align-items: center;
@@ -309,6 +376,13 @@ const nodeTypeLabel = computed(() => {
 .panel-body :deep(.el-divider__text) {
   font-weight: 600;
   color: var(--el-text-color-regular, #4b5169);
+}
+
+/* 分组标题左对齐：is-left 默认 left:20px 缩进改 0；同时去掉文本框默认 padding-left:20px，
+   让标题「字形」（而非文本盒）与 label 字形精确平齐（Task 82 修正 Task 78 遗留的 20px 视觉偏差） */
+.panel-body :deep(.el-divider--horizontal .el-divider__text.is-left) {
+  left: 0;
+  padding-left: 0;
 }
 
 /* 属性表单在浅底色上以白卡片呈现，结构更清晰 */

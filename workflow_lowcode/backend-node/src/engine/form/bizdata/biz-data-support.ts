@@ -35,6 +35,9 @@ import { isConfigMode, type FormQueryConfig } from './form-query-config'
 import { ensureAlias } from './form-query-config'
 import { SqlQueryEngine } from './sql-query-engine'
 import { wrap, type WrappedQuery } from './sql-template-engine'
+import { SystemService } from '../../../system/service/system.service'
+import { SystemSourceQueryService } from '../../datasource/service/system-source-query.service'
+import { DataSourceRepository } from '../../datasource/repository/data-source.repository'
 
 /** 业务数据查询请求（对齐 Java `BizDataQueryRequest` 的默认值）。 */
 export interface BizDataQueryRequest {
@@ -73,6 +76,11 @@ export class BizDataSupport {
     private readonly repository: BizDataRepository,
     private readonly formDefRepository: FormDefinitionRepository,
     private readonly sqlQueryEngine: SqlQueryEngine,
+    /** data-picker dataSourceId 模式的显示文本解析（内建系统数据源取数）；
+     *  依赖方向 form → system/datasource 与 adapter 同向，无环。 */
+    private readonly systemService: SystemService,
+    private readonly systemSourceQuery: SystemSourceQueryService,
+    private readonly dataSources: DataSourceRepository,
   ) {}
 
   // ==================== 上下文 ====================
@@ -439,6 +447,127 @@ export class BizDataSupport {
     return out
   }
 
+  /**
+   * 按「数据源引用」批量解析显示文本（data-picker 的 dataSourceId 模式）。
+   *
+   * 背景：data-picker 除引用业务表单（sourceFormKey）外，还可引用数据源
+   * （dataSourceId，当前支持 SYSTEM 内建源：系统用户/系统岗位/组织机构等）。
+   * 显示文本语义与 resolveDisplayTexts 对齐：`id → displayField 值`，
+   * 引用不存在抛 400（消息对齐：`引用的数据不存在`）。
+   *
+   * 取数策略（SYSTEM 行数量有限，与 adapter.get 同款「拉取 + 内存过滤」）：
+   *   - user-tree：listUsersByUsername 分页生效 → 循环拉取；
+   *   - dept-tree：orgTree() 全量扁平化（对齐 adapter 的 dept-tree 分支空值语义）；
+   *   - 其余内建源（sys-posts 等）：SystemSourceQueryService.query，分页生效的循环拉满。
+   */
+  private async resolveDataSourceTexts(
+    dataSourceId: string,
+    ids: string[],
+    displayField: string,
+  ): Promise<Record<string, string>> {
+    if (!COLUMN_NAME_PATTERN.test(displayField)) {
+      throw new BusinessException(400, `非法显示字段: ${String(displayField)}`)
+    }
+    const ds = await this.dataSources.findByIdAccessible(dataSourceId, getTenantId())
+    if (ds === null) {
+      throw new BusinessException(400, `数据引用的数据源不存在: ${dataSourceId}`)
+    }
+    if (ds.type !== 'SYSTEM') {
+      throw new BusinessException(400, `数据引用暂不支持该数据源类型: ${dataSourceId}`)
+    }
+    const sourceKey = ds.source_key ?? ''
+    if (sourceKey.trim() === '') {
+      throw new BusinessException(400, `数据源缺少 source_key: ${dataSourceId}`)
+    }
+    const rows = await this.listSystemSourceRows(sourceKey)
+    const byId = new Map(rows.map((r) => [String(r.id), r]))
+    const out: Record<string, string> = {}
+    for (const id of ids) {
+      const row = byId.get(String(id))
+      if (row === undefined) {
+        throw new BusinessException(400, `引用的数据不存在: ${String(id)}`)
+      }
+      const v = row.data[displayField]
+      out[String(id)] = v === null || v === undefined ? '' : String(v)
+    }
+    return out
+  }
+
+  /** 内建系统数据源全量行（SYSTEM 行数有限；分页生效的源循环拉满，上限 20 页防失控）。 */
+  private async listSystemSourceRows(sourceKey: string): Promise<BizDataVO[]> {
+    if (sourceKey === 'dept-tree') {
+      // 组织机构树全量扁平化 —— 空值语义对齐 adapter 的 dept-tree 分支（一律空串）
+      const nodes = await this.systemService.orgTree()
+      const records: BizDataVO[] = []
+      const collect = (node: {
+        id: number
+        parentId: number | null
+        label: string | null
+        code: string | null
+        children?: Array<Record<string, unknown>> | null
+      }): void => {
+        records.push({
+          id: String(node.id),
+          data: {
+            id: String(node.id),
+            parentId: node.parentId === null || node.parentId === undefined ? '' : String(node.parentId),
+            label: node.label ?? '',
+            code: node.code ?? '',
+          },
+          version: null,
+          createdAt: null,
+          updatedAt: null,
+        })
+        for (const child of (node.children ?? []) as Array<Record<string, unknown>>) {
+          collect(child as Parameters<typeof collect>[0])
+        }
+      }
+      for (const node of nodes) {
+        collect(node as unknown as Parameters<typeof collect>[0])
+      }
+      return records
+    }
+    const records: BizDataVO[] = []
+    const pageSize = 500
+    for (let page = 1; page <= 20; page++) {
+      const result = sourceKey === 'user-tree'
+        ? await this.queryUserTreePage(page, pageSize)
+        : await this.systemSourceQuery.query(sourceKey, {
+            filter: null,
+            keyword: null,
+            keywordColumn: null,
+            sort: null,
+            order: null,
+            params: null,
+            page,
+            size: pageSize,
+          })
+      records.push(...result.records)
+      if (result.records.length === 0 || records.length >= result.total) break
+    }
+    return records
+  }
+
+  /** user-tree 单页取数（UserVO → BizDataVO，字段转换对齐 adapter 的 user-tree 分支）。 */
+  private async queryUserTreePage(page: number, size: number): Promise<BizDataPageVO> {
+    const result = await this.systemService.listUsersByUsername(null, page, size)
+    const records: BizDataVO[] = result.rows.map((row) => ({
+      id: String(row.id),
+      data: {
+        id: String(row.id),
+        username: row.username,
+        nickname: row.nickname ?? '',
+        orgId: row.orgId === null || row.orgId === undefined ? '' : String(row.orgId),
+        orgName: row.orgName ?? '',
+        status: row.status,
+      },
+      version: null,
+      createdAt: null,
+      updatedAt: null,
+    }))
+    return { records, total: result.total, page: result.page, size: result.size }
+  }
+
   // ==================== 引用统计 ====================
 
   /**
@@ -635,6 +764,38 @@ export class BizDataSupport {
   }
 
   /**
+   * DATE / DATETIME 列值归一（就地修改 `data`）。
+   *
+   * ⚠️ 为什么需要：前端日期选择器（form-create `datePicker`，未配置 value-format）
+   *    的 modelValue 是 Date 对象，JSON 序列化后是**带时区的 ISO 字符串**
+   *    （如 `2026-09-24T16:00:00.000Z`，即东八区 2026-09-25 00:00）。直接入库：
+   *    - DATE 列（物理 `date`）：MariaDB 严格模式拒绝 datetime 字符串 ——
+   *      `Incorrect date value: '2026-09-24T16:00:00.000Z'`；
+   *    - DATETIME 列：即便库接受了，存的也是 UTC 壁钟时间，回显差 8 小时。
+   *    因此写入前按**业务时区 Asia/Shanghai**（对齐连接池 `timezone: '+08:00'`）
+   *    归一：DATE → `YYYY-MM-DD`，DATETIME → `YYYY-MM-DD HH:mm:ss`。
+   *    纯日期/本地时间字符串原样保留；不可解析字符串原样透传（交给 DB 报 400 兜底）。
+   */
+  private normalizeDateTimeColumns(data: Record<string, unknown>, columns: ColumnConfig[]): void {
+    const dateKeys = new Set(
+      columns.filter((c) => (c.columnType ?? '').toUpperCase() === 'DATE').map((c) => String(c.key)),
+    )
+    const dateTimeKeys = new Set(
+      columns
+        .filter((c) => ['DATETIME', 'TIMESTAMP'].includes((c.columnType ?? '').toUpperCase()))
+        .map((c) => String(c.key)),
+    )
+    if (dateKeys.size === 0 && dateTimeKeys.size === 0) return
+    for (const [key, value] of Object.entries(data)) {
+      if (dateKeys.has(key)) {
+        data[key] = normalizeDateColumnValue(value, 'DATE')
+      } else if (dateTimeKeys.has(key)) {
+        data[key] = normalizeDateColumnValue(value, 'DATETIME')
+      }
+    }
+  }
+
+  /**
    * 通用新增（`createGeneric`）。
    *
    * 顺序照抄 Java：必填校验 → 序列化 → 取 picker 冗余文本 → INSERT → 主表行回读 →
@@ -648,6 +809,7 @@ export class BizDataSupport {
     this.validateRequired(ctx.columns, body)
 
     const merged = this.serializeJsonColumns(body, ctx.columns)
+    this.normalizeDateTimeColumns(merged, ctx.columns)
     Object.assign(merged, await this.resolvePickerValues(ctx, merged))
 
     const insert = buildInsert(ctx.tableName, ctx.columnKeys, merged, tenantId)
@@ -682,6 +844,7 @@ export class BizDataSupport {
     const currentVersion = version ?? 1
 
     const merged = this.serializeJsonColumns(body, ctx.columns)
+    this.normalizeDateTimeColumns(merged, ctx.columns)
     Object.assign(merged, await this.resolvePickerValues(ctx, merged))
 
     const query = buildUpdate(ctx.tableName, ctx.columnKeys, merged, tenantId, id, currentVersion)
@@ -936,6 +1099,10 @@ export class BizDataSupport {
     const sourceFormKey = picker.sourceFormKey === null || picker.sourceFormKey === undefined
       ? null
       : String(picker.sourceFormKey)
+    /** dataSourceId 模式（引用数据源，当前支持 SYSTEM 内建源），与 sourceFormKey（业务表单互引）二选一 */
+    const dataSourceId = picker.dataSourceId === null || picker.dataSourceId === undefined
+      ? null
+      : String(picker.dataSourceId)
     const displayField = picker.displayField === null || picker.displayField === undefined
       ? null
       : String(picker.displayField)
@@ -964,8 +1131,14 @@ export class BizDataSupport {
       }
     }
 
-    // 复用读路径的批量解析（`/biz-data/{formKey}/resolve` 用的是同一个方法）
-    const texts = await this.resolveDisplayTexts(sourceFormKey ?? '', ids, displayField ?? '')
+    // 复用读路径的批量解析（`/biz-data/{formKey}/resolve` 用的是同一个方法）：
+    // sourceFormKey（业务表单互引）优先；其次 dataSourceId（数据源引用，SYSTEM 内建源）；
+    // 两者都缺时保持原行为（resolveDisplayTexts('') → 400 非法目标表单 key）。
+    const texts = sourceFormKey !== null && sourceFormKey.trim() !== ''
+      ? await this.resolveDisplayTexts(sourceFormKey, ids, displayField ?? '')
+      : dataSourceId !== null && dataSourceId.trim() !== ''
+        ? await this.resolveDataSourceTexts(dataSourceId, ids, displayField ?? '')
+        : await this.resolveDisplayTexts('', ids, displayField ?? '')
     const ordered: string[] = []
     for (const id of ids) {
       const text = texts[id]
@@ -1178,6 +1351,83 @@ function joinTargetColumnType(columns: JoinTargetColumn[], key: string): string 
 /** 目标列查找：按 key 匹配；查不到返回 null（对齐 Java `findJoinTarget`）。 */
 function findJoinTarget(columns: JoinTargetColumn[], key: string): JoinTargetColumn | null {
   return columns.find((c) => c.key === key) ?? null
+}
+
+/** 业务时区：对齐连接池 `timezone: '+08:00'` 与业务约定（用户侧统一东八）。 */
+const BIZ_TIME_ZONE = 'Asia/Shanghai'
+
+/**
+ * Date → 业务时区（东八）的日期/时间文本。
+ *
+ * ⚠️ en-CA locale 的日期部分恰好是 ISO 形式（`2026-09-25`）；
+ *    `hour12: false` 在部分 V8 版本会给 `24:xx:xx`（零点），需归一回 `00:xx:xx`。
+ */
+function toBizZoneParts(date: Date): { date: string; time: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BIZ_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '00'
+  const hour = get('hour') === '24' ? '00' : get('hour')
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    time: `${hour}:${get('minute')}:${get('second')}`,
+  }
+}
+
+/** 纯日期文本（本地语义，不做时区换算）。 */
+const PLAIN_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+/** 本地时间文本（`YYYY-MM-DD HH:mm[:ss]`，无时区语义）。 */
+const PLAIN_DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/
+
+/**
+ * DATE / DATETIME 列写入值归一（对齐 Java `normalizeDateColumnValue`）。
+ *
+ * 规则（`kind === 'DATE'`）：
+ *   - `YYYY-MM-DD` 纯日期 → 原样（本地语义，无时区偏移问题）；
+ *   - 可解析为时刻的输入（ISO datetime / Date 对象）→ 按 Asia/Shanghai 取日期部分
+ *     （`2026-09-24T16:00:00.000Z` → `2026-09-25`，与用户所见一致）；
+ *   - 其余（null / 不可解析）→ 原样返回，交给 DB 校验兜底。
+ *
+ * 规则（`kind === 'DATETIME'`）：
+ *   - `YYYY-MM-DD` 纯日期 → 补零点 `YYYY-MM-DD 00:00:00`；
+ *   - `YYYY-MM-DD HH:mm[:ss]` 本地时间 → 补秒原样；
+ *   - 可解析时刻 → 按 Asia/Shanghai 格式化为 `YYYY-MM-DD HH:mm:ss`；
+ *   - 其余 → 原样。
+ */
+export function normalizeDateColumnValue(
+  value: unknown,
+  kind: 'DATE' | 'DATETIME',
+): unknown {
+  if (value === null || value === undefined) return value
+  let raw: string | null = null
+  let parsed: Date | null = null
+  if (value instanceof Date) {
+    parsed = value
+  } else if (typeof value === 'string') {
+    const s = value.trim()
+    if (s === '') return value
+    if (PLAIN_DATE_RE.test(s)) {
+      return kind === 'DATE' ? s : `${s} 00:00:00`
+    }
+    if (kind === 'DATETIME' && PLAIN_DATETIME_RE.test(s)) {
+      return s.length === 16 ? `${s}:00` : s
+    }
+    raw = s
+    const ms = Date.parse(s)
+    if (!Number.isNaN(ms)) parsed = new Date(ms)
+  } else {
+    return value
+  }
+  if (parsed === null) return raw ?? value
+  const { date, time } = toBizZoneParts(parsed)
+  return kind === 'DATE' ? date : `${date} ${time}`
 }
 
 /**

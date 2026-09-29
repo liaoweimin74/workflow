@@ -105,6 +105,35 @@ export class ProcessDesignRepository {
     return rows
   }
 
+  /**
+   * 批量取多个部署版本的 `__PROCESS__` 流程级配置（发起中心列表下发 starterScope 用，
+   * Task 76；一页定义数有限，单次 IN 查询避免 N+1）。
+   */
+  async findProcessLevelConfigsByDefIds(defIds: string[]): Promise<NodeConfigRow[]> {
+    if (defIds.length === 0) return []
+    const rows = await this.db
+      .selectFrom('wf_node_config')
+      .selectAll()
+      .where('process_definition_id', 'in', defIds)
+      .where('node_id', '=', '__PROCESS__')
+      .execute()
+    return rows
+  }
+
+  /**
+   * 批量取多个部署版本的全部节点配置（草稿箱把草稿反查到发起流程用；
+   * 与 `findConfigsByProcessDefinitionId` 的区别是单次 IN 查询，避免 N+1）。
+   */
+  async findConfigsByProcessDefinitionIds(defIds: string[]): Promise<NodeConfigRow[]> {
+    if (defIds.length === 0) return []
+    const rows = await this.db
+      .selectFrom('wf_node_config')
+      .selectAll()
+      .where('process_definition_id', 'in', defIds)
+      .execute()
+    return rows
+  }
+
   async deleteEditingConfigs(draftId: string): Promise<void> {
     await this.db
       .deleteFrom('wf_node_config')
@@ -279,6 +308,21 @@ export class ProcessDesignRepository {
     const rows = await this.db
       .selectFrom('wfe_process_def')
       .select(['id', 'process_key', 'name', 'version'])
+      .where('tenant_id', '=', tenantId)
+      .orderBy('process_key', 'asc')
+      .orderBy('version', 'desc')
+      .execute()
+    return rows as Array<Record<string, unknown>>
+  }
+
+  /**
+   * 全部已部署流程定义（含 model_json 与 status），key 升序 + version 倒序
+   * （草稿箱把发起表单反查到所属流程用；同 key 下最新版本排在前）。
+   */
+  async listDeployedDefsWithModel(tenantId: string): Promise<Array<Record<string, unknown>>> {
+    const rows = await this.db
+      .selectFrom('wfe_process_def')
+      .select(['id', 'process_key', 'name', 'version', 'status', 'model_json'])
       .where('tenant_id', '=', tenantId)
       .orderBy('process_key', 'asc')
       .orderBy('version', 'desc')

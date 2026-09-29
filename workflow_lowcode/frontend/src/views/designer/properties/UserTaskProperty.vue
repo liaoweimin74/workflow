@@ -1,7 +1,7 @@
 <template>
   <div class="user-task-property">
     <!-- 顶部（tab 外）：节点名称 + 审批类型 -->
-    <el-form label-width="80px" size="small" :disabled="readOnly" class="top-form">
+    <el-form label-width="7em" label-position="left" size="small" :disabled="readOnly" class="top-form">
       <el-form-item label="节点名称">
         <el-input v-model="config.name" placeholder="如：部门经理审批" @change="updateBpmnName" />
       </el-form-item>
@@ -47,11 +47,17 @@
             :user-ids="ui.approval.userIds"
             :role-codes="ui.approval.roleCodes"
             :allow-adjust="ui.assignee.allowInitiatorAdjust"
+            :form-user-field="ui.approval.formUserField"
+            :external-resolver="ui.approval.externalResolver"
+            :external-params="ui.approval.externalParams"
             kind="approver"
             :disabled="readOnly"
             @update:user-ids="(ids: number[]) => (ui.approval.userIds = ids)"
             @update:role-codes="(codes: string[]) => (ui.approval.roleCodes = codes)"
             @update:allow-adjust="(v: boolean) => (ui.assignee.allowInitiatorAdjust = v)"
+            @update:form-user-field="(v: string) => (ui.approval.formUserField = v)"
+            @update:external-resolver="(v: string) => (ui.approval.externalResolver = v)"
+            @update:external-params="(p: Record<string, unknown>) => (ui.approval.externalParams = p)"
           />
 
           <template v-if="ui.approval.type === 'expression'">
@@ -113,21 +119,26 @@
       <el-tab-pane label="高级设置" name="advanced">
         <div class="tab-inner">
           <div class="section-title">审批人可进行的操作</div>
-          <div class="checkbox-col">
+          <!-- 主选项横向一行：通过/拒绝固定开启且只读 -->
+          <div class="checkbox-row">
             <el-checkbox :model-value="true" disabled>通过</el-checkbox>
-            <el-checkbox v-model="ui.operations.allowRefuse" :disabled="readOnly">拒绝</el-checkbox>
+            <el-checkbox :model-value="true" disabled>拒绝</el-checkbox>
             <el-checkbox v-model="ui.operations.allowTransfer" :disabled="readOnly">转派</el-checkbox>
             <el-checkbox v-model="ui.operations.allowReturn" :disabled="readOnly">退回</el-checkbox>
             <el-checkbox v-model="ui.operations.allowAddSign" :disabled="readOnly">加签</el-checkbox>
           </div>
+          <!-- 二级选项：纵向展示在主选项下方；退回模式二选一（单选，Task 79b） -->
           <template v-if="ui.operations.allowReturn">
             <div class="checkbox-col sub-items">
-              <el-checkbox v-model="ui.returnOptions.restartFromHere" :disabled="readOnly">
-                退回后，从此节点开始审批，已经通过的节点无需再次审批
-              </el-checkbox>
-              <el-checkbox v-model="ui.returnOptions.chooseStartNode" :disabled="readOnly">
-                退回后，由审批人选择重审的起始节点
-              </el-checkbox>
+              <el-radio-group
+                class="return-mode-group"
+                :model-value="returnMode"
+                :disabled="readOnly"
+                @update:model-value="setReturnMode($event as string)"
+              >
+                <el-radio value="restartFromHere">退回后，从此节点开始审批，已经通过的节点无需再次审批</el-radio>
+                <el-radio value="chooseStartNode">退回后，由审批人选择重审的起始节点</el-radio>
+              </el-radio-group>
             </div>
           </template>
           <template v-if="ui.operations.allowAddSign">
@@ -144,6 +155,19 @@
             <span class="switch-label">审批意见必填</span>
           </div>
           <div class="hint-text">开启后，审批人必须填写审批意见</div>
+          <!-- 意见必填范围单选（截图②）：默认拒绝/退回必填 -->
+          <template v-if="ui.commentRequired">
+            <div class="inline-radio-group sub-items">
+              <el-radio-group
+                v-model="ui.commentRequiredScope"
+                :disabled="readOnly"
+                @change="saveConfig"
+              >
+                <el-radio value="REJECT_RETURN">拒绝/退回必填</el-radio>
+                <el-radio value="ALL">全部操作必填</el-radio>
+              </el-radio-group>
+            </div>
+          </template>
 
           <div class="section-title">禁止撤销/撤回</div>
           <div class="switch-row">
@@ -156,37 +180,28 @@
             <el-switch v-model="ui.timeout.enabled" :disabled="readOnly" />
             <span class="switch-label">超时处理</span>
           </div>
-          <div class="hint-text">支持审批超时的自动提醒、转派、通过、拒绝</div>
+          <div class="hint-text">支持审批超时自动提醒、转派、通过、拒绝</div>
+          <!-- 超时规则组（截图③）：添加超时规则 → ProcessTimeoutRuleDialog，同一规则组提醒可多条、转派 1 条、通过/拒绝互斥 -->
           <template v-if="ui.timeout.enabled">
-            <div class="inline-row">
-              <span class="inline-label">时长</span>
-              <el-input-number
-                v-model="ui.timeout.duration"
-                :min="1"
-                :step="1"
-                controls-position="right"
-                size="small"
-                style="width: 100px"
-                :disabled="readOnly"
-                @change="saveConfig"
-              />
-              <span class="inline-label">小时</span>
-            </div>
-            <div class="inline-row">
-              <span class="inline-label">动作</span>
-              <el-select
-                v-model="ui.timeout.action"
-                size="small"
-                style="width: 140px"
-                :disabled="readOnly"
-                @change="saveConfig"
-              >
-                <el-option label="自动提醒" value="remind" />
-                <el-option label="自动转派" value="escalate" />
-                <el-option label="自动通过" value="pass" />
-                <el-option label="自动拒绝" value="refuse" />
-              </el-select>
-            </div>
+            <ul v-if="ui.timeoutRules.length > 0" class="timeout-rule-list">
+              <li v-for="rule in ui.timeoutRules" :key="rule.id" class="timeout-rule-item">
+                <span class="rule-tag" :class="`rule-${rule.action}`">{{ RULE_ACTION_TEXT[rule.action] }}</span>
+                <span class="rule-text">
+                  超过 {{ rule.duration }} {{ RULE_UNIT_TEXT[rule.unit] }}未处理{{ RULE_ACTION_TEXT[rule.action] }}<template v-if="rule.action === 'remind' && rule.repeat">（重复提醒）</template>
+                </span>
+                <el-button link type="primary" size="small" :disabled="readOnly" @click="openTimeoutDialog(rule.id)">编辑</el-button>
+                <el-button link type="danger" size="small" :disabled="readOnly" @click="removeTimeoutRule(rule.id)">删除</el-button>
+              </li>
+            </ul>
+            <el-button size="small" :disabled="readOnly" class="rule-add-btn" @click="openTimeoutDialog(null)">
+              添加超时规则
+            </el-button>
+            <ProcessTimeoutRuleDialog
+              v-model:visible="timeoutDialogVisible"
+              :rules="ui.timeoutRules"
+              :edit-id="timeoutEditId"
+              @confirm="onTimeoutRuleConfirm"
+            />
           </template>
 
           <div class="section-title">审批人去重</div>
@@ -196,6 +211,16 @@
           </div>
           <div class="hint-text">开启后，同一审批人不用重复审批</div>
           <div v-if="ui.dedup.enabled" class="checkbox-col sub-items">
+            <!-- 去重命中口径（截图①）：上一节点已同意 / 前面任意节点已同意 -->
+            <el-radio-group
+              v-model="ui.dedup.mode"
+              class="return-mode-group"
+              :disabled="readOnly"
+              @change="saveConfig"
+            >
+              <el-radio value="CONSECUTIVE">上一节点此审批人已同意时，此节点自动通过</el-radio>
+              <el-radio value="FIRST">前面任意节点此审批人已同意时，此节点自动通过</el-radio>
+            </el-radio-group>
             <div class="inline-row dedup-row">
               <el-checkbox
                 v-model="ui.dedup.skipSameAsInitiator"
@@ -205,9 +230,9 @@
                 审批人与
               </el-checkbox>
               <el-select
+                :model-value="'发起人'"
                 size="small"
                 disabled
-                placeholder="发起人"
                 style="width: 90px"
                 class="dedup-select"
               />
@@ -221,7 +246,8 @@
             <span class="switch-label">手写签名</span>
           </div>
           <template v-if="ui.signature.enabled">
-            <div class="checkbox-col sub-items">
+            <!-- 子选项横向排列（Task 79c）：复用主选项 checkbox-row 横排 + sub-items 缩进 -->
+            <div class="checkbox-row sub-items">
               <el-checkbox v-model="ui.signature.useLast" :disabled="readOnly">默认使用上次签名</el-checkbox>
               <el-checkbox v-model="ui.signature.allowUpload" :disabled="readOnly">支持上传签名图片</el-checkbox>
               <el-checkbox v-model="ui.signature.required" :disabled="readOnly">必须签名</el-checkbox>
@@ -240,11 +266,12 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, watch } from 'vue'
-import { useDesignerStore, type NodeConfigData } from '@/stores/designerStore'
+import { useDesignerStore, type NodeConfigData, type ProcessTimeoutRule } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
 import FormPropertyTab from './FormPropertyTab.vue'
 import AssigneeSelector from './shared/AssigneeSelector.vue'
+import ProcessTimeoutRuleDialog from './ProcessTimeoutRuleDialog.vue'
 
 defineProps<{ readOnly?: boolean }>()
 
@@ -271,6 +298,9 @@ const ui = reactive({
     userIds: [] as number[],
     roleCodes: [] as string[],
     expression: '',
+    formUserField: '',
+    externalResolver: '',
+    externalParams: {} as Record<string, unknown>,
     multiMode: '' as 'countersign' | 'or_sign' | 'sequential' | '',
   },
   assignee: {
@@ -291,15 +321,19 @@ const ui = reactive({
     mustAddSign: false,
   },
   commentRequired: false,
+  /** 意见必填范围：REJECT_RETURN=拒绝/退回必填（新开启默认）；ALL=全部操作必填（存量无 scope 兼容显示） */
+  commentRequiredScope: 'REJECT_RETURN' as 'REJECT_RETURN' | 'ALL',
   blockRecall: false,
   timeout: {
     enabled: false,
-    duration: 24,
-    action: 'remind' as 'remind' | 'escalate' | 'pass' | 'refuse',
   },
+  /** 节点级超时规则组（对齐流程级 timeoutRules；legacy 单规则 duration/action 加载时迁移进来） */
+  timeoutRules: [] as ProcessTimeoutRule[],
   dedup: {
     enabled: false,
     skipSameAsInitiator: false,
+    /** 去重命中口径：CONSECUTIVE=上一节点已同意（默认）；FIRST=前面任意节点已同意 */
+    mode: 'CONSECUTIVE' as 'CONSECUTIVE' | 'FIRST',
   },
   signature: {
     enabled: false,
@@ -312,6 +346,70 @@ const ui = reactive({
 
 /** 自动通过/自动拒绝：无需配置审批人，tabs 内容整体禁用 */
 const isAutoType = computed(() => ui.approvalType === 'auto_pass' || ui.approvalType === 'auto_reject')
+
+/** 退回模式单选（Task 79b）：restartFromHere/chooseStartNode 互斥，映射到存储里的两个布尔键（格式不变，兼容旧数据） */
+const returnMode = computed(() =>
+  ui.returnOptions.restartFromHere
+    ? 'restartFromHere'
+    : ui.returnOptions.chooseStartNode
+      ? 'chooseStartNode'
+      : '',
+)
+function setReturnMode(v: string) {
+  ui.returnOptions.restartFromHere = v === 'restartFromHere'
+  ui.returnOptions.chooseStartNode = v === 'chooseStartNode'
+}
+
+// ========== 超时规则组（截图③：添加超时规则）==========
+/** 超时规则对话框状态（editId=null 新增） */
+const timeoutDialogVisible = ref(false)
+const timeoutEditId = ref<string | null>(null)
+
+const RULE_ACTION_TEXT: Record<ProcessTimeoutRule['action'], string> = {
+  remind: '超时提醒',
+  transfer: '超时转派',
+  pass: '超时通过',
+  refuse: '超时拒绝',
+}
+const RULE_UNIT_TEXT: Record<ProcessTimeoutRule['unit'], string> = {
+  minute: '分钟',
+  hour: '小时',
+  day: '天',
+}
+
+/** legacy 节点级单规则（duration小时+action）→ 规则组一条（escalate 对应规则组的 transfer） */
+function legacyTimeoutToRule(duration: number | undefined, action: string | undefined): ProcessTimeoutRule {
+  const mapped = action === 'escalate' ? 'transfer' : action === 'pass' ? 'pass' : action === 'refuse' ? 'refuse' : 'remind'
+  return {
+    id: `rule-legacy-${Date.now()}`,
+    action: mapped,
+    duration: duration && duration > 0 ? duration : 24,
+    unit: 'hour',
+    repeat: false,
+    notifyAssignee: true,
+    notifyAdmin: false,
+    notifyUserIds: [],
+    sms: true,
+  }
+}
+
+function openTimeoutDialog(editId: string | null) {
+  timeoutEditId.value = editId
+  timeoutDialogVisible.value = true
+}
+
+function removeTimeoutRule(ruleId: string) {
+  ui.timeoutRules = ui.timeoutRules.filter((r) => r.id !== ruleId)
+}
+
+function onTimeoutRuleConfirm(rule: ProcessTimeoutRule) {
+  const idx = ui.timeoutRules.findIndex((r) => r.id === rule.id)
+  if (idx >= 0) {
+    ui.timeoutRules.splice(idx, 1, rule)
+  } else {
+    ui.timeoutRules.push(rule)
+  }
+}
 
 onMounted(() => {
   loadConfig()
@@ -346,6 +444,9 @@ function loadConfig() {
   ui.approval.userIds = []
   ui.approval.roleCodes = []
   ui.approval.expression = ''
+  ui.approval.formUserField = ''
+  ui.approval.externalResolver = ''
+  ui.approval.externalParams = {}
   ui.approval.multiMode = ''
   ui.assignee.allowInitiatorAdjust = false
   ui.assignee.noAssigneePolicy = ''
@@ -359,12 +460,13 @@ function loadConfig() {
   ui.returnOptions.chooseStartNode = false
   ui.returnOptions.mustAddSign = false
   ui.commentRequired = false
+  ui.commentRequiredScope = 'REJECT_RETURN'
   ui.blockRecall = false
   ui.timeout.enabled = false
-  ui.timeout.duration = 24
-  ui.timeout.action = 'remind'
+  ui.timeoutRules = []
   ui.dedup.enabled = false
   ui.dedup.skipSameAsInitiator = false
+  ui.dedup.mode = 'CONSECUTIVE'
   ui.signature.enabled = false
   ui.signature.useLast = false
   ui.signature.allowUpload = false
@@ -383,6 +485,9 @@ function loadConfig() {
       ui.approval.userIds = (existing.approval.userIds || []).map((id) => Number(id))
       ui.approval.roleCodes = (existing.approval.roleCodes || []).map((c) => String(c))
       ui.approval.expression = existing.approval.expression || ''
+      ui.approval.formUserField = existing.approval.formUserField || ''
+      ui.approval.externalResolver = existing.approval.external?.resolver || ''
+      ui.approval.externalParams = { ...(existing.approval.external?.params ?? {}) }
       ui.approval.multiMode = existing.approval.multiMode || ''
     }
     if (existing.assigneeOptions) {
@@ -393,9 +498,10 @@ function loadConfig() {
         : []
     }
     if (existing.operations) {
-      // 兼容旧配置：旧 allowReject（驳回）映射到 allowRefuse / allowReturn
+      // 兼容旧配置：旧 allowReject（驳回）映射到 allowReturn；
+      // 拒绝/通过固定开启（UI 只读，allowRefuse 不再从存量配置读取）
       const legacyReject = existing.operations.allowReject
-      ui.operations.allowRefuse = existing.operations.allowRefuse ?? legacyReject ?? true
+      ui.operations.allowRefuse = true
       ui.operations.allowReturn = existing.operations.allowReturn ?? legacyReject ?? true
       ui.operations.allowTransfer = existing.operations.allowTransfer ?? true
       ui.operations.allowAddSign = existing.operations.allowAddSign ?? false
@@ -407,15 +513,23 @@ function loadConfig() {
       ui.returnOptions.mustAddSign = existing.returnOptions.mustAddSign ?? false
     }
     ui.commentRequired = existing.commentRequired ?? false
+    // 意见必填范围：显式 scope 优先；存量开了必填但无 scope 按 ALL（全部操作必填，与旧后端口径一致）
+    ui.commentRequiredScope =
+      existing.commentRequiredScope ?? (existing.commentRequired ? 'ALL' : 'REJECT_RETURN')
     ui.blockRecall = existing.blockRecall ?? false
     if (existing.timeout) {
       ui.timeout.enabled = existing.timeout.enabled ?? false
-      ui.timeout.duration = existing.timeout.duration || 24
-      ui.timeout.action = (existing.timeout.action as typeof ui.timeout.action) || 'remind'
+      if (existing.timeout.rules && existing.timeout.rules.length > 0) {
+        ui.timeoutRules = existing.timeout.rules.map((r) => ({ ...r }))
+      } else if (ui.timeout.enabled) {
+        // legacy 单规则迁移（duration小时+action）→ 规则组一条
+        ui.timeoutRules = [legacyTimeoutToRule(existing.timeout.duration, existing.timeout.action)]
+      }
     }
     if (existing.dedup) {
       ui.dedup.enabled = existing.dedup.enabled ?? false
       ui.dedup.skipSameAsInitiator = existing.dedup.skipSameAsInitiator ?? false
+      ui.dedup.mode = existing.dedup.mode ?? 'CONSECUTIVE'
     }
     if (existing.signature) {
       ui.signature.enabled = existing.signature.enabled ?? false
@@ -462,6 +576,18 @@ function saveConfig() {
       userIds: ui.approval.type === 'user' && ui.approval.userIds.length > 0 ? ui.approval.userIds : undefined,
       roleCodes: ui.approval.type === 'role' && ui.approval.roleCodes.length > 0 ? [...ui.approval.roleCodes] : undefined,
       expression: ui.approval.type === 'expression' ? ui.approval.expression || undefined : undefined,
+      formUserField:
+        ui.approval.type === 'form_user' ? ui.approval.formUserField || undefined : undefined,
+      external:
+        ui.approval.type === 'external' && ui.approval.externalResolver
+          ? {
+              resolver: ui.approval.externalResolver,
+              // 函数参数值表（空对象不落盘，保持历史配置形状）
+              ...(Object.keys(ui.approval.externalParams ?? {}).length > 0
+                ? { params: { ...ui.approval.externalParams } }
+                : {}),
+            }
+          : undefined,
       multiMode: ui.approval.multiMode,
     },
     assigneeOptions: {
@@ -475,7 +601,8 @@ function saveConfig() {
     operations: {
       ...(existing.operations || {}),
       allowPass: true,
-      allowRefuse: ui.operations.allowRefuse,
+      // 通过/拒绝固定开启（UI 只读，不随配置关闭）
+      allowRefuse: true,
       allowReturn: ui.operations.allowReturn,
       allowAddSign: ui.operations.allowAddSign,
       allowTransfer: ui.operations.allowTransfer,
@@ -487,15 +614,23 @@ function saveConfig() {
       mustAddSign: ui.returnOptions.mustAddSign,
     },
     commentRequired: ui.commentRequired,
+    commentRequiredScope: ui.commentRequired ? ui.commentRequiredScope : undefined,
     blockRecall: ui.blockRecall,
     timeout: {
       enabled: ui.timeout.enabled,
-      duration: ui.timeout.duration,
-      action: ui.timeout.action,
+      // legacy 兼容字段：取首条规则换算（规则组非空时后端以 rules 为准）
+      duration: ui.timeoutRules[0]
+        ? Math.max(1, Math.round((ui.timeoutRules[0].duration * (ui.timeoutRules[0].unit === 'minute' ? 1 : ui.timeoutRules[0].unit === 'hour' ? 60 : 1440)) / 60))
+        : 24,
+      action: ui.timeoutRules[0]
+        ? (ui.timeoutRules[0].action === 'transfer' ? 'escalate' : ui.timeoutRules[0].action)
+        : 'remind',
+      rules: ui.timeoutRules.length > 0 ? ui.timeoutRules.map((r) => ({ ...r })) : undefined,
     },
     dedup: {
       enabled: ui.dedup.enabled,
       skipSameAsInitiator: ui.dedup.skipSameAsInitiator,
+      mode: ui.dedup.mode,
     },
     signature: {
       enabled: ui.signature.enabled,
@@ -533,7 +668,8 @@ watch(ui, () => {
   font-size: 13px;
   font-weight: 600;
   color: var(--el-text-color-primary, #1f2437);
-  padding-left: 8px;
+  /* padding 10px + 左竖条 3px = 13px：与白卡片 border 1px + padding 12px 对齐，分组标题文本与表单 label 左缘平齐（Task 81） */
+  padding-left: 10px;
   border-left: 3px solid var(--el-color-primary);
   margin: 14px 0 8px;
   line-height: 1.2;
@@ -605,6 +741,25 @@ watch(ui, () => {
   gap: 2px;
 }
 
+/* 主选项横向一行（审批人可进行的操作：通过/拒绝只读 + 可勾选项） */
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  width: 100%;
+  gap: 0 14px;
+}
+
+.checkbox-row .el-checkbox {
+  height: auto;
+  margin-right: 0;
+}
+
+.checkbox-row .el-checkbox :deep(.el-checkbox__label) {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .checkbox-col .el-checkbox {
   height: auto;
   margin-right: 0;
@@ -621,6 +776,27 @@ watch(ui, () => {
   margin: 4px 0 4px 16px;
   padding-left: 8px;
   border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+/* 退回模式单选（纵向、长文案可换行） */
+.return-mode-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 2px;
+}
+
+.return-mode-group .el-radio {
+  height: auto;
+  margin-right: 0;
+  align-items: flex-start;
+}
+
+.return-mode-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
+  white-space: normal;
+  line-height: 1.35;
 }
 
 /* 开关行 */
@@ -663,6 +839,83 @@ watch(ui, () => {
 
 .dedup-row .el-checkbox :deep(.el-checkbox__label) {
   white-space: nowrap;
+}
+
+/* 意见必填范围单选：横排一行（截图②），缩进对齐 sub-items */
+.inline-radio-group {
+  margin: 4px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1px dashed var(--el-border-color-lighter, #eef1fc);
+}
+
+.inline-radio-group .el-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 14px;
+}
+
+.inline-radio-group .el-radio {
+  height: 24px;
+  margin-right: 0;
+}
+
+.inline-radio-group .el-radio :deep(.el-radio__label) {
+  font-size: 12px;
+}
+
+/* 节点级超时规则列表（截图③：添加超时规则） */
+.timeout-rule-list {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+
+.timeout-rule-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  background: var(--el-fill-color-lighter, #f5f7fa);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.rule-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.rule-tag.rule-remind {
+  background: #f59e0b;
+}
+
+.rule-tag.rule-transfer {
+  background: #3b82f6;
+}
+
+.rule-tag.rule-pass {
+  background: #10b981;
+}
+
+.rule-tag.rule-refuse {
+  background: #ef4444;
+}
+
+.rule-text {
+  color: var(--el-text-color-regular, #4b5169);
+  flex: 1;
+  min-width: 0;
+}
+
+.rule-add-btn {
+  margin-top: 2px;
 }
 
 .to-user-picker {

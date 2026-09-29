@@ -145,10 +145,11 @@
   fill: var(--el-color-primary) !important;
 }
 
-/* 文字标签 */
+/* 文字标签 — 全部节点名字统一：同字族/同字号/同字重（加粗），颜色随明暗自适应 */
 .djs-label {
   font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, sans-serif !important;
   font-size: 12px !important;
+  font-weight: 600 !important;
   fill: var(--el-text-color-regular) !important;
 }
 
@@ -195,7 +196,7 @@
   height: 100% !important;
 }
 
-/* ===== 上下文菜单 ===== */
+/* ===== 上下文菜单（contextPad，四态自适应） ===== */
 .djs-context-pad {
   background: var(--el-bg-color-overlay) !important;
   border: 1px solid var(--el-border-color-light) !important;
@@ -204,12 +205,28 @@
   padding: 4px !important;
 }
 
+/* bpmn-font 图标用 currentColor 着色：默认继承浏览器黑色，
+   暗色下黑图标+暗底不可读 —— 显式给语义文字色（明暗自适应）；
+   entry 自带白底（diagram-js 经 --context-pad-entry-background-color 控制）
+   会把暗色 pad 顶成白格子 —— 一并覆盖为透明 */
+.djs-context-pad {
+  --context-pad-entry-background-color: transparent;
+  --context-pad-entry-background-color-hover: color-mix(
+    in srgb,
+    var(--el-color-primary) 14%,
+    transparent
+  );
+  --context-pad-entry-border-color: transparent;
+}
+
 .djs-context-pad .entry {
   width: 28px !important;
   height: 28px !important;
   line-height: 28px !important;
   text-align: center !important;
   border-radius: 6px !important;
+  color: var(--el-text-color-regular) !important;
+  background-color: transparent !important;
 }
 
 .djs-context-pad .entry:hover {
@@ -272,16 +289,22 @@
  * .djs-element.approver-task / .djs-element.handler-task）
  * ============================================================ */
 
-/* 审批节点 — 标题着橙色 */
+/* 审批节点 — 标题着橙色（亮色深橙 / 暗色提亮保可读） */
 .djs-element.approver-task .djs-label {
   fill: #b88230 !important;
-  font-weight: 600 !important;
 }
 
-/* 办理节点 — 标题着青绿色 */
+html.dark .djs-element.approver-task .djs-label {
+  fill: #e2b06b !important;
+}
+
+/* 办理节点 — 标题着青绿色（亮色深绿 / 暗色提亮保可读） */
 .djs-element.handler-task .djs-label {
   fill: #1f7a56 !important;
-  font-weight: 600 !important;
+}
+
+html.dark .djs-element.handler-task .djs-label {
+  fill: #52c48f !important;
 }
 
 /* ============================================================

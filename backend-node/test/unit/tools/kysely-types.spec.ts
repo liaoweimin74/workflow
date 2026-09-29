@@ -19,7 +19,7 @@ const SOURCE = readFileSync(TYPES_PATH, 'utf8')
 describe('parseDbTables', () => {
   it('解析出 DB 接口里的全部表，且数量与已知规模一致', () => {
     const tables = parseDbTables(SOURCE)
-    expect(tables.size).toBe(34)
+    expect(tables.size).toBe(38)
     // 抽查三个形态不同的表名
     expect(tables.get('wfe_process_def')).toBe('WfeProcessDefTable')
     expect(tables.get('msg_channel_config')).toBe('MsgChannelConfigTable')
@@ -36,7 +36,7 @@ describe('parseDbTables', () => {
 describe('parseDeclaredSchema', () => {
   it('每张表都解析出非空列集合', () => {
     const declared = parseDeclaredSchema(SOURCE)
-    expect(declared.length).toBe(34)
+    expect(declared.length).toBe(38)
     for (const t of declared) {
       expect(t.columns.length, `${t.table} 解析出 0 个列`).toBeGreaterThan(0)
     }

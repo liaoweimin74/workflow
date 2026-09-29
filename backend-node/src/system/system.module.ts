@@ -3,8 +3,10 @@ import { AuthController } from './controller/auth.controller'
 import {
   DictDataController,
   DictTypeController,
+  MemberGroupController,
   MenuController,
   OrganizationController,
+  PostController,
   RoleController,
   UserController,
 } from './controller/system.controller'
@@ -26,6 +28,8 @@ import { SystemService } from './service/system.service'
     RoleController,
     MenuController,
     OrganizationController,
+    PostController,
+    MemberGroupController,
     DictTypeController,
     DictDataController,
   ],

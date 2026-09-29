@@ -18,6 +18,7 @@ export interface UserRow {
   phone: string | null
   avatar: string | null
   org_id: number | null
+  post_id: number | null
   status: number
   created_at: Date | null
 }
@@ -35,6 +36,7 @@ export interface OrgRow {
   id: number
   org_code: string
   org_name: string
+  leader_id: number | null
   parent_id: number | null
   sort_order: number | null
   status: number | null
@@ -100,7 +102,7 @@ export class SystemRepository {
 
     const rows = await this.db
       .selectFrom('sys_user')
-      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'status', 'created_at'])
+      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'post_id', 'status', 'created_at'])
       .where('is_deleted', '=', 0)
       // ⚠️ 排序必须是 `created_at DESC`（对齐 Java `UserServiceImpl.list` 的
       //    `Sort.by(DESC, "createdAt")`）。这里曾经写成 `id ASC`，
@@ -128,7 +130,7 @@ export class SystemRepository {
   ): Promise<{ rows: UserRow[]; total: number }> {
     let rowsQuery = this.db
       .selectFrom('sys_user')
-      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'status', 'created_at'])
+      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'post_id', 'status', 'created_at'])
       .where('is_deleted', '=', 0)
     let countQuery = this.db
       .selectFrom('sys_user')
@@ -163,7 +165,7 @@ export class SystemRepository {
   async findUserById(id: number): Promise<UserRow | null> {
     const row = await this.db
       .selectFrom('sys_user')
-      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'status', 'created_at'])
+      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'post_id', 'status', 'created_at'])
       .where('id', '=', id)
       .executeTakeFirst()
     return (row as UserRow | undefined) ?? null
@@ -179,7 +181,7 @@ export class SystemRepository {
     if (ids.length === 0) return []
     const rows = await this.db
       .selectFrom('sys_user')
-      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'status', 'created_at'])
+      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'post_id', 'status', 'created_at'])
       .where('id', 'in', ids)
       .execute()
     return rows as UserRow[]
@@ -196,7 +198,7 @@ export class SystemRepository {
   async findUserByUsername(username: string): Promise<UserRow | null> {
     const row = await this.db
       .selectFrom('sys_user')
-      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'status', 'created_at'])
+      .select(['id', 'username', 'nickname', 'email', 'phone', 'avatar', 'org_id', 'post_id', 'status', 'created_at'])
       .where('username', '=', username)
       .executeTakeFirst()
     return (row as UserRow | undefined) ?? null
@@ -209,6 +211,7 @@ export class SystemRepository {
     email: string | null
     phone: string | null
     org_id: number | null
+    post_id?: number | null
     status: number
   }): Promise<number> {
     const result = await this.db
@@ -326,7 +329,7 @@ export class SystemRepository {
   async listAllOrgs(): Promise<OrgRow[]> {
     return this.db
       .selectFrom('sys_organization')
-      .select(['id', 'org_code', 'org_name', 'parent_id', 'sort_order', 'status'])
+      .select(['id', 'org_code', 'org_name', 'leader_id', 'parent_id', 'sort_order', 'status'])
       .where('is_deleted', '=', 0)
       .orderBy('sort_order', 'asc')
       .execute()
@@ -399,7 +402,7 @@ export class SystemRepository {
   async findOrgById(id: number): Promise<OrgRowFull | null> {
     const row = await this.db
       .selectFrom('sys_organization')
-      .select(['id', 'org_code', 'org_name', 'parent_id', 'sort_order', 'status', 'is_deleted'])
+      .select(['id', 'org_code', 'org_name', 'leader_id', 'parent_id', 'sort_order', 'status', 'is_deleted'])
       .where('id', '=', id)
       .executeTakeFirst()
     return (row as OrgRowFull | undefined) ?? null
@@ -409,6 +412,7 @@ export class SystemRepository {
     parent_id: number | null
     org_name: string
     org_code: string
+    leader_id?: number | null
     sort_order: number
     status: number
   }): Promise<number> {
@@ -665,4 +669,395 @@ export class SystemRepository {
       .where('id', '=', id)
       .execute()
   }
+
+  // ------------------------------------------------------------ 岗位（V43）
+
+  async listPosts(
+    keyword: string | null,
+    status: number | null,
+    offset: number,
+    limit: number,
+  ): Promise<{ rows: PostRow[]; total: number }> {
+    let rowsQuery = this.db
+      .selectFrom('sys_post')
+      .select(['id', 'post_code', 'post_name', 'description', 'sort_order', 'status', 'created_at'])
+      .where('is_deleted', '=', 0)
+    let countQuery = this.db
+      .selectFrom('sys_post')
+      .select((eb) => eb.fn.countAll<number>().as('c'))
+      .where('is_deleted', '=', 0)
+
+    if (keyword !== null) {
+      const pattern = `%${keyword}%`
+      rowsQuery = rowsQuery.where((eb) =>
+        eb.or([eb('post_name', 'like', pattern), eb('post_code', 'like', pattern)]),
+      )
+      countQuery = countQuery.where((eb) =>
+        eb.or([eb('post_name', 'like', pattern), eb('post_code', 'like', pattern)]),
+      )
+    }
+    if (status !== null) {
+      rowsQuery = rowsQuery.where('status', '=', status)
+      countQuery = countQuery.where('status', '=', status)
+    }
+
+    const rows = await rowsQuery
+      .orderBy('sort_order', 'asc')
+      .orderBy('id', 'asc')
+      .limit(limit)
+      .offset(offset)
+      .execute()
+    const countRow = await countQuery.executeTakeFirst()
+    return { rows: rows as PostRow[], total: Number(countRow?.c ?? 0) }
+  }
+
+  async findPostById(id: number): Promise<PostRow | null> {
+    const row = await this.db
+      .selectFrom('sys_post')
+      .select(['id', 'post_code', 'post_name', 'description', 'sort_order', 'status', 'created_at'])
+      .where('id', '=', id)
+      .executeTakeFirst()
+    return (row as PostRow | undefined) ?? null
+  }
+
+  /** 岗位编码是否已被占用（唯一键；对齐 roleCodeExists 语义——不过滤 is_deleted）。 */
+  async postCodeExists(postCode: string, excludeId?: number): Promise<boolean> {
+    let query = this.db
+      .selectFrom('sys_post')
+      .select('id')
+      .where('post_code', '=', postCode)
+    if (excludeId !== undefined) query = query.where('id', '!=', excludeId)
+    const row = await query.executeTakeFirst()
+    return row !== undefined
+  }
+
+  /** 启用岗位下拉选项（用户表单/成员组规则用；全量，规模可控）。 */
+  async listEnabledPosts(): Promise<PostRow[]> {
+    return this.db
+      .selectFrom('sys_post')
+      .select(['id', 'post_code', 'post_name', 'description', 'sort_order', 'status', 'created_at'])
+      .where('is_deleted', '=', 0)
+      .where('status', '=', 1)
+      .orderBy('sort_order', 'asc')
+      .orderBy('id', 'asc')
+      .execute() as Promise<PostRow[]>
+  }
+
+  async insertPost(row: {
+    post_code: string
+    post_name: string
+    description: string | null
+    sort_order: number | null
+    status: number
+  }): Promise<number> {
+    const result = await this.db
+      .insertInto('sys_post')
+      .values({ ...row, is_deleted: 0, created_at: new Date(), updated_at: new Date() })
+      .executeTakeFirst()
+    return Number(result.insertId)
+  }
+
+  async updatePost(id: number, patch: Partial<PostRow>): Promise<void> {
+    await this.db
+      .updateTable('sys_post')
+      .set({ ...patch, updated_at: new Date() })
+      .where('id', '=', id)
+      .execute()
+  }
+
+  /** 软删除岗位。 */
+  async softDeletePost(id: number): Promise<void> {
+    await this.db.updateTable('sys_post').set({ is_deleted: 1 }).where('id', '=', id).execute()
+  }
+
+  /** 归属某岗位的用户数（岗位删除保护；不过滤 is_deleted，对齐 countUsersByOrgId）。 */
+  async countUsersByPostId(postId: number): Promise<number> {
+    const row = await this.db
+      .selectFrom('sys_user')
+      .select((eb) => eb.fn.countAll<number>().as('c'))
+      .where('post_id', '=', postId)
+      .executeTakeFirst()
+    return Number(row?.c ?? 0)
+  }
+
+  /** postId → 岗位名（供 UserVO.postName / 成员展示）。 */
+  async findPostNames(postIds: number[]): Promise<Map<number, string>> {
+    const ids = [...new Set(postIds.filter((id): id is number => id !== null))]
+    if (ids.length === 0) return new Map()
+    const rows = await this.db
+      .selectFrom('sys_post')
+      .select(['id', 'post_name'])
+      .where('id', 'in', ids)
+      .execute()
+    return new Map(rows.map((r) => [r.id, r.post_name]))
+  }
+
+  // ------------------------------------------------------------ 成员组（V43）
+
+  async listGroups(
+    keyword: string | null,
+    offset: number,
+    limit: number,
+  ): Promise<{ rows: MemberGroupRow[]; total: number }> {
+    let rowsQuery = this.db
+      .selectFrom('sys_member_group')
+      .select(['id', 'group_name', 'description', 'created_at'])
+      .where('is_deleted', '=', 0)
+    let countQuery = this.db
+      .selectFrom('sys_member_group')
+      .select((eb) => eb.fn.countAll<number>().as('c'))
+      .where('is_deleted', '=', 0)
+
+    if (keyword !== null) {
+      const pattern = `%${keyword}%`
+      rowsQuery = rowsQuery.where((eb) =>
+        eb.or([eb('group_name', 'like', pattern), eb('description', 'like', pattern)]),
+      )
+      countQuery = countQuery.where((eb) =>
+        eb.or([eb('group_name', 'like', pattern), eb('description', 'like', pattern)]),
+      )
+    }
+
+    const rows = await rowsQuery
+      .orderBy('id', 'asc')
+      .limit(limit)
+      .offset(offset)
+      .execute()
+    const countRow = await countQuery.executeTakeFirst()
+    return { rows: rows as MemberGroupRow[], total: Number(countRow?.c ?? 0) }
+  }
+
+  async findGroupById(id: number): Promise<MemberGroupRow | null> {
+    const row = await this.db
+      .selectFrom('sys_member_group')
+      .select(['id', 'group_name', 'description', 'created_at'])
+      .where('id', '=', id)
+      .where('is_deleted', '=', 0)
+      .executeTakeFirst()
+    return (row as MemberGroupRow | undefined) ?? null
+  }
+
+  /** 成员组名是否已存在（同名成员组易混淆，创建时拦截）。 */
+  async groupNameExists(groupName: string, excludeId?: number): Promise<boolean> {
+    let query = this.db
+      .selectFrom('sys_member_group')
+      .select('id')
+      .where('group_name', '=', groupName)
+      .where('is_deleted', '=', 0)
+    if (excludeId !== undefined) query = query.where('id', '!=', excludeId)
+    const row = await query.executeTakeFirst()
+    return row !== undefined
+  }
+
+  async insertGroup(row: { group_name: string; description: string | null }): Promise<number> {
+    const result = await this.db
+      .insertInto('sys_member_group')
+      .values({ ...row, is_deleted: 0, created_at: new Date(), updated_at: new Date() })
+      .executeTakeFirst()
+    return Number(result.insertId)
+  }
+
+  async updateGroup(id: number, patch: { group_name?: string; description?: string | null }): Promise<void> {
+    await this.db
+      .updateTable('sys_member_group')
+      .set({ ...patch, updated_at: new Date() })
+      .where('id', '=', id)
+      .execute()
+  }
+
+  /** 软删除成员组，并物理清理成员/规则关联（关联表是纯从属数据）。 */
+  async deleteGroup(id: number): Promise<void> {
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('sys_member_group')
+        .set({ is_deleted: 1, updated_at: new Date() })
+        .where('id', '=', id)
+        .execute()
+      await trx.deleteFrom('sys_member_group_member').where('group_id', '=', id).execute()
+      await trx.deleteFrom('sys_member_group_rule').where('group_id', '=', id).execute()
+    })
+  }
+
+  /** 手动成员 id 集合。 */
+  async findManualMemberIds(groupId: number): Promise<number[]> {
+    const rows = await this.db
+      .selectFrom('sys_member_group_member')
+      .select('user_id')
+      .where('group_id', '=', groupId)
+      .where('is_deleted', '=', 0)
+      .execute()
+    return rows.map((r) => r.user_id)
+  }
+
+  /** 手动成员 id 集合（过滤掉已删除用户）。 */
+  async findManualMemberIdsAlive(groupId: number): Promise<number[]> {
+    const rows = await this.db
+      .selectFrom('sys_member_group_member as m')
+      .innerJoin('sys_user as u', 'u.id', 'm.user_id')
+      .select('m.user_id')
+      .where('m.group_id', '=', groupId)
+      .where('m.is_deleted', '=', 0)
+      .where('u.is_deleted', '=', 0)
+      .execute()
+    return rows.map((r) => Number(r.user_id))
+  }
+
+  /** 成员的加入时间（手动成员行创建时间；规则匹配成员无此值）。 */
+  async findMemberJoinedAt(groupId: number): Promise<Map<number, Date>> {
+    const rows = await this.db
+      .selectFrom('sys_member_group_member')
+      .select(['user_id', 'created_at'])
+      .where('group_id', '=', groupId)
+      .where('is_deleted', '=', 0)
+      .execute()
+    return new Map(rows.map((r) => [Number(r.user_id), r.created_at as Date]))
+  }
+
+  /** 批量添加手动成员（INSERT IGNORE 跳过重复；返回实际新增行数）。 */
+  async insertGroupMembers(groupId: number, userIds: number[]): Promise<number> {
+    if (userIds.length === 0) return 0
+    const result = await this.db
+      .insertInto('sys_member_group_member')
+      .ignore()
+      .values(
+        userIds.map((userId) => ({
+          group_id: groupId,
+          user_id: userId,
+          is_deleted: 0,
+          created_at: new Date(),
+          updated_at: new Date(),
+        })),
+      )
+      .executeTakeFirst()
+    return Number(result.numInsertedOrUpdatedRows ?? 0)
+  }
+
+  /** 批量移除手动成员（物理删除关联行）。 */
+  async deleteGroupMembers(groupId: number, userIds: number[]): Promise<void> {
+    if (userIds.length === 0) return
+    await this.db
+      .deleteFrom('sys_member_group_member')
+      .where('group_id', '=', groupId)
+      .where('user_id', 'in', userIds)
+      .execute()
+  }
+
+  /** 规则行集合。 */
+  async listGroupRules(groupId: number): Promise<GroupRuleRow[]> {
+    return this.db
+      .selectFrom('sys_member_group_rule')
+      .select(['id', 'group_id', 'rule_type', 'rule_value', 'created_at'])
+      .where('group_id', '=', groupId)
+      .where('is_deleted', '=', 0)
+      .orderBy('id', 'asc')
+      .execute() as Promise<GroupRuleRow[]>
+  }
+
+  async findGroupRule(groupId: number, ruleId: number): Promise<GroupRuleRow | null> {
+    const row = await this.db
+      .selectFrom('sys_member_group_rule')
+      .select(['id', 'group_id', 'rule_type', 'rule_value', 'created_at'])
+      .where('id', '=', ruleId)
+      .where('group_id', '=', groupId)
+      .where('is_deleted', '=', 0)
+      .executeTakeFirst()
+    return (row as GroupRuleRow | undefined) ?? null
+  }
+
+  /** 同组同维度同值查重（唯一键兜底前置检查）。 */
+  async groupRuleExists(groupId: number, ruleType: string, ruleValue: number): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('sys_member_group_rule')
+      .select('id')
+      .where('group_id', '=', groupId)
+      .where('rule_type', '=', ruleType)
+      .where('rule_value', '=', ruleValue)
+      .where('is_deleted', '=', 0)
+      .executeTakeFirst()
+    return row !== undefined
+  }
+
+  async insertGroupRule(row: {
+    group_id: number
+    rule_type: string
+    rule_value: number
+  }): Promise<number> {
+    const result = await this.db
+      .insertInto('sys_member_group_rule')
+      .values({ ...row, is_deleted: 0, created_at: new Date(), updated_at: new Date() })
+      .executeTakeFirst()
+    return Number(result.insertId)
+  }
+
+  async deleteGroupRule(groupId: number, ruleId: number): Promise<void> {
+    await this.db
+      .deleteFrom('sys_member_group_rule')
+      .where('id', '=', ruleId)
+      .where('group_id', '=', groupId)
+      .execute()
+  }
+
+  /** 按岗位 id 集合匹配的在职用户 id（规则展开）。 */
+  async findUserIdsByPostIds(postIds: number[]): Promise<number[]> {
+    if (postIds.length === 0) return []
+    const rows = await this.db
+      .selectFrom('sys_user')
+      .select('id')
+      .where('is_deleted', '=', 0)
+      .where('post_id', 'in', postIds)
+      .execute()
+    return rows.map((r) => Number(r.id))
+  }
+
+  /** 按组织 id 集合匹配的在职用户 id（规则展开）。 */
+  async findUserIdsByOrgIds(orgIds: number[]): Promise<number[]> {
+    if (orgIds.length === 0) return []
+    const rows = await this.db
+      .selectFrom('sys_user')
+      .select('id')
+      .where('is_deleted', '=', 0)
+      .where('org_id', 'in', orgIds)
+      .execute()
+    return rows.map((r) => Number(r.id))
+  }
+
+  /** userId → 展示名（nickname 优先、回落 username；组织负责人列/负责人回显用）。 */
+  async findUserDisplayNames(userIds: number[]): Promise<Map<number, string>> {
+    const ids = [...new Set(userIds.filter((id): id is number => id !== null))]
+    if (ids.length === 0) return new Map()
+    const rows = await this.db
+      .selectFrom('sys_user')
+      .select(['id', 'username', 'nickname'])
+      .where('id', 'in', ids)
+      .execute()
+    return new Map(rows.map((r) => [Number(r.id), r.nickname && r.nickname !== '' ? r.nickname : r.username]))
+  }
+}
+
+/** 岗位行（`sys_post`）。 */
+export interface PostRow {
+  id: number
+  post_code: string
+  post_name: string
+  description: string | null
+  sort_order: number | null
+  status: number
+  created_at: Date | null
+}
+
+/** 成员组行（`sys_member_group`）。 */
+export interface MemberGroupRow {
+  id: number
+  group_name: string
+  description: string | null
+  created_at: Date | null
+}
+
+/** 成员组规则行（`sys_member_group_rule`）。 */
+export interface GroupRuleRow {
+  id: number
+  group_id: number
+  rule_type: string
+  rule_value: number
+  created_at: Date | null
 }

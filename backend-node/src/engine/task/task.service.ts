@@ -556,7 +556,7 @@ export class TaskService {
       () => new Date(),
       () => randomUuid(),
       // to_admin 兜底目标：流程级审批管理员优先，未配置回落全局 admin（Task 76）
-      await this.buildResolutionContext(processPolicy.adminUserIds[0] ?? undefined),
+      await this.buildResolutionContext(processPolicy.adminUserIds[0] ?? undefined, row.instance_id),
       {
         dedupEnabled: processPolicy.dedup.enabled,
         dedupMode: processPolicy.dedup.mode,
@@ -1349,7 +1349,7 @@ export class TaskService {
       state,
       () => new Date(),
       () => randomUuid(),
-      await this.buildResolutionContext(),
+      await this.buildResolutionContext(undefined, instanceId),
       {},
       snapshotAssigneeResolvers(),
     )
@@ -1465,7 +1465,7 @@ export class TaskService {
       state,
       () => new Date(),
       () => randomUuid(),
-      await this.buildResolutionContext(),
+      await this.buildResolutionContext(undefined, row.instance_id),
       {
         dedupEnabled: processPolicy.dedup.enabled,
         dedupMode: processPolicy.dedup.mode,
@@ -1509,11 +1509,16 @@ export class TaskService {
    * 审批/办理人解析上下文（服务层预计算）。
    *
    * adminUserId：sys_user 中 username='admin' 的用户（找不到策略 to_admin / 超时转派兜底）。
-   * initiatorSupervisor：org 表无负责人字段，v1 恒为 null（supervisor/dept_head 策略降级到旧语义）。
+   * initiatorSupervisor：发起人所属组织的负责人（V43：sys_organization.leader_id；
+   *   supervisor 策略 / 表达式 initiator.deptManager 由降级变为真实生效）。
    * roleMemberships：角色编码 → 成员用户 ID 列表（role 类型审批人解析用；表小全量预查）。
    * adminUserIdOverride：流程级审批管理员（adminUserIds[0]）传入时优先（Task 76）。
+   * instanceId：传入实例 id 时回填发起人主管（召回/撤销/完成等写路径均传）。
    */
-  private async buildResolutionContext(adminUserIdOverride?: string): Promise<ResolutionContext> {
+  private async buildResolutionContext(
+    adminUserIdOverride?: string,
+    instanceId?: string | null,
+  ): Promise<ResolutionContext> {
     const admin = await this.db
       .selectFrom('sys_user')
       .select('id')
@@ -1534,11 +1539,41 @@ export class TaskService {
       members.push(String(row.user_id))
       roleMemberships[row.role_code] = members
     }
+    let initiatorSupervisor: string | null = null
+    if (instanceId !== undefined && instanceId !== null && instanceId !== '') {
+      const inst = await this.db
+        .selectFrom('wfe_process_instance')
+        .select('initiator')
+        .where('id', '=', instanceId)
+        .executeTakeFirst()
+      if (inst?.initiator != null && inst.initiator !== '') {
+        initiatorSupervisor = await this.findOrgLeaderByUserId(inst.initiator)
+      }
+    }
     return {
       adminUserId: adminUserIdOverride ?? (admin === undefined ? null : String(admin.id)),
-      initiatorSupervisor: null,
+      initiatorSupervisor,
       roleMemberships,
     }
+  }
+
+  /**
+   * 用户所属组织的负责人用户 ID（V43：sys_user.org_id → sys_organization.leader_id）。
+   * 无组织/组织无负责人/任一已删除 → null（引擎按策略降级）。
+   */
+  private async findOrgLeaderByUserId(userId: string): Promise<string | null> {
+    const idNum = Number(userId)
+    if (!Number.isFinite(idNum)) return null
+    const row = await this.db
+      .selectFrom('sys_user as u')
+      .innerJoin('sys_organization as o', 'o.id', 'u.org_id')
+      .select('o.leader_id')
+      .where('u.id', '=', idNum)
+      .where('u.is_deleted', '=', 0)
+      .where('o.is_deleted', '=', 0)
+      .executeTakeFirst()
+    if (row === undefined || row.leader_id === null || row.leader_id === undefined) return null
+    return String(row.leader_id)
   }
 
   /** 此实例+节点下是否存在加签意见（必须加签门禁用）。 */

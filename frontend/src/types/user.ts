@@ -7,6 +7,9 @@ export interface UserVO {
   avatar: string
   orgId: number
   orgName: string
+  /** 岗位 id（V43）。 */
+  postId: number | null
+  postName: string | null
   roleIds: number[]
   status: number
   createdAt: string
@@ -36,6 +39,7 @@ export interface UserCreateForm {
   email?: string
   phone?: string
   orgId?: number
+  postId?: number | null
   roleIds?: number[]
 }
 
@@ -44,5 +48,7 @@ export interface UserUpdateForm {
   email?: string
   phone?: string
   orgId?: number
+  /** 显式传 null 清空岗位。 */
+  postId?: number | null
   roleIds?: number[]
 }

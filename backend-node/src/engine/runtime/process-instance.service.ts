@@ -141,7 +141,7 @@ export class ProcessInstanceService {
       () => new Date(),
       () => randomUuid(),
       // to_admin 兜底/转派目标：流程级审批管理员优先，未配置回落全局 admin
-      await this.buildResolutionContext(startPolicy.adminUserIds[0] ?? undefined),
+      await this.buildResolutionContext(startPolicy.adminUserIds[0] ?? undefined, initiator ?? null),
       {},
       snapshotAssigneeResolvers(),
     )
@@ -797,20 +797,48 @@ export class ProcessInstanceService {
 
   /**
    * 审批/办理人解析上下文（服务层预计算；与 TaskService 同一口径）。
-   * adminUserId：sys_user 中 username='admin' 的用户；org 无负责人字段 → supervisor 恒 null。
+   * adminUserId：sys_user 中 username='admin' 的用户。
+   * initiatorSupervisor：发起人所属组织的负责人（V43：sys_organization.leader_id；
+   *   supervisor 策略 / 表达式 initiator.deptManager 由降级变为真实生效）。
    * adminUserIdOverride：流程级审批管理员（adminUserIds[0]）传入时优先，to_admin 兜底/转派走流程管理员。
    */
-  private async buildResolutionContext(adminUserIdOverride?: string): Promise<ResolutionContext> {
+  private async buildResolutionContext(
+    adminUserIdOverride?: string,
+    initiatorUserId?: string | null,
+  ): Promise<ResolutionContext> {
     const admin = await this.db
       .selectFrom('sys_user')
       .select('id')
       .where('username', '=', 'admin')
       .where('is_deleted', '=', 0)
       .executeTakeFirst()
+    let initiatorSupervisor: string | null = null
+    if (initiatorUserId !== undefined && initiatorUserId !== null && initiatorUserId !== '') {
+      initiatorSupervisor = await this.findOrgLeaderByUserId(initiatorUserId)
+    }
     return {
       adminUserId: adminUserIdOverride ?? (admin === undefined ? null : String(admin.id)),
-      initiatorSupervisor: null,
+      initiatorSupervisor,
     }
+  }
+
+  /**
+   * 用户所属组织的负责人用户 ID（V43：sys_user.org_id → sys_organization.leader_id）。
+   * 无组织/组织无负责人/任一已删除 → null（引擎按策略降级）。
+   */
+  private async findOrgLeaderByUserId(userId: string): Promise<string | null> {
+    const idNum = Number(userId)
+    if (!Number.isFinite(idNum)) return null
+    const row = await this.db
+      .selectFrom('sys_user as u')
+      .innerJoin('sys_organization as o', 'o.id', 'u.org_id')
+      .select('o.leader_id')
+      .where('u.id', '=', idNum)
+      .where('u.is_deleted', '=', 0)
+      .where('o.is_deleted', '=', 0)
+      .executeTakeFirst()
+    if (row === undefined || row.leader_id === null || row.leader_id === undefined) return null
+    return String(row.leader_id)
   }
 
   async insertComment(

@@ -63,6 +63,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '组织机构管理' }
       },
       {
+        path: 'system/post',
+        name: 'PostManagement',
+        component: () => import('@/views/system/post/PostPage.vue'),
+        meta: { title: '岗位管理' }
+      },
+      {
+        path: 'system/member-group',
+        name: 'MemberGroupManagement',
+        component: () => import('@/views/system/member-group/MemberGroupPage.vue'),
+        meta: { title: '成员组管理' }
+      },
+      {
         path: 'system/dict',
         name: 'DictManagement',
         component: () => import('@/views/system/dict/DictPage.vue'),

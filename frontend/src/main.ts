@@ -14,11 +14,14 @@ import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import App from './App.vue'
 import router from './router'
 import { patchMessageBoxDraggable } from './utils/elementPlusDraggable'
+import { permission } from './directives/permission'
 import './style.css'
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+// 注册按钮权限指令（v-permission）—— 此前从未注册导致权限码形同虚设，本次一并修复
+app.directive('permission', permission)
 // 全局配置：所有 el-dialog 默认标题栏可拖动（EP 2.14 ConfigProvider dialog 全局项；
 // fullscreen 自动排除，个别对话框可用 :draggable="false" 关闭，overflow 默认视口钳制）
 app.use(ElementPlus, { locale: zhCn, dialog: { draggable: true } })

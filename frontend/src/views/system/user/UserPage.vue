@@ -10,13 +10,16 @@ import type { Rule } from '@form-create/element-ui'
 import { getUserList, createUser, updateUser, deleteUser, updateUserStatus, resetUserPassword, getUserById } from '@/api/user'
 import { getOrgTree } from '@/api/org'
 import { getRoleList } from '@/api/role'
+import { getPostOptions } from '@/api/post'
 import type { UserVO } from '@/types/user'
 import type { TreeNode } from '@/types/org'
 import type { RoleVO } from '@/types/role'
+import type { PostOptionVO } from '@/types/post'
 
 // ---------- 下拉/树数据 ----------
 const orgTree = ref<TreeNode[]>([])
 const roleList = ref<RoleVO[]>([])
+const postOptions = ref<PostOptionVO[]>([])
 
 // 角色列表保留首屏加载（角色列 ID→名称映射必需），已声明 cache:true 跨页面复用
 onMounted(async () => {
@@ -70,6 +73,7 @@ const columns: TableColumn[] = [
   { prop: 'email', label: '邮箱', minWidth: 160 },
   { prop: 'phone', label: '手机号', width: 140 },
   { prop: 'orgName', label: '组织机构', width: 140 },
+  { prop: 'postName', label: '岗位', width: 110 },
   {
     label: '角色',
     minWidth: 140,
@@ -135,21 +139,39 @@ const formConfig = computed<FormConfig<UserVO>>(() => ({
       props: { placeholder: '选择组织', data: orgTree.value, props: { label: 'label', value: 'id', children: 'children' } },
     } as Rule,
     {
+      type: 'select', field: 'postId', title: '岗位',
+      props: { placeholder: '选择岗位（可选，在「岗位管理」维护）', clearable: true, filterable: true },
+      options: postOptions.value.map((p) => ({ label: `${p.postName}（${p.postCode}）`, value: p.id })),
+    } as Rule,
+    {
       type: 'select', field: 'roleIds', title: '角色',
       props: { multiple: true, placeholder: '选择角色' },
       options: roleList.value.map((r) => ({ label: r.roleName, value: r.id })),
     } as Rule,
   ],
   createApi: createUser,
-  updateApi: (id, data) => updateUser(id as number, data),
+  updateApi: (id, data) => updateUser(id as number, { ...data, postId: (data as any).postId ?? null }),
   deleteApi: async (id) => { await deleteUser(id as number) },
   getApi: (id) => getUserById(id as number).then((r) => r.data),
   dialogTitle: { create: '新增用户', edit: '编辑用户' },
   createPermission: 'system:user:create',
   editPermission: 'system:user:update',
   deletePermission: 'system:user:delete',
-  onFormOpen: ensureOrgTree,
+  onFormOpen: () => { void ensureOrgTree(); void ensurePostOptions() },
 }))
+
+/** 岗位下拉选项（首次打开表单时加载；失败下次重试） */
+let _postOptionsLoaded = false
+async function ensurePostOptions() {
+  if (_postOptionsLoaded) return
+  _postOptionsLoaded = true
+  try {
+    const res = await getPostOptions()
+    postOptions.value = res.data
+  } catch {
+    _postOptionsLoaded = false
+  }
+}
 </script>
 
 <template>

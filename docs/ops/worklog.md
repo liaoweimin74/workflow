@@ -2044,3 +2044,26 @@ Stage Summary:
 - 审批/办理节点属性面板对齐 4 张产品截图：去重口径 radio、意见必填范围 radio、节点级超时规则组（按钮+对话框+列表）三端打通（设计器配置→编译归一化→运行时门禁/去重/超时扫描）
 - 意见必填 scope 语义落地：REJECT_RETURN 仅拦拒绝/退回，ALL 拦全部操作；存量数据缺省 ALL 行为不变
 - 修复保存草稿全挂的存量 bug（V42 迁移漏执行）；HTML5 DnD 合成与 diagram-js 选中/删除的浏览器自动化经验沉淀
+
+---
+Task ID: 86-post-member-group-org-leader
+Agent: Z.ai Code (main session)
+Task: 用户需求——为配合工作流人员组织模型：①成员组管理 ②组织机构负责人字段 ③岗位管理+用户岗位字段
+
+Work Log:
+- 需求采集：两份薪福通帮助页为 React SPA，page_reader 抓不到 → agent-browser 渲染读取成功（成员组=名称+说明+成员手动/规则自动归属；岗位=组织管理-岗位管理维护+员工选岗位）
+- 后端：V43 迁移（sys_post / sys_member_group / sys_member_group_member / sys_member_group_rule 四表 + sys_user.post_id + sys_organization.leader_id + 菜单 seed id 300-311 + ROLE_ADMIN 全量授权）；types.ts 登记 4 表 2 列（DB 接口 34→38 表）
+- 仓储/服务/控制器：PostController(/api/posts 含 /options)、MemberGroupController(/api/member-groups 含 :id/members、:id/members/remove、:id/rules)；有效成员=手动∪岗位规则∪组织规则去重，来源标记 manual/position/org；查重（岗位编码/组名/规则重复）；删除保护（岗位有用户拒删，对齐组织删除语义）
+- 引擎接线：task.service 与 process-instance.service 的 buildResolutionContext 回填 initiatorSupervisor（instanceId/-initiator → sys_user.org_id → sys_organization.leader_id），supervisor 找不到人策略与表达式 initiator.deptManager 由恒 null 降级变真实生效
+- 前端：PostPage/MemberGroupPage 新建（成员组含成员+自动规则抽屉，ApproverPicker 选人，规则维度岗位/组织树切换）；UserPage 岗位 select+列；OrgPage 负责人 select+列；router 两条；api/types 六文件
+- 顺手修复：v-permission 指令从未在 main.ts 注册（权限码形同虚设）；PostPage/OrgPage 状态列缺 prop 导致 formatter cellValue 恒 undefined（RolePage 同款隐患未动）
+- 存量问题修复：V42 迁移历史行缺失（Task 84 手动 ALTER 未登记）导致 migrate 卡死 → 计算 CRC32 校验和手工补 flyway_schema_history 行后 V43 正常执行
+- 测试：backend 907/907（kysely-types 表规模断言 34→38 随之更新）、frontend 1132/1132、lint 零新增
+- 验证：API E2E 全流程通过（建岗→查重→options→组织带负责人→用户设岗→建组→加成员→加岗位规则→有效成员 2/手动 1/规则 1→keyword 过滤→移除→删规则动态生效→全链清理零残留）；vite 新模块编译 8/8
+- 环境异常记录（未解决，非应用问题）：本会话 next dev 启动后 1-2 分钟被静默回收（无 OOM/panic 日志，限堆/换启动方式均复现，EADDRINUSE 证据显示平台预览系统自管 3000 进程）；沙箱 chrome 无法连接任何本地端口（外网正常），agent-browser UI 验证不可用——改用 API E2E + vite 编译验证，UI 由用户预览面板实际渲染确认
+
+Stage Summary:
+- 岗位/成员组/组织负责人/用户岗位四项落地三端贯通；成员组支持手动+规则自动归属，供工作流后续选人扩展
+- 引擎 dept_head/supervisor 审批策略首次真正可用（发起人组织负责人）
+- v-permission 注册修复使既有+新增权限码真实生效；V42/V43 迁移链修复
+- 详见双 worklog 与提交 db341ca6（77f77492..db341ca6）

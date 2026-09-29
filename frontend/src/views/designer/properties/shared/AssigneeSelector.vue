@@ -16,7 +16,7 @@
             :value="opt.value"
             class="as-radio"
           >
-            {{ opt.label }}<span v-if="opt.advanced" class="as-advanced">高级</span>
+            {{ opt.label }}
           </el-radio>
         </el-radio-group>
       </div>
@@ -375,7 +375,6 @@ watch(
 interface AssigneeOption {
   label: string
   value: string
-  advanced?: boolean
 }
 
 interface AssigneeGroup {
@@ -406,8 +405,8 @@ const GROUPS: AssigneeGroup[] = [
   {
     title: '其他',
     options: [
-      { label: '流程表达式', value: 'expression', advanced: true },
-      { label: '自定义选人函数', value: 'external', advanced: true },
+      { label: '流程表达式', value: 'expression' },
+      { label: '自定义选人函数', value: 'external' },
     ],
   },
 ]
@@ -466,18 +465,6 @@ function onTypeChange(value: string) {
   white-space: normal;
   line-height: 1.2;
   word-break: break-all;
-}
-
-.as-advanced {
-  display: inline-block;
-  margin-left: 2px;
-  font-size: 10px;
-  line-height: 1;
-  padding: 1px 3px;
-  border-radius: 3px;
-  color: var(--el-color-primary);
-  border: 1px solid currentColor;
-  transform: scale(0.9);
 }
 
 /* 角色选择下方的灰色说明 */

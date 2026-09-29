@@ -113,6 +113,23 @@ const groupedProcesses = computed(() => {
   return map
 })
 
+/**
+ * 只保留每个流程 key 的**最高版本**（同一流程部署多次后历史版本不重复展示，
+ * 发起入口永远指向最新定义）。引擎 start() 本就按 key 解析最新已部署版本，
+ * 前端去重后行为与引擎一致；客户端去重兼容双引擎（Java 侧无 latestOnly 参数）。
+ */
+function latestVersionsOnly(list: DeployedProcessDefinition[]): DeployedProcessDefinition[] {
+  const latestByKey = new Map<string, DeployedProcessDefinition>()
+  for (const proc of list) {
+    const existing = latestByKey.get(proc.key)
+    if (existing === undefined || proc.version > existing.version) {
+      latestByKey.set(proc.key, proc)
+    }
+  }
+  // 保持原有顺序（按首个出现的 key 位置），稳定且不打乱分组展示
+  return list.filter((proc) => latestByKey.get(proc.key) === proc)
+}
+
 function categoryName(catId: string): string {
   if (catId === 'uncategorized') return '未分类'
   const cat = categories.value.find(c => c.id === catId)
@@ -128,7 +145,7 @@ async function loadData() {
       deployedProcessApi.list({ status: 'active', size: 999 }),
     ])
     categories.value = catRes.data
-    processes.value = procRes.data.content
+    processes.value = latestVersionsOnly(procRes.data.content)
     // 默认展开所有分类
     expandedCategories.value = Array.from(groupedProcesses.value.keys())
   } catch {
@@ -147,7 +164,7 @@ async function handleSearch() {
       params.name = searchKeyword.value.trim()
     }
     const res = await deployedProcessApi.list(params as Parameters<typeof deployedProcessApi.list>[0])
-    processes.value = res.data.content
+    processes.value = latestVersionsOnly(res.data.content)
     // 搜索时展开所有分类
     expandedCategories.value = Array.from(groupedProcesses.value.keys())
   } catch {

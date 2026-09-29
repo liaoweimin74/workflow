@@ -2121,3 +2121,23 @@ Stage Summary:
 - 发布链路三层防线：列表页预校验（友好中文+节点可定位）→ 设计器错误真阻断 → 后端兜底消息可读化
 - 影响面：所有流程发布入口；空模板无 endEvent 的入门场景从此有明确引导文案
 - 遗留观察：新建草稿空模板仅含 startEvent，可考虑未来提供含发起+结束的最小模板（避免新手再次断链）
+
+---
+Task ID: 92-latest-version-and-recall
+Agent: Z.ai Code (main session)
+Task: ①流程中心只显示每个流程的最新版本（leave 连发 4 版出现 4 张可发起卡片）；②admin 发起的流程撤回报「只有发起人可以撤回流程」
+
+Work Log:
+- 【Bug2 根因】ProcessInstanceService.start 的 initiator 只从客户端 variables.initiator 提取（extractInitiator，可伪造），前端发起页不传该变量 → 实例 initiator 列落库 NULL → recallInstance 的 `instance.initiator !== userId` 判定 400。存量实例 663590e4（leave RUNNING）即此状态；发起节点待办 assignee 也成了字面量 "${initiator}"
+- 【Bug2 修复】start() 改为 `initiator = startUserId ?? extractInitiator(variables)`——服务端登录身份为真源（Task 76「不信任客户端 initiator」口径的补全），无登录态（系统内部调用）才回落客户端变量；唯一调用方 process-instance.controller 本就传 String(user.userId)。新增 test/unit/engine/process-start-initiator.spec.ts 3 用例（登录锚定/防伪造/兜底兼容）
+- 【Bug2 数据修复】存量实例回填：instance.initiator='1' + wfe_variable 补 initiator='"1"'（撤回后发起节点选人 initiator_self 依赖它）+ 历史任务字面量 assignee 归正
+- 【Bug2 E2E】重启后端（kill 20434 → PORT=8080 nohup node dist/main.js，health UP）：API recall 663590e4 → 200；旧审批任务 CANCELLED、发起节点新待办 CREATED(assignee=1)、recalled=true、实例 RUNNING；再走一遍完整闭环——API 发起新实例（不传 initiator）→ 库验 initiator='1'（列+变量）→ 拒绝终止 TERMINATED（refuse 须 reason 字段，comment 不收）
+- 【Bug1 根因】ProcessCenterPage 用 deployedProcessApi.list 拉**全部**已部署版本（size 999）逐版本渲染卡片；引擎 start() 实际按 key 解析最新版本，前端展示与引擎行为脱节
+- 【Bug1 修复】ProcessCenterPage 新增 latestVersionsOnly（按 key 取 version 最高，保持原顺序）；loadData/handleSearch 双入口接入；客户端去重兼容双引擎（Java 侧无 latestOnly 参数）
+- 【Bug1 E2E】浏览器流程中心：分类计数 1、仅「请假 v4」一张卡片带发起按钮（v1~v3 不再出现）；截图 /tmp/center-latest.png
+- 【回归】backend-node 948/948（+3）、前端 1156/1156（+2 ProcessCenterPage）、vue-tsc 46 基线；chrome 归零
+
+Stage Summary:
+- 发起人锚定服务端身份：撤回/再次发起/发起节点选人的身份链路从此以登录用户为真源；存量 NULL 实例已修复
+- 流程中心与引擎「最新版本」语义对齐；版本历史仍走 getVersions(key) 专用端点不受影响
+- 观察：发起页 initiator_select 节点若未选人直接提交，会建 assignee=null 的待办（本次 API 直发复现）——后续可考虑发起页必选校验或引擎 fallback 到审批人配置

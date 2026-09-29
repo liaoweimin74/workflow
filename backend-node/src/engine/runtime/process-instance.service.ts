@@ -120,7 +120,12 @@ export class ProcessInstanceService {
 
     // 流程级策略：start 门禁（可发起范围）与标题/摘要共用一次解析（Task 76）
     const startPolicy = await this.loadStartPolicy(def.id)
-    const initiator = extractInitiator(variables)
+    // 发起人锚定**服务端登录身份**（startUserId）：
+    //   - variables.initiator 由客户端传入，可伪造（Task 76 同款顾虑），仅作无登录态
+    //     （系统内部调用等 startUserId 为空场景）的兜底；
+    //   - 撤回（recallInstance 按 instance.initiator 判定）、发起节点待办（initiator_self）
+    //     都依赖该值 —— 缺失会导致「admin 发起的流程撤回时提示只有发起人可撤回」。
+    const initiator = startUserId ?? extractInitiator(variables)
     await this.assertStartAllowed(startPolicy, startUserId ?? null)
 
     const model = JSON.parse(def.model_json) as ProcessModel

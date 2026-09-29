@@ -2196,3 +2196,21 @@ Work Log:
 Stage Summary:
 - 成员组「成员+规则」录入全面切换数据引用组件，岗位数据源补齐后三个选择场景（用户/岗位/组织）全部数据源化；dept-tree keyword 补齐使组织搜索真实可用
 - 提交见 git；遗留：ApproverPicker 在流程设计器审批人配置等处仍在用（不在本次范围）
+
+---
+Task ID: 96
+Agent: Z.ai Code (main)
+Task: 成员组管理重构为业务表单（组成员/自动规则 = 数据引用字段）
+
+Work Log:
+- 数据模型：BUSINESS 表单 member_group（V46 预置 PUBLISHED + 物理表 wf_biz_member_group）；字段 group_name/description/members/post_rules/org_rules；3 个 dataPicker 分别引用 ds-builtin-user-tree（多选）/ds-builtin-sys-posts/ds-builtin-dept-tree；schema.dataSources 绑定 id=refId 双路径解析
+- 后端改造：BizDataSupport.resolvePickerText 支持 pickerConfig.dataSourceId（SYSTEM 内建源拉取+内存 Map 解析显示文本；user-tree 循环分页 20 页上限、dept-tree orgTree 扁平化对齐 adapter 空值语义、其余走 SystemSourceQueryService）；错误语义对齐 sourceFormKey 模式
+- 前端改造：ColumnConfigDialog pickerConfig 存 dataSourceId；schemaRules.injectPickerDisplayTexts + FormRenderer 注入（<field>_text → displayText）解决内建数据源编辑回显；BizDataListPage meta.formKey 兜底；member-group 路由复用 BizDataListPage；删专用页面/api/types
+- V46 踩坑：wf_form_def.column_config 是 JSON 列（json_valid CHECK），SQL 字面量内层 pickerConfig 引号必须 \\\" 双层转义（首跑失败回滚→修正→通过）
+- 旧数据：V43 的 3 组以 legacy_<id> 搬迁（当时成员/规则为空）；旧 REST /api/member-groups 保留 deprecated；菜单 306-311 按钮权限删除
+- 回归：backend 968/968（+7 dataSourceId 用例 + migration 45）、frontend 1167/1167（schemaRules +4、ColumnConfigDialog +1、删 MemberGroupPage.test）、vue-tsc 46 基线、lint 既有
+- E2E：API（CRUD+_text 全链路、已删岗位 400 拦截）+ 浏览器（列表形态/新增 DataPicker 多选/Tag 昵称/列表文本/编辑回显/保存/删除）全通过；chrome 归零
+- 引擎接入预留：members=用户 id 数组、post_rules=岗位 id 数组、org_rules=组织 id 数组，将来按组展开成员时读 wf_biz_member_group 行
+
+Stage Summary:
+- 成员组管理彻底业务表单化并实证闭环；biz-data 数据引用能力扩展至内建系统数据源（dataSourceId 模式）；旧专用实现退场（页面删除、接口 deprecated）

@@ -35,6 +35,9 @@ import { isConfigMode, type FormQueryConfig } from './form-query-config'
 import { ensureAlias } from './form-query-config'
 import { SqlQueryEngine } from './sql-query-engine'
 import { wrap, type WrappedQuery } from './sql-template-engine'
+import { SystemService } from '../../../system/service/system.service'
+import { SystemSourceQueryService } from '../../datasource/service/system-source-query.service'
+import { DataSourceRepository } from '../../datasource/repository/data-source.repository'
 
 /** 业务数据查询请求（对齐 Java `BizDataQueryRequest` 的默认值）。 */
 export interface BizDataQueryRequest {
@@ -73,6 +76,11 @@ export class BizDataSupport {
     private readonly repository: BizDataRepository,
     private readonly formDefRepository: FormDefinitionRepository,
     private readonly sqlQueryEngine: SqlQueryEngine,
+    /** data-picker dataSourceId 模式的显示文本解析（内建系统数据源取数）；
+     *  依赖方向 form → system/datasource 与 adapter 同向，无环。 */
+    private readonly systemService: SystemService,
+    private readonly systemSourceQuery: SystemSourceQueryService,
+    private readonly dataSources: DataSourceRepository,
   ) {}
 
   // ==================== 上下文 ====================
@@ -437,6 +445,127 @@ export class BizDataSupport {
       out[String(row.id)] = value === null || value === undefined ? '' : String(value)
     }
     return out
+  }
+
+  /**
+   * 按「数据源引用」批量解析显示文本（data-picker 的 dataSourceId 模式）。
+   *
+   * 背景：data-picker 除引用业务表单（sourceFormKey）外，还可引用数据源
+   * （dataSourceId，当前支持 SYSTEM 内建源：系统用户/系统岗位/组织机构等）。
+   * 显示文本语义与 resolveDisplayTexts 对齐：`id → displayField 值`，
+   * 引用不存在抛 400（消息对齐：`引用的数据不存在`）。
+   *
+   * 取数策略（SYSTEM 行数量有限，与 adapter.get 同款「拉取 + 内存过滤」）：
+   *   - user-tree：listUsersByUsername 分页生效 → 循环拉取；
+   *   - dept-tree：orgTree() 全量扁平化（对齐 adapter 的 dept-tree 分支空值语义）；
+   *   - 其余内建源（sys-posts 等）：SystemSourceQueryService.query，分页生效的循环拉满。
+   */
+  private async resolveDataSourceTexts(
+    dataSourceId: string,
+    ids: string[],
+    displayField: string,
+  ): Promise<Record<string, string>> {
+    if (!COLUMN_NAME_PATTERN.test(displayField)) {
+      throw new BusinessException(400, `非法显示字段: ${String(displayField)}`)
+    }
+    const ds = await this.dataSources.findByIdAccessible(dataSourceId, getTenantId())
+    if (ds === null) {
+      throw new BusinessException(400, `数据引用的数据源不存在: ${dataSourceId}`)
+    }
+    if (ds.type !== 'SYSTEM') {
+      throw new BusinessException(400, `数据引用暂不支持该数据源类型: ${dataSourceId}`)
+    }
+    const sourceKey = ds.source_key ?? ''
+    if (sourceKey.trim() === '') {
+      throw new BusinessException(400, `数据源缺少 source_key: ${dataSourceId}`)
+    }
+    const rows = await this.listSystemSourceRows(sourceKey)
+    const byId = new Map(rows.map((r) => [String(r.id), r]))
+    const out: Record<string, string> = {}
+    for (const id of ids) {
+      const row = byId.get(String(id))
+      if (row === undefined) {
+        throw new BusinessException(400, `引用的数据不存在: ${String(id)}`)
+      }
+      const v = row.data[displayField]
+      out[String(id)] = v === null || v === undefined ? '' : String(v)
+    }
+    return out
+  }
+
+  /** 内建系统数据源全量行（SYSTEM 行数有限；分页生效的源循环拉满，上限 20 页防失控）。 */
+  private async listSystemSourceRows(sourceKey: string): Promise<BizDataVO[]> {
+    if (sourceKey === 'dept-tree') {
+      // 组织机构树全量扁平化 —— 空值语义对齐 adapter 的 dept-tree 分支（一律空串）
+      const nodes = await this.systemService.orgTree()
+      const records: BizDataVO[] = []
+      const collect = (node: {
+        id: number
+        parentId: number | null
+        label: string | null
+        code: string | null
+        children?: Array<Record<string, unknown>> | null
+      }): void => {
+        records.push({
+          id: String(node.id),
+          data: {
+            id: String(node.id),
+            parentId: node.parentId === null || node.parentId === undefined ? '' : String(node.parentId),
+            label: node.label ?? '',
+            code: node.code ?? '',
+          },
+          version: null,
+          createdAt: null,
+          updatedAt: null,
+        })
+        for (const child of (node.children ?? []) as Array<Record<string, unknown>>) {
+          collect(child as Parameters<typeof collect>[0])
+        }
+      }
+      for (const node of nodes) {
+        collect(node as unknown as Parameters<typeof collect>[0])
+      }
+      return records
+    }
+    const records: BizDataVO[] = []
+    const pageSize = 500
+    for (let page = 1; page <= 20; page++) {
+      const result = sourceKey === 'user-tree'
+        ? await this.queryUserTreePage(page, pageSize)
+        : await this.systemSourceQuery.query(sourceKey, {
+            filter: null,
+            keyword: null,
+            keywordColumn: null,
+            sort: null,
+            order: null,
+            params: null,
+            page,
+            size: pageSize,
+          })
+      records.push(...result.records)
+      if (result.records.length === 0 || records.length >= result.total) break
+    }
+    return records
+  }
+
+  /** user-tree 单页取数（UserVO → BizDataVO，字段转换对齐 adapter 的 user-tree 分支）。 */
+  private async queryUserTreePage(page: number, size: number): Promise<BizDataPageVO> {
+    const result = await this.systemService.listUsersByUsername(null, page, size)
+    const records: BizDataVO[] = result.rows.map((row) => ({
+      id: String(row.id),
+      data: {
+        id: String(row.id),
+        username: row.username,
+        nickname: row.nickname ?? '',
+        orgId: row.orgId === null || row.orgId === undefined ? '' : String(row.orgId),
+        orgName: row.orgName ?? '',
+        status: row.status,
+      },
+      version: null,
+      createdAt: null,
+      updatedAt: null,
+    }))
+    return { records, total: result.total, page: result.page, size: result.size }
   }
 
   // ==================== 引用统计 ====================
@@ -970,6 +1099,10 @@ export class BizDataSupport {
     const sourceFormKey = picker.sourceFormKey === null || picker.sourceFormKey === undefined
       ? null
       : String(picker.sourceFormKey)
+    /** dataSourceId 模式（引用数据源，当前支持 SYSTEM 内建源），与 sourceFormKey（业务表单互引）二选一 */
+    const dataSourceId = picker.dataSourceId === null || picker.dataSourceId === undefined
+      ? null
+      : String(picker.dataSourceId)
     const displayField = picker.displayField === null || picker.displayField === undefined
       ? null
       : String(picker.displayField)
@@ -998,8 +1131,14 @@ export class BizDataSupport {
       }
     }
 
-    // 复用读路径的批量解析（`/biz-data/{formKey}/resolve` 用的是同一个方法）
-    const texts = await this.resolveDisplayTexts(sourceFormKey ?? '', ids, displayField ?? '')
+    // 复用读路径的批量解析（`/biz-data/{formKey}/resolve` 用的是同一个方法）：
+    // sourceFormKey（业务表单互引）优先；其次 dataSourceId（数据源引用，SYSTEM 内建源）；
+    // 两者都缺时保持原行为（resolveDisplayTexts('') → 400 非法目标表单 key）。
+    const texts = sourceFormKey !== null && sourceFormKey.trim() !== ''
+      ? await this.resolveDisplayTexts(sourceFormKey, ids, displayField ?? '')
+      : dataSourceId !== null && dataSourceId.trim() !== ''
+        ? await this.resolveDataSourceTexts(dataSourceId, ids, displayField ?? '')
+        : await this.resolveDisplayTexts('', ids, displayField ?? '')
     const ordered: string[] = []
     for (const id of ids) {
       const text = texts[id]

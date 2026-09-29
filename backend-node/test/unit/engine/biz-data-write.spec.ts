@@ -55,6 +55,14 @@ function harness(options: {
   pickerRows?: Array<Record<string, unknown>>
   mainRow?: Record<string, unknown> | null
   extraColumns?: Array<Record<string, unknown>>
+  /** dataSourceId 模式：findByIdAccessible 返回的数据源行（默认 null = 源不存在） */
+  dsRow?: { id: string; type: string; source_key: string | null } | null
+  /** user-tree 源用户（第 1 页返回） */
+  systemUsers?: Array<{ id: number; username: string; nickname: string | null; orgId: number | null; orgName: string | null; status: number }>
+  /** dept-tree 源组织树 */
+  orgTreeNodes?: Array<Record<string, unknown>>
+  /** 其余内建源（sys-posts 等）的行 */
+  sourceRows?: Array<Record<string, unknown>>
 }): Harness {
   const writes: Array<{ sql: string; params: unknown[] }> = []
   const subDeletes: string[] = []
@@ -108,12 +116,34 @@ function harness(options: {
     }),
   }
 
+  const systemService = {
+    listUsersByUsername: async (_kw: unknown, page: number, _size: number) => ({
+      rows: page === 1 ? (options.systemUsers ?? []) : [],
+      total: (options.systemUsers ?? []).length,
+      page,
+      size: 500,
+    }),
+    orgTree: async () => options.orgTreeNodes ?? [],
+  }
+  const systemSourceQuery = {
+    query: async (_key: string, req: { page: number }) => ({
+      records: req.page === 1 ? (options.sourceRows ?? []) : [],
+      total: (options.sourceRows ?? []).length,
+    }),
+  }
+  const dataSources = {
+    findByIdAccessible: async () => options.dsRow ?? null,
+  }
+
   return {
     // 写路径用不到 SqlQueryEngine（只有 config/sql 查询模式用），传一个空壳即可
     support: new BizDataSupport(
       repository as never,
       formDefRepository as never,
       {} as never,
+      systemService as never,
+      systemSourceQuery as never,
+      dataSources as never,
     ),
     writes,
     subDeletes,
@@ -232,6 +262,81 @@ describe('BizDataSupport 写路径 / data-picker 文本生成', () => {
     await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["u1"]' }))
     expect(h.pickerQueries).toHaveLength(1)
     expect(h.writes[0].params).toContain('["张三"]')
+  })
+})
+
+describe('BizDataSupport 写路径 / data-picker dataSourceId 模式（数据源引用）', () => {
+  const dsPicker = { pickerType: 'dataPicker', dataSourceId: 'ds-builtin-user-tree', displayField: 'nickname' }
+  const dsRow = { id: 'ds-builtin-user-tree', type: 'SYSTEM', source_key: 'user-tree' }
+
+  it('user-tree 源：create 生成 <key>_text（昵称文本数组，顺序与 id 一致）', async () => {
+    const h = harness({
+      picker: dsPicker,
+      dsRow,
+      systemUsers: [
+        { id: 1, username: 'admin', nickname: '管理员', orgId: null, orgName: '', status: 1 },
+        { id: 2, username: 'zhangsan', nickname: '张三', orgId: null, orgName: '', status: 1 },
+      ],
+    })
+    const vo = await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["1","2"]' }))
+    expect(h.writes[0].params).toContain('["管理员","张三"]')
+    expect(vo.id).toBe('row-1')
+  })
+
+  it('sys-posts 源（SystemSourceQueryService）：按岗位名生成文本', async () => {
+    const h = harness({
+      picker: { pickerType: 'dataPicker', dataSourceId: 'ds-builtin-sys-posts', displayField: 'postName' },
+      dsRow: { id: 'ds-builtin-sys-posts', type: 'SYSTEM', source_key: 'sys-posts' },
+      sourceRows: [{ id: '5', data: { postName: '研发工程师' } }],
+    })
+    await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["5"]' }))
+    expect(h.writes[0].params).toContain('["研发工程师"]')
+  })
+
+  it('dept-tree 源：orgTree 扁平化后按 label 生成文本', async () => {
+    const h = harness({
+      picker: { pickerType: 'dataPicker', dataSourceId: 'ds-builtin-dept-tree', displayField: 'label' },
+      dsRow: { id: 'ds-builtin-dept-tree', type: 'SYSTEM', source_key: 'dept-tree' },
+      orgTreeNodes: [
+        { id: 1, parentId: null, label: '总公司', code: 'root', children: [
+          { id: 2, parentId: 1, label: '研发部', code: 'rd', children: [] },
+        ] },
+      ],
+    })
+    await inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["2"]' }))
+    expect(h.writes[0].params).toContain('["研发部"]')
+  })
+
+  it('数据源不存在 → 400', async () => {
+    const h = harness({ picker: dsPicker, dsRow: null })
+    expect(
+      await messageOf(() => inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["1"]' }))),
+    ).toBe('数据引用的数据源不存在: ds-builtin-user-tree')
+  })
+
+  it('引用的源数据不存在 → 400（消息对齐 sourceFormKey 模式）', async () => {
+    const h = harness({
+      picker: dsPicker,
+      dsRow,
+      systemUsers: [{ id: 1, username: 'admin', nickname: '管理员', orgId: null, orgName: '', status: 1 }],
+    })
+    expect(
+      await messageOf(() => inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["9"]' }))),
+    ).toBe('引用的数据不存在: 9')
+  })
+
+  it('非 SYSTEM 数据源 → 400 暂不支持', async () => {
+    const h = harness({ picker: dsPicker, dsRow: { id: 'ds-1', type: 'FORM', source_key: 'ds-1' } })
+    expect(
+      await messageOf(() => inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["1"]' }))),
+    ).toBe('数据引用暂不支持该数据源类型: ds-builtin-user-tree')
+  })
+
+  it('sourceFormKey 与 dataSourceId 都缺 → 400（保持原行为）', async () => {
+    const h = harness({ picker: { pickerType: 'dataPicker', displayField: 'nickname' } })
+    expect(
+      await messageOf(() => inTenant(() => h.support.createGeneric(FORM_KEY, { title: 'T', owner: '["1"]' }))),
+    ).toBe('非法目标表单 key: ')
   })
 })
 

@@ -79,7 +79,8 @@ const route = useRoute()
 const router = useRouter()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
 
-const formKey = computed(() => route.params.formKey as string)
+/** 路由参数 formKey 优先；菜单静态复用（如成员组管理 → member_group）时从 route.meta.formKey 兜底 */
+const formKey = computed(() => (route.params.formKey as string) || (route.meta.formKey as string) || '')
 const formName = ref('')
 const columnConfig = ref<ColumnConfigItem[]>([])
 const schemaRules = ref<Rule[]>([])

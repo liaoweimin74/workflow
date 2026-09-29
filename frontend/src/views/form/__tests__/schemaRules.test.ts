@@ -122,3 +122,52 @@ describe('normalizeForRender（formContainer → FcRow 渲染转换）', () => {
     expect(JSON.stringify(schema)).toBe(original)
   })
 })
+
+// ----- injectPickerDisplayTexts：dataPicker 编辑回显（<field>_text → props.displayText） -----
+import { injectPickerDisplayTexts } from '../schemaRules'
+
+describe('injectPickerDisplayTexts', () => {
+  it('顶层 dataPicker：有 <field>_text 时注入 displayText（浅拷贝，不改原 rule）', () => {
+    const rules = [
+      { type: 'input', field: 'group_name', title: '名称' },
+      { type: 'dataPicker', field: 'members', title: '组成员', props: { dataSourceId: 'ds-builtin-user-tree' } },
+    ]
+    const data = { members: '["1","2"]', members_text: '["管理员","张三"]' }
+    const next = injectPickerDisplayTexts(rules as any[], data)
+    expect(next[1].props.displayText).toBe('["管理员","张三"]')
+    // 原 rule 不被污染（BizDataListPage 的 formConfig.rule 共享同一引用）
+    expect(rules[1].props.displayText).toBeUndefined()
+  })
+
+  it('无 <field>_text 时原样返回同一引用（不触发无谓重算）', () => {
+    const rules = [{ type: 'dataPicker', field: 'members', props: {} }]
+    const out = injectPickerDisplayTexts(rules as any[], {})
+    expect(out).toBe(rules)
+  })
+
+  it('空文本（空串/null）不注入', () => {
+    const rules = [{ type: 'dataPicker', field: 'members', props: {} }]
+    const out = injectPickerDisplayTexts(rules as any[], { members_text: '' })
+    expect(out).toBe(rules)
+  })
+
+  it('递归 subForm（props.rule）与布局容器（children）', () => {
+    const rules = [
+      {
+        type: 'fcRow',
+        children: [
+          {
+            type: 'subForm',
+            field: 'items',
+            props: {
+              rule: [{ type: 'dataPicker', field: 'dept', props: {} }],
+            },
+          },
+        ],
+      },
+    ]
+    const data = { dept_text: '["研发部"]' }
+    const next = injectPickerDisplayTexts(rules as any[], data) as any
+    expect(next[0].children[0].props.rule[0].props.displayText).toBe('["研发部"]')
+  })
+})

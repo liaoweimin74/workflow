@@ -69,10 +69,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '岗位管理' }
       },
       {
+        // 成员组管理 = 业务表单 member_group 的业务数据列表页（成员/自动规则用数据引用字段录入）
         path: 'system/member-group',
         name: 'MemberGroupManagement',
-        component: () => import('@/views/system/member-group/MemberGroupPage.vue'),
-        meta: { title: '成员组管理' }
+        component: () => import('@/views/form/BizDataListPage.vue'),
+        meta: { title: '成员组管理', formKey: 'member_group' }
       },
       {
         path: 'system/dict',

@@ -2214,3 +2214,20 @@ Work Log:
 
 Stage Summary:
 - 成员组管理彻底业务表单化并实证闭环；biz-data 数据引用能力扩展至内建系统数据源（dataSourceId 模式）；旧专用实现退场（页面删除、接口 deprecated）
+
+---
+Task ID: 97-sandbox-recovery
+Agent: Z.ai Code (main session)
+Task: 沙箱第七次重置（.git 消失/工作区回滚 Sep 24/DB 回滚 V41）——全量恢复至 Task 96 完成态
+
+Work Log:
+- 恢复源：/tmp/my-project（重置前完整备份，含 Task 96 全部产物）；rsync 排除 node_modules 全量覆盖；顶层补回 src 代理三件套/scripts 四脚本
+- DB：孤儿 V39__fix_menu_visible_status.sql 归档至 migrations/_archived（其修复已生效于库），repair 后 migrate 应用 V42~V46（wf_biz_member_group/seed 表单/菜单 305/ds-builtin-sys-posts 全就位）
+- 后端：正确入口 src/main.ts（Nest）；supervisor 以 node dist/main.js 跑旧构建导致「必填字段不能为空/非法目标表单 key」假象，npm run build 重建 dist 后三分支解析实证（members=[1,2]→members_text=[管理员,测试用户]）；login 前缀 /api/auth/login
+- 前端：Next16 仅认 proxy.ts，恢复的 middleware.ts 冲突已删；3000/5173/8080 全绿
+- E2E：成员组业务表单全链路（新增 DataPicker 多选/Tag 昵称/列表/编辑回显/删除空态）+ 草稿箱 SearchTable 形态；chrome 归零、测试数据零残留
+- git 重建：ed385c7（restore）+ bfd0dd3（worklog）；PAT 未留存，推送待用户提供
+
+Stage Summary:
+- 恢复闭环至 Task 96 完成态，四层（文件/DB/服务/网关）验证通过
+- 运维新经验三条入册：入口 main.ts 勿用 index.ts；8080 旧代码行为先查进程（bun src vs node dist）并重建 dist；Nest 无 /health（探活改 /api/auth/login 判 HTTP 层活）

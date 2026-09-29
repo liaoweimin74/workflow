@@ -2231,3 +2231,18 @@ Work Log:
 Stage Summary:
 - 恢复闭环至 Task 96 完成态，四层（文件/DB/服务/网关）验证通过
 - 运维新经验三条入册：入口 main.ts 勿用 index.ts；8080 旧代码行为先查进程（bun src vs node dist）并重建 dist；Nest 无 /health（探活改 /api/auth/login 判 HTTP 层活）
+
+---
+Task ID: 98-push
+Agent: Z.ai Code (main session)
+Task: 用户提供新 PAT——恢复推送闭环 + 恢复内容与远程对齐甄别
+
+Work Log:
+- remote main=0d122a8=Task 96 提交；reset --soft 对齐后发现 561 项差异：279 A=Sep 16 旧快照残留（rsync 并集混入，git ls-tree 实证远程无）、281 D=远程完整内容（backend/src 126+test 122+.env 2+.superpowers 31）、1 M=worklog
+- checkout origin/main 找回 281 项、git rm 清残留 279 项，差异收敛至 worklog；远程 migrations 本就单 V39（fix_menu 归档重置前已推送），以远程为准
+- 【重要发现】94e54552 显示 Bug C（流程中心 key 去重最新版）与 Bug D（发起人锚定服务端身份修撤回 400）重置前已闭环——遗留清单修正
+- 56ed0010 推送成功 remote=local；冒烟 3000/8080 全绿 chrome 0
+
+Stage Summary:
+- 恢复→对齐→推送全链路闭环，Task 94/95/96 全部在远程（main=56ed0010 系）
+- 教训入册：rsync 无 --delete 是并集恢复，重置恢复必须 reset --soft origin/main 后逐类甄别，以远程为权威

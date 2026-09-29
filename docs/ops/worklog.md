@@ -2246,3 +2246,17 @@ Work Log:
 Stage Summary:
 - 恢复→对齐→推送全链路闭环，Task 94/95/96 全部在远程（main=56ed0010 系）
 - 教训入册：rsync 无 --delete 是并集恢复，重置恢复必须 reset --soft origin/main 后逐类甄别，以远程为权威
+
+---
+Task ID: 99-designer-theme
+Agent: Z.ai Code (main session)
+Task: 流程设计器四项 UI 优化（节点标签统一加粗明暗自适应/contextPad 暗色/人员按钮暗色/属性面板只读 ID）
+
+Work Log:
+- designer-theme.css：.djs-label 统一 600；审批/办理类别色补 html.dark 提亮档；contextPad entry 补语义色+覆盖 diagram-js --context-pad-entry-background-color 变量清白底
+- ApproverPicker：9 处硬编码亮色→Element 语义变量（暗底浅字自动切换）
+- PropertyPanel：panel-meta 只读 ID 行（等宽+复制按钮+clipboard 兜底）
+- E2E：eval 计算样式实证暗色四项 + 明暗截图比对；63df6c2b 已推送
+
+Stage Summary:
+- 四项全部闭环；diagram-js 变量覆盖手法入册；chrome 归零、服务全绿

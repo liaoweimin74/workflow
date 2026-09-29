@@ -105,6 +105,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '待办处理' }
       },
       {
+        path: 'process/drafts',
+        name: 'ProcessDraftBox',
+        component: () => import('@/views/process/ProcessDraftBoxPage.vue'),
+        meta: { title: '草稿箱' }
+      },
+      {
         path: 'process/todo/done/:taskId',
         name: 'TaskDoneDetail',
         component: () => import('@/views/process/TaskDoneDetailPage.vue'),

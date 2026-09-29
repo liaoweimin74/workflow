@@ -61,6 +61,21 @@ export interface FormDataSaveRequest {
   dataJson: string
 }
 
+/** 草稿箱列表项（GET /v1/form-data/drafts 返回） */
+export interface ProcessDraftBoxItem {
+  id: string
+  formDefId: string
+  formName: string | null
+  /** 可发起的已部署流程定义 id；null = 流程已下线/挂起/表单解绑，仅可删除 */
+  processDefId: string | null
+  processKey: string | null
+  processName: string | null
+  processVersion: number | null
+  dataJson: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
 export const formApi = {
   createForm(name: string, key: string, type?: string): Promise<R<FormDefinitionDTO>> {
     return http.post('/v1/form-definitions', null, { params: { name, key, type } })
@@ -135,6 +150,16 @@ export const formApi = {
   /** 清除发起页草稿（发起成功后调用） */
   clearDraft(formDefId: string): Promise<R<void>> {
     return http.delete(`/v1/form-data/draft/${formDefId}`)
+  },
+
+  /** 草稿箱：当前用户的全部发起页草稿（按更新时间倒序） */
+  listDrafts(): Promise<R<ProcessDraftBoxItem[]>> {
+    return http.get('/v1/form-data/drafts')
+  },
+
+  /** 草稿箱：删除指定草稿（仅本人草稿可删） */
+  deleteDraft(id: string): Promise<R<void>> {
+    return http.delete(`/v1/form-data/drafts/${id}`)
   },
 
   getFormData(processInstanceId: string, formDefId: string): Promise<R<FormDataDTO | null>> {

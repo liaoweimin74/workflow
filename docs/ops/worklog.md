@@ -2141,3 +2141,21 @@ Stage Summary:
 - 发起人锚定服务端身份：撤回/再次发起/发起节点选人的身份链路从此以登录用户为真源；存量 NULL 实例已修复
 - 流程中心与引擎「最新版本」语义对齐；版本历史仍走 getVersions(key) 专用端点不受影响
 - 观察：发起页 initiator_select 节点若未选人直接提交，会建 assignee=null 的待办（本次 API 直发复现）——后续可考虑发起页必选校验或引擎 fallback 到审批人配置
+
+---
+Task ID: 93-draft-box
+Agent: Z.ai Code (main session)
+Task: 流程管理新增「草稿箱」——发起页保存的草稿可查看/继续填写/删除，并补上草稿的用户隔离
+
+Work Log:
+- 摸底：发起草稿存 wf_form_data（process_instance_id NULL + is_snapshot=0），原实现按 (tenant, formDefId) 全租户共享一条 —— 任何用户打开同一流程发起页都会读到/覆盖他人草稿（隐私缺陷，随本任务一并根治）
+- 后端：FormDataRepository.findDraft 增加 created_by 维度 + listDraftsByUser；FormDefinitionRepository.findByIds 批量回填表单名；ProcessDesignRepository.listDeployedDefsWithModel + findConfigsByProcessDefinitionIds（IN 批量防 N+1）
+- FormDataService：saveDraft 锚定 created_by=登录用户；findDraft/clearDraft 限定本人；新增 listMyDrafts（表单名 + 发起流程反查：仅 ACTIVE、同 key 最新版、发起人节点表单 > __PROCESS__，反查不到则 processDefId=null）与 deleteMyDraft（本人/草稿行/非快照三重校验）；FormDataController 新增 GET /form-data/drafts、DELETE /form-data/drafts/:id，存量 draft 三端点透传 @CurrentUser
+- V44 迁移：流程管理下新增「草稿箱」菜单（id=104, sort 3），待办处理顺延 sort 4，ROLE_ADMIN 授权；真库已执行；migration.spec 期望数 42→43
+- 前端：formApi.listDrafts/deleteDraft + ProcessDraftBoxItem 类型；路由 /process/drafts；ProcessDraftBoxPage（搜索卡片+表格卡片对齐流程中心布局，流程名+版本标签/已下线标签、表单名、草稿内容摘要（前3个非空字段）、最后保存时间、继续填写（下线禁用+tooltip）/删除（confirm））
+- 测试：后端新增 form-data-draft-box.spec 7 用例（created_by 锚定/本人限定/ACTIVE 最新版反查/发起人节点优先/无 ACTIVE 反查 null/删除三重校验）；前端 ProcessDraftBoxPage.test 5 用例（空态/渲染/下线禁用/过滤/删除刷新）；全量前端 1161/1161、后端 955/955；vue-tsc 46 基线零新增；backend tsc 仅剩 task-signature.spec 1 处既有错误（stash 对照确认）
+- E2E：重建后端重启（注意 PORT=8080 显式传入，缺省 8081）；API 实证 saveDraft createdBy='1'、drafts 列表反查到「请假 v4/员工请假申请单」、test 用户看不到 admin 草稿（data:null）、跨用户删除返回 404「草稿不存在或无权删除」；浏览器全链路：菜单出现→草稿箱渲染→继续填写回填「家中有事」→修改保存→摘要更新→删除确认→空态「暂无流程草稿」；用后 chrome 归零、草稿测试数据已清理（0 行残留）
+
+Stage Summary:
+- 草稿箱功能闭环：列表/继续填写/删除/隔离/下线兜底全部落地并实证；草稿从此按用户隔离，旧的全租户共享缺陷一并修复
+- 提交推送至 workflow_lowcode 嵌套仓库

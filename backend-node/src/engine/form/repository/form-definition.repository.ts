@@ -74,6 +74,19 @@ export class FormDefinitionRepository {
     return row ?? null
   }
 
+  /** 按 id 批量取表单定义（租户内，草稿箱列表回填表单名用）；入参去重，顺序不保证。 */
+  async findByIds(ids: string[], tenantId: string): Promise<FormDefinitionRow[]> {
+    const unique = [...new Set(ids)]
+    if (unique.length === 0) return []
+    const rows = await this.db
+      .selectFrom('wf_form_def')
+      .selectAll()
+      .where('tenant_id', '=', tenantId)
+      .where('id', 'in', unique)
+      .execute()
+    return rows
+  }
+
   /** 按 key 取最新版本（version 倒序取第一条）。 */
   async findLatestByKey(key: string, tenantId: string): Promise<FormDefinitionRow | null> {
     const row = await this.db

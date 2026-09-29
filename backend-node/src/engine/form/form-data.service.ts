@@ -7,6 +7,11 @@ import {
   FormDataRepository,
   type FormDataRow,
 } from './repository/form-data.repository'
+import {
+  extractFormConfig,
+  parseInitiatorNodeId,
+} from '../process/process-design.service'
+import { ProcessDesignRepository } from '../process/repository/process-design.repository'
 
 /**
  * 表单实例数据服务，对齐 Java `com.workflow.engine.form.FormDataService`。
@@ -25,6 +30,7 @@ export class FormDataService {
   constructor(
     private readonly repository: FormDataRepository,
     private readonly formDefRepository: FormDefinitionRepository,
+    private readonly processDesignRepository: ProcessDesignRepository,
   ) {}
 
   /** 保存或更新当前数据（upsert）。 */
@@ -92,11 +98,21 @@ export class FormDataService {
     return toVO(row)
   }
 
-  /** 保存发起页草稿（upsert，实例为 NULL）。 */
-  async saveDraft(formDefId: string | null, dataJson: string | null): Promise<FormDataVO> {
+  /**
+   * 保存发起页草稿（upsert，实例为 NULL）。
+   *
+   * ⚠️ 草稿按**登录用户**隔离：`created_by` 记录发起人，读取/列表都限定
+   *    同一用户 —— 否则任何人打开同一流程的发起页都会读到别人的草稿。
+   */
+  async saveDraft(
+    formDefId: string | null,
+    dataJson: string | null,
+    userId: number,
+  ): Promise<FormDataVO> {
     const tenantId = getTenantId()
+    const createdBy = String(userId)
     const formVersion = await this.requireFormVersion(formDefId, tenantId)
-    const existing = await this.repository.findDraft(tenantId, String(formDefId))
+    const existing = await this.repository.findDraft(tenantId, String(formDefId), createdBy)
 
     if (existing !== null) {
       await this.repository.updateData(existing.id, String(dataJson ?? ''))
@@ -112,7 +128,7 @@ export class FormDataService {
       process_instance_id: null,
       task_id: null,
       data_json: dataJson,
-      created_by: null,
+      created_by: createdBy,
       created_at: new Date(),
       updated_at: new Date(),
       is_snapshot: 0,
@@ -159,16 +175,129 @@ export class FormDataService {
     return rows.map(toDTO)
   }
 
-  /** 查询发起页草稿（无则 null）。 */
-  async findDraft(formDefId: string): Promise<FormDataDTOVO | null> {
-    const row = await this.repository.findDraft(getTenantId(), formDefId)
+  /** 查询发起页草稿（限定当前用户，无则 null）。 */
+  async findDraft(formDefId: string, userId: number): Promise<FormDataDTOVO | null> {
+    const row = await this.repository.findDraft(getTenantId(), formDefId, String(userId))
     return row === null ? null : toDTO(row)
   }
 
-  /** 清除发起页草稿（不存在时静默成功）。 */
-  async clearDraft(formDefId: string): Promise<void> {
-    const row = await this.repository.findDraft(getTenantId(), formDefId)
+  /** 清除发起页草稿（限定当前用户；不存在时静默成功）。 */
+  async clearDraft(formDefId: string, userId: number): Promise<void> {
+    const row = await this.repository.findDraft(getTenantId(), formDefId, String(userId))
     if (row !== null) await this.repository.deleteById(row.id)
+  }
+
+  /**
+   * 草稿箱列表：当前用户的全部发起页草稿，附表单名与「发起流程」反查结果。
+   *
+   * 反查规则（与 `resolveFormDefIds` 的发起表单解析互为镜像）：
+   *   - 只映射 **ACTIVE** 的部署版本（挂起流程不可发起，草稿只能删除）；
+   *   - 同 key 只取**最新版本**（发起入口永远指向最新定义）；
+   *   - 优先发起人节点表单，其次 `__PROCESS__` 流程级表单；
+   *   - 同一表单被多个流程引用时取 key 升序遇到的第一个（确定性）。
+   *    反查不到（流程下线/表单解绑）时 processDefId 为 null，前端禁用「继续填写」。
+   */
+  async listMyDrafts(userId: number): Promise<DraftBoxItemVO[]> {
+    const tenantId = getTenantId()
+    const drafts = await this.repository.listDraftsByUser(tenantId, String(userId))
+    if (drafts.length === 0) return []
+
+    // 表单名回填（批量，草稿数量有限）
+    const formIds = drafts.map((d) => d.form_def_id)
+    const forms = await this.formDefRepository.findByIds(formIds, tenantId)
+    const formNameById = new Map(forms.map((f) => [f.id, f.name]))
+
+    // 发起表单 → 已部署流程定义（ACTIVE、同 key 最新版优先）
+    const ownerByFormId = await this.resolveStartFormOwners(tenantId)
+
+    return drafts.map((d) => {
+      const owner = ownerByFormId.get(d.form_def_id) ?? null
+      return {
+        id: d.id,
+        formDefId: d.form_def_id,
+        formName: formNameById.get(d.form_def_id) ?? null,
+        processDefId: owner?.id ?? null,
+        processKey: owner?.processKey ?? null,
+        processName: owner?.name ?? null,
+        processVersion: owner?.version ?? null,
+        dataJson: d.data_json,
+        createdAt: d.created_at,
+        updatedAt: d.updated_at,
+      }
+    })
+  }
+
+  /**
+   * 删除草稿箱里的指定草稿。仅允许删除「自己的、发起页草稿」；
+   * 不存在/非草稿/非本人一律返回 false（由控制器映射成 404 语义）。
+   */
+  async deleteMyDraft(id: string, userId: number): Promise<boolean> {
+    const row = await this.repository.findByIdAndTenantId(id, getTenantId())
+    if (row === null) return false
+    if (row.process_instance_id !== null) return false
+    if (bitToBool(row.is_snapshot)) return false
+    if (row.created_by !== String(userId)) return false
+    await this.repository.deleteById(id)
+    return true
+  }
+
+  /** 全部 ACTIVE 部署定义的「发起表单 → 定义」映射（同 key 只留最新版）。 */
+  private async resolveStartFormOwners(
+    tenantId: string,
+  ): Promise<Map<string, { id: string; processKey: string; name: string | null; version: number }>> {
+    const defs = await this.processDesignRepository.listDeployedDefsWithModel(tenantId)
+    const active = defs.filter((row) => String(row.status) === 'ACTIVE')
+    if (active.length === 0) return new Map()
+
+    const configs = await this.processDesignRepository.findConfigsByProcessDefinitionIds(
+      active.map((row) => String(row.id)),
+    )
+    const configsByDef = new Map<string, typeof configs>()
+    for (const config of configs) {
+      // 已部署定义的配置行 process_definition_id 不会为 null，但类型上允许，防御性跳过
+      if (config.process_definition_id === null) continue
+      const list = configsByDef.get(config.process_definition_id) ?? []
+      list.push(config)
+      configsByDef.set(config.process_definition_id, list)
+    }
+
+    // defs 已按 key 升序 + version 倒序：先到先得 ⇒ 同 key 命中最新版、同表单命中首个 key
+    const ownerByFormId = new Map<
+      string,
+      { id: string; processKey: string; name: string | null; version: number }
+    >()
+    for (const row of active) {
+      const defId = String(row.id)
+      const defConfigs = configsByDef.get(defId) ?? []
+
+      // 与 ProcessDesignService.resolveFormDefIds 同构：发起人节点表单 > __PROCESS__ 表单
+      let effectiveFormDefId: string | null = null
+      const initiatorNodeId = parseInitiatorNodeId(String(row.model_json ?? ''))
+      if (initiatorNodeId !== null) {
+        const config = defConfigs.find((c) => c.node_id === initiatorNodeId)
+        if (config !== undefined) {
+          effectiveFormDefId = extractFormConfig(config.config_json)?.formDefId ?? null
+        }
+      }
+      if (effectiveFormDefId === null) {
+        for (const config of defConfigs) {
+          if (config.node_id !== '__PROCESS__') continue
+          effectiveFormDefId = extractFormConfig(config.config_json)?.formDefId ?? null
+          if (effectiveFormDefId !== null) break
+        }
+      }
+      if (effectiveFormDefId === null) continue
+
+      if (!ownerByFormId.has(effectiveFormDefId)) {
+        ownerByFormId.set(effectiveFormDefId, {
+          id: defId,
+          processKey: String(row.process_key),
+          name: row.name === null ? null : String(row.name),
+          version: Number(row.version),
+        })
+      }
+    }
+    return ownerByFormId
   }
 
   /** 更新当前数据（不动 form_version / task_id，对齐 Java）。 */
@@ -226,6 +355,25 @@ export interface FormDataDTOVO {
   createdAt: Date | null
   updatedAt: Date | null
   isSnapshot: boolean
+}
+
+/**
+ * 草稿箱列表项（Node 侧新能力，无 Java 对齐物）。
+ *
+ * `processDefId` 为 null 表示该草稿的发起表单已没有可发起的部署流程
+ * （流程下线/挂起/表单解绑），前端应禁用「继续填写」。
+ */
+export interface DraftBoxItemVO {
+  id: string
+  formDefId: string
+  formName: string | null
+  processDefId: string | null
+  processKey: string | null
+  processName: string | null
+  processVersion: number | null
+  dataJson: string | null
+  createdAt: Date | null
+  updatedAt: Date | null
 }
 
 function toVO(row: FormDataRow): FormDataVO {

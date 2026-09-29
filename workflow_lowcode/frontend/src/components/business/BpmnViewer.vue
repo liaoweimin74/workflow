@@ -7,6 +7,13 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import BpmnViewer from 'bpmn-js/lib/NavigatedViewer'
 import type ViewerType from 'bpmn-js/lib/NavigatedViewer'
 import { normalizeBpmnXmlForRender } from '@/views/designer/utils/xmlParser'
+import { customRendererModule } from '@/views/designer/utils/customRenderer'
+
+// bpmn-js 基础样式 + bpmn 字体（overlay 类别图标用）+ 画布通用主题（与设计器同源，四态明暗自适应）
+import 'bpmn-js/dist/assets/diagram-js.css'
+import 'bpmn-js/dist/assets/bpmn-js.css'
+import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css'
+import '@/views/designer/styles/bpmn-canvas-theme.css'
 
 const props = defineProps<{
   /** BPMN XML 字符串 */
@@ -49,7 +56,10 @@ watch(() => props.highlights, () => applyHighlights(), { deep: true })
 
 onMounted(async () => {
   if (containerRef.value) {
-    viewer = new BpmnViewer({ container: containerRef.value })
+    // 注册 customRendererModule：给节点打类别 marker（approver-task 等）
+    // 并叠加类别底色/图标 —— 与设计器视觉一致，且 bpmn-canvas-theme.css
+    // 的类别色/overlay 规则才能命中
+    viewer = new BpmnViewer({ container: containerRef.value, additionalModules: [customRendererModule] })
     await renderDiagram()
   }
 })

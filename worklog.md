@@ -1684,3 +1684,22 @@ Work Log:
 Stage Summary:
 - 远程 main = 717f8fff（Task 99 四项 + Task 100 三处残留 + 2 隐藏 bug 根除）
 - 顶层 worklog 曾被重置回滚，Task 68~99 条目以远程内层 docs/ops/worklog.md 为准
+
+---
+Task ID: 101-viewer-dark-label
+Agent: Z.ai Code (main session)
+Task: 用户反馈「节点名称在节点上的文字在暗色风格时看不清」——流程图预览（Viewer）暗色适配缺位根除
+
+Work Log:
+- 根因甄别（浏览器 computed style + 像素采样双证）：设计器画布暗色 label 实际正常（审批 #e2b06b/办理 #52c48f/通用 #c3ccc6，三主题四态 computed 全对）；真正的盲区在 **BpmnViewer 场景**——ProcessStartPage（发起页预览）/ProcessTrackDrawer（审批跟踪抽屉）/ProcessInstanceTrackPage（实例跟踪页）用的 bpmn-js NavigatedViewer 完全裸渲染：不引入 designer-theme.css、不注册 customRenderer、连 bpmn-js 基础 css/字体都没引入，节点文字是 bpmn-js 内联 attr `fill: rgb(34,36,42)`（深色），暗色画布上对比 ≈1:1——「看不清」铁证
+- 抽共享主题：新建 frontend/src/views/designer/styles/bpmn-canvas-theme.css（画布通用段：背景网格/连线/节点/label 统一/类别 label 色/overlay 明暗两档/bjs-powered-by），全语义变量四态自适应；designer-theme.css 改 @import 引用并删除迁移段（447→223 行），单份定义两处使用
+- Viewer 接入：BpmnViewer.vue 注册 customRendererModule（类别 marker + overlay 与设计器一致）+ 引入 diagram-js.css/bpmn-js.css/bpmn 字体/共享主题；ProcessStartPage.vue 独立 viewer 实例同步接入
+- 顺手修复暗色 F5 断档：index.html 首帧脚本补 theme-dark==='1' 时恢复 html.dark（此前仅 AdminLayout 挂载时恢复，流程设计器等全屏路由刷新后暗色丢失变亮，加剧「看不清」困惑）；F5 实证 dark=true 保持
+- E2E（agent-browser）：部署 UI验证流程 → 发起页预览实证 11 元素/4 overlay 渲染、节点类别底色（initiator 深蓝/审批深棕/办理深绿）与描边正确、有字节点 computed fill=rgb(195,200,217) 浅灰（对比 9:1）；设计器明暗两态截图回归正常；vitest 23 用例（wfModdle/ProcessCenter/ProcessList）通过；vue-tsc 46 错=基线零新增
+- 工具链记录：headless chrome 无 sans-serif CJK 字形（仅 Noto Serif SC），SVG 中文文字在截图中不渲染但 DOM/computed 正常——后续验证 SVG 文字色用 computed fill+对比度计算，勿依赖截图像素；中间「tspan 不渲染」假象系采样区域错位（svg fixed top 改动后未重算），tspan 实际正常
+- 门户中途被清一次（dev.log 无异常，疑似 OOM 清理），start-portal.sh 拉回后 chrome 归零
+
+Stage Summary:
+- 流程图预览三处场景（发起页/跟踪抽屉/实例跟踪页）暗色适配闭环，与设计器同源共享主题，节点名称文字从对比 1:1 提升到 9:1
+- 产物：bpmn-canvas-theme.css（新）/designer-theme.css（瘦身 @import）/BpmnViewer.vue/ProcessStartPage.vue/index.html（dark 首帧恢复）
+- 教训：Debug 时采样区域与 fixed 元素坐标必须同帧确认；多假设并行验证前先做最小对照实验

@@ -78,6 +78,13 @@ import { ElMessage } from 'element-plus'
 import BpmnViewer from 'bpmn-js/lib/NavigatedViewer'
 import type ViewerType from 'bpmn-js/lib/NavigatedViewer'
 import { normalizeBpmnXmlForRender } from '@/views/designer/utils/xmlParser'
+import { customRendererModule } from '@/views/designer/utils/customRenderer'
+
+// bpmn-js 基础样式 + 画布通用主题（与设计器同源，四态明暗自适应 —— 暗色下节点名称可读）
+import 'bpmn-js/dist/assets/diagram-js.css'
+import 'bpmn-js/dist/assets/bpmn-js.css'
+import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css'
+import '@/views/designer/styles/bpmn-canvas-theme.css'
 import { deployedProcessApi } from '@/api/processDefinition'
 import { processInstanceApi } from '@/api/processInstance'
 import { formApi } from '@/api/form'
@@ -137,7 +144,7 @@ async function loadProcessDefinition() {
     diagramCollapse.value = ['diagram']
     await nextTick()
     if (diagramRef.value && !viewer) {
-      viewer = new BpmnViewer({ container: diagramRef.value })
+      viewer = new BpmnViewer({ container: diagramRef.value, additionalModules: [customRendererModule] })
     }
     if (viewer) {
       try {

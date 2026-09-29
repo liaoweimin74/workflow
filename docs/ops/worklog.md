@@ -2260,3 +2260,22 @@ Work Log:
 
 Stage Summary:
 - 四项全部闭环；diagram-js 变量覆盖手法入册；chrome 归零、服务全绿
+
+---
+Task ID: 100
+Agent: Z.ai Code (main)
+Task: 用户实测反馈设计器暗色三处残留（contextPad 白格子/选人按钮白色/办理审核节点文字看不清）+ 第八次沙箱重置恢复
+
+Work Log:
+- 第八次重置灾情：workflow_lowcode/.git 消失、工作区回滚 Sep 24、顶层 worklog 回滚至 Task 67；因 Task 98 已完整推送（远程=权威），按 SOP git init -b main + PAT remote + fetch + reset --mixed origin/main + checkout -- . 恢复至 HEAD=07ee9eb0（Task 99），git status 0 行
+- 根因定位三连（浏览器 computed style + node_modules 源码双证）：
+  a. 办理/审核节点文字看不清 = customRenderer JS 硬编码亮色 overlay（#FFF7E6/#E8F5EE）在暗画布成亮块 + .user-task rect 通用规则 !important 把 overlay 一并覆盖（类别色明暗全丢，明色也只剩白底青描边的隐藏 bug）
+  b. contextPad 白格子 = diagram-js 18 entry 白底 + 同色 box-shadow 光晕(0 0 2px 1px var(--color-white))；Task 99 只清了背景且 hover 变量名拼写错（--context-pad-entry-background-color-hover ≠ --context-pad-entry-hover-background-color）
+  c. 选人按钮白色 = 实测 trigger bg=rgb(24,29,27) 已适配，用户所见为旧状态；顺手补 popup menu（replace 弹层）全量暗色（diagram-js 默认 --popup-background-color: var(--color-white)）
+- 修复：customRenderer overlay 元素加 .wf-role-overlay(-icon) class + elements.changed 幂等补打 marker（修 handleDrop 先 create 后 updateProperties 导致的 handler marker 丢失时序 bug）；designer-theme.css 通用 rect 规则 :not() 排除 overlay + 新增 overlay 明暗两档（暗色=16~18% 类别色 mix 深底 + 提亮描边/图标）+ contextPad box-shadow:none + 变量名修正 + popup 12 个语义变量重定义
+- E2E（agent-browser）：明/暗双态截图比对——明色类别底/描边/图标恢复、暗色暗橙/暗绿底+提亮边+label(#e2b06b/#52c48f) 对比>7:1、contextPad 暗底融合无白格、选人弹窗（append-to-body）全暗色、明色零回归；vue-tsc 对改动文件零错误
+- 717f8fff 已推送远程 main；scripts/ab.sh + mem-guard.sh 重建（重置丢失）
+
+Stage Summary:
+- 三处反馈全部闭环 + 两个隐藏 bug（overlay 被吞、marker 时序）一并根除；核心手法：SVG overlay 着色权从 JS attr 移交 CSS 明暗两档，presentation attribute 只作兜底
+- 遗留：diagram-js palette（已 display:none 无需适配）；djs-hit 事件派发仅 PointerEvent 有效（MouseEvent 派发不选中，调试时注意）

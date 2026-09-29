@@ -1,8 +1,10 @@
-// ----- Task 93: ProcessDraftBoxPage 草稿箱 -----
+// ----- Task 94: ProcessDraftBoxPage 草稿箱（SearchTable 重构版） -----
 // npx vitest run src/views/process/__tests__/ProcessDraftBoxPage.test.ts
 //
-// 覆盖：列表渲染（流程名/表单名/版本标签）、已下线流程「继续填写」禁用、
-//       关键字过滤、删除确认调用删除 API 后刷新。
+// 页面已改为 SearchTable 范式：本文件挂载真实 SearchTable，覆盖
+// ① 列表渲染（流程名/版本标签/表单名/摘要/时间） ② 已下线流程隐藏「继续填写」
+// ③ 关键字客户端过滤 + 重置 ④ 删除确认→删除 API→刷新 ⑤ 继续填写路由跳转
+// ⑥ listDrafts 失败兜底（toast + 空表不崩）
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -16,6 +18,16 @@ vi.mock('@/api/form', () => ({
   },
 }))
 
+// 局部 mock：只替换 ElMessage/ElMessageBox，保留组件等真实导出（ElIcon/ElTag 仍真实渲染）
+vi.mock('element-plus', async () => {
+  const actual = await vi.importActual<typeof import('element-plus')>('element-plus')
+  return {
+    ...actual,
+    ElMessage: { ...actual.ElMessage, success: vi.fn(), error: vi.fn() },
+    ElMessageBox: { ...actual.ElMessageBox, confirm: vi.fn() },
+  }
+})
+
 const push = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
@@ -23,6 +35,7 @@ vi.mock('vue-router', () => ({
 }))
 
 const { formApi } = await import('@/api/form').then((m) => m as any)
+const { ElMessage, ElMessageBox } = (await import('element-plus')) as any
 
 function draft(overrides: Record<string, unknown> = {}) {
   return {
@@ -44,6 +57,10 @@ function mountPage() {
   return mount(ProcessDraftBoxPage, {
     global: {
       plugins: [ElementPlus],
+      directives: {
+        // SearchTable 内部操作按钮使用 v-permission，测试环境无全局注册
+        permission: { mounted() {}, updated() {} },
+      },
     },
   })
 }
@@ -53,18 +70,9 @@ beforeEach(() => {
   ;(formApi.listDrafts as any).mockResolvedValue({ data: [] })
 })
 
-describe('ProcessDraftBoxPage 草稿箱', () => {
-  it('空列表展示空态文案', async () => {
-    const wrapper = mountPage()
-    await flushPromises()
-    expect(wrapper.text()).toContain('暂无流程草稿')
-    wrapper.unmount()
-  })
-
-  it('渲染草稿行：流程名 + 版本标签 + 表单名 + 摘要', async () => {
-    ;(formApi.listDrafts as any).mockResolvedValue({
-      data: [draft()],
-    })
+describe('ProcessDraftBoxPage 草稿箱（SearchTable 版）', () => {
+  it('渲染草稿行：流程名 + 版本标签 + 表单名 + 摘要 + 时间，且出现分页', async () => {
+    ;(formApi.listDrafts as any).mockResolvedValue({ data: [draft()] })
     const wrapper = mountPage()
     await flushPromises()
 
@@ -73,11 +81,14 @@ describe('ProcessDraftBoxPage 草稿箱', () => {
     expect(text).toContain('v2')
     expect(text).toContain('请假表单')
     expect(text).toContain('reason: 家中有事')
-    expect(text).toContain('共 1 条草稿')
+    expect(text).toContain('2026-09-29 06:00:00')
+    // 工具栏说明 + 分页栏（total>0 才渲染）
+    expect(text).toContain('保存草稿')
+    expect(wrapper.find('.el-pagination').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('流程已下线（processDefId=null）时显示标签且继续填写禁用', async () => {
+  it('流程已下线（processDefId=null）时显示标签且无「继续填写」按钮', async () => {
     ;(formApi.listDrafts as any).mockResolvedValue({
       data: [draft({ processDefId: null, processName: null, processVersion: null })],
     })
@@ -86,14 +97,13 @@ describe('ProcessDraftBoxPage 草稿箱', () => {
 
     expect(wrapper.text()).toContain('流程已下线')
     expect(wrapper.text()).toContain('未知流程')
-    const continueBtn = wrapper
-      .findAll('button')
-      .find((b) => b.text().includes('继续填写'))
-    expect(continueBtn?.attributes('disabled')).toBeDefined()
+    const labels = wrapper.findAll('button').map((b) => b.text())
+    expect(labels.some((t) => t.includes('继续填写'))).toBe(false)
+    expect(labels.some((t) => t.includes('删除'))).toBe(true)
     wrapper.unmount()
   })
 
-  it('关键字过滤：只保留流程名或表单名命中的草稿', async () => {
+  it('关键字过滤：搜索后只保留流程名命中的草稿，重置后恢复全量', async () => {
     ;(formApi.listDrafts as any).mockResolvedValue({
       data: [
         draft(),
@@ -109,26 +119,35 @@ describe('ProcessDraftBoxPage 草稿箱', () => {
     })
     const wrapper = mountPage()
     await flushPromises()
+    expect(wrapper.text()).toContain('家中有事')
 
-    const input = wrapper.find('input')
+    // 输入关键字 → 点击搜索（圆形主色按钮）
+    const input = wrapper.find('input[placeholder="搜索流程名称 / 表单名称…"]')
+    expect(input.exists()).toBe(true)
     await input.setValue('报销')
+    const searchBtn = wrapper.findAll('.search-card .toolbar-buttons button')[0]
+    await searchBtn.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('报销')
-    expect(wrapper.text()).not.toContain('reason')
-    expect(wrapper.text()).toContain('共 1 条草稿')
+    expect(wrapper.text()).toContain('item: 差旅费')
+    expect(wrapper.text()).not.toContain('家中有事')
+    // 搜索触发重新拉取（初始 1 次 + 搜索 1 次）
+    expect(formApi.listDrafts).toHaveBeenCalledTimes(2)
+
+    // 点击重置 → 关键字清空，恢复全量
+    const resetBtn = wrapper.findAll('.search-card .toolbar-buttons button')[1]
+    await resetBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('家中有事')
     wrapper.unmount()
   })
 
-  it('确认删除后调用 deleteDraft 并刷新列表', async () => {
+  it('确认删除后调用 deleteDraft、toast 成功并刷新列表', async () => {
     ;(formApi.listDrafts as any)
       .mockResolvedValueOnce({ data: [draft()] })
-      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValue({ data: [] })
     ;(formApi.deleteDraft as any).mockResolvedValue({ code: 200, msg: 'success', data: null })
-
-    // 拦截 ElMessageBox.confirm 返回 resolved
-    const ElMessageBox = await import('element-plus').then((m) => m.ElMessageBox)
-    vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+    ;(ElMessageBox.confirm as any).mockResolvedValue('confirm')
 
     const wrapper = mountPage()
     await flushPromises()
@@ -139,8 +158,32 @@ describe('ProcessDraftBoxPage 草稿箱', () => {
 
     expect(ElMessageBox.confirm).toHaveBeenCalled()
     expect(formApi.deleteDraft).toHaveBeenCalledWith('d1')
-    // 第二次加载返回空列表 → 空态
-    expect(wrapper.text()).toContain('暂无流程草稿')
+    expect(ElMessage.success).toHaveBeenCalledWith('草稿已删除')
+    // 刷新后列表为空 → 无数据行、分页隐藏
+    expect(formApi.listDrafts).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.el-table__empty-text').exists()).toBe(true)
+    expect(wrapper.find('.el-pagination').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('继续填写：跳转到发起页并携带流程定义 id', async () => {
+    ;(formApi.listDrafts as any).mockResolvedValue({ data: [draft()] })
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const continueBtn = wrapper.findAll('button').find((b) => b.text().includes('继续填写'))
+    await continueBtn!.trigger('click')
+    expect(push).toHaveBeenCalledWith('/process/start/leave:2:2')
+    wrapper.unmount()
+  })
+
+  it('listDrafts 失败时 toast 错误且页面不崩（空表兜底）', async () => {
+    ;(formApi.listDrafts as any).mockRejectedValue(new Error('network down'))
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(ElMessage.error).toHaveBeenCalledWith('加载草稿列表失败')
+    expect(wrapper.find('.el-table__empty-text').exists()).toBe(true)
     wrapper.unmount()
   })
 })

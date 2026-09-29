@@ -2159,3 +2159,22 @@ Work Log:
 Stage Summary:
 - 草稿箱功能闭环：列表/继续填写/删除/隔离/下线兜底全部落地并实证；草稿从此按用户隔离，旧的全租户共享缺陷一并修复
 - 提交推送至 workflow_lowcode 嵌套仓库
+
+---
+Task ID: 94-draft-box-searchtable
+Agent: Z.ai Code (main session)
+Task: 草稿箱页面用 SearchTable 组件重构（用户指令：草稿箱用searchTable重构）
+
+Work Log:
+- ProcessDraftBoxPage 由手写 el-card+el-table 改为业务组件 SearchTable 承载（与流程中心/待办/用户管理等列表页范式统一）：搜索栏（关键字 input + 搜索/重置圆钮）、border 表格、分页栏、操作列全部交由组件
+- fetchApi 适配器：formApi.listDrafts 全量返回（本人小数据集）→ 关键字客户端过滤（流程名/表单名/processKey）→ page/size 切片 → {rows,total}；失败兜底 toast + 空表
+- 列定义 TableColumn：流程名称列 render（icon+名称+v 版本标签+已下线标签+key 副标题）、发起表单 formatter、草稿内容 render（前 3 非空字段摘要，showOverflowTooltip）、最后保存 formatter；操作列 ActionButton：继续填写（processDefId=null 的行直接隐藏）、删除（保留 ElMessageBox 详细文案 + 删除后 tableRef.fetchList()）
+- 工具栏默认 slot 放常显说明文案「发起流程时点击保存草稿…」（原 hover tooltip 升级为直接可见）；render 输出的单元格样式以 pdb- 前缀全局类承载（SearchTable 内部渲染，scoped 不可达）
+- 测试重写为挂载真实 SearchTable 6 用例：行渲染/已下线隐藏继续填写/过滤+重置/删除刷新（分页随 total 隐藏）/继续填写路由/加载失败兜底；permission 桩指令参照 SearchTable.test
+- 回归：目标文件 vitest 6/6、process 目录+SearchTable 58/58 全绿；vue-tsc 46 基线零新增（ProcessDraftBox 0 错）；lint 干净
+- E2E（浏览器实证）：登录→流程管理/草稿箱→SearchTable 布局（搜索卡+表格卡+分页「共 1 条」）→行渲染（请假 v4/leave/员工请假申请单/摘要/时间）→关键字过滤「暂无数据」→重置恢复→继续填写跳转 /process/start/leave:4:dd3b2513…；用户真实草稿（张三/事假）全程未动，chrome 归零
+- 【运维事故复盘】本轮门户两次被 OOM 杀（07:37/07:39，next-server RSS 1.4~1.5GB）：start-portal.sh 拉起后我在门户存活期间连跑 vue-tsc×2+vitest，内存挤压触发 global_oom 连杀两次 → 教训固化为纪律：重型构建/全量测试必须在门户拉起之前完成，或先停门户再跑，结束后最后一步 start-portal.sh + 浏览器复核
+
+Stage Summary:
+- 草稿箱完成 SearchTable 范式统一，功能等价重构（搜索/分页/操作列/空态全部组件化），测试与浏览器实证双闭环
+- 新增运维铁律：门户存活期间严禁并行 vue-tsc/vitest/全量测试等重型任务（OOM 实锤两次）

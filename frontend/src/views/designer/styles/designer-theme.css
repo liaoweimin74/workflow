@@ -72,8 +72,10 @@
  *     bpmn-js 的 data-element-id 是随机 id，无法用 [data-element-id*=] 命中。
  * ============================================================ */
 
-/* 用户任务 — 表面色底 + 主色细描边 + 圆角 6 */
-.djs-element.user-task .djs-visual rect,
+/* 用户任务 — 表面色底 + 主色细描边 + 圆角 6
+   注：必须用 :not(.wf-role-overlay) 排除 customRenderer 叠加的类别底色矩形，
+   否则 !important 会把审批/办理/发起节点的类别色 overlay 一并覆盖掉（类别色丢失） */
+.djs-element.user-task .djs-visual rect:not(.wf-role-overlay),
 .djs-element.call-activity .djs-visual rect,
 .djs-element.subprocess .djs-visual rect,
 .djs-element.task .djs-visual rect {
@@ -207,11 +209,12 @@
 
 /* bpmn-font 图标用 currentColor 着色：默认继承浏览器黑色，
    暗色下黑图标+暗底不可读 —— 显式给语义文字色（明暗自适应）；
-   entry 自带白底（diagram-js 经 --context-pad-entry-background-color 控制）
-   会把暗色 pad 顶成白格子 —— 一并覆盖为透明 */
+   entry 自带白底（diagram-js --context-pad-entry-background-color，默认 var(--color-white)）
+   会把暗色 pad 顶成白格子 —— 一并覆盖为透明；
+   box-shadow 同色光晕（0 0 2px 1px）在明色下是白描边感，也一并去除 */
 .djs-context-pad {
   --context-pad-entry-background-color: transparent;
-  --context-pad-entry-background-color-hover: color-mix(
+  --context-pad-entry-hover-background-color: color-mix(
     in srgb,
     var(--el-color-primary) 14%,
     transparent
@@ -227,6 +230,7 @@
   border-radius: 6px !important;
   color: var(--el-text-color-regular) !important;
   background-color: transparent !important;
+  box-shadow: none !important;
 }
 
 .djs-context-pad .entry:hover {
@@ -305,6 +309,131 @@ html.dark .djs-element.approver-task .djs-label {
 
 html.dark .djs-element.handler-task .djs-label {
   fill: #52c48f !important;
+}
+
+/* ============================================================
+ * 类别节点 overlay（customRenderer 叠加的底色矩形 + 图标）
+ * 亮色档：与 JS 兕底值一致；暗色档：深色类别底 + 提亮描边/图标，
+ * 保证暗色下类别可辨识且 label 提亮色可读
+ * ============================================================ */
+
+/* ---- 亮色档 ---- */
+.djs-element.approver-task .djs-visual .wf-role-overlay {
+  fill: #FFF7E6 !important;
+  stroke: #e6a23c !important;
+}
+
+.djs-element.approver-task .djs-visual .wf-role-overlay-icon {
+  fill: #e6a23c !important;
+}
+
+.djs-element.handler-task .djs-visual .wf-role-overlay {
+  fill: #E8F5EE !important;
+  stroke: #2e9e6e !important;
+}
+
+.djs-element.handler-task .djs-visual .wf-role-overlay-icon {
+  fill: #2e9e6e !important;
+}
+
+.djs-element.initiator-task .djs-visual .wf-role-overlay {
+  fill: #e3f2fd !important;
+}
+
+.djs-element.initiator-task .djs-visual .wf-role-overlay-icon {
+  fill: #409eff !important;
+}
+
+/* ---- 暗色档：深色类别底 + 提亮边/图标，label 提亮色在暗底上可读 ---- */
+html.dark .djs-element.approver-task .djs-visual .wf-role-overlay {
+  fill: color-mix(in srgb, #e6a23c 16%, var(--el-bg-color, #1f2522)) !important;
+  stroke: #e2b06b !important;
+  fill-opacity: 1 !important;
+}
+
+html.dark .djs-element.approver-task .djs-visual .wf-role-overlay-icon {
+  fill: #e8bd7f !important;
+}
+
+html.dark .djs-element.handler-task .djs-visual .wf-role-overlay {
+  fill: color-mix(in srgb, #2e9e6e 18%, var(--el-bg-color, #1f2522)) !important;
+  stroke: #52c48f !important;
+  fill-opacity: 1 !important;
+}
+
+html.dark .djs-element.handler-task .djs-visual .wf-role-overlay-icon {
+  fill: #6bd4a0 !important;
+}
+
+html.dark .djs-element.initiator-task .djs-visual .wf-role-overlay {
+  fill: color-mix(in srgb, #409eff 14%, var(--el-bg-color, #1f2522)) !important;
+  fill-opacity: 1 !important;
+}
+
+html.dark .djs-element.initiator-task .djs-visual .wf-role-overlay-icon {
+  fill: #79bbff !important;
+}
+
+/* ============================================================
+ * 弹出菜单（popup menu —— contextPad 的替换/追加弹层）四态自适应
+ * diagram-js 默认 --popup-background-color: var(--color-white)，
+ * 暗色下白弹层对比过强 —— 全量重定义语义变量 + 实体规则双保险
+ * ============================================================ */
+.djs-popup {
+  --popup-background-color: var(--el-bg-color-overlay);
+  --popup-border-color: var(--el-border-color-light);
+  --popup-header-entry-selected-color: var(--el-color-primary);
+  --popup-header-group-divider-color: var(--el-border-color-lighter);
+  --popup-disabled-color: var(--el-text-color-disabled);
+  --popup-description-color: var(--el-text-color-secondary);
+  --popup-no-results-color: var(--el-text-color-placeholder);
+  --popup-entry-title-color: var(--el-text-color-regular);
+  --popup-entry-hover-color: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
+  --popup-search-border-color: var(--el-border-color);
+  --popup-search-focus-border-color: var(--el-color-primary);
+  --popup-search-focus-background-color: var(--el-fill-color-blank);
+  background: var(--el-bg-color-overlay) !important;
+  border: 1px solid var(--el-border-color-light) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18) !important;
+  color: var(--el-text-color-primary);
+}
+
+.djs-popup .djs-popup-title,
+.djs-popup .djs-popup-label {
+  color: var(--el-text-color-primary);
+}
+
+.djs-popup-header .entry {
+  color: var(--el-text-color-secondary);
+}
+
+.djs-popup-header .entry.active {
+  color: var(--el-color-primary);
+}
+
+.djs-popup-body .entry {
+  color: var(--el-text-color-regular);
+}
+
+.djs-popup-body .entry:hover,
+.djs-popup .entry.selected {
+  background: color-mix(in srgb, var(--el-color-primary) 12%, transparent) !important;
+  color: var(--el-color-primary);
+}
+
+.djs-popup-search input {
+  background: var(--el-fill-color-blank);
+  color: var(--el-text-color-primary);
+  border-radius: 4px;
+}
+
+.djs-popup-search input::placeholder {
+  color: var(--el-text-color-placeholder);
+}
+
+.djs-popup-breadcrumbs-item--back:hover {
+  background: var(--el-fill-color-light);
 }
 
 /* ============================================================

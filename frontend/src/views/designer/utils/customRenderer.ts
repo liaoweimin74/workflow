@@ -117,6 +117,11 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
   eventBus.on('import.done', applyTypeMarkers)
   // 拖入新节点后：为新节点打标记
   eventBus.on('shape.added', applyTypeMarkers)
+  // 属性更新（如 handleDrop 在 createShape 后 updateProperties 写 wf:nodeRole）
+  // 会触发重绘请求 —— 此时 shape.added 已错过且 role 尚未写入，
+  // 必须在 elements.changed 补打，否则 handler/approver 的类别 marker 丢失，
+  // designer-theme.css 的 .djs-element.<role>-task 规则（含 label 类别色）不命中
+  eventBus.on('elements.changed', applyTypeMarkers)
 
   /**
    * 判断元素是否可由本渲染器渲染：
@@ -193,10 +198,12 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
 
     const nodeRole = bo && bo.get && bo.get('wf:nodeRole')
 
-    // 审批节点：浅橙填充 + 橙边框 + 橙色用户图标（bpmn-font \e817）
+    // 审批节点：类别底色矩形（wf-role-overlay 交由 designer-theme.css 明暗两档着色；
+    // JS 硬编码值仅作 CSS 未加载时兜底 —— 通用 .user-task rect 规则已用 :not() 排除本元素）
     if (nodeRole === 'approver') {
       const rect = create('rect')
       attr(rect, {
+        class: 'wf-role-overlay',
         x: 0,
         y: 0,
         width: shape.width,
@@ -212,6 +219,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
 
       const icon = create('text')
       attr(icon, {
+        class: 'wf-role-overlay-icon',
         x: 30,
         y: 24,
         'font-family': 'bpmn',
@@ -223,10 +231,11 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
       return gfx
     }
 
-    // 办理节点：浅青绿填充 + 绿边框 + 绿色扳手图标（bpmn-font \e840）
+    // 办理节点：类别底色矩形（同上，着色交给 CSS 明暗两档）
     if (nodeRole === 'handler') {
       const rect = create('rect')
       attr(rect, {
+        class: 'wf-role-overlay',
         x: 0,
         y: 0,
         width: shape.width,
@@ -242,6 +251,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
 
       const icon = create('text')
       attr(icon, {
+        class: 'wf-role-overlay-icon',
         x: 30,
         y: 24,
         'font-family': 'bpmn',
@@ -253,9 +263,10 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
       return gfx
     }
 
-    // 追加浅蓝色填充矩形（发起节点）
+    // 追加类别底色矩形（发起节点；wf-role-overlay 交由 CSS 明暗两档着色）
     const rect = create('rect')
     attr(rect, {
+      class: 'wf-role-overlay',
       x: 0,
       y: 0,
       width: shape.width,
@@ -265,9 +276,10 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
     })
     append(parent, rect)
 
-    // 在默认人形图标后方追加蓝色手形图标（bpmn-font \e828）
+    // 在默认人形图标后方追加类别图标（bpmn-font \e828）
     const icon = create('text')
     attr(icon, {
+      class: 'wf-role-overlay-icon',
       x: 30,
       y: 24,
       'font-family': 'bpmn',

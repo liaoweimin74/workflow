@@ -33,9 +33,9 @@ export class SystemSourceQueryService {
     private readonly taskService: TaskService,
   ) {}
 
-  /** 是否由本服务负责取数（新 6 个 sourceKey；历史 2 个归 adapter）。 */
+  /** 是否由本服务负责取数（新 7 个 sourceKey；历史 2 个归 adapter）。 */
   static handles(sourceKey: string): boolean {
-    return ['sys-menus', 'sys-roles', 'sys-dicts', 'process-definitions', 'process-instances', 'todo-tasks'].includes(
+    return ['sys-menus', 'sys-roles', 'sys-dicts', 'sys-posts', 'process-definitions', 'process-instances', 'todo-tasks'].includes(
       sourceKey,
     )
   }
@@ -58,6 +58,8 @@ export class SystemSourceQueryService {
         return this.queryRoles(req)
       case 'sys-dicts':
         return this.queryDicts(req)
+      case 'sys-posts':
+        return this.queryPosts(req)
       case 'process-definitions':
         return this.queryProcessDefinitions()
       case 'process-instances':
@@ -133,6 +135,36 @@ export class SystemSourceQueryService {
           dictName: row.dictName ?? '',
           remark: row.remark ?? '',
           status: row.status,
+        },
+        null,
+        null,
+        null,
+      ),
+    )
+    return { records, total: result.total, page: result.page, size: result.size }
+  }
+
+  // ==================== 系统岗位（标准分页，仅启用岗位） ====================
+
+  /**
+   * 岗位：仅暴露 status=1 的启用岗位 —— 数据源的定位是「选择场景」（成员组自动规则、
+   * 审批人策略等），与旧 UI 的 `listPostOptions`（启用岗位下拉）语义对齐；
+   * 禁用岗位的管理仍在岗位管理页。keyword 走 listPosts 自带的名称/编码模糊搜索。
+   */
+  private async queryPosts(req: BizDataQueryRequest): Promise<BizDataPageVO> {
+    const page = Math.max(req.page, 1)
+    const result = await this.systemService.listPosts(page, req.size, {
+      keyword: req.keyword,
+      status: 1,
+    })
+    const records = result.rows.map((row) =>
+      bizDataVO(
+        String(row.id),
+        {
+          id: String(row.id),
+          postName: row.postName ?? '',
+          postCode: row.postCode ?? '',
+          description: row.description ?? '',
         },
         null,
         null,

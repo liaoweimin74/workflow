@@ -4,8 +4,9 @@ defineOptions({ name: 'MemberGroupManagement' })
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { User, Plus } from '@element-plus/icons-vue'
-import { SearchTable, ApproverPicker } from '@/components/business'
+import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
+import DataPicker from '@/views/form/components/DataPicker.vue'
 import type { Rule } from '@form-create/element-ui'
 import {
   getMemberGroupList,
@@ -19,11 +20,20 @@ import {
   addGroupRule,
   removeGroupRule,
 } from '@/api/memberGroup'
-import { getPostOptions } from '@/api/post'
-import { getOrgTree } from '@/api/org'
 import type { MemberGroupVO, GroupMemberVO, GroupRuleVO } from '@/types/memberGroup'
-import type { PostOptionVO } from '@/types/post'
-import type { TreeNode } from '@/types/org'
+
+/**
+ * 成员/规则录入统一走「数据引用」（DataPicker）组件（Task 95 重构）：
+ *   - 组成员：系统用户内建数据源（ds-builtin-user-tree），弹窗表格多选；
+ *   - 自动规则·按岗位：系统岗位内建数据源（ds-builtin-sys-posts，V45 预置，仅启用岗位）；
+ *   - 自动规则·按组织机构：组织机构内建数据源（ds-builtin-dept-tree）。
+ * DataPicker 的值是 JSON id 数组字符串，提交时解析为后端要求数字。
+ */
+
+/** 内建系统数据源固定 id（后端 system-source-catalog.ts 预置，见 V39/V45） */
+const DS_USER = 'ds-builtin-user-tree'
+const DS_POST = 'ds-builtin-sys-posts'
+const DS_DEPT = 'ds-builtin-dept-tree'
 
 const searchTableRef = ref()
 
@@ -83,9 +93,21 @@ const memberSize = ref(10)
 const memberKeyword = ref('')
 const memberLoading = ref(false)
 
-/** 待添加成员（ApproverPicker 多选） */
-const pickedUserIds = ref<number[]>([])
+/** 待添加成员（DataPicker 多选，值为 JSON id 数组字符串） */
+const pickedUserIdsJson = ref('')
 const addMemberLoading = ref(false)
+
+/** 解析 DataPicker 的 JSON id 数组字符串 → 数字 id 列表 */
+function parsePickedIds(json: string): number[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json)
+    if (!Array.isArray(parsed)) return []
+    return parsed.map((v) => Number(v)).filter((v) => Number.isFinite(v))
+  } catch {
+    return []
+  }
+}
 
 async function loadMembers() {
   if (currentGroup.value === null) return
@@ -105,15 +127,16 @@ async function loadMembers() {
 
 async function handleAddMembers() {
   if (currentGroup.value === null) return
-  if (pickedUserIds.value.length === 0) {
+  const userIds = parsePickedIds(pickedUserIdsJson.value)
+  if (userIds.length === 0) {
     ElMessage.warning('请先选择要添加的成员')
     return
   }
   addMemberLoading.value = true
   try {
-    await addGroupMembers(currentGroup.value.id, pickedUserIds.value)
-    ElMessage.success(`已添加 ${pickedUserIds.value.length} 名成员`)
-    pickedUserIds.value = []
+    await addGroupMembers(currentGroup.value.id, userIds)
+    ElMessage.success(`已添加 ${userIds.length} 名成员`)
+    pickedUserIdsJson.value = ''
     memberPage.value = 1
     await loadMembers()
     searchTableRef.value?.fetchList()
@@ -142,22 +165,8 @@ function handleMemberSearch() {
 const rules = ref<GroupRuleVO[]>([])
 const rulesLoading = ref(false)
 const ruleType = ref<'position' | 'org'>('position')
-const ruleValue = ref<number | undefined>(undefined)
-const postOptions = ref<PostOptionVO[]>([])
-const orgTree = ref<TreeNode[]>([])
-let _optionsLoaded = false
-
-async function ensureRuleOptions() {
-  if (_optionsLoaded) return
-  _optionsLoaded = true
-  try {
-    const [postRes, orgRes] = await Promise.all([getPostOptions(), getOrgTree()])
-    postOptions.value = postRes.data
-    orgTree.value = orgRes.data
-  } catch {
-    _optionsLoaded = false
-  }
-}
+/** 规则匹配对象（DataPicker 单选，值为 JSON id 数组字符串，取第一个） */
+const ruleValueJson = ref('')
 
 async function loadRules() {
   if (currentGroup.value === null) return
@@ -170,15 +179,20 @@ async function loadRules() {
   }
 }
 
+function handleRuleTypeChange() {
+  ruleValueJson.value = ''
+}
+
 async function handleAddRule() {
   if (currentGroup.value === null) return
-  if (ruleValue.value === undefined || ruleValue.value === null) {
+  const picked = parsePickedIds(ruleValueJson.value)
+  if (picked.length === 0) {
     ElMessage.warning(ruleType.value === 'position' ? '请选择岗位' : '请选择组织机构')
     return
   }
-  await addGroupRule(currentGroup.value.id, ruleType.value, ruleValue.value)
+  await addGroupRule(currentGroup.value.id, ruleType.value, picked[0])
   ElMessage.success('规则已添加，符合条件的成员已自动归属')
-  ruleValue.value = undefined
+  ruleValueJson.value = ''
   await loadRules()
   searchTableRef.value?.fetchList()
 }
@@ -204,9 +218,10 @@ async function handleManageMembers(row: MemberGroupVO) {
   activeTab.value = 'members'
   memberPage.value = 1
   memberKeyword.value = ''
-  pickedUserIds.value = []
+  pickedUserIdsJson.value = ''
+  ruleValueJson.value = ''
   drawerVisible.value = true
-  await Promise.all([loadMembers(), loadRules(), ensureRuleOptions()])
+  await Promise.all([loadMembers(), loadRules()])
 }
 
 // ---------- 操作按钮 ----------
@@ -235,9 +250,12 @@ const actionButtons: ActionButton[] = [
       <!-- 成员 Tab -->
       <el-tab-pane label="组成员" name="members">
         <div class="member-add-bar">
-          <ApproverPicker
-            v-model="pickedUserIds"
-            :hide-trigger="false"
+          <DataPicker
+            v-model="pickedUserIdsJson"
+            :global-data-source-id="DS_USER"
+            display-field="nickname"
+            :columns="['username', 'nickname', 'orgName']"
+            :search-columns="['username', 'nickname']"
             placeholder="点击选择要添加的成员（可多选）"
             class="member-picker"
           />
@@ -316,34 +334,31 @@ const actionButtons: ActionButton[] = [
         </div>
 
         <div class="rule-add-bar">
-          <el-select v-model="ruleType" style="width: 140px" @change="ruleValue = undefined">
+          <el-select v-model="ruleType" style="width: 140px" @change="handleRuleTypeChange">
             <el-option label="按岗位" value="position" />
             <el-option label="按组织机构" value="org" />
           </el-select>
-          <el-select
+          <DataPicker
             v-if="ruleType === 'position'"
-            v-model="ruleValue"
-            filterable
-            placeholder="选择岗位"
-            style="width: 260px"
-          >
-            <el-option
-              v-for="p in postOptions"
-              :key="p.id"
-              :label="`${p.postName}（${p.postCode}）`"
-              :value="p.id"
-            />
-          </el-select>
-          <el-tree-select
+            v-model="ruleValueJson"
+            :global-data-source-id="DS_POST"
+            display-field="postName"
+            :columns="['postName', 'postCode', 'description']"
+            :search-columns="['postName', 'postCode']"
+            :max-count="1"
+            placeholder="点击选择岗位"
+            class="rule-picker"
+          />
+          <DataPicker
             v-else
-            v-model="ruleValue"
-            :data="orgTree"
-            :props="{ label: 'label', value: 'id', children: 'children' }"
-            check-strictly
-            filterable
-            clearable
-            placeholder="选择组织机构"
-            style="width: 260px"
+            v-model="ruleValueJson"
+            :global-data-source-id="DS_DEPT"
+            display-field="label"
+            :columns="['label', 'code']"
+            :search-columns="['label', 'code']"
+            :max-count="1"
+            placeholder="点击选择组织机构"
+            class="rule-picker"
           />
           <el-button v-permission="'system:member-group:rule'" type="primary" :icon="Plus" @click="handleAddRule">
             添加规则
@@ -376,7 +391,7 @@ const actionButtons: ActionButton[] = [
 <style scoped>
 .member-add-bar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -384,6 +399,10 @@ const actionButtons: ActionButton[] = [
 .member-picker {
   flex: 1;
   min-width: 0;
+}
+
+.member-picker :deep(.el-input) {
+  width: 100%;
 }
 
 .member-search-bar {
@@ -419,6 +438,15 @@ const actionButtons: ActionButton[] = [
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.rule-picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.rule-picker :deep(.el-input) {
+  width: 100%;
 }
 
 .rule-table {

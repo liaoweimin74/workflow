@@ -2178,3 +2178,21 @@ Work Log:
 Stage Summary:
 - 草稿箱完成 SearchTable 范式统一，功能等价重构（搜索/分页/操作列/空态全部组件化），测试与浏览器实证双闭环
 - 新增运维铁律：门户存活期间严禁并行 vue-tsc/vitest/全量测试等重型任务（OOM 实锤两次）
+
+---
+Task ID: 95-datapicker-member-group
+Agent: Z.ai Code (main session)
+Task: 成员组管理重构成用数据引用（DataPicker）组件实现组成员与自动规则的录入（用户指令；明确澄清数据引用≠LookupPicker）
+
+Work Log:
+- 摸底：数据引用组件 = views/form/components/DataPicker.vue（弹窗表格选择/搜索/分页/Tag 展示，读数据源 queryData 或底表 bizData）；数据源体系已有 8 个内建 SYSTEM 源（V39 预置：组织机构 dept-tree / 系统用户 user-tree 等），DataPicker 支持 globalDataSourceId 直连 —— 缺口仅「岗位」无源
+- 后端新增第 9 个内建系统源 sys-posts：system-source-catalog（POSTS_COLUMNS + 目录项 + mapSystemInternalPath posts）→ SystemSourceQueryService.queryPosts（listPosts(keyword,status=1) 仅启用岗位、标准分页、keyword 模糊）→ SystemInternalController 三端点（system/posts[/metadata|/:id]）→ V45 迁移幂等预置 ds-builtin-sys-posts（V39 同款模式）；V42 起 Java Flyway 不再镜像（仅到 V41），故单端实施
+- 适配器 dept-tree 分支补 keyword 过滤（非空时忽略大小写匹配 label/code，语义对齐 SystemInternalController.flattenTree；keyword 为空保持 golden 全量契约）——此前 DataPicker 搜组织是无效搜索
+- 前端 MemberGroupPage 重构：成员录入 ApproverPicker → DataPicker（ds-builtin-user-tree 多选，displayField=nickname，columns username/nickname/orgName，searchColumns username/nickname）；规则录入 el-select/el-tree-select → DataPicker（岗位=ds-builtin-sys-posts、组织=ds-builtin-dept-tree，均 maxCount=1 点行即选）；值统一 JSON id 数组字符串，提交解析 Number；删除岗位/组织 options 预载逻辑
+- 测试：后端 system-data-source.spec 扩至 11 用例（sys-posts 路由透传/元数据 4 列/启用过滤+空串语义/keyword 透传/dept-tree keyword 过滤三种形态）；migration.spec 计数 43→44；前端新建 MemberGroupPage.test 5 用例（源绑定/多选解析/单选换绑/空选校验）；backend 928+11 全绿、前端 5/5、vue-tsc 46 基线零新增、lint 干净
+- E2E：API 实证三源取数（posts 1 条启用/keyword 0、meta 4 列、dept 空库 0 行、users 2 条）；浏览器全链路——成员：DataPicker 弹窗（搜索占位用户名/昵称）勾选 admin+测试用户→Tag 显示昵称→添加成员→列表 2 行「直接添加」+picker 复位；岗位规则：单选弹窗点行→规则表「按岗位」；组织规则：切维度换绑→选「数据引用E2E部」→「按组织机构」；主列表计数联动 2/2/2；测试组+测试组织已删（仅剩既有测试成员组）、chrome 归零
+- 【运维】门户重启两次踩坑入册：①start-services.sh 的 Node 分支是陈旧脚本（bun src/index.ts 入口不存在，实际入口 src/main.ts→dist/main.js）；②裸 nohup node dist/main.js 会在命令间隙无声消失，平台同款双 fork 子壳 `(cd dir && PORT=8080 nohup node dist/main.js &)` 才能存活；③迁移不在启动时执行，须 npm run migrate（真库 workflow_v6）；④migration.spec 跑隔离库 workflow_node_test 不碰真库
+
+Stage Summary:
+- 成员组「成员+规则」录入全面切换数据引用组件，岗位数据源补齐后三个选择场景（用户/岗位/组织）全部数据源化；dept-tree keyword 补齐使组织搜索真实可用
+- 提交见 git；遗留：ApproverPicker 在流程设计器审批人配置等处仍在用（不在本次范围）

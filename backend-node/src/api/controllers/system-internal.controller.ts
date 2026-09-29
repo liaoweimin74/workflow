@@ -248,6 +248,41 @@ export class SystemInternalController {
     return R.ok(await this.sourceGet('sys-dicts', id))
   }
 
+  /**
+   * 系统岗位分页（仅启用岗位，keyword 匹配名称/编码）。
+   * 与 sys-roles/sys-dicts 不同，这里 keyword 直达取数服务（sourceList 不收 keyword）。
+   */
+  @Get('system/posts')
+  async systemPosts(
+    @Query('keyword') keyword?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+  ): Promise<R<BizDataPageVO>> {
+    const result = await this.systemSourceQuery.query('sys-posts', {
+      filter: null,
+      keyword: normalizeKeyword(keyword),
+      keywordColumn: null,
+      sort: null,
+      order: null,
+      params: null,
+      page: integerQueryParam(page, 'page', 1),
+      size: integerQueryParam(size, 'size', 20),
+    })
+    return R.ok(result)
+  }
+
+  /** 系统岗位元数据。 */
+  @Get('system/posts/metadata')
+  async systemPostsMetadata(): Promise<R<DataSourceMetadata>> {
+    return R.ok(await this.sourceMetadata('sys-posts'))
+  }
+
+  /** 系统岗位单条。 */
+  @Get('system/posts/:id')
+  async systemPostById(@Param('id') id: string): Promise<R<BizDataVO>> {
+    return R.ok(await this.sourceGet('sys-posts', id))
+  }
+
   /** 流程定义列表（全量）。 */
   @Get('system/process/definitions')
   async processDefinitions(

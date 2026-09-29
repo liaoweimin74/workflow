@@ -298,20 +298,31 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
     }
 
     const nodes = await this.systemService.orgTree()
+    // keyword 非空时过滤（忽略大小写匹配 label/code，与 SystemInternalController.deptTree
+    // 的 flattenTree 语义一致）；keyword 为空时保持 golden 契约：全量返回、忽略分页
+    const needle = req.keyword !== null && req.keyword !== undefined && req.keyword.trim() !== ''
+      ? req.keyword.trim().toLowerCase()
+      : null
+    const matches = (node: OrgTreeNode): boolean =>
+      needle === null ||
+      (node.label !== null && node.label.toLowerCase().includes(needle)) ||
+      (node.code !== null && node.code.toLowerCase().includes(needle))
     const records: BizDataVO[] = []
     const collect = (node: OrgTreeNode): void => {
-      records.push({
-        id: String(node.id),
-        data: {
+      if (matches(node)) {
+        records.push({
           id: String(node.id),
-          parentId: node.parentId === null || node.parentId === undefined ? '' : String(node.parentId),
-          label: node.label ?? '',
-          code: node.code ?? '',
-        },
-        version: null,
-        createdAt: null,
-        updatedAt: null,
-      })
+          data: {
+            id: String(node.id),
+            parentId: node.parentId === null || node.parentId === undefined ? '' : String(node.parentId),
+            label: node.label ?? '',
+            code: node.code ?? '',
+          },
+          version: null,
+          createdAt: null,
+          updatedAt: null,
+        })
+      }
       for (const child of node.children ?? []) collect(child)
     }
     for (const node of nodes) collect(node)

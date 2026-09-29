@@ -70,10 +70,11 @@ describe('schema 迁移', () => {
     //   + V41 wf_task_comment 增加 signature 列
     //   + V42 wf_process_draft 增加 description 列
     //   + V43 岗位/成员组/组织负责人（Task 86 人员组织模型）
-    //   + V44 流程管理新增「草稿箱」菜单（Task 93）= 43。
+    //   + V44 流程管理新增「草稿箱」菜单（Task 93）
+    //   + V45 预置内建系统数据源「系统岗位」（Task 95 数据引用重构）= 44。
     // 这里显式断言一个数值，是为了在文件被误删时能立刻发现（派生值单独用会掩盖丢失）。
     const expectedCount = discoverMigrations(MIGRATIONS_DIR).length
-    expect(expectedCount).toBe(43)
+    expect(expectedCount).toBe(44)
     expect(result.applied.length).toBe(expectedCount)
     expect(result.skipped).toEqual([])
 

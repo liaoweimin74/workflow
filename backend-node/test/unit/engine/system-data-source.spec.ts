@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { UnifiedDataSourceAdapter } from '../../../src/engine/datasource/adapter/unified-data-source-adapter'
 import { InternalDataSourceRouter } from '../../../src/engine/datasource/internal-data-source-router'
+import { SystemSourceQueryService } from '../../../src/engine/datasource/service/system-source-query.service'
+import { builtInSourceByKey } from '../../../src/engine/datasource/service/system-source-catalog'
 import type { DataSourceRef } from '../../../src/engine/datasource/adapter/data-source-adapter'
 import { runWithTenant } from '../../../src/framework/tenant/tenant-context'
 
@@ -41,6 +43,7 @@ function adapterWith(overrides: {
   orgTree?: OrgNode[]
   users?: Array<Record<string, unknown>>
   total?: number
+  systemSourceQuery?: Record<string, unknown>
 }): UnifiedDataSourceAdapter {
   const users = overrides.users ?? []
   return new UnifiedDataSourceAdapter(
@@ -57,7 +60,7 @@ function adapterWith(overrides: {
     } as never,
     {} as never,
     {} as never,
-    {} as never,
+    (overrides.systemSourceQuery ?? {}) as never,
   )
 }
 
@@ -190,5 +193,113 @@ describe('UnifiedDataSourceAdapter / SYSTEM 取数', () => {
       adapter.query(ref('role-tree'), emptyRequest).catch((e: unknown) => e),
     )
     expect((error as Error).message).toBe('未注册的系统数据源: role-tree')
+  })
+
+  it('dept-tree：keyword 非空时忽略大小写过滤 label/code（子树仍遍历）；keyword 为空保持全量', async () => {
+    const orgTree: OrgNode[] = [
+      {
+        id: 1,
+        parentId: null,
+        label: '总公司',
+        code: '01',
+        children: [
+          { id: 2, parentId: 1, label: '武汉分公司', code: '0101', children: null },
+          { id: 3, parentId: 1, label: '上海分公司', code: 'SH', children: null },
+        ],
+      },
+    ]
+    const adapter = adapterWith({ orgTree })
+    // 命中 code（大小写不敏感）：只有上海分公司
+    const byCode = await runWithTenant('default', () =>
+      adapter.query(ref('dept-tree'), { ...emptyRequest, keyword: 'sh' }),
+    )
+    expect(byCode.records.map((r) => r.id)).toEqual(['3'])
+    // 命中 label：只有武汉分公司
+    const byLabel = await runWithTenant('default', () =>
+      adapter.query(ref('dept-tree'), { ...emptyRequest, keyword: '武汉' }),
+    )
+    expect(byLabel.records.map((r) => r.id)).toEqual(['2'])
+    // 空白串视作无 keyword：全量返回
+    const blank = await runWithTenant('default', () =>
+      adapter.query(ref('dept-tree'), { ...emptyRequest, keyword: '   ' }),
+    )
+    expect(blank.records.map((r) => r.id)).toEqual(['1', '2', '3'])
+  })
+
+  it('sys-posts：路由到 SystemSourceQueryService 并透传请求（V45 新增内建源）', async () => {
+    const querySpy = vi.fn().mockResolvedValue({
+      records: [{ id: '5', data: { id: '5', postName: '会计', postCode: 'FIN-01', description: '' }, version: null, createdAt: null, updatedAt: null }],
+      total: 1,
+      page: 1,
+      size: 20,
+    })
+    const adapter = adapterWith({ systemSourceQuery: { query: querySpy } })
+    const page = await runWithTenant('default', () =>
+      adapter.query(ref('sys-posts'), { ...emptyRequest, keyword: '会计' }),
+    )
+    expect(querySpy).toHaveBeenCalledWith('sys-posts', expect.objectContaining({ keyword: '会计', page: 1, size: 5 }))
+    expect(page.records[0].data).toEqual({ id: '5', postName: '会计', postCode: 'FIN-01', description: '' })
+  })
+
+  it('sys-posts：元数据 4 列（目录唯一事实源）', async () => {
+    const adapter = adapterWith({
+      systemSourceQuery: { columnsOf: async (key: string) => builtInSourceByKey(key)?.columns ?? [] },
+    })
+    const meta = await runWithTenant('default', () => adapter.metadata(ref('sys-posts')))
+    expect(meta.writable).toBe(false)
+    expect(meta.columns.map((c) => c.key)).toEqual(['id', 'postName', 'postCode', 'description'])
+    expect(meta.columns.every((c) => c.length === null)).toBe(true)
+  })
+})
+
+describe('SystemSourceQueryService / sys-posts 取数', () => {
+  function serviceWith(listPosts: ReturnType<typeof vi.fn>): SystemSourceQueryService {
+    return new SystemSourceQueryService(
+      { listPosts } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    )
+  }
+
+  const req = (overrides: Record<string, unknown> = {}) => ({
+    filter: null,
+    keyword: null,
+    keywordColumn: null,
+    sort: null,
+    order: null,
+    params: null,
+    page: 1,
+    size: 20,
+    ...overrides,
+  })
+
+  it('仅暴露启用岗位（status=1 硬过滤），字段空值给空串', async () => {
+    const listPosts = vi.fn().mockResolvedValue({
+      total: 2,
+      page: 1,
+      size: 20,
+      rows: [
+        { id: 5, postName: '会计', postCode: 'FIN-01', description: '财务核算' },
+        { id: 6, postName: null, postCode: null, description: null },
+      ],
+    })
+    const page = await serviceWith(listPosts).query('sys-posts', req())
+    expect(listPosts).toHaveBeenCalledWith(1, 20, { keyword: null, status: 1 })
+    expect(page.records[0].data).toEqual({ id: '5', postName: '会计', postCode: 'FIN-01', description: '财务核算' })
+    expect(page.records[1].data).toEqual({ id: '6', postName: '', postCode: '', description: '' })
+    expect({ total: page.total, page: page.page, size: page.size }).toEqual({ total: 2, page: 1, size: 20 })
+  })
+
+  it('keyword 透传给 listPosts；page 从 1 起钳制', async () => {
+    const listPosts = vi.fn().mockResolvedValue({ total: 0, page: 3, size: 10, rows: [] })
+    await serviceWith(listPosts).query('sys-posts', req({ page: 3, size: 10, keyword: '工程' }))
+    expect(listPosts).toHaveBeenCalledWith(3, 10, { keyword: '工程', status: 1 })
+  })
+
+  it('handles 含 sys-posts；未知 sourceKey 仍报未注册', async () => {
+    expect(SystemSourceQueryService.handles('sys-posts')).toBe(true)
+    const error = await serviceWith(vi.fn()).query('sys-posts-x', req()).catch((e: unknown) => e)
+    expect((error as Error).message).toBe('未注册的系统数据源: sys-posts-x')
   })
 })

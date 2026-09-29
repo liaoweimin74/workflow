@@ -2279,3 +2279,22 @@ Work Log:
 Stage Summary:
 - 三处反馈全部闭环 + 两个隐藏 bug（overlay 被吞、marker 时序）一并根除；核心手法：SVG overlay 着色权从 JS attr 移交 CSS 明暗两档，presentation attribute 只作兜底
 - 遗留：diagram-js palette（已 display:none 无需适配）；djs-hit 事件派发仅 PointerEvent 有效（MouseEvent 派发不选中，调试时注意）
+
+---
+Task ID: 101-viewer-dark-label
+Agent: Z.ai Code (main session)
+Task: 用户反馈「节点名称在节点上的文字在暗色风格时看不清」——流程图预览（Viewer）暗色适配缺位根除
+
+Work Log:
+- 根因甄别：设计器画布暗色 label 实测正常（Task 99/100 修复有效，三态 computed 全对、对比 >7:1）；真盲区在 BpmnViewer 场景（ProcessStartPage 发起页预览 / ProcessTrackDrawer 审批跟踪抽屉 / ProcessInstanceTrackPage 实例跟踪页）——NavigatedViewer 裸渲染：无 designer-theme.css、无 customRenderer、无 bpmn 基础 css，文字为 bpmn-js 内联 fill rgb(34,36,42)，暗底对比 ≈1:1
+- 新建 frontend/src/views/designer/styles/bpmn-canvas-theme.css：画布通用规则（背景网格/选中悬浮/连线/节点/label 统一/类别 label 橙绿明暗两档/wf-role-overlay 明暗两档/powered-by），全语义变量；designer-theme.css 改 @import 并删迁移段（447→223 行）
+- BpmnViewer.vue：additionalModules 注册 customRendererModule（类别 marker/overlay 与设计器一致）+ import bpmn-js 基础三 css + 共享主题；ProcessStartPage.vue 独立 viewer 同步接入
+- index.html 首帧脚本补 dark 类恢复（theme-dark==='1'）：修复全屏路由 F5 后暗色断档（此前仅 AdminLayout 挂载恢复）；F5 实证 dark 保持
+- E2E：API 部署 UI验证流程（leave 草稿 startEvent 无出边无法部署，历史遗留）→ 发起页预览 11 元素/4 overlay、initiator 深蓝底/审批深棕/办理深绿描边正确、有字节点 computed fill=#c3c8d9（对比 9:1）；设计器明暗双态回归；vitest 23 用例过；vue-tsc 46=基线零新增
+- 工具链：headless chrome 无 sans-serif CJK 字形，SVG 中文不渲染但 DOM/computed 正常——文字色验证用 computed fill+对比度，勿信截图像素；「tspan 不渲染」假象系采样区域错位
+- 门户中途消失一次（疑 OOM 清理），start-portal.sh 幂等拉回；chrome 归零
+
+Stage Summary:
+- 预览三场景暗色适配闭环与设计器同源；节点名称文字对比 1:1 → 9:1
+- leave 草稿「startEvent 无出边」部署报错为数据遗留（此前已知问题），UI验证流程可部署可预览
+- 产物：bpmn-canvas-theme.css（新）/designer-theme.css（瘦身）/BpmnViewer.vue/ProcessStartPage.vue/index.html

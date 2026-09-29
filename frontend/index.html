@@ -7,9 +7,14 @@
     <title>mangban-admin</title>
     <script>
       // 双主题防闪（Task 17-F）：样式加载前按持久化偏好预置 html[data-theme]（verdant 青墨 / classic 经典）
+      // dark 类同步首帧恢复（Task 101）：此前仅 AdminLayout 挂载时恢复，
+      // 流程设计器等全屏路由刷新后暗色断档，画布/预览突然变亮
       try {
         var t = localStorage.getItem('portal-ui-theme')
         document.documentElement.dataset.theme = t === 'classic' ? 'classic' : 'verdant'
+        if (localStorage.getItem('theme-dark') === '1') {
+          document.documentElement.classList.add('dark')
+        }
       } catch (e) {}
     </script>
   </head>

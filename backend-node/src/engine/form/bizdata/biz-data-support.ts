@@ -635,6 +635,38 @@ export class BizDataSupport {
   }
 
   /**
+   * DATE / DATETIME 列值归一（就地修改 `data`）。
+   *
+   * ⚠️ 为什么需要：前端日期选择器（form-create `datePicker`，未配置 value-format）
+   *    的 modelValue 是 Date 对象，JSON 序列化后是**带时区的 ISO 字符串**
+   *    （如 `2026-09-24T16:00:00.000Z`，即东八区 2026-09-25 00:00）。直接入库：
+   *    - DATE 列（物理 `date`）：MariaDB 严格模式拒绝 datetime 字符串 ——
+   *      `Incorrect date value: '2026-09-24T16:00:00.000Z'`；
+   *    - DATETIME 列：即便库接受了，存的也是 UTC 壁钟时间，回显差 8 小时。
+   *    因此写入前按**业务时区 Asia/Shanghai**（对齐连接池 `timezone: '+08:00'`）
+   *    归一：DATE → `YYYY-MM-DD`，DATETIME → `YYYY-MM-DD HH:mm:ss`。
+   *    纯日期/本地时间字符串原样保留；不可解析字符串原样透传（交给 DB 报 400 兜底）。
+   */
+  private normalizeDateTimeColumns(data: Record<string, unknown>, columns: ColumnConfig[]): void {
+    const dateKeys = new Set(
+      columns.filter((c) => (c.columnType ?? '').toUpperCase() === 'DATE').map((c) => String(c.key)),
+    )
+    const dateTimeKeys = new Set(
+      columns
+        .filter((c) => ['DATETIME', 'TIMESTAMP'].includes((c.columnType ?? '').toUpperCase()))
+        .map((c) => String(c.key)),
+    )
+    if (dateKeys.size === 0 && dateTimeKeys.size === 0) return
+    for (const [key, value] of Object.entries(data)) {
+      if (dateKeys.has(key)) {
+        data[key] = normalizeDateColumnValue(value, 'DATE')
+      } else if (dateTimeKeys.has(key)) {
+        data[key] = normalizeDateColumnValue(value, 'DATETIME')
+      }
+    }
+  }
+
+  /**
    * 通用新增（`createGeneric`）。
    *
    * 顺序照抄 Java：必填校验 → 序列化 → 取 picker 冗余文本 → INSERT → 主表行回读 →
@@ -648,6 +680,7 @@ export class BizDataSupport {
     this.validateRequired(ctx.columns, body)
 
     const merged = this.serializeJsonColumns(body, ctx.columns)
+    this.normalizeDateTimeColumns(merged, ctx.columns)
     Object.assign(merged, await this.resolvePickerValues(ctx, merged))
 
     const insert = buildInsert(ctx.tableName, ctx.columnKeys, merged, tenantId)
@@ -682,6 +715,7 @@ export class BizDataSupport {
     const currentVersion = version ?? 1
 
     const merged = this.serializeJsonColumns(body, ctx.columns)
+    this.normalizeDateTimeColumns(merged, ctx.columns)
     Object.assign(merged, await this.resolvePickerValues(ctx, merged))
 
     const query = buildUpdate(ctx.tableName, ctx.columnKeys, merged, tenantId, id, currentVersion)
@@ -1178,6 +1212,83 @@ function joinTargetColumnType(columns: JoinTargetColumn[], key: string): string 
 /** 目标列查找：按 key 匹配；查不到返回 null（对齐 Java `findJoinTarget`）。 */
 function findJoinTarget(columns: JoinTargetColumn[], key: string): JoinTargetColumn | null {
   return columns.find((c) => c.key === key) ?? null
+}
+
+/** 业务时区：对齐连接池 `timezone: '+08:00'` 与业务约定（用户侧统一东八）。 */
+const BIZ_TIME_ZONE = 'Asia/Shanghai'
+
+/**
+ * Date → 业务时区（东八）的日期/时间文本。
+ *
+ * ⚠️ en-CA locale 的日期部分恰好是 ISO 形式（`2026-09-25`）；
+ *    `hour12: false` 在部分 V8 版本会给 `24:xx:xx`（零点），需归一回 `00:xx:xx`。
+ */
+function toBizZoneParts(date: Date): { date: string; time: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BIZ_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '00'
+  const hour = get('hour') === '24' ? '00' : get('hour')
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    time: `${hour}:${get('minute')}:${get('second')}`,
+  }
+}
+
+/** 纯日期文本（本地语义，不做时区换算）。 */
+const PLAIN_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+/** 本地时间文本（`YYYY-MM-DD HH:mm[:ss]`，无时区语义）。 */
+const PLAIN_DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/
+
+/**
+ * DATE / DATETIME 列写入值归一（对齐 Java `normalizeDateColumnValue`）。
+ *
+ * 规则（`kind === 'DATE'`）：
+ *   - `YYYY-MM-DD` 纯日期 → 原样（本地语义，无时区偏移问题）；
+ *   - 可解析为时刻的输入（ISO datetime / Date 对象）→ 按 Asia/Shanghai 取日期部分
+ *     （`2026-09-24T16:00:00.000Z` → `2026-09-25`，与用户所见一致）；
+ *   - 其余（null / 不可解析）→ 原样返回，交给 DB 校验兜底。
+ *
+ * 规则（`kind === 'DATETIME'`）：
+ *   - `YYYY-MM-DD` 纯日期 → 补零点 `YYYY-MM-DD 00:00:00`；
+ *   - `YYYY-MM-DD HH:mm[:ss]` 本地时间 → 补秒原样；
+ *   - 可解析时刻 → 按 Asia/Shanghai 格式化为 `YYYY-MM-DD HH:mm:ss`；
+ *   - 其余 → 原样。
+ */
+export function normalizeDateColumnValue(
+  value: unknown,
+  kind: 'DATE' | 'DATETIME',
+): unknown {
+  if (value === null || value === undefined) return value
+  let raw: string | null = null
+  let parsed: Date | null = null
+  if (value instanceof Date) {
+    parsed = value
+  } else if (typeof value === 'string') {
+    const s = value.trim()
+    if (s === '') return value
+    if (PLAIN_DATE_RE.test(s)) {
+      return kind === 'DATE' ? s : `${s} 00:00:00`
+    }
+    if (kind === 'DATETIME' && PLAIN_DATETIME_RE.test(s)) {
+      return s.length === 16 ? `${s}:00` : s
+    }
+    raw = s
+    const ms = Date.parse(s)
+    if (!Number.isNaN(ms)) parsed = new Date(ms)
+  } else {
+    return value
+  }
+  if (parsed === null) return raw ?? value
+  const { date, time } = toBizZoneParts(parsed)
+  return kind === 'DATE' ? date : `${date} ${time}`
 }
 
 /**

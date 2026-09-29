@@ -41,6 +41,9 @@ public class BizDataSupport {
 
     private static final Pattern FORM_KEY_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{0,63}$");
 
+    /** 业务时区：与 Node 侧 `BIZ_TIME_ZONE` 对齐（DATE/DATETIME 写入归一按东八换算）。 */
+    private static final java.time.ZoneId BIZ_ZONE = java.time.ZoneId.of("Asia/Shanghai");
+
     /** 子表行单次请求上限 */
     private static final int MAX_SUB_ROWS = 100;
 
@@ -226,6 +229,7 @@ public class BizDataSupport {
 
         // data-picker 引用校验与冗余文本生成（不改原 data，返回附加字段）
         Map<String, Object> merged = serializeJsonColumns(data, ctx.columns());
+        normalizeDateTimeColumns(merged, ctx.columns());
         merged.putAll(resolvePickerValues(ctx, merged));
 
         BizDataQueryBuilder.SqlAndParams insert = BizDataQueryBuilder.buildInsert(
@@ -497,6 +501,7 @@ public class BizDataSupport {
         int currentVersion = version == null ? 1 : version;
 
         Map<String, Object> merged = serializeJsonColumns(data, ctx.columns());
+        normalizeDateTimeColumns(merged, ctx.columns());
         merged.putAll(resolvePickerValues(ctx, merged));
 
         BizDataQueryBuilder.SqlAndParams update = BizDataQueryBuilder.buildUpdate(
@@ -889,6 +894,95 @@ public class BizDataSupport {
             out.put(e.getKey(), writeJsonOr400(e.getKey(), v));
         }
         return out;
+    }
+
+    /**
+     * DATE / DATETIME 列值归一（就地修改 `data`；与 Node 侧 `normalizeDateTimeColumns` 逐条对齐）。
+     *
+     * ⚠️ 为什么需要：前端日期选择器（form-create `datePicker`，未配置 value-format）
+     *    的 modelValue 是 Date 对象，JSON 序列化后是**带时区的 ISO 字符串**
+     *    （如 `2026-09-24T16:00:00.000Z`，即东八区 2026-09-25 00:00）。直接入库：
+     *    - DATE 列（物理 `date`）：MariaDB 严格模式拒绝 datetime 字符串 ——
+     *      `Incorrect date value: '2026-09-24T16:00:00.000Z'`；
+     *    - DATETIME 列：即便库接受了，存的也是 UTC 壁钟时间，回显差 8 小时。
+     *    因此写入前按**业务时区 Asia/Shanghai** 归一：DATE → `yyyy-MM-dd`，
+     *    DATETIME → `yyyy-MM-dd HH:mm:ss`。纯日期/本地时间字符串原样保留；
+     *    不可解析字符串原样透传（交给 DB 报 400 兜底）。
+     */
+    private void normalizeDateTimeColumns(Map<String, Object> data, List<ColumnConfig> columns) {
+        Set<String> dateKeys = new HashSet<>();
+        Set<String> dateTimeKeys = new HashSet<>();
+        for (ColumnConfig c : columns) {
+            String t = c.getColumnType() == null ? "" : c.getColumnType().toUpperCase();
+            if ("DATE".equals(t)) {
+                dateKeys.add(c.getKey());
+            } else if ("DATETIME".equals(t) || "TIMESTAMP".equals(t)) {
+                dateTimeKeys.add(c.getKey());
+            }
+        }
+        if (dateKeys.isEmpty() && dateTimeKeys.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Object> e : data.entrySet()) {
+            if (!(e.getValue() instanceof String s)) {
+                continue;
+            }
+            String trimmed = s.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if (dateKeys.contains(e.getKey())) {
+                e.setValue(normalizeDateColumnValue(trimmed, true));
+            } else if (dateTimeKeys.contains(e.getKey())) {
+                e.setValue(normalizeDateColumnValue(trimmed, false));
+            }
+        }
+    }
+
+    /** 纯日期文本（本地语义，不做时区换算）。 */
+    private static final java.util.regex.Pattern PLAIN_DATE_RE =
+            java.util.regex.Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$");
+    /** 本地时间文本（`yyyy-MM-dd HH:mm[:ss]`，无时区语义）。 */
+    private static final java.util.regex.Pattern PLAIN_DATETIME_RE =
+            java.util.regex.Pattern.compile("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}(:\\d{2})?$");
+
+    /**
+     * 单值归一（对齐 Node `normalizeDateColumnValue`）：
+     * 纯日期原样（DATE）/补零点（DATETIME）；本地时间补秒；
+     * 可解析时刻按 Asia/Shanghai 换算；不可解析原样。
+     */
+    private String normalizeDateColumnValue(String trimmed, boolean dateOnly) {
+        if (PLAIN_DATE_RE.matcher(trimmed).matches()) {
+            return dateOnly ? trimmed : trimmed + " 00:00:00";
+        }
+        if (!dateOnly && PLAIN_DATETIME_RE.matcher(trimmed).matches()) {
+            return trimmed.length() == 16 ? trimmed + ":00" : trimmed;
+        }
+        java.time.Instant instant = tryParseInstant(trimmed);
+        if (instant == null) {
+            return trimmed;
+        }
+        java.time.ZonedDateTime zdt = instant.atZone(BIZ_ZONE);
+        java.time.LocalDate date = zdt.toLocalDate();
+        if (dateOnly) {
+            return date.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
+        }
+        return date.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+                + " " + zdt.toLocalTime().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+    }
+
+    /** 宽松时刻解析：ISO 日期时间（含 Z/偏移/纳秒）→ Instant；失败 null。 */
+    private java.time.Instant tryParseInstant(String s) {
+        try {
+            return java.time.OffsetDateTime.parse(s).toInstant();
+        } catch (java.time.format.DateTimeParseException ignored) {
+            // 落到下一格式
+        }
+        try {
+            return java.time.LocalDateTime.parse(s).atZone(BIZ_ZONE).toInstant();
+        } catch (java.time.format.DateTimeParseException ignored) {
+            return null;
+        }
     }
 
     /** Jackson 序列化，失败按既有语义抛 400（提取共用避免两处重复 try/catch）。 */

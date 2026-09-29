@@ -2067,3 +2067,38 @@ Stage Summary:
 - 引擎 dept_head/supervisor 审批策略首次真正可用（发起人组织负责人）
 - v-permission 注册修复使既有+新增权限码真实生效；V42/V43 迁移链修复
 - 详见双 worklog 与提交 db341ca6（77f77492..db341ca6）
+
+---
+Task ID: 89-dialog-tabs-refactor
+Agent: Z.ai Code (main session)
+Task: 数据引用/查找带回配置弹窗页签化（对齐 DataSourceConfig 范式）
+
+Work Log:
+- DataPickerConfigDialog/LookupPickerConfigDialog 改 el-tabs border-card 双页签：「数据源」(UniDataSourceBinding=选择+筛选) + 「显示与行为」/「显示与回填」
+- 样式对齐 datasource-config-dialog 全局隔离；打开归位数据源页签；标题「查找带回配置」
+- 测试链：DataPickerConfigDialog 15/15（append-to-body 回退修复）→ 全量 1132/1132 → 浏览器双设计器实测（designer API setRule 注入字段→属性面板触发→页签+校验 toast）
+- 提交 6c2c8f2b 已推送
+
+Stage Summary:
+- 属性配置弹窗范式统一完成；逻辑零改动；回归零新增
+
+---
+Task ID: 90-date-option-display-fix
+Agent: Z.ai Code (main session)
+Task: 用户报告两修复——①演示页面1编辑保存报 `Incorrect date value: '2026-09-24T16:00:00.000Z' for column wf_biz_bill_test.leave_start_date`；②列表「是否已获得主管批准」显示 yes/no 而非 是/否
+
+Work Log:
+- 【根因①】DATE 列（物理 `date`）读侧 mysql2 把 DATE 解析成本地零点 Date → JSON 序列化成带时区 ISO（东八零点 → `2026-09-24T16:00:00.000Z`）→ 前端编辑回显后原样回传 → MariaDB 严格模式拒绝 datetime 字符串入库。连接池 `timezone:'+08:00'` 解释了偏移来源。
+- 【根因②】radio 组件 options `{label:'是',value:'yes'}`，数据库存 value（正确设计），但 PageDataTable 列渲染直接显示原始 value——缺 value→label 选项映射。
+- 【读侧修复】database.module.ts typeCast 增加 `field.type === 'DATE'` → 返回原始文本 `2026-09-25`（不转 Date，无时区语义，往返安全；JSON/BLOB 同模式既有先例）。
+- 【写侧修复·双端】biz-data-support.ts 新增 normalizeDateTimeColumns（createGeneric/updateGeneric 在 serializeJsonColumns 后调用）：DATE → 按业务时区 Asia/Shanghai 取 `YYYY-MM-DD`（`2026-09-24T16:00:00.000Z` → `2026-09-25`，用户所见日期不偏移）；DATETIME/TIMESTAMP → `YYYY-MM-DD HH:mm:ss`；纯日期/本地时间原样；不可解析原样透传（DB 兜底）。纯函数 normalizeDateColumnValue 导出。Java BizDataSupport.java 静态对齐（BIZ_ZONE/PLAIN_DATE_RE/tryParseInstant，无编译环境仅静态审查）。
+- 【前端修复】新增 utils/optionLabel.ts（extractOptionMap 兼容 rule.options/props.options/props.data 递归 children；mapOptionLabel 单值/数组/JSON 数组文本）；PageDataTable resolvedColumns 两分支接入——metadata 分支加 formatter（空值 '—' 占位）、用户配置分支 render 前覆盖值（用户已配 contentType/formatter 时尊重用户配置不叠加）。
+- 【测试】biz-data-write.spec 新增 6 用例（ISO 按东八取日期/纯日期原样/update 归一/DATETIME 补零点与时刻/非日期列与不可解析不受影响）26/26；optionLabel.test.ts 新增 10 用例全绿；PageDataTable 三测试文件 28/28；frontend utils+page 321/321；vue-tsc 46（基线持平）；backend-node 全量 945/945。
+- 【顺手修复·既有失败】migration.spec 三用例失败为 Task 86（V43 岗位/成员组）加表后未同步断言——修正：迁移计数 41→42、sys_* 清单补 sys_post/sys_member_group×3、declared.length 34→38（非本次改动引入，git stash 验证 + db341ca6 提交溯源）。
+- 【E2E 实证】API：GET 列表 leave_start_date 返回 `"2026-09-25"`（纯日期）；PUT 完整字段带 `2026-09-24T16:00:00.000Z` → 200，HEX/DATE 实库验证 09-25/09-26 正确。浏览器（ab.sh）：演示页面1 列表 is_approved 显示「是」、日期列纯文本 → 编辑弹窗回显 2026-09-25/26 → 确定 → 「更新成功」。chrome 归零。
+- 8080 重启生效：nest build 后 supervisor（start.sh 树）04:20:24 自动拉起新 dist（构建 04:20:04 之后）。
+
+Stage Summary:
+- 两问题双端根治：DATE 列全程纯日期文本（读侧 typeCast + 写侧时区感知归一），选项类列显示 label（选项映射 util，PageDataTable 先行）；数据零迁移、兼容旧格式、契约零破坏（945/945）。
+- 影响面：所有业务表单 DATE/DATETIME 列的读写往返（不止 bill_test）；选项映射已备 util，DataSourceDataPage/PageDataCards 等其余链路可后续按需接入。
+- 改动清单：backend-node（database.module.ts / biz-data-support.ts / biz-data-write.spec.ts / migration.spec.ts）、backend（BizDataSupport.java 静态对齐）、frontend（optionLabel.ts 新增+测试 / PageDataTable.vue）。

@@ -325,3 +325,71 @@ describe('BizDataSupport 写路径 / 乐观锁与删除', () => {
     )
   })
 })
+
+describe('BizDataSupport 写路径 / DATE / DATETIME 列归一（Incorrect date value 兼底）', () => {
+  /** 场景背景：form-create datePicker 未配置 value-format 时提交带时区 ISO 字符串
+   *  （`2026-09-24T16:00:00.000Z` = 东八 2026-09-25 00:00），MariaDB `date` 列直接报
+   *  `Incorrect date value`。写路径必须按业务时区（Asia/Shanghai）归一后再绑定。 */
+  const dateCols = [
+    { key: 'leave_start_date', label: '开始日期', columnType: 'DATE', required: false },
+    { key: 'leave_end_date', label: '结束日期', columnType: 'DATE', required: false },
+    { key: 'approved_at', label: '批准时间', columnType: 'DATETIME', required: false },
+  ]
+  const dateHarness = (): Harness => harness({ picker: null, extraColumns: dateCols })
+
+  it('create：带时区 ISO → 按东八取日期（用户所见日期，不偏移）', async () => {
+    const h = dateHarness()
+    await inTenant(() =>
+      h.support.createGeneric(FORM_KEY, {
+        title: 'T',
+        leave_start_date: '2026-09-24T16:00:00.000Z',
+      }),
+    )
+    expect(h.writes[0].params).toContain('2026-09-25')
+  })
+
+  it('create：纯日期原样（本地语义，无时区偏移问题）', async () => {
+    const h = dateHarness()
+    await inTenant(() =>
+      h.support.createGeneric(FORM_KEY, { title: 'T', leave_start_date: '2026-09-25' }),
+    )
+    expect(h.writes[0].params).toContain('2026-09-25')
+  })
+
+  it('update：ISO 同样归一（编辑保存场景）', async () => {
+    const h = dateHarness()
+    await inTenant(() =>
+      h.support.updateGeneric(FORM_KEY, 'row-1', { title: 'T2', leave_end_date: '2026-09-29T16:00:00.000Z' }, null),
+    )
+    expect(h.writes[0].params).toContain('2026-09-30')
+  })
+
+  it('DATETIME：纯日期补零点、ISO 按东八取完整时刻', async () => {
+    const h = dateHarness()
+    await inTenant(() =>
+      h.support.createGeneric(FORM_KEY, {
+        title: 'T',
+        approved_at: '2026-09-25',
+      }),
+    )
+    expect(h.writes[0].params).toContain('2026-09-25 00:00:00')
+
+    const h2 = dateHarness()
+    await inTenant(() =>
+      h2.support.createGeneric(FORM_KEY, {
+        title: 'T',
+        approved_at: '2026-09-24T16:30:45.000Z',
+      }),
+    )
+    expect(h2.writes[0].params).toContain('2026-09-25 00:30:45')
+  })
+
+  it('非日期列与不可解析值不受影响（兜底交给 DB 校验）', async () => {
+    const h = dateHarness()
+    await inTenant(() =>
+      h.support.createGeneric(FORM_KEY, { title: 'not-a-date', leave_start_date: 'blah' }),
+    )
+    expect(h.writes[0].params).toContain('not-a-date')
+    expect(h.writes[0].params).toContain('blah')
+  })
+})

@@ -62,6 +62,14 @@ export const MYSQL_POOL = Symbol('MYSQL_POOL')
             ) {
               return field.string('utf8')
             }
+            if (field.type === 'DATE') {
+              // DATE 列返回**原始文本**（`2026-09-25`），不转 JS Date。
+              // ⚠️ 默认行为会把 DATE 解析成本地零点的 Date，JSON 序列化成带时区 ISO
+              //    （东八零点 → `2026-09-24T16:00:00.000Z`）—— 前端编辑回显拿到的就是
+              //    这个字符串，保存时原样回传，MariaDB `date` 列直接报
+              //    `Incorrect date value: ...`。纯日期文本无时区语义，往返安全。
+              return field.string('utf8')
+            }
             return next()
           },
           /**

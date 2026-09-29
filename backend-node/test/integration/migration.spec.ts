@@ -68,10 +68,11 @@ describe('schema 迁移', () => {
     //   + V39 内建数据源预置（seeder 迁入，双端同源）
     //   + V40 引擎外发通知记录表
     //   + V41 wf_task_comment 增加 signature 列
-    //   + V42 wf_process_draft 增加 description 列 = 41。
+    //   + V42 wf_process_draft 增加 description 列
+    //   + V43 岗位/成员组/组织负责人（Task 86 人员组织模型）= 42。
     // 这里显式断言一个数值，是为了在文件被误删时能立刻发现（派生值单独用会掩盖丢失）。
     const expectedCount = discoverMigrations(MIGRATIONS_DIR).length
-    expect(expectedCount).toBe(41)
+    expect(expectedCount).toBe(42)
     expect(result.applied.length).toBe(expectedCount)
     expect(result.skipped).toEqual([])
 
@@ -90,7 +91,7 @@ describe('schema 迁移', () => {
     expect(result.skipped.length).toBe(discoverMigrations(MIGRATIONS_DIR).length)
   }, 60_000)
 
-  it('sys_* 系统表已建立（V1 基线覆盖，无其它迁移脚本来源）', async () => {
+  it('sys_* 系统表已建立（V1 基线 + V43 岗位/成员组，无其它迁移脚本来源）', async () => {
     // 显式取别名：MySQL 8 的 information_schema 列名是大写 TABLE_NAME，
     // 直接读 table_name 会得到 undefined。
     const rows = await sql<{ name: string }>`
@@ -100,8 +101,12 @@ describe('schema 迁移', () => {
     expect(rows.rows.map((r) => r.name).sort()).toEqual([
       'sys_dict_data',
       'sys_dict_type',
+      'sys_member_group',
+      'sys_member_group_member',
+      'sys_member_group_rule',
       'sys_menu',
       'sys_organization',
+      'sys_post',
       'sys_role',
       'sys_role_menu',
       'sys_user',
@@ -219,7 +224,9 @@ describe('schema 迁移', () => {
     expect(missingColumns, '以下列 Node 要用但迁移没有创建').toEqual([])
 
     // 顺带证明对账确实覆盖了 V35 补的那批对象 —— 否则「全绿」可能只是没检查到
-    expect(declared.length).toBe(34)
+    // 38 = Task 86（V43）新增 sys_post / sys_member_group / sys_member_group_member /
+    // sys_member_group_rule 四张表后的声明总数
+    expect(declared.length).toBe(38)
     expect(existing.get('msg_channel_config')?.size).toBe(7)
   })
 

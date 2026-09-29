@@ -100,6 +100,7 @@ import {
 import { dataSourceApi } from '@/api/data-source'
 import { executeScript, isScriptEventEnabled } from '@/utils/scriptSandbox'
 import { buildCellRender, getCellValue } from '@/utils/tableColumnRenderer'
+import { extractOptionMap, mapOptionLabel } from '@/utils/optionLabel'
 import SearchTable from '@/components/business/SearchTable.vue'
 import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import { leafDisplayText } from '@/views/form/arrayValueLabel'
@@ -366,6 +367,23 @@ function hasTextColumn(key: string): boolean {
   return metaColumns.value.some((m) => m.key === `${key}_text`)
 }
 
+/**
+ * 选项类列（radio/select/checkbox 等）的 value→label 映射（key → Map）。
+ * ⚠️ 数据库存的是选项 value（如 'yes'），表单里显示的是 label（如「是」）——
+ *    列表直接渲染原始值会露出 yes/no 之类代码值，渲染前统一换算。
+ * 依赖 formSchemaRule（异步加载），computed 自动随其就绪重算。
+ */
+const optionLabelMaps = computed<Map<string, Map<string, string>>>(() => {
+  const maps = new Map<string, Map<string, string>>()
+  for (const rule of formSchemaRule.value) {
+    const field = (rule as any)?.field
+    if (!field) continue
+    const map = extractOptionMap(rule)
+    if (map.size > 0) maps.set(String(field), map)
+  }
+  return maps
+})
+
 /** JSON 数组 → 逗号拼接；非数组（旧逗号串/字符串）原样返回 */
 function formatArrayValue(v: unknown): unknown {
   if (Array.isArray(v)) return v.join(', ')
@@ -407,6 +425,15 @@ const resolvedColumns = computed<TableColumn[]>(() => {
             },
           }
         : {}),
+      ...(!hasTextColumn(c.key) && optionLabelMaps.value.has(c.key)
+        ? {
+            // 选项类列（radio/select 等）：value→label 映射显示（is_approved 'yes' → 「是」）
+            formatter: (_row: any, _col: any, cellValue: unknown): string => {
+              const mapped = mapOptionLabel(optionLabelMaps.value.get(c.key)!, cellValue)
+              return mapped === '' ? '—' : mapped
+            },
+          }
+        : {}),
     }))
   }
   // 有用户配置的列时使用用户配置；排序能力由数据源 metadata + 组件 sortableFields 决定
@@ -444,6 +471,21 @@ const resolvedColumns = computed<TableColumn[]>(() => {
               style: c.style,
             })({ ...row, [key]: display })
           },
+        }
+      }
+      // 选项类列（radio/select 等）：用户未配置内容/格式化器时，value→label 映射显示
+      const optionMap = optionLabelMaps.value.get(key)
+      const hasUserContent = !!(c.contentType || c.contentValue || c.expression || c.template || c.formatter)
+      if (optionMap && optionMap.size > 0 && !hasUserContent) {
+        return {
+          ...base,
+          render: (row: any) =>
+            buildCellRender({
+              key,
+              className: c.className,
+              styleExpr: c.styleExpr,
+              style: c.style,
+            })({ ...row, [key]: mapOptionLabel(optionMap, getCellValue(row, key)) }),
         }
       }
       return {

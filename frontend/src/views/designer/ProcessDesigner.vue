@@ -67,7 +67,7 @@ import PropertyPanel from './properties/PropertyPanel.vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { initModeler, destroyModeler, getModeler } from './utils/bpmnModeler'
 import { importXml, exportXml, exportSvg } from './utils/xmlParser'
-import { isInitiatorTaskElement, validateSubProcessBoundaries } from './utils/bpmnValidation'
+import { validateProcessXml } from './utils/bpmnValidation'
 import { findStartEventInScope, resolveDropParent } from './utils/subflowNavigation'
 import { processDesignApi, deployedProcessApi } from '@/api/processDefinition'
 import 'bpmn-js/dist/assets/diagram-js.css'
@@ -235,112 +235,6 @@ function setupEventListeners(readOnly = false) {
   })
 }
 
-/**
- * 校验导出的 BPMN XML 是否符合部署要求。
- * error：阻断性错误（有则不部署）；warnings：非阻断警告（展示在部署确认中）。
- */
-function validateBpmnXml(xml: string): { error: string | null; warnings: string[] } {
-  const warnings: string[] = []
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(xml, 'application/xml')
-  const parseError = doc.querySelector('parsererror')
-  if (parseError) {
-    return { error: 'BPMN XML 解析失败，请检查流程定义。', warnings }
-  }
-
-  const startEvents = doc.querySelectorAll('bpmn\\:startEvent, startEvent')
-  const endEvents = doc.querySelectorAll('bpmn\\:endEvent, endEvent')
-  const userTasks = doc.querySelectorAll('bpmn\\:userTask, userTask')
-
-  // 1. 必须有开始事件
-  if (startEvents.length === 0) {
-    return { error: '流程缺少开始事件，请添加一个开始事件。', warnings }
-  }
-  // 2. 开始事件只能有一个
-  if (startEvents.length > 1) {
-    return { error: `流程存在 ${startEvents.length} 个开始事件，只允许一个。`, warnings }
-  }
-  // 3. 必须有结束事件
-  if (endEvents.length === 0) {
-    return { error: '流程缺少结束事件，请添加至少一个结束事件。', warnings }
-  }
-
-  // 4. 开始事件必须有出口连线
-  const startEvent = startEvents[0]
-  const startId = startEvent.getAttribute('id')
-  const hasOutgoingFromStart = doc.querySelector(
-    `bpmn\\:sequenceFlow[sourceRef="${startId}"], sequenceFlow[sourceRef="${startId}"]`
-  )
-  if (!hasOutgoingFromStart) {
-    return { error: '开始事件没有出口连线，请连接到下一个节点。', warnings }
-  }
-
-  // 5. 每个结束事件必须有入口连线
-  for (let i = 0; i < endEvents.length; i++) {
-    const endId = endEvents[i].getAttribute('id')
-    const hasIncomingToEnd = doc.querySelector(
-      `bpmn\\:sequenceFlow[targetRef="${endId}"], sequenceFlow[targetRef="${endId}"]`
-    )
-    if (!hasIncomingToEnd) {
-      return { error: `结束事件「${endEvents[i].getAttribute('name') || endId}」没有入口连线，请连接上游节点。`, warnings }
-    }
-  }
-
-  // 6. UserTask 必须配置审批/办理人（发起节点除外，其 assignee 为 ${initiator}）
-  for (let i = 0; i < userTasks.length; i++) {
-    const taskEl = userTasks[i]
-    const taskId = taskEl.getAttribute('id')
-    const taskName = taskEl.getAttribute('name') || taskId
-    // 发起人节点由发起人自己填报，无需配置审批人
-    if (isInitiatorTaskElement(taskEl)) {
-      continue
-    }
-    if (!taskId) {
-      continue
-    }
-    // 节点类别文案：办理节点→办理人，其余（含旧数据无 nodeRole）→审批人
-    const role = taskEl.getAttribute('wf:nodeRole') || taskEl.getAttribute('nodeRole')
-    const personLabel = role === 'handler' ? '办理人' : '审批人'
-    const typeLabel = role === 'handler' ? '办理节点' : '审批节点'
-    const configStr = designerStore.nodeConfigs[taskId]
-    if (configStr) {
-      try {
-        const config = JSON.parse(configStr)
-        // 自动审批（自动通过/自动拒绝）无需配置审批人，跳过人员校验
-        if (config.approvalType === 'auto_pass' || config.approvalType === 'auto_reject') {
-          continue
-        }
-        const approval = config.approval
-        if (!approval || !approval.type) {
-          return { error: `${typeLabel}「${taskName}」未配置${personLabel}，请设置类型。`, warnings }
-        }
-        if (approval.type === 'user' && (!approval.userIds || approval.userIds.length === 0)) {
-          const policy = config.assigneeOptions?.noAssigneePolicy || ''
-          if (policy === 'auto_pass' || policy === 'to_admin' || policy === 'to_user' || policy === 'skip' || policy === 'supervisor') {
-            // 有兕底策略：仅警告，不阻断部署
-            warnings.push(`节点「${taskName}」未指定具体人员，将按找不到${personLabel}策略处理`)
-          } else {
-            return { error: `${typeLabel}「${taskName}」的${personLabel}类型为「指定用户」但未选择用户。`, warnings }
-          }
-        }
-        if (approval.type === 'expression' && !approval.expression) {
-          return { error: `${typeLabel}「${taskName}」的${personLabel}类型为「流程表达式」但未设置表达式。`, warnings }
-        }
-      } catch {
-        return { error: `${typeLabel}「${taskName}」的节点配置解析失败。`, warnings }
-      }
-    } else {
-      return { error: `${typeLabel}「${taskName}」未配置${personLabel}，请设置类型。`, warnings }
-    }
-  }
-
-  // 7. 内嵌子流程必须包含开始与结束事件
-  const subErrors = validateSubProcessBoundaries(xml)
-  if (subErrors.length) return { error: subErrors.join('；'), warnings }
-
-  return { error: null, warnings }
-}
-
 async function handleSave() {
   if (!designerStore.draftId) return
 
@@ -374,10 +268,20 @@ async function handleDeploy() {
     const modeler = getModeler()
     const xml = await exportXml(modeler)
 
-    const validateMessage = validateBpmnXml(xml)
-    if (validateMessage) {
+    // 阻断性错误直接拦截（不再请求后端）；仅非阻断警告允许用户确认后继续
+    const { error, warnings } = validateProcessXml(xml, designerStore.nodeConfigs)
+    if (error) {
+      ElMessage.error({
+        message: `无法部署：${error}`,
+        duration: 8000,
+        showClose: true,
+        dangerouslyUseHTMLString: false
+      })
+      return
+    }
+    if (warnings.length) {
       const confirmed = await ElMessageBox.confirm(
-        `${validateMessage}\n\n是否仍要继续部署？`,
+        `${warnings.join('\n')}\n\n是否仍要继续部署？`,
         '部署警告',
         { type: 'warning', confirmButtonText: '继续部署', cancelButtonText: '取消' }
       ).then(() => true).catch(() => false)

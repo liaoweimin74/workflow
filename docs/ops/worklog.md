@@ -2102,3 +2102,22 @@ Stage Summary:
 - 两问题双端根治：DATE 列全程纯日期文本（读侧 typeCast + 写侧时区感知归一），选项类列显示 label（选项映射 util，PageDataTable 先行）；数据零迁移、兼容旧格式、契约零破坏（945/945）。
 - 影响面：所有业务表单 DATE/DATETIME 列的读写往返（不止 bill_test）；选项映射已备 util，DataSourceDataPage/PageDataCards 等其余链路可后续按需接入。
 - 改动清单：backend-node（database.module.ts / biz-data-support.ts / biz-data-write.spec.ts / migration.spec.ts）、backend（BizDataSupport.java 静态对齐）、frontend（optionLabel.ts 新增+测试 / PageDataTable.vue）。
+
+---
+Task ID: 91-deploy-prevalidation
+Agent: Z.ai Code (main session)
+Task: 修复「请假流程发布报 流程部署校验失败：节点 Activity_12aok35（userTask）没有出边」——发布前预校验三端打通
+
+Work Log:
+- 【根因】用户草稿 BPMN 只有 start→发起节点→办理节点、完全没有 endEvent（空模板只含 startEvent，用户末端断链后直接从列表页发布）；后端校验本身正确但报错只吐内部节点 ID；且列表页「部署」按钮 processDesignApi.deploy(row.id) 直呼后端、跳过设计器里那套 validateBpmnXml 友好校验
+- 【顺手修真 bug】ProcessDesigner.vue handleDeploy 把 validateBpmnXml 返回的 {error,warnings} 对象当字符串判真——永远 truthy、确认框显示 "[object Object]"、阻断性错误从不阻断（与函数注释的既定意图相悖）。已改为 error 阻断 return、warnings 进确认框
+- 【重构】validateBpmnXml 整体从 ProcessDesigner.vue 抽到 utils/bpmnValidation.ts 并升级为 validateProcessXml(xml, nodeConfigs)：新增 validateFlowConnectivity（除 endEvent 外必须有出边/除 startEvent 外必须有入边/排他网关无条件分支≤1，与后端编译器规则对齐）；节点展示名 name 优先、无 name 用角色标签（发起/办理/审批节点）+ID 定位；设计器与列表页共用一套
+- 【列表页】ProcessListPage 部署按钮改为 loadEditor→validateProcessXml 预校验：error 弹 alert（标题「无法部署，请先在流程设计器中修正」+ white-space:pre-line 多行展示）不进后端；warnings 并入确认框；移除原 SearchTable confirm 属性
+- 【后端】process-compiler.ts 校验消息友好化：新增 describeNodeLabel（name+ID，无 name 按 taskRole/类型中文标签）与 NODE_TYPE_LABELS；「没有出边/没有入边/排他网关」消息统一带可读节点名并附处理建议；正则断言 /没有出边/ 等全部兼容
+- 【测试】新增 bpmnValidation.test.ts 两组 12 用例（连通性 7 + validateProcessXml 5，含用户实测场景复刻）；ProcessListPage.test 部署按钮两用例改写为预校验行为断言（alert 不调 deploy / confirm 后调 deploy）；backend process-compiler 30/30；前端全量 1154/1154（91 文件）、backend-node 全量 945/945（--no-file-parallelism）；vue-tsc 46=基线（ProcessListPage 2 处 FormConfig rule 类型为既有）
+- 【E2E 实证】临时断链草稿 qa_broken_deploy（API 建，无 endEvent）浏览器列表页点部署 → 新弹窗「流程缺少结束事件，请添加至少一个结束事件。」而非引擎原文；真流程「请假」点部署 → 确认框 → 「部署成功」；API 部署 v3 + 浏览器部署 v4 均 ACTIVE；用户中途自行补齐 endEvent（v1/v2 为其部署），链路现为 发起→审批→结束；临时草稿已删、chrome 归零
+
+Stage Summary:
+- 发布链路三层防线：列表页预校验（友好中文+节点可定位）→ 设计器错误真阻断 → 后端兜底消息可读化
+- 影响面：所有流程发布入口；空模板无 endEvent 的入门场景从此有明确引导文案
+- 遗留观察：新建草稿空模板仅含 startEvent，可考虑未来提供含发起+结束的最小模板（避免新手再次断链）

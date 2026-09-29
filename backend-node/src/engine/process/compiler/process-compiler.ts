@@ -385,12 +385,14 @@ function validate(parsed: ParsedProcess, errors: CompileErrors, expectedProcessK
       }
     }
 
+    const label = describeNodeLabel(node)
+
     // 必须有出边（endEvent 除外）；必须有入边（startEvent 除外）
     if (node.nodeType !== 'endEvent' && node.outgoing.length === 0) {
-      errors.add(`节点 "${node.nodeId}"（${node.nodeType}）没有出边，流程会走死`)
+      errors.add(`节点 "${label}" 没有出边，流程会走死；请连线到下游节点或结束事件`)
     }
     if (node.nodeType !== 'startEvent' && node.incoming.length === 0) {
-      errors.add(`节点 "${node.nodeId}"（${node.nodeType}）没有入边，永远无法到达`)
+      errors.add(`节点 "${label}" 没有入边，永远无法到达；请从上游节点连线`)
     }
 
     // 网关分支规则
@@ -400,16 +402,59 @@ function validate(parsed: ParsedProcess, errors: CompileErrors, expectedProcessK
       const unconditonal = flows.filter((f) => f.condition === null && !f.isDefault)
       if (unconditonal.length > 1) {
         errors.add(
-          `排他网关 "${node.nodeId}" 有 ${unconditonal.length} 条无条件分支，无法确定走哪条`,
+          `排他网关 "${label}" 有 ${unconditonal.length} 条无条件分支，无法确定走哪条`,
         )
       }
       if (!hasDefault && unconditonal.length === 0) {
         errors.add(
-          `排他网关 "${node.nodeId}" 的所有分支都带条件且没有默认分支，条件全不命中时会卡死`,
+          `排他网关 "${label}" 的所有分支都带条件且没有默认分支，条件全不命中时会卡死`,
         )
       }
     }
   }
+}
+
+/**
+ * 节点在报错消息里的展示名：优先业务 name，否则按 taskRole/类型给中文标签，
+ * 始终附带节点 ID 方便用户在画布上定位（报错原文只有 ID 不可读，见用户反馈）。
+ */
+function describeNodeLabel(node: ParsedNode): string {
+  const name = (node.name || '').trim()
+  const suffix = node.nodeId ? `(${node.nodeId})` : ''
+  if (name) return `${name}${suffix}`
+  const base =
+    node.nodeType === 'userTask'
+      ? node.taskRole === 'initiator'
+        ? '发起节点'
+        : node.taskRole === 'handler'
+          ? '办理节点'
+          : '审批节点'
+      : (NODE_TYPE_LABELS[node.nodeType] ?? node.nodeType)
+  return `${base}${suffix}`
+}
+
+/** 节点类型 → 中文标签（与前端 bpmnValidation 的 NODE_TYPE_LABELS 对齐）。 */
+const NODE_TYPE_LABELS: Record<string, string> = {
+  startEvent: '开始事件',
+  endEvent: '结束事件',
+  userTask: '用户任务',
+  serviceTask: '服务任务',
+  manualTask: '人工任务',
+  receiveTask: '接收任务',
+  scriptTask: '脚本任务',
+  businessRuleTask: '规则任务',
+  sendTask: '发送任务',
+  task: '任务',
+  callActivity: '调用活动',
+  subProcess: '子流程',
+  exclusiveGateway: '排他网关',
+  parallelGateway: '并行网关',
+  inclusiveGateway: '包容网关',
+  eventBasedGateway: '事件网关',
+  complexGateway: '复杂网关',
+  intermediateCatchEvent: '中间捕获事件',
+  intermediateThrowEvent: '中间抛出事件',
+  boundaryEvent: '边界事件',
 }
 
 /**

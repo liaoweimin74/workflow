@@ -102,12 +102,13 @@ defineOptions({ name: 'ProcessDefinition' })
 
 import { ref, computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Upload, CopyDocument, Delete, Fold, Expand, Clock } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { processDesignApi, deployedProcessApi, type ProcessDraft, type ProcessVersion } from '@/api/processDefinition'
 import { categoryApi, type Category } from '@/api/category'
+import { validateProcessXml } from '@/views/designer/utils/bpmnValidation'
 
 const router = useRouter()
 const tableRef = ref()
@@ -323,14 +324,31 @@ const actionButtons: ActionButton[] = [
     size: 'small',
     type: 'primary',
     permission: 'process:definition:deploy',
-    confirm: '确定要部署此流程吗？部署后将创建新的流程定义版本。',
     onClick: async (row: any) => {
       try {
+        // 发布前预校验（与设计器同一套规则）：阻断性错误直接拦截，
+        // 避免后端引擎返回内部节点 ID 等不可读报错（如「没有出边，流程会走死」）
+        const editorRes = await processDesignApi.loadEditor(row.id)
+        const { error, warnings } = validateProcessXml(editorRes.data.bpmnXml, editorRes.data.nodeConfigs || {})
+        if (error) {
+          await ElMessageBox.alert(error, '无法部署，请先在流程设计器中修正', {
+            type: 'error',
+            confirmButtonText: '知道了',
+            customStyle: { whiteSpace: 'pre-line' } as any
+          })
+          return
+        }
+        const tips = warnings.length
+          ? `发现以下问题：\n${warnings.join('\n')}\n\n是否仍要继续部署？`
+          : '确定要部署此流程吗？部署后将创建新的流程定义版本。'
+        await ElMessageBox.confirm(tips, warnings.length ? '部署警告' : '确认部署', {
+          type: 'warning'
+        })
         await processDesignApi.deploy(row.id)
         ElMessage.success('部署成功')
         tableRef.value?.fetchList()
       } catch {
-        // http 拦截器已弹出后端返回的具体错误消息
+        // http 拦截器已弹出后端返回的具体错误消息；ElMessageBox 取消时静默
       }
     },
   },

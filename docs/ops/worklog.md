@@ -2333,3 +2333,19 @@ Stage Summary:
 - 文字被遮盖根因闭环（绘制层级而非颜色值）——此前 99~101 的颜色适配在层级正确后才真正生效
 - 方法论：computed style 验证必须叠加 SVG 文档顺序检查（children.findIndex），截图比对明暗双态
 - UI验证流程 现为带名节点（财务审核节点/部门办理节点/行政办理节点），可直接作暗色验收样本
+
+---
+Task ID: 104-enter-reload-fix
+Agent: Z.ai Code (main session)
+Task: 用户报「流程设计界面回车页面就会刷新，刷新后整个画布都是空白」（Task 103 E2E 时已踩到并留痕，本轮根因定位+修复）
+
+Work Log:
+- 根因链：属性组件 <el-form> 渲染原生 <form> → 顶部表单仅一个文本输入框（节点名称，HTML 规范：无 submit button 时单文本输入即满足隐式提交条件）→ 回车提交无 action 的 GET 表单 → 浏览器用表单数据替换整个 query string（输入框无 name 属性 → query 变空）→ 路由 ?id= 丢失 → 重载后 /lowcode/designer 无草稿上下文 → 空白画布
+- 修复：PropertyPanel.vue 根元素 @submit.prevent（submit 事件冒泡，单点覆盖全部 12 个属性组件——UserTask/HandlerTask/InitiatorTask/ProcessProperty/SequenceFlow/Gateway/Event/SubProcess/CallActivity/ServiceTask/FormTab 等，含只读态与未来新增）；el-input change 本就在回车触发，名称提交不受影响
+- 排查备忘：ProcessTimeoutRuleDialog 无原生 form 无需处理；designer 目录无自写 <form>；12 个 el-form 未逐个加 @submit.prevent，根元素单点拦截更可维护
+- E2E（agent-browser）：登录→UI验证流程→选中财务审核节点→名称改「财务审核节点V2」→Enter → URL 保持 ?id=f50d6d7a…、画布 13 元素完好、label 即时同步 V2、vite 无重连；再回改「财务审核节点」提交正常；chrome 归零
+- 8af08b15 已推送
+
+Stage Summary:
+- 设计器回车刷新根因闭环（隐式 GET 提交替换 query string）——与 Task 103 留痕「Enter 会触发表单默认提交导致页面重载」互证
+- 方法论：Enter 类问题先查「单输入框原生 form」隐式提交条件，修复优先冒泡单点拦截而非逐 form 补丁

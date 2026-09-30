@@ -116,7 +116,8 @@ public class ProcessDesignService {
         draft.setBpmnXml(request.getBpmnXml());
         if (request.getName() != null) draft.setName(request.getName());
         if (request.getKey() != null) draft.setKey(request.getKey());
-        if (request.getCategoryId() != null) draft.setCategoryId(request.getCategoryId());
+        if (Boolean.TRUE.equals(request.getClearCategory())) draft.setCategoryId(null);
+        else if (request.getCategoryId() != null) draft.setCategoryId(request.getCategoryId());
         if (request.getDescription() != null) draft.setDescription(request.getDescription());
 
         // 已部署的流程被修改后标记为 MODIFIED

@@ -23,7 +23,7 @@
         :fetch-api="fetchApi"
         :form-config="formConfig"
         :default-page-size="20"
-        :max-visible-buttons="5"
+        :max-visible-buttons="6"
         table-size="small"
         @row-click="handleRowClick"
       >
@@ -32,12 +32,47 @@
             {{ statusLabel(row.status) }}
           </el-tag>
         </template>
+        <template #category="{ row }">
+          <el-tag v-if="categoryName(row.categoryId)" size="small" type="info" effect="plain">
+            {{ categoryName(row.categoryId) }}
+          </el-tag>
+          <span v-else class="uncategorized">未分类</span>
+        </template>
         <template #lastDeployedAt="{ row }">
           {{ row.lastDeployedAt ? formatDate(row.lastDeployedAt) : '—' }}
         </template>
       </SearchTable>
     </el-card>
   </div>
+
+  <!-- 调整分类弹窗（Task 106）：saveDesign 仅传分类字段，其余保留原值；
+       不选分类确认 = 清空（clearCategory，后端置 null） -->
+  <el-dialog
+    v-model="moveVisible"
+    title="调整分类"
+    width="420px"
+    :close-on-click-modal="false"
+  >
+    <el-form label-width="80px" @submit.prevent>
+      <el-form-item label="流程">
+        <span style="font-weight: 600; word-break: break-all">{{ moveRow?.name || '—' }}</span>
+      </el-form-item>
+      <el-form-item label="分类">
+        <el-select
+          v-model="moveTarget"
+          clearable
+          placeholder="不归类（未分类）"
+          style="width: 100%"
+        >
+          <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="moveVisible = false">取消</el-button>
+      <el-button type="primary" :loading="moveSubmitting" @click="confirmMove">确定</el-button>
+    </template>
+  </el-dialog>
 
   <!-- 版本历史抽屉 -->
   <el-drawer
@@ -77,7 +112,7 @@ defineOptions({ name: 'ProcessDefinition' })
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Edit, Upload, CopyDocument, Delete, Clock } from '@element-plus/icons-vue'
+import { Edit, Upload, CopyDocument, Delete, Clock, FolderOpened } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { processDesignApi, deployedProcessApi, type ProcessDraft, type ProcessVersion } from '@/api/processDefinition'
@@ -126,10 +161,22 @@ const searchFields = computed<SearchField[]>(() => [
 const columns: TableColumn[] = [
   { prop: 'name', label: '流程名称', minWidth: 180 },
   { prop: 'key', label: '流程标识', width: 180 },
+  { prop: 'categoryId', label: '分类', width: 120, slotName: 'category' },
   { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
   { prop: 'version', label: '发布版本', width: 90, align: 'center' },
   { prop: 'lastDeployedAt', label: '发布时间', width: 180, slotName: 'lastDeployedAt' },
 ]
+
+/** 分类 id → 名称（表格分类列展示） */
+const categoryNameMap = computed(() => {
+  const m = new Map<string, string>()
+  categories.value.forEach(c => m.set(c.id, c.name))
+  return m
+})
+
+function categoryName(id?: string | null): string {
+  return (id && categoryNameMap.value.get(id)) || ''
+}
 
 async function fetchApi(params: any) {
   const res = await processDesignApi.listDrafts({
@@ -242,6 +289,13 @@ const actionButtons: ActionButton[] = [
     },
   },
   {
+    label: '移动',
+    icon: FolderOpened,
+    size: 'small',
+    permission: 'process:definition:create',
+    onClick: openMove,
+  },
+  {
     label: '版本',
     icon: Clock,
     size: 'small',
@@ -271,6 +325,39 @@ const actionButtons: ActionButton[] = [
 ]
 
 function handleRowClick(_row: any) {}
+
+// ========== 调整分类弹窗（Task 106） ==========
+const moveVisible = ref(false)
+const moveRow = ref<ProcessDraft | null>(null)
+const moveTarget = ref('')
+const moveSubmitting = ref(false)
+
+async function openMove(row: any) {
+  moveRow.value = row
+  moveTarget.value = row.categoryId || ''
+  moveVisible.value = true
+  // 弹窗选项与胶囊同源刷新（新建分类后无需刷新页面）
+  await loadCategories()
+}
+
+async function confirmMove() {
+  if (!moveRow.value || moveSubmitting.value) return
+  moveSubmitting.value = true
+  try {
+    // 只传分类字段：saveDesign 对未传字段一律保留原值（不会碰 XML/名称）
+    await processDesignApi.saveDesign(
+      moveRow.value.id,
+      moveTarget.value ? { categoryId: moveTarget.value } : { clearCategory: true },
+    )
+    ElMessage.success('分类已调整')
+    moveVisible.value = false
+    tableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    moveSubmitting.value = false
+  }
+}
 
 /** 打开版本历史抽屉，加载该流程 key 的全部已部署版本 */
 async function openVersionHistory(row: any) {
@@ -317,3 +404,10 @@ function statusTagType(status: string): 'info' | 'success' | 'warning' {
   }
 }
 </script>
+
+<style scoped>
+.uncategorized {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+</style>

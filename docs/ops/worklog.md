@@ -2373,3 +2373,24 @@ Stage Summary:
 - 流程定义页正式形态：单卡片+分类胶囊条（全部/各分类/＋内联维护）+全宽流程表；分类扁平无层级、无排序手填（自动排最后）、删除有草稿引用保护
 - 产物：V47 迁移、CategoryChips.vue、ProcessListPage 重构、api/category.ts 瘦身、Node 6 文件+Java 4 文件、SearchTable title
 - 【方法论】组件测试手动调 fetchApi 会掩盖「状态变化→自动刷新」链路缺失，E2E 必须点真实按钮
+
+---
+Task ID: 106-move-category-and-chip-sort
+Agent: Z.ai Code (main session)
+Task: 用户报「流程没有办法调整分类，胶囊无法排序」——补齐胶囊改版两大缺口：①流程调整/清空分类 ②胶囊拖拽排序；期间门户再次挂掉并根因闭环（OOM kill）
+
+Work Log:
+- 方案取证：PUT /categories/:id 双端已支持 sortOrder（null=不改）→ 排序纯前端落库零后端改动；saveDesign（PUT /process-definitions/:id/design）缺省保留原值语义 → 移动分类零新增端点，唯一缺口是「清空为未分类」（`??` 把 null 当保留，'' 会写入脏 FK）→ 双端新增可选字段 clearCategory（Node: true 强制 category_id=null；Java: Boolean.TRUE.equals 优先于 categoryId）
+- 后端：process-design.service.ts + DesignSaveRequest.java + ProcessDesignService.java 三处小改（设计器保存始终传全量字段且不带 clearCategory，行为不受影响）；npm run build 重建 dist + 重启 8080（旧 PID kill 后 nohup node dist/main.js）；后端 vitest process-definition.spec 11/11 过
+- 前端 CategoryChips：本地 chips ref 同步 props（watch immediate，支持拖拽乐观重排）；HTML5 原生拖拽（draggable 门控 canSort=update 权限），dragover 按指针左右半段算插入位，双伪元素指示条（drop-before/drop-after），grab/grabbing 光标；drop 后全量按新顺序 Promise.all 落库（sortOrder=下标归一化，杜绝并列值），finally 必 emit changed 重拉自愈；位置不变不落库
+- 前端 ProcessListPage：新增「分类」列（slotName category：分类名 el-tag / 未分类灰字，categoryNameMap computed）；新增「移动」行操作（FolderOpened 图标，复用 process:definition:create 权限，置于复制之后）+ 调整分类弹窗（el-select clearable，placeholder「不归类（未分类）」；选值确认=saveDesign({categoryId})，清空确认=saveDesign({clearCategory:true})；el-form @submit.prevent 沿用 Task 104 单点拦截）；max-visible-buttons 5→6
+- 测试：ProcessListPage.test.ts 新增 5 用例（分类列断言/拖拽落库+指示条/拖回原位不落库/移动弹窗选分类/移动弹窗清空分支），更新 2 处断言（6 按钮、maxVisible 6），icons mock 补 FolderOpened、api mock 补 saveDesign；拖拽用例用 Object.assign(new Event(...),{dataTransfer,clientX}) 绕过 jsdom 无 DragEvent 构造器限制；vitest 单文件 19/19 → 全量 93 文件 1175/1175 全过；eslint 0 errors（.vue 仍为 ignore warning）
+- 【E2E 中发现并修复 bug】@drop 模板误传整个 cat 对象而非 cat.id → findIndex 落空永不落库（被「拖回原位」用例的假阴性掩盖，修复第一用例后暴露）；同轮修正测试前提错误：拖 c1 落在 c2 右半段=交换而非原位，原位=左半段
+- E2E（agent-browser@5173）：登录→流程定义页：分类列渲染（UI验证流程=未分类、请假=请假流程）✓ → 移动弹窗选「报销流程」确定 → 行内即时变「报销流程」✓ → 再开弹窗 hover 清空 → 确定 → 回「未分类」✓ → 拖拽「请假流程」到「报销流程」→ chip 顺序互换 ✓ → reload 顺序保持 + DB 直查 sort_order=0/1（报销0/请假1）、ui_verify_flow category_id=null ✓；console 无新增错误（仅 el-pagination small/v-permission/SSE 既有警告）；chrome 归零
+- 【门户挂掉根因闭环】dmesg 实锤全局 OOM kill：`Killed process (next-server) anon-rss:1.42GB`——本机 4G，门户存活期间跑全量 vitest（1175 用例）+ 前后端 dev 服务叠加把内存顶爆，kernel 杀掉最大 RSS 的 next-server；恢复过程二次踩坑：旧 next-server 垂死占 3000 → 重启的 next dev EADDRINUSE 退出而 bun wrapper 残留假活 → 第三次重启前先确认端口真死
+- 【运维重建】沙箱重置丢失的 scripts/ 补回三件套并自测：mem-guard.sh（auto 裁决：available<1200MB 禁重型任务）、start-portal.sh（幂等：探活超时放宽到 20s + 双次确认才 pkill，防误杀编译中的健康进程——首版 -m 5 探活在冷编译窗口误判过）、ab.sh（agent-browser 透传+关闭提醒）
+
+Stage Summary:
+- 胶囊改版补齐最后两块：行内「移动」弹窗（调整/清空分类，只传分类字段绝不碰 XML）+ 胶囊拖拽排序（乐观重排→下标归一化落库→失败自愈），后端仅 +clearCategory 一个可选字段
+- 门户反复挂掉=kernel OOM kill next-server，非代码 bug；「门户存活期间严禁重型任务」升级为硬约束：全量测试前必须先停门户或分批跑
+- scripts 三件套已重建；数据侧留痕：分类顺序现为 报销流程→请假流程（拖拽生效证据），UI验证流程保持未分类

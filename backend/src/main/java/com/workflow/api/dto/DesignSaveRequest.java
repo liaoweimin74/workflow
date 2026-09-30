@@ -17,6 +17,9 @@ public class DesignSaveRequest {
     /** 分类 ID */
     private String categoryId;
 
+    /** 置空分类（true 时强制 category_id=null，优先于 categoryId；与 Node 端对齐） */
+    private Boolean clearCategory;
+
     /** 流程说明（缺省时保留原值，与 name/key/categoryId 的可选语义一致） */
     private String description;
 
@@ -34,6 +37,9 @@ public class DesignSaveRequest {
 
     public String getCategoryId() { return categoryId; }
     public void setCategoryId(String categoryId) { this.categoryId = categoryId; }
+
+    public Boolean getClearCategory() { return clearCategory; }
+    public void setClearCategory(Boolean clearCategory) { this.clearCategory = clearCategory; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

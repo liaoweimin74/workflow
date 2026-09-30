@@ -79,6 +79,11 @@ export interface DesignSaveRequest {
   name?: string
   key?: string
   categoryId?: string
+  /**
+   * 置空分类（Task 106：流程定义页「移动」弹窗的「未分类」分支）。
+   * true 时强制 category_id=null；与 categoryId 同时出现时以本字段优先。
+   */
+  clearCategory?: boolean
   /** 流程说明（Task 74：设计器「基本属性」分组维护；缺省时保留原值） */
   description?: string
   bpmnXml?: string
@@ -174,7 +179,8 @@ export class ProcessDesignService {
 
     const name = request.name ?? draft.name
     const key = request.key ?? draft.process_key
-    const categoryId = request.categoryId ?? draft.category_id
+    // Task 106：clearCategory=true → 清空分类（未分类）；否则缺省保留原值
+    const categoryId = request.clearCategory === true ? null : (request.categoryId ?? draft.category_id)
     const description = request.description ?? draft.description
     const bpmnXml = request.bpmnXml ?? draft.bpmn_xml
 

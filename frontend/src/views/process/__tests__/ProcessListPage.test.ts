@@ -11,6 +11,7 @@ vi.mock('@/api/processDefinition', () => ({
   processDesignApi: {
     listDrafts: vi.fn(),
     createDraft: vi.fn(),
+    saveDesign: vi.fn(),
     deploy: vi.fn(),
     copyProcess: vi.fn(),
     deleteDraft: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('@element-plus/icons-vue', () => ({
   CopyDocument: { name: 'CopyDocument', render: () => h('span', '⊕') },
   Delete: { name: 'Delete', render: () => h('span', '×') },
   Clock: { name: 'Clock', render: () => h('span', '◷') },
+  FolderOpened: { name: 'FolderOpened', render: () => h('span', '▽') },
   Close: { name: 'Close', render: () => h('span', '×') },
 }))
 
@@ -77,7 +79,7 @@ describe('ProcessListPage', () => {
     })
   }
 
-  it('操作列包含 5 个按钮：设计/部署/复制/版本/删除', async () => {
+  it('操作列包含 6 个按钮：设计/部署/复制/移动/版本/删除', async () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
@@ -85,17 +87,17 @@ describe('ProcessListPage', () => {
     const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     const labels = actionButtons.map((b: any) => b.label)
-    expect(labels).toEqual(['设计', '部署', '复制', '版本', '删除'])
+    expect(labels).toEqual(['设计', '部署', '复制', '移动', '版本', '删除'])
     wrapper.unmount()
   })
 
-  it('max-visible-buttons 为 5', async () => {
+  it('max-visible-buttons 为 6（移动分类为高频操作需常显）', async () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
     const rightTable = stubs[0]
-    expect(rightTable.props('maxVisibleButtons')).toBe(5)
+    expect(rightTable.props('maxVisibleButtons')).toBe(6)
     wrapper.unmount()
   })
 
@@ -346,6 +348,129 @@ describe('ProcessListPage', () => {
     expect(processDesignApi.listDrafts).toHaveBeenLastCalledWith(
       expect.objectContaining({ categoryId: undefined }),
     )
+    wrapper.unmount()
+  })
+
+  it('表格包含「分类」列（slotName category）', async () => {
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const columns = wrapper.findAllComponents(SearchTableStub)[0].props('columns') as any[]
+    expect(columns.find(c => c.prop === 'categoryId')).toMatchObject({ label: '分类', slotName: 'category' })
+    wrapper.unmount()
+  })
+
+  it('拖拽排序：drag c2 → drop 在 c1 前半段 → 全量按新顺序落库并刷新分类', async () => {
+    ;(categoryApi.list as any).mockResolvedValue({ data: [
+      { id: 'c1', tenantId: 'default', name: '行政办公', sortOrder: 0, createdAt: '' },
+      { id: 'c2', tenantId: 'default', name: '财务报销', sortOrder: 1, createdAt: '' },
+    ] })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const chips = wrapper.findAll('.chip') // [全部, c1, c2, ＋]
+    expect(chips.length).toBe(4)
+    const dataTransfer = { setData: vi.fn(), dropEffect: '', effectAllowed: '' }
+    const fire = (el: Element, type: string, extra: Record<string, unknown> = {}) =>
+      el.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), { dataTransfer, ...extra }))
+    // 开始拖 c2 → 悬停在 c1 左半段（jsdom getBoundingClientRect 全 0，clientX<0 即前半段）
+    fire(chips[2].element, 'dragstart')
+    await nextTick()
+    fire(chips[1].element, 'dragover', { clientX: -10 })
+    await nextTick()
+    // 落点指示条出现在 c1 前
+    expect(chips[1].classes()).toContain('drop-before')
+    fire(chips[1].element, 'drop')
+    await flushPromises()
+    // 新顺序 [c2, c1] → 全量落库 sortOrder=下标
+    expect(categoryApi.update).toHaveBeenCalledTimes(2)
+    expect(categoryApi.update).toHaveBeenNthCalledWith(1, 'c2', { sortOrder: 0 })
+    expect(categoryApi.update).toHaveBeenNthCalledWith(2, 'c1', { sortOrder: 1 })
+    // changed → 分类列表重拉自愈
+    expect(categoryApi.list).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('拖拽排序：拖回原位（drop 在自己右侧）不落库', async () => {
+    ;(categoryApi.list as any).mockResolvedValue({ data: [
+      { id: 'c1', tenantId: 'default', name: '行政办公', sortOrder: 0, createdAt: '' },
+      { id: 'c2', tenantId: 'default', name: '财务报销', sortOrder: 1, createdAt: '' },
+    ] })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const chips = wrapper.findAll('.chip')
+    const dataTransfer = { setData: vi.fn(), dropEffect: '', effectAllowed: '' }
+    const fire = (el: Element, type: string, extra: Record<string, unknown> = {}) =>
+      el.dispatchEvent(Object.assign(new Event(type, { bubbles: true, cancelable: true }), { dataTransfer, ...extra }))
+    // 拖 c1 → 悬停在 c2 左半段（插入点=索引 0，即 c1 原位）→ 位置不变
+    fire(chips[1].element, 'dragstart')
+    await nextTick()
+    fire(chips[2].element, 'dragover', { clientX: -10 })
+    await nextTick()
+    fire(chips[2].element, 'drop')
+    await flushPromises()
+    expect(categoryApi.update).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('移动分类弹窗：选择分类后确定 → saveDesign 仅传 categoryId', async () => {
+    ;(categoryApi.list as any).mockResolvedValue({ data: [
+      { id: 'c1', tenantId: 'default', name: '行政办公', sortOrder: 1, createdAt: '' },
+      { id: 'c2', tenantId: 'default', name: '财务报销', sortOrder: 2, createdAt: '' },
+    ] })
+    const wrapper = mount(ProcessListPage, {
+      global: { plugins: [ElementPlus], stubs: { SearchTable: SearchTableStub } },
+      attachTo: document.body,
+    })
+    await nextTick()
+    await flushPromises()
+    const table = wrapper.findAllComponents(SearchTableStub)[0]
+    const moveBtn = (table.props('actionButtons') as any[]).find((b: any) => b.label === '移动')!
+    await moveBtn.onClick({ id: 'd1', name: '请假流程', categoryId: null })
+    await flushPromises()
+    // 弹窗出现（teleport 到 body），展示流程名
+    const dialog = document.body.querySelector('.el-dialog')!
+    expect(dialog.textContent).toContain('调整分类')
+    expect(dialog.textContent).toContain('请假流程')
+    // 打开下拉并选「财务报销」
+    ;(dialog.querySelector('.el-select__wrapper') as HTMLElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    )
+    await flushPromises()
+    const option = [...document.querySelectorAll('.el-select-dropdown__item')].find(el =>
+      el.textContent!.includes('财务报销'),
+    ) as HTMLElement
+    expect(option).toBeDefined()
+    option.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    // 确定
+    const confirmBtn = [...(dialog.querySelector('.el-dialog__footer') as HTMLElement).querySelectorAll('button')]
+      .find(b => b.textContent!.includes('确定')) as HTMLElement
+    confirmBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(processDesignApi.saveDesign).toHaveBeenCalledWith('d1', { categoryId: 'c2' })
+    expect(ElMessage.success).toHaveBeenCalledWith('分类已调整')
+    wrapper.unmount()
+  })
+
+  it('移动分类弹窗：未分类流程不选直接确定 → saveDesign 传 clearCategory 清空', async () => {
+    const wrapper = mount(ProcessListPage, {
+      global: { plugins: [ElementPlus], stubs: { SearchTable: SearchTableStub } },
+      attachTo: document.body,
+    })
+    await nextTick()
+    await flushPromises()
+    const table = wrapper.findAllComponents(SearchTableStub)[0]
+    const moveBtn = (table.props('actionButtons') as any[]).find((b: any) => b.label === '移动')!
+    await moveBtn.onClick({ id: 'd2', name: '未归类流程', categoryId: null })
+    await flushPromises()
+    const dialog = document.body.querySelector('.el-dialog')!
+    const confirmBtn = [...(dialog.querySelector('.el-dialog__footer') as HTMLElement).querySelectorAll('button')]
+      .find(b => b.textContent!.includes('确定')) as HTMLElement
+    confirmBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(processDesignApi.saveDesign).toHaveBeenCalledWith('d2', { clearCategory: true })
     wrapper.unmount()
   })
 })

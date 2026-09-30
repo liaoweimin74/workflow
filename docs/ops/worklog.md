@@ -2316,3 +2316,20 @@ Stage Summary:
 - 两个用户报错闭环：description（V42 重放，E2E 200）、assignee-resolvers（现 dist 已含控制器，浏览器 200）
 - 本地 main 与 origin/main（4dd23e2c）同步，工作区干净；DB schema=V46
 - 铁律补充：重置恢复后必须核对 remote 是否推进（本轮 remote 比磁盘新 3 个提交，盲推会覆盖 99~101 成果）
+
+---
+Task ID: 103-label-under-overlay
+Agent: Z.ai Code (main session)
+Task: 用户复报「节点上的文字颜色和节点背景色不匹配：亮色看不清、暗色根本看不见」（Task 99~101 暗色适配后残留）
+
+Work Log:
+- 根因（源码级）：bpmn-js renderTask 在 drawShape 内部先画主矩形、再画内嵌 label（node_modules/bpmn-js/lib/draw/BpmnRenderer.js L1308-1316 renderEmbeddedLabel）；customRenderer.drawShape 之后 append 的 rect.wf-role-overlay 按 SVG 文档顺序绘制在 label 之上——亮色 85% 不透明度=文字残影「看不清」，暗色档 CSS fill-opacity:1=「根本看不见」；发起节点 overlay 仅 0.3 不透明度所以一直可见（此前 E2E 只查 computed fill 未查绘制层级，漏检）
+- 修复①：customRenderer 新增 insertOverlayUnderLabel()——querySelector('.djs-label') 命中后 parent.insertBefore(overlay, label)，三类节点（initiator/approver/handler）统一走此路径；无 label 时空名兜底 append
+- 修复②：亮色审核节点 label #b88230→#8f6218（对 #FFF7E6 底 3.1:1→5.0:1 过 WCAG AA；#1f7a56 对 #E8F5EE 实算 4.7:1 达标不动）
+- E2E（agent-browser）：UI验证流程 审核节点输入「财务审核节点」/办理节点输入「部门办理节点」「行政办理节点」（blur 提交；Enter 会触发表单默认提交导致页面重载——属性面板输入后勿按 Enter）→ 三节点 DOM 顺序 label idx=2 > overlay idx=1 ✓、computed fill 明暗两档正确 → 明/暗截图全部清晰可读 → 保存成功 → XML 持久化验证（userTask name 三节点全写入）
+- 0a692cdc 已推送；chrome 归零
+
+Stage Summary:
+- 文字被遮盖根因闭环（绘制层级而非颜色值）——此前 99~101 的颜色适配在层级正确后才真正生效
+- 方法论：computed style 验证必须叠加 SVG 文档顺序检查（children.findIndex），截图比对明暗双态
+- UI验证流程 现为带名节点（财务审核节点/部门办理节点/行政办理节点），可直接作暗色验收样本

@@ -2298,3 +2298,21 @@ Stage Summary:
 - 预览三场景暗色适配闭环与设计器同源；节点名称文字对比 1:1 → 9:1
 - leave 草稿「startEvent 无出边」部署报错为数据遗留（此前已知问题），UI验证流程可部署可预览
 - 产物：bpmn-canvas-theme.css（新）/designer-theme.css（瘦身）/BpmnViewer.vue/ProcessStartPage.vue/index.html
+
+---
+Task ID: 102-sandbox-recovery
+Agent: Z.ai Code (main session)
+Task: Task 101 之后又一次沙箱重置（第九次）恢复：用户报「保存流程 Unknown column 'description' in 'SET'」+ 此前「点击审核/办理节点 Cannot GET /api/v1/assignee-resolvers」
+
+Work Log:
+- 灾情核验：workflow_lowcode/.git 消失、DB 回滚到 V41（flyway 最后一条 V41）、.git/config 中的 PAT 随之丢失；磁盘工作区为旧快照（281 个文件缺失：test fixtures/golden、.superpowers 等；1683 个文件 mode 755/644 漂移）
+- DB 修复：cd backend-node && npm run migrate 重放 V42~V46（description 列/成员组表/草稿箱菜单/岗位数据源）；E2E 验证 POST drafts(query 参数)→PUT design(含 description)→DELETE 全 200
+- assignee-resolvers 404 复盘：当前 8080 dist 已含 AssigneeResolverController（engine.module 注册 + dist 产物在），curl 401→带 token 200；agent-browser 实测设计器点击审核节点（Activity_0wemnzz）与办理节点（Activity_0np59ha），GET /api/v1/assignee-resolvers 均 200、console 无错——用户所见 404 为旧 dist 时期的瞬时状态，当前已不复现
+- git 重建：git init -b main + 全量 add 提交基线 → 配置用户新提供的 PAT → fetch origin（remote 已推进到 4dd23e2c，含 99-designer-theme/100/101 推送）→ reset --soft origin/main → core.fileMode=false 消 mode 噪音 → checkout -- . 以远程为权威恢复 281 个缺失文件（工作区 0 diff）→ 重放本 Task 102 记录
+- PAT 处置：用户提供新 fine-grained PAT，写入 remote URL（教训：PAT 存 .git/config 会随重置丢失，worklog 只记指纹不记全文，每次重置后需向用户索取）
+- 浏览器实测流程列表→设计器全链路正常；chrome 归零；cron 巡检重建为 job 424973（webDevReview 15min）
+
+Stage Summary:
+- 两个用户报错闭环：description（V42 重放，E2E 200）、assignee-resolvers（现 dist 已含控制器，浏览器 200）
+- 本地 main 与 origin/main（4dd23e2c）同步，工作区干净；DB schema=V46
+- 铁律补充：重置恢复后必须核对 remote 是否推进（本轮 remote 比磁盘新 3 个提交，盲推会覆盖 99~101 成果）

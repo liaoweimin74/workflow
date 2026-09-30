@@ -2460,3 +2460,18 @@ Work Log:
 Stage Summary:
 - 远程 main = f5d386dd：checkout 即可编译，异地备份完整性达标
 - SOP：untracked 处置必须引用链实证，禁止粗判；排除清单已固化至顶层 worklog
+
+---
+Task ID: 115-dict-ux-redesign
+Agent: Z.ai Code (main session)
+Task: 字典管理交互重构——左导航列表+右表格
+
+Work Log:
+- 分析旧版四问题（重表格承载小集合 / LookupPicker 反模式 / 分页联动脆弱 / createTime 字段错绑）
+- 方案对比后实施：264px 导航列表 + 右表 dictCode 上下文注入 + 自动选中 + 编码复制 + 响应式
+- 新增 DictPage.test.ts 8 用例；agent-browser E2E 全链路（新建→选中→字典项→隔离）
+- commit 5f6a3019 已 push
+
+Stage Summary:
+- 字典管理交互对齐业界标准形态；LookupPicker 反模式消除
+- 遗留：SearchTable 时间列格式化（ISO 原样，存量）

@@ -2501,3 +2501,22 @@ Work Log:
 
 Stage Summary:
 - 「左导航+右表格」模式具备了标准落地组件；候选接入：消息模板/数据源目录/表单分组
+
+---
+Task ID: 118-form-pass-fix
+Agent: Z.ai Code (main session)
+Task: 修复「流程发起时填写的表单没有传递到下一个节点」
+
+Work Log:
+- 诊断（先分析后动手，用户确认后实施）：Nest 发起链路丢弃 body.formDefId、不写 wf_form_data、无 VariableMappingWriter 对位——对照 Java ProcessInstanceController.start:84-98 逐行核实，非前端问题
+- 新增 VariableMappingWriter（engine/form/mapping/）：计算 __PROCESS__.variableMappings，调用方在 replaceRuntimeRows 前 merge（CAS 一次性落库，终态对齐 Java RuntimeService 直写）
+- start 恢复对位：controller 传 formDefId；service.start 落 wf_form_data（taskId=null，容错同 Java）；completeTask/rejectTask 持久化前合并映射；reInitiate 经 start() 自动覆盖
+- FormRenderer 二段修复：form-create v3 对 rule 原始化，setValue 写值不触发字段重渲染（fapi.formData 有值而 el-input 全空，agent-browser 逐层探测定位）；经 @update:api 取 fapi，数据落地后 setValue+reload 重建字段
+- 测试：form-pass-through.spec 12 用例；后端 948 / 前端 1205 全过
+- E2E（agent-browser）：登录→流程中心→发起（表单填 E2E张三/E2E研发部/Task118-E2E发起验证）→提交→待办→下一节点表单逐字段回显一致；wf_form_data 落库断言通过
+- commit 06b0e0dd
+
+Stage Summary:
+- 发起→下一节点的表单数据链路打通（同 formDefId 回显 / form:initiator 映射 / variable: 映射三场景）
+- 测试基线无变化（后端 691 tsc 错仍为 _legacy+8081 组合根既有；.vue eslint ignore 既有）
+- 备注：为构造 E2E 条件，给 ui_verify_flow ACTIVE 版本 __PROCESS__ 配置了流程级表单（员工请假业务表单），该流程现可完整演示发起→审批回显

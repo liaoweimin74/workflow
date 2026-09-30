@@ -2487,3 +2487,17 @@ Work Log:
 
 Stage Summary:
 - 运维判据补充：hang 型故障（监听无响应+无日志）优先查内存
+
+---
+Task ID: 117-sidenav-component
+Agent: Z.ai Code (main session)
+Task: SideNavList 公共组件抽象
+
+Work Log:
+- 实现 components/business/SideNavList.vue + NavItem/NavItemAction 类型 + 导出
+- 受控纯展示 + 本地过滤 + actions 谓词 + 插槽兜底 + 键盘可达
+- DictPage 改造为第一个消费方；组件测试 13 用例 + DictPage 回归 8 用例 + E2E 一致
+- commit 8653fb40 已 push
+
+Stage Summary:
+- 「左导航+右表格」模式具备了标准落地组件；候选接入：消息模板/数据源目录/表单分组

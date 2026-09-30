@@ -2,27 +2,19 @@
 defineOptions({ name: 'DictManagement' })
 
 /**
- * Task 115：字典管理交互重构——左「类型导航列表」+ 右「字典项表格」。
+ * 字典管理：左「类型导航（SideNavList）」+ 右「字典项表格（SearchTable）」。
  *
- * 旧版问题（左表右表双 SearchTable）：
- * 1. 字典类型是小集合（通常 5~20 条），用 520px 宽的完整表格（搜索栏+分页+多列）承载，空间利用率低；
- * 2. LookupPicker 反模式：左侧已选中类型，右侧新增字典项弹窗里还要再弹窗选一遍「字典分类」，
- *    编辑回显还需 3 次额外请求拼 lookup 行；
- * 3. 父子分页联动脆弱：左表翻页后 selectedType 悬空，右表数据与选中态可能错位；
- * 4. 既有 bug：列绑 createTime，而前后端实际字段是 createdAt（列恒为空白）。
- *
- * 新版交互（对齐若依系标准形态）：
- * - 左栏收窄为 260px 导航列表：本地过滤、选中高亮、停用灰显、hover 行内启停/编辑/删除；
- * - 右侧仅保留字典项 SearchTable，dictCode 由上下文自动注入表单（不再二次选择）；
- * - 进入页面自动选中第一个类型（减少一次无意义点击）；
- * - 响应式：窄屏上下堆叠。
+ * Task 115：重构为左导航列表 + 右表格，消灭 LookupPicker 反模式（dictCode
+ * 由选中上下文注入）、修复 createTime→createdAt 列错绑。
+ * Task 117：左栏抽为公共组件 SideNavList——本页成为第一个消费方，
+ * 业务数据由本页管理（受控模式），组件零字典语义。
  */
 
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Plus, Edit, Delete, Switch as SwitchIcon, CopyDocument } from '@element-plus/icons-vue'
-import { SearchTable } from '@/components/business'
-import type { SearchField, TableColumn, FormConfig } from '@/components/business/types'
+import { Switch as SwitchIcon, Edit, Delete, CopyDocument } from '@element-plus/icons-vue'
+import { SearchTable, SideNavList } from '@/components/business'
+import type { SearchField, TableColumn, FormConfig, NavItem, NavItemAction } from '@/components/business/types'
 import type { Rule } from '@form-create/element-ui'
 import {
   getDictTypeList, createDictType, updateDictType, deleteDictType,
@@ -33,7 +25,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
 
-// ================= 共享状态 =================
+// ================= 字典类型（左栏数据源） =================
 const types = ref<DictTypeVO[]>([])
 const typesLoading = ref(false)
 const selectedType = ref<DictTypeVO | null>(null)
@@ -42,6 +34,41 @@ const dataTableRef = ref()
 const canCreate = computed(() => authStore.hasPermission('system:dict:create'))
 const canUpdate = computed(() => authStore.hasPermission('system:dict:update'))
 const canDelete = computed(() => authStore.hasPermission('system:dict:delete'))
+
+/** DTO → NavItem 映射（Task 117：映射归父级，组件保持通用） */
+const navItems = computed<NavItem[]>(() =>
+  types.value.map((t) => ({
+    key: t.id,
+    title: t.dictName,
+    subtitle: t.dictCode,
+    disabled: t.status !== 1,
+    disabledLabel: '停用',
+    raw: t,
+  })),
+)
+
+/** 行内操作：启停 / 编辑 / 删除（谓词控制权限禁用） */
+const navActions = computed<NavItemAction[]>(() => [
+  {
+    label: '启用/停用',
+    icon: SwitchIcon,
+    disabled: () => !canUpdate.value,
+    onClick: (item) => toggleTypeStatus(item.raw as DictTypeVO),
+  },
+  {
+    label: '编辑',
+    icon: Edit,
+    disabled: () => !canUpdate.value,
+    onClick: (item) => openTypeEdit(item.raw as DictTypeVO),
+  },
+  {
+    label: '删除',
+    icon: Delete,
+    type: 'danger',
+    disabled: () => !canDelete.value,
+    onClick: (item) => removeType(item.raw as DictTypeVO),
+  },
+])
 
 async function fetchTypes(): Promise<void> {
   typesLoading.value = true
@@ -56,22 +83,13 @@ async function fetchTypes(): Promise<void> {
   }
 }
 
-function selectType(row: DictTypeVO): void {
+function handleSelect(item: NavItem): void {
+  const row = item.raw as DictTypeVO
   if (selectedType.value?.id === row.id) return
   selectedType.value = row
 }
 
-// ================= 左栏：过滤 =================
-const typeKeyword = ref('')
-const filteredTypes = computed(() => {
-  const kw = typeKeyword.value.trim().toLowerCase()
-  if (!kw) return types.value
-  return types.value.filter(
-    (t) => t.dictName?.toLowerCase().includes(kw) || t.dictCode?.toLowerCase().includes(kw),
-  )
-})
-
-// ================= 左栏：类型新建/编辑/删除/启停 =================
+// ================= 类型新建/编辑/删除/启停 =================
 const typeDialogVisible = ref(false)
 const typeEditing = ref<DictTypeVO | null>(null) // null = 新建
 const typeForm = ref({ dictName: '', dictCode: '', remark: '' })
@@ -147,13 +165,13 @@ async function toggleTypeStatus(row: DictTypeVO): Promise<void> {
   await fetchTypes()
 }
 
-// ================= 右栏：字典项表格 =================
+// ================= 字典项（右栏 SearchTable） =================
 const dataSearchFields: SearchField[] = [
   { type: 'input', label: '标签', prop: 'label', placeholder: '输入标签' },
   { type: 'input', label: '值', prop: 'value', placeholder: '输入值' },
 ]
 
-// 修复 Task 115：后端字段为 createdAt（旧版绑 createTime 恒空白）
+// Task 115 修复：后端字段为 createdAt（旧版绑 createTime 恒空白）
 const dataColumns: TableColumn[] = [
   { prop: 'label', label: '标签', minWidth: 150 },
   { prop: 'value', label: '值', width: 150 },
@@ -172,10 +190,7 @@ const dataFetchApi = async (p: any) => {
   return { rows: list.slice(start, start + (p.size || 10)), total }
 }
 
-/**
- * Task 115：表单去掉 LookupPicker——dictCode 由左侧选中上下文注入，
- * 新增/编辑均不再弹「选择字典分类」二级弹窗。
- */
+/** Task 115：表单去掉 LookupPicker——dictCode 由左侧选中上下文注入 */
 const dataFormConfig = computed<FormConfig<DictDataVO>>(() => ({
   initialValues: selectedType.value ? { dictCode: selectedType.value.dictCode } : {},
   rule: [
@@ -229,78 +244,25 @@ onMounted(fetchTypes)
 </script>
 
 <template>
-  <!-- Task 115：左导航 + 右表格；窄屏上下堆叠（flex-col），lg 起左右分栏 -->
+  <!-- Task 117：左栏换用公共组件 SideNavList；窄屏上下堆叠（flex-col），lg 起左右分栏 -->
   <div class="flex flex-col lg:flex-row gap-3 h-full min-h-0">
-    <!-- ── 左栏：字典类型导航列表 ── -->
-    <el-card class="type-sidebar" :body-style="{ padding: '0' }" shadow="never">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-bold">字典类型</span>
-          <el-tooltip content="新增字典类型" placement="top">
-            <el-button
-              type="primary" :icon="Plus" size="small" circle
-              aria-label="新增字典类型"
-              :disabled="!canCreate" @click="openTypeCreate"
-            />
-          </el-tooltip>
-        </div>
-      </template>
-
-      <!-- 本地过滤（类型为小集合，不需要独立搜索请求） -->
-      <div class="px-3 pt-2 pb-1">
-        <el-input
-          v-model="typeKeyword" placeholder="搜索名称 / 编码" :prefix-icon="Search"
-          size="small" clearable aria-label="搜索字典类型"
-        />
-      </div>
-
-      <el-scrollbar class="type-list" role="listbox" aria-label="字典类型列表">
-        <div v-if="typesLoading" class="p-4 text-center text-xs text-gray-400">加载中…</div>
-        <div v-else-if="filteredTypes.length === 0" class="p-4 text-center text-xs text-gray-400">
-          {{ typeKeyword ? '无匹配类型' : '暂无字典类型，点击右上角 + 新建' }}
-        </div>
-        <div
-          v-for="t in filteredTypes" :key="t.id"
-          class="type-item"
-          :class="{ 'is-active': selectedType?.id === t.id, 'is-disabled': t.status !== 1 }"
-          role="option"
-          :aria-selected="selectedType?.id === t.id"
-          tabindex="0"
-          @click="selectType(t)"
-          @keydown.enter="selectType(t)"
-          @keydown.space.prevent="selectType(t)"
-        >
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1.5">
-              <span class="type-name" :title="t.dictName">{{ t.dictName }}</span>
-              <el-tag v-if="t.status !== 1" size="small" type="info" effect="plain">停用</el-tag>
-            </div>
-            <div class="type-code" :title="t.dictCode">{{ t.dictCode }}</div>
-          </div>
-          <!-- hover 行内操作：启停 / 编辑 / 删除 -->
-          <div class="type-actions" @click.stop>
-            <el-tooltip content="启用/停用" placement="top">
-              <el-button
-                :icon="SwitchIcon" size="small" link
-                :disabled="!canUpdate" @click="toggleTypeStatus(t)"
-              />
-            </el-tooltip>
-            <el-tooltip content="编辑" placement="top">
-              <el-button
-                :icon="Edit" size="small" link
-                :disabled="!canUpdate" @click="openTypeEdit(t)"
-              />
-            </el-tooltip>
-            <el-tooltip content="删除" placement="top">
-              <el-button
-                :icon="Delete" size="small" link type="danger"
-                :disabled="!canDelete" @click="removeType(t)"
-              />
-            </el-tooltip>
-          </div>
-        </div>
-      </el-scrollbar>
-    </el-card>
+    <!-- ── 左栏：字典类型导航 ── -->
+    <SideNavList
+      title="字典类型"
+      :items="navItems"
+      :selected-key="selectedType?.id ?? null"
+      :loading="typesLoading"
+      :actions="navActions"
+      :creatable="true"
+      create-label="新增字典类型"
+      :create-disabled="!canCreate"
+      filter-placeholder="搜索名称 / 编码"
+      filter-aria-label="搜索字典类型"
+      :empty-text="types.length === 0 ? '暂无字典类型' : '无匹配类型'"
+      empty-hint="点击右上角 + 新建"
+      @select="handleSelect"
+      @create="openTypeCreate"
+    />
 
     <!-- ── 右栏：字典项表格 ── -->
     <el-card v-if="selectedType" class="flex-1 min-w-0" shadow="never">
@@ -366,73 +328,3 @@ onMounted(fetchTypes)
     </el-dialog>
   </div>
 </template>
-
-<style scoped>
-.type-sidebar {
-  width: 100%;
-  flex-shrink: 0;
-}
-@media (min-width: 1024px) {
-  .type-sidebar {
-    width: 264px;
-  }
-}
-.type-list {
-  /* 视口高度 - 顶栏/页签/卡头/搜索框的保守下限，滚动交给 el-scrollbar */
-  height: calc(100vh - 320px);
-  min-height: 240px;
-}
-.type-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  margin: 2px 6px;
-  border-radius: 6px;
-  cursor: pointer;
-  border-left: 3px solid transparent;
-  transition: background-color 0.15s ease;
-}
-.type-item:hover {
-  background-color: var(--el-fill-color-light);
-}
-.type-item.is-active {
-  background-color: var(--el-color-primary-light-9);
-  border-left-color: var(--el-color-primary);
-}
-.type-item.is-disabled .type-name,
-.type-item.is-disabled .type-code {
-  opacity: 0.5;
-}
-.type-item:focus-visible {
-  outline: 2px solid var(--el-color-primary);
-  outline-offset: -2px;
-}
-.type-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.type-code {
-  font-size: 11px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: 1px;
-}
-/* 行内操作默认隐藏，hover/focus/选中时浮现（键盘可达） */
-.type-actions {
-  display: none;
-  flex-shrink: 0;
-}
-.type-item:hover .type-actions,
-.type-item:focus-within .type-actions,
-.type-item.is-active .type-actions {
-  display: inline-flex;
-}
-</style>

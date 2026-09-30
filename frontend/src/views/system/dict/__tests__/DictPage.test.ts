@@ -60,18 +60,18 @@ describe('DictPage 交互重构（Task 115）', () => {
   it('挂载后拉取类型列表并自动选中第一个类型', async () => {
     const wrapper = await mountPage()
     expect(getDictTypeList).toHaveBeenCalledWith({ page: 1, size: 999 })
-    const items = wrapper.findAll('.type-item')
+    const items = wrapper.findAll('.sidenav-item')
     expect(items).toHaveLength(2)
-    expect(items[0].classes()).toContain('is-active')
-    expect(items[1].classes()).not.toContain('is-active')
+    expect(items[0].classes()).toContain('is-selected')
+    expect(items[1].classes()).not.toContain('is-selected')
   })
 
   it('点击第二个类型切换选中态（高亮迁移）', async () => {
     const wrapper = await mountPage()
-    const items = wrapper.findAll('.type-item')
+    const items = wrapper.findAll('.sidenav-item')
     await items[1].trigger('click')
-    expect(items[1].classes()).toContain('is-active')
-    expect(items[0].classes()).not.toContain('is-active')
+    expect(items[1].classes()).toContain('is-selected')
+    expect(items[0].classes()).not.toContain('is-selected')
   })
 
   it('关键字过滤只匹配名称/编码命中的项', async () => {
@@ -79,13 +79,13 @@ describe('DictPage 交互重构（Task 115）', () => {
     const input = wrapper.find('input[aria-label="搜索字典类型"]')
     await input.setValue('gender')
     await flushPromises()
-    expect(wrapper.findAll('.type-item')).toHaveLength(1)
-    expect(wrapper.findAll('.type-item')[0].text()).toContain('性别')
+    expect(wrapper.findAll('.sidenav-item')).toHaveLength(1)
+    expect(wrapper.findAll('.sidenav-item')[0].text()).toContain('性别')
   })
 
   it('停用类型渲染灰显样式与停用标签', async () => {
     const wrapper = await mountPage([typeRow(1, '旧类型', 'legacy', 0)])
-    const item = wrapper.find('.type-item')
+    const item = wrapper.find('.sidenav-item')
     expect(item.classes()).toContain('is-disabled')
     expect(item.text()).toContain('停用')
   })

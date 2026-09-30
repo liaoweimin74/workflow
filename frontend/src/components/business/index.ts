@@ -1,4 +1,5 @@
 export { default as SearchTable } from './SearchTable.vue'
+export { default as SideNavList } from './SideNavList.vue'
 export { default as ListCards } from './ListCards.vue'
 export { default as ReferencePicker } from './ReferencePicker.vue'
 export { default as LookupPicker } from './LookupPicker.vue'

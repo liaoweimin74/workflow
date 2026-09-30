@@ -22,7 +22,7 @@
         </el-radio-group>
         <div v-for="(row, index) in draft.filterRows" :key="index" class="filter-row">
           <el-select v-model="row.column" placeholder="目标列" style="width: 30%">
-            <el-option v-for="column in visibleColumns" :key="column.key" :label="column.label || column.key" :value="column.key" />
+            <el-option v-for="column in visibleColumns" :key="column.key" :label="columnOptionLabel(column)" :value="column.key" />
           </el-select>
           <el-select v-model="row.op" style="width: 22%">
             <el-option label="等于" value="eq" /><el-option label="不等于" value="ne" />
@@ -47,6 +47,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
+import { columnOptionLabel } from '@/utils/columnOption'
 import { dataSourceApi } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
 

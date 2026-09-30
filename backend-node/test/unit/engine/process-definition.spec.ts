@@ -1,79 +1,164 @@
-import { describe, expect, it } from 'vitest'
-import {
-  deploymentIdOf,
-  extractFormConfig,
-  parseInitiatorNodeId,
-} from '../../../src/engine/process/process-design.service'
-
 /**
- * `deployed-processes` 相关纯函数的单测。
+ * process-definition.spec.ts —— 流程定义 saveDesign 分类语义单测
  *
- * 契约回归覆盖了这些函数在**当前数据**下的结果（我们部署的测试流程没有配表单，
- * 所以 formDefId 一路是 null）。解析分支、容错分支只能在这里锁住。
+ * Task 106 建立（11 用例）→ Task 108/109 增强为 12 用例（补显式 clearCategory=false、
+ * tenant 隔离断言）。锁死流程定义页「移动」弹窗依赖的三类行为：
+ *   ①缺省保留原值 ②传 categoryId 覆盖 ③clearCategory 强制清空为未分类。
+ *
+ * 运行：npx vitest run test/unit/engine/process-definition.spec.ts
  */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { runWithTenant } from '../../../src/framework/tenant/tenant-context'
+import {
+  ProcessDesignService,
+  type DesignSaveRequest,
+} from '../../../src/engine/process/process-design.service'
+import type { DraftRow } from '../../../src/engine/process/repository/process-design.repository'
 
-describe('extractFormConfig', () => {
-  it('提取 formDefId 与字段权限', () => {
-    expect(
-      extractFormConfig(
-        JSON.stringify({
-          form: { formDefId: 'fd-1', fieldPermissions: { amount: 'readonly', reason: 'hidden' } },
-        }),
-      ),
-    ).toEqual({ formDefId: 'fd-1', fieldPermissions: { amount: 'readonly', reason: 'hidden' } })
+function draftRow(overrides: Record<string, unknown> = {}): DraftRow {
+  return {
+    id: 'd1',
+    process_key: 'leave_key',
+    name: '请假',
+    category_id: 'cat-a',
+    description: null,
+    bpmn_xml: '<definitions/>',
+    status: 'DRAFT',
+    version: 0,
+    tenant_id: 'default',
+    deploy_id: null,
+    process_definition_id: null,
+    deployed_config_hash: null,
+    deployed_xml: null,
+    last_deployed_at: null,
+    created_at: new Date('2026-01-01'),
+    updated_at: new Date('2026-01-01'),
+    created_by: 'admin',
+    ...overrides,
+  } as unknown as DraftRow
+}
+
+type RepoMock = {
+  findDraftById: ReturnType<typeof vi.fn>
+  updateDraft: ReturnType<typeof vi.fn>
+  deleteEditingConfigs: ReturnType<typeof vi.fn>
+  insertConfigs: ReturnType<typeof vi.fn>
+  findEditingConfigs: ReturnType<typeof vi.fn>
+}
+
+function makeRepo(draft: DraftRow | null): RepoMock {
+  return {
+    findDraftById: vi.fn(async () => draft),
+    updateDraft: vi.fn(async () => {}),
+    deleteEditingConfigs: vi.fn(async () => {}),
+    insertConfigs: vi.fn(async () => {}),
+    findEditingConfigs: vi.fn(async () => []),
+  }
+}
+
+function save(repo: RepoMock, request: DesignSaveRequest) {
+  const service = new ProcessDesignService(repo as never)
+  return runWithTenant('default', () => service.saveDesign('d1', request))
+}
+
+describe('saveDesign 分类语义（Task 106）', () => {
+  let repo: RepoMock
+
+  beforeEach(() => {
+    repo = makeRepo(draftRow())
   })
 
-  it('无 fieldPermissions 时返回 null（不是空对象）', () => {
-    const cfg = extractFormConfig(JSON.stringify({ form: { formDefId: 'fd-1' } }))
-    expect(cfg?.formDefId).toBe('fd-1')
-    expect(cfg?.fieldPermissions).toBeNull()
+  it('缺省保留原分类（只传 name 时 category_id 不变）', async () => {
+    await save(repo, { name: '新名' })
+    expect(repo.updateDraft).toHaveBeenCalledTimes(1)
+    expect(repo.updateDraft.mock.calls[0][2].category_id).toBe('cat-a')
   })
 
-  it('无 form 节点 → null', () => {
-    expect(extractFormConfig(JSON.stringify({ approval: { multiMode: '' } }))).toBeNull()
+  it('传 categoryId → 覆盖原分类（移动到目标分类）', async () => {
+    await save(repo, { categoryId: 'cat-b' })
+    expect(repo.updateDraft.mock.calls[0][2].category_id).toBe('cat-b')
   })
 
-  it('formDefId 缺失或为空串 → null', () => {
-    expect(extractFormConfig(JSON.stringify({ form: {} }))).toBeNull()
-    expect(extractFormConfig(JSON.stringify({ form: { formDefId: '' } }))).toBeNull()
+  it('clearCategory=true → 强制清空为未分类', async () => {
+    await save(repo, { clearCategory: true })
+    expect(repo.updateDraft.mock.calls[0][2].category_id).toBeNull()
   })
 
-  it('非法 JSON → null（不抛异常，对齐 Java 的 try/catch 忽略）', () => {
-    expect(extractFormConfig('{oops')).toBeNull()
+  it('clearCategory=true 与 categoryId 同时出现时以 clearCategory 优先', async () => {
+    await save(repo, { clearCategory: true, categoryId: 'cat-b' })
+    expect(repo.updateDraft.mock.calls[0][2].category_id).toBeNull()
   })
 
-  it('form 是数组 → null', () => {
-    expect(extractFormConfig(JSON.stringify({ form: [] }))).toBeNull()
+  it('clearCategory=false（显式）不清空，走保留分支', async () => {
+    await save(repo, { clearCategory: false })
+    expect(repo.updateDraft.mock.calls[0][2].category_id).toBe('cat-a')
+  })
+
+  it('已是未分类（category_id=null）缺省保存 → 仍为 null 不误赋', async () => {
+    repo = makeRepo(draftRow({ category_id: null }))
+    await save(repo, { name: '改名' })
+    expect(repo.updateDraft.mock.calls[0][2].category_id).toBeNull()
+  })
+
+  it('从未分类移动到目标分类（Task 106 主路径回归）', async () => {
+    repo = makeRepo(draftRow({ category_id: null }))
+    await save(repo, { categoryId: 'cat-b' })
+    expect(repo.updateDraft.mock.calls[0][2].category_id).toBe('cat-b')
   })
 })
 
-describe('parseInitiatorNodeId', () => {
-  it('从编译产物里读 initiatorNodeId', () => {
-    expect(parseInitiatorNodeId(JSON.stringify({ initiatorNodeId: 'Initiator_1' }))).toBe(
-      'Initiator_1',
-    )
+describe('saveDesign 缺省保留语义（移动分类只传分类字段绝不碰 XML）', () => {
+  it('空请求体 → name/key/description/bpmn_xml 全部保留原值', async () => {
+    const repo = makeRepo(draftRow({ description: '说明', bpmn_xml: '<orig-xml/>' }))
+    await save(repo, {})
+    const patch = repo.updateDraft.mock.calls[0][2]
+    expect(patch.name).toBe('请假')
+    expect(patch.process_key).toBe('leave_key')
+    expect(patch.description).toBe('说明')
+    expect(patch.bpmn_xml).toBe('<orig-xml/>')
+    expect(patch.category_id).toBe('cat-a')
   })
 
-  it('缺失 / null / 非法 JSON → null', () => {
-    expect(parseInitiatorNodeId(JSON.stringify({ nodes: [] }))).toBeNull()
-    expect(parseInitiatorNodeId(JSON.stringify({ initiatorNodeId: null }))).toBeNull()
-    expect(parseInitiatorNodeId('not json')).toBeNull()
+  it('设计器全量保存（name+key+categoryId+bpmnXml+nodeConfigs）→ 全部落库', async () => {
+    const repo = makeRepo(draftRow())
+    await save(repo, {
+      name: '全量',
+      key: 'full_key',
+      categoryId: 'cat-b',
+      bpmnXml: '<definitions><userTask id="t1"/></definitions>',
+      nodeConfigs: { t1: '{"approve":"any"}' },
+    })
+    const patch = repo.updateDraft.mock.calls[0][2]
+    expect(patch.name).toBe('全量')
+    expect(patch.process_key).toBe('full_key')
+    expect(patch.category_id).toBe('cat-b')
+    expect(patch.bpmn_xml).toContain('userTask')
+    expect(repo.insertConfigs).toHaveBeenCalledTimes(1)
+    const rows = repo.insertConfigs.mock.calls[0][0]
+    expect(rows).toHaveLength(1)
+    expect(rows[0].node_id).toBe('t1')
+    expect(rows[0].process_definition_id).toBeNull()
+  })
+
+  it('nodeConfigs 为空对象 → 不动配置表', async () => {
+    const repo = makeRepo(draftRow())
+    await save(repo, { nodeConfigs: {} })
+    expect(repo.deleteEditingConfigs).not.toHaveBeenCalled()
+    expect(repo.insertConfigs).not.toHaveBeenCalled()
   })
 })
 
-describe('deploymentIdOf', () => {
-  it('从 key:version:uuid 里取最后一段', () => {
-    expect(deploymentIdOf('contract_flow_x:2:0076ea25-b1eb-11f1-8e4b-7c8ae1a7aa09')).toBe(
-      '0076ea25-b1eb-11f1-8e4b-7c8ae1a7aa09',
-    )
+describe('saveDesign 异常路径', () => {
+  it('草稿不存在 → 抛错（不写库）', async () => {
+    const repo = makeRepo(null)
+    await expect(save(repo, { categoryId: 'cat-b' })).rejects.toThrow(/not found/)
+    expect(repo.updateDraft).not.toHaveBeenCalled()
   })
 
-  it('段数不足时原样返回（不抛异常）', () => {
-    expect(deploymentIdOf('plain')).toBe('plain')
-    expect(deploymentIdOf('a:b')).toBe('a:b')
-  })
-
-  it('key 里含冒号时仍取最后一段', () => {
-    expect(deploymentIdOf('k:1:2:uuid-x')).toBe('uuid-x')
+  it('updateDraft 带 tenant 隔离（tenant_id 透传）', async () => {
+    const repo = makeRepo(draftRow())
+    await save(repo, {})
+    expect(repo.findDraftById).toHaveBeenCalledWith('d1', 'default')
+    expect(repo.updateDraft.mock.calls[0][1]).toBe('default')
   })
 })

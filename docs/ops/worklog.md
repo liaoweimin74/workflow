@@ -2394,3 +2394,20 @@ Stage Summary:
 - 胶囊改版补齐最后两块：行内「移动」弹窗（调整/清空分类，只传分类字段绝不碰 XML）+ 胶囊拖拽排序（乐观重排→下标归一化落库→失败自愈），后端仅 +clearCategory 一个可选字段
 - 门户反复挂掉=kernel OOM kill next-server，非代码 bug；「门户存活期间严禁重型任务」升级为硬约束：全量测试前必须先停门户或分批跑
 - scripts 三件套已重建；数据侧留痕：分类顺序现为 报销流程→请假流程（拖拽生效证据），UI验证流程保持未分类
+
+---
+Task ID: 110-pat-restore-push
+Agent: Z.ai Code (main session)
+Task: 用户提供 PAT——远程恢复、对账推送闭环（第九/十次重置的异地备份重建）
+
+Work Log:
+- remote add origin（PAT 认证）→ fetch 成功；远程 main=441516f5（Task 106 提交，含 Task 105/106/107 全部内容+scripts 注释）——比预期新，Task 106 当时就已推送
+- 【SOP 事故与修正】reset --mixed origin/main 后按 Task 66 SOP 跑 git checkout -- . 找回 285 个纯删除文件，但**该命令同时把 5 个 M 文件（Task 108 增量）覆盖回远程版**——checkout -- . 适用于「工作区=远程快照+纯删除」场景，有本地改动时不适用；修正版：先 `git stash` 或逐文件恢复纯删除（git checkout -- <path>），绝不全量 checkout
+- 事故恢复：三处 columnOptionLabel 接入重做（5 编辑）/ spec 升级回 12 用例（补显式 false + tenant 隔离断言）/ worklog 补记；验证后端 12/12 + 前端定向 39/39
+- 对账认知修正：远程树完整（backend/src 493 文件）；工作区 70 个 untracked（backend-node/src/auth|db|modules|routes、tmp-test-*.ts、backend/data 等）为历史架构僵尸文件与临时产物，远程已不含 → 不提交不污染远程，留待后续清理
+- push origin main 成功；PAT 持久化在 remote URL（巡检代理可复用）
+
+Stage Summary:
+- 异地备份恢复：远程 main = Task 106 + Task 108/110 增量，第十次重置的所有工作已全部上云
+- SOP 修正：git checkout -- . 的适用边界明确化（Task 66 SOP 打补丁）
+- 遗留：工作区 70 个 untracked 僵尸文件清理（低优先级）

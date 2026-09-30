@@ -2475,3 +2475,15 @@ Work Log:
 Stage Summary:
 - 字典管理交互对齐业界标准形态；LookupPicker 反模式消除
 - 遗留：SearchTable 时间列格式化（ISO 原样，存量）
+
+---
+Task ID: 116-portal-hang-recovery
+Agent: Z.ai Code (main session)
+Task: 门户 hang 型故障恢复
+
+Work Log:
+- 新故障形态：进程存活+端口监听但请求 hang、日志静默；根因为 Turbopack Rust 内存不受 NODE_OPTIONS 限制（实占 1.7G）叠加 4G 总内存压力
+- pkill -9 + rm -rf .next + 逃逸重启恢复；三通道全绿
+
+Stage Summary:
+- 运维判据补充：hang 型故障（监听无响应+无日志）优先查内存

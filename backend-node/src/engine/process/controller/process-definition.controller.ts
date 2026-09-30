@@ -19,8 +19,13 @@ import {
  * 响应元素形状对齐 Flowable 的 `ProcessDefinition` 序列化（实测确认）：
  *   { id, key, name, version, deploymentId, resourceName, diagramResourceName,
  *     description, category, tenantId, suspended }
- * 其中 `id` 形如 `key:version:uuid`，`resourceName` 形如 `key.bpmn20.xml`，
- * `category` 取 BPMN 的 targetNamespace。
+ * 其中 `id` 形如 `key:version:uuid`，`resourceName` 形如 `key.bpmn20.xml`。
+ *
+ * `category` 的语义（Task 112，流程中心分组修复）：
+ * 优先返回 `wfe_process_def.category_id`（部署时从草稿快照的分类，
+ * 引擎版 deploy 落库），回退 BPMN targetNamespace（Flowable 语义，
+ * 兼容 category_id 为 null 的历史定义）。前端流程中心据此按真分类分组；
+ * targetNamespace 的默认值 `http://flowable.org/bpmn` 在前端被归入「未分类」。
  */
 @Controller('api/v1/deployed-processes')
 @JavaStatusOk()
@@ -67,8 +72,14 @@ export class ProcessDefinitionController {
         resourceName: `${key}.bpmn20.xml`,
         diagramResourceName: null,
         description: null,
-        // Flowable 把 BPMN 的 targetNamespace 当作 ProcessDefinition.category
-        category: row.target_namespace === null ? null : String(row.target_namespace),
+        // Task 112：优先部署时快照的分类 id（流程中心按真分类分组），
+        // 回退 Flowable 语义（BPMN targetNamespace），兼容历史 category_id=null 的定义
+        category:
+          row.category_id !== null && row.category_id !== undefined && String(row.category_id) !== ''
+            ? String(row.category_id)
+            : row.target_namespace === null
+              ? null
+              : String(row.target_namespace),
         tenantId,
         suspended: String(row.status) !== 'ACTIVE',
         starterScope: scopeByDef.get(String(row.id)) ?? null,

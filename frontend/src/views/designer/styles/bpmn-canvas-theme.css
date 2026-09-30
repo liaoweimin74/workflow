@@ -167,9 +167,9 @@
  * .djs-element.approver-task / .djs-element.handler-task）
  * ============================================================ */
 
-/* 审批节点 — 标题着橙色（亮色深橙 / 暗色提亮保可读） */
+/* 审批节点 — 标题着橙色（亮色深橙：对 #FFF7E6 底 ≥4.5:1；暗色提亮保可读） */
 .djs-element.approver-task .djs-label {
-  fill: #b88230 !important;
+  fill: #8f6218 !important;
 }
 
 html.dark .djs-element.approver-task .djs-label {

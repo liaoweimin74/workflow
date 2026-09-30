@@ -196,7 +196,26 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
       return gfx
     }
 
-    const nodeRole = bo && bo.get && bo.get('wf:nodeRole')
+  /**
+   * 将类别 overlay 矩形插入到内嵌 label 之前（主矩形之上、文字之下）。
+   *
+   * 必须用 insertBefore 而非 append：bpmn-js 的 renderTask 在 drawShape 内部
+   * 先画主矩形、再画内嵌 label（BpmnRenderer.js renderTask → renderEmbeddedLabel，
+   * 见 node_modules/bpmn-js/lib/draw/BpmnRenderer.js L1308-1316），SVG 按文档顺序
+   * 绘制 —— 若 overlay append 在最后，会直接盖住节点名：
+   * 亮色 85% 不透明度 → 文字残影「看不清」；暗色档 fill-opacity:1 → 「根本看不见」。
+   * 插到 .djs-label 之前后，label 永远绘制在类别底色之上，明暗两档均可读。
+   */
+  const insertOverlayUnderLabel = function (parent: SVGElement, overlay: SVGElement): void {
+    const label = parent.querySelector('.djs-label')
+    if (label && label.parentNode === parent) {
+      parent.insertBefore(overlay, label)
+    } else {
+      append(parent, overlay)
+    }
+  }
+
+  const nodeRole = bo && bo.get && bo.get('wf:nodeRole')
 
     // 审批节点：类别底色矩形（wf-role-overlay 交由 designer-theme.css 明暗两档着色；
     // JS 硬编码值仅作 CSS 未加载时兜底 —— 通用 .user-task rect 规则已用 :not() 排除本元素）
@@ -215,7 +234,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
         rx: 6,
         ry: 6
       })
-      append(parent, rect)
+      insertOverlayUnderLabel(parent, rect)
 
       const icon = create('text')
       attr(icon, {
@@ -247,7 +266,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
         rx: 6,
         ry: 6
       })
-      append(parent, rect)
+      insertOverlayUnderLabel(parent, rect)
 
       const icon = create('text')
       attr(icon, {
@@ -274,7 +293,7 @@ function CustomRenderer(this: any, eventBus: any, bpmnRenderer: any, styles: any
       fill: INITIATOR_FILL_COLOR,
       'fill-opacity': 0.3
     })
-    append(parent, rect)
+    insertOverlayUnderLabel(parent, rect)
 
     // 在默认人形图标后方追加类别图标（bpmn-font \e828）
     const icon = create('text')

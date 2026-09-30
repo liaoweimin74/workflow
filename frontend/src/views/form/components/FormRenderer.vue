@@ -5,6 +5,7 @@
       :rule="renderSchema"
       :option="renderOption"
       v-model="formData"
+      @update:api="onFormApi"
     />
     <el-empty v-else-if="!loading" description="暂无表单" />
 
@@ -157,6 +158,37 @@ const resolvedSchema = ref<Rule[]>([])
 const formData = ref<Record<string, unknown>>({})
 const existingFormDataId = ref<string | null>(null)
 const formVersion = ref<number | null>(null)
+
+/** form-create 实例 API（官方 @update:api 通道，数据落地后同步视图用） */
+const fcApi = ref<{ setValue?: (d: Record<string, unknown>) => void; reload?: () => void } | null>(null)
+function onFormApi(api: { setValue?: (d: Record<string, unknown>) => void; reload?: () => void }) {
+  fcApi.value = api
+}
+
+/**
+ * 数据落地后强制对齐视图（Task 118）。
+ *
+ * form-create v3 对 rule 做原始化（非响应式）优化：异步预填（loadData / mappedData /
+ * initialValues 晚于首次渲染）时，setValue 只写入 rule.value，**不会触发字段重渲染**，
+ * 表现为「表单数据已拿到但输入框为空」。此处在数据就绪后显式 setValue + reload 重建
+ * 字段，让字段以最新 rule.value 作为初值挂载（已验证 reload 后字段正确回显）。
+ * 仅在加载时序调用，不影响用户后续输入。
+ */
+async function syncFormDataToView(): Promise<void> {
+  await nextTick()
+  const api = fcApi.value
+  if (!api || Object.keys(formData.value).length === 0) return
+  try {
+    api.setValue?.({ ...formData.value })
+  } catch {
+    // 字段未就绪时忽略（reload 会以 rule.value 为初值重建）
+  }
+  try {
+    api.reload?.()
+  } catch {
+    // 同上
+  }
+}
 
 /** 路由 query（newTab 落地页用；测试环境无 router 时为 undefined） */
 const routeQuery = (() => {
@@ -400,6 +432,8 @@ onMounted(async () => {
   if (props.fieldPermissions) {
     applyPermissions(props.fieldPermissions)
   }
+  // 异步预填数据落地 + 规则链变更完成后，强制对齐一次视图（Task 118，见 syncFormDataToView）
+  void syncFormDataToView()
   // 引擎挂载延迟到 nextTick，等待 dsBindings watcher 更新 activeDsBindings
   // 首次加载：dsBindings 就绪后由 watcher 调用 tryMountEngine
   // 跳过首次加载：如 rule 直传场景（无 formDefId），bindings 可能已就绪
@@ -416,6 +450,7 @@ watch(() => props.initialValues, (newVal) => {
   if (newVal) {
     formData.value = { ...newVal }
     normalizeEchoData(resolvedSchema.value, formData.value)
+    void syncFormDataToView()
   }
 })
 
@@ -488,6 +523,7 @@ async function loadData() {
           formData.value = {}
         }
         emit('loaded', formData.value)
+        void syncFormDataToView()
         return
       }
     }
@@ -503,6 +539,7 @@ async function loadData() {
         formData.value = {}
       }
       emit('loaded', formData.value)
+      void syncFormDataToView()
     }
   } catch {
     // http 拦截器已弹出错误消息

@@ -13,6 +13,8 @@ import type { ProcessModel, ProcessPolicy, ResolutionContext } from '../process/
 import { randomUuid } from '../process/process-design.service'
 import { EngineRuntime, type EngineState } from './engine-runtime'
 import { EnginePersistence, type InstanceRow } from './engine-persistence'
+import { FormDataService } from '../form/form-data.service'
+import { VariableMappingWriter } from '../form/mapping/variable-mapping.writer'
 import { BackendLogicHook, newlyCompletedEndEventNodeIds } from '../logic/backend-logic-hook'
 import { ProcessDesignRepository } from '../process/repository/process-design.repository'
 import { parseProcessPolicy, renderProcessTemplate } from '../process/compiler/process-policy'
@@ -95,6 +97,10 @@ export class ProcessInstanceService {
     private readonly backendLogic: BackendLogicHook,
     /** 可选注入：测试手动 new 时不传；策略读取降级为空配置。 */
     private readonly designRepo?: ProcessDesignRepository,
+    /** 可选注入：发起表单落 wf_form_data（Java formDataService.save 对位）；不传则跳过。 */
+    private readonly formDataService?: FormDataService,
+    /** 可选注入：流程变量映射写入（Java VariableMappingWriter 对位）；不传则跳过。 */
+    private readonly mappingWriter?: VariableMappingWriter,
   ) {}
 
   // ------------------------------------------------------------ 启动
@@ -111,6 +117,7 @@ export class ProcessInstanceService {
     businessKey: string | null,
     variables: Record<string, unknown> | undefined,
     startUserId?: string | null,
+    formDefId?: string | null,
   ): Promise<StartProcessResult> {
     const tenantId = getTenantId()
     const def = await this.persistence.findLatestDeployedDef(tenantId, processKey)
@@ -195,6 +202,38 @@ export class ProcessInstanceService {
       end_time: state.status === 'COMPLETED' ? now : null,
       delete_reason: null,
     })
+
+    // 发起表单数据落 wf_form_data（Java formDataService.save 对位，Task 118）：
+    // 下一节点的表单回显（同 formDefId 读当前数据）与 form:initiator 数据映射
+    // 都以这行为数据源，缺失即「发起时填写的表单传不到下一个节点」。
+    // Java 同款容错：保存失败不影响流程启动。
+    if (typeof formDefId === 'string' && formDefId !== '' && this.formDataService !== undefined) {
+      try {
+        await this.formDataService.save(
+          formDefId,
+          instanceId,
+          null,
+          JSON.stringify(runtime.getVariables()),
+        )
+      } catch {
+        // Java: 表单数据保存失败不影响流程启动
+      }
+    }
+    // 流程变量映射写入（Java VariableMappingWriter 对位；form:* 源需在表单数据
+    // 保存之后读取）。merge 进引擎变量，与下方 replaceRuntimeRows 同一次 CAS 落库。
+    if (this.mappingWriter !== undefined) {
+      try {
+        const mapped = await this.mappingWriter.compute(
+          def.id,
+          instanceId,
+          runtime.getVariables(),
+          model.initiatorNodeId,
+        )
+        for (const [name, value] of Object.entries(mapped)) runtime.setVariable(name, value)
+      } catch {
+        // Java: warn 后吞掉
+      }
+    }
 
     // 期望版本 **0**：实例刚由 `insertInstance` 写入（lock_version 从 0 起），CAS 必然成功，
     // 并把版本推进到 1 —— 后续请求一律以 `loadState` 读到的版本为准。

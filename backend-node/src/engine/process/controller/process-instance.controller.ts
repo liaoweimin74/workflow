@@ -47,6 +47,9 @@ export class ProcessInstanceController {
         body.businessKey ?? null,
         body.variables,
         String(user.userId),
+        // 发起表单定义 id（Task 118）：此前被丢弃，导致发起表单数据无法落
+        // wf_form_data，下一节点表单回显/映射全部落空（Java 对位已补）
+        body.formDefId ?? null,
       ),
     )
   }

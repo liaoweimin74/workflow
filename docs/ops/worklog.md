@@ -2445,3 +2445,18 @@ Work Log:
 Stage Summary:
 - deployed category 语义归一：部署时分类快照优先，Flowable targetNamespace 仅作历史回退
 - 遗留：重建库 collation 混用治理（新表 uca1400_ai_ci vs 旧表 unicode_ci）
+
+---
+Task ID: 113-repo-completeness-push
+Agent: Z.ai Code (main session)
+Task: push 指令触发——Task 110 僵尸误判修正，补录 217 文件恢复远程完整性
+
+Work Log:
+- 复核 untracked：Task 110 误将活代码归为僵尸（columnOption.ts、MemberGroupPage.vue、routes/modules/auth/db/config 等均为被引用代码）
+- 实证方法：源码文件数对比（230 vs 144）+ 引用链核查（router→MemberGroupPage、main.ts→app.module）
+- 分类入库 217 文件/34102 行；确认排除 _legacy/tmp*/backend/data（真僵尸/运行时数据）
+- push 成功，main 与 origin/main 同步（0 0）
+
+Stage Summary:
+- 远程 main = f5d386dd：checkout 即可编译，异地备份完整性达标
+- SOP：untracked 处置必须引用链实证，禁止粗判；排除清单已固化至顶层 worklog

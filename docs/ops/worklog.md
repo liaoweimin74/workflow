@@ -2429,3 +2429,19 @@ Stage Summary:
 - 菜单 300~304（岗位）+ 305（成员组）恢复，挂载系统管理下，admin(角色1)授权齐全
 - SOP：migrations 根目录同版本号文件是迁移链毒药；DB 重建后必须 migrate 至「应用 0 个」
 - sys_post 表为空属正常（岗位数据用户自建）；V45 注册的是内置数据源
+
+---
+Task ID: 112-process-center-grouping
+Agent: Z.ai Code (main session)
+Task: 流程中心分组修复（category 双语义归一）
+
+Work Log:
+- 根因三层：历史定义 targetNamespace=默认值；deployed 列表 category 只取 target_namespace；分类体系存在草稿/定义两条正交链
+- 后端：process-definition.controller.ts category 优先 category_id（部署快照）回退 target_namespace（Flowable 兼容）
+- 前端：categoryName 兜底「未分类」；分组按 sortOrder 排序，未知命名空间沉底 + localeCompare 稳定排序
+- 数据：wfe_process_def.category_id 空值按草稿回填（JOIN 需显式 CONVERT...COLLATE，重建库 collation 混用）
+- 验证：API/前端单测 2/2/agent-browser E2E 全过；commit de35b82c 已 push
+
+Stage Summary:
+- deployed category 语义归一：部署时分类快照优先，Flowable targetNamespace 仅作历史回退
+- 遗留：重建库 collation 混用治理（新表 uca1400_ai_ci vs 旧表 unicode_ci）

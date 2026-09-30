@@ -617,7 +617,6 @@ export interface WfCategoryTable {
   id: string
   tenant_id: string
   name: string
-  parent_id: string | null
   sort_order: number | null
   created_at: NullableTimestamp
 }

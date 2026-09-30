@@ -2349,3 +2349,27 @@ Work Log:
 Stage Summary:
 - 设计器回车刷新根因闭环（隐式 GET 提交替换 query string）——与 Task 103 留痕「Enter 会触发表单默认提交导致页面重载」互证
 - 方法论：Enter 类问题先查「单输入框原生 form」隐式提交条件，修复优先冒泡单点拦截而非逐 form 补丁
+
+---
+Task ID: 105-category-chips
+Agent: Z.ai Code (main)
+Task: 流程定义页布局改版——左侧分类树表 → 顶部分类胶囊条（内联维护），分类扁平化取消 parentId（双端+DB）
+
+Work Log:
+- 研讨拍板：胶囊方式+内联编辑，分类不再采用树形、取消 parentId（用户明确指令）
+- DB：V47__category_flat_no_parent.sql（ALTER TABLE wf_category DROP COLUMN parent_id，idx_parent 随列删除），npm run migrate 已应用
+- Node 端：types.ts WfCategoryTable 去 parent_id；category.repository 去 findByParentId、加 maxSortOrder/countDraftsByCategoryId；category.service 扁平化（VO 去 parentId、create 缺省 sortOrder=租户 max+1 自动排最后、delete 保护改「分类下有流程草稿拒绝」）；category.controller 删 /tree 端点与 parentId 字段
+- Java 端对齐：Category 实体（去字段+去 idx_parent 索引）/CategoryRepository（去 findByParentId、加 findMaxSortOrder）/CategoryService（去树、existsByCategoryId 引用保护、注入 ProcessDraftRepository）/CategoryController（删 /tree、去 parentId）——静态修改，沙箱内无 JDK 未编译验证
+- 【重要发现】GET /process-definitions/drafts 的 categoryId 过滤在 Node 端从未实现（Java 端本有 listDraftsByCategory，Node 迁移遗漏）——旧版左表点击分类筛选实际一直无效；本次补齐 repository($if 条件)/service/controller 全链路，修复契约分歧
+- 前端：新组件 CategoryChips.vue（胶囊条：全部+各分类+「＋」内联新建/双击改名/hover ✕ 删除；权限码 process:category:create/update/delete 各自控制；Enter 提交+blur 兜底+settled 防双提交）；ProcessListPage 重构（删 480px 左卡片树表与折叠按钮/category FormConfig/buildTree；单卡片+胶囊条+SearchTable 全宽；新建流程分类选择 treeSelect→select options；watch(selectedCategoryId) 自动刷新表格）；api/category.ts 去 parentId/CategoryTreeNode/tree()
+- 【E2E 发现 bug】点击胶囊后表格不刷新（测试手动调 fetchApi 掩盖）——补 watch(selectedCategoryId)→fetchList 修复；onCategoriesChanged 收窄为只重拉分类避免双请求
+- 测试：ProcessListPage.test.ts 旧布局 2 用例替换为胶囊 5 用例（渲染/筛选传参/内联新建+空名拦截/双击改名/删除回置全部），icons mock 补 Close，stubs[1]→stubs[0]（单表格化）；vitest 22 用例全过（3 文件）
+- E2E（agent-browser）：登录→/lowcode/process/definition：胶囊渲染✓、点「请假流程」表格只剩请假行✓、点「全部」恢复✓、内联新建「E2E测试分类」→双击改名「E2E改名分类」→hover ✕ 确认删除消失✓；明暗两档截图（暗色选中实底白字/描边胶囊可读）；console 无新错误；chrome 归零
+- API 冒烟：列表无 parentId✓、新建 sortOrder 自动=max+1✓、改名✓、删除保护（临时挂草稿→500「该分类下存在流程，请先移除或转移后再删除」→恢复→删成功）✓；冒烟数据全清理
+- 顺手遗留项闭环：SearchTable 图标按钮（无 confirm 分支）补原生 :title（tooltip 之外即时悬停提示）
+- 后端 build+重启 2 次（分类改版+drafts 过滤）；8080 已跑新 dist
+
+Stage Summary:
+- 流程定义页正式形态：单卡片+分类胶囊条（全部/各分类/＋内联维护）+全宽流程表；分类扁平无层级、无排序手填（自动排最后）、删除有草稿引用保护
+- 产物：V47 迁移、CategoryChips.vue、ProcessListPage 重构、api/category.ts 瘦身、Node 6 文件+Java 4 文件、SearchTable title
+- 【方法论】组件测试手动调 fetchApi 会掩盖「状态变化→自动刷新」链路缺失，E2E 必须点真实按钮

@@ -140,11 +140,12 @@ export class ProcessDesignService {
     return toDraftVO(row)
   }
 
-  async listDrafts(page: number, size: number): Promise<PageResponse<ProcessDraftVO>> {
+  /** Task 105：支持 categoryId 过滤（流程定义页胶囊筛选）。 */
+  async listDrafts(page: number, size: number, categoryId?: string): Promise<PageResponse<ProcessDraftVO>> {
     assertPageSize(size)
     const tenantId = getTenantId()
     const safePage = Math.max(page, 1)
-    const { rows, total } = await this.repo.listDrafts(tenantId, (safePage - 1) * size, size)
+    const { rows, total } = await this.repo.listDrafts(tenantId, (safePage - 1) * size, size, categoryId || undefined)
     // pageNumber 是 1 基（对齐 Java 的 result.getNumber() + 1）
     return new PageResponse(rows.map(toDraftVO), safePage, size, total)
   }

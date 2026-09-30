@@ -30,4 +30,7 @@ public interface ProcessDraftRepository extends JpaRepository<ProcessDraft, Stri
      * 用于运行时根据 processDefinitionId 定位 draftId，进而加载节点配置。
      */
     Optional<ProcessDraft> findByProcessDefinitionId(String processDefinitionId);
+
+    /** 分类下是否存在流程草稿（Task 105：分类删除前的引用保护）。 */
+    boolean existsByCategoryId(String categoryId);
 }

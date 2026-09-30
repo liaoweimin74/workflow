@@ -34,8 +34,9 @@ export class ProcessDesignController {
   async listDrafts(
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('categoryId') categoryId?: string,
   ): Promise<R<PageResponse<ProcessDraftVO>>> {
-    return R.ok(await this.service.listDrafts(intQueryParam(page, 'page', 1), intQueryParam(size, 'size', 20)))
+    return R.ok(await this.service.listDrafts(intQueryParam(page, 'page', 1), intQueryParam(size, 'size', 20), categoryId || undefined))
   }
 
   @Get(':id/editor')

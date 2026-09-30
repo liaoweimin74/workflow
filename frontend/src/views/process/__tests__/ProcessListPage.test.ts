@@ -28,6 +28,9 @@ vi.mock('@/api/category', () => ({
     delete: vi.fn(),
   },
 }))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ hasPermission: () => true }),
+}))
 vi.mock('element-plus', async () => {
   const actual = await vi.importActual('element-plus')
   return { ...actual, ElMessage: { success: vi.fn(), error: vi.fn() }, ElMessageBox: { confirm: vi.fn(), alert: vi.fn() } }
@@ -41,6 +44,7 @@ vi.mock('@element-plus/icons-vue', () => ({
   CopyDocument: { name: 'CopyDocument', render: () => h('span', '⊕') },
   Delete: { name: 'Delete', render: () => h('span', '×') },
   Clock: { name: 'Clock', render: () => h('span', '◷') },
+  Close: { name: 'Close', render: () => h('span', '×') },
 }))
 
 const ElMessage = (await import('element-plus')).ElMessage as any
@@ -78,7 +82,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     const labels = actionButtons.map((b: any) => b.label)
     expect(labels).toEqual(['设计', '部署', '复制', '版本', '删除'])
@@ -90,7 +94,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     expect(rightTable.props('maxVisibleButtons')).toBe(5)
     wrapper.unmount()
   })
@@ -100,7 +104,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     expect(actionButtons.find((b: any) => b.label === '设计').icon).toBeDefined()
     expect(actionButtons.find((b: any) => b.label === '部署').icon).toBeDefined()
@@ -114,7 +118,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     const versionBtn = actionButtons.find((b: any) => b.label === '版本')
     expect(versionBtn).toBeDefined()
@@ -127,7 +131,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     const versionBtn = actionButtons.find((b: any) => b.label === '版本')
     expect(versionBtn.show({ deployId: 'abc' })).toBe(true)
@@ -141,7 +145,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     const deleteBtn = actionButtons.find((b: any) => b.label === '删除')
     expect(deleteBtn.show({ version: 0 })).toBe(true)
@@ -158,7 +162,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     const deleteBtn = actionButtons.find((b: any) => b.label === '删除')
     expect(deleteBtn.confirm).toBeTruthy()
@@ -171,7 +175,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     const deployBtn = actionButtons.find((b: any) => b.label === '部署')
     // 新交互：不再用 SearchTable 的 confirm 弹窗，改为点击后先预校验
@@ -209,7 +213,7 @@ describe('ProcessListPage', () => {
     await nextTick()
     await flushPromises()
     const stubs = wrapper.findAllComponents(SearchTableStub)
-    const rightTable = stubs[1]
+    const rightTable = stubs[0]
     const actionButtons = rightTable.props('actionButtons') as any[]
     const deployBtn = actionButtons.find((b: any) => b.label === '部署')
     ;(processDesignApi.loadEditor as any).mockResolvedValue({
@@ -239,33 +243,109 @@ describe('ProcessListPage', () => {
     wrapper.unmount()
   })
 
-  it('categoryCollapsed 默认为 false，点击切换为 true', async () => {
+  it('顶部渲染分类胶囊条（全部 + 各分类），点击胶囊切换筛选', async () => {
+    ;(categoryApi.list as any).mockResolvedValue({ data: [
+      { id: 'c1', tenantId: 'default', name: '行政办公', sortOrder: 1, createdAt: '' },
+      { id: 'c2', tenantId: 'default', name: '财务报销', sortOrder: 2, createdAt: '' },
+    ] })
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    // 左侧卡片宽度应为 480px（展开状态）
-    const leftCard = wrapper.find('.category-card')
-    expect(leftCard.attributes('style')).toContain('480px')
-    // 点击折叠按钮
-    const collapseBtn = wrapper.find('.category-collapse-btn')
-    await collapseBtn.trigger('click')
-    await nextTick()
-    // 折叠后宽度应为 40px
-    expect(leftCard.attributes('style')).toContain('40px')
+    const chips = wrapper.findAll('.chip')
+    expect(chips.length).toBe(4) // 全部 + 2 分类 + ＋
+    expect(chips[0].text()).toBe('全部')
+    expect(chips[1].text()).toContain('行政办公')
+    expect(chips[2].text()).toContain('财务报销')
+    // 点击「行政办公」→ fetchApi 携带 categoryId=c1
+    await chips[1].trigger('click')
+    const table = wrapper.findAllComponents(SearchTableStub)[0]
+    const fetchApi = table.props('fetchApi') as any
+    await fetchApi({})
+    expect(processDesignApi.listDrafts).toHaveBeenCalledWith(
+      expect.objectContaining({ categoryId: 'c1' }),
+    )
+    // 点「全部」→ categoryId 不筛选
+    await chips[0].trigger('click')
+    await fetchApi({})
+    expect(processDesignApi.listDrafts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ categoryId: undefined }),
+    )
     wrapper.unmount()
   })
 
-  it('categoryCollapsed 为 true 时左侧 SearchTable 隐藏', async () => {
+  it('内联新建分类：点击＋ → 输入名称回车 → create 调用并刷新分类', async () => {
     const wrapper = createWrapper()
     await nextTick()
     await flushPromises()
-    // 点击折叠按钮
-    const collapseBtn = wrapper.find('.category-collapse-btn')
-    await collapseBtn.trigger('click')
+    await wrapper.find('.chip-add').trigger('click')
     await nextTick()
-    // SearchTable 应该有 v-show=false（display:none）
-    const leftSearchTable = wrapper.findAllComponents(SearchTableStub)[0]
-    expect((leftSearchTable.element as HTMLElement).style.display).toBe('none')
+    const input = wrapper.find('.chip-input input')
+    expect(input.exists()).toBe(true)
+    await input.setValue('  新分类  ')
+    await input.trigger('keydown.enter')
+    await flushPromises()
+    expect(categoryApi.create).toHaveBeenCalledWith({ name: '新分类' })
+    // changed 后父页面重新拉取分类列表
+    expect(categoryApi.list).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('内联新建分类：空名称回车不提交', async () => {
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    await wrapper.find('.chip-add').trigger('click')
+    await nextTick()
+    const input = wrapper.find('.chip-input input')
+    await input.setValue('   ')
+    await input.trigger('keydown.enter')
+    await flushPromises()
+    expect(categoryApi.create).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('双击胶囊内联改名：回车提交 update', async () => {
+    ;(categoryApi.list as any).mockResolvedValue({ data: [
+      { id: 'c1', tenantId: 'default', name: '旧名', sortOrder: 1, createdAt: '' },
+    ] })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    const chip = wrapper.findAll('.chip').find(c => c.text().includes('旧名'))!
+    await chip.trigger('dblclick')
+    await nextTick()
+    const input = wrapper.find('.chip-input input')
+    expect(input.exists()).toBe(true)
+    await input.setValue('新名')
+    await input.trigger('keydown.enter')
+    await flushPromises()
+    expect(categoryApi.update).toHaveBeenCalledWith('c1', { name: '新名' })
+    wrapper.unmount()
+  })
+
+  it('删除分类：确认后调 delete，且选中分类被删时回置「全部」', async () => {
+    const ElMessageBox = (await import('element-plus')).ElMessageBox as any
+    ;(ElMessageBox.confirm as any).mockResolvedValue(true)
+    ;(categoryApi.list as any).mockResolvedValue({ data: [
+      { id: 'c1', tenantId: 'default', name: '行政办公', sortOrder: 1, createdAt: '' },
+    ] })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    // 选中 c1
+    await wrapper.findAll('.chip')[1].trigger('click')
+    const del = wrapper.find('.chip-delete')
+    expect(del.exists()).toBe(true)
+    await del.trigger('click')
+    await flushPromises()
+    expect(ElMessageBox.confirm).toHaveBeenCalledTimes(1)
+    expect(categoryApi.delete).toHaveBeenCalledWith('c1')
+    // 删除的是当前选中分类 → 筛选回置「全部」
+    const fetchApi = wrapper.findAllComponents(SearchTableStub)[0].props('fetchApi') as any
+    await fetchApi({})
+    expect(processDesignApi.listDrafts).toHaveBeenLastCalledWith(
+      expect.objectContaining({ categoryId: undefined }),
+    )
     wrapper.unmount()
   })
 })

@@ -3,6 +3,8 @@ package com.workflow.engine.spike;
 import com.workflow.api.dto.CompleteTaskResponse;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.process.config.NodeOptionsService;
+import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.engine.runtime.ProcessVariableService;
 import com.workflow.engine.task.RejectService;
@@ -95,7 +97,8 @@ class EndToEndIntegrationTest extends AbstractFlowableSpikeTest {
         com.workflow.engine.form.mapping.VariableMappingWriter variableMappingWriter =
                 mock(com.workflow.engine.form.mapping.VariableMappingWriter.class);
         RejectService rejectService = new RejectService(taskService, runtimeService, resolver,
-                tenantProvider, commentRepository, variableMappingWriter);
+                tenantProvider, commentRepository, variableMappingWriter,
+                mock(NodeOptionsService.class), mock(NodeConfigRepository.class), mock(HistoryService.class));
         rejectService.reject(managerTask.getId(), "bob", "信息不完整");
 
         // 经理任务消失，发起人任务重新出现

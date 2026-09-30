@@ -2,7 +2,7 @@ package com.workflow.engine.task;
 
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
-import com.workflow.engine.process.config.NodeConfig;
+import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.config.NodeOptions;
 import com.workflow.engine.process.config.NodeOptionsService;
 import com.workflow.engine.process.config.ProcessPolicy;

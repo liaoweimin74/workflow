@@ -2411,3 +2411,21 @@ Stage Summary:
 - 异地备份恢复：远程 main = Task 106 + Task 108/110 增量，第十次重置的所有工作已全部上云
 - SOP 修正：git checkout -- . 的适用边界明确化（Task 66 SOP 打补丁）
 - 遗留：工作区 70 个 untracked 僵尸文件清理（低优先级）
+
+---
+Task ID: 111-post-member-group-restore
+Agent: Z.ai Code (main session)
+Task: 岗位管理/成员组管理消失排查与恢复（沙箱重置后迁移链断裂）
+
+Work Log:
+- 现象：用户反馈岗位管理/成员组管理消失；代码与路由完好、三服务全绿
+- 根因：DB 仅应用到 V41；V43(岗位/成员组菜单)/V45(内置岗位数据源)/V46(成员组业务表单) 均未执行
+- 二级根因：V39__fix_menu_visible_status.sql 未入库文件滞留 migrations 根目录形成同版本号双文件，migrate-cli checksum 按位置配对错乱、repair 逐条修互相覆盖
+- 修复：改号 V48 → migrate 应用 V42~V48 共 7 个 → 后端重启
+- E2E：admin 登录→菜单可见→岗位 CRUD 冒烟（新增/删除）通过，零控制台错误
+- commit 57728014 已 push
+
+Stage Summary:
+- 菜单 300~304（岗位）+ 305（成员组）恢复，挂载系统管理下，admin(角色1)授权齐全
+- SOP：migrations 根目录同版本号文件是迁移链毒药；DB 重建后必须 migrate 至「应用 0 个」
+- sys_post 表为空属正常（岗位数据用户自建）；V45 注册的是内置数据源

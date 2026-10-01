@@ -258,6 +258,112 @@ function appendStructuredFilters(
   return sql`${query} AND (${sql.join(fragments, sql` ${sql.raw(logic)} `)})`
 }
 
+
+/** 保留维度：整表聚合成单值（KPI 无分组场景），不走列白名单。 */
+export const ALL_GROUP_KEY = '__all__'
+
+/** 允许的聚合函数（与 common/domain/biz-data.ts 的 AGGREGATE_FNS 保持一致的小写闭集）。 */
+const AGGREGATE_FN_SQL: Record<string, string> = {
+  count: 'COUNT',
+  sum: 'SUM',
+  avg: 'AVG',
+  max: 'MAX',
+  min: 'MIN',
+}
+
+/** 时间桶 DATE_FORMAT 模板（MariaDB 方言）。 */
+const TIME_GRAIN_FORMAT: Record<string, string> = {
+  day: '%Y-%m-%d',
+  week: '%x-W%v',
+  month: '%Y-%m',
+}
+
+const DATE_COLUMN_TYPES = new Set(['DATE', 'DATETIME', 'TIMESTAMP'])
+
+/**
+ * 生成聚合查询（Task 119 仪表盘）：`SELECT <维度表达式> AS __k, <聚合表达式> AS __v ... GROUP BY`。
+ *
+ * WHERE 构造与 `buildSelect` 完全同源（租户 + 白名单筛选 + 关键词），因此安全模型一致：
+ * 标识符走 `sql.ref` 白名单校验，值参数绑定。
+ *
+ * ⚠️ JSON 类型列**拒绝**参与 group/metric：单表业务列是真实物理列，JSON 列的聚合语义
+ *    （数组展开）与仪表盘诉求不符，宁可显式 400 也不静默给错误数字。
+ */
+export function buildAggregate(
+  tableName: string,
+  allowedColumns: string[],
+  columnTypeOf: ColumnTypeMap,
+  tenantId: string,
+  filters: Record<string, unknown>,
+  keyword: string | null,
+  keywordColumn: string | null,
+  group: string,
+  agg: string,
+  metric: string | null,
+  timeGrain: string | null,
+  sort: string | null,
+  order: string | null,
+): RawBuilder<unknown> {
+  const fn = AGGREGATE_FN_SQL[agg]
+  if (fn === undefined) {
+    throw new Error(`非法聚合函数: ${agg}`)
+  }
+
+  // `__all__` 是保留维度：不做分组、整表聚成一个数（KPI 场景），键恒为 '__all__'
+  const isAll = group === ALL_GROUP_KEY
+  if (!isAll) {
+    validateColumn(group, allowedColumns, '分组字段')
+    assertNotJson(columnTypeOf, group, '分组字段')
+  }
+  let keyExpr: RawBuilder<unknown> = isAll ? sql`'${ALL_GROUP_KEY}'` : sql.ref(group)
+  if (!isAll && timeGrain !== null) {
+    const format = TIME_GRAIN_FORMAT[timeGrain]
+    if (format === undefined) {
+      throw new Error(`非法时间粒度: ${timeGrain}`)
+    }
+    const type = columnTypeOf.get(group) ?? ''
+    if (!DATE_COLUMN_TYPES.has(type.toUpperCase())) {
+      throw new Error(`时间分组的列必须是日期类型: ${group}`)
+    }
+    keyExpr = sql`DATE_FORMAT(${sql.ref(group)}, ${format})`
+  }
+
+  let valueExpr: RawBuilder<unknown>
+  if (agg === 'count') {
+    valueExpr = sql`COUNT(1)`
+  } else {
+    if (metric === null || metric.trim() === '') {
+      throw new Error('聚合字段不能为空')
+    }
+    validateColumn(metric, allowedColumns, '聚合字段')
+    assertNotJson(columnTypeOf, metric, '聚合字段')
+    valueExpr = sql`${sql.raw(fn)}(${sql.ref(metric)})`
+  }
+
+  let query = sql`SELECT ${keyExpr} AS __k, ${valueExpr} AS __v FROM ${sql.table(tableName)} WHERE tenant_id = ${tenantId}`
+  query = appendFilters(query, allowedColumns, columnTypeOf, filters)
+  query = appendKeyword(query, allowedColumns, keyword, keywordColumn)
+  query = sql`${query} GROUP BY __k`
+
+  const sortKey = sort === null || sort.trim() === '' ? 'key' : sort.trim().toLowerCase()
+  if (sortKey !== 'key' && sortKey !== 'value') {
+    throw new Error(`非法聚合排序字段: ${sort}`)
+  }
+  const orderDir = order === null || order.trim() === '' ? 'asc' : order.toLowerCase()
+  if (!ALLOWED_ORDER.has(orderDir)) {
+    throw new Error(`非法排序方向: ${String(order)}`)
+  }
+  const alias = sortKey === 'key' ? '__k' : '__v'
+  return sql`${query} ORDER BY ${sql.raw(alias)} ${sql.raw(orderDir.toUpperCase())}`
+}
+
+/** 聚合列的 JSON 类型守卫（统一文案，避免 group/metric 两处漂移）。 */
+function assertNotJson(columnTypeOf: ColumnTypeMap, column: string, label: string): void {
+  if (isJsonColumn(columnTypeOf, column)) {
+    throw new Error(`${label}不支持 JSON 类型列: ${column}`)
+  }
+}
+
 /** 列名白名单校验（对齐 Java `validateColumn`）。 */
 function validateColumn(
   column: string | null,

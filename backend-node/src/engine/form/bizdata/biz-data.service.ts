@@ -4,7 +4,12 @@ import { getTenantId } from '../../../framework/tenant/tenant-context'
 import { BizDataSupport, type BizDataQueryRequest } from './biz-data-support'
 import type { FormQueryConfig } from './form-query-config'
 import type { JoinConfig } from './join-sql-generator'
-import type { BizDataPageVO, BizDataVO } from '../../../common/domain/biz-data'
+import type {
+  AggregateRequest,
+  AggregateResultVO,
+  BizDataPageVO,
+  BizDataVO,
+} from '../../../common/domain/biz-data'
 
 /**
  * 业务数据门面（对齐 Java `com.workflow.engine.form.bizdata.BizDataService`）。
@@ -65,6 +70,22 @@ export class BizDataService {
     config: FormQueryConfig,
   ): Promise<BizDataPageVO> {
     return this.support.querySqlTemplate(formKey, req, config)
+  }
+
+  // ==================== 聚合查询（Task 119 仪表盘） ====================
+
+  /** 单表聚合（visual 模式 FORM 源）。 */
+  async aggregate(formKey: string, req: AggregateRequest): Promise<AggregateResultVO> {
+    return this.support.queryAggregateGeneric(formKey, req)
+  }
+
+  /** SQL 模板聚合（SQL 源 / FORM sql 模式；对位 querySqlRaw 的聚合版）。 */
+  async aggregateSql(
+    formKey: string | null,
+    req: AggregateRequest,
+    config: FormQueryConfig,
+  ): Promise<AggregateResultVO> {
+    return this.support.queryAggregateSqlTemplate(formKey, req, config)
   }
 
   /** 查询单条业务数据。 */

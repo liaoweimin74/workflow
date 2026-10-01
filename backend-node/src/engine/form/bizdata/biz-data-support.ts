@@ -1,7 +1,15 @@
 import { randomBytes } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 import { sql } from 'kysely'
-import { bizDataPageVO, bizDataVO, type BizDataPageVO, type BizDataVO } from '../../../common/domain/biz-data'
+import {
+  aggregateResultVO,
+  bizDataPageVO,
+  bizDataVO,
+  type AggregateRequest,
+  type AggregateResultVO,
+  type BizDataPageVO,
+  type BizDataVO,
+} from '../../../common/domain/biz-data'
 import type { ColumnConfig } from '../../../common/domain/column-config'
 import { BusinessException } from '../../../common/exception/business-exception'
 import { getTenantId } from '../../../framework/tenant/tenant-context'
@@ -18,6 +26,7 @@ import {
   buildUpdate,
 } from './biz-data-query-builder'
 import {
+  buildAggregate,
   buildCount,
   buildSelect,
   columnTypeMapOf,
@@ -34,7 +43,7 @@ import { joinTargetSystemByKey, isJoinTargetSystemKey } from './join-target-cata
 import { isConfigMode, type FormQueryConfig } from './form-query-config'
 import { ensureAlias } from './form-query-config'
 import { SqlQueryEngine } from './sql-query-engine'
-import { wrap, type WrappedQuery } from './sql-template-engine'
+import { wrap, wrapAggregate, type WrappedQuery } from './sql-template-engine'
 import { SystemService } from '../../../system/service/system.service'
 import { SystemSourceQueryService } from '../../datasource/service/system-source-query.service'
 import { DataSourceRepository } from '../../datasource/repository/data-source.repository'
@@ -311,6 +320,90 @@ export class BizDataSupport {
         wrapped.select,
         (row) => this.toSqlVO(config.columns, row),
       )
+    } catch (error) {
+      throw asBusinessException(error)
+    }
+  }
+
+  // ==================== 聚合查询（Task 119 仪表盘） ====================
+
+  /**
+   * 单表聚合（visual 模式 FORM 源；对位 `queryGeneric` 的聚合版）。
+   *
+   * 维度/指标列白名单与筛选同源（`buildAggregate` 内校验）；
+   * 结果行 key 统一字符串化（DATE_FORMAT 已产出字符串，数值维度 String 化）。
+   */
+  async queryAggregateGeneric(formKey: string, req: AggregateRequest): Promise<AggregateResultVO> {
+    const tenantId = getTenantId()
+    const ctx = await this.loadContext(formKey)
+    const filters = parseFilter(req.filter)
+    const columnTypeOf = columnTypeMapOf(ctx.columns)
+    try {
+      const fragment = buildAggregate(
+        ctx.tableName,
+        ctx.columnKeys,
+        columnTypeOf,
+        tenantId,
+        filters,
+        req.keyword,
+        req.keywordColumn,
+        req.group,
+        req.agg,
+        req.metric,
+        req.timeGrain,
+        req.sort,
+        req.order,
+      )
+      const rows = await this.repository.selectRows(fragment)
+      return aggregateResultVO(rows.map((row) => ({ key: String(row.__k ?? ''), value: Number(row.__v ?? 0) })))
+    } catch (error) {
+      throw asBusinessException(error)
+    }
+  }
+
+  /**
+   * SQL 模板聚合（SQL 源 / FORM sql 模式；对位 `querySqlTemplate` 的聚合版）。
+   *
+   * 与 querySqlTemplate 一样**不校验**主表单物理表 —— 管理员 SQL 可跨表；
+   * 维度/指标必须是声明列（`wrapAggregate` 内校验）。
+   */
+  async queryAggregateSqlTemplate(
+    formKey: string | null,
+    req: AggregateRequest,
+    config: FormQueryConfig,
+  ): Promise<AggregateResultVO> {
+    if (formKey !== null && !FORM_KEY_PATTERN.test(formKey)) {
+      throw new BusinessException(400, `非法表单 key: ${String(formKey)}`)
+    }
+    if (config.query === null) {
+      throw new BusinessException(400, 'SQL 数据源缺少查询配置')
+    }
+    const tenantId = getTenantId()
+    const columns = toQueryColumns(config.columns)
+    const filters = parseFilter(req.filter)
+    const runtimeParams = parseRuntimeParams(req.params)
+    try {
+      const fragment = wrapAggregate(
+        config.query as string,
+        tenantId,
+        columns,
+        filters,
+        req.keyword,
+        req.keywordColumn,
+        config.declaredParams,
+        runtimeParams,
+        {
+          group: req.group,
+          fn: req.agg,
+          metric: req.metric,
+          timeGrain: req.timeGrain,
+          sort: req.sort,
+          order: req.order,
+          limit: req.limit,
+        },
+      )
+      const rows = await this.sqlQueryEngine.rows(fragment)
+      return aggregateResultVO(rows.map((row) => ({ key: String(row.__k ?? ''), value: Number(row.__v ?? 0) })))
     } catch (error) {
       throw asBusinessException(error)
     }

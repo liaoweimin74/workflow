@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.AggregateRequest;
+import com.workflow.api.dto.AggregateResultVO;
+import com.workflow.api.dto.AggregateRowVO;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
@@ -154,6 +157,126 @@ public class WorkflowFormDataQueryService {
         List<?> rows = rowsQ.getResultList();
 
         return assemble(formKey, rows, total, page, size);
+    }
+
+    // ==================== 聚合（Task 119 仪表盘） ====================
+
+    /**
+     * WORKFLOW 源跨实例分组聚合（对位 {@link #query} 的聚合版）。
+     *
+     * <p>维度：{@code startTime}（系统列，{@code DATE_FORMAT(h.START_TIME_, ...)} 支持时间桶）或
+     * 最新 schema 白名单内的业务列（JSON_EXTRACT）；派生系统列
+     * （instanceId/processStatus/initiatorName/currentNodeName）是 JS 侧解析的
+     * 派生值，SQL 层聚不出来，显式 400。
+     * 指标：count 或业务列 {@code CAST(... AS DECIMAL(20,6))} 后聚合（JSON 值是字符串，
+     * 不 CAST 会按字符串聚合）。
+     */
+    public AggregateResultVO aggregate(String formKey, AggregateRequest req) {
+        String tenantId = tenantProvider.getTenantId();
+        LinkedHashMap<String, ColumnConfig> bizCols = businessColumns(tenantId, formKey);
+        Map<String, Object> filters = parseFilters(req.getFilter(), bizCols.keySet());
+        List<String> ids = versionIds(tenantId, formKey);
+        if (ids.isEmpty()) {
+            return AggregateResultVO.of(List.of());
+        }
+
+        Map<String, String> grainFormats = Map.of(
+                "day", "%Y-%m-%d", "week", "%x-W%v", "month", "%Y-%m");
+        String grainFormat = req.getTimeGrain() == null ? null : grainFormats.get(req.getTimeGrain());
+        if (req.getTimeGrain() != null && grainFormat == null) {
+            throw new BusinessException(400, "非法时间粒度: " + req.getTimeGrain());
+        }
+
+        String keyExpr;
+        if ("__all__".equals(req.getGroup())) {
+            keyExpr = "'__all__'";
+        } else if (START_TIME_KEY.equals(req.getGroup())) {
+            if (!"count".equals(req.getAgg())) {
+                throw new BusinessException(400, "聚合字段不在表单字段中: " + START_TIME_KEY);
+            }
+            keyExpr = grainFormat == null
+                    ? "h.START_TIME_"
+                    : "DATE_FORMAT(h.START_TIME_, '" + grainFormat + "')";
+        } else {
+            ColumnConfig groupCol = bizCols.get(req.getGroup());
+            if (groupCol == null || !COL_PATTERN.matcher(req.getGroup()).matches()) {
+                throw new BusinessException(400, "分组字段不在表单字段中: " + req.getGroup());
+            }
+            if (DERIVED_SYSTEM_KEYS.contains(req.getGroup())) {
+                throw new BusinessException(400, "分组字段不在表单字段中: " + req.getGroup());
+            }
+            keyExpr = grainFormat == null
+                    ? "JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + req.getGroup() + "'))"
+                    : "DATE_FORMAT(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + req.getGroup()
+                            + "')), '" + grainFormat + "')";
+        }
+
+        String valueExpr = "COUNT(1)";
+        if (!"count".equals(req.getAgg())) {
+            if (req.getMetric() == null || req.getMetric().isBlank()) {
+                throw new BusinessException(400, "聚合字段不能为空");
+            }
+            ColumnConfig metricCol = bizCols.get(req.getMetric());
+            if (metricCol == null || !COL_PATTERN.matcher(req.getMetric()).matches()
+                    || DERIVED_SYSTEM_KEYS.contains(req.getMetric())) {
+                throw new BusinessException(400, "聚合字段不在表单字段中: " + req.getMetric());
+            }
+            String fn = Map.of("sum", "SUM", "avg", "AVG", "max", "MAX", "min", "MIN").get(req.getAgg());
+            if (fn == null) {
+                throw new BusinessException(400, "非法聚合函数: " + req.getAgg());
+            }
+            valueExpr = fn + "(CAST(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + req.getMetric()
+                    + "')) AS DECIMAL(20,6)))";
+        }
+
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("tenantId", tenantId);
+        params.put("ids", ids);
+        StringBuilder where = new StringBuilder(BASE_FROM);
+        int i = 0;
+        for (Map.Entry<String, Object> e : filters.entrySet()) {
+            where.append(" AND JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.").append(e.getKey())
+                    .append("')) = :filter").append(i);
+            params.put("filter" + i, String.valueOf(e.getValue()));
+            i++;
+        }
+        if (req.getKeyword() != null && !req.getKeyword().isBlank()) {
+            String keywordColumn = resolveKeywordColumn(req.getKeyword(), req.getKeywordColumn(), bizCols.keySet());
+            if (keywordColumn != null) {
+                where.append(" AND JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.").append(keywordColumn)
+                        .append("')) LIKE CONCAT('%', :keyword, '%')");
+                params.put("keyword", req.getKeyword().trim());
+            }
+        }
+
+        String sortKey = (req.getSort() == null || req.getSort().isBlank())
+                ? "key" : req.getSort().trim().toLowerCase();
+        if (!"key".equals(sortKey) && !"value".equals(sortKey)) {
+            throw new BusinessException(400, "非法聚合排序字段: " + req.getSort());
+        }
+        String dir = (req.getOrder() == null || req.getOrder().isBlank())
+                ? "asc" : req.getOrder().toLowerCase();
+        if (!"asc".equals(dir) && !"desc".equals(dir)) {
+            throw new BusinessException(400, "非法排序方向: " + req.getOrder());
+        }
+
+        StringBuilder sqlText = new StringBuilder("SELECT ").append(keyExpr).append(" AS __k, ")
+                .append(valueExpr).append(" AS __v").append(where)
+                .append(" GROUP BY __k ORDER BY ")
+                .append("key".equals(sortKey) ? "__k" : "__v").append(" ").append(dir.toUpperCase());
+        if (req.getLimit() > 0) {
+            sqlText.append(" LIMIT :aggLimit");
+            params.put("aggLimit", req.getLimit());
+        }
+        Query q = em.createNativeQuery(sqlText.toString());
+        bind(q, params);
+        List<?> rows = q.getResultList();
+        List<AggregateRowVO> out = new ArrayList<>(rows.size());
+        for (Object r : rows) {
+            Object[] c = (Object[]) r;
+            out.add(AggregateRowVO.of(c[0] == null ? "" : String.valueOf(c[0]), c[1]));
+        }
+        return AggregateResultVO.of(out);
     }
 
     /** 解析 sort/order 生成 ORDER BY 片段；缺省保持默认排序。 */
@@ -387,12 +510,17 @@ public class WorkflowFormDataQueryService {
 
     /** 关键词非空时必须给出白名单内的匹配列。 */
     private String resolveKeywordColumn(BizDataQueryRequest req, Set<String> allowed) {
-        if (req.getKeyword() == null || req.getKeyword().isBlank()) {
+        return resolveKeywordColumn(req.getKeyword(), req.getKeywordColumn(), allowed);
+    }
+
+    /** 关键词非空时必须给出白名单内的匹配列（聚合路径复用）。 */
+    private String resolveKeywordColumn(String keyword, String keywordColumn, Set<String> allowed) {
+        if (keyword == null || keyword.isBlank()) {
             return null;
         }
-        String col = req.getKeywordColumn();
+        String col = keywordColumn;
         if (col == null || !COL_PATTERN.matcher(col).matches() || !allowed.contains(col)) {
-            throw new BusinessException(400, "关键词列不在表单字段中: " + req.getKeywordColumn());
+            throw new BusinessException(400, "关键词列不在表单字段中: " + keywordColumn);
         }
         return col;
     }

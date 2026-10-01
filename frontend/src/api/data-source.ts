@@ -156,6 +156,28 @@ export const dataSourceApi = {
     return http.get(`/v1/data-sources/${id}/data`, { params })
   },
 
+  /**
+   * 数据源分组聚合（Task 119 仪表盘）。
+   * group 传 `__all__` 表示整表聚合成单值（KPI 场景）；timeGrain 仅对日期类型维度生效。
+   */
+  aggregate(
+    id: string,
+    params: {
+      group: string
+      agg?: string
+      metric?: string | null
+      timeGrain?: string | null
+      filter?: string | null
+      keyword?: string | null
+      keywordColumn?: string | null
+      sort?: string | null
+      order?: string | null
+      limit?: number
+    },
+  ): Promise<R<{ rows: { key: string; value: number }[]; total: number }>> {
+    return http.get(`/v1/data-sources/${id}/aggregate`, { params })
+  },
+
   /** 数据源单条查询 */
   getData(id: string, rowId: string): Promise<R<BizDataVO>> {
     return http.get(`/v1/data-sources/${id}/data/${rowId}`)

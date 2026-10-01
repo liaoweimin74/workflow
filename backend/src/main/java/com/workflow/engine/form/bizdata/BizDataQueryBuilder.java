@@ -20,6 +20,23 @@ public final class BizDataQueryBuilder {
 
     private static final Set<String> ALLOWED_ORDER = Set.of("asc", "desc");
 
+    /** 允许的聚合函数（与 common/domain/biz-data.ts 的 AGGREGATE_FNS 保持一致的小写闭集）。 */
+    private static final Map<String, String> AGGREGATE_FN_SQL = Map.of(
+            "count", "COUNT",
+            "sum", "SUM",
+            "avg", "AVG",
+            "max", "MAX",
+            "min", "MIN");
+
+    /** 时间桶 DATE_FORMAT 模板（MariaDB 方言，与 Node biz-data-query-builder.ts 同源）。 */
+    private static final Map<String, String> TIME_GRAIN_FORMAT = Map.of(
+            "day", "%Y-%m-%d",
+            "week", "%x-W%v",
+            "month", "%Y-%m");
+
+    /** 时间桶仅允许日期类型列。 */
+    private static final Set<String> DATE_COLUMN_TYPES = Set.of("DATE", "DATETIME", "TIMESTAMP");
+
     private static final ObjectMapper OM = new ObjectMapper();
 
     private BizDataQueryBuilder() {}
@@ -95,6 +112,91 @@ public final class BizDataQueryBuilder {
             params.add(page * size);
         }
         return new SqlAndParams(sql.toString(), params);
+    }
+
+    /**
+     * 生成聚合查询（Task 119 仪表盘）：{@code SELECT <维度> AS __k, <聚合> AS __v ... GROUP BY __k}。
+     *
+     * <p>WHERE 构造与 {@link #buildSelect} 完全同源（租户 + 白名单筛选 + 关键词），安全模型一致：
+     * 标识符走白名单校验，值参数绑定。别名固定 {@code __k}/{@code __v}。
+     *
+     * <p>⚠️ JSON 类型列<b>拒绝</b>参与 group/metric：单表业务列是真实物理列，JSON 列的聚合语义
+     * （数组展开）与仪表盘诉求不符，宁可显式 400 也不静默给错误数字。
+     *
+     * @param agg      聚合函数（count/sum/avg/max/min，闭集）
+     * @param metric   聚合指标列（count 时可空，其余必填）
+     * @param timeGrain 时间桶粒度（非空时 group 列必须是日期类型）
+     * @throws IllegalArgumentException 非法聚合函数/字段/粒度/排序时（调用方转 400）
+     */
+    public static SqlAndParams buildAggregate(String tableName, List<String> allowedColumns,
+                                              Map<String, String> columnTypeOf, String tenantId,
+                                              Map<String, Object> filters, String keyword, String keywordColumn,
+                                              String group, String agg, String metric, String timeGrain,
+                                              String sort, String order) {
+        String fn = AGGREGATE_FN_SQL.get(agg);
+        if (fn == null) {
+            throw new IllegalArgumentException("非法聚合函数: " + agg);
+        }
+
+        // `__all__` 是保留维度：不做分组、整表聚成一个数（KPI 场景），键恒为 '__all__'
+        boolean isAll = "__all__".equals(group);
+        if (!isAll) {
+            validateColumn(group, allowedColumns, "分组字段");
+            assertNotJson(columnTypeOf, group, "分组字段");
+        }
+        String keyExpr = isAll ? "'__all__'" : group;
+        if (!isAll && timeGrain != null) {
+            String format = TIME_GRAIN_FORMAT.get(timeGrain);
+            if (format == null) {
+                throw new IllegalArgumentException("非法时间粒度: " + timeGrain);
+            }
+            String type = columnTypeOf.getOrDefault(group, "");
+            if (!DATE_COLUMN_TYPES.contains(type.toUpperCase())) {
+                throw new IllegalArgumentException("时间分组的列必须是日期类型: " + group);
+            }
+            keyExpr = "DATE_FORMAT(" + group + ", '" + format + "')";
+        }
+
+        String valueExpr;
+        if ("count".equals(agg)) {
+            valueExpr = "COUNT(1)";
+        } else {
+            if (metric == null || metric.isBlank()) {
+                throw new IllegalArgumentException("聚合字段不能为空");
+            }
+            validateColumn(metric, allowedColumns, "聚合字段");
+            assertNotJson(columnTypeOf, metric, "聚合字段");
+            valueExpr = fn + "(" + metric + ")";
+        }
+
+        StringBuilder sql = new StringBuilder("SELECT ").append(keyExpr).append(" AS __k, ")
+                .append(valueExpr).append(" AS __v FROM ").append(tableName)
+                .append(" WHERE tenant_id = ?");
+        List<Object> params = new ArrayList<>();
+        params.add(tenantId);
+
+        appendFilters(sql, params, allowedColumns, columnTypeOf, filters);
+        appendKeyword(sql, params, allowedColumns, keyword, keywordColumn);
+        sql.append(" GROUP BY __k");
+
+        String sortKey = (sort == null || sort.isBlank()) ? "key" : sort.trim().toLowerCase();
+        if (!"key".equals(sortKey) && !"value".equals(sortKey)) {
+            throw new IllegalArgumentException("非法聚合排序字段: " + sort);
+        }
+        String orderDir = (order == null || order.isBlank()) ? "asc" : order.toLowerCase();
+        if (!ALLOWED_ORDER.contains(orderDir)) {
+            throw new IllegalArgumentException("非法排序方向: " + order);
+        }
+        sql.append(" ORDER BY ").append("key".equals(sortKey) ? "__k" : "__v")
+                .append(" ").append(orderDir.toUpperCase());
+        return new SqlAndParams(sql.toString(), params);
+    }
+
+    /** 聚合列的 JSON 类型守卫（统一文案，避免 group/metric 两处漂移）。 */
+    private static void assertNotJson(Map<String, String> columnTypeOf, String column, String label) {
+        if (isJsonColumn(columnTypeOf, column)) {
+            throw new IllegalArgumentException(label + "不支持 JSON 类型列: " + column);
+        }
     }
 
     /**

@@ -87,6 +87,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import formCreate from '@form-create/element-ui'
 import PageDataTable from './components/PageDataTable.vue'
+import DashKpi from '@/views/dashboard/components/DashKpi.vue'
+import DashChart from '@/views/dashboard/components/DashChart.vue'
 import PageDataTree from './components/PageDataTree.vue'
 import PageDataCards from './components/PageDataCards.vue'
 import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
@@ -102,6 +104,9 @@ import { useLinkageContainer } from '@/views/form/composables/useLinkageContaine
 formCreate.component('page-table', PageDataTable)
 formCreate.component('page-tree', PageDataTree)
 formCreate.component('page-list-cards', PageDataCards)
+// 仪表盘组件（Task 119）：运行时渲染注册
+formCreate.component('dash-kpi', DashKpi)
+formCreate.component('dash-chart', DashChart)
 
 /** 宿主（PageRenderer）已加载的页面定义；传入时直接使用不自行请求，缺省回退按 pageKey 加载 */
 const props = defineProps<{ definition?: PageDefinitionDetailDTO }>()
@@ -365,6 +370,23 @@ function transformComponent(node: any): any {
   // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
   if (typeof node !== 'object' || node === null) return node
   const next = { ...node, props: { ...(node.props || {}) }, on: { ...(node.on || {}) } }
+  if (next.type === 'dash-kpi' || next.type === 'dash-chart') {
+    // 仪表盘组件（Task 119）：注入 dsRefId + 实例上报（动作总线 refresh/set-filter）
+    // 标题在组件内部渲染（图表标题样式）；置空避免 form-create 再包一层 form-item 标签
+    next.title = ''
+    next.info = ''
+    if (next.props.dataSourceId) {
+      const ds = pageSchema.dataSources.find((d) => d.id === next.props.dataSourceId)
+      if (ds && ds.refId) {
+        next.props.dsRefId = ds.refId
+      }
+    }
+    next.on['ready'] = (instance: any) => {
+      if (next.props.dataSourceId && instance) {
+        componentRefs[next.props.dataSourceId] = instance
+      }
+    }
+  }
   if (next.type === 'page-table' || next.type === 'page-tree' || next.type === 'page-list-cards') {
     next.props.pageKey = pageKey.value
     // 注入 dsRefId（页面内 dataSourceId → 全局数据源 refId，供写操作用）

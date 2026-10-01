@@ -3,6 +3,8 @@ package com.workflow.engine.datasource;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.AggregateRequest;
+import com.workflow.api.dto.AggregateResultVO;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
@@ -227,6 +229,122 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             }
             default -> throw unsupported(ds, "get");
         };
+    }
+
+    // ==================== 聚合（Task 119 仪表盘；GET /:id/aggregate） ====================
+
+    /**
+     * 分组聚合。按类型两条路径：
+     * <ul>
+     *   <li><b>SQL 聚合</b>（数据在物理表里）：FORM visual（单表 GROUP BY）/ FORM sql 与
+     *       SQL 源（模板外层包裹 GROUP BY）/ WORKFLOW（JSON_EXTRACT GROUP BY）；</li>
+     *   <li><b>内存聚合</b>（行集本就在内存或来自远端）：SYSTEM / API / FORM config（JOIN）。</li>
+     * </ul>
+     *
+     * <p>API 源走内存聚合天然兼容「远端本身就是聚合接口」：聚合是幂等归并
+     * （每维度一行时结果不变），且 group/agg/metric/timeGrain 会作为模板变量
+     * 透传给远端（远端支持自己的聚合参数时优先在远端完成）。
+     */
+    @Override
+    public AggregateResultVO aggregate(DataSourceDefinition ds, AggregateRequest req) {
+        return switch (ds.getType()) {
+            case "SYSTEM" -> {
+                router.resolve(ds, "list");
+                yield systemAggregate(ds, req);
+            }
+            case "WORKFLOW" -> workflowQueryService.aggregate(ds.getFormKey(), req);
+            case "API" -> apiAggregate(ds, req);
+            case "SQL" -> {
+                router.resolve(ds, "list");
+                FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+                if (cfg.isVisualMode() || cfg.isSqlMode()) {
+                    // 与 query 分支同语义：绕过表单 covering handler，管理员显式 SQL 直接聚合
+                    yield bizDataService.aggregateSql(ds.getFormKey(), req, cfg);
+                }
+                throw new BusinessException(400, "SQL 数据源缺少查询配置");
+            }
+            case "FORM" -> formAggregate(ds, req);
+            default -> throw unsupported(ds, "aggregate");
+        };
+    }
+
+    /** FORM 源聚合：config 模式（JOIN）行级取全量 + 内存聚合；sql 模式模板聚合；其余单表聚合。 */
+    private AggregateResultVO formAggregate(DataSourceDefinition ds, AggregateRequest req) {
+        String formKey = requireFormKey(ds, "aggregate");
+        FormQueryConfig cfg = FormQueryConfig.parse(ds.getParams(), objectMapper);
+        if (cfg.isConfigMode()) {
+            // JOIN 模式没有单表可包：行级取全量 + 内存聚合（与 SQL 路径语义一致的兜底）
+            BizDataQueryRequest listReq = new BizDataQueryRequest();
+            listReq.setFilter(req.getFilter());
+            listReq.setKeyword(req.getKeyword());
+            listReq.setKeywordColumn(req.getKeywordColumn());
+            listReq.setPage(1);
+            listReq.setSize(0);
+            BizDataPageVO page = bizDataService.queryJoin(formKey, listReq, cfg.joins());
+            List<Map<String, Object>> rows = page.getRecords().stream()
+                    .map(BizDataVO::getData)
+                    .collect(Collectors.toList());
+            return AggregateResultVO.of(InMemoryAggregateUtil.aggregateRowsInMemory(rows, aggOptions(req)));
+        }
+        if (cfg.isSqlMode()) {
+            return bizDataService.aggregateSql(formKey, req, cfg);
+        }
+        // visual 模式在 FORM 类型上不生效（同 query 分支），回退单表聚合
+        return bizDataService.aggregate(formKey, req);
+    }
+
+    /** SYSTEM 源聚合：翻页取全量行（filter 由内存聚合层应用，系统源 SQL 侧不过滤）。 */
+    private AggregateResultVO systemAggregate(DataSourceDefinition ds, AggregateRequest req) {
+        List<BizDataVO> all = new ArrayList<>();
+        int pageSize = 500;
+        int maxPages = 40;
+        for (int page = 1; page <= maxPages; page++) {
+            BizDataQueryRequest listReq = new BizDataQueryRequest();
+            listReq.setKeyword(req.getKeyword());
+            listReq.setKeywordColumn(req.getKeywordColumn());
+            listReq.setPage(page);
+            listReq.setSize(pageSize);
+            BizDataPageVO result = systemQuery(ds, listReq);
+            all.addAll(result.getRecords());
+            if (result.getRecords().size() < pageSize) {
+                break;
+            }
+            if (result.getTotal() > 0 && all.size() >= result.getTotal()) {
+                break;
+            }
+        }
+        List<Map<String, Object>> rows = InMemoryAggregateUtil.applyInMemoryFilter(
+                all.stream().map(BizDataVO::getData).collect(Collectors.toList()), req.getFilter());
+        return AggregateResultVO.of(InMemoryAggregateUtil.aggregateRowsInMemory(rows, aggOptions(req)));
+    }
+
+    /** API 源聚合：list 操作取行集（聚合参数同时作为模板变量透传）+ 内存幂等归并。 */
+    private AggregateResultVO apiAggregate(DataSourceDefinition ds, AggregateRequest req) {
+        BizDataQueryRequest listReq = new BizDataQueryRequest();
+        listReq.setFilter(req.getFilter());
+        listReq.setKeyword(req.getKeyword());
+        listReq.setKeywordColumn(req.getKeywordColumn());
+        listReq.setPage(1);
+        listReq.setSize(0);
+        Map<String, Object> extraVars = new LinkedHashMap<>();
+        extraVars.put("group", req.getGroup());
+        extraVars.put("agg", req.getAgg());
+        if (req.getMetric() != null) {
+            extraVars.put("metric", req.getMetric());
+        }
+        if (req.getTimeGrain() != null) {
+            extraVars.put("timeGrain", req.getTimeGrain());
+        }
+        BizDataPageVO page = apiQuery(ds, listReq, extraVars);
+        List<Map<String, Object>> rows = InMemoryAggregateUtil.applyInMemoryFilter(
+                page.getRecords().stream().map(BizDataVO::getData).collect(Collectors.toList()), req.getFilter());
+        return AggregateResultVO.of(InMemoryAggregateUtil.aggregateRowsInMemory(rows, aggOptions(req)));
+    }
+
+    /** 内存聚合入参（对齐 Node aggregateRowsInMemory 的 options）。 */
+    private static InMemoryAggregateUtil.AggregateOptions aggOptions(AggregateRequest req) {
+        return new InMemoryAggregateUtil.AggregateOptions(req.getGroup(), req.getAgg(), req.getMetric(),
+                req.getTimeGrain(), req.getSort(), req.getOrder(), req.getLimit());
     }
 
     @Override
@@ -464,6 +582,18 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
     }
 
     private BizDataPageVO apiQuery(DataSourceDefinition ds, BizDataQueryRequest req) {
+        return apiQuery(ds, req, Map.of());
+    }
+
+    /**
+     * API 取数（对齐 Node `apiQuery`）。
+     *
+     * <p>变量表与 Node 一致：{@code params.data} 的键值 + {@code page}/{@code size} +
+     * {@code keyword}（null → 空串），以及「keyword 非空且配了 searchParam」时把 keyword
+     * 再塞进 {@code vars[searchParam]}；{@code extraVars} 为聚合透传变量（Task 119：
+     * group/agg/metric/timeGrain，远端模板可选消费，未引用时无副作用，null 值跳过）。
+     */
+    private BizDataPageVO apiQuery(DataSourceDefinition ds, BizDataQueryRequest req, Map<String, Object> extraVars) {
         Map<String, Object> params = parseParams(ds);
         Map<String, Object> op = operation(params, "list");
         if (op == null) {
@@ -481,6 +611,13 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
         vars.put("size", req.getSize());
         String kw = req.getKeyword();
         vars.put("keyword", kw == null ? "" : kw);
+        if (extraVars != null) {
+            for (Map.Entry<String, Object> e : extraVars.entrySet()) {
+                if (e.getValue() != null) {
+                    vars.put(e.getKey(), e.getValue());
+                }
+            }
+        }
         String searchParam = str(params.get("searchParam"));
         if (kw != null && !kw.isBlank() && searchParam != null && !searchParam.isBlank()) {
             vars.put(searchParam, kw);

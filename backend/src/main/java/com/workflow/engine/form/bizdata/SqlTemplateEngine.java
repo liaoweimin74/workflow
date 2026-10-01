@@ -30,6 +30,16 @@ public final class SqlTemplateEngine {
 
     private static final Pattern PLACEHOLDER = Pattern.compile(":[A-Za-z_][A-Za-z0-9_]*");
 
+    /** 时间桶 DATE_FORMAT 模板（MariaDB 方言，与 biz-data-query-builder 同源）。 */
+    private static final Map<String, String> TIME_GRAIN_FORMAT = Map.of(
+            "day", "%Y-%m-%d",
+            "week", "%x-W%v",
+            "month", "%Y-%m");
+
+    /** 聚合入参（Task 119 仪表盘；对齐 Node wrapAggregate 的 agg 形参对象）。 */
+    public record AggregateSpec(String group, String fn, String metric,
+                                String timeGrain, String sort, String order, int limit) {}
+
     private SqlTemplateEngine() {}
 
     /**
@@ -162,6 +172,135 @@ public final class SqlTemplateEngine {
         return SqlQueryEngine.wrapSubquery(
                 new BizDataQueryBuilder.SqlAndParams(innerSql, innerParams),
                 filterFragment, filterParams, orderByFragment, page, size);
+    }
+
+    /**
+     * 聚合包裹查询（Task 119 仪表盘）：
+     *
+     * <pre>
+     * SELECT &lt;维度&gt; AS __k, &lt;聚合&gt; AS __v FROM (&lt;管理员SQL&gt;) _qs {筛选} GROUP BY __k ORDER BY ... [LIMIT ?]
+     * </pre>
+     *
+     * <p>与 {@link #wrap} 同源的安全模型：内层占位符绑定、外层筛选走白名单（filterable），
+     * 维度/指标列必须是<b>声明列</b>（允许不可筛选/不可排序的列参与分组聚合，
+     * 但 key 必须是合法标识符才能进 SQL 文本）。
+     *
+     * @throws IllegalArgumentException 模板/列/聚合参数非法时（调用方转 400）
+     */
+    public static BizDataQueryBuilder.SqlAndParams wrapAggregate(String query, String tenantId,
+                                                                 List<JoinSqlGenerator.QueryColumn> columns,
+                                                                 Map<String, Object> filters,
+                                                                 String keyword, String keywordColumn,
+                                                                 List<String> declaredParams,
+                                                                 Map<String, Object> runtimeParams,
+                                                                 AggregateSpec agg) {
+        validate(query, columns, declaredParams);
+
+        List<Object> innerParams = new ArrayList<>();
+        String innerSql = bindPlaceholders(query, tenantId, declaredParams, runtimeParams, innerParams);
+
+        StringBuilder filterSql = new StringBuilder();
+        List<Object> filterParams = new ArrayList<>();
+        appendFilters(filterSql, filterParams, columns, filters);
+        appendKeyword(filterSql, filterParams, columns, keyword, keywordColumn);
+        // 结构化/旧格式筛选统一以 " AND ..." 追加；独立成片段时去掉前导 AND
+        String filterBody = filterSql.toString();
+        if (filterBody.startsWith(" AND ")) {
+            filterBody = filterBody.substring(5);
+        }
+        String filterFragment = filterBody.isEmpty() ? "" : " WHERE " + filterBody;
+
+        // `__all__` 保留维度：整表聚合成单值（KPI 场景），不走声明列白名单
+        boolean isAll = "__all__".equals(agg.group());
+        String groupKey = isAll ? "'__all__'" : resolveAggregateColumn(columns, agg.group(), "分组字段");
+        String timeGrainFormat = agg.timeGrain() == null ? null : TIME_GRAIN_FORMAT.get(agg.timeGrain());
+        if (agg.timeGrain() != null && timeGrainFormat == null) {
+            throw new IllegalArgumentException("非法时间粒度: " + agg.timeGrain());
+        }
+        if (timeGrainFormat != null && !isAll && !isDateColumn(columns, groupKey)) {
+            throw new IllegalArgumentException("时间分组的列必须是日期类型: " + groupKey);
+        }
+        String keyExpr = timeGrainFormat == null
+                ? groupKey
+                : "DATE_FORMAT(" + groupKey + ", '" + timeGrainFormat + "')";
+
+        String valueExpr;
+        if ("count".equals(agg.fn())) {
+            valueExpr = "COUNT(1)";
+        } else {
+            if (agg.metric() == null || agg.metric().isBlank()) {
+                throw new IllegalArgumentException("聚合字段不能为空");
+            }
+            String metricKey = resolveAggregateColumn(columns, agg.metric(), "聚合字段");
+            valueExpr = aggregateFnSql(agg.fn()) + "(" + metricKey + ")";
+        }
+
+        String sortKey = (agg.sort() == null || agg.sort().isBlank()) ? "key" : agg.sort().trim().toLowerCase();
+        if (!"key".equals(sortKey) && !"value".equals(sortKey)) {
+            throw new IllegalArgumentException("非法聚合排序字段: " + agg.sort());
+        }
+        String orderDir = (agg.order() == null || agg.order().isBlank()) ? "asc" : agg.order().toLowerCase();
+        if (!ALLOWED_ORDER.contains(orderDir)) {
+            throw new IllegalArgumentException("非法排序方向: " + agg.order());
+        }
+
+        String sqlText =
+                "SELECT " + keyExpr + " AS __k, " + valueExpr + " AS __v FROM (" + innerSql + ") _qs"
+                        + filterFragment + " GROUP BY __k ORDER BY "
+                        + ("key".equals(sortKey) ? "__k" : "__v") + " " + orderDir.toUpperCase();
+        List<Object> params = new ArrayList<>(innerParams);
+        params.addAll(filterParams);
+        if (agg.limit() > 0) {
+            sqlText += " LIMIT ?";
+            params.add(agg.limit());
+        }
+        return new BizDataQueryBuilder.SqlAndParams(sqlText, params);
+    }
+
+    /** 聚合函数名白名单（与 buildAggregate 的映射保持一致）。 */
+    private static String aggregateFnSql(String agg) {
+        Map<String, String> map = Map.of(
+                "count", "COUNT", "sum", "SUM", "avg", "AVG", "max", "MAX", "min", "MIN");
+        String fn = map.get(agg);
+        if (fn == null) {
+            throw new IllegalArgumentException("非法聚合函数: " + agg);
+        }
+        return fn;
+    }
+
+    /** 聚合列校验：必须是声明列 + 合法标识符（要拼进 SQL 文本，比筛选列更严）。 */
+    private static String resolveAggregateColumn(List<JoinSqlGenerator.QueryColumn> columns,
+                                                 String column, String label) {
+        if (column == null || column.isBlank()) {
+            throw new IllegalArgumentException(label + "不能为空");
+        }
+        JoinSqlGenerator.QueryColumn matched = null;
+        for (JoinSqlGenerator.QueryColumn c : columns) {
+            if (c.key().equals(column)) {
+                matched = c;
+                break;
+            }
+        }
+        if (matched == null) {
+            throw new IllegalArgumentException("非法" + label + ": " + column);
+        }
+        if (!column.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+            throw new IllegalArgumentException("非法" + label + ": " + column);
+        }
+        return matched.key();
+    }
+
+    /** 日期类型列判定（DATE/DATETIME/TIMESTAMP，大小写不敏感）。 */
+    private static boolean isDateColumn(List<JoinSqlGenerator.QueryColumn> columns, String key) {
+        for (JoinSqlGenerator.QueryColumn c : columns) {
+            if (c.key().equals(key)) {
+                return c.columnType() != null
+                        && (c.columnType().equalsIgnoreCase("DATE")
+                        || c.columnType().equalsIgnoreCase("DATETIME")
+                        || c.columnType().equalsIgnoreCase("TIMESTAMP"));
+            }
+        }
+        return false;
     }
 
     /** 缺省排序列：第一个可排序列；全部不可排序返回 null（调用方不加 ORDER BY）。 */

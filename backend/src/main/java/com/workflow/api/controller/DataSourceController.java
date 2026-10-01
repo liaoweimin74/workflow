@@ -1,5 +1,7 @@
 package com.workflow.api.controller;
 
+import com.workflow.api.dto.AggregateRequest;
+import com.workflow.api.dto.AggregateResultVO;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
@@ -10,6 +12,7 @@ import com.workflow.api.dto.JoinPreviewRequest;
 import com.workflow.api.dto.JoinPreviewVO;
 import com.workflow.api.dto.PageResponse;
 import com.workflow.common.domain.R;
+import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.datasource.DataSourceDefinitionService;
 import com.workflow.engine.datasource.entity.DataSourceDefinition;
 import com.workflow.engine.form.bizdata.BizDataSupport;
@@ -126,6 +129,50 @@ public class DataSourceController {
     }
 
     // ==================== 统一数据访问端点（经 DataSourceAdapter SPI） ====================
+
+    /**
+     * 数据源分组聚合（Task 119 仪表盘；{@code group} 必填，{@code agg} 缺省 count）。
+     *
+     * <p>⚠️ 与 {@code /data} 的校验口径一致：非法 {@code agg}/{@code timeGrain}/{@code limit}
+     * 显式 400，不静默降级成默认值（静默会让「图表配错了聚合函数」变成「图表全是 count」）。
+     *
+     * <p>请求参数按 POJO 绑定（与 {@link BizDataQueryRequest} 同款形态）：Spring 实例化后
+     * 字段缺省值来自初始化器（{@code limit = 0}）；{@code limit} 非法值由 Spring 转换为
+     * 「Failed to convert property value ... for property 'limit'」形态（HTTP 200 + body code 400）。
+     */
+    @GetMapping("/{id}/aggregate")
+    public R<AggregateResultVO> aggregateData(@PathVariable String id, AggregateRequest req) {
+        if (req.getGroup() == null || req.getGroup().trim().isEmpty()) {
+            throw new BusinessException(400, "分组字段不能为空");
+        }
+        if (req.getAgg() != null && !req.getAgg().trim().isEmpty()
+                && !AggregateRequest.AGGREGATE_FNS.contains(req.getAgg())) {
+            throw new BusinessException(400, "非法聚合函数: " + req.getAgg());
+        }
+        if (req.getTimeGrain() != null && !req.getTimeGrain().trim().isEmpty()
+                && !AggregateRequest.TIME_GRAINS.contains(req.getTimeGrain())) {
+            throw new BusinessException(400, "非法时间粒度: " + req.getTimeGrain());
+        }
+        if (req.getLimit() < 0) {
+            throw new BusinessException(400, "limit 不能为负数");
+        }
+        if (req.getAgg() == null || req.getAgg().trim().isEmpty()) {
+            req.setAgg("count");
+        }
+        req.setMetric(blankToNull(req.getMetric()));
+        req.setFilter(blankToNull(req.getFilter()));
+        req.setKeyword(blankToNull(req.getKeyword()));
+        req.setKeywordColumn(blankToNull(req.getKeywordColumn()));
+        req.setParams(blankToNull(req.getParams()));
+        req.setSort(blankToNull(req.getSort()));
+        req.setOrder(blankToNull(req.getOrder()));
+        return R.ok(dataSourceService.aggregateData(id, req));
+    }
+
+    /** Java 侧 {@code x != null && !x.isBlank()} 的等价判定：null/空串/纯空白 → null。 */
+    private static String blankToNull(String value) {
+        return value == null || value.trim().isEmpty() ? null : value;
+    }
 
     /**
      * 数据源元数据：列定义 + 可写标记（设计器切换数据源刷新列用）。

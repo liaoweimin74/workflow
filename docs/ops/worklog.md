@@ -2520,3 +2520,41 @@ Stage Summary:
 - 发起→下一节点的表单数据链路打通（同 formDefId 回显 / form:initiator 映射 / variable: 映射三场景）
 - 测试基线无变化（后端 691 tsc 错仍为 _legacy+8081 组合根既有；.vue eslint ignore 既有）
 - 备注：为构造 E2E 条件，给 ui_verify_flow ACTIVE 版本 __PROCESS__ 配置了流程级表单（员工请假业务表单），该流程现可完整演示发起→审批回显
+
+---
+Task ID: 119-dashboard-form-create
+Agent: Z.ai Code (main session)
+Task: 用 form-create 设计主页仪表盘——可绑定数据源的仪表盘组件（探讨确认后实施）
+
+Work Log:
+- 探讨确认三决策：①聚合取数=后端新增聚合端点（方案 A），API 源用「透传+幂等归并」兼容远端已聚合；②图表渲染=echarts 按需引入（core+bar/line/pie，自建翡翠色板避开 indigo/blue）；③主页替换=路由级判断 pageKey=dashboard 已发布则渲染 PAGE，否则回退静态页
+- 后端（Nest）：`GET /v1/data-sources/:id/aggregate`（group/agg/metric/timeGrain/filter/keyword/keywordColumn/params/sort/order/limit）；SPI 加 aggregate()；五类型双路径——SQL 聚合（FORM visual 单表 buildAggregate / SQL 源与 FORM sql 模板 wrapAggregate / WORKFLOW JSON_EXTRACT GROUP BY + CAST DECIMAL(20,6)）+ 内存聚合（SYSTEM 翻页 500×40 / API 透传变量+幂等归并 / FORM config(JOIN) 兜底）；`__all__` 保留维度支持 KPI 免分组；校验显式 400（非法聚合函数/时间粒度/limit/JSON 列拒绝/派生列拒绝）
+- 后端（Java，用户要求同步）：子代理移植（9 文件+4 新类 DTO/InMemoryAggregateUtil），主会话补 `__all__` 四处；mvn -o package BUILD SUCCESS；存量编译断点（NodeConfig 包路径/Flowable8 DelegateTask 包名）由代理顺手修复 3 行并验证；Java WORKFLOW 分支保持读 ACT_HI_PROCINST（两侧读各自引擎表的结构性差异，文档化不统一）
+- 前端：echarts@5 按需注册（useEcharts.ts+DASH_PALETTE+canvasAvailable 探测）；DashKpi（group=__all__ 单值卡，千分位/单位/副标题/空态）、DashChart（bar/line/pie，ResizeObserver 自适应，暗色 CSS 变量跟随，setFilter/refresh expose 对齐动作总线）；DashConfigDialog（页级绑定数据源选择+metadata 列联动，维度下拉剔 JSON 列，时间粒度仅日期列显示）；register.ts（dashKpiRule/dashChartRule/dashConfigButton）；PageDesigner addComponent+setComponentRuleConfig；PageRendererPage 运行时注册+dsRefId 注入+ready 上报+title 置空防 form-item 包裹；main.ts FcDesigner.component 全局注册（设计器画布+运行时双实例）；DashboardRouterPage 主页分发；refId 解析回退 activeDsBindings（设计器画布实时预览）
+- E2E（agent-browser）：登录→主页 4 组件真数据渲染（流程定义数 1 个/运行中流程 1 条/发起趋势折线/定义分布饼环）→设计器打开 dashboard 页正常、组件面板含新组件、选中出「配置指标卡」按钮→console 零错误→移动端 390px 无溢出
+- 布局两轮修正：①el-row/el-col 嵌套被 fc-form-row 二次包裹→改用规则级 col:{span}（form-create 原生）；②组件根元素补 width:100% 撑满列宽
+- 测试：前端 DashComponents 9/9 + 受影响面 542/542 + 全量 1176/1176；后端 aggregate-rows 13/13（test/ 目录，vitest include 约定）
+
+Stage Summary:
+- 「form-create 设计仪表盘 + 组件绑数据源」全链路打通：数据源绑定复用页面 schema 模型，组件经 aggregate 端点取数，动作总线可联动
+- 主页已可被 form-create 页面替换（pageKey=dashboard，未配置时回退零破坏）；演示页「主页仪表盘」已发布并挂菜单（menuId=312）
+- 【重要环境修复】MariaDB 卷回退导致迁移最高只到 V41（V42-V46 丢失）：leader_id 缺列引发流程发起 500 + dept/user-tree 500，npm run migrate 补齐 5 个后全部恢复（含 Task 118 验证过的发起链路）
+- 存量观察（未处理）：sys_organization 空表 → dept-tree 聚合空行（正常语义）；API 源聚合无真实 API 源实例，逻辑与 SYSTEM 共用内存路径且幂等性有单测背书
+- 备注：TaskCreateBehaviorListener/TaskTimeoutScanner 的 3 行 import 修复是 Java 编译断点的最小修复，非本任务语义变更
+
+---
+Task ID: 119-push-recovery
+Agent: Z.ai Code (main session)
+Task: 第十次沙箱重置恢复（嵌套 .git 丢失）+ push 受阻记录
+
+Work Log:
+- 灾情：workflow_lowcode/.git 消失（git 命令落到父仓库 /home/z/my-project/.git）、DB 回滚 V41（已在 Task 119 修复）、文件 mode 全量 755 漂移、docs 等 510 文件缺失（远程有）
+- 恢复：git init -b main + remote（worklog 指纹 URL，token 需更新）→ fetch origin/main=4390c7a7 → reset --mixed 对齐 → core.fileMode false 消 mode 噪音
+- Task 119 变更甄别提交：父仓库 1d24338 的 42 文件清单按「实际任务面」重新精准暂存（排除 cron 未推送工作：FormRenderer/DictPage/ProcessCenterPage/category.service 等；排除 mariadb-user 数据文件/tool-results）
+- worklog 修正：本地快照缺 Task 102 记录 14 行 → checkout origin/main 为基线后重追加 Task 119 段（+21/-0 纯追加）
+- commit 0280023b 就绪；push 失败：worklog 里的 token 是指纹（Task 102 教训：不记全文），tool-results 转储层已脱敏无凭据
+- 待办：向用户索取新 fine-grained PAT → git remote set-url → push
+
+Stage Summary:
+- 本地仓库已恢复且提交就绪；远程 main 仍为 4390c7a7（Task 118），Task 119 待推送
+- SOP 确认：重置后 PAT 必须向用户索取；父仓库 /home/z/my-project/.git 是巡检代理工作区（含 UUID 提交与误入库的 workflow_lowcode 源码），与业务仓库已重新分离

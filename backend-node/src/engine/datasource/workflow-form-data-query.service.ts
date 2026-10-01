@@ -2,7 +2,13 @@ import { Inject, Injectable } from '@nestjs/common'
 import type { RowDataPacket } from 'mysql2'
 import type { Pool } from 'mysql2'
 import { newColumnConfig, type ColumnConfig } from '../../common/domain/column-config'
-import type { BizDataPageVO, BizDataVO } from '../../common/domain/biz-data'
+import {
+  aggregateResultVO,
+  type AggregateRequest,
+  type AggregateResultVO,
+  type BizDataPageVO,
+  type BizDataVO,
+} from '../../common/domain/biz-data'
 import { BusinessException } from '../../common/exception/business-exception'
 import { MYSQL_POOL } from '../../framework/database/database.module'
 import { getTenantId } from '../../framework/tenant/tenant-context'
@@ -127,6 +133,109 @@ export class WorkflowFormDataQueryService {
       [...params, size, (page - 1) * size],
     )
     return await this.assemble(latest, rows, total, page, size)
+  }
+
+  // ==================== 聚合（Task 119 仪表盘） ====================
+
+  /**
+   * WORKFLOW 源跨实例分组聚合（对位 `query` 的聚合版）。
+   *
+   * 维度：`startTime`（系统列，`DATE_FORMAT(h.start_time, ...)` 支持时间桶）或
+   * 最新 schema 白名单内的业务列（JSON_EXTRACT）；派生系统列
+   * （instanceId/processStatus/initiatorName/currentNodeName）是 JS 侧解析的
+   * 派生值，SQL 层聚不出来，显式 400。
+   * 指标：count 或业务列 `CAST(... AS DECIMAL(20,6))` 后聚合（JSON 值是字符串，
+   * 不 CAST 会按字符串聚合）。
+   *
+   * ⚠️ 与 Java 的结构性差异同 `query`：JOIN 的是 `wfe_process_instance`（不读 ACT_*）。
+   */
+  async aggregate(formKey: string, req: AggregateRequest): Promise<AggregateResultVO> {
+    const tenantId = getTenantId()
+    const latest = await this.latestPublished(formKey)
+    const bizCols = await this.businessColumns(latest)
+    const filters = await this.parseFilters(req.filter, latest, bizCols)
+    const ids = await this.versionIds(formKey)
+    if (ids.length === 0) {
+      return aggregateResultVO([])
+    }
+
+    const grainFormat =
+      req.timeGrain === null ? null : ({ day: '%Y-%m-%d', week: '%x-W%v', month: '%Y-%m' } as Record<string, string>)[req.timeGrain]
+    if (req.timeGrain !== null && grainFormat === undefined) {
+      throw new BusinessException(400, `非法时间粒度: ${req.timeGrain}`)
+    }
+
+    let keyExpr: string
+    if (req.group === '__all__') {
+      keyExpr = `'__all__'`
+    } else if (req.group === START_TIME_KEY) {
+      if (req.agg !== 'count') {
+        throw new BusinessException(400, '聚合字段不在表单字段中: startTime')
+      }
+      keyExpr = grainFormat === null ? 'h.start_time' : `DATE_FORMAT(h.start_time, '${grainFormat}')`
+    } else {
+      const groupCol = bizCols.get(req.group)
+      if (groupCol === undefined || !COL_PATTERN.test(req.group)) {
+        throw new BusinessException(400, `分组字段不在表单字段中: ${req.group}`)
+      }
+      if (DERIVED_SYSTEM_KEYS.has(req.group)) {
+        throw new BusinessException(400, `分组字段不在表单字段中: ${req.group}`)
+      }
+      keyExpr =
+        grainFormat === null
+          ? `JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${req.group}'))`
+          : `DATE_FORMAT(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${req.group}')), '${grainFormat}')`
+    }
+
+    let valueExpr = 'COUNT(1)'
+    if (req.agg !== 'count') {
+      if (req.metric === null || req.metric.trim() === '') {
+        throw new BusinessException(400, '聚合字段不能为空')
+      }
+      const metricCol = bizCols.get(req.metric)
+      if (metricCol === undefined || !COL_PATTERN.test(req.metric) || DERIVED_SYSTEM_KEYS.has(req.metric)) {
+        throw new BusinessException(400, `聚合字段不在表单字段中: ${req.metric}`)
+      }
+      const fn = ({ sum: 'SUM', avg: 'AVG', max: 'MAX', min: 'MIN' } as Record<string, string>)[req.agg]
+      if (fn === undefined) {
+        throw new BusinessException(400, `非法聚合函数: ${req.agg}`)
+      }
+      valueExpr = `${fn}(CAST(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${req.metric}')) AS DECIMAL(20,6)))`
+    }
+
+    const params: unknown[] = [tenantId, ...ids]
+    let where = BASE_FROM.replace('__IDS__', ids.map(() => '?').join(', '))
+    for (const [key, value] of Object.entries(filters)) {
+      where += ` AND JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${key}')) = ?`
+      params.push(String(value))
+    }
+    if (req.keyword !== null && req.keyword !== undefined && String(req.keyword).trim() !== '') {
+      const keywordColumn = this.resolveKeywordColumn(req, bizCols)
+      if (keywordColumn !== null) {
+        where += ` AND JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${keywordColumn}')) LIKE CONCAT('%', ?, '%')`
+        params.push(String(req.keyword).trim())
+      }
+    }
+
+    const sortKey = req.sort === null || req.sort.trim() === '' ? 'key' : req.sort.trim().toLowerCase()
+    if (sortKey !== 'key' && sortKey !== 'value') {
+      throw new BusinessException(400, `非法聚合排序字段: ${String(req.sort)}`)
+    }
+    const dir = req.order === null || req.order.trim() === '' ? 'asc' : req.order.toLowerCase()
+    if (dir !== 'asc' && dir !== 'desc') {
+      throw new BusinessException(400, `非法排序方向: ${String(req.order)}`)
+    }
+
+    let sqlText =
+      `SELECT ${keyExpr} AS __k, ${valueExpr} AS __v${where} GROUP BY __k ORDER BY ${sortKey === 'key' ? '__k' : '__v'} ${dir.toUpperCase()}`
+    if (req.limit > 0) {
+      sqlText += ' LIMIT ?'
+      params.push(req.limit)
+    }
+    const [rows] = await this.pool.promise().query<RowDataPacket[]>(sqlText, params)
+    return aggregateResultVO(
+      rows.map((row) => ({ key: String(row.__k ?? ''), value: Number(row.__v ?? 0) })),
+    )
   }
 
   /** 单条详情；不存在 → 404。 */
@@ -361,7 +470,7 @@ export class WorkflowFormDataQueryService {
 
   /** 关键词非空时必须给出白名单内的匹配列。 */
   private resolveKeywordColumn(
-    req: BizDataQueryRequest,
+    req: Pick<BizDataQueryRequest, 'keyword' | 'keywordColumn'>,
     bizCols: Map<string, ColumnConfig>,
   ): string | null {
     if (req.keyword === null || req.keyword === undefined || String(req.keyword).trim() === '') {

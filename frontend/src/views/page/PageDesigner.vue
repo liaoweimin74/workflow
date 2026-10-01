@@ -72,6 +72,16 @@
       @confirm="handlePageTableConfirm"
     />
 
+    <!-- 仪表盘组件配置（Task 119）：KPI 指标卡 / 统计图 -->
+    <DashConfigDialog
+      v-model="dashDialogVisible"
+      :mode="dashDialogMode"
+      :binding-props="currentDashProps"
+      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId, name: dsNameOf(ds) }))"
+      :enabled-data-sources="enabledDataSources"
+      @confirm="handleDashConfirm"
+    />
+
     <!-- 卡片样式脚本配置（结构化 CardStyle，覆盖主题） -->
     <CardStyleConfigDialog
       v-model="cardStyleDialogVisible"
@@ -180,6 +190,14 @@ import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
+import DashConfigDialog from '@/views/dashboard/components/DashConfigDialog.vue'
+import {
+  DASH_KPI_NAME,
+  DASH_CHART_NAME,
+  dashKpiRule,
+  dashChartRule,
+  dashConfigButton,
+} from '@/views/dashboard/register'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
@@ -437,6 +455,32 @@ function enableCardDesignMode(rules: any[]): any[] {
 // ===== 页面数据表单容器配置（复用 DsBindingConfigDialog 非表格模式） =====
 const formContainerDialogVisible = ref(false)
 /** 数据容器 rule：画布中 loadRule 后 type 为 FcRow，序列化前为 formContainer，两者兼容判断 */
+// ==================== 仪表盘组件配置（Task 119） ====================
+const dashDialogVisible = ref(false)
+const dashDialogMode = ref<'kpi' | 'chart'>('chart')
+const currentDashProps = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  if (active && (active.type === DASH_KPI_NAME || active.type === DASH_CHART_NAME)) {
+    return active.props || {}
+  }
+  return {}
+})
+function openDashConfig(mode: 'kpi' | 'chart') {
+  dashDialogMode.value = mode
+  dashDialogVisible.value = true
+}
+function handleDashConfirm(patch: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (active && (active.type === DASH_KPI_NAME || active.type === DASH_CHART_NAME) && active.props) {
+    Object.assign(active.props, patch)
+  }
+}
+/** 页级数据源显示名（绑定列表无 name 时回退全局源名） */
+function dsNameOf(ds: { id: string; refId: string }): string {
+  const global = enabledDataSources.value.find((d) => d.id === ds.refId)
+  return global ? global.name : ''
+}
+
 function isContainerRule(active: any): boolean {
   return !!active && (active.type === 'formContainer' || active.type === 'FcRow')
 }
@@ -603,6 +647,33 @@ function registerPageComponents() {
     }),
   })
   designerRef.value?.setComponentRuleConfig('page-tree', dataSourceProps, true)
+
+  // 仪表盘组件（Task 119）：KPI 指标卡 / 统计图（数据源配置按钮注入属性面板）
+  designerRef.value?.addComponent({
+    label: 'KPI 指标卡',
+    name: DASH_KPI_NAME,
+    icon: 'icon-count',
+    menu: 'main',
+    rule: () => dashKpiRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_KPI_NAME,
+    () => [dashConfigButton('配置指标卡', () => openDashConfig('kpi'))],
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '统计图',
+    name: DASH_CHART_NAME,
+    icon: 'icon-stack',
+    menu: 'main',
+    rule: () => dashChartRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_CHART_NAME,
+    () => [dashConfigButton('配置图表', () => openDashConfig('chart'))],
+    true,
+  )
 
   // formContainer（数据表单容器）：配置入口复用 DsBindingConfigDialog，避免维护第二套字段
   designerRef.value?.setComponentRuleConfig(

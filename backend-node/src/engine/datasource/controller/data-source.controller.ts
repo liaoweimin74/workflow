@@ -1,8 +1,18 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common'
 import { R } from '../../../common/domain/r'
 import { type ColumnInfo, type ColumnMeta, type DataSourceMetadata } from '../../../common/domain/column-config'
-import type { BizDataPageVO, BizDataVO } from '../../../common/domain/biz-data'
+import {
+  AGGREGATE_FNS,
+  TIME_GRAINS,
+  type AggregateFn,
+  type AggregateRequest,
+  type AggregateResultVO,
+  type BizDataPageVO,
+  type BizDataVO,
+  type TimeGrain,
+} from '../../../common/domain/biz-data'
 import { PageResponse } from '../../../common/domain/page-response'
+import { BusinessException } from '../../../common/exception/business-exception'
 import { JavaStatusOk } from '../../../framework/http/java-status.decorator'
 import {
   bindIntProperty,
@@ -174,6 +184,64 @@ export class DataSourceController {
   @Get(':id/metadata')
   async metadata(@Param('id') id: string): Promise<R<DataSourceMetadata>> {
     return R.ok(await this.service.metadata(id))
+  }
+
+  /**
+   * 数据源分组聚合（Task 119 仪表盘；`group` 必填，`agg` 缺省 count）。
+   *
+   * ⚠️ 与 `/data` 的校验口径一致：非法 `agg`/`timeGrain`/`limit` 显式 400，
+   * 不静默降级成默认值（静默会让「图表配错了聚合函数」变成「图表全是 count」）。
+   */
+  @Get(':id/aggregate')
+  async aggregateData(
+    @Param('id') id: string,
+    @Query('group') group?: string,
+    @Query('agg') agg?: string,
+    @Query('metric') metric?: string,
+    @Query('timeGrain') timeGrain?: string,
+    @Query('filter') filter?: string,
+    @Query('keyword') keyword?: string,
+    @Query('keywordColumn') keywordColumn?: string,
+    @Query('params') params?: string,
+    @Query('sort') sort?: string,
+    @Query('order') order?: string,
+    @Query('limit') limit?: string,
+  ): Promise<R<AggregateResultVO>> {
+    if (group === null || group === undefined || group.trim() === '') {
+      throw new BusinessException(400, '分组字段不能为空')
+    }
+    let aggFn: AggregateFn = 'count'
+    if (agg !== null && agg !== undefined && agg.trim() !== '') {
+      if (!AGGREGATE_FNS.includes(agg as AggregateFn)) {
+        throw new BusinessException(400, `非法聚合函数: ${agg}`)
+      }
+      aggFn = agg as AggregateFn
+    }
+    let grain: TimeGrain | null = null
+    if (timeGrain !== null && timeGrain !== undefined && timeGrain.trim() !== '') {
+      if (!TIME_GRAINS.includes(timeGrain as TimeGrain)) {
+        throw new BusinessException(400, `非法时间粒度: ${timeGrain}`)
+      }
+      grain = timeGrain as TimeGrain
+    }
+    const limitValue = bindIntProperty(limit, 'limit', 0)
+    if (limitValue < 0) {
+      throw new BusinessException(400, 'limit 不能为负数')
+    }
+    const request: AggregateRequest = {
+      group,
+      agg: aggFn,
+      metric: blankToNull(metric),
+      timeGrain: grain,
+      filter: blankToNull(filter),
+      keyword: blankToNull(keyword),
+      keywordColumn: blankToNull(keywordColumn),
+      params: blankToNull(params),
+      sort: blankToNull(sort),
+      order: blankToNull(order),
+      limit: limitValue,
+    }
+    return R.ok(await this.service.aggregateData(id, request))
   }
 
   /**

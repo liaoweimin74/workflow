@@ -2616,3 +2616,61 @@ Work Log:
 
 Stage Summary:
 - WORKFLOW 分支 timeGrain 套用位置回归「只套第一列」，Java 与 Nest 契约重新完全一致（WORKFLOW / buildAggregate / wrapAggregate / 内存聚合四处语义统一）
+
+---
+Task ID: 121-designer-icons
+Agent: Z.ai Code (main session)
+Task: 设计器组件面板图标修复（用户反馈「有些组件没有图标」）+ 图标回归防护测试
+
+Work Log:
+- 根因：FcDesigner 面板 icon 渲染为 fc-icon 字体类名，PageDesigner.vue 四个自造类名（icon-count/icon-filter/icon-circle-check/icon-medal）无字形定义→空白
+- 修复：KPI→icon-statistic、筛选器→icon-data-select、目标→icon-yes、排行榜→icon-statistics；数据表格→icon-table、卡片列表→icon-card（治理 icon-grid 双占用）
+- 坑：宽松 grep 字符串会混入 wangEditor w-e-icon-* 假阳性（icon-table2/icon-list-numbered），须用 `.icon-x:before` CSS 选择器精确提取字体集（248 字形）
+- 测试：新增 PageDesigner.palette-icons.test.ts 5 用例（字体集交集校验 + 仪表盘图标锚点 + 坏类名禁入）；page 测试面 201/201
+- 提交 68d234b8 已 push（origin/main 同步 0 0）
+
+Stage Summary:
+- 面板 11 组件图标全部有效；约束沉淀：addComponent 的 icon 必须取 FcDesigner iconfont 真实字形，防护测试已锁
+
+---
+Task ID: 122-layout-page-fullscreen
+Agent: Z.ai Code (main session)
+Task: 布局级页签页面全屏（用户澄清：非组件级，是每个菜单页签页整体全屏）
+
+Work Log:
+- AdminLayout 页签栏右侧新增全屏开关；page-stage 舞台（包 keep-alive router-view）为作用域；原生 Fullscreen API + CSS fixed 回退（z-2000），浮动退出按钮常驻；四主题全屏底色逐一匹配
+- useFullscreen 提升为 src/composables 共享（6 个 Dash 组件迁移 import）；增强 isFallback 导出 + 回退态 Esc 退出
+- 测试：行为 4 + 接线 5 断言；dashboard 26/26；全量 1229/1237（8 失败=DictPage 存量）
+- 提交 fca15f5f 已 push，远程同步 0 0
+
+Stage Summary:
+- 页签页全屏闭环；存量债：AdminLayout addTag TS2345（HEAD 即有）、DictPage 8 失败待巡检自愈
+
+---
+Task ID: 123-dash-width-height
+Agent: Z.ai Code (main session)
+Task: 仪表盘组件宽度栅格（撑满/1/2/1/3/2/3/1/4/自定义）+ 卡片显示高度
+
+Work Log:
+- rule.col.span（form-create 原生栅格）+ props.span 镜像双写；组件 span<24 时 margin 0 8px 留白，全屏跳过
+- KPI/目标/告警/排行榜 height prop（自适应/固定，is-fixed-height 居中/滚动）；DashConfigDialog 宽度+显示高度两段（全模式/非图表）；handleDashConfirm 同步 col
+- DashLayout123 测试 10 用例；dashboard 36/36；全量 1239/1247（DictPage 8 存量）
+- 提交 49ab0150 已 push，远程同步 0 0
+
+Stage Summary:
+- 宽高配置闭环；存量页面零影响（无 col 默认全宽）；设计器拖拽手柄调宽列为可选后续
+
+---
+Task ID: 124-stale-snapshot-triage
+Agent: Z.ai Code (main session)
+Task: push 前甄别：34 文件遭旧快照逐字节覆盖（HEAD~9~27），回滚 + 合法遗留提交
+
+Work Log:
+- 用户指令 push；36 个 M 文件中 34 个经 git hash-object 比对与 HEAD~9~27 历史提交逐字节相等（Task 103~117 时代），定性旧快照覆盖事故（沙箱已知故障类别的新变种：M 文件时间倒退）
+- 伪工作主题（均随回滚消失）：分类树形恢复（逆 Task 105）、DictPage 双表格重构（逆 Task 115/117）、FormRenderer 删 Task 118 syncFormDataToView、PropertyPanel 移除 @submit.prevent 等
+- 合法保留：①worklog Task 121/122/123 补录（漏提交）②unified-data-source-adapter.ts aggregateInMemory400（Task 120 契约：内存聚合校验错误显式 400，git log -S 确认从未入库）
+- 回滚后验证：前端全量 1255/1255 全绿（DictPage「8 存量失败」实为污染伪象，清零）、Nest 675/675、三服务 200
+- SOP 增补：M 文件甄别须比对历史 hash（非仅肉眼 diff）；恢复禁止 checkout . 全量（误伤合法改动）
+
+Stage Summary:
+- 本提交 = worklog 121-123 补录 + Task 120 aggregateInMemory400 补遗；34 污染文件已还原至 HEAD，零残留

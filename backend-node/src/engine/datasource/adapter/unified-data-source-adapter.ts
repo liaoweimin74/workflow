@@ -5,6 +5,7 @@ import {
   aggregateResultVO,
   type AggregateRequest,
   type AggregateResultVO,
+  type AggregateRowVO,
   type BizDataPageVO,
   type BizDataVO,
 } from '../../../common/domain/biz-data'
@@ -17,7 +18,19 @@ import { HttpLogicExecutor } from '../../logic/http-logic-executor'
 import { WorkflowFormDataQueryService } from '../workflow-form-data-query.service'
 import { SystemSourceQueryService } from '../service/system-source-query.service'
 import { builtInSourceByKey } from '../service/system-source-catalog'
-import { aggregateRowsInMemory, applyInMemoryFilter } from '../aggregate-rows'
+import { aggregateRowsInMemory, applyInMemoryFilter, type InMemoryAggregateOptions } from '../aggregate-rows'
+/** 内存聚合校验类错误 → 显式 400（与 SQL 路径 BusinessException 风格一致，Task 120）。 */
+function aggregateInMemory400(
+  rows: Array<Record<string, unknown>>,
+  options: InMemoryAggregateOptions,
+): AggregateRowVO[] {
+  try {
+    return aggregateRowsInMemory(rows, options)
+  } catch (e) {
+    throw new BusinessException(400, e instanceof Error ? e.message : String(e))
+  }
+}
+
 import {
   cloneColumns,
   type DataSourceAdapter,
@@ -313,7 +326,7 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
         config.joins,
       )
       return aggregateResultVO(
-        aggregateRowsInMemory(page.records.map((row) => row.data), {
+        aggregateInMemory400(page.records.map((row) => row.data), {
           group: req.group,
           agg: req.agg,
           metric: req.metric,
@@ -356,7 +369,7 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
     }
     const rows = applyInMemoryFilter(all.map((row) => row.data), req.filter)
     return aggregateResultVO(
-      aggregateRowsInMemory(rows, {
+      aggregateInMemory400(rows, {
         group: req.group,
         agg: req.agg,
         metric: req.metric,
@@ -389,7 +402,7 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
     )
     const rows = applyInMemoryFilter(page.records.map((row) => row.data), req.filter)
     return aggregateResultVO(
-      aggregateRowsInMemory(rows, {
+      aggregateInMemory400(rows, {
         group: req.group,
         agg: req.agg,
         metric: req.metric,

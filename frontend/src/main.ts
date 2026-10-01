@@ -11,6 +11,12 @@ import '@/vendor/style/index.css'
 import LookupPicker from '@/components/business/LookupPicker.vue'
 import DataPicker from '@/views/form/components/DataPicker.vue'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
+import DashKpi from '@/views/dashboard/components/DashKpi.vue'
+import DashChart from '@/views/dashboard/components/DashChart.vue'
+import DashFilter from '@/views/dashboard/components/DashFilter.vue'
+import DashGoal from '@/views/dashboard/components/DashGoal.vue'
+import DashLeaderboard from '@/views/dashboard/components/DashLeaderboard.vue'
+import DashAlert from '@/views/dashboard/components/DashAlert.vue'
 import App from './App.vue'
 import router from './router'
 import { patchMessageBoxDraggable } from './utils/elementPlusDraggable'
@@ -35,6 +41,13 @@ FcDesigner.component('LookupPicker', LookupPicker)
 FcDesigner.component('dataPicker', DataPicker)
 // 数据表格：全局注册，使表单设计器（画布 + 运行时渲染）与页面设计器/渲染页都能使用
 FcDesigner.component('page-table', PageDataTable)
+// 仪表盘组件（Task 119）：设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('dash-kpi', DashKpi)
+FcDesigner.component('dash-chart', DashChart)
+FcDesigner.component('dash-filter', DashFilter)
+FcDesigner.component('dash-goal', DashGoal)
+FcDesigner.component('dash-leaderboard', DashLeaderboard)
+FcDesigner.component('dash-alert', DashAlert)
 app.use(formCreate)
 app.use(FcDesigner)
 app.mount('#app')

@@ -49,6 +49,7 @@ class ProcessInstanceControllerTest {
     private FormDataService formDataService;
     private VariableMappingWriter variableMappingWriter;
     private TaskService taskService;
+    private WorkflowTaskService workflowTaskService;
     private ObjectMapper objectMapper;
     private ProcessInstanceController controller;
     private SecurityContext savedSecurityContext;
@@ -61,11 +62,11 @@ class ProcessInstanceControllerTest {
         formDataService = mock(FormDataService.class);
         variableMappingWriter = mock(VariableMappingWriter.class);
         taskService = mock(TaskService.class);
+        workflowTaskService = mock(WorkflowTaskService.class);
         objectMapper = new ObjectMapper();
         controller = new ProcessInstanceController(
                 processInstanceService, highlightService, predictionService,
-                formDataService, variableMappingWriter, taskService,
-                mock(WorkflowTaskService.class), objectMapper);
+                formDataService, variableMappingWriter, taskService, workflowTaskService, objectMapper);
         savedSecurityContext = SecurityContextHolder.getContext();
     }
 

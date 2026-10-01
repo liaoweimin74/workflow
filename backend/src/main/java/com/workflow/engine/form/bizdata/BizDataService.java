@@ -1,6 +1,8 @@
 package com.workflow.engine.form.bizdata;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.AggregateRequest;
+import com.workflow.api.dto.AggregateResultVO;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
@@ -175,6 +177,26 @@ public class BizDataService {
      */
     public BizDataPageVO querySqlRaw(String formKey, BizDataQueryRequest req, FormQueryConfig cfg) {
         return support.querySqlTemplate(formKey, req, cfg);
+    }
+
+    // ==================== 聚合查询（Task 119 仪表盘） ====================
+
+    /**
+     * 单表聚合（visual 模式 FORM 源）。
+     *
+     * <p>对齐 Node {@code BizDataService.aggregate}：不经 covering handler 直达通用实现。
+     */
+    public AggregateResultVO aggregate(String formKey, AggregateRequest req) {
+        return support.queryAggregateGeneric(formKey, req);
+    }
+
+    /**
+     * SQL 模板聚合（SQL 源 / FORM sql 模式；对位 querySqlRaw 的聚合版）。
+     *
+     * <p>管理员显式 SQL 不被业务定制 handler 劫持，与 {@link #querySqlRaw} 同语义。
+     */
+    public AggregateResultVO aggregateSql(String formKey, AggregateRequest req, FormQueryConfig cfg) {
+        return support.queryAggregateSqlTemplate(formKey, req, cfg);
     }
 
     /**

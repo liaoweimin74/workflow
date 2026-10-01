@@ -98,7 +98,7 @@ class EndToEndIntegrationTest extends AbstractFlowableSpikeTest {
                 mock(com.workflow.engine.form.mapping.VariableMappingWriter.class);
         RejectService rejectService = new RejectService(taskService, runtimeService, resolver,
                 tenantProvider, commentRepository, variableMappingWriter,
-                mock(NodeOptionsService.class), mock(NodeConfigRepository.class), mock(HistoryService.class));
+                mock(NodeOptionsService.class), mock(NodeConfigRepository.class), historyService);
         rejectService.reject(managerTask.getId(), "bob", "信息不完整");
 
         // 经理任务消失，发起人任务重新出现

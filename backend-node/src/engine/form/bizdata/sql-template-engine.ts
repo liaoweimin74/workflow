@@ -23,6 +23,7 @@ import {
   type FilterEmitOptions,
 } from './filter-sql'
 import { wrapSubquery, type SqlAndParams, type WrappedQuery } from './sql-query-engine'
+import { splitGroupColumns } from '../../datasource/aggregate-rows'
 /**
  * 声明列类型（对齐 Java `JoinSqlGenerator.QueryColumn`）：定义在 `join-sql-generator.ts`
  * —— Java 侧这个 record 的宿主就是 `JoinSqlGenerator`，两处共用同一形状。
@@ -41,6 +42,13 @@ const ALLOWED_ORDER = new Set(['asc', 'desc'])
 
 /** `:占位符`（对齐 Java `PLACEHOLDER`）。 */
 const PLACEHOLDER = /:[A-Za-z_][A-Za-z0-9_]*/g
+
+/** 时间桶 DATE_FORMAT 模板（与 biz-data-query-builder 同源，MariaDB 方言）。 */
+const TIME_GRAIN_FORMAT: Record<string, string> = {
+  day: '%Y-%m-%d',
+  week: '%x-W%v',
+  month: '%Y-%m',
+}
 
 /**
  * 抛「非法参数」——注意**不是** `BusinessException`。
@@ -254,6 +262,123 @@ export function indexOfKeyword(s: string, keyword: string, from = 0): number {
     i = lower.indexOf(k, i + 1)
   }
   return -1
+}
+
+
+/**
+ * 聚合包裹查询（Task 119 仪表盘）：
+ *
+ * ```sql
+ * SELECT <维度> AS __k, <聚合> AS __v FROM (<管理员SQL>) _qs {筛选} GROUP BY __k ORDER BY ... [LIMIT ?]
+ * ```
+ *
+ * 与 `wrap` 同源的安全模型：内层占位符绑定、外层筛选走白名单（filterable），
+ * 维度/指标列必须是**声明列**（允许不可筛选/不可排序的列参与分组聚合，
+ * 但 key 必须是合法标识符才能进 SQL 文本）。
+ */
+export function wrapAggregate(
+  query: string,
+  tenantId: string,
+  columns: QueryColumn[],
+  filters: Record<string, unknown> | null,
+  keyword: string | null,
+  keywordColumn: string | null,
+  declaredParams: string[],
+  runtimeParams: Record<string, unknown>,
+  agg: { group: string; fn: string; metric: string | null; timeGrain: string | null; sort: string | null; order: string | null; limit: number },
+): SqlAndParams {
+  validate(query, columns, declaredParams)
+
+  const innerParams: unknown[] = []
+  const innerSql = bindPlaceholders(query, tenantId, declaredParams, runtimeParams, innerParams)
+
+  let filterSql = ''
+  const filterParams: unknown[] = []
+  filterSql += appendFilters(filterParams, filters, access(columns), FILTER_OPTIONS)
+  filterSql += appendKeyword(filterParams, keyword, keywordColumn, access(columns), FILTER_OPTIONS)
+  const filterBody = filterSql.startsWith(' AND ') ? filterSql.slice(5) : filterSql
+  const filterFragment = filterBody === '' ? '' : ` WHERE ${filterBody}`
+
+  const isAll = agg.group === '__all__'
+  // Task 120：group 支持逗号双维度（"a,b"），key 用 CONCAT(a,'|',b)；timeGrain 只作用于第一列
+  const groupColumns = isAll ? [] : splitGroupColumns(agg.group)
+  const resolveColumn = (column: string): string => resolveAggregateColumn(columns, column, '分组字段')
+  const dimensionExpr = (column: string, withTimeGrain: boolean): string => {
+    const key = resolveColumn(column)
+    if (!withTimeGrain || agg.timeGrain === null || agg.timeGrain === undefined) return key
+    const format = TIME_GRAIN_FORMAT[agg.timeGrain]
+    if (format === undefined) {
+      throw illegal(`非法时间粒度: ${String(agg.timeGrain)}`)
+    }
+    if (!isDateColumn(columns, key)) {
+      throw illegal(`时间分组的列必须是日期类型: ${key}`)
+    }
+    return `DATE_FORMAT(${key}, '${format}')`
+  }
+  const keyExpr = isAll
+    ? "'__all__'"
+    : groupColumns.length === 1
+      ? dimensionExpr(groupColumns[0], true)
+      : `CONCAT(${dimensionExpr(groupColumns[0], true)}, '|', ${dimensionExpr(groupColumns[1], false)})`
+
+  let valueExpr: string
+  if (agg.fn === 'count') {
+    valueExpr = 'COUNT(1)'
+  } else {
+    if (agg.metric === null || agg.metric.trim() === '') {
+      throw illegal('聚合字段不能为空')
+    }
+    const metricKey = resolveAggregateColumn(columns, agg.metric, '聚合字段')
+    valueExpr = `${aggregateFnSql(agg.fn)}(${metricKey})`
+  }
+
+  const sortKey = agg.sort === null || agg.sort.trim() === '' ? 'key' : agg.sort.trim().toLowerCase()
+  if (sortKey !== 'key' && sortKey !== 'value') {
+    throw illegal(`非法聚合排序字段: ${String(agg.sort)}`)
+  }
+  const orderDir = agg.order === null || agg.order.trim() === '' ? 'asc' : agg.order.toLowerCase()
+  if (!ALLOWED_ORDER.has(orderDir)) {
+    throw illegal(`非法排序方向: ${String(agg.order)}`)
+  }
+
+  let sqlText =
+    `SELECT ${keyExpr} AS __k, ${valueExpr} AS __v FROM (${innerSql}) _qs` +
+    `${filterFragment} GROUP BY __k ORDER BY ${sortKey === 'key' ? '__k' : '__v'} ${orderDir.toUpperCase()}`
+  const params: unknown[] = [...innerParams, ...filterParams]
+  if (agg.limit > 0) {
+    sqlText += ' LIMIT ?'
+    params.push(agg.limit)
+  }
+  return { sql: sqlText, params }
+}
+
+/** 聚合函数名白名单（与 buildAggregate 的映射保持一致）。 */
+function aggregateFnSql(agg: string): string {
+  const map: Record<string, string> = { count: 'COUNT', sum: 'SUM', avg: 'AVG', max: 'MAX', min: 'MIN' }
+  const fn = map[agg]
+  if (fn === undefined) throw illegal(`非法聚合函数: ${agg}`)
+  return fn
+}
+
+/** 聚合列校验：必须是声明列 + 合法标识符（要拼进 SQL 文本，比筛选列更严）。 */
+function resolveAggregateColumn(columns: QueryColumn[], column: string, label: string): string {
+  if (column === null || column === undefined || column.trim() === '') {
+    throw illegal(`${label}不能为空`)
+  }
+  const matched = columns.find((c) => c.key === column)
+  if (matched === undefined) {
+    throw illegal(`非法${label}: ${column}`)
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+    throw illegal(`非法${label}: ${column}`)
+  }
+  return matched.key
+}
+
+function isDateColumn(columns: QueryColumn[], key: string): boolean {
+  const column = columns.find((c) => c.key === key)
+  if (column === undefined) return false
+  return ['DATE', 'DATETIME', 'TIMESTAMP'].includes(column.columnType.toUpperCase())
 }
 
 /** 本模块的列访问器（`SqlTemplateEngine.resolveKey` 语义：返回声明列 key）。 */

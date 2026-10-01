@@ -1,23 +1,32 @@
-# 沙箱环境专用配置：H2 数据库（MySQL 兼容模式）
-# 说明：沙箱无 MySQL/libaio，使用项目已内置的 H2 runtime 依赖
+# 沙箱环境专用配置：MariaDB（用户态实例，Task 32 起常驻 127.0.0.1:3306）
+#
+# 历史：本 profile 曾使用 H2（MODE=MySQL）规避「沙箱无 MySQL」；Task 32 引入
+# 用户态 MariaDB 后，H2 路线暴露两类不可维护问题（2026-10-01，Task 125）：
+#   1. Flowable 8.0.0 的 H2 建表脚本用 H2 1.4 的 `identity` 类型，H2 2.x 已删除
+#      （修复脚本见 scripts/patch-flowable-h2.sh），且 Hibernate-first 建表与
+#      Flyway INSERT 的列默认值假设冲突连环爆；
+#   2. mysql-connector-j 9.x 对 MariaDB 的元数据探测触发
+#      Unknown column 'RESERVED'（Hibernate 无法确定 dialect）。
+# 现方案：MariaDB 原生驱动（org.mariadb.jdbc）+ flyway-mysql 原生方言 +
+# Flowable mysql 脚本，与生产 MySQL 形态完全对齐。
+#
 # 注意：
-#  - MODE=MySQL 提供反引号 / INSERT IGNORE / INDEX 内联 / LONGTEXT 等 MySQL 方言兼容
-#  - 不要加 DATABASE_TO_LOWER：未加引号标识符会存成小写，破坏 Flowable 的
-#    DatabaseMetaData 大写表名存在性检查（ACT_GE_PROPERTY already exists）
-#  - CASE_INSENSITIVE_IDENTIFIERS=TRUE：让 Hibernate 的小写 default schema (public) 可命中 PUBLIC
-#  - NON_KEYWORDS=VALUE：SysDictData 实体的 value 列在 H2 中是保留字
+#  - Java 引擎独占 `workflow` 库（createDatabaseIfNotExist），与 Nest 引擎的
+#    `workflow_v6` 相互隔离，双引擎数据互不污染；
+#  - flowable.database-schema-update=true：Flowable 自管 ACT_ 表结构；
+#  - 不要加 DATABASE_TO_LOWER 等 H2 参数（历史遗留，已随 H2 移除）。
 spring:
   datasource:
-    url: jdbc:h2:file:./data/workflow;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;NON_KEYWORDS=VALUE
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
+    url: jdbc:mariadb://127.0.0.1:3306/workflow?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8
+    username: root
+    password: 740130
+    driver-class-name: org.mariadb.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: update
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
+        dialect: org.hibernate.dialect.MariaDBDialect
 
 flowable:
   database-schema-update: true

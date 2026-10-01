@@ -2520,3 +2520,172 @@ Stage Summary:
 - 发起→下一节点的表单数据链路打通（同 formDefId 回显 / form:initiator 映射 / variable: 映射三场景）
 - 测试基线无变化（后端 691 tsc 错仍为 _legacy+8081 组合根既有；.vue eslint ignore 既有）
 - 备注：为构造 E2E 条件，给 ui_verify_flow ACTIVE 版本 __PROCESS__ 配置了流程级表单（员工请假业务表单），该流程现可完整演示发起→审批回显
+
+---
+Task ID: 119-dashboard-form-create
+Agent: Z.ai Code (main session)
+Task: 用 form-create 设计主页仪表盘——可绑定数据源的仪表盘组件（探讨确认后实施）
+
+Work Log:
+- 探讨确认三决策：①聚合取数=后端新增聚合端点（方案 A），API 源用「透传+幂等归并」兼容远端已聚合；②图表渲染=echarts 按需引入（core+bar/line/pie，自建翡翠色板避开 indigo/blue）；③主页替换=路由级判断 pageKey=dashboard 已发布则渲染 PAGE，否则回退静态页
+- 后端（Nest）：`GET /v1/data-sources/:id/aggregate`（group/agg/metric/timeGrain/filter/keyword/keywordColumn/params/sort/order/limit）；SPI 加 aggregate()；五类型双路径——SQL 聚合（FORM visual 单表 buildAggregate / SQL 源与 FORM sql 模板 wrapAggregate / WORKFLOW JSON_EXTRACT GROUP BY + CAST DECIMAL(20,6)）+ 内存聚合（SYSTEM 翻页 500×40 / API 透传变量+幂等归并 / FORM config(JOIN) 兜底）；`__all__` 保留维度支持 KPI 免分组；校验显式 400（非法聚合函数/时间粒度/limit/JSON 列拒绝/派生列拒绝）
+- 后端（Java，用户要求同步）：子代理移植（9 文件+4 新类 DTO/InMemoryAggregateUtil），主会话补 `__all__` 四处；mvn -o package BUILD SUCCESS；存量编译断点（NodeConfig 包路径/Flowable8 DelegateTask 包名）由代理顺手修复 3 行并验证；Java WORKFLOW 分支保持读 ACT_HI_PROCINST（两侧读各自引擎表的结构性差异，文档化不统一）
+- 前端：echarts@5 按需注册（useEcharts.ts+DASH_PALETTE+canvasAvailable 探测）；DashKpi（group=__all__ 单值卡，千分位/单位/副标题/空态）、DashChart（bar/line/pie，ResizeObserver 自适应，暗色 CSS 变量跟随，setFilter/refresh expose 对齐动作总线）；DashConfigDialog（页级绑定数据源选择+metadata 列联动，维度下拉剔 JSON 列，时间粒度仅日期列显示）；register.ts（dashKpiRule/dashChartRule/dashConfigButton）；PageDesigner addComponent+setComponentRuleConfig；PageRendererPage 运行时注册+dsRefId 注入+ready 上报+title 置空防 form-item 包裹；main.ts FcDesigner.component 全局注册（设计器画布+运行时双实例）；DashboardRouterPage 主页分发；refId 解析回退 activeDsBindings（设计器画布实时预览）
+- E2E（agent-browser）：登录→主页 4 组件真数据渲染（流程定义数 1 个/运行中流程 1 条/发起趋势折线/定义分布饼环）→设计器打开 dashboard 页正常、组件面板含新组件、选中出「配置指标卡」按钮→console 零错误→移动端 390px 无溢出
+- 布局两轮修正：①el-row/el-col 嵌套被 fc-form-row 二次包裹→改用规则级 col:{span}（form-create 原生）；②组件根元素补 width:100% 撑满列宽
+- 测试：前端 DashComponents 9/9 + 受影响面 542/542 + 全量 1176/1176；后端 aggregate-rows 13/13（test/ 目录，vitest include 约定）
+
+Stage Summary:
+- 「form-create 设计仪表盘 + 组件绑数据源」全链路打通：数据源绑定复用页面 schema 模型，组件经 aggregate 端点取数，动作总线可联动
+- 主页已可被 form-create 页面替换（pageKey=dashboard，未配置时回退零破坏）；演示页「主页仪表盘」已发布并挂菜单（menuId=312）
+- 【重要环境修复】MariaDB 卷回退导致迁移最高只到 V41（V42-V46 丢失）：leader_id 缺列引发流程发起 500 + dept/user-tree 500，npm run migrate 补齐 5 个后全部恢复（含 Task 118 验证过的发起链路）
+- 存量观察（未处理）：sys_organization 空表 → dept-tree 聚合空行（正常语义）；API 源聚合无真实 API 源实例，逻辑与 SYSTEM 共用内存路径且幂等性有单测背书
+- 备注：TaskCreateBehaviorListener/TaskTimeoutScanner 的 3 行 import 修复是 Java 编译断点的最小修复，非本任务语义变更
+
+---
+Task ID: 119-push-recovery
+Agent: Z.ai Code (main session)
+Task: 第十次沙箱重置恢复（嵌套 .git 丢失）+ push 受阻记录
+
+Work Log:
+- 灾情：workflow_lowcode/.git 消失（git 命令落到父仓库 /home/z/my-project/.git）、DB 回滚 V41（已在 Task 119 修复）、文件 mode 全量 755 漂移、docs 等 510 文件缺失（远程有）
+- 恢复：git init -b main + remote（worklog 指纹 URL，token 需更新）→ fetch origin/main=4390c7a7 → reset --mixed 对齐 → core.fileMode false 消 mode 噪音
+- Task 119 变更甄别提交：父仓库 1d24338 的 42 文件清单按「实际任务面」重新精准暂存（排除 cron 未推送工作：FormRenderer/DictPage/ProcessCenterPage/category.service 等；排除 mariadb-user 数据文件/tool-results）
+- worklog 修正：本地快照缺 Task 102 记录 14 行 → checkout origin/main 为基线后重追加 Task 119 段（+21/-0 纯追加）
+- commit 0280023b 就绪；push 失败：worklog 里的 token 是指纹（Task 102 教训：不记全文），tool-results 转储层已脱敏无凭据
+- 待办：向用户索取新 fine-grained PAT → git remote set-url → push
+
+Stage Summary:
+- 本地仓库已恢复且提交就绪；远程 main 仍为 4390c7a7（Task 118），Task 119 待推送
+- SOP 确认：重置后 PAT 必须向用户索取；父仓库 /home/z/my-project/.git 是巡检代理工作区（含 UUID 提交与误入库的 workflow_lowcode 源码），与业务仓库已重新分离
+
+---
+Task ID: 119-restore-verify
+Agent: Z.ai Code (main session)
+Task: 第十一次文件丢失恢复（磁盘 510 文件消失、.git 完好）+ 全链路可用性核验
+
+Work Log:
+- 磁盘 510 文件丢失（含 Task 117/118 核心源码与 golden fixtures），嵌套 .git 完好：git -c core.quotepath=false 提取 D 清单后 checkout -- 全量恢复；33 个 M 文件（巡检进行中工作）甄别保留
+- 核验：迁移 V42-V46 在、dashboard 页 PUBLISHED、menu 312 在、8080 health UP；agent-browser E2E 登录→主页仪表盘 4 组件真数据渲染、console 零错误
+- push 复试仍 Invalid token：Task 119 提交 b96f64b2 领先 origin/main 1 commit，待用户提供新 PAT
+
+Stage Summary:
+- 站点完全可用；唯一遗留为 push 凭据。SOP：恢复 D 文件必须关 core.quotepath（中文路径）
+
+---
+Task ID: 119-push-done
+Agent: Z.ai Code (main session)
+Task: Task 119 push 完成（用户提供新 PAT，指纹 11ARRZ...TyWFds）
+
+Work Log:
+- remote set-url 更新凭据后 push origin main 成功：4390c7a7..b96f64b2
+- 核对 origin/main...main = 0 0 完全同步
+
+Stage Summary:
+- Task 119（form-create 仪表盘：KPI/统计图组件绑数据源 + 聚合端点 Nest/Java 双后端 + 主页替换）全链路闭环
+
+---
+Task ID: 120-1b
+Agent: Task 120-1b 实施代理（subagent）
+Task: Java 双维度聚合对位移植（对齐 Nest Task 120 聚合端点双维度语义）
+
+Work Log:
+- 先读 Nest 参考实现（aggregate-rows.ts / biz-data-query-builder.ts / sql-template-engine.ts / workflow-form-data-query.service.ts / unified-data-source-adapter.ts 的 Task 120 改动），再对位 Java 侧 5 文件：
+- `InMemoryAggregateUtil.java`：①新增 `splitGroupColumns(group)`（逗号拆分、trim 去空、最多两列；报错文案与 Nest 逐字一致：「分组字段不能为空: xxx」「分组字段最多支持两个维度: xxx」「分组字段重复: xxx」）；②`aggregateRowsInMemory` 支持双维度——`__all__` 保留维度不变，否则拆列逐行取值，任一维度为 null 整行跳过，key 用新增常量 `COMPOSITE_KEY_SEPARATOR='|'` 拼接，timeGrain 只套第一列（i==0）；③`bucketKey` 补 JS Date 格式兼容：非 `^\d{4}-\d{2}` 前缀的字符串先试 `EEE MMM dd yyyy HH:mm:ss 'GMT'Z`（Date.toString 形态，先剥尾部 "(UTC)" 括号）与 RFC_1123 解析，成功则规范化为 UTC "yyyy-MM-dd HH:mm:ss" 再切桶，失败原样（对齐 JS new Date NaN 语义）
+- `BizDataQueryBuilder.buildAggregate`：group 经 splitGroupColumns 拆列，每列独立 validateColumn + assertNotJson；双列 keyExpr = CONCAT(dimExprA, '|', dimExprB)，提取 `dimensionExpr(column, withTimeGrain, ...)` helper，timeGrain 只套第一列
+- `SqlTemplateEngine.wrapAggregate`：同上——splitGroupColumns + `aggregateDimensionExpr` helper（resolveAggregateColumn 白名单/标识符校验保留）+ 双列 CONCAT；顺带消除既有偏差：旧实现 `__all__`+非法 timeGrain 会报错、`__all__`+timeGrain 会产出 DATE_FORMAT('__all__',…) 脏 key，新结构与 Nest 一致（__all__ 短路、不校验不包裹 timeGrain）
+- `WorkflowFormDataQueryService.aggregate`：keyExpr if/else 链改写为 `keyExprOf` lambda（'__all__'/startTime 特殊列/业务列 JSON_EXTRACT 三分支逐列判断，含 grainFormat 套用位置），双列时 CONCAT(keyExprOf(a), '|', keyExprOf(b))；错误文案与 Nest 保持一致（BusinessException 400）
+- `UnifiedDataSourceAdapter`：新增 `aggregateInMemory400(rows, options)` helper（catch IllegalArgumentException → BusinessException(400)，对齐 BizDataSupport 既有用法与 Nest aggregateInMemory400），formAggregate(config)/systemAggregate/apiAggregate 三处调用点替换
+- 最小修复存量编译断点（4 个测试文件，主源码构造器签名早已漂移、测试未跟上，非本任务语义改动）：ProcessInstanceControllerTest 补 WorkflowTaskService mock；EndToEndIntegrationTest 的 RejectService 补 NodeOptionsService/NodeConfigRepository/HistoryService；WorkflowTaskServiceDetailTest / WorkflowTaskServiceMappedDataTest 的 WorkflowTaskService 补 NodeOptionsService/EngineNotifyService/ProcessInstanceService mock
+- 顺手最小修复（记录）：InMemoryAggregateUtil 的 limit 截断由 `subList(0, limit)`（limit>行数时 IndexOutOfBounds→500）改为 `Math.min(limit, size)`，对齐 Node `slice(0, limit)` 的钳制行为
+- 验证：`JAVA_HOME=/home/z/tools/jdk21 /home/z/tools/maven/bin/mvn -o package -q -DskipTests` → BUILD SUCCESS（exit 0），workflow-platform-1.0.0-SNAPSHOT.jar 正常产出
+
+Stage Summary:
+- Java 侧聚合端点双维度语义与 Nest 完全对位：group="a,b"（≤2 列、去空格、重复/空/超列显式 400）、key='|' 拼接、timeGrain 只套第一列（内存聚合与 buildAggregate/wrapAggregate）、__all__ 保留维度不变、bucketKey 兼容 JS Date 序列化格式、内存聚合校验错误显式 400
+- 关键实现差异点（有意为之，保持两侧契约一致）：①WORKFLOW 分支的 keyExprOf 与 Nest 逐列一致——timeGrain 在该分支按「列」而非「位置」套用（第二列也会被 DATE_FORMAT 包裹），与 buildAggregate/wrapAggregate 的「只套第一列」不同，这是 Nest 参考实现的既有行为，Java 侧照抄未"修正"；②Java 侧 splitGroupColumns 复用 InMemoryAggregateUtil（跨包 import），与 Nest 的 import 方向一致；③测试文件仅补构造器 mock 参数使 testCompile 通过，未新增/修改测试逻辑
+
+---
+Task ID: 120-1b-fix
+Agent: Task 120-1b 实施代理（subagent）
+Task: WORKFLOW aggregate keyExprOf 对齐 Nest 修正——timeGrain 只套第一列（withTimeGrain 参数化）
+
+Work Log:
+- Nest 侧 workflow-form-data-query.service.ts 的 keyExprOf 刚修正为 (column, withTimeGrain) 双参（单维度 (a, true)；双维度 CONCAT(a true, '|', b false)，第二列永远原样 JSON_UNQUOTE）——即 Task 120-1b 报告的差异点①已被 Nest 侧消除
+- Java 对齐：WorkflowFormDataQueryService.aggregate 的 keyExprOf 由 UnaryOperator<String> 改为 BiFunction<String, Boolean, String>，startTime 特殊列与 JSON_EXTRACT 业务列分支均为 !withTimeGrain || grainFormat == null 时返回原始表达式；单维度 keyExprOf(a, true)、双维度 CONCAT(keyExprOf(a, true), '|', keyExprOf(b, false))
+- 仅动 WorkflowFormDataQueryService.java 一个文件；mvn -o package -q -DskipTests → BUILD SUCCESS（exit 0）
+
+Stage Summary:
+- WORKFLOW 分支 timeGrain 套用位置回归「只套第一列」，Java 与 Nest 契约重新完全一致（WORKFLOW / buildAggregate / wrapAggregate / 内存聚合四处语义统一）
+
+---
+Task ID: 121-designer-icons
+Agent: Z.ai Code (main session)
+Task: 设计器组件面板图标修复（用户反馈「有些组件没有图标」）+ 图标回归防护测试
+
+Work Log:
+- 根因：FcDesigner 面板 icon 渲染为 fc-icon 字体类名，PageDesigner.vue 四个自造类名（icon-count/icon-filter/icon-circle-check/icon-medal）无字形定义→空白
+- 修复：KPI→icon-statistic、筛选器→icon-data-select、目标→icon-yes、排行榜→icon-statistics；数据表格→icon-table、卡片列表→icon-card（治理 icon-grid 双占用）
+- 坑：宽松 grep 字符串会混入 wangEditor w-e-icon-* 假阳性（icon-table2/icon-list-numbered），须用 `.icon-x:before` CSS 选择器精确提取字体集（248 字形）
+- 测试：新增 PageDesigner.palette-icons.test.ts 5 用例（字体集交集校验 + 仪表盘图标锚点 + 坏类名禁入）；page 测试面 201/201
+- 提交 68d234b8 已 push（origin/main 同步 0 0）
+
+Stage Summary:
+- 面板 11 组件图标全部有效；约束沉淀：addComponent 的 icon 必须取 FcDesigner iconfont 真实字形，防护测试已锁
+
+---
+Task ID: 122-layout-page-fullscreen
+Agent: Z.ai Code (main session)
+Task: 布局级页签页面全屏（用户澄清：非组件级，是每个菜单页签页整体全屏）
+
+Work Log:
+- AdminLayout 页签栏右侧新增全屏开关；page-stage 舞台（包 keep-alive router-view）为作用域；原生 Fullscreen API + CSS fixed 回退（z-2000），浮动退出按钮常驻；四主题全屏底色逐一匹配
+- useFullscreen 提升为 src/composables 共享（6 个 Dash 组件迁移 import）；增强 isFallback 导出 + 回退态 Esc 退出
+- 测试：行为 4 + 接线 5 断言；dashboard 26/26；全量 1229/1237（8 失败=DictPage 存量）
+- 提交 fca15f5f 已 push，远程同步 0 0
+
+Stage Summary:
+- 页签页全屏闭环；存量债：AdminLayout addTag TS2345（HEAD 即有）、DictPage 8 失败待巡检自愈
+
+---
+Task ID: 123-dash-width-height
+Agent: Z.ai Code (main session)
+Task: 仪表盘组件宽度栅格（撑满/1/2/1/3/2/3/1/4/自定义）+ 卡片显示高度
+
+Work Log:
+- rule.col.span（form-create 原生栅格）+ props.span 镜像双写；组件 span<24 时 margin 0 8px 留白，全屏跳过
+- KPI/目标/告警/排行榜 height prop（自适应/固定，is-fixed-height 居中/滚动）；DashConfigDialog 宽度+显示高度两段（全模式/非图表）；handleDashConfirm 同步 col
+- DashLayout123 测试 10 用例；dashboard 36/36；全量 1239/1247（DictPage 8 存量）
+- 提交 49ab0150 已 push，远程同步 0 0
+
+Stage Summary:
+- 宽高配置闭环；存量页面零影响（无 col 默认全宽）；设计器拖拽手柄调宽列为可选后续
+
+---
+Task ID: 124-stale-snapshot-triage
+Agent: Z.ai Code (main session)
+Task: push 前甄别：34 文件遭旧快照逐字节覆盖（HEAD~9~27），回滚 + 合法遗留提交
+
+Work Log:
+- 用户指令 push；36 个 M 文件中 34 个经 git hash-object 比对与 HEAD~9~27 历史提交逐字节相等（Task 103~117 时代），定性旧快照覆盖事故（沙箱已知故障类别的新变种：M 文件时间倒退）
+- 伪工作主题（均随回滚消失）：分类树形恢复（逆 Task 105）、DictPage 双表格重构（逆 Task 115/117）、FormRenderer 删 Task 118 syncFormDataToView、PropertyPanel 移除 @submit.prevent 等
+- 合法保留：①worklog Task 121/122/123 补录（漏提交）②unified-data-source-adapter.ts aggregateInMemory400（Task 120 契约：内存聚合校验错误显式 400，git log -S 确认从未入库）
+- 回滚后验证：前端全量 1255/1255 全绿（DictPage「8 存量失败」实为污染伪象，清零）、Nest 675/675、三服务 200
+- SOP 增补：M 文件甄别须比对历史 hash（非仅肉眼 diff）；恢复禁止 checkout . 全量（误伤合法改动）
+
+Stage Summary:
+- 本提交 = worklog 121-123 补录 + Task 120 aggregateInMemory400 补遗；34 污染文件已还原至 HEAD，零残留
+
+---
+Task ID: 125-java-backend-rescue
+Agent: Z.ai Code (main session)
+Task: Java 引擎沙箱首启修复（Boot 4 + Flowable 8 五层兼容性地雷一次排净）
+
+Work Log:
+- 起因：用户指令关闭 nodejs 后端并启动 Java；发现 Java 崩溃循环（supervisor restarts=14，每次 ~15s 即死）
+- 五层根因：①Connector/J 9.x 对 MariaDB 元数据 RESERVED 报错；②Flowable 8.0.0 H2 脚本 identity 类型在 H2 2.x 已删 + 崩溃残留毒化 schema；③僵尸重复 V2 迁移（0d037dc5 合并 + f5d386dd 补录复活旧碎片）；④V25/V31/V41 非幂等 DDL 撞 Hibernate-first；⑤V32 ${taskName} 运行时模板被 Flyway 占位符误吞
+- 修复：sandbox profile 切用户态 MariaDB（workflow 库，与 Nest workflow_v6 隔离）+ org.mariadb.jdbc 原生驱动；pom +mariadb-java-client；FlywayConfig placeholderReplacement(false)；V25/V31/V41 条件 DDL 幂等化（对齐 V18 模式）；git rm V2__init_data.sql；scripts/patch-flowable-h2.sh 入库备用
+- 验证：Flyway 33 迁移全新库全过；Started WorkflowApplication in 22.561s；admin/admin123 登录 200；userinfo/menus 鉴权 API 通；8080 由 supervisor 托管 Java 常驻；Vite/门户 200
+- 坑记录：mvn clean 删 jar 窗口期会触发 supervisor 的 workflow.db 自愈误拉 Nest（引擎决策链 ④）；Java /api/health 401=活着（需鉴权），登录探活才是真判据
+
+Stage Summary:
+- Java 引擎于 Boot 4 + Flowable 8 下首次在沙箱成功运行；engine-choice=java 持久化；Node 后端按用户指令下线（工作流数据仍在 workflow_v6 不受影响，切回 node 引擎即恢复）

@@ -3,12 +3,13 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick, Check } from '@element-plus/icons-vue'
+import { Fold, Expand, HomeFilled, Sunny, Moon, Lock, MagicStick, Check, FullScreen } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 import SubMenu from '@/components/SubMenu.vue'
 import NotificationBell from '@/modules/notification/components/NotificationBell.vue'
 import ShirtIcon from '@/components/icons/ShirtIcon.vue'
 import { useAiAssistantStore } from '@/stores/aiAssistantStore'
+import { useFullscreen } from '@/composables/useFullscreen'
 
 const router = useRouter()
 const route = useRoute()
@@ -53,6 +54,16 @@ function onStorage(e: StorageEvent) {
 }
 /** 页签集合：path 唯一；name=路由 name（与组件 defineOptions name 一致，供 keep-alive include 匹配） */
 const tags = ref<{ path: string; title: string; locked?: boolean; name?: string }[]>([])
+
+// ====== 页签页面全屏（Task 122：每个菜单对应的页签页面都可全屏显示） ======
+// 作用域 = 内容舞台（页签栏以下的页面区域），不含顶栏/侧边菜单/页签栏；
+// 原生 Fullscreen API 优先，iframe 未授权时自动回退 CSS fixed 覆盖层，Esc 均可退出。
+const pageStageRef = ref<HTMLElement | null>(null)
+const {
+  isFullscreen: pageFullscreen,
+  isFallback: pageFullscreenFallback,
+  toggle: togglePageFullscreen,
+} = useFullscreen(pageStageRef)
 
 /** keep-alive 缓存组件名集合（派生自 tags，关闭页签自动移除同名缓存；多页签共享同一组件时保留） */
 const cachedViews = computed(() =>
@@ -369,8 +380,9 @@ onUnmounted(() => {
 
       <!-- 右侧内容区 -->
       <div class="flex-1 flex flex-col min-w-0">
-        <!-- 页签栏（胶囊式页签） -->
-        <div class="min-h-11 flex items-center gap-1.5 px-3 py-1.5 border-b border-[#e6e9e4] bg-white/60 dark:bg-[#181d1b]/70 dark:border-[#2b332e] backdrop-blur-sm overflow-x-auto shrink-0">
+        <!-- 页签栏（胶囊式页签 + 右侧页面全屏开关） -->
+        <div class="min-h-11 flex items-center gap-2 px-3 py-1.5 border-b border-[#e6e9e4] bg-white/60 dark:bg-[#181d1b]/70 dark:border-[#2b332e] backdrop-blur-sm shrink-0">
+          <div class="flex-1 min-w-0 flex items-center overflow-x-auto">
           <draggable
             v-model="tags"
             item-key="path"
@@ -413,6 +425,19 @@ onUnmounted(() => {
               </div>
             </template>
           </draggable>
+          </div>
+          <!-- 页签页面全屏开关（Task 122）：作用于下方内容舞台，每个页签页都可用 -->
+          <button
+            @click="togglePageFullscreen"
+            :title="pageFullscreen ? '退出全屏（Esc）' : '页面全屏显示'"
+            :aria-label="pageFullscreen ? '退出全屏' : '页面全屏显示'"
+            class="w-7 h-7 flex items-center justify-center rounded-md transition-colors shrink-0"
+            :class="pageFullscreen
+              ? 'text-(--brand) bg-[rgb(var(--brand-soft-rgb)/0.12)]'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-[#f0f2ee] dark:hover:bg-[#2b332e] dark:hover:text-gray-200'"
+          >
+            <el-icon :size="15"><FullScreen /></el-icon>
+          </button>
         </div>
 
         <!-- 右键菜单 -->
@@ -460,20 +485,61 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- 主内容（keep-alive 缓存页签组件实例：切换页签保留状态；max 限制内存，LRU 驱逐） -->
-        <main class="flex-1 overflow-auto p-4 bg-transparent dark:bg-transparent">
-          <router-view v-slot="{ Component }">
-            <keep-alive :include="cachedViews" :max="MAX_CACHED_VIEWS">
-              <component :is="Component" :key="route.path" />
-            </keep-alive>
-          </router-view>
-        </main>
+        <!-- 主内容舞台：页签页面全屏的作用目标（keep-alive 缓存页签组件实例：切换页签保留状态；max 限制内存，LRU 驱逐） -->
+        <div
+          ref="pageStageRef"
+          class="page-stage relative flex-1 flex flex-col min-h-0"
+          :class="{ 'is-fallback-fullscreen': pageFullscreen && pageFullscreenFallback }"
+        >
+          <main class="flex-1 overflow-auto p-4 bg-transparent dark:bg-transparent">
+            <router-view v-slot="{ Component }">
+              <keep-alive :include="cachedViews" :max="MAX_CACHED_VIEWS">
+                <component :is="Component" :key="route.path" />
+              </keep-alive>
+            </router-view>
+          </main>
+          <!-- 全屏态常驻退出按钮（原生态浏览器提示短暂即逝，浮动出口更直观；原生/回退两态都需要） -->
+          <transition name="el-fade-in">
+            <button
+              v-if="pageFullscreen"
+              @click="togglePageFullscreen"
+              class="absolute top-3 right-3 z-[2100] h-8 flex items-center gap-1.5 px-3 rounded-full text-[12px] font-medium text-gray-600 dark:text-gray-300 bg-white/85 dark:bg-[#1f2522]/85 border border-[#e6e9e4] dark:border-[#2b332e] shadow-sm backdrop-blur-sm hover:text-(--brand) hover:border-(--brand) transition-colors"
+            >
+              <el-icon :size="13"><FullScreen /></el-icon>
+              退出全屏（Esc）
+            </button>
+          </transition>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* 页签页全屏（Task 122）：脱离布局流后必须自带底色（布局根为透明，否则白屏），
+   按当前主题匹配 body 背景渐变；原生 :fullscreen 与 CSS 回退覆盖层两态都覆盖 */
+.page-stage:fullscreen,
+.page-stage.is-fallback-fullscreen {
+  background: linear-gradient(180deg, #f7f8f6 0%, #f1f3f0 100%);
+}
+.dark .page-stage:fullscreen,
+.dark .page-stage.is-fallback-fullscreen {
+  background: linear-gradient(180deg, #141917 0%, #111513 100%);
+}
+html[data-theme='classic'] .page-stage:fullscreen,
+html[data-theme='classic'] .page-stage.is-fallback-fullscreen {
+  background: linear-gradient(#f4f6fe, #eef1fc);
+}
+html.dark[data-theme='classic'] .page-stage:fullscreen,
+html.dark[data-theme='classic'] .page-stage.is-fallback-fullscreen {
+  background: #12162b;
+}
+.page-stage.is-fallback-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+
 /* 折叠态下覆盖 SubMenu.vue 硬编码的 paddingLeft，使图标居中 */
 :deep(.el-menu--collapse .el-menu-item) {
   padding-left: 0 !important;

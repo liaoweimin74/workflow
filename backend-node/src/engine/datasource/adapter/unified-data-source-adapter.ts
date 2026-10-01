@@ -1,7 +1,14 @@
 import { Injectable } from '@nestjs/common'
 import { BusinessException } from '../../../common/exception/business-exception'
 import { newColumnConfig, type ColumnConfig, type DataSourceMetadata } from '../../../common/domain/column-config'
-import type { BizDataPageVO, BizDataVO } from '../../../common/domain/biz-data'
+import {
+  aggregateResultVO,
+  type AggregateRequest,
+  type AggregateResultVO,
+  type AggregateRowVO,
+  type BizDataPageVO,
+  type BizDataVO,
+} from '../../../common/domain/biz-data'
 import { resolveSortable } from '../../form/column/column-config-parser'
 import { BizDataService } from '../../form/bizdata/biz-data.service'
 import type { BizDataQueryRequest } from '../../form/bizdata/biz-data-support'
@@ -11,6 +18,19 @@ import { HttpLogicExecutor } from '../../logic/http-logic-executor'
 import { WorkflowFormDataQueryService } from '../workflow-form-data-query.service'
 import { SystemSourceQueryService } from '../service/system-source-query.service'
 import { builtInSourceByKey } from '../service/system-source-catalog'
+import { aggregateRowsInMemory, applyInMemoryFilter, type InMemoryAggregateOptions } from '../aggregate-rows'
+/** 内存聚合校验类错误 → 显式 400（与 SQL 路径 BusinessException 风格一致，Task 120）。 */
+function aggregateInMemory400(
+  rows: Array<Record<string, unknown>>,
+  options: InMemoryAggregateOptions,
+): AggregateRowVO[] {
+  try {
+    return aggregateRowsInMemory(rows, options)
+  } catch (e) {
+    throw new BusinessException(400, e instanceof Error ? e.message : String(e))
+  }
+}
+
 import {
   cloneColumns,
   type DataSourceAdapter,
@@ -250,6 +270,148 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
     }
     const formKey = requireFormKey(dataSource, 'get')
     return this.bizDataService.getById(formKey, id)
+  }
+
+  // ==================== 聚合（Task 119 仪表盘；GET /:id/aggregate） ====================
+
+  /**
+   * 分组聚合。按类型两条路径：
+   *   - **SQL 聚合**（数据在物理表里）：FORM visual（单表 GROUP BY）/ FORM sql 与
+   *     SQL 源（模板外层包裹 GROUP BY）/ WORKFLOW（JSON_EXTRACT GROUP BY）；
+   *   - **内存聚合**（行集本就在内存或来自远端）：SYSTEM / API / FORM config（JOIN）。
+   *
+   * API 源走内存聚合天然兼容「远端本身就是聚合接口」：聚合是幂等归并
+   * （每维度一行时结果不变），且 group/agg/metric/timeGrain 会作为模板变量
+   * 透传给远端（远端支持自己的聚合参数时优先在远端完成）。
+   */
+  async aggregate(dataSource: DataSourceRef, req: AggregateRequest): Promise<AggregateResultVO> {
+    if (dataSource.type === 'SYSTEM') {
+      this.router.resolve(dataSource, 'list')
+      return this.systemAggregate(dataSource, req)
+    }
+    if (dataSource.type === 'WORKFLOW') {
+      return this.workflowQuery.aggregate(String(dataSource.formKey), req)
+    }
+    if (dataSource.type === 'API') {
+      return this.apiAggregate(dataSource, req)
+    }
+    if (dataSource.type === 'SQL') {
+      this.router.resolve(dataSource, 'list')
+      const config = parseFormQueryConfig(dataSource.params, (message) => new BusinessException(400, message))
+      if (isVisualMode(config) || isSqlMode(config)) {
+        // 与 query 分支同语义：绕过表单 covering handler，管理员显式 SQL 直接聚合
+        return this.bizDataService.aggregateSql(dataSource.formKey, req, config)
+      }
+      throw new BusinessException(400, 'SQL 数据源缺少查询配置')
+    }
+    if (dataSource.type !== 'FORM') {
+      throw notMigrated(dataSource, 'aggregate')
+    }
+    const formKey = requireFormKey(dataSource, 'aggregate')
+    const config = parseFormQueryConfig(dataSource.params, (message) => new BusinessException(400, message))
+    if (isConfigMode(config)) {
+      // JOIN 模式没有单表可包：行级取全量 + 内存聚合（与 SQL 路径语义一致的兜底）
+      const page = await this.bizDataService.queryJoin(
+        formKey,
+        {
+          filter: req.filter,
+          keyword: req.keyword,
+          keywordColumn: req.keywordColumn,
+          params: null,
+          sort: null,
+          order: null,
+          page: 1,
+          size: 0,
+        },
+        config.joins,
+      )
+      return aggregateResultVO(
+        aggregateInMemory400(page.records.map((row) => row.data), {
+          group: req.group,
+          agg: req.agg,
+          metric: req.metric,
+          timeGrain: req.timeGrain,
+          sort: req.sort,
+          order: req.order,
+          limit: req.limit,
+        }),
+      )
+    }
+    if (isSqlMode(config)) {
+      return this.bizDataService.aggregateSql(formKey, req, config)
+    }
+    // visual 模式在 FORM 类型上不生效（同 query 分支），回退单表聚合
+    return this.bizDataService.aggregate(formKey, req)
+  }
+
+  /** SYSTEM 源聚合：翻页取全量行（filter 由内存聚合层应用，系统源 SQL 侧不过滤）。 */
+  private async systemAggregate(
+    dataSource: DataSourceRef,
+    req: AggregateRequest,
+  ): Promise<AggregateResultVO> {
+    const all: BizDataVO[] = []
+    const pageSize = 500
+    const maxPages = 40
+    for (let page = 1; page <= maxPages; page++) {
+      const result = await this.systemQuery(dataSource, {
+        filter: null,
+        keyword: req.keyword,
+        keywordColumn: req.keywordColumn,
+        params: null,
+        sort: null,
+        order: null,
+        page,
+        size: pageSize,
+      })
+      all.push(...result.records)
+      if (result.records.length < pageSize) break
+      if (result.total > 0 && all.length >= result.total) break
+    }
+    const rows = applyInMemoryFilter(all.map((row) => row.data), req.filter)
+    return aggregateResultVO(
+      aggregateInMemory400(rows, {
+        group: req.group,
+        agg: req.agg,
+        metric: req.metric,
+        timeGrain: req.timeGrain,
+        sort: req.sort,
+        order: req.order,
+        limit: req.limit,
+      }),
+    )
+  }
+
+  /** API 源聚合：list 操作取行集（聚合参数同时作为模板变量透传）+ 内存幂等归并。 */
+  private async apiAggregate(
+    dataSource: DataSourceRef,
+    req: AggregateRequest,
+  ): Promise<AggregateResultVO> {
+    const page = await this.apiQuery(
+      dataSource,
+      {
+        filter: req.filter,
+        keyword: req.keyword,
+        keywordColumn: req.keywordColumn,
+        params: null,
+        sort: null,
+        order: null,
+        page: 1,
+        size: 0,
+      },
+      { group: req.group, agg: req.agg, metric: req.metric, timeGrain: req.timeGrain },
+    )
+    const rows = applyInMemoryFilter(page.records.map((row) => row.data), req.filter)
+    return aggregateResultVO(
+      aggregateInMemory400(rows, {
+        group: req.group,
+        agg: req.agg,
+        metric: req.metric,
+        timeGrain: req.timeGrain,
+        sort: req.sort,
+        order: req.order,
+        limit: req.limit,
+      }),
+    )
   }
 
   // ==================== SYSTEM 取数（对齐 Java 的 systemQuery 两个分支） ====================
@@ -678,6 +840,7 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
   private async apiQuery(
     dataSource: DataSourceRef,
     req: BizDataQueryRequest,
+    extraVars: Record<string, unknown> = {},
   ): Promise<BizDataPageVO> {
     const params = this.parseApiParams(dataSource)
     const op = this.apiOperation(params, 'list')
@@ -694,6 +857,11 @@ export class UnifiedDataSourceAdapter implements DataSourceAdapter {
     vars.size = req.size
     const keyword = req.keyword
     vars.keyword = keyword === null || keyword === undefined ? '' : keyword
+    // 聚合透传变量（Task 119）：远端模板可选消费（group/agg/metric/timeGrain），
+    // 未在 URL 模板中引用时无副作用
+    for (const [key, value] of Object.entries(extraVars)) {
+      if (value !== null && value !== undefined) vars[key] = value
+    }
     const searchParam = params.searchParam === null || params.searchParam === undefined
       ? null
       : String(params.searchParam)

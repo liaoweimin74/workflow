@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.workflow.api.dto.AggregateRequest;
+import com.workflow.api.dto.AggregateResultVO;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
@@ -382,6 +384,16 @@ public class DataSourceDefinitionService {
             req = new BizDataQueryRequest();
         }
         return adapterOf(id).query(getById(id), req);
+    }
+
+    /**
+     * 数据源分组聚合分发（Task 119 仪表盘；经适配器 SPI）。
+     */
+    public AggregateResultVO aggregateData(String id, AggregateRequest req) {
+        if (req == null) {
+            req = new AggregateRequest();
+        }
+        return adapterOf(id).aggregate(getById(id), req);
     }
 
     /**

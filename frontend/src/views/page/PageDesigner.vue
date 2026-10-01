@@ -72,6 +72,16 @@
       @confirm="handlePageTableConfirm"
     />
 
+    <!-- 仪表盘组件配置（Task 119）：KPI 指标卡 / 统计图 -->
+    <DashConfigDialog
+      v-model="dashDialogVisible"
+      :mode="dashDialogMode"
+      :binding-props="currentDashProps"
+      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId, name: dsNameOf(ds) }))"
+      :enabled-data-sources="enabledDataSources"
+      @confirm="handleDashConfirm"
+    />
+
     <!-- 卡片样式脚本配置（结构化 CardStyle，覆盖主题） -->
     <CardStyleConfigDialog
       v-model="cardStyleDialogVisible"
@@ -180,6 +190,22 @@ import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
+import DashConfigDialog, { type DashConfigMode } from '@/views/dashboard/components/DashConfigDialog.vue'
+import {
+  DASH_KPI_NAME,
+  DASH_CHART_NAME,
+  DASH_FILTER_NAME,
+  DASH_GOAL_NAME,
+  DASH_LEADERBOARD_NAME,
+  DASH_ALERT_NAME,
+  dashKpiRule,
+  dashChartRule,
+  dashFilterRule,
+  dashGoalRule,
+  dashLeaderboardRule,
+  dashAlertRule,
+  dashConfigButton,
+} from '@/views/dashboard/register'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
@@ -437,6 +463,47 @@ function enableCardDesignMode(rules: any[]): any[] {
 // ===== 页面数据表单容器配置（复用 DsBindingConfigDialog 非表格模式） =====
 const formContainerDialogVisible = ref(false)
 /** 数据容器 rule：画布中 loadRule 后 type 为 FcRow，序列化前为 formContainer，两者兼容判断 */
+// ==================== 仪表盘组件配置（Task 119 → Task 120 组件族） ====================
+const dashDialogVisible = ref(false)
+const dashDialogMode = ref<DashConfigMode>('chart')
+const DASH_CONFIG_TYPES: Record<DashConfigMode, string> = {
+  kpi: DASH_KPI_NAME,
+  chart: DASH_CHART_NAME,
+  goal: DASH_GOAL_NAME,
+  alert: DASH_ALERT_NAME,
+  leaderboard: DASH_LEADERBOARD_NAME,
+  filter: DASH_FILTER_NAME,
+}
+const currentDashType = computed(() => DASH_CONFIG_TYPES[dashDialogMode.value] || '')
+const currentDashProps = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  if (active && active.type === currentDashType.value) {
+    return active.props || {}
+  }
+  return {}
+})
+function openDashConfig(mode: DashConfigMode) {
+  dashDialogMode.value = mode
+  dashDialogVisible.value = true
+}
+function handleDashConfirm(patch: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (active && active.type === currentDashType.value && active.props) {
+    const { mode: _mode, span, ...propsPatch } = patch
+    Object.assign(active.props, propsPatch)
+    // Task 123 宽度栅格：props 镜像（组件并排留白感知）+ rule.col（form-create 布局真身），
+    // 运行态 transformComponent 浅拷贝透传 col，双端一致
+    const spanNum = Math.min(24, Math.max(1, Number(span || 24)))
+    active.props.span = spanNum
+    active.col = { ...(active.col || {}), span: spanNum }
+  }
+}
+/** 页级数据源显示名（绑定列表无 name 时回退全局源名） */
+function dsNameOf(ds: { id: string; refId: string }): string {
+  const global = enabledDataSources.value.find((d) => d.id === ds.refId)
+  return global ? global.name : ''
+}
+
 function isContainerRule(active: any): boolean {
   return !!active && (active.type === 'formContainer' || active.type === 'FcRow')
 }
@@ -539,7 +606,7 @@ function registerPageComponents() {
   designerRef.value?.addComponent({
     label: '数据表格',
     name: 'page-table',
-    icon: 'icon-grid',
+    icon: 'icon-table',
     menu: 'main',
     rule: () => ({
       type: 'page-table',
@@ -564,7 +631,7 @@ function registerPageComponents() {
   designerRef.value?.addComponent({
     label: '卡片列表',
     name: 'page-list-cards',
-    icon: 'icon-grid',
+    icon: 'icon-card',
     menu: 'main',
     rule: () => ({
       type: 'page-list-cards',
@@ -603,6 +670,88 @@ function registerPageComponents() {
     }),
   })
   designerRef.value?.setComponentRuleConfig('page-tree', dataSourceProps, true)
+
+  // 仪表盘组件（Task 119）：KPI 指标卡 / 统计图（数据源配置按钮注入属性面板）
+  // 注意：icon 必须取 FcDesigner 内置 iconfont 类名（@form-create/designer 的 fc-icon 字体），
+  // 自造类名（icon-count/icon-filter 等）不在字体里会渲染成空白——即「组件没有图标」的根因。
+  designerRef.value?.addComponent({
+    label: 'KPI 指标卡',
+    name: DASH_KPI_NAME,
+    icon: 'icon-statistic',
+    menu: 'main',
+    rule: () => dashKpiRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_KPI_NAME,
+    () => [dashConfigButton('配置指标卡', () => openDashConfig('kpi'))],
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '统计图',
+    name: DASH_CHART_NAME,
+    icon: 'icon-stack',
+    menu: 'main',
+    rule: () => dashChartRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_CHART_NAME,
+    () => [dashConfigButton('配置图表', () => openDashConfig('chart'))],
+    true,
+  )
+
+  // 仪表盘组件族（Task 120）：筛选器 / 目标进度 / 排行榜 / 告警标记
+  designerRef.value?.addComponent({
+    label: '筛选器',
+    name: DASH_FILTER_NAME,
+    icon: 'icon-data-select',
+    menu: 'main',
+    rule: () => dashFilterRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_FILTER_NAME,
+    () => [dashConfigButton('配置筛选器', () => openDashConfig('filter'))],
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '目标进度',
+    name: DASH_GOAL_NAME,
+    icon: 'icon-yes',
+    menu: 'main',
+    rule: () => dashGoalRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_GOAL_NAME,
+    () => [dashConfigButton('配置目标', () => openDashConfig('goal'))],
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '排行榜',
+    name: DASH_LEADERBOARD_NAME,
+    icon: 'icon-statistics',
+    menu: 'main',
+    rule: () => dashLeaderboardRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_LEADERBOARD_NAME,
+    () => [dashConfigButton('配置排行榜', () => openDashConfig('leaderboard'))],
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '告警标记',
+    name: DASH_ALERT_NAME,
+    icon: 'icon-warning',
+    menu: 'main',
+    rule: () => dashAlertRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_ALERT_NAME,
+    () => [dashConfigButton('配置告警', () => openDashConfig('alert'))],
+    true,
+  )
 
   // formContainer（数据表单容器）：配置入口复用 DsBindingConfigDialog，避免维护第二套字段
   designerRef.value?.setComponentRuleConfig(

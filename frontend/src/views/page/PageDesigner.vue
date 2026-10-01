@@ -601,7 +601,7 @@ function registerPageComponents() {
   designerRef.value?.addComponent({
     label: '数据表格',
     name: 'page-table',
-    icon: 'icon-grid',
+    icon: 'icon-table',
     menu: 'main',
     rule: () => ({
       type: 'page-table',
@@ -626,7 +626,7 @@ function registerPageComponents() {
   designerRef.value?.addComponent({
     label: '卡片列表',
     name: 'page-list-cards',
-    icon: 'icon-grid',
+    icon: 'icon-card',
     menu: 'main',
     rule: () => ({
       type: 'page-list-cards',
@@ -667,10 +667,12 @@ function registerPageComponents() {
   designerRef.value?.setComponentRuleConfig('page-tree', dataSourceProps, true)
 
   // 仪表盘组件（Task 119）：KPI 指标卡 / 统计图（数据源配置按钮注入属性面板）
+  // 注意：icon 必须取 FcDesigner 内置 iconfont 类名（@form-create/designer 的 fc-icon 字体），
+  // 自造类名（icon-count/icon-filter 等）不在字体里会渲染成空白——即「组件没有图标」的根因。
   designerRef.value?.addComponent({
     label: 'KPI 指标卡',
     name: DASH_KPI_NAME,
-    icon: 'icon-count',
+    icon: 'icon-statistic',
     menu: 'main',
     rule: () => dashKpiRule() as any,
   })
@@ -697,7 +699,7 @@ function registerPageComponents() {
   designerRef.value?.addComponent({
     label: '筛选器',
     name: DASH_FILTER_NAME,
-    icon: 'icon-filter',
+    icon: 'icon-data-select',
     menu: 'main',
     rule: () => dashFilterRule() as any,
   })
@@ -710,7 +712,7 @@ function registerPageComponents() {
   designerRef.value?.addComponent({
     label: '目标进度',
     name: DASH_GOAL_NAME,
-    icon: 'icon-circle-check',
+    icon: 'icon-yes',
     menu: 'main',
     rule: () => dashGoalRule() as any,
   })
@@ -723,7 +725,7 @@ function registerPageComponents() {
   designerRef.value?.addComponent({
     label: '排行榜',
     name: DASH_LEADERBOARD_NAME,
-    icon: 'icon-medal',
+    icon: 'icon-statistics',
     menu: 'main',
     rule: () => dashLeaderboardRule() as any,
   })

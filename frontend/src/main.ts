@@ -1,3 +1,8 @@
+// 【必须首行】storage 沙箱兜底（Task 25 契约，Task 128 补接线）：预览面板 iframe
+// 禁用 web storage 时，访问 localStorage getter 本身即抛错。本模块 side-effect
+// 自安装内存兜底，必须在所有其他 import 之前执行——路由守卫/HTTP 拦截器是
+// 最早读 localStorage 的运行时路径，晚了就来不及。
+import '@/utils/safe-storage'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'

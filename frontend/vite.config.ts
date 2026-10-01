@@ -65,6 +65,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    // 沙箱限定（Task 128）：外层预览网关不转发 HMR WebSocket 升级，
+    // 浏览器侧反复重连 wss 失败刷屏。沙箱内禁用 HMR（手动刷新代替热更新，
+    // 文件变更仍会触发 vite 按需重编译，刷新即得新代码）；Windows 开发机不受影响。
+    hmr: SANDBOX_ENV ? false : undefined,
     watch: {
       usePolling: true
     },

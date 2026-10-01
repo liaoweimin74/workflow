@@ -2689,3 +2689,34 @@ Work Log:
 
 Stage Summary:
 - Java 引擎于 Boot 4 + Flowable 8 下首次在沙箱成功运行；engine-choice=java 持久化；Node 后端按用户指令下线（工作流数据仍在 workflow_v6 不受影响，切回 node 引擎即恢复）
+
+---
+Task ID: 126-sandbox-reset-git-restore
+Agent: Z.ai Code (main session)
+Task: 第九次沙箱重置恢复（.git 丢失→远端克隆）+ 完成运行时切换（Java 引擎常驻 8080）
+
+Work Log:
+- 重置盘点：.git 消失（git 落入父目录 UUID 快照仓库）、工作区回滚至 Task 101 时代、~/.m2 与 /home/z/tools（jdk21/maven）清空、jar 消失、chrome/Nest/Java/MariaDB 全灭
+- 恢复：远端匿名克隆 + .git 移入 + reset --hard origin/main；发现 Task 125 已沉淀 sandbox profile SOP，直接复用
+- 运行时切换：重装 JDK21+Maven3.9.9 → mvn package 53s BUILD SUCCESS（jar 103MB）→ 清双位置 node marker + engine-choice=java → POST /api/portal/services 经 next-server 进程树托管拉起 mariadbd+Java
+- 验证：登录探活 admin/admin123=200+JWT；Started in 27.342s；workflow 库自动创建；mariadbd/java 均为 next-server 子进程合法常驻；Vite/门户 200
+
+Stage Summary:
+- Java 引擎沙箱常驻 SOP 固化：远端=唯一权威；进程必须走门户 supervisor 托管；健康判据=登录探活 200
+
+---
+Task ID: 127-tenth-reset-merge-push
+Agent: Z.ai Code (main session)
+Task: 第十次沙箱重置再恢复 + 远端合并线 2442c08e 落地 + Nest→Java 重新切换 + PAT 推送闭环
+
+Work Log:
+- 第十次重置：.git/cc02a521 本地提交/PAT 远端/工具链/jar 再次全灭；开机引导 bootstrap 把 engine-choice 重写回 node + marker 复活；supervisor 按 node 决策自动拉起 Nest 占 8080（MariaDB/Vite/门户 幸存）
+- 远端已前进：2442c08e = Merge(05c8b3b4, 2f32c112)——05c8b3b4 线系 Task 118 时代分出的 3 修复（ae5185f0 Java 编译损坏 / bb96e057 看门狗 Windows 适配 / 05c8b3b4 僵尸 V2 迁移删除，疑似用户 Windows 机推送），与本方 Task 119-125 线无冲突并集，以其为新基线 reset --hard
+- 再恢复链（Task 126 SOP 复用，全程 ~10 分钟）：匿名克隆重建 .git → 清 marker+choice=java → 重装 JDK21+Maven → mvn package（基于 2442c08e，含上游 3 修复）→ 引擎切换
+- 切换坑：POST /api/portal/engine switch=java 返回「当前已是Java版无需切换」（决策读标记而旧 Nest 仍占 8080）→ 手动 kill Nest(1496) → POST /api/portal/services → supervisor 按新决策拉起 Java(1895)
+- 验证：java -Xmx448m 为 next-server(1141) 子进程、登录探活 200+JWT、MariaDB 3306/Vite 5173/门户 3000 全绿
+- worklog Task 126 原记录随重置丢失，本提交一并重录；PAT 远端重建后推送本提交
+
+Stage Summary:
+- 引擎=Java 常驻 8080（含上游 3 修复的新基线 2442c08e）；Nest 下线（workflow_v6 数据无损）
+- SOP 增补：reset 后 supervisor 可能按 node marker 自动拉 Nest 抢占 8080——恢复时须先清 marker 再处理 8080；engine switch API 对「标记=java 但进程=node」的脏状态会误判跳过，需手动杀旧进程后 POST services

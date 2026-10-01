@@ -2736,3 +2736,20 @@ Work Log:
 Stage Summary:
 - 三 BUG 闭环：模块图恢复健康、storage 兜底真正接线、HMR 刷屏根除
 - SOP 增补：重置恢复后必跑 bun install（frontend/backend-node 双端）再验证；Task 25 类「自安装模块」必须验证其在 main.ts 的导入位次
+
+---
+Task ID: 129-db-catchup-migration
+Agent: Z.ai Code (main session)
+Task: 用户报「数据库似乎不是最新的」——Java 引擎 workflow 库补齐 workflow_v6 历史业务数据
+
+Work Log:
+- 定性：双引擎按 Task 125 设计分库隔离——Java 独占新建 workflow 库（仅 Flyway 种子），用户全部业务数据（表单 9/数据源 19/菜单 67/分类 2/草稿 2/评论 3/页面定义 1/节点配置 2）都在 Nest 时代 workflow_v6；另发现 v6 的 flyway_schema_history 最高 V41（早期 Java 曾直连 v6），V42-V46 迁移两侧均未应用
+- 客户端：用户态 mariadb 需 LD_LIBRARY_PATH=root/usr/lib/x86_64-linux-gnu（libncurses）
+- 三坑连环：①JPA 外键致 TRUNCATE 失败（SET FOREIGN_KEY_CHECKS=0）②v6 与 workflow 列顺序完全不同（Kysely 业务序 vs JPA 字母序），INSERT SELECT * 按位串位——首轮 sys_menu/sys_role_menu/sys_user_role 被污染，全部推倒用 information_schema 列名交集显式映射重做 ③v6.wf_node_config 两行（草稿级 NULL/部署级）撞 Java uk_node 唯一键，按 updated_at 保留部署级行
+- 漂移列自动剔除：wf_category.parent_id、wf_process_draft.key（v6 独有且全 NULL，零损失）；sys_user/sys_role 两库种子一致（admin/test 同 id）未复制
+- 验证：14 表行数对齐；wf_form_def/wf_data_source 抽样 created_at 真实时间戳落位正确；Java API 冒烟 /api/v1/categories 返回请假/报销流程、form-definitions/data-sources 200；多租户需 X-Tenant-Id: default（前端 http.ts:49 已自动带）
+- 冒烟踩坑：/api/xxx 404 在该工程表现为 500（No static resource）；真实业务路径为 /api/v1/*
+
+Stage Summary:
+- workflow 库已补齐全部历史业务数据，Java 引擎对外可见性与 Nest 时代一致；脚本 /tmp/copy-v6-to-wf.sql + /tmp/copy-part2.sql 留档
+- 遗留技术债：①V42-V46 迁移（草稿描述/岗位来源/箱菜单/成员群）Java Flyway 侧缺失，需对位补齐 ②wf_category.parent_id / wf_process_draft.key 列 Java 无（分类树/草稿 key 特性落后 Nest）③若 Nest 重启会先跑 V42-V46，届时再迁移需重新对齐

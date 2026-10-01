@@ -2720,3 +2720,19 @@ Work Log:
 Stage Summary:
 - 引擎=Java 常驻 8080（含上游 3 修复的新基线 2442c08e）；Nest 下线（workflow_v6 数据无损）
 - SOP 增补：reset 后 supervisor 可能按 node marker 自动拉 Nest 抢占 8080——恢复时须先清 marker 再处理 8080；engine switch API 对「标记=java 但进程=node」的脏状态会误判跳过，需手动杀旧进程后 POST services
+
+---
+Task ID: 128-preview-bugs-trio
+Agent: Z.ai Code (main session)
+Task: 用户报预览面板三 BUG（HMR WS 刷屏 / useEcharts 500 / storage 禁用报错）；Java 内存优化暂停顺延
+
+Work Log:
+- BUG useEcharts 500：根因 echarts 依赖缺失——第 9/10 次重置后 node_modules 停留在旧快照（echarts 安装前），Task 120 代码回到工作区但依赖从未补装；bun install 补装 4 包（环境级修复，无代码变更）；教训：重置恢复 SOP 应在 reset --hard 后追加 bun install（双端）
+- BUG storage ×4「Access to storage is not allowed」：safe-storage.ts（Task 25 内存兜底）全历史从未被 main.ts 导入（git log -S 零命中），仅 useUiTheme 迟到引用——路由守卫/HTTP 拦截器读 localStorage 早于其安装故必炸；修复：main.ts 首行 import '@/utils/safe-storage'（按其「所有 import 之前」契约补接线）
+- BUG HMR WS 反复重连失败：外层预览网关不转发 WebSocket 升级，wss 经 preview 域名与 localhost:5173 双路均死；修复：vite.config server.hmr = SANDBOX_ENV ? false : undefined（沙箱内禁用热更新改手动刷新，Windows 开发机 SANDBOX_ENV=false 不受影响）
+- 重启：清 node_modules/.vite 缓存 + kill vite + POST /api/portal/services（vite 转 supervisor 托管 pid 2965）；验证 useEcharts/main.ts/DashChart 全 200（5173 直连与 3000 门户链路双通）
+- b5db7ab4 已推送（0 0）；Java 内存优化（用户指令顺延）：基线已测 RSS ~491MB/heap_info 待用，候选=SerialGC/ActiveProcessorCount/CodeCache 96m/MaxDirectMemory 32m/Xss512k/Tomcat 线程 20/Hikari 6/Flowable 定义缓存上限，涉及 start-services.sh 与 service-supervisor.ts 双处同步
+
+Stage Summary:
+- 三 BUG 闭环：模块图恢复健康、storage 兜底真正接线、HMR 刷屏根除
+- SOP 增补：重置恢复后必跑 bun install（frontend/backend-node 双端）再验证；Task 25 类「自安装模块」必须验证其在 main.ts 的导入位次

@@ -2,6 +2,7 @@ package com.workflow.engine.form.bizdata;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.engine.datasource.InMemoryAggregateUtil;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -139,22 +140,21 @@ public final class BizDataQueryBuilder {
         }
 
         // `__all__` 是保留维度：不做分组、整表聚成一个数（KPI 场景），键恒为 '__all__'
+        // Task 120：group 支持逗号双维度（"a,b"），key 用 CONCAT(a,'|',b)；timeGrain 只作用于第一列
         boolean isAll = "__all__".equals(group);
-        if (!isAll) {
-            validateColumn(group, allowedColumns, "分组字段");
-            assertNotJson(columnTypeOf, group, "分组字段");
+        List<String> groupColumns = isAll ? List.of() : InMemoryAggregateUtil.splitGroupColumns(group);
+        for (String column : groupColumns) {
+            validateColumn(column, allowedColumns, "分组字段");
+            assertNotJson(columnTypeOf, column, "分组字段");
         }
-        String keyExpr = isAll ? "'__all__'" : group;
-        if (!isAll && timeGrain != null) {
-            String format = TIME_GRAIN_FORMAT.get(timeGrain);
-            if (format == null) {
-                throw new IllegalArgumentException("非法时间粒度: " + timeGrain);
-            }
-            String type = columnTypeOf.getOrDefault(group, "");
-            if (!DATE_COLUMN_TYPES.contains(type.toUpperCase())) {
-                throw new IllegalArgumentException("时间分组的列必须是日期类型: " + group);
-            }
-            keyExpr = "DATE_FORMAT(" + group + ", '" + format + "')";
+        String keyExpr;
+        if (isAll) {
+            keyExpr = "'__all__'";
+        } else if (groupColumns.size() == 1) {
+            keyExpr = dimensionExpr(groupColumns.get(0), true, timeGrain, columnTypeOf);
+        } else {
+            keyExpr = "CONCAT(" + dimensionExpr(groupColumns.get(0), true, timeGrain, columnTypeOf)
+                    + ", '|', " + dimensionExpr(groupColumns.get(1), false, timeGrain, columnTypeOf) + ")";
         }
 
         String valueExpr;
@@ -197,6 +197,26 @@ public final class BizDataQueryBuilder {
         if (isJsonColumn(columnTypeOf, column)) {
             throw new IllegalArgumentException(label + "不支持 JSON 类型列: " + column);
         }
+    }
+
+    /**
+     * 维度列表达式；{@code withTimeGrain} 仅第一列为 true（timeGrain 只套第一列，
+     * 对齐 Node biz-data-query-builder 的 dimensionExpr）：时间桶要求合法粒度 + 日期类型列。
+     */
+    private static String dimensionExpr(String column, boolean withTimeGrain, String timeGrain,
+                                        Map<String, String> columnTypeOf) {
+        if (!withTimeGrain || timeGrain == null) {
+            return column;
+        }
+        String format = TIME_GRAIN_FORMAT.get(timeGrain);
+        if (format == null) {
+            throw new IllegalArgumentException("非法时间粒度: " + timeGrain);
+        }
+        String type = columnTypeOf.getOrDefault(column, "");
+        if (!DATE_COLUMN_TYPES.contains(type.toUpperCase())) {
+            throw new IllegalArgumentException("时间分组的列必须是日期类型: " + column);
+        }
+        return "DATE_FORMAT(" + column + ", '" + format + "')";
     }
 
     /**

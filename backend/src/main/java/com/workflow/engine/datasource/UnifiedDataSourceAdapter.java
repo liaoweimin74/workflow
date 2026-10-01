@@ -284,7 +284,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
             List<Map<String, Object>> rows = page.getRecords().stream()
                     .map(BizDataVO::getData)
                     .collect(Collectors.toList());
-            return AggregateResultVO.of(InMemoryAggregateUtil.aggregateRowsInMemory(rows, aggOptions(req)));
+            return aggregateInMemory400(rows, aggOptions(req));
         }
         if (cfg.isSqlMode()) {
             return bizDataService.aggregateSql(formKey, req, cfg);
@@ -315,7 +315,7 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
         }
         List<Map<String, Object>> rows = InMemoryAggregateUtil.applyInMemoryFilter(
                 all.stream().map(BizDataVO::getData).collect(Collectors.toList()), req.getFilter());
-        return AggregateResultVO.of(InMemoryAggregateUtil.aggregateRowsInMemory(rows, aggOptions(req)));
+        return aggregateInMemory400(rows, aggOptions(req));
     }
 
     /** API 源聚合：list 操作取行集（聚合参数同时作为模板变量透传）+ 内存幂等归并。 */
@@ -338,13 +338,27 @@ public class UnifiedDataSourceAdapter implements DataSourceAdapter {
         BizDataPageVO page = apiQuery(ds, listReq, extraVars);
         List<Map<String, Object>> rows = InMemoryAggregateUtil.applyInMemoryFilter(
                 page.getRecords().stream().map(BizDataVO::getData).collect(Collectors.toList()), req.getFilter());
-        return AggregateResultVO.of(InMemoryAggregateUtil.aggregateRowsInMemory(rows, aggOptions(req)));
+        return aggregateInMemory400(rows, aggOptions(req));
     }
 
     /** 内存聚合入参（对齐 Node aggregateRowsInMemory 的 options）。 */
     private static InMemoryAggregateUtil.AggregateOptions aggOptions(AggregateRequest req) {
         return new InMemoryAggregateUtil.AggregateOptions(req.getGroup(), req.getAgg(), req.getMetric(),
                 req.getTimeGrain(), req.getSort(), req.getOrder(), req.getLimit());
+    }
+
+    /**
+     * 内存聚合校验类错误 → 显式 400（对齐 Node {@code aggregateInMemory400}，Task 120）：
+     * 原先裸 {@link IllegalArgumentException} 依赖全局兜底，这里与 SQL 路径
+     * {@code catch (IllegalArgumentException) → BusinessException(400)} 用法对齐。
+     */
+    private static AggregateResultVO aggregateInMemory400(List<Map<String, Object>> rows,
+                                                          InMemoryAggregateUtil.AggregateOptions options) {
+        try {
+            return AggregateResultVO.of(InMemoryAggregateUtil.aggregateRowsInMemory(rows, options));
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, e.getMessage());
+        }
     }
 
     @Override

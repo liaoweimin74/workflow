@@ -35,6 +35,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -187,29 +188,40 @@ public class WorkflowFormDataQueryService {
             throw new BusinessException(400, "非法时间粒度: " + req.getTimeGrain());
         }
 
-        String keyExpr;
-        if ("__all__".equals(req.getGroup())) {
-            keyExpr = "'__all__'";
-        } else if (START_TIME_KEY.equals(req.getGroup())) {
-            if (!"count".equals(req.getAgg())) {
-                throw new BusinessException(400, "聚合字段不在表单字段中: " + START_TIME_KEY);
+        // Task 120：group 支持逗号双维度（"a,b"），key 用 CONCAT 拼接；timeGrain 只作用于第一列
+        // keyExprOf 按列判断（'__all__' 保留维度 / startTime 特殊列 / 业务列 JSON_EXTRACT），
+        // 与 Node workflow-form-data-query.service 的 keyExprOf(column, withTimeGrain) 逐列一致
+        List<String> groupColumns = "__all__".equals(req.getGroup())
+                ? List.of("__all__") : InMemoryAggregateUtil.splitGroupColumns(req.getGroup());
+        BiFunction<String, Boolean, String> keyExprOf = (column, withTimeGrain) -> {
+            if ("__all__".equals(column)) {
+                return "'__all__'";
             }
-            keyExpr = grainFormat == null
-                    ? "h.START_TIME_"
-                    : "DATE_FORMAT(h.START_TIME_, '" + grainFormat + "')";
-        } else {
-            ColumnConfig groupCol = bizCols.get(req.getGroup());
-            if (groupCol == null || !COL_PATTERN.matcher(req.getGroup()).matches()) {
-                throw new BusinessException(400, "分组字段不在表单字段中: " + req.getGroup());
+            if (START_TIME_KEY.equals(column)) {
+                if (!"count".equals(req.getAgg())) {
+                    throw new BusinessException(400, "聚合字段不在表单字段中: " + START_TIME_KEY);
+                }
+                return !withTimeGrain || grainFormat == null
+                        ? "h.START_TIME_"
+                        : "DATE_FORMAT(h.START_TIME_, '" + grainFormat + "')";
             }
-            if (DERIVED_SYSTEM_KEYS.contains(req.getGroup())) {
-                throw new BusinessException(400, "分组字段不在表单字段中: " + req.getGroup());
+            ColumnConfig groupCol = bizCols.get(column);
+            if (groupCol == null || !COL_PATTERN.matcher(column).matches()) {
+                throw new BusinessException(400, "分组字段不在表单字段中: " + column);
             }
-            keyExpr = grainFormat == null
-                    ? "JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + req.getGroup() + "'))"
-                    : "DATE_FORMAT(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + req.getGroup()
-                            + "')), '" + grainFormat + "')";
-        }
+            if (DERIVED_SYSTEM_KEYS.contains(column)) {
+                throw new BusinessException(400, "分组字段不在表单字段中: " + column);
+            }
+            if (!withTimeGrain || grainFormat == null) {
+                return "JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + column + "'))";
+            }
+            return "DATE_FORMAT(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$." + column
+                    + "')), '" + grainFormat + "')";
+        };
+        String keyExpr = groupColumns.size() == 1
+                ? keyExprOf.apply(groupColumns.get(0), true)
+                : "CONCAT(" + keyExprOf.apply(groupColumns.get(0), true) + ", '|', "
+                        + keyExprOf.apply(groupColumns.get(1), false) + ")";
 
         String valueExpr = "COUNT(1)";
         if (!"count".equals(req.getAgg())) {

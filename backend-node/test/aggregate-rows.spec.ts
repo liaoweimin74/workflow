@@ -5,7 +5,7 @@
  * 排序与 limit、非数值跳过语义（对齐 SQL 忽略 NULL）。
  */
 import { describe, it, expect } from 'vitest'
-import { aggregateRowsInMemory, bucketKey, applyInMemoryFilter } from '../src/engine/datasource/aggregate-rows'
+import { aggregateRowsInMemory, bucketKey, applyInMemoryFilter, splitGroupColumns } from '../src/engine/datasource/aggregate-rows'
 
 const rows = [
   { type: '事假', days: 1, city: '上海' },
@@ -89,5 +89,71 @@ describe('applyInMemoryFilter', () => {
 
   it('空 filter 原样返回', () => {
     expect(applyInMemoryFilter(rows, null)).toBe(rows)
+  })
+})
+
+describe('splitGroupColumns（Task 120 双维度）', () => {
+  it('单列原样返回', () => {
+    expect(splitGroupColumns('city')).toEqual(['city'])
+  })
+
+  it('双列拆分并去空格', () => {
+    expect(splitGroupColumns('city , type')).toEqual(['city', 'type'])
+  })
+
+  it('空列报错', () => {
+    expect(() => splitGroupColumns(' , ')).toThrow('分组字段不能为空')
+  })
+
+  it('超过两列报错', () => {
+    expect(() => splitGroupColumns('a,b,c')).toThrow('最多支持两个维度')
+  })
+
+  it('重复列报错', () => {
+    expect(() => splitGroupColumns('a,a')).toThrow('分组字段重复')
+  })
+})
+
+describe('双维度内存聚合（Task 120）', () => {
+  const dualRows = [
+    { city: '上海', type: '事假', days: 2 },
+    { city: '上海', type: '事假', days: 3 },
+    { city: '上海', type: '病假', days: 1 },
+    { city: '北京', type: '事假', days: 5 },
+  ]
+
+  it('双维度 count：key 用 | 拼接', () => {
+    const out = aggregateRowsInMemory(dualRows, { group: 'city,type', agg: 'count', metric: null, timeGrain: null, sort: 'key', order: 'asc', limit: 0 })
+    expect(out).toEqual([
+      { key: '上海|事假', value: 2 },
+      { key: '上海|病假', value: 1 },
+      { key: '北京|事假', value: 1 },
+    ])
+  })
+
+  it('双维度 sum：metric 对第二维度组合求和', () => {
+    const out = aggregateRowsInMemory(dualRows, { group: 'city,type', agg: 'sum', metric: 'days', timeGrain: null, sort: 'value', order: 'desc', limit: 0 })
+    expect(out.find((r) => r.key === '北京|事假')?.value).toBe(5)
+    expect(out.find((r) => r.key === '上海|事假')?.value).toBe(5)
+    expect(out.find((r) => r.key === '上海|病假')?.value).toBe(1)
+  })
+
+  it('timeGrain 只作用于第一列', () => {
+    const timeRows = [
+      { day: '2026-09-30 10:00:00', city: '上海' },
+      { day: '2026-09-30 11:00:00', city: '上海' },
+      { day: '2026-09-29 10:00:00', city: '北京' },
+    ]
+    const out = aggregateRowsInMemory(timeRows, { group: 'day,city', agg: 'count', metric: null, timeGrain: 'day', sort: 'key', order: 'asc', limit: 0 })
+    expect(out).toEqual([
+      { key: '2026-09-29|北京', value: 1 },
+      { key: '2026-09-30|上海', value: 2 },
+    ])
+  })
+
+  it('任一维度为 null 的行被跳过（与单列语义一致）', () => {
+    const withNull = [...dualRows, { city: null, type: '事假', days: 9 }]
+    const out = aggregateRowsInMemory(withNull, { group: 'city,type', agg: 'count', metric: null, timeGrain: null, sort: 'key', order: 'asc', limit: 0 })
+    expect(out.find((r) => r.key.includes('null'))).toBeUndefined()
   })
 })

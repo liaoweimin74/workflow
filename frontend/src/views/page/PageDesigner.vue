@@ -190,12 +190,20 @@ import DsBindingConfigDialog from '@/views/form/components/DsBindingConfigDialog
 import DataPickerConfigDialog from '@/views/form/components/DataPickerConfigDialog.vue'
 import LookupPickerConfigDialog from '@/views/form/components/LookupPickerConfigDialog.vue'
 import CardStyleConfigDialog from './components/CardStyleConfigDialog.vue'
-import DashConfigDialog from '@/views/dashboard/components/DashConfigDialog.vue'
+import DashConfigDialog, { type DashConfigMode } from '@/views/dashboard/components/DashConfigDialog.vue'
 import {
   DASH_KPI_NAME,
   DASH_CHART_NAME,
+  DASH_FILTER_NAME,
+  DASH_GOAL_NAME,
+  DASH_LEADERBOARD_NAME,
+  DASH_ALERT_NAME,
   dashKpiRule,
   dashChartRule,
+  dashFilterRule,
+  dashGoalRule,
+  dashLeaderboardRule,
+  dashAlertRule,
   dashConfigButton,
 } from '@/views/dashboard/register'
 import type { CardStyle } from '@/components/business/ListCards.types'
@@ -455,24 +463,34 @@ function enableCardDesignMode(rules: any[]): any[] {
 // ===== 页面数据表单容器配置（复用 DsBindingConfigDialog 非表格模式） =====
 const formContainerDialogVisible = ref(false)
 /** 数据容器 rule：画布中 loadRule 后 type 为 FcRow，序列化前为 formContainer，两者兼容判断 */
-// ==================== 仪表盘组件配置（Task 119） ====================
+// ==================== 仪表盘组件配置（Task 119 → Task 120 组件族） ====================
 const dashDialogVisible = ref(false)
-const dashDialogMode = ref<'kpi' | 'chart'>('chart')
+const dashDialogMode = ref<DashConfigMode>('chart')
+const DASH_CONFIG_TYPES: Record<DashConfigMode, string> = {
+  kpi: DASH_KPI_NAME,
+  chart: DASH_CHART_NAME,
+  goal: DASH_GOAL_NAME,
+  alert: DASH_ALERT_NAME,
+  leaderboard: DASH_LEADERBOARD_NAME,
+  filter: DASH_FILTER_NAME,
+}
+const currentDashType = computed(() => DASH_CONFIG_TYPES[dashDialogMode.value] || '')
 const currentDashProps = computed(() => {
   const active = designerRef.value?.activeRule as any
-  if (active && (active.type === DASH_KPI_NAME || active.type === DASH_CHART_NAME)) {
+  if (active && active.type === currentDashType.value) {
     return active.props || {}
   }
   return {}
 })
-function openDashConfig(mode: 'kpi' | 'chart') {
+function openDashConfig(mode: DashConfigMode) {
   dashDialogMode.value = mode
   dashDialogVisible.value = true
 }
 function handleDashConfirm(patch: Record<string, any>) {
   const active = designerRef.value?.activeRule as any
-  if (active && (active.type === DASH_KPI_NAME || active.type === DASH_CHART_NAME) && active.props) {
-    Object.assign(active.props, patch)
+  if (active && active.type === currentDashType.value && active.props) {
+    const { mode: _mode, ...propsPatch } = patch
+    Object.assign(active.props, propsPatch)
   }
 }
 /** 页级数据源显示名（绑定列表无 name 时回退全局源名） */
@@ -672,6 +690,59 @@ function registerPageComponents() {
   designerRef.value?.setComponentRuleConfig(
     DASH_CHART_NAME,
     () => [dashConfigButton('配置图表', () => openDashConfig('chart'))],
+    true,
+  )
+
+  // 仪表盘组件族（Task 120）：筛选器 / 目标进度 / 排行榜 / 告警标记
+  designerRef.value?.addComponent({
+    label: '筛选器',
+    name: DASH_FILTER_NAME,
+    icon: 'icon-filter',
+    menu: 'main',
+    rule: () => dashFilterRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_FILTER_NAME,
+    () => [dashConfigButton('配置筛选器', () => openDashConfig('filter'))],
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '目标进度',
+    name: DASH_GOAL_NAME,
+    icon: 'icon-circle-check',
+    menu: 'main',
+    rule: () => dashGoalRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_GOAL_NAME,
+    () => [dashConfigButton('配置目标', () => openDashConfig('goal'))],
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '排行榜',
+    name: DASH_LEADERBOARD_NAME,
+    icon: 'icon-medal',
+    menu: 'main',
+    rule: () => dashLeaderboardRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_LEADERBOARD_NAME,
+    () => [dashConfigButton('配置排行榜', () => openDashConfig('leaderboard'))],
+    true,
+  )
+
+  designerRef.value?.addComponent({
+    label: '告警标记',
+    name: DASH_ALERT_NAME,
+    icon: 'icon-warning',
+    menu: 'main',
+    rule: () => dashAlertRule() as any,
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_ALERT_NAME,
+    () => [dashConfigButton('配置告警', () => openDashConfig('alert'))],
     true,
   )
 

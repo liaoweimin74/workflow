@@ -2,6 +2,7 @@ package com.workflow.engine.form.bizdata;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.engine.datasource.InMemoryAggregateUtil;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -211,18 +212,21 @@ public final class SqlTemplateEngine {
         String filterFragment = filterBody.isEmpty() ? "" : " WHERE " + filterBody;
 
         // `__all__` 保留维度：整表聚合成单值（KPI 场景），不走声明列白名单
+        // Task 120：group 支持逗号双维度（"a,b"），key 用 CONCAT(a,'|',b)；timeGrain 只作用于第一列
         boolean isAll = "__all__".equals(agg.group());
-        String groupKey = isAll ? "'__all__'" : resolveAggregateColumn(columns, agg.group(), "分组字段");
-        String timeGrainFormat = agg.timeGrain() == null ? null : TIME_GRAIN_FORMAT.get(agg.timeGrain());
-        if (agg.timeGrain() != null && timeGrainFormat == null) {
-            throw new IllegalArgumentException("非法时间粒度: " + agg.timeGrain());
+        List<String> groupColumns =
+                isAll ? List.of() : InMemoryAggregateUtil.splitGroupColumns(agg.group());
+        String keyExpr;
+        if (isAll) {
+            keyExpr = "'__all__'";
+        } else if (groupColumns.size() == 1) {
+            keyExpr = aggregateDimensionExpr(columns, groupColumns.get(0), true, agg.timeGrain());
+        } else {
+            keyExpr = "CONCAT("
+                    + aggregateDimensionExpr(columns, groupColumns.get(0), true, agg.timeGrain())
+                    + ", '|', "
+                    + aggregateDimensionExpr(columns, groupColumns.get(1), false, agg.timeGrain()) + ")";
         }
-        if (timeGrainFormat != null && !isAll && !isDateColumn(columns, groupKey)) {
-            throw new IllegalArgumentException("时间分组的列必须是日期类型: " + groupKey);
-        }
-        String keyExpr = timeGrainFormat == null
-                ? groupKey
-                : "DATE_FORMAT(" + groupKey + ", '" + timeGrainFormat + "')";
 
         String valueExpr;
         if ("count".equals(agg.fn())) {
@@ -266,6 +270,26 @@ public final class SqlTemplateEngine {
             throw new IllegalArgumentException("非法聚合函数: " + agg);
         }
         return fn;
+    }
+
+    /**
+     * 维度列表达式；{@code withTimeGrain} 仅第一列为 true（timeGrain 只套第一列，
+     * 对齐 Node sql-template-engine 的 dimensionExpr）：时间桶要求合法粒度 + 日期类型声明列。
+     */
+    private static String aggregateDimensionExpr(List<JoinSqlGenerator.QueryColumn> columns,
+                                                 String column, boolean withTimeGrain, String timeGrain) {
+        String key = resolveAggregateColumn(columns, column, "分组字段");
+        if (!withTimeGrain || timeGrain == null) {
+            return key;
+        }
+        String format = TIME_GRAIN_FORMAT.get(timeGrain);
+        if (format == null) {
+            throw new IllegalArgumentException("非法时间粒度: " + timeGrain);
+        }
+        if (!isDateColumn(columns, key)) {
+            throw new IllegalArgumentException("时间分组的列必须是日期类型: " + key);
+        }
+        return "DATE_FORMAT(" + key + ", '" + format + "')";
     }
 
     /** 聚合列校验：必须是声明列 + 合法标识符（要拼进 SQL 文本，比筛选列更严）。 */

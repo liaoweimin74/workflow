@@ -6,12 +6,13 @@
  * 避开 indigo/blue 主导的默认配色。
  */
 import * as echarts from 'echarts/core'
-import { BarChart, LineChart, PieChart } from 'echarts/charts'
+import { BarChart, LineChart, PieChart, ScatterChart, HeatmapChart, FunnelChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
   LegendComponent,
   TitleComponent,
+  VisualMapComponent,
 } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 
@@ -23,10 +24,14 @@ export function ensureEcharts(): typeof echarts {
       BarChart,
       LineChart,
       PieChart,
+      ScatterChart,
+      HeatmapChart,
+      FunnelChart,
       GridComponent,
       TooltipComponent,
       LegendComponent,
       TitleComponent,
+      VisualMapComponent,
       CanvasRenderer,
     ])
     registered = true

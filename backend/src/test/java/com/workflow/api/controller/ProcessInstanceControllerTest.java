@@ -10,6 +10,7 @@ import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.engine.runtime.ProcessTaskPredictionService;
+import com.workflow.engine.task.WorkflowTaskService;
 import com.workflow.framework.security.domain.LoginUser;
 import org.flowable.engine.TaskService;
 import org.flowable.engine.history.HistoricProcessInstance;
@@ -48,6 +49,7 @@ class ProcessInstanceControllerTest {
     private FormDataService formDataService;
     private VariableMappingWriter variableMappingWriter;
     private TaskService taskService;
+    private WorkflowTaskService workflowTaskService;
     private ObjectMapper objectMapper;
     private ProcessInstanceController controller;
     private SecurityContext savedSecurityContext;
@@ -60,10 +62,11 @@ class ProcessInstanceControllerTest {
         formDataService = mock(FormDataService.class);
         variableMappingWriter = mock(VariableMappingWriter.class);
         taskService = mock(TaskService.class);
+        workflowTaskService = mock(WorkflowTaskService.class);
         objectMapper = new ObjectMapper();
         controller = new ProcessInstanceController(
                 processInstanceService, highlightService, predictionService,
-                formDataService, variableMappingWriter, taskService, objectMapper);
+                formDataService, variableMappingWriter, taskService, workflowTaskService, objectMapper);
         savedSecurityContext = SecurityContextHolder.getContext();
     }
 

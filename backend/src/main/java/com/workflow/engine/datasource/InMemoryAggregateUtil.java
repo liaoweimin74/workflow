@@ -4,14 +4,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.AggregateRowVO;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * 内存聚合器（Task 119 仪表盘；移植 Node {@code backend-node/src/engine/datasource/aggregate-rows.ts}）。
@@ -36,11 +41,75 @@ public final class InMemoryAggregateUtil {
 
     private static final ObjectMapper OM = new ObjectMapper();
 
+    /** 复合维度键分隔符（热力图/交叉分析：group="a,b" → key="va|vb"；对齐 Node {@code COMPOSITE_KEY_SEPARATOR}）。 */
+    public static final String COMPOSITE_KEY_SEPARATOR = "|";
+
+    /** 非 "YYYY-MM-*" 前缀判定（命中则跳过 JS Date 解析，与 Node {@code /^\d{4}-\d{2}/} 同源）。 */
+    private static final Pattern SQLISH_PREFIX = Pattern.compile("^\\d{4}-\\d{2}");
+
+    /** JS Date.toString() 形态（"Thu Oct 01 2026 02:33:29 GMT+0000"）解析器。 */
+    private static final DateTimeFormatter JS_DATE_TO_STRING =
+            DateTimeFormatter.ofPattern("EEE MMM dd yyyy HH:mm:ss 'GMT'Z", Locale.US);
+
+    /** 非 "YYYY-MM-*" 来源值的解析尝试顺序（均失败则保留原值，对齐 JS {@code new Date(text)} NaN 语义）。 */
+    private static final DateTimeFormatter[] JS_DATE_FORMATS = {
+            JS_DATE_TO_STRING, DateTimeFormatter.RFC_1123_DATE_TIME};
+
+    /** JS Date.toString() 尾部时区名括号（"(UTC)" / "(China Standard Time)"），解析前剥离。 */
+    private static final Pattern JS_DATE_TAIL = Pattern.compile("\\s*\\([^)]*\\)\\s*$");
+
+    /** 规范化目标格式（对齐 JS {@code toISOString().replace('T',' ').slice(0,19)}，UTC）。 */
+    private static final DateTimeFormatter NORMALIZED_DATETIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     /** 内存聚合入参（对齐 Node {@code InMemoryAggregateOptions}）。 */
     public record AggregateOptions(String group, String agg, String metric,
                                    String timeGrain, String sort, String order, int limit) {}
 
     private InMemoryAggregateUtil() {}
+
+    /**
+     * 拆分 group 参数为维度列（Task 120）：最多两列，逗号分隔，去空格。
+     * 单列原样返回；空/超两个/重复均显式报错（与整体显式 400 风格一致）。
+     *
+     * @throws IllegalArgumentException 空分组/超两列/重复列
+     */
+    public static List<String> splitGroupColumns(String group) {
+        List<String> parts = new ArrayList<>();
+        for (String part : group.split(",")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty()) {
+                parts.add(trimmed);
+            }
+        }
+        if (parts.isEmpty()) {
+            throw new IllegalArgumentException("分组字段不能为空: " + group);
+        }
+        if (parts.size() > 2) {
+            throw new IllegalArgumentException("分组字段最多支持两个维度: " + group);
+        }
+        if (new HashSet<>(parts).size() != parts.size()) {
+            throw new IllegalArgumentException("分组字段重复: " + group);
+        }
+        return parts;
+    }
+
+    /**
+     * 非 "YYYY-MM-*" 前缀的来源值尝试按 JS Date 序列化形态解析，
+     * 规范化为 UTC {@code yyyy-MM-dd HH:mm:ss}；全部失败返回 null（调用方保留原值）。
+     */
+    private static String normalizeJsDate(String text) {
+        String candidate = JS_DATE_TAIL.matcher(text).replaceFirst("");
+        for (DateTimeFormatter formatter : JS_DATE_FORMATS) {
+            try {
+                return OffsetDateTime.parse(candidate, formatter)
+                        .withOffsetSameInstant(ZoneOffset.UTC).format(NORMALIZED_DATETIME);
+            } catch (DateTimeParseException ignored) {
+                // 试下一个格式
+            }
+        }
+        return null;
+    }
 
     /**
      * 时间桶 DATE_FORMAT 对应的 Java 侧格式化（与 SQL 模板同语义）。
@@ -50,16 +119,25 @@ public final class InMemoryAggregateUtil {
      * （先滚到本周周四，再按「与同年元旦的天数差」计算周数）。
      */
     public static String bucketKey(String raw, String timeGrain) {
+        // 来源值可能是 JS Date.toString() 格式（"Thu Oct 01 2026 02:33:29 GMT+0000"，
+        // SYSTEM 源行集序列化的历史格式）：先规范化为 "yyyy-MM-dd HH:mm:ss" 再切桶（Task 120）
+        String text = raw;
+        if (!SQLISH_PREFIX.matcher(text).find()) {
+            String normalized = normalizeJsDate(text);
+            if (normalized != null) {
+                text = normalized;
+            }
+        }
         if ("day".equals(timeGrain)) {
-            return raw.length() > 10 ? raw.substring(0, 10) : raw;
+            return text.length() > 10 ? text.substring(0, 10) : text;
         }
         if ("month".equals(timeGrain)) {
-            return raw.length() > 7 ? raw.substring(0, 7) : raw;
+            return text.length() > 7 ? text.substring(0, 7) : text;
         }
         // week：解析失败原样返回（对齐 JS Date NaN → return raw）
         LocalDate base;
         try {
-            base = LocalDate.parse(raw.length() > 10 ? raw.substring(0, 10) : raw);
+            base = LocalDate.parse(text.length() > 10 ? text.substring(0, 10) : text);
         } catch (DateTimeParseException | IllegalStateException e) {
             return raw;
         }
@@ -76,7 +154,8 @@ public final class InMemoryAggregateUtil {
      * 对行集做分组聚合，产出与 SQL 路径同形的 {@code {key, value}} 行集。
      *
      * <p>维度 key 缺失/为 null 的行跳过（SQL 的 GROUP BY 不含 NULL 之外的语义由
-     * 调用方数据形态决定，Node 侧 {@code rawKey === null || undefined → continue}）；
+     * 调用方数据形态决定，Node 侧 {@code rawKey === null || undefined → continue}；
+     * Task 120 双维度时任一维度为 null 即整行跳过）；
      * count 计行数（含指标列取不到数值的行）；其余聚合跳过不可数值的行。
      */
     public static List<AggregateRowVO> aggregateRowsInMemory(List<Map<String, Object>> rows,
@@ -88,22 +167,39 @@ public final class InMemoryAggregateUtil {
         Map<String, Long> counts = new LinkedHashMap<>();
         Map<String, double[]> numeric = new HashMap<>();
 
+        // Task 120：group 支持逗号双维度（"a,b"），key 用 '|' 拼接；timeGrain 只作用于第一列
+        List<String> groupColumns =
+                "__all__".equals(group) ? List.of("__all__") : splitGroupColumns(group);
+
         if (rows != null) {
             for (Map<String, Object> row : rows) {
                 if (row == null) {
                     continue;
                 }
                 // 保留维度：整表聚合成单值，所有行进同一组（KPI 无分组场景）
-                Object rawKey = "__all__".equals(group) ? "__all__" : row.get(group);
-                if (rawKey == null) {
+                List<String> rawParts = new ArrayList<>(groupColumns.size());
+                boolean hasNull = false;
+                for (int i = 0; i < groupColumns.size(); i++) {
+                    String column = groupColumns.get(i);
+                    Object rawKey = "__all__".equals(column) ? "__all__" : row.get(column);
+                    if (rawKey == null) {
+                        // 任一维度为 null 的行跳过
+                        hasNull = true;
+                        break;
+                    }
+                    String raw = rawKey instanceof java.util.Date date
+                            ? date.toInstant().atZone(java.time.ZoneId.of("UTC"))
+                            .toLocalDateTime()
+                            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                            : String.valueOf(rawKey);
+                    // 时间桶只套在第一列（时间×其他维度的热力图主场景）
+                    String keyed = timeGrain != null && i == 0 ? bucketKey(raw, timeGrain) : raw;
+                    rawParts.add(keyed);
+                }
+                if (hasNull) {
                     continue;
                 }
-                String raw = rawKey instanceof java.util.Date date
-                        ? date.toInstant().atZone(java.time.ZoneId.of("UTC"))
-                        .toLocalDateTime()
-                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                        : String.valueOf(rawKey);
-                String key = timeGrain != null ? bucketKey(raw, timeGrain) : raw;
+                String key = String.join(COMPOSITE_KEY_SEPARATOR, rawParts);
 
                 counts.merge(key, 1L, Long::sum);
                 if (!"count".equals(agg)) {
@@ -167,7 +263,10 @@ public final class InMemoryAggregateUtil {
             return "asc".equals(dir) ? cmp : -cmp;
         });
 
-        return options.limit() > 0 ? new ArrayList<>(out.subList(0, options.limit())) : out;
+        // slice(0, limit) 语义：limit 超出行数时截断到行数（对齐 Node slice 的钳制行为）
+        return options.limit() > 0
+                ? new ArrayList<>(out.subList(0, Math.min(options.limit(), out.size())))
+                : out;
     }
 
     /**

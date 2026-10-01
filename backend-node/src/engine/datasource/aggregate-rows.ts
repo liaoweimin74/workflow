@@ -17,14 +17,23 @@ import type { AggregateRowVO, TimeGrain } from '../../common/domain/biz-data'
 
 /** 时间桶 DATE_FORMAT 对应的 JS 侧格式化（与 SQL 模板同语义）。 */
 export function bucketKey(raw: string, timeGrain: TimeGrain): string {
+  // 来源值可能是 JS Date.toString() 格式（"Thu Oct 01 2026 02:33:29 GMT+0000"，
+  // SYSTEM 源行集序列化的历史格式）：先规范化为 "YYYY-MM-DD HH:mm:ss" 再切桶
+  let text = raw
+  if (!/^\d{4}-\d{2}/.test(text)) {
+    const parsed = new Date(text)
+    if (!Number.isNaN(parsed.getTime())) {
+      text = parsed.toISOString().replace('T', ' ').slice(0, 19)
+    }
+  }
   if (timeGrain === 'day') {
-    return raw.slice(0, 10)
+    return text.slice(0, 10)
   }
   if (timeGrain === 'month') {
-    return raw.slice(0, 7)
+    return text.slice(0, 7)
   }
   // week：ISO 周（MariaDB %x-W%v：4 位年份 + 2 位周数，周一为一周起点）
-  const base = new Date(`${raw.slice(0, 10)}T00:00:00Z`)
+  const base = new Date(`${text.slice(0, 10)}T00:00:00Z`)
   if (Number.isNaN(base.getTime())) return raw
   const target = new Date(base.getTime())
   // ISO 8601：周四所在年份为该周年份；先滚到本周周四
@@ -45,6 +54,30 @@ export interface InMemoryAggregateOptions {
   limit: number
 }
 
+/** 复合维度键分隔符（热力图/交叉分析：group="a,b" → key="va|vb"）。 */
+export const COMPOSITE_KEY_SEPARATOR = '|'
+
+/**
+ * 拆分 group 参数为维度列（Task 120）：最多两列，逗号分隔。
+ * 单列原样返回；空/超两个/重复均显式报错（与整体显式 400 风格一致）。
+ */
+export function splitGroupColumns(group: string): string[] {
+  const parts = group
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+  if (parts.length === 0) {
+    throw new Error(`分组字段不能为空: ${group}`)
+  }
+  if (parts.length > 2) {
+    throw new Error(`分组字段最多支持两个维度: ${group}`)
+  }
+  if (new Set(parts).size !== parts.length) {
+    throw new Error(`分组字段重复: ${group}`)
+  }
+  return parts
+}
+
 /** 对行集做分组聚合，产出与 SQL 路径同形的 `{key, value}` 行集。 */
 export function aggregateRowsInMemory(
   rows: Array<Record<string, unknown>>,
@@ -53,14 +86,29 @@ export function aggregateRowsInMemory(
   const { group, agg, metric, timeGrain } = options
   const counts = new Map<string, number>()
   const numeric = new Map<string, { sum: number; max: number; min: number; n: number }>()
+  // Task 120：group 支持逗号双维度（"a,b"），key 用 '|' 拼接；timeGrain 只作用于第一列
+  const groupColumns = group === '__all__' ? ['__all__'] : splitGroupColumns(group)
 
   for (const row of rows) {
     // 保留维度：整表聚合成单值，所有行进同一组（KPI 无分组场景）
-    const rawKey = group === '__all__' ? '__all__' : row[group]
-    if (rawKey === null || rawKey === undefined) continue
-    const raw =
-      rawKey instanceof Date ? rawKey.toISOString().replace('T', ' ').slice(0, 19) : String(rawKey)
-    const key = timeGrain !== null ? bucketKey(raw, timeGrain as TimeGrain) : raw
+    const rawParts: string[] = []
+    let hasNull = false
+    for (const column of groupColumns) {
+      const rawKey = column === '__all__' ? '__all__' : row[column]
+      if (rawKey === null || rawKey === undefined) {
+        hasNull = true
+        break
+      }
+      const raw =
+        rawKey instanceof Date ? rawKey.toISOString().replace('T', ' ').slice(0, 19) : String(rawKey)
+      // 时间桶只套在第一列（时间×其他维度的热力图主场景）
+      const keyed = timeGrain !== null && column === groupColumns[0]
+        ? bucketKey(raw, timeGrain as TimeGrain)
+        : raw
+      rawParts.push(keyed)
+    }
+    if (hasNull) continue
+    const key = rawParts.join(COMPOSITE_KEY_SEPARATOR)
 
     counts.set(key, (counts.get(key) ?? 0) + 1)
     if (agg !== 'count') {

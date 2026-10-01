@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { sql, type RawBuilder } from 'kysely'
+import { splitGroupColumns } from '../../datasource/aggregate-rows'
 import type { ColumnConfig } from '../../../common/domain/column-config'
 
 /**
@@ -311,21 +312,33 @@ export function buildAggregate(
 
   // `__all__` 是保留维度：不做分组、整表聚成一个数（KPI 场景），键恒为 '__all__'
   const isAll = group === ALL_GROUP_KEY
-  if (!isAll) {
-    validateColumn(group, allowedColumns, '分组字段')
-    assertNotJson(columnTypeOf, group, '分组字段')
+  // Task 120：group 支持逗号双维度（"a,b"），key 用 CONCAT(a,'|',b)；timeGrain 只作用于第一列
+  const groupColumns = isAll ? [] : splitGroupColumns(group)
+  for (const column of groupColumns) {
+    validateColumn(column, allowedColumns, '分组字段')
+    assertNotJson(columnTypeOf, column, '分组字段')
   }
-  let keyExpr: RawBuilder<unknown> = isAll ? sql`'${ALL_GROUP_KEY}'` : sql.ref(group)
-  if (!isAll && timeGrain !== null) {
+
+  const dimensionExpr = (column: string, withTimeGrain: boolean): RawBuilder<unknown> => {
+    if (!withTimeGrain || timeGrain === null) return sql.ref(column)
     const format = TIME_GRAIN_FORMAT[timeGrain]
     if (format === undefined) {
       throw new Error(`非法时间粒度: ${timeGrain}`)
     }
-    const type = columnTypeOf.get(group) ?? ''
+    const type = columnTypeOf.get(column) ?? ''
     if (!DATE_COLUMN_TYPES.has(type.toUpperCase())) {
-      throw new Error(`时间分组的列必须是日期类型: ${group}`)
+      throw new Error(`时间分组的列必须是日期类型: ${column}`)
     }
-    keyExpr = sql`DATE_FORMAT(${sql.ref(group)}, ${format})`
+    return sql`DATE_FORMAT(${sql.ref(column)}, ${format})`
+  }
+
+  let keyExpr: RawBuilder<unknown>
+  if (isAll) {
+    keyExpr = sql`'${ALL_GROUP_KEY}'`
+  } else if (groupColumns.length === 1) {
+    keyExpr = dimensionExpr(groupColumns[0], true)
+  } else {
+    keyExpr = sql`CONCAT(${dimensionExpr(groupColumns[0], true)}, '|', ${dimensionExpr(groupColumns[1], false)})`
   }
 
   let valueExpr: RawBuilder<unknown>

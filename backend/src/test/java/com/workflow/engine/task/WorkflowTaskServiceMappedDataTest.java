@@ -6,6 +6,8 @@ import com.workflow.engine.form.mapping.FormDataMerger;
 import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
+import com.workflow.engine.process.config.NodeOptionsService;
+import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.process.repository.NodeConfigRepository;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -80,7 +82,8 @@ class WorkflowTaskServiceMappedDataTest {
         service = new WorkflowTaskService(flowableTaskService, historyService, tenantProvider,
                 runtimeService, repositoryService, userService, commentRepository, remindRepository,
                 nodeConfigRepository, initiatorNodeResolver, objectMapper, formDataMerger,
-                variableMappingWriter);
+                variableMappingWriter, mock(NodeOptionsService.class),
+                mock(EngineNotifyService.class), mock(ProcessInstanceService.class));
         when(tenantProvider.getTenantId()).thenReturn("default");
     }
 

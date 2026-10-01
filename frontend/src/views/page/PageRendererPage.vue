@@ -164,6 +164,23 @@ const pageSchema = reactive<{
 /** 组件引用注册表：dataSourceId → 组件实例（供 refresh/set-filter） */
 const componentRefs = reactive<Record<string, any>>({})
 
+/** 仪表盘组件实例全量列表（Task 120）：dash-filter autoBroadcast 的广播目标 */
+const dashInstances = new Set<any>()
+
+/** 筛选器变更广播：向所有暴露 setFilter 的仪表盘组件推送该字段条件 */
+function broadcastDashFilter(field: string, op: string, value: unknown): void {
+  const cond = { [field]: value === null ? null : { op, value } }
+  for (const instance of dashInstances) {
+    if (instance && typeof instance.setFilter === 'function') {
+      try {
+        instance.setFilter(cond)
+      } catch (e) {
+        console.warn('[dash-broadcast] setFilter failed:', e)
+      }
+    }
+  }
+}
+
 /** 列表组件配置注册表：dataSourceId → page-table/page-list-cards 节点 props（含 viewDetail） */
 const tableViewConfigs = reactive<Record<string, any>>({})
 
@@ -370,8 +387,9 @@ function transformComponent(node: any): any {
   // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
   if (typeof node !== 'object' || node === null) return node
   const next = { ...node, props: { ...(node.props || {}) }, on: { ...(node.on || {}) } }
-  if (next.type === 'dash-kpi' || next.type === 'dash-chart') {
-    // 仪表盘组件（Task 119）：注入 dsRefId + 实例上报（动作总线 refresh/set-filter）
+  const DASH_DATA_TYPES = new Set(['dash-kpi', 'dash-chart', 'dash-goal', 'dash-leaderboard', 'dash-alert'])
+  if (DASH_DATA_TYPES.has(String(next.type)) || next.type === 'dash-filter') {
+    // 仪表盘组件族（Task 119/120）：注入 dsRefId + 实例上报（动作总线 refresh/set-filter）
     // 标题在组件内部渲染（图表标题样式）；置空避免 form-create 再包一层 form-item 标签
     next.title = ''
     next.info = ''
@@ -381,9 +399,23 @@ function transformComponent(node: any): any {
         next.props.dsRefId = ds.refId
       }
     }
-    next.on['ready'] = (instance: any) => {
-      if (next.props.dataSourceId && instance) {
-        componentRefs[next.props.dataSourceId] = instance
+    if (next.type === 'dash-filter') {
+      // 筛选器：filter-change → 全页广播（autoBroadcast）+ 动作总线可编程响应
+      next.on['filter-change'] = (payload: { field: string; op: string; value: unknown }) => {
+        if (payload && payload.field) {
+          broadcastDashFilter(payload.field, payload.op, payload.value)
+          dispatchActions('filter-change', payload)
+        }
+      }
+      next.on['ready'] = () => undefined
+    } else {
+      next.on['ready'] = (instance: any) => {
+        if (instance) {
+          dashInstances.add(instance)
+          if (next.props.dataSourceId) {
+            componentRefs[next.props.dataSourceId] = instance
+          }
+        }
       }
     }
   }

@@ -10,6 +10,7 @@ import {
   type BizDataVO,
 } from '../../common/domain/biz-data'
 import { BusinessException } from '../../common/exception/business-exception'
+import { splitGroupColumns } from './aggregate-rows'
 import { MYSQL_POOL } from '../../framework/database/database.module'
 import { getTenantId } from '../../framework/tenant/tenant-context'
 import type { BizDataQueryRequest } from '../form/bizdata/biz-data-support'
@@ -165,27 +166,35 @@ export class WorkflowFormDataQueryService {
       throw new BusinessException(400, `非法时间粒度: ${req.timeGrain}`)
     }
 
-    let keyExpr: string
-    if (req.group === '__all__') {
-      keyExpr = `'__all__'`
-    } else if (req.group === START_TIME_KEY) {
-      if (req.agg !== 'count') {
-        throw new BusinessException(400, '聚合字段不在表单字段中: startTime')
+    // Task 120：group 支持逗号双维度（"a,b"），key 用 CONCAT(a,'|',b)；timeGrain 只作用于第一列
+    const groupColumns =
+      req.group === '__all__' ? ['__all__'] : splitGroupColumns(req.group)
+    const keyExprOf = (column: string, withTimeGrain: boolean): string => {
+      if (column === '__all__') return `'__all__'`
+      if (column === START_TIME_KEY) {
+        if (req.agg !== 'count') {
+          throw new BusinessException(400, '聚合字段不在表单字段中: startTime')
+        }
+        return !withTimeGrain || grainFormat === null
+          ? 'h.start_time'
+          : `DATE_FORMAT(h.start_time, '${grainFormat}')`
       }
-      keyExpr = grainFormat === null ? 'h.start_time' : `DATE_FORMAT(h.start_time, '${grainFormat}')`
-    } else {
-      const groupCol = bizCols.get(req.group)
-      if (groupCol === undefined || !COL_PATTERN.test(req.group)) {
-        throw new BusinessException(400, `分组字段不在表单字段中: ${req.group}`)
+      const groupCol = bizCols.get(column)
+      if (groupCol === undefined || !COL_PATTERN.test(column)) {
+        throw new BusinessException(400, `分组字段不在表单字段中: ${column}`)
       }
-      if (DERIVED_SYSTEM_KEYS.has(req.group)) {
-        throw new BusinessException(400, `分组字段不在表单字段中: ${req.group}`)
+      if (DERIVED_SYSTEM_KEYS.has(column)) {
+        throw new BusinessException(400, `分组字段不在表单字段中: ${column}`)
       }
-      keyExpr =
-        grainFormat === null
-          ? `JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${req.group}'))`
-          : `DATE_FORMAT(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${req.group}')), '${grainFormat}')`
+      if (!withTimeGrain || grainFormat === null) {
+        return `JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${column}'))`
+      }
+      return `DATE_FORMAT(JSON_UNQUOTE(JSON_EXTRACT(f.data_json, '$.${column}')), '${grainFormat}')`
     }
+    const keyExpr =
+      groupColumns.length === 1
+        ? keyExprOf(groupColumns[0], true)
+        : `CONCAT(${keyExprOf(groupColumns[0], true)}, '|', ${keyExprOf(groupColumns[1], false)})`
 
     let valueExpr = 'COUNT(1)'
     if (req.agg !== 'count') {

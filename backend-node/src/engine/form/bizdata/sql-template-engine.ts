@@ -23,6 +23,7 @@ import {
   type FilterEmitOptions,
 } from './filter-sql'
 import { wrapSubquery, type SqlAndParams, type WrappedQuery } from './sql-query-engine'
+import { splitGroupColumns } from '../../datasource/aggregate-rows'
 /**
  * 声明列类型（对齐 Java `JoinSqlGenerator.QueryColumn`）：定义在 `join-sql-generator.ts`
  * —— Java 侧这个 record 的宿主就是 `JoinSqlGenerator`，两处共用同一形状。
@@ -299,17 +300,26 @@ export function wrapAggregate(
   const filterFragment = filterBody === '' ? '' : ` WHERE ${filterBody}`
 
   const isAll = agg.group === '__all__'
-  const groupKey = isAll ? "'__all__'" : resolveAggregateColumn(columns, agg.group, '分组字段')
-  const timeGrainFormat =
-    agg.timeGrain === null || agg.timeGrain === undefined ? null : TIME_GRAIN_FORMAT[agg.timeGrain]
-  if (agg.timeGrain !== null && agg.timeGrain !== undefined && timeGrainFormat === undefined) {
-    throw illegal(`非法时间粒度: ${String(agg.timeGrain)}`)
+  // Task 120：group 支持逗号双维度（"a,b"），key 用 CONCAT(a,'|',b)；timeGrain 只作用于第一列
+  const groupColumns = isAll ? [] : splitGroupColumns(agg.group)
+  const resolveColumn = (column: string): string => resolveAggregateColumn(columns, column, '分组字段')
+  const dimensionExpr = (column: string, withTimeGrain: boolean): string => {
+    const key = resolveColumn(column)
+    if (!withTimeGrain || agg.timeGrain === null || agg.timeGrain === undefined) return key
+    const format = TIME_GRAIN_FORMAT[agg.timeGrain]
+    if (format === undefined) {
+      throw illegal(`非法时间粒度: ${String(agg.timeGrain)}`)
+    }
+    if (!isDateColumn(columns, key)) {
+      throw illegal(`时间分组的列必须是日期类型: ${key}`)
+    }
+    return `DATE_FORMAT(${key}, '${format}')`
   }
-  if (timeGrainFormat !== null && !isAll && !isDateColumn(columns, groupKey)) {
-    throw illegal(`时间分组的列必须是日期类型: ${groupKey}`)
-  }
-  const keyExpr =
-    timeGrainFormat === null ? groupKey : `DATE_FORMAT(${groupKey}, '${timeGrainFormat}')`
+  const keyExpr = isAll
+    ? "'__all__'"
+    : groupColumns.length === 1
+      ? dimensionExpr(groupColumns[0], true)
+      : `CONCAT(${dimensionExpr(groupColumns[0], true)}, '|', ${dimensionExpr(groupColumns[1], false)})`
 
   let valueExpr: string
   if (agg.fn === 'count') {

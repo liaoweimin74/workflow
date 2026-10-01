@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { spawn } from 'child_process'
+import { existsSync } from 'fs'
 import net from 'net'
 
 // 【应急自愈看门狗】next dev(3000) 被 OOM 击杀后无人拉起：平台仅在容器启动时
@@ -12,6 +13,13 @@ import net from 'net'
 // 不通则以 detached 方式 spawn 根目录 `bun run dev`（父进程是本 vite 进程，
 // 可长期存活；其内部 start-services.sh 幂等：8080/5173 健康时直接跳过）。
 // 端口守卫保证 vite 每次重启时最多补拉一次，3000 存活时完全零开销。
+//
+// ⚠️ 沙箱限定：bun 与 /home/z/my-project 只存在于 Linux 沙箱容器。Windows 开发机
+// 上 spawn 会 ENOENT 且（历史代码缺 error 监听）把 vite 整个带崩 —— 因此仅当
+// 沙箱目录存在时才启用本看门狗，其余环境直接跳过。
+const SANDBOX_ROOT = '/home/z/my-project'
+const SANDBOX_ENV = process.platform !== 'win32' && existsSync(SANDBOX_ROOT)
+
 function reviveNextDev(): PluginOption {
   const portAlive = (port: number, timeout = 1500) =>
     new Promise<boolean>((resolve) => {
@@ -27,13 +35,16 @@ function reviveNextDev(): PluginOption {
   return {
     name: 'revive-next-dev',
     async configureServer() {
+      if (!SANDBOX_ENV) return
       if (await portAlive(3000)) return
       console.log('[revive-next-dev] 3000 无响应，拉起 next dev ...')
       const child = spawn('bun', ['run', 'dev'], {
-        cwd: '/home/z/my-project',
+        cwd: SANDBOX_ROOT,
         detached: true,
         stdio: 'ignore'
       })
+      // 拉起失败（bun 缺失等）不影响 vite 本身
+      child.on('error', () => {})
       child.unref()
     }
   }

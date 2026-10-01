@@ -60,7 +60,7 @@
  *   - keyword    → { op: 'like', value: 文本 }（清除时 null）
  */
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useFullscreen } from './useFullscreen'
+import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(
   defineProps<{

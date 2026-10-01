@@ -46,7 +46,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ensureEcharts, DASH_PALETTE, cssVar, canvasAvailable } from './useEcharts'
 import { parseDashFilter, mergeDashFilter, upsertDashConditions, splitCompositeKey, type DashCondition } from './dash-shared'
-import { useFullscreen } from './useFullscreen'
+import { useFullscreen } from '@/composables/useFullscreen'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 

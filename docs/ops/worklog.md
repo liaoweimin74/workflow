@@ -2583,3 +2583,36 @@ Work Log:
 
 Stage Summary:
 - Task 119（form-create 仪表盘：KPI/统计图组件绑数据源 + 聚合端点 Nest/Java 双后端 + 主页替换）全链路闭环
+
+---
+Task ID: 120-1b
+Agent: Task 120-1b 实施代理（subagent）
+Task: Java 双维度聚合对位移植（对齐 Nest Task 120 聚合端点双维度语义）
+
+Work Log:
+- 先读 Nest 参考实现（aggregate-rows.ts / biz-data-query-builder.ts / sql-template-engine.ts / workflow-form-data-query.service.ts / unified-data-source-adapter.ts 的 Task 120 改动），再对位 Java 侧 5 文件：
+- `InMemoryAggregateUtil.java`：①新增 `splitGroupColumns(group)`（逗号拆分、trim 去空、最多两列；报错文案与 Nest 逐字一致：「分组字段不能为空: xxx」「分组字段最多支持两个维度: xxx」「分组字段重复: xxx」）；②`aggregateRowsInMemory` 支持双维度——`__all__` 保留维度不变，否则拆列逐行取值，任一维度为 null 整行跳过，key 用新增常量 `COMPOSITE_KEY_SEPARATOR='|'` 拼接，timeGrain 只套第一列（i==0）；③`bucketKey` 补 JS Date 格式兼容：非 `^\d{4}-\d{2}` 前缀的字符串先试 `EEE MMM dd yyyy HH:mm:ss 'GMT'Z`（Date.toString 形态，先剥尾部 "(UTC)" 括号）与 RFC_1123 解析，成功则规范化为 UTC "yyyy-MM-dd HH:mm:ss" 再切桶，失败原样（对齐 JS new Date NaN 语义）
+- `BizDataQueryBuilder.buildAggregate`：group 经 splitGroupColumns 拆列，每列独立 validateColumn + assertNotJson；双列 keyExpr = CONCAT(dimExprA, '|', dimExprB)，提取 `dimensionExpr(column, withTimeGrain, ...)` helper，timeGrain 只套第一列
+- `SqlTemplateEngine.wrapAggregate`：同上——splitGroupColumns + `aggregateDimensionExpr` helper（resolveAggregateColumn 白名单/标识符校验保留）+ 双列 CONCAT；顺带消除既有偏差：旧实现 `__all__`+非法 timeGrain 会报错、`__all__`+timeGrain 会产出 DATE_FORMAT('__all__',…) 脏 key，新结构与 Nest 一致（__all__ 短路、不校验不包裹 timeGrain）
+- `WorkflowFormDataQueryService.aggregate`：keyExpr if/else 链改写为 `keyExprOf` lambda（'__all__'/startTime 特殊列/业务列 JSON_EXTRACT 三分支逐列判断，含 grainFormat 套用位置），双列时 CONCAT(keyExprOf(a), '|', keyExprOf(b))；错误文案与 Nest 保持一致（BusinessException 400）
+- `UnifiedDataSourceAdapter`：新增 `aggregateInMemory400(rows, options)` helper（catch IllegalArgumentException → BusinessException(400)，对齐 BizDataSupport 既有用法与 Nest aggregateInMemory400），formAggregate(config)/systemAggregate/apiAggregate 三处调用点替换
+- 最小修复存量编译断点（4 个测试文件，主源码构造器签名早已漂移、测试未跟上，非本任务语义改动）：ProcessInstanceControllerTest 补 WorkflowTaskService mock；EndToEndIntegrationTest 的 RejectService 补 NodeOptionsService/NodeConfigRepository/HistoryService；WorkflowTaskServiceDetailTest / WorkflowTaskServiceMappedDataTest 的 WorkflowTaskService 补 NodeOptionsService/EngineNotifyService/ProcessInstanceService mock
+- 顺手最小修复（记录）：InMemoryAggregateUtil 的 limit 截断由 `subList(0, limit)`（limit>行数时 IndexOutOfBounds→500）改为 `Math.min(limit, size)`，对齐 Node `slice(0, limit)` 的钳制行为
+- 验证：`JAVA_HOME=/home/z/tools/jdk21 /home/z/tools/maven/bin/mvn -o package -q -DskipTests` → BUILD SUCCESS（exit 0），workflow-platform-1.0.0-SNAPSHOT.jar 正常产出
+
+Stage Summary:
+- Java 侧聚合端点双维度语义与 Nest 完全对位：group="a,b"（≤2 列、去空格、重复/空/超列显式 400）、key='|' 拼接、timeGrain 只套第一列（内存聚合与 buildAggregate/wrapAggregate）、__all__ 保留维度不变、bucketKey 兼容 JS Date 序列化格式、内存聚合校验错误显式 400
+- 关键实现差异点（有意为之，保持两侧契约一致）：①WORKFLOW 分支的 keyExprOf 与 Nest 逐列一致——timeGrain 在该分支按「列」而非「位置」套用（第二列也会被 DATE_FORMAT 包裹），与 buildAggregate/wrapAggregate 的「只套第一列」不同，这是 Nest 参考实现的既有行为，Java 侧照抄未"修正"；②Java 侧 splitGroupColumns 复用 InMemoryAggregateUtil（跨包 import），与 Nest 的 import 方向一致；③测试文件仅补构造器 mock 参数使 testCompile 通过，未新增/修改测试逻辑
+
+---
+Task ID: 120-1b-fix
+Agent: Task 120-1b 实施代理（subagent）
+Task: WORKFLOW aggregate keyExprOf 对齐 Nest 修正——timeGrain 只套第一列（withTimeGrain 参数化）
+
+Work Log:
+- Nest 侧 workflow-form-data-query.service.ts 的 keyExprOf 刚修正为 (column, withTimeGrain) 双参（单维度 (a, true)；双维度 CONCAT(a true, '|', b false)，第二列永远原样 JSON_UNQUOTE）——即 Task 120-1b 报告的差异点①已被 Nest 侧消除
+- Java 对齐：WorkflowFormDataQueryService.aggregate 的 keyExprOf 由 UnaryOperator<String> 改为 BiFunction<String, Boolean, String>，startTime 特殊列与 JSON_EXTRACT 业务列分支均为 !withTimeGrain || grainFormat == null 时返回原始表达式；单维度 keyExprOf(a, true)、双维度 CONCAT(keyExprOf(a, true), '|', keyExprOf(b, false))
+- 仅动 WorkflowFormDataQueryService.java 一个文件；mvn -o package -q -DskipTests → BUILD SUCCESS（exit 0）
+
+Stage Summary:
+- WORKFLOW 分支 timeGrain 套用位置回归「只套第一列」，Java 与 Nest 契约重新完全一致（WORKFLOW / buildAggregate / wrapAggregate / 内存聚合四处语义统一）

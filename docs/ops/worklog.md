@@ -2558,3 +2558,28 @@ Work Log:
 Stage Summary:
 - 本地仓库已恢复且提交就绪；远程 main 仍为 4390c7a7（Task 118），Task 119 待推送
 - SOP 确认：重置后 PAT 必须向用户索取；父仓库 /home/z/my-project/.git 是巡检代理工作区（含 UUID 提交与误入库的 workflow_lowcode 源码），与业务仓库已重新分离
+
+---
+Task ID: 119-restore-verify
+Agent: Z.ai Code (main session)
+Task: 第十一次文件丢失恢复（磁盘 510 文件消失、.git 完好）+ 全链路可用性核验
+
+Work Log:
+- 磁盘 510 文件丢失（含 Task 117/118 核心源码与 golden fixtures），嵌套 .git 完好：git -c core.quotepath=false 提取 D 清单后 checkout -- 全量恢复；33 个 M 文件（巡检进行中工作）甄别保留
+- 核验：迁移 V42-V46 在、dashboard 页 PUBLISHED、menu 312 在、8080 health UP；agent-browser E2E 登录→主页仪表盘 4 组件真数据渲染、console 零错误
+- push 复试仍 Invalid token：Task 119 提交 b96f64b2 领先 origin/main 1 commit，待用户提供新 PAT
+
+Stage Summary:
+- 站点完全可用；唯一遗留为 push 凭据。SOP：恢复 D 文件必须关 core.quotepath（中文路径）
+
+---
+Task ID: 119-push-done
+Agent: Z.ai Code (main session)
+Task: Task 119 push 完成（用户提供新 PAT，指纹 11ARRZ...TyWFds）
+
+Work Log:
+- remote set-url 更新凭据后 push origin main 成功：4390c7a7..b96f64b2
+- 核对 origin/main...main = 0 0 完全同步
+
+Stage Summary:
+- Task 119（form-create 仪表盘：KPI/统计图组件绑数据源 + 聚合端点 Nest/Java 双后端 + 主页替换）全链路闭环

@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-filter" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }">
+  <div ref="rootEl" class="dash-filter" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }" :style="layoutStyle">
     <span v-if="label" class="dash-filter-label">{{ label }}</span>
     <el-date-picker
       v-if="filterType === 'date-range'"
@@ -61,6 +61,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useFullscreen } from '@/composables/useFullscreen'
+import { dashSpanGapStyle } from './dash-shared'
 
 const props = withDefaults(
   defineProps<{
@@ -75,6 +76,8 @@ const props = withDefaults(
     /** 变更后自动向同页组件广播（false = 只 emit，由页面 actions 编排） */
     autoBroadcast?: boolean
     designMode?: boolean
+    /** Task 123：栅格跨度（1-24，与 rule.col.span 镜像） */
+    span?: number
   }>(),
   {
     filterType: 'date-range',
@@ -84,6 +87,7 @@ const props = withDefaults(
     options: '',
     autoBroadcast: true,
     designMode: false,
+    span: 24,
   },
 )
 
@@ -94,6 +98,12 @@ const emit = defineEmits<{
 
 const rootEl = ref<HTMLDivElement | null>(null)
 const { isFullscreen, toggle: _toggle } = useFullscreen(rootEl)
+
+/** Task 123 布局：并排留白（全屏跳过） */
+const layoutStyle = computed<Record<string, string>>(() => {
+  if (isFullscreen.value) return {}
+  return dashSpanGapStyle(props.span)
+})
 const dateRange = ref<[string, string] | null>(null)
 const selectValue = ref<string | null>(null)
 const keyword = ref('')

@@ -203,7 +203,50 @@
             </el-select>
           </el-form-item>
         </template>
+
+        <el-form-item v-if="mode !== 'chart'" label="显示高度">
+          <div style="display: flex; gap: 8px; width: 100%">
+            <el-select v-model="form.displayHeight" style="width: 170px">
+              <el-option value="" label="自适应" />
+              <el-option value="120px" label="矮 (120px)" />
+              <el-option value="200px" label="标准 (200px)" />
+              <el-option value="320px" label="高 (320px)" />
+              <el-option value="420px" label="超高 (420px)" />
+              <el-option value="custom" label="自定义…" />
+            </el-select>
+            <el-input
+              v-if="form.displayHeight === 'custom'"
+              v-model="form.displayHeightCustomText"
+              placeholder="如 280px"
+              maxlength="12"
+              style="flex: 1"
+            />
+          </div>
+          <div class="field-hint">卡片整体高度；自适应时随内容伸缩（Task 123）</div>
+        </el-form-item>
       </template>
+
+      <!-- Task 123：宽度栅格（全部组件可用，含筛选器；写入 rule.col.span 驱动 form-create 布局） -->
+      <el-form-item label="宽度">
+        <div style="display: flex; gap: 8px; width: 100%">
+          <el-select v-model="form.spanMode" style="width: 170px">
+            <el-option :value="24" label="撑满 (100%)" />
+            <el-option :value="16" label="2/3 宽" />
+            <el-option :value="12" label="1/2 宽" />
+            <el-option :value="8" label="1/3 宽" />
+            <el-option :value="6" label="1/4 宽" />
+            <el-option :value="0" label="自定义栅格…" />
+          </el-select>
+          <el-input-number
+            v-if="form.spanMode === 0"
+            v-model="form.spanCustom"
+            :min="1"
+            :max="24"
+            style="flex: 1"
+          />
+        </div>
+        <div class="field-hint">按 24 栅格分宽；同行多个组件建议档位互补（如两个 1/2 宽）</div>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
@@ -257,6 +300,8 @@ export interface DashConfigResult {
   trendField?: string
   sparkline?: boolean
   sparkRange?: number
+  /** Task 123：宽度栅格跨度（1-24；设计器同步写入 rule.col.span） */
+  span?: number
   /** filter */
   filterType?: string
   field?: string
@@ -324,6 +369,11 @@ const form = reactive({
   label: '',
   placeholder: '',
   options: '',
+  // Task 123：宽度栅格（spanMode 0 = 自定义，用 spanCustom）与卡片显示高度
+  spanMode: 24 as number,
+  spanCustom: 24,
+  displayHeight: '',
+  displayHeightCustomText: '',
 })
 
 watch(
@@ -363,6 +413,22 @@ watch(
     form.label = p.label || ''
     form.placeholder = p.placeholder || ''
     form.options = p.options || ''
+    // Task 123 宽高回填（span 镜像存于 props）
+    const spanNum = Number(p.span ?? 24) || 24
+    if ([24, 16, 12, 8, 6].includes(spanNum)) {
+      form.spanMode = spanNum
+      form.spanCustom = spanNum
+    } else {
+      form.spanMode = 0
+      form.spanCustom = spanNum
+    }
+    form.displayHeight = props.mode === 'chart' ? '' : String(p.height ?? '')
+    form.displayHeightCustomText = ''
+    if (!['', '120px', '200px', '320px', '420px'].includes(form.displayHeight)) {
+      // 既有自定义值回填到自定义输入框
+      form.displayHeight = 'custom'
+      form.displayHeightCustomText = String(p.height ?? '')
+    }
     if (props.mode !== 'filter') void loadColumns()
   },
 )
@@ -410,8 +476,16 @@ const canConfirm = computed(() => {
   if (form.agg !== 'count' && !form.metric) return false
   if (props.mode === 'kpi' && form.trendEnabled && !form.trendField) return false
   if (props.mode === 'alert' && form.threshold === null) return false
+  if (form.displayHeight === 'custom' && !form.displayHeightCustomText.trim()) return false
   return true
 })
+
+/** Task 123：生效宽度栅格（spanMode 0 = 自定义档） */
+const effectiveSpan = computed(() => (form.spanMode === 0 ? form.spanCustom : form.spanMode))
+/** Task 123：生效显示高度（custom 档用输入框值；chart 模式沿用绘图高度不消费此值） */
+const effectiveDisplayHeight = computed(() =>
+  form.displayHeight === 'custom' ? form.displayHeightCustomText.trim() : form.displayHeight,
+)
 
 async function loadColumns(): Promise<void> {
   columns.value = []
@@ -446,6 +520,7 @@ function confirm(): void {
       placeholder: form.placeholder,
       options: form.options,
       autoBroadcast: true,
+      span: effectiveSpan.value,
     })
   } else if (props.mode === 'chart') {
     // 热力图双维度："a,b"（后端 splitGroupColumns 契约）
@@ -465,6 +540,7 @@ function confirm(): void {
       order: form.order,
       limit: form.limit,
       height: form.height,
+      span: effectiveSpan.value,
     })
   } else if (props.mode === 'leaderboard') {
     emit('confirm', {
@@ -477,6 +553,8 @@ function confirm(): void {
       timeGrain: form.timeGrain === '' ? null : form.timeGrain,
       limit: form.limit,
       numberFormat: form.numberFormat,
+      span: effectiveSpan.value,
+      height: effectiveDisplayHeight.value,
     })
   } else if (props.mode === 'goal') {
     emit('confirm', {
@@ -488,6 +566,8 @@ function confirm(): void {
       unit: form.unit,
       target: form.target,
       numberFormat: form.numberFormat,
+      span: effectiveSpan.value,
+      height: effectiveDisplayHeight.value,
     })
   } else if (props.mode === 'alert') {
     emit('confirm', {
@@ -501,6 +581,8 @@ function confirm(): void {
       threshold: form.threshold,
       alertText: form.alertText,
       numberFormat: form.numberFormat,
+      span: effectiveSpan.value,
+      height: effectiveDisplayHeight.value,
     })
   } else {
     emit('confirm', {
@@ -517,6 +599,8 @@ function confirm(): void {
       trendField: form.trendField,
       sparkline: form.sparkline,
       sparkRange: form.sparkRange,
+      span: effectiveSpan.value,
+      height: effectiveDisplayHeight.value,
     })
   }
   emit('update:modelValue', false)

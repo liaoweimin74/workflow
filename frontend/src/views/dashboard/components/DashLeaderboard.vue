@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-leaderboard" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }">
+  <div ref="rootEl" class="dash-leaderboard" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
     <div class="dash-leaderboard-head">
       <span class="dash-leaderboard-title">{{ title || '排行榜' }}</span>
       <span v-if="rows.length > 0" class="dash-leaderboard-meta">Top {{ rows.length }}</span>
@@ -44,7 +44,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(
@@ -64,6 +64,10 @@ const props = withDefaults(
     filter?: string | null
     designMode?: boolean
     numberFormat?: string
+    /** Task 123：栅格跨度（1-24，与 rule.col.span 镜像） */
+    span?: number
+    /** Task 123：显示高度（空 = 自适应；固定高度时列表区滚动） */
+    height?: string
   }>(),
   {
     title: '',
@@ -77,12 +81,21 @@ const props = withDefaults(
     filter: null,
     designMode: false,
     numberFormat: '',
+    span: 24,
+    height: '',
   },
 )
 
 const emit = defineEmits<{ (e: 'ready', instance: unknown): void }>()
 const rootEl = ref<HTMLDivElement | null>(null)
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootEl)
+
+/** Task 123 布局：并排留白（全屏跳过）+ 固定高度（内容纵向居中） */
+const layoutStyle = computed<Record<string, string>>(() => {
+  if (isFullscreen.value) return {}
+  return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
+})
+const fixedHeight = computed(() => !!dashHeightStyle(props.height))
 const rawRows = ref<Array<{ key: string; value: number }>>([])
 const baseFilter = ref<Record<string, unknown> | null>(parseDashFilter(props.filter))
 const extraConditions = ref<DashCondition[]>([])
@@ -177,6 +190,11 @@ defineExpose({ setFilter, refresh })
 .dash-leaderboard.is-fullscreen {
   z-index: 3000;
   border-radius: 0;
+  overflow-y: auto;
+}
+/* Task 123：固定高度时内容纵向居中；列表区溢出滚动防截断 */
+.dash-leaderboard.is-fixed-height {
+  justify-content: center;
   overflow-y: auto;
 }
 .dash-leaderboard-head {

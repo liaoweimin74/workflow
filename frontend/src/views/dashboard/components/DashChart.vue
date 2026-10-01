@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-chart" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }">
+  <div ref="rootEl" class="dash-chart" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }" :style="layoutStyle">
     <div class="dash-chart-head">
       <div v-if="title" class="dash-chart-title">{{ title }}</div>
       <button
@@ -45,7 +45,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { ensureEcharts, DASH_PALETTE, cssVar, canvasAvailable } from './useEcharts'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, splitCompositeKey, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, splitCompositeKey, dashSpanGapStyle, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
@@ -73,6 +73,8 @@ const props = withDefaults(
     /** 绘图高度（css 值） */
     height?: string
     designMode?: boolean
+    /** Task 123：栅格跨度（1-24，与 rule.col.span 镜像；高度沿用既有 height 绘图语义） */
+    span?: number
   }>(),
   {
     title: '',
@@ -89,6 +91,7 @@ const props = withDefaults(
     filter: null,
     height: '260px',
     designMode: false,
+    span: 24,
   },
 )
 
@@ -100,6 +103,12 @@ const rows = ref<Array<{ key: string; value: number }>>([])
 const loading = ref(false)
 const loadError = ref('')
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootEl)
+
+/** Task 123 布局：并排留白（全屏跳过）；绘图高度仍由既有 height prop 驱动画布 */
+const layoutStyle = computed<Record<string, string>>(() => {
+  if (isFullscreen.value) return {}
+  return dashSpanGapStyle(props.span)
+})
 let chart: ReturnType<ReturnType<typeof ensureEcharts>['init']> | null = null
 let resizeObserver: ResizeObserver | null = null
 const baseFilter = ref<Record<string, unknown> | null>(parseDashFilter(props.filter))

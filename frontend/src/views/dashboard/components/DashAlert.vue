@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-alert" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-alert': alerting, 'is-ok': !alerting && value !== null }">
+  <div ref="rootEl" class="dash-alert" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-alert': alerting, 'is-ok': !alerting && value !== null, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
     <div class="dash-alert-head">
       <span class="dash-alert-title">{{ title || '指标监控' }}</span>
       <span class="dash-alert-state" :class="{ alerting }">
@@ -45,7 +45,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(
@@ -64,6 +64,10 @@ const props = withDefaults(
     threshold?: number
     /** 触发时的告警文案 */
     alertText?: string
+    /** Task 123：栅格跨度（1-24，与 rule.col.span 镜像） */
+    span?: number
+    /** Task 123：显示高度（空 = 自适应） */
+    height?: string
   }>(),
   {
     title: '',
@@ -78,12 +82,21 @@ const props = withDefaults(
     condition: 'gt',
     threshold: 0,
     alertText: '',
+    span: 24,
+    height: '',
   },
 )
 
 const emit = defineEmits<{ (e: 'ready', instance: unknown): void }>()
 const rootEl = ref<HTMLDivElement | null>(null)
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootEl)
+
+/** Task 123 布局：并排留白（全屏跳过）+ 固定高度（内容纵向居中） */
+const layoutStyle = computed<Record<string, string>>(() => {
+  if (isFullscreen.value) return {}
+  return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
+})
+const fixedHeight = computed(() => !!dashHeightStyle(props.height))
 const value = ref<number | null>(null)
 const baseFilter = ref<Record<string, unknown> | null>(parseDashFilter(props.filter))
 const extraConditions = ref<DashCondition[]>([])
@@ -190,6 +203,10 @@ defineExpose({ setFilter, refresh })
 }
 .dash-alert.is-ok {
   border-color: rgba(16, 185, 129, 0.35);
+}
+/* Task 123：固定高度时内容纵向居中（根已是 flex column） */
+.dash-alert.is-fixed-height {
+  justify-content: center;
 }
 .dash-alert.is-design {
   outline: 1px dashed var(--el-color-primary-light-5, #a7f3d0);

@@ -489,8 +489,13 @@ function openDashConfig(mode: DashConfigMode) {
 function handleDashConfirm(patch: Record<string, any>) {
   const active = designerRef.value?.activeRule as any
   if (active && active.type === currentDashType.value && active.props) {
-    const { mode: _mode, ...propsPatch } = patch
+    const { mode: _mode, span, ...propsPatch } = patch
     Object.assign(active.props, propsPatch)
+    // Task 123 宽度栅格：props 镜像（组件并排留白感知）+ rule.col（form-create 布局真身），
+    // 运行态 transformComponent 浅拷贝透传 col，双端一致
+    const spanNum = Math.min(24, Math.max(1, Number(span || 24)))
+    active.props.span = spanNum
+    active.col = { ...(active.col || {}), span: spanNum }
   }
 }
 /** 页级数据源显示名（绑定列表无 name 时回退全局源名） */

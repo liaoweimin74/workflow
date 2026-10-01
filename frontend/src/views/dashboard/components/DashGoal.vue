@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-goal" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }">
+  <div ref="rootEl" class="dash-goal" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
     <div class="dash-goal-head">
       <span class="dash-goal-title">{{ title || '目标进度' }}</span>
       <span class="dash-goal-percent" :class="percentTone">{{ percentText }}</span>
@@ -45,7 +45,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(
@@ -60,6 +60,10 @@ const props = withDefaults(
     filter?: string | null
     designMode?: boolean
     numberFormat?: string
+    /** Task 123：栅格跨度（1-24，与 rule.col.span 镜像；<24 并排时根节点左右留白） */
+    span?: number
+    /** Task 123：显示高度（空 = 自适应；纯数字补 px） */
+    height?: string
   }>(),
   {
     title: '',
@@ -72,12 +76,21 @@ const props = withDefaults(
     filter: null,
     designMode: false,
     numberFormat: '',
+    span: 24,
+    height: '',
   },
 )
 
 const emit = defineEmits<{ (e: 'ready', instance: unknown): void }>()
 const rootEl = ref<HTMLDivElement | null>(null)
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootEl)
+
+/** Task 123 布局：并排留白（全屏跳过）+ 固定高度（内容纵向居中） */
+const layoutStyle = computed<Record<string, string>>(() => {
+  if (isFullscreen.value) return {}
+  return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
+})
+const fixedHeight = computed(() => !!dashHeightStyle(props.height))
 const value = ref<number | null>(null)
 const baseFilter = ref<Record<string, unknown> | null>(parseDashFilter(props.filter))
 const extraConditions = ref<DashCondition[]>([])
@@ -169,6 +182,10 @@ defineExpose({ setFilter, refresh })
 }
 .dash-goal:hover {
   box-shadow: 0 6px 18px rgba(16, 185, 129, 0.1);
+}
+/* Task 123：固定高度时内容纵向居中（根已是 flex column） */
+.dash-goal.is-fixed-height {
+  justify-content: center;
 }
 .dash-goal.is-design {
   outline: 1px dashed var(--el-color-primary-light-5, #a7f3d0);

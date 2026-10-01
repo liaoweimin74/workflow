@@ -16,12 +16,13 @@ export const DASH_GOAL_NAME = 'dash-goal'
 export const DASH_LEADERBOARD_NAME = 'dash-leaderboard'
 export const DASH_ALERT_NAME = 'dash-alert'
 
-/** KPI 指标卡拖入 rule（props 与 DashKpi.vue 对齐；Task 120 增加趋势/迷你图） */
+/** KPI 指标卡拖入 rule（props 与 DashKpi.vue 对齐；Task 120 增加趋势/迷你图；Task 123 增加宽高） */
 export function dashKpiRule(): Record<string, unknown> {
   return {
     type: DASH_KPI_NAME,
     field: 'kpi' + Date.now(),
     title: 'KPI 指标卡',
+    col: { span: 24 },
     props: {
       title: '',
       subtitle: '',
@@ -35,16 +36,19 @@ export function dashKpiRule(): Record<string, unknown> {
       trendField: '',
       sparkline: false,
       sparkRange: 12,
+      span: 24,
+      height: '',
     },
   }
 }
 
-/** 统计图拖入 rule（props 与 DashChart.vue 对齐；Task 120 增加 area/scatter/heatmap/funnel） */
+/** 统计图拖入 rule（props 与 DashChart.vue 对齐；Task 120 增加 area/scatter/heatmap/funnel；Task 123 增加宽度栅格） */
 export function dashChartRule(): Record<string, unknown> {
   return {
     type: DASH_CHART_NAME,
     field: 'chart' + Date.now(),
     title: '统计图',
+    col: { span: 24 },
     props: {
       title: '',
       chartType: 'bar',
@@ -57,16 +61,18 @@ export function dashChartRule(): Record<string, unknown> {
       limit: 0,
       dataSourceId: '',
       height: '260px',
+      span: 24,
     },
   }
 }
 
-/** 筛选器拖入 rule（Task 120） */
+/** 筛选器拖入 rule（Task 120；Task 123 增加宽度栅格） */
 export function dashFilterRule(): Record<string, unknown> {
   return {
     type: DASH_FILTER_NAME,
     field: 'filter' + Date.now(),
     title: '筛选器',
+    col: { span: 24 },
     props: {
       filterType: 'date-range',
       field: '',
@@ -74,16 +80,18 @@ export function dashFilterRule(): Record<string, unknown> {
       placeholder: '',
       options: '',
       autoBroadcast: true,
+      span: 24,
     },
   }
 }
 
-/** 目标进度拖入 rule（Task 120） */
+/** 目标进度拖入 rule（Task 120；Task 123 增加宽高） */
 export function dashGoalRule(): Record<string, unknown> {
   return {
     type: DASH_GOAL_NAME,
     field: 'goal' + Date.now(),
     title: '目标进度',
+    col: { span: 24 },
     props: {
       title: '',
       target: 100,
@@ -92,16 +100,19 @@ export function dashGoalRule(): Record<string, unknown> {
       metric: null,
       dataSourceId: '',
       numberFormat: '',
+      span: 24,
+      height: '',
     },
   }
 }
 
-/** 排行榜拖入 rule（Task 120） */
+/** 排行榜拖入 rule（Task 120；Task 123 增加宽高） */
 export function dashLeaderboardRule(): Record<string, unknown> {
   return {
     type: DASH_LEADERBOARD_NAME,
     field: 'board' + Date.now(),
     title: '排行榜',
+    col: { span: 24 },
     props: {
       title: '',
       group: '',
@@ -111,16 +122,19 @@ export function dashLeaderboardRule(): Record<string, unknown> {
       limit: 5,
       dataSourceId: '',
       numberFormat: '',
+      span: 24,
+      height: '',
     },
   }
 }
 
-/** 告警标记拖入 rule（Task 120） */
+/** 告警标记拖入 rule（Task 120；Task 123 增加宽高） */
 export function dashAlertRule(): Record<string, unknown> {
   return {
     type: DASH_ALERT_NAME,
     field: 'alert' + Date.now(),
     title: '告警标记',
+    col: { span: 24 },
     props: {
       title: '',
       unit: '',
@@ -131,6 +145,8 @@ export function dashAlertRule(): Record<string, unknown> {
       condition: 'gt',
       threshold: 0,
       alertText: '',
+      span: 24,
+      height: '',
     },
   }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="dash-kpi" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen }">
+  <div ref="rootEl" class="dash-kpi" :class="{ 'is-design': designMode, 'is-fullscreen': isFullscreen, 'is-fixed-height': fixedHeight }" :style="layoutStyle">
     <div class="dash-kpi-head">
       <span class="dash-kpi-title">{{ title || '指标' }}</span>
       <span
@@ -75,7 +75,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { dataSourceApi } from '@/api/data-source'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
-import { parseDashFilter, mergeDashFilter, upsertDashConditions, type DashCondition } from './dash-shared'
+import { parseDashFilter, mergeDashFilter, upsertDashConditions, dashSpanGapStyle, dashHeightStyle, type DashCondition } from './dash-shared'
 import { useFullscreen } from '@/composables/useFullscreen'
 
 const props = withDefaults(
@@ -105,6 +105,10 @@ const props = withDefaults(
     sparkline?: boolean
     /** Task 120：Sparkline 桶数上限 */
     sparkRange?: number
+    /** Task 123：栅格跨度（1-24，与 rule.col.span 镜像；<24 并排时根节点左右留白） */
+    span?: number
+    /** Task 123：显示高度（空 = 自适应；纯数字补 px） */
+    height?: string
   }>(),
   {
     title: '',
@@ -122,6 +126,8 @@ const props = withDefaults(
     trendField: '',
     sparkline: false,
     sparkRange: 12,
+    span: 24,
+    height: '',
   },
 )
 
@@ -129,6 +135,13 @@ const emit = defineEmits<{ (e: 'ready', instance: unknown): void }>()
 
 const rootEl = ref<HTMLDivElement | null>(null)
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(rootEl)
+
+/** Task 123 布局：并排留白（全屏跳过）+ 固定高度（内容纵向居中） */
+const layoutStyle = computed<Record<string, string>>(() => {
+  if (isFullscreen.value) return {}
+  return { ...dashSpanGapStyle(props.span), ...(dashHeightStyle(props.height) || {}) }
+})
+const fixedHeight = computed(() => !!dashHeightStyle(props.height))
 
 const value = ref<number | null>(null)
 const prevValue = ref<number | null>(null)
@@ -343,6 +356,10 @@ defineExpose({ setFilter, refresh, loading })
 .dash-kpi:hover {
   box-shadow: 0 6px 18px rgba(16, 185, 129, 0.1);
   transform: translateY(-1px);
+}
+/* Task 123：固定高度时内容纵向居中（根已是 flex column） */
+.dash-kpi.is-fixed-height {
+  justify-content: center;
 }
 .dash-kpi.is-design {
   outline: 1px dashed var(--el-color-primary-light-5, #a7f3d0);

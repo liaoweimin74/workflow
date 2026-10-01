@@ -66,3 +66,23 @@ export function upsertDashConditions(
 export function splitCompositeKey(key: string): string[] {
   return key.split('|')
 }
+
+/**
+ * Task 123 宽度布局：栅格跨度 <24（并排）时组件根左右留白，避免相邻卡片贴住。
+ * 用 margin 而非 padding——组件根自带内边距（卡片留白语义），不能被覆盖；
+ * 全宽（24）不加，保证与历史页面视觉零差异。全屏态由组件自行跳过（铺满语义）。
+ */
+export function dashSpanGapStyle(span: number | undefined): Record<string, string> {
+  const s = Number(span ?? 24)
+  return s > 0 && s < 24 ? { margin: '0 8px' } : {}
+}
+
+/**
+ * Task 123 显示高度：'' / 'auto' = 自适应（返回 null，不加内联样式）；
+ * 纯数字自动补 px；其余原样（支持 '260px' / '50vh' 等 CSS 高度值）。
+ */
+export function dashHeightStyle(height: string | undefined | null): { height: string } | null {
+  const raw = String(height ?? '').trim()
+  if (!raw || raw === 'auto') return null
+  return { height: /^\d+$/.test(raw) ? `${raw}px` : raw }
+}

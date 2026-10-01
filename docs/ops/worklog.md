@@ -2674,3 +2674,18 @@ Work Log:
 
 Stage Summary:
 - 本提交 = worklog 121-123 补录 + Task 120 aggregateInMemory400 补遗；34 污染文件已还原至 HEAD，零残留
+
+---
+Task ID: 125-java-backend-rescue
+Agent: Z.ai Code (main session)
+Task: Java 引擎沙箱首启修复（Boot 4 + Flowable 8 五层兼容性地雷一次排净）
+
+Work Log:
+- 起因：用户指令关闭 nodejs 后端并启动 Java；发现 Java 崩溃循环（supervisor restarts=14，每次 ~15s 即死）
+- 五层根因：①Connector/J 9.x 对 MariaDB 元数据 RESERVED 报错；②Flowable 8.0.0 H2 脚本 identity 类型在 H2 2.x 已删 + 崩溃残留毒化 schema；③僵尸重复 V2 迁移（0d037dc5 合并 + f5d386dd 补录复活旧碎片）；④V25/V31/V41 非幂等 DDL 撞 Hibernate-first；⑤V32 ${taskName} 运行时模板被 Flyway 占位符误吞
+- 修复：sandbox profile 切用户态 MariaDB（workflow 库，与 Nest workflow_v6 隔离）+ org.mariadb.jdbc 原生驱动；pom +mariadb-java-client；FlywayConfig placeholderReplacement(false)；V25/V31/V41 条件 DDL 幂等化（对齐 V18 模式）；git rm V2__init_data.sql；scripts/patch-flowable-h2.sh 入库备用
+- 验证：Flyway 33 迁移全新库全过；Started WorkflowApplication in 22.561s；admin/admin123 登录 200；userinfo/menus 鉴权 API 通；8080 由 supervisor 托管 Java 常驻；Vite/门户 200
+- 坑记录：mvn clean 删 jar 窗口期会触发 supervisor 的 workflow.db 自愈误拉 Nest（引擎决策链 ④）；Java /api/health 401=活着（需鉴权），登录探活才是真判据
+
+Stage Summary:
+- Java 引擎于 Boot 4 + Flowable 8 下首次在沙箱成功运行；engine-choice=java 持久化；Node 后端按用户指令下线（工作流数据仍在 workflow_v6 不受影响，切回 node 引擎即恢复）

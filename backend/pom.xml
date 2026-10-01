@@ -71,6 +71,13 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- MariaDB 原生驱动（沙箱用户态 MariaDB 11.8；Connector/J 对 MariaDB
+             的元数据探测会触发 Unknown column 'RESERVED' 导致 Hibernate 无法取 dialect） -->
+        <dependency>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+            <scope>runtime</scope>
+        </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-mysql</artifactId>

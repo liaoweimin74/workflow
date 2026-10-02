@@ -2795,3 +2795,19 @@ Stage Summary:
 - webpack dev 不能省内存，维持 turbopack + NODE_OPTIONS=614（只管 V8 堆）；dev 模式 RSS ~1.3-1.4GB 是 Next 16 的常态成本，治理手段只有「重启回收」（下次 available<500MB 时执行 start-portal.sh 即等效回收）
 - 新常态：3000 门户回合内续命（start-portal.sh），跨回合由 cron 巡检回合自动执行（payload 已更新）；Turbopack OOM 后必须清 .next 再拉
 - 铁律再确认：工具调用/setsid/nohup 裸拉进程均会被沙箱回收，仅平台启动链（dev.sh→bun run dev→start-services.sh）内的进程跨回合常驻
+
+---
+Task ID: 130c-preview-trio-recur
+Agent: Z.ai Code (main session)
+Task: 用户再报 Task 128 同款三件套（HMR WS 刷屏/useEcharts 500/storage ×4）——甄别为重置恢复漏跑 bun install，补装 + vite 进程换血
+
+Work Log:
+- 甄别：代码全健康（vite.config.ts:71 hmr:false 与 main.ts:5 safe-storage import 均在，git reset 后未丢）——非代码回归；vite.log 铁证 `Failed to resolve import "echarts/core" from useEcharts.ts` → 500
+- 根因：第十一次重置把 node_modules 回滚至旧快照（echarts 之前时代），Task 130 恢复时只验了 node_modules/.bin/vite（FE_OK）未验业务依赖、漏跑 bun install——Task 128 同款教训第二次重演；旧 vite 进程（1233→3542，启动于 .git 恢复前）用脏缓存与缺依赖服务，HMR 旧 config 未禁导致 WS 刷屏、storage 报错系浏览器持有旧 main.js
+- 修复：bun install 补装 echarts@5.6.0（4 packages）→ 清 node_modules/.vite 缓存 → kill 3542 → POST /api/portal/services（supervisor 新拉 pid 4573）
+- 验证：useEcharts.ts / main.ts / DashChart.vue 全 200；main.ts 编译产物确认含 safe-storage（用户端强刷后 storage 错误消失）；Java 登录探活 200；内存 available 743MB（next-server 新实例 1.33GB 为大头，常态水位）
+- SOP 强化：重置恢复后 bun install 必须带哨兵验证（ls node_modules/echarts + node_modules/vite 双哨兵），仅验 .bin/vite 不够——业务依赖可能整包缺失
+
+Stage Summary:
+- 三件套复现闭环：非代码回归，环境级（依赖缺失+脏进程）；echarts 补装 + vite 换血后全绿
+- 教训固化：bun install 双哨兵验证写入重置 SOP；「FE_OK 只证 vite 二进制在，不证依赖树完整」

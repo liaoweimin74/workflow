@@ -2753,3 +2753,27 @@ Work Log:
 Stage Summary:
 - workflow 库已补齐全部历史业务数据，Java 引擎对外可见性与 Nest 时代一致；脚本 /tmp/copy-v6-to-wf.sql + /tmp/copy-part2.sql 留档
 - 遗留技术债：①V42-V46 迁移（草稿描述/岗位来源/箱菜单/成员群）Java Flyway 侧缺失，需对位补齐 ②wf_category.parent_id / wf_process_draft.key 列 Java 无（分类树/草稿 key 特性落后 Nest）③若 Nest 重启会先跑 V42-V46，届时再迁移需重新对齐
+
+---
+Task ID: 130-java-memory-optimize
+Agent: Z.ai Code (main session)
+Task: 用户指令「开始内存优化吧」——Java 引擎内存占用优化；期间发现第十一次沙箱重置 + Task 129 数据成果回滚，一并处置
+
+Work Log:
+- 第十一次重置甄别：git log 落入父目录 UUID 快照仓库 / 无 Java 进程 / Nest(node dist/main.js) 复占 8080 / engine-choice 被重写回 node / marker 复活 / 外层 worklog 回滚至 Task 101 时代 / jar 消失 / ~/.m2 清空；jdk21+maven 与双端 node_modules 幸存（重装与 bun install 环节免跑）
+- 恢复链：匿名克隆重建 .git → reset --hard origin/main（远端已含 Task 129 提交 0e40052a）→ 写回 PAT remote → 清双 marker + choice=java
+- 内存优化实施（三处同步）：
+  ① application-sandbox.yml：Tomcat threads 200→20 / min-spare 4 / max-connections 8192→200 / accept-count 20；Hikari 10→6 + minimum-idle 2 + idle-timeout 120s；Flowable process.definition.cache.limit=32（默认无上限）
+  ② scripts/start-services.sh（两处 java 启动行）+ ③ src/lib/service-supervisor.ts JAVA_DEF args，JVM 参数统一为：-Xms128m -Xmx448m -XX:+UseSerialGC -XX:ActiveProcessorCount=2 -XX:ReservedCodeCacheSize=96m -XX:MaxDirectMemorySize=32m -Xss512k -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError
+- 编译切换：mvn -DskipTests package 29s BUILD SUCCESS（依赖重新下载，.m2 曾被清）→ kill Nest → POST /api/portal/services → supervisor 按决策拉起 Java pid 2334（全参数生效确认）
+- 验证：登录探活 200（~15s 就绪）；SerialGC 生效铁证=GC.heap_info 显示 def new generation/tenured generation 分代布局；ActiveProcessorCount=2 / ThreadStackSize=512 确认；RSS 491→432MB（-12%），线程 32，堆提交仅 ~170MB（eden 47M+tenured 118M），Metaspace 134MB；dev.log 无错
+- 数据回滚发现与重做：业务冒烟 categories 返回空 → 查库确诊 workflow 库被重置回滚至 Task 129 迁移前快照（wf_category=0/wf_form_def=0），workflow_v6 完好（2/10/20/1）；Task 129 的 /tmp 迁移脚本已随重置丢失
+- 迁移脚本仓库化：新建 scripts/migrate-v6-to-workflow.sh（幂等可重跑）——白名单 25 表、information_schema 列名交集显式映射（防 Kysely 业务序 vs JPA 字母序串位）、SET FOREIGN_KEY_CHECKS=0、INSERT IGNORE + ORDER BY updated_at DESC（uk 冲突保留部署级）、group_concat_max_len 32768
+- 重跑迁移结果：wf_category 2/2、wf_data_source 19/19、sys_menu 67/67、sys_role_menu 67/67、sys_user_role 2/2、wf_form_def 9/9、wf_node_config 2→1（uk 去重保留部署级）、wf_page_def 1/1、wf_process_draft 2/2、wf_task_comment 3/3、wf_engine_notify 1/1，与 Task 129 水位完全一致
+- API 冒烟：categories 返回请假/报销流程、form-definitions 返回测试表单(bill_test/PUBLISHED)，业务可见性恢复 Nest 时代水平
+
+Stage Summary:
+- Java 引擎内存优化闭环：RSS 491→432MB（-12%），线程 32，SerialGC+全套参数生效；低并发场景无功能损失（冒烟全过）
+- 迁移脚本从此仓库化留档：后续重置若再回滚数据目录，直接 bash scripts/migrate-v6-to-workflow.sh 即可恢复（幂等）
+- 遗留观察：next-server 1385MB 为容器内存最大头（门户 Turbopack dev），非本次范围；available 947MB 偏紧，agent-browser 视觉复验仍需等待窗口
+- JVM 参数契约：start-services.sh 与 service-supervisor.ts 双处必须同步改（本 task 已一致），后续调参勿只改一处

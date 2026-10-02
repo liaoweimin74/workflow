@@ -21,6 +21,13 @@ spring:
     username: root
     password: 740130
     driver-class-name: org.mariadb.jdbc.Driver
+    # Task 130 内存优化：Hikari 默认 max=10 且 minimum-idle=max（10 常驻连接），
+    # 每连接客户端缓冲+服务端线程都有成本；低代码平台并发 <5，6+2 足够
+    hikari:
+      maximum-pool-size: 6
+      minimum-idle: 2
+      idle-timeout: 120000
+      connection-timeout: 10000
   jpa:
     hibernate:
       ddl-auto: update
@@ -28,9 +35,25 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MariaDBDialect
 
+# Task 130 内存优化：Tomcat 默认 max=200 线程（每线程 512k 栈=Xss），沙箱单用户
+# 场景 20 峰值绰绰有余；max-connections 默认 8192 每连接带 NIO 缓冲，一并收紧
+server:
+  tomcat:
+    threads:
+      max: 20
+      min-spare: 4
+    max-connections: 200
+    accept-count: 20
+
 flowable:
   database-schema-update: true
   async-executor-activate: false
+  # Task 130 内存优化：流程定义缓存默认无上限（每个 BPMN 模型对象图数百 KB），
+  # 平台流程数 <20，32 封顶防内存随部署次数线性增长
+  process:
+    definition:
+      cache:
+        limit: 32
 
 logging:
   level:

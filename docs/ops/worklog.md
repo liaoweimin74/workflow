@@ -2777,3 +2777,21 @@ Stage Summary:
 - 迁移脚本从此仓库化留档：后续重置若再回滚数据目录，直接 bash scripts/migrate-v6-to-workflow.sh 即可恢复（幂等）
 - 遗留观察：next-server 1385MB 为容器内存最大头（门户 Turbopack dev），非本次范围；available 947MB 偏紧，agent-browser 视觉复验仍需等待窗口
 - JVM 参数契约：start-services.sh 与 service-supervisor.ts 双处必须同步改（本 task 已一致），后续调参勿只改一处
+
+---
+Task ID: 130b-webpack-mem-bench-oom-incident
+Agent: Z.ai Code (main session)
+Task: 用户问「换 webpack dev 能省多少内存」→ 实测对照实验；实验引发门户 OOM 事故并恢复
+
+Work Log:
+- 实验设计：硬链副本 /home/z/wp-bench（/tmp 跨文件系统失败）+ 删副本 .next 隔离产物 + 3100 端口 + --webpack flag（日志确认 webpack 模式）；教训：工具调用裸 spawn 会被沙箱回收（nohup+& 亦然），实验须在同一条 Bash 内完成全生命周期
+- **实验结论（推翻预判）：换 webpack dev 省不了内存（≈0 收益）**——webpack worker 仅 10 分钟（两次实验共 ~10 请求 + 首编 / 16.8s）即达 RSS 1413MB，与 turbopack 主实例 1421MB 持平；构成不同（webpack：V8 堆 316MB+散布 native 缓存段；turbopack：两个 1GB native arena 806+247MB）但总量同级别；共同根因是 Next 16 dev 模式本身（编译图/模块缓存/source maps 常驻 + allocator 不还 OS）
+- 成本对比：webpack 首编 / 用 16.8s（turbopack 秒级），「一样吃内存但更慢」纯亏，维持 turbopack
+- **OOM 事故**：实验 worker（1.4GB）与主实例（1.4GB）并行叠加触顶 4Gi，cgroup OOM 静默杀主实例 next-server(1261)——watchdog 注释印证历史同款死因（oom-kill task=next-server 无声）；次生：1261 死后 mariadbd/java reparent 到 init 存活（Java 内存参数完好）、Vite 幸存、门户新拉实例 supervisor 无托管记录（managedPid=null，端口探活正常，异常时自动 spawn 接管）
+- 恢复链踩坑：①portal-watchdog.sh setsid 拉起亦被沙箱回收（秒死）②watchdog 首轮拉起遇 Turbopack panic（corrupted database，OOM -9 后 .next 坏状态）其日志检测 pattern 虽含关键字但仅拉起时查一次 ③正解=start-portal.sh（幂等：pkill 残留 + rm -rf .next 清坏缓存 + 拉起，回合内有效）
+- 恢复后状态：四端口全 OPEN、Java 业务冒烟 200（categories 请假/报销可见）、available 1391MB（比事故前 947MB 宽裕——实验 worker 1.4GB 已清）
+
+Stage Summary:
+- webpack dev 不能省内存，维持 turbopack + NODE_OPTIONS=614（只管 V8 堆）；dev 模式 RSS ~1.3-1.4GB 是 Next 16 的常态成本，治理手段只有「重启回收」（下次 available<500MB 时执行 start-portal.sh 即等效回收）
+- 新常态：3000 门户回合内续命（start-portal.sh），跨回合由 cron 巡检回合自动执行（payload 已更新）；Turbopack OOM 后必须清 .next 再拉
+- 铁律再确认：工具调用/setsid/nohup 裸拉进程均会被沙箱回收，仅平台启动链（dev.sh→bun run dev→start-services.sh）内的进程跨回合常驻

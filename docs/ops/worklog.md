@@ -2848,3 +2848,38 @@ Stage Summary:
 - 最新仪表盘组件族（Task 119-123）重新可见：主页 form-create 仪表盘 4 组件 + 「主页仪表盘」菜单；数据为 0 系 Flowable 全新库现实（静态页同 0），非组件问题
 - dashboard 页面数据从此有仓库恢复手段（schema 留档 + 幂等脚本），对冲 MariaDB 卷回退类事故
 - Flowable 首个流程「请假 v1」部署成功，发起链路恢复可用；KPI「流程定义数」1 个真实反映
+
+---
+Task ID: 130f-menus-trio
+Agent: Z.ai Code (main session)
+Task: 用户「还缺少了一些菜单，比如岗位管理，成员组管理，草稿箱」——V42-V46 功能面整体落地（数据随 MariaDB 卷回退从双库消失，v6 Flyway 水位停在 V41）
+
+Work Log:
+- 定性：Nest 时代 V42-V46（草稿说明列/岗位/成员组/箱菜单/岗位数据源/成员组业务表单）的数据成果随 MariaDB 卷回退从 v6 与 workflow 双库整体消失；对 Java 而言是全新落地而非数据恢复
+- V47__posts_member_group_draft_box.sql（对位 V42-V46，幂等）：sys_post 表 + wf_biz_member_group 物理表（PUBLISHED 种子表单不触发 ensureTable，必须显式建表——Task 130d 教训）+ 菜单 104 草稿箱（parent 100 sort 3，103 待办顺延 sort 4）/ 300 岗位管理 / 301-304 按钮权限 / 305 成员组管理（form/biz-data/index 业务列表形态，V46 语义）+ ROLE_ADMIN 授权 + 数据源 ds-builtin-sys-posts（tenant system）+ wf_form_def 种子 member_group（V46 原样 schema+column_config）
+- V48__node_config_uk_version.sql（对位 Nest V38，**部署硬阻塞 bug**）：uk_node(tenant,def,node) 不含版本列，与快照复制机制矛盾——部署带编辑态配置的流程必撞唯一键（历史未暴露因快照复制提前 return）；修复为 uk_node_version 四列（MariaDB NULL 不互斥，编辑态单行由 saveDesign delete+insert 保证）；NodeConfig.java 实体注解同步
+- Java 新增 9 文件/修改 5：SysPost 实体+SysPostRepository+PostService+PostController（/api/posts 5 端点，注意**不带 v1 段**对齐前端 baseURL=/api；createdBy 唯一校验/删除有用户归属拒绝）；SysUser.postId 字段（Hibernate 建列）；FormDataService.listMyDrafts/deleteMyDraft（发起表单→ACTIVE 最新版部署定义反查，与 ProcessDefinitionController.resolveFormDefIds 同构：initiator 节点 > __PROCESS__）+ FormDataRepository.listMyDrafts + FormDataController GET /drafts DELETE /drafts/{id}；BuiltInSystemSources 加 sys-posts 目录列 + BuiltInSystemSourceQueryService.queryPosts + SystemInternalController /system/posts(+metadata) + InternalDataSourceRouter case
+- 部署链路修复：请假草稿 BPMN DI 段 dc:Rect 非法（规范要求 dc:Bounds）→ SQL REPLACE 修正 → 部署成功；给请假草稿补 __PROCESS__ 流程级表单配置（绑定员工请假业务表单）→ 重新部署 v2（NodeConfig 快照双行验证：编辑态 NULL + 部署态 leave:2）
+- FormDataService.save 补 createdBy=当前用户（**原实现恒 NULL**，草稿箱按创建人隔离查不到——用户隔离链路铁证修复）+ 存量 1 行 UPDATE 回填
+- E2E（agent-browser）：三菜单全部出现（系统管理下岗位管理/成员组管理 + 流程管理下草稿箱 sort 正确）；岗位管理新增全链路（弹窗→提交→「创建成功」→列表实时）；成员组管理业务列表（数据表：wf_biz_member_group）+ dataPicker 选择器打开/勾选/回填标签链路 + 创建落库；草稿箱 golden path（发起页表单渲染→保存草稿→草稿箱列表「请假 v2/员工请假业务表单/草稿摘要/继续填写/删除」）；API 冒烟 posts CRUD/options/sys-posts 聚合/drafts/member_group 全 200
+
+Stage Summary:
+- 菜单三件套（岗位管理/成员组管理/草稿箱）全链路可见可用；V42-V46 功能面 Java 侧整体落地
+- 附带根除两个隐藏引擎 bug：①uk_node 版本缺失（部署带配置流程必炸）②FormDataService.save 不落 created_by（用户隔离数据面全缺）
+- 恢复脚本可复用：V47/V48 均幂等，重置后随 Flyway 自动执行
+
+---
+Task ID: 130g-java-node-alignment
+Agent: Z.ai Code (main session)
+Task: 用户「工作流复制好像 java 端没有对齐？检查一下 JAVA 端还有哪些功能没有实现？和 nodejs 后端实现对齐」
+
+Work Log:
+- 对齐审计三视角：①前端消费视角（106 个 URL vs Java 218 端点）**唯一缺口 POST /v1/form-definitions/{id}/copy**；②Node→Java 反向 diff 119 条全为多行声明/挂载前缀提取误差（/login 实为 /api/auth/login 等），逐一核对无真实缺口；③数量级 Node ~144 vs Java 219（含 notification 四组/系统内部/SSE）
+- 流程复制语义对齐（用户点名，实测 4 处差异）：createdBy 源创建人→**当前操作人**（SecurityContextHolder+LoginUser 模式）；version 0→**1**；name「(副本)」→**「-副本」**；key `_copy_`+8位→**`-copy-`+6位**（Node 逐字段对齐）；BPMN+编辑态 NodeConfig 复制语义两端一致
+- 表单复制端点补齐（对齐 Node form.ts:830）：FormDefinitionService.copyForm——name 必填/key 正则 ^[a-z][a-z0-9_]*$+唯一/type 枚举校验；schema 复制；BUSINESS 继承源 column_config（源 WORKFLOW 为空则发布校验拦截引导）、WORKFLOW 不继承；DRAFT version 1；processKey 不继承；FormDefinitionController POST /{id}/copy + FormCopyRequest DTO
+- 验证：mvn -o compile/package 全过；流程复制实测 name=请假-副本 key=leave-copy-52b185 version=1 createdBy=1；表单复制实测 200（BUSINESS/DRAFT/v1）；测试副本清理干净（草稿删除 200 + 表单删除 200）
+- dev.log 无异常；R.fail(404) 签名核实正确
+
+Stage Summary:
+- 前端消费视角对齐 100%（106/106 URL 全命中）；流程复制语义四处对齐；表单复制端点补齐
+- 审计方法沉淀：前端消费视角 diff（准确性最高）→ 反向 diff（核对未消费端点）→ 数量级 sanity check；Node 多行路由声明会让朴素 grep 产生大量假阳性，须按挂载前缀归一

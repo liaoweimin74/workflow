@@ -116,6 +116,13 @@ public final class BuiltInSystemSources {
             column("status", "状态", "VARCHAR", 32),
             column("startTime", "发起时间", "VARCHAR", 64));
 
+    /** 岗位列常量（V45 对位；queryPosts 字段面）。 */
+    public static final List<ColumnConfig> POST_COLUMNS = List.of(
+            column("id", "岗位 ID", "INTEGER"),
+            column("postName", "岗位名称", "VARCHAR", 64),
+            column("postCode", "岗位编码", "VARCHAR", 64),
+            column("description", "岗位说明", "VARCHAR", 255));
+
     /** 待办任务列常量（{@code WorkflowTaskService.listTodoTasksVO()} 字段面；主键字段是 taskId 不是 id）。 */
     public static final List<ColumnConfig> TODO_TASK_COLUMNS = List.of(
             column("taskId", "任务 ID", "VARCHAR", 64),
@@ -127,13 +134,14 @@ public final class BuiltInSystemSources {
 
     // ==================== 目录 ====================
 
-    /** 8 个系统内建数据源（顺序即预置顺序；前 2 个是历史既有 key，后 6 个 50-a 新增）。 */
+    /** 系统内建数据源（顺序即预置顺序；sys-posts 为 V45 对位新增）。 */
     public static final List<BuiltInSystemSource> BUILT_IN_SYSTEM_SOURCES = List.of(
             new BuiltInSystemSource("dept-tree", "组织机构", DEPT_COLUMNS, PAGING_FULL),
             new BuiltInSystemSource("user-tree", "系统用户", USER_COLUMNS, PAGING_PAGED),
             new BuiltInSystemSource("sys-menus", "系统菜单", MENU_COLUMNS, PAGING_FULL),
             new BuiltInSystemSource("sys-roles", "系统角色", ROLE_COLUMNS, PAGING_PAGED),
             new BuiltInSystemSource("sys-dicts", "系统字典", DICT_COLUMNS, PAGING_PAGED),
+            new BuiltInSystemSource("sys-posts", "系统岗位", POST_COLUMNS, PAGING_PAGED),
             new BuiltInSystemSource("process-definitions", "流程定义", PROCESS_DEF_COLUMNS, PAGING_FULL),
             new BuiltInSystemSource("process-instances", "流程实例", PROCESS_INSTANCE_COLUMNS, PAGING_PAGED),
             new BuiltInSystemSource("todo-tasks", "待办任务", TODO_TASK_COLUMNS, PAGING_PAGED));

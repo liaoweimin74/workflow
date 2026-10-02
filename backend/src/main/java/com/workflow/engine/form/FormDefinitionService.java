@@ -137,6 +137,56 @@ public class FormDefinitionService {
     }
 
     /**
+     * 复制表单定义（Task 130g，对齐 Node POST /v1/form-definitions/:id/copy）。
+     *
+     * <p>语义：复制 schema；类型可变（BUSINESS 继承源 column_config——源为
+     * WORKFLOW 时 column_config 为空，发布时被「业务表单发布前必须配置列映射」
+     * 拦截引导配置；WORKFLOW 不继承——业务列映射不属于工作流表单语义）；
+     * DRAFT version 1；processKey 不继承（工作流绑定属于原表单语义）。
+     *
+     * @param id   源表单定义 ID
+     * @param name 新表单名称（必填）
+     * @param key  新表单标识（小写字母开头，仅小写字母/数字/下划线，同租户唯一）
+     * @param type 新表单类型（WORKFLOW/BUSINESS 必填其一）
+     * @return 新表单定义（DRAFT）
+     */
+    @Transactional
+    public FormDefinition copyForm(String id, String name, String key, String type) {
+        String tenantId = tenantProvider.getTenantId();
+
+        if (name == null || name.isBlank()) {
+            throw new BusinessException(400, "表单名称不能为空");
+        }
+        if (key == null || !key.matches("^[a-z][a-z0-9_]*$")) {
+            throw new BusinessException(400, "表单标识只能包含小写字母、数字、下划线，且以字母开头");
+        }
+        if (!"WORKFLOW".equals(type) && !"BUSINESS".equals(type)) {
+            throw new BusinessException(400, "表单类型必须为 WORKFLOW 或 BUSINESS");
+        }
+
+        FormDefinition source = formDefRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new BusinessException(404, "表单定义不存在: " + id));
+        if (formDefRepository.existsByTenantIdAndKey(tenantId, key)) {
+            throw new BusinessException(400, "表单标识已存在: " + key);
+        }
+
+        FormDefinition copy = new FormDefinition();
+        copy.setId(UUID.randomUUID().toString().replace("-", ""));
+        copy.setTenantId(tenantId);
+        copy.setName(name.trim());
+        copy.setKey(key.trim());
+        copy.setType(type);
+        // BUSINESS 继承源列配置（源为 WORKFLOW 时本就为空）；WORKFLOW 不继承
+        copy.setColumnConfig("BUSINESS".equals(type) ? source.getColumnConfig() : null);
+        copy.setSchema(source.getSchema() == null ? "[]" : source.getSchema());
+        copy.setVersion(1);
+        copy.setStatus("DRAFT");
+        copy.setPublishedVersion(null);
+        copy.setProcessKey(null);
+        return formDefRepository.save(copy);
+    }
+
+    /**
      * 获取表单定义详情。
      */
     public FormDefinition getById(String id) {

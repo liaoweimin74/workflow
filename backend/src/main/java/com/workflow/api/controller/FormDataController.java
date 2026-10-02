@@ -8,6 +8,7 @@ import com.workflow.engine.form.entity.FormData;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -37,6 +38,35 @@ public class FormDataController {
                 request.getDataJson()
         );
         return R.ok(formData);
+    }
+
+    /**
+     * 草稿箱：当前用户的全部发起页草稿（附表单名 + 发起流程反查；Task 130f）。
+     */
+    @GetMapping("/drafts")
+    public R<List<Map<String, Object>>> listDrafts() {
+        return R.ok(formDataService.listMyDrafts(currentUserId()));
+    }
+
+    /**
+     * 草稿箱：删除指定草稿（仅本人草稿可删；不存在/非草稿/非本人 → 404）。
+     */
+    @DeleteMapping("/drafts/{id}")
+    public R<Void> deleteDraft(@PathVariable String id) {
+        if (!formDataService.deleteMyDraft(id, currentUserId())) {
+            return R.fail(404, "草稿不存在或无权删除");
+        }
+        return R.ok();
+    }
+
+    /** 当前登录用户 id（对齐 ProcessInstanceController.getCurrentUserId）。 */
+    private String currentUserId() {
+        var auth = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof com.workflow.framework.security.domain.LoginUser loginUser) {
+            return String.valueOf(loginUser.getUserId());
+        }
+        return null;
     }
 
     /**

@@ -55,9 +55,11 @@ import java.util.Set;
 @Service
 public class BuiltInSystemSourceQueryService {
 
+    private final com.workflow.system.repository.SysPostRepository postRepository;
+
     /** 本服务负责取数的 6 个新增 sourceKey（历史 2 个 dept-tree/user-tree 归 adapter）。 */
     private static final Set<String> HANDLED_KEYS = Set.of(
-            "sys-menus", "sys-roles", "sys-dicts",
+            "sys-menus", "sys-roles", "sys-dicts", "sys-posts",
             "process-definitions", "process-instances", "todo-tasks");
 
     private final MenuService menuService;
@@ -72,13 +74,16 @@ public class BuiltInSystemSourceQueryService {
                                            DictTypeService dictTypeService,
                                            ProcessService processService,
                                            ProcessInstanceService processInstanceService,
-                                           WorkflowTaskService taskService) {
+                                           WorkflowTaskService taskService,
+                                    com.workflow.system.repository.SysPostRepository postRepository) {
         this.menuService = menuService;
         this.roleService = roleService;
         this.dictTypeService = dictTypeService;
         this.processService = processService;
         this.processInstanceService = processInstanceService;
         this.taskService = taskService;
+    
+        this.postRepository = postRepository;
     }
 
     /** 是否由本服务负责取数（新 6 个 sourceKey；历史 2 个归 adapter）。 */
@@ -104,6 +109,7 @@ public class BuiltInSystemSourceQueryService {
             case "sys-menus" -> queryMenus();
             case "sys-roles" -> queryRoles(req);
             case "sys-dicts" -> queryDicts(req);
+            case "sys-posts" -> queryPosts(req);
             case "process-definitions" -> queryProcessDefinitions();
             case "process-instances" -> queryProcessInstances(req);
             case "todo-tasks" -> queryTodoTasks(req);
@@ -139,6 +145,33 @@ public class BuiltInSystemSourceQueryService {
     }
 
     // ==================== 系统角色 / 系统字典（标准分页） ====================
+
+    /** 系统岗位（V45 对位）：仅启用岗位，keyword 匹配名称/编码（对齐 Node queryPosts）。 */
+    private BizDataPageVO queryPosts(BizDataQueryRequest req) {
+        int page = Math.max(req.getPage(), 1);
+        int size = Math.max(req.getSize(), 1);
+        String keyword = req.getKeyword() == null || req.getKeyword().isBlank() ? null : req.getKeyword().trim();
+        List<com.workflow.system.domain.entity.SysPost> rows = postServiceSearch(keyword, page, size);
+        List<BizDataVO> records = new ArrayList<>();
+        for (com.workflow.system.domain.entity.SysPost row : rows) {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("id", row.getId());
+            data.put("postName", row.getPostName() == null ? "" : row.getPostName());
+            data.put("postCode", row.getPostCode() == null ? "" : row.getPostCode());
+            data.put("description", row.getDescription() == null ? "" : row.getDescription());
+            records.add(new BizDataVO(String.valueOf(row.getId()), data, null, null, null));
+        }
+        return new BizDataPageVO(records, records.size(), page, size);
+    }
+
+    /** 岗位分页取数（内存分页；keyword/status 语义与 PostService.list 一致，status=1）。 */
+    private List<com.workflow.system.domain.entity.SysPost> postServiceSearch(String keyword, int page, int size) {
+        List<com.workflow.system.domain.entity.SysPost> all =
+                postRepository.search(keyword, 1);
+        int from = Math.min((page - 1) * size, all.size());
+        int to = Math.min(from + size, all.size());
+        return all.subList(from, to);
+    }
 
     private BizDataPageVO queryRoles(BizDataQueryRequest req) {
         int page = Math.max(req.getPage(), 1);

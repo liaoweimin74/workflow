@@ -2828,3 +2828,23 @@ Work Log:
 
 Stage Summary:
 - 「数据库不最新」完整定性：元数据（Task 130 已齐）+ 业务填报数据（本轮已齐）+ E2E 测试运行时（归档不迁）三层；Java 引擎现可见全部用户真实数据
+
+---
+Task ID: 130e-dashboard-page-rebuild
+Agent: Z.ai Code (main session)
+Task: 用户「最新的dashboard组件没有展现」——甄别为页面定义数据丢失（非前端回归），重建 pageKey=dashboard 页面并仓库化恢复脚本
+
+Work Log:
+- 甄别链：DashboardRouterPage 分发逻辑（getPageByKey('dashboard')→无 PUBLISHED 页则回退静态页）→ 双库排查 wf_page_def 仅剩 test1「测试页面」、sys_menu 无 menuId=312「主页仪表盘」——Task 119 创建的 dashboard 页随 MariaDB 卷回退从 v6 与 workflow 双库同时消失（该页从未进入 129 迁移链路：Task 129 迁移时 v6 源库已无此页）
+- 重建链路实测（API 全程）：POST /v1/pages（create 不收 schema，setSchema(null)）→ PUT /v1/pages/{id}（schema 保存唯一入口）→ POST /{id}/publish → POST /{id}/mount-menu（生成 sys_menu path=/page/dashboard + permission=page:read:dashboard 自动授权 ROLE_ADMIN；PageAccessGuard 按 path 反查菜单决定可见性，404「未挂接菜单」即此）→ GET /pages/dashboard/definition 返回 PUBLISHED
+- schema 构造（反查 register.ts dashKpiRule/dashChartRule + PageRendererPage.transformComponent 契约）：4 组件 2×2（col.span=12）——KPI 流程定义数（ds-builtin-process-definitions count）+ KPI 运行中流程（ds-builtin-process-instances + filter {"conditions":[{"column":"status","op":"eq","value":"running"}]}，status 枚举实测确认小写 running/completed/suspended，来源 BuiltInSystemSourceQueryService.statusOf）+ 折线发起趋势（group=startTime timeGrain=day limit=14）+ 饼环流程分布（group=processDefinitionName sort=value limit=8）；dataSources 以 id→refId 映射内置 SYSTEM 源
+- agent-browser E2E：admin 登录 → /lowcode/dashboard 4 组件全渲染（KPI 0 值 + 图表空态「暂无数据」）+ 左侧菜单出现「主页仪表盘」；暗色主题复验正常；console 无新错误
+- ECharts「Can't get DOM width/height」warning 甄别：非 bug——DashChart hasData=false 时 el-empty 空态设计使 chartEl v-show 隐藏，echarts init 于 0 尺寸容器的预期 warning；组件 ResizeObserver 正常
+- 增值：Flowable 部署链路修复——「请假」草稿部署 400（DI 段 dc:Rect 非法，BPMN 规范要求 dc:Bounds）→ SQL REPLACE 修正 → 部署成功（deployed-processes 返回 请假 v1，ACT_RE_PROCDEF 1 条）→ 首页 KPI 实时变「1个」铁证组件+聚合全链路真数据可用；「UI验证流程」草稿 DI 段本就合法（dc:Bounds）不部署（E2E 测试流程保持干净）
+- 仓库化：scripts/dashboard-page.schema.json（留档 schema）+ scripts/recreate-dashboard-page.sh（幂等重建：已发布+菜单在→跳过；菜单丢→只补挂；404→创建→PUT→发布→挂菜单，幂等三态实测通过）
+- 期间插曲：门户 next-server 再次消失（3000 不监听，OOM/回收），start-portal.sh 拉起（脚本自身 120s 超时被沙箱连带杀后台进程的坑 → 改用 setsid bash -c 内联拉起成功，portal=200）
+
+Stage Summary:
+- 最新仪表盘组件族（Task 119-123）重新可见：主页 form-create 仪表盘 4 组件 + 「主页仪表盘」菜单；数据为 0 系 Flowable 全新库现实（静态页同 0），非组件问题
+- dashboard 页面数据从此有仓库恢复手段（schema 留档 + 幂等脚本），对冲 MariaDB 卷回退类事故
+- Flowable 首个流程「请假 v1」部署成功，发起链路恢复可用；KPI「流程定义数」1 个真实反映

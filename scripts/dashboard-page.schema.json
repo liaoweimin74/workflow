@@ -1,0 +1,119 @@
+{
+  "rule": [
+    {
+      "type": "dash-kpi",
+      "field": "kpiDefCount",
+      "title": "流程定义数",
+      "col": {
+        "span": 12
+      },
+      "props": {
+        "title": "流程定义数",
+        "subtitle": "已部署流程定义",
+        "unit": "个",
+        "agg": "count",
+        "metric": null,
+        "dataSourceId": "ds_def",
+        "numberFormat": "",
+        "trendEnabled": false,
+        "trendGrain": "day",
+        "trendField": "",
+        "sparkline": false,
+        "sparkRange": 12,
+        "span": 12,
+        "height": "140px"
+      }
+    },
+    {
+      "type": "dash-kpi",
+      "field": "kpiRunning",
+      "title": "运行中流程",
+      "col": {
+        "span": 12
+      },
+      "props": {
+        "title": "运行中流程",
+        "subtitle": "进行中的流程实例",
+        "unit": "条",
+        "agg": "count",
+        "metric": null,
+        "dataSourceId": "ds_inst",
+        "filter": "{\"conditions\": [{\"column\": \"status\", \"op\": \"eq\", \"value\": \"running\"}], \"logic\": \"AND\"}",
+        "numberFormat": "",
+        "trendEnabled": false,
+        "trendGrain": "day",
+        "trendField": "",
+        "sparkline": false,
+        "sparkRange": 12,
+        "span": 12,
+        "height": "140px"
+      }
+    },
+    {
+      "type": "dash-chart",
+      "field": "chartTrend",
+      "title": "发起趋势",
+      "col": {
+        "span": 12
+      },
+      "props": {
+        "title": "发起趋势",
+        "chartType": "line",
+        "group": "startTime",
+        "timeGrain": "day",
+        "agg": "count",
+        "metric": null,
+        "sort": "key",
+        "order": "asc",
+        "limit": 14,
+        "dataSourceId": "ds_inst",
+        "height": "280px",
+        "span": 12
+      }
+    },
+    {
+      "type": "dash-chart",
+      "field": "chartDist",
+      "title": "流程分布",
+      "col": {
+        "span": 12
+      },
+      "props": {
+        "title": "流程分布",
+        "chartType": "pie",
+        "group": "processDefinitionName",
+        "timeGrain": null,
+        "agg": "count",
+        "metric": null,
+        "sort": "value",
+        "order": "desc",
+        "limit": 8,
+        "dataSourceId": "ds_inst",
+        "height": "280px",
+        "span": 12
+      }
+    }
+  ],
+  "option": {
+    "form": {
+      "inline": false,
+      "hideRequiredAsterisk": false,
+      "labelPosition": "top",
+      "size": "default",
+      "labelWidth": "auto"
+    }
+  },
+  "dataSources": [
+    {
+      "id": "ds_def",
+      "refId": "ds-builtin-process-definitions",
+      "name": "流程定义"
+    },
+    {
+      "id": "ds_inst",
+      "refId": "ds-builtin-process-instances",
+      "name": "流程实例"
+    }
+  ],
+  "actions": []
+}

@@ -50,11 +50,28 @@ function reviveNextDev(): PluginOption {
   }
 }
 
+// 【代理环境 HMR 静默】(Task 132)：外层预览网关与 next 门户(3000)的反代均不转发
+// WebSocket 升级，vite client 经这些链路访问时 wss 反复失败刷屏（vite 8 的
+// hmr:false 仅停用服务端推送，client 仍会尝试建连）。往 head 最前注入一段同步
+// 脚本：仅当"非直连 5173"时把 window.WebSocket 换成"立即假 OPEN"的 stub ——
+// client 判定已连接后静默待机，零报错、零重试、无挂起；直连 5173（本地开发/
+// 自动化测试）保持原生 WebSocket，HMR/overlay 行为不变。
+function silenceProxiedHmr(): PluginOption {
+  const stubScript =
+    "(function(){try{if(location.port==='5173')return;var L=function(){this.readyState=1;var s=this;setTimeout(function(){var e={type:'open',target:s};typeof s.onopen==='function'&&s.onopen(e);((s.__l&&s.__l.open)||[]).forEach(function(c){c(e)})},0)};L.prototype.addEventListener=function(t,c){(this.__l=this.__l||{})[t]=this.__l[t]||[];this.__l[t].push(c)};L.prototype.removeEventListener=function(t,c){var l=this.__l&&this.__l[t];if(l)this.__l[t]=l.filter(function(f){return f!==c})};L.prototype.dispatchEvent=function(){return!0};L.prototype.send=function(){};L.prototype.close=function(){this.readyState=3};L.CONNECTING=0;L.OPEN=1;L.CLOSING=2;L.CLOSED=3;L.prototype.OPEN=1;L.prototype.CLOSED=3;window.WebSocket=L}catch(e){}})()"
+  return {
+    name: 'silence-proxied-hmr',
+    transformIndexHtml() {
+      return [{ tag: 'script', children: stubScript, injectTo: 'head-prepend' }]
+    }
+  }
+}
+
 export default defineConfig({
   // 沙箱适配：唯一对外端口为 3000（Caddy→Next 门户），/lowcode/* 反代到本服务；
   // base 必须与门户反代路径一致，否则经 3000 访问时资源 404
   base: '/lowcode/',
-  plugins: [vue(), tailwindcss(), reviveNextDev()],
+  plugins: [silenceProxiedHmr(), vue(), tailwindcss(), reviveNextDev()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

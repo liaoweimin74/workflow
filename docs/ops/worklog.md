@@ -2811,3 +2811,20 @@ Work Log:
 Stage Summary:
 - 三件套复现闭环：非代码回归，环境级（依赖缺失+脏进程）；echarts 补装 + vite 换血后全绿
 - 教训固化：bun install 双哨兵验证写入重置 SOP；「FE_OK 只证 vite 二进制在，不证依赖树完整」
+
+---
+Task ID: 130d-db-runtime-gap
+Agent: Z.ai Code (main session)
+Task: 用户再问「数据库似乎不是最新的」——甄别为运行时数据缺口（非回滚），补齐表单填报数据
+
+Work Log:
+- 甄别：环境健康（HEAD=a6f86047 四服务全活）、Task 130 迁移水位完好（2/9/19/67/2/3/1/1）——非回滚；真差异在 v6 独有的两类运行时数据：①wf_biz_bill_test 1 行真实填报（admin 9-25 请假单）②wfe_process_instance 1 条=dual_node_e2e E2E 测试遗留（COMPLETED，business_key=NULL，Task 61 产物非真实业务）
+- wf_biz_* 缺口根因：Java 动态表由「草稿发布流程」的 DynamicTableManager.ensureTable 建（FormDefinitionService:338），迁移的 form_def 已是 PUBLISHED 状态从未在 Java 侧走 publish → 表从未创建（BizDataSupport.loadContext 对缺表抛 404）
+- 修复路径：publish API 支持 republish（PUBLISHED 可重发，323 行 schema 恒等检查因排除自身而跳过）→ POST /api/v1/form-definitions/9dc27e83.../publish → Java DdlBuilder 自建 wf_biz_bill_test（18 列与 v6 逐列一致，类型映射绝对自洽）→ 显式列 INSERT IGNORE 迁入 1 行
+- 冒烟：GET /api/v1/biz-data/bill_test 返回填报数据（person_name=admin/事假/is_approved=yes）——Java 引擎对外可见性与 Nest 时代对齐
+- 副作用记录：bill_test version 1→2（republish 语义正常）
+- E2E 测试实例处置：不迁（Nest 自研引擎 wfe_* 运行时与 Flowable ACT_* 结构不同，且为测试数据无业务价值，随 Nest 归档）
+- 脚本加固：migrate-v6-to-workflow.sh 尾部追加 wf_biz_* 两步补建说明（republish + INSERT）
+
+Stage Summary:
+- 「数据库不最新」完整定性：元数据（Task 130 已齐）+ 业务填报数据（本轮已齐）+ E2E 测试运行时（归档不迁）三层；Java 引擎现可见全部用户真实数据

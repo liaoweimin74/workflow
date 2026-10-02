@@ -71,3 +71,8 @@ echo "---- 迁移后行数对照（v6 vs workflow）----"
   done
 } | MY --table 2>/dev/null || echo "（部分对照查询失败，见上方日志）"
 echo "---- 完成 ----"
+echo
+echo "【注意】wf_biz_* 动态业务表不在本脚本范围（v6 独有，Java 侧由表单发布流程建表）："
+echo "  若 v6 的 wf_biz_<key> 有数据而 workflow 缺同名表，需两步："
+echo "  ① POST /api/v1/form-definitions/<formDefId>/publish（republish 触发 Java DdlBuilder ensureTable 建表，Task 130d 验证）"
+echo "  ② 按同名列 INSERT IGNORE ... SELECT 迁行（bill_test 结构与 v6 逐列一致）"

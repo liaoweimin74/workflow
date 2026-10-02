@@ -2936,3 +2936,17 @@ Stage Summary:
 - 三类报错全消除：500=依赖补装、WSS=stub 静默、storage=旧会话残留无需改码
 - 新增风险面：next dev RSS 1.5GB 级 OOM 惯性（4GB 机器四服务+浏览器验证即触顶）；4GB 内存下浏览器验证必须短平快、用毕即关
 - 改动面：frontend/vite.config.ts（+插件 16 行）；bun.lock 被 gitignore 不入库（package.json echarts 声明本就在库）
+
+---
+Task ID: 132b-watchdog-revive
+Agent: Z.ai Code (main session)
+Task: portal 看门狗重新激活 + OOM 自愈闭环验证
+
+Work Log:
+- 终验后 portal 3000 第 4 次倒下（dmesg：next-server RSS 1.39GB OOM kill，诱因=经 3000 加载 /lowcode 页面触发数百个 vite 模块代理请求，历史陷阱模式复现；Task 132 终验即最后一根稻草）
+- portal-watchdog.sh 进程未存活（131b 激活的实例被后续 OOM 扫荡连带清除）：按脚本头部标准命令 setsid nohup 重新激活（pid 13932）
+- 自愈闭环实测：激活后首个巡检周期即检测 down → 识别 Turbopack 缓存损坏（FATAL 残留日志）→ rm -rf .next → 拉起（pid 13943）→ 8s 后 HTTP 200
+
+Stage Summary:
+- 四服务全绿 + portal-watchdog 常驻守护：OOM → 20-30s 自愈的准稳态成立（冷启编译膨胀→OOM→自动清缓存重建→增量编译稳定）
+- 遗留：next dev Turbopack rust 侧内存不受 NODE_OPTIONS 约束为根因，根治（webpack dev/限流/升级）留巡检轮评估

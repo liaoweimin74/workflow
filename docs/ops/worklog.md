@@ -2977,3 +2977,19 @@ Stage Summary:
 - 【内存核算】停 Nest 回收 108MB，Java 上位 RSS 515MB（净增 +407MB），可用 632MB——与预告一致；内存大头仍是 next-server 1.4GB（portal-watchdog 守护中）
 - 【PAT 轮换闭环】用户提供新 fine-grained PAT → remote set-url → fetch 验证通过 → push 成功（b23f15e8..d352b47c main），本地与远端归零对齐；PAT 完整 URL 存 tool-results/pat-remote-url.txt（chmod 600，沙箱内易失）
 - 【凭据风险提示】PAT 仅存于 .git/config 与沙箱内备份文件——沙箱重置即灭，建议用户在沙箱外（密码管理器）留存副本
+
+---
+Task ID: 134-portal-memory
+Agent: Z.ai Code (main session)
+Task: 用户「有没有办法避免内存失控，例如换掉 rust」——门户 Turbopack 内存治理
+
+Work Log:
+- 历史复核：换 webpack（Task 132 实验）已证不省内存；Next 16 schema 确认支持 experimental.turbopackMemoryLimit（bytes 软限制，到线主动丢弃编译缓存）
+- 方案落地：①next.config.ts 加 experimental.turbopackMemoryLimit=805306368（768MB，dev.log 打印确认生效）②portal-watchdog.sh 升级预防性重启（RSS>1.3GB 主动重启，内核 OOM 线 1.4GB 前留缓冲）+ 防抖（连续 2 次 down 才重启）+ Ready 等待循环（180s，根治冷启期重启风暴）
+- 沙箱铁律实证（start-portal.sh 注释）：只有平台 start.sh 进程树能常驻，agent 回合内 spawn（setsid 亦无效）回合后一律回收——mvn/watchdog/bun dev 之死同根因；Java 幸存系 Task 131 经 POST /api/portal/services 挂平台树
+- 冷启慢真相：dev 模式懒编译，Ready in 751ms 仅代表监听，首屏编译 60s+（curl -m 3/5 全程 000 系超时掐断，非故障）；watchdog 首版 is_up 判定与冷启时长冲突引发重启风暴（is_up 失败→pkill 刚拉起的→再拉→再失败），已用 Ready 等待循环根治
+- 终态：start-portal.sh 官方 SOP 拉起门户 200；turbopackMemoryLimit 生效；watchdog 常驻不可行改由 15min cron 巡检兜底（job 432156：四服务探活+RSS 预防性重启+start-portal 重拉+开发推进）
+
+Stage Summary:
+- 门户内存治理三层防线：①Turbopack rust 侧 768MB 软限制（主动回收缓存）②RSS 1.3GB 预防性重启（防 OOM 连坐）③15min cron 巡检（应对沙箱回收，含 start-portal 重拉 SOP 与 Java 重建命令）
+- 教训：dev 懒编译的探活必须长超时（首屏编译 60s+）；「进程无声消失」优先怀疑沙箱回收而非 OOM（dmesg 无痕）

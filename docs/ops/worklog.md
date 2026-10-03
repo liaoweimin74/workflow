@@ -2993,3 +2993,21 @@ Work Log:
 Stage Summary:
 - 门户内存治理三层防线：①Turbopack rust 侧 768MB 软限制（主动回收缓存）②RSS 1.3GB 预防性重启（防 OOM 连坐）③15min cron 巡检（应对沙箱回收，含 start-portal 重拉 SOP 与 Java 重建命令）
 - 教训：dev 懒编译的探活必须长超时（首屏编译 60s+）；「进程无声消失」优先怀疑沙箱回收而非 OOM（dmesg 无痕）
+
+---
+Task ID: 135-echarts500-storage
+Agent: Z.ai Code (main session)
+Task: 用户报前端三连错——useEcharts.ts 500 / storage not allowed / 登录后仪表盘空
+
+Work Log:
+- 甄别一：useEcharts 500 = node_modules 旧快照缺 echarts（Task 128 同款复发，package.json 有 ^5.6.0 而 node_modules 无）→ bun install 补装 echarts@5.6.0
+- 甄别二：Vite optimizeDeps 缓存锁死 → 杀双实例（416MB+62MB）→ POST /api/portal/services 经平台树重拉单实例（pid 5663，常驻）→ useEcharts 直连 200
+- 甄别三：storage not allowed 为 echarts 500 连锁假象（4 条 = 4 个 Dash 组件动态 import 失败的 unhandled rejection）；index.html 裸读已有 try-catch、safe-storage 兜底完整，非独立故障
+- 甄别四（E2E 揪出）：登录后仪表盘内容区空 → wf_page_def 0 行（第 13+ 次重置重建 workflow 库后页面定义缺失，Task 130e 同款）→ recreate-dashboard-page.sh 幂等重建（PUBLISHED schema 1798B + 菜单 306 挂接）
+- 沙箱进程规律补充：next-server 每次膨胀回 1.1GB+ 即被沙箱回收（4GB 内最大进程优先），Java 515MB/vite 533MB 幸免——「周期性死亡 + cron 15min 复活」为预期常态（job 432156）
+- E2E 全通：登录 → /lowcode/dashboard → canvas:2（echarts 两图渲染）→ console 零错误零 storage 报错 → 浏览器即关（OOM SOP）
+
+Stage Summary:
+- 三故障一链根因闭环：echarts 补装（环境级）→ vite 平台树重拉 → 仪表盘页面定义重建（数据级）
+- 仪表盘恢复链仓库化验证：recreate-dashboard-page.sh 在第 13+ 次重置后再次一击即中，幂等设计可靠
+- 运行时认知更新：next-server dev 模式在此沙箱无法长驻（1.1GB+ 必被回收），门户可用性由 cron 巡检兜底

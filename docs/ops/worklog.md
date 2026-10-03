@@ -2975,3 +2975,5 @@ Stage Summary:
 - 【数据回填】workflow_v6.wf_process_draft → workflow 显式列映射回填 2 条（请假 leave DRAFT v0 / UI验证流程 ui_verify_flow DEPLOYED v1，v6.key 列废弃全 NULL 真 key 在 process_key）
 - 【E2E】登录 200 / GET /api/v1/tasks?assignee=admin 200 空列表 / GET /api/v1/process-definitions/drafts 200 返回完整 BPMN / 四服务探活（MariaDB 137MB·Java 515MB·Vite·门户 3000=200）
 - 【内存核算】停 Nest 回收 108MB，Java 上位 RSS 515MB（净增 +407MB），可用 632MB——与预告一致；内存大头仍是 next-server 1.4GB（portal-watchdog 守护中）
+- 【PAT 轮换闭环】用户提供新 fine-grained PAT → remote set-url → fetch 验证通过 → push 成功（b23f15e8..d352b47c main），本地与远端归零对齐；PAT 完整 URL 存 tool-results/pat-remote-url.txt（chmod 600，沙箱内易失）
+- 【凭据风险提示】PAT 仅存于 .git/config 与沙箱内备份文件——沙箱重置即灭，建议用户在沙箱外（密码管理器）留存副本

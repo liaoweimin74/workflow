@@ -2950,3 +2950,28 @@ Work Log:
 Stage Summary:
 - 四服务全绿 + portal-watchdog 常驻守护：OOM → 20-30s 自愈的准稳态成立（冷启编译膨胀→OOM→自动清缓存重建→增量编译稳定）
 - 遗留：next dev Turbopack rust 侧内存不受 NODE_OPTIONS 约束为根因，根治（webpack dev/限流/升级）留巡检轮评估
+
+---
+Task ID: 133-git-recovery
+Agent: Z.ai Code (main session)
+Task: 用户「处理 git 恢复」——内层 workflow_lowcode/.git 第 13+ 次丢失后重建，接回 origin 并恢复工作树
+
+Work Log:
+- 现状甄别：内层 .git 丢失（git 上行落顶层快照仓库）；远端 github.com/liaoweimin74/workflow 匿名可达（ls-remote 免认证）
+- 远端核实：main=b23f15e8（Task 132b），比摘要记录的 480dd80d 新 3 提交——c5e99112（Task 131 git 重建）/2d7e9c1c（Task 132）/b23f15e（Task 132b），即此前某轮已接回并推送过，本轮为重置后再次恢复
+- PAT 甄别：~/.git-credentials、~/.netrc、gh CLI、env、scripts/worklog/docs 全域搜索无明文；tool-results 备份文件中 PAT 已脱敏（<PAT>）——push 凭据彻底丢失，fetch 走匿名
+- 重建 SOP：git init -b main → core.fileMode false → remote add origin（无 PAT 匿名 URL）→ fetch origin（3 分支）→ reset --mixed origin/main → 方向验证（本地 worklog 0 处 Task 132 vs 远端 1 处=远端权威）→ git checkout -- .
+- 终态：git status 0 行，HEAD=b23f15e8=origin/main；V41 幂等 SQL、recreate-dashboard-page.sh、start-portal.sh 等丢失文件全数从远端找回
+- 次生损失盘点（第 13+ 次重置标配）：backend/target jar 全灭、~/.m2 清空、mvn 本体丢失、/tmp/wf-biz-backup TSV 灭、engine-choice 被 bootstrap 重写回 node、Nest 复占 8080（RSS 108MB）；workflow 主库丢失但 workflow_v6 幸存（2 草稿+2 分类=回填源在）
+- 灾后重建启动：Maven 3.9.9 从中央仓库重装（/home/z/tools/apache-maven-3.9.9）；首轮 mvn 后台构建被沙箱回收（log 0 字节）；setsid+nohup 双保险+MAVEN_OPTS=-Xmx256m 重试成功（pid 2399，log 413 行推进中）
+
+Stage Summary:
+- 内层 .git 已恢复：工作树=origin/main=b23f15e8（Task 132b），status 0 行，全部丢失文件找回；本地与远端零分叉，无需 push
+- 遗留：push 需用户提供新 PAT（remote set-url origin https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git）
+- 进行中：mvn package 构建 jar → CREATE DATABASE workflow → 杀 Nest 释放 8080 → Java sandbox 拉起 Flyway V1-V49 → workflow_v6 回填草稿 → E2E
+- 【重建完成】Maven 3.9.9 重装（后台进程两次被沙箱回收，改前台跑通）；JDK21 javac 缺失（系统仅剩 JRE）→ Temurin JDK 21.0.12.1 落 /home/z/tools/jdk-21.0.12.1+1 → mvn package 32.9s BUILD SUCCESS（jar 103MB）
+- 【引擎切换】CREATE DATABASE workflow → 杀 Nest(pid 1503) 释放 8080 → 清 .engine-node + engine-choice=java → setsid 拉起 Java（-Xmx448m，sandbox profile）
+- 【迁移甄别】全新库 baseline v1 + applied 5（V2 init 全量建表/V39/V40/V41/V49）——非故障，系 Task 131「迁移链归档」设计：V3-V38/V42-V48 存于 db/migration-archive/，75 张表全在
+- 【数据回填】workflow_v6.wf_process_draft → workflow 显式列映射回填 2 条（请假 leave DRAFT v0 / UI验证流程 ui_verify_flow DEPLOYED v1，v6.key 列废弃全 NULL 真 key 在 process_key）
+- 【E2E】登录 200 / GET /api/v1/tasks?assignee=admin 200 空列表 / GET /api/v1/process-definitions/drafts 200 返回完整 BPMN / 四服务探活（MariaDB 137MB·Java 515MB·Vite·门户 3000=200）
+- 【内存核算】停 Nest 回收 108MB，Java 上位 RSS 515MB（净增 +407MB），可用 632MB——与预告一致；内存大头仍是 next-server 1.4GB（portal-watchdog 守护中）

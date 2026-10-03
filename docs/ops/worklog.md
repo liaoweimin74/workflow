@@ -3011,3 +3011,19 @@ Stage Summary:
 - 三故障一链根因闭环：echarts 补装（环境级）→ vite 平台树重拉 → 仪表盘页面定义重建（数据级）
 - 仪表盘恢复链仓库化验证：recreate-dashboard-page.sh 在第 13+ 次重置后再次一击即中，幂等设计可靠
 - 运行时认知更新：next-server dev 模式在此沙箱无法长驻（1.1GB+ 必被回收），门户可用性由 cron 巡检兜底
+
+---
+Task ID: 136-db-backup
+Agent: Z.ai Code (main session)
+Task: 用户「push代码及数据库」——代码推送确认 + workflow 库备份仓库化
+
+Work Log:
+- 代码侧：内层 HEAD=e43d3209=origin/main、工作区 0 行——全部已推送，无遗漏
+- 数据侧：bin 无 mysqldump → 自研 scripts/db-dump.sh（QUOTE() 转义交给数据库、information_schema 动态列、--raw 真换行、75 表全覆盖）
+- 三连坑闭环：①GROUP_CONCAT 默认 1024 截断宽表表达式（INSERT 残缺 Column count mismatch）→ group_concat_max_len=1MB；②EXPR 中列名反引号在 shell 双引号内被命令替换吞掉 → printf %s 字面替换+管道；③CONCAT 参数列表中 EXPR 间逗号是参数分隔符非输出内容 → GROUP BY 主键 + GROUP_CONCAT(CONCAT_WS(',',...)) 每行一条 INSERT
+- 可恢复性验证（临时库 workflow_verify 全量导入）：75 表全过、sys_menu 70 / sys_role_menu 70 / wf_page_def 1 / wf_process_draft 2 / wf_data_source 9 全吻合、DEPLOYED 草稿多行 BPMN XML 无损（4112B 与源一致）——验证后临时库已清理
+- 配套 scripts/db-restore.sh（DROP→重建→导入+提醒 flyway 历史随库带回语义）；dump 落 scripts/db-backup/workflow-dump-20261003-0151.sql（124K）
+
+Stage Summary:
+- 数据库备份链仓库化完成：db-dump.sh（自研无 mysqldump 环境适配+三坑免疫）/ 124K 全量 dump（已验证可恢复）/ db-restore.sh（一键恢复）——下次重置后恢复路径 = db-restore.sh 或 Flyway 空库重建二选一
+- 备份铁律落实：未经验证的备份不做交付，本轮 dump 经临时库全量导入比对后才入库

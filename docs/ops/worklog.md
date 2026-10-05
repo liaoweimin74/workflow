@@ -3066,3 +3066,25 @@ Work Log:
 Stage Summary:
 - 主页仪表盘 JSON 报错根除（DB schema 已换 repo 合法版，4 组件渲染实证）；备份链第四坑根除并过自洽校验，新权威 dump=workflow-dump-20261005-fixed.sql
 - 产物：db-dump.sh v2（--raw+参数化）/workflow-dump-20261005-fixed.sql（已验证）/修复 SQL 链路留痕 /tmp（已清）
+
+---
+Task ID: 139-portal-oom-recovery
+Agent: Z.ai Code (main session)
+Task: 「门户挂了」事故诊断与恢复（3000 进程级死亡，OOM 根因实锤）
+
+Work Log:
+- 用户报障「门户挂了」：3000 端口无响应、无 next 进程；mariadb(3306)/java(8080)/vite(5173) 幸存（平台树收养进程）
+- dev.log 尾部：14:22「Found a change in next.config.ts → Restarting → Ready in 1871ms」后无任何日志——平台树 next dev 死亡近 2 小时
+- 关键证据链：/sys/fs/cgroup/memory/memory.oom_control 显示 oom_kill=7（cgroup 4G 上限已触发 7 次 OOM kill，历次沙箱重置与本次进程死亡同源）
+- 复现实验：start-portal.sh 拉起后 5 分钟 curl 探活全部存活（排除沙箱随机回收）；agent-browser 一访问 /lowcode 即死（vite 模块请求 200 后进程无声消失、无 crash stack）——浏览器 50+ 模块并发加载 + 双 dev server 同活 + chrome ~700MB → 内存尖峰 → OOM killer 杀 RSS 最大的 next-server（1.28GB）
+- curl 手工 WS upgrade 实验不杀进程（排除 HMR websocket 凶手假设）
+- 上轮遗留 JSON position 591 定论：schema 转义损伤（Task 138 已修）与 OOM 响应流截断构成双重根因，本次验证仪表盘零报错、console 干净，双双闭环
+- 内存减压三招落地：①杀重复 vite（双实例 -250MB）②杀 postcss 编译 worker（-473MB，下次编译自动重启）③agent-browser 验证完立即 close（chrome -700MB）→ available 从 595MB 恢复至 1046MB
+- 恢复验证全链路：登录 API 200（admin/admin123）→ /lowcode 登录页渲染 → 登录成功 → 主页仪表盘全部卡片（流程定义数/运行中流程/发起趋势/流程分布）正常、零 JSON 报错
+- 新建 cron job 438154「门户OOM减压与探活-5min」（fixed_rate 300s，priority 10，agentTurn）：探活 3000/5173 → 杀重复 vite/postcss 减压 → 挂则拉起 → oom_kill 计数监控入 worklog；与 15min webDevReview job 437863 形成双层保障
+
+Stage Summary:
+- 门户全链路复活（3000/8080/5173/3306 四服务绿）；根因 oom_kill=7 实锤记录在案
+- OOM 时代 QA 铁律沉淀：browser 验证必须 open→snapshot→close 单回合压缩完成；绝不让 chrome 与 /lowcode 模块加载长时间并存；大量 browser 验证前先杀 postcss worker/重复 vite
+- 架构定论：start-portal.sh 拉起属回合内临时进程（寿命受内存压力支配）；常驻唯一靠平台树（已死待下次沙箱冷启动重建）+ cron 5min 探活轮换兜底
+- 风险预告：next-server RSS 1.28GB 已近 portal-watchdog 轮换线 1.3GiB；/lowcode 重负载访问仍可能 OOM，长眠风险由 job 438154 每 5 分钟自动拉起对冲

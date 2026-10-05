@@ -1809,7 +1809,7 @@ CREATE TABLE `wf_page_def` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ;
 -- rows: 1
-INSERT INTO `wf_page_def` (`id`,`created_at`,`created_by`,`data_source_id`,`form_key`,`key`,`name`,`published_version`,`schema`,`status`,`tenant_id`,`type`,`updated_at`,`version`) VALUES ('f5d2e46500e74402831590ae8d310cd0','2026-10-03 01:29:54.144312',NULL,NULL,NULL,'dashboard','主页仪表盘','1','{"rule": [{"type": "dash-kpi", "field": "kpiDefCount", "title": "流程定义数", "col": {"span": 12}, "props": {"title": "流程定义数", "subtitle": "已部署流程定义", "unit": "个", "agg": "count", "metric": null, "dataSourceId": "ds_def", "numberFormat": "", "trendEnabled": false, "trendGrain": "day", "trendField": "", "sparkline": false, "sparkRange": 12, "span": 12, "height": "140px"}}, {"type": "dash-kpi", "field": "kpiRunning", "title": "运行中流程", "col": {"span": 12}, "props": {"title": "运行中流程", "subtitle": "进行中的流程实例", "unit": "条", "agg": "count", "metric": null, "dataSourceId": "ds_inst", "filter": "{\\\\"conditions\\\\": [{\\\\"column\\\\": \\\\"status\\\\", \\\\"op\\\\": \\\\"eq\\\\", \\\\"value\\\\": \\\\"running\\\\"}], \\\\"logic\\\\": \\\\"AND\\\\"}", "numberFormat": "", "trendEnabled": false, "trendGrain": "day", "trendField": "", "sparkline": false, "sparkRange": 12, "span": 12, "height": "140px"}}, {"type": "dash-chart", "field": "chartTrend", "title": "发起趋势", "col": {"span": 12}, "props": {"title": "发起趋势", "chartType": "line", "group": "startTime", "timeGrain": "day", "agg": "count", "metric": null, "sort": "key", "order": "asc", "limit": 14, "dataSourceId": "ds_inst", "height": "280px", "span": 12}}, {"type": "dash-chart", "field": "chartDist", "title": "流程分布", "col": {"span": 12}, "props": {"title": "流程分布", "chartType": "pie", "group": "processDefinitionName", "timeGrain": null, "agg": "count", "metric": null, "sort": "value", "order": "desc", "limit": 8, "dataSourceId": "ds_inst", "height": "280px", "span": 12}}], "option": {"form": {"inline": false, "hideRequiredAsterisk": false, "labelPosition": "top", "size": "default", "labelWidth": "auto"}}, "dataSources": [{"id": "ds_def", "refId": "ds-builtin-process-definitions", "name": "流程定义"}, {"id": "ds_inst", "refId": "ds-builtin-process-instances", "name": "流程实例"}], "actions": []}','PUBLISHED','default','PAGE','2026-10-03 01:29:54.331685','1');
+INSERT INTO `wf_page_def` (`id`,`created_at`,`created_by`,`data_source_id`,`form_key`,`key`,`name`,`published_version`,`schema`,`status`,`tenant_id`,`type`,`updated_at`,`version`) VALUES ('f5d2e46500e74402831590ae8d310cd0','2026-10-03 01:29:54.144312',NULL,NULL,NULL,'dashboard','主页仪表盘','1','{"rule":[{"type":"dash-kpi","field":"kpiDefCount","title":"流程定义数","col":{"span":12},"props":{"title":"流程定义数","subtitle":"已部署流程定义","unit":"个","agg":"count","metric":null,"dataSourceId":"ds_def","numberFormat":"","trendEnabled":false,"trendGrain":"day","trendField":"","sparkline":false,"sparkRange":12,"span":12,"height":"140px"}},{"type":"dash-kpi","field":"kpiRunning","title":"运行中流程","col":{"span":12},"props":{"title":"运行中流程","subtitle":"进行中的流程实例","unit":"条","agg":"count","metric":null,"dataSourceId":"ds_inst","filter":"{\\"conditions\\": [{\\"column\\": \\"status\\", \\"op\\": \\"eq\\", \\"value\\": \\"running\\"}], \\"logic\\": \\"AND\\"}","numberFormat":"","trendEnabled":false,"trendGrain":"day","trendField":"","sparkline":false,"sparkRange":12,"span":12,"height":"140px"}},{"type":"dash-chart","field":"chartTrend","title":"发起趋势","col":{"span":12},"props":{"title":"发起趋势","chartType":"line","group":"startTime","timeGrain":"day","agg":"count","metric":null,"sort":"key","order":"asc","limit":14,"dataSourceId":"ds_inst","height":"280px","span":12}},{"type":"dash-chart","field":"chartDist","title":"流程分布","col":{"span":12},"props":{"title":"流程分布","chartType":"pie","group":"processDefinitionName","timeGrain":null,"agg":"count","metric":null,"sort":"value","order":"desc","limit":8,"dataSourceId":"ds_inst","height":"280px","span":12}}],"option":{"form":{"inline":false,"hideRequiredAsterisk":false,"labelPosition":"top","size":"default","labelWidth":"auto"}},"dataSources":[{"id":"ds_def","refId":"ds-builtin-process-definitions","name":"流程定义"},{"id":"ds_inst","refId":"ds-builtin-process-instances","name":"流程实例"}],"actions":[]}','PUBLISHED','default','PAGE','2026-10-03 01:29:54.331685','1');
 
 -- ===== table: wf_process_draft =====
 DROP TABLE IF EXISTS `wf_process_draft`;
@@ -1838,8 +1838,170 @@ CREATE TABLE `wf_process_draft` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ;
 -- rows: 2
-INSERT INTO `wf_process_draft` (`id`,`bpmn_xml`,`category_id`,`created_at`,`created_by`,`deploy_id`,`deployed_config_hash`,`deployed_xml`,`description`,`process_key`,`last_deployed_at`,`name`,`process_definition_id`,`status`,`tenant_id`,`updated_at`,`version`) VALUES ('4f10a0d7bf698bca3eeae99dd132d5a1','<?xml version="1.0" encoding="UTF-8"?>\n<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="64f4802b34e352e3da0d7aeb9fa71de2">\n  <bpmn:process id="leave" name="请假" isExecutable="true">\n    <bpmn:startEvent id="startEvent_1"/>\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id="BPMNDiagram_1">\n    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="leave">\n      <bpmndi:BPMNShape id="startEvent_1_di" bpmnElement="startEvent_1">\n        <dc:Rect x="160" y="160" width="36" height="36"/>\n      </bpmndi:BPMNShape>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>','64f4802b34e352e3da0d7aeb9fa71de2','2026-09-27 21:54:59.000000',NULL,NULL,NULL,NULL,NULL,'leave',NULL,'请假',NULL,'DRAFT','default','2026-09-27 21:54:59.000000','0');
-INSERT INTO `wf_process_draft` (`id`,`bpmn_xml`,`category_id`,`created_at`,`created_by`,`deploy_id`,`deployed_config_hash`,`deployed_xml`,`description`,`process_key`,`last_deployed_at`,`name`,`process_definition_id`,`status`,`tenant_id`,`updated_at`,`version`) VALUES ('f50d6d7a012aea6df8710a35de24b267','<?xml version="1.0" encoding="UTF-8"?>\n<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:wf="http://workflow.com/schema/bpmn/wf" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://flowable.org/bpmn">\n  <bpmn:process id="ui_verify_flow" name="UI验证流程" isExecutable="true">\n    <bpmn:startEvent id="startEvent_1">\n      <bpmn:outgoing>Flow_10bijim</bpmn:outgoing>\n    </bpmn:startEvent>\n    <bpmn:userTask id="Activity_0q13unc" name="发起节点" wf:nodeRole="initiator" flowable:assignee="${initiator}">\n      <bpmn:incoming>Flow_10bijim</bpmn:incoming>\n      <bpmn:outgoing>Flow_1mkegyr</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id="Flow_10bijim" sourceRef="startEvent_1" targetRef="Activity_0q13unc" />\n    <bpmn:userTask id="Activity_0np59ha" wf:nodeRole="handler">\n      <bpmn:incoming>Flow_1mkegyr</bpmn:incoming>\n      <bpmn:outgoing>Flow_1avyfx2</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id="Flow_1mkegyr" sourceRef="Activity_0q13unc" targetRef="Activity_0np59ha" />\n    <bpmn:userTask id="Activity_023htgs" wf:nodeRole="handler">\n      <bpmn:incoming>Flow_1avyfx2</bpmn:incoming>\n      <bpmn:outgoing>Flow_04920vf</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id="Flow_1avyfx2" sourceRef="Activity_0np59ha" targetRef="Activity_023htgs" />\n    <bpmn:userTask id="Activity_0wemnzz" wf:nodeRole="approver">\n      <bpmn:incoming>Flow_04920vf</bpmn:incoming>\n      <bpmn:outgoing>Flow_1bblzfz</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id="Flow_04920vf" sourceRef="Activity_023htgs" targetRef="Activity_0wemnzz" />\n    <bpmn:endEvent id="Event_04ffjpj">\n      <bpmn:incoming>Flow_1bblzfz</bpmn:incoming>\n    </bpmn:endEvent>\n    <bpmn:sequenceFlow id="Flow_1bblzfz" sourceRef="Activity_0wemnzz" targetRef="Event_04ffjpj" />\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id="BPMNDiagram_1">\n    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="ui_verify_flow">\n      <bpmndi:BPMNShape id="startEvent_1_di" bpmnElement="startEvent_1">\n        <dc:Bounds x="160" y="160" width="36" height="36" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Activity_0q13unc_di" bpmnElement="Activity_0q13unc">\n        <dc:Bounds x="250" y="138" width="100" height="80" />\n        <bpmndi:BPMNLabel />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Activity_0np59ha_di" bpmnElement="Activity_0np59ha">\n        <dc:Bounds x="410" y="138" width="100" height="80" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Activity_023htgs_di" bpmnElement="Activity_023htgs">\n        <dc:Bounds x="570" y="138" width="100" height="80" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Activity_0wemnzz_di" bpmnElement="Activity_0wemnzz">\n        <dc:Bounds x="730" y="138" width="100" height="80" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Event_04ffjpj_di" bpmnElement="Event_04ffjpj">\n        <dc:Bounds x="892" y="160" width="36" height="36" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNEdge id="Flow_10bijim_di" bpmnElement="Flow_10bijim">\n        <di:waypoint x="196" y="178" />\n        <di:waypoint x="250" y="178" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id="Flow_1mkegyr_di" bpmnElement="Flow_1mkegyr">\n        <di:waypoint x="350" y="178" />\n        <di:waypoint x="410" y="178" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id="Flow_1avyfx2_di" bpmnElement="Flow_1avyfx2">\n        <di:waypoint x="510" y="178" />\n        <di:waypoint x="570" y="178" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id="Flow_04920vf_di" bpmnElement="Flow_04920vf">\n        <di:waypoint x="670" y="178" />\n        <di:waypoint x="730" y="178" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id="Flow_1bblzfz_di" bpmnElement="Flow_1bblzfz">\n        <di:waypoint x="830" y="178" />\n        <di:waypoint x="892" y="178" />\n      </bpmndi:BPMNEdge>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>\n',NULL,'2026-09-30 01:18:47.000000',NULL,'ebeedebc-a08a-a49e-b50b-d75ef7811064','041b3974db57dece93836aedb001faf160851101f5364cecf304c70fedb108fd','<?xml version="1.0" encoding="UTF-8"?>\n<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:wf="http://workflow.com/schema/bpmn/wf" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://flowable.org/bpmn">\n  <bpmn:process id="ui_verify_flow" name="UI验证流程" isExecutable="true">\n    <bpmn:startEvent id="startEvent_1">\n      <bpmn:outgoing>Flow_10bijim</bpmn:outgoing>\n    </bpmn:startEvent>\n    <bpmn:userTask id="Activity_0q13unc" name="发起节点" wf:nodeRole="initiator" flowable:assignee="${initiator}">\n      <bpmn:incoming>Flow_10bijim</bpmn:incoming>\n      <bpmn:outgoing>Flow_1mkegyr</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id="Flow_10bijim" sourceRef="startEvent_1" targetRef="Activity_0q13unc" />\n    <bpmn:userTask id="Activity_0np59ha" wf:nodeRole="handler">\n      <bpmn:incoming>Flow_1mkegyr</bpmn:incoming>\n      <bpmn:outgoing>Flow_1avyfx2</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id="Flow_1mkegyr" sourceRef="Activity_0q13unc" targetRef="Activity_0np59ha" />\n    <bpmn:userTask id="Activity_023htgs" wf:nodeRole="handler">\n      <bpmn:incoming>Flow_1avyfx2</bpmn:incoming>\n      <bpmn:outgoing>Flow_04920vf</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id="Flow_1avyfx2" sourceRef="Activity_0np59ha" targetRef="Activity_023htgs" />\n    <bpmn:userTask id="Activity_0wemnzz" wf:nodeRole="approver">\n      <bpmn:incoming>Flow_04920vf</bpmn:incoming>\n      <bpmn:outgoing>Flow_1bblzfz</bpmn:outgoing>\n    </bpmn:userTask>\n    <bpmn:sequenceFlow id="Flow_04920vf" sourceRef="Activity_023htgs" targetRef="Activity_0wemnzz" />\n    <bpmn:endEvent id="Event_04ffjpj">\n      <bpmn:incoming>Flow_1bblzfz</bpmn:incoming>\n    </bpmn:endEvent>\n    <bpmn:sequenceFlow id="Flow_1bblzfz" sourceRef="Activity_0wemnzz" targetRef="Event_04ffjpj" />\n  </bpmn:process>\n  <bpmndi:BPMNDiagram id="BPMNDiagram_1">\n    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="ui_verify_flow">\n      <bpmndi:BPMNShape id="startEvent_1_di" bpmnElement="startEvent_1">\n        <dc:Bounds x="160" y="160" width="36" height="36" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Activity_0q13unc_di" bpmnElement="Activity_0q13unc">\n        <dc:Bounds x="250" y="138" width="100" height="80" />\n        <bpmndi:BPMNLabel />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Activity_0np59ha_di" bpmnElement="Activity_0np59ha">\n        <dc:Bounds x="410" y="138" width="100" height="80" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Activity_023htgs_di" bpmnElement="Activity_023htgs">\n        <dc:Bounds x="570" y="138" width="100" height="80" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Activity_0wemnzz_di" bpmnElement="Activity_0wemnzz">\n        <dc:Bounds x="730" y="138" width="100" height="80" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNShape id="Event_04ffjpj_di" bpmnElement="Event_04ffjpj">\n        <dc:Bounds x="892" y="160" width="36" height="36" />\n      </bpmndi:BPMNShape>\n      <bpmndi:BPMNEdge id="Flow_10bijim_di" bpmnElement="Flow_10bijim">\n        <di:waypoint x="196" y="178" />\n        <di:waypoint x="250" y="178" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id="Flow_1mkegyr_di" bpmnElement="Flow_1mkegyr">\n        <di:waypoint x="350" y="178" />\n        <di:waypoint x="410" y="178" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id="Flow_1avyfx2_di" bpmnElement="Flow_1avyfx2">\n        <di:waypoint x="510" y="178" />\n        <di:waypoint x="570" y="178" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id="Flow_04920vf_di" bpmnElement="Flow_04920vf">\n        <di:waypoint x="670" y="178" />\n        <di:waypoint x="730" y="178" />\n      </bpmndi:BPMNEdge>\n      <bpmndi:BPMNEdge id="Flow_1bblzfz_di" bpmnElement="Flow_1bblzfz">\n        <di:waypoint x="830" y="178" />\n        <di:waypoint x="892" y="178" />\n      </bpmndi:BPMNEdge>\n    </bpmndi:BPMNPlane>\n  </bpmndi:BPMNDiagram>\n</bpmn:definitions>\n',NULL,'ui_verify_flow','2026-09-30 02:06:19.000000','UI验证流程','ui_verify_flow:1:1f4f614e-f2a4-6e5f-3ee6-59d5fccd12a4','DEPLOYED','default','2026-09-30 02:06:19.000000','1');
+INSERT INTO `wf_process_draft` (`id`,`bpmn_xml`,`category_id`,`created_at`,`created_by`,`deploy_id`,`deployed_config_hash`,`deployed_xml`,`description`,`process_key`,`last_deployed_at`,`name`,`process_definition_id`,`status`,`tenant_id`,`updated_at`,`version`) VALUES ('4f10a0d7bf698bca3eeae99dd132d5a1','<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="64f4802b34e352e3da0d7aeb9fa71de2">
+  <bpmn:process id="leave" name="请假" isExecutable="true">
+    <bpmn:startEvent id="startEvent_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="leave">
+      <bpmndi:BPMNShape id="startEvent_1_di" bpmnElement="startEvent_1">
+        <dc:Rect x="160" y="160" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>','64f4802b34e352e3da0d7aeb9fa71de2','2026-09-27 21:54:59.000000',NULL,NULL,NULL,NULL,NULL,'leave',NULL,'请假',NULL,'DRAFT','default','2026-09-27 21:54:59.000000','0');
+INSERT INTO `wf_process_draft` (`id`,`bpmn_xml`,`category_id`,`created_at`,`created_by`,`deploy_id`,`deployed_config_hash`,`deployed_xml`,`description`,`process_key`,`last_deployed_at`,`name`,`process_definition_id`,`status`,`tenant_id`,`updated_at`,`version`) VALUES ('f50d6d7a012aea6df8710a35de24b267','<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:wf="http://workflow.com/schema/bpmn/wf" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://flowable.org/bpmn">
+  <bpmn:process id="ui_verify_flow" name="UI验证流程" isExecutable="true">
+    <bpmn:startEvent id="startEvent_1">
+      <bpmn:outgoing>Flow_10bijim</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Activity_0q13unc" name="发起节点" wf:nodeRole="initiator" flowable:assignee="${initiator}">
+      <bpmn:incoming>Flow_10bijim</bpmn:incoming>
+      <bpmn:outgoing>Flow_1mkegyr</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_10bijim" sourceRef="startEvent_1" targetRef="Activity_0q13unc" />
+    <bpmn:userTask id="Activity_0np59ha" wf:nodeRole="handler">
+      <bpmn:incoming>Flow_1mkegyr</bpmn:incoming>
+      <bpmn:outgoing>Flow_1avyfx2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_1mkegyr" sourceRef="Activity_0q13unc" targetRef="Activity_0np59ha" />
+    <bpmn:userTask id="Activity_023htgs" wf:nodeRole="handler">
+      <bpmn:incoming>Flow_1avyfx2</bpmn:incoming>
+      <bpmn:outgoing>Flow_04920vf</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_1avyfx2" sourceRef="Activity_0np59ha" targetRef="Activity_023htgs" />
+    <bpmn:userTask id="Activity_0wemnzz" wf:nodeRole="approver">
+      <bpmn:incoming>Flow_04920vf</bpmn:incoming>
+      <bpmn:outgoing>Flow_1bblzfz</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_04920vf" sourceRef="Activity_023htgs" targetRef="Activity_0wemnzz" />
+    <bpmn:endEvent id="Event_04ffjpj">
+      <bpmn:incoming>Flow_1bblzfz</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1bblzfz" sourceRef="Activity_0wemnzz" targetRef="Event_04ffjpj" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="ui_verify_flow">
+      <bpmndi:BPMNShape id="startEvent_1_di" bpmnElement="startEvent_1">
+        <dc:Bounds x="160" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0q13unc_di" bpmnElement="Activity_0q13unc">
+        <dc:Bounds x="250" y="138" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0np59ha_di" bpmnElement="Activity_0np59ha">
+        <dc:Bounds x="410" y="138" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_023htgs_di" bpmnElement="Activity_023htgs">
+        <dc:Bounds x="570" y="138" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0wemnzz_di" bpmnElement="Activity_0wemnzz">
+        <dc:Bounds x="730" y="138" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_04ffjpj_di" bpmnElement="Event_04ffjpj">
+        <dc:Bounds x="892" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_10bijim_di" bpmnElement="Flow_10bijim">
+        <di:waypoint x="196" y="178" />
+        <di:waypoint x="250" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1mkegyr_di" bpmnElement="Flow_1mkegyr">
+        <di:waypoint x="350" y="178" />
+        <di:waypoint x="410" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1avyfx2_di" bpmnElement="Flow_1avyfx2">
+        <di:waypoint x="510" y="178" />
+        <di:waypoint x="570" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04920vf_di" bpmnElement="Flow_04920vf">
+        <di:waypoint x="670" y="178" />
+        <di:waypoint x="730" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1bblzfz_di" bpmnElement="Flow_1bblzfz">
+        <di:waypoint x="830" y="178" />
+        <di:waypoint x="892" y="178" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
+',NULL,'2026-09-30 01:18:47.000000',NULL,'ebeedebc-a08a-a49e-b50b-d75ef7811064','041b3974db57dece93836aedb001faf160851101f5364cecf304c70fedb108fd','<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:wf="http://workflow.com/schema/bpmn/wf" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://flowable.org/bpmn">
+  <bpmn:process id="ui_verify_flow" name="UI验证流程" isExecutable="true">
+    <bpmn:startEvent id="startEvent_1">
+      <bpmn:outgoing>Flow_10bijim</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Activity_0q13unc" name="发起节点" wf:nodeRole="initiator" flowable:assignee="${initiator}">
+      <bpmn:incoming>Flow_10bijim</bpmn:incoming>
+      <bpmn:outgoing>Flow_1mkegyr</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_10bijim" sourceRef="startEvent_1" targetRef="Activity_0q13unc" />
+    <bpmn:userTask id="Activity_0np59ha" wf:nodeRole="handler">
+      <bpmn:incoming>Flow_1mkegyr</bpmn:incoming>
+      <bpmn:outgoing>Flow_1avyfx2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_1mkegyr" sourceRef="Activity_0q13unc" targetRef="Activity_0np59ha" />
+    <bpmn:userTask id="Activity_023htgs" wf:nodeRole="handler">
+      <bpmn:incoming>Flow_1avyfx2</bpmn:incoming>
+      <bpmn:outgoing>Flow_04920vf</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_1avyfx2" sourceRef="Activity_0np59ha" targetRef="Activity_023htgs" />
+    <bpmn:userTask id="Activity_0wemnzz" wf:nodeRole="approver">
+      <bpmn:incoming>Flow_04920vf</bpmn:incoming>
+      <bpmn:outgoing>Flow_1bblzfz</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_04920vf" sourceRef="Activity_023htgs" targetRef="Activity_0wemnzz" />
+    <bpmn:endEvent id="Event_04ffjpj">
+      <bpmn:incoming>Flow_1bblzfz</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1bblzfz" sourceRef="Activity_0wemnzz" targetRef="Event_04ffjpj" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="ui_verify_flow">
+      <bpmndi:BPMNShape id="startEvent_1_di" bpmnElement="startEvent_1">
+        <dc:Bounds x="160" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0q13unc_di" bpmnElement="Activity_0q13unc">
+        <dc:Bounds x="250" y="138" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0np59ha_di" bpmnElement="Activity_0np59ha">
+        <dc:Bounds x="410" y="138" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_023htgs_di" bpmnElement="Activity_023htgs">
+        <dc:Bounds x="570" y="138" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_0wemnzz_di" bpmnElement="Activity_0wemnzz">
+        <dc:Bounds x="730" y="138" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_04ffjpj_di" bpmnElement="Event_04ffjpj">
+        <dc:Bounds x="892" y="160" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_10bijim_di" bpmnElement="Flow_10bijim">
+        <di:waypoint x="196" y="178" />
+        <di:waypoint x="250" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1mkegyr_di" bpmnElement="Flow_1mkegyr">
+        <di:waypoint x="350" y="178" />
+        <di:waypoint x="410" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1avyfx2_di" bpmnElement="Flow_1avyfx2">
+        <di:waypoint x="510" y="178" />
+        <di:waypoint x="570" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04920vf_di" bpmnElement="Flow_04920vf">
+        <di:waypoint x="670" y="178" />
+        <di:waypoint x="730" y="178" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1bblzfz_di" bpmnElement="Flow_1bblzfz">
+        <di:waypoint x="830" y="178" />
+        <di:waypoint x="892" y="178" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
+',NULL,'ui_verify_flow','2026-09-30 02:06:19.000000','UI验证流程','ui_verify_flow:1:1f4f614e-f2a4-6e5f-3ee6-59d5fccd12a4','DEPLOYED','default','2026-09-30 02:06:19.000000','1');
 
 -- ===== table: wf_task_comment =====
 DROP TABLE IF EXISTS `wf_task_comment`;

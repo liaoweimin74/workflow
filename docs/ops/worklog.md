@@ -3046,3 +3046,23 @@ Stage Summary:
 - 内存结论：内核压缩不可达（无 CAP_SYS_ADMIN）。「扩展到 16G」交付形态=自激活脚本(cron 每轮重试，放权即生效)+应用层收紧(turbopack 512MB+watchdog 1.3GB 预防轮换)+僵尸进程治理；next-server 峰值预算 1.3GB→~1.1GB，4G 天花板触顶概率大幅下降
 - 灾后重建第九次全绿：3000(门户)/8080(Java Spring Boot+Flowable)/5173(Vite)/3306(MariaDB) 四服务恢复，workflow 库 75 表数据完整
 - 产物：setup-memory-compression.sh（内层+顶层）/portal-watchdog.sh Task 137 版/supervisor 绝对路径补丁/next.config.ts 512MB/cron 巡检 v2（15min 含自愈 SOP）
+
+---
+Task ID: 138-dashboard-schema-fix
+Agent: Z.ai Code (main session)
+Task: 用户报「主页仪表板 JSON 解析错（position 591）」——schema 双重转义损伤修复 + db-dump 链第四坑根除
+
+Work Log:
+- 取证：DB wf_page_def.schema（dashboard, 1938B）JSON-BROKEN 于 position 591，损坏模式=内嵌 filter JSON 的引号前多一层反斜杠（\\" 应为 \"）；repo 留档 dashboard-page.schema.json（2718B）合法且更新
+- 损坏溯源三方比对（DB vs dump vs repo）：dump 文件与 DB 一致（忠实备份）→ 损坏在备份（10-03）之前已入库，属历史写入侧遗留；dump 链当时未暴露
+- 修复：node 从 repo schema 紧凑化（JSON.stringify，1625 chars）+ SQL 转义生成 UPDATE → 生产库 md5=b6e08147...；三层验证（DB JSON-VALID 含 2×dash-kpi+2×dash-chart / Java API definition schema 合法 / agent-browser 登录 5173 进主页仪表盘 4 组件全渲染控制台零报错）
+- 体检 wf_form_def.schema（1 行 OK）与 msg content（非 JSON）：损伤仅限 wf_page_def 一行
+- 第四坑定罪：db-dump.sh 数据导出管道（line 59）缺 --raw → client 输出层把 QUOTE 产生的 \\ 再翻倍为 \\\\，导入后多一层转义。BPMN XML 无反斜杠故 Task 136 byte-exact 验证幸存，schema 内嵌 JSON 首次踩中。今天 DB 修好后 dump→restore 立即复现（position 529）才暴露
+- db-dump.sh 修复：数据管道补 --raw + 库名参数化（支持自洽校验）；新全量 dump workflow-dump-20261005-fixed.sql（120K/75 表）
+- 自洽校验闭环：dump→restore(workflow_verify)→schema md5 与生产一致+JSON-VALID→re-dump→diff 为空（75 表全量字节级无损）；旧坏 dump（20261003-0151/20261005-1559）删除
+- cron 自愈 SOP 同步更新：dump 路径换 workflow-dump-20261005-fixed.sql（旧 dump 恢复会复发本 bug）
+- 教训：①byte-exact 验证必须覆盖全部含反斜杠的长文本列，单验 BPMN 有盲区 ②「dump→restore→re-dump→diff 为空」是备份链自洽校验的黄金标准，Task 136 若有此步当天就会拦下 ③自研 dump 链四坑全录：GROUP_CONCAT 截断/反引号吞/逗号歧义/client 输出层再转义
+
+Stage Summary:
+- 主页仪表盘 JSON 报错根除（DB schema 已换 repo 合法版，4 组件渲染实证）；备份链第四坑根除并过自洽校验，新权威 dump=workflow-dump-20261005-fixed.sql
+- 产物：db-dump.sh v2（--raw+参数化）/workflow-dump-20261005-fixed.sql（已验证）/修复 SQL 链路留痕 /tmp（已清）

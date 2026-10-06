@@ -753,6 +753,34 @@ function registerPageComponents() {
     true,
   )
 
+  // 基础组件：计算公式（Task 144，组件已在 main.ts 全局注册）
+  designerRef.value?.addComponent({
+    label: '计算公式',
+    name: 'FormulaField',
+    icon: 'icon-statistic',
+    menu: 'main',
+    rule: () => ({
+      type: 'FormulaField',
+      field: 'formulaField' + Date.now(),
+      title: '计算公式',
+      props: { expression: '', precision: 2, prefix: '', suffix: '', placeholder: '—', disabled: false },
+    }),
+    props: () => [
+      {
+        type: 'input',
+        field: 'expression',
+        title: '计算表达式',
+        info: '用 ${字段名} 引用同表单字段，支持 + - * / % 与 MIN/MAX/SUM/AVG/ABS/ROUND/FLOOR/CEIL',
+        props: { type: 'textarea', rows: 2, placeholder: '${price} * ${count} * (1 - ${discount})' },
+      },
+      { type: 'inputNumber', field: 'precision', title: '小数位数', props: { min: 0, max: 10, precision: 0 } },
+      { type: 'input', field: 'prefix', title: '前缀' },
+      { type: 'input', field: 'suffix', title: '后缀' },
+      { type: 'input', field: 'placeholder', title: '占位提示' },
+      { type: 'switch', field: 'disabled', title: '禁用' },
+    ],
+  })
+
   // 系统组件分组（Task 143）：用户 / 部门选择器（组件已在 main.ts 全局注册，
   // 分组 'system' 由 vendor/config/menu.js 声明，此处仅挂载面板项）
   designerRef.value?.addComponent({

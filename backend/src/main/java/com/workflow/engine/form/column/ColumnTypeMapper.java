@@ -76,6 +76,16 @@ public final class ColumnTypeMapper {
                 // 系统部门选择（Task 143）：值为部门 id（数字），VARCHAR 序列化回显类型不匹配 → JSON 保真（对齐 elTreeSelect）
                 applyJson(c);
             }
+            case "FormulaField" -> {
+                // 计算公式（Task 144）：结果恒为数值 → DECIMAL(18, precision)，precision 缺省 2
+                int scale = 2;
+                if (props != null && props.get("precision") instanceof Number n && n.intValue() > 0) {
+                    scale = Math.min(10, n.intValue());
+                }
+                c.setColumnType("DECIMAL");
+                c.setLength(18);
+                c.setScale(scale);
+            }
             case "slider" -> applySlider(c, props);
             default -> {
                 return null;

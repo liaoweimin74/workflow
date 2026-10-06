@@ -17,6 +17,7 @@ import LookupPicker from '@/components/business/LookupPicker.vue'
 import DataPicker from '@/views/form/components/DataPicker.vue'
 import SystemUserPicker from '@/components/business/SystemUserPicker.vue'
 import SystemDeptPicker from '@/components/business/SystemDeptPicker.vue'
+import FormulaField from '@/components/business/FormulaField.vue'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import DashKpi from '@/views/dashboard/components/DashKpi.vue'
 import DashChart from '@/views/dashboard/components/DashChart.vue'
@@ -49,6 +50,8 @@ FcDesigner.component('dataPicker', DataPicker)
 // 系统组件（Task 143）：用户/部门选择器，设计器画布 + 运行时渲染双实例可见
 FcDesigner.component('SystemUserPicker', SystemUserPicker)
 FcDesigner.component('SystemDeptPicker', SystemDeptPicker)
+// 基础组件（Task 144）：计算公式（跨字段表达式求值），设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('FormulaField', FormulaField)
 // 数据表格：全局注册，使表单设计器（画布 + 运行时渲染）与页面设计器/渲染页都能使用
 FcDesigner.component('page-table', PageDataTable)
 // 仪表盘组件（Task 119）：设计器画布 + 运行时渲染双实例可见

@@ -152,7 +152,8 @@ import DataSourceConfigPanel from '@/components/business/DataSourceConfigPanel.v
 import type { DataSourceBinding } from '@/components/business/DataSourceConfigPanel.vue'
 import CardStyleConfigDialog from '@/views/page/components/CardStyleConfigDialog.vue'
 import type { CardStyle } from '@/components/business/ListCards.types'
-import { collectFieldsOfType, collectFieldKeys, collectFieldOptions, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, collectFieldOptions, collectFormulaRefFields, patchFieldProps, resolveActiveField, ensureRuleProps } from './formRuleWalk'
+import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 const route = useRoute()
@@ -262,6 +263,9 @@ const designerRule = computed<any[]>(() => {
     return []
   }
 })
+
+/** 计算公式可视化编辑器字段来源（Task 145）：实时收集同层可引用字段（懒调用，registry 已兜底） */
+setFormulaFieldProvider(() => collectFormulaRefFields(designerRef.value?.getRule() || []))
 
 onMounted(async () => {
   if (!formId.value) {
@@ -393,11 +397,10 @@ onMounted(async () => {
     }),
     props: () => [
       {
-        type: 'input',
+        type: 'FormulaExpressionEditor',
         field: 'expression',
         title: '计算表达式',
-        info: '用 ${字段名} 引用同表单字段，支持 + - * / % 与 MIN/MAX/SUM/AVG/ABS/ROUND/FLOOR/CEIL',
-        props: { type: 'textarea', rows: 2, placeholder: '${price} * ${count} * (1 - ${discount})' },
+        info: '用 ${字段名} 引用同表单字段，支持 + - * / % 与 MIN/MAX/SUM/AVG/ABS/ROUND/FLOOR/CEIL；点击「可视化配置」弹窗点选拼接',
       },
       { type: 'inputNumber', field: 'precision', title: '小数位数', props: { min: 0, max: 10, precision: 0 } },
       { type: 'input', field: 'prefix', title: '前缀' },

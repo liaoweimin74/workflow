@@ -63,8 +63,11 @@ const emit = defineEmits<{
 
 /** 表达式解析（props.expression 响应式，改动即重解析） */
 const parsed = computed<{ formula: ReturnType<typeof parseFormula> | null; error: string }>(() => {
+  // 空表达式 → 空态（中性提示），不算解析错误；新插入组件不应直接红字报警
+  const src = (props.expression || '').trim()
+  if (!src) return { formula: null, error: '' }
   try {
-    return { formula: parseFormula(props.expression || ''), error: '' }
+    return { formula: parseFormula(src), error: '' }
   } catch (e) {
     return { formula: null, error: e instanceof FormulaParseError ? e.message : String(e) }
   }

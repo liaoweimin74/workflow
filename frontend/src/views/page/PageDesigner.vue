@@ -207,7 +207,8 @@ import {
   dashConfigButton,
 } from '@/views/dashboard/register'
 import type { CardStyle } from '@/components/business/ListCards.types'
-import { collectFieldsOfType, collectFieldKeys, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
+import { collectFieldsOfType, collectFieldKeys, collectFormulaRefFields, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
+import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
@@ -336,6 +337,9 @@ const designerRule = computed<any[]>(() => {
     return []
   }
 })
+
+/** 计算公式可视化编辑器字段来源（Task 145）：实时收集同层可引用字段（懒调用，registry 已兜底） */
+setFormulaFieldProvider(() => collectFormulaRefFields(designerRef.value?.getRule() || []))
 
 /** 页面画布中的全部字段，供筛选条件选择表单字段 */
 const currentFieldKeys = computed<string[]>(() => collectFieldKeys(designerRule.value))
@@ -767,11 +771,10 @@ function registerPageComponents() {
     }),
     props: () => [
       {
-        type: 'input',
+        type: 'FormulaExpressionEditor',
         field: 'expression',
         title: '计算表达式',
-        info: '用 ${字段名} 引用同表单字段，支持 + - * / % 与 MIN/MAX/SUM/AVG/ABS/ROUND/FLOOR/CEIL',
-        props: { type: 'textarea', rows: 2, placeholder: '${price} * ${count} * (1 - ${discount})' },
+        info: '用 ${字段名} 引用同表单字段，支持 + - * / % 与 MIN/MAX/SUM/AVG/ABS/ROUND/FLOOR/CEIL；点击「可视化配置」弹窗点选拼接',
       },
       { type: 'inputNumber', field: 'precision', title: '小数位数', props: { min: 0, max: 10, precision: 0 } },
       { type: 'input', field: 'prefix', title: '前缀' },

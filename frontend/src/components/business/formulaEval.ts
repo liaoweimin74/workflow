@@ -196,6 +196,12 @@ function makeParser(tokens: Token[]) {
   return { parseExpr, done: () => pos === tokens.length, rest: () => tokens[pos] }
 }
 
+/** 报错用 token 文本化（ref 无 value 属性，需按类型收窄） */
+function tokenText(t: Token): string {
+  if (t.type === 'ref') return `\${${t.field}}`
+  return t.value
+}
+
 function collectDeps(node: Node, out: string[]): void {
   switch (node.kind) {
     case 'ref':
@@ -293,7 +299,7 @@ export function parseFormula(expr: string): Formula {
   if (tokens.length === 0) throw new FormulaParseError('表达式为空')
   const parser = makeParser(tokens)
   const ast = parser.parseExpr()
-  if (!parser.done()) throw new FormulaParseError(`存在多余内容「${parser.rest()!.value}」`)
+  if (!parser.done()) throw new FormulaParseError(`存在多余内容「${tokenText(parser.rest()!)}」`)
   const deps: string[] = []
   collectDeps(ast, deps)
   return {

@@ -865,7 +865,7 @@ export class SystemRepository {
       .execute()
   }
 
-  /** 软删除成员组，并物理清理成员/规则关联（关联表是纯从属数据）。 */
+  /** 软删除成员组，并物理清理成员关联（关联表是纯从属数据）。 */
   async deleteGroup(id: number): Promise<void> {
     await this.db.transaction().execute(async (trx) => {
       await trx
@@ -874,7 +874,6 @@ export class SystemRepository {
         .where('id', '=', id)
         .execute()
       await trx.deleteFrom('sys_member_group_member').where('group_id', '=', id).execute()
-      await trx.deleteFrom('sys_member_group_rule').where('group_id', '=', id).execute()
     })
   }
 
@@ -942,85 +941,6 @@ export class SystemRepository {
       .execute()
   }
 
-  /** 规则行集合。 */
-  async listGroupRules(groupId: number): Promise<GroupRuleRow[]> {
-    return this.db
-      .selectFrom('sys_member_group_rule')
-      .select(['id', 'group_id', 'rule_type', 'rule_value', 'created_at'])
-      .where('group_id', '=', groupId)
-      .where('is_deleted', '=', 0)
-      .orderBy('id', 'asc')
-      .execute() as Promise<GroupRuleRow[]>
-  }
-
-  async findGroupRule(groupId: number, ruleId: number): Promise<GroupRuleRow | null> {
-    const row = await this.db
-      .selectFrom('sys_member_group_rule')
-      .select(['id', 'group_id', 'rule_type', 'rule_value', 'created_at'])
-      .where('id', '=', ruleId)
-      .where('group_id', '=', groupId)
-      .where('is_deleted', '=', 0)
-      .executeTakeFirst()
-    return (row as GroupRuleRow | undefined) ?? null
-  }
-
-  /** 同组同维度同值查重（唯一键兜底前置检查）。 */
-  async groupRuleExists(groupId: number, ruleType: string, ruleValue: number): Promise<boolean> {
-    const row = await this.db
-      .selectFrom('sys_member_group_rule')
-      .select('id')
-      .where('group_id', '=', groupId)
-      .where('rule_type', '=', ruleType)
-      .where('rule_value', '=', ruleValue)
-      .where('is_deleted', '=', 0)
-      .executeTakeFirst()
-    return row !== undefined
-  }
-
-  async insertGroupRule(row: {
-    group_id: number
-    rule_type: string
-    rule_value: number
-  }): Promise<number> {
-    const result = await this.db
-      .insertInto('sys_member_group_rule')
-      .values({ ...row, is_deleted: 0, created_at: new Date(), updated_at: new Date() })
-      .executeTakeFirst()
-    return Number(result.insertId)
-  }
-
-  async deleteGroupRule(groupId: number, ruleId: number): Promise<void> {
-    await this.db
-      .deleteFrom('sys_member_group_rule')
-      .where('id', '=', ruleId)
-      .where('group_id', '=', groupId)
-      .execute()
-  }
-
-  /** 按岗位 id 集合匹配的在职用户 id（规则展开）。 */
-  async findUserIdsByPostIds(postIds: number[]): Promise<number[]> {
-    if (postIds.length === 0) return []
-    const rows = await this.db
-      .selectFrom('sys_user')
-      .select('id')
-      .where('is_deleted', '=', 0)
-      .where('post_id', 'in', postIds)
-      .execute()
-    return rows.map((r) => Number(r.id))
-  }
-
-  /** 按组织 id 集合匹配的在职用户 id（规则展开）。 */
-  async findUserIdsByOrgIds(orgIds: number[]): Promise<number[]> {
-    if (orgIds.length === 0) return []
-    const rows = await this.db
-      .selectFrom('sys_user')
-      .select('id')
-      .where('is_deleted', '=', 0)
-      .where('org_id', 'in', orgIds)
-      .execute()
-    return rows.map((r) => Number(r.id))
-  }
-
   /** userId → 展示名（nickname 优先、回落 username；组织负责人列/负责人回显用）。 */
   async findUserDisplayNames(userIds: number[]): Promise<Map<number, string>> {
     const ids = [...new Set(userIds.filter((id): id is number => id !== null))]
@@ -1050,14 +970,5 @@ export interface MemberGroupRow {
   id: number
   group_name: string
   description: string | null
-  created_at: Date | null
-}
-
-/** 成员组规则行（`sys_member_group_rule`）。 */
-export interface GroupRuleRow {
-  id: number
-  group_id: number
-  rule_type: string
-  rule_value: number
   created_at: Date | null
 }

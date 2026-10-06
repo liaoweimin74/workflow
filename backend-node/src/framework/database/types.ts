@@ -281,20 +281,6 @@ export interface SysMemberGroupMemberTable {
   updated_at: NullableTimestamp
 }
 
-/** 成员组自动匹配规则——按岗位/按组织维度（V43 创建）。 */
-export interface SysMemberGroupRuleTable {
-  /** 自增主键：写入时省略，由数据库生成。 */
-  id: Generated<number>
-  group_id: number
-  /** 规则维度：position=按岗位 org=按组织机构。 */
-  rule_type: string
-  /** 维度取值：post_id / org_id。 */
-  rule_value: number
-  is_deleted: number
-  created_at: NullableTimestamp
-  updated_at: NullableTimestamp
-}
-
 /** 流程定义草稿（V6 迁移创建；deployed_config_hash 由 V18 补；description 由 V42 补）。 */
 export interface WfProcessDraftTable {
   id: string
@@ -669,7 +655,6 @@ export interface DB {
   sys_post: SysPostTable
   sys_member_group: SysMemberGroupTable
   sys_member_group_member: SysMemberGroupMemberTable
-  sys_member_group_rule: SysMemberGroupRuleTable
 
   wf_process_draft: WfProcessDraftTable
   wf_node_config: WfNodeConfigTable

@@ -1,455 +1,393 @@
 <script setup lang="ts">
 defineOptions({ name: 'MemberGroupManagement' })
 
-import { ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { User, Plus } from '@element-plus/icons-vue'
-import { SearchTable } from '@/components/business'
-import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
-import DataPicker from '@/views/form/components/DataPicker.vue'
-import type { Rule } from '@form-create/element-ui'
-import {
-  getMemberGroupList,
-  createMemberGroup,
-  updateMemberGroup,
-  deleteMemberGroup,
-  getGroupMembers,
-  addGroupMembers,
-  removeGroupMembers,
-  getGroupRules,
-  addGroupRule,
-  removeGroupRule,
-} from '@/api/memberGroup'
-import type { MemberGroupVO, GroupMemberVO, GroupRuleVO } from '@/types/memberGroup'
-
 /**
- * 成员/规则录入统一走「数据引用」（DataPicker）组件（Task 95 重构）：
- *   - 组成员：系统用户内建数据源（ds-builtin-user-tree），弹窗表格多选；
- *   - 自动规则·按岗位：系统岗位内建数据源（ds-builtin-sys-posts，V45 预置，仅启用岗位）；
- *   - 自动规则·按组织机构：组织机构内建数据源（ds-builtin-dept-tree）。
- * DataPicker 的值是 JSON id 数组字符串，提交时解析为后端要求数字。
+ * 成员组管理：左「成员组导航（SideNavList）」+ 右「组成员表格（SearchTable）」。
+ *
+ * Task 142：去业务表单化重构——不再走 BizDataListPage（业务表单 member_group），
+ * 回归专用数据表（sys_member_group / sys_member_group_member）+ 专用接口
+ * /api/member-groups；界面参照字典管理页（Task 115/117 的左导航 + 右表格形态）。
+ * 自动规则机制已移除（Task 141 决策），成员均为手动添加。
  */
 
-/** 内建系统数据源固定 id（后端 system-source-catalog.ts 预置，见 V39/V45） */
-const DS_USER = 'ds-builtin-user-tree'
-const DS_POST = 'ds-builtin-sys-posts'
-const DS_DEPT = 'ds-builtin-dept-tree'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Switch as SwitchIcon, Edit, Delete, Plus, User } from '@element-plus/icons-vue'
+import { SearchTable, SideNavList } from '@/components/business'
+import type { SearchField, TableColumn, ActionButton, NavItem, NavItemAction } from '@/components/business/types'
+import {
+  getMemberGroupList, createMemberGroup, updateMemberGroup, deleteMemberGroup,
+  getGroupMembers, addGroupMembers, removeGroupMembers,
+} from '@/api/memberGroup'
+import { getUserList } from '@/api/user'
+import type { MemberGroupVO, GroupMemberVO } from '@/types/memberGroup'
+import type { UserVO } from '@/types/user'
+import { useAuthStore } from '@/stores/auth'
 
-const searchTableRef = ref()
+const authStore = useAuthStore()
 
-// ---------- 搜索字段 ----------
-const searchFields: SearchField[] = [
-  { type: 'input', label: '关键词', prop: 'keyword', placeholder: '成员组名称/说明' },
+// ================= 成员组（左栏数据源） =================
+const groups = ref<MemberGroupVO[]>([])
+const groupsLoading = ref(false)
+const selectedGroup = ref<MemberGroupVO | null>(null)
+const memberTableRef = ref()
+
+const canCreate = computed(() => authStore.hasPermission('system:member-group:create'))
+const canUpdate = computed(() => authStore.hasPermission('system:member-group:update'))
+const canDelete = computed(() => authStore.hasPermission('system:member-group:delete'))
+const canManageMember = computed(() => authStore.hasPermission('system:member-group:member'))
+
+/** DTO → NavItem 映射（与字典管理页同构） */
+const navItems = computed<NavItem[]>(() =>
+  groups.value.map((g) => ({
+    key: g.id,
+    title: g.groupName,
+    subtitle: g.description || '',
+    disabled: g.status !== 1,
+    disabledLabel: '停用',
+    raw: g,
+  })),
+)
+
+/** 行内操作：启停 / 编辑 / 删除 */
+const navActions = computed<NavItemAction[]>(() => [
+  {
+    label: '启用/停用',
+    icon: SwitchIcon,
+    disabled: () => !canUpdate.value,
+    onClick: (item) => toggleGroupStatus(item.raw as MemberGroupVO),
+  },
+  {
+    label: '编辑',
+    icon: Edit,
+    disabled: () => !canUpdate.value,
+    onClick: (item) => openGroupEdit(item.raw as MemberGroupVO),
+  },
+  {
+    label: '删除',
+    icon: Delete,
+    type: 'danger',
+    disabled: () => !canDelete.value,
+    onClick: (item) => removeGroup(item.raw as MemberGroupVO),
+  },
+])
+
+async function fetchGroups(): Promise<void> {
+  groupsLoading.value = true
+  try {
+    const res = await getMemberGroupList({ page: 1, size: 999 })
+    groups.value = res.data.rows ?? []
+    // 选中项被删/停用后仍按 id 回查保留，否则回落第一个
+    const keep = selectedGroup.value ? groups.value.find((g) => g.id === selectedGroup.value!.id) : null
+    selectedGroup.value = keep ?? groups.value[0] ?? null
+  } finally {
+    groupsLoading.value = false
+  }
+}
+
+function handleSelect(item: NavItem): void {
+  const row = item.raw as MemberGroupVO
+  if (selectedGroup.value?.id === row.id) return
+  selectedGroup.value = row
+}
+
+// ================= 成员组新建/编辑/删除/启停 =================
+const groupDialogVisible = ref(false)
+const groupEditing = ref<MemberGroupVO | null>(null) // null = 新建
+const groupForm = ref({ groupName: '', description: '' })
+const groupSubmitting = ref(false)
+const groupFormRef = ref()
+const groupRules = {
+  groupName: [
+    { required: true, message: '请输入成员组名称', trigger: 'blur' },
+    { max: 64, message: '名称不能超过 64 个字符', trigger: 'blur' },
+  ],
+  description: [{ max: 255, message: '说明不能超过 255 个字符', trigger: 'blur' }],
+}
+
+function openGroupCreate(): void {
+  groupEditing.value = null
+  groupForm.value = { groupName: '', description: '' }
+  groupDialogVisible.value = true
+  nextTick(() => groupFormRef.value?.clearValidate())
+}
+
+function openGroupEdit(row: MemberGroupVO): void {
+  groupEditing.value = row
+  groupForm.value = { groupName: row.groupName, description: row.description ?? '' }
+  groupDialogVisible.value = true
+  nextTick(() => groupFormRef.value?.clearValidate())
+}
+
+async function submitGroup(): Promise<void> {
+  await groupFormRef.value?.validate().catch(() => Promise.reject(new Error('invalid')))
+  groupSubmitting.value = true
+  try {
+    if (groupEditing.value) {
+      await updateMemberGroup(groupEditing.value.id, {
+        groupName: groupForm.value.groupName,
+        description: groupForm.value.description,
+      })
+      ElMessage.success('成员组已更新')
+    } else {
+      await createMemberGroup({
+        groupName: groupForm.value.groupName,
+        description: groupForm.value.description,
+      })
+      ElMessage.success('成员组已创建')
+    }
+    groupDialogVisible.value = false
+    await fetchGroups()
+  } finally {
+    groupSubmitting.value = false
+  }
+}
+
+async function removeGroup(row: MemberGroupVO): Promise<void> {
+  try {
+    await ElMessageBox.confirm(
+      `删除成员组「${row.groupName}」将连带移除其全部成员关系，且不可恢复。确定删除？`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  await deleteMemberGroup(row.id)
+  ElMessage.success('删除成功')
+  if (selectedGroup.value?.id === row.id) selectedGroup.value = null
+  await fetchGroups()
+}
+
+async function toggleGroupStatus(row: MemberGroupVO): Promise<void> {
+  await updateMemberGroup(row.id, { status: row.status === 1 ? 0 : 1 })
+  ElMessage.success(row.status === 1 ? '已停用' : '已启用')
+  await fetchGroups()
+}
+
+// ================= 组成员（右栏 SearchTable） =================
+const memberSearchFields: SearchField[] = [
+  { type: 'input', label: '关键词', prop: 'keyword', placeholder: '用户名 / 昵称' },
 ]
 
-// ---------- 表格列 ----------
-const columns: TableColumn[] = [
-  { prop: 'groupName', label: '成员组名称', width: 160 },
-  { prop: 'description', label: '说明', minWidth: 180 },
-  { label: '成员数', width: 90, align: 'center', formatter: (row: any) => String(row.memberCount) },
-  { label: '手动添加', width: 90, align: 'center', formatter: (row: any) => String(row.manualCount) },
-  { label: '自动规则', width: 90, align: 'center', formatter: (row: any) => String(row.ruleCount) },
-  { prop: 'createdAt', label: '创建时间', width: 170 },
+const memberColumns: TableColumn[] = [
+  { prop: 'username', label: '用户名', width: 130 },
+  { prop: 'nickname', label: '昵称', width: 130 },
+  { prop: 'orgName', label: '组织机构', minWidth: 130 },
+  { prop: 'postName', label: '岗位', width: 110 },
+  {
+    prop: 'joinedAt', label: '加入时间', width: 170,
+    // 后端 LocalDateTime 为 ISO 串（2026-10-06T06:46:49.208），本地转友好格式
+    formatter: (_r: any, _c: any, v: any) =>
+      typeof v === 'string' && v ? v.replace('T', ' ').slice(0, 19) : '',
+  },
 ]
 
-// ---------- fetchApi ----------
-async function fetchApi(params: any) {
-  const res = await getMemberGroupList(params)
+const memberFetchApi = async (p: any) => {
+  if (!selectedGroup.value) return { rows: [], total: 0 }
+  const res = await getGroupMembers(selectedGroup.value.id, {
+    page: p.page || 1,
+    size: p.size || 10,
+    keyword: p.keyword?.trim() ? p.keyword.trim() : undefined,
+  })
   return { rows: res.data.rows, total: res.data.total }
 }
 
-// ---------- 表单配置 ----------
-const formConfig: FormConfig<MemberGroupVO> = {
-  rule: [
-    { type: 'input', field: 'groupName', title: '成员组名称', validate: [{ required: true, message: '请输入成员组名称', trigger: 'blur' }] } as Rule,
-    { type: 'input', field: 'description', title: '成员组说明', props: { type: 'textarea', maxlength: 255, rows: 2, placeholder: '请输入成员组说明' } } as Rule,
-  ],
-  createApi: createMemberGroup,
-  updateApi: (id, data) => updateMemberGroup(id as number, data),
-  deleteApi: async (id) => { await deleteMemberGroup(id as number) },
-  getApi: async (id) => {
-    const res = await getMemberGroupList({ page: 1, size: 999 })
-    return res.data.rows.find((r: MemberGroupVO) => r.id === (id as number)) as MemberGroupVO
+/** 行内操作：移除成员 */
+const memberActionButtons: ActionButton[] = [
+  {
+    label: '移除',
+    type: 'danger',
+    size: 'small',
+    link: true,
+    permission: 'system:member-group:member',
+    onClick: (row: any) => removeMember(row as GroupMemberVO),
   },
-  dialogTitle: { create: '新增成员组', edit: '编辑成员组' },
-  createPermission: 'system:member-group:create',
-  editPermission: 'system:member-group:update',
-  deletePermission: 'system:member-group:delete',
-}
+]
 
-// ============================================================
-// 成员管理抽屉（成员 + 自动规则）
-// ============================================================
-
-const drawerVisible = ref(false)
-const currentGroup = ref<MemberGroupVO | null>(null)
-const activeTab = ref<'members' | 'rules'>('members')
-
-// ---------- 成员列表 ----------
-const memberList = ref<GroupMemberVO[]>([])
-const memberTotal = ref(0)
-const memberPage = ref(1)
-const memberSize = ref(10)
-const memberKeyword = ref('')
-const memberLoading = ref(false)
-
-/** 待添加成员（DataPicker 多选，值为 JSON id 数组字符串） */
-const pickedUserIdsJson = ref('')
-const addMemberLoading = ref(false)
-
-/** 解析 DataPicker 的 JSON id 数组字符串 → 数字 id 列表 */
-function parsePickedIds(json: string): number[] {
-  if (!json) return []
+async function removeMember(row: GroupMemberVO): Promise<void> {
+  if (!selectedGroup.value) return
   try {
-    const parsed = JSON.parse(json)
-    if (!Array.isArray(parsed)) return []
-    return parsed.map((v) => Number(v)).filter((v) => Number.isFinite(v))
+    await ElMessageBox.confirm(
+      `确定将成员「${row.nickname || row.username}」移出成员组吗？`,
+      '确认移除',
+      { type: 'warning' },
+    )
   } catch {
-    return []
+    return
   }
+  await removeGroupMembers(selectedGroup.value.id, [row.userId])
+  ElMessage.success('已移除')
+  await memberTableRef.value?.fetchList?.()
+  await fetchGroups()
 }
 
-async function loadMembers() {
-  if (currentGroup.value === null) return
-  memberLoading.value = true
+// 选中组变化 → 刷新右表（用 id 做依赖，避免同对象替换触发重复请求）
+watch(() => selectedGroup.value?.id, () => {
+  memberTableRef.value?.fetchList?.()
+})
+
+// ================= 添加成员弹窗（远程用户多选，value=用户 id） =================
+const addMemberVisible = ref(false)
+const addMemberSubmitting = ref(false)
+/** 选中用户 id 列表（el-select value=用户 id 数字） */
+const pickedUserIds = ref<number[]>([])
+const userOptions = ref<UserVO[]>([])
+const userSearching = ref(false)
+
+async function searchUsers(query: string): Promise<void> {
+  userSearching.value = true
   try {
-    const res = await getGroupMembers(currentGroup.value.id, {
-      page: memberPage.value,
-      size: memberSize.value,
-      keyword: memberKeyword.value.trim() !== '' ? memberKeyword.value.trim() : undefined,
-    })
-    memberList.value = res.data.rows
-    memberTotal.value = res.data.total
+    const res = await getUserList({ username: query, page: 1, size: 20 })
+    userOptions.value = res.data.rows ?? []
+  } catch {
+    userOptions.value = []
   } finally {
-    memberLoading.value = false
+    userSearching.value = false
   }
 }
 
-async function handleAddMembers() {
-  if (currentGroup.value === null) return
-  const userIds = parsePickedIds(pickedUserIdsJson.value)
-  if (userIds.length === 0) {
+function openAddMember(): void {
+  pickedUserIds.value = []
+  addMemberVisible.value = true
+  void searchUsers('')
+}
+
+async function submitAddMembers(): Promise<void> {
+  if (!selectedGroup.value) return
+  if (pickedUserIds.value.length === 0) {
     ElMessage.warning('请先选择要添加的成员')
     return
   }
-  addMemberLoading.value = true
+  addMemberSubmitting.value = true
   try {
-    await addGroupMembers(currentGroup.value.id, userIds)
-    ElMessage.success(`已添加 ${userIds.length} 名成员`)
-    pickedUserIdsJson.value = ''
-    memberPage.value = 1
-    await loadMembers()
-    searchTableRef.value?.fetchList()
+    await addGroupMembers(selectedGroup.value.id, pickedUserIds.value)
+    ElMessage.success(`已添加 ${pickedUserIds.value.length} 名成员`)
+    addMemberVisible.value = false
+    await memberTableRef.value?.fetchList?.()
+    await fetchGroups()
   } finally {
-    addMemberLoading.value = false
+    addMemberSubmitting.value = false
   }
 }
 
-async function handleRemoveMember(row: GroupMemberVO) {
-  if (currentGroup.value === null) return
-  try {
-    await ElMessageBox.confirm(`确定将成员「${row.nickname || row.username}」移出成员组吗？`, '确认移除', { type: 'warning' })
-    await removeGroupMembers(currentGroup.value.id, [row.userId])
-    ElMessage.success('已移除')
-    await loadMembers()
-    searchTableRef.value?.fetchList()
-  } catch { /* cancelled */ }
-}
-
-function handleMemberSearch() {
-  memberPage.value = 1
-  void loadMembers()
-}
-
-// ---------- 自动规则 ----------
-const rules = ref<GroupRuleVO[]>([])
-const rulesLoading = ref(false)
-const ruleType = ref<'position' | 'org'>('position')
-/** 规则匹配对象（DataPicker 单选，值为 JSON id 数组字符串，取第一个） */
-const ruleValueJson = ref('')
-
-async function loadRules() {
-  if (currentGroup.value === null) return
-  rulesLoading.value = true
-  try {
-    const res = await getGroupRules(currentGroup.value.id)
-    rules.value = res.data
-  } finally {
-    rulesLoading.value = false
-  }
-}
-
-function handleRuleTypeChange() {
-  ruleValueJson.value = ''
-}
-
-async function handleAddRule() {
-  if (currentGroup.value === null) return
-  const picked = parsePickedIds(ruleValueJson.value)
-  if (picked.length === 0) {
-    ElMessage.warning(ruleType.value === 'position' ? '请选择岗位' : '请选择组织机构')
-    return
-  }
-  await addGroupRule(currentGroup.value.id, ruleType.value, picked[0])
-  ElMessage.success('规则已添加，符合条件的成员已自动归属')
-  ruleValueJson.value = ''
-  await loadRules()
-  searchTableRef.value?.fetchList()
-}
-
-async function handleRemoveRule(row: GroupRuleVO) {
-  if (currentGroup.value === null) return
-  try {
-    await ElMessageBox.confirm(
-      `确定删除规则「${row.ruleTypeName}：${row.ruleValueLabel}」吗？删除后规则匹配的成员将自动移出成员组。`,
-      '确认删除规则',
-      { type: 'warning' },
-    )
-    await removeGroupRule(currentGroup.value.id, row.id)
-    ElMessage.success('规则已删除')
-    await loadRules()
-    searchTableRef.value?.fetchList()
-  } catch { /* cancelled */ }
-}
-
-// ---------- 打开抽屉 ----------
-async function handleManageMembers(row: MemberGroupVO) {
-  currentGroup.value = row
-  activeTab.value = 'members'
-  memberPage.value = 1
-  memberKeyword.value = ''
-  pickedUserIdsJson.value = ''
-  ruleValueJson.value = ''
-  drawerVisible.value = true
-  await Promise.all([loadMembers(), loadRules()])
-}
-
-// ---------- 操作按钮 ----------
-const actionButtons: ActionButton[] = [
-  { label: '成员管理', icon: User, size: 'small', link: true, onClick: handleManageMembers },
-]
+onMounted(fetchGroups)
 </script>
 
 <template>
-  <SearchTable
-    ref="searchTableRef"
-    :search-fields="searchFields"
-    :columns="columns"
-    :action-buttons="actionButtons"
-    :fetch-api="fetchApi"
-    :form-config="formConfig"
-  />
+  <!-- 与字典管理同构：窄屏上下堆叠（flex-col），lg 起左右分栏 -->
+  <div class="flex flex-col lg:flex-row gap-3 h-full min-h-0">
+    <!-- ── 左栏：成员组导航 ── -->
+    <SideNavList
+      title="成员组"
+      :items="navItems"
+      :selected-key="selectedGroup?.id ?? null"
+      :loading="groupsLoading"
+      :actions="navActions"
+      :creatable="true"
+      create-label="新增成员组"
+      :create-disabled="!canCreate"
+      filter-placeholder="搜索名称 / 说明"
+      filter-aria-label="搜索成员组"
+      :empty-text="groups.length === 0 ? '暂无成员组' : '无匹配成员组'"
+      empty-hint="点击右上角 + 新建"
+      @select="handleSelect"
+      @create="openGroupCreate"
+    />
 
-  <el-drawer
-    v-model="drawerVisible"
-    :title="`成员组管理 — ${currentGroup?.groupName ?? ''}`"
-    size="760px"
-    :destroy-on-close="false"
-  >
-    <el-tabs v-model="activeTab">
-      <!-- 成员 Tab -->
-      <el-tab-pane label="组成员" name="members">
-        <div class="member-add-bar">
-          <DataPicker
-            v-model="pickedUserIdsJson"
-            :global-data-source-id="DS_USER"
-            display-field="nickname"
-            :columns="['username', 'nickname', 'orgName']"
-            :search-columns="['username', 'nickname']"
-            placeholder="点击选择要添加的成员（可多选）"
-            class="member-picker"
-          />
+    <!-- ── 右栏：组成员表格 ── -->
+    <el-card v-if="selectedGroup" class="flex-1 min-w-0" shadow="never">
+      <template #header>
+        <div class="flex items-center gap-2 flex-wrap">
+          <el-icon class="align-middle text-gray-500"><User /></el-icon>
+          <span class="text-sm font-bold">组成员</span>
+          <span class="text-sm text-gray-500">— {{ selectedGroup.groupName }}</span>
+          <el-tag size="small" effect="plain" type="info">{{ selectedGroup.memberCount }} 人</el-tag>
+          <div class="flex-1" />
           <el-button
             v-permission="'system:member-group:member'"
             type="primary"
+            size="small"
             :icon="Plus"
-            :loading="addMemberLoading"
-            @click="handleAddMembers"
+            @click="openAddMember"
           >
             添加成员
           </el-button>
         </div>
+      </template>
+      <SearchTable
+        ref="memberTableRef"
+        :search-fields="memberSearchFields"
+        :columns="memberColumns"
+        :action-buttons="memberActionButtons"
+        table-size="small"
+        :fetch-api="memberFetchApi"
+      />
+    </el-card>
 
-        <div class="member-search-bar">
+    <!-- 未选中占位（理论上进入即自动选中第一个，防御性保留） -->
+    <div v-else class="flex-1 flex items-center justify-center text-gray-400 text-sm">
+      {{ groups.length === 0 ? '请先创建成员组' : '请选择左侧成员组' }}
+    </div>
+
+    <!-- ── 成员组新建/编辑弹窗（名称 + 说明） ── -->
+    <el-dialog
+      v-model="groupDialogVisible"
+      :title="groupEditing ? '编辑成员组' : '新增成员组'"
+      width="440px"
+      :close-on-click-modal="false"
+    >
+      <el-form ref="groupFormRef" :model="groupForm" :rules="groupRules" label-width="82px">
+        <el-form-item label="组名称" prop="groupName">
+          <el-input v-model="groupForm.groupName" placeholder="如：项目管理组" maxlength="64" />
+        </el-form-item>
+        <el-form-item label="说明" prop="description">
           <el-input
-            v-model="memberKeyword"
-            placeholder="按用户名/昵称过滤"
-            clearable
-            style="width: 220px"
-            @keyup.enter="handleMemberSearch"
-            @clear="handleMemberSearch"
+            v-model="groupForm.description" type="textarea" :rows="2" maxlength="255"
+            placeholder="选填，用于说明该组的用途"
           />
-          <el-button @click="handleMemberSearch">查询</el-button>
-        </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="groupDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="groupSubmitting" @click="submitGroup">确定</el-button>
+      </template>
+    </el-dialog>
 
-        <el-table v-loading="memberLoading" :data="memberList" size="small" class="member-table">
-          <el-table-column prop="username" label="用户名" width="120" />
-          <el-table-column prop="nickname" label="昵称" width="120" />
-          <el-table-column prop="orgName" label="组织机构" min-width="120" />
-          <el-table-column prop="postName" label="岗位" width="110" />
-          <el-table-column label="来源" width="100" align="center">
-            <template #default="{ row }">
-              <el-tag v-if="row.source === 'manual'" size="small">直接添加</el-tag>
-              <el-tag v-else-if="row.source === 'position'" size="small" type="warning">岗位规则</el-tag>
-              <el-tag v-else size="small" type="success">组织规则</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="joinedAt" label="加入时间" width="160" />
-          <el-table-column label="操作" width="90" align="center">
-            <template #default="{ row }">
-              <el-button
-                v-if="row.source === 'manual'"
-                v-permission="'system:member-group:member'"
-                link
-                type="danger"
-                size="small"
-                @click="handleRemoveMember(row)"
-              >
-                移除
-              </el-button>
-              <span v-else class="rule-member-hint">随规则</span>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div class="member-pagination">
-          <el-pagination
-            v-model:current-page="memberPage"
-            v-model:page-size="memberSize"
-            :total="memberTotal"
-            :page-sizes="[10, 20, 50]"
-            layout="total, sizes, prev, pager, next"
-            small
-            background
-            @current-change="loadMembers"
-            @size-change="handleMemberSearch"
-          />
-        </div>
-      </el-tab-pane>
-
-      <!-- 规则 Tab -->
-      <el-tab-pane label="自动规则" name="rules">
-        <div class="rule-hint">
-          按维度配置关联规则，符合条件的成员将自动归属到成员组内（按岗位、按组织机构）。
-        </div>
-
-        <div class="rule-add-bar">
-          <el-select v-model="ruleType" style="width: 140px" @change="handleRuleTypeChange">
-            <el-option label="按岗位" value="position" />
-            <el-option label="按组织机构" value="org" />
-          </el-select>
-          <DataPicker
-            v-if="ruleType === 'position'"
-            v-model="ruleValueJson"
-            :global-data-source-id="DS_POST"
-            display-field="postName"
-            :columns="['postName', 'postCode', 'description']"
-            :search-columns="['postName', 'postCode']"
-            :max-count="1"
-            placeholder="点击选择岗位"
-            class="rule-picker"
-          />
-          <DataPicker
-            v-else
-            v-model="ruleValueJson"
-            :global-data-source-id="DS_DEPT"
-            display-field="label"
-            :columns="['label', 'code']"
-            :search-columns="['label', 'code']"
-            :max-count="1"
-            placeholder="点击选择组织机构"
-            class="rule-picker"
-          />
-          <el-button v-permission="'system:member-group:rule'" type="primary" :icon="Plus" @click="handleAddRule">
-            添加规则
-          </el-button>
-        </div>
-
-        <el-table v-loading="rulesLoading" :data="rules" size="small" class="rule-table">
-          <el-table-column prop="ruleTypeName" label="规则维度" width="110" align="center" />
-          <el-table-column prop="ruleValueLabel" label="匹配对象" min-width="180" />
-          <el-table-column prop="createdAt" label="创建时间" width="160" />
-          <el-table-column label="操作" width="90" align="center">
-            <template #default="{ row }">
-              <el-button
-                v-permission="'system:member-group:rule'"
-                link
-                type="danger"
-                size="small"
-                @click="handleRemoveRule(row)"
-              >
-                删除
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-tab-pane>
-    </el-tabs>
-  </el-drawer>
+    <!-- ── 添加成员弹窗（远程搜索多选；value=用户 id） ── -->
+    <el-dialog
+      v-model="addMemberVisible"
+      :title="`添加成员 — ${selectedGroup?.groupName ?? ''}`"
+      width="460px"
+      :close-on-click-modal="false"
+    >
+      <el-select
+        v-model="pickedUserIds"
+        multiple
+        filterable
+        remote
+        reserve-keyword
+        clearable
+        :remote-method="searchUsers"
+        :loading="userSearching"
+        placeholder="搜索用户名添加成员（可多选）"
+        style="width: 100%"
+      >
+        <el-option
+          v-for="u in userOptions"
+          :key="u.id"
+          :label="`${u.nickname} (${u.username})`"
+          :value="u.id"
+          :disabled="u.status !== 1"
+        />
+      </el-select>
+      <div class="text-xs text-gray-400 leading-4 mt-2">
+        已在组内的成员将被自动跳过；曾移出的成员会重新加入。
+      </div>
+      <template #footer>
+        <el-button @click="addMemberVisible = false">取消</el-button>
+        <el-button type="primary" :loading="addMemberSubmitting" @click="submitAddMembers">确定添加</el-button>
+      </template>
+    </el-dialog>
+  </div>
 </template>
-
-<style scoped>
-.member-add-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.member-picker {
-  flex: 1;
-  min-width: 0;
-}
-
-.member-picker :deep(.el-input) {
-  width: 100%;
-}
-
-.member-search-bar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.member-table {
-  width: 100%;
-}
-
-.rule-member-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary, #8b91ab);
-}
-
-.member-pagination {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
-
-.rule-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary, #8b91ab);
-  line-height: 1.5;
-  margin-bottom: 10px;
-}
-
-.rule-add-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.rule-picker {
-  flex: 1;
-  min-width: 0;
-}
-
-.rule-picker :deep(.el-input) {
-  width: 100%;
-}
-
-.rule-table {
-  width: 100%;
-}
-</style>

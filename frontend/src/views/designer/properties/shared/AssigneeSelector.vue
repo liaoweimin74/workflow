@@ -326,7 +326,7 @@ function setParam(key: string, value: unknown) {
 const formDefId = computed(() => designerStore.getNodeConfig(designerStore.selectedNodeId!)?.form?.formDefId || '')
 
 /** 表单 schema 中「用户类型」控件的 type 集合（用户选择控件 + 常见命名兼容） */
-const USER_FIELD_TYPES = new Set(['selectUser', 'userPicker', 'user', 'memberSelect'])
+const USER_FIELD_TYPES = new Set(['selectUser', 'userPicker', 'user', 'memberSelect', 'SystemUserPicker'])
 
 /** 拉取本节点表单字段并过滤用户类型字段 */
 async function loadFormUserFields(formId: string) {

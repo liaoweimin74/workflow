@@ -64,6 +64,18 @@ public final class ColumnTypeMapper {
             case "fcEditor" -> applyText(c);
             case "signaturePad" -> applyText(c);
             case "subForm" -> applyJson(c);
+            case "SystemUserPicker" -> {
+                // 系统用户选择（Task 143）：单选存 username → VARCHAR(255)；多选存数组 → JSON
+                if (props != null && Boolean.TRUE.equals(props.get("multiple"))) {
+                    applyJson(c);
+                } else {
+                    applyString(c, 255);
+                }
+            }
+            case "SystemDeptPicker" -> {
+                // 系统部门选择（Task 143）：值为部门 id（数字），VARCHAR 序列化回显类型不匹配 → JSON 保真（对齐 elTreeSelect）
+                applyJson(c);
+            }
             case "slider" -> applySlider(c, props);
             default -> {
                 return null;

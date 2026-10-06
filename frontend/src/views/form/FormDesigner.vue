@@ -379,6 +379,53 @@ onMounted(async () => {
     }),
   })
 
+  // 系统组件分组（Task 143）：用户 / 部门选择器（组件已在 main.ts 全局注册）
+  designerRef.value?.addComponent({
+    label: '用户',
+    name: 'SystemUserPicker',
+    icon: 'icon-avatar',
+    menu: 'system',
+    rule: () => ({
+      type: 'SystemUserPicker',
+      field: 'sysUser' + Date.now(),
+      title: '用户',
+      props: { multiple: false, disabled: false, clearable: true, placeholder: '请选择用户' },
+    }),
+    props: () => [
+      { type: 'switch', field: 'multiple', title: '多选' },
+      { type: 'switch', field: 'disabled', title: '禁用' },
+      { type: 'input', field: 'placeholder', title: '占位提示' },
+    ],
+    watch: {
+      multiple({ rule }: { rule: any }) {
+        rule.key = 'k' + Date.now()
+      },
+    },
+  })
+
+  designerRef.value?.addComponent({
+    label: '部门',
+    name: 'SystemDeptPicker',
+    icon: 'icon-branch',
+    menu: 'system',
+    rule: () => ({
+      type: 'SystemDeptPicker',
+      field: 'sysDept' + Date.now(),
+      title: '部门',
+      props: { multiple: false, disabled: false, clearable: true, placeholder: '请选择部门' },
+    }),
+    props: () => [
+      { type: 'switch', field: 'multiple', title: '多选' },
+      { type: 'switch', field: 'disabled', title: '禁用' },
+      { type: 'input', field: 'placeholder', title: '占位提示' },
+    ],
+    watch: {
+      multiple({ rule }: { rule: any }) {
+        rule.key = 'k' + Date.now()
+      },
+    },
+  })
+
   loading.value = true
   try {
     const res = await formApi.getFormDefinition(formId.value)

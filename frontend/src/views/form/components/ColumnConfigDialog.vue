@@ -290,6 +290,15 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
       }
       return { columnType: 'INT', length: null, scale: null }
     }
+    case 'SystemUserPicker': {
+      // 系统用户（Task 143）：单选存 username → VARCHAR(255)；多选存数组 → JSON
+      return propsMap?.multiple
+        ? { columnType: 'JSON', length: null, scale: null }
+        : { columnType: 'VARCHAR', length: 255, scale: null }
+    }
+    case 'SystemDeptPicker':
+      // 系统部门（Task 143）：值为部门 id（数字），VARCHAR 序列化回显类型不匹配 → JSON 保真（对齐 elTreeSelect）
+      return { columnType: 'JSON', length: null, scale: null }
     default:
       return null
   }

@@ -15,6 +15,8 @@ import FcDesigner from '@form-create/designer'
 import '@/vendor/style/index.css'
 import LookupPicker from '@/components/business/LookupPicker.vue'
 import DataPicker from '@/views/form/components/DataPicker.vue'
+import SystemUserPicker from '@/components/business/SystemUserPicker.vue'
+import SystemDeptPicker from '@/components/business/SystemDeptPicker.vue'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import DashKpi from '@/views/dashboard/components/DashKpi.vue'
 import DashChart from '@/views/dashboard/components/DashChart.vue'
@@ -44,6 +46,9 @@ patchMessageBoxDraggable()
 // 只用 formCreate.component 会导致设计器画布（designerForm 实例）找不到组件而只渲染 label。
 FcDesigner.component('LookupPicker', LookupPicker)
 FcDesigner.component('dataPicker', DataPicker)
+// 系统组件（Task 143）：用户/部门选择器，设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('SystemUserPicker', SystemUserPicker)
+FcDesigner.component('SystemDeptPicker', SystemDeptPicker)
 // 数据表格：全局注册，使表单设计器（画布 + 运行时渲染）与页面设计器/渲染页都能使用
 FcDesigner.component('page-table', PageDataTable)
 // 仪表盘组件（Task 119）：设计器画布 + 运行时渲染双实例可见

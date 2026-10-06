@@ -177,6 +177,99 @@ class ColumnTypeMapperTest {
         assertThat(c.getColumnType()).isEqualTo("TINYINT");
     }
 
+    // ----- 系统附件（Task 146）：单/多由文件数量 limit 决定（七点反馈改造） -----
+
+    @Test
+    void mapAttachmentSingleLimit1_returnsBigint() {
+        // limit==1 → 单文件，值为附件 id 数值 → BIGINT
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment", Map.of("limit", 1));
+        assertThat(c.getColumnType()).isEqualTo("BIGINT");
+        assertThat(c.getLength()).isNull();
+    }
+
+    @Test
+    void mapAttachmentMultiLimit_returnsJson() {
+        // limit>1 → 多文件，值为 id 数组 → JSON
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment", Map.of("limit", 5));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapAttachmentUnlimitedLimit0_returnsJson() {
+        // limit==0（多文件不限量）→ JSON
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment", Map.of("limit", 0));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapAttachmentMissingLimit_returnsJson() {
+        // limit 缺失按多文件兜底（对齐组件 isMulti 的 Number(limit)!==1 与前端 Number(limit)===1 判定）
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment", Map.of("maxSizeMB", 10));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapAttachmentNullProps_returnsJson() {
+        // props 为空 → 多文件 JSON 兜底
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment", null);
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapAttachmentLegacyMultipleTrue_returnsJson() {
+        // 遗留 schema：multiple=true 仍兜底按多文件（即使 limit==1，防旧数据列型漂移）
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment",
+                Map.of("multiple", true, "limit", 1));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapAttachmentLimitAsString1_returnsBigint() {
+        // limit 以字符串形态落盘时容错解析，仍正确判定单文件
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment", Map.of("limit", "1"));
+        assertThat(c.getColumnType()).isEqualTo("BIGINT");
+    }
+
+    // ----- 系统图片（Task 147）：值语义与附件一致（limit 判定共用） -----
+
+    @Test
+    void mapImageSingleLimit1_returnsBigint() {
+        // limit==1 → 单图，值为图片 id 数值 → BIGINT
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemImage", Map.of("limit", 1));
+        assertThat(c.getColumnType()).isEqualTo("BIGINT");
+        assertThat(c.getLength()).isNull();
+    }
+
+    @Test
+    void mapImageMultiLimit_returnsJson() {
+        // limit>1 → 多图，值为 id 数组 → JSON
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemImage", Map.of("limit", 9));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapImageUnlimitedLimit0_returnsJson() {
+        // limit==0（多图不限量）→ JSON
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemImage", Map.of("limit", 0));
+        assertThat(c.getColumnType()).isEqualTo("JSON");
+    }
+
+    @Test
+    void mapImageMissingLimitAndNullProps_returnsJson() {
+        // limit 缺失 / props 为空 → 多图 JSON 兜底（对齐组件 isMulti 判定）
+        assertThat(ColumnTypeMapper.mapComponentToColumn("SystemImage", Map.of("maxSizeMB", 10)).getColumnType())
+                .isEqualTo("JSON");
+        assertThat(ColumnTypeMapper.mapComponentToColumn("SystemImage", null).getColumnType())
+                .isEqualTo("JSON");
+    }
+
+    @Test
+    void mapImageLimitAsString1_returnsBigint() {
+        // limit 字符串形态容错解析
+        ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemImage", Map.of("limit", "1"));
+        assertThat(c.getColumnType()).isEqualTo("BIGINT");
+    }
+
     @Test
     void mapUpload_returnsJson() {
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("Upload", Map.of());

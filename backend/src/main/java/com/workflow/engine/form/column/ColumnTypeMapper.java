@@ -76,6 +76,20 @@ public final class ColumnTypeMapper {
                 // 系统部门选择（Task 143）：值为部门 id（数字），VARCHAR 序列化回显类型不匹配 → JSON 保真（对齐 elTreeSelect）
                 applyJson(c);
             }
+            case "SystemAttachment", "SystemImage" -> {
+                // 系统附件/图片（Task 146/147）：值为附件 id，单文件 → BIGINT；多文件存 id 数组 → JSON
+                // 单/多由文件数量 limit 决定（146 七点反馈改造，设计器已移除多文件开关）：
+                // limit==1 → 单文件；>1 / 0 不限 / 缺失 → 多文件。对齐组件 isMulti（Number(limit)!==1）
+                // 与前端 ColumnConfigDialog 的 Number(limit)===1 判定；遗留 schema 的 multiple=true
+                // 仍兜底按多文件（新设计器不再产出该键，仅兼容旧数据）
+                boolean legacyMulti = props != null && Boolean.TRUE.equals(props.get("multiple"));
+                Integer limitValue = parseLimit(props);
+                if (!legacyMulti && limitValue != null && limitValue == 1) {
+                    c.setColumnType("BIGINT");
+                } else {
+                    applyJson(c);
+                }
+            }
             case "FormulaField" -> {
                 // 计算公式（Task 144）：结果恒为数值 → DECIMAL(18, precision)，precision 缺省 2
                 int scale = 2;
@@ -97,6 +111,27 @@ public final class ColumnTypeMapper {
     private static void applyString(ColumnConfig c, Integer length) {
         c.setColumnType("VARCHAR");
         c.setLength(length);
+    }
+
+    /**
+     * 解析 props.limit 为整数（兼容 Number 与字符串形态）；缺失/非法返回 null（按多文件处理）。
+     * SystemAttachment / SystemImage 共用。
+     */
+    private static Integer parseLimit(Map<String, Object> props) {
+        if (props == null) {
+            return null;
+        }
+        if (props.get("limit") instanceof Number n) {
+            return n.intValue();
+        }
+        if (props.get("limit") instanceof String s && !s.isBlank()) {
+            try {
+                return Integer.parseInt(s.trim());
+            } catch (NumberFormatException ignored) {
+                // 非法字符串按缺失处理 → 多文件
+            }
+        }
+        return null;
     }
 
     private static void applyText(ColumnConfig c) {

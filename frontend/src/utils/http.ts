@@ -54,6 +54,10 @@ http.interceptors.request.use(
 
 http.interceptors.response.use(
   (response: AxiosResponse) => {
+    // 二进制响应（blob/arraybuffer）无 R 包装，原样放行（Task 146：附件预览/下载）
+    if (response.config.responseType === 'blob' || response.config.responseType === 'arraybuffer') {
+      return response.data
+    }
     const data = response.data
     if (data.code !== 200) {
       if (!response.config.headers?.['X-Skip-Error-Toast']) {
@@ -63,7 +67,7 @@ http.interceptors.response.use(
     }
     return data
   },
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
@@ -71,7 +75,15 @@ http.interceptors.response.use(
       window.location.href = import.meta.env.BASE_URL + 'login'
     } else if (!error.config?.headers?.['X-Skip-Error-Toast']) {
       // 优先取后端 R 包装返回的业务错误消息
-      const bizMsg = error.response?.data?.msg
+      let bizMsg = error.response?.data?.msg
+      // blob 错误响应：error.response.data 是 Blob，尝试解出 R 包装的 msg（Task 146）
+      if (!bizMsg && error.response?.data instanceof Blob && error.response.data.size > 0) {
+        try {
+          bizMsg = JSON.parse(await error.response.data.text())?.msg
+        } catch {
+          bizMsg = undefined
+        }
+      }
       ElMessage.error(bizMsg || error.message || '网络错误')
     }
     return Promise.reject(error)

@@ -17,6 +17,8 @@ import LookupPicker from '@/components/business/LookupPicker.vue'
 import DataPicker from '@/views/form/components/DataPicker.vue'
 import SystemUserPicker from '@/components/business/SystemUserPicker.vue'
 import SystemDeptPicker from '@/components/business/SystemDeptPicker.vue'
+import SystemAttachment from '@/components/business/SystemAttachment.vue'
+import SystemImage from '@/components/business/SystemImage.vue'
 import FormulaField from '@/components/business/FormulaField.vue'
 import FormulaExpressionEditor from '@/components/business/FormulaExpressionEditor.vue'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
@@ -51,6 +53,10 @@ FcDesigner.component('dataPicker', DataPicker)
 // 系统组件（Task 143）：用户/部门选择器，设计器画布 + 运行时渲染双实例可见
 FcDesigner.component('SystemUserPicker', SystemUserPicker)
 FcDesigner.component('SystemDeptPicker', SystemDeptPicker)
+// 系统组件（Task 146）：附件（多文件上传/大小限制/预览/下载），设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('SystemAttachment', SystemAttachment)
+// 系统组件（Task 147）：图片（尺寸/大小/数量限制、多选、缩略图、预览/下载），设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('SystemImage', SystemImage)
 // 基础组件（Task 144）：计算公式（跨字段表达式求值），设计器画布 + 运行时渲染双实例可见
 FcDesigner.component('FormulaField', FormulaField)
 // Task 145：表达式可视化编辑器（属性面板自定义 prop 组件，仅面板用；全局注册使面板 form-create 实例可解析）

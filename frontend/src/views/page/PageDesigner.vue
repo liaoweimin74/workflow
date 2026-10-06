@@ -208,6 +208,7 @@ import {
 } from '@/views/dashboard/register'
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { collectFieldsOfType, collectFieldKeys, collectFormulaRefFields, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
+import { attachmentHintText, imageHintText } from '@/components/business/componentHints'
 import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
 import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
 
@@ -829,6 +830,131 @@ function registerPageComponents() {
       multiple({ rule }: { rule: any }) {
         rule.key = 'k' + Date.now()
       },
+    },
+  })
+
+  // Task 148 反馈 2：说明性文字同步到规则 info（form-create 在 label 后以 ？ 图标悬浮显示，
+  // 画布与运行时通用；属性面板变更时重算，文案事实源见 componentHints.ts）
+  const syncAttachmentInfo = ({ rule }: { rule: any }) => {
+    rule.info = attachmentHintText(rule.props || {})
+  }
+  const syncImageInfo = ({ rule }: { rule: any }) => {
+    rule.info = imageHintText(rule.props || {})
+  }
+
+  designerRef.value?.addComponent({
+    label: '附件',
+    name: 'SystemAttachment',
+    icon: 'icon-upload',
+    menu: 'system',
+    rule: () => ({
+      type: 'SystemAttachment',
+      field: 'sysAttachment' + Date.now(),
+      title: '附件',
+      // 说明性文字走 label 后 ？ 图标悬浮（Task 148 反馈 2），由 info 派生并随属性变更同步
+      info: attachmentHintText({ limit: 5, multiSelect: true, maxSizeMB: 10, accept: [] }),
+      props: {
+        limit: 5,
+        multiSelect: true,
+        draggable: false,
+        previewable: true,
+        showFileName: true,
+        maxSizeMB: 10,
+        accept: [] as string[],
+        disabled: false,
+        placeholder: '暂无附件',
+      },
+    }),
+    props: () => [
+      { type: 'inputNumber', field: 'limit', title: '文件数量', props: { min: 0, max: 50, precision: 0 }, info: '1 = 单文件（值为单个附件 id）；≥2 = 多文件且为数量上限；0 = 多文件不限' },
+      { type: 'switch', field: 'multiSelect', title: '一次多选上传', info: '文件选择框允许一次选中多个文件（仅多文件模式生效）' },
+      { type: 'switch', field: 'draggable', title: '拖拽上传' },
+      { type: 'switch', field: 'previewable', title: '支持预览' },
+      { type: 'switch', field: 'showFileName', title: '显示文件名' },
+      { type: 'inputNumber', field: 'maxSizeMB', title: '单文件上限(MB)', props: { min: 1, max: 100, precision: 0 }, info: '服务端全局上限 100MB' },
+      {
+        type: 'select',
+        field: 'accept',
+        title: '类型限制',
+        props: { multiple: true, filterable: true, allowCreate: true, defaultFirstOption: true, clearable: true, placeholder: '下拉多选或输入后回车，留空不限' },
+        options: [
+          { value: 'image/*', label: '图片 image/*' },
+          { value: '.pdf', label: 'PDF .pdf' },
+          { value: '.doc,.docx', label: 'Word .doc/.docx' },
+          { value: '.xls,.xlsx', label: 'Excel .xls/.xlsx' },
+          { value: '.ppt,.pptx', label: 'PPT .ppt/.pptx' },
+          { value: '.txt,.md,.csv', label: '文本 .txt/.md/.csv' },
+          { value: '.zip,.rar,.7z', label: '压缩包 .zip/.rar/.7z' },
+          { value: 'video/*', label: '视频 video/*' },
+          { value: 'audio/*', label: '音频 audio/*' },
+        ],
+        info: '预设类型下拉多选，也可手动输入 accept 语法（输入后回车创建）',
+      },
+      { type: 'switch', field: 'disabled', title: '禁用' },
+      { type: 'input', field: 'placeholder', title: '空态提示' },
+    ],
+    watch: {
+      limit({ rule }: { rule: any }) {
+        rule.key = 'k' + Date.now() // 单/多文件值语义切换时重建画布节点
+        rule.info = attachmentHintText(rule.props || {})
+      },
+      multiSelect: syncAttachmentInfo,
+      maxSizeMB: syncAttachmentInfo,
+      accept: syncAttachmentInfo,
+    },
+  })
+
+  // 系统组件分组（Task 147）：图片上传（组件已在 main.ts 全局注册）
+  designerRef.value?.addComponent({
+    label: '图片',
+    name: 'SystemImage',
+    icon: 'icon-image',
+    menu: 'system',
+    rule: () => ({
+      type: 'SystemImage',
+      field: 'sysImage' + Date.now(),
+      title: '图片',
+      info: imageHintText({ limit: 5, multiSelect: true, maxSizeMB: 10, minWidth: 0, maxWidth: 0, minHeight: 0, maxHeight: 0 }),
+      props: {
+        limit: 5,
+        multiSelect: true,
+        maxSizeMB: 10,
+        minWidth: 0,
+        maxWidth: 0,
+        minHeight: 0,
+        maxHeight: 0,
+        thumbnailSize: 110,
+        previewable: true,
+        downloadable: true,
+        disabled: false,
+        placeholder: '暂无图片',
+      },
+    }),
+    props: () => [
+      { type: 'inputNumber', field: 'limit', title: '图片数量', props: { min: 0, max: 50, precision: 0 }, info: '1 = 单图（值为单个图片 id）；≥2 = 多图且为数量上限；0 = 多图不限' },
+      { type: 'switch', field: 'multiSelect', title: '一次多选上传', info: '文件选择框允许一次选中多个图片（仅多图模式生效）' },
+      { type: 'inputNumber', field: 'maxSizeMB', title: '单图上限(MB)', props: { min: 1, max: 100, precision: 0 }, info: '服务端全局上限 100MB' },
+      { type: 'inputNumber', field: 'minWidth', title: '最小宽度(px)', props: { min: 0, max: 20000, precision: 0 }, info: '0 = 不限' },
+      { type: 'inputNumber', field: 'maxWidth', title: '最大宽度(px)', props: { min: 0, max: 20000, precision: 0 }, info: '0 = 不限' },
+      { type: 'inputNumber', field: 'minHeight', title: '最小高度(px)', props: { min: 0, max: 20000, precision: 0 }, info: '0 = 不限' },
+      { type: 'inputNumber', field: 'maxHeight', title: '最大高度(px)', props: { min: 0, max: 20000, precision: 0 }, info: '0 = 不限' },
+      { type: 'inputNumber', field: 'thumbnailSize', title: '缩略图边长(px)', props: { min: 64, max: 640, precision: 0 }, info: '缩略图卡片边长（64~640），服务端按最大边等比生成' },
+      { type: 'switch', field: 'previewable', title: '支持预览' },
+      { type: 'switch', field: 'downloadable', title: '支持下载' },
+      { type: 'switch', field: 'disabled', title: '禁用' },
+      { type: 'input', field: 'placeholder', title: '空态提示' },
+    ],
+    watch: {
+      limit({ rule }: { rule: any }) {
+        rule.key = 'k' + Date.now() // 单/多图值语义切换时重建画布节点
+        rule.info = imageHintText(rule.props || {})
+      },
+      multiSelect: syncImageInfo,
+      maxSizeMB: syncImageInfo,
+      minWidth: syncImageInfo,
+      maxWidth: syncImageInfo,
+      minHeight: syncImageInfo,
+      maxHeight: syncImageInfo,
     },
   })
 

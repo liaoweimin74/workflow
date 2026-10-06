@@ -47,3 +47,13 @@ workflow:
     max-tokens: 4096
     connect-timeout-ms: 5000
     read-timeout-ms: 120000
+# 附件上传（Task 146：系统组件·附件）
+spring.servlet.multipart:
+  enabled: true
+  max-file-size: 100MB
+  max-request-size: 200MB
+  file-size-threshold: 1MB
+
+workflow.attachment:
+  storage-path: ${ATTACHMENT_STORAGE_PATH:./data/attachments}
+  max-size-mb: 100

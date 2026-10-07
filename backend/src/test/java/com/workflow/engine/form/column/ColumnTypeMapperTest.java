@@ -177,13 +177,13 @@ class ColumnTypeMapperTest {
         assertThat(c.getColumnType()).isEqualTo("TINYINT");
     }
 
-    // ----- 系统附件（Task 146）：单/多由文件数量 limit 决定（七点反馈改造） -----
+    // ----- 系统附件（Task 146；2026-10-07 统一 JSON）：单/多文件均存附件 id → JSON -----
 
     @Test
-    void mapAttachmentSingleLimit1_returnsBigint() {
-        // limit==1 → 单文件，值为附件 id 数值 → BIGINT
+    void mapAttachmentSingleLimit1_returnsJson() {
+        // limit==1 → 单文件，值为附件 id 标量 → JSON（统一 JSON 后列型不再随 limit 切换）
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment", Map.of("limit", 1));
-        assertThat(c.getColumnType()).isEqualTo("BIGINT");
+        assertThat(c.getColumnType()).isEqualTo("JSON");
         assertThat(c.getLength()).isNull();
     }
 
@@ -217,26 +217,26 @@ class ColumnTypeMapperTest {
 
     @Test
     void mapAttachmentLegacyMultipleTrue_returnsJson() {
-        // 遗留 schema：multiple=true 仍兜底按多文件（即使 limit==1，防旧数据列型漂移）
+        // 遗留 schema：multiple=true 与统一 JSON 后行为一致，均按 JSON
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment",
                 Map.of("multiple", true, "limit", 1));
         assertThat(c.getColumnType()).isEqualTo("JSON");
     }
 
     @Test
-    void mapAttachmentLimitAsString1_returnsBigint() {
-        // limit 以字符串形态落盘时容错解析，仍正确判定单文件
+    void mapAttachmentLimitAsString1_returnsJson() {
+        // limit 以字符串形态落盘时容错解析；统一 JSON 后任何形态均 JSON
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemAttachment", Map.of("limit", "1"));
-        assertThat(c.getColumnType()).isEqualTo("BIGINT");
+        assertThat(c.getColumnType()).isEqualTo("JSON");
     }
 
-    // ----- 系统图片（Task 147）：值语义与附件一致（limit 判定共用） -----
+    // ----- 系统图片（Task 147）：值语义与附件一致（统一 JSON） -----
 
     @Test
-    void mapImageSingleLimit1_returnsBigint() {
-        // limit==1 → 单图，值为图片 id 数值 → BIGINT
+    void mapImageSingleLimit1_returnsJson() {
+        // limit==1 → 单图，值为图片 id 标量 → JSON（统一 JSON）
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemImage", Map.of("limit", 1));
-        assertThat(c.getColumnType()).isEqualTo("BIGINT");
+        assertThat(c.getColumnType()).isEqualTo("JSON");
         assertThat(c.getLength()).isNull();
     }
 
@@ -264,10 +264,10 @@ class ColumnTypeMapperTest {
     }
 
     @Test
-    void mapImageLimitAsString1_returnsBigint() {
-        // limit 字符串形态容错解析
+    void mapImageLimitAsString1_returnsJson() {
+        // limit 字符串形态容错解析；统一 JSON 后任何形态均 JSON
         ColumnConfig c = ColumnTypeMapper.mapComponentToColumn("SystemImage", Map.of("limit", "1"));
-        assertThat(c.getColumnType()).isEqualTo("BIGINT");
+        assertThat(c.getColumnType()).isEqualTo("JSON");
     }
 
     @Test
@@ -322,6 +322,10 @@ class ColumnTypeMapperTest {
         assertThat(ColumnTypeMapper.isCrossTypeChange("VARCHAR", "VARCHAR")).isFalse();
         assertThat(ColumnTypeMapper.isCrossTypeChange("INT", "DECIMAL")).isTrue();
         assertThat(ColumnTypeMapper.isCrossTypeChange("DATE", "DATETIME")).isFalse();
+        // 统一 JSON 改造（2026-10-07）：存量单文件/单图 BIGINT 列放行迁往 JSON，反向仍拦截
+        assertThat(ColumnTypeMapper.isCrossTypeChange("BIGINT", "JSON")).isFalse();
+        assertThat(ColumnTypeMapper.isCrossTypeChange("JSON", "BIGINT")).isTrue();
+        assertThat(ColumnTypeMapper.isCrossTypeChange("BIGINT", "INT")).isTrue();
     }
 
     @Test

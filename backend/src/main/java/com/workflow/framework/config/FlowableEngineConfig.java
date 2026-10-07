@@ -57,19 +57,37 @@ public class FlowableEngineConfig {
     @Bean
     public HttpLogicExecutor httpLogicExecutor(RestClient.Builder restClientBuilder,
                                                VariableResolver variableResolver,
-                                               ObjectMapper objectMapper) {
-        return new HttpLogicExecutor(restClientBuilder, variableResolver, objectMapper);
+                                               ObjectMapper objectMapper,
+                                               @org.springframework.beans.factory.annotation.Value(
+                                                       "${workflow.logic.http.allowed-hosts:}") java.util.List<String> allowedHosts) {
+        // SSRF 防护：白名单支持精确主机与 *.example.com 后缀通配；空列表 = 放行全部 + 首次 WARN 一次
+        //（默认空，兼容存量；生产建议 workflow.logic.http.allowed-hosts: api.example.com,*.example.com）
+        return new HttpLogicExecutor(restClientBuilder, variableResolver, objectMapper, allowedHosts);
     }
 
     @Bean
-    public GroovyScriptLogic groovyScriptLogic() {
-        return new GroovyScriptLogic();
+    public GroovyScriptLogic groovyScriptLogic(
+            @org.springframework.beans.factory.annotation.Value(
+                    "${workflow.logic.script.timeout-ms:5000}") long scriptTimeoutMillis) {
+        return new GroovyScriptLogic(scriptTimeoutMillis);
     }
 
     @Bean
     public ProcessConfigResolver processConfigResolver(NodeConfigRepository nodeConfigRepository,
                                                        ObjectMapper objectMapper) {
         return new ProcessConfigResolver(nodeConfigRepository, objectMapper);
+    }
+
+    /** 逻辑编排引擎：复用三型执行器（HTTP/Bean/Groovy 沙箱）+ 条件求值，独立于 BPMN 流程运行。 */
+    @Bean
+    public com.workflow.engine.logicflow.engine.LogicFlowEngine logicFlowEngine(
+            HttpLogicExecutor httpExecutor,
+            GroovyScriptLogic groovyScriptLogic,
+            BackendBeanRegistry backendBeanRegistry,
+            VariableResolver variableResolver,
+            ObjectMapper objectMapper) {
+        return new com.workflow.engine.logicflow.engine.LogicFlowEngine(
+                httpExecutor, groovyScriptLogic, backendBeanRegistry, variableResolver, objectMapper);
     }
 
     @Bean

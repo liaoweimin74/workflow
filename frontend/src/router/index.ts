@@ -28,6 +28,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '页面设计器', fullScreen: true }
   },
   {
+    // 逻辑流设计器：全屏顶层路由（与 /designer 平级），从列表页 /logic-flow 进入
+    path: '/logic-flow/design/:id',
+    name: 'LogicFlowDesigner',
+    component: () => import('@/views/logicflow/LogicFlowDesigner.vue'),
+    meta: { title: '逻辑流设计器', fullScreen: true }
+  },
+  {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/dashboard',
@@ -170,6 +177,13 @@ const routes: RouteRecordRaw[] = [
         name: 'DataSourceData',
         component: () => import('@/views/dataSource/DataSourceDataPage.vue'),
         meta: { title: '数据源数据管理' }
+      },
+      {
+        // 逻辑编排：列表页（设计器走顶层全屏路由 /logic-flow/design/:id）
+        path: 'logic-flow',
+        name: 'LogicFlowList',
+        component: () => import('@/views/logicflow/LogicFlowListPage.vue'),
+        meta: { title: '逻辑编排' }
       },
       {
         path: '404',

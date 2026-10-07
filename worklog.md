@@ -2229,3 +2229,16 @@ Work Log:
 
 Stage Summary:
 - 135-patrol 全绿免修复；vite 常驻三连稳，D+ 稳态无波动
+---
+Task ID: 136-patrol
+Agent: main (cron 439400 轻量巡检 07:42 轮)
+Task: D+ 架构巡检
+
+Work Log:
+- 探活：A3000=200 / C-HOST=200 / D-8080=200 全绿；B-BFF=404 已备案预期
+- vite（PID 9754）连续第四轮存活（ELAPSED 17:13，RSS 274MB）；单 vite、无 postcss
+- cgroup 1.67GB 基本持平（1671368704）；oom_kill=0，无事故
+- 无修复动作；未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 136-patrol 全绿免修复；vite 常驻四连稳，无波动

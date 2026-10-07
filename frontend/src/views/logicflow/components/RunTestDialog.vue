@@ -8,19 +8,35 @@
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
     @open="onOpen"
   >
-    <!-- 输入变量 -->
+      <!-- 输入变量 -->
     <div class="run-section">
       <div class="section-head">
         <span class="section-title">输入变量</span>
         <el-button size="small" text type="primary" @click="addVar">添加变量</el-button>
       </div>
+      <div v-if="declaredVars.length" class="declare-hint">
+        本流已声明 {{ declaredVars.length }} 个入参（<el-link type="primary" :underline="false" @click="showSuggested = !showSuggested">查看扫描建议</el-link>）
+      </div>
+      <div v-if="declaredVars.length && showSuggested && suggestedKeys.length" class="declare-hint suggest">
+        扫描到未声明引用：{{ suggestedKeys.join('、') }}（可手动添加）
+      </div>
       <div v-if="!varRows.length" class="rows-empty">无输入变量，可直接运行</div>
       <div v-for="(row, i) in varRows" :key="i" class="var-row">
-        <el-input v-model="row.key" placeholder="变量名" />
-        <el-input v-model="row.value" placeholder="值（数字/对象等按 JSON 解析，其余按字符串）" />
-        <el-button size="small" text type="danger" @click="removeVar(i)">
-          <el-icon><Delete /></el-icon>
-        </el-button>
+        <template v-if="row.declared">
+          <div class="declared-key" :title="row.desc || row.key">
+            <span v-if="row.required" class="required-mark">*</span>
+            <span class="mono">{{ row.key }}</span>
+            <el-tag size="small" type="info" effect="plain" class="type-tag">{{ row.type }}</el-tag>
+          </div>
+          <el-input v-model="row.value" :placeholder="row.desc || '值（按 JSON 解析，其余按字符串）'" />
+        </template>
+        <template v-else>
+          <el-input v-model="row.key" placeholder="变量名" />
+          <el-input v-model="row.value" placeholder="值（数字/对象等按 JSON 解析，其余按字符串）" />
+          <el-button size="small" text type="danger" @click="removeVar(i)">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </template>
       </div>
       <div class="section-foot">
         <el-button type="primary" :loading="running" @click="handleRun">
@@ -119,6 +135,8 @@ import { ElMessage } from 'element-plus'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { RunResult } from '@/api/logicFlow'
 import { nodeTypeLabel } from '../utils/nodeMeta'
+import { parseDsl, collectReferencedVars } from '../utils/dsl'
+import type { InputVarDef } from '../utils/dsl'
 
 const props = defineProps<{
   modelValue: boolean
@@ -126,21 +144,56 @@ const props = defineProps<{
   flowName?: string
 }>()
 
-const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: boolean]; /** 运行成功后回传节点轨迹（设计器画布状态徽标用） */ traces: [traces: RunResult['traces']] }>()
 
 interface VarRow {
   key: string
   value: string
+  /** 声明行（来自 inputVars）：key 固定不可改 */
+  declared?: boolean
+  required?: boolean
+  type?: string
+  desc?: string
 }
 
 const varRows = ref<VarRow[]>([])
 const running = ref(false)
 const result = ref<RunResult | null>(null)
+const declaredVars = ref<InputVarDef[]>([])
+const suggestedKeys = ref<string[]>([])
+const showSuggested = ref(false)
 
-function onOpen() {
+async function onOpen() {
   // 每次打开重置上次的运行结果与输入
   result.value = null
-  if (!varRows.value.length) varRows.value = [{ key: '', value: '' }]
+  showSuggested.value = false
+  // 拉取详情解析 DSL：入参声明 + 引用扫描
+  declaredVars.value = []
+  suggestedKeys.value = []
+  try {
+    const detail = await logicFlowApi.get(props.flowId)
+    const graph = parseDsl(detail.data.dsl || '')
+    declaredVars.value = graph.inputVars || []
+    suggestedKeys.value = collectReferencedVars(graph).filter(
+      (k) => !declaredVars.value.some((v) => v.name === k)
+    )
+  } catch {
+    // 详情拉取失败（后端异常等）降级为自由输入
+  }
+  if (declaredVars.value.length) {
+    varRows.value = declaredVars.value.map((v) => ({
+      key: v.name,
+      value: '',
+      declared: true,
+      required: !!v.required,
+      type: v.type,
+      desc: v.desc,
+    }))
+  } else if (suggestedKeys.value.length) {
+    varRows.value = suggestedKeys.value.map((k) => ({ key: k, value: '' }))
+  } else if (!varRows.value.length) {
+    varRows.value = [{ key: '', value: '' }]
+  }
 }
 
 function addVar() {
@@ -168,11 +221,19 @@ async function handleRun() {
     const key = row.key.trim()
     if (key) vars[key] = parseValue(row.value)
   }
+  // 声明的必填项校验
+  const missing = varRows.value.filter((r) => r.required && !String(r.value ?? '').trim())
+  if (missing.length) {
+    ElMessage.warning(`必填入参未填：${missing.map((r) => r.key).join('、')}`)
+    return
+  }
   running.value = true
   result.value = null
   try {
     const res = await logicFlowApi.run(props.flowId, { vars })
     result.value = res.data
+    // 回传轨迹给设计器：画布节点渲染运行状态徽标
+    emit('traces', res.data.traces ?? [])
   } catch {
     // http 拦截器已弹出错误；结果区保持空
     ElMessage.warning('运行失败，请检查节点配置与后端服务')
@@ -249,6 +310,35 @@ function traceLabel(status: string): string {
   border: 1px dashed var(--el-border-color-lighter);
   border-radius: 8px;
   margin-bottom: 8px;
+}
+
+/* 入参声明提示与声明行 */
+.declare-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  background: color-mix(in srgb, var(--el-color-primary) 6%, transparent);
+  border-radius: 6px;
+  padding: 5px 10px;
+  margin-bottom: 8px;
+}
+.declare-hint.suggest {
+  background: color-mix(in srgb, var(--el-color-warning) 10%, transparent);
+}
+.declared-key {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 110px;
+  max-width: 200px;
+  overflow: hidden;
+}
+.required-mark {
+  color: var(--el-color-danger);
+  font-weight: 700;
+}
+.type-tag {
+  flex-shrink: 0;
+  text-transform: lowercase;
 }
 
 .section-foot {

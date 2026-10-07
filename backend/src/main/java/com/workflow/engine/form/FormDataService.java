@@ -9,6 +9,7 @@ import com.workflow.engine.form.repository.FormDefinitionRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.entity.NodeConfig;
 import com.workflow.engine.process.repository.NodeConfigRepository;
+import com.workflow.engine.logicflow.service.FormLogicBindingService;
 import com.workflow.engine.tenant.TenantProvider;
 import com.workflow.framework.security.domain.LoginUser;
 import org.flowable.engine.RepositoryService;
@@ -43,6 +44,8 @@ public class FormDataService {
     private final NodeConfigRepository nodeConfigRepository;
     private final InitiatorNodeResolver initiatorNodeResolver;
     private final ObjectMapper objectMapper;
+    /** 表单 × 逻辑编排绑定调度（AFTER_SNAPSHOT 触发点） */
+    private final FormLogicBindingService logicBindings;
 
     public FormDataService(FormDataRepository formDataRepository,
                            FormDefinitionRepository formDefRepository,
@@ -50,7 +53,8 @@ public class FormDataService {
                            RepositoryService repositoryService,
                            NodeConfigRepository nodeConfigRepository,
                            InitiatorNodeResolver initiatorNodeResolver,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper,
+                           FormLogicBindingService logicBindings) {
         this.formDataRepository = formDataRepository;
         this.formDefRepository = formDefRepository;
         this.tenantProvider = tenantProvider;
@@ -58,6 +62,7 @@ public class FormDataService {
         this.nodeConfigRepository = nodeConfigRepository;
         this.initiatorNodeResolver = initiatorNodeResolver;
         this.objectMapper = objectMapper;
+        this.logicBindings = logicBindings;
     }
 
     /**
@@ -105,7 +110,8 @@ public class FormDataService {
     }
 
     /**
-     * 保存任务审批时的表单快照（每次创建新记录，不可变）。
+     * 保存任务审批时的表单快照（每次创建新记录，不可变）；
+     * 落库后触发 AFTER_SNAPSHOT 绑定的逻辑编排（失败语义同 AFTER_*：SYNC_IN_TX 回滚 / AFTER_COMMIT 留痕）。
      *
      * @param formDefId          表单定义 ID
      * @param processInstanceId  流程实例 ID
@@ -130,7 +136,29 @@ public class FormDataService {
         snapshot.setDataJson(dataJson);
         snapshot.setIsSnapshot(true);
 
-        return formDataRepository.save(snapshot);
+        FormData saved = formDataRepository.save(snapshot);
+
+        // 快照后置编排：formData = dataJson 解析结果（解析失败不阻断快照，formData 传 null）
+        Map<String, Object> formDataMap = parseFormDataQuietly(dataJson);
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
+                FormLogicBindingService.TRIG_AFTER_SNAPSHOT,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
+                        FormLogicBindingService.TRIG_AFTER_SNAPSHOT, "SNAPSHOT", saved.getId(),
+                        formDataMap, null));
+        return saved;
+    }
+
+    /** dataJson → Map（宽松解析：失败返回 null，避免快照保存被脏数据阻断）。 */
+    private Map<String, Object> parseFormDataQuietly(String dataJson) {
+        if (dataJson == null || dataJson.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(dataJson,
+                    objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class));
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

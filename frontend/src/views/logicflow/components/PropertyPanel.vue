@@ -42,7 +42,10 @@
 
           <!-- ===== HTTP ===== -->
           <template v-if="node.data.nodeType === 'HTTP'">
-            <el-form-item label="请求 URL" required>
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="请求 URL" tip="目标接口地址，支持 {{ 变量 }} 占位符注入上下文变量" />
+              </template>
               <el-input v-model="httpCfg.url" placeholder="https://host/api/path" clearable />
             </el-form-item>
             <el-form-item label="请求方法">
@@ -53,7 +56,7 @@
 
             <div class="rows-block">
               <div class="rows-head">
-                <span>请求头 Headers</span>
+                <FieldLabel label="请求头 Headers" tip="自定义 HTTP 请求头键值对，随请求发送" />
                 <el-button size="small" text type="primary" @click="addHeader">添加</el-button>
               </div>
               <div v-if="!headerRows.length" class="rows-empty">暂无请求头</div>
@@ -68,7 +71,7 @@
 
             <div class="rows-block">
               <div class="rows-head">
-                <span>Query 参数</span>
+                <FieldLabel label="Query 参数" tip="左侧填当前流变量名，右侧填 URL 查询参数名；值支持 {{ 变量 }} 占位符" />
                 <el-button size="small" text type="primary" @click="addParam('queryParams')">添加</el-button>
               </div>
               <div v-if="!httpCfg.queryParams.length" class="rows-empty">暂无参数</div>
@@ -83,7 +86,7 @@
 
             <div class="rows-block">
               <div class="rows-head">
-                <span>Body 参数</span>
+                <FieldLabel label="Body 参数" tip="左侧填当前流变量名，右侧填请求体字段名" />
                 <el-button size="small" text type="primary" @click="addParam('bodyParams')">添加</el-button>
               </div>
               <div v-if="!httpCfg.bodyParams.length" class="rows-empty">暂无参数</div>
@@ -97,13 +100,22 @@
             </div>
 
             <div class="num-grid">
-              <el-form-item label="连接超时(ms)">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="连接超时(ms)" tip="建立 TCP 连接的最长等待时间（毫秒），默认 3000" />
+                </template>
                 <el-input-number v-model="httpCfg.connTimeoutMs" :min="0" :step="500" controls-position="right" style="width: 100%" />
               </el-form-item>
-              <el-form-item label="读取超时(ms)">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="读取超时(ms)" tip="等待响应数据的最长时间（毫秒），默认 5000" />
+                </template>
                 <el-input-number v-model="httpCfg.readTimeoutMs" :min="0" :step="500" controls-position="right" style="width: 100%" />
               </el-form-item>
-              <el-form-item label="重试次数">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="重试次数" tip="请求失败后的自动重试次数，0 表示不重试" />
+                </template>
                 <el-input-number v-model="httpCfg.retryCount" :min="0" :max="10" controls-position="right" style="width: 100%" />
               </el-form-item>
             </div>
@@ -111,7 +123,10 @@
 
           <!-- ===== BEAN ===== -->
           <template v-else-if="node.data.nodeType === 'BEAN'">
-            <el-form-item label="Bean 名称" required>
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="Bean 名称" tip="Spring 容器注册的 Bean，支持搜索选择；清单加载失败时降级为手动输入" />
+              </template>
               <!-- Bean 清单加载失败降级为输入框 -->
               <el-select
                 v-if="!beanLoadFailed"
@@ -127,7 +142,10 @@
               </el-select>
               <el-input v-else v-model="beanCfg.beanName" placeholder="请输入 Bean 名称" />
             </el-form-item>
-            <el-form-item label="方法名" required>
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="方法名" tip="该 Bean 上可调用的方法，随 Bean 名称联动加载" />
+              </template>
               <el-select
                 v-if="!beanLoadFailed && beanMethods.length"
                 v-model="beanCfg.methodName"
@@ -144,7 +162,7 @@
 
             <div class="rows-block">
               <div class="rows-head">
-                <span>方法参数</span>
+                <FieldLabel label="方法参数" tip="左侧填当前流变量名，右侧填 Bean 方法形参名，按顺序注入" />
                 <el-button size="small" text type="primary" @click="addParam('params')">添加</el-button>
               </div>
               <div v-if="!beanCfg.params.length" class="rows-empty">暂无参数</div>
@@ -169,17 +187,13 @@
 
           <!-- ===== SCRIPT ===== -->
           <template v-else-if="node.data.nodeType === 'SCRIPT'">
-            <el-alert
-              title="脚本将在服务端执行，注意安全"
-              type="warning"
-              :closable="false"
-              show-icon
-              class="panel-alert"
-            />
             <el-form-item label="脚本语言">
               <el-input model-value="groovy" readonly />
             </el-form-item>
-            <el-form-item label="脚本内容" required>
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="脚本内容" tip="Groovy 脚本在服务端沙箱执行，注意安全；用 return 返回结果，上下文变量直接用变量名访问" />
+              </template>
               <el-input
                 v-model="scriptCfg.source"
                 type="textarea"
@@ -192,7 +206,10 @@
 
           <!-- ===== CONDITION ===== -->
           <template v-else-if="node.data.nodeType === 'CONDITION'">
-            <el-form-item label="判断变量" required>
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="判断变量" tip="参与比较的上下文变量，支持 {{ var }} 写法" />
+              </template>
               <el-input v-model="conditionCfg.variable" placeholder="变量名，如 risk" />
             </el-form-item>
             <el-form-item label="运算符">
@@ -200,17 +217,189 @@
                 <el-option v-for="op in OPERATORS" :key="op.value" :label="op.label" :value="op.value" />
               </el-select>
             </el-form-item>
-            <el-form-item v-if="!isEmptyOperator" label="比较值">
+            <el-form-item v-if="!isEmptyOperator">
+              <template #label>
+                <FieldLabel label="比较值" tip="比较的字面量或 {{ var }}；为空/不为空运算符时无需填写" />
+              </template>
               <el-input v-model="conditionCfg.value" placeholder="字面量或 {{var}}" />
             </el-form-item>
           </template>
 
+          <!-- ===== BATCH ===== -->
+          <template v-else-if="node.data.nodeType === 'BATCH'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="集合表达式" tip="被遍历的集合：{{ listVar }} 上下文集合变量，或 JSON 数组字面量 [1,2,3]" />
+              </template>
+              <el-input v-model="batchCfg.collection" placeholder="{{listVar}} 或 [1,2,3]" />
+            </el-form-item>
+            <div class="num-grid">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="项变量名" tip="迭代中当前项的变量名（默认 item），动作内直接引用" />
+                </template>
+                <el-input v-model="batchCfg.itemVar" placeholder="item" />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="序号变量名" tip="迭代序号变量名（默认 index，从 0 开始）" />
+                </template>
+                <el-input v-model="batchCfg.indexVar" placeholder="index" />
+              </el-form-item>
+            </div>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="循环体（画布配置）" tip="在画布中把动作节点拖到批处理节点右侧的循环虚线上自动接入，多项按链序逐项执行；循环体内可直接用项/序号变量；把循环体节点拖离虚线或双击即可移出循环" />
+              </template>
+              <div class="loop-hint" :class="{ 'is-empty': loopBodyCount === 0 }">
+                <span v-if="loopBodyCount > 0">循环体已配置 {{ loopBodyCount }} 步，按链序逐项执行</span>
+                <span v-else>未配置：把动作节点拖到画布中批处理节点右侧的循环虚线上</span>
+              </div>
+            </el-form-item>
+
+            <div class="num-grid">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="单次最大迭代数" tip="单次最多迭代条数，超出后停止（硬上限 1000）" />
+                </template>
+                <el-input-number
+                  v-model="batchCfg.maxItems"
+                  :min="1"
+                  :max="1000"
+                  controls-position="right"
+                  style="width: 100%"
+                />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="单项失败策略" tip="开=任一项失败即中断整批；关=记录该项失败后继续执行剩余项" />
+                </template>
+                <el-switch
+                  v-model="batchCfg.stopOnError"
+                  active-text="中断整批"
+                  inactive-text="记录后继续"
+                />
+              </el-form-item>
+            </div>
+          </template>
+
+          <!-- ===== SUBFLOW ===== -->
+          <template v-else-if="node.data.nodeType === 'SUBFLOW'">
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="目标流程" tip="仅可选择已发布的逻辑流；其输出变量（outputVars）整体写入本流 resultVar；递归/自引用会被引擎拒绝（嵌套上限 5 层）" />
+              </template>
+              <el-select
+                v-model="subflowCfg.flowId"
+                placeholder="选择已发布的逻辑流"
+                style="width: 100%"
+                filterable
+                :loading="flowsLoading"
+              >
+                <el-option
+                  v-for="f in publishedFlows"
+                  :key="f.id"
+                  :label="`${f.name || f.flowKey}（${f.flowKey}）`"
+                  :value="f.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="继承上下文" tip="开=父流全部变量传入子流；关=仅传递下方映射的变量" />
+              </template>
+              <el-switch
+                v-model="subflowCfg.passAllVars"
+                active-text="全量传入"
+                inactive-text="仅映射变量"
+              />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="变量映射" tip="左侧填当前流变量名，右侧填子流入参名；在继承基础上做覆盖/改名" />
+              </template>
+              <div class="mapping-rows">
+                <div v-for="(pair, i) in subflowCfg.varsMapping" :key="i" class="mapping-row">
+                  <el-input v-model="pair.source" placeholder="当前流变量" />
+                  <span class="mapping-arrow">→</span>
+                  <el-input v-model="pair.target" placeholder="子流变量" />
+                  <el-button size="small" text type="danger" @click="subflowCfg.varsMapping.splice(i, 1)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+                <el-button size="small" text type="primary" @click="subflowCfg.varsMapping.push({ source: '', target: '' })">
+                  添加映射
+                </el-button>
+              </div>
+            </el-form-item>
+          </template>
+
+          <!-- ===== DATA_UPDATE ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_UPDATE'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="目标表" tip="仅平台动态数据表（wf_biz_* / wf_form_data*）；表名与列名在运行时经元数据校验，值经参数绑定防注入" />
+              </template>
+              <el-input v-model="dataUpdateCfg.table" placeholder="如 wf_biz_warehouse" clearable />
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="更新字段 SET" tip="SET 直接赋值；ADD/SUB 对数值列累加/递减；值支持字面量或 {{ formData.xxx }} 点路径取表单字段" />
+                <el-button size="small" text type="primary" @click="addSetOp">添加</el-button>
+              </div>
+              <div v-if="!dataUpdateCfg.setOps.length" class="rows-empty">暂无更新字段</div>
+              <div v-for="(op, i) in dataUpdateCfg.setOps" :key="i" class="du-row">
+                <el-input v-model="op.column" size="small" placeholder="列名" class="du-col" />
+                <el-select v-model="op.mode" size="small" class="du-mode">
+                  <el-option label="SET" value="SET" />
+                  <el-option label="ADD +" value="ADD" />
+                  <el-option label="SUB −" value="SUB" />
+                </el-select>
+                <el-input v-model="op.value" size="small" placeholder="值或 {{formData.xxx}}" class="du-value" />
+                <el-button size="small" text type="danger" @click="dataUpdateCfg.setOps.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="更新条件 WHERE" tip="多条件 AND 连接；条件为空时将影响全表，请谨慎配置" />
+                <el-button size="small" text type="primary" @click="addWhereCond">添加</el-button>
+              </div>
+              <div v-if="!dataUpdateCfg.where.length" class="rows-empty du-warn">未配置条件，执行将更新全表</div>
+              <div v-for="(cond, i) in dataUpdateCfg.where" :key="i" class="du-row">
+                <el-input v-model="cond.column" size="small" placeholder="列名" class="du-col" />
+                <el-select v-model="cond.op" size="small" class="du-mode">
+                  <el-option v-for="op in DATA_UPDATE_OPS" :key="op.value" :label="op.label" :value="op.value" />
+                </el-select>
+                <el-input
+                  v-if="!isNullOp(cond.op)"
+                  v-model="cond.value"
+                  size="small"
+                  placeholder="值或 {{formData.xxx}}"
+                  class="du-value"
+                />
+                <el-button size="small" text type="danger" @click="dataUpdateCfg.where.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+          </template>
+
           <!-- ===== 公共：结果变量 / 异常策略（START/END/CONDITION 无） ===== -->
           <template v-if="hasExecutionMeta">
-            <el-form-item label="结果写入变量（resultVar）">
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="结果写入变量（resultVar）" tip="节点输出写入该上下文变量，供后续节点以 {{ 变量 }} 引用；留空不保存" />
+              </template>
               <el-input v-model="node.data.resultVar" placeholder="如 riskResult，留空不保存" clearable />
             </el-form-item>
-            <el-form-item label="异常处理">
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="异常处理" tip="失败中断：节点异常终止整个流程；忽略继续：记录异常并继续执行后续节点" />
+              </template>
               <el-select v-model="node.data.errorAction" style="width: 100%">
                 <el-option label="失败中断（FAIL_FLOW）" value="FAIL_FLOW" />
                 <el-option label="忽略继续（IGNORE_CONTINUE）" value="IGNORE_CONTINUE" />
@@ -227,10 +416,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { CopyDocument, Delete, Fold, Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import FieldLabel from './FieldLabel.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type FlowNode, type HttpNodeConfig } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig } from '../utils/dsl'
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 const OPERATORS = [
@@ -244,7 +434,7 @@ const OPERATORS = [
   { label: '不为空（NOT_EMPTY）', value: 'NOT_EMPTY' },
 ] as const
 
-const props = defineProps<{ node?: FlowNode | null; collapsed?: boolean }>()
+const props = defineProps<{ node?: FlowNode | null; collapsed?: boolean; loopBodyCount?: number }>()
 const emit = defineEmits<{ 'update:collapsed': [value: boolean]; remove: [id: string] }>()
 
 const collapsed = computed({
@@ -252,10 +442,14 @@ const collapsed = computed({
   set: (val) => emit('update:collapsed', val),
 })
 
+const loopBodyCount = computed(() => props.loopBodyCount ?? 0)
+
 const node = computed(() => props.node ?? null)
 const nodeTypeLabel = computed(() => (node.value ? typeLabel(node.value.data.nodeType) : ''))
 const hasExecutionMeta = computed(
-  () => !!node.value && ['HTTP', 'BEAN', 'SCRIPT'].includes(node.value.data.nodeType)
+  () =>
+    !!node.value &&
+    ['HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE'].includes(node.value.data.nodeType)
 )
 
 /** 兜底补齐 config（历史 DSL 缺字段时按类型默认值补全） */
@@ -271,6 +465,71 @@ const httpCfg = computed(() => ensureConfig<HttpNodeConfig>())
 const beanCfg = computed(() => ensureConfig<{ beanName: string; methodName: string; params: { source: string; target: string }[] }>())
 const scriptCfg = computed(() => ensureConfig<{ language: string; source: string }>())
 const conditionCfg = computed(() => ensureConfig<{ variable: string; operator: string; value?: string }>())
+const batchCfg = computed(() =>
+  ensureConfig<{
+    collection: string
+    itemVar: string
+    indexVar: string
+    body?: unknown[]
+    actionType?: 'HTTP' | 'SCRIPT' | 'BEAN'
+    stopOnError: boolean
+    maxItems: number
+  }>()
+)
+
+const subflowCfg = computed(() =>
+  ensureConfig<{
+    flowId: string
+    passAllVars: boolean
+    varsMapping: { source: string; target: string }[]
+  }>()
+)
+
+// ===== DATA_UPDATE =====
+const DATA_UPDATE_OPS: { label: string; value: DataUpdateWhereOp }[] = [
+  { label: '等于', value: 'EQ' },
+  { label: '不等于', value: 'NE' },
+  { label: '大于', value: 'GT' },
+  { label: '大于等于', value: 'GTE' },
+  { label: '小于', value: 'LT' },
+  { label: '小于等于', value: 'LTE' },
+  { label: '为空', value: 'IS_NULL' },
+  { label: '不为空', value: 'NOT_NULL' },
+]
+
+const dataUpdateCfg = computed(() => ensureConfig<DataUpdateNodeConfig>())
+
+function addSetOp() {
+  dataUpdateCfg.value.setOps.push({ column: '', mode: 'SET', value: '' })
+}
+
+function addWhereCond() {
+  dataUpdateCfg.value.where.push({ column: '', op: 'EQ', value: '' })
+}
+
+function isNullOp(op: string): boolean {
+  return op === 'IS_NULL' || op === 'NOT_NULL'
+}
+
+// ===== 已发布流清单（SUBFLOW 目标下拉用；拉首页大页后前端过滤） =====
+const publishedFlows = ref<{ id: string; flowKey: string; name: string }[]>([])
+const flowsLoading = ref(false)
+onMounted(async () => {
+  flowsLoading.value = true
+  try {
+    const res = await logicFlowApi.list({ page: 1, size: 100 })
+    const content: any[] = (res.data as any)?.content || []
+    publishedFlows.value = content
+      .filter((f) => f.status === 'PUBLISHED')
+      .map((f) => ({ id: f.id, flowKey: f.flowKey, name: f.name }))
+  } catch {
+    // http 拦截器已提示；下拉为空时用户可稍后重开面板
+  } finally {
+    flowsLoading.value = false
+  }
+})
+
+/** 循环体在画布上编辑（拖节点到循环虚线），面板仅展示步数提示 */
 
 const isEmptyOperator = computed(
   () => conditionCfg.value.operator === 'EMPTY' || conditionCfg.value.operator === 'NOT_EMPTY'
@@ -594,8 +853,58 @@ async function copyNodeId() {
   padding: 4px;
 }
 
+/* DATA_UPDATE 行：列名 / 模式 / 值 三段布局 */
+.du-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.du-row .du-col {
+  flex: 1.1;
+  min-width: 0;
+}
+
+.du-row .du-mode {
+  width: 88px;
+  flex-shrink: 0;
+}
+
+.du-row .du-value {
+  flex: 1.4;
+  min-width: 0;
+}
+
+.du-row .el-button {
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+.du-warn {
+  color: var(--el-color-warning);
+}
+
 .num-grid :deep(.el-form-item) {
   margin-bottom: 14px;
+}
+
+/* BATCH 循环体画布配置提示卡 */
+.loop-hint {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--lf-batch) 82%, var(--el-text-color-primary));
+  background: color-mix(in srgb, var(--lf-batch) 8%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--lf-batch) 40%, transparent);
+}
+
+.loop-hint.is-empty {
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  border-color: var(--el-border-color-lighter);
 }
 
 /* 脚本编辑：等宽字体 */
@@ -617,5 +926,30 @@ async function copyNodeId() {
 
 .panel-form :deep(.el-form-item) {
   margin-bottom: 14px;
+}
+
+/* SUBFLOW 变量映射动态行 */
+.mapping-rows {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mapping-row .el-input {
+  flex: 1;
+  min-width: 0;
+}
+.mapping-arrow {
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+}
+.mapping-row .el-button {
+  flex-shrink: 0;
+  padding: 4px;
 }
 </style>

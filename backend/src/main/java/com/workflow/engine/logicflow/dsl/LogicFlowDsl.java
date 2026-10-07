@@ -33,7 +33,7 @@ import java.util.List;
  * }
  * }</pre>
  *
- * <p>节点六型见 {@link NodeType}；config 结构按类型区分：
+ * <p>节点类型见 {@link NodeType}；config 结构按类型区分：
  * <ul>
  *   <li>HTTP：{@code BackendLogicHttpConfig} 字段（url/method/headers/queryParams/bodyParams/
  *       connTimeoutMs=3000/readTimeoutMs=5000/retryCount=0）；</li>
@@ -41,15 +41,29 @@ import java.util.List;
  *   <li>SCRIPT：{@code {language:"groovy", source}}；</li>
  *   <li>CONDITION：{@code {variable, operator: EQ|NE|GT|LT|GTE|LTE|EMPTY|NOT_EMPTY, value?}}
  *       （value 支持字面量或 {{var}}）。</li>
+ *   <li>BATCH：{@code {collection, itemVar="item", indexVar="index",
+ *       body:[{id?, type: HTTP|BEAN|SCRIPT|DATA_UPDATE|SUBFLOW, name?, config, resultVar?, errorAction?}...],
+ *       stopOnError=true, maxItems=100}}（循环体链，每项迭代按序执行链上节点）；
+ *       legacy 兼容 {@code {actionType: HTTP|SCRIPT|BEAN, actionConfig:{...}}} 单动作形态。</li>
+ *   <li>SUBFLOW：{@code {flowId, passAllVars=true, varsMapping:[{source,target}]}}
+ *       （调用另一条已发布逻辑流，outputVars 写 resultVar）。</li>
  * </ul>
+ *
+ * <p>顶层 {@code inputVars[]} 为入参声明（可选，纯契约描述，引擎不消费）：
+ * {@code [{name, type: string|number|boolean|json, required, desc}]}。
  */
 public class LogicFlowDsl {
 
     private List<NodeDef> nodes;
     private List<EdgeDef> edges;
+    /** 入参声明（可选，设计器编辑 / 运行测试渲染表单用，引擎不消费）。 */
+    private List<InputVarDef> inputVars;
 
     public List<NodeDef> getNodes() { return nodes; }
     public void setNodes(List<NodeDef> nodes) { this.nodes = nodes; }
+
+    public List<InputVarDef> getInputVars() { return inputVars; }
+    public void setInputVars(List<InputVarDef> inputVars) { this.inputVars = inputVars; }
 
     public List<EdgeDef> getEdges() { return edges; }
     public void setEdges(List<EdgeDef> edges) { this.edges = edges; }
@@ -67,6 +81,7 @@ public class LogicFlowDsl {
             if (parsed != null) {
                 dsl.setNodes(parsed.getNodes() != null ? parsed.getNodes() : new ArrayList<>());
                 dsl.setEdges(parsed.getEdges() != null ? parsed.getEdges() : new ArrayList<>());
+                dsl.setInputVars(parsed.getInputVars() != null ? parsed.getInputVars() : new ArrayList<>());
             }
             return dsl;
         } catch (JsonProcessingException e) {
@@ -139,6 +154,27 @@ public class LogicFlowDsl {
 
         public String getErrorAction() { return errorAction; }
         public void setErrorAction(String errorAction) { this.errorAction = errorAction; }
+    }
+
+    /** 入参声明（运行测试表单 / 文档展示用）。 */
+    public static class InputVarDef {
+        private String name;
+        /** string | number | boolean | json（展示辅助，不做强校验）。 */
+        private String type;
+        private Boolean required;
+        private String desc;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+
+        public Boolean getRequired() { return required; }
+        public void setRequired(Boolean required) { this.required = required; }
+
+        public String getDesc() { return desc; }
+        public void setDesc(String desc) { this.desc = desc; }
     }
 
     /** DSL 边定义（branch 仅 CONDITION 出边使用："true" | "false"）。 */

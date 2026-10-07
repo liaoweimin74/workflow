@@ -62,8 +62,6 @@
 </template>
 
 <script setup lang="ts">
-defineOptions({ name: 'LogicFlowList' })
-
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -72,6 +70,9 @@ import { Delete, EditPen, Plus, VideoPlay } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, ToolbarButton } from '@/components/business/types'
 import { logicFlowApi } from '@/api/logicFlow'
+import RunTestDialog from './components/RunTestDialog.vue'
+
+defineOptions({ name: 'LogicFlowList' })
 
 const router = useRouter()
 const tableRef = ref<InstanceType<typeof SearchTable>>()

@@ -44,7 +44,9 @@
 
     <!-- 角色：多选/可输入角色编码（引擎按 sys_role.role_code 解析成员） -->
     <template v-if="modelValue === 'role'">
-      <div class="section-title">选择角色</div>
+      <div class="section-title">
+        <FormLabelTip tip="多个角色取并集；角色编码在「系统管理-角色管理」维护">选择角色</FormLabelTip>
+      </div>
       <el-select
         :model-value="roleCodes ?? []"
         multiple
@@ -59,12 +61,13 @@
       >
         <el-option v-for="code in roleOptions" :key="code" :label="code" :value="code" />
       </el-select>
-      <div class="as-role-hint">多个角色取并集；角色编码在「系统管理-角色管理」维护</div>
     </template>
 
     <!-- 表单内用户：从本节点绑定表单的「用户类型」字段取值（发起/上一步填写 → 流程变量） -->
     <template v-if="modelValue === 'form_user'">
-      <div class="section-title">表单内用户字段</div>
+      <div class="section-title">
+        <FormLabelTip :tip="`运行时从表单数据中取该字段的值作为${kind === 'handler' ? '办理人' : '审批人'}（支持单个或多个用户）`">表单内用户字段</FormLabelTip>
+      </div>
       <el-select
         :model-value="formUserField ?? ''"
         filterable
@@ -82,11 +85,9 @@
           :value="f.field"
         />
       </el-select>
-      <div class="as-role-hint">
-        <template v-if="formUserFields.length > 0">
-          运行时从表单数据中取该字段的值作为{{ kind === 'handler' ? '办理人' : '审批人' }}（支持单个或多个用户）
-        </template>
-        <template v-else-if="formDefId">
+      <!-- 条件性警示保留常显：指导用户修复缺字段/缺表单问题 -->
+      <div v-if="formUserFields.length === 0" class="as-role-hint">
+        <template v-if="formDefId">
           该表单暂无用户类型字段，可先在表单设计中添加
         </template>
         <template v-else>
@@ -97,7 +98,9 @@
 
     <!-- 自定义选人：业务系统通过引擎扩展点注册的选人函数（中文名下拉 + 参数配置） -->
     <template v-if="modelValue === 'external'">
-      <div class="section-title">选择选人函数</div>
+      <div class="section-title">
+        <FormLabelTip :tip="`候选函数由业务系统经引擎扩展点注册（中文名唯一）；同一函数可被多个节点以不同参数复用；未注册或解析为空时按「找不到${kind === 'handler' ? '办理人' : '审批人'}」策略处理`">选择选人函数</FormLabelTip>
+      </div>
       <el-select
         :model-value="externalResolver ?? ''"
         filterable
@@ -171,9 +174,6 @@
         </div>
       </template>
 
-      <div class="as-role-hint">
-        候选函数由业务系统经引擎扩展点注册（中文名唯一）；同一函数可被多个节点以不同参数复用；未注册或解析为空时按「找不到{{ kind === 'handler' ? '办理人' : '审批人' }}」策略处理
-      </div>
     </template>
 
     <!-- 类型不在当前版本支持范围内（含历史遗留配置）：给出提示（不阻断选择） -->
@@ -195,6 +195,7 @@ import { getRoleList } from '@/api/role'
 import { useDesignerStore } from '@/stores/designerStore'
 import { formApi, type FormDefinitionDetailDTO } from '@/api/form'
 import { getAssigneeResolvers, type AssigneeResolverMeta } from '@/api/assigneeResolver'
+import FormLabelTip from './FormLabelTip.vue'
 
 /**
  * 办理人/审批人选择器（审批节点与办理节点共用）。

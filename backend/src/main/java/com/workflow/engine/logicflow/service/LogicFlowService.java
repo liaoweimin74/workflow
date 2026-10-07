@@ -45,6 +45,9 @@ public class LogicFlowService {
     private static final String STATUS_PUBLISHED = "PUBLISHED";
     private static final String DEFAULT_TENANT = "default";
 
+    /** 运行成功状态（与引擎一致，供调度方判定）。 */
+    public static final String STATUS_SUCCESS = LogicFlowEngine.STATUS_SUCCESS;
+
     private final LogicFlowDefRepository repository;
     private final LogicFlowRunRepository runRepository;
     private final ObjectMapper objectMapper;
@@ -162,7 +165,29 @@ public class LogicFlowService {
 
     /** 以当前已存 DSL 运行（不要求已发布）；每次运行落一条 LogicFlowRun 历史并返回结果（含 runId）。 */
     public RunResult run(String tenantId, String id, Map<String, Object> vars) {
-        LogicFlowDef def = get(tenantId, id);
+        return runDef(get(tenantId, id), vars);
+    }
+
+    /** 按 flowKey 查找定义（租户内，须存在）。 */
+    public LogicFlowDef requireByKey(String tenantId, String flowKey) {
+        return repository.findByTenantIdAndFlowKey(normalizeTenant(tenantId), flowKey)
+                .orElseThrow(() -> new BusinessException("逻辑流不存在: " + flowKey));
+    }
+
+    /**
+     * 按 flowKey 运行<b>已发布</b>逻辑流（表单触发等系统调度入口；草稿拒绝执行）。
+     * 与手动测试运行同样落 LogicFlowRun 历史。
+     */
+    public RunResult runByKey(String tenantId, String flowKey, Map<String, Object> vars) {
+        LogicFlowDef def = requireByKey(tenantId, flowKey);
+        if (!STATUS_PUBLISHED.equals(def.getStatus())) {
+            throw new BusinessException("逻辑流未发布，拒绝执行: " + flowKey);
+        }
+        return runDef(def, vars);
+    }
+
+    /** 公共运行体：解析 DSL → 引擎执行 → 运行历史留痕。 */
+    private RunResult runDef(LogicFlowDef def, Map<String, Object> vars) {
         LogicFlowDsl dsl = LogicFlowDsl.parse(def.getDslJson(), objectMapper);
         Map<String, Object> inputVars = vars == null ? Map.of() : vars;
         LocalDateTime startedAt = LocalDateTime.now();
@@ -170,7 +195,8 @@ public class LogicFlowService {
 
         LogicFlowEngine.RunOutcome outcome;
         try {
-            outcome = engine.run(dsl, inputVars);
+            // 传入所属流 id：子流程环检测以当前流为链头（自引用即刻拒绝）
+            outcome = engine.run(dsl, inputVars, def.getId());
         } catch (Exception e) {
             // 引擎设计为不抛异常；此处兜底保证失败运行同样留痕
             log.warn("Logic flow engine threw unexpectedly", e);
@@ -238,21 +264,21 @@ public class LogicFlowService {
         return errors;
     }
 
-    /** 初始 DSL：START(120,160) → END(420,160)。 */
+    /** 初始 DSL：START(360,80) → END(360,320)（自上而下纵向布局，符合主流编排习惯）。 */
     private String defaultDslJson() {
         LogicFlowDsl.NodeDef start = new LogicFlowDsl.NodeDef();
         start.setId("start");
         start.setType(NodeType.START);
         start.setName("开始");
-        start.setX(120.0);
-        start.setY(160.0);
+        start.setX(360.0);
+        start.setY(80.0);
 
         LogicFlowDsl.NodeDef end = new LogicFlowDsl.NodeDef();
         end.setId("end");
         end.setType(NodeType.END);
         end.setName("结束");
-        end.setX(420.0);
-        end.setY(160.0);
+        end.setX(360.0);
+        end.setY(320.0);
 
         LogicFlowDsl.EdgeDef edge = new LogicFlowDsl.EdgeDef();
         edge.setId("e1");

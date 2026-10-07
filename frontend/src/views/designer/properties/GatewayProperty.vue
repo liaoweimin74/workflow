@@ -11,7 +11,7 @@
     </el-form-item>
 
     <el-divider content-position="left">
-      网关说明<el-tooltip :content="gatewayTip" placement="top"><el-icon class="help-icon"><QuestionFilled /></el-icon></el-tooltip>
+      <FormLabelTip :tip="gatewayTip">网关说明</FormLabelTip>
     </el-divider>
 
     <el-form-item label="描述">
@@ -27,9 +27,9 @@
 
 <script setup lang="ts">
 import { reactive, computed, onMounted, watch } from 'vue'
-import { QuestionFilled } from '@element-plus/icons-vue'
 import { useDesignerStore } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
+import FormLabelTip from './shared/FormLabelTip.vue'
 
 defineProps<{ readOnly?: boolean }>()
 
@@ -96,15 +96,3 @@ function updateBpmn() {
   }
 }
 </script>
-
-<style scoped>
-.help-icon {
-  font-size: 13px;
-  color: #c0c4cc;
-  cursor: help;
-  margin-left: 2px;
-  vertical-align: super;
-  display: inline-flex;
-  align-items: center;
-}
-</style>

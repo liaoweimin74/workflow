@@ -38,14 +38,16 @@
               :key="node.type"
               class="palette-item"
               draggable="true"
-              :title="`${node.description}（拖拽到画布，或点击添加到视口中心）`"
               @dragstart="handleDragStart($event, node)"
               @click="emit('add', node.type)"
             >
               <span class="item-chip" :style="chipStyle(node)">{{ node.badge }}</span>
               <span class="item-text">
-                <span class="item-label">{{ node.label }}</span>
-                <span class="item-desc">{{ node.description }}</span>
+                <FieldLabel
+                  :label="node.label"
+                  :tip="`${node.description}。拖拽到画布，或点击添加到视口中心`"
+                  clickable
+                />
               </span>
               <el-icon class="item-drag"><Rank /></el-icon>
             </div>
@@ -63,6 +65,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Expand, Fold, Menu, Rank, InfoFilled } from '@element-plus/icons-vue'
+import FieldLabel from './FieldLabel.vue'
 import { PALETTE_GROUPS } from '../utils/nodeMeta'
 import type { PaletteNode } from '../utils/nodeMeta'
 import type { LogicNodeType } from '../utils/dsl'
@@ -287,21 +290,18 @@ function handleDragStart(event: DragEvent, node: PaletteNode) {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.item-label {
+  align-items: center;
   font-size: 13px;
   color: var(--el-text-color-regular);
   font-weight: 600;
   line-height: 1.3;
 }
 
-.item-desc {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.4;
+.item-text :deep(.fl-label) {
+  max-width: 100%;
+}
+
+.item-text :deep(.fl-label > span:first-child) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

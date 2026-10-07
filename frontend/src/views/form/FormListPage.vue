@@ -113,6 +113,133 @@
         <el-button type="primary" :loading="copySubmitting" @click="submitCopy">复制</el-button>
       </template>
     </el-dialog>
+
+    <!-- 逻辑流绑定弹窗：表单保存/更新/删除前后自动运行已发布逻辑编排 -->
+    <el-dialog
+      v-model="bindingDialogVisible"
+      :title="bindingDialogTitle"
+      width="820px"
+      :close-on-click-modal="false"
+      class="binding-dialog"
+    >
+      <div class="binding-hint">
+        <span class="binding-hint-label">
+          触发说明
+          <el-tooltip
+            placement="top"
+            effect="dark"
+            content="绑定后，表单在对应触发点自动运行所选逻辑流：前类触发点失败将拒绝本次操作（校验语义）；后类触发点可选同事务回滚（强一致）或提交后执行（失败仅留运行历史）。编排需已发布，入参自动注入 formData（整行）、formKey、dataId、opType、operator 等。"
+          >
+            <el-icon class="binding-hint-icon"><QuestionFilled /></el-icon>
+          </el-tooltip>
+        </span>
+      </div>
+      <el-table :data="bindings" border size="small" v-loading="bindingsLoading" max-height="320">
+        <el-table-column label="触发点" width="110" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.triggerType.startsWith('BEFORE_') ? 'warning' : 'success'" size="small">
+              {{ triggerLabel(row.triggerType) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="逻辑流" min-width="170">
+          <template #default="{ row }">
+            <span class="binding-flow-key">{{ row.flowKey }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="执行模式" width="120" align="center">
+          <template #default="{ row }">
+            <span v-if="row.triggerType.startsWith('BEFORE_')" class="binding-mode-dim">同步校验</span>
+            <el-tag v-else :type="row.executionMode === 'AFTER_COMMIT' ? 'info' : ''" size="small">
+              {{ row.executionMode === 'AFTER_COMMIT' ? '提交后执行' : '同事务' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="启用" width="80" align="center">
+          <template #default="{ row }">
+            <el-switch
+              :model-value="row.enabled"
+              size="small"
+              @change="(val: any) => toggleBinding(row, !!val)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="description" label="描述" min-width="140" show-overflow-tooltip />
+        <el-table-column label="操作" width="70" align="center">
+          <template #default="{ row }">
+            <el-button size="small" text type="danger" @click="removeBinding(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-divider content-position="left">添加绑定</el-divider>
+      <!-- 添加绑定：表格行式布局（small 尺寸，与上方绑定列表风格统一） -->
+      <el-table :data="[{}]" size="small" class="binding-add-table">
+        <el-table-column label="触发点" width="140">
+          <template #default>
+            <el-select v-model="bindingForm.triggerType" size="small" style="width: 100%">
+              <el-option
+                v-for="t in triggerOptions"
+                :key="t.value"
+                :label="t.label"
+                :value="t.value"
+              />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="逻辑流" min-width="220">
+          <template #default>
+            <el-select
+              v-model="bindingForm.flowKey"
+              filterable
+              size="small"
+              style="width: 100%"
+              placeholder="仅已发布逻辑流"
+              :loading="flowsLoading"
+            >
+              <el-option
+                v-for="f in publishedFlows"
+                :key="f.flowKey"
+                :label="`${f.name || f.flowKey}（${f.flowKey}）`"
+                :value="f.flowKey"
+              />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="执行模式" width="170">
+          <template #default>
+            <el-select
+              v-if="!isBeforeTrigger(bindingForm.triggerType)"
+              v-model="bindingForm.executionMode"
+              size="small"
+              style="width: 100%"
+            >
+              <el-option label="同事务（失败回滚）" value="SYNC_IN_TX" />
+              <el-option label="提交后执行（失败留痕）" value="AFTER_COMMIT" />
+            </el-select>
+            <span v-else class="binding-mode-dim">同步校验</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="描述" min-width="150">
+          <template #default>
+            <el-input
+              v-model="bindingForm.description"
+              size="small"
+              maxlength="200"
+              placeholder="可选"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="90" align="center">
+          <template #default>
+            <el-button type="primary" size="small" :loading="bindingSubmitting" @click="submitBinding">添加</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="bindingDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -131,11 +258,19 @@ import {
   Promotion,
   Clock,
   Delete,
+  Connection,
+  QuestionFilled,
 } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { formApi, type FormDefinitionDTO, type FormVersionDTO } from '@/api/form'
 import { bizDataApi } from '@/api/bizData'
+import { logicFlowApi } from '@/api/logicFlow'
+import {
+  formLogicBindingApi,
+  FORM_LOGIC_TRIGGERS,
+  type FormLogicBindingDTO,
+} from '@/api/formLogicBinding'
 
 const router = useRouter()
 const tableRef = ref<InstanceType<typeof SearchTable>>()
@@ -291,6 +426,14 @@ const actionButtons: ActionButton[] = [
     },
   },
   {
+    label: '编排',
+    icon: Connection,
+    size: 'small',
+    permission: 'form:list',
+    show: (row: any) => row.status !== 'ARCHIVED',
+    onClick: (row: any) => openBindingDialog(row),
+  },
+  {
     label: '版本',
     icon: Clock,
     size: 'small',
@@ -407,6 +550,135 @@ const versionDialogVisible = ref(false)
 const versionLoading = ref(false)
 const versionList = ref<FormVersionDTO[]>([])
 
+// ========== 逻辑流绑定 ==========
+const bindingDialogVisible = ref(false)
+const bindingSource = ref<FormDefinitionDTO | null>(null)
+const bindingDialogTitle = computed(() =>
+  bindingSource.value ? `逻辑流绑定 — ${bindingSource.value.name}` : '逻辑流绑定',
+)
+const bindings = ref<FormLogicBindingDTO[]>([])
+const bindingsLoading = ref(false)
+const bindingSubmitting = ref(false)
+const publishedFlows = ref<{ flowKey: string; name: string }[]>([])
+const flowsLoading = ref(false)
+const bindingForm = reactive({
+  triggerType: 'AFTER_CREATE' as string,
+  flowKey: '',
+  executionMode: 'SYNC_IN_TX',
+  description: '',
+})
+
+/** 当前表单类型可选触发点（BUSINESS 六类；WORKFLOW 仅快照后） */
+const triggerOptions = computed(() => {
+  const type = bindingSource.value?.type || 'WORKFLOW'
+  return FORM_LOGIC_TRIGGERS.filter((t) => t.formType === type)
+})
+
+function triggerLabel(value: string): string {
+  return FORM_LOGIC_TRIGGERS.find((t) => t.value === value)?.label ?? value
+}
+
+function isBeforeTrigger(triggerType: string): boolean {
+  return triggerType.startsWith('BEFORE_')
+}
+
+async function openBindingDialog(row: FormDefinitionDTO) {
+  bindingSource.value = row
+  bindingDialogVisible.value = true
+  bindingForm.triggerType = row.type === 'BUSINESS' ? 'AFTER_CREATE' : 'AFTER_SNAPSHOT'
+  bindingForm.flowKey = ''
+  bindingForm.executionMode = 'SYNC_IN_TX'
+  bindingForm.description = ''
+  await Promise.all([loadBindings(), loadPublishedFlows()])
+}
+
+async function loadBindings() {
+  const row = bindingSource.value
+  if (!row) return
+  bindingsLoading.value = true
+  try {
+    const res = await formLogicBindingApi.list(row.type, row.key)
+    bindings.value = res.data || []
+  } catch {
+    // http 拦截器已提示
+  } finally {
+    bindingsLoading.value = false
+  }
+}
+
+async function loadPublishedFlows() {
+  flowsLoading.value = true
+  try {
+    const res = await logicFlowApi.list({ page: 1, size: 100 })
+    const content: any[] = (res.data as any)?.content || []
+    publishedFlows.value = content
+      .filter((f) => f.status === 'PUBLISHED')
+      .map((f) => ({ flowKey: f.flowKey, name: f.name }))
+  } catch {
+    // http 拦截器已提示
+  } finally {
+    flowsLoading.value = false
+  }
+}
+
+async function submitBinding() {
+  const row = bindingSource.value
+  if (!row) return
+  if (!bindingForm.flowKey) {
+    ElMessage.warning('请选择逻辑流')
+    return
+  }
+  bindingSubmitting.value = true
+  try {
+    await formLogicBindingApi.create({
+      formType: row.type,
+      formKey: row.key,
+      triggerType: bindingForm.triggerType,
+      flowKey: bindingForm.flowKey,
+      executionMode: isBeforeTrigger(bindingForm.triggerType) ? 'SYNC_IN_TX' : bindingForm.executionMode,
+      enabled: true,
+      description: bindingForm.description.trim() || null,
+    })
+    ElMessage.success('绑定已添加')
+    bindingForm.flowKey = ''
+    bindingForm.description = ''
+    await loadBindings()
+  } catch {
+    // http 拦截器已提示
+  } finally {
+    bindingSubmitting.value = false
+  }
+}
+
+async function toggleBinding(row: FormLogicBindingDTO, enabled: boolean) {
+  try {
+    await formLogicBindingApi.update(row.id, { enabled })
+    row.enabled = enabled
+    ElMessage.success(enabled ? '已启用' : '已停用')
+  } catch {
+    // http 拦截器已提示
+  }
+}
+
+async function removeBinding(row: FormLogicBindingDTO) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除该绑定吗？（${triggerLabel(row.triggerType)} → ${row.flowKey}）`,
+      '删除确认',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await formLogicBindingApi.remove(row.id)
+    ElMessage.success('绑定已删除')
+    await loadBindings()
+  } catch {
+    // http 拦截器已提示
+  }
+}
+
 // ========== 工具函数 ==========
 function statusTagType(status: string): '' | 'success' | 'warning' | 'info' | 'danger' {
   const map: Record<string, '' | 'success' | 'warning' | 'info' | 'danger'> = {
@@ -462,5 +734,39 @@ function formatDate(dateStr: string): string {
   line-height: 1.5;
   color: var(--el-text-color-secondary);
   margin-top: 4px;
+}
+
+/* ===== 逻辑流绑定弹窗 ===== */
+.binding-hint {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+.binding-hint-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.binding-hint-icon {
+  cursor: help;
+  color: var(--el-color-primary);
+  font-size: 14px;
+}
+.binding-flow-key {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.binding-mode-dim {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+/* 添加绑定表格行：控件贴行紧凑（small），与上方绑定列表表格风格统一 */
+.binding-add-table :deep(.el-table__cell) {
+  padding: 5px 0;
+}
+.binding-add-table :deep(.cell) {
+  padding: 0 8px;
 }
 </style>

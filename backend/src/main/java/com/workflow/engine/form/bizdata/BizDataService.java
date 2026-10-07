@@ -8,6 +8,7 @@ import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
 import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.DynamicTableManager;
+import com.workflow.engine.logicflow.service.FormLogicBindingService;
 import com.workflow.engine.tenant.TenantProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,8 @@ public class BizDataService {
     private final Map<String, List<BizDataHandler>> handlerIndex;
     /** formKey+操作 → 覆盖 handler（覆盖声明为 true 时的短路径接管，不执行通用实现） */
     private final Map<String, BizDataHandler> coveringIndex;
+    /** 表单 × 逻辑编排绑定调度（六类触发点；覆盖接管路径不自动触发） */
+    private final FormLogicBindingService logicBindings;
 
     /**
      * @param handlers Spring 自动注入所有 BizDataHandler bean（无则空列表）
@@ -48,12 +51,14 @@ public class BizDataService {
                           TenantProvider tenantProvider,
                           ObjectMapper objectMapper,
                           List<BizDataHandler> handlers,
-                          List<FormProcessGuard> guards) {
+                          List<FormProcessGuard> guards,
+                          FormLogicBindingService logicBindings) {
         this.support = new BizDataSupport(jdbcTemplate, tableManager, formDefService, tenantProvider, objectMapper);
         this.tenantProvider = tenantProvider;
         this.guards = guards == null ? List.of() : guards;
         this.handlerIndex = buildHandlerIndex(handlers);
         this.coveringIndex = buildCoveringIndex(handlers);
+        this.logicBindings = logicBindings;
     }
 
     private static Map<String, List<BizDataHandler>> buildHandlerIndex(List<BizDataHandler> handlers) {
@@ -111,7 +116,10 @@ public class BizDataService {
     // ==================== 主表 CRUD 入口 ====================
 
     /**
-     * 新增业务数据（覆盖短路 → 装饰钩子链 → 通用委托）。
+     * 新增业务数据（覆盖短路 → 逻辑流前置绑定 → 装饰钩子链 → 通用委托 → 逻辑流后置绑定）。
+     * <p>绑定调度顺序：BEFORE_CREATE（失败拒绝）→ handler.beforeCreate → 落库 →
+     * handler.afterCreate → AFTER_CREATE（失败按 executionMode 语义）。
+     * 覆盖接管路径不自动触发绑定。
      */
     @Transactional
     public BizDataVO create(String formKey, Map<String, Object> data) {
@@ -120,6 +128,11 @@ public class BizDataService {
             return covering.create(data);
         }
         support.loadContext(formKey);
+        String tenantId = tenantProvider.getTenantId();
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                FormLogicBindingService.TRIG_BEFORE_CREATE,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                        FormLogicBindingService.TRIG_BEFORE_CREATE, "CREATE", null, data, null));
         for (BizDataHandler handler : handlersOf(formKey)) {
             handler.beforeCreate(data);
         }
@@ -130,7 +143,13 @@ public class BizDataService {
         // afterCreate 钩子可能已通过 updateGeneric 回写默认值并自增 version，
         // 重新查询返回最新状态，避免调用方拿到过期 version 触发乐观锁 409。
         BizDataContext ctx2 = support.loadContext(formKey);
-        return support.findById(ctx2.tableName(), tenantProvider.getTenantId(), ctx2, created.getId());
+        BizDataVO latest = support.findById(ctx2.tableName(), tenantId, ctx2, created.getId());
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                FormLogicBindingService.TRIG_AFTER_CREATE,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                        FormLogicBindingService.TRIG_AFTER_CREATE, "CREATE", created.getId(),
+                        latest != null ? latest.getData() : created.getData(), null));
+        return latest != null ? latest : created;
     }
 
     /**
@@ -208,7 +227,7 @@ public class BizDataService {
     }
 
     /**
-     * 更新业务数据（乐观锁；覆盖短路 → 守卫检查 → 装饰钩子链 → 通用委托）。
+     * 更新业务数据（乐观锁；覆盖短路 → 守卫检查 → 逻辑流前置绑定 → 装饰钩子链 → 通用委托 → 逻辑流后置绑定）。
      */
     @Transactional
     public BizDataVO update(String formKey, String id, Map<String, Object> data, Integer version) {
@@ -219,16 +238,28 @@ public class BizDataService {
         // 守卫检查（覆盖接管路径不自动执行，覆盖实现自行负责）
         guards.stream().filter(g -> g.appliesTo(formKey)).forEach(g -> g.checkBeforeUpdate(formKey, id));
         BizDataContext ctx = support.loadContext(formKey);
-        BizDataVO existing = support.findById(ctx.tableName(), tenantProvider.getTenantId(), ctx, id);
+        String tenantId = tenantProvider.getTenantId();
+        BizDataVO existing = support.findById(ctx.tableName(), tenantId, ctx, id);
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                FormLogicBindingService.TRIG_BEFORE_UPDATE,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                        FormLogicBindingService.TRIG_BEFORE_UPDATE, "UPDATE", id, data,
+                        existing != null ? existing.getData() : null));
         for (BizDataHandler handler : handlersOf(formKey)) {
             handler.beforeUpdate(data, existing);
         }
         BizDataVO updated = support.updateGeneric(formKey, id, data, version);
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                FormLogicBindingService.TRIG_AFTER_UPDATE,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                        FormLogicBindingService.TRIG_AFTER_UPDATE, "UPDATE", id,
+                        updated != null ? updated.getData() : data,
+                        existing != null ? existing.getData() : null));
         return updated;
     }
 
     /**
-     * 删除业务数据（租户范围限定；覆盖短路 → 守卫检查 → 装饰钩子链 → 通用委托）。
+     * 删除业务数据（租户范围限定；覆盖短路 → 守卫检查 → 逻辑流前置绑定 → 装饰钩子链 → 通用委托 → 逻辑流后置绑定）。
      */
     @Transactional
     public void delete(String formKey, String id) {
@@ -240,11 +271,22 @@ public class BizDataService {
         // 守卫检查（覆盖接管路径不自动执行，覆盖实现自行负责）
         guards.stream().filter(g -> g.appliesTo(formKey)).forEach(g -> g.checkBeforeDelete(formKey, id));
         BizDataContext ctx = support.loadContext(formKey);
-        BizDataVO existing = support.findById(ctx.tableName(), tenantProvider.getTenantId(), ctx, id);
+        String tenantId = tenantProvider.getTenantId();
+        BizDataVO existing = support.findById(ctx.tableName(), tenantId, ctx, id);
+        Map<String, Object> existingData = existing != null ? existing.getData() : null;
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                FormLogicBindingService.TRIG_BEFORE_DELETE,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                        FormLogicBindingService.TRIG_BEFORE_DELETE, "DELETE", id, existingData, null));
         for (BizDataHandler handler : handlersOf(formKey)) {
             handler.beforeDelete(existing);
         }
         support.deleteGeneric(formKey, id);
+        // AFTER_DELETE 以删除前行快照作为 formData（行已不存在）
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                FormLogicBindingService.TRIG_AFTER_DELETE,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
+                        FormLogicBindingService.TRIG_AFTER_DELETE, "DELETE", id, existingData, null));
     }
 
     // ==================== 独立子表行 CRUD ====================

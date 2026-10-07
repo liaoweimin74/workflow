@@ -1,13 +1,9 @@
 <template>
   <span class="flt-wrap">
     <span class="flt-text"><slot /></span>
-    <el-tooltip
-      :content="tip"
-      placement="top"
-      effect="dark"
-      :show-after="120"
-      popper-style="max-width: 280px; line-height: 1.5;"
-    >
+    <!-- tip 为空时隐藏 ？ 图标（如网关说明在非三类网关下无文案），避免空气泡 -->
+    <el-tooltip v-if="tip" :content="tip" placement="top" effect="dark" :show-after="120"
+      popper-style="max-width: 280px; line-height: 1.5;">
       <span class="flt-icon" aria-label="说明">
         <el-icon :size="10"><QuestionFilled /></el-icon>
       </span>

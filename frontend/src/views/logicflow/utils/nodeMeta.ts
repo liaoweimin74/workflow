@@ -25,6 +25,9 @@ export const NODE_COLOR_VAR: Record<LogicNodeType, string> = {
   BEAN: '--lf-bean',
   SCRIPT: '--lf-script',
   CONDITION: '--lf-condition',
+  BATCH: '--lf-batch',
+  SUBFLOW: '--lf-subflow',
+  DATA_UPDATE: '--lf-data',
   START: '--lf-neutral',
   END: '--lf-neutral',
 }
@@ -36,6 +39,9 @@ const NODE_META: Record<LogicNodeType, { label: string; description: string; bad
   BEAN: { label: 'Bean 方法', description: '调用系统内已注册的服务方法', badge: 'B' },
   SCRIPT: { label: 'Groovy 脚本', description: '执行服务端 Groovy 脚本（注意安全）', badge: 'S' },
   CONDITION: { label: '条件', description: '按变量条件走「真/假」分支', badge: '条' },
+  BATCH: { label: '批处理', description: '遍历集合并按循环体链逐项执行（把动作节点拖到循环虚线上组成循环体），聚合结果列表', badge: '批' },
+  SUBFLOW: { label: '子流程', description: '调用另一条已发布的逻辑流，输出写回变量', badge: '子' },
+  DATA_UPDATE: { label: '数据更新', description: '纯配置更新动态表（SET/ADD/SUB + 条件），无需写代码', badge: '数' },
 }
 
 export function nodeMeta(type: LogicNodeType): PaletteNode {
@@ -43,7 +49,7 @@ export function nodeMeta(type: LogicNodeType): PaletteNode {
   return { type, ...meta, colorVar: NODE_COLOR_VAR[type] }
 }
 
-/** 调色板分组：控制（开始/结束/条件）+ 动作（HTTP/Bean/脚本） */
+/** 调色板分组：控制（开始/结束/条件）+ 动作（HTTP/Bean/脚本/批处理/子流程/数据更新） */
 export const PALETTE_GROUPS: PaletteGroup[] = [
   {
     title: '控制',
@@ -51,7 +57,14 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
   },
   {
     title: '动作',
-    items: [nodeMeta('HTTP'), nodeMeta('BEAN'), nodeMeta('SCRIPT')],
+    items: [
+      nodeMeta('HTTP'),
+      nodeMeta('BEAN'),
+      nodeMeta('SCRIPT'),
+      nodeMeta('BATCH'),
+      nodeMeta('SUBFLOW'),
+      nodeMeta('DATA_UPDATE'),
+    ],
   },
 ]
 

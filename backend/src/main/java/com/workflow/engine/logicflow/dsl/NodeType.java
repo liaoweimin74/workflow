@@ -22,7 +22,13 @@ public enum NodeType {
     /** Groovy 脚本（复用 GroovyScriptLogic 沙箱）。 */
     SCRIPT,
     /** 条件分叉（按 branch=true/false 选出边）。 */
-    CONDITION;
+    CONDITION,
+    /** 批处理循环（遍历集合并对每项执行内嵌动作，聚合结果列表）。 */
+    BATCH,
+    /** 子流程调用（调用另一条已发布的逻辑流，输出写回 resultVar）。 */
+    SUBFLOW,
+    /** 数据更新（纯配置 UPDATE 动态表：SET/ADD/SUB + WHERE，参数绑定防注入，受影响行数写回 resultVar）。 */
+    DATA_UPDATE;
 
     @JsonCreator
     public static NodeType fromJson(String value) {

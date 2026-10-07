@@ -89,6 +89,10 @@ describe('parseDsl', () => {
     expect(graph.edges[1].id).toBeTruthy()
     expect(graph.edges[2].data).toEqual({ branch: 'true' })
     expect(graph.edges[3].data).toEqual({ branch: 'false' })
+    // branch → sourceHandle：vue-flow 依 sourceHandle 定位真/假连接点，缺失会兜底连到「真」
+    expect(graph.edges[2].sourceHandle).toBe('true')
+    expect(graph.edges[3].sourceHandle).toBe('false')
+    expect(graph.edges[0].sourceHandle).toBeUndefined()
   })
 
   it('缺失字段容错：无 name 补默认名，无 x/y 回 0，非六类 type 归一为 HTTP', () => {
@@ -196,6 +200,31 @@ describe('serializeDsl', () => {
     expect(condOut.map((e: { branch?: string }) => e.branch).sort()).toEqual(['false', 'true'])
   })
 
+  it('CONDITION 边：serialize 优先按 sourceHandle 定 branch，data.branch 作后备', () => {
+    const cond = makeNode('cond_1', 'CONDITION', 0, 0, {
+      config: { variable: 'x', operator: 'EQ', value: '1' },
+    })
+    const end = makeNode('end_1', 'END', 200, 100)
+
+    // 场景一：边被拖动重连后 sourceHandle='false' 而 data.branch 仍是旧值 'true' → 以 handle 为准
+    const stale = serializeDsl(
+      [cond, end],
+      [{ id: 'e1', source: 'cond_1', target: 'end_1', sourceHandle: 'false', data: { branch: 'true' } }]
+    )
+    expect(JSON.parse(stale).edges[0].branch).toBe('false')
+
+    // 场景二：只有 data.branch（旧数据形态）→ 后备生效
+    const legacy = serializeDsl(
+      [cond, end],
+      [{ id: 'e2', source: 'cond_1', target: 'end_1', data: { branch: 'false' } }]
+    )
+    expect(JSON.parse(legacy).edges[0].branch).toBe('false')
+
+    // 场景三：无 branch 语义的普通出边 → 不输出 branch
+    const plain = serializeDsl([cond, end], [{ id: 'e3', source: 'cond_1', target: 'end_1' }])
+    expect(JSON.parse(plain).edges[0].branch).toBeUndefined()
+  })
+
   it('坐标取整：小数位置序列化为整数', () => {
     const node = makeNode('http_1', 'HTTP', 100.4, 60.6, { config: defaultConfig('HTTP') })
     const parsed = JSON.parse(serializeDsl([node], []))
@@ -234,5 +263,428 @@ describe('isDslEqual', () => {
     expect(isDslEqual('{"a":1,"b":2}', '{"b":2,"a":1}')).toBe(true)
     expect(isDslEqual('{"a":1}', '{"a":2}')).toBe(false)
     expect(isDslEqual('{bad', '{"a":1}')).toBe(false)
+  })
+})
+
+describe('BATCH 批处理节点', () => {
+  it('BATCH 属合法类型：parse 保留 config 与 resultVar，默认名为批处理', () => {
+    const graph = parseDsl(
+      JSON.stringify({
+        nodes: [
+          {
+            id: 'batch_1',
+            type: 'BATCH',
+            name: '批量通知',
+            x: 300,
+            y: 120,
+            config: {
+              collection: '{{users}}',
+              itemVar: 'user',
+              indexVar: 'i',
+              actionType: 'HTTP',
+              actionConfig: { url: 'https://x/api?to={{user}}', method: 'POST' },
+              stopOnError: false,
+              maxItems: 50,
+            },
+            resultVar: 'notifyOut',
+          },
+        ],
+        edges: [],
+      })
+    )
+    expect(graph.nodes[0].data.nodeType).toBe('BATCH')
+    expect(graph.nodes[0].data.name).toBe('批量通知')
+    expect(graph.nodes[0].data.config).toMatchObject({ actionType: 'HTTP', itemVar: 'user', maxItems: 50 })
+    expect(graph.nodes[0].data.resultVar).toBe('notifyOut')
+  })
+
+  it('BATCH 序列化输出 resultVar/errorAction（业务执行节点语义）；新默认 config 无 legacy 动作', () => {
+    const nodes: FlowNode[] = [
+      makeNode('batch_1', 'BATCH', 300, 120, {
+        config: defaultConfig('BATCH'),
+        resultVar: 'out',
+        errorAction: 'FAIL_FLOW',
+      }),
+    ]
+    const parsed = JSON.parse(serializeDsl(nodes, []))
+    expect(parsed.nodes[0].type).toBe('BATCH')
+    expect(parsed.nodes[0].resultVar).toBe('out')
+    expect(parsed.nodes[0].errorAction).toBe('FAIL_FLOW')
+    expect(parsed.nodes[0].config).toMatchObject({
+      collection: '',
+      itemVar: 'item',
+      indexVar: 'index',
+      body: [],
+      stopOnError: true,
+      maxItems: 100,
+    })
+    expect(parsed.nodes[0].config.actionType).toBeUndefined()
+  })
+
+  it('BATCH DSL 往返：legacy 单动作首次保存升级为 body 形态后稳定', () => {
+    const nodes: FlowNode[] = [
+      makeNode('start_1', 'START', 100, 80),
+      makeNode('batch_1', 'BATCH', 300, 160, {
+        config: {
+          collection: '[1,2,3]',
+          itemVar: 'n',
+          indexVar: 'i',
+          actionType: 'SCRIPT',
+          actionConfig: { language: 'groovy', source: 'return n * 2' },
+          stopOnError: true,
+          maxItems: 10,
+        },
+        resultVar: 'doubled',
+      }),
+    ]
+    const edges: FlowEdge[] = [makeEdge('e1', 'start_1', 'batch_1')]
+    const once = serializeDsl(nodes, edges) // 画布无循环边：legacy 原样保留
+    expect(JSON.parse(once).nodes[1].config.actionType).toBe('SCRIPT')
+    const graph1 = parseDsl(once) // legacy 合成单节点循环体
+    const twice = serializeDsl(graph1.nodes, graph1.edges) // 升级为 body 形态
+    const upgraded = JSON.parse(twice).nodes.find((n: { id: string }) => n.id === 'batch_1')
+    expect(upgraded.config.actionType).toBeUndefined()
+    expect(upgraded.config.body).toHaveLength(1)
+    expect(upgraded.config.body[0]).toMatchObject({ type: 'SCRIPT', name: 'Groovy 脚本' })
+    const graph2 = parseDsl(twice)
+    const thrice = serializeDsl(graph2.nodes, graph2.edges)
+    expect(isDslEqual(twice, thrice)).toBe(true) // body 形态往返稳定
+  })
+
+  it('parse：BATCH config.body 合成循环体节点与闭合循环连线', () => {
+    const graph = parseDsl(
+      JSON.stringify({
+        nodes: [
+          {
+            id: 'batch_1',
+            type: 'BATCH',
+            name: '批处理',
+            x: 300,
+            y: 80,
+            config: {
+              collection: '{{items}}',
+              itemVar: 'item',
+              indexVar: 'index',
+              stopOnError: true,
+              maxItems: 100,
+              body: [
+                { id: 'step_a', type: 'SCRIPT', name: '脚本', config: { language: 'groovy', source: 'return item' } },
+                { id: 'step_b', type: 'DATA_UPDATE', name: '改库存', config: { table: 'wf_biz_t', setOps: [{ column: 'c', mode: 'ADD', value: '1' }], where: [] } },
+              ],
+            },
+          },
+        ],
+        edges: [],
+      })
+    )
+    const ids = graph.nodes.map((n) => n.id)
+    expect(ids).toContain('batch_1')
+    expect(ids).toContain('step_a')
+    expect(ids).toContain('step_b')
+    // 循环链：loop_start→step_a→step_b→loop_end
+    const loopEdges = graph.edges.filter((e) => e.data?.loop === true)
+    expect(loopEdges).toHaveLength(3)
+    expect(loopEdges.every((e) => e.type === 'smoothstep' && e.deletable === undefined)).toBe(true)
+    const chain = loopEdges.map((e) => [e.source, e.target, e.sourceHandle, e.targetHandle])
+    expect(chain).toContainEqual(['batch_1', 'step_a', 'loop_start', 'in'])
+    expect(chain).toContainEqual(['step_a', 'step_b', 'out', 'in'])
+    expect(chain).toContainEqual(['step_b', 'batch_1', 'out', 'loop_end'])
+    // 合成节点位置：批处理下方横排
+    const a = graph.nodes.find((n) => n.id === 'step_a')!
+    const b = graph.nodes.find((n) => n.id === 'step_b')!
+    expect(a.position.y).toBe(210)
+    expect(b.position.x).toBeGreaterThan(a.position.x)
+  })
+
+  it('parse：BATCH 无 body 无 actionType 时合成 loop_start→loop_end 直连空循环', () => {
+    const graph = parseDsl(
+      JSON.stringify({
+        nodes: [{ id: 'batch_1', type: 'BATCH', name: '批处理', x: 0, y: 0, config: { collection: '', stopOnError: true, maxItems: 100 } }],
+        edges: [],
+      })
+    )
+    expect(graph.nodes).toHaveLength(1)
+    const loopEdges = graph.edges.filter((e) => e.data?.loop === true)
+    expect(loopEdges).toHaveLength(1)
+    expect(loopEdges[0]).toMatchObject({
+      source: 'batch_1',
+      target: 'batch_1',
+      sourceHandle: 'loop_start',
+      targetHandle: 'loop_end',
+      // 自环走自定义 'loop' 边（右侧 U 形外凸，LoopEdge.vue），链段仍是 smoothstep
+      type: 'loop',
+    })
+  })
+
+  it('serialize：循环体链编入 config.body，loop 边与链上节点不进契约', () => {
+    const nodes: FlowNode[] = [
+      makeNode('start_1', 'START', 100, 80),
+      makeNode('batch_1', 'BATCH', 300, 80, {
+        config: { ...defaultConfig('BATCH'), collection: '{{items}}' },
+      }),
+      makeNode('batch_1__b0', 'SCRIPT', 260, 210, {
+        config: { language: 'groovy', source: 'return item' },
+        resultVar: 'r0',
+      }),
+      makeNode('batch_1__b1', 'DATA_UPDATE', 440, 210, {
+        config: { table: 'wf_biz_t', setOps: [{ column: 'c', mode: 'SET', value: '1' }], where: [] },
+      }),
+      makeNode('end_1', 'END', 560, 80),
+    ]
+    const loopEdge = (id: string, source: string, target: string, sh?: string, th?: string): FlowEdge => ({
+      id,
+      source,
+      target,
+      sourceHandle: sh,
+      targetHandle: th,
+      data: { loop: true },
+    })
+    const edges: FlowEdge[] = [
+      makeEdge('e1', 'start_1', 'batch_1'),
+      makeEdge('e2', 'batch_1', 'end_1'),
+      loopEdge('l1', 'batch_1', 'batch_1__b0', 'loop_start', 'in'),
+      loopEdge('l2', 'batch_1__b0', 'batch_1__b1', 'out', 'in'),
+      loopEdge('l3', 'batch_1__b1', 'batch_1', 'out', 'loop_end'),
+    ]
+    const dsl = JSON.parse(serializeDsl(nodes, edges))
+    const batch = dsl.nodes.find((n: { id: string }) => n.id === 'batch_1')
+    expect(batch.config.body).toHaveLength(2)
+    expect(batch.config.body[0]).toMatchObject({ id: 'batch_1__b0', type: 'SCRIPT', resultVar: 'r0' })
+    expect(batch.config.body[1]).toMatchObject({ id: 'batch_1__b1', type: 'DATA_UPDATE' })
+    expect(batch.config.actionType).toBeUndefined()
+    // 循环边/链上节点不进契约
+    expect(dsl.edges.some((e: { source: string }) => e.source === 'batch_1__b0')).toBe(false)
+    expect(dsl.nodes.some((n: { id: string }) => n.id === 'batch_1__b0')).toBe(false)
+    // 主流边保留
+    expect(dsl.edges.map((e: { id: string }) => e.id).sort()).toEqual(['e1', 'e2'])
+  })
+
+  it('serialize：嵌套批处理——子 BATCH 的 body 递归写回外层 body，子链节点剔出顶层', () => {
+    const nodes: FlowNode[] = [
+      makeNode('start_1', 'START', 100, 80),
+      makeNode('batch_outer', 'BATCH', 300, 80, {
+        config: { ...defaultConfig('BATCH'), collection: '{{rows}}' },
+      }),
+      makeNode('batch_inner', 'BATCH', 300, 210, {
+        config: { ...defaultConfig('BATCH'), collection: '{{item}}' },
+      }),
+      makeNode('batch_inner__b0', 'SCRIPT', 300, 340, {
+        config: { language: 'groovy', source: 'return item' },
+      }),
+      makeNode('end_1', 'END', 560, 80),
+    ]
+    const loopEdge = (id: string, source: string, target: string, sh?: string, th?: string): FlowEdge => ({
+      id,
+      source,
+      target,
+      sourceHandle: sh,
+      targetHandle: th,
+      data: { loop: true },
+    })
+    const edges: FlowEdge[] = [
+      makeEdge('e1', 'start_1', 'batch_outer'),
+      makeEdge('e2', 'batch_outer', 'end_1'),
+      loopEdge('l1', 'batch_outer', 'batch_inner', 'loop_start', 'in'),
+      loopEdge('l2', 'batch_inner', 'batch_outer', 'out', 'loop_end'),
+      loopEdge('l3', 'batch_inner', 'batch_inner__b0', 'loop_start', 'in'),
+      loopEdge('l4', 'batch_inner__b0', 'batch_inner', 'out', 'loop_end'),
+    ]
+    const dsl = JSON.parse(serializeDsl(nodes, edges))
+    // 顶层：start/end/batch_outer（batch_inner 与其循环体节点剔出顶层）
+    expect(dsl.nodes.map((n: { id: string }) => n.id).sort()).toEqual([
+      'batch_outer',
+      'end_1',
+      'start_1',
+    ])
+    const outer = dsl.nodes.find((n: { id: string }) => n.id === 'batch_outer')
+    expect(outer.config.body).toHaveLength(1)
+    const inner = outer.config.body[0]
+    expect(inner).toMatchObject({ id: 'batch_inner', type: 'BATCH' })
+    // 嵌套写回：子 BATCH 的 body 含 SCRIPT 步骤
+    expect(inner.config.body).toHaveLength(1)
+    expect(inner.config.body[0]).toMatchObject({ id: 'batch_inner__b0', type: 'SCRIPT' })
+  })
+})
+
+// ==================== SUBFLOW / inputVars / 变量扫描 ====================
+
+describe('SUBFLOW', () => {
+  it('defaultConfig(SUBFLOW) 给出默认结构', () => {
+    expect(defaultConfig('SUBFLOW')).toEqual({
+      flowId: '',
+      passAllVars: true,
+      varsMapping: [],
+    })
+  })
+
+  it('SUBFLOW DSL 往返：serialize → parse → serialize 稳定', () => {
+    const nodes: FlowNode[] = [
+      makeNode('start_1', 'START', 100, 80),
+      makeNode('sub_1', 'SUBFLOW', 300, 160, {
+        config: {
+          flowId: 'abc123',
+          passAllVars: false,
+          varsMapping: [{ source: 'a', target: 'x' }],
+        },
+        resultVar: 'subOut',
+      }),
+    ]
+    const edges: FlowEdge[] = [
+      makeEdge('e1', 'start_1', 'sub_1'),
+    ]
+    const once = serializeDsl(nodes, edges)
+    const graph = parseDsl(once)
+    const twice = serializeDsl(graph.nodes, graph.edges, graph.inputVars)
+    expect(isDslEqual(once, twice)).toBe(true)
+    const raw = JSON.parse(once)
+    expect(raw.nodes[1].config.flowId).toBe('abc123')
+    expect(raw.nodes[1].config.passAllVars).toBe(false)
+    expect(raw.nodes[1].config.varsMapping[0]).toEqual({ source: 'a', target: 'x' })
+    expect(raw.nodes[1].resultVar).toBe('subOut')
+  })
+})
+
+describe('DATA_UPDATE 数据更新节点', () => {
+  it('defaultConfig(DATA_UPDATE) 给出默认结构；默认名为数据更新', () => {
+    expect(defaultConfig('DATA_UPDATE')).toEqual({
+      table: '',
+      setOps: [{ column: '', mode: 'SET', value: '' }],
+      where: [],
+    })
+    expect(defaultNodeName('DATA_UPDATE')).toBe('数据更新')
+  })
+
+  it('DATA_UPDATE 属合法类型：parse 保留 config 与 resultVar/errorAction', () => {
+    const dsl = JSON.stringify({
+      nodes: [
+        { id: 'start_1', type: 'START', name: '开始', x: 100, y: 80 },
+        {
+          id: 'du_1',
+          type: 'DATA_UPDATE',
+          name: '扣减库存',
+          x: 300,
+          y: 160,
+          config: {
+            table: 'wf_biz_warehouse',
+            setOps: [{ column: 'qty', mode: 'ADD', value: '{{formData.qty}}' }],
+            where: [{ column: 'sku', op: 'EQ', value: '{{formData.sku}}' }],
+          },
+          resultVar: 'updatedRows',
+          errorAction: 'FAIL_FLOW',
+        },
+        { id: 'end_1', type: 'END', name: '结束', x: 500, y: 240 },
+      ],
+      edges: [
+        { source: 'start_1', target: 'du_1' },
+        { source: 'du_1', target: 'end_1' },
+      ],
+    })
+    const graph = parseDsl(dsl)
+    const du = graph.nodes[1]
+    expect(du.data.nodeType).toBe('DATA_UPDATE')
+    expect(du.data.resultVar).toBe('updatedRows')
+    expect(du.data.errorAction).toBe('FAIL_FLOW')
+    const cfg = du.data.config as { table: string; setOps: unknown[]; where: unknown[] }
+    expect(cfg.table).toBe('wf_biz_warehouse')
+    expect(cfg.setOps).toHaveLength(1)
+    expect(cfg.where).toHaveLength(1)
+  })
+
+  it('DATA_UPDATE DSL 往返：serialize → parse → serialize 稳定', () => {
+    const nodes: FlowNode[] = [
+      makeNode('start_1', 'START', 100, 80),
+      makeNode('du_1', 'DATA_UPDATE', 300, 160, {
+        config: {
+          table: 'wf_biz_product',
+          setOps: [
+            { column: 'stock', mode: 'SUB', value: '12' },
+            { column: 'last_op', mode: 'SET', value: '入库' },
+          ],
+          where: [{ column: 'id', op: 'EQ', value: '{{dataId}}' }],
+        },
+        resultVar: 'updatedRows',
+      }),
+    ]
+    const edges: FlowEdge[] = [makeEdge('e1', 'start_1', 'du_1')]
+    const once = serializeDsl(nodes, edges)
+    const graph = parseDsl(once)
+    const twice = serializeDsl(graph.nodes, graph.edges, graph.inputVars)
+    expect(isDslEqual(once, twice)).toBe(true)
+    const raw = JSON.parse(once)
+    expect(raw.nodes[1].config.table).toBe('wf_biz_product')
+    expect(raw.nodes[1].config.setOps[0]).toEqual({ column: 'stock', mode: 'SUB', value: '12' })
+    expect(raw.nodes[1].config.where[0]).toEqual({ column: 'id', op: 'EQ', value: '{{dataId}}' })
+    expect(raw.nodes[1].resultVar).toBe('updatedRows')
+  })
+})
+
+describe('inputVars', () => {
+  it('inputVars 声明往返：序列化包含声明，解析还原', () => {
+    const declared = [
+      { name: 'orderId', type: 'string' as const, required: true, desc: '订单号' },
+      { name: 'amount', type: 'number' as const, required: false },
+    ]
+    const once = serializeDsl(
+      [
+        makeNode('start_1', 'START'),
+        makeNode('end_1', 'END'),
+      ],
+      [
+        makeEdge('e1', 'start_1', 'end_1'),
+      ],
+      declared
+    )
+    const raw = JSON.parse(once)
+    expect(raw.inputVars).toHaveLength(2)
+    expect(raw.inputVars[0]).toEqual({ name: 'orderId', type: 'string', required: true, desc: '订单号' })
+    const graph = parseDsl(once)
+    expect(graph.inputVars[0].name).toBe('orderId')
+    expect(graph.inputVars[0].required).toBe(true)
+    // 空白名声明被过滤
+    const filtered = serializeDsl([], [], [{ name: ' ', type: 'string' }])
+    expect(JSON.parse(filtered).inputVars).toBeUndefined()
+  })
+
+  it('无 inputVars 时序列化不输出该字段（兼容旧 DSL）', () => {
+    expect(Object.keys(JSON.parse(serializeDsl([], [])))).toEqual(['nodes', 'edges'])
+  })
+})
+
+describe('collectReferencedVars', () => {
+  it('提取占位符/结构化引用并剔除本流产出（resultVar/itemVar/indexVar）', async () => {
+    const { collectReferencedVars } = await import('../dsl')
+    const graph = parseDsl(JSON.stringify({
+      nodes: [
+        { id: 's', type: 'START', name: '开始', x: 0, y: 0 },
+        {
+          id: 'h', type: 'HTTP', name: '调用', x: 10, y: 10,
+          config: { url: 'http://a/{{orderId}}', method: 'GET', headers: {}, queryParams: [{ source: 'token', target: 't' }], bodyParams: [] },
+          resultVar: 'resp',
+        },
+        {
+          id: 'b', type: 'BATCH', name: '批', x: 20, y: 20,
+          config: { collection: '{{resp}}', itemVar: 'item', indexVar: 'index', actionType: 'SCRIPT', actionConfig: { language: 'groovy', source: 'return item' } },
+        },
+        {
+          id: 'sf', type: 'SUBFLOW', name: '子流程', x: 30, y: 30,
+          config: { flowId: 'x', passAllVars: true, varsMapping: [{ source: 'orderId', target: 'id' }] },
+        },
+        { id: 'e', type: 'END', name: '结束', x: 40, y: 40 },
+      ],
+      edges: [
+        { source: 's', target: 'h' },
+        { source: 'h', target: 'b' },
+        { source: 'b', target: 'sf' },
+        { source: 'sf', target: 'e' },
+      ],
+    }))
+    const refs = collectReferencedVars(graph)
+    // orderId（占位符+映射）、token（queryParams source）为输入候选；
+    // resp 虽被 BATCH collection 引用，但它是本流产出（resultVar）→ 剔除；item/index 产出 → 剔除
+    expect(refs).toContain('orderId')
+    expect(refs).toContain('token')
+    expect(refs).not.toContain('resp')
+    expect(refs).not.toContain('item')
+    expect(refs).not.toContain('index')
   })
 })

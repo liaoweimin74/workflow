@@ -1,7 +1,25 @@
 <template>
-  <div class="lf-node-card" :class="[`type-${data.nodeType.toLowerCase()}`, { 'is-selected': selected }]">
+  <div
+    class="lf-node-card"
+    :class="[
+      `type-${data.nodeType.toLowerCase()}`,
+      { 'is-selected': selected, 'is-run-failed': status === 'FAILED', 'is-run-success': status === 'SUCCESS' },
+    ]"
+  >
     <!-- 类型色条 -->
     <span class="type-bar" :style="typeColorStyle" />
+
+    <!-- 运行状态徽标（flowgram 风格：成功✓/失败✕/跳过—） -->
+    <span
+      v-if="status"
+      class="run-badge"
+      :class="`run-${String(status).toLowerCase()}`"
+      :title="`运行状态：${status}`"
+    >
+      <el-icon v-if="status === 'SUCCESS'"><Check /></el-icon>
+      <el-icon v-else-if="status === 'FAILED'"><CloseBold /></el-icon>
+      <el-icon v-else><Minus /></el-icon>
+    </span>
 
     <!-- 删除小按钮（hover 显示，连带删除关联边由父组件处理） -->
     <span
@@ -29,13 +47,22 @@
       </span>
     </div>
 
-    <!-- 连接点：CONDITION 两个出边（真/假）上下排布标注；其余上入下出 -->
+    <!-- 连接点：CONDITION 两个出边（真/假）上下排布标注；BATCH 侧面闭合循环连线；其余上入下出 -->
     <template v-if="data.nodeType === 'CONDITION'">
       <Handle id="in" type="target" :position="Position.Top" />
       <Handle id="true" type="source" :position="Position.Bottom" class="handle-branch branch-true" :style="{ left: '28%' }" />
       <Handle id="false" type="source" :position="Position.Bottom" class="handle-branch branch-false" :style="{ left: '72%' }" />
       <span class="branch-label label-true">真</span>
       <span class="branch-label label-false">假</span>
+    </template>
+    <template v-else-if="data.nodeType === 'BATCH'">
+      <Handle id="in" type="target" :position="Position.Top" />
+      <Handle id="out" type="source" :position="Position.Bottom" />
+      <!-- 闭合循环连线挂在节点右侧：外凸 U 形（LoopEdge.vue），远离主流更醒目 -->
+      <Handle id="loop_start" type="source" :position="Position.Right" class="handle-loop" :style="{ top: '30%' }" />
+      <Handle id="loop_end" type="target" :position="Position.Right" class="handle-loop" :style="{ top: '74%' }" />
+      <span class="loop-label loop-label-start">循环起点</span>
+      <span class="loop-label loop-label-end">循环终点</span>
     </template>
     <template v-else>
       <Handle v-if="data.nodeType !== 'START'" id="in" type="target" :position="Position.Top" />
@@ -47,7 +74,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
-import { Close } from '@element-plus/icons-vue'
+import { Check, Close, CloseBold, Minus } from '@element-plus/icons-vue'
 import { NODE_COLOR_VAR, nodeMeta } from '../utils/nodeMeta'
 import type { FlowNodeData } from '../utils/dsl'
 
@@ -57,8 +84,10 @@ const props = withDefaults(
     data: FlowNodeData
     selected?: boolean
     deletable?: boolean
+    /** 最近一次运行的状态（画布徽标） */
+    status?: string
   }>(),
-  { selected: false, deletable: true }
+  { selected: false, deletable: true, status: '' }
 )
 
 const emit = defineEmits<{ delete: [id: string] }>()
@@ -74,6 +103,17 @@ const typeColorStyle = computed(() => {
     borderColor: `color-mix(in srgb, var(${colorVar}) 45%, transparent)`,
   }
 })
+
+/** legacy 单动作摘要（body 循环体模式下不用） */
+function legacyActionSummary(cfg: Record<string, unknown> | undefined): string {
+  const actionConfig = cfg?.actionConfig as Record<string, unknown> | undefined
+  const actionType = String(cfg?.actionType ?? '').toUpperCase()
+  if (actionType === 'HTTP') return `HTTP ${String(actionConfig?.url ?? '')}`
+  if (actionType === 'BEAN') {
+    return `${String(actionConfig?.beanName ?? '')}#${String(actionConfig?.methodName ?? '')}`
+  }
+  return 'Groovy 脚本'
+}
 
 /** 节点副标题：类型 + 配置摘要 */
 const summary = computed(() => {
@@ -102,6 +142,25 @@ const summary = computed(() => {
       return '流程起点'
     case 'END':
       return '流程终点'
+    case 'BATCH': {
+      const collection = String(cfg?.collection ?? '')
+      const body = Array.isArray(cfg?.body) ? (cfg?.body as unknown[]) : []
+      const bodyLabel = body.length
+        ? `${body.length} 步循环体`
+        : cfg?.actionType
+          ? `遍历执行 ${legacyActionSummary(cfg)}`
+          : '未配置循环体'
+      return collection ? `${collection} · ${bodyLabel}` : `未配置集合 · ${bodyLabel}`
+    }
+    case 'SUBFLOW': {
+      const flowId = String(cfg?.flowId ?? '')
+      return flowId ? `调用流 ${flowId.slice(0, 12)}…` : '未选择目标流程'
+    }
+    case 'DATA_UPDATE': {
+      const table = String(cfg?.table ?? '')
+      const setOps = Array.isArray(cfg?.setOps) ? (cfg?.setOps as unknown[]) : []
+      return table ? `更新 ${table} · ${setOps.length} 字段` : '未配置目标表'
+    }
     default:
       return ''
   }
@@ -111,15 +170,15 @@ const summary = computed(() => {
 <style scoped>
 .lf-node-card {
   position: relative;
-  min-width: 168px;
-  max-width: 220px;
-  padding: 9px 12px 10px 15px;
+  min-width: 136px;
+  max-width: 180px;
+  padding: 6px 10px 7px 12px;
   background: var(--el-bg-color);
   border: 1.5px solid var(--el-border-color-light);
-  border-radius: 8px;
+  border-radius: 7px;
   box-shadow: 0 1px 3px rgba(31, 36, 55, 0.06);
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .lf-node-card:hover {
@@ -139,12 +198,51 @@ const summary = computed(() => {
 .type-bar {
   position: absolute;
   left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3.5px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
   border-radius: 0 3px 3px 0;
   background: currentColor;
   opacity: 0.9;
+}
+
+/* 运行状态徽标 */
+.run-badge {
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  z-index: 6;
+}
+
+.run-badge.run-success {
+  background: var(--el-color-success);
+}
+
+.run-badge.run-failed {
+  background: var(--el-color-danger);
+}
+
+.run-badge.run-skipped {
+  background: var(--el-color-info);
+}
+
+/* 运行结果描边 */
+.lf-node-card.is-run-success {
+  border-color: var(--el-color-success);
+}
+
+.lf-node-card.is-run-failed {
+  border-color: var(--el-color-danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--el-color-danger) 22%, transparent);
 }
 
 /* 中性类型（START/END）色条弱化 */
@@ -155,17 +253,17 @@ const summary = computed(() => {
 
 .node-delete {
   position: absolute;
-  top: -9px;
-  right: -9px;
+  top: -8px;
+  right: -8px;
   display: none;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--el-color-danger);
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   z-index: 5;
@@ -182,7 +280,7 @@ const summary = computed(() => {
 .node-head {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -190,12 +288,12 @@ const summary = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 19px;
+  height: 19px;
   flex-shrink: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   border: 1px solid transparent;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -209,8 +307,8 @@ const summary = computed(() => {
 }
 
 .node-summary {
-  margin-top: 4px;
-  font-size: 11px;
+  margin-top: 3px;
+  font-size: 10px;
   color: var(--el-text-color-secondary);
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   overflow: hidden;
@@ -222,16 +320,16 @@ const summary = computed(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 5px;
+  margin-top: 4px;
 }
 
 .node-tag {
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
-  height: 16px;
+  padding: 0 5px;
+  height: 14px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1;
   max-width: 100%;
   overflow: hidden;
@@ -254,6 +352,44 @@ const summary = computed(() => {
 /* CONDITION 真/假分支标注 */
 .handle-branch {
   cursor: crosshair;
+}
+
+/* BATCH 循环连接点（右侧，紫罗兰实心醒目）。
+ * 提权：.vue-flow__handle 主题规则与 .handle-loop 同特异性且后注入会覆盖，
+ * 借 .lf-node-card 提到 (0,3,0) 稳赢 */
+.lf-node-card .handle-loop {
+  width: 10px;
+  height: 10px;
+  cursor: crosshair;
+  background: color-mix(in srgb, var(--lf-batch) 55%, var(--el-bg-color));
+  border: 1.5px solid var(--lf-batch);
+}
+
+/* 循环标签：节点右侧（连接点同侧），上下错开避让 U 形水平段，实底保可读 */
+.loop-label {
+  position: absolute;
+  left: 100%;
+  margin-left: 8px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 5px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+  color: var(--lf-batch);
+  background: color-mix(in srgb, var(--lf-batch) 10%, var(--el-bg-color));
+  border: 1px solid color-mix(in srgb, var(--lf-batch) 28%, transparent);
+  box-shadow: 0 0 0 2px var(--el-bg-color);
+}
+
+.loop-label-start {
+  top: 30%;
+  transform: translateY(calc(-50% - 13px));
+}
+
+.loop-label-end {
+  top: 74%;
+  transform: translateY(calc(-50% + 13px));
 }
 
 .branch-label {

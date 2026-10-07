@@ -2142,3 +2142,18 @@ Work Log:
 Stage Summary:
 - D+ 架构切换落地：门户退役、vite 独占 3000（待重置生效）、8080 后端保持；巡检预期态已改写
 - 【「代码回滚」疑问结论】git 全历史核查无回滚提交；逻辑流设计界面（BackendLogicProperty.vue / api/backendLogic.ts）从未入库——系更早会话未提交文件随沙箱重置丢失，store 类型与后端引擎仍在；待用户指示后重建 UI 并实现「变量选择列表就近显示」
+
+---
+Task ID: 130-patrol
+Agent: main (cron 439400 轻量巡检 07:12 轮)
+Task: D+ 架构巡检（新预期态首轮）
+
+Work Log:
+- 探活（D+ 新预期态）：D-8080=200 核心链路健康（backend-node）；A3000=000 / B-BFF=000 / C-HOST=000 均为预期（门户已退役，vite-3000 待下次发布/重置由启动树常驻；B-BFF 随门户退役不再要求）
+- mariadb(4847, 129MB) 在听 3306；进程栈干净：python-supervisor / mariadb / backend-node / caddy / agent-browser CLI，无 postcss、无多余 vite（上轮 vite=1 为 rg 自匹配误报，已复核排除）
+- 内存减压：无 postcss 再生（next dev 退役后该残留源已消失，连续计数终止于 23 轮）；cgroup 1437323264 ≈ 1.44GB，与切换后持平
+- OOM：oom_kill=0 持平，无事故
+- 未启 agent-browser、未改代码、未做 QA；未跑 start-portal.sh（已退役守卫）
+
+Stage Summary:
+- 130-patrol：D+ 新稳态确认（8080 核心 + mariadb 支撑，1.44GB 轻载运行）；3000 复活条件=用户触发发布/重置

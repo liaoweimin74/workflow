@@ -2203,3 +2203,16 @@ Work Log:
 
 Stage Summary:
 - 133-patrol 全绿；vite 跨回合存活证实，3000 在 cron 体系下可自愈常驻（掉线轮次由 start-services.sh 修复即可）；引擎 Java 切换与 cron 文本更新仍待架构对齐轮
+---
+Task ID: 134-patrol
+Agent: main (cron 439400 轻量巡检 07:32 轮)
+Task: D+ 架构巡检（vite 常驻稳态确认轮）
+
+Work Log:
+- 探活：A3000=200 / C-HOST=200 / D-8080=200 全绿；B-BFF=404 为已备案预期
+- vite（PID 9754）连续第二轮跨回合存活（ELAPSED 07:11，RSS 274MB 稳定）——「nohup 拉起可跨回合常驻」结论进一步坐实
+- 内存减压：单 vite、无 postcss 再生；cgroup 1.67GB 与上轮持平（1667178496）；oom_kill=0 持平，无事故
+- 无修复动作，未跑任何启动脚本；未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 134-patrol 全绿免修复；vite 常驻进入稳态（两轮连续存活），3000/8080 双链路健康

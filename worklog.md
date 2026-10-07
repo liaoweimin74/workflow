@@ -2046,3 +2046,36 @@ Work Log:
 Stage Summary:
 - 123-patrol 全绿零修复；postcss 连续第十八轮再生（PID 4473→4615），规律不变，例行清除
 - start-portal.sh 健康门槛隐患（L26）仍未甄别，本轮未触发
+
+---
+Task ID: 124-patrol
+Agent: main (cron 439400 轻量巡检 06:42 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 探活：A3000=200 / B-BFF=200 / C-HOST=200 三链路全绿
+- 【架构变化备案】D-8080=200 —— 8080 已由新进程接管：node dist/main.js（PID 4871，cwd=/home/z/my-project/workflow_lowcode/backend-node），ss 确认 *:8080 监听。102-patrol「8080 退役」备案作废，新架构下 8080=backend-node Node 引擎端口，探活 200 为新预期态
+- 减压：postcss worker 再生（PID 4753，415MB）按 PID kill，复核无存活；vite 单进程（1128）
+- cgroup 3209158656 bytes ≈ 3.21 GB；oom_kill=0 持平，无事故
+- 本轮另有用户插队需求「选择变量的列表应该显示在变量附近」，巡检条款外任务，另立条目处理
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 124-patrol 全绿；8080 复活为 backend-node 监听端口（重大架构事实更新），postcss 连续第十九轮再生已清
+
+---
+Task ID: 125-patrol
+Agent: main (cron 439400 轻量巡检 06:47 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 探活：A3000=200 / B-BFF=200 / C-HOST=200 三链路全绿；D-8080=200 新预期态（124-patrol 备案：8080=backend-node Node 引擎）
+- 减压：postcss worker 再生（PID 5861，323MB）按 PID kill，复核无存活；vite 单进程（1128）
+- 环境补充观察：mariadbd 运行中（PID 4847，127.0.0.1:3306），backend-node+mariadb 平台栈形态
+- cgroup 3301388288 bytes ≈ 3.30 GB，较上轮 3.21 GB 略升；next-server(2141) RSS 1.56GiB 偏高（编译波动区间）
+- OOM：oom_kill=0 持平，无事故
+- 用户澄清问题（变量选择列表场景）仍在等待回复，未动代码
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 125-patrol 全绿；postcss 连续第二十轮再生已清；8080/3306 平台栈新稳态确认

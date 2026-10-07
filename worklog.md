@@ -1758,3 +1758,19 @@ Work Log:
 Stage Summary:
 - 105-patrol 修复 Turbopack panic 致 3000 全页 500 故障，四链路恢复三绿
 - 隐患上报：start-portal.sh 健康门槛把 HTTP 500 判为「已健康」直接退出（L26 非 000 即通过），建议改为仅 200 视为健康；postcss worker 本轮未再生
+
+---
+Task ID: 106-patrol
+Agent: main (cron 439400 轻量巡检 05:12 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 探活：A3000=200 / B-BFF=200 / C-HOST=200 三链路全绿；D-8080=000 新架构预期下线（102-patrol 备案，维持不拉起）
+- 减压：vite 单进程（PID 1128，432MB）无需处置；postcss worker 再生（PID 2192，288MB）按 PID kill，复核无存活
+- next-server 现为 105 轮重拉后新 PID 2141，RSS 约 1.27GiB；cgroup 3177381888 bytes ≈ 3.18 GB，较上轮 3.27 GB 略降
+- OOM：oom_kill=0 持平（重置后基线 0），无事故
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 106-patrol 全绿零修复；postcss 再生呈间歇性（105 轮未现、本轮再现），维持出现即 kill 策略
+- 上轮隐患（start-portal.sh 健康门槛 L26 非 000 即通过）仍待 cron/脚本甄别，本轮未触发

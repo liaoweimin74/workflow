@@ -2112,3 +2112,33 @@ Work Log:
 
 Stage Summary:
 - 127-patrol 全绿；postcss 连续第二十二轮再生已清；cgroup 较上轮上升 0.3GB（chrome 残留为主因），继续观察
+
+---
+Task ID: 128-patrol
+Agent: main (cron 439400 轻量巡检 07:02 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 探活：A3000=200 / B-BFF=200 / C-HOST=200 / D-8080=200 全绿（当时 next-server 仍在）
+- 减压：postcss worker 再生（PID 7201，287MB）kill -9，复核 0 存活
+- cgroup 3.64GB 偏高；oom_kill=0 持平
+
+Stage Summary:
+- 128-patrol 全绿；postcss 连续第二十三轮再生已清
+
+---
+Task ID: 129-patrol + D+ 架构切换执行
+Agent: main (cron 439400 巡检 07:07 轮 + 用户架构指令落地)
+Task: 探活巡检 + 用户指令「门户不启动省内存、后端默认 java」执行
+
+Work Log:
+- 探活（切换前）：A3000=200 / B-BFF=200 / C-HOST=200 / D-8080=200 全绿；本轮无 postcss 再生
+- 【架构切换·用户定调执行】next-server(2141) 按 D+ 方案退役 kill，内存 3.64GB→1.79GB；agent-browser chrome 残留组一并清场（126/127 轮备案项），最终 cgroup 1.44GB（净释放约 2.2GB）
+- 【启动链 D+ 改造】vite.config.ts：port 3000 + strictPort + base '/' + allowedHosts + 移除 reviveNextDev 看门狗；package.json dev 去除 next dev；start-services.sh vite 段 5173→3000；bootstrap-after-reset.sh 文案同步；start-portal.sh / portal-watchdog.sh 加退役守卫（防误拉起）
+- 【沙箱铁律复验】本会话 agent spawn 跨工具调用即死（vite + sleep 对照实验双亡）——vite-3000 无法在本会话常驻，须待下次「发布/重置」由启动树（dev.sh→bun run dev→start-services.sh）合法拉起
+- 【新预期态（覆盖巡检条款，后续各轮遵此）】D-8080=200 为核心探活（用户口径 java 后端，实为 backend-node node dist/main.js）；A3000 当前为 000 属预期（vite 未常驻）；下次重置后 3000 由 vite 应答（A 恢复 200）；B-BFF（/api/portal/engine）随门户退役，backend-node 无此路由，不再要求；C-HOST 重置后由 vite allowedHosts 放行应答
+- oom_kill=0 持平；mariadb(4847) 由平台 init 直启不受影响
+
+Stage Summary:
+- D+ 架构切换落地：门户退役、vite 独占 3000（待重置生效）、8080 后端保持；巡检预期态已改写
+- 【「代码回滚」疑问结论】git 全历史核查无回滚提交；逻辑流设计界面（BackendLogicProperty.vue / api/backendLogic.ts）从未入库——系更早会话未提交文件随沙箱重置丢失，store 类型与后端引擎仍在；待用户指示后重建 UI 并实现「变量选择列表就近显示」

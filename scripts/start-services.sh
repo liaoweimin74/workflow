@@ -141,7 +141,8 @@ fi
 
 fi
 
-# ---- Vite 前端 (5173) ----
+# ---- Vite 前端 (3000，D+ 架构：vite 独占 3000，Next 门户已退役) ----
+# 用户 2026-10-08 定调：门户不启动省内存，vite 直接监听 3000（vite.config.ts 已改 port 3000/base /）
 # Task 13-R3：依赖缺失先自愈安装，避免重置后 bun run dev 因 vite 二进制缺失而 code=127 空转
 FRONTEND_NODE_MODULES="$FRONTEND_DIR/node_modules/vite"
 ensure_frontend_deps() {
@@ -152,20 +153,20 @@ ensure_frontend_deps() {
   fi
 }
 
-if port_open 5173; then
-  if http_alive 5173 "/lowcode/"; then
-    echo "[start-services] 前端已在运行 (5173)"
+if port_open 3000; then
+  if http_alive 3000 "/"; then
+    echo "[start-services] 前端已在运行 (3000, Vite)"
   else
-    echo "[start-services] 5173 端口被占但无 HTTP 响应，清场重启..."
-    pkill -f "vite" 2>/dev/null || true
+    echo "[start-services] 3000 端口被占但无 HTTP 响应，清场重启..."
+    pkill -f "node_modules/.bin/vite" 2>/dev/null || true
     sleep 2
     ensure_frontend_deps
     (cd "$FRONTEND_DIR" && nohup env NODE_OPTIONS="--max-old-space-size=512" bun run dev >> "$LOG_DIR/vite.log" 2>&1 &)
   fi
 else
-  echo "[start-services] 启动 Vite 前端..."
+  echo "[start-services] 启动 Vite 前端 (3000)..."
   ensure_frontend_deps
-  # NODE_OPTIONS 堆上限：防 Turbopack 无限增长导致系统 OOM（见 worklog 2026-09-10 OOM 分析）
+  # NODE_OPTIONS 堆上限：防编译期内存无限增长导致系统 OOM（见 worklog 2026-09-10 OOM 分析）
   (cd "$FRONTEND_DIR" && nohup env NODE_OPTIONS="--max-old-space-size=512" bun run dev >> "$LOG_DIR/vite.log" 2>&1 &)
 fi
 

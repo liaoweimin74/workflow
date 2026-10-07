@@ -74,7 +74,7 @@ if [ "$MODE" = "node" ]; then
   ensure_node_backend_deps
   log "调用 start-services.sh 拉起服务..."
   bash /home/z/my-project/scripts/start-services.sh
-  log "恢复完成。验证：3000(网关) / 5173(Vite) / 8080(后端)"
+  log "恢复完成。验证：3000(Vite 低代码前端，D+ 架构独占) / 8080(后端)"
   exit 0
 fi
 
@@ -141,5 +141,5 @@ ensure_frontend_deps
 log "调用 start-services.sh 拉起服务..."
 bash /home/z/my-project/scripts/start-services.sh
 
-log "恢复完成。验证：3000(网关) / 5173(Vite) / 8080(后端)"
+log "恢复完成。验证：3000(Vite 低代码前端，D+ 架构独占) / 8080(后端)"
 exit 0

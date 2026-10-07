@@ -2170,3 +2170,21 @@ Work Log:
 
 Stage Summary:
 - 131-patrol：D+ 新稳态延续（8080 核心 200 + 1.44GB 轻载）；无修复动作，免修复直接收尾
+---
+Task ID: 132-patrol
+Agent: main (cron 439400 轻量巡检 07:24 轮)
+Task: D+ 架构巡检 + 3000 掉线修复
+
+Work Log:
+- 探活（轮初）：A3000=000 / B-BFF=000 / C-HOST=000 / D-8080=200 —— 与 129~131 备案一致（vite 跨回合消亡，8080 核心健康）
+- 【修复动作】start-portal.sh 已退役守卫（执行即拒绝），改按其指引执行 bash scripts/start-services.sh：后端已在运行跳过，vite 拉起（VITE v8.1.5 就绪 305ms，PID 9754，RSS 447MB）
+- 探活（修复后）：A3000=200 / C-HOST=200 / D-8080=200 全部恢复
+- 【B-BFF=404 根因判定·非故障】/api/portal/engine 为 next 门户专属 BFF 路由，随门户退役；8080 直测同 404（后端本无此路由）；vite /api→8080 代理验证健康（经 3000 的 POST /api/auth/login=200）。cron 条款 b) 已过时，待架构对齐轮更新文本
+- 【存活规律修正】本轮 vite 跨工具调用存活（拉起后 3 次独立调用均 200），129 轮「跨工具调用即死」结论需修正为「跨回合消亡」；能否活到下一轮由 133-patrol 轮初探活判定
+- 内存减压：无 postcss 再生（残留源已随 next 退役消失）、无多余 vite（仅 1 个）；cgroup 1.44GB→1.85GB（+0.4GB 为 vite 本体，符合预期）
+- OOM：oom_kill=0 持平，无事故
+- 【引擎现状备查】8080 实为 backend-node（node dist/main.js, PID 4871）；engine-choice 仍 node（marker 存在），jar 未构建——Java 切换属架构对齐待办，非巡检职责
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 132-patrol：3000 掉线经 start-services.sh 修复全绿（A/C/D=200）；BFF 404 判定为退役预期非故障；vite 存活规律修正为「跨回合消亡、回合内可常驻」，下轮轮初验证

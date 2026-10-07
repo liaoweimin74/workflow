@@ -1950,3 +1950,19 @@ Work Log:
 Stage Summary:
 - 117-patrol 全绿零修复；postcss 连续第十二轮再生（PID 3641→3779），规律不变，例行清除
 - start-portal.sh 健康门槛隐患（L26）仍未甄别，本轮未触发
+
+---
+Task ID: 118-patrol
+Agent: main (cron 439400 轻量巡检 06:12 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 探活：A3000=200 / B-BFF=200 / C-HOST=200 三链路全绿；D-8080=000 新架构预期下线（102-patrol 备案，维持不拉起）
+- 减压：vite 单进程（PID 1128，432MB）无需处置；postcss worker 再生（PID 3917，286MB）按 PID kill，复核无存活
+- cgroup 3197956096 bytes ≈ 3.20 GB，与上轮 3.19 GB 持平；next-server(2141) RSS 1.30GiB 稳定
+- OOM：oom_kill=0 持平（重置后基线 0），无事故
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 118-patrol 全绿零修复；postcss 连续第十三轮再生（PID 3779→3917），规律不变，例行清除
+- start-portal.sh 健康门槛隐患（L26）仍未甄别，本轮未触发

@@ -2079,3 +2079,20 @@ Work Log:
 
 Stage Summary:
 - 125-patrol 全绿；postcss 连续第二十轮再生已清；8080/3306 平台栈新稳态确认
+
+---
+Task ID: 126-patrol
+Agent: main (cron 439400 轻量巡检 06:52 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 探活：A3000=200 / B-BFF=200 / C-HOST=200 三链路全绿；D-8080=200（backend-node Node 引擎，124-patrol 备案的新预期态）
+- 减压：postcss worker 再生（PID 5940，333MB）按 PID kill（TERM 未退，-9 强杀），复核 0 存活；vite 单进程（1128，402MB）
+- 【环境观察·备案】agent-browser chrome 残留进程组出现（主进程 6150 约 212MB + renderer 6234 约 285MB + 若干子进程，合计约 0.6GB）：非本轮启动，条款(6)仅禁止启动、未授权清理，本轮不下手仅记录；若后续 cgroup 持续走高再议处置
+- next-server(2141) RSS 1.64GiB，编译波动区间偏高，持续观察
+- cgroup：起测 3346120704 ≈ 3.35GB → 清理后 3198148608 ≈ 3.20GB
+- OOM：oom_kill=0 持平，无事故
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 126-patrol 全绿；postcss 连续第二十一轮再生已清；chrome 残留进程组（约 0.6GB）备案待观察

@@ -1717,3 +1717,16 @@ Work Log:
 
 Stage Summary:
 - 102-patrol：三链路全绿；8080 D 链路按新架构判定退役（engine-choice=node + 无 jar + 无脚本），后续 cron 文本中 Java 探活条款建议同步更新
+---
+Task ID: 103-patrol
+Agent: main (cron 439400 轻量巡检 04:57 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 三链路 200（3000 next-server 网关 / BFF / 外域 Host）；8080=000 按新架构预期下线（上轮 102-patrol 已备案：engine-choice=node + 无 jar）
+- 内存减压：postcss worker 复发（PID 1693，next dev 编译期子进程会再生）已 kill；vite 单进程（PID 1128）；next-server 1.31 GiB 属并行会话工作负载；cgroup 3.19 GiB
+- OOM：oom_kill=0 新基线持平
+- 未启动 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 103-patrol 三链路全绿零修复；postcss 按 cron 条款例行清除（注：next dev 存活期间可能再生，属其编译工作进程，建议后续 cron 文本甄别）

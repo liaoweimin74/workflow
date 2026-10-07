@@ -1703,3 +1703,17 @@ Stage Summary:
 - 流程图预览三处场景（发起页/跟踪抽屉/实例跟踪页）暗色适配闭环，与设计器同源共享主题，节点名称文字从对比 1:1 提升到 9:1
 - 产物：bpmn-canvas-theme.css（新）/designer-theme.css（瘦身 @import）/BpmnViewer.vue/ProcessStartPage.vue/index.html（dark 首帧恢复）
 - 教训：Debug 时采样区域与 fixed 元素坐标必须同帧确认；多假设并行验证前先做最小对照实验
+---
+Task ID: 102-patrol
+Agent: main (cron 439400 轻量巡检 04:52 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 发现沙箱环境已重置：oom_kill=0（旧基线 96 作废）、全进程新 PID、worklog 曾被重写、start-backend.sh 消失
+- 三链路 200：3000 首页 / /api/portal/engine / 外域 Host 头；D 链路 8080=000
+- 架构核实：3000 现由 next-server(PID 1152) 监听（网关），vite(PID 1128) 移至 5173，主引擎为 backend-node（engine-choice=node 持久化选择，端口 12600/19001 在听）；8080 Java 无 jar、无启动脚本——下线为新架构预期状态，不拉起（避免重演 14-R1 劫持事故）
+- 内存减压：postcss 退役残留 PID 1238 已 kill；vite 单进程无冗余；next-server 1.2GB 属并行会话工作负载不在处置清单；cgroup 2.98 GiB
+- 未启动 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 102-patrol：三链路全绿；8080 D 链路按新架构判定退役（engine-choice=node + 无 jar + 无脚本），后续 cron 文本中 Java 探活条款建议同步更新

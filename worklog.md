@@ -2157,3 +2157,16 @@ Work Log:
 
 Stage Summary:
 - 130-patrol：D+ 新稳态确认（8080 核心 + mariadb 支撑，1.44GB 轻载运行）；3000 复活条件=用户触发发布/重置
+---
+Task ID: 131-patrol
+Agent: main (cron 439400 轻量巡检 07:17 轮)
+Task: D+ 架构巡检（新预期态第二轮）
+
+Work Log:
+- 探活（D+ 新预期态）：D-8080=200 核心链路健康；A3000=000 / B-BFF=000 / C-HOST=000 均为预期（vite-3000 待下次发布/重置常驻，BFF 随门户退役不再要求）
+- 内存减压：无 postcss 再生、无多余 vite；cgroup 1437896704 ≈ 1.44GB，与 129/130 轮持平
+- OOM：oom_kill=0 持平，无事故
+- 未启 agent-browser、未改代码、未做 QA；未跑 start-portal.sh（退役守卫）/ start-backend.sh（8080 健康，无需）
+
+Stage Summary:
+- 131-patrol：D+ 新稳态延续（8080 核心 200 + 1.44GB 轻载）；无修复动作，免修复直接收尾

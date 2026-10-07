@@ -1743,3 +1743,18 @@ Work Log:
 
 Stage Summary:
 - 104-patrol 三链路全绿；postcss 例行清除，其余零修复
+---
+Task ID: 105-patrol
+Agent: main (cron 439400 轻量巡检 05:07 轮·含故障修复)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 故障：A/C 链路 500（首页连续三次 500 复现）；根因 Turbopack FATAL panic（globals.css panic + Failed to write app endpoint /page，panic 日志 /tmp/next-panic-a81c1e21be36b7899161b6b71a4fbc45.log），next-server RSS 涨至 1.61 GiB
+- 修复：按 PID kill 假死 next dev(1120)/next-server(1152) → rm -rf .next 清 Turbopack 崩溃缓存 → next dev -p 3000 重新拉起（首次 setsid 未存活，子壳二次拉起成功，Ready 1279ms）
+- 验证：A=200 / B-BFF=200 / C-HOST=200 恢复；D-8080=000 维持新架构预期下线（102-patrol 备案）
+- OOM：oom_kill=0 持平；cgroup 3.27 GiB
+- 未改代码、未做 QA（rm .next 属运行时缓存，非代码变更）
+
+Stage Summary:
+- 105-patrol 修复 Turbopack panic 致 3000 全页 500 故障，四链路恢复三绿
+- 隐患上报：start-portal.sh 健康门槛把 HTTP 500 判为「已健康」直接退出（L26 非 000 即通过），建议改为仅 200 视为健康；postcss worker 本轮未再生

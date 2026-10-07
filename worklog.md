@@ -2188,3 +2188,18 @@ Work Log:
 
 Stage Summary:
 - 132-patrol：3000 掉线经 start-services.sh 修复全绿（A/C/D=200）；BFF 404 判定为退役预期非故障；vite 存活规律修正为「跨回合消亡、回合内可常驻」，下轮轮初验证
+---
+Task ID: 133-patrol
+Agent: main (cron 439400 轻量巡检 07:27 轮)
+Task: D+ 架构巡检（vite 跨回合存活性验证轮）
+
+Work Log:
+- 探活：A3000=200 / C-HOST=200 / D-8080=200 全绿；B-BFF=404 为已备案预期（路由随门户退役，vite /api→8080 代理健康）
+- 【关键验证】132 轮拉起的 vite（PID 9754）跨回合存活（ELAPSED 02:13），推翻 129 轮「跨回合消亡」悲观结论——nohup 分离拉起可跨 cron 回合常驻；存活规律修正为：agent 会话内 nohup 拉起的服务可跨回合存活
+- vite RSS 447MB→275MB（启动编译后 GC 回落，健康）；单 vite、无 postcss 再生
+- cgroup 1.67GB（1.44→1.85→1.67，vite 常驻后的新稳态）；oom_kill=0 持平，无事故
+- 无修复动作：全链路健康，未跑任何启动脚本
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 133-patrol 全绿；vite 跨回合存活证实，3000 在 cron 体系下可自愈常驻（掉线轮次由 start-services.sh 修复即可）；引擎 Java 切换与 cron 文本更新仍待架构对齐轮

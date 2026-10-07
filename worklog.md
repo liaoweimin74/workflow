@@ -1806,3 +1806,19 @@ Work Log:
 Stage Summary:
 - 108-patrol 全绿零修复；postcss 连续第三轮再生（PID 2395→2533，每轮新 PID），kill 后约 5 分钟复发规律与 cron 周期重合，例行清除持续有效
 - start-portal.sh 健康门槛隐患（L26）仍未甄别，本轮未触发
+
+---
+Task ID: 109-patrol
+Agent: main (cron 439400 轻量巡检 05:27 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 探活：A3000=200 / B-BFF=200 / C-HOST=200 三链路全绿；D-8080=000 新架构预期下线（102-patrol 备案，维持不拉起）
+- 减压：vite 单进程（PID 1128，432MB）无需处置；postcss worker 再生（PID 2671，286MB）按 PID kill，复核无存活
+- cgroup 3196268544 bytes ≈ 3.20 GB，较上轮 3.25 GB 略降；next-server(2141) RSS 1.31GiB 稳定
+- OOM：oom_kill=0 持平（重置后基线 0），无事故
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 109-patrol 全绿零修复；postcss 连续第四轮再生（PID 2533→2671），kill→复发周期稳定约 5 分钟，与 cron 轮次同步，例行清除策略维持
+- start-portal.sh 健康门槛隐患（L26）仍未甄别，本轮未触发

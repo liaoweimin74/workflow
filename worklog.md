@@ -1774,3 +1774,19 @@ Work Log:
 Stage Summary:
 - 106-patrol 全绿零修复；postcss 再生呈间歇性（105 轮未现、本轮再现），维持出现即 kill 策略
 - 上轮隐患（start-portal.sh 健康门槛 L26 非 000 即通过）仍待 cron/脚本甄别，本轮未触发
+
+---
+Task ID: 107-patrol
+Agent: main (cron 439400 轻量巡检 05:17 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 探活：A3000=200 / B-BFF=200 / C-HOST=200 三链路全绿；D-8080=000 新架构预期下线（102-patrol 备案，维持不拉起）
+- 减压：vite 单进程（PID 1128，432MB）无需处置；postcss worker 再生（PID 2395，342MB）按 PID kill，复核无存活
+- cgroup 3243544576 bytes ≈ 3.24 GB，较上轮 3.18 GB 略升；next-server(2141) RSS 1.31GiB、vite(1128) 432MB 为两大占用
+- OOM：oom_kill=0 持平（重置后基线 0），无事故
+- 未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 107-patrol 全绿零修复；postcss 连续两轮再生（106/107 轮，新 PID 2192→2395），确认 next dev 编译子进程持续行为，例行清除有效
+- start-portal.sh 健康门槛隐患（L26）仍未甄别，本轮未触发

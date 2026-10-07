@@ -1730,3 +1730,16 @@ Work Log:
 
 Stage Summary:
 - 103-patrol 三链路全绿零修复；postcss 按 cron 条款例行清除（注：next dev 存活期间可能再生，属其编译工作进程，建议后续 cron 文本甄别）
+---
+Task ID: 104-patrol
+Agent: main (cron 439400 轻量巡检 05:02 轮)
+Task: D+ 门户探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 三链路 200（3000 next-server 网关 / BFF / 外域 Host）；8080=000 新架构预期下线（102-patrol 备案）
+- 内存减压：postcss worker 再生（PID 1810，next dev 编译子进程）已 kill；vite 单进程；cgroup 3.17 GiB
+- OOM：oom_kill=0 持平
+- 未启动 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 104-patrol 三链路全绿；postcss 例行清除，其余零修复

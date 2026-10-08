@@ -4755,3 +4755,18 @@ Work Log:
 
 Stage Summary:
 - r100 全绿零干预；健康基线连续 24 轮稳定（r77~r100）；worklog 452KB 属健康范围，无需立即处理，待用户确认是否轮转
+
+---
+Task ID: patrol-r101
+Agent: main (cron patrol, Job 443426)
+Task: r101 定时巡检（四链路探活 + 内存/OOM 监控）
+
+Work Log:
+- 四链路探活：a(vite 3000)=200、b(外域 Host)=200、c(/api 业务链)=200、d(8080 直连)=200，全绿
+- 进程：vite 18932 唯一实例 ~600MB；Java 19458 ~543MB；MariaDB 4847 ~190MB，三常驻基线不变
+- 无冗余 vite/postcss worker，无需减压
+- cgroup 内存 2,545,627,136 B ≈ 2.37GB（< 3.5GB 备案线）
+- oom_kill = 22，与基线持平零新增；无修复干预
+
+Stage Summary:
+- r101 全绿零干预；健康基线延续（r77~r101 连续 25 轮稳定），布局 v4 已交付待用户页面验证

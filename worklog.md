@@ -5105,3 +5105,18 @@ Work Log:
 
 Stage Summary:
 - r114 复核确认全绿零干预；r77~r114 连续 38 轮稳定全绿；下拉折叠需求交付记账仍待并行会话
+---
+Task ID: patrol-r115
+Agent: main (cron Job 443426)
+Task: 定时巡检 r115（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- 进程快照：vite 18932 (RSS ~584MB) / Java 28428 (RSS ~551MB) / MariaDB 4847 (RSS ~194MB)，与基线一致；vite 进程数 1，postcss worker 0，无需减压
+- cgroup 内存 2489339904 ≈ 2.32GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增，无事故
+- 【只读观察】worklog 条目数 304→305（+1 为本会话 r114-reverify）；并行会话（TriggerGroupSelect 下拉折叠）仍未记账交付条目，继续只读观察
+- 本轮零干预；未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- r115 全绿通过；r77~r115 连续 39 轮稳定全绿；下拉折叠需求交付记账仍待并行会话

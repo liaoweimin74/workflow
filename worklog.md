@@ -3317,3 +3317,16 @@ Work Log:
 
 Stage Summary:
 - r24 全绿零干预；并行会话疑似进入 E2E 阶段（agent-browser 现身），cgroup 逼近阈值（2.93/3.5GB）持续关注，若 Chrome 进程组遗留不退，后续轮次 cgroup 可能触线。
+---
+Task ID: patrol-r25
+Agent: Super Z (main)
+Task: Job 443426 轻量运维巡检（2026-10-08 12:47 触发）
+
+Work Log:
+- 四链路探活：a) 200；b) 200；c) 200；d) 200。全绿。
+- 内存：Java PID 2815（~559MB，12:34 起新构建运行健康）/ vite 单实例 PID 18932（~548MB）/ MariaDB PID 4847 正常；agent-browser Chrome 组（3408/3493/3452 合计 ~665MB）仍驻留，不在 kill 授权清单，未干预；无多余 vite、无 postcss。cgroup 3196112896 bytes（~2.98GB）< 3.5GB，较上轮 +~48MB，趋势备案。OOM 0，无上涨。
+- 关键事实确认：worklog `outputs-v2-unify` 条目显示并行会话已全量交付 SCRIPT results 改造（LogicFlowDsl/Engine/Validator + 前端 dsl.ts/flowVars/PropertyPanel/FlowNode + 构建部署 + E2E 9/9 + 浏览器黄金链路验证），"实施权仲裁"事项事实上落定为 A（并行会话完成）；本会话退避策略完成使命，历史条目 dev-unify-output-abort 可归档。
+- 本轮同时回答用户设计问询"除 Groovy 外其他节点是否有必要改造"（纯设计咨询，零代码编辑）：结论 HTTP/BEAN/SUBFLOW 值得迁移、DATA_UPDATE 低收益可选、CONDITION 天然不需要、BATCH 步骤随主节点同步；关键前置决策为 HTTP 载体定义（解析后 body 而非信封）与 KEY 解析失败语义（FAILED 或宽跳过），详见会话回复。
+
+Stage Summary:
+- r25 全绿零干预；统一输出机制 SCRIPT 范围已由并行会话交付并部署，遗留：前端 dsl.test.ts 旧夹具适配、其他节点迁移评估（本轮已给出分层建议）、二期点路径。cgroup 2.98GB 缓升持续关注。

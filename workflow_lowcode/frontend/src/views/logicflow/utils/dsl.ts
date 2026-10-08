@@ -99,8 +99,8 @@ export interface BatchBodyNode {
   name: string
   config?: NodeConfig
   resultVar?: string
-  /** 多输出声明（仅 SCRIPT 步骤消费：脚本返回 Map 时逐 key 拆包写入上下文） */
-  outputs?: OutputVarDef[]
+  /** 输出声明（仅 SCRIPT 步骤消费，统一 results 单表模型） */
+  results?: ResultVarDef[]
   errorAction?: ErrorAction
   /** 画布绝对坐标（可选）：仅当节点被拖离「批处理下方居中」默认排布位时持久化，
    *  缺省 = 回显时按批处理位置自动居中排布——保证旧 DSL / 未移动场景往返稳定 */
@@ -180,26 +180,35 @@ export interface InputVarDef {
   desc?: string
 }
 
-/** 输出参数声明（SCRIPT 多输出：脚本返回 Map 时按 name 逐 key 拆包写入上下文，与 resultVar 双轨） */
-export interface OutputVarDef {
+/**
+ * 输出提取方式（SCRIPT 统一输出模型，单表替代双轨 resultVar+outputs）：
+ * WHOLE = 脚本末行表达式的值整体写入变量（null 跳过）；
+ * KEY = 脚本末行返回 Map 时按 name 取对应 key 写入（缺 key 跳过；含 KEY 声明而返回非 Map → 节点失败）
+ */
+export type ResultMode = 'WHOLE' | 'KEY'
+
+/** 输出参数声明（SCRIPT 统一输出模型：每个结果按 mode 从脚本末行表达式提取写入上下文） */
+export interface ResultVarDef {
   name: string
+  mode: ResultMode
   type: 'string' | 'number' | 'boolean' | 'json'
   desc?: string
 }
 
 export const OUTPUT_VAR_TYPES = ['string', 'number', 'boolean', 'json'] as const
 
-/** 清洗输出参数声明行：trim 变量名、剔除无名行、类型回退 string；全空返回 undefined */
-export function sanitizeOutputs(outputs?: OutputVarDef[]): OutputVarDef[] | undefined {
-  const rows = (outputs ?? [])
-    .map((o) => ({
-      name: String(o?.name ?? '').trim(),
-      type: (OUTPUT_VAR_TYPES as readonly string[]).includes(o?.type)
-        ? (o.type as OutputVarDef['type'])
+/** 清洗输出参数声明行：trim 变量名、剔除无名行、类型回退 string、mode 回退 WHOLE；全空返回 undefined */
+export function sanitizeResults(results?: ResultVarDef[]): ResultVarDef[] | undefined {
+  const rows = (results ?? [])
+    .map((r) => ({
+      name: String(r?.name ?? '').trim(),
+      mode: r?.mode === 'KEY' ? ('KEY' as const) : ('WHOLE' as const),
+      type: (OUTPUT_VAR_TYPES as readonly string[]).includes(r?.type)
+        ? (r.type as ResultVarDef['type'])
         : ('string' as const),
-      desc: o?.desc ? String(o.desc).trim() || undefined : undefined,
+      desc: r?.desc ? String(r.desc).trim() || undefined : undefined,
     }))
-    .filter((o) => o.name)
+    .filter((r) => r.name)
   return rows.length ? rows : undefined
 }
 
@@ -212,8 +221,8 @@ export interface DslNode {
   y: number
   config?: NodeConfig
   resultVar?: string
-  /** 多输出声明（仅 SCRIPT：返回 Map 时逐 key 拆包写入扁平上下文） */
-  outputs?: OutputVarDef[]
+  /** 输出声明（仅 SCRIPT：统一 results 单表，WHOLE 整包 / KEY 拆包） */
+  results?: ResultVarDef[]
   errorAction?: ErrorAction
 }
 
@@ -239,8 +248,8 @@ export interface FlowNodeData {
   name: string
   config?: NodeConfig
   resultVar?: string
-  /** 多输出声明（仅 SCRIPT 编辑/序列化） */
-  outputs?: OutputVarDef[]
+  /** 输出声明（仅 SCRIPT 编辑/序列化） */
+  results?: ResultVarDef[]
   errorAction?: ErrorAction
 }
 
@@ -477,8 +486,8 @@ function synthesizeBatchLoops(nodes: FlowNode[], edges: FlowEdge[]): void {
           nodeType: type as LogicNodeType,
           name: bn.name || defaultNodeName(type as LogicNodeType),
           config: bn.config,
-          resultVar: bn.resultVar || undefined,
-          outputs: (type as LogicNodeType) === 'SCRIPT' ? sanitizeOutputs(bn.outputs) : undefined,
+          resultVar: (type as LogicNodeType) !== 'SCRIPT' ? bn.resultVar || undefined : undefined,
+          results: (type as LogicNodeType) === 'SCRIPT' ? sanitizeResults(bn.results) : undefined,
           errorAction: bn.errorAction || undefined,
         },
       }))
@@ -540,10 +549,11 @@ export function parseDsl(dsl: string): FlowGraph {
         nodeType: type,
         name: String(n.name ?? '') || defaultNodeName(type),
         config: (n.config ?? undefined) as NodeConfig | undefined,
-        resultVar: n.resultVar ? String(n.resultVar) : undefined,
-        outputs:
+        // SCRIPT 不消费 resultVar（输出统一由 results 声明），解析时丢弃避免回显误导
+        resultVar: type !== 'SCRIPT' && n.resultVar ? String(n.resultVar) : undefined,
+        results:
           type === 'SCRIPT'
-            ? sanitizeOutputs(n.outputs as OutputVarDef[] | undefined)
+            ? sanitizeResults(n.results as ResultVarDef[] | undefined)
             : undefined,
         errorAction: n.errorAction ? (String(n.errorAction) as ErrorAction) : undefined,
       },
@@ -606,10 +616,11 @@ function toDslNode(node: FlowNode): DslNode | null {
     out.config = data.config
   }
   if (hasExecutionMeta(type)) {
-    if (data.resultVar) out.resultVar = data.resultVar
+    // SCRIPT 不消费 resultVar（输出统一由 results 声明），序列化时不再写出
+    if (type !== 'SCRIPT' && data.resultVar) out.resultVar = data.resultVar
     if (type === 'SCRIPT') {
-      const outputs = sanitizeOutputs(data.outputs)
-      if (outputs) out.outputs = outputs
+      const results = sanitizeResults(data.results)
+      if (results) out.results = results
     }
     out.errorAction = data.errorAction === 'IGNORE_CONTINUE' ? 'IGNORE_CONTINUE' : 'FAIL_FLOW'
   }
@@ -649,10 +660,10 @@ function toDslBodyNode(node: FlowNode): BatchBodyNode | null {
     y: Math.round(node.position?.y ?? 0),
   }
   if (data.config && typeof data.config === 'object') out.config = data.config
-  if (data.resultVar) out.resultVar = data.resultVar
+  if (type !== 'SCRIPT' && data.resultVar) out.resultVar = data.resultVar
   if (type === 'SCRIPT') {
-    const outputs = sanitizeOutputs(data.outputs)
-    if (outputs) out.outputs = outputs
+    const results = sanitizeResults(data.results)
+    if (results) out.results = results
   }
   out.errorAction = data.errorAction === 'IGNORE_CONTINUE' ? 'IGNORE_CONTINUE' : 'FAIL_FLOW'
   return out
@@ -822,11 +833,11 @@ export function collectReferencedVars(graph: FlowGraph): string[] {
     const cfg = node.data.config as Record<string, unknown> | undefined
     if (cfg) scanPlaceholders(cfg)
     const type = node.data.nodeType
-    if (node.data.resultVar) produced.add(node.data.resultVar)
-    // SCRIPT 多输出：outputs 声明即产出（运行期逐 key 拆包写入上下文）
-    if (type === 'SCRIPT' && Array.isArray(node.data.outputs)) {
-      for (const o of node.data.outputs as { name?: string }[]) {
-        if (o?.name?.trim()) produced.add(o.name.trim())
+    if (node.data.resultVar && type !== 'SCRIPT') produced.add(node.data.resultVar)
+    // SCRIPT 输出：results 声明即产出（WHOLE 整包 / KEY 拆包，均按声明名写入上下文）
+    if (type === 'SCRIPT' && Array.isArray(node.data.results)) {
+      for (const r of node.data.results as { name?: string }[]) {
+        if (r?.name?.trim()) produced.add(r.name.trim())
       }
     }
     if (type === 'BEAN' && Array.isArray(cfg?.params)) {
@@ -854,14 +865,14 @@ export function collectReferencedVars(graph: FlowGraph): string[] {
       const indexVar = String(cfg?.indexVar ?? 'index')
       if (itemVar) produced.add(itemVar)
       if (indexVar) produced.add(indexVar)
-      // 循环体链：body 节点 resultVar/outputs 计入产出，结构化 source 引用计入引用
+      // 循环体链：body 节点 resultVar/results 计入产出，结构化 source 引用计入引用
       const body = Array.isArray(cfg?.body) ? (cfg?.body as BatchBodyNode[]) : []
       for (const bn of body) {
         if (!bn) continue
-        if (bn.resultVar) produced.add(bn.resultVar)
-        if (bn.type === 'SCRIPT' && Array.isArray(bn.outputs)) {
-          for (const o of bn.outputs as { name?: string }[]) {
-            if (o?.name?.trim()) produced.add(o.name.trim())
+        if (bn.resultVar && bn.type !== 'SCRIPT') produced.add(bn.resultVar)
+        if (bn.type === 'SCRIPT' && Array.isArray(bn.results)) {
+          for (const r of bn.results as { name?: string }[]) {
+            if (r?.name?.trim()) produced.add(r.name.trim())
           }
         }
         const bc = bn.config as Record<string, unknown> | undefined

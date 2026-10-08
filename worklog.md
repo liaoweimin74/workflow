@@ -3249,3 +3249,15 @@ Work Log:
 Stage Summary:
 - 并发写入风险下主动退避；统一输出机制的实施权待用户仲裁（本会话接手 or 由并行会话完成）。
 - 本会话本轮已完成：patrol-r20 全绿；改造方案设计与源码侦察结论留存于会话（results={name,mode:WHOLE|KEY,type,desc}、WHOLE null 跳过、KEY 缺 key 跳过/非 Map FAIL/字符串先 JSON 解析、单一命名空间去重）。
+---
+Task ID: patrol-r21
+Agent: Super Z (main)
+Task: Job 443426 轻量运维巡检 r21（2026-10-08 12:27 触发）
+
+Work Log:
+- 四链路探活：a) 200；b) 200；c) 200；d) 200。全绿。
+- 内存：Java PID 32234 / vite 单实例 PID 18932 / MariaDB PID 4847 正常；无多余 vite、无 postcss。cgroup 2647441408 bytes（~2.47GB）< 3.5GB。OOM 0。
+- 统一输出机制改造的实施权仍待用户仲裁（见 dev-unify-output-abort 条目），本会话继续零代码编辑、不构建不部署。
+
+Stage Summary:
+- r21 全绿零干预。

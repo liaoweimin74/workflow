@@ -3001,3 +3001,39 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿零干预；内存余量约 0.50GB，无风险；四轮连绿，服务稳定
+
+---
+Task ID: 443426-r12
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 11:17 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 539MB）；Java 正常驻留（PID 22990，RSS 552MB）；无 postcss worker，无多余 vite
+- cgroup 内存 3258458112B ≈ 3.03GB，低于 3.5GB 阈值；OOM 计数 0 与基线一致
+- agent-browser renderer RSS 340MB 持平，继续观察不干预
+- 未启动 agent-browser、巡检部分未修改代码；本轮同回合并接到用户 3 条交互开发需求（设计器批处理节点位置持久化/属性栏+100px/导入改分组下拉），巡检记录完毕后即转入开发（开发为用户交互指令，不受巡检"不做开发"约束限制）
+
+Stage Summary:
+- 巡检五轮连绿零干预；随后同回合处理用户开发需求
+
+---
+Task ID: LOCAL-designer-3fixes
+Agent: main (interactive)
+Task: 逻辑流设计器三项改进（批处理循环体位置持久化 / 属性栏加宽 100px / 导入触发点改分组下拉）
+
+Work Log:
+- 需求1（位置持久化）根因：BatchBodyNode 契约无坐标字段，toDslBodyNode 序列化不带位置，synthesizeBatchLoops 每次回显按「批处理下方居中」重排——拖过的位置保存/退出/撤销重做全丢
+- 修复（frontend/src/views/logicflow/utils/dsl.ts）：BatchBodyNode 增加可选 x/y（画布绝对坐标）；toDslBodyNode 始终写入坐标；extractBatchBody 按默认排布公式（batch.x+(i-(count-1)/2)*180, batch.y+130）判定，仍在默认位的节点剔除 x/y——旧 DSL/未移动场景往返稳定，isDslEqual 脏检测不误报（打开旧流脏点不亮，已验证）；synthesizeBatchLoops 优先用已存坐标回显
+- 设计取舍：存绝对坐标而非相对偏移——循环体节点是独立画布节点（拖批处理不带动体节点），绝对坐标忠实还原画布；附带修复了「拖动批处理后动体节点被重排」和「整理布局后动体位置丢失」同类问题；undo/redo 快照（serialize→parse 链路）现在正确携带循环体位置
+- 需求2：PropertyPanel.vue 宽度 288px → 388px（+100px）
+- 需求3（LogicFlowDesigner.vue）：导入触发点由「表单类型下拉+触发点下拉」两步级联改为单个 el-option-group 分组下拉（业务表单 6 项 / 工作流表单 4 项，共 10 触发点一屏直达），选项右侧显示参数数，filterable 可搜索；新增 popper-class=iv-trigger-popper 定点样式（分组标题条底色、选中项计数高亮；popper 挂 body 需非 scoped 块）；移除 importFormType/importTriggerOptions
+- 验证：vitest 28/28 通过（含 BATCH 往返/嵌套/legacy 升级用例，toMatchObject 兼容新增坐标）；vue-tsc 触及文件零类型错误（修复一处自引入错误：as const 元组不能直接做可变数组类型，改用 TriggerItem=typeof ARR[number]）
+- 浏览器端到端（agent-browser，test/admin123 登录）：属性面板实测 388px ✓；分组下拉渲染 10 触发点带参数计数、单步选中「快照保存后」导入 7 项入参 ✓；拖动循环体节点 (360,340)→(540,640)→保存→服务端 DSL body 节点含 "x":540,"y":640 ✓；刷新页面回显 (540,640) 且脏点不亮 ✓；拖动后 Ctrl+Z 撤销精确回到保存位、Ctrl+Shift+Z 重做到拖动位（快照携带位置）✓
+- 验证遗留数据：var_picker_test 流的入参声明被导入测试改为「快照保存后」7 项、循环体节点停留在 (540,640)——均为测试流，与上轮 E2E 惯例一致，未回滚
+- 控制台检查：设计器全程无报错；历史告警均来自 FormList/Dashboard 既有遗留（KeepAlive 残留），与本次无关
+
+Stage Summary:
+- 三项需求全部完成并验证：循环体位置跨「保存/退出/刷新/撤销重做」持久化（默认位剥离保证旧数据零脏扰）；属性栏 388px；导入触发点一步分组直达
+- 产物：frontend/src/views/logicflow/utils/dsl.ts、components/PropertyPanel.vue、LogicFlowDesigner.vue（纯前端，未动后端/未构建 jar）
+- 注意：若后续后端或运行测试表单需要感知 body x/y——引擎侧忽略未知字段，无需改动

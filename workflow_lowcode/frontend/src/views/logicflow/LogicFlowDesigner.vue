@@ -157,29 +157,35 @@
         </el-button>
       </div>
       <el-button size="small" text type="primary" @click="addInputVar">添加入参</el-button>
-      <!-- 从触发点事件导入参数：与表单逻辑流绑定联动（绑定下拉按参数完全匹配过滤） -->
+      <!-- 从触发点事件导入参数：与表单逻辑流绑定联动（绑定下拉按参数完全匹配过滤）。
+           单个分组下拉：按表单类型分组展示全部触发点，免先选类型再选事件的两步级联 -->
       <div class="iv-import">
         <div class="iv-import-head">
           <span class="iv-import-title">从触发点导入</span>
-          <span class="iv-import-tip">导入后入参声明与触发点事件参数完全一致，表单绑定弹窗的下拉才会显示本流</span>
+          <span class="iv-import-tip">选择触发点事件一键导入，入参声明与事件参数完全一致后，表单绑定弹窗的下拉才会显示本流</span>
         </div>
         <div class="iv-import-row">
-          <el-select v-model="importFormType" size="small" style="width: 132px" @change="importTrigger = ''">
-            <el-option label="业务表单" value="BUSINESS" />
-            <el-option label="工作流表单" value="WORKFLOW" />
-          </el-select>
           <el-select
             v-model="importTrigger"
             size="small"
-            style="width: 150px"
-            placeholder="选择触发点"
+            style="width: 264px"
+            placeholder="选择触发点事件（按表单类型分组）"
+            popper-class="iv-trigger-popper"
+            filterable
           >
-            <el-option
-              v-for="t in importTriggerOptions"
-              :key="t.value"
-              :label="t.label"
-              :value="t.value"
-            />
+            <el-option-group v-for="g in importTriggerGroups" :key="g.type" :label="g.label">
+              <el-option
+                v-for="t in g.triggers"
+                :key="t.value"
+                :label="t.label"
+                :value="t.value"
+              >
+                <span class="iv-trigger-opt">
+                  <span>{{ t.label }}</span>
+                  <span class="iv-trigger-opt-count">{{ triggerParamSpec(t.value)?.length ?? 0 }} 项参数</span>
+                </span>
+              </el-option>
+            </el-option-group>
           </el-select>
           <el-button size="small" type="primary" plain :disabled="!importTrigger" @click="importTriggerParams">
             导入参数
@@ -296,11 +302,26 @@ function addInputVar() {
 }
 
 // ===== 从触发点事件导入参数（与表单逻辑流绑定联动） =====
-const importFormType = ref<'BUSINESS' | 'WORKFLOW'>('WORKFLOW')
 const importTrigger = ref('')
-const importTriggerOptions = computed(() =>
-  FORM_LOGIC_TRIGGERS.filter((t) => t.formType === importFormType.value),
-)
+
+/** 触发点按表单类型分组（业务表单 / 工作流表单），单个下拉直达，免两步级联选择 */
+const FORM_TYPE_LABELS: Record<string, string> = {
+  BUSINESS: '业务表单',
+  WORKFLOW: '工作流表单',
+}
+type TriggerItem = (typeof FORM_LOGIC_TRIGGERS)[number]
+const importTriggerGroups = computed(() => {
+  const groups: { type: string; label: string; triggers: TriggerItem[] }[] = []
+  for (const t of FORM_LOGIC_TRIGGERS) {
+    let g = groups.find((x) => x.type === t.formType)
+    if (!g) {
+      g = { type: t.formType, label: FORM_TYPE_LABELS[t.formType] ?? t.formType, triggers: [] }
+      groups.push(g)
+    }
+    g.triggers.push(t)
+  }
+  return groups
+})
 const importTriggerSpec = computed(() =>
   importTrigger.value ? triggerParamSpec(importTrigger.value) || [] : [],
 )
@@ -1393,5 +1414,36 @@ function handleBack() {
 .iv-import-count {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+/* 分组下拉选项：名称居左 + 参数数居右（选择器渲染在 body 层 popper 内，
+   但选项内容槽在本组件模板内声明，带 scope 属性可正常命中） */
+.iv-trigger-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.iv-trigger-opt-count {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  flex-shrink: 0;
+}
+</style>
+
+<!-- 分组下拉 popper 样式：popper 挂在 body 层（append-to-body），scoped 样式不可达，
+     经 popper-class 定点注入，不污染全局同名类 -->
+<style>
+.iv-trigger-popper .el-select-group__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+  letter-spacing: 1px;
+  background: var(--el-fill-color-lighter);
+  margin: 4px 0;
+  padding: 4px 12px;
+}
+.iv-trigger-popper .el-select-dropdown__item.selected .iv-trigger-opt-count {
+  color: var(--el-color-primary);
 }
 </style>

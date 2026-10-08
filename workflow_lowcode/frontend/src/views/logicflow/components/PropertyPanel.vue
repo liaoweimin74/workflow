@@ -726,7 +726,7 @@ async function copyNodeId() {
 }
 
 .property-panel:not(.collapsed) {
-  width: 288px;
+  width: 388px;
 }
 
 .property-panel.collapsed {

@@ -10,7 +10,8 @@
  *   - SCRIPT config = { language: 'groovy', source }
  *   - CONDITION config = { variable, operator: EQ|NE|GT|LT|GTE|LTE|EMPTY|NOT_EMPTY, value? }
  *   - BATCH  config = { collection, itemVar?, indexVar?, body?: BatchBodyNode[](循环体链，
- *                       按序逐项执行)，stopOnError?, maxItems? }
+ *                       按序逐项执行；节点可选 x/y 画布绝对坐标——仅拖离默认排布位才
+ *                       写入，缺省时回显自动居中排布)，stopOnError?, maxItems? }
  *                       （legacy 兼容：actionType: HTTP|SCRIPT|BEAN + actionConfig 单动作，
  *                         读取时自动合成为单节点循环体，保存后升级为 body 形态）
  *   - SUBFLOW config = { flowId, passAllVars=true, varsMapping[{source,target}] }
@@ -99,6 +100,10 @@ export interface BatchBodyNode {
   config?: NodeConfig
   resultVar?: string
   errorAction?: ErrorAction
+  /** 画布绝对坐标（可选）：仅当节点被拖离「批处理下方居中」默认排布位时持久化，
+   *  缺省 = 回显时按批处理位置自动居中排布——保证旧 DSL / 未移动场景往返稳定 */
+  x?: number
+  y?: number
 }
 
 export interface BatchNodeConfig {
@@ -388,7 +393,9 @@ function toBatchBodyType(raw: unknown): BatchBodyType | null {
 
 /**
  * 为每个 BATCH 节点合成循环体画布结构与闭合循环连线：
- * - config.body 非空 → 循环体节点横排在批处理下方，沿链 loop_start→b0→…→loop_end；
+ * - config.body 非空 → 循环体节点沿链 loop_start→b0→…→loop_end；
+ *   节点已持久化 x/y（曾拖离默认位）→ 用绝对坐标回显，位置不再丢失；
+ *   未持久化 → 横排在批处理下方居中排布（默认位）；
  * - legacy（无 body 有 actionType/actionConfig）→ 合成单个循环体节点；
  * - 两者皆无 → loop_start 直连 loop_end（空循环虚线）。
  * 循环边均为 deletable:false + data.loop=true（设计器内部结构，serialize 时剔除）。
@@ -427,8 +434,15 @@ function synthesizeBatchLoops(nodes: FlowNode[], edges: FlowEdge[]): void {
         id: bn.id || `${batch.id}__b${i}`,
         type: FLOW_NODE_TYPE,
         position: {
-          x: Math.round(batch.position.x + (i - (count - 1) / 2) * 180),
-          y: Math.round(batch.position.y + 130),
+          // 已持久化的绝对坐标优先（拖动位置不丢失）；否则按默认位：批处理下方居中横排
+          x:
+            Number.isFinite(bn.x) && Number.isFinite(bn.y)
+              ? Math.round(bn.x as number)
+              : Math.round(batch.position.x + (i - (count - 1) / 2) * 180),
+          y:
+            Number.isFinite(bn.x) && Number.isFinite(bn.y)
+              ? Math.round(bn.y as number)
+              : Math.round(batch.position.y + 130),
         },
         data: {
           nodeType: type as LogicNodeType,
@@ -582,7 +596,8 @@ function toDslEdge(edge: FlowEdge): DslEdge | null {
   return out
 }
 
-/** 画布节点 → 循环体节点（剥离 vue-flow 内部字段；非循环体类型返回 null） */
+/** 画布节点 → 循环体节点（剥离 vue-flow 内部字段；非循环体类型返回 null）。
+ *  x/y 总是写入，由调用方按「默认排布位」判定后剥离，避免旧 DSL 被误标脏 */
 function toDslBodyNode(node: FlowNode): BatchBodyNode | null {
   const data = node?.data
   if (!data) return null
@@ -592,6 +607,8 @@ function toDslBodyNode(node: FlowNode): BatchBodyNode | null {
     id: node.id,
     type,
     name: String(data.name ?? '') || defaultNodeName(data.nodeType),
+    x: Math.round(node.position?.x ?? 0),
+    y: Math.round(node.position?.y ?? 0),
   }
   if (data.config && typeof data.config === 'object') out.config = data.config
   if (data.resultVar) out.resultVar = data.resultVar
@@ -635,6 +652,22 @@ function extractBatchBody(
     if (!nextEdge) break
     currentId = nextEdge.target
   }
+
+  // 位置持久化（仅拖离默认位才写入）：与 synthesizeBatchLoops 的默认公式互逆——
+  // 仍在默认位的节点剔除 x/y，旧 DSL / 未移动场景往返稳定（isDslEqual 脏检测不误报）
+  const batch = nodeById.get(batchId)
+  if (batch && body.length) {
+    const count = body.length
+    body.forEach((bn, i) => {
+      const defX = Math.round(batch.position.x + (i - (count - 1) / 2) * 180)
+      const defY = Math.round(batch.position.y + 130)
+      if (bn.x === defX && bn.y === defY) {
+        delete bn.x
+        delete bn.y
+      }
+    })
+  }
+
   return { body, chainNodeIds }
 }
 

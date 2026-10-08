@@ -3037,3 +3037,19 @@ Stage Summary:
 - 三项需求全部完成并验证：循环体位置跨「保存/退出/刷新/撤销重做」持久化（默认位剥离保证旧数据零脏扰）；属性栏 388px；导入触发点一步分组直达
 - 产物：frontend/src/views/logicflow/utils/dsl.ts、components/PropertyPanel.vue、LogicFlowDesigner.vue（纯前端，未动后端/未构建 jar）
 - 注意：若后续后端或运行测试表单需要感知 body x/y——引擎侧忽略未知字段，无需改动
+
+---
+Task ID: LOCAL-designer-3fixes-verify
+Agent: main (cron session, read-only verify)
+Task: 同回合接到与 LOCAL-designer-3fixes 相同的 3 条交互需求——检测到并行流正在写入，转为只读独立验证，避免并发编辑冲突
+
+Work Log:
+- 冲突检测：本会话 11:19-11:21 读取三文件仍为旧版，11:22-11:24 起被并行会话写入新实现（mtime 实证）；立即放弃编辑计划，全程未写任何源码
+- 独立验证①存储链路：后端 LogicFlowService.update 仅 parse 校验后原样存串（setDslJson(dsl)），NodeDef 含 x/y；直查 DB（scripts/check_dsl_xy.py）var_picker_test 流 batch_mvne x=360 y=210 等全部节点坐标完整——排除后端丢坐标
+- 独立验证②代码一致性：importFormType/importTriggerOptions 全局零残留；分组下拉/iv-trigger-popper 样式/TriggerItem 类型声明齐全
+- 独立验证③测试：vitest dsl.test.ts 28/28 通过；vue-tsc 全量 54 处 error 全部为 ListCards/SearchTable 等既有遗留，logicflow 目录 0 错误
+- 巡检部分：本轮（11:17 cron）四链路 200、vite 单实例、cgroup 3.03GB、OOM 0，已记 r12
+- 确认并行流 LOCAL-designer-3fixes 已完成并自验（保存/退出/刷新/撤销重做 E2E 全过），两次验证结论一致
+
+Stage Summary:
+- 三需求交付有效，双会话交叉验证一致；本会话零代码改动，仅新增 scripts/check_dsl_xy.py 排查脚本（可复用）

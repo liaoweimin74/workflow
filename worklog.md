@@ -2886,3 +2886,18 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿：四链路 200、内存 3.04GB 稳定、OOM 0；浏览器进程 RSS 停止增长，暂无逼近阈值风险
+
+---
+Task ID: 443426-r6
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 10:47 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 524MB）；Java 正常驻留（PID 22990，RSS 530MB）；无 postcss worker
+- cgroup 内存 3187396608B ≈ 2.97GB（较上轮 3.04GB 回落），低于 3.5GB 阈值；OOM 计数 0 与基线一致
+- 恢复流 UI 验证浏览器仍驻留（chrome 三进程 RSS 稳定：renderer 383MB / 主进程 216MB / network 172MB），其 worklog 记录尚未落笔；进程无异常增长，继续观察不干预
+- 未启动 agent-browser、未修改代码，探活通过即结束
+
+Stage Summary:
+- 本轮全绿：四链路 200、内存回落至 2.97GB、OOM 0；恢复流验证浏览器驻留超 13 分钟但资源稳定，若后续轮次仍无收尾迹象且其会话确认僵死，将按 RSS 备案后清理

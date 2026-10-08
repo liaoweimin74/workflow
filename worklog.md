@@ -2634,3 +2634,21 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿；数据事故结论维持，仍待用户决策修复方向（A切库/B迁移/C定位）
+
+---
+Task ID: db-restore-20261008
+Agent: main（用户确认「近期数据，表单列表和页面列表」后的恢复执行）
+Task: 恢复近期表单/页面/草稿数据
+
+Work Log:
+- 用户确认丢失范围：近期表单列表(wf_form_def)与页面列表(wf_page_def)
+- 搜索备份：发现 workflow_lowcode/scripts/db-backup/ 下有两份历史 dump——workflow-dump-20261003-0151.sql(在/tmp副本) 与 workflow-dump-20261005-fixed.sql(120K，10/3 数据，今早 08:29 被复制到 home 侧)
+- 提取 10/5 dump 业务数据：wf_form_def 1 行(成员组业务表单 member_group, 10/3 00:34)+wf_page_def 1 行(主页仪表盘 dashboard, 10/3 01:29, 含完整 KPI schema)+wf_process_draft 2 行(含 BPMN XML)；表结构与现库 14/14、14/14、17/17 列完全一致
+- 新增 scripts/restore-1005-data.py（INSERT 前按 id 防重），4 条全部恢复成功
+- 端到端验证：登录 admin → GET /api/v1/form-definitions 与 /api/v1/pages（需 X-Tenant-Id: default 头）均 200
+- 恢复后状态（超出预期）：workflow 库现 10 个表单（v6 的 9 个 9/24 表单 id 一致地出现在列表中，疑似引擎内置 v6→workflow 同步任务在 09:3x 执行）+ 2 个页面 + 2 个草稿
+
+Stage Summary:
+- 用户可见列表已恢复：表单 10 条（9 条 9/24 + 1 条 10/3 成员组）、页面 2 条（测试页面 + 主页仪表盘）、流程草稿 2 条
+- 残留缺口：10/5 备份之后至今早 08:39 之间新建的数据无备份，不可恢复
+- 待办建议：把每日自动备份（rescue-dump.py / db-dump.sh）纳入巡检轮固化，杜绝再发

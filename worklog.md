@@ -2721,3 +2721,16 @@ Stage Summary:
 - 正确入口：平台预览面板（preview 链路自动注入会话头）；若面板白屏/报错为浏览器缓存旧 Next 500 页，强刷即可
 - 巡检盲区补充：此前"外域 Host 头 200"仅验证 vite allowedHosts 层，未覆盖 FC 网关层；后续巡检保留原探活口径即可（FC 网关属平台资产，沙箱内无需也无法修复）
 - 无代码改动，无需修复动作
+
+---
+Task ID: patrol-20261008-0952
+Agent: Z.ai (cron lightweight ops)
+Task: D+ 终态轻量巡检（第 2 轮）
+
+Work Log:
+- 四链路探活：a) 3000 vite 200；b) 外域 Host 200；c) 3000→8080 login 200；d) 8080 直连 200
+- 进程：vite 仅 1 个（PID 18932，RSS ~470MB，较上轮 620MB 回落），Java PID 12577（RSS ~525MB），无 postcss worker，无需减压
+- 内存：cgroup ≈ 2.54GB（< 3.5GB）；oom_kill = 0（基线持平）
+
+Stage Summary:
+- 全链路健康，无异常无修复；终态架构（vite 3000 + Java 8080 + MariaDB 3306）稳定运行

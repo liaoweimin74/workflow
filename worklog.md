@@ -2702,3 +2702,22 @@ Stage Summary:
 - 全链路健康：四探活 200/200/200/200，OOM 计数 0，内存 2.53GB 正常
 - 终态架构稳固运行：vite 3000 + Java 8080 + MariaDB 3306，Next/Turbopack 保持退役不拉起
 - 无异常、无修复动作，本轮巡检结束
+
+---
+Task ID: debug-20261008-0952-frontend-access
+Agent: Z.ai
+Task: 排查用户反馈"访问不了前端应用"
+
+Work Log:
+- 用户反馈无法访问前端；本地四链路此前已全 200，转查外部入口链路
+- 外域裸访问 https://ws-ea-cc-acffbe-ugzpoxltyw.cn-hongkong-vpc.fcapp.run/ → 400 Bad Request，FC 网关返回 FCCommonError: "Invocation is rejected, due to header 'x-session-id' is required for header field session affinity, but missing"
+- 带任意 x-session-id 头重试同一域名 → 200，返回 vite mangban-admin 页面 HTML（隧道 FC→沙箱→vite:3000 完全通畅）
+- 检查 /app/Caddyfile：root 权限不可读（平台资产，非本项目管辖）；caddy 未监听 80/443，排除本机反代问题
+- vite.config 确认 allowedHosts:true、base=/、strictPort:3000、/api→8080 代理，配置无异常
+- 前端无 Service Worker/PWA 残留（public 仅 favicon.svg/icons.svg），排除 SW 供应旧缓存
+
+Stage Summary:
+- 根因：外域 fcapp.run 入口为平台网关，强制要求 x-session-id 会话亲和头，浏览器裸访域名被 400 拒绝，与应用无关
+- 正确入口：平台预览面板（preview 链路自动注入会话头）；若面板白屏/报错为浏览器缓存旧 Next 500 页，强刷即可
+- 巡检盲区补充：此前"外域 Host 头 200"仅验证 vite allowedHosts 层，未覆盖 FC 网关层；后续巡检保留原探活口径即可（FC 网关属平台资产，沙箱内无需也无法修复）
+- 无代码改动，无需修复动作

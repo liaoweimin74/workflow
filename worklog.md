@@ -2652,3 +2652,24 @@ Stage Summary:
 - 用户可见列表已恢复：表单 10 条（9 条 9/24 + 1 条 10/3 成员组）、页面 2 条（测试页面 + 主页仪表盘）、流程草稿 2 条
 - 残留缺口：10/5 备份之后至今早 08:39 之间新建的数据无备份，不可恢复
 - 待办建议：把每日自动备份（rescue-dump.py / db-dump.sh）纳入巡检轮固化，杜绝再发
+
+---
+Task ID: data-recovery-20261008
+Agent: main（用户确认后执行恢复）
+Task: 恢复表单列表/页面列表数据（v6 → workflow 迁移）
+
+Work Log:
+- 用户确认丢失范围："近期数据，表单列表和页面列表"
+- 09:37 巡检四链路全 200，oom_kill=0，内存 2.55GB（正常）
+- 定位数据：backend-node.log 证实 Node 引擎（NestJS）连接 127.0.0.1:3306/workflow_v6；用户表单/页面全在 workflow_v6 库（wf_form_def 9 行、wf_page_def 1 行，9/24-25 创建）
+- 结构比对：wf_form_def / wf_page_def 两库字段一一对应（仅 datetime vs datetime(6) 精度差异，JPA 兼容），直接 INSERT SELECT 可行
+- 排除项：backend-node/data 无 SQLite（仅 engine-choice 文件）；tmp/dbcopy*.mv.db 为 9/10 QA 产物；ddl-auto=update 不删数据
+- 执行迁移（INSERT IGNORE 显式列映射）：workflow.wf_form_def 0→10 行（迁入 9 + 原有 1），wf_page_def 0→2 行（迁入 1 + 原有 1）
+- 修正认知：workflow 库原有 member_group 表单(10/3 创建)和 dashboard 页面(10/3 创建)各 1 行，此前 information_schema 估算 0 行系误导
+- 业务链路验证：admin/admin123 登录(accessToken) + X-Tenant-Id: default → GET /api/v1/form-definitions 返回 10 条(成员组/报销/请假/办公用品/会议室预约×3/AI小智/暗色/测试表单)；GET /api/v1/pages 返回 2 条(主页仪表盘/测试页面)；接口真实路径 /api/v1/form-definitions、/api/v1/pages，需 X-Tenant-Id 头
+- 迁移后备份：backups/mariadb-post-migrate-*.tar.gz（FTWRL 物理快照）
+
+Stage Summary:
+- 数据恢复完成：表单列表 10 条、页面列表 2 条，经 3000→8080→MariaDB 全链路 API 验证 200 可见
+- 数据零破坏：workflow 库原有数据未动，v6 源数据保留未删
+- 三重备份在位：mariadb-datadir-snap（迁移前）、v6-logic TSV、mariadb-post-migrate（迁移后）

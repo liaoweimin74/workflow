@@ -2787,3 +2787,15 @@ Stage Summary:
 - 根因判定：应用/数据/路由全链路正常；用户浏览器为故障期间遗留的旧会话（500 时代打开的标签 + HMR WebSocket 断连导致页面从未热更新），内存中菜单/路由状态过期 → 报错
 - 解决方案：用户强制刷新（Ctrl+Shift+R）或关闭预览标签从预览面板重开；必要时退出重登
 - 截图证据：download/debug-home-after-login.png、download/debug-page-dashboard-menu.png
+
+---
+Task ID: patrol-20261008-1007
+Agent: Z.ai (cron lightweight ops)
+Task: D+ 终态轻量巡检（第 4 轮）
+
+Work Log:
+- 四链路探活全 200（a vite 页面 / b 外域 Host / c 3000→8080 login / d 8080 直连）
+- vite 1 个进程、postcss worker 0，无需减压；cgroup ≈ 2.62GB（< 3.5GB）；oom_kill = 0（基线持平）
+
+Stage Summary:
+- 全链路健康，无异常无修复；终态架构（vite 3000 + Java 8080 + MariaDB 3306）稳定运行

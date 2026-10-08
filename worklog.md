@@ -2377,3 +2377,20 @@ Work Log:
 
 Stage Summary:
 - D+ 终态达成：vite(3000) + Java(8080) + MariaDB(3306)，代码已对齐远程 main(v53/LogicFlow)；回退路径 = 恢复 marker+choice=node 后重启 node dist
+---
+Task ID: 144~145-patrol + 远程仓库核查与架构切换实况记录
+Agent: main (cron 439400 08:27/08:32 两轮合并补记 + 用户 git 核查指令执行)
+Task: D+ 巡检 + 用户指令「Java 版本应更领先、本地代码疑似回滚、远程仓库或更新」核查
+
+Work Log:
+- 144 轮（08:27）：A/C/D=200、B=404；vite 十二连存活（1h04m）；cgroup 1.71GB；oom_kill=0
+- 145 轮（08:32）：四链路首次 B=200（异常向好）；vite RSS 暴涨 280→972MB、cgroup 2.5GB，触发溯源
+- 【git 核查结论·回答用户】本地与远程 github.com/liaoweimin74/workflow 为「无共同祖先」的孤儿历史——本地 141 提交系沙箱 cron 自动链（仅 worklog/运行时产物），远程 main 才是真实项目史（领先 1148 提交，HEAD=昨晚22:36 formhook-v2 八批合入）。远程 Flyway 已至 V53，本地文件仅到 V41；丢失的 BackendLogicProperty.vue/backendLogic.ts 远程亦无（从未推送，重建是唯一出路）。工作树内容已≈远程（backend 0 差异；frontend 仅 bun.lock+vite.config；backend-node 仅 marker/data/dist 运行态）——「回滚」感知实为 git 历史断层而非代码落后
+- 【实况·用户另一会话执行切换（本会话全程只读旁观）】08:28 vite.config 变更→vite 进程内重启（BFF 中间件激活=B=200 根因，引擎状态 JSON 出自 src/lib/service-supervisor.ts 同源逻辑）；08:38 jar 产出（103MB）；08:40:28 Java PID 12577 独占 8080（-Xmx448m，Spring Boot 18.3s 启动，Tomcat 就绪）；backend-node（NestJS PID 4871）退出；engine-choice=java；Flyway 连 MariaDB workflow 库「Schema up to date, validated 10 migrations」
+- 【切换后首轮全量探活】A=200 / B=200 / C=200 / D=200 —— D+ 目标态四链路历史首次全绿
+- 内存：cgroup 峰值 3.27GB（maven 构建 + vite 重打包叠加），Java RSS 507MB 限内，构建结束后预期回落；oom_kill=0 全程无事故
+- 纪律：本会话未改任何代码/配置（vite.config 变更均系用户会话所为）、未启 agent-browser、未做 QA；git fetch/archive/diff 仅只读 + 重建 remote 引用（origin 指向 github.com/liaoweimin74/workflow）
+
+Stage Summary:
+- 用户判断证实：远程仓库确为最新真实史；其会话已完成 jar 构建→Java 引擎切换→8080 易主，四链路首次全 200
+- 待办更新：①cron 文本 b) 条款 BFF 已恢复 200，文本可整体对齐新常态 ②UI 重建（变量列表就近显示）仍欠 ③本地 git 历史为孤儿链，建议用户会话在适当时机提交工作树快照以免再丢 ④cgroup 3.27GB 需后续轮次观察回落

@@ -5049,3 +5049,17 @@ Work Log:
 
 Stage Summary:
 - r77~r112 连续 36 轮稳定全绿；下拉折叠需求等待并行会话验证记账
+---
+Task ID: patrol-r113
+Agent: main (cron Job 443426)
+Task: 定时巡检 r113（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- vite 18932 独占 / Java 28428 / MariaDB 4847；vite 进程数 1，postcss 0
+- cgroup 内存 2490167296 ≈ 2.32GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 本轮零干预
+
+Stage Summary:
+- r77~r113 连续 37 轮稳定全绿

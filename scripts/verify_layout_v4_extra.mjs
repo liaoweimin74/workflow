@@ -19,8 +19,7 @@ const overlap = (a, b) =>
 function buildLayout(nodes, edges) {
   const nodesById = new Map(nodes.map((n) => [n.id, n]))
   const size = (id) => ({ w: nodesById.get(id).w, h: nodesById.get(id).h })
-  const isLoop = (e) =>
-    ['loop_start', 'loop_end'].includes(e.sh) || ['loop_start', 'loop_end'].includes(e.th)
+  const isLoop = (e) => e.loop === true
 
   function collectBodyChain(batchId) {
     const chain = []
@@ -230,13 +229,13 @@ console.log('== 图A：基础嵌套（外层 BATCH 先建 = 旧收集缺陷的 a
   const edges = [
     { source: 'start', target: 'B1', sh: 'out', th: 'in' },
     { source: 'B1', target: 'end', sh: 'out', th: 'in' },
-    { source: 'B1', target: 'h1', sh: 'loop_start', th: 'in' },
-    { source: 'h1', target: 'B2', sh: 'out', th: 'in' },
-    { source: 'B2', target: 'h4', sh: 'out', th: 'in' },
-    { source: 'B2', target: 'h2', sh: 'loop_start', th: 'in' },
-    { source: 'h2', target: 'h3', sh: 'out', th: 'in' },
-    { source: 'h3', target: 'B2', sh: 'out', th: 'loop_end' },
-    { source: 'h4', target: 'B1', sh: 'out', th: 'loop_end' },
+    { source: 'B1', target: 'h1', sh: 'loop_start', th: 'in', loop: true },
+    { source: 'h1', target: 'B2', sh: 'out', th: 'in', loop: true },
+    { source: 'B2', target: 'h4', sh: 'out', th: 'in', loop: true },
+    { source: 'B2', target: 'h2', sh: 'loop_start', th: 'in', loop: true },
+    { source: 'h2', target: 'h3', sh: 'out', th: 'in', loop: true },
+    { source: 'h3', target: 'B2', sh: 'out', th: 'loop_end', loop: true },
+    { source: 'h4', target: 'B1', sh: 'out', th: 'loop_end', loop: true },
   ]
   const { bodyChains, bodyOwner, blockH } = buildLayout(nodes, edges)()
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]))
@@ -282,8 +281,8 @@ console.log('== 图B：同层并行（循环子树横向让位）==')
     { source: 'start', target: 'hb', sh: 'out', th: 'in' },
     { source: 'B1', target: 'end', sh: 'out', th: 'in' },
     { source: 'hb', target: 'end', sh: 'out', th: 'in' },
-    { source: 'B1', target: 'h1', sh: 'loop_start', th: 'in' },
-    { source: 'h1', target: 'B1', sh: 'out', th: 'loop_end' },
+    { source: 'B1', target: 'h1', sh: 'loop_start', th: 'in', loop: true },
+    { source: 'h1', target: 'B1', sh: 'out', th: 'loop_end', loop: true },
   ]
   buildLayout(nodes, edges)()
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]))
@@ -311,16 +310,16 @@ console.log('== 图C：嵌套兄弟列级联（B2/B3 纵向并行、子列高）
   const edges = [
     { source: 'start', target: 'B1', sh: 'out', th: 'in' },
     { source: 'B1', target: 'end', sh: 'out', th: 'in' },
-    { source: 'B1', target: 'B2', sh: 'loop_start', th: 'in' },
-    { source: 'B2', target: 'h2a', sh: 'loop_start', th: 'in' },
-    { source: 'h2a', target: 'h2b', sh: 'out', th: 'in' },
-    { source: 'h2b', target: 'h2c', sh: 'out', th: 'in' },
-    { source: 'h2c', target: 'B2', sh: 'out', th: 'loop_end' },
-    { source: 'B3', target: 'h3a', sh: 'loop_start', th: 'in' },
-    { source: 'h3a', target: 'h3b', sh: 'out', th: 'in' },
-    { source: 'h3b', target: 'B3', sh: 'out', th: 'loop_end' },
-    { source: 'B2', target: 'B3', sh: 'out', th: 'in' },
-    { source: 'B3', target: 'B1', sh: 'out', th: 'loop_end' },
+    { source: 'B1', target: 'B2', sh: 'loop_start', th: 'in', loop: true },
+    { source: 'B2', target: 'h2a', sh: 'loop_start', th: 'in', loop: true },
+    { source: 'h2a', target: 'h2b', sh: 'out', th: 'in', loop: true },
+    { source: 'h2b', target: 'h2c', sh: 'out', th: 'in', loop: true },
+    { source: 'h2c', target: 'B2', sh: 'out', th: 'loop_end', loop: true },
+    { source: 'B3', target: 'h3a', sh: 'loop_start', th: 'in', loop: true },
+    { source: 'h3a', target: 'h3b', sh: 'out', th: 'in', loop: true },
+    { source: 'h3b', target: 'B3', sh: 'out', th: 'loop_end', loop: true },
+    { source: 'B2', target: 'B3', sh: 'out', th: 'in', loop: true },
+    { source: 'B3', target: 'B1', sh: 'out', th: 'loop_end', loop: true },
   ]
   buildLayout(nodes, edges)()
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]))

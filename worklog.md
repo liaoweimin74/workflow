@@ -3817,3 +3817,19 @@ Stage Summary:
 - results-v3 全量交付上线：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/CONDITION）统一 results 单表输出，resultVar 全链路下线（DSL 反序列化兼容遗留键）
 - KEY 语义双轨定型：SCRIPT 严格（非 Map→FAILED），其余宽松（warn+跳过）——用户拍板 3B
 - 遗留：BizDataHandlerTest 构造不匹配（历史）、仓库 781 lint 问题（历史）、BPMN 侧 designerStore resultVar（另行决策）、二期点路径（{{a.b.c}} 全节点下钻）维持暂缓
+
+---
+Task ID: patrol-r54
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r54：四链路探活 + 内存减压 + OOM 盯防 + 并行交付进度核查
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿（results-v3 新 jar 部署后链路正常）
+- 交付进度核查：results-v3-unify 并行会话已全量交付——后端三件套 14:38-14:40、jar 重建 14:45、前端 dsl.ts/flowVars.ts 14:49、PropertyPanel.vue 14:52、Java PID 8906 于 14:55 拉起新 jar（本轮时已运行 18m）、E2E 11/11 全绿、浏览器自检完成且 Chrome 已 close --all 释放
+- 进程内存：Java ~556MB（新 jar 稳定运行）；vite PID 18932 ~525MB（唯一）；MariaDB ~185MB；Chrome 组已退出（RSS TOP8 无残留）
+- cgroup = 1593470976（~1.59GB，较上轮 2.56GB 回落 ~970MB，Chrome 释放见效）
+- OOM 事故（第三次）：oom_kill 2 → 4（+2），元凶大概率仍是构建期 git/重负载进程在 Chrome 驻留峰值窗口被收割；新基线 4，后续以此比对；零干预（不追杀、不重启，重启归并行会话）
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r54 全绿；results-v3 全链路交付完成（后端+前端+构建+部署+E2E+自检），内存峰值风险随 Chrome 退出解除；OOM 累计 4 次立案在册（git 连环被杀，无核心服务损伤），新基线 4

@@ -2526,3 +2526,16 @@ Work Log:
 Stage Summary:
 - 丢失的「变量选择列表就近显示」功能已在 LogicFlow 路线完整重建并验证落库，支持四组变量源与两种插入模式
 - 后续可做：①BATCH 循环体内节点的面板复用（body 链变量作用域细化）②RunTestDialog 建议列表与 flowVars 联动 ③远程推送（本地孤儿链需用户会话决断合并策略）
+
+---
+Task ID: 154-patrol
+Agent: 轻量运维巡检 (cron 443426)
+Task: 09:12 巡检轮——四链路探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 四链路全 200（a/b/c/d）；vite PID 9754 单进程第七轮存活；postcss=0；Java 12577 正常
+- agent-browser Chrome 组已退出（另一会话 QA 收尾），内存压力解除：cgroup 3.03GB → 2.48GB 显著回落
+- oom_kill=0 基线持平；无修复动作；延续 Task 150 退避纪律
+
+Stage Summary:
+- 154-patrol 全绿；Chrome 退场 + cgroup 回落至 2.48GB，为全程最低水位，D+ 终态连续第七轮稳态

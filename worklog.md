@@ -2492,3 +2492,16 @@ Work Log:
 
 Stage Summary:
 - 152-patrol 全绿；Chrome 驻留下内存稳定 3.03GB，D+ 终态连续第五轮稳态
+
+---
+Task ID: 153-patrol
+Agent: 轻量运维巡检 (cron 443426)
+Task: 09:08 派发巡检轮（任务戳 09:07）——四链路探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 四链路全 200（a/b/c/d）；vite PID 9754 单进程第六轮存活；postcss=0；Java 12577 正常
+- cgroup 3.03GB 持平；oom_kill=0 基线持平；Chrome 组（另一会话 QA）~793MB 稳定在场，授权范围外未触碰
+- 无修复动作；延续 Task 150 退避纪律，未触碰 logicflow 文件
+
+Stage Summary:
+- 153-patrol 全绿；连续第六轮稳态，进入纯监视节奏

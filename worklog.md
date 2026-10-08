@@ -2320,3 +2320,16 @@ Work Log:
 
 Stage Summary:
 - 142-patrol 全绿免修复；vite 常驻十连稳（累计 52 分钟），D+ 稳态健康
+---
+Task ID: 143-patrol
+Agent: main (cron 439400 轻量巡检 08:22 轮)
+Task: D+ 架构巡检（本轮同收用户指令：核查 Java 代码与远程仓库差异，巡检后执行）
+
+Work Log:
+- 探活：A3000=200 / C-HOST=200 / D-8080=200 全绿；B-BFF=404 已备案预期
+- vite（PID 9754）连续第十一轮存活（ELAPSED 57:49，RSS 274→313MB 正常波动）；单 vite、无 postcss
+- cgroup 1.71GB（1711591424，微涨 0.05GB）；oom_kill=0，无事故
+- 无修复动作；未启 agent-browser、巡检部分未改代码、未做 QA
+
+Stage Summary:
+- 143-patrol 全绿免修复；随后按用户指令核查远程仓库（见 143-git-check 条目）

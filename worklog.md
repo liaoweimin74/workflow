@@ -2333,3 +2333,17 @@ Work Log:
 
 Stage Summary:
 - 143-patrol 全绿免修复；随后按用户指令核查远程仓库（见 143-git-check 条目）
+---
+Task ID: 143-sync（用户指令：代码回滚排查 + 远程同步）
+Agent: main
+Task: 用户指出「Java 版本应更领先、本地代码疑似被回滚、远程仓库可能更新」——排查并同步
+
+Work Log:
+- 【排查结论·用户判断正确】本地无回滚痕迹（历史中有现无文件均为已提交的重构删除），但本地 workflow_lowcode 远落后于远程 origin/main（github.com/liaoweimin74/workflow，公开仓）
+- 代差量化：Java 迁移 V41→远程 V53（LogicFlow/附件/成员群组等 5 版）；backend-node V46→远程 V49；远程新增完整 LogicFlow 设计器（Java 引擎+前端 LogicFlowDesigner/PropertyPanel 621 行等，B1+formhook-v2 两提交，最新 10-07 14:36）
+- 【丢失文件定论】BackendLogicProperty.vue/api/backendLogic.ts 本地与远程均无——系未入库旧路线，远程 LogicFlow 路线已取代；后续「变量列表就近显示」应基于远程 PropertyPanel.vue 实施
+- 【同步策略】①快照提交保全本地（含今日 D+ 改动与 worklog）②rsync origin/main 内容→workflow_lowcode/（排除 .git/node_modules/data/dist/target/*.log，运行时数据与在跑 dist 全保护）③回植 D+ vite.config.ts（port 3000/allowedHosts/proxy）④frontend bun install（新增 logicflow 依赖）⑤验证 vite/8080 存活 ⑥提交同步结果 ⑦后台启动 Java jar 构建（代码已具备 V53/LogicFlow）
+- 风险备案：node 侧 DB 将于下次后端重启自动迁 V47-V49（前向兼容）；在跑 node dist/main.js 为旧编译产物，进程内存不受磁盘同步影响
+
+Stage Summary:
+- 同步开始前备案完成；本地快照→远程内容替换→D+ 回植→验证 的顺序执行

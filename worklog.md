@@ -3619,3 +3619,17 @@ Work Log:
 
 Stage Summary:
 - r45 全绿零干预，零代码编辑；D+ 终态稳定，内存余量维持 ~0.9GB
+
+---
+Task ID: patrol-r46
+Agent: main (cron Job 443426)
+Task: 14:32:27 轻量运维巡检（探活+内存，零开发）
+
+Work Log:
+- 四链路探活：a) vite 3000 = 200；b) 外域 Host = 200；c) 业务登录代理 = 200；d) 8080 直连 = 200 —— 全绿
+- 进程内存：Java PID 2815 ~554MB（正当常驻）；vite PID 18932 ~538MB（唯一）；无 postcss worker；MariaDB 4847 ~191MB
+- Chrome 组保持退出状态，无回归；cgroup memory.usage_in_bytes = 2820546560（~2.63GB）< 3.5GB，较上轮 +32MB（Java/vite 常规波动范围内）
+- OOM 计数 oom_kill = 0（基线持平），无事故
+
+Stage Summary:
+- r46 全绿零干预，零代码编辑；D+ 终态稳定，内存余量 ~0.87GB

@@ -3689,3 +3689,19 @@ Work Log:
 
 Stage Summary:
 - r48 全绿零干预，零代码编辑；持续观察并行交付进度
+
+---
+Task ID: patrol-r49
+Agent: main (cron Job 443426)
+Task: 14:47:27 轻量运维巡检（探活+内存，零开发）
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：Java PID 2815 ~567MB（正当常驻）；vite PID 18932 ~540MB（唯一）；无 postcss worker；MariaDB ~194MB
+- cgroup = 2911870976（~2.71GB）< 3.5GB；OOM 0（基线不变）
+- 【交付观察·进展】jar 已重建：target mtime = 14:45:29 +08（上一轮仍为 12:34 旧版）——并行会话完成 mvn 构建
+- 【交付观察·未完】8080 Java 进程仍为 12:34:40 启动的旧 jar（未重启）；前端四文件（logicflow/utils/dsl.ts、flowVars.ts、components/PropertyPanel.vue、FlowNode.vue）mtime 仍 12:31-12:32 未适配
+- 判读：并行会话处于「后端已构建、前端适配+部署重启待做」阶段；部署窗口若 8080 短暂 000，先核 jar mtime/进程再判死（沿用既有约定），本会话不抢跑拉起
+
+Stage Summary:
+- r49 全绿零干预，零代码编辑；交付进入构建完成节点，下轮重点观察前端 mtime 与 8080 重启迹象

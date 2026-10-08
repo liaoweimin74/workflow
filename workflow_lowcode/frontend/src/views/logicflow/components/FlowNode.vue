@@ -39,18 +39,11 @@
     <div v-if="summary" class="node-summary" :title="summary">{{ summary }}</div>
 
     <div
-      v-if="(data.resultVar && data.nodeType !== 'SCRIPT') || scriptResultNames.length || data.errorAction === 'IGNORE_CONTINUE'"
+      v-if="resultNames.length || data.errorAction === 'IGNORE_CONTINUE'"
       class="node-tags"
     >
       <span
-        v-if="data.resultVar && data.nodeType !== 'SCRIPT'"
-        class="node-tag var-tag"
-        :title="`结果写入变量：${data.resultVar}`"
-      >
-        {{ data.resultVar }}
-      </span>
-      <span
-        v-for="r in scriptResultNames"
+        v-for="r in resultNames"
         :key="r.name"
         class="node-tag out-tag"
         :title="`输出变量：${r.name}${r.desc ? '（' + r.desc + '）' : ''}`"
@@ -130,9 +123,9 @@ function legacyActionSummary(cfg: Record<string, unknown> | undefined): string {
   return 'Groovy 脚本'
 }
 
-/** SCRIPT 输出声明行（卡片徽标展示；仅 SCRIPT 且声明了变量名时非空） */
-const scriptResultNames = computed(() => {
-  if (props.data.nodeType !== 'SCRIPT' || !Array.isArray(props.data.results)) return []
+/** 输出声明行（卡片徽标展示；全执行型节点声明了变量名时非空） */
+const resultNames = computed(() => {
+  if (!Array.isArray(props.data.results)) return []
   return (props.data.results as { name?: string; desc?: string }[])
     .map((r) => ({ name: String(r?.name ?? '').trim(), desc: r?.desc ? String(r.desc) : '' }))
     .filter((r) => r.name)
@@ -153,7 +146,7 @@ const summary = computed(() => {
       return bean || method ? `${bean || '?'}#${method || '?'}` : '未配置 Bean'
     }
     case 'SCRIPT': {
-      const results = scriptResultNames.value
+      const results = resultNames.value
       return results.length ? `Groovy 脚本 · ${results.length} 个输出` : 'Groovy 脚本'
     }
     case 'CONDITION': {
@@ -368,7 +361,7 @@ const summary = computed(() => {
   border: 1px solid color-mix(in srgb, var(--el-color-primary) 25%, transparent);
 }
 
-/* SCRIPT 多输出徽标：绿色系与 resultVar 主色区分，↗ 前缀示意「展开写出」 */
+/* 多输出徽标：绿色系，↗ 前缀示意「展开写出」 */
 .out-tag {
   color: var(--el-color-success);
   background: color-mix(in srgb, var(--el-color-success) 10%, transparent);

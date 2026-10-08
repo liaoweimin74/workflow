@@ -233,40 +233,6 @@
                 placeholder="return 'hello ' + vars.name"
               />
             </el-form-item>
-
-            <div class="rows-block">
-              <div class="rows-head">
-                <FieldLabel label="输出参数（results）" tip="统一输出声明，每个结果按提取方式写入上下文：整体值（WHOLE）→ 脚本末行表达式的值整个写入该变量，标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 要求脚本末行返回 Map（如 [outLevel: level]），按变量名取对应 key，缺 key 跳过；含 KEY 声明而末行未返回 Map → 节点失败。输出名全表唯一，供下游节点直接引用" />
-                <el-button size="small" text type="primary" @click="addScriptResult">添加</el-button>
-              </div>
-              <div v-if="!scriptResults.length" class="rows-empty">
-                未声明输出：脚本结果不写入任何变量（纯副作用脚本可留空）
-              </div>
-              <div v-for="(r, i) in scriptResults" :key="i" class="so-row">
-                <div class="so-line1">
-                  <el-input v-model="r.name" size="small" placeholder="变量名如 outLevel" class="so-name" />
-                  <el-select v-model="r.mode" size="small" class="so-mode">
-                    <el-option label="整体值" value="WHOLE" />
-                    <el-option label="按 key 取" value="KEY" />
-                  </el-select>
-                  <el-select v-model="r.type" size="small" class="so-type">
-                    <el-option v-for="t in OUTPUT_VAR_TYPES" :key="t" :label="t" :value="t" />
-                  </el-select>
-                  <el-button size="small" text type="danger" @click="scriptResults.splice(i, 1)">
-                    <el-icon><Delete /></el-icon>
-                  </el-button>
-                </div>
-                <el-input v-model="r.desc" size="small" placeholder="说明（可选）" class="so-desc" />
-              </div>
-              <el-alert
-                v-if="scriptOutputWarnings.length"
-                type="warning"
-                :closable="false"
-                show-icon
-                class="panel-alert"
-                :title="scriptOutputWarnings.join('；')"
-              />
-            </div>
           </template>
 
           <!-- ===== CONDITION ===== -->
@@ -368,7 +334,7 @@
           <template v-else-if="node.data.nodeType === 'SUBFLOW'">
             <el-form-item>
               <template #label>
-                <FieldLabel label="目标流程" tip="仅可选择已发布的逻辑流；其输出变量（outputVars）整体写入本流 resultVar；递归/自引用会被引擎拒绝（嵌套上限 5 层）" />
+                <FieldLabel label="目标流程" tip="仅可选择已发布的逻辑流；其输出变量（outputVars）作为本节点返回值、由输出参数（results）声明写入；递归/自引用会被引擎拒绝（嵌套上限 5 层）" />
               </template>
               <el-select
                 v-model="subflowCfg.flowId"
@@ -484,15 +450,42 @@
             </div>
           </template>
 
-          <!-- ===== 公共：结果变量 / 异常策略（START/END/CONDITION 无；
-               SCRIPT 输出统一由 results 声明，不再有 resultVar） ===== -->
+          <!-- ===== 公共：输出参数 / 异常策略（全执行型节点统一 results 单表；
+               START/END/CONDITION 无；resultVar 已下线） ===== -->
           <template v-if="hasExecutionMeta">
-            <el-form-item v-if="node.data.nodeType !== 'SCRIPT'">
-              <template #label>
-                <FieldLabel label="结果写入变量（resultVar）" tip="节点输出写入该上下文变量，供后续节点以 {{ 变量 }} 引用；留空不保存" />
-              </template>
-              <el-input v-model="node.data.resultVar" placeholder="如 riskResult，留空不保存" clearable />
-            </el-form-item>
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="输出参数（results）" tip="统一输出声明，每个结果按提取方式写入上下文：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数，SUBFLOW 为子流 outputVars，BATCH 为汇总列表），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一，供下游节点直接引用" />
+                <el-button size="small" text type="primary" @click="addResultRow">添加</el-button>
+              </div>
+              <div v-if="!resultRows.length" class="rows-empty">
+                未声明输出：节点结果不写入任何变量（纯副作用可留空）
+              </div>
+              <div v-for="(r, i) in resultRows" :key="i" class="so-row">
+                <div class="so-line1">
+                  <el-input v-model="r.name" size="small" placeholder="变量名如 outLevel" class="so-name" />
+                  <el-select v-model="r.mode" size="small" class="so-mode">
+                    <el-option label="整体值" value="WHOLE" />
+                    <el-option label="按 key 取" value="KEY" />
+                  </el-select>
+                  <el-select v-model="r.type" size="small" class="so-type">
+                    <el-option v-for="t in OUTPUT_VAR_TYPES" :key="t" :label="t" :value="t" />
+                  </el-select>
+                  <el-button size="small" text type="danger" @click="resultRows.splice(i, 1)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+                <el-input v-model="r.desc" size="small" placeholder="说明（可选）" class="so-desc" />
+              </div>
+              <el-alert
+                v-if="resultWarnings.length"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="panel-alert"
+                :title="resultWarnings.join('；')"
+              />
+            </div>
             <el-form-item>
               <template #label>
                 <FieldLabel label="异常处理" tip="失败中断：节点异常终止整个流程；忽略继续：记录异常并继续执行后续节点" />
@@ -570,30 +563,30 @@ const httpCfg = computed(() => ensureConfig<HttpNodeConfig>())
 const beanCfg = computed(() => ensureConfig<{ beanName: string; methodName: string; params: { source: string; target: string }[] }>())
 const scriptCfg = computed(() => ensureConfig<{ language: string; source: string }>())
 
-/** SCRIPT 统一输出声明（reactive 引用，增删改直接写回 node.data.results） */
-const scriptResults = computed<ResultVarDef[]>(() => {
+/** 统一输出声明（reactive 引用，增删改直接写回 node.data.results；全执行型节点共享） */
+const resultRows = computed<ResultVarDef[]>(() => {
   const n = node.value!
-  if (n.data.nodeType !== 'SCRIPT') return []
+  if (!hasExecutionMeta.value) return []
   if (!Array.isArray(n.data.results)) n.data.results = []
   return n.data.results
 })
 
-function addScriptResult(): void {
-  // 首行默认整体值（单值脚本最常见）；已有行默认按 key 取（多输出需脚本返回 Map）
-  scriptResults.value.push({
+function addResultRow(): void {
+  // 首行默认整体值（单值输出最常见）；已有行默认按 key 取（多输出需输出源为 Map/JSON 对象）
+  resultRows.value.push({
     name: '',
-    mode: scriptResults.value.length ? 'KEY' : 'WHOLE',
+    mode: resultRows.value.length ? 'KEY' : 'WHOLE',
     type: 'string',
     desc: undefined,
   })
 }
 
 /** 输出参数软校验（发布时后端硬校验同名/mode 规则）：缺名/非法名/重名 */
-const scriptOutputWarnings = computed<string[]>(() => {
-  if (node.value?.data.nodeType !== 'SCRIPT') return []
+const resultWarnings = computed<string[]>(() => {
+  if (!node.value || !hasExecutionMeta.value) return []
   const warns: string[] = []
   const seen = new Set<string>()
-  scriptResults.value.forEach((r, i) => {
+  resultRows.value.forEach((r, i) => {
     const name = String(r.name ?? '').trim()
     if (!name) {
       warns.push(`输出参数第 ${i + 1} 行缺少变量名`)

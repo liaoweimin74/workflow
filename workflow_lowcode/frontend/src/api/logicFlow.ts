@@ -24,7 +24,7 @@ export interface LogicFlowSummary {
 
 /** 逻辑流详情（含画布 DSL JSON 字符串） */
 export interface LogicFlowDetail extends LogicFlowSummary {
-  /** DSL JSON 字符串：{ nodes:[{id,type,name,x,y,config,resultVar?,errorAction?}], edges:[{id?,source,target,branch?}] } */
+  /** DSL JSON 字符串：{ nodes:[{id,type,name,x,y,config,results?,errorAction?}], edges:[{id?,source,target,branch?}] } */
   dsl: string
 }
 

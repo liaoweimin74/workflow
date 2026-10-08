@@ -32,7 +32,7 @@
           </div>
         </template>
         <div v-else class="vp-empty">
-          {{ keyword ? '无匹配变量' : '暂无可用变量：工具栏「入参」可声明，上游节点 resultVar 可产出' }}
+          {{ keyword ? '无匹配变量' : '暂无可用变量：工具栏「入参」可声明，上游节点输出参数（results）可产出' }}
         </div>
       </div>
     </div>

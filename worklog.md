@@ -3705,3 +3705,19 @@ Work Log:
 
 Stage Summary:
 - r49 全绿零干预，零代码编辑；交付进入构建完成节点，下轮重点观察前端 mtime 与 8080 重启迹象
+
+---
+Task ID: patrol-r50
+Agent: main (cron Job 443426)
+Task: 14:52:27 轻量运维巡检（探活+内存，零开发）
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~571MB（唯一）；Java PID 2815 ~567MB（正当常驻）；MariaDB ~195MB；无 postcss worker
+- cgroup = 2949607424（~2.75GB）< 3.5GB；OOM 0（基线不变）
+- 【交付观察·突破】前端四文件全部更新：dsl.ts 14:49:37、flowVars.ts 14:49:59、FlowNode.vue 14:52:00、PropertyPanel.vue 14:52:00（+08）——前端适配完成（本轮消息前 27 秒仍在写）
+- 【交付观察】jar 仍为 14:45:29 版本；8080 Java 进程仍 12:34:40 启动未重启；LogicFlowEngineTest.java 晚于 jar 构建（并行会话在适配测试，jar 或需再构建）
+- 判读：并行交付推进至「前端已适配、测试适配中、部署重启未做」；本会话继续零干预，8080 重启窗口若短暂 000 先核 jar mtime/进程再判死
+
+Stage Summary:
+- r50 全绿零干预，零代码编辑；前端适配落地为交付关键里程碑，下轮观察测试文件/jar 重建与 8080 重启

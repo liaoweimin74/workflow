@@ -403,7 +403,7 @@ const selectedLoopBodyCount = computed(() => {
   return count
 })
 
-/** 选中节点的可用上下文变量（入参 + 循环变量 + 上游 resultVar + formData），
+/** 选中节点的可用上下文变量（入参 + 循环变量 + 上游 results 产出 + formData），
  *  供属性面板变量选择器就近显示；依赖 store 真值，画布增删/改配置实时联动 */
 const availableVars = computed(() =>
   collectAvailableVars(selectedNodeId.value, allNodes(), allEdges(), inputVars.value)

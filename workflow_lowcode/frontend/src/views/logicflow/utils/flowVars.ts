@@ -5,12 +5,12 @@
  * - input   入参：DSL 顶层 inputVars 声明（全局可用）
  * - loop    循环变量：上游 BATCH 节点的 itemVar/indexVar（仅循环体链内可用，
  *           通过 data.loop === true 的循环边传播；循环外不可见，与引擎作用域一致）
- * - upstream 上游产出：祖先节点（沿入边反向可达）的 resultVar（SCRIPT 除外，其输出见 results），
- *           SCRIPT 节点另含 results 声明的输出变量（WHOLE 整包 / KEY 拆包，按声明名写入）
+ * - upstream 上游产出：祖先节点（沿入边反向可达）results 声明的输出变量
+ *           （全执行型节点：WHOLE 整包 / KEY 拆包，按声明名写入）
  * - form    表单数据：formData 点路径取流程表单字段（仅 {{ }} 占位符场景展示，
  *           VariablePicker 在 bare 模式下过滤该组）
  *
- * CONDITION 双分支均为祖先：真/假支路 resultVar 都会列出（超集，不影响正确性）。
+ * CONDITION 双分支均为祖先：真/假支路 results 产出都会列出（超集，不影响正确性）。
  */
 import type { InputVarDef, ResultVarDef } from './dsl'
 
@@ -27,8 +27,7 @@ export interface VarNodeLike {
   data: {
     nodeType: string
     name?: string
-    resultVar?: string
-    /** 输出声明（SCRIPT 节点，产出变量进 upstream 组） */
+    /** 输出声明（执行型节点，产出变量进 upstream 组） */
     results?: ResultVarDef[]
     /** 具体形态随 nodeType 不同，使用处再收窄 */
     config?: unknown
@@ -143,12 +142,19 @@ export function collectAvailableVars(
       continue
     }
 
-    if (data.resultVar?.trim()) {
-      push({
-        name: data.resultVar.trim(),
-        group: 'upstream',
-        detail: `上游产出 · ${data.name || id}（${data.nodeType}）`,
-      })
+    // 其余执行型节点输出：results 声明即产出
+    if (Array.isArray(data.results)) {
+      for (const r of data.results as ResultVarDef[]) {
+        if (!r?.name?.trim()) continue
+        const bits: string[] = [r.type]
+        if (r.mode === 'WHOLE') bits.push('整体值')
+        if (r.desc) bits.push(r.desc)
+        push({
+          name: r.name.trim(),
+          group: 'upstream',
+          detail: `输出参数 · 来自「${data.name || id}」（${data.nodeType}）`,
+        })
+      }
     }
   }
 

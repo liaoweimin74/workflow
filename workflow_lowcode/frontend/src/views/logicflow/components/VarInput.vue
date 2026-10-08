@@ -34,7 +34,7 @@
             {{ v.name }}
           </button>
         </template>
-        <span v-else class="chips-empty">暂无可用变量：工具栏「入参」可声明，上游节点 resultVar 可产出</span>
+        <span v-else class="chips-empty">暂无可用变量：工具栏「入参」可声明，上游节点输出参数（results）可产出</span>
       </div>
     </div>
   </div>

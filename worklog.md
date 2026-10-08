@@ -4303,3 +4303,18 @@ Work Log:
 
 Stage Summary:
 - 第 8/9/11/12 条全部交付：tooltip 多行化、目标表全库下拉（前后端同步放开白名单+重新部署）、results 去说明字段、groovy 变量 label 居中；四链路全绿、OOM 基线稳 22；待用户页面验证
+
+---
+Task ID: patrol-r77
+Agent: main (定时巡检 Job 443426)
+Task: 四链路探活 + 内存减压 + OOM 盯防（17:17 回合，第 8/9/11/12 条交付后首轮验证）
+
+Work Log:
+- 四链路：a) vite 3000 = 200；b) 外域 Host = 200（allowedHosts 正常）；c) 业务链路 3000→8080 = 200（新 jar 代理链路通）；d) 8080 直连 = 200（新 jar 健康确认）
+- 进程内存：vite PID 18932 ~584MB（唯一）；Java PID 19458 ~540MB（17:12 交付的新 jar，首次探活全绿）；MariaDB ~195MB
+- cgroup = 2425487360（~2.26GB，构建后回落中，未破 3.5GB 备案线）
+- OOM 盯防：oom_kill = 22，零新增，基线稳 22
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r77 全绿（~2.26GB 回落中、OOM 稳 22）；第 8/9/11/12 条交付后的新 jar 经四链路验证健康；待办池不变：4（批处理布局）、5+9（表下拉）、6（审批事件）、8/11/12（已交付待用户页面验证）

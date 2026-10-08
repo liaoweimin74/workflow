@@ -4095,3 +4095,18 @@ Work Log:
 
 Stage Summary:
 - push 任务完成（保底形式）：本地工作已上远端 sandbox-wip-20261008 分支，零覆盖、零丢失；远端 main 与本地分叉（unrelated histories）待用户拍板后续（PR 合并 / 授权强推覆盖 / 两线并存）；低内存 pack 配置对 git 连环案有根治意义，建议保留；r68 全绿、新 OOM 基线 22
+
+---
+Task ID: patrol-r69
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r69：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~540MB（唯一）；Java PID 12826 ~530MB（15:31 新 jar 稳定）；MariaDB ~189MB；Chrome renderer ~213MB 驻留
+- cgroup = 2579804160（~2.58GB，push 打包后高位持平，未破 3.5GB 备案线）
+- OOM 盯防：oom_kill = 22，**零新增**（上轮 +4 后首次零击杀轮）——低内存 pack 配置（windowMemory 64m/单线程/低压缩）或轮间无重 git 操作，止血迹象初现，继续观察
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r69 全绿；git 连环案首次零击杀轮（基线稳在 22），低内存 pack 配置止血迹象初现；核心服务无损

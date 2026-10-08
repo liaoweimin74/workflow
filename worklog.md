@@ -4215,3 +4215,19 @@ Work Log:
 
 Stage Summary:
 - r74 探活全绿但内存越备案线（元凶=并行会话 gc 进行中，属预期瞬时）；瘦身三步中 gitignore/untrack 已由并行会话完成，gc 执行中——本会话避让，下轮验收瘦身效果；git 连环案基线稳 22
+
+---
+Task ID: repo-slim
+Agent: main (用户授权指令)
+Task: 执行用户授权的"仓库瘦身"
+
+Work Log:
+- 影像前：loose 5211 个 / 1.19GiB + pack 15.81MiB；mariadb-user/ 在索引 875 个文件
+- .gitignore 追加 mariadb-user/（MariaDB 数据目录永久移出版本控制）
+- git rm -r --cached mariadb-user/（875 文件仅出索引、磁盘保留，MariaDB 服务无损）；提交 3d3a15d1
+- git gc --prune=now：**全程 OOM 零新增**（oom_kill 稳 22）——低内存 pack 配置（windowMemory 64m/deltaCache 32m/单线程/低压缩）使全量打包安全完成，git 连环案土壤铲除
+- 影像后：loose 0；pack 23759 对象 / 179.70MiB（~1.6 万 unreachable 对象被 prune；96MB redo log 历史副本被 delta 压缩）；.git 磁盘占用 181MiB
+- push 3d3a15d1 → fast-forward 成功（8487686a..3d3a15d1，upstream 生效不再被拒）；远端=本地同步 ✅
+
+Stage Summary:
+- 瘦身完成：.git 从 ~1.21GiB → 181MiB（净省 ~1.03GiB）；mariadb-user/ 永久移出（未来不再新增 96MB 副本）；gc 零 OOM 证明低内存配置根治 git 连环案；历史 blob 已 delta 压缩，彻底清除需改写历史（破坏性，不建议）

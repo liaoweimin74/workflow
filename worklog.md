@@ -2539,3 +2539,18 @@ Work Log:
 
 Stage Summary:
 - 154-patrol 全绿；Chrome 退场 + cgroup 回落至 2.48GB，为全程最低水位，D+ 终态连续第七轮稳态
+
+---
+Task ID: 443426
+Agent: main (cron patrol)
+Task: 09:17 轻量运维巡检（四链路探活 + 内存/OOM 检查）
+
+Work Log:
+- 探活四链路：vite 3000=200、外域Host=200、业务链路 /api/auth/login=200、8080 直连=200，全部正常
+- 进程检查：仅 1 个 vite（PID 9754, RSS 614MB），无多余 vite/postcss worker，无需减压
+- Java 引擎（PID 12577, RSS 528MB, -Xmx448m）正当常驻；mariadbd（169MB）正常
+- cgroup 内存 2.31GB（2480529408B），低于 3.5GB 阈值
+- oom_kill=0，与基线一致，无 OOM 事故
+
+Stage Summary:
+- 本轮全绿，零动作结束；未启动 agent-browser、未改代码

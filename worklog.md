@@ -4916,3 +4916,21 @@ Work Log:
 
 Stage Summary:
 - r77~r107 连续 31 轮稳定全绿，系统健康基线持续保持
+---
+Task ID: patrol-r108
+Agent: main (cron Job 443426)
+Task: 定时巡检 r108（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- 【观察】Java 进程 PID 19458 → 28428：jar 于 21:05:34 重新构建，Java 于 21:05:44 重启（本轮探活前 2 分钟）
+- 【观察】frontend/src/api/formLogicBinding.ts 近 10 分钟内有改动 —— 判定为并行开发会话正在实施触发点扩展 batch2，重启属正常发版，非事故
+- 冲突规避：本主会话暂停 batch2 开发计划，避免与并行会话冲突
+- vite 18932 独占 / MariaDB 4847 正常；vite 进程数 1，postcss 0
+- cgroup 内存 2575613952 ≈ 2.40GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 本轮零干预
+
+Stage Summary:
+- 服务在并行会话发版重启后四链路立即全绿，重启窗口无损
+- 主会话触发点开发任务移交并行会话执行中，主会话仅巡检

@@ -3766,3 +3766,33 @@ Work Log:
 
 Stage Summary:
 - r52 全绿；唯一异常为 git 遭 OOM 击杀（详见事故小节），D+ 服务无损；新 OOM 基线 = 1
+
+---
+Task ID: incident-oom-git-2 (r53 发现)
+Agent: main (cron Job 443426)
+Task: OOM 事故记录（第二次）——git 再次被杀，oom_kill 1 → 2
+
+Work Log:
+- 15:07 巡检发现 oom_kill = 2（上轮立案后基线 1 → 现突破为 2）
+- 内核日志定位：07:04:28 UTC = 15:04:28 +08，全局 OOM，牺牲者仍是 git（PID 8884，anon-rss ~2.07GB / total-vm ~2.26GB）——与 14:58:45 第一次（git 7979，~2.07GB）如出一辙，判定为并行会话重试同一大体积 git 操作并连续两次触发 OOM
+- 并发内存压力源：agent-browser Chrome 组新入驻（主进程 10085 ~220MB + renderer 10172 ~380MB + network 10129 ~173MB ≈ ~770MB），推高 cgroup 1.52GB → 2.56GB
+- 影响评估：D+ 三大服务再次全部幸存（Java 8906 持续运行 12m32s、vite 18932、mariadbd 4847 均在），四链路 15:07 全 200
+- 风险提示（记入台账供并行会话/用户参考）：git(~2GB) + Chrome(~770MB 且可能继续增长) + Java(~560MB) + vite(~570MB) + MariaDB(~190MB) 叠加逼近上限；若 git 重试时机撞上 Chrome 高峰，OOM killer 可能选中 vite/Java 等关键进程。建议 git 操作分批/减压（避开 Chrome 驻留窗口），Chrome 组按授权先例不 kill
+- 新基线：oom_kill = 2；本轮零干预、零代码编辑
+
+Stage Summary:
+- 同因事故第二次：git 连续两杀（均 ~2.07GB），Chrome 驻留放大内存风险；核心服务无损，重点盯防 git 重试 × Chrome 高峰叠加窗口
+
+---
+Task ID: patrol-r53
+Agent: main (cron Job 443426)
+Task: 15:07:27 轻量运维巡检（探活+内存，零开发）
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：Java PID 8906 ~560MB（results-v2 jar，持续运行 12m32s）；vite PID 18932 ~569MB（唯一）；MariaDB ~189MB；另 agent-browser Chrome 组 3 进程 ~770MB（非 kill 授权范围，仅观察）
+- cgroup = 2557853696（~2.56GB，Chrome 入驻推高）；OOM 计数 2（基线 1 → 2，第二次事故已立案，见 incident-oom-git-2）
+- 无 postcss worker；无多余 vite；jar mtime 14:45:29 未变（部署态稳定）；本轮零代码编辑、零干预
+
+Stage Summary:
+- r53 全绿但内存风险上行（Chrome 驻留 + git 连续 OOM 两杀）；核心服务无损，持续盯防

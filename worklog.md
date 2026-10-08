@@ -2420,3 +2420,19 @@ Work Log:
 
 Stage Summary:
 - 147-patrol 全绿；新 cron 443426 条款与实际架构完全对齐，巡检进入终态稳态
+
+---
+Task ID: 148-patrol
+Agent: 轻量运维巡检 (cron 443426)
+Task: 08:47 轻量运维轮——四链路探活 + 内存减压 + OOM 监控，只读不做开发
+
+Work Log:
+- 四链路全 200：a) vite 3000=200；b) 外域 Host=200（allowedHosts 生效）；c) 业务链路 3000→8080 /api/auth/login=200；d) 8080 直连=200
+- vite 进程数=1（PID 9754，RSS 612MB），无重复实例；上轮疑虑「PID 已变化」实为误记，9754 跨回合存活属实
+- postcss worker=0（绝迹维持）；Java PID 12577 正常住场勿动；MariaDB 3306 正常
+- cgroup 3.07GB（3296006144B），较上轮 3.28GB 回落，<3.5GB 警戒线
+- oom_kill=0，与基线持平，无事故
+- 无修复动作；未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 148-patrol 全绿；D+ 终态连续两轮稳态，内存呈回落趋势，巡检进入纯监视模式

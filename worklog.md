@@ -4934,3 +4934,20 @@ Work Log:
 Stage Summary:
 - 服务在并行会话发版重启后四链路立即全绿，重启窗口无损
 - 主会话触发点开发任务移交并行会话执行中，主会话仅巡检
+
+---
+Task ID: user-req-6-triggers-2
+Agent: main (用户交互指令·触发点扩展·接管收尾)
+Task: 完成触发点扩展第二批（8 个 AFTER_* 触发点）前端实施 + 全链验证 + 部署
+
+Work Log:
+- 盘点接管进度：后端已齐——常量层（并行会话 commit 16afe747：8 个 TRIG_* + TRIGGER_TYPES + DEFAULT_AFTER_COMMIT_TRIGGERS + normalizeMode）、FormLogicBindingService.buildApprovalVars 扩 toUser、LogicFlowApprovalTrigger.onTaskAction/onProcessAction、6 处挂钩（TransferService.transfer / WorkflowTaskService.delegateTask+delegateTaskWithComment+claimTask+recallInstance / AddSignService.addSign / TaskRemindService.remind / ProcessInstanceService.terminateProcessInstance / ProcessInstanceController.start 首份表单落库后）、7 个测试类适配（3 个 Mockito @Mock + 4 个直接构造 mock(...)）
+- 前端实施①formLogicBinding.ts：FORM_LOGIC_TRIGGERS 新增 8 触发点并全量加 group 字段（业务数据/表单存档/审批动作/流程事件）；导出 AFTER_COMMIT_DEFAULT_TRIGGERS（与后端同集）；TRIGGER_PARAM_SPECS 新增 8 条规格（动作类追加 toUser：转办新办理人/委派被委派人/加签人逗号分隔/被催办人），approvalTriggerSpec 支持 extra 追加
+- 前端实施②FormListPage.vue：绑定弹窗触发点下拉改 el-option-group 四分组展示；watch 触发点切换时辅助动作预置 executionMode=AFTER_COMMIT（与后端 normalizeMode 缺省一致）；设计器导入对话框遍历 FORM_LOGIC_TRIGGERS 自动获得新触发点（按 formType 分组复用）
+- 验证：mvn -o compile test-compile 零错误；7 个受影响测试类 62 用例全过（BUILD SUCCESS）；mvn -o package 出新 jar（13:05:34, 103MB）；vue-tsc 本次三改动文件零新增错误（FormListPage(10,10) FormConfig 为历史存量噪音）；eslint 不在 node_modules（历史基线即无，跳过）
+- 部署：kill 旧 Java 19458 → start-services.sh 拉起新 PID 28428（19.3s 启动，13:06:05 Tomcat up）；四链路复验 a(vite 3000)=200 / b(外域 Host)=200 / c(vite /api→8080 业务链)=200 / d(8080 直连 /api/auth/login)=200；vite HMR 热更 FormListPage/formLogicBinding 无报错
+
+Stage Summary:
+- 触发点体系扩至 22 个（14→22）：业务数据 6 + 表单存档 4 + 审批动作 8（通过/拒绝/驳回/转办/委派/加签/认领/催办）+ 流程事件 4（结束/撤回/终止/启动）；辅助动作默认 AFTER_COMMIT 留痕，显式 SYNC_IN_TX 仍可回滚主操作
+- 事件参数新增 toUser 注入（buildApprovalVars 全键恒注入，前端规格按触发点声明子集）；催办防重复用 24h 任务级 + urge.interval 实例级限流
+- 剩余：第三批 BEFORE_TASK_APPROVE/BEFORE_PROCESS_START（失败拒绝校验语义）、ON_TASK_TIMEOUT/ON_NODE_ENTER/LEAVE（需改 TaskTimeoutScanner 调度）；P3 远期 TIMER/WEBHOOK/子表行级事件

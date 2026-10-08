@@ -3125,3 +3125,17 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿零干预，服务态稳定；多输出改造方案已答复用户供决策：一期 outputs 声明式展开（引擎约 30-50 行 + 校验器 + 前端输出参数表格），二期点路径解析打通 CONDITION/HTTP/BEAN，均向后兼容
+
+---
+Task ID: 443426-r16
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 11:47 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 550MB）；Java 正常驻留（PID 22990，RSS 546MB）；MariaDB 正常（PID 4847）；无 postcss worker，无多余 vite
+- cgroup 内存 2095960064B ≈ 1.95GB（<3.5GB 阈值，与上轮 1.96GB 持平）；OOM 计数 0 与基线一致
+- 未启动 agent-browser、未修改代码，探活通过即结束
+
+Stage Summary:
+- 本轮全绿零干预，服务态稳定；多输出改造方案（一期 outputs 展开 + 二期点路径）仍在等待用户拍板三个决策点

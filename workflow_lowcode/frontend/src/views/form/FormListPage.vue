@@ -179,12 +179,14 @@
         <el-table-column label="触发点" width="140">
           <template #default>
             <el-select v-model="bindingForm.triggerType" size="small" style="width: 100%">
-              <el-option
-                v-for="t in triggerOptions"
-                :key="t.value"
-                :label="t.label"
-                :value="t.value"
-              />
+              <el-option-group v-for="g in groupedTriggerOptions" :key="g.group" :label="g.group">
+                <el-option
+                  v-for="t in g.triggers"
+                  :key="t.value"
+                  :label="t.label"
+                  :value="t.value"
+                />
+              </el-option-group>
             </el-select>
           </template>
         </el-table-column>
@@ -284,6 +286,7 @@ import { logicFlowApi } from '@/api/logicFlow'
 import {
   formLogicBindingApi,
   FORM_LOGIC_TRIGGERS,
+  AFTER_COMMIT_DEFAULT_TRIGGERS,
   flowsMatchTrigger,
   triggerParamSpec,
   type FormLogicBindingDTO,
@@ -591,10 +594,23 @@ const bindingForm = reactive({
   description: '',
 })
 
-/** 当前表单类型可选触发点（BUSINESS 六类；WORKFLOW 含快照前后与保存前后四类） */
+/** 当前表单类型可选触发点（BUSINESS 六类；WORKFLOW 含存档/审批动作/流程事件共十六类） */
 const triggerOptions = computed(() => {
   const type = bindingSource.value?.type || 'WORKFLOW'
   return FORM_LOGIC_TRIGGERS.filter((t) => t.formType === type)
+})
+/** 触发点按事件类别分组（业务数据/表单存档/审批动作/流程事件，保持定义顺序） */
+const groupedTriggerOptions = computed(() => {
+  const groups: { group: string; triggers: typeof triggerOptions.value }[] = []
+  for (const t of triggerOptions.value) {
+    let g = groups.find((x) => x.group === t.group)
+    if (!g) {
+      g = { group: t.group, triggers: [] as unknown as typeof triggerOptions.value }
+      groups.push(g)
+    }
+    ;(g.triggers as unknown[]).push(t)
+  }
+  return groups
 })
 /** 入参声明与当前触发点事件参数完全一致的已发布逻辑流（名称集合严格相等） */
 const filteredFlows = computed(() =>
@@ -605,9 +621,14 @@ const currentTriggerSpec = computed(() => triggerParamSpec(bindingForm.triggerTy
 // 切换触发点后，原选中逻辑流若不再参数匹配则清空，避免提交非法绑定
 watch(
   () => bindingForm.triggerType,
-  () => {
+  (val) => {
     if (bindingForm.flowKey && !filteredFlows.value.some((f) => f.flowKey === bindingForm.flowKey)) {
       bindingForm.flowKey = ''
+    }
+    // 辅助动作触发点（转办/委派/加签/认领/催办/撤回/终止/启动）预置 AFTER_COMMIT，
+    // 与后端 normalizeMode 缺省一致；其余触发点保留用户当前选择
+    if (AFTER_COMMIT_DEFAULT_TRIGGERS.has(val)) {
+      bindingForm.executionMode = 'AFTER_COMMIT'
     }
   },
 )

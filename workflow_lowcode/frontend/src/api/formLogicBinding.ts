@@ -1,23 +1,48 @@
 import http from '@/utils/http'
 import type { R } from '@/types/common'
 
-/** 触发点（后端 FormLogicBindingService 同名常量） */
+/** 触发点（后端 FormLogicBindingService 同名常量）；group 供绑定弹窗/设计器导入按事件类别分组展示 */
 export const FORM_LOGIC_TRIGGERS = [
-  { value: 'BEFORE_CREATE', label: '新增前', formType: 'BUSINESS' },
-  { value: 'AFTER_CREATE', label: '新增后', formType: 'BUSINESS' },
-  { value: 'BEFORE_UPDATE', label: '更新前', formType: 'BUSINESS' },
-  { value: 'AFTER_UPDATE', label: '更新后', formType: 'BUSINESS' },
-  { value: 'BEFORE_DELETE', label: '删除前', formType: 'BUSINESS' },
-  { value: 'AFTER_DELETE', label: '删除后', formType: 'BUSINESS' },
-  { value: 'BEFORE_SNAPSHOT', label: '快照保存前', formType: 'WORKFLOW' },
-  { value: 'AFTER_SNAPSHOT', label: '快照保存后', formType: 'WORKFLOW' },
-  { value: 'BEFORE_SAVE', label: '表单保存前', formType: 'WORKFLOW' },
-  { value: 'AFTER_SAVE', label: '表单保存后', formType: 'WORKFLOW' },
-  { value: 'AFTER_TASK_APPROVE', label: '审批通过后', formType: 'WORKFLOW' },
-  { value: 'AFTER_PROCESS_FINISH', label: '流程结束后', formType: 'WORKFLOW' },
-  { value: 'AFTER_TASK_REJECT', label: '审批拒绝后', formType: 'WORKFLOW' },
-  { value: 'AFTER_TASK_RETURN', label: '驳回退回后', formType: 'WORKFLOW' },
+  { value: 'BEFORE_CREATE', label: '新增前', formType: 'BUSINESS', group: '业务数据' },
+  { value: 'AFTER_CREATE', label: '新增后', formType: 'BUSINESS', group: '业务数据' },
+  { value: 'BEFORE_UPDATE', label: '更新前', formType: 'BUSINESS', group: '业务数据' },
+  { value: 'AFTER_UPDATE', label: '更新后', formType: 'BUSINESS', group: '业务数据' },
+  { value: 'BEFORE_DELETE', label: '删除前', formType: 'BUSINESS', group: '业务数据' },
+  { value: 'AFTER_DELETE', label: '删除后', formType: 'BUSINESS', group: '业务数据' },
+  { value: 'BEFORE_SNAPSHOT', label: '快照保存前', formType: 'WORKFLOW', group: '表单存档' },
+  { value: 'AFTER_SNAPSHOT', label: '快照保存后', formType: 'WORKFLOW', group: '表单存档' },
+  { value: 'BEFORE_SAVE', label: '表单保存前', formType: 'WORKFLOW', group: '表单存档' },
+  { value: 'AFTER_SAVE', label: '表单保存后', formType: 'WORKFLOW', group: '表单存档' },
+  { value: 'AFTER_TASK_APPROVE', label: '审批通过后', formType: 'WORKFLOW', group: '审批动作' },
+  { value: 'AFTER_TASK_REJECT', label: '审批拒绝后', formType: 'WORKFLOW', group: '审批动作' },
+  { value: 'AFTER_TASK_RETURN', label: '驳回退回后', formType: 'WORKFLOW', group: '审批动作' },
+  { value: 'AFTER_TASK_TRANSFER', label: '转办后', formType: 'WORKFLOW', group: '审批动作' },
+  { value: 'AFTER_TASK_DELEGATE', label: '委派后', formType: 'WORKFLOW', group: '审批动作' },
+  { value: 'AFTER_TASK_ADD_SIGN', label: '加签后', formType: 'WORKFLOW', group: '审批动作' },
+  { value: 'AFTER_TASK_CLAIM', label: '认领后', formType: 'WORKFLOW', group: '审批动作' },
+  { value: 'AFTER_TASK_URGE', label: '催办后', formType: 'WORKFLOW', group: '审批动作' },
+  { value: 'AFTER_PROCESS_FINISH', label: '流程结束后', formType: 'WORKFLOW', group: '流程事件' },
+  { value: 'AFTER_PROCESS_WITHDRAW', label: '发起人撤回后', formType: 'WORKFLOW', group: '流程事件' },
+  { value: 'AFTER_PROCESS_TERMINATE', label: '流程终止后', formType: 'WORKFLOW', group: '流程事件' },
+  { value: 'AFTER_PROCESS_START', label: '流程启动后', formType: 'WORKFLOW', group: '流程事件' },
 ] as const
+
+/**
+ * 辅助动作触发点（与后端 DEFAULT_AFTER_COMMIT_TRIGGERS 同集）：
+ * 转办/委派/加签/认领/催办/撤回/终止/启动。这八个动作以留痕为主、
+ * 失败回滚主操作意义有限，后端 executionMode 缺省时默认 AFTER_COMMIT（可显式 SYNC_IN_TX 覆盖）；
+ * 绑定弹窗选中时前端同步预置 AFTER_COMMIT。
+ */
+export const AFTER_COMMIT_DEFAULT_TRIGGERS: ReadonlySet<string> = new Set([
+  'AFTER_TASK_TRANSFER',
+  'AFTER_TASK_DELEGATE',
+  'AFTER_TASK_ADD_SIGN',
+  'AFTER_TASK_CLAIM',
+  'AFTER_TASK_URGE',
+  'AFTER_PROCESS_WITHDRAW',
+  'AFTER_PROCESS_TERMINATE',
+  'AFTER_PROCESS_START',
+])
 
 export type FormLogicTrigger = (typeof FORM_LOGIC_TRIGGERS)[number]['value']
 
@@ -37,20 +62,31 @@ export interface TriggerParamSpec {
  * - 审批事件触发点（AFTER_TASK_APPROVE/REJECT/RETURN/PROCESS_FINISH）另行注入：
  *   processInstanceId / taskId / comment；不注入 formDataExisting/dataId；
  *   formData 为该流程实例最新一条表单数据（无表单数据的流程不触发，绑定也不会被调度）
+ * - 审批事件二期（AFTER_TASK_TRANSFER/DELEGATE/ADD_SIGN/CLAIM/URGE、
+ *   AFTER_PROCESS_WITHDRAW/TERMINATE/START）注入同一集合，动作类另注入 toUser
+ *   （转办/委派的新办理人、加签人逗号分隔、被催办人；认领/流程级为 null）；
+ *   taskId 为被操作任务（撤回时为活跃任务，终止/启动为空）；
+ *   八个辅助动作触发点 executionMode 缺省 AFTER_COMMIT（见 AFTER_COMMIT_DEFAULT_TRIGGERS）
  */
-/** 审批事件触发点共用参数（formData/操作员等差异字段在后端 buildApprovalVars 逐字段对齐） */
-function approvalTriggerSpec(opType: string, opLabel: string): TriggerParamSpec[] {
+/** 审批事件触发点共用参数（formData/操作员等差异字段在后端 buildApprovalVars 逐字段对齐；extra 追加 toUser 等动作差异字段） */
+function approvalTriggerSpec(opType: string, opLabel: string, extra?: TriggerParamSpec[]): TriggerParamSpec[] {
   return [
     { name: 'formData', type: 'json', required: true, desc: '该流程实例最新表单数据（无表单数据时不触发）' },
     { name: 'processInstanceId', type: 'string', required: false, desc: '流程实例 ID' },
-    { name: 'taskId', type: 'string', required: false, desc: '触发本次审批事件的审批任务 ID' },
+    { name: 'taskId', type: 'string', required: false, desc: '关联任务 ID（部分流程级事件为空）' },
     { name: 'formKey', type: 'string', required: false, desc: '表单标识' },
     { name: 'formType', type: 'string', required: false, desc: '表单类型（WORKFLOW）' },
     { name: 'opType', type: 'string', required: false, desc: `操作类型（${opType}）` },
-    { name: 'operator', type: 'string', required: false, desc: '审批操作人' },
+    { name: 'operator', type: 'string', required: false, desc: '操作人' },
     { name: 'comment', type: 'string', required: false, desc: `审批意见/${opLabel}原因（可空）` },
+    ...(extra ?? []),
     { name: '__trigger', type: 'json', required: false, desc: '触发元信息（调试用）' },
   ]
+}
+
+/** toUser 参数（动作目标人：转办/委派新办理人、加签人逗号分隔、被催办人） */
+function toUserSpec(desc: string): TriggerParamSpec {
+  return { name: 'toUser', type: 'string', required: false, desc }
 }
 
 /** 触发点事件参数规格（单源：绑定弹窗过滤 + 设计器导入共用，勿在调用处重复定义） */
@@ -150,6 +186,14 @@ export const TRIGGER_PARAM_SPECS: Record<string, TriggerParamSpec[]> = {
   AFTER_PROCESS_FINISH: approvalTriggerSpec('FINISH', '结束'),
   AFTER_TASK_REJECT: approvalTriggerSpec('REJECT', '拒绝'),
   AFTER_TASK_RETURN: approvalTriggerSpec('RETURN', '驳回'),
+  AFTER_TASK_TRANSFER: approvalTriggerSpec('TRANSFER', '转办', [toUserSpec('转办后的新办理人')]),
+  AFTER_TASK_DELEGATE: approvalTriggerSpec('DELEGATE', '委派', [toUserSpec('被委派人')]),
+  AFTER_TASK_ADD_SIGN: approvalTriggerSpec('ADD_SIGN', '加签', [toUserSpec('加签人（多个逗号分隔）')]),
+  AFTER_TASK_CLAIM: approvalTriggerSpec('CLAIM', '认领'),
+  AFTER_TASK_URGE: approvalTriggerSpec('URGE', '催办', [toUserSpec('被催办人')]),
+  AFTER_PROCESS_WITHDRAW: approvalTriggerSpec('WITHDRAW', '撤回'),
+  AFTER_PROCESS_TERMINATE: approvalTriggerSpec('TERMINATE', '终止'),
+  AFTER_PROCESS_START: approvalTriggerSpec('START', '启动'),
 }
 
 /** 取触发点参数规格（未知触发点返回 null） */

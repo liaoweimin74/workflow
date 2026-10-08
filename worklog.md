@@ -3796,3 +3796,24 @@ Work Log:
 
 Stage Summary:
 - r53 全绿但内存风险上行（Chrome 驻留 + git 连续 OOM 两杀）；核心服务无损，持续盯防
+
+---
+Task ID: results-v3-unify
+Agent: main (用户对话驱动：拍板 1A 2A 3B 4A)
+Task: 全执行型节点迁移 results 单表（resultVar 全链路下线）
+
+Work Log:
+- 拍板落地：1A 开工（HTTP→BEAN→SUBFLOW→BATCH→DATA_UPDATE 顺序）、2A HTTP 载体=解析后 body（KEY 模式字符串先尝试 JSON 解析）、3B 宽松 KEY（非 Map/解析失败→warn 跳过节点继续；SCRIPT 保持严格）、4A DATA_UPDATE 随迁
+- 后端 LogicFlowDsl：删 NodeDef.resultVar（+@JsonIgnoreProperties 兼容存量草稿遗留键），results 注释/类文档泛化到全执行节点
+- 后端 Engine：writeScriptResults→writeResults 泛化（严格度按 SCRIPT/其余分流）+ 新增 resolveKeyMap（Map 直通/字符串 JSON 解析/严格抛错或宽松 warn）；executeLogicNode、CONDITION 写回点（原 L306-308）、BATCH 内层 executeBatchBodyStep 三处统一走 writeResults
+- 后端 Validator：results 校验泛化（顶层+循环体全类型），resultVar 拦截移除；LogicFlowEngineTest 适配（wholeDef 助手替换 setResultVar）；BizDataHandlerTest 构造函数不匹配为历史遗留未动
+- 前端：dsl.ts（类型/parse/serialize/collectReferencedVars 全链路删 resultVar、results 全类型回显与序列化）；PropertyPanel results 单表提升为全执行型节点公共区（resultVar 输入框删除）；flowVars.ts 上游产出改由 results 声明收集；FlowNode.vue 输出徽标泛化（↗ 名称）；api/logicFlow.ts、VariablePicker/VarInput 提示文案同步；designerStore.ts（BPMN 侧）按拍板不动
+- 构建：mvn -Dmaven.test.skip=true package（06:45 新 jar）；前端改动文件 ESLint 0 问题（仓库 781 个 lint 问题均为历史遗留）
+- 部署：kill 2815 → start-services.sh 拉起新 jar（PID 8906）；四链路探活 a/b/c/d 全 200
+- E2E（/tmp/e2e_results_v3.sh）11/11 全绿：①HTTP→KEY body JSON 拆包 code/msg/data（POST login 带 bodyParams，data.accessToken 真实提取）+发布拦截移除 ②HTTP→WHOLE body 整值 ③宽松语义（缺 key 跳过节点 SUCCESS）④SUBFLOW outputVars Map KEY 拆包 outVal=subvalue ⑤legacy resultVar 键发布放行且无副作用（results 正常写入）
+- 浏览器自检（agent-browser）：登录→逻辑流列表→设计器画布→点 HTTP 节点：卡片显示 ↗ 输出徽标、属性栏出现「输出参数（results）」单表（回显 legacyCheck/整体值）、resultVar 输入框已消失；验证后 close --all 释放内存
+
+Stage Summary:
+- results-v3 全量交付上线：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/CONDITION）统一 results 单表输出，resultVar 全链路下线（DSL 反序列化兼容遗留键）
+- KEY 语义双轨定型：SCRIPT 严格（非 Map→FAILED），其余宽松（warn+跳过）——用户拍板 3B
+- 遗留：BizDataHandlerTest 构造不匹配（历史）、仓库 781 lint 问题（历史）、BPMN 侧 designerStore resultVar（另行决策）、二期点路径（{{a.b.c}} 全节点下钻）维持暂缓

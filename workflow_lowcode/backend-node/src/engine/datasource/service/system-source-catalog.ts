@@ -106,7 +106,7 @@ const PROCESS_INSTANCE_COLUMNS: ColumnConfig[] = [
   { ...newColumnConfig(), key: 'startTime', label: '发起时间', columnType: 'VARCHAR', length: 64 },
 ]
 
-/** 岗位列常量（`SystemService.listPosts()` 字段面；数据源仅暴露启用岗位，供成员组规则等选择场景）。 */
+/** 岗位列常量（`SystemService.listPosts()` 字段面；数据源仅暴露启用岗位，供审批人策略等选择场景）。 */
 const POSTS_COLUMNS: ColumnConfig[] = [
   { ...newColumnConfig(), key: 'id', label: '岗位 ID', columnType: 'VARCHAR', length: 64 },
   { ...newColumnConfig(), key: 'postName', label: '岗位名称', columnType: 'VARCHAR', length: 128 },

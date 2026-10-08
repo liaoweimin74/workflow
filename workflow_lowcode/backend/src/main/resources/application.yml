@@ -47,3 +47,20 @@ workflow:
     max-tokens: 4096
     connect-timeout-ms: 5000
     read-timeout-ms: 120000
+# 附件上传（Task 146：系统组件·附件）
+spring.servlet.multipart:
+  enabled: true
+  max-file-size: 100MB
+  max-request-size: 200MB
+  file-size-threshold: 1MB
+
+workflow.attachment:
+  storage-path: ${ATTACHMENT_STORAGE_PATH:./data/attachments}
+  max-size-mb: 100
+
+# 后端业务逻辑执行（流程节点 logic 项 + 独立逻辑编排共用）
+# HTTP 出站白名单：逗号分隔主机，支持精确与 *.example.com 后缀通配；
+# 默认空 = 放行全部（首次使用 WARN 一次，生产建议收紧为 api.example.com,*.example.com 形式）
+workflow.logic.http.allowed-hosts: ${LOGIC_HTTP_ALLOWED_HOSTS:}
+# Groovy 脚本单次执行超时毫秒数（超时 cancel(true) 中断，抛 SCRIPT_TIMEOUT: >Nms）
+workflow.logic.script.timeout-ms: ${LOGIC_SCRIPT_TIMEOUT_MS:5000}

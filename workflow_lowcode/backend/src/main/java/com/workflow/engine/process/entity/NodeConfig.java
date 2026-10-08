@@ -10,7 +10,8 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "wf_node_config",
-       uniqueConstraints = @UniqueConstraint(name = "uk_node", columnNames = {"tenant_id", "process_def_id", "node_id"}),
+       uniqueConstraints = @UniqueConstraint(name = "uk_node_version",
+               columnNames = {"tenant_id", "process_def_id", "node_id", "process_definition_id"}),
        indexes = @Index(name = "idx_def", columnList = "tenant_id, process_def_id"))
 public class NodeConfig {
 

@@ -28,6 +28,10 @@ public class SysUser extends BaseEntity {
     @Column(name = "org_id")
     private Long orgId;
 
+    /** 岗位 id（sys_post.id，V43 对位；选人/成员组规则按它匹配）。 */
+    @Column(name = "post_id")
+    private Long postId;
+
     @Column(nullable = false)
     private Integer status = 1;
 
@@ -51,6 +55,8 @@ public class SysUser extends BaseEntity {
     public void setAvatar(String avatar) { this.avatar = avatar; }
     public Long getOrgId() { return orgId; }
     public void setOrgId(Long orgId) { this.orgId = orgId; }
+    public Long getPostId() { return postId; }
+    public void setPostId(Long postId) { this.postId = postId; }
     public Integer getStatus() { return status; }
     public void setStatus(Integer status) { this.status = status; }
     public List<SysRole> getRoles() { return roles; }

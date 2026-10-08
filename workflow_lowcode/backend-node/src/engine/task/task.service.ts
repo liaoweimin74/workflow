@@ -9,6 +9,7 @@ import { getTenantId } from '../../framework/tenant/tenant-context'
 import { EngineRuntime } from '../runtime/engine-runtime'
 import { snapshotAssigneeResolvers } from '../runtime/assignee-resolver-registry'
 import { extractFormConfig, randomUuid } from '../process/process-design.service'
+import { VariableMappingWriter } from '../form/mapping/variable-mapping.writer'
 import { EnginePersistence, type TaskJoinRow } from '../runtime/engine-persistence'
 import { ProcessDesignRepository } from '../process/repository/process-design.repository'
 import { BackendLogicHook, completedActivityIdSnapshot, newlyCompletedEndEventNodeIds } from '../logic/backend-logic-hook'
@@ -128,6 +129,8 @@ export class TaskService {
     private readonly instances: ProcessInstanceService,
     private readonly designRepo: ProcessDesignRepository,
     private readonly backendLogic: BackendLogicHook,
+    /** 可选注入：流程变量映射写入（Java VariableMappingWriter 对位）；测试手动 new 时不传则跳过。 */
+    private readonly mappingWriter?: VariableMappingWriter,
   ) {}
 
   // ------------------------------------------------------------ 列表
@@ -576,6 +579,23 @@ export class TaskService {
     const completedBefore = completedActivityIdSnapshot(state)
     runtime.completeTask(taskId, body.variables ?? {})
 
+    // 流程变量映射写入（Java VariableMappingWriter 对位，Task 118：任务完成后触发；
+    // form:* 源读 wf_form_data 当前数据 —— 前端已在此前通过表单接口保存本节点数据）。
+    // merge 进引擎变量，与下方 replaceRuntimeRows 同一次 CAS 落库；失败不阻断（Java 同款吞掉）。
+    if (this.mappingWriter !== undefined) {
+      try {
+        const mapped = await this.mappingWriter.compute(
+          row.process_def_id,
+          row.instance_id,
+          runtime.getVariables(),
+          model.initiatorNodeId,
+        )
+        for (const [name, value] of Object.entries(mapped)) runtime.setVariable(name, value)
+      } catch {
+        // Java: warn 后吞掉
+      }
+    }
+
     await this.persistence.replaceRuntimeRows(
       row.instance_id,
       tenantId,
@@ -747,6 +767,22 @@ export class TaskService {
     } catch (error) {
       // 引擎异常 → Java 的 IllegalStateException 形态（HTTP 500、消息不加前缀）
       throw new Error(error instanceof Error ? error.message : String(error), { cause: error })
+    }
+
+    // 流程变量映射写入（Java VariableMappingWriter 对位，Task 118：驳回后触发；
+    // 发起人重新填报后变量刷新）。失败不阻断（Java 同款吞掉）。
+    if (this.mappingWriter !== undefined) {
+      try {
+        const mapped = await this.mappingWriter.compute(
+          row.process_def_id,
+          row.instance_id,
+          runtime.getVariables(),
+          model.initiatorNodeId,
+        )
+        for (const [name, value] of Object.entries(mapped)) runtime.setVariable(name, value)
+      } catch {
+        // Java: warn 后吞掉
+      }
     }
 
     await this.persistence.replaceRuntimeRows(

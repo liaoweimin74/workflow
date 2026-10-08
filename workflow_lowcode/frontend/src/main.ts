@@ -1,3 +1,8 @@
+// 【必须首行】storage 沙箱兜底（Task 25 契约，Task 128 补接线）：预览面板 iframe
+// 禁用 web storage 时，访问 localStorage getter 本身即抛错。本模块 side-effect
+// 自安装内存兜底，必须在所有其他 import 之前执行——路由守卫/HTTP 拦截器是
+// 最早读 localStorage 的运行时路径，晚了就来不及。
+import '@/utils/safe-storage'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
@@ -10,7 +15,19 @@ import FcDesigner from '@form-create/designer'
 import '@/vendor/style/index.css'
 import LookupPicker from '@/components/business/LookupPicker.vue'
 import DataPicker from '@/views/form/components/DataPicker.vue'
+import SystemUserPicker from '@/components/business/SystemUserPicker.vue'
+import SystemDeptPicker from '@/components/business/SystemDeptPicker.vue'
+import SystemAttachment from '@/components/business/SystemAttachment.vue'
+import SystemImage from '@/components/business/SystemImage.vue'
+import FormulaField from '@/components/business/FormulaField.vue'
+import FormulaExpressionEditor from '@/components/business/FormulaExpressionEditor.vue'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
+import DashKpi from '@/views/dashboard/components/DashKpi.vue'
+import DashChart from '@/views/dashboard/components/DashChart.vue'
+import DashFilter from '@/views/dashboard/components/DashFilter.vue'
+import DashGoal from '@/views/dashboard/components/DashGoal.vue'
+import DashLeaderboard from '@/views/dashboard/components/DashLeaderboard.vue'
+import DashAlert from '@/views/dashboard/components/DashAlert.vue'
 import App from './App.vue'
 import router from './router'
 import { patchMessageBoxDraggable } from './utils/elementPlusDraggable'
@@ -33,8 +50,26 @@ patchMessageBoxDraggable()
 // 只用 formCreate.component 会导致设计器画布（designerForm 实例）找不到组件而只渲染 label。
 FcDesigner.component('LookupPicker', LookupPicker)
 FcDesigner.component('dataPicker', DataPicker)
+// 系统组件（Task 143）：用户/部门选择器，设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('SystemUserPicker', SystemUserPicker)
+FcDesigner.component('SystemDeptPicker', SystemDeptPicker)
+// 系统组件（Task 146）：附件（多文件上传/大小限制/预览/下载），设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('SystemAttachment', SystemAttachment)
+// 系统组件（Task 147）：图片（尺寸/大小/数量限制、多选、缩略图、预览/下载），设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('SystemImage', SystemImage)
+// 基础组件（Task 144）：计算公式（跨字段表达式求值），设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('FormulaField', FormulaField)
+// Task 145：表达式可视化编辑器（属性面板自定义 prop 组件，仅面板用；全局注册使面板 form-create 实例可解析）
+FcDesigner.component('FormulaExpressionEditor', FormulaExpressionEditor)
 // 数据表格：全局注册，使表单设计器（画布 + 运行时渲染）与页面设计器/渲染页都能使用
 FcDesigner.component('page-table', PageDataTable)
+// 仪表盘组件（Task 119）：设计器画布 + 运行时渲染双实例可见
+FcDesigner.component('dash-kpi', DashKpi)
+FcDesigner.component('dash-chart', DashChart)
+FcDesigner.component('dash-filter', DashFilter)
+FcDesigner.component('dash-goal', DashGoal)
+FcDesigner.component('dash-leaderboard', DashLeaderboard)
+FcDesigner.component('dash-alert', DashAlert)
 app.use(formCreate)
 app.use(FcDesigner)
 app.mount('#app')

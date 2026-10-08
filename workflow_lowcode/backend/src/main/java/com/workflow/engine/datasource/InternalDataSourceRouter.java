@@ -22,7 +22,7 @@ import java.util.Set;
 @Component
 public class InternalDataSourceRouter {
 
-    /** SYSTEM sourceKey 允许列表（8 个内建数据源，唯一事实源见 BuiltInSystemSources） */
+    /** SYSTEM sourceKey 允许列表（内建数据源，唯一事实源见 BuiltInSystemSources） */
     private static final Set<String> SYSTEM_SOURCE_KEYS = BuiltInSystemSources.SOURCE_KEYS;
 
     private final TenantProvider tenantProvider;
@@ -115,6 +115,8 @@ public class InternalDataSourceRouter {
                     "/api/v1/internal/system/roles");
             case "sys-dicts" -> requireListOnly(operation, "sys-dicts", "systemDicts",
                     "/api/v1/internal/system/dicts");
+            case "sys-posts" -> requireListOnly(operation, "sys-posts", "systemPosts",
+                    "/api/v1/internal/system/posts");
             case "process-definitions" -> requireListOnly(operation, "process-definitions", "processDefinitions",
                     "/api/v1/internal/system/process/definitions");
             case "process-instances" -> requireListOnly(operation, "process-instances", "processInstances",

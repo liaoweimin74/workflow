@@ -44,22 +44,29 @@ export class ProcessDesignRepository {
       .execute()
   }
 
-  /** 草稿分页（无筛选），按 updated_at 倒序 —— 与 Java Pageable 默认一致。 */
+  /**
+   * 草稿分页，按 updated_at 倒序 —— 与 Java Pageable 默认一致。
+   * Task 105：支持 categoryId 过滤（胶囊筛选；无值时不过滤）。
+   */
   async listDrafts(
     tenantId: string,
     offset: number,
     limit: number,
+    categoryId?: string,
   ): Promise<{ rows: DraftRow[]; total: number }> {
+    const filterByCategory = !!categoryId
     const countRow = await this.db
       .selectFrom('wf_process_draft')
       .select((eb) => eb.fn.countAll<number>().as('c'))
       .where('tenant_id', '=', tenantId)
+      .$if(filterByCategory, (qb) => qb.where('category_id', '=', categoryId!))
       .executeTakeFirst()
 
     const rows = await this.db
       .selectFrom('wf_process_draft')
       .selectAll()
       .where('tenant_id', '=', tenantId)
+      .$if(filterByCategory, (qb) => qb.where('category_id', '=', categoryId!))
       .orderBy('updated_at', 'desc')
       .limit(limit)
       .offset(offset)

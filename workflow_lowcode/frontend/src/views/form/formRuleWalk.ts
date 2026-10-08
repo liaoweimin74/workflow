@@ -71,6 +71,28 @@ export function collectFieldOptions(rules: RuleLike[] | undefined): { field: str
 }
 
 /**
+ * 收集计算公式（FormulaField）可引用的字段候选（Task 145）。
+ *
+ * 与 collectFieldOptions 的差异：
+ * - 排除 FormulaField 自身（公式引用自身 = 循环依赖，恒 NaN）
+ * - 仅穿透布局容器 children（同层字段），不进子表单 props.rule / 子表 props.columns：
+ *   FormulaField 第一版仅支持引用同层字段（子表行值是数组，无法参与标量运算）
+ */
+export function collectFormulaRefFields(rules: RuleLike[] | undefined): { field: string; title?: string; type?: string }[] {
+  const out: { field: string; title?: string; type?: string }[] = []
+  const visit = (list: RuleLike[] | undefined): void => {
+    if (!list) return
+    for (const rule of list) {
+      if (rule.type === 'FormulaField') continue
+      if (rule.field) out.push({ field: rule.field, title: rule.title, type: rule.type })
+      if (Array.isArray(rule.children)) visit(rule.children)
+    }
+  }
+  visit(rules)
+  return out
+}
+
+/**
  * 递归确保 rule 树中每个 rule 都有 props 对象（原地修改）。
  *
  * fc-designer 在保存（parseRule）时会删除空的 props:{}，导致从数据库加载的

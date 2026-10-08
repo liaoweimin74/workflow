@@ -54,7 +54,7 @@
             <div class="binding-filter" v-if="ds.refId">
               <div class="filter-row" v-for="(fc, fi) in ds.filter?.conditions || []" :key="fi">
                 <el-select v-model="fc.column" placeholder="列名" size="small" style="width: 22%" filterable allow-create>
-                  <el-option v-for="col in getDsColumns(ds.refId)" :key="col.key" :label="col.label" :value="col.key" />
+                  <el-option v-for="col in getDsColumns(ds.refId)" :key="col.key" :label="columnOptionLabel(col)" :value="col.key" />
                 </el-select>
                 <el-select v-model="fc.op" style="width: 20%" size="small">
                   <el-option label="等于" value="eq" />
@@ -144,6 +144,7 @@
 import { ref, watch } from 'vue'
 import { Plus, InfoFilled } from '@element-plus/icons-vue'
 import type { DataSourceDTO } from '@/api/data-source'
+import { columnOptionLabel } from '@/utils/columnOption'
 import { dataSourceApi } from '@/api/data-source'
 import type { LookupFilterConfig } from './types'
 

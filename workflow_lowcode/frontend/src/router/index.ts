@@ -28,6 +28,13 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '页面设计器', fullScreen: true }
   },
   {
+    // 逻辑流设计器：全屏顶层路由（与 /designer 平级），从列表页 /logic-flow 进入
+    path: '/logic-flow/design/:id',
+    name: 'LogicFlowDesigner',
+    component: () => import('@/views/logicflow/LogicFlowDesigner.vue'),
+    meta: { title: '逻辑流设计器', fullScreen: true }
+  },
+  {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
     redirect: '/dashboard',
@@ -35,7 +42,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'dashboard',
         name: 'Dashboard',
-        component: () => import('@/views/dashboard/DashboardPage.vue'),
+        component: () => import('@/views/dashboard/DashboardRouterPage.vue'),
         meta: { title: '首页' }
       },
       {
@@ -69,11 +76,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '岗位管理' }
       },
       {
-        // 成员组管理 = 业务表单 member_group 的业务数据列表页（成员/自动规则用数据引用字段录入）
+        // Task 142：成员组管理去业务表单化——专用数据表 + 字典式专用页（无自动规则）
         path: 'system/member-group',
         name: 'MemberGroupManagement',
-        component: () => import('@/views/form/BizDataListPage.vue'),
-        meta: { title: '成员组管理', formKey: 'member_group' }
+        component: () => import('@/views/system/member-group/MemberGroupPage.vue'),
+        meta: { title: '成员组管理' }
       },
       {
         path: 'system/dict',
@@ -170,6 +177,13 @@ const routes: RouteRecordRaw[] = [
         name: 'DataSourceData',
         component: () => import('@/views/dataSource/DataSourceDataPage.vue'),
         meta: { title: '数据源数据管理' }
+      },
+      {
+        // 逻辑编排：列表页（设计器走顶层全屏路由 /logic-flow/design/:id）
+        path: 'logic-flow',
+        name: 'LogicFlowList',
+        component: () => import('@/views/logicflow/LogicFlowListPage.vue'),
+        meta: { title: '逻辑编排' }
       },
       {
         path: '404',

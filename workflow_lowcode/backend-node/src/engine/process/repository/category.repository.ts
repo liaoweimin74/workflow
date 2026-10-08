@@ -37,17 +37,31 @@ export class CategoryRepository {
   }
 
   /**
-   * 某分类的直接子分类（对齐 Java `findByParentId`）。
-   *
-   * ⚠️ Java 这里**不带租户条件** —— 删除前的「有子分类则拒绝」检查是跨租户的。
-   *    看着像缺陷，但照抄：自行加租户条件会让两个后端在跨租户数据下分叉。
+   * 当前租户的最大 sort_order（内联新建分类时自动排到最后）。
+   * 空表返回 0，新分类 sort_order = max + 1 = 1。
    */
-  async findByParentId(parentId: string): Promise<CategoryRow[]> {
-    return this.db
+  async maxSortOrder(tenantId: string): Promise<number> {
+    const row = await this.db
       .selectFrom('wf_category')
-      .selectAll()
-      .where('parent_id', '=', parentId)
-      .execute()
+      .select((eb) => eb.fn.max('sort_order').as('maxSort'))
+      .where('tenant_id', '=', tenantId)
+      .executeTakeFirst()
+    const v = row?.maxSort
+    return v === null || v === undefined ? 0 : Number(v)
+  }
+
+  /**
+   * 分类被流程草稿引用的数量（删除前保护：有引用时拒绝删除）。
+   * 只查草稿表 `wf_process_draft`——已部署版本（wfe_process_def）的 category_id
+   * 属历史快照，不阻止分类维护。
+   */
+  async countDraftsByCategoryId(categoryId: string): Promise<number> {
+    const row = await this.db
+      .selectFrom('wf_process_draft')
+      .select((eb) => eb.fn.countAll<number>().as('c'))
+      .where('category_id', '=', categoryId)
+      .executeTakeFirst()
+    return Number(row?.c ?? 0)
   }
 
   /** 插入。 */

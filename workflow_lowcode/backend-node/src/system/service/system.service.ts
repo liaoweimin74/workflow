@@ -6,7 +6,6 @@ import { assertPageSize } from '../../framework/http/query-params'
 import type {
   DictDataRow,
   DictTypeRow,
-  GroupRuleRow,
   MemberGroupRow,
   MenuRow,
   OrgRow,
@@ -131,7 +130,7 @@ export interface PostVO {
   createdAt: Date | null
 }
 
-/** 岗位下拉选项（用户表单/成员组规则用）。 */
+/** 岗位下拉选项（用户表单用）。 */
 export interface PostOptionVO {
   id: number
   postCode: string
@@ -142,17 +141,13 @@ export interface MemberGroupVO {
   id: number
   groupName: string
   description: string | null
-  /** 有效成员数（手动 ∪ 规则匹配，去重）。 */
+  /** 成员数（全部为手动添加）。 */
   memberCount: number
-  /** 手动添加成员数。 */
-  manualCount: number
-  /** 自动规则数。 */
-  ruleCount: number
   createdAt: Date | null
 }
 
-/** 成员来源：manual=直接添加 position=按岗位规则 org=按组织规则。 */
-export type GroupMemberSource = 'manual' | 'position' | 'org'
+/** 成员来源：manual=直接添加（规则机制已移除，保留字段兼容历史响应）。 */
+export type GroupMemberSource = 'manual'
 
 export interface GroupMemberVO {
   userId: number
@@ -162,18 +157,8 @@ export interface GroupMemberVO {
   postName: string | null
   source: GroupMemberSource
   sourceLabel: string
-  /** 加入时间（手动成员为行创建时间；规则匹配成员为 null）。 */
+  /** 加入时间（行创建时间）。 */
   joinedAt: Date | null
-}
-
-export interface GroupRuleVO {
-  id: number
-  ruleType: 'position' | 'org'
-  ruleTypeName: string
-  ruleValue: number
-  /** 维度取值展示名（岗位名/组织名；已被删除时回落 #id）。 */
-  ruleValueLabel: string
-  createdAt: Date | null
 }
 
 @Injectable()
@@ -999,69 +984,32 @@ export class SystemService {
     const safePage = Math.max(page, 1)
     const kw = keyword !== undefined && keyword !== null && keyword.trim() !== '' ? keyword.trim() : null
     const { rows, total } = await this.repo.listGroups(kw, (safePage - 1) * size, size)
-    // 每行补成员统计（手动数 / 规则数 / 有效去重成员数）
+    // 每行补成员统计（成员全部为手动添加）
     const withCounts = await Promise.all(rows.map((row) => this.toGroupVO(row)))
     return new PageResult(total, safePage, size, withCounts)
   }
 
   private async toGroupVO(row: MemberGroupRow): Promise<MemberGroupVO> {
-    const [manualIds, rules] = await Promise.all([
-      this.repo.findManualMemberIdsAlive(row.id),
-      this.repo.listGroupRules(row.id),
-    ])
-    const postRuleValues = rules.filter((r) => r.rule_type === 'position').map((r) => Number(r.rule_value))
-    const orgRuleValues = rules.filter((r) => r.rule_type === 'org').map((r) => Number(r.rule_value))
-    const [postUserIds, orgUserIds] = await Promise.all([
-      this.repo.findUserIdsByPostIds(postRuleValues),
-      this.repo.findUserIdsByOrgIds(orgRuleValues),
-    ])
-    const effective = new Set<number>(manualIds)
-    for (const id of postUserIds) effective.add(id)
-    for (const id of orgUserIds) effective.add(id)
+    const manualIds = await this.repo.findManualMemberIdsAlive(row.id)
     return {
       id: row.id,
       groupName: row.group_name,
       description: row.description,
-      memberCount: effective.size,
-      manualCount: manualIds.length,
-      ruleCount: rules.length,
+      memberCount: manualIds.length,
       createdAt: row.created_at,
     }
   }
 
   /**
-   * 有效成员（手动 ∪ 岗位规则 ∪ 组织规则）+ 每人来源：
-   * manual=直接添加（优先），position=按岗位规则，org=按组织规则。
-   * 排序：手动成员在前（按加入顺序），规则匹配成员按 id。
+   * 有效成员（全部为手动添加，规则机制已移除）。
+   * 排序：按加入顺序（id）。
    */
   private async effectiveMembers(
     groupId: number,
   ): Promise<{ ids: number[]; sourceById: Map<number, GroupMemberSource> }> {
-    const [manualIds, rules] = await Promise.all([
-      this.repo.findManualMemberIdsAlive(groupId),
-      this.repo.listGroupRules(groupId),
-    ])
-    const postRuleValues = rules.filter((r) => r.rule_type === 'position').map((r) => Number(r.rule_value))
-    const orgRuleValues = rules.filter((r) => r.rule_type === 'org').map((r) => Number(r.rule_value))
-    const [postUserIds, orgUserIds] = await Promise.all([
-      this.repo.findUserIdsByPostIds(postRuleValues),
-      this.repo.findUserIdsByOrgIds(orgRuleValues),
-    ])
-    const manualSet = new Set(manualIds)
-    const postSet = new Set(postUserIds)
-    const union = new Set<number>(manualIds)
-    for (const id of postUserIds) union.add(id)
-    for (const id of orgUserIds) union.add(id)
+    const ids = await this.repo.findManualMemberIdsAlive(groupId)
     const sourceById = new Map<number, GroupMemberSource>()
-    for (const id of union) {
-      sourceById.set(id, manualSet.has(id) ? 'manual' : postSet.has(id) ? 'position' : 'org')
-    }
-    const ids = [...union].sort((a, b) => {
-      const aManual = manualSet.has(a) ? 0 : 1
-      const bManual = manualSet.has(b) ? 0 : 1
-      if (aManual !== bManual) return aManual - bManual
-      return a - b
-    })
+    for (const id of ids) sourceById.set(id, 'manual')
     return { ids, sourceById }
   }
 
@@ -1094,15 +1042,14 @@ export class SystemService {
     return this.toGroupVO(await this.requireGroup(id))
   }
 
-  /** 删除成员组（软删除；成员/规则关联一并清理）。 */
+  /** 删除成员组（软删除；成员关联一并清理）。 */
   async deleteGroup(id: number): Promise<void> {
     await this.requireGroup(id)
     await this.repo.deleteGroup(id)
   }
 
   /**
-   * 成员组有效成员分页（手动 ∪ 规则匹配；keyword 过滤用户名/昵称）。
-   * 来源标记：manual=直接添加（可移除），position/org=规则匹配（不可手动移除）。
+   * 成员组分页（全部为手动成员；keyword 过滤用户名/昵称）。
    */
   async listGroupMembers(
     groupId: number,
@@ -1114,9 +1061,7 @@ export class SystemService {
     assertPageSize(size)
     const safePage = Math.max(page, 1)
 
-    const effective = await this.effectiveMembers(groupId)
-    const { sourceById } = effective
-    let ids = effective.ids
+    let ids = (await this.effectiveMembers(groupId)).ids
     const kw = keyword !== undefined && keyword !== null && keyword.trim() !== '' ? keyword.trim() : null
     // keyword 过滤：先在 id 集上按用户名/昵称过滤，再分页
     if (kw !== null && ids.length > 0) {
@@ -1152,18 +1097,16 @@ export class SystemService {
     const vos: GroupMemberVO[] = []
     for (const userId of pageIds) {
       const user = byId.get(userId)
-      if (user === undefined) continue // 规则匹配成员可能在此期间被删
-      const source: GroupMemberSource = sourceById.get(userId) ?? 'manual'
-      const isManual = source === 'manual'
+      if (user === undefined) continue // 成员可能在此期间被删
       vos.push({
         userId,
         username: user.username,
         nickname: user.nickname,
         orgName: user.org_id === null ? null : (orgNameMap.get(user.org_id) ?? null),
         postName: user.post_id === null ? null : (postNameMap.get(user.post_id) ?? null),
-        source,
-        sourceLabel: isManual ? '直接添加' : source === 'position' ? '岗位规则' : '组织规则',
-        joinedAt: isManual ? (joinedAtMap.get(userId) ?? null) : null,
+        source: 'manual',
+        sourceLabel: '直接添加',
+        joinedAt: joinedAtMap.get(userId) ?? null,
       })
     }
     return new PageResult(total, safePage, size, vos)
@@ -1186,75 +1129,6 @@ export class SystemService {
     await this.repo.deleteGroupMembers(groupId, userIds)
   }
 
-  /** 成员组规则列表（带维度取值展示名）。 */
-  async listGroupRules(groupId: number): Promise<GroupRuleVO[]> {
-    await this.requireGroup(groupId)
-    const rules = await this.repo.listGroupRules(groupId)
-    const postIds = rules.filter((r) => r.rule_type === 'position').map((r) => Number(r.rule_value))
-    const orgIds = rules.filter((r) => r.rule_type === 'org').map((r) => Number(r.rule_value))
-    const [postMap, orgMap] = await Promise.all([
-      this.repo.findPostNames(postIds),
-      this.repo.findOrgNames(orgIds),
-    ])
-    return rules.map((rule) => {
-      const ruleType = rule.rule_type === 'position' ? 'position' : 'org'
-      const label =
-        ruleType === 'position'
-          ? (postMap.get(Number(rule.rule_value)) ?? `#${rule.rule_value}`)
-          : (orgMap.get(Number(rule.rule_value)) ?? `#${rule.rule_value}`)
-      return {
-        id: rule.id,
-        ruleType,
-        ruleTypeName: ruleType === 'position' ? '按岗位' : '按组织机构',
-        ruleValue: Number(rule.rule_value),
-        ruleValueLabel: label,
-        createdAt: rule.created_at,
-      }
-    })
-  }
-
-  /** 添加自动匹配规则（维度：position=岗位 org=组织机构；取值须存在；同维度同值幂等拦截）。 */
-  async addGroupRule(
-    groupId: number,
-    request: { ruleType: 'position' | 'org'; ruleValue: number | null },
-  ): Promise<GroupRuleVO> {
-    await this.requireGroup(groupId)
-    const ruleType = request.ruleType
-    if (ruleType !== 'position' && ruleType !== 'org') {
-      throw new BusinessException(`不支持的规则维度: ${String(request.ruleType)}`)
-    }
-    if (request.ruleValue === null || request.ruleValue === undefined || Number.isNaN(request.ruleValue)) {
-      throw new BusinessException(ruleType === 'position' ? '请选择岗位' : '请选择组织机构')
-    }
-    if (ruleType === 'position') {
-      const post = await this.repo.findPostById(Number(request.ruleValue))
-      if (post === null) throw new BusinessException('岗位不存在')
-    } else {
-      const org = await this.repo.findOrgById(Number(request.ruleValue))
-      if (org === null || org.is_deleted !== 0) throw new BusinessException('组织机构不存在')
-    }
-    if (await this.repo.groupRuleExists(groupId, ruleType, Number(request.ruleValue))) {
-      throw new BusinessException('该规则已存在')
-    }
-    const id = await this.repo.insertGroupRule({
-      group_id: groupId,
-      rule_type: ruleType,
-      rule_value: Number(request.ruleValue),
-    })
-    const row = await this.repo.findGroupRule(groupId, id)
-    if (row === null) throw new BusinessException('规则添加失败')
-    const rules = await this.listGroupRules(groupId)
-    return rules.find((r) => r.id === id) ?? toGroupRuleVO(row, ruleType, String(request.ruleValue))
-  }
-
-  /** 删除自动匹配规则。 */
-  async removeGroupRule(groupId: number, ruleId: number): Promise<void> {
-    await this.requireGroup(groupId)
-    const rule = await this.repo.findGroupRule(groupId, ruleId)
-    if (rule === null) throw new BusinessException('规则不存在')
-    await this.repo.deleteGroupRule(groupId, ruleId)
-  }
-
   private async requireGroup(id: number): Promise<MemberGroupRow> {
     const row = await this.repo.findGroupById(id)
     if (row === null) throw new BusinessException(`成员组不存在: ${id}`)
@@ -1270,17 +1144,6 @@ function toPostVO(row: PostRow): PostVO {
     description: row.description,
     sortOrder: row.sort_order,
     status: row.status,
-    createdAt: row.created_at,
-  }
-}
-
-function toGroupRuleVO(row: GroupRuleRow, ruleType: 'position' | 'org', label: string): GroupRuleVO {
-  return {
-    id: row.id,
-    ruleType,
-    ruleTypeName: ruleType === 'position' ? '按岗位' : '按组织机构',
-    ruleValue: Number(row.rule_value),
-    ruleValueLabel: label,
     createdAt: row.created_at,
   }
 }

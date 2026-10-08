@@ -64,6 +64,36 @@ public final class ColumnTypeMapper {
             case "fcEditor" -> applyText(c);
             case "signaturePad" -> applyText(c);
             case "subForm" -> applyJson(c);
+            case "SystemUserPicker" -> {
+                // 系统用户选择（Task 143）：单选存 username → VARCHAR(255)；多选存数组 → JSON
+                if (props != null && Boolean.TRUE.equals(props.get("multiple"))) {
+                    applyJson(c);
+                } else {
+                    applyString(c, 255);
+                }
+            }
+            case "SystemDeptPicker" -> {
+                // 系统部门选择（Task 143）：值为部门 id（数字），VARCHAR 序列化回显类型不匹配 → JSON 保真（对齐 elTreeSelect）
+                applyJson(c);
+            }
+            case "SystemAttachment", "SystemImage" -> {
+                // 系统附件/图片（Task 146/147）：值为附件 id（引用 sys_attachment 主键）。
+                // 统一 JSON（2026-10-07 用户决策）：单文件存 id 标量、多文件存 id 数组，均落 JSON 列——
+                // 值形态由组件运行时（isMulti = Number(limit)!==1）决定，列型不再随 limit 切换，
+                // 避免 limit 调整触发 BIGINT↔JSON 跨类变更拦截；存量 BIGINT 列经
+                // isCrossTypeChange 的 BIGINT→JSON 放行特例自动 MODIFY 迁移。
+                applyJson(c);
+            }
+            case "FormulaField" -> {
+                // 计算公式（Task 144）：结果恒为数值 → DECIMAL(18, precision)，precision 缺省 2
+                int scale = 2;
+                if (props != null && props.get("precision") instanceof Number n && n.intValue() > 0) {
+                    scale = Math.min(10, n.intValue());
+                }
+                c.setColumnType("DECIMAL");
+                c.setLength(18);
+                c.setScale(scale);
+            }
             case "slider" -> applySlider(c, props);
             default -> {
                 return null;
@@ -247,8 +277,15 @@ public final class ColumnTypeMapper {
      * 判断新旧列类型是否为跨大类变更（不允许的 DDL 变更）。
      * 字符串类(VARCHAR/TEXT)、整数类(INT)、小数类(DECIMAL)、日期类(DATE/DATETIME)、其他 之间互相切换视为跨类。
      * 同一大类内的调整（如 VARCHAR 加长、DATE→DATETIME）允许。
+     *
+     * 特例放行：BIGINT → JSON（2026-10-07 统一 JSON 改造）——存量单文件/单图 BIGINT 列
+     * 迁往 JSON（MySQL MODIFY 数字 → JSON 标量合法，id 值语义不变，组件读取兼容），
+     * 反向 JSON → BIGINT 仍视为跨类拦截。
      */
     public static boolean isCrossTypeChange(String oldType, String newType) {
+        if ("BIGINT".equals(oldType) && "JSON".equals(newType)) {
+            return false;
+        }
         return !categoryOf(oldType).equals(categoryOf(newType));
     }
 

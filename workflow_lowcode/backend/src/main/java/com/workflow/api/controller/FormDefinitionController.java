@@ -117,6 +117,17 @@ public class FormDefinitionController {
     }
 
     /**
+     * 复制表单定义（对齐 Node；类型可变，schema 复制，BUSINESS 继承列配置）。
+     */
+    @PostMapping("/{id}/copy")
+    public R<FormDefinition> copy(@PathVariable String id,
+                                  @RequestBody FormCopyRequest request) {
+        FormDefinition copy = formDefService.copyForm(
+                id, request.getName(), request.getKey(), request.getType());
+        return R.ok(copy);
+    }
+
+    /**
      * 获取表单定义的所有版本列表。
      */
     @GetMapping("/{id}/versions")
@@ -170,5 +181,19 @@ public class FormDefinitionController {
         dto.setColumnConfig(formDef.getColumnConfig());
         dto.setProcessKey(formDef.getProcessKey());
         return dto;
+    }
+
+    /** 表单复制请求体（对齐 Node FormCopyRequest）。 */
+    public static class FormCopyRequest {
+        private String name;
+        private String key;
+        private String type;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getKey() { return key; }
+        public void setKey(String key) { this.key = key; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
     }
 }

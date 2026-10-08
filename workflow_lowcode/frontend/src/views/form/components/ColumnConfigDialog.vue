@@ -290,6 +290,30 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
       }
       return { columnType: 'INT', length: null, scale: null }
     }
+    case 'SystemUserPicker': {
+      // 系统用户（Task 143）：单选存 username → VARCHAR(255)；多选存数组 → JSON
+      return propsMap?.multiple
+        ? { columnType: 'JSON', length: null, scale: null }
+        : { columnType: 'VARCHAR', length: 255, scale: null }
+    }
+    case 'SystemDeptPicker':
+      // 系统部门（Task 143）：值为部门 id（数字），VARCHAR 序列化回显类型不匹配 → JSON 保真（对齐 elTreeSelect）
+      return { columnType: 'JSON', length: null, scale: null }
+    case 'SystemAttachment':
+    case 'SystemImage':
+      // 系统附件/图片（Task 146/147；2026-10-07 统一 JSON）：值为附件 id（单值标量/多值数组）→ JSON，
+      // 列型不再随 limit 切换；存量 BIGINT 列由后端 isCrossTypeChange 的 BIGINT→JSON 放行特例自动迁移
+      return { columnType: 'JSON', length: null, scale: null }
+    case 'FormulaField': {
+      // 计算公式（Task 144）：结果恒为数值 → DECIMAL(18, precision)，precision 缺省 2
+      const precision = Number(propsMap?.precision)
+      return {
+        columnType: 'DECIMAL',
+        length: 18,
+        scale:
+          Number.isFinite(precision) && precision > 0 ? Math.min(10, Math.trunc(precision)) : 2,
+      }
+    }
     default:
       return null
   }

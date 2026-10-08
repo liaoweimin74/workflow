@@ -8,7 +8,6 @@ import {
   type DictDataVO,
   type DictTypeVO,
   type GroupMemberVO,
-  type GroupRuleVO,
   type MemberGroupVO,
   type MenuTreeVO,
   type PostOptionVO,
@@ -520,7 +519,7 @@ interface PostSaveRequest {
 /**
  * 成员组接口（`/api/member-groups`，V43）。
  *
- * 成员 = 手动添加 ∪ 规则匹配（按岗位/按组织机构）；成员/规则端点挂在 `:id` 下。
+ * 成员 = 手动添加（自动规则机制已移除）；成员端点挂在 `:id` 下。
  */
 @Controller('api/member-groups')
 @JavaStatusOk()
@@ -568,7 +567,7 @@ export class MemberGroupController {
     return R.ok()
   }
 
-  /** 有效成员分页（含来源标记）。 */
+  /** 成员分页（全部为手动成员）。 */
   @Get(':id/members')
   async members(
     @Param('id') id: string,
@@ -593,37 +592,10 @@ export class MemberGroupController {
     return R.ok()
   }
 
-  /** 批量移除手动成员（仅直接添加部分；规则匹配成员由删规则自动消失）。 */
+  /** 批量移除手动成员。 */
   @Post(':id/members/remove')
   async removeMembers(@Param('id') id: string, @Body() body: { userIds?: number[] }): Promise<R<null>> {
     await this.service.removeGroupMembers(Number(id), body?.userIds ?? [])
-    return R.ok()
-  }
-
-  /** 规则列表（带维度取值展示名）。 */
-  @Get(':id/rules')
-  async rules(@Param('id') id: string): Promise<R<GroupRuleVO[]>> {
-    return R.ok(await this.service.listGroupRules(Number(id)))
-  }
-
-  /** 添加自动匹配规则（position=按岗位 / org=按组织机构）。 */
-  @Post(':id/rules')
-  async addRule(
-    @Param('id') id: string,
-    @Body() body: { ruleType?: 'position' | 'org'; ruleValue?: number },
-  ): Promise<R<GroupRuleVO>> {
-    return R.ok(
-      await this.service.addGroupRule(Number(id), {
-        ruleType: body?.ruleType ?? ('position' as const),
-        ruleValue: body?.ruleValue ?? null,
-      }),
-    )
-  }
-
-  /** 删除自动匹配规则。 */
-  @Delete(':id/rules/:ruleId')
-  async removeRule(@Param('id') id: string, @Param('ruleId') ruleId: string): Promise<R<null>> {
-    await this.service.removeGroupRule(Number(id), Number(ruleId))
     return R.ok()
   }
 }

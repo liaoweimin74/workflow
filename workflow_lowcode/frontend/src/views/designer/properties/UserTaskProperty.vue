@@ -149,12 +149,13 @@
             </div>
           </template>
 
-          <div class="section-title">审批意见必填</div>
+          <div class="section-title">
+            <FormLabelTip tip="开启后，审批人必须填写审批意见">审批意见必填</FormLabelTip>
+          </div>
           <div class="switch-row">
             <el-switch v-model="ui.commentRequired" :disabled="readOnly" />
             <span class="switch-label">审批意见必填</span>
           </div>
-          <div class="hint-text">开启后，审批人必须填写审批意见</div>
           <!-- 意见必填范围单选（截图②）：默认拒绝/退回必填 -->
           <template v-if="ui.commentRequired">
             <div class="inline-radio-group sub-items">
@@ -175,12 +176,13 @@
             <span class="switch-label">流程到达此节点后禁止撤销/撤回</span>
           </div>
 
-          <div class="section-title">超时处理</div>
+          <div class="section-title">
+            <FormLabelTip tip="支持审批超时自动提醒、转派、通过、拒绝">超时处理</FormLabelTip>
+          </div>
           <div class="switch-row">
             <el-switch v-model="ui.timeout.enabled" :disabled="readOnly" />
             <span class="switch-label">超时处理</span>
           </div>
-          <div class="hint-text">支持审批超时自动提醒、转派、通过、拒绝</div>
           <!-- 超时规则组（截图③）：添加超时规则 → ProcessTimeoutRuleDialog，同一规则组提醒可多条、转派 1 条、通过/拒绝互斥 -->
           <template v-if="ui.timeout.enabled">
             <ul v-if="ui.timeoutRules.length > 0" class="timeout-rule-list">
@@ -204,12 +206,13 @@
             />
           </template>
 
-          <div class="section-title">审批人去重</div>
+          <div class="section-title">
+            <FormLabelTip tip="开启后，同一审批人不用重复审批">审批人去重</FormLabelTip>
+          </div>
           <div class="switch-row">
             <el-switch v-model="ui.dedup.enabled" :disabled="readOnly" />
             <span class="switch-label">审批人去重</span>
           </div>
-          <div class="hint-text">开启后，同一审批人不用重复审批</div>
           <div v-if="ui.dedup.enabled" class="checkbox-col sub-items">
             <!-- 去重命中口径（截图①）：上一节点已同意 / 前面任意节点已同意 -->
             <el-radio-group
@@ -272,6 +275,7 @@ import { ApproverPicker } from '@/components/business'
 import FormPropertyTab from './FormPropertyTab.vue'
 import AssigneeSelector from './shared/AssigneeSelector.vue'
 import ProcessTimeoutRuleDialog from './ProcessTimeoutRuleDialog.vue'
+import FormLabelTip from './shared/FormLabelTip.vue'
 
 defineProps<{ readOnly?: boolean }>()
 
@@ -811,13 +815,7 @@ watch(ui, () => {
   color: var(--el-text-color-regular, #4b5169);
 }
 
-/* 开关下方灰色说明 */
-.hint-text {
-  font-size: 11px;
-  color: var(--el-text-color-secondary, #8b91ab);
-  line-height: 1.4;
-  margin: 2px 0 6px;
-}
+/* 开关下方灰色说明（已迁移至 FormLabelTip 悬浮提示） */
 
 /* 行内编辑（超时时长/动作、去重条件） */
 .inline-row {

@@ -2298,3 +2298,793 @@ Stage Summary:
 - 预览三场景暗色适配闭环与设计器同源；节点名称文字对比 1:1 → 9:1
 - leave 草稿「startEvent 无出边」部署报错为数据遗留（此前已知问题），UI验证流程可部署可预览
 - 产物：bpmn-canvas-theme.css（新）/designer-theme.css（瘦身）/BpmnViewer.vue/ProcessStartPage.vue/index.html
+
+---
+Task ID: 102-sandbox-recovery
+Agent: Z.ai Code (main session)
+Task: Task 101 之后又一次沙箱重置（第九次）恢复：用户报「保存流程 Unknown column 'description' in 'SET'」+ 此前「点击审核/办理节点 Cannot GET /api/v1/assignee-resolvers」
+
+Work Log:
+- 灾情核验：workflow_lowcode/.git 消失、DB 回滚到 V41（flyway 最后一条 V41）、.git/config 中的 PAT 随之丢失；磁盘工作区为旧快照（281 个文件缺失：test fixtures/golden、.superpowers 等；1683 个文件 mode 755/644 漂移）
+- DB 修复：cd backend-node && npm run migrate 重放 V42~V46（description 列/成员组表/草稿箱菜单/岗位数据源）；E2E 验证 POST drafts(query 参数)→PUT design(含 description)→DELETE 全 200
+- assignee-resolvers 404 复盘：当前 8080 dist 已含 AssigneeResolverController（engine.module 注册 + dist 产物在），curl 401→带 token 200；agent-browser 实测设计器点击审核节点（Activity_0wemnzz）与办理节点（Activity_0np59ha），GET /api/v1/assignee-resolvers 均 200、console 无错——用户所见 404 为旧 dist 时期的瞬时状态，当前已不复现
+- git 重建：git init -b main + 全量 add 提交基线 → 配置用户新提供的 PAT → fetch origin（remote 已推进到 4dd23e2c，含 99-designer-theme/100/101 推送）→ reset --soft origin/main → core.fileMode=false 消 mode 噪音 → checkout -- . 以远程为权威恢复 281 个缺失文件（工作区 0 diff）→ 重放本 Task 102 记录
+- PAT 处置：用户提供新 fine-grained PAT，写入 remote URL（教训：PAT 存 .git/config 会随重置丢失，worklog 只记指纹不记全文，每次重置后需向用户索取）
+- 浏览器实测流程列表→设计器全链路正常；chrome 归零；cron 巡检重建为 job 424973（webDevReview 15min）
+
+Stage Summary:
+- 两个用户报错闭环：description（V42 重放，E2E 200）、assignee-resolvers（现 dist 已含控制器，浏览器 200）
+- 本地 main 与 origin/main（4dd23e2c）同步，工作区干净；DB schema=V46
+- 铁律补充：重置恢复后必须核对 remote 是否推进（本轮 remote 比磁盘新 3 个提交，盲推会覆盖 99~101 成果）
+
+---
+Task ID: 103-label-under-overlay
+Agent: Z.ai Code (main session)
+Task: 用户复报「节点上的文字颜色和节点背景色不匹配：亮色看不清、暗色根本看不见」（Task 99~101 暗色适配后残留）
+
+Work Log:
+- 根因（源码级）：bpmn-js renderTask 在 drawShape 内部先画主矩形、再画内嵌 label（node_modules/bpmn-js/lib/draw/BpmnRenderer.js L1308-1316 renderEmbeddedLabel）；customRenderer.drawShape 之后 append 的 rect.wf-role-overlay 按 SVG 文档顺序绘制在 label 之上——亮色 85% 不透明度=文字残影「看不清」，暗色档 CSS fill-opacity:1=「根本看不见」；发起节点 overlay 仅 0.3 不透明度所以一直可见（此前 E2E 只查 computed fill 未查绘制层级，漏检）
+- 修复①：customRenderer 新增 insertOverlayUnderLabel()——querySelector('.djs-label') 命中后 parent.insertBefore(overlay, label)，三类节点（initiator/approver/handler）统一走此路径；无 label 时空名兜底 append
+- 修复②：亮色审核节点 label #b88230→#8f6218（对 #FFF7E6 底 3.1:1→5.0:1 过 WCAG AA；#1f7a56 对 #E8F5EE 实算 4.7:1 达标不动）
+- E2E（agent-browser）：UI验证流程 审核节点输入「财务审核节点」/办理节点输入「部门办理节点」「行政办理节点」（blur 提交；Enter 会触发表单默认提交导致页面重载——属性面板输入后勿按 Enter）→ 三节点 DOM 顺序 label idx=2 > overlay idx=1 ✓、computed fill 明暗两档正确 → 明/暗截图全部清晰可读 → 保存成功 → XML 持久化验证（userTask name 三节点全写入）
+- 0a692cdc 已推送；chrome 归零
+
+Stage Summary:
+- 文字被遮盖根因闭环（绘制层级而非颜色值）——此前 99~101 的颜色适配在层级正确后才真正生效
+- 方法论：computed style 验证必须叠加 SVG 文档顺序检查（children.findIndex），截图比对明暗双态
+- UI验证流程 现为带名节点（财务审核节点/部门办理节点/行政办理节点），可直接作暗色验收样本
+
+---
+Task ID: 104-enter-reload-fix
+Agent: Z.ai Code (main session)
+Task: 用户报「流程设计界面回车页面就会刷新，刷新后整个画布都是空白」（Task 103 E2E 时已踩到并留痕，本轮根因定位+修复）
+
+Work Log:
+- 根因链：属性组件 <el-form> 渲染原生 <form> → 顶部表单仅一个文本输入框（节点名称，HTML 规范：无 submit button 时单文本输入即满足隐式提交条件）→ 回车提交无 action 的 GET 表单 → 浏览器用表单数据替换整个 query string（输入框无 name 属性 → query 变空）→ 路由 ?id= 丢失 → 重载后 /lowcode/designer 无草稿上下文 → 空白画布
+- 修复：PropertyPanel.vue 根元素 @submit.prevent（submit 事件冒泡，单点覆盖全部 12 个属性组件——UserTask/HandlerTask/InitiatorTask/ProcessProperty/SequenceFlow/Gateway/Event/SubProcess/CallActivity/ServiceTask/FormTab 等，含只读态与未来新增）；el-input change 本就在回车触发，名称提交不受影响
+- 排查备忘：ProcessTimeoutRuleDialog 无原生 form 无需处理；designer 目录无自写 <form>；12 个 el-form 未逐个加 @submit.prevent，根元素单点拦截更可维护
+- E2E（agent-browser）：登录→UI验证流程→选中财务审核节点→名称改「财务审核节点V2」→Enter → URL 保持 ?id=f50d6d7a…、画布 13 元素完好、label 即时同步 V2、vite 无重连；再回改「财务审核节点」提交正常；chrome 归零
+- 8af08b15 已推送
+
+Stage Summary:
+- 设计器回车刷新根因闭环（隐式 GET 提交替换 query string）——与 Task 103 留痕「Enter 会触发表单默认提交导致页面重载」互证
+- 方法论：Enter 类问题先查「单输入框原生 form」隐式提交条件，修复优先冒泡单点拦截而非逐 form 补丁
+
+---
+Task ID: 105-category-chips
+Agent: Z.ai Code (main)
+Task: 流程定义页布局改版——左侧分类树表 → 顶部分类胶囊条（内联维护），分类扁平化取消 parentId（双端+DB）
+
+Work Log:
+- 研讨拍板：胶囊方式+内联编辑，分类不再采用树形、取消 parentId（用户明确指令）
+- DB：V47__category_flat_no_parent.sql（ALTER TABLE wf_category DROP COLUMN parent_id，idx_parent 随列删除），npm run migrate 已应用
+- Node 端：types.ts WfCategoryTable 去 parent_id；category.repository 去 findByParentId、加 maxSortOrder/countDraftsByCategoryId；category.service 扁平化（VO 去 parentId、create 缺省 sortOrder=租户 max+1 自动排最后、delete 保护改「分类下有流程草稿拒绝」）；category.controller 删 /tree 端点与 parentId 字段
+- Java 端对齐：Category 实体（去字段+去 idx_parent 索引）/CategoryRepository（去 findByParentId、加 findMaxSortOrder）/CategoryService（去树、existsByCategoryId 引用保护、注入 ProcessDraftRepository）/CategoryController（删 /tree、去 parentId）——静态修改，沙箱内无 JDK 未编译验证
+- 【重要发现】GET /process-definitions/drafts 的 categoryId 过滤在 Node 端从未实现（Java 端本有 listDraftsByCategory，Node 迁移遗漏）——旧版左表点击分类筛选实际一直无效；本次补齐 repository($if 条件)/service/controller 全链路，修复契约分歧
+- 前端：新组件 CategoryChips.vue（胶囊条：全部+各分类+「＋」内联新建/双击改名/hover ✕ 删除；权限码 process:category:create/update/delete 各自控制；Enter 提交+blur 兜底+settled 防双提交）；ProcessListPage 重构（删 480px 左卡片树表与折叠按钮/category FormConfig/buildTree；单卡片+胶囊条+SearchTable 全宽；新建流程分类选择 treeSelect→select options；watch(selectedCategoryId) 自动刷新表格）；api/category.ts 去 parentId/CategoryTreeNode/tree()
+- 【E2E 发现 bug】点击胶囊后表格不刷新（测试手动调 fetchApi 掩盖）——补 watch(selectedCategoryId)→fetchList 修复；onCategoriesChanged 收窄为只重拉分类避免双请求
+- 测试：ProcessListPage.test.ts 旧布局 2 用例替换为胶囊 5 用例（渲染/筛选传参/内联新建+空名拦截/双击改名/删除回置全部），icons mock 补 Close，stubs[1]→stubs[0]（单表格化）；vitest 22 用例全过（3 文件）
+- E2E（agent-browser）：登录→/lowcode/process/definition：胶囊渲染✓、点「请假流程」表格只剩请假行✓、点「全部」恢复✓、内联新建「E2E测试分类」→双击改名「E2E改名分类」→hover ✕ 确认删除消失✓；明暗两档截图（暗色选中实底白字/描边胶囊可读）；console 无新错误；chrome 归零
+- API 冒烟：列表无 parentId✓、新建 sortOrder 自动=max+1✓、改名✓、删除保护（临时挂草稿→500「该分类下存在流程，请先移除或转移后再删除」→恢复→删成功）✓；冒烟数据全清理
+- 顺手遗留项闭环：SearchTable 图标按钮（无 confirm 分支）补原生 :title（tooltip 之外即时悬停提示）
+- 后端 build+重启 2 次（分类改版+drafts 过滤）；8080 已跑新 dist
+
+Stage Summary:
+- 流程定义页正式形态：单卡片+分类胶囊条（全部/各分类/＋内联维护）+全宽流程表；分类扁平无层级、无排序手填（自动排最后）、删除有草稿引用保护
+- 产物：V47 迁移、CategoryChips.vue、ProcessListPage 重构、api/category.ts 瘦身、Node 6 文件+Java 4 文件、SearchTable title
+- 【方法论】组件测试手动调 fetchApi 会掩盖「状态变化→自动刷新」链路缺失，E2E 必须点真实按钮
+
+---
+Task ID: 106-move-category-and-chip-sort
+Agent: Z.ai Code (main session)
+Task: 用户报「流程没有办法调整分类，胶囊无法排序」——补齐胶囊改版两大缺口：①流程调整/清空分类 ②胶囊拖拽排序；期间门户再次挂掉并根因闭环（OOM kill）
+
+Work Log:
+- 方案取证：PUT /categories/:id 双端已支持 sortOrder（null=不改）→ 排序纯前端落库零后端改动；saveDesign（PUT /process-definitions/:id/design）缺省保留原值语义 → 移动分类零新增端点，唯一缺口是「清空为未分类」（`??` 把 null 当保留，'' 会写入脏 FK）→ 双端新增可选字段 clearCategory（Node: true 强制 category_id=null；Java: Boolean.TRUE.equals 优先于 categoryId）
+- 后端：process-design.service.ts + DesignSaveRequest.java + ProcessDesignService.java 三处小改（设计器保存始终传全量字段且不带 clearCategory，行为不受影响）；npm run build 重建 dist + 重启 8080（旧 PID kill 后 nohup node dist/main.js）；后端 vitest process-definition.spec 11/11 过
+- 前端 CategoryChips：本地 chips ref 同步 props（watch immediate，支持拖拽乐观重排）；HTML5 原生拖拽（draggable 门控 canSort=update 权限），dragover 按指针左右半段算插入位，双伪元素指示条（drop-before/drop-after），grab/grabbing 光标；drop 后全量按新顺序 Promise.all 落库（sortOrder=下标归一化，杜绝并列值），finally 必 emit changed 重拉自愈；位置不变不落库
+- 前端 ProcessListPage：新增「分类」列（slotName category：分类名 el-tag / 未分类灰字，categoryNameMap computed）；新增「移动」行操作（FolderOpened 图标，复用 process:definition:create 权限，置于复制之后）+ 调整分类弹窗（el-select clearable，placeholder「不归类（未分类）」；选值确认=saveDesign({categoryId})，清空确认=saveDesign({clearCategory:true})；el-form @submit.prevent 沿用 Task 104 单点拦截）；max-visible-buttons 5→6
+- 测试：ProcessListPage.test.ts 新增 5 用例（分类列断言/拖拽落库+指示条/拖回原位不落库/移动弹窗选分类/移动弹窗清空分支），更新 2 处断言（6 按钮、maxVisible 6），icons mock 补 FolderOpened、api mock 补 saveDesign；拖拽用例用 Object.assign(new Event(...),{dataTransfer,clientX}) 绕过 jsdom 无 DragEvent 构造器限制；vitest 单文件 19/19 → 全量 93 文件 1175/1175 全过；eslint 0 errors（.vue 仍为 ignore warning）
+- 【E2E 中发现并修复 bug】@drop 模板误传整个 cat 对象而非 cat.id → findIndex 落空永不落库（被「拖回原位」用例的假阴性掩盖，修复第一用例后暴露）；同轮修正测试前提错误：拖 c1 落在 c2 右半段=交换而非原位，原位=左半段
+- E2E（agent-browser@5173）：登录→流程定义页：分类列渲染（UI验证流程=未分类、请假=请假流程）✓ → 移动弹窗选「报销流程」确定 → 行内即时变「报销流程」✓ → 再开弹窗 hover 清空 → 确定 → 回「未分类」✓ → 拖拽「请假流程」到「报销流程」→ chip 顺序互换 ✓ → reload 顺序保持 + DB 直查 sort_order=0/1（报销0/请假1）、ui_verify_flow category_id=null ✓；console 无新增错误（仅 el-pagination small/v-permission/SSE 既有警告）；chrome 归零
+- 【门户挂掉根因闭环】dmesg 实锤全局 OOM kill：`Killed process (next-server) anon-rss:1.42GB`——本机 4G，门户存活期间跑全量 vitest（1175 用例）+ 前后端 dev 服务叠加把内存顶爆，kernel 杀掉最大 RSS 的 next-server；恢复过程二次踩坑：旧 next-server 垂死占 3000 → 重启的 next dev EADDRINUSE 退出而 bun wrapper 残留假活 → 第三次重启前先确认端口真死
+- 【运维重建】沙箱重置丢失的 scripts/ 补回三件套并自测：mem-guard.sh（auto 裁决：available<1200MB 禁重型任务）、start-portal.sh（幂等：探活超时放宽到 20s + 双次确认才 pkill，防误杀编译中的健康进程——首版 -m 5 探活在冷编译窗口误判过）、ab.sh（agent-browser 透传+关闭提醒）
+
+Stage Summary:
+- 胶囊改版补齐最后两块：行内「移动」弹窗（调整/清空分类，只传分类字段绝不碰 XML）+ 胶囊拖拽排序（乐观重排→下标归一化落库→失败自愈），后端仅 +clearCategory 一个可选字段
+- 门户反复挂掉=kernel OOM kill next-server，非代码 bug；「门户存活期间严禁重型任务」升级为硬约束：全量测试前必须先停门户或分批跑
+- scripts 三件套已重建；数据侧留痕：分类顺序现为 报销流程→请假流程（拖拽生效证据），UI验证流程保持未分类
+
+---
+Task ID: 110-pat-restore-push
+Agent: Z.ai Code (main session)
+Task: 用户提供 PAT——远程恢复、对账推送闭环（第九/十次重置的异地备份重建）
+
+Work Log:
+- remote add origin（PAT 认证）→ fetch 成功；远程 main=441516f5（Task 106 提交，含 Task 105/106/107 全部内容+scripts 注释）——比预期新，Task 106 当时就已推送
+- 【SOP 事故与修正】reset --mixed origin/main 后按 Task 66 SOP 跑 git checkout -- . 找回 285 个纯删除文件，但**该命令同时把 5 个 M 文件（Task 108 增量）覆盖回远程版**——checkout -- . 适用于「工作区=远程快照+纯删除」场景，有本地改动时不适用；修正版：先 `git stash` 或逐文件恢复纯删除（git checkout -- <path>），绝不全量 checkout
+- 事故恢复：三处 columnOptionLabel 接入重做（5 编辑）/ spec 升级回 12 用例（补显式 false + tenant 隔离断言）/ worklog 补记；验证后端 12/12 + 前端定向 39/39
+- 对账认知修正：远程树完整（backend/src 493 文件）；工作区 70 个 untracked（backend-node/src/auth|db|modules|routes、tmp-test-*.ts、backend/data 等）为历史架构僵尸文件与临时产物，远程已不含 → 不提交不污染远程，留待后续清理
+- push origin main 成功；PAT 持久化在 remote URL（巡检代理可复用）
+
+Stage Summary:
+- 异地备份恢复：远程 main = Task 106 + Task 108/110 增量，第十次重置的所有工作已全部上云
+- SOP 修正：git checkout -- . 的适用边界明确化（Task 66 SOP 打补丁）
+- 遗留：工作区 70 个 untracked 僵尸文件清理（低优先级）
+
+---
+Task ID: 111-post-member-group-restore
+Agent: Z.ai Code (main session)
+Task: 岗位管理/成员组管理消失排查与恢复（沙箱重置后迁移链断裂）
+
+Work Log:
+- 现象：用户反馈岗位管理/成员组管理消失；代码与路由完好、三服务全绿
+- 根因：DB 仅应用到 V41；V43(岗位/成员组菜单)/V45(内置岗位数据源)/V46(成员组业务表单) 均未执行
+- 二级根因：V39__fix_menu_visible_status.sql 未入库文件滞留 migrations 根目录形成同版本号双文件，migrate-cli checksum 按位置配对错乱、repair 逐条修互相覆盖
+- 修复：改号 V48 → migrate 应用 V42~V48 共 7 个 → 后端重启
+- E2E：admin 登录→菜单可见→岗位 CRUD 冒烟（新增/删除）通过，零控制台错误
+- commit 57728014 已 push
+
+Stage Summary:
+- 菜单 300~304（岗位）+ 305（成员组）恢复，挂载系统管理下，admin(角色1)授权齐全
+- SOP：migrations 根目录同版本号文件是迁移链毒药；DB 重建后必须 migrate 至「应用 0 个」
+- sys_post 表为空属正常（岗位数据用户自建）；V45 注册的是内置数据源
+
+---
+Task ID: 112-process-center-grouping
+Agent: Z.ai Code (main session)
+Task: 流程中心分组修复（category 双语义归一）
+
+Work Log:
+- 根因三层：历史定义 targetNamespace=默认值；deployed 列表 category 只取 target_namespace；分类体系存在草稿/定义两条正交链
+- 后端：process-definition.controller.ts category 优先 category_id（部署快照）回退 target_namespace（Flowable 兼容）
+- 前端：categoryName 兜底「未分类」；分组按 sortOrder 排序，未知命名空间沉底 + localeCompare 稳定排序
+- 数据：wfe_process_def.category_id 空值按草稿回填（JOIN 需显式 CONVERT...COLLATE，重建库 collation 混用）
+- 验证：API/前端单测 2/2/agent-browser E2E 全过；commit de35b82c 已 push
+
+Stage Summary:
+- deployed category 语义归一：部署时分类快照优先，Flowable targetNamespace 仅作历史回退
+- 遗留：重建库 collation 混用治理（新表 uca1400_ai_ci vs 旧表 unicode_ci）
+
+---
+Task ID: 113-repo-completeness-push
+Agent: Z.ai Code (main session)
+Task: push 指令触发——Task 110 僵尸误判修正，补录 217 文件恢复远程完整性
+
+Work Log:
+- 复核 untracked：Task 110 误将活代码归为僵尸（columnOption.ts、MemberGroupPage.vue、routes/modules/auth/db/config 等均为被引用代码）
+- 实证方法：源码文件数对比（230 vs 144）+ 引用链核查（router→MemberGroupPage、main.ts→app.module）
+- 分类入库 217 文件/34102 行；确认排除 _legacy/tmp*/backend/data（真僵尸/运行时数据）
+- push 成功，main 与 origin/main 同步（0 0）
+
+Stage Summary:
+- 远程 main = f5d386dd：checkout 即可编译，异地备份完整性达标
+- SOP：untracked 处置必须引用链实证，禁止粗判；排除清单已固化至顶层 worklog
+
+---
+Task ID: 115-dict-ux-redesign
+Agent: Z.ai Code (main session)
+Task: 字典管理交互重构——左导航列表+右表格
+
+Work Log:
+- 分析旧版四问题（重表格承载小集合 / LookupPicker 反模式 / 分页联动脆弱 / createTime 字段错绑）
+- 方案对比后实施：264px 导航列表 + 右表 dictCode 上下文注入 + 自动选中 + 编码复制 + 响应式
+- 新增 DictPage.test.ts 8 用例；agent-browser E2E 全链路（新建→选中→字典项→隔离）
+- commit 5f6a3019 已 push
+
+Stage Summary:
+- 字典管理交互对齐业界标准形态；LookupPicker 反模式消除
+- 遗留：SearchTable 时间列格式化（ISO 原样，存量）
+
+---
+Task ID: 116-portal-hang-recovery
+Agent: Z.ai Code (main session)
+Task: 门户 hang 型故障恢复
+
+Work Log:
+- 新故障形态：进程存活+端口监听但请求 hang、日志静默；根因为 Turbopack Rust 内存不受 NODE_OPTIONS 限制（实占 1.7G）叠加 4G 总内存压力
+- pkill -9 + rm -rf .next + 逃逸重启恢复；三通道全绿
+
+Stage Summary:
+- 运维判据补充：hang 型故障（监听无响应+无日志）优先查内存
+
+---
+Task ID: 117-sidenav-component
+Agent: Z.ai Code (main session)
+Task: SideNavList 公共组件抽象
+
+Work Log:
+- 实现 components/business/SideNavList.vue + NavItem/NavItemAction 类型 + 导出
+- 受控纯展示 + 本地过滤 + actions 谓词 + 插槽兜底 + 键盘可达
+- DictPage 改造为第一个消费方；组件测试 13 用例 + DictPage 回归 8 用例 + E2E 一致
+- commit 8653fb40 已 push
+
+Stage Summary:
+- 「左导航+右表格」模式具备了标准落地组件；候选接入：消息模板/数据源目录/表单分组
+
+---
+Task ID: 118-form-pass-fix
+Agent: Z.ai Code (main session)
+Task: 修复「流程发起时填写的表单没有传递到下一个节点」
+
+Work Log:
+- 诊断（先分析后动手，用户确认后实施）：Nest 发起链路丢弃 body.formDefId、不写 wf_form_data、无 VariableMappingWriter 对位——对照 Java ProcessInstanceController.start:84-98 逐行核实，非前端问题
+- 新增 VariableMappingWriter（engine/form/mapping/）：计算 __PROCESS__.variableMappings，调用方在 replaceRuntimeRows 前 merge（CAS 一次性落库，终态对齐 Java RuntimeService 直写）
+- start 恢复对位：controller 传 formDefId；service.start 落 wf_form_data（taskId=null，容错同 Java）；completeTask/rejectTask 持久化前合并映射；reInitiate 经 start() 自动覆盖
+- FormRenderer 二段修复：form-create v3 对 rule 原始化，setValue 写值不触发字段重渲染（fapi.formData 有值而 el-input 全空，agent-browser 逐层探测定位）；经 @update:api 取 fapi，数据落地后 setValue+reload 重建字段
+- 测试：form-pass-through.spec 12 用例；后端 948 / 前端 1205 全过
+- E2E（agent-browser）：登录→流程中心→发起（表单填 E2E张三/E2E研发部/Task118-E2E发起验证）→提交→待办→下一节点表单逐字段回显一致；wf_form_data 落库断言通过
+- commit 06b0e0dd
+
+Stage Summary:
+- 发起→下一节点的表单数据链路打通（同 formDefId 回显 / form:initiator 映射 / variable: 映射三场景）
+- 测试基线无变化（后端 691 tsc 错仍为 _legacy+8081 组合根既有；.vue eslint ignore 既有）
+- 备注：为构造 E2E 条件，给 ui_verify_flow ACTIVE 版本 __PROCESS__ 配置了流程级表单（员工请假业务表单），该流程现可完整演示发起→审批回显
+
+---
+Task ID: 119-dashboard-form-create
+Agent: Z.ai Code (main session)
+Task: 用 form-create 设计主页仪表盘——可绑定数据源的仪表盘组件（探讨确认后实施）
+
+Work Log:
+- 探讨确认三决策：①聚合取数=后端新增聚合端点（方案 A），API 源用「透传+幂等归并」兼容远端已聚合；②图表渲染=echarts 按需引入（core+bar/line/pie，自建翡翠色板避开 indigo/blue）；③主页替换=路由级判断 pageKey=dashboard 已发布则渲染 PAGE，否则回退静态页
+- 后端（Nest）：`GET /v1/data-sources/:id/aggregate`（group/agg/metric/timeGrain/filter/keyword/keywordColumn/params/sort/order/limit）；SPI 加 aggregate()；五类型双路径——SQL 聚合（FORM visual 单表 buildAggregate / SQL 源与 FORM sql 模板 wrapAggregate / WORKFLOW JSON_EXTRACT GROUP BY + CAST DECIMAL(20,6)）+ 内存聚合（SYSTEM 翻页 500×40 / API 透传变量+幂等归并 / FORM config(JOIN) 兜底）；`__all__` 保留维度支持 KPI 免分组；校验显式 400（非法聚合函数/时间粒度/limit/JSON 列拒绝/派生列拒绝）
+- 后端（Java，用户要求同步）：子代理移植（9 文件+4 新类 DTO/InMemoryAggregateUtil），主会话补 `__all__` 四处；mvn -o package BUILD SUCCESS；存量编译断点（NodeConfig 包路径/Flowable8 DelegateTask 包名）由代理顺手修复 3 行并验证；Java WORKFLOW 分支保持读 ACT_HI_PROCINST（两侧读各自引擎表的结构性差异，文档化不统一）
+- 前端：echarts@5 按需注册（useEcharts.ts+DASH_PALETTE+canvasAvailable 探测）；DashKpi（group=__all__ 单值卡，千分位/单位/副标题/空态）、DashChart（bar/line/pie，ResizeObserver 自适应，暗色 CSS 变量跟随，setFilter/refresh expose 对齐动作总线）；DashConfigDialog（页级绑定数据源选择+metadata 列联动，维度下拉剔 JSON 列，时间粒度仅日期列显示）；register.ts（dashKpiRule/dashChartRule/dashConfigButton）；PageDesigner addComponent+setComponentRuleConfig；PageRendererPage 运行时注册+dsRefId 注入+ready 上报+title 置空防 form-item 包裹；main.ts FcDesigner.component 全局注册（设计器画布+运行时双实例）；DashboardRouterPage 主页分发；refId 解析回退 activeDsBindings（设计器画布实时预览）
+- E2E（agent-browser）：登录→主页 4 组件真数据渲染（流程定义数 1 个/运行中流程 1 条/发起趋势折线/定义分布饼环）→设计器打开 dashboard 页正常、组件面板含新组件、选中出「配置指标卡」按钮→console 零错误→移动端 390px 无溢出
+- 布局两轮修正：①el-row/el-col 嵌套被 fc-form-row 二次包裹→改用规则级 col:{span}（form-create 原生）；②组件根元素补 width:100% 撑满列宽
+- 测试：前端 DashComponents 9/9 + 受影响面 542/542 + 全量 1176/1176；后端 aggregate-rows 13/13（test/ 目录，vitest include 约定）
+
+Stage Summary:
+- 「form-create 设计仪表盘 + 组件绑数据源」全链路打通：数据源绑定复用页面 schema 模型，组件经 aggregate 端点取数，动作总线可联动
+- 主页已可被 form-create 页面替换（pageKey=dashboard，未配置时回退零破坏）；演示页「主页仪表盘」已发布并挂菜单（menuId=312）
+- 【重要环境修复】MariaDB 卷回退导致迁移最高只到 V41（V42-V46 丢失）：leader_id 缺列引发流程发起 500 + dept/user-tree 500，npm run migrate 补齐 5 个后全部恢复（含 Task 118 验证过的发起链路）
+- 存量观察（未处理）：sys_organization 空表 → dept-tree 聚合空行（正常语义）；API 源聚合无真实 API 源实例，逻辑与 SYSTEM 共用内存路径且幂等性有单测背书
+- 备注：TaskCreateBehaviorListener/TaskTimeoutScanner 的 3 行 import 修复是 Java 编译断点的最小修复，非本任务语义变更
+
+---
+Task ID: 119-push-recovery
+Agent: Z.ai Code (main session)
+Task: 第十次沙箱重置恢复（嵌套 .git 丢失）+ push 受阻记录
+
+Work Log:
+- 灾情：workflow_lowcode/.git 消失（git 命令落到父仓库 /home/z/my-project/.git）、DB 回滚 V41（已在 Task 119 修复）、文件 mode 全量 755 漂移、docs 等 510 文件缺失（远程有）
+- 恢复：git init -b main + remote（worklog 指纹 URL，token 需更新）→ fetch origin/main=4390c7a7 → reset --mixed 对齐 → core.fileMode false 消 mode 噪音
+- Task 119 变更甄别提交：父仓库 1d24338 的 42 文件清单按「实际任务面」重新精准暂存（排除 cron 未推送工作：FormRenderer/DictPage/ProcessCenterPage/category.service 等；排除 mariadb-user 数据文件/tool-results）
+- worklog 修正：本地快照缺 Task 102 记录 14 行 → checkout origin/main 为基线后重追加 Task 119 段（+21/-0 纯追加）
+- commit 0280023b 就绪；push 失败：worklog 里的 token 是指纹（Task 102 教训：不记全文），tool-results 转储层已脱敏无凭据
+- 待办：向用户索取新 fine-grained PAT → git remote set-url → push
+
+Stage Summary:
+- 本地仓库已恢复且提交就绪；远程 main 仍为 4390c7a7（Task 118），Task 119 待推送
+- SOP 确认：重置后 PAT 必须向用户索取；父仓库 /home/z/my-project/.git 是巡检代理工作区（含 UUID 提交与误入库的 workflow_lowcode 源码），与业务仓库已重新分离
+
+---
+Task ID: 119-restore-verify
+Agent: Z.ai Code (main session)
+Task: 第十一次文件丢失恢复（磁盘 510 文件消失、.git 完好）+ 全链路可用性核验
+
+Work Log:
+- 磁盘 510 文件丢失（含 Task 117/118 核心源码与 golden fixtures），嵌套 .git 完好：git -c core.quotepath=false 提取 D 清单后 checkout -- 全量恢复；33 个 M 文件（巡检进行中工作）甄别保留
+- 核验：迁移 V42-V46 在、dashboard 页 PUBLISHED、menu 312 在、8080 health UP；agent-browser E2E 登录→主页仪表盘 4 组件真数据渲染、console 零错误
+- push 复试仍 Invalid token：Task 119 提交 b96f64b2 领先 origin/main 1 commit，待用户提供新 PAT
+
+Stage Summary:
+- 站点完全可用；唯一遗留为 push 凭据。SOP：恢复 D 文件必须关 core.quotepath（中文路径）
+
+---
+Task ID: 119-push-done
+Agent: Z.ai Code (main session)
+Task: Task 119 push 完成（用户提供新 PAT，指纹 11ARRZ...TyWFds）
+
+Work Log:
+- remote set-url 更新凭据后 push origin main 成功：4390c7a7..b96f64b2
+- 核对 origin/main...main = 0 0 完全同步
+
+Stage Summary:
+- Task 119（form-create 仪表盘：KPI/统计图组件绑数据源 + 聚合端点 Nest/Java 双后端 + 主页替换）全链路闭环
+
+---
+Task ID: 120-1b
+Agent: Task 120-1b 实施代理（subagent）
+Task: Java 双维度聚合对位移植（对齐 Nest Task 120 聚合端点双维度语义）
+
+Work Log:
+- 先读 Nest 参考实现（aggregate-rows.ts / biz-data-query-builder.ts / sql-template-engine.ts / workflow-form-data-query.service.ts / unified-data-source-adapter.ts 的 Task 120 改动），再对位 Java 侧 5 文件：
+- `InMemoryAggregateUtil.java`：①新增 `splitGroupColumns(group)`（逗号拆分、trim 去空、最多两列；报错文案与 Nest 逐字一致：「分组字段不能为空: xxx」「分组字段最多支持两个维度: xxx」「分组字段重复: xxx」）；②`aggregateRowsInMemory` 支持双维度——`__all__` 保留维度不变，否则拆列逐行取值，任一维度为 null 整行跳过，key 用新增常量 `COMPOSITE_KEY_SEPARATOR='|'` 拼接，timeGrain 只套第一列（i==0）；③`bucketKey` 补 JS Date 格式兼容：非 `^\d{4}-\d{2}` 前缀的字符串先试 `EEE MMM dd yyyy HH:mm:ss 'GMT'Z`（Date.toString 形态，先剥尾部 "(UTC)" 括号）与 RFC_1123 解析，成功则规范化为 UTC "yyyy-MM-dd HH:mm:ss" 再切桶，失败原样（对齐 JS new Date NaN 语义）
+- `BizDataQueryBuilder.buildAggregate`：group 经 splitGroupColumns 拆列，每列独立 validateColumn + assertNotJson；双列 keyExpr = CONCAT(dimExprA, '|', dimExprB)，提取 `dimensionExpr(column, withTimeGrain, ...)` helper，timeGrain 只套第一列
+- `SqlTemplateEngine.wrapAggregate`：同上——splitGroupColumns + `aggregateDimensionExpr` helper（resolveAggregateColumn 白名单/标识符校验保留）+ 双列 CONCAT；顺带消除既有偏差：旧实现 `__all__`+非法 timeGrain 会报错、`__all__`+timeGrain 会产出 DATE_FORMAT('__all__',…) 脏 key，新结构与 Nest 一致（__all__ 短路、不校验不包裹 timeGrain）
+- `WorkflowFormDataQueryService.aggregate`：keyExpr if/else 链改写为 `keyExprOf` lambda（'__all__'/startTime 特殊列/业务列 JSON_EXTRACT 三分支逐列判断，含 grainFormat 套用位置），双列时 CONCAT(keyExprOf(a), '|', keyExprOf(b))；错误文案与 Nest 保持一致（BusinessException 400）
+- `UnifiedDataSourceAdapter`：新增 `aggregateInMemory400(rows, options)` helper（catch IllegalArgumentException → BusinessException(400)，对齐 BizDataSupport 既有用法与 Nest aggregateInMemory400），formAggregate(config)/systemAggregate/apiAggregate 三处调用点替换
+- 最小修复存量编译断点（4 个测试文件，主源码构造器签名早已漂移、测试未跟上，非本任务语义改动）：ProcessInstanceControllerTest 补 WorkflowTaskService mock；EndToEndIntegrationTest 的 RejectService 补 NodeOptionsService/NodeConfigRepository/HistoryService；WorkflowTaskServiceDetailTest / WorkflowTaskServiceMappedDataTest 的 WorkflowTaskService 补 NodeOptionsService/EngineNotifyService/ProcessInstanceService mock
+- 顺手最小修复（记录）：InMemoryAggregateUtil 的 limit 截断由 `subList(0, limit)`（limit>行数时 IndexOutOfBounds→500）改为 `Math.min(limit, size)`，对齐 Node `slice(0, limit)` 的钳制行为
+- 验证：`JAVA_HOME=/home/z/tools/jdk21 /home/z/tools/maven/bin/mvn -o package -q -DskipTests` → BUILD SUCCESS（exit 0），workflow-platform-1.0.0-SNAPSHOT.jar 正常产出
+
+Stage Summary:
+- Java 侧聚合端点双维度语义与 Nest 完全对位：group="a,b"（≤2 列、去空格、重复/空/超列显式 400）、key='|' 拼接、timeGrain 只套第一列（内存聚合与 buildAggregate/wrapAggregate）、__all__ 保留维度不变、bucketKey 兼容 JS Date 序列化格式、内存聚合校验错误显式 400
+- 关键实现差异点（有意为之，保持两侧契约一致）：①WORKFLOW 分支的 keyExprOf 与 Nest 逐列一致——timeGrain 在该分支按「列」而非「位置」套用（第二列也会被 DATE_FORMAT 包裹），与 buildAggregate/wrapAggregate 的「只套第一列」不同，这是 Nest 参考实现的既有行为，Java 侧照抄未"修正"；②Java 侧 splitGroupColumns 复用 InMemoryAggregateUtil（跨包 import），与 Nest 的 import 方向一致；③测试文件仅补构造器 mock 参数使 testCompile 通过，未新增/修改测试逻辑
+
+---
+Task ID: 120-1b-fix
+Agent: Task 120-1b 实施代理（subagent）
+Task: WORKFLOW aggregate keyExprOf 对齐 Nest 修正——timeGrain 只套第一列（withTimeGrain 参数化）
+
+Work Log:
+- Nest 侧 workflow-form-data-query.service.ts 的 keyExprOf 刚修正为 (column, withTimeGrain) 双参（单维度 (a, true)；双维度 CONCAT(a true, '|', b false)，第二列永远原样 JSON_UNQUOTE）——即 Task 120-1b 报告的差异点①已被 Nest 侧消除
+- Java 对齐：WorkflowFormDataQueryService.aggregate 的 keyExprOf 由 UnaryOperator<String> 改为 BiFunction<String, Boolean, String>，startTime 特殊列与 JSON_EXTRACT 业务列分支均为 !withTimeGrain || grainFormat == null 时返回原始表达式；单维度 keyExprOf(a, true)、双维度 CONCAT(keyExprOf(a, true), '|', keyExprOf(b, false))
+- 仅动 WorkflowFormDataQueryService.java 一个文件；mvn -o package -q -DskipTests → BUILD SUCCESS（exit 0）
+
+Stage Summary:
+- WORKFLOW 分支 timeGrain 套用位置回归「只套第一列」，Java 与 Nest 契约重新完全一致（WORKFLOW / buildAggregate / wrapAggregate / 内存聚合四处语义统一）
+
+---
+Task ID: 121-designer-icons
+Agent: Z.ai Code (main session)
+Task: 设计器组件面板图标修复（用户反馈「有些组件没有图标」）+ 图标回归防护测试
+
+Work Log:
+- 根因：FcDesigner 面板 icon 渲染为 fc-icon 字体类名，PageDesigner.vue 四个自造类名（icon-count/icon-filter/icon-circle-check/icon-medal）无字形定义→空白
+- 修复：KPI→icon-statistic、筛选器→icon-data-select、目标→icon-yes、排行榜→icon-statistics；数据表格→icon-table、卡片列表→icon-card（治理 icon-grid 双占用）
+- 坑：宽松 grep 字符串会混入 wangEditor w-e-icon-* 假阳性（icon-table2/icon-list-numbered），须用 `.icon-x:before` CSS 选择器精确提取字体集（248 字形）
+- 测试：新增 PageDesigner.palette-icons.test.ts 5 用例（字体集交集校验 + 仪表盘图标锚点 + 坏类名禁入）；page 测试面 201/201
+- 提交 68d234b8 已 push（origin/main 同步 0 0）
+
+Stage Summary:
+- 面板 11 组件图标全部有效；约束沉淀：addComponent 的 icon 必须取 FcDesigner iconfont 真实字形，防护测试已锁
+
+---
+Task ID: 122-layout-page-fullscreen
+Agent: Z.ai Code (main session)
+Task: 布局级页签页面全屏（用户澄清：非组件级，是每个菜单页签页整体全屏）
+
+Work Log:
+- AdminLayout 页签栏右侧新增全屏开关；page-stage 舞台（包 keep-alive router-view）为作用域；原生 Fullscreen API + CSS fixed 回退（z-2000），浮动退出按钮常驻；四主题全屏底色逐一匹配
+- useFullscreen 提升为 src/composables 共享（6 个 Dash 组件迁移 import）；增强 isFallback 导出 + 回退态 Esc 退出
+- 测试：行为 4 + 接线 5 断言；dashboard 26/26；全量 1229/1237（8 失败=DictPage 存量）
+- 提交 fca15f5f 已 push，远程同步 0 0
+
+Stage Summary:
+- 页签页全屏闭环；存量债：AdminLayout addTag TS2345（HEAD 即有）、DictPage 8 失败待巡检自愈
+
+---
+Task ID: 123-dash-width-height
+Agent: Z.ai Code (main session)
+Task: 仪表盘组件宽度栅格（撑满/1/2/1/3/2/3/1/4/自定义）+ 卡片显示高度
+
+Work Log:
+- rule.col.span（form-create 原生栅格）+ props.span 镜像双写；组件 span<24 时 margin 0 8px 留白，全屏跳过
+- KPI/目标/告警/排行榜 height prop（自适应/固定，is-fixed-height 居中/滚动）；DashConfigDialog 宽度+显示高度两段（全模式/非图表）；handleDashConfirm 同步 col
+- DashLayout123 测试 10 用例；dashboard 36/36；全量 1239/1247（DictPage 8 存量）
+- 提交 49ab0150 已 push，远程同步 0 0
+
+Stage Summary:
+- 宽高配置闭环；存量页面零影响（无 col 默认全宽）；设计器拖拽手柄调宽列为可选后续
+
+---
+Task ID: 124-stale-snapshot-triage
+Agent: Z.ai Code (main session)
+Task: push 前甄别：34 文件遭旧快照逐字节覆盖（HEAD~9~27），回滚 + 合法遗留提交
+
+Work Log:
+- 用户指令 push；36 个 M 文件中 34 个经 git hash-object 比对与 HEAD~9~27 历史提交逐字节相等（Task 103~117 时代），定性旧快照覆盖事故（沙箱已知故障类别的新变种：M 文件时间倒退）
+- 伪工作主题（均随回滚消失）：分类树形恢复（逆 Task 105）、DictPage 双表格重构（逆 Task 115/117）、FormRenderer 删 Task 118 syncFormDataToView、PropertyPanel 移除 @submit.prevent 等
+- 合法保留：①worklog Task 121/122/123 补录（漏提交）②unified-data-source-adapter.ts aggregateInMemory400（Task 120 契约：内存聚合校验错误显式 400，git log -S 确认从未入库）
+- 回滚后验证：前端全量 1255/1255 全绿（DictPage「8 存量失败」实为污染伪象，清零）、Nest 675/675、三服务 200
+- SOP 增补：M 文件甄别须比对历史 hash（非仅肉眼 diff）；恢复禁止 checkout . 全量（误伤合法改动）
+
+Stage Summary:
+- 本提交 = worklog 121-123 补录 + Task 120 aggregateInMemory400 补遗；34 污染文件已还原至 HEAD，零残留
+
+---
+Task ID: 125-java-backend-rescue
+Agent: Z.ai Code (main session)
+Task: Java 引擎沙箱首启修复（Boot 4 + Flowable 8 五层兼容性地雷一次排净）
+
+Work Log:
+- 起因：用户指令关闭 nodejs 后端并启动 Java；发现 Java 崩溃循环（supervisor restarts=14，每次 ~15s 即死）
+- 五层根因：①Connector/J 9.x 对 MariaDB 元数据 RESERVED 报错；②Flowable 8.0.0 H2 脚本 identity 类型在 H2 2.x 已删 + 崩溃残留毒化 schema；③僵尸重复 V2 迁移（0d037dc5 合并 + f5d386dd 补录复活旧碎片）；④V25/V31/V41 非幂等 DDL 撞 Hibernate-first；⑤V32 ${taskName} 运行时模板被 Flyway 占位符误吞
+- 修复：sandbox profile 切用户态 MariaDB（workflow 库，与 Nest workflow_v6 隔离）+ org.mariadb.jdbc 原生驱动；pom +mariadb-java-client；FlywayConfig placeholderReplacement(false)；V25/V31/V41 条件 DDL 幂等化（对齐 V18 模式）；git rm V2__init_data.sql；scripts/patch-flowable-h2.sh 入库备用
+- 验证：Flyway 33 迁移全新库全过；Started WorkflowApplication in 22.561s；admin/admin123 登录 200；userinfo/menus 鉴权 API 通；8080 由 supervisor 托管 Java 常驻；Vite/门户 200
+- 坑记录：mvn clean 删 jar 窗口期会触发 supervisor 的 workflow.db 自愈误拉 Nest（引擎决策链 ④）；Java /api/health 401=活着（需鉴权），登录探活才是真判据
+
+Stage Summary:
+- Java 引擎于 Boot 4 + Flowable 8 下首次在沙箱成功运行；engine-choice=java 持久化；Node 后端按用户指令下线（工作流数据仍在 workflow_v6 不受影响，切回 node 引擎即恢复）
+
+---
+Task ID: 126-sandbox-reset-git-restore
+Agent: Z.ai Code (main session)
+Task: 第九次沙箱重置恢复（.git 丢失→远端克隆）+ 完成运行时切换（Java 引擎常驻 8080）
+
+Work Log:
+- 重置盘点：.git 消失（git 落入父目录 UUID 快照仓库）、工作区回滚至 Task 101 时代、~/.m2 与 /home/z/tools（jdk21/maven）清空、jar 消失、chrome/Nest/Java/MariaDB 全灭
+- 恢复：远端匿名克隆 + .git 移入 + reset --hard origin/main；发现 Task 125 已沉淀 sandbox profile SOP，直接复用
+- 运行时切换：重装 JDK21+Maven3.9.9 → mvn package 53s BUILD SUCCESS（jar 103MB）→ 清双位置 node marker + engine-choice=java → POST /api/portal/services 经 next-server 进程树托管拉起 mariadbd+Java
+- 验证：登录探活 admin/admin123=200+JWT；Started in 27.342s；workflow 库自动创建；mariadbd/java 均为 next-server 子进程合法常驻；Vite/门户 200
+
+Stage Summary:
+- Java 引擎沙箱常驻 SOP 固化：远端=唯一权威；进程必须走门户 supervisor 托管；健康判据=登录探活 200
+
+---
+Task ID: 127-tenth-reset-merge-push
+Agent: Z.ai Code (main session)
+Task: 第十次沙箱重置再恢复 + 远端合并线 2442c08e 落地 + Nest→Java 重新切换 + PAT 推送闭环
+
+Work Log:
+- 第十次重置：.git/cc02a521 本地提交/PAT 远端/工具链/jar 再次全灭；开机引导 bootstrap 把 engine-choice 重写回 node + marker 复活；supervisor 按 node 决策自动拉起 Nest 占 8080（MariaDB/Vite/门户 幸存）
+- 远端已前进：2442c08e = Merge(05c8b3b4, 2f32c112)——05c8b3b4 线系 Task 118 时代分出的 3 修复（ae5185f0 Java 编译损坏 / bb96e057 看门狗 Windows 适配 / 05c8b3b4 僵尸 V2 迁移删除，疑似用户 Windows 机推送），与本方 Task 119-125 线无冲突并集，以其为新基线 reset --hard
+- 再恢复链（Task 126 SOP 复用，全程 ~10 分钟）：匿名克隆重建 .git → 清 marker+choice=java → 重装 JDK21+Maven → mvn package（基于 2442c08e，含上游 3 修复）→ 引擎切换
+- 切换坑：POST /api/portal/engine switch=java 返回「当前已是Java版无需切换」（决策读标记而旧 Nest 仍占 8080）→ 手动 kill Nest(1496) → POST /api/portal/services → supervisor 按新决策拉起 Java(1895)
+- 验证：java -Xmx448m 为 next-server(1141) 子进程、登录探活 200+JWT、MariaDB 3306/Vite 5173/门户 3000 全绿
+- worklog Task 126 原记录随重置丢失，本提交一并重录；PAT 远端重建后推送本提交
+
+Stage Summary:
+- 引擎=Java 常驻 8080（含上游 3 修复的新基线 2442c08e）；Nest 下线（workflow_v6 数据无损）
+- SOP 增补：reset 后 supervisor 可能按 node marker 自动拉 Nest 抢占 8080——恢复时须先清 marker 再处理 8080；engine switch API 对「标记=java 但进程=node」的脏状态会误判跳过，需手动杀旧进程后 POST services
+
+---
+Task ID: 128-preview-bugs-trio
+Agent: Z.ai Code (main session)
+Task: 用户报预览面板三 BUG（HMR WS 刷屏 / useEcharts 500 / storage 禁用报错）；Java 内存优化暂停顺延
+
+Work Log:
+- BUG useEcharts 500：根因 echarts 依赖缺失——第 9/10 次重置后 node_modules 停留在旧快照（echarts 安装前），Task 120 代码回到工作区但依赖从未补装；bun install 补装 4 包（环境级修复，无代码变更）；教训：重置恢复 SOP 应在 reset --hard 后追加 bun install（双端）
+- BUG storage ×4「Access to storage is not allowed」：safe-storage.ts（Task 25 内存兜底）全历史从未被 main.ts 导入（git log -S 零命中），仅 useUiTheme 迟到引用——路由守卫/HTTP 拦截器读 localStorage 早于其安装故必炸；修复：main.ts 首行 import '@/utils/safe-storage'（按其「所有 import 之前」契约补接线）
+- BUG HMR WS 反复重连失败：外层预览网关不转发 WebSocket 升级，wss 经 preview 域名与 localhost:5173 双路均死；修复：vite.config server.hmr = SANDBOX_ENV ? false : undefined（沙箱内禁用热更新改手动刷新，Windows 开发机 SANDBOX_ENV=false 不受影响）
+- 重启：清 node_modules/.vite 缓存 + kill vite + POST /api/portal/services（vite 转 supervisor 托管 pid 2965）；验证 useEcharts/main.ts/DashChart 全 200（5173 直连与 3000 门户链路双通）
+- b5db7ab4 已推送（0 0）；Java 内存优化（用户指令顺延）：基线已测 RSS ~491MB/heap_info 待用，候选=SerialGC/ActiveProcessorCount/CodeCache 96m/MaxDirectMemory 32m/Xss512k/Tomcat 线程 20/Hikari 6/Flowable 定义缓存上限，涉及 start-services.sh 与 service-supervisor.ts 双处同步
+
+Stage Summary:
+- 三 BUG 闭环：模块图恢复健康、storage 兜底真正接线、HMR 刷屏根除
+- SOP 增补：重置恢复后必跑 bun install（frontend/backend-node 双端）再验证；Task 25 类「自安装模块」必须验证其在 main.ts 的导入位次
+
+---
+Task ID: 129-db-catchup-migration
+Agent: Z.ai Code (main session)
+Task: 用户报「数据库似乎不是最新的」——Java 引擎 workflow 库补齐 workflow_v6 历史业务数据
+
+Work Log:
+- 定性：双引擎按 Task 125 设计分库隔离——Java 独占新建 workflow 库（仅 Flyway 种子），用户全部业务数据（表单 9/数据源 19/菜单 67/分类 2/草稿 2/评论 3/页面定义 1/节点配置 2）都在 Nest 时代 workflow_v6；另发现 v6 的 flyway_schema_history 最高 V41（早期 Java 曾直连 v6），V42-V46 迁移两侧均未应用
+- 客户端：用户态 mariadb 需 LD_LIBRARY_PATH=root/usr/lib/x86_64-linux-gnu（libncurses）
+- 三坑连环：①JPA 外键致 TRUNCATE 失败（SET FOREIGN_KEY_CHECKS=0）②v6 与 workflow 列顺序完全不同（Kysely 业务序 vs JPA 字母序），INSERT SELECT * 按位串位——首轮 sys_menu/sys_role_menu/sys_user_role 被污染，全部推倒用 information_schema 列名交集显式映射重做 ③v6.wf_node_config 两行（草稿级 NULL/部署级）撞 Java uk_node 唯一键，按 updated_at 保留部署级行
+- 漂移列自动剔除：wf_category.parent_id、wf_process_draft.key（v6 独有且全 NULL，零损失）；sys_user/sys_role 两库种子一致（admin/test 同 id）未复制
+- 验证：14 表行数对齐；wf_form_def/wf_data_source 抽样 created_at 真实时间戳落位正确；Java API 冒烟 /api/v1/categories 返回请假/报销流程、form-definitions/data-sources 200；多租户需 X-Tenant-Id: default（前端 http.ts:49 已自动带）
+- 冒烟踩坑：/api/xxx 404 在该工程表现为 500（No static resource）；真实业务路径为 /api/v1/*
+
+Stage Summary:
+- workflow 库已补齐全部历史业务数据，Java 引擎对外可见性与 Nest 时代一致；脚本 /tmp/copy-v6-to-wf.sql + /tmp/copy-part2.sql 留档
+- 遗留技术债：①V42-V46 迁移（草稿描述/岗位来源/箱菜单/成员群）Java Flyway 侧缺失，需对位补齐 ②wf_category.parent_id / wf_process_draft.key 列 Java 无（分类树/草稿 key 特性落后 Nest）③若 Nest 重启会先跑 V42-V46，届时再迁移需重新对齐
+
+---
+Task ID: 130-java-memory-optimize
+Agent: Z.ai Code (main session)
+Task: 用户指令「开始内存优化吧」——Java 引擎内存占用优化；期间发现第十一次沙箱重置 + Task 129 数据成果回滚，一并处置
+
+Work Log:
+- 第十一次重置甄别：git log 落入父目录 UUID 快照仓库 / 无 Java 进程 / Nest(node dist/main.js) 复占 8080 / engine-choice 被重写回 node / marker 复活 / 外层 worklog 回滚至 Task 101 时代 / jar 消失 / ~/.m2 清空；jdk21+maven 与双端 node_modules 幸存（重装与 bun install 环节免跑）
+- 恢复链：匿名克隆重建 .git → reset --hard origin/main（远端已含 Task 129 提交 0e40052a）→ 写回 PAT remote → 清双 marker + choice=java
+- 内存优化实施（三处同步）：
+  ① application-sandbox.yml：Tomcat threads 200→20 / min-spare 4 / max-connections 8192→200 / accept-count 20；Hikari 10→6 + minimum-idle 2 + idle-timeout 120s；Flowable process.definition.cache.limit=32（默认无上限）
+  ② scripts/start-services.sh（两处 java 启动行）+ ③ src/lib/service-supervisor.ts JAVA_DEF args，JVM 参数统一为：-Xms128m -Xmx448m -XX:+UseSerialGC -XX:ActiveProcessorCount=2 -XX:ReservedCodeCacheSize=96m -XX:MaxDirectMemorySize=32m -Xss512k -XX:MaxMetaspaceSize=192m -XX:+ExitOnOutOfMemoryError
+- 编译切换：mvn -DskipTests package 29s BUILD SUCCESS（依赖重新下载，.m2 曾被清）→ kill Nest → POST /api/portal/services → supervisor 按决策拉起 Java pid 2334（全参数生效确认）
+- 验证：登录探活 200（~15s 就绪）；SerialGC 生效铁证=GC.heap_info 显示 def new generation/tenured generation 分代布局；ActiveProcessorCount=2 / ThreadStackSize=512 确认；RSS 491→432MB（-12%），线程 32，堆提交仅 ~170MB（eden 47M+tenured 118M），Metaspace 134MB；dev.log 无错
+- 数据回滚发现与重做：业务冒烟 categories 返回空 → 查库确诊 workflow 库被重置回滚至 Task 129 迁移前快照（wf_category=0/wf_form_def=0），workflow_v6 完好（2/10/20/1）；Task 129 的 /tmp 迁移脚本已随重置丢失
+- 迁移脚本仓库化：新建 scripts/migrate-v6-to-workflow.sh（幂等可重跑）——白名单 25 表、information_schema 列名交集显式映射（防 Kysely 业务序 vs JPA 字母序串位）、SET FOREIGN_KEY_CHECKS=0、INSERT IGNORE + ORDER BY updated_at DESC（uk 冲突保留部署级）、group_concat_max_len 32768
+- 重跑迁移结果：wf_category 2/2、wf_data_source 19/19、sys_menu 67/67、sys_role_menu 67/67、sys_user_role 2/2、wf_form_def 9/9、wf_node_config 2→1（uk 去重保留部署级）、wf_page_def 1/1、wf_process_draft 2/2、wf_task_comment 3/3、wf_engine_notify 1/1，与 Task 129 水位完全一致
+- API 冒烟：categories 返回请假/报销流程、form-definitions 返回测试表单(bill_test/PUBLISHED)，业务可见性恢复 Nest 时代水平
+
+Stage Summary:
+- Java 引擎内存优化闭环：RSS 491→432MB（-12%），线程 32，SerialGC+全套参数生效；低并发场景无功能损失（冒烟全过）
+- 迁移脚本从此仓库化留档：后续重置若再回滚数据目录，直接 bash scripts/migrate-v6-to-workflow.sh 即可恢复（幂等）
+- 遗留观察：next-server 1385MB 为容器内存最大头（门户 Turbopack dev），非本次范围；available 947MB 偏紧，agent-browser 视觉复验仍需等待窗口
+- JVM 参数契约：start-services.sh 与 service-supervisor.ts 双处必须同步改（本 task 已一致），后续调参勿只改一处
+
+---
+Task ID: 130b-webpack-mem-bench-oom-incident
+Agent: Z.ai Code (main session)
+Task: 用户问「换 webpack dev 能省多少内存」→ 实测对照实验；实验引发门户 OOM 事故并恢复
+
+Work Log:
+- 实验设计：硬链副本 /home/z/wp-bench（/tmp 跨文件系统失败）+ 删副本 .next 隔离产物 + 3100 端口 + --webpack flag（日志确认 webpack 模式）；教训：工具调用裸 spawn 会被沙箱回收（nohup+& 亦然），实验须在同一条 Bash 内完成全生命周期
+- **实验结论（推翻预判）：换 webpack dev 省不了内存（≈0 收益）**——webpack worker 仅 10 分钟（两次实验共 ~10 请求 + 首编 / 16.8s）即达 RSS 1413MB，与 turbopack 主实例 1421MB 持平；构成不同（webpack：V8 堆 316MB+散布 native 缓存段；turbopack：两个 1GB native arena 806+247MB）但总量同级别；共同根因是 Next 16 dev 模式本身（编译图/模块缓存/source maps 常驻 + allocator 不还 OS）
+- 成本对比：webpack 首编 / 用 16.8s（turbopack 秒级），「一样吃内存但更慢」纯亏，维持 turbopack
+- **OOM 事故**：实验 worker（1.4GB）与主实例（1.4GB）并行叠加触顶 4Gi，cgroup OOM 静默杀主实例 next-server(1261)——watchdog 注释印证历史同款死因（oom-kill task=next-server 无声）；次生：1261 死后 mariadbd/java reparent 到 init 存活（Java 内存参数完好）、Vite 幸存、门户新拉实例 supervisor 无托管记录（managedPid=null，端口探活正常，异常时自动 spawn 接管）
+- 恢复链踩坑：①portal-watchdog.sh setsid 拉起亦被沙箱回收（秒死）②watchdog 首轮拉起遇 Turbopack panic（corrupted database，OOM -9 后 .next 坏状态）其日志检测 pattern 虽含关键字但仅拉起时查一次 ③正解=start-portal.sh（幂等：pkill 残留 + rm -rf .next 清坏缓存 + 拉起，回合内有效）
+- 恢复后状态：四端口全 OPEN、Java 业务冒烟 200（categories 请假/报销可见）、available 1391MB（比事故前 947MB 宽裕——实验 worker 1.4GB 已清）
+
+Stage Summary:
+- webpack dev 不能省内存，维持 turbopack + NODE_OPTIONS=614（只管 V8 堆）；dev 模式 RSS ~1.3-1.4GB 是 Next 16 的常态成本，治理手段只有「重启回收」（下次 available<500MB 时执行 start-portal.sh 即等效回收）
+- 新常态：3000 门户回合内续命（start-portal.sh），跨回合由 cron 巡检回合自动执行（payload 已更新）；Turbopack OOM 后必须清 .next 再拉
+- 铁律再确认：工具调用/setsid/nohup 裸拉进程均会被沙箱回收，仅平台启动链（dev.sh→bun run dev→start-services.sh）内的进程跨回合常驻
+
+---
+Task ID: 130c-preview-trio-recur
+Agent: Z.ai Code (main session)
+Task: 用户再报 Task 128 同款三件套（HMR WS 刷屏/useEcharts 500/storage ×4）——甄别为重置恢复漏跑 bun install，补装 + vite 进程换血
+
+Work Log:
+- 甄别：代码全健康（vite.config.ts:71 hmr:false 与 main.ts:5 safe-storage import 均在，git reset 后未丢）——非代码回归；vite.log 铁证 `Failed to resolve import "echarts/core" from useEcharts.ts` → 500
+- 根因：第十一次重置把 node_modules 回滚至旧快照（echarts 之前时代），Task 130 恢复时只验了 node_modules/.bin/vite（FE_OK）未验业务依赖、漏跑 bun install——Task 128 同款教训第二次重演；旧 vite 进程（1233→3542，启动于 .git 恢复前）用脏缓存与缺依赖服务，HMR 旧 config 未禁导致 WS 刷屏、storage 报错系浏览器持有旧 main.js
+- 修复：bun install 补装 echarts@5.6.0（4 packages）→ 清 node_modules/.vite 缓存 → kill 3542 → POST /api/portal/services（supervisor 新拉 pid 4573）
+- 验证：useEcharts.ts / main.ts / DashChart.vue 全 200；main.ts 编译产物确认含 safe-storage（用户端强刷后 storage 错误消失）；Java 登录探活 200；内存 available 743MB（next-server 新实例 1.33GB 为大头，常态水位）
+- SOP 强化：重置恢复后 bun install 必须带哨兵验证（ls node_modules/echarts + node_modules/vite 双哨兵），仅验 .bin/vite 不够——业务依赖可能整包缺失
+
+Stage Summary:
+- 三件套复现闭环：非代码回归，环境级（依赖缺失+脏进程）；echarts 补装 + vite 换血后全绿
+- 教训固化：bun install 双哨兵验证写入重置 SOP；「FE_OK 只证 vite 二进制在，不证依赖树完整」
+
+---
+Task ID: 130d-db-runtime-gap
+Agent: Z.ai Code (main session)
+Task: 用户再问「数据库似乎不是最新的」——甄别为运行时数据缺口（非回滚），补齐表单填报数据
+
+Work Log:
+- 甄别：环境健康（HEAD=a6f86047 四服务全活）、Task 130 迁移水位完好（2/9/19/67/2/3/1/1）——非回滚；真差异在 v6 独有的两类运行时数据：①wf_biz_bill_test 1 行真实填报（admin 9-25 请假单）②wfe_process_instance 1 条=dual_node_e2e E2E 测试遗留（COMPLETED，business_key=NULL，Task 61 产物非真实业务）
+- wf_biz_* 缺口根因：Java 动态表由「草稿发布流程」的 DynamicTableManager.ensureTable 建（FormDefinitionService:338），迁移的 form_def 已是 PUBLISHED 状态从未在 Java 侧走 publish → 表从未创建（BizDataSupport.loadContext 对缺表抛 404）
+- 修复路径：publish API 支持 republish（PUBLISHED 可重发，323 行 schema 恒等检查因排除自身而跳过）→ POST /api/v1/form-definitions/9dc27e83.../publish → Java DdlBuilder 自建 wf_biz_bill_test（18 列与 v6 逐列一致，类型映射绝对自洽）→ 显式列 INSERT IGNORE 迁入 1 行
+- 冒烟：GET /api/v1/biz-data/bill_test 返回填报数据（person_name=admin/事假/is_approved=yes）——Java 引擎对外可见性与 Nest 时代对齐
+- 副作用记录：bill_test version 1→2（republish 语义正常）
+- E2E 测试实例处置：不迁（Nest 自研引擎 wfe_* 运行时与 Flowable ACT_* 结构不同，且为测试数据无业务价值，随 Nest 归档）
+- 脚本加固：migrate-v6-to-workflow.sh 尾部追加 wf_biz_* 两步补建说明（republish + INSERT）
+
+Stage Summary:
+- 「数据库不最新」完整定性：元数据（Task 130 已齐）+ 业务填报数据（本轮已齐）+ E2E 测试运行时（归档不迁）三层；Java 引擎现可见全部用户真实数据
+
+---
+Task ID: 130e-dashboard-page-rebuild
+Agent: Z.ai Code (main session)
+Task: 用户「最新的dashboard组件没有展现」——甄别为页面定义数据丢失（非前端回归），重建 pageKey=dashboard 页面并仓库化恢复脚本
+
+Work Log:
+- 甄别链：DashboardRouterPage 分发逻辑（getPageByKey('dashboard')→无 PUBLISHED 页则回退静态页）→ 双库排查 wf_page_def 仅剩 test1「测试页面」、sys_menu 无 menuId=312「主页仪表盘」——Task 119 创建的 dashboard 页随 MariaDB 卷回退从 v6 与 workflow 双库同时消失（该页从未进入 129 迁移链路：Task 129 迁移时 v6 源库已无此页）
+- 重建链路实测（API 全程）：POST /v1/pages（create 不收 schema，setSchema(null)）→ PUT /v1/pages/{id}（schema 保存唯一入口）→ POST /{id}/publish → POST /{id}/mount-menu（生成 sys_menu path=/page/dashboard + permission=page:read:dashboard 自动授权 ROLE_ADMIN；PageAccessGuard 按 path 反查菜单决定可见性，404「未挂接菜单」即此）→ GET /pages/dashboard/definition 返回 PUBLISHED
+- schema 构造（反查 register.ts dashKpiRule/dashChartRule + PageRendererPage.transformComponent 契约）：4 组件 2×2（col.span=12）——KPI 流程定义数（ds-builtin-process-definitions count）+ KPI 运行中流程（ds-builtin-process-instances + filter {"conditions":[{"column":"status","op":"eq","value":"running"}]}，status 枚举实测确认小写 running/completed/suspended，来源 BuiltInSystemSourceQueryService.statusOf）+ 折线发起趋势（group=startTime timeGrain=day limit=14）+ 饼环流程分布（group=processDefinitionName sort=value limit=8）；dataSources 以 id→refId 映射内置 SYSTEM 源
+- agent-browser E2E：admin 登录 → /lowcode/dashboard 4 组件全渲染（KPI 0 值 + 图表空态「暂无数据」）+ 左侧菜单出现「主页仪表盘」；暗色主题复验正常；console 无新错误
+- ECharts「Can't get DOM width/height」warning 甄别：非 bug——DashChart hasData=false 时 el-empty 空态设计使 chartEl v-show 隐藏，echarts init 于 0 尺寸容器的预期 warning；组件 ResizeObserver 正常
+- 增值：Flowable 部署链路修复——「请假」草稿部署 400（DI 段 dc:Rect 非法，BPMN 规范要求 dc:Bounds）→ SQL REPLACE 修正 → 部署成功（deployed-processes 返回 请假 v1，ACT_RE_PROCDEF 1 条）→ 首页 KPI 实时变「1个」铁证组件+聚合全链路真数据可用；「UI验证流程」草稿 DI 段本就合法（dc:Bounds）不部署（E2E 测试流程保持干净）
+- 仓库化：scripts/dashboard-page.schema.json（留档 schema）+ scripts/recreate-dashboard-page.sh（幂等重建：已发布+菜单在→跳过；菜单丢→只补挂；404→创建→PUT→发布→挂菜单，幂等三态实测通过）
+- 期间插曲：门户 next-server 再次消失（3000 不监听，OOM/回收），start-portal.sh 拉起（脚本自身 120s 超时被沙箱连带杀后台进程的坑 → 改用 setsid bash -c 内联拉起成功，portal=200）
+
+Stage Summary:
+- 最新仪表盘组件族（Task 119-123）重新可见：主页 form-create 仪表盘 4 组件 + 「主页仪表盘」菜单；数据为 0 系 Flowable 全新库现实（静态页同 0），非组件问题
+- dashboard 页面数据从此有仓库恢复手段（schema 留档 + 幂等脚本），对冲 MariaDB 卷回退类事故
+- Flowable 首个流程「请假 v1」部署成功，发起链路恢复可用；KPI「流程定义数」1 个真实反映
+
+---
+Task ID: 130f-menus-trio
+Agent: Z.ai Code (main session)
+Task: 用户「还缺少了一些菜单，比如岗位管理，成员组管理，草稿箱」——V42-V46 功能面整体落地（数据随 MariaDB 卷回退从双库消失，v6 Flyway 水位停在 V41）
+
+Work Log:
+- 定性：Nest 时代 V42-V46（草稿说明列/岗位/成员组/箱菜单/岗位数据源/成员组业务表单）的数据成果随 MariaDB 卷回退从 v6 与 workflow 双库整体消失；对 Java 而言是全新落地而非数据恢复
+- V47__posts_member_group_draft_box.sql（对位 V42-V46，幂等）：sys_post 表 + wf_biz_member_group 物理表（PUBLISHED 种子表单不触发 ensureTable，必须显式建表——Task 130d 教训）+ 菜单 104 草稿箱（parent 100 sort 3，103 待办顺延 sort 4）/ 300 岗位管理 / 301-304 按钮权限 / 305 成员组管理（form/biz-data/index 业务列表形态，V46 语义）+ ROLE_ADMIN 授权 + 数据源 ds-builtin-sys-posts（tenant system）+ wf_form_def 种子 member_group（V46 原样 schema+column_config）
+- V48__node_config_uk_version.sql（对位 Nest V38，**部署硬阻塞 bug**）：uk_node(tenant,def,node) 不含版本列，与快照复制机制矛盾——部署带编辑态配置的流程必撞唯一键（历史未暴露因快照复制提前 return）；修复为 uk_node_version 四列（MariaDB NULL 不互斥，编辑态单行由 saveDesign delete+insert 保证）；NodeConfig.java 实体注解同步
+- Java 新增 9 文件/修改 5：SysPost 实体+SysPostRepository+PostService+PostController（/api/posts 5 端点，注意**不带 v1 段**对齐前端 baseURL=/api；createdBy 唯一校验/删除有用户归属拒绝）；SysUser.postId 字段（Hibernate 建列）；FormDataService.listMyDrafts/deleteMyDraft（发起表单→ACTIVE 最新版部署定义反查，与 ProcessDefinitionController.resolveFormDefIds 同构：initiator 节点 > __PROCESS__）+ FormDataRepository.listMyDrafts + FormDataController GET /drafts DELETE /drafts/{id}；BuiltInSystemSources 加 sys-posts 目录列 + BuiltInSystemSourceQueryService.queryPosts + SystemInternalController /system/posts(+metadata) + InternalDataSourceRouter case
+- 部署链路修复：请假草稿 BPMN DI 段 dc:Rect 非法（规范要求 dc:Bounds）→ SQL REPLACE 修正 → 部署成功；给请假草稿补 __PROCESS__ 流程级表单配置（绑定员工请假业务表单）→ 重新部署 v2（NodeConfig 快照双行验证：编辑态 NULL + 部署态 leave:2）
+- FormDataService.save 补 createdBy=当前用户（**原实现恒 NULL**，草稿箱按创建人隔离查不到——用户隔离链路铁证修复）+ 存量 1 行 UPDATE 回填
+- E2E（agent-browser）：三菜单全部出现（系统管理下岗位管理/成员组管理 + 流程管理下草稿箱 sort 正确）；岗位管理新增全链路（弹窗→提交→「创建成功」→列表实时）；成员组管理业务列表（数据表：wf_biz_member_group）+ dataPicker 选择器打开/勾选/回填标签链路 + 创建落库；草稿箱 golden path（发起页表单渲染→保存草稿→草稿箱列表「请假 v2/员工请假业务表单/草稿摘要/继续填写/删除」）；API 冒烟 posts CRUD/options/sys-posts 聚合/drafts/member_group 全 200
+
+Stage Summary:
+- 菜单三件套（岗位管理/成员组管理/草稿箱）全链路可见可用；V42-V46 功能面 Java 侧整体落地
+- 附带根除两个隐藏引擎 bug：①uk_node 版本缺失（部署带配置流程必炸）②FormDataService.save 不落 created_by（用户隔离数据面全缺）
+- 恢复脚本可复用：V47/V48 均幂等，重置后随 Flyway 自动执行
+
+---
+Task ID: 130g-java-node-alignment
+Agent: Z.ai Code (main session)
+Task: 用户「工作流复制好像 java 端没有对齐？检查一下 JAVA 端还有哪些功能没有实现？和 nodejs 后端实现对齐」
+
+Work Log:
+- 对齐审计三视角：①前端消费视角（106 个 URL vs Java 218 端点）**唯一缺口 POST /v1/form-definitions/{id}/copy**；②Node→Java 反向 diff 119 条全为多行声明/挂载前缀提取误差（/login 实为 /api/auth/login 等），逐一核对无真实缺口；③数量级 Node ~144 vs Java 219（含 notification 四组/系统内部/SSE）
+- 流程复制语义对齐（用户点名，实测 4 处差异）：createdBy 源创建人→**当前操作人**（SecurityContextHolder+LoginUser 模式）；version 0→**1**；name「(副本)」→**「-副本」**；key `_copy_`+8位→**`-copy-`+6位**（Node 逐字段对齐）；BPMN+编辑态 NodeConfig 复制语义两端一致
+- 表单复制端点补齐（对齐 Node form.ts:830）：FormDefinitionService.copyForm——name 必填/key 正则 ^[a-z][a-z0-9_]*$+唯一/type 枚举校验；schema 复制；BUSINESS 继承源 column_config（源 WORKFLOW 为空则发布校验拦截引导）、WORKFLOW 不继承；DRAFT version 1；processKey 不继承；FormDefinitionController POST /{id}/copy + FormCopyRequest DTO
+- 验证：mvn -o compile/package 全过；流程复制实测 name=请假-副本 key=leave-copy-52b185 version=1 createdBy=1；表单复制实测 200（BUSINESS/DRAFT/v1）；测试副本清理干净（草稿删除 200 + 表单删除 200）
+- dev.log 无异常；R.fail(404) 签名核实正确
+
+Stage Summary:
+- 前端消费视角对齐 100%（106/106 URL 全命中）；流程复制语义四处对齐；表单复制端点补齐
+- 审计方法沉淀：前端消费视角 diff（准确性最高）→ 反向 diff（核对未消费端点）→ 数量级 sanity check；Node 多行路由声明会让朴素 grep 产生大量假阳性，须按挂载前缀归一
+
+---
+Task ID: 131b-git-restore
+Agent: Z.ai Code (main session)
+Task: git 恢复——内层仓库重建并接回 origin/main@480dd80d 完整历史
+
+Work Log:
+- 凭证甄别：PAT 无任何残留（.git-credentials/.netrc/env/history/tool-results 均无明文，历史记录已脱敏）；发现仓库 GitHub 匿名可读（公开），git fetch 无需认证即成功
+- 按第六/八次恢复 SOP 完全体执行：git init -b main → core.fileMode false → remote add origin（无 PAT 干净 URL）→ fetch（拉下 main + 3 feature 分支）→ origin/main HEAD=480dd80d（Task 130f/130g）与摘要记录一致
+- 工作区甄别（diff origin/main）：重置卷走 540 文件（含 scripts/recreate-dashboard-page.sh 93 行/dashboard-page.schema.json/migrate-v6-to-workflow.sh/patch-flowable-h2.sh 等关键资产）、82 文件为旧版本内容、仅 2 文件为本地重演新增（api/controller/PostController.java + V49）
+- 对齐操作：备份 V41 幂等版与权威 worklog → reset --mixed origin/main → checkout -- .（补回 540 文件，HEAD 接回完整历史链 130a→130f）→ 恢复 V41 幂等版 → 删除重演版 PostController（远程权威版 system/controller/PostController.java 同路由 /api/posts，防未来双类 ambiguous mapping）→ V49 保留入库（flyway_schema_history 已记录其 checksum，缺文件会 validate 失败）
+- 迁移链受控归档（关键决策）：V3-V32/V47/V48 共 31 文件 git mv 至 db/migration-archive/——完整链全新库重放有实证风险（V17__clear_form_def_data 清数据、V4-V24 建表在 V2 已建表上冲突、V41 先炸为证）；归档后磁盘扫描集（V2/39/40/41/49）与 flyway_schema_history 精确对齐，V47/V48 功能面已由 V49+JPA ddl-auto 覆盖，jar 内嵌迁移集天然同构（内嵌本就无 V3-V32）
+- 重启实证：Java 重启 10s 就绪（401），Flyway 零重放零报错，登录链正常
+- 门户连环事故处置：next-server 第 12 次 OOM（1.56GB RSS）→ start-portal.sh 拉回后 Turbopack panic（.next 缓存损坏，watchdog 40 行检测窗口滚过 FATAL 行未触发清缓存）→ 手动 start-portal.sh（含 rm -rf .next）重建恢复连续 200 → portal-watchdog.sh 已 setsid 激活（20s 巡检）
+
+Stage Summary:
+- 本地 main = 480dd80d + c5e99112（Task 131 git 重建提交），git status 0 行，领先 origin/main 1 提交
+- push 阻塞仅剩 PAT：仓库公开可读可 fetch，认证 push 待用户提供 PAT（届时 git remote set-url origin https://<PAT>@github.com/liaoweimin74/workflow.git && git push 即可）
+- 磁盘迁移扫描集=已验证最小集，灾后全新重放安全性已闭环；dashboard 重建脚本资产找回（下次 DB 重建可直接用）
+
+---
+Task ID: 131c-push
+Agent: Z.ai Code (main session)
+Task: PAT 就绪后推送 Task 131 提交，本地与远程完全同步
+
+Work Log:
+- 用户提供 PAT，remote set-url origin（x-access-token 形式，PAT 仅存于 .git/config 不入日志）
+- git push origin main：480dd80d..c5e99112 成功（Task 131 git 重建提交上云）
+- 验证：本地 HEAD = origin/main = c5e99112，git status 0 行
+
+Stage Summary:
+- 双侧同步闭环：workflow_lowcode 仓库与 GitHub 完全一致（Task 130f 480dd80d + Task 131 c5e99112）
+- 第 12 次重置灾后恢复全链路完结：DB/服务/数据/git 四线全部恢复并同步远程
+- PAT 凭据已按历史惯例持久化于 origin URL（重置后再丢时按 Task 131b SOP + 新 PAT 重建）
+
+---
+Task ID: 132-preview-fix
+Agent: Z.ai Code (main session)
+Task: 用户预览面板三连报错处置——WSS 刷屏 / useEcharts.ts 500 / storage 拒绝
+
+Work Log:
+- 根因甄别（curl 复现 500 报文）：useEcharts.ts 500 = vite:import-analysis "Failed to resolve import \"echarts/core\""——package.json 声明 echarts ^5.6.0 但 node_modules 缺失（灾后安装残缺，bun.lock 与 node_modules 不同步）；bun install 补装 4 包（echarts@5.6.0）并清 node_modules/.vite 依赖缓存
+- WSS 刷屏根因：vite 8 的 server.hmr:false 仅停用服务端推送，client 仍尝试建连（实测 console 仍有 connecting）；外层预览网关与 next 门户(3000)反代均不转发 WS 升级 → 必然失败刷屏（含 fallback 直连 localhost:5173 二连败）
+- 修复（vite.config.ts 新增 silence-proxied-hmr 插件）：transformIndexHtml 往 head 最前注入同步脚本——仅当 location.port!=='5173'（经网关/3000 代理场景）把 window.WebSocket 替换为"立即假 OPEN"stub（readyState=1 + 异步派发 open 事件）；client 判定已连接后静默待机，零报错零重试无挂起；直连 5173 保持原生 WebSocket 不受影响（src/ 无业务 WebSocket，grep 佐证）
+- client 源码考证（node 提取 minified 上下文）：connect 流程 await Promise 等 open（close 时 isOpened=false → reject "WebSocket closed without opened." → 打印 failed to connect；isOpened=true → notify "vite:ws:disconnect" → "server connection lost" 轮询）；stub 走假 OPEN 路径绕开全部失败分支；ping 为单向 30s 心跳无 pong 超时检查，send no-op 安全
+- storage 报错判定为旧会话残留：safe-storage 兜底在位（main.ts 首行 import）、index.html 内联主题脚本有 try/catch、src/ 无 cookie/indexedDB/caches 访问；fresh load 三度验证均零复现
+- 连环事故：vite 进程早于配置修改（13:59 启动 vs 16:12 修改且自动重启未触发）手动重启×2；next dev 本轮双杀——Turbopack panic（"Failed to restore task data" 缓存损坏）+ OOM kill（RSS 1.54GB，dmesg 实锤第 13 次），start-portal.sh 两次拉起恢复（清 .next 重建）；portal 看门狗未自动拉起（疑被 OOM 连坐），待观察
+- 验证闭环：5173 直连登录 admin → dashboard 截图实锤（作业趋势柱状图 + 作业类型占比环形图正常渲染，KPI 卡片"--"为静态设计占位）；经 3000 代理 console 仅剩 debug 级 "connecting..."（零红错零刷屏），errors 空；agent-browser 用毕即关（OOM 边缘纪律）
+
+Stage Summary:
+- 三类报错全消除：500=依赖补装、WSS=stub 静默、storage=旧会话残留无需改码
+- 新增风险面：next dev RSS 1.5GB 级 OOM 惯性（4GB 机器四服务+浏览器验证即触顶）；4GB 内存下浏览器验证必须短平快、用毕即关
+- 改动面：frontend/vite.config.ts（+插件 16 行）；bun.lock 被 gitignore 不入库（package.json echarts 声明本就在库）
+
+---
+Task ID: 132b-watchdog-revive
+Agent: Z.ai Code (main session)
+Task: portal 看门狗重新激活 + OOM 自愈闭环验证
+
+Work Log:
+- 终验后 portal 3000 第 4 次倒下（dmesg：next-server RSS 1.39GB OOM kill，诱因=经 3000 加载 /lowcode 页面触发数百个 vite 模块代理请求，历史陷阱模式复现；Task 132 终验即最后一根稻草）
+- portal-watchdog.sh 进程未存活（131b 激活的实例被后续 OOM 扫荡连带清除）：按脚本头部标准命令 setsid nohup 重新激活（pid 13932）
+- 自愈闭环实测：激活后首个巡检周期即检测 down → 识别 Turbopack 缓存损坏（FATAL 残留日志）→ rm -rf .next → 拉起（pid 13943）→ 8s 后 HTTP 200
+
+Stage Summary:
+- 四服务全绿 + portal-watchdog 常驻守护：OOM → 20-30s 自愈的准稳态成立（冷启编译膨胀→OOM→自动清缓存重建→增量编译稳定）
+- 遗留：next dev Turbopack rust 侧内存不受 NODE_OPTIONS 约束为根因，根治（webpack dev/限流/升级）留巡检轮评估
+
+---
+Task ID: 133-git-recovery
+Agent: Z.ai Code (main session)
+Task: 用户「处理 git 恢复」——内层 workflow_lowcode/.git 第 13+ 次丢失后重建，接回 origin 并恢复工作树
+
+Work Log:
+- 现状甄别：内层 .git 丢失（git 上行落顶层快照仓库）；远端 github.com/liaoweimin74/workflow 匿名可达（ls-remote 免认证）
+- 远端核实：main=b23f15e8（Task 132b），比摘要记录的 480dd80d 新 3 提交——c5e99112（Task 131 git 重建）/2d7e9c1c（Task 132）/b23f15e（Task 132b），即此前某轮已接回并推送过，本轮为重置后再次恢复
+- PAT 甄别：~/.git-credentials、~/.netrc、gh CLI、env、scripts/worklog/docs 全域搜索无明文；tool-results 备份文件中 PAT 已脱敏（<PAT>）——push 凭据彻底丢失，fetch 走匿名
+- 重建 SOP：git init -b main → core.fileMode false → remote add origin（无 PAT 匿名 URL）→ fetch origin（3 分支）→ reset --mixed origin/main → 方向验证（本地 worklog 0 处 Task 132 vs 远端 1 处=远端权威）→ git checkout -- .
+- 终态：git status 0 行，HEAD=b23f15e8=origin/main；V41 幂等 SQL、recreate-dashboard-page.sh、start-portal.sh 等丢失文件全数从远端找回
+- 次生损失盘点（第 13+ 次重置标配）：backend/target jar 全灭、~/.m2 清空、mvn 本体丢失、/tmp/wf-biz-backup TSV 灭、engine-choice 被 bootstrap 重写回 node、Nest 复占 8080（RSS 108MB）；workflow 主库丢失但 workflow_v6 幸存（2 草稿+2 分类=回填源在）
+- 灾后重建启动：Maven 3.9.9 从中央仓库重装（/home/z/tools/apache-maven-3.9.9）；首轮 mvn 后台构建被沙箱回收（log 0 字节）；setsid+nohup 双保险+MAVEN_OPTS=-Xmx256m 重试成功（pid 2399，log 413 行推进中）
+
+Stage Summary:
+- 内层 .git 已恢复：工作树=origin/main=b23f15e8（Task 132b），status 0 行，全部丢失文件找回；本地与远端零分叉，无需 push
+- 遗留：push 需用户提供新 PAT（remote set-url origin https://x-access-token:<PAT>@github.com/liaoweimin74/workflow.git）
+- 进行中：mvn package 构建 jar → CREATE DATABASE workflow → 杀 Nest 释放 8080 → Java sandbox 拉起 Flyway V1-V49 → workflow_v6 回填草稿 → E2E
+- 【重建完成】Maven 3.9.9 重装（后台进程两次被沙箱回收，改前台跑通）；JDK21 javac 缺失（系统仅剩 JRE）→ Temurin JDK 21.0.12.1 落 /home/z/tools/jdk-21.0.12.1+1 → mvn package 32.9s BUILD SUCCESS（jar 103MB）
+- 【引擎切换】CREATE DATABASE workflow → 杀 Nest(pid 1503) 释放 8080 → 清 .engine-node + engine-choice=java → setsid 拉起 Java（-Xmx448m，sandbox profile）
+- 【迁移甄别】全新库 baseline v1 + applied 5（V2 init 全量建表/V39/V40/V41/V49）——非故障，系 Task 131「迁移链归档」设计：V3-V38/V42-V48 存于 db/migration-archive/，75 张表全在
+- 【数据回填】workflow_v6.wf_process_draft → workflow 显式列映射回填 2 条（请假 leave DRAFT v0 / UI验证流程 ui_verify_flow DEPLOYED v1，v6.key 列废弃全 NULL 真 key 在 process_key）
+- 【E2E】登录 200 / GET /api/v1/tasks?assignee=admin 200 空列表 / GET /api/v1/process-definitions/drafts 200 返回完整 BPMN / 四服务探活（MariaDB 137MB·Java 515MB·Vite·门户 3000=200）
+- 【内存核算】停 Nest 回收 108MB，Java 上位 RSS 515MB（净增 +407MB），可用 632MB——与预告一致；内存大头仍是 next-server 1.4GB（portal-watchdog 守护中）
+- 【PAT 轮换闭环】用户提供新 fine-grained PAT → remote set-url → fetch 验证通过 → push 成功（b23f15e8..d352b47c main），本地与远端归零对齐；PAT 完整 URL 存 tool-results/pat-remote-url.txt（chmod 600，沙箱内易失）
+- 【凭据风险提示】PAT 仅存于 .git/config 与沙箱内备份文件——沙箱重置即灭，建议用户在沙箱外（密码管理器）留存副本
+
+---
+Task ID: 134-portal-memory
+Agent: Z.ai Code (main session)
+Task: 用户「有没有办法避免内存失控，例如换掉 rust」——门户 Turbopack 内存治理
+
+Work Log:
+- 历史复核：换 webpack（Task 132 实验）已证不省内存；Next 16 schema 确认支持 experimental.turbopackMemoryLimit（bytes 软限制，到线主动丢弃编译缓存）
+- 方案落地：①next.config.ts 加 experimental.turbopackMemoryLimit=805306368（768MB，dev.log 打印确认生效）②portal-watchdog.sh 升级预防性重启（RSS>1.3GB 主动重启，内核 OOM 线 1.4GB 前留缓冲）+ 防抖（连续 2 次 down 才重启）+ Ready 等待循环（180s，根治冷启期重启风暴）
+- 沙箱铁律实证（start-portal.sh 注释）：只有平台 start.sh 进程树能常驻，agent 回合内 spawn（setsid 亦无效）回合后一律回收——mvn/watchdog/bun dev 之死同根因；Java 幸存系 Task 131 经 POST /api/portal/services 挂平台树
+- 冷启慢真相：dev 模式懒编译，Ready in 751ms 仅代表监听，首屏编译 60s+（curl -m 3/5 全程 000 系超时掐断，非故障）；watchdog 首版 is_up 判定与冷启时长冲突引发重启风暴（is_up 失败→pkill 刚拉起的→再拉→再失败），已用 Ready 等待循环根治
+- 终态：start-portal.sh 官方 SOP 拉起门户 200；turbopackMemoryLimit 生效；watchdog 常驻不可行改由 15min cron 巡检兜底（job 432156：四服务探活+RSS 预防性重启+start-portal 重拉+开发推进）
+
+Stage Summary:
+- 门户内存治理三层防线：①Turbopack rust 侧 768MB 软限制（主动回收缓存）②RSS 1.3GB 预防性重启（防 OOM 连坐）③15min cron 巡检（应对沙箱回收，含 start-portal 重拉 SOP 与 Java 重建命令）
+- 教训：dev 懒编译的探活必须长超时（首屏编译 60s+）；「进程无声消失」优先怀疑沙箱回收而非 OOM（dmesg 无痕）
+
+---
+Task ID: 135-echarts500-storage
+Agent: Z.ai Code (main session)
+Task: 用户报前端三连错——useEcharts.ts 500 / storage not allowed / 登录后仪表盘空
+
+Work Log:
+- 甄别一：useEcharts 500 = node_modules 旧快照缺 echarts（Task 128 同款复发，package.json 有 ^5.6.0 而 node_modules 无）→ bun install 补装 echarts@5.6.0
+- 甄别二：Vite optimizeDeps 缓存锁死 → 杀双实例（416MB+62MB）→ POST /api/portal/services 经平台树重拉单实例（pid 5663，常驻）→ useEcharts 直连 200
+- 甄别三：storage not allowed 为 echarts 500 连锁假象（4 条 = 4 个 Dash 组件动态 import 失败的 unhandled rejection）；index.html 裸读已有 try-catch、safe-storage 兜底完整，非独立故障
+- 甄别四（E2E 揪出）：登录后仪表盘内容区空 → wf_page_def 0 行（第 13+ 次重置重建 workflow 库后页面定义缺失，Task 130e 同款）→ recreate-dashboard-page.sh 幂等重建（PUBLISHED schema 1798B + 菜单 306 挂接）
+- 沙箱进程规律补充：next-server 每次膨胀回 1.1GB+ 即被沙箱回收（4GB 内最大进程优先），Java 515MB/vite 533MB 幸免——「周期性死亡 + cron 15min 复活」为预期常态（job 432156）
+- E2E 全通：登录 → /lowcode/dashboard → canvas:2（echarts 两图渲染）→ console 零错误零 storage 报错 → 浏览器即关（OOM SOP）
+
+Stage Summary:
+- 三故障一链根因闭环：echarts 补装（环境级）→ vite 平台树重拉 → 仪表盘页面定义重建（数据级）
+- 仪表盘恢复链仓库化验证：recreate-dashboard-page.sh 在第 13+ 次重置后再次一击即中，幂等设计可靠
+- 运行时认知更新：next-server dev 模式在此沙箱无法长驻（1.1GB+ 必被回收），门户可用性由 cron 巡检兜底
+
+---
+Task ID: 136-db-backup
+Agent: Z.ai Code (main session)
+Task: 用户「push代码及数据库」——代码推送确认 + workflow 库备份仓库化
+
+Work Log:
+- 代码侧：内层 HEAD=e43d3209=origin/main、工作区 0 行——全部已推送，无遗漏
+- 数据侧：bin 无 mysqldump → 自研 scripts/db-dump.sh（QUOTE() 转义交给数据库、information_schema 动态列、--raw 真换行、75 表全覆盖）
+- 三连坑闭环：①GROUP_CONCAT 默认 1024 截断宽表表达式（INSERT 残缺 Column count mismatch）→ group_concat_max_len=1MB；②EXPR 中列名反引号在 shell 双引号内被命令替换吞掉 → printf %s 字面替换+管道；③CONCAT 参数列表中 EXPR 间逗号是参数分隔符非输出内容 → GROUP BY 主键 + GROUP_CONCAT(CONCAT_WS(',',...)) 每行一条 INSERT
+- 可恢复性验证（临时库 workflow_verify 全量导入）：75 表全过、sys_menu 70 / sys_role_menu 70 / wf_page_def 1 / wf_process_draft 2 / wf_data_source 9 全吻合、DEPLOYED 草稿多行 BPMN XML 无损（4112B 与源一致）——验证后临时库已清理
+- 配套 scripts/db-restore.sh（DROP→重建→导入+提醒 flyway 历史随库带回语义）；dump 落 scripts/db-backup/workflow-dump-20261003-0151.sql（124K）
+
+Stage Summary:
+- 数据库备份链仓库化完成：db-dump.sh（自研无 mysqldump 环境适配+三坑免疫）/ 124K 全量 dump（已验证可恢复）/ db-restore.sh（一键恢复）——下次重置后恢复路径 = db-restore.sh 或 Flyway 空库重建二选一
+- 备份铁律落实：未经验证的备份不做交付，本轮 dump 经临时库全量导入比对后才入库
+
+---
+Task ID: 137-memory-compression
+Agent: Z.ai Code (main session)
+Task: 用户「沙箱内存不足频繁重置 → 采用内存压缩机制扩展到 16G」+ 第九次整沙箱回滚灾后重建
+
+Work Log:
+- 勘察实锤：物理 3.9Gi / cgroup v1 硬顶 4GiB / Swap=0；uid=1001 无免密 sudo（已知口令三组全灭）、sysfs 只读（zram hot_add 不可写）、sysctl -w permission denied → 内核级 zram/zswap 全链路被 CAP_SYS_ADMIN 封死，16G 无法从沙箱内部真实达成
+- 交付 scripts/setup-memory-compression.sh（自激活设计）：能力探测→命中即建 zram(zstd, 自适应 sizing 目标 16G 夹[4G,12G]) + swapon pri100 + 调优(swappiness 180/page-cluster 0/vfs_cache_pressure 50)；被权限封死时 exit 3 带精确诊断——cron 每轮重试，平台放权即刻自激活（内层+顶层双份部署）
+- 应用层压缩替代（本轮实际生效）：turbopackMemoryLimit 768→512MB（next.config.ts 注明缘由）、僵尸 vite 三实例去重(-450MB)、next-server 1.33GB 预防性轮换(-1GB)、start-portal.sh NODE_OPTIONS=614MB 保持、portal-watchdog.sh 升级 Task 137 版（RSS 预防轮换+防抖+Ready 180s+每轮顺带 mem-compress）
+- 第九次回滚重建：workspace 回滚至平台模板镜像（内层 .git/worklog/cron/JDK/Maven/jar/workflow 库全灭，8080 被旧 backend-node node dist/main.js 顶替，顶层 worklog 回退 Task 101 时代）→ 远端权威重克隆（HEAD=ee816581，含 Task 136 db 备份链）→ JDK21(Adoptium)+Maven3.9.16(dlcdn) 重装 + /home/z/tools/{jdk21,maven} 软链 → jar 前台构建 103MB → supervisor Java cmd 补绝对路径 ${JDK_PATH}/bin/java（原 "java" 裸名因 next-server PATH 缺 JDK 必 ENOENT 启动即崩退避）→ engine-choice=java + 清双 marker + 手杀旧 Node(1621) → POST /api/portal/services 拉起 Java(21s 就绪)
+- 数据恢复：db-restore.sh + 仓库化 dump 一键还原 75 表（Task 136 资产首战立功）：leave DRAFT v0 / ui_verify_flow DEPLOYED v1 / wf_page_def 1 / sys_user 2 全吻合，登录 API 200 + drafts API 返回 BPMN XML；旧目录 workflow_lowcode.old 已清
+- cron 巡检重建（15min webDevReview）：新增基础设施自愈 SOP 段（四服务探活/mem-compress 自激活/DB 丢失 db-restore 一键还原/jar 重建/工具链软链）
+- 教训：①supervisor spawn 用 next-server 的 process.env，JDK 绝对路径必须写死进 cmd ②start-portal.sh 幂等判断会跳过 RSS 膨胀轮换——膨胀场景必须先 pkill ③db-restore.sh + 仓库化 dump 把灾后 DB 恢复从「Flyway 重建+回填 10min」压缩到「一键 5s」④整沙箱回滚后 8080 假健康（Node 顶替）——探活必须验业务特征（登录 API）而非仅端口
+
+Stage Summary:
+- 内存结论：内核压缩不可达（无 CAP_SYS_ADMIN）。「扩展到 16G」交付形态=自激活脚本(cron 每轮重试，放权即生效)+应用层收紧(turbopack 512MB+watchdog 1.3GB 预防轮换)+僵尸进程治理；next-server 峰值预算 1.3GB→~1.1GB，4G 天花板触顶概率大幅下降
+- 灾后重建第九次全绿：3000(门户)/8080(Java Spring Boot+Flowable)/5173(Vite)/3306(MariaDB) 四服务恢复，workflow 库 75 表数据完整
+- 产物：setup-memory-compression.sh（内层+顶层）/portal-watchdog.sh Task 137 版/supervisor 绝对路径补丁/next.config.ts 512MB/cron 巡检 v2（15min 含自愈 SOP）
+
+---
+Task ID: 138-dashboard-schema-fix
+Agent: Z.ai Code (main session)
+Task: 用户报「主页仪表板 JSON 解析错（position 591）」——schema 双重转义损伤修复 + db-dump 链第四坑根除
+
+Work Log:
+- 取证：DB wf_page_def.schema（dashboard, 1938B）JSON-BROKEN 于 position 591，损坏模式=内嵌 filter JSON 的引号前多一层反斜杠（\\" 应为 \"）；repo 留档 dashboard-page.schema.json（2718B）合法且更新
+- 损坏溯源三方比对（DB vs dump vs repo）：dump 文件与 DB 一致（忠实备份）→ 损坏在备份（10-03）之前已入库，属历史写入侧遗留；dump 链当时未暴露
+- 修复：node 从 repo schema 紧凑化（JSON.stringify，1625 chars）+ SQL 转义生成 UPDATE → 生产库 md5=b6e08147...；三层验证（DB JSON-VALID 含 2×dash-kpi+2×dash-chart / Java API definition schema 合法 / agent-browser 登录 5173 进主页仪表盘 4 组件全渲染控制台零报错）
+- 体检 wf_form_def.schema（1 行 OK）与 msg content（非 JSON）：损伤仅限 wf_page_def 一行
+- 第四坑定罪：db-dump.sh 数据导出管道（line 59）缺 --raw → client 输出层把 QUOTE 产生的 \\ 再翻倍为 \\\\，导入后多一层转义。BPMN XML 无反斜杠故 Task 136 byte-exact 验证幸存，schema 内嵌 JSON 首次踩中。今天 DB 修好后 dump→restore 立即复现（position 529）才暴露
+- db-dump.sh 修复：数据管道补 --raw + 库名参数化（支持自洽校验）；新全量 dump workflow-dump-20261005-fixed.sql（120K/75 表）
+- 自洽校验闭环：dump→restore(workflow_verify)→schema md5 与生产一致+JSON-VALID→re-dump→diff 为空（75 表全量字节级无损）；旧坏 dump（20261003-0151/20261005-1559）删除
+- cron 自愈 SOP 同步更新：dump 路径换 workflow-dump-20261005-fixed.sql（旧 dump 恢复会复发本 bug）
+- 教训：①byte-exact 验证必须覆盖全部含反斜杠的长文本列，单验 BPMN 有盲区 ②「dump→restore→re-dump→diff 为空」是备份链自洽校验的黄金标准，Task 136 若有此步当天就会拦下 ③自研 dump 链四坑全录：GROUP_CONCAT 截断/反引号吞/逗号歧义/client 输出层再转义
+
+Stage Summary:
+- 主页仪表盘 JSON 报错根除（DB schema 已换 repo 合法版，4 组件渲染实证）；备份链第四坑根除并过自洽校验，新权威 dump=workflow-dump-20261005-fixed.sql
+- 产物：db-dump.sh v2（--raw+参数化）/workflow-dump-20261005-fixed.sql（已验证）/修复 SQL 链路留痕 /tmp（已清）
+
+---
+Task ID: 139-portal-oom-recovery
+Agent: Z.ai Code (main session)
+Task: 「门户挂了」事故诊断与恢复（3000 进程级死亡，OOM 根因实锤）
+
+Work Log:
+- 用户报障「门户挂了」：3000 端口无响应、无 next 进程；mariadb(3306)/java(8080)/vite(5173) 幸存（平台树收养进程）
+- dev.log 尾部：14:22「Found a change in next.config.ts → Restarting → Ready in 1871ms」后无任何日志——平台树 next dev 死亡近 2 小时
+- 关键证据链：/sys/fs/cgroup/memory/memory.oom_control 显示 oom_kill=7（cgroup 4G 上限已触发 7 次 OOM kill，历次沙箱重置与本次进程死亡同源）
+- 复现实验：start-portal.sh 拉起后 5 分钟 curl 探活全部存活（排除沙箱随机回收）；agent-browser 一访问 /lowcode 即死（vite 模块请求 200 后进程无声消失、无 crash stack）——浏览器 50+ 模块并发加载 + 双 dev server 同活 + chrome ~700MB → 内存尖峰 → OOM killer 杀 RSS 最大的 next-server（1.28GB）
+- curl 手工 WS upgrade 实验不杀进程（排除 HMR websocket 凶手假设）
+- 上轮遗留 JSON position 591 定论：schema 转义损伤（Task 138 已修）与 OOM 响应流截断构成双重根因，本次验证仪表盘零报错、console 干净，双双闭环
+- 内存减压三招落地：①杀重复 vite（双实例 -250MB）②杀 postcss 编译 worker（-473MB，下次编译自动重启）③agent-browser 验证完立即 close（chrome -700MB）→ available 从 595MB 恢复至 1046MB
+- 恢复验证全链路：登录 API 200（admin/admin123）→ /lowcode 登录页渲染 → 登录成功 → 主页仪表盘全部卡片（流程定义数/运行中流程/发起趋势/流程分布）正常、零 JSON 报错
+- 新建 cron job 438154「门户OOM减压与探活-5min」（fixed_rate 300s，priority 10，agentTurn）：探活 3000/5173 → 杀重复 vite/postcss 减压 → 挂则拉起 → oom_kill 计数监控入 worklog；与 15min webDevReview job 437863 形成双层保障
+
+Stage Summary:
+- 门户全链路复活（3000/8080/5173/3306 四服务绿）；根因 oom_kill=7 实锤记录在案
+- OOM 时代 QA 铁律沉淀：browser 验证必须 open→snapshot→close 单回合压缩完成；绝不让 chrome 与 /lowcode 模块加载长时间并存；大量 browser 验证前先杀 postcss worker/重复 vite
+- 架构定论：start-portal.sh 拉起属回合内临时进程（寿命受内存压力支配）；常驻唯一靠平台树（已死待下次沙箱冷启动重建）+ cron 5min 探活轮换兜底
+- 风险预告：next-server RSS 1.28GB 已近 portal-watchdog 轮换线 1.3GiB；/lowcode 重负载访问仍可能 OOM，长眠风险由 job 438154 每 5 分钟自动拉起对冲

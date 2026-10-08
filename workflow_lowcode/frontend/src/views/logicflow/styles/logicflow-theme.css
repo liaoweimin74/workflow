@@ -1,0 +1,214 @@
+/* ============================================================
+ * 逻辑流设计器主题（四态自适应）
+ * 配色规则与 designer-theme.css 一致：全部走语义变量 ——
+ *   · 主色/激活 : var(--el-color-primary)（青瓷，明暗双态由 style.css 重定义）
+ *   · 表面/文字 : var(--el-bg-color)/--el-fill-color-*/--el-text-color-*
+ *   · 类型色    : --lf-*（EP 语义色派生，color-mix 洗底）
+ * ============================================================ */
+
+/* ===== 画布容器 ===== */
+.logic-flow-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * 节点类型色（青瓷/墨绿/橙/琥珀/中性）。
+ * 注意：这些变量与画布容器合并声明 —— 实测仅含 custom property 的
+ * 独立 .logic-flow-designer 规则偶发被解析丢弃（文本在 style 标签中、
+ * CSSOM 缺失），导致 var(--lf-*) 引用链断裂 → stroke 变 initial(none)，
+ * 循环虚线整体不可见（故障：patrol 会话用户反馈「循环虚线看不到」）。
+ * 画布内元素（节点/边/marker）全在 .logic-flow-canvas 子树内，此规则
+ * 稳定存在；下方 .logic-flow-designer 规则保留作面板侧双保险。
+ */
+.logic-flow-canvas {
+  /* HTTP — 青瓷点缀（accent-500） */
+  --lf-http: var(--brand-bright, #22c9d6);
+  /* BEAN — 墨绿（success 压暗） */
+  --lf-bean: color-mix(in srgb, var(--el-color-success) 78%, #14532d);
+  /* SCRIPT — 橙（warning 偏红） */
+  --lf-script: color-mix(in srgb, var(--el-color-warning) 72%, var(--el-color-danger));
+  /* CONDITION — 琥珀（warning 原色） */
+  --lf-condition: var(--el-color-warning);
+  /* BATCH — 紫罗兰（区分于既有四色，明暗双态可读） */
+  --lf-batch: color-mix(in srgb, #a855f7 82%, var(--el-color-primary));
+  /* SUBFLOW — 青绿（子流程引用，区别于 HTTP 青/BEAN 绿） */
+  --lf-subflow: color-mix(in srgb, #14b8a6 82%, var(--el-color-primary));
+  /* DATA_UPDATE — 深蓝绿（数据写操作，区别于 SUBFLOW 青绿更沉稳） */
+  --lf-data: color-mix(in srgb, #0e7490 85%, var(--el-color-primary));
+  /* START/END — 中性 */
+  --lf-neutral: var(--el-color-info);
+}
+
+.logic-flow-designer {
+  /* 同上一组变量（面板侧双保险；画布侧以 .logic-flow-canvas 为准） */
+  --lf-http: var(--brand-bright, #22c9d6);
+  --lf-bean: color-mix(in srgb, var(--el-color-success) 78%, #14532d);
+  --lf-script: color-mix(in srgb, var(--el-color-warning) 72%, var(--el-color-danger));
+  --lf-condition: var(--el-color-warning);
+  --lf-batch: color-mix(in srgb, #a855f7 82%, var(--el-color-primary));
+  --lf-subflow: color-mix(in srgb, #14b8a6 82%, var(--el-color-primary));
+  --lf-data: color-mix(in srgb, #0e7490 85%, var(--el-color-primary));
+  --lf-neutral: var(--el-color-info);
+}
+
+/* vue-flow 容器自带灰底，交给 Background 点阵呈现 */
+.logic-flow-designer .vue-flow {
+  background: var(--el-bg-color-page, #f4f5f3);
+}
+
+/* 背景点阵随明暗态取边框色（Background 默认固定灰点，暗色下过亮） */
+.logic-flow-designer .vue-flow__background circle,
+.logic-flow-designer .vue-flow__background path {
+  fill: var(--el-border-color-darker, #c0c4cc);
+}
+
+/* ===== 边 ===== */
+.logic-flow-designer .vue-flow__edge-path {
+  stroke: var(--el-border-color-darker, #b8beb6);
+  stroke-width: 1.5;
+}
+
+.logic-flow-designer .vue-flow__edge:hover .vue-flow__edge-path,
+.logic-flow-designer .vue-flow__edge.selected .vue-flow__edge-path {
+  stroke: var(--el-color-primary);
+  stroke-width: 2;
+}
+
+/* BATCH 闭合循环连线：紫罗兰实色虚线（72% 透明在白底上过淡，用户反馈「看不到」后改实色） */
+.logic-flow-designer .vue-flow__edge.lf-edge-loop .vue-flow__edge-path {
+  stroke: var(--lf-batch, #a855f7);
+  stroke-width: 2;
+  stroke-dasharray: 7 5;
+}
+
+.logic-flow-designer .vue-flow__edge.lf-edge-loop:hover .vue-flow__edge-path,
+.logic-flow-designer .vue-flow__edge.lf-edge-loop.selected .vue-flow__edge-path {
+  stroke: color-mix(in srgb, var(--lf-batch, #a855f7) 70%, var(--el-color-danger));
+  stroke-width: 2.4;
+}
+
+/* 循环连线箭头随线色 */
+.logic-flow-designer .vue-flow__edge.lf-edge-loop .vue-flow__edge-marker path {
+  stroke: var(--lf-batch, #a855f7);
+  fill: var(--lf-batch, #a855f7);
+}
+
+/* 循环边中点文字标签（LoopEdge 渲染，画布外的 EdgeLabelRenderer 层需独立取色） */
+.logic-flow-designer .lf-loop-edge-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #fff;
+  background: var(--lf-batch, #a855f7);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* 条件分支边 true/false 标签 */
+.logic-flow-designer .lf-edge-label {
+  font-size: 11px;
+  fill: var(--el-text-color-secondary);
+}
+
+/* ===== 连接点 ===== */
+.logic-flow-designer .vue-flow__handle {
+  width: 9px;
+  height: 9px;
+  background: var(--el-bg-color);
+  border: 1.5px solid var(--el-border-color-darker, #b8beb6);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.logic-flow-designer .vue-flow__handle:hover,
+.logic-flow-designer .vue-flow__handle.connecting {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--el-color-primary) 18%, transparent);
+}
+
+.logic-flow-designer .vue-flow__handle-left,
+.logic-flow-designer .vue-flow__handle-right {
+  top: 50%;
+}
+
+/* ===== 控件条（左下 Controls / 右下 MiniMap） ===== */
+.logic-flow-designer .vue-flow__controls {
+  box-shadow: var(--el-box-shadow-light);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-left: 12px;
+  margin-bottom: 12px;
+}
+
+.logic-flow-designer .vue-flow__controls .vue-flow__controls-button {
+  background: var(--el-bg-color-overlay);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  color: var(--el-text-color-regular);
+}
+
+.logic-flow-designer .vue-flow__controls .vue-flow__controls-button:hover {
+  background: color-mix(in srgb, var(--el-color-primary) 12%, var(--el-bg-color-overlay));
+  color: var(--el-color-primary);
+}
+
+.logic-flow-designer .vue-flow__controls .vue-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.logic-flow-designer .vue-flow__minimap {
+  background: color-mix(in srgb, var(--el-bg-color-overlay) 96%, transparent);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+  margin-right: 12px;
+  margin-bottom: 12px;
+}
+
+.logic-flow-designer .vue-flow__minimap-svg {
+  border-radius: 10px;
+}
+
+/* MiniMap 节点块取类型中性色（默认黑块，暗色下刺眼） */
+.logic-flow-designer .vue-flow__minimap-mask {
+  stroke: var(--el-color-primary);
+  fill: color-mix(in srgb, var(--el-color-primary) 8%, transparent);
+}
+
+/* ===== 选中节点：vue-flow 给节点容器加 selected 类，配合 FlowNode 内高亮 ===== */
+.logic-flow-designer .vue-flow__node.selected .lf-node-card {
+  border-color: var(--el-color-primary);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--el-color-primary) 28%, transparent),
+    0 6px 18px rgba(0, 0, 0, 0.1);
+}
+
+/* ===== 面板细滚动条（调色板/属性面板共用） ===== */
+.logic-flow-designer .palette-body::-webkit-scrollbar,
+.logic-flow-designer .panel-body::-webkit-scrollbar,
+.logic-flow-designer .lf-dynamic-rows::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.logic-flow-designer .palette-body::-webkit-scrollbar-thumb,
+.logic-flow-designer .panel-body::-webkit-scrollbar-thumb,
+.logic-flow-designer .lf-dynamic-rows::-webkit-scrollbar-thumb {
+  background: var(--el-border-color-darker, #c0c4cc);
+  border-radius: 3px;
+}
+
+.logic-flow-designer .palette-body::-webkit-scrollbar-track,
+.logic-flow-designer .panel-body::-webkit-scrollbar-track,
+.logic-flow-designer .lf-dynamic-rows::-webkit-scrollbar-track {
+  background: var(--el-fill-color-light);
+}
+
+.logic-flow-designer .palette-body::-webkit-scrollbar-thumb:hover,
+.logic-flow-designer .panel-body::-webkit-scrollbar-thumb:hover {
+  background: var(--el-text-color-placeholder);
+}

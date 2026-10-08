@@ -180,6 +180,16 @@ public class SystemInternalController {
     }
 
     /** 系统角色元数据。 */
+    @GetMapping("/system/posts")
+    public R<BizDataPageVO> systemPosts(BizDataQueryRequest request) {
+        return R.ok(builtInSourceQuery.query("sys-posts", request));
+    }
+
+    @GetMapping("/system/posts/metadata")
+    public R<DataSourceMetadata> systemPostsMetadata() {
+        return R.ok(sourceMetadata("sys-posts"));
+    }
+
     @GetMapping("/system/roles/metadata")
     public R<DataSourceMetadata> systemRolesMetadata() {
         return R.ok(sourceMetadata("sys-roles"));

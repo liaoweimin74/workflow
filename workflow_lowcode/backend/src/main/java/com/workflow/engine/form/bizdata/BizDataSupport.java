@@ -2,6 +2,9 @@ package com.workflow.engine.form.bizdata;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.workflow.api.dto.AggregateRequest;
+import com.workflow.api.dto.AggregateResultVO;
+import com.workflow.api.dto.AggregateRowVO;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
@@ -338,6 +341,77 @@ public class BizDataSupport {
         } catch (IllegalArgumentException e) {
             throw new BusinessException(400, e.getMessage());
         }
+    }
+
+    /**
+     * 单表聚合（visual 模式 FORM 源；对位 {@link #queryGeneric} 的聚合版）。
+     *
+     * <p>维度/指标列白名单与筛选同源（{@code buildAggregate} 内校验）；
+     * 结果行 key 统一字符串化（DATE_FORMAT 已产出字符串，数值维度 String 化）。
+     */
+    public AggregateResultVO queryAggregateGeneric(String formKey, AggregateRequest req) {
+        String tenantId = tenantProvider.getTenantId();
+        BizDataContext ctx = loadContext(formKey);
+
+        Map<String, Object> filters = parseFilter(req.getFilter());
+        // 列类型映射（key → columnType）：JSON 列拒绝参与 group/metric（buildAggregate 内守卫）
+        Map<String, String> columnTypeOf = ctx.columns().stream()
+                .collect(Collectors.toMap(ColumnConfig::getKey,
+                        c -> c.getColumnType() == null ? "" : c.getColumnType().toUpperCase(), (a, b) -> a));
+
+        try {
+            BizDataQueryBuilder.SqlAndParams fragment = BizDataQueryBuilder.buildAggregate(
+                    ctx.tableName(), ctx.columnKeys(), columnTypeOf, tenantId, filters,
+                    req.getKeyword(), req.getKeywordColumn(),
+                    req.getGroup(), req.getAgg(), req.getMetric(), req.getTimeGrain(),
+                    req.getSort(), req.getOrder());
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(fragment.sql(), fragment.params().toArray());
+            return toAggregateResult(rows);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, e.getMessage());
+        }
+    }
+
+    /**
+     * SQL 模板聚合（SQL 源 / FORM sql 模式；对位 {@link #querySqlTemplate} 的聚合版）。
+     *
+     * <p>与 querySqlTemplate 一样<b>不校验</b>主表单物理表 —— 管理员 SQL 可跨表；
+     * 维度/指标必须是声明列（{@code wrapAggregate} 内校验）。
+     */
+    public AggregateResultVO queryAggregateSqlTemplate(String formKey, AggregateRequest req, FormQueryConfig cfg) {
+        // SQL 类型无 formKey 时跳过校验（管理员 SQL 独立定义，不依赖表单）
+        if (formKey != null && !FORM_KEY_PATTERN.matcher(formKey).matches()) {
+            throw new BusinessException(400, "非法表单 key: " + formKey);
+        }
+        if (cfg.query() == null || cfg.query().isBlank()) {
+            throw new BusinessException(400, "SQL 数据源缺少查询配置");
+        }
+        String tenantId = tenantProvider.getTenantId();
+        List<JoinSqlGenerator.QueryColumn> columns = toQueryColumns(cfg.columns());
+        Map<String, Object> filters = parseFilter(req.getFilter());
+        Map<String, Object> runtimeParams = parseRuntimeParams(req.getParams());
+
+        try {
+            BizDataQueryBuilder.SqlAndParams fragment = SqlTemplateEngine.wrapAggregate(
+                    cfg.query(), tenantId, columns, filters, req.getKeyword(), req.getKeywordColumn(),
+                    cfg.declaredParams(), runtimeParams,
+                    new SqlTemplateEngine.AggregateSpec(req.getGroup(), req.getAgg(), req.getMetric(),
+                            req.getTimeGrain(), req.getSort(), req.getOrder(), req.getLimit()));
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(fragment.sql(), fragment.params().toArray());
+            return toAggregateResult(rows);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, e.getMessage());
+        }
+    }
+
+    /** 聚合行集 → VO（对齐 Node {@code String(row.__k ?? '')} + {@code Number(row.__v ?? 0)}）。 */
+    private static AggregateResultVO toAggregateResult(List<Map<String, Object>> rows) {
+        List<AggregateRowVO> out = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            Object k = row.get("__k");
+            out.add(AggregateRowVO.of(k == null ? "" : String.valueOf(k), row.get("__v")));
+        }
+        return AggregateResultVO.of(out);
     }
 
     /** 构建查询列映射：主表列（ref="m."+key，默认全可排可筛）+ 虚拟列（ref=alias+"."+joinField，能力取 join 声明） */

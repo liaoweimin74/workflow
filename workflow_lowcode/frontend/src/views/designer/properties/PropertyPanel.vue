@@ -1,5 +1,9 @@
 <template>
-  <div class="property-panel" :class="{ collapsed }">
+  <!-- @submit.prevent：属性组件的 el-form 渲染原生 <form>，顶部单输入框（如节点名称）
+       满足 HTML 隐式提交条件——回车会提交无 action 的 GET 表单，用表单数据替换整个
+       query string，导致 ?id= 丢失、重载后画布空白。submit 事件冒泡，在根元素
+       统一 preventDefault，一处覆盖全部属性组件（含只读态与未来新增组件）。 -->
+  <div class="property-panel" :class="{ collapsed }" @submit.prevent>
     <!-- 折叠态：竖条 -->
     <div v-if="collapsed" class="collapse-bar" @click="collapsed = false">
       <span class="bar-text">属性</span>

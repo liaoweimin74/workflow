@@ -1,5 +1,10 @@
 import type { ColumnConfig, DataSourceMetadata } from '../../../common/domain/column-config'
-import type { BizDataPageVO, BizDataVO } from '../../../common/domain/biz-data'
+import type {
+  AggregateRequest,
+  AggregateResultVO,
+  BizDataPageVO,
+  BizDataVO,
+} from '../../../common/domain/biz-data'
 import type { BizDataQueryRequest } from '../../form/bizdata/biz-data-support'
 
 /**
@@ -36,6 +41,11 @@ export interface DataSourceAdapter {
   supports(type: string): boolean
   metadata(dataSource: DataSourceRef): Promise<DataSourceMetadata>
   query(dataSource: DataSourceRef, req: BizDataQueryRequest): Promise<BizDataPageVO>
+  /**
+   * 分组聚合（Task 119 仪表盘；`GET /:id/aggregate` 的 SPI）。
+   * 实现方按类型选择 SQL 聚合或行集内存聚合，语义与 `/data` 的 filter 一致。
+   */
+  aggregate(dataSource: DataSourceRef, req: AggregateRequest): Promise<AggregateResultVO>
   get(dataSource: DataSourceRef, id: string): Promise<BizDataVO>
   /** 新增一行，返回新行 id（Java `create` 返回 `String`）。 */
   create(dataSource: DataSourceRef, data: Record<string, unknown> | null): Promise<string>

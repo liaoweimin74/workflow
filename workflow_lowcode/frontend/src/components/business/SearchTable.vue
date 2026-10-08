@@ -174,9 +174,9 @@
                   </template>
                 </el-popconfirm>
 
-                <!-- 图标无 confirm -->
+                <!-- 图标无 confirm（tooltip 之外再补原生 title：即时悬停提示 + 无障碍） -->
                 <el-tooltip v-else-if="btn.icon" :content="btn.label" placement="top" :show-after="200">
-                  <el-button :icon="resolveIcon(btn, row)" circle plain size="small" :type="btn.type" v-permission="btn.permission" @click.stop="btn.onClick(row)" />
+                  <el-button :icon="resolveIcon(btn, row)" circle plain size="small" :type="btn.type" :title="btn.label" v-permission="btn.permission" @click.stop="btn.onClick(row)" />
                 </el-tooltip>
 
                 <!-- 文本 + confirm -->

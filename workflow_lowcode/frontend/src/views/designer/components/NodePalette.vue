@@ -43,12 +43,14 @@
               draggable="true"
               @dragstart="handleDragStart($event, node)"
               @click="handleClick(node)"
-              :title="node.description"
             >
               <span class="item-chip" :style="chipStyle(node)">
                 <i class="item-icon bpmn-font-icon" :class="node.iconClass"></i>
               </span>
-              <span class="item-label">{{ node.label }}</span>
+              <span class="item-label">
+                <!-- 节点说明收进 ？ 悬浮（与 logicflow 调色板同模式） -->
+                <FormLabelTip :tip="node.description">{{ node.label }}</FormLabelTip>
+              </span>
               <el-icon class="item-drag"><Rank /></el-icon>
             </div>
           </div>
@@ -61,6 +63,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Fold, Expand, Menu, Rank } from '@element-plus/icons-vue'
+import FormLabelTip from '../properties/shared/FormLabelTip.vue'
 
 interface PaletteNode {
   type: string

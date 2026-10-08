@@ -1,19 +1,14 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="editing ? '超时规则' : '超时规则'"
     width="560px"
     :close-on-click-modal="false"
     @update:model-value="emit('update:visible', $event)"
     @closed="resetForm"
   >
-    <el-alert
-      type="info"
-      :closable="false"
-      show-icon
-      class="rule-alert"
-      title="同一规则组超时提醒可以添加多个，超时转派只能添加1个，超时通过和超时拒绝只能添加其中1个；超时通过和超时拒绝的配置对办理人节点不生效"
-    />
+    <template #header>
+      <FormLabelTip tip="同一规则组超时提醒可以添加多个，超时转派只能添加1个，超时通过和超时拒绝只能添加其中1个；超时通过和超时拒绝的配置对办理人节点不生效">超时规则</FormLabelTip>
+    </template>
 
     <!-- 规则类型选择（编辑已有规则时锁定类型） -->
     <div class="action-cards">
@@ -76,6 +71,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import type { ProcessTimeoutRule } from '@/stores/designerStore'
+import FormLabelTip from './shared/FormLabelTip.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -186,10 +182,6 @@ function resetForm() {
 :deep(.el-divider--horizontal .el-divider__text.is-left) {
   left: 0;
   padding-left: 0;
-}
-
-.rule-alert {
-  margin-bottom: 12px;
 }
 
 .action-cards {

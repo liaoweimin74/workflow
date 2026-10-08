@@ -17,7 +17,7 @@
           placeholder="目标列"
           style="width: 30%"
         >
-          <el-option v-for="c in columns" :key="c.key" :label="c.label || c.key" :value="c.key" />
+          <el-option v-for="c in columns" :key="c.key" :label="columnOptionLabel(c)" :value="c.key" />
         </el-select>
         <el-select v-model="row.op" style="width: 22%">
           <el-option label="等于" value="eq" />
@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, nextTick, watch } from 'vue'
+import { columnOptionLabel } from '@/utils/columnOption'
 
 interface FilterCondition {
   column: string

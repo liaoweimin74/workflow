@@ -26,4 +26,15 @@ public interface FormDataRepository extends JpaRepository<FormData, String> {
 
     List<FormData> findByTenantIdAndProcessInstanceIdAndIsSnapshotOrderByCreatedAtDesc(
             String tenantId, String processInstanceId, Boolean isSnapshot);
+
+    /**
+     * 草稿箱列表（Task 130f 对齐 Node listDraftsByUser）：当前用户的全部
+     * 发起页草稿（processInstanceId IS NULL、非快照、本人创建），按更新时间倒序。
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT d FROM FormData d WHERE d.tenantId = :tenantId " +
+            "AND d.processInstanceId IS NULL AND d.isSnapshot = false " +
+            "AND d.createdBy = :createdBy ORDER BY d.updatedAt DESC")
+    List<FormData> listMyDrafts(@org.springframework.data.repository.query.Param("tenantId") String tenantId,
+                                @org.springframework.data.repository.query.Param("createdBy") String createdBy);
 }

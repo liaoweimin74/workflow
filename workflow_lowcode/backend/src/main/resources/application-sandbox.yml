@@ -1,0 +1,63 @@
+# 沙箱环境专用配置：MariaDB（用户态实例，Task 32 起常驻 127.0.0.1:3306）
+#
+# 历史：本 profile 曾使用 H2（MODE=MySQL）规避「沙箱无 MySQL」；Task 32 引入
+# 用户态 MariaDB 后，H2 路线暴露两类不可维护问题（2026-10-01，Task 125）：
+#   1. Flowable 8.0.0 的 H2 建表脚本用 H2 1.4 的 `identity` 类型，H2 2.x 已删除
+#      （修复脚本见 scripts/patch-flowable-h2.sh），且 Hibernate-first 建表与
+#      Flyway INSERT 的列默认值假设冲突连环爆；
+#   2. mysql-connector-j 9.x 对 MariaDB 的元数据探测触发
+#      Unknown column 'RESERVED'（Hibernate 无法确定 dialect）。
+# 现方案：MariaDB 原生驱动（org.mariadb.jdbc）+ flyway-mysql 原生方言 +
+# Flowable mysql 脚本，与生产 MySQL 形态完全对齐。
+#
+# 注意：
+#  - Java 引擎独占 `workflow` 库（createDatabaseIfNotExist），与 Nest 引擎的
+#    `workflow_v6` 相互隔离，双引擎数据互不污染；
+#  - flowable.database-schema-update=true：Flowable 自管 ACT_ 表结构；
+#  - 不要加 DATABASE_TO_LOWER 等 H2 参数（历史遗留，已随 H2 移除）。
+spring:
+  datasource:
+    url: jdbc:mariadb://127.0.0.1:3306/workflow?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8
+    username: root
+    password: 740130
+    driver-class-name: org.mariadb.jdbc.Driver
+    # Task 130 内存优化：Hikari 默认 max=10 且 minimum-idle=max（10 常驻连接），
+    # 每连接客户端缓冲+服务端线程都有成本；低代码平台并发 <5，6+2 足够
+    hikari:
+      maximum-pool-size: 6
+      minimum-idle: 2
+      idle-timeout: 120000
+      connection-timeout: 10000
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect
+
+# Task 130 内存优化：Tomcat 默认 max=200 线程（每线程 512k 栈=Xss），沙箱单用户
+# 场景 20 峰值绰绰有余；max-connections 默认 8192 每连接带 NIO 缓冲，一并收紧
+server:
+  tomcat:
+    threads:
+      max: 20
+      min-spare: 4
+    max-connections: 200
+    accept-count: 20
+
+flowable:
+  database-schema-update: true
+  async-executor-activate: false
+  # Task 130 内存优化：流程定义缓存默认无上限（每个 BPMN 模型对象图数百 KB），
+  # 平台流程数 <20，32 封顶防内存随部署次数线性增长
+  process:
+    definition:
+      cache:
+        limit: 32
+
+logging:
+  level:
+    com.workflow: DEBUG
+    org.flowable: INFO
+    org.springframework.modulith: WARN
+    org.flywaydb: INFO

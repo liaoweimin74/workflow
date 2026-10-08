@@ -101,7 +101,7 @@ function startableByCurrentUser(proc: DeployedProcessDefinition): boolean {
   return false
 }
 
-// ── 按 categoryId 分组 ──
+// ── 按 categoryId 分组（Task 112：分类按 sortOrder 排序，未分类/未知命名空间沉底）──
 const groupedProcesses = computed(() => {
   const map = new Map<string, DeployedProcessDefinition[]>()
   for (const proc of processes.value) {
@@ -110,7 +110,20 @@ const groupedProcesses = computed(() => {
     if (!map.has(catId)) map.set(catId, [])
     map.get(catId)!.push(proc)
   }
-  return map
+  // 已知分类按 sortOrder 升序；未分类与历史命名空间（非分类 id）
+  // 永远排在已知分类之后，避免 URL 形态的分组抢首位
+  const orderOf = (catId: string): number => {
+    const cat = categories.value.find((c) => c.id === catId)
+    return cat ? cat.sortOrder : Number.MAX_SAFE_INTEGER
+  }
+  return new Map(
+    Array.from(map.entries()).sort((a, b) => {
+      const diff = orderOf(a[0]) - orderOf(b[0])
+      if (diff !== 0) return diff
+      // 同为未知分类时按名字稳定排序，避免闪烁
+      return categoryName(a[0]).localeCompare(categoryName(b[0]), 'zh-Hans-CN')
+    }),
+  )
 })
 
 /**
@@ -130,10 +143,15 @@ function latestVersionsOnly(list: DeployedProcessDefinition[]): DeployedProcessD
   return list.filter((proc) => latestByKey.get(proc.key) === proc)
 }
 
+/**
+ * Task 112：分组标题。分类 id 命中 categories → 显示分类名；
+ * 未命中（'uncategorized' 或历史定义的 BPMN 命名空间如 http://flowable.org/bpmn）
+ * → 统一归入「未分类」，不再把 URL 原样当分组标题展示。
+ */
 function categoryName(catId: string): string {
   if (catId === 'uncategorized') return '未分类'
   const cat = categories.value.find(c => c.id === catId)
-  return cat?.name ?? catId
+  return cat?.name ?? '未分类'
 }
 
 // ── 加载数据 ──

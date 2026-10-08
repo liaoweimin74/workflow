@@ -336,6 +336,7 @@ const En = {
     },
     menu: {
         main: 'Basic',
+        system: 'System',
         aide: 'Auxiliary',
         layout: 'Layout',
         component: 'Component',

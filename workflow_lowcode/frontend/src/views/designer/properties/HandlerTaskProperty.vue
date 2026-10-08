@@ -117,12 +117,13 @@
             </div>
           </template>
 
-          <div class="section-title">处理意见必填</div>
+          <div class="section-title">
+            <FormLabelTip tip="开启后，办理人必须填写处理意见">处理意见必填</FormLabelTip>
+          </div>
           <div class="switch-row">
             <el-switch v-model="ui.commentRequired" :disabled="readOnly" />
             <span class="switch-label">处理意见必填</span>
           </div>
-          <div class="hint-text">开启后，办理人必须填写处理意见</div>
           <!-- 意见必填范围单选（截图④）：默认退回必填；与审批节点同口径存 REJECT_RETURN -->
           <template v-if="ui.commentRequired">
             <div class="inline-radio-group sub-items">
@@ -143,12 +144,13 @@
             <span class="switch-label">流程到达此节点后禁止撤销/撤回</span>
           </div>
 
-          <div class="section-title">超时处理</div>
+          <div class="section-title">
+            <FormLabelTip tip="支持办理超时自动提醒、转派">超时处理</FormLabelTip>
+          </div>
           <div class="switch-row">
             <el-switch v-model="ui.timeout.enabled" :disabled="readOnly" />
             <span class="switch-label">超时处理</span>
           </div>
-          <div class="hint-text">支持办理超时自动提醒、转派</div>
           <template v-if="ui.timeout.enabled">
             <div class="inline-row">
               <span class="inline-label">时长</span>
@@ -202,6 +204,7 @@ import { getModeler } from '../utils/bpmnModeler'
 import { ApproverPicker } from '@/components/business'
 import FormPropertyTab from './FormPropertyTab.vue'
 import AssigneeSelector from './shared/AssigneeSelector.vue'
+import FormLabelTip from './shared/FormLabelTip.vue'
 
 defineProps<{ readOnly?: boolean }>()
 
@@ -601,13 +604,7 @@ watch(ui, () => {
   color: var(--el-text-color-regular, #4b5169);
 }
 
-/* 开关下方灰色说明 */
-.hint-text {
-  font-size: 11px;
-  color: var(--el-text-color-secondary, #8b91ab);
-  line-height: 1.4;
-  margin: 2px 0 6px;
-}
+/* 开关下方灰色说明（已迁移至 FormLabelTip 悬浮提示） */
 
 /* 意见必填范围单选：横排一行（截图④），缩进对齐 sub-items */
 .inline-radio-group {

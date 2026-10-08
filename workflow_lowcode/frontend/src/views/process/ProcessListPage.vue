@@ -1,46 +1,20 @@
 <template>
+  <!--
+    Task 105：布局改版——左侧分类树表 → 顶部「分类胶囊条」（内联维护）。
+    分类扁平无层级，点击胶囊筛选流程，「＋」新建 / 双击改名 / hover ✕ 删除。
+  -->
   <!-- 高度用 100% 撑满 main（p-4 唯一决定四周留白），对齐用户管理 SearchTable 的布局标准 -->
   <div class="process-list-page" style="display: flex; gap: 12px; height: 100%">
-    <!-- 左侧：流程分类（可折叠） -->
-    <el-card class="category-card" :style="categoryCardStyle" style="flex-shrink: 0; overflow: hidden">
-      <template #header>
-        <div style="display: flex; align-items: center; justify-content: space-between">
-          <span v-show="!categoryCollapsed" style="font-weight: bold; font-size: 14px">流程分类</span>
-          <el-button
-            class="category-collapse-btn"
-            link
-            :icon="categoryCollapsed ? Expand : Fold"
-            :title="categoryCollapsed ? '展开分类' : '折叠分类'"
-            @click="categoryCollapsed = !categoryCollapsed"
-          />
-        </div>
-      </template>
-      <SearchTable
-        v-show="!categoryCollapsed"
-        ref="categoryTableRef"
-        :search-fields="categorySearchFields"
-        :columns="categoryColumns"
-        :action-buttons="categoryActionButtons"
-        :fetch-api="categoryFetchApi"
-        :form-config="categoryFormConfig"
-        :tree-props="{ rowKey: 'id', children: 'children', defaultExpandAll: true }"
-        table-size="small"
-        :max-visible-buttons="3"
-        @row-click="handleCategoryClick"
-      />
-      <!-- 折叠后的展开按钮 -->
-      <div v-if="categoryCollapsed" class="category-expand-btn" style="display: flex; justify-content: center; padding-top: 4px">
-        <el-button link :icon="Expand" title="展开分类" @click="categoryCollapsed = false" />
-      </div>
-    </el-card>
-
-    <!-- 右侧：流程列表 -->
     <el-card style="flex: 1; overflow: hidden">
       <template #header>
-        <span style="font-weight: bold; font-size: 14px">
-          流程定义{{ selectedCategory ? ' - ' + selectedCategory.name : '' }}
-        </span>
+        <span style="font-weight: bold; font-size: 14px">流程定义</span>
       </template>
+      <CategoryChips
+        v-model="selectedCategoryId"
+        :categories="categories"
+        @changed="onCategoriesChanged"
+      />
+      <div style="height: 12px" aria-hidden="true" />
       <SearchTable
         ref="tableRef"
         :search-fields="searchFields"
@@ -49,7 +23,7 @@
         :fetch-api="fetchApi"
         :form-config="formConfig"
         :default-page-size="20"
-        :max-visible-buttons="5"
+        :max-visible-buttons="6"
         table-size="small"
         @row-click="handleRowClick"
       >
@@ -58,12 +32,47 @@
             {{ statusLabel(row.status) }}
           </el-tag>
         </template>
+        <template #category="{ row }">
+          <el-tag v-if="categoryName(row.categoryId)" size="small" type="info" effect="plain">
+            {{ categoryName(row.categoryId) }}
+          </el-tag>
+          <span v-else class="uncategorized">未分类</span>
+        </template>
         <template #lastDeployedAt="{ row }">
           {{ row.lastDeployedAt ? formatDate(row.lastDeployedAt) : '—' }}
         </template>
       </SearchTable>
     </el-card>
   </div>
+
+  <!-- 调整分类弹窗（Task 106）：saveDesign 仅传分类字段，其余保留原值；
+       不选分类确认 = 清空（clearCategory，后端置 null） -->
+  <el-dialog
+    v-model="moveVisible"
+    title="调整分类"
+    width="420px"
+    :close-on-click-modal="false"
+  >
+    <el-form label-width="80px" @submit.prevent>
+      <el-form-item label="流程">
+        <span style="font-weight: 600; word-break: break-all">{{ moveRow?.name || '—' }}</span>
+      </el-form-item>
+      <el-form-item label="分类">
+        <el-select
+          v-model="moveTarget"
+          clearable
+          placeholder="不归类（未分类）"
+          style="width: 100%"
+        >
+          <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="moveVisible = false">取消</el-button>
+      <el-button type="primary" :loading="moveSubmitting" @click="confirmMove">确定</el-button>
+    </template>
+  </el-dialog>
 
   <!-- 版本历史抽屉 -->
   <el-drawer
@@ -100,150 +109,49 @@
 <script setup lang="ts">
 defineOptions({ name: 'ProcessDefinition' })
 
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Upload, CopyDocument, Delete, Fold, Expand, Clock } from '@element-plus/icons-vue'
+import { Edit, Upload, CopyDocument, Delete, Clock, FolderOpened } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { processDesignApi, deployedProcessApi, type ProcessDraft, type ProcessVersion } from '@/api/processDefinition'
 import { categoryApi, type Category } from '@/api/category'
 import { validateProcessXml } from '@/views/designer/utils/bpmnValidation'
+import CategoryChips from './components/CategoryChips.vue'
 
 const router = useRouter()
 const tableRef = ref()
-const categoryTableRef = ref()
-const selectedCategory = ref<Category | null>(null)
 
-// ========== 流程分类折叠 ==========
-const categoryCollapsed = ref(false)
-const categoryCardStyle = computed(() => ({
-  width: categoryCollapsed.value ? '40px' : '480px',
-}))
+// ========== 分类胶囊（Task 105：扁平结构，无树形） ==========
+const categories = ref<Category[]>([])
+const selectedCategoryId = ref<string | null>(null)
+
+async function loadCategories() {
+  const res = await categoryApi.list()
+  categories.value = res.data || []
+}
+
+onMounted(() => {
+  loadCategories()
+})
+
+/** 切换分类胶囊 → 重新拉取流程表（SearchTable 不会因外部状态变化自动刷新） */
+watch(selectedCategoryId, () => {
+  tableRef.value?.fetchList()
+})
+
+/** 分类增删改后：重拉分类列表（流程表刷新由 selectedCategoryId 的 watch 兜底——
+ *  删除当前选中分类时胶囊组件会回置为「全部」并触发 watch） */
+function onCategoriesChanged() {
+  loadCategories()
+}
 
 // ========== 版本历史抽屉 ==========
 const versionDrawerVisible = ref(false)
 const versionLoading = ref(false)
 const versionRows = ref<ProcessVersion[]>([])
 const versionDrawerTitle = ref('')
-
-// ========== 流程分类 ==========
-const categorySearchFields: SearchField[] = [
-  { type: 'input', label: '名称', prop: 'name', placeholder: '搜索分类名称', style: 'width: 120px' },
-]
-
-const categoryColumns: TableColumn[] = [
-  { prop: 'name', label: '分类名称', minWidth: 160 },
-  { prop: 'sortOrder', label: '排序', width: 70, align: 'center' },
-]
-
-async function categoryFetchApi(params: any) {
-  const res = await categoryApi.list()
-  let list = res.data || []
-  if (params.name) {
-    list = list.filter((c: Category) => c.name?.includes(params.name))
-  }
-  return { rows: buildTree(list), total: list.length }
-}
-
-function buildTree(items: Category[]): any[] {
-  const map = new Map<string, any>()
-  const roots: any[] = []
-  items.forEach(item => map.set(item.id, { ...item, children: [] }))
-  items.forEach(item => {
-    const node = map.get(item.id)!
-    if (item.parentId && map.has(item.parentId)) {
-      map.get(item.parentId)!.children.push(node)
-    } else {
-      roots.push(node)
-    }
-  })
-  const sortNodes = (nodes: any[]) => {
-    nodes.sort((a, b) => a.sortOrder - b.sortOrder)
-    nodes.forEach(n => sortNodes(n.children))
-  }
-  sortNodes(roots)
-  return roots
-}
-
-const categoryFormConfig = reactive<FormConfig<Category>>({
-  rule: [
-    {
-      type: 'treeSelect',
-      field: 'parentId',
-      title: '父分类',
-      props: { data: [] as any[], props: { label: 'name', value: 'id', children: 'children' }, placeholder: '不选则为顶级分类', checkStrictly: true, clearable: true },
-    },
-    { type: 'input', field: 'name', title: '名称', validate: [{ required: true, message: '请输入分类名称', trigger: 'blur' }] },
-    { type: 'input', field: 'sortOrder', title: '排序' },
-  ],
-  dialogTitle: { create: '新建分类', edit: '编辑分类' },
-  createPermission: 'process:category:create',
-  editPermission: 'process:category:update',
-  deletePermission: 'process:category:delete',
-  beforeCreate: async () => {
-    const res = await categoryApi.list()
-    const r = categoryFormConfig.rule.find(r => r.field === 'parentId')
-    if (r) {
-      r!.props!.data = buildTree(res.data || [])
-    }
-    return true
-  },
-  beforeEdit: async (row: Category) => {
-    const res = await categoryApi.list()
-    const r = categoryFormConfig.rule.find(r => r.field === 'parentId')
-    if (r) {
-      r!.props!.data = buildTree(res.data?.filter((c: Category) => c.id !== row.id) || [])
-    }
-    return true
-  },
-  createApi: async (data: any) => {
-    return await categoryApi.create({
-      name: data.name,
-      parentId: data.parentId || null,
-      sortOrder: Number(data.sortOrder) || 0,
-    })
-  },
-  updateApi: (id, data: any) => {
-    return categoryApi.update(id as string, {
-      name: data.name,
-      parentId: data.parentId || null,
-      sortOrder: Number(data.sortOrder) || 0,
-    }) as any
-  },
-  deleteApi: (id) => categoryApi.delete(id as string) as any,
-  getApi: async (id: any) => {
-    const res = await categoryApi.list()
-    return res.data?.find((c: Category) => c.id === id) ?? ({} as Category)
-  },
-  afterCreate: () => categoryTableRef.value?.fetchList(),
-  afterUpdate: () => categoryTableRef.value?.fetchList(),
-  afterDelete: () => {
-    categoryTableRef.value?.fetchList()
-    if (selectedCategory.value) {
-      selectedCategory.value = null
-      tableRef.value?.fetchList()
-    }
-  },
-})
-
-const categoryActionButtons: ActionButton[] = [
-  {
-    label: '添加子分类',
-    icon: Plus,
-    link: true,
-    permission: 'process:category:create',
-    show: (row: any) => !!row.id,
-    onClick: (row: any) => {
-      categoryTableRef.value?.openFormDialog({ parentId: row.id })
-    },
-  },
-]
-
-function handleCategoryClick(row: Category) {
-  selectedCategory.value = row
-  tableRef.value?.fetchList()
-}
 
 // ========== 流程定义 ==========
 const searchFields = computed<SearchField[]>(() => [
@@ -253,17 +161,29 @@ const searchFields = computed<SearchField[]>(() => [
 const columns: TableColumn[] = [
   { prop: 'name', label: '流程名称', minWidth: 180 },
   { prop: 'key', label: '流程标识', width: 180 },
+  { prop: 'categoryId', label: '分类', width: 120, slotName: 'category' },
   { prop: 'status', label: '状态', width: 100, align: 'center', slotName: 'status' },
   { prop: 'version', label: '发布版本', width: 90, align: 'center' },
   { prop: 'lastDeployedAt', label: '发布时间', width: 180, slotName: 'lastDeployedAt' },
 ]
+
+/** 分类 id → 名称（表格分类列展示） */
+const categoryNameMap = computed(() => {
+  const m = new Map<string, string>()
+  categories.value.forEach(c => m.set(c.id, c.name))
+  return m
+})
+
+function categoryName(id?: string | null): string {
+  return (id && categoryNameMap.value.get(id)) || ''
+}
 
 async function fetchApi(params: any) {
   const res = await processDesignApi.listDrafts({
     page: params.page || 1,
     size: params.size || 20,
     name: params.name || undefined,
-    categoryId: selectedCategory.value?.id || undefined,
+    categoryId: selectedCategoryId.value || undefined,
   })
   const data = res.data as any
   return {
@@ -285,19 +205,20 @@ const formConfig = reactive<FormConfig<ProcessDraft>>({
       ],
     },
     {
-      type: 'treeSelect',
+      type: 'select',
       field: 'categoryId',
       title: '分类',
-      props: { data: [] as any[], props: { label: 'name', value: 'id', children: 'children' }, checkStrictly: true, clearable: true },
+      props: { placeholder: '不选则为未分类', clearable: true },
+      options: [],
     },
   ],
   dialogTitle: { create: '新建流程' },
   createPermission: 'process:definition:create',
   beforeCreate: async () => {
-    const res = await categoryApi.list()
+    await loadCategories()
     const r = formConfig.rule.find(r => r.field === 'categoryId')
     if (r) {
-      r!.props!.data = buildTree(res.data || [])
+      r!.options = categories.value.map(c => ({ label: c.name, value: c.id }))
     }
     return true
   },
@@ -368,6 +289,13 @@ const actionButtons: ActionButton[] = [
     },
   },
   {
+    label: '移动',
+    icon: FolderOpened,
+    size: 'small',
+    permission: 'process:definition:create',
+    onClick: openMove,
+  },
+  {
     label: '版本',
     icon: Clock,
     size: 'small',
@@ -397,6 +325,39 @@ const actionButtons: ActionButton[] = [
 ]
 
 function handleRowClick(_row: any) {}
+
+// ========== 调整分类弹窗（Task 106） ==========
+const moveVisible = ref(false)
+const moveRow = ref<ProcessDraft | null>(null)
+const moveTarget = ref('')
+const moveSubmitting = ref(false)
+
+async function openMove(row: any) {
+  moveRow.value = row
+  moveTarget.value = row.categoryId || ''
+  moveVisible.value = true
+  // 弹窗选项与胶囊同源刷新（新建分类后无需刷新页面）
+  await loadCategories()
+}
+
+async function confirmMove() {
+  if (!moveRow.value || moveSubmitting.value) return
+  moveSubmitting.value = true
+  try {
+    // 只传分类字段：saveDesign 对未传字段一律保留原值（不会碰 XML/名称）
+    await processDesignApi.saveDesign(
+      moveRow.value.id,
+      moveTarget.value ? { categoryId: moveTarget.value } : { clearCategory: true },
+    )
+    ElMessage.success('分类已调整')
+    moveVisible.value = false
+    tableRef.value?.fetchList()
+  } catch {
+    // http 拦截器已弹出错误消息
+  } finally {
+    moveSubmitting.value = false
+  }
+}
 
 /** 打开版本历史抽屉，加载该流程 key 的全部已部署版本 */
 async function openVersionHistory(row: any) {
@@ -443,3 +404,10 @@ function statusTagType(status: string): 'info' | 'success' | 'warning' {
   }
 }
 </script>
+
+<style scoped>
+.uncategorized {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+</style>

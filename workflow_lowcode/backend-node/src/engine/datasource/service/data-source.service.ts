@@ -5,6 +5,7 @@ import { PageResponse } from '../../../common/domain/page-response'
 import { BusinessException } from '../../../common/exception/business-exception'
 import { assertPageSize } from '../../../framework/http/query-params'
 import { getTenantId } from '../../../framework/tenant/tenant-context'
+import type { AggregateRequest, AggregateResultVO } from '../../../common/domain/biz-data'
 import type { BizDataQueryRequest } from '../../form/bizdata/biz-data-support'
 import type { DataSourceAdapter, DataSourceRef } from '../adapter/data-source-adapter'
 import { DataSourceRepository, type DataSourceRow } from '../repository/data-source.repository'
@@ -151,6 +152,12 @@ export class DataSourceService {
   async queryData(id: string, req: BizDataQueryRequest): Promise<BizDataPageVO> {
     const { ref, adapter } = await this.adapterOf(id)
     return adapter.query(ref, req)
+  }
+
+  /** 数据源分组聚合（经适配器 SPI；Task 119 仪表盘）。 */
+  async aggregateData(id: string, req: AggregateRequest): Promise<AggregateResultVO> {
+    const { ref, adapter } = await this.adapterOf(id)
+    return adapter.aggregate(ref, req)
   }
 
   /** 数据源单行取数（经适配器 SPI）。 */

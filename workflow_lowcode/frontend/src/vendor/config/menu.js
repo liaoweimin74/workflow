@@ -5,6 +5,11 @@ const menus = [
         list: []
     },
     {
+        name: 'system',
+        title: '系统组件',
+        list: []
+    },
+    {
         name: 'subform',
         title: '子表单组件',
         list: []

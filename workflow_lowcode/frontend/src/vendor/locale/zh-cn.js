@@ -337,6 +337,7 @@ const ZhCn = {
     },
     menu: {
         main: '基础组件',
+        system: '系统组件',
         aide: '辅助组件',
         layout: '布局组件',
         component: '组件',

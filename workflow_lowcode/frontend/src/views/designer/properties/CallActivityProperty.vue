@@ -29,8 +29,9 @@
       </el-select>
     </el-form-item>
 
-    <el-divider content-position="left">输入参数</el-divider>
-    <div class="param-hint">父流程变量 → 子流程变量</div>
+    <el-divider content-position="left">
+      <FormLabelTip tip="映射方向：父流程变量 → 子流程变量（每行一对，左填父流程变量名、右填子流程变量名）">输入参数</FormLabelTip>
+    </el-divider>
     <div
       v-for="(param, index) in config.inParams"
       :key="'in-' + index"
@@ -43,8 +44,9 @@
     </div>
     <el-button type="primary" link size="small" :disabled="readOnly" @click="addInParam">+ 添加输入参数</el-button>
 
-    <el-divider content-position="left">输出参数</el-divider>
-    <div class="param-hint">子流程变量 → 父流程变量</div>
+    <el-divider content-position="left">
+      <FormLabelTip tip="映射方向：子流程变量 → 父流程变量（每行一对，左填子流程变量名、右填父流程变量名）">输出参数</FormLabelTip>
+    </el-divider>
     <div
       v-for="(param, index) in config.outParams"
       :key="'out-' + index"
@@ -65,6 +67,7 @@ import { Delete, Right } from '@element-plus/icons-vue'
 import { useDesignerStore, type ParamMapping } from '@/stores/designerStore'
 import { getModeler } from '../utils/bpmnModeler'
 import { processDesignApi, type ProcessDefinitionSummary } from '@/api/processDefinition'
+import FormLabelTip from './shared/FormLabelTip.vue'
 
 defineProps<{ readOnly?: boolean }>()
 
@@ -169,11 +172,7 @@ function saveConfig() {
 </script>
 
 <style scoped>
-.param-hint {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 8px;
-}
+/* param-hint 说明（已迁移至 FormLabelTip 悬浮提示） */
 
 .param-row {
   display: flex;

@@ -25,20 +25,24 @@
 
         <el-divider content-position="left">发起人设置</el-divider>
 
-        <el-form-item label="撤销撤回">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="开启后，审批中的流程将不允许员工撤销/撤回">撤销撤回</FormLabelTip>
+          </template>
           <div class="switch-row">
             <el-switch v-model="initiator.disallowRecall" @change="saveConfig" />
             <span class="switch-label">不允许撤销/撤回</span>
           </div>
-          <div class="hint-text">开启后，审批中的流程将不允许员工撤销/撤回</div>
         </el-form-item>
 
-        <el-form-item label="审批催办">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="发起人可以催办审批人/办理人">审批催办</FormLabelTip>
+          </template>
           <div class="switch-row">
             <el-switch v-model="initiator.urgeEnabled" @change="saveConfig" />
             <span class="switch-label">审批催办</span>
           </div>
-          <div class="hint-text">发起人可以催办审批人/办理人</div>
           <div v-if="initiator.urgeEnabled" class="urge-row">
             <span class="urge-text">每隔</span>
             <el-input-number
@@ -64,12 +68,14 @@
           </div>
         </el-form-item>
 
-        <el-form-item label="再次发起">
+        <el-form-item>
+          <template #label>
+            <FormLabelTip tip="取消后，此审批将不再支持再次发起">再次发起</FormLabelTip>
+          </template>
           <div class="switch-row">
             <el-switch v-model="initiator.reInitiate" @change="saveConfig" />
             <span class="switch-label">再次发起</span>
           </div>
-          <div class="hint-text">取消后，此审批将不再支持再次发起</div>
         </el-form-item>
 
         <el-form-item label="结束短信">
@@ -98,6 +104,7 @@ import {
   getDocumentation,
 } from '../utils/nodeConfigAdapter'
 import FormPropertyTab from './FormPropertyTab.vue'
+import FormLabelTip from './shared/FormLabelTip.vue'
 
 defineProps<{ readOnly?: boolean }>()
 
@@ -257,14 +264,7 @@ watch([config, initiator], () => {
   font-weight: 600;
 }
 
-/* 开关下方灰色说明文字 */
-.hint-text {
-  width: 100%;
-  font-size: 11px;
-  color: var(--el-text-color-secondary, #8b91ab);
-  line-height: 1.4;
-  margin-top: 2px;
-}
+/* 开关下方灰色说明文字（已迁移至 FormLabelTip 悬浮提示） */
 
 /* 催办频率行内编辑 */
 .urge-row {

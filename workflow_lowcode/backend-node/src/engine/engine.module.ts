@@ -27,6 +27,7 @@ import { FormDataService } from './form/form-data.service'
 import { FormDefinitionWriteService } from './form/form-definition-write.service'
 import { DynamicTableManager } from './form/column/dynamic-table-manager'
 import { FormDataRepository } from './form/repository/form-data.repository'
+import { VariableMappingWriter } from './form/mapping/variable-mapping.writer'
 import { FormDefinitionRepository } from './form/repository/form-definition.repository'
 import { FormDefinitionService } from './form/service/form-definition.service'
 import { PageAccessGuard } from './page/page-access.guard'
@@ -119,6 +120,7 @@ import { TaskService } from './task/task.service'
     BizDataService,
     FormDataRepository,
     FormDataService,
+    VariableMappingWriter,
     FormDefinitionWriteService,
     DynamicTableManager,
     CategoryRepository,

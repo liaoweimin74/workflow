@@ -1,32 +1,23 @@
 import http from '@/utils/http'
 import type { R } from '@/types/common'
 
+/** 流程分类（Task 105 起为扁平结构，无 parentId）。 */
 export interface Category {
   id: string
   tenantId: string
   name: string
-  parentId: string | null
   sortOrder: number
   createdAt: string
 }
 
-export interface CategoryTreeNode extends Category {
-  children: CategoryTreeNode[]
-}
-
 export interface CategorySaveRequest {
   name: string
-  parentId: string | null
   sortOrder?: number
 }
 
 export const categoryApi = {
   list(): Promise<R<Category[]>> {
     return http.get('/v1/categories')
-  },
-
-  tree(): Promise<R<Category[]>> {
-    return http.get('/v1/categories/tree')
   },
 
   create(data: CategorySaveRequest): Promise<R<Category>> {

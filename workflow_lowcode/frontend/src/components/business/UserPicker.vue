@@ -5,10 +5,11 @@
     filterable
     remote
     reserve-keyword
-    clearable
+    :clearable="clearable"
+    :disabled="disabled"
     :remote-method="handleSearch"
     :loading="loading"
-    placeholder="搜索用户名/昵称"
+    :placeholder="placeholder"
     style="width: 100%"
     @update:model-value="handleChange"
   >
@@ -31,8 +32,17 @@ const props = withDefaults(defineProps<{
   modelValue?: string | string[]
   /** 是否多选 */
   multiple?: boolean
+  /** 禁用（设计器属性面板可配，Task 143） */
+  disabled?: boolean
+  /** 占位提示 */
+  placeholder?: string
+  /** 是否可清空 */
+  clearable?: boolean
 }>(), {
   multiple: false,
+  disabled: false,
+  placeholder: '搜索用户名/昵称',
+  clearable: true,
 })
 
 const emit = defineEmits<{

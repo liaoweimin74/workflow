@@ -1,5 +1,7 @@
 package com.workflow.engine.datasource;
 
+import com.workflow.api.dto.AggregateRequest;
+import com.workflow.api.dto.AggregateResultVO;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.api.dto.BizDataVO;
@@ -28,6 +30,15 @@ public interface DataSourceAdapter {
 
     /** 单条查询 */
     BizDataVO get(DataSourceDefinition ds, String id);
+
+    /**
+     * 分组聚合（Task 119 仪表盘；{@code GET /api/v1/data-sources/{id}/aggregate}）。
+     *
+     * <p>默认实现：只读聚合能力非所有源都支持，未实现的类型抛「该数据源不支持aggregate」。
+     */
+    default AggregateResultVO aggregate(DataSourceDefinition ds, AggregateRequest req) {
+        throw unsupported(ds, "aggregate");
+    }
 
     // ===== 写能力：只读数据源继承默认实现 → 抛"该数据源不支持XX" =====
 

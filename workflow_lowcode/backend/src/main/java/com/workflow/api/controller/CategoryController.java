@@ -10,6 +10,7 @@ import java.util.Map;
 
 /**
  * 流程分类 Controller。
+ * Task 105：取消树形结构——parentId 字段与 /tree 端点移除。
  */
 @RestController
 @RequestMapping("/api/v1/categories")
@@ -31,24 +32,14 @@ public class CategoryController {
     }
 
     /**
-     * 获取分类树。
-     */
-    @GetMapping("/tree")
-    public R<List<Category>> tree() {
-        List<Category> tree = categoryService.getCategoryTree();
-        return R.ok(tree);
-    }
-
-    /**
-     * 新建分类。
+     * 新建分类。sortOrder 为空时自动排到最后（当前租户 max + 1）。
      */
     @PostMapping
     public R<Category> create(@RequestBody Map<String, Object> body) {
         String name = (String) body.get("name");
-        String parentId = (String) body.get("parentId");
         Integer sortOrder = body.get("sortOrder") != null
                 ? ((Number) body.get("sortOrder")).intValue() : null;
-        Category category = categoryService.createCategory(name, parentId, sortOrder);
+        Category category = categoryService.createCategory(name, sortOrder);
         return R.ok(category);
     }
 
@@ -58,15 +49,14 @@ public class CategoryController {
     @PutMapping("/{id}")
     public R<Category> update(@PathVariable String id, @RequestBody Map<String, Object> body) {
         String name = (String) body.get("name");
-        String parentId = (String) body.get("parentId");
         Integer sortOrder = body.get("sortOrder") != null
                 ? ((Number) body.get("sortOrder")).intValue() : null;
-        Category category = categoryService.updateCategory(id, name, parentId, sortOrder);
+        Category category = categoryService.updateCategory(id, name, sortOrder);
         return R.ok(category);
     }
 
     /**
-     * 删除分类。
+     * 删除分类（分类下存在流程草稿时拒绝）。
      */
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable String id) {

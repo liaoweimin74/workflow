@@ -19,6 +19,8 @@ import org.flowable.engine.repository.ProcessDefinitionQuery;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -116,7 +118,8 @@ public class ProcessDesignService {
         draft.setBpmnXml(request.getBpmnXml());
         if (request.getName() != null) draft.setName(request.getName());
         if (request.getKey() != null) draft.setKey(request.getKey());
-        if (request.getCategoryId() != null) draft.setCategoryId(request.getCategoryId());
+        if (Boolean.TRUE.equals(request.getClearCategory())) draft.setCategoryId(null);
+        else if (request.getCategoryId() != null) draft.setCategoryId(request.getCategoryId());
         if (request.getDescription() != null) draft.setDescription(request.getDescription());
 
         // 已部署的流程被修改后标记为 MODIFIED
@@ -159,6 +162,16 @@ public class ProcessDesignService {
         return draft;
     }
 
+    /** 当前登录用户 id（对齐 ProcessInstanceController.getCurrentUserId；无登录态返回 null）。 */
+    private String currentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof
+                com.workflow.framework.security.domain.LoginUser loginUser) {
+            return String.valueOf(loginUser.getUserId());
+        }
+        return null;
+    }
+
     /**
      * 复制流程定义草稿（含 BPMN XML + 节点配置）。
      */
@@ -172,13 +185,14 @@ public class ProcessDesignService {
         ProcessDraft copy = new ProcessDraft();
         copy.setId(newId);
         copy.setTenantId(tenantId);
-        copy.setName(source.getName() + " (副本)");
-        copy.setKey(source.getKey() + "_copy_" + newId.substring(0, 8));
+        // 对齐 Node：`{name}-副本` / `{key}-copy-{id前6位}` / version=1 / createdBy=当前操作人
+        copy.setName(source.getName() + "-副本");
+        copy.setKey(source.getKey() + "-copy-" + newId.substring(0, 6));
         copy.setCategoryId(source.getCategoryId());
         copy.setBpmnXml(source.getBpmnXml());
         copy.setStatus("DRAFT");
-        copy.setVersion(0);
-        copy.setCreatedBy(source.getCreatedBy());
+        copy.setVersion(1);
+        copy.setCreatedBy(currentUserId());
         draftRepository.save(copy);
 
         // 仅复制当前编辑中的配置（不含历史版本快照）

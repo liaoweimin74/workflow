@@ -115,6 +115,45 @@ export interface ToolbarButton {
   onClick: () => void
 }
 
+// --- SideNavList：通用左栏轻量导航列表（Task 117） ---
+
+/**
+ * 导航项。由父级把业务 DTO 映射为本结构，组件零业务感知；
+ * 原始对象放 raw，事件与行内操作回传。
+ */
+export interface NavItem {
+  /** 唯一键（选中态/本地过滤外的稳定标识） */
+  key: string | number
+  /** 主标题（如字典名称） */
+  title: string
+  /** 副标题，等宽字体第二行（如字典编码） */
+  subtitle?: string
+  /** 右侧徽标（如条目数） */
+  badge?: string | number
+  /** 灰显态（如停用类型）；仍可点击选中 */
+  disabled?: boolean
+  /** 灰显原因标签文案（默认「停用」） */
+  disabledLabel?: string
+  /** 原始业务数据 */
+  raw?: any
+}
+
+/**
+ * 行内操作（hover/选中/键盘聚焦时浮现在导航项右侧）。
+ * 风格对齐 ActionButton：谓词控制显隐与禁用，onClick 回传整项。
+ */
+export interface NavItemAction {
+  /** 操作标识（tooltip/aria-label 同时使用） */
+  label: string
+  icon?: Component
+  type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
+  /** 返回 true 时禁用（如无对应权限点） */
+  disabled?: (item: NavItem) => boolean
+  /** 返回 false 时隐藏 */
+  show?: (item: NavItem) => boolean
+  onClick: (item: NavItem) => void
+}
+
 // --- 查询参数 ---
 
 export interface QueryParams {

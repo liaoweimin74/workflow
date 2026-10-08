@@ -2464,3 +2464,17 @@ Stage Summary:
 - 重建职责归另一会话，本会话退回只读旁观 + 巡检角色，避免双人编辑覆盖
 - 防丢快照：download/rebuild-snapshot-20261008-0906/（5 文件，09:05 时点）
 - 后续若另一会话完成，建议尽快 git 提交（孤儿历史下唯一防丢手段）；本会话不再触碰 logicflow 相关文件，除非用户明确改派
+
+---
+Task ID: 151-patrol
+Agent: 轻量运维巡检 (cron 443426)
+Task: 09:06 派发巡检轮（任务戳 08:57，积压轮）——四链路探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 四链路全 200（a/b/c/d）；vite PID 9754 单进程第四轮存活；postcss=0；Java 12577 正常
+- cgroup 3.02GB 回落（<3.5GB）；oom_kill=0 基线持平；无修复动作
+- 观察：agent-browser Chrome 进程组出现（PID 14518/14562/14604，合计约 790MB），属另一会话重建后 QA/预览行为；不在本任务处置授权内（仅限 vite 重复进程与 postcss），未触碰；当前总内存仍低于预警线
+- 延续 Task 150 退避纪律：未触碰 logicflow 相关文件
+
+Stage Summary:
+- 151-patrol 全绿；Chrome 额外 ~790MB 下 cgroup 仍 3.02GB，短期 OOM 风险低；若后续轮次 cgroup 逼近 3.5GB 将按条款记录 RSS 明细备案

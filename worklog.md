@@ -4394,3 +4394,17 @@ Work Log:
 
 Stage Summary:
 - r80 全绿稳态（~2.34GB、OOM 稳 22）；v3 布局交付后运行平稳；待办池：余 5+9（表下拉）、6（审批事件），4/8/11/12 已交付待用户页面验证
+
+---
+Task ID: patrol-r81
+Agent: main (定时巡检 Job 443426)
+Task: 四链路探活 + 内存减压 + OOM 盯防（17:42 回合）
+
+Work Log:
+- 四链路：a) 200；b) 200；c) 200；d) 200 —— 全绿
+- 进程：vite PID 18932 ~595MB（唯一）；Java PID 19458 ~542MB；MariaDB ~195MB
+- cgroup = 2512879616（~2.34GB，平稳，未破 3.5GB 备案线）
+- OOM：oom_kill = 22，零新增；无 postcss、无多余 vite，零干预
+
+Stage Summary:
+- r81 全绿稳态（~2.34GB、OOM 稳 22）；各交付运行平稳；待办池：余 5+9（表下拉）、6（审批事件），4/8/11/12 已交付待用户页面验证

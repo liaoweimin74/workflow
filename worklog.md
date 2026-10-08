@@ -4469,3 +4469,33 @@ Work Log:
 
 Stage Summary:
 - r82 全绿零干预；基线连续第 6 轮稳定（r77~r82），vite 内存小幅上升源于布局 v4 热更新，继续观察
+
+---
+Task ID: user-req-4b-v4
+Agent: main (用户交互指令·布局 v4)
+Task: 用户修正第 4 条布局规格——循环连线节点改回纵向排列（列中轴居中对齐），仅嵌套批处理按外→内从左到右展开
+
+Work Log:
+- 冲突检测：受理时 .vue mtime 稳定 12 分钟+（v3 状态），无并行编辑，正常受理
+- 设计定稿：循环链成员连线走底部 out→顶部 in 手柄，纵向排列时链边为竖直直线（v3 横行迫使 S 形弯，即用户修正动因）；列悬于宿主 BATCH 右侧（loop_start/loop_end 均在右侧 30%/74%），列首锚定 30% 线+24，闭环呈「右出→纵向下行→右回」顺时针回路；列内节点共享列中轴（x=轴-卡宽/2）
+- 实施 v4（LogicFlowDesigner.vue）：常量族 BODY_ROW_*→BODY_COL_*（GAP_X/GAP_Y=56、ANCHOR_DROP=24、NEST_MARGIN=24、LOOP_START_ANCHOR=0.3）；blockHeight 改列式累计；新增 colSubtreeW（与 placeChain nestLeft 严格同构）供同层横向铺开让位；placeChain 带 minLeftX 递归+兄弟列级联（子列左缘 ≥ max(子卡右缘+56, 宿主列最宽成员右缘+24, 前序兄弟子树右缘+56)）并返回子树右缘；工具提示同步更新
+- 修复 v3 遗留缺陷①：bodyChains 收集曾跳过已被宿主认领的嵌套 BATCH（节点遍历顺序宿主在先时其链永不收集→子列成员滞留原位）——改为无条件收集（并行会话 verify_layout_v4.mjs 同图崩溃实证该缺陷）
+- 修复 v3 遗留缺陷②：collectBodyChain 曾在嵌套 BATCH 处截断链，使其后的外层链成员（嵌套BATCH→尾节点→loop_end）失去归属混入主流分层——改为贯穿行走（跳过嵌套 BATCH 的 loop_start 出边防误入子链），嵌套 BATCH 为链中普通成员、布局时递归展开子列
+- 验证：vue-tsc 对本文件 0 错误（仓内 54 个错误均在未改动历史文件）；scripts/verify_layout_v4_extra.mjs 三图 24/24 断言全过（列中轴对齐/纵距56/30%+24锚/嵌套轴严格右移/同层让位/兄弟级联/全图零重叠/blockHeight 与实际几何一致/层带隔离）；check_sfc 编译 200；四链路全 200；mtime 复核无并行写入
+
+Stage Summary:
+- 第 4 条布局 v4 交付：循环体纵向居中排列 + 嵌套批处理外→内自左向右；顺带修复嵌套链收集/截断两个 v3 遗留缺陷；并行会话本轮写入 verify_layout_v4.mjs（镜像验证脚本，因复刻早于缺陷②修复而崩溃，待其同步）；待办池不变：余 5+9（表下拉）、6（审批事件），4(v4)/8/11/12 待用户页面验证
+
+---
+Task ID: patrol-r83
+Agent: main (cron patrol, Job 443426)
+Task: r83 定时巡检（四链路探活 + 内存/OOM 监控）
+
+Work Log:
+- 四链路探活：a/b/c/d 全部 200
+- 进程：vite 18932 唯一实例 ~597MB；Java 19458 ~539MB；MariaDB 4847 ~190MB
+- 异常观察：发现临时 vue-tsc 进程（PID 21869）RSS ~687MB，cgroup 瞬时升至 ~2.99GB（3,205,357,568 B，仍低于 3.5GB 备案线）；确认 15 秒后已自行退出，属并行会话类型检查的短暂峰值，非僵死，未干预
+- 复查 cgroup 回落至 ~2.36GB；oom_kill = 22 零新增；无 postcss worker
+
+Stage Summary:
+- r83 全绿零干预；cgroup 瞬时峰值由 vue-tsc 类型检查引起，已自愈回落，三常驻进程基线不变

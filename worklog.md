@@ -4185,3 +4185,18 @@ Work Log:
 
 Stage Summary:
 - r73 全绿；Chrome QA 组彻底退场，内存企稳 ~2.36GB；git 连环案连续五轮零击杀（基线稳 22）；核心服务无损
+
+---
+Task ID: git-merge-lines
+Agent: main (用户授权指令)
+Task: 执行用户授权的"归档覆盖"整合两条历史线
+
+Work Log:
+- 前置校验：git ls-remote 确认远端 main 仍为 4020c972（未被其他环境动过）
+- 归档：git push origin origin/main:refs/heads/archive/pre-reset-main → * [new branch]；ls-remote 验证 archive/pre-reset-main = 4020c972 ✅（老线 1148 提交完整保全）
+- 覆盖：git push --force origin main:main → + 4020c972...8487686a main -> main (forced update)；ls-remote 验证远端 main = 本地 HEAD = 8487686a ✅（含今日 results-v2 与 16:31 后全部 cron 提交）
+- 收尾：git branch --set-upstream-to=origin/main main 成功；git status 显示 main...origin/main 完全同步（无 ahead/behind）
+- 最终三线：main=8487686a（最新，本地远端一致）；archive/pre-reset-main=4020c972（老史归档）；sandbox-wip-20261008=4d97d97c（16:31 时点快照，保留）
+
+Stage Summary:
+- 两条历史线整合完成：远端 main 已指向本地最新线（今日 results-v2 在内），老线完整归档于 archive/pre-reset-main，零丢失；upstream 已设，今后 cron 推送一路畅通；遗留可选事项：①sandbox-wip-20261008 快照分支去留；②仓库瘦身（.gitignore mariadb-user/ + git rm --cached + gc，历史中仍有 96MB×N redo log blob）

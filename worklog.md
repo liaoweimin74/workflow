@@ -2478,3 +2478,17 @@ Work Log:
 
 Stage Summary:
 - 151-patrol 全绿；Chrome 额外 ~790MB 下 cgroup 仍 3.02GB，短期 OOM 风险低；若后续轮次 cgroup 逼近 3.5GB 将按条款记录 RSS 明细备案
+
+---
+Task ID: 152-patrol
+Agent: 轻量运维巡检 (cron 443426)
+Task: 09:07 派发巡检轮（任务戳 09:02，积压轮）——四链路探活 + 内存减压 + OOM 监控
+
+Work Log:
+- 四链路全 200（a/b/c/d）；vite PID 9754 单进程第五轮存活；postcss=0；Java 12577 正常
+- cgroup 3.03GB 持平（<3.5GB）；oom_kill=0 基线持平；无修复动作
+- agent-browser Chrome 组（14518/14562/14604）仍在场 ~797MB，属另一会话 QA 行为，非处置授权范围，未触碰；总量稳定未逼近预警线
+- 延续 Task 150 退避纪律：未触碰 logicflow 相关文件
+
+Stage Summary:
+- 152-patrol 全绿；Chrome 驻留下内存稳定 3.03GB，D+ 终态连续第五轮稳态

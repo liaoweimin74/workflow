@@ -4015,3 +4015,18 @@ Work Log:
 
 Stage Summary:
 - r65 全绿、内存平稳回落（~2.00GB）；git 连环案累计 15 杀、每轮 +1 节奏未破，核心服务无损，新基线 15
+
+---
+Task ID: patrol-r66
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r66：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~533MB（唯一）；Java PID 12826 ~528MB（15:31 新 jar 稳定）；MariaDB ~188MB；Chrome 组驻留（3 进程 ~358MB：renderer 236 + 主 76 + webui 47）
+- cgroup = 2073038848（~2.07GB，平稳，未破 3.5GB 备案线）
+- OOM 事故（第十六次）：oom_kill 15 → 16（+1），git 连环案既定模式；新基线 16；零干预
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r66 全绿、内存平稳（~2.07GB）；git 连环案累计 16 杀、每轮 +1 节奏未破，核心服务无损，新基线 16

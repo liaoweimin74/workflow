@@ -2842,3 +2842,17 @@ Work Log:
 Stage Summary:
 - 巡检全绿；三功能恢复由并行流完成开发与部署，代码审查通过、服务已加载新实现，其 UI 级验证由该流自行收尾并落日志
 - 后续巡检无需特殊关注，若绑定弹窗/设计器报错优先查 FormListPage/LogicFlowDesigner 与新接口 /api/v1/logic-flows 列表 inputParams 字段
+
+---
+Task ID: 443426-r3
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 10:32 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 519MB）；Java 正常驻留（PID 22990，RSS 509MB，02:33 加载含触发点扩展的新 jar）；无 postcss worker；agent-browser chrome 三进程（约 800MB）为并行开发流 UI 验证所用，属临时进程不予干预
+- cgroup 内存 3264086016B ≈ 3.04GB，低于 3.5GB 阈值（较上轮 2.62GB 上涨主因即上述浏览器进程），OOM 计数 0 与基线一致
+- 未启动 agent-browser、未修改代码，探活通过即结束
+
+Stage Summary:
+- 本轮全绿：四链路 200、内存 3.04GB（阈值内）、OOM 0，无需修复；三功能恢复流的 UI 验证仍在进行，下轮关注其收尾与浏览器进程释放

@@ -24,7 +24,11 @@ import java.util.Optional;
  *   <li>{@link #onTaskApproved}：任务审批通过后（{@code AFTER_TASK_APPROVE}）；
  *       流程同时结束时追加 {@code AFTER_PROCESS_FINISH}；</li>
  *   <li>{@link #onTaskRefused}：审批拒绝（终止全流程）后（{@code AFTER_TASK_REJECT}）；</li>
- *   <li>{@link #onTaskReturned}：驳回退回发起人后（{@code AFTER_TASK_RETURN}）。</li>
+ *   <li>{@link #onTaskReturned}：驳回退回发起人后（{@code AFTER_TASK_RETURN}）；</li>
+ *   <li>{@link #onTaskAction}：任务协作类动作（转办/委派/加签/认领/催办）后
+ *       （{@code AFTER_TASK_TRANSFER/DELEGATE/ADD_SIGN/CLAIM/URGE}）；</li>
+ *   <li>{@link #onProcessAction}：流程级事件（撤回/终止/启动）后
+ *       （{@code AFTER_PROCESS_WITHDRAW/TERMINATE/START}）。</li>
  * </ul>
  *
  * <p>formKey 解析：绑定按 (WORKFLOW, formKey) 组织，而审批事件发生在流程实例上。
@@ -91,18 +95,52 @@ public class LogicFlowApprovalTrigger {
                         processInstanceId, taskId, userId, reason));
     }
 
+    /**
+     * 任务协作类动作后触发对应 AFTER_* 绑定（转办/委派/加签/认领/催办）。
+     *
+     * @param triggerType TRIG_AFTER_TASK_TRANSFER / DELEGATE / ADD_SIGN / CLAIM / URGE
+     * @param opType      TRANSFER / DELEGATE / ADD_SIGN / CLAIM / URGE
+     * @param toUser      目标人（新办理人/被委派人/加签人逗号分隔/被催办人；认领为 null）
+     */
+    public void onTaskAction(String processInstanceId, String taskId, String triggerType, String opType,
+                             String userId, String comment, String toUser) {
+        resolveContext(processInstanceId).ifPresent(c ->
+                dispatch(c, triggerType, opType, processInstanceId, taskId, userId, comment, toUser));
+    }
+
+    /**
+     * 流程级事件后触发对应 AFTER_* 绑定（撤回/终止/启动）。
+     *
+     * <p>启动事件由控制器在首份表单数据落库后调用（无表单数据的启动 resolveContext
+     * 为空不触发，与既有「无表单数据不触发」原则一致）。
+     *
+     * @param triggerType TRIG_AFTER_PROCESS_WITHDRAW / TERMINATE / START
+     * @param opType      WITHDRAW / TERMINATE / START
+     */
+    public void onProcessAction(String processInstanceId, String triggerType, String opType,
+                                String taskId, String userId, String comment) {
+        resolveContext(processInstanceId).ifPresent(c ->
+                dispatch(c, triggerType, opType, processInstanceId, taskId, userId, comment, null));
+    }
+
     // ------------------------------------------------------------------
     // 内部
     // ------------------------------------------------------------------
 
     private void dispatch(ApprovalContext ctx, String triggerType, String opType,
                           String processInstanceId, String taskId, String userId, String comment) {
+        dispatch(ctx, triggerType, opType, processInstanceId, taskId, userId, comment, null);
+    }
+
+    private void dispatch(ApprovalContext ctx, String triggerType, String opType,
+                          String processInstanceId, String taskId, String userId, String comment,
+                          String toUser) {
         try {
             logicBindings.dispatch(tenantProvider.getTenantId(),
                     FormLogicBindingService.FORM_TYPE_WORKFLOW, ctx.formKey(), triggerType,
                     logicBindings.buildApprovalVars(FormLogicBindingService.FORM_TYPE_WORKFLOW,
                             ctx.formKey(), triggerType, opType, processInstanceId, taskId,
-                            ctx.formData(), comment, userId));
+                            ctx.formData(), comment, userId, toUser));
         } catch (Exception e) {
             // SYNC_IN_TX 绑定的 BusinessException 需要向上传播（回滚主操作），
             // 这里仅对「无绑定/上下文解析」外的意外异常兜底记日志后重抛

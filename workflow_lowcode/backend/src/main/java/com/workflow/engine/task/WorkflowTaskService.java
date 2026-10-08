@@ -12,6 +12,7 @@ import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.form.mapping.FormDataMerger;
 import com.workflow.engine.form.mapping.VariableMappingWriter;
 import com.workflow.engine.history.entity.WfTaskComment;
+import com.workflow.engine.logicflow.service.FormLogicBindingService;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
@@ -1093,7 +1094,16 @@ public class WorkflowTaskService {
 
     @Transactional
     public void claimTask(String taskId, String userId) {
+        // 上下文先行（claim 后 Flowable 任务归认领人，pi 不变但防御性提前查询）
+        org.flowable.task.api.Task task = flowableTaskService.createTaskQuery()
+                .taskId(taskId)
+                .singleResult();
         flowableTaskService.claim(taskId, userId);
+        // 审批事件触发逻辑编排（AFTER_TASK_CLAIM；无 comment/toUser）
+        if (task != null) {
+            logicFlowApprovalTrigger.onTaskAction(task.getProcessInstanceId(), taskId,
+                    FormLogicBindingService.TRIG_AFTER_TASK_CLAIM, "CLAIM", userId, null, null);
+        }
     }
 
     @Transactional
@@ -1232,7 +1242,15 @@ public class WorkflowTaskService {
 
     @Transactional
     public void delegateTask(String taskId, String userId) {
+        org.flowable.task.api.Task task = flowableTaskService.createTaskQuery()
+                .taskId(taskId)
+                .singleResult();
         flowableTaskService.delegateTask(taskId, userId);
+        // 审批事件触发逻辑编排（AFTER_TASK_DELEGATE，toUser = 被委派人；裸版本无意见）
+        if (task != null) {
+            logicFlowApprovalTrigger.onTaskAction(task.getProcessInstanceId(), taskId,
+                    FormLogicBindingService.TRIG_AFTER_TASK_DELEGATE, "DELEGATE", null, null, userId);
+        }
     }
 
     /**
@@ -1261,6 +1279,11 @@ public class WorkflowTaskService {
         if (fromUser != null) {
             saveTaskComment(taskId, task.getProcessInstanceId(), fromUser, "delegate", comment, delegateTo);
         }
+
+        // 4. 审批事件触发逻辑编排（AFTER_TASK_DELEGATE，toUser = 被委派人）
+        logicFlowApprovalTrigger.onTaskAction(task.getProcessInstanceId(), taskId,
+                FormLogicBindingService.TRIG_AFTER_TASK_DELEGATE, "DELEGATE",
+                fromUser, comment, delegateTo);
     }
 
     // ==================== 审批意见写入辅助 ====================
@@ -1609,6 +1632,12 @@ public class WorkflowTaskService {
 
         // 8. 意见 action='recall'
         saveTaskComment(openTasks.get(0).getId(), instanceId, userId, "recall", reason);
+
+        // 9. 审批事件触发逻辑编排（AFTER_PROCESS_WITHDRAW，taskId = 撤回时活跃任务，
+        //    comment = 撤回原因；失败语义由绑定 executionMode 决定）
+        logicFlowApprovalTrigger.onProcessAction(instanceId,
+                FormLogicBindingService.TRIG_AFTER_PROCESS_WITHDRAW, "WITHDRAW",
+                openTasks.get(0).getId(), userId, reason);
     }
 
     // ==================== Task 69 审批召回 ====================

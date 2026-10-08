@@ -3,6 +3,8 @@ package com.workflow.engine.process;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.logicflow.service.FormLogicBindingService;
+import com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger;
 import com.workflow.engine.process.config.ProcessPolicy;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.task.RoleMembershipResolver;
@@ -47,6 +49,7 @@ public class ProcessInstanceService {
     /** Task 76：start() 可发起范围门禁（查最新部署版本 + 角色/管理员解析）。 */
     private final RepositoryService repositoryService;
     private final RoleMembershipResolver roleMembershipResolver;
+    private final LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     public ProcessInstanceService(RuntimeService runtimeService,
                                   HistoryService historyService,
@@ -56,7 +59,8 @@ public class ProcessInstanceService {
                                   WfTaskCommentRepository commentRepository,
                                   NodeConfigRepository nodeConfigRepository,
                                   RepositoryService repositoryService,
-                                  RoleMembershipResolver roleMembershipResolver) {
+                                  RoleMembershipResolver roleMembershipResolver,
+                                  LogicFlowApprovalTrigger logicFlowApprovalTrigger) {
         this.runtimeService = runtimeService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -66,6 +70,7 @@ public class ProcessInstanceService {
         this.nodeConfigRepository = nodeConfigRepository;
         this.repositoryService = repositoryService;
         this.roleMembershipResolver = roleMembershipResolver;
+        this.logicFlowApprovalTrigger = logicFlowApprovalTrigger;
     }
 
     @Transactional
@@ -307,6 +312,10 @@ public class ProcessInstanceService {
     @Transactional
     public void terminateProcessInstance(String instanceId, String reason) {
         runtimeService.deleteProcessInstance(instanceId, reason);
+        // 审批事件触发逻辑编排（AFTER_PROCESS_TERMINATE；手动终止/拒绝终止均经此路径。
+        // FormData 为业务侧自有表不随 Flowable 删除，resolveContext 可正常反查 formKey）
+        logicFlowApprovalTrigger.onProcessAction(instanceId,
+                FormLogicBindingService.TRIG_AFTER_PROCESS_TERMINATE, "TERMINATE", null, null, reason);
     }
 
     /**

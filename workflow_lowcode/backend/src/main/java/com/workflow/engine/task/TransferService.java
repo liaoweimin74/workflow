@@ -3,6 +3,8 @@ package com.workflow.engine.task;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.logicflow.service.FormLogicBindingService;
+import com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger;
 import com.workflow.engine.task.entity.WfTaskTransfer;
 import com.workflow.engine.task.repository.WfTaskTransferRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -39,17 +41,20 @@ public class TransferService {
     private final TenantProvider tenantProvider;
     private final WfTaskCommentRepository commentRepository;
     private final WorkflowTaskService workflowTaskService;
+    private final LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     public TransferService(TaskService flowableTaskService,
                            WfTaskTransferRepository transferRepository,
                            TenantProvider tenantProvider,
                            WfTaskCommentRepository commentRepository,
-                           WorkflowTaskService workflowTaskService) {
+                           WorkflowTaskService workflowTaskService,
+                           LogicFlowApprovalTrigger logicFlowApprovalTrigger) {
         this.flowableTaskService = flowableTaskService;
         this.transferRepository = transferRepository;
         this.tenantProvider = tenantProvider;
         this.commentRepository = commentRepository;
         this.workflowTaskService = workflowTaskService;
+        this.logicFlowApprovalTrigger = logicFlowApprovalTrigger;
     }
 
     /**
@@ -116,5 +121,11 @@ public class TransferService {
             comment.setTargetUserId(toUser);
             commentRepository.save(comment);
         }
+
+        // 审批事件触发逻辑编排（AFTER_TASK_TRANSFER，toUser = 新办理人；
+        // 辅助动作默认 AFTER_COMMIT 留痕，显式 SYNC_IN_TX 仍可回滚转办）
+        logicFlowApprovalTrigger.onTaskAction(processInstanceId, taskId,
+                FormLogicBindingService.TRIG_AFTER_TASK_TRANSFER, "TRANSFER",
+                fromUser, reason, toUser);
     }
 }

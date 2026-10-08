@@ -2,6 +2,8 @@ package com.workflow.engine.task;
 
 import com.workflow.engine.history.entity.WfTaskComment;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.logicflow.service.FormLogicBindingService;
+import com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.common.engine.api.FlowableException;
 import org.flowable.engine.RepositoryService;
@@ -38,15 +40,18 @@ public class AddSignService {
     private final RepositoryService repositoryService;
     private final TenantProvider tenantProvider;
     private final WfTaskCommentRepository commentRepository;
+    private final LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     public AddSignService(RuntimeService runtimeService, TaskService flowableTaskService,
                           RepositoryService repositoryService,
-                          TenantProvider tenantProvider, WfTaskCommentRepository commentRepository) {
+                          TenantProvider tenantProvider, WfTaskCommentRepository commentRepository,
+                          LogicFlowApprovalTrigger logicFlowApprovalTrigger) {
         this.runtimeService = runtimeService;
         this.flowableTaskService = flowableTaskService;
         this.repositoryService = repositoryService;
         this.tenantProvider = tenantProvider;
         this.commentRepository = commentRepository;
+        this.logicFlowApprovalTrigger = logicFlowApprovalTrigger;
     }
 
     /**
@@ -118,6 +123,11 @@ public class AddSignService {
             commentRecord.setTargetUserId(String.join(",", users));
             commentRepository.save(commentRecord);
         }
+
+        // 审批事件触发逻辑编排（AFTER_TASK_ADD_SIGN，toUser = 加签人逗号分隔）
+        logicFlowApprovalTrigger.onTaskAction(processInstanceId, taskId,
+                FormLogicBindingService.TRIG_AFTER_TASK_ADD_SIGN, "ADD_SIGN",
+                userId, comment, String.join(",", users));
     }
 
     private boolean isMultiInstanceActivity(String processDefinitionId, String activityId) {

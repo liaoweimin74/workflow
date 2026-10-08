@@ -1,6 +1,8 @@
 package com.workflow.engine.task;
 
 import com.workflow.common.exception.BusinessException;
+import com.workflow.engine.logicflow.service.FormLogicBindingService;
+import com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger;
 import com.workflow.engine.process.bpmn.InitiatorNodeResolver;
 import com.workflow.engine.process.config.NodeOptions;
 import com.workflow.engine.process.config.NodeOptionsService;
@@ -36,6 +38,7 @@ public class TaskRemindService {
     private final TenantProvider tenantProvider;
     private final NodeOptionsService nodeOptionsService;
     private final InitiatorNodeResolver initiatorNodeResolver;
+    private final LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     /** 催办频率限制（小时），可通过 workflow.remind.frequency-hours 配置覆盖。 */
     @Value("${workflow.remind.frequency-hours:24}")
@@ -45,12 +48,14 @@ public class TaskRemindService {
                              WfTaskRemindRepository remindRepository,
                              TenantProvider tenantProvider,
                              NodeOptionsService nodeOptionsService,
-                             InitiatorNodeResolver initiatorNodeResolver) {
+                             InitiatorNodeResolver initiatorNodeResolver,
+                             LogicFlowApprovalTrigger logicFlowApprovalTrigger) {
         this.flowableTaskService = flowableTaskService;
         this.remindRepository = remindRepository;
         this.tenantProvider = tenantProvider;
         this.nodeOptionsService = nodeOptionsService;
         this.initiatorNodeResolver = initiatorNodeResolver;
+        this.logicFlowApprovalTrigger = logicFlowApprovalTrigger;
     }
 
     /**
@@ -113,6 +118,11 @@ public class TaskRemindService {
         // 4. 触发通知（本期 log，后续对接通知中心）
         log.info("催办通知 taskId={} processInstanceId={} from={} to={} remindTo={}",
                 taskId, task.getProcessInstanceId(), remindFrom, remindTo, remindTo);
+
+        // 5. 审批事件触发逻辑编排（AFTER_TASK_URGE，toUser = 被催办人；
+        //    催办频率受 24h 任务级 / urge.interval 实例级限流天然约束，无重复风暴）
+        logicFlowApprovalTrigger.onTaskAction(task.getProcessInstanceId(), taskId,
+                FormLogicBindingService.TRIG_AFTER_TASK_URGE, "URGE", remindFrom, null, remindTo);
     }
 
     /**

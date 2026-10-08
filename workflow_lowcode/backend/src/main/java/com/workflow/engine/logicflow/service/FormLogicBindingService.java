@@ -325,6 +325,28 @@ public class FormLogicBindingService {
                                                  String opType, String processInstanceId, String taskId,
                                                  Map<String, Object> formData, String comment,
                                                  String operatorOverride) {
+        return buildApprovalVars(formType, formKey, triggerType, opType, processInstanceId, taskId,
+                formData, comment, operatorOverride, null);
+    }
+
+    /**
+     * 组装审批/任务动作事件触发入参（带目标人，与前端 TRIGGER_PARAM_SPECS 逐字段对齐）：
+     * {@code formData / processInstanceId / taskId / formKey / formType / opType / operator /
+     * comment / toUser / __trigger}。
+     *
+     * <p>toUser：动作目标人（转办/委派的新办理人、加签人列表逗号分隔、被催办人；
+     * 认领/流程级事件为 null）。全部键恒注入（无值放 null），与既有约定一致——
+     * 前端规格按触发点声明相关子集，运行时多出的 null 键无害。
+     *
+     * @param opType            APPROVE | REJECT | RETURN | FINISH | TRANSFER | DELEGATE |
+     *                          ADD_SIGN | CLAIM | URGE | WITHDRAW | TERMINATE | START
+     * @param toUser            动作目标人（可为 null）
+     * @param operatorOverride  操作人（null 时回落当前登录人）
+     */
+    public Map<String, Object> buildApprovalVars(String formType, String formKey, String triggerType,
+                                                 String opType, String processInstanceId, String taskId,
+                                                 Map<String, Object> formData, String comment,
+                                                 String operatorOverride, String toUser) {
         Map<String, Object> vars = new LinkedHashMap<>();
         vars.put("formData", formData);
         vars.put("processInstanceId", processInstanceId);
@@ -335,6 +357,7 @@ public class FormLogicBindingService {
         vars.put("operator", operatorOverride != null && !operatorOverride.isBlank()
                 ? operatorOverride : currentOperator());
         vars.put("comment", comment);
+        vars.put("toUser", toUser);
         Map<String, Object> trigger = new LinkedHashMap<>();
         trigger.put("source", "form-approval");
         trigger.put("formType", formType);
@@ -343,6 +366,9 @@ public class FormLogicBindingService {
         trigger.put("opType", opType);
         trigger.put("processInstanceId", processInstanceId);
         trigger.put("taskId", taskId);
+        if (toUser != null) {
+            trigger.put("toUser", toUser);
+        }
         vars.put("__trigger", trigger);
         return vars;
     }

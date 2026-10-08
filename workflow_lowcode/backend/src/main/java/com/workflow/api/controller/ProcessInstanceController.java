@@ -4,6 +4,8 @@ import com.workflow.api.dto.*;
 import com.workflow.common.domain.R;
 import com.workflow.engine.form.FormDataService;
 import com.workflow.engine.form.mapping.VariableMappingWriter;
+import com.workflow.engine.logicflow.service.FormLogicBindingService;
+import com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger;
 import com.workflow.engine.process.ProcessInstanceService;
 import com.workflow.engine.runtime.ProcessHighlightService;
 import com.workflow.engine.runtime.ProcessTaskPredictionService;
@@ -43,6 +45,7 @@ public class ProcessInstanceController {
     private final TaskService taskService;
     private final WorkflowTaskService workflowTaskService;
     private final ObjectMapper objectMapper;
+    private final LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     public ProcessInstanceController(ProcessInstanceService processInstanceService,
                                      ProcessHighlightService highlightService,
@@ -51,7 +54,8 @@ public class ProcessInstanceController {
                                      VariableMappingWriter variableMappingWriter,
                                      TaskService taskService,
                                      WorkflowTaskService workflowTaskService,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     LogicFlowApprovalTrigger logicFlowApprovalTrigger) {
         this.processInstanceService = processInstanceService;
         this.highlightService = highlightService;
         this.predictionService = predictionService;
@@ -60,6 +64,7 @@ public class ProcessInstanceController {
         this.taskService = taskService;
         this.workflowTaskService = workflowTaskService;
         this.objectMapper = objectMapper;
+        this.logicFlowApprovalTrigger = logicFlowApprovalTrigger;
     }
 
     @PostMapping
@@ -97,6 +102,12 @@ public class ProcessInstanceController {
         } catch (Exception e) {
             log.warn("Failed to write variable mappings for instance [{}]: {}", instance.getId(), e.getMessage());
         }
+
+        // 审批事件触发逻辑编排（AFTER_PROCESS_START：首份表单数据已落库后触发，
+        // 无表单数据的启动不触发；operator 回落当前登录人）。
+        // ⚠️ 绑定建议选 AFTER_COMMIT：本方法无事务边界，SYNC_IN_TX 失败抛错时实例已启动
+        logicFlowApprovalTrigger.onProcessAction(instance.getId(),
+                FormLogicBindingService.TRIG_AFTER_PROCESS_START, "START", null, null, null);
 
         Map<String, Object> response = new HashMap<>();
         response.put("id", instance.getId());

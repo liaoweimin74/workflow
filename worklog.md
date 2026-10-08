@@ -4829,3 +4829,45 @@ Work Log:
 
 Stage Summary:
 - r105 全绿零干预（连续 29 轮稳定）；随后受理用户开发指令：触发点扩展实施（见 user-req-6-triggers）
+
+---
+Task ID: user-req-6-triggers
+Agent: main (用户交互指令·触发点扩展)
+Task: 实施「审批事件二期」触发点扩展（8 个 AFTER_* 新触发点：转办/委派/加签/认领/催办/撤回/终止/启动）
+
+Work Log:
+- 完成前期研读：FormLogicBindingService 调度架构（dispatch/buildVars/buildApprovalVars/normalizeMode）、LogicFlowApprovalTrigger 挂点模式、8 个操作钩子点全部定位（TransferService.transfer、WorkflowTaskService.claimTask/delegateTaskWithComment/recallInstance、AddSignService.addSign、TaskRemindService.remind、ProcessInstanceService.terminateProcessInstance、ProcessInstanceController.start）
+- 冲突检测（动手前复核）：FormLogicBindingService.java mtime 12:18:13（受理时还是 07:25），git 工作区被并行会话清空；commit 16afe747（12:18:34）已写入与本人计划逐字一致的 8 个 TRIG_* 常量 + TRIGGER_TYPES 扩展 + DEFAULT_AFTER_COMMIT_TRIGGERS（辅助动作默认 AFTER_COMMIT，与本方案设计一致）+ normalizeMode 更新
+- 【让行】按冲突规避协议（r79 先例）：并行会话正实施同一任务（推测用户同指令已派发至并行会话），停止一切编辑，仅保留独立验证权
+- 待并行会话完成后独立验证：mvn 编译/相关单测、vue-tsc、四链路健康
+
+Stage Summary:
+- 触发点扩展实施权让渡给并行会话（其 commit 16afe747 与本会话方案同构）；本会话挂起编辑，待其收尾后做独立验证并汇报
+
+---
+Task ID: user-req-6-triggers-2
+Agent: main (用户交互指令·触发点扩展·接管)
+Task: 接管完成触发点扩展剩余工作（挂钩 + 前端 + 测试），并行会话静默 15 分钟且交付为半成品
+
+Work Log:
+- 判定依据：并行会话 commit 16afe747（12:18:34）后静默 15+ 分钟（三轮监控：+150s/+240s/+180s 零文件变动零新提交），未留自身 worklog 条目；其交付仅含常量层（无调度挂钩、无前端规格——新触发点当前不可用）
+- 接管规程：worklog 先行声明接管意向 → 每文件编辑前复核 mtime → 完成后立即提交，若并行会话苏醒可通过 git 感知已提交变更
+- 待办：LogicFlowApprovalTrigger(onTaskAction/onProcessAction)、6 处服务/控制器挂钩、5 个测试类适配、前端 8 触发点+参数规格+分组下拉
+
+Stage Summary:
+- 接管启动；提交策略：全部完成后单次 commit，便于并行会话识别与合并
+
+---
+Task ID: patrol-r105
+Agent: Super Z (cron Job 443426)
+Task: 轻量运维巡检（四链路探活 + 内存/OOM 监控）
+
+Work Log:
+- 四链路探活：a) vite 3000 = 200 / b) 外域 Host = 200 / c) /api/auth/login 业务链 = 200 / d) 8080 直连 = 200，全绿零干预
+- 内存检查：vite 仅 1 个（PID 18932, RSS 600MB），无 postcss worker，无多余进程需清理
+- cgroup memory.usage = 2589024256 (~2.41GB) < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 全程未修改代码、未启动 agent-browser，按规程立即结束回合
+
+Stage Summary:
+- r105 全绿通过。基线进程：vite 18932 / Java 19458 / MariaDB 4847，健康基线延续（r77~r105 连续 29 轮稳定）

@@ -2686,3 +2686,19 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿零动作；数据恢复成果持续稳定
+
+---
+Task ID: patrol-20261008-0947
+Agent: Z.ai (cron lightweight ops)
+Task: D+ 终态轻量巡检（vite 3000 + Java 8080 + MariaDB 3306），不开发不QA
+
+Work Log:
+- 进程核查：vite PID 18932 独占 3000（RSS ~620MB），Java PID 12577 独占 8080（-Xmx448m），MariaDB PID 4847 于 3306；无 Next/Turbopack 进程残留，无 postcss worker，vite 进程仅 1 个无需减压
+- 期间确认：早前误启动的 Next dev server 未实际存活（vite 已按终态架构接管 3000），未做任何拉起 Next 的操作
+- 四链路探活：a) 3000 vite 200；b) 外域 Host 头 200（allowedHosts 生效）；c) 3000→8080 /api/auth/login 200（代理链路通）；d) 8080 直连 /api/auth/login 200
+- 内存：cgroup usage ≈ 2.53GB（< 3.5GB 阈值，无需备案 RSS 明细）；oom_kill = 0（与基线一致，无 OOM 事故）
+
+Stage Summary:
+- 全链路健康：四探活 200/200/200/200，OOM 计数 0，内存 2.53GB 正常
+- 终态架构稳固运行：vite 3000 + Java 8080 + MariaDB 3306，Next/Turbopack 保持退役不拉起
+- 无异常、无修复动作，本轮巡检结束

@@ -1,0 +1,899 @@
+     1→/**
+     2→ * 逻辑流 DSL ↔ vue-flow 画布数据 转换工具。
+     3→ *
+     4→ * 契约（worklog Task 2 + SUBFLOW/inputVars 增量 + DATA_UPDATE）：
+     5→ * - nodes[]: { id, type: START|END|HTTP|BEAN|SCRIPT|CONDITION|BATCH|SUBFLOW|DATA_UPDATE, name, x, y,
+     6→ *              config{...}, resultVar?, errorAction?: FAIL_FLOW|IGNORE_CONTINUE }
+     7→ *   - HTTP   config = { url, method, headers{...}, queryParams[{source,target}],
+     8→ *                       bodyParams[{source,target}], connTimeoutMs, readTimeoutMs, retryCount }
+     9→ *   - BEAN   config = { beanName, methodName, params[{source,target}] }
+    10→ *   - SCRIPT config = { language: 'groovy', source }
+    11→ *   - CONDITION config = { variable, operator: EQ|NE|GT|LT|GTE|LTE|EMPTY|NOT_EMPTY, value? }
+    12→ *   - BATCH  config = { collection, itemVar?, indexVar?, body?: BatchBodyNode[](循环体链，
+    13→ *                       按序逐项执行；节点可选 x/y 画布绝对坐标——仅拖离默认排布位才
+    14→ *                       写入，缺省时回显自动居中排布)，stopOnError?, maxItems? }
+    15→ *                       （legacy 兼容：actionType: HTTP|SCRIPT|BEAN + actionConfig 单动作，
+    16→ *                         读取时自动合成为单节点循环体，保存后升级为 body 形态）
+    17→ *   - SUBFLOW config = { flowId, passAllVars=true, varsMapping[{source,target}] }
+    18→ *   - DATA_UPDATE config = { table, setOps[{column, mode: SET|ADD|SUB, value}],
+    19→ *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}] }
+    20→ *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；受影响行数写回 resultVar
+    21→ * - edges[]: { id?, source, target, branch?: 'true'|'false'（仅 CONDITION 出边用） }
+    22→ *   - BATCH 循环体边（画布 data.loop=true）为设计器内部结构，序列化时剔除；
+    23→ *     循环体内容编入 BATCH.config.body[]
+    24→ * - 顶层 inputVars[]: 入参声明（可选）：[{ name, type: string|number|boolean|json, required?, desc? }]
+    25→ *
+    26→ * vue-flow 侧：
+    27→ * - node.type 固定为 'logic'（自定义节点渲染槽 #node-logic），
+    28→ *   节点业务类型存 node.data.nodeType
+    29→ * - position 需要 {x,y}；契约的顶层 x/y 与之对应
+    30→ * - branch 存到 edge.data.branch
+    31→ * - 序列化时剥离 vue-flow 内部字段（selected/handles/dimensions...），只留契约字段
+    32→ */
+    33→
+    34→// ==================== 契约类型 ====================
+    35→
+    36→export type LogicNodeType =
+    37→  | 'START'
+    38→  | 'END'
+    39→  | 'HTTP'
+    40→  | 'BEAN'
+    41→  | 'SCRIPT'
+    42→  | 'CONDITION'
+    43→  | 'BATCH'
+    44→  | 'SUBFLOW'
+    45→  | 'DATA_UPDATE'
+    46→
+    47→export type ErrorAction = 'FAIL_FLOW' | 'IGNORE_CONTINUE'
+    48→
+    49→export type ConditionOperator = 'EQ' | 'NE' | 'GT' | 'LT' | 'GTE' | 'LTE' | 'EMPTY' | 'NOT_EMPTY'
+    50→
+    51→/** 变量映射对：source=变量名，target=参数名 */
+    52→export interface ParamPair {
+    53→  source: string
+    54→  target: string
+    55→}
+    56→
+    57→export interface HttpNodeConfig {
+    58→  url: string
+    59→  method: string
+    60→  headers: Record<string, string>
+    61→  queryParams: ParamPair[]
+    62→  bodyParams: ParamPair[]
+    63→  connTimeoutMs: number
+    64→  readTimeoutMs: number
+    65→  retryCount: number
+    66→}
+    67→
+    68→export interface BeanNodeConfig {
+    69→  beanName: string
+    70→  methodName: string
+    71→  params: ParamPair[]
+    72→}
+    73→
+    74→export interface ScriptNodeConfig {
+    75→  language: string
+    76→  source: string
+    77→}
+    78→
+    79→export interface ConditionNodeConfig {
+    80→  variable: string
+    81→  operator: ConditionOperator
+    82→  /** EMPTY/NOT_EMPTY 时不需要；支持字面量或 {{var}} */
+    83→  value?: string
+    84→}
+    85→
+    86→/** 批处理节点内嵌动作类型（仅业务执行三型，legacy 配置用） */
+    87→export type BatchActionType = 'HTTP' | 'SCRIPT' | 'BEAN'
+    88→
+    89→/** 循环体允许的节点类型（业务执行六型，含 BATCH = 支持嵌套批处理；START/END/CONDITION 不可入循环体） */
+    90→export type BatchBodyType = 'HTTP' | 'BEAN' | 'SCRIPT' | 'DATA_UPDATE' | 'SUBFLOW' | 'BATCH'
+    91→
+    92→export const BATCH_BODY_TYPES: BatchBodyType[] = ['HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'SUBFLOW', 'BATCH']
+    93→
+    94→/** 循环体节点（线性链一环，按序逐项执行） */
+    95→export interface BatchBodyNode {
+    96→  /** 画布节点 id（回显时按它复用画布节点） */
+    97→  id?: string
+    98→  type: BatchBodyType
+    99→  name: string
+   100→  config?: NodeConfig
+   101→  resultVar?: string
+   102→  /** 多输出声明（仅 SCRIPT 步骤消费：脚本返回 Map 时逐 key 拆包写入上下文） */
+   103→  outputs?: OutputVarDef[]
+   104→  errorAction?: ErrorAction
+   105→  /** 画布绝对坐标（可选）：仅当节点被拖离「批处理下方居中」默认排布位时持久化，
+   106→   *  缺省 = 回显时按批处理位置自动居中排布——保证旧 DSL / 未移动场景往返稳定 */
+   107→  x?: number
+   108→  y?: number
+   109→}
+   110→
+   111→export interface BatchNodeConfig {
+   112→  /** 集合表达式：{{var}} 或 JSON 数组字面量 */
+   113→  collection: string
+   114→  /** 迭代项变量名（默认 item） */
+   115→  itemVar: string
+   116→  /** 迭代序号变量名（默认 index） */
+   117→  indexVar: string
+   118→  /** 循环体链（画布循环连线上的节点序列；空 = 未配置） */
+   119→  body?: BatchBodyNode[]
+   120→  /** legacy：每项执行的动作类型（有 body 时忽略） */
+   121→  actionType?: BatchActionType
+   122→  /** legacy：内嵌动作配置（同型节点 config 形态） */
+   123→  actionConfig?: Record<string, unknown>
+   124→  /** 单项失败是否中断整批（默认 true） */
+   125→  stopOnError: boolean
+   126→  /** 单次最大迭代数（默认 100，硬上限 1000） */
+   127→  maxItems: number
+   128→}
+   129→
+   130→export interface SubflowNodeConfig {
+   131→  /** 目标逻辑流 id（必须是已发布流） */
+   132→  flowId: string
+   133→  /** 是否全量继承当前上下文变量（默认 true；varsMapping 在此基础上覆盖/改名） */
+   134→  passAllVars: boolean
+   135→  /** 变量映射：当前流 source → 子流入参 target */
+   136→  varsMapping: ParamPair[]
+   137→}
+   138→
+   139→/** 数据更新写值模式 */
+   140→export type DataUpdateMode = 'SET' | 'ADD' | 'SUB'
+   141→
+   142→export interface DataUpdateSetOp {
+   143→  column: string
+   144→  mode: DataUpdateMode
+   145→  /** 字面量或 {{var}}/{{formData.xxx}} 点路径；ADD/SUB 须数值 */
+   146→  value: string
+   147→}
+   148→
+   149→/** 数据更新条件算子 */
+   150→export type DataUpdateWhereOp = 'EQ' | 'NE' | 'GT' | 'GTE' | 'LT' | 'LTE' | 'IS_NULL' | 'NOT_NULL'
+   151→
+   152→export interface DataUpdateWhereCond {
+   153→  column: string
+   154→  op: DataUpdateWhereOp
+   155→  /** IS_NULL/NOT_EMPTY 不需要 */
+   156→  value?: string
+   157→}
+   158→
+   159→export interface DataUpdateNodeConfig {
+   160→  /** 目标动态表（运行期校验须存在且以 wf_biz_/wf_form_data 开头） */
+   161→  table: string
+   162→  setOps: DataUpdateSetOp[]
+   163→  where: DataUpdateWhereCond[]
+   164→}
+   165→
+   166→export type NodeConfig =
+   167→  | HttpNodeConfig
+   168→  | BeanNodeConfig
+   169→  | ScriptNodeConfig
+   170→  | ConditionNodeConfig
+   171→  | BatchNodeConfig
+   172→  | SubflowNodeConfig
+   173→  | DataUpdateNodeConfig
+   174→
+   175→/** 入参声明（运行测试表单 / 文档展示用，引擎不消费） */
+   176→export interface InputVarDef {
+   177→  name: string
+   178→  type: 'string' | 'number' | 'boolean' | 'json'
+   179→  required?: boolean
+   180→  desc?: string
+   181→}
+   182→
+   183→/** 输出参数声明（SCRIPT 多输出：脚本返回 Map 时按 name 逐 key 拆包写入上下文，与 resultVar 双轨） */
+   184→export interface OutputVarDef {
+   185→  name: string
+   186→  type: 'string' | 'number' | 'boolean' | 'json'
+   187→  desc?: string
+   188→}
+   189→
+   190→export const OUTPUT_VAR_TYPES = ['string', 'number', 'boolean', 'json'] as const
+   191→
+   192→/** 清洗输出参数声明行：trim 变量名、剔除无名行、类型回退 string；全空返回 undefined */
+   193→export function sanitizeOutputs(outputs?: OutputVarDef[]): OutputVarDef[] | undefined {
+   194→  const rows = (outputs ?? [])
+   195→    .map((o) => ({
+   196→      name: String(o?.name ?? '').trim(),
+   197→      type: (OUTPUT_VAR_TYPES as readonly string[]).includes(o?.type)
+   198→        ? (o.type as OutputVarDef['type'])
+   199→        : ('string' as const),
+   200→      desc: o?.desc ? String(o.desc).trim() || undefined : undefined,
+   201→    }))
+   202→    .filter((o) => o.name)
+   203→  return rows.length ? rows : undefined
+   204→}
+   205→
+   206→/** DSL 契约节点 */
+   207→export interface DslNode {
+   208→  id: string
+   209→  type: LogicNodeType
+   210→  name: string
+   211→  x: number
+   212→  y: number
+   213→  config?: NodeConfig
+   214→  resultVar?: string
+   215→  /** 多输出声明（仅 SCRIPT：返回 Map 时逐 key 拆包写入扁平上下文） */
+   216→  outputs?: OutputVarDef[]
+   217→  errorAction?: ErrorAction
+   218→}
+   219→
+   220→/** DSL 契约边 */
+   221→export interface DslEdge {
+   222→  id?: string
+   223→  source: string
+   224→  target: string
+   225→  branch?: 'true' | 'false'
+   226→}
+   227→
+   228→export interface LogicFlowDsl {
+   229→  nodes: DslNode[]
+   230→  edges: DslEdge[]
+   231→  inputVars?: InputVarDef[]
+   232→}
+   233→
+   234→// ==================== vue-flow 画布类型 ====================
+   235→
+   236→/** 自定义节点 data（node.type 固定 'logic'，业务类型在 nodeType） */
+   237→export interface FlowNodeData {
+   238→  nodeType: LogicNodeType
+   239→  name: string
+   240→  config?: NodeConfig
+   241→  resultVar?: string
+   242→  /** 多输出声明（仅 SCRIPT 编辑/序列化） */
+   243→  outputs?: OutputVarDef[]
+   244→  errorAction?: ErrorAction
+   245→}
+   246→
+   247→/** vue-flow 节点（本设计器使用的最小形状） */
+   248→export interface FlowNode {
+   249→  id: string
+   250→  type: string
+   251→  position: { x: number; y: number }
+   252→  data: FlowNodeData
+   253→}
+   254→
+   255→/** vue-flow 边（branch 挂在 data 上；CONDITION 出边需 sourceHandle 定位 真/假 连接点） */
+   256→export interface FlowEdge {
+   257→  id: string
+   258→  source: string
+   259→  target: string
+   260→  sourceHandle?: string
+   261→  targetHandle?: string
+   262→  type?: string
+   263→  markerEnd?: string
+   264→  deletable?: boolean
+   265→  class?: string
+   266→  data?: { branch?: 'true' | 'false'; loop?: boolean }
+   267→}
+   268→
+   269→export interface FlowGraph {
+   270→  nodes: FlowNode[]
+   271→  edges: FlowEdge[]
+   272→  inputVars: InputVarDef[]
+   273→}
+   274→
+   275→// ==================== 常量 ====================
+   276→
+   277→/** vue-flow 自定义节点类型名（对应模板 #node-logic 槽） */
+   278→export const FLOW_NODE_TYPE = 'logic'
+   279→
+   280→/** BATCH 循环体起点/终点连接点（节点侧面，闭合循环连线两端） */
+   281→export const LOOP_HANDLE_START = 'loop_start'
+   282→export const LOOP_HANDLE_END = 'loop_end'
+   283→
+   284→/** 判断是否循环体边（设计器内部结构，不进 DSL edges） */
+   285→export function isLoopEdge(edge: FlowEdge | undefined | null): boolean {
+   286→  return edge?.data?.loop === true
+   287→}
+   288→
+   289→/**
+   290→ * 循环边默认渲染（折线 + 箭头 + 虚线紫罗兰，见 logicflow-theme.css .lf-edge-loop）。
+   291→ * 自环（空循环 batch→batch 直连）走自定义 'loop' 边：右侧 U 形外凸 44px（LoopEdge.vue），
+   292→ * 内置 smoothstep 对同侧自环仅 20px 凸出且被节点标签遮挡，视觉上不可见。
+   293→ * 注意：不设 deletable:false —— vue-flow removeEdges 会静默跳过不可删边，
+   294→ * 导致程序化拆线（吸附接入）失效；防误删由设计器双击拦截 + 删除后自愈重建保障。
+   295→ */
+   296→export function createLoopEdge(
+   297→  source: string,
+   298→  target: string,
+   299→  sourceHandle?: string,
+   300→  targetHandle?: string
+   301→): FlowEdge {
+   302→  return {
+   303→    id: `loop_${Math.random().toString(36).slice(2, 9)}`,
+   304→    source,
+   305→    target,
+   306→    sourceHandle,
+   307→    targetHandle,
+   308→    type: source === target ? 'loop' : 'smoothstep',
+   309→    markerEnd: 'arrowclosed',
+   310→    class: 'lf-edge-loop',
+   311→    data: { loop: true },
+   312→  }
+   313→}
+   314→
+   315→/** 有 config 的业务节点类型 */
+   316→export const CONFIG_TYPES: LogicNodeType[] = [
+   317→  'HTTP',
+   318→  'BEAN',
+   319→  'SCRIPT',
+   320→  'CONDITION',
+   321→  'BATCH',
+   322→  'SUBFLOW',
+   323→  'DATA_UPDATE',
+   324→]
+   325→
+   326→export function isLogicNodeType(type: unknown): type is LogicNodeType {
+   327→  return (
+   328→    type === 'START' || type === 'END' || type === 'HTTP' ||
+   329→    type === 'BEAN' || type === 'SCRIPT' || type === 'CONDITION' ||
+   330→    type === 'BATCH' || type === 'SUBFLOW' || type === 'DATA_UPDATE'
+   331→  )
+   332→}
+   333→
+   334→/** 各类型默认名称 */
+   335→export function defaultNodeName(type: LogicNodeType): string {
+   336→  const names: Record<LogicNodeType, string> = {
+   337→    START: '开始',
+   338→    END: '结束',
+   339→    HTTP: 'HTTP 调用',
+   340→    BEAN: 'Bean 方法',
+   341→    SCRIPT: 'Groovy 脚本',
+   342→    CONDITION: '条件判断',
+   343→    BATCH: '批处理',
+   344→    SUBFLOW: '子流程',
+   345→    DATA_UPDATE: '数据更新',
+   346→  }
+   347→  return names[type]
+   348→}
+   349→
+   350→/** 各类型默认 config（新建节点用；数字字段按契约默认值） */
+   351→export function defaultConfig(type: LogicNodeType): NodeConfig | undefined {
+   352→  switch (type) {
+   353→    case 'HTTP':
+   354→      return {
+   355→        url: '',
+   356→        method: 'GET',
+   357→        headers: {},
+   358→        queryParams: [],
+   359→        bodyParams: [],
+   360→        connTimeoutMs: 3000,
+   361→        readTimeoutMs: 5000,
+   362→        retryCount: 0,
+   363→      }
+   364→    case 'BEAN':
+   365→      return { beanName: '', methodName: '', params: [] }
+   366→    case 'SCRIPT':
+   367→      return { language: 'groovy', source: '' }
+   368→    case 'CONDITION':
+   369→      return { variable: '', operator: 'EQ', value: '' }
+   370→    case 'BATCH':
+   371→      return {
+   372→        collection: '',
+   373→        itemVar: 'item',
+   374→        indexVar: 'index',
+   375→        body: [],
+   376→        stopOnError: true,
+   377→        maxItems: 100,
+   378→      }
+   379→    case 'SUBFLOW':
+   380→      return { flowId: '', passAllVars: true, varsMapping: [] }
+   381→    case 'DATA_UPDATE':
+   382→      return { table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }
+   383→    default:
+   384→      return undefined
+   385→  }
+   386→}
+   387→
+   388→/** 短随机码（节点 id 兜底去重用） */
+   389→function shortCode(): string {
+   390→  return Math.random().toString(36).slice(2, 6)
+   391→}
+   392→
+   393→/** 生成不与现有节点冲突的节点 id：http_a1b2 形式 */
+   394→export function createNodeId(type: LogicNodeType, existingIds: Iterable<string>): string {
+   395→  const taken = new Set(existingIds)
+   396→  const prefix = type.toLowerCase()
+   397→  let id = `${prefix}_${shortCode()}`
+   398→  while (taken.has(id)) {
+   399→    id = `${prefix}_${shortCode()}${Math.floor(Math.random() * 10)}`
+   400→  }
+   401→  return id
+   402→}
+   403→
+   404→// ==================== 解析：DSL 字符串 → 画布 ====================
+   405→
+   406→/** 宽松取数字：非法/缺失回退默认值 */
+   407→function toNum(value: unknown, fallback: number): number {
+   408→  const n = Number(value)
+   409→  return Number.isFinite(n) ? n : fallback
+   410→}
+   411→
+   412→function normalizeType(raw: unknown): LogicNodeType {
+   413→  const upper = String(raw ?? '').toUpperCase()
+   414→  return isLogicNodeType(upper) ? upper : 'HTTP'
+   415→}
+   416→
+   417→/** 循环体类型归一：非法类型返回 null（调用方跳过该节点） */
+   418→function toBatchBodyType(raw: unknown): BatchBodyType | null {
+   419→  const upper = String(raw ?? '').toUpperCase()
+   420→  return (BATCH_BODY_TYPES as string[]).includes(upper) ? (upper as BatchBodyType) : null
+   421→}
+   422→
+   423→/**
+   424→ * 为每个 BATCH 节点合成循环体画布结构与闭合循环连线：
+   425→ * - config.body 非空 → 循环体节点沿链 loop_start→b0→…→loop_end；
+   426→ *   节点已持久化 x/y（曾拖离默认位）→ 用绝对坐标回显，位置不再丢失；
+   427→ *   未持久化 → 横排在批处理下方居中排布（默认位）；
+   428→ * - legacy（无 body 有 actionType/actionConfig）→ 合成单个循环体节点；
+   429→ * - 两者皆无 → loop_start 直连 loop_end（空循环虚线）。
+   430→ * 循环边均为 deletable:false + data.loop=true（设计器内部结构，serialize 时剔除）。
+   431→ */
+   432→function synthesizeBatchLoops(nodes: FlowNode[], edges: FlowEdge[]): void {
+   433→  for (const batch of nodes) {
+   434→    if (batch.data.nodeType !== 'BATCH') continue
+   435→    const cfg = (batch.data.config ?? {}) as Partial<BatchNodeConfig>
+   436→    const rawBody = Array.isArray(cfg.body) ? cfg.body : []
+   437→
+   438→    // legacy 单动作 → 合成为单节点循环体
+   439→    let bodyItems = rawBody
+   440→    if (!bodyItems.length && cfg.actionType) {
+   441→      const legacyType = toBatchBodyType(cfg.actionType)
+   442→      if (legacyType) {
+   443→        bodyItems = [
+   444→          {
+   445→            type: legacyType,
+   446→            name: defaultNodeName(legacyType as LogicNodeType),
+   447→            config: cfg.actionConfig as NodeConfig | undefined,
+   448→          },
+   449→        ]
+   450→      }
+   451→    }
+   452→
+   453→    const valid = bodyItems
+   454→      .map((bn) => {
+   455→        const type = toBatchBodyType(bn?.type)
+   456→        return type ? { bn, type } : null
+   457→      })
+   458→      .filter((x): x is { bn: BatchBodyNode; type: BatchBodyType } => x !== null)
+   459→
+   460→    if (valid.length) {
+   461→      const count = valid.length
+   462→      const bodyNodes: FlowNode[] = valid.map(({ bn, type }, i) => ({
+   463→        id: bn.id || `${batch.id}__b${i}`,
+   464→        type: FLOW_NODE_TYPE,
+   465→        position: {
+   466→          // 已持久化的绝对坐标优先（拖动位置不丢失）；否则按默认位：批处理下方居中横排
+   467→          x:
+   468→            Number.isFinite(bn.x) && Number.isFinite(bn.y)
+   469→              ? Math.round(bn.x as number)
+   470→              : Math.round(batch.position.x + (i - (count - 1) / 2) * 180),
+   471→          y:
+   472→            Number.isFinite(bn.x) && Number.isFinite(bn.y)
+   473→              ? Math.round(bn.y as number)
+   474→              : Math.round(batch.position.y + 130),
+   475→        },
+   476→        data: {
+   477→          nodeType: type as LogicNodeType,
+   478→          name: bn.name || defaultNodeName(type as LogicNodeType),
+   479→          config: bn.config,
+   480→          resultVar: bn.resultVar || undefined,
+   481→          outputs: (type as LogicNodeType) === 'SCRIPT' ? sanitizeOutputs(bn.outputs) : undefined,
+   482→          errorAction: bn.errorAction || undefined,
+   483→        },
+   484→      }))
+   485→      nodes.push(...bodyNodes)
+   486→      edges.push(createLoopEdge(batch.id, bodyNodes[0].id, LOOP_HANDLE_START, 'in'))
+   487→      for (let i = 1; i < bodyNodes.length; i++) {
+   488→        edges.push(createLoopEdge(bodyNodes[i - 1].id, bodyNodes[i].id, 'out', 'in'))
+   489→      }
+   490→      edges.push(
+   491→        createLoopEdge(bodyNodes[bodyNodes.length - 1].id, batch.id, 'out', LOOP_HANDLE_END)
+   492→      )
+   493→    } else {
+   494→      edges.push(createLoopEdge(batch.id, batch.id, LOOP_HANDLE_START, LOOP_HANDLE_END))
+   495→    }
+   496→  }
+   497→}
+   498→
+   499→/** 解析 DSL 字符串为 vue-flow 画布数据。非法 JSON / 结构不符时抛错。 */
+   500→export function parseDsl(dsl: string): FlowGraph {
+   501→  let raw: unknown
+   502→  try {
+   503→    raw = JSON.parse(dsl)
+   504→  } catch (err) {
+   505→    throw new Error(`DSL 不是合法的 JSON：${err instanceof Error ? err.message : String(err)}`)
+   506→  }
+   507→  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+   508→    throw new Error('DSL 结构不符：顶层应为对象（含 nodes/edges）')
+   509→  }
+   510→  const obj = raw as { nodes?: unknown; edges?: unknown; inputVars?: unknown }
+   511→  const rawNodes = Array.isArray(obj.nodes) ? obj.nodes : []
+   512→  const rawEdges = Array.isArray(obj.edges) ? obj.edges : []
+   513→  const rawInputVars = Array.isArray(obj.inputVars) ? obj.inputVars : []
+   514→
+   515→  const inputVars: InputVarDef[] = rawInputVars
+   516→    .map((item): InputVarDef | null => {
+   517→      const v = (item ?? {}) as Record<string, unknown>
+   518→      const name = String(v.name ?? '').trim()
+   519→      if (!name) return null
+   520→      const type = ['string', 'number', 'boolean', 'json'].includes(String(v.type))
+   521→        ? (String(v.type) as InputVarDef['type'])
+   522→        : 'string'
+   523→      return {
+   524→        name,
+   525→        type,
+   526→        required: Boolean(v.required),
+   527→        desc: v.desc ? String(v.desc) : undefined,
+   528→      }
+   529→    })
+   530→    .filter((v): v is InputVarDef => v !== null)
+   531→
+   532→  const nodes: FlowNode[] = rawNodes.map((item) => {
+   533→    const n = (item ?? {}) as Record<string, unknown>
+   534→    const type = normalizeType(n.type)
+   535→    return {
+   536→      id: String(n.id ?? '') || createNodeId(type, []),
+   537→      type: FLOW_NODE_TYPE,
+   538→      position: { x: toNum(n.x, 0), y: toNum(n.y, 0) },
+   539→      data: {
+   540→        nodeType: type,
+   541→        name: String(n.name ?? '') || defaultNodeName(type),
+   542→        config: (n.config ?? undefined) as NodeConfig | undefined,
+   543→        resultVar: n.resultVar ? String(n.resultVar) : undefined,
+   544→        outputs:
+   545→          type === 'SCRIPT'
+   546→            ? sanitizeOutputs(n.outputs as OutputVarDef[] | undefined)
+   547→            : undefined,
+   548→        errorAction: n.errorAction ? (String(n.errorAction) as ErrorAction) : undefined,
+   549→      },
+   550→    }
+   551→  })
+   552→
+   553→  const edges: FlowEdge[] = rawEdges
+   554→    .map((item, index) => {
+   555→      const e = (item ?? {}) as Record<string, unknown>
+   556→      const branch =
+   557→        e.branch === 'true' || e.branch === 'false' ? (e.branch as 'true' | 'false') : undefined
+   558→      return {
+   559→        id: e.id != null ? String(e.id) : `e_${index}_${shortCode()}`,
+   560→        source: String(e.source ?? ''),
+   561→        target: String(e.target ?? ''),
+   562→        // 默认渲染：折线 + 箭头（契约不存 type，回显统一补齐）
+   563→        type: 'smoothstep',
+   564→        markerEnd: 'arrowclosed',
+   565→        // branch → sourceHandle：vue-flow 依 sourceHandle 定位出发点；
+   566→        // CONDITION 有 true/false 两个 source handle，缺省时渲染会兜底连到第一个（true），
+   567→        // 导致「否」连线重开后错显在「是」上（bug: 条件分支回显丢失）
+   568→        sourceHandle: branch,
+   569→        data: branch ? { branch } : undefined,
+   570→      }
+   571→    })
+   572→    .filter((e) => e.source && e.target)
+   573→
+   574→  synthesizeBatchLoops(nodes, edges)
+   575→
+   576→  return { nodes, edges, inputVars }
+   577→}
+   578→
+   579→// ==================== 序列化：画布 → DSL 字符串 ====================
+   580→
+   581→/** START/END 无 resultVar / errorAction（契约：业务执行节点有；CONDITION 例外仅运行结果布尔） */
+   582→function hasExecutionMeta(type: LogicNodeType): boolean {
+   583→  return (
+   584→    type === 'HTTP' ||
+   585→    type === 'BEAN' ||
+   586→    type === 'SCRIPT' ||
+   587→    type === 'BATCH' ||
+   588→    type === 'SUBFLOW' ||
+   589→    type === 'DATA_UPDATE'
+   590→  )
+   591→}
+   592→
+   593→/** 画布节点 → 契约节点（剥离 vue-flow 内部字段） */
+   594→function toDslNode(node: FlowNode): DslNode | null {
+   595→  const data = node?.data
+   596→  if (!data) return null
+   597→  const type = normalizeType(data.nodeType)
+   598→  const out: DslNode = {
+   599→    id: node.id,
+   600→    type,
+   601→    name: String(data.name ?? '') || defaultNodeName(type),
+   602→    x: Math.round(node.position?.x ?? 0),
+   603→    y: Math.round(node.position?.y ?? 0),
+   604→  }
+   605→  if (data.config && typeof data.config === 'object') {
+   606→    out.config = data.config
+   607→  }
+   608→  if (hasExecutionMeta(type)) {
+   609→    if (data.resultVar) out.resultVar = data.resultVar
+   610→    if (type === 'SCRIPT') {
+   611→      const outputs = sanitizeOutputs(data.outputs)
+   612→      if (outputs) out.outputs = outputs
+   613→    }
+   614→    out.errorAction = data.errorAction === 'IGNORE_CONTINUE' ? 'IGNORE_CONTINUE' : 'FAIL_FLOW'
+   615→  }
+   616→  return out
+   617→}
+   618→
+   619→/** 画布边 → 契约边（只留 id/source/target/branch；循环边不进契约） */
+   620→function toDslEdge(edge: FlowEdge): DslEdge | null {
+   621→  if (!edge?.source || !edge?.target) return null
+   622→  if (isLoopEdge(edge)) return null
+   623→  const out: DslEdge = { source: edge.source, target: edge.target }
+   624→  if (edge.id) out.id = edge.id
+   625→  // branch 以 sourceHandle 为准（连线/重连时与 handle 同步），data.branch 作后备
+   626→  const fromHandle = edge.sourceHandle
+   627→  const branch =
+   628→    fromHandle === 'true' || fromHandle === 'false'
+   629→      ? fromHandle
+   630→      : edge.data?.branch === 'true' || edge.data?.branch === 'false'
+   631→        ? edge.data.branch
+   632→        : undefined
+   633→  if (branch) out.branch = branch
+   634→  return out
+   635→}
+   636→
+   637→/** 画布节点 → 循环体节点（剥离 vue-flow 内部字段；非循环体类型返回 null）。
+   638→ *  x/y 总是写入，由调用方按「默认排布位」判定后剥离，避免旧 DSL 被误标脏 */
+   639→function toDslBodyNode(node: FlowNode): BatchBodyNode | null {
+   640→  const data = node?.data
+   641→  if (!data) return null
+   642→  const type = toBatchBodyType(data.nodeType)
+   643→  if (!type) return null
+   644→  const out: BatchBodyNode = {
+   645→    id: node.id,
+   646→    type,
+   647→    name: String(data.name ?? '') || defaultNodeName(data.nodeType),
+   648→    x: Math.round(node.position?.x ?? 0),
+   649→    y: Math.round(node.position?.y ?? 0),
+   650→  }
+   651→  if (data.config && typeof data.config === 'object') out.config = data.config
+   652→  if (data.resultVar) out.resultVar = data.resultVar
+   653→  if (type === 'SCRIPT') {
+   654→    const outputs = sanitizeOutputs(data.outputs)
+   655→    if (outputs) out.outputs = outputs
+   656→  }
+   657→  out.errorAction = data.errorAction === 'IGNORE_CONTINUE' ? 'IGNORE_CONTINUE' : 'FAIL_FLOW'
+   658→  return out
+   659→}
+   660→
+   661→/**
+   662→ * 从 loop 边集合提取某 BATCH 的循环体链：loop_start 出发沿链行走至无后继
+   663→ * （或成环/步数耗尽）。body 只收合法循环体类型节点；链上节点 id 由调用方
+   664→ * 从顶层画布剔除（孤段节点保留顶层，由发布校验兜底报「节点无出边」）。
+   665→ * 链上遇 BATCH（嵌套子批处理）即入 body 并终止本链行走 ——
+   666→ * 子批处理的循环体链由 serializeDsl 顶层遍历单独提取，避免被父链吞并。
+   667→ */
+   668→function extractBatchBody(
+   669→  batchId: string,
+   670→  loopEdges: FlowEdge[],
+   671→  nodeById: Map<string, FlowNode>
+   672→): { body: BatchBodyNode[]; chainNodeIds: Set<string> } {
+   673→  const body: BatchBodyNode[] = []
+   674→  const chainNodeIds = new Set<string>()
+   675→  const startEdge = loopEdges.find(
+   676→    (e) => e.source === batchId && e.sourceHandle === LOOP_HANDLE_START
+   677→  )
+   678→  if (!startEdge) return { body, chainNodeIds }
+   679→  const visited = new Set<string>([batchId])
+   680→  let currentId = startEdge.target
+   681→  let guard = 0
+   682→  while (currentId && !visited.has(currentId) && guard++ < 100) {
+   683→    visited.add(currentId)
+   684→    const node = nodeById.get(currentId)
+   685→    if (!node) break
+   686→    const bodyNode = toDslBodyNode(node)
+   687→    if (bodyNode) {
+   688→      body.push(bodyNode)
+   689→      chainNodeIds.add(currentId)
+   690→      // 嵌套子批处理：入 body 后停止沿父链行走（子的循环体链独立提取）
+   691→      if (bodyNode.type === 'BATCH') break
+   692→    }
+   693→    const nextEdge = loopEdges.find((e) => e.source === currentId)
+   694→    if (!nextEdge) break
+   695→    currentId = nextEdge.target
+   696→  }
+   697→
+   698→  // 位置持久化（仅拖离默认位才写入）：与 synthesizeBatchLoops 的默认公式互逆——
+   699→  // 仍在默认位的节点剔除 x/y，旧 DSL / 未移动场景往返稳定（isDslEqual 脏检测不误报）
+   700→  const batch = nodeById.get(batchId)
+   701→  if (batch && body.length) {
+   702→    const count = body.length
+   703→    body.forEach((bn, i) => {
+   704→      const defX = Math.round(batch.position.x + (i - (count - 1) / 2) * 180)
+   705→      const defY = Math.round(batch.position.y + 130)
+   706→      if (bn.x === defX && bn.y === defY) {
+   707→        delete bn.x
+   708→        delete bn.y
+   709→      }
+   710→    })
+   711→  }
+   712→
+   713→  return { body, chainNodeIds }
+   714→}
+   715→
+   716→/** 序列化画布为 DSL JSON 字符串（空画布 → 空节点/空边结构；inputVars 非空时带上） */
+   717→export function serializeDsl(
+   718→  nodes: FlowNode[],
+   719→  edges: FlowEdge[],
+   720→  inputVars?: InputVarDef[]
+   721→): string {
+   722→  const safeNodes = nodes || []
+   723→  const safeEdges = edges || []
+   724→  const loopEdges = safeEdges.filter(isLoopEdge)
+   725→  const nodeById = new Map(safeNodes.map((n) => [n.id, n]))
+   726→
+   727→  // BATCH 循环体提取：链上节点剔出顶层、编入 config.body（替换的是序列化副本，不改画布）
+   728→  const stripNodeIds = new Set<string>()
+   729→  const batchBodies = new Map<string, BatchBodyNode[]>()
+   730→  for (const node of safeNodes) {
+   731→    if (node.data?.nodeType !== 'BATCH') continue
+   732→    const { body, chainNodeIds } = extractBatchBody(node.id, loopEdges, nodeById)
+   733→    if (body.length) {
+   734→      batchBodies.set(node.id, body)
+   735→      chainNodeIds.forEach((id) => stripNodeIds.add(id))
+   736→    }
+   737→  }
+   738→
+   739→  const dsl: LogicFlowDsl = {
+   740→    nodes: safeNodes
+   741→      .filter((n) => !stripNodeIds.has(n.id))
+   742→      .map(toDslNode)
+   743→      .filter((n): n is DslNode => n !== null),
+   744→    edges: safeEdges.map(toDslEdge).filter((e): e is DslEdge => e !== null),
+   745→  }
+   746→
+   747→  // 循环体写回对应 BATCH config（浅拷贝替换，legacy actionType 升级后移除）。
+   748→  // 嵌套批处理：子 BATCH 被剔出顶层（不在 dsl.nodes），需从父 body 中递归下钻写回，
+   749→  // 否则子批处理的循环体链会因「无顶层节点可写」而丢失。
+   750→  if (batchBodies.size) {
+   751→    const applyBody = (node: DslNode): void => {
+   752→      if (node.type !== 'BATCH') return
+   753→      const body = batchBodies.get(node.id)
+   754→      if (!body) return
+   755→      const cfg = { ...((node.config ?? {}) as Record<string, unknown>) }
+   756→      cfg.body = body
+   757→      delete cfg.actionType
+   758→      delete cfg.actionConfig
+   759→      node.config = cfg as unknown as NodeConfig
+   760→      for (const step of body) {
+   761→        if (step.type === 'BATCH') applyBody(step as unknown as DslNode)
+   762→      }
+   763→    }
+   764→    for (const node of dsl.nodes) applyBody(node)
+   765→  }
+   766→
+   767→  const declared = (inputVars || []).filter((v) => v.name && v.name.trim())
+   768→  if (declared.length) dsl.inputVars = declared
+   769→  return JSON.stringify(dsl)
+   770→}
+   771→
+   772→/** 规范化 JSON 序列化：对象键按字典序排列（数组保持原序），用于键序无关的深比较 */
+   773→function stableStringify(value: unknown): string {
+   774→  if (value === null || typeof value !== 'object') {
+   775→    return JSON.stringify(value) ?? 'undefined'
+   776→  }
+   777→  if (Array.isArray(value)) {
+   778→    return `[${value.map((item) => stableStringify(item)).join(',')}]`
+   779→  }
+   780→  const entries = Object.entries(value as Record<string, unknown>)
+   781→    .filter(([, v]) => v !== undefined)
+   782→    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+   783→  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`
+   784→}
+   785→
+   786→/** 深比较两份 DSL 字符串是否等价（对象键序无关），用于脏检测 */
+   787→export function isDslEqual(a: string, b: string): boolean {
+   788→  if (a === b) return true
+   789→  try {
+   790→    return stableStringify(JSON.parse(a)) === stableStringify(JSON.parse(b))
+   791→  } catch {
+   792→    return false
+   793→  }
+   794→}
+   795→
+   796→// ==================== 输入变量扫描（运行测试建议用） ====================
+   797→
+   798→/**
+   799→ * 扫描画布图，提取「被引用但未在本流产出」的输入变量候选名。
+   800→ * - 深度遍历所有节点 config 字符串值中的 {{var}} 占位符；
+   801→ * - 结构化引用：BEAN params[].source、HTTP queryParams/bodyParams[].source、
+   802→ *   SUBFLOW varsMapping[].source、CONDITION variable、BATCH collection；
+   803→ * - 剔除本流产出：各节点 resultVar + BATCH itemVar/indexVar。
+   804→ */
+   805→export function collectReferencedVars(graph: FlowGraph): string[] {
+   806→  const referenced = new Set<string>()
+   807→  const produced = new Set<string>()
+   808→
+   809→  const scanPlaceholders = (value: unknown): void => {
+   810→    if (typeof value === 'string') {
+   811→      for (const m of value.matchAll(/\{\{\s*([a-zA-Z_][\w]*)\s*\}\}/g)) {
+   812→        referenced.add(m[1])
+   813→      }
+   814→    } else if (Array.isArray(value)) {
+   815→      value.forEach(scanPlaceholders)
+   816→    } else if (value && typeof value === 'object') {
+   817→      Object.values(value as Record<string, unknown>).forEach(scanPlaceholders)
+   818→    }
+   819→  }
+   820→
+   821→  for (const node of graph.nodes) {
+   822→    const cfg = node.data.config as Record<string, unknown> | undefined
+   823→    if (cfg) scanPlaceholders(cfg)
+   824→    const type = node.data.nodeType
+   825→    if (node.data.resultVar) produced.add(node.data.resultVar)
+   826→    // SCRIPT 多输出：outputs 声明即产出（运行期逐 key 拆包写入上下文）
+   827→    if (type === 'SCRIPT' && Array.isArray(node.data.outputs)) {
+   828→      for (const o of node.data.outputs as { name?: string }[]) {
+   829→        if (o?.name?.trim()) produced.add(o.name.trim())
+   830→      }
+   831→    }
+   832→    if (type === 'BEAN' && Array.isArray(cfg?.params)) {
+   833→      for (const p of cfg.params as { source?: string }[]) {
+   834→        if (p?.source) referenced.add(p.source)
+   835→      }
+   836→    }
+   837→    if (type === 'HTTP') {
+   838→      for (const key of ['queryParams', 'bodyParams'] as const) {
+   839→        if (Array.isArray(cfg?.[key])) {
+   840→          for (const p of cfg[key] as { source?: string }[]) {
+   841→            if (p?.source) referenced.add(p.source)
+   842→          }
+   843→        }
+   844→      }
+   845→    }
+   846→    if (type === 'CONDITION' && typeof cfg?.variable === 'string' && cfg.variable) {
+   847→      referenced.add(cfg.variable.replace(/^\{\{\s*|\s*\}\}$/g, ''))
+   848→    }
+   849→    if (type === 'BATCH') {
+   850→      const collection = String(cfg?.collection ?? '')
+   851→      const m = collection.match(/^\{\{\s*([a-zA-Z_][\w]*)\s*\}\}$/)
+   852→      if (m) referenced.add(m[1])
+   853→      const itemVar = String(cfg?.itemVar ?? 'item')
+   854→      const indexVar = String(cfg?.indexVar ?? 'index')
+   855→      if (itemVar) produced.add(itemVar)
+   856→      if (indexVar) produced.add(indexVar)
+   857→      // 循环体链：body 节点 resultVar/outputs 计入产出，结构化 source 引用计入引用
+   858→      const body = Array.isArray(cfg?.body) ? (cfg?.body as BatchBodyNode[]) : []
+   859→      for (const bn of body) {
+   860→        if (!bn) continue
+   861→        if (bn.resultVar) produced.add(bn.resultVar)
+   862→        if (bn.type === 'SCRIPT' && Array.isArray(bn.outputs)) {
+   863→          for (const o of bn.outputs as { name?: string }[]) {
+   864→            if (o?.name?.trim()) produced.add(o.name.trim())
+   865→          }
+   866→        }
+   867→        const bc = bn.config as Record<string, unknown> | undefined
+   868→        if (!bc) continue
+   869→        if (bn.type === 'BEAN' && Array.isArray(bc.params)) {
+   870→          for (const p of bc.params as { source?: string }[]) {
+   871→            if (p?.source) referenced.add(p.source)
+   872→          }
+   873→        }
+   874→        if (bn.type === 'HTTP') {
+   875→          for (const key of ['queryParams', 'bodyParams'] as const) {
+   876→            if (Array.isArray(bc[key])) {
+   877→              for (const p of bc[key] as { source?: string }[]) {
+   878→                if (p?.source) referenced.add(p.source)
+   879→              }
+   880→            }
+   881→          }
+   882→        }
+   883→        if (bn.type === 'SUBFLOW' && Array.isArray(bc.varsMapping)) {
+   884→          for (const p of bc.varsMapping as { source?: string }[]) {
+   885→            if (p?.source) referenced.add(p.source)
+   886→          }
+   887→        }
+   888→      }
+   889→    }
+   890→    if (type === 'SUBFLOW' && Array.isArray(cfg?.varsMapping)) {
+   891→      for (const p of cfg.varsMapping as { source?: string }[]) {
+   892→        if (p?.source) referenced.add(p.source)
+   893→      }
+   894→    }
+   895→  }
+   896→
+   897→  return [...referenced].filter((name) => !produced.has(name)).sort()
+   898→}
+   899→

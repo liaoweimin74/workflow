@@ -38,10 +38,11 @@ import java.util.List;
  *   <li>HTTP：{@code BackendLogicHttpConfig} 字段（url/method/headers/queryParams/bodyParams/
  *       connTimeoutMs=3000/readTimeoutMs=5000/retryCount=0）；</li>
  *   <li>BEAN：{@code {beanName, methodName, params:[{source,target}]}}；</li>
- *   <li>SCRIPT：{@code {language:"groovy", source}}；节点级 outputs（可选）声明多输出：
- *       {@code outputs:[{name, type: string|number|boolean|json, desc?}...]} ——
- *       脚本返回 Map 时按声明逐 key 拆包写入扁平上下文（缺 key 跳过；非 Map 报错），
- *       resultVar 双轨并存（整包另存）；</li>
+ *   <li>SCRIPT：{@code {language:"groovy", source}}；节点级 results（可选）统一输出声明：
+ *       {@code results:[{name, mode: WHOLE|KEY, type: string|number|boolean|json, desc?}...]} ——
+ *       mode=WHOLE 将脚本末行表达式的值整体写入变量（null 跳过不写）；
+ *       mode=KEY 要求脚本末行返回 Map，按 name 取对应 key 写入（缺 key 跳过不写；
+ *       含 KEY 声明而末行返回非 Map → 节点失败）。SCRIPT 节点不消费 resultVar；</li>
  *   <li>CONDITION：{@code {variable, operator: EQ|NE|GT|LT|GTE|LTE|EMPTY|NOT_EMPTY, value?}}
  *       （value 支持字面量或 {{var}}）。</li>
  *   <li>BATCH：{@code {collection, itemVar="item", indexVar="index",
@@ -129,10 +130,10 @@ public class LogicFlowDsl {
         private Double y;
         /** 节点配置（结构随 type 变化，见类注释）。 */
         private JsonNode config;
-        /** 结果写回变量名（可选）。 */
+        /** 结果写回变量名（可选；SCRIPT 节点不消费，其输出统一由 results 声明）。 */
         private String resultVar;
-        /** 多输出声明（当前仅 SCRIPT 消费：脚本返回 Map 时逐 key 拆包写入上下文）。 */
-        private List<OutputVarDef> outputs;
+        /** 输出声明（当前仅 SCRIPT 消费：按 mode 从脚本末行表达式提取写入上下文）。 */
+        private List<ResultVarDef> results;
         /** 异常策略：FAIL_FLOW（默认，中断整个流）| IGNORE_CONTINUE（记失败轨迹后继续）。 */
         private String errorAction;
 
@@ -157,22 +158,30 @@ public class LogicFlowDsl {
         public String getResultVar() { return resultVar; }
         public void setResultVar(String resultVar) { this.resultVar = resultVar; }
 
-        public List<OutputVarDef> getOutputs() { return outputs; }
-        public void setOutputs(List<OutputVarDef> outputs) { this.outputs = outputs; }
+        public List<ResultVarDef> getResults() { return results; }
+        public void setResults(List<ResultVarDef> results) { this.results = results; }
 
         public String getErrorAction() { return errorAction; }
         public void setErrorAction(String errorAction) { this.errorAction = errorAction; }
     }
 
-    /** 输出参数声明（SCRIPT 多输出：脚本返回 Map 时按 name 逐 key 拆包写入上下文）。 */
-    public static class OutputVarDef {
+    /**
+     * 输出参数声明（SCRIPT 统一输出模型，单表替代双轨 resultVar+outputs）：
+     * mode=WHOLE 取脚本末行表达式的整体值；mode=KEY 从末行返回的 Map 按 name 取对应 key。
+     */
+    public static class ResultVarDef {
         private String name;
+        /** WHOLE=整体值 | KEY=按 key 取（发布校验必填；运行期未知/缺省按 WHOLE 兜底）。 */
+        private String mode;
         /** string | number | boolean | json（展示辅助，不做强校验）。 */
         private String type;
         private String desc;
 
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
+
+        public String getMode() { return mode; }
+        public void setMode(String mode) { this.mode = mode; }
 
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }

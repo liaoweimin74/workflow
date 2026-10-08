@@ -3221,3 +3221,31 @@ Work Log:
 
 Stage Summary:
 - r19 全绿零干预。5173/3010 已退役未探测；agent-browser 未启动；未修改任何代码。
+---
+Task ID: patrol-r20
+Agent: Super Z (main)
+Task: Job 443426 轻量运维巡检 r20（2026-10-08 12:22 触发）
+
+Work Log:
+- 四链路探活：a) 200；b) 200；c) 200；d) 200。全绿。
+- 内存：Java PID 32234 / vite 单实例 PID 18932 / MariaDB PID 4847 正常；无多余 vite、无 postcss。cgroup 2611695616 bytes（~2.43GB）< 3.5GB。OOM 0。
+- 本轮巡检后按用户指示进入"统一输出机制"开发（无历史兼容约束，干净替换 resultVar/outputs → results[]），开发细节另记 dev 条目。
+
+Stage Summary:
+- r20 全绿零干预。
+---
+Task ID: dev-unify-output-abort
+Agent: Super Z (main)
+Task: 统一输出机制改造——检测到并行写入，主动退避备案
+
+Work Log:
+- 用户批示"统一输出机制 + 不需历史兼容"，本会话开始实施（Dsl→Engine→Validator→前端→构建部署）。
+- 编辑 LogicFlowDsl.java 时 MultiEdit 因 old_str 不匹配失败；随后读文件发现内容已变为非本会话写入的中间态（ResultVarDef{mode: WHOLE|KEY}、SCRIPT 节点 results 单表、其余节点保留 resultVar）。
+- mtime 取证（UTC+8）：LogicFlowDsl 12:27:57 → LogicFlowEngine 12:28:35 → LogicFlowDslValidator 12:29:12（本会话两次只读之间持续推进，按 Dsl→Engine→Validator 顺序），dsl.ts 尚未改动（11:56 旧）。写入方非本会话（本会话唯一成功写入仅为 worklog 追加）。
+- 判定：存在另一并行会话/进程正在实施同题改造（SCRIPT 范围 results 单表 + 其余节点 resultVar 的scoped 变体，与本会话拟定的"全执行节点 results"方案不同）。
+- 决策：立即停止一切代码编辑、不构建不部署，避免双写损坏；仅保留只读观测与本备案。
+- 观测快照（12:29）：Engine L254-259 SCRIPT 不再消费 resultVar；L367+ 统一 results 写回；parseBatchBody 已解析 results；Validator 修改进行中。
+
+Stage Summary:
+- 并发写入风险下主动退避；统一输出机制的实施权待用户仲裁（本会话接手 or 由并行会话完成）。
+- 本会话本轮已完成：patrol-r20 全绿；改造方案设计与源码侦察结论留存于会话（results={name,mode:WHOLE|KEY,type,desc}、WHOLE null 跳过、KEY 缺 key 跳过/非 Map FAIL/字符串先 JSON 解析、单一命名空间去重）。

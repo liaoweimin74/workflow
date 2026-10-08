@@ -42,7 +42,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li>从 START 节点出发沿出边行走，到达 END 结束；多个 START 取第一个，无 START → FAILED；</li>
  *   <li>CONDITION 节点按 branch=true/false 选出边（缺边 → FAILED）；非条件/结束节点缺出边 → FAILED「节点无出边」；</li>
  *   <li>maxSteps=200：步数超出 → FAILED「超出最大执行步数(疑似死循环)」；</li>
- *   <li>HTTP/BEAN/SCRIPT 三型复用既有执行器；结果经 resultVar 写回变量上下文；
+ *   <li>HTTP/BEAN/DATA_UPDATE/SUBFLOW 结果经 resultVar 写回变量上下文；SCRIPT 输出统一由
+ *       节点级 results 声明驱动（mode=WHOLE 整包 / mode=KEY 拆包，见 {@link #writeScriptResults}）；
  *       BATCH 遍历集合并按循环体链（config.body[]，逐项顺序执行链上各节点）执行，
  *       聚合结果列表写入 resultVar；legacy 单动作（actionType+actionConfig）仍兼容；
  *       SUBFLOW 调用另一条已发布逻辑流（环检测 + 深度限制），其 outputVars 写 resultVar；</li>
@@ -249,12 +250,14 @@ public class LogicFlowEngine {
         try {
             Object result = dispatch(node, vars, traces);
             long duration = System.currentTimeMillis() - begin;
-            String resultVar = node.getResultVar();
-            if (resultVar != null && !resultVar.isBlank()) {
-                vars.put(resultVar, result);
-            }
             if (node.getType() == NodeType.SCRIPT) {
-                expandScriptOutputs(node, result, vars);
+                // SCRIPT 输出统一由 results 声明驱动（WHOLE 整包 / KEY 拆包），不消费 resultVar
+                writeScriptResults(node, result, vars);
+            } else {
+                String resultVar = node.getResultVar();
+                if (resultVar != null && !resultVar.isBlank()) {
+                    vars.put(resultVar, result);
+                }
             }
             traces.add(new NodeTrace(node.getId(), node.getName(), node.getType().name(),
                     TRACE_SUCCESS, result, null, duration));
@@ -361,45 +364,54 @@ public class LogicFlowEngine {
     }
 
     /**
-     * SCRIPT 节点多输出展开（outputs 声明式，与 resultVar 双轨并存）：
+     * SCRIPT 节点统一输出写回（results 声明式单表模型，替代双轨 resultVar+outputs）：
      * <ul>
-     *   <li>脚本返回 Map：按声明逐 key 拆包写入扁平上下文；声明 key 缺失 → 跳过不写（防 null 覆盖上游变量）；</li>
-     *   <li>声明名与上游同名变量冲突 → log.warn 警告后放行（首版宽容策略）；</li>
-     *   <li>声明名与 resultVar 同名 → 跳过展开并警告（发布校验已拦截，运行期纵深防御）；</li>
-     *   <li>返回非 Map 而声明了 outputs → 抛 IllegalArgumentException（节点 FAILED，配置错误尽早暴露）。</li>
+     *   <li>mode=WHOLE：脚本末行表达式的值整体写入变量；值为 null → 跳过并警告（防覆盖上游变量）；</li>
+     *   <li>mode=KEY：要求脚本末行返回 Map，按声明名取对应 key 写入；缺 key → 跳过不写；</li>
+     *   <li>声明了 KEY 行而末行返回非 Map → 抛 IllegalArgumentException（节点 FAILED，配置错误尽早暴露）；</li>
+     *   <li>输出名与上游同名变量冲突 → log.warn 警告后放行（运行期宽容策略）。</li>
      * </ul>
-     * 调用点须在 resultVar 写回之后、trace 记 SUCCESS 之前（失败归入节点异常路径）。
+     * 调用点须在 trace 记 SUCCESS 之前（失败归入节点异常路径）。
      */
-    private void expandScriptOutputs(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
-        List<LogicFlowDsl.OutputVarDef> outputs = node.getOutputs();
-        if (outputs == null || outputs.isEmpty()) {
-            return;
+    private void writeScriptResults(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
+        List<LogicFlowDsl.ResultVarDef> results = node.getResults();
+        if (results == null || results.isEmpty()) {
+            return; // 未声明输出：脚本纯副作用，不写任何变量
         }
-        if (!(result instanceof Map)) {
+        String nodeLabel = node.getName() != null && !node.getName().isBlank()
+                ? node.getName() : node.getId();
+        boolean needsMap = results.stream()
+                .anyMatch(r -> r != null && r.getMode() != null && "KEY".equalsIgnoreCase(r.getMode().trim()));
+        if (needsMap && !(result instanceof Map)) {
             throw new IllegalArgumentException("SCRIPT 节点 " + node.getId()
-                    + " 配置了 outputs 但脚本未返回 Map（实际 " + (result == null ? "null" : result.getClass().getSimpleName())
-                    + "）：outputs 需脚本以 [key: value, ...] 形式返回");
+                    + " 声明了 mode=KEY 的输出但脚本未返回 Map（实际 "
+                    + (result == null ? "null" : result.getClass().getSimpleName())
+                    + "）：KEY 输出需脚本以 [key: value, ...] 形式返回");
         }
-        Map<?, ?> map = (Map<?, ?>) result;
-        String resultVar = node.getResultVar();
-        for (LogicFlowDsl.OutputVarDef def : outputs) {
+        for (LogicFlowDsl.ResultVarDef def : results) {
             String name = def != null ? def.getName() : null;
             if (name == null || name.isBlank()) {
                 continue;
             }
-            if (name.equals(resultVar)) {
-                log.warn("SCRIPT 节点 '{}' 输出变量 '{}' 与 resultVar 同名，跳过展开（双轨不重叠）",
-                        node.getName() != null ? node.getName() : node.getId(), name);
-                continue;
-            }
-            if (!map.containsKey(name)) {
-                continue;
+            Object value;
+            if (def.getMode() != null && "KEY".equalsIgnoreCase(def.getMode().trim())) {
+                Map<?, ?> map = (Map<?, ?>) result;
+                if (!map.containsKey(name)) {
+                    continue; // 缺 key 跳过不写（防 null 覆盖上游同名变量）
+                }
+                value = map.get(name);
+            } else {
+                if (result == null) {
+                    log.warn("SCRIPT 节点 '{}' 输出 '{}' 为 null，跳过写入（防覆盖上游同名变量）",
+                            nodeLabel, name);
+                    continue;
+                }
+                value = result;
             }
             if (vars.containsKey(name)) {
-                log.warn("SCRIPT 节点 '{}' 输出变量 '{}' 覆盖上游同名变量（outputs 冲突警告放行）",
-                        node.getName() != null ? node.getName() : node.getId(), name);
+                log.warn("SCRIPT 节点 '{}' 输出 '{}' 覆盖上游同名变量（警告放行）", nodeLabel, name);
             }
-            vars.put(name, map.get(name));
+            vars.put(name, value);
         }
     }
 
@@ -833,21 +845,21 @@ public class LogicFlowEngine {
         inner.setType(step.getType());
         inner.setConfig(step.getConfig());
         inner.setResultVar(step.getResultVar());
-        inner.setOutputs(step.getOutputs());
+        inner.setResults(step.getResults());
         inner.setErrorAction(step.getErrorAction());
         boolean traceable = iteration < BATCH_BODY_TRACE_ITERATIONS;
         long begin = System.currentTimeMillis();
         try {
             Object result = dispatch(inner, childVars, traces);
+            // 统一结果写回：SCRIPT 走 results 声明，其余节点走 resultVar（先写回后记 SUCCESS 轨迹，失败归入异常路径）
+            if (inner.getType() == NodeType.SCRIPT) {
+                writeScriptResults(inner, result, childVars);
+            } else if (inner.getResultVar() != null && !inner.getResultVar().isBlank()) {
+                childVars.put(inner.getResultVar(), result);
+            }
             if (traceable && traces != null) {
                 traces.add(new NodeTrace(stepId, inner.getName(), inner.getType().name(),
                         TRACE_SUCCESS, result, null, System.currentTimeMillis() - begin));
-            }
-            if (inner.getResultVar() != null && !inner.getResultVar().isBlank()) {
-                childVars.put(inner.getResultVar(), result);
-            }
-            if (inner.getType() == NodeType.SCRIPT) {
-                expandScriptOutputs(inner, result, childVars);
             }
             return result;
         } catch (Exception e) {
@@ -895,26 +907,26 @@ public class LogicFlowEngine {
             step.setType(type);
             step.setConfig(entry.get("config"));
             step.setResultVar(textOrNull(entry, "resultVar"));
-            step.setOutputs(parseOutputsList(entry.get("outputs")));
+            step.setResults(parseResultsList(entry.get("results")));
             step.setErrorAction(textOrNull(entry, "errorAction"));
             steps.add(step);
         }
         return steps;
     }
 
-    /** outputs 数组 → OutputVarDef 列表（null/空安全；忽略无名行）。 */
-    private List<LogicFlowDsl.OutputVarDef> parseOutputsList(JsonNode outputsNode) {
-        if (outputsNode == null || !outputsNode.isArray() || outputsNode.isEmpty()) {
+    /** results 数组 → ResultVarDef 列表（null/空安全；忽略无名行）。 */
+    private List<LogicFlowDsl.ResultVarDef> parseResultsList(JsonNode resultsNode) {
+        if (resultsNode == null || !resultsNode.isArray() || resultsNode.isEmpty()) {
             return null;
         }
-        List<LogicFlowDsl.OutputVarDef> outputs = new ArrayList<>();
-        for (JsonNode item : outputsNode) {
-            LogicFlowDsl.OutputVarDef def = objectMapper.convertValue(item, LogicFlowDsl.OutputVarDef.class);
+        List<LogicFlowDsl.ResultVarDef> results = new ArrayList<>();
+        for (JsonNode item : resultsNode) {
+            LogicFlowDsl.ResultVarDef def = objectMapper.convertValue(item, LogicFlowDsl.ResultVarDef.class);
             if (def != null && def.getName() != null && !def.getName().isBlank()) {
-                outputs.add(def);
+                results.add(def);
             }
         }
-        return outputs.isEmpty() ? null : outputs;
+        return results.isEmpty() ? null : results;
     }
 
     /** maxItems 归一化：缺省 100，钳位 1~1000。 */

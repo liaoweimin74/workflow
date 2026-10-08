@@ -391,7 +391,7 @@
           <template v-else-if="node.data.nodeType === 'DATA_UPDATE'">
             <el-form-item required>
               <template #label>
-                <FieldLabel label="目标表" tip="仅平台动态数据表（wf_biz_* / wf_form_data*）；下拉取库真实表清单，表名与列名在运行时经元数据校验，值经参数绑定防注入" />
+                <FieldLabel label="目标表" tip="下拉取数据库全部表清单；表名运行时校验合法性与存在性，值经参数绑定防注入" />
               </template>
               <el-select
                 v-model="dataUpdateCfg.table"
@@ -520,7 +520,6 @@
                     <el-icon><Delete /></el-icon>
                   </el-button>
                 </div>
-                <el-input v-model="r.desc" size="small" placeholder="说明（可选）" class="so-desc" />
               </div>
               <el-alert
                 v-if="resultWarnings.length"
@@ -623,7 +622,6 @@ function addResultRow(): void {
     name: '',
     mode: resultRows.value.length ? 'KEY' : 'WHOLE',
     type: 'string',
-    desc: undefined,
   })
 }
 
@@ -679,10 +677,9 @@ const DATA_UPDATE_OPS: { label: string; value: DataUpdateWhereOp }[] = [
 
 const dataUpdateCfg = computed(() => ensureConfig<DataUpdateNodeConfig>())
 
-// ===== DATA_UPDATE 目标表/列下拉（取库真实 schema，对齐后端白名单） =====
-// 后端 DATA_UPDATE_TABLE_PREFIXES：仅平台动态数据表 wf_biz_* / wf_form_data*；
+// ===== DATA_UPDATE 目标表/列下拉（取库真实 schema） =====
+// 目标表展示数据库全部表清单（后端已放开前缀白名单，保留表名合法性+存在性校验）；
 // 列排除 tenant_id（运行时禁改列），其余以 information_schema 真实结构为准
-const DATA_UPDATE_TABLE_RE = /^(wf_biz_|wf_form_data)/
 
 const duTableOptions = ref<string[]>([])
 const duTablesLoading = ref(false)
@@ -722,7 +719,7 @@ async function loadDuTables() {
   duTablesLoading.value = true
   try {
     const res = await dataSourceApi.getDbSchemaTables()
-    duTableOptions.value = (res.data ?? []).filter((name) => DATA_UPDATE_TABLE_RE.test(name))
+    duTableOptions.value = res.data ?? []
   } catch {
     // http 拦截器已提示；表清单为空时可稍后重开面板
   } finally {
@@ -1163,7 +1160,7 @@ async function copyNodeId() {
   color: var(--el-color-warning);
 }
 
-/* SCRIPT 统一输出声明行：两行卡片式（首行 变量名+提取方式+类型+删除，次行说明） */
+/* 输出参数声明行：单行卡片式（变量名+提取方式+类型+删除） */
 .so-row {
   margin-bottom: 8px;
   padding: 6px 8px;
@@ -1191,10 +1188,6 @@ async function copyNodeId() {
 .so-row .so-type {
   width: 82px;
   flex-shrink: 0;
-}
-
-.so-row .so-desc {
-  margin-top: 6px;
 }
 
 .so-row .el-button {

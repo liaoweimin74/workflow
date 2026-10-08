@@ -170,7 +170,9 @@ function onChipPick(v: FlowVarItem) {
 
 .chips-label {
   flex-shrink: 0;
-  padding-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  height: 21px; /* 与首行 chip 等高（11px×1.4 行高 + 2px 内距 + 1px 边框），label 垂直居中对齐 */
   color: var(--el-text-color-secondary);
 }
 

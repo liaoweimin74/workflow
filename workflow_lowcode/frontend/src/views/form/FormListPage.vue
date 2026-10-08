@@ -128,6 +128,7 @@
           <el-tooltip
             placement="top"
             effect="dark"
+            popper-class="long-line-tip"
             content="绑定后，表单在对应触发点自动运行所选逻辑流：前类触发点失败将拒绝本次操作（校验语义）；后类触发点可选同事务回滚（强一致）或提交后执行（失败仅留运行历史）。编排需已发布，且入参声明须与触发点事件参数完全一致（下拉自动过滤），可在逻辑流设计器「输入参数」中一键导入触发点参数。"
           >
             <el-icon class="binding-hint-icon"><QuestionFilled /></el-icon>
@@ -831,5 +832,13 @@ function formatDate(dateStr: string): string {
 .binding-param-hint .param-tag {
   margin: 0 2px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+</style>
+
+<style>
+/* el-tooltip popper 挂在 body 下，scoped 样式无法命中：全局类限宽使长文案多行换行显示 */
+.long-line-tip {
+  max-width: 420px;
+  line-height: 1.7;
 }
 </style>

@@ -440,8 +440,6 @@ public class LogicFlowEngine {
     // 数据更新（DATA_UPDATE）节点
     // ------------------------------------------------------------------
 
-    /** 数据更新节点允许操作的动态表名前缀（业务表单动态表 / 审批表单数据表）。 */
-    private static final List<String> DATA_UPDATE_TABLE_PREFIXES = List.of("wf_biz_", "wf_form_data");
     /** 数据更新节点 SET 禁改列（租户隔离列，防止跨租户污染）。 */
     private static final String DATA_UPDATE_FORBIDDEN_COLUMN = "tenant_id";
 
@@ -533,15 +531,10 @@ public class LogicFlowEngine {
         return affected;
     }
 
-    /** 表名校验：合法标识符 + 存在 + 前缀白名单（仅平台动态数据表）。 */
+    /** 表名校验：合法标识符 + 存在（目标表放开为全库表清单，表名经标识符校验后拼接，值一律参数绑定防注入）。 */
     private void validateDataUpdateTable(String table) {
         if (!table.matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
             throw new IllegalArgumentException("DATA_UPDATE 表名非法: " + table);
-        }
-        boolean allowed = DATA_UPDATE_TABLE_PREFIXES.stream().anyMatch(table::startsWith);
-        if (!allowed) {
-            throw new IllegalArgumentException(
-                    "DATA_UPDATE 仅允许平台动态数据表(wf_biz_*/wf_form_data*): " + table);
         }
         if (!tableManager.tableExists(table)) {
             throw new IllegalArgumentException("DATA_UPDATE 目标表不存在: " + table);

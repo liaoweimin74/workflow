@@ -5034,3 +5034,18 @@ Work Log:
 Stage Summary:
 - 需求由并行会话承接实现，方案为自定义组件（能力超集：折叠记忆+工具栏+搜索），本会话零残留退出
 - 冲突规避协议执行成功：检测→停手→清理→移交
+---
+Task ID: patrol-r112
+Agent: main (cron Job 443426)
+Task: 定时巡检 r112（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- vite 18932 独占 / Java 28428 / MariaDB 4847；vite 进程数 1，postcss 0
+- cgroup 内存 2503753728 ≈ 2.33GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 【只读观察】并行会话 TriggerGroupSelect 三文件自 21:30:22 后无新改动，疑似进入验证阶段；worklog 尚无其交付条目
+- 本轮零干预
+
+Stage Summary:
+- r77~r112 连续 36 轮稳定全绿；下拉折叠需求等待并行会话验证记账

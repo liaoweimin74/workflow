@@ -79,6 +79,7 @@ public class WorkflowTaskService {
     private final NodeOptionsService nodeOptionsService;
     private final EngineNotifyService engineNotifyService;
     private final ProcessInstanceService processInstanceService;
+    private final com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     public WorkflowTaskService(org.flowable.engine.TaskService flowableTaskService,
                                HistoryService historyService,
@@ -95,7 +96,8 @@ public class WorkflowTaskService {
                                VariableMappingWriter variableMappingWriter,
                                NodeOptionsService nodeOptionsService,
                                EngineNotifyService engineNotifyService,
-                               ProcessInstanceService processInstanceService) {
+                               ProcessInstanceService processInstanceService,
+                               com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger logicFlowApprovalTrigger) {
         this.flowableTaskService = flowableTaskService;
         this.historyService = historyService;
         this.tenantProvider = tenantProvider;
@@ -112,6 +114,7 @@ public class WorkflowTaskService {
         this.nodeOptionsService = nodeOptionsService;
         this.engineNotifyService = engineNotifyService;
         this.processInstanceService = processInstanceService;
+        this.logicFlowApprovalTrigger = logicFlowApprovalTrigger;
     }
 
     public Page<Task> listTodoTasks(String assignee, Pageable pageable) {
@@ -1192,6 +1195,11 @@ public class WorkflowTaskService {
         if (processFinished) {
             writeSmsEndIfConfigured(currentTask.getProcessDefinitionId(), processInstanceId);
         }
+
+        // 4c. 审批事件触发逻辑编排（AFTER_TASK_APPROVE；流程结束时追加 AFTER_PROCESS_FINISH）。
+        //     失败语义由绑定 executionMode 决定：SYNC_IN_TX 抛 BusinessException 回滚本次任务完成，
+        //     AFTER_COMMIT 注册提交后回调（失败仅留痕）——与表单 AFTER_* 触发点语义一致。
+        logicFlowApprovalTrigger.onTaskApproved(processInstanceId, taskId, userId, comment, processFinished);
 
         // 5. 如果流程未结束，查下一个任务
         String nextTaskId = null;

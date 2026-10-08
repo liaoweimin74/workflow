@@ -3864,3 +3864,18 @@ Work Log:
 
 Stage Summary:
 - r56 全绿；OOM 连环案定性收官：元凶=git 单进程膨胀至 ~2.3GB（连续多轮被收割，重复的 git 重操作建议并行会话优化 .gitignore 或改用增量暂存，但非运维授权范围）；核心服务全程无损，新基线 6
+
+---
+Task ID: patrol-r57
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r57：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~569MB（唯一）；Java PID 8906 ~557MB（results-v3 jar 稳定）；MariaDB ~187MB；巡检瞬间无 git 瞬时进程（元凶在轮间窗口，r56 已实锤 git ~2.3GB 膨胀模式）
+- cgroup = 1617293312（~1.62GB，低位稳定）
+- OOM 事故（第六次）：oom_kill 6 → 7（+1），延续 git 连环案既定模式（轮间 git 重操作被收割）；新基线 7；零干预
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r57 全绿、内存低位；OOM 案发节奏稳定为每轮 +1（git 重操作未停），核心服务无损；待并行会话侧收敛 git 用法后自然止血，运维侧继续只记不动

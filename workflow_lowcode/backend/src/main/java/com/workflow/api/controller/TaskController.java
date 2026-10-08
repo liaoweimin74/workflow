@@ -34,12 +34,14 @@ public class TaskController {
     private final ForwardSignService forwardSignService;
     private final ProcessInstanceService processInstanceService;
     private final TaskService flowableTaskService;
+    private final com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     public TaskController(WorkflowTaskService taskService, RejectService rejectService,
                           TransferService transferService, AddSignService addSignService,
                           ForwardSignService forwardSignService,
                           ProcessInstanceService processInstanceService,
-                          TaskService flowableTaskService) {
+                          TaskService flowableTaskService,
+                          com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger logicFlowApprovalTrigger) {
         this.taskService = taskService;
         this.rejectService = rejectService;
         this.transferService = transferService;
@@ -47,6 +49,7 @@ public class TaskController {
         this.forwardSignService = forwardSignService;
         this.processInstanceService = processInstanceService;
         this.flowableTaskService = flowableTaskService;
+        this.logicFlowApprovalTrigger = logicFlowApprovalTrigger;
     }
 
     @GetMapping
@@ -158,6 +161,9 @@ public class TaskController {
         // 终止流程
         processInstanceService.terminateProcessInstance(processInstanceId,
                 reason != null ? reason : "审批拒绝，流程终止");
+
+        // 拒绝终止后触发逻辑编排（AFTER_TASK_REJECT；失败语义由绑定 executionMode 决定）
+        logicFlowApprovalTrigger.onTaskRefused(processInstanceId, id, userId, reason);
         return R.ok();
     }
 

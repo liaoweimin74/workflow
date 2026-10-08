@@ -51,6 +51,7 @@ public class RejectService {
     private final NodeOptionsService nodeOptionsService;
     private final NodeConfigRepository nodeConfigRepository;
     private final HistoryService historyService;
+    private final com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     public RejectService(TaskService flowableTaskService,
                          RuntimeService runtimeService,
@@ -60,7 +61,8 @@ public class RejectService {
                          VariableMappingWriter variableMappingWriter,
                          NodeOptionsService nodeOptionsService,
                          NodeConfigRepository nodeConfigRepository,
-                         HistoryService historyService) {
+                         HistoryService historyService,
+                         com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger logicFlowApprovalTrigger) {
         this.flowableTaskService = flowableTaskService;
         this.runtimeService = runtimeService;
         this.initiatorNodeResolver = initiatorNodeResolver;
@@ -70,6 +72,7 @@ public class RejectService {
         this.nodeOptionsService = nodeOptionsService;
         this.nodeConfigRepository = nodeConfigRepository;
         this.historyService = historyService;
+        this.logicFlowApprovalTrigger = logicFlowApprovalTrigger;
     }
 
     /**
@@ -163,6 +166,9 @@ public class RejectService {
         } catch (Exception e) {
             log.warn("Failed to write variable mappings after reject task [{}]: {}", taskId, e.getMessage());
         }
+
+        // 驳回退回后触发逻辑编排（AFTER_TASK_RETURN；失败语义由绑定 executionMode 决定）
+        logicFlowApprovalTrigger.onTaskReturned(task.getProcessInstanceId(), taskId, userId, reason);
     }
 
     /**

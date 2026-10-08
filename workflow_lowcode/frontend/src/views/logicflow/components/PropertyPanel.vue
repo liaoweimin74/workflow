@@ -412,7 +412,25 @@
               </div>
               <div v-if="!dataUpdateCfg.setOps.length" class="rows-empty">暂无更新字段</div>
               <div v-for="(op, i) in dataUpdateCfg.setOps" :key="i" class="du-row">
-                <el-input v-model="op.column" size="small" placeholder="列名" class="du-col" />
+                <el-select
+                  v-model="op.column"
+                  size="small"
+                  filterable
+                  allow-create
+                  default-first-option
+                  :loading="duColumnsLoading"
+                  :disabled="!dataUpdateCfg.table"
+                  :title="dataUpdateCfg.table ? undefined : '先选择目标表'"
+                  placeholder="列名"
+                  class="du-col"
+                >
+                  <el-option v-for="c in duColumnMergedOptions" :key="c.key" :label="c.key" :value="c.key">
+                    <span class="du-col-opt">
+                      <span>{{ c.key }}</span>
+                      <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+                    </span>
+                  </el-option>
+                </el-select>
                 <el-select v-model="op.mode" size="small" class="du-mode">
                   <el-option label="SET" value="SET" />
                   <el-option label="ADD +" value="ADD" />
@@ -439,7 +457,25 @@
               </div>
               <div v-if="!dataUpdateCfg.where.length" class="rows-empty du-warn">未配置条件，执行将更新全表</div>
               <div v-for="(cond, i) in dataUpdateCfg.where" :key="i" class="du-row">
-                <el-input v-model="cond.column" size="small" placeholder="列名" class="du-col" />
+                <el-select
+                  v-model="cond.column"
+                  size="small"
+                  filterable
+                  allow-create
+                  default-first-option
+                  :loading="duColumnsLoading"
+                  :disabled="!dataUpdateCfg.table"
+                  :title="dataUpdateCfg.table ? undefined : '先选择目标表'"
+                  placeholder="列名"
+                  class="du-col"
+                >
+                  <el-option v-for="c in duColumnMergedOptions" :key="c.key" :label="c.key" :value="c.key">
+                    <span class="du-col-opt">
+                      <span>{{ c.key }}</span>
+                      <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+                    </span>
+                  </el-option>
+                </el-select>
                 <el-select v-model="cond.op" size="small" class="du-mode">
                   <el-option v-for="op in DATA_UPDATE_OPS" :key="op.value" :label="op.label" :value="op.value" />
                 </el-select>
@@ -1086,6 +1122,26 @@ async function copyNodeId() {
 .du-row .du-col {
   flex: 1.1;
   min-width: 0;
+}
+
+/* 目标表下拉占满表单项宽度（与原 el-input 对齐） */
+.du-table-select {
+  width: 100%;
+}
+
+/* 列下拉选项：列名 + 类型小字两端排布 */
+.du-col-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.du-col-type {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--el-text-color-secondary);
 }
 
 .du-row .du-mode {

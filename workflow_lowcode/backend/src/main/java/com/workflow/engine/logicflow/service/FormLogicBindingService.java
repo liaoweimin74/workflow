@@ -59,12 +59,22 @@ public class FormLogicBindingService {
     public static final String TRIG_BEFORE_SAVE = "BEFORE_SAVE";
     /** 工作流表单：节点间表单数据保存后（非快照 upsert 路径，dataId = 记录 id）。 */
     public static final String TRIG_AFTER_SAVE = "AFTER_SAVE";
+    /** 工作流表单：审批任务通过后（每次 complete 动作后；AFTER 语义）。 */
+    public static final String TRIG_AFTER_TASK_APPROVE = "AFTER_TASK_APPROVE";
+    /** 工作流表单：审批拒绝（终止全流程）后（AFTER 语义）。 */
+    public static final String TRIG_AFTER_TASK_REJECT = "AFTER_TASK_REJECT";
+    /** 工作流表单：驳回退回发起人后（AFTER 语义）。 */
+    public static final String TRIG_AFTER_TASK_RETURN = "AFTER_TASK_RETURN";
+    /** 工作流表单：流程实例结束（最后一个审批任务通过）后（AFTER 语义）。 */
+    public static final String TRIG_AFTER_PROCESS_FINISH = "AFTER_PROCESS_FINISH";
     public static final Set<String> TRIGGER_TYPES = Set.of(
             TRIG_BEFORE_CREATE, TRIG_AFTER_CREATE,
             TRIG_BEFORE_UPDATE, TRIG_AFTER_UPDATE,
             TRIG_BEFORE_DELETE, TRIG_AFTER_DELETE,
             TRIG_BEFORE_SNAPSHOT, TRIG_AFTER_SNAPSHOT,
-            TRIG_BEFORE_SAVE, TRIG_AFTER_SAVE);
+            TRIG_BEFORE_SAVE, TRIG_AFTER_SAVE,
+            TRIG_AFTER_TASK_APPROVE, TRIG_AFTER_TASK_REJECT,
+            TRIG_AFTER_TASK_RETURN, TRIG_AFTER_PROCESS_FINISH);
 
     public static final String MODE_SYNC_IN_TX = "SYNC_IN_TX";
     public static final String MODE_AFTER_COMMIT = "AFTER_COMMIT";
@@ -263,6 +273,44 @@ public class FormLogicBindingService {
             return loginUser.getUsername();
         }
         return "system";
+    }
+
+    /**
+     * 组装审批事件触发入参（系统注入约定，与前端 TRIGGER_PARAM_SPECS 逐字段对齐）：
+     * {@code formData / processInstanceId / taskId / formKey / formType / opType / operator / comment / __trigger}。
+     *
+     * <p>与 {@link #buildVars} 分开组装：审批事件的上下文是流程实例而非表单 CRUD 行，
+     * 不注入 formDataExisting/dataId；formData 取该流程实例最新一条表单数据（可为 null）。
+     *
+     * @param formData          该流程实例最新表单数据（解析失败/无记录传 null）
+     * @param opType            APPROVE | REJECT | RETURN | FINISH
+     * @param comment           审批意见/拒绝原因（可为 null）
+     * @param operatorOverride  审批人（null 时回落当前登录人）
+     */
+    public Map<String, Object> buildApprovalVars(String formType, String formKey, String triggerType,
+                                                 String opType, String processInstanceId, String taskId,
+                                                 Map<String, Object> formData, String comment,
+                                                 String operatorOverride) {
+        Map<String, Object> vars = new LinkedHashMap<>();
+        vars.put("formData", formData);
+        vars.put("processInstanceId", processInstanceId);
+        vars.put("taskId", taskId);
+        vars.put("formKey", formKey);
+        vars.put("formType", formType);
+        vars.put("opType", opType);
+        vars.put("operator", operatorOverride != null && !operatorOverride.isBlank()
+                ? operatorOverride : currentOperator());
+        vars.put("comment", comment);
+        Map<String, Object> trigger = new LinkedHashMap<>();
+        trigger.put("source", "form-approval");
+        trigger.put("formType", formType);
+        trigger.put("formKey", formKey);
+        trigger.put("trigger", triggerType);
+        trigger.put("opType", opType);
+        trigger.put("processInstanceId", processInstanceId);
+        trigger.put("taskId", taskId);
+        vars.put("__trigger", trigger);
+        return vars;
     }
 
     // ------------------------------------------------------------------

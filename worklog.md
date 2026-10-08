@@ -4046,3 +4046,18 @@ Work Log:
 
 Stage Summary:
 - push 因缺少 GitHub 写权限凭据失败；需用户提供 PAT（repo 写权限）后再执行：git remote set-url 或 credential store 方式完成 246 个提交的推送；其余状态正常
+
+---
+Task ID: patrol-r67
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r67：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~533MB（唯一）；Java PID 12826 ~530MB（15:31 新 jar 稳定）；MariaDB ~189MB；Chrome 组驻留（3 进程 ~338MB：renderer 230 + 主 65 + webui 43）
+- cgroup = 2010046464（~2.01GB，平稳，未破 3.5GB 备案线）
+- OOM 事故（第十七、十八次）：oom_kill 16 → 18（**+2**，打破每轮 +1 节奏）——本轮轮间发生 2 次收割，或与上回合 push 尝试期间 git 打包操作叠加轮间 git 重操作有关；新基线 18；零干预
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r67 全绿、内存平稳（~2.01GB）；git 连环案累计 18 杀、节奏加速为本轮 +2（疑似 push 尝试叠加），核心服务无损，新基线 18；push 仍待用户提供凭据

@@ -2956,3 +2956,18 @@ Stage Summary:
 - 产物：frontend/src/api/formLogicBinding.ts、frontend/src/views/form/FormListPage.vue、frontend/src/views/logicflow/LogicFlowDesigner.vue、backend .../FormLogicBindingService.java、FormDataService.java、LogicFlowController.java；新 jar 已部署
 - 注意：逻辑流未声明入参不会出现在绑定下拉（设计使然，导入即解决）；LogicFlowDetail（detail 接口）未加 inputParams，前端过滤走 list 摘要即可
 - 遗留：wrapper 内既有 TS 错误（ListCards/SearchTable 等）与本次无关，建议后续单独治理
+
+---
+Task ID: 443426-r9
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 11:02 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 538MB）；Java 正常驻留（PID 22990，RSS 549MB）；无 postcss worker，无多余 vite
+- cgroup 内存 3189055488B ≈ 2.97GB，低于 3.5GB 阈值，较上轮 3.09GB 略降；OOM 计数 0 与基线一致
+- agent-browser chrome 进程组仍在（renderer PID 23191 RSS 371MB，较上轮 464MB 回落）：三功能恢复流已收尾（见 LOCAL-3flows-restore），残留浏览器属验证会话收尾阶段，继续观察不干预（本任务未授权 kill）
+- 未启动 agent-browser、未修改代码，探活通过即结束
+
+Stage Summary:
+- 本轮全绿零干预；内存余量约 0.53GB 且环比下降，无风险；逻辑流绑定三功能已确认恢复上线（触发点扩展/参数过滤下拉/设计器导入），服务运行新实现

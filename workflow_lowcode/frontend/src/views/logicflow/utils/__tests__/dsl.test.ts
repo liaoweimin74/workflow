@@ -41,7 +41,7 @@ describe('parseDsl', () => {
           x: 220,
           y: 160,
           config: { url: 'http://a/b', method: 'POST', headers: { 'X-Token': 't' }, queryParams: [], bodyParams: [], connTimeoutMs: 3000, readTimeoutMs: 5000, retryCount: 1 },
-          resultVar: 'risk',
+          results: [{ name: 'risk', mode: 'WHOLE' }],
           errorAction: 'IGNORE_CONTINUE',
         },
         {
@@ -75,7 +75,7 @@ describe('parseDsl', () => {
 
     const http = graph.nodes[1]
     expect(http.data.nodeType).toBe('HTTP')
-    expect(http.data.resultVar).toBe('risk')
+    expect(http.data.results).toEqual([{ name: 'risk', mode: 'WHOLE', type: 'string' }])
     expect(http.data.errorAction).toBe('IGNORE_CONTINUE')
     expect(http.data.config).toMatchObject({ url: 'http://a/b', method: 'POST' })
 
@@ -128,7 +128,7 @@ describe('serializeDsl', () => {
       makeNode('start_1', 'START', 120, 60),
       makeNode('http_1', 'HTTP', 240, 140, {
         config: defaultConfig('HTTP'),
-        resultVar: 'risk',
+        results: [{ name: 'risk', mode: 'WHOLE', type: 'string' }],
         errorAction: 'IGNORE_CONTINUE',
       }),
       makeNode('end_1', 'END', 360, 220),
@@ -147,20 +147,20 @@ describe('serializeDsl', () => {
     const parsed = JSON.parse(serializeDsl([nodes[0], vueFlowPolluted, nodes[2]], edges))
     expect(Object.keys(parsed)).toEqual(['nodes', 'edges'])
     expect(Object.keys(parsed.nodes[1]).sort()).toEqual(
-      ['config', 'errorAction', 'id', 'name', 'resultVar', 'type', 'x', 'y'].sort()
+      ['config', 'errorAction', 'id', 'name', 'results', 'type', 'x', 'y'].sort()
     )
     expect(parsed.nodes[1].x).toBe(240)
-    expect(parsed.nodes[1].resultVar).toBe('risk')
+    expect(parsed.nodes[1].results).toEqual([{ name: 'risk', mode: 'WHOLE', type: 'string' }])
     expect(parsed.nodes[1].errorAction).toBe('IGNORE_CONTINUE')
     expect(parsed.edges[0]).toEqual({ id: 'e1', source: 'start_1', target: 'http_1' })
   })
 
-  it('START/END/CONDITION 节点不输出 resultVar/errorAction', () => {
+  it('START/END/CONDITION 节点不输出 errorAction（results 未声明也不输出）', () => {
     const nodes: FlowNode[] = [
-      makeNode('cond_1', 'CONDITION', 0, 0, { resultVar: 'x', errorAction: 'FAIL_FLOW' }),
+      makeNode('cond_1', 'CONDITION', 0, 0, { errorAction: 'FAIL_FLOW' }),
     ]
     const parsed = JSON.parse(serializeDsl(nodes, []))
-    expect(parsed.nodes[0].resultVar).toBeUndefined()
+    expect(parsed.nodes[0].results).toBeUndefined()
     expect(parsed.nodes[0].errorAction).toBeUndefined()
   })
 
@@ -169,12 +169,12 @@ describe('serializeDsl', () => {
       makeNode('start_1', 'START', 100, 80),
       makeNode('bean_1', 'BEAN', 220, 160, {
         config: { beanName: 'demoService', methodName: 'query', params: [{ source: 'a', target: 'b' }] },
-        resultVar: 'beanOut',
+        results: [{ name: 'beanOut', mode: 'WHOLE', type: 'string' }],
         errorAction: 'FAIL_FLOW',
       }),
       makeNode('script_1', 'SCRIPT', 340, 240, {
         config: { language: 'groovy', source: "return 'ok'" },
-        resultVar: 's',
+        results: [{ name: 's', mode: 'WHOLE', type: 'string' }],
         errorAction: 'IGNORE_CONTINUE',
       }),
       makeNode('cond_1', 'CONDITION', 460, 320, {
@@ -267,7 +267,7 @@ describe('isDslEqual', () => {
 })
 
 describe('BATCH 批处理节点', () => {
-  it('BATCH 属合法类型：parse 保留 config 与 resultVar，默认名为批处理', () => {
+  it('BATCH 属合法类型：parse 保留 config 与 results，默认名为批处理', () => {
     const graph = parseDsl(
       JSON.stringify({
         nodes: [
@@ -286,7 +286,7 @@ describe('BATCH 批处理节点', () => {
               stopOnError: false,
               maxItems: 50,
             },
-            resultVar: 'notifyOut',
+            results: [{ name: 'notifyOut', mode: 'WHOLE' }],
           },
         ],
         edges: [],
@@ -295,20 +295,20 @@ describe('BATCH 批处理节点', () => {
     expect(graph.nodes[0].data.nodeType).toBe('BATCH')
     expect(graph.nodes[0].data.name).toBe('批量通知')
     expect(graph.nodes[0].data.config).toMatchObject({ actionType: 'HTTP', itemVar: 'user', maxItems: 50 })
-    expect(graph.nodes[0].data.resultVar).toBe('notifyOut')
+    expect(graph.nodes[0].data.results).toEqual([{ name: 'notifyOut', mode: 'WHOLE', type: 'string' }])
   })
 
-  it('BATCH 序列化输出 resultVar/errorAction（业务执行节点语义）；新默认 config 无 legacy 动作', () => {
+  it('BATCH 序列化输出 results/errorAction（业务执行节点语义）；新默认 config 无 legacy 动作', () => {
     const nodes: FlowNode[] = [
       makeNode('batch_1', 'BATCH', 300, 120, {
         config: defaultConfig('BATCH'),
-        resultVar: 'out',
+        results: [{ name: 'out', mode: 'WHOLE', type: 'json' }],
         errorAction: 'FAIL_FLOW',
       }),
     ]
     const parsed = JSON.parse(serializeDsl(nodes, []))
     expect(parsed.nodes[0].type).toBe('BATCH')
-    expect(parsed.nodes[0].resultVar).toBe('out')
+    expect(parsed.nodes[0].results).toEqual([{ name: 'out', mode: 'WHOLE', type: 'json' }])
     expect(parsed.nodes[0].errorAction).toBe('FAIL_FLOW')
     expect(parsed.nodes[0].config).toMatchObject({
       collection: '',
@@ -334,7 +334,7 @@ describe('BATCH 批处理节点', () => {
           stopOnError: true,
           maxItems: 10,
         },
-        resultVar: 'doubled',
+        results: [{ name: 'doubled', mode: 'WHOLE' }],
       }),
     ]
     const edges: FlowEdge[] = [makeEdge('e1', 'start_1', 'batch_1')]
@@ -424,7 +424,7 @@ describe('BATCH 批处理节点', () => {
       }),
       makeNode('batch_1__b0', 'SCRIPT', 260, 210, {
         config: { language: 'groovy', source: 'return item' },
-        resultVar: 'r0',
+        results: [{ name: 'r0', mode: 'WHOLE', type: 'string' }],
       }),
       makeNode('batch_1__b1', 'DATA_UPDATE', 440, 210, {
         config: { table: 'wf_biz_t', setOps: [{ column: 'c', mode: 'SET', value: '1' }], where: [] },
@@ -449,7 +449,7 @@ describe('BATCH 批处理节点', () => {
     const dsl = JSON.parse(serializeDsl(nodes, edges))
     const batch = dsl.nodes.find((n: { id: string }) => n.id === 'batch_1')
     expect(batch.config.body).toHaveLength(2)
-    expect(batch.config.body[0]).toMatchObject({ id: 'batch_1__b0', type: 'SCRIPT', resultVar: 'r0' })
+    expect(batch.config.body[0]).toMatchObject({ id: 'batch_1__b0', type: 'SCRIPT', results: [{ name: 'r0', mode: 'WHOLE', type: 'string' }] })
     expect(batch.config.body[1]).toMatchObject({ id: 'batch_1__b1', type: 'DATA_UPDATE' })
     expect(batch.config.actionType).toBeUndefined()
     // 循环边/链上节点不进契约
@@ -526,7 +526,7 @@ describe('SUBFLOW', () => {
           passAllVars: false,
           varsMapping: [{ source: 'a', target: 'x' }],
         },
-        resultVar: 'subOut',
+        results: [{ name: 'subOut', mode: 'WHOLE' }],
       }),
     ]
     const edges: FlowEdge[] = [
@@ -540,7 +540,7 @@ describe('SUBFLOW', () => {
     expect(raw.nodes[1].config.flowId).toBe('abc123')
     expect(raw.nodes[1].config.passAllVars).toBe(false)
     expect(raw.nodes[1].config.varsMapping[0]).toEqual({ source: 'a', target: 'x' })
-    expect(raw.nodes[1].resultVar).toBe('subOut')
+    expect(raw.nodes[1].results).toEqual([{ name: 'subOut', mode: 'WHOLE', type: 'string' }])
   })
 })
 
@@ -554,7 +554,7 @@ describe('DATA_UPDATE 数据更新节点', () => {
     expect(defaultNodeName('DATA_UPDATE')).toBe('数据更新')
   })
 
-  it('DATA_UPDATE 属合法类型：parse 保留 config 与 resultVar/errorAction', () => {
+  it('DATA_UPDATE 属合法类型：parse 保留 config 与 results/errorAction', () => {
     const dsl = JSON.stringify({
       nodes: [
         { id: 'start_1', type: 'START', name: '开始', x: 100, y: 80 },
@@ -569,7 +569,7 @@ describe('DATA_UPDATE 数据更新节点', () => {
             setOps: [{ column: 'qty', mode: 'ADD', value: '{{formData.qty}}' }],
             where: [{ column: 'sku', op: 'EQ', value: '{{formData.sku}}' }],
           },
-          resultVar: 'updatedRows',
+          results: [{ name: 'updatedRows', mode: 'WHOLE' }],
           errorAction: 'FAIL_FLOW',
         },
         { id: 'end_1', type: 'END', name: '结束', x: 500, y: 240 },
@@ -582,7 +582,7 @@ describe('DATA_UPDATE 数据更新节点', () => {
     const graph = parseDsl(dsl)
     const du = graph.nodes[1]
     expect(du.data.nodeType).toBe('DATA_UPDATE')
-    expect(du.data.resultVar).toBe('updatedRows')
+    expect(du.data.results).toEqual([{ name: 'updatedRows', mode: 'WHOLE', type: 'string' }])
     expect(du.data.errorAction).toBe('FAIL_FLOW')
     const cfg = du.data.config as { table: string; setOps: unknown[]; where: unknown[] }
     expect(cfg.table).toBe('wf_biz_warehouse')
@@ -602,7 +602,7 @@ describe('DATA_UPDATE 数据更新节点', () => {
           ],
           where: [{ column: 'id', op: 'EQ', value: '{{dataId}}' }],
         },
-        resultVar: 'updatedRows',
+        results: [{ name: 'updatedRows', mode: 'WHOLE' }],
       }),
     ]
     const edges: FlowEdge[] = [makeEdge('e1', 'start_1', 'du_1')]
@@ -614,7 +614,7 @@ describe('DATA_UPDATE 数据更新节点', () => {
     expect(raw.nodes[1].config.table).toBe('wf_biz_product')
     expect(raw.nodes[1].config.setOps[0]).toEqual({ column: 'stock', mode: 'SUB', value: '12' })
     expect(raw.nodes[1].config.where[0]).toEqual({ column: 'id', op: 'EQ', value: '{{dataId}}' })
-    expect(raw.nodes[1].resultVar).toBe('updatedRows')
+    expect(raw.nodes[1].results).toEqual([{ name: 'updatedRows', mode: 'WHOLE', type: 'string' }])
   })
 })
 
@@ -651,7 +651,7 @@ describe('inputVars', () => {
 })
 
 describe('collectReferencedVars', () => {
-  it('提取占位符/结构化引用并剔除本流产出（resultVar/itemVar/indexVar）', async () => {
+  it('提取占位符/结构化引用并剔除本流产出（results/itemVar/indexVar）', async () => {
     const { collectReferencedVars } = await import('../dsl')
     const graph = parseDsl(JSON.stringify({
       nodes: [
@@ -659,7 +659,7 @@ describe('collectReferencedVars', () => {
         {
           id: 'h', type: 'HTTP', name: '调用', x: 10, y: 10,
           config: { url: 'http://a/{{orderId}}', method: 'GET', headers: {}, queryParams: [{ source: 'token', target: 't' }], bodyParams: [] },
-          resultVar: 'resp',
+          results: [{ name: 'resp', mode: 'WHOLE' }],
         },
         {
           id: 'b', type: 'BATCH', name: '批', x: 20, y: 20,
@@ -680,7 +680,7 @@ describe('collectReferencedVars', () => {
     }))
     const refs = collectReferencedVars(graph)
     // orderId（占位符+映射）、token（queryParams source）为输入候选；
-    // resp 虽被 BATCH collection 引用，但它是本流产出（resultVar）→ 剔除；item/index 产出 → 剔除
+    // resp 虽被 BATCH collection 引用，但它是本流产出（results 声明）→ 剔除；item/index 产出 → 剔除
     expect(refs).toContain('orderId')
     expect(refs).toContain('token')
     expect(refs).not.toContain('resp')

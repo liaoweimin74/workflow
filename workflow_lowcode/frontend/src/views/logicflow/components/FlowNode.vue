@@ -38,17 +38,24 @@
 
     <div v-if="summary" class="node-summary" :title="summary">{{ summary }}</div>
 
-    <div v-if="data.resultVar || scriptOutputNames.length || data.errorAction === 'IGNORE_CONTINUE'" class="node-tags">
-      <span v-if="data.resultVar" class="node-tag var-tag" :title="`结果写入变量：${data.resultVar}`">
+    <div
+      v-if="(data.resultVar && data.nodeType !== 'SCRIPT') || scriptResultNames.length || data.errorAction === 'IGNORE_CONTINUE'"
+      class="node-tags"
+    >
+      <span
+        v-if="data.resultVar && data.nodeType !== 'SCRIPT'"
+        class="node-tag var-tag"
+        :title="`结果写入变量：${data.resultVar}`"
+      >
         {{ data.resultVar }}
       </span>
       <span
-        v-for="o in scriptOutputNames"
-        :key="o.name"
+        v-for="r in scriptResultNames"
+        :key="r.name"
         class="node-tag out-tag"
-        :title="`多输出变量：${o.name}${o.desc ? '（' + o.desc + '）' : ''}`"
+        :title="`输出变量：${r.name}${r.desc ? '（' + r.desc + '）' : ''}`"
       >
-        ↗ {{ o.name }}
+        ↗ {{ r.name }}
       </span>
       <span v-if="data.errorAction === 'IGNORE_CONTINUE'" class="node-tag ignore-tag" title="出错时忽略并继续">
         忽略继续
@@ -123,12 +130,12 @@ function legacyActionSummary(cfg: Record<string, unknown> | undefined): string {
   return 'Groovy 脚本'
 }
 
-/** SCRIPT 多输出声明行（卡片徽标展示；仅 SCRIPT 且声明了变量名时非空） */
-const scriptOutputNames = computed(() => {
-  if (props.data.nodeType !== 'SCRIPT' || !Array.isArray(props.data.outputs)) return []
-  return (props.data.outputs as { name?: string; desc?: string }[])
-    .map((o) => ({ name: String(o?.name ?? '').trim(), desc: o?.desc ? String(o.desc) : '' }))
-    .filter((o) => o.name)
+/** SCRIPT 输出声明行（卡片徽标展示；仅 SCRIPT 且声明了变量名时非空） */
+const scriptResultNames = computed(() => {
+  if (props.data.nodeType !== 'SCRIPT' || !Array.isArray(props.data.results)) return []
+  return (props.data.results as { name?: string; desc?: string }[])
+    .map((r) => ({ name: String(r?.name ?? '').trim(), desc: r?.desc ? String(r.desc) : '' }))
+    .filter((r) => r.name)
 })
 
 /** 节点副标题：类型 + 配置摘要 */
@@ -146,8 +153,8 @@ const summary = computed(() => {
       return bean || method ? `${bean || '?'}#${method || '?'}` : '未配置 Bean'
     }
     case 'SCRIPT': {
-      const outputs = scriptOutputNames.value
-      return outputs.length ? `Groovy 脚本 · ${outputs.length} 个输出` : 'Groovy 脚本'
+      const results = scriptResultNames.value
+      return results.length ? `Groovy 脚本 · ${results.length} 个输出` : 'Groovy 脚本'
     }
     case 'CONDITION': {
       const variable = String(cfg?.variable ?? '')

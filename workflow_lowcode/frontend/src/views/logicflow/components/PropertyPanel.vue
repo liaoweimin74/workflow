@@ -236,21 +236,27 @@
 
             <div class="rows-block">
               <div class="rows-head">
-                <FieldLabel label="输出参数（多输出）" tip="声明后脚本末行返回 Map（如 [outLevel: level]），引擎按声明逐 key 拆包写入上下文，供下游节点直接引用；缺 key 跳过不写；与 resultVar 双轨并存（整包另存）" />
-                <el-button size="small" text type="primary" @click="addScriptOutput">添加</el-button>
+                <FieldLabel label="输出参数（results）" tip="统一输出声明，每个结果按提取方式写入上下文：整体值（WHOLE）→ 脚本末行表达式的值整个写入该变量，标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 要求脚本末行返回 Map（如 [outLevel: level]），按变量名取对应 key，缺 key 跳过；含 KEY 声明而末行未返回 Map → 节点失败。输出名全表唯一，供下游节点直接引用" />
+                <el-button size="small" text type="primary" @click="addScriptResult">添加</el-button>
               </div>
-              <div v-if="!scriptOutputs.length" class="rows-empty">
-                未声明：脚本结果仅经 resultVar 单变量输出
+              <div v-if="!scriptResults.length" class="rows-empty">
+                未声明输出：脚本结果不写入任何变量（纯副作用脚本可留空）
               </div>
-              <div v-for="(o, i) in scriptOutputs" :key="i" class="so-row">
-                <el-input v-model="o.name" size="small" placeholder="变量名如 outLevel" class="so-name" />
-                <el-select v-model="o.type" size="small" class="so-type">
-                  <el-option v-for="t in OUTPUT_VAR_TYPES" :key="t" :label="t" :value="t" />
-                </el-select>
-                <el-input v-model="o.desc" size="small" placeholder="说明（可选）" class="so-desc" />
-                <el-button size="small" text type="danger" @click="scriptOutputs.splice(i, 1)">
-                  <el-icon><Delete /></el-icon>
-                </el-button>
+              <div v-for="(r, i) in scriptResults" :key="i" class="so-row">
+                <div class="so-line1">
+                  <el-input v-model="r.name" size="small" placeholder="变量名如 outLevel" class="so-name" />
+                  <el-select v-model="r.mode" size="small" class="so-mode">
+                    <el-option label="整体值" value="WHOLE" />
+                    <el-option label="按 key 取" value="KEY" />
+                  </el-select>
+                  <el-select v-model="r.type" size="small" class="so-type">
+                    <el-option v-for="t in OUTPUT_VAR_TYPES" :key="t" :label="t" :value="t" />
+                  </el-select>
+                  <el-button size="small" text type="danger" @click="scriptResults.splice(i, 1)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+                <el-input v-model="r.desc" size="small" placeholder="说明（可选）" class="so-desc" />
               </div>
               <el-alert
                 v-if="scriptOutputWarnings.length"
@@ -478,9 +484,10 @@
             </div>
           </template>
 
-          <!-- ===== 公共：结果变量 / 异常策略（START/END/CONDITION 无） ===== -->
+          <!-- ===== 公共：结果变量 / 异常策略（START/END/CONDITION 无；
+               SCRIPT 输出统一由 results 声明，不再有 resultVar） ===== -->
           <template v-if="hasExecutionMeta">
-            <el-form-item>
+            <el-form-item v-if="node.data.nodeType !== 'SCRIPT'">
               <template #label>
                 <FieldLabel label="结果写入变量（resultVar）" tip="节点输出写入该上下文变量，供后续节点以 {{ 变量 }} 引用；留空不保存" />
               </template>
@@ -511,7 +518,7 @@ import VarInput from './VarInput.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, OUTPUT_VAR_TYPES, type OutputVarDef } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
 import type { FlowVarItem } from '../utils/flowVars'
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
@@ -563,26 +570,31 @@ const httpCfg = computed(() => ensureConfig<HttpNodeConfig>())
 const beanCfg = computed(() => ensureConfig<{ beanName: string; methodName: string; params: { source: string; target: string }[] }>())
 const scriptCfg = computed(() => ensureConfig<{ language: string; source: string }>())
 
-/** SCRIPT 多输出声明（reactive 引用，增删改直接写回 node.data.outputs） */
-const scriptOutputs = computed<OutputVarDef[]>(() => {
+/** SCRIPT 统一输出声明（reactive 引用，增删改直接写回 node.data.results） */
+const scriptResults = computed<ResultVarDef[]>(() => {
   const n = node.value!
   if (n.data.nodeType !== 'SCRIPT') return []
-  if (!Array.isArray(n.data.outputs)) n.data.outputs = []
-  return n.data.outputs
+  if (!Array.isArray(n.data.results)) n.data.results = []
+  return n.data.results
 })
 
-function addScriptOutput(): void {
-  scriptOutputs.value.push({ name: '', type: 'string', desc: undefined })
+function addScriptResult(): void {
+  // 首行默认整体值（单值脚本最常见）；已有行默认按 key 取（多输出需脚本返回 Map）
+  scriptResults.value.push({
+    name: '',
+    mode: scriptResults.value.length ? 'KEY' : 'WHOLE',
+    type: 'string',
+    desc: undefined,
+  })
 }
 
-/** 输出参数软校验（发布时后端硬校验同名规则）：缺名/非法名/重名/与 resultVar 同名 */
+/** 输出参数软校验（发布时后端硬校验同名/mode 规则）：缺名/非法名/重名 */
 const scriptOutputWarnings = computed<string[]>(() => {
   if (node.value?.data.nodeType !== 'SCRIPT') return []
   const warns: string[] = []
   const seen = new Set<string>()
-  const resultVar = node.value.data.resultVar?.trim()
-  scriptOutputs.value.forEach((o, i) => {
-    const name = String(o.name ?? '').trim()
+  scriptResults.value.forEach((r, i) => {
+    const name = String(r.name ?? '').trim()
     if (!name) {
       warns.push(`输出参数第 ${i + 1} 行缺少变量名`)
       return
@@ -590,7 +602,6 @@ const scriptOutputWarnings = computed<string[]>(() => {
     if (!/^\w+$/.test(name)) warns.push(`「${name}」非法（仅字母/数字/下划线）`)
     if (seen.has(name)) warns.push(`「${name}」重复`)
     seen.add(name)
-    if (resultVar && name === resultVar) warns.push(`「${name}」与 resultVar 同名（发布将被拦截）`)
   })
   return warns
 })
@@ -1015,12 +1026,19 @@ async function copyNodeId() {
   color: var(--el-color-warning);
 }
 
-/* SCRIPT 多输出行：变量名 / 类型 / 说明 三段布局 */
+/* SCRIPT 统一输出声明行：两行卡片式（首行 变量名+提取方式+类型+删除，次行说明） */
 .so-row {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.so-row .so-line1 {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 6px;
 }
 
 .so-row .so-name {
@@ -1028,14 +1046,18 @@ async function copyNodeId() {
   min-width: 0;
 }
 
+.so-row .so-mode {
+  width: 92px;
+  flex-shrink: 0;
+}
+
 .so-row .so-type {
-  width: 96px;
+  width: 82px;
   flex-shrink: 0;
 }
 
 .so-row .so-desc {
-  flex: 1;
-  min-width: 0;
+  margin-top: 6px;
 }
 
 .so-row .el-button {

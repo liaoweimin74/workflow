@@ -4170,3 +4170,18 @@ Work Log:
 
 Stage Summary:
 - r72 全绿；OOM 基线稳 22（连续四轮零击杀）；两条历史线定性完成：远端=8/1 起的完整正规史（昨晚为止），本地=9/10 重置后独立新账（含今日 results-v2 全部工作）；整合方案待用户拍板（归档+覆盖 / PR 合并 / 并存）
+
+---
+Task ID: patrol-r73
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r73：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~542MB（唯一）；Java PID 12826 ~532MB（15:31 新 jar 稳定）；MariaDB ~189MB；**Chrome 组已完全退出**（TOP6 无 Chrome，QA 长尾终结，并行会话浏览器收尾完成）
+- cgroup = 2357166080（~2.36GB，持平，未破 3.5GB 备案线，后续有望继续回落）
+- OOM 盯防：oom_kill = 22，**连续第五轮零新增**——止血态势稳固
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r73 全绿；Chrome QA 组彻底退场，内存企稳 ~2.36GB；git 连环案连续五轮零击杀（基线稳 22）；核心服务无损

@@ -2673,3 +2673,16 @@ Stage Summary:
 - 数据恢复完成：表单列表 10 条、页面列表 2 条，经 3000→8080→MariaDB 全链路 API 验证 200 可见
 - 数据零破坏：workflow 库原有数据未动，v6 源数据保留未删
 - 三重备份在位：mariadb-datadir-snap（迁移前）、v6-logic TSV、mariadb-post-migrate（迁移后）
+
+---
+Task ID: 443426
+Agent: main (cron patrol)
+Task: 09:42 轻量运维巡检
+
+Work Log:
+- 探活四链路全 200；vite(630MB)/Java(536MB)/mariadbd(179MB) 正常驻留
+- cgroup 2.63GB（<3.5GB）；oom_kill=0 基线不变
+- 恢复数据稳定性确认：workflow 库 wf_form_def=10、wf_page_def=2，与迁移后状态一致，无回退
+
+Stage Summary:
+- 本轮全绿零动作；数据恢复成果持续稳定

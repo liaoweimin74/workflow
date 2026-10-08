@@ -253,6 +253,9 @@ public class LogicFlowEngine {
             if (resultVar != null && !resultVar.isBlank()) {
                 vars.put(resultVar, result);
             }
+            if (node.getType() == NodeType.SCRIPT) {
+                expandScriptOutputs(node, result, vars);
+            }
             traces.add(new NodeTrace(node.getId(), node.getName(), node.getType().name(),
                     TRACE_SUCCESS, result, null, duration));
         } catch (Exception e) {
@@ -355,6 +358,49 @@ public class LogicFlowEngine {
             throw new IllegalArgumentException("UNSUPPORTED_LANGUAGE: " + config.getLanguage());
         }
         return groovyScriptLogic.execute(config.getSource(), null, vars);
+    }
+
+    /**
+     * SCRIPT 节点多输出展开（outputs 声明式，与 resultVar 双轨并存）：
+     * <ul>
+     *   <li>脚本返回 Map：按声明逐 key 拆包写入扁平上下文；声明 key 缺失 → 跳过不写（防 null 覆盖上游变量）；</li>
+     *   <li>声明名与上游同名变量冲突 → log.warn 警告后放行（首版宽容策略）；</li>
+     *   <li>声明名与 resultVar 同名 → 跳过展开并警告（发布校验已拦截，运行期纵深防御）；</li>
+     *   <li>返回非 Map 而声明了 outputs → 抛 IllegalArgumentException（节点 FAILED，配置错误尽早暴露）。</li>
+     * </ul>
+     * 调用点须在 resultVar 写回之后、trace 记 SUCCESS 之前（失败归入节点异常路径）。
+     */
+    private void expandScriptOutputs(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
+        List<LogicFlowDsl.OutputVarDef> outputs = node.getOutputs();
+        if (outputs == null || outputs.isEmpty()) {
+            return;
+        }
+        if (!(result instanceof Map)) {
+            throw new IllegalArgumentException("SCRIPT 节点 " + node.getId()
+                    + " 配置了 outputs 但脚本未返回 Map（实际 " + (result == null ? "null" : result.getClass().getSimpleName())
+                    + "）：outputs 需脚本以 [key: value, ...] 形式返回");
+        }
+        Map<?, ?> map = (Map<?, ?>) result;
+        String resultVar = node.getResultVar();
+        for (LogicFlowDsl.OutputVarDef def : outputs) {
+            String name = def != null ? def.getName() : null;
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            if (name.equals(resultVar)) {
+                log.warn("SCRIPT 节点 '{}' 输出变量 '{}' 与 resultVar 同名，跳过展开（双轨不重叠）",
+                        node.getName() != null ? node.getName() : node.getId(), name);
+                continue;
+            }
+            if (!map.containsKey(name)) {
+                continue;
+            }
+            if (vars.containsKey(name)) {
+                log.warn("SCRIPT 节点 '{}' 输出变量 '{}' 覆盖上游同名变量（outputs 冲突警告放行）",
+                        node.getName() != null ? node.getName() : node.getId(), name);
+            }
+            vars.put(name, map.get(name));
+        }
     }
 
     // ------------------------------------------------------------------
@@ -787,6 +833,7 @@ public class LogicFlowEngine {
         inner.setType(step.getType());
         inner.setConfig(step.getConfig());
         inner.setResultVar(step.getResultVar());
+        inner.setOutputs(step.getOutputs());
         inner.setErrorAction(step.getErrorAction());
         boolean traceable = iteration < BATCH_BODY_TRACE_ITERATIONS;
         long begin = System.currentTimeMillis();
@@ -798,6 +845,9 @@ public class LogicFlowEngine {
             }
             if (inner.getResultVar() != null && !inner.getResultVar().isBlank()) {
                 childVars.put(inner.getResultVar(), result);
+            }
+            if (inner.getType() == NodeType.SCRIPT) {
+                expandScriptOutputs(inner, result, childVars);
             }
             return result;
         } catch (Exception e) {
@@ -845,10 +895,26 @@ public class LogicFlowEngine {
             step.setType(type);
             step.setConfig(entry.get("config"));
             step.setResultVar(textOrNull(entry, "resultVar"));
+            step.setOutputs(parseOutputsList(entry.get("outputs")));
             step.setErrorAction(textOrNull(entry, "errorAction"));
             steps.add(step);
         }
         return steps;
+    }
+
+    /** outputs 数组 → OutputVarDef 列表（null/空安全；忽略无名行）。 */
+    private List<LogicFlowDsl.OutputVarDef> parseOutputsList(JsonNode outputsNode) {
+        if (outputsNode == null || !outputsNode.isArray() || outputsNode.isEmpty()) {
+            return null;
+        }
+        List<LogicFlowDsl.OutputVarDef> outputs = new ArrayList<>();
+        for (JsonNode item : outputsNode) {
+            LogicFlowDsl.OutputVarDef def = objectMapper.convertValue(item, LogicFlowDsl.OutputVarDef.class);
+            if (def != null && def.getName() != null && !def.getName().isBlank()) {
+                outputs.add(def);
+            }
+        }
+        return outputs.isEmpty() ? null : outputs;
     }
 
     /** maxItems 归一化：缺省 100，钳位 1~1000。 */

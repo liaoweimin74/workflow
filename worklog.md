@@ -3139,3 +3139,17 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿零干预，服务态稳定；多输出改造方案（一期 outputs 展开 + 二期点路径）仍在等待用户拍板三个决策点
+
+---
+Task ID: 443426-r17
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 11:52 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 550MB）；Java 正常驻留（PID 22990，RSS 546MB）；MariaDB 正常；无 postcss worker，无多余 vite
+- cgroup 内存 2098491392B ≈ 1.95GB（<3.5GB 阈值）；OOM 计数 0 与基线一致
+- 用户已确认多输出方案「按建议来」：本巡检轮先按约束完成探活，开发任务随后在独立任务段执行（重建 jar/重启 8080 属开发交付，不与本轮巡检约束冲突）
+
+Stage Summary:
+- 本轮巡检全绿零干预；多输出一期（双轨 outputs）正式获批开工

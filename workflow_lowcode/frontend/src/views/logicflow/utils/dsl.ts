@@ -99,6 +99,8 @@ export interface BatchBodyNode {
   name: string
   config?: NodeConfig
   resultVar?: string
+  /** 多输出声明（仅 SCRIPT 步骤消费：脚本返回 Map 时逐 key 拆包写入上下文） */
+  outputs?: OutputVarDef[]
   errorAction?: ErrorAction
   /** 画布绝对坐标（可选）：仅当节点被拖离「批处理下方居中」默认排布位时持久化，
    *  缺省 = 回显时按批处理位置自动居中排布——保证旧 DSL / 未移动场景往返稳定 */
@@ -178,6 +180,29 @@ export interface InputVarDef {
   desc?: string
 }
 
+/** 输出参数声明（SCRIPT 多输出：脚本返回 Map 时按 name 逐 key 拆包写入上下文，与 resultVar 双轨） */
+export interface OutputVarDef {
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'json'
+  desc?: string
+}
+
+export const OUTPUT_VAR_TYPES = ['string', 'number', 'boolean', 'json'] as const
+
+/** 清洗输出参数声明行：trim 变量名、剔除无名行、类型回退 string；全空返回 undefined */
+export function sanitizeOutputs(outputs?: OutputVarDef[]): OutputVarDef[] | undefined {
+  const rows = (outputs ?? [])
+    .map((o) => ({
+      name: String(o?.name ?? '').trim(),
+      type: (OUTPUT_VAR_TYPES as readonly string[]).includes(o?.type)
+        ? (o.type as OutputVarDef['type'])
+        : ('string' as const),
+      desc: o?.desc ? String(o.desc).trim() || undefined : undefined,
+    }))
+    .filter((o) => o.name)
+  return rows.length ? rows : undefined
+}
+
 /** DSL 契约节点 */
 export interface DslNode {
   id: string
@@ -187,6 +212,8 @@ export interface DslNode {
   y: number
   config?: NodeConfig
   resultVar?: string
+  /** 多输出声明（仅 SCRIPT：返回 Map 时逐 key 拆包写入扁平上下文） */
+  outputs?: OutputVarDef[]
   errorAction?: ErrorAction
 }
 
@@ -212,6 +239,8 @@ export interface FlowNodeData {
   name: string
   config?: NodeConfig
   resultVar?: string
+  /** 多输出声明（仅 SCRIPT 编辑/序列化） */
+  outputs?: OutputVarDef[]
   errorAction?: ErrorAction
 }
 
@@ -449,6 +478,7 @@ function synthesizeBatchLoops(nodes: FlowNode[], edges: FlowEdge[]): void {
           name: bn.name || defaultNodeName(type as LogicNodeType),
           config: bn.config,
           resultVar: bn.resultVar || undefined,
+          outputs: (type as LogicNodeType) === 'SCRIPT' ? sanitizeOutputs(bn.outputs) : undefined,
           errorAction: bn.errorAction || undefined,
         },
       }))
@@ -511,6 +541,10 @@ export function parseDsl(dsl: string): FlowGraph {
         name: String(n.name ?? '') || defaultNodeName(type),
         config: (n.config ?? undefined) as NodeConfig | undefined,
         resultVar: n.resultVar ? String(n.resultVar) : undefined,
+        outputs:
+          type === 'SCRIPT'
+            ? sanitizeOutputs(n.outputs as OutputVarDef[] | undefined)
+            : undefined,
         errorAction: n.errorAction ? (String(n.errorAction) as ErrorAction) : undefined,
       },
     }
@@ -573,6 +607,10 @@ function toDslNode(node: FlowNode): DslNode | null {
   }
   if (hasExecutionMeta(type)) {
     if (data.resultVar) out.resultVar = data.resultVar
+    if (type === 'SCRIPT') {
+      const outputs = sanitizeOutputs(data.outputs)
+      if (outputs) out.outputs = outputs
+    }
     out.errorAction = data.errorAction === 'IGNORE_CONTINUE' ? 'IGNORE_CONTINUE' : 'FAIL_FLOW'
   }
   return out
@@ -612,6 +650,10 @@ function toDslBodyNode(node: FlowNode): BatchBodyNode | null {
   }
   if (data.config && typeof data.config === 'object') out.config = data.config
   if (data.resultVar) out.resultVar = data.resultVar
+  if (type === 'SCRIPT') {
+    const outputs = sanitizeOutputs(data.outputs)
+    if (outputs) out.outputs = outputs
+  }
   out.errorAction = data.errorAction === 'IGNORE_CONTINUE' ? 'IGNORE_CONTINUE' : 'FAIL_FLOW'
   return out
 }
@@ -781,6 +823,12 @@ export function collectReferencedVars(graph: FlowGraph): string[] {
     if (cfg) scanPlaceholders(cfg)
     const type = node.data.nodeType
     if (node.data.resultVar) produced.add(node.data.resultVar)
+    // SCRIPT 多输出：outputs 声明即产出（运行期逐 key 拆包写入上下文）
+    if (type === 'SCRIPT' && Array.isArray(node.data.outputs)) {
+      for (const o of node.data.outputs as { name?: string }[]) {
+        if (o?.name?.trim()) produced.add(o.name.trim())
+      }
+    }
     if (type === 'BEAN' && Array.isArray(cfg?.params)) {
       for (const p of cfg.params as { source?: string }[]) {
         if (p?.source) referenced.add(p.source)
@@ -806,11 +854,16 @@ export function collectReferencedVars(graph: FlowGraph): string[] {
       const indexVar = String(cfg?.indexVar ?? 'index')
       if (itemVar) produced.add(itemVar)
       if (indexVar) produced.add(indexVar)
-      // 循环体链：body 节点 resultVar 计入产出，结构化 source 引用计入引用
+      // 循环体链：body 节点 resultVar/outputs 计入产出，结构化 source 引用计入引用
       const body = Array.isArray(cfg?.body) ? (cfg?.body as BatchBodyNode[]) : []
       for (const bn of body) {
         if (!bn) continue
         if (bn.resultVar) produced.add(bn.resultVar)
+        if (bn.type === 'SCRIPT' && Array.isArray(bn.outputs)) {
+          for (const o of bn.outputs as { name?: string }[]) {
+            if (o?.name?.trim()) produced.add(o.name.trim())
+          }
+        }
         const bc = bn.config as Record<string, unknown> | undefined
         if (!bc) continue
         if (bn.type === 'BEAN' && Array.isArray(bc.params)) {

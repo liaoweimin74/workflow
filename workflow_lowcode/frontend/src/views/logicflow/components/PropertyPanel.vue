@@ -220,7 +220,7 @@
             </el-form-item>
             <el-form-item required>
               <template #label>
-                <FieldLabel label="脚本内容" tip="Groovy 脚本在服务端沙箱执行，注意安全；用 return 返回结果，上下文变量直接用变量名访问" />
+                <FieldLabel label="脚本内容" tip="Groovy 脚本在服务端沙箱执行，注意安全；末行用 Map 字面量 [key: value, ...] 返回多输出，上下文变量直接用变量名访问" />
               </template>
               <VarInput
                 v-model="scriptCfg.source"
@@ -233,6 +233,34 @@
                 placeholder="return 'hello ' + vars.name"
               />
             </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="输出参数（多输出）" tip="声明后脚本末行返回 Map（如 [outLevel: level]），引擎按声明逐 key 拆包写入上下文，供下游节点直接引用；缺 key 跳过不写；与 resultVar 双轨并存（整包另存）" />
+                <el-button size="small" text type="primary" @click="addScriptOutput">添加</el-button>
+              </div>
+              <div v-if="!scriptOutputs.length" class="rows-empty">
+                未声明：脚本结果仅经 resultVar 单变量输出
+              </div>
+              <div v-for="(o, i) in scriptOutputs" :key="i" class="so-row">
+                <el-input v-model="o.name" size="small" placeholder="变量名如 outLevel" class="so-name" />
+                <el-select v-model="o.type" size="small" class="so-type">
+                  <el-option v-for="t in OUTPUT_VAR_TYPES" :key="t" :label="t" :value="t" />
+                </el-select>
+                <el-input v-model="o.desc" size="small" placeholder="说明（可选）" class="so-desc" />
+                <el-button size="small" text type="danger" @click="scriptOutputs.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+              <el-alert
+                v-if="scriptOutputWarnings.length"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="panel-alert"
+                :title="scriptOutputWarnings.join('；')"
+              />
+            </div>
           </template>
 
           <!-- ===== CONDITION ===== -->
@@ -483,7 +511,7 @@ import VarInput from './VarInput.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, OUTPUT_VAR_TYPES, type OutputVarDef } from '../utils/dsl'
 import type { FlowVarItem } from '../utils/flowVars'
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
@@ -534,6 +562,38 @@ function ensureConfig<T>(): T {
 const httpCfg = computed(() => ensureConfig<HttpNodeConfig>())
 const beanCfg = computed(() => ensureConfig<{ beanName: string; methodName: string; params: { source: string; target: string }[] }>())
 const scriptCfg = computed(() => ensureConfig<{ language: string; source: string }>())
+
+/** SCRIPT 多输出声明（reactive 引用，增删改直接写回 node.data.outputs） */
+const scriptOutputs = computed<OutputVarDef[]>(() => {
+  const n = node.value!
+  if (n.data.nodeType !== 'SCRIPT') return []
+  if (!Array.isArray(n.data.outputs)) n.data.outputs = []
+  return n.data.outputs
+})
+
+function addScriptOutput(): void {
+  scriptOutputs.value.push({ name: '', type: 'string', desc: undefined })
+}
+
+/** 输出参数软校验（发布时后端硬校验同名规则）：缺名/非法名/重名/与 resultVar 同名 */
+const scriptOutputWarnings = computed<string[]>(() => {
+  if (node.value?.data.nodeType !== 'SCRIPT') return []
+  const warns: string[] = []
+  const seen = new Set<string>()
+  const resultVar = node.value.data.resultVar?.trim()
+  scriptOutputs.value.forEach((o, i) => {
+    const name = String(o.name ?? '').trim()
+    if (!name) {
+      warns.push(`输出参数第 ${i + 1} 行缺少变量名`)
+      return
+    }
+    if (!/^\w+$/.test(name)) warns.push(`「${name}」非法（仅字母/数字/下划线）`)
+    if (seen.has(name)) warns.push(`「${name}」重复`)
+    seen.add(name)
+    if (resultVar && name === resultVar) warns.push(`「${name}」与 resultVar 同名（发布将被拦截）`)
+  })
+  return warns
+})
 const conditionCfg = computed(() => ensureConfig<{ variable: string; operator: string; value?: string }>())
 const batchCfg = computed(() =>
   ensureConfig<{
@@ -953,6 +1013,34 @@ async function copyNodeId() {
 
 .du-warn {
   color: var(--el-color-warning);
+}
+
+/* SCRIPT 多输出行：变量名 / 类型 / 说明 三段布局 */
+.so-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.so-row .so-name {
+  flex: 1.2;
+  min-width: 0;
+}
+
+.so-row .so-type {
+  width: 96px;
+  flex-shrink: 0;
+}
+
+.so-row .so-desc {
+  flex: 1;
+  min-width: 0;
+}
+
+.so-row .el-button {
+  flex-shrink: 0;
+  padding: 4px;
 }
 
 .num-grid :deep(.el-form-item) {

@@ -21,6 +21,8 @@ import java.util.Set;
  *   <li>边引用不存在的节点（source/target）；</li>
  *   <li>CONDITION 节点缺 branch=true / branch=false 出边；</li>
  *   <li>HTTP 节点缺 url；BEAN 节点缺 beanName/methodName；SCRIPT 节点缺 source；</li>
+ *   <li>outputs 声明：仅 SCRIPT（顶层/循环体）可配；变量名须 \\w+ 合法标识符、不重复、
+ *       不与 resultVar 同名；</li>
  *   <li>非 END/CONDITION 节点无出边（含 START）。</li>
  * </ul>
  *
@@ -126,8 +128,46 @@ public class LogicFlowDslValidator {
                     // 其余类型无 config 硬要求
                 }
             }
+            // outputs 声明校验：仅 SCRIPT 支持多输出；SCRIPT 则校验合法名/不重复/不与 resultVar 同名
+            List<LogicFlowDsl.OutputVarDef> outputs = node.getOutputs();
+            boolean hasOutputs = outputs != null && !outputs.isEmpty();
+            if (hasOutputs && type != NodeType.SCRIPT) {
+                errors.add("节点 " + node.getId() + " (" + type + ") 不支持 outputs（仅 SCRIPT 支持多输出声明）");
+            } else if (hasOutputs) {
+                List<String> names = new ArrayList<>();
+                for (LogicFlowDsl.OutputVarDef def : outputs) {
+                    names.add(def != null ? def.getName() : null);
+                }
+                validateOutputNames(names, node.getResultVar(), "SCRIPT 节点 " + node.getId(), errors);
+            }
         }
         return errors;
+    }
+
+    /**
+     * outputs 声明硬校验（name 集合）：非空/合法标识符（\\w+，与 VariableResolver 占位符同域）、
+     * 不重复、不与 resultVar 同名（双轨不重叠）。label 用于错误定位（如 "SCRIPT 节点 s1"）。
+     */
+    private void validateOutputNames(List<String> names, String resultVar, String label, List<String> errors) {
+        Set<String> seen = new LinkedHashSet<>();
+        for (int i = 0; i < names.size(); i++) {
+            String name = names.get(i);
+            if (name == null || name.isBlank()) {
+                errors.add(label + " 第 " + (i + 1) + " 个输出变量缺少 name");
+                continue;
+            }
+            if (!name.matches("\\w+")) {
+                errors.add(label + " 输出变量名非法（仅字母/数字/下划线）: " + name);
+                continue;
+            }
+            if (!seen.add(name)) {
+                errors.add(label + " 输出变量名重复: " + name);
+                continue;
+            }
+            if (name.equals(resultVar)) {
+                errors.add(label + " 输出变量 '" + name + "' 与 resultVar 同名（双轨不可重叠）");
+            }
+        }
     }
 
     /**
@@ -310,6 +350,13 @@ public class LogicFlowDslValidator {
             return;
         }
         JsonNode stepConfig = step.get("config");
+        // outputs 仅 SCRIPT 步骤支持；其余类型配置即报错
+        JsonNode stepOutputs = step.get("outputs");
+        boolean hasStepOutputs = stepOutputs != null && stepOutputs.isArray() && !stepOutputs.isEmpty();
+        if (hasStepOutputs && type != NodeType.SCRIPT) {
+            errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "(" + type
+                    + ") 不支持 outputs（仅 SCRIPT 支持多输出声明）");
+        }
         if (type == NodeType.BATCH) {
             // 嵌套批处理：递归校验子 config（深度限制防自嵌套）
             LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
@@ -334,6 +381,15 @@ public class LogicFlowDslValidator {
             case SCRIPT -> {
                 if (stepConfig == null || stepConfig.isNull() || isBlankText(stepConfig, "source")) {
                     errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "(SCRIPT) 缺少 source");
+                }
+                if (hasStepOutputs) {
+                    List<String> names = new ArrayList<>();
+                    for (int i = 0; i < stepOutputs.size(); i++) {
+                        JsonNode item = stepOutputs.get(i);
+                        names.add(item != null && item.isObject() ? textOrNull(item, "name") : null);
+                    }
+                    validateOutputNames(names, textOrNull(step, "resultVar"),
+                            "BATCH 节点 " + batchNode.getId() + " " + label + "(SCRIPT)", errors);
                 }
             }
             case DATA_UPDATE -> {

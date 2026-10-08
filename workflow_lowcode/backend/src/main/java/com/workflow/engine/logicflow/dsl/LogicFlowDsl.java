@@ -38,7 +38,10 @@ import java.util.List;
  *   <li>HTTP：{@code BackendLogicHttpConfig} 字段（url/method/headers/queryParams/bodyParams/
  *       connTimeoutMs=3000/readTimeoutMs=5000/retryCount=0）；</li>
  *   <li>BEAN：{@code {beanName, methodName, params:[{source,target}]}}；</li>
- *   <li>SCRIPT：{@code {language:"groovy", source}}；</li>
+ *   <li>SCRIPT：{@code {language:"groovy", source}}；节点级 outputs（可选）声明多输出：
+ *       {@code outputs:[{name, type: string|number|boolean|json, desc?}...]} ——
+ *       脚本返回 Map 时按声明逐 key 拆包写入扁平上下文（缺 key 跳过；非 Map 报错），
+ *       resultVar 双轨并存（整包另存）；</li>
  *   <li>CONDITION：{@code {variable, operator: EQ|NE|GT|LT|GTE|LTE|EMPTY|NOT_EMPTY, value?}}
  *       （value 支持字面量或 {{var}}）。</li>
  *   <li>BATCH：{@code {collection, itemVar="item", indexVar="index",
@@ -128,6 +131,8 @@ public class LogicFlowDsl {
         private JsonNode config;
         /** 结果写回变量名（可选）。 */
         private String resultVar;
+        /** 多输出声明（当前仅 SCRIPT 消费：脚本返回 Map 时逐 key 拆包写入上下文）。 */
+        private List<OutputVarDef> outputs;
         /** 异常策略：FAIL_FLOW（默认，中断整个流）| IGNORE_CONTINUE（记失败轨迹后继续）。 */
         private String errorAction;
 
@@ -152,8 +157,28 @@ public class LogicFlowDsl {
         public String getResultVar() { return resultVar; }
         public void setResultVar(String resultVar) { this.resultVar = resultVar; }
 
+        public List<OutputVarDef> getOutputs() { return outputs; }
+        public void setOutputs(List<OutputVarDef> outputs) { this.outputs = outputs; }
+
         public String getErrorAction() { return errorAction; }
         public void setErrorAction(String errorAction) { this.errorAction = errorAction; }
+    }
+
+    /** 输出参数声明（SCRIPT 多输出：脚本返回 Map 时按 name 逐 key 拆包写入上下文）。 */
+    public static class OutputVarDef {
+        private String name;
+        /** string | number | boolean | json（展示辅助，不做强校验）。 */
+        private String type;
+        private String desc;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+
+        public String getDesc() { return desc; }
+        public void setDesc(String desc) { this.desc = desc; }
     }
 
     /** 入参声明（运行测试表单 / 文档展示用）。 */

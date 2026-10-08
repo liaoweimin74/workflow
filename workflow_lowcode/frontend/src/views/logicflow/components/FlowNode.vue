@@ -38,9 +38,17 @@
 
     <div v-if="summary" class="node-summary" :title="summary">{{ summary }}</div>
 
-    <div v-if="data.resultVar || data.errorAction === 'IGNORE_CONTINUE'" class="node-tags">
+    <div v-if="data.resultVar || scriptOutputNames.length || data.errorAction === 'IGNORE_CONTINUE'" class="node-tags">
       <span v-if="data.resultVar" class="node-tag var-tag" :title="`结果写入变量：${data.resultVar}`">
         {{ data.resultVar }}
+      </span>
+      <span
+        v-for="o in scriptOutputNames"
+        :key="o.name"
+        class="node-tag out-tag"
+        :title="`多输出变量：${o.name}${o.desc ? '（' + o.desc + '）' : ''}`"
+      >
+        ↗ {{ o.name }}
       </span>
       <span v-if="data.errorAction === 'IGNORE_CONTINUE'" class="node-tag ignore-tag" title="出错时忽略并继续">
         忽略继续
@@ -115,6 +123,14 @@ function legacyActionSummary(cfg: Record<string, unknown> | undefined): string {
   return 'Groovy 脚本'
 }
 
+/** SCRIPT 多输出声明行（卡片徽标展示；仅 SCRIPT 且声明了变量名时非空） */
+const scriptOutputNames = computed(() => {
+  if (props.data.nodeType !== 'SCRIPT' || !Array.isArray(props.data.outputs)) return []
+  return (props.data.outputs as { name?: string; desc?: string }[])
+    .map((o) => ({ name: String(o?.name ?? '').trim(), desc: o?.desc ? String(o.desc) : '' }))
+    .filter((o) => o.name)
+})
+
 /** 节点副标题：类型 + 配置摘要 */
 const summary = computed(() => {
   const cfg = props.data.config as Record<string, unknown> | undefined
@@ -129,8 +145,10 @@ const summary = computed(() => {
       const method = String(cfg?.methodName ?? '')
       return bean || method ? `${bean || '?'}#${method || '?'}` : '未配置 Bean'
     }
-    case 'SCRIPT':
-      return 'Groovy 脚本'
+    case 'SCRIPT': {
+      const outputs = scriptOutputNames.value
+      return outputs.length ? `Groovy 脚本 · ${outputs.length} 个输出` : 'Groovy 脚本'
+    }
     case 'CONDITION': {
       const variable = String(cfg?.variable ?? '')
       const op = String(cfg?.operator ?? '')
@@ -341,6 +359,13 @@ const summary = computed(() => {
   color: var(--el-color-primary);
   background: color-mix(in srgb, var(--el-color-primary) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--el-color-primary) 25%, transparent);
+}
+
+/* SCRIPT 多输出徽标：绿色系与 resultVar 主色区分，↗ 前缀示意「展开写出」 */
+.out-tag {
+  color: var(--el-color-success);
+  background: color-mix(in srgb, var(--el-color-success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--el-color-success) 25%, transparent);
 }
 
 .ignore-tag {

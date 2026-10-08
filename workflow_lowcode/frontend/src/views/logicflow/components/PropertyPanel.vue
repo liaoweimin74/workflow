@@ -391,9 +391,18 @@
           <template v-else-if="node.data.nodeType === 'DATA_UPDATE'">
             <el-form-item required>
               <template #label>
-                <FieldLabel label="目标表" tip="仅平台动态数据表（wf_biz_* / wf_form_data*）；表名与列名在运行时经元数据校验，值经参数绑定防注入" />
+                <FieldLabel label="目标表" tip="仅平台动态数据表（wf_biz_* / wf_form_data*）；下拉取库真实表清单，表名与列名在运行时经元数据校验，值经参数绑定防注入" />
               </template>
-              <el-input v-model="dataUpdateCfg.table" placeholder="如 wf_biz_warehouse" clearable />
+              <el-select
+                v-model="dataUpdateCfg.table"
+                filterable
+                :loading="duTablesLoading"
+                placeholder="选择平台动态数据表"
+                clearable
+                class="du-table-select"
+              >
+                <el-option v-for="t in duTableMergedOptions" :key="t" :label="t" :value="t" />
+              </el-select>
             </el-form-item>
 
             <div class="rows-block">
@@ -510,6 +519,7 @@ import FieldLabel from './FieldLabel.vue'
 import VarInput from './VarInput.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
+import { dataSourceApi } from '@/api/data-source'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
 import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
 import type { FlowVarItem } from '../utils/flowVars'
@@ -633,6 +643,83 @@ const DATA_UPDATE_OPS: { label: string; value: DataUpdateWhereOp }[] = [
 
 const dataUpdateCfg = computed(() => ensureConfig<DataUpdateNodeConfig>())
 
+// ===== DATA_UPDATE 目标表/列下拉（取库真实 schema，对齐后端白名单） =====
+// 后端 DATA_UPDATE_TABLE_PREFIXES：仅平台动态数据表 wf_biz_* / wf_form_data*；
+// 列排除 tenant_id（运行时禁改列），其余以 information_schema 真实结构为准
+const DATA_UPDATE_TABLE_RE = /^(wf_biz_|wf_form_data)/
+
+const duTableOptions = ref<string[]>([])
+const duTablesLoading = ref(false)
+const duRawColumns = ref<{ key: string; columnType: string }[]>([])
+const duColumnsLoading = ref(false)
+let duColumnsReqSeq = 0
+
+/** 目标表选项：真实表清单过滤白名单，并入当前已填表名（历史 DSL 的表可能已不在清单） */
+const duTableMergedOptions = computed(() => {
+  const cur = String(dataUpdateCfg.value?.table ?? '').trim()
+  const set = new Set(duTableOptions.value)
+  if (cur) set.add(cur)
+  return [...set].sort()
+})
+
+/** 列选项：当前表真实列（除 tenant_id）+ SET/WHERE 已填列名（含字面量占位历史值） */
+const duColumnMergedOptions = computed(() => {
+  const cur = new Set<string>(duRawColumns.value.map((c) => c.key))
+  for (const op of dataUpdateCfg.value?.setOps ?? []) {
+    const col = String(op.column ?? '').trim()
+    if (col) cur.add(col)
+  }
+  for (const cond of dataUpdateCfg.value?.where ?? []) {
+    const col = String(cond.column ?? '').trim()
+    if (col) cur.add(col)
+  }
+  return [...cur]
+    .filter((key) => key.toLowerCase() !== 'tenant_id')
+    .sort()
+    .map((key) => {
+      const meta = duRawColumns.value.find((c) => c.key === key)
+      return { key, type: meta?.columnType ?? '' }
+    })
+})
+
+async function loadDuTables() {
+  duTablesLoading.value = true
+  try {
+    const res = await dataSourceApi.getDbSchemaTables()
+    duTableOptions.value = (res.data ?? []).filter((name) => DATA_UPDATE_TABLE_RE.test(name))
+  } catch {
+    // http 拦截器已提示；表清单为空时可稍后重开面板
+  } finally {
+    duTablesLoading.value = false
+  }
+}
+
+async function loadDuColumns(table: string) {
+  const seq = ++duColumnsReqSeq
+  if (!table) {
+    duRawColumns.value = []
+    return
+  }
+  duColumnsLoading.value = true
+  try {
+    const res = await dataSourceApi.getDbSchemaColumns(table)
+    if (seq !== duColumnsReqSeq) return // 表快速切换时丢弃过期响应
+    duRawColumns.value = (res.data ?? []).map((c) => ({ key: c.key, columnType: c.columnType }))
+  } catch {
+    if (seq === duColumnsReqSeq) duRawColumns.value = []
+  } finally {
+    if (seq === duColumnsReqSeq) duColumnsLoading.value = false
+  }
+}
+
+watch(
+  () => String(dataUpdateCfg.value?.table ?? ''),
+  (table) => {
+    loadDuColumns(table)
+  },
+  { immediate: true }
+)
+
 function addSetOp() {
   dataUpdateCfg.value.setOps.push({ column: '', mode: 'SET', value: '' })
 }
@@ -650,6 +737,7 @@ const publishedFlows = ref<{ id: string; flowKey: string; name: string }[]>([])
 const flowsLoading = ref(false)
 onMounted(async () => {
   flowsLoading.value = true
+  loadDuTables()
   try {
     const res = await logicFlowApi.list({ page: 1, size: 100 })
     const content: any[] = (res.data as any)?.content || []

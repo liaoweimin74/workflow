@@ -1089,35 +1089,83 @@ function onKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
-// ===== 自动整理布局：从 START 做 Kahn 分层（环上节点兜底），层级自上而下、同层横向铺开 =====
+// ===== 自动整理布局（v2）：主流边 Kahn 分层（自上而下、同层横向铺开，间距按节点
+// 实际尺寸自适应）；BATCH 循环体链不参与主流分层，随宿主 BATCH 在其下方一行横排。
+// 修复：循环链边（loop_start→链→loop_end→BATCH）构成图环，旧版把环上节点全部堆到
+// 兜底层导致「加入批处理节点后整理布局混乱」；且固定层距/列距与节点实际高宽不符。 =====
+
+/** 循环体行相对宿主 BATCH 的默认落点（与 dsl.extractBatchBody 位置持久化公式一致） */
+const BODY_ROW_OFFSET_Y = 130
+/** 循环体行内相邻成员的水平步长（同上，默认落点公式步长） */
+const BODY_COL_STEP_X = 180
+
+/** 收集某 BATCH 的循环体链（画布节点 id 序列，保序）：loop_start 出边沿链行走，
+ * visited 防环；遇嵌套 BATCH 即收进链并终止（嵌套 BATCH 的循环体由递归单独排布） */
+function collectBodyChain(batchId: string): string[] {
+  const chain: string[] = []
+  const loopEdges = allEdges().filter(isLoopEdge)
+  const startEdge = loopEdges.find(
+    (e) => e.source === batchId && e.sourceHandle === LOOP_HANDLE_START
+  )
+  if (!startEdge) return chain
+  const nodesById = new Map(allNodes().map((n) => [n.id, n]))
+  const seen = new Set<string>([batchId])
+  let cur = startEdge.target
+  let guard = 0
+  while (cur && !seen.has(cur) && guard++ < 100) {
+    seen.add(cur)
+    const node = nodesById.get(cur)
+    if (!node) break
+    chain.push(cur)
+    if (node.data.nodeType === 'BATCH') break
+    const next = loopEdges.find((e) => e.source === cur)
+    if (!next) break
+    cur = next.target
+  }
+  return chain
+}
+
 function handleAutoLayout() {
   if (!nodes.value.length) return
   const leftX = 80
-  const colGapX = 230
+  const colGapX = 56
   const topY = 60
-  const layerGapY = 160
+  const layerGapY = 64
 
-  const idSet = new Set(nodes.value.map((n) => n.id))
+  const nodesById = new Map(allNodes().map((n) => [n.id, n]))
+
+  // 1) 循环体归属：每个 BATCH 的 body 链成员从主流分层名单剔除（成员只有 loop 边，
+  //    主流入度恒 0，混进分层会把它们误当第 0 层起点）
+  const bodyOwner = new Map<string, string>()
+  const bodyChains = new Map<string, string[]>()
+  for (const n of allNodes()) {
+    if (n.data.nodeType !== 'BATCH' || bodyOwner.has(n.id)) continue
+    const chain = collectBodyChain(n.id)
+    if (!chain.length) continue
+    bodyChains.set(n.id, chain)
+    chain.forEach((id) => bodyOwner.set(id, n.id))
+  }
+
+  // 2) 主流边（排除循环链边）Kahn 分层：START（或入度 0 者）为第 0 层，拓扑序传播最长路径深度
+  const mainIds = allNodes().filter((n) => !bodyOwner.has(n.id)).map((n) => n.id)
+  const idSet = new Set(mainIds)
   const depth = new Map<string, number>()
   const indegree = new Map<string, number>()
   const out = new Map<string, string[]>()
-  nodes.value.forEach((n) => {
-    indegree.set(n.id, 0)
-    out.set(n.id, [])
+  mainIds.forEach((id) => {
+    indegree.set(id, 0)
+    out.set(id, [])
   })
   allEdges().forEach((e) => {
+    if (isLoopEdge(e)) return
     if (idSet.has(e.source) && idSet.has(e.target)) {
       out.get(e.source)!.push(e.target)
       indegree.set(e.target, (indegree.get(e.target) ?? 0) + 1)
     }
   })
-
-  // START（或入度 0 者）为第 0 层；拓扑序传播最长路径深度
-  const queue = nodes.value
-    .filter((n) => (indegree.get(n.id) ?? 0) === 0)
-    .map((n) => n.id)
-  const startId = nodes.value.find((n) => n.data.nodeType === 'START')?.id
-  if (startId && (indegree.get(startId) ?? 0) > 0) queue.unshift(startId)
+  const queue = mainIds.filter((id) => (indegree.get(id) ?? 0) === 0)
+  const startId = allNodes().find((n) => n.data.nodeType === 'START')?.id
+  if (startId && idSet.has(startId) && (indegree.get(startId) ?? 0) > 0) queue.unshift(startId)
   queue.forEach((id) => {
     if (!depth.has(id)) depth.set(id, 0)
   })
@@ -1127,33 +1175,85 @@ function handleAutoLayout() {
     const current = depth.get(id) ?? 0
     maxDepth = Math.max(maxDepth, current)
     for (const next of out.get(id) ?? []) {
-      const candidate = current + 1
-      if (candidate > (depth.get(next) ?? -1)) depth.set(next, candidate)
+      if (current + 1 > (depth.get(next) ?? -1)) depth.set(next, current + 1)
       const remaining = (indegree.get(next) ?? 1) - 1
       indegree.set(next, remaining)
       if (remaining === 0) queue.push(next)
     }
   }
-  // 环上残余节点：接到最深层后面
-  nodes.value.forEach((n) => {
-    if (!depth.has(n.id)) depth.set(n.id, ++maxDepth)
+  // 主流环上残余节点：接到最深层后面
+  mainIds.forEach((id) => {
+    if (!depth.has(id)) depth.set(id, ++maxDepth)
   })
 
-  // 分层内按原 x 排序减少跳动；同层横向铺开，层级沿 Y 轴自上而下
+  // 3) 子树有效高度：普通节点=自身高；BATCH=循环体行底缘（130 偏移 + 行内成员有效高最大值，
+  //    嵌套 BATCH 的有效高含其自身 body 行），供层高累计用
+  const effectiveH = new Map<string, number>()
+  function effectiveHeight(id: string, stack: Set<string> = new Set()): number {
+    if (effectiveH.has(id)) return effectiveH.get(id)!
+    const self = nodeSize(nodesById.get(id)!).h
+    if (stack.has(id)) return self
+    stack.add(id)
+    let h = self
+    const chain = bodyChains.get(id)
+    if (chain?.length) {
+      const rowH = Math.max(...chain.map((cid) => effectiveHeight(cid, stack)))
+      h = BODY_ROW_OFFSET_Y + rowH
+    }
+    stack.delete(id)
+    effectiveH.set(id, h)
+    return h
+  }
+  mainIds.forEach((id) => effectiveHeight(id))
+
+  // 4) 分层布局：层顶自上而下按「下层最大有效高 + 层距」累计；同层按累计宽度横向铺开
   const byLayer = new Map<number, FlowNodeModel[]>()
-  nodes.value.forEach((n) => {
-    const layer = depth.get(n.id) ?? 0
+  mainIds.forEach((id) => {
+    const layer = depth.get(id) ?? 0
     if (!byLayer.has(layer)) byLayer.set(layer, [])
-    byLayer.get(layer)!.push(n)
+    byLayer.get(layer)!.push(nodesById.get(id)!)
   })
-  ;[...byLayer.entries()]
-    .sort(([a], [b]) => a - b)
-    .forEach(([layer, list]) => {
-      list.sort((a, b) => a.position.x - b.position.x)
-      list.forEach((n, index) => {
-        n.position = { x: leftX + index * colGapX, y: topY + layer * layerGapY }
-      })
+  const layerTop = new Map<number, number>()
+  let cursorY = topY
+  const layers = [...byLayer.entries()].sort(([a], [b]) => a - b)
+  layers.forEach(([layer, list]) => {
+    layerTop.set(layer, cursorY)
+    cursorY += Math.max(...list.map((n) => effectiveHeight(n.id))) + layerGapY
+  })
+  layers.forEach(([layer, list]) => {
+    list.sort((a, b) => a.position.x - b.position.x)
+    let cursorX = leftX
+    list.forEach((n) => {
+      n.position = { x: Math.round(cursorX), y: Math.round(layerTop.get(layer)!) }
+      cursorX += nodeSize(n).w + colGapX
     })
+  })
+
+  // 5) 循环体行随宿主 BATCH 落位（与默认落点公式一致，不产生位置持久化脏数据）；
+  //    嵌套 BATCH 由递归继续下探，visited 防交叉嵌套环
+  const placed = new Set<string>()
+  function placeChain(batchId: string) {
+    if (placed.has(batchId)) return
+    placed.add(batchId)
+    const chain = bodyChains.get(batchId)
+    const batch = nodesById.get(batchId)
+    if (!chain?.length || !batch) return
+    const bx = batch.position.x
+    const by = batch.position.y
+    chain.forEach((cid, i) => {
+      const cn = nodesById.get(cid)
+      if (!cn) return
+      cn.position = {
+        x: Math.round(bx + (i - (chain.length - 1) / 2) * BODY_COL_STEP_X),
+        y: Math.round(by + BODY_ROW_OFFSET_Y),
+      }
+      if (cn.data.nodeType === 'BATCH') placeChain(cid)
+    })
+  }
+  for (const batchId of bodyChains.keys()) {
+    if (!bodyOwner.has(batchId)) placeChain(batchId)
+  }
+
   setTimeout(() => fitView({ padding: 0.15, maxZoom: 1, duration: 300 }), 50)
 }
 

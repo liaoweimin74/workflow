@@ -3848,3 +3848,19 @@ Work Log:
 
 Stage Summary:
 - r55 全绿、内存低位平稳；OOM 连续第三轮上涨（1→2→4→5）但均为瞬时收割、无核心服务损伤，持续盯防；若下轮继续上涨且抓不到元凶，考虑在巡检中加挂 ps 快照比对（仍属观察，不做干预）
+
+---
+Task ID: patrol-r56
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r56：四链路探活 + 内存减压 + OOM 元凶定位（上轮预告的快照观察）
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：Java PID 8906 ~556MB；vite PID 18932 ~524MB（唯一）；MariaDB ~188MB；巡检瞬间无 git/maven/npm 等瞬时进程
+- cgroup = 1567444992（~1.57GB，持续低位缓降）
+- OOM 事故（第五次）：oom_kill 5 → 6（+1）；元凶经内核日志实锤——07:18:32 UTC（本地 15:18:32）git（PID 11604）anon-rss 2,319,936kB（~2.32GB）触发 global OOM 被收割；判定为 git 对超大工作区（疑似未忽略 node_modules/target）执行 status/add 类操作导致内存膨胀
+- 处置：零干预（git 操作归并行会话授权范围）；本轮快照观察已履行（巡检瞬间无瞬时进程，元凶存在于轮间窗口）
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r56 全绿；OOM 连环案定性收官：元凶=git 单进程膨胀至 ~2.3GB（连续多轮被收割，重复的 git 重操作建议并行会话优化 .gitignore 或改用增量暂存，但非运维授权范围）；核心服务全程无损，新基线 6

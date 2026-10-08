@@ -4589,3 +4589,18 @@ Work Log:
 
 Stage Summary:
 - r89 全绿零干预；健康基线延续（r77~r89 稳定），布局 v4 已交付待用户页面验证
+
+---
+Task ID: patrol-r90
+Agent: main (cron patrol, Job 443426)
+Task: r90 定时巡检（四链路探活 + 内存/OOM 监控）
+
+Work Log:
+- 四链路探活：a(vite 3000)=200、b(外域 Host)=200、c(/api 业务链)=200、d(8080 直连)=200，全绿
+- 进程：vite 18932 唯一实例 ~600MB；Java 19458 ~539MB；MariaDB 4847 ~190MB，三常驻基线不变
+- 无冗余 vite/postcss worker，无需减压
+- cgroup 内存 2,534,342,656 B ≈ 2.36GB（< 3.5GB 备案线）
+- oom_kill = 22，与基线持平零新增；无修复干预
+
+Stage Summary:
+- r90 全绿零干预；健康基线延续（r77~r90 连续 14 轮稳定），布局 v4 已交付待用户页面验证

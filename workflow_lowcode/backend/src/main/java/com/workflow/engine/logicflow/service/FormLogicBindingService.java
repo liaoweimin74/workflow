@@ -67,6 +67,22 @@ public class FormLogicBindingService {
     public static final String TRIG_AFTER_TASK_RETURN = "AFTER_TASK_RETURN";
     /** 工作流表单：流程实例结束（最后一个审批任务通过）后（AFTER 语义）。 */
     public static final String TRIG_AFTER_PROCESS_FINISH = "AFTER_PROCESS_FINISH";
+    /** 工作流表单：任务转办后（AFTER 语义，toUser = 新办理人）。 */
+    public static final String TRIG_AFTER_TASK_TRANSFER = "AFTER_TASK_TRANSFER";
+    /** 工作流表单：任务委派后（AFTER 语义，toUser = 被委派人）。 */
+    public static final String TRIG_AFTER_TASK_DELEGATE = "AFTER_TASK_DELEGATE";
+    /** 工作流表单：加签后（AFTER 语义，toUser = 加签人，多人逗号分隔）。 */
+    public static final String TRIG_AFTER_TASK_ADD_SIGN = "AFTER_TASK_ADD_SIGN";
+    /** 工作流表单：任务认领后（AFTER 语义）。 */
+    public static final String TRIG_AFTER_TASK_CLAIM = "AFTER_TASK_CLAIM";
+    /** 工作流表单：审批催办后（AFTER 语义；触发频率受催办限流天然约束）。 */
+    public static final String TRIG_AFTER_TASK_URGE = "AFTER_TASK_URGE";
+    /** 工作流表单：发起人撤回（回退发起节点）后（AFTER 语义）。 */
+    public static final String TRIG_AFTER_PROCESS_WITHDRAW = "AFTER_PROCESS_WITHDRAW";
+    /** 工作流表单：流程实例终止（管理员作废）后（AFTER 语义）。 */
+    public static final String TRIG_AFTER_PROCESS_TERMINATE = "AFTER_PROCESS_TERMINATE";
+    /** 工作流表单：流程实例启动（含首份表单数据落库）后（AFTER 语义）。 */
+    public static final String TRIG_AFTER_PROCESS_START = "AFTER_PROCESS_START";
     public static final Set<String> TRIGGER_TYPES = Set.of(
             TRIG_BEFORE_CREATE, TRIG_AFTER_CREATE,
             TRIG_BEFORE_UPDATE, TRIG_AFTER_UPDATE,
@@ -74,7 +90,24 @@ public class FormLogicBindingService {
             TRIG_BEFORE_SNAPSHOT, TRIG_AFTER_SNAPSHOT,
             TRIG_BEFORE_SAVE, TRIG_AFTER_SAVE,
             TRIG_AFTER_TASK_APPROVE, TRIG_AFTER_TASK_REJECT,
-            TRIG_AFTER_TASK_RETURN, TRIG_AFTER_PROCESS_FINISH);
+            TRIG_AFTER_TASK_RETURN, TRIG_AFTER_PROCESS_FINISH,
+            TRIG_AFTER_TASK_TRANSFER, TRIG_AFTER_TASK_DELEGATE,
+            TRIG_AFTER_TASK_ADD_SIGN, TRIG_AFTER_TASK_CLAIM,
+            TRIG_AFTER_TASK_URGE,
+            TRIG_AFTER_PROCESS_WITHDRAW, TRIG_AFTER_PROCESS_TERMINATE,
+            TRIG_AFTER_PROCESS_START);
+
+    /**
+     * 未显式指定 executionMode 时默认 AFTER_COMMIT 的触发点：转办/委派/加签/认领/催办/
+     * 撤回/终止/启动等辅助动作，逻辑流失败不应阻断审批主操作（弱一致，留痕即可）。
+     * 显式传 SYNC_IN_TX 仍可强一致。
+     */
+    public static final Set<String> DEFAULT_AFTER_COMMIT_TRIGGERS = Set.of(
+            TRIG_AFTER_TASK_TRANSFER, TRIG_AFTER_TASK_DELEGATE,
+            TRIG_AFTER_TASK_ADD_SIGN, TRIG_AFTER_TASK_CLAIM,
+            TRIG_AFTER_TASK_URGE,
+            TRIG_AFTER_PROCESS_WITHDRAW, TRIG_AFTER_PROCESS_TERMINATE,
+            TRIG_AFTER_PROCESS_START);
 
     public static final String MODE_SYNC_IN_TX = "SYNC_IN_TX";
     public static final String MODE_AFTER_COMMIT = "AFTER_COMMIT";
@@ -283,7 +316,8 @@ public class FormLogicBindingService {
      * 不注入 formDataExisting/dataId；formData 取该流程实例最新一条表单数据（可为 null）。
      *
      * @param formData          该流程实例最新表单数据（解析失败/无记录传 null）
-     * @param opType            APPROVE | REJECT | RETURN | FINISH
+     * @param opType            APPROVE | REJECT | RETURN | FINISH | TRANSFER | DELEGATE |
+     *                          ADD_SIGN | CLAIM | URGE | WITHDRAW | TERMINATE | START
      * @param comment           审批意见/拒绝原因（可为 null）
      * @param operatorOverride  审批人（null 时回落当前登录人）
      */
@@ -351,13 +385,14 @@ public class FormLogicBindingService {
         return key.trim();
     }
 
-    /** BEFORE_* 强制 SYNC_IN_TX；其余默认 SYNC_IN_TX，可选 AFTER_COMMIT。 */
+    /** BEFORE_* 强制 SYNC_IN_TX；辅助动作默认 AFTER_COMMIT，其余默认 SYNC_IN_TX，均可显式覆盖。 */
     private static String normalizeMode(String executionMode, String triggerType) {
         if (triggerType.startsWith("BEFORE_")) {
             return MODE_SYNC_IN_TX;
         }
         if (executionMode == null || executionMode.isBlank()) {
-            return MODE_SYNC_IN_TX;
+            return DEFAULT_AFTER_COMMIT_TRIGGERS.contains(triggerType)
+                    ? MODE_AFTER_COMMIT : MODE_SYNC_IN_TX;
         }
         if (!EXECUTION_MODES.contains(executionMode)) {
             throw new BusinessException("executionMode 非法（须 SYNC_IN_TX/AFTER_COMMIT）: " + executionMode);

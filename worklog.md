@@ -4815,3 +4815,17 @@ Work Log:
 
 Stage Summary:
 - r104 全绿零干预；健康基线延续（r77~r104 连续 28 轮稳定），布局 v4 已交付待用户页面验证
+
+---
+Task ID: patrol-r105
+Agent: main (cron patrol, Job 443426)
+Task: r105 定时巡检（四链路探活 + 内存/OOM 监控）
+
+Work Log:
+- 四链路探活：a/b/c/d 全部 200 全绿
+- 进程：vite 18932 ~600MB；Java 19458 ~543MB；MariaDB 4847 ~191MB，基线不变
+- cgroup 内存 2,546,352,128 B ≈ 2.37GB（< 3.5GB）；oom_kill = 22 零新增
+- 无修复干预
+
+Stage Summary:
+- r105 全绿零干预（连续 29 轮稳定）；随后受理用户开发指令：触发点扩展实施（见 user-req-6-triggers）

@@ -2505,3 +2505,24 @@ Work Log:
 
 Stage Summary:
 - 153-patrol 全绿；连续第六轮稳态，进入纯监视节奏
+
+---
+Task ID: 149-rebuild
+Agent: main（用户指令「那就开始重建吧」开发轮）
+Task: UI 重建——变量选择列表就近显示（Groovy 编辑器 + 各节点表达式输入框）
+
+Work Log:
+- 【基准核实】远程 main 已演进：logicflow PropertyPanel.vue 955 行（旧摘要 621 行过时），本地工作树与远程逐行一致（designer 400 行亦同）；origin 引用就位（github.com/liaoweimin74/workflow），git 根在 /home/z/my-project（远程目录无 workflow_lowcode 前缀）
+- 【新增 utils/flowVars.ts】collectAvailableVars(nodeId, nodes, edges, inputVars)：沿入边反向 BFS 收集祖先链 → 入参组（DSL 顶层 inputVars）/ 循环变量组（BATCH itemVar/indexVar，仅经 data.loop 循环边传播，作用域与引擎一致）/ 上游产出组（祖先 resultVar，附来源节点）/ 表单数据组（formData 点路径，仅占位符模式）；visited 防环；varInsertText 统一插入语义（{{name}} / 裸名 / formData. 前缀）
+- 【新增 VariablePicker.vue】{} 触发钮 + 搜索分组弹层（入参/循环变量/上游产出/表单数据），teleported 弹层全局样式，选中即发 pick
+- 【新增 VarInput.vue】el-input 包装：光标处插入并恢复焦点/光标（selectionStart/End + nextTick setSelectionRange）；replace 模式（变量名单值字段整字段替换）；textarea 形态浮动触发钮 + 就近 chips 行（max-h 74px 滚动）；class/style 归包装层、其余 attrs 透传（du-value/script-source 等 flex 布局零破坏）
+- 【PropertyPanel 11 处接入】HTTP url、CONDITION 判断变量（replace bare）/比较值（placeholder）、BATCH 集合表达式、DATA_UPDATE SET 值/WHERE 值、HTTP queryParams/bodyParams + BEAN params 的 source（replace bare）、SUBFLOW 映射 source、Groovy 脚本（bare + chips）；Headers 值为静态键值对刻意不接
+- 【LogicFlowDesigner】availableVars computed（读 storeNodes 真值，画布增删/改配置实时联动，与 dirty computed 同源模式）下传 :variables
+- 【验证】vue-tsc 全量 0 错（修 6 处：weak type config?: unknown、bits 显式 string[]、modelValue 放宽 string|null|undefined、chips 复用 varInsertText）；logicflow+stores 单测 39/39；vite 模块编译探测 4/4=200
+- 【agent-browser E2E 全通过】admin/admin123 登录 → 新建流 var_picker_test → 声明入参 orderAmount → 画布 start→脚本→HTTP→end 自动接入 → Groovy chips 显示 orderAmount 且点击光标处插入（尾部+中部两态验证，焦点/caret 恢复）→ HTTP url 弹层三分组（入参/上游产出/表单数据）→ 点选插入 {{orderAmount}} → SCRIPT 设 resultVar=scriptOut 后 HTTP 弹层正确出现「上游产出 scriptOut · Groovy 脚本（SCRIPT）」→ 误拖回边可删；截图 /tmp/varpicker-final.png；备注：轮初 designer setup 报错为 HMR 中途挂载暂态，reload 即愈
+- 【防丢落库】沙箱自动提交链已捕获代码（e9027ac8，含 09:06 外部快照 download/rebuild-snapshot-20261008-0906/ 三新文件），另补可读标注提交 fb0d605f
+- 【cron 核实】439400 已消失，仅剩 443426 巡检（并存疑虑解除）；按规程新建 webDevReview 开发轮 cron 443462（15min，与巡检分工互斥已在任务描述注明）
+
+Stage Summary:
+- 丢失的「变量选择列表就近显示」功能已在 LogicFlow 路线完整重建并验证落库，支持四组变量源与两种插入模式
+- 后续可做：①BATCH 循环体内节点的面板复用（body 链变量作用域细化）②RunTestDialog 建议列表与 flowVars 联动 ③远程推送（本地孤儿链需用户会话决断合并策略）

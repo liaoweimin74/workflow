@@ -4951,3 +4951,20 @@ Stage Summary:
 - 触发点体系扩至 22 个（14→22）：业务数据 6 + 表单存档 4 + 审批动作 8（通过/拒绝/驳回/转办/委派/加签/认领/催办）+ 流程事件 4（结束/撤回/终止/启动）；辅助动作默认 AFTER_COMMIT 留痕，显式 SYNC_IN_TX 仍可回滚主操作
 - 事件参数新增 toUser 注入（buildApprovalVars 全键恒注入，前端规格按触发点声明子集）；催办防重复用 24h 任务级 + urge.interval 实例级限流
 - 剩余：第三批 BEFORE_TASK_APPROVE/BEFORE_PROCESS_START（失败拒绝校验语义）、ON_TASK_TIMEOUT/ON_NODE_ENTER/LEAVE（需改 TaskTimeoutScanner 调度）；P3 远期 TIMER/WEBHOOK/子表行级事件
+---
+Task ID: patrol-r109
+Agent: main (cron Job 443426)
+Task: 定时巡检 r109（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- 进程快照：vite 18932 (RSS 614MB) / Java 28428 (RSS 552MB，batch2 新 jar 稳定运行) / MariaDB 4847 (RSS 199MB)
+- vite 进程数 1（无冗余），postcss worker 0，无需减压
+- cgroup 内存 2541760512 ≈ 2.37GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 【确认】worklog 尾部 user-req-6-triggers-2 条目：并行会话已完成触发点扩展 batch2（14→22 个触发点，mvn 62 用例全过，新 jar 13:05:34 打包，Java 19.3s 启动，四链路复验 200）——主会话 batch2 待办正式关闭
+- 本轮零干预
+
+Stage Summary:
+- batch2 交付落地确认：触发点体系 22 个（业务数据 6 + 表单存档 4 + 审批动作 8 + 流程事件 4），新版本已上线稳定运行
+- r77~r109 连续 33 轮稳定全绿；剩余远期项（第三批 BEFORE_* 校验类、ON_TASK_TIMEOUT、TIMER/WEBHOOK）由后续需求驱动

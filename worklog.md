@@ -3208,3 +3208,16 @@ Work Log:
 
 Stage Summary:
 - r18 全绿零干预。5173/3010 已退役未探测；agent-browser 未启动；未修改任何代码。
+---
+Task ID: patrol-r19
+Agent: Super Z (main)
+Task: Job 443426 轻量运维巡检 r19（2026-10-08 12:17 触发）
+
+Work Log:
+- 四链路探活：a) vite 3000 = 200；b) 外域 Host = 200（allowedHosts 正常）；c) 业务链路 3000→8080 /api/auth/login = 200；d) 8080 直连 = 200。全绿。
+- 内存检查：Java PID 32234（RSS ~569MB，正当常驻勿动）；vite 单实例 PID 18932（RSS ~530MB）；MariaDB PID 4847 正常；无多余 vite 进程、无 postcss worker，无需减压。
+- cgroup 内存 2612903936 bytes（~2.43GB）< 3.5GB 阈值，正常。
+- OOM：oom_kill = 0，与基线一致，无事故。
+
+Stage Summary:
+- r19 全绿零干预。5173/3010 已退役未探测；agent-browser 未启动；未修改任何代码。

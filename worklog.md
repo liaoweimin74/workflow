@@ -3985,3 +3985,18 @@ Work Log:
 
 Stage Summary:
 - 第 4/5/6 条已登记为待办（排期待并行交付后）；第 7 条结论=属性已废弃且前端适配已落地，待用户刷新验证
+
+---
+Task ID: patrol-r64
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r64：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~537MB（唯一）；Java PID 12826 ~529MB（15:31 新 jar 稳定）；MariaDB ~191MB；Chrome 组长尾收缩（3 进程 ~351MB：renderer 240 + 主 66 + webui 45）
+- cgroup = 2027393024（~2.03GB，与上轮持平，未破 3.5GB 备案线）
+- OOM 事故（第十四次）：oom_kill 13 → 14（+1），git 连环案既定模式；新基线 14；零干预
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r64 全绿、内存平稳（~2.03GB）；git 连环案累计 14 杀、每轮 +1 节奏未破，核心服务无损，新基线 14

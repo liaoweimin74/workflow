@@ -3477,3 +3477,18 @@ Work Log:
 
 Stage Summary:
 - r35 全绿零干预，零代码编辑；D+ 终态稳定，cgroup 维持 ~3.02GB 平台
+
+---
+Task ID: patrol-r36
+Agent: main (cron Job 443426)
+Task: 13:42:26 轻量运维巡检（探活+内存，零开发）
+
+Work Log:
+- 四链路探活：a) vite 3000 = 200；b) 外域 Host = 200；c) 业务登录代理 = 200；d) 8080 直连 = 200 —— 全绿
+- 【积极变化】agent-browser Chrome 组（3408/3493/3452）已自行退出，非人工干预（不在授权清单，本轮未 kill）
+- 进程内存：Java PID 2815 ~549MB（正当常驻）；vite PID 18932 ~536MB（唯一）；无 postcss worker；MariaDB 4847 ~191MB
+- cgroup memory.usage_in_bytes = 2777767936（~2.59GB）< 3.5GB，较上轮回落 ~465MB（对应 Chrome 组退出释放）
+- OOM 计数 oom_kill = 0（基线持平），无事故
+
+Stage Summary:
+- r36 全绿零干预，零代码编辑；持续 10 轮的 Chrome 组驻留观察项自然消解，内存余量扩大至 ~0.9GB

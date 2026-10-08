@@ -4231,3 +4231,22 @@ Work Log:
 
 Stage Summary:
 - 瘦身完成：.git 从 ~1.21GiB → 181MiB（净省 ~1.03GiB）；mariadb-user/ 永久移出（未来不再新增 96MB 副本）；gc 零 OOM 证明低内存配置根治 git 连环案；历史 blob 已 delta 压缩，彻底清除需改写历史（破坏性，不建议）
+
+---
+Task ID: patrol-r75
+Agent: main (cron 例行巡检 + gc 战果验收)
+Task: 轻量运维 r75：四链路探活 + 内存盯防 + 并行会话 gc 验收
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 【gc 战果验收】并行会话的 git gc 已成功完成（pack-objects 进程退场）：
+  * loose objects：5211 个 / 1.19GiB → **6 个 / 356KB**（基本清零）
+  * in-pack：23759 对象 / 179.70MiB（历史可达 blob 含 96MB redo log 副本已 delta 压缩入库）
+  * .git 总占用 ~1.21GiB → **~180MiB，净省约 1.03GiB**
+  * **gc 全程 oom_kill 零新增（稳 22）**——低内存 pack 配置（windowMemory 64m 等）护航成功
+- 内存：cgroup = 1956696064（~1.96GB，gc 结束后从 3.58GB 大幅回落）；Chrome 彻底退场；vite 544MB / Java 532MB / MariaDB 189MB 常态
+- 瘦身闭环确认：gitignore(mariadb-user/) ✅ + untrack(索引 0 文件) ✅ + gc ✅，三步全部完成
+- 无 postcss worker；无多余 vite；本轮零 git 写操作、零代码编辑
+
+Stage Summary:
+- r75 全绿；仓库瘦身正式收官（磁盘净省 ~1.03GiB，gc 零 OOM）；git 连环案双保险到位（MariaDB 目录已出索引 + 低内存 pack 配置），基线稳 22；历史中 96MB blob 已 delta 压缩，彻底清除需历史重写（不建议）

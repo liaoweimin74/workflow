@@ -3096,3 +3096,17 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿零干预，服务态稳定；Groovy 多变量输出调研结论：单 resultVar 输出槽 + Map 返回值为推荐方案，CONDITION/HTTP/BEAN 存在点路径限制需 SCRIPT 节点平铺中转
+
+---
+Task ID: LOCAL-groovy-multioutput-design
+Agent: main (user session)
+Task: Groovy 脚本多变量输出（常态需求）实施级改造方案设计（仅设计，未改码）
+
+Work Log:
+- 确认现状：SCRIPT 节点单输出槽（LogicFlowEngine.executeLogicNode L252-255 vars.put(resultVar, result)）；BPMN 侧同构（BackendLogicExecutor L94-96 setVariable）
+- 复核下游点路径能力矩阵：SCRIPT 内 ✅ / DATA_UPDATE ✅(resolvePath) / CONDITION ❌(vars.get 单层) / HTTP ❌(占位符正则 \w+ 无点) / BEAN ❌(vars.get 单层)
+- 设计 P1（声明式 outputs）与 P2（点路径基础设施 PathResolver 抽取 + VariableResolver/CONDITION/BEAN 接入）两级方案，产出决策点 D1-D4 待用户拍板
+- 本轮零代码改动，方案全文已答复用户
+
+Stage Summary:
+- 多输出定型为「P1 outputVars 声明式拆包 + P2 {{a.b.c}} 点路径」两期；向后兼容（旧 DSL 无 outputs 行为不变）；待用户确认 D1(缺 key 宽容/严格)、D3(非 Map 返回是否报错)、P2 优先级后开工

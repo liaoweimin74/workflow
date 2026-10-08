@@ -4871,3 +4871,18 @@ Work Log:
 
 Stage Summary:
 - r105 全绿通过。基线进程：vite 18932 / Java 19458 / MariaDB 4847，健康基线延续（r77~r105 连续 29 轮稳定）
+---
+Task ID: patrol-r105
+Agent: main (cron Job 443426)
+Task: 定时巡检 r105（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- 进程快照：vite 18932 (RSS 614MB) / Java 19458 (RSS 558MB) / MariaDB 4847 (RSS 195MB)，与基线一致
+- vite 进程数 1（无冗余），postcss worker 0，无需减压
+- cgroup 内存 2589888512 ≈ 2.41GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 本轮零干预；触发点开发任务（batch2）因 cron 到来顺延
+
+Stage Summary:
+- r77~r105 连续 29 轮稳定全绿，系统健康基线持续保持

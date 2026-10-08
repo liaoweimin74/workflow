@@ -3153,3 +3153,32 @@ Work Log:
 
 Stage Summary:
 - 本轮巡检全绿零干预；多输出一期（双轨 outputs）正式获批开工
+
+---
+Task ID: 443426-r18
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 11:57 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：Java 新进程 PID 32234（outputs 新 jar，RSS 559MB）正常驻留；vite 单实例（PID 18932，RSS 543MB）；无 postcss worker
+- cgroup 内存 2554847232B ≈ 2.38GiB/2.55GB（<3.5GB 阈值；较上轮 +0.6GB 为 8080 重启后 JVM 新进程启动期正常爬升）；OOM 计数 0 与基线一致
+- 未启动 agent-browser、未修改代码，探活通过即结束；本轮巡检后继续 outputs E2E 验证（上轮因 401 待登录凭据）
+
+Stage Summary:
+- 本轮全绿零干预；outputs 新 jar 已稳定上线运行（PID 32234 自 04:02 起），服务态健康
+
+---
+Task ID: LOCAL-multioutput-impl
+Agent: main (dev session, 多实例协作)
+Task: Groovy 脚本节点多变量输出（outputs 声明式·双轨）一期交付与验证
+
+Work Log:
+- 分工事实：用户「按建议来」批准后，并行 cron 会话实例完成代码实施（03:52-03:57 改 6 文件：LogicFlowDsl/Validator/Engine + dsl.ts/flowVars.ts/PropertyPanel/FlowNode），构建 jar（04:01:22）、重启 8080（04:02, PID 32234）、提交（04:06, 2ae9d826）；本实例完成巡检 r17/r18、进度监督（让路防写冲突）、E2E 验证与收尾记录
+- 引擎语义（源码核实）：SCRIPT 节点 outputs:[{name,type,desc}]，脚本末行返回 Map 后按声明逐 key 拆包写入扁平上下文；缺 key 跳过不写；返回非 Map 且已声明 outputs → 节点 FAILED 明确报错；与 resultVar 双轨并存（整包另存）；outputs 与 resultVar 同名 → 发布校验拦截（运行期纵深防御跳过展开）；与上游变量同名 → log.warn 警告放行；BATCH 循环体 SCRIPT 步骤同享（childVars 展开）
+- 关键约定：outputs 声明名必须与脚本返回 Map 的 key 同名（引擎按 map.containsKey(声明名) 匹配）——前端 FieldLabel tooltip 已含示例 [outLevel: level] 提示
+- E2E 验证（scripts/e2e_multioutput.sh，可复用，admin/admin123 登录）：5/5 全绿——①outputs 平铺（outLevel/outRatio/hits）✓ ②resultVar 整包 Map 双轨 ✓ ③CONDITION 引用平铺变量 outLevel EQ HIGH 走 true 分支 ✓ ④同名发布拦截（DSL_INVALID ... 双轨不可重叠）✓ ⑤标量返回 run FAILED 含「未返回 Map」文案 ✓；测试流已清理
+- 服务态：新 jar 稳定运行（PID 32234），r18 探活四链路 200，cgroup 2.55GB（JVM 启动期正常），OOM 0
+
+Stage Summary:
+- 多输出一期（双轨 outputs）全量交付上线：后端 DSL/引擎/校验器 + 前端输出参数表格/DSL 往返/变量候选联动 + FlowNode 徽标；E2E 5/5 全绿；二期（{{a.b.c}} 点路径打通 CONDITION/HTTP/BEAN）待排期

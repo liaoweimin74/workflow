@@ -4499,3 +4499,18 @@ Work Log:
 
 Stage Summary:
 - r83 全绿零干预；cgroup 瞬时峰值由 vue-tsc 类型检查引起，已自愈回落，三常驻进程基线不变
+
+---
+Task ID: patrol-r84
+Agent: main (cron patrol, Job 443426)
+Task: r84 定时巡检（四链路探活 + 内存/OOM 监控）
+
+Work Log:
+- 四链路探活：a(vite 3000)=200、b(外域 Host)=200、c(/api 业务链)=200、d(8080 直连)=200，全绿
+- 进程：vite 18932 唯一实例 ~599MB；Java 19458 ~539MB；MariaDB 4847 ~190MB，三常驻基线不变
+- 无冗余 vite/postcss worker，无需减压
+- cgroup 内存 2,531,753,984 B ≈ 2.36GB（< 3.5GB 备案线）
+- oom_kill = 22，与基线持平零新增；无修复干预
+
+Stage Summary:
+- r84 全绿零干预；健康基线延续（r77~r84 稳定），布局 v4 已交付待用户页面验证

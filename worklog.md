@@ -4110,3 +4110,18 @@ Work Log:
 
 Stage Summary:
 - r69 全绿；git 连环案首次零击杀轮（基线稳在 22），低内存 pack 配置止血迹象初现；核心服务无损
+
+---
+Task ID: patrol-r70
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r70：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~540MB（唯一）；Java PID 12826 ~530MB（15:31 新 jar 稳定）；MariaDB ~189MB；Chrome renderer ~213MB 驻留
+- cgroup = 2615115776（~2.62GB，与上轮持平，未破 3.5GB 备案线）
+- OOM 盯防：oom_kill = 22，**连续第二轮零新增**——低内存 pack 配置止血趋势进一步确认
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r70 全绿；git 连环案连续两轮零击杀（基线稳 22），止血趋势确认中；核心服务无损

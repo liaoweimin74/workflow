@@ -21,8 +21,9 @@ import java.util.Set;
  *   <li>边引用不存在的节点（source/target）；</li>
  *   <li>CONDITION 节点缺 branch=true / branch=false 出边；</li>
  *   <li>HTTP 节点缺 url；BEAN 节点缺 beanName/methodName；SCRIPT 节点缺 source；</li>
- *   <li>SCRIPT 输出声明 results：仅 SCRIPT（顶层/循环体）可配；变量名须 \\w+ 合法标识符、
- *       不重复、mode 必填且 ∈ WHOLE|KEY；SCRIPT 配置 resultVar → 报错（输出统一由 results 声明）；</li>
+ *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH）
+ *       顶层与循环体均可配；变量名须 \\w+ 合法标识符、不重复、mode 必填且 ∈ WHOLE|KEY；
+ *       resultVar 已全链路下线（引擎反序列化忽略该遗留键）；</li>
  *   <li>非 END/CONDITION 节点无出边（含 START）。</li>
  * </ul>
  *
@@ -128,29 +129,19 @@ public class LogicFlowDslValidator {
                     // 其余类型无 config 硬要求
                 }
             }
-            // SCRIPT 输出声明校验：统一 results 单表（WHOLE/KEY）；SCRIPT 不再支持 resultVar；
-            // 其余节点类型配置 results 即报错
+            // 输出声明校验：全部执行型节点统一 results 单表（WHOLE/KEY）；resultVar 已下线
             List<LogicFlowDsl.ResultVarDef> results = node.getResults();
-            boolean hasResults = results != null && !results.isEmpty();
-            if (type == NodeType.SCRIPT) {
-                if (node.getResultVar() != null && !node.getResultVar().isBlank()) {
-                    errors.add("SCRIPT 节点 " + node.getId()
-                            + " 不支持 resultVar（输出统一由 results 声明：mode=WHOLE 整体值 / KEY 按 key 取）");
-                }
-                if (hasResults) {
-                    validateResults(results, "SCRIPT 节点 " + node.getId(), errors);
-                }
-            } else if (hasResults) {
-                errors.add("节点 " + node.getId() + " (" + type + ") 不支持 results（仅 SCRIPT 支持输出声明）");
+            if (results != null && !results.isEmpty()) {
+                validateResults(results, "节点 " + node.getId() + " (" + type + ")", errors);
             }
         }
         return errors;
     }
 
     /**
-     * SCRIPT results 声明硬校验：非空/合法标识符（\\w+，与 VariableResolver 占位符同域）、
+     * results 声明硬校验：非空/合法标识符（\\w+，与 VariableResolver 占位符同域）、
      * 不重复（单一命名空间，WHOLE/KEY 混排同表）、mode 必填且 ∈ WHOLE|KEY。
-     * label 用于错误定位（如 "SCRIPT 节点 s1"）。
+     * label 用于错误定位（如 "节点 s1 (HTTP)"）。
      */
     private void validateResults(List<LogicFlowDsl.ResultVarDef> results, String label, List<String> errors) {
         Set<String> seen = new LinkedHashSet<>();
@@ -358,17 +349,22 @@ public class LogicFlowDslValidator {
             return;
         }
         JsonNode stepConfig = step.get("config");
-        // results 仅 SCRIPT 步骤支持；其余类型配置即报错
+        // results 全类型步骤均可配（WHOLE/KEY 单表）；resultVar 已下线
         JsonNode stepResults = step.get("results");
         boolean hasStepResults = stepResults != null && stepResults.isArray() && !stepResults.isEmpty();
-        if (hasStepResults && type != NodeType.SCRIPT) {
-            errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "(" + type
-                    + ") 不支持 results（仅 SCRIPT 支持输出声明）");
-        }
-        if (type == NodeType.SCRIPT
-                && textOrNull(step, "resultVar") != null && !textOrNull(step, "resultVar").isBlank()) {
-            errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "(SCRIPT) 不支持 resultVar"
-                    + "（输出统一由 results 声明：mode=WHOLE 整体值 / KEY 按 key 取）");
+        if (hasStepResults) {
+            List<LogicFlowDsl.ResultVarDef> defs = new ArrayList<>();
+            for (int i = 0; i < stepResults.size(); i++) {
+                JsonNode item = stepResults.get(i);
+                LogicFlowDsl.ResultVarDef def = item != null && item.isObject()
+                        ? new LogicFlowDsl.ResultVarDef() : null;
+                if (def != null) {
+                    def.setName(textOrNull(item, "name"));
+                    def.setMode(textOrNull(item, "mode"));
+                }
+                defs.add(def);
+            }
+            validateResults(defs, "BATCH 节点 " + batchNode.getId() + " " + label + "(" + type + ")", errors);
         }
         if (type == NodeType.BATCH) {
             // 嵌套批处理：递归校验子 config（深度限制防自嵌套）
@@ -394,21 +390,6 @@ public class LogicFlowDslValidator {
             case SCRIPT -> {
                 if (stepConfig == null || stepConfig.isNull() || isBlankText(stepConfig, "source")) {
                     errors.add("BATCH 节点 " + batchNode.getId() + " " + label + "(SCRIPT) 缺少 source");
-                }
-                if (hasStepResults) {
-                    List<LogicFlowDsl.ResultVarDef> defs = new ArrayList<>();
-                    for (int i = 0; i < stepResults.size(); i++) {
-                        JsonNode item = stepResults.get(i);
-                        LogicFlowDsl.ResultVarDef def = item != null && item.isObject()
-                                ? new LogicFlowDsl.ResultVarDef() : null;
-                        if (def != null) {
-                            def.setName(textOrNull(item, "name"));
-                            def.setMode(textOrNull(item, "mode"));
-                        }
-                        defs.add(def);
-                    }
-                    validateResults(defs,
-                            "BATCH 节点 " + batchNode.getId() + " " + label + "(SCRIPT)", errors);
                 }
             }
             case DATA_UPDATE -> {

@@ -42,11 +42,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li>从 START 节点出发沿出边行走，到达 END 结束；多个 START 取第一个，无 START → FAILED；</li>
  *   <li>CONDITION 节点按 branch=true/false 选出边（缺边 → FAILED）；非条件/结束节点缺出边 → FAILED「节点无出边」；</li>
  *   <li>maxSteps=200：步数超出 → FAILED「超出最大执行步数(疑似死循环)」；</li>
- *   <li>HTTP/BEAN/DATA_UPDATE/SUBFLOW 结果经 resultVar 写回变量上下文；SCRIPT 输出统一由
- *       节点级 results 声明驱动（mode=WHOLE 整包 / mode=KEY 拆包，见 {@link #writeScriptResults}）；
+ *   <li>全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH 及 CONDITION）输出统一由
+ *       节点级 results 声明驱动（mode=WHOLE 整包 / mode=KEY 拆包，见 {@link #writeResults}；
+ *       SCRIPT 严格 / 其余宽松）；resultVar 已全链路下线；</li>
  *       BATCH 遍历集合并按循环体链（config.body[]，逐项顺序执行链上各节点）执行，
- *       聚合结果列表写入 resultVar；legacy 单动作（actionType+actionConfig）仍兼容；
- *       SUBFLOW 调用另一条已发布逻辑流（环检测 + 深度限制），其 outputVars 写 resultVar；</li>
+ *       聚合结果列表为节点返回值（由 results 声明写入）；legacy 单动作（actionType+actionConfig）仍兼容；
+ *       SUBFLOW 调用另一条已发布逻辑流（环检测 + 深度限制），其 outputVars 为节点返回值（由 results 声明写入）；</li>
  *   <li>节点异常按 errorAction：FAIL_FLOW（默认）→ 整个流 FAILED 停止；
  *       IGNORE_CONTINUE → 该节点 trace 记 FAILED 后继续走边；</li>
  *   <li>输出 outputVars = 全部变量快照（容器结构深拷贝）。</li>
@@ -250,15 +251,8 @@ public class LogicFlowEngine {
         try {
             Object result = dispatch(node, vars, traces);
             long duration = System.currentTimeMillis() - begin;
-            if (node.getType() == NodeType.SCRIPT) {
-                // SCRIPT 输出统一由 results 声明驱动（WHOLE 整包 / KEY 拆包），不消费 resultVar
-                writeScriptResults(node, result, vars);
-            } else {
-                String resultVar = node.getResultVar();
-                if (resultVar != null && !resultVar.isBlank()) {
-                    vars.put(resultVar, result);
-                }
-            }
+            // 输出统一由 results 声明驱动（全部执行型节点；SCRIPT 严格 / 其余宽松；无声明则纯副作用不写回）
+            writeResults(node, result, vars);
             traces.add(new NodeTrace(node.getId(), node.getName(), node.getType().name(),
                     TRACE_SUCCESS, result, null, duration));
         } catch (Exception e) {
@@ -303,9 +297,8 @@ public class LogicFlowEngine {
             branch = false;
         }
         long duration = System.currentTimeMillis() - begin;
-        if (node.getResultVar() != null && !node.getResultVar().isBlank()) {
-            vars.put(node.getResultVar(), branch);
-        }
+        // 输出统一由 results 声明（宽松语义）：WHOLE 写回布尔；未声明不写
+        writeResults(node, branch, vars);
         traces.add(new NodeTrace(node.getId(), node.getName(), NodeType.CONDITION.name(),
                 TRACE_SUCCESS, String.valueOf(branch), null, duration));
         return resolveBranchTarget(node, nodeById, outEdges.get(node.getId()), branch);
@@ -364,30 +357,29 @@ public class LogicFlowEngine {
     }
 
     /**
-     * SCRIPT 节点统一输出写回（results 声明式单表模型，替代双轨 resultVar+outputs）：
+     * 节点统一输出写回（results 声明式单表模型，适用于全部执行型节点）：
      * <ul>
-     *   <li>mode=WHOLE：脚本末行表达式的值整体写入变量；值为 null → 跳过并警告（防覆盖上游变量）；</li>
-     *   <li>mode=KEY：要求脚本末行返回 Map，按声明名取对应 key 写入；缺 key → 跳过不写；</li>
-     *   <li>声明了 KEY 行而末行返回非 Map → 抛 IllegalArgumentException（节点 FAILED，配置错误尽早暴露）；</li>
+     *   <li>mode=WHOLE：节点返回值整体写入变量；值为 null → 跳过并警告（防覆盖上游变量）；</li>
+     *   <li>mode=KEY：要求输出源为 Map，按声明名取对应 key 写入；缺 key → 跳过不写；
+     *       输出源为字符串时先尝试 JSON 解析为对象（HTTP body 载体拍板 2A）；</li>
+     *   <li>严格度分流（拍板 3B）：SCRIPT 严格——声明 KEY 而末行非 Map → 抛
+     *       IllegalArgumentException（节点 FAILED，配置错误尽早暴露）；其余节点宽松——
+     *       非 Map/解析失败 → 警告跳过，节点继续（外部系统输出不受本流控制）；</li>
      *   <li>输出名与上游同名变量冲突 → log.warn 警告后放行（运行期宽容策略）。</li>
      * </ul>
      * 调用点须在 trace 记 SUCCESS 之前（失败归入节点异常路径）。
      */
-    private void writeScriptResults(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
+    private void writeResults(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
         List<LogicFlowDsl.ResultVarDef> results = node.getResults();
         if (results == null || results.isEmpty()) {
-            return; // 未声明输出：脚本纯副作用，不写任何变量
+            return; // 未声明输出：节点纯副作用，不写任何变量
         }
         String nodeLabel = node.getName() != null && !node.getName().isBlank()
                 ? node.getName() : node.getId();
+        boolean strict = node.getType() == NodeType.SCRIPT;
         boolean needsMap = results.stream()
                 .anyMatch(r -> r != null && r.getMode() != null && "KEY".equalsIgnoreCase(r.getMode().trim()));
-        if (needsMap && !(result instanceof Map)) {
-            throw new IllegalArgumentException("SCRIPT 节点 " + node.getId()
-                    + " 声明了 mode=KEY 的输出但脚本未返回 Map（实际 "
-                    + (result == null ? "null" : result.getClass().getSimpleName())
-                    + "）：KEY 输出需脚本以 [key: value, ...] 形式返回");
-        }
+        Map<?, ?> keyMap = needsMap ? resolveKeyMap(node, nodeLabel, result, strict) : null;
         for (LogicFlowDsl.ResultVarDef def : results) {
             String name = def != null ? def.getName() : null;
             if (name == null || name.isBlank()) {
@@ -395,24 +387,53 @@ public class LogicFlowEngine {
             }
             Object value;
             if (def.getMode() != null && "KEY".equalsIgnoreCase(def.getMode().trim())) {
-                Map<?, ?> map = (Map<?, ?>) result;
-                if (!map.containsKey(name)) {
-                    continue; // 缺 key 跳过不写（防 null 覆盖上游同名变量）
+                if (keyMap == null || !keyMap.containsKey(name)) {
+                    continue; // 解析失败已警告 / 缺 key 跳过不写（防 null 覆盖上游同名变量）
                 }
-                value = map.get(name);
+                value = keyMap.get(name);
             } else {
                 if (result == null) {
-                    log.warn("SCRIPT 节点 '{}' 输出 '{}' 为 null，跳过写入（防覆盖上游同名变量）",
+                    log.warn("节点 '{}' 输出 '{}' 返回值为 null，跳过写入（防覆盖上游同名变量）",
                             nodeLabel, name);
                     continue;
                 }
                 value = result;
             }
             if (vars.containsKey(name)) {
-                log.warn("SCRIPT 节点 '{}' 输出 '{}' 覆盖上游同名变量（警告放行）", nodeLabel, name);
+                log.warn("节点 '{}' 输出 '{}' 覆盖上游同名变量（警告放行）", nodeLabel, name);
             }
             vars.put(name, value);
         }
+    }
+
+    /**
+     * KEY 模式输出源归一为 Map：Map 直通；字符串尝试 JSON 解析（宽松失败返回 null 并警告）；
+     * 严格模式（SCRIPT）非 Map 直接抛 IllegalArgumentException。
+     */
+    private Map<?, ?> resolveKeyMap(LogicFlowDsl.NodeDef node, String nodeLabel,
+                                    Object result, boolean strict) {
+        if (result instanceof Map<?, ?> map) {
+            return map;
+        }
+        if (result instanceof String text) {
+            try {
+                JsonNode tree = objectMapper.readTree(text);
+                if (tree != null && tree.isObject()) {
+                    return objectMapper.convertValue(tree, Map.class);
+                }
+            } catch (Exception e) {
+                // 落入下方统一警告
+            }
+        }
+        if (strict) {
+            throw new IllegalArgumentException("SCRIPT 节点 " + node.getId()
+                    + " 声明了 mode=KEY 的输出但脚本未返回 Map（实际 "
+                    + (result == null ? "null" : result.getClass().getSimpleName())
+                    + "）：KEY 输出需脚本以 [key: value, ...] 形式返回");
+        }
+        log.warn("节点 '{}' 声明了 mode=KEY 输出但返回值非 Map/JSON 对象（实际 {}），KEY 输出跳过写入",
+                nodeLabel, result == null ? "null" : result.getClass().getSimpleName());
+        return null;
     }
 
     // ------------------------------------------------------------------
@@ -426,7 +447,7 @@ public class LogicFlowEngine {
 
     /**
      * 执行数据更新节点：纯配置 UPDATE 动态表。
-     * 表名/列名经元数据校验，值经参数绑定执行（防注入）；受影响行数返回写回 resultVar。
+     * 表名/列名经元数据校验，值经参数绑定执行（防注入）；受影响行数作为节点返回值由 results 声明写入。
      */
     private Object executeDataUpdate(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
         BackendDataUpdateConfig config = readConfig(node, BackendDataUpdateConfig.class);
@@ -623,7 +644,7 @@ public class LogicFlowEngine {
      * 逐项覆盖/改名（后写胜出）；passAllVars=false 时仅传映射后的变量。
      * 环检测：目标 flowId 已在调用链（含当前流自身）→ 拒绝；嵌套深度上限
      * {@link #MAX_SUBFLOW_DEPTH}。子流程未发布/不存在 → 节点异常（走 errorAction）。
-     * 子流程自身轨迹不并入父轨迹；节点 result = 子流程 outputVars（写 resultVar 可选）。
+     * 子流程自身轨迹不并入父轨迹；节点 result = 子流程 outputVars（由 results 声明写入）。
      */
     private Object executeSubflow(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
         JsonNode config = node.getConfig();
@@ -708,7 +729,7 @@ public class LogicFlowEngine {
     private static final int MAX_BATCH_NESTING_DEPTH = 5;
     private static final ThreadLocal<Integer> BATCH_DEPTH = ThreadLocal.withInitial(() -> 0);
 
-    /** 批处理汇总（写入 resultVar / 节点轨迹 result）。 */
+    /** 批处理汇总（节点返回值，由 results 声明写入 / 节点轨迹 result）。 */
     record BatchSummary(int total, int succeeded, int failed, boolean truncated,
                         List<Object> results, List<Map<String, Object>> errors) {
     }
@@ -717,12 +738,12 @@ public class LogicFlowEngine {
      * 执行批处理节点：解析集合 → 逐项执行循环体链（或 legacy 单动作）→ 聚合结果列表。
      *
      * <p>config 形态（body 模式，推荐）：{@code {collection, itemVar="item", indexVar="index",
-     * body:[{id?, type, name?, config, resultVar?, errorAction?}...], stopOnError=true, maxItems=100}}。
+     * body:[{id?, type, name?, config, results?, errorAction?}...], stopOnError=true, maxItems=100}}。
      * legacy 模式（无 body）：{@code {actionType: HTTP|SCRIPT|BEAN, actionConfig:{...}}}。
      *
      * <p>语义：每项在「主变量上下文的副本」中执行（itemVar/indexVar 注入），
-     * 循环体链按序逐节点执行，节点 resultVar 写入副本，迭代后副本并回主上下文
-     * （后写胜出，脚本副作用跨项保留）；聚合结果按顺序写入 resultVar
+     * 循环体链按序逐节点执行，节点输出由 results 声明写入副本，迭代后副本并回主上下文
+     * （后写胜出，脚本副作用跨项保留）；聚合结果作为节点返回值由 results 声明写入
      * （汇总 Map：total/succeeded/failed/truncated/results/errors，results 取每项链末结果）；
      * 链内节点 errorAction=IGNORE_CONTINUE → 跳过该步继续后续节点；
      * 否则该项失败，stopOnError=true 时首个失败项向上抛出（由外层 errorAction 决定中断或跳过继续）。
@@ -844,19 +865,14 @@ public class LogicFlowEngine {
         inner.setName(step.getName());
         inner.setType(step.getType());
         inner.setConfig(step.getConfig());
-        inner.setResultVar(step.getResultVar());
         inner.setResults(step.getResults());
         inner.setErrorAction(step.getErrorAction());
         boolean traceable = iteration < BATCH_BODY_TRACE_ITERATIONS;
         long begin = System.currentTimeMillis();
         try {
             Object result = dispatch(inner, childVars, traces);
-            // 统一结果写回：SCRIPT 走 results 声明，其余节点走 resultVar（先写回后记 SUCCESS 轨迹，失败归入异常路径）
-            if (inner.getType() == NodeType.SCRIPT) {
-                writeScriptResults(inner, result, childVars);
-            } else if (inner.getResultVar() != null && !inner.getResultVar().isBlank()) {
-                childVars.put(inner.getResultVar(), result);
-            }
+            // 统一结果写回：results 声明驱动（SCRIPT 严格 / 其余宽松；无声明不写回）
+            writeResults(inner, result, childVars);
             if (traceable && traces != null) {
                 traces.add(new NodeTrace(stepId, inner.getName(), inner.getType().name(),
                         TRACE_SUCCESS, result, null, System.currentTimeMillis() - begin));
@@ -906,7 +922,6 @@ public class LogicFlowEngine {
             step.setName(textOrNull(entry, "name"));
             step.setType(type);
             step.setConfig(entry.get("config"));
-            step.setResultVar(textOrNull(entry, "resultVar"));
             step.setResults(parseResultsList(entry.get("results")));
             step.setErrorAction(textOrNull(entry, "errorAction"));
             steps.add(step);

@@ -3633,3 +3633,45 @@ Work Log:
 
 Stage Summary:
 - r46 全绿零干预，零代码编辑；D+ 终态稳定，内存余量 ~0.87GB
+
+---
+Task ID: patrol-r47
+Agent: main (cron Job 443426)
+Task: 14:37:27 轻量运维巡检（探活+内存，零开发）
+
+Work Log:
+- 四链路探活全 200；Java 2815 ~554MB / vite 18932 ~538MB 唯一 / 无 postcss worker / MariaDB ~191MB
+- Chrome 组保持退出；cgroup = 2821525504（~2.63GB）< 3.5GB；OOM 0
+
+Stage Summary:
+- r47 全绿零干预；巡检职责完成后转入用户拍板的迁移开发
+
+---
+Task ID: migrate-results-all
+Agent: main
+Task: 用户拍板 1A 2A 3B 4A —— 其他节点迁移 results 单表，正式开工
+
+Work Log:
+- 【拍板确认】1A=现在开工（HTTP → BEAN → SUBFLOW → BATCH 内层 → DATA_UPDATE 随迁 → 收尾删 resultVar 全链路）
+- 【拍板确认】2A=HTTP results 载体=解析后 body（KEY 模式 body 字符串先 JSON 解析再取字段）；点路径维持二期暂缓
+- 【拍板确认】3B=KEY 失败语义宽松版（非 Map/解析失败 → 跳过写入 + warn，节点继续；仅限非 SCRIPT 节点，SCRIPT 保持严格）
+- 【拍板确认】4A=DATA_UPDATE 随迁（WHOLE 写受影响行数）
+- 设计轮既定：CONDITION 不迁移但 resultVar 删除后需最小 results 支持（WHOLE 写布尔）；BPMN 侧不动
+
+Stage Summary:
+- 迁移开发启动；纪律：不动 BPMN 侧、不留归一化层、resultVar 干净删除
+
+---
+Task ID: migrate-results-all (arbitration)
+Agent: main
+Task: 冲突仲裁——并行会话正在实施同一迁移，本会话零编辑退避
+
+Work Log:
+- 只读核查发现 LogicFlowDsl/Engine/Validator 已被并行会话更新（mtime 14:38-14:40 +08，本会话拍板后 1-3 分钟内）
+- 逐条比对：并行会话实现与本会话拍板完全吻合——writeResults 严格度分流（SCRIPT 严格/其余宽松=拍板3B）、resolveKeyMap 字符串先 JSON 解析（=拍板2A body 载体）、全节点写回接入（executeLogicNode L255 / CONDITION L301 / BATCH 内层 L875）、resultVar 全链路下线、Validator results 校验扩展全类型
+- jar 未重建（target 仍为 12:34 旧版）；前端 dsl.ts/PropertyPanel/flowVars.ts 未动（12:31-12:32 旧时间戳）→ 并行会话交付进行中
+- 本会话按既有冲突协议零编辑退避（与 outputs-v2-unify 仲裁先例一致），不抢跑重复实施
+- 本会话转入：观察交付进度 + 例行巡检；部署窗口若 8080 短暂 000，先核 jar mtime/进程再判死，避免旧 jar 误拉起干扰并行部署
+
+Stage Summary:
+- 迁移实施权归并行会话；本会话零编辑，维持探活/内存职责

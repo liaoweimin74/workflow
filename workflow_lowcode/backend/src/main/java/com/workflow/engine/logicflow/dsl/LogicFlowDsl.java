@@ -19,7 +19,7 @@ import java.util.List;
  *                "headers":{"Authorization":"Bearer {{token}}"},
  *                "queryParams":[{"source":"orderId","target":"orderId"}],
  *                "connTimeoutMs":3000,"readTimeoutMs":5000,"retryCount":0},
- *      "resultVar":"risk","errorAction":"FAIL_FLOW"},
+ *      "results":[{"name":"risk","mode":"WHOLE"}],"errorAction":"FAIL_FLOW"},
  *     {"id":"cond1","type":"CONDITION","name":"是否通过","x":520,"y":160,
  *      "config":{"variable":"risk","operator":"EQ","value":"PASS"}},
  *     {"id":"end1","type":"END","name":"结束","x":720,"y":160}
@@ -38,19 +38,20 @@ import java.util.List;
  *   <li>HTTP：{@code BackendLogicHttpConfig} 字段（url/method/headers/queryParams/bodyParams/
  *       connTimeoutMs=3000/readTimeoutMs=5000/retryCount=0）；</li>
  *   <li>BEAN：{@code {beanName, methodName, params:[{source,target}]}}；</li>
- *   <li>SCRIPT：{@code {language:"groovy", source}}；节点级 results（可选）统一输出声明：
- *       {@code results:[{name, mode: WHOLE|KEY, type: string|number|boolean|json, desc?}...]} ——
- *       mode=WHOLE 将脚本末行表达式的值整体写入变量（null 跳过不写）；
- *       mode=KEY 要求脚本末行返回 Map，按 name 取对应 key 写入（缺 key 跳过不写；
- *       含 KEY 声明而末行返回非 Map → 节点失败）。SCRIPT 节点不消费 resultVar；</li>
+ *   <li>执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH 及 CONDITION）节点级 results（可选）
+ *       统一输出声明：{@code results:[{name, mode: WHOLE|KEY, type: string|number|boolean|json, desc?}...]} ——
+ *       mode=WHOLE 将节点返回值整体写入变量（null 跳过不写）；
+ *       mode=KEY 要求输出源为 Map（HTTP 为 body 先尝试 JSON 解析），按 name 取对应 key 写入
+ *       （缺 key 跳过不写）。严格度分流：SCRIPT 严格（声明 KEY 而非 Map → 节点失败）；
+ *       其余节点宽松（非 Map/解析失败 → 警告跳过，节点继续）；</li>
  *   <li>CONDITION：{@code {variable, operator: EQ|NE|GT|LT|GTE|LTE|EMPTY|NOT_EMPTY, value?}}
  *       （value 支持字面量或 {{var}}）。</li>
  *   <li>BATCH：{@code {collection, itemVar="item", indexVar="index",
- *       body:[{id?, type: HTTP|BEAN|SCRIPT|DATA_UPDATE|SUBFLOW, name?, config, resultVar?, errorAction?}...],
+ *       body:[{id?, type: HTTP|BEAN|SCRIPT|DATA_UPDATE|SUBFLOW, name?, config, results?, errorAction?}...],
  *       stopOnError=true, maxItems=100}}（循环体链，每项迭代按序执行链上节点）；
  *       legacy 兼容 {@code {actionType: HTTP|SCRIPT|BEAN, actionConfig:{...}}} 单动作形态。</li>
  *   <li>SUBFLOW：{@code {flowId, passAllVars=true, varsMapping:[{source,target}]}}
- *       （调用另一条已发布逻辑流，outputVars 写 resultVar）。</li>
+ *       （调用另一条已发布逻辑流，outputVars 作为节点返回值，由 results 声明写入）。</li>
  * </ul>
  *
  * <p>顶层 {@code inputVars[]} 为入参声明（可选，纯契约描述，引擎不消费）：
@@ -120,7 +121,8 @@ public class LogicFlowDsl {
         }
     }
 
-    /** DSL 节点定义。 */
+    /** DSL 节点定义（兼容存量草稿中已下线的 resultVar 键：反序列化忽略未知字段）。 */
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public static class NodeDef {
         private String id;
         private NodeType type;
@@ -130,9 +132,7 @@ public class LogicFlowDsl {
         private Double y;
         /** 节点配置（结构随 type 变化，见类注释）。 */
         private JsonNode config;
-        /** 结果写回变量名（可选；SCRIPT 节点不消费，其输出统一由 results 声明）。 */
-        private String resultVar;
-        /** 输出声明（当前仅 SCRIPT 消费：按 mode 从脚本末行表达式提取写入上下文）。 */
+        /** 输出声明（全部执行型节点可配：按 mode 从节点返回值提取写入上下文）。 */
         private List<ResultVarDef> results;
         /** 异常策略：FAIL_FLOW（默认，中断整个流）| IGNORE_CONTINUE（记失败轨迹后继续）。 */
         private String errorAction;
@@ -155,9 +155,6 @@ public class LogicFlowDsl {
         public JsonNode getConfig() { return config; }
         public void setConfig(JsonNode config) { this.config = config; }
 
-        public String getResultVar() { return resultVar; }
-        public void setResultVar(String resultVar) { this.resultVar = resultVar; }
-
         public List<ResultVarDef> getResults() { return results; }
         public void setResults(List<ResultVarDef> results) { this.results = results; }
 
@@ -166,8 +163,8 @@ public class LogicFlowDsl {
     }
 
     /**
-     * 输出参数声明（SCRIPT 统一输出模型，单表替代双轨 resultVar+outputs）：
-     * mode=WHOLE 取脚本末行表达式的整体值；mode=KEY 从末行返回的 Map 按 name 取对应 key。
+     * 输出参数声明（全部执行型节点统一输出模型，单表替代 resultVar）：
+     * mode=WHOLE 取节点返回值的整体；mode=KEY 从返回值 Map（HTTP 为 body JSON 解析结果）按 name 取对应 key。
      */
     public static class ResultVarDef {
         private String name;

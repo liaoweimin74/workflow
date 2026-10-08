@@ -3081,3 +3081,18 @@ Work Log:
 
 Stage Summary:
 - 同轮复核全绿，与 r13 结论一致，服务态稳定；本轮以确认记录归档
+
+---
+Task ID: 443426-r14
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 11:37 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 550MB）；Java 正常驻留（PID 22990，RSS 546MB）；MariaDB 正常（PID 4847）；无 postcss worker，无多余 vite
+- cgroup 内存 2068729856B ≈ 1.93GB（<3.5GB 阈值，较上轮 1.92GB 基本持平）；OOM 计数 0 与基线一致
+- 本轮附带完成 Groovy 脚本多变量输出机制的纯读码调研（GroovyScriptLogic/LogicFlowEngine/ConditionEvaluator/VariableResolver），零代码改动，结论已答复用户
+- 未启动 agent-browser、未修改代码，探活通过即结束
+
+Stage Summary:
+- 本轮全绿零干预，服务态稳定；Groovy 多变量输出调研结论：单 resultVar 输出槽 + Map 返回值为推荐方案，CONDITION/HTTP/BEAN 存在点路径限制需 SCRIPT 节点平铺中转

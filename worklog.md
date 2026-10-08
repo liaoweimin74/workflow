@@ -2799,3 +2799,15 @@ Work Log:
 
 Stage Summary:
 - 全链路健康，无异常无修复；终态架构（vite 3000 + Java 8080 + MariaDB 3306）稳定运行
+
+---
+Task ID: patrol-20261008-1012
+Agent: Z.ai (cron lightweight ops)
+Task: D+ 终态轻量巡检（第 5 轮）
+
+Work Log:
+- 四链路探活全 200（a vite 页面 / b 外域 Host / c 3000→8080 login / d 8080 直连）
+- vite 1 个进程、postcss worker 0，无需减压；cgroup ≈ 2.62GB（< 3.5GB）；oom_kill = 0（基线持平）
+
+Stage Summary:
+- 全链路健康，无异常无修复；终态架构（vite 3000 + Java 8080 + MariaDB 3306）稳定运行

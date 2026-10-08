@@ -5090,3 +5090,18 @@ Work Log:
 
 Stage Summary:
 - 更正误读，避免后续会话误判下拉折叠需求已交付；以并行会话正式 worklog 条目为准
+---
+Task ID: patrol-r114-reverify
+Agent: main (cron Job 443426)
+Task: r114 复核轮（上一下文窗口耗尽后同任务重触发，重新执行四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿（与此前 r114 条目一致）
+- 进程快照：vite 18932 (RSS ~584MB) / Java 28428 (RSS ~551MB) / MariaDB 4847 (RSS ~194MB)；vite 进程数 1，postcss worker 0，无需减压
+- cgroup 内存 2488647680 ≈ 2.32GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增（已核对历史：r68 后低内存 pack 配置止血，稳 22 达 45+ 轮，无需记事故）
+- 【只读观察】worklog 条目数 302→304，+2 为 patrol-r114 与 correction 自身；并行会话（TriggerGroupSelect 下拉折叠）仍未记账交付条目，继续只读观察
+- 本轮零干预；未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- r114 复核确认全绿零干预；r77~r114 连续 38 轮稳定全绿；下拉折叠需求交付记账仍待并行会话

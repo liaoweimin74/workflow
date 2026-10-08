@@ -2932,3 +2932,27 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿；修正上轮"会话收尾"判断——验证浏览器重新活跃，属正常 QA 进行中；内存余量约 0.4GB，暂无风险
+
+---
+Task ID: LOCAL-3flows-restore
+Agent: main (interactive)
+Task: 恢复丢失的三个逻辑流绑定需求（触发点扩展 / 参数匹配过滤 / 设计器导入触发点参数）
+
+Work Log:
+- 排查确认三需求全部丢失：FORM_LOGIC_TRIGGERS 仅剩 BUSINESS 六类 + WORKFLOW 仅 AFTER_SNAPSHOT；绑定下拉无参数过滤；设计器无导入功能
+- 前端 api/formLogicBinding.ts：新增 WORKFLOW 触发点 BEFORE_SNAPSHOT/BEFORE_SAVE/AFTER_SAVE；新增单源规格表 TRIGGER_PARAM_SPECS（10 个触发点，与后端 buildVars 注入逐字段对齐）+ triggerParamSpec/flowsMatchTrigger 工具（名称集合严格相等判定）
+- 前端 FormListPage.vue：绑定弹窗逻辑流下拉改用 filteredFlows（入参声明与触发点参数完全一致才显示，未声明入参的流排除）；切换触发点自动清空不再匹配的选中流；新增底部参数规格提示行（tag 列出注入参数 + 指路设计器导入）；tooltip 文案同步更新
+- 前端 LogicFlowDesigner.vue：输入参数声明对话框新增"从触发点导入"区块（表单类型 + 触发点 + 导入按钮 + 参数计数）；已声明时弹覆盖确认；导入后自动写入 DSL inputVars
+- 后端 FormLogicBindingService：新增三个触发点常量并入 TRIGGER_TYPES（BEFORE_* 自动强制 SYNC_IN_TX 既有逻辑不变）
+- 后端 FormDataService：save() 挂 BEFORE_SAVE（保存前校验语义，formData=本次数据/formDataExisting=旧行）/AFTER_SAVE（dataId=记录id）；saveSnapshot() 挂 BEFORE_SNAPSHOT（dataId 未生成传 null）
+- 后端 LogicFlowController：SummaryVO 新增 inputParams 入参摘要（从 DSL 顶层 inputVars 宽松解析，非法/未声明返回 null），供绑定弹窗过滤，避免 N+1 详情请求
+- 构建：maven 3.9.9 离线 package 成功（-Dmaven.test.skip=true），重启 8080 一次探活即 200
+- 浏览器端到端验证（agent-browser）：触发点下拉 4 个 WORKFLOW 选项 ✓；切换触发点参数提示/执行模式联动 ✓；设计器导入 7 项参数落库 ✓；发布后绑定下拉"快照保存后"出现匹配流、"快照保存前"显示无匹配 disabled 提示 ✓；后端接受 BEFORE_SNAPSHOT/AFTER_SAVE 绑定创建 ✓（测试绑定已清理）
+- 过程中修复一处自引入 bug：filteredFlows/watch 声明位置在 bindingForm 之前导致 TDZ setup 崩溃（页面白屏），已移至其后；vue-tsc 确认本次改动零新增类型错误（ListCards/SearchTable/markdown/FormConfig 等报错均为既有遗留）
+- 排障记录：验证中出现两次"保存后 inputVars 丢失"，深查为 agent-browser 自动化点击被 ElMessageBox 覆盖确认框/overlay 遮挡产生的时序假象（确认框挂起期间保存、refs 漂移），非产品 bug；干净用户流程（导入→确定→关闭→保存）验证 inputVars=7 正确落库
+
+Stage Summary:
+- 三需求全部恢复并增强：WORKFLOW 触发点 1→4 个；绑定下拉按参数严格匹配过滤 + 无匹配提示 + 参数规格提示行；设计器一键导入触发点参数（覆盖确认保护）
+- 产物：frontend/src/api/formLogicBinding.ts、frontend/src/views/form/FormListPage.vue、frontend/src/views/logicflow/LogicFlowDesigner.vue、backend .../FormLogicBindingService.java、FormDataService.java、LogicFlowController.java；新 jar 已部署
+- 注意：逻辑流未声明入参不会出现在绑定下拉（设计使然，导入即解决）；LogicFlowDetail（detail 接口）未加 inputParams，前端过滤走 list 摘要即可
+- 遗留：wrapper 内既有 TS 错误（ListCards/SearchTable 等）与本次无关，建议后续单独治理

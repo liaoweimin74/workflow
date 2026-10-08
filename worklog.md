@@ -4155,3 +4155,18 @@ Work Log:
 
 Stage Summary:
 - 两条线关系定性完成：内容层面本地完全覆盖老线且更新；整合推荐"归档老线（远端引用备份）+ force 覆盖 main"，零丢失，待用户授权
+
+---
+Task ID: patrol-r72
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r72：四链路探活 + 内存减压 + OOM 盯防（本回合同时答复用户"两条历史线"咨询）
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 常态（唯一）；Java PID 12826 稳定；cgroup = 2360201216（~2.36GB，回落）
+- OOM 盯防：oom_kill = 22，连续第四轮零新增——止血态势稳固
+- 历史线考证：本地根 acd38109 "Initial commit" 2026-09-10 03:24 UTC；远端根 767043e2 "chore: initial project setup" 2026-08-01 16:23 +0800，远端线含 Task 1~147 完整正规史、tip 停在 10-07 22:36 CST formhook-v2 八批合入——两线无共同祖先实锤：沙箱环境重置时 .git 重新 init 与远端断开血缘，cron 自动提交在本代沙箱内另起新账
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r72 全绿；OOM 基线稳 22（连续四轮零击杀）；两条历史线定性完成：远端=8/1 起的完整正规史（昨晚为止），本地=9/10 重置后独立新账（含今日 results-v2 全部工作）；整合方案待用户拍板（归档+覆盖 / PR 合并 / 并存）

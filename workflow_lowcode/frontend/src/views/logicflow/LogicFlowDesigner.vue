@@ -157,6 +157,36 @@
         </el-button>
       </div>
       <el-button size="small" text type="primary" @click="addInputVar">添加入参</el-button>
+      <!-- 从触发点事件导入参数：与表单逻辑流绑定联动（绑定下拉按参数完全匹配过滤） -->
+      <div class="iv-import">
+        <div class="iv-import-head">
+          <span class="iv-import-title">从触发点导入</span>
+          <span class="iv-import-tip">导入后入参声明与触发点事件参数完全一致，表单绑定弹窗的下拉才会显示本流</span>
+        </div>
+        <div class="iv-import-row">
+          <el-select v-model="importFormType" size="small" style="width: 132px" @change="importTrigger = ''">
+            <el-option label="业务表单" value="BUSINESS" />
+            <el-option label="工作流表单" value="WORKFLOW" />
+          </el-select>
+          <el-select
+            v-model="importTrigger"
+            size="small"
+            style="width: 150px"
+            placeholder="选择触发点"
+          >
+            <el-option
+              v-for="t in importTriggerOptions"
+              :key="t.value"
+              :label="t.label"
+              :value="t.value"
+            />
+          </el-select>
+          <el-button size="small" type="primary" plain :disabled="!importTrigger" @click="importTriggerParams">
+            导入参数
+          </el-button>
+          <span v-if="importTriggerSpec.length" class="iv-import-count">{{ importTriggerSpec.length }} 项</span>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="inputVarsDialogVisible = false">关闭</el-button>
       </template>
@@ -192,6 +222,7 @@ import PropertyPanel from './components/PropertyPanel.vue'
 import RunTestDialog from './components/RunTestDialog.vue'
 import FieldLabel from './components/FieldLabel.vue'
 import { logicFlowApi } from '@/api/logicFlow'
+import { FORM_LOGIC_TRIGGERS, triggerParamSpec } from '@/api/formLogicBinding'
 import {
   BATCH_BODY_TYPES,
   LOOP_HANDLE_END,
@@ -262,6 +293,38 @@ const inputVarsDialogVisible = ref(false)
 
 function addInputVar() {
   inputVars.value.push({ name: '', type: 'string', required: false, desc: undefined })
+}
+
+// ===== 从触发点事件导入参数（与表单逻辑流绑定联动） =====
+const importFormType = ref<'BUSINESS' | 'WORKFLOW'>('WORKFLOW')
+const importTrigger = ref('')
+const importTriggerOptions = computed(() =>
+  FORM_LOGIC_TRIGGERS.filter((t) => t.formType === importFormType.value),
+)
+const importTriggerSpec = computed(() =>
+  importTrigger.value ? triggerParamSpec(importTrigger.value) || [] : [],
+)
+
+async function importTriggerParams() {
+  const spec = triggerParamSpec(importTrigger.value)
+  if (!spec?.length) {
+    ElMessage.warning('该触发点暂无参数规格')
+    return
+  }
+  const label = FORM_LOGIC_TRIGGERS.find((t) => t.value === importTrigger.value)?.label ?? importTrigger.value
+  if (inputVars.value.length) {
+    try {
+      await ElMessageBox.confirm(
+        `导入「${label}」的 ${spec.length} 项参数将覆盖当前已声明的 ${inputVars.value.length} 项入参，确定继续吗？`,
+        '覆盖确认',
+        { type: 'warning' },
+      )
+    } catch {
+      return
+    }
+  }
+  inputVars.value = spec.map((p) => ({ name: p.name, type: p.type, required: p.required, desc: p.desc }))
+  ElMessage.success(`已导入「${label}」参数 ${spec.length} 项`)
 }
 
 // ===== 流程元信息 =====
@@ -1297,5 +1360,38 @@ function handleBack() {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+}
+/* 从触发点导入区块：与表单逻辑流绑定联动 */
+.iv-import {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
+}
+.iv-import-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.iv-import-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+.iv-import-tip {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+.iv-import-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.iv-import-count {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

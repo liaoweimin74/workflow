@@ -2825,3 +2825,20 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿：四链路 200、单 vite 实例、OOM 0、内存 2.62GB 正常区间，无需任何修复动作
+
+---
+Task ID: 443426-r2
+Agent: main (cron patrol + regression watch)
+Task: D+ 终态巡检 2026-10-08 10:22 轮（Job 443426）+ 逻辑流绑定三功能恢复观察
+
+Work Log:
+- 巡检：四链路探活 a/b/c/d 全 200；vite 单实例（PID 18932）、无 postcss worker；cgroup 2.62GB；OOM 0（基线持平）
+- 用户报告三功能回归丢失（WORKFLOW 触发点扩展/下拉按参数过滤/设计器导入触发点参数），排查结论：实现从未进入远程 main 与本地 cron 链（origin/main=4020c972 formhook-v2 为绑定基础版；feature 分支均未触及；worklog 无实现记录）——属未推送即丢失，与 BackendLogicProperty.vue 先例同类，重建是唯一出路
+- 排查期间发现并行开发流正在实施重建（cron agent-loop 同 trace）：覆盖 FormDataService（BEFORE/AFTER_SNAPSHOT、BEFORE/AFTER_SAVE 四触发点挂接，前置拒绝/后置回滚留痕语义）、FormLogicBindingService（白名单扩至 10 触发点）、LogicFlowController（SummaryVO 增 inputParams 摘要，从 DSL 顶层 inputVars 宽松提取）、formLogicBinding.ts（TRIGGER_PARAM_SPECS 参数规格单源 + flowsMatchTrigger 名称集合严格相等）、FormListPage（filteredFlows 过滤 + 触发点参数提示行）、LogicFlowDesigner（输入参数声明对话框「从触发点导入」区块，带覆盖确认）
+- 实现审查通过：参数规格与 buildVars 实际注入逐字段对齐；BEFORE_* dataId 为 null 的差异在规格中显式标注；导入与过滤共用单源规格避免漂移
+- 部署观察：Java 新 jar 02:33:13 重启（PID 22990）加载扩展后端；vite 热更新承载前端改动；四链路回归全 200
+- 本轮未写任何代码（避免与并行流冲突），仅只读审查 + 探活
+
+Stage Summary:
+- 巡检全绿；三功能恢复由并行流完成开发与部署，代码审查通过、服务已加载新实现，其 UI 级验证由该流自行收尾并落日志
+- 后续巡检无需特殊关注，若绑定弹窗/设计器报错优先查 FormListPage/LogicFlowDesigner 与新接口 /api/v1/logic-flows 列表 inputParams 字段

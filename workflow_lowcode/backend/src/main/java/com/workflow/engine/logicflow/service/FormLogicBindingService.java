@@ -51,12 +51,20 @@ public class FormLogicBindingService {
     public static final String TRIG_AFTER_UPDATE = "AFTER_UPDATE";
     public static final String TRIG_BEFORE_DELETE = "BEFORE_DELETE";
     public static final String TRIG_AFTER_DELETE = "AFTER_DELETE";
+    /** 工作流表单：审批快照保存前（校验语义，dataId 未生成）。 */
+    public static final String TRIG_BEFORE_SNAPSHOT = "BEFORE_SNAPSHOT";
+    /** 工作流表单：审批快照落库后（AFTER 语义，dataId = 快照记录 id）。 */
     public static final String TRIG_AFTER_SNAPSHOT = "AFTER_SNAPSHOT";
+    /** 工作流表单：节点间表单数据保存前（非快照 upsert 路径，校验语义）。 */
+    public static final String TRIG_BEFORE_SAVE = "BEFORE_SAVE";
+    /** 工作流表单：节点间表单数据保存后（非快照 upsert 路径，dataId = 记录 id）。 */
+    public static final String TRIG_AFTER_SAVE = "AFTER_SAVE";
     public static final Set<String> TRIGGER_TYPES = Set.of(
             TRIG_BEFORE_CREATE, TRIG_AFTER_CREATE,
             TRIG_BEFORE_UPDATE, TRIG_AFTER_UPDATE,
             TRIG_BEFORE_DELETE, TRIG_AFTER_DELETE,
-            TRIG_AFTER_SNAPSHOT);
+            TRIG_BEFORE_SNAPSHOT, TRIG_AFTER_SNAPSHOT,
+            TRIG_BEFORE_SAVE, TRIG_AFTER_SAVE);
 
     public static final String MODE_SYNC_IN_TX = "SYNC_IN_TX";
     public static final String MODE_AFTER_COMMIT = "AFTER_COMMIT";
@@ -223,8 +231,8 @@ public class FormLogicBindingService {
      * {@code formData / formDataExisting / formKey / formType / dataId / opType / operator / __trigger}。
      *
      * @param formData        当前数据行（BUSINESS：字段 Map；WORKFLOW：dataJson 解析后的 Map）
-     * @param formDataExisting 更新/删除前的旧行（create 传 null）
-     * @param opType          CREATE | UPDATE | DELETE | SNAPSHOT
+     * @param formDataExisting 更新/删除前的旧行（create/快照传 null）
+     * @param opType          CREATE | UPDATE | DELETE | SNAPSHOT | SAVE
      */
     public Map<String, Object> buildVars(String formType, String formKey, String triggerType,
                                          String opType, String dataId,

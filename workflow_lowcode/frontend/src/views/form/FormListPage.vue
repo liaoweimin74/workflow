@@ -128,7 +128,7 @@
           <el-tooltip
             placement="top"
             effect="dark"
-            content="绑定后，表单在对应触发点自动运行所选逻辑流：前类触发点失败将拒绝本次操作（校验语义）；后类触发点可选同事务回滚（强一致）或提交后执行（失败仅留运行历史）。编排需已发布，入参自动注入 formData（整行）、formKey、dataId、opType、operator 等。"
+            content="绑定后，表单在对应触发点自动运行所选逻辑流：前类触发点失败将拒绝本次操作（校验语义）；后类触发点可选同事务回滚（强一致）或提交后执行（失败仅留运行历史）。编排需已发布，且入参声明须与触发点事件参数完全一致（下拉自动过滤），可在逻辑流设计器「输入参数」中一键导入触发点参数。"
           >
             <el-icon class="binding-hint-icon"><QuestionFilled /></el-icon>
           </el-tooltip>
@@ -194,15 +194,18 @@
               filterable
               size="small"
               style="width: 100%"
-              placeholder="仅已发布逻辑流"
+              :placeholder="filteredFlows.length ? '仅已发布逻辑流' : '暂无参数匹配的逻辑流'"
               :loading="flowsLoading"
             >
-              <el-option
-                v-for="f in publishedFlows"
-                :key="f.flowKey"
-                :label="`${f.name || f.flowKey}（${f.flowKey}）`"
-                :value="f.flowKey"
-              />
+              <template v-if="filteredFlows.length">
+                <el-option
+                  v-for="f in filteredFlows"
+                  :key="f.flowKey"
+                  :label="`${f.name || f.flowKey}（${f.flowKey}）`"
+                  :value="f.flowKey"
+                />
+              </template>
+              <el-option v-else disabled value="__no_match__" label="无参数匹配的已发布逻辑流" />
             </el-select>
           </template>
         </el-table-column>
@@ -236,6 +239,16 @@
           </template>
         </el-table-column>
       </el-table>
+      <!-- 触发点注入参数提示：解释下拉过滤规则，并指路设计器导入 -->
+      <div v-if="currentTriggerSpec.length" class="binding-param-hint">
+        <el-icon><InfoFilled /></el-icon>
+        <span>
+          触发点「{{ triggerLabel(bindingForm.triggerType) }}」注入参数：
+          <el-tag v-for="p in currentTriggerSpec" :key="p.name" size="small" type="info" class="param-tag">{{ p.name }}</el-tag>
+          （共 {{ currentTriggerSpec.length }} 项）；下拉仅显示入参声明与之完全一致的已发布逻辑流，
+          未匹配可在逻辑流设计器「输入参数」对话框一键导入该触发点参数后发布。
+        </span>
+      </div>
       <template #footer>
         <el-button @click="bindingDialogVisible = false">关闭</el-button>
       </template>
@@ -246,7 +259,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'FormList' })
 
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -260,6 +273,7 @@ import {
   Delete,
   Connection,
   QuestionFilled,
+  InfoFilled,
 } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
@@ -269,6 +283,8 @@ import { logicFlowApi } from '@/api/logicFlow'
 import {
   formLogicBindingApi,
   FORM_LOGIC_TRIGGERS,
+  flowsMatchTrigger,
+  triggerParamSpec,
   type FormLogicBindingDTO,
 } from '@/api/formLogicBinding'
 
@@ -559,7 +575,13 @@ const bindingDialogTitle = computed(() =>
 const bindings = ref<FormLogicBindingDTO[]>([])
 const bindingsLoading = ref(false)
 const bindingSubmitting = ref(false)
-const publishedFlows = ref<{ flowKey: string; name: string }[]>([])
+/** 已发布逻辑流选项（inputParams = 后端从 DSL 抽取的入参声明摘要，未声明时为 null） */
+interface PublishedFlowOption {
+  flowKey: string
+  name: string
+  inputParams: { name: string; type?: string }[] | null
+}
+const publishedFlows = ref<PublishedFlowOption[]>([])
 const flowsLoading = ref(false)
 const bindingForm = reactive({
   triggerType: 'AFTER_CREATE' as string,
@@ -568,11 +590,26 @@ const bindingForm = reactive({
   description: '',
 })
 
-/** 当前表单类型可选触发点（BUSINESS 六类；WORKFLOW 仅快照后） */
+/** 当前表单类型可选触发点（BUSINESS 六类；WORKFLOW 含快照前后与保存前后四类） */
 const triggerOptions = computed(() => {
   const type = bindingSource.value?.type || 'WORKFLOW'
   return FORM_LOGIC_TRIGGERS.filter((t) => t.formType === type)
 })
+/** 入参声明与当前触发点事件参数完全一致的已发布逻辑流（名称集合严格相等） */
+const filteredFlows = computed(() =>
+  publishedFlows.value.filter((f) => flowsMatchTrigger(f.inputParams?.map((p) => p.name), bindingForm.triggerType)),
+)
+/** 当前触发点注入参数规格（供底部提示展示） */
+const currentTriggerSpec = computed(() => triggerParamSpec(bindingForm.triggerType) || [])
+// 切换触发点后，原选中逻辑流若不再参数匹配则清空，避免提交非法绑定
+watch(
+  () => bindingForm.triggerType,
+  () => {
+    if (bindingForm.flowKey && !filteredFlows.value.some((f) => f.flowKey === bindingForm.flowKey)) {
+      bindingForm.flowKey = ''
+    }
+  },
+)
 
 function triggerLabel(value: string): string {
   return FORM_LOGIC_TRIGGERS.find((t) => t.value === value)?.label ?? value
@@ -613,7 +650,11 @@ async function loadPublishedFlows() {
     const content: any[] = (res.data as any)?.content || []
     publishedFlows.value = content
       .filter((f) => f.status === 'PUBLISHED')
-      .map((f) => ({ flowKey: f.flowKey, name: f.name }))
+      .map((f) => ({
+        flowKey: f.flowKey,
+        name: f.name,
+        inputParams: Array.isArray(f.inputParams) ? f.inputParams : null,
+      }))
   } catch {
     // http 拦截器已提示
   } finally {
@@ -768,5 +809,27 @@ function formatDate(dateStr: string): string {
 }
 .binding-add-table :deep(.cell) {
   padding: 0 8px;
+}
+/* 触发点注入参数提示行：小字灰调 + 参数 tag 轻量内联 */
+.binding-param-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+}
+.binding-param-hint .el-icon {
+  margin-top: 3px;
+  color: var(--el-color-primary);
+  flex-shrink: 0;
+}
+.binding-param-hint .param-tag {
+  margin: 0 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 </style>

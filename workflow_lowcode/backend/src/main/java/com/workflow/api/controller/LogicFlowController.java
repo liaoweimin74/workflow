@@ -6,10 +6,15 @@ import com.workflow.engine.logicflow.engine.LogicFlowEngine;
 import com.workflow.engine.logicflow.entity.LogicFlowDef;
 import com.workflow.engine.logicflow.entity.LogicFlowRun;
 import com.workflow.engine.logicflow.service.LogicFlowService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -24,10 +29,14 @@ import java.util.Map;
 @RequestMapping("/api/v1/logic-flows")
 public class LogicFlowController {
 
-    private final LogicFlowService service;
+    private static final Logger log = LoggerFactory.getLogger(LogicFlowController.class);
 
-    public LogicFlowController(LogicFlowService service) {
+    private final LogicFlowService service;
+    private final ObjectMapper objectMapper;
+
+    public LogicFlowController(LogicFlowService service, ObjectMapper objectMapper) {
         this.service = service;
+        this.objectMapper = objectMapper;
     }
 
     // ------------------------------------------------------------------
@@ -44,8 +53,14 @@ public class LogicFlowController {
     public record RunReq(Map<String, Object> vars) {
     }
 
+    /** 入参声明摘要（从 DSL 顶层 inputVars 抽取，供绑定弹窗按触发点参数过滤）。 */
+    public record InputParamVO(String name, String type, Boolean required, String desc) {
+    }
+
+    /** inputParams = 入参声明摘要（未声明时为 null）。 */
     public record SummaryVO(String id, String flowKey, String name, String description,
-                            String status, Integer version, LocalDateTime updatedAt) {
+                            String status, Integer version, LocalDateTime updatedAt,
+                            List<InputParamVO> inputParams) {
     }
 
     /** dsl 为存储原文（String）。 */
@@ -149,7 +164,37 @@ public class LogicFlowController {
 
     private SummaryVO toSummary(LogicFlowDef def) {
         return new SummaryVO(def.getId(), def.getFlowKey(), def.getName(), def.getDescription(),
-                statusOf(def), versionOf(def), def.getUpdatedAt());
+                statusOf(def), versionOf(def), def.getUpdatedAt(), extractInputParams(def.getDslJson()));
+    }
+
+    /**
+     * DSL 顶层 inputVars → 入参声明摘要（宽松解析：DSL 非法/无声明返回 null，
+     * 不影响列表渲染；单条缺 name 丢弃）。
+     */
+    private List<InputParamVO> extractInputParams(String dslJson) {
+        if (dslJson == null || dslJson.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode vars = objectMapper.readTree(dslJson).get("inputVars");
+            if (vars == null || !vars.isArray() || vars.isEmpty()) {
+                return null;
+            }
+            List<InputParamVO> out = new ArrayList<>();
+            for (JsonNode v : vars) {
+                if (v == null || !v.hasNonNull("name")) continue;
+                String name = v.get("name").asText();
+                if (name.isBlank()) continue;
+                String type = v.hasNonNull("type") ? v.get("type").asText() : "string";
+                Boolean required = v.has("required") && v.get("required").asBoolean(false);
+                String desc = v.hasNonNull("desc") ? v.get("desc").asText() : null;
+                out.add(new InputParamVO(name, type, required, desc));
+            }
+            return out.isEmpty() ? null : out;
+        } catch (Exception e) {
+            log.warn("解析逻辑流 DSL inputVars 失败（忽略，仅影响入参过滤）: {}", e.getMessage());
+            return null;
+        }
     }
 
     private DetailVO toDetail(LogicFlowDef def) {

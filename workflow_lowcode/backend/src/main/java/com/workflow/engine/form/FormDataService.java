@@ -68,6 +68,8 @@ public class FormDataService {
     /**
      * 保存或更新当前表单数据（非快照，用于节点间传递）。
      * 同一 processInstanceId + formDefId 只保留一条当前数据。
+     * 落库前后分别触发 BEFORE_SAVE / AFTER_SAVE 绑定（失败语义同 BUSINESS：
+     * 前置失败拒绝保存；后置 SYNC_IN_TX 回滚 / AFTER_COMMIT 留痕）。
      *
      * @param formDefId          表单定义 ID
      * @param processInstanceId  流程实例 ID
@@ -88,6 +90,16 @@ public class FormDataService {
                 .findByTenantIdAndProcessInstanceIdAndFormDefIdAndIsSnapshot(
                         tenantId, processInstanceId, formDefId, false);
 
+        // 触发变量快照：formData = 本次数据，formDataExisting = 旧行（首次保存为 null）
+        Map<String, Object> formDataMap = parseFormDataQuietly(dataJson);
+        Map<String, Object> existingMap = existing.map(d -> parseFormDataQuietly(d.getDataJson())).orElse(null);
+        // 保存前置编排（校验语义：失败拒绝本次保存）
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
+                FormLogicBindingService.TRIG_BEFORE_SAVE,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
+                        FormLogicBindingService.TRIG_BEFORE_SAVE, "SAVE", null,
+                        formDataMap, existingMap));
+
         FormData formData;
         if (existing.isPresent()) {
             formData = existing.get();
@@ -106,12 +118,21 @@ public class FormDataService {
             formData.setIsSnapshot(false);
         }
 
-        return formDataRepository.save(formData);
+        FormData saved = formDataRepository.save(formData);
+
+        // 保存后置编排（dataId = 记录 id；失败语义：SYNC_IN_TX 回滚 / AFTER_COMMIT 留痕）
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
+                FormLogicBindingService.TRIG_AFTER_SAVE,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
+                        FormLogicBindingService.TRIG_AFTER_SAVE, "SAVE", saved.getId(),
+                        formDataMap, existingMap));
+        return saved;
     }
 
     /**
      * 保存任务审批时的表单快照（每次创建新记录，不可变）；
-     * 落库后触发 AFTER_SNAPSHOT 绑定的逻辑编排（失败语义同 AFTER_*：SYNC_IN_TX 回滚 / AFTER_COMMIT 留痕）。
+     * 落库前触发 BEFORE_SNAPSHOT（校验语义，dataId 未生成）；落库后触发
+     * AFTER_SNAPSHOT 绑定的逻辑编排（失败语义同 AFTER_*：SYNC_IN_TX 回滚 / AFTER_COMMIT 留痕）。
      *
      * @param formDefId          表单定义 ID
      * @param processInstanceId  流程实例 ID
@@ -126,6 +147,14 @@ public class FormDataService {
         FormDefinition formDef = formDefRepository.findByIdAndTenantId(formDefId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Form definition not found: " + formDefId));
 
+        // 快照前置编排（校验语义：失败拒绝本次快照；dataId 未生成传 null）
+        Map<String, Object> formDataMap = parseFormDataQuietly(dataJson);
+        logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
+                FormLogicBindingService.TRIG_BEFORE_SNAPSHOT,
+                logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
+                        FormLogicBindingService.TRIG_BEFORE_SNAPSHOT, "SNAPSHOT", null,
+                        formDataMap, null));
+
         FormData snapshot = new FormData();
         snapshot.setId(UUID.randomUUID().toString().replace("-", ""));
         snapshot.setTenantId(tenantId);
@@ -139,7 +168,6 @@ public class FormDataService {
         FormData saved = formDataRepository.save(snapshot);
 
         // 快照后置编排：formData = dataJson 解析结果（解析失败不阻断快照，formData 传 null）
-        Map<String, Object> formDataMap = parseFormDataQuietly(dataJson);
         logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),
                 FormLogicBindingService.TRIG_AFTER_SNAPSHOT,
                 logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_WORKFLOW, formDef.getKey(),

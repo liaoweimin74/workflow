@@ -2856,3 +2856,18 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿：四链路 200、内存 3.04GB（阈值内）、OOM 0，无需修复；三功能恢复流的 UI 验证仍在进行，下轮关注其收尾与浏览器进程释放
+
+---
+Task ID: 443426-r4
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 10:37 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 522MB）；Java 正常驻留（PID 22990，RSS 510MB）；无 postcss worker
+- cgroup 内存 3286691840B ≈ 3.06GB，低于 3.5GB 阈值；OOM 计数 0 与基线一致
+- agent-browser chrome 三进程仍在（renderer 缓涨至 410MB），为三功能恢复流的 UI 验证（02:34 启动），属其 QA 流程不干预；总量仍阈值内，暂无需处置
+- 未启动 agent-browser、未修改代码，探活通过即结束
+
+Stage Summary:
+- 本轮全绿；关注点延续：恢复流 UI 验证未收尾（chrome 已运行 6 分钟+），若下轮仍在且 cgroup 逼近 3.5GB，将评估是否按 RSS 备案并在确认其会话僵死后再清理

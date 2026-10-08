@@ -2986,3 +2986,18 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿零干预；内存余量约 0.52GB，无风险；服务稳定运行逻辑流绑定三功能新实现
+
+---
+Task ID: 443426-r11
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 11:12 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 单实例（PID 18932，RSS 539MB）；Java 正常驻留（PID 22990，RSS 551MB）；无 postcss worker，无多余 vite
+- cgroup 内存 3221925888B ≈ 3.00GB，低于 3.5GB 阈值；OOM 计数 0 与基线一致
+- agent-browser renderer RSS 332MB，较上轮 333MB 基本持平，仍处收尾观察期，不干预（本任务未授权 kill）
+- 未启动 agent-browser、未修改代码，探活通过即结束
+
+Stage Summary:
+- 本轮全绿零干预；内存余量约 0.50GB，无风险；四轮连绿，服务稳定

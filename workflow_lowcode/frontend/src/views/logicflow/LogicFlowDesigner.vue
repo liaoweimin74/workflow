@@ -40,7 +40,7 @@
           @click="redo"
         />
       </el-tooltip>
-      <el-tooltip content="自动整理布局（自上而下分层排布）" placement="bottom">
+      <el-tooltip content="自动整理布局（自上而下分层 · 节点垂直居中对齐 · 循环体随批处理向右排布）" placement="bottom">
         <el-button class="toolbar-btn" :icon="Sort" @click="handleAutoLayout">整理布局</el-button>
       </el-tooltip>
       <el-tooltip content="声明本流的输入参数（运行测试时按声明渲染表单）" placement="bottom">
@@ -1089,15 +1089,21 @@ function onKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
-// ===== 自动整理布局（v2）：主流边 Kahn 分层（自上而下、同层横向铺开，间距按节点
-// 实际尺寸自适应）；BATCH 循环体链不参与主流分层，随宿主 BATCH 在其下方一行横排。
+// ===== 自动整理布局（v3）：主流边 Kahn 分层（自上而下、同层横向铺开，间距按节点
+// 实际尺寸自适应）。同层主流节点改为共享「层中线」垂直居中对齐（v2 顶边对齐，
+// 高低卡片参差）；BATCH 循环体链不参与主流分层：循环行自宿主 BATCH 右缘起按链序
+// 从左到右排布（连线自右侧 loop_start 手柄出、loop_end 回；嵌套 BATCH 的循环行以
+// 宿主为锚继续右移下探，嵌套层次从左到右展开），行内节点在各自循环连线上垂直居中。
 // 修复：循环链边（loop_start→链→loop_end→BATCH）构成图环，旧版把环上节点全部堆到
-// 兜底层导致「加入批处理节点后整理布局混乱」；且固定层距/列距与节点实际高宽不符。 =====
+// 兜底层导致「加入批处理节点后整理布局混乱」；v2 循环行相对宿主居中导致首节点
+// 甩到 BATCH 左侧、与右侧出手柄走向相悖；层高按居中后的块底缘精确累计。 =====
 
-/** 循环体行相对宿主 BATCH 的默认落点（与 dsl.extractBatchBody 位置持久化公式一致） */
+/** 循环行顶部相对宿主 BATCH 卡片顶缘的纵向锚（沿用默认位纵锚，行悬于卡片下方） */
 const BODY_ROW_OFFSET_Y = 130
-/** 循环体行内相邻成员的水平步长（同上，默认落点公式步长） */
-const BODY_COL_STEP_X = 180
+/** 循环行首节点与宿主 BATCH 右缘的间距（与自环 U 形外凸 offset 56 视觉对齐） */
+const BODY_ROW_START_GAP_X = 56
+/** 循环行内相邻成员的水平间距（与主流列距 colGapX 一致） */
+const BODY_ROW_COL_GAP_X = 56
 
 /** 收集某 BATCH 的循环体链（画布节点 id 序列，保序）：loop_start 出边沿链行走，
  * visited 防环；遇嵌套 BATCH 即收进链并终止（嵌套 BATCH 的循环体由递归单独排布） */
@@ -1186,51 +1192,73 @@ function handleAutoLayout() {
     if (!depth.has(id)) depth.set(id, ++maxDepth)
   })
 
-  // 3) 子树有效高度：普通节点=自身高；BATCH=循环体行底缘（130 偏移 + 行内成员有效高最大值，
-  //    嵌套 BATCH 的有效高含其自身 body 行），供层高累计用
-  const effectiveH = new Map<string, number>()
-  function effectiveHeight(id: string, stack: Set<string> = new Set()): number {
-    if (effectiveH.has(id)) return effectiveH.get(id)!
+  // 3) 子树纵向块高：普通节点=自身卡高；BATCH=卡片顶缘到循环块最深底缘。行内节点
+  //    垂直居中后（行中线 = 行卡高上限/2），普通成员底缘 ≤ 行卡高上限；嵌套 BATCH
+  //    底缘 = (行卡高上限-子卡高)/2 + 子块块高。供层内块底缘与层高精确累计用
+  const blockH = new Map<string, number>()
+  function blockHeight(id: string, stack: Set<string> = new Set()): number {
+    if (blockH.has(id)) return blockH.get(id)!
     const self = nodeSize(nodesById.get(id)!).h
     if (stack.has(id)) return self
     stack.add(id)
     let h = self
     const chain = bodyChains.get(id)
     if (chain?.length) {
-      const rowH = Math.max(...chain.map((cid) => effectiveHeight(cid, stack)))
-      h = BODY_ROW_OFFSET_Y + rowH
+      const rowMaxCardH = Math.max(...chain.map((cid) => nodeSize(nodesById.get(cid)!).h))
+      let deepest = rowMaxCardH
+      for (const cid of chain) {
+        const cn = nodesById.get(cid)
+        if (cn?.data.nodeType === 'BATCH') {
+          const innerCardH = nodeSize(cn).h
+          deepest = Math.max(deepest, (rowMaxCardH - innerCardH) / 2 + blockHeight(cid, stack))
+        }
+      }
+      h = BODY_ROW_OFFSET_Y + deepest
     }
     stack.delete(id)
-    effectiveH.set(id, h)
+    blockH.set(id, h)
     return h
   }
-  mainIds.forEach((id) => effectiveHeight(id))
+  mainIds.forEach((id) => blockHeight(id))
 
-  // 4) 分层布局：层顶自上而下按「下层最大有效高 + 层距」累计；同层按累计宽度横向铺开
+  // 4) 分层布局：层内主流节点卡片共享「层中线」垂直居中（中线 = 层顶 + 最高卡高/2，
+  //    高低卡片对齐同一水平视线）；层高按「中线 - 卡高/2 + 块高」最大值累计
+  //    （BATCH 的循环行块底缘计入，保证下层不被循环行侵入）；同层按累计宽度横向铺开
   const byLayer = new Map<number, FlowNodeModel[]>()
   mainIds.forEach((id) => {
     const layer = depth.get(id) ?? 0
     if (!byLayer.has(layer)) byLayer.set(layer, [])
     byLayer.get(layer)!.push(nodesById.get(id)!)
   })
-  const layerTop = new Map<number, number>()
+  const layerCenter = new Map<number, number>()
   let cursorY = topY
   const layers = [...byLayer.entries()].sort(([a], [b]) => a - b)
   layers.forEach(([layer, list]) => {
-    layerTop.set(layer, cursorY)
-    cursorY += Math.max(...list.map((n) => effectiveHeight(n.id))) + layerGapY
+    const maxCardH = Math.max(...list.map((n) => nodeSize(n).h))
+    const center = cursorY + maxCardH / 2
+    layerCenter.set(layer, center)
+    let bandBottom = center + maxCardH / 2
+    list.forEach((n) => {
+      bandBottom = Math.max(bandBottom, center - nodeSize(n).h / 2 + blockHeight(n.id))
+    })
+    cursorY = bandBottom + layerGapY
   })
   layers.forEach(([layer, list]) => {
+    const center = layerCenter.get(layer)!
     list.sort((a, b) => a.position.x - b.position.x)
     let cursorX = leftX
     list.forEach((n) => {
-      n.position = { x: Math.round(cursorX), y: Math.round(layerTop.get(layer)!) }
-      cursorX += nodeSize(n).w + colGapX
+      const size = nodeSize(n)
+      n.position = { x: Math.round(cursorX), y: Math.round(center - size.h / 2) }
+      cursorX += size.w + colGapX
     })
   })
 
-  // 5) 循环体行随宿主 BATCH 落位（与默认落点公式一致，不产生位置持久化脏数据）；
-  //    嵌套 BATCH 由递归继续下探，visited 防交叉嵌套环
+  // 5) 循环行落位：行首自宿主 BATCH 右缘起按链序从左到右（连线自右侧 loop_start
+  //    手柄出、末节点回 loop_end，行随链序右行）；行内节点在行中线上垂直居中
+  //    （中线 = 卡片顶 + 行锚 130 + 行卡高上限/2）。嵌套 BATCH 的循环行以宿主为锚
+  //    继续右移下探（嵌套层次从左到右展开），placed 防交叉嵌套环。
+  //    注：布局后坐标不再匹配 DSL 默认位公式，将按绝对坐标持久化（拖动位置同路径）
   const placed = new Set<string>()
   function placeChain(batchId: string) {
     if (placed.has(batchId)) return
@@ -1238,15 +1266,19 @@ function handleAutoLayout() {
     const chain = bodyChains.get(batchId)
     const batch = nodesById.get(batchId)
     if (!chain?.length || !batch) return
-    const bx = batch.position.x
-    const by = batch.position.y
-    chain.forEach((cid, i) => {
+    const bSize = nodeSize(batch)
+    const rowMaxCardH = Math.max(...chain.map((cid) => nodeSize(nodesById.get(cid)!).h))
+    const rowCenterY = batch.position.y + BODY_ROW_OFFSET_Y + rowMaxCardH / 2
+    let cursorX = batch.position.x + bSize.w + BODY_ROW_START_GAP_X
+    chain.forEach((cid) => {
       const cn = nodesById.get(cid)
       if (!cn) return
+      const size = nodeSize(cn)
       cn.position = {
-        x: Math.round(bx + (i - (chain.length - 1) / 2) * BODY_COL_STEP_X),
-        y: Math.round(by + BODY_ROW_OFFSET_Y),
+        x: Math.round(cursorX),
+        y: Math.round(rowCenterY - size.h / 2),
       }
+      cursorX += size.w + BODY_ROW_COL_GAP_X
       if (cn.data.nodeType === 'BATCH') placeChain(cid)
     })
   }

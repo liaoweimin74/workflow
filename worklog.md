@@ -3068,3 +3068,16 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿零干预；内存余量充裕（余约 1.58GB），遗留观察项清零；设计器三需求交付后的服务态稳定
+
+---
+Task ID: 443426-r13b
+Agent: main (cron session, duplicate dispatch confirm)
+Task: D+ 终态巡检 11:32 轮重复派发复核（Job 443426，trace 202610081133）
+
+Work Log:
+- 检测到 worklog 已有 443426-r13 条目记录同一 11:32 轮（数据与本轮实测一致：PID 18932/22990、cgroup 约 1.92GB），判定为同轮重复派发，不重复编号
+- 独立复核：四链路 a/b/c/d 全 200；vite 单实例（18932，RSS 537MB）、Java 正常驻（22990，RSS 533MB）、无 postcss worker；cgroup 2061266944B ≈ 1.92GB（较 r13 仅漂移 33KB）；OOM 计数 0 与基线一致
+- 未启动 agent-browser、未修改代码、无任何干预
+
+Stage Summary:
+- 同轮复核全绿，与 r13 结论一致，服务态稳定；本轮以确认记录归档

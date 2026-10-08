@@ -3330,3 +3330,15 @@ Work Log:
 
 Stage Summary:
 - r25 全绿零干预；统一输出机制 SCRIPT 范围已由并行会话交付并部署，遗留：前端 dsl.test.ts 旧夹具适配、其他节点迁移评估（本轮已给出分层建议）、二期点路径。cgroup 2.98GB 缓升持续关注。
+---
+Task ID: patrol-r26
+Agent: Super Z (main)
+Task: Job 443426 轻量运维巡检（2026-10-08 12:52 触发）
+
+Work Log:
+- 四链路探活：a) 200；b) 200；c) 200；d) 200。全绿。
+- 内存：Java PID 2815（~561MB）/ vite 单实例 PID 18932（~549MB）/ MariaDB PID 4847（~195MB）正常；agent-browser Chrome 组（3493/3408/3452 合计 ~666MB）仍驻留，不在 kill 授权清单，未干预；无多余 vite、无 postcss。cgroup 3234627584 bytes（~3.01GB）< 3.5GB，较上轮 +~37MB，缓升趋势持续备案。OOM 0，无上涨。
+- 本会话保持零代码编辑；待办池：HTTP 节点迁移评估结论已给出（含两个前置决策点：results 载体=解析后 body、KEY 失败语义 FAILED vs 宽松跳过），等待用户拍板后才可进入开发轮。
+
+Stage Summary:
+- r26 全绿零干预；cgroup 3.01GB 继续缓升（主因 Chrome 进程组 ~666MB 不退），距 3.5GB 阈值余量 ~0.49GB，按当前速率尚有数轮缓冲，持续观察。

@@ -4140,3 +4140,18 @@ Work Log:
 
 Stage Summary:
 - r71 全绿；git 连环案连续三轮零击杀（基线稳 22），止血态势稳固；核心服务无损
+
+---
+Task ID: history-analysis
+Agent: main (用户问询·历史线定性)
+Task: 回答"两条历史线是怎么回事"并验证内容连续性
+
+Work Log:
+- 本地线：根提交 "Initial commit"（2026-09-10 05:24 UTC，沙箱搭建时全新 git init），248 提交（132 个 cron 自动提交 + 会话开发提交），持续至今（10-08 16:37 CST）
+- 远端线：根提交 "chore: initial project setup"（2026-08-01 16:23 CST），1148 个规范提交（feat/fix/docs + Task 编号），tip 停在 2026-10-07 22:36 CST "formhook-v2 八批累计合入"
+- 定性：环境重置时全新 init 未接续老历史 → 两条 git 历史（unrelated histories）记录同一项目的平行快照流
+- 【关键验证】老线昨日工作（Task 144/145/146/147）标志性文件逐一比对：formulaEditorKit 2=2、SystemAttachment 2=2、SystemImage 2=2、member_group 本地 9≥老线 5——老线内容已全部被本地继承，本地还多出今天的 results-v2
+- 结论：老线 = 内容已被完整继承的历史档案；本地线 = 最新权威现状；整合无内容缺口风险
+
+Stage Summary:
+- 两条线关系定性完成：内容层面本地完全覆盖老线且更新；整合推荐"归档老线（远端引用备份）+ force 覆盖 main"，零丢失，待用户授权

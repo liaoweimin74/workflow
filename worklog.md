@@ -4250,3 +4250,18 @@ Work Log:
 
 Stage Summary:
 - r75 全绿；仓库瘦身正式收官（磁盘净省 ~1.03GiB，gc 零 OOM）；git 连环案双保险到位（MariaDB 目录已出索引 + 低内存 pack 配置），基线稳 22；历史中 96MB blob 已 delta 压缩，彻底清除需历史重写（不建议）
+
+---
+Task ID: branch-cleanup
+Agent: main (用户授权指令·方案A)
+Task: sandbox-wip-20261008 快照分支去留——用户选定方案A（删分支+tag保时点）
+
+Work Log:
+- 前置验证：4d97d97c 是 main 祖先、该分支独有提交 0——纯冗余时点标记，删除零丢失
+- 执行：git push origin :sandbox-wip-20261008（- [deleted]）；本地无此分支（仅 main）
+- 打 tag：git tag sandbox-snapshot-1631 4d97d97c + 推送远端（时点语义保留）
+- 同类清理：sandbox-main（4d97d97c，本会话首次推送时创建，与快照同 tip，同为冗余）一并删除，时点已由 tag 覆盖，零丢失
+- 远端分支终局：main=3d3a15d1（最新）、archive/pre-reset-main=4020c972（老史）、feature/array-value-text-columns、feature/process-engine-core、feature/vtj-integration（老线时代 feature 分支，非授权范围不动）；tag: sandbox-snapshot-1631=4d97d97c
+
+Stage Summary:
+- 冗余快照分支清理完成（sandbox-wip-20261008 + sandbox-main 均删，tag 保时点）；远端分支结构清晰：1 主线 + 1 归档 + 3 个老线 feature 分支（未动）；分支治理收官

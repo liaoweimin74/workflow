@@ -4030,3 +4030,19 @@ Work Log:
 
 Stage Summary:
 - r66 全绿、内存平稳（~2.07GB）；git 连环案累计 16 杀、每轮 +1 节奏未破，核心服务无损，新基线 16
+
+---
+Task ID: user-push-1607
+Agent: main (用户交互指令)
+Task: 响应用户 "push" 指令：推送本地提交至 GitHub
+
+Work Log:
+- 核查：/home/z/my-project（remote=github.com/liaoweimin74/workflow，main 分支）；工作树干净（cron 自动提交机制在维护）
+- 未推送提交：246 个（origin/main 基线停在 2026-10-07 14:36 UTC = 昨日 22:36 CST "feat(logicflow+form): formhook-v2 触发点绑定…"，今日 results-v2 全部工作均在其中）
+- 待推送对象 8528 个，体量可控（size-pack 15.81MiB + loose 1.21GiB——loose 即 git 连环案根源，未做 gc 以免再触发 OOM）
+- 认证排查：无 credential helper / 无 ~/.git-credentials / 无 ~/.netrc / 无 GITHUB_TOKEN·GH_TOKEN 环境变量 / 无 gh CLI / 无 SSH 密钥
+- git ls-remote 匿名可读（仓库 public、网络通）；git push -u origin main 实测失败：fatal: could not read Username for 'https://github.com'（非交互环境无凭据可用）
+- 未清理 .git/objects/c3/tmp_obj_Kvq6hr 垃圾残留（被 OOM kill 的 git 遗留，清理属重操作，避免连环案恶化）
+
+Stage Summary:
+- push 因缺少 GitHub 写权限凭据失败；需用户提供 PAT（repo 写权限）后再执行：git remote set-url 或 credential store 方式完成 246 个提交的推送；其余状态正常

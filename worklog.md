@@ -2591,3 +2591,34 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿零动作结束；数据事故待用户答复（A切库/B迁移/C放弃）
+
+---
+Task ID: db-incident-20261008
+Agent: main（用户报告「数据库数据丢了」应急响应）
+Task: 数据库数据丢失诊断 + 抢救性备份
+
+## 事故经过
+- 丢失时间：Oct 8 北京 08:39（java-build.log 00:33 UTC 构建后、00:40:11 Java 引擎 PID 12577 启动前的窗口）
+- 丢失内容：workflow 库全部 wf_ 业务表数据清零——wf_form_def(表单定义)、wf_category(分类)、wf_page_def(页面定义)、wf_node_config(节点配置)、wf_process_draft(草稿)、ACT_* 流程运行/历史表
+- 幸存数据：sys_user(2)/sys_role(2)/sys_menu(76) 系统表完好（登录与菜单正常的原因）、wf_data_source 9 行、wf_logic_flow 1 行
+- 直接痕迹：data/workflow/ 全部 .frm/.ibd mtime=00:39；ddl_recovery.log 记录 00:40 一次中断的 ALTER wf_form_def（column_config JSON）
+- 根因判定：08:33-08:40 的重新构建/引擎重启窗口中 workflow 库被 DROP 重建（无 binlog、无逻辑备份佐证谁执行；Flyway 10 个迁移+JPA/Flowable 自动建表生成现有 81 张表）
+
+## 已排除的恢复途径（均验证过）
+- /tmp/my-project 完整副本：与现库同源——wf_form_def.ibd 等关键文件 md5 逐字节一致（副本为 09:08 cp -a 镜像，含 12 张 flw_/wf_biz_ 空表孤儿文件但无数据）
+- binlog：未开启
+- undo 表空间：旧业务表 .ibd 已被 unlink（新空表文件替换），沙箱环境无页级恢复工具，放弃
+
+## 已完成的抢救动作
+- 新增 scripts/rescue-dump.py（pymysql 全库结构+数据导出器）
+- 导出 backups/rescue-workflow-20261008-013021.sql（81 表 192 行，90KB）
+- 导出 backups/rescue-workflow_v6-20261008-013021.sql（40 表 239 行，105KB）
+- workflow_v6 旧库数据集（Sep 24）：分类=请假/报销流程、wf_form_def 10 个、wf_data_source 20、wf_page_def 1、wfe_* v6 引擎运行时若干
+
+## 待用户决策
+1. workflow_v6 里的旧数据是否包含想要的内容？若是 v6 时代数据可选择性恢复（注意 v6 是 wfe_ 旧引擎结构，不能整库直接回灌）
+2. 若近期手工建的表单/流程/页面，物理上已无法恢复，只能重建
+3. 建议将每日自动 mysqldump（rescue-dump.py）纳入巡检轮固化，杜绝再发
+
+Stage Summary:
+- 事故已定案：08:39 库重置致 wf_ 业务数据丢失，物理恢复不可行；两库现存全部数据已抢救导出至 backups/；等待用户对 workflow_v6 旧数据与重建范围的决策

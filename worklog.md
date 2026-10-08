@@ -3368,3 +3368,15 @@ Work Log:
 
 Stage Summary:
 - r27 全绿零干预；cgroup 持平于 3.01GB，余量 ~0.49GB，服务态稳定。
+---
+Task ID: patrol-r28
+Agent: Super Z (main)
+Task: Job 443426 轻量运维巡检（2026-10-08 13:02 触发）
+
+Work Log:
+- 四链路探活：a) 200；b) 200；c) 200；d) 200。全绿。
+- 内存：Java PID 2815（~561MB）/ vite 单实例 PID 18932（~549MB）/ MariaDB PID 4847（~195MB）正常；agent-browser Chrome 组（3493/3408/3452 合计 ~666MB）仍驻留，不在 kill 授权清单，未干预；无多余 vite、无 postcss。cgroup 3234934784 bytes（~3.01GB）< 3.5GB，与上轮基本持平（+~0.8MB）。OOM 0，无上涨。
+- 本会话保持零代码编辑；待办池：HTTP 节点迁移两个前置决策点（results 载体=解析后 body、KEY 失败语义 FAILED vs 宽松跳过）仍待用户拍板。
+
+Stage Summary:
+- r28 全绿零干预；cgroup 稳定于 3.01GB，服务态平稳，无异常。

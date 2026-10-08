@@ -2347,3 +2347,33 @@ Work Log:
 
 Stage Summary:
 - 同步开始前备案完成；本地快照→远程内容替换→D+ 回植→验证 的顺序执行
+---
+Task ID: 143-sync（续）
+Agent: main
+Task: 远程同步落地记录
+
+Work Log:
+- 【同步执行】快照提交 0fc3d069 → rsync origin/main(4020c972)→workflow_lowcode/（2306 文件，+741 新建，-3 删除）→ 回植 D+ vite.config.ts（port 3000/allowedHosts ✓）→ bun install（@vue-flow 全家桶 + echarts + @pinia/testing，29 包）→ 提交 8d0fc9a6 → worktree 清理
+- 【同步后验证全绿】vite 3000=200（扛住 2300 文件热更）、外域 Host=200、代理→8080=200；LogicFlow 双路由已注册（LogicFlowDesigner/ListPage）
+- 【构建环境】本机 java 21.0.12 ✓；mvn/~/.m2 均缺（重置清空）→ 装二进制 maven 3.9.9（/home/z/tools/maven/）；后台构建 PID 11978（MAVEN_OPTS=-Xmx512m，日志 /home/z/tools/java-build.log），首次需拉全量依赖
+- 【DB 备案】Java 引擎独占 MariaDB `workflow` 库（sandbox yml：mariadb 原生驱动 root/740130，Hikari 6+2，Flowable mysql 脚本，与 node 的库隔离）；当前 MariaDB 无 workflow 库 → jar 首启自动建库 + Flyway V2→V53 全量迁移
+- 【后续路线】jar 构建成功 → 引擎切换 java（start-services.sh 决策链②：CHOICE=java 且 jar 存在即走 Java）→ 8080 由 Java 接管 → cron 文本更新
+
+Stage Summary:
+- 远程同步完成并双服务零中断；jar 构建进行中；engine 切换待构建产物
+---
+Task ID: 144-engine-switch
+Agent: main
+Task: Java 引擎构建与 8080 正式切换（D+ 终态达成）
+
+Work Log:
+- 【jar 构建】mvn/~/.m2 缺失 → 装 maven 3.9.9（/home/z/tools/maven/）+ Temurin JDK 21.0.12.1（/home/z/tools/jdk/，系统仅 JRE 无 javac）；依赖拉取后 BUILD SUCCESS（-Dmaven.test.skip=true，远程测试代码滞后于 BizDataService 新构造器，属远程仓已知问题）；产物 workflow-platform-1.0.0-SNAPSHOT.jar（103MB），target/ 已被 gitignore
+- 【试启动验证】8090 端口试启动（不动 node）：18.2s 启动完成，MariaDB 自动建 workflow 库，Flyway 迁移至 v53（applied 9），POST /api/auth/login=200
+- 【正式切换】kill node(4871) 释放 8080 → rm 双 engine marker + engine-choice 写 java → java -Xmx448m -jar … --spring.profiles.active=sandbox 拉起 → 8080 于 21s 就绪（200）
+- 【切换后全绿】vite 3000=200 / 外域 Host=200 / 3000 代理→8080 Java 登录=200 / LogicFlow API（/api/v1/logic-flows）已注册；8090 测试实例已清
+- 【内存态势】vite 602MB（热更新代码后）+ Java 507MB + mariadb 166MB，cgroup 3.14GB / 3.9GB，oom_kill=0；后续巡检观察
+- 【cron 对齐】旧 439400 已删，新建 443426（fixed_rate 300s，Asia/Shanghai）：四链路探活（含 3000 代理链）、start-services.sh 统一拉起、Java 常驻保护、oom 基线 0
+- 【数据备案】Java 引擎用全新 workflow 库（MariaDB），node 时代的业务数据在 workflow_v6/SQLite 不随引擎切换带入（双引擎隔离为既有设计）；node dist 产物仍在磁盘可随时回退
+
+Stage Summary:
+- D+ 终态达成：vite(3000) + Java(8080) + MariaDB(3306)，代码已对齐远程 main(v53/LogicFlow)；回退路径 = 恢复 marker+choice=node 后重启 node dist

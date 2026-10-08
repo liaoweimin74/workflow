@@ -4200,3 +4200,18 @@ Work Log:
 
 Stage Summary:
 - 两条历史线整合完成：远端 main 已指向本地最新线（今日 results-v2 在内），老线完整归档于 archive/pre-reset-main，零丢失；upstream 已设，今后 cron 推送一路畅通；遗留可选事项：①sandbox-wip-20261008 快照分支去留；②仓库瘦身（.gitignore mariadb-user/ + git rm --cached + gc，历史中仍有 96MB×N redo log blob）
+
+---
+Task ID: patrol-r74 + user-slim-observe
+Agent: main (cron 例行巡检 + 瘦身授权观察)
+Task: 轻量运维 r74 + 用户"仓库瘦身"授权响应
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- ⚠️ cgroup = 3582263296（~3.58GB，**超 3.5GB 备案线**），按要求记录明细：vite 543MB + Java 532MB + **git pack-objects PID 18199 ~363MB（膨胀中，gc --all --reflog --indexed-objects 全量打包进行中，为本次越线元凶）** + MariaDB 189MB + python/caddy/shell 等常驻 ~700MB；oom_kill 仍 22（未触 4GB 硬限）
+- 瘦身现状核查（用户已授权）：.gitignore 第 56 行已有 mariadb-user/ 条目（注释直指 96MB redo log）——并行会话已完成 gitignore+untrack 步骤；git ls-files mariadb-user/ = 0（索引已清）
+- **决策：不并发执行 gc**（并行会话 gc 正在跑，并发将导致 .git 锁冲突 + 内存叠加破 4GB）；本会话转入观察验收，下轮巡检核查 gc 结果（count-objects 瘦身前后对比 + oom_kill 变化）
+- 无多余 vite；本轮零 git 写操作、零代码编辑
+
+Stage Summary:
+- r74 探活全绿但内存越备案线（元凶=并行会话 gc 进行中，属预期瞬时）；瘦身三步中 gitignore/untrack 已由并行会话完成，gc 执行中——本会话避让，下轮验收瘦身效果；git 连环案基线稳 22

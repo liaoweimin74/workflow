@@ -2734,3 +2734,56 @@ Work Log:
 
 Stage Summary:
 - 全链路健康，无异常无修复；终态架构（vite 3000 + Java 8080 + MariaDB 3306）稳定运行
+
+---
+Task ID: patrol-20261008-0957
+Agent: Z.ai (cron lightweight ops)
+Task: D+ 终态轻量巡检（第 3 轮）
+
+Work Log:
+- 四链路探活全 200（a 3000 vite / b 外域 Host / c 3000→8080 login / d 8080 直连）
+- vite 1 个进程、postcss 0、cgroup ≈ 2.72GB、oom_kill 0，无需任何干预
+- 轮内另收到用户报障：预览面板可访问（HTTP 通），仅 vite HMR wss 连不上（平台网关不转发 WS upgrade），属非阻断噪音；按本轮约束未改代码
+
+Stage Summary:
+- 全链路健康；HMR wss 失败为平台网关限制，页面功能不受影响，待开发窗口再决定是否 hmr:false 静音
+
+---
+Task ID: fix-20261008-1005-homepage-dashboard
+Agent: Z.ai
+Task: 修复"主页不显示设计好的仪表盘，提示页面不存在或未挂接菜单"
+
+Work Log:
+- 定位报错文案来源：PageAccessGuard.java:35 —— 页面访问采用"菜单挂接 OR"语义，sys_menu 中无 path=/page/<key> 且 is_deleted=0 的记录 → 一律 404
+- 核库：wf_page_def 中 key=dashboard（主页仪表盘，PAGE，PUBLISHED，v1，schema 1625B）与 test1（测试页面）均已发布，但 sys_menu 无任何 /page/% 挂接记录 → 守卫必 404
+- 前端链路：/dashboard → DashboardRouterPage → getPageByKey('dashboard') 被守卫 404 → 回退内置静态首页（这就是用户看到的旧首页）；若从菜单点 /page/<key> 则直接展示 404 文案
+- 数据修复（无代码改动，遵循系统设计的挂接机制）：
+  - sys_menu 插入 id=317「主页仪表盘」，parent=160 表单视图管理，path=/page/dashboard，permission=page:read:dashboard，component=page/PageRenderer，status=1（照种子 id=304 范例）
+  - sys_role_menu 授权 role 1(ROLE_ADMIN)、2(ROLE_USER)
+- 验证：
+  - API：admin/test 双用户 GET /api/v1/pages/dashboard/definition → 200 + PUBLISHED 定义（修复前 404）
+  - 浏览器（agent-browser 登录 admin/admin123）：/dashboard 主区挂载 .page-renderer-page（设计仪表盘，非静态回退）；侧边栏出现「主页仪表盘」菜单；点击跳 /page/dashboard 渲染成功；无业务 console 报错
+- 遗留说明：test1 页面仍未挂接（测试产物，按需自行在菜单管理挂接）；菜单项刷新一次侧边栏后出现（会话内菜单缓存，登录时序导致首次未显）
+
+Stage Summary:
+- 根因：设计页面从未挂接菜单，PageAccessGuard 按设计拒绝（404「页面不存在或未挂接菜单」）
+- 修复：按既有规范补菜单挂接 + 双角色授权（纯数据操作，id=317）
+- 主页现在渲染设计好的 form-create 仪表盘，菜单直达入口可用，admin/test 双角色均通过
+- 环境备注：本机 mariadb 客户端需 LD_LIBRARY_PATH=/home/z/my-project/mariadb-user/root/usr/lib/x86_64-linux-gnu；API 需带 X-Tenant-Id: default；admin 密码 admin123
+
+---
+Task ID: debug-20261008-1010-dashboard-homepage
+Agent: Z.ai
+Task: 排查"主页不显示设计好的仪表盘，提示页面不存在或未挂接菜单"
+
+Work Log:
+- DB 核查：wf_page_def 中 key=dashboard 的"主页仪表盘"存在且 PUBLISHED（schema 1625 字符，2 dash-kpi + 2 dash-chart，租户 default）；sys_menu id=317 为今日 02:04 挂接生成（path=/page/dashboard，parent=表单视图管理）
+- 接口复现：登录 admin → GET /api/v1/pages/dashboard/definition（走 3000 代理 + X-Tenant-Id: default）→ 200 返回完整定义；后端+数据层无异常
+- 排除项：前端 http.ts X-Tenant-Id 头正确（先前 rg -r 参数误用造成"头名为 n"的假象，已澄清）；路由 page/:pageKey 与挂接路径 /page/dashboard 匹配；无 Service Worker 残留
+- agent-browser 实测（全新会话）：登录 → /dashboard 渲染设计仪表盘（2 KPI + 2 图表）✅；点击挂接菜单"主页仪表盘" → /page/dashboard 同样正常渲染 ✅；侧边栏正确显示挂接菜单 ✅
+- 附加观察：KPI 计数 0 与 ACT_RE_PROCDEF 数据一致（环境无流程数据），图表"暂无数据"为数据缺失非渲染故障
+
+Stage Summary:
+- 根因判定：应用/数据/路由全链路正常；用户浏览器为故障期间遗留的旧会话（500 时代打开的标签 + HMR WebSocket 断连导致页面从未热更新），内存中菜单/路由状态过期 → 报错
+- 解决方案：用户强制刷新（Ctrl+Shift+R）或关闭预览标签从预览面板重开；必要时退出重登
+- 截图证据：download/debug-home-after-login.png、download/debug-page-dashboard-menu.png

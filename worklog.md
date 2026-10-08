@@ -4423,3 +4423,35 @@ Work Log:
 
 Stage Summary:
 - r80 全绿零干预；健康基线连续第 4 轮（r77~r80）稳定：vite 18932 / Java 19458 / MariaDB 4847，cgroup ~2.26→2.35GB 平稳波动
+
+---
+Task ID: patrol-r81
+Agent: main (cron patrol, Job 443426)
+Task: r81 定时巡检（四链路探活 + 内存/OOM 监控）
+
+Work Log:
+- 四链路探活：a/b/c/d 全部 200
+- 进程：vite 18932 唯一实例 ~581MB；Java 19458 ~537MB；MariaDB 4847 ~190MB；无 postcss worker
+- cgroup ≈ 2.35GB（< 3.5GB 备案线）；oom_kill = 22 零新增
+- 本回合同时收到用户第 4 条布局反馈（循环行改纵向、嵌套批处理 L2R），巡检后转入开发
+
+Stage Summary:
+- r81 全绿零干预，基线连续第 5 轮稳定
+
+---
+Task ID: user-req-4-layout-v4
+Agent: main (用户消息直达 + 冲突规避验证)
+Task: 第 4 条布局反馈落地验证——循环连线节点改纵向排列（列中轴居中），嵌套批处理从外到内左→右展开
+
+Work Log:
+- 17:52 收到用户反馈；开始修改前检测到并行会话正在编辑 LogicFlowDesigner.vue（1581→1605 行，mtime 18:04:01）→ 按冲突规避协议让行，转独立验证
+- 并行会话 18:04 交付 v4：循环列纵向堆叠（列首锚 loop_start 线 30%+24、列中轴水平居中、纵距 56）、嵌套子列右移下探（nestLeft 三重下界）
+- 独立同构脚本发现顺序依赖缺陷：收链与归属耦合，外层 BATCH 先入列时嵌套链不进 bodyChains，嵌套成员滞留原位（DSL parse 端 synthesizeBatchLoops 先 push 外层 body，节点序恒外层在前，缺陷必现）——与 r79 轮 v3 同源
+- 18:11:43 并行会话自行修复同一缺陷（无条件收链）并追加 3b) colSubtreeW 循环子树横向让位（修复同层右邻被循环列压住的 v3 同源边界）+ placeChain 返回子树右缘供兄弟列级联；此后文件稳定（1649 行）
+- 按最终实现重写同构验证脚本 scripts/verify_layout_v4.mjs：67 项断言全过——双节点序（外层先/内层先）链收集与布局一致、两层/三层嵌套列中轴严格递增（外→内=左→右）、列首锚 30%+24、纵距 56、子列左缘 ≥ max(子卡右+56, 宿主列右+24)、同层右邻让位 ≥56、全局两两不重叠、blockHeight 覆盖循环闭包最深底缘
+- vue-tsc：LogicFlowDesigner.vue 0 错误（全项目 54 个错误均在 dict/member-group 等并行工作文件，非本任务范围）；SFC 编译 OK；四链路复测全 200（vite HMR 已加载 v4）
+
+Stage Summary:
+- 用户两项要求均已满足且验证通过：① 循环连线节点自上而下、列中轴垂直居中对齐；② 嵌套批处理从外到内自左向右展开，列间互不重叠
+- 修复全程由并行会话完成，本会话仅独立验证（含发现其 18:11 自愈的顺序依赖缺陷），无代码冲突
+- 待用户页面验证：整理布局（v4 纵向循环列）；新增待办：全项目 54 个 vue-tsc 类型错误（dict/member-group 等）归属并行工作流，后续轮次跟进

@@ -40,7 +40,7 @@
           @click="redo"
         />
       </el-tooltip>
-      <el-tooltip content="自动整理布局（自上而下分层 · 节点垂直居中对齐 · 循环体随批处理向右排布）" placement="bottom">
+      <el-tooltip content="自动整理布局（自上而下分层 · 节点垂直居中对齐 · 循环体纵向居中排列 · 嵌套批处理从左到右展开）" placement="bottom">
         <el-button class="toolbar-btn" :icon="Sort" @click="handleAutoLayout">整理布局</el-button>
       </el-tooltip>
       <el-tooltip content="声明本流的输入参数（运行测试时按声明渲染表单）" placement="bottom">
@@ -1089,24 +1089,34 @@ function onKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
-// ===== 自动整理布局（v3）：主流边 Kahn 分层（自上而下、同层横向铺开，间距按节点
-// 实际尺寸自适应）。同层主流节点改为共享「层中线」垂直居中对齐（v2 顶边对齐，
-// 高低卡片参差）；BATCH 循环体链不参与主流分层：循环行自宿主 BATCH 右缘起按链序
-// 从左到右排布（连线自右侧 loop_start 手柄出、loop_end 回；嵌套 BATCH 的循环行以
-// 宿主为锚继续右移下探，嵌套层次从左到右展开），行内节点在各自循环连线上垂直居中。
+// ===== 自动整理布局（v4）：主流边 Kahn 分层（自上而下、同层横向铺开，间距按节点
+// 实际尺寸自适应），同层主流节点共享「层中线」垂直居中对齐。BATCH 循环体链不参与
+// 主流分层：v4 按链序在宿主 BATCH 右侧纵向排列——循环链成员连线走底部 out → 顶部
+// in 手柄，纵向排布时链边为竖直直线（v3 横向成行迫使链边走 S 形弯）；列首锚定
+// loop_start 线（卡高 30%）下方，链走完自末节点回 loop_end（74% 线），闭环呈
+// 「右出 → 纵向下行 → 右回」顺时针回路；列内节点共享「列中轴」水平居中对齐。
+// 嵌套 BATCH 的循环列以宿主为锚继续右移下探，嵌套层次从外到内自左向右展开
+// （子列左缘避开宿主卡、宿主列最宽成员与前序嵌套兄弟子树，纵向并行的列互不
+// 重叠）；同层横向铺开时为 BATCH 的整棵循环子树让位，循环列不压右侧兄弟卡片。
 // 修复：循环链边（loop_start→链→loop_end→BATCH）构成图环，旧版把环上节点全部堆到
-// 兜底层导致「加入批处理节点后整理布局混乱」；v2 循环行相对宿主居中导致首节点
-// 甩到 BATCH 左侧、与右侧出手柄走向相悖；层高按居中后的块底缘精确累计。 =====
+// 兜底层导致「加入批处理节点后整理布局混乱」；层高按居中后的块底缘精确累计。 =====
 
-/** 循环行顶部相对宿主 BATCH 卡片顶缘的纵向锚（沿用默认位纵锚，行悬于卡片下方） */
-const BODY_ROW_OFFSET_Y = 130
-/** 循环行首节点与宿主 BATCH 右缘的间距（与自环 U 形外凸 offset 56 视觉对齐） */
-const BODY_ROW_START_GAP_X = 56
-/** 循环行内相邻成员的水平间距（与主流列距 colGapX 一致） */
-const BODY_ROW_COL_GAP_X = 56
+/** loop_start 手柄纵锚（卡高比例，与 FlowNode.vue 右侧手柄 top:30% 对齐） */
+const LOOP_START_ANCHOR = 0.3
+/** 循环列与宿主 BATCH 右缘的间距（与自环 U 形外凸 offset 56 视觉对齐） */
+const BODY_COL_GAP_X = 56
+/** 循环列内相邻成员的纵向间距（竖直连线段呼吸感，与主流层距同量级） */
+const BODY_COL_GAP_Y = 56
+/** 列首成员顶缘位于 loop_start 线（卡高 30%）下方的落差：入边经 smoothstep 20px
+ * 手柄偏移平滑落入顶部 in 口，避免与 loop_start 线等高产生回折 */
+const BODY_COL_ANCHOR_DROP = 24
+/** 嵌套子循环列左缘相对宿主列最宽成员右缘的让位余量（防纵向并行的列间重叠） */
+const BODY_COL_NEST_MARGIN = 24
 
-/** 收集某 BATCH 的循环体链（画布节点 id 序列，保序）：loop_start 出边沿链行走，
- * visited 防环；遇嵌套 BATCH 即收进链并终止（嵌套 BATCH 的循环体由递归单独排布） */
+/** 收集某 BATCH 的循环体链（画布节点 id 序列，保序）：loop_start 出边沿链行走至
+ * 回环 loop_end，visited 防环。嵌套 BATCH 是链中普通一员（照常收进、布局时递归
+ * 展开其子列），链经其 'out' 口继续——旧版在嵌套 BATCH 处截断，会使其后的外层
+ * 链成员（嵌套BATCH→尾节点→loop_end）失去归属、混入主流分层被甩到顶层 */
 function collectBodyChain(batchId: string): string[] {
   const chain: string[] = []
   const loopEdges = allEdges().filter(isLoopEdge)
@@ -1123,8 +1133,9 @@ function collectBodyChain(batchId: string): string[] {
     const node = nodesById.get(cur)
     if (!node) break
     chain.push(cur)
-    if (node.data.nodeType === 'BATCH') break
-    const next = loopEdges.find((e) => e.source === cur)
+    const next = loopEdges.find(
+      (e) => e.source === cur && e.sourceHandle !== LOOP_HANDLE_START
+    )
     if (!next) break
     cur = next.target
   }
@@ -1140,12 +1151,14 @@ function handleAutoLayout() {
 
   const nodesById = new Map(allNodes().map((n) => [n.id, n]))
 
-  // 1) 循环体归属：每个 BATCH 的 body 链成员从主流分层名单剔除（成员只有 loop 边，
-  //    主流入度恒 0，混进分层会把它们误当第 0 层起点）
+  // 1) 循环体归属：无条件收集每个 BATCH 的 body 链（嵌套 BATCH 亦然——若因遍历
+  //    顺序被宿主链先行占名而跳过收集，placeChain 递归将找不到其链，其成员会滞留
+  //    原位不参与布局）；成员从主流分层名单剔除（成员只有 loop 边，主流入度恒 0，
+  //    混进分层会把它们误当第 0 层起点）
   const bodyOwner = new Map<string, string>()
   const bodyChains = new Map<string, string[]>()
   for (const n of allNodes()) {
-    if (n.data.nodeType !== 'BATCH' || bodyOwner.has(n.id)) continue
+    if (n.data.nodeType !== 'BATCH') continue
     const chain = collectBodyChain(n.id)
     if (!chain.length) continue
     bodyChains.set(n.id, chain)
@@ -1192,9 +1205,9 @@ function handleAutoLayout() {
     if (!depth.has(id)) depth.set(id, ++maxDepth)
   })
 
-  // 3) 子树纵向块高：普通节点=自身卡高；BATCH=卡片顶缘到循环块最深底缘。行内节点
-  //    垂直居中后（行中线 = 行卡高上限/2），普通成员底缘 ≤ 行卡高上限；嵌套 BATCH
-  //    底缘 = (行卡高上限-子卡高)/2 + 子块块高。供层内块底缘与层高精确累计用
+  // 3) 子树纵向块高：普通节点=自身卡高；BATCH=卡片顶缘到 max(卡底, 循环列最深
+  //    底缘)——列首锚 = 卡高 30% + 落差 24，成员自上而下逐个累计，嵌套 BATCH 成员
+  //    的块底缘 = 其卡片顶纵距 + 子块块高。供层内块底缘与层高精确累计用
   const blockH = new Map<string, number>()
   function blockHeight(id: string, stack: Set<string> = new Set()): number {
     if (blockH.has(id)) return blockH.get(id)!
@@ -1204,16 +1217,19 @@ function handleAutoLayout() {
     let h = self
     const chain = bodyChains.get(id)
     if (chain?.length) {
-      const rowMaxCardH = Math.max(...chain.map((cid) => nodeSize(nodesById.get(cid)!).h))
-      let deepest = rowMaxCardH
+      const colTop = self * LOOP_START_ANCHOR + BODY_COL_ANCHOR_DROP
+      let offset = 0
+      let deepest = 0
       for (const cid of chain) {
         const cn = nodesById.get(cid)
-        if (cn?.data.nodeType === 'BATCH') {
-          const innerCardH = nodeSize(cn).h
-          deepest = Math.max(deepest, (rowMaxCardH - innerCardH) / 2 + blockHeight(cid, stack))
-        }
+        const cardH = cn ? nodeSize(cn).h : 0
+        deepest = Math.max(
+          deepest,
+          offset + (cn?.data.nodeType === 'BATCH' ? blockHeight(cid, stack) : cardH)
+        )
+        offset += cardH + BODY_COL_GAP_Y
       }
-      h = BODY_ROW_OFFSET_Y + deepest
+      h = Math.max(self, colTop + deepest)
     }
     stack.delete(id)
     blockH.set(id, h)
@@ -1221,9 +1237,40 @@ function handleAutoLayout() {
   }
   mainIds.forEach((id) => blockHeight(id))
 
+  // 3b) 循环子树横向跨度（自列左缘 = 宿主卡右缘+56 起算）：自身列宽 与 各嵌套 BATCH
+  //     子列（左缘含让位与兄弟列级联）及其子树跨度最右值取大。与 placeChain 的
+  //     nestLeft 公式严格同构，供同层横向铺开时为循环子树让位，防止循环列压到
+  //     同层右侧兄弟卡片
+  const colW = new Map<string, number>()
+  function colSubtreeW(id: string, stack: Set<string> = new Set()): number {
+    if (colW.has(id)) return colW.get(id)!
+    const chain = bodyChains.get(id)
+    if (!chain?.length) return 0
+    if (stack.has(id)) return 0
+    stack.add(id)
+    const colMaxW = Math.max(...chain.map((cid) => nodeSize(nodesById.get(cid)!).w))
+    let extent = colMaxW
+    let prevRight = -Infinity
+    for (const cid of chain) {
+      const cn = nodesById.get(cid)
+      if (!cn || cn.data.nodeType !== 'BATCH') continue
+      const nestLeftRel = Math.max(
+        (colMaxW + nodeSize(cn).w) / 2 + BODY_COL_GAP_X,
+        colMaxW + BODY_COL_NEST_MARGIN,
+        prevRight + BODY_COL_GAP_X
+      )
+      prevRight = nestLeftRel + colSubtreeW(cid, stack)
+      extent = Math.max(extent, prevRight)
+    }
+    stack.delete(id)
+    colW.set(id, extent)
+    return extent
+  }
+  mainIds.forEach((id) => colSubtreeW(id))
+
   // 4) 分层布局：层内主流节点卡片共享「层中线」垂直居中（中线 = 层顶 + 最高卡高/2，
   //    高低卡片对齐同一水平视线）；层高按「中线 - 卡高/2 + 块高」最大值累计
-  //    （BATCH 的循环行块底缘计入，保证下层不被循环行侵入）；同层按累计宽度横向铺开
+  //    （BATCH 的循环列块底缘计入，保证下层不被循环列侵入）；同层按累计宽度横向铺开
   const byLayer = new Map<number, FlowNodeModel[]>()
   mainIds.forEach((id) => {
     const layer = depth.get(id) ?? 0
@@ -1250,40 +1297,64 @@ function handleAutoLayout() {
     list.forEach((n) => {
       const size = nodeSize(n)
       n.position = { x: Math.round(cursorX), y: Math.round(center - size.h / 2) }
-      cursorX += size.w + colGapX
+      // 循环子树横向让位：BATCH 的循环列悬于卡右侧，同层后续节点须为其整棵
+      // 循环子树（含嵌套列级联）让出横向空间，防止列卡重叠
+      const subtreeW = colSubtreeW(n.id)
+      cursorX += size.w + (subtreeW > 0 ? BODY_COL_GAP_X + subtreeW + colGapX : colGapX)
     })
   })
 
-  // 5) 循环行落位：行首自宿主 BATCH 右缘起按链序从左到右（连线自右侧 loop_start
-  //    手柄出、末节点回 loop_end，行随链序右行）；行内节点在行中线上垂直居中
-  //    （中线 = 卡片顶 + 行锚 130 + 行卡高上限/2）。嵌套 BATCH 的循环行以宿主为锚
-  //    继续右移下探（嵌套层次从左到右展开），placed 防交叉嵌套环。
+  // 5) 循环列落位：列悬于宿主 BATCH 右侧、按链序自上而下（连线自右侧 loop_start
+  //    手柄出 → 列内竖直直线下行 → 末节点回 loop_end，顺时针闭环）；列内节点共享
+  //    「列中轴」水平居中（x = 中轴 - 卡宽/2，in/out 手柄居中故链边为竖直直线），
+  //    列首顶缘锚定 loop_start 线（卡高 30%）下方 BODY_COL_ANCHOR_DROP。嵌套 BATCH
+  //    的循环列以宿主为锚继续右移下探：子列左缘 ≥ max(宿主卡右缘+56, 宿主列最宽
+  //    成员右缘+24, 前序嵌套兄弟子树右缘+56)，嵌套层次从外到内自左向右展开且列间
+  //    互不重叠；minLeftX 由宿主列逐层下传，placed 防交叉嵌套环。
   //    注：布局后坐标不再匹配 DSL 默认位公式，将按绝对坐标持久化（拖动位置同路径）
   const placed = new Set<string>()
-  function placeChain(batchId: string) {
-    if (placed.has(batchId)) return
+  /** 落位某 BATCH 的循环列，返回整棵循环子树的最右缘（含嵌套列级联，供兄弟列让位） */
+  function placeChain(batchId: string, minLeftX: number): number {
+    if (placed.has(batchId)) return minLeftX
     placed.add(batchId)
     const chain = bodyChains.get(batchId)
     const batch = nodesById.get(batchId)
-    if (!chain?.length || !batch) return
+    if (!chain?.length || !batch) return minLeftX
     const bSize = nodeSize(batch)
-    const rowMaxCardH = Math.max(...chain.map((cid) => nodeSize(nodesById.get(cid)!).h))
-    const rowCenterY = batch.position.y + BODY_ROW_OFFSET_Y + rowMaxCardH / 2
-    let cursorX = batch.position.x + bSize.w + BODY_ROW_START_GAP_X
+    const colMaxW = Math.max(...chain.map((cid) => nodeSize(nodesById.get(cid)!).w))
+    const axisX = minLeftX + colMaxW / 2
+    let cursorY = batch.position.y + bSize.h * LOOP_START_ANCHOR + BODY_COL_ANCHOR_DROP
+    let subtreeRight = axisX + colMaxW / 2
+    let prevNestRight = -Infinity
     chain.forEach((cid) => {
       const cn = nodesById.get(cid)
       if (!cn) return
       const size = nodeSize(cn)
       cn.position = {
-        x: Math.round(cursorX),
-        y: Math.round(rowCenterY - size.h / 2),
+        x: Math.round(axisX - size.w / 2),
+        y: Math.round(cursorY),
       }
-      cursorX += size.w + BODY_ROW_COL_GAP_X
-      if (cn.data.nodeType === 'BATCH') placeChain(cid)
+      cursorY += size.h + BODY_COL_GAP_Y
+      if (cn.data.nodeType === 'BATCH') {
+        // 子列左缘 = max(子 BATCH 卡右缘+56, 宿主列最宽成员右缘+24, 前一嵌套
+        // 兄弟子树右缘+56)：让出宿主卡与宿主列全部成员，且兄弟嵌套列纵向并行
+        // 时依次向右级联，互不重叠
+        const nestLeft = Math.max(
+          cn.position.x + size.w + BODY_COL_GAP_X,
+          axisX + colMaxW / 2 + BODY_COL_NEST_MARGIN,
+          prevNestRight + BODY_COL_GAP_X
+        )
+        prevNestRight = placeChain(cid, nestLeft)
+        subtreeRight = Math.max(subtreeRight, prevNestRight)
+      }
     })
+    return subtreeRight
   }
   for (const batchId of bodyChains.keys()) {
-    if (!bodyOwner.has(batchId)) placeChain(batchId)
+    if (bodyOwner.has(batchId)) continue
+    const batch = nodesById.get(batchId)
+    if (!batch) continue
+    placeChain(batchId, batch.position.x + nodeSize(batch).w + BODY_COL_GAP_X)
   }
 
   setTimeout(() => fitView({ padding: 0.15, maxZoom: 1, duration: 300 }), 50)

@@ -3318,6 +3318,20 @@ Work Log:
 Stage Summary:
 - r24 全绿零干预；并行会话疑似进入 E2E 阶段（agent-browser 现身），cgroup 逼近阈值（2.93/3.5GB）持续关注，若 Chrome 进程组遗留不退，后续轮次 cgroup 可能触线。
 ---
+Task ID: LOCAL-results-scope-design
+Agent: Super Z (main)
+Task: 设计咨询——除 SCRIPT 外其他节点是否也有必要接入 results 单表（仅分析，未改码）
+
+Work Log:
+- 源码核实现状（V2 交付后）：SCRIPT 走 results 单表；其余节点全部仍消费 resultVar——HTTP 返回 body(String.class) 原始字符串（HttpLogicExecutor L166）、BEAN 返回方法返回值、SUBFLOW 返回 outputVars Map、DATA_UPDATE 返回受影响行数、CONDITION 返回布尔（独立写回点 executeCondition L306-308，不在 executeLogicNode 分支内）、BATCH 返回聚合 List 且 body 内非 SCRIPT 步骤仍走 resultVar（内层双轨，引擎 L854 注释确认）
+- 逐节点收益评级：HTTP ★★★（KEY+「字符串先 JSON 解析」规则的设计动机所在，现状拆字段须中转 SCRIPT 节点）、BEAN/SUBFLOW ★★★（返回天然常为 Map）、BATCH body 步骤 ★★（清内层双轨）、CONDITION/DATA_UPDATE ★（标量，WHOLE-only）
+- 改造路径评估：executeLogicNode L253 删 SCRIPT 分支全走 writeResults + executeCondition 写回点接入，引擎预计 <40 行；Validator validateResults 已就位仅需扩展；前端 PropertyPanel results 单表组件直接复用；收尾删 NodeDef.resultVar 全链路
+- 服务态快照（距上轮巡检 r24 约 16h）：a)3000=200 b)外域Host=200 c)业务登录=200 d)8080=401(actuator 需鉴权，服务存活)；Java PID 2815（V2 新 jar，~560MB）/ vite 18932 / MariaDB 4847 正常驻留；无多余 vite/postcss；Job 443426 仍 active（status=1，execution=succeeded）
+- 结论已答复用户：有必要改造且当前为最低边际成本窗口，附 P0/P1/P2 分级与 HTTP 语义决策点（KEY 解析失败→FAILED 严格版 vs 回退跳过宽松版，推荐严格版与 SCRIPT 对齐）
+
+Stage Summary:
+- 设计咨询轮零代码改动；建议全执行节点统一 results：P0 HTTP/BEAN/SUBFLOW → P1 BATCH body 步骤 → P2 CONDITION/DATA_UPDATE，最终删除 resultVar 字段全链路；待用户批准后开工
+---
 Task ID: patrol-r25
 Agent: Super Z (main)
 Task: Job 443426 轻量运维巡检（2026-10-08 12:47 触发）

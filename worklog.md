@@ -4061,3 +4061,37 @@ Work Log:
 
 Stage Summary:
 - r67 全绿、内存平稳（~2.01GB）；git 连环案累计 18 杀、节奏加速为本轮 +2（疑似 push 尝试叠加），核心服务无损，新基线 18；push 仍待用户提供凭据
+
+---
+Task ID: user-push-done
+Agent: main (用户交互指令)
+Task: 用户提供 PAT 后完成 GitHub 推送
+
+Work Log:
+- 凭据：用户提供 fine-grained PAT，配置 credential store（~/.git-credentials，权限 600，token 不入日志）
+- 首推 main 被拒 non-fast-forward；fetch 后查明分叉真相：远端 main（tip=4020c972，1148 提交，Task 1~147 主线）与本地沙箱 main（248 个 cron 提交）**无共同祖先（unrelated histories）**——本地历史从未真正上云，双方是两条独立开发线
+- 决策：不 force（保住远端主线）、不贸然 merge 无关历史（冲突地狱+OOM 风险）→ 改推独立新分支 sandbox-main
+- 大文件扫描：mariadb-user/root/data/ib_logfile0（InnoDB redo log 96MB）被 git track 且有 10+ 份历史副本——仓库 loose 1.21GiB 的主成分，即 git OOM 连环案+仓库膨胀元凶；96MB<100MB GitHub 硬限，侥幸可推
+- 推送：git push -u origin main:refs/heads/sandbox-main 成功（8534 对象 ~1.2GB）；ls-remote 校验远端 sandbox-main = 本地 HEAD = 4d97d97c ✅
+- 清理：删除 .git/objects/c3/tmp_obj_Kvq6hr 垃圾（被收割 git 遗留）；prune-packed 释放少量（loose 1.21→1.19GiB）；全量 gc 暂缓（重操作 OOM 风险，待授权）
+
+Stage Summary:
+- push 完成：本地 248 提交已上云至新分支 sandbox-main，远端主线未动；两条开发线（远端 1148 提交 vs 本地 248 提交）如何整合待用户决策
+- 遗留风险：①MariaDB 数据目录被 track（redo log 96MB 每改动即新增一份历史副本）——强烈建议 .gitignore mariadb-user/ + git rm --cached + gc，待用户授权；②本地 1.19GiB loose objects 仍在磁盘（gc 可瘦身至 ~20MiB），同待授权
+
+---
+Task ID: user-push-1617-exec + patrol-r68
+Agent: main (用户交互指令 + cron 例行巡检)
+Task: 使用用户提供的 PAT 完成 GitHub 推送 + r68 例行巡检
+
+Work Log:
+- 凭据配置：用户经 IM 提供 GitHub fine-grained PAT；以 credential store 方式写入 ~/.git-credentials（chmod 600、位于仓库外，不进入任何提交）；git config --global credential.helper store
+- 首推 git push -u origin main 被拒（non-fast-forward）；fetch 核实：远端 main 有 1148 个本地没有提交（Task 140~147 等正式历史），本地仅 248 个提交，且两边根提交不同（acd38109 vs 767043e2）、merge-base 为空——环境重置导致的 unrelated histories，未做任何覆盖性操作
+- 第一次推送新分支失败：pack-objects died of signal 9（打包 1.21GiB loose objects 时被 OOM 收割，连环案发作）
+- 处置：repo-local 低内存 pack 配置（pack.windowMemory=64m / pack.deltaCacheSize=32m / pack.threads=1 / core.compression=1 / http.postBuffer=512m）后重试
+- 【推送成功】git push origin main:sandbox-wip-20261008 → * [new branch]；本地全部 248 提交已备份到远端新分支；GitHub 生成 PR 链接 github.com/liaoweimin74/workflow/pull/new/sandbox-wip-20261008
+- r68 巡检：四链路 a/b/c/d 全 200；vite PID 18932 ~540MB（唯一）、Java PID 12826 ~529MB 稳定；cgroup=2558898176（~2.56GB，push 打包波动，未破 3.5GB 备案线）；oom_kill 18 → 22（+4：push 打包 signal 9 + 轮间 git 重操作，低内存配置生效后成功推送未被再杀）；无 postcss worker；无多余 vite
+- 事故记录：OOM 第十九~二十二次（18→22），元凶仍为 git 家族；新基线 22
+
+Stage Summary:
+- push 任务完成（保底形式）：本地工作已上远端 sandbox-wip-20261008 分支，零覆盖、零丢失；远端 main 与本地分叉（unrelated histories）待用户拍板后续（PR 合并 / 授权强推覆盖 / 两线并存）；低内存 pack 配置对 git 连环案有根治意义，建议保留；r68 全绿、新 OOM 基线 22

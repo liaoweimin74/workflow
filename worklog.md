@@ -2394,3 +2394,16 @@ Work Log:
 Stage Summary:
 - 用户判断证实：远程仓库确为最新真实史；其会话已完成 jar 构建→Java 引擎切换→8080 易主，四链路首次全 200
 - 待办更新：①cron 文本 b) 条款 BFF 已恢复 200，文本可整体对齐新常态 ②UI 重建（变量列表就近显示）仍欠 ③本地 git 历史为孤儿链，建议用户会话在适当时机提交工作树快照以免再丢 ④cgroup 3.27GB 需后续轮次观察回落
+---
+Task ID: 146-patrol
+Agent: main (cron 439400 轻量巡检 08:37 轮)
+Task: D+ 架构巡检（Java 引擎时代第二轮）
+
+Work Log:
+- 探活：A=200 / B-BFF=200 / C-HOST=200 / D-Java=200 —— 四链路全绿第二连
+- 8080 归属复核：java PID 12577（RSS 510MB，-Xmx448m 限内，运行 5m18s 稳定）；vite PID 9754（RSS 609MB，重打包后缓慢回落）；单 vite、无 postcss
+- 内存：cgroup 3.29GB（3.27→3.29 微涨，增量以可回收页缓存为主，under_oom=0 无压力，继续观察 3.5GB 警戒线）；oom_kill=0
+- 无修复动作；未启 agent-browser、未改代码、未做 QA（用户会话资产一律不碰）
+
+Stage Summary:
+- 146-patrol 全绿免修复；Java+vite 双常驻稳态初成，cgroup 3.29GB 列入观察

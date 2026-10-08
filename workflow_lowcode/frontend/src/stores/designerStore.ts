@@ -170,7 +170,6 @@ export interface BackendLogicItem {
   trigger: BackendLogicTrigger
   type: BackendLogicType
   errorAction: BackendLogicErrorAction
-  resultVar?: string
   http?: BackendLogicHttpConfig
   bean?: BackendLogicBeanConfig
   script?: BackendLogicScriptConfig

@@ -45,7 +45,7 @@ describe('designerStore — 流程配置', () => {
     const logic: BackendLogicItem = {
       id: 'l1', name: '同步订单', enabled: true,
       trigger: 'ENTER', type: 'http',
-      errorAction: 'IGNORE_CONTINUE', resultVar: 'orderStatus',
+      errorAction: 'IGNORE_CONTINUE',
       http: { url: 'https://ex/api', method: 'POST', bodyParams: [{ source: 'orderId', target: 'id' }] },
     }
     const cfg: NodeConfigData = { backendLogic: [logic] }

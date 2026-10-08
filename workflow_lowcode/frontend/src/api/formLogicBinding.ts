@@ -13,6 +13,10 @@ export const FORM_LOGIC_TRIGGERS = [
   { value: 'AFTER_SNAPSHOT', label: '快照保存后', formType: 'WORKFLOW' },
   { value: 'BEFORE_SAVE', label: '表单保存前', formType: 'WORKFLOW' },
   { value: 'AFTER_SAVE', label: '表单保存后', formType: 'WORKFLOW' },
+  { value: 'AFTER_TASK_APPROVE', label: '审批通过后', formType: 'WORKFLOW' },
+  { value: 'AFTER_PROCESS_FINISH', label: '流程结束后', formType: 'WORKFLOW' },
+  { value: 'AFTER_TASK_REJECT', label: '审批拒绝后', formType: 'WORKFLOW' },
+  { value: 'AFTER_TASK_RETURN', label: '驳回退回后', formType: 'WORKFLOW' },
 ] as const
 
 export type FormLogicTrigger = (typeof FORM_LOGIC_TRIGGERS)[number]['value']
@@ -30,7 +34,25 @@ export interface TriggerParamSpec {
  * - BEFORE_* 时机 dataId 尚未生成（BEFORE_CREATE/BEFORE_SNAPSHOT/BEFORE_SAVE 无 dataId 有效值）
  * - CREATE/DELETE 时机无 formDataExisting（UPDATE/SAVE 的 upsert 旧行才注入）
  * - WORKFLOW BEFORE_SAVE/AFTER_SAVE 的 formDataExisting 为节点间保存路径的旧行（首次保存为 null 值）
+ * - 审批事件触发点（AFTER_TASK_APPROVE/REJECT/RETURN/PROCESS_FINISH）另行注入：
+ *   processInstanceId / taskId / comment；不注入 formDataExisting/dataId；
+ *   formData 为该流程实例最新一条表单数据（无表单数据的流程不触发，绑定也不会被调度）
  */
+/** 审批事件触发点共用参数（formData/操作员等差异字段在后端 buildApprovalVars 逐字段对齐） */
+function approvalTriggerSpec(opType: string, opLabel: string): TriggerParamSpec[] {
+  return [
+    { name: 'formData', type: 'json', required: true, desc: '该流程实例最新表单数据（无表单数据时不触发）' },
+    { name: 'processInstanceId', type: 'string', required: false, desc: '流程实例 ID' },
+    { name: 'taskId', type: 'string', required: false, desc: '触发本次审批事件的审批任务 ID' },
+    { name: 'formKey', type: 'string', required: false, desc: '表单标识' },
+    { name: 'formType', type: 'string', required: false, desc: '表单类型（WORKFLOW）' },
+    { name: 'opType', type: 'string', required: false, desc: `操作类型（${opType}）` },
+    { name: 'operator', type: 'string', required: false, desc: '审批操作人' },
+    { name: 'comment', type: 'string', required: false, desc: `审批意见/${opLabel}原因（可空）` },
+    { name: '__trigger', type: 'json', required: false, desc: '触发元信息（调试用）' },
+  ]
+}
+
 /** 触发点事件参数规格（单源：绑定弹窗过滤 + 设计器导入共用，勿在调用处重复定义） */
 export const TRIGGER_PARAM_SPECS: Record<string, TriggerParamSpec[]> = {
   BEFORE_CREATE: [
@@ -124,6 +146,10 @@ export const TRIGGER_PARAM_SPECS: Record<string, TriggerParamSpec[]> = {
     { name: 'operator', type: 'string', required: false, desc: '当前操作人' },
     { name: '__trigger', type: 'json', required: false, desc: '触发元信息（调试用）' },
   ],
+  AFTER_TASK_APPROVE: approvalTriggerSpec('APPROVE', '通过'),
+  AFTER_PROCESS_FINISH: approvalTriggerSpec('FINISH', '结束'),
+  AFTER_TASK_REJECT: approvalTriggerSpec('REJECT', '拒绝'),
+  AFTER_TASK_RETURN: approvalTriggerSpec('RETURN', '驳回'),
 }
 
 /** 取触发点参数规格（未知触发点返回 null） */

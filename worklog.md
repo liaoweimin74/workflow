@@ -2811,3 +2811,17 @@ Work Log:
 
 Stage Summary:
 - 全链路健康，无异常无修复；终态架构（vite 3000 + Java 8080 + MariaDB 3306）稳定运行
+
+---
+Task ID: 443426
+Agent: main (cron patrol)
+Task: D+ 终态巡检 2026-10-08 10:17 轮（Job 443426）
+
+Work Log:
+- 四链路探活：a) vite 3000=200；b) 外域 Host=200；c) 业务链路 3000/api/auth/login=200；d) 8080 直连=200，全部通过
+- 进程核查：vite 仅 1 个（PID 18932，RSS 517MB），无需清理；java 引擎正当常驻（PID 12577，RSS 539MB）未动；无 postcss worker
+- cgroup 内存 2818306048B ≈ 2.62GB，低于 3.5GB 阈值；OOM 计数 0，与基线一致
+- 未启动 agent-browser、未修改代码，探活通过即结束
+
+Stage Summary:
+- 本轮全绿：四链路 200、单 vite 实例、OOM 0、内存 2.62GB 正常区间，无需任何修复动作

@@ -46,7 +46,13 @@
               <template #label>
                 <FieldLabel label="请求 URL" tip="目标接口地址，支持 {{ 变量 }} 占位符注入上下文变量" />
               </template>
-              <el-input v-model="httpCfg.url" placeholder="https://host/api/path" clearable />
+              <VarInput
+                v-model="httpCfg.url"
+                :variables="variables"
+                mode="placeholder"
+                placeholder="https://host/api/path"
+                clearable
+              />
             </el-form-item>
             <el-form-item label="请求方法">
               <el-select v-model="httpCfg.method" style="width: 100%">
@@ -63,6 +69,7 @@
               <div v-for="(row, i) in headerRows" :key="i" class="kv-row">
                 <el-input v-model="row.key" size="small" placeholder="名称" @input="syncHeaders" />
                 <el-input v-model="row.value" size="small" placeholder="值" @input="syncHeaders" />
+                <!-- 请求头值为静态键值对，不接变量选择器 -->
                 <el-button size="small" text type="danger" @click="removeHeader(i)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
@@ -76,7 +83,14 @@
               </div>
               <div v-if="!httpCfg.queryParams.length" class="rows-empty">暂无参数</div>
               <div v-for="(row, i) in httpCfg.queryParams" :key="i" class="kv-row">
-                <el-input v-model="row.source" size="small" placeholder="变量名" />
+                <VarInput
+                  v-model="row.source"
+                  :variables="variables"
+                  mode="bare"
+                  replace
+                  size="small"
+                  placeholder="变量名"
+                />
                 <el-input v-model="row.target" size="small" placeholder="参数名" />
                 <el-button size="small" text type="danger" @click="removeParam('queryParams', i)">
                   <el-icon><Delete /></el-icon>
@@ -91,7 +105,14 @@
               </div>
               <div v-if="!httpCfg.bodyParams.length" class="rows-empty">暂无参数</div>
               <div v-for="(row, i) in httpCfg.bodyParams" :key="i" class="kv-row">
-                <el-input v-model="row.source" size="small" placeholder="变量名" />
+                <VarInput
+                  v-model="row.source"
+                  :variables="variables"
+                  mode="bare"
+                  replace
+                  size="small"
+                  placeholder="变量名"
+                />
                 <el-input v-model="row.target" size="small" placeholder="参数名" />
                 <el-button size="small" text type="danger" @click="removeParam('bodyParams', i)">
                   <el-icon><Delete /></el-icon>
@@ -167,7 +188,14 @@
               </div>
               <div v-if="!beanCfg.params.length" class="rows-empty">暂无参数</div>
               <div v-for="(row, i) in beanCfg.params" :key="i" class="kv-row">
-                <el-input v-model="row.source" size="small" placeholder="变量名" />
+                <VarInput
+                  v-model="row.source"
+                  :variables="variables"
+                  mode="bare"
+                  replace
+                  size="small"
+                  placeholder="变量名"
+                />
                 <el-input v-model="row.target" size="small" placeholder="参数名" />
                 <el-button size="small" text type="danger" @click="removeParam('params', i)">
                   <el-icon><Delete /></el-icon>
@@ -194,10 +222,13 @@
               <template #label>
                 <FieldLabel label="脚本内容" tip="Groovy 脚本在服务端沙箱执行，注意安全；用 return 返回结果，上下文变量直接用变量名访问" />
               </template>
-              <el-input
+              <VarInput
                 v-model="scriptCfg.source"
-                type="textarea"
+                :variables="variables"
+                mode="bare"
+                textarea
                 :rows="10"
+                chips
                 class="script-source"
                 placeholder="return 'hello ' + vars.name"
               />
@@ -210,7 +241,13 @@
               <template #label>
                 <FieldLabel label="判断变量" tip="参与比较的上下文变量，支持 {{ var }} 写法" />
               </template>
-              <el-input v-model="conditionCfg.variable" placeholder="变量名，如 risk" />
+              <VarInput
+                v-model="conditionCfg.variable"
+                :variables="variables"
+                mode="bare"
+                replace
+                placeholder="变量名，如 risk"
+              />
             </el-form-item>
             <el-form-item label="运算符">
               <el-select v-model="conditionCfg.operator" style="width: 100%">
@@ -221,7 +258,12 @@
               <template #label>
                 <FieldLabel label="比较值" tip="比较的字面量或 {{ var }}；为空/不为空运算符时无需填写" />
               </template>
-              <el-input v-model="conditionCfg.value" placeholder="字面量或 {{var}}" />
+              <VarInput
+                v-model="conditionCfg.value"
+                :variables="variables"
+                mode="placeholder"
+                placeholder="字面量或 {{var}}"
+              />
             </el-form-item>
           </template>
 
@@ -231,7 +273,12 @@
               <template #label>
                 <FieldLabel label="集合表达式" tip="被遍历的集合：{{ listVar }} 上下文集合变量，或 JSON 数组字面量 [1,2,3]" />
               </template>
-              <el-input v-model="batchCfg.collection" placeholder="{{listVar}} 或 [1,2,3]" />
+              <VarInput
+                v-model="batchCfg.collection"
+                :variables="variables"
+                mode="placeholder"
+                placeholder="{{listVar}} 或 [1,2,3]"
+              />
             </el-form-item>
             <div class="num-grid">
               <el-form-item>
@@ -320,7 +367,13 @@
               </template>
               <div class="mapping-rows">
                 <div v-for="(pair, i) in subflowCfg.varsMapping" :key="i" class="mapping-row">
-                  <el-input v-model="pair.source" placeholder="当前流变量" />
+                  <VarInput
+                    v-model="pair.source"
+                    :variables="variables"
+                    mode="bare"
+                    replace
+                    placeholder="当前流变量"
+                  />
                   <span class="mapping-arrow">→</span>
                   <el-input v-model="pair.target" placeholder="子流变量" />
                   <el-button size="small" text type="danger" @click="subflowCfg.varsMapping.splice(i, 1)">
@@ -356,7 +409,14 @@
                   <el-option label="ADD +" value="ADD" />
                   <el-option label="SUB −" value="SUB" />
                 </el-select>
-                <el-input v-model="op.value" size="small" placeholder="值或 {{formData.xxx}}" class="du-value" />
+                <VarInput
+                  v-model="op.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  class="du-value"
+                  placeholder="值或 {{formData.xxx}}"
+                />
                 <el-button size="small" text type="danger" @click="dataUpdateCfg.setOps.splice(i, 1)">
                   <el-icon><Delete /></el-icon>
                 </el-button>
@@ -374,12 +434,14 @@
                 <el-select v-model="cond.op" size="small" class="du-mode">
                   <el-option v-for="op in DATA_UPDATE_OPS" :key="op.value" :label="op.label" :value="op.value" />
                 </el-select>
-                <el-input
+                <VarInput
                   v-if="!isNullOp(cond.op)"
                   v-model="cond.value"
+                  :variables="variables"
+                  mode="placeholder"
                   size="small"
-                  placeholder="值或 {{formData.xxx}}"
                   class="du-value"
+                  placeholder="值或 {{formData.xxx}}"
                 />
                 <el-button size="small" text type="danger" @click="dataUpdateCfg.where.splice(i, 1)">
                   <el-icon><Delete /></el-icon>
@@ -417,10 +479,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { CopyDocument, Delete, Fold, Setting } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import FieldLabel from './FieldLabel.vue'
+import VarInput from './VarInput.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
 import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig } from '../utils/dsl'
+import type { FlowVarItem } from '../utils/flowVars'
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
 const OPERATORS = [
@@ -434,7 +498,13 @@ const OPERATORS = [
   { label: '不为空（NOT_EMPTY）', value: 'NOT_EMPTY' },
 ] as const
 
-const props = defineProps<{ node?: FlowNode | null; collapsed?: boolean; loopBodyCount?: number }>()
+const props = defineProps<{
+  node?: FlowNode | null
+  collapsed?: boolean
+  loopBodyCount?: number
+  /** 当前节点可用的上下文变量（父组件按画布实时计算，见 flowVars.ts） */
+  variables?: FlowVarItem[]
+}>()
 const emit = defineEmits<{ 'update:collapsed': [value: boolean]; remove: [id: string] }>()
 
 const collapsed = computed({

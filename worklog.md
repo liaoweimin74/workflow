@@ -2436,3 +2436,31 @@ Work Log:
 
 Stage Summary:
 - 148-patrol 全绿；D+ 终态连续两轮稳态，内存呈回落趋势，巡检进入纯监视模式
+
+---
+Task ID: 149-patrol
+Agent: 轻量运维巡检 (cron 443426)
+Task: 08:52 轻量运维轮（与用户「开始重建」指令同回合，巡检先行完成后转开发）
+
+Work Log:
+- 四链路全 200（a/b/c/d）；vite PID 9754 单进程存活第三轮；postcss=0
+- cgroup 3.05GB 继续回落；oom_kill=0 基线持平；无修复动作
+
+Stage Summary:
+- 149-patrol 全绿；同回合用户已批准 UI 重建启动，转入开发任务
+
+---
+Task ID: 150-rebuild-yield
+Agent: 本会话（Super Z 重建执行）
+Task: 执行「变量选择列表就近显示」UI 重建 → 检测到并发写入，主动退避
+
+Work Log:
+- 09:03 完成重建设计（VarPicker 方案）并写出 VarPicker.vue，尚未触碰 PropertyPanel/LogicFlowDesigner
+- 09:05 Read 目标文件时发现 PropertyPanel.vue 已变为 1026 行（含 VarInput 集成），与本会话 09:00 前验证的 955 行基线不符
+- 核实 mtime：PropertyPanel 08:58 / LogicFlowDesigner 08:59 / flowVars.ts 09:00 / VarInput+VariablePicker 09:01（+08:00），均非本会话产出 → 判定用户另一会话正在同步实施同一重建需求，且进度更快、方案更完整（flowVars.collectAvailableVars 按引擎语义收集 input/loop/upstream/form 四组，VarInput 已在 PropertyPanel 8+ 处集成，设计器传 :variables="availableVars"）
+- 处置：(1) 立即停止本会话全部编辑，未对共享文件做任何写入；(2) 删除本会话孤儿 VarPicker.vue（避免与 VariablePicker/VarInput 三重混淆）；(3) 只读快照 5 个改动文件至 download/rebuild-snapshot-20261008-0906/ 防丢；(4) 只读健康检查：vite 3000=200、业务链路=200，vite 日志无编译错误（01:04 依赖重优化为正常 HMR 行为）
+
+Stage Summary:
+- 重建职责归另一会话，本会话退回只读旁观 + 巡检角色，避免双人编辑覆盖
+- 防丢快照：download/rebuild-snapshot-20261008-0906/（5 文件，09:05 时点）
+- 后续若另一会话完成，建议尽快 git 提交（孤儿历史下唯一防丢手段）；本会话不再触碰 logicflow 相关文件，除非用户明确改派

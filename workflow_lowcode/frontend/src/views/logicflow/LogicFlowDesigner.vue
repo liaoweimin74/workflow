@@ -115,6 +115,7 @@
         v-model:collapsed="panelCollapsed"
         :node="selectedNode"
         :loop-body-count="selectedLoopBodyCount"
+        :variables="availableVars"
         @remove="removeNode"
       />
     </div>
@@ -205,6 +206,7 @@ import {
   serializeDsl,
 } from './utils/dsl'
 import type { FlowEdge, FlowNode as FlowNodeModel, InputVarDef, LogicNodeType } from './utils/dsl'
+import { collectAvailableVars } from './utils/flowVars'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
@@ -316,6 +318,12 @@ const selectedLoopBodyCount = computed(() => {
   }
   return count
 })
+
+/** 选中节点的可用上下文变量（入参 + 循环变量 + 上游 resultVar + formData），
+ *  供属性面板变量选择器就近显示；依赖 store 真值，画布增删/改配置实时联动 */
+const availableVars = computed(() =>
+  collectAvailableVars(selectedNodeId.value, allNodes(), allEdges(), inputVars.value)
+)
 
 // ===== 面板折叠 =====
 const paletteCollapsed = ref(false)

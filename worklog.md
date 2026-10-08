@@ -4983,3 +4983,54 @@ Work Log:
 
 Stage Summary:
 - r77~r110 连续 34 轮稳定全绿；batch2 新版本（22 触发点）上线后持续稳定
+---
+Task ID: patrol-r111
+Agent: main (cron Job 443426)
+Task: 定时巡检 r111（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- vite 18932 独占（RSS 614MB）/ Java 28428（batch2 新 jar）/ MariaDB 4847；vite 进程数 1，postcss 0
+- cgroup 内存 2553368576 ≈ 2.38GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 本轮零干预；随后处理用户直接消息开发需求（触发点下拉分组折叠+标题加粗）
+
+Stage Summary:
+- r77~r111 连续 35 轮稳定全绿
+---
+Task ID: user-req-7-collapse-groups
+Agent: main (用户交互指令·触发点下拉分组可折叠+标题加粗)
+Task: 业务表单/工作流表单绑定逻辑编排的触发点事件下拉：分组可折叠、分组标题加粗
+
+Work Log:
+- 冲突检查：git 干净、近 5 分钟无文件改动，无并行会话
+- 新建 src/components/TriggerGroupSelect.vue：可复用分组可折叠下拉（el-popover 自绘面板，摆脱 el-option-group 不可折叠限制）
+  - 分组标题 font-weight:600 加粗 + 计数徽标，点击标题折叠/展开（CaretRight 箭头旋转），折叠状态跨开合记忆
+  - 工具条「展开全部/收起全部」+ 触发点总数；filterable 搜索框（搜索自动展开全部，清空恢复折叠状态）
+  - 选项支持 extra 右侧辅助文案、选中高亮+对勾；触发框对齐 el-input small 外观，悬停清空（clearable）
+  - 无障碍：combobox/listbox/option 角色 + aria-expanded/aria-selected + Enter/Space/Esc 键盘操作；面板滚动区自定义细滚动条
+- 接入①FormListPage.vue 绑定弹窗：el-select+el-option-group → TriggerGroupSelect（groups 按 t.group 四分组，新增 filterable 搜索）
+- 接入②LogicFlowDesigner.vue 入参导入弹窗：同组件替换（按 formType 两分组，extra 携带「N 项参数」，width=264px，保留 filterable）
+- 清理：删除 LogicFlowDesigner 死样式（.iv-trigger-opt/.iv-trigger-opt-count/.iv-trigger-popper 全局块）
+- 验证：vue-tsc --noEmit 全量 54 错误均为历史存量（24 文件既有噪音）；本次三文件零新增（TriggerGroupSelect/LogicFlowDesigner 全净，FormListPage(10,10) 为已记录基线噪音）；vite 页面 200，HMR 无报错
+
+Stage Summary:
+- 触发点下拉 UX 升级：分组可折叠 + 标题加粗落地于绑定弹窗与设计器导入弹窗两处（组件化复用，后续新增触发点自动分组）
+- SFC 双 script 块具名类型导出（TriggerGroupSelectGroup）经 vue-tsc 验证可用，可作后续组件类型导出范式
+- 待用户页面目验折叠交互手感；后端零改动无需发版
+---
+Task ID: user-req-dropdown-collapse
+Agent: main (用户直接消息·触发点下拉分组折叠+标题加粗)
+Task: 业务表单/工作流表单绑定逻辑编排触发点事件下拉：分组可折叠、分组标题加粗
+
+Work Log:
+- r111 巡检全绿后开始实施：已确认 EP 2.14.3 el-option-group 无 title 插槽、卸载子选项会连标题一起隐藏（visible 计算依赖 children）
+- 产出备选方案：src/utils/collapsibleSelectGroups.ts（文档级事件委托）+ style.css 33 行全局 CSS（.cs-collapsible 加粗/箭头/折叠）
+- 【冲突】待接入调用点时发现并行会话已实现同需求且更完整：新建自包含组件 src/components/TriggerGroupSelect.vue（el-popover 自绘：标题 600 加粗、点击折叠、跨开合记忆、展开/收起全部、filterable 搜索自动展开、选中高亮/清空），并已改写 FormListPage.vue 绑定弹窗与 LogicFlowDesigner.vue 导入下拉两个调用点；groupedTriggerOptions 已适配 key/label 接口
+- 冲突时刻其文件 58 秒前仍在变动，判定并行会话活跃中——本会话立即停手让行，不碰其文件
+- 清理本会话冗余产物：git checkout 还原 style.css、删除未被引用的 utils/collapsibleSelectGroups.ts，现场仅余并行会话三个文件
+- 本会话不跑 vue-tsc（其会话负责验证，避免编辑中途噪音）；后续回合巡检时顺带观察 HMR/编译状态
+
+Stage Summary:
+- 需求由并行会话承接实现，方案为自定义组件（能力超集：折叠记忆+工具栏+搜索），本会话零残留退出
+- 冲突规避协议执行成功：检测→停手→清理→移交

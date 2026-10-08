@@ -178,16 +178,13 @@
       <el-table :data="[{}]" size="small" class="binding-add-table">
         <el-table-column label="触发点" width="140">
           <template #default>
-            <el-select v-model="bindingForm.triggerType" size="small" style="width: 100%">
-              <el-option-group v-for="g in groupedTriggerOptions" :key="g.group" :label="g.group">
-                <el-option
-                  v-for="t in g.triggers"
-                  :key="t.value"
-                  :label="t.label"
-                  :value="t.value"
-                />
-              </el-option-group>
-            </el-select>
+            <!-- 分组可折叠下拉：分组标题加粗、点击标题折叠/展开，支持搜索直达 -->
+            <TriggerGroupSelect
+              v-model="bindingForm.triggerType"
+              :groups="groupedTriggerOptions"
+              placeholder="选择触发点事件"
+              filterable
+            />
           </template>
         </el-table-column>
         <el-table-column label="逻辑流" min-width="220">
@@ -279,6 +276,7 @@ import {
   InfoFilled,
 } from '@element-plus/icons-vue'
 import { SearchTable } from '@/components/business'
+import TriggerGroupSelect from '@/components/TriggerGroupSelect.vue'
 import type { SearchField, TableColumn, ActionButton, FormConfig } from '@/components/business/types'
 import { formApi, type FormDefinitionDTO, type FormVersionDTO } from '@/api/form'
 import { bizDataApi } from '@/api/bizData'
@@ -599,16 +597,16 @@ const triggerOptions = computed(() => {
   const type = bindingSource.value?.type || 'WORKFLOW'
   return FORM_LOGIC_TRIGGERS.filter((t) => t.formType === type)
 })
-/** 触发点按事件类别分组（业务数据/表单存档/审批动作/流程事件，保持定义顺序） */
+/** 触发点按事件类别分组（业务数据/表单存档/审批动作/流程事件，保持定义顺序），供可折叠分组下拉 */
 const groupedTriggerOptions = computed(() => {
-  const groups: { group: string; triggers: typeof triggerOptions.value }[] = []
+  const groups: { key: string; label: string; triggers: { value: string; label: string }[] }[] = []
   for (const t of triggerOptions.value) {
-    let g = groups.find((x) => x.group === t.group)
+    let g = groups.find((x) => x.key === t.group)
     if (!g) {
-      g = { group: t.group, triggers: [] as unknown as typeof triggerOptions.value }
+      g = { key: t.group, label: t.group, triggers: [] }
       groups.push(g)
     }
-    ;(g.triggers as unknown[]).push(t)
+    g.triggers.push({ value: t.value, label: t.label })
   }
   return groups
 })

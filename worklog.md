@@ -2578,3 +2578,16 @@ Stage Summary:
 - 事故定性与时间线：今早 08:39(+08) 引擎切换(v6进程→java sandbox)，sandbox 连接 workflow 库并完成初始化；用户业务数据所在 workflow_v6 库完好未删，应用侧不再连接它
 - 修复方向需用户决策（涉及配置/开发，超出轻量运维权限）：A) sandbox 引擎切连 workflow_v6(需评估 schema 兼容性) B) 从 v6 迁数据到 workflow(schema 映射) C) 若用户丢的是 workflow 库 08:39 前的数据则不可恢复
 - 本轮巡检链路全绿，OOM 基线正常
+
+---
+Task ID: 443426
+Agent: main (cron patrol)
+Task: 09:27 轻量运维巡检
+
+Work Log:
+- 探活四链路全 200；单 vite(624MB)+Java(532MB)+mariadbd(173MB) 正常驻留，无冗余进程
+- cgroup 内存 2.54GB（<3.5GB）；oom_kill=0 基线不变
+- mariadbd(PID 4847) 存活；上轮数据丢失诊断结论与备份保持有效，等待用户决策修复方向
+
+Stage Summary:
+- 本轮全绿零动作结束；数据事故待用户答复（A切库/B迁移/C放弃）

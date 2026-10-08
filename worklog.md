@@ -3273,3 +3273,47 @@ Work Log:
 
 Stage Summary:
 - r22 全绿零干预。
+---
+Task ID: patrol-r23
+Agent: Super Z (main)
+Task: Job 443426 轻量运维巡检（2026-10-08 12:37 触发；12:32 轮已由并行会话记录为 patrol-r22，本轮顺延编号 r23）
+
+Work Log:
+- 四链路探活：a) 200；b) 200；c) 200；d) 200。全绿。
+- 关键观测：Java PID 已由 32234 更替为 2815（RSS ~506MB，-Xmx448m + sandbox profile 参数正确，8080 探活 200）——推断并行会话已完成构建并重启引擎，服务健康，按正当常驻勿动处理。
+- 内存：vite 单实例 PID 18932（~554MB）/ MariaDB PID 4847 正常；无多余 vite、无 postcss。cgroup 2460545024 bytes（~2.46GB）< 3.5GB。OOM 0，较上轮无上涨。
+- 统一输出机制改造的实施权仍待用户仲裁（见 dev-unify-output-abort 条目），本会话持续零代码编辑、不构建不部署。
+
+Stage Summary:
+- 全绿零干预；并行会话疑似已完成后端构建+引擎重启（Java PID 32234→2815），前端 dsl.ts 改动与否仍待观测，仲裁事项继续挂起。
+---
+Task ID: outputs-v2-unify
+Agent: Super Z (main)
+Task: SCRIPT 输出机制统一（V2）：删除 resultVar 双轨，收敛为 results:[{name, mode: WHOLE|KEY, type, desc}] 单表模型（用户确认无需历史兼容，干净切换）
+
+Work Log:
+- 后端 LogicFlowDsl.java：NodeDef.outputs(OutputVarDef) → results(ResultVarDef{name,mode,type,desc})；resultVar 字段保留（HTTP/BEAN/DATA_UPDATE/SUBFLOW/BATCH/CONDITION 仍消费），SCRIPT 不再消费
+- 后端 LogicFlowEngine.java：expandScriptOutputs → writeScriptResults 单循环（WHOLE=末行表达式整体值写入，null 跳过并 warn 顺手修掉 println-null 覆盖坑；KEY=末行 Map 按 name 取 key，缺 key 跳过；含 KEY 行而末行非 Map → FAILED；上游同名 warn 放行）；executeLogicNode 与 BATCH executeBatchBodyStep 双路径统一（SCRIPT 走 results、其余走 resultVar），BATCH 步骤改为先写回后记 SUCCESS 轨迹；parseBatchBody 读 results；parseResultsList 替代 parseOutputsList
+- 后端 LogicFlowDslValidator.java：validateResults（名 \w+ 唯一 + mode 必填 ∈ WHOLE/KEY，单一命名空间，"双轨同名拦截"规则消亡）；新增 SCRIPT+resultVar → 发布拦截；循环体步骤同规则
+- 前端：dsl.ts（ResultVarDef/ResultMode/sanitizeResults、DslNode/FlowNodeData/BatchBodyNode、parseDsl SCRIPT 丢弃 resultVar、toDslNode/toDslBodyNode 不写 resultVar、collectReferencedVars）；flowVars.ts（SCRIPT outputs→results 分支，detail 含"整体值"标注）；PropertyPanel.vue（SCRIPT 区块单表：变量名+提取方式[整体值/按key取]+类型+删除 两行卡片式，首行默认 WHOLE、后续默认 KEY，公共区 resultVar 输入框对 SCRIPT 隐藏，软校验去掉 resultVar 同名项）；FlowNode.vue（徽标读 results、SCRIPT 不再渲染 resultVar 标签）
+- 构建：mvn -o package -Dmaven.test.skip=true（JDK21=/home/z/tools/jdk/jdk-21.0.12.1+1；BizDataHandlerTest 为历史失配非本次引入）；12:34 重启 8080（新 PID 2815），12:34:40 起稳定
+- E2E（scripts/e2e_multioutput.sh 重写为 results 模型 9 用例）：9/9 全绿——①KEY 拆包+CONDITION 引用 ②WHOLE 标量(doubled=160) ③混排 WHOLE+KEY(wholeMap={a:1,b:2}) ④null WHOLE 跳过(SUCCESS 且变量缺席) ⑤SCRIPT+resultVar 发布拦截 ⑥重名拦截 ⑦缺 mode 拦截 ⑧KEY+标量 FAILED 含「未返回 Map」⑨BATCH 循环体 results(末次迭代胜出 doubled=6)；首轮 3 败均为测试 DSL 缺 END 节点，修夹具后全绿；测试流已清理
+- agent-browser 浏览器验证：登录→设计器画布（节点副标题「Groovy 脚本 · 2 个输出」、↗ outLevel 徽标）→点开属性面板（输出参数(results) 单表+提取方式列+无 resultVar 输入框）→添加行默认 KEY→保存成功→API 回读 DSL：resultVar 不存在、results 3 行完整序列化；控制台无错误（仅既有 ECharts 尺寸 warning）
+- vue-tsc 全量检查：logicflow 目录 0 错误（其余模块历史报错不属本次范围）；dsl.test.ts 含旧 outputs 夹具待后续更新（vitest 非发布链路）
+
+Stage Summary:
+- SCRIPT 输出统一为 results 单表模型全量交付：概念收敛（一个节点一个输出契约）、校验简化（单一命名空间）、null 覆盖坑修复、WHOLE+KEY 混排成为合法表达；E2E 9/9 + 浏览器黄金链路验证通过
+- 遗留：前端 dsl.test.ts 旧夹具待适配 results API；二期点路径（{{a.b.c}}）与本模型正交可叠加，待排期
+---
+Task ID: patrol-r24
+Agent: Super Z (main)
+Task: Job 443426 轻量运维巡检（2026-10-08 12:42 触发）
+
+Work Log:
+- 四链路探活：a) 200；b) 200；c) 200；d) 200。全绿。
+- 关键观测：出现 agent-browser Chrome 进程组（主 3408 ~202MB + renderer 3493 ~288MB + network 3452 ~160MB，合计 ~650MB）——推断并行会话已进入 E2E/浏览器验证阶段。不在 kill 授权清单（仅多余 vite/postcss），未干预。
+- 内存：Java PID 2815（~540MB）/ vite 单实例 PID 18932（~535MB）/ MariaDB PID 4847 正常；无多余 vite、无 postcss。cgroup 3148251136 bytes（~2.93GB）< 3.5GB，但较上轮 +688MB，趋势备案。OOM 0，无上涨。
+- 统一输出机制改造的实施权仍待用户仲裁，本会话持续零代码编辑、不构建不部署。
+
+Stage Summary:
+- r24 全绿零干预；并行会话疑似进入 E2E 阶段（agent-browser 现身），cgroup 逼近阈值（2.93/3.5GB）持续关注，若 Chrome 进程组遗留不退，后续轮次 cgroup 可能触线。

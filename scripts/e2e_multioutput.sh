@@ -1,12 +1,12 @@
 #!/bin/bash
-# E2E 验证：SCRIPT 节点 outputs 多输出（双轨）功能
-# 用例：1) 正例：outputs 平铺 + resultVar 整包 + CONDITION 引用平铺变量
-#       2) 反例A：outputs 与 resultVar 同名 → 发布被校验器拦截
-#       3) 反例B：配 outputs 但脚本返回标量 → run FAILED 且报错文案明确
+# E2E 验证：SCRIPT 节点统一输出模型 results:[{name, mode: WHOLE|KEY, ...}]（单表，无 resultVar 双轨）
+# 正例：1) KEY 拆包+CONDITION 引用  2) WHOLE 标量  3) 混排 WHOLE+KEY  4) null WHOLE 跳过
+# 反例：5) SCRIPT 带 resultVar 发布拦截  6) 输出名重复发布拦截  7) 缺 mode 发布拦截
+#       8) KEY 声明但返回标量 → run FAILED
+# 回归：9) BATCH 循环体 SCRIPT 步骤 results（childVars 展开，末次迭代胜出）
 set -u
 BASE="http://127.0.0.1:8080/api/v1/logic-flows"
 TS=$(date +%s)
-KEY="multioutput_e2e_${TS}"
 pass=0; fail=0
 
 TOKEN=$(curl -s --max-time 10 -X POST -H 'Content-Type: application/json' \
@@ -19,20 +19,22 @@ A() { curl -s --max-time 15 -H "X-Tenant-Id: default" -H "Authorization: Bearer 
 
 jqget() { python3 -c "import sys,json;d=json.load(sys.stdin);print(eval(sys.argv[1]))" "$2" 2>/dev/null <<<"$1"; }
 
-echo "== 1) 创建流 $KEY =="
-CREATE=$(A -X POST "$BASE" -d "{\"key\":\"$KEY\",\"name\":\"多输出E2E\",\"description\":\"outputs 双轨验证\"}")
-FID=$(jqget "$CREATE" "d['data']['id']")
-[ -z "$FID" ] && { echo "创建失败: $CREATE"; exit 1; }
-echo "flowId=$FID"
+mkflow() { # $1=key $2=name → flowId
+  jqget "$(A -X POST "$BASE" -d "{\"key\":\"$1\",\"name\":\"$2\"}")" "d['data']['id']"
+}
+putdsl() { # $1=flowId $2=dsl文件
+  A -X PUT "$BASE/$1" -d "{\"dsl\":$(python3 -c 'import json,sys;print(json.dumps(open(sys.argv[1]).read()))' "$2")}"
+}
 
-cat > /tmp/dsl_mo.json <<'EOF'
+echo "== 1) 正例：KEY 拆包 + CONDITION 引用平铺变量 =="
+F1=$(mkflow "results_e2e_${TS}" "results拆包")
+cat > /tmp/dsl_r1.json <<'EOF'
 {
   "nodes": [
     {"id":"start1","type":"START","name":"开始","x":100,"y":160},
     {"id":"s1","type":"SCRIPT","name":"多输出脚本","x":300,"y":160,
      "config":{"language":"groovy","source":"def lv = score > 60 ? 'HIGH' : 'LOW'\ndef rt = total == 0 ? 0 : (passCount / total)\n[outLevel: lv, outRatio: rt, hits: ['r1','r2']]"},
-     "resultVar":"scriptOut",
-     "outputs":[{"name":"outLevel","type":"string","desc":"风险等级"},{"name":"outRatio","type":"number"},{"name":"hits","type":"json"}],
+     "results":[{"name":"outLevel","mode":"KEY","type":"string","desc":"风险等级"},{"name":"outRatio","mode":"KEY","type":"number"},{"name":"hits","mode":"KEY","type":"json"}],
      "errorAction":"FAIL_FLOW"},
     {"id":"c1","type":"CONDITION","name":"等级判断","x":520,"y":160,
      "config":{"variable":"outLevel","operator":"EQ","value":"HIGH"}},
@@ -48,89 +50,206 @@ cat > /tmp/dsl_mo.json <<'EOF'
   "inputVars":[{"name":"score","type":"number","required":true},{"name":"total","type":"number","required":true},{"name":"passCount","type":"number","required":true}]
 }
 EOF
-UPD=$(A -X PUT "$BASE/$FID" -d "{\"dsl\":$(python3 -c 'import json;print(json.dumps(open("/tmp/dsl_mo.json").read()))')}")
-echo "更新DSL: status=$(jqget "$UPD" "d['data']['status']")"
-
-echo "== 2) 发布 =="
-PUB=$(A -X POST "$BASE/$FID/publish")
-PUB_STATUS=$(jqget "$PUB" "d['data']['status']")
-echo "发布结果: $PUB_STATUS"
-if [ "$PUB_STATUS" = "PUBLISHED" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $PUB"; fi
-
-echo "== 3) 运行（score=80,total=200,passCount=150）=="
-RUN=$(A -X POST "$BASE/$FID/run" -d '{"vars":{"score":80,"total":200,"passCount":150}}')
-echo "$RUN" > /tmp/run_mo.json
-STATUS=$(jqget "$RUN" "d['data']['status']")
-OUTLEVEL=$(jqget "$RUN" "d['data']['outputVars']['outLevel']")
-echo "status=$STATUS outLevel=$OUTLEVEL"
-if [ "$STATUS" = "SUCCESS" ] && [ "$OUTLEVEL" = "HIGH" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL 基础运行: $(echo "$RUN" | head -c 400)"; fi
-
-python3 - /tmp/run_mo.json <<'PYEOF'
+putdsl "$F1" /tmp/dsl_r1.json > /dev/null
+P1=$(jqget "$(A -X POST "$BASE/$F1/publish")" "d['data']['status']")
+RUN1=$(A -X POST "$BASE/$F1/run" -d '{"vars":{"score":80,"total":200,"passCount":150}}')
+echo "$RUN1" > /tmp/run_r1.json
+S1=$(jqget "$RUN1" "d['data']['status']")
+python3 - /tmp/run_r1.json <<'PYEOF'
 import sys, json
 d = json.load(open(sys.argv[1]))["data"]
-ok = True
 ov = d.get("outputVars") or {}
+ok = d.get("status") == "SUCCESS"
 if ov.get("outLevel") != "HIGH": print("FAIL outLevel:", ov.get("outLevel")); ok = False
 if abs((ov.get("outRatio") or 0) - 0.75) > 1e-9: print("FAIL outRatio:", ov.get("outRatio")); ok = False
-hits = ov.get("hits")
-if not (isinstance(hits, list) and hits == ["r1", "r2"]): print("FAIL hits:", hits); ok = False
-sout = ov.get("scriptOut")
-if not (isinstance(sout, dict) and sout.get("outLevel") == "HIGH" and abs((sout.get("outRatio") or 0) - 0.75) < 1e-9):
-    print("FAIL scriptOut 整包:", sout); ok = False
-traces = d.get("traces") or []
-c1 = next((t for t in traces if t.get("nodeId") == "c1"), None)
-if not c1 or c1.get("result") != "true":
-    print("FAIL CONDITION 走向:", c1); ok = False
-print("用例1 平铺变量+整包双轨+CONDITION引用平铺变量:", "PASS" if ok else "FAIL")
+if ov.get("hits") != ["r1", "r2"]: print("FAIL hits:", ov.get("hits")); ok = False
+if "scriptOut" in ov: print("FAIL 不应再写 resultVar 整包:", ov.get("scriptOut")); ok = False
+c1 = next((t for t in (d.get("traces") or []) if t.get("nodeId") == "c1"), None)
+if not c1 or c1.get("result") != "true": print("FAIL CONDITION 走向:", c1); ok = False
+print("用例1 KEY拆包+CONDITION引用:", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)
 PYEOF
 [ $? -eq 0 ] && pass=$((pass+1)) || fail=$((fail+1))
 
-echo "== 4) 反例A：outputs 与 resultVar 同名 → 发布拦截 =="
-FID2=$(jqget "$(A -X POST "$BASE" -d "{\"key\":\"mo_dup_${TS}\",\"name\":\"同名拦截\"}")" "d['data']['id']")
-cat > /tmp/dsl_dup.json <<'EOF'
+echo "== 2) 正例：WHOLE 标量 =="
+F2=$(mkflow "results_w_${TS}" "WHOLE标量")
+cat > /tmp/dsl_r2.json <<'EOF'
+{
+  "nodes": [
+    {"id":"start1","type":"START","name":"开始","x":100,"y":160},
+    {"id":"s1","type":"SCRIPT","name":"标量脚本","x":300,"y":160,
+     "config":{"language":"groovy","source":"score * 2"},
+     "results":[{"name":"doubled","mode":"WHOLE","type":"number","desc":"入参翻倍"}]},
+    {"id":"end1","type":"END","name":"结束","x":520,"y":160}
+  ],
+  "edges": [{"id":"e1","source":"start1","target":"s1"},{"id":"e2","source":"s1","target":"end1"}],
+  "inputVars":[{"name":"score","type":"number","required":true}]
+}
+EOF
+putdsl "$F2" /tmp/dsl_r2.json > /dev/null
+A -X POST "$BASE/$F2/publish" > /dev/null
+RUN2=$(A -X POST "$BASE/$F2/run" -d '{"vars":{"score":80}}')
+S2=$(jqget "$RUN2" "d['data']['status']"); D2=$(jqget "$RUN2" "d['data']['outputVars']['doubled']")
+echo "status=$S2 doubled=$D2"
+if [ "$S2" = "SUCCESS" ] && [ "$D2" = "160" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $(echo "$RUN2" | head -c 300)"; fi
+
+echo "== 3) 正例：混排 WHOLE+KEY 同表 =="
+F3=$(mkflow "results_mix_${TS}" "混排")
+cat > /tmp/dsl_r3.json <<'EOF'
+{
+  "nodes": [
+    {"id":"start1","type":"START","name":"开始","x":100,"y":160},
+    {"id":"s1","type":"SCRIPT","name":"混排脚本","x":300,"y":160,
+     "config":{"language":"groovy","source":"[a: 1, b: 2]"},
+     "results":[{"name":"wholeMap","mode":"WHOLE","type":"json","desc":"整包"},{"name":"a","mode":"KEY","type":"number"},{"name":"b","mode":"KEY","type":"number"}]},
+    {"id":"end1","type":"END","name":"结束","x":520,"y":160}
+  ],
+  "edges": [{"id":"e1","source":"start1","target":"s1"},{"id":"e2","source":"s1","target":"end1"}]
+}
+EOF
+putdsl "$F3" /tmp/dsl_r3.json > /dev/null
+A -X POST "$BASE/$F3/publish" > /dev/null
+RUN3=$(A -X POST "$BASE/$F3/run" -d '{"vars":{}}')
+echo "$RUN3" > /tmp/run_r3.json
+python3 - /tmp/run_r3.json <<'PYEOF'
+import sys, json
+d = json.load(open(sys.argv[1]))["data"]
+ov = d.get("outputVars") or {}
+ok = d.get("status") == "SUCCESS"
+if ov.get("wholeMap") != {"a": 1, "b": 2}: print("FAIL wholeMap:", ov.get("wholeMap")); ok = False
+if ov.get("a") != 1 or ov.get("b") != 2: print("FAIL 拆包:", ov.get("a"), ov.get("b")); ok = False
+print("用例3 混排 WHOLE+KEY:", "PASS" if ok else "FAIL")
+sys.exit(0 if ok else 1)
+PYEOF
+[ $? -eq 0 ] && pass=$((pass+1)) || fail=$((fail+1))
+
+echo "== 4) 正例：null 整体值跳过写入 =="
+F4=$(mkflow "results_null_${TS}" "null跳过")
+cat > /tmp/dsl_r4.json <<'EOF'
+{
+  "nodes": [
+    {"id":"start1","type":"START","name":"开始","x":100,"y":160},
+    {"id":"s1","type":"SCRIPT","name":"null脚本","x":300,"y":160,
+     "config":{"language":"groovy","source":"null"},
+     "results":[{"name":"outNull","mode":"WHOLE","type":"string"}]},
+    {"id":"end1","type":"END","name":"结束","x":520,"y":160}
+  ],
+  "edges": [{"id":"e1","source":"start1","target":"s1"},{"id":"e2","source":"s1","target":"end1"}]
+}
+EOF
+putdsl "$F4" /tmp/dsl_r4.json > /dev/null
+A -X POST "$BASE/$F4/publish" > /dev/null
+RUN4=$(A -X POST "$BASE/$F4/run" -d '{"vars":{}}')
+S4=$(jqget "$RUN4" "d['data']['status']"); N4=$(jqget "$RUN4" "d['data']['outputVars'].get('outNull')")
+echo "status=$S4 outNull=${N4:-<absent>}"
+if [ "$S4" = "SUCCESS" ] && [ "$N4" = "None" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $(echo "$RUN4" | head -c 300)"; fi
+
+echo "== 5) 反例：SCRIPT 带 resultVar → 发布拦截 =="
+F5=$(mkflow "results_rv_${TS}" "resultVar拦截")
+cat > /tmp/dsl_r5.json <<'EOF'
 {
   "nodes": [
     {"id":"start1","type":"START","name":"开始","x":100,"y":160},
     {"id":"s1","type":"SCRIPT","name":"脚本","x":300,"y":160,
      "config":{"language":"groovy","source":"[a: 1]"},
-     "resultVar":"outA",
-     "outputs":[{"name":"outA","type":"number"}]},
-    {"id":"end1","type":"END","name":"结束","x":720,"y":160}
+     "resultVar":"staleOut",
+     "results":[{"name":"a","mode":"KEY","type":"number"}]},
+    {"id":"end1","type":"END","name":"结束","x":520,"y":160}
   ],
   "edges": [{"id":"e1","source":"start1","target":"s1"},{"id":"e2","source":"s1","target":"end1"}]
 }
 EOF
-A -X PUT "$BASE/$FID2" -d "{\"dsl\":$(python3 -c 'import json;print(json.dumps(open("/tmp/dsl_dup.json").read()))')}" > /dev/null
-PUB2=$(A -X POST "$BASE/$FID2/publish")
-PUB2_MSG=$(echo "$PUB2" | head -c 400)
-echo "发布响应: $PUB2_MSG"
-if echo "$PUB2_MSG" | grep -q "同名"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL 未拦截"; fi
+putdsl "$F5" /tmp/dsl_r5.json > /dev/null
+PUB5=$(A -X POST "$BASE/$F5/publish")
+echo "发布响应: $(echo "$PUB5" | head -c 300)"
+if echo "$PUB5" | grep -q "不支持 resultVar"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL 未拦截"; fi
 
-echo "== 5) 反例B：配 outputs 但返回标量 → run FAILED =="
-FID3=$(jqget "$(A -X POST "$BASE" -d "{\"key\":\"mo_scalar_${TS}\",\"name\":\"标量报错\"}")" "d['data']['id']")
-cat > /tmp/dsl_scalar.json <<'EOF'
+echo "== 6) 反例：输出名重复 → 发布拦截 =="
+F6=$(mkflow "results_dup_${TS}" "重名拦截")
+cat > /tmp/dsl_r6.json <<'EOF'
+{
+  "nodes": [
+    {"id":"start1","type":"START","name":"开始","x":100,"y":160},
+    {"id":"s1","type":"SCRIPT","name":"脚本","x":300,"y":160,
+     "config":{"language":"groovy","source":"[a: 1]"},
+     "results":[{"name":"a","mode":"KEY"},{"name":"a","mode":"WHOLE"}]},
+    {"id":"end1","type":"END","name":"结束","x":520,"y":160}
+  ],
+  "edges": [{"id":"e1","source":"start1","target":"s1"},{"id":"e2","source":"s1","target":"end1"}]
+}
+EOF
+putdsl "$F6" /tmp/dsl_r6.json > /dev/null
+PUB6=$(A -X POST "$BASE/$F6/publish")
+echo "发布响应: $(echo "$PUB6" | head -c 300)"
+if echo "$PUB6" | grep -q "重复"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL 未拦截"; fi
+
+echo "== 7) 反例：缺 mode → 发布拦截 =="
+F7=$(mkflow "results_mode_${TS}" "mode拦截")
+cat > /tmp/dsl_r7.json <<'EOF'
+{
+  "nodes": [
+    {"id":"start1","type":"START","name":"开始","x":100,"y":160},
+    {"id":"s1","type":"SCRIPT","name":"脚本","x":300,"y":160,
+     "config":{"language":"groovy","source":"[a: 1]"},
+     "results":[{"name":"a"}]},
+    {"id":"end1","type":"END","name":"结束","x":520,"y":160}
+  ],
+  "edges": [{"id":"e1","source":"start1","target":"s1"},{"id":"e2","source":"s1","target":"end1"}]
+}
+EOF
+putdsl "$F7" /tmp/dsl_r7.json > /dev/null
+PUB7=$(A -X POST "$BASE/$F7/publish")
+echo "发布响应: $(echo "$PUB7" | head -c 300)"
+if echo "$PUB7" | grep -q "缺少 mode"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL 未拦截"; fi
+
+echo "== 8) 反例：KEY 声明但返回标量 → run FAILED =="
+F8=$(mkflow "results_scalar_${TS}" "标量报错")
+cat > /tmp/dsl_r8.json <<'EOF'
 {
   "nodes": [
     {"id":"start1","type":"START","name":"开始","x":100,"y":160},
     {"id":"s1","type":"SCRIPT","name":"标量脚本","x":300,"y":160,
      "config":{"language":"groovy","source":"42"},
-     "outputs":[{"name":"outNum","type":"number"}]},
-    {"id":"end1","type":"END","name":"结束","x":720,"y":160}
+     "results":[{"name":"outNum","mode":"KEY","type":"number"}]}
   ],
-  "edges": [{"id":"e1","source":"start1","target":"s1"},{"id":"e2","source":"s1","target":"end1"}]
+  "edges": [{"id":"e1","source":"start1","target":"s1"}]
 }
 EOF
-A -X PUT "$BASE/$FID3" -d "{\"dsl\":$(python3 -c 'import json;print(json.dumps(open("/tmp/dsl_scalar.json").read()))')}" > /dev/null
-A -X POST "$BASE/$FID3/publish" > /dev/null
-RUN3=$(A -X POST "$BASE/$FID3/run" -d '{"vars":{}}')
-RUN3_STATUS=$(jqget "$RUN3" "d['data']['status']")
-RUN3_ERR=$(jqget "$RUN3" "d['data']['errorMessage'] or ''")
-echo "运行: status=$RUN3_STATUS err=${RUN3_ERR:0:150}"
-if [ "$RUN3_STATUS" = "FAILED" ] && echo "$RUN3_ERR" | grep -q "未返回 Map"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $(echo "$RUN3" | head -c 400)"; fi
+putdsl "$F8" /tmp/dsl_r8.json > /dev/null
+A -X POST "$BASE/$F8/publish" > /dev/null
+RUN8=$(A -X POST "$BASE/$F8/run" -d '{"vars":{}}')
+S8=$(jqget "$RUN8" "d['data']['status']"); E8=$(jqget "$RUN8" "d['data']['errorMessage'] or ''")
+echo "status=$S8 err=${E8:0:150}"
+if [ "$S8" = "FAILED" ] && echo "$E8" | grep -q "未返回 Map"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $(echo "$RUN8" | head -c 300)"; fi
 
-echo "== 6) 清理测试流 =="
-for id in $FID $FID2 $FID3; do A -X DELETE "$BASE/$id" > /dev/null && echo "deleted $id"; done
+echo "== 9) 回归：BATCH 循环体 SCRIPT 步骤 results =="
+F9=$(mkflow "results_batch_${TS}" "BATCH回归")
+cat > /tmp/dsl_r9.json <<'EOF'
+{
+  "nodes": [
+    {"id":"start1","type":"START","name":"开始","x":100,"y":160},
+    {"id":"b1","type":"BATCH","name":"遍历","x":300,"y":160,
+     "config":{"collection":"{{nums}}","itemVar":"item","indexVar":"index",
+       "body":[{"id":"bs1","type":"SCRIPT","name":"翻倍",
+                "config":{"language":"groovy","source":"[doubled: item * 2]"},
+                "results":[{"name":"doubled","mode":"KEY","type":"number"}]}],
+       "stopOnError":true,"maxItems":100},
+     "errorAction":"FAIL_FLOW"},
+    {"id":"end1","type":"END","name":"结束","x":520,"y":160}
+  ],
+  "edges": [{"id":"e1","source":"start1","target":"b1"},{"id":"e2","source":"b1","target":"end1"}],
+  "inputVars":[{"name":"nums","type":"json","required":true}]
+}
+EOF
+putdsl "$F9" /tmp/dsl_r9.json > /dev/null
+A -X POST "$BASE/$F9/publish" > /dev/null
+RUN9=$(A -X POST "$BASE/$F9/run" -d '{"vars":{"nums":[1,2,3]}}')
+S9=$(jqget "$RUN9" "d['data']['status']"); D9=$(jqget "$RUN9" "d['data']['outputVars']['doubled']")
+echo "status=$S9 doubled=$D9（末次迭代胜出应为 6）"
+if [ "$S9" = "SUCCESS" ] && [ "$D9" = "6" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $(echo "$RUN9" | head -c 400)"; fi
+
+echo "== 清理测试流 =="
+for id in $F1 $F2 $F3 $F4 $F5 $F6 $F7 $F8 $F9; do A -X DELETE "$BASE/$id" > /dev/null && echo "deleted $id"; done
 
 echo ""
 echo "======== E2E 结果: PASS=$pass FAIL=$fail ========"

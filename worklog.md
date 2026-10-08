@@ -3833,3 +3833,18 @@ Work Log:
 
 Stage Summary:
 - r54 全绿；results-v3 全链路交付完成（后端+前端+构建+部署+E2E+自检），内存峰值风险随 Chrome 退出解除；OOM 累计 4 次立案在册（git 连环被杀，无核心服务损伤），新基线 4
+
+---
+Task ID: patrol-r55
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r55：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：Java PID 8906 ~555MB（results-v3 jar 稳定）；vite PID 18932 ~520MB（唯一）；MariaDB ~188MB；无 Chrome/agent-browser 残留
+- cgroup = 1585983488（~1.59GB，与上轮持平，低位稳定）
+- OOM 事故（第四次）：oom_kill 4 → 5（+1）；cgroup 低位且 TOP8 无重负载进程，推断为轮间短暂派生的 git/构建类进程瞬间峰值被收割（并行会话 git 操作未停）；新基线 5；零干预
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r55 全绿、内存低位平稳；OOM 连续第三轮上涨（1→2→4→5）但均为瞬时收割、无核心服务损伤，持续盯防；若下轮继续上涨且抓不到元凶，考虑在巡检中加挂 ps 快照比对（仍属观察，不做干预）

@@ -4285,3 +4285,21 @@ Work Log:
 
 Stage Summary:
 - r76 全绿（~1.97GB 低位、OOM 基线稳 22）；第 8/9/11/12 条已登记：8/11/12 为独立 UI 小改待办，9 并入 5 号待办（表清单下拉化）；待办池现有：4（批处理布局）、5+9（表下拉）、6（审批事件，待用户给事件集）、8（tooltip 限宽）、11（results 去 desc）、12（groovy 对齐）
+
+---
+Task ID: user-req-8to12-impl
+Agent: main (用户交互指令·实施)
+Task: 实施用户第 8/9/11/12 条反馈（r76 会话登记待办后由本会话接手实施，各文件 1h 无改动无冲突）
+
+Work Log:
+- 【第 8 条】FormListPage.vue 绑定对话框"触发说明"tooltip：加 popper-class="long-line-tip" + 非 scoped 全局样式 max-width 420px / line-height 1.7——长文案悬浮多行换行显示
+- 【第 9 条·前端】PropertyPanel.vue：目标表下拉去掉 DATA_UPDATE_TABLE_RE 白名单过滤（原 wf_biz_*/wf_form_data* 前缀过滤导致库里仅一张表可选）——展示数据库全部表清单；FieldLabel tip 同步更新
+- 【第 9 条·后端】LogicFlowEngine.java：删除 DATA_UPDATE_TABLE_PREFIXES 常量；validateDataUpdateTable 去掉前缀校验，保留表名合法性（标识符正则）+ 表存在性校验（防注入与误配仍在）
+- 【第 9 条·部署】mvn 3.9.9（/home/z/tools/maven）+ JDK21 构建 jar（17:12:49 CST）→ kill 旧 java → start-services.sh 幂等拉起 → 8080/3000 全 200
+- 【第 11 条】PropertyPanel.vue：删除 results 行"说明（可选）"输入框；卡片样式改单行式（注释/样式/默认行 desc 字段同步清理）；数据模型 desc 可选保留，老 DSL 兼容
+- 【第 12 条】VarInput.vue：.chips-label 由 padding-top:2px 改为 inline-flex + height 21px 与首行 chip 等高垂直居中（11px×1.4 行高+2px 内距+1px 边框核算）
+- 验证：四链路 a/b/c/d 全 200；改动文件 eslint 0 errors（3 warnings 均为 .vue 不在 lint 配置的历史状态）；cgroup ~2.40GB（构建后回落中）；oom_kill 稳 22 零新增
+- 前端改动 vite 热加载即时生效；后端新 jar 已上线（PID 更替）
+
+Stage Summary:
+- 第 8/9/11/12 条全部交付：tooltip 多行化、目标表全库下拉（前后端同步放开白名单+重新部署）、results 去说明字段、groovy 变量 label 居中；四链路全绿、OOM 基线稳 22；待用户页面验证

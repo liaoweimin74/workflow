@@ -4318,3 +4318,18 @@ Work Log:
 
 Stage Summary:
 - r77 全绿（~2.26GB 回落中、OOM 稳 22）；第 8/9/11/12 条交付后的新 jar 经四链路验证健康；待办池不变：4（批处理布局）、5+9（表下拉）、6（审批事件）、8/11/12（已交付待用户页面验证）
+
+---
+Task ID: patrol-r78
+Agent: main (定时巡检 Job 443426)
+Task: 四链路探活 + 内存减压 + OOM 盯防（17:22 回合）
+
+Work Log:
+- 四链路：a) 200；b) 200；c) 200；d) 200 —— 全绿
+- 进程：vite PID 18932 ~584MB（唯一）；Java PID 19458 ~540MB（新 jar 稳定运行）；MariaDB ~195MB
+- cgroup = 2421665792（~2.26GB，平稳，未破 3.5GB 备案线）
+- OOM：oom_kill = 22，零新增
+- 无 postcss worker；无多余 vite；零干预
+
+Stage Summary:
+- r78 全绿稳态（~2.26GB、OOM 稳 22）；第 8/9/11/12 条交付后运行平稳；待办池不变

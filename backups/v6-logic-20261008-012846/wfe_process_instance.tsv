@@ -1,0 +1,2 @@
+id	tenant_id	process_def_id	process_key	process_name	business_key	status	initiator	parent_instance_id	parent_node_id	start_time	end_time	delete_reason	created_at	updated_at	lock_version
+db15967d-0195-3468-3f14-b27279a25082	default	dual_node_e2e:1:3ebcb471-2a66-232f-1ba6-3eae0ac0fb9f	dual_node_e2e	双类型节点E2E流程	NULL	COMPLETED	1	NULL	NULL	2026-09-27 18:50:15.173000	2026-09-27 18:53:32.478000	NULL	2026-09-27 18:50:15.173000	2026-09-27 18:53:32.478000	3

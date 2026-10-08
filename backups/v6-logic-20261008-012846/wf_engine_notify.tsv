@@ -1,0 +1,2 @@
+id	tenant_id	instance_id	task_id	notify_type	target_user	content	status	created_at
+e0e71cb4-8426-6809-bbe8-800a1d96ebea	default	db15967d-0195-3468-3f14-b27279a25082	28b5adad-7c5a-f40a-e1ee-df7faa5f74ca	SMS_NODE	1	您有新的办理任务：经理审批	PENDING	2026-09-27 18:50:15.180

@@ -1,0 +1,3 @@
+id	tenant_id	name	parent_id	sort_order	created_at
+64f4802b34e352e3da0d7aeb9fa71de2	default	请假流程	NULL	1	2026-09-24 08:44:04
+9fc5266c8e07a5ac9adf80494049bbe2	default	报销流程	NULL	2	2026-09-24 08:44:17

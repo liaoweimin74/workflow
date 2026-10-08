@@ -2554,3 +2554,27 @@ Work Log:
 
 Stage Summary:
 - 本轮全绿，零动作结束；未启动 agent-browser、未改代码
+
+---
+Task ID: 443426 (+用户报告: 数据库数据丢失)
+Agent: main (cron patrol + 事故诊断)
+Task: 09:22 巡检 + 用户报告"数据库中的数据也丢了"诊断
+
+Work Log:
+- 常规探活四链路全 200（vite 3000 / 外域Host / 业务链路 / 8080 直连），oom_kill=0，内存 2.34GB 正常
+- 诊断数据丢失：mariadbd(PID 4847) 正常运行，数据目录 192MB 在
+- 发现系统时区为 UTC，以下时间已换算 +08：
+  * 10-08 06:41 mariadbd 崩溃恢复启动（此前有异常关闭，InnoDB 恢复 1356 页）
+  * 10-08 08:39 Java sandbox 引擎启动，flyway 对 workflow 库打 baseline(00:39:19 UTC) 并跑 V2/V39-V53 种子迁移
+  * 10-08 08:39 同刻旧 v6 进程退出（10 个 workflow_v6 连接同时 aborted）
+- workflow_v6 库数据完好：wf_form_def 9行、wf_data_source 20行(含用户自建)、wfe_process_instance 1、wfe_task 3、wfe_variable 11、wf_task_comment 3 等，最后写入 09-27
+- workflow 库现为纯种子状态：sys_menu 76、sys_user 2(admin)、wf_data_source 9(内置)，无用户业务数据；V2__init.sql 只 INSERT 种子不建表(建表归 JPA ddl-auto)
+- binlog=OFF、无历史 SQL dump → workflow 库 08:39 前状态不可回溯
+- 防御性备份完成：
+  * 物理备份 /home/z/my-project/backups/mariadb-datadir-snap-20261008-012751.tar.gz (FTWRL 下 tar，ibd 校验 workflow 81/81、v6 40/40 一致)
+  * 逻辑备份 /home/z/my-project/backups/v6-logic-20261008-0129xx/ (16 张关键表 TSV)
+
+Stage Summary:
+- 事故定性与时间线：今早 08:39(+08) 引擎切换(v6进程→java sandbox)，sandbox 连接 workflow 库并完成初始化；用户业务数据所在 workflow_v6 库完好未删，应用侧不再连接它
+- 修复方向需用户决策（涉及配置/开发，超出轻量运维权限）：A) sandbox 引擎切连 workflow_v6(需评估 schema 兼容性) B) 从 v6 迁数据到 workflow(schema 映射) C) 若用户丢的是 workflow 库 08:39 前的数据则不可恢复
+- 本轮巡检链路全绿，OOM 基线正常

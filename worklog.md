@@ -3910,3 +3910,18 @@ Work Log:
 
 Stage Summary:
 - r59 全绿；二次部署后系统平稳，Chrome QA 渐退、内存回落 2.28GB；git 连环案累计 9 杀、每轮 +1 节奏未变，核心服务无损，新基线 9
+
+---
+Task ID: patrol-r60
+Agent: main (cron 例行巡检)
+Task: 轻量运维 r60：四链路探活 + 内存减压 + OOM 盯防
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：vite PID 18932 ~554MB（唯一）；Java PID 12826 ~521MB（稳定）；MariaDB ~191MB；Chrome 组驻留 ~607MB（renderer 370 + 主 132 + network 106，QA 长尾）
+- cgroup = 2336059392（~2.34GB，与上轮持平，未破 3.5GB 备案线）
+- OOM 事故（第九次）：oom_kill 9 → 10（+1），git 连环案既定模式（每轮一只 ~2.3GB git 被收割）；新基线 10；零干预
+- 无 postcss worker；无多余 vite；本轮零代码编辑、零干预
+
+Stage Summary:
+- r60 全绿、内存平稳；OOM 累计 10 杀（全为 git，每轮 +1 节奏未破），核心服务无损，新基线 10

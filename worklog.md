@@ -5063,3 +5063,30 @@ Work Log:
 
 Stage Summary:
 - r77~r113 连续 37 轮稳定全绿
+---
+Task ID: patrol-r114
+Agent: main (cron Job 443426)
+Task: 定时巡检 r114（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- vite 18932 独占 / Java 28428 / MariaDB 4847；vite 进程数 1，postcss 0
+- cgroup 内存 2488401920 ≈ 2.32GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 【只读观察】worklog 条目数 300→302：并行会话已追加 2 条新记录（其验证应已完成）；TriggerGroupSelect 组件文件无再改动
+- 本轮零干预
+
+Stage Summary:
+- r77~r114 连续 38 轮稳定全绿；下拉折叠需求并行会话已记账交付
+---
+Task ID: patrol-r114-correction
+Agent: main (cron Job 443426)
+Task: 更正 r114 条目中的误读
+
+Work Log:
+- r114 条目误将条目数 300→302 归因于并行会话；实为本会话自身追加的 patrol-r112/r113 两条
+- 复核：worklog 最后 4 条 Task ID 均为本会话（user-req-dropdown-collapse / patrol-r112 / r113 / r114）
+- 并行会话（TriggerGroupSelect 下拉折叠）尚未在 worklog 记账交付条目，继续只读观察
+
+Stage Summary:
+- 更正误读，避免后续会话误判下拉折叠需求已交付；以并行会话正式 worklog 条目为准

@@ -4968,3 +4968,18 @@ Work Log:
 Stage Summary:
 - batch2 交付落地确认：触发点体系 22 个（业务数据 6 + 表单存档 4 + 审批动作 8 + 流程事件 4），新版本已上线稳定运行
 - r77~r109 连续 33 轮稳定全绿；剩余远期项（第三批 BEFORE_* 校验类、ON_TASK_TIMEOUT、TIMER/WEBHOOK）由后续需求驱动
+---
+Task ID: patrol-r110
+Agent: main (cron Job 443426)
+Task: 定时巡检 r110（四链路探活 + 内存减压 + OOM 监控）
+
+Work Log:
+- 四链路探活：a=200 / b=200 / c=200 / d=200，全绿
+- 进程快照：vite 18932 (RSS 614MB) / Java 28428 (RSS 552MB，batch2 新 jar 稳定) / MariaDB 4847 (RSS 199MB)
+- vite 进程数 1（无冗余），postcss worker 0，无需减压
+- cgroup 内存 2546606080 ≈ 2.37GB < 3.5GB 备案线
+- oom_kill = 22，与基线持平，零新增
+- 本轮零干预
+
+Stage Summary:
+- r77~r110 连续 34 轮稳定全绿；batch2 新版本（22 触发点）上线后持续稳定

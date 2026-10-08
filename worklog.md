@@ -2407,3 +2407,16 @@ Work Log:
 
 Stage Summary:
 - 146-patrol 全绿免修复；Java+vite 双常驻稳态初成，cgroup 3.29GB 列入观察
+---
+Task ID: 147-patrol
+Agent: main (cron 443426 轻量巡检 08:42 轮 · 新条款首轮)
+Task: D+ 终态巡检（四链路新条款）
+
+Work Log:
+- 探活（新条款四链路）：a)vite=200 / b)外域Host=200 / c)代理业务链=200 / d)8080直连=200 全绿
+- Java PID 12577（510MB 限内）+ vite PID 9754（603MB）双常驻；单 vite、无 postcss
+- cgroup 3.28GB 持平（<3.5GB 警戒线）；oom_kill=0，无事故
+- 无修复动作；未启 agent-browser、未改代码、未做 QA
+
+Stage Summary:
+- 147-patrol 全绿；新 cron 443426 条款与实际架构完全对齐，巡检进入终态稳态

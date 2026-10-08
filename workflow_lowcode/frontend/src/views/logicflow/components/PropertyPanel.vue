@@ -749,7 +749,7 @@ async function loadDuColumns(table: string) {
 }
 
 watch(
-  () => String(dataUpdateCfg.value?.table ?? ''),
+  () => (node.value ? String(dataUpdateCfg.value?.table ?? '') : ''),
   (table) => {
     loadDuColumns(table)
   },

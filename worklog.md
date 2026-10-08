@@ -3737,3 +3737,32 @@ Work Log:
 
 Stage Summary:
 - r51 全绿零干预，零代码编辑；results-v2 迁移正式部署上线（14:55:05），内存因旧进程退出不升反降
+
+---
+Task ID: incident-oom-git (r52 发现)
+Agent: main (cron Job 443426)
+Task: OOM 事故记录——oom_kill 0 → 1，基线突破
+
+Work Log:
+- 15:02 巡检发现 memory.oom_control oom_kill = 1（r32-r51 基线恒为 0）；cgroup 2.47GB → 1.52GB（释放 ~950MB）
+- 内核日志定位：06:58:45 UTC = 14:58:45 +08，全局 OOM（global_oom），被杀进程 = git（PID 7979，uid 1001），anon-rss ~2.07GB / total-vm ~2.32GB——推测为并行会话部署后执行的大体积 git 操作（commit/status/fetch 类）内存膨胀触发
+- 影响评估：D+ 终态三大服务全部幸存——Java 8906（results-v2 jar，14:55 启动持续运行）、vite 18932、mariadbd 4847 均在；四链路 15:02 探活全 200
+- 附带：memory.failcnt = 0（事件后无内存分配失败记录）；max_usage_in_bytes = ~1.53GB（疑似被重置过，仅备案不深究）
+- 本会话处置：零干预（git 不在运维授权范围，重启 git 操作归并行会话自行决定）；新基线 oom_kill = 1，后续巡检以 1 为基线，再上涨才记事故
+
+Stage Summary:
+- 一次非关键 OOM：牺牲者为 git（~2.07GB），核心服务无损，部署成果（results-v2 上线）未受影响
+
+---
+Task ID: patrol-r52
+Agent: main (cron Job 443426)
+Task: 15:02:27 轻量运维巡检（探活+内存，零开发）
+
+Work Log:
+- 四链路探活：a/b/c/d 全 200 —— 全绿
+- 进程内存：Java PID 8906 ~562MB（results-v2 jar，14:55 启动持续运行 ~7m38s）；vite PID 18932 ~542MB（唯一）；MariaDB ~192MB；无 postcss worker；无多余 vite
+- cgroup = 1631469568（~1.52GB，显著回落，成因见上方 incident-oom-git 事故小节）；OOM 计数 1（基线 0 → 1，已立案）
+- jar mtime 仍 14:45:29（部署态稳定，无新增构建）；本轮零代码编辑、零干预
+
+Stage Summary:
+- r52 全绿；唯一异常为 git 遭 OOM 击杀（详见事故小节），D+ 服务无损；新 OOM 基线 = 1

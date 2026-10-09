@@ -5577,3 +5577,20 @@ Stage Summary:
 - 需求全量交付：formData 导入表单结构（原有）+ JSON 实例生成变量结构（入参+输出，新）+ 选择器字段级点选（任意深度，新）
 - 已知特性：结构为设计期数据源（引擎运行期不消费，与 formData 树同策略）；展开状态在 popover 重建时不保留（可接受）
 - 后端 DSL 模型已 forward-compat（@JsonIgnoreProperties），未来加字段不会再 400
+
+---
+Task ID: json-structure-20261009（JSON 实例→变量结构树交付收口）
+Agent: 主控（Z.ai Code）
+Task: 用户需求「入参/输出参数 JSON 实例推导结构 + 变量选择器字段级下钻」验收收口
+
+Work Log:
+- 接手时功能已由并行会话实现（未提交）：jsonStructure.ts 推断引擎 + JsonInstanceImport.vue + dsl/flowVars/VariablePicker/Designer/PropertyPanel 五文件接线 + 后端 LogicFlowDsl FieldNode DTO（修 Jackson 400）
+- 【本会话贡献 1·测试补全】新增 jsonStructure.test.ts 13 例 + flowVars 结构树 5 例（并行会话原始交付零测试）
+- 【本会话贡献 2·抓出真 bug】structureToVarItems 递归丢中间路径段（payload.data.id→payload.id），会导致变量引用静默错插——已修（模板串拼接 root.path）并用 E2E 实证
+- 【本会话贡献 3·全链 E2E】浏览器实测：建流→入参 json 导入实例→选择器「已导入结构（7 字段）」→caret 三级展开→点选插入 {{payload.data.items.sku}} 完整路径✓→输出参数 json 导入（4 字段）→保存→API 回读 DSL structure 双侧持久✓→测试流 DELETE 零残留
+- 【并行会话后续】668d47da 提交（含我方修复+测试一并扫入）+ jar 重建 22:12 + 重启 Java + backups/jar 同步——三方一致
+- 测试：logicflow utils 72/72（新增 18）、全量 1398/1398、vue-tsc 仅 2 个基线旧错（DictPage/MemberGroupPage，与本次无关）
+
+Stage Summary:
+- 需求三点全落地：①formData 输入参数（前轮 aec957eb 后端发现树）②JSON 入参粘贴实例推结构 ③JSON 输出参数粘贴实例推结构；变量选择器任意深度下钻点选完整路径
+- 重置防御就位：jar 新版本已入 backups/jar（git 追踪），冷启动恢复即得新功能

@@ -5854,3 +5854,20 @@ Stage Summary:
 - GitHub 推送链路完全恢复；本地/远端零分叉
 - 主线状态确认：DATA_UPSERT 已由并行会话全链路交付（后端 210/210、前端 1425/1425、vue-tsc 基线零新增、E2E 复验+unchanged 语义勘误），无需本会话再实施
 - 本地时间线教训入档：rebase 中 checkout --theirs 取的是「被应用提交」而非「基底」，双版本脚本择优时必须显式 git show 对比后再落
+
+---
+Task ID: cron-巡检-20261010-0730（重供给#5 恢复+导入bug修复）
+Agent: 主控（Z.ai Code）
+Task: 用户报告 no such table: SYS_USER → 诊断假绿 → jar 快速路径恢复
+
+Work Log:
+- 【重供给 #5】用户访问报 no such table（bun 假绿，uptime 5 分钟）；jar/jdk/mariadb-user 全灭；数据库本身无损（快照都在 git）
+- 【jar 快速路径首秀】backups/jar/workflow-platform-1.0.0-SNAPSHOT.jar（远端线 23:01 存入）直接 cp 恢复，跳过 JDK/Maven/mvn 全链路——恢复耗时从 ~10 分钟降至 ~3 分钟
+- 【新 bug 发现并修复】远端线 recover-dplus.sh 导入 dump 未指定库名：其 dump-db.sh 生成的是无 CREATE DATABASE/USE 的纯表 dump（mariadb-dump 不带 --databases）→ "ERROR 1046 No database selected" → 数据导入静默失败；修复=导入显式指定 workflow/workflow_v6 库名（兼容带与不带 USE 的 dump），commit 448dc561 已推送
+- 【手工续作路径】建库+授权（脚本第 2 段本身成功）→ mariadb workflow < 最新 dump（87 表/SYS_USER 2 行）→ workflow_v6 同理 → jar cp → engine-choice=java + pkill bun → Java 拉起（前次脚本窗口已拉起 PID 2097，Started 40.8s；手工重复拉起那次端口冲突退出无碍）
+- 【终验】真登录 accessToken ✓ + 四链路 200；数据和结构完整
+
+Stage Summary:
+- 恢复体系闭环再进一步：jar 备份快速路径验证可用（~3 分钟）；导入 bug 修复后 recover-dplus.sh 应可全自动一键恢复（此前需手工补导入）
+- 数据完好性：workflow 87 表 SYS_USER 2 行，最新快照 20261009-220510（远端线产出）
+- 本轮修复已推送 GitHub（448dc561），凭据链路工作正常

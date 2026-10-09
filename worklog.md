@@ -5801,3 +5801,22 @@ Stage Summary:
 - DATA_UPSERT 双会话交叉验证闭环：实现 cf516205 + 勘误 0d34c29d 均已推 GitHub（origin/main==main）
 - 用户需求「存在则更新/不存在则新增，面向业务表单记录」全链路交付：设计器配置→发布→运行→DB 落库→输出三键（result/affected/id）下游可引用
 - 沉淀坑：⑤Bash 工具单次调用的后台进程随调用结束被收割，setsid/nohup 均不可靠，必须经 start-services.sh 的双 fork 子 shell 拉起常驻服务；⑥ODKU+恒刷 updated_at ⇒ unchanged 实际不可达，三态文档要标注保留态语义
+Task ID: cron-巡检-20261010-0305（假绿恢复）
+Agent: 主控（Z.ai Code）
+Task: 03:05 巡检发现第三次环境重供给 → D+ 终态全链路重建（脚本化）
+
+Work Log:
+- 【环境重供给 #3】uptime 短 + 无 java 进程 + 8080 被 bun 假绿接管（login body code:500 no such table: SYS_USER）+ engine-choice=node + workflow.db 复活；jar/mariadb-user/jdk21/maven/.m2 全灭；四链路 200×4 但属 Node 假绿
+- 【恢复脚本化】新建 scripts/recover-dplus.sh（幂等 11 阶段：deb→布局→install-db→mariadbd→授权→dump 导入→JDK→Maven→mvn→切引擎→真绿验证）+ scripts/dump-db.sh（每轮快照，两脚本入 git commit 150ed14d 防再丢失）
+- 【MariaDB 11.8.6 重建】9 deb 秒到（apt 缓存）→ dpkg -x root/+sysroot/ → 布局修正两处：errmsg.sys 在 usr/share/mariadb/english/ 子目录；需 ln -s usr/share root/share（install-db 按 basedir/share/mariadb/ 找 fill_help_tables.sql）→ install-db 成功 → mariadbd 3306 在线
+- 【数据导入】socket 空密码改 4 条 root 密码（localhost/127.0.0.1/主机名/::1 → 740130）→ TCP 验证 OK → db-workflow-full-20261009.sql（87 表/SYS_USER 2 行）+ rescue-workflow_v6（40 表）导入完成
+- 【工具链】Adoptium JDK 21.0.12.1（207M 下载 ~3 分钟）+ Maven 3.9.9 → mvn package BUILD SUCCESS 36.5s（103M jar）
+- 【切引擎+点亮】engine-choice=java + 双 marker 清 + pkill bun src/index.ts → start-services.sh（管道 120s 超时但实际成功，历史已知现象）→ Java Started in 18.933s（PID 2146，-Xmx448m）
+- 【终验】真登录 accessToken ✓ + form-fields 业务 API 200 ✓ + 四链路 200×4 真绿；内存 3263MB（<3.5G 阈值）oom_kill=0
+- 【收口快照】dump-db.sh 首跑成功：db-workflow-full-20261009-192611.sql（203K，UTC 时间戳）+ db-workflow_v6 同批；本地 commit d8a5b05b
+
+Stage Summary:
+- D+ 终态恢复完成：vite 3000 + Java 8080 + MariaDB 3306 全部真绿且业务可验证
+- 【新事故备案】GitHub credential store 随重供给丢失（~/.git-credentials 没了，git config credential.helper 空）→ 本地 main 领先 origin/main 6 commits（含今日快照+恢复脚本）无法推送；待用户提供 token 或下会话恢复凭据后 git push origin main
+- 【防御升级】recover-dplus.sh/dump-db.sh 已入 git，下次重供给后巡检可直接「前台 bash scripts/recover-dplus.sh」一键重建（幂等，超时重跑续作），不再依赖 worklog 手工序列
+- 遗留：recover-dplus.sh 的 S4 heredoc 双命令写法有 bug（本次手动绕过），建议下个开发会话修正为单一 heredoc + fallback 判断

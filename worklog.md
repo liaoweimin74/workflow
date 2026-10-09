@@ -5673,3 +5673,15 @@ Work Log:
 
 Stage Summary:
 - GitHub 终态：origin/main = b6fcf59d = 本地 main（20 提交含全部 bug 修复与备案）；此后任何会话直接 git push 即可（credential store 600 已就位）
+
+---
+Task ID: push-github-20261010-verify（用户重发 PAT 本轮 —— 推送终态核验 + 例行巡检）
+Agent: 主控（Z.ai Code）
+Task: 用户在对话中重发 PAT 触发 push；核验同步终态；随后执行 Job 446961 例行巡检
+
+Work Log:
+- 【终态核验】bash push-with-token.sh <PAT> → "Everything up-to-date"；rev-parse main==origin/main==59f61abd；git ls-remote origin main = 59f61abd 独立确认 GitHub 现网一致 —— 20 提交（含 START 崩溃修复/JSON 结构回显/push 备案/credential 修正）全部已入库
+- 【凭证安全】脚本 trap 生效 origin URL 恢复原值无残留；PAT 本体未写入任何文件/worklog；credential store（并行会话配置，600）为持久推送通道，push-with-token.sh 保留作轮换工具
+- 【巡检附加 20261010 00:05】四链路 200×4 真绿（accessToken 核验通过）；dump OK workflow=204K v6=128K；cgroup 2.43GB（<3.5GB 备案线）；vite×1 无重复、无 postcss worker
+- 【oom_kill=1 定论】非服务事故：16:00 前后全量 git bundle 打包 pack-objects 被 OOM 杀死（signal 9，容器内存限制）即该计数来源；已改增量 bundle（105MB 打包成功）规避，vite/java/mariadb 未受影响
+- 【内存观察】agent-browser chrome 渲染进程×2 残留占 ~520MB（并行 QA 会话资产，不在巡检 kill 清单，未干预）；如后续 cgroup 逼近 3.5GB 可优先回收

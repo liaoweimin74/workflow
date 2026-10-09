@@ -5370,3 +5370,4 @@ Stage Summary:
 - 输出沿用「约定优于配置」：未声明 results 自动写 <节点id> 汇总 {total,affected,durationMs,别名|t{i}:{table,affected}}，下游 {{du_x.order.affected}} 点路径零配置引用；显式 KEY 拆包取顶层键；与 SQL_SCRIPT 的 s{i} 键控约定同构
 - 备案：①浏览器 UI E2E 未跑（巡检窗口约束不启动 agent-browser；前端由 vue-tsc+vitest 1391 用例+UI diff 审阅兜底，多表编辑器与 SQL_SCRIPT 编辑器同款交互模式）②运行期失败用 VARCHAR 超长截断（MariaDB 严格模式）造出，配置类错误（表不存在/别名重复）执行前暴露路径由单测覆盖 ③jar mtime 05:12 早于二次 package 时刻的时序疑点，经 subagent 核实 jar 内容正确（新类在、大小一致），mvn 增量打包行为，无碍
 - 提交：本轮全部入库（引擎+校验器+配置+前端 4 文件+7 用例测试+e2e 脚本+本记账），push origin/main
+- 【事故备案·OOM】本轮开发收尾终验发现 oom_kill 0→2（巡检起点实测 0）：根因为 vue-tsc 与 vitest（1391 用例，运行峰值内存高）并行执行触发 cgroup OOM，被杀对象是 vue-tsc 工具进程本身（首次运行输出 "Killed"，单独重跑成功 54=基线）；vite 8601 / java 25506 / mariadbd 服务进程全程存活（四链路 200×4 复验），非服务事故。教训：内存 2GB 级沙箱内 vue-tsc 与全量 vitest 禁止并行，串行执行

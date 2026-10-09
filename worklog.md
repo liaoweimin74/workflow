@@ -5611,3 +5611,21 @@ Stage Summary:
 - 事故定论：非渲染 bug、非本会话代码改动——是 HMR 热替换瞬间的空画布被显式保存写库（数据事故）；已从 14:05 快照完整恢复
 - 加固落地：空画布保存守卫（缺 START 即阻断），同类事故不可能再次覆盖数据
 - 风险提示：并行会话与巡检会话并存时，避免在设计器页面上方做大规模 HMR 编辑；守卫已兜底最坏情况
+
+---
+Task ID: bugfix-start-crash-nav-deadlock-20261009（START 选中崩溃 + 返回列表卡死 + JSON 导入结构回显）
+Agent: 主控（Z.ai Code）
+Task: 用户报障两点 + 提供浏览器控制台报错日志：①点击开始节点/删除角标后节点未删且永久无法返回列表 ②输入参数声明对话框导入 JSON 结构后无法查看结构
+
+Work Log:
+- 【日志破案】用户提供控制台日志直接暴露完整错误链：PropertyPanel.vue:799 `Cannot read properties of undefined (reading 'updates')`（点击节点选中时 watcher getter 崩）→ Vue patch 中断 vnode 树损坏 → LogicFlowDesigner.vue:1591 handleBack→router.push→finalizeNavigation 卸载组件树时 `Cannot read properties of null (reading 'type')` → 导航卡死
+- 【根因】dsl.ts defaultConfig() 对 START/END 无 case 返回 undefined → PropertyPanel ensureConfig() 把 undefined 当 config 返回；L869 表列预取 watcher 对任意选中节点（含 START）无条件求值 dataUpdateCfg → cfg.updates 抛 TypeError。handleBack 本身已是 router.push('/logic-flow') 无辜，崩溃全在 PropertyPanel
+- 【Fix A·PropertyPanel.vue】双重加固：①watcher getter 改为仅 nodeType==='DATA_UPDATE' 才求值 dataUpdateCfg；②ensureConfig 对 defaultConfig 返回 undefined 的节点直接返回 {} 兜底（不写回 node.data.config，避免污染 DSL 序列化）
+- 【Fix B·JsonInstanceImport.vue】导入成功后不再自动关对话框：emit 同步更新 structure，「当前已导入结构」树立即出现在对话框上方；tooltip 改「点击查看结构树 / 重新导入」；成功提示明示「可在上方查看结构树」
+- 【浏览器全链路验证】登录→设计器→点 START 节点：面板正常渲染（属性配置|开始/ID start/名称输入框）零报错；面板删除图标→warning「开始节点是流程入口，不可删除」节点保留；点「返回」→成功回 /logic-flow 零报错（修前必卡死）；打开输入参数对话框→点 json 参数导入图标→粘贴新 JSON→导入：对话框不关闭、结构树即时刷新可见（paid/customer/items 层级清晰）；未保存确认「放弃变更并离开」正常回列表；全程控制台零错误
+- 【回归】vue-tsc 改动文件零新增错误（旧基线错误不变）；vitest 全量 1421/1421 通过（111 文件）
+
+Stage Summary:
+- 一箭双雕：PropertyPanel 一处 computed 崩溃同时解释了「无法返回列表」（vnode 损坏→卸载崩溃→路由卡死）与 START 交互异常；START 删除角标本就有禁删保护（deletable=false 隐藏角标 + removeNode warning 兜底），修复后交互闭环完整
+- JSON 导入查看闭环：导入完成即见树（不关对话框）+ 已有结构点图标即见树（对话框顶部只读区）双路径，与 formData 结构查看器交互对齐
+- 遗留观察项（非阻塞）：用户日志中 ECharts「Can't get DOM width or height」警告（某图表 init 时容器 0 尺寸）与 v-permission 未声明权限点警告（列表页设计/运行测试/删除按钮），均不影响功能，低优先级

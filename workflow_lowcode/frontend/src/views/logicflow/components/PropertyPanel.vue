@@ -708,7 +708,13 @@ const hasExecutionMeta = computed(
 function ensureConfig<T>(): T {
   const n = node.value!
   if (!n.data.config || typeof n.data.config !== 'object') {
-    n.data.config = defaultConfig(n.data.nodeType)
+    const d = defaultConfig(n.data.nodeType)
+    // START/END 等无配置节点 defaultConfig 返回 undefined：不落库（避免污染 DSL）、
+    // 返回空对象兑底——否则依赖 config 的 computed/watcher 对其求值即崩（真实事故：
+    // 2026-10-09 选中 START 节点触发 dataUpdateCfg computed 抛 TypeError，patch 中断
+    // vnode 树损坏，随后返回列表导航卸载失败永久卡死）
+    if (!d) return {} as T
+    n.data.config = d
   }
   return n.data.config as T
 }
@@ -868,7 +874,9 @@ async function ensureDuColumns(table: string): Promise<void> {
 
 watch(
   () =>
-    node.value
+    // 仅 DATA_UPDATE 节点求值 dataUpdateCfg：START/END 等无配置节点的 computed getter
+    // 依赖 ensureConfig 兑底才不抛错（真实事故：选中 START 即崩，见 ensureConfig 注释）
+    node.value?.data.nodeType === 'DATA_UPDATE'
       ? (dataUpdateCfg.value?.updates ?? [])
           .map((u) => String(u?.table ?? '').trim())
           .join('\u0001')

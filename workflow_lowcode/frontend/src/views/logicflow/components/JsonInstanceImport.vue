@@ -108,9 +108,9 @@ watch(open, (v) => {
 const hasStructure = computed(() => Array.isArray(props.structure) && props.structure.length > 0)
 const stats = computed(() => (hasStructure.value ? statFields(props.structure as FieldNode[]).total : 0))
 
-/** 图标模式 tooltip：无结构引导导入，有结构报字段数 + 可重导 */
+/** 图标模式 tooltip：无结构引导导入，有结构引导查看 + 可重导 */
 const iconTip = computed(() =>
-  hasStructure.value ? `已导入结构（${stats.value} 字段）· 点击重新导入` : '导入 JSON 实例生成变量结构'
+  hasStructure.value ? `已导入结构（${stats.value} 字段）· 点击查看结构树 / 重新导入` : '导入 JSON 实例生成变量结构'
 )
 
 /** 实时解析预览（防抖不需要：解析轻量） */
@@ -123,8 +123,10 @@ function onImport() {
     return
   }
   emit('import', r.fields)
-  open.value = false
-  ElMessage.success(`已导入结构：${r.stats?.top ?? r.fields.length} 个顶层字段`)
+  // 导入后不关闭对话框：emit 同步更新 structure，上方「当前已导入结构」树立即可见，
+  // 满足「导入后可直接查看结构」；粘贴区保留，粘贴新实例可继续覆盖导入（真实反馈：
+  // 导入成功后对话框立即关闭，行内只剩变绿图标，结构树需再点图标重开才能看到）
+  ElMessage.success(`已导入结构：${r.stats?.top ?? r.fields.length} 个顶层字段，可在上方查看结构树`)
 }
 
 function onClearFromDialog() {

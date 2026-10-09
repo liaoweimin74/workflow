@@ -50,6 +50,7 @@ export type LogicNodeType =
   | 'BATCH'
   | 'SUBFLOW'
   | 'DATA_UPDATE'
+  | 'DATA_UPSERT'
   | 'SQL_SCRIPT'
 
 export type ErrorAction = 'FAIL_FLOW' | 'IGNORE_CONTINUE'
@@ -94,10 +95,10 @@ export interface ConditionNodeConfig {
 /** 批处理节点内嵌动作类型（仅业务执行三型，legacy 配置用） */
 export type BatchActionType = 'HTTP' | 'SCRIPT' | 'BEAN'
 
-/** 循环体允许的节点类型（业务执行七型，含 BATCH = 支持嵌套批处理；START/END/CONDITION 不可入循环体） */
-export type BatchBodyType = 'HTTP' | 'BEAN' | 'SCRIPT' | 'DATA_UPDATE' | 'SUBFLOW' | 'SQL_SCRIPT' | 'BATCH'
+/** 循环体允许的节点类型（业务执行八型，含 BATCH = 支持嵌套批处理；START/END/CONDITION 不可入循环体） */
+export type BatchBodyType = 'HTTP' | 'BEAN' | 'SCRIPT' | 'DATA_UPDATE' | 'DATA_UPSERT' | 'SUBFLOW' | 'SQL_SCRIPT' | 'BATCH'
 
-export const BATCH_BODY_TYPES: BatchBodyType[] = ['HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'SUBFLOW', 'SQL_SCRIPT', 'BATCH']
+export const BATCH_BODY_TYPES: BatchBodyType[] = ['HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'DATA_UPSERT', 'SUBFLOW', 'SQL_SCRIPT', 'BATCH']
 
 /** 循环体节点（线性链一环，按序逐项执行） */
 export interface BatchBodyNode {
@@ -181,6 +182,28 @@ export interface DataUpdateNodeConfig {
   updates?: DataUpdateTableUpdate[]
 }
 
+/** 业务数据写入取值项（列名 + 字面量或 {{var}} 点路径） */
+export interface DataUpsertValueOp {
+  column: string
+  value: string
+}
+
+/**
+ * 业务数据写入（表单记录 upsert）：引擎以 (tenant_id, conflictKey) 唯一索引为冲突判定
+ * 执行原子 INSERT ... ON DUPLICATE KEY UPDATE——存在则更新、不存在则新增；
+ * tenant_id/created_by/version 等引擎列自动维护，输出 { result, affected, id, table }
+ */
+export interface DataUpsertNodeConfig {
+  /** 已发布 BUSINESS 表单 key → 物理表 wf_biz_<formKey> */
+  formKey: string
+  /** 冲突键：表单声明的唯一字段（须有 (tenant_id, 字段) 二列唯一索引） */
+  conflictKey: string
+  /** 新增与更新共用的字段值（冲突键列必须包含） */
+  values: DataUpsertValueOp[]
+  /** 可选：仅更新路径额外覆盖的字段；缺省更新路径 = 全量 values */
+  onUpdate?: DataUpsertValueOp[]
+}
+
 /** SQL 批处理失败策略 */
 export type SqlOnError = 'abort' | 'continue'
 
@@ -201,6 +224,7 @@ export type NodeConfig =
   | BatchNodeConfig
   | SubflowNodeConfig
   | DataUpdateNodeConfig
+  | DataUpsertNodeConfig
   | SqlScriptNodeConfig
 
 /** 入参声明（运行测试表单 / 文档展示用，引擎不消费） */
@@ -398,6 +422,7 @@ export const CONFIG_TYPES: LogicNodeType[] = [
   'BATCH',
   'SUBFLOW',
   'DATA_UPDATE',
+  'DATA_UPSERT',
   'SQL_SCRIPT',
 ]
 
@@ -406,7 +431,7 @@ export function isLogicNodeType(type: unknown): type is LogicNodeType {
     type === 'START' || type === 'END' || type === 'HTTP' ||
     type === 'BEAN' || type === 'SCRIPT' || type === 'CONDITION' ||
     type === 'BATCH' || type === 'SUBFLOW' || type === 'DATA_UPDATE' ||
-    type === 'SQL_SCRIPT'
+    type === 'DATA_UPSERT' || type === 'SQL_SCRIPT'
   )
 }
 
@@ -422,6 +447,7 @@ export function defaultNodeName(type: LogicNodeType): string {
     BATCH: '批处理',
     SUBFLOW: '子流程',
     DATA_UPDATE: '数据更新',
+    DATA_UPSERT: '数据写入',
     SQL_SCRIPT: 'SQL 批处理',
   }
   return names[type]
@@ -464,6 +490,13 @@ export function defaultConfig(type: LogicNodeType): NodeConfig | undefined {
         setOps: [],
         where: [],
         updates: [{ table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }],
+      }
+    case 'DATA_UPSERT':
+      return {
+        formKey: '',
+        conflictKey: '',
+        values: [{ column: '', value: '' }],
+        onUpdate: [],
       }
     case 'SQL_SCRIPT':
       return { sql: '', onError: 'abort', maxRows: 200 }
@@ -671,6 +704,7 @@ function hasExecutionMeta(type: LogicNodeType): boolean {
     type === 'BATCH' ||
     type === 'SUBFLOW' ||
     type === 'DATA_UPDATE' ||
+    type === 'DATA_UPSERT' ||
     type === 'SQL_SCRIPT'
   )
 }

@@ -2,6 +2,7 @@ package com.workflow.engine.logicflow.engine;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.workflow.engine.logic.config.BackendDataUpdateConfig;
+import com.workflow.engine.logic.config.BackendDataUpsertConfig;
 import com.workflow.engine.logicflow.dsl.LogicFlowDsl;
 import com.workflow.engine.logicflow.dsl.NodeType;
 import org.springframework.stereotype.Component;
@@ -26,7 +27,9 @@ import java.util.Set;
  *   <li>SQL_SCRIPT 节点缺 sql / 语句解析失败 / 类型白名单外 / 别名重复 / 占位符语法错 / onError 或 maxRows 非法；</li>
  *   <li>DATA_UPDATE 节点：单表形态缺 table/setOps；多表形态（updates 非空）逐项校验
  *       （table 合法标识符 / setOps 非空 / alias 可选 \w+ 且唯一 / 条目数 ≤ MAX_UPDATES）；</li>
- *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/SQL_SCRIPT）
+ *   <li>DATA_UPSERT 节点：formKey/conflictKey 必填且非引擎管理列、values 非空且须含冲突键列、
+ *       列不重复不越 MAX_VALUES；表/列/唯一索引存在性运行期校验（发布时表单可能尚未发布）；</li>
+ *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/DATA_UPSERT/SUBFLOW/BATCH/SQL_SCRIPT）
  *       顶层与循环体均可配；变量名须 \\w+ 合法标识符、不重复、mode 必填且 ∈ WHOLE|KEY；
  *       resultVar 已全链路下线（引擎反序列化忽略该遗留键）；</li>
  *   <li>非 END/CONDITION 节点无出边（含 START）。</li>
@@ -130,6 +133,7 @@ public class LogicFlowDslValidator {
                 case BATCH -> validateBatch(node, errors);
                 case SUBFLOW -> validateSubflow(node, errors);
                 case DATA_UPDATE -> validateDataUpdate(node, errors);
+                case DATA_UPSERT -> validateDataUpsert(node, errors);
                 case SQL_SCRIPT -> validateSqlScript(node, errors);
                 default -> {
                     // 其余类型无 config 硬要求
@@ -292,6 +296,90 @@ public class LogicFlowDslValidator {
         }
     }
 
+    /**
+     * DATA_UPSERT 节点硬校验：formKey 合法标识符（表名拼接 wf_biz_ 前缀）、conflictKey 必填且非引擎管理列、
+     * values 非空且须包含冲突键列、values/onUpdate 逐项 column 非空且非引擎管理列、value 非空、列不重复、
+     * 数量不超 {@link BackendDataUpsertConfig#MAX_VALUES}；
+     * 表/列/唯一索引存在性运行期校验（发布时表单可能尚未发布）。
+     */
+    private void validateDataUpsert(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        String formKey = textOrNull(config, "formKey");
+        if (formKey == null || formKey.isBlank()) {
+            errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 formKey");
+        } else if (!formKey.trim().matches("[a-zA-Z0-9_]{1,64}")) {
+            errors.add("DATA_UPSERT 节点 " + node.getId() + " formKey 非法(仅字母/数字/下划线): " + formKey);
+        }
+        String conflictKey = textOrNull(config, "conflictKey");
+        if (conflictKey == null || conflictKey.isBlank()) {
+            errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 conflictKey");
+        } else if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(conflictKey.trim().toLowerCase())) {
+            errors.add("DATA_UPSERT 节点 " + node.getId() + " 冲突键禁止使用引擎管理列: " + conflictKey);
+        }
+        JsonNode values = config.get("values");
+        if (values == null || !values.isArray() || values.isEmpty()) {
+            errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 values");
+            return;
+        }
+        if (values.size() > BackendDataUpsertConfig.MAX_VALUES) {
+            errors.add("DATA_UPSERT 节点 " + node.getId() + " 写入字段数超出上限("
+                    + BackendDataUpsertConfig.MAX_VALUES + "): " + values.size());
+        }
+        String base = "DATA_UPSERT 节点 " + node.getId();
+        Set<String> cols = new HashSet<>();
+        boolean hasConflict = false;
+        for (int i = 0; i < values.size(); i++) {
+            JsonNode op = values.get(i);
+            String label = base + " 写入字段第 " + (i + 1) + " 项";
+            String col = textOrNull(op, "column");
+            if (col == null || col.isBlank()) {
+                errors.add(label + "缺少 column");
+            } else {
+                String norm = col.trim();
+                if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(norm.toLowerCase())) {
+                    errors.add(label + "禁止写入引擎管理列: " + norm);
+                } else if (!cols.add(norm.toLowerCase())) {
+                    errors.add(label + "写入列重复: " + norm);
+                }
+                if (conflictKey != null && norm.equalsIgnoreCase(conflictKey.trim())) {
+                    hasConflict = true;
+                }
+            }
+            if (isBlankText(op, "value")) {
+                errors.add(label + "缺少 value");
+            }
+        }
+        if (conflictKey != null && !conflictKey.isBlank() && !hasConflict) {
+            errors.add(base + " values 须包含冲突键列: " + conflictKey.trim());
+        }
+        JsonNode onUpdate = config.get("onUpdate");
+        if (onUpdate != null && onUpdate.isArray() && !onUpdate.isEmpty()) {
+            Set<String> updateCols = new HashSet<>();
+            for (int i = 0; i < onUpdate.size(); i++) {
+                JsonNode op = onUpdate.get(i);
+                String label = base + " 更新覆盖第 " + (i + 1) + " 项";
+                String col = textOrNull(op, "column");
+                if (col == null || col.isBlank()) {
+                    errors.add(label + "缺少 column");
+                } else {
+                    String norm = col.trim();
+                    if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(norm.toLowerCase())) {
+                        errors.add(label + "禁止写入引擎管理列: " + norm);
+                    } else if (!updateCols.add(norm.toLowerCase())) {
+                        errors.add(label + "覆盖列重复: " + norm);
+                    }
+                }
+                if (isBlankText(op, "value")) {
+                    errors.add(label + "缺少 value");
+                }
+            }
+        }
+    }
+
     /** 数字或 {{数值变量}}（占位符内容运行期解析，此处放行）。 */
     private static boolean isNumericText(String text) {
         String trimmed = text == null ? "" : text.trim();
@@ -394,10 +482,10 @@ public class LogicFlowDslValidator {
         }
     }
 
-    /** 批处理循环体允许的节点类型（业务执行六型 + SQL_SCRIPT + BATCH 嵌套；CONDITION/START/END 不可入循环体）。 */
+    /** 批处理循环体允许的节点类型（业务执行七型 + SQL_SCRIPT + BATCH 嵌套；CONDITION/START/END 不可入循环体）。 */
     private static final Set<NodeType> BATCH_BODY_ALLOWED = Set.of(
-            NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.SUBFLOW,
-            NodeType.SQL_SCRIPT, NodeType.BATCH);
+            NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.DATA_UPSERT,
+            NodeType.SUBFLOW, NodeType.SQL_SCRIPT, NodeType.BATCH);
 
     /** BATCH 最大嵌套深度（发布校验限制，防无限自嵌套） */
     private static final int MAX_BATCH_NESTING_DEPTH = 3;
@@ -470,7 +558,7 @@ public class LogicFlowDslValidator {
         }
         if (type == null || !BATCH_BODY_ALLOWED.contains(type)) {
             errors.add("BATCH 节点 " + batchNode.getId() + " " + label
-                    + "类型非法（仅支持 HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/SQL_SCRIPT/BATCH）: " + typeName);
+                    + "类型非法（仅支持 HTTP/BEAN/SCRIPT/DATA_UPDATE/DATA_UPSERT/SUBFLOW/SQL_SCRIPT/BATCH）: " + typeName);
             return;
         }
         JsonNode stepConfig = step.get("config");
@@ -523,6 +611,13 @@ public class LogicFlowDslValidator {
                 stepNode.setType(NodeType.DATA_UPDATE);
                 stepNode.setConfig(stepConfig);
                 validateDataUpdate(stepNode, errors);
+            }
+            case DATA_UPSERT -> {
+                LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
+                stepNode.setId(batchNode.getId() + " " + label);
+                stepNode.setType(NodeType.DATA_UPSERT);
+                stepNode.setConfig(stepConfig);
+                validateDataUpsert(stepNode, errors);
             }
             case SUBFLOW -> {
                 LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();

@@ -28,6 +28,7 @@ export const NODE_COLOR_VAR: Record<LogicNodeType, string> = {
   BATCH: '--lf-batch',
   SUBFLOW: '--lf-subflow',
   DATA_UPDATE: '--lf-data',
+  DATA_UPSERT: '--lf-data',
   SQL_SCRIPT: '--lf-data',
   START: '--lf-neutral',
   END: '--lf-neutral',
@@ -43,6 +44,7 @@ const NODE_META: Record<LogicNodeType, { label: string; description: string; bad
   BATCH: { label: '批处理', description: '遍历集合并按循环体链逐项执行（把动作节点拖到循环虚线上组成循环体），聚合结果列表', badge: '批' },
   SUBFLOW: { label: '子流程', description: '调用另一条已发布的逻辑流，输出写回变量', badge: '子' },
   DATA_UPDATE: { label: '数据更新', description: '纯配置更新动态表（SET/ADD/SUB + 条件），单表/多表统一配置，多表单事务执行', badge: '数' },
+  DATA_UPSERT: { label: '数据写入', description: '业务表单记录 upsert：按唯一字段存在则更新、不存在则新增（原子 SQL 无竞态），租户隔离、自动维护审计列，输出 created/updated/unchanged 与记录 id', badge: '写' },
   SQL_SCRIPT: { label: 'SQL 批处理', description: '多条 SQL 按 ; 顺序执行（{{var}} 参数绑定防注入），可选单事务回滚，输出执行汇总', badge: 'Q' },
 }
 
@@ -66,6 +68,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       nodeMeta('BATCH'),
       nodeMeta('SUBFLOW'),
       nodeMeta('DATA_UPDATE'),
+      nodeMeta('DATA_UPSERT'),
       nodeMeta('SQL_SCRIPT'),
     ],
   },

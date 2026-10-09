@@ -6,6 +6,7 @@ import com.workflow.engine.form.column.ColumnInfo;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.logic.BackendBeanRegistry;
 import com.workflow.engine.logic.config.BackendDataUpdateConfig;
+import com.workflow.engine.logic.config.BackendDataUpsertConfig;
 import com.workflow.engine.logic.config.BackendSqlScriptConfig;
 import com.workflow.engine.logic.config.BackendLogicBeanConfig;
 import com.workflow.engine.logic.config.BackendLogicHttpConfig;
@@ -19,6 +20,7 @@ import com.workflow.engine.logicflow.dsl.LogicFlowDsl;
 import com.workflow.engine.logicflow.dsl.NodeType;
 import com.workflow.engine.logicflow.entity.LogicFlowDef;
 import com.workflow.engine.logicflow.repository.LogicFlowDefRepository;
+import com.workflow.engine.tenant.TenantProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +40,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -49,7 +52,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li>从 START 节点出发沿出边行走，到达 END 结束；多个 START 取第一个，无 START → FAILED；</li>
  *   <li>CONDITION 节点按 branch=true/false 选出边（缺边 → FAILED）；非条件/结束节点缺出边 → FAILED「节点无出边」；</li>
  *   <li>maxSteps=200：步数超出 → FAILED「超出最大执行步数(疑似死循环)」；</li>
- *   <li>全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/SQL_SCRIPT 及 CONDITION）输出统一由
+ *   <li>全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/DATA_UPSERT/SUBFLOW/BATCH/SQL_SCRIPT 及 CONDITION）输出统一由
  *       节点级 results 声明驱动（mode=WHOLE 整包 / mode=KEY 拆包，见 {@link #writeResults}；
  *       SCRIPT 严格 / 其余宽松）；resultVar 已全链路下线；</li>
  *   <li>隐式默认输出（约定优于配置）：未声明 results 的执行型节点自动把整体返回值写入
@@ -91,6 +94,8 @@ public class LogicFlowEngine {
     private final JdbcTemplate jdbcTemplate;
     /** 动态表元数据（表/列存在性校验；可为 null，同上）。 */
     private final DynamicTableManager tableManager;
+    /** 租户提供者（DATA_UPSERT 写入 tenant_id；可为 null → DATA_UPSERT 节点报「引擎未装配租户能力」）。 */
+    private final TenantProvider tenantProvider;
 
     public LogicFlowEngine(HttpLogicExecutor httpExecutor,
                            GroovyScriptLogic groovyScriptLogic,
@@ -118,6 +123,19 @@ public class LogicFlowEngine {
                            LogicFlowDefRepository defRepository,
                            JdbcTemplate jdbcTemplate,
                            DynamicTableManager tableManager) {
+        this(httpExecutor, groovyScriptLogic, backendBeanRegistry, variableResolver, objectMapper,
+                defRepository, jdbcTemplate, tableManager, null);
+    }
+
+    public LogicFlowEngine(HttpLogicExecutor httpExecutor,
+                           GroovyScriptLogic groovyScriptLogic,
+                           BackendBeanRegistry backendBeanRegistry,
+                           VariableResolver variableResolver,
+                           ObjectMapper objectMapper,
+                           LogicFlowDefRepository defRepository,
+                           JdbcTemplate jdbcTemplate,
+                           DynamicTableManager tableManager,
+                           TenantProvider tenantProvider) {
         this.httpExecutor = httpExecutor;
         this.groovyScriptLogic = groovyScriptLogic;
         this.backendBeanRegistry = backendBeanRegistry;
@@ -126,6 +144,7 @@ public class LogicFlowEngine {
         this.defRepository = defRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.tableManager = tableManager;
+        this.tenantProvider = tenantProvider;
     }
 
     /** 单节点执行轨迹（record，可被 Jackson 直接序列化）。 */
@@ -322,6 +341,7 @@ public class LogicFlowEngine {
             case BATCH -> executeBatch(node, vars, traces);
             case SUBFLOW -> executeSubflow(node, vars);
             case DATA_UPDATE -> executeDataUpdate(node, vars);
+            case DATA_UPSERT -> executeDataUpsert(node, vars);
             case SQL_SCRIPT -> executeSqlScript(node, vars);
             default -> throw new IllegalArgumentException("节点 " + node.getId() + " 不支持执行: " + node.getType());
         };
@@ -811,6 +831,204 @@ public class LogicFlowEngine {
     }
 
     // ------------------------------------------------------------------
+    // 业务数据写入（DATA_UPSERT）节点：表单记录 upsert（INSERT ... ON DUPLICATE KEY UPDATE）
+    // ------------------------------------------------------------------
+
+    /**
+     * 执行业务数据写入节点：面向已发布 BUSINESS 表单物理表 wf_biz_&lt;formKey&gt; 的记录级 upsert。
+     *
+     * <p>以 (tenant_id, conflictKey) 唯一索引（表单唯一字段发布产物）为冲突判定执行原子
+     * {@code INSERT ... ON DUPLICATE KEY UPDATE}：冲突键命中 → 更新（version+1、updated_at 刷新，
+     * 列值 = 插入镜像 VALUES(col)，onUpdate 额外覆盖）；未命中 → 新增（version=1、审计列自动填充）。
+     * 单语句原子完成，无 check-then-act 竞态；值一律参数绑定防注入。
+     *
+     * <p>输出 Map：{@code { result: "created"|"updated"|"unchanged", affected, id, table }}——
+     * MariaDB ODKU 受影响行数 1=新增 / 2=更新 / 0=无变化；id 恒反查回填（新增=本次生成，
+     * 更新/无变化=按冲突键参数化反查），下游零配置点路径取用。
+     */
+    private Object executeDataUpsert(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        BackendDataUpsertConfig config = readConfig(node, BackendDataUpsertConfig.class);
+        if (config == null) {
+            throw new IllegalArgumentException("DATA_UPSERT 节点缺少 config: " + node.getId());
+        }
+        if (jdbcTemplate == null || tableManager == null) {
+            throw new IllegalStateException("引擎未装配数据写入能力(JdbcTemplate/DynamicTableManager): " + node.getId());
+        }
+        if (tenantProvider == null) {
+            throw new IllegalStateException("引擎未装配租户能力(TenantProvider): " + node.getId());
+        }
+        String formKey = config.getFormKey() == null ? "" : config.getFormKey().trim();
+        if (!formKey.matches("[a-zA-Z0-9_]{1,64}")) {
+            throw new IllegalArgumentException("DATA_UPSERT 节点 formKey 非法(仅字母/数字/下划线): "
+                    + formKey + " (" + node.getId() + ")");
+        }
+        String table = "wf_biz_" + formKey;
+        if (!tableManager.tableExists(table)) {
+            throw new IllegalArgumentException("DATA_UPSERT 目标表不存在(表单未发布或已下线): "
+                    + table + " (" + node.getId() + ")");
+        }
+        String conflictKey = config.getConflictKey() == null ? "" : config.getConflictKey().trim();
+        if (conflictKey.isEmpty()) {
+            throw new IllegalArgumentException("DATA_UPSERT 节点缺少 conflictKey: " + node.getId());
+        }
+        Map<String, ColumnInfo> columns = columnsOf(table);
+        String conflictCol = requireUpsertColumn(columns, table, conflictKey, "conflictKey", node.getId());
+        if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(conflictCol.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("DATA_UPSERT 冲突键禁止使用引擎管理列: " + conflictCol
+                    + " (" + node.getId() + ")");
+        }
+        if (!hasTenantScopedUniqueIndex(table, conflictCol)) {
+            throw new IllegalArgumentException("DATA_UPSERT 冲突键缺少 (tenant_id, " + conflictCol
+                    + ") 唯一索引——请先在表单设计器将该字段标记为唯一并重新发布: " + table + " (" + node.getId() + ")");
+        }
+
+        List<BackendDataUpsertConfig.ValueOp> values = config.getValues();
+        if (values == null || values.isEmpty()) {
+            throw new IllegalArgumentException("DATA_UPSERT 节点缺少 values: " + node.getId());
+        }
+        if (values.size() > BackendDataUpsertConfig.MAX_VALUES) {
+            throw new IllegalArgumentException("DATA_UPSERT 节点写入字段数超出上限("
+                    + BackendDataUpsertConfig.MAX_VALUES + "): " + values.size() + " (" + node.getId() + ")");
+        }
+        // 冲突键 + 写入列编译（canonical 列名统一为元数据原键，大小写不敏感）；
+        // 全部配置类错误在任何语句执行前暴露
+        LinkedHashMap<String, Object> insertCols = new LinkedHashMap<>();
+        Object conflictValue = null;
+        for (BackendDataUpsertConfig.ValueOp op : values) {
+            String col = requireUpsertColumn(columns, table, op.getColumn(), "values", node.getId());
+            if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(col.toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("DATA_UPSERT 禁止写入引擎管理列: " + col + " (" + node.getId() + ")");
+            }
+            if (insertCols.containsKey(col)) {
+                throw new IllegalArgumentException("DATA_UPSERT 写入列重复: " + col + " (" + node.getId() + ")");
+            }
+            Object resolved = resolveDataUpdateValue(op.getValue(), vars);
+            insertCols.put(col, resolved);
+            if (col.equalsIgnoreCase(conflictCol)) {
+                conflictValue = resolved;
+            }
+        }
+        if (conflictValue == null) {
+            throw new IllegalArgumentException("DATA_UPSERT values 须包含冲突键列: "
+                    + conflictCol + " (" + node.getId() + ")");
+        }
+        if (String.valueOf(conflictValue).isBlank()) {
+            throw new IllegalArgumentException("DATA_UPSERT 冲突键取值为空(无法判定存在性): "
+                    + conflictCol + " (" + node.getId() + ")");
+        }
+        LinkedHashMap<String, Object> updateOnlyCols = new LinkedHashMap<>();
+        for (BackendDataUpsertConfig.ValueOp op : config.getOnUpdate() != null
+                ? config.getOnUpdate() : List.<BackendDataUpsertConfig.ValueOp>of()) {
+            String col = requireUpsertColumn(columns, table, op.getColumn(), "onUpdate", node.getId());
+            if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(col.toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("DATA_UPSERT 禁止写入引擎管理列: " + col + " (" + node.getId() + ")");
+            }
+            if (updateOnlyCols.containsKey(col)) {
+                throw new IllegalArgumentException("DATA_UPSERT onUpdate 列重复: " + col + " (" + node.getId() + ")");
+            }
+            updateOnlyCols.put(col, resolveDataUpdateValue(op.getValue(), vars));
+        }
+
+        // 编译 ODKU：INSERT 镜像 = 引擎管理列(id/tenant_id/version=1/created_by/审计时间戳) + values；
+        // UPDATE 子句 = version+1、updated_at=NOW(3) + 全量 values 列 + onUpdate 仅追加列(col = ?)
+        String id = UUID.randomUUID().toString().replace("-", "");
+        String tenantId = tenantProvider.getTenantId();
+        String createdBy = resolveUpsertOperator(vars);
+        List<Object> params = new ArrayList<>();
+        params.add(id);
+        params.add(tenantId);
+        params.add(createdBy);
+
+        StringBuilder sql = new StringBuilder("INSERT INTO ").append(table).append(" (id, tenant_id, version, created_by, created_at, updated_at");
+        for (String col : insertCols.keySet()) {
+            sql.append(", ").append(col);
+        }
+        sql.append(") VALUES (?, ?, 1, ?, NOW(3), NOW(3)");
+        for (int i = 0; i < insertCols.size(); i++) {
+            sql.append(", ?");
+        }
+        sql.append(") ON DUPLICATE KEY UPDATE version = version + 1, updated_at = NOW(3)");
+        for (Map.Entry<String, Object> entry : insertCols.entrySet()) {
+            sql.append(", ").append(entry.getKey()).append(" = VALUES(").append(entry.getKey()).append(")");
+            params.add(entry.getValue());
+        }
+        for (Map.Entry<String, Object> entry : updateOnlyCols.entrySet()) {
+            if (insertCols.containsKey(entry.getKey())) {
+                // values 已含该列：ODKU 子句已覆盖，无需重复（onUpdate 同列同值时为冗余配置，容忍）
+                continue;
+            }
+            sql.append(", ").append(entry.getKey()).append(" = ?");
+            params.add(entry.getValue());
+        }
+
+        int affected = jdbcTemplate.update(sql.toString(), params.toArray());
+        String result = affected == 1 ? "created" : affected == 2 ? "updated" : "unchanged";
+        String rowId = affected == 1 ? id
+                : queryUpsertRowId(table, conflictCol, conflictValue, tenantId);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("result", result);
+        out.put("affected", affected);
+        out.put("id", rowId);
+        out.put("table", table);
+        if (log.isDebugEnabled()) {
+            log.debug("DATA_UPSERT node '{}' -> {} ({}) rows={} id={}", node.getId(), result, table, affected, rowId);
+        }
+        return out;
+    }
+
+    /** 列存在性校验（大小写不敏感），返回元数据原键列名（DATA_UPSERT 专用错误文案）。 */
+    private String requireUpsertColumn(Map<String, ColumnInfo> columns, String table,
+                                       String column, String clause, String nodeId) {
+        if (column == null || column.isBlank()) {
+            throw new IllegalArgumentException("DATA_UPSERT " + clause + " 列名为空: " + nodeId);
+        }
+        ColumnInfo info = columns.get(column.trim().toLowerCase(Locale.ROOT));
+        if (info == null) {
+            throw new IllegalArgumentException("DATA_UPSERT 目标表缺少列: " + table + "." + column.trim()
+                    + " (" + nodeId + ")");
+        }
+        return info.getKey();
+    }
+
+    /**
+     * 实查 (tenant_id, column) 二列唯一索引是否存在（information_schema.STATISTICS）：
+     * NON_UNIQUE=0 且第 1 序位为 tenant_id、第 2 序位为目标列、索引总列数恰为 2。
+     * 复合唯一索引首列才带 COLUMN_KEY=UNI，故不能复用 ColumnInfo.unique。
+     */
+    private boolean hasTenantScopedUniqueIndex(String table, String column) {
+        String sql = """
+                SELECT s1.INDEX_NAME
+                FROM information_schema.STATISTICS s1
+                JOIN information_schema.STATISTICS s2
+                  ON s2.TABLE_SCHEMA = s1.TABLE_SCHEMA AND s2.TABLE_NAME = s1.TABLE_NAME
+                 AND s2.INDEX_NAME = s1.INDEX_NAME
+                WHERE s1.TABLE_SCHEMA = DATABASE() AND s1.TABLE_NAME = ? AND s1.NON_UNIQUE = 0
+                  AND s1.SEQ_IN_INDEX = 1 AND s1.COLUMN_NAME = 'tenant_id'
+                  AND s2.SEQ_IN_INDEX = 2 AND s2.COLUMN_NAME = ?
+                  AND (SELECT COUNT(*) FROM information_schema.STATISTICS s3
+                       WHERE s3.TABLE_SCHEMA = s1.TABLE_SCHEMA AND s3.TABLE_NAME = s1.TABLE_NAME
+                         AND s3.INDEX_NAME = s1.INDEX_NAME) = 2
+                LIMIT 1
+                """;
+        List<String> found = jdbcTemplate.query(sql, (rs, i) -> rs.getString(1), table, column);
+        return !found.isEmpty();
+    }
+
+    /** 冲突键反查记录 id（参数绑定；更新/无变化路径回填，查无返回 null）。 */
+    private String queryUpsertRowId(String table, String conflictCol, Object conflictValue, String tenantId) {
+        String sql = "SELECT id FROM " + table + " WHERE tenant_id = ? AND " + conflictCol + " = ? LIMIT 1";
+        List<String> ids = jdbcTemplate.query(sql, (rs, i) -> rs.getString(1), tenantId, conflictValue);
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
+    /** created_by 取值：上下文 operator 变量（表单触发注入当前登录人），缺省 logicflow。 */
+    private String resolveUpsertOperator(Map<String, Object> vars) {
+        Object operator = vars.get("operator");
+        String name = operator == null ? null : String.valueOf(operator).trim();
+        return name == null || name.isEmpty() ? "logicflow" : name;
+    }
+
+    // ------------------------------------------------------------------
     // SQL 批处理（SQL_SCRIPT）节点
     // ------------------------------------------------------------------
 
@@ -1058,10 +1276,10 @@ public class LogicFlowEngine {
     /** 循环体节点 trace 记录的迭代上限（只记首轮 + 失败项，防轨迹膨胀）。 */
     private static final int BATCH_BODY_TRACE_ITERATIONS = 1;
 
-    /** 批处理循环体允许的节点类型（业务执行六型 + SQL_SCRIPT + BATCH 嵌套）。 */
+    /** 批处理循环体允许的节点类型（业务执行七型 + SQL_SCRIPT + BATCH 嵌套）。 */
     private static final Set<NodeType> BATCH_BODY_ALLOWED = EnumSet.of(
-            NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.SUBFLOW,
-            NodeType.SQL_SCRIPT, NodeType.BATCH);
+            NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.DATA_UPSERT,
+            NodeType.SUBFLOW, NodeType.SQL_SCRIPT, NodeType.BATCH);
 
     /** BATCH 嵌套深度运行时上限（发布校验限 3 层，此处纵深防御防绕过校验的自引用 DSL） */
     private static final int MAX_BATCH_NESTING_DEPTH = 5;

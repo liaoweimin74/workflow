@@ -534,6 +534,130 @@
             </div>
           </template>
 
+          <!-- ===== DATA_UPSERT（业务数据写入：存在则更新/不存在则新增，原子 ODKU） ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_UPSERT'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="业务表单" tip="选择已发布的 BUSINESS 表单，写入其物理表 wf_biz_<formKey>；tenant_id/created_by/version/审计时间戳由引擎自动维护，不在本表暴露" />
+              </template>
+              <el-select
+                v-model="dataUpsertCfg.formKey"
+                filterable
+                clearable
+                :loading="upsertFormsLoading"
+                placeholder="选择已发布业务表单"
+                class="du-table-select"
+                @change="onUpsertFormChange"
+              >
+                <el-option v-for="f in upsertFormOptions" :key="f.key" :label="`${f.name}（${f.key}）`" :value="f.key" />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="冲突键（唯一字段）" tip="按该字段判定存在性：命中即更新、未命中即新增；下拉仅列物理表 (tenant_id, 字段) 二列唯一索引的字段（表单设计器标记「唯一」并重新发布后生成）；运行期引擎实查索引兑底校验，缺索引直接节点失败" />
+              </template>
+              <el-select
+                v-model="dataUpsertCfg.conflictKey"
+                filterable
+                :loading="upsertKeysLoading"
+                :disabled="!dataUpsertCfg.formKey"
+                :title="dataUpsertCfg.formKey ? undefined : '先选择业务表单'"
+                placeholder="选择唯一字段"
+                class="du-table-select"
+              >
+                <el-option v-for="c in upsertConflictOptions" :key="c" :label="c" :value="c" />
+              </el-select>
+              <div v-if="dataUpsertCfg.formKey && !upsertKeysLoading && !upsertConflictOptions.length" class="rows-empty du-warn">
+                该表单物理表暂无 (tenant_id, 字段) 唯一索引：请先在表单设计器将判定字段标记「唯一」并重新发布
+              </div>
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="写入字段" tip="新增与更新共用的字段值；冲突键列必须包含在内；值支持字面量或 {{ formData.xxx }} 点路径取变量；参数绑定防注入" />
+                <el-button size="small" text type="primary" @click="dataUpsertCfg.values.push({ column: '', value: '' })">添加</el-button>
+              </div>
+              <div v-if="!dataUpsertCfg.values.length" class="rows-empty">暂无写入字段</div>
+              <div v-for="(op, i) in dataUpsertCfg.values" :key="i" class="du-row">
+                <el-select
+                  v-model="op.column"
+                  size="small"
+                  filterable
+                  allow-create
+                  default-first-option
+                  :loading="upsertColumnsLoading"
+                  :disabled="!dataUpsertCfg.formKey"
+                  :title="dataUpsertCfg.formKey ? undefined : '先选择业务表单'"
+                  placeholder="字段"
+                  class="du-col"
+                >
+                  <el-option v-for="c in upsertColumnOptions(op.column)" :key="c.key" :label="c.key" :value="c.key">
+                    <span class="du-col-opt">
+                      <span>{{ c.key }}</span>
+                      <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+                    </span>
+                  </el-option>
+                </el-select>
+                <VarInput
+                  v-model="op.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  class="du-value"
+                  placeholder="值或 {{formData.xxx}}"
+                />
+                <el-button size="small" text type="danger" @click="dataUpsertCfg.values.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="更新时覆盖（可选）" tip="仅命中更新路径时额外覆盖的字段（col = ? 直绑）；未配置时更新路径 = 全量写入字段；适合 updated_by、最近同步时间等只在新值到达时刷新的列" />
+                <el-button size="small" text type="primary" @click="addUpsertOnUpdate">添加</el-button>
+              </div>
+              <div v-if="!dataUpsertCfg.onUpdate?.length" class="rows-empty">未配置 · 更新路径默认覆盖全部写入字段</div>
+              <div v-for="(op, i) in dataUpsertCfg.onUpdate ?? []" :key="'u' + i" class="du-row">
+                <el-select
+                  v-model="op.column"
+                  size="small"
+                  filterable
+                  allow-create
+                  default-first-option
+                  :loading="upsertColumnsLoading"
+                  :disabled="!dataUpsertCfg.formKey"
+                  :title="dataUpsertCfg.formKey ? undefined : '先选择业务表单'"
+                  placeholder="字段"
+                  class="du-col"
+                >
+                  <el-option v-for="c in upsertColumnOptions(op.column)" :key="c.key" :label="c.key" :value="c.key">
+                    <span class="du-col-opt">
+                      <span>{{ c.key }}</span>
+                      <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+                    </span>
+                  </el-option>
+                </el-select>
+                <VarInput
+                  v-model="op.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  class="du-value"
+                  placeholder="值或 {{formData.xxx}}"
+                />
+                <el-button size="small" text type="danger" @click="dataUpsertCfg.onUpdate?.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将整体结果写入「{{ nodeId }}」：{ result: 'created'|'updated'|'unchanged', affected, id, table }；id 为记录主键（新增=本次生成，更新/无变化=按冲突键反查），下游可点路径引用（如 {{ nodeId }}.id）
+            </div>
+          </template>
+
           <!-- ===== SQL_SCRIPT ===== -->
           <template v-else-if="node.data.nodeType === 'SQL_SCRIPT'">
             <el-form-item required>
@@ -652,7 +776,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { CopyDocument, Delete, Fold, Setting, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import FieldLabel from './FieldLabel.vue'
@@ -661,8 +785,9 @@ import VarInput from './VarInput.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { dataSourceApi } from '@/api/data-source'
+import { formApi } from '@/api/form'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type DataUpsertNodeConfig, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
 import { parseSqlScriptPreview } from '../utils/sqlScript'
 import type { FlowVarItem } from '../utils/flowVars'
 
@@ -701,7 +826,7 @@ const nodeTypeLabel = computed(() => (node.value ? typeLabel(node.value.data.nod
 const hasExecutionMeta = computed(
   () =>
     !!node.value &&
-    ['HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE', 'SQL_SCRIPT'].includes(node.value.data.nodeType)
+    ['HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE', 'DATA_UPSERT', 'SQL_SCRIPT'].includes(node.value.data.nodeType)
 )
 
 /** 兜底补齐 config（历史 DSL 缺字段时按类型默认值补全） */
@@ -906,6 +1031,113 @@ function duEntryColumns(u: DataUpdateTableUpdate): { key: string; type: string }
     .sort()
     .map((key) => ({ key, type: real.find((c) => c.key === key)?.columnType ?? '' }))
 }
+
+// ===== DATA_UPSERT（业务数据写入：存在则更新/不存在则新增） =====
+
+const dataUpsertCfg = computed(() => ensureConfig<DataUpsertNodeConfig>())
+
+/** 已发布 BUSINESS 表单选项（选择表单 → 物理表 wf_biz_<formKey>） */
+interface UpsertFormOption {
+  key: string
+  name: string
+}
+const upsertFormOptions = ref<UpsertFormOption[]>([])
+const upsertFormsLoading = ref(false)
+
+async function loadUpsertForms(): Promise<void> {
+  if (upsertFormOptions.value.length || upsertFormsLoading.value) return
+  upsertFormsLoading.value = true
+  try {
+    const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 1000 })
+    const data = res.data as { content?: { key: string; name: string | null }[] } | null
+    upsertFormOptions.value = (data?.content ?? [])
+      .filter((f) => f?.key)
+      .map((f) => ({ key: f.key, name: f.name || f.key }))
+  } catch {
+    // http 拦截器已提示；可稍后重开面板重试
+  } finally {
+    upsertFormsLoading.value = false
+  }
+}
+
+/** 唯一索引列组缓存（键 = 物理表名）：冲突键下拉取 (tenant_id, 字段) 二列组的第二列 */
+const upsertUniqueByTable = reactive(new Map<string, string[]>())
+const upsertKeysLoading = ref(false)
+
+/** 物理表名：wf_biz_<formKey>（未选表单为空串） */
+const upsertTable = computed(() => {
+  const k = String(dataUpsertCfg.value?.formKey ?? '').trim()
+  return k ? 'wf_biz_' + k : ''
+})
+
+const upsertConflictOptions = computed(() => upsertUniqueByTable.get(upsertTable.value) ?? [])
+
+async function ensureUpsertUniqueKeys(table: string): Promise<void> {
+  if (!table || upsertUniqueByTable.has(table) || upsertKeysLoading.value) return
+  upsertKeysLoading.value = true
+  try {
+    const res = await dataSourceApi.getDbSchemaUniqueKeys(table)
+    const singles: string[] = []
+    for (const g of res.data ?? []) {
+      if (Array.isArray(g) && g.length === 2 && g[0] === 'tenant_id' && g[1]) singles.push(g[1])
+    }
+    upsertUniqueByTable.set(table, singles)
+  } catch {
+    // http 拦截器已提示；空列表时冲突键禁配（运行期引擎仍会实查校验）
+    upsertUniqueByTable.set(table, [])
+  } finally {
+    upsertKeysLoading.value = false
+  }
+}
+
+/** 表单切换：预取列结构与唯一键；清空不再可选的冲突键 */
+function onUpsertFormChange(): void {
+  void nextTick(() => {
+    const t = upsertTable.value
+    if (t) {
+      void ensureDuColumns(t)
+      void ensureUpsertUniqueKeys(t)
+    }
+    const opts = upsertUniqueByTable.get(t) ?? []
+    const cfg = dataUpsertCfg.value
+    if (cfg?.conflictKey && !opts.includes(cfg.conflictKey)) {
+      cfg.conflictKey = ''
+    }
+  })
+}
+
+const upsertColumnsLoading = computed(() => (upsertTable.value ? duTableLoading.has(upsertTable.value) : false))
+
+/** 写入字段列选项：真实业务列（排除引擎管理列）+ 已填列名兜底 */
+function upsertColumnOptions(current: string): { key: string; type: string }[] {
+  const real = upsertTable.value ? duColumnsByTable.get(upsertTable.value) ?? [] : []
+  const managed = new Set(['id', 'tenant_id', 'version', 'created_by', 'created_at', 'updated_at'])
+  const cur = new Set<string>(real.map((c) => c.key).filter((k) => !managed.has(k.toLowerCase())))
+  const filled = String(current ?? '').trim()
+  if (filled) cur.add(filled)
+  return [...cur]
+    .sort()
+    .map((key) => ({ key, type: real.find((c) => c.key === key)?.columnType ?? '' }))
+}
+
+function addUpsertOnUpdate(): void {
+  const cfg = dataUpsertCfg.value
+  if (!cfg) return
+  if (!Array.isArray(cfg.onUpdate)) cfg.onUpdate = []
+  cfg.onUpdate.push({ column: '', value: '' })
+}
+
+watch(
+  () => (node.value?.data.nodeType === 'DATA_UPSERT' ? upsertTable.value : ''),
+  (t) => {
+    if (t) {
+      void loadUpsertForms()
+      void ensureDuColumns(t)
+      void ensureUpsertUniqueKeys(t)
+    }
+  },
+  { immediate: true }
+)
 
 /** 多表条目目标表选项：全表清单 + 当前已填表名兜底（历史 DSL 的表可能已不在清单） */
 function duEntryTableOptions(cur: string): string[] {

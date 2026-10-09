@@ -5261,3 +5261,23 @@ Stage Summary:
 - 结论：逻辑编排进一步完善的代码【零丢失】，无需从 worklog 重建——全部改动当时已 commit+push 入库（重置前纪律生效），重置后由 git 恢复并重新构建部署，当前服务运行的即最新实现
 - worklog 的作用仅是提供提交哈希索引，使本轮核验能在数分钟内完成
 - 唯一与逻辑编排相关的历史损失仍是两件旧事：①更早未入库的旧设计界面（BackendLogicProperty.vue/api/backendLogic.ts，重置前已丢且被新路线取代）②逻辑流数据仅 var_picker_test 一条有备份且已恢复（3aa71789）
+
+---
+Task ID: implicit-output-e2e-verify
+Agent: 主会话（用户拍板主方案 → 并行会话实施 → 本会话让路+E2E验证）
+Task: 逻辑流「隐式默认输出（约定优于配置）」主方案——用户批准后经 agent-loop 并行会话实施，本会话检测到写冲突后让路，转独立 E2E 验证与收尾
+
+Work Log:
+- 02:0x 检测到并行会话（trace 带 cron-agent-loop-202610091005）正在实施同方案：LogicFlowEngine/flowVars.ts/PropertyPanel.vue mtime 持续推进 → 按冲突规避协议让路，不触碰四个改动文件，转只读审阅
+- 只读审阅通过：writeImplicitResult（null 静默跳过、节点 id 须 \w+ 合法才写——循环体 fallback id 含 '#' 跳过、覆盖走 debug 级放行）；flowVars 自动列「自动整体输出 · 来自『节点名』，支持点路径取子字段」；PropertyPanel 空态提示改版
+- 并行会话 02:11 完成两笔提交：0de09699（主方案实施，flowVars 单测 7 例全绿）+ a8991854（重大修复：整个 src/test 树 129 文件因 8d0fc9a6 同步时裸 'test' gitignore 规则从未入库——规则收窄为 /test，适配 9 类，178 测试全绿）
+- 02:12:34 并行会话以新 jar（02:07 构建）重启 8080（PID 14104）；本会话巡检型 start-services.sh 调用在其重启完成前发出，120s 超时空转无副作用（幂等保护未重复拉起）
+- E2E 验证（scripts/e2e-implicit-output.mjs，API 驱动 admin 登录→建临时流→run→断言→删流）：START→SCRIPT(无 results 返回 Map)→SCRIPT(下游裸名引用+子字段取值)→END；首轮发现 CONDITION variable 参数为裸变量名查找（vars.get 直接查，不支持 {{}}/点路径；value 侧才走 resolver）——现存限制非本次回归，测试流改用双 SCRIPT 设计
+- 终局 4/4 PASS：run SUCCESS；outputVars 含 script_e2e01={answer:'42',nested:{level:'deep'}}（隐式整体输出真实写回）；下游 script_e2e02 裸名引用取 script_e2e01.nested.level='deep'、answer=='42' 比较成立；临时流已删库无残留
+- 复测四链路 200×4（新 jar 生效）；vue-tsc 全量 logicflow 相关 0 错误
+
+Stage Summary:
+- 主方案落地完成：未声明 results 的执行型节点自动将整体返回值写入 <节点id> 变量，下游零配置引用；显式声明优先行为不变；存量流零迁移
+- 隐患顺手修复：后端测试树 129 文件此前从未入库（裸 'test' gitignore），现已收窄规则并全量入库（178 绿）
+- 新增待办（不阻塞）：①CONDITION variable 支持 {{var.path}} 展开（与 value 侧对齐，属语义增强）②"从示例 JSON 生成输出表 / 从脚本末行推断 KEY"二期增强
+- E2E 脚本留存 scripts/e2e-implicit-output.mjs 可复跑（幂等，自动清理）

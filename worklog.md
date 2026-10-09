@@ -5190,3 +5190,17 @@ Work Log:
 Stage Summary:
 - workflow_v6 用户业务数据 100% 恢复进 D+ 终态 workflow 库并通过 Java API 双链路验证；workflow_v6 库作为归档保留在 MariaDB 中（后续可随时再查/再迁）
 - 注意：①流程实例/任务等旧引擎运行时数据未迁（设计如此），已发布流程需用草稿重新部署到 Flowable；②巡检勿删 workflow_v6 归档库；③引擎运行时查询类报表（如旧 wfe_task 关联评论）在 Java 侧无对应历史
+---
+Task ID: home-restore-dashboard
+Agent: main (interactive session)
+Task: 用户反馈「首页应该指向一个数据库中的低代码页面，但这个页面现在数据库中不存在」——定位并恢复 dashboard 仪表盘页面
+
+Work Log:
+- 【机制定位】首页 /dashboard 由 DashboardRouterPage.vue 分发：pageApi.getPageByKey('dashboard') 命中且 type=PAGE、status=PUBLISHED、有 schema → 渲染低代码页面；否则回退内置静态首页。当前库 wf_page_def 仅 test_page/test1 两页，key=dashboard 缺失 → 一直回退静态页，用户观察正确
+- 【溯源】workflow_lowcode/scripts/db-backup/workflow-dump-20261005-fixed.sql（Java 时代 workflow 库 10-05 导出）第 1812 行找到完整定义：wf_page_def id=f5d2e46500e74402831590ae8d310cd0、key=dashboard、name=主页仪表盘、PUBLISHED、tenant=default、type=PAGE、schema=1625 字符（dash-kpi 卡片×2 + 发起趋势/流程分布图表，dataSources 引用 ds-builtin-process-definitions/-instances）；配套 sys_menu id=306（主页仪表盘，/page/dashboard，permission=page:read:dashboard）与 sys_role_menu（menu 306 → role 1 超级管理员）；该页 10-03 01:29 创建，历次重建中丢失
+- 【恢复】三行 INSERT 原样入库：页面 OK、菜单 306 OK、role_menu 原行 id=90 撞主键（当前库已占用）→ 改用 MAX(id)+1=100 补授权（menu 306 → role 1）
+- 【双链路验证】①API：GET /api/v1/pages/dashboard/definition → 200 主页仪表盘/PUBLISHED/PAGE/schema 1625；/api/auth/menus 含「主页仪表盘」②agent-browser 浏览器端到端：3000 → 登录 admin → /dashboard 渲染出低代码仪表盘（流程定义数/运行中流程 KPI + 两图表占位），侧边栏出现「主页仪表盘」菜单；截图 backups/dashboard-restored-20261009.png；console 无 error（SSE 重连与 ECharts 零宽 warning 为已知非阻断项）
+
+Stage Summary:
+- 首页低代码仪表盘页面（key=dashboard）从 10-05 备份完整恢复并验证渲染成功；KPI 数值为 0 属实（Flowable 新引擎无旧部署/实例，旧 wfe_* 运行时按设计不迁移）
+- 后续注意：①sys_role_menu 主键自增已到 100，恢复历史授权行时勿直接用原 id；②如需仪表盘显示真实数字，需在流程管理重新部署流程定义

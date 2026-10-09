@@ -5232,3 +5232,15 @@ Work Log:
 
 Stage Summary:
 - 逻辑流无历史备份（如实答用户）；已补当前全库基线备份并入 git；后续巡检若发现三张 logic 表出现数据，建议按需追加导出防重建丢失
+---
+Task ID: logicflow-backup-check-verify
+Agent: main (interactive session)
+Task: 勘误+核验：逻辑流数据备份与恢复终态
+
+Work Log:
+- 【勘误】前节记账时 wf_logic_flow 为 0 行，随后并行会话（commit 3aa71789）已从 rescue-workflow-20261008-013021.sql 恢复 1 条逻辑流——本轮复核确认
+- 【终态核验】wf_logic_flow 1 行：var_picker_test「变量选择器测试流」(DRAFT, tenant=default, 10-08 01:04 创建)，dsl_json 323 字符完整（JSON valid，含 START 节点）；wf_form_logic_binding / wf_logic_flow_run 均 0 行（备份时点即空，无需恢复）
+- 【备份点全景】逻辑流唯一历史备份点 = rescue-workflow-20261008-013021.sql（v6 归档无 logic，10-05 dump 无 logic 表，v6-logic-20261008-012846/ 目录为 v6 时代 TSV 提取亦无 logic）；本轮基线备份 workflow-baseline-20261009-010740.sql 已含该逻辑流（双保险）
+
+Stage Summary:
+- 逻辑流数据「有备份且已恢复在库」：var_picker_test 一条，DSL 完整；未来在库中新建的逻辑流暂无自动备份覆盖，重要数据建议按需导出（mariadb-dump TCP 3306 可用）

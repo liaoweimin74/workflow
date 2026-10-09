@@ -5739,3 +5739,24 @@ Work Log:
 Stage Summary:
 - 按钮拥挤问题维持已解决状态，无需新改动；实测证据链完整
 - 坑补充：agent-browser snapshot 对嵌套 dialog 渲染顺序可能截断，需用 eval 查 .el-overlay display 状态判定对话框实开
+
+---
+Task ID: dev-20261010-0130
+Agent: main (user-triggered)
+Task: ①输入参数删除按钮恢复常驻可见 ②数据更新组件 upsert 需求分析（先分析不动手）
+
+Work Log:
+- ①LogicFlowDesigner.vue 删除 .iv-del-btn hover 显现规则，改 opacity:1 常驻；agent-browser 实证对话框内删除按钮 opacity=1/display=flex；commit 921c2571 已推 GitHub
+- ②现状摸底：
+  - DATA_UPDATE 节点=纯 UPDATE（SET/ADD/SUB+WHERE，参数绑定；多表单事务），引擎注入 JdbcTemplate+DynamicTableManager，无 TenantProvider
+  - NodeType 无任何 INSERT/UPSERT 节点；SQL_SCRIPT 可写 SQL 但面向开发者
+  - 业务表单物理表 wf_biz_<formKey>：id UUID 主键/tenant_id/version 乐观锁/审计列；column_config 声明 unique 的字段由 DdlBuilder 建 UNIQUE KEY uk_(tenant_id,col)
+  - BizDataService.createGeneric/updateGeneric：REST 路径含校验/钩子链/逻辑编排绑定触发
+
+Stage Summary:
+- upsert 推荐方案 A：新增 DATA_UPSERT「业务数据写入」节点，INSERT...ON DUPLICATE KEY UPDATE 原子实现
+  - 配置：formKey+conflictKey(限唯一字段，物理 uk_(tenant_id,col) 必在)+values 映射；tenant_id 引擎强制（需给引擎补 TenantProvider）
+  - affected 1=created/2=updated/0=unchanged；无 check-then-act 竞态
+- 否决：C(affected==0 歧义误插)、D'(REPLACE 丢列)、B(SELECT 分支留作 conflictKey 非唯一字段的长尾补充)
+- 备案取舍：不走 BizDataHandler 钩子/不触发绑定(防递归，与 DATA_UPDATE 一致)；必填校验发布期+DB 兜底；version 自增；子表本期不做
+- 待用户拍板后实施：后端 NodeType/Config/Executor+发布校验+前端 nodeMeta/PropertyPanel+测试

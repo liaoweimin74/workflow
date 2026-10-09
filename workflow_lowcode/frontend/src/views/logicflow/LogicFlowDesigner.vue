@@ -138,23 +138,33 @@
       <template #header>
         <FieldLabel
           label="输入参数声明"
-          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议"
+          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议；json 类型参数可粘贴 JSON 实例导入字段结构，节点选择变量时即可展开选到具体字段"
         />
       </template>
       <div v-if="!inputVars.length" class="iv-empty">未声明入参</div>
-      <div v-for="(v, i) in inputVars" :key="i" class="iv-row">
-        <el-input v-model="v.name" placeholder="变量名" style="width: 160px" />
-        <el-select v-model="v.type" style="width: 110px">
-          <el-option label="string" value="string" />
-          <el-option label="number" value="number" />
-          <el-option label="boolean" value="boolean" />
-          <el-option label="json" value="json" />
-        </el-select>
-        <el-switch v-model="v.required" active-text="必填" style="flex-shrink: 0" />
-        <el-input v-model="v.desc" placeholder="说明（可选）" style="flex: 1" />
-        <el-button size="small" text type="danger" @click="inputVars.splice(i, 1)">
-          <el-icon><Delete /></el-icon>
-        </el-button>
+      <div v-for="(v, i) in inputVars" :key="i" class="iv-row-wrap">
+        <div class="iv-row" :class="{ 'is-json': v.type === 'json' }">
+          <el-input v-model="v.name" placeholder="变量名" style="width: 160px" />
+          <el-select v-model="v.type" style="width: 110px">
+            <el-option label="string" value="string" />
+            <el-option label="number" value="number" />
+            <el-option label="boolean" value="boolean" />
+            <el-option label="json" value="json" />
+          </el-select>
+          <el-switch v-model="v.required" active-text="必填" style="flex-shrink: 0" />
+          <el-input v-model="v.desc" placeholder="说明（可选）" style="flex: 1" />
+          <el-button size="small" text type="danger" @click="inputVars.splice(i, 1)">
+            <el-icon><Delete /></el-icon>
+          </el-button>
+        </div>
+        <!-- json 类型：粘贴 JSON 实例生成字段结构树 → 变量选择器可展开选到字段 -->
+        <div v-if="v.type === 'json'" class="iv-json-row">
+          <JsonInstanceImport
+            :structure="v.structure"
+            @import="(fields) => (v.structure = fields)"
+            @clear="v.structure = undefined"
+          />
+        </div>
       </div>
       <el-button size="small" text type="primary" @click="addInputVar">添加入参</el-button>
       <!-- 从触发点事件导入参数：与表单逻辑流绑定联动（绑定下拉按参数完全匹配过滤）。
@@ -214,6 +224,7 @@ import RunTestDialog from './components/RunTestDialog.vue'
 import FieldLabel from './components/FieldLabel.vue'
 import TriggerGroupSelect from '@/components/TriggerGroupSelect.vue'
 import type { TriggerGroupSelectGroup } from '@/components/TriggerGroupSelect.vue'
+import JsonInstanceImport from './components/JsonInstanceImport.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import { FORM_LOGIC_TRIGGERS, triggerParamSpec } from '@/api/formLogicBinding'
 import {
@@ -1590,6 +1601,20 @@ function handleBack() {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+}
+/* json 入参结构导入子行（JsonInstanceImport 挂载行） */
+.iv-row-wrap {
+  margin-bottom: 8px;
+}
+.iv-row-wrap .iv-row {
+  margin-bottom: 0;
+}
+.iv-json-row {
+  margin-top: 4px;
+  padding: 4px 6px 4px 10px;
+  border-left: 2px solid var(--el-color-primary-light-7, #d9ecff);
+  display: flex;
+  align-items: center;
 }
 /* 从触发点导入区块：与表单逻辑流绑定联动 */
 .iv-import {

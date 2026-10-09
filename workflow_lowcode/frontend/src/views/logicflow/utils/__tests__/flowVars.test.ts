@@ -186,3 +186,58 @@ describe('varInsertText · 表单条目', () => {
     expect(varInsertText(exLeaf, 'placeholder')).toBe('{{formDataExisting.amount}}')
   })
 })
+
+describe('collectAvailableVars · JSON 结构树（输入参数）', () => {
+  const structure = [
+    { path: 'code', type: 'number' },
+    { path: 'data', type: 'object', children: [{ path: 'id', type: 'number' }] },
+  ]
+
+  it('json 入参带 structure → input 组根条目 + 子字段树（name=根.路径，short=相对路径）', () => {
+    const inputs: InputVarDef[] = [{ name: 'payload', type: 'json', structure } as InputVarDef]
+    const vars = collectAvailableVars('start', [node('start', 'START', '开始')], [], inputs)
+    const root = vars.find((v) => v.name === 'payload')
+    expect(root?.group).toBe('input')
+    expect(root?.children?.length).toBe(2)
+    expect(root?.children?.[0]).toMatchObject({ name: 'payload.code', short: 'code', detail: 'number' })
+    expect(root?.children?.[1].children?.[0].name).toBe('payload.data.id')
+  })
+
+  it('无结构 json 入参 → 无 children（保持单条目，存量行为不变）', () => {
+    const inputs: InputVarDef[] = [{ name: 'bare', type: 'json' }]
+    const vars = collectAvailableVars('start', [node('start', 'START', '开始')], [], inputs)
+    const root = vars.find((v) => v.name === 'bare')
+    expect(root?.children).toBeUndefined()
+  })
+})
+
+describe('collectAvailableVars · JSON 结构树（上游输出）', () => {
+  it('上游 results json 带 structure → upstream 条目展开字段树，点选插完整路径', () => {
+    const nodes = [
+      node('start', 'START', '开始'),
+      node('http_a', 'HTTP', '调用', [
+        {
+          name: 'resp',
+          mode: 'WHOLE',
+          type: 'json',
+          structure: [{ path: 'list', type: 'array<object>', children: [{ path: 'sku', type: 'string' }] }],
+        } as ResultVarDef,
+      ]),
+      node('script_b', 'SCRIPT', '用'),
+    ]
+    const edges = [edge('start', 'http_a'), edge('http_a', 'script_b')]
+    const vars = collectAvailableVars('script_b', nodes, edges, NO_INPUT)
+    const item = vars.find((v) => v.name === 'resp')
+    expect(item?.group).toBe('upstream')
+    expect(item?.children?.[0]).toMatchObject({ name: 'resp.list', short: 'list' })
+    expect(item?.children?.[0].children?.[0].name).toBe('resp.list.sku')
+  })
+})
+
+describe('varInsertText · 结构子条目', () => {
+  it('结构字段子条目插完整路径（与 form 字段同规）', () => {
+    const child: any = { name: 'payload.data.id', group: 'input' }
+    expect(varInsertText(child, 'placeholder')).toBe('{{payload.data.id}}')
+    expect(varInsertText(child, 'bare')).toBe('payload.data.id')
+  })
+})

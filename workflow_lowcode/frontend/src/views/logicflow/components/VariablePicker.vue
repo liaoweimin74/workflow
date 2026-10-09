@@ -15,57 +15,33 @@
       <el-input v-model="keyword" size="small" placeholder="搜索变量" clearable :prefix-icon="Search" />
 
       <div class="vp-list">
-        <template v-if="grouped.length">
-          <div v-for="g in grouped" :key="g.key" class="vp-group">
+        <template v-if="flatGroups.length">
+          <div v-for="g in flatGroups" :key="g.key" class="vp-group">
             <div class="vp-group-title">{{ g.label }}</div>
-            <div v-for="item in g.items" :key="g.key + item.name" class="vp-branch">
+            <div v-for="row in g.rows" :key="g.key + row.item.name" class="vp-branch">
               <button
                 class="vp-item"
                 type="button"
-                :title="item.detail || item.name"
-                @click="onPick(item)"
+                :style="{ paddingLeft: 6 + row.depth * 14 + 'px' }"
+                :title="row.item.detail || row.item.name"
+                @click="onPick(row.item)"
               >
                 <span class="vp-row">
                   <span
-                    v-if="item.children?.length"
+                    v-if="row.hasKids"
                     class="vp-caret"
                     role="button"
                     tabindex="0"
-                    :aria-label="isOpen(item.name) ? '收起字段' : '展开字段'"
-                    @click.stop="toggle(item.name)"
-                    @keydown.enter.stop.prevent="toggle(item.name)"
-                    @keydown.space.stop.prevent="toggle(item.name)"
-                  >{{ isOpen(item.name) ? '▾' : '▸' }}</span>
-                  <span class="vp-name">{{ item.name }}</span>
-                  <span v-if="item.detail" class="vp-detail">{{ item.detail }}</span>
+                    :aria-label="isOpen(row.item.name) ? '收起字段' : '展开字段'"
+                    @click.stop="toggle(row.item.name)"
+                    @keydown.enter.stop.prevent="toggle(row.item.name)"
+                    @keydown.space.stop.prevent="toggle(row.item.name)"
+                  >{{ isOpen(row.item.name) || searching ? '▾' : '▸' }}</span>
+                  <span v-else class="vp-caret vp-caret-leaf">·</span>
+                  <span class="vp-name">{{ displayName(row.item, row.depth) }}</span>
+                  <span v-if="row.item.detail" class="vp-detail">{{ row.item.detail }}</span>
                 </span>
               </button>
-              <!-- 子字段（二级）：点击插完整路径；孙字段（三级，采样深层）同列平铺 -->
-              <template v-if="item.children?.length && (isOpen(item.name) || searching)">
-                <template v-for="c in item.children" :key="item.name + c.name">
-                  <button class="vp-item vp-child" type="button" :title="c.detail || c.name" @click="onPick(c)">
-                    <span class="vp-row">
-                      <span class="vp-caret vp-caret-leaf">·</span>
-                      <span class="vp-name">{{ shortName(c.name) }}</span>
-                      <span v-if="c.detail" class="vp-detail">{{ c.detail }}</span>
-                    </span>
-                  </button>
-                  <button
-                    v-for="gc in c.children || []"
-                    :key="item.name + gc.name"
-                    class="vp-item vp-child vp-grandchild"
-                    type="button"
-                    :title="gc.detail || gc.name"
-                    @click="onPick(gc)"
-                  >
-                    <span class="vp-row">
-                      <span class="vp-caret vp-caret-leaf">·</span>
-                      <span class="vp-name">{{ shortName(gc.name) }}</span>
-                      <span v-if="gc.detail" class="vp-detail">{{ gc.detail }}</span>
-                    </span>
-                  </button>
-                </template>
-              </template>
             </div>
           </div>
         </template>
@@ -152,6 +128,34 @@ function pruneTree(v: FlowVarItem, kw: string): FlowVarItem | null {
     .filter((c): c is FlowVarItem => c !== null)
   if (selfHit) return v
   return kids.length ? { ...v, children: kids } : null
+}
+
+/** 扁平行（任意深度）：搜索时全展开，否则按 expanded 集合展开 */
+interface VpRow {
+  item: FlowVarItem
+  depth: number
+  hasKids: boolean
+}
+
+function flattenRows(items: FlowVarItem[]): VpRow[] {
+  const out: VpRow[] = []
+  const walk = (list: FlowVarItem[], depth: number): void => {
+    for (const it of list) {
+      const kids = it.children ?? []
+      out.push({ item: it, depth, hasKids: kids.length > 0 })
+      if (kids.length && (isOpen(it.name) || searching.value)) walk(kids, depth + 1)
+    }
+  }
+  walk(items, 0)
+  return out
+}
+
+const flatGroups = computed(() => grouped.value.map((g) => ({ ...g, rows: flattenRows(g.items) })))
+
+/** 根行显示完整变量名；子行显示相对路径（short 优先，回退剥 formData 前缀） */
+function displayName(v: FlowVarItem, depth: number): string {
+  if (depth === 0) return v.name
+  return v.short ?? shortName(v.name)
 }
 
 const grouped = computed(() => {
@@ -276,19 +280,6 @@ function onPick(v: FlowVarItem) {
 .var-popper .vp-caret-leaf:hover {
   background: transparent;
   color: var(--el-text-color-placeholder);
-}
-
-.var-popper .vp-item.vp-child {
-  padding-left: 18px;
-}
-
-.var-popper .vp-item.vp-grandchild {
-  padding-left: 32px;
-}
-
-.var-popper .vp-item.vp-child .vp-name,
-.var-popper .vp-item.vp-grandchild .vp-name {
-  font-weight: 500;
 }
 
 .var-popper .vp-item {

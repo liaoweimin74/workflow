@@ -713,7 +713,7 @@
           <template v-if="hasExecutionMeta">
             <div class="rows-block">
               <div class="rows-head">
-                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数（多表更新为汇总 total/affected/t{i}|别名），SUBFLOW 为子流 outputVars，BATCH 为汇总列表，SQL_SCRIPT 为执行汇总 { total/succeeded/failed/sN }，KEY 取其顶层键如 s0/s1/total），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一" />
+                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数（多表更新为汇总 total/affected/t{i}|别名），SUBFLOW 为子流 outputVars，BATCH 为汇总列表，SQL_SCRIPT 为执行汇总 { total/succeeded/failed/sN }，KEY 取其顶层键如 s0/s1/total），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一；json 类型可粘贴 JSON 实例导入字段结构，下游选择变量时可展开选到具体字段" />
                 <el-button size="small" text type="primary" @click="addResultRow">添加</el-button>
               </div>
               <div v-if="!resultRows.length" class="rows-empty">
@@ -732,6 +732,14 @@
                   <el-button size="small" text type="danger" @click="resultRows.splice(i, 1)">
                     <el-icon><Delete /></el-icon>
                   </el-button>
+                </div>
+                <!-- json 类型：粘贴 JSON 实例生成字段结构树 → 下游变量选择器可展开选到字段 -->
+                <div v-if="r.type === 'json'" class="so-json-row">
+                  <JsonInstanceImport
+                    :structure="r.structure"
+                    @import="(fields) => (r.structure = fields)"
+                    @clear="r.structure = undefined"
+                  />
                 </div>
               </div>
               <el-alert
@@ -764,6 +772,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { CopyDocument, Delete, Fold, Setting, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import FieldLabel from './FieldLabel.vue'
+import JsonInstanceImport from './JsonInstanceImport.vue'
 import VarInput from './VarInput.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
@@ -1542,6 +1551,13 @@ async function copyNodeId() {
   background: var(--el-fill-color-extra-light);
 }
 
+.so-json-row {
+  margin-top: 4px;
+  padding: 2px 4px 2px 10px;
+  border-left: 2px solid var(--el-color-primary-light-7, #d9ecff);
+  display: flex;
+  align-items: center;
+}
 .so-row .so-line1 {
   display: flex;
   align-items: center;

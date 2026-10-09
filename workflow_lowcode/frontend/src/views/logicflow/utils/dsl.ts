@@ -203,11 +203,21 @@ export type NodeConfig =
   | SqlScriptNodeConfig
 
 /** 入参声明（运行测试表单 / 文档展示用，引擎不消费） */
+/** 字段结构树节点（JSON 实例推断产物，与后端 form-fields 树同构：path/label/type/children） */
+export interface FieldNode {
+  path: string
+  label?: string | null
+  type?: string | null
+  children?: FieldNode[] | null
+}
+
 export interface InputVarDef {
   name: string
   type: 'string' | 'number' | 'boolean' | 'json'
   required?: boolean
   desc?: string
+  /** json 类型可选：由 JSON 实例推断的字段结构树（持久化在 DSL，供变量选择器展开） */
+  structure?: FieldNode[]
 }
 
 /**
@@ -224,9 +234,34 @@ export interface ResultVarDef {
   mode: ResultMode
   type: 'string' | 'number' | 'boolean' | 'json'
   desc?: string
+  /** json 类型可选：由 JSON 实例推断的字段结构树（供下游变量选择器展开） */
+  structure?: FieldNode[]
 }
 
 export const OUTPUT_VAR_TYPES = ['string', 'number', 'boolean', 'json'] as const
+
+/** 结构树轻校验：非法/空则丢弃；单层最多 30 键、深度最多 6 层，超限截断 */
+function sanitizeStructure(input?: FieldNode[] | null): FieldNode[] | undefined {
+  if (!Array.isArray(input) || !input.length) return undefined
+  const MAX_DEPTH = 6
+  const MAX_KEYS = 30
+  const walk = (list: FieldNode[], d: number): FieldNode[] | null => {
+    if (d > MAX_DEPTH) return null
+    const out: FieldNode[] = []
+    for (const f of list.slice(0, MAX_KEYS)) {
+      const path = String(f?.path ?? '').trim()
+      if (!path) continue
+      const node: FieldNode = { path, type: f?.type ? String(f.type) : null }
+      if (Array.isArray(f?.children) && f.children.length) {
+        const kids = walk(f.children as FieldNode[], d + 1)
+        if (kids) node.children = kids
+      }
+      out.push(node)
+    }
+    return out.length ? out : null
+  }
+  return walk(input, 1) ?? undefined
+}
 
 /** 清洗输出参数声明行：trim 变量名、剔除无名行、类型回退 string、mode 回退 WHOLE；全空返回 undefined */
 export function sanitizeResults(results?: ResultVarDef[]): ResultVarDef[] | undefined {
@@ -238,6 +273,7 @@ export function sanitizeResults(results?: ResultVarDef[]): ResultVarDef[] | unde
         ? (r.type as ResultVarDef['type'])
         : ('string' as const),
       desc: r?.desc ? String(r.desc).trim() || undefined : undefined,
+      structure: sanitizeStructure(r?.structure),
     }))
     .filter((r) => r.name)
   return rows.length ? rows : undefined
@@ -567,6 +603,7 @@ export function parseDsl(dsl: string): FlowGraph {
         type,
         required: Boolean(v.required),
         desc: v.desc ? String(v.desc) : undefined,
+        structure: sanitizeStructure(Array.isArray(v.structure) ? (v.structure as FieldNode[]) : undefined),
       }
     })
     .filter((v): v is InputVarDef => v !== null)

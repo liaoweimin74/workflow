@@ -5820,3 +5820,21 @@ Stage Summary:
 - 【新事故备案】GitHub credential store 随重供给丢失（~/.git-credentials 没了，git config credential.helper 空）→ 本地 main 领先 origin/main 6 commits（含今日快照+恢复脚本）无法推送；待用户提供 token 或下会话恢复凭据后 git push origin main
 - 【防御升级】recover-dplus.sh/dump-db.sh 已入 git，下次重供给后巡检可直接「前台 bash scripts/recover-dplus.sh」一键重建（幂等，超时重跑续作），不再依赖 worklog 手工序列
 - 遗留：recover-dplus.sh 的 S4 heredoc 双命令写法有 bug（本次手动绕过），建议下个开发会话修正为单一 heredoc + fallback 判断
+
+---
+Task ID: cron-巡检-20261010-0405（重供给#4 恢复）
+Agent: 主控（Z.ai Code）
+Task: 04:05 巡检发现第四次环境重供给 → recover-dplus.sh 一键恢复
+
+Work Log:
+- 【重供给 #4】uptime 8 分钟（~03:57 重建）：jar/jdk21/maven/.m2/mariadb-user 全灭，bun 假绿接管 8080（no such table: SYS_USER）
+- 【防御升级生效】recover-dplus.sh/dump-db.sh/快照 20261009-192611 全部随 git 幸存，直接一键恢复，无需翻 worklog 手工序列
+- 【脚本两处修复并入库】①S4 heredoc 语法错误（历史遗留）②S4 误用带密码 TCP 的 $MC 变量执行授权（Access denied）→ 改独立 socket 无密码连接 + ALTER USER 四条；commit 46bef868
+- 【恢复时序】600s 前台窗口×3 次幂等续作：S1-S3（deb/布局/install-db/mariadbd）→ S4-S8（授权/导入 87 表/JDK 207M/Maven/mvn 冷构建 103M jar）→ S9-S11（切引擎 choice=java + 清 bun + Java 点亮，实际第三次窗口已跑完 S9）
+- 【终验】真登录 accessToken ✓ 四链路 200×4 业务真绿；内存 3165MB oom_kill=0
+- 【收口】dump-db.sh 快照 20261009-202739 + 修复提交 46bef868（本地）
+
+Stage Summary:
+- D+ 终态恢复完成（第 4 次），本次起恢复完全脚本化（幂等续作模式稳定）
+- recover-dplus.sh 现已无已知 bug，未来重供给一条命令前台恢复，600s 窗口不够时重跑自动续作
+- 依旧备案：GitHub 凭据丢失未恢复，本地 main 领先 origin/main（含恢复脚本修复），待 token 后推送

@@ -5244,3 +5244,20 @@ Work Log:
 
 Stage Summary:
 - 逻辑流数据「有备份且已恢复在库」：var_picker_test 一条，DSL 完整；未来在库中新建的逻辑流暂无自动备份覆盖，重要数据建议按需导出（mariadb-dump TCP 3306 可用）
+
+---
+Task ID: logicflow-code-integrity-audit
+Agent: 主会话（用户问答核查）
+Task: 用户问「对逻辑编排进一步完善的代码是否也丢失了？能否通过 worklog 找回来？」——全面核查逻辑编排（LogicFlow）迭代代码在重置后的完整性
+
+Work Log:
+- git 全历史核查：HEAD 共 322 提交，origin/main..HEAD=0（无未推送差距）；git status 干净
+- worklog 记录的关键提交哈希逐一验证：4a4fc2ad（B1 可视化编排落地）、4020c972（formhook-v2 触发点绑定+批处理循环连线+五条反馈增强）、e9027ac8+fb0d605f（变量选择列表就近显示）、c413a222/7e8b27f1（触发点三功能）、2ae9d826（SCRIPT results 多输出，message 被平台自动提交改为 UUID 但内容在）、5087c64e（审批事件二期 8 个 AFTER_* 触发点）全部存在；唯 03602ad1 哈希查无（疑缩写笔误），其内容特征已全部在工作树验证命中
+- 工作树特征验证（10 项全过）：LogicFlowDsl 含 ResultVarDef/WHOLE/KEY、resultVar 仅剩 2 处兼容注释（L124/L166，@JsonIgnoreProperties 语义）；LogicFlowEngine 1113 行含 writeResults（SCRIPT 严格/其余宽松，类文档明示 resultVar 全链路下线）、DATA_UPDATE_TABLE_PREFIXES 已删；Validator 含 validateResults；FormLogicBindingService 含 15 个 TRIG_*（一期 7 + 二期 8 全在）+ LogicFlowApprovalTrigger onTaskAction/onProcessAction；formLogicBinding.ts 含 TRIGGER_PARAM_SPECS/flowsMatchTrigger；LogicFlowDesigner 含 v4 列式布局（BODY_COL_*/colSubtreeW 21 处）+「从触发点导入」；PropertyPanel 含 results 单表；dsl.ts 含批处理坐标持久化（13 处）；TriggerGroupSelect.vue 与 FormListPage filteredFlows 均在
+- 部署状态：backend/target jar 构建于 10-09 00:28（重置后重建），内含 10-08 23:13 编译的 LogicFlowEngine.class；8080 Java 进程（PID 7988）正运行该 jar；vite 3000 在跑；本机探活 3000=200 / 8080=200
+- 文件 mtime 全为 Oct 8 23:12 = 重置后防线从 git 自动恢复工作树的痕迹
+
+Stage Summary:
+- 结论：逻辑编排进一步完善的代码【零丢失】，无需从 worklog 重建——全部改动当时已 commit+push 入库（重置前纪律生效），重置后由 git 恢复并重新构建部署，当前服务运行的即最新实现
+- worklog 的作用仅是提供提交哈希索引，使本轮核验能在数分钟内完成
+- 唯一与逻辑编排相关的历史损失仍是两件旧事：①更早未入库的旧设计界面（BackendLogicProperty.vue/api/backendLogic.ts，重置前已丢且被新路线取代）②逻辑流数据仅 var_picker_test 一条有备份且已恢复（3aa71789）

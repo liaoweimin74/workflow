@@ -5138,3 +5138,22 @@ Work Log:
 Stage Summary:
 - D+ 终态数据层 100% 重建完毕并落盘持久化；V1 修复入库；剩余仅「常驻进程启动」一步，由 00:05 patrol 会话完成（其会话进程历史上可存活，如 r-28428 曾连续运行数小时）
 - 后续巡检注意：①java 若"静默死亡"先查是否本会话自启（收割者），勿误判 jar/DB 问题；②DB 已预迁移，勿再 drop；③mariadb-user/debs/ 为新下载 deb 存放处（原五件套已被 git clean 删除，start-services.sh 的 *.deb 通配需注意）
+
+---
+Task ID: restore-r139-cronstart2
+Agent: cron-agent-loop-202610090829 (patrol + 收尾拉起)
+Task: Job 445799 运维拉起——start-services.sh 幂等 + 四链路探活 + 数据备案（不开发、不 drop 库）
+
+Work Log:
+- 承接 00:05 patrol（Job 444954）中断现场，本轮四项关键修复落地后终态达成：
+- 【修复1·lctn 大小写根因】重建的 MariaDB 11.8.6 缺省 lower_case_table_names=0（大小写敏感），而旧世界=1（全部表名小写存储）；Java/Flowable 大写查询 ACT_GE_PROPERTY 等全报 doesn't exist，Flowable 建表路径卡死。已在 start-services.sh mariadbd 启动参数补 --lower-case-table-names=1（commit 19ecf779，ops 参数修复，非代码改动）；验证 DB 内 0 张大写 ACT 表、lctn=1 生效后 Java 可见全部 39 张 ACT 表。
+- 【修复2·jar 过期重建】23:13 构建的 jar 内 db/migration/workflow.sql 无 V1__ 前缀（含 restore-r139 之前的中态源码），Flyway validate 报 "Migrations have failed validation"（applied migration not resolved locally: 1）。用 restore-r139 已提交的源码（V1__workflow.sql 已恢复）前台 mvn -o package 3.7s 重建成功。⚠️后台 setsid 启动 mvn 15s 内被收割（日志 0 行），前台窗口内构建存活——收割者仍按会话边界工作，mvn/java/mariadbd 均须前台窗口或脚本链路启动。
+- 【启动链路时序】SHUTDOWN 旧 lctn=0 实例 → start-services.sh（已含 restore-r139 的 MariaDB 段）拉起 lctn=1 mariadbd → 脚本拉 java 7988 → "Started WorkflowApplication in 18.642 seconds"（Flyway validate 通过、Flowable 8.0.0.0 校验通过、干净路径符合预期 20-30s）。
+- 幂等复跑 start-services.sh：MariaDB 已在运行 / 后端已在运行 (8080) / 前端已在运行 (3000, Vite)，无重复拉起。
+- 08:29 四链路探活（admin/admin123）：a) 3000 页面=200；b) 外域 Host=200（allowedHosts 生效）；c) 3000 代理 /api/auth/login=200；d) 8080 直连 /api/auth/login=200 —— 全绿 200×4。
+- 资源备案：java 7988 RSS 553988KB；mariadbd 7468 RSS 146148KB；vite PID 2762 独占 3000（唯一实例，RSS ~542MB）；cgroup 内存 3.45GB（<3.5GB 阈值）；oom_kill 0（基线无上涨）。
+- 提交防丢失：19ecf779（start-services.sh lctn=1）；jar 为构建产物走 .gitignore 不入库，丢失后按本节"修复2"3.7s 重建即可。
+
+Stage Summary:
+- D+ 终态全绿达成：vite 独占 3000 + Java 独占 8080（-Xmx448m）+ MariaDB 3306（lctn=1），四链路 200×4，Next/Turbopack 保持退役。
+- 后续巡检注意：①若 java 启动报 "ACT_xx doesn't exist" 先查 mariadbd 是否带 --lower-case-table-names=1（lctn=0 会让大小写查询全部落空）；②若报 "Migrations have failed validation" 先核 jar 内是否有 V1__workflow.sql（unzip -l | grep V1__），无则前台 mvn -o package -DskipTests -f backend/pom.xml 重建（3.7s，需 JAVA_HOME=/home/z/tools/jdk21）；③mariadbd/java 从本会话起存活正常，收割者主要打击后台 setsid 的独立长任务（mvn 实测被杀），重活尽量前台窗口完成。

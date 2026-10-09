@@ -5704,3 +5704,21 @@ Stage Summary:
 - 输入参数行按钮 3→2（hover 后才见删除，常态仅结构入口 1 个），信息密度显著下降；结构 查看/导入/清除 收敛单一入口，交互一致性提升
 - JsonInstanceImport 三模式：menu（Designer 输入参数）/ icon（PropertyPanel 输出参数）/ 默认文本按钮，复用一个对话框实现
 - 沉淀坑：el-dropdown 触发器禁用 el-tooltip 包裹（用原生 title）；MultiEdit 部分写入风险（大 old_str 易因不可见字符失配，宜小锚点分段）
+
+---
+Task ID: qa-console-warnings-cleanup-20261010（继续轮：控制台既有警告清理）
+Agent: 主控（Z.ai Code）
+Task: 用户「继续」→ 选取上轮备案的遗留观察项（控制台警告类 QA 噪音）作为本轮重点
+
+Work Log:
+- 【修复1·v-permission 静默化】directives/permission.ts：未传权限码从 DEV console.warn 改为静默放行（注释说明设计意图：页面级授权模型，页面由路由/菜单守卫控制；按钮级权限显式传码才校验）。理由：权限点清单实测 admin 仅 70 码（logicflow 只有 list），全站大量按钮本就无权限点，常驻警告淹没真正输出
+- 【修复2·el-link underline 枚举】RunTestDialog.vue + TriggerGroupSelect.vue：:underline="false"（boolean 已弃用）→ underline="never"（EP 新 API），消除弃用警告 ×2 处
+- 【修复3·ECharts 0 尺寸守卫】DashChart.vue render()：clientWidth/Height===0 时静默跳过 init（0 尺寸 init = 警告 + 宽度锁定 0 双重问题）；ResizeObserver 回调补分支：chart 未创建时调 render() 补画（容器从隐藏恢复显示时自动渲染）——顺带破案：「Can't get DOM」警告源于空数据图表对 display:none 容器 init，守卫后自然消除
+- 【排查·role="button" tooltip 警告备案不修】静态全量搜索 + 浏览器 hook console.warn 逐页捕获（列表/设计器/对话框/搜索重渲染）均未现形——警告源在 vendor 组件（FcDesigner 等）或 EP 内部透传，定位成本超收益；无功能影响，备案后续偶遇即修
+- 【验证】vitest 全量 1421/1421（111 文件，DashChart 相关 DashComponents/120/123 全过）+ vue-tsc 54=旧基线零新增；agent-browser 新会话 hook 实测：登录→仪表盘→逻辑流列表+搜索重渲染，v-permission/underline/Can't get DOM 三类警告 0 产生（console 里的历史条目为跨导航缓冲非新产生）
+- 【辨析】仪表盘两图「暂无数据」为既有业务状态（图表未绑数据源/无聚合数据），与本次守卫无关——旧代码该场景正是警告源头，新代码静默空态，行为更优
+
+Stage Summary:
+- 控制台三类既有警告清零（v-permission/underline/ECharts 尺寸），QA 信噪比提升；一处 vendor 深源警告（role=button）备案
+- 沉淀：ECharts 容器须 0 尺寸守卫 + RO 补渲染模式；EP 新 API（underline 枚举）替换点全站仅 2 处已清
+- 待办移交：仪表盘图表数据源绑定（业务配置）可作后续功能完善方向

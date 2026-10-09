@@ -158,7 +158,7 @@ function clearValue() {
         <el-input v-model="keyword" size="small" placeholder="搜索触发点" clearable :prefix-icon="Search" />
       </div>
       <div class="tgs-toolbar">
-        <el-link type="primary" :underline="false" @click="allCollapsed ? expandAll() : collapseAll()">
+        <el-link type="primary" underline="never" @click="allCollapsed ? expandAll() : collapseAll()">
           {{ allCollapsed ? '展开全部' : '收起全部' }}
         </el-link>
         <span class="tgs-total">共 {{ total }} 个触发点</span>

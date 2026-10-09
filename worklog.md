@@ -5560,3 +5560,20 @@ Work Log:
 Stage Summary:
 - 重置应对从「每次手工 ~10 分钟」升级为「自动 ~3 分钟」：冷启动 → start-services.sh 钩子后台恢复 → 下一轮巡检验证；或巡检轮直接前台恢复
 - RPO ≤ 1 小时（巡检轮首 dump）；jar/代码/deb 零丢失（git）；已知残留风险：巡检 cron 会话自身可能触发冷重供给（自激励循环），恢复链已能闭环应对
+
+---
+Task ID: json-structure-20261009（JSON 实例→变量结构树）
+Agent: 主控（Z.ai Code）
+Task: 用户需求——输入参数/节点输出为 JSON 时粘贴 JSON 实例生成变量结构，变量选择器可选到字段
+
+Work Log:
+- 【方案定型】复用 formData 树机制（FlowVarItem.children 通用渲染）：结构推断为纯前端（jsonStructure.ts）+ 结构持久化进 DSL（inputVars[].structure / results[].structure）→ 后端仅需 Jackson 放行
+- 【前端 6 处】①utils/jsonStructure.ts 新建：object 递归/array 元素收敛（前 3 个对象键并集）/标量叶；深度 6·单层 30 键·总量 300 截断 ②dsl.ts：FieldNode 类型 + InputVarDef/ResultVarDef.structure + sanitizeStructure（30 键/6 层轻校验，serialize+parse 双透传）③flowVars.ts：input/upstream（含 SCRIPT 分支）组挂 children，点选插 name.field ④VariablePicker.vue：两级→行扁平化任意深度重构（14px/层缩进，搜索自动全展开）⑤JsonInstanceImport.vue 共用对话框（实时预览/截断提示/结构标签）⑥入参声明+输出参数 json 行挂导入控件
+- 【后端 1 处·关键排障】首验保存 400：INVALID_DSL_JSON Unrecognized field "structure"（Jackson 严格解析）→ LogicFlowDsl 增 FieldNode DTO + 双 structure 字段 + @JsonIgnoreProperties forward-compat → jar 重建（.m2 热，~90s）→ Java 重启 35s 点亮 → 保存 200
+- 【E2E 全通（agent-browser）】设计器导入 {"code":0,"data":{"id","items":[{"sku","qty"}]},"msg"} → 实时预览「3 顶层/7 节点/深度 3」→ 结构标签「结构 7 字段」→ 保存 → API 回读 DSL structure 完整 → HTTP 节点变量选择器：payload 带 ▸ → 四层展开（payload@6px→code/msg/data@20px→id/items@34px→sku/qty@48px）→ 点选插入 {{payload.data.items.sku}} 四层完整路径
+- 【收尾】测试 URL 清理、流程保存、jar 备份同步 backups/jar、git 提交 668d47da
+
+Stage Summary:
+- 需求全量交付：formData 导入表单结构（原有）+ JSON 实例生成变量结构（入参+输出，新）+ 选择器字段级点选（任意深度，新）
+- 已知特性：结构为设计期数据源（引擎运行期不消费，与 formData 树同策略）；展开状态在 popover 重建时不保留（可接受）
+- 后端 DSL 模型已 forward-compat（@JsonIgnoreProperties），未来加字段不会再 400

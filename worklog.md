@@ -5594,3 +5594,20 @@ Work Log:
 Stage Summary:
 - 需求三点全落地：①formData 输入参数（前轮 aec957eb 后端发现树）②JSON 入参粘贴实例推结构 ③JSON 输出参数粘贴实例推结构；变量选择器任意深度下钻点选完整路径
 - 重置防御就位：jar 新版本已入 backups/jar（git 追踪），冷启动恢复即得新功能
+
+---
+Task ID: incident-canvas-wipe-20261009（开始节点消失事故排查与恢复）
+Agent: 主控（Z.ai Code）
+Task: 用户报障「逻辑流设计界面的开始节点无法在画布中显示」→ 排查根因、恢复数据、加防复发守卫
+
+Work Log:
+- 【澄清责任】本会话未改过任何源码——工作区 11 个文件未提交改动来自并行会话（DATA_UPDATE 统一多表重构 + formData 一键导入 + JSON 导入图标化），本会话此前仅审阅 diff + 跑测试（dsl/flowVars 51/51 通过）
+- 【根因定位】agent-browser 复现：画布空态提示「从左侧拖入开始节点」但无 JS 错误 → API 直查 wf_logic_flow：DSL nodes=[] edges=[]，updatedAt 14:15:30 恰为并行会话 HMR 编辑窗口（vite.log 14:15:30 style.css+Designer HMR 同秒）→ 判定：设计器页开着时 HMR 热替换清掉 vue-flow 画布状态，随后一次显式保存把空画布写库（无自动保存，纯点击触发）；14:05 快照实证当时 DSL 完好（start/end/e1）
+- 【数据恢复】PUT /v1/logic-flows/{id}：nodes+edges 从 14:05 dump 取回，inputVars（payload/json 含 7 字段结构树）保留现值合并写入 → 200
+- 【回归验证】浏览器重开设计器：开始/结束节点 + 连线 + 小地图全部渲染 ✓；点保存 → 「保存成功」（守卫无误伤）✓；API 回读 nodes/edges/inputVars 三者完整 ✓
+- 【防复发守卫】LogicFlowDesigner.vue handleSave() 头部加校验：画布无 START 节点 → warning「画布为空：缺少开始节点，已阻止保存（避免覆盖已有流程内容）」+ return false（三个调用点 保存/发布/运行测试 均正确处理 false）；三个调用点语义核实无误
+
+Stage Summary:
+- 事故定论：非渲染 bug、非本会话代码改动——是 HMR 热替换瞬间的空画布被显式保存写库（数据事故）；已从 14:05 快照完整恢复
+- 加固落地：空画布保存守卫（缺 START 即阻断），同类事故不可能再次覆盖数据
+- 风险提示：并行会话与巡检会话并存时，避免在设计器页面上方做大规模 HMR 编辑；守卫已兜底最坏情况

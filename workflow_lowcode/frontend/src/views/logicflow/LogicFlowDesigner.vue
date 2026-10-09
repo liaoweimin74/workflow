@@ -1673,13 +1673,8 @@ if (import.meta.hot) {
 .iv-row-wrap .iv-row {
   margin-bottom: 0;
 }
-/* 删除按钮 hover/focus 才显现：行尾静态只留结构入口，视觉降噪（占位保留布局不跳） */
+/* 删除按钮常驻可见（用户反馈：不要 hover 才显示） */
 .iv-del-btn {
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-.iv-row:hover .iv-del-btn,
-.iv-row:focus-within .iv-del-btn {
   opacity: 1;
 }
 /* 从触发点导入区块：与表单逻辑流绑定联动 */

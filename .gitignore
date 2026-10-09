@@ -46,7 +46,8 @@ local-*
 *.log
 dev.log
 dev.out.log
-test
+# test 目录需入库（backend/src/test 曾因裸 test 规则被整体忽略，重置后 130 个测试丢失）
+/test
 prompt
 
 server.log

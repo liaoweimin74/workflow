@@ -545,11 +545,12 @@ describe('SUBFLOW', () => {
 })
 
 describe('DATA_UPDATE 数据更新节点', () => {
-  it('defaultConfig(DATA_UPDATE) 给出默认结构；默认名为数据更新', () => {
+  it('defaultConfig(DATA_UPDATE) 给出统一多表默认结构（单条目=单表更新）；默认名为数据更新', () => {
     expect(defaultConfig('DATA_UPDATE')).toEqual({
       table: '',
-      setOps: [{ column: '', mode: 'SET', value: '' }],
+      setOps: [],
       where: [],
+      updates: [{ table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }],
     })
     expect(defaultNodeName('DATA_UPDATE')).toBe('数据更新')
   })

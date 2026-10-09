@@ -492,12 +492,14 @@ public class LogicFlowEngine {
      * 执行数据更新节点：纯配置 UPDATE 动态表。
      * 表名/列名经元数据校验，值经参数绑定执行（防注入）。
      *
-     * <p>两种 config 形态：
+     * <p>统一多表形态（设计器唯一产出）：{@code updates} 存在且非空时——
      * <ul>
-     *   <li>单表（存量）：{@code {table, setOps, where}} → 返回受影响行数 Integer（存量流零影响）；</li>
-     *   <li>多表（{@code updates} 存在且非空，优先）：各表单事务顺序执行、全有或全无，
+     *   <li>恰好 1 条：与存量单表更新完全等价（含输出 Integer 受影响行数），
+     *       存量流迁移到 updates 形态后行为零变化；</li>
+     *   <li>多条：各表单事务顺序执行、全有或全无，
      *       返回汇总 Map（见 {@link #executeDataUpdateMulti}）。</li>
      * </ul>
+     * legacy 单表形态（{@code {table, setOps, where}} 顶层字段）仍接受，行为不变。
      * 返回值由 results 声明写入（未声明走隐式整体输出）。
      */
     private Object executeDataUpdate(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
@@ -506,21 +508,36 @@ public class LogicFlowEngine {
             throw new IllegalArgumentException("DATA_UPDATE 节点缺少 config: " + node.getId());
         }
         if (config.getUpdates() != null && !config.getUpdates().isEmpty()) {
+            // 统一编辑器形态：updates 恰好 1 条 = 单表更新（输出与存量单表一致，迁移零回归）
+            if (config.getUpdates().size() == 1) {
+                return executeDataUpdateSingle(node, config.getUpdates().get(0), vars);
+            }
             return executeDataUpdateMulti(node, config, vars);
         }
-        if (isBlank(config.getTable())) {
+        // legacy 单表形态：顶层 {table, setOps, where}
+        BackendDataUpdateConfig.TableUpdate single = new BackendDataUpdateConfig.TableUpdate();
+        single.setTable(config.getTable());
+        single.setSetOps(config.getSetOps());
+        single.setWhere(config.getWhere());
+        return executeDataUpdateSingle(node, single, vars);
+    }
+
+    /**
+     * 单表 UPDATE（legacy 单表形态与 updates 单条目共用）：校验配置 → 编译 → 执行，
+     * 返回受影响行数 Integer（存量输出契约不变）。
+     */
+    private Object executeDataUpdateSingle(LogicFlowDsl.NodeDef node,
+                                           BackendDataUpdateConfig.TableUpdate single,
+                                           Map<String, Object> vars) {
+        if (isBlank(single.getTable())) {
             throw new IllegalArgumentException("DATA_UPDATE 节点缺少 table 配置: " + node.getId());
         }
-        if (config.getSetOps() == null || config.getSetOps().isEmpty()) {
+        if (single.getSetOps() == null || single.getSetOps().isEmpty()) {
             throw new IllegalArgumentException("DATA_UPDATE 节点缺少 setOps 配置: " + node.getId());
         }
         if (jdbcTemplate == null || tableManager == null) {
             throw new IllegalStateException("引擎未装配数据更新能力(JdbcTemplate/DynamicTableManager): " + node.getId());
         }
-        BackendDataUpdateConfig.TableUpdate single = new BackendDataUpdateConfig.TableUpdate();
-        single.setTable(config.getTable());
-        single.setSetOps(config.getSetOps());
-        single.setWhere(config.getWhere());
         BuiltUpdate built = buildDataUpdate(node.getId(), single, vars);
 
         int affected = jdbcTemplate.update(built.sql(), built.params().toArray());

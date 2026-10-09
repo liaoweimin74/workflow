@@ -177,7 +177,16 @@ const summary = computed(() => {
     }
     case 'DATA_UPDATE': {
       const updates = Array.isArray(cfg?.updates) ? (cfg?.updates as unknown[]) : []
-      if (updates.length) {
+      if (updates.length === 1) {
+        // 单条目 = 单表更新（引擎输出与存量单表一致）
+        const u = updates[0] as { table?: unknown; setOps?: unknown[] } | null
+        const uTable = String(u?.table ?? '')
+        if (uTable) {
+          const uFields = Array.isArray(u?.setOps) ? u!.setOps.length : 0
+          return `更新 ${uTable} · ${uFields} 字段`
+        }
+      }
+      if (updates.length > 1) {
         const fields = updates.reduce((sum: number, u) => {
           const ops = (u as { setOps?: unknown[] } | null)?.setOps
           return sum + (Array.isArray(ops) ? ops.length : 0)

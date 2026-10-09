@@ -18,7 +18,7 @@ import type { FieldNode, InputVarDef, ResultVarDef } from './dsl'
 export interface FlowVarItem {
   name: string
   group: 'input' | 'loop' | 'upstream' | 'form'
-  /** 展示用说明：类型/来源节点等 */
+  /** 展示用类型标注（string/number/json…；下拉只显示变量名 + 类型） */
   detail?: string
   /** 字段树：子字段条目（form 组 / 结构化 input·upstream 组；点击插完整路径） */
   children?: FlowVarItem[]
@@ -67,26 +67,12 @@ export interface VarEdgeLike {
 
 const BATCH_TYPE = 'BATCH'
 
-/** 统计结构树节点总数（展示用） */
-function countFieldNodes(fields: FieldNode[]): number {
-  let n = 0
-  const walk = (list: FieldNode[]): void => {
-    for (const f of list) {
-      n += 1
-      if (f.children?.length) walk(f.children)
-    }
-  }
-  walk(fields)
-  return n
-}
-
-/** 表单字段 → form 组变量条目（name = 根前缀 + 相对路径，递归 children） */
+/** 表单字段 → form 组变量条目（name = 根前缀 + 相对路径，递归 children；只展示类型） */
 function fieldToVarItem(prefix: string, f: FormFieldLike): FlowVarItem {
-  const bits = [f.label, f.type].filter(Boolean)
   return {
     name: prefix + f.path,
     group: 'form',
-    detail: bits.length ? bits.join(' · ') : undefined,
+    detail: f.type || undefined,
     children: f.children?.length ? f.children.map((c) => fieldToVarItem(prefix, c)) : undefined,
   }
 }
@@ -102,6 +88,29 @@ function structureToVarItems(root: string, fields: FieldNode[]): FlowVarItem[] {
   }))
 }
 
+/** 绑定表单字段组 → FieldNode 结构树（入参 formData 一键导入用；多表单合并，同路径先到先得） */
+export function formFieldGroupsToFieldNodes(groups?: FormFieldGroupLike[] | null): FieldNode[] {
+  const seen = new Set<string>()
+  const out: FieldNode[] = []
+  for (const g of groups || []) {
+    for (const f of g?.fields || []) {
+      if (!f?.path || seen.has(f.path)) continue
+      seen.add(f.path)
+      out.push(formFieldToFieldNode(f))
+    }
+  }
+  return out
+}
+
+function formFieldToFieldNode(f: FormFieldLike): FieldNode {
+  return {
+    path: f.path,
+    label: f.label ?? null,
+    type: f.type ?? null,
+    children: f.children?.length ? f.children.map(formFieldToFieldNode) : null,
+  }
+}
+
 /** 构建 form 组变量：formData（字段树）+ formDataExisting（更新/删除触发点时同构旧行） */
 function buildFormVars(groups?: FormFieldGroupLike[]): FlowVarItem[] {
   const list = (groups || []).filter((g) => g && Array.isArray(g.fields) && g.fields.length)
@@ -110,12 +119,11 @@ function buildFormVars(groups?: FormFieldGroupLike[]): FlowVarItem[] {
       {
         name: 'formData',
         group: 'form',
-        detail: '流程表单数据 · 点路径取字段，如 formData.amount',
       },
     ]
   }
 
-  // 多表单字段合并（同路径先到先得，label/类型取首个命中来源）
+  // 多表单字段合并（同路径先到先得，类型取首个命中来源）
   const seen = new Set<string>()
   const children: FlowVarItem[] = []
   for (const g of list) {
@@ -128,17 +136,11 @@ function buildFormVars(groups?: FormFieldGroupLike[]): FlowVarItem[] {
     }
   }
 
-  const srcBits = list
-    .map((g) => g.formName || g.formKey || '')
-    .filter(Boolean)
-    .join(' / ')
-  const srcDetail = list.some((g) => g.source === 'sampled') ? ' · 部分结构来自实例采样' : ''
   const out: FlowVarItem[] = [
     {
       name: 'formData',
       group: 'form',
       prefixOnly: true,
-      detail: `流程表单数据 · ${srcBits || '绑定表单'}（${children.length} 字段，点 ▸ 展开选字段）${srcDetail}`,
       children,
     },
   ]
@@ -152,7 +154,6 @@ function buildFormVars(groups?: FormFieldGroupLike[]): FlowVarItem[] {
       name: 'formDataExisting',
       group: 'form',
       prefixOnly: true,
-      detail: '更新/删除前旧行 · 与 formData 同结构',
       children: children.map((c) => ({
         ...c,
         name: c.name.replace(/^formData\./, 'formDataExisting.'),
@@ -216,20 +217,15 @@ export function collectAvailableVars(
     result.push(item)
   }
 
-  // 1) 入参（跳过未命名行；json 类型带结构树时展开子字段，点选插 name.field 完整路径）
+  // 1) 入参（跳过未命名行；json 类型带结构树时展开子字段，点选插 name.field 完整路径）。
+  //    下拉只展示变量名 + 类型（不展示说明，保持列表简洁）
   for (const v of inputVars || []) {
     if (!v?.name?.trim()) continue
-    const bits: string[] = [v.type]
-    if (v.required) bits.push('必填')
-    if (v.desc) bits.push(v.desc)
     const structure = Array.isArray(v.structure) ? v.structure : []
-    if (structure.length) {
-      bits.push(`已导入结构（${countFieldNodes(structure)} 字段，点 ▸ 展开选字段）`)
-    }
     push({
       name: v.name.trim(),
       group: 'input',
-      detail: bits.filter(Boolean).join(' · '),
+      detail: v.type || undefined,
       children: structure.length ? structureToVarItems(v.name.trim(), structure) : undefined,
     })
   }
@@ -274,8 +270,8 @@ export function collectAvailableVars(
       const cfg = (data.config || {}) as { itemVar?: string; indexVar?: string }
       const itemVar = cfg.itemVar?.trim() || DEFAULT_ITEM_VAR
       const indexVar = cfg.indexVar?.trim() || DEFAULT_INDEX_VAR
-      push({ name: itemVar, group: 'loop', detail: `迭代项 · 来自「${data.name || id}」` })
-      push({ name: indexVar, group: 'loop', detail: `迭代序号 · 来自「${data.name || id}」` })
+      push({ name: itemVar, group: 'loop' })
+      push({ name: indexVar, group: 'loop' })
     }
 
     if (data.nodeType === 'SCRIPT') {
@@ -283,24 +279,16 @@ export function collectAvailableVars(
       if (Array.isArray(data.results) && data.results.length > 0) {
         for (const r of data.results as ResultVarDef[]) {
           if (!r?.name?.trim()) continue
-          const bits: string[] = [r.type]
-          if (r.mode === 'WHOLE') bits.push('整体值')
-          if (r.desc) bits.push(r.desc)
           const structure = Array.isArray(r.structure) ? r.structure : []
-          if (structure.length) bits.push(`已导入结构（${countFieldNodes(structure)} 字段）`)
           push({
             name: r.name.trim(),
             group: 'upstream',
-            detail: `输出参数 · 来自「${data.name || id}」${bits.length ? `（${bits.join(' · ')}）` : ''}`,
+            detail: r.type || undefined,
             children: structure.length ? structureToVarItems(r.name.trim(), structure) : undefined,
           })
         }
       } else {
-        push({
-          name: id,
-          group: 'upstream',
-          detail: `自动整体输出 · 来自「${data.name || id}」，支持点路径取子字段`,
-        })
+        push({ name: id, group: 'upstream' })
       }
       continue
     }
@@ -309,24 +297,16 @@ export function collectAvailableVars(
     if (Array.isArray(data.results) && data.results.length > 0) {
       for (const r of data.results as ResultVarDef[]) {
         if (!r?.name?.trim()) continue
-        const bits: string[] = [r.type]
-        if (r.mode === 'WHOLE') bits.push('整体值')
-        if (r.desc) bits.push(r.desc)
         const structure = Array.isArray(r.structure) ? r.structure : []
-        if (structure.length) bits.push(`已导入结构（${countFieldNodes(structure)} 字段）`)
         push({
           name: r.name.trim(),
           group: 'upstream',
-          detail: `输出参数 · 来自「${data.name || id}」（${data.nodeType}）${bits.length ? `（${bits.join(' · ')}）` : ''}`,
+          detail: r.type || undefined,
           children: structure.length ? structureToVarItems(r.name.trim(), structure) : undefined,
         })
       }
     } else if (EXEC_NODE_TYPES.has(data.nodeType)) {
-      push({
-        name: id,
-        group: 'upstream',
-        detail: `自动整体输出 · 来自「${data.name || id}」（${data.nodeType}），支持点路径取子字段`,
-      })
+      push({ name: id, group: 'upstream' })
     }
   }
 

@@ -15,12 +15,13 @@
  *                       （legacy 兼容：actionType: HTTP|SCRIPT|BEAN + actionConfig 单动作，
  *                         读取时自动合成为单节点循环体，保存后升级为 body 形态）
  *   - SUBFLOW config = { flowId, passAllVars=true, varsMapping[{source,target}] }
- *   - DATA_UPDATE config = { table, setOps[{column, mode: SET|ADD|SUB, value}],
- *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}],
- *                            updates?: [{alias?, table, setOps, where}] }
- *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；updates 非空时为多表形态：单事务顺序
- *       执行全有或全无，返回汇总 Map（total/affected/t{i}|别名 条目）作为节点返回值；
- *       单表形态返回受影响行数 Integer（存量行为不变）
+ *   - DATA_UPDATE config = { updates: [{alias?, table, setOps[{column, mode: SET|ADD|SUB, value}],
+ *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}]}] }
+ *       （legacy 兼容：顶层 {table, setOps, where} 单表形态，引擎仍接受；设计器打开时自动
+ *         迁移为 updates 单条目形态）
+ *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；统一多表形态：单条目 = 单表更新，
+ *       返回受影响行数 Integer（与存量单表行为一致）；多条目单事务顺序执行全有或全无，
+ *       返回汇总 Map（total/affected/t{i}|别名 条目）作为节点返回值
  *   - SQL_SCRIPT config = { sql, onError?: 'abort'|'continue', maxRows? }
  *       多条 SQL 按 ; 顺序执行（字面量/注释内分号不切分）；{{var.path}} 编译为 JDBC ? 参数绑定；
  *       返回执行汇总 Map（total/succeeded/failed/aborted?/durationMs/s{i} 条目）作为节点返回值
@@ -162,7 +163,7 @@ export interface DataUpdateWhereCond {
   value?: string
 }
 
-/** 多表更新单表项（updates 非空时生效；alias 缺省输出键为 t{序号}） */
+/** 多表更新单表项（统一形态：单条目 = 单表更新；alias 缺省输出键为 t{序号}，仅多条目时输出汇总） */
 export interface DataUpdateTableUpdate {
   /** 可选输出别名（仅字母/数字/下划线，多表内唯一） */
   alias?: string
@@ -172,11 +173,11 @@ export interface DataUpdateTableUpdate {
 }
 
 export interface DataUpdateNodeConfig {
-  /** 目标动态表（运行期校验存在性与标识符合法性，值经参数绑定防注入） */
+  /** legacy 单表形态（引擎仍接受；设计器打开时自动迁移为 updates[0]，新 DSL 不再产出） */
   table: string
   setOps: DataUpdateSetOp[]
   where: DataUpdateWhereCond[]
-  /** 多表更新：存在且非空时引擎单事务顺序执行（优先于单表形态），任一表失败整体回滚 */
+  /** 统一多表形态：单条目 = 单表更新（输出受影响行数）；多条目单事务顺序执行（输出汇总），任一表失败整体回滚 */
   updates?: DataUpdateTableUpdate[]
 }
 
@@ -456,7 +457,12 @@ export function defaultConfig(type: LogicNodeType): NodeConfig | undefined {
     case 'SUBFLOW':
       return { flowId: '', passAllVars: true, varsMapping: [] }
     case 'DATA_UPDATE':
-      return { table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }
+      return {
+        table: '',
+        setOps: [],
+        where: [],
+        updates: [{ table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }],
+      }
     case 'SQL_SCRIPT':
       return { sql: '', onError: 'abort', maxRows: 200 }
     default:

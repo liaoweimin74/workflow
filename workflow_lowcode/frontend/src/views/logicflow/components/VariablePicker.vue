@@ -23,7 +23,7 @@
                 class="vp-item"
                 type="button"
                 :style="{ paddingLeft: 6 + row.depth * 14 + 'px' }"
-                :title="row.item.detail || row.item.name"
+                :title="row.item.name"
                 @click="onPick(row.item)"
               >
                 <span class="vp-row">
@@ -39,7 +39,7 @@
                   >{{ isOpen(row.item.name) || searching ? '▾' : '▸' }}</span>
                   <span v-else class="vp-caret vp-caret-leaf">·</span>
                   <span class="vp-name">{{ displayName(row.item, row.depth) }}</span>
-                  <span v-if="row.item.detail" class="vp-detail">{{ row.item.detail }}</span>
+                  <span v-if="row.item.detail" class="vp-type">{{ row.item.detail }}</span>
                 </span>
               </button>
             </div>
@@ -309,12 +309,21 @@ function onPick(v: FlowVarItem) {
   word-break: break-all;
 }
 
-.var-popper .vp-detail {
-  font-size: 11px;
+/* 类型徽标：右对齐轻量 pill（下拉只展示变量名 + 类型） */
+.var-popper .vp-type {
+  flex: none;
+  margin-left: auto;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 8px;
+  background: var(--el-fill-color);
   color: var(--el-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.var-popper .vp-item:hover .vp-type {
+  background: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
+  color: var(--el-color-primary);
 }
 
 .var-popper .vp-empty {

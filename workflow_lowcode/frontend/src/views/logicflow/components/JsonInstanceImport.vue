@@ -1,12 +1,28 @@
 <template>
   <div class="jii-wrap">
-    <el-button size="small" text type="primary" class="jii-btn" @click="open = true">
-      <el-icon><Upload /></el-icon>
-      导入 JSON 实例
-    </el-button>
-    <el-tag v-if="hasStructure" size="small" type="success" effect="plain" closable class="jii-tag" @close="emit('clear')">
-      结构 {{ stats }} 字段
-    </el-tag>
+    <!-- 图标模式：嵌在参数行内（删除按钮之后），已导入结构时图标变绿提示 -->
+    <el-tooltip v-if="icon" placement="top" :content="iconTip">
+      <el-button
+        size="small"
+        text
+        type="primary"
+        class="jii-icon-btn"
+        :class="{ 'is-set': hasStructure }"
+        aria-label="导入 JSON 实例"
+        @click="open = true"
+      >
+        <el-icon><Upload /></el-icon>
+      </el-button>
+    </el-tooltip>
+    <template v-else>
+      <el-button size="small" text type="primary" class="jii-btn" @click="open = true">
+        <el-icon><Upload /></el-icon>
+        导入 JSON 实例
+      </el-button>
+      <el-tag v-if="hasStructure" size="small" type="success" effect="plain" closable class="jii-tag" @close="emit('clear')">
+        结构 {{ stats }} 字段
+      </el-tag>
+    </template>
 
     <el-dialog
       v-model="open"
@@ -58,10 +74,15 @@ import {
   JSON_INFER_MAX_KEYS,
 } from '../utils/jsonStructure'
 
-const props = defineProps<{
-  /** 已导入的结构（存在时显示成功标签与清除按钮） */
-  structure?: FieldNode[] | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** 已导入的结构（存在时显示成功标签/图标变绿与清除按钮） */
+    structure?: FieldNode[] | null
+    /** 图标按钮模式（嵌入参数行内，仅图标 + tooltip 提示状态）；默认 false = 文本按钮 + 结构标签 */
+    icon?: boolean
+  }>(),
+  { icon: false }
+)
 
 const emit = defineEmits<{
   import: [fields: FieldNode[]]
@@ -78,6 +99,11 @@ watch(open, (v) => {
 
 const hasStructure = computed(() => Array.isArray(props.structure) && props.structure.length > 0)
 const stats = computed(() => (hasStructure.value ? statFields(props.structure as FieldNode[]).total : 0))
+
+/** 图标模式 tooltip：无结构引导导入，有结构报字段数 + 可重导 */
+const iconTip = computed(() =>
+  hasStructure.value ? `已导入结构（${stats.value} 字段）· 点击重新导入` : '导入 JSON 实例生成变量结构'
+)
 
 /** 实时解析预览（防抖不需要：解析轻量） */
 const preview = computed(() => inferStructureFromJsonText(text.value))
@@ -109,6 +135,19 @@ function onClearFromDialog() {
 
 .jii-btn {
   padding: 0 4px;
+}
+
+.jii-icon-btn {
+  padding: 5px 6px;
+}
+
+.jii-icon-btn.is-set {
+  color: var(--el-color-success);
+}
+
+.jii-icon-btn.is-set:hover {
+  color: var(--el-color-success);
+  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
 }
 
 .jii-head {

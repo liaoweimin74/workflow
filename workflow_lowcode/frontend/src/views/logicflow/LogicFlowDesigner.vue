@@ -138,7 +138,7 @@
       <template #header>
         <FieldLabel
           label="输入参数声明"
-          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议；json 类型参数可粘贴 JSON 实例导入字段结构，节点选择变量时即可展开选到具体字段"
+          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议；json 类型参数可点击行尾图标粘贴 JSON 实例导入字段结构；参数名 formData 的入参可一键导入绑定表单结构。节点选择变量时即可展开选到具体字段"
         />
       </template>
       <div v-if="!inputVars.length" class="iv-empty">未声明入参</div>
@@ -156,14 +156,28 @@
           <el-button size="small" text type="danger" @click="inputVars.splice(i, 1)">
             <el-icon><Delete /></el-icon>
           </el-button>
-        </div>
-        <!-- json 类型：粘贴 JSON 实例生成字段结构树 → 变量选择器可展开选到字段 -->
-        <div v-if="v.type === 'json'" class="iv-json-row">
+          <!-- json 类型：粘贴 JSON 实例生成字段结构树（图标按钮在删除之后，已导入变绿） → 变量选择器可展开选到字段 -->
           <JsonInstanceImport
+            v-if="v.type === 'json'"
+            icon
             :structure="v.structure"
             @import="(fields) => (v.structure = fields)"
             @clear="v.structure = undefined"
           />
+          <!-- 参数名 formData：一键导入绑定表单结构（图标按钮，已导入变绿） -->
+          <el-tooltip v-if="v.name.trim() === 'formData'" placement="top" :content="formStructTip(v)">
+            <el-button
+              size="small"
+              text
+              type="primary"
+              class="iv-form-btn"
+              :class="{ 'is-set': v.structure?.length }"
+              aria-label="导入表单结构"
+              @click="importFormStructure(v)"
+            >
+              <el-icon><Grid /></el-icon>
+            </el-button>
+          </el-tooltip>
         </div>
       </div>
       <el-button size="small" text type="primary" @click="addInputVar">添加入参</el-button>
@@ -203,6 +217,7 @@ import {
   ArrowLeft,
   Delete,
   Finished,
+  Grid,
   MagicStick,
   Promotion,
   RefreshLeft,
@@ -241,7 +256,12 @@ import {
   serializeDsl,
 } from './utils/dsl'
 import type { FlowEdge, FlowNode as FlowNodeModel, InputVarDef, LogicNodeType } from './utils/dsl'
-import { collectAvailableVars, type FormFieldGroupLike } from './utils/flowVars'
+import {
+  collectAvailableVars,
+  formFieldGroupsToFieldNodes,
+  type FormFieldGroupLike,
+} from './utils/flowVars'
+import { statFields } from './utils/jsonStructure'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
@@ -297,6 +317,24 @@ const inputVarsDialogVisible = ref(false)
 
 function addInputVar() {
   inputVars.value.push({ name: '', type: 'string', required: false, desc: undefined })
+}
+
+/** formData 入参一键导入绑定表单字段结构（formFieldGroups 由设计器设计期发现加载） */
+function importFormStructure(v: InputVarDef): void {
+  const fields = formFieldGroupsToFieldNodes(formFieldGroups.value)
+  if (!fields.length) {
+    ElMessage.warning('未获取到绑定表单的字段结构：请先在「表单逻辑」为本流绑定表单后重试')
+    return
+  }
+  v.structure = fields
+  ElMessage.success(`已导入表单结构：${statFields(fields).total} 个字段`)
+}
+
+/** formData 导入按钮 tooltip：无结构引导导入，有结构报字段数 + 可重导 */
+function formStructTip(v: InputVarDef): string {
+  return v.structure?.length
+    ? `已导入表单结构（${statFields(v.structure).total} 字段）· 点击重新导入`
+    : '导入表单结构（来自绑定表单）'
 }
 
 // ===== 从触发点事件导入参数（与表单逻辑流绑定联动） =====
@@ -1394,6 +1432,12 @@ function onRunTraces(traces: { nodeId: string; status: string }[] | undefined) {
 let savingQuiet = false
 
 async function handleSave(): Promise<boolean> {
+  // 防呆守卫：画布无「开始」节点视为异常状态（如 HMR 热替换/加载失败导致画布被清空），
+  // 禁止保存以免把空画布写库覆盖已有流程内容（真实事故：2026-10-09 var_picker_test 节点被空存清空）
+  if (!allNodes().some((n) => n.data.nodeType === 'START')) {
+    ElMessage.warning('画布为空：缺少「开始」节点，已阻止保存（避免覆盖已有流程内容）。请刷新页面重新加载流程')
+    return false
+  }
   saving.value = true
   try {
     const dsl = serializeDsl(allNodes(), allEdges(), inputVars.value)
@@ -1602,19 +1646,22 @@ function handleBack() {
   gap: 8px;
   margin-bottom: 8px;
 }
-/* json 入参结构导入子行（JsonInstanceImport 挂载行） */
+/* json 入参结构导入（图标按钮在行内删除之后） */
 .iv-row-wrap {
   margin-bottom: 8px;
 }
 .iv-row-wrap .iv-row {
   margin-bottom: 0;
 }
-.iv-json-row {
-  margin-top: 4px;
-  padding: 4px 6px 4px 10px;
-  border-left: 2px solid var(--el-color-primary-light-7, #d9ecff);
-  display: flex;
-  align-items: center;
+.iv-form-btn {
+  padding: 5px 6px;
+}
+.iv-form-btn.is-set {
+  color: var(--el-color-success);
+}
+.iv-form-btn.is-set:hover {
+  color: var(--el-color-success);
+  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
 }
 /* 从触发点导入区块：与表单逻辑流绑定联动 */
 .iv-import {

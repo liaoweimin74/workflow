@@ -88,11 +88,10 @@ if $MC -e "SELECT 1" >/dev/null 2>&1; then
   log "S4: root@$DBPASS TCP 授权已就绪"
 else
   log "S4: 配置 root 密码（socket 初始化授权）..."
-  $MC --socket="$MDB/mysql.sock" -u root 2>/dev/null <<SQL || \
-  $MC --socket="$MDB/mysql.sock" -u root --skip-password <<SQL
+  "$MDB/root/usr/bin/mariadb" --socket="$MDB/mysql.sock" -u root <<SQL
 ALTER USER 'root'@'localhost' IDENTIFIED BY '$DBPASS';
-CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY '$DBPASS';
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;
+ALTER USER 'root'@'127.0.0.1' IDENTIFIED BY '$DBPASS';
+ALTER USER 'root'@'::1' IDENTIFIED BY '$DBPASS';
 FLUSH PRIVILEGES;
 SQL
   $MC -e "SELECT 1" >/dev/null 2>&1 || { log "S4 FAIL: 授权后仍无法连接"; exit 1; }

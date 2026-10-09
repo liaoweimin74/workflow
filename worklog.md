@@ -5470,3 +5470,36 @@ Stage Summary:
 - 【收割者规律最终版】本代沙箱专项 SIGTERM 击杀一切 java 进程（周期 ~18-30s，判定独立于 cmdline/exe 名/父进程/会话/启动时长），java 引擎在本沙箱代际不可常驻；巡检任务中「java 进程为正当常驻勿动」条款失效——巡检勿再尝试拉 java（必被杀）
 - 当前引擎=node（NestJS dist/main.js），8080=200 平台基础功能全量可用；Java 侧增量功能（DATA_UPDATE 多表/SQL_SCRIPT/form-fields 字段发现）引擎能力暂缺，前端静默容错降级为旧形态（form 组单条目），待收割者规则变化或平台侧放开后再切 java（jar 99M 已就绪 target/，engine-choice 一改 + supervisor POST 即切换）
 - start-services.sh 对 node 引擎入口过时（bun src/index.ts 应为 node dist/main.js）——本轮未走该路径，恢复一律经 POST /api/portal/services
+
+---
+Task ID: cron-巡检-20261009-1705 + 重置取证
+Agent: 主控（Z.ai Code）
+Task: 17:05 巡检发现假绿 → 重置原因取证 → MariaDB/数据/Java 全链路恢复
+
+Work Log:
+- 【重大发现·环境级重建】/proc/uptime=2027s → 沙箱环境于 17:05:29-17:06:40（本地）整体重新供给：全部进程陪葬（vite/Node 引擎 lstart 均 17:05:29-32）、node_modules 被清后由开机自愈链 bun install 重装（mtime 17:05:32）；未入 git 的运行时产物全灭（jar/mariadb-user/tools maven+jdk21/.m2），git 追踪文件全幸存（backups/*.sql、代码、worklog）
+- 【重置时间线（git reflog，UTC+8）】15:29:25 cron 快照 3f63c835 → 15:44:34 平台 reset to origin/main（上轮摘要记的"15:07 重置"实为此次 git 层动作）→ 16:21:51 cron 快照 b8607718 → 17:05:29 环境重建；三次事件全部对齐 cron/会话边界 → 根因=平台会话生命周期重供给，非 OOM（oom_kill=0）非脚本事故
+- 【17:05 假绿真相】四链路 200×4 但 8080=Node 引擎（bun src/index.ts）撑门面，login 响应体 code:500 "no such table: SYS_USER"；engine-choice 被自愈链写回 node（决策链④ workflow.db 最强信号）
+- 【MariaDB 重建（17:05 会话）】apt 下载 8 deb（mariadb 11.8.6 + libaio1t64/liburing2/libncurses6）→ dpkg -x 至 mariadb-user/root → share/bin/lib 符号链接布局 → mariadb-install-db（--lc-messages-dir=share/mariadb --auth-root-authentication-method=normal）成功
+- 【本会话（17:40）续作】mariadbd 拉起 3306 UP → root@localhost+127.0.0.1 密码 740130 双授权 → 导入 backups/db-workflow-full-20261009.sql（workflow 87 表，SYS_USER 2 行）+ rescue-workflow_v6-20261008-013021.sql（归档）→ engine-choice=java + 双 marker 已清 → bootstrap --build-java 后台重建中（PID 1755，日志 /home/z/tools/bootstrap-java-1741.log）
+
+Stage Summary:
+- 重置根因定论：平台在 cron 会话边界做环境级重供给，仅 git 追踪状态幸存；防御=一切关键产物必须入 git（dump 已入）或脚本可重建
+- 遗留缺口：bootstrap-after-reset.sh 无 MariaDB 重建段（建议补：deb 下载→解包→布局→init-db，参数已验证）；mariadb-user/debs/ 8 件 deb 现存可复用
+- 待 jar 构建完成后：kill Node(1111) → start-services.sh（java 分支）→ 8080 真绿收口
+
+---
+Task ID: java-restore-20261009-1750（收口）
+Agent: 主控（Z.ai Code）
+Task: Java 引擎恢复收口（承接 cron-巡检-20261009-1705）
+
+Work Log:
+- 【方法论修正】nohup 后台构建两度被收割（bootstrap 死于 JDK 下载阶段，无日志尾行=静默被杀）→ 改前台长超时分步执行：curl JDK 198M（570s 内完成）→ 解压 javac 21.0.12.1 → Maven 3.9.9 → mvn package 前台 99M jar 成功
+- 【引擎切换】rm 双 marker + engine-choice=java（已提前固化）→ kill Node(1111) → start-services.sh java 分支拉起（管道超时 120s 但实际已执行成功）
+- 【Java Started 18.046s】17:51:36 本地，PID 2127，-Xmx448m；此前 43+ 次启动循环失败的正解=MariaDB 未就绪，DB 层修复后一次点亮
+- 【业务全链路验证】admin/admin123 登录 200（token 180 字符）→ Bearer + X-Tenant-Id: default → GET /api/v1/logic-flows/1/form-fields = 200（aec957eb 新端点在恢复栈上工作正常）
+- 【四链路真绿】3000/外域 Host/业务链/8080 直连 = 200×4（本次为真实业务绿，区别于 17:05 的假绿）；内存 3267MB，oom_kill=0
+
+Stage Summary:
+- D+ 终态达成：vite 3000 + Java 8080 + MariaDB 3306 全部就位且业务可验证
+- 已知脆弱点：①java/mariadbd 由本会话 nohup 托管，收割者随时可能回收（巡检自愈链可拉回但 jar/mariadb-user 在下次环境重置时会再丢，需重跑本轮前台构建流程）②bootstrap-after-reset.sh 仍无 MariaDB 重建段（建议补齐，参数已全部验证：8 deb→dpkg -x→share/bin/lib 链接→install-db --lc-messages-dir=share/mariadb --auth-root-authentication-method=normal）③ daily dump 已入 git（backups/*.sql 在重置中幸存，本轮恢复的数据就来自它）

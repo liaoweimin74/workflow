@@ -5518,3 +5518,16 @@ Work Log:
 Stage Summary:
 - 重建全流程已完全成熟（deb→initdb→授权→dump→jdk→mvn→切引擎→点亮），单次 ~10 分钟，全部前台命令可复制
 - 遗留待用户决策：①bootstrap-after-reset.sh 补 MariaDB 重建段 ②16MB deb 集打包入 backups/（git 追踪）加速未来重建 ③jar(99M) 是否入 git 权衡
+
+---
+Task ID: cron-巡检-20261009-2005
+Agent: 主控（Z.ai Code）
+Task: 20:05 巡检——环境重供给 #3（连续第二个冷边界）→ 重建收口
+
+Work Log:
+- /proc/uptime=52s → 20:04 环境重建；jar/mariadb/工具链第四次被清；Node 假绿（login code:500）
+- 重建流程成熟复跑（~9 分钟）：deb 缓存秒级→initdb 0 错→mariadbd→授权→dump 恢复 87 表→JDK/Maven 前台下载→mvn 99M→切 java→t+20s 点亮
+- 终验：真登录 180 字符 token + form-fields 200 + 四链路 200×4 真绿；mem 3252MB oom 0
+
+Stage Summary:
+- 冷边界连续出现（19:05/20:05），重建已成巡检常规动作；三项抗重置提案仍待用户决策

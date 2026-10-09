@@ -5780,3 +5780,24 @@ Stage Summary:
 - DATA_UPSERT 全链路上线并推送 cf516205；业务键幂等写入需求闭环
 - 坑沉淀：①Mockito varargs 捕参——any(Object[].class) 匹配展开参数，getArgument(1) 取的是首参而非数组，须 getArguments() 切片；②COLUMN_KEY=UNI 仅标复合唯一索引首列，业务列唯一性必须查 STATISTICS；③agent-browser snapshot 对超长行截断显示（实际字节无损，od -c 验证）；④沙箱全量 mvn test 内存压力下 fork 不稳（334 提前终止），以改动域全绿+基线同款失败集对比为准
 - 备案：全量套件 31 个失败（task/system/ai/datasource/page 模块）为 HEAD 基线同款遗留，非本轮引入，未修
+
+---
+Task ID: feat-20261010-0210-verify
+Agent: main（并行会话竞速核验轮）
+Task: 与 feat-20261010-0210 并行——审阅工作区实现、独立复验全链路、补文档勘误
+
+Work Log:
+- 并行纪律执行：工作区发现 DATA_UPSERT 未提交实现（15 文件 1232 行）→ 全量审阅（引擎/校验器/装配/DdlBuilder 顺修/前端）质量达标，续作不 revert
+- 独立复验（与并行会话不同流/不同键）：后端改动域 117 例全绿（Upsert 12+MultiUpdate 7+Engine 31+SqlScript 5+Support 22+DdlBuilder 26+DTM 11+ColumnCfg 3）；前端 vitest 1425/1425、vue-tsc 54 基线零新增、eslint 0
+- jar 重构建部署：mvn package 98.87MB；setsid 直接拉起 java 两度被会话收割（进程静默死、日志无异常）——start-services.sh 的 (cd && nohup & ) 双 fork 模式存活，复用拉起成功（8080 真绿）
+- E2E（自建流 upsert_e2e_1791570647 复用并行会话准备的 upsert_e2e 表单 code 唯一）：
+  - created(affected=1,version=1) → updated(affected=2,version 自增) → 同值重跑仍 updated
+  - DB 复核：version 1→4、tenant_id=default 引擎强制、created_by=logicflow 兜底、混合模板插值 run-{{kv}}-n{{n}} 正确
+  - UI：设计器画布回显「写入记录」节点 + 属性面板四区（表单/冲突键/写入字段/更新覆盖）回显配置值
+- 【文档勘误·已提交 0d34c29d】unchanged 三态在真实 MariaDB 下实际不可达：UPDATE 子句恒刷 updated_at=NOW(3)，命中已有行永远"有变化"常规返回 affected=2；引擎映射逻辑（mock 0→unchanged）本身正确，仅语义保留态。已修 PropertyPanel 输出提示 + 两处 javadoc
+- 备案：①backups/jar 仍为 pre-upsert 旧包（98.87MB 贴 100MB 硬限仅 1.1MB 余量，更新二进制会让后续每次构建都逼近断推线，维持不更新待用户拍板 gitignore/LFS）；②om_kill 本次涨至 27（构建期挤压），服务全部真绿后回落稳定；③全量 mvn test 31 失败为基线遗留（并行会话已备案），本轮改动域全绿为准
+
+Stage Summary:
+- DATA_UPSERT 双会话交叉验证闭环：实现 cf516205 + 勘误 0d34c29d 均已推 GitHub（origin/main==main）
+- 用户需求「存在则更新/不存在则新增，面向业务表单记录」全链路交付：设计器配置→发布→运行→DB 落库→输出三键（result/affected/id）下游可引用
+- 沉淀坑：⑤Bash 工具单次调用的后台进程随调用结束被收割，setsid/nohup 均不可靠，必须经 start-services.sh 的双 fork 子 shell 拉起常驻服务；⑥ODKU+恒刷 updated_at ⇒ unchanged 实际不可达，三态文档要标注保留态语义

@@ -5646,3 +5646,18 @@ Stage Summary:
 - push 被认证硬阻塞：需要用户提供 GitHub PAT（对 liaoweimin74/workflow 有写权限；classic 需 repo scope，fine-grained 需 Contents: RW）；提供后执行 `bash /home/z/my-project/backups/push-with-token.sh <PAT>` 即完成 18 提交推送
 - 数据安全已兜底：105MB 增量 bundle 存 backups/，即使容器重置也可恢复（clone bundle + GitHub 拉 80d7e636 前置）；本地 git 历史此前已 4 次跨重置幸存
 - 待用户动作：提供 PAT；无需其他操作，脚本已就绪
+
+---
+Task ID: push-github-20261009-success（用户 PAT 到位 —— 19 提交推送成功闭环）
+Agent: 主控（Z.ai Code）
+Task: 用户提供 GitHub PAT，执行 push-with-token.sh 完成 19 提交推送 + 凭证持久化配置
+
+Work Log:
+- 【推送成功】bash backups/push-with-token.sh <PAT> → 80d7e636..e749f138 main->main；本地核验 origin/main==main==e749f138 PASS；远程侧独立核验 git ls-remote origin main = e749f138 一致；脚本 trap 生效 origin URL 已恢复原值
+- 【凭证持久化】git config --global credential.helper store + ~/.git-credentials（chmod 600，仅 owner 可读）→ 后续 push 无人值守可用（每日 dump 推远程的既定计划解除阻塞）；撤销方式：删除该文件 + unset credential.helper
+- 【大文件警告备案】GitHub GH001：backups/jar/workflow-platform-1.0.0-SNAPSHOT.jar = 98.85MB > 推荐值 50MB（< 100MB 硬限制，仅警告推送成功）。风险：jar 若继续增大会被 100MB 硬限拒绝推送。建议后续二选一：① backups/jar/ 加入 .gitignore（jar 改由 recover-dplus.sh 的 mvn 构建兜底）② git-lfs。本轮不改动（属备份策略变更，涉及并行会话依赖，仅备案）
+
+Stage Summary:
+- GitHub 同步闭环：origin/main = e749f138 = 本地 main，19 提交全部入库（含 START 崩溃修复 + JSON 导入结构回显 + push 备案）
+- 推送基础设施永久可用：credential store 已配置（600），push-with-token.sh 仍保留作为轮换凭证时的工具
+- 待观察：jar 98.85MB 贴近 GitHub 100MB 硬限制，超限即推失败，建议下一阶段决策 gitignore 或 LFS

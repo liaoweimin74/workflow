@@ -35,6 +35,27 @@ kill_stale_backend() {
   sleep 1
 }
 
+# ---- MariaDB (3306，用户态实例；D+ 终态前置依赖，必须在 Java 之前就绪) ----
+# 2026-10-09 restore-r139：重置后二进制/数据目录由 scripts/bootstrap-after-reset.sh 重建；
+# 此处仅负责幂等拉起（数据目录与 sysroot 已就位时直接启动）
+MDB_DIR=/home/z/my-project/mariadb-user
+if ! port_open 3306; then
+  if [ -x "$MDB_DIR/root/usr/sbin/mariadbd" ] && [ -d "$MDB_DIR/root/data/mysql" ]; then
+    echo "[start-services] 启动 MariaDB (3306, 用户态)..."
+    rm -f "$MDB_DIR/mysqld.pid"
+    (cd "$MDB_DIR" && LD_LIBRARY_PATH="$MDB_DIR/sysroot/usr/lib/x86_64-linux-gnu:$MDB_DIR/root/usr/lib/x86_64-linux-gnu" \
+      nohup root/usr/sbin/mariadbd --no-defaults --basedir="$MDB_DIR/root" --datadir="$MDB_DIR/root/data" \
+      --socket="$MDB_DIR/mysql.sock" --pid-file="$MDB_DIR/mysqld.pid" --port=3306 --bind-address=127.0.0.1 \
+      >> "$MDB_DIR/mariadbd.err" 2>&1 < /dev/null &)
+    for i in 1 2 3 4 5 6; do sleep 5; port_open 3306 && break; done
+    if port_open 3306; then echo "[start-services] MariaDB 就绪 (3306)"; else echo "[start-services] WARN: MariaDB 3306 未就绪"; fi
+  else
+    echo "[start-services] WARN: mariadbd 二进制或数据目录缺失，跳过（运行 scripts/bootstrap-after-reset.sh 重建）"
+  fi
+else
+  echo "[start-services] MariaDB 已在运行 (3306)"
+fi
+
 # ---- 引擎选择（Task 13-8 → 13-R2 → 13-R3 → 15-R1，与 service-supervisor.ts 决策链保持一致）----
 NODE_MARKER=/home/z/tools/backend-engine-node
 NODE_BACKEND_DIR=/home/z/my-project/workflow_lowcode/backend-node

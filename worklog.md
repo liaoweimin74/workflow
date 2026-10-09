@@ -5172,3 +5172,21 @@ Work Log:
 Stage Summary:
 - **D+ 终态全绿达成**：vite 独占 3000 + Java 独占 8080（18.6s 健康启动）+ MariaDB 3306；数据层为全新重建（flyway 11 行、83 表、admin/test 种子），jar 与源码一致性恢复
 - 遗留交接：①本会话收割者现象已入档（重大发现 1），后续巡检/开发会话若见"进程静默死亡"先查会话归属；②01:05 起 hourly patrol 444954 应回归全绿零干预；③mariadb-user/debs/ 保存了完整 deb 集（8 件），供未来重置后 bootstrap 使用
+---
+Task ID: data-restore-v6
+Agent: main (interactive session)
+Task: 用户问「数据库现在是V6吗？似乎不是最新数据」——确认当前库状态并将 workflow_v6 用户业务数据恢复进 D+ 终态的 workflow 库
+
+Work Log:
+- 【现状确认】当前 MariaDB 只有 workflow 库（r139/r142 从 Flyway 全新重建：83 表 + admin/test 种子），workflow_v6 库不存在——用户业务数据（9/24-25 创建）确实缺失，用户观察正确
+- 【数据源定位】backups/rescue-workflow_v6-20261008-013021.sql（105KB，10-08 01:30 抢救导出，40 表 239 行，最后写入 09-27）
+- 【导入对照库】将 rescue dump 导入为独立 workflow_v6 库（作为归档保留），实查用户数据：wf_form_def 9、wf_page_def 1、wf_data_source 19（8 内建+11 用户）、wf_category 2、wf_process_draft 2、wf_node_config 2、wf_biz_bill_test 1 行；msg_*/sys_dict_* 全空无需迁移
+- 【结构比对】6 张核心表列结构与 Java 库完全一致（wf_form_def 14=14、wf_page_def 14=14、wf_data_source 12=12、wf_category 6=6、wf_node_config 9=9），仅 wf_process_draft 有 1 列差异（v6.key ↔ Java.description，按公共 16 列导入）；ID 零冲突（除 ds-builtin-* 8 条内建撞名——保留新版跳过）
+- 【精确导入】INSERT IGNORE … SELECT：wf_form_def +9、wf_page_def +1、wf_category +2、wf_node_config +1（另 1 行因 V38 唯一键冲突保留新版）、wf_data_source +11（WHERE id NOT LIKE 'ds-builtin-%'）、wf_process_draft +2；4 张 wf_biz_* 业务表 DDL 搬运（SHOW CREATE TABLE 重建）+ bill_test 数据 +1
+- 【引擎运行时隔离】wfe_*（activity/execution/process_def/process_instance/task/candidate/delegation/variable）与 wf_task_comment/remind/transfer 为旧 Node 引擎运行时结构，Java 用 Flowable ACT_*，不迁移（双引擎隔离既有设计，流程草稿已迁可重新发布）
+- 【API 双链路验证】8080 直连：/api/v1/form-definitions total=12（员工请假业务表单/员工报销申请/办公用品登记/报销单/请假单-业务表单/请假人员等 6 个 PUBLISHED）、/api/v1/pages total=2、/api/v1/data-sources total=23；3000 vite 代理链路 total=12 一致
+- 【关键排障点】列表 API 需 X-Tenant-Id: default（数据的 tenant_id=default；误传 tenant-default 会返回空列表，易误判迁移失败）
+
+Stage Summary:
+- workflow_v6 用户业务数据 100% 恢复进 D+ 终态 workflow 库并通过 Java API 双链路验证；workflow_v6 库作为归档保留在 MariaDB 中（后续可随时再查/再迁）
+- 注意：①流程实例/任务等旧引擎运行时数据未迁（设计如此），已发布流程需用草稿重新部署到 Flowable；②巡检勿删 workflow_v6 归档库；③引擎运行时查询类报表（如旧 wfe_task 关联评论）在 Java 侧无对应历史

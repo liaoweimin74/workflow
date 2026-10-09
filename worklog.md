@@ -5352,3 +5352,21 @@ Stage Summary:
 - 安全边界：语句类型白名单（无 DDL/管理命令）、参数绑定防注入、行数/语句数/超时三重上限；能力面（全库 DML）与 SCRIPT 同信任级别（管理员侧）
 - 遗留备案：①KEY 拆包仅取汇总顶层键（s0/s1/total…，引擎 results-v2 语义即如此）深层走点路径 ②CONDITION variable 仍不支持 {{}} 点路径（既有限制）③Job 446016 会话中断未记账，由本节代记
 - 提交：本轮实施 + E2E 脚本入库，push origin/main
+
+---
+Task ID: du-multi-table
+Agent: 主会话（用户需求 #16「对数据更新组件进行修改，使其能够更新多个表」；顺带执行 Job 444954 巡检）
+Task: DATA_UPDATE 节点支持多表更新——盘点并行会话遗留的工作树实施（8 改 + 1 新测试，未提交未部署），接手完成验证、部署、E2E、记账入库
+
+Work Log:
+- 【巡检 Job 444954（13:05）】四链路 200×4（3000/外域 Host/代理登录/8080 直连），内存 2.59GB，oom_kill 0，vite 单实例 8601 + java 19978（03:51 SQL_SCRIPT jar），全绿无干预
+- 【盘点】工作树已有 DATA_UPDATE 多表实施：引擎 executeDataUpdateMulti（编译前移全部配置错误→单连接单事务 setAutoCommit(false) 顺序执行→全成 commit；任一失败 rollback 且节点抛错走 errorAction；条目键=别名或 t{i}，汇总 {total,affected,durationMs,…}）+ BackendDataUpdateConfig.TableUpdate（alias/table/setOps/where，MAX_UPDATES=20）+ 校验器 validateDataUpdateUpdates（alias \w+ 唯一/table 合法标识符/setOps 非空/条目上限）+ 前端 PropertyPanel 多表开关（开启把单表配置迁移为第一条、关闭仅 ≤1 条防丢配置）+ 条目卡片（别名/目标表/SET/WHERE 完整编辑、每表列结构缓存拉取 dataSourceApi.getDbSchemaColumns、汇总键预览）+ FlowNode 摘要「多表更新 N 张表 · M 字段」——实施完整，缺验证/部署/入库
+- 【测试】LogicFlowDataUpdateMultiTest 7/7（单事务汇总+参数绑定下发/失败回滚节点 FAILED/配置错误执行前暴露/别名非法+重复拒绝/updates 优先于遗留单表字段/存量单表返回 Integer 不变/显式 KEY 拆包抑制隐式输出）；logicflow 包 78/78 BUILD SUCCESS（mvn: /home/z/tools/maven/bin/mvn，PATH 无 mvn）；前端 vitest 1391/1391（110 文件）+ vue-tsc 54=历史基线零新增
+- 【部署】mvn -o package 重建 jar（subagent 独立核实含 BackendDataUpdateConfig$TableUpdate/$SetOp/$WhereCond + LogicFlowEngine$BuiltUpdate 新类）；subagent 会话执行换装：旧 PID 19978 已先行消失（kill 幂等跳过）→ start-services.sh 拉起 PID 25506（05:21:55 UTC，agent 会话拉起免疫收割者铁律再次生效）→ 8080=200、3000=200（vite 8601 未动）
+- 【E2E】scripts/e2e-dataupdate-multi.mjs（留存可复跑）5/5 PASS：Phase1 多表成功——run SUCCESS，du_x 汇总 {total:2,affected:3,durationMs,order:{table,affected:1},t1:{table,affected:2}}，{{newStatus}}/{{orderId}} 参数绑定真实生效，库核验 order.status=PAID（SET）+ stock 8/18（SUB 2 两行）；Phase2 运行期整体回滚——order.status VARCHAR(16) SET 25 字符超长串 → 第二句 Data too long 失败，run FAILED 错误含「Data too long for column 'status'」，库核验第一句 stock ADD 100 效果不存在、order 仍 PAID（单事务全有或全无端到端实证）；临时流/两张临时表清理零残留
+
+Stage Summary:
+- 数据更新组件升级完成：单节点可更新多张表——config.updates 非空即多表形态（单事务顺序执行全有或全无，多表数据一致性优先；需逐表独立失败语义请拆多个 DATA_UPDATE 节点）；存量单表形态返回值/DSL/前端行为零影响
+- 输出沿用「约定优于配置」：未声明 results 自动写 <节点id> 汇总 {total,affected,durationMs,别名|t{i}:{table,affected}}，下游 {{du_x.order.affected}} 点路径零配置引用；显式 KEY 拆包取顶层键；与 SQL_SCRIPT 的 s{i} 键控约定同构
+- 备案：①浏览器 UI E2E 未跑（巡检窗口约束不启动 agent-browser；前端由 vue-tsc+vitest 1391 用例+UI diff 审阅兜底，多表编辑器与 SQL_SCRIPT 编辑器同款交互模式）②运行期失败用 VARCHAR 超长截断（MariaDB 严格模式）造出，配置类错误（表不存在/别名重复）执行前暴露路径由单测覆盖 ③jar mtime 05:12 早于二次 package 时刻的时序疑点，经 subagent 核实 jar 内容正确（新类在、大小一致），mvn 增量打包行为，无碍
+- 提交：本轮全部入库（引擎+校验器+配置+前端 4 文件+7 用例测试+e2e 脚本+本记账），push origin/main

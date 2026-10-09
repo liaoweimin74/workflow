@@ -1,11 +1,13 @@
 package com.workflow.engine.logicflow.engine;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.workflow.engine.logic.config.BackendDataUpdateConfig;
 import com.workflow.engine.logicflow.dsl.LogicFlowDsl;
 import com.workflow.engine.logicflow.dsl.NodeType;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -22,6 +24,8 @@ import java.util.Set;
  *   <li>CONDITION 节点缺 branch=true / branch=false 出边；</li>
  *   <li>HTTP 节点缺 url；BEAN 节点缺 beanName/methodName；SCRIPT 节点缺 source；</li>
  *   <li>SQL_SCRIPT 节点缺 sql / 语句解析失败 / 类型白名单外 / 别名重复 / 占位符语法错 / onError 或 maxRows 非法；</li>
+ *   <li>DATA_UPDATE 节点：单表形态缺 table/setOps；多表形态（updates 非空）逐项校验
+ *       （table 合法标识符 / setOps 非空 / alias 可选 \w+ 且唯一 / 条目数 ≤ MAX_UPDATES）；</li>
  *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/SQL_SCRIPT）
  *       顶层与循环体均可配；变量名须 \\w+ 合法标识符、不重复、mode 必填且 ∈ WHOLE|KEY；
  *       resultVar 已全链路下线（引擎反序列化忽略该遗留键）；</li>
@@ -172,15 +176,22 @@ public class LogicFlowDslValidator {
     }
 
     /**
-     * DATA_UPDATE 节点硬校验：table 必填且为合法标识符；setOps 非空且逐项
-     * column 非空 / mode ∈ SET,ADD,SUB / value 非空（ADD/SUB 须数字）；where 逐项
-     * column 非空 / op ∈ EQ,NE,GT,GTE,LT,LTE,IS_NULL,NOT_NULL / 非空判定类 op 须带 value。
+     * DATA_UPDATE 节点硬校验（两种形态二选一，updates 非空时为多表形态且优先）：
+     * 单表形态 table 必填且为合法标识符；多表形态 updates 逐项校验（table 合法标识符 /
+     * setOps 非空 / alias 可选 \w+ 且唯一 / 条目数 ≤ {@link BackendDataUpdateConfig#MAX_UPDATES}）。
+     * setOps 逐项 column 非空 / mode ∈ SET,ADD,SUB / value 非空（ADD/SUB 须数字）；
+     * where 逐项 column 非空 / op ∈ EQ,NE,GT,GTE,LT,LTE,IS_NULL,NOT_NULL / 非空判定类 op 须带 value。
      * 表/列存在性运行期校验（发布时目标表可能尚未由表单发布创建）。
      */
     private void validateDataUpdate(LogicFlowDsl.NodeDef node, List<String> errors) {
         JsonNode config = node.getConfig();
         if (config == null || config.isNull()) {
             errors.add("DATA_UPDATE 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        JsonNode updates = config.get("updates");
+        if (updates != null && updates.isArray() && !updates.isEmpty()) {
+            validateDataUpdateUpdates(node.getId(), updates, errors);
             return;
         }
         if (isBlankText(config, "table")) {
@@ -192,46 +203,91 @@ public class LogicFlowDslValidator {
         if (setOps == null || !setOps.isArray() || setOps.isEmpty()) {
             errors.add("DATA_UPDATE 节点 " + node.getId() + " 缺少 setOps");
         } else {
-            for (int i = 0; i < setOps.size(); i++) {
-                JsonNode setOp = setOps.get(i);
-                String label = "SET 第 " + (i + 1) + " 项";
-                if (isBlankText(setOp, "column")) {
-                    errors.add("DATA_UPDATE 节点 " + node.getId() + " " + label + "缺少 column");
-                }
-                String mode = textOrNull(setOp, "mode");
-                String normalizedMode = mode == null || mode.isBlank() ? "SET" : mode.trim().toUpperCase();
-                if (!Set.of("SET", "ADD", "SUB").contains(normalizedMode)) {
-                    errors.add("DATA_UPDATE 节点 " + node.getId() + " " + label + "mode 非法(须 SET/ADD/SUB): " + mode);
-                } else if (isBlankText(setOp, "value")) {
-                    errors.add("DATA_UPDATE 节点 " + node.getId() + " " + label + "缺少 value");
-                } else if (("ADD".equals(normalizedMode) || "SUB".equals(normalizedMode))
-                        && !isNumericText(setOp.get("value").asText())) {
-                    errors.add("DATA_UPDATE 节点 " + node.getId() + " " + label
-                            + mode + " 模式 value 须为数字或 {{数值变量}}: " + setOp.get("value").asText());
-                }
-            }
+            validateDataUpdateSetOps(setOps, "DATA_UPDATE 节点 " + node.getId(), errors);
         }
         JsonNode where = config.get("where");
         if (where != null && where.isArray()) {
-            for (int i = 0; i < where.size(); i++) {
-                JsonNode cond = where.get(i);
-                String label = "WHERE 第 " + (i + 1) + " 项";
-                if (isBlankText(cond, "column")) {
-                    errors.add("DATA_UPDATE 节点 " + node.getId() + " " + label + "缺少 column");
+            validateDataUpdateWhere(where, "DATA_UPDATE 节点 " + node.getId(), errors);
+        }
+    }
+
+    /** DATA_UPDATE 多表形态逐项硬校验：alias 可选 \w+ 唯一、table 合法、setOps/where 复用单表同款规则。 */
+    private void validateDataUpdateUpdates(String nodeId, JsonNode updates, List<String> errors) {
+        if (updates.size() > BackendDataUpdateConfig.MAX_UPDATES) {
+            errors.add("DATA_UPDATE 节点 " + nodeId + " 多表更新数超出上限("
+                    + BackendDataUpdateConfig.MAX_UPDATES + "): " + updates.size());
+        }
+        Set<String> aliases = new HashSet<>();
+        for (int i = 0; i < updates.size(); i++) {
+            JsonNode u = updates.get(i);
+            String base = "DATA_UPDATE 节点 " + nodeId + " 多表更新第 " + (i + 1) + " 项";
+            String alias = textOrNull(u, "alias");
+            if (alias != null && !alias.isBlank()) {
+                if (!alias.trim().matches("\\w+")) {
+                    errors.add(base + " 别名非法（仅字母/数字/下划线）: " + alias);
+                } else if (!aliases.add(alias.trim())) {
+                    errors.add(base + " 别名重复: " + alias.trim());
                 }
-                String op = textOrNull(cond, "op");
-                if (op == null || op.isBlank()) {
-                    errors.add("DATA_UPDATE 节点 " + node.getId() + " " + label + "缺少 op");
-                    continue;
-                }
-                String normalizedOp = op.trim().toUpperCase();
-                if (!Set.of("EQ", "NE", "GT", "GTE", "LT", "LTE", "IS_NULL", "NOT_NULL").contains(normalizedOp)) {
-                    errors.add("DATA_UPDATE 节点 " + node.getId() + " " + label + "op 非法: " + op);
-                } else if (Set.of("IS_NULL", "NOT_NULL").contains(normalizedOp)) {
-                    // 空判定无需 value
-                } else if (isBlankText(cond, "value")) {
-                    errors.add("DATA_UPDATE 节点 " + node.getId() + " " + label + "缺少 value");
-                }
+            }
+            if (isBlankText(u, "table")) {
+                errors.add(base + " 缺少 table");
+            } else if (!u.get("table").asText().trim().matches("[a-zA-Z_][a-zA-Z0-9_]*")) {
+                errors.add(base + " 表名非法: " + u.get("table").asText());
+            }
+            JsonNode setOps = u.get("setOps");
+            if (setOps == null || !setOps.isArray() || setOps.isEmpty()) {
+                errors.add(base + " 缺少 setOps");
+            } else {
+                validateDataUpdateSetOps(setOps, base, errors);
+            }
+            JsonNode where = u.get("where");
+            if (where != null && where.isArray()) {
+                validateDataUpdateWhere(where, base, errors);
+            }
+        }
+    }
+
+    /** setOps 逐项硬校验（单表与多表共用；base 为错误定位前缀，如「DATA_UPDATE 节点 du_1」）。 */
+    private void validateDataUpdateSetOps(JsonNode setOps, String base, List<String> errors) {
+        for (int i = 0; i < setOps.size(); i++) {
+            JsonNode setOp = setOps.get(i);
+            String label = base + " SET 第 " + (i + 1) + " 项";
+            if (isBlankText(setOp, "column")) {
+                errors.add(label + "缺少 column");
+            }
+            String mode = textOrNull(setOp, "mode");
+            String normalizedMode = mode == null || mode.isBlank() ? "SET" : mode.trim().toUpperCase();
+            if (!Set.of("SET", "ADD", "SUB").contains(normalizedMode)) {
+                errors.add(label + "mode 非法(须 SET/ADD/SUB): " + mode);
+            } else if (isBlankText(setOp, "value")) {
+                errors.add(label + "缺少 value");
+            } else if (("ADD".equals(normalizedMode) || "SUB".equals(normalizedMode))
+                    && !isNumericText(setOp.get("value").asText())) {
+                errors.add(label + mode + " 模式 value 须为数字或 {{数值变量}}: " + setOp.get("value").asText());
+            }
+        }
+    }
+
+    /** where 逐项硬校验（单表与多表共用；base 为错误定位前缀）。 */
+    private void validateDataUpdateWhere(JsonNode where, String base, List<String> errors) {
+        for (int i = 0; i < where.size(); i++) {
+            JsonNode cond = where.get(i);
+            String label = base + " WHERE 第 " + (i + 1) + " 项";
+            if (isBlankText(cond, "column")) {
+                errors.add(label + "缺少 column");
+            }
+            String op = textOrNull(cond, "op");
+            if (op == null || op.isBlank()) {
+                errors.add(label + "缺少 op");
+                continue;
+            }
+            String normalizedOp = op.trim().toUpperCase();
+            if (!Set.of("EQ", "NE", "GT", "GTE", "LT", "LTE", "IS_NULL", "NOT_NULL").contains(normalizedOp)) {
+                errors.add(label + "op 非法: " + op);
+            } else if (Set.of("IS_NULL", "NOT_NULL").contains(normalizedOp)) {
+                // 空判定无需 value
+            } else if (isBlankText(cond, "value")) {
+                errors.add(label + "缺少 value");
             }
         }
     }

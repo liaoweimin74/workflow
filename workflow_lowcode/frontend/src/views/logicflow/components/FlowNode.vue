@@ -176,6 +176,14 @@ const summary = computed(() => {
       return flowId ? `调用流 ${flowId.slice(0, 12)}…` : '未选择目标流程'
     }
     case 'DATA_UPDATE': {
+      const updates = Array.isArray(cfg?.updates) ? (cfg?.updates as unknown[]) : []
+      if (updates.length) {
+        const fields = updates.reduce((sum: number, u) => {
+          const ops = (u as { setOps?: unknown[] } | null)?.setOps
+          return sum + (Array.isArray(ops) ? ops.length : 0)
+        }, 0)
+        return `多表更新 ${updates.length} 张表 · ${fields} 字段`
+      }
       const table = String(cfg?.table ?? '')
       const setOps = Array.isArray(cfg?.setOps) ? (cfg?.setOps as unknown[]) : []
       return table ? `更新 ${table} · ${setOps.length} 字段` : '未配置目标表'

@@ -389,6 +389,24 @@
 
           <!-- ===== DATA_UPDATE ===== -->
           <template v-else-if="node.data.nodeType === 'DATA_UPDATE'">
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="多表更新" tip="开启后一个节点可配置多张目标表，引擎在单事务内按顺序执行：全成提交，任一表失败整体回滚（全有或全无）；未声明输出时自动汇总 { total, affected, t0|别名.affected, … } 供下游点路径引用；需要逐表独立失败语义请拆成多个数据更新节点" />
+              </template>
+              <div class="du-multi-switch">
+                <el-switch :model-value="duMultiMode" @change="toggleDuMultiMode" />
+                <span class="du-multi-hint">
+                  {{ duMultiMode
+                    ? `已启用 · ${dataUpdateCfg.updates?.length ?? 0} 张表 · 单事务全有或全无`
+                    : '未启用 · 仅更新单张表（存量行为）' }}
+                </span>
+                <el-button v-if="duMultiMode" size="small" text type="primary" @click="addDataUpdateEntry">
+                  添加目标表
+                </el-button>
+              </div>
+            </el-form-item>
+
+            <template v-if="!duMultiMode">
             <el-form-item required>
               <template #label>
                 <FieldLabel label="目标表" tip="下拉取数据库全部表清单；表名运行时校验合法性与存在性，值经参数绑定防注入" />
@@ -493,6 +511,143 @@
                 </el-button>
               </div>
             </div>
+            </template>
+
+            <template v-else>
+              <div v-if="!dataUpdateCfg.updates?.length" class="rows-empty">
+                尚未添加目标表，点击上方「添加目标表」开始配置
+              </div>
+              <div v-for="(u, ui) in dataUpdateCfg.updates ?? []" :key="ui" class="du-multi-card">
+                <div class="du-multi-head">
+                  <span class="du-multi-idx">#{{ ui }}</span>
+                  <el-input
+                    v-model="u.alias"
+                    size="small"
+                    class="du-alias"
+                    maxlength="32"
+                    placeholder="输出别名(可选，字母/数字/下划线)"
+                  />
+                  <el-button
+                    size="small"
+                    text
+                    type="danger"
+                    :disabled="(dataUpdateCfg.updates?.length ?? 0) <= 1"
+                    @click="dataUpdateCfg.updates?.splice(ui, 1)"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+
+                <el-form-item required>
+                  <template #label>
+                    <FieldLabel label="目标表" tip="下拉取数据库全部表清单；表名运行时校验合法性与存在性，值经参数绑定防注入" />
+                  </template>
+                  <el-select
+                    v-model="u.table"
+                    filterable
+                    :loading="duTablesLoading"
+                    placeholder="选择平台动态数据表"
+                    clearable
+                    class="du-table-select"
+                  >
+                    <el-option v-for="t in duEntryTableOptions(u.table)" :key="t" :label="t" :value="t" />
+                  </el-select>
+                </el-form-item>
+
+                <div class="rows-block">
+                  <div class="rows-head">
+                    <FieldLabel label="更新字段 SET" tip="SET 直接赋值；ADD/SUB 对数值列累加/递减；值支持字面量或 {{ formData.xxx }} 点路径取表单字段" />
+                    <el-button size="small" text type="primary" @click="u.setOps.push({ column: '', mode: 'SET', value: '' })">添加</el-button>
+                  </div>
+                  <div v-if="!u.setOps.length" class="rows-empty">暂无更新字段</div>
+                  <div v-for="(op, i) in u.setOps" :key="i" class="du-row">
+                    <el-select
+                      v-model="op.column"
+                      size="small"
+                      filterable
+                      allow-create
+                      default-first-option
+                      :loading="duEntryLoading(u.table)"
+                      :disabled="!u.table"
+                      :title="u.table ? undefined : '先选择目标表'"
+                      placeholder="列名"
+                      class="du-col"
+                    >
+                      <el-option v-for="c in duEntryColumns(u)" :key="c.key" :label="c.key" :value="c.key">
+                        <span class="du-col-opt">
+                          <span>{{ c.key }}</span>
+                          <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+                        </span>
+                      </el-option>
+                    </el-select>
+                    <el-select v-model="op.mode" size="small" class="du-mode">
+                      <el-option label="SET" value="SET" />
+                      <el-option label="ADD +" value="ADD" />
+                      <el-option label="SUB −" value="SUB" />
+                    </el-select>
+                    <VarInput
+                      v-model="op.value"
+                      :variables="variables"
+                      mode="placeholder"
+                      size="small"
+                      class="du-value"
+                      placeholder="值或 {{formData.xxx}}"
+                    />
+                    <el-button size="small" text type="danger" @click="u.setOps.splice(i, 1)">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
+
+                <div class="rows-block">
+                  <div class="rows-head">
+                    <FieldLabel label="更新条件 WHERE" tip="多条件 AND 连接；该表条件为空时将影响全表，请谨慎配置" />
+                    <el-button size="small" text type="primary" @click="u.where.push({ column: '', op: 'EQ', value: '' })">添加</el-button>
+                  </div>
+                  <div v-if="!u.where.length" class="rows-empty du-warn">未配置条件，执行将更新该表全表</div>
+                  <div v-for="(cond, i) in u.where" :key="i" class="du-row">
+                    <el-select
+                      v-model="cond.column"
+                      size="small"
+                      filterable
+                      allow-create
+                      default-first-option
+                      :loading="duEntryLoading(u.table)"
+                      :disabled="!u.table"
+                      :title="u.table ? undefined : '先选择目标表'"
+                      placeholder="列名"
+                      class="du-col"
+                    >
+                      <el-option v-for="c in duEntryColumns(u)" :key="c.key" :label="c.key" :value="c.key">
+                        <span class="du-col-opt">
+                          <span>{{ c.key }}</span>
+                          <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+                        </span>
+                      </el-option>
+                    </el-select>
+                    <el-select v-model="cond.op" size="small" class="du-mode">
+                      <el-option v-for="wop in DATA_UPDATE_OPS" :key="wop.value" :label="wop.label" :value="wop.value" />
+                    </el-select>
+                    <VarInput
+                      v-if="!isNullOp(cond.op)"
+                      v-model="cond.value"
+                      :variables="variables"
+                      mode="placeholder"
+                      size="small"
+                      class="du-value"
+                      placeholder="值或 {{formData.xxx}}"
+                    />
+                    <el-button size="small" text type="danger" @click="u.where.splice(i, 1)">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="dataUpdateCfg.updates?.length" class="sql-preview-hint du-output-hint">
+                未声明输出时引擎自动将整体汇总写入「{{ nodeId }}」：{ total, affected, {{ duKeysPreview }}, … }；各表按顺序在单事务内执行，任一表失败整体回滚（全有或全无）
+              </div>
+            </template>
           </template>
 
           <!-- ===== SQL_SCRIPT ===== -->
@@ -558,7 +713,7 @@
           <template v-if="hasExecutionMeta">
             <div class="rows-block">
               <div class="rows-head">
-                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数，SUBFLOW 为子流 outputVars，BATCH 为汇总列表，SQL_SCRIPT 为执行汇总 { total/succeeded/failed/sN }，KEY 取其顶层键如 s0/s1/total），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一" />
+                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数（多表更新为汇总 total/affected/t{i}|别名），SUBFLOW 为子流 outputVars，BATCH 为汇总列表，SQL_SCRIPT 为执行汇总 { total/succeeded/failed/sN }，KEY 取其顶层键如 s0/s1/total），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一" />
                 <el-button size="small" text type="primary" @click="addResultRow">添加</el-button>
               </div>
               <div v-if="!resultRows.length" class="rows-empty">
@@ -605,7 +760,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { CopyDocument, Delete, Fold, Setting, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import FieldLabel from './FieldLabel.vue'
@@ -614,7 +769,7 @@ import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { dataSourceApi } from '@/api/data-source'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
 import { parseSqlScriptPreview } from '../utils/sqlScript'
 import type { FlowVarItem } from '../utils/flowVars'
 
@@ -830,6 +985,112 @@ function addWhereCond() {
 function isNullOp(op: string): boolean {
   return op === 'IS_NULL' || op === 'NOT_NULL'
 }
+
+// ===== DATA_UPDATE 多表更新（config.updates，单事务全有或全无） =====
+const duMultiMode = computed(
+  () => Array.isArray(dataUpdateCfg.value?.updates) && (dataUpdateCfg.value?.updates?.length ?? 0) > 0
+)
+
+/** 切换多表/单表：开启时把现有单表配置迁移为第一条多表项；关闭仅当 ≤1 条（避免丢配置） */
+function toggleDuMultiMode(on: string | number | boolean): void {
+  const cfg = dataUpdateCfg.value
+  if (!cfg) return
+  if (on) {
+    if (Array.isArray(cfg.updates) && cfg.updates.length) return
+    cfg.updates = [{ table: cfg.table ?? '', setOps: cfg.setOps ?? [], where: cfg.where ?? [] }]
+  } else {
+    if (!Array.isArray(cfg.updates)) return
+    if (cfg.updates.length <= 1) {
+      const only = cfg.updates[0]
+      cfg.table = only?.table ?? ''
+      cfg.setOps = only?.setOps ?? []
+      cfg.where = only?.where ?? []
+      cfg.updates = []
+    }
+  }
+}
+
+function addDataUpdateEntry(): void {
+  const cfg = dataUpdateCfg.value
+  if (!cfg) return
+  if (!Array.isArray(cfg.updates)) cfg.updates = []
+  cfg.updates.push({ table: '', setOps: [], where: [] })
+}
+
+/** 每表列结构缓存（多表模式按表拉取；键为表名） */
+const duColumnsByTable = reactive(new Map<string, { key: string; columnType: string }[]>())
+const duTableLoading = reactive(new Set<string>())
+
+function duEntryLoading(table: string): boolean {
+  return duTableLoading.has(String(table ?? '').trim())
+}
+
+async function ensureDuColumns(table: string): Promise<void> {
+  const t = String(table ?? '').trim()
+  if (!t || duColumnsByTable.has(t) || duTableLoading.has(t)) return
+  duTableLoading.add(t)
+  try {
+    const res = await dataSourceApi.getDbSchemaColumns(t)
+    duColumnsByTable.set(t, (res.data ?? []).map((c) => ({ key: c.key, columnType: c.columnType })))
+  } catch {
+    // http 拦截器已提示；置空表仍允许手填列名（allow-create）
+    duColumnsByTable.set(t, [])
+  } finally {
+    duTableLoading.delete(t)
+  }
+}
+
+watch(
+  () =>
+    node.value
+      ? (dataUpdateCfg.value?.updates ?? [])
+          .map((u) => String(u?.table ?? '').trim())
+          .join('\u0001')
+      : '',
+  (joined) => {
+    for (const t of joined.split('\u0001')) {
+      if (t) void ensureDuColumns(t)
+    }
+  },
+  { immediate: true }
+)
+
+/** 多表条目列选项：该表真实列（除 tenant_id）+ SET/WHERE 已填列名兜底（含字面量占位历史值） */
+function duEntryColumns(u: DataUpdateTableUpdate): { key: string; type: string }[] {
+  const real = duColumnsByTable.get(String(u?.table ?? '').trim()) ?? []
+  const cur = new Set<string>(real.map((c) => c.key))
+  for (const op of u?.setOps ?? []) {
+    const col = String(op.column ?? '').trim()
+    if (col) cur.add(col)
+  }
+  for (const cond of u?.where ?? []) {
+    const col = String(cond.column ?? '').trim()
+    if (col) cur.add(col)
+  }
+  return [...cur]
+    .filter((key) => key.toLowerCase() !== 'tenant_id')
+    .sort()
+    .map((key) => ({ key, type: real.find((c) => c.key === key)?.columnType ?? '' }))
+}
+
+/** 多表条目目标表选项：全表清单 + 当前已填表名兜底（历史 DSL 的表可能已不在清单） */
+function duEntryTableOptions(cur: string): string[] {
+  const set = new Set(duTableOptions.value)
+  const c = String(cur ?? '').trim()
+  if (c) set.add(c)
+  return [...set].sort()
+}
+
+/** 汇总输出键预览（别名合法时用别名，否则 t{序号}） */
+const duKeysPreview = computed(() => {
+  const updates = dataUpdateCfg.value?.updates ?? []
+  return updates
+    .map((u, i) => {
+      const alias = String(u?.alias ?? '').trim()
+      return alias && /^\w+$/.test(alias) ? `${alias}.affected` : `t${i}.affected`
+    })
+    .join(', ')
+})
 
 // ===== 已发布流清单（SUBFLOW 目标下拉用；拉首页大页后前端过滤） =====
 const publishedFlows = ref<{ id: string; flowKey: string; name: string }[]>([])
@@ -1224,6 +1485,52 @@ async function copyNodeId() {
 
 .du-warn {
   color: var(--el-color-warning);
+}
+
+/* DATA_UPDATE 多表更新：模式开关行 */
+.du-multi-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.du-multi-hint {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+/* 多表条目卡片：头部（序号+别名+删除） + 该表 SET/WHERE 编辑区 */
+.du-multi-card {
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-extra-light);
+}
+
+.du-multi-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.du-multi-idx {
+  min-width: 22px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.du-alias {
+  width: 190px;
+}
+
+.du-output-hint {
+  margin-top: 8px;
 }
 
 /* 输出参数声明行：单行卡片式（变量名+提取方式+类型+删除） */

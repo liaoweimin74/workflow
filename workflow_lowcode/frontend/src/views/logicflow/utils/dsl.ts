@@ -16,8 +16,11 @@
  *                         读取时自动合成为单节点循环体，保存后升级为 body 形态）
  *   - SUBFLOW config = { flowId, passAllVars=true, varsMapping[{source,target}] }
  *   - DATA_UPDATE config = { table, setOps[{column, mode: SET|ADD|SUB, value}],
- *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}] }
- *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；受影响行数作为节点返回值由 results 声明写入
+ *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}],
+ *                            updates?: [{alias?, table, setOps, where}] }
+ *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；updates 非空时为多表形态：单事务顺序
+ *       执行全有或全无，返回汇总 Map（total/affected/t{i}|别名 条目）作为节点返回值；
+ *       单表形态返回受影响行数 Integer（存量行为不变）
  *   - SQL_SCRIPT config = { sql, onError?: 'abort'|'continue', maxRows? }
  *       多条 SQL 按 ; 顺序执行（字面量/注释内分号不切分）；{{var.path}} 编译为 JDBC ? 参数绑定；
  *       返回执行汇总 Map（total/succeeded/failed/aborted?/durationMs/s{i} 条目）作为节点返回值
@@ -159,11 +162,22 @@ export interface DataUpdateWhereCond {
   value?: string
 }
 
-export interface DataUpdateNodeConfig {
-  /** 目标动态表（运行期校验须存在且以 wf_biz_/wf_form_data 开头） */
+/** 多表更新单表项（updates 非空时生效；alias 缺省输出键为 t{序号}） */
+export interface DataUpdateTableUpdate {
+  /** 可选输出别名（仅字母/数字/下划线，多表内唯一） */
+  alias?: string
   table: string
   setOps: DataUpdateSetOp[]
   where: DataUpdateWhereCond[]
+}
+
+export interface DataUpdateNodeConfig {
+  /** 目标动态表（运行期校验存在性与标识符合法性，值经参数绑定防注入） */
+  table: string
+  setOps: DataUpdateSetOp[]
+  where: DataUpdateWhereCond[]
+  /** 多表更新：存在且非空时引擎单事务顺序执行（优先于单表形态），任一表失败整体回滚 */
+  updates?: DataUpdateTableUpdate[]
 }
 
 /** SQL 批处理失败策略 */

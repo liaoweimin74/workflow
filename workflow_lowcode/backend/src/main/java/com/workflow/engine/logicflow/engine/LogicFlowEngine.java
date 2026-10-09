@@ -481,13 +481,34 @@ public class LogicFlowEngine {
     /** 数据更新节点 SET 禁改列（租户隔离列，防止跨租户污染）。 */
     private static final String DATA_UPDATE_FORBIDDEN_COLUMN = "tenant_id";
 
+    /** DATA_UPDATE 多表更新（updates）条目数上限（与发布校验同值）。 */
+    private static final int DATA_UPDATE_MAX_UPDATES = BackendDataUpdateConfig.MAX_UPDATES;
+
+    /** 单表 UPDATE 编译产物（key 为多表汇总输出键=别名或 t{序号}；单表路径仅用 sql/params）。 */
+    private record BuiltUpdate(String key, String table, String sql, List<Object> params) {
+    }
+
     /**
      * 执行数据更新节点：纯配置 UPDATE 动态表。
-     * 表名/列名经元数据校验，值经参数绑定执行（防注入）；受影响行数作为节点返回值由 results 声明写入。
+     * 表名/列名经元数据校验，值经参数绑定执行（防注入）。
+     *
+     * <p>两种 config 形态：
+     * <ul>
+     *   <li>单表（存量）：{@code {table, setOps, where}} → 返回受影响行数 Integer（存量流零影响）；</li>
+     *   <li>多表（{@code updates} 存在且非空，优先）：各表单事务顺序执行、全有或全无，
+     *       返回汇总 Map（见 {@link #executeDataUpdateMulti}）。</li>
+     * </ul>
+     * 返回值由 results 声明写入（未声明走隐式整体输出）。
      */
     private Object executeDataUpdate(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
         BackendDataUpdateConfig config = readConfig(node, BackendDataUpdateConfig.class);
-        if (config == null || isBlank(config.getTable())) {
+        if (config == null) {
+            throw new IllegalArgumentException("DATA_UPDATE 节点缺少 config: " + node.getId());
+        }
+        if (config.getUpdates() != null && !config.getUpdates().isEmpty()) {
+            return executeDataUpdateMulti(node, config, vars);
+        }
+        if (isBlank(config.getTable())) {
             throw new IllegalArgumentException("DATA_UPDATE 节点缺少 table 配置: " + node.getId());
         }
         if (config.getSetOps() == null || config.getSetOps().isEmpty()) {
@@ -496,18 +517,132 @@ public class LogicFlowEngine {
         if (jdbcTemplate == null || tableManager == null) {
             throw new IllegalStateException("引擎未装配数据更新能力(JdbcTemplate/DynamicTableManager): " + node.getId());
         }
+        BackendDataUpdateConfig.TableUpdate single = new BackendDataUpdateConfig.TableUpdate();
+        single.setTable(config.getTable());
+        single.setSetOps(config.getSetOps());
+        single.setWhere(config.getWhere());
+        BuiltUpdate built = buildDataUpdate(node.getId(), single, vars);
 
-        String table = config.getTable().trim();
+        int affected = jdbcTemplate.update(built.sql(), built.params().toArray());
+        if (log.isDebugEnabled()) {
+            log.debug("DATA_UPDATE node '{}' -> {} rows: {}", node.getId(), affected, built.sql());
+        }
+        return affected;
+    }
+
+    /**
+     * 多表更新（config.updates）：各表 UPDATE 逐条编译（表/列校验等配置类错误在任何语句
+     * 执行前全部暴露）后，于单连接单事务内顺序执行——全成提交；任一失败整体回滚且节点抛错
+     * （走 errorAction；多表数据一致性优先，需要逐表独立失败语义请拆多个 DATA_UPDATE 节点）。
+     *
+     * <p>返回汇总 Map（条目键 = 别名或 t{序号}）：
+     * {@code { total, affected, t0|别名: {table, affected}, ... }}，
+     * 未声明 results 时按隐式约定写入 {@code <节点id>}（下游如 du_x1.t0.affected、du_x1.order.affected）。
+     */
+    private Map<String, Object> executeDataUpdateMulti(LogicFlowDsl.NodeDef node,
+                                                       BackendDataUpdateConfig config,
+                                                       Map<String, Object> vars) {
+        if (jdbcTemplate == null || tableManager == null) {
+            throw new IllegalStateException("引擎未装配数据更新能力(JdbcTemplate/DynamicTableManager): " + node.getId());
+        }
+        List<BackendDataUpdateConfig.TableUpdate> updates = config.getUpdates();
+        if (updates.size() > DATA_UPDATE_MAX_UPDATES) {
+            throw new IllegalArgumentException("DATA_UPDATE 节点多表更新数超出上限("
+                    + DATA_UPDATE_MAX_UPDATES + "): " + updates.size() + " (" + node.getId() + ")");
+        }
+        // 编译 + 键名冲突预检：全部配置错误在任何语句执行前暴露
+        List<BuiltUpdate> built = new ArrayList<>(updates.size());
+        Set<String> keys = new HashSet<>();
+        for (int i = 0; i < updates.size(); i++) {
+            BackendDataUpdateConfig.TableUpdate u = updates.get(i);
+            String alias = u.getAlias() == null ? "" : u.getAlias().trim();
+            if (!alias.isEmpty() && !alias.matches("\\w+")) {
+                throw new IllegalArgumentException("DATA_UPDATE 节点多表更新别名非法（仅字母/数字/下划线）: "
+                        + u.getAlias() + " (" + node.getId() + ")");
+            }
+            String key = alias.isEmpty() ? ("t" + i) : alias;
+            if (!keys.add(key)) {
+                throw new IllegalArgumentException(
+                        "DATA_UPDATE 节点多表更新别名重复: " + key + " (" + node.getId() + ")");
+            }
+            BuiltUpdate b = buildDataUpdate(node.getId(), u, vars);
+            built.add(new BuiltUpdate(key, b.table(), b.sql(), b.params()));
+        }
+        long begin = System.currentTimeMillis();
+        return jdbcTemplate.execute((Connection con) -> runDataUpdateMulti(con, built, begin));
+    }
+
+    /**
+     * 单连接单事务顺序执行多表 UPDATE：全成提交并返回汇总；任一失败回滚并抛出（节点失败走
+     * errorAction）。汇总条目键 = 别名或 t{序号}，值为 {table, affected}。
+     */
+    private Map<String, Object> runDataUpdateMulti(Connection con, List<BuiltUpdate> built,
+                                                   long begin) throws SQLException {
+        boolean oldAuto = con.getAutoCommit();
+        con.setAutoCommit(false);
+        try {
+            Map<String, Object> items = new LinkedHashMap<>();
+            int total = 0;
+            for (BuiltUpdate u : built) {
+                int affected;
+                try (PreparedStatement ps = con.prepareStatement(u.sql())) {
+                    List<Object> params = u.params();
+                    for (int i = 0; i < params.size(); i++) {
+                        ps.setObject(i + 1, params.get(i));
+                    }
+                    affected = ps.executeUpdate();
+                }
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("table", u.table());
+                item.put("affected", affected);
+                items.put(u.key(), item);
+                total += affected;
+            }
+            con.commit();
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("total", built.size());
+            summary.put("affected", total);
+            summary.put("durationMs", System.currentTimeMillis() - begin);
+            summary.putAll(items);
+            if (log.isDebugEnabled()) {
+                log.debug("DATA_UPDATE multi-table -> {} tables / {} rows: {}", built.size(), total, items);
+            }
+            return summary;
+        } catch (SQLException | RuntimeException ex) {
+            try {
+                con.rollback();
+            } catch (SQLException re) {
+                ex.addSuppressed(re);
+            }
+            throw ex;
+        } finally {
+            con.setAutoCommit(oldAuto);
+        }
+    }
+
+    /**
+     * 编译单表 UPDATE（单表与多表形态共用）：表名/列名经元数据校验，值经参数绑定（防注入）。
+     * 配置类错误（缺 table/setOps、表/列不存在、mode 非法、禁改列等）在执行前抛出。
+     */
+    private BuiltUpdate buildDataUpdate(String nodeId, BackendDataUpdateConfig.TableUpdate u,
+                                        Map<String, Object> vars) {
+        if (isBlank(u.getTable())) {
+            throw new IllegalArgumentException("DATA_UPDATE 节点缺少 table 配置: " + nodeId);
+        }
+        if (u.getSetOps() == null || u.getSetOps().isEmpty()) {
+            throw new IllegalArgumentException("DATA_UPDATE 节点缺少 setOps 配置: " + nodeId);
+        }
+        String table = u.getTable().trim();
         validateDataUpdateTable(table);
         Map<String, ColumnInfo> columns = columnsOf(table);
 
         StringBuilder sql = new StringBuilder("UPDATE ").append(table).append(" SET ");
         List<Object> params = new ArrayList<>();
         List<String> setParts = new ArrayList<>();
-        for (BackendDataUpdateConfig.SetOp setOp : config.getSetOps()) {
+        for (BackendDataUpdateConfig.SetOp setOp : u.getSetOps()) {
             String column = requireColumn(columns, table, setOp.getColumn(), "SET");
             if (DATA_UPDATE_FORBIDDEN_COLUMN.equalsIgnoreCase(column)) {
-                throw new IllegalArgumentException("DATA_UPDATE 节点禁止修改列 tenant_id: " + node.getId());
+                throw new IllegalArgumentException("DATA_UPDATE 节点禁止修改列 tenant_id: " + nodeId);
             }
             String mode = setOp.getMode() == null || setOp.getMode().isBlank()
                     ? BackendDataUpdateConfig.MODE_SET : setOp.getMode().trim().toUpperCase(Locale.ROOT);
@@ -516,11 +651,11 @@ public class LogicFlowEngine {
                 case BackendDataUpdateConfig.MODE_SET -> setParts.add(column + " = ?");
                 case BackendDataUpdateConfig.MODE_ADD -> {
                     setParts.add(column + " = " + column + " + ?");
-                    value = requireNumeric(value, node.getId(), column, "ADD");
+                    value = requireNumeric(value, nodeId, column, "ADD");
                 }
                 case BackendDataUpdateConfig.MODE_SUB -> {
                     setParts.add(column + " = " + column + " - ?");
-                    value = requireNumeric(value, node.getId(), column, "SUB");
+                    value = requireNumeric(value, nodeId, column, "SUB");
                 }
                 default -> throw new IllegalArgumentException(
                         "DATA_UPDATE 节点 setOp.mode 非法(须 SET/ADD/SUB): " + setOp.getMode());
@@ -529,8 +664,8 @@ public class LogicFlowEngine {
         }
         sql.append(String.join(", ", setParts));
 
-        List<BackendDataUpdateConfig.WhereCond> where = config.getWhere() != null
-                ? config.getWhere() : List.of();
+        List<BackendDataUpdateConfig.WhereCond> where = u.getWhere() != null
+                ? u.getWhere() : List.of();
         if (!where.isEmpty()) {
             sql.append(" WHERE ");
             List<String> whereParts = new ArrayList<>();
@@ -557,16 +692,12 @@ public class LogicFlowEngine {
                 }
             }
             if (whereParts.isEmpty()) {
-                throw new IllegalArgumentException("DATA_UPDATE 节点 WHERE 条件为空: " + node.getId());
+                throw new IllegalArgumentException("DATA_UPDATE 节点 WHERE 条件为空: " + nodeId);
             }
             sql.append(String.join(" AND ", whereParts));
         }
 
-        int affected = jdbcTemplate.update(sql.toString(), params.toArray());
-        if (log.isDebugEnabled()) {
-            log.debug("DATA_UPDATE node '{}' -> {} rows: {}", node.getId(), affected, sql);
-        }
-        return affected;
+        return new BuiltUpdate("", table, sql.toString(), params);
     }
 
     /** 表名校验：合法标识符 + 存在（目标表放开为全库表清单，表名经标识符校验后拼接，值一律参数绑定防注入）。 */

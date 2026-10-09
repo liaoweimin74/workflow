@@ -5157,3 +5157,18 @@ Work Log:
 Stage Summary:
 - D+ 终态全绿达成：vite 独占 3000 + Java 独占 8080（-Xmx448m）+ MariaDB 3306（lctn=1），四链路 200×4，Next/Turbopack 保持退役。
 - 后续巡检注意：①若 java 启动报 "ACT_xx doesn't exist" 先查 mariadbd 是否带 --lower-case-table-names=1（lctn=0 会让大小写查询全部落空）；②若报 "Migrations have failed validation" 先核 jar 内是否有 V1__workflow.sql（unzip -l | grep V1__），无则前台 mvn -o package -DskipTests -f backend/pom.xml 重建（3.7s，需 JAVA_HOME=/home/z/tools/jdk21）；③mariadbd/java 从本会话起存活正常，收割者主要打击后台 setsid 的独立长任务（mvn 实测被杀），重活尽量前台窗口完成。
+
+---
+Task ID: restore-r139-final
+Agent: main (interactive session)
+Task: D+ 终态终验确认
+
+Work Log:
+- cronstart3 (Job 445805) 完成 jar 重建（00:28:11，含 V1__workflow.sql）→ start-services.sh 拉起 Java → **Started WorkflowApplication in 18.642s，Tomcat 8080**（java pid 7988，RSS 554MB，cron 会话进程存活确认）
+- 四链路终验（00:33）：a) 3000 页面=200；b) 外域 Host=200；c) 业务链 vite→8080 /api/auth/login（admin/admin123）=200；d) 8080 直连=200；空体 {} 探针 c2/d2 亦=200（全局异常处理器包装，与稳定期 patrol 探针行为一致，巡检脚本无需修改）
+- cgroup 内存 3.22GB < 3.5GB 备案线；MariaDB 3306（cron 会话拉起，pid 7022 系）持续存活
+- 本轮入库提交：8338461b（V1__ 前缀修复）、bd9cf1da（start-services.sh MariaDB 引导段恢复）均已推送 origin/main
+
+Stage Summary:
+- **D+ 终态全绿达成**：vite 独占 3000 + Java 独占 8080（18.6s 健康启动）+ MariaDB 3306；数据层为全新重建（flyway 11 行、83 表、admin/test 种子），jar 与源码一致性恢复
+- 遗留交接：①本会话收割者现象已入档（重大发现 1），后续巡检/开发会话若见"进程静默死亡"先查会话归属；②01:05 起 hourly patrol 444954 应回归全绿零干预；③mariadb-user/debs/ 保存了完整 deb 集（8 件），供未来重置后 bootstrap 使用

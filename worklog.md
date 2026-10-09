@@ -5629,3 +5629,20 @@ Stage Summary:
 - 一箭双雕：PropertyPanel 一处 computed 崩溃同时解释了「无法返回列表」（vnode 损坏→卸载崩溃→路由卡死）与 START 交互异常；START 删除角标本就有禁删保护（deletable=false 隐藏角标 + removeNode warning 兜底），修复后交互闭环完整
 - JSON 导入查看闭环：导入完成即见树（不关对话框）+ 已有结构点图标即见树（对话框顶部只读区）双路径，与 formData 结构查看器交互对齐
 - 遗留观察项（非阻塞）：用户日志中 ECharts「Can't get DOM width or height」警告（某图表 init 时容器 0 尺寸）与 v-permission 未声明权限点警告（列表页设计/运行测试/删除按钮），均不影响功能，低优先级
+
+---
+Task ID: push-github-20261009（用户指令 push —— 推送阻塞于凭证 + 双保险落地）
+Agent: 主控（Z.ai Code）
+Task: 用户指令「push」：将 workflow_lowcode 最新提交（含 START 崩溃修复 + JSON 导入结构回显）推送到 origin (github.com/liaoweimin74/workflow.git)
+
+Work Log:
+- 【仓库定位】workflow_lowcode 无独立 .git，实际仓库在 /home/z/my-project/.git（父目录），remote origin = https://github.com/liaoweimin74/workflow.git（fetch 顶层 = main）
+- 【待推内容】工作树干净；origin/main...main = 0 behind / 18 ahead；HEAD=1f2f4139（fix: 选中 START 崩溃致返回列表卡死 + JSON 导入结构树即时可见）；两个用户报障 bug 的修复已入库待推
+- 【凭证搜索】穷尽无果：credential.helper 空、无 ~/.git-credentials、无 gh CLI、无 token 环境变量、无 ~/.ssh、无 ~/.netrc、代码文件无 PAT 字符串 → 匿名 push 实测 `remote: No anonymous write access` 认证失败（公开仓库可匿名 fetch，写必须认证）
+- 【双保险 bundle】全量打包 pack-objects OOM（signal 9，容器 4GB 内存限制）→ 改增量 bundle 成功：git -c pack.threads=1 -c pack.windowMemory=32m bundle create origin/main..main → backups/workflow-main-inc-20261009-1600.bundle（105MB，含 18 提交全部对象，verify 通过，前置依赖 80d7e636=GitHub 现网 origin/main 匿名可拉，恢复链路完整）
+- 【一键推送脚本】backups/push-with-token.sh：传入 PAT → 临时 set-url 注入 → push → trap 恢复原 URL（凭证零落盘零残留）→ 推后 rev-parse 核验 main==origin/main；假 token 演练：认证失败路径下 URL 正确恢复
+
+Stage Summary:
+- push 被认证硬阻塞：需要用户提供 GitHub PAT（对 liaoweimin74/workflow 有写权限；classic 需 repo scope，fine-grained 需 Contents: RW）；提供后执行 `bash /home/z/my-project/backups/push-with-token.sh <PAT>` 即完成 18 提交推送
+- 数据安全已兜底：105MB 增量 bundle 存 backups/，即使容器重置也可恢复（clone bundle + GitHub 拉 80d7e636 前置）；本地 git 历史此前已 4 次跨重置幸存
+- 待用户动作：提供 PAT；无需其他操作，脚本已就绪

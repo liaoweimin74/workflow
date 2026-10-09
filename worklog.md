@@ -5204,3 +5204,17 @@ Work Log:
 Stage Summary:
 - 首页低代码仪表盘页面（key=dashboard）从 10-05 备份完整恢复并验证渲染成功；KPI 数值为 0 属实（Flowable 新引擎无旧部署/实例，旧 wfe_* 运行时按设计不迁移）
 - 后续注意：①sys_role_menu 主键自增已到 100，恢复历史授权行时勿直接用原 id；②如需仪表盘显示真实数字，需在流程管理重新部署流程定义
+---
+Task ID: logicflow-backup-check
+Agent: main (interactive session)
+Task: 用户问「逻辑流的数据有备份吗？」——核查逻辑编排数据备份情况并恢复 + 制作当前库全量新备份
+
+Work Log:
+- 【存储定位】逻辑编排 = Java 时代功能：定义存 wf_logic_flow（flow_key/dsl_json/status）、运行记录 wf_logic_flow_run、表单绑定 wf_form_logic_binding；前端入口 LogicFlowListPage.vue → /api/v1/logic-flows
+- 【备份核查三源】①rescue-workflow_v6（10-08）：无逻辑流表（Node 世界无此功能）②workflow-dump-20261005：有表无数据 ③rescue-workflow-20261008-013021：**找到 1 条定义**——「变量选择器测试流」var_picker_test，DRAFT，tenant=default，10-08 01:04 创建（开始→结束最小测试流）， rescued 于引擎切换后 26 分钟
+- 【恢复】当前库 wf_logic_flow 列结构与备份行完全一致（10 列），INSERT 原样入库 1 行；API 验证 /api/v1/logic-flows total=1 可见
+- 【新全量备份】mariadb-dump -h 127.0.0.1（socket 路径 /run/mysqld 不可用，须走 TCP；LD_LIBRARY_PATH 需 shim-libs+sysroot 双路径）→ backups/db-workflow-full-20261009.sql（203KB，22 条 INSERT，--single-transaction --routines）；关键表逐一核对：wf_form_def/wf_page_def/wf_data_source/wf_category/wf_process_draft/wf_node_config/wf_logic_flow/wf_biz_bill_test/sys_menu/sys_role_menu/sys_user 全部含数据
+
+Stage Summary:
+- 逻辑流数据答案：历史备份中仅存 1 条（变量选择器测试流），已恢复入库；用户若在 10-08 之后创建过其他逻辑流则无备份可寻（历次重建已失）
+- 当前库全量快照 backups/db-workflow-full-20261009.sql 已建立（含此前恢复的表单/页面/仪表盘/逻辑流全部数据），后续每次重大数据操作后建议重做一份；mariadb-dump 必须 -h 127.0.0.1 TCP 连接

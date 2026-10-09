@@ -1,122 +1,188 @@
 #!/bin/bash
 # ============================================================
-# recover-dplus.sh — D+ 终态自动恢复（幂等）
-#
-# 触发场景：沙箱环境重供给（cron 会话边界冷启动）后，未入 git 的
-#   运行时产物（mariadb-user/、jdk21、maven、.m2、jar）全部丢失，
-#   开机自愈链只能拉起 vite + Node 假绿（SQLite 缺 SYS_USER 表）。
-#
-# 本脚本按序恢复：MariaDB → 数据导入 → jar（优先 git 备份）→ Java。
-# 全程可重入：任何一步已就绪则跳过。调用方：
-#   1) start-services.sh 冷启动检测（后台异步）
-#   2) 巡检轮（前台）
-#
-# 性能：jar 走 backups/jar 恢复时全程 ~3 分钟；无备份时含 mvn 构建 ~10 分钟
+# recover-dplus.sh — D+ 终态全链路幂等恢复
+# 场景：环境重供给后（jar/mariadb-user/jdk/maven/.m2 全灭），
+#       由 cron 巡检前台调用，重建 MariaDB→数据→jar→Java 引擎。
+# 依据 worklog restore-r139 / cron-20261009-1705 / 1905 已验证序列。
+# 用法：前台 bash scripts/recover-dplus.sh（超时重跑幂等续作）
 # ============================================================
 set -u
-
-MDB=/home/z/my-project/mariadb-user
-BACKUPS=/home/z/my-project/backups
-BACKEND=/home/z/my-project/workflow_lowcode/backend
-NODE_BACKEND=/home/z/my-project/workflow_lowcode/backend-node
+BASE=/home/z/my-project
+MDB=$BASE/mariadb-user
 TOOLS=/home/z/tools
+BACKEND=$BASE/workflow_lowcode/backend
+NODE_BACKEND=$BASE/workflow_lowcode/backend-node
+BK=$BASE/backups
 JAR="$BACKEND/target/workflow-platform-1.0.0-SNAPSHOT.jar"
-JAR_BAK="$BACKUPS/jar/workflow-platform-1.0.0-SNAPSHOT.jar"
+DBPASS=740130
+WF_DUMP=$BK/db-workflow-full-20261009.sql
+V6_DUMP=$BK/rescue-workflow_v6-20261008-013021.sql
+LD="$MDB/sysroot/usr/lib/x86_64-linux-gnu:$MDB/root/usr/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH=$LD
+export DEBIAN_FRONTEND=noninteractive
 
+log() { echo "[recover $(date +%H:%M:%S)] $*"; }
 port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1; }
-http_8080() { curl -s -o /dev/null -w '%{http_code}' -m 5 -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8080/api/auth/login 2>/dev/null; }
 
-echo "[recover] $(date '+%F %T') start (uptime=$(cut -d' ' -f1 /proc/uptime)s)"
-
-# ---- 幂等短路：全部健康则退出 ----
-if [ -f "$JAR" ] && port_open 3306 && [ "$(http_8080)" != "000" ]; then
-  echo "[recover] 全部健康，幂等退出"
-  exit 0
+# ---- 阶段 1：MariaDB 二进制 + 布局 ----
+if [ ! -x "$MDB/root/usr/sbin/mariadbd" ]; then
+  log "S1: 下载 MariaDB deb 并解包..."
+  mkdir -p "$MDB/debs" && cd "$MDB/debs" || exit 1
+  apt-get download mariadb-server mariadb-server-core mariadb-client mariadb-client-core \
+    mariadb-common libmariadb3 liburing2 libaio1t64 libncurses6 >>"$TOOLS/recover.log" 2>&1 \
+    || { log "S1 FAIL: apt-get download 失败"; exit 1; }
+  for d in ./*.deb; do dpkg -x "$d" "$MDB/root/"; dpkg -x "$d" "$MDB/sysroot/"; done
+  log "S1: deb 解包完成 ($(ls ./*.deb | wc -l) 件)"
+else
+  log "S1: MariaDB 二进制已就位，跳过"
 fi
 
-# ---- 1. MariaDB ----
-export LD_LIBRARY_PATH="$MDB/root/lib/x86_64-linux-gnu"
-if ! port_open 3306; then
-  if [ ! -x "$MDB/root/usr/sbin/mariadbd" ]; then
-    echo "[recover] 重建 MariaDB（deb 下载→解包→布局→initdb）..."
-    mkdir -p "$MDB/debs"
-    (cd "$MDB/debs" && apt-get download mariadb-server-core mariadb-server mariadb-client-core \
-      mariadb-client mariadb-common libaio1t64 liburing2 libncurses6) >> /home/z/tools/recover.log 2>&1
-    mkdir -p "$MDB/root"
-    for f in "$MDB"/debs/*.deb; do dpkg -x "$f" "$MDB/root/"; done
-    cd "$MDB/root" && ln -sfn usr/bin bin && ln -sfn usr/sbin sbin && ln -sfn usr/lib lib && ln -sfn usr/share share
-    ln -sfn root "$MDB/sysroot" 2>/dev/null || true
-    "$MDB/root/bin/mariadb-install-db" --no-defaults --basedir="$MDB/root" --datadir="$MDB/root/data" \
-      --lc-messages-dir="$MDB/root/share/mariadb" --auth-root-authentication-method=normal \
-      --skip-test-db >> /home/z/tools/recover.log 2>&1
+# 布局符号链接（幂等）+ 探测 errmsg.sys 实际位置
+mkdir -p "$MDB/root"
+ln -sfn usr/bin  "$MDB/root/bin"
+ln -sfn usr/sbin "$MDB/root/sbin"
+ln -sfn usr/sbin "$MDB/root/libexec"
+ln -sfn usr/share "$MDB/root/share"   # basedir/share/mariadb/*.sql = usr/share/mariadb
+MSGDIR=""
+for c in usr/share/mariadb usr/share/mysql; do
+  if [ -f "$MDB/root/$c/errmsg.sys" ] || [ -f "$MDB/root/$c/english/errmsg.sys" ]; then
+    MSGDIR="$c" && break
   fi
-  echo "[recover] 启动 mariadbd..."
+done
+[ -n "$MSGDIR" ] || { log "S1 FAIL: errmsg.sys 未找到"; ls "$MDB/root/usr/share/" ; exit 1; }
+log "S1: errmsg.sys @ $MSGDIR"
+
+# ---- 阶段 2：datadir 初始化 ----
+if [ ! -d "$MDB/root/data/mysql" ]; then
+  log "S2: mariadb-install-db 初始化 datadir..."
+  rm -rf "$MDB/root/data"
+  "$MDB/root/usr/bin/mariadb-install-db" --no-defaults \
+    --basedir="$MDB/root" --datadir="$MDB/root/data" \
+    --lc-messages-dir="$MDB/root/$MSGDIR" \
+    --auth-root-authentication-method=normal >>"$TOOLS/recover.log" 2>&1 \
+    || { log "S2 FAIL: install-db 失败，详见 recover.log"; tail -20 "$TOOLS/recover.log"; exit 1; }
+  log "S2: datadir 初始化完成"
+else
+  log "S2: datadir 已存在，跳过"
+fi
+
+# ---- 阶段 3：拉起 mariadbd（幂等）----
+if port_open 3306; then
+  log "S3: MariaDB 已在线 (3306)"
+else
+  log "S3: 启动 mariadbd..."
   rm -f "$MDB/mysqld.pid"
-  (cd "$MDB" && nohup root/usr/sbin/mariadbd --no-defaults --basedir="$MDB/root" --datadir="$MDB/root/data" \
-    --socket="$MDB/mysql.sock" --pid-file="$MDB/mysqld.pid" --port=3306 --bind-address=127.0.0.1 \
-    --lower-case-table-names=1 --lc-messages-dir="$MDB/root/share/mariadb" \
+  (cd "$MDB" && nohup root/usr/sbin/mariadbd --no-defaults \
+    --basedir="$MDB/root" --datadir="$MDB/root/data" \
+    --socket="$MDB/mysql.sock" --pid-file="$MDB/mysqld.pid" \
+    --port=3306 --bind-address=127.0.0.1 --lower-case-table-names=1 \
     >> "$MDB/mariadbd.err" 2>&1 < /dev/null &)
   for i in 1 2 3 4 5 6 7 8; do sleep 3; port_open 3306 && break; done
+  port_open 3306 || { log "S3 FAIL: 3306 未就绪"; tail -20 "$MDB/mariadbd.err"; exit 1; }
+  log "S3: mariadbd 在线"
 fi
 
-# ---- 2. 账号 + 数据（SYS_USER 缺失才导入，避免重复导入）----
-M="$MDB/root/bin/mariadb"
-if port_open 3306 && [ -x "$M" ]; then
-  "$M" -u root -S "$MDB/mysql.sock" -e "CREATE DATABASE IF NOT EXISTS workflow CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; CREATE DATABASE IF NOT EXISTS workflow_v6 CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; GRANT ALL ON *.* TO 'root'@'localhost' IDENTIFIED BY '740130' WITH GRANT OPTION; GRANT ALL ON *.* TO 'root'@'127.0.0.1' IDENTIFIED BY '740130' WITH GRANT OPTION; FLUSH PRIVILEGES;" >> /home/z/tools/recover.log 2>&1
-  HAS_USER=$("$M" -u root -p740130 -S "$MDB/mysql.sock" -N -e \
-    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='workflow' AND table_name='SYS_USER';" 2>/dev/null || echo 0)
-  if [ "$HAS_USER" = "0" ]; then
-    LATEST=$(ls -1t "$BACKUPS"/db-workflow-full-*.sql 2>/dev/null | head -1)
-    if [ -n "$LATEST" ]; then
-      echo "[recover] 导入数据: $LATEST"
-      "$M" -u root -p740130 -S "$MDB/mysql.sock" < "$LATEST" >> /home/z/tools/recover.log 2>&1
-      LATEST6=$(ls -1t "$BACKUPS"/db-workflow_v6-*.sql 2>/dev/null | head -1)
-      [ -n "$LATEST6" ] && "$M" -u root -p740130 -S "$MDB/mysql.sock" < "$LATEST6" >> /home/z/tools/recover.log 2>&1
-    else
-      echo "[recover] WARN: 无可用 dump！workflow 库为空壳（Flyway 启动时仅建结构）"
-    fi
-  fi
+# ---- 阶段 4：root 授权（幂等：TCP 密码连通即跳过）----
+MC="$MDB/root/usr/bin/mariadb -h 127.0.0.1 -P 3306 -u root -p$DBPASS --protocol=TCP"
+if $MC -e "SELECT 1" >/dev/null 2>&1; then
+  log "S4: root@$DBPASS TCP 授权已就绪"
+else
+  log "S4: 配置 root 密码（socket 初始化授权）..."
+  $MC --socket="$MDB/mysql.sock" -u root 2>/dev/null <<SQL || \
+  $MC --socket="$MDB/mysql.sock" -u root --skip-password <<SQL
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$DBPASS';
+CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY '$DBPASS';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+SQL
+  $MC -e "SELECT 1" >/dev/null 2>&1 || { log "S4 FAIL: 授权后仍无法连接"; exit 1; }
+  log "S4: 授权完成"
 fi
 
-# ---- 3. jar：优先 git 备份直复（3 秒），否则前台 mvn 构建（~8 分钟）----
-if [ ! -f "$JAR" ]; then
-  if [ -f "$JAR_BAK" ]; then
-    echo "[recover] 从 backups/jar 恢复 jar（跳过 mvn 构建）..."
-    mkdir -p "$BACKEND/target" && cp "$JAR_BAK" "$JAR"
-  else
-    echo "[recover] 无 jar 备份，前台重建工具链 + mvn 构建（~8 分钟）..."
-    if [ ! -x "$TOOLS/jdk21/bin/javac" ]; then
-      curl -sL --max-time 560 -o /tmp/jdk21.tar.gz \
-        "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse" \
-        && tar -xzf /tmp/jdk21.tar.gz -C "$TOOLS" \
-        && SRC=$(tar -tzf /tmp/jdk21.tar.gz | head -1 | cut -d/ -f1) \
-        && rm -rf "$TOOLS/jdk21" && mv "$TOOLS/$SRC" "$TOOLS/jdk21" && rm -f /tmp/jdk21.tar.gz
-    fi
-    if [ ! -x "$TOOLS/maven/bin/mvn" ]; then
-      curl -sL --max-time 240 -o /tmp/maven.tar.gz \
-        "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.tar.gz" \
-        && tar -xzf /tmp/maven.tar.gz -C "$TOOLS" \
-        && rm -rf "$TOOLS/maven" && mv "$TOOLS/apache-maven-3.9.9" "$TOOLS/maven" && rm -f /tmp/maven.tar.gz
-    fi
-    (cd "$BACKEND" && JAVA_HOME="$TOOLS/jdk21" "$TOOLS/maven/bin/mvn" -q -B -DskipTests package) >> /home/z/tools/recover.log 2>&1
-  fi
+# ---- 阶段 5：数据导入（幂等：workflow.SYS_USER 存在则跳过）----
+if $MC -e "SELECT 1 FROM workflow.SYS_USER LIMIT 1" >/dev/null 2>&1; then
+  log "S5: workflow 库数据已就绪，跳过导入"
+else
+  [ -s "$WF_DUMP" ] || { log "S5 FAIL: $WF_DUMP 为空/缺失"; exit 1; }
+  log "S5: 导入 workflow 全量 dump..."
+  $MC < "$WF_DUMP" || { log "S5 FAIL: workflow 导入失败"; exit 1; }
+  log "S5: workflow 导入完成"
+fi
+if $MC -e "SELECT 1 FROM workflow_v6.flyway_schema_history LIMIT 1" >/dev/null 2>&1; then
+  log "S5: workflow_v6 已就绪"
+else
+  [ -s "$V6_DUMP" ] || log "S5 WARN: $V6_DUMP 为空/缺失，跳过 v6"
+  $MC < "$V6_DUMP" && log "S5: workflow_v6 导入完成" || log "S5 WARN: v6 导入失败（非致命）"
 fi
 
-# ---- 4. 引擎决策固化 + Java 拉起 ----
+# ---- 阶段 6：JDK 21 ----
+ARCH=$(uname -m); [ "$ARCH" = "x86_64" ] && A=x64 || A=aarch64
+if [ -x "$TOOLS/jdk21/bin/javac" ]; then
+  log "S6: JDK 已就绪"
+else
+  log "S6: 下载 Temurin JDK 21 ($A, ~198M)..."
+  curl -sL --max-time 550 --retry 1 -o /tmp/jdk21.tar.gz \
+    "https://api.adoptium.net/v3/binary/latest/21/ga/linux/$A/jdk/hotspot/normal/eclipse" \
+    || { log "S6 FAIL: JDK 下载失败"; exit 1; }
+  tar -xzf /tmp/jdk21.tar.gz -C "$TOOLS" || { log "S6 FAIL: 解压失败"; exit 1; }
+  SRCDIR=$(tar -tzf /tmp/jdk21.tar.gz | head -1 | cut -d/ -f1)
+  rm -rf "$TOOLS/jdk21" && mv "$TOOLS/$SRCDIR" "$TOOLS/jdk21" && rm -f /tmp/jdk21.tar.gz
+  [ -x "$TOOLS/jdk21/bin/javac" ] || { log "S6 FAIL: javac 校验失败"; exit 1; }
+  log "S6: JDK 就绪 ($("$TOOLS/jdk21/bin/javac" -version 2>&1))"
+fi
+
+# ---- 阶段 7：Maven ----
+if [ -x "$TOOLS/maven/bin/mvn" ]; then
+  log "S7: Maven 已就绪"
+else
+  log "S7: 下载 Maven 3.9.9..."
+  curl -sL --max-time 300 --retry 2 -o /tmp/mvn.tar.gz \
+    "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.9/apache-maven-3.9.9-bin.tar.gz" \
+    || curl -sL --max-time 300 --retry 2 -o /tmp/mvn.tar.gz \
+    "https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz" \
+    || { log "S7 FAIL: Maven 下载失败"; exit 1; }
+  tar -xzf /tmp/mvn.tar.gz -C "$TOOLS"
+  rm -rf "$TOOLS/maven" && mv "$TOOLS/apache-maven-3.9.9" "$TOOLS/maven" && rm -f /tmp/mvn.tar.gz
+  [ -x "$TOOLS/maven/bin/mvn" ] || { log "S7 FAIL: mvn 校验失败"; exit 1; }
+  log "S7: Maven 就绪"
+fi
+
+# ---- 阶段 8：mvn 构建 jar ----
+if [ -f "$JAR" ]; then
+  log "S8: jar 已存在 ($(du -h "$JAR" | cut -f1))，跳过构建"
+else
+  log "S8: mvn package（冷 .m2 需数分钟）..."
+  (cd "$BACKEND" && JAVA_HOME="$TOOLS/jdk21" "$TOOLS/maven/bin/mvn" -B -DskipTests package >>"$TOOLS/recover.log" 2>&1) \
+    || { log "S8 FAIL: mvn 构建失败，详见 recover.log"; tail -30 "$TOOLS/recover.log"; exit 1; }
+  [ -f "$JAR" ] || { log "S8 FAIL: 构建后无 jar"; exit 1; }
+  log "S8: jar 就绪 ($(du -h "$JAR" | cut -f1))"
+fi
+
+# ---- 阶段 9：切引擎（choice=java + 清 marker + 清 Node 假绿）----
 mkdir -p "$NODE_BACKEND/data"
-echo -n java > "$NODE_BACKEND/data/engine-choice" 2>/dev/null || true
-rm -f "$NODE_BACKEND/.engine-node" "$TOOLS/backend-engine-node" 2>/dev/null || true
+echo -n java > "$NODE_BACKEND/data/engine-choice"
+rm -f /home/z/tools/backend-engine-node "$NODE_BACKEND/.engine-node"
+pkill -f "bun src/index.ts" 2>/dev/null || true
+sleep 2
+log "S9: engine-choice=java，markers 已清，Node 假绿已清场"
 
-if [ -f "$JAR" ] && ! pgrep -f 'workflow-platform-1.0.0-SNAPSHOT.jar' >/dev/null 2>&1; then
-  # 清掉 Node 假绿占位
-  pkill -f 'bun src/index.ts' 2>/dev/null || true
-  sleep 2
-  echo "[recover] 启动 Java（-Xmx448m，首启约 20s）..."
-  (cd "$BACKEND" && setsid nohup java -Xmx448m -XX:MaxMetaspaceSize=192m -jar "$JAR" \
-    --spring.profiles.active=sandbox >> /home/z/tools/backend.log 2>&1 < /dev/null &)
-  for i in $(seq 1 9); do sleep 5; port_open 8080 && break; done
+# ---- 阶段 10：start-services.sh 拉起 Java ----
+bash "$BASE/scripts/start-services.sh"
+
+# ---- 阶段 11：真绿验证（Java 首启 20-30s）----
+log "S11: 等待 Java 引擎点亮..."
+G=""
+for i in $(seq 1 20); do
+  sleep 5
+  body=$(curl -s --max-time 5 -X POST -H 'Content-Type: application/json' \
+    -d '{"username":"admin","password":"admin123"}' http://127.0.0.1:8080/api/auth/login 2>/dev/null)
+  if echo "$body" | grep -q accessToken; then G=1; log "S11: 真绿 (t+$((i*5))s)"; break; fi
+done
+if [ -n "$G" ]; then
+  log "恢复成功：D+ 终态已重建"
+  exit 0
+else
+  log "S11 WARN: 120s 内未真绿，请查看 $TOOLS/backend.log 尾部"
+  tail -20 "$TOOLS/backend.log" 2>/dev/null
+  exit 2
 fi
-
-CODE=$(http_8080)
-echo "[recover] $(date '+%F %T') done: 8080=$CODE jar=$([ -f "$JAR" ] && echo ok || echo MISSING) 3306=$(port_open 3306 && echo ok || echo DOWN)"
-[ "$CODE" != "000" ] && [ -f "$JAR" ] && port_open 3306

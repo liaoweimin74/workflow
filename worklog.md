@@ -5531,3 +5531,15 @@ Work Log:
 
 Stage Summary:
 - 冷边界连续出现（19:05/20:05），重建已成巡检常规动作；三项抗重置提案仍待用户决策
+
+---
+Task ID: cron-巡检-20261009-2105
+Agent: 主控（Z.ai Code）
+Task: 21:05 巡检——环境重供给 #4（连续第三个冷边界）→ 重建收口
+
+Work Log:
+- /proc/uptime=59s → 21:04 重建；Node 假绿复现 → 成熟流程重建（~9 分钟）→ Java t+20s 点亮
+- 终验：真登录 180 token + form-fields 200 + 四链路 200×4；mem/oom 正常
+
+Stage Summary:
+- 冷边界已三连（19/20/21 点），重建流程稳定；等待用户对三项抗重置提案决策

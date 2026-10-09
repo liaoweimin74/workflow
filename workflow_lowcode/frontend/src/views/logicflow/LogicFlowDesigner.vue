@@ -84,11 +84,13 @@
           @drop="handleDrop"
         >
           <template #node-logic="nodeProps">
+            <!-- START 角标隐藏（data 推导；引擎层另有 node.deletable=false 双保险） -->
             <FlowNode
               :id="nodeProps.id"
               :data="nodeProps.data"
               :selected="nodeProps.selected"
               :status="runStatusMap[nodeProps.id] ?? ''"
+              :deletable="nodeProps.data?.nodeType !== 'START'"
               @delete="removeNode"
             />
           </template>
@@ -164,7 +166,7 @@
             @import="(fields) => (v.structure = fields)"
             @clear="v.structure = undefined"
           />
-          <!-- 参数名 formData：一键导入绑定表单结构（图标按钮，已导入变绿） -->
+          <!-- 参数名 formData：一键导入绑定表单结构（图标按钮，已导入变绿；点击可查看结构树） -->
           <el-tooltip v-if="v.name.trim() === 'formData'" placement="top" :content="formStructTip(v)">
             <el-button
               size="small"
@@ -173,7 +175,7 @@
               class="iv-form-btn"
               :class="{ 'is-set': v.structure?.length }"
               aria-label="导入表单结构"
-              @click="importFormStructure(v)"
+              @click="onFormStructClick(v)"
             >
               <el-icon><Grid /></el-icon>
             </el-button>
@@ -204,6 +206,22 @@
       </div>
       <template #footer>
         <el-button @click="inputVarsDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- formData 已导入表单结构查看器：只读树 + 重新导入/清除（与 JSON 实例导入对话框同源渲染） -->
+    <el-dialog v-model="formStructViewOpen" width="560px" append-to-body class="jii-dialog">
+      <template #header>
+        <div class="jii-head">
+          <span class="jii-title">已导入表单结构（{{ formStructStats }} 字段）</span>
+          <span class="jii-sub">来自当前绑定的表单字段（设计期发现）；变量选择器可展开选择到具体字段</span>
+        </div>
+      </template>
+      <StructureTree :nodes="formStructTarget?.structure ?? null" />
+      <template #footer>
+        <el-button size="small" text type="danger" @click="clearFormStructure">清除结构</el-button>
+        <el-button @click="formStructViewOpen = false">关闭</el-button>
+        <el-button type="primary" plain @click="reimportFormStructure">重新导入</el-button>
       </template>
     </el-dialog>
   </div>
@@ -262,6 +280,7 @@ import {
   type FormFieldGroupLike,
 } from './utils/flowVars'
 import { statFields } from './utils/jsonStructure'
+import StructureTree from './components/StructureTree.vue'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
@@ -330,10 +349,41 @@ function importFormStructure(v: InputVarDef): void {
   ElMessage.success(`已导入表单结构：${statFields(fields).total} 个字段`)
 }
 
-/** formData 导入按钮 tooltip：无结构引导导入，有结构报字段数 + 可重导 */
+/** formData 导入按钮点击：无结构直接导入；有结构先打开查看器（可重新导入/清除） */
+function onFormStructClick(v: InputVarDef): void {
+  if (v.structure?.length) {
+    formStructTarget.value = v
+    formStructViewOpen.value = true
+    return
+  }
+  importFormStructure(v)
+}
+
+const formStructViewOpen = ref(false)
+const formStructTarget = ref<InputVarDef | null>(null)
+const formStructStats = computed(() => {
+  const s = formStructTarget.value?.structure
+  return s?.length ? statFields(s).total : 0
+})
+
+function reimportFormStructure(): void {
+  const v = formStructTarget.value
+  if (!v) return
+  importFormStructure(v)
+}
+
+function clearFormStructure(): void {
+  const v = formStructTarget.value
+  if (!v) return
+  v.structure = undefined
+  formStructViewOpen.value = false
+  ElMessage.success('已清除表单结构')
+}
+
+/** formData 导入按钮 tooltip：无结构引导导入，有结构报字段数 + 可查看/重导 */
 function formStructTip(v: InputVarDef): string {
   return v.structure?.length
-    ? `已导入表单结构（${statFields(v.structure).total} 字段）· 点击重新导入`
+    ? `已导入表单结构（${statFields(v.structure).total} 字段）· 点击查看/重新导入`
     : '导入表单结构（来自绑定表单）'
 }
 
@@ -487,7 +537,7 @@ onMounted(async () => {
     if (detail.dsl) {
       try {
         const graph = parseDsl(detail.dsl)
-        nodes.value = graph.nodes
+        nodes.value = withNodeGuards(graph.nodes)
         edges.value = graph.edges
         inputVars.value = graph.inputVars || []
       } catch (err) {
@@ -519,6 +569,8 @@ function addNode(type: LogicNodeType, position: { x: number; y: number }): FlowN
     id: createNodeId(type, allNodes().map((n) => n.id)),
     type: 'logic',
     position,
+    // START 是流程锚点：禁删（Delete 键交互删除被 vue-flow 跳过，角标随 deletable 隐藏）
+    deletable: type === 'START' ? false : undefined,
     data: {
       nodeType: type,
       name: defaultNodeName(type),
@@ -559,7 +611,20 @@ function handleDrop(event: DragEvent) {
   if (node) trySnapNode(node)
 }
 
+/** START 为流程锚点禁删：装载 DSL 后统一打标（角标隐藏 + Delete 键豁免 + removeNode 兑底） */
+function withNodeGuards(list: FlowNodeModel[]): FlowNodeModel[] {
+  for (const n of list) {
+    if (n?.data?.nodeType === 'START') n.deletable = false
+  }
+  return list
+}
+
 function removeNode(id: string) {
+  const target = allNodes().find((n) => n.id === id)
+  if (target?.data.nodeType === 'START') {
+    ElMessage.warning('开始节点是流程入口，不可删除')
+    return
+  }
   removeNodes([id])
   if (selectedNodeId.value === id) selectedNodeId.value = null
 }
@@ -1103,7 +1168,7 @@ function applySnapshot(dsl: string) {
   applyingHistory.value = true
   try {
     const graph = parseDsl(dsl)
-    nodes.value = graph.nodes
+    nodes.value = withNodeGuards(graph.nodes)
     edges.value = graph.edges
     selectedNodeId.value = null
   } catch {
@@ -1516,8 +1581,30 @@ onBeforeRouteLeave(async (_to, _from) => {
   }
 })
 
+/** 返回守卫状态：确认框/导航进行中防重复触发（双击返回会连跳两个历史条目，落地页错乱） */
+const leaving = ref(false)
+
 function handleBack() {
-  router.back()
+  if (leaving.value) return
+  leaving.value = true
+  // 确定性回列表：不依赖 history 栈（直链进入/刷新后 back 会跳出应用或落在错误页）
+  router
+    .push('/logic-flow')
+    .catch(() => {}) // 留在本页（未保存确认取消）时 push 被中止，吞掉导航失败
+    .finally(() => {
+      leaving.value = false
+    })
+}
+
+// ===== HMR 守卫：本页持有整张画布的内存状态（nodes/edges/入参声明），流程数据仅在
+// onMounted 拉取一次；开发期 vite HMR 重载本组件会重置 setup 状态但不会重跑 onMounted，
+// 导致画布被清空、「开始」节点消失（真实事故：2026-10-09 画布被 HMR 清空，var_picker_test
+// 节点被空存覆盖）。故在本模块被 HMR 替换时强制整页刷新：页面重载后画布从 API 完整重建，
+// 开发期并发编辑不再产生「空画布」中间态（仅影响 dev，生产构建无 HMR）。
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    window.location.reload()
+  })
 }
 </script>
 

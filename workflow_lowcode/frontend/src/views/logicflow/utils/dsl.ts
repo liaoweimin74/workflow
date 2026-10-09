@@ -325,6 +325,8 @@ export interface FlowNode {
   type: string
   position: { x: number; y: number }
   data: FlowNodeData
+  /** vue-flow 节点级删除豁免：START 置 false（Delete 键交互删除被跳过；角标显隐联动） */
+  deletable?: boolean
 }
 
 /** vue-flow 边（branch 挂在 data 上；CONDITION 出边需 sourceHandle 定位 真/假 连接点） */

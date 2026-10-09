@@ -37,6 +37,14 @@
           <span class="jii-sub">粘贴一份示例 JSON，系统据此生成字段结构树，变量选择器即可展开选择到具体字段</span>
         </div>
       </template>
+      <!-- 当前已导入结构：只读查看（重导前可确认现有结构，避免盲覆盖） -->
+      <div v-if="hasStructure" class="jii-current">
+        <div class="jii-current-head">
+          <span class="jii-current-title">当前已导入结构（{{ stats }} 字段）</span>
+          <el-button size="small" text type="danger" @click="onClearFromDialog">清除</el-button>
+        </div>
+        <StructureTree :nodes="structure" class="jii-current-tree" />
+      </div>
       <el-input
         v-model="text"
         type="textarea"
@@ -54,9 +62,8 @@
         <template v-else>✗ {{ preview.error }}</template>
       </div>
       <template #footer>
-        <el-button v-if="hasStructure" size="small" text type="danger" @click="onClearFromDialog">清除已有结构</el-button>
-        <el-button @click="open = false">取消</el-button>
-        <el-button type="primary" :disabled="!preview.ok" @click="onImport">导入</el-button>
+        <el-button @click="open = false">关闭</el-button>
+        <el-button type="primary" :disabled="!preview.ok" @click="onImport">{{ hasStructure ? '覆盖导入' : '导入' }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -67,6 +74,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import type { FieldNode } from '../utils/dsl'
+import StructureTree from './StructureTree.vue'
 import {
   inferStructureFromJsonText,
   statFields,
@@ -92,7 +100,7 @@ const emit = defineEmits<{
 const open = ref(false)
 const text = ref('')
 
-// 打开时预填当前实例结构（仅展示统计；实例本身未存，从结构还原成示例骨架便于增量编辑）
+// 打开时清空输入区：当前结构已在上方「当前已导入结构」区只读展示，粘贴新实例即覆盖导入
 watch(open, (v) => {
   if (v) text.value = ''
 })
@@ -166,6 +174,25 @@ function onClearFromDialog() {
   font-size: 12px;
   color: var(--el-text-color-secondary);
   line-height: 1.5;
+}
+
+/* 当前已导入结构查看区（只读树 + 清除入口） */
+.jii-current {
+  margin-bottom: 10px;
+}
+.jii-current-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.jii-current-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-color-success);
+}
+.jii-current-tree {
+  background: color-mix(in srgb, var(--el-color-success) 4%, var(--el-fill-color-extra-light));
 }
 
 .jii-preview {

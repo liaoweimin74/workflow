@@ -5760,3 +5760,23 @@ Stage Summary:
 - 否决：C(affected==0 歧义误插)、D'(REPLACE 丢列)、B(SELECT 分支留作 conflictKey 非唯一字段的长尾补充)
 - 备案取舍：不走 BizDataHandler 钩子/不触发绑定(防递归，与 DATA_UPDATE 一致)；必填校验发布期+DB 兜底；version 自增；子表本期不做
 - 待用户拍板后实施：后端 NodeType/Config/Executor+发布校验+前端 nodeMeta/PropertyPanel+测试
+
+---
+Task ID: feat-20261010-0210
+Agent: main (user-triggered)
+Task: 用户拍板按推荐实施 DATA_UPSERT 业务数据写入节点（存在则更新/不存在则新增，面向业务表单记录）
+
+Work Log:
+- 后端：NodeType.DATA_UPSERT + BackendDataUpsertConfig（formKey/conflictKey/values/onUpdate，MAX_VALUES=50）
+- 引擎 executeDataUpsert：原子 INSERT...ON DUPLICATE KEY UPDATE；information_schema.STATISTICS 实查 (tenant_id,col) 二列唯一索引（ColumnInfo.unique 不可靠——UNI 只标首列）；id 恒反查回填；TenantProvider 注入（FlowableEngineConfig 9 参构造，8 参兼容保留）；BATCH 循环体白名单扩容
+- 校验器 validateDataUpsert + BATCH 步骤复用；新端点 unique-keys；DdlBuilder 既有唯一索引感知（跨租户同 key 表单共享物理表重复 ADD UNIQUE 500 既有缺口修复，发布幂等）
+- 前端：dsl.ts 类型/默认配置/BATCH 白名单、nodeMeta 调色板「数据写入」（badge 写）、PropertyPanel 编辑器（表单下拉=PUBLISHED BUSINESS、冲突键下拉=物理唯一索引第二列、列下拉=真实 schema 排管理列、onUpdate 可选覆盖）、api getDbSchemaUniqueKeys
+- 测试：后端改动域 210/210 全绿（DATA_UPSERT 引擎 12 例 + DdlBuilder 26 + logicflow 全包）；前端 1425/1425（+4）；vue-tsc 54=基线零新增；eslint 0
+- 顺手修复：LogicFlowDataUpdateMultiTest 2 个陈旧用例（44c18433 单条目=单表捷径未同步测试——aliasMustBeUniqueAndValid 非法别名改双条目走多表路径；updatesTakePrecedence 断言改为单表等价 Integer 输出）
+- E2E：API 三连跑 SKU-E2E(created→updated→updated)+SKU-E2E-B(created) 实证 DB version=3 自增/note 全量更新/created_by=logicflow 兜底/审计列齐；UI：登录→设计器画布回显「写 台账写入」→面板表单=UpsertE2E（upsert_e2e）/冲突键=code/写入字段 code,qty/输出提示——agent-browser 实证零控制台错误
+- 部署：mvn package 重启 Java（8080 真绿 accessToken）；演示数据留存（default 租户：upsert_e2e 表单已发布+数据写入E2E 流已发布；t1 租户同名表单/流）
+
+Stage Summary:
+- DATA_UPSERT 全链路上线并推送 cf516205；业务键幂等写入需求闭环
+- 坑沉淀：①Mockito varargs 捕参——any(Object[].class) 匹配展开参数，getArgument(1) 取的是首参而非数组，须 getArguments() 切片；②COLUMN_KEY=UNI 仅标复合唯一索引首列，业务列唯一性必须查 STATISTICS；③agent-browser snapshot 对超长行截断显示（实际字节无损，od -c 验证）；④沙箱全量 mvn test 内存压力下 fork 不稳（334 提前终止），以改动域全绿+基线同款失败集对比为准
+- 备案：全量套件 31 个失败（task/system/ai/datasource/page 模块）为 HEAD 基线同款遗留，非本轮引入，未修

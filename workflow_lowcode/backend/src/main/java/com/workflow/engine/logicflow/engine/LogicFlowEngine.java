@@ -45,6 +45,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li>全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH 及 CONDITION）输出统一由
  *       节点级 results 声明驱动（mode=WHOLE 整包 / mode=KEY 拆包，见 {@link #writeResults}；
  *       SCRIPT 严格 / 其余宽松）；resultVar 已全链路下线；</li>
+ *   <li>隐式默认输出（约定优于配置）：未声明 results 的执行型节点自动把整体返回值写入
+ *       以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用；显式声明后按声明执行；</li>
  *       BATCH 遍历集合并按循环体链（config.body[]，逐项顺序执行链上各节点）执行，
  *       聚合结果列表为节点返回值（由 results 声明写入）；legacy 单动作（actionType+actionConfig）仍兼容；
  *       SUBFLOW 调用另一条已发布逻辑流（环检测 + 深度限制），其 outputVars 为节点返回值（由 results 声明写入）；</li>
@@ -251,7 +253,7 @@ public class LogicFlowEngine {
         try {
             Object result = dispatch(node, vars, traces);
             long duration = System.currentTimeMillis() - begin;
-            // 输出统一由 results 声明驱动（全部执行型节点；SCRIPT 严格 / 其余宽松；无声明则纯副作用不写回）
+            // 输出统一由 results 声明驱动（全部执行型节点；SCRIPT 严格 / 其余宽松；无声明则隐式整体输出为 <节点id>）
             writeResults(node, result, vars);
             traces.add(new NodeTrace(node.getId(), node.getName(), node.getType().name(),
                     TRACE_SUCCESS, result, null, duration));
@@ -297,7 +299,7 @@ public class LogicFlowEngine {
             branch = false;
         }
         long duration = System.currentTimeMillis() - begin;
-        // 输出统一由 results 声明（宽松语义）：WHOLE 写回布尔；未声明不写
+        // 输出统一由 results 声明（宽松语义）：WHOLE 写回布尔；未声明则隐式写入 <节点id>=布尔
         writeResults(node, branch, vars);
         traces.add(new NodeTrace(node.getId(), node.getName(), NodeType.CONDITION.name(),
                 TRACE_SUCCESS, String.valueOf(branch), null, duration));
@@ -365,14 +367,17 @@ public class LogicFlowEngine {
      *   <li>严格度分流（拍板 3B）：SCRIPT 严格——声明 KEY 而末行非 Map → 抛
      *       IllegalArgumentException（节点 FAILED，配置错误尽早暴露）；其余节点宽松——
      *       非 Map/解析失败 → 警告跳过，节点继续（外部系统输出不受本流控制）；</li>
-     *   <li>输出名与上游同名变量冲突 → log.warn 警告后放行（运行期宽容策略）。</li>
+     *   <li>输出名与上游同名变量冲突 → log.warn 警告后放行（运行期宽容策略）；</li>
+     *   <li>未声明 results → 隐式整体输出（见 {@link #writeImplicitResult}）。</li>
      * </ul>
      * 调用点须在 trace 记 SUCCESS 之前（失败归入节点异常路径）。
      */
     private void writeResults(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
         List<LogicFlowDsl.ResultVarDef> results = node.getResults();
         if (results == null || results.isEmpty()) {
-            return; // 未声明输出：节点纯副作用，不写任何变量
+            // 未声明输出：隐式约定——整体返回值写入以节点 id 命名的变量（零配置即可被下游引用）
+            writeImplicitResult(node, result, vars);
+            return;
         }
         String nodeLabel = node.getName() != null && !node.getName().isBlank()
                 ? node.getName() : node.getId();
@@ -404,6 +409,31 @@ public class LogicFlowEngine {
             }
             vars.put(name, value);
         }
+    }
+
+    /**
+     * 隐式默认输出（约定优于配置）：未声明 results 的执行型节点把整体返回值写入
+     * 以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用；需要重命名/拆包时才显式声明。
+     * <ul>
+     *   <li>null 结果静默跳过（纯副作用节点常见，不刷警告）；</li>
+     *   <li>节点 id 须为合法变量名（\w+）才写——循环体步骤 fallback id 含 '#' 时跳过；</li>
+     *   <li>同名覆盖沿用警告放行策略（节点 id 带类型前缀，与用户变量撞名概率极低）。</li>
+     * </ul>
+     */
+    private void writeImplicitResult(LogicFlowDsl.NodeDef node, Object result, Map<String, Object> vars) {
+        if (result == null) {
+            return;
+        }
+        String id = node.getId();
+        if (id == null || !id.matches("\\w+")) {
+            return;
+        }
+        if (vars.containsKey(id)) {
+            // debug 级：隐式输出属赠品语义，自环/同名场景高频触发，避免刷屏
+            log.debug("节点 '{}' 隐式输出 '{}' 覆盖同名变量（放行）",
+                    node.getName() != null && !node.getName().isBlank() ? node.getName() : id, id);
+        }
+        vars.put(id, result);
     }
 
     /**
@@ -864,7 +894,7 @@ public class LogicFlowEngine {
         long begin = System.currentTimeMillis();
         try {
             Object result = dispatch(inner, childVars, traces);
-            // 统一结果写回：results 声明驱动（SCRIPT 严格 / 其余宽松；无声明不写回）
+            // 统一结果写回：results 声明驱动（SCRIPT 严格 / 其余宽松；无声明则隐式整体输出为 <步骤id>）
             writeResults(inner, result, childVars);
             if (traceable && traces != null) {
                 traces.add(new NodeTrace(stepId, inner.getName(), inner.getType().name(),

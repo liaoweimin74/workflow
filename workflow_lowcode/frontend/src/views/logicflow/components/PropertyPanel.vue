@@ -500,11 +500,11 @@
           <template v-if="hasExecutionMeta">
             <div class="rows-block">
               <div class="rows-head">
-                <FieldLabel label="输出参数（results）" tip="统一输出声明，每个结果按提取方式写入上下文：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数，SUBFLOW 为子流 outputVars，BATCH 为汇总列表），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一，供下游节点直接引用" />
+                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数，SUBFLOW 为子流 outputVars，BATCH 为汇总列表），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一" />
                 <el-button size="small" text type="primary" @click="addResultRow">添加</el-button>
               </div>
               <div v-if="!resultRows.length" class="rows-empty">
-                未声明输出：节点结果不写入任何变量（纯副作用可留空）
+                未声明输出 · 引擎自动将整体结果写入变量「{{ nodeId }}」，下游可直接引用（点路径取子字段，如 {{ nodeId }}.data.id）；需要重命名或拆包时再添加
               </div>
               <div v-for="(r, i) in resultRows" :key="i" class="so-row">
                 <div class="so-line1">
@@ -588,6 +588,8 @@ const collapsed = computed({
 const loopBodyCount = computed(() => props.loopBodyCount ?? 0)
 
 const node = computed(() => props.node ?? null)
+/** 隐式输出变量名（未声明 results 时引擎写入的变量 = 节点 id） */
+const nodeId = computed(() => node.value?.id ?? '')
 const nodeTypeLabel = computed(() => (node.value ? typeLabel(node.value.data.nodeType) : ''))
 const hasExecutionMeta = computed(
   () =>

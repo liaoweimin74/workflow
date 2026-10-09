@@ -5,8 +5,9 @@
  * - input   入参：DSL 顶层 inputVars 声明（全局可用）
  * - loop    循环变量：上游 BATCH 节点的 itemVar/indexVar（仅循环体链内可用，
  *           通过 data.loop === true 的循环边传播；循环外不可见，与引擎作用域一致）
- * - upstream 上游产出：祖先节点（沿入边反向可达）results 声明的输出变量
- *           （全执行型节点：WHOLE 整包 / KEY 拆包，按声明名写入）
+ * - upstream 上游产出：祖先节点 results 声明的输出变量（全执行型节点：WHOLE 整包 /
+ *           KEY 拆包，按声明名写入）；未声明 results 的执行型节点按引擎隐式约定
+ *           自动产出「整体输出」条目（变量名 = 节点 id，下游可点路径取子字段）
  * - form    表单数据：formData 点路径取流程表单字段（仅 {{ }} 占位符场景展示，
  *           VariablePicker 在 bare 模式下过滤该组）
  *
@@ -41,6 +42,21 @@ export interface VarEdgeLike {
 }
 
 const BATCH_TYPE = 'BATCH'
+
+/**
+ * 执行型节点类型（与引擎一致：会产出返回值并写回上下文）。
+ * 未声明 results 时，引擎按隐式约定把整体返回值写入以节点 id 命名的变量
+ * （约定优于配置：下游零配置即可引用，点路径取子字段，如 {{http_x7k2.data.id}}）。
+ */
+export const EXEC_NODE_TYPES = new Set<string>([
+  'HTTP',
+  'BEAN',
+  'SCRIPT',
+  'CONDITION',
+  'BATCH',
+  'SUBFLOW',
+  'DATA_UPDATE',
+])
 
 /** 循环变量名缺省值（与 dsl.ts defaultConfig / 引擎约定一致） */
 const DEFAULT_ITEM_VAR = 'item'
@@ -125,8 +141,8 @@ export function collectAvailableVars(
     }
 
     if (data.nodeType === 'SCRIPT') {
-      // SCRIPT 输出：results 声明即产出（引擎按声明写回上下文）
-      if (Array.isArray(data.results)) {
+      // SCRIPT 输出：results 声明即产出；未声明 → 引擎隐式整体输出（变量名=节点 id）
+      if (Array.isArray(data.results) && data.results.length > 0) {
         for (const r of data.results as ResultVarDef[]) {
           if (!r?.name?.trim()) continue
           const bits: string[] = [r.type]
@@ -138,12 +154,18 @@ export function collectAvailableVars(
             detail: `输出参数 · 来自「${data.name || id}」${bits.length ? `（${bits.join(' · ')}）` : ''}`,
           })
         }
+      } else {
+        push({
+          name: id,
+          group: 'upstream',
+          detail: `自动整体输出 · 来自「${data.name || id}」，支持点路径取子字段`,
+        })
       }
       continue
     }
 
-    // 其余执行型节点输出：results 声明即产出
-    if (Array.isArray(data.results)) {
+    // 其余执行型节点输出：results 声明即产出；未声明 → 引擎隐式整体输出（变量名=节点 id）
+    if (Array.isArray(data.results) && data.results.length > 0) {
       for (const r of data.results as ResultVarDef[]) {
         if (!r?.name?.trim()) continue
         const bits: string[] = [r.type]
@@ -155,6 +177,12 @@ export function collectAvailableVars(
           detail: `输出参数 · 来自「${data.name || id}」（${data.nodeType}）`,
         })
       }
+    } else if (EXEC_NODE_TYPES.has(data.nodeType)) {
+      push({
+        name: id,
+        group: 'upstream',
+        detail: `自动整体输出 · 来自「${data.name || id}」（${data.nodeType}），支持点路径取子字段`,
+      })
     }
   }
 

@@ -5281,3 +5281,17 @@ Stage Summary:
 - 隐患顺手修复：后端测试树 129 文件此前从未入库（裸 'test' gitignore），现已收窄规则并全量入库（178 绿）
 - 新增待办（不阻塞）：①CONDITION variable 支持 {{var.path}} 展开（与 value 侧对齐，属语义增强）②"从示例 JSON 生成输出表 / 从脚本末行推断 KEY"二期增强
 - E2E 脚本留存 scripts/e2e-implicit-output.mjs 可复跑（幂等，自动清理）
+
+---
+Task ID: cron-restart-implicit-jar
+Agent: cron 巡检会话（Job 445901）
+Task: 系统通报 8080 Java 进程被会话收割者杀掉，要求以 cron 身份幂等拉起并四链路探活
+
+Work Log:
+- 探活前置核查：8080 实际存活——ss 有监听、POST /api/auth/login=200、进程 PID 14104 自 02:12:34 运行（cron 并行会话所启，符合「cron 拉起的进程不被收割」），判定通报为瞬态误报或已被自愈覆盖
+- 按幂等原则未重复执行 start-services.sh（服务已活，脚本空转超时风险大于收益；不 build、不改代码）
+- 四链路探活：3000 页面=200 / 外域 Host=200 / 3000 代理 login(admin/admin123)=200 / 8080 直连 login=200，全绿
+- 资源状态：内存 1.91GB，oom_kill=0（基线无变化）
+
+Stage Summary:
+- 8080 在跑含隐式输出功能的 02:07 新 jar（PID 14104），四链路 200×4，无需干预；未拉起、未构建、未改代码，仅记账

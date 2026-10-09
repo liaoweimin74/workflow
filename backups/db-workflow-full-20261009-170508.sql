@@ -3398,6 +3398,8 @@ CREATE TABLE `wf_form_logic_binding` (
 SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `wf_form_logic_binding` WRITE;
 /*!40000 ALTER TABLE `wf_form_logic_binding` DISABLE KEYS */;
+INSERT INTO `wf_form_logic_binding` VALUES
+('48b07c47ab244baba6ae99a13c053ca9','2026-10-09 15:06:32.243319',NULL,0x01,'SYNC_IN_TX','test_logic','bill_test','BUSINESS','default','BEFORE_CREATE','2026-10-09 15:06:32.243339');
 /*!40000 ALTER TABLE `wf_form_logic_binding` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
@@ -3435,7 +3437,8 @@ SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, @@AUTOCOMMIT=0;
 LOCK TABLES `wf_logic_flow` WRITE;
 /*!40000 ALTER TABLE `wf_logic_flow` DISABLE KEYS */;
 INSERT INTO `wf_logic_flow` VALUES
-('88bcfe0b7a1742a7b09a3286012a78b9','2026-10-08 01:04:24.119650',NULL,'{\"nodes\":[{\"id\":\"start\",\"type\":\"START\",\"name\":\"开始\",\"x\":360.0,\"y\":80.0,\"config\":null,\"resultVar\":null,\"errorAction\":null},{\"id\":\"end\",\"type\":\"END\",\"name\":\"结束\",\"x\":360.0,\"y\":320.0,\"config\":null,\"resultVar\":null,\"errorAction\":null}],\"edges\":[{\"id\":\"e1\",\"source\":\"start\",\"target\":\"end\",\"branch\":null}],\"inputVars\":null}','var_picker_test','变量选择器测试流','DRAFT','default','2026-10-08 01:04:24.119670',0);
+('4c78abf9f82d4673b4f348ef1afaade9','2026-10-09 15:03:26.163205','','{\"nodes\":[{\"id\":\"start\",\"type\":\"START\",\"name\":\"开始\",\"x\":360,\"y\":80},{\"id\":\"end\",\"type\":\"END\",\"name\":\"结束\",\"x\":360,\"y\":320},{\"id\":\"script_d01r\",\"type\":\"SCRIPT\",\"name\":\"Groovy 脚本\",\"x\":360,\"y\":200,\"config\":{\"language\":\"groovy\",\"source\":\"formData.person_id\",\"updates\":[{\"table\":\"\",\"setOps\":[{\"column\":\"\",\"mode\":\"SET\",\"value\":\"\"}],\"where\":[]}],\"table\":\"\",\"setOps\":[],\"where\":[]},\"errorAction\":\"FAIL_FLOW\"}],\"edges\":[{\"source\":\"start\",\"target\":\"script_d01r\",\"id\":\"vueflow__edge-startout-script_d01rin\"},{\"source\":\"script_d01r\",\"target\":\"end\",\"id\":\"vueflow__edge-script_d01rout-endin\"}],\"inputVars\":[{\"name\":\"formData\",\"type\":\"json\",\"required\":true,\"desc\":\"当前数据行（新增前）\",\"structure\":[{\"path\":\"person_id\",\"type\":\"string\"},{\"path\":\"person_name\",\"type\":\"string\"},{\"path\":\"department\",\"type\":\"string\"},{\"path\":\"position\",\"type\":\"string\"},{\"path\":\"leave_start_date\",\"type\":\"string\"},{\"path\":\"leave_end_date\",\"type\":\"string\"},{\"path\":\"leave_type\",\"type\":\"json\"},{\"path\":\"leave_type_text\",\"type\":\"string\"},{\"path\":\"leave_days\",\"type\":\"number\"},{\"path\":\"leave_reason\",\"type\":\"string\"},{\"path\":\"contact_phone\",\"type\":\"string\"},{\"path\":\"is_approved\",\"type\":\"string\"}]},{\"name\":\"formKey\",\"type\":\"string\",\"required\":false,\"desc\":\"表单标识\"},{\"name\":\"formType\",\"type\":\"string\",\"required\":false,\"desc\":\"表单类型（BUSINESS）\"},{\"name\":\"opType\",\"type\":\"string\",\"required\":false,\"desc\":\"操作类型（CREATE）\"},{\"name\":\"operator\",\"type\":\"string\",\"required\":false,\"desc\":\"当前操作人\"},{\"name\":\"__trigger\",\"type\":\"json\",\"required\":false,\"desc\":\"触发元信息（调试用）\"}]}','test_logic','测似流程','PUBLISHED','default','2026-10-09 15:13:27.109872',1),
+('88bcfe0b7a1742a7b09a3286012a78b9','2026-10-08 01:04:24.119650','','{\"nodes\":[{\"id\":\"start\",\"type\":\"START\",\"name\":\"开始\",\"x\":360,\"y\":80},{\"id\":\"end\",\"type\":\"END\",\"name\":\"结束\",\"x\":360,\"y\":320}],\"edges\":[{\"source\":\"start\",\"target\":\"end\",\"id\":\"e1\"}],\"inputVars\":[{\"name\":\"payload\",\"type\":\"json\",\"required\":false,\"structure\":[{\"path\":\"code\",\"type\":\"number\"},{\"path\":\"data\",\"type\":\"object\",\"children\":[{\"path\":\"id\",\"type\":\"number\"},{\"path\":\"items\",\"type\":\"array<object>\",\"children\":[{\"path\":\"sku\",\"type\":\"string\"},{\"path\":\"qty\",\"type\":\"number\"}]}]},{\"path\":\"msg\",\"type\":\"string\"}]}]}','var_picker_test','变量选择器测试流','DRAFT','default','2026-10-09 15:04:47.554500',0);
 /*!40000 ALTER TABLE `wf_logic_flow` ENABLE KEYS */;
 UNLOCK TABLES;
 COMMIT;
@@ -3725,4 +3728,4 @@ SET AUTOCOMMIT=@OLD_AUTOCOMMIT;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*M!100616 SET NOTE_VERBOSITY=@OLD_NOTE_VERBOSITY */;
 
--- Dump completed on 2026-10-09 13:33:36
+-- Dump completed on 2026-10-09 17:05:08

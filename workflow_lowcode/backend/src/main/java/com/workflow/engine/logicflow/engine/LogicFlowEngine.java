@@ -843,7 +843,8 @@ public class LogicFlowEngine {
      * 单语句原子完成，无 check-then-act 竞态；值一律参数绑定防注入。
      *
      * <p>输出 Map：{@code { result: "created"|"updated"|"unchanged", affected, id, table }}——
-     * MariaDB ODKU 受影响行数 1=新增 / 2=更新 / 0=无变化；id 恒反查回填（新增=本次生成，
+     * MariaDB ODKU 受影响行数 1=新增 / 2=更新 / 0=无变化（updated_at 恒随更新子句刷新，
+     * 命中已有行常规返回 2；0 为保留态，仅值全同且同毫秒写入才出现）；id 恒反查回填（新增=本次生成，
      * 更新/无变化=按冲突键参数化反查），下游零配置点路径取用。
      */
     private Object executeDataUpsert(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {

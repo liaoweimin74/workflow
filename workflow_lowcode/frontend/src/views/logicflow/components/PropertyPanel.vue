@@ -654,7 +654,7 @@
             </div>
 
             <div class="sql-preview-hint du-output-hint">
-              未声明输出时引擎自动将整体结果写入「{{ nodeId }}」：{ result: 'created'|'updated'|'unchanged', affected, id, table }；id 为记录主键（新增=本次生成，更新/无变化=按冲突键反查），下游可点路径引用（如 {{ nodeId }}.id）
+              未声明输出时引擎自动将整体结果写入「{{ nodeId }}」：{ result: 'created'|'updated'|'unchanged', affected, id, table }；id 为记录主键（新增=本次生成，更新/无变化=按冲突键反查），下游可点路径引用（如 {{ nodeId }}.id）。注意 updated_at 恒随更新子句刷新：命中已有行常规返回 updated（affected=2），unchanged 为保留态（值全同且同毫秒写入才出现，极罕见）
             </div>
           </template>
 

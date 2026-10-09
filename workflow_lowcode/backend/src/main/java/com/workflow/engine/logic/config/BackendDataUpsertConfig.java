@@ -28,7 +28,8 @@ import java.util.List;
  *       values/onUpdate 列须为业务列（引擎管理列 id/tenant_id/version/created_by/created_at/updated_at 禁写）；</li>
  *   <li>created_by：取上下文 {@code operator} 变量（表单触发注入当前登录人），缺省 logicflow；</li>
  *   <li>输出：{@code { result: "created"|"updated"|"unchanged", affected, id, table }}——
- *       MariaDB ODKU 受影响行数 1=新增 / 2=更新 / 0=无变化；id 恒反查回填（新增=本次生成，
+ *       MariaDB ODKU 受影响行数 1=新增 / 2=更新 / 0=无变化（updated_at 恒随更新子句刷新，
+ *       命中已有行常规返回 2；0 为保留态，仅值全同且同毫秒写入才出现）；id 恒反查回填（新增=本次生成，
  *       更新/无变化=按冲突键反查），下游可点路径取用（如 upsert_x1.id）；</li>
  *   <li>不走 BizDataHandler 钩子、不自动触发表单×逻辑编排绑定（与 DATA_UPDATE 一致，防自递归）；</li>
  *   <li>子表（tableForm/group）行级写入不支持，发布校验与运行期均不涉及子表。</li>

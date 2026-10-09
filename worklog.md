@@ -5685,3 +5685,22 @@ Work Log:
 - 【巡检附加 20261010 00:05】四链路 200×4 真绿（accessToken 核验通过）；dump OK workflow=204K v6=128K；cgroup 2.43GB（<3.5GB 备案线）；vite×1 无重复、无 postcss worker
 - 【oom_kill=1 定论】非服务事故：16:00 前后全量 git bundle 打包 pack-objects 被 OOM 杀死（signal 9，容器内存限制）即该计数来源；已改增量 bundle（105MB 打包成功）规避，vite/java/mariadb 未受影响
 - 【内存观察】agent-browser chrome 渲染进程×2 残留占 ~520MB（并行 QA 会话资产，不在巡检 kill 清单，未干预）；如后续 cgroup 逼近 3.5GB 可优先回收
+
+---
+Task ID: ui-inputvars-single-entry-20261010（输入参数对话框按钮拥挤 → 结构单一入口改造）
+Agent: 主控（Z.ai Code）
+Task: 用户反馈：输入参数声明对话框导入变量结构后可查看，但按钮已三个太拥挤，征询建议并落地
+
+Work Log:
+- 【拥挤构成】720px 行内：变量名(160px)+类型(110px)+必填开关+说明(flex)+删除按钮+JSON导入图标+formData表单导入图标（name==='formData'&&type==='json' 时三图标并排）
+- 【方案】①两个结构导入图标合并为单一下拉入口（两者写同一 v.structure 本质互斥）②删除按钮 hover/focus 才显现（占位保留布局不跳）③已导入时绿图标+el-badge 字段数徽标
+- 【落地】JsonInstanceImport.vue 新增 mode='menu'（el-dropdown：查看结构树/粘贴 JSON 实例导入/从绑定表单导入/清除，动态文案+动态标题「字段结构（查看/重新导入）」+徽标）+ isFormData prop + import-form emit；LogicFlowDesigner.vue 行模板替换、FieldLabel tip 同步、删除按钮 class iv-del-btn；清理 formData 专属查看器死代码（对话框+onFormStructClick/formStructTarget 等 6 段+iv-form-btn 样式+StructureTree/Grid 死 import）——查看路径统一走 JSON 导入对话框顶部树（对表单来源结构同样适用）；PropertyPanel 输出参数区 icon 模式保持向后兼容未动
+- 【坑1】el-tooltip 包裹 el-dropdown 触发器 → 菜单点击失效（Element Plus ref/事件链冲突，agent-browser 实证 aria-hidden 恒 true）→ 改原生 title 属性解决
+- 【坑2】MultiEdit 报整体失败但前 3 个 edit 实际已写入（非原子），后补小锚点分段清理
+- 【验证·agent-browser 全链路】登录→设计器→输入参数对话框：formData 行静态仅 2 按钮（删除 hover 显现 opacity 0→1 实测）✓；点结构按钮菜单展开「查看结构树（12 字段）| 从绑定表单导入结构 | 清除结构」✓；查看→对话框动态标题+12 行树（person_id string 起）✓；清除→绿标消失徽标消失、菜单首项自动切「粘贴 JSON 实例导入…」✓；重导→树 6 行即时出现+绿标+徽标 6 ✓；全程零 JS 错误（el-link underline 与 tooltip role=button 警告为既有，role 警告源自 TriggerGroupSelect/VariablePicker 等非本次改动）
+- 【回归】vue-tsc 54=旧基线零新增；eslint 0 错；vitest 全量 1421/1421（111 文件）+ logicflow 目录 77/77
+
+Stage Summary:
+- 输入参数行按钮 3→2（hover 后才见删除，常态仅结构入口 1 个），信息密度显著下降；结构 查看/导入/清除 收敛单一入口，交互一致性提升
+- JsonInstanceImport 三模式：menu（Designer 输入参数）/ icon（PropertyPanel 输出参数）/ 默认文本按钮，复用一个对话框实现
+- 沉淀坑：el-dropdown 触发器禁用 el-tooltip 包裹（用原生 title）；MultiEdit 部分写入风险（大 old_str 易因不可见字符失配，宜小锚点分段）

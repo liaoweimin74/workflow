@@ -140,7 +140,7 @@
       <template #header>
         <FieldLabel
           label="输入参数声明"
-          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议；json 类型参数可点击行尾图标粘贴 JSON 实例导入字段结构；参数名 formData 的入参可一键导入绑定表单结构。节点选择变量时即可展开选到具体字段"
+          tip="声明本流需要调用方传入的参数（保存在 DSL 中，仅作契约展示，引擎不强制校验）。也可不声明，运行测试时会自动扫描画布引用的变量给出建议；行尾上传图标为结构单一入口：可粘贴 JSON 实例导入字段结构，formData 参数还可从绑定表单一键导入，已导入后同一入口可查看结构树/清除。节点选择变量时即可展开选到具体字段"
         />
       </template>
       <div v-if="!inputVars.length" class="iv-empty">未声明入参</div>
@@ -155,31 +155,20 @@
           </el-select>
           <el-switch v-model="v.required" active-text="必填" style="flex-shrink: 0" />
           <el-input v-model="v.desc" placeholder="说明（可选）" style="flex: 1" />
-          <el-button size="small" text type="danger" @click="inputVars.splice(i, 1)">
+          <el-button size="small" text type="danger" class="iv-del-btn" title="删除参数" @click="inputVars.splice(i, 1)">
             <el-icon><Delete /></el-icon>
           </el-button>
-          <!-- json 类型：粘贴 JSON 实例生成字段结构树（图标按钮在删除之后，已导入变绿） → 变量选择器可展开选到字段 -->
+          <!-- 结构单一入口（menu 模式）：查看树 / JSON 实例导入 / 绑定表单导入 / 清除，替代两图标并列防拥挤；
+               已导入时图标变绿 + 字段数徽标 → 变量选择器可展开选到字段 -->
           <JsonInstanceImport
-            v-if="v.type === 'json'"
-            icon
+            v-if="v.type === 'json' || v.name.trim() === 'formData'"
+            mode="menu"
+            :is-form-data="v.name.trim() === 'formData'"
             :structure="v.structure"
             @import="(fields) => (v.structure = fields)"
+            @import-form="importFormStructure(v)"
             @clear="v.structure = undefined"
           />
-          <!-- 参数名 formData：一键导入绑定表单结构（图标按钮，已导入变绿；点击可查看结构树） -->
-          <el-tooltip v-if="v.name.trim() === 'formData'" placement="top" :content="formStructTip(v)">
-            <el-button
-              size="small"
-              text
-              type="primary"
-              class="iv-form-btn"
-              :class="{ 'is-set': v.structure?.length }"
-              aria-label="导入表单结构"
-              @click="onFormStructClick(v)"
-            >
-              <el-icon><Grid /></el-icon>
-            </el-button>
-          </el-tooltip>
         </div>
       </div>
       <el-button size="small" text type="primary" @click="addInputVar">添加入参</el-button>
@@ -208,22 +197,6 @@
         <el-button @click="inputVarsDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
-
-    <!-- formData 已导入表单结构查看器：只读树 + 重新导入/清除（与 JSON 实例导入对话框同源渲染） -->
-    <el-dialog v-model="formStructViewOpen" width="560px" append-to-body class="jii-dialog">
-      <template #header>
-        <div class="jii-head">
-          <span class="jii-title">已导入表单结构（{{ formStructStats }} 字段）</span>
-          <span class="jii-sub">来自当前绑定的表单字段（设计期发现）；变量选择器可展开选择到具体字段</span>
-        </div>
-      </template>
-      <StructureTree :nodes="formStructTarget?.structure ?? null" />
-      <template #footer>
-        <el-button size="small" text type="danger" @click="clearFormStructure">清除结构</el-button>
-        <el-button @click="formStructViewOpen = false">关闭</el-button>
-        <el-button type="primary" plain @click="reimportFormStructure">重新导入</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -235,7 +208,6 @@ import {
   ArrowLeft,
   Delete,
   Finished,
-  Grid,
   MagicStick,
   Promotion,
   RefreshLeft,
@@ -280,7 +252,6 @@ import {
   type FormFieldGroupLike,
 } from './utils/flowVars'
 import { statFields } from './utils/jsonStructure'
-import StructureTree from './components/StructureTree.vue'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
@@ -347,44 +318,6 @@ function importFormStructure(v: InputVarDef): void {
   }
   v.structure = fields
   ElMessage.success(`已导入表单结构：${statFields(fields).total} 个字段`)
-}
-
-/** formData 导入按钮点击：无结构直接导入；有结构先打开查看器（可重新导入/清除） */
-function onFormStructClick(v: InputVarDef): void {
-  if (v.structure?.length) {
-    formStructTarget.value = v
-    formStructViewOpen.value = true
-    return
-  }
-  importFormStructure(v)
-}
-
-const formStructViewOpen = ref(false)
-const formStructTarget = ref<InputVarDef | null>(null)
-const formStructStats = computed(() => {
-  const s = formStructTarget.value?.structure
-  return s?.length ? statFields(s).total : 0
-})
-
-function reimportFormStructure(): void {
-  const v = formStructTarget.value
-  if (!v) return
-  importFormStructure(v)
-}
-
-function clearFormStructure(): void {
-  const v = formStructTarget.value
-  if (!v) return
-  v.structure = undefined
-  formStructViewOpen.value = false
-  ElMessage.success('已清除表单结构')
-}
-
-/** formData 导入按钮 tooltip：无结构引导导入，有结构报字段数 + 可查看/重导 */
-function formStructTip(v: InputVarDef): string {
-  return v.structure?.length
-    ? `已导入表单结构（${statFields(v.structure).total} 字段）· 点击查看/重新导入`
-    : '导入表单结构（来自绑定表单）'
 }
 
 // ===== 从触发点事件导入参数（与表单逻辑流绑定联动） =====
@@ -1740,15 +1673,14 @@ if (import.meta.hot) {
 .iv-row-wrap .iv-row {
   margin-bottom: 0;
 }
-.iv-form-btn {
-  padding: 5px 6px;
+/* 删除按钮 hover/focus 才显现：行尾静态只留结构入口，视觉降噪（占位保留布局不跳） */
+.iv-del-btn {
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
-.iv-form-btn.is-set {
-  color: var(--el-color-success);
-}
-.iv-form-btn.is-set:hover {
-  color: var(--el-color-success);
-  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
+.iv-row:hover .iv-del-btn,
+.iv-row:focus-within .iv-del-btn {
+  opacity: 1;
 }
 /* 从触发点导入区块：与表单逻辑流绑定联动 */
 .iv-import {

@@ -5394,3 +5394,20 @@ Stage Summary:
 - 新 jar（05:12 构建，含 DATA_UPDATE 多表更新 + 隐式输出 + SQL_SCRIPT 全量能力）已在 8080 生效运行：PID 25506（05:21:55 启动，sandbox profile），"Started WorkflowApplication" + login 探针 200 + 7 分钟稳定运行三重确认
 - 异常记录：本 agent 会话两次拉起均被"会话收割者"静默 SIGKILL（第 1 次秒杀 0 字节日志；第 2 次 Spring 完整启动后 ~12s 被杀）；最终由 start-services.sh detached 路径拉起的实例存活——存活铁律更新：Task-subagent 会话拉起同样不免疫，后续重启应优先 cron 巡检会话或 detached start-services.sh，勿再委派 subagent 直启
 - 风险备案：25506 之父 25504 非本会话所启且暂无对应记账（主会话如非其所为需留意）；若收割者的会话判定范围扩大，25506 仍存被回收风险，建议巡检会话关注 8080 存活
+
+---
+Task ID: du-11
+Agent: 主会话（交互会话，承接第 16 项需求收尾）
+Task: DATA_UPDATE 多表更新——浏览器 UI E2E 补验 + 推送收口
+
+Work Log:
+- 上下文对齐：并行会话已将本功能实施提交入库（87b2a714 测试 + 84ff5140 实现与 E2E 脚本 + 0d43b412 记账），本会话工作树与其零冲突；du-8 换装部署记账已提交推送（a395a203，HEAD=origin/main）
+- 【浏览器 UI E2E 补验】（并行会话该环节未跑，本会话补齐）：agent-browser 走通设计器全链路——登录 admin → /logic-flow 新建临时流 du_multi_browser_check → 进设计器 → 组件面板添加「数据更新」节点（自动连线）→ 选中节点属性面板渲染「多表更新」开关（关态提示"未启用 · 仅更新单张表（存量行为）"）→ 拨动开关：单表配置自动迁移为条目 #0（无配置丢失）→「添加目标表」追加条目 #1 → 首条填别名 order → 汇总输出提示实时联动为「{ total, affected, order.affected, t1.affected, … }」（duKeysPreview computed 生效）→ 画布卡片摘要「多表更新 2 张表 · 1 字段」→ 保存成功
+- 【持久化核验】API 直查 dslJson：updates 长度 2、alias[0]=order、config 含 table/setOps/where/updates 四键——多表配置跨保存零丢失
+- 【清理】临时流已删（DELETE 200），库零残留；browser 关闭
+- 【四链路】200×4（3000 页 / 外域 Host / 3000 代理 login / 8080 直连 login，java PID 25506 跑 05:12 新 jar）
+- 提交：a395a203（du-8 记账）已推送；本条记账随收口提交
+
+Stage Summary:
+- DATA_UPDATE 多表更新（用户第 16 项需求）全链路交付完成：引擎单事务（全有或全无）+ 别名/t{i} 键控汇总输出 + 校验器 + 前端双形态编辑器 + 后端 7 用例（logicflow 包 78/78）+ API E2E 5/5 + 浏览器 UI E2E 补验通过
+- 备案：①PropertyPanel 多表编辑器与单表模式互斥切换，关闭开关仅允许 ≤1 条目（防丢配置）②汇总输出走隐式整体输出约定（<节点id> 变量，点路径取 t0.affected/order.affected）③收割者规律已更新至 du-8 记账（Task-subagent 拉起不免疫，重启优先 cron 会话）

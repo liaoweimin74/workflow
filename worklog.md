@@ -5661,3 +5661,15 @@ Stage Summary:
 - GitHub 同步闭环：origin/main = e749f138 = 本地 main，19 提交全部入库（含 START 崩溃修复 + JSON 导入结构回显 + push 备案）
 - 推送基础设施永久可用：credential store 已配置（600），push-with-token.sh 仍保留作为轮换凭证时的工具
 - 待观察：jar 98.85MB 贴近 GitHub 100MB 硬限制，超限即推失败，建议下一阶段决策 gitignore 或 LFS
+
+---
+Task ID: push-github-20261009-final（收口：credential store 格式修正 + 完全同步）
+Agent: 主控（Z.ai Code）
+Task: 修正 ~/.git-credentials 格式错误，推齐 worklog 记账提交
+
+Work Log:
+- 【坑】~/.git-credentials 首次写入误加 `url=` 前缀（git credentials 文件标准格式是每行 `protocol://user:pass@host`，无键名）→ 直接 git push 报 could not read Username；echo "https://x-access-token:<TOKEN>@github.com" 重写后 git credential fill 测试通过
+- 【终态】直接 git push origin main 成功：e749f138..b6fcf59d main->main；rev-parse main origin/main 双双 b6fcf59d 完全同步；工作树干净
+
+Stage Summary:
+- GitHub 终态：origin/main = b6fcf59d = 本地 main（20 提交含全部 bug 修复与备案）；此后任何会话直接 git push 即可（credential store 600 已就位）

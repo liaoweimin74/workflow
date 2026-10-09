@@ -5722,3 +5722,20 @@ Stage Summary:
 - 控制台三类既有警告清零（v-permission/underline/ECharts 尺寸），QA 信噪比提升；一处 vendor 深源警告（role=button）备案
 - 沉淀：ECharts 容器须 0 尺寸守卫 + RO 补渲染模式；EP 新 API（underline 枚举）替换点全站仅 2 处已清
 - 待办移交：仪表盘图表数据源绑定（业务配置）可作后续功能完善方向
+
+---
+Task ID: qa-20261010-0115
+Agent: main (user-triggered)
+Task: 用户再次询问输入参数对话框按钮拥挤问题——复核 cf65999e 改造的线上实况并回复
+
+Work Log:
+- 确认工作树干净，cf65999e 已推送（babe2ba7 为后续 dump）
+- agent-browser 全链路实测：设计器 → 输入参数 6 → 对话框
+- 实证行尾常驻按钮 3→1：结构查看/导入合并为单一下拉「字段结构：查看 / 导入」，删除按钮仅 hover 显现
+- 下拉菜单三项正常：查看结构树（12 字段）/ 从绑定表单导入结构 / 清除结构
+- 结构树对话框实开验证：标题「字段结构（查看 / 重新导入）」、徽标「当前已导入结构（12 字段）」、树渲染 person_id/person_name/department/position 等字段
+- Escape 双层对话框关闭干净（0 overlays open）；控制台无新增错误（仅历史 v-permission/el-link 告警，已备案于 7e627121）
+
+Stage Summary:
+- 按钮拥挤问题维持已解决状态，无需新改动；实测证据链完整
+- 坑补充：agent-browser snapshot 对嵌套 dialog 渲染顺序可能截断，需用 eval 查 .el-overlay display 状态判定对话框实开

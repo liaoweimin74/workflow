@@ -21,7 +21,8 @@ import java.util.Set;
  *   <li>边引用不存在的节点（source/target）；</li>
  *   <li>CONDITION 节点缺 branch=true / branch=false 出边；</li>
  *   <li>HTTP 节点缺 url；BEAN 节点缺 beanName/methodName；SCRIPT 节点缺 source；</li>
- *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH）
+ *   <li>SQL_SCRIPT 节点缺 sql / 语句解析失败 / 类型白名单外 / 别名重复 / 占位符语法错 / onError 或 maxRows 非法；</li>
+ *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/SQL_SCRIPT）
  *       顶层与循环体均可配；变量名须 \\w+ 合法标识符、不重复、mode 必填且 ∈ WHOLE|KEY；
  *       resultVar 已全链路下线（引擎反序列化忽略该遗留键）；</li>
  *   <li>非 END/CONDITION 节点无出边（含 START）。</li>
@@ -125,6 +126,7 @@ public class LogicFlowDslValidator {
                 case BATCH -> validateBatch(node, errors);
                 case SUBFLOW -> validateSubflow(node, errors);
                 case DATA_UPDATE -> validateDataUpdate(node, errors);
+                case SQL_SCRIPT -> validateSqlScript(node, errors);
                 default -> {
                     // 其余类型无 config 硬要求
                 }
@@ -269,10 +271,77 @@ public class LogicFlowDslValidator {
         }
     }
 
-    /** 批处理循环体允许的节点类型（业务执行五型 + BATCH 嵌套；CONDITION/START/END 不可入循环体）。 */
+    /**
+     * SQL_SCRIPT 节点硬校验：sql 必填；语句切分成功且非空、数量不超上限；
+     * 逐条类型白名单（kindOf）+ 占位符/引号语法（compile 空变量编译，配置错误尽早暴露）；
+     * 语句别名（含默认 s{i} 键）不重复；onError ∈ abort|continue；maxRows（若填）1~1000。
+     * 目标表/列存在性不做静态校验（运行期由数据库报错，错误进汇总条目）。
+     */
+    private void validateSqlScript(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("SQL_SCRIPT 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        String sql = textOrNull(config, "sql");
+        if (sql == null || sql.isBlank()) {
+            errors.add("SQL_SCRIPT 节点 " + node.getId() + " 缺少 sql");
+            return;
+        }
+        List<String> statements;
+        try {
+            statements = SqlScriptSupport.splitStatements(sql);
+        } catch (IllegalArgumentException e) {
+            errors.add("SQL_SCRIPT 节点 " + node.getId() + " 语句解析失败: " + e.getMessage());
+            return;
+        }
+        if (statements.isEmpty()) {
+            errors.add("SQL_SCRIPT 节点 " + node.getId() + " sql 未包含可执行语句");
+            return;
+        }
+        if (statements.size() > SqlScriptSupport.MAX_STATEMENTS) {
+            errors.add("SQL_SCRIPT 节点 " + node.getId() + " 语句数超出上限("
+                    + SqlScriptSupport.MAX_STATEMENTS + "): " + statements.size());
+        }
+        Set<String> keys = new LinkedHashSet<>();
+        for (int i = 0; i < statements.size(); i++) {
+            String label = "第 " + (i + 1) + " 条";
+            String stmt = statements.get(i);
+            try {
+                SqlScriptSupport.kindOf(stmt);
+            } catch (IllegalArgumentException e) {
+                errors.add("SQL_SCRIPT 节点 " + node.getId() + " " + label + ": " + e.getMessage());
+            }
+            try {
+                // 空变量编译 = 纯语法校验（占位符闭合/路径合法/引号闭合）；变量存在性运行期解析
+                SqlScriptSupport.compile(stmt, Map.of(), null);
+            } catch (Exception e) {
+                errors.add("SQL_SCRIPT 节点 " + node.getId() + " " + label + " 语法错误: " + e.getMessage());
+            }
+            String name = SqlScriptSupport.extractName(stmt);
+            String key = (name != null && !name.isBlank()) ? name.trim() : ("s" + i);
+            if (!keys.add(key)) {
+                errors.add("SQL_SCRIPT 节点 " + node.getId() + " " + label + " 语句别名重复: " + key);
+            }
+        }
+        String onError = textOrNull(config, "onError");
+        if (onError != null && !onError.isBlank()
+                && !Set.of("abort", "continue").contains(onError.trim().toLowerCase())) {
+            errors.add("SQL_SCRIPT 节点 " + node.getId() + " onError 非法(须 abort/continue): " + onError);
+        }
+        JsonNode maxRows = config.get("maxRows");
+        if (maxRows != null && !maxRows.isNull()) {
+            int v = maxRows.asInt(-1);
+            if (v < 1 || v > 1000) {
+                errors.add("SQL_SCRIPT 节点 " + node.getId() + " maxRows 须在 1~1000: " + v);
+            }
+        }
+    }
+
+    /** 批处理循环体允许的节点类型（业务执行六型 + SQL_SCRIPT + BATCH 嵌套；CONDITION/START/END 不可入循环体）。 */
     private static final Set<NodeType> BATCH_BODY_ALLOWED = Set.of(
             NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.SUBFLOW,
-            NodeType.BATCH);
+            NodeType.SQL_SCRIPT, NodeType.BATCH);
 
     /** BATCH 最大嵌套深度（发布校验限制，防无限自嵌套） */
     private static final int MAX_BATCH_NESTING_DEPTH = 3;
@@ -345,7 +414,7 @@ public class LogicFlowDslValidator {
         }
         if (type == null || !BATCH_BODY_ALLOWED.contains(type)) {
             errors.add("BATCH 节点 " + batchNode.getId() + " " + label
-                    + "类型非法（仅支持 HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH）: " + typeName);
+                    + "类型非法（仅支持 HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/SQL_SCRIPT/BATCH）: " + typeName);
             return;
         }
         JsonNode stepConfig = step.get("config");
@@ -405,6 +474,13 @@ public class LogicFlowDslValidator {
                 stepNode.setType(NodeType.SUBFLOW);
                 stepNode.setConfig(stepConfig);
                 validateSubflow(stepNode, errors);
+            }
+            case SQL_SCRIPT -> {
+                LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
+                stepNode.setId(batchNode.getId() + " " + label);
+                stepNode.setType(NodeType.SQL_SCRIPT);
+                stepNode.setConfig(stepConfig);
+                validateSqlScript(stepNode, errors);
             }
             default -> {
                 // 不可达（上方类型白名单已过滤）

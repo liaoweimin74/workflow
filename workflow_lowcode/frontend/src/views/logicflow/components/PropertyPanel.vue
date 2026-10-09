@@ -495,12 +495,70 @@
             </div>
           </template>
 
+          <!-- ===== SQL_SCRIPT ===== -->
+          <template v-else-if="node.data.nodeType === 'SQL_SCRIPT'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="SQL 语句" tip="多条 SQL 用 ; 分隔（字符串/注释内的分号不会切分）；语句中用 {{var.path}} 引用上下文变量，执行时编译为 JDBC ? 参数绑定防注入（保留数值类型；'前缀{{var}}后缀' 拼接形态整段绑定字符串）；支持 -- name: 别名 注释为语句命名（输出键用别名，重复会校验拒绝）；仅支持 SELECT/INSERT/UPDATE/DELETE/REPLACE（及 SHOW/DESC/EXPLAIN/WITH 查询），DDL 会隐式提交破坏事务故不支持" />
+              </template>
+              <VarInput
+                v-model="sqlScriptCfg.sql"
+                :variables="variables"
+                mode="placeholder"
+                textarea
+                :rows="10"
+                chips
+                class="sql-source"
+                placeholder="-- name: upsert_user&#10;UPDATE wf_biz_order SET status = {{newStatus}} WHERE id = {{orderId}};&#10;&#10;SELECT id, amount FROM wf_biz_order WHERE id = {{orderId}};"
+              />
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="语句解析预览" tip="按 ; 切分后的执行顺序、类型识别与变量引用（与引擎语义一致）；条目键 = 别名或 s{序号}，即输出汇总里的子键" />
+              </div>
+              <div v-if="sqlPreview.error" class="sql-preview-error">
+                <el-icon><WarningFilled /></el-icon>
+                <span>{{ sqlPreview.error }}</span>
+              </div>
+              <div v-if="!sqlPreview.statements.length && !sqlPreview.error" class="rows-empty">
+                输入 SQL 后按 ; 切分预览
+              </div>
+              <div v-for="st in sqlPreview.statements" :key="st.index" class="sql-stmt-row">
+                <span class="sql-stmt-idx">#{{ st.index }}</span>
+                <span class="sql-stmt-kind" :class="'kind-' + st.kind.toLowerCase()">{{ st.kindLabel }}</span>
+                <span class="sql-stmt-text" :title="st.excerpt">{{ st.excerpt }}</span>
+                <span v-if="st.name" class="sql-stmt-name" :title="`输出键 ${st.name}`">{{ st.name }}</span>
+              </div>
+              <div v-if="sqlPreview.statements.length" class="sql-preview-hint">
+                未声明输出时引擎自动写整体汇总到「{{ nodeId }}」：{ total, succeeded, failed, aborted?, s0.affected, s1.data, … }，下游点路径取子字段（如 {{ nodeId }}.s0.affected）
+              </div>
+            </div>
+
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="失败策略" tip="失败回滚（abort）：单事务执行，任一语句失败整体回滚并停止，汇总标 aborted=true（节点不抛错，下游可按 failed/aborted 变量分支）；逐条继续（continue）：自动提交逐条执行，失败记入该语句条目（sN.error）继续执行后续语句" />
+              </template>
+              <el-select v-model="sqlScriptCfg.onError" class="sql-onerror">
+                <el-option label="失败回滚（单事务）" value="abort" />
+                <el-option label="逐条继续（自动提交）" value="continue" />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="查询行数上限" tip="单条 SELECT 最多返回的行数（1~1000），超出截断并在该条目标记 truncated=true，防大结果集撑爆内存" />
+              </template>
+              <el-input-number v-model="sqlScriptCfg.maxRows" :min="1" :max="1000" size="small" class="sql-maxrows" />
+            </el-form-item>
+          </template>
+
           <!-- ===== 公共：输出参数 / 异常策略（全执行型节点统一 results 单表；
                START/END/CONDITION 无；resultVar 已下线） ===== -->
           <template v-if="hasExecutionMeta">
             <div class="rows-block">
               <div class="rows-head">
-                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数，SUBFLOW 为子流 outputVars，BATCH 为汇总列表），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一" />
+                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数，SUBFLOW 为子流 outputVars，BATCH 为汇总列表，SQL_SCRIPT 为执行汇总 { total/succeeded/failed/sN }，KEY 取其顶层键如 s0/s1/total），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一" />
                 <el-button size="small" text type="primary" @click="addResultRow">添加</el-button>
               </div>
               <div v-if="!resultRows.length" class="rows-empty">
@@ -548,7 +606,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { CopyDocument, Delete, Fold, Setting } from '@element-plus/icons-vue'
+import { CopyDocument, Delete, Fold, Setting, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import FieldLabel from './FieldLabel.vue'
 import VarInput from './VarInput.vue'
@@ -556,7 +614,8 @@ import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { dataSourceApi } from '@/api/data-source'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
+import { parseSqlScriptPreview } from '../utils/sqlScript'
 import type { FlowVarItem } from '../utils/flowVars'
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']
@@ -594,7 +653,7 @@ const nodeTypeLabel = computed(() => (node.value ? typeLabel(node.value.data.nod
 const hasExecutionMeta = computed(
   () =>
     !!node.value &&
-    ['HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE'].includes(node.value.data.nodeType)
+    ['HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE', 'SQL_SCRIPT'].includes(node.value.data.nodeType)
 )
 
 /** 兜底补齐 config（历史 DSL 缺字段时按类型默认值补全） */
@@ -609,6 +668,11 @@ function ensureConfig<T>(): T {
 const httpCfg = computed(() => ensureConfig<HttpNodeConfig>())
 const beanCfg = computed(() => ensureConfig<{ beanName: string; methodName: string; params: { source: string; target: string }[] }>())
 const scriptCfg = computed(() => ensureConfig<{ language: string; source: string }>())
+
+// ===== SQL_SCRIPT =====
+const sqlScriptCfg = computed(() => ensureConfig<SqlScriptNodeConfig>())
+/** 实时拆分预览（与引擎同语义；解析错误不抛出，进 error 字段展示） */
+const sqlPreview = computed(() => parseSqlScriptPreview(String(sqlScriptCfg.value?.sql ?? '')))
 
 /** 统一输出声明（reactive 引用，增删改直接写回 node.data.results；全执行型节点共享） */
 const resultRows = computed<ResultVarDef[]>(() => {
@@ -1224,6 +1288,112 @@ async function copyNodeId() {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* ===== SQL_SCRIPT：编辑器 + 语句解析预览 ===== */
+.sql-source :deep(textarea) {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.sql-preview-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--el-color-danger);
+  background: color-mix(in srgb, var(--el-color-danger) 8%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--el-color-danger) 40%, transparent);
+}
+
+.sql-stmt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.sql-stmt-row + .sql-stmt-row {
+  margin-top: 4px;
+}
+
+.sql-stmt-idx {
+  flex-shrink: 0;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+
+.sql-stmt-kind {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 16px;
+  color: #fff;
+}
+
+.sql-stmt-kind.kind-dml {
+  background: color-mix(in srgb, #0e7490 78%, var(--el-color-primary));
+}
+
+.sql-stmt-kind.kind-insert {
+  background: var(--el-color-success);
+}
+
+.sql-stmt-kind.kind-query {
+  background: color-mix(in srgb, var(--lf-batch) 82%, var(--el-text-color-primary));
+}
+
+.sql-stmt-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  color: var(--el-text-color-regular);
+}
+
+.sql-stmt-name {
+  flex-shrink: 0;
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 16px;
+  color: color-mix(in srgb, var(--lf-data) 85%, var(--el-text-color-primary));
+  background: color-mix(in srgb, var(--lf-data) 12%, transparent);
+}
+
+.sql-preview-hint {
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--lf-data) 82%, var(--el-text-color-primary));
+  background: color-mix(in srgb, var(--lf-data) 8%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--lf-data) 38%, transparent);
+}
+
+.sql-onerror {
+  width: 100%;
+}
+
+.sql-maxrows {
+  width: 140px;
 }
 
 .panel-alert {

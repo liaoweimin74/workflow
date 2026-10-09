@@ -56,6 +56,7 @@ export const EXEC_NODE_TYPES = new Set<string>([
   'BATCH',
   'SUBFLOW',
   'DATA_UPDATE',
+  'SQL_SCRIPT',
 ])
 
 /** 循环变量名缺省值（与 dsl.ts defaultConfig / 引擎约定一致） */

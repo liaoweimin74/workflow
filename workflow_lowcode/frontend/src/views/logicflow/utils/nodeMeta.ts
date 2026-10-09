@@ -28,6 +28,7 @@ export const NODE_COLOR_VAR: Record<LogicNodeType, string> = {
   BATCH: '--lf-batch',
   SUBFLOW: '--lf-subflow',
   DATA_UPDATE: '--lf-data',
+  SQL_SCRIPT: '--lf-data',
   START: '--lf-neutral',
   END: '--lf-neutral',
 }
@@ -42,6 +43,7 @@ const NODE_META: Record<LogicNodeType, { label: string; description: string; bad
   BATCH: { label: '批处理', description: '遍历集合并按循环体链逐项执行（把动作节点拖到循环虚线上组成循环体），聚合结果列表', badge: '批' },
   SUBFLOW: { label: '子流程', description: '调用另一条已发布的逻辑流，输出写回变量', badge: '子' },
   DATA_UPDATE: { label: '数据更新', description: '纯配置更新动态表（SET/ADD/SUB + 条件），无需写代码', badge: '数' },
+  SQL_SCRIPT: { label: 'SQL 批处理', description: '多条 SQL 按 ; 顺序执行（{{var}} 参数绑定防注入），可选单事务回滚，输出执行汇总', badge: 'Q' },
 }
 
 export function nodeMeta(type: LogicNodeType): PaletteNode {
@@ -64,6 +66,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
       nodeMeta('BATCH'),
       nodeMeta('SUBFLOW'),
       nodeMeta('DATA_UPDATE'),
+      nodeMeta('SQL_SCRIPT'),
     ],
   },
 ]

@@ -18,6 +18,9 @@
  *   - DATA_UPDATE config = { table, setOps[{column, mode: SET|ADD|SUB, value}],
  *                            where[{column, op: EQ|NE|GT|GTE|LT|LTE|IS_NULL|NOT_NULL, value?}] }
  *       值支持字面量或 {{var}}/{{formData.xxx}} 点路径；受影响行数作为节点返回值由 results 声明写入
+ *   - SQL_SCRIPT config = { sql, onError?: 'abort'|'continue', maxRows? }
+ *       多条 SQL 按 ; 顺序执行（字面量/注释内分号不切分）；{{var.path}} 编译为 JDBC ? 参数绑定；
+ *       返回执行汇总 Map（total/succeeded/failed/aborted?/durationMs/s{i} 条目）作为节点返回值
  * - edges[]: { id?, source, target, branch?: 'true'|'false'（仅 CONDITION 出边用） }
  *   - BATCH 循环体边（画布 data.loop=true）为设计器内部结构，序列化时剔除；
  *     循环体内容编入 BATCH.config.body[]
@@ -43,6 +46,7 @@ export type LogicNodeType =
   | 'BATCH'
   | 'SUBFLOW'
   | 'DATA_UPDATE'
+  | 'SQL_SCRIPT'
 
 export type ErrorAction = 'FAIL_FLOW' | 'IGNORE_CONTINUE'
 
@@ -86,10 +90,10 @@ export interface ConditionNodeConfig {
 /** 批处理节点内嵌动作类型（仅业务执行三型，legacy 配置用） */
 export type BatchActionType = 'HTTP' | 'SCRIPT' | 'BEAN'
 
-/** 循环体允许的节点类型（业务执行六型，含 BATCH = 支持嵌套批处理；START/END/CONDITION 不可入循环体） */
-export type BatchBodyType = 'HTTP' | 'BEAN' | 'SCRIPT' | 'DATA_UPDATE' | 'SUBFLOW' | 'BATCH'
+/** 循环体允许的节点类型（业务执行七型，含 BATCH = 支持嵌套批处理；START/END/CONDITION 不可入循环体） */
+export type BatchBodyType = 'HTTP' | 'BEAN' | 'SCRIPT' | 'DATA_UPDATE' | 'SUBFLOW' | 'SQL_SCRIPT' | 'BATCH'
 
-export const BATCH_BODY_TYPES: BatchBodyType[] = ['HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'SUBFLOW', 'BATCH']
+export const BATCH_BODY_TYPES: BatchBodyType[] = ['HTTP', 'BEAN', 'SCRIPT', 'DATA_UPDATE', 'SUBFLOW', 'SQL_SCRIPT', 'BATCH']
 
 /** 循环体节点（线性链一环，按序逐项执行） */
 export interface BatchBodyNode {
@@ -162,6 +166,18 @@ export interface DataUpdateNodeConfig {
   where: DataUpdateWhereCond[]
 }
 
+/** SQL 批处理失败策略 */
+export type SqlOnError = 'abort' | 'continue'
+
+export interface SqlScriptNodeConfig {
+  /** 多语句 SQL 文本（; 分隔；{{var.path}} 占位符运行期编译为 JDBC ? 真绑定） */
+  sql: string
+  /** 失败策略：abort（默认，单事务回滚）| continue（自动提交逐条继续） */
+  onError: SqlOnError
+  /** 单条 SELECT 行数上限（默认 200，硬上限 1000） */
+  maxRows?: number
+}
+
 export type NodeConfig =
   | HttpNodeConfig
   | BeanNodeConfig
@@ -170,6 +186,7 @@ export type NodeConfig =
   | BatchNodeConfig
   | SubflowNodeConfig
   | DataUpdateNodeConfig
+  | SqlScriptNodeConfig
 
 /** 入参声明（运行测试表单 / 文档展示用，引擎不消费） */
 export interface InputVarDef {
@@ -328,13 +345,15 @@ export const CONFIG_TYPES: LogicNodeType[] = [
   'BATCH',
   'SUBFLOW',
   'DATA_UPDATE',
+  'SQL_SCRIPT',
 ]
 
 export function isLogicNodeType(type: unknown): type is LogicNodeType {
   return (
     type === 'START' || type === 'END' || type === 'HTTP' ||
     type === 'BEAN' || type === 'SCRIPT' || type === 'CONDITION' ||
-    type === 'BATCH' || type === 'SUBFLOW' || type === 'DATA_UPDATE'
+    type === 'BATCH' || type === 'SUBFLOW' || type === 'DATA_UPDATE' ||
+    type === 'SQL_SCRIPT'
   )
 }
 
@@ -350,6 +369,7 @@ export function defaultNodeName(type: LogicNodeType): string {
     BATCH: '批处理',
     SUBFLOW: '子流程',
     DATA_UPDATE: '数据更新',
+    SQL_SCRIPT: 'SQL 批处理',
   }
   return names[type]
 }
@@ -387,6 +407,8 @@ export function defaultConfig(type: LogicNodeType): NodeConfig | undefined {
       return { flowId: '', passAllVars: true, varsMapping: [] }
     case 'DATA_UPDATE':
       return { table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }
+    case 'SQL_SCRIPT':
+      return { sql: '', onError: 'abort', maxRows: 200 }
     default:
       return undefined
   }
@@ -581,7 +603,7 @@ export function parseDsl(dsl: string): FlowGraph {
 
 // ==================== 序列化：画布 → DSL 字符串 ====================
 
-/** START/END/CONDITION 不含执行元信息（errorAction/results 仅业务执行六型） */
+/** START/END/CONDITION 不含执行元信息（errorAction/results 仅业务执行七型） */
 function hasExecutionMeta(type: LogicNodeType): boolean {
   return (
     type === 'HTTP' ||
@@ -589,7 +611,8 @@ function hasExecutionMeta(type: LogicNodeType): boolean {
     type === 'SCRIPT' ||
     type === 'BATCH' ||
     type === 'SUBFLOW' ||
-    type === 'DATA_UPDATE'
+    type === 'DATA_UPDATE' ||
+    type === 'SQL_SCRIPT'
   )
 }
 

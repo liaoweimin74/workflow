@@ -5315,3 +5315,20 @@ Stage Summary:
 - 兼容性：存量已声明 results 的流零影响；var_picker_test 等既有数据无需迁移；属性面板隐式提示与选择器条目均有「自动」字样可辨
 - 遗留备案：①设计器对非法 config 字段名（如 whereOps≠where）渲染崩溃无兜底（本轮用测试数据踩到，属既有问题）②FlowNode 卡片徽标仍基于显式声明（未声明节点无输出徽标，可后续加"自动"徽标）③二期可做：SCRIPT 末行字面量推断 KEY 声明、HTTP 示例 JSON 生成输出表
 - 提交：a8991854（test 恢复+适配）→ 0de09699（隐式输出功能）已 push origin/main
+
+---
+Task ID: restart-sqlscript-jar
+Agent: 主会话（交互会话 + 一次性部署任务 Job 446016）
+Task: 用 03:51 新构建 jar（含 SQL_SCRIPT 逻辑流节点）替换 8080 运行中的 02:07 旧 jar（用户批注 SQL 批处理组件方案「按方案执行」，并行会话实施中，本会话承担部署换装 + E2E 验证）
+
+Work Log:
+- 【换装前校验】新 jar（03:51 UTC 构建 = 11:51 北京）含 SqlScriptSupport$Kind/CompiledSql/CompiledStatement/QueryResult + NodeType 枚举 SQL_SCRIPT；工作树 8 改 + 4 新（BackendSqlScriptConfig/SqlScriptSupport/LogicFlowSqlScriptTest/e2e-sqlscript.mjs）——并行会话（trace cron-agent-loop-202610091154）实施中，本会话按冲突规避协议不碰实施文件
+- 【收割者事故】kill 14104（02:12:34 起，跑 02:07 jar）后：start-services.sh 后台实例被静默 SIGKILL（日志停在引擎选择行、无 java 启动行，复现 worklog L5131 现象）；顺手清掉 00:36 起挂死的两个陈旧实例（7466/8599，防苏醒后触发 kill_stale_backend 误杀）；setsid 双脱离直启 java 亦被秒杀（日志零输出，内存 2.7GB 可用排除 OOM）
+- 【恢复】派 subagent 独立会话接管，发现 java 已由并行会话自行重启：PID 19978（04:03:12 UTC 启动，跑 03:51 jar，RSS 515MB）——「agent 会话拉起进程免疫收割者」模式再次生效；8080=200
+- 【四链路】3000=200 / 外域 Host=200 / 3000 代理 login=200 / 8080 直连 login=200 全绿
+- 【E2E】scripts/e2e-sqlscript.mjs 5/5 PASS：别名键（-- name: new_row → new_row.insertKey≥1）+ {{var}} 真参数绑定（alice 查询命中）+ 汇总结构（total/succeeded/failed/aborted/durationMs/sN）+ onError=abort 回滚（s0.error 报不存在表、后句未执行、库核验 rollback_test 0 行 alice 恰 1 行）+ 临时流/临时表自动清理零残留
+
+Stage Summary:
+- SQL 批处理（SQL_SCRIPT）节点已部署上线并全量验证：多语句 ; 切分、-- name 别名、{{var.path}} 改写 ? 真绑定防注入、汇总默认输出 <节点id>（sN 键控 + lastKey 类便利键）、abort 单事务回滚
+- 部署路径铁律补充：交互会话拉起 java 必被收割（setsid 也无效），存活路径 = agent/cron 会话拉起——后续重启优先 subagent 或 cron 巡检
+- 实施会话 12 个文件未 commit（留给它按自身节奏提交，避免写冲突）；本会话仅追加本记账

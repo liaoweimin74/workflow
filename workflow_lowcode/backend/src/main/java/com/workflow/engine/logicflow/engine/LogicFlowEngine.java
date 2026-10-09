@@ -6,6 +6,7 @@ import com.workflow.engine.form.column.ColumnInfo;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.logic.BackendBeanRegistry;
 import com.workflow.engine.logic.config.BackendDataUpdateConfig;
+import com.workflow.engine.logic.config.BackendSqlScriptConfig;
 import com.workflow.engine.logic.config.BackendLogicBeanConfig;
 import com.workflow.engine.logic.config.BackendLogicHttpConfig;
 import com.workflow.engine.logic.config.BackendLogicScriptConfig;
@@ -22,10 +23,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -42,7 +49,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *   <li>从 START 节点出发沿出边行走，到达 END 结束；多个 START 取第一个，无 START → FAILED；</li>
  *   <li>CONDITION 节点按 branch=true/false 选出边（缺边 → FAILED）；非条件/结束节点缺出边 → FAILED「节点无出边」；</li>
  *   <li>maxSteps=200：步数超出 → FAILED「超出最大执行步数(疑似死循环)」；</li>
- *   <li>全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH 及 CONDITION）输出统一由
+ *   <li>全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/SQL_SCRIPT 及 CONDITION）输出统一由
  *       节点级 results 声明驱动（mode=WHOLE 整包 / mode=KEY 拆包，见 {@link #writeResults}；
  *       SCRIPT 严格 / 其余宽松）；resultVar 已全链路下线；</li>
  *   <li>隐式默认输出（约定优于配置）：未声明 results 的执行型节点自动把整体返回值写入
@@ -315,6 +322,7 @@ public class LogicFlowEngine {
             case BATCH -> executeBatch(node, vars, traces);
             case SUBFLOW -> executeSubflow(node, vars);
             case DATA_UPDATE -> executeDataUpdate(node, vars);
+            case SQL_SCRIPT -> executeSqlScript(node, vars);
             default -> throw new IllegalArgumentException("节点 " + node.getId() + " 不支持执行: " + node.getType());
         };
     }
@@ -655,6 +663,165 @@ public class LogicFlowEngine {
     }
 
     // ------------------------------------------------------------------
+    // SQL 批处理（SQL_SCRIPT）节点
+    // ------------------------------------------------------------------
+
+    /** SQL_SCRIPT 单语句数上限（防超长脚本；与发布校验同值）。 */
+    private static final int SQL_SCRIPT_MAX_STATEMENTS = SqlScriptSupport.MAX_STATEMENTS;
+
+    /** SQL_SCRIPT 单语句超时（秒）。 */
+    private static final int SQL_STATEMENT_TIMEOUT_SECONDS = 30;
+
+    /** SQL_SCRIPT 查询行数缺省上限（可配 maxRows 覆盖，硬上限 1000）。 */
+    private static final int SQL_DEFAULT_MAX_ROWS = 200;
+    private static final int SQL_MAX_ROWS_HARD_CAP = 1000;
+
+    /**
+     * 执行 SQL 批处理节点：多条 SQL 按 {@code ;} 顺序执行（切分/编译见 {@link SqlScriptSupport}），
+     * {{var.path}} 占位符编译为 JDBC ? 参数绑定（防注入）。返回执行汇总 Map 作为节点返回值
+     * （未声明 results 时按隐式约定写入 {@code <节点id>}，如 sql_script_x1.s0.affected）。
+     *
+     * <p>config 形态：{@code {sql, onError?: abort(默认)|continue, maxRows?: 1~1000}}。
+     *
+     * <p>失败语义：abort（默认）——单事务（setAutoCommit=false），任一语句失败整体回滚，
+     * 汇总标 aborted=true 且后续语句不再执行，节点<b>不抛错</b>（下游按 failed/aborted 变量分支）；
+     * continue——自动提交逐条执行，失败记入 sN.error 继续。
+     * 配置类错误（空 sql/语句超限/别名重复/类型白名单外/占位符语法）在任何语句执行前抛出（走 errorAction）。
+     */
+    private Object executeSqlScript(LogicFlowDsl.NodeDef node, Map<String, Object> vars) {
+        if (jdbcTemplate == null) {
+            throw new IllegalStateException("引擎未装配 SQL 执行能力(JdbcTemplate): " + node.getId());
+        }
+        BackendSqlScriptConfig config = readConfig(node, BackendSqlScriptConfig.class);
+        if (config == null || config.getSql() == null || config.getSql().isBlank()) {
+            throw new IllegalArgumentException("SQL_SCRIPT 节点缺少 sql 配置: " + node.getId());
+        }
+        boolean abort = !BackendSqlScriptConfig.ON_ERROR_CONTINUE.equalsIgnoreCase(config.getOnError());
+        int maxRows = config.getMaxRows() == null
+                ? SQL_DEFAULT_MAX_ROWS
+                : Math.max(1, Math.min(SQL_MAX_ROWS_HARD_CAP, config.getMaxRows()));
+
+        List<String> statements = SqlScriptSupport.splitStatements(config.getSql());
+        if (statements.isEmpty()) {
+            throw new IllegalArgumentException("SQL_SCRIPT 节点 sql 未包含可执行语句: " + node.getId());
+        }
+        if (statements.size() > SQL_SCRIPT_MAX_STATEMENTS) {
+            throw new IllegalArgumentException("SQL_SCRIPT 节点语句数超出上限("
+                    + SQL_SCRIPT_MAX_STATEMENTS + "): " + statements.size() + " (" + node.getId() + ")");
+        }
+        // 编译 + 键名冲突预检：配置错误在任何语句执行前暴露（编译同时校验占位符语法与引号闭合）
+        List<SqlScriptSupport.CompiledStatement> entries = new ArrayList<>(statements.size());
+        Set<String> keys = new HashSet<>();
+        for (int i = 0; i < statements.size(); i++) {
+            String stmt = statements.get(i);
+            String name = SqlScriptSupport.extractName(stmt);
+            String key = (name != null && !name.isBlank()) ? name.trim() : ("s" + i);
+            if (!keys.add(key)) {
+                throw new IllegalArgumentException(
+                        "SQL_SCRIPT 节点语句别名重复: " + key + " (" + node.getId() + ")");
+            }
+            SqlScriptSupport.Kind kind = SqlScriptSupport.kindOf(stmt);
+            SqlScriptSupport.CompiledSql compiled = SqlScriptSupport.compile(stmt, vars, objectMapper);
+            entries.add(new SqlScriptSupport.CompiledStatement(key, kind, stmt, compiled.jdbcSql(), compiled.params()));
+        }
+        long begin = System.currentTimeMillis();
+        return jdbcTemplate.execute((Connection con) ->
+                runSqlScript(con, entries, abort, maxRows, begin));
+    }
+
+    /**
+     * 在单连接上顺序执行已编译语句并构建汇总（条目键=别名或 s{i}）：
+     * QUERY → {data, rows, truncated?}；INSERT → {affected, insertKey?}；DML → {affected}；
+     * 失败条目 → {ok:false, error}。abort 模式失败即回滚并终止。
+     */
+    private Map<String, Object> runSqlScript(Connection con, List<SqlScriptSupport.CompiledStatement> entries,
+                                             boolean abort, int maxRows, long begin) throws SQLException {
+        boolean oldAuto = con.getAutoCommit();
+        if (abort) {
+            con.setAutoCommit(false);
+        }
+        boolean aborted = false;
+        int succeeded = 0;
+        int failed = 0;
+        Map<String, Object> items = new LinkedHashMap<>();
+        try {
+            for (int i = 0; i < entries.size(); i++) {
+                SqlScriptSupport.CompiledStatement e = entries.get(i);
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("index", i);
+                item.put("kind", e.kind().name());
+                try {
+                    switch (e.kind()) {
+                        case QUERY -> {
+                            try (PreparedStatement ps = con.prepareStatement(e.jdbcSql())) {
+                                ps.setQueryTimeout(SQL_STATEMENT_TIMEOUT_SECONDS);
+                                SqlScriptSupport.bindParams(ps, e.params());
+                                try (ResultSet rs = ps.executeQuery()) {
+                                    SqlScriptSupport.QueryResult qr = SqlScriptSupport.extractRows(rs, maxRows);
+                                    item.put("data", qr.rows());
+                                    item.put("rows", qr.rows().size());
+                                    if (qr.truncated()) {
+                                        item.put("truncated", true);
+                                    }
+                                }
+                            }
+                        }
+                        case INSERT -> {
+                            try (PreparedStatement ps =
+                                         con.prepareStatement(e.jdbcSql(), Statement.RETURN_GENERATED_KEYS)) {
+                                ps.setQueryTimeout(SQL_STATEMENT_TIMEOUT_SECONDS);
+                                SqlScriptSupport.bindParams(ps, e.params());
+                                item.put("affected", ps.executeUpdate());
+                                List<Object> keys = SqlScriptSupport.extractGeneratedKeys(ps);
+                                if (!keys.isEmpty()) {
+                                    item.put("insertKey", keys.get(0));
+                                }
+                            }
+                        }
+                        default -> {
+                            try (PreparedStatement ps = con.prepareStatement(e.jdbcSql())) {
+                                ps.setQueryTimeout(SQL_STATEMENT_TIMEOUT_SECONDS);
+                                SqlScriptSupport.bindParams(ps, e.params());
+                                item.put("affected", ps.executeUpdate());
+                            }
+                        }
+                    }
+                    item.put("ok", true);
+                    succeeded++;
+                } catch (Exception ex) {
+                    String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+                    item.put("ok", false);
+                    item.put("error", msg);
+                    failed++;
+                    if (abort) {
+                        con.rollback();
+                        aborted = true;
+                    }
+                }
+                items.put(e.key(), item);
+                if (aborted) {
+                    break;
+                }
+            }
+            if (abort && !aborted) {
+                con.commit();
+            }
+        } finally {
+            con.setAutoCommit(oldAuto);
+        }
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("total", entries.size());
+        summary.put("succeeded", succeeded);
+        summary.put("failed", failed);
+        if (aborted) {
+            summary.put("aborted", true);
+        }
+        summary.put("durationMs", System.currentTimeMillis() - begin);
+        summary.putAll(items);
+        return summary;
+    }
+
+    // ------------------------------------------------------------------
     // 子流程（SUBFLOW）节点
     // ------------------------------------------------------------------
 
@@ -743,10 +910,10 @@ public class LogicFlowEngine {
     /** 循环体节点 trace 记录的迭代上限（只记首轮 + 失败项，防轨迹膨胀）。 */
     private static final int BATCH_BODY_TRACE_ITERATIONS = 1;
 
-    /** 批处理循环体允许的节点类型（业务执行五型 + BATCH 嵌套）。 */
+    /** 批处理循环体允许的节点类型（业务执行六型 + SQL_SCRIPT + BATCH 嵌套）。 */
     private static final Set<NodeType> BATCH_BODY_ALLOWED = EnumSet.of(
             NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.SUBFLOW,
-            NodeType.BATCH);
+            NodeType.SQL_SCRIPT, NodeType.BATCH);
 
     /** BATCH 嵌套深度运行时上限（发布校验限 3 层，此处纵深防御防绕过校验的自引用 DSL） */
     private static final int MAX_BATCH_NESTING_DEPTH = 5;
@@ -917,7 +1084,7 @@ public class LogicFlowEngine {
 
     /**
      * 解析循环体配置（config.body 数组）为节点定义列表。
-     * 每项须为对象且 type ∈ HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW，否则抛 IllegalArgumentException。
+     * 每项须为对象且 type ∈ HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/SQL_SCRIPT/BATCH，否则抛 IllegalArgumentException。
      */
     private List<LogicFlowDsl.NodeDef> parseBatchBody(LogicFlowDsl.NodeDef node, JsonNode bodyNode) {
         List<LogicFlowDsl.NodeDef> steps = new ArrayList<>();

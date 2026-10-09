@@ -84,6 +84,7 @@ import { computed } from 'vue'
 import { Handle, Position } from '@vue-flow/core'
 import { Check, Close, CloseBold, Minus } from '@element-plus/icons-vue'
 import { NODE_COLOR_VAR, nodeMeta } from '../utils/nodeMeta'
+import { sqlStatementKind, splitSqlStatements } from '../utils/sqlScript'
 import type { FlowNodeData } from '../utils/dsl'
 
 const props = withDefaults(
@@ -178,6 +179,27 @@ const summary = computed(() => {
       const table = String(cfg?.table ?? '')
       const setOps = Array.isArray(cfg?.setOps) ? (cfg?.setOps as unknown[]) : []
       return table ? `更新 ${table} · ${setOps.length} 字段` : '未配置目标表'
+    }
+    case 'SQL_SCRIPT': {
+      const sqlText = String(cfg?.sql ?? '')
+      if (!sqlText.trim()) return '未配置 SQL'
+      try {
+        const parts = splitSqlStatements(sqlText)
+        const kinds = parts.map((p) => {
+          try { return sqlStatementKind(p) } catch { return null }
+        })
+        const query = kinds.filter((k) => k === 'QUERY').length
+        const write = kinds.filter((k) => k === 'INSERT').length
+        const dml = kinds.filter((k) => k === 'DML').length
+        const bits = [
+          dml ? `${dml} 更新` : '',
+          write ? `${write} 写入` : '',
+          query ? `${query} 查询` : '',
+        ].filter(Boolean).join(' · ')
+        return `${parts.length} 条 SQL${bits ? ` · ${bits}` : ''}`
+      } catch {
+        return 'SQL 解析待修正'
+      }
     }
     default:
       return ''

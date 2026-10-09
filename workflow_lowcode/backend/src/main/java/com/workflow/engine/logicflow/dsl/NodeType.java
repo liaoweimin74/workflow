@@ -28,7 +28,9 @@ public enum NodeType {
     /** 子流程调用（调用另一条已发布的逻辑流，输出写回 resultVar）。 */
     SUBFLOW,
     /** 数据更新（纯配置 UPDATE 动态表：SET/ADD/SUB + WHERE，参数绑定防注入，受影响行数写回 resultVar）。 */
-    DATA_UPDATE;
+    DATA_UPDATE,
+    /** SQL 批处理（多条 SQL 按 ; 顺序执行，{{var}} 占位符编译为 JDBC ? 参数绑定，返回执行汇总 Map）。 */
+    SQL_SCRIPT;
 
     @JsonCreator
     public static NodeType fromJson(String value) {

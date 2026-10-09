@@ -230,7 +230,7 @@ import {
   serializeDsl,
 } from './utils/dsl'
 import type { FlowEdge, FlowNode as FlowNodeModel, InputVarDef, LogicNodeType } from './utils/dsl'
-import { collectAvailableVars } from './utils/flowVars'
+import { collectAvailableVars, type FormFieldGroupLike } from './utils/flowVars'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
@@ -396,8 +396,22 @@ const selectedLoopBodyCount = computed(() => {
 /** 选中节点的可用上下文变量（入参 + 循环变量 + 上游 results 产出 + formData），
  *  供属性面板变量选择器就近显示；依赖 store 真值，画布增删/改配置实时联动 */
 const availableVars = computed(() =>
-  collectAvailableVars(selectedNodeId.value, allNodes(), allEdges(), inputVars.value)
+  collectAvailableVars(selectedNodeId.value, allNodes(), allEdges(), inputVars.value, formFieldGroups.value)
 )
+
+// ===== 设计期表单字段发现（formData 字段树，供变量选择器树形展开） =====
+const formFieldGroups = ref<FormFieldGroupLike[]>([])
+
+/** 拉取绑定表单字段结构；失败/无绑定静默回退（form 组退化为单条 formData 提示） */
+async function loadFormFields() {
+  if (!flowId) return
+  try {
+    const res = await logicFlowApi.formFields(flowId)
+    formFieldGroups.value = Array.isArray(res.data) ? res.data : []
+  } catch {
+    formFieldGroups.value = []
+  }
+}
 
 // ===== 面板折叠 =====
 const paletteCollapsed = ref(false)
@@ -433,6 +447,8 @@ onMounted(async () => {
     }
     savedDsl.value = detail.dsl || serializeDsl(allNodes(), allEdges(), inputVars.value)
     savedName.value = flowName.value
+    // 设计期表单字段发现（不阻塞主流程渲染）
+    loadFormFields()
   } catch {
     // http 拦截器已弹出错误消息
   } finally {

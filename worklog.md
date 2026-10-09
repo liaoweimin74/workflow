@@ -5411,3 +5411,25 @@ Work Log:
 Stage Summary:
 - DATA_UPDATE 多表更新（用户第 16 项需求）全链路交付完成：引擎单事务（全有或全无）+ 别名/t{i} 键控汇总输出 + 校验器 + 前端双形态编辑器 + 后端 7 用例（logicflow 包 78/78）+ API E2E 5/5 + 浏览器 UI E2E 补验通过
 - 备案：①PropertyPanel 多表编辑器与单表模式互斥切换，关闭开关仅允许 ≤1 条目（防丢配置）②汇总输出走隐式整体输出约定（<节点id> 变量，点路径取 t0.affected/order.affected）③收割者规律已更新至 du-8 记账（Task-subagent 拉起不免疫，重启优先 cron 会话）
+
+---
+Task ID: formfields-tree
+Agent: 主会话（用户「按方案执行，字段条目形态为树形」）
+Task: 设计期 formData 结构发现——后端表单字段发现服务/API + 前端变量选择器树形展开（用户点选字段免手敲）
+
+Work Log:
+- 【调研】formData 结构源头确认：BUSINESS 表单 columnConfig（结构化列清单 key/label/columnType，实测 bill_test 12 列）+ WORKFLOW 表单 schema（form-create rule 树）+ 空 schema 回落实例采样（baoxiaodan/ai_xiaozhi_test schema 均空，实证采样必要性）；绑定反查链路 wf_form_logic_binding（flow_key → form_key+triggerType）；FormData 实体经 form_def_id 关联（非 formKey）
+- 【引擎侧】新建 FormFieldSchemaService（logicflow/service）：三路提取（columnConfig 直读→类型映射 VARCHAR/INT/BOOLEAN/JSON；rule 树递归→field 平铺去重+props.columns 生成父字段 children（person.username）；布局容器 children 并列收集不加前缀；组件 type→number/boolean/array 映射；实例采样→FormDataRepository 最新 10 条非快照 dataJson 合并，值类型推断 object/array 下钻 2 层只取结构不取值）；版本选择 PUBLISHED 优先回退最新；坏 JSON 容错降级（columnConfig→schema→sampled→empty）；同 formType+formKey 多触发点绑定聚合（Agg 静态内部类，triggerTypes 合并——record 不允许实例字段的编译坑）
+- 【API】LogicFlowController 新增 GET /{id}/form-fields（构造器注入 FormFieldSchemaService，service.get(id)→flowKey→listFieldsForFlow）；FormLogicBindingRepository 新增 findByTenantIdAndFlowKeyAndEnabledTrueOrderByCreatedAtAsc；FormDataRepository 新增 findTop10ByTenantIdAndFormDefIdAndIsSnapshotOrderByUpdatedAtDesc
+- 【前端】flowVars.ts：FlowVarItem 增 children/prefixOnly；FormFieldGroupLike/FormFieldLike（null 与缺省等价，兼容 API 类型）；buildFormVars 构建 form 组（formData 根条目带字段树+来源提示「测试表单（12 字段，点 ▸ 展开选字段）」，formDataExisting 仅绑定含 UPDATE/DELETE 触发点时同构展示）；多表单字段合并去重；varInsertText 根条目保持插前缀、子条目插完整路径 {{formData.person_name}}；VariablePicker 树形 UI（▸/▾ caret 展开/收起+键盘可达、二级缩进 18px、孙层 32px、搜索树剪枝 hitDeep/pruneTree——搜 leave 只显示 5 个命中字段、搜索态自动展开）；LogicFlowDesigner formFields API 拉取（loadFormFields 静默容错，不阻塞渲染）
+- 【测试】后端 FormFieldSchemaServiceTest 5/5（columnConfig 直读类型映射/rule 树平铺+columns children/空 schema 采样推断/PUBLISHED 回退/无绑定+坏 JSON 容错）+ logicflow 包 83/83；前端 flowVars.test.ts 14/14（字段树展开/fallback/formDataExisting 条件/多表单合并/varInsertText）+ logicflow 目录 54/54 + 全量 1398/1398 + vue-tsc 54=基线零新增（FormLogFieldLike 兼容 null 修复 1 个新增类型错）
+- 【坑】①push(...buildFormVars()) 静默丢条目——push 是单参函数，spread 只消费第一个元素（formDataExisting 丢失，插桩定位：buildFormVars 返回 2 条但 push 仅被调 1 次），改 forEach(push) ②MultiEdit 锚点误删 runs 方法体/注释头/样式选择器头各一次，git diff 全量核对后逐一恢复 ③mvn 需 JAVA_HOME=/home/z/tools/jdk21 ④mysql 客户端 libncurses 版本冲突不可用，改走 8080 REST API 查库
+- 【部署】mvn -o package 重建 jar（06:18，unzip 核验 FormFieldSchemaService 4 类在包内）；kill 25506 → setsid nohup start-services.sh 双脱离拉起 PID 31351（06:19:10 Started 17.98s，穿越收割窗口 15 分钟+存活）
+- 【E2E】API：临时流+bill_test 绑定→form-fields 返回 {bill_test, columnConfig, [AFTER_CREATE], 12 字段含 person_name/leave_days} PASS；无绑定流返回 [] PASS；多组聚合（bill_test+ai_xiaozhi_test→empty 回落）PASS。浏览器：登录→设计器→添加 DATA_UPDATE→变量选择器 form 组树形根条目（12 字段提示）→▸ 展开 12 子字段（标签+类型徽标）→点 person_name 插入 {{formData.person_name}} 完整路径→再插 leave_days 追加 {{formData.person_name}}{{formData.leave_days}}→搜索 leave 剪枝命中 5 字段→点选插入正常；临时流×2+绑定×2 全删库净
+- 【四链路】3000=200 / 8080=200（31351 新 jar）；外域/代理巡检归 Job 444954 常规核
+
+Stage Summary:
+- formData 设计期结构发现上线：逻辑流设计器变量选择器「表单数据」组从 1 条整体条目升级为可展开字段树（数据源=绑定表单定义三路提取），用户点选即插 {{formData.字段}} 完整路径，免手敲免记忆；无绑定/无结构静默回退存量行为，存量流零影响
+- 覆盖面：DATA_UPDATE 值绑定、SQL_SCRIPT {{var}} 占位符、HTTP/BEAN 等全部 VarInput 占位符场景统一受益（VariablePicker 单点改造）；formDataExisting（更新/删除前旧行）同构字段树自动可用
+- 备案：①empty 组（空 schema 且无实例）前端忽略不显示 ②WORKFLOW rule 树对子表格类组件（值是数组）按平铺字段处理，props.columns 场景才有 children——如需数组元素子字段可后续增强 ③校验器软校验 formData 字段存在性留作二期 ④被删流 form-fields 返回 500「逻辑流不存在」（前端静默容错）
+- 提交：本条随收口 commit push origin/main

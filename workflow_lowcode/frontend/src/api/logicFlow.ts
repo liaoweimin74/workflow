@@ -55,6 +55,25 @@ export interface LogicFlowRunRecord extends RunResult {
   createdAt?: string
 }
 
+/** 表单字段节点（path 为相对 formData 根的完整点路径，children 为子字段树） */
+export interface FlowFormFieldNode {
+  path: string
+  label: string | null
+  type: string
+  children: FlowFormFieldNode[] | null
+}
+
+/** 绑定表单字段组（同表单多触发点绑定聚合为一组） */
+export interface FlowFormFieldGroup {
+  formKey: string
+  formName: string | null
+  formType: 'BUSINESS' | 'WORKFLOW' | string
+  /** 来源：columnConfig | schema | sampled | empty */
+  source: string
+  triggerTypes: string[] | null
+  fields: FlowFormFieldNode[] | null
+}
+
 /** 已注册的后端 Bean 方法（GET /v1/backend-logic/beans 列表项，供 BEAN 节点面板下拉） */
 export interface BackendBeanInfo {
   beanName: string
@@ -126,5 +145,13 @@ export const logicFlowApi = {
   /** 已注册 Bean 方法清单（复用既有 backend-logic 接口） */
   listBeans(): Promise<R<BackendBeanInfo[]>> {
     return http.get('/v1/backend-logic/beans')
+  },
+
+  /**
+   * 设计期表单字段发现：绑定表单（enabled）→ formData 字段树。
+   * 来源：BUSINESS columnConfig / WORKFLOW schema rule 树 / 空 schema 实例采样（只取结构不取值）。
+   */
+  formFields(id: string): Promise<R<FlowFormFieldGroup[]>> {
+    return http.get(`/v1/logic-flows/${id}/form-fields`)
   },
 }

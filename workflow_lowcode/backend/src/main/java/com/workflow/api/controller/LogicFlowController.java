@@ -5,6 +5,7 @@ import com.workflow.common.domain.R;
 import com.workflow.engine.logicflow.engine.LogicFlowEngine;
 import com.workflow.engine.logicflow.entity.LogicFlowDef;
 import com.workflow.engine.logicflow.entity.LogicFlowRun;
+import com.workflow.engine.logicflow.service.FormFieldSchemaService;
 import com.workflow.engine.logicflow.service.LogicFlowService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,10 +33,13 @@ public class LogicFlowController {
     private static final Logger log = LoggerFactory.getLogger(LogicFlowController.class);
 
     private final LogicFlowService service;
+    private final FormFieldSchemaService formFieldSchemas;
     private final ObjectMapper objectMapper;
 
-    public LogicFlowController(LogicFlowService service, ObjectMapper objectMapper) {
+    public LogicFlowController(LogicFlowService service, FormFieldSchemaService formFieldSchemas,
+                               ObjectMapper objectMapper) {
         this.service = service;
+        this.formFieldSchemas = formFieldSchemas;
         this.objectMapper = objectMapper;
     }
 
@@ -156,6 +160,18 @@ public class LogicFlowController {
                 .map(this::toHistory)
                 .toList();
         return R.ok(history);
+    }
+
+    /**
+     * 设计期表单字段发现：绑定表单（enabled）→ formData 字段树。
+     * 来源：BUSINESS columnConfig / WORKFLOW schema rule 树 / 空 schema 实例采样（只取结构不取值）。
+     */
+    @GetMapping("/{id}/form-fields")
+    public R<List<FormFieldSchemaService.FormFieldGroupVO>> formFields(
+            @RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId,
+            @PathVariable String id) {
+        LogicFlowDef def = service.get(tenantId, id);
+        return R.ok(formFieldSchemas.listFieldsForFlow(tenantId, def.getFlowKey()));
     }
 
     // ------------------------------------------------------------------

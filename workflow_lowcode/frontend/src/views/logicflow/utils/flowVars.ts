@@ -20,6 +20,28 @@ export interface FlowVarItem {
   group: 'input' | 'loop' | 'upstream' | 'form'
   /** 展示用说明：类型/来源节点等 */
   detail?: string
+  /** 表单字段树：子字段条目（仅 form 组；点击插完整路径） */
+  children?: FlowVarItem[]
+  /** form 组根条目：点击仅插前缀（formData. / {{formData.），字段由子条目供选 */
+  prefixOnly?: boolean
+}
+
+/** 绑定表单字段组（设计期表单字段发现，后端 FormFieldSchemaService 同构最小结构；null 与缺省等价） */
+export interface FormFieldGroupLike {
+  formKey?: string
+  formName?: string | null
+  formType?: string
+  /** 来源：columnConfig | schema | sampled | empty */
+  source?: string
+  triggerTypes?: string[] | null
+  fields?: FormFieldLike[] | null
+}
+
+export interface FormFieldLike {
+  path: string
+  label?: string | null
+  type?: string | null
+  children?: FormFieldLike[] | null
 }
 
 /** 最小结构（vue-flow store 节点 / FlowNode 均可结构化赋值） */
@@ -43,6 +65,77 @@ export interface VarEdgeLike {
 
 const BATCH_TYPE = 'BATCH'
 
+/** 表单字段 → form 组变量条目（name = 根前缀 + 相对路径，递归 children） */
+function fieldToVarItem(prefix: string, f: FormFieldLike): FlowVarItem {
+  const bits = [f.label, f.type].filter(Boolean)
+  return {
+    name: prefix + f.path,
+    group: 'form',
+    detail: bits.length ? bits.join(' · ') : undefined,
+    children: f.children?.length ? f.children.map((c) => fieldToVarItem(prefix, c)) : undefined,
+  }
+}
+
+/** 构建 form 组变量：formData（字段树）+ formDataExisting（更新/删除触发点时同构旧行） */
+function buildFormVars(groups?: FormFieldGroupLike[]): FlowVarItem[] {
+  const list = (groups || []).filter((g) => g && Array.isArray(g.fields) && g.fields.length)
+  if (!list.length) {
+    return [
+      {
+        name: 'formData',
+        group: 'form',
+        detail: '流程表单数据 · 点路径取字段，如 formData.amount',
+      },
+    ]
+  }
+
+  // 多表单字段合并（同路径先到先得，label/类型取首个命中来源）
+  const seen = new Set<string>()
+  const children: FlowVarItem[] = []
+  for (const g of list) {
+    for (const f of g.fields!) {
+      const item = fieldToVarItem('formData.', f)
+      if (!seen.has(item.name)) {
+        seen.add(item.name)
+        children.push(item)
+      }
+    }
+  }
+
+  const srcBits = list
+    .map((g) => g.formName || g.formKey || '')
+    .filter(Boolean)
+    .join(' / ')
+  const srcDetail = list.some((g) => g.source === 'sampled') ? ' · 部分结构来自实例采样' : ''
+  const out: FlowVarItem[] = [
+    {
+      name: 'formData',
+      group: 'form',
+      prefixOnly: true,
+      detail: `流程表单数据 · ${srcBits || '绑定表单'}（${children.length} 字段，点 ▸ 展开选字段）${srcDetail}`,
+      children,
+    },
+  ]
+
+  // 更新/删除前旧行（同构）：仅当绑定含 UPDATE/DELETE 触发点
+  const hasMutation = list.some((g) =>
+    (g.triggerTypes || []).some((t) => t.includes('UPDATE') || t.includes('DELETE'))
+  )
+  if (hasMutation) {
+    out.push({
+      name: 'formDataExisting',
+      group: 'form',
+      prefixOnly: true,
+      detail: '更新/删除前旧行 · 与 formData 同结构',
+      children: children.map((c) => ({
+        ...c,
+        name: c.name.replace(/^formData\./, 'formDataExisting.'),
+      })),
+    })
+  }
+  return out
+}
+
 /**
  * 执行型节点类型（与引擎一致：会产出返回值并写回上下文）。
  * 未声明 results 时，引擎按隐式约定把整体返回值写入以节点 id 命名的变量
@@ -63,21 +156,30 @@ export const EXEC_NODE_TYPES = new Set<string>([
 const DEFAULT_ITEM_VAR = 'item'
 const DEFAULT_INDEX_VAR = 'index'
 
-/** 选中项 → 插入文本：占位符场景插 {{name}}，裸名场景插 name；formData 点路径只补前缀 */
+/** 选中项 → 插入文本：占位符场景插 {{name}}，裸名场景插 name；
+ *  formData 根条目只补前缀，字段子条目（name 已是完整路径）直接包装 */
 export function varInsertText(v: FlowVarItem, mode: 'placeholder' | 'bare'): string {
-  if (v.group === 'form') return mode === 'bare' ? 'formData.' : '{{formData.'
+  if (v.group === 'form') {
+    if (v.prefixOnly) return mode === 'bare' ? 'formData.' : '{{formData.'
+    return mode === 'bare' ? v.name : `{{${v.name}}}`
+  }
   return mode === 'bare' ? v.name : `{{${v.name}}}`
 }
 
 /**
  * 收集 nodeId 节点可用的上下文变量。
  * 入参顺序即分组优先级：同名变量 input > loop > upstream > form 先到先得。
+ *
+ * @param formFieldGroups 设计期表单字段发现结果（可选）：有结构时 form 组展开为
+ *        formData 根条目（可展开子字段树，点选插完整路径）+ formDataExisting（绑定含
+ *        更新/删除触发点时，同字段树）；无结构时回退单条 formData 提示（存量行为）
  */
 export function collectAvailableVars(
   nodeId: string | null | undefined,
   nodes: VarNodeLike[],
   edges: VarEdgeLike[],
-  inputVars: InputVarDef[]
+  inputVars: InputVarDef[],
+  formFieldGroups?: FormFieldGroupLike[]
 ): FlowVarItem[] {
   const result: FlowVarItem[] = []
   const seen = new Set<string>()
@@ -187,12 +289,8 @@ export function collectAvailableVars(
     }
   }
 
-  // 4) 表单数据（占位符场景专用，bare 模式由 VariablePicker 过滤）
-  push({
-    name: 'formData',
-    group: 'form',
-    detail: '流程表单数据 · 点路径取字段，如 formData.amount',
-  })
+  // 4) 表单数据：绑定表单字段树展开（有结构时根条目带子字段，点选插完整路径）
+  buildFormVars(formFieldGroups).forEach(push)
 
   return result
 }

@@ -3,8 +3,8 @@
  * （未声明 results 的执行型祖先节点 → 变量名 = 节点 id，与引擎隐式约定对齐）。
  */
 import { describe, expect, it } from 'vitest'
-import { collectAvailableVars, EXEC_NODE_TYPES } from '../flowVars'
-import type { VarEdgeLike, VarNodeLike } from '../flowVars'
+import { collectAvailableVars, EXEC_NODE_TYPES, varInsertText } from '../flowVars'
+import type { FormFieldGroupLike, VarEdgeLike, VarNodeLike } from '../flowVars'
 import type { InputVarDef, ResultVarDef } from '../dsl'
 
 function node(id: string, nodeType: string, name?: string, results?: ResultVarDef[]): VarNodeLike {
@@ -99,5 +99,90 @@ describe('collectAvailableVars · 隐式整体输出', () => {
     const implicit = vars.find((v) => v.name === 'cond_x')
     expect(implicit).toBeDefined()
     expect(implicit!.group).toBe('upstream')
+  })
+})
+
+describe('collectAvailableVars · 表单字段树', () => {
+  const groups: FormFieldGroupLike[] = [
+    {
+      formKey: 'bill_test',
+      formName: '测试表单',
+      formType: 'BUSINESS',
+      source: 'columnConfig',
+      triggerTypes: ['BEFORE_CREATE', 'AFTER_CREATE'],
+      fields: [
+        { path: 'person_name', label: '请假人姓名', type: 'string' },
+        { path: 'order', type: 'object', children: [
+          { path: 'order.no', label: '单号', type: 'string' },
+        ] },
+      ],
+    },
+  ]
+
+  it('有结构时 form 组展开为 formData 根条目 + 字段子条目（完整路径）', () => {
+    const vars = collectAvailableVars('n', [], [], NO_INPUT, groups)
+
+    const root = vars.find((v) => v.name === 'formData')
+    expect(root).toBeDefined()
+    expect(root!.prefixOnly).toBe(true)
+    expect(root!.children!.map((c) => c.name)).toEqual(['formData.person_name', 'formData.order'])
+    expect(root!.detail).toContain('测试表单')
+    // 孙层（props.columns / 采样深层）
+    expect(root!.children![1].children!.map((c) => c.name)).toEqual(['formData.order.no'])
+  })
+
+  it('无结构（未传/空数组/全部空字段）→ 回退单条 formData 提示', () => {
+    const fallback = collectAvailableVars('n', [], [], NO_INPUT)
+    expect(fallback.find((v) => v.name === 'formData')).toBeDefined()
+
+    const empty = collectAvailableVars('n', [], [], NO_INPUT, [{ formKey: 'x', fields: [] }])
+    const root = empty.find((v) => v.name === 'formData')
+    expect(root!.children).toBeUndefined()
+    expect(root!.prefixOnly).toBeUndefined()
+  })
+
+  it('绑定含 UPDATE/DELETE 触发点 → 额外列出 formDataExisting（同构字段）', () => {
+    const mutGroups: FormFieldGroupLike[] = [
+      { formKey: 'b1', fields: [{ path: 'amount', type: 'number' }], triggerTypes: ['BEFORE_UPDATE'] },
+    ]
+    const vars = collectAvailableVars('n', [], [], NO_INPUT, mutGroups)
+
+    const ex = vars.find((v) => v.name === 'formDataExisting')
+    expect(ex).toBeDefined()
+    expect(ex!.children!.map((c) => c.name)).toEqual(['formDataExisting.amount'])
+  })
+
+  it('仅查询类触发点（CREATE/SNAPSHOT）→ 不列 formDataExisting', () => {
+    const vars = collectAvailableVars('n', [], [], NO_INPUT, groups)
+    expect(vars.find((v) => v.name === 'formDataExisting')).toBeUndefined()
+  })
+
+  it('多表单字段合并去重（同路径先到先得）', () => {
+    const two: FormFieldGroupLike[] = [
+      { formKey: 'a', fields: [{ path: 'amount', type: 'number' }] },
+      { formKey: 'b', fields: [{ path: 'amount', type: 'string' }, { path: 'extra' }] },
+    ]
+    const vars = collectAvailableVars('n', [], [], NO_INPUT, two)
+    const root = vars.find((v) => v.name === 'formData')!
+    expect(root.children!.filter((c) => c.name === 'formData.amount')).toHaveLength(1)
+    expect(root.children!.find((c) => c.name === 'formData.amount')!.detail).toContain('number')
+    expect(root.children!.find((c) => c.name === 'formData.extra')).toBeDefined()
+  })
+})
+
+describe('varInsertText · 表单条目', () => {
+  const root: any = { name: 'formData', group: 'form', prefixOnly: true }
+  const leaf: any = { name: 'formData.person_name', group: 'form' }
+  const exLeaf: any = { name: 'formDataExisting.amount', group: 'form' }
+
+  it('根条目仅插前缀（存量行为不变）', () => {
+    expect(varInsertText(root, 'placeholder')).toBe('{{formData.')
+    expect(varInsertText(root, 'bare')).toBe('formData.')
+  })
+
+  it('字段子条目插完整路径', () => {
+    expect(varInsertText(leaf, 'placeholder')).toBe('{{formData.person_name}}')
+    expect(varInsertText(leaf, 'bare')).toBe('formData.person_name')
+    expect(varInsertText(exLeaf, 'placeholder')).toBe('{{formDataExisting.amount}}')
   })
 })

@@ -18,4 +18,8 @@ public interface FormLogicBindingRepository extends JpaRepository<FormLogicBindi
     /** 唯一性校验：同租户同表单同触发点同流只允许一条。 */
     boolean existsByTenantIdAndFormTypeAndFormKeyAndTriggerTypeAndFlowKey(
             String tenantId, String formType, String formKey, String triggerType, String flowKey);
+
+    /** 某逻辑流全部启用绑定（设计期表单字段发现，创建时间升序）。 */
+    List<FormLogicBinding> findByTenantIdAndFlowKeyAndEnabledTrueOrderByCreatedAtAsc(
+            String tenantId, String flowKey);
 }

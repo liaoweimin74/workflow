@@ -37,4 +37,8 @@ public interface FormDataRepository extends JpaRepository<FormData, String> {
             "AND d.createdBy = :createdBy ORDER BY d.updatedAt DESC")
     List<FormData> listMyDrafts(@org.springframework.data.repository.query.Param("tenantId") String tenantId,
                                 @org.springframework.data.repository.query.Param("createdBy") String createdBy);
+
+    /** 表单字段发现采样：某表单定义最近 N 条非快照数据（只取结构，按更新时间倒序）。 */
+    List<FormData> findTop10ByTenantIdAndFormDefIdAndIsSnapshotOrderByUpdatedAtDesc(
+            String tenantId, String formDefId, Boolean isSnapshot);
 }

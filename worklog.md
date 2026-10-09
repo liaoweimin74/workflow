@@ -5371,3 +5371,26 @@ Stage Summary:
 - 备案：①浏览器 UI E2E 未跑（巡检窗口约束不启动 agent-browser；前端由 vue-tsc+vitest 1391 用例+UI diff 审阅兜底，多表编辑器与 SQL_SCRIPT 编辑器同款交互模式）②运行期失败用 VARCHAR 超长截断（MariaDB 严格模式）造出，配置类错误（表不存在/别名重复）执行前暴露路径由单测覆盖 ③jar mtime 05:12 早于二次 package 时刻的时序疑点，经 subagent 核实 jar 内容正确（新类在、大小一致），mvn 增量打包行为，无碍
 - 提交：本轮全部入库（引擎+校验器+配置+前端 4 文件+7 用例测试+e2e 脚本+本记账），push origin/main
 - 【事故备案·OOM】本轮开发收尾终验发现 oom_kill 0→2（巡检起点实测 0）：根因为 vue-tsc 与 vitest（1391 用例，运行峰值内存高）并行执行触发 cgroup OOM，被杀对象是 vue-tsc 工具进程本身（首次运行输出 "Killed"，单独重跑成功 54=基线）；vite 8601 / java 25506 / mariadbd 服务进程全程存活（四链路 200×4 复验），非服务事故。教训：内存 2GB 级沙箱内 vue-tsc 与全量 vitest 禁止并行，串行执行
+
+---
+Task ID: du-8
+Agent: deploy-subagent (Task tool, interactive main session 委派)
+Task: DATA_UPDATE 多表更新新 jar（05:12 构建）换装重启 8080
+
+Work Log:
+- 前置核查：ss 确认 8080 在监听（java PID 19978，04:03:12 启动，跑旧 jar）且 MariaDB 3306 正常（mariadbd PID 7468）；目标 jar 确认为 2026-10-09 05:12:29 UTC 构建（103,659,232 字节）
+- 优雅停旧：kill 19978（SIGTERM）→ 8080 约 1s 释放、进程正常退出，未用 kill -9
+- 第 1 次拉起（05:14:16，规定命令 nohup → /tmp/java-du8.log）：命令返回后 java（PID 24518）即被静默 SIGKILL，/tmp/java-du8.log 0 字节——"会话收割者"现象，Task-subagent 会话亦未能幸免（简报中"agent 会话免疫"假设实测不成立）
+- 第 2 次拉起（05:16:39，setsid 双脱离重试）：java PID 24986 存活穿越 30s 监控窗口，Spring 启动正常无异常栈，05:16:58 /tmp/java-du8.log 出现 "Started WorkflowApplication in 17.905 seconds (process running for 18.719)" 且 Tomcat 已监听 8080；约 05:17:10（启动完成后 ~12s、拉起 Bash 命令退出时刻）再度被静默 SIGKILL，日志无任何错误栈；排除 OOM（当时可用内存 2.5GB，dmesg OOM 记录为历史他人进程）
+- 收割者规律观察：两次死亡均精确伴随本会话拉起命令的退出；对照 vite(8601)/mariadbd(7468) 均为 PPID=1 的历史进程长期存活、19978（04:03 由并行会话经 start-services.sh 拉起，存活 71 分钟）——判定 java 存活与"拉起会话"类型强相关，Task-subagent 拉起不可靠
+- 恢复：05:21:5x 出现父进程为 PID 1 的 detached start-services.sh 实例（PID 25504，非本会话所启，疑似主会话侧按既定路径补拉，其 stdout/stderr 接 pipe、cwd=backend），其子 java PID 25506 于 05:21:55 启动、跑 05:12 新 jar，日志写入 /home/z/tools/backend.log；本会话判定该实例即目标部署态，未再杀启（避免反复横跳，且已用满 2 次重试额度）
+- 成功判据（对 PID 25506）三条全过：a) 进程存在且启动时间 05:21:55=刚才；b) backend.log L73080：2026-10-09T05:22:15.565Z INFO 25506 --- [main] com.workflow.WorkflowApplication : Started WorkflowApplication in 19.193 seconds (process running for 20.113)；c) login 探针 200×4
+- 稳定性复核（启动后 ~7 分钟）：25506 存活、8080/3000/3306 三端口监听正常、8080 login=200、vite 3000 页面=200——已远超第 2 次尝试的 ~13s 死亡窗口
+- 停机窗口合计约 8 分钟（05:14:16 杀旧 → 05:22:15 新实例 Started），其中含两次被收割造成的空窗
+- 红线遵守：未改任何代码、未跑 mvn、未动 MariaDB 数据（workflow_v6 未触碰）、未杀 vite/未重启 3000；全程仅操作 workflow-platform java 进程；/tmp/java-du8.log 保留第 2 次尝试完整日志（含 Started 行）原样
+- 日志旁注（与部署无关）：05:25:43 可见并行 E2E 会话对逻辑流 'du_multi_e2e' 的 DATA_UPDATE 验证（run FAILED：Data too long for column 'status' at row 1，11ms，流已删）——属功能测试侧行长度数据问题，后端进程本身健康
+
+Stage Summary:
+- 新 jar（05:12 构建，含 DATA_UPDATE 多表更新 + 隐式输出 + SQL_SCRIPT 全量能力）已在 8080 生效运行：PID 25506（05:21:55 启动，sandbox profile），"Started WorkflowApplication" + login 探针 200 + 7 分钟稳定运行三重确认
+- 异常记录：本 agent 会话两次拉起均被"会话收割者"静默 SIGKILL（第 1 次秒杀 0 字节日志；第 2 次 Spring 完整启动后 ~12s 被杀）；最终由 start-services.sh detached 路径拉起的实例存活——存活铁律更新：Task-subagent 会话拉起同样不免疫，后续重启应优先 cron 巡检会话或 detached start-services.sh，勿再委派 subagent 直启
+- 风险备案：25506 之父 25504 非本会话所启且暂无对应记账（主会话如非其所为需留意）；若收割者的会话判定范围扩大，25506 仍存被回收风险，建议巡检会话关注 8080 存活

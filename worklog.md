@@ -5218,3 +5218,17 @@ Work Log:
 Stage Summary:
 - 逻辑流数据答案：历史备份中仅存 1 条（变量选择器测试流），已恢复入库；用户若在 10-08 之后创建过其他逻辑流则无备份可寻（历次重建已失）
 - 当前库全量快照 backups/db-workflow-full-20261009.sql 已建立（含此前恢复的表单/页面/仪表盘/逻辑流全部数据），后续每次重大数据操作后建议重做一份；mariadb-dump 必须 -h 127.0.0.1 TCP 连接
+---
+Task ID: logicflow-backup-check
+Agent: main (interactive session + 09:05 patrol Job 444954)
+Task: 用户问「逻辑流的数据有备份吗？」——盘点逻辑流数据备份覆盖情况并补建全库基线备份
+
+Work Log:
+- 【09:05 patrol 全绿】200×4（3000/外域Host/3000代理login/8080直连），mem 2.79GB，oom 0，vite×1 无需减压
+- 【逻辑流数据盘点】数据存 3 张 JPA 表：wf_logic_flow（LogicFlowDef，DSL 在 dsl_json）/ wf_form_logic_binding / wf_logic_flow_run，当前全部 0 行
+- 【备份覆盖核查】v6 rescue（10-08 01:30，覆盖 ≤09-27）无 logic 表；10-05 dump 无 logic 表；10-08 01:27 datadir 快照早于功能上线；10-08 23:08 项目 tar 包仅源码——结论：逻辑流功能上线晚于一切备份点，历史逻辑流数据（若创建过）无恢复路径
+- 【补建基线】mariadb-dump（TCP 3306，--single-transaction --routines）导出 backups/workflow-baseline-20261009-010740.sql（203KB，87 CREATE TABLE，22 组 INSERT）；核验含 dashboard 页、wf_form_def 12 表单（ai_muf4tjek39 等）、sys_menu 全量——即「v6 恢复+首页恢复」后的已知完好态
+- 【工具链备忘】mariadb-dump 走 TCP 可用（socket 路径 /run/mysqld/mysqld.sock 不存在，mariadb 交互客户端因 libncurses 版本符号不可用，dump 无此依赖）
+
+Stage Summary:
+- 逻辑流无历史备份（如实答用户）；已补当前全库基线备份并入 git；后续巡检若发现三张 logic 表出现数据，建议按需追加导出防重建丢失

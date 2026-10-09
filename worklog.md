@@ -5503,3 +5503,18 @@ Work Log:
 Stage Summary:
 - D+ 终态达成：vite 3000 + Java 8080 + MariaDB 3306 全部就位且业务可验证
 - 已知脆弱点：①java/mariadbd 由本会话 nohup 托管，收割者随时可能回收（巡检自愈链可拉回但 jar/mariadb-user 在下次环境重置时会再丢，需重跑本轮前台构建流程）②bootstrap-after-reset.sh 仍无 MariaDB 重建段（建议补齐，参数已全部验证：8 deb→dpkg -x→share/bin/lib 链接→install-db --lc-messages-dir=share/mariadb --auth-root-authentication-method=normal）③ daily dump 已入 git（backups/*.sql 在重置中幸存，本轮恢复的数据就来自它）
+
+---
+Task ID: cron-巡检-20261009-1905
+Agent: 主控（Z.ai Code）
+Task: 19:05 巡检发现第二次环境重供给 → 全链路第三次重建收口
+
+Work Log:
+- 【环境重供给 #2】/proc/uptime=90s → 环境于 ~19:03 重建（19:05 cron 边界）：jar/mariadb-user/jdk21/maven/.m2 再次全灭；java 进程陪葬；开机自愈链拉起 vite+Node 引擎（8080 假绿，login body code:500 no such table）；engine-choice 再写回 node + 双 marker 复活（决策链⑤ jar 缺失）
+- 【规律确认】cron 会话边界 = 冷启动重供给（17:05 ✓ 19:05 ✓，18:05 温启动幸免）→ 无抗性，必须重建
+- 【第三次重建（全前台分步法，~10 分钟）】apt 8 deb（秒到，缓存生效）→ dpkg -x + 布局 + install-db 0 错误 → mariadbd 拉起 → root/740130 双授权 → db-workflow-full-20261009.sql + rescue-workflow_v6 导入（87 表/SYS_USER 2 行）→ JDK 198M + Maven 3.9.9 前台下载 → mvn package 99M → engine-choice=java + rm markers + kill Node → setsid 启动 start-services.sh → Java t+20s 点亮（PID 1561）
+- 【终验】admin/admin123 真登录 token 正常 + form-fields 200；四链路 200×4 真绿；mem/oom 正常
+
+Stage Summary:
+- 重建全流程已完全成熟（deb→initdb→授权→dump→jdk→mvn→切引擎→点亮），单次 ~10 分钟，全部前台命令可复制
+- 遗留待用户决策：①bootstrap-after-reset.sh 补 MariaDB 重建段 ②16MB deb 集打包入 backups/（git 追踪）加速未来重建 ③jar(99M) 是否入 git 权衡

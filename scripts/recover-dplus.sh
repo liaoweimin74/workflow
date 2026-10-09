@@ -69,9 +69,9 @@ if port_open 3306 && [ -x "$M" ]; then
     LATEST=$(ls -1t "$BACKUPS"/db-workflow-full-*.sql 2>/dev/null | head -1)
     if [ -n "$LATEST" ]; then
       echo "[recover] 导入数据: $LATEST"
-      "$M" -u root -p740130 -S "$MDB/mysql.sock" < "$LATEST" >> /home/z/tools/recover.log 2>&1
+      "$M" -u root -p740130 -S "$MDB/mysql.sock" workflow < "$LATEST" >> /home/z/tools/recover.log 2>&1
       LATEST6=$(ls -1t "$BACKUPS"/db-workflow_v6-*.sql 2>/dev/null | head -1)
-      [ -n "$LATEST6" ] && "$M" -u root -p740130 -S "$MDB/mysql.sock" < "$LATEST6" >> /home/z/tools/recover.log 2>&1
+      [ -n "$LATEST6" ] && "$M" -u root -p740130 -S "$MDB/mysql.sock" workflow_v6 < "$LATEST6" >> /home/z/tools/recover.log 2>&1
     else
       echo "[recover] WARN: 无可用 dump！workflow 库为空壳（Flyway 启动时仅建结构）"
     fi

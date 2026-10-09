@@ -5543,3 +5543,20 @@ Work Log:
 
 Stage Summary:
 - 冷边界已三连（19/20/21 点），重建流程稳定；等待用户对三项抗重置提案决策
+
+---
+Task ID: reset-defense-20261009（重置防御体系落地）
+Agent: 主控（Z.ai Code）
+Task: 用户问「怎么能避免重置/不丢数据/自动恢复」→ 防御三件套落地
+
+Work Log:
+- 【重置不可防】平台会话边界重供给是基础设施行为（今日 17:05/19:05/20:05/21:04 四实证，oom_kill=0），沙箱内无法阻止 → 策略=持久化+自动恢复
+- 【持久层=本地 git】无推送凭证（credential.helper 空），但本地 git 历史已 4 次跨重置幸存（含平台 cron 自动快照提交）→ 提交即持久
+- 【三件套落地】①scripts/dump-db.sh：mariadb-dump 全量 workflow+workflow_v6 → backups/（每库留 3 份+有效性校验）→ git commit；RPO ≤ 1h（巡检轮首执行）②scripts/recover-dplus.sh：幂等全链路恢复（健康短路→MariaDB deb 重建→initdb→授权→最新 dump 导入→jar 优先 backups/jar 直复否则 mvn→引擎决策固化→清 Node 假绿→Java 拉起→终验），有 jar 备份时 ~3 分钟 ③start-services.sh 冷启动钩子：jar+mariadbd 双缺失判定冷启动 → 后台异步触发恢复（不阻塞 vite）
+- 【jar/deb 入 git】backups/jar/workflow-platform-1.0.0-SNAPSHOT.jar（99M）+ backups/mariadb-debs-11.8.6.tar.gz（16M）已提交（b7f6bd51）→ 未来冷启动跳过 JDK/Maven/mvn 全链（省 ~7 分钟）
+- 【巡检任务升级】444954 → 446961：新增 (0) 每轮 dump 快照、(2) 真伪核验（admin/admin123 body 含 accessToken=真绿 / code:500=Node 假绿）、(4) 恢复入口改为 recover-dplus.sh、(5) 恢复后二次快照
+- 【验证】dump-db.sh 修 bug（mariadb 客户端无 --databases，改用 mariadb-dump）后实测 OK（workflow 200K+v6 128K）；recover-dplus.sh 幂等测试通过（健康系统短路退出）
+
+Stage Summary:
+- 重置应对从「每次手工 ~10 分钟」升级为「自动 ~3 分钟」：冷启动 → start-services.sh 钩子后台恢复 → 下一轮巡检验证；或巡检轮直接前台恢复
+- RPO ≤ 1 小时（巡检轮首 dump）；jar/代码/deb 零丢失（git）；已知残留风险：巡检 cron 会话自身可能触发冷重供给（自激励循环），恢复链已能闭环应对

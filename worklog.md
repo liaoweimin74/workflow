@@ -5838,3 +5838,19 @@ Stage Summary:
 - D+ 终态恢复完成（第 4 次），本次起恢复完全脚本化（幂等续作模式稳定）
 - recover-dplus.sh 现已无已知 bug，未来重供给一条命令前台恢复，600s 窗口不够时重跑自动续作
 - 依旧备案：GitHub 凭据丢失未恢复，本地 main 领先 origin/main（含恢复脚本修复），待 token 后推送
+
+---
+Task ID: cred-restore-20261010-0700（凭据恢复+分支整合）
+Agent: 主控（Z.ai Code）
+Task: 用户提供 GitHub PAT → 恢复 credential store → 整合分叉推送
+
+Work Log:
+- 【凭据恢复】PAT 写入 ~/.git-credentials（chmod 600）+ git config credential.helper=store，无人值守推送能力恢复
+- 【分叉整合】首推 non-fast-forward：origin/main 领先 30 提交（并行会话完成 DATA_UPSERT 实施 0d34c29d + 核验记账 78064ce8），本地领先 11 提交（运维脚本+快照）→ git pull --rebase
+- 【冲突×3 全解】①scripts/dump-db.sh + recover-dplus.sh 双侧各自新增（AA）→ 取远端版（更完善：幂等短路/jar 自 backups/jar 快速恢复/自动取最新 dump/授权段无 S4 bug；本地 --theirs 语义在 rebase 中反向，最终以 origin/main 版覆盖提交 6f3775d7）②worklog.md 双侧追加 → 删标记保留两段
+- 【推送成功】78064ce8..6f3775d7，origin/main == main，41 提交全同步；dump-db.sh 此后每轮自动 push 生效
+
+Stage Summary:
+- GitHub 推送链路完全恢复；本地/远端零分叉
+- 主线状态确认：DATA_UPSERT 已由并行会话全链路交付（后端 210/210、前端 1425/1425、vue-tsc 基线零新增、E2E 复验+unchanged 语义勘误），无需本会话再实施
+- 本地时间线教训入档：rebase 中 checkout --theirs 取的是「被应用提交」而非「基底」，双版本脚本择优时必须显式 git show 对比后再落

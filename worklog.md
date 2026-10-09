@@ -5871,3 +5871,18 @@ Stage Summary:
 - 恢复体系闭环再进一步：jar 备份快速路径验证可用（~3 分钟）；导入 bug 修复后 recover-dplus.sh 应可全自动一键恢复（此前需手工补导入）
 - 数据完好性：workflow 87 表 SYS_USER 2 行，最新快照 20261009-220510（远端线产出）
 - 本轮修复已推送 GitHub（448dc561），凭据链路工作正常
+
+---
+Task ID: cron-巡检-20261010-0705（重供给#5 恢复，用户报告触发核实）
+Agent: 主控（Z.ai Code）
+Task: 用户报告「no such table: SYS_USER」+ 07:05 巡检 → 第五次重供给恢复
+
+Work Log:
+- 【重供给 #5】uptime ~5.6 分钟（~06:59 重建），bun 假绿撑 8080，用户访问时看到 no such table: SYS_USER（SQLite 无此表=Node 引擎登录路径报错，非 MariaDB 数据损坏）
+- 【快速路径首次生效】backups/jar/ 已有 103M jar（并行会话 23:01 存入）→ recover-dplus.sh 走 jar 恢复，无需 mvn 构建
+- 【600s 窗口内完成】MariaDB 重建+授权+导入（workflow 87 表/v6 40 表）+ jar 恢复 + Java 拉起；recover.log 内 1045/1046 为脚本早期尝试残留（实际授权导入均成功），已幂等自愈
+- 【终验】真登录 accessToken ✓ 四链路 200×4 form-fields 200；收口快照 20261009-231557（workflow 200K + v6 128K，含凭据恢复后的首次自动 push）；mem 3045MB oom 0
+
+Stage Summary:
+- D+ 终态恢复（第 5 次），jar 备份快速路径使恢复窗口缩至单次 600s 内
+- 用户可见症状（no such table: SYS_USER）= 环境重供给后 Node 假绿的固定表现，非数据库损坏；数据始终有 git 快照兜底

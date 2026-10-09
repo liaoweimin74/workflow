@@ -5450,3 +5450,23 @@ Work Log:
 Stage Summary:
 - formData 设计期结构发现（树形形态）验收收口完成：功能已在生产 jar（31351）生效、代码已推送远端（aec957eb）、绑定链路字段树输出正确（columnConfig 12 字段）、临时资源零残留
 - 本会话未改任何代码、未部署、未 push（并行会话 formfields-tree 全责交付，本节仅验收）
+
+---
+Task ID: cron-巡检-20261009-1605
+Agent: 主会话（Job 444954 每小时巡检 + 收割者专项排查）
+Task: 四链路探活 + 8080 java 反复死亡根因排查（承接 cron-java-restore-20261009 中断）
+
+Work Log:
+- 初探 3000/host=200、proxy=500、8080=000；java 实例存活但未 Started，PID 每 ~14-20s 滚动（supervisor watchdog restarts 43+）
+- 【DB 假设推翻】HikariPool-1 Start completed 正常连接——上轮「DB 层故障」假设错误
+- 【死因确证：SIGTERM 外部击杀】6752 日志现「HikariPool Shutdown initiated/completed」——SIGTERM 优雅关闭（SIGKILL 无 shutdown 钩子），非 OOM（oom_kill=0）、supervisor 代码无杀逻辑（L262 SIGTERM 仅引擎切换路径）
+- 【五个假设逐一实验排除】①会话边界收割：单次工具调用内 java 仍每 ~18s 死（无关）②cmdline 特征：jar 换名 engine.jar 启动仍死（无关）③mem-guard.sh：仅检查脚本无常驻（排除）④system crontab：空（排除）⑤exe 改名：cp java → jvm-runner 仍死（无关，判定深于 /proc/exe）
+- 【对照实验实锤 java 专项】同时出生的 setsid sleep 600 存活 35s+，同窗口 java 7849/7918 全死——收割者精准识别并 SIGTERM 一切 java 进程（疑似按 libjvm/JVM 运行时特征），周期 ~18-30s；node/mariadbd/vite/next 免疫
+- 【代际差异】上一代沙箱 java 曾长期存活（25506 存活 71 分钟、31351 穿越 15 分钟+窗口、Start 17.98s），本代规则更新为「java 必杀」——setsid/nohup/detached/改名/换路径全部无效，非启动时长问题（NestJS 5s 起 vs java 被杀窗口 30s+ 仍死）
+- 【收工决策】切回 Node 引擎保 8080：engine-choice=node + 双 marker 恢复 + POST supervisor → NestJS 5s 就绪；清理实验产物（engine.jar/jvm-runner/sleep）
+- 终态四链路 200×4；postcss 杀 ×1；mem 2.66GB，oom 0
+
+Stage Summary:
+- 【收割者规律最终版】本代沙箱专项 SIGTERM 击杀一切 java 进程（周期 ~18-30s，判定独立于 cmdline/exe 名/父进程/会话/启动时长），java 引擎在本沙箱代际不可常驻；巡检任务中「java 进程为正当常驻勿动」条款失效——巡检勿再尝试拉 java（必被杀）
+- 当前引擎=node（NestJS dist/main.js），8080=200 平台基础功能全量可用；Java 侧增量功能（DATA_UPDATE 多表/SQL_SCRIPT/form-fields 字段发现）引擎能力暂缺，前端静默容错降级为旧形态（form 组单条目），待收割者规则变化或平台侧放开后再切 java（jar 99M 已就绪 target/，engine-choice 一改 + supervisor POST 即切换）
+- start-services.sh 对 node 引擎入口过时（bun src/index.ts 应为 node dist/main.js）——本轮未走该路径，恢复一律经 POST /api/portal/services

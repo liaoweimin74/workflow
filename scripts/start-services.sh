@@ -46,6 +46,7 @@ if ! port_open 3306; then
     (cd "$MDB_DIR" && LD_LIBRARY_PATH="$MDB_DIR/sysroot/usr/lib/x86_64-linux-gnu:$MDB_DIR/root/usr/lib/x86_64-linux-gnu" \
       nohup root/usr/sbin/mariadbd --no-defaults --basedir="$MDB_DIR/root" --datadir="$MDB_DIR/root/data" \
       --socket="$MDB_DIR/mysql.sock" --pid-file="$MDB_DIR/mysqld.pid" --port=3306 --bind-address=127.0.0.1 \
+      --lower-case-table-names=1 \
       >> "$MDB_DIR/mariadbd.err" 2>&1 < /dev/null &)
     for i in 1 2 3 4 5 6; do sleep 5; port_open 3306 && break; done
     if port_open 3306; then echo "[start-services] MariaDB 就绪 (3306)"; else echo "[start-services] WARN: MariaDB 3306 未就绪"; fi

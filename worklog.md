@@ -5295,3 +5295,23 @@ Work Log:
 
 Stage Summary:
 - 8080 在跑含隐式输出功能的 02:07 新 jar（PID 14104），四链路 200×4，无需干预；未拉起、未构建、未改代码，仅记账
+
+---
+Task ID: logicflow-implicit-output
+Agent: 主会话
+Task: 用户拍板「按主方案执行」——逻辑编排隐式默认输出（约定优于配置）：未声明 results 的执行型节点自动将整体返回值写入 <节点id> 变量，下游零配置即可引用
+
+Work Log:
+- 【引擎】LogicFlowEngine.writeResults 空声明分支改为调 writeImplicitResult（新私有方法）：result 非 null 且节点 id 匹配 \w+ 时 vars.put(id, result)；null 静默跳过（纯副作用不刷警告）；循环体步骤 fallback id 含 '#' 被过滤；同名覆盖沿用放行策略但降级 log.debug（自环 200 步刷 warn 实测后才降级）；类头 javadoc + 三处调用点注释同步；HTTP/BEAN/SCRIPT/BATCH/SUBFLOW/DATA_UPDATE/CONDITION 全部生效
+- 【前端】flowVars.ts：新增 EXEC_NODE_TYPES 导出（7 执行型）；collectAvailableVars 对未声明 results（含空数组，与引擎 isEmpty 分支对齐）的执行型祖先自动列「自动整体输出 · 来自「节点名」，支持点路径取子字段」条目（name=节点 id），SCRIPT 分支与通用分支双路改造；PropertyPanel.vue：results 空态文案改为隐式提示（含 {{ nodeId }} 插值）+ tip 前置隐式说明 + nodeId computed
+- 【测试恢复·意外发现大坑】backend/src/test 整目录（129 文件）自 sync 提交 8d0fc9a6 起丢失——根 .gitignore 裸 `test` 规则把所有 test 目录忽略（127+ 文件从未入 workflow_lowcode 库，10-08 的测试适配随重置湮灭）；修复：gitignore 收窄为 /test + 从 4020c972 git archive 恢复全树
+- 【测试适配】9 个类构造函数尾参加 mock（ProcessInstanceController/TaskController/ProcessInstanceService/WorkflowTaskService×2/RejectService→LogicFlowApprovalTrigger；BizDataService×14 处→FormLogicBindingService）+ LogicFlowEngineTest 5 处 setResultVar→setResults(wholeDef()) + 修 queryJoin 缺主表列 mock（JoinSqlGenerator.validate 存在性校验）；新增 3 个隐式输出用例（隐式写入节点 id/null 跳过/CONDITION 隐式布尔）；新增前端 flowVars.test.ts 7 用例
+- 【验证】后端：LogicFlowEngineTest 31/31 + 适配 8 类 147 用例全绿（mvn test 实跑）；前端：vitest 35/35（dsl 28+flowVars 7）、vue-tsc 全量 54 错误=历史基线零新增；API E2E：临时流 START→SCRIPT(无 results)→END 运行 outputVars={"sc1":{"code":200,"msg":"ok"}} PASS 后即删；浏览器 E2E（agent-browser）：设计器选中 DATA_UPDATE 节点 → 属性面板空态显示「未声明输出 · 引擎自动将整体结果写入变量'du_v'…」+ SET 值变量选择器「上游产出」组出现 http_up「自动整体输出」条目 + 点选插入 {{http_up}} 全 PASS
+- 【部署】mvn -o package 重建 jar（02:07）；本会话 nohup 拉起的 java 被"会话收割者"静默 SIGKILL（worklog L5131 现象复现，日志停 02:08:26 无异常栈）→ 按既定规避建 one_time cron Job 445901 由 cron 会话拉起（PID 14104 存活）；四链路复测全绿（3000=200/外域=200[需 x-session-id 头，裸探 400 系 FC 会话亲和要求非故障]/代理登录=200/8080=200）
+
+Stage Summary:
+- 新功能上线：逻辑流输出配置从「每节点必填」变为「零配置默认可用」——下游变量列表自动列出上游所有执行型节点的整体输出（变量名=节点 id），点选即插、点路径取子字段（{{http_x7k2.data.id}}）；显式 results 声明保留（重命名/拆包场景），二者互斥时显式优先
+- 【重大修复】backend/src/test 129 文件回归入库（gitignore 根因修复），10-08 丢失的构造函数适配全部重做，测试资产从此跨重置存活
+- 兼容性：存量已声明 results 的流零影响；var_picker_test 等既有数据无需迁移；属性面板隐式提示与选择器条目均有「自动」字样可辨
+- 遗留备案：①设计器对非法 config 字段名（如 whereOps≠where）渲染崩溃无兜底（本轮用测试数据踩到，属既有问题）②FlowNode 卡片徽标仍基于显式声明（未声明节点无输出徽标，可后续加"自动"徽标）③二期可做：SCRIPT 末行字面量推断 KEY 声明、HTTP 示例 JSON 生成输出表
+- 提交：a8991854（test 恢复+适配）→ 0de09699（隐式输出功能）已 push origin/main

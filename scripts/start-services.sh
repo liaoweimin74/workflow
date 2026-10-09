@@ -18,6 +18,16 @@ FRONTEND_DIR=/home/z/my-project/workflow_lowcode/frontend
 JAR="$BACKEND_DIR/target/workflow-platform-1.0.0-SNAPSHOT.jar"
 mkdir -p "$LOG_DIR"
 
+# ---- 冷启动自动恢复（2026-10-09 四次重置实证：环境重供给会清掉 jar/MariaDB/工具链）----
+# 检测：jar 与 mariadbd 二进制双缺失 = 冷启动。后台异步跑 recover-dplus.sh
+# （MariaDB 重建→dump 导入→jar 恢复→Java 拉起），不阻塞 vite 启动。
+if [ ! -f "$JAR" ] && [ ! -x /home/z/my-project/mariadb-user/root/usr/sbin/mariadbd ]; then
+  if ! pgrep -f 'recover-dplus.sh' >/dev/null 2>&1; then
+    echo "[start-services] 冷启动检测：jar/MariaDB 缺失 → 后台启动 recover-dplus.sh"
+    (setsid nohup bash /home/z/my-project/scripts/recover-dplus.sh >> "$LOG_DIR/recover.log" 2>&1 < /dev/null &)
+  fi
+fi
+
 port_open() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&- 3<&-; return 0; } || return 1
 }

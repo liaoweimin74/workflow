@@ -5433,3 +5433,20 @@ Stage Summary:
 - 覆盖面：DATA_UPDATE 值绑定、SQL_SCRIPT {{var}} 占位符、HTTP/BEAN 等全部 VarInput 占位符场景统一受益（VariablePicker 单点改造）；formDataExisting（更新/删除前旧行）同构字段树自动可用
 - 备案：①empty 组（空 schema 且无实例）前端忽略不显示 ②WORKFLOW rule 树对子表格类组件（值是数组）按平铺字段处理，props.columns 场景才有 children——如需数组元素子字段可后续增强 ③校验器软校验 formData 字段存在性留作二期 ④被删流 form-fields 返回 500「逻辑流不存在」（前端静默容错）
 - 提交：本条随收口 commit push origin/main
+
+---
+Task ID: formfields-verify
+Agent: 主会话（交互会话，承接用户「按方案执行，字段条目形态为树形」的验收收口）
+Task: 设计期 formData 结构发现（树形）——并行会话 formfields-tree 交付后的独立验收：push 核验 + 线上端点复核 + 绑定全链路补验 + 清理
+
+Work Log:
+- 【观察让行】轮询并行会话进度（06:13 vue-tsc → 06:14 vitest 1398 → 06:18 mvn package → 06:24 浏览器 E2E），全程未触碰实施文件、未跑重资源命令（防 mvn×vitest 并行 OOM 前科复现）
+- 【交付确认】并行会话提交 aec957eb（后端 FormFieldSchemaService 313 行三路提取 + controller 端点 + 前端树形选择器 + 后端 5 用例/前端 flowVars 14 用例/全量 1398 + vue-tsc 零新增 + API/浏览器 E2E + jar 06:18 换装 PID 31351 + worklog 记账）
+- 【push 核验】HEAD=origin/main=aec957eb，ahead=0，ls-remote 远端一致，工作树干净
+- 【线上复核】重登录（旧 token 过期）→ 无绑定流 form-fields 返回 [] PASS → 建临时流 ff_verify_tmp + 绑定 bill_test(AFTER_CREATE) → form-fields 返回 {source=columnConfig, triggers=[AFTER_CREATE], 12 字段：person_id/请假人id/string…} 全链路 PASS → 临时流+绑定删除 200，残留 bindings=0 库净
+- 【四链路收口】3000=200 / 外域 Host=200 / 3000 代理 login=200 / 8080 直连=200（java PID 31351，06:19 起）；内存 2.41GB，无 oom
+- 备注：新增 webDevReview 15 分钟 cron 要求因当前会话无 cron 工具暂无法创建，既有每小时巡检 Job 444954 覆盖可用性，待后续会话补建
+
+Stage Summary:
+- formData 设计期结构发现（树形形态）验收收口完成：功能已在生产 jar（31351）生效、代码已推送远端（aec957eb）、绑定链路字段树输出正确（columnConfig 12 字段）、临时资源零残留
+- 本会话未改任何代码、未部署、未 push（并行会话 formfields-tree 全责交付，本节仅验收）

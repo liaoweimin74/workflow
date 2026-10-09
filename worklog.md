@@ -5332,3 +5332,23 @@ Stage Summary:
 - SQL 批处理（SQL_SCRIPT）节点已部署上线并全量验证：多语句 ; 切分、-- name 别名、{{var.path}} 改写 ? 真绑定防注入、汇总默认输出 <节点id>（sN 键控 + lastKey 类便利键）、abort 单事务回滚
 - 部署路径铁律补充：交互会话拉起 java 必被收割（setsid 也无效），存活路径 = agent/cron 会话拉起——后续重启优先 subagent 或 cron 巡检
 - 实施会话 12 个文件未 commit（留给它按自身节奏提交，避免写冲突）；本会话仅追加本记账
+
+---
+Task ID: sqlscript-node
+Agent: 主会话（用户拍板「按方案执行」）
+Task: 逻辑流设计器新增 SQL 批处理（SQL_SCRIPT）节点：多语句 ; 分隔 + {{var}} 参数绑定 + 汇总输出（约定优于配置）
+
+Work Log:
+- 【引擎】NodeType 新增 SQL_SCRIPT；新建 SqlScriptSupport（引号/注释感知切分器、-- name: 别名提取、类型白名单 kindOf、{{var.path}}→JDBC ? 编译器、bindParams/extractRows/extractGeneratedKeys）；LogicFlowEngine 新增 executeSqlScript+runSqlScript：单连接顺序执行，abort（默认）=单事务 setAutoCommit(false) 失败回滚且节点不抛错（下游按 failed/aborted 分支），continue=自动提交逐条记错继续；单语句 30s 超时、语句数上限 100、SELECT 行数上限 maxRows(默认200/硬上限1000 截断标 truncated)；汇总 Map={total,succeeded,failed,aborted?,durationMs,s{i}|别名:{index,kind,sql,affected|insertKey|data/rows/truncated?,ok,error?}}，经 writeResults 隐式整体输出 <节点id>（显式 results KEY 取顶层键 s0/total… 优先）；INSERT 用 RETURN_GENERATED_KEYS 取自增键 insertKey；容器值绑 JSON 字符串、null 绑 SQL NULL（List.copyOf 坑修复：unmodifiableList 容 null）
+- 【校验】LogicFlowDslValidator.validateSqlScript：sql 必填/切分非空/≤100 条/逐条白名单+空变量编译（语法错早暴露）/键名去重/onError+maxRows 范围；BATCH 循环体白名单（引擎 EnumSet + 校验器 Set + 消息文案）加入 SQL_SCRIPT
+- 【前端】新建 utils/sqlScript.ts（同语义 TS 切分/kind/name/vars/parseSqlScriptPreview 永不抛错）；dsl.ts 九处注册（LogicNodeType/SqlScriptNodeConfig/BATCH_BODY_TYPES/CONFIG_TYPES/isLogicNodeType/defaultNodeName/defaultConfig{sql,onError:abort,maxRows:200}/hasExecutionMeta/头注释）；nodeMeta（--lf-data 色、badge Q、动作组）；flowVars EXEC_NODE_TYPES（隐式整体输出条目自动生效）；FlowNode 摘要「N 条 SQL · x 更新 · y 写入 · z 查询」；PropertyPanel 新增 SQL_SCRIPT 段：VarInput textarea 等宽编辑器(chips 变量插入) + 语句解析预览（#i/类型徽标/摘录/别名徽标/错误红条/隐式输出提示）+ 失败策略 select + 查询行数上限 input-number
+- 【测试】后端 SqlScriptSupportTest 22 例 + LogicFlowSqlScriptTest 5 例（mock JdbcTemplate/Connection：汇总结构/参数绑定下发/commit/rollback/abort 停止/continue 继续/显式 KEY s0 拆包/空语句执行前抛错）全绿；logicflow 包 71/71；前端 sqlScript.test.ts 12 例，logicflow utils 47/47；vue-tsc 54=基线零新增
+- 【坑】FormJoinQueryIntegrationTest 全量跑时 11 错误系环境性（并发 Spring 上下文耗尽 DB 连接），隔离复跑 11/11 通过（带改动）；SysMenuRepositoryTest 2 错误带/不带改动均失败=既有环境问题，与本次无关
+- 【部署】mvn -o package 重建 jar（03:51）；one_time cron Job 446016 会话杀旧 PID 14104 后未完成拉起即中断（8080 停机约 6 分钟），本会话补跑 start-services.sh 拉起 PID 19978（cron 会话启动的进程被收割风险仍需巡检关注）
+- 【E2E】API 驱动 5/5 PASS（scripts/e2e-sqlscript.mjs 留存可复跑）：INSERT 别名键 new_row.insertKey=自增 + SELECT 参数绑定 data[0].name=alice + abort 回滚（rollback_test 行不存在、s1 未执行、s0.error 表不存在）；浏览器 E2E：面板添加节点自动连线 → 属性面板预览（#0 更新/new_row + #1 查询）→ 卡片摘要「2 条 SQL · 1 更新 · 1 查询」→ 保存成功 DB DSL 正确 → 发布成功 v1（校验器通过）→ 测试流已删库净
+
+Stage Summary:
+- SQL 批处理节点上线：输出配置沿用「约定优于配置」——零配置即得结构化汇总（s{i}/别名 键控，规避 resolvePath 不支持数组下标），点路径取 s0.affected / s1.data / total 等；事务语义 abort 回滚/continue 逐条，失败详情进条目不炸流
+- 安全边界：语句类型白名单（无 DDL/管理命令）、参数绑定防注入、行数/语句数/超时三重上限；能力面（全库 DML）与 SCRIPT 同信任级别（管理员侧）
+- 遗留备案：①KEY 拆包仅取汇总顶层键（s0/s1/total…，引擎 results-v2 语义即如此）深层走点路径 ②CONDITION variable 仍不支持 {{}} 点路径（既有限制）③Job 446016 会话中断未记账，由本节代记
+- 提交：本轮实施 + E2E 脚本入库，push origin/main

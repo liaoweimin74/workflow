@@ -4,12 +4,14 @@ import com.workflow.system.domain.entity.SysMenu;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
+@ActiveProfiles("test") // H2 内存库 + test 配置（与其它 @SpringBootTest 集成测试一致；缺省 profile 会连不存在的生产库导致上下文加载失败）
 class SysMenuRepositoryTest {
 
     @Autowired

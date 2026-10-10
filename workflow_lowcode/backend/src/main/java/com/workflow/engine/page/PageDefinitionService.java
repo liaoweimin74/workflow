@@ -333,13 +333,18 @@ public class PageDefinitionService {
     }
 
     /**
-     * 移除 schema 中的编译产物键（rule/option），仅保留用户声明内容。
+     * 移除 schema 中的编译产物键（rule/option/display），仅保留用户声明内容。
+     *
+     * <p>⚠️ 剥离清单必须与 {@link #mergeCompiled(String, String)} 的合并键保持同步：
+     * mergeCompiled 会把编译产出的 rule/option/display 合入已发布 schema，
+     * 漏剥任一键会把「相同声明」误判为「已变化」，导致同内容重复发布不被拒绝。
      */
     private JsonNode stripCompiled(JsonNode node) {
         if (node != null && node.isObject()) {
             ObjectNode copy = ((ObjectNode) node).deepCopy();
             copy.remove("rule");
             copy.remove("option");
+            copy.remove("display");
             return copy;
         }
         return node;

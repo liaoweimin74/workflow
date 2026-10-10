@@ -33,8 +33,9 @@ class JoinSqlGeneratorTest {
         assertThat(sql.sql()).isEqualTo(
                 "SELECT m.*, j1.name AS customer_name FROM wf_biz_order m"
                         + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " AND j1.tenant_id = ?"
                         + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
-        assertThat(sql.params()).containsExactly(TENANT, 10, 0);
+        assertThat(sql.params()).containsExactly(TENANT, TENANT, 10, 0);
     }
 
     @Test
@@ -50,9 +51,11 @@ class JoinSqlGeneratorTest {
         assertThat(sql.sql()).isEqualTo(
                 "SELECT m.*, j1.name AS customer_name, j2.nickname AS owner_name FROM wf_biz_order m"
                         + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " AND j1.tenant_id = ?"
                         + " LEFT JOIN wf_biz_user j2 ON j2.id = JSON_UNQUOTE(JSON_EXTRACT(m.owner_id,'$[0]'))"
+                        + " AND j2.tenant_id = ?"
                         + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
-        assertThat(sql.params()).containsExactly(TENANT, 10, 0);
+        assertThat(sql.params()).containsExactly(TENANT, TENANT, TENANT, 10, 0);
     }
 
     @Test
@@ -74,6 +77,7 @@ class JoinSqlGeneratorTest {
         assertThat(sql.sql()).isEqualTo(
                 "SELECT m.*, j1.name AS customer_name FROM wf_biz_order m"
                         + " LEFT JOIN wf_biz_customer j1 ON j1.id = m.customer_id"
+                        + " AND j1.tenant_id = ?"
                         + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
     }
 
@@ -89,9 +93,10 @@ class JoinSqlGeneratorTest {
         assertThat(sql.sql()).isEqualTo(
                 "SELECT m.*, j1.name AS customer_name FROM wf_biz_order m"
                         + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " AND j1.tenant_id = ?"
                         + " WHERE m.tenant_id = ? AND (j1.name LIKE ?)"
                         + " ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
-        assertThat(sql.params()).containsExactly(TENANT, "%张%", 10, 0);
+        assertThat(sql.params()).containsExactly(TENANT, TENANT, "%张%", 10, 0);
     }
 
     @Test
@@ -103,7 +108,8 @@ class JoinSqlGeneratorTest {
                 filters, null, null, null, null, 0, 10);
 
         assertThat(sql.sql()).contains(" AND m.order_no = ?");
-        assertThat(sql.params()).containsExactly(TENANT, "NO-1", 10, 0);
+        // 参数顺序（对齐 Node）：JOIN 租户参 → 主租户 → 筛选 → LIMIT/OFFSET
+        assertThat(sql.params()).containsExactly(TENANT, TENANT, "NO-1", 10, 0);
     }
 
     @Test
@@ -137,8 +143,9 @@ class JoinSqlGeneratorTest {
         assertThat(count.sql()).isEqualTo(
                 "SELECT COUNT(1) FROM wf_biz_order m"
                         + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " AND j1.tenant_id = ?"
                         + " WHERE m.tenant_id = ?");
-        assertThat(count.params()).containsExactly(TENANT);
+        assertThat(count.params()).containsExactly(TENANT, TENANT);
     }
 
     @Test
@@ -188,6 +195,7 @@ class JoinSqlGeneratorTest {
                 "SELECT m.*, j1.name AS customer_name, j1.phone AS customer_phone, j1.email AS customer_email"
                         + " FROM wf_biz_order m"
                         + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " AND j1.tenant_id = ?"
                         + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
     }
 
@@ -236,6 +244,7 @@ class JoinSqlGeneratorTest {
                 "SELECT m.*, j1.manager AS customer_manager, j1.manager_text AS customer_manager_text"
                         + " FROM wf_biz_order m"
                         + " LEFT JOIN wf_biz_customer j1 ON j1.id = JSON_UNQUOTE(JSON_EXTRACT(m.customer_id,'$[0]'))"
+                        + " AND j1.tenant_id = ?"
                         + " WHERE m.tenant_id = ? ORDER BY m.created_at DESC LIMIT ? OFFSET ?");
     }
 

@@ -6109,3 +6109,23 @@ Work Log:
 Stage Summary:
 - 运行代码已与 HEAD 同步（含 __lastError 引擎端）；凭据已由并行会话恢复（~/.git-credentials 09:37）
 - 五项开发待办更新：①已完成并上线；接下来派 ②43 存量测试清偿
+---
+Task ID: 2
+Agent: test-debt-cleanup
+Task: ② 43 存量测试清偿
+
+Work Log:
+- 【基线复跑】全量 mvn test 实测 1229 tests / 18 Failures + 25 Errors = 43（与存量债基线吻合），报告落 target/surefire-reports/；逐类归因后分类修复，全程未触碰 LogicFlowEngine.java、未 commit、未重启进程、未动 backups/
+- 【根因A·单测未跟随构造器新增依赖（12 errors）】LogicFlowApprovalTrigger/NodeOptionsService 上线后，5 个 Mockito 单测类（@InjectMocks 构造注入对未知参数填 null）未声明对应 @Mock → 调用时 NPE。手法=补 @Mock 字段+import：AddSignServiceTest(4)、TransferServiceTest(3)、TaskRemindServiceTest(2)、WorkflowTaskServiceCompleteTest(2，NodeOptionsService+Trigger)、RejectServiceTest(1，NodeOptionsService+Trigger)；UrgeGate/SmsEnd/loadProcessPolicy 等路径本就有 try/catch 兜底，无需额外桩
+- 【根因B·鉴权上下文缺失（11 errors）】DeliveryControllerTest：list/retry 入口新增 NotificationAdminAuthorization.requireAdmin()（SecurityContextHolder 取 LoginUser），纯单测无过滤器链 → 403。手法=@BeforeEach 注入 ROLE_ADMIN LoginUser（UsernamePasswordAuthenticationToken，与 AnnouncementControllerTest 同款）+ @AfterEach clearContext
+- 【根因C·集成测试配置缺失（2 errors）】SysMenuRepositoryTest 是唯一缺 @ActiveProfiles("test") 的 @SpringBootTest → 走生产 profile 连不上库（Hibernate 无法确定 Dialect）。手法=补 @ActiveProfiles("test")（H2 内存库，与 MessageEndToEndTest 等一致）
+- 【根因D·断言过期-主代码故意变更且注释明示（17 失败）】①JoinSqlGeneratorTest(8)：commit 75f42817「方案A」在 JOIN ON 子句追加租户过滤 AND j1.tenant_id = ?（LEFT JOIN 下放 WHERE 会退化 INNER JOIN，javadoc 明示），期望 SQL/参数序全部按新契约更新（参数序=JOIN 租户参→主租户→筛选→分页）②DataSourceDefinitionServiceTest(6)：update() FORM 类型入参 params 现与 generateParams 端点段合并（「端点段系统权威重建+草稿段原样保留」对齐 Node update 分支），新增 assertFormUpdateParamsMerged 助手（FORM_ENDPOINTS 常量+ObjectNode.setAll 语义比较，入参 list 不参与覆盖）③AiPropertiesTest(1)：AI 默认配置已切平台内置模型（enabled=true/内部网关/glm-4-plus/isConfigured=true，javadoc 明示）④FormSchemaValidatorTest(2)：词汇表已与设计器真实 type 对齐（历史教训注释），slider 入白名单、divider 等布局组件改丢弃——invalidType_downgradedToInput 拆为 sliderType_whitelisted_keptAsIs + unknownType_droppedWithWarning，divider_keptWithoutBeingListedAsField 改为断言丢弃+warning
+- 【根因E·主代码真实 bug（1 失败）】PageDefinitionPublishIntegrationTest.publish_sameContent_rejectedAsUnchanged：mergeCompiled 会把编译产物 display（ViewCompiler.compileDisplay 恒产出 table/card）合入已发布 schema，而 schemaEquals→stripCompiled 只剥 rule/option → 相同声明因多出 display 键被误判「已变化」，同内容重复发布不被拒绝。修主代码 PageDefinitionService.stripCompiled 增加 copy.remove("display") 并注释「剥离清单必须与 mergeCompiled 合并键同步」；该测试 8/8 全绿，未用测试掩盖
+- 【验证】修复后全量 mvn test：134 测试类 / 1230 tests（+1：invalidType 用例一拆二）/ 0 Failures / 0 Errors / 0 Skipped；logicflow 包回归全绿 122/122（ConditionEvaluator13+DataUpdateMulti7+DataUpsert17+Engine31+LastError5+NewNodes22+SqlScript5+SqlScriptSupport22），Task 1 的 LogicFlowLastErrorTest 5/5 保留；git status 确认主代码仅 PageDefinitionService.java 改动（+6/-1），测试侧 11 文件；零 @Disabled/@Ignore
+
+Stage Summary:
+- 修复前 43（18F+25E）→ 修复后 0：43 全部清偿，无跳过项（无需产品决策/外部依赖的场景未出现：真实邮箱/外部 API 类失败一条都没有）
+- 处置统计：测试侧 41（A 类补 @Mock 12 + B 类补安全上下文 11 + C 类补 @ActiveProfiles 2 + D 类过期断言 16 处涉及 4 类 17 失败）+ 主代码 1（PageDefinitionService stripCompiled 漏剥 display，真 bug）
+- 改动文件：主代码 PageDefinitionService.java（1）；测试 AiPropertiesTest/FormSchemaValidatorTest/DataSourceDefinitionServiceTest/JoinSqlGeneratorTest/AddSignServiceTest/RejectServiceTest/TaskRemindServiceTest/TransferServiceTest/WorkflowTaskServiceCompleteTest/DeliveryControllerTest/SysMenuRepositoryTest（11）
+- 遗留风险：①schemaEquals 对「一边声明 display 一边未声明」的极端草稿会视为未变化（语义取舍：display 由系统缺省 table，声明意图差异暂不区分，如需严格可改为比对原始声明 schema）②AiAutoConfiguration 的 @ConditionalOnProperty matchIfMissing=false 与 POJO 默认 enabled=true 存在「无配置时无 chatModel bean 但 isConfigured=true」的微妙错位（既有行为，未改）③SysMenuRepositoryTest 走 H2 create-drop，真库方言差异仍靠生产回归覆盖；全量套件含 3 个 @SpringBootTest 上下文，约 3.5 分钟/轮，内存峰值可控（MAVEN_OPTS -Xmx768m 未 OOM）
+---

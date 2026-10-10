@@ -1,6 +1,7 @@
 package com.workflow.engine.task;
 
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger;
 import com.workflow.engine.tenant.TenantProvider;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.MultiInstanceLoopCharacteristics;
@@ -43,6 +44,8 @@ class AddSignServiceTest {
     TenantProvider tenantProvider;
     @Mock
     WfTaskCommentRepository commentRepository;
+    @Mock
+    LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     @InjectMocks
     AddSignService addSignService;

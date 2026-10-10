@@ -31,13 +31,26 @@ class FormSchemaValidatorTest {
     }
 
     @Test
-    void invalidType_downgradedToInput() {
+    void sliderType_whitelisted_keptAsIs() {
+        // 词汇表已与设计器真实 type 对齐：slider 在白名单内（不再降级为 input）
         String json = "{\"rule\":[{\"type\":\"slider\",\"field\":\"score\",\"title\":\"评分\"}]}";
 
         AiFormGenerateResult r = validator.validate(json);
 
-        assertThat(r.fields().get(0).componentType()).isEqualTo("input");
-        assertThat(r.warnings()).anyMatch(w -> w.contains("slider"));
+        assertThat(r.fields()).hasSize(1);
+        assertThat(r.fields().get(0).componentType()).isEqualTo("slider");
+        assertThat(r.warnings()).isEmpty();
+    }
+
+    @Test
+    void unknownType_droppedWithWarning() {
+        // 白名单外且无别名映射的 type：不再降级为 input，而是丢弃该条目并记 warning
+        String json = "{\"rule\":[{\"type\":\"richtext\",\"field\":\"score\",\"title\":\"评分\"}]}";
+
+        AiFormGenerateResult r = validator.validate(json);
+
+        assertThat(r.fields()).isEmpty();
+        assertThat(r.warnings()).anyMatch(w -> w.contains("richtext"));
     }
 
     @Test
@@ -100,12 +113,14 @@ class FormSchemaValidatorTest {
     }
 
     @Test
-    void divider_keptWithoutBeingListedAsField() {
+    void dividerLayoutComponent_droppedWithWarning() {
+        // divider 等布局组件不在白名单/别名映射内 → 整条丢弃（不出现在产物 schema，也不列为字段）
         String json = "{\"rule\":[{\"type\":\"divider\",\"title\":\"分割\"}]}";
 
         AiFormGenerateResult r = validator.validate(json);
 
         assertThat(r.fields()).isEmpty();
-        assertThat(r.schema()).contains("divider");
+        assertThat(r.schema()).doesNotContain("divider");
+        assertThat(r.warnings()).anyMatch(w -> w.contains("divider"));
     }
 }

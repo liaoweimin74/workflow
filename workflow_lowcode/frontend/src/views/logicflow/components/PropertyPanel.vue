@@ -583,7 +583,7 @@
 
                 <el-form-item required>
                   <template #label>
-                    <FieldLabel label="冲突键（唯一字段）" tip="按该字段判定存在性：命中即更新、未命中即新增；下拉仅列物理表 (tenant_id, 字段) 二列唯一索引的字段（表单设计器标记「唯一」并重新发布后生成）；运行期引擎实查索引兜底校验，缺索引直接节点失败" />
+                    <FieldLabel label="冲突键（唯一字段）" tip="按该字段判定存在性：命中即更新、未命中即新增；下拉仅列表单中标记「唯一」的业务字段——发布时自动生成 (tenant_id, 该字段) 复合唯一索引；tenant_id 列由引擎自动维护且发布时已自动创建，无需手动添加；运行期引擎实查索引兜底校验，缺索引直接节点失败" />
                   </template>
                   <el-select
                     v-model="u.conflictKey"
@@ -597,7 +597,7 @@
                     <el-option v-for="c in upsertEntryConflictOptions(u.formKey)" :key="c" :label="c" :value="c" />
                   </el-select>
                   <div v-if="u.formKey && !upsertEntryLoading(u.formKey) && !upsertEntryConflictOptions(u.formKey).length" class="rows-empty du-warn">
-                    该表单物理表暂无 (tenant_id, 字段) 唯一索引：请先在表单设计器将判定字段标记「唯一」并重新发布
+                    该表单还没有任何标记为「唯一」的业务字段，因此无法判定数据重复：请到表单设计器的字段配置中，把用于判重的字段打开「唯一」开关并重新发布（发布时自动生成 (tenant_id, 字段) 复合唯一索引；tenant_id 列由系统自动创建和维护，不是缺少它）
                   </div>
                 </el-form-item>
 

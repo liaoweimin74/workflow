@@ -5922,3 +5922,21 @@ Work Log:
 Stage Summary:
 - 用户两报障闭环：①新 jar 上线 UNKNOWN_NODE_TYPE 根治（前端强刷即恢复）②多表单支持完整交付：设计器多表单卡片编辑器→保存→发布→运行（单事务全有或全无）→DB 双表落库→汇总 {total,created,updated,u0|别名.{result,affected,id,table}} 下游可点路径引用
 - 使用注意：无唯一索引的表单（bill_test 等）冲突键下拉为空属预期，需在表单设计器标记「唯一」字段并重新发布
+---
+Task ID: dev-tenantid-clarify-20261010-0145（用户报障澄清+链路验证）
+Agent: 主控（Z.ai Code）
+Task: 用户问：DATA_UPSERT 选 bill_test 提示没有 tenant_id 字段，业务表单发布时不是应该自动加上吗？
+
+Work Log:
+- 【根因澄清】报错/提示的真实含义不是「缺 tenant_id 列」：SHOW COLUMNS 证实 wf_biz_bill_test 的 tenant_id varchar(64) NOT NULL 已由发布链路自动创建（DdlBuilder.buildCreateTable L54）；真实缺的是 **(tenant_id, 冲突键) 二列复合唯一索引**（LogicFlowEngine L910 hasTenantScopedUniqueIndex 实查 information_schema 后报「冲突键缺少 (tenant_id, xxx) 唯一索引」）
+- 【bill_test 现状】wf_form_def v1 column_config 12 个业务字段全部 unique=false → SHOW INDEX 仅 PRIMARY(id) → 冲突键下拉空 + PropertyPanel 空态提示，均属预期行为
+- 【设计原理】tenant_id 列自动建但唯一索引不能自动建——系统无法猜测哪个业务字段适合判重，必须由用户在设计器「列映射确认」对话框（发布流程中）打开字段的「唯一」开关；发布时 DdlBuilder 生成 UNIQUE KEY uk_<formKey>_<col> (tenant_id, col)，且 DynamicTableManager 实查既有索引保证幂等
+- 【链路 E2E 9/9 全 PASS】scripts/e2e-unique-field-chain.mjs（入库）：临时表单 e2u_uniq_demo（bill_no unique=true）→ 发布 → 物理表自动出现 uk_ 前缀 (tenant_id,bill_no) 唯一索引 + tenant_id 列 → unique-keys API 返回 [[tenant_id,bill_no]]（PropertyPanel 冲突键下拉数据源）→ DATA_UPSERT 流程发布校验通过 → run created→updated（同 id）→ 清理零残留；教训：表单 key 软删除后不可复用（每次时间戳后缀）、PUBLISHED 表单不能删（先 SQL 翻 DRAFT 再调 DELETE 触发 FormDeletedEvent）、数据源自动命名 <表单名> 数据源 占 uk_ds_tenant_name（表单名也要唯一化）、unique-keys 正确路径 /api/v1/data-sources/db/tables/{table}/unique-keys（库名不在路径）、run 输出在 outputVars.<nodeId>
+- 【文案优化（防再误读）】PropertyPanel：冲突键 FieldLabel tip 与空态提示重写——明确「tenant_id 列由系统自动创建和维护，不是缺少它」「还没有任何标记为唯一的业务字段，请打开判重字段的唯一开关并重新发布」；ColumnConfigDialog 主表「唯一」表头加 el-tooltip（虚线下划线 cursor:help 样式）：「开启后发布时自动生成 (tenant_id, 该字段) 复合唯一索引：同租户内该字段值不可重复；可作为数据写入（UPSERT）节点的冲突键用于判重」
+- 【Agent Browser 实测】登录→新建逻辑流 upsert_hint_e2e→画布加 DATA_UPSERT 节点→选 bill_test → 新空态文案正确渲染 ✓；表单设计器 bill_test → 重新发布 → 列映射确认对话框「唯一」表头 tooltip 正确显示 ✓（随后取消未发布）；测试流程已删，数据库零残留（form/table/datasource/flow 均 0）
+- 【质量关】vue-tsc 54=基线零新增；ColumnConfigDialog.test 42/42、dsl.test 32/32 全绿；期间 vite-error-overlay 为 MultiEdit 写盘中间态陈旧报错，刷新即消（非真实错误）
+
+Stage Summary:
+- 用户问题定性：不是缺陷而是配置缺失 + 文案歧义；tenant_id 列发布时确实自动创建，缺的是 (tenant_id, 冲突字段) 复合唯一索引，需在设计器把判重字段标「唯一」再发布
+- 给用户的操作路径已双端验证可行（API E2E 9/9 + 浏览器实测）；bill_test 若需接入 DATA_UPSERT：设计器打开某业务字段「唯一」开关 → 重新发布 → 冲突键下拉即出现该字段
+- 双向引导文案上线：设计器侧 tooltip 讲清「唯一」开关的作用，编排器侧空态文案讲清该怎么做，消除 tenant_id 误读

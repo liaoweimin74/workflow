@@ -21,6 +21,16 @@ import SystemAttachment from '@/components/business/SystemAttachment.vue'
 import SystemImage from '@/components/business/SystemImage.vue'
 import FormulaField from '@/components/business/FormulaField.vue'
 import FormulaExpressionEditor from '@/components/business/FormulaExpressionEditor.vue'
+// 业务扩展组件（Task 3-a/3-c/3-g）：地址/字典下拉/自动编号/关联卡片/定位/分步表单/抽屉容器
+import AreaPicker from '@/components/business/AreaPicker.vue'
+import DictSelect from '@/components/business/DictSelect.vue'
+import AutoNumber from '@/components/business/AutoNumber.vue'
+import RelationCard from '@/components/business/RelationCard.vue'
+import LocationPicker from '@/components/business/LocationPicker.vue'
+import StepsForm from '@/components/business/StepsForm.vue'
+import DrawerContainer from '@/components/business/DrawerContainer.vue'
+// 属性面板通用 JSON 数组编辑器（form-create 控件，无 vendor rule 组件的 items 配置用）
+import JsonItemsEditor from '@/components/business/JsonItemsEditor.vue'
 import PageDataTable from '@/views/page/components/PageDataTable.vue'
 import DashKpi from '@/views/dashboard/components/DashKpi.vue'
 import DashChart from '@/views/dashboard/components/DashChart.vue'
@@ -28,6 +38,8 @@ import DashFilter from '@/views/dashboard/components/DashFilter.vue'
 import DashGoal from '@/views/dashboard/components/DashGoal.vue'
 import DashLeaderboard from '@/views/dashboard/components/DashLeaderboard.vue'
 import DashAlert from '@/views/dashboard/components/DashAlert.vue'
+// 环比指标卡（Task 3-h）：DashKpi 同族，双实例注册
+import DashKpiTrend from '@/views/dashboard/components/DashKpiTrend.vue'
 import App from './App.vue'
 import router from './router'
 import { patchMessageBoxDraggable } from './utils/elementPlusDraggable'
@@ -61,6 +73,16 @@ FcDesigner.component('SystemImage', SystemImage)
 FcDesigner.component('FormulaField', FormulaField)
 // Task 145：表达式可视化编辑器（属性面板自定义 prop 组件，仅面板用；全局注册使面板 form-create 实例可解析）
 FcDesigner.component('FormulaExpressionEditor', FormulaExpressionEditor)
+// 业务扩展组件（Task 3-a/3-c/3-g）：注册名与 vendor rule 物料的 name/type 严格一致
+FcDesigner.component('areaPicker', AreaPicker)
+FcDesigner.component('dictSelect', DictSelect)
+FcDesigner.component('AutoNumber', AutoNumber)
+FcDesigner.component('RelationCard', RelationCard)
+FcDesigner.component('LocationPicker', LocationPicker)
+FcDesigner.component('StepsForm', StepsForm)
+FcDesigner.component('DrawerContainer', DrawerContainer)
+// 属性面板 JSON 数组编辑器（form-create 控件，无 vendor rule 组件的 items 配置用）
+FcDesigner.component('JsonItemsEditor', JsonItemsEditor)
 // 数据表格：全局注册，使表单设计器（画布 + 运行时渲染）与页面设计器/渲染页都能使用
 FcDesigner.component('page-table', PageDataTable)
 // 仪表盘组件（Task 119）：设计器画布 + 运行时渲染双实例可见
@@ -70,6 +92,8 @@ FcDesigner.component('dash-filter', DashFilter)
 FcDesigner.component('dash-goal', DashGoal)
 FcDesigner.component('dash-leaderboard', DashLeaderboard)
 FcDesigner.component('dash-alert', DashAlert)
+// 环比指标卡（Task 3-h）：DashKpi 同族
+FcDesigner.component('dash-kpi-trend', DashKpiTrend)
 app.use(formCreate)
 app.use(FcDesigner)
 app.mount('#app')

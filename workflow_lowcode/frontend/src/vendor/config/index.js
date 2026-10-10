@@ -42,6 +42,13 @@ import tableFormColumn from './rule/tableFormColumn';
 import image from './rule/image';
 import signaturePad from './rule/signaturePad';
 import title from './rule/title';
+import areaPicker from './rule/areaPicker';
+import dictSelect from './rule/dictSelect';
+import autoNumber from './rule/autoNumber';
+import relationCard from './rule/relationCard';
+import locationPicker from './rule/locationPicker';
+import stepsForm from './rule/stepsForm';
+import drawerContainer from './rule/drawerContainer';
 
 
 const ruleList = [
@@ -50,6 +57,9 @@ const ruleList = [
     alert, button, text, title, html, divider, tag, image,
     row, table, tabs, space, card, collapse,
     col, tabPane, collapseItem,
+    // 业务扩展组件（Task 3-a/3-c/3-g）：地址/字典下拉/自动编号/关联卡片/定位/分步表单/抽屉容器
+    areaPicker, dictSelect, autoNumber, relationCard, locationPicker,
+    stepsForm, drawerContainer,
 ];
 
 export default ruleList;

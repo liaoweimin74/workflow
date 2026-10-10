@@ -91,6 +91,17 @@ import DashKpi from '@/views/dashboard/components/DashKpi.vue'
 import DashChart from '@/views/dashboard/components/DashChart.vue'
 import PageDataTree from './components/PageDataTree.vue'
 import PageDataCards from './components/PageDataCards.vue'
+// PAGE 轨新组件（Task 3-f/3-h/3-b）：录入/详情/图表/树表格/五件套
+import PageDataForm from './components/PageDataForm.vue'
+import PageDataDetail from './components/PageDataDetail.vue'
+import PageDataChartPage from './components/PageDataChartPage.vue'
+import PageTreeTable from './components/PageTreeTable.vue'
+import PageIframe from './components/PageIframe.vue'
+import PageNoticeCarousel from './components/PageNoticeCarousel.vue'
+import PageCalendar from './components/PageCalendar.vue'
+import PageTimeline from './components/PageTimeline.vue'
+import PageSteps from './components/PageSteps.vue'
+import DashKpiTrend from '@/views/dashboard/components/DashKpiTrend.vue'
 import { measureFormLabelWidth } from '@/views/form/components/formLabelWidth'
 import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
 import { dataSourceApi } from '@/api/data-source'
@@ -104,9 +115,21 @@ import { useLinkageContainer } from '@/views/form/composables/useLinkageContaine
 formCreate.component('page-table', PageDataTable)
 formCreate.component('page-tree', PageDataTree)
 formCreate.component('page-list-cards', PageDataCards)
+// PAGE 轨新组件：运行时渲染注册（设计器画布侧在 PageDesigner FcDesigner.component）
+formCreate.component('page-form', PageDataForm)
+formCreate.component('page-detail', PageDataDetail)
+formCreate.component('page-chart', PageDataChartPage)
+formCreate.component('page-tree-table', PageTreeTable)
+// 纯展示五件套（Task 3-b）：无数据绑定，仅注册渲染
+formCreate.component('page-iframe', PageIframe)
+formCreate.component('page-notice-carousel', PageNoticeCarousel)
+formCreate.component('page-calendar', PageCalendar)
+formCreate.component('page-timeline', PageTimeline)
+formCreate.component('page-steps', PageSteps)
 // 仪表盘组件（Task 119）：运行时渲染注册
 formCreate.component('dash-kpi', DashKpi)
 formCreate.component('dash-chart', DashChart)
+formCreate.component('dash-kpi-trend', DashKpiTrend)
 
 /** 宿主（PageRenderer）已加载的页面定义；传入时直接使用不自行请求，缺省回退按 pageKey 加载 */
 const props = defineProps<{ definition?: PageDefinitionDetailDTO }>()
@@ -387,7 +410,7 @@ function transformComponent(node: any): any {
   // 字符串子节点（text/button 文字内容）原样透传，避免 {...'文字'} 展开为字符索引对象
   if (typeof node !== 'object' || node === null) return node
   const next = { ...node, props: { ...(node.props || {}) }, on: { ...(node.on || {}) } }
-  const DASH_DATA_TYPES = new Set(['dash-kpi', 'dash-chart', 'dash-goal', 'dash-leaderboard', 'dash-alert'])
+  const DASH_DATA_TYPES = new Set(['dash-kpi', 'dash-chart', 'dash-goal', 'dash-leaderboard', 'dash-alert', 'dash-kpi-trend'])
   if (DASH_DATA_TYPES.has(String(next.type)) || next.type === 'dash-filter') {
     // 仪表盘组件族（Task 119/120）：注入 dsRefId + 实例上报（动作总线 refresh/set-filter）
     // 标题在组件内部渲染（图表标题样式）；置空避免 form-create 再包一层 form-item 标签
@@ -419,7 +442,7 @@ function transformComponent(node: any): any {
       }
     }
   }
-  if (next.type === 'page-table' || next.type === 'page-tree' || next.type === 'page-list-cards') {
+  if (next.type === 'page-table' || next.type === 'page-tree' || next.type === 'page-list-cards' || next.type === 'page-form' || next.type === 'page-detail' || next.type === 'page-chart' || next.type === 'page-tree-table') {
     next.props.pageKey = pageKey.value
     // 注入 dsRefId（页面内 dataSourceId → 全局数据源 refId，供写操作用）
     if (next.props.dataSourceId) {
@@ -452,9 +475,10 @@ function transformComponent(node: any): any {
       dispatchActions('row-click', { node: data, row: data, source })
     }
   }
-  if (next.type === 'page-table' || next.type === 'page-list-cards') {
+  if (next.type === 'page-table' || next.type === 'page-list-cards' || next.type === 'page-form' || next.type === 'page-detail' || next.type === 'page-chart' || next.type === 'page-tree-table') {
     // 设计器保存的 designMode 仅用于预览，已发布 PAGE 运行时不能因此隐藏查询/分页/Excel 导入导出。
     // page-table 同理（PageDataTable excelExportOn/excelImportOn 以 !designMode 为前提），预览态保持 true。
+    // page-form 依赖 designMode 在画布禁写（提交禁用），运行态必须按 preview 归一。
     next.props.designMode = route.query.preview === 'true'
   }
   if (Array.isArray(next.children)) {

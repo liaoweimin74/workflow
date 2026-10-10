@@ -52,7 +52,9 @@ function mountConfig(columns: any[]) {
 function lastColumnsEmit(wrapper: ReturnType<typeof mount>): any[] {
   const events = wrapper.emitted('update:columns') as unknown[][] | undefined
   expect(events, '应发出 update:columns').toBeTruthy()
-  return events![events!.length - 1] as any[]
+  // emitted 每条记录是参数数组 [payload]，取首个参数（columns 数组本体）
+  const last = events![events!.length - 1] as any[]
+  return (Array.isArray(last) && last.length && Array.isArray(last[0]) ? last[0] : last) as any[]
 }
 
 describe('QueryColumnsConfig — 列高级配置 aggregate 写回（汇总 计数→无 回归）', () => {

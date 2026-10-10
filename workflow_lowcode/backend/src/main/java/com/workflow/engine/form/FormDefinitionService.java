@@ -58,6 +58,8 @@ public class FormDefinitionService {
             "input", "textarea", "inputNumber", "select", "radio", "checkbox",
             "datePicker", "timePicker", "switch", "rate", "slider", "cascader",
             "colorPicker", "upload", "tree", "fcEditor", "signaturePad",
+            // 业务扩展字段（Task 3-a/3-c/3-g）：地址/字典下拉/自动编号/关联卡片/定位
+            "areaPicker", "dictSelect", "AutoNumber", "RelationCard", "LocationPicker",
             // 外部数据展示（合法、不生成业务列）
             "dataPicker", "page-list-cards", "page-table", "LookupPicker",
             // 子表（发布流程建独立物理表）
@@ -65,7 +67,9 @@ public class FormDefinitionService {
             // 布局/辅助（无 field，纯渲染）
             "fcRow", "fcTable", "fcFrame", "fcFragment", "fcGroup", "col", "space",
             "div", "html", "text", "elCard", "elCollapse", "elCollapseItem", "elTabs",
-            "elTabPane", "elDivider", "elTag", "elAlert", "elButton", "elImage");
+            "elTabPane", "elDivider", "elTag", "elAlert", "elButton", "elImage",
+            // 布局容器扩展（Task 3-g）：分步表单/抽屉容器（children 递归校验）
+            "StepsForm", "DrawerContainer");
 
     /** 子表组件：发布时创建独立子表物理表（wf_biz_<formKey>_<field>） */
     private static final Set<String> SUBTABLE_COMPONENTS = Set.of("group", "tableForm", "subForm");

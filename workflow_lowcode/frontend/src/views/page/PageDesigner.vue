@@ -22,6 +22,7 @@
         {{ statusLabel(formStatus) }}
       </el-tag>
       <div class="toolbar-right">
+        <el-button plain :icon="Grid" @click="insertLeftTreeRightTableTemplate">左树右表</el-button>
         <el-button plain @click="dsDialogVisible = true">
           数据源配置（{{ schema.dataSources.length }}）
         </el-button>
@@ -72,7 +73,7 @@
       @confirm="handlePageTableConfirm"
     />
 
-    <!-- 仪表盘组件配置（Task 119）：KPI 指标卡 / 统计图 -->
+    <!-- 仪表盘组件配置（Task 119）：KPI 指标卡 / 统计图 / 环比卡 -->
     <DashConfigDialog
       v-model="dashDialogVisible"
       :mode="dashDialogMode"
@@ -82,11 +83,29 @@
       @confirm="handleDashConfirm"
     />
 
+    <!-- 图表配置（Task 3-e）：维度/指标/类型 -->
+    <PageChartConfigDialog
+      v-model="chartDialogVisible"
+      :config="currentChartConfig"
+      :candidates="chartCandidates"
+      @confirm="handleChartConfirm"
+    />
+
     <!-- 卡片样式脚本配置（结构化 CardStyle，覆盖主题） -->
     <CardStyleConfigDialog
       v-model="cardStyleDialogVisible"
       :card-style="currentCardStyle"
       @confirm="handleCardStyleConfirm"
+    />
+
+    <!-- 轻量数据源绑定（page-form/page-detail/page-chart/page-tree-table 专用：容器模式仅写 dataSourceId+filter，不产生列配置，保护各组件专属 props） -->
+    <DsBindingConfigDialog
+      v-model="lightDsDialogVisible"
+      :current-fields="[]"
+      :binding-props="currentLightDsProps"
+      :form-data-sources="schema.dataSources.map(ds => ({ id: ds.id, refId: ds.refId }))"
+      :enabled-data-sources="enabledDataSources"
+      @confirm="handleLightDsConfirm"
     />
 
     <!-- 数据表单容器配置：与表单设计器复用同一套非表格模式绑定弹窗 -->
@@ -176,12 +195,24 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Promotion, View, Document, Menu } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Promotion, View, Document, Menu, Grid } from '@element-plus/icons-vue'
 import FcDesigner from '@form-create/designer'
 import PageDataTable from './components/PageDataTable.vue'
 import PageDataCards from './components/PageDataCards.vue'
 import { tableFilterStore } from './components/tableFilterStore'
 import PageDataTree from './components/PageDataTree.vue'
+// PAGE 轨新组件（Task 3-b/3-e/3-f/3-h）：录入/详情/图表/树表格/五件套
+import PageDataForm from './components/PageDataForm.vue'
+import PageDataDetail from './components/PageDataDetail.vue'
+import PageDataChartPage from './components/PageDataChartPage.vue'
+import PageTreeTable from './components/PageTreeTable.vue'
+import PageIframe from './components/PageIframe.vue'
+import PageNoticeCarousel from './components/PageNoticeCarousel.vue'
+import PageCalendar from './components/PageCalendar.vue'
+import PageTimeline from './components/PageTimeline.vue'
+import PageSteps from './components/PageSteps.vue'
+import PageChartConfigDialog from './components/PageChartConfigDialog.vue'
+import DashKpiTrend from '@/views/dashboard/components/DashKpiTrend.vue'
 import { pageApi, type PageDefinitionDetailDTO, type PageMenuItem } from '@/api/page'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 import { useAuthStore } from '@/stores/auth'
@@ -210,12 +241,26 @@ import type { CardStyle } from '@/components/business/ListCards.types'
 import { collectFieldsOfType, collectFieldKeys, collectFormulaRefFields, patchFieldProps, resolveActiveField, ensureRuleProps } from '@/views/form/formRuleWalk'
 import { attachmentHintText, imageHintText } from '@/components/business/componentHints'
 import { setFormulaFieldProvider } from '@/components/business/formulaFieldRegistry'
-import { setActiveDsBindings } from '@/utils/formDsBindingsStore'
+import { setActiveDsBindings, activeDsBindings } from '@/utils/formDsBindingsStore'
 
 // 注册页面数据组件到 FcDesigner（表单组件已全局注册，页面可复用）
 FcDesigner.component('page-table', PageDataTable)
 FcDesigner.component('page-tree', PageDataTree)
 FcDesigner.component('page-list-cards', PageDataCards)
+// PAGE 轨新组件：设计器画布 + 预览（运行时注册在 PageRendererPage）
+FcDesigner.component('page-form', PageDataForm)
+FcDesigner.component('page-detail', PageDataDetail)
+FcDesigner.component('page-chart', PageDataChartPage)
+FcDesigner.component('page-tree-table', PageTreeTable)
+// 纯展示五件套（Task 3-b）：无数据绑定
+FcDesigner.component('page-iframe', PageIframe)
+FcDesigner.component('page-notice-carousel', PageNoticeCarousel)
+FcDesigner.component('page-calendar', PageCalendar)
+FcDesigner.component('page-timeline', PageTimeline)
+FcDesigner.component('page-steps', PageSteps)
+FcDesigner.component('dash-kpi-trend', DashKpiTrend)
+/** 环比指标卡注册名（DashKpi 同族，组件内未导出常量，本地声明） */
+const DASH_KPI_TREND_NAME = 'dash-kpi-trend'
 
 const route = useRoute()
 const router = useRouter()
@@ -455,8 +500,11 @@ function handleCardStyleConfirm(style: CardStyle) {
 function enableCardDesignMode(rules: any[]): any[] {
   return rules.map((rule) => {
     const next = { ...rule, props: rule.props ? { ...rule.props } : rule.props }
-    // 设计态标记：卡片/表格据此固定取首页且最多 10 条（与运行态分页语义区分）
-    if (next.type === 'page-list-cards' || next.type === 'page-table') {
+    // 设计态标记：卡片/表格/图表/树表格据此固定取首页且最多 10 条，page-form 画布禁写（与运行态分页/提交语义区分）
+    if (
+      next.type === 'page-list-cards' || next.type === 'page-table' ||
+      next.type === 'page-chart' || next.type === 'page-tree-table' || next.type === 'page-form'
+    ) {
       next.props = { ...(next.props || {}), designMode: true }
     }
     if (Array.isArray(next.children)) next.children = enableCardDesignMode(next.children)
@@ -478,6 +526,7 @@ const DASH_CONFIG_TYPES: Record<DashConfigMode, string> = {
   alert: DASH_ALERT_NAME,
   leaderboard: DASH_LEADERBOARD_NAME,
   filter: DASH_FILTER_NAME,
+  kpiTrend: DASH_KPI_TREND_NAME,
 }
 const currentDashType = computed(() => DASH_CONFIG_TYPES[dashDialogMode.value] || '')
 const currentDashProps = computed(() => {
@@ -507,6 +556,91 @@ function handleDashConfirm(patch: Record<string, any>) {
 function dsNameOf(ds: { id: string; refId: string }): string {
   const global = enabledDataSources.value.find((d) => d.id === ds.refId)
   return global ? global.name : ''
+}
+
+// ==================== 数据图表配置（Task 3-e：page-chart 维度/指标） ====================
+const chartDialogVisible = ref(false)
+const chartCandidates = ref<Array<{ key: string; label?: string; columnType?: string | null }>>([])
+const currentChartConfig = computed(() => {
+  const active = designerRef.value?.activeRule as any
+  return active?.type === 'page-chart' ? active?.props?.config || null : null
+})
+/** 打开图表配置：从页面绑定层解析 refId 拉取列元数据作候选 */
+async function openChartConfig() {
+  chartDialogVisible.value = true
+  chartCandidates.value = []
+  const active = designerRef.value?.activeRule as any
+  const dsId = active?.props?.dataSourceId as string | undefined
+  if (!dsId) return
+  const binding = (activeDsBindings.value || []).find((d: any) => d.id === dsId)
+  if (!binding?.refId) return
+  try {
+    const res = await dataSourceApi.getMetadata(binding.refId)
+    chartCandidates.value = ((res.data as any)?.columns || []).filter((c: any) => !c.hidden)
+  } catch {
+    chartCandidates.value = []
+  }
+}
+function handleChartConfirm(config: any) {
+  const active = designerRef.value?.activeRule as any
+  if (active?.type === 'page-chart' && active.props) {
+    active.props.config = config
+    ElMessage.success('图表配置已保存')
+  }
+}
+
+// ===== 轻量数据源绑定（page-detail/page-tree-table：容器模式仅写 dataSourceId+filter，
+// 避免表格模式弹窗把确认输出 columns/headerFilter 等覆写到这两个组件的专属 props 上） =====
+const lightDsDialogVisible = ref(false)
+const currentLightDsProps = computed(() => (designerRef.value?.activeRule as any)?.props || {})
+function openLightDsConfig() {
+  lightDsDialogVisible.value = true
+}
+function handleLightDsConfirm(newProps: Record<string, any>) {
+  const active = designerRef.value?.activeRule as any
+  if (active?.props) Object.assign(active.props, newProps)
+  ElMessage.success('数据源配置已保存')
+}
+
+// ==================== 左树右表一键模板（Task 3-h） ====================
+/** 向画布追加 page-tree（左 8 栅格）+ page-table（右 16 栅格），联动由用户在事件链中配置 node-click → set-filter */
+function insertLeftTreeRightTableTemplate() {
+  const designer = designerRef.value as any
+  if (!designer || typeof designer.setRule !== 'function') return
+  const ts = Date.now()
+  const treeRule = {
+    type: 'page-tree',
+    field: 'tree' + ts,
+    title: '左树',
+    col: { span: 8 },
+    props: {
+      dataSourceId: '',
+      'node-key': 'id',
+      props: { label: 'name', children: 'children' },
+      highlightCurrent: true,
+      defaultExpandAll: true,
+    },
+  }
+  const tableRule = {
+    type: 'page-table',
+    field: 'table' + ts,
+    title: '右表',
+    col: { span: 16 },
+    props: {
+      dataSourceId: '',
+      border: true,
+      stripe: true,
+      columns: [],
+      sortable: false,
+      filterable: false,
+      pagination: true,
+      selectionMode: 'none',
+      actionColumnWidth: 0,
+    },
+  }
+  const rules = (typeof designer.getRule === 'function' ? designer.getRule() : []) || []
+  designer.setRule([...rules, treeRule, tableRule])
+  ElMessage.success('已插入左树右表模板：请分别配置两个组件的数据源，并为左树配置 node-click → set-filter 联动到右表')
 }
 
 function isContainerRule(active: any): boolean {
@@ -540,6 +674,20 @@ function registerPageComponents() {
       style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
       props: { size: 'small' },
       on: { click: () => openPageTableDsConfig() },
+    },
+  ]
+
+  /** 轻量数据源按钮：容器模式弹窗，仅写 dataSourceId/filter（保护 page-detail.columns / page-tree-table.columns 等专属 props 不被表格模式确认输出覆写） */
+  const lightDsButton = () => [
+    {
+      type: 'button',
+      field: 'dsConfigTrigger',
+      title: '数据源',
+      children: ['配置数据源'],
+      native: true,
+      style: { width: '100%', borderColor: '#2E73FF', color: '#2E73FF' },
+      props: { size: 'small' },
+      on: { click: () => openLightDsConfig() },
     },
   ]
 
@@ -683,7 +831,7 @@ function registerPageComponents() {
     label: 'KPI 指标卡',
     name: DASH_KPI_NAME,
     icon: 'icon-statistic',
-    menu: 'main',
+    menu: 'chart',
     rule: () => dashKpiRule() as any,
   })
   designerRef.value?.setComponentRuleConfig(
@@ -696,7 +844,7 @@ function registerPageComponents() {
     label: '统计图',
     name: DASH_CHART_NAME,
     icon: 'icon-stack',
-    menu: 'main',
+    menu: 'chart',
     rule: () => dashChartRule() as any,
   })
   designerRef.value?.setComponentRuleConfig(
@@ -710,7 +858,7 @@ function registerPageComponents() {
     label: '筛选器',
     name: DASH_FILTER_NAME,
     icon: 'icon-data-select',
-    menu: 'main',
+    menu: 'chart',
     rule: () => dashFilterRule() as any,
   })
   designerRef.value?.setComponentRuleConfig(
@@ -723,7 +871,7 @@ function registerPageComponents() {
     label: '目标进度',
     name: DASH_GOAL_NAME,
     icon: 'icon-yes',
-    menu: 'main',
+    menu: 'chart',
     rule: () => dashGoalRule() as any,
   })
   designerRef.value?.setComponentRuleConfig(
@@ -736,7 +884,7 @@ function registerPageComponents() {
     label: '排行榜',
     name: DASH_LEADERBOARD_NAME,
     icon: 'icon-statistics',
-    menu: 'main',
+    menu: 'chart',
     rule: () => dashLeaderboardRule() as any,
   })
   designerRef.value?.setComponentRuleConfig(
@@ -749,7 +897,7 @@ function registerPageComponents() {
     label: '告警标记',
     name: DASH_ALERT_NAME,
     icon: 'icon-warning',
-    menu: 'main',
+    menu: 'chart',
     rule: () => dashAlertRule() as any,
   })
   designerRef.value?.setComponentRuleConfig(
@@ -757,6 +905,161 @@ function registerPageComponents() {
     () => [dashConfigButton('配置告警', () => openDashConfig('alert'))],
     true,
   )
+
+  // ===== PAGE 轨新组件（Task 3-e/3-f/3-h） =====
+  // 数据录入页（page-form）：绑定数据源 + 表单定义，create/edit 双模式
+  designerRef.value?.addComponent({
+    label: '数据录入',
+    name: 'page-form',
+    icon: 'icon-input',
+    menu: 'main',
+    rule: () => ({
+      type: 'page-form',
+      field: 'form' + Date.now(),
+      title: '数据录入',
+      props: { dataSourceId: '', mode: 'create', submitText: '提交' },
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-form', lightDsButton, true)
+
+  // KV 详情（page-detail）：行点击联动展示选中记录
+  designerRef.value?.addComponent({
+    label: '数据详情',
+    name: 'page-detail',
+    icon: 'icon-cell',
+    menu: 'main',
+    rule: () => ({
+      type: 'page-detail',
+      field: 'detail' + Date.now(),
+      title: '数据详情',
+      props: { dataSourceId: '', columns: [] },
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-detail', lightDsButton, true)
+
+  // 树形表格（page-tree-table）：平铺数据客户端组树只读展示
+  designerRef.value?.addComponent({
+    label: '树形表格',
+    name: 'page-tree-table',
+    icon: 'icon-tree',
+    menu: 'main',
+    rule: () => ({
+      type: 'page-tree-table',
+      field: 'treeTable' + Date.now(),
+      title: '树形表格',
+      props: { dataSourceId: '', columns: [], idKey: 'id', parentKey: 'parentId', border: true },
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-tree-table', lightDsButton, true)
+
+  // 数据图表（page-chart）：自取数 + 前端聚合，配置弹窗选维度/指标
+  designerRef.value?.addComponent({
+    label: '数据图表',
+    name: 'page-chart',
+    icon: 'icon-stack',
+    menu: 'chart',
+    rule: () => ({
+      type: 'page-chart',
+      field: 'chart' + Date.now(),
+      title: '数据图表',
+      props: { dataSourceId: '', config: null, height: '320px' },
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-chart', () => [
+    ...dataSourceProps(),
+    {
+      type: 'button',
+      field: 'chartConfigTrigger',
+      title: '',
+      children: ['配置图表'],
+      native: true,
+      style: { width: '100%', marginLeft: '0', borderColor: '#2E73FF', color: '#2E73FF' },
+      props: { size: 'small' },
+      on: { click: () => openChartConfig() },
+    },
+  ], true)
+
+  // 环比指标卡（dash-kpi-trend）：DashKpi 同族，配置走 DashConfigDialog kpiTrend 模式
+  designerRef.value?.addComponent({
+    label: '环比指标卡',
+    name: DASH_KPI_TREND_NAME,
+    icon: 'icon-statistic',
+    menu: 'chart',
+    rule: () => ({
+      type: DASH_KPI_TREND_NAME,
+      field: 'kpiTrend' + Date.now(),
+      title: '环比指标卡',
+      props: { dataSourceId: '', compareOffset: 'month', compareLabel: '环比' },
+    }),
+  })
+  designerRef.value?.setComponentRuleConfig(
+    DASH_KPI_TREND_NAME,
+    () => [dashConfigButton('配置环比卡', () => openDashConfig('kpiTrend'))],
+    true,
+  )
+
+  // ===== 纯展示五件套（Task 3-b）：无数据绑定，items 用 JsonItemsEditor 直编 JSON 数组 =====
+  designerRef.value?.addComponent({
+    label: '内嵌网页',
+    name: 'page-iframe',
+    icon: 'icon-application',
+    menu: 'aide',
+    rule: () => ({ type: 'page-iframe', field: 'pageIframe' + Date.now(), title: '', props: { url: '', height: '360px', scrolling: true } }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-iframe', () => [
+    { type: 'input', field: 'url', title: '内嵌地址', props: { placeholder: 'https://...' } },
+    { type: 'input', field: 'height', title: '高度' },
+    { type: 'switch', field: 'scrolling', title: '允许滚动' },
+  ], true)
+
+  designerRef.value?.addComponent({
+    label: '公告轮播',
+    name: 'page-notice-carousel',
+    icon: 'icon-bulletin',
+    menu: 'aide',
+    rule: () => ({ type: 'page-notice-carousel', field: 'notice' + Date.now(), title: '', props: { items: [], height: '180px', interval: 4000 } }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-notice-carousel', () => [
+    { type: 'JsonItemsEditor', field: 'items', title: '公告项', info: '数组：[{title,content,color?}]' },
+    { type: 'input', field: 'height', title: '高度' },
+    { type: 'inputNumber', field: 'interval', title: '轮播间隔(ms)', props: { min: 1000, step: 500 } },
+  ], true)
+
+  designerRef.value?.addComponent({
+    label: '日历',
+    name: 'page-calendar',
+    icon: 'icon-calendar',
+    menu: 'aide',
+    rule: () => ({ type: 'page-calendar', field: 'calendar' + Date.now(), title: '', props: { highlightedDates: [] } }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-calendar', () => [
+    { type: 'JsonItemsEditor', field: 'highlightedDates', title: '高亮日期', info: '字符串数组：["2026-10-01", ...]' },
+  ], true)
+
+  designerRef.value?.addComponent({
+    label: '时间线',
+    name: 'page-timeline',
+    icon: 'icon-date',
+    menu: 'aide',
+    rule: () => ({ type: 'page-timeline', field: 'timeline' + Date.now(), title: '', props: { items: [], reverse: false } }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-timeline', () => [
+    { type: 'JsonItemsEditor', field: 'items', title: '节点', info: '数组：[{timestamp,title?,content?,color?}]' },
+    { type: 'switch', field: 'reverse', title: '倒序' },
+  ], true)
+
+  designerRef.value?.addComponent({
+    label: '步骤条',
+    name: 'page-steps',
+    icon: 'icon-step-form',
+    menu: 'aide',
+    rule: () => ({ type: 'page-steps', field: 'steps' + Date.now(), title: '', props: { items: [], active: 0, direction: 'horizontal' } }),
+  })
+  designerRef.value?.setComponentRuleConfig('page-steps', () => [
+    { type: 'JsonItemsEditor', field: 'items', title: '步骤', info: '数组：[{title,description?}]' },
+    { type: 'inputNumber', field: 'active', title: '当前步骤', props: { min: 0 } },
+    { type: 'select', field: 'direction', title: '方向', options: [{ label: '横向', value: 'horizontal' }, { label: '纵向', value: 'vertical' }] },
+  ], true)
 
   // 基础组件：计算公式（Task 144，组件已在 main.ts 全局注册）
   designerRef.value?.addComponent({

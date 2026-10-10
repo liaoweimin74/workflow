@@ -7,8 +7,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
+import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import MemberGroupPage from '../MemberGroupPage.vue'
+
+// auth store mock：hasPermission 必须全真，否则操作列/成员管理按钮被权限门控隐藏（mount 阶段真实 store 无用户态）
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ hasPermission: () => true, user: { username: 'admin' } }),
+}))
 
 vi.mock('@/api/memberGroup', () => ({
   getMemberGroupList: vi.fn(),
@@ -80,20 +86,23 @@ function group(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function mountPage() {
-  return mount(MemberGroupPage, {
+async function mountPage() {
+  const wrapper = mount(MemberGroupPage, {
     global: {
-      plugins: [ElementPlus],
+      plugins: [ElementPlus, createPinia()],
       directives: {
         permission: { mounted() {}, updated() {} },
       },
       stubs: { SearchTable: SearchTableStub, DataPicker: DataPickerStub },
     },
   })
+  // 等 onMounted fetchGroups 完成：selectedGroup 自动选中首组后，右栏 SearchTable（v-if）才渲染
+  await flushPromises()
+  return wrapper
 }
 
 /** 打开抽屉（模拟点击第一行的成员管理按钮） */
-async function openDrawer(wrapper: ReturnType<typeof mountPage>) {
+async function openDrawer(wrapper: Awaited<ReturnType<typeof mountPage>>) {
   const table = wrapper.findComponent(SearchTableStub)
   const manage = (table.props('actionButtons') as any[])[0]
   await manage.onClick(group())
@@ -110,8 +119,8 @@ beforeEach(() => {
 })
 
 describe('MemberGroupPage 数据引用录入（Task 95）', () => {
-  it('操作列提供「成员管理」入口', () => {
-    const wrapper = mountPage()
+  it('操作列提供「成员管理」入口', async () => {
+    const wrapper = await mountPage()
     const table = wrapper.findComponent(SearchTableStub)
     const labels = (table.props('actionButtons') as any[]).map((b) => b.label)
     expect(labels).toContain('成员管理')
@@ -119,7 +128,7 @@ describe('MemberGroupPage 数据引用录入（Task 95）', () => {
   })
 
   it('成员 Tab：DataPicker 绑定系统用户源（多选），解析 JSON id 后提交', async () => {
-    const wrapper = mountPage()
+    const wrapper = await mountPage()
     await openDrawer(wrapper)
 
     const pickers = wrapper.findAllComponents(DataPickerStub)
@@ -146,7 +155,7 @@ describe('MemberGroupPage 数据引用录入（Task 95）', () => {
   })
 
   it('未选择成员时点击添加 → warning 不调接口', async () => {
-    const wrapper = mountPage()
+    const wrapper = await mountPage()
     await openDrawer(wrapper)
 
     const addBtn = wrapper.findAll('button').find((b) => b.text().includes('添加成员'))!
@@ -159,7 +168,7 @@ describe('MemberGroupPage 数据引用录入（Task 95）', () => {
   })
 
   it('规则 Tab·按岗位：DataPicker 绑定系统岗位源（单选），提交解析第一个 id', async () => {
-    const wrapper = mountPage()
+    const wrapper = await mountPage()
     await openDrawer(wrapper)
 
     // 切到「自动规则」页签（drawer 未开 append-to-body，内容在 wrapper 内）
@@ -185,7 +194,7 @@ describe('MemberGroupPage 数据引用录入（Task 95）', () => {
   })
 
   it('规则 Tab·按组织机构：切换维度后 DataPicker 换绑组织机构源', async () => {
-    const wrapper = mountPage()
+    const wrapper = await mountPage()
     await openDrawer(wrapper)
 
     const tabItems = wrapper.element.querySelectorAll('.el-tabs__item')

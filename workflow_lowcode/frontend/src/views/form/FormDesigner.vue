@@ -49,7 +49,7 @@
       <fc-designer
         ref="designerRef"
         :height="designerHeight"
-        :config="{ fieldReadonly: false, disabledFormConfig: ['formCreateFormName'] }"
+        :config="{ fieldReadonly: false, disabledFormConfig: ['formCreateFormName'], hiddenMenu: ['chart'] }"
       />
     </div>
 

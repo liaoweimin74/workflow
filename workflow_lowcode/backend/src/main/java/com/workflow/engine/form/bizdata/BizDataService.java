@@ -10,6 +10,7 @@ import com.workflow.engine.form.FormDefinitionService;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.logicflow.service.FormLogicBindingService;
 import com.workflow.engine.tenant.TenantProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,8 @@ public class BizDataService {
     private final Map<String, BizDataHandler> coveringIndex;
     /** 表单 × 逻辑编排绑定调度（六类触发点；覆盖接管路径不自动触发） */
     private final FormLogicBindingService logicBindings;
+    /** 自动编号填充钩子（Task 3-d；旧签名兼容构造为 null，create 时判空跳过） */
+    private final AutoNumberHook autoNumberHook;
 
     /**
      * @param handlers Spring 自动注入所有 BizDataHandler bean（无则空列表）
@@ -53,12 +56,32 @@ public class BizDataService {
                           List<BizDataHandler> handlers,
                           List<FormProcessGuard> guards,
                           FormLogicBindingService logicBindings) {
+        this(jdbcTemplate, tableManager, formDefService, tenantProvider, objectMapper,
+                handlers, guards, logicBindings, null);
+    }
+
+    /**
+     * @param autoNumberHook 自动编号填充钩子（Task 3-d，Spring 主构造注入）
+     * @param handlers       Spring 自动注入所有 BizDataHandler bean（无则空列表）
+     * @param guards         Spring 自动注入所有 FormProcessGuard bean（无则空列表）
+     */
+    @Autowired
+    public BizDataService(JdbcTemplate jdbcTemplate,
+                          DynamicTableManager tableManager,
+                          FormDefinitionService formDefService,
+                          TenantProvider tenantProvider,
+                          ObjectMapper objectMapper,
+                          List<BizDataHandler> handlers,
+                          List<FormProcessGuard> guards,
+                          FormLogicBindingService logicBindings,
+                          AutoNumberHook autoNumberHook) {
         this.support = new BizDataSupport(jdbcTemplate, tableManager, formDefService, tenantProvider, objectMapper);
         this.tenantProvider = tenantProvider;
         this.guards = guards == null ? List.of() : guards;
         this.handlerIndex = buildHandlerIndex(handlers);
         this.coveringIndex = buildCoveringIndex(handlers);
         this.logicBindings = logicBindings;
+        this.autoNumberHook = autoNumberHook;
     }
 
     private static Map<String, List<BizDataHandler>> buildHandlerIndex(List<BizDataHandler> handlers) {
@@ -127,8 +150,14 @@ public class BizDataService {
         if (covering != null) {
             return covering.create(data);
         }
-        support.loadContext(formKey);
+        BizDataContext ctx = support.loadContext(formKey);
         String tenantId = tenantProvider.getTenantId();
+        // 自动编号填充（Task 3-d）：column_config/schema 中组件 type=AutoNumber 且提交值为空
+        // 的字段生成流水号（serialKey = formKey.fieldKey）。置于 BEFORE_CREATE 调度之前，
+        // 逻辑流与装饰钩子均可读到编号；钩子自带容错（失败仅 warn），绝不阻断创建。
+        if (autoNumberHook != null) {
+            autoNumberHook.fill(formKey, tenantId, ctx, data);
+        }
         logicBindings.dispatch(tenantId, FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,
                 FormLogicBindingService.TRIG_BEFORE_CREATE,
                 logicBindings.buildVars(FormLogicBindingService.FORM_TYPE_BUSINESS, formKey,

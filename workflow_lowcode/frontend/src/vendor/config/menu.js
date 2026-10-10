@@ -5,6 +5,11 @@ const menus = [
         list: []
     },
     {
+        name: 'chart',
+        title: '图表组件',
+        list: []
+    },
+    {
         name: 'system',
         title: '系统组件',
         list: []

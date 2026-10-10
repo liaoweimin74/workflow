@@ -16,7 +16,7 @@ describe('PageDesigner card data-source entry', () => {
 
     // 设计态必须主动填充 activeDsBindings，否则卡片/数据组件依赖运行态残留才解析出 refId
     // （"先开运行页再开设计页才有数据"），与 PageRendererPage.load 的写入对称。
-    expect(source).toContain("import { setActiveDsBindings } from '@/utils/formDsBindingsStore'")
+    expect(source).toContain("import { setActiveDsBindings, activeDsBindings } from '@/utils/formDsBindingsStore'")
     // load() 解析 schema 后立即写入本页 dataSources
     expect(source).toContain('setActiveDsBindings(schema.dataSources as any)')
     // 数据源配置变更时同步写入，reactive 生效触发组件重新取数
@@ -59,9 +59,10 @@ describe('PageDesigner card data-source entry', () => {
   it('marks page-table as design mode so it clamps to ≤10 rows and refetches on switch', () => {
     const source = readFileSync(resolve(__dirname, '../PageDesigner.vue'), 'utf8')
 
-    // enableCardDesignMode 需对 page-table 也注入 designMode:true，
+    // enableCardDesignMode 需对 page-table 也注入 designMode:true（新组件 page-chart/page-tree-table/page-form 同理），
     // 否则 PageDataTable 收不到标记，设计态取数不受 ≤10 限制、且无法区分运行态分页。
-    expect(source).toContain("if (next.type === 'page-list-cards' || next.type === 'page-table')")
+    expect(source).toContain("next.type === 'page-list-cards' || next.type === 'page-table'")
+    expect(source).toContain("next.type === 'page-chart' || next.type === 'page-tree-table' || next.type === 'page-form'")
     expect(source).toContain('designMode: true')
   })
 

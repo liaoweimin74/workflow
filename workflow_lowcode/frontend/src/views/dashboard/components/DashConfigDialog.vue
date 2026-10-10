@@ -164,6 +164,29 @@
             </el-form-item>
           </template>
 
+          <template v-if="mode === 'kpiTrend'">
+            <el-form-item label="时间字段">
+              <el-select v-model="form.trendField" placeholder="选择日期字段（空 = 全量主值，不算环比）" style="width: 100%" filterable clearable>
+                <el-option v-for="c in dateColumns" :key="c.key" :value="c.key" :label="`${c.label || c.key} (${c.key})`" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="对比窗口">
+              <el-radio-group v-model="form.compareOffset">
+                <el-radio value="day">日环比</el-radio>
+                <el-radio value="week">周环比</el-radio>
+                <el-radio value="month">月环比</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="环比标签">
+              <el-input v-model="form.compareLabel" maxlength="8" style="width: 160px" />
+            </el-form-item>
+            <el-form-item label="趋势配色">
+              <el-radio-group v-model="form.trendColorScheme">
+                <el-radio value="up-good">升好（涨绿跌红）</el-radio>
+                <el-radio value="down-good">降好（涨红跌绿）</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </template>
           <template v-if="mode === 'kpi'">
             <el-form-item label="环比趋势">
               <el-switch v-model="form.trendEnabled" />
@@ -269,7 +292,7 @@ import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { dataSourceApi, type DataSourceDTO } from '@/api/data-source'
 
-export type DashConfigMode = 'kpi' | 'chart' | 'goal' | 'alert' | 'leaderboard' | 'filter'
+export type DashConfigMode = 'kpi' | 'chart' | 'goal' | 'alert' | 'leaderboard' | 'filter' | 'kpiTrend'
 
 export interface DashConfigResult {
   mode: DashConfigMode
@@ -300,6 +323,10 @@ export interface DashConfigResult {
   trendField?: string
   sparkline?: boolean
   sparkRange?: number
+  /** kpiTrend（环比指标卡 Task 3-h） */
+  compareOffset?: string
+  compareLabel?: string
+  trendColorScheme?: string
   /** Task 123：宽度栅格跨度（1-24；设计器同步写入 rule.col.span） */
   span?: number
   /** filter */
@@ -334,10 +361,11 @@ const DIALOG_TITLES: Record<DashConfigMode, string> = {
   alert: '告警标记配置',
   leaderboard: '排行榜配置',
   filter: '筛选器配置',
+  kpiTrend: '环比指标卡配置',
 }
 const dialogTitle = computed(() => DIALOG_TITLES[props.mode] || '组件配置')
-/** 单值型（KPI/目标/告警共用单位/格式段） */
-const isKpiLike = computed(() => props.mode === 'kpi' || props.mode === 'goal' || props.mode === 'alert')
+/** 单值型（KPI/目标/告警/环比卡共用单位/格式段） */
+const isKpiLike = computed(() => props.mode === 'kpi' || props.mode === 'goal' || props.mode === 'alert' || props.mode === 'kpiTrend')
 
 const form = reactive({
   dataSourceId: '',
@@ -364,6 +392,10 @@ const form = reactive({
   trendField: '',
   sparkline: false,
   sparkRange: 12,
+  // kpiTrend（环比指标卡）
+  compareOffset: 'month',
+  compareLabel: '环比',
+  trendColorScheme: 'up-good',
   filterType: 'date-range',
   field: '',
   label: '',
@@ -406,6 +438,9 @@ watch(
     form.trendEnabled = p.trendEnabled === true
     form.trendGrain = p.trendGrain || 'day'
     form.trendField = p.trendField || ''
+    form.compareOffset = p.compareOffset || 'month'
+    form.compareLabel = p.compareLabel || '环比'
+    form.trendColorScheme = p.trendColorScheme || 'up-good'
     form.sparkline = p.sparkline === true
     form.sparkRange = Number(p.sparkRange || 12)
     form.filterType = p.filterType || 'date-range'
@@ -476,7 +511,6 @@ const canConfirm = computed(() => {
   if (form.agg !== 'count' && !form.metric) return false
   if (props.mode === 'kpi' && form.trendEnabled && !form.trendField) return false
   if (props.mode === 'alert' && form.threshold === null) return false
-  if (form.displayHeight === 'custom' && !form.displayHeightCustomText.trim()) return false
   return true
 })
 
@@ -581,6 +615,22 @@ function confirm(): void {
       threshold: form.threshold,
       alertText: form.alertText,
       numberFormat: form.numberFormat,
+      span: effectiveSpan.value,
+      height: effectiveDisplayHeight.value,
+    })
+  } else if (props.mode === 'kpiTrend') {
+    emit('confirm', {
+      mode: 'kpiTrend',
+      dataSourceId: form.dataSourceId,
+      title: form.title,
+      agg: form.agg,
+      metric: form.metric,
+      unit: form.unit,
+      numberFormat: form.numberFormat,
+      trendField: form.trendField,
+      compareOffset: form.compareOffset,
+      compareLabel: form.compareLabel,
+      trendColorScheme: form.trendColorScheme,
       span: effectiveSpan.value,
       height: effectiveDisplayHeight.value,
     })

@@ -6407,3 +6407,154 @@ Work Log:
 
 Stage Summary:
 - 组件缺口分析已重建并按 P0/P1/P2 分级 + 成本标注 + 路线建议；等用户选择方向后开工
+
+---
+Task ID: 3-c
+Agent: general-purpose (sub agent)
+Task: 自动编号 AutoNumber 表单字段组件（前端部分）——只读展示组件 + vendor rule + 测试；产出 props 契约给并行后端生成器代理
+
+Work Log:
+- 【研究】signaturePad 全链路（rule→config/index ruleList→vendor/index addComponent→locale 词条）+ SystemDeptPicker/FormulaField 业务组件风格（withDefaults 契约注释 / 只读展示 computed 模式）；确认双注册通道：业务组件走 main.ts FcDesigner.component + FormDesigner.vue addComponent(menu:'system')，vendor rule 走 vendor/config/index.js ruleList
+- 【契约】编号 = prefix + formatAutoNumberDate(now,dateFormat) + 流水号补零 seqDigits 位；resetPolicy(day/month/year/never) 决定 period 粒度；值永远由后端提交时生成写入，前端绝不自行生成、组件不 emit update:modelValue（契约注释写在组件与 autoNumberFormat.ts 头部）
+- 【新文件】① src/components/business/autoNumberFormat.ts：纯函数层（SUPPORTED_DATE_FORMATS 白名单+回退、formatAutoNumberDate、buildPreviewText、RESET_POLICY_LABELS 四档文案）；② src/components/business/AutoNumber.vue：disabled el-input + Tickets 前缀图标，无值=占位「提交后自动生成」+ 下方 previewText 格式示意与粒度提示，有值=回显编号+隐藏预览；③ src/vendor/config/rule/autoNumber.js：menu:'system'、icon-number、mask:true，props 面板 prefix/dateFormat(4档下拉)/resetPolicy(4档下拉)/seqDigits(inputNumber 1-10)/placeholder，title 内联中文不依赖 locale 新词条；④ __tests__/AutoNumber.test.ts 8 用例
+- 【验证】vitest 定向 8/8 全绿；eslint 0 errors（.vue ignored 与 vendor 匿名默认导出 warning 均为存量基线，signaturePad.js 同款）；vue-tsc 54 = 历史基线零新增；node --check 规则文件通过
+- 【未接线（按分工留给主会话）】main.ts 注册、vendor/config/index.js ruleList、FormDesigner.vue addComponent、ColumnConfigDialog 列映射、发布白名单均未动，接线点见下
+
+Stage Summary:
+- 交付 4 个新文件（组件/格式纯函数/vendor rule/测试），0 个既有文件改动；注册名 'AutoNumber'
+- 后端契约速览：POST 提交时后端生成；格式 prefix+日期段+seq 补零；resetPolicy→period：day=按天归零/month=按月/year=按年/never=全局递增；seqDigits 溢出位数不截断；建议列型 VARCHAR(64)（ColumnConfigDialog 尚无 autoNumber case，走 default null 需补）
+- vendor rule 接线点：src/vendor/config/index.js L43-44 区（import）+ L48 ruleList 尾部；src/main.ts 尾部 FcDesigner.component('AutoNumber', ...)；画布渲染名即 'AutoNumber'
+- seqDigits 面板 min:1 max:10，组件预览对 0/负数按 0 处理不抛错；未知 dateFormat 白名单回退 yyyyMMdd
+
+---
+Task ID: 3-b
+Agent: Z.ai Code (sub-agent general-purpose，Task ID: 3-b)
+Task: 页面设计器纯展示组件五件套（PageIframe / PageNoticeCarousel / PageCalendar / PageTimeline / PageSteps）——新建组件+测试，不接线不修改既有文件
+
+Work Log:
+- 【现状输入】读 worklog 末 3 节（analysis-component-gap 明确 P2 清单含 iframe/公告轮播/日历/时间线/步骤条，本任务落地）；对齐 PageDataChart.vue 风格：script setup + withDefaults(defineProps<{...}>()) 逐 prop 行内 JSDoc、computed 归一化、el-empty 空态不白屏、组件类名前缀 page-*
+- 【组件 5 新建】src/views/page/components/ 下：PageIframe（sandbox 固定 allow-scripts allow-same-origin 基线，不加 allow-forms/popups/top-navigation；空 url el-empty）、PageNoticeCarousel（el-carousel 包装，title 加粗+content 段落，item.color 文本色继承，点击 emit item-click，空 items el-empty；注意 el-carousel 对仅 2 条+loop 会克隆节点）、PageCalendar（modelValue 兼容 Date 与 'yyyy-MM-dd' 字符串，字符串按本地时区正则解析避免 new Date(str) 的 UTC 漂移；date-cell 插槽命中 highlightedDates 渲染小圆点；选择经 update:modelValue 抛出归一为 Date）、PageTimeline（timestamp/color 透传节点，title/content 段落；icon 字符串经 #dot 插槽渲染——el-timeline-item 的 icon prop 只收组件，字符串会落成无法解析引用；reverse 倒序）、PageSteps（active/direction/processStatus/finishStatus 透传，processStatus/finishStatus 缺省 undefined 沿用 el-steps 默认，空 items el-empty）；全部文件头含指定职责边界注释「纯展示组件（Task 3-b），props 驱动不绑数据源；数据源驱动版本由后续任务接线」
+- 【测试】新建 src/views/page/components/__tests__/PageDisplaySet.test.ts，16 用例（iframe 3 / carousel 4 / calendar 3 / timeline 3 / steps 3）：mount 核心渲染+props 传入+点击 emit+空态，仅 ElementPlus 全局插件无外部 mock
+- 【调试踩坑记录】①el-carousel 条目类是 el-carousel__item（BEM 双下划线）②el-carousel 自有 date-table 单元格类为 current/prev/next，非 date-picker 的 available ③el-timeline-item 传 #dot 插槽后默认 __node 不渲染（color 检查须选无 icon 的节点）④el-steps 步骤下标经 useOrderedChildren 异步注册，状态类需 await nextTick 后断言 ⑤el-carousel 仅 2 条目+loop 默认克隆节点（isTwoLengthShow），测试 fixture 用 3 条避开计数歧义
+- 【验证】npx vitest run PageDisplaySet.test.ts → 16/16 全绿；eslint：测试 .ts 0 error，5 个 .vue 为「no matching configuration」历史基线（.vue 不在 lint 配置为历史状态，与既往记录一致）；vue-tsc --noEmit 54 errors = 既有基线零新增，新文件零错误；git status 确认仅新增 6 文件，未动 PageDesigner.vue/main.ts/vendor（接线归主会话）
+
+Stage Summary:
+- 展示五件套交付：PageIframe/PageNoticeCarousel/PageCalendar/PageTimeline/PageSteps + PageDisplaySet.test.ts（16/16 绿），props 契约齐备可直接生成 PageDesigner addComponent 注册代码
+- 关键设计决策：①iframe sandbox 安全基线写死在组件内 ②calendar 字符串 modelValue 本地时区解析防 UTC 漂移、v-model set 归一 Date 向外抛 ③timeline icon 走 dot 插槽规避字符串组件解析失败 ④carousel 2 条目克隆行为已注释在测试内
+- 待主会话接线：PageDesigner.vue 注册 5 组件（label/icon/默认 props/props schema）、main.ts 无需全局注册（组件按需 import）；运行态 PageRenderer 转发 rule.props 即可驱动；calendar 建议运行时绑 v-model 使选择回写
+
+---
+Task ID: 3-d
+Agent: Z.ai Code (sub agent)
+Task: 「自动编号」后端——流水号生成服务 + 业务表单创建路径钩子 + V54 迁移（配合主会话设计器加 'AutoNumber' 组件）
+
+Work Log:
+- 【必做研究】迁移最大版本 V53 → 取 V54；业务创建唯一入口 = BizDataService.create（控制器/Excel 导入 PageDataExcelService#L424/逻辑流 DATA_INSERT 全部汇聚于此，钩子一处覆盖全部创建路径）；column_config 含 componentType（设计器 ColumnConfigDialog 对每个真实字段持久化 componentType:type）→ 创建时零查询识别；mvn 需 JAVA_HOME=/home/z/tools/jdk-build/merged（旧 /home/z/tools/jdk21 已随重供给消失）
+- 【迁移 V54__serial_number.sql】wf_serial_number(id BIGINT AI PK, tenant_id VARCHAR(64), serial_key VARCHAR(128), period VARCHAR(16), seq BIGINT DEFAULT 0, updated_at DATETIME, UNIQUE uk_serial(tenant_id,serial_key,period))，InnoDB/utf8mb4_unicode_ci 对齐 V50/V51 风格；无 JPA 实体 → ddl-auto 不碰，Flyway 唯一 DDL 来源（V2 共存约定已在头注释声明）
+- 【SerialNumberService】(engine/form) nextSerial(tenantId, serialKey, prefix, dateFormat, resetPolicy, seqDigits)：period 推导 day=yyyyMMdd/month=yyyyMM/year=yyyy/never=ALL；格式 prefix+dateText+补零序号（DateTimeFormatter 不可变+ConcurrentHashMap 缓存；非法/含时间字段的 dateFormat 回退 yyyyMMdd）；缺省 BN/yyyyMMdd/day/4，seqDigits 钳制 [1,10] 超位自然扩展，未知 resetPolicy 兜底 ALL（宁可序号增长不可重号）
+- 【并发策略】INSERT ... ON DUPLICATE KEY UPDATE seq=seq+1 再 SELECT（单语句原子 upsert，免 FOR UPDATE 的「行不存在需二次 upsert」竞态）；upsert 唯一键行锁持有至事务提交，并发取号阻塞串行；方法 @Transactional(REQUIRED) 保证 upsert/SELECT 同连接同事务（独立调用自开事务，从 BizDataService.create 进入则加入业务事务，业务回滚序号回退不留空洞）
+- 【AutoNumberHook】(engine/form/bizdata) 两级识别：①column_config componentType=AutoNumber（BizDataContext 已带零查询）②为空则递归 schema（children/props.rule/props.columns[].rule，对齐 collectUnknownComponentTypes 遍历写法）取 type=AutoNumber 的 field；props（prefix/dateFormat/resetPolicy/seqDigits）唯一来源是已发布 schema，缺失逐项走缺省值；serialKey=formKey+'.'+field（防跨表单重号，跨发布版本计数连续）；仅填 null/空白值（幂等不覆盖）；容错三层：schema 读取/解析失败降级默认 props、单字段取号失败 warn 跳过、外层 catch-all——绝不阻断创建
+- 【挂钩点】BizDataService#create L153-160：捕获 loadContext 结果 ctx，置于 BEFORE_CREATE 逻辑流调度之前（逻辑流与装饰钩子均可读到编号）；新增 9 参主构造（@Autowired）+ 保留 8 参旧构造（hook=null 判空跳过）→ 存量 BizDataServiceTest/BizDataHandlerTest 零改动
+- 【测试】SerialNumberServiceTest 17/17（period 推导×5/格式含回退×7/取号参数与递增×3/参数校验×2，固定 Clock 消除日期不确定）；AutoNumberHookTest 12/12（两级识别/嵌套遍历/props 缺省/已有值不覆盖/取号失败不阻断/表单缺失与 schema 查询异常降级）；BizDataServiceAutoNumberTest 2/2 服务层集成（创建时填充值进 INSERT 参数 + 取号异常不阻断）；定向 31 绿 + 回归 BizDataServiceTest 47/BizDataHandlerTest 17/FormDefinitionServiceTest 25 全绿
+
+Stage Summary:
+- 覆盖接管路径（overridesCreate 的定制 handler）与 FormDataService（WORKFLOW 表单快照）不经过该钩子——前者属自定义语义、后者不在业务表单范围，如需覆盖后续单独接线
+- AutoNumber 尚未在 BUSINESS_FORM_ALLOWED_COMPONENTS 白名单（主会话统一加）；前端设计器组件落地后，发布 column_config 即自动带 componentType=AutoNumber，无需后端再动
+- 迁移未执行（禁重启服务）：V54 将在下次服务启动时由 Flyway 应用
+
+---
+Task ID: 3-a
+Agent: Z.ai Code (sub-agent: area-dict-field-components)
+Task: 表单设计器新增两个字段组件——①AreaPicker 地址（省市区三级联动）②DictSelect 字典下拉（含 vendor rule 物料 + 单测；接线点探测，未动任何既有文件）
+
+Work Log:
+- 【研究】signaturePad 全接线链路确认：组件 src/vendor/components/SignaturePad.vue → src/vendor/index.js L24/L87 addComponent('SignaturePad',...)（= FcDesigner.component，内部同时注册 designerForm 画布 + formCreate 运行时双实例）→ rule 物料 src/vendor/config/rule/signaturePad.js → src/vendor/config/index.js L43 import + L48 ruleList（拖拽面板）；locale 可选（zh-cn.js L691）。业务组件惯例（SystemDeptPicker/Task143）：main.ts FcDesigner.component 全局注册 + FormDesigner.vue designerRef.addComponent 挂菜单
+- 【研究】cascader.js/select.js rule 结构：menu:'main'/icon/label/name/input/event[]/validate[]/rule({t}) 工厂/props(_, {t}) 用 localeProps(t, name+'.props', [...])——locale 缺 key 时回退 rule.title 原值（utils/index.js L340），故新 rule 文件内联中文 title 即可脱离 locale 接线独立工作
+- 【研究】api/dict.ts 双端点齐全无缺口：GET /dict-types（分页）+ GET /dict-data/{dictCode} → R<DictDataVO[]>；字段名为 label/value/sortOrder/status（非 dictLabel/dictValue），status===1 启用（对齐 DictPage 语义）
+- 【依赖】package.json 无省市区包 → bun add china-area-data@5.0.1 成功（仅改 package.json+bun.lock；bun.lock 原本已被 git 跟踪）。数据边界实测：直辖市二级为『市辖区/县』占位（重庆双节点同名）；281 个三级遗留空壳『市辖区』（嘉峪关市剔除后为空市）；东莞三级为街道；澳门/台湾两级；CommonJS 无类型
+- 【AreaPicker.vue】el-cascader 包装；值语义='省/市/区'拼接文本直存 VARCHAR（列映射/导出/Excel 全兼容）；模块级一次性构建选项树+缓存+code→归一化名 Map：①直辖市『市辖区/县』二级展示名归一为省名（输出 北京市/北京市/东城区，重庆同名歧义由三级名称 DFS 反查消解）②三级空壳『市辖区』剔除、剔除后空市转叶子（甘肃省/嘉峪关市 两级文本）③两级行政区天然支持；回显=文本按'/'拆分逐级按名反查（取最深匹配），失败显示空但原值不丢；降级：数据不可用时内置 34 省级数据 + console.warn
+- 【DictSelect.vue】el-select 包装；onMounted+watch(dictTypeCode) 拉选项（label/value 取 DictDataVO.label/value，sortOrder 升序，仅 status===1）；回显补偿：当前值命中停用项时补入选项保 label 可显示；多选容错（历史 VARCHAR 单值自动包装数组）；加载失败 console.warn+空选项、不弹 ElMessage（渲染页不被字典故障打断）
+- 【vendor rule】areaPicker.js（icon-address，props 面板：placeholder/size/disabled/clearable/showAllLevels）+ dictSelect.js（icon-collection，面板：dictTypeCode 输入框/multiple switch/placeholder/size/disabled/clearable；watch.multiple 重渲染对齐 select.js）；均 validate 字符串(串/数组)、localeProps+内联中文 title 双保险
+- 【测试】AreaPicker.test.ts 17 用例 + DictSelect.test.ts 12 用例 + AreaPicker.realdata.smoke.test.ts 11 用例（真实 china-area-data 冒烟：34 省/汉渝京回填/澳门/东莞/嘉峪关往返，防数据包升级静默漂移，发现并纠正 500101=万州区 预期错误——组件零 bug）；定向 3 文件 40/40 绿；business 目录回归 18 文件 367/367 绿
+- 【验证】eslint 新文件 0 error（2 条 import/no-anonymous-default-export warning 与全部既有 vendor rule 同款；.vue 被根 Next 配置忽略属项目全局状态）；vue-tsc 54=既有漂移水位（触碰文件零命中，无 TS2307 即 d.ts 声明生效）；esbuild 转译 rule 文件通过；未 commit、未动任何既有文件、未跑全量 vitest
+
+Stage Summary:
+- 新文件 7 个：src/components/business/{AreaPicker,DictSelect}.vue、src/vendor/config/rule/{areaPicker,dictSelect}.js、src/components/business/__tests__/{AreaPicker,DictSelect}.test.ts + AreaPicker.realdata.smoke.test.ts、src/types/china-area-data.d.ts（包无类型）；依赖 china-area-data@5.0.1 已装
+- 主会话接线点（4 处前端+1 处后端）：①src/main.ts ~L65 后加 import AreaPicker/DictSelect + FcDesigner.component('areaPicker', AreaPicker)、FcDesigner.component('dictSelect', DictSelect)（组件注册名必须小写驼峰与 rule.type 一致）②src/vendor/config/index.js L43 区加两条 import + ruleList（L48-53）加 areaPicker, dictSelect ③可选：src/vendor/locale/{zh-cn,en}.js 加 com.areaPicker / com.dictSelect 条目（不加也能跑，title 走内联回退）④可选：src/components/business/componentHints.ts 加 info 文案构造器 ⑤【后端必改】workflow_lowcode/backend FormDefinitionService.java L56 BUSINESS_FORM_ALLOWED_COMPONENTS 白名单加入 "areaPicker","dictSelect"（否则发布报不支持组件；AutoNumber 同理，见上一节）
+- 组件注册名建议：'areaPicker'/'dictSelect'（与 vendor rule 的 name/type 严格一致）；props 契约见两组件头注释（AreaPicker: modelValue/placeholder/disabled/size/clearable/showAllLevels；DictSelect: modelValue/dictTypeCode/multiple/placeholder/disabled/clearable/size）
+- api/dict.ts 无缺口（类型列表+按 type 查数据端点均在）；若后端 dict-data 未按 sortOrder 排序，前端已兜底排序
+
+---
+Task ID: 3-f
+Agent: general-purpose (sub agent)
+Task: PAGE 轨「写闭环」双组件——①PageDataForm 数据录入/编辑页 ②PageDataDetail KV 详情；只创建新文件+测试，禁止修改既有文件（PageDesigner.vue/PageRendererPage.vue 接线归主会话）
+
+Work Log:
+- 【必做研究】PageDataTable 取数/表单链路：数据组件统一用 resolvedRefId（dsRefId 优先 → activeDsBindings 按 dataSourceId 解析 → ''）；行结构={...record.data, id, version}；CRUD 同款 API 层=dataSourceApi.{getData,createData,updateData(id,rowId,data,version),queryData,deleteData}（端点 /v1/data-sources/{id}/data...）；FormRenderer 用法=:rule/:option{labelWidth,submitBtn.show:false}/:initial-values/:data-sources/readonly，expose getFormData（内部已 withArrayLabels）/validate（未注入 api 时跳过返回 true）；useDataSourceCrud 确认 formConfig.createApi/updateApi=+withArrayLabels(data,rules)；PageDataCards props 风格参照（withDefaults 逐 prop JSDoc + [key:string]:any 兜底 + resolvedRefId 同款三段式）；api/data-source.ts + api/form.ts（getFormDefinitionByKey=GET /v1/form-definitions/by-key/{key}，schema 字符串 JSON.parse → rule 数组/对象两形态 + schema.dataSources 表单级绑定）全确认，无缺口
+- 【PageDataForm.vue】create：props.formKey 加载表单定义（缺省回退 metadata.formKey → 列映射 buildFormRule 兜底，对齐 useDataSourceCrud）→ FormRenderer 渲染（renderKey 递增强制重建）→ 提交 validate→getFormData→withArrayLabels→createData；edit：getData 取单条回填 initialValues（{...data,id,version}）→ 提交 updateData（version 乐观锁透传，与 PageDataTable cfg.updateApi 同款）；成功 ElMessage.success（提交成功/更新成功）+ emit('saved', record)（create 载荷含新 id）；失败 catch 静默（http 拦截器 toast 不重复弹）；loading（v-loading 表单体）/saving（按钮 loading）双态；designMode 提交按钮 disabled+handleSubmit 守卫（画布零写操作）；expose load(recordId)（create 模式注入记录即编辑化，供动作链/容器联动）+reload 别名；resolvedRefId/表单定义随 refId 变化重置重载、props.recordId 变化重取
+- 【PageDataDetail.vue】纯展示 KV：el-descriptions :column=1 border 渲染 expose load(record) 注入的记录；columns [{key,label,formatter?}]，formatter 函数 (value,record)=>string 或 '$row.x' 模板串（简化实现：$row.字段→记录值）；数组值 join(', ')、null/undefined 显空；columns 缺省回退记录自身键（剔除 <key>_text 内部显示列）；clear() 回空态；空 record el-empty「请在上方列表点击行查看详情」；pageKey/dataSourceId/dsRefId 声明预留（上下文一致性/动作脚本 api 透传），组件本身不取数
+- 【测试】__tests__/PageDataFormDetail.test.ts 15 用例（Form 9：formKey 渲染透传/创建 API 参数/成功 saved 含新 id/失败静默/校验失败阻断/designMode 禁用/dsRefId 优先/edit 回填+更新 API 带 version/load(recordId) 联动编辑化/metadata.formKey 回退/submitText+title；Detail 4：空态引导/load+clear/formatter 函数与数组 join/列缺省回退剔除 _text）；mock 面=api 两模块+element-plus 仅换 ElMessage（importOriginal 保留真实组件渲染 el-descriptions）+FormRenderer stub（formStub 状态驱动 getFormData/validate）+formDsBindingsStore getter 注入
+- 【验证】vitest 定向 15/15 全绿；page/components 目录回归 14 文件 186/186 全绿；eslint：测试 .ts 0 error，2 个 .vue「no matching configuration」= 存量基线（.vue 不在 lint 配置，与既往记录一致）；vue-tsc 新文件 0 错误（曾报 effectiveFormKey 未使用已删，总数 59 均为其他并行任务/存量基线）；git status 确认本任务仅新增 3 文件，未动 PageDesigner.vue/PageRendererPage.vue/main.ts
+
+Stage Summary:
+- 交付 3 个新文件：PageDataForm.vue / PageDataDetail.vue / PageDataFormDetail.test.ts（15/15 绿），0 个既有文件改动
+- 注册名建议 'page-form' / 'page-detail'（FcDesigner.component('page-form', PageDataForm) + addComponent{label:'数据录入',name:'page-form',icon:'icon-input',menu:'main'}，icon 须取 fc-icon 字体既有类名防渲染空白）；PageDataForm 契约=pageKey/dataSourceId/dsRefId/formKey/mode('create'|'edit')/recordId/designMode/submitText/title+emit('saved',record)+expose load(recordId)；PageDataDetail 契约=pageKey/dataSourceId/dsRefId/columns[{key,label,formatter?}]/title/designMode+expose load(record)/clear()
+- PageRendererPage 接线建议：transformComponent 对 page-form/page-detail 注入 pageKey+dsRefId+on.ready 注册 componentRefs[dataSourceId]；行点击→详情联动=row-click 处理器里对已收集的 page-detail 实例逐个 load(row)；PageDataForm 联动=容器/动作链把 row.id 经 load(id) 投给表单
+- CRUD 端点：create=POST /v1/data-sources/{refId}/data；update=PUT /v1/data-sources/{refId}/data/{rowId}?version=；单条=GET /v1/data-sources/{refId}/data/{rowId}；表单定义=GET /v1/form-definitions/by-key/{formKey}；元数据回退=GET /v1/data-sources/{refId}/metadata
+
+---
+Task ID: 3-h
+Agent: general-purpose (sub agent, Task ID: 3-h)
+Task: 页面设计器补齐 P1 组件——①DashKpiTrend 环比指标卡 ②PageTreeTable 树表格 ③左树右表模板插入函数（只产出代码与规则 JSON，不改共享文件）
+
+Work Log:
+- 【必做研究】读 DashKpi.vue：结论=自取数组件（dataSourceApi.aggregate + dsRefId || activeDsBindings 反查，结构化 filter，setFilter/refresh 动作总线契约，组件级全屏）；读 PageDataTable.vue 取数模式（resolvedRefId 三级解析、queryData size=-1 不分页/designMode 首页 10 条、records→{...r.data,id,version} 映射、绑定就绪补发恰一次）；读 PageDesigner.vue dashConfigButton/openDashConfig 模式（menu:'chart' + setComponentRuleConfig 配置按钮，只读未改）；确认 @form-create/designer types L519-537 暴露 getRule()/setRule()（模板插入函数的 API 依据）；确认后端列表接口返回平铺 records（PageDataTree/PageDataTable 均为平铺映射）→ 树表格需客户端组树
+- 【新文件 6 个】①src/views/dashboard/components/kpiTrendShared.ts：纯函数层（computeComparePercent 除零保护 prev=0→cur=0?0:null、periodRangeCondition 当前期 [now-span,now)/上期 [now-2span,now-span)、compareSpanMs 与 DashKpi.grainMs 同口径 day=1d/week=7d/month=30d、formatComparePercent 带符号 1 位小数）②DashKpiTrend.vue：视觉族谱对齐 DashKpi（18/20px 内边距、30px/700 主值、radial 光斑、全屏按钮、span/height 布局），自取数两次聚合 + 数据下发双模式（current/previous props 传 undefined 即自取数）、trendColorScheme('up-good' 默认=升绿降红与 DashKpi 同族|'down-good'=升红降绿适合成本类)、无 trendField 时退化为全量主值+环比 --、setFilter/refresh/ready 动作总线对齐③src/views/page/components/treeTableShared.ts：buildTreeRows 纯函数（parentKey→idKey 组树、孤儿挂根、环引用防护含自指/多节点环/环上悬挂、空 children 剔除防幽灵展开图标、数字/字符串键 String 归一）④PageTreeTable.vue：取数完全对齐 PageDataTable（resolvedRefId 三级解析+绑定就绪补发一次+records 映射同款），运行态 size=-1 全量/设计态 10 条，el-table row-key+tree-props 渲染、默认展开第一层（toggleRowExpansion 逐根展开，default-expand-all 可配全部展开）、只读边界注释写明（不承诺操作列/分页/批量/表头筛选/Excel）、row-click/ready(setFilter/refresh) 按动作总线约定预留⑤⑥两测试文件 22 用例
+- 【左树右表模板】insertLeftTreeRightTableTemplate(designerRef) 完整代码文本已产出在报告（不改 PageDesigner.vue）：getRule()+setRule() 追加 page-tree(col span 8)+page-table(col span 16) 两条 rule，数据源 props 占位，表格 rule 上方注释写明联动接线=树 node-click 动作→目标表格 field→{op:'set-filter',field:'parentId',value:'{node.id}'}（executeStep resolveStepValue 模板语法已核实）
+- 【验证】vitest 定向 22/22 全绿（DashKpiTrend 12：环比正/负/零/除零、窗口口径、自取数/下发/设计态；PageTreeTable 10：组树/孤儿/环/空数据/自定义键/DOM 树渲染含展开层级/set-filter 重查/row-click）；回归 dash 目录+PageDataTable+PageDisplaySet 87/87 绿；eslint 0 errors（2 个 .vue no-matching-configuration 为既有基线，与 3-a/3-b 记录一致）；vue-tsc 56 errors 全部在既有文件（并行任务基线漂移 54→56，4 个新文件 0 命中）
+
+Stage Summary:
+- 交付 6 个新文件，0 个既有文件改动；组件注册名建议：'dash-kpi-trend'（menu:'chart'，DashKpi 同款 dashConfigButton('配置环比卡', () => openDashConfig('kpiTrend'))，openDashConfig/DashConfigDialog 需扩 'kpiTrend' 模式）、'page-tree-table'（menu:'main'，setComponentRuleConfig('page-tree-table', dataSourceProps, true)）
+- DashKpi 数据流结论：自取数（aggregate×2），DashKpiTrend 已内置双模式（自取数默认 + current/previous 下发可选），接线层二选一
+- 待主会话接线：PageDesigner FcDesigner.component 注册两组件 + addComponent 两条目；PageRendererPage.transformComponent 的 DASH_DATA_TYPES 集合与 page-table/page-tree 类型分支需补 'dash-kpi-trend'/'page-tree-table'（dsRefId 注入+ready 上报）；左树右表模板函数落位；已发布白名单 BUSINESS_FORM_ALLOWED_TYPES 若需含新类型需同步
+
+---
+Task ID: 3-g
+Agent: general-purpose (sub agent)
+Task: 表单设计器 4 组件——①RelationCard 关联记录卡片 ②StepsForm 分步表单容器（layout）③DrawerContainer 抽屉容器（layout）④LocationPicker 定位（降级版）；只新建文件+测试，接线归主会话
+
+Work Log:
+- 【研究】signaturePad 链路（rule→config/index ruleList→main.ts FcDesigner.component 双实例）；LookupPicker 值形态确认：modelValue=显示文本字符串（新语义）/整行对象（旧兼容），id 走 idField 独立字段、returnFields 回填——RelationCard 按此消费并复用 lookupFetch.readCellValue 深层取值；布局容器两种范式：elCard 式（drag:true/inside:false/mask:false，设计态 children 包成单个 DragBox 作默认插槽）与 formContainer 式（loadRule/parseRule 把 children 收进 props.rule + 运行时 normalizeForRender 还原，需改既有 schemaRules.ts——本次禁改既有文件故不走）
+- 【关键验证（scratch 测试先行）】①<slot /> 转发在 VNode 外包 Fragment，Vue3 模板 <component :is> 不收 VNode → StepsForm 分步内容区用 plain <script> 定义 StepsPaneArea（h() 渲染函数）+ flattenSlotChildren 展平 Fragment，逐子节点包 pane div ②el-drawer 内容懒挂载（useDialog rendered，首次打开才渲染、关闭后保留）③el-steps @click.capture+closest('.el-step') 可做步骤点击导航
+- 【RelationCard】只读 el-card mini：字符串直显/对象按 displayField 深层取值（回退 name/title/label/id/JSON 兜底）/空值「未选择关联记录」占位；clickable（默认 true）hover 阴影+整卡点击 emit('open-detail', value)，空值不发；title/description 卡内标题行与说明行
+- 【StepsForm】分步=显隐切换不破取值校验：StepsPaneArea 把每个直接子组件包成 pane，display:none 显隐（非 v-if），children 常挂载全量校验；「每个直接子组件=一步」（与 elTabs+elTabPane 同构，多字段步骤拖卡片分组）；active 越界钳制、steps 缺项回退「第 N 步」、步骤数=max(steps.length, children 数)；设计态检测（单 DragBox）→ 全显+禁用点击+设计提示条；点击步骤头 emit update:active+change
+- 【DrawerContainer】按钮（buttonText/buttonType/plain）打开 el-drawer（title/size/destroy-on-close=false）；设计态不渲染抽屉、children 平铺在设计预览区（虚线框）保证可拖拽编排；事件改为 :model-value+onVisibleChange 统一抛 open/close（el-drawer @close 过渡后才发，jsdom 不可靠）
+- 【LocationPicker】降级版零地图 SDK：纬度/经度 el-input-number（-90~90/-180~180、precision 6、无 controls）+ 粘贴解析（中英文逗号/空白分隔、非法与越界输入忽略不破坏当前值）+ 清空按钮 + 格式化预览；modelValue='lat,lng' 字符串或空串，发射前去尾零（39.9→'39.9'）+ clamp
+- 【vendor rule 4 个】relationCard.js（menu:main, icon-link, mask:true, event:[change,open-detail], 面板 title/description/displayField/clickable）、stepsForm.js（menu:layout, icon-step-form, drag 容器, 面板 steps=Struct JSON 编辑器/active/direction）、drawerContainer.js（menu:layout, icon-dialog, drag 容器, 面板 buttonText/buttonType/plain/title/size）、locationPicker.js（menu:main, icon-location, mask:true, 面板 disabled/clearable）；全部内联中文 title 不依赖 locale 新词条
+- 【测试】RelationCard 9 + StepsForm 9 + DrawerContainer 7 + LocationPicker 10 + task3gRules 12 = 46 用例；定向 5 文件 46/46 绿；business+vendor rule 目录回归 25 文件 432/432 绿
+- 【验证】eslint 新文件 0 errors（.vue ignored 与 rule 匿名默认导出 warning 均存量基线）；vue-tsc 54=历史基线零新增（期间 LocationPicker 模板箭头函数隐式 any 新增 2 个已改为具名具型方法归零）；node --check 4 rule 通过；git status 确认仅新增 13 文件零既有文件改动
+
+Stage Summary:
+- 交付 13 个新文件：4 组件（RelationCard/StepsForm/DrawerContainer/LocationPicker.vue）+ 4 vendor rule + 5 测试文件；0 个既有文件改动
+- 注册名与 menu：'RelationCard'(main) / 'StepsForm'(layout) / 'DrawerContainer'(layout) / 'LocationPicker'(main)；rule.type=组件注册名严格一致
+- 渲染边界：StepsForm 分步为「设计态全显、运行态按 pane v-show 显隐」降级实现（children 常挂载、全量校验不受影响；裸字段直拖=每字段一步，推荐卡片分组）；DrawerContainer 抽屉内字段首次打开才挂载（el-drawer 懒渲染）、打开过一次后关闭仍挂载正常校验——从未打开即提交则抽屉内字段不参与渲染期校验
+- 接线点（主会话）：src/vendor/config/index.js import+ruleList 四条；src/main.ts FcDesigner.component 四条；发布白名单 BUSINESS_FORM_ALLOWED_COMPONENTS 建议加四名（否则发布报不支持）
+
+---
+Task ID: 3-e
+Agent: general-purpose (sub agent, Task ID: 3-e)
+Task: PAGE 轨数据图表组件「page-chart」——VIEW 轨 PageDataChart + chartDataset 能力复活为自取数组件（只创建新文件+测试，PageDesigner.vue/PageRendererPage.vue/main.ts 接线归主会话）
+
+Work Log:
+- 【必做研究】①PageDataChart.vue（VIEW 渲染器：rows/config/columns/height/loading props，canvasAvailable+0 尺寸守卫，空态 el-empty）与 chartDataset.ts（normalizeChartConfig/buildChartDataset/buildPieDataset，limit 缺省 20，聚合复用 tableEnhance.computeAggregate）②PageDataTable 取数模式：resolvedRefId 三级解析（dsRefId 优先 → activeDsBindings 按 dataSourceId 反查 → ''）、queryData designMode={page:1,size:10} / 不分页={size:-1}（后端 size<=0 跳过 LIMIT）、records→{...r.data,id,version} 扁平化；PageRenderer.vue chart 分支确认 size=-1 全量语义（loadChartRows→searchTableFetchApi({page:1,size:-1})）③测试手法：PageDataChart.test.ts 不 mock echarts（jsdom 无 canvas 静默退化）、PageDataTable.test.ts mock @/api/data-source+@/utils/formDsBindingsStore（plain object）④tableEnhance.aggregateOptionsOf=数值列全量 5 项/其余仅 count⑤配置弹窗风格参照 CardStyleConfigDialog（visible computed 读写器+confirm 事件+footer 确定/取消）与 FilterConfig 行编辑器
+- 【新文件 4 个】①pageChartConfig.ts：PAGE 轨配置契约共享类型（PageChartConfig {type?,dimension?,measures?[{key,agg,label?}]}，agg=AggregateFn 闭集），渲染端与配置弹窗共用防漂移②PageDataChartPage.vue：自取数组件——resolvedRefId 三级解析（PageDataTable 同款）、运行态 queryData {size:-1} 全量拉取/设计态 {page:1,size:10}（enableCardDesignMode 需补 page-chart 分支）、行扁平化 {...data,id,version}；props.config（PAGE 形态）经 normalizeChartConfig 归一为 ViewChartConfig（dimension→xField、measures→yFields，维度/指标齐备才有效）交 PageDataChart 渲染；getMetadata 拉 metadata 列做显示名映射（指标 label 覆盖，失败静默）；未配置/空数据 el-empty、loading 透传（v-loading 遮罩）；动作总线契约=expose refresh/setFilter/resetFilter/records/reload + emit ready + bus.register（set-filter 以 eq 合并进取数 filter，PageDataCards 同款）；依赖变化 watch：resolvedRefId（重载元数据+重取）、designMode（取数口径切换）、config deep（配置回填重取）③PageChartConfigDialog.vue：el-dialog 配置弹窗——类型 radio（柱/线/饼）、维度列下拉（candidates，`${label} (${key})`）、指标行编辑器（字段下拉+聚合下拉 aggregateOptionsOf 口径+显示名输入，可增删，字段切换后聚合不在新口径自动回落 count）、饼图多指标 el-alert 提示「仅使用第一个指标列」（buildPieDataset 退化语义，行保留可编辑）、候选列缺省 el-empty、canConfirm 门控确定按钮（无需 ElMessage）；回传双通道=confirm + update:config（父组件 v-model:config 或 @confirm 二选一）④__tests__/PageDataChartPage.test.ts 12 用例
+- 【测试】组件 7 用例（运行态 size=-1 全量拉取+行扁平化+config 归一化+列名映射+buildChartDataset 端到端复算 150/80、designMode {page:1,size:10}、挂起 promise→loading 透传+el-loading-mask、空数据「暂无数据」、config 缺失自身 el-empty 且不发起取数、取数失败静默退化、dsRefId 缺省经 activeDsBindings 解析 refId 取数+bus.register 上报断言）；弹窗 5 用例（类型切换↔饼图提示显隐、指标增删行数同步、confirm/update:config/关闭三通道回传+回显、聚合口径 aggregateOptionsOf 数值 5 项/文本仅计数+切字段回落 count、未配置确定禁用 canConfirm 门控）；mock 面=@/api/data-source（getMetadata/queryData）+@/utils/formDsBindingsStore+pageActionBus provide stub，echarts 照抄 PageDataChart.test.ts 不 mock
+- 【踩坑】el-dialog 内容 teleport 到 body：VTU wrapper.findAll 不穿越 teleport（DOM 断言用 document.querySelectorAll + attachTo document.body + unmount 清理），wrapper.text() 可含 teleport 文本；el-dialog 挂载时 modelValue=true 经 onMounted 置 rendered，内容下一 tick 落 DOM（DOM 断言前需 await nextTick）；teleport stub 会诱发 ElSelect「Maximum recursive updates」不可用；配置弹窗需 setup 末尾 initForm() 一次（挂载即开场景 watch 不触发，对齐 CardStyleConfigDialog）；candidates 可选 prop 在模板直接 .length 会 TypeError（hasCandidates computed 守卫）
+- 【验证】vitest 定向 12/12 全绿；回归 PageDataChart 15+chartDataset 14+PageDataTable+PageDisplaySet+CardStyleConfigDialog 5 共 73/73 绿；eslint：测试 .ts 与 pageChartConfig.ts 0 error，2 个 .vue「no matching configuration」=存量基线（.vue 不在 lint 配置，与 3-a/3-b 记录一致）；vue-tsc 54 errors=基线水位且新文件零命中；git status 确认本任务仅新增 4 文件，未动 PageDesigner.vue/PageRendererPage.vue/main.ts（工作区两者的 M 状态来自并行任务，非本代理改动）
+
+Stage Summary:
+- 交付 4 个新文件：PageDataChartPage.vue / PageChartConfigDialog.vue / pageChartConfig.ts / __tests__/PageDataChartPage.test.ts（12/12 绿），0 个既有文件改动
+- 注册名建议 'page-chart'：PageDesigner.vue 里 FcDesigner.component('page-chart', PageDataChartPage) + addComponent({label:'数据图表', name:'page-chart', icon:'icon-stack'|'icon-statistic', menu:'chart', rule:()=>({type:'page-chart', field:'chart'+Date.now(), title:'数据图表', props:{dataSourceId:'', config:null, height:'320px'}})}) + setComponentRuleConfig('page-chart', 数据源下拉+「配置图表」按钮（开 PageChartConfigDialog，candidates 取 enabledDataSources 对应源 getMetadata columns）, true)；enableCardDesignMode 需把 page-chart 纳入 designMode:true 注入名单
+- PageRendererPage.transformComponent 注入字段清单（参照 page-table 分支）：next.type==='page-chart' → next.props.pageKey=pageKey.value；props.dataSourceId 命中 pageSchema.dataSources → next.props.dsRefId=ds.refId；next.on['ready']=(instance)=>componentRefs[dataSourceId]=instance；next.props.designMode=route.query.preview==='true'（可并入 page-table/page-list-cards 同一分支）；form-create title 包裹无需置空（page-table 同款）
+- props 契约：pageKey(string)/dataSourceId?/dsRefId?/designMode?/height?('320px')/config?(PageChartConfig {type:'bar'|'line'|'pie', dimension:string, measures:[{key,agg:'sum'|'avg'|'count'|'max'|'min',label?}]})/title?；emit ready/loaded；expose refresh/setFilter/resetFilter/records/reload
+- 已知边界：维度聚合上限 config 未含 limit（统一 20 组，PAGE 轨弹窗未暴露；需放开时在 PageChartConfigDialog 加一档即可）；图表联动刷新走动作总线 refresh/setFilter（ready 已上报），搜索栏联动（page-table 专属 query 面板）不适用于图表

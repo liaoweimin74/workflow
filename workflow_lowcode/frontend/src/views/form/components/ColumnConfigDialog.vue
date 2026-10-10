@@ -322,6 +322,23 @@ function mapComponentToColumn(type: string, propsMap: Record<string, any>): { co
           Number.isFinite(precision) && precision > 0 ? Math.min(10, Math.trunc(precision)) : 2,
       }
     }
+    case 'areaPicker':
+      // 地址（Task 3-a）：'省/市/区' 拼接文本直存
+      return { columnType: 'VARCHAR', length: 255, scale: null }
+    case 'dictSelect':
+      // 字典下拉（Task 3-a）：多选数组 → JSON；单选值 → VARCHAR（对齐 SystemUserPicker 策略）
+      return propsMap?.multiple
+        ? { columnType: 'JSON', length: null, scale: null }
+        : { columnType: 'VARCHAR', length: 255, scale: null }
+    case 'AutoNumber':
+      // 自动编号（Task 3-c/3-d）：后端提交时生成（prefix+日期+序号），VARCHAR(64) 足够
+      return { columnType: 'VARCHAR', length: 64, scale: null }
+    case 'LocationPicker':
+      // 定位降级版（Task 3-g）：'lat,lng' 文本
+      return { columnType: 'VARCHAR', length: 64, scale: null }
+    case 'RelationCard':
+      // 关联记录卡片（Task 3-g）：值形态对齐 LookupPicker（对象/数组）→ JSON
+      return { columnType: 'JSON', length: null, scale: null }
     default:
       return null
   }

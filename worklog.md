@@ -6558,3 +6558,21 @@ Stage Summary:
 - PageRendererPage.transformComponent 注入字段清单（参照 page-table 分支）：next.type==='page-chart' → next.props.pageKey=pageKey.value；props.dataSourceId 命中 pageSchema.dataSources → next.props.dsRefId=ds.refId；next.on['ready']=(instance)=>componentRefs[dataSourceId]=instance；next.props.designMode=route.query.preview==='true'（可并入 page-table/page-list-cards 同一分支）；form-create title 包裹无需置空（page-table 同款）
 - props 契约：pageKey(string)/dataSourceId?/dsRefId?/designMode?/height?('320px')/config?(PageChartConfig {type:'bar'|'line'|'pie', dimension:string, measures:[{key,agg:'sum'|'avg'|'count'|'max'|'min',label?}]})/title?；emit ready/loaded；expose refresh/setFilter/resetFilter/records/reload
 - 已知边界：维度聚合上限 config 未含 limit（统一 20 组，PAGE 轨弹窗未暴露；需放开时在 PageChartConfigDialog 加一档即可）；图表联动刷新走动作总线 refresh/setFilter（ready 已上报），搜索栏联动（page-table 专属 query 面板）不适用于图表
+
+---
+Task ID: components-mvp
+Agent: Z.ai Code (continuation session, 8 子代理并行)
+Task: 用户指令「按计划先调整分类，然后实现所有列出的组件」——分类重构 + 15 组件落地 + 接线 + 修复 + 验证推送
+
+Work Log:
+- 【分类】vendor/config/menu.js 加「图表组件」组（ruleList 按 menu 字段自动装配）；FormDesigner config.hiddenMenu=['chart'] 隐藏空组；⚠️ 踩坑记录：曾用 FcDesigner menu prop 自定义分组——vendor L2553 传 menu 即跳过 ruleList 装配导致全部物料消失（reactive 修一半才定性），回退为默认菜单+hiddenMenu 方案
+- 【表单侧 7 件】Task 3-a areaPicker(省市区级联,值=拼接文本存 VARCHAR)+dictSelect(字典下拉,api/dict.ts 双端点现成)；3-c AutoNumber 前端(只读+previewText)+3-d 后端(V54 wf_serial_number 迁移+SerialNumberService upsert 取号+AutoNumberHook 创建路径填充,serialKey=formKey.fieldKey)；3-g RelationCard(值形态对齐 LookupPicker)/LocationPicker(降级 lat,lng)/StepsForm(显隐切换保校验)/DrawerContainer
+- 【页面侧 8 件】3-e page-chart(自取数+chartDataset 前端聚合+配置弹窗)；3-f page-form(create/edit 双模式 FormRenderer+CRUD API 同 PageDataTable)/page-detail(el-descriptions+load(record) 联动)；3-h dash-kpi-trend(环比纯函数+双期取数+down-good 配色)/page-tree-table(客户端组树:孤儿挂根+环断链)+左树右表模板函数；3-b 五件套(iframe/公告轮播/日历/时间线/步骤条)
+- 【接线】main.ts 7 组件 FcDesigner.component；vendor ruleList +7 物料；PageDesigner addComponent×5+chartConfigDialog 接线(候选列经 activeDsBindings→getMetadata)+左树右表工具栏按钮；PageRendererPage 运行时注册×10+transformComponent 注入分支扩 4 类+designMode 归一扩 4 类；Java 白名单 +7；ColumnConfigDialog 列映射 +5；DashConfigDialog kpiTrend 模式(并行会话)
+- 【关键修复】①SerialNumberService 双构造器无 @Autowired→Spring 回退默认构造→启动崩溃（cron 重建 jar 时暴露）：主构造器显式 @Autowired+import，重建 jar 验证 ②cron 轮 aggregate 测试 helper 把 emitted 参数数组当 payload 用（双层解包修复，3/3 绿）③MemberGroupPage 测试补 pinia+auth mock+flushPromises——暴露更深的时代漂移（actionButtons 断言旧 UI），5 用例记遗留 ④删零引用 dashboard 私有 useFullscreen.ts（Task 122 断言满足）
+- 【验证】前端全量 1709/1714（+163 新用例，唯一失败=member-group 5 陈旧用例）；后端 SerialNumber 定向 31 绿+mvn package 成功；浏览器实测：分类面板全组就位（基础35/图表8/系统5/子表4/辅助13/布局8）、汇总行开关 UI→确定→保存→发布→落库 {enabled:true}→运行页 footer 4/4/4 全链路 ✓、数据源下拉回填 ds_mv2i46vn 正常（草稿绑定回填风险未复现）
+- 【推送】a3716b11..ae5efd3a main→main；并行 cron 会话同树协作（主动采纳本会话接线并补 lightDs 轻量绑定弹窗——比复用表格弹窗更优，保护组件专属 props）
+
+Stage Summary:
+- 组件缺口分析 P0/P1 全部落地 + P2 全量落地（15 组件 + 1 分类重构 + 后端流水号基建）
+- 遗留：①member-group 5 用例时代漂移（页面已演进为仅「移除」操作列，测试仍断言旧「成员管理」入口，需按现 UI 重写）②AutoNumber/areaPicker/dictSelect/StepsForm 等新组件的浏览器端到端仅面板就位验证，表单填写→发布→自动编号落库闭环待下轮实测 ③V54 已在运行实例应用

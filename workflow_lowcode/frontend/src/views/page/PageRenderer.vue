@@ -1408,8 +1408,9 @@ async function handleExportExcel() {
     URL.revokeObjectURL(url)
     if (truncated) ElMessage.warning('数据量较大，已导出前 10000 行')
     else ElMessage.success('导出成功')
-  } catch {
-    // http 拦截器已弹错误消息（blob 错误响应会解出 R.msg）
+  } catch (e: any) {
+    // exportPageData 已归一错误消息（R.msg / HTTP 状态兜底，请求带 X-Skip-Error-Toast 不重复弹），此处统一提示
+    ElMessage.error(e?.message || '导出失败')
   } finally {
     exporting.value = false
   }

@@ -193,20 +193,56 @@ function blobHeader(blob: Blob, name: string): string | undefined {
   return undefined
 }
 
+/** 从错误载荷（Blob 形态的 R 包装 / 普通对象）解出 R.msg；无 → 空串 */
+async function rMsgOf(data: unknown): Promise<string> {
+  try {
+    if (data instanceof Blob) {
+      if (data.size === 0) return ''
+      const parsed = JSON.parse(await data.text())
+      return typeof parsed?.msg === 'string' ? parsed.msg : ''
+    }
+    if (data && typeof data === 'object') {
+      const msg = (data as Record<string, unknown>).msg
+      return typeof msg === 'string' ? msg : ''
+    }
+  } catch {
+    /* 非 JSON 错误体 → 空串（调用方走 HTTP 状态兜底消息） */
+  }
+  return ''
+}
+
 /**
  * 导出视图数据为 Excel（POST + JSON body → xlsx blob）。
  * 拦截器对 blob 原样放行并把响应头挂在 blob.__headers：文件名取
  * Content-Disposition（filename*=UTF-8''，回退入参 filename）；
  * X-Export-Truncated:true 表示后端按上限截断（10000 行），由调用方提示。
+ *
+ * 错误归一（单点，请求带 X-Skip-Error-Toast 让拦截器不重复 toast）：
+ * - HTTP 4xx/5xx：axios reject，错误体 Blob/对象 → 解 R.msg，兜底「导出失败（HTTP n）」；
+ * - HTTP 200 + application/json：全局异常处理器对 BusinessException 回 200 + R{code≠200}
+ *   （非 blob 语义），按 Content-Type 识别并抛出业务 msg——避免把 JSON 当 xlsx 下载。
  */
 export async function exportPageData(
   pageKey: string,
   body: PageDataExportRequest = {},
 ): Promise<{ blob: Blob; filename: string; truncated: boolean }> {
-  const blob = (await http.post(`/v1/pages/${pageKey}/data/export`, body, {
-    responseType: 'blob',
-    timeout: 120000,
-  })) as unknown as Blob
+  let blob: Blob
+  try {
+    blob = (await http.post(`/v1/pages/${pageKey}/data/export`, body, {
+      responseType: 'blob',
+      timeout: 120000,
+      // 单点错误归一：拦截器不 toast，由本函数解出 R.msg 抛 Error，调用方统一提示
+      headers: { 'X-Skip-Error-Toast': '1' },
+    })) as unknown as Blob
+  } catch (err: any) {
+    const status = err?.response?.status
+    const msg = await rMsgOf(err?.response?.data)
+    throw new Error(msg || `导出失败（HTTP ${status ?? 'ERR'}）`)
+  }
+  const contentType = (blobHeader(blob, 'Content-Type') || '').toLowerCase()
+  if (contentType.includes('json')) {
+    throw new Error((await rMsgOf(blob)) || '导出失败')
+  }
   const filename =
     filenameFromDisposition(blobHeader(blob, 'Content-Disposition')) ||
     (body.filename ? `${body.filename}.xlsx` : `${pageKey}.xlsx`)

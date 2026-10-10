@@ -118,9 +118,9 @@
                 :label="yFieldLabel(y.key)"
               >
                 <el-select v-model="y.agg" style="width: 120px">
-                  <el-option v-for="a in CHART_AGGS" :key="a" :label="aggLabel(a)" :value="a" />
+                  <el-option v-for="a in aggOptionsOf(y.key)" :key="a.value" :label="a.label" :value="a.value" />
                 </el-select>
-                <span class="form-tip">该指标列的聚合方式（缺省求和）；饼图仅取第一个指标列</span>
+                <span class="form-tip">聚合方式（数值列缺省求和、其他列计数，对齐汇总行口径）；饼图仅取第一个指标列</span>
               </el-form-item>
               <el-form-item label="取前 N 条">
                 <el-select v-model="chartLimit" style="width: 120px">
@@ -255,7 +255,6 @@ import { useAuthStore } from '@/stores/auth'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
 import {
-  CHART_AGGS,
   CHART_LIMITS,
   CHART_TYPES,
   DEFAULT_CHART_LIMIT,
@@ -264,6 +263,7 @@ import {
   type ChartType,
   type ViewChartConfig,
 } from './components/chartDataset'
+import { aggregateOptionsOf, isNumericColumnType } from './components/tableEnhance'
 import QueryColumnsConfig from './components/QueryColumnsConfig.vue'
 import ActionsConfig from './components/ActionsConfig.vue'
 import EventsConfig from './components/EventsConfig.vue'
@@ -540,14 +540,21 @@ const chartFieldCandidates = computed(() =>
 )
 
 const CHART_TYPE_LABELS: Record<ChartType, string> = { bar: '柱状图', line: '折线图', pie: '饼图' }
-const CHART_AGG_LABELS: Record<ChartAgg, string> = { sum: '求和', avg: '平均', count: '计数', max: '最大', min: '最小' }
 
 function chartTypeLabel(t: ChartType): string {
   return CHART_TYPE_LABELS[t] ?? t
 }
 
-function aggLabel(a: ChartAgg): string {
-  return CHART_AGG_LABELS[a] ?? a
+/** 指标列可用的聚合选项：数值列 sum/avg/max/min/count，其余列仅 count（对齐 ⑤ 汇总行 aggregateOptionsOf 口径） */
+function aggOptionsOf(key: string): { label: string; value: ChartAgg }[] {
+  const col = viewColumns.value.find((c) => c.key === key)
+  return aggregateOptionsOf(col?.columnType)
+}
+
+/** 指标列缺省聚合：数值列求和、其他列计数 */
+function defaultAggOf(key: string): ChartAgg {
+  const col = viewColumns.value.find((c) => c.key === key)
+  return isNumericColumnType(col?.columnType) ? 'sum' : 'count'
 }
 
 /** 指标列 key → 视图列显示名（聚合行标签） */
@@ -579,13 +586,13 @@ const chartLimit = computed<number>({
   },
 })
 
-/** 指标列多选（key 集合 ⇔ yFields[{key,agg}] 双向映射；新选指标缺省 agg=sum，取消勾选即移除） */
+/** 指标列多选（key 集合 ⇔ yFields[{key,agg}] 双向映射；新选指标按列类型取缺省聚合，取消勾选即移除） */
 const chartYKeys = computed<string[]>({
   get: () => (schema.chart?.yFields || []).map((y) => y.key),
   set: (keys) => {
     if (!schema.chart) return
     const prev = new Map(schema.chart.yFields.map((y) => [y.key, y.agg]))
-    schema.chart.yFields = keys.map((k) => ({ key: k, agg: prev.get(k) ?? 'sum' }))
+    schema.chart.yFields = keys.map((k) => ({ key: k, agg: prev.get(k) ?? defaultAggOf(k) }))
   },
 })
 

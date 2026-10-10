@@ -400,4 +400,25 @@ describe('ViewDesigner — 图表视图形态（Task ④）', () => {
     expect(parsed2.chart).toBeUndefined()
     wrapper2.unmount()
   })
+
+  it('指标列聚合选项对齐汇总行口径：已配置 agg 保留；新选数值列（INT）缺省 sum、非数值列（JSON/VARCHAR）缺省 count', async () => {
+    const wrapper = await mountWithSchema({
+      searchFields: [],
+      columns: [{ key: 'age', label: '年龄' }, { key: 'dept', label: '部门' }, { key: 'name', label: '姓名' }],
+      display: 'chart',
+      chart: { type: 'bar', xField: 'dept', yFields: [{ key: 'age', agg: 'avg' }], limit: 20 },
+      events: [],
+    })
+
+    // 指标列多选为 teleport 下拉，DOM 驱动成本高：直接驱动 computed setter（等效用户勾选）
+    ;(wrapper.vm as any).$.setupState.chartYKeys = ['age', 'dept', 'name']
+    await nextTick()
+    const saved = await saveAndParseSchema(wrapper)
+    expect(saved.chart.yFields).toEqual([
+      { key: 'age', agg: 'avg' }, // 已配置 agg 保留（INT 数值列）
+      { key: 'dept', agg: 'count' }, // 新选 JSON 列 → 仅计数
+      { key: 'name', agg: 'count' }, // 新选 VARCHAR 列 → 仅计数
+    ])
+    wrapper.unmount()
+  })
 })

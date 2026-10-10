@@ -6189,3 +6189,23 @@ Stage Summary:
 - 五项任务全部交付：①errorAction 提示+__lastError ②测试债 43→0 ③Excel 导入导出（后端+前端）④图表视图 ⑤汇总行/表头筛选/批量操作
 - 经验沉淀：子代理大任务易超时（≥2 次），落盘成品可主会话直接验收；E2E 脚本需容忍重供给后动态表缺失
 - 待办移交：Excel 完整 UI E2E（需真实绑定页面）；图表跨页聚合（需后端 aggregate 出参）；批量删除大批量场景后端端点；VariableResolver 点路径升级（__lastError.message 全局可用）
+---
+Task ID: 4+5b
+Agent: chart-view-excel-frontend
+Task: ④ 图表视图形态 + ③ Excel 导入导出前端接线
+
+Work Log:
+- 【探索】接手时发现 4+5b 主体已由前一（中断）会话落盘且已被外部进程以 8ec23eed 提交（本代理未做任何 git commit）：④ ViewDesigner chart 形态 + chartDataset.ts 纯逻辑 + PageDataChart.vue 渲染器 + PageRenderer chart 分支；③ api/page.ts 导出导入函数 + http.ts blob __headers 附带 + excelTransfer.ts（fetch 传输层，服务 PageDataTable 能力位与 ExcelImportDialog）+ ExcelActions/ExcelImportDialog 组件；测试 5 个新文件 + ViewDesigner/PageRenderer 扩展。本次续作以「核验 + 补缺 + 收敛」为主
+- 【补缺①·导出错误归一（真 bug 修复）】api/page.ts exportPageData 原样放行 HTTP 200 + application/json R{code≠200}（后端 GlobalExceptionHandler 对 BusinessException 回 200，非 blob 语义），会把 JSON 错误体当 xlsx 下载且提示「导出成功」——改为：请求带 X-Skip-Error-Toast 单点归一（拦截器不重复 toast），非 2xx 解错误体（Blob/对象）R.msg 兜底「导出失败（HTTP n）」，HTTP 200 按 __headers Content-Type 识别 json 抛业务 msg；PageRenderer.handleExportExcel catch 同步改为 ElMessage.error(e.message)
+- 【补缺②·api 单测】新建 src/api/__tests__/page.test.ts 12 用例：mock axios adapter（记录请求配置/伪造响应，与 xhr adapter settle 语义一致）+ 走「真实」http.ts 拦截器链——覆盖导出 blob 放行与 __headers 附带（http.ts 改动被测）、文件名回退链（Content-Disposition filename* → body.filename → pageKey）、X-Export-Truncated 大小写、HTTP200 JSON R 抛 msg、403 Blob R 解 msg 且无重复 toast、500 非 JSON 兜底、导入 FormData 原体/120s 超时/无手动 Content-Type、code≠200 拦截器 toast+reject 契约、filenameFromDisposition 纯解析
+- 【补缺③·聚合口径对齐】ViewDesigner 指标列聚合下拉由全量 CHART_AGGS 改为按列类型 aggregateOptionsOf（数值列 sum/avg/max/min/count、非数值仅 count，对齐 ⑤ 汇总行口径），新选指标缺省聚合按列类型（数值 sum/其他 count），已配置 agg 保留；移除本地 CHART_AGG_LABELS/aggLabel（AGGREGATE_OPTIONS 自带中文标签）
+- 【核验】图表链路（display=chart ⇔ schema.chart 存在不变量、ViewCompiler display 归一 table 后以 chart 存在性恢复、PageDataChart 空态/缺配置占位、size=-1 与 pagination.show=false 分支兼容）与 Excel 链路（导入弹窗统计/行级错误/刷新、无 formKey 置灰、图表形态仅导出）逐文件读毕，与 5-a 后端契约（filename*=UTF-8''、X-Export-Truncated、row=Excel 行号、label 等价自动映射）一致
+- 【验证】npx vitest run 定向 15 文件 183/183 全绿（api/page 12 + ViewDesigner 8 + PageDataChart 15 + chartDataset 14 + ExcelImportDialog 7 + PageDataTable.excel 7 + excelTransfer 24 + PageRenderer 20+4 + PageDataTable 19+6+3 + PageDataCards 17 + tableEnhance 19 + http-cache 8）；npx vue-tsc --noEmit rg -c "error TS" = 53 ≤ 基线 53，触碰文件零命中
+- 【纪律】未 commit（外部 8ec23eed 先于本次改动入库，本代理增量仅存工作区）、未重启 java/vite、未碰 backend/（仅只读探查）、未动 backups/、未跑全量 vitest
+
+Stage Summary:
+- 本次增量（工作区未提交，基线=8ec23eed）：frontend/src/api/page.ts（exportPageData 错误归一 + rMsgOf 助手，44 行）；PageRenderer.vue（导出 catch toast，5 行）；ViewDesigner.vue（聚合选项按列类型对齐 aggregateOptionsOf + 缺省聚合，23 行）；新增 src/api/__tests__/page.test.ts（12 用例）；ViewDesigner.test.ts +1 用例（8 用例全文件）
+- 图表实现选型：直用 echarts（复用 dashboard useEcharts 单例注册与 DASH_PALETTE/主题，不直接复用 DashChart 组件——其数据契约是 aggregate 端点 {key,value}，与行数据前端聚合不同）；数据映射纯逻辑独立 chartDataset.ts（rows→{dimensions,series}/pie[{name,value}]，兼容扁平行与 BizDataVO 双形态）；聚合口径复用 tableEnhance.computeAggregate（与 ⑤ 汇总行同源：count=非空计数、sum/avg/max/min 剔空值不可转数、avg 两位小数），UI 选项按列类型 aggregateOptionsOf 收敛；分组保持维度首现顺序、limit 截前 N 组；PageRenderer size=-1 同源取数（formKey 视图与 SQL 数据源后端跳过 LIMIT）
+- 测试数字：定向 vitest 15 文件 183/183；vue-tsc 53=基线（触碰文件零错误）
+- 遗留风险：①双传输层并存——api/page.ts（axios，PageRenderer 用）与 excelTransfer.ts（fetch，PageDataTable 能力位 + ExcelImportDialog 用）各有一套导出/导入/Content-Disposition 解析，均有测试且行为一致，但 importPageData 暂无组件调用方（作为标准 client 面保留），后续可统一到 api 层减少重复②图表取数 size=-1 的「不分页」在 formKey（BizDataSupport）与 SQL 数据源（SqlQueryEngine.wrapSubquery）生效，但 BuiltInSystemSourceQueryService/WorkflowFormDataQueryService 会 Math.max(1,size) 钳为 1——绑定此类数据源的图表视图仅聚合到首行（前端不可修，需后端两服务补 size<=0 语义）③Excel 导出为全量拉取（导出端点后端截断 10000 行），无分页进度提示；导入映射 UI 未暴露（默认按表头 label 等价自动映射，mapping 参数 API 已就绪）④运行中 jar 未含新端点（禁重启），导入导出/图表数据流待下次部署 UI 实测（前端单测已覆盖契约形态）⑤http.ts 的 __headers 以不可枚举属性挂 Blob，若上游替换 Blob 实现需回看 defineProperty 兜底
+---

@@ -6170,3 +6170,22 @@ Stage Summary:
 - 导出入参示例：form-data file=<.xlsx> + mapping={"全名":"name","年龄":"age"}（可选；缺省按表头=字段key 或列label 匹配，未匹配表头 400）；出参 R.data={total:100,success:98,failed:2,skipped:1,errors:[{row:5,message:"字段 年龄 须为整数: 3.5"},{row:12,message:"Duplicate entry ..."}]}；约束：仅 formKey 绑定的 VIEW 页面、≤5000 数据行/20MB/列≤200
 - 给前端 5-b 对接：导出用 POST+JSON（同视图查询参数+columns 可选子集）→ axios responseType:'blob'，从 Content-Disposition 取文件名、X-Export-Truncated 提示「已导出前 10000 行」；导入用 FormData+onUploadProgress，返回 code≠200 时 R.msg 直接 toast，code=200 时按 success/failed/errors 渲染行级错误表；下载后回填导入模板=导出文件表头即导入表头（label 等价自动映射，roundtrip 闭环）
 - 遗留风险：①导入仅支持业务表单（formKey）绑定视图，纯数据源（SQL/聚合类）视图导入返回 400「页面未绑定业务表单」（导出两者皆可）②TEXT/LONGTEXT 大文本与 JSON 列以文本进出 Excel（JSON 列导入传 JSON 文本由 createGeneric 校验合法性）③运行中 jar 未含新端点（禁重启约束），下次部署后可 UI 实测；单测 28 已覆盖端点与服务行为④上传大小沿用全局 spring.servlet.multipart 100MB，Controller 层另收窄 20MB
+
+---
+Task ID: 6
+Agent: main-session
+Task: 五项开发集成验证与交付收官
+
+Work Log:
+- Wave1：Task1（①errorAction 动态提示+__lastError）子代理交付，LogicFlowLastErrorTest 5/5+回归 53/53，vitest 37/37，vue-tsc 54
+- Wave2 并行：Task2（②43 存量测试）43→0 全清偿（1230 tests 0F0E，logicflow 122/122 保持；修主代码真 bug stripCompiled 漏剥 display）；Task3（⑤表格三件套）首次超时，resume 续作完成 220/220
+- 意外收获：Task3 首跑代理越界预写了 ③Excel 后端全链路（POI 5.3.0+Controller/Service/Support 下沉），定向测试 28+16+8=52/52 全绿，直接采纳为 Task5-a
+- Wave3 并行（Task4 图表 ∥ Task5-b Excel 前端）：双双超时但成品落盘，主会话直接验收——首跑 2 断言失败系 dying agent 写文件竞态，复跑两次 views/page 290/290 全绿，vue-tsc 53
+- 集成：mvn 全量 135 类 1213 tests 0F0E → jar 重建（121MB）→ start-java.sh 换装（pid 19145，此前发现 cron 18:05 轮已自行部署过一次旧 jar 实例 pid 7312，pkill 后重启）
+- E2E：e2e-new-nodes 13/13（补幂等 DELETE 容忍重供给缺表补丁）+ e2e-unique-field-chain 9/9；Excel HTTP 层探针 R{code:404 页面不存在}=路由/守卫/租户链全通（DB 重供给后无用户页面，完整 UI E2E 留待真实页面时补）
+- 提交推送：origin/main=b3cc1159，四链路 200×4，mem 2142MB，oom 0
+
+Stage Summary:
+- 五项任务全部交付：①errorAction 提示+__lastError ②测试债 43→0 ③Excel 导入导出（后端+前端）④图表视图 ⑤汇总行/表头筛选/批量操作
+- 经验沉淀：子代理大任务易超时（≥2 次），落盘成品可主会话直接验收；E2E 脚本需容忍重供给后动态表缺失
+- 待办移交：Excel 完整 UI E2E（需真实绑定页面）；图表跨页聚合（需后端 aggregate 出参）；批量删除大批量场景后端端点；VariableResolver 点路径升级（__lastError.message 全局可用）

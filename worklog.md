@@ -6298,3 +6298,22 @@ Stage Summary:
 - 前端链路全通：设计器有开关 → schema 落 props → 运行页按钮出现（designMode 修复后实测）；后端 Excel 仅 VIEW 型可用 → PAGE 型（当前主路径）验证被门禁挡住
 - 推送状态：本地与远端已对齐（f54ba15a），历史含密文件已清除，dump-db.sh 推送失败不再静默
 - 已知技术债：①FormJoinQueryIntegrationTest 11 错（H2 夹具列漂移）②导入映射 UI 未暴露（mapping 参数后端已支持）③Excel PAGE 型适配待做
+
+---
+Task ID: dev-6-excel-e2e-final
+Agent: main-session-dev（用户问进度轮：push 收口 + PAGE 型 Excel 全链路验证 + 数据修复）
+Task: 完成 push、恢复丢失的表单定义、PAGE 型 Excel 导入导出端到端验证
+
+Work Log:
+- 【push 收口】发现上轮 cron 会话已把 25+ 积压推上远端（88413223），本地仅剩 cron 提交 e18c7c1b（PAGE 型 Excel 适配实现）；工作区遗留其编译修复未提交（DataSourceDefinition 实体 import 路径不存在 + 测试构造器缺参）→ 编译验证 + 测试断言对齐新语义（PAGE 型放行、无 page-table 组件报「未包含数据表格组件」，28/28 绿）→ 提交 1acbc4b2 → PAT push 成功 88413223..1acbc4b2
+- 【运行时切新】发现旧 jar（pid 16720）仍占 8080 且上轮重启（16985）因端口占用静默失败（日志实锤 Port 8080 already in use）→ kill 16720 → clean package 重建（含 PAGE 适配）→ 双层 fork 拉起 pid 18145 → login 200
+- 【数据丢失发现与修复】导出报「业务表单不存在或未发布: person」，且运行时 GET /ds/{id}/data 同样 404 —— 排查确认 wf_form_def 从 15 行跌至 1 行（丢 13 条：person/leave_apply_biz/bill_test/e2enew_task/ai_* 等；16:06 dump 尚完好，丢失发生在 16:06 后、成因未明，唯一可疑窗口是 cron 会话全量测试跑动或环境重供给）；其余表（wf_page_def/wf_data_source/wf_biz_person）按业务键逐行比对与 16:06 完全一致，仅 wf_form_def 受损 → mariadb 原生方案：16:06 dump 导入临时库 workflow_restore（sed 换库名防误写）→ INSERT...SELECT 按 id 差集回补 13 条 → person PUBLISHED 恢复
+- 【Excel 端到端全通】租户坑：curl 需 X-Tenant-Id: default（页面归属 default 租户，传 1 会 404）；导出 POST /api/v1/pages/table-enhance-e2e/data/export → 200 真实 xlsx（表头=人员编码/人员姓名/所属部门，数据行 001/张三）；导入 POST .../data/import 上传 imp_row.xlsx（IMP001/导入验证/测试部）→ {"success":1,"failed":0}；回读导出含 IMP001 行 ✓
+- 【浏览器验证】/page/table-enhance-e2e 登录后：导出 Excel/导入 Excel/新增按钮齐备；表格渲染含 IMP001 行（dept 列正确显示「武汉分公司」，JSON ["2"] 经部门树翻译）；导入弹窗完整（拖拽区/说明/取消/开始导入未选文件禁用）；点导出后控制台无错误
+- 【链路复核】dump-db.sh 推送告警已修（显式 WARN + 落盘 /home/z/tools/dump-db-push-fail.log）；credential.helper store 已存 PAT，后续 push 正常
+
+Stage Summary:
+- PAGE 型 Excel 导入导出全链路收官：设计器开关 → schema props → 运行页按钮 → 后端 PAGE 适配（导出列取 props.columns、导入目标 refId→formKey）→ xlsx 往返实测 ✓；提交已上 GitHub（1acbc4b2）
+- 【风险观察】wf_form_def 13 条定义无操作者痕迹消失，成因未定位；建议下一轮：①重启后复查 form_def 行数是否稳定 ②排查是否有测试进程误连真实库 ③考虑 dump-db 增加行数基线告警
+- 【体验遗留】导出 dept 列显示原始 JSON（["2"]）而非部门名——可在导出时对 elTreeSelect 型列做显示值翻译（待排期）；导入弹窗浏览器拖拽上传受无头环境限制未 UI 实测（API+弹窗渲染已验）
+- 三问收口素材：①汇总标签=首个未配置聚合列显示「汇总」，其余列显数值 ②Excel=设计器数据源绑定弹窗表格增强区两开关（table 模式）+ 运行页工具栏按钮 ③表头筛选/批量开关=同弹窗表格增强区

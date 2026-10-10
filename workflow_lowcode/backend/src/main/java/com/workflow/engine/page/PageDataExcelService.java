@@ -91,6 +91,9 @@ public class PageDataExcelService {
     /** 导出产物（xlsx 字节 + 实际行数 + 是否被上限截断） */
     public record ExportResult(byte[] xlsx, int rows, boolean truncated) {}
 
+    /** 导出列声明（VIEW = schema.columns / PAGE = rule.props.columns 的归一化中间态） */
+    public record ColumnDecl(String key, String label, boolean hidden, boolean custom) {}
+
     // ==================== 导出 ====================
 
     /**
@@ -102,10 +105,31 @@ public class PageDataExcelService {
      */
     public ExportResult export(PageDefinition page, BizDataQueryRequest query, List<String> requestedColumns) {
         List<ExportColumn> columns = resolveExportColumns(page, requestedColumns);
+        return fetchAndWrite(q -> queryOnce(page, q), columns, query);
+    }
+
+    /**
+     * 导出自定义页面（PAGE）数据表格绑定的数据源为 .xlsx。
+     * 列声明来自 rule.props.columns（prop/label/hidden/custom），取数走页面内数据源 refId
+     * （与 PageQueryController#queryPageDataSource 同链路）。
+     *
+     * @param refId            页面内数据源解析出的全局数据源 refId（调用方经 PageViewQuerySupport 解析）
+     * @param decls            page-table 组件列声明（调用方从 rule JSON 解析）
+     * @param query            已过白名单的查询上下文
+     * @param requestedColumns 导出列 key 子集（可空 = 全部可见列）
+     */
+    public ExportResult exportPageDataSource(String refId, List<ColumnDecl> decls,
+                                             BizDataQueryRequest query, List<String> requestedColumns) {
+        List<ExportColumn> columns = exportColumnsOf(decls, requestedColumns);
         if (columns.size() > MAX_COLUMNS) {
             throw new BusinessException(400, "导出列数超过上限 " + MAX_COLUMNS + " 列");
         }
+        return fetchAndWrite(q -> dsService.queryData(refId, q), columns, query);
+    }
 
+    /** 分页拉全量 + 写 workbook（VIEW/PAGE 两条导出路径共享；上限 MAX_EXPORT_ROWS，超出截断防 OOM） */
+    private ExportResult fetchAndWrite(java.util.function.Function<BizDataQueryRequest, BizDataPageVO> fetcher,
+                                       List<ExportColumn> columns, BizDataQueryRequest query) {
         // 分页拉全量（上限 MAX_EXPORT_ROWS，超出截断防 OOM）
         List<BizDataVO> collected = new ArrayList<>();
         long total = -1;
@@ -113,7 +137,7 @@ public class PageDataExcelService {
         while (collected.size() < MAX_EXPORT_ROWS) {
             query.setPage(pageNo);
             query.setSize(EXPORT_PAGE_SIZE);
-            BizDataPageVO vo = queryOnce(page, query);
+            BizDataPageVO vo = fetcher.apply(query);
             if (vo.getRecords() == null || vo.getRecords().isEmpty()) {
                 break;
             }
@@ -188,6 +212,46 @@ public class PageDataExcelService {
             throw new BusinessException(400, "页面未声明展示列，无法导出");
         }
 
+        Set<String> chosen = chooseColumns(requestedColumns, orderedKeys, defaultKeys);
+
+        List<ExportColumn> out = new ArrayList<>(chosen.size());
+        for (String key : chosen) {
+            out.add(new ExportColumn(key, labelByKey.getOrDefault(key, key)));
+        }
+        return out;
+    }
+
+    /** PAGE 数据表格列声明 → 导出列（选择语义与 {@link #resolveExportColumns} 尾段一致） */
+    private List<ExportColumn> exportColumnsOf(List<ColumnDecl> decls, List<String> requestedColumns) {
+        LinkedHashSet<String> orderedKeys = new LinkedHashSet<>();
+        Map<String, String> labelByKey = new LinkedHashMap<>();
+        Set<String> defaultKeys = new LinkedHashSet<>();
+        if (decls != null && !decls.isEmpty()) {
+            for (ColumnDecl d : decls) {
+                if (d == null || d.key() == null || d.key().isBlank() || d.custom()) {
+                    continue;
+                }
+                orderedKeys.add(d.key());
+                labelByKey.put(d.key(), d.label() == null || d.label().isBlank() ? d.key() : d.label());
+                if (!d.hidden()) {
+                    defaultKeys.add(d.key());
+                }
+            }
+        }
+        if (orderedKeys.isEmpty()) {
+            throw new BusinessException(400, "页面未声明展示列，无法导出");
+        }
+        Set<String> chosen = chooseColumns(requestedColumns, orderedKeys, defaultKeys);
+        List<ExportColumn> out = new ArrayList<>(chosen.size());
+        for (String key : chosen) {
+            out.add(new ExportColumn(key, labelByKey.getOrDefault(key, key)));
+        }
+        return out;
+    }
+
+    /** 导出列选择（requested 子集校验 + 缺省可见列）；与原 resolveExportColumns 尾段同语义 */
+    private Set<String> chooseColumns(List<String> requestedColumns,
+                                      LinkedHashSet<String> orderedKeys, Set<String> defaultKeys) {
         Set<String> chosen = new LinkedHashSet<>();
         if (requestedColumns != null && !requestedColumns.isEmpty()) {
             for (String key : requestedColumns) {
@@ -205,12 +269,7 @@ public class PageDataExcelService {
         if (chosen.isEmpty()) {
             throw new BusinessException(400, "无可导出的展示列");
         }
-
-        List<ExportColumn> out = new ArrayList<>(chosen.size());
-        for (String key : chosen) {
-            out.add(new ExportColumn(key, labelByKey.getOrDefault(key, key)));
-        }
-        return out;
+        return chosen;
     }
 
     /** 解析 schema 顶层节点（容错：空/非法 schema → missing node） */

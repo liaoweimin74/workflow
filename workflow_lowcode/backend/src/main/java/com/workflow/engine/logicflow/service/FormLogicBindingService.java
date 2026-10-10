@@ -83,6 +83,12 @@ public class FormLogicBindingService {
     public static final String TRIG_AFTER_PROCESS_TERMINATE = "AFTER_PROCESS_TERMINATE";
     /** 工作流表单：流程实例启动（含首份表单数据落库）后（AFTER 语义）。 */
     public static final String TRIG_AFTER_PROCESS_START = "AFTER_PROCESS_START";
+    /** 逻辑编排任务级：Flowable TASK_CREATED 桥接触发（WorkflowLogicTriggerListener 派发；词表对齐 WorkflowLogicTriggerService javadoc）。 */
+    public static final String TRIG_TASK_CREATE = "TASK_CREATE";
+    /** 逻辑编排流程级：Flowable PROCESS_COMPLETED 桥接触发。 */
+    public static final String TRIG_PROCESS_COMPLETE = "PROCESS_COMPLETE";
+    /** 逻辑编排流程级：Flowable PROCESS_CANCELLED 桥接触发（cause 写入触发变量）。 */
+    public static final String TRIG_PROCESS_CANCEL = "PROCESS_CANCEL";
     public static final Set<String> TRIGGER_TYPES = Set.of(
             TRIG_BEFORE_CREATE, TRIG_AFTER_CREATE,
             TRIG_BEFORE_UPDATE, TRIG_AFTER_UPDATE,

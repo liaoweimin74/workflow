@@ -6374,3 +6374,36 @@ Stage Summary:
 - 两项用户反馈全部修复并双通道验证（单测+浏览器几何/截图）
 - 【新观察·预存问题】设计器重开页面后，组件绑定弹窗数据源下拉显示占位符（草稿态未回填 dataSourceId='ds_mv2i46vn'），但已发布 schema 完好（dataSourceId+全部能力位 true）、运行页正常——弹窗回填逻辑 form.dataSourceId=bp.dataSourceId 本身正确，疑似父组件（页面设计器属性面板）加载草稿时未传 bindingProps；与本次改动无关（本次仅模板 class/插槽迁移）。风险：若用户在未重选绑定时点保存，可能擦除 dataSourceId。建议下一轮：核实 PageDesigner 加载链路的 bindingProps 传递并在重开时回填
 - 【安全动作】排查期间未在设计器做任何保存操作，避免草稿态覆盖已发布 schema
+
+---
+Task ID: ui-summary-switch
+Agent: Z.ai Code (continuation session)
+Task: 用户反馈——①数据表格配置汇总行的开关没有了（只剩「去配置」链接）②删掉该链接，配置位置改由悬浮 tooltip 说明
+
+Work Log:
+- 【根因】DsBindingConfigDialog.vue 表格增强区第 6 项「汇总行」无开关，实为 scrollToColumns 锚点链接（列级聚合功能 Task ⑤ 引入时用「去配置」替代了开关位）
+- 【修复】①「汇总行」恢复 el-switch 总开关（tableData.summaryRow，缺省关闭）②删除「去配置」链接 + scrollToColumns + columnsWrapRef + .summary-entry 样式 + 无用的 summary-tip class ③tooltip 改为「开启后表格底部显示汇总行，按当前页数据统计；在下方列清单点击列的『高级配置』→ 汇总下拉选择聚合方式（求和/平均/最大/最小/计数）」
+- 【存量兼容】PageDataTable 新增 summaryRow 能力位（boolean | {enabled}）：已声明用其值；未声明（存量 schema）回退旧行为=存在列级聚合即显示汇总行。⚠️ Vue 陷阱：Boolean 联合类型 prop 未传会被强转 false，需 withDefaults 显式 summaryRow: undefined 保留「未声明」语义
+- 【保存链】handleConfirm table 模式写入 result.summaryRow={enabled}；initTableData 回填：已声明用其值，未声明按 columns.some(c=>c.aggregate) 推导（存量页面开关自动呈开启态，行为不变）
+- 【测试】DsBindingConfigDialog.table.test.ts +4 用例（存量推导开/关、显式 false/true 保存回填 + summary-entry 移除断言）；PageDataTable.test.ts +4 用例（未传/显式 false/显式 true/无聚合列 的 showSummary 门控）——定向 40/40 绿
+- 【发现】并行 cron 提交 ae482a7d 已修复上轮遗留 bug（列汇总「计数→无」pickAdvanced 跳过 undefined 致旧值残留），附 94 行测试，该欠账闭环
+
+Stage Summary:
+- 「汇总行」配置项：开关恢复 + 链接删除 + tooltip 指引，存量 schema 行为零变化（未声明 summaryRow 时回退旧口径）
+- Vue Boolean 联合 prop 强转陷阱已注释沉淀在 withDefaults 处，后续新增同类能力位注意
+- 待收尾：全量回归曾有 3 文件 9 用例失败未定位归属（中断丢日志）；浏览器实测与提交推送进行中
+
+---
+Task ID: analysis-component-gap
+Agent: Z.ai Code (continuation session)
+Task: 用户需求——分析表单设计器与页面设计器对标成熟低代码平台还欠缺哪些组件（用户提示此前讨论过，worklog 无独立清单，按代码「唯一事实来源」重建）
+
+Work Log:
+- 【事实源】vendor/config/rule 44 文件（基础组件全集）+ FormDesigner.vue addComponent（查找带回/卡片列表/数据引用/数据表格/计算公式/用户/部门/附件）+ main.ts（dash 系 6 件）+ PageDesigner.vue（page-table/page-tree/page-list-cards）+ 发布白名单 BUSINESS_FORM_ALLOWED_TYPES
+- 【表单设计器欠缺】P0=地址省市区（PRD §3.2.1 承诺未实现）、字典下拉（/dict-types API 现成、select 目前仅静态选项）、自动编号（PRD 承诺未实现、需后端提交时生成流水号）；P1=关联记录只读卡片、分步表单容器；P2=地图定位、弹窗/抽屉容器
+- 【页面设计器欠缺】P0=page-form 数据录入页（PAGE 轨只能看不能填的最大闭环缺口）、page-detail KV 详情（record-change 联动现成）、page-chart（PageDataChart+chartDataset.ts VIEW 轨已写好，低成本复活）；P1=环比指标卡、树表格；P2=iframe/公告轮播/日历/时间线/步骤条/左树右表一键模板
+- 【平台级配套】自定义组件注册机制（PRD §3.2.2）、可视化联动规则（PRD §3.2.5）、表单打印/PDF、移动端 H5 变体
+- 【路线】第一批 page-chart→字典下拉→地址→page-detail；第二批 page-form→自动编号→环比指标卡；第三批体验增强。待用户拍板
+
+Stage Summary:
+- 组件缺口分析已重建并按 P0/P1/P2 分级 + 成本标注 + 路线建议；等用户选择方向后开工

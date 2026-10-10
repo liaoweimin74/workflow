@@ -6209,3 +6209,17 @@ Stage Summary:
 - 测试数字：定向 vitest 15 文件 183/183；vue-tsc 53=基线（触碰文件零错误）
 - 遗留风险：①双传输层并存——api/page.ts（axios，PageRenderer 用）与 excelTransfer.ts（fetch，PageDataTable 能力位 + ExcelImportDialog 用）各有一套导出/导入/Content-Disposition 解析，均有测试且行为一致，但 importPageData 暂无组件调用方（作为标准 client 面保留），后续可统一到 api 层减少重复②图表取数 size=-1 的「不分页」在 formKey（BizDataSupport）与 SQL 数据源（SqlQueryEngine.wrapSubquery）生效，但 BuiltInSystemSourceQueryService/WorkflowFormDataQueryService 会 Math.max(1,size) 钳为 1——绑定此类数据源的图表视图仅聚合到首行（前端不可修，需后端两服务补 size<=0 语义）③Excel 导出为全量拉取（导出端点后端截断 10000 行），无分页进度提示；导入映射 UI 未暴露（默认按表头 label 等价自动映射，mapping 参数 API 已就绪）④运行中 jar 未含新端点（禁重启），导入导出/图表数据流待下次部署 UI 实测（前端单测已覆盖契约形态）⑤http.ts 的 __headers 以不可枚举属性挂 Blob，若上游替换 Blob 实现需回看 defineProperty 兜底
 ---
+
+---
+Task ID: 6-final
+Agent: main-session-integration
+Task: 五项开发最终对账收口（全量绿+终态探活）
+
+Work Log:
+- 验收 4+5b 代理增量（Excel 导出错误归一+图表聚合口径对齐+api 12 用例）：前端全量 vitest 119 文件 1532/1532 全绿（历史新高，基线 1425→1532），vue-tsc 53 基线
+- 增量提交推送 ad827722；并行主会话收官记录核对一致（mvn 1213 0F0E、E2E 13/13+9/9、jar 换装 pid 19145 含 Excel 端点）
+- 终态：四链路 200×4 + accessToken 真绿，Java 单实例 pid 19145，vite×1，mem 2291MB，oom 0，工作树干净 origin/main=ad827722
+
+Stage Summary:
+- 五项任务全部交付并上线：①errorAction 动态提示+{{__lastError}}（后端引擎+面板三态提示）②测试债 43→0 ③Excel 导入导出（POI 后端 28 用例+前端接线含错误归一）④图表视图（echarts+前端聚合对齐⑤口径）⑤汇总行/表头筛选/批量操作
+- 移交待办：Excel 完整 UI E2E（需真实绑定页面）；图表跨页聚合需后端 aggregate 出参；BuiltInSystemSource/WorkflowForm 适配器 size=-1 钳 1 影响图表全量取数；导入映射 UI 未暴露

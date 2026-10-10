@@ -6279,3 +6279,22 @@ Stage Summary:
 - 结论：非代码缺陷，属配置未确认落库；刷新 /page/table-enhance-e2e 后三列均显示计数值、「汇总」文字消失（无未配置列承载标签）
 - UX 改进候选（已向用户提出待确认）：①高级配置弹窗未保存关闭加确认提醒 ②汇总下拉即改即存 ③首列"汇总: 数值"同格标签样式
 - 23:05 巡检轮全绿收口
+
+---
+Task ID: dev-6-excel-entry
+Agent: main-session-dev（用户三问答疑 + Excel 配置入口 + 运行态修复 + jar 重建）
+Task: Excel 导入导出配置入口补齐 + designMode 泄漏修复 + 推送链路与构建清偿
+
+Work Log:
+- 【设计器补口】DsBindingConfigDialog 表格增强区新增「Excel 导出/Excel 导入」开关（仅 table 模式，缺省关闭）：tableData 默认值/回填 bp.excelExport?.enabled/confirm 写入 props.excelExport={enabled}/props.excelImport={enabled}；弹窗三套件 22→24 全绿（新增 Excel 缺省关闭/回填保存用例，card 排除断言扩展）；提交 13beb210（重写后哈希）
+- 【运行态修复】PageRendererPage.transformComponent 的 designMode 运行态归一从 page-list-cards 扩展到 page-table：设计器持久化的 designMode:true 曾让已发布 PAGE 运行时 Excel 按钮永不显示（PageDataTable excelExportOn/excelImportOn 以 !designMode 为前提）；agent-browser 实测修复后按钮出现
+- 【推送链路】用户提供 PAT → credential.helper store；首次 push 撞 origin/main 分叉（并行实例真实链 ba759d5a）→ merge 解决三冲突（recover-dplus.sh 取本地双密码加固版、worklog 并集、backups 按工作树收口）→ GitHub Push Protection 拦截（cron 误提交 tool-results/pat-remote-url.txt 含旧 PAT）→ filter-branch 仅对 origin/main..main（11 提交）清除 tool-results/ + .gitignore 防复发 → 推送成功 ba759d5a..f406bf29；dump-db.sh 静默 push 失败改为显式告警落盘
+- 【构建清偿（合并语义冲突三连）】远端链靠增量编译掩盖了三处源码级冲突：①api/controller/PostController.java 为重构遗留旧件（与 system/controller 新版重复映射 /api/posts 且引用已不存在的 SysPost API）→ 删除 ②WorkflowLogicTriggerListener 引用 FormLogicBindingService 不存在的 TRIG_TASK_CREATE/TRIG_PROCESS_COMPLETE/TRIG_PROCESS_CANCEL → 按派发层 javadoc 词表补三常量（未配置绑定时派发空转无害）③target/classes 残留 V2__init_data.sql 与现行 V2__init.sql 双 V2 → Flyway 拒启 → mvn clean package 清偿
+- 【工具链重建】重供给后无 JDK/maven：apt-get download openjdk-21-jdk-headless + dpkg -x 合成树（JDK 工具覆盖系统 JRE）+ Apache maven-3.9.9 tarball 用户态装配；mvn clean package 1258 测试 1247 绿/11 错（全部集中于 FormJoinQueryIntegrationTest：H2 夹具 wf_biz_customer 缺 manager 列——示例 join 功能夹具漂移，与本轮改动无关，记技术债）
+- 【Java 恢复】新 jar（121MB，含 PageDataExcelController+POI5）拉起 pid 16720，Flyway 单 V2 通过，login 200；导出接口 HTTP 200 但返回 R{code=400:「页面 table-enhance-e2e 不是视图类型」}
+- 【缺口定位】PageDataExcelController.resolveViewPage 门禁仅放行 VIEW 型（页面级 dataSourceId/formKey）；PAGE 型为组件级绑定（rule[0].props.dataSourceId → 全局源 refId），运行时取数已走 GET /{pageKey}/ds/{dataSourceId}/data——Excel 控制器需镜像该解析路径放行 PAGE 型（export 列清单取 page-table props.columns；import 目标 = refId→formKey）——独立小特性，待用户确认后排期
+
+Stage Summary:
+- 前端链路全通：设计器有开关 → schema 落 props → 运行页按钮出现（designMode 修复后实测）；后端 Excel 仅 VIEW 型可用 → PAGE 型（当前主路径）验证被门禁挡住
+- 推送状态：本地与远端已对齐（f54ba15a），历史含密文件已清除，dump-db.sh 推送失败不再静默
+- 已知技术债：①FormJoinQueryIntegrationTest 11 错（H2 夹具列漂移）②导入映射 UI 未暴露（mapping 参数后端已支持）③Excel PAGE 型适配待做

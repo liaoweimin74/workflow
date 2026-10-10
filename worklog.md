@@ -5904,3 +5904,21 @@ Stage Summary:
 - 用户两个报障闭环：①=旧 jar 根因已根治（新 jar 已替换且备份已更新，UNKNOWN_NODE_TYPE 不再出现）②=多表单已原生支持（前端统一编辑器直接配多条目）
 - 用户侧注意事项：浏览器强刷（Ctrl+Shift+R）拉最新前端；表单须声明唯一字段后其冲突键下拉才有选项（bill_test 等无唯一索引的表单配不了冲突键属预期）
 - 沉淀：验证 jar 版本用 unzip -p jar path/NodeType.class | strings 比 git log 时间推断可靠
+
+---
+Task ID: dev-dataupsert-multi-20261010-0900（多表单实施+验证）
+Agent: 主控（Z.ai Code）
+Task: 用户报障①DATA_UPSERT 保存报 UNKNOWN_NODE_TYPE+业务表单下拉空 ②数据写入节点需支持多表单——实施与双会话交叉验证
+
+Work Log:
+- 【问题①根因确认】运行 jar（10-09 23:13 构建）早于 DATA_UPSERT 实现（0d34c29d @ 10-10 02:18 本地）→ NodeType 枚举无 DATA_UPSERT → 保存报 UNKNOWN_NODE_TYPE；下拉空=假绿期间（06:59-07:30）Node 引擎无 form-definitions API + 旧 jar 缺 unique-keys 端点的叠加表现
+- 【多表单实施（本会话）】后端：BackendDataUpsertConfig 增 TableUpsert{alias,formKey,conflictKey,values,onUpdate}+upserts（MAX 20）→ LogicFlowEngine 重构（编译抽 compileUpsertEntry/执行抽 executeBuiltUpsert/BuiltUpsert record + executeDataUpsertMulti 单连接单事务 runUpsertMulti 含同连接 id 反查）→ Validator 分派（upserts 逐条目 alias/formKey/conflictKey/values 校验）→ 编译 BUILD SUCCESS；单测 LogicFlowDataUpsertTest 17/17（+5 多表单：单条目等价输出/双表单事务汇总+SQL 序/回滚 rollback/别名重复拒绝/超上限拒绝）
+- 【前端实施】dsl.ts +DataUpsertUpsertItem/upserts 类型 + defaultConfig 预置；PropertyPanel DATA_UPSERT 段重写为统一多表单卡片编辑器（对齐 DATA_UPDATE 模式：alias+表单/冲突键/写入字段/更新覆盖 + 单表迁移函数 + per-formKey 列与唯一键缓存）；vue-tsc 54=基线零新增；vitest 1425/1425 全绿（dsl.test 断言更新）
+- 【新 jar 上线】mvn package 103671571 字节 → 杀旧 java（2097）→ 新实例 5747 Started 40.5s → 真登录 token ✓ → backups/jar 已更新（防重供给回退）
+- 【端点验证】form-definitions?type=BUSINESS ✓；data-sources/db/tables/wf_biz_person/unique-keys 返回 [[tenant_id,code]] ✓
+- 【E2E 7/7 全 PASS】scripts/e2e-dataupsert-multi.mjs（临时表含 (tenant_id,col) 唯一索引）：Phase1 双表单新增 total=2/created=2 + u0/ledger.created + 库核验；Phase2 同键二写 updated=2 + id 反查一致 + qty/amount 新值落库；Phase3 超精度失败 run FAILED + 首条效果随事务回滚（qty 仍 8）；与并行会话 e2e-dataupsert.sh（API 级）交叉验证一致
+- 【并行会话整合】cron 快照 a853ef79 已收录本会话全部改动入库（对方 worklog 误记多表单为「原生存在」，实为本会话实施成果）；本地 main 领先 origin，本轮补推
+
+Stage Summary:
+- 用户两报障闭环：①新 jar 上线 UNKNOWN_NODE_TYPE 根治（前端强刷即恢复）②多表单支持完整交付：设计器多表单卡片编辑器→保存→发布→运行（单事务全有或全无）→DB 双表落库→汇总 {total,created,updated,u0|别名.{result,affected,id,table}} 下游可点路径引用
+- 使用注意：无唯一索引的表单（bill_test 等）冲突键下拉为空属预期，需在表单设计器标记「唯一」字段并重新发布

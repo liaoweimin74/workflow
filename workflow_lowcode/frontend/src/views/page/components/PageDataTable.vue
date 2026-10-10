@@ -27,8 +27,21 @@
     @selection-change="handleSelectionChange"
     @sort-change="handleSortChange"
   >
-    <!-- 批量操作条（Task ⑤）：选中行后浮出在表格顶部；批量删除/清空选择 -->
+    <!-- 工具栏：Excel 导入导出（Task 5-b，能力位缺省隐藏）+ 批量操作条（Task ⑤）：选中行后浮出在表格顶部；批量删除/清空选择 -->
     <template #default>
+      <el-button
+        v-if="excelExportOn"
+        class="excel-export-btn"
+        :icon="Download"
+        :loading="excelExporting"
+        @click="handleExcelExport"
+      >导出 Excel</el-button>
+      <el-button
+        v-if="excelImportOn"
+        class="excel-import-btn"
+        :icon="Upload"
+        @click="excelImportVisible = true"
+      >导入 Excel</el-button>
       <TableBatchBar
         v-if="batchEnabled && selectedRows.length > 0"
         :count="selectedRows.length"
@@ -39,6 +52,14 @@
       />
     </template>
   </SearchTable>
+
+  <!-- Excel 导入弹窗（Task 5-b）：上传 → 统计/失败明细；有行写入成功后经 refresh 触发既有刷新链路 -->
+  <ExcelImportDialog
+    v-if="excelImportOn"
+    v-model="excelImportVisible"
+    :page-key="pageKey"
+    @success="refresh"
+  />
 
   <!-- 详情弹窗（view 按钮/行查看：只读表单） -->
   <el-dialog v-model="detailVisible" title="详情" :width="detailWidth" :close-on-click-modal="false">
@@ -137,6 +158,12 @@ import {
   type SummaryColumnSpec,
 } from './tableEnhance'
 import { useDataSourceCrud } from '@/composables/useDataSourceCrud'
+import ExcelImportDialog from './ExcelImportDialog.vue'
+import {
+  buildExcelExportRequest,
+  exportPageDataToExcel,
+  pageExcelUrl,
+} from './excelTransfer'
 
 /** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费；关联容器打开能力 */
 const actionBus = inject<{
@@ -186,6 +213,10 @@ const props = withDefaults(defineProps<{
   headerFilter?: boolean | { enabled?: boolean }
   /** 批量操作（Task ⑤）：首列多选框 + 批量操作条（批量删除/清空选择）；缺省关闭 */
   batch?: boolean | { enabled?: boolean; delete?: boolean }
+  /** Excel 导出（Task 5-b）：工具栏「导出 Excel」能力位；缺省关闭（按钮不出现） */
+  excelExport?: boolean | { enabled?: boolean }
+  /** Excel 导入（Task 5-b）：工具栏「导入 Excel」能力位；缺省关闭（按钮不出现） */
+  excelImport?: boolean | { enabled?: boolean }
   styleRule?: CardStyle
   /** 附加属性（border/stripe 等） */
   [key: string]: any
@@ -631,6 +662,57 @@ function applyHeaderFilter(key: string, value: HeaderFilterValue | null) {
   tableRef.value?.setQuery({}, true)
 }
 
+// ==================== Excel 导入导出（Task 5-b） ====================
+/** 能力位：与表头筛选/批量操作同款 featureEnabled 归一化（缺省关闭 → 按钮不出现）；设计态预览不启用 */
+const excelExportOn = computed(() => !props.designMode && featureEnabled(props.excelExport))
+const excelImportOn = computed(() => !props.designMode && featureEnabled(props.excelImport))
+const excelExporting = ref(false)
+const excelImportVisible = ref(false)
+/** SearchTable 最近一次取数参数快照（导出复用当前查询条件：搜索字段值/排序随取数落地，未搜索的输入不参与） */
+const lastQueryParams = ref<Record<string, any> | null>(null)
+
+/** 导出列 = 当前生效展示列（baseColumns）剔除自定义计算列（后端导出列白名单仅限声明列，custom 不在候选集，显式传入会 400） */
+const excelExportColumns = computed<string[]>(() => {
+  const customKeys = new Set(
+    (props.columns || [])
+      .filter((c: any) => c.custom)
+      .map((c: any) => String(c.key ?? c.prop)),
+  )
+  return baseColumns.value
+    .map((c) => String(c.prop))
+    .filter((k) => k && !customKeys.has(k))
+})
+
+/** 导出 Excel：以当前查询条件 + 视图列配置请求后端生成 xlsx 并触发浏览器下载（fetch → blob → a[download]） */
+async function handleExcelExport() {
+  if (excelExporting.value) return
+  excelExporting.value = true
+  try {
+    const body = buildExcelExportRequest({
+      queryParams: lastQueryParams.value,
+      searchFields: resolvedSearchFields.value,
+      staticFilter: props.dataSourceId ? tableFilterStore[props.dataSourceId] : undefined,
+      busFilter: currentFilter.value,
+      headerFilters: headerFilters.value,
+      resolveColumn: resolveSearchColumn,
+      columns: excelExportColumns.value,
+    })
+    const res = await exportPageDataToExcel(pageExcelUrl(props.pageKey || '', 'export'), body, {
+      filenameBase: props.pageKey || '',
+    })
+    if (res.truncated) {
+      ElMessage.warning(`导出成功：数据量超过单次导出上限，已截断至前 10000 行（${res.filename}）`)
+    } else {
+      ElMessage.success(`导出成功：${res.filename}`)
+    }
+  } catch (e) {
+    // fetch 不走 http 拦截器：R 包装错误消息（readExportResponse 归一化）在此提示
+    ElMessage.error(e instanceof Error && e.message ? e.message : '导出失败')
+  } finally {
+    excelExporting.value = false
+  }
+}
+
 // ==================== 操作按钮适配 ====================
 /** 用户是否配置了 create 按钮（隐藏 SearchTable 内置新增，避免操作栏出现两个"新增"） */
 const hasCreateButton = computed(() =>
@@ -729,6 +811,8 @@ function resolveSearchColumn(key: string): string {
 }
 
 const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {
+  // 记录取数参数快照（Task 5-b：导出 Excel 复用当前查询条件——搜索字段值/排序与本次取数完全一致）
+  lastQueryParams.value = params
   const dsId = resolvedRefId.value
   if (!dsId) return { rows: [], total: 0 }
 

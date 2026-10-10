@@ -75,16 +75,61 @@
             :sortable-candidates="sortableCandidates"
             :mode="schema.display === 'card' ? 'card' : 'table'"
           />
-          <!-- 显示方式：表格 / 卡片（切换后兼容属性在渲染时保留，表格列自动映射卡片字段） -->
+          <!-- 显示方式：表格 / 卡片 / 图表（切换后兼容属性在渲染时保留，表格列自动映射卡片字段/图表字段） -->
           <el-divider content-position="left">显示方式</el-divider>
           <el-form label-width="100px" size="default">
             <el-form-item label="显示方式">
-              <el-radio-group v-model="schema.display">
+              <el-radio-group v-model="schema.display" @change="handleDisplayChange">
                 <el-radio-button value="table">表格</el-radio-button>
                 <el-radio-button value="card">卡片</el-radio-button>
+                <el-radio-button value="chart">图表</el-radio-button>
               </el-radio-group>
+              <span v-if="schema.display === 'chart'" class="form-tip">图表形态：查询/筛选与表格共用，行数据全量拉取后在前端按维度聚合成图。</span>
             </el-form-item>
           </el-form>
+          <!-- 图表配置（Task ④，仅图表显示方式生效）：持久化进 schema.chart={type,xField,yFields:[{key,agg}],limit} -->
+          <template v-if="schema.display === 'chart' && schema.chart">
+            <el-divider content-position="left">图表配置</el-divider>
+            <el-form label-width="100px" size="default" class="chart-config">
+              <el-form-item label="图表类型">
+                <el-radio-group v-model="chartType">
+                  <el-radio-button v-for="t in CHART_TYPES" :key="t" :value="t">{{ chartTypeLabel(t) }}</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item label="维度列">
+                <el-select v-model="chartXField" placeholder="选择维度列（X 轴 / 分组）" style="width: 260px">
+                  <el-option v-for="c in chartFieldCandidates" :key="c.key" :label="c.label" :value="c.key" />
+                </el-select>
+                <span class="form-tip">从视图展示列中选择；同名维度值合并聚合成一个数据点</span>
+              </el-form-item>
+              <el-form-item label="指标列">
+                <el-select
+                  v-model="chartYKeys"
+                  multiple
+                  placeholder="选择一个或多个指标列"
+                  style="width: 100%; max-width: 420px"
+                >
+                  <el-option v-for="c in chartFieldCandidates" :key="c.key" :label="c.label" :value="c.key" />
+                </el-select>
+              </el-form-item>
+              <el-form-item
+                v-for="y in schema.chart?.yFields || []"
+                :key="y.key"
+                :label="yFieldLabel(y.key)"
+              >
+                <el-select v-model="y.agg" style="width: 120px">
+                  <el-option v-for="a in CHART_AGGS" :key="a" :label="aggLabel(a)" :value="a" />
+                </el-select>
+                <span class="form-tip">该指标列的聚合方式（缺省求和）；饼图仅取第一个指标列</span>
+              </el-form-item>
+              <el-form-item label="取前 N 条">
+                <el-select v-model="chartLimit" style="width: 120px">
+                  <el-option v-for="n in CHART_LIMITS" :key="n" :label="n + ' 条'" :value="n" />
+                </el-select>
+                <span class="form-tip">按数据顺序保留前 N 个维度值</span>
+              </el-form-item>
+            </el-form>
+          </template>
           <!-- 表头筛选（Task ⑤，仅表格显示方式生效） -->
           <el-divider content-position="left">表头筛选</el-divider>
           <el-form label-width="100px" size="default">
@@ -209,6 +254,16 @@ import { pageApi, type PageDefinitionDetailDTO, type PageMenuItem } from '@/api/
 import { useAuthStore } from '@/stores/auth'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import type { ColumnConfigItem } from '@/api/bizData'
+import {
+  CHART_AGGS,
+  CHART_LIMITS,
+  CHART_TYPES,
+  DEFAULT_CHART_LIMIT,
+  normalizeChartConfig,
+  type ChartAgg,
+  type ChartType,
+  type ViewChartConfig,
+} from './components/chartDataset'
 import QueryColumnsConfig from './components/QueryColumnsConfig.vue'
 import ActionsConfig from './components/ActionsConfig.vue'
 import EventsConfig from './components/EventsConfig.vue'
@@ -295,8 +350,13 @@ export interface ViewSchema {
   actions: ViewActionsConfig
   detail: ViewDetailConfig
   events: any[]
-  /** 显示方式：table（表格）/ card（卡片）；缺省表格 */
-  display?: 'table' | 'card'
+  /** 显示方式：table（表格）/ card（卡片）/ chart（图表）；缺省表格。
+   *  注意：后端 ViewCompiler 会把 display 归一为 table/card（发布后该键被编译产物覆盖），
+   *  chart 形态的权威信号是 schema.chart 配置对象存在性（设计器负责维持两者一致）。 */
+  display?: 'table' | 'card' | 'chart'
+  /** 图表配置（Task ④，display=chart 时持久化）：type/xField/yFields[{key,agg}]/limit；
+   *  取值闭集与缺省见 components/chartDataset.ts（type=bar、agg=sum、limit=20） */
+  chart?: ViewChartConfig
   /** 数据源静态筛选（可选；运行时与用户搜索条件 AND 合并） */
   filter?: { logic: 'AND' | 'OR'; conditions: Array<{ column: string; op: string; source: 'fixed'; value: string }> }
   /** 表头筛选（Task ⑤，可选）：每列漏斗图标按列筛选（文本=多选/数值=区间/日期=区间），走服务端 filter 链；缺省关闭 */
@@ -473,6 +533,77 @@ const filterableColumnsForFilter = computed(() =>
   viewColumns.value.map((c) => ({ key: c.key, label: c.label || c.key })),
 )
 
+// ========== 图表配置（Task ④：display=chart 时持久化 schema.chart；非图表形态不写该键，保持「chart 存在 ⇔ chart 形态」不变量） ==========
+/** 图表字段候选：视图配置列（排除自定义计算列——行数据不含其值，聚合无意义；隐藏列保留可选） */
+const chartFieldCandidates = computed(() =>
+  schema.columns.filter((c) => !c.custom).map((c) => ({ key: c.key, label: c.label || c.key })),
+)
+
+const CHART_TYPE_LABELS: Record<ChartType, string> = { bar: '柱状图', line: '折线图', pie: '饼图' }
+const CHART_AGG_LABELS: Record<ChartAgg, string> = { sum: '求和', avg: '平均', count: '计数', max: '最大', min: '最小' }
+
+function chartTypeLabel(t: ChartType): string {
+  return CHART_TYPE_LABELS[t] ?? t
+}
+
+function aggLabel(a: ChartAgg): string {
+  return CHART_AGG_LABELS[a] ?? a
+}
+
+/** 指标列 key → 视图列显示名（聚合行标签） */
+function yFieldLabel(key: string): string {
+  return chartFieldCandidates.value.find((c) => c.key === key)?.label || key
+}
+
+/** 图表类型（v-model 代理：schema.chart 未初始化时读缺省，写需对象存在） */
+const chartType = computed<ChartType>({
+  get: () => schema.chart?.type ?? 'bar',
+  set: (v) => {
+    if (schema.chart) schema.chart.type = v
+  },
+})
+
+/** 维度列（单选） */
+const chartXField = computed<string>({
+  get: () => schema.chart?.xField ?? '',
+  set: (v) => {
+    if (schema.chart) schema.chart.xField = v
+  },
+})
+
+/** 取前 N 条 */
+const chartLimit = computed<number>({
+  get: () => schema.chart?.limit ?? DEFAULT_CHART_LIMIT,
+  set: (v) => {
+    if (schema.chart) schema.chart.limit = v
+  },
+})
+
+/** 指标列多选（key 集合 ⇔ yFields[{key,agg}] 双向映射；新选指标缺省 agg=sum，取消勾选即移除） */
+const chartYKeys = computed<string[]>({
+  get: () => (schema.chart?.yFields || []).map((y) => y.key),
+  set: (keys) => {
+    if (!schema.chart) return
+    const prev = new Map(schema.chart.yFields.map((y) => [y.key, y.agg]))
+    schema.chart.yFields = keys.map((k) => ({ key: k, agg: prev.get(k) ?? 'sum' }))
+  },
+})
+
+/** 显示方式切换：进入 chart 时初始化 schema.chart 缺省配置（已有则保留；维度列缺省预选第一个可用列）；
+ *  离开 chart 时移除 schema.chart——保持「schema.chart 存在 ⇔ chart 形态」不变量
+ *  （发布编译会把 display 归一为 table，渲染端/设计器以 chart 配置存在性恢复图表形态） */
+function handleDisplayChange(v: string | number | boolean | undefined | null) {
+  if (v === 'chart') {
+    if (!schema.chart || typeof schema.chart !== 'object') {
+      schema.chart = normalizeChartConfig(undefined)
+      const first = chartFieldCandidates.value[0]
+      if (first) schema.chart.xField = first.key
+    }
+    return
+  }
+  schema.chart = undefined
+}
+
 onMounted(async () => {
   if (!pageId.value) {
     ElMessage.error('缺少页面 ID')
@@ -544,10 +675,23 @@ function normalizePagination() {
   }
 }
 
-/** 归一化显示方式：兼容旧 schema 缺失 display，缺省表格 */
+/** 归一化显示方式：兼容旧 schema 缺失 display，缺省表格。
+ *  chart 形态修复：发布编译会把 display 归一为 table/card，而 chart 配置经 mergeCompiled 原样保留——
+ *  加载时以 chart 配置存在性恢复 display='chart'，并归一化配置（畸形/缺省回填，见 normalizeChartConfig）。 */
 function normalizeDisplay() {
   const d = schema.display
-  schema.display = d === 'card' ? 'card' : 'table'
+  if (d === 'card') return
+  if (d === 'chart' || (schema.chart && typeof schema.chart === 'object')) {
+    schema.display = 'chart'
+    schema.chart = normalizeChartConfig(schema.chart)
+    // 维度列缺省预选：配置为空时选第一个可用列（未配置时给合理缺省）
+    if (!schema.chart.xField) {
+      const first = chartFieldCandidates.value[0]
+      if (first) schema.chart.xField = first.key
+    }
+    return
+  }
+  schema.display = 'table'
 }
 
 /** 加载绑定数据源 metadata 列（候选字段来源） */

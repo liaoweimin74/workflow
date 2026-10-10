@@ -75,6 +75,16 @@
             @batch-delete="handleBatchDelete"
             @clear="clearSelection"
           />
+          <!-- Excel 导入导出（Task 5-b）：导入仅业务表单绑定视图可用，无 formKey 置灰+说明 -->
+          <ExcelActions
+            class="excel-actions-in-toolbar"
+            :exporting="exporting"
+            :show-import="true"
+            :import-disabled="!boundFormKey"
+            import-title="仅绑定业务表单的视图支持导入；导出文件表头可直接作为导入模板"
+            @export="handleExportExcel"
+            @import="excelImportVisible = true"
+          />
         </template>
       </SearchTable>
       <ListCards
@@ -92,6 +102,19 @@
         @row-click="handleRowClick"
         @action-click="handleCardActionClick"
       />
+      <!-- 图表形态（Task ④）：与表格同源查询/筛选语义，行数据全量拉取后交 PageDataChart 前端按维度聚合；工具栏仅导出 -->
+      <div v-else-if="ready && displayMode === 'chart'" class="page-data-chart-block">
+        <div class="chart-toolbar">
+          <ExcelActions :exporting="exporting" :show-import="false" @export="handleExportExcel" />
+        </div>
+        <PageDataChart
+          class="page-data-chart"
+          :rows="chartRows"
+          :config="chartConfig"
+          :columns="rawViewColumns"
+          :loading="chartLoading"
+        />
+      </div>
     </template>
 
     <!-- 详情弹窗双轨：FORM 数据源/遗留页 → 只读表单；WORKFLOW 等只读数据源 → KV 表格 -->
@@ -130,6 +153,9 @@
         <el-button type="primary" :loading="saving" @click="handleEditSubmit">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- Excel 导入弹窗（Task 5-b，与 PageDataTable 共用 ExcelImportDialog）：上传 → 统计/行级失败明细；成功后刷新列表 -->
+    <ExcelImportDialog v-model="excelImportVisible" :page-key="pageKey" @success="refresh" />
 
     <!-- 内嵌表单（formMode=inline）：全屏覆盖视图，关闭后恢复 -->
     <div v-if="inlineVisible" class="inline-form-overlay">
@@ -210,8 +236,12 @@ import FormRenderer from '@/views/form/components/FormRenderer.vue'
 import PageRendererPage from './PageRendererPage.vue'
 import SearchTable from '@/components/business/SearchTable.vue'
 import ListCards from '@/components/business/ListCards.vue'
+import PageDataChart from './components/PageDataChart.vue'
+import ExcelActions from './components/ExcelActions.vue'
+import ExcelImportDialog from './components/ExcelImportDialog.vue'
+import { normalizeChartConfig, type ViewChartConfig } from './components/chartDataset'
 import type { TableColumn, ActionButton, ToolbarButton, QueryParams, CardColumn, ListQueryParams, ListPageResult } from '@/components/business/types'
-import { pageApi, type PageDefinitionDetailDTO } from '@/api/page'
+import { pageApi, exportPageData, type PageDataExportRequest, type PageDefinitionDetailDTO } from '@/api/page'
 import { formApi } from '@/api/form'
 import { dataSourceApi, type DataSourceDTO, type DataSourceMetadataDTO } from '@/api/data-source'
 import { bizDataApi } from '@/api/bizData'
@@ -339,8 +369,20 @@ interface SearchRule {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const searchRules = ref<SearchRule[]>([])
 const tableColumns = ref<CompiledColumn[]>([])
-/** 显示方式：table（表格，默认）/ card（卡片，由视图 schema.display 编译透传） */
-const displayMode = ref<'table' | 'card'>('table')
+/** 显示方式：table（表格，默认）/ card（卡片，由视图 schema.display 编译透传）/ chart（图表，Task ④） */
+const displayMode = ref<'table' | 'card' | 'chart'>('table')
+/** 图表配置（Task ④：原始 schema.chart 归一化；「chart 配置对象存在性」= chart 形态权威信号，
+ *  发布编译会把 display 归一为 table，chart 对象经 mergeCompiled 原样保留可恢复形态） */
+const chartConfig = ref<ViewChartConfig | null>(null)
+/** 图表行数据（与表格同源查询全量拉取，交 PageDataChart 前端按维度聚合） */
+const chartRows = ref<any[]>([])
+const chartLoading = ref(false)
+/** 图表查询条件快照（搜索/重置时从 query 构建；Excel 导出与图上数据同参） */
+const chartFilter = ref<string | undefined>(undefined)
+/** 原始视图列（图表系列名 label 映射来源） */
+const rawViewColumns = ref<Array<{ key: string; label?: string }>>([])
+/** 最近一次排序状态（handleSortChange 捕获，供 Excel 导出透传） */
+const lastSort = ref<{ sort: string; order: string }>({ sort: '', order: '' })
 const tableStyle = ref<CardStyle | undefined>(undefined)
 const cardStyle = ref<CardStyle | undefined>(undefined)
 /** 视图级可排序字段（编译产物 sortableFields；空=跟随数据源全部可排字段） */
@@ -416,6 +458,7 @@ watch(
 function refresh() {
   if (page.value?.type === 'PAGE') return
   if (displayMode.value === 'card') cardsRef.value?.fetchData()
+  else if (displayMode.value === 'chart') void loadChartRows()
   else searchTableRef.value?.fetchList()
 }
 
@@ -446,6 +489,8 @@ async function load() {
       }
     }
     ready.value = true
+    // 图表形态：首屏行数据拉取（表格/卡片由 SearchTable/ListCards 挂载自取）
+    if (displayMode.value === 'chart') void loadChartRows()
   } catch (e: any) {
     error.value = e?.message || '页面加载失败'
     ElMessage.error(error.value)
@@ -457,8 +502,12 @@ function parseSchema(schema: string): boolean {
   try {
     const parsed = JSON.parse(schema || '{}')
     const rule: any[] = Array.isArray(parsed) ? parsed : (parsed.rule || [])
-    // 显示方式（编译产物顶层 display；缺省表格）
-    displayMode.value = parsed.display === 'card' ? 'card' : 'table'
+    // 显示方式（编译产物顶层 display；缺省表格）。chart 形态信号：display==='chart' 或 chart 配置对象存在——
+    // 发布编译会把 display 归一为 table/card，chart 配置经 mergeCompiled 原样保留，据此恢复图表形态（Task ④）
+    const chartRaw: unknown = (parsed as Record<string, unknown>).chart
+    const hasChartConfig = !!chartRaw && typeof chartRaw === 'object'
+    displayMode.value = parsed.display === 'card' ? 'card' : (parsed.display === 'chart' || hasChartConfig) ? 'chart' : 'table'
+    chartConfig.value = hasChartConfig ? normalizeChartConfig(chartRaw) : null
     detailOption.value = Array.isArray(parsed) ? {} : (parsed.option || {})
     searchRules.value = rule.filter((r) => r.type === 'input' || r.type === 'datePicker')
     // 视图级可排序字段（编译产物顶层 sortableFields；未声明=跟随数据源全部可排字段）
@@ -475,6 +524,8 @@ function parseSchema(schema: string): boolean {
     // 表格增强（Task ⑤）：从顶层原始 schema 读取（ViewCompiler 编译产物不含这些字段，
     // mergeCompiled 保留原始字段，预览/发布后均可读；未配置时全部关闭 = 现状行为）
     const rawColumns: any[] = Array.isArray(parsed.columns) ? parsed.columns : []
+    // 图表系列名 label 映射（Task ④）：原始声明列 {key,label}
+    rawViewColumns.value = rawColumns.map((c: any) => ({ key: c.key, label: c.label }))
     summarySpecs.value = rawColumns
       .filter((c: any) => c && !c.hidden && c.aggregate)
       .map((c: any) => ({ key: c.key, aggregate: c.aggregate }))
@@ -495,6 +546,8 @@ function parseSchema(schema: string): boolean {
     // 查询默认值（编译产物 rule.value）
     queryDefaults.value = Object.fromEntries(searchRules.value.map((r) => [r.field, r.value ?? '']))
     Object.keys(queryDefaults.value).forEach((k) => { query[k] = queryDefaults.value[k] })
+    // 图表形态：初始查询条件快照（行数据加载由 loadChartRows 触发；快照供 Excel 导出与图上数据同参）
+    chartFilter.value = buildFilter(query) || undefined
     return true
   } catch {
     return false
@@ -545,9 +598,26 @@ const cardFetchApi = async (params: ListQueryParams): Promise<ListPageResult> =>
   return searchTableFetchApi(merged)
 }
 
+// ========== 图表视图（Task ④：display=chart，与表格同源取数） ==========
+/** 图表取数：复用 searchTableFetchApi（同 filter/搜索条件/refresh 事件语义），size=-1 不分页取全部（后端跳过 LIMIT）；
+ *  行数据交 PageDataChart 前端按维度聚合（chartDataset.buildChartDataset / buildPieDataset） */
+async function loadChartRows() {
+  if (displayMode.value !== 'chart') return
+  chartLoading.value = true
+  try {
+    const res = await searchTableFetchApi({ ...query, page: 1, size: -1 })
+    chartRows.value = res.rows
+  } finally {
+    chartLoading.value = false
+  }
+}
+
 // ========== 查询交互 ==========
 function handleSearch() {
   searchTableRef.value?.setQuery({ ...query })
+  // 图表形态：快照查询条件（Excel 导出同参）并重取行数据重渲图表
+  chartFilter.value = buildFilter(query) || undefined
+  if (displayMode.value === 'chart') void loadChartRows()
   if (displayMode.value === 'card') cardsRef.value?.fetchData()
   triggerEvents('search', 'search', { row: null, params: route.query || {} })
 }
@@ -555,6 +625,8 @@ function handleSearch() {
 function handleReset() {
   Object.keys(queryDefaults.value).forEach((k) => { query[k] = queryDefaults.value[k] })
   searchTableRef.value?.setQuery({ ...query })
+  chartFilter.value = buildFilter(query) || undefined
+  if (displayMode.value === 'chart') void loadChartRows()
   if (displayMode.value === 'card') cardsRef.value?.fetchData()
 }
 
@@ -1305,7 +1377,42 @@ function handleSelectionChange(selection: any[]) {
 
 // ========== 排序变化（新增） ==========
 function handleSortChange({ column, prop, order }: { column: any; prop: string; order: string }) {
+  // 捕获排序状态供 Excel 导出透传（对齐 SearchTable 内部 sortState 语义）
+  lastSort.value = order ? { sort: prop || '', order: order === 'ascending' ? 'asc' : 'desc' } : { sort: '', order: '' }
   triggerEvents('sort-change', 'table', { column, prop, order, params: route.query || {} })
+}
+
+// ==================== Excel 导入导出（Task 5-b：③ 前端接线） ====================
+const exporting = ref(false)
+/** 导入弹窗（共用 ExcelImportDialog：上传 → 统计/行级失败明细；success>0 时 @success 刷新列表） */
+const excelImportVisible = ref(false)
+
+/** 导出 Excel：当前查询参数（含表头筛选/排序）+ filename=页面名称；截断时提示「已导出前 10000 行」 */
+async function handleExportExcel() {
+  if (exporting.value) return
+  exporting.value = true
+  try {
+    // 图表形态用搜索快照（与图上数据一致）；表格形态取当前查询输入实时构建
+    const filter = displayMode.value === 'chart' ? chartFilter.value || undefined : buildFilter(query) || undefined
+    const body: PageDataExportRequest = { filter, filename: page.value?.name || pageKey.value }
+    if (lastSort.value.sort) {
+      body.sort = lastSort.value.sort
+      body.order = lastSort.value.order
+    }
+    const { blob, filename, truncated } = await exportPageData(pageKey.value, body)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename || `${pageKey.value}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+    if (truncated) ElMessage.warning('数据量较大，已导出前 10000 行')
+    else ElMessage.success('导出成功')
+  } catch {
+    // http 拦截器已弹错误消息（blob 错误响应会解出 R.msg）
+  } finally {
+    exporting.value = false
+  }
 }
 </script>
 
@@ -1331,6 +1438,25 @@ function handleSortChange({ column, prop, order }: { column: any; prop: string; 
 .page-search-table {
   flex: 1;
   min-height: 0;
+}
+/* Excel 导入导出工具栏（Task 5-b）：表格形态右对齐挂在 SearchTable 工具行 */
+.excel-actions-in-toolbar {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+/* 图表形态（Task ④）：工具栏右对齐 + 图表容器 */
+.page-data-chart-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.chart-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
 }
 /* 查询工具栏图标按钮（对齐 SearchTable） */
 .toolbar-buttons {

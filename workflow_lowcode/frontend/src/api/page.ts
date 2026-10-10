@@ -134,3 +134,93 @@ export const pageApi = {
     return http.delete(`/v1/pages/menus/${menuId}`)
   },
 }
+
+// ==================== Excel 导入导出（Task 5-b：③ 前端接线，端点见后端 PageDataExcelController） ====================
+
+/** 页面数据 Excel 导出请求体（对齐后端 PageDataExportRequest；全部可选） */
+export interface PageDataExportRequest {
+  /** 结构化 filter JSON（与查询接口同白名单校验） */
+  filter?: string
+  keyword?: string
+  keywordColumn?: string
+  sort?: string
+  order?: string
+  params?: string
+  /** 导出列子集（字段 key 列表；缺省=页面声明列，自定义计算列后端恒排除） */
+  columns?: string[]
+  /** 下载文件名（缺省=页面名称；后端清洗非法字符并强制 .xlsx 后缀） */
+  filename?: string
+}
+
+/** Excel 导入行级错误（row=Excel 实际行号，1-based，表头=1） */
+export interface PageDataImportError {
+  row: number
+  message: string
+}
+
+/** Excel 导入结果统计（对齐后端 ImportResultVO） */
+export interface PageDataImportResult {
+  total: number
+  success: number
+  failed: number
+  skipped: number
+  errors: PageDataImportError[]
+}
+
+/** Content-Disposition → 文件名：RFC 5987 filename*=UTF-8'' 优先（中文安全），回退 filename=（去引号） */
+export function filenameFromDisposition(header: unknown): string {
+  if (!header || typeof header !== 'string') return ''
+  const star = /filename\*\s*=\s*(?:UTF-8|utf-8)''([^;]+)/i.exec(header)
+  if (star) {
+    try {
+      return decodeURIComponent(star[1].trim().replace(/^"|"$/g, ''))
+    } catch {
+      /* 非法百分号编码 → 回退 filename= */
+    }
+  }
+  const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(header)
+  return plain ? plain[1].trim() : ''
+}
+
+/** 读取 blob 上拦截器附带（http.ts __headers）的响应头，键大小写不敏感 */
+function blobHeader(blob: Blob, name: string): string | undefined {
+  const headers = (blob as unknown as { __headers?: Record<string, unknown> }).__headers
+  if (!headers) return undefined
+  const lower = name.toLowerCase()
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === lower) return v == null ? undefined : String(v)
+  }
+  return undefined
+}
+
+/**
+ * 导出视图数据为 Excel（POST + JSON body → xlsx blob）。
+ * 拦截器对 blob 原样放行并把响应头挂在 blob.__headers：文件名取
+ * Content-Disposition（filename*=UTF-8''，回退入参 filename）；
+ * X-Export-Truncated:true 表示后端按上限截断（10000 行），由调用方提示。
+ */
+export async function exportPageData(
+  pageKey: string,
+  body: PageDataExportRequest = {},
+): Promise<{ blob: Blob; filename: string; truncated: boolean }> {
+  const blob = (await http.post(`/v1/pages/${pageKey}/data/export`, body, {
+    responseType: 'blob',
+    timeout: 120000,
+  })) as unknown as Blob
+  const filename =
+    filenameFromDisposition(blobHeader(blob, 'Content-Disposition')) ||
+    (body.filename ? `${body.filename}.xlsx` : `${pageKey}.xlsx`)
+  const truncated = (blobHeader(blob, 'X-Export-Truncated') || '').toLowerCase() === 'true'
+  return { blob, filename, truncated }
+}
+
+/**
+ * 导入 Excel（multipart：file 必须 + mapping 可选 JSON 字符串 {"表头":"字段key"}）。
+ * 仅 formKey 绑定的 VIEW 页面可用（纯数据源视图后端 400）；code≠200 由 http 拦截器
+ * 统一 toast msg 并 reject，调用方只需 catch。
+ */
+export function importPageData(pageKey: string, formData: FormData): Promise<R<PageDataImportResult>> {
+  return http.post(`/v1/pages/${pageKey}/data/import`, formData, { timeout: 120000 }) as unknown as Promise<
+    R<PageDataImportResult>
+  >
+}

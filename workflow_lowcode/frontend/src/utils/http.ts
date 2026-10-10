@@ -56,7 +56,15 @@ http.interceptors.response.use(
   (response: AxiosResponse) => {
     // 二进制响应（blob/arraybuffer）无 R 包装，原样放行（Task 146：附件预览/下载）
     if (response.config.responseType === 'blob' || response.config.responseType === 'arraybuffer') {
-      return response.data
+      const payload = response.data
+      // Task 5-b（Excel 导出）：把响应头随 blob 带出（Content-Disposition 文件名 /
+      // X-Export-Truncated 截断标记）；定义为不可枚举，不干扰 Blob 消费方与既有调用
+      try {
+        Object.defineProperty(payload, '__headers', { value: response.headers, enumerable: false, configurable: true })
+      } catch {
+        /* 载荷不可定义属性（极端环境）时静默跳过，文件名走入参回退 */
+      }
+      return payload
     }
     const data = response.data
     if (data.code !== 200) {

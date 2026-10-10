@@ -6357,3 +6357,20 @@ Stage Summary:
 - 根因判断：Vite 长时间运行（近 4h）+ 边缘 ALB 瞬时抖动叠加导致连接异常；Vite 重启后外网全链路实测恢复
 - 经验沉淀：预览连接类故障处理顺序 = ①curl 外网域名三级探测（3000/81/外网）②浏览器外网域名实测 ③无效再重启 Vite（双层 fork 模式）④Caddy 属保护进程不可操作
 - 登录态经外网域名验证有效（admin/admin123）
+
+---
+Task ID: ui-toolbar-grid
+Agent: Z.ai Code
+Task: 用户两条 UI 反馈修复——①设计器表格增强 6 配置项单行拥挤 ②运行页 Excel 按钮应放工具栏右侧
+
+Work Log:
+- ① DsBindingConfigDialog.vue：表格增强区 card-quick-row（nowrap flex）改为 table-enhance-grid（grid 3 列两行，gap 6/16px，label max-content 左对齐，≤720px 降级 2 列）；第一行=表头筛选/批量操作/批量删除，第二行=Excel 导出/Excel 导入/汇总行
+- ② SearchTable.vue 新增 toolbar-right 具名插槽（.toolbar-right-slot margin-left:auto 推到行尾，去相邻按钮默认 margin 统一 gap）；PageDataTable.vue 将导出/导入 Excel 按钮从 #default 移至 #toolbar-right，批量操作条留在左侧
+- 测试同步：PageDataTable.excel.test.ts 的 SearchTable 桩补渲染 slots['toolbar-right']；vitest 三目录 675/675 全绿（期间 5 个 Excel 用例因插槽迁移失败→补桩后通过）
+- 浏览器实测：运行页 /page/table-enhance-e2e —— 新增在左、导出/导入 Excel 右置、筛选/批量/汇总均正常（截图）；设计器 /page/designer?id=ead17293033c45409e6601e31bea40a8 —— 显示列页签六项几何坐标验证 top=237/275 两行 left=242/513/783 三列（截图）
+- 提交推送：fcd6533f（fafc398f..fcd6533f main -> main）
+
+Stage Summary:
+- 两项用户反馈全部修复并双通道验证（单测+浏览器几何/截图）
+- 【新观察·预存问题】设计器重开页面后，组件绑定弹窗数据源下拉显示占位符（草稿态未回填 dataSourceId='ds_mv2i46vn'），但已发布 schema 完好（dataSourceId+全部能力位 true）、运行页正常——弹窗回填逻辑 form.dataSourceId=bp.dataSourceId 本身正确，疑似父组件（页面设计器属性面板）加载草稿时未传 bindingProps；与本次改动无关（本次仅模板 class/插槽迁移）。风险：若用户在未重选绑定时点保存，可能擦除 dataSourceId。建议下一轮：核实 PageDesigner 加载链路的 bindingProps 传递并在重开时回填
+- 【安全动作】排查期间未在设计器做任何保存操作，避免草稿态覆盖已发布 schema

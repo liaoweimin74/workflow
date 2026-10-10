@@ -5570,3 +5570,19 @@ Stage Summary:
 - D+ 终态恢复完成（第 4 次），本次起恢复完全脚本化（幂等续作模式稳定）
 - recover-dplus.sh 现已无已知 bug，未来重供给一条命令前台恢复，600s 窗口不够时重跑自动续作
 - 依旧备案：GitHub 凭据丢失未恢复，本地 main 领先 origin/main（含恢复脚本修复），待 token 后推送
+
+---
+Task ID: cron-巡检-20261010-1305（重供给#5 + 用户报障）
+Agent: 主控（Z.ai Code）
+Task: 13:05 巡检 + 用户报告「后端java似乎没有启动」
+
+Work Log:
+- 【重供给 #5】用户 13:05 前后报 Java 未启动；/proc/uptime=19min → 环境于 ~12:46 重建，早前 Java(PID 5747)/vite/mariadbd 全部陪葬，用户看到的是重供给窗口期的空档
+- 【自愈链已自动恢复】探活时 java(PID 1925)/vite/mariadbd 均已被开机自愈链拉起（elapsed 14-18min），无需人工干预
+- 【四链路真绿】3000/外域 Host/业务链/8080 直连 = 200×4；8080 login body 含 accessToken=真绿（非 Node 假绿）
+- 【快照】dump-db.sh 成功：db-workflow-full-20261010-050523.sql(203K) + db-workflow_v6 同批
+- 【内存】3128MB < 3.5G 阈值，oom_kill=0，vite×1，postcss×0
+
+Stage Summary:
+- 重供给 #5 由自愈链自动恢复，全栈真绿；用户报障时段=重供给窗口，现已正常
+- P0/P1/P2 节点开发任务仍待开工（上轮探查被重供给打断，NodeType 现存 10 节点、无 DATA_UPSERT，与摘要描述不符，下轮开发需先核实 git 历史）

@@ -67,7 +67,8 @@ class PageQueryControllerTest {
         bizDataService = mock(BizDataService.class);
         dsService = mock(DataSourceDefinitionService.class);
         pageAccessGuard = mock(PageAccessGuard.class);
-        controller = new PageQueryController(pageDefService, bizDataService, dsService, pageAccessGuard, new ObjectMapper());
+        controller = new PageQueryController(pageDefService, bizDataService, dsService, pageAccessGuard,
+                new PageViewQuerySupport(new ObjectMapper()));
 
         PageDefinition view = new PageDefinition();
         view.setType("VIEW");

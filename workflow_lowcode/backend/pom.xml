@@ -136,6 +136,13 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Apache POI（页面数据视图 Excel 导入导出；5.3.0 兼容 Spring Boot 4 / Java 21） -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.3.0</version>
+        </dependency>
+
         <!-- Groovy script execution -->
         <dependency>
             <groupId>org.apache.groovy</groupId>

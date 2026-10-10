@@ -250,3 +250,83 @@ describe('DsBindingConfigDialog — table-mode sortableFields', () => {
     wrapper.unmount()
   })
 })
+
+// ----- 表格增强配置入口（Task ⑤）：表头筛选/批量操作/批量删除/列级汇总透传 -----
+describe('DsBindingConfigDialog — table-mode 表格增强（Task ⑤ 配置入口）', () => {
+  it('未声明时缺省关闭：confirm 输出 headerFilter={enabled:false} / batch={enabled:false, delete:true}', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({ dataSourceId: 'ds1' })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    ;(wrapper.vm as any).handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.headerFilter).toEqual({ enabled: false })
+    expect(result.batch).toEqual({ enabled: false, delete: true })
+    wrapper.unmount()
+  })
+
+  it('回填并保存三开关：headerFilter / batch.enabled / batch.delete', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({
+      dataSourceId: 'ds1',
+      headerFilter: { enabled: true },
+      batch: { enabled: true, delete: false },
+    })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    expect(vm.tableData.headerFilter).toBe(true)
+    expect(vm.tableData.batch).toBe(true)
+    expect(vm.tableData.batchDelete).toBe(false)
+
+    vm.handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.headerFilter).toEqual({ enabled: true })
+    expect(result.batch).toEqual({ enabled: true, delete: false })
+    wrapper.unmount()
+  })
+
+  it('表格增强仅 table 模式输出：card 模式 confirm 不含 headerFilter/batch 键', async () => {
+    ;(dataSourceApi.getMetadata as any).mockResolvedValue({
+      data: { columns: [{ key: 'name', label: '姓名', columnType: 'VARCHAR', sortable: true }] },
+    })
+    const wrapper = mount(DsBindingConfigDialog, {
+      props: {
+        modelValue: false,
+        currentFields: ['name'],
+        bindingProps: { dataSourceId: 'ds1' },
+        formDataSources: [{ id: 'ds1', refId: 'global1' }],
+        listMode: 'card',
+      },
+      global: { plugins: [ElementPlus], stubs: { teleport: true, 'el-select': true, 'el-option': true, 'el-input': true, 'el-button': true, 'el-tabs': true, 'el-tab-pane': true } },
+    })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    ;(wrapper.vm as any).handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.headerFilter).toBeUndefined()
+    expect(result.batch).toBeUndefined()
+    // card 专属字段正常输出
+    expect(result.groupBy).toBe('')
+    wrapper.unmount()
+  })
+
+  it('列级 aggregate 透传：QueryColumnsConfig 高级配置的聚合声明不丢失', async () => {
+    mockMetadata()
+    const wrapper = mountDialog({ dataSourceId: 'ds1', columns: [
+      { prop: 'amount', label: '金额', aggregate: 'sum' },
+      { prop: 'name', label: '姓名' },
+    ] })
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    ;(wrapper.vm as any).handleConfirm()
+    const result = (wrapper.emitted('confirm') as any[])[0][0]
+    expect(result.columns[0].aggregate).toBe('sum')
+    expect(result.columns[1].aggregate).toBeUndefined()
+    wrapper.unmount()
+  })
+})

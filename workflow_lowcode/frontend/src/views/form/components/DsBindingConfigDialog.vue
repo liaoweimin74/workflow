@@ -49,6 +49,53 @@
                   <el-input-number v-model="tableData.cardMinWidth" :min="180" :max="800" :step="20" class="qi-number" />
                 </el-form-item>
               </div>
+              <!-- 表格增强（Task ⑤ 配置入口）：表头筛选/批量操作/批量删除；列级汇总在每列「高级配置」→ 汇总下拉 -->
+              <div v-if="effectiveListMode === 'table'" class="card-quick-row">
+                <el-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      表头筛选
+                      <el-tooltip content="开启后列头出现筛选控件：文本输入/数值区间/日期区间，筛选走服务端" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-switch v-model="tableData.headerFilter" />
+                </el-form-item>
+                <el-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      批量操作
+                      <el-tooltip content="开启后表格首列出现多选框，选中行后顶部浮出批量操作条" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-switch v-model="tableData.batch" />
+                </el-form-item>
+                <el-form-item>
+                  <template #label>
+                    <span class="label-with-tip">
+                      批量删除
+                      <el-tooltip content="批量操作条中的删除按钮；需数据源可写且绑定表单（运行时自动校验）" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <el-switch v-model="tableData.batchDelete" :disabled="!tableData.batch" />
+                </el-form-item>
+                <el-form-item>
+                  <template #label>
+                    <span class="label-with-tip summary-tip">
+                      汇总行
+                      <el-tooltip content="在下方列清单中点击列的「高级配置」→ 汇总下拉选择聚合方式（求和/平均/最大/最小/计数）" placement="top">
+                        <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </span>
+                  </template>
+                  <span class="summary-entry" @click="scrollToColumns">去配置 →</span>
+                </el-form-item>
+              </div>
               <div v-if="effectiveListMode === 'card'" class="card-quick-row">
                 <el-form-item class="qi-group-field">
                   <template #label><span class="qi-label">分组字段</span></template>
@@ -78,18 +125,20 @@
               </div>
             </div>
           </el-form>
-          <QueryColumnsConfig
-            v-if="tableCandidates.length > 0"
-            :candidates="tableCandidates"
-            :filterable-keys="tableFilterableKeys as any"
-            v-model:search-fields="tableData.searchFields as any"
-            v-model:columns="tableData.columns"
-            :show-search="tableData.showSearch"
-            v-model:sortable-fields="tableData.sortableFields"
-            :sortable-candidates="tableSortableCandidates"
-            :mode="effectiveListMode"
-          />
-          <el-empty v-else description="请先选择数据源" :image-size="60" />
+          <div ref="columnsWrapRef">
+            <QueryColumnsConfig
+              v-if="tableCandidates.length > 0"
+              :candidates="tableCandidates"
+              :filterable-keys="tableFilterableKeys as any"
+              v-model:search-fields="tableData.searchFields as any"
+              v-model:columns="tableData.columns"
+              :show-search="tableData.showSearch"
+              v-model:sortable-fields="tableData.sortableFields"
+              :sortable-candidates="tableSortableCandidates"
+              :mode="effectiveListMode"
+            />
+            <el-empty v-else description="请先选择数据源" :image-size="60" />
+          </div>
           <!-- 分页配置（默认显示分页，20 条/页，可选 [10,20,50]；横向流式布局） -->
           <el-divider content-position="left">分页</el-divider>
           <div class="pagination-config">
@@ -238,7 +287,6 @@ const dialogTitle = computed(() => effectiveListMode.value === 'card' ? '卡片�
 
 // ==================== 数据源 + 组件级数据筛选（表格模式） ====================
 const dsColumns = ref<ColumnConfigItem[]>([])
-const visibleColumns = computed(() => dsColumns.value.filter(c => !c.hidden))
 
 const form = reactive({
   dataSourceId: '',
@@ -380,6 +428,12 @@ const tableData = reactive({
   collapsibleGroups: false,
   /** 卡片操作区位置（card 模式）：top / bottom（默认）/ right */
   actionsPlacement: 'bottom' as 'top' | 'bottom' | 'right',
+  /** 表头筛选（Task ⑤，table 模式）：列头筛选控件，缺省关闭 */
+  headerFilter: false,
+  /** 批量操作（Task ⑤，table 模式）：首列多选框 + 批量操作条，缺省关闭 */
+  batch: false,
+  /** 批量删除（batch 启用时生效，缺省开启） */
+  batchDelete: true,
 })
 
 /** 可排序字段候选（数据源 metadata 声明 sortable=true 的列；不可排字段不可配置） */
@@ -445,9 +499,19 @@ function initTableData() {
   tableData.collapsibleGroups = bp.collapsibleGroups === true
   const placement = bp.actionsPlacement
   tableData.actionsPlacement = placement === 'top' || placement === 'right' ? placement : 'bottom'
+  // 表格增强（Task ⑤）：回填开关；batch.delete 缺省开启（未显式 false 即开）
+  tableData.headerFilter = bp.headerFilter?.enabled === true
+  tableData.batch = bp.batch?.enabled === true
+  tableData.batchDelete = bp.batch?.delete !== false
 }
 
 // ==================== 打开/回填 ====================
+const columnsWrapRef = ref<HTMLElement | null>(null)
+/** 汇总行「去配置」：滚动到列清单区（列级聚合在每列高级配置内） */
+function scrollToColumns() {
+  columnsWrapRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 watch(() => props.modelValue, async (val) => {
   if (!val) return
   activeTab.value = 'binding'
@@ -507,6 +571,8 @@ function handleConfirm() {
       ...(c.onCellClick !== undefined ? { onCellClick: c.onCellClick } : {}),
       ...(c.custom !== undefined ? { custom: c.custom } : {}),
       ...(c.hidden !== undefined ? { hidden: c.hidden } : {}),
+      // 汇总行（Task ⑤）：列级聚合声明透传（QueryColumnsConfig 高级配置写入，PageDataTable 消费）
+      ...(c.aggregate !== undefined ? { aggregate: c.aggregate } : {}),
       // ===== 卡片专属字段（card 模式） =====
       ...(c.role !== undefined ? { role: c.role } : {}),
       ...(c.valueType !== undefined ? { valueType: c.valueType } : {}),
@@ -518,6 +584,11 @@ function handleConfirm() {
       ...(c.labelPosition !== undefined ? { labelPosition: c.labelPosition } : {}),
       ...(c.style !== undefined ? { style: c.style } : {}),
     }))
+    // 表格增强（Task ⑤，仅 table 模式）：开关写入 props（PageDataTable featureEnabled/batchDeleteEnabled 消费）
+    if (effectiveListMode.value === 'table') {
+      result.headerFilter = { enabled: tableData.headerFilter }
+      result.batch = { enabled: tableData.batch, delete: tableData.batchDelete }
+    }
     result.sortableFields = [...tableData.sortableFields]
     result.pagination = tableData.pagination
     result.pageSize = tableData.pageSize
@@ -618,6 +689,16 @@ function handleConfirm() {
   margin-left: 4px;
   color: #909399;
   cursor: help;
+}
+/* 汇总行入口链接：可点击样式提示 */
+.summary-entry {
+  color: #2e73ff;
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+.summary-entry:hover {
+  text-decoration: underline;
 }
 /* 数据容器配置：label 独占一行并左对齐，控件占满下一行 */
 .container-form :deep(.el-form-item__label) {

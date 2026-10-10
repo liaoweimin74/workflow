@@ -1191,13 +1191,21 @@
             </div>
             <el-form-item>
               <template #label>
-                <FieldLabel label="异常处理" tip="节点失败时优先走失败分支：从节点底部红色「败」出点连线即可定向到补偿/降级节点（输出不写入，替代全局两档策略）；未连失败分支时按本策略：失败中断 = 节点异常终止整个流程；忽略继续 = 记录异常并继续执行后续节点" />
+                <FieldLabel label="异常处理" tip="节点失败时优先走失败分支：从节点底部红色「败」出点连线即可定向到补偿/降级节点（输出不写入，替代全局两档策略）；未连失败分支时按本策略：失败中断 = 节点异常终止整个流程；忽略继续 = 记录异常并继续执行后续节点。失败详情会写入上下文变量 __lastError，补救节点模板可引用" />
               </template>
-              <el-select v-model="node.data.errorAction" style="width: 100%">
+              <el-select v-model="node.data.errorAction" :disabled="hasErrorOutEdge" style="width: 100%">
                 <el-option label="失败中断（FAIL_FLOW）" value="FAIL_FLOW" />
                 <el-option label="忽略继续（IGNORE_CONTINUE）" value="IGNORE_CONTINUE" />
               </el-select>
             </el-form-item>
+            <!-- errorAction 动态提示：随当前节点 error 出边（连接/删除实时联动）与选择值三态切换 -->
+            <el-alert
+              :type="errorActionHint.type"
+              :closable="false"
+              show-icon
+              class="panel-alert"
+              :title="errorActionHint.text"
+            />
           </template>
         </el-form>
       </div>
@@ -1217,7 +1225,7 @@ import type { BackendBeanInfo } from '@/api/logicFlow'
 import { dataSourceApi } from '@/api/data-source'
 import { formApi } from '@/api/form'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type DataUpsertNodeConfig, type DataUpsertUpsertItem, type DataQueryNodeConfig, type DataInsertNodeConfig, type DataDeleteNodeConfig, type NotifyNodeConfig, type DelayNodeConfig, type TransformNodeConfig, type AggregateNodeConfig, type LlmNodeConfig, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type DataUpsertNodeConfig, type DataUpsertUpsertItem, type DataQueryNodeConfig, type DataInsertNodeConfig, type DataDeleteNodeConfig, type NotifyNodeConfig, type DelayNodeConfig, type TransformNodeConfig, type AggregateNodeConfig, type LlmNodeConfig, type FlowNode, type FlowEdge, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
 import { parseSqlScriptPreview } from '../utils/sqlScript'
 import type { FlowVarItem } from '../utils/flowVars'
 
@@ -1239,6 +1247,8 @@ const props = defineProps<{
   loopBodyCount?: number
   /** 当前节点可用的上下文变量（父组件按画布实时计算，见 flowVars.ts） */
   variables?: FlowVarItem[]
+  /** 画布实时边集合（父组件从 vue-flow store 真值传入）：errorAction 动态提示需判断当前节点是否已连失败分支（error 出边） */
+  edges?: FlowEdge[]
 }>()
 const emit = defineEmits<{ 'update:collapsed': [value: boolean]; remove: [id: string] }>()
 
@@ -1261,6 +1271,43 @@ const hasExecutionMeta = computed(
       'DATA_QUERY', 'DATA_INSERT', 'DATA_DELETE', 'NOTIFY', 'DELAY', 'TRANSFORM', 'AGGREGATE', 'LLM',
     ].includes(node.value.data.nodeType)
 )
+
+/**
+ * 当前节点是否已连失败分支（error 出边）：设计器连线时 sourceHandle='error' 且 data.branch='error'
+ * （双标记兼容手连/DSL 回灌两种来源），props.edges 为 store 实时真值，连接/删边即联动。
+ */
+const hasErrorOutEdge = computed(() => {
+  if (!node.value) return false
+  const id = node.value.id
+  return (props.edges ?? []).some(
+    (e) => e.source === id && (e.sourceHandle === 'error' || e.data?.branch === 'error')
+  )
+})
+
+/**
+ * errorAction 动态提示（三级回落链优先级可视化）：
+ * ① 已连 error 出边 → 优先级最高，本属性不生效（选择器置灰）；
+ * ② 无 error 出边 + FAIL_FLOW（含未设置）→ 中性说明；
+ * ③ 无 error 出边 + IGNORE_CONTINUE → 提示失败详情可经 {{__lastError}} 引用（引擎随本迭代交付）。
+ */
+const errorActionHint = computed<{ type: 'warning' | 'info'; text: string }>(() => {
+  if (hasErrorOutEdge.value) {
+    return {
+      type: 'warning',
+      text: '已连接失败分支（error 出边）：失败时优先走该分支，此属性不生效',
+    }
+  }
+  if (node.value?.data.errorAction === 'IGNORE_CONTINUE') {
+    return {
+      type: 'info',
+      text: '失败时记录后继续主流程，失败详情可通过 {{__lastError}} 在后续节点引用',
+    }
+  }
+  return {
+    type: 'info',
+    text: '失败时中断整个流程（可连接失败分支或选择 IGNORE_CONTINUE 跳过继续）',
+  }
+})
 
 /** 兜底补齐 config（历史 DSL 缺字段时按类型默认值补全） */
 function ensureConfig<T>(): T {

@@ -118,6 +118,7 @@
         :node="selectedNode"
         :loop-body-count="selectedLoopBodyCount"
         :variables="availableVars"
+        :edges="panelEdges"
         @remove="removeNode"
       />
     </div>
@@ -288,6 +289,9 @@ function allNodes(): FlowNodeModel[] {
 function allEdges(): FlowEdge[] {
   return (storeEdges.value ?? []) as unknown as FlowEdge[]
 }
+
+/** PropertyPanel errorAction 动态提示依赖的实时边集合（store 真值：连接/删边即联动，v-model 副本滞后不可用） */
+const panelEdges = computed<FlowEdge[]>(() => allEdges())
 
 // ===== 画布数据 =====
 const nodes = ref<FlowNodeModel[]>([])

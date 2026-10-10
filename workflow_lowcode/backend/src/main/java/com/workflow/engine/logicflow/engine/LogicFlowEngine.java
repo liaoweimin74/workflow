@@ -49,6 +49,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.OffsetDateTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -81,7 +82,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
  *       聚合结果列表为节点返回值（由 results 声明写入）；legacy 单动作（actionType+actionConfig）仍兼容；
  *       SUBFLOW 调用另一条已发布逻辑流（环检测 + 深度限制），其 outputVars 为节点返回值（由 results 声明写入）；</li>
  *   <li>节点异常按 errorAction：FAIL_FLOW（默认）→ 整个流 FAILED 停止；
- *       IGNORE_CONTINUE → 该节点 trace 记 FAILED 后继续走边；</li>
+ *       IGNORE_CONTINUE → 该节点 trace 记 FAILED 后继续走边；
+ *       任一节点失败时失败详情写入上下文 {@code __lastError}（Map{nodeId,nodeName,type,message,timestamp}，
+ *       最近一次覆盖），失败分支/补救节点模板可引用（{{__lastError}} 或 {{__lastError.message}}）；</li>
  *   <li>输出 outputVars = 全部变量快照（容器结构深拷贝）。</li>
  * </ul>
  */
@@ -301,11 +304,38 @@ public class LogicFlowEngine {
     /** 错误分支出边标记（EdgeDef.branch）：节点失败时优先路由到该边（onError 失败路由）。 */
     public static final String BRANCH_ERROR = "error";
 
+    /** 失败详情上下文变量名（{@code __lastError}）：任一节点失败时写入，补救节点模板可引用。 */
+    public static final String VAR_LAST_ERROR = "__lastError";
+
+    /**
+     * 失败详情写入流程上下文（三级回落链共用）：任一节点执行失败时调用，无论后续走
+     * ① error 出边路由、② IGNORE_CONTINUE 继续主边，还是 ③ FAIL_FLOW 收敛 FAILED
+     * （{@link #fail} 对 vars 做快照，收敛结果 outputVars 同样带出 {@code __lastError}）。
+     *
+     * <p>形态选型：Map{nodeId, nodeName, type, message, timestamp}——引擎通用插值
+     * {@link #resolveDataUpdateValue} 支持 {{__lastError}} 整体取用（Map toString）与
+     * {{__lastError.message}} 点路径取字段（{@link #resolvePath} 逐层 Map 取值），
+     * 补救节点（TRANSFORM 模板/NOTIFY 文案变量/LLM prompt 等）均可引用。
+     *
+     * <p>并发/覆盖语义：单次运行内多个节点连续失败时 {@code __lastError} 为最近一次失败详情
+     * （后写覆盖前写，不聚合历史）；流程上下文按次独立，跨运行互不影响。仅写上下文，不改 trace。
+     */
+    private void recordLastError(LogicFlowDsl.NodeDef node, String error, Map<String, Object> vars) {
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("nodeId", node.getId());
+        detail.put("nodeName", node.getName());
+        detail.put("type", node.getType() != null ? node.getType().name() : null);
+        detail.put("message", error);
+        detail.put("timestamp", OffsetDateTime.now().toString());
+        vars.put(VAR_LAST_ERROR, detail);
+    }
+
     /**
      * 执行 HTTP/BEAN/SCRIPT/数据/通知等逻辑节点，返回下一节点。
      * 失败按顺序尝试：① 存在 branch=error 出边 → 路由到失败分支（trace 记 FAILED，输出不写入）；
      * ② errorAction=IGNORE_CONTINUE → trace 记 FAILED 后继续主边；
      * ③ FAIL_FLOW（默认）→ 抛 {@link FlowAbortedException}（run 顶层收敛为 FAILED）。
+     * 三级路径前失败详情均先写入 {@code __lastError}（见 {@link #recordLastError}）。
      */
     private LogicFlowDsl.NodeDef executeLogicNode(LogicFlowDsl.NodeDef node,
                                                   Map<String, LogicFlowDsl.NodeDef> nodeById,
@@ -325,6 +355,8 @@ public class LogicFlowEngine {
             String error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             traces.add(new NodeTrace(node.getId(), node.getName(), node.getType().name(),
                     TRACE_FAILED, null, error, duration));
+            // 三级回落链任一路径前先写失败详情（error 分支目标 / IGNORE_CONTINUE 下游 / FAIL_FLOW 快照均可引用）
+            recordLastError(node, error, vars);
             LogicFlowDsl.NodeDef errorTarget = resolveErrorTarget(node, nodeById, outEdges.get(node.getId()));
             if (errorTarget != null) {
                 log.debug("Logic flow node '{}' failed, route to error branch: {}", node.getId(), error);
@@ -360,6 +392,8 @@ public class LogicFlowEngine {
             String error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             traces.add(new NodeTrace(node.getId(), node.getName(), NodeType.CONDITION.name(),
                     TRACE_FAILED, null, error, duration));
+            // 与执行节点同语义：失败详情先写 __lastError 再走三级回落链
+            recordLastError(node, error, vars);
             LogicFlowDsl.NodeDef errorTarget = resolveErrorTarget(node, nodeById, outEdges.get(node.getId()));
             if (errorTarget != null) {
                 return errorTarget;

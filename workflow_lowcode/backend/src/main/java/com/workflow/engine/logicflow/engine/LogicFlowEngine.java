@@ -858,50 +858,76 @@ public class LogicFlowEngine {
         if (tenantProvider == null) {
             throw new IllegalStateException("引擎未装配租户能力(TenantProvider): " + node.getId());
         }
-        String formKey = config.getFormKey() == null ? "" : config.getFormKey().trim();
-        if (!formKey.matches("[a-zA-Z0-9_]{1,64}")) {
-            throw new IllegalArgumentException("DATA_UPSERT 节点 formKey 非法(仅字母/数字/下划线): "
-                    + formKey + " (" + node.getId() + ")");
+        // 统一编辑器形态（upserts）：0 条 = legacy 单表；恰好 1 条 = 单表更新（输出与存量一致，迁移零回归）；
+        // 多条 = 单事务顺序执行，全成提交、任一失败整体回滚（全有或全无）
+        List<BackendDataUpsertConfig.TableUpsert> ups = config.getUpserts();
+        if (ups != null && !ups.isEmpty()) {
+            if (ups.size() == 1) {
+                BackendDataUpsertConfig.TableUpsert u = ups.get(0);
+                return executeBuiltUpsert(node.getId(), compileUpsertEntry(node.getId(),
+                        u.getFormKey(), u.getConflictKey(), u.getValues(), u.getOnUpdate(), vars));
+            }
+            return executeDataUpsertMulti(node, ups, vars);
         }
-        String table = "wf_biz_" + formKey;
+        return executeBuiltUpsert(node.getId(), compileUpsertEntry(node.getId(), config.getFormKey(),
+                config.getConflictKey(), config.getValues(), config.getOnUpdate(), vars));
+    }
+
+    /** DATA_UPSERT 单条目编译产物：ODKU SQL + 参数 + 冲突键上下文（单表/多表单复用）。 */
+    private record BuiltUpsert(String table, String sql, List<Object> params,
+                               String conflictCol, Object conflictValue, String id, String tenantId) {
+    }
+
+    /**
+     * 编译单条目 DATA_UPSERT：formKey/冲突键/写入列全量校验（表存在、(tenant_id, conflictKey) 唯一索引、
+     * 引擎管理列禁写、列不重复、values 须含冲突键）→ ODKU SQL（INSERT 镜像 + UPDATE 子句）。
+     * 全部配置类错误在任何语句执行前暴露。
+     */
+    private BuiltUpsert compileUpsertEntry(String nodeId, String formKey, String conflictKey,
+                                           List<BackendDataUpsertConfig.ValueOp> values,
+                                           List<BackendDataUpsertConfig.ValueOp> onUpdate,
+                                           Map<String, Object> vars) {
+        String fk = formKey == null ? "" : formKey.trim();
+        if (!fk.matches("[a-zA-Z0-9_]{1,64}")) {
+            throw new IllegalArgumentException("DATA_UPSERT 节点 formKey 非法(仅字母/数字/下划线): "
+                    + fk + " (" + nodeId + ")");
+        }
+        String table = "wf_biz_" + fk;
         if (!tableManager.tableExists(table)) {
             throw new IllegalArgumentException("DATA_UPSERT 目标表不存在(表单未发布或已下线): "
-                    + table + " (" + node.getId() + ")");
+                    + table + " (" + nodeId + ")");
         }
-        String conflictKey = config.getConflictKey() == null ? "" : config.getConflictKey().trim();
-        if (conflictKey.isEmpty()) {
-            throw new IllegalArgumentException("DATA_UPSERT 节点缺少 conflictKey: " + node.getId());
+        String ck = conflictKey == null ? "" : conflictKey.trim();
+        if (ck.isEmpty()) {
+            throw new IllegalArgumentException("DATA_UPSERT 节点缺少 conflictKey: " + nodeId);
         }
         Map<String, ColumnInfo> columns = columnsOf(table);
-        String conflictCol = requireUpsertColumn(columns, table, conflictKey, "conflictKey", node.getId());
+        String conflictCol = requireUpsertColumn(columns, table, ck, "conflictKey", nodeId);
         if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(conflictCol.toLowerCase(Locale.ROOT))) {
             throw new IllegalArgumentException("DATA_UPSERT 冲突键禁止使用引擎管理列: " + conflictCol
-                    + " (" + node.getId() + ")");
+                    + " (" + nodeId + ")");
         }
         if (!hasTenantScopedUniqueIndex(table, conflictCol)) {
             throw new IllegalArgumentException("DATA_UPSERT 冲突键缺少 (tenant_id, " + conflictCol
-                    + ") 唯一索引——请先在表单设计器将该字段标记为唯一并重新发布: " + table + " (" + node.getId() + ")");
+                    + ") 唯一索引——请先在表单设计器将该字段标记为唯一并重新发布: " + table + " (" + nodeId + ")");
         }
-
-        List<BackendDataUpsertConfig.ValueOp> values = config.getValues();
         if (values == null || values.isEmpty()) {
-            throw new IllegalArgumentException("DATA_UPSERT 节点缺少 values: " + node.getId());
+            throw new IllegalArgumentException("DATA_UPSERT 节点缺少 values: " + nodeId);
         }
         if (values.size() > BackendDataUpsertConfig.MAX_VALUES) {
             throw new IllegalArgumentException("DATA_UPSERT 节点写入字段数超出上限("
-                    + BackendDataUpsertConfig.MAX_VALUES + "): " + values.size() + " (" + node.getId() + ")");
+                    + BackendDataUpsertConfig.MAX_VALUES + "): " + values.size() + " (" + nodeId + ")");
         }
-        // 冲突键 + 写入列编译（canonical 列名统一为元数据原键，大小写不敏感）；
-        // 全部配置类错误在任何语句执行前暴露
+        // 冲突键 + 写入列编译（canonical 列名统一为元数据原键，大小写不敏感）
         LinkedHashMap<String, Object> insertCols = new LinkedHashMap<>();
         Object conflictValue = null;
         for (BackendDataUpsertConfig.ValueOp op : values) {
-            String col = requireUpsertColumn(columns, table, op.getColumn(), "values", node.getId());
+            String col = requireUpsertColumn(columns, table, op.getColumn(), "values", nodeId);
             if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(col.toLowerCase(Locale.ROOT))) {
-                throw new IllegalArgumentException("DATA_UPSERT 禁止写入引擎管理列: " + col + " (" + node.getId() + ")");
+                throw new IllegalArgumentException("DATA_UPSERT 禁止写入引擎管理列: " + col + " (" + nodeId + ")");
             }
             if (insertCols.containsKey(col)) {
-                throw new IllegalArgumentException("DATA_UPSERT 写入列重复: " + col + " (" + node.getId() + ")");
+                throw new IllegalArgumentException("DATA_UPSERT 写入列重复: " + col + " (" + nodeId + ")");
             }
             Object resolved = resolveDataUpdateValue(op.getValue(), vars);
             insertCols.put(col, resolved);
@@ -911,21 +937,21 @@ public class LogicFlowEngine {
         }
         if (conflictValue == null) {
             throw new IllegalArgumentException("DATA_UPSERT values 须包含冲突键列: "
-                    + conflictCol + " (" + node.getId() + ")");
+                    + conflictCol + " (" + nodeId + ")");
         }
         if (String.valueOf(conflictValue).isBlank()) {
             throw new IllegalArgumentException("DATA_UPSERT 冲突键取值为空(无法判定存在性): "
-                    + conflictCol + " (" + node.getId() + ")");
+                    + conflictCol + " (" + nodeId + ")");
         }
         LinkedHashMap<String, Object> updateOnlyCols = new LinkedHashMap<>();
-        for (BackendDataUpsertConfig.ValueOp op : config.getOnUpdate() != null
-                ? config.getOnUpdate() : List.<BackendDataUpsertConfig.ValueOp>of()) {
-            String col = requireUpsertColumn(columns, table, op.getColumn(), "onUpdate", node.getId());
+        for (BackendDataUpsertConfig.ValueOp op : onUpdate != null
+                ? onUpdate : List.<BackendDataUpsertConfig.ValueOp>of()) {
+            String col = requireUpsertColumn(columns, table, op.getColumn(), "onUpdate", nodeId);
             if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(col.toLowerCase(Locale.ROOT))) {
-                throw new IllegalArgumentException("DATA_UPSERT 禁止写入引擎管理列: " + col + " (" + node.getId() + ")");
+                throw new IllegalArgumentException("DATA_UPSERT 禁止写入引擎管理列: " + col + " (" + nodeId + ")");
             }
             if (updateOnlyCols.containsKey(col)) {
-                throw new IllegalArgumentException("DATA_UPSERT onUpdate 列重复: " + col + " (" + node.getId() + ")");
+                throw new IllegalArgumentException("DATA_UPSERT onUpdate 列重复: " + col + " (" + nodeId + ")");
             }
             updateOnlyCols.put(col, resolveDataUpdateValue(op.getValue(), vars));
         }
@@ -961,20 +987,127 @@ public class LogicFlowEngine {
             sql.append(", ").append(entry.getKey()).append(" = ?");
             params.add(entry.getValue());
         }
+        return new BuiltUpsert(table, sql.toString(), params, conflictCol, conflictValue, id, tenantId);
+    }
 
-        int affected = jdbcTemplate.update(sql.toString(), params.toArray());
+    /** 单条目执行（jdbc 直连路径）：ODKU 受影响行数 → result 派生 → id 回填，输出单表 Map。 */
+    private Map<String, Object> executeBuiltUpsert(String nodeId, BuiltUpsert b) {
+        int affected = jdbcTemplate.update(b.sql(), b.params().toArray());
         String result = affected == 1 ? "created" : affected == 2 ? "updated" : "unchanged";
-        String rowId = affected == 1 ? id
-                : queryUpsertRowId(table, conflictCol, conflictValue, tenantId);
+        String rowId = affected == 1 ? b.id()
+                : queryUpsertRowId(b.table(), b.conflictCol(), b.conflictValue(), b.tenantId());
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("result", result);
         out.put("affected", affected);
         out.put("id", rowId);
-        out.put("table", table);
+        out.put("table", b.table());
         if (log.isDebugEnabled()) {
-            log.debug("DATA_UPSERT node '{}' -> {} ({}) rows={} id={}", node.getId(), result, table, affected, rowId);
+            log.debug("DATA_UPSERT node '{}' -> {} ({}) rows={} id={}", nodeId, result, b.table(), affected, rowId);
         }
         return out;
+    }
+
+    /**
+     * 多表单写入：单连接单事务顺序执行，全成提交、任一失败整体回滚（全有或全无）。
+     * 输出 {@code { total, created, updated, <别名|u{序号}>: {result, affected, id, table}, ... }}。
+     */
+    private Map<String, Object> executeDataUpsertMulti(LogicFlowDsl.NodeDef node,
+                                                       List<BackendDataUpsertConfig.TableUpsert> ups,
+                                                       Map<String, Object> vars) {
+        if (ups.size() > BackendDataUpsertConfig.MAX_UPSERTS) {
+            throw new IllegalArgumentException("DATA_UPSERT 节点多表单写入数超出上限("
+                    + BackendDataUpsertConfig.MAX_UPSERTS + "): " + ups.size() + " (" + node.getId() + ")");
+        }
+        // 编译 + 键名冲突预检：全部配置错误在任何语句执行前暴露
+        List<BuiltUpsert> built = new ArrayList<>(ups.size());
+        List<String> keys = new ArrayList<>(ups.size());
+        for (int i = 0; i < ups.size(); i++) {
+            BackendDataUpsertConfig.TableUpsert u = ups.get(i);
+            String alias = u.getAlias() == null ? "" : u.getAlias().trim();
+            if (!alias.isEmpty() && !alias.matches("\\w+")) {
+                throw new IllegalArgumentException("DATA_UPSERT 节点多表单写入别名非法（仅字母/数字/下划线）: "
+                        + u.getAlias() + " (" + node.getId() + ")");
+            }
+            String key = alias.isEmpty() ? ("u" + i) : alias;
+            if (keys.contains(key)) {
+                throw new IllegalArgumentException("DATA_UPSERT 节点多表单写入别名重复: " + key
+                        + " (" + node.getId() + ")");
+            }
+            keys.add(key);
+            built.add(compileUpsertEntry(node.getId(), u.getFormKey(), u.getConflictKey(),
+                    u.getValues(), u.getOnUpdate(), vars));
+        }
+        long begin = System.currentTimeMillis();
+        return jdbcTemplate.execute((Connection con) -> runUpsertMulti(con, built, keys, begin));
+    }
+
+    /** 单连接单事务顺序执行多表单 ODKU；id 反查复用同连接（事务内一致性）。 */
+    private Map<String, Object> runUpsertMulti(Connection con, List<BuiltUpsert> built,
+                                               List<String> keys, long begin) throws SQLException {
+        boolean oldAuto = con.getAutoCommit();
+        con.setAutoCommit(false);
+        try {
+            Map<String, Object> items = new LinkedHashMap<>();
+            int created = 0;
+            int updated = 0;
+            for (int idx = 0; idx < built.size(); idx++) {
+                BuiltUpsert b = built.get(idx);
+                int affected;
+                try (PreparedStatement ps = con.prepareStatement(b.sql())) {
+                    List<Object> params = b.params();
+                    for (int i = 0; i < params.size(); i++) {
+                        ps.setObject(i + 1, params.get(i));
+                    }
+                    affected = ps.executeUpdate();
+                }
+                String result = affected == 1 ? "created" : affected == 2 ? "updated" : "unchanged";
+                if (affected == 1) {
+                    created++;
+                } else if (affected == 2) {
+                    updated++;
+                }
+                String rowId = affected == 1 ? b.id()
+                        : queryUpsertRowIdCon(con, b.table(), b.conflictCol(), b.conflictValue(), b.tenantId());
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("result", result);
+                item.put("affected", affected);
+                item.put("id", rowId);
+                item.put("table", b.table());
+                items.put(keys.get(idx), item);
+            }
+            con.commit();
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("total", built.size());
+            summary.put("created", created);
+            summary.put("updated", updated);
+            summary.putAll(items);
+            if (log.isDebugEnabled()) {
+                log.debug("DATA_UPSERT multi -> {} entries in {} ms", built.size(), System.currentTimeMillis() - begin);
+            }
+            return summary;
+        } catch (SQLException | RuntimeException ex) {
+            try {
+                con.rollback();
+            } catch (SQLException e) {
+                log.warn("DATA_UPSERT multi rollback 失败", e);
+            }
+            throw ex;
+        } finally {
+            con.setAutoCommit(oldAuto);
+        }
+    }
+
+    /** 冲突键反查记录 id（事务内同连接版本；查无返回 null）。 */
+    private String queryUpsertRowIdCon(Connection con, String table, String conflictCol,
+                                       Object conflictValue, String tenantId) throws SQLException {
+        String sql = "SELECT id FROM " + table + " WHERE tenant_id = ? AND " + conflictCol + " = ? LIMIT 1";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setObject(1, tenantId);
+            ps.setObject(2, conflictValue);
+            try (java.sql.ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
     }
 
     /** 列存在性校验（大小写不敏感），返回元数据原键列名（DATA_UPSERT 专用错误文案）。 */

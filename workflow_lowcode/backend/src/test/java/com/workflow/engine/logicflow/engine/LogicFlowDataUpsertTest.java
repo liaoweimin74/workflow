@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.workflow.engine.form.column.ColumnInfo;
 import com.workflow.engine.form.column.DynamicTableManager;
 import com.workflow.engine.logic.BackendBeanRegistry;
+import com.workflow.engine.logic.config.BackendDataUpsertConfig;
 import com.workflow.engine.logic.executor.GroovyScriptLogic;
 import com.workflow.engine.logic.executor.HttpLogicExecutor;
 import com.workflow.engine.logic.parse.VariableResolver;
@@ -15,9 +16,13 @@ import com.workflow.engine.tenant.TenantProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +32,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -329,5 +336,180 @@ class LogicFlowDataUpsertTest {
 
         assertThat(outcome.status()).isEqualTo("FAILED");
         assertThat(outcome.errorMessage()).contains("引擎未装配租户能力");
+    }
+
+    // ------------------------------------------------------------------
+    // 多表单形态（upserts）：单条目 = 单表等价输出；多条目单连接单事务汇总
+    // ------------------------------------------------------------------
+
+    private void stubLedgerTable() {
+        when(tableManager.tableExists("wf_biz_ledger")).thenReturn(true);
+        when(tableManager.findTableColumns("wf_biz_ledger")).thenReturn(List.of(
+                new ColumnInfo("id", "varchar", false, true),
+                new ColumnInfo("tenant_id", "varchar", false, true),
+                new ColumnInfo("version", "int", true, false),
+                new ColumnInfo("created_by", "varchar", true, false),
+                new ColumnInfo("created_at", "datetime", true, false),
+                new ColumnInfo("updated_at", "datetime", true, false),
+                new ColumnInfo("order_no", "varchar", true, false),
+                new ColumnInfo("amount", "int", true, false)));
+        when(jdbcTemplate.query(ArgumentMatchers.contains("STATISTICS"),
+                ArgumentMatchers.<RowMapper<String>>any(), eq("wf_biz_ledger"), eq("order_no")))
+                .thenReturn(List.of("uk_ledger_order_no"));
+    }
+
+    private ObjectNode upsertEntry(String alias, String formKey, String conflictKey, ArrayNode values) {
+        ObjectNode entry = objectMapper.createObjectNode();
+        if (alias != null) {
+            entry.put("alias", alias);
+        }
+        entry.put("formKey", formKey);
+        entry.put("conflictKey", conflictKey);
+        entry.set("values", values);
+        return entry;
+    }
+
+    private ObjectNode multiConfig(ObjectNode... entries) {
+        ObjectNode config = objectMapper.createObjectNode();
+        ArrayNode arr = objectMapper.createArrayNode();
+        for (ObjectNode e : entries) {
+            arr.add(e);
+        }
+        config.set("upserts", arr);
+        return config;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Connection stubTransaction(java.util.List<String> sqls) throws SQLException {
+        Connection con = mock(Connection.class);
+        PreparedStatement psDml = mock(PreparedStatement.class);
+        PreparedStatement psQry = mock(PreparedStatement.class);
+        java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+        when(con.getAutoCommit()).thenReturn(true);
+        // ODKU 语句：捕获 SQL + affected 序列（首条 created、次条 updated）
+        when(con.prepareStatement(ArgumentMatchers.startsWith("INSERT"))).thenAnswer(inv -> {
+            sqls.add(inv.getArgument(0));
+            return psDml;
+        });
+        when(psDml.executeUpdate()).thenReturn(1, 2);
+        // 冲突键反查（SELECT id ...）：返回既有行
+        when(con.prepareStatement(ArgumentMatchers.startsWith("SELECT id"))).thenReturn(psQry);
+        when(psQry.executeQuery()).thenReturn(rs);
+        when(rs.next()).thenReturn(true);
+        when(rs.getString(1)).thenReturn("row-existing");
+        when(jdbcTemplate.execute(ArgumentMatchers.<ConnectionCallback<Map<String, Object>>>any()))
+                .thenAnswer(inv -> ((ConnectionCallback<Map<String, Object>>) inv.getArgument(0)).doInConnection(con));
+        return con;
+    }
+
+    @Test
+    void multiUpsertSingleEntryMatchesLegacyOutput() {
+        ObjectNode config = multiConfig(upsertEntry(null, "warehouse", "sku", defaultValues()));
+        LogicFlowEngine.RunOutcome outcome = engine.run(
+                flow(upsertNode("up_20", config)), vars());
+
+        assertThat(outcome.status()).as(String.valueOf(outcome.errorMessage())).isEqualTo("SUCCESS");
+        Map<String, Object> out = outputOf(outcome, "up_20");
+        // 恰好 1 条 = 单表更新等价输出（无 total/created/updated 汇总键）
+        assertThat(out.get("result")).isEqualTo("created");
+        assertThat(out.get("affected")).isEqualTo(1);
+        assertThat(out.get("table")).isEqualTo("wf_biz_warehouse");
+        assertThat(out).doesNotContainKeys("total", "created", "updated");
+        verify(jdbcTemplate, never()).execute(ArgumentMatchers.<ConnectionCallback<Map<String, Object>>>any());
+    }
+
+    @Test
+    void multiUpsertRunsAllEntriesInSingleTransactionAndSummarizes() throws SQLException {
+        stubLedgerTable();
+        java.util.List<String> sqls = new java.util.ArrayList<>();
+        Connection con = stubTransaction(sqls);
+
+        ObjectNode config = multiConfig(
+                upsertEntry(null, "warehouse", "sku", defaultValues()),
+                upsertEntry("stock", "ledger", "order_no",
+                        objectMapper.createArrayNode().add(valueOp("order_no", "{{formData.sku}}"))
+                                .add(valueOp("amount", "5"))));
+        LogicFlowEngine.RunOutcome outcome = engine.run(
+                flow(upsertNode("up_21", config)), vars());
+
+        assertThat(outcome.status()).as(String.valueOf(outcome.errorMessage())).isEqualTo("SUCCESS");
+        Map<String, Object> out = outputOf(outcome, "up_21");
+        assertThat(out.get("total")).isEqualTo(2);
+        assertThat(out.get("created")).isEqualTo(1);
+        assertThat(out.get("updated")).isEqualTo(1);
+        assertThat(out).containsKey("u0").containsKey("stock");
+        Map<String, Object> u0 = (Map<String, Object>) out.get("u0");
+        assertThat(u0.get("result")).isEqualTo("created");
+        assertThat(u0.get("affected")).isEqualTo(1);
+        assertThat(u0.get("table")).isEqualTo("wf_biz_warehouse");
+        Map<String, Object> stock = (Map<String, Object>) out.get("stock");
+        assertThat(stock.get("result")).isEqualTo("updated");
+        assertThat(stock.get("affected")).isEqualTo(2);
+        // 两条 ODKU 分别指向两张物理表
+        assertThat(sqls).hasSize(2);
+        assertThat(sqls.get(0)).startsWith("INSERT INTO wf_biz_warehouse ");
+        assertThat(sqls.get(1)).startsWith("INSERT INTO wf_biz_ledger ");
+        // 事务语义：单连接、autoCommit 关闭、全成提交后恢复
+        verify(con).setAutoCommit(false);
+        verify(con).commit();
+        verify(con).setAutoCommit(true);
+    }
+
+    @Test
+    void multiUpsertRollsBackAllOnFailure() throws SQLException {
+        stubLedgerTable();
+        java.util.List<String> sqls = new java.util.ArrayList<>();
+        Connection con = mock(Connection.class);
+        PreparedStatement ps = mock(PreparedStatement.class);
+        when(con.getAutoCommit()).thenReturn(true);
+        when(con.prepareStatement(anyString())).thenAnswer(inv -> {
+            sqls.add(inv.getArgument(0));
+            return ps;
+        });
+        // 首条成功、次条失败 → 整体回滚
+        when(ps.executeUpdate()).thenReturn(1).thenThrow(new SQLException("dup key"));
+        when(jdbcTemplate.execute(ArgumentMatchers.<ConnectionCallback<Map<String, Object>>>any()))
+                .thenAnswer(inv -> ((ConnectionCallback<Map<String, Object>>) inv.getArgument(0)).doInConnection(con));
+
+        ObjectNode config = multiConfig(
+                upsertEntry(null, "warehouse", "sku", defaultValues()),
+                upsertEntry("stock", "ledger", "order_no",
+                        objectMapper.createArrayNode().add(valueOp("order_no", "X"))
+                                .add(valueOp("amount", "1"))));
+        LogicFlowEngine.RunOutcome outcome = engine.run(
+                flow(upsertNode("up_22", config)), vars());
+
+        assertThat(outcome.status()).isEqualTo("FAILED");
+        verify(con).rollback();
+        verify(con, never()).commit();
+    }
+
+    @Test
+    void multiUpsertRejectsDuplicateAliasBeforeExecution() {
+        stubLedgerTable();
+        ObjectNode config = multiConfig(
+                upsertEntry("same", "warehouse", "sku", defaultValues()),
+                upsertEntry("same", "ledger", "order_no",
+                        objectMapper.createArrayNode().add(valueOp("order_no", "X"))
+                                .add(valueOp("amount", "1"))));
+        LogicFlowEngine.RunOutcome outcome = engine.run(
+                flow(upsertNode("up_23", config)), vars());
+
+        assertThat(outcome.status()).isEqualTo("FAILED");
+        assertThat(outcome.errorMessage()).contains("多表单写入别名重复: same");
+    }
+
+    @Test
+    void multiUpsertRejectsOverLimitBeforeExecution() {
+        ObjectNode[] entries = new ObjectNode[BackendDataUpsertConfig.MAX_UPSERTS + 1];
+        for (int i = 0; i < entries.length; i++) {
+            entries[i] = upsertEntry(null, "warehouse", "sku", defaultValues());
+        }
+        ObjectNode config = multiConfig(entries);
+        LogicFlowEngine.RunOutcome outcome = engine.run(
+                flow(upsertNode("up_24", config)), vars());
+
+        assertThat(outcome.status()).isEqualTo("FAILED");
+        assertThat(outcome.errorMessage()).contains("多表单写入数超出上限");
     }
 }

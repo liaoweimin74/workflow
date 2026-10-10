@@ -691,12 +691,13 @@ describe('collectReferencedVars', () => {
 })
 
 describe('DATA_UPSERT 数据写入节点', () => {
-  it('defaultConfig(DATA_UPSERT) 给出 upsert 默认结构；默认名为数据写入', () => {
+  it('defaultConfig(DATA_UPSERT) 给出 upsert 默认结构（含 upserts 空条目）；默认名为数据写入', () => {
     expect(defaultConfig('DATA_UPSERT')).toEqual({
       formKey: '',
       conflictKey: '',
       values: [{ column: '', value: '' }],
       onUpdate: [],
+      upserts: [{ formKey: '', conflictKey: '', values: [{ column: '', value: '' }], onUpdate: [] }],
     })
     expect(defaultNodeName('DATA_UPSERT')).toBe('数据写入')
   })

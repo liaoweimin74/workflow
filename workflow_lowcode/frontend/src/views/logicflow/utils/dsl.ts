@@ -188,12 +188,10 @@ export interface DataUpsertValueOp {
   value: string
 }
 
-/**
- * 业务数据写入（表单记录 upsert）：引擎以 (tenant_id, conflictKey) 唯一索引为冲突判定
- * 执行原子 INSERT ... ON DUPLICATE KEY UPDATE——存在则更新、不存在则新增；
- * tenant_id/created_by/version 等引擎列自动维护，输出 { result, affected, id, table }
- */
-export interface DataUpsertNodeConfig {
+/** 业务数据写入单条目（多表单形态：单事务顺序执行，任一失败整体回滚） */
+export interface DataUpsertUpsertItem {
+  /** 输出别名（可选，字母/数字/下划线；缺省输出键 u{序号}） */
+  alias?: string
   /** 已发布 BUSINESS 表单 key → 物理表 wf_biz_<formKey> */
   formKey: string
   /** 冲突键：表单声明的唯一字段（须有 (tenant_id, 字段) 二列唯一索引） */
@@ -202,6 +200,24 @@ export interface DataUpsertNodeConfig {
   values: DataUpsertValueOp[]
   /** 可选：仅更新路径额外覆盖的字段；缺省更新路径 = 全量 values */
   onUpdate?: DataUpsertValueOp[]
+}
+
+/**
+ * 业务数据写入（表单记录 upsert）：引擎以 (tenant_id, conflictKey) 唯一索引为冲突判定
+ * 执行原子 INSERT ... ON DUPLICATE KEY UPDATE——存在则更新、不存在则新增；
+ * tenant_id/created_by/version 等引擎列自动维护，输出 { result, affected, id, table }
+ */
+export interface DataUpsertNodeConfig {
+  /** legacy 单表形态（引擎仍接受；设计器打开时自动迁移为 upserts[0]，新 DSL 不再产出） */
+  formKey: string
+  /** 冲突键：表单声明的唯一字段（须有 (tenant_id, 字段) 二列唯一索引） */
+  conflictKey: string
+  /** 新增与更新共用的字段值（冲突键列必须包含） */
+  values: DataUpsertValueOp[]
+  /** 可选：仅更新路径额外覆盖的字段；缺省更新路径 = 全量 values */
+  onUpdate?: DataUpsertValueOp[]
+  /** 统一多表单形态：单条目 = 单表写入（输出与存量单表一致）；多条目单事务顺序执行（输出汇总 { total, created, updated, u0|别名.affected, … }） */
+  upserts?: DataUpsertUpsertItem[]
 }
 
 /** SQL 批处理失败策略 */
@@ -497,6 +513,7 @@ export function defaultConfig(type: LogicNodeType): NodeConfig | undefined {
         conflictKey: '',
         values: [{ column: '', value: '' }],
         onUpdate: [],
+        upserts: [{ formKey: '', conflictKey: '', values: [{ column: '', value: '' }], onUpdate: [] }],
       }
     case 'SQL_SCRIPT':
       return { sql: '', onError: 'abort', maxRows: 200 }

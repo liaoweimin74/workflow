@@ -44,12 +44,18 @@ public class BackendDataUpsertConfig {
     /** 写入字段（values）条目数上限（防超长配置；引擎与发布校验共用）。 */
     public static final int MAX_VALUES = 50;
 
+    /** 多表单写入（upserts）条目数上限（防超长配置；引擎与发布校验共用）。 */
+    public static final int MAX_UPSERTS = 20;
+
     private String formKey;
     private String conflictKey;
     private List<ValueOp> values;
 
     /** 可选：仅更新路径（ON DUPLICATE KEY UPDATE）额外覆盖的字段；缺省更新路径 = 全量 values。 */
     private List<ValueOp> onUpdate;
+
+    /** 多表单写入：存在且非空时按单事务顺序执行（优先于单表单形态）。 */
+    private List<TableUpsert> upserts;
 
     public String getFormKey() { return formKey; }
     public void setFormKey(String formKey) { this.formKey = formKey; }
@@ -62,6 +68,33 @@ public class BackendDataUpsertConfig {
 
     public List<ValueOp> getOnUpdate() { return onUpdate; }
     public void setOnUpdate(List<ValueOp> onUpdate) { this.onUpdate = onUpdate; }
+
+    public List<TableUpsert> getUpserts() { return upserts; }
+    public void setUpserts(List<TableUpsert> upserts) { this.upserts = upserts; }
+
+    /** 多表单写入条目：单表单配置 + 可选输出别名（缺省输出键 u{序号}）。 */
+    public static class TableUpsert {
+        private String alias;
+        private String formKey;
+        private String conflictKey;
+        private List<ValueOp> values;
+        private List<ValueOp> onUpdate;
+
+        public String getAlias() { return alias; }
+        public void setAlias(String alias) { this.alias = alias; }
+
+        public String getFormKey() { return formKey; }
+        public void setFormKey(String formKey) { this.formKey = formKey; }
+
+        public String getConflictKey() { return conflictKey; }
+        public void setConflictKey(String conflictKey) { this.conflictKey = conflictKey; }
+
+        public List<ValueOp> getValues() { return values; }
+        public void setValues(List<ValueOp> values) { this.values = values; }
+
+        public List<ValueOp> getOnUpdate() { return onUpdate; }
+        public void setOnUpdate(List<ValueOp> onUpdate) { this.onUpdate = onUpdate; }
+    }
 
     /** 写值项（列名 + 取值表达式；{{var}} 点路径运行期解析，字面量直通）。 */
     public static class ValueOp {

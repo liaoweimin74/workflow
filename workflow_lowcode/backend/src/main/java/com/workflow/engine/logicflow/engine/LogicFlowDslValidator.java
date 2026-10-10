@@ -308,28 +308,55 @@ public class LogicFlowDslValidator {
             errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 config");
             return;
         }
+        String base = "DATA_UPSERT 节点 " + node.getId();
+        // 统一编辑器形态（upserts）：存在且非空时逐条目校验（单表顶层字段忽略）
+        JsonNode upserts = config.get("upserts");
+        if (upserts != null && upserts.isArray() && !upserts.isEmpty()) {
+            if (upserts.size() > BackendDataUpsertConfig.MAX_UPSERTS) {
+                errors.add(base + " 多表单写入数超出上限("
+                        + BackendDataUpsertConfig.MAX_UPSERTS + "): " + upserts.size());
+            }
+            Set<String> aliases = new HashSet<>();
+            for (int i = 0; i < upserts.size(); i++) {
+                JsonNode entry = upserts.get(i);
+                String alias = textOrNull(entry, "alias");
+                if (alias != null && !alias.isBlank()) {
+                    if (!alias.trim().matches("\\w+")) {
+                        errors.add(base + " 表单写入第 " + (i + 1) + " 项别名非法(仅字母/数字/下划线): " + alias);
+                    } else if (!aliases.add(alias.trim())) {
+                        errors.add(base + " 表单写入别名重复: " + alias.trim());
+                    }
+                }
+                validateUpsertEntry(base + " 表单写入第 " + (i + 1) + " 项", entry, errors);
+            }
+            return;
+        }
+        validateUpsertEntry(base, config, errors);
+    }
+
+    /** 单条目 upsert 校验（顶层单表 config 与 upserts[i] 共用；base 作错误文案前缀）。 */
+    private void validateUpsertEntry(String base, JsonNode config, List<String> errors) {
         String formKey = textOrNull(config, "formKey");
         if (formKey == null || formKey.isBlank()) {
-            errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 formKey");
+            errors.add(base + " 缺少 formKey");
         } else if (!formKey.trim().matches("[a-zA-Z0-9_]{1,64}")) {
-            errors.add("DATA_UPSERT 节点 " + node.getId() + " formKey 非法(仅字母/数字/下划线): " + formKey);
+            errors.add(base + " formKey 非法(仅字母/数字/下划线): " + formKey);
         }
         String conflictKey = textOrNull(config, "conflictKey");
         if (conflictKey == null || conflictKey.isBlank()) {
-            errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 conflictKey");
+            errors.add(base + " 缺少 conflictKey");
         } else if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(conflictKey.trim().toLowerCase())) {
-            errors.add("DATA_UPSERT 节点 " + node.getId() + " 冲突键禁止使用引擎管理列: " + conflictKey);
+            errors.add(base + " 冲突键禁止使用引擎管理列: " + conflictKey);
         }
         JsonNode values = config.get("values");
         if (values == null || !values.isArray() || values.isEmpty()) {
-            errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 values");
+            errors.add(base + " 缺少 values");
             return;
         }
         if (values.size() > BackendDataUpsertConfig.MAX_VALUES) {
-            errors.add("DATA_UPSERT 节点 " + node.getId() + " 写入字段数超出上限("
+            errors.add(base + " 写入字段数超出上限("
                     + BackendDataUpsertConfig.MAX_VALUES + "): " + values.size());
         }
-        String base = "DATA_UPSERT 节点 " + node.getId();
         Set<String> cols = new HashSet<>();
         boolean hasConflict = false;
         for (int i = 0; i < values.size(); i++) {

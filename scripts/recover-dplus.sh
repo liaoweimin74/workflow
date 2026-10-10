@@ -62,7 +62,10 @@ fi
 # ---- 2. 账号 + 数据（SYS_USER 缺失才导入，避免重复导入）----
 M="$MDB/root/bin/mariadb"
 if port_open 3306 && [ -x "$M" ]; then
-  "$M" -u root -S "$MDB/mysql.sock" -e "CREATE DATABASE IF NOT EXISTS workflow CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; CREATE DATABASE IF NOT EXISTS workflow_v6 CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; GRANT ALL ON *.* TO 'root'@'localhost' IDENTIFIED BY '740130' WITH GRANT OPTION; GRANT ALL ON *.* TO 'root'@'127.0.0.1' IDENTIFIED BY '740130' WITH GRANT OPTION; FLUSH PRIVILEGES;" >> /home/z/tools/recover.log 2>&1
+  # 密码自适应：全新 initdb（无密码）或混合状态（datadir 保留 root 密码 740130）均可建库
+  RECOVER_SQL="CREATE DATABASE IF NOT EXISTS workflow CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; CREATE DATABASE IF NOT EXISTS workflow_v6 CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci; GRANT ALL ON *.* TO 'root'@'localhost' IDENTIFIED BY '740130' WITH GRANT OPTION; GRANT ALL ON *.* TO 'root'@'127.0.0.1' IDENTIFIED BY '740130' WITH GRANT OPTION; FLUSH PRIVILEGES;"
+  "$M" -u root -S "$MDB/mysql.sock" -e "$RECOVER_SQL" >> /home/z/tools/recover.log 2>&1 || \
+  "$M" -u root -p740130 -S "$MDB/mysql.sock" -e "$RECOVER_SQL" >> /home/z/tools/recover.log 2>&1
   HAS_USER=$("$M" -u root -p740130 -S "$MDB/mysql.sock" -N -e \
     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='workflow' AND table_name='SYS_USER';" 2>/dev/null || echo 0)
   if [ "$HAS_USER" = "0" ]; then

@@ -6223,3 +6223,25 @@ Work Log:
 Stage Summary:
 - 五项任务全部交付并上线：①errorAction 动态提示+{{__lastError}}（后端引擎+面板三态提示）②测试债 43→0 ③Excel 导入导出（POI 后端 28 用例+前端接线含错误归一）④图表视图（echarts+前端聚合对齐⑤口径）⑤汇总行/表头筛选/批量操作
 - 移交待办：Excel 完整 UI E2E（需真实绑定页面）；图表跨页聚合需后端 aggregate 出参；BuiltInSystemSource/WorkflowForm 适配器 size=-1 钳 1 影响图表全量取数；导入映射 UI 未暴露
+
+---
+Task ID: ops-20261010-2105~2210
+Agent: main-session-ops
+Task: D+ 终态巡检发现 Node 假绿 → 全链路恢复（重供给级故障）
+
+Work Log:
+- 【21:05 巡检】dump-db 静默跳过（3306 不在线）；四链路 200×4 但 8080 真伪核验=假绿（no such table: SYS_USER），Java 进程不存在，环境已被重供给（uptime 100s + rsync 克隆进行中）
+- 【恢复第 1-2 轮失败】recover-dplus.sh 报 3306=DOWN：定位根因①——重供给快照恢复 mariadb-user 二进制但丢失 root/{bin,sbin,lib,share} 符号链接 → LD_LIBRARY_PATH 失效 → mariadbd 无法加载 liburing.so.2；重建符号链接后 mariadbd 可启动
+- 【会话通道故障】工具网关反复 broken session 403（约 8 次），恢复流程被打断多次；其间清理污染库命令未送达
+- 【恢复第 3 轮】mariadbd 起（3306=ok）但 Java 崩：定位根因②——快照 datadir 的 workflow 库含大小写重复表（ACT_GE_PROPERTY 与 act_ge_property 并存，lc_names=0 血统），与启动参数 --lower-case-table-names=1 冲突，ACT_GE_PROPERTY 缺 schema.version 行致 Flowable 误判无表结构执行 CREATE → flw_ru_batch already exists
+- 【处置】停库 → rm -rf data/workflow data/workflow_v6（污染库弃用）→ 重启 mariadbd
+- 【恢复第 4 轮暴露根因③】recover-dplus.sh 第 65 行无密码 socket 建库在混合状态下 1045（mysql 系统库保留 root 密码 740130）→ Unknown database → dump 未导入 → Java 起后 Flyway 在 workflow 建出 37 张半成品表仍崩
+- 【手工修复】-p740130 重建库 → 导 backups/db-workflow-full-20261010-120517.sql（88 表、sys_user 2 行、schema.version 等版本行齐全，与 12:05 健康快照一致）+ workflow_v6（16 表）→ recover-dplus.sh 拉起 Java → 真绿 t+5s
+- 【顺带修复】dump-db.sh 报「dump 无效」：mariadb-dump 二进制同样被快照丢失 → apt-get download mariadb-client(-core) dpkg -x 补齐；sysroot 实体目录恢复为→root 符号链接；快照成功（workflow=204K v6=40K）并 git 提交
+- 【脚本加固】recover-dplus.sh 建库语句改为无密码/740130 密码双尝试（bash -n 通过，幂等短路验证 OK）
+
+Stage Summary:
+- 终态恢复：四链路 200×4 + accessToken 真绿；Java pid 3007（-Xmx448m）单实例，vite×1，mariadbd×1（lc_names=1），cgroup 3.16GB，oom_kill 0
+- 故障链完整记录：重供给丢符号链接 → liburing 失败；快照库大小写污染 → Flowable 建表冲突；混合状态触发脚本无密码建库缺陷；mariadb-dump 丢失致快照失效——四项均修复
+- 数据零丢失：以 git backups 最新 dump（12:05 快照）为准重导，sys_user/sys_menu(78 行)/流程引擎版本行完整
+- 遗留：① 工具网关 broken session 403 频发（平台层，非沙箱故障），长前台命令与 cron 轮叠加疑似诱因，建议恢复期用小步短命令 ② debs/ 缓存（4MB）未 git 追踪，全量重供给时由脚本 apt 重新下载（已验证可用）③ dump-db.sh 校验可考虑增加行数级抽检防半成品

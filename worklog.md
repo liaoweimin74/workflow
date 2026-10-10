@@ -5587,3 +5587,19 @@ Work Log:
 Stage Summary:
 - 本轮发生环境重供给（Node 假绿），已冷恢复全绿；jar 走 mvn 构建（backups/jar 备份缺失，建议核实 jar 备份留存策略）
 - 终态：vite 独占 3000 + Java 独占 8080（sandbox，accessToken 真绿）+ MariaDB 3306，内存 3195MB，oom 0
+
+---
+Task ID: 446961-r1705
+Agent: cron-light-ops
+Task: 17:05 轻量运维轮（快照/探活/真伪核验/内存/恢复）
+
+Work Log:
+- 首轮 dump-db.sh 正常退出；探活 200×4 但真伪核验失败：no such table: SYS_USER = Node 假绿（Java 进程不存在，环境再次重供给，1 小时内第 2 次）
+- 前台执行 recover-dplus.sh：MariaDB 重建→dump 导入→mvn 构建（BUILD SUCCESS 37.8s）→Java 拉起，exit 0
+- 等 25s 重探 8080=200，accessToken 核验真绿
+- 复探四链路 200×4；vite×1、postcss×0；mem 3307MB（<3.5GB，Java RSS 547MB/vite 507MB 备案）；oom_kill 0
+- 恢复后补 dump-db.sh 快照成功
+
+Stage Summary:
+- 环境重供给频率上升（16:05、17:05 连续两轮命中），恢复链路稳定可用；jar 备份仍缺失走 mvn 构建
+- 终态：200×4 真绿，内存 3307MB 逼近 3.5GB 阈值，oom 0

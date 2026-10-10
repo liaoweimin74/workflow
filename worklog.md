@@ -5570,3 +5570,20 @@ Stage Summary:
 - D+ 终态恢复完成（第 4 次），本次起恢复完全脚本化（幂等续作模式稳定）
 - recover-dplus.sh 现已无已知 bug，未来重供给一条命令前台恢复，600s 窗口不够时重跑自动续作
 - 依旧备案：GitHub 凭据丢失未恢复，本地 main 领先 origin/main（含恢复脚本修复），待 token 后推送
+
+---
+Task ID: 446961-r1605
+Agent: cron-light-ops
+Task: 16:05 轻量运维轮（快照/探活/真伪核验/内存/恢复）
+
+Work Log:
+- 首轮 dump-db.sh 正常退出
+- 探活 200×4，但真伪核验失败：{"code":500,"msg":"no such table: SYS_USER"} = Node 假绿（环境已被重供给）
+- 前台执行 recover-dplus.sh：MariaDB 重建→dump 导入→jar 备份缺失→mvn 构建（BUILD SUCCESS 39.5s）→Java 拉起，exit 0
+- 等 25s 重探 8080=200，accessToken 核验真绿
+- 复探四链路 200×4；vite×1、postcss×0；mem 3195MB（<3.5GB 阈值，Java RSS 525MB/vite 489MB 备案）；oom_kill 0
+- 恢复后补 dump-db.sh 快照成功
+
+Stage Summary:
+- 本轮发生环境重供给（Node 假绿），已冷恢复全绿；jar 走 mvn 构建（backups/jar 备份缺失，建议核实 jar 备份留存策略）
+- 终态：vite 独占 3000 + Java 独占 8080（sandbox，accessToken 真绿）+ MariaDB 3306，内存 3195MB，oom 0

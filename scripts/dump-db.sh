@@ -51,4 +51,7 @@ if ! git diff --cached --quiet 2>/dev/null; then
 fi
 
 echo "[dump-db] OK $TS workflow=$(du -h "$DUMP_WF" | cut -f1) v6=$(du -h "$DUMP_V6" | cut -f1)"
-git push origin main >/dev/null 2>&1 || true
+# 推送（凭证由 credential.helper store 提供；失败必须显式告警，禁止静默吞掉）
+if ! git push origin main >/dev/null 2>&1; then
+  echo "[dump-db][WARN] git push FAILED $(date '+%F %T')——远端落后，凭据或网络需人工检查" | tee -a /home/z/tools/dump-db-push-fail.log >&2
+fi

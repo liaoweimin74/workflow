@@ -1,0 +1,4 @@
+workflow:
+  logicflow:
+    materialization:
+      mode: "on"

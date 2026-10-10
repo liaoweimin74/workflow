@@ -1,0 +1,10 @@
+{
+  "name": "portal-bff",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node index.ts",
+    "dev:bun": "bun index.ts"
+  }
+}

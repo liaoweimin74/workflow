@@ -19,10 +19,46 @@
     :page-sizes="pageSizes || [10, 20, 50]"
     :table-size="tableSize"
     :delete-confirm="deleteConfirm"
+    :show-selection="batchEnabled"
+    :show-summary="summaryEnabled"
+    :summary-method="summaryMethod"
     @row-click="handleRowClick"
     @cell-click="handleCellClick"
     @selection-change="handleSelectionChange"
     @sort-change="handleSortChange"
+  >
+    <!-- 工具栏：Excel 导入导出（Task 5-b，能力位缺省隐藏）+ 批量操作条（Task ⑤）：选中行后浮出在表格顶部；批量删除/清空选择 -->
+    <template #default>
+      <el-button
+        v-if="excelExportOn"
+        class="excel-export-btn"
+        :icon="Download"
+        :loading="excelExporting"
+        @click="handleExcelExport"
+      >导出 Excel</el-button>
+      <el-button
+        v-if="excelImportOn"
+        class="excel-import-btn"
+        :icon="Upload"
+        @click="excelImportVisible = true"
+      >导入 Excel</el-button>
+      <TableBatchBar
+        v-if="batchEnabled && selectedRows.length > 0"
+        :count="selectedRows.length"
+        :deletable="batchDeleteOn"
+        :deleting="batchDeleting"
+        @batch-delete="handleBatchDelete"
+        @clear="clearSelection"
+      />
+    </template>
+  </SearchTable>
+
+  <!-- Excel 导入弹窗（Task 5-b）：上传 → 统计/失败明细；有行写入成功后经 refresh 触发既有刷新链路 -->
+  <ExcelImportDialog
+    v-if="excelImportOn"
+    v-model="excelImportVisible"
+    :page-key="pageKey"
+    @success="refresh"
   />
 
   <!-- 详情弹窗（view 按钮/行查看：只读表单） -->
@@ -90,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick, inject } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, inject, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -108,7 +144,26 @@ import type { TableColumn, ActionButton, SearchField, ToolbarButton, DataSourceB
 import type { CardStyle } from '@/components/business/ListCards.types'
 import { activeDsBindings } from '@/utils/formDsBindingsStore'
 import { tableFilterStore } from './tableFilterStore'
+import TableHeaderFilter from './TableHeaderFilter.vue'
+import TableBatchBar from './TableBatchBar.vue'
+import {
+  buildHeaderFilterCondition,
+  buildSummaryMethod,
+  extractDistinctValues,
+  featureEnabled,
+  batchDeleteEnabled,
+  headerFilterKindOf,
+  selectedRowIds,
+  type HeaderFilterValue,
+  type SummaryColumnSpec,
+} from './tableEnhance'
 import { useDataSourceCrud } from '@/composables/useDataSourceCrud'
+import ExcelImportDialog from './ExcelImportDialog.vue'
+import {
+  buildExcelExportRequest,
+  exportPageDataToExcel,
+  pageExcelUrl,
+} from './excelTransfer'
 
 /** 动作总线（PageRendererPage provide）：dispatch(trigger, eventData) → 是否被动作链消费；关联容器打开能力 */
 const actionBus = inject<{
@@ -154,6 +209,14 @@ const props = withDefaults(defineProps<{
   stretch?: boolean
   /** 设计态标记：PageDesigner.enableCardDesignMode 注入，取数固定取首页且最多 10 条 */
   designMode?: boolean
+  /** 表头筛选（Task ⑤）：漏斗图标按列筛选，多选→in / 区间→range，走服务端 filter 链；缺省关闭 */
+  headerFilter?: boolean | { enabled?: boolean }
+  /** 批量操作（Task ⑤）：首列多选框 + 批量操作条（批量删除/清空选择）；缺省关闭 */
+  batch?: boolean | { enabled?: boolean; delete?: boolean }
+  /** Excel 导出（Task 5-b）：工具栏「导出 Excel」能力位；缺省关闭（按钮不出现） */
+  excelExport?: boolean | { enabled?: boolean }
+  /** Excel 导入（Task 5-b）：工具栏「导入 Excel」能力位；缺省关闭（按钮不出现） */
+  excelImport?: boolean | { enabled?: boolean }
   styleRule?: CardStyle
   /** 附加属性（border/stripe 等） */
   [key: string]: any
@@ -165,6 +228,7 @@ const emit = defineEmits<{
   (e: 'row-click', row: any): void
   (e: 'loaded', records: any[]): void
   (e: 'ready', instance: any): void
+  (e: 'selection-change', rows: any[]): void
 }>()
 
 const tableRef = ref<InstanceType<typeof SearchTable> | null>(null)
@@ -400,7 +464,7 @@ function formatArrayValue(v: unknown): unknown {
 }
 
 /** ColumnViewConfig → SearchTable TableColumn（formatter 字符串映射为函数） */
-const resolvedColumns = computed<TableColumn[]>(() => {
+const baseColumns = computed<TableColumn[]>(() => {
   /** 组件级收窄：metadata 可排 ∧ (sortableFields 未声明或包含该列) */
   const sortableOf = (key: string): boolean => {
     const metaSortable = !!metaColumns.value.find((m) => m.key === key)?.sortable
@@ -505,6 +569,150 @@ const resolvedColumns = computed<TableColumn[]>(() => {
     })
 })
 
+// ==================== 汇总行（Task ⑤） ====================
+/** 汇总列声明（schema columns[].aggregate；未配置时无汇总行 = 现状行为） */
+const summarySpecs = computed<SummaryColumnSpec[]>(() =>
+  (props.columns || [])
+    .filter((c: any) => !c.hidden && c.aggregate)
+    .map((c: any) => ({ key: c.key ?? c.prop, aggregate: c.aggregate })),
+)
+/** 存在聚合配置列 → 表格底部渲染汇总行（按当前页数据统计） */
+const summaryEnabled = computed(() => summarySpecs.value.length > 0)
+const summaryMethod = computed(() => buildSummaryMethod(summarySpecs.value))
+
+// ==================== 表头筛选（Task ⑤） ====================
+/** 列 → 筛选值状态（运行态，不持久化；key=列 key） */
+const headerFilters = ref<Record<string, HeaderFilterValue>>({})
+const headerFilterOn = computed(() => featureEnabled(props.headerFilter))
+
+/** 列筛选元信息（形态按 columnType：文本=多选/数值=区间/日期=区间）；自定义计算列不在服务端白名单，不可筛选 */
+const headerFilterMetas = computed<Map<string, { key: string; label: string; kind: 'text' | 'number' | 'date'; dateType?: 'daterange' | 'datetimerange'; loadOptions?: () => { label: string; value: any }[] }>>(() => {
+  const map = new Map()
+  if (!headerFilterOn.value) return map
+  for (const col of baseColumns.value) {
+    const key = String(col.prop || '')
+    if (!key) continue
+    if ((props.columns || []).some((c: any) => (c.key ?? c.prop) === key && c.custom)) continue
+    const meta = metaColumns.value.find((m) => m.key === key)
+    const kind = headerFilterKindOf(meta?.columnType)
+    if (kind === 'text') {
+      map.set(key, { key, label: col.label || key, kind, loadOptions: () => textOptionsFor(key) })
+    } else if (kind === 'number') {
+      map.set(key, { key, label: col.label || key, kind })
+    } else {
+      map.set(key, {
+        key,
+        label: col.label || key,
+        kind,
+        dateType: (meta?.columnType || '').toUpperCase() === 'DATE' ? 'daterange' : 'datetimerange',
+      })
+    }
+  }
+  return map
+})
+
+/** 文本多选候选：选项类列优先映射 label→value，其余取当前页去重值（每次打开弹层惰性读取） */
+function textOptionsFor(key: string): { label: string; value: any }[] {
+  const optMap = optionLabelMaps.value.get(key)
+  const out: { label: string; value: any }[] = []
+  const seen = new Set<string>()
+  if (optMap) {
+    for (const [v, l] of optMap) {
+      out.push({ label: l, value: v })
+      seen.add(String(v))
+    }
+  }
+  for (const v of extractDistinctValues(records.value, key)) {
+    if (!seen.has(String(v))) {
+      out.push({ label: optMap?.get(String(v)) ?? String(v), value: v })
+      seen.add(String(v))
+    }
+  }
+  return out
+}
+
+/** 表头漏斗挂载：headerFilter 开启时为可筛列注入 headerRender（label + 漏斗图标），关闭时与现状一致 */
+const resolvedColumns = computed<TableColumn[]>(() => {
+  if (!headerFilterOn.value) return baseColumns.value
+  return baseColumns.value.map((col) => {
+    const meta = headerFilterMetas.value.get(String(col.prop || ''))
+    if (!meta) return col
+    return {
+      ...col,
+      headerRender: () =>
+        h(TableHeaderFilter, {
+          columnKey: meta.key,
+          label: meta.label,
+          kind: meta.kind,
+          ...(meta.dateType ? { dateType: meta.dateType } : {}),
+          ...(meta.loadOptions ? { loadOptions: meta.loadOptions } : {}),
+          getValue: () => headerFilters.value[meta.key],
+          onApply: (payload: { key: string; value: HeaderFilterValue | null }) => applyHeaderFilter(payload.key, payload.value),
+        }),
+    }
+  })
+})
+
+/** 应用/清空某列表头筛选：写回状态 → 重置第一页并按新条件取数（走既有服务端 filter 链） */
+function applyHeaderFilter(key: string, value: HeaderFilterValue | null) {
+  const next = { ...headerFilters.value }
+  if (value) next[key] = value
+  else delete next[key]
+  headerFilters.value = next
+  tableRef.value?.setQuery({}, true)
+}
+
+// ==================== Excel 导入导出（Task 5-b） ====================
+/** 能力位：与表头筛选/批量操作同款 featureEnabled 归一化（缺省关闭 → 按钮不出现）；设计态预览不启用 */
+const excelExportOn = computed(() => !props.designMode && featureEnabled(props.excelExport))
+const excelImportOn = computed(() => !props.designMode && featureEnabled(props.excelImport))
+const excelExporting = ref(false)
+const excelImportVisible = ref(false)
+/** SearchTable 最近一次取数参数快照（导出复用当前查询条件：搜索字段值/排序随取数落地，未搜索的输入不参与） */
+const lastQueryParams = ref<Record<string, any> | null>(null)
+
+/** 导出列 = 当前生效展示列（baseColumns）剔除自定义计算列（后端导出列白名单仅限声明列，custom 不在候选集，显式传入会 400） */
+const excelExportColumns = computed<string[]>(() => {
+  const customKeys = new Set(
+    (props.columns || [])
+      .filter((c: any) => c.custom)
+      .map((c: any) => String(c.key ?? c.prop)),
+  )
+  return baseColumns.value
+    .map((c) => String(c.prop))
+    .filter((k) => k && !customKeys.has(k))
+})
+
+/** 导出 Excel：以当前查询条件 + 视图列配置请求后端生成 xlsx 并触发浏览器下载（fetch → blob → a[download]） */
+async function handleExcelExport() {
+  if (excelExporting.value) return
+  excelExporting.value = true
+  try {
+    const body = buildExcelExportRequest({
+      queryParams: lastQueryParams.value,
+      searchFields: resolvedSearchFields.value,
+      staticFilter: props.dataSourceId ? tableFilterStore[props.dataSourceId] : undefined,
+      busFilter: currentFilter.value,
+      headerFilters: headerFilters.value,
+      resolveColumn: resolveSearchColumn,
+      columns: excelExportColumns.value,
+    })
+    const res = await exportPageDataToExcel(pageExcelUrl(props.pageKey || '', 'export'), body, {
+      filenameBase: props.pageKey || '',
+    })
+    if (res.truncated) {
+      ElMessage.warning(`导出成功：数据量超过单次导出上限，已截断至前 10000 行（${res.filename}）`)
+    } else {
+      ElMessage.success(`导出成功：${res.filename}`)
+    }
+  } catch (e) {
+    // fetch 不走 http 拦截器：R 包装错误消息（readExportResponse 归一化）在此提示
+    ElMessage.error(e instanceof Error && e.message ? e.message : '导出失败')
+  } finally {
+    excelExporting.value = false
+  }
+}
+
 // ==================== 操作按钮适配 ====================
 /** 用户是否配置了 create 按钮（隐藏 SearchTable 内置新增，避免操作栏出现两个"新增"） */
 const hasCreateButton = computed(() =>
@@ -603,6 +811,8 @@ function resolveSearchColumn(key: string): string {
 }
 
 const fetchApi = async (params: { page: number; size: number; [key: string]: any }) => {
+  // 记录取数参数快照（Task 5-b：导出 Excel 复用当前查询条件——搜索字段值/排序与本次取数完全一致）
+  lastQueryParams.value = params
   const dsId = resolvedRefId.value
   if (!dsId) return { rows: [], total: 0 }
 
@@ -625,6 +835,11 @@ const fetchApi = async (params: { page: number; size: number; [key: string]: any
       if (value === '' || value === null || value === undefined) continue
       filterConditions.push({ column, op: 'eq', value })
     }
+  }
+  // 2.5 表头筛选条件（Task ⑤：漏斗按列筛选；多选→in / 区间→range；与其它条件 AND 合并）
+  for (const [hfKey, hfValue] of Object.entries(headerFilters.value)) {
+    const cond = buildHeaderFilterCondition(hfKey, hfValue)
+    if (cond) filterConditions.push(cond)
   }
   // 3. 搜索栏条件（数组值组件主列 → 映射 <key>_text 显示列查询 label；级联路径 label 数组 join('/') 匹配 _text 全路径）
   for (const field of resolvedSearchFields.value) {
@@ -863,6 +1078,42 @@ async function handleDelete(row: any) {
   }
 }
 
+// ==================== 批量操作（Task ⑤） ====================
+const batchEnabled = computed(() => featureEnabled(props.batch))
+const batchDeleteOn = computed(() => batchDeleteEnabled(props.batch))
+const batchDeleting = ref(false)
+/** 已选行集合（批量动作挂载点：经 defineExpose 暴露，事件链/脚本/外部可读取） */
+const selectedRows = ref<any[]>([])
+
+/** 批量删除：确认后逐行调用单行删除同款 API（dataSourceApi.deleteData），完成后清空选择并刷新 */
+async function handleBatchDelete() {
+  const rows = selectedRows.value
+  if (!rows.length || !resolvedRefId.value) return
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${rows.length} 条记录吗？`, '批量删除', { type: 'warning' })
+  } catch {
+    return
+  }
+  batchDeleting.value = true
+  try {
+    const ids = selectedRowIds(rows)
+    await Promise.all(ids.map((id: any) => dataSourceApi.deleteData(resolvedRefId.value, id)))
+    ElMessage.success(`已删除 ${ids.length} 条记录`)
+    selectedRows.value = []
+    tableRef.value?.clearSelection()
+    tableRef.value?.fetchList()
+  } catch {
+    // 拦截器已弹错误
+  } finally {
+    batchDeleting.value = false
+  }
+}
+
+/** 清空行选择（批量操作条「清空选择」按钮/外部调用） */
+function clearSelection() {
+  tableRef.value?.clearSelection()
+}
+
 // ==================== 表格事件 → 事件链 ====================
 /** 触发 viewEvents 中匹配触发器的动作（动作由本组件自执行，对齐 PageRenderer triggerEvents） */
 function triggerViewEvents(trigger: string, target: string, ctx: { row?: any; column?: any; selectedRows?: any[]; prop?: string; order?: string }) {
@@ -896,9 +1147,11 @@ function handleCellClick(row: any, column: any) {
   triggerViewEvents('cell-click', 'table', { row, column })
 }
 
-/** 行选择变化（新增） */
+/** 行选择变化：维护 selectedRows（批量操作条/挂载点）+ emit + 触发事件链 */
 function handleSelectionChange(selection: any[]) {
-  triggerViewEvents('selection-change', 'table', { selectedRows: selection })
+  selectedRows.value = selection || []
+  emit('selection-change', selectedRows.value)
+  triggerViewEvents('selection-change', 'table', { selectedRows: selectedRows.value })
 }
 
 /** 排序变化（新增） */
@@ -925,7 +1178,19 @@ function openCreate() {
   tableRef.value?.openFormDialog()
 }
 
-defineExpose({ refresh, fetchData: refresh, records, setFilter, resetFilter, openCreate })
+defineExpose({
+  refresh,
+  fetchData: refresh,
+  records,
+  setFilter,
+  resetFilter,
+  openCreate,
+  /** 已选行集合（批量动作挂载点；ref 经 expose 自动解包） */
+  selectedRows,
+  getSelectedRows: () => selectedRows.value,
+  clearSelection,
+  deleteRows: handleBatchDelete,
+})
 
 onMounted(async () => {
   await loadMetadata()

@@ -1,7 +1,5 @@
 package com.workflow.api.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.common.domain.R;
@@ -13,9 +11,6 @@ import com.workflow.engine.page.PageDefinitionService;
 import com.workflow.engine.page.entity.PageDefinition;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -25,6 +20,7 @@ import java.util.Set;
  * 自定义页面（PAGE）数据源查询：按页面内 dataSourceId 解析全局数据源 refId，
  * 委托 DataSourceDefinitionService.queryData（经 DataSourceAdapter）查询。
  * 所有数据出口均经 PageAccessGuard 校验访问权限（无菜单 404 / 无权限 403）。
+ * 白名单/schema 解析逻辑下沉 {@link PageViewQuerySupport}（与 Excel 导入导出共享）。
  */
 @RestController
 @RequestMapping("/api/v1/pages")
@@ -34,18 +30,18 @@ public class PageQueryController {
     private final BizDataService bizDataService;
     private final DataSourceDefinitionService dsService;
     private final PageAccessGuard pageAccessGuard;
-    private final ObjectMapper objectMapper;
+    private final PageViewQuerySupport querySupport;
 
     public PageQueryController(PageDefinitionService pageDefService,
                                BizDataService bizDataService,
                                DataSourceDefinitionService dsService,
                                PageAccessGuard pageAccessGuard,
-                               ObjectMapper objectMapper) {
+                               PageViewQuerySupport querySupport) {
         this.pageDefService = pageDefService;
         this.bizDataService = bizDataService;
         this.dsService = dsService;
         this.pageAccessGuard = pageAccessGuard;
-        this.objectMapper = objectMapper;
+        this.querySupport = querySupport;
     }
 
     /**
@@ -71,11 +67,11 @@ public class PageQueryController {
         }
 
         // filter 白名单：仅保留 schema 声明的 searchFields key
-        Set<String> whitelist = searchFieldKeys(page.getSchema());
-        req.setFilter(whitelistFilter(req.getFilter(), whitelist));
+        Set<String> whitelist = querySupport.searchFieldKeys(page.getSchema());
+        req.setFilter(querySupport.whitelistFilter(req.getFilter(), whitelist));
 
         // 排序白名单：schema 声明 sortableFields 时，sort 字段必须命中（对齐 searchFields 白名单模式）
-        Set<String> sortable = sortableFieldKeys(page.getSchema());
+        Set<String> sortable = querySupport.sortableFieldKeys(page.getSchema());
         if (req.getSort() != null && !req.getSort().isBlank()
                 && !sortable.isEmpty() && !sortable.contains(req.getSort())) {
             throw new BusinessException(400, "排序字段不在页面声明的可排序字段中: " + req.getSort());
@@ -105,153 +101,10 @@ public class PageQueryController {
         if (!"PAGE".equals(page.getType())) {
             throw new BusinessException(400, "页面 " + pageKey + " 不是自定义页面类型");
         }
-        String refId = resolveDataSourceRefId(page.getSchema(), dataSourceId);
+        String refId = querySupport.resolveDataSourceRefId(page.getSchema(), dataSourceId);
         // filter 白名单：仅保留该数据源条目声明的 searchFields
-        Set<String> whitelist = pageDataSourceSearchFields(page.getSchema(), dataSourceId);
-        req.setFilter(whitelistFilter(req.getFilter(), whitelist));
+        Set<String> whitelist = querySupport.pageDataSourceSearchFields(page.getSchema(), dataSourceId);
+        req.setFilter(querySupport.whitelistFilter(req.getFilter(), whitelist));
         return R.ok(dsService.queryData(refId, req));
-    }
-
-    /** 在 PAGE schema dataSources 中按页面内 id 解析 refId */
-    private String resolveDataSourceRefId(String schema, String dataSourceId) {
-        JsonNode dataSources = pageDataSources(schema);
-        if (dataSources.isArray()) {
-            for (JsonNode entry : dataSources) {
-                if (dataSourceId.equals(entry.path("id").asText())) {
-                    String refId = entry.path("refId").asText();
-                    if (!refId.isBlank()) return refId;
-                }
-            }
-        }
-        throw new BusinessException(400, "页面未声明数据源: " + dataSourceId);
-    }
-
-    /** 该数据源条目声明的 searchFields key 集合（未声明 → 空 = 不限制） */
-    private Set<String> pageDataSourceSearchFields(String schema, String dataSourceId) {
-        Set<String> keys = new HashSet<>();
-        JsonNode dataSources = pageDataSources(schema);
-        if (dataSources.isArray()) {
-            for (JsonNode entry : dataSources) {
-                if (!dataSourceId.equals(entry.path("id").asText())) continue;
-                JsonNode searchFields = entry.path("searchFields");
-                if (searchFields.isArray()) {
-                    for (JsonNode sf : searchFields) {
-                        String k = sf.asText();
-                        if (!k.isBlank()) keys.add(k);
-                    }
-                }
-                break;
-            }
-        }
-        return keys;
-    }
-
-    /** 解析 PAGE schema 的 dataSources 数组 */
-    private JsonNode pageDataSources(String schema) {
-        try {
-            JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
-            return root.path("dataSources");
-        } catch (Exception e) {
-            throw new BusinessException(400, "页面 schema 解析失败");
-        }
-    }
-
-    /**
-     * 解析 schema 中声明的 searchFields key 集合。
-     * 同时包含 filter.conditions 中引用的列（静态筛选列也需白名单校验）。
-     */
-    private Set<String> searchFieldKeys(String schema) {
-        Set<String> keys = new HashSet<>();
-        try {
-            JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
-            JsonNode searchFields = root.path("searchFields");
-            if (searchFields.isArray()) {
-                for (JsonNode field : searchFields) {
-                    keys.add(field.path("key").asText());
-                }
-            }
-            // 静态筛选列也纳入白名单（ViewDesigner 数据源页签配置）
-            JsonNode filter = root.path("filter");
-            if (filter.isObject()) {
-                JsonNode conditions = filter.path("conditions");
-                if (conditions.isArray()) {
-                    for (JsonNode c : conditions) {
-                        String column = c.path("column").asText();
-                        if (column != null && !column.isBlank()) {
-                            keys.add(column);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            throw new BusinessException(400, "页面 schema 解析失败");
-        }
-        return keys;
-    }
-
-    /**
-     * 解析 schema 中声明的 sortableFields key 集合（视图级排序收窄；未声明为空=不限制）。
-     */
-    private Set<String> sortableFieldKeys(String schema) {
-        Set<String> keys = new HashSet<>();
-        try {
-            JsonNode root = objectMapper.readTree(schema == null || schema.isBlank() ? "{}" : schema);
-            JsonNode fields = root.path("sortableFields");
-            if (fields.isArray()) {
-                for (JsonNode f : fields) {
-                    keys.add(f.asText());
-                }
-            }
-        } catch (Exception e) {
-            throw new BusinessException(400, "页面 schema 解析失败");
-        }
-        return keys;
-    }
-
-    /**
-     * 过滤 filter JSON：仅保留白名单内的字段。
-     * 支持两种格式：
-     * - 扁平格式 {@code {"col":"value"}}：按顶层 key 校验
-     * - 结构化格式 {@code {"logic":"AND","conditions":[{column,op,value}]}}
-     *   （前端 PageRenderer.buildFilter 输出）：按 conditions[].column 校验
-     */
-    @SuppressWarnings("unchecked")
-    private String whitelistFilter(String filterJson, Set<String> whitelist) {
-        if (filterJson == null || filterJson.isBlank()) {
-            return null;
-        }
-        // 白名单为空（数据源未声明 searchFields）= 不限制
-        if (whitelist == null || whitelist.isEmpty()) {
-            return filterJson;
-        }
-        try {
-            Map<String, Object> filter = objectMapper.readValue(filterJson, Map.class);
-            if (filter == null || filter.isEmpty()) {
-                return null;
-            }
-            if (filter.get("conditions") instanceof List<?> conditions) {
-                // 结构化格式：{logic, conditions:[{column,op,value}]}
-                for (Object o : conditions) {
-                    if (o instanceof Map<?, ?> c) {
-                        String column = String.valueOf(c.get("column"));
-                        if (!whitelist.contains(column)) {
-                            throw new BusinessException(400, "筛选字段不在页面声明白名单: " + column);
-                        }
-                    }
-                }
-            } else {
-                // 扁平格式：{col: value}
-                for (String key : filter.keySet()) {
-                    if (!whitelist.contains(key)) {
-                        throw new BusinessException(400, "筛选字段不在页面声明白名单: " + key);
-                    }
-                }
-            }
-            return objectMapper.writeValueAsString(filter);
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BusinessException(400, "筛选参数 filter 格式非法，应为 JSON 对象");
-        }
     }
 }

@@ -76,6 +76,8 @@ export interface TableColumn {
   ) => string
   /** 富渲染函数（返回 VNode 或字符串），优先级高于 formatter */
   render?: (row: any, column: TableColumn, index: number) => VNode | string
+  /** 表头自定义渲染（漏斗筛选图标等；配置后替换默认 label 文本） */
+  headerRender?: (column: TableColumn) => any
   slotName?: string
   /** 内容超长省略并显示 tooltip（透传 el-table-column show-overflow-tooltip） */
   showOverflowTooltip?: boolean
@@ -246,6 +248,12 @@ export interface SearchTableProps<T = any> {
   styleRule?: CardStyle
   /** 表格整体静态样式对象 */
   style?: Record<string, string>
+  /** 是否显示首列多选框（checkbox 行选择列，支持全选；批量操作用），默认 false */
+  showSelection?: boolean
+  /** 是否显示底部汇总行（el-table show-summary），默认 false */
+  showSummary?: boolean
+  /** 汇总行计算方法（el-table summary-method 透传；showSummary=true 时生效） */
+  summaryMethod?: (param: { columns: any[]; data: any[] }) => (string | number)[]
 }
 
 // --- ReferencePicker props ---

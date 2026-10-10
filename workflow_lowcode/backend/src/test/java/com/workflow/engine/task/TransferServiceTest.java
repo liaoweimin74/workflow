@@ -3,6 +3,7 @@ package com.workflow.engine.task;
 import com.workflow.api.dto.OperationsConfig;
 import com.workflow.common.exception.BusinessException;
 import com.workflow.engine.history.repository.WfTaskCommentRepository;
+import com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger;
 import com.workflow.engine.task.entity.WfTaskTransfer;
 import com.workflow.engine.task.repository.WfTaskTransferRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -43,6 +44,8 @@ class TransferServiceTest {
     WfTaskCommentRepository commentRepository;
     @Mock
     WorkflowTaskService workflowTaskService;
+    @Mock
+    LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     @InjectMocks
     TransferService transferService;

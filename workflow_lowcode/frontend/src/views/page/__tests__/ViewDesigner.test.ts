@@ -287,3 +287,138 @@ describe('ViewDesigner — 清单勾选式视图配置', () => {
     wrapper.unmount()
   })
 })
+
+describe('ViewDesigner — 图表视图形态（Task ④）', () => {
+  async function mountWithSchema(schemaObj: any) {
+    ;(pageApi.getPage as any).mockResolvedValue({
+      data: {
+        id: 'p1',
+        name: '员工视图',
+        key: 'emp_view',
+        type: 'VIEW',
+        formKey: null,
+        dataSourceId: 'ds_wf_1',
+        status: 'DRAFT',
+        version: 1,
+        schema: JSON.stringify(schemaObj),
+      },
+    })
+    ;(dataSourceApi.getEnabledDataSources as any).mockResolvedValue({ data: enabledDs })
+    mockMetadata()
+    ;(pageApi.updatePage as any).mockResolvedValue({ data: { status: 'DRAFT' } })
+    const wrapper = createWrapper()
+    await nextTick()
+    await flushPromises()
+    return wrapper
+  }
+
+  async function saveAndParseSchema(wrapper: any) {
+    const saveBtn = wrapper.findAll('button').find((b: any) => b.text().includes('保存'))!
+    await saveBtn.trigger('click')
+    await flushPromises()
+    const calls = (pageApi.updatePage as any).mock.calls
+    return JSON.parse(calls[calls.length - 1][1].schema) as any
+  }
+
+  it('显示方式含「图表」选项；新切换 → 初始化缺省配置（维度列预选首列），保存写入 display=chart + chart', async () => {
+    const wrapper = await mountWithSchema({ searchFields: [], columns: [], events: [] })
+
+    const chartRadio = wrapper.findAll('.el-radio-button').find((b) => b.text() === '图表')
+    expect(chartRadio).toBeTruthy()
+    await chartRadio!.find('input').setValue()
+    await nextTick()
+
+    // 图表配置区出现（图表类型/维度列/指标列/取前 N 条）
+    expect(wrapper.text()).toContain('图表配置')
+    expect(wrapper.text()).toContain('维度列')
+    expect(wrapper.text()).toContain('指标列')
+    expect(wrapper.text()).toContain('取前 N 条')
+
+    // 保存 → display=chart + 缺省 chart 配置（type=bar、limit=20、yFields=[]、xField 预选首个配置列 name）
+    const parsed = await saveAndParseSchema(wrapper)
+    expect(parsed.display).toBe('chart')
+    expect(parsed.chart).toEqual({ type: 'bar', xField: 'name', yFields: [], limit: 20 })
+    wrapper.unmount()
+  })
+
+  it('已配置图表回显：display 缺失时以 chart 存在性恢复图表形态，畸形 type 归一并保留合法配置', async () => {
+    const wrapper = await mountWithSchema({
+      searchFields: [],
+      columns: [{ key: 'dept', label: '部门' }, { key: 'amount', label: '金额' }],
+      // display 缺省（模拟发布编译把 display 归一为 table 后 mergeCompiled 保留 chart 的产物）
+      chart: { type: 'pie', xField: 'dept', yFields: [{ key: 'amount', agg: 'avg' }], limit: 50 },
+      events: [],
+    })
+
+    const jsonBtn = wrapper.findAll('button').find((b) => b.text().includes('JSON'))!
+    await jsonBtn.trigger('click')
+    await nextTick()
+    const parsed = JSON.parse(wrapper.find('.preview-json').text()) as any
+    expect(parsed.display).toBe('chart')
+    expect(parsed.chart).toEqual({ type: 'pie', xField: 'dept', yFields: [{ key: 'amount', agg: 'avg' }], limit: 50 })
+
+    // 保存 roundtrip：配置不丢
+    const saved = await saveAndParseSchema(wrapper)
+    expect(saved.display).toBe('chart')
+    expect(saved.chart).toEqual({ type: 'pie', xField: 'dept', yFields: [{ key: 'amount', agg: 'avg' }], limit: 50 })
+    wrapper.unmount()
+  })
+
+  it('切离图表形态 → 移除 schema.chart（保持 chart 存在 ⇔ chart 形态不变量）；display 残留非法值回落 table', async () => {
+    const wrapper = await mountWithSchema({
+      searchFields: [],
+      columns: [{ key: 'dept', label: '部门' }],
+      display: 'chart',
+      chart: { type: 'area', xField: 'dept', yFields: [{ key: 'dept', agg: 'count' }], limit: 10 },
+      events: [],
+    })
+
+    // 畸形 type 归一为 bar（合法配置保留）
+    const jsonBtn = wrapper.findAll('button').find((b) => b.text().includes('JSON'))!
+    await jsonBtn.trigger('click')
+    await nextTick()
+    const parsed = JSON.parse(wrapper.find('.preview-json').text()) as any
+    expect(parsed.chart.type).toBe('bar')
+    expect(parsed.chart.yFields).toEqual([{ key: 'dept', agg: 'count' }])
+
+    // 切回表格 → chart 键移除
+    const tableRadio = wrapper.findAll('.el-radio-button').find((b) => b.text() === '表格')!
+    await tableRadio.find('input').setValue()
+    await nextTick()
+    const saved = await saveAndParseSchema(wrapper)
+    expect(saved.display).toBe('table')
+    expect(saved.chart).toBeUndefined()
+    wrapper.unmount()
+
+    // display 非法残留（无 chart 配置）→ 回落表格
+    const wrapper2 = await mountWithSchema({ searchFields: [], columns: [], display: 'grid', events: [] })
+    const jsonBtn2 = wrapper2.findAll('button').find((b) => b.text().includes('JSON'))!
+    await jsonBtn2.trigger('click')
+    await nextTick()
+    const parsed2 = JSON.parse(wrapper2.find('.preview-json').text()) as any
+    expect(parsed2.display).toBe('table')
+    expect(parsed2.chart).toBeUndefined()
+    wrapper2.unmount()
+  })
+
+  it('指标列聚合选项对齐汇总行口径：已配置 agg 保留；新选数值列（INT）缺省 sum、非数值列（JSON/VARCHAR）缺省 count', async () => {
+    const wrapper = await mountWithSchema({
+      searchFields: [],
+      columns: [{ key: 'age', label: '年龄' }, { key: 'dept', label: '部门' }, { key: 'name', label: '姓名' }],
+      display: 'chart',
+      chart: { type: 'bar', xField: 'dept', yFields: [{ key: 'age', agg: 'avg' }], limit: 20 },
+      events: [],
+    })
+
+    // 指标列多选为 teleport 下拉，DOM 驱动成本高：直接驱动 computed setter（等效用户勾选）
+    ;(wrapper.vm as any).$.setupState.chartYKeys = ['age', 'dept', 'name']
+    await nextTick()
+    const saved = await saveAndParseSchema(wrapper)
+    expect(saved.chart.yFields).toEqual([
+      { key: 'age', agg: 'avg' }, // 已配置 agg 保留（INT 数值列）
+      { key: 'dept', agg: 'count' }, // 新选 JSON 列 → 仅计数
+      { key: 'name', agg: 'count' }, // 新选 VARCHAR 列 → 仅计数
+    ])
+    wrapper.unmount()
+  })
+})

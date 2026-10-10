@@ -1,8 +1,10 @@
 package com.workflow.engine.form.column;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -87,6 +89,36 @@ public final class DdlBuilder {
      * @throws IllegalArgumentException 列名/列类型非法、类型跨类变更时
      */
     public static List<String> buildAlterStatements(String formKey, List<ColumnConfig> desired, List<ColumnInfo> existing) {
+        return buildAlterStatements(formKey, desired, existing, List.of());
+    }
+
+    /**
+     * 同上（带既有唯一索引感知）：同 key 表单可能被多租户先后发布，物理表被共享，
+     * (tenant_id, 列) 唯一索引可能已由先发布方创建——列比对（COLUMN_KEY=UNI 仅标索引首列）
+     * 察觉不到第 2 序位的业务列，重复 ADD UNIQUE INDEX 会报 duplicate key name 500。
+     * existingUniqueGroups 传入物理真值（DynamicTableManager.findTableUniqueIndexes），
+     * 已覆盖的列跳过唯一索引新增，保证发布幂等。
+     */
+    public static List<String> buildAlterStatements(String formKey, List<ColumnConfig> desired,
+                                                    List<ColumnInfo> existing, List<List<String>> existingUniqueGroups) {
+        Set<String> coveredUniques = tenantScopedUniqueCols(existingUniqueGroups, 2);
+        return doBuildAlterStatements(formKey, desired, existing, coveredUniques);
+    }
+
+    /** 从唯一索引列组提取租户隔离唯一索引覆盖的业务列（首列 tenant_id，总列数 size）。 */
+    private static Set<String> tenantScopedUniqueCols(List<List<String>> groups, int size) {
+        Set<String> out = new HashSet<>();
+        if (groups == null) return out;
+        for (List<String> g : groups) {
+            if (g != null && g.size() == size && "tenant_id".equalsIgnoreCase(g.get(0))) {
+                out.add(g.get(1).toLowerCase(Locale.ROOT));
+            }
+        }
+        return out;
+    }
+
+    private static List<String> doBuildAlterStatements(String formKey, List<ColumnConfig> desired,
+                                                       List<ColumnInfo> existing, Set<String> coveredUniques) {
         validateFormKey(formKey);
         validateColumns(desired);
 
@@ -102,7 +134,7 @@ public final class DdlBuilder {
             ColumnInfo current = existingMap.get(c.getKey());
             if (current == null) {
                 statements.add("ALTER TABLE " + table + " ADD COLUMN " + c.getKey() + " " + columnDefinition(c));
-                if (c.isUnique()) {
+                if (c.isUnique() && !coveredUniques.contains(c.getKey().toLowerCase(Locale.ROOT))) {
                     statements.add("ALTER TABLE " + table + " ADD UNIQUE INDEX uk_" + formKey + "_" + c.getKey()
                             + " (tenant_id, " + c.getKey() + ")");
                 }
@@ -127,7 +159,8 @@ public final class DdlBuilder {
                 statements.add("ALTER TABLE " + table + " MODIFY COLUMN " + c.getKey() + " " + columnDefinition(c));
             }
 
-            if (c.isUnique() && !current.isUnique()) {
+            if (c.isUnique() && !current.isUnique()
+                    && !coveredUniques.contains(c.getKey().toLowerCase(Locale.ROOT))) {
                 statements.add("ALTER TABLE " + table + " ADD UNIQUE INDEX uk_" + formKey + "_" + c.getKey()
                         + " (tenant_id, " + c.getKey() + ")");
             }

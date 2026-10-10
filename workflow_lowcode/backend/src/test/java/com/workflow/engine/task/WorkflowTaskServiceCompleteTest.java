@@ -39,6 +39,10 @@ class WorkflowTaskServiceCompleteTest {
     com.workflow.engine.form.mapping.FormDataMerger formDataMerger;
     @Mock
     com.workflow.engine.form.mapping.VariableMappingWriter variableMappingWriter;
+    @Mock
+    com.workflow.engine.process.config.NodeOptionsService nodeOptionsService;
+    @Mock
+    com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     @InjectMocks
     WorkflowTaskService taskService;

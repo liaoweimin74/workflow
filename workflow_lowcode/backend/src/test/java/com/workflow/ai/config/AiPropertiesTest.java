@@ -17,13 +17,15 @@ class AiPropertiesTest {
 
     @Test
     void defaults_whenNoProperties() {
+        // 默认接入平台内置模型（经内部 LLM 网关，开箱即用）——对齐 AiProperties javadoc：
+        // enabled=true、baseUrl=内部网关、apiKey=internal-llm、model=glm-4-plus → isConfigured=true
         runner.run(ctx -> {
             AiProperties p = ctx.getBean(AiProperties.class);
-            assertThat(p.isEnabled()).isFalse();
-            assertThat(p.getBaseUrl()).isEqualTo("https://api.deepseek.com/v1");
-            assertThat(p.getModel()).isEqualTo("deepseek-chat");
+            assertThat(p.isEnabled()).isTrue();
+            assertThat(p.getBaseUrl()).isEqualTo("http://127.0.0.1:8080/api/internal/llm/v1");
+            assertThat(p.getModel()).isEqualTo("glm-4-plus");
             assertThat(p.getMaxTokens()).isEqualTo(4096);
-            assertThat(p.isConfigured()).isFalse();
+            assertThat(p.isConfigured()).isTrue();
         });
     }
 

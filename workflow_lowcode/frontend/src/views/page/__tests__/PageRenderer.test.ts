@@ -13,6 +13,8 @@ vi.mock('@/api/page', () => ({
     getPageByKey: vi.fn(),
     queryPageData: vi.fn(),
   },
+  // Task 5-b：Excel 导出（PageRenderer 导入导出工具栏用）
+  exportPageData: vi.fn(),
 }))
 
 vi.mock('@/api/form', () => ({

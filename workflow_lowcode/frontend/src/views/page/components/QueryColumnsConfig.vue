@@ -174,6 +174,7 @@
       :visible="advancedVisible"
       :column="advancedColumn"
       :mode="mode"
+      :column-type="advancedColumnType"
       @update:visible="advancedVisible = $event"
       @save="saveAdvanced"
     />
@@ -438,6 +439,10 @@ type CardColumnConfig = ColumnViewConfig & {
 const advancedVisible = ref(false)
 /** 当前正在编辑高级配置的列副本 */
 const advancedColumn = ref<CardColumnConfig | null>(null)
+/** 正在编辑列的 columnType（数据源 metadata；汇总聚合选项按数值/其他列区分） */
+const advancedColumnType = computed(() =>
+  props.candidates.find((c) => c.key === advancedColumn.value?.key)?.columnType || '',
+)
 
 function openAdvanced(key: string) {
   const col = findColumn(key)
@@ -490,6 +495,7 @@ function pickAdvanced(c: ColumnViewConfig): Partial<ColumnViewConfig> {
     ...(c.className !== undefined ? { className: c.className } : {}),
     ...(c.styleExpr !== undefined ? { styleExpr: c.styleExpr } : {}),
     ...(c.onCellClick !== undefined ? { onCellClick: c.onCellClick } : {}),
+    ...(c.aggregate !== undefined ? { aggregate: c.aggregate } : {}),
   }
 }
 

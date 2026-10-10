@@ -1,5 +1,6 @@
 package com.workflow.engine.task;
 
+import com.workflow.engine.logicflow.service.LogicFlowApprovalTrigger;
 import com.workflow.engine.task.entity.WfTaskRemind;
 import com.workflow.engine.task.repository.WfTaskRemindRepository;
 import com.workflow.engine.tenant.TenantProvider;
@@ -42,6 +43,8 @@ class TaskRemindServiceTest {
     WfTaskRemindRepository remindRepository;
     @Mock
     TenantProvider tenantProvider;
+    @Mock
+    LogicFlowApprovalTrigger logicFlowApprovalTrigger;
 
     @InjectMocks
     TaskRemindService taskRemindService;

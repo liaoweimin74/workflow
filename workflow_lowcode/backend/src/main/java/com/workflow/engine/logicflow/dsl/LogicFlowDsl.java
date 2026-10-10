@@ -166,8 +166,28 @@ public class LogicFlowDsl {
      * 输出参数声明（全部执行型节点统一输出模型，单表替代 resultVar）：
      * mode=WHOLE 取节点返回值的整体；mode=KEY 从返回值 Map（HTTP 为 body JSON 解析结果）按 name 取对应 key。
      */
+    /** 字段结构树节点（JSON 实例推断产物，与前端 jsonStructure / 后端 form-fields 树同构；仅设计期消费，运行期不读取）。 */
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class FieldNode {
+        private String path;
+        private String label;
+        private String type;
+        private java.util.List<FieldNode> children;
+
+        public String getPath() { return path; }
+        public void setPath(String path) { this.path = path; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+        public java.util.List<FieldNode> getChildren() { return children; }
+        public void setChildren(java.util.List<FieldNode> children) { this.children = children; }
+    }
+
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public static class ResultVarDef {
         private String name;
+        private java.util.List<FieldNode> structure;
         /** WHOLE=整体值 | KEY=按 key 取（发布校验必填；运行期未知/缺省按 WHOLE 兜底）。 */
         private String mode;
         /** string | number | boolean | json（展示辅助，不做强校验）。 */
@@ -185,11 +205,16 @@ public class LogicFlowDsl {
 
         public String getDesc() { return desc; }
         public void setDesc(String desc) { this.desc = desc; }
+
+        public java.util.List<FieldNode> getStructure() { return structure; }
+        public void setStructure(java.util.List<FieldNode> structure) { this.structure = structure; }
     }
 
     /** 入参声明（运行测试表单 / 文档展示用）。 */
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     public static class InputVarDef {
         private String name;
+        private java.util.List<FieldNode> structure;
         /** string | number | boolean | json（展示辅助，不做强校验）。 */
         private String type;
         private Boolean required;
@@ -206,6 +231,9 @@ public class LogicFlowDsl {
 
         public String getDesc() { return desc; }
         public void setDesc(String desc) { this.desc = desc; }
+
+        public java.util.List<FieldNode> getStructure() { return structure; }
+        public void setStructure(java.util.List<FieldNode> structure) { this.structure = structure; }
     }
 
     /** DSL 边定义（branch 仅 CONDITION 出边使用："true" | "false"）。 */

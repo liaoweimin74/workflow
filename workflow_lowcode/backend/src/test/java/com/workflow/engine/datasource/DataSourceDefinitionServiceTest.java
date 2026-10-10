@@ -2,6 +2,7 @@ package com.workflow.engine.datasource;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.workflow.api.dto.BizDataPageVO;
 import com.workflow.api.dto.BizDataQueryRequest;
 import com.workflow.common.exception.BusinessException;
@@ -732,6 +733,30 @@ class DataSourceDefinitionServiceTest {
                 + "\",\"sortable\":" + sortable + ",\"filterable\":" + filterable + "}";
     }
 
+    /** FORM 生成端点段（对齐 DataSourceDefinitionService.generateParams，formKey=biz_leave） */
+    private static final String FORM_ENDPOINTS =
+            "{\"list\":{\"action\":\"/api/v1/biz-data/biz_leave\",\"method\":\"GET\",\"parse\":\"records\",\"totalParse\":\"total\"},"
+                    + "\"create\":{\"action\":\"/api/v1/biz-data/biz_leave\",\"method\":\"POST\"},"
+                    + "\"get\":{\"action\":\"/api/v1/biz-data/biz_leave/{id}\",\"method\":\"GET\"},"
+                    + "\"update\":{\"action\":\"/api/v1/biz-data/biz_leave/{id}\",\"method\":\"PUT\"},"
+                    + "\"delete\":{\"action\":\"/api/v1/biz-data/biz_leave/{id}\",\"method\":\"DELETE\"}}";
+
+    /**
+     * FORM update 语义断言：端点段系统权威重建 + query 配置草稿段
+     * （queryMode/joins/query/columns/params）原样保留 —— 对齐主代码 mergeQueryConfig。
+     */
+    private void assertFormUpdateParamsMerged(DataSourceDefinition result, String draftParamsJson) {
+        try {
+            ObjectNode expected = (ObjectNode) objectMapper.readTree(FORM_ENDPOINTS);
+            ObjectNode draft = (ObjectNode) objectMapper.readTree(draftParamsJson);
+            draft.remove("list"); // 端点段不参与覆盖（FORM_QUERY_FIELDS 仅含 query 配置段，list 由系统重建）
+            expected.setAll(draft);
+            assertEquals(expected, objectMapper.readTree(result.getParams()));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Test
     void update_formConfigMode_validJoins_saved() {
         String params = configJoinsParams(join("j1", "biz_customer", "customer_id", "id", "name",
@@ -740,7 +765,8 @@ class DataSourceDefinitionServiceTest {
 
         DataSourceDefinition result = updateFormParams(params);
 
-        assertEquals(params, result.getParams());
+        // 端点段系统权威重建 + config 草稿段原样保留
+        assertFormUpdateParamsMerged(result, params);
     }
 
     @Test
@@ -753,7 +779,8 @@ class DataSourceDefinitionServiceTest {
 
         DataSourceDefinition result = updateFormParams(params);
 
-        assertEquals(params, result.getParams());
+        // 端点段系统权威重建 + 多 joins 草稿段原样保留
+        assertFormUpdateParamsMerged(result, params);
     }
 
     @Test
@@ -765,7 +792,8 @@ class DataSourceDefinitionServiceTest {
 
         DataSourceDefinition result = updateFormParams(params);
 
-        assertEquals(params, result.getParams());
+        // 端点段系统权威重建 + 无 alias joins 草稿段原样保留
+        assertFormUpdateParamsMerged(result, params);
     }
 
     @Test
@@ -820,7 +848,8 @@ class DataSourceDefinitionServiceTest {
 
         DataSourceDefinition result = updateFormParams(params);
 
-        assertEquals(params, result.getParams());
+        // 端点段系统权威重建 + sql 草稿段原样保留
+        assertFormUpdateParamsMerged(result, params);
     }
 
     @Test
@@ -832,7 +861,8 @@ class DataSourceDefinitionServiceTest {
 
         DataSourceDefinition result = updateFormParams(params);
 
-        assertEquals(params, result.getParams());
+        // 端点段系统权威重建 + sql 草稿段（含声明参数）原样保留
+        assertFormUpdateParamsMerged(result, params);
     }
 
     @Test
@@ -880,10 +910,11 @@ class DataSourceDefinitionServiceTest {
 
     @Test
     void update_formNoQueryMode_backwardCompatible() {
-        // 老数据源 params 无 queryMode 段 → 不校验、原样保存（向后兼容）
+        // 老数据源 params 无 queryMode 段 → 不校验；端点段仍系统权威重建
+        //（入参仅含 list，不参与覆盖；对齐 Node update 分支的向后兼容语义）
         DataSourceDefinition result = updateFormParams("{\"list\":{}}");
 
-        assertEquals("{\"list\":{}}", result.getParams());
+        assertFormUpdateParamsMerged(result, "{\"list\":{}}");
     }
 
     @Test

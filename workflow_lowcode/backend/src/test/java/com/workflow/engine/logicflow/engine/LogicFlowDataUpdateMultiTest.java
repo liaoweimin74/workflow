@@ -270,11 +270,14 @@ class LogicFlowDataUpdateMultiTest {
         assertThat(dupOutcome.status()).isEqualTo("FAILED");
         assertThat(dupOutcome.errorMessage()).contains("别名重复");
 
-        // 非法别名
+        // 非法别名（两表确保走多表路径：单条目=单表等价，别名不参与单表路径校验）
         ObjectNode bad = objectMapper.createObjectNode();
         bad.set("updates", objectMapper.createArrayNode()
-                .add(updateEntry("bad-name", "wf_biz_order",
+                .add(updateEntry("ok_alias", "wf_biz_order",
                         objectMapper.createArrayNode().add(setOp("status", "SET", "PAID")),
+                        objectMapper.createArrayNode()))
+                .add(updateEntry("bad-name", "wf_biz_stock",
+                        objectMapper.createArrayNode().add(setOp("qty", "ADD", "1")),
                         objectMapper.createArrayNode())));
         LogicFlowEngine.RunOutcome badOutcome = engine.run(flow(multiNode("du_bad", bad)), Map.of());
         assertThat(badOutcome.status()).isEqualTo("FAILED");
@@ -283,10 +286,6 @@ class LogicFlowDataUpdateMultiTest {
 
     @Test
     void updatesTakePrecedenceOverLegacySingleTable() throws SQLException {
-        PreparedStatement psStock = mock(PreparedStatement.class);
-        when(psStock.executeUpdate()).thenReturn(2);
-        when(connection.prepareStatement(anyString())).thenReturn(psStock);
-        when(connection.getAutoCommit()).thenReturn(true);
         when(jdbcTemplate.update(anyString(), any(Object[].class))).thenReturn(99);
 
         ObjectNode config = objectMapper.createObjectNode();
@@ -299,8 +298,10 @@ class LogicFlowDataUpdateMultiTest {
         LogicFlowEngine.RunOutcome outcome = engine.run(flow(multiNode("du_mix", config)), Map.of());
 
         assertThat(outcome.status()).isEqualTo("SUCCESS");
-        assertThat(summaryOf(outcome, "du_mix").get("total")).isEqualTo(1);
-        verify(jdbcTemplate, never()).update(anyString(), any(Object[].class)); // 未走单表路径
+        // 单条目 updates = 单表等价（44c18433 语义）：走 jdbcTemplate.update 直连路径，输出 Integer 行数
+        assertThat(outcome.outputVars().get("du_mix")).isEqualTo(99);
+        verify(jdbcTemplate).update(anyString(), any(Object[].class)); // 走单表路径而非事务汇总
+        verify(connection, never()).setAutoCommit(false); // 单条目不进事务
     }
 
     @Test

@@ -1,0 +1,6 @@
+/* 复用主项目全局样式（tailwind4 主题 + 双品牌主题变量） */
+@import "@/app/globals.css";
+
+/* tailwind4 自动内容探测以 vite root（portal-vite/）为界，
+   扫描不到上级 src 里的类名，这里显式声明源码范围 */
+@source "../../src/**/*.{ts,tsx}";

@@ -1,6 +1,7 @@
 package com.workflow.notification.admin;
 
 import com.workflow.common.domain.R;
+import com.workflow.framework.security.domain.LoginUser;
 import com.workflow.notification.dispatch.MessageEvent;
 import com.workflow.notification.model.ChannelType;
 import com.workflow.notification.model.DeliveryRetry;
@@ -16,9 +17,13 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -52,6 +57,21 @@ class DeliveryControllerTest {
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final DeliveryController controller =
             new DeliveryController(messageRepository, recipientRepository, retryRepository, eventPublisher);
+
+    @BeforeEach
+    void setUpAdminContext() {
+        // list/retry 入口调用 NotificationAdminAuthorization.requireAdmin()
+        // （纯单测无 Spring Security 过滤器链 → 需手工注入管理员身份，与 AnnouncementControllerTest 同款）
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        new LoginUser(100L, "admin", "x", List.of("ROLE_ADMIN"), java.util.Set.of(), true),
+                        null));
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     private Message message(long id, String title, LocalDateTime createdAt) {
         Message m = new Message();

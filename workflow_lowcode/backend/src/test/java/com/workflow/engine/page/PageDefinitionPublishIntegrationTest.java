@@ -103,7 +103,7 @@ class PageDefinitionPublishIntegrationTest {
         pageDefService = new PageDefinitionService(pageRepo, tenantProvider, validator, compiler, objectMapper);
 
         // 访问守卫 mock 为放行（本测试聚焦发布/查询链路，不测权限）
-        queryController = new PageQueryController(pageDefService, bizDataService, dsService, pageAccessGuard, objectMapper);
+        queryController = new PageQueryController(pageDefService, bizDataService, dsService, pageAccessGuard, new com.workflow.api.controller.PageViewQuerySupport(objectMapper));
     }
 
     @AfterEach

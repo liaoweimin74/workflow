@@ -387,135 +387,15 @@
             </el-form-item>
           </template>
 
-          <!-- ===== DATA_UPDATE ===== -->
+          <!-- ===== DATA_UPDATE（统一多表编辑器：单条目 = 单表更新；多条目单事务顺序执行） ===== -->
           <template v-else-if="node.data.nodeType === 'DATA_UPDATE'">
-            <el-form-item>
-              <template #label>
-                <FieldLabel label="多表更新" tip="开启后一个节点可配置多张目标表，引擎在单事务内按顺序执行：全成提交，任一表失败整体回滚（全有或全无）；未声明输出时自动汇总 { total, affected, t0|别名.affected, … } 供下游点路径引用；需要逐表独立失败语义请拆成多个数据更新节点" />
-              </template>
-              <div class="du-multi-switch">
-                <el-switch :model-value="duMultiMode" @change="toggleDuMultiMode" />
-                <span class="du-multi-hint">
-                  {{ duMultiMode
-                    ? `已启用 · ${dataUpdateCfg.updates?.length ?? 0} 张表 · 单事务全有或全无`
-                    : '未启用 · 仅更新单张表（存量行为）' }}
-                </span>
-                <el-button v-if="duMultiMode" size="small" text type="primary" @click="addDataUpdateEntry">
-                  添加目标表
-                </el-button>
-              </div>
-            </el-form-item>
-
-            <template v-if="!duMultiMode">
-            <el-form-item required>
-              <template #label>
-                <FieldLabel label="目标表" tip="下拉取数据库全部表清单；表名运行时校验合法性与存在性，值经参数绑定防注入" />
-              </template>
-              <el-select
-                v-model="dataUpdateCfg.table"
-                filterable
-                :loading="duTablesLoading"
-                placeholder="选择平台动态数据表"
-                clearable
-                class="du-table-select"
-              >
-                <el-option v-for="t in duTableMergedOptions" :key="t" :label="t" :value="t" />
-              </el-select>
-            </el-form-item>
-
             <div class="rows-block">
               <div class="rows-head">
-                <FieldLabel label="更新字段 SET" tip="SET 直接赋值；ADD/SUB 对数值列累加/递减；值支持字面量或 {{ formData.xxx }} 点路径取表单字段" />
-                <el-button size="small" text type="primary" @click="addSetOp">添加</el-button>
+                <FieldLabel label="目标表" tip="一个节点可配置一张或多张目标表：单张表即单表更新，未声明输出时写入受影响行数（与存量单表行为一致）；多张表在单事务内按顺序执行，全成提交、任一失败整体回滚（全有或全无），未声明输出时自动汇总 { total, affected, t0|别名.affected, … } 供下游点路径引用；需要逐表独立失败语义请拆成多个数据更新节点；SET 直接赋值，ADD/SUB 对数值列累加/递减；值支持字面量或 {{ formData.xxx }} 点路径取表单字段；表名运行时校验合法性与存在性，值经参数绑定防注入" />
+                <el-button size="small" text type="primary" @click="addDataUpdateEntry">添加目标表</el-button>
               </div>
-              <div v-if="!dataUpdateCfg.setOps.length" class="rows-empty">暂无更新字段</div>
-              <div v-for="(op, i) in dataUpdateCfg.setOps" :key="i" class="du-row">
-                <el-select
-                  v-model="op.column"
-                  size="small"
-                  filterable
-                  allow-create
-                  default-first-option
-                  :loading="duColumnsLoading"
-                  :disabled="!dataUpdateCfg.table"
-                  :title="dataUpdateCfg.table ? undefined : '先选择目标表'"
-                  placeholder="列名"
-                  class="du-col"
-                >
-                  <el-option v-for="c in duColumnMergedOptions" :key="c.key" :label="c.key" :value="c.key">
-                    <span class="du-col-opt">
-                      <span>{{ c.key }}</span>
-                      <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
-                    </span>
-                  </el-option>
-                </el-select>
-                <el-select v-model="op.mode" size="small" class="du-mode">
-                  <el-option label="SET" value="SET" />
-                  <el-option label="ADD +" value="ADD" />
-                  <el-option label="SUB −" value="SUB" />
-                </el-select>
-                <VarInput
-                  v-model="op.value"
-                  :variables="variables"
-                  mode="placeholder"
-                  size="small"
-                  class="du-value"
-                  placeholder="值或 {{formData.xxx}}"
-                />
-                <el-button size="small" text type="danger" @click="dataUpdateCfg.setOps.splice(i, 1)">
-                  <el-icon><Delete /></el-icon>
-                </el-button>
-              </div>
-            </div>
-
-            <div class="rows-block">
-              <div class="rows-head">
-                <FieldLabel label="更新条件 WHERE" tip="多条件 AND 连接；条件为空时将影响全表，请谨慎配置" />
-                <el-button size="small" text type="primary" @click="addWhereCond">添加</el-button>
-              </div>
-              <div v-if="!dataUpdateCfg.where.length" class="rows-empty du-warn">未配置条件，执行将更新全表</div>
-              <div v-for="(cond, i) in dataUpdateCfg.where" :key="i" class="du-row">
-                <el-select
-                  v-model="cond.column"
-                  size="small"
-                  filterable
-                  allow-create
-                  default-first-option
-                  :loading="duColumnsLoading"
-                  :disabled="!dataUpdateCfg.table"
-                  :title="dataUpdateCfg.table ? undefined : '先选择目标表'"
-                  placeholder="列名"
-                  class="du-col"
-                >
-                  <el-option v-for="c in duColumnMergedOptions" :key="c.key" :label="c.key" :value="c.key">
-                    <span class="du-col-opt">
-                      <span>{{ c.key }}</span>
-                      <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
-                    </span>
-                  </el-option>
-                </el-select>
-                <el-select v-model="cond.op" size="small" class="du-mode">
-                  <el-option v-for="op in DATA_UPDATE_OPS" :key="op.value" :label="op.label" :value="op.value" />
-                </el-select>
-                <VarInput
-                  v-if="!isNullOp(cond.op)"
-                  v-model="cond.value"
-                  :variables="variables"
-                  mode="placeholder"
-                  size="small"
-                  class="du-value"
-                  placeholder="值或 {{formData.xxx}}"
-                />
-                <el-button size="small" text type="danger" @click="dataUpdateCfg.where.splice(i, 1)">
-                  <el-icon><Delete /></el-icon>
-                </el-button>
-              </div>
-            </div>
-            </template>
-
-            <template v-else>
               <div v-if="!dataUpdateCfg.updates?.length" class="rows-empty">
-                尚未添加目标表，点击上方「添加目标表」开始配置
+                尚未添加目标表，点击右上「添加目标表」开始配置
               </div>
               <div v-for="(u, ui) in dataUpdateCfg.updates ?? []" :key="ui" class="du-multi-card">
                 <div class="du-multi-head">
@@ -531,7 +411,6 @@
                     size="small"
                     text
                     type="danger"
-                    :disabled="(dataUpdateCfg.updates?.length ?? 0) <= 1"
                     @click="dataUpdateCfg.updates?.splice(ui, 1)"
                   >
                     <el-icon><Delete /></el-icon>
@@ -645,9 +524,568 @@
               </div>
 
               <div v-if="dataUpdateCfg.updates?.length" class="sql-preview-hint du-output-hint">
-                未声明输出时引擎自动将整体汇总写入「{{ nodeId }}」：{ total, affected, {{ duKeysPreview }}, … }；各表按顺序在单事务内执行，任一表失败整体回滚（全有或全无）
+                <template v-if="(dataUpdateCfg.updates?.length ?? 0) === 1">
+                  单表更新：未声明输出时引擎将受影响行数写入「{{ nodeId }}」（与存量单表行为一致）
+                </template>
+                <template v-else>
+                  未声明输出时引擎自动将整体汇总写入「{{ nodeId }}」：{ total, affected, {{ duKeysPreview }}, … }；各表按顺序在单事务内执行，任一表失败整体回滚（全有或全无）
+                </template>
               </div>
+            </div>
+          </template>
+
+          <!-- ===== DATA_UPSERT（统一多表单编辑器：单条目 = 单表写入；多条目单事务顺序执行） ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_UPSERT'">
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="写入表单" tip="一个节点可配置一张或多张业务表单：单张表单即单表写入，未声明输出时写入整体结果（与存量单表行为一致）；多张表单在单事务内按顺序执行，全成提交、任一失败整体回滚（全有或全无），未声明输出时自动汇总 { total, created, updated, u0|别名.result, … } 供下游点路径引用；每张表单按 (tenant_id, 唯一字段) 原子判定存在则更新、不存在则新增" />
+                <el-button size="small" text type="primary" @click="addUpsertEntry">添加业务表单</el-button>
+              </div>
+              <div v-if="!dataUpsertCfg.upserts?.length" class="rows-empty">
+                尚未添加业务表单，点击右上「添加业务表单」开始配置
+              </div>
+              <div v-for="(u, ui) in dataUpsertCfg.upserts ?? []" :key="ui" class="du-multi-card">
+                <div class="du-multi-head">
+                  <span class="du-multi-idx">#{{ ui }}</span>
+                  <el-input
+                    v-model="u.alias"
+                    size="small"
+                    class="du-alias"
+                    maxlength="32"
+                    placeholder="输出别名(可选，字母/数字/下划线)"
+                  />
+                  <el-button
+                    size="small"
+                    text
+                    type="danger"
+                    @click="dataUpsertCfg.upserts?.splice(ui, 1)"
+                  >
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+
+                <el-form-item required>
+                  <template #label>
+                    <FieldLabel label="业务表单" tip="选择已发布的 BUSINESS 表单，写入其物理表 wf_biz_<formKey>；tenant_id/created_by/version/审计时间戳由引擎自动维护，不在本表暴露" />
+                  </template>
+                  <el-select
+                    v-model="u.formKey"
+                    filterable
+                    clearable
+                    :loading="upsertFormsLoading"
+                    placeholder="选择已发布业务表单"
+                    class="du-table-select"
+                    @change="onUpsertEntryFormChange(u)"
+                  >
+                    <el-option v-for="f in upsertFormOptions" :key="f.key" :label="`${f.name}（${f.key}）`" :value="f.key" />
+                  </el-select>
+                </el-form-item>
+
+                <el-form-item required>
+                  <template #label>
+                    <FieldLabel label="冲突键（唯一字段）" tip="按该字段判定存在性：命中即更新、未命中即新增；下拉仅列表单中标记「唯一」的业务字段——发布时自动生成 (tenant_id, 该字段) 复合唯一索引；tenant_id 列由引擎自动维护且发布时已自动创建，无需手动添加；运行期引擎实查索引兜底校验，缺索引直接节点失败" />
+                  </template>
+                  <el-select
+                    v-model="u.conflictKey"
+                    filterable
+                    :loading="upsertEntryLoading(u.formKey)"
+                    :disabled="!u.formKey"
+                    :title="u.formKey ? undefined : '先选择业务表单'"
+                    placeholder="选择唯一字段"
+                    class="du-table-select"
+                  >
+                    <el-option v-for="c in upsertEntryConflictOptions(u.formKey)" :key="c" :label="c" :value="c" />
+                  </el-select>
+                  <div v-if="u.formKey && !upsertEntryLoading(u.formKey) && !upsertEntryConflictOptions(u.formKey).length" class="rows-empty du-warn">
+                    该表单还没有任何标记为「唯一」的业务字段，因此无法判定数据重复：请到表单设计器的字段配置中，把用于判重的字段打开「唯一」开关并重新发布（发布时自动生成 (tenant_id, 字段) 复合唯一索引；tenant_id 列由系统自动创建和维护，不是缺少它）
+                  </div>
+                </el-form-item>
+
+                <div class="rows-block">
+                  <div class="rows-head">
+                    <FieldLabel label="写入字段" tip="新增与更新共用的字段值；冲突键列必须包含在内；值支持字面量或 {{ formData.xxx }} 点路径取变量；参数绑定防注入" />
+                    <el-button size="small" text type="primary" @click="u.values.push({ column: '', value: '' })">添加</el-button>
+                  </div>
+                  <div v-if="!u.values.length" class="rows-empty">暂无写入字段</div>
+                  <div v-for="(op, i) in u.values" :key="i" class="du-row">
+                    <el-select
+                      v-model="op.column"
+                      size="small"
+                      filterable
+                      allow-create
+                      default-first-option
+                      :loading="upsertEntryLoading(u.formKey)"
+                      :disabled="!u.formKey"
+                      :title="u.formKey ? undefined : '先选择业务表单'"
+                      placeholder="字段"
+                      class="du-col"
+                    >
+                      <el-option v-for="c in upsertColumnOptions(u.formKey, op.column)" :key="c.key" :label="c.key" :value="c.key">
+                        <span class="du-col-opt">
+                          <span>{{ c.key }}</span>
+                          <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+                        </span>
+                      </el-option>
+                    </el-select>
+                    <VarInput
+                      v-model="op.value"
+                      :variables="variables"
+                      mode="placeholder"
+                      size="small"
+                      class="du-value"
+                      placeholder="值或 {{formData.xxx}}"
+                    />
+                    <el-button size="small" text type="danger" @click="u.values.splice(i, 1)">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
+
+                <div class="rows-block">
+                  <div class="rows-head">
+                    <FieldLabel label="更新时覆盖（可选）" tip="仅命中更新路径时额外覆盖的字段（col = ? 直绑）；未配置时更新路径 = 全量写入字段；适合 updated_by、最近同步时间等只在新值到达时刷新的列" />
+                    <el-button size="small" text type="primary" @click="u.onUpdate?.push({ column: '', value: '' })">添加</el-button>
+                  </div>
+                  <div v-if="!u.onUpdate?.length" class="rows-empty">未配置 · 更新路径默认覆盖全部写入字段</div>
+                  <div v-for="(op, i) in u.onUpdate ?? []" :key="'o' + i" class="du-row">
+                    <el-select
+                      v-model="op.column"
+                      size="small"
+                      filterable
+                      allow-create
+                      default-first-option
+                      :loading="upsertEntryLoading(u.formKey)"
+                      :disabled="!u.formKey"
+                      :title="u.formKey ? undefined : '先选择业务表单'"
+                      placeholder="字段"
+                      class="du-col"
+                    >
+                      <el-option v-for="c in upsertColumnOptions(u.formKey, op.column)" :key="c.key" :label="c.key" :value="c.key">
+                        <span class="du-col-opt">
+                          <span>{{ c.key }}</span>
+                          <span v-if="c.type" class="du-col-type">{{ c.type }}</span>
+                        </span>
+                      </el-option>
+                    </el-select>
+                    <VarInput
+                      v-model="op.value"
+                      :variables="variables"
+                      mode="placeholder"
+                      size="small"
+                      class="du-value"
+                      placeholder="值或 {{formData.xxx}}"
+                    />
+                    <el-button size="small" text type="danger" @click="u.onUpdate?.splice(i, 1)">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="dataUpsertCfg.upserts?.length" class="sql-preview-hint du-output-hint">
+                <template v-if="(dataUpsertCfg.upserts?.length ?? 0) === 1">
+                  单表写入：未声明输出时引擎将整体结果写入「{{ nodeId }}」：{ result: 'created'|'updated'|'unchanged', affected, id, table }（与存量单表行为一致）
+                </template>
+                <template v-else>
+                  多表单写入（{{ dataUpsertCfg.upserts?.length }} 张，单事务全有或全无）：输出 { total, created, updated, &lt;别名|u序号&gt;: { result, affected, id, table } }，如「{{ nodeId }}.{{ dataUpsertCfg.upserts?.[0]?.alias || 'u0' }}.id」
+                </template>
+                ；id 为记录主键（新增=本次生成，更新/无变化=按冲突键反查）。注意 updated_at 恒随更新子句刷新：命中已有行常规返回 updated（affected=2），unchanged 为保留态（值全同且同毫秒写入才出现，极罕见）
+              </div>
+            </div>
+          </template>
+
+          <!-- ===== DATA_QUERY ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_QUERY'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="业务表单" tip="选择业务类型表单（租户内），运行期按其动态表查询数据；引擎自动注入租户隔离" />
+              </template>
+              <el-select
+                v-model="dataQueryCfg.formKey"
+                filterable
+                allow-create
+                default-first-option
+                :loading="bizFormsLoading"
+                placeholder="选择业务表单（可输入 key）"
+                class="du-table-select"
+              >
+                <el-option v-for="f in bizForms" :key="f.key" :label="`${f.name}（${f.key}）`" :value="f.key" />
+              </el-select>
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="等值筛选" tip="多条件 AND 连接；列须为该表单业务列，值支持 {{var}} 取上下文" />
+                <el-button size="small" text type="primary" @click="dataQueryCfg.filter.push({ column: '', value: '' })">添加</el-button>
+              </div>
+              <div v-if="!dataQueryCfg.filter.length" class="rows-empty">无条件：返回该表单全部数据</div>
+              <div v-for="(f, i) in dataQueryCfg.filter" :key="i" class="du-row">
+                <el-input v-model="f.column" size="small" class="du-col" placeholder="列名" />
+                <VarInput
+                  v-model="f.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  class="du-value"
+                  placeholder="值或 {{var}}"
+                />
+                <el-button size="small" text type="danger" @click="dataQueryCfg.filter.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="num-grid">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="关键字" tip="可选：对关键字列做模糊匹配" />
+                </template>
+                <el-input v-model="dataQueryCfg.keyword" placeholder="如：张" clearable />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="关键字列" tip="关键字匹配的目标列（须在表单列白名单内）" />
+                </template>
+                <el-input v-model="dataQueryCfg.keywordColumn" placeholder="如：person_name" clearable />
+              </el-form-item>
+            </div>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="行数上限" tip="单次返回行数（1~100，默认 50）；输出 { total, rows }，rows 行含 id 与全部业务列" />
+              </template>
+              <el-input-number v-model="dataQueryCfg.size" :min="1" :max="100" controls-position="right" style="width: 100%" />
+            </el-form-item>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将汇总写入「{{ nodeId }}」：{ total, page, size, rows: [...] }，下游点路径取值（如 {{ nodeId }}.rows[0] 经 KEY 拆包 rows）
+            </div>
+          </template>
+
+          <!-- ===== DATA_INSERT ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_INSERT'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="业务表单" tip="选择业务类型表单（租户内），运行期向其动态表插入一行；必填校验/JSON 列/日期归一自动处理" />
+              </template>
+              <el-select
+                v-model="dataInsertCfg.formKey"
+                filterable
+                allow-create
+                default-first-option
+                :loading="bizFormsLoading"
+                placeholder="选择业务表单（可输入 key）"
+                class="du-table-select"
+              >
+                <el-option v-for="f in bizForms" :key="f.key" :label="`${f.name}（${f.key}）`" :value="f.key" />
+              </el-select>
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="新增字段" tip="列值对；值支持 {{var}} 取上下文（保留原始类型）或字面量；主键/租户/版本等托管列由平台自动生成" />
+                <el-button size="small" text type="primary" @click="dataInsertCfg.data.push({ column: '', value: '' })">添加</el-button>
+              </div>
+              <div v-if="!dataInsertCfg.data.length" class="rows-empty">暂无字段</div>
+              <div v-for="(f, i) in dataInsertCfg.data" :key="i" class="du-row">
+                <el-input v-model="f.column" size="small" class="du-col" placeholder="列名" />
+                <VarInput
+                  v-model="f.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  class="du-value"
+                  placeholder="值或 {{var}}"
+                />
+                <el-button size="small" text type="danger" @click="dataInsertCfg.data.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将新行写入「{{ nodeId }}」：{ id, version, data: {...} }，下游取 {{ nodeId }}.id（KEY 拆包）
+            </div>
+          </template>
+
+          <!-- ===== DATA_DELETE ===== -->
+          <template v-else-if="node.data.nodeType === 'DATA_DELETE'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="业务表单" tip="选择业务类型表单（租户内）" />
+              </template>
+              <el-select
+                v-model="dataDeleteCfg.formKey"
+                filterable
+                allow-create
+                default-first-option
+                :loading="bizFormsLoading"
+                placeholder="选择业务表单（可输入 key）"
+                class="du-table-select"
+              >
+                <el-option v-for="f in bizForms" :key="f.key" :label="`${f.name}（${f.key}）`" :value="f.key" />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="删除方式" tip="按 ID：精确删一行（级联子表，行不存在报错）；按条件：批量删除满足条件的行（引擎自动追加租户过滤防跨租户误删，不级联子表）" />
+              </template>
+              <el-radio-group v-model="dataDeleteMode">
+                <el-radio-button value="id">按 ID</el-radio-button>
+                <el-radio-button value="filter">按条件</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+
+            <el-form-item v-if="dataDeleteMode === 'id'" required>
+              <template #label>
+                <FieldLabel label="行 ID" tip="要删除的记录 id，支持 {{var}} 取上下文（如上游数据查询产出的行 id）" />
+              </template>
+              <VarInput
+                v-model="dataDeleteCfg.id"
+                :variables="variables"
+                mode="placeholder"
+                placeholder="{{dq_x1.rows}} 中的 id 或字面量"
+              />
+            </el-form-item>
+
+            <template v-else>
+              <div class="rows-block">
+                <div class="rows-head">
+                  <FieldLabel label="删除条件" tip="多条件 AND 连接；至少一个带值条件（防全表删除）；值支持 {{var}}" />
+                  <el-button size="small" text type="primary" @click="dataDeleteCfg.filter?.push({ column: '', op: 'EQ', value: '' })">添加</el-button>
+                </div>
+                <div v-if="!dataDeleteCfg.filter?.length" class="rows-empty du-warn">未配置条件（按 ID 删除请切换删除方式）</div>
+                <div v-for="(c, i) in dataDeleteCfg.filter ?? []" :key="i" class="du-row">
+                  <el-input v-model="c.column" size="small" class="du-col" placeholder="列名" />
+                  <el-select v-model="c.op" size="small" class="du-mode">
+                    <el-option v-for="op in DATA_UPDATE_OPS" :key="op.value" :label="op.label" :value="op.value" />
+                  </el-select>
+                  <VarInput
+                    v-if="!isNullOp(c.op)"
+                    v-model="c.value"
+                    :variables="variables"
+                    mode="placeholder"
+                    size="small"
+                    class="du-value"
+                    placeholder="值或 {{var}}"
+                  />
+                  <el-button size="small" text type="danger" @click="dataDeleteCfg.filter?.splice(i, 1)">
+                    <el-icon><Delete /></el-icon>
+                  </el-button>
+                </div>
+              </div>
+              <el-alert type="warning" :closable="false" show-icon class="panel-alert"
+                title="条件删除引擎自动追加 tenant_id = 当前租户（跨租户误删防护）；仅删主表行，不级联子表" />
             </template>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动写入「{{ nodeId }}」：{ deleted: 行数, mode: 'id' | 'filter' }
+            </div>
+          </template>
+
+          <!-- ===== NOTIFY ===== -->
+          <template v-else-if="node.data.nodeType === 'NOTIFY'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="模板代码" tip="租户内消息模板代码（须存在，缺失发送失败走异常策略）；模板必填变量缺失会被拒绝" />
+              </template>
+              <el-input v-model="notifyCfg.templateCode" placeholder="如 ORDER_PAID_NOTICE" />
+            </el-form-item>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="接收人 ID" tip="接收用户 ID（数字），支持 {{var}} 取上下文；上限 20 人" />
+                <el-button size="small" text type="primary" @click="notifyCfg.recipientIds.push('')">添加</el-button>
+              </div>
+              <div v-if="!notifyCfg.recipientIds.length" class="rows-empty">暂无接收人</div>
+              <div v-for="(_, i) in notifyCfg.recipientIds" :key="i" class="kv-row">
+                <VarInput
+                  :model-value="notifyCfg.recipientIds[i]"
+                  @update:model-value="notifyCfg.recipientIds[i] = $event"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  placeholder="2 或 {{ownerId}}"
+                />
+                <el-button size="small" text type="danger" @click="notifyCfg.recipientIds.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="rows-block">
+              <div class="rows-head">
+                <FieldLabel label="模板变量" tip="渲染模板标题/内容的变量对；name 须为字母/数字/下划线，值支持 {{var}}" />
+                <el-button size="small" text type="primary" @click="notifyCfg.variables.push({ name: '', value: '' })">添加</el-button>
+              </div>
+              <div v-if="!notifyCfg.variables.length" class="rows-empty">暂无变量</div>
+              <div v-for="(v, i) in notifyCfg.variables" :key="i" class="kv-row">
+                <el-input v-model="v.name" size="small" placeholder="变量名" />
+                <VarInput
+                  v-model="v.value"
+                  :variables="variables"
+                  mode="placeholder"
+                  size="small"
+                  placeholder="值或 {{var}}"
+                />
+                <el-button size="small" text type="danger" @click="notifyCfg.variables.splice(i, 1)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </div>
+            </div>
+
+            <div class="num-grid">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="消息类型" tip="PRIVATE 用户私信（默认）/ PUBLIC 公共广播 / SYSTEM 系统公告" />
+                </template>
+                <el-select v-model="notifyCfg.messageType" style="width: 100%">
+                  <el-option label="PRIVATE（私信）" value="PRIVATE" />
+                  <el-option label="PUBLIC（广播）" value="PUBLIC" />
+                  <el-option label="SYSTEM（系统公告）" value="SYSTEM" />
+                </el-select>
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="投递渠道" tip="IN_APP 站内信（默认）/ SMS 短信（模板须有对应渠道配置）" />
+                </template>
+                <el-select v-model="notifyCfg.channels" multiple style="width: 100%">
+                  <el-option label="站内信（IN_APP）" value="IN_APP" />
+                  <el-option label="短信（SMS）" value="SMS" />
+                </el-select>
+              </el-form-item>
+            </div>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动写入「{{ nodeId }}」：{ sent: true, templateCode, recipients, channels }
+            </div>
+          </template>
+
+          <!-- ===== DELAY ===== -->
+          <template v-else-if="node.data.nodeType === 'DELAY'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="等待时长(ms)" tip="同步等待毫秒数（1~60000）：逻辑流在请求线程内执行，超过 1 分钟的延时请改用外部调度方案" />
+              </template>
+              <el-input-number v-model="delayCfg.durationMs" :min="1" :max="60000" :step="500" controls-position="right" style="width: 100%" />
+              <span class="delay-hint">{{ delayHint }}</span>
+            </el-form-item>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动写入「{{ nodeId }}」：{ waitedMs: 实际等待毫秒 }
+            </div>
+          </template>
+
+          <!-- ===== TRANSFORM ===== -->
+          <template v-else-if="node.data.nodeType === 'TRANSFORM'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="JSON 模板" tip="合法 JSON（对象/数组）：值位占位符（如 &quot;k&quot;: {{var.path}}）注入变量原始值（对象/数组/数值类型保留；Long 型按平台约定注入为字符串防 JS 精度丢失）；字符串内占位符（如 &quot;共 {{total}} 条&quot;）做文本插值；变量缺失时值位注入 null、插值为空串" />
+              </template>
+              <VarInput
+                v-model="transformCfg.template"
+                :variables="variables"
+                mode="placeholder"
+                textarea
+                :rows="8"
+                chips
+                class="sql-source"
+                placeholder='{"name": {{formData.person_name}}, "summary": "共 {{total}} 条"}'
+              />
+            </el-form-item>
+            <el-alert
+              v-if="transformPreviewError"
+              type="error"
+              :closable="false"
+              show-icon
+              class="panel-alert"
+              :title="transformPreviewError"
+            />
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将编译后的对象写入「{{ nodeId }}」，下游点路径取子字段
+            </div>
+          </template>
+
+          <!-- ===== AGGREGATE ===== -->
+          <template v-else-if="node.data.nodeType === 'AGGREGATE'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="集合表达式" tip="被聚合的集合变量（元素须为对象），如上游数据查询产出的 {{dq_x1.rows}}" />
+              </template>
+              <VarInput
+                v-model="aggregateCfg.collection"
+                :variables="variables"
+                mode="placeholder"
+                placeholder="{{rows}}"
+              />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="聚合算子" tip="可多选：SUM/AVG/MIN/MAX 对字段做数值聚合；COUNT 计数恒输出；纯 COUNT 时字段可省" />
+              </template>
+              <el-checkbox-group v-model="aggregateCfg.ops">
+                <el-checkbox value="SUM">SUM</el-checkbox>
+                <el-checkbox value="AVG">AVG</el-checkbox>
+                <el-checkbox value="COUNT">COUNT</el-checkbox>
+                <el-checkbox value="MIN">MIN</el-checkbox>
+                <el-checkbox value="MAX">MAX</el-checkbox>
+              </el-checkbox-group>
+            </el-form-item>
+            <div class="num-grid">
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="聚合字段" tip="取每个元素对象上的该字段值做数值聚合（非数字会报错）；纯 COUNT 时可留空" />
+                </template>
+                <el-input v-model="aggregateCfg.field" placeholder="如 amount" clearable />
+              </el-form-item>
+              <el-form-item>
+                <template #label>
+                  <FieldLabel label="分组字段（可选）" tip="按该字段值分组后逐组聚合；输出 [{ group, count, sum, … }]；留空输出单层汇总" />
+                </template>
+                <el-input v-model="aggregateCfg.groupBy" placeholder="如 person_name" clearable />
+              </el-form-item>
+            </div>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动将汇总写入「{{ nodeId }}」：{ count, sum, avg, … } 或分组列表
+            </div>
+          </template>
+
+          <!-- ===== LLM ===== -->
+          <template v-else-if="node.data.nodeType === 'LLM'">
+            <el-form-item required>
+              <template #label>
+                <FieldLabel label="提示词（Prompt）" tip="用户提示词，支持 {{var}} 取上下文；模型由平台内置网关提供，无需管理 API Key" />
+              </template>
+              <VarInput
+                v-model="llmCfg.prompt"
+                :variables="variables"
+                mode="placeholder"
+                textarea
+                :rows="6"
+                chips
+                class="sql-source"
+                placeholder="请把以下事由归类为 事假/病假/年假/其他，只输出类别词：{{formData.reason}}"
+              />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="系统提示词（可选）" tip="设定模型角色/输出约束，同样支持 {{var}}" />
+              </template>
+              <VarInput
+                v-model="llmCfg.system"
+                :variables="variables"
+                mode="placeholder"
+                textarea
+                :rows="3"
+                chips
+                class="sql-source"
+                placeholder="你是严谨的分类助手，只输出一个词。"
+              />
+            </el-form-item>
+            <el-form-item>
+              <template #label>
+                <FieldLabel label="温度（可选）" tip="0~2：越小越确定（分类/抽取建议 ≤0.3），越大越发散；留空用平台默认" />
+              </template>
+              <el-input-number v-model="llmCfg.temperature" :min="0" :max="2" :step="0.1" controls-position="right" style="width: 100%" />
+            </el-form-item>
+            <div v-if="nodeId" class="sql-preview-hint du-output-hint">
+              未声明输出时引擎自动写入「{{ nodeId }}」：{ content: 模型文本 }；模型网关异常走失败分支/异常策略
+            </div>
           </template>
 
           <!-- ===== SQL_SCRIPT ===== -->
@@ -713,7 +1151,7 @@
           <template v-if="hasExecutionMeta">
             <div class="rows-block">
               <div class="rows-head">
-                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数（多表更新为汇总 total/affected/t{i}|别名），SUBFLOW 为子流 outputVars，BATCH 为汇总列表，SQL_SCRIPT 为执行汇总 { total/succeeded/failed/sN }，KEY 取其顶层键如 s0/s1/total），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一" />
+                <FieldLabel label="输出参数（results）" tip="可选：未声明时引擎自动将整体结果写入以节点 id 命名的变量（如 http_x7k2），下游零配置即可引用，支持点路径取子字段（如 http_x7k2.data.id）；声明后按本表执行：整体值（WHOLE）→ 节点返回值整体写入该变量（HTTP 为响应 body，BEAN 为方法返回值，DATA_UPDATE 为受影响行数（配置多张目标表时为汇总 total/affected/t{i}|别名），SUBFLOW 为子流 outputVars，BATCH 为汇总列表，SQL_SCRIPT 为执行汇总 { total/succeeded/failed/sN }，KEY 取其顶层键如 s0/s1/total），标量/列表/Map 均可，null 跳过；按 key 取（KEY）→ 输出源为 Map/JSON 对象时按变量名取对应 key（HTTP body 先尝试 JSON 解析），缺 key 跳过；SCRIPT 含 KEY 声明而末行未返回 Map → 节点失败，其余节点宽松跳过。输出名全表唯一；json 类型可粘贴 JSON 实例导入字段结构，下游选择变量时可展开选到具体字段" />
                 <el-button size="small" text type="primary" @click="addResultRow">添加</el-button>
               </div>
               <div v-if="!resultRows.length" class="rows-empty">
@@ -732,6 +1170,14 @@
                   <el-button size="small" text type="danger" @click="resultRows.splice(i, 1)">
                     <el-icon><Delete /></el-icon>
                   </el-button>
+                  <!-- json 类型：粘贴 JSON 实例生成字段结构树（图标按钮在删除之后，已导入变绿） → 下游变量选择器可展开选到字段 -->
+                  <JsonInstanceImport
+                    v-if="r.type === 'json'"
+                    icon
+                    :structure="r.structure"
+                    @import="(fields) => (r.structure = fields)"
+                    @clear="r.structure = undefined"
+                  />
                 </div>
               </div>
               <el-alert
@@ -745,13 +1191,21 @@
             </div>
             <el-form-item>
               <template #label>
-                <FieldLabel label="异常处理" tip="失败中断：节点异常终止整个流程；忽略继续：记录异常并继续执行后续节点" />
+                <FieldLabel label="异常处理" tip="节点失败时优先走失败分支：从节点底部红色「败」出点连线即可定向到补偿/降级节点（输出不写入，替代全局两档策略）；未连失败分支时按本策略：失败中断 = 节点异常终止整个流程；忽略继续 = 记录异常并继续执行后续节点。失败详情会写入上下文变量 __lastError，补救节点模板可引用" />
               </template>
-              <el-select v-model="node.data.errorAction" style="width: 100%">
+              <el-select v-model="node.data.errorAction" :disabled="hasErrorOutEdge" style="width: 100%">
                 <el-option label="失败中断（FAIL_FLOW）" value="FAIL_FLOW" />
                 <el-option label="忽略继续（IGNORE_CONTINUE）" value="IGNORE_CONTINUE" />
               </el-select>
             </el-form-item>
+            <!-- errorAction 动态提示：随当前节点 error 出边（连接/删除实时联动）与选择值三态切换 -->
+            <el-alert
+              :type="errorActionHint.type"
+              :closable="false"
+              show-icon
+              class="panel-alert"
+              :title="errorActionHint.text"
+            />
           </template>
         </el-form>
       </div>
@@ -760,16 +1214,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { CopyDocument, Delete, Fold, Setting, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import FieldLabel from './FieldLabel.vue'
+import JsonInstanceImport from './JsonInstanceImport.vue'
 import VarInput from './VarInput.vue'
 import { logicFlowApi } from '@/api/logicFlow'
 import type { BackendBeanInfo } from '@/api/logicFlow'
 import { dataSourceApi } from '@/api/data-source'
+import { formApi } from '@/api/form'
 import { nodeTypeLabel as typeLabel } from '../utils/nodeMeta'
-import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type FlowNode, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
+import { defaultConfig, type DataUpdateNodeConfig, type DataUpdateTableUpdate, type DataUpdateWhereOp, type DataUpsertNodeConfig, type DataUpsertUpsertItem, type DataQueryNodeConfig, type DataInsertNodeConfig, type DataDeleteNodeConfig, type NotifyNodeConfig, type DelayNodeConfig, type TransformNodeConfig, type AggregateNodeConfig, type LlmNodeConfig, type FlowNode, type FlowEdge, type HttpNodeConfig, type SqlScriptNodeConfig, OUTPUT_VAR_TYPES, type ResultVarDef } from '../utils/dsl'
 import { parseSqlScriptPreview } from '../utils/sqlScript'
 import type { FlowVarItem } from '../utils/flowVars'
 
@@ -791,6 +1247,8 @@ const props = defineProps<{
   loopBodyCount?: number
   /** 当前节点可用的上下文变量（父组件按画布实时计算，见 flowVars.ts） */
   variables?: FlowVarItem[]
+  /** 画布实时边集合（父组件从 vue-flow store 真值传入）：errorAction 动态提示需判断当前节点是否已连失败分支（error 出边） */
+  edges?: FlowEdge[]
 }>()
 const emit = defineEmits<{ 'update:collapsed': [value: boolean]; remove: [id: string] }>()
 
@@ -808,14 +1266,60 @@ const nodeTypeLabel = computed(() => (node.value ? typeLabel(node.value.data.nod
 const hasExecutionMeta = computed(
   () =>
     !!node.value &&
-    ['HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE', 'SQL_SCRIPT'].includes(node.value.data.nodeType)
+    [
+      'HTTP', 'BEAN', 'SCRIPT', 'BATCH', 'SUBFLOW', 'DATA_UPDATE', 'DATA_UPSERT', 'SQL_SCRIPT',
+      'DATA_QUERY', 'DATA_INSERT', 'DATA_DELETE', 'NOTIFY', 'DELAY', 'TRANSFORM', 'AGGREGATE', 'LLM',
+    ].includes(node.value.data.nodeType)
 )
+
+/**
+ * 当前节点是否已连失败分支（error 出边）：设计器连线时 sourceHandle='error' 且 data.branch='error'
+ * （双标记兼容手连/DSL 回灌两种来源），props.edges 为 store 实时真值，连接/删边即联动。
+ */
+const hasErrorOutEdge = computed(() => {
+  if (!node.value) return false
+  const id = node.value.id
+  return (props.edges ?? []).some(
+    (e) => e.source === id && (e.sourceHandle === 'error' || e.data?.branch === 'error')
+  )
+})
+
+/**
+ * errorAction 动态提示（三级回落链优先级可视化）：
+ * ① 已连 error 出边 → 优先级最高，本属性不生效（选择器置灰）；
+ * ② 无 error 出边 + FAIL_FLOW（含未设置）→ 中性说明；
+ * ③ 无 error 出边 + IGNORE_CONTINUE → 提示失败详情可经 {{__lastError}} 引用（引擎随本迭代交付）。
+ */
+const errorActionHint = computed<{ type: 'warning' | 'info'; text: string }>(() => {
+  if (hasErrorOutEdge.value) {
+    return {
+      type: 'warning',
+      text: '已连接失败分支（error 出边）：失败时优先走该分支，此属性不生效',
+    }
+  }
+  if (node.value?.data.errorAction === 'IGNORE_CONTINUE') {
+    return {
+      type: 'info',
+      text: '失败时记录后继续主流程，失败详情可通过 {{__lastError}} 在后续节点引用',
+    }
+  }
+  return {
+    type: 'info',
+    text: '失败时中断整个流程（可连接失败分支或选择 IGNORE_CONTINUE 跳过继续）',
+  }
+})
 
 /** 兜底补齐 config（历史 DSL 缺字段时按类型默认值补全） */
 function ensureConfig<T>(): T {
   const n = node.value!
   if (!n.data.config || typeof n.data.config !== 'object') {
-    n.data.config = defaultConfig(n.data.nodeType)
+    const d = defaultConfig(n.data.nodeType)
+    // START/END 等无配置节点 defaultConfig 返回 undefined：不落库（避免污染 DSL）、
+    // 返回空对象兑底——否则依赖 config 的 computed/watcher 对其求值即崩（真实事故：
+    // 2026-10-09 选中 START 节点触发 dataUpdateCfg computed 抛 TypeError，patch 中断
+    // vnode 树损坏，随后返回列表导航卸载失败永久卡死）
+    if (!d) return {} as T
+    n.data.config = d
   }
   return n.data.config as T
 }
@@ -896,7 +1400,94 @@ const DATA_UPDATE_OPS: { label: string; value: DataUpdateWhereOp }[] = [
   { label: '不为空', value: 'NOT_NULL' },
 ]
 
-const dataUpdateCfg = computed(() => ensureConfig<DataUpdateNodeConfig>())
+/**
+ * 统一多表形态（config.updates）：updates 缺失/为空时自动迁移——
+ * 存量单表配置（table/setOps/where）→ updates[0]（引擎单条目与单表行为等价，含输出）；
+ * 全新空配置 → 预置一条空表项。迁移后清空顶层单表字段，DSL 只保留 updates 一种形态
+ */
+const dataUpdateCfg = computed(() => {
+  const cfg = ensureConfig<DataUpdateNodeConfig>()
+  if (!Array.isArray(cfg.updates) || cfg.updates.length === 0) {
+    const hasLegacy =
+      Boolean(String(cfg.table ?? '').trim()) ||
+      (cfg.setOps?.length ?? 0) > 0 ||
+      (cfg.where?.length ?? 0) > 0
+    cfg.updates = hasLegacy
+      ? [{ table: cfg.table ?? '', setOps: cfg.setOps ?? [], where: cfg.where ?? [] }]
+      : [{ table: '', setOps: [{ column: '', mode: 'SET', value: '' }], where: [] }]
+    cfg.table = ''
+    cfg.setOps = []
+    cfg.where = []
+  }
+  return cfg
+})
+
+// ===== 数据查询/新增/删除：业务表单清单（懒加载一次，降级手输） =====
+const bizForms = ref<{ key: string; name: string }[]>([])
+const bizFormsLoading = ref(false)
+let bizFormsLoaded = false
+async function loadBizForms(): Promise<void> {
+  if (bizFormsLoaded || bizFormsLoading.value) return
+  bizFormsLoading.value = true
+  try {
+    const res = await formApi.getFormDefinitions({ page: 1, size: 100, type: 'BUSINESS' })
+    const rows = res.data?.rows ?? []
+    bizForms.value = rows.map((f) => ({ key: f.key, name: f.name }))
+    bizFormsLoaded = true
+  } catch {
+    // 降级：下拉为空时 allow-create 手输 key 仍可用
+  } finally {
+    bizFormsLoading.value = false
+  }
+}
+
+const dataQueryCfg = computed(() => ensureConfig<DataQueryNodeConfig>())
+const dataInsertCfg = computed(() => ensureConfig<DataInsertNodeConfig>())
+const dataDeleteCfg = computed(() => ensureConfig<DataDeleteNodeConfig>())
+/** 删除方式视图态：id 非空 → 按 ID，否则按条件（不写回 config，纯 UI 切换） */
+const dataDeleteMode = computed<'id' | 'filter'>({
+  get: () => (String(dataDeleteCfg.value.id ?? '').trim() ? 'id' : 'filter'),
+  set: (mode) => {
+    if (mode === 'filter') dataDeleteCfg.value.id = ''
+    else if (!dataDeleteCfg.value.id) dataDeleteCfg.value.id = ''
+  },
+})
+
+// ===== NOTIFY / DELAY / TRANSFORM / AGGREGATE / LLM =====
+const notifyCfg = computed(() => ensureConfig<NotifyNodeConfig>())
+const delayCfg = computed(() => ensureConfig<DelayNodeConfig>())
+const delayHint = computed(() => {
+  const ms = Number(delayCfg.value?.durationMs ?? 0)
+  if (!ms || ms <= 0) return ''
+  return ms % 1000 === 0 ? `约 ${ms / 1000} 秒` : `约 ${(ms / 1000).toFixed(1)} 秒`
+})
+const transformCfg = computed(() => ensureConfig<TransformNodeConfig>())
+/** TRANSFORM 模板软预检：占位符代换为 1 后须为合法 JSON（与后端发布校验同语义） */
+const transformPreviewError = computed<string | null>(() => {
+  const tpl = String(transformCfg.value?.template ?? '').trim()
+  if (!tpl) return null
+  const normalized = tpl.replace(/\{\{\s*[\w.]+\s*}}/g, '1')
+  try {
+    const parsed = JSON.parse(normalized)
+    if (!parsed || typeof parsed !== 'object') return '模板编译产物须为 JSON 对象或数组'
+    return null
+  } catch {
+    return '模板不是合法 JSON（占位符代换后仍解析失败，请检查括号/引号）'
+  }
+})
+const aggregateCfg = computed(() => ensureConfig<AggregateNodeConfig>())
+const llmCfg = computed(() => ensureConfig<LlmNodeConfig>())
+
+// ===== 数据节点业务表单清单懒加载：节点为数据族时拉取 =====
+watch(
+  () => node.value?.data.nodeType,
+  (type) => {
+    if (type && ['DATA_QUERY', 'DATA_INSERT', 'DATA_DELETE'].includes(type)) {
+      void loadBizForms()
+    }
+  },
+  { immediate: true }
+)
 
 // ===== DATA_UPDATE 目标表/列下拉（取库真实 schema） =====
 // 目标表展示数据库全部表清单（后端已放开前缀白名单，保留表名合法性+存在性校验）；
@@ -904,37 +1495,6 @@ const dataUpdateCfg = computed(() => ensureConfig<DataUpdateNodeConfig>())
 
 const duTableOptions = ref<string[]>([])
 const duTablesLoading = ref(false)
-const duRawColumns = ref<{ key: string; columnType: string }[]>([])
-const duColumnsLoading = ref(false)
-let duColumnsReqSeq = 0
-
-/** 目标表选项：真实表清单过滤白名单，并入当前已填表名（历史 DSL 的表可能已不在清单） */
-const duTableMergedOptions = computed(() => {
-  const cur = String(dataUpdateCfg.value?.table ?? '').trim()
-  const set = new Set(duTableOptions.value)
-  if (cur) set.add(cur)
-  return [...set].sort()
-})
-
-/** 列选项：当前表真实列（除 tenant_id）+ SET/WHERE 已填列名（含字面量占位历史值） */
-const duColumnMergedOptions = computed(() => {
-  const cur = new Set<string>(duRawColumns.value.map((c) => c.key))
-  for (const op of dataUpdateCfg.value?.setOps ?? []) {
-    const col = String(op.column ?? '').trim()
-    if (col) cur.add(col)
-  }
-  for (const cond of dataUpdateCfg.value?.where ?? []) {
-    const col = String(cond.column ?? '').trim()
-    if (col) cur.add(col)
-  }
-  return [...cur]
-    .filter((key) => key.toLowerCase() !== 'tenant_id')
-    .sort()
-    .map((key) => {
-      const meta = duRawColumns.value.find((c) => c.key === key)
-      return { key, type: meta?.columnType ?? '' }
-    })
-})
 
 async function loadDuTables() {
   duTablesLoading.value = true
@@ -948,67 +1508,11 @@ async function loadDuTables() {
   }
 }
 
-async function loadDuColumns(table: string) {
-  const seq = ++duColumnsReqSeq
-  if (!table) {
-    duRawColumns.value = []
-    return
-  }
-  duColumnsLoading.value = true
-  try {
-    const res = await dataSourceApi.getDbSchemaColumns(table)
-    if (seq !== duColumnsReqSeq) return // 表快速切换时丢弃过期响应
-    duRawColumns.value = (res.data ?? []).map((c) => ({ key: c.key, columnType: c.columnType }))
-  } catch {
-    if (seq === duColumnsReqSeq) duRawColumns.value = []
-  } finally {
-    if (seq === duColumnsReqSeq) duColumnsLoading.value = false
-  }
-}
-
-watch(
-  () => (node.value ? String(dataUpdateCfg.value?.table ?? '') : ''),
-  (table) => {
-    loadDuColumns(table)
-  },
-  { immediate: true }
-)
-
-function addSetOp() {
-  dataUpdateCfg.value.setOps.push({ column: '', mode: 'SET', value: '' })
-}
-
-function addWhereCond() {
-  dataUpdateCfg.value.where.push({ column: '', op: 'EQ', value: '' })
-}
-
 function isNullOp(op: string): boolean {
   return op === 'IS_NULL' || op === 'NOT_NULL'
 }
 
-// ===== DATA_UPDATE 多表更新（config.updates，单事务全有或全无） =====
-const duMultiMode = computed(
-  () => Array.isArray(dataUpdateCfg.value?.updates) && (dataUpdateCfg.value?.updates?.length ?? 0) > 0
-)
-
-/** 切换多表/单表：开启时把现有单表配置迁移为第一条多表项；关闭仅当 ≤1 条（避免丢配置） */
-function toggleDuMultiMode(on: string | number | boolean): void {
-  const cfg = dataUpdateCfg.value
-  if (!cfg) return
-  if (on) {
-    if (Array.isArray(cfg.updates) && cfg.updates.length) return
-    cfg.updates = [{ table: cfg.table ?? '', setOps: cfg.setOps ?? [], where: cfg.where ?? [] }]
-  } else {
-    if (!Array.isArray(cfg.updates)) return
-    if (cfg.updates.length <= 1) {
-      const only = cfg.updates[0]
-      cfg.table = only?.table ?? ''
-      cfg.setOps = only?.setOps ?? []
-      cfg.where = only?.where ?? []
-      cfg.updates = []
-    }
-  }
-}
+// ===== DATA_UPDATE 多表条目（config.updates，单条目 = 单表更新；多条目单事务全有或全无） =====
 
 function addDataUpdateEntry(): void {
   const cfg = dataUpdateCfg.value
@@ -1042,7 +1546,9 @@ async function ensureDuColumns(table: string): Promise<void> {
 
 watch(
   () =>
-    node.value
+    // 仅 DATA_UPDATE 节点求值 dataUpdateCfg：START/END 等无配置节点的 computed getter
+    // 依赖 ensureConfig 兑底才不抛错（真实事故：选中 START 即崩，见 ensureConfig 注释）
+    node.value?.data.nodeType === 'DATA_UPDATE'
       ? (dataUpdateCfg.value?.updates ?? [])
           .map((u) => String(u?.table ?? '').trim())
           .join('\u0001')
@@ -1072,6 +1578,137 @@ function duEntryColumns(u: DataUpdateTableUpdate): { key: string; type: string }
     .sort()
     .map((key) => ({ key, type: real.find((c) => c.key === key)?.columnType ?? '' }))
 }
+
+// ===== DATA_UPSERT（统一多表单编辑器：单条目 = 单表写入；多条目单事务顺序执行） =====
+
+/**
+ * 统一多表单形态（config.upserts）：upserts 缺失/为空时自动迁移——
+ * 存量单表配置（formKey/conflictKey/values/onUpdate）→ upserts[0]（引擎单条目与单表行为等价，含输出）；
+ * 全新空配置 → 预置一条空表单项。迁移后清空顶层单表字段，DSL 只保留 upserts 一种形态
+ */
+const dataUpsertCfg = computed(() => {
+  const cfg = ensureConfig<DataUpsertNodeConfig>()
+  if (!Array.isArray(cfg.upserts) || cfg.upserts.length === 0) {
+    const hasLegacy =
+      Boolean(String(cfg.formKey ?? '').trim()) ||
+      Boolean(String(cfg.conflictKey ?? '').trim()) ||
+      (cfg.values?.length ?? 0) > 0 ||
+      (cfg.onUpdate?.length ?? 0) > 0
+    cfg.upserts = hasLegacy
+      ? [{ formKey: cfg.formKey ?? '', conflictKey: cfg.conflictKey ?? '', values: cfg.values ?? [], onUpdate: cfg.onUpdate ?? [] }]
+      : [{ formKey: '', conflictKey: '', values: [{ column: '', value: '' }], onUpdate: [] }]
+    cfg.formKey = ''
+    cfg.conflictKey = ''
+    cfg.values = []
+    cfg.onUpdate = []
+  }
+  return cfg
+})
+
+/** 已发布 BUSINESS 表单选项（全局共享：选择表单 → 物理表 wf_biz_<formKey>） */
+interface UpsertFormOption {
+  key: string
+  name: string
+}
+const upsertFormOptions = ref<UpsertFormOption[]>([])
+const upsertFormsLoading = ref(false)
+
+async function loadUpsertForms(): Promise<void> {
+  if (upsertFormOptions.value.length || upsertFormsLoading.value) return
+  upsertFormsLoading.value = true
+  try {
+    const res = await formApi.getFormDefinitions({ type: 'BUSINESS', status: 'PUBLISHED', size: 1000 })
+    const data = res.data as { content?: { key: string; name: string | null }[] } | null
+    upsertFormOptions.value = (data?.content ?? [])
+      .filter((f) => f?.key)
+      .map((f) => ({ key: f.key, name: f.name || f.key }))
+  } catch {
+    // http 拦截器已提示；可稍后重开面板重试
+  } finally {
+    upsertFormsLoading.value = false
+  }
+}
+
+/** 唯一索引列组缓存（键 = 物理表名）：冲突键下拉取 (tenant_id, 字段) 二列组的第二列 */
+const upsertUniqueByTable = reactive(new Map<string, string[]>())
+
+/** 惰性请求去重（同表并发只发一次） */
+const upsertUniquePending = reactive(new Set<string>())
+
+function upsertEntryLoading(formKey: string): boolean {
+  const k = String(formKey ?? '').trim()
+  return k ? (duTableLoading.has('wf_biz_' + k) || (!upsertUniqueByTable.has('wf_biz_' + k) && upsertUniquePending.has('wf_biz_' + k))) : false
+}
+
+async function ensureUpsertUniqueKeys(formKey: string): Promise<void> {
+  const k = String(formKey ?? '').trim()
+  if (!k) return
+  const table = 'wf_biz_' + k
+  if (upsertUniqueByTable.has(table) || upsertUniquePending.has(table)) return
+  upsertUniquePending.add(table)
+  try {
+    const res = await dataSourceApi.getDbSchemaUniqueKeys(table)
+    const singles: string[] = []
+    for (const g of res.data ?? []) {
+      if (Array.isArray(g) && g.length === 2 && g[0] === 'tenant_id' && g[1]) singles.push(g[1])
+    }
+    upsertUniqueByTable.set(table, singles)
+  } catch {
+    // http 拦截器已提示；空列表时冲突键禁配（运行期引擎仍会实查校验）
+    upsertUniqueByTable.set(table, [])
+  } finally {
+    upsertUniquePending.delete(table)
+  }
+}
+
+/** 条目冲突键选项：(tenant_id, 字段) 二列唯一索引的第二列清单 */
+function upsertEntryConflictOptions(formKey: string): string[] {
+  const k = String(formKey ?? '').trim()
+  return k ? (upsertUniqueByTable.get('wf_biz_' + k) ?? []) : []
+}
+
+/** 条目表单切换：预取列结构与唯一键；清空不再可选的冲突键 */
+function onUpsertEntryFormChange(u: DataUpsertUpsertItem): void {
+  void nextTick(() => {
+    const k = String(u.formKey ?? '').trim()
+    if (k) {
+      void ensureDuColumns('wf_biz_' + k)
+      void ensureUpsertUniqueKeys(k)
+    }
+    const opts = k ? (upsertUniqueByTable.get('wf_biz_' + k) ?? []) : []
+    if (u.conflictKey && !opts.includes(u.conflictKey)) {
+      u.conflictKey = ''
+    }
+  })
+}
+
+function addUpsertEntry(): void {
+  const cfg = dataUpsertCfg.value
+  if (!cfg) return
+  if (!Array.isArray(cfg.upserts)) cfg.upserts = []
+  cfg.upserts.push({ formKey: '', conflictKey: '', values: [{ column: '', value: '' }], onUpdate: [] })
+}
+
+/** 写入字段列选项：该表单真实业务列（排除引擎管理列）+ 已填列名兜底 */
+function upsertColumnOptions(formKey: string, current: string): { key: string; type: string }[] {
+  const k = String(formKey ?? '').trim()
+  const real = k ? (duColumnsByTable.get('wf_biz_' + k) ?? []) : []
+  const managed = new Set(['id', 'tenant_id', 'version', 'created_by', 'created_at', 'updated_at'])
+  const cur = new Set<string>(real.map((c) => c.key).filter((key) => !managed.has(key.toLowerCase())))
+  const filled = String(current ?? '').trim()
+  if (filled) cur.add(filled)
+  return [...cur]
+    .sort()
+    .map((key) => ({ key, type: real.find((c) => c.key === key)?.columnType ?? '' }))
+}
+
+watch(
+  () => node.value?.data.nodeType,
+  (t) => {
+    if (t === 'DATA_UPSERT') void loadUpsertForms()
+  },
+  { immediate: true }
+)
 
 /** 多表条目目标表选项：全表清单 + 当前已填表名兜底（历史 DSL 的表可能已不在清单） */
 function duEntryTableOptions(cur: string): string[] {
@@ -1487,21 +2124,6 @@ async function copyNodeId() {
   color: var(--el-color-warning);
 }
 
-/* DATA_UPDATE 多表更新：模式开关行 */
-.du-multi-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.du-multi-hint {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
 /* 多表条目卡片：头部（序号+别名+删除） + 该表 SET/WHERE 编辑区 */
 .du-multi-card {
   margin-bottom: 10px;
@@ -1533,7 +2155,7 @@ async function copyNodeId() {
   margin-top: 8px;
 }
 
-/* 输出参数声明行：单行卡片式（变量名+提取方式+类型+删除） */
+/* 输出参数声明行：单行卡片式（变量名+提取方式+类型+删除+json结构导入图标） */
 .so-row {
   margin-bottom: 8px;
   padding: 6px 8px;
@@ -1693,6 +2315,14 @@ async function copyNodeId() {
   color: color-mix(in srgb, var(--lf-data) 82%, var(--el-text-color-primary));
   background: color-mix(in srgb, var(--lf-data) 8%, transparent);
   border: 1px dashed color-mix(in srgb, var(--lf-data) 38%, transparent);
+}
+
+/* DELAY 时长换算提示 */
+.delay-hint {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
 }
 
 .sql-onerror {

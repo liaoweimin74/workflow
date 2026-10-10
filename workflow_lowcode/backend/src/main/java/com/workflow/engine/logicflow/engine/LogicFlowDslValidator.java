@@ -2,6 +2,7 @@ package com.workflow.engine.logicflow.engine;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.workflow.engine.logic.config.BackendDataUpdateConfig;
+import com.workflow.engine.logic.config.BackendDataUpsertConfig;
 import com.workflow.engine.logicflow.dsl.LogicFlowDsl;
 import com.workflow.engine.logicflow.dsl.NodeType;
 import org.springframework.stereotype.Component;
@@ -26,7 +27,9 @@ import java.util.Set;
  *   <li>SQL_SCRIPT 节点缺 sql / 语句解析失败 / 类型白名单外 / 别名重复 / 占位符语法错 / onError 或 maxRows 非法；</li>
  *   <li>DATA_UPDATE 节点：单表形态缺 table/setOps；多表形态（updates 非空）逐项校验
  *       （table 合法标识符 / setOps 非空 / alias 可选 \w+ 且唯一 / 条目数 ≤ MAX_UPDATES）；</li>
- *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/BATCH/SQL_SCRIPT）
+ *   <li>DATA_UPSERT 节点：formKey/conflictKey 必填且非引擎管理列、values 非空且须含冲突键列、
+ *       列不重复不越 MAX_VALUES；表/列/唯一索引存在性运行期校验（发布时表单可能尚未发布）；</li>
+ *   <li>输出声明 results：全部执行型节点（HTTP/BEAN/SCRIPT/DATA_UPDATE/DATA_UPSERT/SUBFLOW/BATCH/SQL_SCRIPT）
  *       顶层与循环体均可配；变量名须 \\w+ 合法标识符、不重复、mode 必填且 ∈ WHOLE|KEY；
  *       resultVar 已全链路下线（引擎反序列化忽略该遗留键）；</li>
  *   <li>非 END/CONDITION 节点无出边（含 START）。</li>
@@ -130,7 +133,16 @@ public class LogicFlowDslValidator {
                 case BATCH -> validateBatch(node, errors);
                 case SUBFLOW -> validateSubflow(node, errors);
                 case DATA_UPDATE -> validateDataUpdate(node, errors);
+                case DATA_UPSERT -> validateDataUpsert(node, errors);
                 case SQL_SCRIPT -> validateSqlScript(node, errors);
+                case DATA_QUERY -> validateDataQuery(node, errors);
+                case DATA_INSERT -> validateDataInsert(node, errors);
+                case DATA_DELETE -> validateDataDelete(node, errors);
+                case NOTIFY -> validateNotify(node, errors);
+                case DELAY -> validateDelay(node, errors);
+                case TRANSFORM -> validateTransform(node, errors);
+                case AGGREGATE -> validateAggregate(node, errors);
+                case LLM -> validateLlm(node, errors);
                 default -> {
                     // 其余类型无 config 硬要求
                 }
@@ -292,6 +304,117 @@ public class LogicFlowDslValidator {
         }
     }
 
+    /**
+     * DATA_UPSERT 节点硬校验：formKey 合法标识符（表名拼接 wf_biz_ 前缀）、conflictKey 必填且非引擎管理列、
+     * values 非空且须包含冲突键列、values/onUpdate 逐项 column 非空且非引擎管理列、value 非空、列不重复、
+     * 数量不超 {@link BackendDataUpsertConfig#MAX_VALUES}；
+     * 表/列/唯一索引存在性运行期校验（发布时表单可能尚未发布）。
+     */
+    private void validateDataUpsert(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("DATA_UPSERT 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        String base = "DATA_UPSERT 节点 " + node.getId();
+        // 统一编辑器形态（upserts）：存在且非空时逐条目校验（单表顶层字段忽略）
+        JsonNode upserts = config.get("upserts");
+        if (upserts != null && upserts.isArray() && !upserts.isEmpty()) {
+            if (upserts.size() > BackendDataUpsertConfig.MAX_UPSERTS) {
+                errors.add(base + " 多表单写入数超出上限("
+                        + BackendDataUpsertConfig.MAX_UPSERTS + "): " + upserts.size());
+            }
+            Set<String> aliases = new HashSet<>();
+            for (int i = 0; i < upserts.size(); i++) {
+                JsonNode entry = upserts.get(i);
+                String alias = textOrNull(entry, "alias");
+                if (alias != null && !alias.isBlank()) {
+                    if (!alias.trim().matches("\\w+")) {
+                        errors.add(base + " 表单写入第 " + (i + 1) + " 项别名非法(仅字母/数字/下划线): " + alias);
+                    } else if (!aliases.add(alias.trim())) {
+                        errors.add(base + " 表单写入别名重复: " + alias.trim());
+                    }
+                }
+                validateUpsertEntry(base + " 表单写入第 " + (i + 1) + " 项", entry, errors);
+            }
+            return;
+        }
+        validateUpsertEntry(base, config, errors);
+    }
+
+    /** 单条目 upsert 校验（顶层单表 config 与 upserts[i] 共用；base 作错误文案前缀）。 */
+    private void validateUpsertEntry(String base, JsonNode config, List<String> errors) {
+        String formKey = textOrNull(config, "formKey");
+        if (formKey == null || formKey.isBlank()) {
+            errors.add(base + " 缺少 formKey");
+        } else if (!formKey.trim().matches("[a-zA-Z0-9_]{1,64}")) {
+            errors.add(base + " formKey 非法(仅字母/数字/下划线): " + formKey);
+        }
+        String conflictKey = textOrNull(config, "conflictKey");
+        if (conflictKey == null || conflictKey.isBlank()) {
+            errors.add(base + " 缺少 conflictKey");
+        } else if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(conflictKey.trim().toLowerCase())) {
+            errors.add(base + " 冲突键禁止使用引擎管理列: " + conflictKey);
+        }
+        JsonNode values = config.get("values");
+        if (values == null || !values.isArray() || values.isEmpty()) {
+            errors.add(base + " 缺少 values");
+            return;
+        }
+        if (values.size() > BackendDataUpsertConfig.MAX_VALUES) {
+            errors.add(base + " 写入字段数超出上限("
+                    + BackendDataUpsertConfig.MAX_VALUES + "): " + values.size());
+        }
+        Set<String> cols = new HashSet<>();
+        boolean hasConflict = false;
+        for (int i = 0; i < values.size(); i++) {
+            JsonNode op = values.get(i);
+            String label = base + " 写入字段第 " + (i + 1) + " 项";
+            String col = textOrNull(op, "column");
+            if (col == null || col.isBlank()) {
+                errors.add(label + "缺少 column");
+            } else {
+                String norm = col.trim();
+                if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(norm.toLowerCase())) {
+                    errors.add(label + "禁止写入引擎管理列: " + norm);
+                } else if (!cols.add(norm.toLowerCase())) {
+                    errors.add(label + "写入列重复: " + norm);
+                }
+                if (conflictKey != null && norm.equalsIgnoreCase(conflictKey.trim())) {
+                    hasConflict = true;
+                }
+            }
+            if (isBlankText(op, "value")) {
+                errors.add(label + "缺少 value");
+            }
+        }
+        if (conflictKey != null && !conflictKey.isBlank() && !hasConflict) {
+            errors.add(base + " values 须包含冲突键列: " + conflictKey.trim());
+        }
+        JsonNode onUpdate = config.get("onUpdate");
+        if (onUpdate != null && onUpdate.isArray() && !onUpdate.isEmpty()) {
+            Set<String> updateCols = new HashSet<>();
+            for (int i = 0; i < onUpdate.size(); i++) {
+                JsonNode op = onUpdate.get(i);
+                String label = base + " 更新覆盖第 " + (i + 1) + " 项";
+                String col = textOrNull(op, "column");
+                if (col == null || col.isBlank()) {
+                    errors.add(label + "缺少 column");
+                } else {
+                    String norm = col.trim();
+                    if (BackendDataUpsertConfig.MANAGED_COLUMNS.contains(norm.toLowerCase())) {
+                        errors.add(label + "禁止写入引擎管理列: " + norm);
+                    } else if (!updateCols.add(norm.toLowerCase())) {
+                        errors.add(label + "覆盖列重复: " + norm);
+                    }
+                }
+                if (isBlankText(op, "value")) {
+                    errors.add(label + "缺少 value");
+                }
+            }
+        }
+    }
+
     /** 数字或 {{数值变量}}（占位符内容运行期解析，此处放行）。 */
     private static boolean isNumericText(String text) {
         String trimmed = text == null ? "" : text.trim();
@@ -394,10 +517,12 @@ public class LogicFlowDslValidator {
         }
     }
 
-    /** 批处理循环体允许的节点类型（业务执行六型 + SQL_SCRIPT + BATCH 嵌套；CONDITION/START/END 不可入循环体）。 */
+    /** 批处理循环体允许的节点类型（业务执行多型 + SQL_SCRIPT + 数据/通知/转换/聚合/LLM + BATCH 嵌套；DELAY 不可入循环体）。 */
     private static final Set<NodeType> BATCH_BODY_ALLOWED = Set.of(
-            NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.SUBFLOW,
-            NodeType.SQL_SCRIPT, NodeType.BATCH);
+            NodeType.HTTP, NodeType.BEAN, NodeType.SCRIPT, NodeType.DATA_UPDATE, NodeType.DATA_UPSERT, NodeType.SUBFLOW,
+            NodeType.SQL_SCRIPT, NodeType.BATCH,
+            NodeType.DATA_QUERY, NodeType.DATA_INSERT, NodeType.DATA_DELETE, NodeType.NOTIFY,
+            NodeType.TRANSFORM, NodeType.AGGREGATE, NodeType.LLM);
 
     /** BATCH 最大嵌套深度（发布校验限制，防无限自嵌套） */
     private static final int MAX_BATCH_NESTING_DEPTH = 3;
@@ -447,6 +572,34 @@ public class LogicFlowDslValidator {
                 errors.add("BATCH 节点 " + node.getId() + " maxItems 须在 1~1000: " + value);
             }
         }
+        JsonNode chunkSize = config.get("chunkSize");
+        if (chunkSize != null && !chunkSize.isNull()) {
+            int value = chunkSize.asInt(-1);
+            if (value < 1 || value > 100) {
+                errors.add("BATCH 节点 " + node.getId() + " chunkSize 须在 1~100: " + value);
+            }
+        }
+        JsonNode intervalMs = config.get("intervalMs");
+        if (intervalMs != null && !intervalMs.isNull()) {
+            int value = intervalMs.asInt(-1);
+            if (value < 0 || value > 5000) {
+                errors.add("BATCH 节点 " + node.getId() + " intervalMs 须在 0~5000: " + value);
+            }
+        }
+        JsonNode breakWhen = config.get("breakWhen");
+        if (breakWhen != null && !breakWhen.isNull()) {
+            if (!breakWhen.isObject()) {
+                errors.add("BATCH 节点 " + node.getId() + " breakWhen 须为对象 {variable, operator, value?}");
+            } else if (isBlankText(breakWhen, "variable")) {
+                errors.add("BATCH 节点 " + node.getId() + " breakWhen 缺少 variable");
+            } else {
+                String op = textOrNull(breakWhen, "operator");
+                if (op == null || !Set.of("EQ", "NE", "GT", "LT", "GTE", "LTE", "EMPTY", "NOT_EMPTY")
+                        .contains(op.trim().toUpperCase())) {
+                    errors.add("BATCH 节点 " + node.getId() + " breakWhen.operator 非法: " + op);
+                }
+            }
+        }
     }
 
     /** 校验循环体单步：type 合法 + 对应 config 完整（复用主节点同款规则）；BATCH 步骤递归校验（嵌套）。 */
@@ -470,7 +623,7 @@ public class LogicFlowDslValidator {
         }
         if (type == null || !BATCH_BODY_ALLOWED.contains(type)) {
             errors.add("BATCH 节点 " + batchNode.getId() + " " + label
-                    + "类型非法（仅支持 HTTP/BEAN/SCRIPT/DATA_UPDATE/SUBFLOW/SQL_SCRIPT/BATCH）: " + typeName);
+                    + "类型非法（仅支持 HTTP/BEAN/SCRIPT/DATA_UPDATE/DATA_UPSERT/SUBFLOW/SQL_SCRIPT/BATCH）: " + typeName);
             return;
         }
         JsonNode stepConfig = step.get("config");
@@ -524,6 +677,13 @@ public class LogicFlowDslValidator {
                 stepNode.setConfig(stepConfig);
                 validateDataUpdate(stepNode, errors);
             }
+            case DATA_UPSERT -> {
+                LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
+                stepNode.setId(batchNode.getId() + " " + label);
+                stepNode.setType(NodeType.DATA_UPSERT);
+                stepNode.setConfig(stepConfig);
+                validateDataUpsert(stepNode, errors);
+            }
             case SUBFLOW -> {
                 LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
                 stepNode.setId(batchNode.getId() + " " + label);
@@ -537,6 +697,25 @@ public class LogicFlowDslValidator {
                 stepNode.setType(NodeType.SQL_SCRIPT);
                 stepNode.setConfig(stepConfig);
                 validateSqlScript(stepNode, errors);
+            }
+            case DATA_QUERY, DATA_INSERT, DATA_DELETE, NOTIFY, DELAY, TRANSFORM, AGGREGATE, LLM -> {
+                LogicFlowDsl.NodeDef stepNode = new LogicFlowDsl.NodeDef();
+                stepNode.setId(batchNode.getId() + " " + label);
+                stepNode.setType(type);
+                stepNode.setConfig(stepConfig);
+                switch (type) {
+                    case DATA_QUERY -> validateDataQuery(stepNode, errors);
+                    case DATA_INSERT -> validateDataInsert(stepNode, errors);
+                    case DATA_DELETE -> validateDataDelete(stepNode, errors);
+                    case NOTIFY -> validateNotify(stepNode, errors);
+                    case DELAY -> validateDelay(stepNode, errors);
+                    case TRANSFORM -> validateTransform(stepNode, errors);
+                    case AGGREGATE -> validateAggregate(stepNode, errors);
+                    case LLM -> validateLlm(stepNode, errors);
+                    default -> {
+                        // 不可达
+                    }
+                }
             }
             default -> {
                 // 不可达（上方类型白名单已过滤）
@@ -570,6 +749,253 @@ public class LogicFlowDslValidator {
                 }
             }
             default -> errors.add("BATCH 节点 " + node.getId() + " actionType 非法（仅支持 HTTP/SCRIPT/BEAN）: " + actionType);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 新增节点硬校验（DATA_QUERY / DATA_INSERT / DATA_DELETE / NOTIFY / DELAY / TRANSFORM / AGGREGATE / LLM）
+    // ------------------------------------------------------------------
+
+    private static final Set<String> DML_OPS = Set.of("EQ", "NE", "GT", "GTE", "LT", "LTE", "IS_NULL", "NOT_NULL");
+
+    /** DATA_QUERY：formKey 必填合法标识符；filter 逐项 column 非空；size 1~100。 */
+    private void validateDataQuery(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("DATA_QUERY 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        String formKey = textOrNull(config, "formKey");
+        if (formKey == null || formKey.isBlank()) {
+            errors.add("DATA_QUERY 节点 " + node.getId() + " 缺少 formKey");
+        } else if (!formKey.matches("[a-zA-Z][a-zA-Z0-9_]{0,63}")) {
+            errors.add("DATA_QUERY 节点 " + node.getId() + " formKey 非法: " + formKey);
+        }
+        JsonNode filter = config.get("filter");
+        if (filter != null && filter.isArray()) {
+            for (int i = 0; i < filter.size(); i++) {
+                JsonNode item = filter.get(i);
+                if (item == null || item.isNull() || !item.isObject()) {
+                    continue;
+                }
+                if (isBlankText(item, "column")) {
+                    errors.add("DATA_QUERY 节点 " + node.getId() + " filter 第 " + (i + 1) + " 项缺少 column");
+                }
+            }
+        }
+        JsonNode size = config.get("size");
+        if (size != null && !size.isNull()) {
+            int v = size.asInt(-1);
+            if (v < 1 || v > 100) {
+                errors.add("DATA_QUERY 节点 " + node.getId() + " size 须在 1~100: " + v);
+            }
+        }
+    }
+
+    /** DATA_INSERT：formKey 必填合法标识符；data 非空且逐项 column 非空。 */
+    private void validateDataInsert(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("DATA_INSERT 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        String formKey = textOrNull(config, "formKey");
+        if (formKey == null || formKey.isBlank()) {
+            errors.add("DATA_INSERT 节点 " + node.getId() + " 缺少 formKey");
+        } else if (!formKey.matches("[a-zA-Z][a-zA-Z0-9_]{0,63}")) {
+            errors.add("DATA_INSERT 节点 " + node.getId() + " formKey 非法: " + formKey);
+        }
+        JsonNode data = config.get("data");
+        if (data == null || !data.isArray() || data.isEmpty()) {
+            errors.add("DATA_INSERT 节点 " + node.getId() + " 缺少 data（列值对数组）");
+            return;
+        }
+        for (int i = 0; i < data.size(); i++) {
+            JsonNode item = data.get(i);
+            if (item == null || item.isNull() || !item.isObject()) {
+                errors.add("DATA_INSERT 节点 " + node.getId() + " data 第 " + (i + 1) + " 项须为对象");
+                continue;
+            }
+            if (isBlankText(item, "column")) {
+                errors.add("DATA_INSERT 节点 " + node.getId() + " data 第 " + (i + 1) + " 项缺少 column");
+            }
+        }
+    }
+
+    /** DATA_DELETE：formKey 必填；id 或至少一个有效 filter（防全表删）；filter op 枚举。 */
+    private void validateDataDelete(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("DATA_DELETE 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        String formKey = textOrNull(config, "formKey");
+        if (formKey == null || formKey.isBlank()) {
+            errors.add("DATA_DELETE 节点 " + node.getId() + " 缺少 formKey");
+        } else if (!formKey.matches("[a-zA-Z][a-zA-Z0-9_]{0,63}")) {
+            errors.add("DATA_DELETE 节点 " + node.getId() + " formKey 非法: " + formKey);
+        }
+        boolean hasId = !isBlankText(config, "id");
+        JsonNode filter = config.get("filter");
+        boolean hasValidFilter = false;
+        if (filter != null && filter.isArray()) {
+            for (int i = 0; i < filter.size(); i++) {
+                JsonNode item = filter.get(i);
+                if (item == null || item.isNull() || !item.isObject()) {
+                    continue;
+                }
+                if (isBlankText(item, "column")) {
+                    errors.add("DATA_DELETE 节点 " + node.getId() + " filter 第 " + (i + 1) + " 项缺少 column");
+                    continue;
+                }
+                String op = textOrNull(item, "op");
+                if (op != null && !DML_OPS.contains(op.trim().toUpperCase())) {
+                    errors.add("DATA_DELETE 节点 " + node.getId() + " filter 第 " + (i + 1)
+                            + " 项 op 非法(须 EQ/NE/GT/GTE/LT/LTE/IS_NULL/NOT_NULL): " + op);
+                    continue;
+                }
+                if (op == null || Set.of("EQ", "NE", "GT", "GTE", "LT", "LTE")
+                        .contains(op.trim().toUpperCase())) {
+                    hasValidFilter = true;
+                }
+            }
+        }
+        if (!hasId && !hasValidFilter) {
+            errors.add("DATA_DELETE 节点 " + node.getId()
+                    + " 须提供 id 或至少一个带值的 filter 条件（防全表删除）");
+        }
+    }
+
+    /** NOTIFY：templateCode/recipientIds 必填；接收人 ≤20 且须可解析为数字（占位符形态放行运行期）；variables 名合法；messageType/channels 枚举。 */
+    private void validateNotify(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("NOTIFY 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        if (isBlankText(config, "templateCode")) {
+            errors.add("NOTIFY 节点 " + node.getId() + " 缺少 templateCode");
+        }
+        JsonNode recipientIds = config.get("recipientIds");
+        if (recipientIds == null || !recipientIds.isArray() || recipientIds.isEmpty()) {
+            errors.add("NOTIFY 节点 " + node.getId() + " 缺少 recipientIds（接收人 ID 列表）");
+        } else if (recipientIds.size() > 20) {
+            errors.add("NOTIFY 节点 " + node.getId() + " 接收人数超出上限(20): " + recipientIds.size());
+        }
+        JsonNode variables = config.get("variables");
+        if (variables != null && variables.isArray()) {
+            for (int i = 0; i < variables.size(); i++) {
+                JsonNode item = variables.get(i);
+                if (item == null || item.isNull() || !item.isObject() || isBlankText(item, "name")) {
+                    errors.add("NOTIFY 节点 " + node.getId() + " variables 第 " + (i + 1) + " 项缺少 name");
+                    continue;
+                }
+                String name = textOrNull(item, "name");
+                if (name != null && !name.matches("\\w+")) {
+                    errors.add("NOTIFY 节点 " + node.getId() + " 模板变量名非法: " + name);
+                }
+            }
+        }
+        String messageType = textOrNull(config, "messageType");
+        if (messageType != null && !messageType.isBlank()
+                && !Set.of("PRIVATE", "PUBLIC", "SYSTEM").contains(messageType.trim().toUpperCase())) {
+            errors.add("NOTIFY 节点 " + node.getId() + " messageType 非法(须 PRIVATE/PUBLIC/SYSTEM): " + messageType);
+        }
+        JsonNode channels = config.get("channels");
+        if (channels != null && channels.isArray()) {
+            for (int i = 0; i < channels.size(); i++) {
+                String channel = channels.get(i) != null ? channels.get(i).asText("") : "";
+                if (!channel.isBlank() && !Set.of("IN_APP", "SMS").contains(channel.trim().toUpperCase())) {
+                    errors.add("NOTIFY 节点 " + node.getId() + " 渠道非法(须 IN_APP/SMS): " + channel);
+                }
+            }
+        }
+    }
+
+    /** DELAY：durationMs 必填且 1~60000（同步引擎硬上限）。 */
+    private void validateDelay(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("DELAY 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        JsonNode durationMs = config.get("durationMs");
+        if (durationMs == null || durationMs.isNull()) {
+            errors.add("DELAY 节点 " + node.getId() + " 缺少 durationMs");
+            return;
+        }
+        int v = durationMs.asInt(-1);
+        if (v < 1 || v > 60000) {
+            errors.add("DELAY 节点 " + node.getId() + " durationMs 须在 1~60000: " + v);
+        }
+    }
+
+    /** TRANSFORM：template 必填；{{var}} 占位符语法校验（以数字 1 代入后须为合法 JSON 对象/数组）。 */
+    private void validateTransform(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("TRANSFORM 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        String template = textOrNull(config, "template");
+        if (template == null || template.isBlank()) {
+            errors.add("TRANSFORM 节点 " + node.getId() + " 缺少 template");
+            return;
+        }
+        String normalized = template.replaceAll("\\{\\{\\s*[\\w.]+\\s*}}", "1");
+        try {
+            JsonNode tree = new com.fasterxml.jackson.databind.ObjectMapper().readTree(normalized);
+            if (tree == null || (!tree.isObject() && !tree.isArray())) {
+                errors.add("TRANSFORM 节点 " + node.getId() + " 模板须为 JSON 对象或数组");
+            }
+        } catch (Exception e) {
+            errors.add("TRANSFORM 节点 " + node.getId() + " 模板不是合法 JSON: " + e.getMessage());
+        }
+    }
+
+    /** AGGREGATE：collection/ops 必填；ops ∈ SUM/AVG/COUNT/MIN/MAX；非纯 COUNT 须带 field。 */
+    private void validateAggregate(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("AGGREGATE 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        if (isBlankText(config, "collection")) {
+            errors.add("AGGREGATE 节点 " + node.getId() + " 缺少 collection");
+        }
+        JsonNode ops = config.get("ops");
+        if (ops == null || !ops.isArray() || ops.isEmpty()) {
+            errors.add("AGGREGATE 节点 " + node.getId() + " 缺少 ops（SUM/AVG/COUNT/MIN/MAX 子集）");
+            return;
+        }
+        boolean countOnly = ops.size() == 1 && "COUNT".equalsIgnoreCase(ops.get(0).asText(""));
+        for (int i = 0; i < ops.size(); i++) {
+            String op = ops.get(i) != null ? ops.get(i).asText("") : "";
+            if (!Set.of("SUM", "AVG", "COUNT", "MIN", "MAX").contains(op.trim().toUpperCase())) {
+                errors.add("AGGREGATE 节点 " + node.getId() + " ops 第 " + (i + 1) + " 项非法: " + op);
+            }
+        }
+        if (!countOnly && isBlankText(config, "field")) {
+            errors.add("AGGREGATE 节点 " + node.getId() + " 缺少 field（纯 COUNT 可省）");
+        }
+    }
+
+    /** LLM：prompt 必填；temperature 0~2。 */
+    private void validateLlm(LogicFlowDsl.NodeDef node, List<String> errors) {
+        JsonNode config = node.getConfig();
+        if (config == null || config.isNull()) {
+            errors.add("LLM 节点 " + node.getId() + " 缺少 config");
+            return;
+        }
+        if (isBlankText(config, "prompt")) {
+            errors.add("LLM 节点 " + node.getId() + " 缺少 prompt");
+        }
+        JsonNode temperature = config.get("temperature");
+        if (temperature != null && temperature.isNumber()) {
+            double v = temperature.asDouble();
+            if (v < 0 || v > 2) {
+                errors.add("LLM 节点 " + node.getId() + " temperature 须在 0~2: " + v);
+            }
         }
     }
 

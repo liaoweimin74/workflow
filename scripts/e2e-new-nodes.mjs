@@ -64,7 +64,7 @@ async function main() {
 
   // ===== 临时表单（BUSINESS，publish 建动态表） =====
   const conn = await mysql.createConnection({ host: '127.0.0.1', port: 3306, user: 'root', password: '740130', database: 'workflow' });
-  await conn.query(`DELETE FROM ${TABLE}`); // 幂等：清残留数据（上轮失败遗留）
+  try { await conn.query(`DELETE FROM ${TABLE}`); } catch (e) { if (!/doesn't exist/.test(e.message || '')) throw e; console.log('table absent (fresh db) — publish will create it'); } // 幂等：清残留数据（重供给后表缺失则容忍）
   const colCfg = JSON.stringify([
     { key: 'person_name', label: '姓名', columnType: 'VARCHAR', length: 64 },
     { key: 'amount', label: '金额', columnType: 'DECIMAL', scale: 2 },
@@ -182,7 +182,7 @@ async function main() {
   }
 
   try {
-    await conn.query(`DELETE FROM ${TABLE}`);
+    try { await conn.query(`DELETE FROM ${TABLE}`); } catch (e) { if (!/doesn't exist/.test(e.message || '')) throw e; }
     await conn.end();
   } catch { /* 表可能尚未建 */ }
 

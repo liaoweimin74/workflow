@@ -495,7 +495,11 @@ function pickAdvanced(c: ColumnViewConfig): Partial<ColumnViewConfig> {
     ...(c.className !== undefined ? { className: c.className } : {}),
     ...(c.styleExpr !== undefined ? { styleExpr: c.styleExpr } : {}),
     ...(c.onCellClick !== undefined ? { onCellClick: c.onCellClick } : {}),
-    ...(c.aggregate !== undefined ? { aggregate: c.aggregate } : {}),
+    // 「无」聚合以 undefined 表示（ColumnAdvancedConfig @change v||undefined），
+    // 不能像其他可选字段一样跳过 undefined——跳过会让旧值（如 count）经列对象扩散残留，
+    // 表现为 汇总 计数→无 确定后回读仍是 计数。始终显式写回：undefined 覆盖旧键，
+    // 且 JSON.stringify 序列化时自动剔除，schema 不产生冗余字段。
+    aggregate: c.aggregate,
   }
 }
 

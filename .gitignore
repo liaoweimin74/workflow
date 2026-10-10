@@ -56,3 +56,6 @@ server.log
 # MariaDB data directory (96MB redo log copies bloating repo / git OOM)
 mariadb-user/
 *.bundle
+
+# session tool artifacts (never commit — may contain secrets)
+tool-results/

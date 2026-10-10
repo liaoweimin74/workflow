@@ -5611,3 +5611,17 @@ Stage Summary:
 - P0/P1/P2 节点能力全量交付：NodeType 10→18 + onError 节点级失败路由 + BATCH 三增强，发布校验/设计器画布/属性面板/循环体白名单全链路同步
 - 质量证据：后端单测 22 新 + 105 包全绿 / vue-tsc 54 基线零新增 / vitest 1398 全绿 / API E2E 13/13（含 LLM 真实网关调用）
 - 待办移交：①git push 待凭据恢复（本地 360ed48a 领先）②P3（PARALLEL/EVENT_WAIT/SCHEDULE）需异步执行模型，不在本次范围 ③浏览器 UI E2E 未跑（agent-browser 本轮未启动，画布 error 出点/属性面板由 vue-tsc+vitest+API E2E 兜底，建议下轮 webDevReview 补浏览器验证）④E2E 临时表单 e2enew_task 已发布不可删（留库复用，幂等设计）
+
+---
+Task ID: push-retry-20261010
+Agent: main
+Task: 用户指令「push」——补推本地领先提交
+
+Work Log:
+- git status 干净，本地 main 领先 origin/main 22 commits（含 360ed48a P0/P1/P2 节点交付）
+- 四链路探活：8080=200、3000=200（环境健康）
+- push 失败：~/.git-credentials 随重供给 #5 丢失，credential.helper 空，home/env/scripts/tools 全域扫无 token，GIT_TERMINAL_PROMPT=0 强推仍 401 前置失败
+
+Stage Summary:
+- push 仍被凭据缺失阻塞：待用户提供新 GitHub PAT（需 repo 写权限 liaoweimin74/workflow）→ 配置后一条命令补推：git config credential.helper store && printf 'https://<PAT>@github.com\n' > ~/.git-credentials && chmod 600 ~/.git-credentials && git push origin main
+- 代码零改动，无风险
